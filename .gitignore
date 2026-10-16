@@ -25,7 +25,7 @@ coverage
 # nyc test coverage
 .nyc_output
 
-# Grunt intermediate storage (https://gruntjs.com/creating-plugins#storing-task-files)
+# Grunt intermediate storage (http://gruntjs.com/creating-plugins#storing-task-files)
 .grunt
 
 # Bower dependency directory (https://bower.io/)
@@ -104,14 +104,14 @@ dist
 # vitepress cache directory
 **/.vitepress/cache
 
-# Docusaurus cache and generated files
+# Docusaurus generated and cached files
 .docusaurus
 
 # Serverless directories
 .serverless/
 
 # FuseBox cache
-.fusebox/
+.fusebox
 
 # DynamoDB Local files
 .dynamodb/
@@ -122,7 +122,7 @@ dist
 # TernJS port file
 .tern-port
 
-# Stores Visual Studio Code versions used for testing Visual Studio Code extensions
+# Stores Visual Studio Code versions used for testing VS Code extensions
 .vscode-test
 
 # pnpm
@@ -147,3 +147,7 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# Electron-builder output (project-specific)
+release/
+.DS_Store

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src https: http://127.0.0.1:* http://localhost:*;">
+  <title>EduGame Studio</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark"><span>✦</span></div>
+        <div><div class="brand-name">EduGame <b>Studio</b></div><div class="brand-sub">LEARNING GAME BUILDER</div></div>
+      </div>
+      <div class="workspace-label">KHÔNG GIAN LÀM VIỆC</div>
+      <nav class="nav">
+        <button class="nav-item active" data-page="home"><span class="nav-icon">⌂</span><span>Tổng quan</span></button>
+        <button class="nav-item" data-page="library"><span class="nav-icon">▦</span><span>Thư viện trò chơi</span><span class="nav-count" id="navGameCount">1</span></button>
+        <button class="nav-item" data-page="create"><span class="nav-icon">✳</span><span>Tạo trò chơi</span></button>
+        <button class="nav-item" data-page="sessions"><span class="nav-icon">◷</span><span>Lịch sử kết quả</span></button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="offline-card"><div class="offline-dot"></div><div><strong>Sẵn sàng ngoại tuyến</strong><small>Game đã lưu vẫn chơi được</small></div></div>
+        <button class="nav-item" data-page="settings"><span class="nav-icon">⚙</span><span>Cài đặt</span></button>
+        <div class="profile"><div class="avatar">GV</div><div><strong>Không gian giáo viên</strong><small>Máy tính này</small></div><span class="profile-more">•••</span></div>
+      </div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div class="breadcrumb"><span>EduGame Studio</span><span class="crumb-sep">/</span><strong id="pageCrumb">Tổng quan</strong></div>
+        <div class="top-actions"><span class="local-pill"><i></i> Lưu trên thiết bị</span><button class="icon-button" id="helpBtn" title="Hướng dẫn">?</button><div class="top-avatar">GV</div></div>
+      </header>
+      <div id="pageContent" class="page-content"></div>
+      <div id="toast" class="toast" role="status"></div>
+    </main>
+  </div>
+  <div id="modalRoot"></div>
+  <script src="renderer.js"></script>
+</body>
+</html>

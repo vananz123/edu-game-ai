@@ -1,0 +1,50 @@
+{
+  "name": "edugame-studio",
+  "version": "0.3.0",
+  "description": "EduGame Studio - ứng dụng Windows tạo, quản lý và chơi game giáo dục offline, TypeScript",
+  "main": "dist/src/main.js",
+  "author": "EduGame Studio",
+  "license": "MIT",
+  "scripts": {
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "build": "npm run clean && tsc -p tsconfig.json && copyfiles -u 1 \"src/index.html\" \"src/styles.css\" dist/src",
+    "start": "npm run build && electron .",
+    "check": "tsc --noEmit -p tsconfig.json",
+    "test": "npm run build && node dist/tests/runtime.test.js",
+    "dist:win": "npm run build && electron-builder --win nsis",
+    "dist:dir": "npm run build && electron-builder --dir",
+    "server:dev": "tsx watch server/index.ts",
+    "server:start": "node dist/server/index.js",
+    "server:build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.57.0",
+    "better-sqlite3": "^11.7.0",
+    "express": "^5.1.0",
+    "express-rate-limit": "^8.1.0",
+    "jszip": "^3.10.1",
+    "mammoth": "^1.8.0",
+    "pdf-parse": "1.1.1",
+    "zod": "^4.1.5"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/express": "^5.0.3",
+    "@types/node": "^22.15.30",
+    "copyfiles": "^2.4.1",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  },
+  "build": {
+    "appId": "vn.edugame.studio",
+    "productName": "EduGame Studio",
+    "asar": true,
+    "files": ["dist/**/*", "package.json", "node_modules/**/*"],
+    "directories": { "output": "release" },
+    "npmRebuild": true,
+    "win": { "target": ["nsis"], "artifactName": "EduGame-Studio-Setup-${version}.${ext}" },
+    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true, "createDesktopShortcut": true, "createStartMenuShortcut": true }
+  }
+}
