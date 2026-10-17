@@ -12,26 +12,30 @@ Electron is the desktop shell. Keep renderer isolated from Node.js and expose on
 Use SQLite on the teacher's machine for structured local data. Keep `.egame` as a portable export format. SQLite is not the cloud account database.
 
 ### 4. Offline gameplay
-Saved games, scoring, explanations, history, and game assets must work without internet. Cloud generation/account features may require internet.
+Saved games, scoring, explanations, history, and game assets must work without internet or a running AI process. Model installation may require internet; after a model is verified, generation should work offline.
 
 ### 5. Fixed engines, structured AI output
 AI returns validated game data (for example JSON), not executable game code. The app renders it with tested game engines.
 
-### 6. Cloud AI Gateway owns provider keys
-Gemini is the initial provider candidate. Provider keys and Supabase service-role secrets stay on the server. Desktop sends an authenticated user access token to the Gateway; it must not contain a product-owned provider key.
+### 6. Historical v0.3 cloud AI Gateway
+The existing v0.3 prototype has a Gemini Gateway scaffold. Its provider keys and Supabase service-role secrets stay on the server. This is legacy prototype behavior and is superseded for the Offline AI V1 generation path by decision 10.
 
-### 7. Supabase for auth/database in pilot
+### 7. Historical v0.3 Supabase choice
 Use Supabase Auth and Postgres quota records to reduce initial implementation work. Reassess only if actual requirements justify changing providers.
 
-### 8. Free + paid plans, pilot 1–10 teachers
+### 8. Historical v0.3 free + paid plans
 Start with server-enforced quotas. Suggested starting limits in the scaffold are Free 5 generations/month and Plus 100/month; these are test defaults, not final commercial promises. Validate AI cost and user demand before setting final pricing.
 
-### 9. Local AI is optional and later
-Do not require teachers to install Ollama or download a multi-GB model. Consider local AI after the core product and cloud flow are stable.
+### 9. Local AI does not require third-party desktop tools
+Teachers must not need to install Ollama, LM Studio, Python, Node.js, or other AI tools to use local generation. The application manages its compatible runtime and model installation.
+
+### 10. Offline AI V1 supersedes cloud-first generation
+For Offline AI V1, generation runs locally through a managed llama.cpp runtime and a verified GGUF model. Teachers do not need cloud AI accounts or provider API keys. First model installation may need internet; generation after successful verification and saved-game play must work offline. Existing BYOK and Supabase/Gemini code is retained during migration, not used as a dependency of the new offline path.
+
+### 11. Keep the current TypeScript project structure during Phase A
+Continue using the existing npm package and Electron layout. Reuse `src/shared`, `src/game-engine`, and `src/services`; add focused boundaries under `src/ai-core` rather than introducing pnpm workspaces or React without a demonstrated need. Move modules only when a later phase requires it and can preserve current behavior.
 
 ## Decisions still open
-- Final provider/model and production data terms.
-- Final free/paid quotas and pricing.
-- Payment provider suitable for Vietnam and accounting requirements.
+- Initial GGUF model and runtime versions, verified source/checksum/size/license, and supported Windows hardware.
 - Whether/how to sync game libraries across devices.
 - Retention period for usage logs and account deletion workflow.

@@ -1,0 +1,158 @@
+import { createHash } from 'node:crypto';
+import { mkdir, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import JSZip from 'jszip';
+import type { LocalAiDownloadProgress } from './contracts';
+import { LLAMA_CPP_RUNTIME } from './model-catalog';
+import { fetchTrustedDownload } from './trusted-download';
+
+export interface RuntimeInstallerOptions {
+  runtimeDirectory: string;
+  fetchRuntime?: typeof fetch;
+  runtimeArtifact?: RuntimeArtifact;
+  platform?: NodeJS.Platform;
+  arch?: string;
+}
+
+export interface RuntimeArtifact {
+  version: string;
+  downloadUrl: string;
+  sizeBytes: number;
+  sha256: string;
+  sourceUrl: string;
+}
+
+export class LlamaRuntimeInstaller {
+  private readonly fetchRuntime: typeof fetch;
+  private readonly runtimeArtifact: RuntimeArtifact;
+  private readonly platform: NodeJS.Platform;
+  private readonly arch: string;
+
+  constructor(private readonly options: RuntimeInstallerOptions) {
+    if (!path.isAbsolute(options.runtimeDirectory)) {
+      throw new Error('Thư mục runtime phải là đường dẫn tuyệt đối do ứng dụng xác định.');
+    }
+    this.fetchRuntime = options.fetchRuntime ?? fetch;
+    this.runtimeArtifact = options.runtimeArtifact ?? LLAMA_CPP_RUNTIME;
+    this.platform = options.platform ?? process.platform;
+    this.arch = options.arch ?? process.arch;
+  }
+
+  async getExecutablePath(): Promise<string | undefined> {
+    const executablePath = path.join(this.options.runtimeDirectory, this.platform === 'win32' ? 'llama-server.exe' : 'llama-server');
+    try {
+      const file = await stat(executablePath);
+      return file.isFile() && file.size > 0 ? executablePath : undefined;
+    } catch (error) {
+      if (isMissingFile(error)) return undefined;
+      throw error;
+    }
+  }
+
+  async install(
+    modelId: string,
+    onProgress?: (progress: LocalAiDownloadProgress) => void,
+    signal?: AbortSignal
+  ): Promise<string> {
+    const existing = await this.getExecutablePath();
+    if (existing) return existing;
+    if (this.platform !== 'win32' || this.arch !== 'x64') {
+      throw new Error('Runtime llama.cpp tự quản lý hiện được hỗ trợ trên Windows x64.');
+    }
+    if (signal?.aborted) throw new Error('Cài đặt llama.cpp đã bị hủy.');
+
+    const parent = path.dirname(this.options.runtimeDirectory);
+    const temporaryDirectory = `${this.options.runtimeDirectory}.installing`;
+    const archivePath = path.join(parent, `llama-${this.runtimeArtifact.version}.zip.part`);
+    await mkdir(parent, { recursive: true });
+    await rm(temporaryDirectory, { recursive: true, force: true });
+    await rm(archivePath, { force: true });
+
+    const response = await fetchTrustedDownload(this.fetchRuntime, this.runtimeArtifact.downloadUrl, { signal });
+    if (response.status !== 200 || !response.body) {
+      await response.body?.cancel();
+      throw new Error(`Không tải được llama.cpp: HTTP ${response.status}.`);
+    }
+    const contentLength = Number(response.headers.get('content-length'));
+    if (Number.isFinite(contentLength) && contentLength > 0 &&
+        contentLength !== this.runtimeArtifact.sizeBytes) {
+      await response.body.cancel();
+      throw new Error('Kích thước gói llama.cpp không khớp thông tin phát hành.');
+    }
+
+    const hash = createHash('sha256');
+    let receivedBytes = 0;
+    const startedAt = Date.now();
+    const archive = await open(archivePath, 'w');
+    try {
+      const reader = response.body.getReader();
+      try {
+        while (true) {
+          if (signal?.aborted) throw new Error('Cài đặt llama.cpp đã bị hủy.');
+          const { done, value } = await reader.read();
+          if (done) break;
+          receivedBytes += value.byteLength;
+          if (receivedBytes > this.runtimeArtifact.sizeBytes) {
+            throw new Error('Gói llama.cpp tải về lớn hơn kích thước đã xác minh.');
+          }
+          hash.update(value);
+          await archive.write(value);
+          onProgress?.({
+            stage: 'runtime',
+            modelId,
+            receivedBytes,
+            totalBytes: this.runtimeArtifact.sizeBytes,
+            bytesPerSecond: Math.round(receivedBytes / Math.max((Date.now() - startedAt) / 1000, 0.001))
+          });
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    } catch (error) {
+      await response.body.cancel().catch(() => undefined);
+      await rm(archivePath, { force: true });
+      throw error;
+    } finally {
+      await archive.close();
+    }
+
+    const actualHash = hash.digest('hex');
+    if (receivedBytes !== this.runtimeArtifact.sizeBytes ||
+        actualHash !== this.runtimeArtifact.sha256) {
+      await rm(archivePath, { force: true });
+      throw new Error('Gói llama.cpp không vượt qua kiểm tra kích thước/SHA-256.');
+    }
+
+    try {
+      const zip = await JSZip.loadAsync(await readFile(archivePath));
+      await mkdir(temporaryDirectory, { recursive: true });
+      let foundServer = false;
+      for (const [entryName, entry] of Object.entries(zip.files)) {
+        if (entry.dir) continue;
+        if (entryName.includes('\\') || entryName.startsWith('/') ||
+            entryName.includes(':') || entryName.split('/').some(part => part === '..')) {
+          throw new Error('Gói llama.cpp chứa đường dẫn tệp không an toàn.');
+        }
+        const fileName = path.posix.basename(entryName);
+        if (fileName !== entryName) throw new Error('Gói llama.cpp chứa thư mục con không được hỗ trợ.');
+        if (!/\.(exe|dll)$/i.test(fileName) && !/^LICENSE/i.test(fileName)) continue;
+        const content = await entry.async('nodebuffer');
+        await writeFile(path.join(temporaryDirectory, fileName), content, { flag: 'wx' });
+        if (fileName.toLowerCase() === 'llama-server.exe') foundServer = true;
+      }
+      if (!foundServer) throw new Error('Trong gói llama.cpp không tìm thấy llama-server.exe.');
+      await rm(this.options.runtimeDirectory, { recursive: true, force: true });
+      await rename(temporaryDirectory, this.options.runtimeDirectory);
+      return path.join(this.options.runtimeDirectory, 'llama-server.exe');
+    } catch (error) {
+      await rm(temporaryDirectory, { recursive: true, force: true });
+      throw error;
+    } finally {
+      await rm(archivePath, { force: true });
+    }
+  }
+}
+
+function isMissingFile(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT';
+}

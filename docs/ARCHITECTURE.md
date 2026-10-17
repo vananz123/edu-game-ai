@@ -1,31 +1,40 @@
-# EduGame Studio v0.3 — Architecture
+# EduGame Studio — Architecture
 
-## Desktop
+## Current desktop prototype
 
-- Electron main process: file dialogs, safe IPC, SQLite, document extraction, export/import, AI calls for local/BYOK endpoint.
-- Preload: allowlisted API exposed through `contextBridge`; renderer has no Node.js access.
-- Renderer: TypeScript source compiled to JavaScript for Chromium at build time.
-- SQLite: `edugame.sqlite` under Electron `userData`; tables `games` and `sessions`, indexes for update/session date.
-- `library.json` migration: first startup imports the v0.2 file if the SQLite `games` table is empty.
-- Game package `.egame`: portable JSON bundle, independent of SQLite.
+- Electron main process owns file dialogs, SQLite, document extraction, import/export, settings, and existing AI requests.
+- Preload exposes an allowlisted API through `contextBridge`; the renderer has no direct Node.js access.
+- Renderer TypeScript is compiled to JavaScript for Chromium.
+- SQLite stores games and sessions under Electron `userData`; the first-start migration imports v0.2 `library.json` when the games table is empty.
+- `.egame` is a portable JSON bundle, independent of SQLite.
 
-## Cloud architecture target
+The desktop supports document analysis and evidence-based Q&A, reviewable sample questions and quiz/scenario recommendations. The selected analysis is included in AI game-generation prompts. The embedded local path uses a managed llama.cpp CPU runtime and pinned Qwen3.5 GGUF files; it does not require an external AI application and sends lesson text only to loopback. The online path remains a user-configured OpenAI-compatible HTTPS provider. Offline mode remains rule-based and does not call a model. The separate Express/Supabase/Gemini Gateway scaffold is not called by the desktop.
 
-Electron -> Supabase Auth session -> EduGame AI Gateway (Express/TypeScript) -> Gemini API.
+## Offline AI V1 target
 
-Gateway -> Supabase Postgres RPC for monthly quota. Provider secrets are only backend environment variables. Game content is validated before use; source lesson text is not persisted by the gateway.
+Electron Main -> `AIManager` -> verified app-managed `llama-server.exe` -> loopback API bound only to `127.0.0.1`.
 
-The cloud gateway is scaffolded in v0.3, but the desktop login UI and cloud request integration remain unfinished. Do not advertise cloud generation as production-ready until they are connected and tested.
+The application downloads a pinned llama.cpp Windows x64 CPU archive and verifies its size/SHA-256 before safely extracting executable/DLL files. `src/ai-core/model-installer.ts` checks disk space, handles progress and HTTP Range resume, validates pinned manifest metadata, checks final byte size and SHA-256, and atomically installs models under Electron `userData`. A model file already present is reused only after checksum verification. No model/runtime is written to the installer or `Program Files`.
+
+The create-game view offers Qwen3.5 2B/4B and Qwen2.5 7B Q4_0 with pinned Hub revisions, file sizes, SHA-256, source and Apache-2.0 license. It displays available RAM, logical CPU count, rough RAM estimates and expected use. Estimates are guidance rather than measured compatibility or speed; this CPU runtime does not enable GPU acceleration.
+
+Document summarization, Q&A, and game generation send requests only to the locally managed server in local mode. Generated JSON is validated by schemas/game normalization before it can be edited or saved. Generated text is data only and is never executed as code. The selected model runtime starts on first local request, one process at a time, and stops when the app closes.
+
+If local inference reaches its request timeout, Electron aborts the request, stops the potentially unresponsive runtime, and starts the same model again before returning the timeout message. A failed restart is surfaced explicitly so the teacher can restart AI local manually.
+
+SQLite continues to own local projects and history. Exported games use the existing trusted offline game runtime and must not depend on the AI process.
+
+The current BYOK and cloud Gateway code is retained as legacy v0.3 behavior during migration. It is not a dependency of the new offline AI path, and no cloud credentials belong in the offline desktop or installer.
 
 ## Security
 
 - `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`.
-- No provider secret embedded in renderer, preload, package, or installer.
-- Local BYOK key is encrypted with Electron `safeStorage` when available. This protects at-rest storage but is not equivalent to keeping a product-owned API key on a server.
-- Validate generation input on server and enforce rate/quota limits server-side.
-- The Supabase service-role key is backend-only; do not ship it to desktop.
+- Start the AI process only from Electron Main or another trusted backend module using `spawn()` with `shell: false`; Renderer never supplies executable paths or command-line arguments.
+- Bind the model API to `127.0.0.1`, use a selected nonzero port, and verify health before reporting `READY`.
+- Validate IPC data in Main. Apply startup/generation timeouts, cancellation, crash handling, and bounded logs without lesson text or unnecessary personal data.
+- Verify runtime origin, version, model metadata, size, and checksum before use. Never automatically execute an unverified download.
 - Do not execute arbitrary code generated by an LLM. Use fixed, tested game engines and structured game data.
 
 ## Offline guarantees
 
-Game play, scoring, local library, history, local file import, and `.egame` import/export do not require network. Cloud generation and account sync do.
+Saved-game play, scoring, explanations, history, local file import, and `.egame` import/export do not require network or an AI process. Installing a model may require internet; generation is local after a verified model has been installed.

@@ -17,13 +17,18 @@ EduGame Studio is a Windows Electron + TypeScript app that helps teachers create
 ## Architecture map
 - `src/main.ts`: Electron main process, local database, IPC handlers, document operations.
 - `src/preload.ts`: allowlisted IPC API exposed to renderer.
-- `src/renderer.ts`, `src/index.html`, `src/styles.css`: desktop UI.
+- `src/index.html`: desktop window shell and ordered renderer script/style loading.
+- `src/renderer/pages/`: individual screens (home, game library, creation, sessions, settings).
+- `src/renderer/features/`: UI flows (document assistance, local AI, game editor/play, results).
+- `src/renderer/core/`: renderer initialization, navigation, and page wiring.
+- `src/renderer/styles/`: global, layout, shared components, page-specific, and responsive CSS.
+- `src/renderer/shared.ts`: shared renderer state and UI helpers.
 - `src/shared/types.ts`: shared contracts/types.
-- `src/services/game-service.ts`: game-related service logic.
-- `src/game-engine/runtime.ts`: game runtime.
+- `src/services/` — game-service (normalize), game-validation (4 template validators), question-import (CSV/TSV/XLSX), ai-game-normalize (AI draft normalize).
+- `src/game-engine/runtime.ts`: game runtime (scoring, text answers, dedupe helpers).
 - `server/index.ts`: Express AI Gateway scaffold.
 - `server/schema.sql`: Supabase tables/RPC for usage quotas.
-- `tests/runtime.test.ts`: current runtime test.
+- `tests/`: unit tests (runtime, AI manager, model/runtime installer, model catalog, document-assist, question-import, game-validation, ai-game-normalize) run by `npm test`; `tests/smoke56-59.js` are CDP UI smokes (need `electron . --remote-debugging-port=9333`); `tests/legacy/` holds older smokes kept for history.
 
 ## Do not break these invariants
 1. Saved game playback works offline.
@@ -35,7 +40,7 @@ EduGame Studio is a Windows Electron + TypeScript app that helps teachers create
 7. Do not claim tests/build passed unless commands were run and results observed.
 
 ## First task for the new agent
-Do not start with a large rewrite or new features. First establish the actual build/test state:
+Read the latest dated update in `docs/STATUS.md` before relying on older notes. Do not start with a large rewrite or new features. Establish the actual build/test state:
 
 ```bash
 npm install
@@ -52,8 +57,12 @@ npm run dist:win
 
 Then manually verify save/reopen, `.egame` export/import, and offline gameplay.
 
-## After baseline verification
-Implement the next highest-priority incomplete feature: connect Supabase Auth session management in Electron to the existing Gateway `POST /v1/generate`. The desktop should send the user's short-lived access token; the Gateway validates it and enforces quotas. Never expose the Gemini key to desktop. Add integration tests before describing cloud generation as ready.
+## Current development focus
+Product direction is **Offline AI V1**: local llama.cpp/Qwen is the active document-assist path. The Supabase/Gemini Gateway is a legacy scaffold and is not wired to the desktop; do not treat Gateway integration as the next task unless the product owner explicitly changes scope.
+
+Tasknight spec (`docs/tasknight.txt`, §2–§7) core features are implemented and unit/CDP-smoke verified — see the **"tasknight — Trạng thái đã làm / chưa làm"** checklist at the top of `docs/ROADMAP.md` for the authoritative done/not-done list (AI generation for treasure/race journeys, per-question AI regeneration, drag-drop editors, and real-model end-to-end runs remain open). Repository cleanup on 2026-10-18 removed scratch scripts/reports from the root and moved retired smokes to `tests/legacy/`.
+
+Before new features: re-run `npm run check`, `npm test`, and the current CDP smokes (`tests/smoke56-59.js`); update `docs/STATUS.md` after each task. Preserve offline behavior and security boundaries, and add tests for behavior changes.
 
 ## Expected response format from the agent
 - **Findings:** what code currently does, with file paths.

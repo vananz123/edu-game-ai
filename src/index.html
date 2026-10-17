@@ -3,9 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src https: http://127.0.0.1:* http://localhost:*;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src https: http://127.0.0.1:* http://localhost:*;">
   <title>EduGame Studio</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="renderer/styles/global.css">
+  <link rel="stylesheet" href="renderer/styles/layout.css">
+  <link rel="stylesheet" href="renderer/styles/components.css">
+  <link rel="stylesheet" href="renderer/styles/pages.css">
+  <link rel="stylesheet" href="renderer/styles/responsive.css">
 </head>
 <body>
   <div class="app-shell">
@@ -19,6 +23,8 @@
         <button class="nav-item active" data-page="home"><span class="nav-icon">⌂</span><span>Tổng quan</span></button>
         <button class="nav-item" data-page="library"><span class="nav-icon">▦</span><span>Thư viện trò chơi</span><span class="nav-count" id="navGameCount">1</span></button>
         <button class="nav-item" data-page="create"><span class="nav-icon">✳</span><span>Tạo trò chơi</span></button>
+        <button class="nav-item" data-page="lesson-plans"><span class="nav-icon">📄</span><span>Giáo án</span></button>
+        <button class="nav-item" data-page="my-projects"><span class="nav-icon">📁</span><span>Dự án của tôi</span></button>
         <button class="nav-item" data-page="sessions"><span class="nav-icon">◷</span><span>Lịch sử kết quả</span></button>
       </nav>
       <div class="sidebar-bottom">
@@ -37,6 +43,24 @@
     </main>
   </div>
   <div id="modalRoot"></div>
-  <script src="renderer.js"></script>
+  <script src="renderer/shared.js"></script>
+  <script src="renderer/pages/home.js"></script>
+  <script src="renderer/pages/library.js"></script>
+  <script src="renderer/pages/create.js"></script>
+  <script src="renderer/pages/sessions.js"></script>
+  <script src="renderer/pages/settings.js"></script>
+  <script src="renderer/pages/lesson-plans.js"></script>
+  <script src="renderer/pages/my-projects.js"></script>
+  <script src="renderer/core/render.js"></script>
+  <script src="renderer/features/game-editor.js"></script>
+  <script src="renderer/core/controller.js"></script>
+  <script src="renderer/features/document-assist.js"></script>
+  <script src="renderer/features/local-ai.js"></script>
+  <script src="renderer/features/game-generation.js"></script>
+  <script src="game-engine/runtime.js"></script>
+  <script src="renderer/features/gameplay.js"></script>
+  <script src="renderer/features/results.js"></script>
+  <script src="renderer/features/settings.js"></script>
+  <script src="renderer/core/bootstrap.js"></script>
 </body>
 </html>

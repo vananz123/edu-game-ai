@@ -8,9 +8,21 @@ contextBridge.exposeInMainWorld('eduGame', Object.freeze({
   deleteGame: id => ipcRenderer.invoke('library:delete-game', id),
   saveSession: session => ipcRenderer.invoke('library:save-session', session),
   importDocument: () => ipcRenderer.invoke('files:import-document'),
+  importQuestions: () => ipcRenderer.invoke('files:import-questions'),
   exportGame: game => ipcRenderer.invoke('files:export-game', game),
   importGame: () => ipcRenderer.invoke('files:import-game'),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   saveSettings: settings => ipcRenderer.invoke('settings:save', settings),
+  assistWithDocument: request => ipcRenderer.invoke('ai:document-assist', request),
+  getLocalAiModels: () => ipcRenderer.invoke('ai:local-models'),
+  getLocalRuntimeStatus: () => ipcRenderer.invoke('ai:local-status'),
+  installLocalAiModel: modelId => ipcRenderer.invoke('ai:install-local-model', modelId),
+  startLocalRuntime: modelId => ipcRenderer.invoke('ai:start-local-runtime', modelId),
+  stopLocalRuntime: () => ipcRenderer.invoke('ai:stop-local-runtime'),
+  onLocalAiProgress: callback => {
+    const listener = (_event, progress) => callback(progress);
+    ipcRenderer.on('ai:local-progress', listener);
+    return () => ipcRenderer.removeListener('ai:local-progress', listener);
+  },
   generateGame: payload => ipcRenderer.invoke('ai:generate', payload)
 }));

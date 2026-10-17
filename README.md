@@ -1,14 +1,26 @@
 # EduGame Studio v0.3 — TypeScript
 
-Ứng dụng desktop Windows cho giáo viên tạo, chỉnh sửa, lưu, chia sẻ và chơi trò chơi giáo dục. v0.3 giữ lại các tính năng của v0.2, chuyển mã nguồn ứng dụng sang TypeScript, thay thư viện JSON cục bộ bằng SQLite và bổ sung khung AI Gateway cloud để triển khai gói miễn phí/trả phí.
+Ứng dụng desktop Windows cho giáo viên tạo, chỉnh sửa, lưu, chia sẻ và chơi trò chơi giáo dục. v0.3 giữ lại các tính năng của v0.2, chuyển mã nguồn ứng dụng sang TypeScript, thay thư viện JSON cục bộ bằng SQLite và bổ sung khung AI Gateway cloud. Đã tích hợp thử nghiệm AI local llama.cpp cho Windows x64 CPU, gồm hỏi đáp/tóm tắt tài liệu và tạo game từ nội dung đã phân tích.
+
+## Hướng Offline AI V1
+
+- Ứng dụng tự tải và quản lý bản llama.cpp CPU x64 đã ghim phiên bản, kiểm tra kích thước/SHA-256, giải nén vào thư mục dữ liệu riêng và khởi chạy bằng AIManager. Không yêu cầu cài Ollama, LM Studio, llama.cpp hay công cụ nào khác.
+- Có ba lựa chọn GGUF Q4_0: Qwen3.5 2B (~1.21 GB), Qwen3.5 4B (~2.58 GB) và Qwen2.5 7B (~4.44 GB, nguồn bartowski). URL theo revision cố định, kích thước và SHA-256 được khai báo trong `src/ai-core/model-catalog.ts`; giấy phép model là Apache-2.0.
+- Model và runtime được lưu trong thư mục dữ liệu ứng dụng, không trong bộ cài/Program Files. Nếu model đúng kích thước đã có, ứng dụng xác minh SHA-256 rồi dùng lại, không tải lại. Tải lần đầu cần Internet; sau khi cài, hỏi đáp, tóm tắt và tạo game chạy trên máy.
+- Màn hình tạo game hiển thị dung lượng, license, RAM máy, luồng CPU, ước tính RAM và kết quả mong đợi. Các ước tính RAM/kết quả không phải cam kết hiệu năng; runtime hiện dùng CPU, chưa bật GPU.
+- `AIManager` giữ một tiến trình, bind loopback, chờ health check và dừng khi thoát ứng dụng. Model download có resume HTTP Range; runtime tải một lần và được xác minh SHA-256 trước khi giải nén.
+- Đây là tích hợp prototype: chưa kiểm chứng trải nghiệm suy luận trên mọi máy, độ chính xác đầu ra cần giáo viên duyệt; Windows x64 CPU là nền tảng được hỗ trợ hiện tại.
+- BYOK/OpenAI-compatible và Gateway Supabase/Gemini là hành vi prototype v0.3 hiện có, chưa bị xóa trong bước chuyển tiếp; chúng không thuộc đường AI offline mục tiêu.
 
 ## Tính năng trong v0.3
 
 - Dashboard tiếng Việt, thư viện game, trình chỉnh sửa, lịch sử kết quả và cài đặt.
 - Trò chơi mẫu an toàn giao thông; engine trắc nghiệm/tình huống; điểm số, giải thích và chơi lại.
+- Trình sửa tình huống hỗ trợ bối cảnh, phản hồi theo từng hành động, nhánh tiếp theo/kết thúc, câu hỏi thảo luận và thang điểm mỗi quyết định 0–60 an toàn + 0–25 giải thích + 0–15 giảm hậu quả. Runtime ghi điểm theo lộ trình người chơi thực sự đi qua; giáo viên cấu hình điểm từng hành động.
 - Nhập tài liệu TXT, MD, DOCX, PDF có lớp văn bản và PPTX.
+- Luồng AI local llama.cpp: tóm tắt/rút ý, câu hỏi mẫu, gợi ý quiz/tình huống và hỏi đáp tài liệu kèm căn cứ trích dẫn. Kết quả phân tích được đưa vào prompt tạo game; giáo viên cần rà soát trước khi lưu.
 - Tạo bản nháp offline theo quy tắc. Đây không phải mô hình AI; giáo viên phải rà soát đáp án.
-- AI online qua endpoint tương thích OpenAI; có thể cấu hình endpoint local như Ollama.
+- API online tương thích OpenAI vẫn là tùy chọn riêng do người dùng cấu hình; Gateway Gemini là scaffold riêng, chưa được desktop gọi.
 - Dữ liệu thư viện và kết quả lưu trong SQLite trên máy; tự di trú `library.json` từ v0.2 khi khởi động lần đầu.
 - Gói `.egame` để xuất/nhập qua USB; kết quả xuất CSV.
 - Electron dùng `contextIsolation`, `nodeIntegration: false`, `sandbox: true` và API qua preload.
@@ -58,13 +70,19 @@ SQLite là cơ sở dữ liệu cục bộ, không phải tài khoản cloud. Kh
 
 ## Cấu hình AI trong ứng dụng
 
-Mở **Cài đặt** và chọn chế độ online để cấu hình endpoint OpenAI-compatible:
+Trong **Tạo trò chơi**, chọn chế độ:
 
-- Ollama local: thường dùng `http://127.0.0.1:11434/v1` nếu phiên bản hỗ trợ API tương thích.
-- Nhập đúng model name; API key chỉ cần nếu endpoint yêu cầu.
-- Chế độ offline tạo bản nháp theo quy tắc, không gọi AI.
+- **Mẫu ngoại tuyến:** không gọi mô hình; tạo bản nháp theo quy tắc.
+- **AI local tích hợp:** chọn Qwen3.5 0.8B, 2B hoặc 4B và bấm tải/cài. Ứng dụng tải llama.cpp và model, tự xác minh checksum và chỉ tải model chưa có/hỏng. Chế độ hiện dùng CPU, không gọi endpoint Ollama.
+- **AI đám mây:** chọn ChatGPT (OpenAI), Gemini (Google) hoặc endpoint HTTPS tương thích OpenAI trong Cài đặt; API key do người dùng cung cấp.
+
+Trong trang Tạo trò chơi, chọn **Tổng hợp với AI trên máy** hoặc **Tổng hợp với AI đám mây**. Lựa chọn trên máy mở bảng llama.cpp/model dùng chung với Cài đặt; lựa chọn đám mây cho phép chọn ChatGPT, Gemini hoặc endpoint tùy chỉnh đã cấu hình. Sau khi có bản tổng hợp, giáo viên có thể tiếp tục trò chuyện (Enter để gửi, Shift+Enter để xuống dòng), yêu cầu **Tạo bộ câu hỏi khác**, rồi chọn **Dùng bộ câu hỏi gợi ý trong trò chơi** để đưa bộ hiện tại vào trò chơi. Bản tổng hợp, ý chính và tối đa bốn lượt hỏi đáp gần nhất được dùng làm nguồn khi tạo game. Trên AI local, tài liệu dài hơn 12.000 ký tự được rút gọn thành trích đoạn đầu/cuối để giảm thời gian xử lý CPU; ứng dụng sẽ thông báo khi dùng trích đoạn. Nội dung không gửi ra ngoài khi dùng AI local.
 
 **Lưu ý:** cấu hình endpoint trực tiếp trong desktop hiện là đường dành cho thử nghiệm/local hoặc người dùng tự cung cấp khóa (BYOK). Khi phát hành đại trà, không yêu cầu giáo viên dùng khóa API cá nhân; hãy nối đăng nhập của ứng dụng với Cloud Gateway bên dưới và giữ provider key hoàn toàn ở backend.
+
+Trong trình chỉnh sửa trò chơi, **Nhập CSV/XLSX** thêm tối đa 100 câu trắc nghiệm từ `.csv`, `.tsv` hoặc `.xlsx` vào bản nháp để giáo viên rà soát trước khi lưu. Bảng cần có các cột `Câu hỏi`, `Phương án A`, `Phương án B`, `Đáp án`; có thể thêm `Phương án C`, `Phương án D`, `Giải thích`, `Điểm`, `Độ khó`. Đáp án có thể là A/B/C/D hoặc trùng chính xác nội dung phương án. Tệp mỗi lần nhập tối đa 10 MB; nếu có dòng không hợp lệ, toàn bộ lần nhập bị từ chối để tránh thêm dữ liệu dở dang.
+
+Với mẫu **Thử thách tình huống**, mỗi lựa chọn có thể dẫn sang tình huống khác hoặc kết thúc nhánh; mặc định tiếp tục theo thứ tự. Mỗi nhánh có phản hồi riêng và điểm rubric cấu hình theo ba tiêu chí có giới hạn 60/25/15 (tối đa 100 điểm/quyết định). Tình huống cũng có bối cảnh và câu hỏi thảo luận. Các nhánh được xác minh khi lưu/nhập gói `.egame`; lộ trình bị giới hạn tối đa 100 quyết định mỗi lượt để tránh vòng lặp vô hạn.
 
 ## Cloud AI Gateway — bản khung cho gói miễn phí/trả phí
 
@@ -116,12 +134,16 @@ edugame-studio-v0.3/
 ├── src/
 │   ├── main.ts                 # Electron main process + SQLite
 │   ├── preload.ts              # API IPC an toàn
-│   ├── renderer.ts             # Giao diện TypeScript
+│   ├── index.html              # Khung cửa sổ ứng dụng
+│   ├── renderer/
+│   │   ├── core/               # Điều phối trang, điều hướng, khởi tạo
+│   │   ├── features/           # Tạo game, AI, biên tập, chơi và kết quả
+│   │   ├── pages/              # Màn hình tổng quan, thư viện, tạo game...
+│   │   ├── styles/             # CSS nền, bố cục, thành phần, trang, responsive
+│   │   └── shared.ts           # Trạng thái và tiện ích giao diện dùng chung
 │   ├── shared/types.ts         # Kiểu dữ liệu dùng chung
 │   ├── services/game-service.ts
 │   ├── game-engine/runtime.ts
-│   ├── index.html
-│   └── styles.css
 ├── server/
 │   ├── index.ts                # AI Gateway TypeScript
 │   └── schema.sql              # Supabase quota schema/RPC
@@ -136,5 +158,5 @@ edugame-studio-v0.3/
 2. Nối Supabase Auth vào ứng dụng desktop và tích hợp Gateway.
 3. Thêm test schema game, kiểm thử prompt/đáp án, và kiểm thử migration SQLite.
 4. Hoàn thiện matching kéo-thả, game phân nhánh, hình ảnh/âm thanh.
-5. Kiểm thử Ollama local trên cấu hình máy yếu; AI local là tùy chọn, không bắt buộc để chơi game.
+5. Kiểm thử cài đặt và inference Qwen local trên nhiều cấu hình máy, ưu tiên máy cấu hình thấp; AI local là tùy chọn, không bắt buộc để chơi game.
 6. Thêm thanh toán, trang quản trị, ký số installer và quy trình hỗ trợ người dùng.

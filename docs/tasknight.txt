@@ -1,0 +1,203 @@
+Mô tải giao diện trò chơi:
+Đấu trường kiến thức
+Định hướng giao diện: chương trình đố vui, sân khấu thi đấu, điểm số nổi bật
+2.1. Mục đích và cách chơi
+Phù hợp với bài học cần ghi nhớ kiến thức, kiểm tra nhanh mức độ hiểu bài hoặc tổ chức thi đua giữa cá nhân và đội nhóm.
+Mỗi lượt hiển thị một câu hỏi cùng các phương án trả lời.
+Người chơi chọn đáp án hoặc nhập câu trả lời theo dạng câu hỏi được thiết lập.
+Sau khi trả lời, hệ thống thông báo đúng hoặc sai, giải thích đáp án và cập nhật điểm.
+Chuyển sang câu tiếp theo cho đến khi hết câu hỏi.
+Kết thúc trò chơi, hiển thị tổng điểm, số câu đúng, thời gian và bảng xếp hạng.
+2.2. Giao diện trong lúc chơi minh họa
+
+Minh họa giao diện đề xuất, không phải trò chơi đang hoạt động.
+2.3. Cách tính điểm
+Cho phép giáo viên chọn một trong các chế độ:
+Chế độ
+Cách tính
+Cơ bản
+Đúng được điểm cố định; sai không có điểm
+Tốc độ
+Đúng nhanh được nhiều điểm hơn
+Theo độ khó
+Câu dễ, trung bình, khó có mức điểm khác nhau
+Thi đấu đội
+Cộng điểm cho đội, có thể luân phiên người trả lời
+Luyện tập
+Không áp lực thời gian, ưu tiên giải thích và phản hồi
+Ví dụ cấu hình mặc định: câu dễ 100 điểm, trung bình 200 điểm, khó 300 điểm. Có thể cộng tối đa 50 điểm tốc độ nếu giáo viên bật chế độ này. Không cộng điểm tốc độ khi học sinh đang ở chế độ luyện tập không giới hạn thời gian.
+2.4. Tạo thủ công
+Thêm câu hỏi, chọn dạng trắc nghiệm, đúng/sai, điền từ hoặc câu trả lời ngắn.
+Thêm, xóa, sắp xếp phương án và đánh dấu đáp án chính xác.
+Nhập lời giải thích hiển thị sau mỗi câu.
+Thiết lập độ khó, điểm thưởng, thời gian và thứ tự câu hỏi.
+Sao chép câu hỏi để tạo biến thể; nhập câu hỏi từ tệp hoặc bảng tính nếu được hỗ trợ.
+2.5. Tạo bằng AI
+Giáo viên nhập yêu cầu như: “Tạo 15 câu hỏi ôn tập Khoa học tự nhiên lớp 7 về trao đổi chất, gồm 5 câu dễ, 7 câu trung bình và 3 câu khó”.
+AI sẽ:
+Xác định kiến thức trọng tâm từ giáo án.
+Sinh câu hỏi, phương án nhiễu hợp lý, đáp án và giải thích.
+Phân loại độ khó và gợi ý điểm thưởng.
+Phát hiện câu hỏi trùng lặp hoặc thiếu đáp án.
+Cho giáo viên duyệt từng câu, tạo lại câu chưa phù hợp hoặc sửa trực tiếp.
+Thử thách tình huống
+Định hướng giao diện: một câu chuyện trực quan, nhân vật, bối cảnh và lựa chọn có hậu quả rõ ràng.
+3.1. Mục đích và cách chơi
+Dành cho các bài học yêu cầu vận dụng kiến thức, tư duy phản biện và ra quyết định: an toàn giao thông, kỹ năng sống, bảo vệ môi trường, an toàn số, đạo đức và ứng xử.
+Khác với trắc nghiệm thông thường, trò chơi này cần hỗ trợ lựa chọn dẫn đến những kết quả khác nhau.
+Học sinh đọc tình huống hoặc nghe đọc tình huống.
+Chọn một hành động trong số các lựa chọn.
+Nhận phản hồi giải thích vì sao hành động phù hợp hoặc chưa phù hợp.
+Với tình huống nhiều bước, lựa chọn trước có thể ảnh hưởng đến tình huống kế tiếp.
+Kết thúc bằng đánh giá quyết định và gợi ý cách xử lý tốt hơn.
+3.2. Giao diện
+
+3.3. Cơ chế tính điểm
+Không nên chỉ chấm đúng/sai. Có thể đánh giá chất lượng quyết định theo nhiều tiêu chí:
+Mức độ an toàn hoặc phù hợp: 0–60 điểm.
+Khả năng giải thích lý do: 0–25 điểm.
+Lựa chọn phương án ít gây hậu quả tiêu cực: 0–15 điểm.
+Tổng tối đa 100 điểm cho mỗi tình huống. Giáo viên được chỉnh trọng số, hoặc chuyển sang chấm đúng/sai đơn giản.
+Nếu trò chơi có nhiều nhánh, hệ thống ghi nhận kết quả của từng quyết định và tổng hợp thành báo cáo cuối cùng. Không nên thưởng cho tốc độ nếu điều đó khiến học sinh phải quyết định vội trong một tình huống an toàn.
+3.4. Tạo thủ công
+Giáo viên tạo từng tình huống với các trường:
+Tên tình huống và bối cảnh.
+Nhân vật, hình ảnh hoặc âm thanh minh họa.
+Nội dung tình huống.
+Danh sách hành động có thể lựa chọn.
+Phản hồi riêng cho từng hành động.
+Hậu quả, điểm số và nhánh tiếp theo.
+Câu hỏi thảo luận sau tình huống.
+Giáo viên có thể vẽ sơ đồ nhánh để xác định học sinh đi đến bước nào sau mỗi lựa chọn.
+3.5. Tạo bằng AI
+AI có thể chuyển một đoạn giáo án thành tình huống thực tế, tạo các lựa chọn dễ nhầm lẫn nhưng có ý nghĩa giáo dục, viết phản hồi riêng cho từng lựa chọn và đề xuất nhánh tiếp theo.
+Giáo viên cần duyệt tính chính xác của các nội dung liên quan đến pháp luật, tiền phạt, sức khỏe hoặc an toàn. AI không được tự đặt mức phạt hoặc quy tắc pháp lý chưa được xác minh.
+Ghép cặp kiến thức
+
+teacherspayteachers.com
+4.1. Mục đích và cách chơi
+Dành cho nội dung có quan hệ tương ứng: thuật ngữ – định nghĩa, cơ quan – chức năng, nguyên nhân – kết quả, khái niệm – ví dụ, hình ảnh – tên gọi, công thức – đại lượng.
+Giáo viên có thể chọn nhiều cách chơi khác nhau thay vì chỉ kéo thả thẻ.
+Ghép hai cột
+Nối hoặc kéo thuật ngữ sang định nghĩa đúng. Phù hợp với bài học có nhiều khái niệm.
+
+Lật thẻ ghi nhớ
+Lật từng thẻ để tìm hai nội dung tương ứng. Phù hợp với ghi nhớ từ vựng, hình ảnh và thuật ngữ.
+
+Phân loại kiến thức
+Đưa các thẻ vào đúng nhóm. Phù hợp với phân loại sinh vật, vật liệu, thiết bị hoặc dữ liệu.
+4.2. Cách tính điểm
+Ghép đúng: cộng điểm theo từng cặp.
+Ghép sai: không cộng điểm; có thể trừ điểm hoặc tăng số lần thử.
+Hoàn thành nhanh: có thể thưởng điểm thời gian.
+Hoàn thành toàn bộ: cộng điểm hoàn thành.
+Chế độ luyện tập: cho phép xem gợi ý, không trừ điểm.
+Ví dụ: mỗi cặp đúng được 100 điểm, hoàn thành tất cả được thưởng 200 điểm, sai không bị trừ điểm. Giáo viên có thể bật giới hạn lượt thử nếu muốn tăng độ thử thách.
+4.3. Tạo thủ công
+Giao diện nên có một bảng chỉnh sửa trực quan:
+Cột nội dung A
+Cột nội dung B
+Thuật ngữ
+Định nghĩa
+Quang hợp
+Quá trình thực vật sử dụng năng lượng ánh sáng để tổng hợp chất hữu cơ
+Hô hấp tế bào
+Quá trình giải phóng năng lượng từ các chất hữu cơ
+Giáo viên được thêm cặp, sửa nội dung, thêm ảnh, đổi vị trí, xóa cặp hoặc kéo thả để sắp xếp. Sau đó chọn cách chơi và mức độ khó.
+4.4. Tạo bằng AI
+AI trích xuất các cặp kiến thức từ giáo án và tạo nội dung tương ứng. Hệ thống cần bảo đảm mỗi mục có cặp ghép rõ ràng, không tạo định nghĩa trùng nhau hoặc nhiều đáp án đúng ngoài dự kiến.
+Giáo viên có thể yêu cầu AI:
+Tạo 10 cặp thuật ngữ – định nghĩa.
+Chuyển thành 3 nhóm phân loại.
+Tạo phiên bản khó hơn bằng cách thêm các mục gây nhiễu.
+Thay định nghĩa dài bằng cách giải thích phù hợp với học sinh lớp 7.
+Gợi ý hình ảnh minh họa cho mỗi cặp.
+5. Giải mã kho báu
+
+jabali.ai
+Đây nên là trò chơi nổi bật nhất của EduGame Studio vì có thể biến cả một bài học hoặc một chủ đề thành hành trình khám phá.
+5.1. Cách chơi
+Học sinh nhập vai nhà thám hiểm, nhà khoa học hoặc nhân vật do giáo viên lựa chọn. Hành trình được chia thành các chặng; mỗi chặng gắn với một phần kiến thức.
+Chặng 1: giải câu đố để tìm manh mối đầu tiên.
+Chặng 2: hoàn thành nhiệm vụ để lấy chìa khóa.
+Chặng 3: vượt thử thách tổng hợp để mở cánh cửa cuối.
+Chặng cuối: giải mã mật mã hoặc trả lời câu hỏi tổng hợp để nhận kho báu.
+Giáo viên có thể tạo tuyến đường cố định, cho học sinh lựa chọn nhánh khám phá hoặc đặt giới hạn lượt thử. Khi thất bại, trò chơi có thể đưa ra gợi ý thay vì bắt đầu lại từ đầu.
+5.2. Giao diện trong lúc chơi
+HÀNH TRÌNH
+Ngôi đền tri thức
+Chặng 2/4
+
+5.3. Cơ chế tính điểm và phần thưởng
+Hành động
+Điểm đề xuất
+Giải câu đố chính xác
+100 điểm
+Hoàn thành chặng
+200 điểm
+Tìm được vật phẩm ẩn
+50 điểm
+Dùng gợi ý
+Không thưởng điểm gợi ý
+Hoàn thành hành trình
+300 điểm
+Điểm số chỉ là một phần của trải nghiệm. Phần thưởng chính có thể gồm chìa khóa, bản đồ, vật phẩm, huy hiệu hoặc mở khóa câu chuyện. Giáo viên được điều chỉnh giá trị điểm, số lượng vật phẩm và điều kiện chiến thắng.
+Không nên yêu cầu mọi trò chơi đều có bảng xếp hạng. Giáo viên có thể chọn trải nghiệm cá nhân, hợp tác cả lớp hoặc thi đấu giữa các đội.
+5.4. Tạo thủ công
+Đây là trò chơi cần trình soạn thảo màn chơi riêng.
+Giáo viên có thể:
+Tạo, đổi tên, nhân bản và sắp xếp các chặng.
+Chọn kiểu nhiệm vụ cho mỗi chặng: trắc nghiệm, ghép cặp, giải mã, phân loại hoặc xử lý tình huống.
+Đặt điều kiện mở khóa, số lượt thử, điểm thưởng và gợi ý.
+Viết cốt truyện, mô tả nhiệm vụ và lời thoại nhân vật.
+Thêm bản đồ, hình nền, biểu tượng chìa khóa, vật phẩm và hình ảnh tự chọn.
+Thiết lập nhiều kết thúc hoặc phần thưởng cho các tuyến đường khác nhau.
+Ví dụ, trong bài học về hệ hô hấp, giáo viên tạo hành trình “Giải cứu lá phổi”: mỗi chặng là một nhiệm vụ về cơ quan hô hấp, trao đổi khí, bảo vệ hệ hô hấp và vận dụng kiến thức.
+5.5. Tạo bằng AI
+AI nên sinh một bản thiết kế hành trình gồm:
+Tên trò chơi, cốt truyện và mục tiêu.
+Số chặng phù hợp với thời lượng.
+Mục tiêu kiến thức của từng chặng.
+Câu đố, đáp án, giải thích và gợi ý.
+Cơ chế chìa khóa, vật phẩm, điểm số và mở khóa.
+Đề xuất hình ảnh, phong cách mỹ thuật và lời dẫn.
+Điều kiện chiến thắng và phương án khi học sinh trả lời sai.
+Sau khi tạo, giáo viên có thể yêu cầu: “Giữ nguyên cốt truyện nhưng thay chặng 3 bằng một thử thách ghép cặp”, hoặc “Giảm còn 3 chặng để chơi trong 10 phút”.
+AI phải sửa đúng phần được yêu cầu, thay vì tạo lại toàn bộ trò chơi và làm mất các chỉnh sửa trước đó.
+6. Đường đua chinh phục
+
+uchi.ru
+6.1. Cách chơi
+Đây là trò chơi phù hợp với thi đua giữa các nhóm, ôn tập cuối chương hoặc tạo không khí sôi nổi trong lớp học.
+Giáo viên tạo đường đua với số ô tùy chỉnh.
+Mỗi đội chọn nhân vật hoặc phương tiện.
+Khi đến lượt, đội trả lời một câu hỏi.
+Trả lời đúng thì tiến lên; trả lời sai có thể đứng yên hoặc thực hiện nhiệm vụ bổ sung.
+Một số ô có hiệu ứng đặc biệt như tăng tốc, nhận thưởng, câu hỏi khó hoặc mất lượt.
+Đội đầu tiên đến đích, hoặc đạt mục tiêu sau số lượt quy định, sẽ chiến thắng.
+Cần có chế độ giáo viên điều khiển trên màn hình chung, không yêu cầu mỗi học sinh phải có máy riêng. Giáo viên đọc câu hỏi, nhận câu trả lời của đội rồi xác nhận kết quả.
+6.2. Giao diện
+Đường đua tri thức
+
+6.3. Tính điểm và luật đua
+Có thể thiết lập hai hệ thống độc lập:
+Tiến độ đường đua: xác định vị trí của đội.
+Điểm kiến thức: phản ánh kết quả trả lời.
+Ví dụ:
+Trả lời đúng câu dễ: tiến 1 ô.
+Trả lời đúng câu trung bình: tiến 2 ô.
+Trả lời đúng câu khó: tiến 3 ô.
+Ô tăng tốc: tiến thêm 1 ô.
+Ô thử thách: phải trả lời câu bổ sung để tiếp tục.
+Ô may mắn: nhận vật phẩm hoặc quyền lợi theo luật đã công bố.
+Nên tránh để hiệu ứng ngẫu nhiên lấn át kiến thức. Giáo viên có thể tắt hoàn toàn yếu tố may mắn, chọn luật đua công bằng hoặc đặt mức tiến tối đa cho mỗi lượt.
+6.4. Tạo thủ công
+Giáo viên thiết lập chiều dài đường đua, số đội, số lượt, nhân vật, câu hỏi, điểm thưởng và các ô đặc biệt.
+Giao diện nên có trình chỉnh sửa đường đua trực quan: kéo thả ô đặc biệt, chọn hiệu ứng, đặt quy tắc và xem trước đường đi. Câu hỏi được quản lý trong một ngân hàng riêng để giáo viên tái sử dụng.
+6.5. Tạo bằng AI
+AI có thể đề xuất số câu hỏi và chiều dài đường đua theo thời lượng tiết học, phân bố câu dễ – trung bình – khó, gợi ý các ô đặc biệt và tạo bộ câu hỏi cân bằng cho từng đội.
+Ví dụ yêu cầu: “Tạo đường đua 12 ô, chơi trong 10 phút, chia 4 đội, ưu tiên kiến thức trọng tâm và hạn chế yếu tố may mắn”.
+Kết quả cần có thể chỉnh sửa từng câu hỏi, luật đua, vị trí ô đặc biệt và độ khó trước khi chơi.
+7. Cá nhân hóa phong cách theo từng giáo viên
+Đây là tính năng rất quan trọng để EduGame Studio không trở thành phần mềm mà giáo viên nào cũng tạo ra những trò chơi giống hệt nhau.
+Tôi đề xuất thiết kế một mục riêng mang tên Phong cách giảng dạy của tôi. Giáo viên thiết lập một lần, sau đó AI sử dụng các lựa chọn đó làm mặc định cho những trò chơi mới.
