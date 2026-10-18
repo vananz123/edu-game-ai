@@ -60,9 +60,9 @@ Then manually verify save/reopen, `.egame` export/import, and offline gameplay.
 ## Current development focus
 Product direction is **Offline AI V1**: local llama.cpp/Qwen is the active document-assist path. The Supabase/Gemini Gateway is a legacy scaffold and is not wired to the desktop; do not treat Gateway integration as the next task unless the product owner explicitly changes scope.
 
-Tasknight spec (`docs/tasknight.txt`, §2–§7) core features are implemented and unit/CDP-smoke verified — see the **"tasknight — Trạng thái đã làm / chưa làm"** checklist at the top of `docs/ROADMAP.md` for the authoritative done/not-done list (AI generation for treasure/race journeys, per-question AI regeneration, drag-drop editors, and real-model end-to-end runs remain open). Repository cleanup on 2026-10-18 removed scratch scripts/reports from the root and moved retired smokes to `tests/legacy/`.
+Tasknight spec (`docs/tasknight.txt`, §2–§7) core features are implemented and unit/CDP-smoke verified — see the **"tasknight — Trạng thái đã làm / chưa làm"** checklist at the top of `docs/ROADMAP.md` for the authoritative done/not-done list (AI generation for treasure/race journeys, per-question AI regeneration, drag-drop editors, and drag-drop editors remain open; online real-model end-to-end is verified via `tests/smoke60.js` 43/43, local-runtime e2e is not). Repository cleanup on 2026-10-18 removed scratch scripts/reports from the root and moved retired smokes to `tests/legacy/`.
 
-Before new features: re-run `npm run check`, `npm test`, and the current CDP smokes (`tests/smoke56-59.js`); update `docs/STATUS.md` after each task. Preserve offline behavior and security boundaries, and add tests for behavior changes.
+Before new features: re-run `npm run check`, `npm test`, and the current CDP smokes (`tests/smoke56-60.js`); update `docs/STATUS.md` after each task. Preserve offline behavior and security boundaries, and add tests for behavior changes.
 
 ## Expected response format from the agent
 - **Findings:** what code currently does, with file paths.

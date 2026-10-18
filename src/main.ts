@@ -24,6 +24,7 @@ const { importQuestionsFromFile } = require('./services/question-import');
 const { normalizeAiGame: normalizeAiGameService } = require('./services/ai-game-normalize');
 const { buildTreasureHunt: buildTreasureHuntService, buildRaceData: buildRaceDataService } = require('./services/ai-game-design');
 const { validateScenarioGame, validateMatchingGame, validateTreasureHuntGame, validateRaceGame } = require('./services/game-validation');
+const { isZenBaseUrl, postZenChatCompletions, readLocalOpencodeApiKey } = require('./services/opencode-zen');
 const {
   QWEN_LOCAL_MODELS,
   LLAMA_CPP_RUNTIME,
@@ -865,38 +866,46 @@ function registerIpc() {
     }
     if (endpoint.username || endpoint.password || endpoint.hash) throw new Error('Base URL không được chứa thông tin đăng nhập hoặc fragment.');
     let apiKey = mode === 'online' ? payload.apiKey || '' : '';
+    const useZen = mode === 'online' && isZenBaseUrl(baseUrl);
     if (mode === 'online' && !apiKey && ai.apiKeyEncrypted && safeStorage.isEncryptionAvailable()) {
       try { apiKey = safeStorage.decryptString(Buffer.from(ai.apiKeyEncrypted, 'base64')); }
       catch (error) {
-        console.error('Could not decrypt configured AI API key:', error instanceof Error ? error.message : 'unknown');
-        throw new Error('Không đọc được API key đã lưu. Hãy nhập lại khóa trong Cài đặt.');
+        if (!useZen) {
+          console.error('Could not decrypt configured AI API key:', error instanceof Error ? error.message : 'unknown');
+          throw new Error('Không đọc được API key đã lưu. Hãy nhập lại khóa trong Cài đặt.');
+        }
+        apiKey = '';
       }
     }
+    if (useZen && !apiKey) apiKey = readLocalOpencodeApiKey();
     if (!baseUrl || !model) throw new Error('Hãy cấu hình địa chỉ API và tên mô hình trong Cài đặt.');
     const prompt = buildPrompt({ ...payload, teachingStyle: settings.preferences?.teachingStyle });
     const useStrictGameSchema = mode === 'local';
-    const response = await fetchAiEndpoint(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      redirect: 'error',
-      headers: { 'Content-Type': 'application/json', ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}) },
-      body: JSON.stringify({
-        model,
-        temperature: mode === 'local' ? 0.2 : 0.4,
-        ...(mode === 'local' ? { top_p: 1.0, top_k: 20, presence_penalty: 0.0 } : {}),
-        ...buildGenerationOptions(
-          mode,
-          Math.min(4_096, Math.max(1_200, Number(payload.questionCount || 8) * 256))
-        ),
-        ...(useStrictGameSchema
-          ? { response_format: { type: 'json_schema', json_schema: { name: 'game_draft', strict: true, schema: gameDraftResponseSchema } } }
-          : {}),
-        messages: [
-          { role: 'system', content: 'Bạn là trợ lý thiết kế trò chơi giáo dục tiếng Việt. Chỉ trả về JSON hợp lệ, không markdown. Câu trắc nghiệm có 3-4 phương án với id "a","b","c","d" và correctOptionId là một trong các id đó. Câu đúng/sai đặt type "true-false", correctOptionId là "a" (Đúng) hoặc "b" (Sai). Câu điền từ/trả lời ngắn đặt type "fill-in-blank" hoặc "short-answer", bỏ options, điền correctAnswer bằng văn bản đáp án đúng. Với template "treasure-hunt": mọi câu là trắc nghiệm và phải kèm treasureDesign (cốt truyện, tên chặng, vật phẩm ẩn). Với template "race": mọi câu là trắc nghiệm có difficulty và phải kèm raceDesign (chiều dài đường đua, đội, ô đặc biệt). Không bịa quy định pháp luật hoặc số liệu; nếu không chắc, hãy ghi chú cần giáo viên xác minh.' },
-          { role: 'user', content: prompt }
-        ]
-      }),
-      signal: AbortSignal.timeout(mode === 'local' ? 300_000 : 90_000)
-    }, mode);
+    const requestBody = {
+      model,
+      temperature: mode === 'local' ? 0.2 : 0.4,
+      ...(mode === 'local' ? { top_p: 1.0, top_k: 20, presence_penalty: 0.0 } : {}),
+      ...buildGenerationOptions(
+        mode,
+        Math.min(4_096, Math.max(1_200, Number(payload.questionCount || 8) * 256))
+      ),
+      ...(useStrictGameSchema
+        ? { response_format: { type: 'json_schema', json_schema: { name: 'game_draft', strict: true, schema: gameDraftResponseSchema } } }
+        : {}),
+      messages: [
+        { role: 'system', content: 'Bạn là trợ lý thiết kế trò chơi giáo dục tiếng Việt. Chỉ trả về JSON hợp lệ, không markdown. Câu trắc nghiệm có 3-4 phương án với id "a","b","c","d" và correctOptionId là một trong các id đó. Câu đúng/sai đặt type "true-false", correctOptionId là "a" (Đúng) hoặc "b" (Sai). Câu điền từ/trả lời ngắn đặt type "fill-in-blank" hoặc "short-answer", bỏ options, điền correctAnswer bằng văn bản đáp án đúng. Với template "treasure-hunt": mọi câu là trắc nghiệm và phải kèm treasureDesign (cốt truyện, tên chặng, vật phẩm ẩn). Với template "race": mọi câu là trắc nghiệm có difficulty và phải kèm raceDesign (chiều dài đường đua, đội, ô đặc biệt). Không bịa quy định pháp luật hoặc số liệu; nếu không chắc, hãy ghi chú cần giáo viên xác minh.' },
+        { role: 'user', content: prompt }
+      ]
+    };
+    const response = useZen
+      ? await postZenChatCompletions({ baseUrl, apiKey, payload: requestBody, timeoutMs: 180_000 })
+      : await fetchAiEndpoint(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        redirect: 'error',
+        headers: { 'Content-Type': 'application/json', ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}) },
+        body: JSON.stringify(requestBody),
+        signal: AbortSignal.timeout(mode === 'local' ? 300_000 : 90_000)
+      }, mode);
     if (!response.ok) throw new Error(`AI API trả về lỗi HTTP ${response.status}. Kiểm tra endpoint, model và API key.`);
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content;
@@ -984,44 +993,52 @@ async function requestJsonFromCompatibleApi({ payload, ai, systemPrompt, userPro
   }
 
   let apiKey = '';
+  const useZen = mode === 'online' && isZenBaseUrl(baseUrl);
   if (mode === 'online') {
     apiKey = String(payload.apiKey || '');
     if (!apiKey && ai.apiKeyEncrypted && safeStorage.isEncryptionAvailable()) {
       try {
         apiKey = safeStorage.decryptString(Buffer.from(ai.apiKeyEncrypted, 'base64'));
       } catch (error) {
-        console.error('Could not decrypt configured AI API key:', error instanceof Error ? error.message : 'unknown');
-        throw new Error('Không đọc được API key đã lưu. Hãy nhập lại khóa trong Cài đặt.');
+        if (!useZen) {
+          console.error('Could not decrypt configured AI API key:', error instanceof Error ? error.message : 'unknown');
+          throw new Error('Không đọc được API key đã lưu. Hãy nhập lại khóa trong Cài đặt.');
+        }
+        apiKey = '';
       }
     }
+    if (useZen && !apiKey) apiKey = readLocalOpencodeApiKey();
   }
 
-  const response = await fetchAiEndpoint(`${baseUrl}/chat/completions`, {
-    method: 'POST',
-    redirect: 'error',
-    headers: { 'Content-Type': 'application/json', ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}) },
-    body: JSON.stringify({
-      model,
-      temperature: mode === 'local' ? 0.2 : 0.3,
-      ...(mode === 'local' ? { top_p: 1.0, top_k: 20, presence_penalty: 0.0 } : {}),
-      ...buildGenerationOptions(mode, maxTokens),
-      response_format: mode === 'local' && responseSchema
-        ? {
-          type: 'json_schema',
-          json_schema: {
-            name: responseSchema.name,
-            strict: true,
-            schema: responseSchema.schema
-          }
+  const requestBody = {
+    model,
+    temperature: mode === 'local' ? 0.2 : 0.3,
+    ...(mode === 'local' ? { top_p: 1.0, top_k: 20, presence_penalty: 0.0 } : {}),
+    ...buildGenerationOptions(mode, maxTokens),
+    response_format: mode === 'local' && responseSchema
+      ? {
+        type: 'json_schema',
+        json_schema: {
+          name: responseSchema.name,
+          strict: true,
+          schema: responseSchema.schema
         }
-        : { type: 'json_object' },
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ]
-    }),
-    signal: AbortSignal.timeout(mode === 'local' ? 300_000 : 90_000)
-  }, mode);
+      }
+      : { type: 'json_object' },
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ]
+  };
+  const response = useZen
+    ? await postZenChatCompletions({ baseUrl, apiKey, payload: requestBody, timeoutMs: 180_000 })
+    : await fetchAiEndpoint(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      redirect: 'error',
+      headers: { 'Content-Type': 'application/json', ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}) },
+      body: JSON.stringify(requestBody),
+      signal: AbortSignal.timeout(mode === 'local' ? 300_000 : 90_000)
+    }, mode);
   if (!response.ok) {
     const detail = mode === 'local' ? (await response.text()).slice(0, 500).trim() : '';
     throw new Error(
@@ -1035,7 +1052,7 @@ async function requestJsonFromCompatibleApi({ payload, ai, systemPrompt, userPro
   }
   const content = choice?.message?.content;
   if (typeof content !== 'string' || !content.trim()) {
-    throw new Error('AI không trả về nội dung. Hãy kiểm tra model/runtime local và thử lại.');
+    throw new Error('AI không trả về nội dung. Hãy kiểm tra model và nhà cung cấp AI rồi thử lại.');
   }
   const cleaned = content.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
   try {

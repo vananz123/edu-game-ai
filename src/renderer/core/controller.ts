@@ -28,7 +28,9 @@ function wirePage() {
       } else {
         render();
       }
-      toast('Đã chọn nhà cung cấp. Hãy lưu API key trong Cài đặt để bắt đầu.');
+      toast(isZenCloudConfig(state.settings.ai)
+        ? 'Đã chọn OpenCode Zen. Nhấn Lưu cài đặt để dùng model miễn phí (khóa tự đọc nếu máy đã đăng nhập OpenCode).'
+        : 'Đã chọn nhà cung cấp. Hãy lưu API key trong Cài đặt để bắt đầu.');
     });
   });
   $('#localModelSelect')?.addEventListener('change', async event => {

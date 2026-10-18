@@ -1,7 +1,21 @@
 # Current Project Status — v0.3
 
 **Status:** Prototype / handoff build. Do not describe as production-ready.
-**Last verified:** 2026-10-18 — AI generation supports treasure-hunt/race (design blocks, normalize+build helpers, offline wiring). `npm run check` + `npm test` passed (build + 10 suites).
+**Last verified:** 2026-10-18 — OpenCode Zen online AI integration live-verified: CDP `tests/smoke60.js` **43/43** against the real `mimo-v2.6-flash-free` model (analyze + generate/save/play treasure-hunt & race). `npm run check` + `npm test` passed (build + 11 suites).
+
+## OpenCode Zen online AI integration (2026-10-18)
+
+Online mode now talks straight to OpenCode's free Zen API (no external relay); the local llama.cpp path is unchanged.
+
+- **New `src/services/opencode-zen.ts`:**
+  - `isZenBaseUrl()` (host `opencode.ai`), `buildZenIds()` (session/request id algorithm copied from the opencode client), `buildZenRequestPayload()` — enforces Zen's free-tier gate: `stream: true` + tool set, **`max_tokens` floor 8192** (`ZEN_MIN_MAX_TOKENS`; reasoning tokens count against the cap, so the app's 512/1024 caps got truncated with `finish=length`), `reasoning_effort: minimal`.
+  - `aggregateZenStream()` (SSE → content/finish/usage/tool_calls, tolerant of junk lines), tool-call loop fallback (asks the model to answer directly), `postZenChatCompletions()` (adds gate headers, drops `response_format` on HTTP 400, 180s timeout, missing key falls back to `Bearer public`).
+  - `sanitizeZenContent()` — strips chat-template tokens (endoftext/end_of_text style) that the backend sometimes re-emits after the JSON; without it every `JSON.parse` failed.
+  - `readLocalOpencodeApiKey()` — reads `~/.local/share/opencode/auth.json` (then `%LOCALAPPDATA%/opencode/auth.json`) at runtime only; no key is stored or committed.
+- **`src/main.ts`:** online mode with an `opencode.ai` baseUrl routes through the Zen client (both `ai:generate` and `requestJsonFromCompatibleApi`); empty apiKey falls back to the local opencode key for Zen; clearer error text when a provider returns no content.
+- **Renderer:** `opencode` preset in `shared.ts` (`https://opencode.ai/zen/v1` + `mimo-v2.6-flash-free`), provider inference + `isZenCloudConfig()`, settings provider option with "leave key empty" hint, document-assist gate skips the apiKey requirement for Zen, toast wording.
+- **Verification:** `tests/opencode-zen.test.ts` added (base URL, id shape, payload floor/reasoning_effort, stream aggregation, sanitize) — `npm run check` + `npm test` → **11/11 suites**. Live repro: 3/3 analysis responses parse. CDP `tests/smoke60.js` → **43/43** (T0 boot … T2 analyze real model, T3-T5 treasure generate/save/play, T6-T7 race generate/save/play, T8 cleanup), 0 uncaught exceptions. Debug logging is opt-in via env `ZEN_DEBUG_LOG`.
+- **Handoff notes:** Zen free tier requires stream+tools+ids; `max_tokens` floor and sanitize are load-bearing — do not remove them. Known benign CSP notice for `data:text/css` stylesheets in smoke output.
 
 ## AI generation for §5/§6 (Treasure hunt · Race) (2026-10-18, resumed session)
 

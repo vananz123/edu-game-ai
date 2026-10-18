@@ -13,7 +13,7 @@ async function selectDocumentAssistMode(mode) {
       state.pendingDocumentSummary = true;
       return toast('Hãy tải model và llama.cpp trong bảng AI local. Sau khi cài xong, ứng dụng sẽ tự tổng hợp tài liệu.', 5000);
     }
-  } else if (mode === 'online' && !state.settings.ai?.apiKey) {
+  } else if (mode === 'online' && !state.settings.ai?.apiKey && !isZenCloudConfig(state.settings.ai)) {
     return toast('Hãy chọn ChatGPT hoặc Gemini và lưu API key trong Cài đặt trước khi tổng hợp.', 5000);
   }
   return assistWithDocument('summarize', mode);

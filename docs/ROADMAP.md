@@ -46,7 +46,7 @@
 
 ### Cross-cutting / unverified
 - [x] Library SQLite, chơi offline, `.egame` export/import (logic-level test), validation 4 template.
-- [~] End-to-end AI với model thật (cloud Gemini + local Qwen) — tầng normalize/schema/unit test đã có; không có model/API trong harness. (offline path hoàn chỉnh; cần verify CDP với runtime local/online).
+- [~] End-to-end AI với model thật: **online (OpenCode Zen free tier) đã verify qua CDP `tests/smoke60.js` 43/43 (2026-10-18)** — analyze + generate/save/play treasure-hunt & race với `mimo-v2.6-flash-free`. Local llama.cpp/Qwen chưa verify (cần runtime + model thật trên máy). Tổng normalize/schema/unit test đã có.
 - [ ] Native dialog import/export click-through; XLSX với cột type (parser type-agnostic, chưa smoke).
 - [~] `npm run dist:win` package Windows; nâng cấp/downgrade dữ liệu người dùng. (chưa chạy build installer trong phiên này).
 

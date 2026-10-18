@@ -10,7 +10,7 @@
     "build": "npm run clean && tsc -p tsconfig.json && copyfiles -u 1 \"src/index.html\" \"src/renderer/styles/*.css\" dist/src",
     "start": "npm run build && electron .",
     "check": "tsc --noEmit -p tsconfig.json",
-    "test": "npm run build && node dist/tests/runtime.test.js && node dist/tests/ai-manager.test.js && node dist/tests/model-installer.test.js && node dist/tests/runtime-installer.test.js && node dist/tests/model-catalog.test.js && node dist/tests/document-assist.test.js && node dist/tests/question-import.test.js && node dist/tests/game-validation.test.js && node dist/tests/ai-game-normalize.test.js && node dist/tests/ai-game-design.test.js",
+    "test": "npm run build && node dist/tests/runtime.test.js && node dist/tests/ai-manager.test.js && node dist/tests/model-installer.test.js && node dist/tests/runtime-installer.test.js && node dist/tests/model-catalog.test.js && node dist/tests/document-assist.test.js && node dist/tests/question-import.test.js && node dist/tests/game-validation.test.js && node dist/tests/ai-game-normalize.test.js && node dist/tests/ai-game-design.test.js && node dist/tests/opencode-zen.test.js",
     "dist:win": "npm run build && electron-builder --win nsis",
     "dist:dir": "npm run build && electron-builder --dir",
     "server:dev": "tsx watch server/index.ts",

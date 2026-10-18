@@ -8,15 +8,23 @@ const coverClasses = ['cover-purple','cover-mint','cover-orange','cover-blue','c
 const cloudProviderPresets = {
   openai: { label: 'ChatGPT', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
   gemini: { label: 'Gemini', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-2.5-flash' },
+  opencode: { label: 'OpenCode Zen (miễn phí)', baseUrl: 'https://opencode.ai/zen/v1', model: 'mimo-v2.6-flash-free' },
   custom: { label: 'API tương thích OpenAI', baseUrl: '', model: '' }
 };
+function isZenCloudConfig(ai = {}) {
+  if (ai.cloudProvider === 'opencode') return true;
+  const host = String(ai.baseUrl || '').replace(/^https?:\/\//i, '').split('/')[0] || '';
+  return /(^|\.)opencode\.ai$/i.test(host);
+}
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function getCloudProviderConfig(ai = {}) {
   const inferredProvider = String(ai.baseUrl || '').includes('googleapis.com')
     ? 'gemini'
     : String(ai.baseUrl || '').includes('api.openai.com')
       ? 'openai'
-      : ai.baseUrl ? 'custom' : 'openai';
+      : /(^|\.)opencode\.ai$/i.test(String(ai.baseUrl || '').replace(/^https?:\/\//i, '').split('/')[0] || '')
+        ? 'opencode'
+        : ai.baseUrl ? 'custom' : 'openai';
   const provider = Object.prototype.hasOwnProperty.call(cloudProviderPresets, ai.cloudProvider)
     ? ai.cloudProvider
     : inferredProvider;
