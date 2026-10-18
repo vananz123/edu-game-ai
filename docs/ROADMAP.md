@@ -1,5 +1,17 @@
 # Roadmap
 
+## Tailwind CSS migration + UI/UX refresh (in progress, 2026-10-18)
+
+Replace the 5 hand-written stylesheets (`global/layout/components/pages/responsive.css`, ~427 rules, ~250 classes) with Tailwind CSS v4 utilities/components, then use the freed-up budget for a creative UI/UX pass. Direction agreed with the owner: animations across the whole app; the in-game player UI adapts to the audience (child → teen → adult) **only while a game is being presented**; UI/UX may be redesigned creatively, pixel parity matters only while both CSS systems coexist.
+
+- [x] **G0 — Zen online AI** (pre-requisite work, verified 43/43) — see STATUS.
+- [x] **G1 — Infrastructure:** Tailwind v4 CLI standalone, `src/renderer/styles/app.css` entry (`@source`, `@theme` tokens/breakpoints/9 animations, `@layer components .motion-safe-off`, temporary `@layer base` UA reverts so preflight doesn't disturb the legacy look), `build:css` in the build chain, `app.css` linked after the legacy sheets. Verified: check + 11 test suites + `smoke60` 43/43; geometry diff CSS-on vs CSS-off reduced to 31/764 elements at 1–2 px.
+- [ ] **G2 — Shell + static pages:** migrate `index.html` (sidebar/topbar/nav) + `core/render.ts` + `shared.ts` + `pages/*` to utilities; delete the corresponding `layout.css`/`pages.css` rules as sections migrate.
+- [ ] **G3 — Components + editor:** migrate `components.css` and the inline styles in `game-editor.ts` (879 lines, 23 inline styles).
+- [ ] **G4 — Gameplay + audience theming:** migrate `features/gameplay.ts` (dark play modal, 41 inline styles, 27 classList toggles); add `data-player-theme="child|teen|adult"` on the play-modal root with `--player-fs`/`--player-radius`/`--motion-scale` variables driven from settings.
+- [ ] **G5 — Motion + performance + cleanup:** apply the animation tokens app-wide (respecting `.motion-safe-off`), delete the 5 legacy stylesheets, the temporary `@layer base` reverts, the old `app.css` link order, and the 4 dead classes.
+- Must-keep selectors (used by code/CDP smokes): `.stage-top`, `.answer-option`, `.race-cell`, `.feedback`, `[data-play-close]`, `[data-race-answer]`, `.match-card`, `.memory-card`, and the `#id`s (`#saveGameBtn`, `#treasureStageCount`, `#raceTeamCount`, `#drawQuestionBtn`, …); state classes toggled via `classList` stay as real classes, not utility soup.
+
 ## v0.3 tasknight (`docs/tasknight.txt`) — Trạng thái đã làm / chưa làm
 
 ### §2 Đấu trường kiến thức (quiz)

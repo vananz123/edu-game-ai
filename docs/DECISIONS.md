@@ -35,6 +35,12 @@ For Offline AI V1, generation runs locally through a managed llama.cpp runtime a
 ### 11. Keep the current TypeScript project structure during Phase A
 Continue using the existing npm package and Electron layout. Reuse `src/shared`, `src/game-engine`, and `src/services`; add focused boundaries under `src/ai-core` rather than introducing pnpm workspaces or React without a demonstrated need. Move modules only when a later phase requires it and can preserve current behavior.
 
+### 11. Keep the current TypeScript project structure during Phase A
+Continue using the existing npm package and Electron layout. Reuse `src/shared`, `src/game-engine`, and `src/services`; add focused boundaries under `src/ai-core` rather than introducing pnpm workspaces or React without a demonstrated need. Move modules only when a later phase requires it and can preserve current behavior.
+
+### 12. Tailwind CSS v4 (CLI, no bundler) replaces the hand-written stylesheets incrementally
+Migrate the renderer styling to Tailwind CSS v4 using the standalone CLI (no bundler/PostCSS step added to the Electron build). The entry stylesheet (`src/renderer/styles/app.css`) is linked *after* the 5 legacy stylesheets so utilities win the cascade while migration is in progress. Because the legacy UI was built against browser-default (UA) values that Tailwind's preflight resets, a temporary `@layer base` block restores those UA values with `revert`; since every legacy rule is unlayered it still takes precedence, so the reverts affect only genuinely UA-styled elements. That block is removed together with the last legacy stylesheet (Phase 5, see ROADMAP). Verification for each phase uses the existing gates plus a CDP geometry diff (CSS on vs off) to catch layout regressions that computed-style spot checks miss.
+
 ## Decisions still open
 - Initial GGUF model and runtime versions, verified source/checksum/size/license, and supported Windows hardware.
 - Whether/how to sync game libraries across devices.

@@ -7,7 +7,8 @@
   "license": "MIT",
   "scripts": {
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
-    "build": "npm run clean && tsc -p tsconfig.json && copyfiles -u 1 \"src/index.html\" \"src/renderer/styles/*.css\" dist/src",
+    "build": "npm run clean && tsc -p tsconfig.json && copyfiles -u 1 \"src/index.html\" \"src/renderer/styles/*.css\" dist/src && npm run build:css",
+    "build:css": "tailwindcss -i src/renderer/styles/app.css -o dist/src/renderer/styles/app.css --minify",
     "start": "npm run build && electron .",
     "check": "tsc --noEmit -p tsconfig.json",
     "test": "npm run build && node dist/tests/runtime.test.js && node dist/tests/ai-manager.test.js && node dist/tests/model-installer.test.js && node dist/tests/runtime-installer.test.js && node dist/tests/model-catalog.test.js && node dist/tests/document-assist.test.js && node dist/tests/question-import.test.js && node dist/tests/game-validation.test.js && node dist/tests/ai-game-normalize.test.js && node dist/tests/ai-game-design.test.js && node dist/tests/opencode-zen.test.js",
@@ -28,12 +29,14 @@
     "zod": "^4.1.5"
   },
   "devDependencies": {
+    "@tailwindcss/cli": "^4.3.3",
     "@types/better-sqlite3": "^7.6.13",
     "@types/express": "^5.0.3",
     "@types/node": "^22.15.30",
     "copyfiles": "^2.4.1",
     "electron": "^33.2.1",
     "electron-builder": "^25.1.8",
+    "tailwindcss": "^4.3.3",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2"
   },
