@@ -1,21 +1,24 @@
 # Current Project Status — v0.3
 
 **Status:** Prototype / handoff build. Do not describe as production-ready.
-**Last verified:** 2026-10-18 — repository cleanup after import-polish task; `npm run check` + `npm test` passed (build + all 9 suites) with the cleaned tree.
+**Last verified:** 2026-10-18 — AI generation supports treasure-hunt/race (design blocks, normalize+build helpers, offline wiring). `npm run check` + `npm test` passed (build + 10 suites).
 
-## Repository cleanup + done/not-done notes (2026-10-18, resumed session)
+## AI generation for §5/§6 (Treasure hunt · Race) (2026-10-18, resumed session)
 
-Housekeeping before starting tasknight §7+ work (per product owner request): delete scratch files, reorganize, and document what is finished vs. open.
+The main generator now produces full structure for the new game types.
 
-- **Deleted (root, all untracked/regenerable):** one-off helper scripts (`check-dist/check-lib/check-state`, `extract-docx`, `gen-smoke-p1`, `get-cbg`, `inspect-editor`, `patch-a/b/p1`, `recover-mvajtxyz`), stray outputs (`delete-*.txt`, `p1-*.txt`, `smoke58-app.log`), CDP reports (`smoke56-59-report.json`, regenerable by re-running the smokes), duplicate/broken-encoding tasknight extracts (`spec-sec4-5.txt`, `spec-sec6-7.txt`, `tasknight-extracted.txt` — canonical copy is `docs/tasknight.txt`), and empty `docs/New folder`. `docs/tasknight.docx` (source) kept.
-- **Moved:** retired smokes `smoke2.js`, `smoke-p1.js`, `smoke-ui.js`, `smoke-delete.js` → `tests/legacy/` (still referenced by older STATUS entries; updated those references). Active harnesses stay at `tests/smoke56-59.js`.
-- **Docs reorganized for readability:** `docs/ROADMAP.md` now opens with a **"tasknight §2–§7 — Trạng thái đã làm / chưa làm"** checklist (authoritative done/not-done list, incl. unchecked gaps: AI-generated treasure/race journeys, per-question AI regeneration, difficulty-mix enforcement, drag-drop editors, media/sound, multi-teacher profiles, real-model end-to-end, `dist:win`). `docs/AGENT_HANDOFF.md` "Current development focus" and architecture map refreshed (services list, `tests/legacy/`, current smoke entry points).
-- **Kept untouched:** `docs/tasknight.docx/.txt`, `.env.example`, `release/`+`dist/` (gitignored build output), all source/tests, `.git` history. No source code changed in this task — cleanup only (the STATUS path references above are doc edits).
-- **Verification:** `npm run check` + `npm test` green on the cleaned tree (9/9 suites). File deletions/moves are not code-path dependent (root scratch files were never imported; `npm test` chain references only `tests/*.test.ts`).
-- **Not verified in this pass:** git working tree now shows the earlier session's modifications + this cleanup as uncommitted changes — committing is left to the product owner.
-- **Next:** start the unchecked items in the ROADMAP tasknight checklist (recommended order: AI generation for §5/§6 journeys, then real-model end-to-end verification, then §7 multi-profile if desired).
-
-## Import polish: duplicate detection + summary toast (2026-10-18, resumed session)
+- **Main (IPC `ai:generate`):**
+  - Extended `gameDraftSchema` and `gameDraftResponseSchema` to accept `treasureDesign` and `raceDesign` (zod + JSON Schema). Template enum includes `'treasure-hunt' | 'race'`.
+  - `buildPrompt()` generates type-specific structure and rules:
+    - `treasure-hunt`: require all questions as `multiple-choice` (3–4 options) and include ordered `treasureDesign.stages` mapped to questions (story/task/hint/attempts/points/completionBonus/hasHiddenItem, character/intro/journeyBonus/hiddenItemBonus). Code wires linear progression.
+    - `race`: require all questions as `multiple-choice` with `difficulty` (`dễ|trung bình|khó`) and include `raceDesign` (trackLength/maxRounds/stepByDifficulty/luckEnabled/teams/specialCells). Code clamps/validates cell types.
+  - System prompt updated to mention treasure/race design blocks and strict JSON.
+  - Offline `generateOffline()` now builds `treasureHunt` or `race` via design helpers when template matches; falls back to MC quiz otherwise.
+- **Normalize + design helpers:**
+  - `src/services/ai-game-design.ts` (new): `buildTreasureHunt(questions, design)` — filters to puzzle MC, aligns `stagesMeta[originalIndex]`, sets `nextStageId` linear, ends at final; returns null if <2 puzzles. `buildRaceData(questions, design)` — filters puzzles, assigns defaults/clamps (track 3–100 → clamp to 100, maxRounds 1–50), dedupe/drop invalid teams/cells; assigns `difficulty` (default `trung bình` if missing). Both compatible with `validateTreasureHuntGame`/`validateRaceGame`.
+  - `src/services/ai-game-normalize.ts`: template enum expanded to 5; attaches `treasureHunt` when `treasure-hunt` (and valid) and `race` when `race`; falls back to `scenario` only for unknown template.
+- **Verification:** `tests/ai-game-design.test.ts` (new) covers meta alignment, clamping, dedup, validation round-trip, normalize attachment, fallback behavior. `package.json` test chain includes it. `npm run check` + `npm test` → 10/10 suites green.
+- **Handoff notes:** design blocks optional (helpers safe defaults). Treasure needs >=2 puzzle MC; race needs >=1 puzzle MC. Addresses "AI-generated treasure/race journeys" in ROADMAP §5.5/§6.5. Real-model end-to-end remains unverified in CI (needs local runtime or online API).
 
 Follow-up to §2.4 — importing a file that repeats questions already in the game now skips the copies and reports exactly what happened.
 

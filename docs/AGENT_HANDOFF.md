@@ -24,11 +24,11 @@ EduGame Studio is a Windows Electron + TypeScript app that helps teachers create
 - `src/renderer/styles/`: global, layout, shared components, page-specific, and responsive CSS.
 - `src/renderer/shared.ts`: shared renderer state and UI helpers.
 - `src/shared/types.ts`: shared contracts/types.
-- `src/services/` — game-service (normalize), game-validation (4 template validators), question-import (CSV/TSV/XLSX), ai-game-normalize (AI draft normalize).
+- `src/services/` — game-service (normalize), game-validation (4 template validators), question-import (CSV/TSV/XLSX), ai-game-normalize (AI draft normalize), ai-game-design (treasure/race builder).
 - `src/game-engine/runtime.ts`: game runtime (scoring, text answers, dedupe helpers).
 - `server/index.ts`: Express AI Gateway scaffold.
 - `server/schema.sql`: Supabase tables/RPC for usage quotas.
-- `tests/`: unit tests (runtime, AI manager, model/runtime installer, model catalog, document-assist, question-import, game-validation, ai-game-normalize) run by `npm test`; `tests/smoke56-59.js` are CDP UI smokes (need `electron . --remote-debugging-port=9333`); `tests/legacy/` holds older smokes kept for history.
+- `tests/`: unit tests (runtime, AI manager, model/runtime installer, model catalog, document-assist, question-import, game-validation, ai-game-normalize, ai-game-design) run by `npm test`; `tests/smoke56-59.js` are CDP UI smokes (need `electron . --remote-debugging-port=9333`); `tests/legacy/` holds older smokes kept for history.
 
 ## Do not break these invariants
 1. Saved game playback works offline.

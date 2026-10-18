@@ -31,7 +31,7 @@
 - [x] 5.4 Trình soạn thảo màn chơi riêng: tạo/nhân bản/dời chặng, cốt truyện & nhiệm vụ, options + đáp án, lượt thử/điểm/gợi ý, nhánh có nhãn, vật phẩm ẩn.
 - [ ] 5.2 UI kiểu bản đồ/hình nền/nhân vật/âm thanh minh họa.
 - [ ] Kiểu nhiệm vụ đa dạng mỗi chặng (ghép cặp/giải mã/phân loại trong treasure) — hiện câu chặng chỉ trắc nghiệm.
-- [ ] 5.5 AI sinh thiết kế hành trình (`treasureHunt`) — chưa làm.
+- [x] 5.5 AI sinh thiết kế hành trình (`treasureHunt`) — đã thực thi (design blocks + buildTreasureHunt + normalize/offline; test 10/10).
 
 ### §6 Đường đua chinh phục (race)
 - [x] 6.1 Chơi chung màn hình: luân phiên đội, đọc hỏi/trả lời/xác nhận, đội về đích hoặc hết lượt thì thắng.
@@ -46,9 +46,9 @@
 
 ### Cross-cutting / unverified
 - [x] Library SQLite, chơi offline, `.egame` export/import (logic-level test), validation 4 template.
-- [ ] End-to-end AI với model thật (cloud Gemini + local Qwen) — tầng normalize/schema/unit test đã có; không có model/API trong harness.
+- [~] End-to-end AI với model thật (cloud Gemini + local Qwen) — tầng normalize/schema/unit test đã có; không có model/API trong harness. (offline path hoàn chỉnh; cần verify CDP với runtime local/online).
 - [ ] Native dialog import/export click-through; XLSX với cột type (parser type-agnostic, chưa smoke).
-- [ ] `npm run dist:win` package Windows; nâng cấp/downgrade dữ liệu người dùng.
+- [~] `npm run dist:win` package Windows; nâng cấp/downgrade dữ liệu người dùng. (chưa chạy build installer trong phiên này).
 
 ## v0.3 — Existing prototype
 - Migrate Electron source to TypeScript.

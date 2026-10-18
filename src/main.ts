@@ -22,6 +22,7 @@ const {
 const { LlamaRuntimeInstaller } = require('./ai-core/runtime-installer');
 const { importQuestionsFromFile } = require('./services/question-import');
 const { normalizeAiGame: normalizeAiGameService } = require('./services/ai-game-normalize');
+const { buildTreasureHunt: buildTreasureHuntService, buildRaceData: buildRaceDataService } = require('./services/ai-game-design');
 const { validateScenarioGame, validateMatchingGame, validateTreasureHuntGame, validateRaceGame } = require('./services/game-validation');
 const {
   QWEN_LOCAL_MODELS,
@@ -86,7 +87,38 @@ const gameDraftSchema = z.object({
   subject: z.string().max(100).optional().default(''),
   grade: z.string().max(50).optional().default(''),
   topic: z.string().max(200).optional().default(''),
-  template: z.enum(['quiz', 'scenario', 'matching']).optional(),
+  template: z.enum(['quiz', 'scenario', 'matching', 'treasure-hunt', 'race']).optional(),
+  treasureDesign: z.object({
+    character: z.string().max(100).optional(),
+    intro: z.string().max(2000).optional(),
+    journeyBonus: z.number().int().min(0).max(10000).optional(),
+    hiddenItemBonus: z.number().int().min(0).max(1000).optional(),
+    stages: z.array(z.object({
+      name: z.string().max(120).optional(),
+      story: z.string().max(2000).optional(),
+      taskDescription: z.string().max(1000).optional(),
+      attempts: z.number().int().min(0).max(99).optional(),
+      points: z.number().int().min(0).max(1000).optional(),
+      completionBonus: z.number().int().min(0).max(10000).optional(),
+      hasHiddenItem: z.boolean().optional(),
+      hint: z.string().max(500).optional()
+    })).max(30).optional()
+  }).optional(),
+  raceDesign: z.object({
+    trackLength: z.number().int().min(3).max(100).optional(),
+    maxRounds: z.number().int().min(1).max(50).optional(),
+    stepByDifficulty: z.boolean().optional(),
+    luckEnabled: z.boolean().optional(),
+    teams: z.array(z.object({
+      name: z.string().trim().min(1).max(60),
+      icon: z.string().max(8).optional()
+    })).min(2).max(6).optional(),
+    specialCells: z.array(z.object({
+      cell: z.number().int().min(2).max(100),
+      type: z.enum(['boost', 'penalty', 'lucky', 'challenge']),
+      label: z.string().max(80).optional()
+    })).max(12).optional()
+  }).optional(),
   description: z.string().max(2000).optional().default(''),
   questions: z.array(z.object({
     id: z.string().max(20).optional(),
@@ -121,8 +153,70 @@ const gameDraftResponseSchema = {
     subject: { type: 'string' },
     grade: { type: 'string' },
     topic: { type: 'string' },
-    template: { type: 'string', enum: ['quiz', 'scenario', 'matching'] },
+    template: { type: 'string', enum: ['quiz', 'scenario', 'matching', 'treasure-hunt', 'race'] },
     description: { type: 'string' },
+    treasureDesign: {
+      type: 'object',
+      properties: {
+        character: { type: 'string' },
+        intro: { type: 'string' },
+        journeyBonus: { type: 'number' },
+        hiddenItemBonus: { type: 'number' },
+        stages: {
+          type: 'array', maxItems: 30,
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              story: { type: 'string' },
+              taskDescription: { type: 'string' },
+              attempts: { type: 'number' },
+              points: { type: 'number' },
+              completionBonus: { type: 'number' },
+              hasHiddenItem: { type: 'boolean' },
+              hint: { type: 'string' }
+            },
+            required: ['name'],
+            additionalProperties: false
+          }
+        }
+      },
+      required: ['stages'],
+      additionalProperties: false
+    },
+    raceDesign: {
+      type: 'object',
+      properties: {
+        trackLength: { type: 'number' },
+        maxRounds: { type: 'number' },
+        stepByDifficulty: { type: 'boolean' },
+        luckEnabled: { type: 'boolean' },
+        teams: {
+          type: 'array', minItems: 2, maxItems: 6,
+          items: {
+            type: 'object',
+            properties: { name: { type: 'string' }, icon: { type: 'string' } },
+            required: ['name'],
+            additionalProperties: false
+          }
+        },
+        specialCells: {
+          type: 'array', maxItems: 12,
+          items: {
+            type: 'object',
+            properties: {
+              cell: { type: 'number' },
+              type: { type: 'string', enum: ['boost', 'penalty', 'lucky', 'challenge'] },
+              label: { type: 'string' }
+            },
+            required: ['cell', 'type'],
+            additionalProperties: false
+          }
+        }
+      },
+      required: ['trackLength'],
+      additionalProperties: false
+    },
     questions: {
       type: 'array', minItems: 3, maxItems: 15,
       items: {
@@ -797,7 +891,7 @@ function registerIpc() {
           ? { response_format: { type: 'json_schema', json_schema: { name: 'game_draft', strict: true, schema: gameDraftResponseSchema } } }
           : {}),
         messages: [
-          { role: 'system', content: 'Bạn là trợ lý thiết kế trò chơi giáo dục tiếng Việt. Chỉ trả về JSON hợp lệ, không markdown. Câu trắc nghiệm có 3-4 phương án với id "a","b","c","d" và correctOptionId là một trong các id đó. Câu đúng/sai đặt type "true-false", correctOptionId là "a" (Đúng) hoặc "b" (Sai). Câu điền từ/trả lời ngắn đặt type "fill-in-blank" hoặc "short-answer", bỏ options, điền correctAnswer bằng văn bản đáp án đúng. Không bịa quy định pháp luật hoặc số liệu; nếu không chắc, hãy ghi chú cần giáo viên xác minh.' },
+          { role: 'system', content: 'Bạn là trợ lý thiết kế trò chơi giáo dục tiếng Việt. Chỉ trả về JSON hợp lệ, không markdown. Câu trắc nghiệm có 3-4 phương án với id "a","b","c","d" và correctOptionId là một trong các id đó. Câu đúng/sai đặt type "true-false", correctOptionId là "a" (Đúng) hoặc "b" (Sai). Câu điền từ/trả lời ngắn đặt type "fill-in-blank" hoặc "short-answer", bỏ options, điền correctAnswer bằng văn bản đáp án đúng. Với template "treasure-hunt": mọi câu là trắc nghiệm và phải kèm treasureDesign (cốt truyện, tên chặng, vật phẩm ẩn). Với template "race": mọi câu là trắc nghiệm có difficulty và phải kèm raceDesign (chiều dài đường đua, đội, ô đặc biệt). Không bịa quy định pháp luật hoặc số liệu; nếu không chắc, hãy ghi chú cần giáo viên xác minh.' },
           { role: 'user', content: prompt }
         ]
       }),
@@ -988,10 +1082,21 @@ function buildPrompt(payload) {
   const scoringLine = !mode ? '' : `\nChế độ tính điểm giáo viên chọn: ${mode}. ${mode === 'theo độ khó' ? `Đặt điểm points mỗi câu theo bảng: dễ ${pointsEasy}, trung bình ${pointsMedium}, khó ${pointsHard}; gán trường "difficulty" cho từng câu là "dễ", "trung bình" hoặc "khó" phù hợp mức độ. ` : mode === 'tốc độ' ? `Mỗi câu đúng nhận khoảng ${pointsPer} điểm; trả lời nhanh được cộng tối đa ${timeBonus} điểm. ` : mode === 'luyện tập' ? 'Ưu tiên câu hỏi rõ ràng và giải thích chi tiết; không nhấn mạnh thời gian. ' : mode === 'thi đấu đội' ? 'Câu hỏi vừa sức để các đội luân phiên trả lời; điểm số cộng về cho đội. ' : `Mỗi câu đúng nhận ${pointsPer} điểm. `}`;
   const ts = payload.teachingStyle && typeof payload.teachingStyle === 'object' ? payload.teachingStyle : null;
   const styleLine = ts ? `\nPhong cách giảng dạy của giáo viên (áp dụng cho trò chơi này): giọng điệu ${String(ts.tone || 'thân thiện')}; mức độ hài hước ${String(ts.humor || 'vừa phải')}; phong cách mỹ thuật ${String(ts.visualStyle || 'hiện đại sinh động')}${ts.examples ? `; ưu tiên ví dụ hoặc tình huống: ${String(ts.examples).slice(0, 300)}` : ''}${ts.notes ? `; lưu ý thêm: ${String(ts.notes).slice(0, 400)}` : ''}.` : '';
+  const template = ['quiz', 'scenario', 'matching', 'treasure-hunt', 'race'].includes(String(payload.template)) ? String(payload.template) : 'scenario';
+  const questionCount = Math.max(3, Math.min(15, Number(payload.questionCount) || 8));
+  const genericStructure = '{"title":"...","subject":"...","grade":"...","topic":"...","template":"quiz|scenario|matching","description":"...","questions":[{"id":"q1","type":"multiple-choice|true-false|fill-in-blank|short-answer|scenario|matching","prompt":"...","options":[{"id":"a","text":"..."},{"id":"b","text":"..."},{"id":"c","text":"..."},{"id":"d","text":"..."}],"correctOptionId":"b","explanation":"...","points":100}]}';
+  const genericRules = 'trộn đa dạng kiểu câu hỏi: trắc nghiệm (3-4 lựa chọn id "a","b","c","d", correctOptionId là một trong các id đó), đúng/sai (type "true-false", correctOptionId "a" cho Đúng hoặc "b" cho Sai), điền từ (type "fill-in-blank", không options, correctAnswer là đáp án cần điền) và trả lời ngắn (type "short-answer", không options, correctAnswer là đáp án mẫu); Thể loại mong muốn: ' + template + '.';
+  const treasureStructure = '{"title":"...","subject":"...","grade":"...","topic":"...","template":"treasure-hunt","description":"...","questions":[{"id":"q1","type":"multiple-choice","prompt":"...","options":[{"id":"a","text":"..."},{"id":"b","text":"..."},{"id":"c","text":"..."}],"correctOptionId":"a","explanation":"..."}],"treasureDesign":{"character":"Nhà thám hiểm","intro":"...","journeyBonus":300,"hiddenItemBonus":50,"stages":[{"name":"Chặng 1 — ...","story":"...","taskDescription":"...","hint":"...","attempts":0,"points":100,"completionBonus":200,"hasHiddenItem":true}]}}';
+  const treasureRules = `Thể loại mong muốn: treasure-hunt (Giải mã kho báu). Tạo ${questionCount} câu ứng với ${questionCount} chặng (tối thiểu 2); MỌI câu hỏi đều là trắc nghiệm nhiều phương án (type "multiple-choice", 3-4 phương án; KHÔNG dùng đúng/sai, điền từ hay trả lời ngắn trong thể loại này). Kèm treasureDesign: stages có MỖI PHẦN tương ứng theo đúng thứ tự questions — name (tên chặng), story (bối cảnh, lời dẫn nối tiếp mạch lạc giữa các chặng), taskDescription (nhiệm vụ của học sinh ở chặng này), hint (gợi ý khi trả lời sai), attempts (số lượt thử 0-99, 0 = không giới hạn), points (0-1000), completionBonus (0-10000), hasHiddenItem (true cho khoảng một nửa số chặng cất vật phẩm ẩn). character là nhân vật của học sinh, intro là lời mở đầu hành trình; journeyBonus (0-10000) thưởng khi hoàn thành cả hành trình; hiddenItemBonus (0-1000) điểm cho mỗi vật phẩm ẩn. Hệ thống tự nối các chặng thành hành trình một nhánh, chặng cuối là kết thúc.`;
+  const raceStructure = '{"title":"...","subject":"...","grade":"...","topic":"...","template":"race","description":"...","questions":[{"id":"q1","type":"multiple-choice","prompt":"...","options":[{"id":"a","text":"..."},{"id":"b","text":"..."},{"id":"c","text":"..."}],"correctOptionId":"a","explanation":"...","difficulty":"dễ"}],"raceDesign":{"trackLength":12,"maxRounds":6,"stepByDifficulty":true,"luckEnabled":true,"teams":[{"name":"Đội Sao Mộc","icon":"🚀"},{"name":"Đội Sao Kim","icon":"🏎️"}],"specialCells":[{"cell":5,"type":"boost","label":"Tăng tốc"},{"cell":9,"type":"challenge","label":"Thử thách"}]}}';
+  const raceRules = 'Thể loại mong muốn: race (Đường đua chinh phục). MỌI câu hỏi đều là trắc nghiệm và CÓ trường difficulty là "dễ", "trung bình" hoặc "khó" — phân bố đều ba mức trong bộ câu hỏi. Kèm raceDesign: trackLength (số ô đường đua, 3-100, gợi ý 10-16 theo thời lượng), maxRounds (số vòng đua, 1-50), stepByDifficulty (true nếu trả lời đúng khó thì đi thêm ô), luckEnabled (yếu tố may mắn), teams (2-4 đội gợi ý gồm name và icon emoji — giáo viên sẽ chỉnh lại), specialCells (4-8 ô đặc biệt: cell ≥ 2 và ≤ trackLength, không trùng số ô, type là "boost" (tăng tốc), "penalty" (chướng ngại), "lucky" (may mắn) hoặc "challenge" (thử thách), label là nhãn hiển thị).';
+  const structure = template === 'treasure-hunt' ? { json: treasureStructure, rules: treasureRules }
+    : template === 'race' ? { json: raceStructure, rules: raceRules }
+    : { json: genericStructure, rules: genericRules };
   return `Tạo một trò chơi giáo dục bằng tiếng Việt từ tài liệu sau.
 Trả về JSON có cấu trúc:
-{"title":"...","subject":"...","grade":"...","topic":"...","template":"quiz|scenario|matching","description":"...","questions":[{"id":"q1","type":"multiple-choice|true-false|fill-in-blank|short-answer|scenario|matching","prompt":"...","options":[{"id":"a","text":"..."},{"id":"b","text":"..."},{"id":"c","text":"..."},{"id":"d","text":"..."}],"correctOptionId":"b","explanation":"...","points":100}]}
-Yêu cầu: tạo ${Math.max(3, Math.min(15, Number(payload.questionCount) || 8))} câu; trộn đa dạng kiểu câu hỏi: trắc nghiệm (3-4 lựa chọn id "a","b","c","d", correctOptionId là một trong các id đó), đúng/sai (type "true-false", correctOptionId "a" cho Đúng hoặc "b" cho Sai), điền từ (type "fill-in-blank", không options, correctAnswer là đáp án cần điền) và trả lời ngắn (type "short-answer", không options, correctAnswer là đáp án mẫu); prompt của mỗi câu PHẢI là câu hỏi hoặc tình huống cụ thể (kết thúc bằng ? hoặc mô tả tình huống), tuyệt đối KHÔNG dùng nhãn như "TOM TAT", "Y CHINH", "GOI Y"; một đáp án đúng; giải thích ngắn, rõ; tránh câu mơ hồ; không tự bịa mức phạt hoặc điều luật. Thể loại mong muốn: ${payload.template || 'scenario'}. Lớp: ${payload.grade || 'chưa xác định'}. Môn học: ${payload.subject || 'chưa xác định'}.
+${structure.json}
+Yêu cầu: tạo ${questionCount} câu; ${structure.rules} prompt của mỗi câu PHẢI là câu hỏi hoặc tình huống cụ thể (kết thúc bằng ? hoặc mô tả tình huống), tuyệt đối KHÔNG dùng nhãn như "TOM TAT", "Y CHINH", "GOI Y"; một đáp án đúng; giải thích ngắn, rõ; tránh câu mơ hồ; không tự bịa mức phạt hoặc điều luật. Lớp: ${payload.grade || 'chưa xác định'}. Môn học: ${payload.subject || 'chưa xác định'}.
 ${scoringLine}${styleLine}Tên tài liệu: ${payload.sourceName || 'Không có'}.
 ${payload.analysis ? 'Chỉ sử dụng bản tổng hợp, ý chính, câu hỏi gợi ý và phần trao đổi dưới đây làm nguồn nội dung cho trò chơi. Không tham chiếu văn bản tài liệu gốc ngoài phần đã tổng hợp. Dùng câu hỏi và câu trả lời của giáo viên để định hướng nội dung; mọi đáp án vẫn phải được căn cứ vào ý chính và bản tổng hợp.' : 'Dùng nội dung tài liệu gốc bên dưới làm nguồn.'}
 ${payload.useSuggestedQuestions ? 'Ưu tiên chuyển bộ câu hỏi gợi ý trong bản tổng hợp thành câu hỏi của trò chơi; giữ đúng trọng tâm và tạo đáp án dựa trên nội dung nguồn.' : ''}
@@ -1017,5 +1122,14 @@ async function generateOffline(payload) {
     explanation: 'Câu hỏi ngoại tuyến được tạo theo mẫu từ văn bản trích xuất. Giáo viên cần chỉnh sửa lựa chọn và xác nhận đáp án trước khi dùng trên lớp.',
     points: 100
   }));
-  return { game: { id: id('game'), title: payload.title || `Trò chơi: ${payload.topic || payload.sourceName || 'Bài học mới'}`, subject: payload.subject || '', grade: payload.grade || '', topic: payload.topic || '', template: payload.template || 'scenario', description: 'Bản nháp được tạo ngoại tuyến theo mẫu. Cần giáo viên duyệt trước khi sử dụng.', questions, sourceName: payload.sourceName || '', tags: ['Ngoại tuyến', 'Cần duyệt'], createdAt: new Date().toISOString() }, warning: 'Chế độ ngoại tuyến tạo bản nháp theo quy tắc, không phải mô hình AI. Vui lòng rà soát đáp án trước khi dùng.' };
+  const game: any = { id: id('game'), title: payload.title || `Trò chơi: ${payload.topic || payload.sourceName || 'Bài học mới'}`, subject: payload.subject || '', grade: payload.grade || '', topic: payload.topic || '', template: payload.template || 'scenario', description: 'Bản nháp được tạo ngoại tuyến theo mẫu. Cần giáo viên duyệt trước khi sử dụng.', questions, sourceName: payload.sourceName || '', tags: ['Ngoại tuyến', 'Cần duyệt'], createdAt: new Date().toISOString() };
+  if (game.template === 'treasure-hunt') {
+    const hunt = buildTreasureHuntService(questions, null);
+    if (hunt) game.treasureHunt = hunt;
+  }
+  if (game.template === 'race') {
+    const race = buildRaceDataService(questions, null);
+    if (race) game.race = race;
+  }
+  return { game, warning: 'Chế độ ngoại tuyến tạo bản nháp theo quy tắc, không phải mô hình AI. Vui lòng rà soát đáp án trước khi dùng.' };
 }

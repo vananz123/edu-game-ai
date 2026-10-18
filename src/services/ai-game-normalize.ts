@@ -1,7 +1,9 @@
 import type { GameQuestion } from '../shared/types';
+import { buildRaceData, buildTreasureHunt } from './ai-game-design';
 
 const TEXT_QUESTION_TYPES = new Set(['fill-in-blank', 'short-answer']);
 const KNOWN_QUESTION_TYPES = new Set(['multiple-choice', 'true-false', 'fill-in-blank', 'short-answer', 'scenario', 'matching']);
+const KNOWN_TEMPLATES = ['quiz', 'scenario', 'matching', 'treasure-hunt', 'race'];
 
 export interface NormalizeAiGamePayload {
   subject?: string;
@@ -51,19 +53,31 @@ export function normalizeAiGame(raw: any, payload: NormalizeAiGamePayload, makeI
     questions.push({ id, type: type === 'scenario' || type === 'matching' ? type : 'multiple-choice', prompt, options, correctOptionId: resolveOptionId(q?.correctOptionId, options), explanation, points, ...(difficulty ? { difficulty } : {}) });
   });
   if (!questions.length) throw new Error('AI không tạo được câu hỏi nào.');
-  return {
+  const template = KNOWN_TEMPLATES.includes(String(raw?.template))
+    ? String(raw.template)
+    : (KNOWN_TEMPLATES.includes(String(payload.template)) ? String(payload.template) : 'scenario');
+  const game: any = {
     id: makeId('game'),
     title: String(raw?.title || 'Trò chơi mới'),
     subject: String(raw?.subject || payload.subject || ''),
     grade: String(raw?.grade || payload.grade || ''),
     topic: String(raw?.topic || ''),
-    template: ['quiz', 'scenario', 'matching'].includes(raw?.template) ? raw.template : (payload.template || 'scenario'),
+    template,
     description: String(raw?.description || ''),
     questions,
     sourceName: payload.sourceName || '',
     tags: ['AI tạo'],
     createdAt: new Date().toISOString()
   };
+  if (template === 'treasure-hunt') {
+    const hunt = buildTreasureHunt(questions, raw?.treasureDesign);
+    if (hunt) game.treasureHunt = hunt;
+  }
+  if (template === 'race') {
+    const race = buildRaceData(questions, raw?.raceDesign);
+    if (race) game.race = race;
+  }
+  return game;
 }
 
 function normalizeOptions(rawOptions: unknown): Array<{ id: string; text: string }> {
