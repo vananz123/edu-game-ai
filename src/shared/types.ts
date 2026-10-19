@@ -1,4 +1,6 @@
 /** Shared, versioned domain contracts for EduGame Studio. */
+import type { GameProject } from './lesson-types';
+
 export type GameTemplate = 'quiz' | 'scenario' | 'matching' | 'treasure-hunt' | 'race';
 export type QuestionType = 'multiple-choice' | 'true-false' | 'fill-in-blank' | 'short-answer' | 'scenario' | 'matching' | 'treasure-hunt' | 'race';
 export type QuestionDifficulty = 'dễ' | 'trung bình' | 'khó';
@@ -258,6 +260,12 @@ export interface EduGameBridge {
   saveGame(game: EducationalGame): Promise<EducationalGame>;
   deleteGame(id: string): Promise<{ ok: boolean }>;
   saveSession(session: GameSession): Promise<{ ok: boolean }>;
+  saveLessonDocument(payload: { documentId?: string; name: string; ext: string; sizeBytes?: number; text: string; characters?: number }): Promise<import('./lesson-types').LessonDocument>;
+  getLessonDocument(documentId: string): Promise<(import('./lesson-types').LessonDocument & { text: string }) | null>;
+  saveProjectDraft(project: GameProject): Promise<GameProject>;
+  getProject(projectId: string): Promise<GameProject | null>;
+  listProjects(): Promise<GameProject[]>;
+  deleteProject(projectId: string): Promise<{ ok: boolean }>;
   importDocument(): Promise<{ name: string; text: string } | null>;
   importQuestions(): Promise<{ name: string; questions: GameQuestion[] } | null>;
   exportGame(game: EducationalGame): Promise<{ ok: boolean }>;

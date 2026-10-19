@@ -22,6 +22,7 @@ const {
 const { LlamaRuntimeInstaller } = require('./ai-core/runtime-installer');
 const { importQuestionsFromFile } = require('./services/question-import');
 const { normalizeAiGame: normalizeAiGameService } = require('./services/ai-game-normalize');
+const { LessonStore, LESSON_STORE_SCHEMA_SQL } = require('./services/lesson-store');
 const { buildTreasureHunt: buildTreasureHuntService, buildRaceData: buildRaceDataService } = require('./services/ai-game-design');
 const { validateScenarioGame, validateMatchingGame, validateTreasureHuntGame, validateRaceGame } = require('./services/game-validation');
 const { isZenBaseUrl, postZenChatCompletions, readLocalOpencodeApiKey } = require('./services/opencode-zen');
@@ -251,6 +252,7 @@ const gameDraftResponseSchema = {
 };
 
 let sqlite;
+let lessonStore;
 
 let mainWindow;
 let localAiManager;
@@ -323,6 +325,9 @@ async function ensureData() {
     CREATE INDEX IF NOT EXISTS idx_games_updated_at ON games(updated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_sessions_created_at ON sessions(created_at DESC);
   `);
+  sqlite.exec(LESSON_STORE_SCHEMA_SQL);
+  await fs.mkdir(path.join(DATA_DIR(), 'lessons'), { recursive: true });
+  lessonStore = new LessonStore({ db: sqlite, lessonsDir: path.join(DATA_DIR(), 'lessons') });
   const gameCount = sqlite.prepare('SELECT COUNT(*) AS count FROM games').get().count;
   if (gameCount === 0) {
     let legacy = { games: [], sessions: [] };
@@ -339,9 +344,12 @@ async function readJson(file, fallback = {}) {
 async function writeJson(file, value) {
   await fs.writeFile(file, JSON.stringify(value, null, 2), 'utf8');
 }
+function requireLessonStore() {
+  if (!lessonStore) throw new Error('Kho giáo án chưa sẵn sàng.');
+  return lessonStore;
+}
 async function readDb() {
-  if (!sqlite) return { version: 1, games: [], sessions: [] };
-  const games = sqlite.prepare('SELECT data_json FROM games ORDER BY updated_at DESC').all().map(row => JSON.parse(row.data_json));
+  if (!sqlite) return { version: 1, games: [], sessions: [] };  const games = sqlite.prepare('SELECT data_json FROM games ORDER BY updated_at DESC').all().map(row => JSON.parse(row.data_json));
   const sessions = sqlite.prepare('SELECT data_json FROM sessions ORDER BY created_at DESC LIMIT 1000').all().map(row => JSON.parse(row.data_json));
   return { version: 1, games, sessions };
 }
@@ -595,6 +603,12 @@ function registerIpc() {
     await saveDb(db);
     return { ok: true };
   });
+  ipcMain.handle('lesson:save-document', async (_e, payload) => requireLessonStore().saveDocument(payload || {}));
+  ipcMain.handle('lesson:get-document', async (_e, documentId) => requireLessonStore().getDocumentWithText(String(documentId || '')));
+  ipcMain.handle('project:save-draft', async (_e, project) => requireLessonStore().saveProject(project));
+  ipcMain.handle('project:get', async (_e, projectId) => requireLessonStore().getProject(String(projectId || '')));
+  ipcMain.handle('project:list', async () => requireLessonStore().listProjects());
+  ipcMain.handle('project:delete', async (_e, projectId) => ({ ok: requireLessonStore().deleteProject(String(projectId || '')) }));
   ipcMain.handle('files:import-document', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       title: 'Chọn giáo án hoặc tài liệu',

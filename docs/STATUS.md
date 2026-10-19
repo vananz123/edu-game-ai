@@ -1,7 +1,7 @@
 # Current Project Status — v0.3
 
 **Status:** Prototype / handoff build. Do not describe as production-ready.
-**Last verified:** 2026-10-19 — **P1 giáo án → trò chơi (contracts + adapter)**: `src/shared/lesson-types.ts` (union 5 thể loại), `src/services/lesson-contracts.ts` (zod cho analysis/recommendations/5 draft/config + JSON schema cho llama.cpp), `src/services/game-project-adapter.ts` (adapter 2 chiều draft ⇄ `EducationalGame`, ánh xạ `arena→quiz`, `treasure→treasure-hunt`, tự nối chuỗi chặng treasure) — verified by `tests/lesson-contracts.test.ts` + `tests/game-project-adapter.test.ts`, `npm run check`, `npm test` (build + **13 suites**). Trước đó: **Editor kéo-thả + xem trước đường đua** (smoke63 49/49 + installer `release/EduGame-Studio-Setup-0.3.0.exe`).
+**Last verified:** 2026-10-19 — **P2 giáo án → trò chơi (storage + draft)**: 4 bảng sidecar (`lesson_documents`/`lesson_analyses`/`game_recommendations`/`game_projects`) + tệp `userData/lessons/<id>.txt`, `src/services/lesson-store.ts`, IPC `lesson:save-document`/`lesson:get-document`/`project:save-draft`/`project:get`/`project:list`/`project:delete` — verified by `tests/lesson-store.test.ts` (chạy bằng Node của Electron), `npm run check`, `npm test` (build + **14 suites**), và app thật: boot CDP `saveLessonDocument`/`saveProjectDraft`/`listProjects`/`deleteProject` **8/8** + `smoke62` **9/9** không đổi. Trước đó: **P1 contracts + adapter**, **Editor kéo-thả + xem trước đường đua**, installer `release/EduGame-Studio-Setup-0.3.0.exe`.
 
 ## AI-assisted Lesson-to-Game — P1: contracts + adapter (2026-10-19)
 
@@ -13,6 +13,19 @@ Bước P1 của `docs/implementation-plan.md`: dựng contract dữ liệu và 
 - **Không đổi:** `EducationalGame`, `GameQuestion`, `.egame`, `gameplay.ts`, `game-editor.ts` và mọi IPC hiện có; adapter chỉ là module mới.
 - **Verification:** `npm run check` pass; `npm test` pass (build + **13 suites**, thêm 2 suite mới). `tests/lesson-contracts.test.ts`: parse 5 draft/config hợp lệ + các ca sai (ID trùng, đáp án ngoài options, nhánh treo, chặng không kết thúc, ô ngoài đường đua, sai `schemaVersion`, sai thể loại, đề xuất trùng thể loại/rỗng). `tests/game-project-adapter.test.ts`: 5 thể loại draft→game (đúng template, giữ dữ liệu, validator cũ pass), lỗi adapter theo mã, vòng lặp game cũ→project→game (giữ `matchingGame`/`race`/câu trả lời), và `.egame` JSON round-trip không đổi.
 - **Chưa verify / còn lại:** chưa có UI, chưa gọi AI, chưa lưu DB — P2 (storage) và P3–P6 mới nối; JSON schema cho `response_format` chưa thử với llama.cpp thật (P6).
+
+## AI-assisted Lesson-to-Game — P2: storage + draft (2026-10-19)
+
+Bước P2: kho lưu trữ **additive** cho workflow giáo án → trò chơi. Không đụng `games`/`sessions`/`saveDb`/`.egame`/gameplay.
+
+- **`src/services/lesson-store.ts` (mới):** 4 bảng sidecar + index (`LESSON_STORE_SCHEMA_SQL`), CRUD prepared statements, mỗi lần ghi là upsert trong transaction (không xoá toàn bảng như `saveDb`). Tài liệu giáo án ghi ra `userData/lessons/<id>.txt` (DB chỉ giữ `text_rel_path` + metadata + sha256); đọc lại có kiểm tra tệp. `deleteDocument` xoá cascade analysis/recommendation (bằng transaction thủ công, không phụ thuộc FK), project giữ snapshot độc lập.
+- **Kiểm tra trước khi lưu:** draft/config chạy lại `lesson-contracts` (zod), snapshot chạy lại 4 validator cũ. Lỗi rõ mã: `PROJECT_VERSION_UNSUPPORTED` (version > 1), `PROJECT_MIGRATION_MISSING` (version < 1), `PROJECT_SNAPSHOT_INVALID`, `STORE_INVALID_PROJECT`, `STORE_CORRUPT_JSON`… Không tự sửa dữ liệu.
+- **`src/main.ts`:** tạo schema 4 bảng trong `ensureData` sau bảng cũ, khởi tạo `lessonStore`; thêm IPC `lesson:save-document`, `lesson:get-document`, `project:save-draft`, `project:get`, `project:list`, `project:delete` (giữ nguyên mọi kênh cũ).
+- **`src/preload.ts` + `src/shared/types.ts`:** expose 6 hàm mới trên `window.eduGame` và khai báo trong `EduGameBridge` (type-only `GameProject`).
+- **Test mới `tests/lesson-store.test.ts`:** SQLite temp + thư mục temp: lưu/đọc/ghi đè tài liệu (giữ `createdAt`, sha256, file thật), analysis/recommendation (replace theo analysis), project upsert/list/delete, kiểm tra version trên cả ghi lẫn đọc, snapshot sai bị chặn, cascade xoá tài liệu, và **bảng `games`/`sessions` cũ không đổi**.
+- **Chạy test SQLite:** `better-sqlite3` build cho ABI của Electron nên test store chạy qua `tests/run-electron-node.js` (`ELECTRON_RUN_AS_NODE=1`); các suite còn lại vẫn chạy Node thường.
+- **Verification:** `npm run check` pass; `npm test` pass (build + **14 suites**); app thật (CDP 9333): `saveLessonDocument` → `getLessonDocument` khớp text, `saveProjectDraft` → `listProjects`/`getProject` → `deleteProject` → `null`, `getLibrary()` vẫn đọc được (8/8); regression `smoke62` **9/9**.
+- **Chưa verify / còn lại:** chưa có UI dùng các IPC này (P5), chưa có `lesson:analyze`/`recommend`/`generate` (P3–P4); chưa test resume draft sau khi tắt app ở UI (mới test ở tầng store); chưa dọn tệp giáo án mồ côi khi project bị xoá.
 
 ## Editor kéo-thả (matching + race) + xem trước đường đua (2026-10-19)
 

@@ -366,10 +366,10 @@ Không sửa: `gameplay.ts`, `game-editor.ts` (trừ điểm gọi AI regenerate
 
 ### P2 — Storage + draft
 
-- 4 bảng mới, `lesson-store.ts`, lưu text ra file.
-- IPC `project:*`.
-- Test: lưu/mở/xoá; cascade; schemaVersion; dữ liệu cũ không đổi; `.egame` round-trip.
-- **Gate:** test store + `npm test` cũ vẫn xanh.
+- [x] 4 bảng mới, `lesson-store.ts`, lưu text ra file.
+- [x] IPC `project:*` (+ `lesson:save-document`/`lesson:get-document`).
+- [x] Test: lưu/mở/xoá; cascade; schemaVersion; dữ liệu cũ không đổi; `.egame` round-trip.
+- **Gate:** test store + `npm test` cũ vẫn xanh. ✅ (2026-10-19, `tests/lesson-store.test.ts` chạy qua Electron node)
 
 ### P3 — AI transport + workflow
 
