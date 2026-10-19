@@ -103,6 +103,18 @@ async function withTimeout(promise, ms, label) {
     out.analysisTopic = wizardState.analysis && wizardState.analysis.topic;
     out.analysisObjectives = wizardState.analysis ? wizardState.analysis.objectives.length : 0;
 
+    // T1b — O5: the same lesson is not analyzed twice (§4).
+    setPhase('analysis cache');
+    const analyzeAgain = await window.eduGame.analyzeLesson({
+      documentId: out.documentId,
+      projectId: out.projectId,
+      mode: 'fast',
+      requestId: 'smoke66-analyze-cache'
+    });
+    out.analysisCached = analyzeAgain.cached === true;
+    out.analysisCacheSameId = analyzeAgain.analysis.id === out.analysisId;
+    out.analysisCacheSameTopic = analyzeAgain.analysis.topic === out.analysisTopic;
+
     setPhase('recommend (rules)');
     document.querySelector('[data-wizard-step-body="analyze"] [data-wizard-action="next"]').click();
     await waitFor(() => wizardState.step === 'recommend' && !wizardState.busy);
@@ -169,6 +181,17 @@ async function withTimeout(promise, ms, label) {
     out.context = wizardState.context || null;
     const contextHint = document.querySelector('[data-wizard-context]');
     out.contextHint = contextHint ? String(contextHint.textContent || '').trim() : '';
+
+    // T4d — O5: identical inputs reuse the generated content (§9).
+    setPhase('generation cache');
+    const cachedGeneration = await window.eduGame.generateLessonDraft({
+      projectId: out.projectId,
+      requestId: 'smoke66-cache-gen',
+      mode: 'fast'
+    });
+    out.generationCached = cachedGeneration.cached === true;
+    out.generationCacheSameTitle = cachedGeneration.game.title === game.title;
+    out.generationCacheSameCount = (cachedGeneration.game.questions || []).length === (game.questions || []).length;
 
     // T5 — adapter coherence (type-aware: not every type uses the questions list)
     setPhase('check adapter output');
@@ -313,6 +336,7 @@ async function withTimeout(promise, ms, label) {
   push('T1 analyze completed without error', run.analyzeOk === true && !run.analyzeError, 'err=' + run.analyzeError);
   push('T1 analysis has a topic + objectives', typeof run.analysisTopic === 'string' && run.analysisTopic.length > 0 && run.analysisObjectives >= 1, run.analysisTopic + ' obj=' + run.analysisObjectives);
   push('T1 recommendations completed', run.recommendOk === true && !run.recommendError, 'err=' + run.recommendError + ' types=' + (run.recommendationTypes || []).join(','));
+  push('T1b unchanged lesson reuses the stored analysis (no model call)', run.analysisCached === true && run.analysisCacheSameId === true && run.analysisCacheSameTopic === true, 'cached=' + run.analysisCached + ' id=' + run.analysisCacheSameId);
   push('T2 a recommendation was picked + configured', typeof run.pickedType === 'string' && run.configType === run.pickedType, 'picked=' + run.pickedType + ' config=' + run.configType);
   push('T2 configure saved and advanced', run.configureOk === true && !run.configureError, 'err=' + run.configureError);
   push('T2 teacher title edit was persisted', run.storedConfigTitle === 'smoke66 · Trò chơi từ giáo án', run.storedConfigTitle);
@@ -328,6 +352,7 @@ async function withTimeout(promise, ms, label) {
   push('T4c retrieved lesson chunks for the prompt', Boolean(run.context) && run.context.chunkCount > 0 && run.context.selectedChunkCount > 0 && ['lexical-v1', 'embeddings-v1'].includes(run.context.scorer), JSON.stringify(run.context));
   push('T4c retrieved excerpt fits the prompt budget', Boolean(run.context) && run.context.characters > 0 && run.context.characters <= 5200, run.context && run.context.characters);
   push('T4c wizard tells the teacher which chunks were used', typeof run.contextHint === 'string' && run.contextHint.includes('đoạn giáo án'), run.contextHint);
+  push('T4d identical inputs reuse the generated content', run.generationCached === true && run.generationCacheSameTitle === true && run.generationCacheSameCount === true, 'cached=' + run.generationCached);
   push('T6 project persisted at edit/ready', run.storedStep === 'edit' && run.storedStatus === 'ready', run.storedStep + '/' + run.storedStatus);
   push('T6 snapshot + draft stored on the project', run.storedGameId === run.gameId && run.storedSnapshotTemplate === run.expectedTemplate && run.storedDraftType === run.configType, run.storedGameId + ' draft=' + run.storedDraftType);
   push('T7 editor opens with the teacher title', run.editorOpened === true && run.editorTitle === 'smoke66 · Trò chơi từ giáo án', run.editorTitle);

@@ -21,11 +21,14 @@ import {
 import {
   buildDraftPrompt,
   buildDraftRepairMessages,
+  buildItemRegenerationPrompt,
+  buildItemRegenerationRepairMessages,
   buildLessonAnalysisPrompt,
   buildRecommendationPrompt,
   buildRepairMessages,
   LESSON_ANALYSIS_SYSTEM_PROMPT,
   LESSON_GENERATION_SYSTEM_PROMPT,
+  LESSON_ITEM_REGENERATION_SYSTEM_PROMPT,
   LESSON_RECOMMENDATION_SYSTEM_PROMPT,
   type ChatMessage
 } from './lesson-prompts';
@@ -37,7 +40,9 @@ import {
 import {
   gameDraftJsonSchemas,
   lessonAnalysisJsonSchema,
-  recommendationsJsonSchema
+  parseRegeneratedItem,
+  recommendationsJsonSchema,
+  regenerateItemJsonSchemas
 } from './lesson-contracts';
 import type {
   GameConfig,
@@ -311,12 +316,68 @@ export async function generateGameDraft(options: GenerateDraftOptions): Promise<
   });
 }
 
+export interface RegenerateItemOptions {
+  client: LessonChatClient;
+  registry: AiRequestRegistry;
+  requestId: string;
+  gameType: WorkflowGameType;
+  config: GameConfig;
+  analysis: LessonAnalysis;
+  /** 1-based position and total (matches `lesson-item-repair`). */
+  position: number;
+  total: number;
+  itemLabel: string;
+  currentItem: unknown;
+  issues?: string[];
+  sourceExcerpt?: string;
+  maxTokens?: number;
+}
+
+/**
+ * O5: rewrites exactly one draft item (docs/update-AI-local.txt §5.5). The caller
+ * merges the result with `replaceDraftItem`, which keeps ids/links and re-validates
+ * the whole draft. No cache: "Tạo lại" must always produce new content.
+ */
+export async function regenerateGameItem(options: RegenerateItemOptions): Promise<unknown> {
+  const schema = regenerateItemJsonSchemas[options.gameType];
+  return runStructuredStep({
+    client: options.client,
+    registry: options.registry,
+    requestId: options.requestId,
+    maxTokens: options.maxTokens ?? 1024,
+    responseSchema: schema ? { name: `game_item_${options.gameType}`, schema } : null,
+    messages: [
+      { role: 'system', content: LESSON_ITEM_REGENERATION_SYSTEM_PROMPT },
+      {
+        role: 'user',
+        content: buildItemRegenerationPrompt({
+          gameType: options.gameType,
+          config: options.config,
+          analysis: options.analysis,
+          itemLabel: options.itemLabel,
+          position: options.position,
+          total: options.total,
+          currentItem: options.currentItem,
+          issues: options.issues,
+          sourceExcerpt: options.sourceExcerpt
+        })
+      }
+    ],
+    validate: value => parseRegeneratedItem(options.gameType, value),
+    repairMessages: info => buildItemRegenerationRepairMessages({
+      gameType: options.gameType,
+      messages: info.messages,
+      rawContent: info.rawContent,
+      errorMessage: info.errorMessage
+    })
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 function isCancellation(error: unknown, signal: AbortSignal): boolean {
-  if (signal.aborted) return true;
   if (error instanceof AiTransportError && error.code === 'AI_CANCELLED') return true;
   return isCancelReason(error);
 }

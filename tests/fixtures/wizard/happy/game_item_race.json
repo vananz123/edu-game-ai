@@ -1,0 +1,17 @@
+{
+  "gameType": "race",
+  "questions": [
+    {
+      "id": "regen-q1",
+      "prompt": "Sắc tố nào hấp thụ ánh sáng trong lục lạp?",
+      "options": [
+        { "id": "a", "text": "Diệp lục" },
+        { "id": "b", "text": "Hemoglobin" },
+        { "id": "c", "text": "Melanin" }
+      ],
+      "correctOptionId": "a",
+      "explanation": "Diệp lục là sắc tố hấp thụ ánh sáng trong lục lạp.",
+      "difficulty": "dễ"
+    }
+  ]
+}

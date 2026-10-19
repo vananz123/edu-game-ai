@@ -16,7 +16,8 @@ import type {
   GameRecommendation,
   GameRecommendationContent,
   LessonAnalysis,
-  LessonAnalysisContent
+  LessonAnalysisContent,
+  WorkflowGameType
 } from '../shared/lesson-types';
 
 export class LessonContractError extends Error {
@@ -192,7 +193,7 @@ export const arenaDraftContentSchema = arenaDraftBase.omit({ schemaVersion: true
 // Scenario
 // ---------------------------------------------------------------------------
 
-const scenarioOptionSchema = z.object({
+export const scenarioOptionSchema = z.object({
   id: nonEmpty(40),
   text: nonEmpty(600),
   feedback: optionalText(1200),
@@ -205,17 +206,19 @@ const scenarioOptionSchema = z.object({
   }).optional()
 });
 
+export const scenarioSituationSchema = z.object({
+  id: nonEmpty(60),
+  context: optionalText(900),
+  prompt: nonEmpty(1000),
+  options: z.array(scenarioOptionSchema).min(2).max(6),
+  correctOptionId: z.string().trim().min(1).max(40).optional(),
+  discussionPrompt: optionalText(900)
+});
+
 const scenarioDraftBase = z.object({
   gameType: z.literal('scenario'),
   schemaVersion: z.literal(1),
-  situations: z.array(z.object({
-    id: nonEmpty(60),
-    context: optionalText(900),
-    prompt: nonEmpty(1000),
-    options: z.array(scenarioOptionSchema).min(2).max(6),
-    correctOptionId: z.string().trim().min(1).max(40).optional(),
-    discussionPrompt: optionalText(900)
-  })).min(1).max(30)
+  situations: z.array(scenarioSituationSchema).min(1).max(30)
 });
 
 export const scenarioDraftSchema = scenarioDraftBase.superRefine((draft, ctx) => {
@@ -255,15 +258,17 @@ export const scenarioDraftContentSchema = scenarioDraftBase.omit({ schemaVersion
 // Matching
 // ---------------------------------------------------------------------------
 
+export const matchingPairSchema = z.object({
+  id: nonEmpty(60),
+  left: nonEmpty(400),
+  right: nonEmpty(400)
+});
+
 const matchingDraftBase = z.object({
   gameType: z.literal('matching'),
   schemaVersion: z.literal(1),
   mode: z.enum(['columns', 'memory', 'categorize']),
-  pairs: z.array(z.object({
-    id: nonEmpty(60),
-    left: nonEmpty(400),
-    right: nonEmpty(400)
-  })).min(2).max(30),
+  pairs: z.array(matchingPairSchema).min(2).max(30),
   pointsPerPair: z.number().int().min(0).max(1000),
   completionBonus: z.number().int().min(0).max(10000),
   wrongPenalty: z.number().int().min(0).max(1000),
@@ -290,7 +295,7 @@ export const matchingDraftContentSchema = matchingDraftBase.omit({ schemaVersion
 // Treasure
 // ---------------------------------------------------------------------------
 
-const treasureStageSchema = z.object({
+export const treasureStageSchema = z.object({
   id: nonEmpty(60),
   name: nonEmpty(160),
   story: nonEmpty(1600),
@@ -379,6 +384,15 @@ export const treasureDraftContentSchema = treasureDraftBase.omit({ schemaVersion
 
 const raceCellTypes = z.enum(['boost', 'penalty', 'lucky', 'challenge']);
 
+export const raceQuestionSchema = z.object({
+  id: nonEmpty(60),
+  prompt: nonEmpty(1000),
+  options: answerOptionsSchema,
+  correctOptionId: nonEmpty(40),
+  explanation: nonEmpty(1200),
+  difficulty: difficultySchema
+});
+
 const raceDraftBase = z.object({
   gameType: z.literal('race'),
   schemaVersion: z.literal(1),
@@ -396,14 +410,7 @@ const raceDraftBase = z.object({
     type: raceCellTypes,
     label: nonEmpty(160)
   })).max(30),
-  questions: z.array(z.object({
-    id: nonEmpty(60),
-    prompt: nonEmpty(1000),
-    options: answerOptionsSchema,
-    correctOptionId: nonEmpty(40),
-    explanation: nonEmpty(1200),
-    difficulty: difficultySchema
-  })).min(1).max(30)
+  questions: z.array(raceQuestionSchema).min(1).max(30)
 });
 
 export const raceDraftSchema = raceDraftBase.superRefine((draft, ctx) => {
@@ -530,6 +537,62 @@ export function parseGameConfig(value: unknown): GameConfig {
   return parseOrThrow(gameConfigSchema, value, 'CONFIG_INVALID', 'Cấu hình trò chơi') as GameConfig;
 }
 
+// ---------------------------------------------------------------------------
+// O5: one regenerated item
+// ---------------------------------------------------------------------------
+
+/**
+ * The model is asked for a one-element wrapper so the item keeps the same shape
+ * as the full draft (no second contract to drift). A bare item is accepted too:
+ * small models often drop the wrapper, and the item schema is unambiguous.
+ */
+export const regeneratedItemWrapperSchemas: Record<WorkflowGameType, z.ZodTypeAny> = {
+  arena: z.object({ gameType: z.literal('arena'), questions: z.array(arenaQuestionSchema).length(1) }),
+  scenario: z.object({ gameType: z.literal('scenario'), situations: z.array(scenarioSituationSchema).length(1) }),
+  matching: z.object({ gameType: z.literal('matching'), pairs: z.array(matchingPairSchema).length(1) }),
+  treasure: z.object({ gameType: z.literal('treasure'), stages: z.array(treasureStageSchema).length(1) }),
+  race: z.object({ gameType: z.literal('race'), questions: z.array(raceQuestionSchema).length(1) })
+};
+
+const singleItemSchemas: Record<WorkflowGameType, z.ZodTypeAny> = {
+  arena: arenaQuestionSchema,
+  scenario: scenarioSituationSchema,
+  matching: matchingPairSchema,
+  treasure: treasureStageSchema,
+  race: raceQuestionSchema
+};
+
+const REGENERATED_LIST_KEYS: Record<WorkflowGameType, 'questions' | 'situations' | 'pairs' | 'stages'> = {
+  arena: 'questions',
+  scenario: 'situations',
+  matching: 'pairs',
+  treasure: 'stages',
+  race: 'questions'
+};
+
+/** Returns the validated single item (unknown keys stripped), without app-owned ids. */
+export function parseRegeneratedItem(gameType: WorkflowGameType, value: unknown): unknown {
+  const wrapper = value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+  if (!wrapper) {
+    throw new LessonContractError('ITEM_INVALID', 'AI không trả về JSON cho mục cần tạo lại.');
+  }
+  const listKey = REGENERATED_LIST_KEYS[gameType];
+  let candidate: unknown = wrapper;
+  if (Array.isArray(wrapper[listKey])) {
+    const list = wrapper[listKey] as unknown[];
+    if (list.length !== 1) {
+      throw new LessonContractError(
+        'ITEM_INVALID',
+        `Mục cần tạo lại phải nằm trong mảng có đúng 1 phần tử (AI trả về ${list.length}).`
+      );
+    }
+    candidate = list[0];
+  }
+  return parseOrThrow(singleItemSchemas[gameType], candidate, 'ITEM_INVALID', 'Mục cần tạo lại') as unknown;
+}
+
 export function formatContractIssues(error: z.ZodError): string[] {
   return error.issues.slice(0, 8).map(issue => {
     const path = issue.path.length ? issue.path.map(String).join('.') : '(root)';
@@ -584,6 +647,15 @@ export const gameDraftJsonSchemas: Record<GameDraft['gameType'], JsonSchema | nu
   matching: safeJsonSchema(matchingDraftContentSchema),
   treasure: safeJsonSchema(treasureDraftContentSchema),
   race: safeJsonSchema(raceDraftContentSchema)
+};
+
+/** `response_format` for `lesson:regenerate-item` (one-element wrapper per type). */
+export const regenerateItemJsonSchemas: Record<WorkflowGameType, JsonSchema | null> = {
+  arena: safeJsonSchema(regeneratedItemWrapperSchemas.arena),
+  scenario: safeJsonSchema(regeneratedItemWrapperSchemas.scenario),
+  matching: safeJsonSchema(regeneratedItemWrapperSchemas.matching),
+  treasure: safeJsonSchema(regeneratedItemWrapperSchemas.treasure),
+  race: safeJsonSchema(regeneratedItemWrapperSchemas.race)
 };
 
 /** Convenience alias for the inferred arena draft shape. */

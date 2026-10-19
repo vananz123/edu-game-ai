@@ -37,6 +37,21 @@ export const LESSON_RECOMMENDATION_SYSTEM_PROMPT =
 export const LESSON_GENERATION_SYSTEM_PROMPT =
   'Bạn là trợ lý thiết kế trò chơi giáo dục tiếng Việt. Chỉ trả về DUY NHẤT một đối tượng JSON hợp lệ, không markdown. Mọi câu hỏi phải có đúng một đáp án, giải thích ngắn, và phải dựa trên nội dung giáo án; không bịa điều luật hay số liệu.';
 
+export const LESSON_ITEM_REGENERATION_SYSTEM_PROMPT =
+  'Bạn là trợ lý thiết kế trò chơi giáo dục tiếng Việt. Bạn chỉ viết lại MỘT mục của trò chơi, giữ nguyên cấu trúc chung. Chỉ trả về DUY NHẤT một đối tượng JSON hợp lệ, không markdown. Nội dung mới phải dựa trên giáo án; không bịa điều luật hay số liệu.';
+
+/**
+ * O5: versions of the prompt + content-schema pairs that feed the cache keys.
+ * Bump the matching number whenever the prompt wording or its content schema
+ * changes, so content produced by the previous wording is never reused silently
+ * (`lesson-cache.ts` mixes these into every key).
+ */
+export const LESSON_PROMPT_VERSIONS = {
+  analysis: 1,
+  draft: 1,
+  item: 1
+} as const;
+
 const MAX_OBJECTIVES = 10;
 const MAX_KEY_CONCEPTS = 12;
 
@@ -172,6 +187,99 @@ Hãy trả lại DUY NHẤT một đối tượng JSON hợp lệ, đúng cấu 
     ...(input.rawContent ? [{ role: 'assistant' as const, content: input.rawContent }] : []),
     { role: 'user' as const, content: repair }
   ];
+}
+
+// ---------------------------------------------------------------------------
+// O5: regenerate one item (docs/update-AI-local.txt §5.5)
+// ---------------------------------------------------------------------------
+
+export interface ItemRegenerationPromptInput {
+  gameType: WorkflowGameType;
+  config: GameConfig;
+  analysis: LessonAnalysis;
+  /** Vietnamese label shown to the model and the teacher, e.g. "Câu hỏi 3". */
+  itemLabel: string;
+  /** 1-based position and total, so the model knows where the item sits. */
+  position: number;
+  total: number;
+  /** The current item (already validated) — the model must not repeat it. */
+  currentItem: unknown;
+  /** Teacher-facing quality findings that triggered the regeneration. */
+  issues?: string[];
+  /** Retrieved lesson slice (same contract as `buildDraftPrompt`). */
+  sourceExcerpt?: string;
+}
+
+/**
+ * Prompt for replacing exactly one draft item. The model only writes content:
+ * ids, chain links, option numbering and attempt counts stay app-owned (see
+ * `lesson-item-repair.ts`), so a single regeneration cannot break the draft.
+ */
+export function buildItemRegenerationPrompt(input: ItemRegenerationPromptInput): string {
+  const { gameType, config, analysis } = input;
+  const objectiveIds = config.focusObjectiveIds.length
+    ? config.focusObjectiveIds
+    : analysis.objectives.map(objective => objective.id);
+  const focusObjectives = analysis.objectives
+    .filter(objective => objectiveIds.includes(objective.id))
+    .map(objective => `- ${objective.id}: ${objective.description}`)
+    .join('\n');
+  const concepts = analysis.keyConcepts.map(concept => `- ${concept.term}: ${concept.explanation}`).join('\n');
+  const issues = (input.issues || []).filter(Boolean);
+  const reason = issues.length
+    ? `Lý do tạo lại:\n${issues.map(issue => `- ${issue}`).join('\n')}`
+    : 'Lý do tạo lại: giáo viên muốn một phương án khác cho mục này.';
+  const source = input.sourceExcerpt
+    ? `Trích tài liệu:\n${input.sourceExcerpt}`
+    : `Tóm tắt giáo án:\n${analysis.topic}`;
+  return `Viết lại DUY NHẤT một mục của trò chơi "${gameType}" bằng tiếng Việt.
+Mục cần viết lại: ${input.itemLabel} (mục ${input.position}/${input.total}).
+Trả về JSON đúng cấu trúc sau, trong đó mảng chỉ chứa ĐÚNG MỘT phần tử:
+${DRAFT_SHAPES[gameType]}
+Quy tắc thể loại: ${DRAFT_RULES[gameType]}
+${reason}
+Mục hiện tại (phải thay bằng nội dung mới, không lặp lại y nguyên):
+${safeItemJson(input.currentItem)}
+Yêu cầu:
+- Giữ đúng số phương án và các trường bắt buộc của thể loại; mọi phương án phải khác nhau.
+- Nội dung mới phải khác mục hiện tại và không trùng ý với các mục khác trong trò chơi.
+- Không đổi cấu trúc chung: không thêm/bớt mục, không đổi chủ đề, độ khó hay cách tính điểm.
+- Ứng dụng tự giữ mã mục và liên kết giữa các mục; không cần tạo mã mới cho mục.
+Thiết lập của giáo viên:
+- Tiêu đề: ${config.title}
+- Môn: ${config.subject || analysis.subject || 'chưa xác định'} — Lớp: ${config.grade || (analysis.grade ? `Lớp ${analysis.grade}` : 'chưa xác định')}
+- Chủ đề: ${config.topic}
+- Độ khó: ${config.difficulty}; đối tượng: ${config.audience}; phong cách: ${config.style}
+- Ưu tiên các mục tiêu sau:
+${focusObjectives || '- (không chỉ định; dùng toàn bộ mục tiêu)'}
+Khái niệm cần bám sát:
+${concepts}
+${source}
+Không tạo nội dung ngoài giáo án; nếu thiếu căn cứ, chọn phương án an toàn nhất và ghi chú trong "explanation".`;
+}
+
+export function buildItemRegenerationRepairMessages(input: {
+  gameType: WorkflowGameType;
+  messages: ChatMessage[];
+  rawContent: string | null;
+  errorMessage: string;
+}): ChatMessage[] {
+  const repair = `JSON trước đó không phải một mục hợp lệ cho trò chơi "${input.gameType}".
+Lỗi: ${input.errorMessage}
+Hãy trả lại DUY NHẤT một đối tượng JSON đúng cấu trúc, với mảng chứa đúng MỘT phần tử, không thêm chữ nào khác.`;
+  return [
+    ...input.messages,
+    ...(input.rawContent ? [{ role: 'assistant' as const, content: input.rawContent }] : []),
+    { role: 'user' as const, content: repair }
+  ];
+}
+
+function safeItemJson(value: unknown): string {
+  try {
+    return JSON.stringify(value);
+  } catch (error) {
+    return String(value);
+  }
 }
 
 /** Generic repair messages for analysis/recommendation steps. */

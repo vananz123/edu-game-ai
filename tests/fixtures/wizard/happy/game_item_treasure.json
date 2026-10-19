@@ -1,0 +1,27 @@
+{
+  "gameType": "treasure",
+  "stages": [
+    {
+      "id": "regen-st1",
+      "name": "Khu rừng ánh sáng",
+      "story": "Bạn bước vào khu rừng, nơi ánh nắng lọc qua tán lá và tạo nên những vệt sáng.",
+      "taskDescription": "Tìm hiểu nguồn năng lượng giúp lá cây tổng hợp chất hữu cơ.",
+      "question": {
+        "prompt": "Nguồn năng lượng chính cho quang hợp là gì?",
+        "options": [
+          { "id": "a", "text": "Ánh sáng mặt trời" },
+          { "id": "b", "text": "Nước" },
+          { "id": "c", "text": "Đất" }
+        ],
+        "correctOptionId": "a",
+        "explanation": "Diệp lục hấp thụ ánh sáng mặt trời để tổng hợp chất hữu cơ.",
+        "hint": "Hãy nghĩ tới điều kiện cần cho lá cây xanh."
+      },
+      "attempts": 2,
+      "points": 100,
+      "completionBonus": 50,
+      "nextStageId": null,
+      "hasHiddenItem": false
+    }
+  ]
+}

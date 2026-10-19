@@ -97,6 +97,58 @@ function wizardContextHint(context) {
   return `<div class="field-hint" data-wizard-context="1">${escapeHtml(parts.join(' '))}.</div>`;
 }
 
+/**
+ * O5: per-item regeneration (docs/update-AI-local.txt §5.5). The list is built
+ * from the typed draft (not the snapshot) so the position matches the quality
+ * report and the `lesson:regenerate-item` payload. One request rewrites one item;
+ * every other item (and its id/links) stays untouched.
+ *
+ * DECISIONS #24: this lives in the wizard, not inside the editor. The editor
+ * edits the `EducationalGame` snapshot while regeneration works on the typed
+ * draft + project context; keeping it here means one source of truth and no
+ * re-snapshotting from the editor. The teacher regenerates, then opens the editor.
+ */
+function wizardDraftItemList(draft) {
+  if (!draft) return [];
+  if (draft.gameType === 'scenario') return draft.situations || [];
+  if (draft.gameType === 'matching') return draft.pairs || [];
+  if (draft.gameType === 'treasure') return draft.stages || [];
+  return draft.questions || [];
+}
+
+function wizardDraftItemLabel(gameType, position) {
+  const units = { arena: 'Câu hỏi', scenario: 'Tình huống', matching: 'Cặp ghép', treasure: 'Chặng', race: 'Câu hỏi' };
+  return `${units[gameType] || 'Mục'} ${position}`;
+}
+
+function wizardDraftItemPreview(gameType, item) {
+  if (!item) return '';
+  let text = '';
+  if (gameType === 'matching') text = `${item.left || ''} ↔ ${item.right || ''}`;
+  else if (gameType === 'treasure') text = `${item.name || ''}${item.question && item.question.prompt ? ` — ${item.question.prompt}` : ''}`;
+  else text = item.prompt || '';
+  const compact = String(text).replace(/\s+/g, ' ').trim();
+  return compact.length > 140 ? `${compact.slice(0, 137)}…` : compact;
+}
+
+function wizardDraftItemsPanel(s) {
+  const draft = s.draft;
+  const items = wizardDraftItemList(draft);
+  if (!items.length) return '';
+  const rows = items.map((item, index) => `<li class="flex items-start justify-between gap-[10px] py-[7px] border-t border-line first:border-t-0">
+      <div class="min-w-0">
+        <div class="text-[11px] text-[#788196]">${escapeHtml(wizardDraftItemLabel(draft.gameType, index + 1))}</div>
+        <div class="text-[12px] break-words">${escapeHtml(wizardDraftItemPreview(draft.gameType, item))}</div>
+      </div>
+      <button class="btn btn-secondary btn-small shrink-0" data-wizard-action="regenerate-item" data-item-index="${index + 1}"${s.busy ? ' disabled' : ''}>🔄 Tạo lại</button>
+    </li>`).join('');
+  return `<div class="field mt-[10px]" data-wizard-draft-items="1">
+    <div class="flex items-center gap-[8px] mb-[6px] flex-wrap"><strong class="text-[12px]">Từng mục</strong><span class="tag">${items.length} mục</span></div>
+    <ul class="bg-[#f8f9fc] border border-line rounded-[10px] px-[12px]">${rows}</ul>
+    <div class="field-hint">“Tạo lại” chỉ viết lại đúng một mục và giữ nguyên mọi mục còn lại.</div>
+  </div>`;
+}
+
 function renderWizardGenerate() {
   const s = wizardState;
   const config = s.config;
@@ -107,6 +159,7 @@ function renderWizardGenerate() {
       ? `<div class="panel-sub">AI local đã soạn bản nháp từ giáo án và đã được kiểm tra cấu trúc. Hãy mở trình chỉnh sửa để duyệt, sửa lại rồi lưu vào thư viện để chơi thử.</div>
         ${wizardSummaryGrid(wizardGeneratedSummaryRows(s.gameSnapshot))}
         ${wizardQualityPanel(s.quality)}
+        ${wizardDraftItemsPanel(s)}
         ${wizardContextHint(s.context)}
         <div class="publish-actions">
           <button class="btn btn-primary" data-wizard-action="open-editor"${s.busy ? ' disabled' : ''}>✎ Mở trình chỉnh sửa</button>
@@ -125,7 +178,7 @@ function renderWizardGenerate() {
   </section>`;
 }
 
-async function wizardGenerateRun() {
+async function wizardGenerateRun(options) {
   if (wizardState.busy) return undefined;
   wizardSyncCurrentStepFromDom();
   if (!wizardState.config) {
@@ -152,7 +205,10 @@ async function wizardGenerateRun() {
     const result = await window.eduGame.generateLessonDraft({
       projectId: wizardState.projectId,
       requestId: wizardState.activeRequestId,
-      mode: wizardState.config.generationMode
+      mode: wizardState.config.generationMode,
+      // O5: "Tạo lại" always asks the model for new content; a plain "Tạo nội
+      // dung" may reuse the cached draft when nothing changed (§9).
+      regenerate: Boolean(options && options.regenerate)
     });
     wizardState.projectId = result.project.id;
     wizardState.createdAt = result.project.createdAt || wizardState.createdAt;
@@ -163,7 +219,9 @@ async function wizardGenerateRun() {
     wizardState.gameId = result.game.id;
     wizardState.step = 'generate';
     await wizardRefreshProjects();
-    wizardSetNotice(`Đã tạo bản nháp “${result.game.title || 'trò chơi'}”. Hãy mở trình chỉnh sửa để duyệt.`);
+    wizardSetNotice(result.cached
+      ? 'Giáo án và cấu hình không đổi nên đã dùng lại nội dung đã tạo (không gọi AI). Nhấn “Tạo lại nội dung” nếu muốn nội dung mới.'
+      : `Đã tạo bản nháp “${result.game.title || 'trò chơi'}”. Hãy mở trình chỉnh sửa để duyệt.`);
   } catch (error) {
     wizardSetError(error);
   }
@@ -179,7 +237,42 @@ function wizardGenerateRegenerate() {
   if (wizardState.gameSnapshot && !window.confirm(`Tạo lại toàn bộ nội dung “${type}” từ giáo án? Bản nháp hiện tại sẽ bị thay thế khi AI trả kết quả mới.`)) {
     return undefined;
   }
-  return wizardGenerateRun();
+  return wizardGenerateRun({ regenerate: true });
+}
+
+/** O5: rewrite one item only; the other items are not sent to the model. */
+async function wizardRegenerateItem(position) {
+  if (wizardState.busy) return undefined;
+  if (!wizardState.projectId) {
+    toast('Hãy lưu dự án trước khi tạo lại một mục.');
+    return undefined;
+  }
+  wizardClearMessages();
+  wizardState.busy = 'generate';
+  wizardState.activeRequestId = wizardNewRequestId('regen');
+  render();
+  try {
+    const result = await window.eduGame.regenerateLessonItem({
+      projectId: wizardState.projectId,
+      requestId: wizardState.activeRequestId,
+      itemIndex: position
+    });
+    wizardState.projectId = result.project.id;
+    wizardState.draft = result.project.draft || wizardState.draft;
+    wizardState.gameSnapshot = result.game;
+    wizardState.quality = result.quality || null;
+    wizardState.context = result.context || wizardState.context;
+    wizardState.gameId = result.game.id;
+    const gameType = (wizardState.config && wizardState.config.gameType) || (result.project.draft && result.project.draft.gameType) || '';
+    await wizardRefreshProjects();
+    wizardSetNotice(`Đã tạo lại ${wizardDraftItemLabel(gameType, position)}. Các mục khác giữ nguyên.`);
+  } catch (error) {
+    wizardSetError(error);
+  }
+  wizardState.busy = '';
+  wizardState.activeRequestId = null;
+  render();
+  return undefined;
 }
 
 /** Opens the generated game in the normal editor (same editor the manual path uses). */

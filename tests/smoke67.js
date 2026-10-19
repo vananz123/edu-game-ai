@@ -115,6 +115,24 @@ const EXPECTED = {
         info.qualityCanPublish = quality ? quality.canPublish : null;
         info.context = result.context || null;
 
+        // O5 — cache: identical inputs reuse content; "Tạo lại" bypasses it (§9).
+        const cachedAgain = await window.eduGame.generateLessonDraft({ projectId, requestId: 'smoke67-cache-' + type, mode: 'fast' });
+        info.cacheReuse = cachedAgain.cached === true && cachedAgain.game.title === game.title;
+        const forcedAgain = await window.eduGame.generateLessonDraft({ projectId, requestId: 'smoke67-forced-' + type, mode: 'fast', regenerate: true });
+        info.cacheBypassed = forcedAgain.cached === false;
+
+        // O5 — rewrite one item; ids and every other item stay untouched (§5.5).
+        const listKey = type === 'scenario' ? 'situations' : type === 'matching' ? 'pairs' : type === 'treasure' ? 'stages' : 'questions';
+        const beforeItems = (forcedAgain.project.draft || {})[listKey] || [];
+        const itemRegen = await window.eduGame.regenerateLessonItem({ projectId, requestId: 'smoke67-item-' + type, itemIndex: 2 });
+        const afterItems = (itemRegen.project.draft || {})[listKey] || [];
+        info.itemRegenIndexes = itemRegen.itemIndexes;
+        info.itemRegenCountKept = beforeItems.length === afterItems.length && beforeItems.length >= 2;
+        info.itemRegenIdKept = Boolean(beforeItems[1] && afterItems[1] && beforeItems[1].id === afterItems[1].id);
+        info.itemRegenChanged = JSON.stringify(beforeItems[1]) !== JSON.stringify(afterItems[1]);
+        info.itemRegenOthersUnchanged = JSON.stringify(beforeItems.filter((_, index) => index !== 1)) === JSON.stringify(afterItems.filter((_, index) => index !== 1));
+        info.itemRegenTemplate = itemRegen.game && itemRegen.game.template;
+
         // Type-specific shape checks.
         if (type === 'arena' || type === 'scenario') {
           const questions = game.questions || [];
@@ -200,6 +218,9 @@ const EXPECTED = {
     push(`${type}: quality counts match the generated draft`, info.qualityFound >= 2 && info.qualityFound === info.contentCount, info.qualityFound + '/' + info.contentCount + ' req=' + info.qualityRequested);
     push(`${type}: retrieved lesson chunks for the prompt`, Boolean(info.context) && info.context.chunkCount > 0 && info.context.selectedChunkCount > 0 && ['lexical-v1', 'embeddings-v1'].includes(info.context.scorer), JSON.stringify(info.context));
     push(`${type}: retrieved excerpt stays inside the prompt budget`, Boolean(info.context) && info.context.characters > 0 && info.context.characters <= 5200 && info.context.selectedChunkCount <= info.context.chunkCount, info.context && info.context.characters);
+    push(`${type}: identical inputs reuse the cached draft`, info.cacheReuse === true);
+    push(`${type}: "Tạo lại" bypasses the cache`, info.cacheBypassed === true);
+    push(`${type}: one item regenerated, ids + others untouched`, Array.isArray(info.itemRegenIndexes) && info.itemRegenIndexes.length === 1 && info.itemRegenIndexes[0] === 2 && info.itemRegenCountKept === true && info.itemRegenIdKept === true && info.itemRegenChanged === true && info.itemRegenOthersUnchanged === true && info.itemRegenTemplate === expectedTemplate, JSON.stringify(info.itemRegenIndexes) + ' changed=' + info.itemRegenChanged + ' others=' + info.itemRegenOthersUnchanged);
     push(`${type}: editor opened`, info.editorOpened === true);
     push(`${type}: editor surface matches the type`, info.panelVisible === true && (EXPECTED[type].panel ? info.panelExists === true : info.questionCards === info.contentCount), EXPECTED[type].panel ? 'panel=' + info.panelExists : 'cards=' + info.questionCards + '/' + info.contentCount);
     push(`${type}: game round-trips through the library`, info.inLibrary === true);

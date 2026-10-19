@@ -116,7 +116,7 @@ function wizardAnalysisValid() {
   return objectives.length >= 1;
 }
 
-async function wizardAnalyzeRun() {
+async function wizardAnalyzeRun(force) {
   if (wizardState.busy) return;
   if (!wizardState.documentId) {
     wizardSetError(new Error('Chưa có giáo án đã lưu. Hãy quay lại bước 1 và nhập giáo án.'));
@@ -134,6 +134,9 @@ async function wizardAnalyzeRun() {
       projectId: wizardState.projectId || undefined,
       analysisId: wizardState.analysisId || undefined,
       mode: 'fast',
+      // O5: only the explicit "Phân tích lại" button bypasses the cache; the
+      // automatic call reuses a stored analysis when the lesson is unchanged.
+      force: Boolean(force),
       requestId
     });
     wizardState.analysis = result.analysis;
@@ -147,7 +150,9 @@ async function wizardAnalyzeRun() {
     wizardState.selectedGameType = null;
     wizardState.selectedRecommendationId = null;
     await wizardRefreshProjects();
-    wizardSetNotice('AI local đã phân tích xong. Hãy xem lại và chỉnh sửa nếu cần.');
+    wizardSetNotice(result.cached
+      ? 'Giáo án không đổi nên đã dùng lại kết quả phân tích trước đó (không gọi AI).'
+      : 'AI local đã phân tích xong. Hãy xem lại và chỉnh sửa nếu cần.');
   } catch (error) {
     wizardSetError(error);
   }

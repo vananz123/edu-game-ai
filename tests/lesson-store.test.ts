@@ -348,6 +348,78 @@ async function run(): Promise<void> {
     .run('analysis-future', document.id, JSON.stringify({ ...analysis, id: 'analysis-future' }), 2, ISO, ISO);
   expectStoreError('ANALYSIS_VERSION_UNSUPPORTED', () => store.getAnalysis('analysis-future'));
 
+  // --- O5: analysis cache key ---------------------------------------------
+  const analysisCacheKey = 'analysis_v1_test_key';
+  store.saveAnalysis({ ...analysis, id: 'analysis-cached' }, { cacheKey: analysisCacheKey });
+  assert.equal(store.findAnalysisByCacheKey(document.id, analysisCacheKey)?.id, 'analysis-cached');
+  assert.equal(store.findAnalysisByCacheKey(document.id, 'another-key'), null);
+  assert.equal(store.findAnalysisByCacheKey('missing-doc', analysisCacheKey), null);
+  assert.equal(store.findAnalysisByCacheKey(document.id, ''), null);
+  // A teacher edit arrives without a cache key; the row must keep its key so the
+  // edited analysis is what a later automatic analyze reuses.
+  store.saveAnalysis({ ...analysis, id: 'analysis-cached', topic: 'Chủ đề giáo viên sửa' });
+  assert.equal(store.findAnalysisByCacheKey(document.id, analysisCacheKey)?.topic, 'Chủ đề giáo viên sửa');
+
+  // --- O5: generation cache ------------------------------------------------
+  assert.equal(store.getGenerationCache('missing-key'), null);
+  const draftPayload = { draft: arenaDraft, mode: 'fast', context: { chunkCount: 1 } };
+  const cacheEntry = store.putGenerationCache({
+    cacheKey: 'draft_key_1',
+    gameType: 'arena',
+    analysisId: 'analysis-1',
+    modelId: 'qwen-test',
+    promptVersion: 'draft-v1',
+    payload: draftPayload
+  });
+  assert.equal(cacheEntry.kind, 'draft');
+  assert.equal(cacheEntry.analysisId, 'analysis-1');
+  assert.deepEqual(store.getGenerationCache('draft_key_1')?.payload, draftPayload);
+  store.putGenerationCache({
+    cacheKey: 'draft_key_1',
+    gameType: 'arena',
+    modelId: 'qwen-test',
+    promptVersion: 'draft-v1',
+    payload: { draft: arenaDraft, mode: 'deep' }
+  });
+  assert.equal(store.getGenerationCache('draft_key_1')?.payload.mode, 'deep', 'upsert replaces the payload');
+  expectStoreError('STORE_INVALID_ANALYSIS', () => store.putGenerationCache({ cacheKey: '', gameType: 'arena', modelId: 'qwen', promptVersion: 'v1', payload: {} }));
+  expectStoreError('STORE_INVALID_ANALYSIS', () => store.putGenerationCache({ cacheKey: 'k', gameType: 'arena', modelId: 'qwen', promptVersion: 'v1', payload: 'not-an-object' }));
+
+  // A corrupt row is a cache miss, and is dropped instead of failing generation.
+  db.prepare('INSERT INTO ai_generation_cache (cache_key,kind,game_type,analysis_id,model_id,prompt_version,payload_json,created_at) VALUES (?,?,?,?,?,?,?,?)')
+    .run('draft_corrupt', 'draft', 'arena', null, 'qwen-test', 'draft-v1', '{not json', ISO);
+  assert.equal(store.getGenerationCache('draft_corrupt'), null);
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM ai_generation_cache WHERE cache_key='draft_corrupt'").get().count, 0);
+
+  // Pruning keeps the newest rows only.
+  assert.equal(store.deleteGenerationCache('draft_key_1'), true);
+  assert.equal(store.deleteGenerationCache('draft_key_1'), false);
+  db.prepare('INSERT INTO ai_generation_cache (cache_key,kind,game_type,analysis_id,model_id,prompt_version,payload_json,created_at) VALUES (?,?,?,?,?,?,?,?)')
+    .run('draft_old', 'draft', 'arena', null, 'qwen-test', 'draft-v1', '{}', '2025-01-01T00:00:00.000Z');
+  db.prepare('INSERT INTO ai_generation_cache (cache_key,kind,game_type,analysis_id,model_id,prompt_version,payload_json,created_at) VALUES (?,?,?,?,?,?,?,?)')
+    .run('draft_new', 'draft', 'arena', null, 'qwen-test', 'draft-v1', '{}', '2026-06-01T00:00:00.000Z');
+  assert.equal(store.pruneGenerationCache(1), 1);
+  assert.equal(store.getGenerationCache('draft_old'), null);
+  assert.ok(store.getGenerationCache('draft_new'));
+  assert.ok(store.clearGenerationCache() >= 1);
+  assert.equal(store.getGenerationCache('draft_new'), null);
+
+  // O5 migration: a database created before the cache key column gets it added.
+  const legacyDb = new Database(':memory:');
+  legacyDb.exec(`
+    CREATE TABLE lesson_documents (id TEXT PRIMARY KEY);
+    CREATE TABLE lesson_analyses (
+      id TEXT PRIMARY KEY, document_id TEXT NOT NULL, data_json TEXT NOT NULL,
+      schema_version INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+    );
+  `);
+  const legacyStore = new LessonStore({ db: legacyDb as unknown as LessonStoreDatabase, lessonsDir });
+  legacyStore.ensureSchema();
+  const analysisColumns = (legacyDb.prepare('PRAGMA table_info(lesson_analyses)').all() as Array<{ name: string }>).map(column => column.name);
+  assert.ok(analysisColumns.includes('cache_key'), 'O5 migration adds lesson_analyses.cache_key');
+  legacyStore.ensureSchema(); // idempotent
+  legacyDb.close();
+
   // --- Cascade delete keeps projects --------------------------------------
   assert.equal(await store.deleteDocument(document.id), true);
   assert.equal(store.getDocument(document.id), null);

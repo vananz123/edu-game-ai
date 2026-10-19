@@ -1,0 +1,20 @@
+{
+  "gameType": "arena",
+  "questions": [
+    {
+      "id": "regen-q1",
+      "type": "multiple-choice",
+      "prompt": "Trong quá trình quang hợp, thực vật sử dụng năng lượng nào để tổng hợp chất hữu cơ?",
+      "options": [
+        { "id": "a", "text": "Năng lượng ánh sáng mặt trời" },
+        { "id": "b", "text": "Năng lượng từ đất" },
+        { "id": "c", "text": "Năng lượng từ nước" },
+        { "id": "d", "text": "Năng lượng từ không khí" }
+      ],
+      "correctOptionId": "a",
+      "explanation": "Quang hợp dùng năng lượng ánh sáng mặt trời, được diệp lục hấp thụ, để tổng hợp chất hữu cơ.",
+      "difficulty": "dễ",
+      "points": 100
+    }
+  ]
+}

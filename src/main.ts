@@ -22,7 +22,7 @@ const {
 const { LlamaRuntimeInstaller } = require('./ai-core/runtime-installer');
 const { importQuestionsFromFile } = require('./services/question-import');
 const { normalizeAiGame: normalizeAiGameService } = require('./services/ai-game-normalize');
-const { LessonStore, LESSON_STORE_SCHEMA_SQL } = require('./services/lesson-store');
+const { LessonStore } = require('./services/lesson-store');
 const { buildTreasureHunt: buildTreasureHuntService, buildRaceData: buildRaceDataService } = require('./services/ai-game-design');
 const { validateScenarioGame, validateMatchingGame, validateTreasureHuntGame, validateRaceGame } = require('./services/game-validation');
 const { isZenBaseUrl, postZenChatCompletions, readLocalOpencodeApiKey } = require('./services/opencode-zen');
@@ -32,7 +32,24 @@ const {
   isCancelReason,
   requestChatJson
 } = require('./services/ai-transport');
-const { analyzeLesson, generateGameDraft } = require('./services/lesson-workflow');
+const { analyzeLesson, generateGameDraft, regenerateGameItem } = require('./services/lesson-workflow');
+// O5: cache keys (document hash + model + prompt/schema version + config).
+const {
+  buildAnalysisCacheKey,
+  buildGenerationCacheKey,
+  analysisFingerprint,
+  configFingerprint,
+  sha256Hex
+} = require('./services/lesson-cache');
+// O5: replace exactly one item while the app keeps ids/links (§5.5).
+const {
+  replaceDraftItem,
+  resolveItemIndexes,
+  itemCount,
+  itemAt,
+  itemLabel
+} = require('./services/lesson-item-repair');
+const { parseGameDraft } = require('./services/lesson-contracts');
 // O1: genre suggestions are rule-based, so this step never calls the model.
 const { recommendGamesForAnalysis } = require('./services/game-recommender');
 // O2: deterministic content-quality checks (no model call).
@@ -40,7 +57,7 @@ const { checkDraftQuality } = require('./services/lesson-quality');
 // O3: chunk the lesson once, then retrieve only the relevant part for generation.
 const { chunkLessonText } = require('./services/lesson-chunker');
 const { selectChunks, selectChunksByVectors, buildRetrievalQuery, DEFAULT_MAX_SELECTED_CHUNKS, DEFAULT_MAX_SELECTED_CHARS } = require('./services/lesson-retrieval');
-const { formatRetrievedChunks } = require('./services/lesson-prompts');
+const { formatRetrievedChunks, LESSON_PROMPT_VERSIONS } = require('./services/lesson-prompts');
 // O4: the retrieval model + its dedicated llama-server process (embeddings only).
 const { getEmbeddingModel, embeddingTextForChunk } = require('./ai-core/embedding-catalog');
 const { createEmbeddingRuntime, chunkTextsForEmbedding } = require('./ai-core/embedding-manager');
@@ -298,7 +315,36 @@ const RUNTIME_DIR = () => path.join(AI_LOCAL_ROOT(), 'runtime', `llama.cpp-${LLA
 // O4: how many chunks go into one `/v1/embeddings` request. Measured, not guessed
 // (tests/bench-embedding.js); 8 keeps a single request well under a second on the
 // target 16 GB / U-series machine while avoiding one request per chunk.
-const EMBEDDING_BATCH_SIZE = 8;
+// O5: the default stays 8 but is now overridable (`ai.embeddingBatchSize` in
+// settings.json, 1..32) so O6 can tune it from the benchmark instead of a guess.
+const DEFAULT_EMBEDDING_BATCH_SIZE = 8;
+
+function clampInteger(value, min, max, fallback) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(numeric)));
+}
+
+async function readAiSettings() {
+  const settings = await readJson(SETTINGS_FILE(), {});
+  return (settings && settings.ai) || {};
+}
+
+async function readEmbeddingBatchSize() {
+  const ai = await readAiSettings();
+  return clampInteger(ai.embeddingBatchSize, 1, 32, DEFAULT_EMBEDDING_BATCH_SIZE);
+}
+
+/**
+ * The chat model id is part of every O5 cache key. This mirrors the resolution
+ * inside `createLessonChatClient` (settings first, catalog default second) so a
+ * model switch invalidates cached analyses/content instead of silently reusing
+ * output produced by the previous model.
+ */
+async function currentChatModelId() {
+  const ai = await readAiSettings();
+  return String(ai.localModelId || QWEN_LOCAL_MODELS[0].id);
+}
 
 async function deleteLocalAiData() {
   try {
@@ -358,9 +404,11 @@ async function ensureData() {
     CREATE INDEX IF NOT EXISTS idx_games_updated_at ON games(updated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_sessions_created_at ON sessions(created_at DESC);
   `);
-  sqlite.exec(LESSON_STORE_SCHEMA_SQL);
   await fs.mkdir(path.join(DATA_DIR(), 'lessons'), { recursive: true });
   lessonStore = new LessonStore({ db: sqlite, lessonsDir: path.join(DATA_DIR(), 'lessons') });
+  // Single entry point for the sidecar schema: creates the tables and applies
+  // additive migrations (e.g. O5's `lesson_analyses.cache_key`) to older files.
+  lessonStore.ensureSchema();
   const gameCount = sqlite.prepare('SELECT COUNT(*) AS count FROM games').get().count;
   if (gameCount === 0) {
     let legacy = { games: [], sessions: [] };
@@ -671,13 +719,68 @@ async function embedLessonChunks(store, documentId, chunks) {
   if (!missing.length) return stored;
   const runtime = await ensureEmbeddingRuntime();
   const vectors = new Map(stored);
-  const batches = chunkTextsForEmbedding(missing, EMBEDDING_BATCH_SIZE);
+  const batches = chunkTextsForEmbedding(missing, await readEmbeddingBatchSize());
   for (const batch of batches) {
     const embedded = await runtime.embed(batch.map(chunk => embeddingTextForChunk(chunk, model)));
     batch.forEach((chunk, position) => vectors.set(chunk.index, embedded[position]));
   }
   store.saveChunkEmbeddings(documentId, model.id, model.dimension, vectors);
   return vectors;
+}
+
+/**
+ * Builds the lesson slice sent to the model (O3 retrieval + O4 embeddings).
+ *
+ * Shared by full generation and by single-item regeneration, so a regenerated
+ * question sees exactly the same source material as the draft it belongs to.
+ * Retrieval is best-effort: any failure falls back to `lexical-v1` and, with no
+ * chunks at all, to the head of the document.
+ */
+async function buildLessonGenerationContext(store, project, analysis) {
+  let sourceExcerpt;
+  let context = { chunkCount: 0, selectedChunkCount: 0, characters: 0, scorer: 'none', fallback: false };
+  if (!project.lesson || !project.lesson.documentId) return { sourceExcerpt, context };
+  const document = await store.getDocumentWithText(project.lesson.documentId);
+  if (!document || !document.text) return { sourceExcerpt, context };
+
+  // O3: chunk the document once (cached in `lesson_chunks`), then send only the
+  // slices that match the topic/objectives instead of the first 6000 characters.
+  let chunks = store.listChunks(document.id);
+  if (!chunks.length) {
+    store.replaceChunks(document.id, chunkLessonText(document.text));
+    chunks = store.listChunks(document.id);
+  }
+  const query = buildRetrievalQuery({ analysis, config: project.config });
+  const selectionOptions = {
+    maxChunks: DEFAULT_MAX_SELECTED_CHUNKS,
+    maxChars: DEFAULT_MAX_SELECTED_CHARS
+  };
+  // O4: rank by meaning when the embedding model is available and cached;
+  // otherwise (model missing, server error, first run offline) keep the lexical
+  // ranking. Retrieval quality may drop, generation never blocks.
+  let selection;
+  try {
+    const vectors = await embedLessonChunks(store, document.id, chunks);
+    if (vectors.size) {
+      const runtime = await ensureEmbeddingRuntime();
+      const [queryVector] = await runtime.embed([query]);
+      if (queryVector) selection = selectChunksByVectors(chunks, queryVector, vectors, selectionOptions);
+    }
+  } catch (error) {
+    console.warn('Bộ đọc hiểu giáo án không dùng được, tạm dùng truy xuất từ vựng:', error && error.message ? error.message : error);
+  }
+  if (!selection) selection = selectChunks(chunks, query, selectionOptions);
+  sourceExcerpt = selection.selected.length
+    ? formatRetrievedChunks(selection.selected)
+    : document.text.slice(0, 6000);
+  context = {
+    chunkCount: chunks.length,
+    selectedChunkCount: selection.selected.length,
+    characters: sourceExcerpt.length,
+    scorer: selection.scorer,
+    fallback: selection.fallback
+  };
+  return { sourceExcerpt, context };
 }
 
 function registerIpc() {
@@ -723,18 +826,34 @@ function registerIpc() {
     const store = requireLessonStore();
     const document = await store.getDocumentWithText(documentId);
     if (!document) throw new Error('Không tìm thấy giáo án đã lưu. Hãy nhập lại tài liệu.');
-    const analysis = await analyzeLesson({
-      client: createLessonChatClient(),
-      registry: aiRequests,
-      requestId,
-      documentId,
-      text: document.text,
-      sourceName: document.name,
-      analysisId: payload?.analysisId ? String(payload.analysisId) : undefined,
-      now: new Date().toISOString(),
-      maxTokens: payload?.mode === 'deep' ? 1536 : 1024
+    const mode = payload?.mode === 'deep' ? 'deep' : 'fast';
+    // O5 (docs/update-AI-local.txt §4): never analyze the same text twice when the
+    // document hash, model, mode and prompt version are unchanged. `force` is the
+    // teacher's explicit "Phân tích lại" action, and also what a changed lesson
+    // produces automatically (different hash → different key).
+    const cacheKey = buildAnalysisCacheKey({
+      documentSha256: sha256Hex(document.text),
+      modelId: await currentChatModelId(),
+      mode,
+      sourceName: document.name
     });
-    store.saveAnalysis(analysis);
+    let analysis = payload?.force ? null : store.findAnalysisByCacheKey(documentId, cacheKey);
+    let cached = Boolean(analysis);
+    if (!analysis) {
+      analysis = await analyzeLesson({
+        client: createLessonChatClient(),
+        registry: aiRequests,
+        requestId,
+        documentId,
+        text: document.text,
+        sourceName: document.name,
+        analysisId: payload?.analysisId ? String(payload.analysisId) : undefined,
+        now: new Date().toISOString(),
+        maxTokens: mode === 'deep' ? 1536 : 1024
+      });
+      store.saveAnalysis(analysis, { cacheKey });
+      cached = false;
+    }
     const identity = { documentId: document.id, name: document.name, characters: document.characters };
     const now = new Date().toISOString();
     let project;
@@ -745,7 +864,7 @@ function registerIpc() {
     } else {
       project = store.saveProject(createProjectFromAnalysis({ projectId: id('project'), document: identity, analysis, now }));
     }
-    return { analysis, project };
+    return { analysis, project, cached };
   });
   ipcMain.handle('lesson:recommend', async (_e, payload) => {
     const analysisId = String(payload?.analysisId || '');
@@ -787,49 +906,49 @@ function registerIpc() {
     if (!analysis) throw new Error('Không tìm thấy kết quả phân tích giáo án. Hãy phân tích lại.');
 
     const mode = payload?.mode === 'deep' ? 'deep' : project.config.generationMode === 'deep' ? 'deep' : 'fast';
-    let sourceExcerpt;
-    let context = { chunkCount: 0, selectedChunkCount: 0, characters: 0, scorer: 'none', fallback: false };
-    if (project.lesson && project.lesson.documentId) {
-      const document = await store.getDocumentWithText(project.lesson.documentId);
-      if (document && document.text) {
-        // O3: chunk the document once (cached in `lesson_chunks`), then send only
-        // the slices that match the topic/objectives instead of the first 6000
-        // characters. The fallback keeps the old behaviour if anything is odd.
-        let chunks = store.listChunks(document.id);
-        if (!chunks.length) {
-          store.replaceChunks(document.id, chunkLessonText(document.text));
-          chunks = store.listChunks(document.id);
-        }
-        const query = buildRetrievalQuery({ analysis, config: project.config });
-        const selectionOptions = {
-          maxChunks: DEFAULT_MAX_SELECTED_CHUNKS,
-          maxChars: DEFAULT_MAX_SELECTED_CHARS
-        };
-        // O4: rank by meaning when the embedding model is available and cached;
-        // otherwise (model missing, server error, first run offline) keep the
-        // lexical ranking. Retrieval quality may drop, generation never blocks.
-        let selection;
+    const modelId = await currentChatModelId();
+    // O5 cache key: lesson + analysis content + genre + config + model + prompt
+    // version. Any change to one of those misses the cache (and the AI is called).
+    const cacheKey = buildGenerationCacheKey({
+      documentId: project.lesson ? project.lesson.documentId : '',
+      analysisFingerprint: analysisFingerprint(analysis),
+      gameType: project.config.gameType,
+      configFingerprint: configFingerprint(project.config),
+      modelId,
+      mode
+    });
+    const { sourceExcerpt, context } = await buildLessonGenerationContext(store, project, analysis);
+
+    // §9: a second press of "Tạo nội dung" with identical inputs reuses the stored
+    // draft. "Tạo lại" (`regenerate: true`) always calls the model, because the
+    // teacher explicitly asked for different content.
+    if (!payload?.regenerate) {
+      const cachedEntry = store.getGenerationCache(cacheKey);
+      if (cachedEntry) {
         try {
-          const vectors = await embedLessonChunks(store, document.id, chunks);
-          if (vectors.size) {
-            const runtime = await ensureEmbeddingRuntime();
-            const [queryVector] = await runtime.embed([query]);
-            if (queryVector) selection = selectChunksByVectors(chunks, queryVector, vectors, selectionOptions);
-          }
+          // Re-run the adapter instead of trusting the stored snapshot: it is the
+          // single conversion boundary and may have changed since the cache write.
+          const cachedDraft = parseGameDraft(cachedEntry.payload.draft);
+          const cachedGame = toEducationalGame({ ...project, draft: cachedDraft });
+          const cachedSaved = store.saveProject(applyDraft(project, {
+            draft: cachedDraft,
+            game: cachedGame,
+            now: new Date().toISOString()
+          }));
+          const cachedQuality = checkDraftQuality({ draft: cachedDraft, config: project.config, analysis });
+          return {
+            project: cachedSaved,
+            game: cachedGame,
+            mode,
+            quality: cachedQuality,
+            context: cachedEntry.payload.context || context,
+            cached: true
+          };
         } catch (error) {
-          console.warn('Bộ đọc hiểu giáo án không dùng được, tạm dùng truy xuất từ vựng:', error && error.message ? error.message : error);
+          // A row written by an older schema/adapter must never block generation.
+          console.warn('Bộ nhớ đệm nội dung không dùng được, tạo mới:', error && error.message ? error.message : error);
+          store.deleteGenerationCache(cacheKey);
         }
-        if (!selection) selection = selectChunks(chunks, query, selectionOptions);
-        sourceExcerpt = selection.selected.length
-          ? formatRetrievedChunks(selection.selected)
-          : document.text.slice(0, 6000);
-        context = {
-          chunkCount: chunks.length,
-          selectedChunkCount: selection.selected.length,
-          characters: sourceExcerpt.length,
-          scorer: selection.scorer,
-          fallback: selection.fallback
-        };
       }
     }
 
@@ -856,7 +975,22 @@ function registerIpc() {
     // O2: advisory content-quality report (duplicates, weak distractors, broken
     // chains, coverage). Pure TypeScript, so it costs nothing here.
     const quality = checkDraftQuality({ draft, config: project.config, analysis });
-    return { project: saved, game, mode, quality, context };
+    // Best effort: a cache write must never fail the generation the teacher waited for.
+    try {
+      store.putGenerationCache({
+        cacheKey,
+        kind: 'draft',
+        gameType: project.config.gameType,
+        analysisId: project.analysisId,
+        modelId,
+        promptVersion: `draft-v${LESSON_PROMPT_VERSIONS.draft}`,
+        payload: { draft, mode, context }
+      });
+      store.pruneGenerationCache(50);
+    } catch (error) {
+      console.warn('Không lưu được bộ nhớ đệm nội dung:', error && error.message ? error.message : error);
+    }
+    return { project: saved, game, mode, quality, context, cached: false };
   });
   // O2: recompute the advisory report when a draft is reopened (no model call).
   ipcMain.handle('lesson:quality', async (_e, payload) => {
@@ -867,6 +1001,85 @@ function registerIpc() {
     if (!project || !project.draft) return null;
     const analysis = project.analysisId ? store.getAnalysis(project.analysisId) : null;
     return checkDraftQuality({ draft: project.draft, config: project.config, analysis });
+  });
+  // O5: rewrite exactly one item (docs/update-AI-local.txt §5.5). Everything else
+  // in the draft is preserved; ids and links stay app-owned (lesson-item-repair).
+  ipcMain.handle('lesson:regenerate-item', async (_e, payload) => {
+    const projectId = String(payload?.projectId || '');
+    const requestId = String(payload?.requestId || '');
+    if (!projectId) throw new Error('Thiếu mã dự án để tạo lại nội dung.');
+    if (!requestId) throw new Error('Thiếu mã yêu cầu AI.');
+    const store = requireLessonStore();
+    const project = store.getProject(projectId);
+    if (!project) throw new Error('Không tìm thấy dự án. Hãy lưu dự án trước khi tạo lại nội dung.');
+    if (!project.config) throw new Error('Dự án chưa có cấu hình trò chơi. Hãy hoàn tất bước cấu hình.');
+    if (!project.draft) throw new Error('Dự án chưa có nội dung để tạo lại. Hãy tạo nội dung trước.');
+    if (!project.analysisId) throw new Error('Dự án chưa có kết quả phân tích giáo án.');
+    if (project.draft.gameType !== project.config.gameType) {
+      throw new Error('[GENERATION_INVALID] Nội dung hiện tại không khớp thể loại đã chọn. Hãy tạo lại toàn bộ nội dung.');
+    }
+    const analysis = store.getAnalysis(project.analysisId);
+    if (!analysis) throw new Error('Không tìm thấy kết quả phân tích giáo án. Hãy phân tích lại.');
+
+    const qualityBefore = checkDraftQuality({ draft: project.draft, config: project.config, analysis });
+    const requested = Array.isArray(payload?.itemIndexes)
+      ? payload.itemIndexes.map(value => Number(value))
+      : [Number(payload?.itemIndex)];
+    // No explicit position: the teacher asked to fix the items the quality report
+    // flagged (the "Tạo lại các câu lỗi" path).
+    const indexes = resolveItemIndexes(project.draft, requested, qualityBefore);
+    if (!indexes.length) {
+      throw new Error('Không xác định được mục cần tạo lại. Hãy chọn một mục cụ thể.');
+    }
+    const issuesByIndex = new Map();
+    for (const issue of qualityBefore.issues) {
+      if (!issue.itemIndex) continue;
+      const list = issuesByIndex.get(issue.itemIndex) || [];
+      list.push(issue.message);
+      issuesByIndex.set(issue.itemIndex, list);
+    }
+
+    const mode = project.config.generationMode === 'deep' ? 'deep' : 'fast';
+    const { sourceExcerpt, context } = await buildLessonGenerationContext(store, project, analysis);
+    const total = itemCount(project.draft);
+    let draft = project.draft;
+    for (const position of indexes) {
+      // One model call per item: §5.5 keeps failing items isolated so the passing
+      // ones are never regenerated (and never change). `handle.done()` frees the
+      // requestId between items, so the same id can be reused sequentially.
+      const item = await regenerateGameItem({
+        client: createLessonChatClient(),
+        registry: aiRequests,
+        requestId,
+        gameType: project.config.gameType,
+        config: project.config,
+        analysis,
+        position,
+        total,
+        itemLabel: itemLabel(project.config.gameType, position),
+        currentItem: itemAt(draft, position),
+        issues: issuesByIndex.get(position) || [],
+        sourceExcerpt,
+        maxTokens: mode === 'deep' ? 1536 : 1024
+      });
+      try {
+        draft = replaceDraftItem(draft, position, item);
+      } catch (error) {
+        throw new Error(`[GENERATION_INVALID] ${itemLabel(project.config.gameType, position)} mới chưa hợp lệ: ${error && error.message ? error.message : 'không đọc được nội dung AI trả về.'}`);
+      }
+    }
+
+    // The adapter stays the single conversion boundary and runs the legacy
+    // validators; a failed adapter must not overwrite the project.
+    let game;
+    try {
+      game = toEducationalGame({ ...project, draft });
+    } catch (error) {
+      throw new Error(`[GENERATION_INVALID] ${error && error.message ? error.message : 'Nội dung mới chưa hợp lệ.'}`);
+    }
+    const saved = store.saveProject(applyDraft(project, { draft, game, now: new Date().toISOString() }));
+    const quality = checkDraftQuality({ draft, config: project.config, analysis });
+    return { project: saved, game, quality, context, mode, itemIndexes: indexes, cached: false };
   });
   ipcMain.handle('files:import-document', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {

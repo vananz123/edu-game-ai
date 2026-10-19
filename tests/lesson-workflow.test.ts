@@ -9,6 +9,7 @@ import {
   analyzeLesson,
   generateGameDraft,
   recommendGames,
+  regenerateGameItem,
   runStructuredStep,
   validateRecommendationsAgainstAnalysis,
   type LessonChatClient,
@@ -310,6 +311,76 @@ async function main(): Promise<void> {
   } else {
     throw new Error(`expected a choice question, got ${firstArenaQuestion.type}`);
   }
+
+  // --- O5: single-item regeneration ---------------------------------------
+  const currentQuestion = {
+    id: 'q1', type: 'multiple-choice', prompt: 'Câu cũ?',
+    options: [{ id: 'a', text: 'A' }, { id: 'b', text: 'B' }],
+    correctOptionId: 'a', explanation: 'Cũ.', difficulty: 'dễ', points: 100
+  };
+  const regeneratedQuestion = {
+    id: 'q9', type: 'multiple-choice', prompt: 'Câu mới?',
+    options: [{ id: 'x', text: 'X' }, { id: 'y', text: 'Y' }],
+    correctOptionId: 'x', explanation: 'Mới.', difficulty: 'trung bình', points: 100
+  };
+  const itemClient = new MockClient([{ value: { gameType: 'arena', questions: [regeneratedQuestion] } }]);
+  const regenerated = await regenerateGameItem({
+    client: itemClient,
+    registry,
+    requestId: 'req-item',
+    gameType: 'arena',
+    config: arenaConfig,
+    analysis: validAnalysis,
+    position: 2,
+    total: 5,
+    itemLabel: 'Câu hỏi 2',
+    currentItem: currentQuestion,
+    issues: ['Câu hỏi 2 thiếu giải thích.'],
+    sourceExcerpt: 'Trích tài liệu.'
+  });
+  assert.deepEqual(regenerated, regeneratedQuestion);
+  assert.equal(itemClient.calls.length, 1);
+  assert.equal(itemClient.calls[0].responseSchema?.name, 'game_item_arena');
+  const itemPrompt = itemClient.calls[0].messages[1].content;
+  assert.match(itemPrompt, /Viết lại DUY NHẤT một mục/);
+  assert.match(itemPrompt, /Câu hỏi 2 \(mục 2\/5\)/);
+  assert.match(itemPrompt, /ĐÚNG MỘT phần tử/);
+  assert.match(itemPrompt, /Câu hỏi 2 thiếu giải thích/);
+  assert.ok(itemPrompt.includes('Câu cũ?'), 'the current item is shown to the model');
+  assert.equal(registry.size, 0);
+
+  // A bare item (no one-element wrapper) is accepted: small models drop it.
+  const bareClient = new MockClient([{ value: regeneratedQuestion }]);
+  const bareItem = await regenerateGameItem({
+    client: bareClient, registry, requestId: 'req-item-bare', gameType: 'arena',
+    config: arenaConfig, analysis: validAnalysis, position: 1, total: 2,
+    itemLabel: 'Câu hỏi 1', currentItem: currentQuestion
+  });
+  assert.deepEqual(bareItem, regeneratedQuestion);
+
+  // Wrong cardinality triggers exactly one repair, then succeeds.
+  const twoItemsClient = new MockClient([
+    { value: { gameType: 'arena', questions: [regeneratedQuestion, currentQuestion] } },
+    { value: { gameType: 'arena', questions: [regeneratedQuestion] } }
+  ]);
+  const repairedItem = await regenerateGameItem({
+    client: twoItemsClient, registry, requestId: 'req-item-repair', gameType: 'arena',
+    config: arenaConfig, analysis: validAnalysis, position: 1, total: 2,
+    itemLabel: 'Câu hỏi 1', currentItem: currentQuestion
+  });
+  assert.deepEqual(repairedItem, regeneratedQuestion);
+  assert.equal(twoItemsClient.calls.length, 2);
+  assert.equal(twoItemsClient.calls[1].messages[2].role, 'assistant');
+  assert.match(twoItemsClient.calls[1].messages[3].content, /đúng MỘT phần tử/);
+
+  // Missing required fields fail after the repair attempt (never silently saved).
+  const badItemClient = new MockClient([{ value: { gameType: 'arena', questions: [{ prompt: 'Thiếu hết.' }] } }]);
+  await expectWorkflowError('AI_OUTPUT_INVALID', () => regenerateGameItem({
+    client: badItemClient, registry, requestId: 'req-item-bad', gameType: 'arena',
+    config: arenaConfig, analysis: validAnalysis, position: 1, total: 2,
+    itemLabel: 'Câu hỏi 1', currentItem: currentQuestion
+  }));
+  assert.equal(badItemClient.calls.length, 2);
 
   // --- Duplicate requestId is rejected before calling the model ------------
   const held = registry.begin('req-held');

@@ -48,6 +48,7 @@ export const LESSON_STORE_SCHEMA_SQL = `
     document_id TEXT NOT NULL,
     data_json TEXT NOT NULL,
     schema_version INTEGER NOT NULL,
+    cache_key TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     FOREIGN KEY (document_id) REFERENCES lesson_documents(id) ON DELETE CASCADE
@@ -90,6 +91,20 @@ export const LESSON_STORE_SCHEMA_SQL = `
     FOREIGN KEY (document_id) REFERENCES lesson_documents(id) ON DELETE CASCADE
   );
   CREATE INDEX IF NOT EXISTS idx_lesson_chunks_document ON lesson_chunks(document_id);
+  -- O5: generated content cache (one row per document/analysis/config/model key).
+  -- Drafts are also stored on the project; this table lets a *second* generation
+  -- with identical inputs reuse the content instead of calling the model again.
+  CREATE TABLE IF NOT EXISTS ai_generation_cache (
+    cache_key TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    game_type TEXT,
+    analysis_id TEXT,
+    model_id TEXT NOT NULL,
+    prompt_version TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_ai_generation_cache_created ON ai_generation_cache(created_at DESC);
 `;
 
 export type LessonStoreErrorCode =
@@ -154,12 +169,34 @@ export interface LessonDocumentWithText extends StoredLessonDocument {
   text: string;
 }
 
-/** A cached chunk row (O3). `embedding` fields are unused until O4. */
+/** A cached chunk row (O3). */
 export interface StoredLessonChunk extends LessonChunk {
   documentId: string;
   tokenCount: number;
   embeddingModel: string | null;
   embeddingDim: number | null;
+}
+
+/** O5: row shape of `ai_generation_cache`. */
+export interface GenerationCacheEntry {
+  cacheKey: string;
+  kind: string;
+  gameType: string | null;
+  analysisId: string | null;
+  modelId: string;
+  promptVersion: string;
+  payload: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface PutGenerationCacheInput {
+  cacheKey: string;
+  kind?: string;
+  gameType: string;
+  analysisId?: string | null;
+  modelId: string;
+  promptVersion: string;
+  payload: unknown;
 }
 
 interface ChunkRow {
@@ -202,8 +239,20 @@ interface AnalysisRow {
   document_id: string;
   data_json: string;
   schema_version: number;
+  cache_key?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+interface GenerationCacheRow {
+  cache_key: string;
+  kind: string;
+  game_type: string | null;
+  analysis_id: string | null;
+  model_id: string;
+  prompt_version: string;
+  payload_json: string;
+  created_at: string;
 }
 
 interface RecommendationRow {
@@ -231,6 +280,21 @@ export class LessonStore {
 
   ensureSchema(): void {
     this.db.exec(LESSON_STORE_SCHEMA_SQL);
+    this.migrateSchema();
+  }
+
+  /**
+   * Additive migrations for databases created before O5. `CREATE TABLE IF NOT
+   * EXISTS` cannot add a column, so the analysis cache key needs an explicit
+   * `ALTER TABLE`. The index is created afterwards because the DDL block runs
+   * before the column exists on older databases.
+   */
+  private migrateSchema(): void {
+    const columns = this.db.prepare('PRAGMA table_info(lesson_analyses)').all() as Array<{ name?: string }>;
+    if (!columns.some(column => column && column.name === 'cache_key')) {
+      this.db.exec('ALTER TABLE lesson_analyses ADD COLUMN cache_key TEXT');
+    }
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_lesson_analyses_cache ON lesson_analyses(document_id, cache_key)');
   }
 
   // -------------------------------------------------------------------------
@@ -471,18 +535,21 @@ export class LessonStore {
   // Analyses + recommendations
   // -------------------------------------------------------------------------
 
-  saveAnalysis(analysis: LessonAnalysis): LessonAnalysis {
+  saveAnalysis(analysis: LessonAnalysis, options?: { cacheKey?: string }): LessonAnalysis {
     assertAnalysis(analysis);
     const existing = this.getAnalysisRow(analysis.id);
     const createdAt = existing?.created_at || analysis.createdAt || new Date().toISOString();
     const updatedAt = new Date().toISOString();
     this.db.prepare(`
-      INSERT INTO lesson_analyses (id,document_id,data_json,schema_version,created_at,updated_at)
-      VALUES (@id,@document_id,@data_json,@schema_version,@created_at,@updated_at)
+      INSERT INTO lesson_analyses (id,document_id,data_json,schema_version,cache_key,created_at,updated_at)
+      VALUES (@id,@document_id,@data_json,@schema_version,@cache_key,@created_at,@updated_at)
       ON CONFLICT(id) DO UPDATE SET
         document_id=excluded.document_id, data_json=excluded.data_json,
-        schema_version=excluded.schema_version, updated_at=excluded.updated_at
+        schema_version=excluded.schema_version,
+        cache_key=COALESCE(excluded.cache_key, lesson_analyses.cache_key),
+        updated_at=excluded.updated_at
     `).run({
+      cache_key: options && options.cacheKey ? options.cacheKey : null,
       id: analysis.id,
       document_id: analysis.documentId,
       data_json: JSON.stringify({ ...analysis, createdAt }),
@@ -503,6 +570,117 @@ export class LessonStore {
     const rows = this.db.prepare('SELECT * FROM lesson_analyses WHERE document_id = ? ORDER BY updated_at DESC')
       .all(documentId) as AnalysisRow[];
     return rows.map(parseAnalysisRow);
+  }
+
+  /**
+   * O5 analysis cache: the newest analysis saved for this exact key. Keys are
+   * built by `lesson-cache.ts` from the document hash, model, mode and prompt
+   * version, so a hit means the model would see identical input. Teacher edits
+   * to the stored analysis are preserved (they live in the same row).
+   */
+  findAnalysisByCacheKey(documentId: string, cacheKey: string): LessonAnalysis | null {
+    if (!documentId || !cacheKey) return null;
+    const row = this.db.prepare(
+      'SELECT * FROM lesson_analyses WHERE document_id = ? AND cache_key = ? ORDER BY updated_at DESC LIMIT 1'
+    ).get(documentId, cacheKey) as AnalysisRow | undefined;
+    return row ? parseAnalysisRow(row) : null;
+  }
+
+  // -------------------------------------------------------------------------
+  // O5: generated-content cache
+  // -------------------------------------------------------------------------
+
+  putGenerationCache(input: PutGenerationCacheInput): GenerationCacheEntry {
+    if (!input || !input.cacheKey || !input.gameType || !input.modelId || !input.promptVersion) {
+      throw new LessonStoreError('STORE_INVALID_ANALYSIS', 'Thiếu thông tin để lưu bộ nhớ đệm nội dung.');
+    }
+    const payload = input.payload && typeof input.payload === 'object' && !Array.isArray(input.payload)
+      ? (input.payload as Record<string, unknown>)
+      : null;
+    if (!payload) {
+      throw new LessonStoreError('STORE_INVALID_ANALYSIS', 'Bộ nhớ đệm nội dung phải là một đối tượng JSON.');
+    }
+    const createdAt = new Date().toISOString();
+    this.db.prepare(`
+      INSERT INTO ai_generation_cache (cache_key,kind,game_type,analysis_id,model_id,prompt_version,payload_json,created_at)
+      VALUES (@cache_key,@kind,@game_type,@analysis_id,@model_id,@prompt_version,@payload_json,@created_at)
+      ON CONFLICT(cache_key) DO UPDATE SET
+        kind=excluded.kind, game_type=excluded.game_type, analysis_id=excluded.analysis_id,
+        model_id=excluded.model_id, prompt_version=excluded.prompt_version,
+        payload_json=excluded.payload_json, created_at=excluded.created_at
+    `).run({
+      cache_key: input.cacheKey,
+      kind: input.kind || 'draft',
+      game_type: input.gameType,
+      analysis_id: input.analysisId || null,
+      model_id: input.modelId,
+      prompt_version: input.promptVersion,
+      payload_json: JSON.stringify(payload),
+      created_at: createdAt
+    });
+    return {
+      cacheKey: input.cacheKey,
+      kind: input.kind || 'draft',
+      gameType: input.gameType,
+      analysisId: input.analysisId || null,
+      modelId: input.modelId,
+      promptVersion: input.promptVersion,
+      payload,
+      createdAt
+    };
+  }
+
+  /**
+   * Returns null for a missing *or* corrupt row: a broken cache must never block
+   * generation, so the bad row is dropped and the caller regenerates normally.
+   */
+  getGenerationCache(cacheKey: string): GenerationCacheEntry | null {
+    if (!cacheKey) return null;
+    const row = this.db.prepare('SELECT * FROM ai_generation_cache WHERE cache_key = ?').get(cacheKey) as GenerationCacheRow | undefined;
+    if (!row) return null;
+    let payload: unknown;
+    try {
+      payload = JSON.parse(row.payload_json);
+    } catch (error) {
+      this.deleteGenerationCache(cacheKey);
+      return null;
+    }
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      this.deleteGenerationCache(cacheKey);
+      return null;
+    }
+    return {
+      cacheKey: row.cache_key,
+      kind: row.kind,
+      gameType: row.game_type || null,
+      analysisId: row.analysis_id || null,
+      modelId: row.model_id,
+      promptVersion: row.prompt_version,
+      payload: payload as Record<string, unknown>,
+      createdAt: row.created_at
+    };
+  }
+
+  deleteGenerationCache(cacheKey: string): boolean {
+    if (!cacheKey) return false;
+    const result = this.db.prepare('DELETE FROM ai_generation_cache WHERE cache_key = ?').run(cacheKey) as { changes?: number };
+    return Boolean(result && result.changes);
+  }
+
+  /** Keeps the newest `keep` rows; the cache is a convenience, not a record. */
+  pruneGenerationCache(keep = 50): number {
+    const limit = Number.isFinite(keep) && Number(keep) >= 1 ? Math.floor(Number(keep)) : 50;
+    const result = this.db.prepare(`
+      DELETE FROM ai_generation_cache WHERE cache_key NOT IN (
+        SELECT cache_key FROM ai_generation_cache ORDER BY created_at DESC LIMIT ?
+      )
+    `).run(limit) as { changes?: number };
+    return result ? Number(result.changes) || 0 : 0;
+  }
+
+  clearGenerationCache(): number {
+    const result = this.db.prepare('DELETE FROM ai_generation_cache').run() as { changes?: number };
+    return result ? Number(result.changes) || 0 : 0;
   }
 
   saveRecommendations(analysisId: string, recommendations: GameRecommendation[]): GameRecommendation[] {

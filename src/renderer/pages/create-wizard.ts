@@ -181,12 +181,12 @@ function wizardHandleClick(event) {
 }
 
 async function wizardDispatch(action, button) {
-  if (wizardState.busy && ['back', 'new', 'save', 'generate', 'regenerate', 'open-editor'].includes(action)) return undefined;
+  if (wizardState.busy && ['back', 'new', 'save', 'generate', 'regenerate', 'regenerate-item', 'open-editor'].includes(action)) return undefined;
   switch (action) {
     case 'import-file': return wizardInputImportFile();
     case 'open-ai': return openLocalAiModal();
-    case 'analyze':
-    case 'rerun': return wizardAnalyzeRun();
+    case 'analyze': return wizardAnalyzeRun(false);
+    case 'rerun': return wizardAnalyzeRun(true);
     case 'cancel': return wizardAnalyzeCancel();
     case 'recommend':
     case 'rerun-recommend': return wizardRecommendRun();
@@ -206,6 +206,7 @@ async function wizardDispatch(action, button) {
     case 'new': return wizardNewProject();
     case 'generate': return wizardGenerateRun();
     case 'regenerate': return wizardGenerateRegenerate();
+    case 'regenerate-item': return wizardRegenerateItem(Number(button.dataset.itemIndex));
     case 'open-editor': return wizardGenerateOpenEditor();
     case 'go-library': navigate('library'); return undefined;
     default: return undefined;
