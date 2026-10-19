@@ -325,7 +325,7 @@ async function withTimeout(promise, ms, label) {
   push('T4b quality report returned with the draft', run.qualityPresent === true, 'errors=' + run.qualityErrors + ' warnings=' + run.qualityWarnings);
   push('T4b quality panel rendered in the wizard', ['ok', 'errors', 'warnings'].includes(run.qualityPanel) && run.qualityPanelText > 0, run.qualityPanel);
   if (mode === 'fixture') push('T4b fixture content passes quality checks', run.qualityErrors === 0 && run.qualityPanel === 'ok', run.qualityPanel + ' errors=' + run.qualityErrors);
-  push('T4c retrieved lesson chunks for the prompt', Boolean(run.context) && run.context.chunkCount > 0 && run.context.selectedChunkCount > 0 && run.context.scorer === 'lexical-v1', JSON.stringify(run.context));
+  push('T4c retrieved lesson chunks for the prompt', Boolean(run.context) && run.context.chunkCount > 0 && run.context.selectedChunkCount > 0 && ['lexical-v1', 'embeddings-v1'].includes(run.context.scorer), JSON.stringify(run.context));
   push('T4c retrieved excerpt fits the prompt budget', Boolean(run.context) && run.context.characters > 0 && run.context.characters <= 5200, run.context && run.context.characters);
   push('T4c wizard tells the teacher which chunks were used', typeof run.contextHint === 'string' && run.contextHint.includes('đoạn giáo án'), run.contextHint);
   push('T6 project persisted at edit/ready', run.storedStep === 'edit' && run.storedStatus === 'ready', run.storedStep + '/' + run.storedStatus);

@@ -198,7 +198,7 @@ const EXPECTED = {
     push(`${type}: quality report returned`, info.qualityPresent === true);
     push(`${type}: fixture content has no hard quality errors`, info.qualityErrors === 0 && info.qualityCanPublish === true, 'errors=' + info.qualityErrors + ' warnings=' + info.qualityWarnings);
     push(`${type}: quality counts match the generated draft`, info.qualityFound >= 2 && info.qualityFound === info.contentCount, info.qualityFound + '/' + info.contentCount + ' req=' + info.qualityRequested);
-    push(`${type}: retrieved lesson chunks for the prompt`, Boolean(info.context) && info.context.chunkCount > 0 && info.context.selectedChunkCount > 0 && info.context.scorer === 'lexical-v1', JSON.stringify(info.context));
+    push(`${type}: retrieved lesson chunks for the prompt`, Boolean(info.context) && info.context.chunkCount > 0 && info.context.selectedChunkCount > 0 && ['lexical-v1', 'embeddings-v1'].includes(info.context.scorer), JSON.stringify(info.context));
     push(`${type}: retrieved excerpt stays inside the prompt budget`, Boolean(info.context) && info.context.characters > 0 && info.context.characters <= 5200 && info.context.selectedChunkCount <= info.context.chunkCount, info.context && info.context.characters);
     push(`${type}: editor opened`, info.editorOpened === true);
     push(`${type}: editor surface matches the type`, info.panelVisible === true && (EXPECTED[type].panel ? info.panelExists === true : info.questionCards === info.contentCount), EXPECTED[type].panel ? 'panel=' + info.panelExists : 'cards=' + info.questionCards + '/' + info.contentCount);

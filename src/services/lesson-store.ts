@@ -399,6 +399,74 @@ export class LessonStore {
     return this.listChunks(documentId);
   }
 
+  /**
+   * Vectors cached for a document under one embedding model (O4).
+   * Vectors from another model are ignored: different dimensions/models are not
+   * comparable, so they must be recomputed rather than mixed.
+   */
+  listChunkEmbeddings(documentId: string, modelId: string): Map<number, Float32Array> {
+    const vectors = new Map<number, Float32Array>();
+    if (!documentId || !modelId) return vectors;
+    const rows = this.db
+      .prepare(
+        'SELECT chunk_index, embedding, embedding_dim FROM lesson_chunks WHERE document_id = ? AND embedding_model = ? AND embedding IS NOT NULL'
+      )
+      .all(documentId, modelId) as Array<{ chunk_index: number; embedding: unknown; embedding_dim: number }>;
+    rows.forEach(row => {
+      const vector = blobToVector(row.embedding, Number(row.embedding_dim));
+      if (vector) vectors.set(Number(row.chunk_index), vector);
+    });
+    return vectors;
+  }
+
+  /** Writes vectors for existing chunks; returns how many rows were updated. */
+  saveChunkEmbeddings(documentId: string, modelId: string, dimension: number, vectors: Map<number, Float32Array>): number {
+    if (!documentId || !modelId) {
+      throw new LessonStoreError('STORE_INVALID_DOCUMENT', 'Thiếu thông tin để lưu vector embedding.');
+    }
+    const dim = Math.round(Number(dimension));
+    if (!Number.isInteger(dim) || dim < 1 || dim > 4096) {
+      throw new LessonStoreError('STORE_INVALID_DOCUMENT', 'Số chiều vector embedding không hợp lệ.');
+    }
+    if (!this.getDocumentRow(documentId)) {
+      throw new LessonStoreError('STORE_DOCUMENT_MISSING', `Không tìm thấy tài liệu ${documentId} để lưu vector.`);
+    }
+    const update = this.db.prepare(`
+      UPDATE lesson_chunks SET embedding=@embedding, embedding_model=@model, embedding_dim=@dim
+      WHERE document_id=@document AND chunk_index=@index
+    `);
+    let updated = 0;
+    // Validate every vector before touching the DB, so a bad batch cannot leave
+    // half of the document embedded.
+    vectors.forEach((vector, index) => {
+      if (!(vector instanceof Float32Array) || vector.length !== dim) {
+        throw new LessonStoreError('STORE_INVALID_DOCUMENT', `Vector của đoạn ${index} không đúng ${dim} chiều.`);
+      }
+    });
+    const write = this.db.transaction(() => {
+      vectors.forEach((vector, index) => {
+        const blob = Buffer.from(vector.buffer, vector.byteOffset, vector.byteLength);
+        const result = update.run({ embedding: blob, model: modelId, dim, document: documentId, index }) as { changes?: number } | undefined;
+        if (result && Number(result.changes) > 0) updated += 1;
+      });
+    });
+    write();
+    return updated;
+  }
+
+  /** Drops cached vectors (all models, or one) without touching the chunk text. */
+  clearChunkEmbeddings(documentId: string, modelId?: string): number {
+    if (!documentId) return 0;
+    const result = modelId
+      ? (this.db
+          .prepare('UPDATE lesson_chunks SET embedding=NULL, embedding_model=NULL, embedding_dim=NULL WHERE document_id = ? AND embedding_model = ?')
+          .run(documentId, modelId) as { changes?: number } | undefined)
+      : (this.db
+          .prepare('UPDATE lesson_chunks SET embedding=NULL, embedding_model=NULL, embedding_dim=NULL WHERE document_id = ?')
+          .run(documentId) as { changes?: number } | undefined);
+    return result ? Number(result.changes) || 0 : 0;
+  }
+
   // -------------------------------------------------------------------------
   // Analyses + recommendations
   // -------------------------------------------------------------------------
@@ -541,6 +609,21 @@ function chunkFromRow(row: ChunkRow): StoredLessonChunk {
     embeddingModel: row.embedding_model || null,
     embeddingDim: row.embedding_dim === null || row.embedding_dim === undefined ? null : Number(row.embedding_dim)
   };
+}
+
+/** SQLite gives a Buffer for a BLOB; copy into an aligned Float32Array. */
+function blobToVector(blob: unknown, dimension: number): Float32Array | null {
+  if (!blob) return null;
+  const dim = Math.round(Number(dimension));
+  if (!Number.isInteger(dim) || dim < 1 || dim > 4096) return null;
+  const buffer = Buffer.isBuffer(blob)
+    ? blob
+    : ArrayBuffer.isView(blob)
+      ? Buffer.from(blob.buffer, blob.byteOffset, blob.byteLength)
+      : null;
+  if (!buffer || buffer.byteLength !== dim * 4) return null;
+  const copy = new Uint8Array(buffer);
+  return new Float32Array(copy.buffer, 0, dim);
 }
 
 function documentFromRow(row: DocumentRow): StoredLessonDocument {

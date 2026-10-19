@@ -39,8 +39,11 @@ const { recommendGamesForAnalysis } = require('./services/game-recommender');
 const { checkDraftQuality } = require('./services/lesson-quality');
 // O3: chunk the lesson once, then retrieve only the relevant part for generation.
 const { chunkLessonText } = require('./services/lesson-chunker');
-const { selectChunks, buildRetrievalQuery, DEFAULT_MAX_SELECTED_CHUNKS, DEFAULT_MAX_SELECTED_CHARS } = require('./services/lesson-retrieval');
+const { selectChunks, selectChunksByVectors, buildRetrievalQuery, DEFAULT_MAX_SELECTED_CHUNKS, DEFAULT_MAX_SELECTED_CHARS } = require('./services/lesson-retrieval');
 const { formatRetrievedChunks } = require('./services/lesson-prompts');
+// O4: the retrieval model + its dedicated llama-server process (embeddings only).
+const { getEmbeddingModel, embeddingTextForChunk } = require('./ai-core/embedding-catalog');
+const { createEmbeddingRuntime, chunkTextsForEmbedding } = require('./ai-core/embedding-manager');
 const {
   createProjectFromAnalysis,
   applyAnalysis,
@@ -281,6 +284,8 @@ const aiRequests = new AiRequestRegistry();
 let mainWindow;
 let localAiManager;
 let localAiModelId;
+let localEmbeddingRuntime;
+let localEmbeddingModelId;
 let localModelInstallInProgress = false;
 let quittingAfterAiShutdown = false;
 const DATA_DIR = () => path.join(app.getPath('userData'), 'edugame-data');
@@ -290,6 +295,10 @@ const SETTINGS_FILE = () => path.join(DATA_DIR(), 'settings.json');
 const AI_LOCAL_ROOT = () => path.join(DATA_DIR(), 'ai-local');
 const MODEL_DIR = () => path.join(AI_LOCAL_ROOT(), 'models');
 const RUNTIME_DIR = () => path.join(AI_LOCAL_ROOT(), 'runtime', `llama.cpp-${LLAMA_CPP_RUNTIME.version}`);
+// O4: how many chunks go into one `/v1/embeddings` request. Measured, not guessed
+// (tests/bench-embedding.js); 8 keeps a single request well under a second on the
+// target 16 GB / U-series machine while avoiding one request per chunk.
+const EMBEDDING_BATCH_SIZE = 8;
 
 async function deleteLocalAiData() {
   try {
@@ -589,6 +598,16 @@ async function ensureLocalRuntime(modelId) {
 }
 
 async function stopLocalAiRuntime() {
+  const embedding = localEmbeddingRuntime;
+  localEmbeddingRuntime = undefined;
+  localEmbeddingModelId = undefined;
+  if (embedding) {
+    try {
+      await embedding.stop();
+    } catch (error) {
+      console.error('Không dừng được máy chủ embedding:', error);
+    }
+  }
   const manager = localAiManager;
   if (!manager) return;
   await manager.stop();
@@ -596,6 +615,69 @@ async function stopLocalAiRuntime() {
     localAiManager = undefined;
     localAiModelId = undefined;
   }
+}
+
+/**
+ * O4: a dedicated embedding server (mini BERT) that turns chunks and the query
+ * into vectors. It is optional: if the model/runtime is missing or fails, the
+ * caller falls back to lexical retrieval instead of blocking generation.
+ */
+function embeddingModelFilePath(model) {
+  return path.join(MODEL_DIR(), `${model.id}-${model.version}.gguf`);
+}
+async function ensureEmbeddingRuntime() {
+  const model = getEmbeddingModel();
+  if (localEmbeddingRuntime && localEmbeddingModelId === model.id && localEmbeddingRuntime.isReady()) {
+    return localEmbeddingRuntime;
+  }
+  const executablePath = await createRuntimeInstaller().getExecutablePath();
+  if (!executablePath) throw new Error('Runtime llama.cpp chưa được cài để chạy bộ đọc hiểu giáo án.');
+  await verifyModelFile(embeddingModelFilePath(model), model);
+  const previous = localEmbeddingRuntime;
+  localEmbeddingRuntime = undefined;
+  localEmbeddingModelId = undefined;
+  if (previous) {
+    try { await previous.stop(); } catch (error) { /* ignored: replacing the process */ }
+  }
+  const totalThreads = Math.max(1, os.cpus().length);
+  const runtime = createEmbeddingRuntime({
+    executablePath,
+    modelPath: embeddingModelFilePath(model),
+    modelId: model.id,
+    dimension: model.dimension,
+    pooling: model.pooling,
+    contextLength: model.contextLength,
+    cpuThreads: Math.max(1, Math.min(totalThreads, model.hardware.recommendedCpuThreads))
+  });
+  try {
+    await runtime.start();
+  } catch (error) {
+    try { await runtime.stop(); } catch (stopError) { /* process never became ready */ }
+    throw new Error(`Không khởi chạy được bộ đọc hiểu giáo án: ${error.message}`);
+  }
+  localEmbeddingRuntime = runtime;
+  localEmbeddingModelId = model.id;
+  return runtime;
+}
+/**
+ * Cached per chunk, so re-opening a lesson or generating a second game type does
+ * not re-embed the document. Vectors are keyed by model id; a model change
+ * invalidates them (see `lesson-store.listChunkEmbeddings`).
+ */
+async function embedLessonChunks(store, documentId, chunks) {
+  const model = getEmbeddingModel();
+  const stored = store.listChunkEmbeddings(documentId, model.id);
+  const missing = chunks.filter(chunk => !stored.has(chunk.index));
+  if (!missing.length) return stored;
+  const runtime = await ensureEmbeddingRuntime();
+  const vectors = new Map(stored);
+  const batches = chunkTextsForEmbedding(missing, EMBEDDING_BATCH_SIZE);
+  for (const batch of batches) {
+    const embedded = await runtime.embed(batch.map(chunk => embeddingTextForChunk(chunk, model)));
+    batch.forEach((chunk, position) => vectors.set(chunk.index, embedded[position]));
+  }
+  store.saveChunkEmbeddings(documentId, model.id, model.dimension, vectors);
+  return vectors;
 }
 
 function registerIpc() {
@@ -718,10 +800,26 @@ function registerIpc() {
           store.replaceChunks(document.id, chunkLessonText(document.text));
           chunks = store.listChunks(document.id);
         }
-        const selection = selectChunks(chunks, buildRetrievalQuery({ analysis, config: project.config }), {
+        const query = buildRetrievalQuery({ analysis, config: project.config });
+        const selectionOptions = {
           maxChunks: DEFAULT_MAX_SELECTED_CHUNKS,
           maxChars: DEFAULT_MAX_SELECTED_CHARS
-        });
+        };
+        // O4: rank by meaning when the embedding model is available and cached;
+        // otherwise (model missing, server error, first run offline) keep the
+        // lexical ranking. Retrieval quality may drop, generation never blocks.
+        let selection;
+        try {
+          const vectors = await embedLessonChunks(store, document.id, chunks);
+          if (vectors.size) {
+            const runtime = await ensureEmbeddingRuntime();
+            const [queryVector] = await runtime.embed([query]);
+            if (queryVector) selection = selectChunksByVectors(chunks, queryVector, vectors, selectionOptions);
+          }
+        } catch (error) {
+          console.warn('Bộ đọc hiểu giáo án không dùng được, tạm dùng truy xuất từ vựng:', error && error.message ? error.message : error);
+        }
+        if (!selection) selection = selectChunks(chunks, query, selectionOptions);
         sourceExcerpt = selection.selected.length
           ? formatRetrievedChunks(selection.selected)
           : document.text.slice(0, 6000);
@@ -887,6 +985,20 @@ function registerIpc() {
         modelId: model.id,
         ...progress
       }));
+      // O4: install the small retrieval model (131 MB) with the same click. The
+      // chat model id is reused for progress so the existing progress bar keeps
+      // moving; a failure here only degrades retrieval to lexical scoring, so it
+      // must never fail the chat model install.
+      try {
+        const embeddingModel = getEmbeddingModel();
+        await installer.install(embeddingModel, progress => sendProgress({
+          stage: 'model',
+          modelId: model.id,
+          ...progress
+        }));
+      } catch (error) {
+        console.warn('Không cài được bộ đọc hiểu giáo án (sẽ dùng truy xuất từ vựng):', error && error.message ? error.message : error);
+      }
       const settings = await readJson(SETTINGS_FILE(), {});
       settings.ai = { ...settings.ai, mode: 'local', localModelId: model.id };
       await writeJson(SETTINGS_FILE(), settings);

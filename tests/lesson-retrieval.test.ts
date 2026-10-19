@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { chunkLessonText } from '../src/services/lesson-chunker';
 import {
   buildRetrievalQuery,
+  cosineSimilarity,
   selectChunks,
+  selectChunksByVectors,
   scoreChunksLexically,
   tokenizeForRetrieval,
   DEFAULT_MAX_SELECTED_CHUNKS,
@@ -160,6 +162,50 @@ assert.ok(bare.includes('Sinh học'));
 const focusSelection = selectChunks(chunks, query, { maxChunks: 2, maxChars: 600 });
 assert.ok(focusSelection.selected.some(chunk => chunk.index === photosynthesis));
 assert.equal(focusSelection.selected.some(chunk => chunk.index === safety), false);
+
+// --- vector selection (O4) -----------------------------------------------
+
+const vector = (...values: number[]) => Float32Array.from(values);
+assert.ok(Math.abs(cosineSimilarity(vector(1, 2), vector(1, 2)) - 1) < 1e-9);
+assert.ok(Math.abs(cosineSimilarity(vector(1, 0), vector(0, 1))) < 1e-6);
+assert.equal(cosineSimilarity(vector(0, 0), vector(1, 0)), 0, 'a zero vector cannot be similar to anything');
+assert.throws(() => cosineSimilarity(vector(1, 0), vector(1, 0, 0)), /chiều/);
+
+const vectors = new Map<number, Float32Array>();
+chunks.forEach((chunk, position) => {
+  vectors.set(chunk.index, position === photosynthesis ? vector(1, 0, 0) : vector(0.2, 1, 0));
+});
+const byMeaning = selectChunksByVectors(chunks, vector(1, 0, 0), vectors, { maxChunks: 1, maxChars: 1000 });
+assert.equal(byMeaning.scorer, 'embeddings-v1');
+assert.deepEqual(byMeaning.selected.map(chunk => chunk.index), [photosynthesis]);
+assert.equal(byMeaning.fallback, false);
+assert.equal(byMeaning.scores.length, 1);
+
+// Identical scores keep document order (deterministic output, like lexical).
+const flatVectors = new Map(chunks.map(chunk => [chunk.index, vector(1, 0, 0)]));
+const flatSelection = selectChunksByVectors(chunks, vector(1, 0, 0), flatVectors, { maxChunks: 2, maxChars: 1000 });
+assert.deepEqual(
+  flatSelection.selected.map(chunk => chunk.index),
+  [chunks[0].index, chunks[1].index]
+);
+
+// Chunks without a vector cannot be ranked; when none can, it reports fallback.
+assert.equal(selectChunksByVectors(chunks, vector(1, 0, 0), new Map(), { maxChunks: 1 }).fallback, true);
+const partialVectors = new Map([[chunks[1].index, vector(1, 0, 0)]]);
+const partialSelection = selectChunksByVectors(chunks, vector(1, 0, 0), partialVectors, {
+  maxChunks: 5,
+  maxChars: 100000
+});
+assert.deepEqual(partialSelection.selected.map(chunk => chunk.index), [chunks[1].index]);
+
+// Same budget rules as the lexical scorer.
+const budgetVectors = new Map(chunks.map(chunk => [chunk.index, vector(1, 0, 0)]));
+const budgetSelection = selectChunksByVectors(chunks, vector(1, 0, 0), budgetVectors, {
+  maxChunks: DEFAULT_MAX_SELECTED_CHUNKS,
+  maxChars: DEFAULT_MAX_SELECTED_CHARS
+});
+assert.ok(budgetSelection.selected.length <= DEFAULT_MAX_SELECTED_CHUNKS);
+assert.ok(budgetSelection.characters <= DEFAULT_MAX_SELECTED_CHARS);
 
 // --- determinism ----------------------------------------------------------
 

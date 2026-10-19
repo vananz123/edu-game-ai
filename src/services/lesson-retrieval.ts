@@ -13,7 +13,7 @@
 import type { GameConfig, LessonAnalysis } from '../shared/lesson-types';
 import type { LessonChunk } from './lesson-chunker';
 
-export type ChunkScorerId = 'lexical-v1';
+export type ChunkScorerId = 'lexical-v1' | 'embeddings-v1';
 
 export interface ChunkScore {
   chunk: LessonChunk;
@@ -115,24 +115,42 @@ function takeInDocumentOrder(selected: ChunkScore[]): LessonChunk[] {
   return [...selected].sort((left, right) => left.chunk.index - right.chunk.index).map(entry => entry.chunk);
 }
 
+/** Cosine similarity of two equal-length vectors (0 for a zero vector). */
+export function cosineSimilarity(left: Float32Array, right: Float32Array): number {
+  if (left.length !== right.length) {
+    throw new Error(`Không so sánh được vector ${left.length} chiều với ${right.length} chiều.`);
+  }
+  let dot = 0;
+  let leftNorm = 0;
+  let rightNorm = 0;
+  for (let position = 0; position < left.length; position += 1) {
+    dot += left[position] * right[position];
+    leftNorm += left[position] * left[position];
+    rightNorm += right[position] * right[position];
+  }
+  const denominator = Math.sqrt(leftNorm) * Math.sqrt(rightNorm);
+  return denominator > 0 ? dot / denominator : 0;
+}
+
 /**
- * Picks the chunks that fit the prompt budget.
- *
- * Ranking decides *which* chunks, document order decides *how they are shown*.
- * If nothing matches (a lesson with no overlap with the analysis), the first
- * chunks are returned instead of an empty excerpt — the model must always get
- * real source text, and `fallback` tells the caller/benchmark it happened.
+ * Shared selection core: ranked candidates in, budget-respecting selection in
+ * document order out. Both scorers (lexical now, embeddings next) go through
+ * this so budgets, fallback and ordering can never drift apart.
  */
-export function selectChunks(chunks: LessonChunk[], query: string, options: SelectChunkOptions = {}): ChunkSelection {
+function buildSelection(
+  chunks: LessonChunk[],
+  ranked: ChunkScore[],
+  options: SelectChunkOptions,
+  scorer: ChunkScorerId
+): ChunkSelection {
   const maxChunks = Math.max(1, Math.round(Number(options.maxChunks) || DEFAULT_MAX_SELECTED_CHUNKS));
   const maxChars = Math.max(200, Math.round(Number(options.maxChars) || DEFAULT_MAX_SELECTED_CHARS));
   const minScore = Number.isFinite(options.minScore) ? Number(options.minScore) : 0;
 
   if (!chunks.length) {
-    return { selected: [], scores: [], scorer: 'lexical-v1', fallback: false, characters: 0, considered: 0 };
+    return { selected: [], scores: [], scorer, fallback: false, characters: 0, considered: 0 };
   }
 
-  const ranked = scoreChunksLexically(query, chunks);
   const picked: ChunkScore[] = [];
   let characters = 0;
   for (const entry of ranked) {
@@ -153,7 +171,7 @@ export function selectChunks(chunks: LessonChunk[], query: string, options: Sele
     return {
       selected: takeInDocumentOrder(picked),
       scores: picked.map(() => 0),
-      scorer: 'lexical-v1',
+      scorer,
       fallback: true,
       characters,
       considered: chunks.length
@@ -165,11 +183,46 @@ export function selectChunks(chunks: LessonChunk[], query: string, options: Sele
   return {
     selected,
     scores: selected.map(chunk => scoreByIndex.get(chunk.index) || 0),
-    scorer: 'lexical-v1',
+    scorer,
     fallback: false,
     characters,
     considered: chunks.length
   };
+}
+
+/**
+ * Picks the chunks that fit the prompt budget using lexical (BM25-lite) scores.
+ *
+ * Ranking decides *which* chunks, document order decides *how they are shown*.
+ * If nothing matches (a lesson with no overlap with the analysis), the first
+ * chunks are returned instead of an empty excerpt — the model must always get
+ * real source text, and `fallback` tells the caller/benchmark it happened.
+ */
+export function selectChunks(chunks: LessonChunk[], query: string, options: SelectChunkOptions = {}): ChunkSelection {
+  return buildSelection(chunks, scoreChunksLexically(query, chunks), options, 'lexical-v1');
+}
+
+/**
+ * Picks chunks by cosine similarity against a query vector (O4).
+ *
+ * Chunks without a vector for the current embedding model are not ranked (they
+ * cannot be compared); when none of them has a vector the caller should fall
+ * back to `selectChunks` instead. Ties break by chunk index for determinism.
+ */
+export function selectChunksByVectors(
+  chunks: LessonChunk[],
+  queryVector: Float32Array,
+  vectors: Map<number, Float32Array>,
+  options: SelectChunkOptions = {}
+): ChunkSelection {
+  const ranked: ChunkScore[] = [];
+  chunks.forEach(chunk => {
+    const vector = vectors.get(chunk.index);
+    if (!vector) return;
+    ranked.push({ chunk, score: cosineSimilarity(queryVector, vector) });
+  });
+  ranked.sort((left, right) => right.score - left.score || left.chunk.index - right.chunk.index);
+  return buildSelection(chunks, ranked, options, 'embeddings-v1');
 }
 
 /**

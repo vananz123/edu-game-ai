@@ -197,6 +197,41 @@ async function run(): Promise<void> {
   );
   assert.equal(store.countChunks(document.id), chunks.length, 'a rejected write must not delete the cached chunks');
 
+  // --- Chunk embeddings (O4) ------------------------------------------------
+  const modelId = 'test-embed-v1';
+  const dim = 4;
+  const vectorFor = (value: number) => Float32Array.from([value, value, value, value]);
+  assert.equal(store.listChunkEmbeddings(document.id, modelId).size, 0);
+  assert.equal(store.listChunkEmbeddings('', modelId).size, 0);
+
+  const expectedEmbedded = Math.min(2, chunks.length);
+  assert.equal(
+    store.saveChunkEmbeddings(document.id, modelId, dim, new Map([[0, vectorFor(0.25)], [1, vectorFor(0.5)]])),
+    expectedEmbedded
+  );
+  const cachedVectors = store.listChunkEmbeddings(document.id, modelId);
+  assert.equal(cachedVectors.size, expectedEmbedded);
+  assert.equal(cachedVectors.get(0)?.length, dim);
+  assert.ok(Math.abs((cachedVectors.get(0)?.[0] ?? 0) - 0.25) < 1e-6, 'vectors must round-trip through the BLOB');
+  assert.equal(store.listChunkEmbeddings(document.id, 'other-model').size, 0, 'vectors are scoped per model');
+
+  expectStoreError('STORE_INVALID_DOCUMENT', () =>
+    store.saveChunkEmbeddings(document.id, modelId, dim, new Map([[0, new Float32Array(3)]]))
+  );
+  expectStoreError('STORE_INVALID_DOCUMENT', () => store.saveChunkEmbeddings(document.id, modelId, 0, new Map()));
+  expectStoreError('STORE_INVALID_DOCUMENT', () =>
+    store.saveChunkEmbeddings(document.id, modelId, dim, new Map([[0, 'nope' as unknown as Float32Array]]))
+  );
+  expectStoreError('STORE_DOCUMENT_MISSING', () => store.saveChunkEmbeddings('missing-doc', modelId, dim, new Map()));
+  assert.equal(store.clearChunkEmbeddings(document.id, 'other-model'), 0);
+  assert.equal(store.clearChunkEmbeddings(document.id, modelId), expectedEmbedded);
+  assert.equal(store.listChunkEmbeddings(document.id, modelId).size, 0);
+
+  // Re-chunking invalidates vectors: the text they described is gone.
+  store.saveChunkEmbeddings(document.id, modelId, dim, new Map([[0, vectorFor(0.5)]]));
+  store.replaceChunks(document.id, chunks);
+  assert.equal(store.listChunkEmbeddings(document.id, modelId).size, 0);
+
   // --- Analyses + recommendations -----------------------------------------
   const analysis: LessonAnalysis = { ...analysisTemplate, documentId: document.id, sourceDocumentIds: [document.id] };
   const savedAnalysis = store.saveAnalysis(analysis);
