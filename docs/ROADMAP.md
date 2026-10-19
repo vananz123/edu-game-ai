@@ -120,7 +120,7 @@ Closes the two remaining tasknight visual-authoring items (§4 "Kéo thả để
 Owner spec: `docs/update-AI-local.txt`. Full audit, target flow, modules, storage and risks: `docs/implementation-plan.md` §13. Rule of the workstream: **only call Qwen for work that truly needs language/pedagogical ability**; reuse everything; never call AI to pick a genre or apply ordinary config; never regenerate parts that already pass.
 
 - [ ] **O0** Audit + phased plan approved by owner (plan §13) — **no code before approval**.
-- [ ] **O1** Genre recommendation in TypeScript (`game-type-rules` + `game-recommender`); `lesson:recommend` keeps its shape but makes **0 Qwen calls**.
+- [x] **O1** Genre recommendation in TypeScript (`game-type-rules` + `game-recommender`); `lesson:recommend` keeps its shape but makes **0 Qwen calls**. Verified 2026-10-20: 18 test suites, `smoke64` 39/39, `smoke65 output` 18/18 (rewritten to test the AI error at generate), `smoke56/62/63/66/67` green, no model running.
 - [ ] **O2** Quality validators (`lesson-quality`): duplicates, counts, distractors, objective coverage — hard errors vs teacher-facing warnings.
 - [ ] **O3** Lesson chunking + retrieval plumbing (lexical pseudo-embedder first), generation prompt uses retrieved chunks instead of 6k raw text.
 - [ ] **O4** Real MiniLM embeddings (separate llama-server with `--embedding`), verified on a Vietnamese lesson corpus; embedding cache.

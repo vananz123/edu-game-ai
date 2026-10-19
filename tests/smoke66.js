@@ -103,7 +103,7 @@ async function withTimeout(promise, ms, label) {
     out.analysisTopic = wizardState.analysis && wizardState.analysis.topic;
     out.analysisObjectives = wizardState.analysis ? wizardState.analysis.objectives.length : 0;
 
-    setPhase('recommend (model)');
+    setPhase('recommend (rules)');
     document.querySelector('[data-wizard-step-body="analyze"] [data-wizard-action="next"]').click();
     await waitFor(() => wizardState.step === 'recommend' && !wizardState.busy);
     document.querySelector('[data-wizard-action="recommend"]').click();

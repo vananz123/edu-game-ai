@@ -1,5 +1,5 @@
 // @ts-nocheck -- renderer UI logic; workflow contracts are typed in src/shared/lesson-types.ts.
-/** Wizard step 3 — ask the local AI for 2–3 game suggestions and pick one. */
+/** Wizard step 3 — suggest 2–3 genres by rules (no model call) and let the teacher pick one. */
 
 function wizardObjectiveTitle(id) {
   const analysis = wizardState.analysis;
@@ -13,7 +13,7 @@ function renderWizardRecommend() {
   const loading = s.busy === 'recommend';
   const analysis = s.analysis;
   const header = `<div class="section-head"><h3>Bước 3 · Chọn trò chơi</h3><span class="tag">2–3 gợi ý</span></div>
-    <div class="panel-sub">AI local đề xuất thể loại phù hợp với mục tiêu của giáo án. Bạn chọn một gợi ý để cấu hình — có thể đổi thể loại sau.</div>`;
+    <div class="panel-sub">Hệ thống gợi ý thể loại phù hợp với mục tiêu của giáo án. Bạn chọn một gợi ý để cấu hình — vẫn có thể đổi sang thể loại khác.</div>`;
 
   if (!analysis) {
     return `<section class="form-panel" data-wizard-step-body="recommend">${header}
@@ -26,13 +26,12 @@ function renderWizardRecommend() {
     return `<section class="form-panel" data-wizard-step-body="recommend">${header}
       <div class="field"><strong class="text-[12px] block mb-[6px]">Chủ đề: ${escapeHtml(analysis.topic || '—')}</strong>
         <small class="block text-[11px] text-[#788196]">${analysis.objectives.length} mục tiêu · ${analysis.keyConcepts.length} kiến thức trọng tâm</small></div>
-      ${wizardAiReadinessHint()}
       <div class="publish-actions">
-        <button class="btn btn-primary" id="wizardRecommendBtn" data-wizard-action="recommend"${loading ? ' disabled' : ''}>${loading ? 'AI đang gợi ý…' : '✦ Gợi ý trò chơi bằng AI local'}</button>
+        <button class="btn btn-primary" id="wizardRecommendBtn" data-wizard-action="recommend"${loading ? ' disabled' : ''}>${loading ? 'Đang chọn thể loại…' : '✦ Gợi ý thể loại phù hợp'}</button>
         ${loading ? '<button class="btn btn-secondary" data-wizard-action="cancel">Huỷ</button>' : ''}
         <button class="btn btn-secondary" data-wizard-action="back">← Xem lại phân tích</button>
       </div>
-      ${loading ? '<div class="field-hint" data-wizard-loading="recommend">AI local đang cân nhắc thể loại phù hợp với mục tiêu…</div>' : ''}
+      ${loading ? '<div class="field-hint" data-wizard-loading="recommend">Đang đối chiếu mục tiêu, kiến thức trọng tâm với 5 thể loại…</div>' : ''}
     </section>`;
   }
 
@@ -49,10 +48,20 @@ function renderWizardRecommend() {
         </article>`;
       }).join('')}
     </div>
+    ${(() => {
+      const shown = new Set(s.recommendations.map(item => item.gameType));
+      const others = wizardGameTypeOrder.filter(gameType => !shown.has(gameType));
+      if (!others.length) return '';
+      return `<div class="field mt-[10px]"><small class="block text-[11px] text-[#788196] mb-[6px]">Hoặc chọn thể loại khác:</small>
+        <div class="flex flex-wrap gap-[6px]">${others.map(gameType => {
+          const meta = wizardGameMeta(gameType);
+          return `<button class="btn btn-secondary btn-small" data-wizard-action="select-type" data-game-type="${escapeHtml(gameType)}">${meta.icon} ${escapeHtml(meta.label)}</button>`;
+        }).join('')}</div></div>`;
+    })()}
     <div class="publish-actions">
       <button class="btn btn-secondary" data-wizard-action="rerun-recommend"${loading ? ' disabled' : ''}>↻ Gợi ý lại</button>
       <button class="btn btn-secondary" data-wizard-action="back">← Xem lại phân tích</button>
-      <button class="btn btn-primary" id="wizardNextBtn" data-wizard-action="next"${s.selectedRecommendationId ? '' : ' disabled'}>Tiếp tục · Cấu hình →</button>
+      <button class="btn btn-primary" id="wizardNextBtn" data-wizard-action="next"${s.selectedGameType ? '' : ' disabled'}>Tiếp tục · Cấu hình →</button>
     </div>
   </section>`;
 }
@@ -81,7 +90,7 @@ async function wizardRecommendRun() {
       wizardState.createdAt = result.project.createdAt || wizardState.createdAt;
     }
     await wizardRefreshProjects();
-    wizardSetNotice('AI local đã gợi ý thể loại trò chơi. Hãy chọn một gợi ý.');
+    wizardSetNotice('Đã gợi ý thể loại phù hợp với giáo án. Hãy chọn một thể loại để cấu hình.');
   } catch (error) {
     wizardSetError(error);
   }
@@ -103,8 +112,25 @@ function wizardRecommendSelect(recommendationId) {
   render();
 }
 
+/**
+ * Picks a genre that was not among the suggestions. The spec requires the
+ * teacher to stay free to choose any of the five genres, so this builds the
+ * same default config the recommender path would (no model call involved).
+ */
+function wizardRecommendSelectType(gameType) {
+  if (!gameType) return;
+  const changed = wizardState.selectedGameType !== gameType;
+  wizardState.selectedRecommendationId = null;
+  wizardState.selectedGameType = gameType;
+  if (changed || !wizardState.config) {
+    wizardState.config = wizardDefaultConfig({ gameType }, wizardState.analysis);
+  }
+  wizardClearMessages();
+  render();
+}
+
 async function wizardRecommendNext() {
-  if (!wizardState.selectedRecommendationId) {
+  if (!wizardState.selectedGameType) {
     wizardSetError(new Error('Hãy chọn một thể loại trò chơi trước khi cấu hình.'));
     render();
     return;

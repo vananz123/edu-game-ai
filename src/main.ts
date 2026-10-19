@@ -32,7 +32,9 @@ const {
   isCancelReason,
   requestChatJson
 } = require('./services/ai-transport');
-const { analyzeLesson, recommendGames, generateGameDraft } = require('./services/lesson-workflow');
+const { analyzeLesson, generateGameDraft } = require('./services/lesson-workflow');
+// O1: genre suggestions are rule-based, so this step never calls the model.
+const { recommendGamesForAnalysis } = require('./services/game-recommender');
 const {
   createProjectFromAnalysis,
   applyAnalysis,
@@ -659,18 +661,15 @@ function registerIpc() {
   });
   ipcMain.handle('lesson:recommend', async (_e, payload) => {
     const analysisId = String(payload?.analysisId || '');
-    const requestId = String(payload?.requestId || '');
     if (!analysisId) throw new Error('Thiếu mã phân tích để gợi ý trò chơi.');
     const store = requireLessonStore();
     const analysis = store.getAnalysis(analysisId);
     if (!analysis) throw new Error('Không tìm thấy kết quả phân tích. Hãy phân tích giáo án trước.');
-    const recommendations = await recommendGames({
-      client: createLessonChatClient(),
-      registry: aiRequests,
-      requestId,
+    // Rule-based: no model call, so no requestId/registry entry is needed here.
+    // Recommendation ids are globally unique (they are a primary key), so scope
+    // them to the analysis: re-running for the same analysis replaces the set.
+    const recommendations = recommendGamesForAnalysis({
       analysis,
-      // Recommendation ids are globally unique (they are a primary key), so scope
-      // them to the analysis: re-running for the same analysis replaces the set.
       idPrefix: `rec_${analysis.id}_`,
       now: new Date().toISOString()
     });

@@ -1,17 +1,18 @@
 // tests/smoke64.js — P5 wizard happy path (run with the app open on port 9333).
 // Requires the app to be launched with EDUGAME_AI_TEST_DIR pointing at
-// tests/fixtures/wizard/happy. The analyze/recommend *model* responses are
-// fixtures (no local model on this machine), but everything else is real:
-// IPC -> lesson store -> project row -> resume. Content generation is covered
-// separately by tests/smoke66.js (P6), which runs against a real local model.
+// tests/fixtures/wizard/happy. The analyze *model* response is a fixture (no
+// local model on this machine), but everything else is real: IPC -> lesson
+// store -> project row -> resume. Genre suggestions are rule-based since O1, so
+// they come from the lesson content (no model, no fixture). Content generation is
+// covered separately by tests/smoke66.js (P6), which runs against a real local model.
 //
 // T1  nav entry + wizard shell (5 steps, input active)
 // T2  short text keeps "next" disabled
 // T3  step 1 saves the lesson document + creates the project
 // T4  analyze stores an editable analysis (3 objectives rendered)
 // T5  teacher edit is persisted without re-running AI
-// T6  recommend returns 2-3 suggestions with unique ids
-// T7  selecting a card seeds a type-specific config
+// T6  recommend returns 2-3 suggestions with unique ids (rule-based, no model)
+// T7  selecting a card (or another genre) seeds a type-specific config
 // T8  configured project passes main-side validation and saves at step "generate"
 // T9  the draft reopens from the store (AI is NOT called again)
 // T10 saved-drafts sidebar lists the project
@@ -101,7 +102,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     const savedAnalysis = out.analysisId ? await window.eduGame.getLessonAnalysis(out.analysisId) : null;
     out.savedTopic = savedAnalysis && savedAnalysis.topic;
 
-    // T6 — recommend (fixture)
+    // T6 — recommend (rule-based since O1: instant, no model call)
     out.recommendButton = !!document.querySelector('[data-wizard-action="recommend"]');
     document.querySelector('[data-wizard-action="recommend"]').click();
     await waitFor(() => wizardState.recommendations.length > 0 && !wizardState.busy);
@@ -109,16 +110,21 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     out.recommendationTypes = wizardState.recommendations.map(item => item.gameType);
     out.recommendationIdsUnique = new Set(wizardState.recommendations.map(item => item.id)).size === wizardState.recommendations.length;
     out.recommendationCards = document.querySelectorAll('[data-wizard-recommendation]').length;
+    // Genres that were not suggested are still offered as chips (spec: the teacher
+    // must always be able to choose any of the five genres).
+    out.otherTypeChips = document.querySelectorAll('[data-wizard-action="select-type"]').length;
     out.recommendationError = wizardState.error && wizardState.error.code;
 
-    // T7 — select arena
-    const arenaCard = document.querySelector('[data-wizard-recommendation][data-game-type="arena"]');
-    out.arenaCard = !!arenaCard;
-    if (arenaCard) arenaCard.querySelector('[data-wizard-action="select"]').click();
+    // T7 — select the first suggestion (its type depends on the lesson content)
+    const GAME_TYPE_COUNT_FIELD = { arena: 'questionCount', scenario: 'situationCount', matching: 'pairCount', treasure: 'stageCount', race: 'maxRounds' };
+    const firstCard = document.querySelector('[data-wizard-recommendation]');
+    out.firstCardType = firstCard && firstCard.getAttribute('data-game-type');
+    if (firstCard) firstCard.querySelector('[data-wizard-action="select"]').click();
     await sleep(250);
     out.selectedType = wizardState.selectedGameType;
     out.configType = wizardState.config && wizardState.config.gameType;
-    out.seededQuestionCount = wizardState.config && wizardState.config.questionCount;
+    out.countKey = GAME_TYPE_COUNT_FIELD[out.configType] || 'questionCount';
+    out.seededQuestionCount = wizardState.config && wizardState.config[out.countKey];
     out.nextEnabledAfterSelect = !document.getElementById('wizardNextBtn').disabled;
     document.querySelector('[data-wizard-step-body="recommend"] [data-wizard-action="next"]').click();
     await waitFor(() => wizardState.step === 'configure' && !wizardState.busy);
@@ -128,9 +134,14 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
     // T8 — edit config, save (main-side zod validation runs here)
     const titleField = document.querySelector('[data-wizard-config="title"]');
-    if (titleField) titleField.value = 'Đấu trường quang hợp (bản smoke)';
-    const countField = document.querySelector('[data-wizard-config="questionCount"]');
-    if (countField) countField.value = '6';
+    if (titleField) titleField.value = 'Trò chơi quang hợp (bản smoke)';
+    out.countEdited = false;
+    const countField = document.querySelector('[data-wizard-config="' + out.countKey + '"]');
+    if (countField) {
+      countField.value = '6';
+      countField.dispatchEvent(new Event('input', { bubbles: true }));
+      out.countEdited = true;
+    }
     document.querySelector('[data-wizard-step-body="configure"] [data-wizard-action="next"]').click();
     await waitFor(() => wizardState.step === 'generate' && !wizardState.busy);
     out.stepAfterConfigure = wizardState.step;
@@ -139,7 +150,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     out.storedStep = stored && stored.step;
     out.storedStatus = stored && stored.status;
     out.storedTitle = stored && stored.config && stored.config.title;
-    out.storedQuestionCount = stored && stored.config && stored.config.questionCount;
+    out.storedQuestionCount = stored && stored.config && stored.config[out.countKey];
     out.storedRecommendationId = stored && stored.recommendationId;
     out.storedAnalysisId = stored && stored.analysisId;
     out.storedLessonDoc = stored && stored.lesson && stored.lesson.documentId;
@@ -154,7 +165,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     out.resumedTopic = wizardState.analysis && wizardState.analysis.topic;
     out.resumedRecommendations = wizardState.recommendations.length;
     out.resumedRecommendationIdsMatch = JSON.stringify(wizardState.recommendations.map(item => item.id)) === beforeResume;
-    out.resumedQuestionCount = wizardState.config && wizardState.config.questionCount;
+    out.resumedQuestionCount = wizardState.config && wizardState.config[out.countKey];
     out.resumedTitle = wizardState.config && wizardState.config.title;
     out.resumedTextLength = (wizardState.text || '').length;
     out.resumedType = wizardState.selectedGameType;
@@ -198,21 +209,26 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   push('T6 two or three recommendations returned', run.recommendationCount >= 2 && run.recommendationCount <= 3, 'n=' + run.recommendationCount + ' types=' + (run.recommendationTypes || []).join(','));
   push('T6 recommendation ids are unique', run.recommendationIdsUnique === true);
   push('T6 recommendation cards rendered', run.recommendationCards === run.recommendationCount, run.recommendationCards + '/' + run.recommendationCount);
-  push('T7 arena card present and selectable', run.arenaCard === true);
-  push('T7 selecting seeds a valid arena config', run.selectedType === 'arena' && run.configType === 'arena' && run.seededQuestionCount === 8, run.selectedType + ' q=' + run.seededQuestionCount);
+  push('T6 rule-based suggestions need no model', !run.recommendationError, 'err=' + run.recommendationError);
+  push('T7 other genres still offered', run.otherTypeChips === 5 - run.recommendationCount, 'chips=' + run.otherTypeChips + ' suggested=' + run.recommendationCount);
+  push('T7 selecting the first card seeds its config', run.selectedType === run.firstCardType && run.configType === run.firstCardType, run.selectedType);
+  const countInRange = typeof run.seededQuestionCount === 'number' && run.seededQuestionCount >= 3 && run.seededQuestionCount <= 30;
+  push('T7 suggested item count is sane (' + run.countKey + ')', countInRange, run.countKey + '=' + run.seededQuestionCount);
   push('T7 next enabled after selecting', run.nextEnabledAfterSelect === true);
   push('T7 recommend step advances to configure', run.stepAfterRecommend === 'configure', 'err=' + run.configError);
   push('T7 type-specific config fields rendered', run.configFieldsRendered >= 8, 'fields=' + run.configFieldsRendered);
   push('T8 config passes main-side validation', run.stepAfterConfigure === 'generate' && !run.configureError, 'err=' + run.configureError);
   push('T8 project saved at generate/review', run.storedStep === 'generate' && run.storedStatus === 'review', run.storedStep + '/' + run.storedStatus);
-  push('T8 edited title + question count persisted', run.storedTitle === 'Đấu trường quang hợp (bản smoke)' && run.storedQuestionCount === 6, run.storedTitle + ' q=' + run.storedQuestionCount);
+  const storedCountOk = run.countEdited ? run.storedQuestionCount === 6 : typeof run.storedQuestionCount === 'number';
+  push('T8 edited title + item count persisted', run.storedTitle === 'Trò chơi quang hợp (bản smoke)' && storedCountOk, run.storedTitle + ' ' + run.countKey + '=' + run.storedQuestionCount);
   push('T8 project links recommendation + analysis + lesson', !!run.storedRecommendationId && run.storedAnalysisId === run.analysisId && run.storedLessonDoc === run.documentId);
   push('T8 generate step shows the real P6 action', run.generatePlaceholder === true && run.generateDisabled === false, 'enabled=' + !run.generateDisabled);
   push('T9 draft reopens at generate', run.resumedStep === 'generate' && run.resumedBody === 'generate');
   push('T9 edited analysis survives reopen', run.resumedTopic === 'Quang hợp (giáo viên sửa)', run.resumedTopic);
   push('T9 recommendations restored without AI', run.resumedRecommendations === run.recommendationCount && run.resumedRecommendationIdsMatch === true, 'n=' + run.resumedRecommendations);
-  push('T9 config + lesson text restored', run.resumedQuestionCount === 6 && run.resumedTitle === 'Đấu trường quang hợp (bản smoke)' && run.resumedTextLength > 100, 'q=' + run.resumedQuestionCount + ' len=' + run.resumedTextLength);
-  push('T9 selected game type restored', run.resumedType === 'arena', run.resumedType);
+  const resumedCountOk = run.countEdited ? run.resumedQuestionCount === 6 : typeof run.resumedQuestionCount === 'number';
+  push('T9 config + lesson text restored', resumedCountOk && run.resumedTitle === 'Trò chơi quang hợp (bản smoke)' && run.resumedTextLength > 100, run.countKey + '=' + run.resumedQuestionCount + ' len=' + run.resumedTextLength);
+  push('T9 selected game type restored', run.resumedType === run.selectedType, run.resumedType);
   push('T10 saved-drafts sidebar lists the project', run.sidebarEntry === true);
   push('T10 cleanup removes the project', run.remainingWithId === false && run.remainingInDb === false);
   push('T11 no uncaught renderer errors', run.rendererErrors.length === 0, (run.rendererErrors || []).join(' | '));

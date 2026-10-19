@@ -5,8 +5,9 @@
 //
 // runtime: no model running -> AI_NOT_RUNNING banner, "Mở AI local" recovery,
 //          retry stays available, back keeps the lesson text, draft keeps step.
-// output:  analysis OK, recommendations return bad data -> AI_OUTPUT_INVALID,
-//          friendly text (no raw [CODE]), teacher edit survives back+retry.
+// output:  analysis OK, content generation returns bad data -> AI_OUTPUT_INVALID,
+//          friendly text (no raw [CODE]), nothing stored, teacher edit survives back.
+//          (Since O1 the genre step is rule-based and takes no model response.)
 const mode = process.argv[2] || 'runtime';
 if (mode !== 'runtime' && mode !== 'output') {
   console.error('usage: node tests/smoke65.js <runtime|output>');
@@ -128,8 +129,31 @@ if (mode !== 'runtime' && mode !== 'output') {
       const saved = out.analysisId ? await window.eduGame.getLessonAnalysis(out.analysisId) : null;
       out.savedObjective = saved && saved.objectives[0] && saved.objectives[0].description;
 
-      // T2 — recommendations fail with a bad-output error
+      // T2 — O1: genre suggestions are rule-based and make no model call, so the
+      // corrupt game_recommendations.json in this fixture set is inert: a broken
+      // model response can no longer break the choose-a-genre step.
       document.querySelector('[data-wizard-step-body="recommend"] [data-wizard-action="recommend"]').click();
+      await waitFor(() => wizardState.recommendations.length > 0 && !wizardState.busy);
+      out.recommendationCount = wizardState.recommendations.length;
+      out.recommendationError = wizardState.error && wizardState.error.code;
+      out.recommendationTypes = wizardState.recommendations.map(item => item.gameType);
+      out.otherTypeChips = document.querySelectorAll('[data-wizard-action="select-type"]').length;
+
+      // T3 — pick a suggestion, configure and save (advances to generate)
+      const firstCard = document.querySelector('[data-wizard-recommendation]');
+      out.pickedType = firstCard && firstCard.getAttribute('data-game-type');
+      if (firstCard) firstCard.querySelector('[data-wizard-action="select"]').click();
+      await sleep(200);
+      document.querySelector('[data-wizard-step-body="recommend"] [data-wizard-action="next"]').click();
+      await waitFor(() => wizardState.step === 'configure' && !wizardState.busy);
+      document.querySelector('[data-wizard-step-body="configure"] [data-wizard-action="next"]').click();
+      await waitFor(() => wizardState.step === 'generate' && !wizardState.busy);
+      out.stepBeforeGenerate = wizardState.step;
+      const beforeGenerate = await window.eduGame.getProject(out.projectId);
+      out.storedStepBeforeGenerate = beforeGenerate && beforeGenerate.step;
+
+      // T4 — generating against a broken model response surfaces the typed error
+      document.querySelector('[data-wizard-step-body="generate"] [data-wizard-action="generate"]').click();
       await waitFor(() => !!wizardState.error && !wizardState.busy);
       const banner = document.getElementById('wizardError');
       out.errorCode = banner && banner.dataset.errorCode;
@@ -137,30 +161,31 @@ if (mode !== 'runtime' && mode !== 'output') {
       out.rawCodeLeaked = Boolean(banner && banner.textContent.includes('AI_OUTPUT_INVALID'));
       out.friendlyText = Boolean(banner && banner.textContent.includes('chưa đúng cấu trúc'));
       out.hasOpenAi = !!document.querySelector('#wizardError [data-wizard-action="open-ai"]');
-      out.recommendationCount = wizardState.recommendations.length;
       out.stepAfterFailure = wizardState.step;
-      const retry = document.querySelector('[data-wizard-step-body="recommend"] [data-wizard-action="recommend"]');
-      out.retryAvailable = !!retry && !retry.disabled;
+      const afterFailure = await window.eduGame.getProject(out.projectId);
+      out.storedStepAfterFailure = afterFailure && afterFailure.step;
+      out.storedSnapshotAfterFailure = Boolean(afterFailure && afterFailure.gameSnapshot);
+      const retryButton = document.querySelector('[data-wizard-step-body="generate"] [data-wizard-action="generate"]');
+      out.retryAvailable = !!retryButton && !retryButton.disabled;
 
-      // T3 — back preserves the edited analysis
+      // T5 — retry is repeatable with the same typed error and stores nothing
+      if (retryButton) retryButton.click();
+      await waitFor(() => !!wizardState.error && !wizardState.busy);
+      out.retryCode = wizardState.error && wizardState.error.code;
+
+      // T6 — walking back keeps the teacher's edit; the project is still at generate
+      document.querySelector('[data-wizard-step-body="generate"] [data-wizard-action="back"]').click();
+      await waitFor(() => wizardState.step === 'configure' && !wizardState.busy);
+      document.querySelector('[data-wizard-step-body="configure"] [data-wizard-action="back"]').click();
+      await waitFor(() => wizardState.step === 'recommend' && !wizardState.busy);
       document.querySelector('[data-wizard-step-body="recommend"] [data-wizard-action="back"]').click();
-      await sleep(250);
+      await waitFor(() => wizardState.step === 'analyze' && !wizardState.busy);
       out.stepAfterBack = wizardState.step;
       const backObjective = document.querySelector('[data-wizard-objective="0"][data-field="description"]');
       out.objectiveAfterBack = backObjective && backObjective.value;
-
-      // T4 — retry is repeatable with the same typed error
-      document.querySelector('[data-wizard-step-body="analyze"] [data-wizard-action="next"]').click();
-      await waitFor(() => wizardState.step === 'recommend' && !wizardState.busy);
-      document.querySelector('[data-wizard-step-body="recommend"] [data-wizard-action="recommend"]').click();
-      await waitFor(() => !!wizardState.error && !wizardState.busy);
-      out.retryCode = wizardState.error && wizardState.error.code;
-      out.recommendationCountAfterRetry = wizardState.recommendations.length;
-
-      // T5 — the project is still at recommend and points at the edited analysis
-      const stored = await window.eduGame.getProject(out.projectId);
-      out.storedStep = stored && stored.step;
-      out.storedAnalysisId = stored && stored.analysisId;
+      const storedFinal = await window.eduGame.getProject(out.projectId);
+      out.storedStep = storedFinal && storedFinal.step;
+      out.storedAnalysisId = storedFinal && storedFinal.analysisId;
     }
 
     out.rendererErrors = window.__smokeErrors.slice();
@@ -194,14 +219,18 @@ if (mode !== 'runtime' && mode !== 'output') {
     push('T1 analysis succeeds before the failure', typeof run.analysisId === 'string' && run.analysisTopic === 'Quang hợp ở thực vật', run.analysisTopic);
     push('T1 teacher edit persisted without AI', run.savedObjective === run.editedObjective, run.savedObjective);
     push('T1 analyze advances to recommend', run.stepAfterAnalysis === 'recommend');
-    push('T2 recommend surfaces AI_OUTPUT_INVALID', run.errorCode === 'AI_OUTPUT_INVALID', run.errorCode);
-    push('T2 friendly message (no raw [CODE])', run.friendlyText === true && run.rawCodeLeaked === false);
-    push('T2 bad-output errors do not suggest opening AI local', run.hasOpenAi === false);
-    push('T2 retry stays available', run.retryAvailable === true);
-    push('T2 no recommendations are stored on failure', run.recommendationCount === 0 && run.stepAfterFailure === 'recommend');
-    push('T3 back to analyze preserves the edited objective', run.stepAfterBack === 'analyze' && run.objectiveAfterBack === run.editedObjective, run.objectiveAfterBack);
-    push('T4 retry reproduces the same typed failure', run.retryCode === 'AI_OUTPUT_INVALID' && run.recommendationCountAfterRetry === 0, run.retryCode);
-    push('T5 project stays at recommend and keeps the edited analysis', run.storedStep === 'recommend' && run.storedAnalysisId === run.analysisId, run.storedStep);
+    push('T2 rule-based suggestions ignore the broken model response', !run.recommendationError, 'err=' + run.recommendationError);
+    push('T2 two or three suggestions returned', run.recommendationCount >= 2 && run.recommendationCount <= 3, 'n=' + run.recommendationCount + ' types=' + (run.recommendationTypes || []).join(','));
+    push('T2 other genres still offered', run.otherTypeChips === 5 - run.recommendationCount, 'chips=' + run.otherTypeChips);
+    push('T3 configure saved and advanced to generate', run.stepBeforeGenerate === 'generate' && run.storedStepBeforeGenerate === 'generate', run.stepBeforeGenerate + '/' + run.storedStepBeforeGenerate);
+    push('T4 bad model output surfaces AI_OUTPUT_INVALID', run.errorCode === 'AI_OUTPUT_INVALID', run.errorCode);
+    push('T4 friendly message (no raw [CODE])', run.friendlyText === true && run.rawCodeLeaked === false);
+    push('T4 bad-output errors do not suggest opening AI local', run.hasOpenAi === false);
+    push('T4 retry stays available', run.retryAvailable === true);
+    push('T4 no partial game is stored', run.stepAfterFailure === 'generate' && run.storedStepAfterFailure === 'generate' && run.storedSnapshotAfterFailure === false, run.storedStepAfterFailure + ' snapshot=' + run.storedSnapshotAfterFailure);
+    push('T5 retry reproduces the same typed failure', run.retryCode === 'AI_OUTPUT_INVALID', run.retryCode);
+    push('T6 back preserves the edited objective', run.stepAfterBack === 'analyze' && run.objectiveAfterBack === run.editedObjective, run.objectiveAfterBack);
+    push('T6 project stays at generate and keeps the edited analysis', run.storedStep === 'generate' && run.storedAnalysisId === run.analysisId, run.storedStep);
   }
   push('cleanup removes the project', run.projectGone === true);
   push('no uncaught renderer errors', run.rendererErrors.length === 0, (run.rendererErrors || []).join(' | '));

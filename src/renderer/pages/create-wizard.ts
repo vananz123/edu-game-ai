@@ -191,6 +191,8 @@ async function wizardDispatch(action, button) {
     case 'recommend':
     case 'rerun-recommend': return wizardRecommendRun();
     case 'select': return wizardRecommendSelect(button.dataset.id);
+    // O1: the teacher may pick a genre the rule-based recommender did not list.
+    case 'select-type': return wizardRecommendSelectType(button.dataset.gameType);
     case 'add-objective': return wizardEditAnalysis('add-objective');
     case 'remove-objective': return wizardEditAnalysis('remove-objective', Number(button.dataset.index));
     case 'add-concept': return wizardEditAnalysis('add-concept');

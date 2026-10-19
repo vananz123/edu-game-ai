@@ -50,6 +50,9 @@ const wizardGameMetaMap = {
   race: { icon: '🏁', label: 'Đường đua chinh phục', hint: 'Trả lời đúng để tiến ô, có ô đặc biệt.' }
 };
 
+/** All five genres, in a stable order (used to offer the ones not suggested). */
+const wizardGameTypeOrder = ['arena', 'scenario', 'matching', 'treasure', 'race'];
+
 function wizardGameMeta(gameType) {
   return wizardGameMetaMap[gameType] || { icon: '🎮', label: 'Trò chơi', hint: '' };
 }
