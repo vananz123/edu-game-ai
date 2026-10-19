@@ -299,6 +299,16 @@ export interface EduGameBridge {
   /** Persists teacher edits to an analysis without calling the model again. */
   saveLessonAnalysis(analysis: import('./lesson-types').LessonAnalysis): Promise<import('./lesson-types').LessonAnalysis>;
   getLessonRecommendations(analysisId: string): Promise<import('./lesson-types').GameRecommendation[]>;
+  /** Generates the configured game (fast/deep) and returns the validated snapshot. */
+  generateLessonDraft(payload: {
+    projectId: string;
+    requestId: string;
+    mode?: 'fast' | 'deep';
+  }): Promise<{
+    project: GameProject;
+    game: import('./types').EducationalGame;
+    mode: 'fast' | 'deep';
+  }>;
   onLocalAiProgress(callback: (progress: import('../ai-core/contracts').LocalAiDownloadProgress) => void): () => void;
   generateGame(payload: GenerateGameRequest): Promise<GenerateGameResponse>;
 }

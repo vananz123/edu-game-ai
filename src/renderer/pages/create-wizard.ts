@@ -56,6 +56,7 @@ function renderWizardStatus() {
 function wizardBusyText(kind) {
   if (kind === 'analyze') return 'AI local đang phân tích giáo án…';
   if (kind === 'recommend') return 'AI local đang gợi ý trò chơi…';
+  if (kind === 'generate') return 'AI local đang soạn nội dung trò chơi… (giáo án dài có thể mất vài phút)';
   if (kind === 'save') return 'Đang lưu dự án…';
   return 'Đang xử lý…';
 }
@@ -180,7 +181,7 @@ function wizardHandleClick(event) {
 }
 
 async function wizardDispatch(action, button) {
-  if (wizardState.busy && (action === 'back' || action === 'new' || action === 'save')) return undefined;
+  if (wizardState.busy && ['back', 'new', 'save', 'generate', 'regenerate', 'open-editor'].includes(action)) return undefined;
   switch (action) {
     case 'import-file': return wizardInputImportFile();
     case 'open-ai': return openLocalAiModal();
@@ -201,6 +202,10 @@ async function wizardDispatch(action, button) {
     case 'save': return wizardConfigureSave(false);
     case 'next': return wizardNext();
     case 'new': return wizardNewProject();
+    case 'generate': return wizardGenerateRun();
+    case 'regenerate': return wizardGenerateRegenerate();
+    case 'open-editor': return wizardGenerateOpenEditor();
+    case 'go-library': navigate('library'); return undefined;
     default: return undefined;
   }
 }

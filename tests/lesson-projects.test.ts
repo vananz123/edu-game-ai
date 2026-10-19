@@ -3,6 +3,7 @@ import {
   advanceAfterRecommendations,
   advanceStep,
   applyAnalysis,
+  applyDraft,
   createProjectFromAnalysis,
   WORKFLOW_STEP_ORDER
 } from '../src/services/lesson-projects';
@@ -99,6 +100,48 @@ function main(): void {
   const alreadyReady = advanceAfterRecommendations({ ...baseProject(), status: 'ready', step: 'generate' }, LATER);
   assert.equal(alreadyReady.status, 'ready', 'ready status is not downgraded');
   assert.equal(alreadyReady.step, 'generate', 'step is not regressed');
+
+  // --- applyDraft ---------------------------------------------------------
+  const draft = {
+    gameType: 'arena' as const,
+    schemaVersion: 1 as const,
+    questions: [{
+      id: 'q1',
+      type: 'multiple-choice' as const,
+      prompt: 'Quang hợp tạo ra khí nào?',
+      options: [{ id: 'a', text: 'Oxy' }, { id: 'b', text: 'Nitơ' }],
+      correctOptionId: 'a',
+      explanation: 'Quang hợp giải phóng oxy.',
+      difficulty: 'trung bình' as const,
+      points: 100
+    }]
+  };
+  const game = {
+    id: 'game-project_9',
+    title: 'Quang hợp',
+    subject: 'Sinh học',
+    grade: '7',
+    topic: 'Quang hợp',
+    description: '',
+    template: 'quiz' as const,
+    questions: [],
+    tags: [],
+    sourceName: 'quang-hop.txt',
+    createdAt: NOW
+  };
+  const generated = applyDraft({ ...baseProject(), status: 'review', step: 'configure' }, { draft, game, now: LATER });
+  assert.equal(generated.status, 'ready');
+  assert.equal(generated.step, 'edit');
+  assert.equal(generated.gameId, 'game-project_9');
+  assert.deepEqual(generated.draft, draft);
+  assert.deepEqual(generated.gameSnapshot, game);
+  assert.equal(generated.updatedAt, LATER);
+
+  // Re-generating keeps the project identity (same id/createdAt) and replaces content.
+  const regenerated = applyDraft(generated, { draft, game: { ...game, title: 'Quang hợp (lần 2)' }, now: NOW });
+  assert.equal(regenerated.id, generated.id);
+  assert.equal(regenerated.createdAt, generated.createdAt);
+  assert.equal(regenerated.gameSnapshot.title, 'Quang hợp (lần 2)');
 
   console.log('Lesson projects tests passed');
 }

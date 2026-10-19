@@ -32,12 +32,14 @@ const {
   isCancelReason,
   requestChatJson
 } = require('./services/ai-transport');
-const { analyzeLesson, recommendGames } = require('./services/lesson-workflow');
+const { analyzeLesson, recommendGames, generateGameDraft } = require('./services/lesson-workflow');
 const {
   createProjectFromAnalysis,
   applyAnalysis,
-  advanceAfterRecommendations
+  advanceAfterRecommendations,
+  applyDraft
 } = require('./services/lesson-projects');
+const { toEducationalGame } = require('./services/game-project-adapter');
 const {
   QWEN_LOCAL_MODELS,
   LLAMA_CPP_RUNTIME,
@@ -683,6 +685,49 @@ function registerIpc() {
   ipcMain.handle('lesson:get-analysis', async (_e, analysisId) => requireLessonStore().getAnalysis(String(analysisId || '')));
   ipcMain.handle('lesson:save-analysis', async (_e, analysis) => requireLessonStore().saveAnalysis(analysis));
   ipcMain.handle('lesson:recommendations', async (_e, analysisId) => requireLessonStore().listRecommendations(String(analysisId || '')));
+  // P6: turn a configured project into real game content (fast/deep) and attach
+  // the validated game snapshot. The teacher reviews/edits it in the editor next.
+  ipcMain.handle('lesson:generate', async (_e, payload) => {
+    const projectId = String(payload?.projectId || '');
+    const requestId = String(payload?.requestId || '');
+    if (!projectId) throw new Error('Thiếu mã dự án để tạo nội dung.');
+    const store = requireLessonStore();
+    const project = store.getProject(projectId);
+    if (!project) throw new Error('Không tìm thấy dự án. Hãy lưu dự án trước khi tạo nội dung.');
+    if (!project.config) throw new Error('Dự án chưa có cấu hình trò chơi. Hãy hoàn tất bước cấu hình.');
+    if (!project.analysisId) throw new Error('Dự án chưa có kết quả phân tích giáo án.');
+    const analysis = store.getAnalysis(project.analysisId);
+    if (!analysis) throw new Error('Không tìm thấy kết quả phân tích giáo án. Hãy phân tích lại.');
+
+    const mode = payload?.mode === 'deep' ? 'deep' : project.config.generationMode === 'deep' ? 'deep' : 'fast';
+    let sourceExcerpt;
+    if (project.lesson && project.lesson.documentId) {
+      const document = await store.getDocumentWithText(project.lesson.documentId);
+      if (document && document.text) sourceExcerpt = document.text.slice(0, 6000);
+    }
+
+    const draft = await generateGameDraft({
+      client: createLessonChatClient(),
+      registry: aiRequests,
+      requestId,
+      gameType: project.config.gameType,
+      config: project.config,
+      analysis,
+      sourceExcerpt,
+      maxTokens: mode === 'deep' ? 4096 : 2048
+    });
+
+    // The adapter is the only place that builds `EducationalGame`; it also runs
+    // the existing per-template validators, so invalid content is caught here.
+    let game;
+    try {
+      game = toEducationalGame({ ...project, draft });
+    } catch (error) {
+      throw new Error(`[GENERATION_INVALID] ${error && error.message ? error.message : 'Nội dung AI tạo ra chưa hợp lệ.'}`);
+    }
+    const saved = store.saveProject(applyDraft(project, { draft, game, now: new Date().toISOString() }));
+    return { project: saved, game, mode };
+  });
   ipcMain.handle('files:import-document', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       title: 'Chọn giáo án hoặc tài liệu',

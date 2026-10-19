@@ -1,0 +1,17 @@
+{
+  "gameType": "matching",
+  "schemaVersion": 1,
+  "mode": "columns",
+  "pairs": [
+    { "id": "p1", "left": "Quang hợp", "right": "Tổng hợp chất hữu cơ nhờ ánh sáng" },
+    { "id": "p2", "left": "Diệp lục", "right": "Sắc tố hấp thụ ánh sáng trong lục lạp" },
+    { "id": "p3", "left": "Lục lạp", "right": "Bào quan diễn ra quang hợp" },
+    { "id": "p4", "left": "Hô hấp", "right": "Phân giải chất hữu cơ để giải phóng năng lượng" }
+  ],
+  "pointsPerPair": 100,
+  "completionBonus": 50,
+  "wrongPenalty": 0,
+  "timeBonus": 0,
+  "bonusUnderSeconds": 0,
+  "practiceMode": false
+}

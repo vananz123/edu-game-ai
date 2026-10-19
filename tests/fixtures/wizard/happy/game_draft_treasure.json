@@ -1,0 +1,52 @@
+{
+  "gameType": "treasure",
+  "schemaVersion": 1,
+  "character": "Nhà thám hiểm thực vật",
+  "intro": "Hành trình khám phá bí mật của lá cây để mở kho báu ánh sáng.",
+  "journeyBonus": 300,
+  "hiddenItemBonus": 100,
+  "stages": [
+    {
+      "id": "st1",
+      "name": "Cánh cổng ánh sáng",
+      "story": "Con đường vào khu vườn bị khoá bởi một câu đố về ánh sáng.",
+      "taskDescription": "Trả lời đúng để nhận chìa khoá mở cổng.",
+      "question": {
+        "prompt": "Thực vật dùng năng lượng nào để tổng hợp chất hữu cơ?",
+        "options": [
+          { "id": "a", "text": "Năng lượng ánh sáng mặt trời" },
+          { "id": "b", "text": "Năng lượng từ nước" },
+          { "id": "c", "text": "Năng lượng từ đất" }
+        ],
+        "correctOptionId": "a",
+        "explanation": "Quang hợp dùng năng lượng ánh sáng mặt trời để tổng hợp chất hữu cơ.",
+        "hint": "Hãy nghĩ tới nguồn năng lượng chiếu vào lá mỗi ngày."
+      },
+      "attempts": 3,
+      "points": 100,
+      "completionBonus": 50,
+      "nextStageId": "st2"
+    },
+    {
+      "id": "st2",
+      "name": "Kho báu chất hữu cơ",
+      "story": "Cánh cửa cuối cùng chỉ mở khi em hiểu vì sao cây cần ánh sáng.",
+      "taskDescription": "Giải câu đố cuối để mở kho báu.",
+      "question": {
+        "prompt": "Vì sao cây thiếu ánh sáng thường vàng lá và chậm phát triển?",
+        "options": [
+          { "id": "a", "text": "Vì quang hợp giảm nên thiếu chất hữu cơ nuôi cây" },
+          { "id": "b", "text": "Vì cây thừa nước" },
+          { "id": "c", "text": "Vì cây thừa oxy" }
+        ],
+        "correctOptionId": "a",
+        "explanation": "Thiếu ánh sáng làm giảm hiệu suất quang hợp nên cây thiếu chất hữu cơ.",
+        "hint": "Liên hệ giữa ánh sáng và chất hữu cơ."
+      },
+      "attempts": 2,
+      "points": 150,
+      "completionBonus": 0,
+      "nextStageId": null
+    }
+  ]
+}

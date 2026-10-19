@@ -8,10 +8,12 @@
  */
 import {
   LESSON_SCHEMA_VERSION,
+  type GameDraft,
   type GameProject,
   type LessonAnalysis,
   type WorkflowStep
 } from '../shared/lesson-types';
+import type { EducationalGame } from '../shared/types';
 
 export const WORKFLOW_STEP_ORDER: readonly WorkflowStep[] = [
   'input',
@@ -93,5 +95,28 @@ export function advanceAfterRecommendations(project: GameProject, now: string): 
     status: project.status === 'draft' ? 'review' : project.status,
     step: advanceStep(project.step, 'configure'),
     updatedAt: now
+  };
+}
+
+export interface ApplyDraftInput {
+  draft: GameDraft;
+  game: EducationalGame;
+  now: string;
+}
+
+/**
+ * Attaches the generated draft plus its validated game snapshot (from the single
+ * adapter) and moves the project to the editor step. The snapshot is what lets a
+ * saved project reopen in the editor without calling AI again.
+ */
+export function applyDraft(project: GameProject, input: ApplyDraftInput): GameProject {
+  return {
+    ...project,
+    draft: input.draft,
+    gameSnapshot: input.game,
+    gameId: input.game.id,
+    status: 'ready',
+    step: 'edit',
+    updatedAt: input.now
   };
 }

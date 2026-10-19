@@ -2,7 +2,8 @@
 // Requires the app to be launched with EDUGAME_AI_TEST_DIR pointing at
 // tests/fixtures/wizard/happy. The analyze/recommend *model* responses are
 // fixtures (no local model on this machine), but everything else is real:
-// IPC -> lesson store -> project row -> resume. The generation leg is P6.
+// IPC -> lesson store -> project row -> resume. Content generation is covered
+// separately by tests/smoke66.js (P6), which runs against a real local model.
 //
 // T1  nav entry + wizard shell (5 steps, input active)
 // T2  short text keeps "next" disabled
@@ -206,7 +207,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   push('T8 project saved at generate/review', run.storedStep === 'generate' && run.storedStatus === 'review', run.storedStep + '/' + run.storedStatus);
   push('T8 edited title + question count persisted', run.storedTitle === 'Đấu trường quang hợp (bản smoke)' && run.storedQuestionCount === 6, run.storedTitle + ' q=' + run.storedQuestionCount);
   push('T8 project links recommendation + analysis + lesson', !!run.storedRecommendationId && run.storedAnalysisId === run.analysisId && run.storedLessonDoc === run.documentId);
-  push('T8 generate step is an honest P6 placeholder', run.generatePlaceholder === true && run.generateDisabled === true);
+  push('T8 generate step shows the real P6 action', run.generatePlaceholder === true && run.generateDisabled === false, 'enabled=' + !run.generateDisabled);
   push('T9 draft reopens at generate', run.resumedStep === 'generate' && run.resumedBody === 'generate');
   push('T9 edited analysis survives reopen', run.resumedTopic === 'Quang hợp (giáo viên sửa)', run.resumedTopic);
   push('T9 recommendations restored without AI', run.resumedRecommendations === run.recommendationCount && run.resumedRecommendationIdsMatch === true, 'n=' + run.resumedRecommendations);

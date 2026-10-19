@@ -1,0 +1,56 @@
+{
+  "gameType": "race",
+  "schemaVersion": 1,
+  "trackLength": 20,
+  "maxRounds": 12,
+  "stepByDifficulty": true,
+  "luckEnabled": true,
+  "teams": [
+    { "id": "t1", "name": "Đội Lá Xanh", "icon": "🍃" },
+    { "id": "t2", "name": "Đội Ánh Sáng", "icon": "☀️" }
+  ],
+  "cells": [
+    { "cell": 3, "type": "boost", "label": "Tăng tốc thêm 1 ô" },
+    { "cell": 8, "type": "penalty", "label": "Chậm lại 1 ô" },
+    { "cell": 13, "type": "lucky", "label": "Ô may mắn" },
+    { "cell": 17, "type": "challenge", "label": "Câu hỏi thử thách" }
+  ],
+  "questions": [
+    {
+      "id": "rq1",
+      "prompt": "Sắc tố nào hấp thụ ánh sáng cho quang hợp?",
+      "options": [
+        { "id": "a", "text": "Diệp lục" },
+        { "id": "b", "text": "Hemoglobin" },
+        { "id": "c", "text": "Melanin" }
+      ],
+      "correctOptionId": "a",
+      "explanation": "Diệp lục trong lục lạp hấp thụ ánh sáng.",
+      "difficulty": "dễ"
+    },
+    {
+      "id": "rq2",
+      "prompt": "Quang hợp chủ yếu diễn ra ở bào quan nào?",
+      "options": [
+        { "id": "a", "text": "Lục lạp" },
+        { "id": "b", "text": "Ti thể" },
+        { "id": "c", "text": "Nhân tế bào" }
+      ],
+      "correctOptionId": "a",
+      "explanation": "Lục lạp chứa diệp lục và là nơi diễn ra quang hợp.",
+      "difficulty": "trung bình"
+    },
+    {
+      "id": "rq3",
+      "prompt": "Sản phẩm khí nào được thải ra trong quá trình quang hợp?",
+      "options": [
+        { "id": "a", "text": "Oxy" },
+        { "id": "b", "text": "Cacbon dioxide" },
+        { "id": "c", "text": "Nitơ" }
+      ],
+      "correctOptionId": "a",
+      "explanation": "Quang hợp giải phóng oxy ra môi trường.",
+      "difficulty": "khó"
+    }
+  ]
+}

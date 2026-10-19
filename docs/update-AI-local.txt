@@ -1,0 +1,389 @@
+# TASK SPECIFICATION — Tối ưu quy trình AI tạo trò chơi từ giáo án trong EduGame Studio
+
+## 1. Bối cảnh dự án
+
+EduGame Studio là ứng dụng desktop Windows giúp giáo viên tạo trò chơi giáo dục từ giáo án, ưu tiên hoạt động offline, dễ sử dụng, cài đặt đơn giản và chạy ổn định trên máy tính phổ thông.
+
+### Công nghệ định hướng
+
+- Electron
+- React + TypeScript + TailwindCSS
+- Qwen 3.5 GGUF chạy local qua llama.cpp để phân tích và sinh nội dung.
+- MiniLM làm embedding model phục vụ lập chỉ mục và truy xuất kiến thức.
+- SQLite hoặc cơ chế lưu trữ hiện có để lưu metadata, kết quả phân tích, cache và bản nháp.
+- Gameplay engine TypeScript quản lý luật chơi, tính điểm và thực thi trò chơi.
+
+**Đây là nhiệm vụ nâng cấp chức năng hiện có, không phải xây dựng lại ứng dụng.** Trước khi chỉnh sửa, phải khảo sát repository, tái sử dụng service, schema, model manager và gameplay engine hiện tại. Bảo đảm tương thích ngược với các định dạng trò chơi đang được sử dụng.
+
+## 2. Mục tiêu kiến trúc
+
+Thiết kế lại luồng “Tạo từ giáo án” nhằm:
+
+1. Giảm số lần gọi Qwen không cần thiết.
+2. Không gọi AI khi giáo viên chọn thể loại hoặc thay đổi cấu hình thông thường.
+3. Phân tích giáo án một lần và tái sử dụng kết quả.
+4. Dùng MiniLM để tìm kiến thức liên quan thay vì gửi toàn bộ giáo án vào Qwen mỗi lần.
+5. Dùng một model Qwen 3.5 cho Fast và Deep trong phiên bản đầu, nếu khả năng vận hành được xác minh.
+6. Tối ưu bước sinh trò chơi, đặc biệt trên laptop 16 GB RAM, CPU dòng U và GPU tích hợp.
+7. Dùng TypeScript xử lý những công việc có quy tắc xác định, không giao mọi việc cho AI.
+8. Bảo đảm trò chơi đã lưu vẫn hoạt động khi AI không chạy hoặc chưa được nạp.
+
+## 3. Quy trình nghiệp vụ mới
+
+### Bước 1 — Nhập giáo án
+
+Cho phép dùng các phương thức nhập tài liệu hiện có: chọn tệp, dán văn bản hoặc nhập nội dung trực tiếp.
+
+Hệ thống cần:
+
+- Trích xuất và chuẩn hóa văn bản.
+- Kiểm tra nội dung rỗng hoặc lỗi đọc tệp.
+- Lưu bản gốc theo cơ chế hiện có.
+- Tạo định danh tài liệu và fingerprint/hash cho phiên bản nội dung.
+- Giữ metadata nguồn như tên tệp, tiêu đề, số trang hoặc vị trí đoạn nếu có.
+- Không làm mất chức năng nhập tài liệu đang hoạt động.
+
+Sau khi nhập, ứng dụng có thể bắt đầu xử lý tài liệu ở nền. Không để renderer bị treo.
+
+### Bước 2 — Phân tích giáo án bằng AI: lần gọi Qwen thứ nhất
+
+Qwen phân tích tài liệu và tạo một `LessonAnalysis` có cấu trúc, gồm:
+
+- Môn học và khối lớp.
+- Chủ đề bài học.
+- Mục tiêu học tập.
+- Kiến thức trọng tâm.
+- Khái niệm, sự kiện, quy tắc hoặc quy trình cần ghi nhớ.
+- Những nội dung có thể vận dụng.
+- Các nhóm kiến thức có thể chuyển thành câu hỏi hoặc nhiệm vụ trò chơi.
+- Mức độ khó phù hợp dự kiến.
+- Các hạn chế hoặc điểm chưa rõ của tài liệu.
+
+Kết quả phải được kiểm tra schema và lưu lại.
+
+Không phân tích lại toàn bộ tài liệu nếu fingerprint, model/version và cấu hình phân tích không đổi. Chỉ phân tích lại khi tài liệu thay đổi, cache không hợp lệ hoặc giáo viên chủ động yêu cầu.
+
+Không yêu cầu Qwen tạo sẵn toàn bộ trò chơi trong bước này.
+
+### Bước 3 — Chọn loại trò chơi: không gọi Qwen
+
+Giữ nguyên hệ thống thể loại và gameplay engine hiện có. Các thể loại định hướng gồm:
+
+- Đấu trường kiến thức.
+- Thử thách tình huống.
+- Ghép cặp kiến thức.
+- Giải mã kho báu.
+- Đường đua chinh phục.
+
+Khi giáo viên chọn thể loại, ứng dụng sử dụng:
+
+- `LessonAnalysis` đã lưu.
+- Metadata kiến thức.
+- Bảng quy tắc và khả năng của từng thể loại.
+- Các hàm TypeScript để xác định thể loại phù hợp.
+
+Hệ thống có thể đề xuất một số thể loại bằng quy tắc xác định, nhưng không gọi Qwen chỉ để đưa ra đề xuất. Giáo viên vẫn được tự chọn thể loại khác.
+
+Luật chơi do gameplay engine quản lý, không do Qwen tự thiết kế lại mỗi lần.
+
+### Bước 4 — Cấu hình trò chơi: không gọi Qwen
+
+Cho phép giáo viên thiết lập các tùy chọn phù hợp với thể loại, ví dụ:
+
+- Số lượng câu hỏi hoặc nhiệm vụ.
+- Độ khó.
+- Thời lượng.
+- Mục tiêu kiến thức.
+- Số đội hoặc người chơi nếu thể loại hỗ trợ.
+- Các tùy chọn riêng của gameplay engine.
+
+TypeScript kiểm tra tính hợp lệ của cấu hình.
+
+Thay đổi cấu hình thông thường không được kích hoạt lại phân tích giáo án. Chỉ truy xuất lại kiến thức nếu mục tiêu hoặc phạm vi nội dung thay đổi.
+
+### Bước 5 — Tạo trò chơi: lần gọi Qwen thứ hai trong luồng thông thường
+
+Khi giáo viên nhấn “Tạo trò chơi”, thực hiện theo thứ tự:
+
+1. Kiểm tra `LessonAnalysis` và cấu hình đã có.
+2. MiniLM truy xuất các đoạn kiến thức phù hợp từ chỉ mục đã lưu.
+3. Xây dựng prompt gọn, chỉ gồm kiến thức cần thiết, cấu hình trò chơi, quy tắc thể loại và schema đầu ra.
+4. Gọi Qwen ở chế độ Fast hoặc Deep.
+5. Parse và kiểm tra dữ liệu đầu ra bằng TypeScript.
+6. Chỉ sửa hoặc tạo lại phần bị lỗi nếu cần.
+7. Hiển thị bản xem trước cho giáo viên.
+
+Không gửi lại toàn bộ giáo án nếu các đoạn kiến thức cần thiết đã được truy xuất. Không gọi Qwen thêm chỉ để chọn thể loại, tạo giao diện hoặc kiểm tra các lỗi có thể phát hiện bằng TypeScript.
+
+**Mục tiêu:** Fast thường chỉ cần một lượt sinh nội dung. Deep có thể sử dụng thêm lượt đánh giá hoặc sửa lỗi khi cần, nhưng phải có giới hạn rõ ràng.
+
+## 4. MiniLM: lập chỉ mục và truy xuất
+
+Tách riêng hai nhiệm vụ:
+
+### 4.1. Lập chỉ mục
+
+Sau khi có văn bản giáo án:
+
+1. Chia tài liệu thành các đoạn có ý nghĩa theo tiêu đề, mục tiêu và nội dung.
+2. Lưu metadata nguồn.
+3. Tạo embedding bằng MiniLM.
+4. Lưu embedding và nội dung đoạn vào hệ thống lưu trữ cục bộ.
+5. Tái sử dụng khi tạo nhiều trò chơi từ cùng giáo án.
+
+Không tạo embedding lại khi nội dung và model embedding không đổi.
+
+Nếu tài liệu thay đổi, cập nhật các đoạn bị ảnh hưởng khi có thể thực hiện an toàn; nếu không, lập chỉ mục lại tài liệu.
+
+### 4.2. Truy xuất khi tạo trò chơi
+
+Tạo truy vấn dựa trên:
+
+- Mục tiêu học tập.
+- Thể loại.
+- Loại nhiệm vụ.
+- Độ khó.
+- Phạm vi kiến thức giáo viên chọn.
+
+Lấy các đoạn phù hợp nhất, loại bỏ nội dung trùng lặp và giới hạn lượng văn bản đưa vào Qwen.
+
+Nếu không tìm được kiến thức phù hợp, thông báo rõ hoặc yêu cầu giáo viên bổ sung dữ liệu. Không bịa nội dung để lấp chỗ trống.
+
+Kiểm thử model embedding với giáo án tiếng Việt thực tế trước khi chốt phiên bản MiniLM. Không mặc định rằng mọi model mang tên MiniLM đều có chất lượng truy xuất tiếng Việt tốt.
+
+## 5. Tối ưu trọng tâm: bước tạo trò chơi
+
+### 5.1. Tách nội dung sư phạm khỏi luật chơi
+
+Qwen chỉ chịu trách nhiệm tạo nội dung sư phạm có cấu trúc, gồm các trường cần thiết như:
+
+- Câu hỏi hoặc nhiệm vụ.
+- Các lựa chọn nếu có.
+- Đáp án.
+- Giải thích.
+- Độ khó hoặc metadata học tập.
+- Tham chiếu nguồn kiến thức nếu xác định được.
+
+TypeScript và gameplay engine chịu trách nhiệm:
+
+- Khung trò chơi.
+- Giao diện.
+- Luật chơi.
+- Tính điểm.
+- Đồng hồ đếm ngược.
+- Thứ tự câu hỏi.
+- Điều kiện thắng/thua.
+- Chuyển màn hình và trạng thái trò chơi.
+- Kiểm tra tính hợp lệ của dữ liệu.
+
+Không để Qwen sinh lại mã nguồn giao diện hoặc luật chơi cho mỗi trò chơi. Không thực thi mã do model tạo ra.
+
+### 5.2. Tối ưu Fast
+
+Fast là chế độ mặc định.
+
+- Dùng kết quả phân tích đã lưu.
+- Dùng MiniLM truy xuất kiến thức.
+- Dùng Qwen non-thinking nếu phiên bản model và llama.cpp hỗ trợ đúng cách.
+- Ưu tiên một lượt sinh cả bộ nội dung khi kích thước đầu ra phù hợp.
+- Giới hạn lượng văn bản đầu vào và số token đầu ra.
+- Dùng schema rõ ràng, không yêu cầu giải thích dài dòng.
+- Không gọi lượt đánh giá AI bổ sung nếu kết quả vượt qua kiểm tra cần thiết.
+- Hiển thị bản xem trước ngay khi dữ liệu hợp lệ.
+
+Không chia nhỏ thành nhiều lượt một cách máy móc. Một lượt sinh có thể nhanh hơn nhiều lượt; phải benchmark theo thể loại và số câu hỏi.
+
+### 5.3. Tối ưu Deep
+
+Deep ưu tiên chất lượng sư phạm thay vì chỉ tăng số token.
+
+Cần xem xét:
+
+- Độ chính xác kiến thức.
+- Mức độ bao phủ mục tiêu.
+- Phù hợp với độ tuổi và khối lớp.
+- Độ khó và tính đa dạng.
+- Chất lượng phương án nhiễu.
+- Chất lượng giải thích.
+- Tính phù hợp giữa nội dung với luật chơi.
+
+Deep có thể sử dụng Qwen thinking. Tuy nhiên:
+
+- Không yêu cầu model tiết lộ chuỗi suy luận nội bộ.
+- Không bắt buộc nhiều lượt gọi nếu một lượt đã đáp ứng yêu cầu.
+- Nếu cần sửa, chỉ sửa các câu hoặc nhóm câu không đạt.
+- Giới hạn số lượt sửa và tổng ngân sách token.
+- Không gửi lại toàn bộ giáo án hoặc toàn bộ trò chơi nếu chỉ cần sửa một phần.
+
+### 5.4. Sinh nội dung theo lô
+
+Thiết kế cơ chế sinh theo lô có thể cấu hình.
+
+Ví dụ, khi tạo trò chơi 20 câu:
+
+- Thử sinh cả 20 câu trong một lượt nếu output không quá dài và model xử lý ổn định.
+- Thử sinh 4–5 câu mỗi lượt nếu sinh cả bộ gây lỗi JSON, vượt giới hạn đầu ra hoặc giảm chất lượng.
+- So sánh thời gian tổng thể, tỷ lệ thành công và chất lượng trên phần cứng mục tiêu.
+
+Không mặc định sinh theo lô luôn nhanh hơn. Phải chọn chiến lược dựa trên benchmark.
+
+### 5.5. Tạo lại một phần
+
+Nếu một câu hỏi sai schema, thiếu đáp án hoặc không đạt tiêu chí:
+
+- Dùng TypeScript phát hiện lỗi.
+- Chỉ gửi lại câu hỏi lỗi cùng kiến thức nguồn và ngữ cảnh tối thiểu.
+- Giữ nguyên những câu đã đạt.
+- Không tạo lại toàn bộ trò chơi trừ khi lỗi ảnh hưởng đến cấu trúc chung.
+
+Với lỗi sư phạm không thể xác minh tự động, hiển thị cảnh báo hoặc cho phép Deep đánh giá có giới hạn.
+
+## 6. Kiểm tra đầu ra bằng TypeScript
+
+Tạo hoặc mở rộng validator hiện có để kiểm tra:
+
+- JSON hợp lệ.
+- Đúng schema của thể loại.
+- Đủ số lượng câu hỏi.
+- Đáp án và lựa chọn hợp lệ.
+- Trường bắt buộc tồn tại.
+- Điểm số và cấu hình hợp lệ.
+- Nội dung trùng lặp.
+- Dữ liệu tham chiếu nguồn có tồn tại.
+- Nội dung tương thích với gameplay engine.
+
+Không gọi AI chỉ để kiểm tra những điều có thể kiểm tra bằng code.
+
+Validator không thể chứng minh mọi khẳng định kiến thức đều đúng. Những điểm không thể xác minh tự động phải được đưa ra để giáo viên duyệt.
+
+## 7. Fast/Deep và quản lý model Qwen
+
+Sử dụng một model Qwen 3.5 GGUF trong phiên bản đầu nếu benchmark chứng minh model đáp ứng được cả hai chế độ.
+
+- Fast: non-thinking.
+- Deep: thinking.
+- MiniLM dùng chung cho cả hai.
+- Không giữ hai model Qwen lớn trong RAM chỉ để chuyển chế độ nhanh.
+
+Trước khi triển khai, kiểm tra khả năng chuyển thinking/non-thinking của đúng model GGUF, chat template và phiên bản llama.cpp.
+
+Nếu chuyển chế độ theo từng yêu cầu không được hỗ trợ ổn định, cân nhắc khởi động lại cùng model với cấu hình phù hợp. Không khẳng định một tham số hoạt động nếu chưa kiểm thử thực tế.
+
+## 8. Tối ưu llama.cpp và phần cứng
+
+Thiết kế theo hướng cấu hình được và đo đạc được:
+
+- Chọn quantization phù hợp với RAM.
+- Giới hạn context theo nhu cầu thực tế.
+- Giới hạn số token đầu ra.
+- Tránh khởi động lại model không cần thiết.
+- Điều chỉnh batch và số lớp GPU offload bằng benchmark.
+- Tránh để MiniLM và Qwen tranh chấp tài nguyên không cần thiết.
+- Đo thời gian khởi động model, prompt processing, token generation và tổng thời gian tạo trò chơi.
+- Xử lý đúng khi model lỗi hoặc thiếu RAM.
+
+Không chốt tham số tối ưu chỉ dựa vào phỏng đoán. Phải kiểm thử trên cấu hình máy mục tiêu, đặc biệt laptop 16 GB RAM và GPU tích hợp.
+
+## 9. Cache và tái sử dụng
+
+Tận dụng cơ chế lưu trữ hiện có để cache:
+
+- `LessonAnalysis`.
+- Các đoạn giáo án đã chuẩn hóa.
+- Embedding của từng đoạn.
+- Kết quả truy xuất theo truy vấn và phiên bản tài liệu khi phù hợp.
+- Nội dung trò chơi đã sinh.
+- Các câu hỏi giáo viên đã duyệt.
+
+Cache phải có versioning phù hợp với fingerprint tài liệu, model embedding, phiên bản schema và cấu hình liên quan.
+
+Khi tạo trò chơi thứ hai từ cùng giáo án, bỏ qua phân tích và lập chỉ mục nếu không có thay đổi. Tái sử dụng câu hỏi cũ chỉ khi phù hợp với thể loại và mục tiêu mới.
+
+## 10. Giao diện và trạng thái xử lý
+
+Trong bước tạo trò chơi, hiển thị tiến trình dễ hiểu:
+
+1. Đang tìm kiến thức phù hợp.
+2. Đang tạo nội dung trò chơi.
+3. Đang kiểm tra câu hỏi.
+4. Đang sửa phần chưa đạt nếu cần.
+5. Đã sẵn sàng xem trước.
+
+Hiển thị Fast/Deep, có thể cho người dùng hủy tác vụ nếu an toàn. Không để renderer bị treo trong lúc AI chạy.
+
+Không hiển thị các thuật ngữ kỹ thuật như embedding hoặc vector trong giao diện chính dành cho giáo viên.
+
+## 11. An toàn và tương thích Electron
+
+- Tiếp tục dùng kiến trúc main/preload/renderer hiện tại.
+- Truy cập tệp và quản lý tiến trình ở phía main hoặc worker phù hợp.
+- Kiểm tra dữ liệu qua IPC.
+- Không cấp Node.js tùy ý cho renderer.
+- Không thực thi mã sinh bởi Qwen.
+- Giữ trò chơi đã lưu tương thích với định dạng hiện tại.
+- Không xóa hoặc thay thế module cũ khi chưa xác minh tác động.
+
+## 12. Kiểm thử và benchmark bắt buộc
+
+Tạo tập giáo án tiếng Việt đại diện cho nhiều môn và khối lớp.
+
+So sánh Fast/Deep và các chiến lược sinh cả bộ so với sinh theo lô.
+
+Đo ít nhất:
+
+- Thời gian phân tích giáo án.
+- Thời gian lập chỉ mục MiniLM.
+- Thời gian truy xuất.
+- Thời gian sinh trò chơi.
+- Thời gian khởi động model.
+- Tốc độ xử lý prompt.
+- Tốc độ sinh token.
+- Tổng thời gian từ lúc bấm “Tạo trò chơi” đến lúc xem trước.
+- RAM/VRAM đỉnh.
+- Tỷ lệ JSON hợp lệ.
+- Tỷ lệ câu hỏi có căn cứ trong giáo án.
+- Mức độ bao phủ mục tiêu học tập.
+- Số lượt gọi Qwen trung bình.
+- Tỷ lệ phải tạo lại nội dung.
+
+Mục tiêu định hướng:
+
+- Phân tích giáo án chỉ thực hiện lại khi cần.
+- Chọn thể loại và cấu hình không gọi Qwen.
+- Fast thông thường hoàn thành với một lượt sinh nội dung.
+- Deep chỉ gọi thêm khi có lý do.
+- Trò chơi đã lưu không phụ thuộc AI để chạy.
+- Không đánh đổi tính đúng đắn sư phạm chỉ để đạt thời gian thấp hơn.
+
+## 13. Kế hoạch thực hiện cho Agent
+
+Trước tiên, khảo sát repository và báo cáo:
+
+1. Luồng “Tạo từ giáo án” hiện có.
+2. Các service AI, schema, model manager và gameplay engine.
+3. Những lần gọi Qwen đang xảy ra ở từng bước.
+4. Các tác vụ có thể chuyển sang TypeScript.
+5. Các kết quả có thể cache và tái sử dụng.
+6. Những điểm có nguy cơ phá vỡ tương thích ngược.
+
+Sau đó tạo hoặc cập nhật `docs/implementation-plan.md` với danh sách file sẽ sửa, thứ tự triển khai, rủi ro và kế hoạch kiểm thử.
+
+Triển khai từng giai đoạn nhỏ. Chạy kiểm thử sau mỗi giai đoạn. Không tự ý viết lại toàn bộ ứng dụng.
+
+## 14. Kết quả bàn giao
+
+- Luồng tạo trò chơi mới được tích hợp vào chức năng hiện tại.
+- Phân tích giáo án có cache.
+- MiniLM lập chỉ mục và truy xuất cục bộ.
+- Fast/Deep sử dụng Qwen 3.5 theo cấu hình đã xác minh.
+- TypeScript validator.
+- Cơ chế tạo lại từng phần.
+- Quản lý tiến trình, lỗi và hủy tác vụ.
+- Benchmark trước và sau tối ưu.
+- Tài liệu hướng dẫn chạy và bảo trì.
+
+**Nguyên tắc cốt lõi:** chỉ dùng AI cho những công việc thực sự cần năng lực ngôn ngữ và sư phạm. Tái sử dụng mọi kết quả có thể, không gọi AI ở bước chọn thể loại hoặc cấu hình thông thường, và không tạo lại những phần đã đạt yêu cầu.
+Cách triển khai an toàn:
+1. Audit: thống kê chính xác hiện tại có bao nhiêu lần gọi Qwen và thời gian từng lần.
+2. Tối ưu luồng: loại bỏ các lần gọi dư thừa, bổ sung cache và validator.
+3. Benchmark: so sánh thời gian và chất lượng trước/sau khi tối ưu.

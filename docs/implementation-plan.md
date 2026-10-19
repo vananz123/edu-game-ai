@@ -2,7 +2,7 @@
 
 **Ngày lập:** 2026-10-19
 **Phạm vi:** bổ sung luồng tạo trò chơi từ giáo án bằng AI local, không phá vỡ gameplay, `.egame` hay dữ liệu đang có.
-**Trạng thái:** P0–P5 đã xong (2026-10-19); P6 (tạo nội dung 5 thể loại + editor, verify model thật) và P7 (hoàn thiện/build/tài liệu) còn lại.
+**Trạng thái:** P0–P6 đã code xong (2026-10-19); P6 **chưa đạt cổng e2e với model thật** (xem §8 P6) nên còn P7. Từ 2026-10-20 có **spec tối ưu mới** (`docs/update-AI-local.txt`) → kế hoạch tối ưu ở §13. Số liệu kiểm chứng nằm trong `docs/STATUS.md`.
 
 ---
 
@@ -397,11 +397,12 @@ Không sửa: `gameplay.ts`, `game-editor.ts` (trừ điểm gọi AI regenerate
 
 ### P6 — Generate 5 loại + draft + editor
 
-- `lesson:generate` cho 5 loại, fast/deep.
-- Validate → adapter → `gameSnapshot` → mở editor.
-- Lưu draft, mở lại ở bước edit không gọi AI.
-- Cài llama.cpp/Qwen trên máy, chạy e2e thật (analyze → recommend → generate → edit → save → play).
-- **Gate:** e2e local thật; `smoke64/65`; regression đầy đủ.
+- [x] `lesson:generate` cho 5 loại, fast/deep (main validate → 1 adapter → `gameSnapshot`; giữ nguyên `EducationalGame`/gameplay).
+- [x] Validate → adapter → `gameSnapshot` → mở editor (dùng lại `openEditor` của trình soạn thảo cũ).
+- [x] Lưu draft, mở lại ở bước edit **không gọi AI** (`game_projects.gameSnapshot` + `step='edit'`).
+- [~] Cài llama.cpp/Qwen trên máy (runtime + Qwen3.5-2B Q4_0, xác minh SHA-256) ✅; e2e thật analyze ✅ + recommend ✅; **generate ❌ `AI_TRUNCATED`** → e2e thật **chưa hoàn tất**.
+- **Gate (chưa đạt):** phần **fixture/wiring đạt** (`smoke67` 52/52 cả 5 loại, `smoke66 fixture` 26/26, `smoke64` 37/37, `smoke65` 18/18 + 14/14, `npm run check`, `npm test` 17 suites). Phần **model thật chưa đạt**: generate dừng ở `AI_TRUNCATED`, và môi trường tự đóng cửa sổ Electron sau ~1–2 phút (kể cả khi rảnh) nên không chạy nổi một lượt real dài. Chủ dự án đã đồng ý **bỏ qua cổng này** (2026-10-20) để chuyển sang spec tối ưu (§13) — xem `docs/STATUS.md` mục P6.
+- Ghi chú: nội dung AI tạo ra đi qua **hai lớp** kiểm tra — zod theo từng loại draft (`lesson-contracts`) rồi tới 4 validator cũ trên `EducationalGame` sau khi adapter (`game-validation`). Nếu lớp 2 thất bại, lỗi trả về mã `GENERATION_INVALID` để renderer hướng dẫn thử lại/giảm số lượng. `tests/smoke66.js fixture` kiểm tra toàn bộ đường dây (IPC → store → adapter → editor → thư viện) khi chỉ phản hồi của model là fixture.
 
 ### P7 — Hoàn thiện
 

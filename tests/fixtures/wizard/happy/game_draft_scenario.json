@@ -1,0 +1,30 @@
+{
+  "gameType": "scenario",
+  "schemaVersion": 1,
+  "situations": [
+    {
+      "id": "sit1",
+      "context": "Tan học, trời mưa to, em cần sang đường.",
+      "prompt": "Em nên làm gì để sang đường an toàn?",
+      "options": [
+        { "id": "a", "text": "Chờ đèn dành cho người đi bộ và quan sát hai bên", "feedback": "Đúng: đây là cách an toàn nhất.", "score": { "safety": 55, "reasoning": 20, "harmReduction": 15 } },
+        { "id": "b", "text": "Chạy thật nhanh qua đường", "feedback": "Nguy hiểm: trời mưa làm tầm nhìn hạn chế, xe khó phanh.", "score": { "safety": 5, "reasoning": 5, "harmReduction": 0 } },
+        { "id": "c", "text": "Vừa đi vừa xem điện thoại", "feedback": "Mất tập trung, rất dễ xảy ra tai nạn.", "score": { "safety": 0, "reasoning": 0, "harmReduction": 0 } }
+      ],
+      "correctOptionId": "a",
+      "discussionPrompt": "Vì sao không nên chạy qua đường khi trời mưa?"
+    },
+    {
+      "id": "sit2",
+      "context": "Bạn cùng lớp bị ngã xe đạp trước cổng trường.",
+      "prompt": "Em sẽ xử lý thế nào?",
+      "options": [
+        { "id": "a", "text": "Giữ an toàn cho bạn, gọi người lớn và sơ cứu nhẹ", "feedback": "Đúng: ưu tiên an toàn rồi mới xử lý vết thương.", "score": { "safety": 50, "reasoning": 22, "harmReduction": 15 } },
+        { "id": "b", "text": "Tự dựng bạn dậy ngay lập tức", "feedback": "Có thể làm vết thương nặng hơn.", "score": { "safety": 8, "reasoning": 6, "harmReduction": 2 } },
+        { "id": "c", "text": "Bỏ đi vì sợ muộn học", "feedback": "Không giúp đỡ người gặp nạn là hành vi sai.", "score": { "safety": 0, "reasoning": 0, "harmReduction": 0 } }
+      ],
+      "correctOptionId": "a",
+      "discussionPrompt": "Khi nào cần gọi cấp cứu 115?"
+    }
+  ]
+}

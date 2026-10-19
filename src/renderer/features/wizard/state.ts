@@ -67,6 +67,7 @@ function wizardNow() {
 }
 
 function wizardStepIndex(step) {
+  if (step === 'edit' || step === 'done') return wizardSteps.length - 1;
   const index = wizardSteps.findIndex(item => item.id === step);
   return index < 0 ? 0 : index;
 }
@@ -139,7 +140,8 @@ const wizardErrorMessages = {
   AI_EMPTY: 'AI local không trả về nội dung. Hãy thử lại.',
   AI_TRUNCATED: 'Câu trả lời bị cắt do giới hạn độ dài. Hãy giảm yêu cầu hoặc thử lại.',
   AI_INVALID_JSON: 'AI local trả về dữ liệu không đọc được. Hãy thử lại.',
-  AI_OUTPUT_INVALID: 'Nội dung AI trả về chưa đúng cấu trúc. Hãy thử lại hoặc chỉnh sửa thủ công ở bước sau.'
+  AI_OUTPUT_INVALID: 'Nội dung AI trả về chưa đúng cấu trúc. Hãy thử lại hoặc chỉnh sửa thủ công ở bước sau.',
+  GENERATION_INVALID: 'Nội dung AI tạo ra chưa vượt qua kiểm tra của trò chơi (thiếu đáp án đúng, chặng bị lệch…). Hãy tạo lại, hoặc giảm số lượng câu/chặng rồi thử lại.'
 };
 
 function wizardErrorText(error = wizardState.error) {

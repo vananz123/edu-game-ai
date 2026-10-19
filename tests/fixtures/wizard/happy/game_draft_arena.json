@@ -1,0 +1,51 @@
+{
+  "gameType": "arena",
+  "schemaVersion": 1,
+  "questions": [
+    {
+      "id": "q1",
+      "type": "multiple-choice",
+      "prompt": "Trong quá trình quang hợp, thực vật sử dụng năng lượng nào để tổng hợp chất hữu cơ?",
+      "options": [
+        { "id": "a", "text": "Năng lượng ánh sáng mặt trời" },
+        { "id": "b", "text": "Năng lượng từ đất" },
+        { "id": "c", "text": "Năng lượng từ nước" },
+        { "id": "d", "text": "Năng lượng từ không khí" }
+      ],
+      "correctOptionId": "a",
+      "explanation": "Quang hợp dùng năng lượng ánh sáng mặt trời, được diệp lục trong lục lạp hấp thụ, để tổng hợp chất hữu cơ.",
+      "difficulty": "dễ",
+      "points": 100
+    },
+    {
+      "id": "q2",
+      "type": "multiple-choice",
+      "prompt": "Sắc tố nào trong lục lạp trực tiếp hấp thụ ánh sáng cho quang hợp?",
+      "options": [
+        { "id": "a", "text": "Diệp lục" },
+        { "id": "b", "text": "Carotenoid" },
+        { "id": "c", "text": "Hemoglobin" },
+        { "id": "d", "text": "Melanin" }
+      ],
+      "correctOptionId": "a",
+      "explanation": "Diệp lục là sắc tố chính hấp thụ ánh sáng trong lục lạp.",
+      "difficulty": "trung bình",
+      "points": 100
+    },
+    {
+      "id": "q3",
+      "type": "multiple-choice",
+      "prompt": "Vì sao cây thiếu ánh sáng thường vàng lá và chậm phát triển?",
+      "options": [
+        { "id": "a", "text": "Vì quang hợp giảm nên thiếu chất hữu cơ nuôi cây" },
+        { "id": "b", "text": "Vì cây hấp thụ quá nhiều nước" },
+        { "id": "c", "text": "Vì cây thừa oxy" },
+        { "id": "d", "text": "Vì đất bị nén chặt" }
+      ],
+      "correctOptionId": "a",
+      "explanation": "Thiếu ánh sáng làm giảm hiệu suất quang hợp, cây thiếu chất hữu cơ nên vàng lá và chậm lớn.",
+      "difficulty": "khó",
+      "points": 200
+    }
+  ]
+}
