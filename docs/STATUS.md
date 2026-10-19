@@ -1,7 +1,7 @@
 # Current Project Status — v0.3
 
 **Status:** Prototype / handoff build. Do not describe as production-ready.
-**Last verified:** 2026-10-19 — **P2 giáo án → trò chơi (storage + draft)**: 4 bảng sidecar (`lesson_documents`/`lesson_analyses`/`game_recommendations`/`game_projects`) + tệp `userData/lessons/<id>.txt`, `src/services/lesson-store.ts`, IPC `lesson:save-document`/`lesson:get-document`/`project:save-draft`/`project:get`/`project:list`/`project:delete` — verified by `tests/lesson-store.test.ts` (chạy bằng Node của Electron), `npm run check`, `npm test` (build + **14 suites**), và app thật: boot CDP `saveLessonDocument`/`saveProjectDraft`/`listProjects`/`deleteProject` **8/8** + `smoke62` **9/9** không đổi. Trước đó: **P1 contracts + adapter**, **Editor kéo-thả + xem trước đường đua**, installer `release/EduGame-Studio-Setup-0.3.0.exe`.
+**Last verified:** 2026-10-19 — **P3 giáo án → trò chơi (AI transport + workflow)**: `src/services/ai-transport.ts` (rút từ `main.ts`: `buildChatRequestBody`, `readAssistantContent`, `parseModelJson`, timeout/cancel signal, `AiRequestRegistry`, `requestChatJson`), `lesson-prompts.ts`, `lesson-normalize.ts`, `lesson-workflow.ts` (`runStructuredStep` + `analyzeLesson`/`recommendGames`/`generateGameDraft`, retry/repair 1 lần), IPC `ai:cancel` — verified by `tests/ai-transport.test.ts` + `tests/lesson-workflow.test.ts`, `npm run check`, `npm test` (build + **16 suites**), app thật CDP **5/5** (`ai:generate` offline, `ai:document-assist` lỗi cấu hình, `ai:cancel`), regression `smoke62` **9/9** + `smoke63` **49/49**. Trước đó: **P2 storage + draft** (4 bảng sidecar + tệp giáo án, 8/8 CDP), **P1 contracts + adapter**, installer `release/EduGame-Studio-Setup-0.3.0.exe`.
 
 ## AI-assisted Lesson-to-Game — P1: contracts + adapter (2026-10-19)
 
@@ -13,6 +13,20 @@ Bước P1 của `docs/implementation-plan.md`: dựng contract dữ liệu và 
 - **Không đổi:** `EducationalGame`, `GameQuestion`, `.egame`, `gameplay.ts`, `game-editor.ts` và mọi IPC hiện có; adapter chỉ là module mới.
 - **Verification:** `npm run check` pass; `npm test` pass (build + **13 suites**, thêm 2 suite mới). `tests/lesson-contracts.test.ts`: parse 5 draft/config hợp lệ + các ca sai (ID trùng, đáp án ngoài options, nhánh treo, chặng không kết thúc, ô ngoài đường đua, sai `schemaVersion`, sai thể loại, đề xuất trùng thể loại/rỗng). `tests/game-project-adapter.test.ts`: 5 thể loại draft→game (đúng template, giữ dữ liệu, validator cũ pass), lỗi adapter theo mã, vòng lặp game cũ→project→game (giữ `matchingGame`/`race`/câu trả lời), và `.egame` JSON round-trip không đổi.
 - **Chưa verify / còn lại:** chưa có UI, chưa gọi AI, chưa lưu DB — P2 (storage) và P3–P6 mới nối; JSON schema cho `response_format` chưa thử với llama.cpp thật (P6).
+
+## AI-assisted Lesson-to-Game — P3: AI transport + workflow (2026-10-19)
+
+Bước P3: tách tầng gọi AI thành module thuần, có thể test bằng mock, và dựng sẵn luồng analyze/recommend/generate. **Không đổi hành vi các kênh `ai:*` cũ.**
+
+- **`src/services/ai-transport.ts` (mới):** rút logic dùng chung khỏi `main.ts` — `buildChatRequestBody`, `readAssistantContent`, `parseModelJson`, `cleanModelJson`, `createRequestSignal` (timeout + `AbortSignal.any`), `AiRequestRegistry` (map `requestId` → `AbortController`), `requestChatJson` (một vòng HTTP qua `send` được inject). Thêm `AiTransportError` với mã rõ ràng: `AI_CONFIG`, `AI_NOT_RUNNING`, `AI_CONNECTION`, `AI_TIMEOUT`, `AI_CANCELLED`, `AI_HTTP`, `AI_EMPTY`, `AI_TRUNCATED`, `AI_INVALID_JSON`.
+- **`src/services/lesson-prompts.ts` (mới):** prompt cho analyze/recommend/generate theo 5 thể loại + prompt sửa lỗi (repair). Cắt tài liệu theo `getLocalDocumentAnalysisExcerpt` và ghi chú khi bị rút gọn.
+- **`src/services/lesson-normalize.ts` (mới):** điền `schemaVersion` + id còn thiếu (câu, phương án a/b/c, cặp ghép, chặng, đội) rồi validate bằng zod. Không tự bịa đáp án/điểm.
+- **`src/services/lesson-workflow.ts` (mới):** `runStructuredStep` là chính sách chung (đăng ký `requestId`, gọi model, validate, **sửa lỗi 1 lần** khi JSON hỏng/sai cấu trúc, dịch lỗi thành `LessonWorkflowError`). Trên đó là `analyzeLesson`, `recommendGames`, `generateGameDraft`.
+- **`src/main.ts`:** `requestJsonFromCompatibleApi` giờ gọi `requestChatJson` (giữ nguyên prompt, body, timeout 300s/90s và **mọi thông báo lỗi tiếng Việt**); `fetchAiEndpoint` trả `AiTransportError` và **không khởi động lại runtime khi bị giáo viên huỷ**; thêm IPC `ai:cancel`; `aiRequests.cancelAll()` khi thoát app.
+- **`src/preload.ts` + `src/shared/types.ts`:** thêm `cancelAi(requestId)` vào `window.eduGame`.
+- **Test mới:** `tests/ai-transport.test.ts` (parse/fence, body local/online, registry, timeout, cancel, HTTP, JSON hỏng, mất kết nối) và `tests/lesson-workflow.test.ts` (analyze/recommend/generate happy path, sửa lỗi 1 lần rồi bỏ cuộc, timeout không retry, cancel, model chưa chạy, `requestId` trùng).
+- **Verification:** `npm run check` pass; `npm test` pass (build + **16 suites**); app thật (CDP 9333): `ai:generate` offline vẫn tạo game, `ai:document-assist` trả đúng lỗi cấu hình, `ai:cancel` có mặt và trả `{ok:false}` cho id lạ — **5/5**; regression `smoke62` **9/9**, `smoke63` **49/49**.
+- **Chưa verify / còn lại:** chưa có IPC `lesson:analyze`/`lesson:recommend`/`lesson:generate` (P4) nên `lesson-workflow` mới chỉ được test bằng mock, **chưa chạy với model thật**; `ai:cancel` chưa huỷ được nhánh OpenCode Zen (chỉ local); retry/repair chưa đo với model thật nhỏ.
 
 ## AI-assisted Lesson-to-Game — P2: storage + draft (2026-10-19)
 

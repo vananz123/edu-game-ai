@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld('eduGame', Object.freeze({
   installLocalAiModel: modelId => ipcRenderer.invoke('ai:install-local-model', modelId),
   startLocalRuntime: modelId => ipcRenderer.invoke('ai:start-local-runtime', modelId),
   stopLocalRuntime: () => ipcRenderer.invoke('ai:stop-local-runtime'),
+  cancelAi: requestId => ipcRenderer.invoke('ai:cancel', requestId),
   onLocalAiProgress: callback => {
     const listener = (_event, progress) => callback(progress);
     ipcRenderer.on('ai:local-progress', listener);

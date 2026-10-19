@@ -1,0 +1,290 @@
+import assert from 'node:assert/strict';
+import {
+  AiRequestRegistry,
+  AiTransportError,
+  createCancelError
+} from '../src/services/ai-transport';
+import {
+  LessonWorkflowError,
+  analyzeLesson,
+  generateGameDraft,
+  recommendGames,
+  runStructuredStep,
+  type LessonChatClient,
+  type LessonChatRequest
+} from '../src/services/lesson-workflow';
+import { normalizeAnalysis } from '../src/services/lesson-normalize';
+import type { LessonAnalysis } from '../src/shared/lesson-types';
+
+const NOW = '2026-01-01T00:00:00.000Z';
+
+const analysisContent = {
+  subject: 'Toán',
+  grade: 5,
+  topic: 'Phép cộng',
+  objectives: [
+    { description: 'Cộng hai số có nhớ.', cognitiveLevel: 'apply' },
+    { description: 'Nhận biết tính chất giao hoán.', cognitiveLevel: 'understand' }
+  ],
+  keyConcepts: [{ term: 'Phép cộng', explanation: 'Gộp hai số lại.' }],
+  uncertainties: ['Chưa rõ phạm vi số trong bài.']
+};
+
+const validAnalysis: LessonAnalysis = normalizeAnalysis(analysisContent, {
+  id: 'analysis_1',
+  documentId: 'doc_1',
+  createdAt: NOW,
+  sourceDocumentIds: ['doc_1']
+});
+
+type ScriptedResponse = { value?: unknown; error?: unknown };
+
+class MockClient implements LessonChatClient {
+  readonly calls: LessonChatRequest[] = [];
+
+  constructor(private readonly script: ScriptedResponse[]) {}
+
+  async chatJson(request: LessonChatRequest): Promise<unknown> {
+    this.calls.push(request);
+    const step = this.script[Math.min(this.calls.length - 1, this.script.length - 1)] || { value: {} };
+    if (step.error) throw step.error;
+    return step.value;
+  }
+}
+
+async function expectWorkflowError(code: string, run: () => Promise<unknown>): Promise<LessonWorkflowError> {
+  try {
+    await run();
+  } catch (error) {
+    assert.ok(error instanceof LessonWorkflowError, `expected LessonWorkflowError, got ${String(error)}`);
+    assert.equal(error.code, code);
+    return error;
+  }
+  assert.fail(`expected LessonWorkflowError ${code}`);
+  throw new Error('unreachable');
+}
+
+async function main(): Promise<void> {
+  const registry = new AiRequestRegistry();
+
+  // --- Happy path: analyze -------------------------------------------------
+  const analyzeClient = new MockClient([{ value: analysisContent }]);
+  const analysis = await analyzeLesson({
+    client: analyzeClient,
+    registry,
+    requestId: 'req-happy',
+    documentId: 'doc_1',
+    text: 'Nội dung bài học về phép cộng hai số.',
+    subject: 'Toán',
+    grade: 'Lớp 5',
+    analysisId: 'analysis_1',
+    now: NOW
+  });
+  assert.equal(analysis.id, 'analysis_1');
+  assert.equal(analysis.schemaVersion, 1);
+  assert.equal(analysis.documentId, 'doc_1');
+  assert.deepEqual(analysis.sourceDocumentIds, ['doc_1']);
+  assert.equal(analysis.objectives[0].id, 'o1');
+  assert.equal(analysis.keyConcepts[0].id, 'k1');
+  assert.equal(analyzeClient.calls.length, 1);
+  assert.equal(analyzeClient.calls[0].messages[0].role, 'system');
+  assert.match(analyzeClient.calls[0].messages[1].content, /Phân tích giáo án/);
+  assert.equal(registry.size, 0, 'requestId is released after the step');
+
+  // --- Repair after invalid JSON from the provider -------------------------
+  const repairJsonClient = new MockClient([
+    { error: new AiTransportError('AI_INVALID_JSON', 'AI trả về JSON không hợp lệ.', { rawContent: 'not json' }) },
+    { value: analysisContent }
+  ]);
+  const repaired = await analyzeLesson({
+    client: repairJsonClient,
+    registry,
+    requestId: 'req-repair-json',
+    documentId: 'doc_1',
+    text: 'Nội dung.',
+    analysisId: 'analysis_repaired',
+    now: NOW
+  });
+  assert.equal(repaired.id, 'analysis_repaired');
+  assert.equal(repairJsonClient.calls.length, 2, 'invalid JSON triggers exactly one repair');
+  const repairMessages = repairJsonClient.calls[1].messages;
+  assert.equal(repairMessages.length, 4);
+  assert.equal(repairMessages[2].role, 'assistant');
+  assert.equal(repairMessages[2].content, 'not json');
+  assert.match(repairMessages[3].content, /JSON/);
+
+  // --- Repair after valid JSON but wrong shape -----------------------------
+  const repairShapeClient = new MockClient([
+    { value: { subject: null, grade: null, topic: 'Thiếu mục tiêu', objectives: [], keyConcepts: [{ term: 'a', explanation: 'b' }], uncertainties: [] } },
+    { value: analysisContent }
+  ]);
+  await analyzeLesson({
+    client: repairShapeClient,
+    registry,
+    requestId: 'req-repair-shape',
+    documentId: 'doc_1',
+    text: 'Nội dung.',
+    analysisId: 'analysis_shape',
+    now: NOW
+  });
+  assert.equal(repairShapeClient.calls.length, 2);
+  assert.equal(repairShapeClient.calls[1].messages[2].role, 'assistant', 'raw JSON is echoed back for repair');
+
+  // --- Give up after the repair attempt ------------------------------------
+  const alwaysBroken = new MockClient([
+    { value: { subject: null, grade: null, topic: 'x', objectives: [], keyConcepts: [{ term: 'a', explanation: 'b' }], uncertainties: [] } }
+  ]);
+  await expectWorkflowError('AI_OUTPUT_INVALID', () => analyzeLesson({
+    client: alwaysBroken,
+    registry,
+    requestId: 'req-give-up',
+    documentId: 'doc_1',
+    text: 'Nội dung.',
+    analysisId: 'analysis_bad',
+    now: NOW
+  }));
+  assert.equal(alwaysBroken.calls.length, 2, 'only one repair attempt');
+
+  // --- Timeout is not retried ---------------------------------------------
+  const timeoutClient = new MockClient([{ error: new AiTransportError('AI_TIMEOUT', 'AI quá thời gian chờ.') }]);
+  await expectWorkflowError('AI_TIMEOUT', () => analyzeLesson({
+    client: timeoutClient, registry, requestId: 'req-timeout', documentId: 'doc_1', text: 'x', analysisId: 'a', now: NOW
+  }));
+  assert.equal(timeoutClient.calls.length, 1);
+  assert.equal(registry.size, 0);
+
+  // --- Cancel --------------------------------------------------------------
+  const cancelClient: LessonChatClient = {
+    async chatJson(request) {
+      registry.cancel(request.requestId);
+      throw createCancelError();
+    }
+  };
+  await expectWorkflowError('AI_CANCELLED', () => analyzeLesson({
+    client: cancelClient, registry, requestId: 'req-cancel', documentId: 'doc_1', text: 'x', analysisId: 'a', now: NOW
+  }));
+  assert.equal(registry.size, 0);
+
+  // --- Model not running ---------------------------------------------------
+  const notRunningClient = new MockClient([{ error: new AiTransportError('AI_NOT_RUNNING', 'AI local chưa chạy.') }]);
+  await expectWorkflowError('AI_NOT_RUNNING', () => analyzeLesson({
+    client: notRunningClient, registry, requestId: 'req-offline', documentId: 'doc_1', text: 'x', analysisId: 'a', now: NOW
+  }));
+  assert.equal(notRunningClient.calls.length, 1);
+
+  // --- Recommendations -----------------------------------------------------
+  const recommendationContent = {
+    recommendations: [
+      { gameType: 'arena', title: 'Đấu trường', description: 'Trả lời nhanh.', reason: 'Luyện phản xạ.', learningObjectiveIds: ['o1'], suggestedDurationMinutes: 15 },
+      { gameType: 'matching', title: 'Ghép cặp', description: 'Ghép khái niệm.', reason: 'Củng cố khái niệm.', learningObjectiveIds: ['o2'], suggestedDurationMinutes: 10 }
+    ]
+  };
+  const recommendClient = new MockClient([{ value: recommendationContent }]);
+  const recommendations = await recommendGames({
+    client: recommendClient,
+    registry,
+    requestId: 'req-recommend',
+    analysis: validAnalysis,
+    now: NOW
+  });
+  assert.equal(recommendations.length, 2);
+  assert.equal(recommendations[0].id, 'rec1');
+  assert.equal(recommendations[0].analysisId, 'analysis_1');
+  assert.equal(recommendations[0].schemaVersion, 1);
+  assert.equal(recommendations[1].gameType, 'matching');
+
+  const duplicateType = new MockClient([{
+    value: { recommendations: [recommendationContent.recommendations[0], recommendationContent.recommendations[0]] }
+  }]);
+  await expectWorkflowError('AI_OUTPUT_INVALID', () => recommendGames({
+    client: duplicateType, registry, requestId: 'req-dup', analysis: validAnalysis, now: NOW
+  }));
+  assert.equal(duplicateType.calls.length, 2);
+
+  // --- Generation: normalizes missing ids ----------------------------------
+  const raceContent = {
+    trackLength: 10,
+    maxRounds: 5,
+    stepByDifficulty: true,
+    luckEnabled: false,
+    teams: [{ name: 'Đội Mặt Trời', icon: '🚀' }, { name: 'Đội Mặt Trăng' }],
+    cells: [{ cell: 5, type: 'boost', label: 'Tăng tốc' }],
+    questions: [{
+      prompt: 'Nước sôi ở bao nhiêu độ?',
+      options: [{ text: '90' }, { text: '100' }, { text: '110' }],
+      correctOptionId: 'b',
+      explanation: 'Ở áp suất tiêu chuẩn nước sôi ở 100°C.',
+      difficulty: 'dễ'
+    }]
+  };
+  const raceConfig = {
+    gameType: 'race' as const, title: 'Đường đua', subject: 'Khoa học', grade: 'Lớp 4', topic: 'Nhiệt độ',
+    audience: 'child' as const, durationMinutes: 15, difficulty: 'dễ' as const, playMode: 'team' as const,
+    style: 'competition' as const, focusObjectiveIds: [], generationMode: 'fast' as const,
+    trackLength: 10, maxRounds: 5, teamCount: 2, stepByDifficulty: true, luckEnabled: false
+  };
+  const raceClient = new MockClient([{ value: raceContent }]);
+  const raceDraft = await generateGameDraft({
+    client: raceClient, registry, requestId: 'req-race', gameType: 'race', config: raceConfig, analysis: validAnalysis
+  });
+  assert.equal(raceDraft.gameType, 'race');
+  assert.equal(raceDraft.schemaVersion, 1);
+  if (raceDraft.gameType !== 'race') throw new Error('expected race draft');
+  assert.equal(raceDraft.teams[0].id, 't1');
+  assert.equal(raceDraft.teams[1].id, 't2');
+  assert.equal(raceDraft.questions[0].id, 'q1');
+  assert.equal(raceDraft.questions[0].options[0].id, 'a');
+  assert.equal(raceDraft.questions[0].correctOptionId, 'b');
+
+  // --- Generation: repair when the answer key is inconsistent --------------
+  const invalidArena = {
+    gameType: 'arena',
+    questions: [{
+      id: 'q1', type: 'true-false', prompt: 'Nước sôi ở 100°C?',
+      options: [{ id: 'a', text: 'Đúng' }, { id: 'b', text: 'Sai' }],
+      correctOptionId: 'z', explanation: 'Đúng.', difficulty: 'dễ', points: 100
+    }]
+  };
+  const validArena = { ...invalidArena, questions: [{ ...invalidArena.questions[0], correctOptionId: 'a' }] };
+  const arenaConfig = {
+    gameType: 'arena' as const, title: 'Đấu trường', subject: 'Khoa học', grade: 'Lớp 4', topic: 'Nhiệt độ',
+    audience: 'child' as const, durationMinutes: 10, difficulty: 'dễ' as const, playMode: 'individual' as const,
+    style: 'fun' as const, focusObjectiveIds: [], generationMode: 'fast' as const,
+    questionCount: 1, scoringMode: 'basic' as const, pointsPerCorrect: 100, timeBonus: 10
+  };
+  const arenaClient = new MockClient([{ value: invalidArena }, { value: validArena }]);
+  const arenaDraft = await generateGameDraft({
+    client: arenaClient, registry, requestId: 'req-arena', gameType: 'arena', config: arenaConfig, analysis: validAnalysis
+  });
+  assert.equal(arenaClient.calls.length, 2);
+  assert.equal(arenaDraft.gameType, 'arena');
+  if (arenaDraft.gameType !== 'arena') throw new Error('expected arena draft');
+  const firstArenaQuestion = arenaDraft.questions[0];
+  if (firstArenaQuestion.type === 'multiple-choice' || firstArenaQuestion.type === 'true-false') {
+    assert.equal(firstArenaQuestion.correctOptionId, 'a');
+  } else {
+    throw new Error(`expected a choice question, got ${firstArenaQuestion.type}`);
+  }
+
+  // --- Duplicate requestId is rejected before calling the model ------------
+  const held = registry.begin('req-held');
+  const shouldNotRun = new MockClient([{ value: analysisContent }]);
+  await expectWorkflowError('AI_CONFIG', () => runStructuredStep({
+    client: shouldNotRun,
+    registry,
+    requestId: 'req-held',
+    messages: [{ role: 'user', content: 'x' }],
+    maxTokens: 16,
+    validate: value => value
+  }));
+  assert.equal(shouldNotRun.calls.length, 0);
+  held.done();
+  assert.equal(registry.size, 0);
+
+  console.log('Lesson workflow tests passed');
+}
+
+main().catch(error => {
+  console.error(error);
+  process.exit(1);
+});

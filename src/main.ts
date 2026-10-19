@@ -27,6 +27,12 @@ const { buildTreasureHunt: buildTreasureHuntService, buildRaceData: buildRaceDat
 const { validateScenarioGame, validateMatchingGame, validateTreasureHuntGame, validateRaceGame } = require('./services/game-validation');
 const { isZenBaseUrl, postZenChatCompletions, readLocalOpencodeApiKey } = require('./services/opencode-zen');
 const {
+  AiRequestRegistry,
+  AiTransportError,
+  isCancelReason,
+  requestChatJson
+} = require('./services/ai-transport');
+const {
   QWEN_LOCAL_MODELS,
   LLAMA_CPP_RUNTIME,
   getLocalModel,
@@ -253,6 +259,8 @@ const gameDraftResponseSchema = {
 
 let sqlite;
 let lessonStore;
+/** Maps renderer `requestId` → AbortController for the new lesson workflow + `ai:cancel`. */
+const aiRequests = new AiRequestRegistry();
 
 let mainWindow;
 let localAiManager;
@@ -394,6 +402,7 @@ app.whenReady().then(async () => {
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 app.on('before-quit', async event => {
+  aiRequests.cancelAll();
   if (quittingAfterAiShutdown) return;
   if (!localAiManager) return;
 
@@ -773,6 +782,7 @@ function registerIpc() {
     await stopLocalAiRuntime();
     return { ok: true, models: await getLocalAiModels() };
   });
+  ipcMain.handle('ai:cancel', async (_e, requestId) => ({ ok: aiRequests.cancel(String(requestId || '')) }));
   ipcMain.handle('ai:document-assist', async (_e, request) => {
     if (!request || !['summarize', 'ask'].includes(request.operation)) {
       throw new Error('Yêu cầu xử lý tài liệu không hợp lệ.');
@@ -886,7 +896,7 @@ function registerIpc() {
       catch (error) {
         if (!useZen) {
           console.error('Could not decrypt configured AI API key:', error instanceof Error ? error.message : 'unknown');
-          throw new Error('Không đọc được API key đã lưu. Hãy nhập lại khóa trong Cài đặt.');
+          throw new AiTransportError('AI_CONFIG', 'Không đọc được API key đã lưu. Hãy nhập lại khóa trong Cài đặt.');
         }
         apiKey = '';
       }
@@ -942,11 +952,15 @@ async function fetchAiEndpoint(url, options, mode) {
   try {
     return await fetch(url, options);
   } catch (error) {
+    // A teacher cancel must never restart the runtime or look like a timeout.
+    if (isCancelReason(error) || isCancelReason(options?.signal?.reason)) {
+      throw createCancelReason(options?.signal?.reason);
+    }
     if (error?.name === 'TimeoutError' || error?.name === 'AbortError') {
       if (mode === 'local') {
         const manager = localAiManager;
         if (!manager) {
-          throw new Error('AI local đã vượt quá thời gian chờ và runtime không còn hoạt động. Hãy khởi động lại AI local rồi thử lại.');
+          throw new AiTransportError('AI_TIMEOUT', 'AI local đã vượt quá thời gian chờ và runtime không còn hoạt động. Hãy khởi động lại AI local rồi thử lại.');
         }
         try {
           await manager.stop();
@@ -954,56 +968,65 @@ async function fetchAiEndpoint(url, options, mode) {
         } catch (restartError) {
           console.error('Could not restart local AI runtime after a timed-out request:', restartError);
           const restartMessage = restartError instanceof Error ? restartError.message : String(restartError);
-          throw new Error(
+          throw new AiTransportError(
+            'AI_TIMEOUT',
             `AI local đã vượt quá thời gian chờ và không khởi động lại được runtime: ${restartMessage}`
           );
         }
-        throw new Error('AI local đã vượt quá thời gian chờ; runtime đã được khởi động lại. Hãy thử với tài liệu ngắn hơn hoặc model nhẹ hơn.');
+        throw new AiTransportError('AI_TIMEOUT', 'AI local đã vượt quá thời gian chờ; runtime đã được khởi động lại. Hãy thử với tài liệu ngắn hơn hoặc model nhẹ hơn.');
       }
-      throw new Error('Yêu cầu AI quá thời gian chờ. Kiểm tra dịch vụ/model hoặc thử lại với tài liệu ngắn hơn.');
+      throw new AiTransportError('AI_TIMEOUT', 'Yêu cầu AI quá thời gian chờ. Kiểm tra dịch vụ/model hoặc thử lại với tài liệu ngắn hơn.');
     }
     if (mode === 'local' && error?.cause?.code === 'ECONNREFUSED') {
       const origin = new URL(url).origin;
-      throw new Error(`Không kết nối được llama.cpp tại ${origin}. Hãy thử lại hoặc kiểm tra runtime AI local trong ứng dụng.`);
+      throw new AiTransportError('AI_CONNECTION', `Không kết nối được llama.cpp tại ${origin}. Hãy thử lại hoặc kiểm tra runtime AI local trong ứng dụng.`);
     }
     if (error instanceof TypeError) {
-      throw new Error('Không kết nối được AI API. Kiểm tra endpoint, kết nối mạng và chứng thư HTTPS.');
+      throw new AiTransportError('AI_CONNECTION', 'Không kết nối được AI API. Kiểm tra endpoint, kết nối mạng và chứng thư HTTPS.');
     }
     throw error;
   }
 }
 
+/** Preserve the original cancel reason so `isCancelReason` still matches upstream. */
+function createCancelReason(reason) {
+  if (isCancelReason(reason)) return reason;
+  const error = new Error('Yêu cầu AI đã bị huỷ.');
+  error.name = 'AiCancelledError';
+  return error;
+}
+
 async function requestJsonFromCompatibleApi({ payload, ai, systemPrompt, userPrompt, maxTokens, responseSchema }) {
   const mode = payload.mode || ai.mode || 'offline';
   if (mode !== 'local' && mode !== 'online') {
-    throw new Error('Hãy chọn API local hoặc online để phân tích và hỏi đáp tài liệu.');
+    throw new AiTransportError('AI_CONFIG', 'Hãy chọn API local hoặc online để phân tích và hỏi đáp tài liệu.');
   }
   if (mode === 'local' && (!localAiManager || localAiManager.getStatus().state !== 'READY')) {
-    throw new Error('AI local chưa chạy. Hãy nhấn “Tổng hợp với AI trên máy” để mở cửa sổ AI local · llama.cpp, chọn model đã tải đầy đủ rồi nhấn “Bắt đầu chạy”.');
+    throw new AiTransportError('AI_NOT_RUNNING', 'AI local chưa chạy. Hãy nhấn “Tổng hợp với AI trên máy” để mở cửa sổ AI local · llama.cpp, chọn model đã tải đầy đủ rồi nhấn “Bắt đầu chạy”.');
   }
   const localModelId = payload.localModelId || ai.localModelId || QWEN_LOCAL_MODELS[0].id;
   const baseUrl = mode === 'local'
     ? await ensureLocalRuntime(localModelId)
     : String(payload.baseUrl || ai.baseUrl || '').replace(/\/+$/, '');
   const model = mode === 'local' ? localModelId : String(payload.model || ai.model || '').trim();
-  if (!baseUrl || !model) throw new Error('Hãy cấu hình API Base URL và tên model trong Cài đặt.');
+  if (!baseUrl || !model) throw new AiTransportError('AI_CONFIG', 'Hãy cấu hình API Base URL và tên model trong Cài đặt.');
 
   let endpoint;
   try {
     endpoint = new URL(baseUrl);
   } catch {
-    throw new Error('API Base URL không hợp lệ.');
+    throw new AiTransportError('AI_CONFIG', 'API Base URL không hợp lệ.');
   }
   const isLoopback = ['localhost', '127.0.0.1', '[::1]'].includes(endpoint.hostname);
   if (mode === 'local' && (!isLoopback || endpoint.protocol !== 'http:')) {
-    throw new Error('Chế độ API local chỉ chấp nhận HTTP trên localhost hoặc 127.0.0.1.');
+    throw new AiTransportError('AI_CONFIG', 'Chế độ API local chỉ chấp nhận HTTP trên localhost hoặc 127.0.0.1.');
   }
   if (mode === 'online' && endpoint.protocol !== 'https:' &&
       !(endpoint.protocol === 'http:' && isLoopback)) {
-    throw new Error('API online phải dùng HTTPS. HTTP chỉ được phép cho endpoint loopback trong môi trường thử nghiệm.');
+    throw new AiTransportError('AI_CONFIG', 'API online phải dùng HTTPS. HTTP chỉ được phép cho endpoint loopback trong môi trường thử nghiệm.');
   }
   if (endpoint.username || endpoint.password || endpoint.hash) {
-    throw new Error('Base URL không được chứa thông tin đăng nhập hoặc fragment.');
+    throw new AiTransportError('AI_CONFIG', 'Base URL không được chứa thông tin đăng nhập hoặc fragment.');
   }
 
   let apiKey = '';
@@ -1016,7 +1039,7 @@ async function requestJsonFromCompatibleApi({ payload, ai, systemPrompt, userPro
       } catch (error) {
         if (!useZen) {
           console.error('Could not decrypt configured AI API key:', error instanceof Error ? error.message : 'unknown');
-          throw new Error('Không đọc được API key đã lưu. Hãy nhập lại khóa trong Cài đặt.');
+          throw new AiTransportError('AI_CONFIG', 'Không đọc được API key đã lưu. Hãy nhập lại khóa trong Cài đặt.');
         }
         apiKey = '';
       }
@@ -1024,56 +1047,27 @@ async function requestJsonFromCompatibleApi({ payload, ai, systemPrompt, userPro
     if (useZen && !apiKey) apiKey = readLocalOpencodeApiKey();
   }
 
-  const requestBody = {
+  return requestChatJson({
     model,
+    mode,
     temperature: mode === 'local' ? 0.2 : 0.3,
-    ...(mode === 'local' ? { top_p: 1.0, top_k: 20, presence_penalty: 0.0 } : {}),
-    ...buildGenerationOptions(mode, maxTokens),
-    response_format: mode === 'local' && responseSchema
-      ? {
-        type: 'json_schema',
-        json_schema: {
-          name: responseSchema.name,
-          strict: true,
-          schema: responseSchema.schema
-        }
-      }
-      : { type: 'json_object' },
+    generation: buildGenerationOptions(mode, maxTokens),
+    responseSchema: responseSchema || null,
+    timeoutMs: mode === 'local' ? 300_000 : 90_000,
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt }
-    ]
-  };
-  const response = useZen
-    ? await postZenChatCompletions({ baseUrl, apiKey, payload: requestBody, timeoutMs: 180_000 })
-    : await fetchAiEndpoint(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      redirect: 'error',
-      headers: { 'Content-Type': 'application/json', ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}) },
-      body: JSON.stringify(requestBody),
-      signal: AbortSignal.timeout(mode === 'local' ? 300_000 : 90_000)
-    }, mode);
-  if (!response.ok) {
-    const detail = mode === 'local' ? (await response.text()).slice(0, 500).trim() : '';
-    throw new Error(
-      `AI API trả về lỗi HTTP ${response.status}.${detail ? ` ${detail}` : ' Kiểm tra endpoint, model và cấu hình xác thực.'}`
-    );
-  }
-  const data = await response.json();
-  const choice = data.choices?.[0];
-  if (choice?.finish_reason === 'length') {
-    throw new Error('AI hết giới hạn token trước khi hoàn tất câu trả lời. Hãy rút ngắn tài liệu hoặc thử lại.');
-  }
-  const content = choice?.message?.content;
-  if (typeof content !== 'string' || !content.trim()) {
-    throw new Error('AI không trả về nội dung. Hãy kiểm tra model và nhà cung cấp AI rồi thử lại.');
-  }
-  const cleaned = content.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
-  try {
-    return JSON.parse(cleaned);
-  } catch {
-    throw new Error('AI trả về JSON không hợp lệ. Hãy thử lại hoặc rút ngắn tài liệu.');
-  }
+    ],
+    send: (body, signal) => useZen
+      ? postZenChatCompletions({ baseUrl, apiKey, payload: body, timeoutMs: 180_000 })
+      : fetchAiEndpoint(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        redirect: 'error',
+        headers: { 'Content-Type': 'application/json', ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}) },
+        body: JSON.stringify(body),
+        signal
+      }, mode)
+  });
 }
 
 function buildDocumentAnalysisPrompt(request, text) {

@@ -373,10 +373,10 @@ Không sửa: `gameplay.ts`, `game-editor.ts` (trừ điểm gọi AI regenerate
 
 ### P3 — AI transport + workflow
 
-- Rút `ai-transport.ts` khỏi `main.ts` (giữ hành vi), thêm `AbortController` + `requestId`, retry/repair 1 lần.
-- `lesson-prompts.ts`, `lesson-workflow.ts`.
-- Test mock: JSON hợp lệ, JSON hỏng, thiếu trường, timeout, cancel, model chưa chạy.
-- **Gate:** test workflow + regression `ai:*` cũ.
+- [x] Rút `ai-transport.ts` khỏi `main.ts` (giữ hành vi), thêm `AbortController` + `requestId`, retry/repair 1 lần.
+- [x] `lesson-prompts.ts`, `lesson-normalize.ts`, `lesson-workflow.ts`.
+- [x] Test mock: JSON hợp lệ, JSON hỏng, thiếu trường, timeout, cancel, model chưa chạy.
+- **Gate:** test workflow + regression `ai:*` cũ. ✅ (2026-10-19, `tests/ai-transport.test.ts` + `tests/lesson-workflow.test.ts`; CDP `ai:generate` offline + `ai:document-assist` lỗi cấu hình + `ai:cancel` 5/5, smoke62 9/9, smoke63 49/49)
 
 ### P4 — Analyze + recommend
 

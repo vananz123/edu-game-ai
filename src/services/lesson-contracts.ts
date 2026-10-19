@@ -13,7 +13,9 @@ import type {
   ArenaDraft,
   GameConfig,
   GameDraft,
+  GameRecommendation,
   GameRecommendationContent,
+  LessonAnalysis,
   LessonAnalysisContent
 } from '../shared/lesson-types';
 
@@ -504,6 +506,15 @@ export const gameConfigSchema = z.discriminatedUnion('gameType', [
 
 export function parseLessonAnalysisContent(value: unknown): LessonAnalysisContent {
   return parseOrThrow(lessonAnalysisContentSchema, value, 'ANALYSIS_INVALID', 'Kết quả phân tích giáo án') as LessonAnalysisContent;
+}
+
+/** Full analysis object (ids + timestamp added by `lesson-normalize`). */
+export function parseLessonAnalysis(value: unknown): LessonAnalysis {
+  return parseOrThrow(lessonAnalysisSchema, value, 'ANALYSIS_INVALID', 'Kết quả phân tích giáo án') as LessonAnalysis;
+}
+
+export function parseGameRecommendation(value: unknown): GameRecommendation {
+  return parseOrThrow(gameRecommendationSchema, value, 'RECOMMENDATION_INVALID', 'Đề xuất trò chơi') as GameRecommendation;
 }
 
 export function parseRecommendationsContent(value: unknown): GameRecommendationContent[] {

@@ -281,6 +281,8 @@ export interface EduGameBridge {
   installLocalAiModel(modelId: string): Promise<{ ok: boolean }>;
   startLocalRuntime(modelId: string): Promise<{ ok: boolean; baseUrl: string }>;
   stopLocalRuntime(): Promise<{ ok: boolean }>;
+  /** Cancels an in-flight AI request by the `requestId` passed to a workflow call. */
+  cancelAi(requestId: string): Promise<{ ok: boolean }>;
   onLocalAiProgress(callback: (progress: import('../ai-core/contracts').LocalAiDownloadProgress) => void): () => void;
   generateGame(payload: GenerateGameRequest): Promise<GenerateGameResponse>;
 }
