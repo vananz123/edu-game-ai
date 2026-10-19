@@ -127,7 +127,8 @@ async function handleAction(action, id) {
     }
     if (action === 'clear-lesson') { state.importedDoc = null; render(); toast('Đã xóa giáo án đã nhập.'); }
     if (action === 'delete') {
-      if (confirm('Xóa vĩnh viễn dự án “' + (findGame(id)?.title || 'này') + '” khỏi máy?\nKhông thể hoàn tác — hãy xuất gói .egame trước nếu muốn giữ bản sao.')) { await window.eduGame.deleteGame(id); await refreshDb(); render(); toast('Đã xóa dự án.'); }
+      const target = findGame(id);
+      if (confirm('Xóa vĩnh viễn “' + (target?.title || 'trò chơi này') + '” khỏi máy?\nKhông thể hoàn tác — hãy xuất gói .egame trước nếu muốn giữ bản sao.')) { await window.eduGame.deleteGame(id); await refreshDb(); render(); toast('Đã xóa “' + (target?.title || 'trò chơi') + '”.'); }
     }
     if (action === 'export-results') exportResults();
   } catch (e) { toast(e.message || 'Đã xảy ra lỗi.'); }
@@ -136,10 +137,10 @@ function findGame(id) { return state.db.games.find(g => g.id === id); }
 function updateScoringVisibility() {
   const mode = $('#setupScoringMode')?.value || 'tốc độ';
   const timeBonusField = $('#timeBonusField');
-  if (timeBonusField) timeBonusField.style.display = mode === 'tốc độ' ? '' : 'none';
+  if (timeBonusField) timeBonusField.classList.toggle('hidden', mode !== 'tốc độ');
   ['pointsEasyField', 'pointsMediumField', 'pointsHardField'].forEach(id => {
     const field = document.getElementById(id);
-    if (field) field.style.display = mode === 'theo độ khó' ? '' : 'none';
+    if (field) field.classList.toggle('hidden', mode !== 'theo độ khó');
   });
   const hint = $('#scoringModeHint');
   if (hint) hint.textContent = scoringModeHint(mode);

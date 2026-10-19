@@ -5,11 +5,24 @@
 Replace the 5 hand-written stylesheets (`global/layout/components/pages/responsive.css`, ~427 rules, ~250 classes) with Tailwind CSS v4 utilities/components, then use the freed-up budget for a creative UI/UX pass. Direction agreed with the owner: animations across the whole app; the in-game player UI adapts to the audience (child → teen → adult) **only while a game is being presented**; UI/UX may be redesigned creatively, pixel parity matters only while both CSS systems coexist.
 
 - [x] **G0 — Zen online AI** (pre-requisite work, verified 43/43) — see STATUS.
-- [x] **G1 — Infrastructure:** Tailwind v4 CLI standalone, `src/renderer/styles/app.css` entry (`@source`, `@theme` tokens/breakpoints/9 animations, `@layer components .motion-safe-off`, temporary `@layer base` UA reverts so preflight doesn't disturb the legacy look), `build:css` in the build chain, `app.css` linked after the legacy sheets. Verified: check + 11 test suites + `smoke60` 43/43; geometry diff CSS-on vs CSS-off reduced to 31/764 elements at 1–2 px.
-- [ ] **G2 — Shell + static pages:** migrate `index.html` (sidebar/topbar/nav) + `core/render.ts` + `shared.ts` + `pages/*` to utilities; delete the corresponding `layout.css`/`pages.css` rules as sections migrate.
-- [ ] **G3 — Components + editor:** migrate `components.css` and the inline styles in `game-editor.ts` (879 lines, 23 inline styles).
-- [ ] **G4 — Gameplay + audience theming:** migrate `features/gameplay.ts` (dark play modal, 41 inline styles, 27 classList toggles); add `data-player-theme="child|teen|adult"` on the play-modal root with `--player-fs`/`--player-radius`/`--motion-scale` variables driven from settings.
-- [ ] **G5 — Motion + performance + cleanup:** apply the animation tokens app-wide (respecting `.motion-safe-off`), delete the 5 legacy stylesheets, the temporary `@layer base` reverts, the old `app.css` link order, and the 4 dead classes.
+- [x] **G1 — Infrastructure:** Tailwind v4 CLI standalone, `src/renderer/styles/app.css` entry (`@source`, `@theme` tokens/breakpoints/9 animations, `@layer components .motion-safe-off`, temporary `@layer base` UA reverts so preflight doesn't disturb the legacy look), `build:css` in the build chain, `app.css` as the only linked sheet. Verified: check + 11 test suites + `smoke60` 43/43; geometry diff CSS-on vs CSS-off reduced to 31/764 elements at 1–2 px.
+- [x] **G2a — Cascade fix (prerequisite for G2):** the 5 legacy stylesheets are now imported into `@layer components` from `app.css` (single `<link>`) instead of separate sheets, because unlayered legacy always outranked `@layer utilities` — utilities would have been dead on arrival. Verified by a CDP geometry A/B (layered vs. old unlayered behaviour): **0 diffs** across all 7 pages (noise baseline 0), `npm run check`, `npm test` (11 suites), `smoke60` **43/43**, 0 uncaught.
+- [x] **G2 — Shell + static pages (verified 2026-10-18, STATUS Phase 2b):** migrate `index.html` (sidebar/topbar/nav) + `core/render.ts` + `shared.ts` + `pages/*` to utilities. Legacy rules may stay as fallback (they are now overridable); delete the ones that become redundant as sections migrate, and the whole files in G5.
+- [x] **G3 — Components + editor (verified 2026-10-19, STATUS Phase 2c):** migrate `components.css` and the inline styles in `game-editor.ts` (879 lines, 23 inline styles → 0 `style=` / 0 `style.display`; show/hide via `hidden`-class toggles; `tests/smoke56.js` assertions updated).
+- [x] **G4 — Gameplay + audience theming (verified 2026-10-18, STATUS Phase 2d):** migrate `features/gameplay.ts` (dark play modal, 41 inline styles → 0 `style=`; dynamic progress bars → `data-progress` + `paintProgress()` runtime write); add `data-player-theme="child|teen|adult"` on the play-modal root with `--player-fs`/`--player-radius`/`--motion-scale` variables driven from `preferences.audience` (settings select `#settingAudience`). Live-verified by new CDP `tests/smoke61.js` **18/18**, 0 uncaught; `npm run check` + `npm test` (11 suites). Remaining `style=` elsewhere (create/local-ai/bootstrap/home — 16) is G5 follow-up.
+- [x] **G5 — Motion + performance + cleanup (verified 2026-10-19, STATUS Phase 2e):** remaining 16 inline `style=` → 0 (`create.ts`/`local-ai.ts`/`bootstrap.ts`/`home.ts` → utilities + `hidden` toggles; `controller.ts` runtime `style.display` → `classList.toggle('hidden')`); deleted the 5 legacy stylesheets + their `@import … layer(components)` lines and their 81 dead classes (class-usage survey: 220 declared → 139 used incl. dynamic `race-cell-*`; 10 false-positive keeps dropped manually); the surviving 226 rules (modal/field/editor/play-mode/chat systems + state classes) were ported into `app.css` `@layer components` with a `:root` → `@theme` var alias block (`--purple`/`--line`/`--shadow`…); animation tokens applied app-wide (`.modal-backdrop` `var(--animate-fade-in)`, `.modal` `var(--animate-pop-in)` — all suppressed by `.motion-safe-off`). **Kept the `@layer base` UA-normalization block** (re-verified: deleting it = 3775 geometry diffs — the G2–G4 markup was written under it; it is no longer "temporary", comment updated). Verified: geometry A/B 7 pages 1336 elements **0 diffs** (`tests/geom-ab.js`, noise 0), new modal A/B `tests/modal-ab.js` 8 screens 245 elements **0 CSS diffs** (only the empty `#modalRoot`'s document-position `y` varies with pre-dump page state), `smoke61` 18/18, `npm run check`, `npm test` (11 suites), 0 uncaught.
+
+## Editor drag-drop + race track preview (done, 2026-10-19)
+
+Closes the two remaining tasknight visual-authoring items (§4 "Kéo thả để sắp xếp", §6 "Giao diện kéo thả ô đặc biệt + xem trước đường đi trực quan"). Editor-only: gameplay, data contracts, validators and `.egame` are untouched. See STATUS "Editor kéo-thả (matching + race) + xem trước đường đua".
+
+- [x] **Matching pair reorder by drag** — handle `⠿` per row (`data-pair-drag`), drop above/below a target row; ↑/↓ and ✕ kept as fallback.
+- [x] **Race track preview** — `#raceTrackPreview` renders 1..trackLength reusing `.race-cell`/`race-cell-*`; start 🚩 + team icons, finish 🏁, out-of-range effects warned, lucky cells dimmed when luck is off.
+- [x] **Preview theme toggle** — `#racePreviewTheme` switches `data-preview-theme="editor"` (light, default) ⇄ `"play"` (dark, gameplay colours); survives re-render, resets on editor open.
+- [x] **Drop effect palette onto a cell** — `placeRaceEffect`; occupied cell or cell 1 → toast, no change; **move** an existing cell effect by dragging its `⠿` handle onto another cell (`moveRaceCellRow`, conflict → toast).
+- [x] **Race question reorder by drag** + renumber; team rows reorderable too.
+- [x] **Guards** — no gamepad/API changes; DOM stays the single source of truth for `readMatchingEditor`/`readRaceEditor`.
+- Verified: `tests/smoke63.js` **49/49**, regression `smoke56` 56/56, `smoke57` 37/37, `smoke58` 25/25 (2 stale assertions fixed), `smoke59` 21/21, `smoke61` 18/18, `smoke62` 9/9, `geom-ab` 0 diff, `modal-ab` 0 diff, `npm run check`, `npm test` (11 suites).
 - Must-keep selectors (used by code/CDP smokes): `.stage-top`, `.answer-option`, `.race-cell`, `.feedback`, `[data-play-close]`, `[data-race-answer]`, `.match-card`, `.memory-card`, and the `#id`s (`#saveGameBtn`, `#treasureStageCount`, `#raceTeamCount`, `#drawQuestionBtn`, …); state classes toggled via `classList` stay as real classes, not utility soup.
 
 ## v0.3 tasknight (`docs/tasknight.txt`) — Trạng thái đã làm / chưa làm
@@ -35,7 +48,8 @@ Replace the 5 hand-written stylesheets (`global/layout/components/pages/responsi
 - [x] 4.2 Điểm: thưởng theo cặp, penalty cấu hình (mặc định 0), thưởng thời gian/hoàn thành, chế độ luyện tập.
 - [x] 4.3 Bảng chỉnh sửa cặp trực quan (thêm/sửa/xóa/dời vị trí) + chọn cách chơi.
 - [x] 4.4 AI sinh matching (schema type `matching`) — chưa verify end-to-end với model thật.
-- [ ] Kéo thả để sắp xếp; thêm ảnh cho từng cặp.
+- [x] Kéo-thả để sắp xếp cặp trong editor (2026-10-19, `tests/smoke63.js`; giữ ↑/↓ làm dự phòng).
+- [ ] Thêm ảnh cho từng cặp.
 
 ### §5 Giải mã kho báu (treasure-hunt)
 - [x] 5.1 Hành trình nhiều chặng: câu đố → nhiệm vụ → thử thách tổng hợp → kết, chọn nhánh, giới hạn lượt thử (sai → gợi ý, không chơi lại từ đầu), nhiều kết thúc.
@@ -49,7 +63,7 @@ Replace the 5 hand-written stylesheets (`global/layout/components/pages/responsi
 - [x] 6.1 Chơi chung màn hình: luân phiên đội, đọc hỏi/trả lời/xác nhận, đội về đích hoặc hết lượt thì thắng.
 - [x] 6.3 Hai hệ thống: tiến độ đường đua (dễ +1 / TB +2 / khó +3, ô đặc biệt boost −1/may mắn +1/thử thách) + điểm kiến thức; cờ tắt may mắn, giới hạn step.
 - [x] 6.4 Trình soạn: chiều dài track, số lượt, đội, ô đặc biệt (số ô/type/label), ngân hàng câu hỏi tái sử dụng (độ khó, options).
-- [ ] Giao diện kéo thả ô đặc biệt + xem trước đường đi trực quan (hiện là bảng rows).
+- [x] Giao diện kéo thả ô đặc biệt + xem trước đường đi trực quan (2026-10-19 — preview 1..trackLength dùng lại `.race-cell`, palette 4 loại thả vào ô, kéo ô đổi vị trí, nút đổi tông "soạn thảo ⇄ như lúc chơi"; `tests/smoke63.js`).
 - [ ] 6.5 AI sinh đường đua/bộ câu hỏi theo thời lượng tiết học — chưa làm.
 
 ### §7 Cá nhân hóa phong cách theo từng giáo viên

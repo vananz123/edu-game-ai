@@ -166,8 +166,8 @@ async function findTarget() {
     const typeSelect = last.querySelector('[data-field="type"]');
     typeSelect.value = 'fill-in-blank'; typeSelect.dispatchEvent(new Event('change', { bubbles: true }));
     await new Promise(r => setTimeout(r, 80));
-    push('text answer field visible after type switch', last.querySelector('.text-answer-fields').style.display !== 'none', last.querySelector('.text-answer-fields').style.display);
-    push('options hidden for fill-blank', last.querySelector('.editor-options').style.display === 'none', last.querySelector('.editor-options').style.display);
+    push('text answer field visible after type switch', last.querySelector('.text-answer-fields').classList.contains('hidden') === false, last.querySelector('.text-answer-fields').className);
+    push('options hidden for fill-blank', last.querySelector('.editor-options').classList.contains('hidden') === true, last.querySelector('.editor-options').className);
     last.querySelector('[data-field="prompt"]').value = 'Câu điền từ mới';
     document.getElementById('saveGameBtn').click();
     await new Promise(r => setTimeout(r, 300));

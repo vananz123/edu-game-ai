@@ -32,10 +32,19 @@ function playGame(game) {
   if (game.gameSetup?.scoringMode === 'thi đấu đội') return openTeamSetup();
   openPlayModal();
 }
+// ---------- G4 — player theme (chỉ áp dụng trong lúc trình chiếu game) ----------
+function playerTheme() {
+  const audience = state.settings?.preferences?.audience;
+  return audience === 'child' || audience === 'adult' ? audience : 'teen';
+}
+// Template chỉ ghi data-progress; giá trị % động gán qua style.width lúc render.
+function paintProgress(scope) {
+  $$('[data-progress]', scope).forEach(el => { el.style.width = `${el.dataset.progress}%`; });
+}
 // ---------- §2.3 Thi đấu đội (quiz/scenario) ----------
 function openTeamSetup() {
   const root = $('#modalRoot');
-  root.innerHTML = `<div class="modal-backdrop"><div class="modal" style="width:min(720px,96vw);background:#11152b;border:1px solid #303651"><div class="modal-head" style="background:#11152b;border-color:#303651;color:#fff"><div><h2>${escapeHtml(state.currentGame.title)}</h2><div class="small" style="color:#aeb5ce;margin-top:4px">THI ĐẤU ĐỘI · CHIA ĐỘ TRƯỚC KHI BẮT ĐẦU</div></div><button class="modal-close" data-play-close style="background:#292f49;color:#fff">✕</button></div><div class="modal-body" id="playBody" style="padding:18px"></div></div></div>`;
+  root.innerHTML = `<div class="modal-backdrop"><div class="modal w-[min(720px,96vw)] bg-[#11152b] border border-[#303651]" data-player-theme="${playerTheme()}"><div class="modal-head bg-[#11152b] border-[#303651] text-white"><div><h2>${escapeHtml(state.currentGame.title)}</h2><div class="small text-[#aeb5ce] mt-1">THI ĐẤU ĐỘI · CHIA ĐỘ TRƯỚC KHI BẮT ĐẦU</div></div><button class="modal-close bg-[#292f49] text-white" data-play-close>✕</button></div><div class="modal-body p-[18px]" id="playBody"></div></div></div>`;
   $('[data-play-close]', root).addEventListener('click', () => root.innerHTML = '');
   state.pendingTeams = [
     { id: 't1', name: 'Đội A', icon: '🏎️' },
@@ -46,10 +55,10 @@ function openTeamSetup() {
 function renderTeamSetup() {
   const root = $('#playBody');
   const teams = state.pendingTeams;
-  root.innerHTML = `<div class="game-stage"><div class="stage-kicker">CHIA ĐỘ CHO LỚP</div><p class="small" style="color:#aeb5ce">Mỗi câu hỏi cộng điểm cho đội đang tới lượt. Giáo viên có thể luân phiên người trả lời — chọn lại đội trên thanh lượt trước khi học sinh trả lời.</p>
-    <div class="team-setup">${teams.map((t, i) => `<div class="team-setup-row"><input data-team-icon data-team-index="${i}" value="${escapeHtml(t.icon)}" style="width:64px;text-align:center" title="Biểu tượng đội"><input data-team-name data-team-index="${i}" value="${escapeHtml(t.name)}" placeholder="Tên đội ${i + 1}"><button type="button" class="text-link danger-text" data-team-remove="${i}" ${teams.length <= 2 ? 'disabled style="opacity:.35;cursor:default"' : ''}>✕</button></div>`).join('')}</div>
-    <div style="margin-top:10px"><button type="button" class="btn btn-secondary btn-small" id="addTeamBtn" ${teams.length >= 6 ? 'disabled' : ''}>＋ Thêm đội (tối đa 6)</button></div>
-    <div class="result-actions" style="justify-content:center;margin-top:18px"><button type="button" class="btn btn-secondary" data-play-close2>Đóng</button><button type="button" class="btn btn-primary" id="startTeamGameBtn">🏁 Bắt đầu thi đấu</button></div></div>`;
+  root.innerHTML = `<div class="game-stage"><div class="stage-kicker">CHIA ĐỘ CHO LỚP</div><p class="small text-[#aeb5ce]">Mỗi câu hỏi cộng điểm cho đội đang tới lượt. Giáo viên có thể luân phiên người trả lời — chọn lại đội trên thanh lượt trước khi học sinh trả lời.</p>
+    <div class="team-setup">${teams.map((t, i) => `<div class="team-setup-row"><input data-team-icon data-team-index="${i}" value="${escapeHtml(t.icon)}" class="w-[64px] text-center" title="Biểu tượng đội"><input data-team-name data-team-index="${i}" value="${escapeHtml(t.name)}" placeholder="Tên đội ${i + 1}"><button type="button" class="text-link danger-text" data-team-remove="${i}" ${teams.length <= 2 ? 'disabled opacity-[.35] cursor-default' : ''}>✕</button></div>`).join('')}</div>
+    <div class="mt-[10px]"><button type="button" class="btn btn-secondary btn-small" id="addTeamBtn" ${teams.length >= 6 ? 'disabled' : ''}>＋ Thêm đội (tối đa 6)</button></div>
+    <div class="result-actions mt-[18px]"><button type="button" class="btn btn-secondary" data-play-close2>Đóng</button><button type="button" class="btn btn-primary" id="startTeamGameBtn">🏁 Bắt đầu thi đấu</button></div></div>`;
   $$('[data-team-name]', root).forEach(el => el.addEventListener('input', () => { state.pendingTeams[Number(el.dataset.teamIndex)].name = el.value; }));
   $$('[data-team-icon]', root).forEach(el => el.addEventListener('input', () => { state.pendingTeams[Number(el.dataset.teamIndex)].icon = el.value; }));
   $$('[data-team-remove]', root).forEach(btn => btn.addEventListener('click', () => {
@@ -80,7 +89,7 @@ function startTeamGame() {
 function teamTurnBarHtml() {
   const tp = state.teamPlay;
   const team = tp.teams[tp.turn];
-  return `<div class="team-turn-bar"><span>👥 LƯỢT CỦA <strong>${team.icon} ${escapeHtml(team.name)}</strong> · 🏆 ${team.points} điểm</span>${tp.teams.length > 1 ? `<label class="small" style="color:#aeb5ce">Giao câu này cho <select id="teamTurnSelect">${tp.teams.map((t, i) => `<option value="${i}" ${i === tp.turn ? 'selected' : ''}>${t.icon} ${escapeHtml(t.name)}</option>`).join('')}</select></label>` : ''}</div>`;
+  return `<div class="team-turn-bar"><span>👥 LƯỢT CỦA <strong>${team.icon} ${escapeHtml(team.name)}</strong> · 🏆 ${team.points} điểm</span>${tp.teams.length > 1 ? `<label class="small text-[#aeb5ce]">Giao câu này cho <select id="teamTurnSelect">${tp.teams.map((t, i) => `<option value="${i}" ${i === tp.turn ? 'selected' : ''}>${t.icon} ${escapeHtml(t.name)}</option>`).join('')}</select></label>` : ''}</div>`;
 }
 function leaderboardHtml() {
   const tp = state.teamPlay;
@@ -91,7 +100,7 @@ function leaderboardHtml() {
 }
 function openPlayModal() {
   const root = $('#modalRoot');
-  root.innerHTML = `<div class="modal-backdrop"><div class="modal" style="width:min(980px,96vw);background:#11152b;border:1px solid #303651"><div class="modal-head" style="background:#11152b;border-color:#303651;color:#fff"><div><h2>${escapeHtml(state.currentGame.title)}</h2><div class="small" style="color:#aeb5ce;margin-top:4px">CHẾ ĐỘ TRÌNH CHIẾU · NGOẠI TUYẾN</div></div><button class="modal-close" data-play-close style="background:#292f49;color:#fff">✕</button></div><div class="modal-body" id="playBody" style="padding:18px"></div></div></div>`;
+  root.innerHTML = `<div class="modal-backdrop"><div class="modal w-[min(980px,96vw)] bg-[#11152b] border border-[#303651]" data-player-theme="${playerTheme()}"><div class="modal-head bg-[#11152b] border-[#303651] text-white"><div><h2>${escapeHtml(state.currentGame.title)}</h2><div class="small text-[#aeb5ce] mt-1">CHẾ ĐỘ TRÌNH CHIẾU · NGOẠI TUYẾN</div></div><button class="modal-close bg-[#292f49] text-white" data-play-close>✕</button></div><div class="modal-body p-[18px]" id="playBody"></div></div></div>`;
   $('[data-play-close]',root).addEventListener('click', () => root.innerHTML = '');
   renderQuestion();
 }
@@ -107,7 +116,8 @@ function renderQuestion() {
   const answerArea = textQ
     ? `<div class="text-answer-box"><input id="textAnswerInput" placeholder="${q.type==='fill-in-blank'?'Nhập từ hoặc cụm từ còn thiếu…':'Nhập câu trả lời của bạn…'}" autocomplete="off"><button class="btn btn-primary" id="textAnswerBtn">Trả lời</button></div>`
     : `<div class="answer-grid">${q.options.map((o,i)=>`<button class="answer-option" data-answer="${escapeHtml(o.id)}"><span class="letter">${String.fromCharCode(65+i)}</span><span>${escapeHtml(o.text)}</span></button>`).join('')}</div>`;
-  root.innerHTML = `<div class="game-stage"><div class="stage-top"><span>${escapeHtml(game.subject || 'TRÒ CHƠI HỌC TẬP')} · ${game.grade ? 'LỚP '+escapeHtml(game.grade) : 'MỌI LỚP'}</span><span>${game.template==='scenario'?'QUYẾT ĐỊNH':'CÂU'} ${state.gameAnswers.length+1} / ${game.questions.length} &nbsp; · &nbsp; 🏆 ${state.gameAnswers.reduce((s,a)=>s+a.points,0)} điểm</span></div><div class="stage-progress"><div style="width:${progress}%"></div></div>${state.teamPlay ? teamTurnBarHtml() : ''}<div class="stage-center"><div class="stage-kicker">${kicker}</div>${q.context?`<p class="scenario-context">${escapeHtml(q.context).replace(/\n/g,'<br>')}</p>`:''}<div class="stage-question">${escapeHtml(q.prompt).replace(/\n/g,'<br>')}</div>${answerArea}<div id="answerFeedback"></div><div class="stage-bottom"><span>${scoringTip}</span><button class="btn hidden" id="nextQuestionBtn">Tiếp tục →</button></div></div></div>`;
+  root.innerHTML = `<div class="game-stage"><div class="stage-top"><span>${escapeHtml(game.subject || 'TRÒ CHƠI HỌC TẬP')} · ${game.grade ? 'LỚP '+escapeHtml(game.grade) : 'MỌI LỚP'}</span><span>${game.template==='scenario'?'QUYẾT ĐỊNH':'CÂU'} ${state.gameAnswers.length+1} / ${game.questions.length} &nbsp; · &nbsp; 🏆 ${state.gameAnswers.reduce((s,a)=>s+a.points,0)} điểm</span></div><div class="stage-progress"><div data-progress="${progress}"></div></div>${state.teamPlay ? teamTurnBarHtml() : ''}<div class="stage-center"><div class="stage-kicker">${kicker}</div>${q.context?`<p class="scenario-context">${escapeHtml(q.context).replace(/\n/g,'<br>')}</p>`:''}<div class="stage-question">${escapeHtml(q.prompt).replace(/\n/g,'<br>')}</div>${answerArea}<div id="answerFeedback"></div><div class="stage-bottom"><span>${scoringTip}</span><button class="btn hidden" id="nextQuestionBtn">Tiếp tục →</button></div></div></div>`;
+  paintProgress(root);
   $$('.answer-option',root).forEach(btn => btn.addEventListener('click', () => chooseAnswer(q, btn.dataset.answer)));
   if (textQ) {
     const input = $('#textAnswerInput', root);
@@ -229,7 +239,7 @@ function openMatchingPlay() {
   const root = $('#modalRoot');
   const game = state.currentGame;
   const modeLabel = ({ columns: 'GHÉP HAI CỘT', memory: 'LẬT THẺ GHI NHỚ', categorize: 'PHÂN LOẠI KIẾN THỨC' })[game.matchingGame.mode] || 'GHÉP CẶP KIẾN THỨC';
-  root.innerHTML = `<div class="modal-backdrop"><div class="modal" style="width:min(980px,96vw);background:#11152b;border:1px solid #303651"><div class="modal-head" style="background:#11152b;border-color:#303651;color:#fff"><div><h2>${escapeHtml(game.title)}</h2><div class="small" style="color:#aeb5ce;margin-top:4px">${modeLabel} · NGOẠI TUYẾN</div></div><button class="modal-close" data-play-close style="background:#292f49;color:#fff">✕</button></div><div class="modal-body" id="playBody" style="padding:18px"></div></div></div>`;
+  root.innerHTML = `<div class="modal-backdrop"><div class="modal w-[min(980px,96vw)] bg-[#11152b] border border-[#303651]" data-player-theme="${playerTheme()}"><div class="modal-head bg-[#11152b] border-[#303651] text-white"><div><h2>${escapeHtml(game.title)}</h2><div class="small text-[#aeb5ce] mt-1">${modeLabel} · NGOẠI TUYẾN</div></div><button class="modal-close bg-[#292f49] text-white" data-play-close>✕</button></div><div class="modal-body p-[18px]" id="playBody"></div></div></div>`;
   $('[data-play-close]', root).addEventListener('click', () => root.innerHTML = '');
   resetMatchingPlay();
 }
@@ -242,7 +252,7 @@ function matchingHeader() {
   const game = state.currentGame, m = game.matchingGame, mp = state.matchingPlay;
   const elapsed = Math.max(0, Math.round((Date.now() - state.gameStart) / 1000));
   const progress = Math.round(mp.matched / m.pairs.length * 100);
-  return `<div class="stage-top"><span>${escapeHtml(game.subject || 'GHÉP CẶP KIẾN THỨC')} · ${game.grade ? 'LỚP ' + escapeHtml(game.grade) : 'MỌI LỚP'}</span><span id="matchingStats">ĐÃ GHÉP ${mp.matched}/${m.pairs.length} · SAI ${mp.wrong} · ${elapsed}s &nbsp; · &nbsp; ${m.practiceMode ? '📖 Luyện tập' : '🏆 Chinh phục'}</span></div><div class="stage-progress"><div style="width:${progress}%"></div></div>`;
+  return `<div class="stage-top"><span>${escapeHtml(game.subject || 'GHÉP CẶP KIẾN THỨC')} · ${game.grade ? 'LỚP ' + escapeHtml(game.grade) : 'MỌI LỚP'}</span><span id="matchingStats">ĐÃ GHÉP ${mp.matched}/${m.pairs.length} · SAI ${mp.wrong} · ${elapsed}s &nbsp; · &nbsp; ${m.practiceMode ? '📖 Luyện tập' : '🏆 Chinh phục'}</span></div><div class="stage-progress"><div data-progress="${progress}"></div></div>`;
 }
 function matchingFooter(m) {
   return `<div class="stage-bottom"><span>${m.practiceMode ? '📖 Luyện tập: không trừ điểm · ' : ''}${m.wrongPenalty > 0 ? `⚠️ Mỗi lần sai trừ ${m.wrongPenalty} điểm` : 'Sai không bị trừ điểm'}${m.completionBonus > 0 ? ` · Thưởng hoàn thành +${m.completionBonus}` : ''}${m.timeBonus > 0 && m.bonusUnderSeconds > 0 ? ` · nhanh dưới ${m.bonusUnderSeconds}s: +${m.timeBonus}` : ''}</span></div>`;
@@ -274,6 +284,7 @@ function renderMatchingBoard() {
 function renderColumnsBoard(root, m) {
   const rights = shuffled(m.pairs);
   root.innerHTML = `<div class="game-stage">${matchingHeader()}<div class="stage-center"><div class="stage-kicker">GHÉP HAI CỘT</div><p class="field-hint">Chọn một mục ở cột A, rồi chọn mục tương ứng ở cột B.</p><div class="matching-board"><div class="matching-col">${m.pairs.map(p => `<button type="button" class="match-card" data-match-side="left" data-pair="${escapeHtml(p.id)}">${escapeHtml(p.left)}</button>`).join('')}</div><div class="matching-col">${rights.map(p => `<button type="button" class="match-card" data-match-side="right" data-pair="${escapeHtml(p.id)}">${escapeHtml(p.right)}</button>`).join('')}</div></div><div id="matchFeedback"></div></div>${matchingFooter(m)}</div>`;
+  paintProgress(root);
   $$('.match-card', root).forEach(btn => btn.addEventListener('click', () => onColumnCardClick(btn)));
 }
 function onColumnCardClick(btn) {
@@ -316,6 +327,7 @@ function renderMemoryBoard(root, m) {
     { pair: p.id, text: p.right }
   ]));
   root.innerHTML = `<div class="game-stage">${matchingHeader()}<div class="stage-center"><div class="stage-kicker">LẬT THẺ GHI NHỚ</div><p class="field-hint">Lật từng thẻ để tìm hai nội dung tương ứng.</p><div class="memory-grid">${state.memoryCards.map((c, i) => `<button type="button" class="memory-card" data-memory="${i}" data-pair="${escapeHtml(c.pair)}"><span class="memory-face">?</span></button>`).join('')}</div><div id="matchFeedback"></div></div>${matchingFooter(m)}</div>`;
+  paintProgress(root);
   $$('.memory-card', root).forEach(btn => btn.addEventListener('click', () => onMemoryCardClick(btn)));
 }
 function onMemoryCardClick(btn) {
@@ -353,6 +365,7 @@ function renderCategorizeBoard(root, m) {
   const groups = [...new Set(m.pairs.map(p => p.left))];
   state.memoryCards = shuffled(m.pairs);
   root.innerHTML = `<div class="game-stage">${matchingHeader()}<div class="stage-center"><div class="stage-kicker">PHÂN LOẠI KIẾN THỨC</div><p class="field-hint">Chọn một thẻ nội dung, rồi chọn đúng nhóm.</p><div class="category-cards">${state.memoryCards.map((p, i) => `<button type="button" class="match-card" data-category-card="${i}" data-pair="${escapeHtml(p.id)}">${escapeHtml(p.right)}</button>`).join('')}</div><div class="category-groups">${groups.map(g => `<div class="group-box" data-group="${escapeHtml(g)}"><strong>${escapeHtml(g)}</strong><div class="group-slots"></div></div>`).join('')}</div><div id="matchFeedback"></div></div>${matchingFooter(m)}</div>`;
+  paintProgress(root);
   $$('[data-category-card]', root).forEach(btn => btn.addEventListener('click', () => {
     if (btn.classList.contains('matched') || state.matchingPlay.lock) return;
     $$('[data-category-card]').forEach(b => b.classList.remove('selected'));
@@ -406,7 +419,7 @@ async function renderMatchingResults() {
 function openTreasurePlay() {
   const root = $('#modalRoot');
   const game = state.currentGame;
-  root.innerHTML = `<div class="modal-backdrop"><div class="modal" style="width:min(980px,96vw);background:#11152b;border:1px solid #303651"><div class="modal-head" style="background:#11152b;border-color:#303651;color:#fff"><div><h2>${escapeHtml(game.title)}</h2><div class="small" style="color:#aeb5ce;margin-top:4px">HÀNH TRÌNH KHÁM PHÁ · NGOẠI TUYẾN</div></div><button class="modal-close" data-play-close style="background:#292f49;color:#fff">✕</button></div><div class="modal-body" id="playBody" style="padding:18px"></div></div></div>`;
+  root.innerHTML = `<div class="modal-backdrop"><div class="modal w-[min(980px,96vw)] bg-[#11152b] border border-[#303651]" data-player-theme="${playerTheme()}"><div class="modal-head bg-[#11152b] border-[#303651] text-white"><div><h2>${escapeHtml(game.title)}</h2><div class="small text-[#aeb5ce] mt-1">HÀNH TRÌNH KHÁM PHÁ · NGOẠI TUYẾN</div></div><button class="modal-close bg-[#292f49] text-white" data-play-close>✕</button></div><div class="modal-body p-[18px]" id="playBody"></div></div></div>`;
   $('[data-play-close]', root).addEventListener('click', () => root.innerHTML = '');
   const hunt = game.treasureHunt;
   state.treasurePlay = { stageId: hunt.stages[0].id, earned: 0, results: [], itemsFound: {}, attemptsLeft: 0, steps: 0, answered: false, done: false };
@@ -428,20 +441,21 @@ function renderTreasureStage() {
   const itemCount = Object.keys(tp.itemsFound).length;
   root.innerHTML = `<div class="game-stage">
     <div class="stage-top"><span>HÀNH TRÌNH · ${escapeHtml(hunt.character || 'Nhà thám hiểm')}</span><span>CHẶNG ${stageNo}/${hunt.stages.length} · 🏆 ${tp.earned} điểm${itemCount ? ` · 🎁 ${itemCount} vật phẩm` : ''}</span></div>
-    <div class="stage-progress"><div style="width:${Math.round((stageNo - 1) / hunt.stages.length * 100)}%"></div></div>
+    <div class="stage-progress"><div data-progress="${Math.round((stageNo - 1) / hunt.stages.length * 100)}"></div></div>
     <div class="stage-center">
       <div class="stage-kicker">${escapeHtml(stage.name || 'CHẶNG')}</div>
       ${tp.results.length === 0 && hunt.intro ? `<p class="scenario-context">${escapeHtml(hunt.intro)}</p>` : ''}
       ${stage.story ? `<p class="scenario-context">${escapeHtml(stage.story)}</p>` : ''}
-      ${stage.taskDescription ? `<p class="small" style="color:#aeb5ce">${escapeHtml(stage.taskDescription)}</p>` : ''}
+      ${stage.taskDescription ? `<p class="small text-[#aeb5ce]">${escapeHtml(stage.taskDescription)}</p>` : ''}
       <div class="stage-question">${escapeHtml(stage.question.prompt).replace(/\n/g, '<br>')}</div>
       <div class="answer-grid">${stage.question.options.map((o, i) => `<button class="answer-option" data-answer="${escapeHtml(o.id)}"><span class="letter">${String.fromCharCode(65 + i)}</span><span>${escapeHtml(o.text)}</span></button>`).join('')}</div>
-      <div id="treasureExtra">${stage.hasHiddenItem && !tp.itemsFound[stage.id] ? `<button type="button" class="btn btn-secondary btn-small" id="findItemBtn" style="margin-top:10px">🎁 Tìm vật phẩm ẩn (+${hunt.hiddenItemBonus || 50})</button> ` : ''}${stage.question.hint ? `<button type="button" class="btn btn-secondary btn-small" id="treasureHintBtn" style="margin-top:10px">💡 Dùng gợi ý</button>` : ''}</div>
+      <div id="treasureExtra">${stage.hasHiddenItem && !tp.itemsFound[stage.id] ? `<button type="button" class="btn btn-secondary btn-small mt-[10px]" id="findItemBtn">🎁 Tìm vật phẩm ẩn (+${hunt.hiddenItemBonus || 50})</button> ` : ''}${stage.question.hint ? `<button type="button" class="btn btn-secondary btn-small mt-[10px]" id="treasureHintBtn">💡 Dùng gợi ý</button>` : ''}</div>
       <div id="answerFeedback"></div>
       <div id="treasureActions"></div>
     </div>
     <div class="stage-bottom"><span id="treasureAttemptsHint">${stage.attempts > 0 ? (tp.attemptsLeft > 0 ? `Còn ${tp.attemptsLeft} lượt thử` : 'Hết lượt thử') : 'Không giới hạn lượt thử'} · sai không bị trừ điểm</span></div>
   </div>`;
+  paintProgress(root);
   $$('.answer-option', root).forEach(btn => btn.addEventListener('click', () => chooseTreasureAnswer(btn.dataset.answer)));
   const itemBtn = $('#findItemBtn', root);
   if (itemBtn) itemBtn.onclick = () => {
@@ -552,7 +566,7 @@ const RACE_CELL_ICON = { boost: '⚡', penalty: '🪨', lucky: '🎁', challenge
 function openRacePlay() {
   const root = $('#modalRoot');
   const game = state.currentGame;
-  root.innerHTML = `<div class="modal-backdrop"><div class="modal" style="width:min(1040px,96vw);background:#11152b;border:1px solid #303651"><div class="modal-head" style="background:#11152b;border-color:#303651;color:#fff"><div><h2>${escapeHtml(game.title)}</h2><div class="small" style="color:#aeb5ce;margin-top:4px">ĐƯỜNG ĐUA TRI THỨC · GIẢNG VIÊN ĐIỀU KHIỂN MÀN CHUNG</div></div><button class="modal-close" data-play-close style="background:#292f49;color:#fff">✕</button></div><div class="modal-body" id="playBody" style="padding:18px"></div></div></div>`;
+  root.innerHTML = `<div class="modal-backdrop"><div class="modal w-[min(1040px,96vw)] bg-[#11152b] border border-[#303651]" data-player-theme="${playerTheme()}"><div class="modal-head bg-[#11152b] border-[#303651] text-white"><div><h2>${escapeHtml(game.title)}</h2><div class="small text-[#aeb5ce] mt-1">ĐƯỜNG ĐUA TRI THỨC · GIẢNG VIÊN ĐIỀU KHIỂN MÀN CHUNG</div></div><button class="modal-close bg-[#292f49] text-white" data-play-close>✕</button></div><div class="modal-body p-[18px]" id="playBody"></div></div></div>`;
   $('[data-play-close]', root).addEventListener('click', () => root.innerHTML = '');
   const race = game.race;
   state.racePlay = {
@@ -583,7 +597,7 @@ function renderRaceBoard() {
     }).join('')}</div>
     <div class="race-scoreboard">${standings.map(t => `<div class="race-team-row scoreboard ${t.id === team.id ? 'active' : ''}"><span>${t.icon} <strong>${escapeHtml(t.name)}</strong></span><span>Ô ${t.progress}/${race.trackLength}</span><span>🏆 ${t.points} điểm</span></div>`).join('')}</div>
     <div id="raceTurnPanel">${raceTurnPanelHtml()}</div>
-    <div id="answerFeedback">${rp.lastEvent ? `<span class="small" style="color:#aeb5ce">${escapeHtml(rp.lastEvent)}</span>` : ''}</div>
+    <div id="answerFeedback">${rp.lastEvent ? `<span class="small text-[#aeb5ce]">${escapeHtml(rp.lastEvent)}</span>` : ''}</div>
   </div>`;
   const drawBtn = $('#drawQuestionBtn', root);
   if (drawBtn) drawBtn.onclick = drawRaceQuestion;
@@ -594,13 +608,13 @@ function renderRaceBoard() {
 function raceTurnPanelHtml() {
   const rp = state.racePlay, team = rp.teams[rp.turn];
   if (!rp.currentQ) {
-    return `<div class="race-turn"><p class="small" style="color:#aeb5ce">Lượt của <strong>${team.icon} ${escapeHtml(team.name)}</strong>. Giáo viên bốc câu hỏi, đọc cho đội, rồi chọn đáp án mà đội trả lời.</p><button type="button" class="btn btn-primary" id="drawQuestionBtn">🃏 Bốc câu hỏi</button></div>`;
+    return `<div class="race-turn"><p class="small text-[#aeb5ce]">Lượt của <strong>${team.icon} ${escapeHtml(team.name)}</strong>. Giáo viên bốc câu hỏi, đọc cho đội, rồi chọn đáp án mà đội trả lời.</p><button type="button" class="btn btn-primary" id="drawQuestionBtn">🃏 Bốc câu hỏi</button></div>`;
   }
   const q = rp.currentQ;
   const diff = q.difficulty || 'trung bình';
   return `<div class="race-turn"><div class="stage-kicker">CÂU HỎI · ĐỘ KHÓ ${escapeHtml(diff.toUpperCase())}${raceStepLabel(diff)}</div><div class="stage-question">${escapeHtml(q.prompt).replace(/\n/g, '<br>')}</div>
     <div class="answer-grid">${q.options.map((o, i) => `<button class="answer-option" data-race-answer="${escapeHtml(o.id)}"><span class="letter">${String.fromCharCode(65 + i)}</span><span>${escapeHtml(o.text)}</span></button>`).join('')}</div>
-    <div style="margin-top:10px"><button type="button" class="btn btn-secondary btn-small" id="raceNoAnswerBtn">Đội không trả lời được</button></div></div>`;
+    <div class="mt-[10px]"><button type="button" class="btn btn-secondary btn-small" id="raceNoAnswerBtn">Đội không trả lời được</button></div></div>`;
 }
 function raceStepLabel(diff) {
   const race = state.currentGame.race;
@@ -664,7 +678,7 @@ function renderRaceResults() {
   const percent = Math.round(winner.progress / race.trackLength * 100);
   state.lastSummary = { points: winner.points, max: maxPoints, percent, correct: 0, total: 0, winner: winner.name };
   $('#playBody').innerHTML = `<div class="game-stage"><div class="result-screen"><div class="result-medal">${rp.winnerId ? '🏁' : '🏅'}</div><div class="stage-kicker">KẾT QUẢ ĐƯỜNG ĐUA</div><h2>${tied ? 'Về đích đồng hạng!' : `${winner.icon} ${escapeHtml(winner.name)} chiến thắng!`}</h2><p>${escapeHtml(game.title)}</p>
-    <div class="race-scoreboard" style="max-width:460px;margin:14px auto">${byProgress.map((t, i) => `<div class="race-team-row scoreboard"><span>${i + 1}. ${t.icon} <strong>${escapeHtml(t.name)}</strong></span><span>Ô ${t.progress}/${race.trackLength}</span><span>🏆 ${t.points} điểm</span></div>`).join('')}</div>
+    <div class="race-scoreboard max-w-[460px] my-[14px] mx-auto">${byProgress.map((t, i) => `<div class="race-team-row scoreboard"><span>${i + 1}. ${t.icon} <strong>${escapeHtml(t.name)}</strong></span><span>Ô ${t.progress}/${race.trackLength}</span><span>🏆 ${t.points} điểm</span></div>`).join('')}</div>
     <div class="result-actions"><button class="btn btn-secondary" id="closeResultBtn">Đóng</button><button class="btn btn-secondary" id="replayBtn">↻ Đua lại</button><button class="btn btn-primary" id="saveResultBtn">Lưu kết quả</button></div></div></div>`;
   $('#closeResultBtn').onclick = () => $('#modalRoot').innerHTML = '';
   $('#replayBtn').onclick = () => openRacePlay();

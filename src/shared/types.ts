@@ -193,7 +193,7 @@ export interface TeachingStyle {
 
 export interface AppSettings {
   ai: AiSettings;
-  preferences: { sound: boolean; largeText: boolean; teachingStyle?: TeachingStyle };
+  preferences: { sound: boolean; largeText: boolean; teachingStyle?: TeachingStyle; audience?: 'child' | 'teen' | 'adult' };
 }
 
 export interface GenerateGameRequest {

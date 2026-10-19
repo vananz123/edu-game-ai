@@ -1,6 +1,0 @@
-@import url('data:text/css,');
-:root{--bg:#f4f6fb;--panel:#fff;--text:#172033;--muted:#788196;--line:#e7eaf2;--purple:#6258e8;--purple2:#eeeefe;--green:#159b72;--orange:#f29d38;--red:#e65b68;--shadow:0 10px 35px rgba(28,37,75,.06)}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);font-family:Inter,"Segoe UI",Arial,sans-serif;color:var(--text);font-size:14px}
-button,input,select,textarea{font:inherit}
-button{cursor:pointer}

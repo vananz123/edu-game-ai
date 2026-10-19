@@ -6,6 +6,7 @@ async function saveSettings() {
       ...(state.settings.preferences || {}),
       largeText: $('#settingLargeText').checked,
       sound: $('#settingSound').checked,
+      audience: $('#settingAudience')?.value || 'teen',
       teachingStyle: {
         tone: $('#settingStyleTone')?.value || 'thân thiện',
         humor: $('#settingStyleHumor')?.value || 'vừa phải',

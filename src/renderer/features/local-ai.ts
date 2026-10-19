@@ -8,10 +8,10 @@ function localModalCard(model, machine) {
     : 'Chưa tải';
   return `<div class="editor-question" data-local-model="${escapeHtml(model.id)}">`
     + `<div class="editor-question-head"><strong>${escapeHtml(model.friendlyName || model.displayName)}</strong><span class="tag">${escapeHtml(status)}${model.id === machine.recommendedModelId ? ' · Đề xuất' : ''}</span></div>`
-    + `<p class="small muted" style="margin:0 0 8px">${escapeHtml(model.tagline || '')}</p>`
-    + `<p class="small muted" style="margin:0 0 8px">Dung lượng ${formatBytes(model.sizeBytes)} · RAM tối thiểu ${formatBytes(model.minimumRamBytes)}, khuyến nghị ${formatBytes(model.recommendedRamBytes)} · ${escapeHtml(model.recommendationReason || '')}</p>`
-    + `<p class="small muted" style="margin:0 0 8px">Kỹ thuật: ${escapeHtml(model.displayName)} · Giấy phép ${escapeHtml(model.licenseName)}</p>`
-    + `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="btn btn-secondary btn-small" data-local-download="${escapeHtml(model.id)}" ${machine.runtimeSupported === false ? 'disabled' : ''}>${model.installed ? 'Xác minh lại' : 'Tải model này'}</button>`
+    + `<p class="small muted mb-[8px] mt-0">${escapeHtml(model.tagline || '')}</p>`
+    + `<p class="small muted mb-[8px] mt-0">Dung lượng ${formatBytes(model.sizeBytes)} · RAM tối thiểu ${formatBytes(model.minimumRamBytes)}, khuyến nghị ${formatBytes(model.recommendedRamBytes)} · ${escapeHtml(model.recommendationReason || '')}</p>`
+    + `<p class="small muted mb-[8px] mt-0">Kỹ thuật: ${escapeHtml(model.displayName)} · Giấy phép ${escapeHtml(model.licenseName)}</p>`
+    + `<div class="flex items-center gap-[8px] flex-wrap"><button class="btn btn-secondary btn-small" data-local-download="${escapeHtml(model.id)}" ${machine.runtimeSupported === false ? 'disabled' : ''}>${model.installed ? 'Xác minh lại' : 'Tải model này'}</button>`
     + `<span class="field-hint" data-local-progress="${escapeHtml(model.id)}">${model.installed ? 'Đã có trên máy; nhấn Tải để xác minh lại.' : 'Chưa có trên máy.'}</span></div></div>`;
 }
 function localRuntimeStateLabel(machine) {
@@ -29,7 +29,7 @@ function openLocalAiModal() {
   const running = machine.runtimeState === 'READY';
   const starting = machine.runtimeState === 'STARTING';
   const cards = models.map(model => localModalCard(model, machine)).join('');
-  $('#modalRoot').innerHTML = `<div class="modal-backdrop"><div class="modal"><div class="modal-head"><div><h2>Cửa sổ AI local · llama.cpp</h2><div class="small muted" style="margin-top:5px">Chọn bản Nhanh / Linh hoạt / Chuyên sâu, tải đầy đủ rồi nhấn “Bắt đầu chạy”. Runtime chỉ chạy khi bạn yêu cầu.</div></div><button class="modal-close" data-close>✕</button></div>`
+  $('#modalRoot').innerHTML = `<div class="modal-backdrop"><div class="modal"><div class="modal-head"><div><h2>Cửa sổ AI local · llama.cpp</h2><div class="small muted mt-[5px]">Chọn bản Nhanh / Linh hoạt / Chuyên sâu, tải đầy đủ rồi nhấn “Bắt đầu chạy”. Runtime chỉ chạy khi bạn yêu cầu.</div></div><button class="modal-close" data-close>✕</button></div>`
     + `<div class="modal-body">`
     + `${machine.runtimeSupported === false ? '<div class="info-box"><strong>Chưa hỗ trợ cấu hình này</strong><p>Runtime AI local tích hợp hiện chỉ hỗ trợ Windows x64.</p></div>' : ''}`
     + `<div class="field"><label>MODEL SẼ CHẠY</label><select id="localModalSelect">${models.map(model => `<option value="${escapeHtml(model.id)}" ${model.id === selectedId ? 'selected' : ''}>${escapeHtml(model.friendlyName || model.displayName)}${model.installed ? ' · Đã tải' : ''}</option>`).join('')}</select><div class="field-hint">Model được chọn ở đây sẽ dùng chung cho màn hình Tạo trò chơi.</div></div>`

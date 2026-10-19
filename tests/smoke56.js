@@ -106,9 +106,9 @@ async function findTarget() {
     push('editor modal opened', !!document.querySelector('#modalRoot .modal'), '');
     const hunt = document.getElementById('treasureEditor');
     push('treasure editor panel exists', !!hunt, '');
-    push('treasure panel visible', hunt && hunt.style.display !== 'none', hunt && hunt.style.display);
-    push('race panel hidden', document.getElementById('raceEditor')?.style.display === 'none', '');
-    push('matching panel hidden', document.getElementById('matchingEditor')?.style.display === 'none', '');
+    push('treasure panel visible', hunt && !hunt.classList.contains('hidden'), hunt && hunt.className);
+    push('race panel hidden', document.getElementById('raceEditor')?.classList.contains('hidden'), '');
+    push('matching panel hidden', document.getElementById('matchingEditor')?.classList.contains('hidden'), '');
     const stageCount = document.querySelectorAll('#treasureStages .treasure-stage-card').length;
     push('sample stages >= 2', stageCount >= 2, stageCount);
     const jb = document.getElementById('treasureJourneyBonus');
@@ -214,8 +214,8 @@ async function findTarget() {
     document.getElementById('previewManualBtn').click();
     await new Promise(r => setTimeout(r, 300));
     const race = document.getElementById('raceEditor');
-    push('race panel exists and visible', !!race && race.style.display !== 'none', race && race.style.display);
-    push('treasure panel hidden', document.getElementById('treasureEditor')?.style.display === 'none', '');
+    push('race panel exists and visible', !!race && !race.classList.contains('hidden'), race && race.className);
+    push('treasure panel hidden', document.getElementById('treasureEditor')?.classList.contains('hidden'), '');
     push('team rows >= 2', document.querySelectorAll('#raceTeams .race-team-row').length >= 2, document.querySelectorAll('#raceTeams .race-team-row').length);
     const tl = document.getElementById('raceTrackLength');
     tl.value = '3'; tl.dispatchEvent(new Event('change', { bubbles: true }));
