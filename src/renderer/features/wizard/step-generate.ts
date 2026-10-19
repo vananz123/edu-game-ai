@@ -58,6 +58,34 @@ function wizardSummaryGrid(rows) {
   return `<div class="grid gap-[6px] bg-[#f8f9fc] border border-line rounded-[10px] p-[14px]">${rows.map(([label, value]) => `<div class="flex justify-between gap-[12px] text-[12px]"><span class="text-[#788196]">${escapeHtml(label)}</span><strong class="text-right">${escapeHtml(String(value))}</strong></div>`).join('')}</div>`;
 }
 
+/**
+ * O2: advisory content-quality panel. Pure data from the main process (no model
+ * call). Errors are surfaced but do not block the editor: structural validity is
+ * already enforced by the adapter + legacy validators, and the teacher must stay
+ * able to fix content by hand (DECISIONS #21).
+ */
+function wizardQualityPanel(report) {
+  if (!report) return '';
+  const issues = report.issues || [];
+  if (!issues.length) {
+    return `<div class="field-hint" data-wizard-quality="ok">✓ Đã kiểm tra chất lượng: không thấy câu trùng, đáp án thiếu hay liên kết hỏng.</div>`;
+  }
+  const errors = issues.filter(issue => issue.severity === 'error');
+  const warnings = issues.filter(issue => issue.severity === 'warning');
+  const list = (items, color) => `<ul class="list-disc pl-[18px] text-[12px] space-y-[3px]">${items.slice(0, 6).map(issue => `<li class="${color}">${escapeHtml(issue.message)}</li>`).join('')}${items.length > 6 ? `<li class="text-[#788196]">… và ${items.length - 6} mục khác</li>` : ''}</ul>`;
+  return `<div class="field mt-[10px]" data-wizard-quality="${errors.length ? 'errors' : 'warnings'}">
+    <div class="flex items-center gap-[8px] mb-[6px] flex-wrap">
+      <strong class="text-[12px]">Kiểm tra chất lượng nội dung</strong>
+      <span class="tag">${errors.length} lỗi · ${warnings.length} cảnh báo</span>
+    </div>
+    ${errors.length ? list(errors, 'text-[#b3261e]') : ''}
+    ${warnings.length ? `<div class="${errors.length ? 'mt-[4px]' : ''}">${list(warnings, 'text-[#8a6d00]')}</div>` : ''}
+    <div class="field-hint">${errors.length
+      ? 'Những lỗi này có thể làm trò chơi chấm sai hoặc chạy sai. Bạn vẫn mở được trình chỉnh sửa để sửa tay, hoặc tạo lại nội dung.'
+      : 'Đây là gợi ý để nội dung chặt chẽ hơn — không chặn việc lưu hay chơi thử.'}</div>
+  </div>`;
+}
+
 function renderWizardGenerate() {
   const s = wizardState;
   const config = s.config;
@@ -67,6 +95,7 @@ function renderWizardGenerate() {
     ${hasContent
       ? `<div class="panel-sub">AI local đã soạn bản nháp từ giáo án và đã được kiểm tra cấu trúc. Hãy mở trình chỉnh sửa để duyệt, sửa lại rồi lưu vào thư viện để chơi thử.</div>
         ${wizardSummaryGrid(wizardGeneratedSummaryRows(s.gameSnapshot))}
+        ${wizardQualityPanel(s.quality)}
         <div class="publish-actions">
           <button class="btn btn-primary" data-wizard-action="open-editor"${s.busy ? ' disabled' : ''}>✎ Mở trình chỉnh sửa</button>
           <button class="btn btn-secondary" data-wizard-action="regenerate"${s.busy ? ' disabled' : ''}>🔄 Tạo lại nội dung</button>
@@ -117,6 +146,7 @@ async function wizardGenerateRun() {
     wizardState.createdAt = result.project.createdAt || wizardState.createdAt;
     wizardState.draft = result.project.draft || null;
     wizardState.gameSnapshot = result.game;
+    wizardState.quality = result.quality || null;
     wizardState.gameId = result.game.id;
     wizardState.step = 'generate';
     await wizardRefreshProjects();

@@ -105,6 +105,15 @@ const EXPECTED = {
         info.storedGameId = result.project.gameId;
         info.persistedSnapshot = !!(await window.eduGame.getProject(projectId)).gameSnapshot;
 
+        // O2 — the advisory quality report comes back with the generation.
+        const quality = result.quality;
+        info.qualityPresent = !!quality;
+        info.qualityErrors = quality ? quality.errors : -1;
+        info.qualityWarnings = quality ? quality.warnings : -1;
+        info.qualityFound = quality ? quality.counts.found : -1;
+        info.qualityRequested = quality ? quality.counts.requested : -1;
+        info.qualityCanPublish = quality ? quality.canPublish : null;
+
         // Type-specific shape checks.
         if (type === 'arena' || type === 'scenario') {
           const questions = game.questions || [];
@@ -185,6 +194,9 @@ const EXPECTED = {
     push(`${type}: content adapted (n>=2)`, info.contentCount >= 2, 'n=' + info.contentCount);
     push(`${type}: adapted data is coherent`, info.optionsOk === true && info.correctOk === true);
     push(`${type}: project stored at edit/ready with snapshot`, info.storedStep === 'edit' && info.storedStatus === 'ready' && info.storedGameId === info.gameId && info.persistedSnapshot === true, info.storedStep + '/' + info.storedStatus);
+    push(`${type}: quality report returned`, info.qualityPresent === true);
+    push(`${type}: fixture content has no hard quality errors`, info.qualityErrors === 0 && info.qualityCanPublish === true, 'errors=' + info.qualityErrors + ' warnings=' + info.qualityWarnings);
+    push(`${type}: quality counts match the generated draft`, info.qualityFound >= 2 && info.qualityFound === info.contentCount, info.qualityFound + '/' + info.contentCount + ' req=' + info.qualityRequested);
     push(`${type}: editor opened`, info.editorOpened === true);
     push(`${type}: editor surface matches the type`, info.panelVisible === true && (EXPECTED[type].panel ? info.panelExists === true : info.questionCards === info.contentCount), EXPECTED[type].panel ? 'panel=' + info.panelExists : 'cards=' + info.questionCards + '/' + info.contentCount);
     push(`${type}: game round-trips through the library`, info.inLibrary === true);

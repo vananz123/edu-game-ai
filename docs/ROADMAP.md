@@ -121,7 +121,7 @@ Owner spec: `docs/update-AI-local.txt`. Full audit, target flow, modules, storag
 
 - [ ] **O0** Audit + phased plan approved by owner (plan §13) — **no code before approval**.
 - [x] **O1** Genre recommendation in TypeScript (`game-type-rules` + `game-recommender`); `lesson:recommend` keeps its shape but makes **0 Qwen calls**. Verified 2026-10-20: 18 test suites, `smoke64` 39/39, `smoke65 output` 18/18 (rewritten to test the AI error at generate), `smoke56/62/63/66/67` green, no model running.
-- [ ] **O2** Quality validators (`lesson-quality`): duplicates, counts, distractors, objective coverage — hard errors vs teacher-facing warnings.
+- [x] **O2** Quality validators (`lesson-quality`): duplicates, counts, distractors, objective coverage — hard errors vs teacher-facing warnings. Verified 2026-10-20: 19 test suites, `smoke66 fixture` 29/29, `smoke67` 67/67 (3 checks per type), `smoke64/65/56/62/63` green, all 5 happy fixtures clean, no model running. Advisory only (DECISIONS #21).
 - [ ] **O3** Lesson chunking + retrieval plumbing (lexical pseudo-embedder first), generation prompt uses retrieved chunks instead of 6k raw text.
 - [ ] **O4** Real MiniLM embeddings (separate llama-server with `--embedding`), verified on a Vietnamese lesson corpus; embedding cache.
 - [ ] **O5** Cache keys (analysis/generation), configurable batching, per-item regeneration (`lesson:regenerate-item` + editor button).

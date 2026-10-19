@@ -2,7 +2,7 @@
 
 **Ngày lập:** 2026-10-19
 **Phạm vi:** bổ sung luồng tạo trò chơi từ giáo án bằng AI local, không phá vỡ gameplay, `.egame` hay dữ liệu đang có.
-**Trạng thái:** P0–P6 đã code xong (2026-10-19); P6 **chưa đạt cổng e2e với model thật** (xem §8 P6) nên còn P7. Từ 2026-10-20 có **spec tối ưu mới** (`docs/update-AI-local.txt`) → kế hoạch ở §13, trong đó **O1 đã xong** (chọn thể loại bằng TypeScript, 0 lượt Qwen); O2–O7 tiếp theo. Số liệu kiểm chứng nằm trong `docs/STATUS.md`.
+**Trạng thái:** P0-P6 đã code xong (2026-10-19); P6 **chưa đạt cổng e2e với model thật** (xem §8 P6) nên còn P7. Từ 2026-10-20 có **spec tối ưu mới** (`docs/update-AI-local.txt`) → kế hoạch ở §13, trong đó **O0-O2 đã xong** (O1: chọn thể loại bằng TypeScript, 0 lượt Qwen; O2: kiểm tra chất lượng nội dung thuần TypeScript, tư vấn); O3-O7 tiếp theo. Số liệu kiểm chứng nằm trong `docs/STATUS.md`.
 
 ---
 
@@ -581,7 +581,7 @@ CREATE TABLE IF NOT EXISTS game_generation_cache (
 
 - **O0 — Audit + kế hoạch (tài liệu này).** Cổng: chủ dự án duyệt; **không sửa code** trước khi duyệt.
 - **O1 — Đề xuất thể loại bằng TypeScript.** `game-type-rules` + `game-recommender`; `lesson:recommend` giữ nguyên shape nhưng **không gọi model**; thêm `reason`/`warnings`. Test quy tắc cho 5 thể loại + dữ liệu thiếu. **Cổng:** *số lượt Qwen khi chọn thể loại = 0*; `smoke64` vẫn xanh. → **Xong 2026-10-20:** 0 lượt Qwen (hàm đồng bộ, không client), `tests/game-recommender.test.ts`, `smoke64` **39/39** + `smoke65 output` **18/18** (viết lại: lỗi AI kiểm ở bước generate), `smoke66 fixture` 26/26, `smoke67` 52/52, `smoke56/62/63` xanh, `npm test` 18 suites. Thêm hàng "Hoặc chọn thể loại khác" để giáo viên luôn chọn được cả 5 thể loại.
-- **O2 — Validator chất lượng + trùng lặp.** `lesson-quality` (lỗi cứng vs cảnh báo), hiển thị ở bước xem trước. **Cổng:** unit test; không có false-positive chặn giáo viên.
+- **O2 — Validator chất lượng + trùng lặp.** `lesson-quality` (lỗi cứng vs cảnh báo), hiển thị ở bước xem trước. **Cổng:** unit test; không có false-positive chặn giáo viên. → **Xong 2026-10-20:** `checkDraftQuality` cho cả 5 thể loại (trùng/gần trùng câu, lựa chọn trùng, thiếu đáp án, nhiễu chung chung, tình huống không có phương án tốt nhất, cặp trùng, chuỗi chặng hỏng/vòng lặp, ô đua ngoài đường, bao phủ mục tiêu), trả kèm `lesson:generate` + IPC `lesson:quality` khi mở lại draft (0 lượt Qwen). Wizard hiện bảng lỗi/cảnh báo nhưng **không chặn** editor (DECISIONS #21) nên không thể chặn nhầm giáo viên. `tests/lesson-quality.test.ts`, `smoke66 fixture` 29/29, `smoke67` 67/67, `npm test` 19 suites; 5 fixture happy 0 lỗi/0 cảnh báo.
 - **O3 — Chunk + truy xuất (chưa cần model mới).** `lesson-chunker`, `lesson-store` chunk, `lesson-retrieval` với embedder **giả lập từ vựng** để kiểm tra đường ống; prompt generate chuyển sang dùng đoạn. **Cổng:** đường ống chạy end-to-end với fixture; `AI_TRUNCATED` giảm nhờ prompt ngắn hơn (đo).
 - **O4 — MiniLM thật.** `embedding-catalog` + `embedding-manager`; cài/verify SHA-256; đo chất lượng truy xuất trên bộ giáo án tiếng Việt; cache embedding. **Cổng:** retrieval đúng chủ đề ≥ mức đặt ra trên bộ thử; RAM đỉnh trong ngân sách 16 GB.
 - **O5 — Cache + lô + tạo lại từng câu.** Cache analysis/generation theo `cache_key`; batching cấu hình được; IPC `lesson:regenerate-item` + nút trong editor. **Cổng:** tạo game thứ hai từ cùng giáo án **không** phân tích lại; tạo lại 1 câu không đổi các câu khác.

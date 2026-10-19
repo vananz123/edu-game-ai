@@ -308,7 +308,11 @@ export interface EduGameBridge {
     project: GameProject;
     game: import('./types').EducationalGame;
     mode: 'fast' | 'deep';
+    /** Deterministic content-quality findings (O2); advisory, no model call. */
+    quality: import('../services/lesson-quality').QualityReport;
   }>;
+  /** Recomputes the advisory quality report for a stored draft (no model call). */
+  checkLessonQuality(payload: { projectId: string }): Promise<import('../services/lesson-quality').QualityReport | null>;
   onLocalAiProgress(callback: (progress: import('../ai-core/contracts').LocalAiDownloadProgress) => void): () => void;
   generateGame(payload: GenerateGameRequest): Promise<GenerateGameResponse>;
 }

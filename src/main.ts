@@ -35,6 +35,8 @@ const {
 const { analyzeLesson, generateGameDraft } = require('./services/lesson-workflow');
 // O1: genre suggestions are rule-based, so this step never calls the model.
 const { recommendGamesForAnalysis } = require('./services/game-recommender');
+// O2: deterministic content-quality checks (no model call).
+const { checkDraftQuality } = require('./services/lesson-quality');
 const {
   createProjectFromAnalysis,
   applyAnalysis,
@@ -725,7 +727,20 @@ function registerIpc() {
       throw new Error(`[GENERATION_INVALID] ${error && error.message ? error.message : 'Nội dung AI tạo ra chưa hợp lệ.'}`);
     }
     const saved = store.saveProject(applyDraft(project, { draft, game, now: new Date().toISOString() }));
-    return { project: saved, game, mode };
+    // O2: advisory content-quality report (duplicates, weak distractors, broken
+    // chains, coverage). Pure TypeScript, so it costs nothing here.
+    const quality = checkDraftQuality({ draft, config: project.config, analysis });
+    return { project: saved, game, mode, quality };
+  });
+  // O2: recompute the advisory report when a draft is reopened (no model call).
+  ipcMain.handle('lesson:quality', async (_e, payload) => {
+    const projectId = String(payload?.projectId || '');
+    if (!projectId) return null;
+    const store = requireLessonStore();
+    const project = store.getProject(projectId);
+    if (!project || !project.draft) return null;
+    const analysis = project.analysisId ? store.getAnalysis(project.analysisId) : null;
+    return checkDraftQuality({ draft: project.draft, config: project.config, analysis });
   });
   ipcMain.handle('files:import-document', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {

@@ -157,6 +157,14 @@ async function withTimeout(promise, ms, label) {
     out.questionCount = game ? (game.questions || []).length : 0;
     out.stepAfterGenerate = wizardState.step;
 
+    // T4b — O2: advisory quality report returned with the draft + rendered panel
+    out.qualityPresent = !!wizardState.quality;
+    out.qualityErrors = wizardState.quality ? wizardState.quality.errors : -1;
+    out.qualityWarnings = wizardState.quality ? wizardState.quality.warnings : -1;
+    const qualityPanel = document.querySelector('[data-wizard-quality]');
+    out.qualityPanel = qualityPanel ? qualityPanel.getAttribute('data-wizard-quality') : 'missing';
+    out.qualityPanelText = qualityPanel ? String(qualityPanel.textContent || '').trim().length : 0;
+
     // T5 — adapter coherence (type-aware: not every type uses the questions list)
     setPhase('check adapter output');
     if (game) {
@@ -309,6 +317,9 @@ async function withTimeout(promise, ms, label) {
   push('T4 real model produced content', run.contentCount >= (run.configType === 'race' ? 1 : 2), 'n=' + run.contentCount);
   if (mode === 'fixture') push('T4 fixture produced exactly 3 questions', run.template !== 'quiz' || run.contentCount === 3, 'n=' + run.contentCount);
   push('T5 adapted content is coherent', run.coherent === true, 'ids=' + run.idsUnique + ' answers=' + run.correctInsideOptions + ' prompts=' + run.allPrompts);
+  push('T4b quality report returned with the draft', run.qualityPresent === true, 'errors=' + run.qualityErrors + ' warnings=' + run.qualityWarnings);
+  push('T4b quality panel rendered in the wizard', ['ok', 'errors', 'warnings'].includes(run.qualityPanel) && run.qualityPanelText > 0, run.qualityPanel);
+  if (mode === 'fixture') push('T4b fixture content passes quality checks', run.qualityErrors === 0 && run.qualityPanel === 'ok', run.qualityPanel + ' errors=' + run.qualityErrors);
   push('T6 project persisted at edit/ready', run.storedStep === 'edit' && run.storedStatus === 'ready', run.storedStep + '/' + run.storedStatus);
   push('T6 snapshot + draft stored on the project', run.storedGameId === run.gameId && run.storedSnapshotTemplate === run.expectedTemplate && run.storedDraftType === run.configType, run.storedGameId + ' draft=' + run.storedDraftType);
   push('T7 editor opens with the teacher title', run.editorOpened === true && run.editorTitle === 'smoke66 · Trò chơi từ giáo án', run.editorTitle);
