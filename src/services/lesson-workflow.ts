@@ -53,7 +53,10 @@ export class LessonWorkflowError extends Error {
   readonly code: LessonWorkflowCode;
 
   constructor(code: LessonWorkflowCode, message: string) {
-    super(message);
+    // The `[CODE]` marker travels with the message across IPC (Electron only
+    // serializes `message`), so the renderer can map failures to friendly text
+    // and per-code recovery actions. `code` stays available in-process.
+    super(`[${code}] ${message}`);
     this.name = 'LessonWorkflowError';
     this.code = code;
   }

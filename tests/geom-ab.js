@@ -11,7 +11,7 @@
 // Noise baseline: dump 2 lần liên tiếp rồi compare → kỳ vọng 0 diff.
 const fs = require('node:fs');
 const PORT = 9333;
-const PAGES = ['home', 'library', 'create', 'lesson-plans', 'my-projects', 'sessions', 'settings'];
+const PAGES = ['home', 'library', 'create-wizard', 'create', 'lesson-plans', 'my-projects', 'sessions', 'settings'];
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function findTarget() {

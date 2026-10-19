@@ -1,0 +1,15 @@
+{
+  "subject": "Sinh học",
+  "grade": 7,
+  "topic": "Quang hợp ở thực vật",
+  "objectives": [
+    { "description": "Nêu được vai trò của ánh sáng trong quá trình quang hợp.", "cognitiveLevel": "remember" },
+    { "description": "Giải thích mối liên hệ giữa quang hợp và hô hấp ở thực vật.", "cognitiveLevel": "understand" },
+    { "description": "Vận dụng kiến thức để giải thích hiện tượng cây thiếu ánh sáng.", "cognitiveLevel": "apply" }
+  ],
+  "keyConcepts": [
+    { "term": "Quang hợp", "explanation": "Quá trình tổng hợp chất hữu cơ nhờ năng lượng ánh sáng." },
+    { "term": "Diệp lục", "explanation": "Sắc tố hấp thụ ánh sáng trong lục lạp." }
+  ],
+  "uncertainties": ["Giáo án không nêu rõ thời lượng tiết học."]
+}

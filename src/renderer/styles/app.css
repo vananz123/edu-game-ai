@@ -420,6 +420,25 @@
 .danger-text{color:#d84b5a}
 .hidden{display:none!important}
 .setup-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
-.publish-panel{border:1px solid #cfc9ff;background:linear-gradient(180deg,#fbfaff,#fff)}
+.publish-panel{border:1px solid #cfc9ff;background:linear-gradient(180deg,#fbfaff,#fff)}
 .publish-actions{display:flex;gap:10px;flex-wrap:wrap}
+}
+
+/* === P5 - wizard "Tạo từ giáo án" (stepper + status banners) === */
+@layer components {
+.wizard-stepper{display:flex;flex-wrap:wrap;gap:8px;list-style:none;margin:0 0 16px;padding:0}
+.wizard-step{min-width:0}
+.wizard-step-btn{display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:#fff;border-radius:10px;padding:9px 12px;cursor:pointer;color:#717b90;font-weight:650;font-size:11px;transition:border-color .15s,color .15s,background .15s}
+.wizard-step-btn:disabled{cursor:default;opacity:.55}
+.wizard-step-index{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;background:#f0f1f6;color:#7b8499;font-size:10px;font-weight:800}
+.wizard-step[data-status=active] .wizard-step-btn{border-color:#6258e8;background:#f8f7ff;color:#4a41c4}
+.wizard-step[data-status=active] .wizard-step-index{background:#6258e8;color:#fff}
+.wizard-step[data-status=done] .wizard-step-btn{border-color:#d7e9df;color:#2b7d5d}
+.wizard-step[data-status=done] .wizard-step-index{background:#e8f8f1;color:#169c70}
+.wizard-status{display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-radius:10px;padding:11px 13px;margin-bottom:14px;font-size:12px;line-height:1.5}
+.wizard-status.is-busy{background:#f4f3ff;border:1px solid #e0ddff;color:#4a41c4}
+.wizard-status.is-ok{background:#effaf5;border:1px solid #ddf4e8;color:#1c7c58}
+.wizard-status.is-error{background:#fdf2f3;border:1px solid #f7d9dd;color:#b53b4a}
+.wizard-status.is-error strong{color:#a52f3d}
+.quick-action.active{border-color:#c9c5ff;background:#f8f7ff}
 }

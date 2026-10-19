@@ -1,0 +1,620 @@
+# TASK SPECIFICATION — EDUGAME STUDIO
+## Feature: AI-assisted Lesson-to-Game Workflow
+
+### 1. Vai trò và mục tiêu
+
+Bạn là Senior Software Engineer phụ trách triển khai tính năng tạo trò chơi giáo dục từ giáo án trong EduGame Studio.
+
+**Mục tiêu:** Xây dựng luồng mặc định cho phép giáo viên:
+
+1. Nhập nội dung giáo án hoặc tải tệp giáo án.
+2. Phân tích giáo án bằng AI local.
+3. Xem lại mục tiêu học tập và kiến thức trọng tâm do AI trích xuất.
+4. Nhận đề xuất 2–3 thể loại trò chơi phù hợp.
+5. Chọn trò chơi và thiết lập cách chơi.
+6. Sinh nội dung trò chơi bằng AI local.
+7. Chỉnh sửa, kiểm tra và xem trước trò chơi.
+8. Lưu dự án và chơi hoàn toàn offline.
+
+Không triển khai toàn bộ tính năng trong một lần nếu repository chưa sẵn sàng. Hãy khảo sát mã nguồn, lập kế hoạch, sau đó thực hiện từng task theo thứ tự.
+
+---
+
+## 2. Quy tắc bắt buộc
+
+- Sử dụng TypeScript; giữ nguyên framework và thư viện hiện có nếu chúng đã đáp ứng yêu cầu.
+- Ứng dụng desktop sử dụng Electron. Nếu dự án đang dùng React, tiếp tục sử dụng React.
+- AI chạy local thông qua một lớp dịch vụ độc lập, ưu tiên llama.cpp.
+- Không yêu cầu người dùng có API key hoặc tài khoản dịch vụ AI trực tuyến.
+- AI chỉ tạo dữ liệu trò chơi có cấu trúc, không tạo hoặc thực thi mã JavaScript/HTML tùy ý.
+- Logic gameplay, tính điểm, kiểm tra đáp án và chuyển câu phải do TypeScript kiểm soát.
+- Giáo viên phải có quyền xem lại và chỉnh sửa nội dung AI sinh ra trước khi sử dụng.
+- Phải xử lý được tình trạng AI chưa khởi động, model chưa tải, JSON không hợp lệ, mất kết nối và dữ liệu thiếu.
+- Không tự ý thay đổi các tính năng hiện có ngoài phạm vi task.
+- Không giả lập rằng AI đã hoạt động nếu chưa có model và backend thực sự.
+- Không viết toàn bộ tính năng vào một component lớn.
+- Không tạo thêm abstraction hoặc dependency nếu chưa có lý do kỹ thuật rõ ràng.
+
+---
+
+# PHASE 0 — Khảo sát repository và lập kế hoạch
+
+### TASK 0.1 — Kiểm tra kiến trúc hiện tại
+
+Khảo sát:
+
+- Cấu trúc thư mục.
+- Electron main process, preload và renderer.
+- Framework UI và hệ thống routing hiện có.
+- Cấu hình TypeScript và package scripts.
+- Hệ thống quản lý trạng thái.
+- Cơ chế lưu dữ liệu và database hiện có.
+- Các màn hình tạo, chỉnh sửa và chơi trò chơi hiện tại.
+- Cách quản lý model AI local và tiến trình bên ngoài, nếu đã có.
+- Các loại trò chơi đã triển khai và các kiểu dữ liệu tương ứng.
+- Các thư viện xử lý PDF, DOCX hoặc TXT đã được cài đặt.
+
+### Đầu ra bắt buộc
+
+Tạo tài liệu `docs/implementation-plan.md`, gồm:
+
+1. Kiến trúc hiện tại.
+2. Những thành phần có thể tái sử dụng.
+3. Những thành phần còn thiếu.
+4. Các file dự kiến cần tạo hoặc chỉnh sửa.
+5. Thứ tự triển khai.
+6. Rủi ro kỹ thuật và phương án xử lý.
+7. Các câu hỏi thực sự cần người dùng quyết định.
+
+**Tiêu chí nghiệm thu:** Không viết lại kiến trúc từ đầu nếu dự án đã có thành phần phù hợp. Không tự suy đoán rằng một tính năng đã tồn tại khi chưa kiểm tra mã nguồn.
+
+---
+
+# PHASE 1 — Xây dựng luồng UI và mô hình dữ liệu
+
+## TASK 1.1 — Thiết kế luồng tạo trò chơi
+
+Xây dựng luồng mặc định:
+
+`Nhập giáo án → Phân tích → Xem đề xuất → Chọn trò chơi → Cấu hình → Sinh nội dung → Chỉnh sửa → Xem trước → Lưu`
+
+Các bước cần có trạng thái tải, lỗi, thử lại và quay lại bước trước mà không làm mất dữ liệu đã nhập.
+
+Bổ sung lối vào phụ: **“Tôi đã biết muốn tạo trò chơi nào”**. Lối này cho phép chọn thể loại trước, sau đó nhập hoặc chọn giáo án. Không thay đổi luồng mặc định lấy giáo án làm điểm bắt đầu.
+
+### TASK 1.2 — Màn hình nhập giáo án
+
+Tạo màn hình có:
+
+- Ô nhập hoặc dán nội dung giáo án.
+- Chọn tệp được hỗ trợ.
+- Các trường tùy chọn: môn học, khối lớp, chủ đề, thời lượng trò chơi.
+- Nút “Phân tích giáo án”.
+- Trạng thái xử lý và thông báo lỗi dễ hiểu.
+
+Ưu tiên hỗ trợ TXT và DOCX; chỉ hỗ trợ PDF khi dự án có hoặc bổ sung được thư viện phù hợp. Không giả định PDF nào cũng có thể trích xuất văn bản, đặc biệt là PDF scan.
+
+Yêu cầu:
+
+- Kiểm tra phần mở rộng, kích thước và nội dung tệp.
+- Giới hạn dung lượng bằng cấu hình tập trung.
+- Không tải hoặc thực thi nội dung nhúng trong tệp.
+- Tách nội dung parser khỏi UI.
+- Không đọc tệp tùy ý từ đường dẫn do renderer gửi lên. Dùng hộp thoại chọn tệp và kiểm tra tại Electron main process.
+
+### TASK 1.3 — Màn hình xem lại kết quả phân tích
+
+Hiển thị:
+
+- Môn học, khối lớp và chủ đề.
+- Mục tiêu học tập.
+- Kiến thức trọng tâm.
+- Mức độ nhận thức: ghi nhớ, hiểu, vận dụng, phân tích.
+- Những nội dung chưa rõ hoặc cần giáo viên xác nhận.
+- Nguồn trích dẫn ngắn từ giáo án nếu có.
+
+Giáo viên có thể chỉnh sửa kết quả trước khi yêu cầu đề xuất trò chơi.
+
+Không trình bày nội dung AI suy đoán như một sự thật chắc chắn. Nếu không xác định được môn học hoặc khối lớp, hiển thị “Chưa xác định” thay vì tự điền giá trị.
+
+### TASK 1.4 — Màn hình đề xuất trò chơi
+
+AI đề xuất 2–3 lựa chọn trong năm thể loại:
+
+1. `arena` — Đấu trường kiến thức.
+2. `scenario` — Thử thách tình huống.
+3. `matching` — Ghép cặp kiến thức.
+4. `treasure` — Giải mã kho báu.
+5. `race` — Đường đua chinh phục.
+
+Mỗi thẻ đề xuất cần hiển thị:
+
+- Tên và mô tả ngắn.
+- Vì sao thể loại này phù hợp với bài học.
+- Mục tiêu học tập được hỗ trợ.
+- Thời lượng gợi ý.
+- Số câu hoặc số thử thách dự kiến.
+- Nút “Chọn trò chơi”.
+
+Không mặc định rằng thể loại có điểm đánh giá AI cao nhất luôn là lựa chọn tốt nhất. Ưu tiên sự phù hợp với mục tiêu học tập, nội dung bài và thời lượng.
+
+Nếu AI chỉ tạo được một đề xuất hợp lệ, hãy hiển thị đề xuất đó và thông báo phù hợp, không tự nhân bản để đủ ba thẻ.
+
+### TASK 1.5 — Màn hình cấu hình trò chơi
+
+Cho phép giáo viên điều chỉnh:
+
+- Tên trò chơi.
+- Đối tượng học sinh.
+- Thời lượng.
+- Độ khó.
+- Số câu hoặc số thử thách.
+- Chế độ chơi cá nhân hoặc theo đội nếu thể loại hỗ trợ.
+- Cách tính điểm và giới hạn thời gian nếu thể loại hỗ trợ.
+- Phong cách: vui nhộn, khám phá, thi đua, thực tế hoặc tối giản.
+- Mục tiêu học tập muốn tập trung.
+- Chế độ tạo nội dung: Nhanh hoặc Phân tích sâu.
+
+Chỉ hiển thị các thiết lập có ý nghĩa đối với thể loại đang chọn. Không áp dụng một bộ thiết lập chung khiến năm trò chơi có cách chơi giống nhau.
+
+---
+
+# PHASE 2 — Chuẩn hóa TypeScript data model
+
+## TASK 2.1 — Xây dựng các kiểu dữ liệu dùng chung
+
+Tạo các kiểu dữ liệu cho giáo án, phân tích, đề xuất và dự án trò chơi. Điều chỉnh tên file theo quy ước repository hiện tại.
+
+Ví dụ định hướng:
+
+```ts
+export type GameType =
+  | "arena"
+  | "scenario"
+  | "matching"
+  | "treasure"
+  | "race";
+
+export type GenerationMode = "fast" | "deep";
+
+export type CognitiveLevel =
+  | "remember"
+  | "understand"
+  | "apply"
+  | "analyze";
+
+export interface LessonObjective {
+  id: string;
+  description: string;
+  cognitiveLevel: CognitiveLevel;
+  sourceExcerpt?: string;
+}
+
+export interface KeyConcept {
+  id: string;
+  term: string;
+  explanation: string;
+  sourceExcerpt?: string;
+}
+
+export interface LessonAnalysis {
+  id: string;
+  subject: string | null;
+  grade: number | null;
+  topic: string;
+  objectives: LessonObjective[];
+  keyConcepts: KeyConcept[];
+  uncertainties: string[];
+  sourceDocumentIds: string[];
+  createdAt: string;
+}
+
+export interface GameRecommendation {
+  id: string;
+  gameType: GameType;
+  reason: string;
+  learningObjectiveIds: string[];
+  suggestedDurationMinutes: number;
+  suggestedQuestionCount?: number;
+}
+
+export interface GameProjectBase {
+  id: string;
+  title: string;
+  gameType: GameType;
+  schemaVersion: number;
+  lessonAnalysisId: string;
+  status: "draft" | "review" | "ready";
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+Đây là kiểu dữ liệu định hướng, không phải yêu cầu sao chép máy móc. Trước khi tạo kiểu mới, kiểm tra model hiện có và tái sử dụng nếu phù hợp.
+
+## TASK 2.2 — Tạo schema riêng cho từng trò chơi
+
+Không sử dụng `content: unknown` làm kiểu dữ liệu cuối cùng cho toàn bộ năm trò chơi.
+
+Thiết kế dữ liệu phân biệt theo `gameType`, sử dụng discriminated union và validator runtime.
+
+Định hướng:
+
+- `arena`: câu hỏi, lựa chọn, đáp án đúng, giải thích, độ khó, điểm cơ bản và cấu hình thời gian.
+- `scenario`: bối cảnh, tình huống, các lựa chọn xử lý, hậu quả hoặc phản hồi, lời giải thích.
+- `matching`: danh sách cặp dữ liệu và quy tắc ghép.
+- `treasure`: các chặng, câu đố, điều kiện mở khóa và phần thưởng.
+- `race`: các chặng đua, câu hỏi hoặc nhiệm vụ, điểm và điều kiện hoàn thành.
+
+Mỗi thể loại phải có schema và luật kiểm tra riêng. Không biến tất cả thành trắc nghiệm chỉ khác giao diện.
+
+Đáp án và giải thích phải tách khỏi nội dung hiển thị cho học sinh nếu chế độ chơi cần giữ kín đáp án.
+
+## TASK 2.3 — Kiểm tra dữ liệu runtime
+
+Chọn thư viện schema validation phù hợp với repository; nếu chưa có, đánh giá Zod hoặc thư viện tương đương trước khi thêm dependency.
+
+Validator phải kiểm tra:
+
+- Kiểu dữ liệu và trường bắt buộc.
+- Số lượng câu hoặc thử thách hợp lệ.
+- ID duy nhất trong phạm vi dự án.
+- Đáp án đúng có tồn tại trong danh sách lựa chọn.
+- Các tham chiếu tới mục tiêu học tập hợp lệ.
+- Cấu hình điểm và thời gian nằm trong giới hạn.
+- Nội dung không rỗng, không có cấu trúc lồng nhau bất thường.
+- `gameType` khớp với schema tương ứng.
+
+Nếu dữ liệu sai, trả về lỗi có thể hiển thị cho người dùng và cho phép thử lại hoặc chỉnh sửa. Không âm thầm biến dữ liệu sai thành dữ liệu hợp lệ.
+
+---
+
+# PHASE 3 — Xây dựng lớp dịch vụ AI local
+
+## TASK 3.1 — Tách giao diện AI khỏi nhà cung cấp cụ thể
+
+Tạo interface dịch vụ độc lập, ví dụ:
+
+```ts
+export interface LocalAIProvider {
+  checkHealth(): Promise<AIHealthStatus>;
+
+  analyzeLesson(
+    input: LessonAnalysisInput,
+    options: GenerationOptions
+  ): Promise<LessonAnalysisResult>;
+
+  recommendGames(
+    input: GameRecommendationInput,
+    options: GenerationOptions
+  ): Promise<GameRecommendation[]>;
+
+  generateGame(
+    input: GameGenerationInput,
+    options: GenerationOptions
+  ): Promise<GeneratedGameResult>;
+}
+```
+
+Tạo các kiểu dữ liệu đầu vào, đầu ra và lỗi tương ứng. Không dùng `any` cho dữ liệu trao đổi với AI.
+
+Tách interface khỏi implementation llama.cpp để sau này có thể thay model hoặc backend mà không cần sửa UI và gameplay.
+
+## TASK 3.2 — Tích hợp llama.cpp
+
+Nếu repository chưa có tích hợp, triển khai adapter gọi local inference server theo cấu hình tập trung.
+
+Yêu cầu:
+
+- Địa chỉ và cổng local có thể cấu hình.
+- Kiểm tra health trước khi gửi yêu cầu.
+- Timeout và giới hạn số lần thử lại.
+- Hủy yêu cầu khi người dùng rời luồng hoặc chủ động hủy.
+- Xử lý server không chạy, model chưa có, hết bộ nhớ và phản hồi không hợp lệ.
+- Không khởi động nhiều tiến trình AI trùng lặp.
+- Không để renderer trực tiếp quản lý tiến trình hệ thống.
+- Không hard-code đường dẫn model hoặc cổng ở nhiều nơi.
+- Không tải model âm thầm nếu chưa có cơ chế tải và xác nhận rõ ràng.
+
+Ưu tiên API tương thích OpenAI của llama.cpp nếu phù hợp với phiên bản backend hiện có. Kiểm tra định dạng response thực tế thay vì giả định mọi model hỗ trợ cùng một cấu trúc.
+
+## TASK 3.3 — Tạo hai chế độ sinh nội dung
+
+### Chế độ Nhanh (`fast`)
+
+- Prompt ngắn, yêu cầu trực tiếp.
+- Giới hạn độ dài đầu ra.
+- Số lượng câu hỏi phù hợp với cấu hình.
+- Ưu tiên độ trễ thấp và cấu trúc JSON ổn định.
+- Hạn chế phân tích nhiều bước không cần thiết.
+
+### Chế độ Phân tích sâu (`deep`)
+
+- Phân tích mục tiêu học tập và kiến thức trước khi sinh.
+- Đối chiếu câu hỏi với mục tiêu học tập.
+- Ưu tiên tình huống vận dụng khi nội dung cho phép.
+- Kiểm tra sự đa dạng và độ phù hợp của câu hỏi.
+- Có thể chia tác vụ thành các bước riêng nếu phần cứng đáp ứng.
+
+Không dựa vào tên model để kết luận rằng thinking hoặc non-thinking chắc chắn được hỗ trợ. Hãy xác minh khả năng thực tế của model, template và phiên bản llama.cpp.
+
+## TASK 3.4 — Thiết kế prompt và đầu ra có cấu trúc
+
+Tạo prompt riêng cho:
+
+- Phân tích giáo án.
+- Đề xuất thể loại trò chơi.
+- Sinh dữ liệu cho từng thể loại.
+- Sửa dữ liệu không vượt qua validation.
+
+Mỗi prompt cần yêu cầu:
+
+1. Chỉ dựa trên nội dung giáo án và dữ liệu cấu hình được cung cấp.
+2. Không bịa kiến thức chuyên môn khi nguồn không đủ thông tin.
+3. Nêu rõ những chỗ thiếu dữ liệu hoặc không chắc chắn.
+4. Tuân thủ schema được yêu cầu.
+5. Không sinh mã chương trình.
+6. Không tự thay đổi mục tiêu học tập hoặc cấu hình của giáo viên.
+7. Trả lời theo định dạng dữ liệu mà ứng dụng kiểm tra được.
+
+Thực hiện parse và validation phía ứng dụng. Không coi JSON do AI trả về là đáng tin cậy chỉ vì nó đúng cú pháp.
+
+Nếu phản hồi không hợp lệ, có thể thực hiện một lần sửa lỗi có giới hạn; sau đó báo lỗi hoặc cho giáo viên chỉnh sửa thủ công.
+
+---
+
+# PHASE 4 — Điều phối luồng tạo trò chơi
+
+## TASK 4.1 — Xây dựng workflow service
+
+Tạo service điều phối các bước:
+
+1. Nhận giáo án.
+2. Trích xuất văn bản.
+3. Gọi phân tích giáo án.
+4. Kiểm tra và lưu bản phân tích.
+5. Sinh đề xuất trò chơi.
+6. Giáo viên chọn thể loại.
+7. Nhận cấu hình.
+8. Sinh dữ liệu trò chơi.
+9. Validate theo schema của thể loại.
+10. Lưu bản nháp.
+11. Mở editor và preview.
+
+Không gộp toàn bộ quá trình vào một API hoặc component duy nhất.
+
+Các bước phải có trạng thái rõ ràng, chẳng hạn:
+
+```ts
+type WorkflowStatus =
+  | "idle"
+  | "parsing"
+  | "analyzing"
+  | "recommending"
+  | "generating"
+  | "validating"
+  | "saving"
+  | "completed"
+  | "failed"
+  | "cancelled";
+```
+
+Có thể điều chỉnh trạng thái theo kiến trúc thực tế, nhưng phải hỗ trợ loading, lỗi, thử lại và hủy.
+
+## TASK 4.2 — Lưu dữ liệu và phục hồi
+
+Tái sử dụng database hiện có. Nếu chưa có, đánh giá SQLite cho metadata và dữ liệu dự án.
+
+Lưu được:
+
+- Giáo án nguồn và metadata.
+- Kết quả phân tích.
+- Đề xuất trò chơi.
+- Cấu hình.
+- Nội dung trò chơi.
+- Phiên bản schema.
+- Thời điểm tạo và chỉnh sửa.
+- Trạng thái bản nháp.
+
+Tệp lớn nên được lưu trong thư mục dữ liệu ứng dụng, database lưu đường dẫn tương đối và metadata.
+
+Đảm bảo đóng/mở ứng dụng không làm mất bản nháp. Có cơ chế cập nhật schema hoặc báo lỗi tương thích khi mở dự án cũ.
+
+Không lưu đáp án hoặc dữ liệu nhạy cảm vào log không cần thiết.
+
+---
+
+# PHASE 5 — Editor và gameplay
+
+## TASK 5.1 — Xây dựng trình chỉnh sửa
+
+Giáo viên có thể:
+
+- Sửa tên trò chơi.
+- Sửa câu hỏi hoặc tình huống.
+- Sửa đáp án và giải thích.
+- Thêm, xóa, sắp xếp câu hỏi.
+- Điều chỉnh thiết lập.
+- Tạo nội dung thủ công không cần AI.
+- Yêu cầu AI tạo lại một câu hoặc một phần được chọn.
+- Hoàn tác thay đổi nếu cơ chế hiện tại hỗ trợ.
+
+Khi yêu cầu AI viết lại một câu, chỉ gửi các dữ liệu cần thiết và giữ nguyên các phần không được chọn sửa.
+
+Phân biệt rõ “Tạo nội dung bằng AI” với “Chỉnh sửa thủ công”. Khi AI không khả dụng, giáo viên vẫn có thể sửa, lưu và chơi dữ liệu đã có.
+
+## TASK 5.2 — Gameplay theo thể loại
+
+Tái sử dụng game engine hiện có nếu phù hợp; nếu chưa có, xây dựng component/runtime riêng cho từng thể loại.
+
+Mỗi thể loại phải có quy tắc chơi riêng:
+
+- **Đấu trường kiến thức:** trả lời câu hỏi, chấm điểm, có thể thưởng tốc độ nếu được bật.
+- **Thử thách tình huống:** chọn cách xử lý và xem phản hồi, lý giải hoặc hậu quả.
+- **Ghép cặp kiến thức:** ghép hai phần tương ứng, xác định đúng/sai và điều kiện hoàn thành.
+- **Giải mã kho báu:** giải các thử thách theo chặng, mở khóa chặng tiếp theo.
+- **Đường đua chinh phục:** tiến triển qua các chặng dựa trên câu trả lời hoặc nhiệm vụ.
+
+Điểm số phải được tính bằng TypeScript, không lấy kết quả tính điểm do AI cung cấp.
+
+Không để học sinh thấy đáp án đúng trước khi trả lời, trừ khi luật chơi cho phép. Không để dữ liệu nội bộ như `correctAnswer` bị render nhầm ra giao diện học sinh.
+
+## TASK 5.3 — Preview và kiểm thử trước khi chơi
+
+Cung cấp chế độ xem trước để giáo viên thử trò chơi trước khi sử dụng với học sinh.
+
+Kiểm tra:
+
+- Mọi câu hỏi đều có dữ liệu cần thiết.
+- Điều hướng và điều kiện kết thúc hoạt động đúng.
+- Điểm số được tính nhất quán.
+- Không bị treo nếu thiếu hình ảnh hoặc nội dung tùy chọn.
+- Có thể bắt đầu lại trò chơi.
+- Kích thước chữ và giao diện phù hợp với màn hình lớp học.
+
+---
+
+# PHASE 6 — Electron security và xử lý lỗi
+
+## TASK 6.1 — Ranh giới bảo mật
+
+Kiểm tra và giữ các thiết lập:
+
+- `contextIsolation: true`.
+- `nodeIntegration: false`.
+- Renderer không được truy cập Node.js tùy ý.
+- Preload chỉ công khai các API được phép.
+- Kiểm tra dữ liệu IPC tại main process.
+- Chỉ cho phép truy cập tệp qua quy trình được kiểm soát.
+- Không thực thi mã do AI sinh ra.
+- Không đưa bí mật hoặc đường dẫn hệ thống nhạy cảm vào renderer.
+
+Chỉ expose những hàm cần thiết, ví dụ:
+
+- `selectLessonFile()`
+- `readLessonFile()`
+- `analyzeLesson()`
+- `recommendGames()`
+- `generateGame()`
+- `saveGameProject()`
+- `loadGameProject()`
+- `checkAIStatus()`
+- `cancelAIRequest()`
+
+Tên API là gợi ý; phải tuân thủ quy ước thực tế của dự án.
+
+## TASK 6.2 — Trải nghiệm lỗi
+
+Hiển thị thông báo dễ hiểu khi:
+
+- Chưa có model.
+- llama.cpp chưa chạy.
+- Model không đủ bộ nhớ.
+- Giáo án không trích xuất được.
+- AI trả về dữ liệu không hợp lệ.
+- Lưu dự án thất bại.
+- Người dùng hủy tác vụ.
+
+Thông báo phải chỉ ra hành động tiếp theo. Không hiển thị stack trace kỹ thuật cho người dùng phổ thông; ghi log kỹ thuật phù hợp ở phía main/service.
+
+---
+
+# PHASE 7 — Kiểm thử và nghiệm thu
+
+## TASK 7.1 — Unit tests
+
+Viết kiểm thử cho:
+
+- Parser giáo án.
+- Validation kết quả phân tích.
+- Validation từng loại trò chơi.
+- Tính điểm.
+- Điều kiện hoàn thành từng trò chơi.
+- Chuyển đổi và lưu dữ liệu.
+- Xử lý JSON lỗi từ AI.
+
+## TASK 7.2 — Integration tests
+
+Kiểm thử:
+
+- Workflow với AI mock.
+- Workflow với dữ liệu mẫu hợp lệ.
+- Workflow khi AI timeout hoặc không chạy.
+- Lưu và mở lại dự án.
+- Tạo trò chơi ở cả hai chế độ.
+- Giáo viên sửa nội dung mà không gọi AI.
+
+AI mock chỉ được dùng trong kiểm thử; không được giả làm AI thật ở bản production.
+
+## TASK 7.3 — Kiểm thử giao diện
+
+Kiểm tra các trạng thái:
+
+- Chưa nhập giáo án.
+- Đang phân tích.
+- Phân tích thất bại.
+- Không có đề xuất hợp lệ.
+- Đang sinh trò chơi.
+- Dữ liệu cần giáo viên xem lại.
+- Đã lưu bản nháp.
+- AI offline nhưng vẫn chỉnh sửa/chơi được.
+
+## TASK 7.4 — Kiểm tra chất lượng repository
+
+Chạy các lệnh phù hợp với dự án hiện tại:
+
+- TypeScript typecheck.
+- Linter.
+- Unit tests.
+- Integration tests.
+- Build ứng dụng.
+
+Không tuyên bố test hoặc build thành công nếu chưa chạy thực tế. Ghi rõ những test nào chưa chạy và lý do.
+
+---
+
+# Thứ tự thực hiện bắt buộc
+
+Triển khai theo thứ tự:
+
+1. **P0:** Khảo sát repository và tạo `docs/implementation-plan.md`.
+2. **P1:** Chuẩn hóa data model và schema validation.
+3. **P2:** Xây dựng UI nhập giáo án và các trạng thái workflow.
+4. **P3:** Xây dựng parser và lớp dịch vụ AI local.
+5. **P4:** Phân tích giáo án và đề xuất trò chơi.
+6. **P5:** Sinh dữ liệu theo thể loại, validate và lưu bản nháp.
+7. **P6:** Editor, preview và gameplay.
+8. **P7:** Bảo mật, kiểm thử, build và tài liệu bàn giao.
+
+Nếu repository đã có một phần, hãy kiểm tra và tái sử dụng thay vì tạo bản thứ hai.
+
+Sau mỗi phase, báo cáo:
+
+- File đã tạo hoặc sửa.
+- Chức năng đã hoàn thành.
+- Kiểm thử đã chạy và kết quả.
+- Vấn đề còn tồn tại.
+- Phase tiếp theo.
+- Những quyết định cần người dùng xác nhận.
+
+Không triển khai phase tiếp theo nếu phase trước đang có lỗi kiến trúc nghiêm trọng hoặc chưa thể nghiệm thu.
+
+---
+
+# Định nghĩa hoàn thành cuối cùng
+
+Tính năng được coi là hoàn thành khi:
+
+1. Giáo viên nhập hoặc tải được giáo án hợp lệ.
+2. Ứng dụng phân tích giáo án bằng AI local thực sự.
+3. Giáo viên xem lại và chỉnh sửa được kết quả phân tích.
+4. Hệ thống đề xuất 2–3 trò chơi phù hợp khi đủ dữ liệu.
+5. Giáo viên chọn và cấu hình được một trong năm thể loại.
+6. AI sinh dữ liệu đúng schema của thể loại đã chọn.
+7. Dữ liệu sai được phát hiện trước khi chơi.
+8. Giáo viên chỉnh sửa thủ công và xem trước được trò chơi.
+9. Trò chơi lưu được và mở lại được.
+10. Gameplay và tính điểm chạy bằng logic TypeScript.
+11. Giáo án, sinh nội dung và gameplay không phụ thuộc dịch vụ AI trực tuyến.
+12. Khi AI không hoạt động, giáo viên vẫn dùng được các trò chơi đã lưu.
+13. Kiểm thử và build được thực hiện, kết quả được báo cáo trung thực.

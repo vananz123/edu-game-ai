@@ -168,10 +168,13 @@ async function main(): Promise<void> {
 
   // --- Model not running ---------------------------------------------------
   const notRunningClient = new MockClient([{ error: new AiTransportError('AI_NOT_RUNNING', 'AI local chưa chạy.') }]);
-  await expectWorkflowError('AI_NOT_RUNNING', () => analyzeLesson({
+  const notRunningError = await expectWorkflowError('AI_NOT_RUNNING', () => analyzeLesson({
     client: notRunningClient, registry, requestId: 'req-offline', documentId: 'doc_1', text: 'x', analysisId: 'a', now: NOW
   }));
   assert.equal(notRunningClient.calls.length, 1);
+  // The `[CODE]` marker must survive in `message` so the renderer (which only
+  // receives `message` over IPC) can map failures to friendly text.
+  assert.ok(notRunningError.message.startsWith('[AI_NOT_RUNNING] '), `unexpected message: ${notRunningError.message}`);
 
   // --- Recommendations -----------------------------------------------------
   const recommendationContent = {

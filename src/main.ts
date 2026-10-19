@@ -667,6 +667,9 @@ function registerIpc() {
       registry: aiRequests,
       requestId,
       analysis,
+      // Recommendation ids are globally unique (they are a primary key), so scope
+      // them to the analysis: re-running for the same analysis replaces the set.
+      idPrefix: `rec_${analysis.id}_`,
       now: new Date().toISOString()
     });
     store.saveRecommendations(analysis.id, recommendations);
@@ -678,6 +681,7 @@ function registerIpc() {
     return { recommendations, project };
   });
   ipcMain.handle('lesson:get-analysis', async (_e, analysisId) => requireLessonStore().getAnalysis(String(analysisId || '')));
+  ipcMain.handle('lesson:save-analysis', async (_e, analysis) => requireLessonStore().saveAnalysis(analysis));
   ipcMain.handle('lesson:recommendations', async (_e, analysisId) => requireLessonStore().listRecommendations(String(analysisId || '')));
   ipcMain.handle('files:import-document', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
@@ -1132,6 +1136,44 @@ async function requestJsonFromCompatibleApi({ payload, ai, systemPrompt, userPro
 }
 
 /**
+ * Test-only fixture loader for the lesson workflow.
+ *
+ * Enabled **only** in an unpackaged build (`npx electron .`) via
+ * `EDUGAME_AI_TEST_DIR`, so a packaged installer can never fabricate AI output:
+ * there, `createLessonChatClient` still fails with `AI_NOT_RUNNING` until a real
+ * local model is running. Fixture files are named after the request's JSON
+ * schema (`lesson_analysis.json`, `game_recommendations.json`, …); a file with a
+ * `__testDouble` marker can force a specific typed error instead.
+ */
+function loadLessonTestFixture(responseSchema) {
+  if (app.isPackaged) return { found: false };
+  const dir = process.env.EDUGAME_AI_TEST_DIR;
+  if (!dir) return { found: false };
+  const name = String((responseSchema && responseSchema.name) || 'default').replace(/[^a-z0-9_-]/gi, '');
+  const file = path.join(dir, `${name}.json`);
+  const fsSync = require('node:fs');
+  if (!fsSync.existsSync(file)) return { found: false };
+  let parsed;
+  try {
+    parsed = JSON.parse(fsSync.readFileSync(file, 'utf8'));
+  } catch (error) {
+    return { found: true, error: { code: 'AI_INVALID_JSON', message: `Fixture ${name}.json không đọc được: ${error.message}`, rawContent: null } };
+  }
+  const marker = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed.__testDouble : null;
+  if (marker) {
+    return {
+      found: true,
+      error: {
+        code: String(marker.code || 'AI_OUTPUT_INVALID'),
+        message: String(marker.message || 'Lỗi AI mô phỏng cho kiểm thử.'),
+        rawContent: marker.rawContent === undefined ? null : marker.rawContent
+      }
+    };
+  }
+  return { found: true, value: parsed };
+}
+
+/**
  * Local-only chat client for the lesson-to-game workflow.
  *
  * Reuses the same llama.cpp runtime and `fetchAiEndpoint` as the legacy
@@ -1141,6 +1183,13 @@ async function requestJsonFromCompatibleApi({ payload, ai, systemPrompt, userPro
 function createLessonChatClient() {
   return {
     async chatJson({ messages, maxTokens, responseSchema, signal }) {
+      const fixture = loadLessonTestFixture(responseSchema);
+      if (fixture.found) {
+        if (fixture.error) {
+          throw new AiTransportError(fixture.error.code, fixture.error.message, { rawContent: fixture.error.rawContent });
+        }
+        return fixture.value;
+      }
       if (!localAiManager || localAiManager.getStatus().state !== 'READY') {
         throw new AiTransportError('AI_NOT_RUNNING', 'AI local chưa chạy. Hãy nhấn “Tổng hợp với AI trên máy” để mở cửa sổ AI local · llama.cpp, chọn model đã tải đầy đủ rồi nhấn “Bắt đầu chạy”.');
       }

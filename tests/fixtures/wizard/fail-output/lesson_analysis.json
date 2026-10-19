@@ -1,0 +1,13 @@
+{
+  "subject": "Sinh học",
+  "grade": 7,
+  "topic": "Quang hợp ở thực vật",
+  "objectives": [
+    { "description": "Nêu được vai trò của ánh sáng trong quá trình quang hợp.", "cognitiveLevel": "remember" },
+    { "description": "Giải thích mối liên hệ giữa quang hợp và hô hấp ở thực vật.", "cognitiveLevel": "understand" }
+  ],
+  "keyConcepts": [
+    { "term": "Quang hợp", "explanation": "Quá trình tổng hợp chất hữu cơ nhờ năng lượng ánh sáng." }
+  ],
+  "uncertainties": []
+}

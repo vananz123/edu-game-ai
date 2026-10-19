@@ -1,3 +1,7 @@
+// LEGACY / RETIRED (P5, 2026-10-19): this smoke drove the AI/cloud generation flow
+// that used to live on the "Tạo trò chơi" page (document assist -> generate game).
+// That page is now manual-only; AI moved to "Tạo từ giáo án" (wizard), covered by
+// smoke64/smoke65. Kept for reference only — do NOT run against the current build.
 // smoke60.js — CDP e2e với model THẬT qua OpenCode Zen (online mode) của chính ứng dụng:
 //   cài đặt provider opencode (key tự đọc) → phân tích tài liệu → tạo treasure-hunt & race
 //   → lưu (validators của main) → chơi → dọn dẹp + khôi phục cài đặt.

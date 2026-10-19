@@ -2,7 +2,7 @@
 
 **Ngày lập:** 2026-10-19
 **Phạm vi:** bổ sung luồng tạo trò chơi từ giáo án bằng AI local, không phá vỡ gameplay, `.egame` hay dữ liệu đang có.
-**Trạng thái:** Phase 0 — chờ duyệt trước khi sửa code.
+**Trạng thái:** P0–P5 đã xong (2026-10-19); P6 (tạo nội dung 5 thể loại + editor, verify model thật) và P7 (hoàn thiện/build/tài liệu) còn lại.
 
 ---
 
@@ -388,9 +388,12 @@ Không sửa: `gameplay.ts`, `game-editor.ts` (trừ điểm gọi AI regenerate
 
 ### P5 — Wizard bước 1–4
 
-- Trang mới, nhập/paste/chọn tệp, sửa analysis, chọn 2–3 gợi ý, cấu hình theo thể loại.
-- Trạng thái loading/lỗi/retry/back; giữ dữ liệu khi quay lại.
-- **Gate:** `smoke64` (happy path), `smoke65` (lỗi/back), `smoke56–63` không đổi.
+- [x] Trang mới, nhập/paste/chọn tệp, sửa analysis, chọn 2–3 gợi ý, cấu hình theo thể loại.
+- [x] Trạng thái loading/lỗi/retry/back; giữ dữ liệu khi quay lại.
+- **Gate:** `smoke64` (happy path), `smoke65` (lỗi/back), `smoke56–63` không đổi. ✅ (2026-10-19, `smoke64` **37/37**, `smoke65 runtime` **18/18** + `smoke65 output` **14/14**, regression `smoke56` **56/56**, `smoke62` **9/9**, `smoke63` **49/49**; `npm test` 17 suites)
+- **Thay đổi phạm vi so với bản đầu (chủ dự án chốt 2026-10-19):** trang "Tạo trò chơi" nay **chỉ tạo thủ công**; mọi AI dời hẳn sang trang "Tạo từ giáo án" (xem DECISIONS #15). Bước 5 `generate` mới là **placeholder** (P6 điền vào).
+- **Bổ sung hợp đồng P5:** IPC `lesson:save-analysis` (lưu chỉnh sửa analysis của giáo viên, không gọi AI) + bridge `saveLessonAnalysis`. `LessonWorkflowError` nhúng `[CODE]` vào `message` để renderer lấy lại mã lỗi qua IPC.
+- **Ghi chú kiểm thử:** `smoke64`/`smoke65` dùng fixture cho phản hồi model (`EDUGAME_AI_TEST_DIR`, chỉ khi `!app.isPackaged` — DECISIONS #16) vì máy chưa cài model; phần còn lại (IPC/store/adapter/validate) là thật. `tests/smoke60.js` (AI trên trang tạo trò chơi) chuyển sang `tests/legacy/` và **không còn chạy**.
 
 ### P6 — Generate 5 loại + draft + editor
 

@@ -1,20 +1,16 @@
 // @ts-nocheck -- migrated legacy UI logic; new contracts are typed in src/shared/types.ts.
 function navigate(page) { state.page = page; render(); }
 function wirePage() {
+  if (state.page === 'create-wizard') wireCreateWizard();
   $('#pageContent').querySelectorAll('[data-page]').forEach(el => el.addEventListener('click', () => navigate(el.dataset.page)));
   $('#pageContent').querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', () => handleAction(el.dataset.action, el.dataset.id)));
   $('#pageContent').querySelectorAll('[data-template]').forEach(el => el.addEventListener('click', () => { state.draft = { ...collectDraft() }; state.selectedTemplate = el.dataset.template; render(); }));
-  $('#pageContent').querySelectorAll('[data-source]').forEach(el => el.addEventListener('click', () => { state.draft = { ...collectDraft(), contentSource: el.dataset.source }; render(); }));
   ['#setupDifficulty', '#setupDuration', '#setupPoints', '#setupTimeBonus', '#setupStyle', '#setupPlayers', '#setupCompetition', '#setupPointsEasy', '#setupPointsMedium', '#setupPointsHard'].forEach(sel => $(sel)?.addEventListener('change', () => { state.draft = { ...collectDraft() }; }));
   $('#setupScoringMode')?.addEventListener('change', () => { updateScoringVisibility(); state.draft = { ...collectDraft() }; });
   if ($('#setupScoringMode')) updateScoringVisibility();
   const search = $('#librarySearch'); if (search) search.addEventListener('input', e => { state.search = e.target.value; const pos = e.target.selectionStart; render(); const next = $('#librarySearch'); next.focus(); next.setSelectionRange(pos,pos); });
   const filter = $('#templateFilter'); if (filter) filter.addEventListener('change', e => { state.filter = e.target.value; render(); });
   $('#generateBtn')?.addEventListener('click', generateGame);
-  $('#generationMode')?.addEventListener('change', event => {
-    state.draft = { ...collectDraft(), mode: event.target.value };
-    render();
-  });
   ['#settingCloudProvider', '#documentCloudProvider'].forEach(selector => {
     $(selector)?.addEventListener('change', async event => {
       state.settings.ai = applyCloudProvider(event.target.value);
@@ -50,53 +46,8 @@ function wirePage() {
     }
   });
   $('#installLocalModelBtn')?.addEventListener('click', () => installLocalModel());
-  $('#openLocalAiModalBtn')?.addEventListener('click', () => openLocalAiModal());
   $('#openLocalAiSettingsModalBtn')?.addEventListener('click', () => openLocalAiModal());
-  $('#analyzeLocalDocumentBtn')?.addEventListener('click', () => selectDocumentAssistMode('local'));
-  $('#analyzeCloudDocumentBtn')?.addEventListener('click', () => selectDocumentAssistMode('online'));
-  $('#documentChatForm')?.addEventListener('submit', event => {
-    event.preventDefault();
-    assistWithDocument('ask');
-  });
-  $('#documentQuestion')?.addEventListener('keydown', event => {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      assistWithDocument('ask');
-    }
-  });
-  $('#sourceText')?.addEventListener('input', event => {
-    state.documentAssistRequestId = (state.documentAssistRequestId || 0) + 1;
-    const hadDocumentResults = Boolean(state.draft?.analysis || state.draft?.qaEntries?.length);
-    state.draft = { ...state.draft, text: event.target.value };
-    if (hadDocumentResults) {
-      state.draft.analysis = null;
-      state.draft.qaEntries = [];
-      const results = $('#documentAssistResults');
-      if (results) results.outerHTML = renderDocumentAssistResults(state.draft);
-    }
-  });
-  $('#documentQuestion')?.addEventListener('input', event => {
-    state.draft = { ...state.draft, qaQuestion: event.target.value };
-  });
-  $('#regenerateSuggestedQuestionsBtn')?.addEventListener('click', () => {
-    const question = $('#documentQuestion');
-    if (!question) return;
-    question.value = 'Tạo một bộ câu hỏi ôn tập khác dựa trên tài liệu, không lặp lại bộ câu hỏi hiện tại.';
-    assistWithDocument('ask');
-  });
-  $('#useSuggestedQuestionsBtn')?.addEventListener('click', () => {
-    state.draft = { ...collectDraft(), useSuggestedQuestions: !state.draft?.useSuggestedQuestions };
-    render();
-    toast(state.draft.useSuggestedQuestions
-      ? 'Bộ câu hỏi gợi ý sẽ được ưu tiên khi tạo trò chơi.'
-      : 'Đã tắt sử dụng bộ câu hỏi gợi ý.');
-  });
-  $('#pageContent').querySelectorAll('[data-recommended-template]').forEach(button =>
-    button.addEventListener('click', () => {
-      state.draft = { ...state.draft, ...collectDraft() };
-      state.selectedTemplate = button.dataset.recommendedTemplate;
-      render();
-    }));
+  // Trang "Tạo trò chơi" chỉ tạo thủ công: cả hai nút đều mở trình chỉnh sửa trống.
   $('#previewManualBtn')?.addEventListener('click', () => window.createBlankGame?.());
   $('#saveSettingsBtn')?.addEventListener('click', saveSettings);
   $('#testAiBtn')?.addEventListener('click', testAi);

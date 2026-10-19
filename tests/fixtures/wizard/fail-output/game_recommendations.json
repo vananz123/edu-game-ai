@@ -1,0 +1,6 @@
+{
+  "__testDouble": {
+    "code": "AI_OUTPUT_INVALID",
+    "message": "AI trả về đề xuất không đúng cấu trúc (mô phỏng cho smoke65)."
+  }
+}
