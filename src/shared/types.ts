@@ -310,6 +310,14 @@ export interface EduGameBridge {
     mode: 'fast' | 'deep';
     /** Deterministic content-quality findings (O2); advisory, no model call. */
     quality: import('../services/lesson-quality').QualityReport;
+    /** Which lesson chunks were retrieved for the prompt (O3); no model call. */
+    context: {
+      chunkCount: number;
+      selectedChunkCount: number;
+      characters: number;
+      scorer: string;
+      fallback: boolean;
+    };
   }>;
   /** Recomputes the advisory quality report for a stored draft (no model call). */
   checkLessonQuality(payload: { projectId: string }): Promise<import('../services/lesson-quality').QualityReport | null>;

@@ -37,6 +37,10 @@ const { analyzeLesson, generateGameDraft } = require('./services/lesson-workflow
 const { recommendGamesForAnalysis } = require('./services/game-recommender');
 // O2: deterministic content-quality checks (no model call).
 const { checkDraftQuality } = require('./services/lesson-quality');
+// O3: chunk the lesson once, then retrieve only the relevant part for generation.
+const { chunkLessonText } = require('./services/lesson-chunker');
+const { selectChunks, buildRetrievalQuery, DEFAULT_MAX_SELECTED_CHUNKS, DEFAULT_MAX_SELECTED_CHARS } = require('./services/lesson-retrieval');
+const { formatRetrievedChunks } = require('./services/lesson-prompts');
 const {
   createProjectFromAnalysis,
   applyAnalysis,
@@ -702,9 +706,33 @@ function registerIpc() {
 
     const mode = payload?.mode === 'deep' ? 'deep' : project.config.generationMode === 'deep' ? 'deep' : 'fast';
     let sourceExcerpt;
+    let context = { chunkCount: 0, selectedChunkCount: 0, characters: 0, scorer: 'none', fallback: false };
     if (project.lesson && project.lesson.documentId) {
       const document = await store.getDocumentWithText(project.lesson.documentId);
-      if (document && document.text) sourceExcerpt = document.text.slice(0, 6000);
+      if (document && document.text) {
+        // O3: chunk the document once (cached in `lesson_chunks`), then send only
+        // the slices that match the topic/objectives instead of the first 6000
+        // characters. The fallback keeps the old behaviour if anything is odd.
+        let chunks = store.listChunks(document.id);
+        if (!chunks.length) {
+          store.replaceChunks(document.id, chunkLessonText(document.text));
+          chunks = store.listChunks(document.id);
+        }
+        const selection = selectChunks(chunks, buildRetrievalQuery({ analysis, config: project.config }), {
+          maxChunks: DEFAULT_MAX_SELECTED_CHUNKS,
+          maxChars: DEFAULT_MAX_SELECTED_CHARS
+        });
+        sourceExcerpt = selection.selected.length
+          ? formatRetrievedChunks(selection.selected)
+          : document.text.slice(0, 6000);
+        context = {
+          chunkCount: chunks.length,
+          selectedChunkCount: selection.selected.length,
+          characters: sourceExcerpt.length,
+          scorer: selection.scorer,
+          fallback: selection.fallback
+        };
+      }
     }
 
     const draft = await generateGameDraft({
@@ -730,7 +758,7 @@ function registerIpc() {
     // O2: advisory content-quality report (duplicates, weak distractors, broken
     // chains, coverage). Pure TypeScript, so it costs nothing here.
     const quality = checkDraftQuality({ draft, config: project.config, analysis });
-    return { project: saved, game, mode, quality };
+    return { project: saved, game, mode, quality, context };
   });
   // O2: recompute the advisory report when a draft is reopened (no model call).
   ipcMain.handle('lesson:quality', async (_e, payload) => {

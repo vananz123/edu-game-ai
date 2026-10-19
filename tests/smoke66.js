@@ -165,6 +165,11 @@ async function withTimeout(promise, ms, label) {
     out.qualityPanel = qualityPanel ? qualityPanel.getAttribute('data-wizard-quality') : 'missing';
     out.qualityPanelText = qualityPanel ? String(qualityPanel.textContent || '').trim().length : 0;
 
+    // T4c — O3: retrieval summary returned with the draft + hint rendered
+    out.context = wizardState.context || null;
+    const contextHint = document.querySelector('[data-wizard-context]');
+    out.contextHint = contextHint ? String(contextHint.textContent || '').trim() : '';
+
     // T5 — adapter coherence (type-aware: not every type uses the questions list)
     setPhase('check adapter output');
     if (game) {
@@ -320,6 +325,9 @@ async function withTimeout(promise, ms, label) {
   push('T4b quality report returned with the draft', run.qualityPresent === true, 'errors=' + run.qualityErrors + ' warnings=' + run.qualityWarnings);
   push('T4b quality panel rendered in the wizard', ['ok', 'errors', 'warnings'].includes(run.qualityPanel) && run.qualityPanelText > 0, run.qualityPanel);
   if (mode === 'fixture') push('T4b fixture content passes quality checks', run.qualityErrors === 0 && run.qualityPanel === 'ok', run.qualityPanel + ' errors=' + run.qualityErrors);
+  push('T4c retrieved lesson chunks for the prompt', Boolean(run.context) && run.context.chunkCount > 0 && run.context.selectedChunkCount > 0 && run.context.scorer === 'lexical-v1', JSON.stringify(run.context));
+  push('T4c retrieved excerpt fits the prompt budget', Boolean(run.context) && run.context.characters > 0 && run.context.characters <= 5200, run.context && run.context.characters);
+  push('T4c wizard tells the teacher which chunks were used', typeof run.contextHint === 'string' && run.contextHint.includes('đoạn giáo án'), run.contextHint);
   push('T6 project persisted at edit/ready', run.storedStep === 'edit' && run.storedStatus === 'ready', run.storedStep + '/' + run.storedStatus);
   push('T6 snapshot + draft stored on the project', run.storedGameId === run.gameId && run.storedSnapshotTemplate === run.expectedTemplate && run.storedDraftType === run.configType, run.storedGameId + ' draft=' + run.storedDraftType);
   push('T7 editor opens with the teacher title', run.editorOpened === true && run.editorTitle === 'smoke66 · Trò chơi từ giáo án', run.editorTitle);

@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { LessonStore, LessonStoreError, LESSON_STORE_SCHEMA_SQL } from '../src/services/lesson-store';
 import type { LessonStoreDatabase } from '../src/services/lesson-store';
+import { chunkLessonText } from '../src/services/lesson-chunker';
 import { toEducationalGame } from '../src/services/game-project-adapter';
 import { advanceAfterRecommendations, createProjectFromAnalysis } from '../src/services/lesson-projects';
 import type {
@@ -160,6 +161,42 @@ async function run(): Promise<void> {
 
   await expectStoreErrorAsync('STORE_INVALID_DOCUMENT', () => store.saveDocument({ name: '', ext: 'txt', text: 'x' }));
 
+  // --- Lesson chunks (O3) ---------------------------------------------------
+  assert.equal(store.countChunks(document.id), 0);
+  assert.deepEqual(store.listChunks(document.id), []);
+  assert.deepEqual(store.listChunks(''), []);
+  assert.equal(store.countChunks('missing-doc'), 0);
+
+  const chunks = chunkLessonText('Phần 1\nQuang hợp là quá trình tổng hợp chất hữu cơ.\n\nPhần 2\nHô hấp là quá trình phân giải chất hữu cơ.');
+  assert.ok(chunks.length >= 1);
+  const storedChunks = store.replaceChunks(document.id, chunks);
+  assert.equal(storedChunks.length, chunks.length);
+  assert.equal(store.countChunks(document.id), chunks.length);
+  assert.equal(storedChunks[0].documentId, document.id);
+  assert.deepEqual(
+    storedChunks.map(chunk => chunk.index),
+    chunks.map(chunk => chunk.index)
+  );
+  assert.equal(storedChunks[0].text, chunks[0].text);
+  assert.equal(storedChunks[0].heading, chunks[0].heading);
+  assert.equal(storedChunks[0].charStart, chunks[0].charStart);
+  assert.equal(storedChunks[0].charEnd, chunks[0].charEnd);
+  assert.ok(storedChunks[0].tokenCount > 0);
+  assert.equal(storedChunks[0].embeddingModel, null);
+  assert.equal(storedChunks[0].embeddingDim, null);
+
+  // Replacing is idempotent and drops stale rows.
+  store.replaceChunks(document.id, [chunks[0]]);
+  assert.equal(store.countChunks(document.id), 1);
+  store.replaceChunks(document.id, chunks);
+  assert.equal(store.countChunks(document.id), chunks.length);
+
+  expectStoreError('STORE_DOCUMENT_MISSING', () => store.replaceChunks('missing-doc', chunks));
+  expectStoreError('STORE_INVALID_DOCUMENT', () =>
+    store.replaceChunks(document.id, [{ index: 0, text: '   ', charStart: 0, charEnd: 0, heading: null }])
+  );
+  assert.equal(store.countChunks(document.id), chunks.length, 'a rejected write must not delete the cached chunks');
+
   // --- Analyses + recommendations -----------------------------------------
   const analysis: LessonAnalysis = { ...analysisTemplate, documentId: document.id, sourceDocumentIds: [document.id] };
   const savedAnalysis = store.saveAnalysis(analysis);
@@ -282,6 +319,7 @@ async function run(): Promise<void> {
   assert.equal(store.getAnalysis('analysis-1'), null, 'deleting a document cascades analyses');
   assert.equal(store.listRecommendations('analysis-1').length, 0, 'deleting a document cascades recommendations');
   assert.equal(store.getAnalysis('analysis-2'), null);
+  assert.equal(store.countChunks(document.id), 0, 'deleting a document removes its cached chunks');
   const fileExists = await fs.stat(path.join(lessonsDir, `${document.id}.txt`)).then(() => true).catch(() => false);
   assert.equal(fileExists, false, 'lesson text file is removed');
   assert.equal(store.getProject('project-1')?.id, 'project-1', 'projects keep their independent snapshot after lesson cleanup');

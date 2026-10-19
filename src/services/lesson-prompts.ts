@@ -10,6 +10,7 @@
  * matching JSON schema is sent as `response_format` for llama.cpp in `main.ts`.
  */
 import { getLocalDocumentAnalysisExcerpt } from '../ai-core/document-assist';
+import type { LessonChunk } from './lesson-chunker';
 import type {
   GameConfig,
   LessonAnalysis,
@@ -44,6 +45,17 @@ export function prepareLessonExcerpt(text: string): { excerpt: string; truncated
   const source = String(text ?? '');
   const excerpt = getLocalDocumentAnalysisExcerpt(source);
   return { excerpt, truncated: excerpt.length < source.length };
+}
+
+/**
+ * Formats the retrieved chunks (O3) as the draft prompt's source block.
+ * Chunk numbers are 1-based so the model/teacher can refer to them, and the
+ * heading (when the document has one) is kept for context.
+ */
+export function formatRetrievedChunks(chunks: Array<Pick<LessonChunk, 'index' | 'text' | 'heading'>>): string {
+  return (chunks || [])
+    .map(chunk => `[Đoạn ${Number(chunk.index) + 1}${chunk.heading ? ` — ${chunk.heading}` : ''}]\n${chunk.text}`)
+    .join('\n\n');
 }
 
 export function buildLessonAnalysisPrompt(input: { text: string } & LessonPromptContext): string {
@@ -100,6 +112,10 @@ export function buildDraftPrompt(input: {
   gameType: WorkflowGameType;
   config: GameConfig;
   analysis: LessonAnalysis;
+  /**
+   * Source text for the game. Since O3 this is normally the retrieved chunks
+   * (`formatRetrievedChunks`) rather than the head of the whole lesson.
+   */
   sourceExcerpt?: string;
 }): string {
   const { gameType, config, analysis } = input;

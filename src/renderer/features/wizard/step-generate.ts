@@ -86,6 +86,17 @@ function wizardQualityPanel(report) {
   </div>`;
 }
 
+/**
+ * O3: transparency about what the model actually read. Not a warning — just so a
+ * teacher is not surprised that a long lesson produced questions from one section.
+ */
+function wizardContextHint(context) {
+  if (!context || !context.chunkCount) return '';
+  const parts = [`Đã dùng ${context.selectedChunkCount}/${context.chunkCount} đoạn giáo án liên quan`];
+  if (context.fallback) parts.push('(chưa khớp chủ đề rõ ràng nên dùng phần đầu giáo án)');
+  return `<div class="field-hint" data-wizard-context="1">${escapeHtml(parts.join(' '))}.</div>`;
+}
+
 function renderWizardGenerate() {
   const s = wizardState;
   const config = s.config;
@@ -96,6 +107,7 @@ function renderWizardGenerate() {
       ? `<div class="panel-sub">AI local đã soạn bản nháp từ giáo án và đã được kiểm tra cấu trúc. Hãy mở trình chỉnh sửa để duyệt, sửa lại rồi lưu vào thư viện để chơi thử.</div>
         ${wizardSummaryGrid(wizardGeneratedSummaryRows(s.gameSnapshot))}
         ${wizardQualityPanel(s.quality)}
+        ${wizardContextHint(s.context)}
         <div class="publish-actions">
           <button class="btn btn-primary" data-wizard-action="open-editor"${s.busy ? ' disabled' : ''}>✎ Mở trình chỉnh sửa</button>
           <button class="btn btn-secondary" data-wizard-action="regenerate"${s.busy ? ' disabled' : ''}>🔄 Tạo lại nội dung</button>
@@ -147,6 +159,7 @@ async function wizardGenerateRun() {
     wizardState.draft = result.project.draft || null;
     wizardState.gameSnapshot = result.game;
     wizardState.quality = result.quality || null;
+    wizardState.context = result.context || null;
     wizardState.gameId = result.game.id;
     wizardState.step = 'generate';
     await wizardRefreshProjects();

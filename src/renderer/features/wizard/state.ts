@@ -34,6 +34,7 @@ const wizardState = {
   draft: null, // P6
   gameSnapshot: null, // P6
   quality: null, // O2: advisory content-quality report for the draft
+  context: null, // O3: which lesson chunks fed the prompt
   busy: '', // '' | 'analyze' | 'recommend' | 'save'
   error: null, // { code, message }
   notice: null,
@@ -116,6 +117,7 @@ function wizardReset() {
     draft: null,
     gameSnapshot: null,
     quality: null,
+    context: null,
     busy: '',
     error: null,
     notice: null,
@@ -283,6 +285,8 @@ async function wizardOpenProject(projectId) {
   wizardState.gameSnapshot = project.gameSnapshot || null;
   // O2: recompute the advisory quality report locally (no model call).
   wizardState.quality = null;
+  // O3: the retrieval summary belongs to the last generation, not the project.
+  wizardState.context = null;
   if (project.draft && project.config && typeof window.eduGame.checkLessonQuality === 'function') {
     try {
       wizardState.quality = await window.eduGame.checkLessonQuality({ projectId: project.id });

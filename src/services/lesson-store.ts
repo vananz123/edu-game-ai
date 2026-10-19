@@ -5,6 +5,9 @@
  * `game_recommendations`, `game_projects`) plus the lesson text files. It never
  * touches `games`/`sessions` and never uses the whole-table `DELETE` pattern of
  * `saveDb`; every write is a targeted upsert inside a transaction.
+ *
+ * O3 adds a fifth sidecar table, `lesson_chunks`, caching the chunked lesson so
+ * generation can retrieve a relevant slice instead of re-chunking on every run.
  */
 import { createHash, randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
@@ -18,6 +21,7 @@ import type {
   LessonDocument,
   GameRecommendation
 } from '../shared/lesson-types';
+import type { LessonChunk } from './lesson-chunker';
 import { LESSON_SCHEMA_VERSION } from '../shared/lesson-types';
 import { parseGameConfig, parseGameDraft } from './lesson-contracts';
 import {
@@ -69,6 +73,23 @@ export const LESSON_STORE_SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS idx_game_projects_updated_at ON game_projects(updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_lesson_analyses_document ON lesson_analyses(document_id);
   CREATE INDEX IF NOT EXISTS idx_game_recommendations_analysis ON game_recommendations(analysis_id);
+  -- O3: cached chunks per document (retrieval input). Embedding columns are
+  -- nullable now so O4 can fill them without another schema change.
+  CREATE TABLE IF NOT EXISTS lesson_chunks (
+    document_id TEXT NOT NULL,
+    chunk_index INTEGER NOT NULL,
+    text TEXT NOT NULL,
+    heading TEXT,
+    char_start INTEGER NOT NULL,
+    char_end INTEGER NOT NULL,
+    token_count INTEGER NOT NULL DEFAULT 0,
+    embedding BLOB,
+    embedding_model TEXT,
+    embedding_dim INTEGER,
+    PRIMARY KEY (document_id, chunk_index),
+    FOREIGN KEY (document_id) REFERENCES lesson_documents(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_lesson_chunks_document ON lesson_chunks(document_id);
 `;
 
 export type LessonStoreErrorCode =
@@ -131,6 +152,26 @@ export interface StoredLessonDocument extends LessonDocument {
 
 export interface LessonDocumentWithText extends StoredLessonDocument {
   text: string;
+}
+
+/** A cached chunk row (O3). `embedding` fields are unused until O4. */
+export interface StoredLessonChunk extends LessonChunk {
+  documentId: string;
+  tokenCount: number;
+  embeddingModel: string | null;
+  embeddingDim: number | null;
+}
+
+interface ChunkRow {
+  document_id: string;
+  chunk_index: number;
+  text: string;
+  heading: string | null;
+  char_start: number;
+  char_end: number;
+  token_count: number;
+  embedding_model: string | null;
+  embedding_dim: number | null;
 }
 
 interface DocumentRow {
@@ -277,6 +318,7 @@ export class LessonStore {
       const deleteRecommendation = this.db.prepare('DELETE FROM game_recommendations WHERE analysis_id = ?');
       for (const analysisId of analysisIds) deleteRecommendation.run(analysisId);
       this.db.prepare('DELETE FROM lesson_analyses WHERE document_id = ?').run(documentId);
+      this.db.prepare('DELETE FROM lesson_chunks WHERE document_id = ?').run(documentId);
       this.db.prepare('DELETE FROM lesson_documents WHERE id = ?').run(documentId);
     });
     remove();
@@ -290,6 +332,71 @@ export class LessonStore {
 
   private getDocumentRow(documentId: string): DocumentRow | undefined {
     return this.db.prepare('SELECT * FROM lesson_documents WHERE id = ?').get(documentId) as DocumentRow | undefined;
+  }
+
+  // -------------------------------------------------------------------------
+  // Lesson chunks (O3)
+  // -------------------------------------------------------------------------
+
+  /** Cached chunks of a document, in document order. Empty when never chunked. */
+  listChunks(documentId: string): StoredLessonChunk[] {
+    if (!documentId) return [];
+    const rows = this.db
+      .prepare('SELECT * FROM lesson_chunks WHERE document_id = ? ORDER BY chunk_index ASC')
+      .all(documentId) as ChunkRow[];
+    return rows.map(chunkFromRow);
+  }
+
+  countChunks(documentId: string): number {
+    if (!documentId) return 0;
+    const row = this.db.prepare('SELECT COUNT(*) AS total FROM lesson_chunks WHERE document_id = ?').get(documentId) as
+      | { total: number }
+      | undefined;
+    return row ? Number(row.total) || 0 : 0;
+  }
+
+  /**
+   * Replaces every chunk of a document. Idempotent: re-chunking the same text
+   * produces the same rows, and a re-import cannot leave stale chunks behind.
+   */
+  replaceChunks(documentId: string, chunks: LessonChunk[]): StoredLessonChunk[] {
+    if (!this.getDocumentRow(documentId)) {
+      throw new LessonStoreError('STORE_DOCUMENT_MISSING', `Không tìm thấy tài liệu ${documentId} để lưu đoạn.`);
+    }
+    const rows = (chunks || []).map((chunk, position) => {
+      const text = String(chunk.text ?? '').trim();
+      if (!text) {
+        throw new LessonStoreError('STORE_INVALID_DOCUMENT', 'Đoạn giáo án không được để trống.');
+      }
+      return {
+        index: Number.isFinite(chunk.index) ? Math.round(chunk.index) : position,
+        text,
+        heading: chunk.heading ? String(chunk.heading) : null,
+        charStart: Number.isFinite(chunk.charStart) ? Math.round(chunk.charStart) : 0,
+        charEnd: Number.isFinite(chunk.charEnd) ? Math.round(chunk.charEnd) : 0,
+        tokenCount: text.split(/\s+/).length
+      };
+    });
+    const write = this.db.transaction(() => {
+      this.db.prepare('DELETE FROM lesson_chunks WHERE document_id = ?').run(documentId);
+      const insert = this.db.prepare(`
+        INSERT INTO lesson_chunks (document_id,chunk_index,text,heading,char_start,char_end,token_count)
+        VALUES (@document_id,@chunk_index,@text,@heading,@char_start,@char_end,@token_count)
+      `);
+      rows.forEach(row =>
+        insert.run({
+          document_id: documentId,
+          chunk_index: row.index,
+          text: row.text,
+          heading: row.heading,
+          char_start: row.charStart,
+          char_end: row.charEnd,
+          token_count: row.tokenCount
+        })
+      );
+    });
+    write();
+    return this.listChunks(documentId);
   }
 
   // -------------------------------------------------------------------------
@@ -421,6 +528,20 @@ export class LessonStore {
 // ---------------------------------------------------------------------------
 // Row parsing / validation
 // ---------------------------------------------------------------------------
+
+function chunkFromRow(row: ChunkRow): StoredLessonChunk {
+  return {
+    documentId: row.document_id,
+    index: Number(row.chunk_index) || 0,
+    text: row.text,
+    heading: row.heading || null,
+    charStart: Number(row.char_start) || 0,
+    charEnd: Number(row.char_end) || 0,
+    tokenCount: Number(row.token_count) || 0,
+    embeddingModel: row.embedding_model || null,
+    embeddingDim: row.embedding_dim === null || row.embedding_dim === undefined ? null : Number(row.embedding_dim)
+  };
+}
 
 function documentFromRow(row: DocumentRow): StoredLessonDocument {
   return {
