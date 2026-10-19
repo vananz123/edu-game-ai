@@ -26,6 +26,10 @@ contextBridge.exposeInMainWorld('eduGame', Object.freeze({
   startLocalRuntime: modelId => ipcRenderer.invoke('ai:start-local-runtime', modelId),
   stopLocalRuntime: () => ipcRenderer.invoke('ai:stop-local-runtime'),
   cancelAi: requestId => ipcRenderer.invoke('ai:cancel', requestId),
+  analyzeLesson: payload => ipcRenderer.invoke('lesson:analyze', payload),
+  recommendGames: payload => ipcRenderer.invoke('lesson:recommend', payload),
+  getLessonAnalysis: analysisId => ipcRenderer.invoke('lesson:get-analysis', analysisId),
+  getLessonRecommendations: analysisId => ipcRenderer.invoke('lesson:recommendations', analysisId),
   onLocalAiProgress: callback => {
     const listener = (_event, progress) => callback(progress);
     ipcRenderer.on('ai:local-progress', listener);

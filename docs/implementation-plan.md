@@ -380,10 +380,11 @@ Không sửa: `gameplay.ts`, `game-editor.ts` (trừ điểm gọi AI regenerate
 
 ### P4 — Analyze + recommend
 
-- IPC `lesson:analyze`, `lesson:recommend`.
-- Normalize + validate `LessonAnalysis`, `GameRecommendation`.
-- Test mock + fixture; kiểm tra mục tiêu/mức nhận thức/uncertainties.
-- **Gate:** test contracts + workflow.
+- [x] IPC `lesson:analyze`, `lesson:recommend` (+ `lesson:get-analysis`, `lesson:recommendations` để mở lại draft).
+- [x] Normalize + validate `LessonAnalysis`, `GameRecommendation` (+ kiểm tra chéo `learningObjectiveIds`).
+- [x] Test mock + fixture; kiểm tra mục tiêu/mức nhận thức/uncertainties.
+- **Gate:** test contracts + workflow. ✅ (2026-10-19, `tests/lesson-projects.test.ts` + mở rộng `tests/lesson-workflow.test.ts`; CDP wiring 8/8, smoke62 9/9, smoke63 49/49; **happy path với model thật để P6**)
+- Ghi chú: `lesson:analyze` trả `{ analysis, project }`, `lesson:recommend` trả `{ recommendations, project }` (khác bảng §6 vốn ghi `GameRecommendation[]`) để lưu tiến độ draft; helper dựng project ở `lesson-projects.ts`.
 
 ### P5 — Wizard bước 1–4
 

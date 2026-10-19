@@ -283,6 +283,20 @@ export interface EduGameBridge {
   stopLocalRuntime(): Promise<{ ok: boolean }>;
   /** Cancels an in-flight AI request by the `requestId` passed to a workflow call. */
   cancelAi(requestId: string): Promise<{ ok: boolean }>;
+  analyzeLesson(payload: {
+    documentId: string;
+    projectId?: string;
+    analysisId?: string;
+    mode?: 'fast' | 'deep';
+    requestId: string;
+  }): Promise<{ analysis: import('./lesson-types').LessonAnalysis; project: GameProject }>;
+  recommendGames(payload: {
+    analysisId: string;
+    projectId?: string;
+    requestId: string;
+  }): Promise<{ recommendations: import('./lesson-types').GameRecommendation[]; project: GameProject | null }>;
+  getLessonAnalysis(analysisId: string): Promise<import('./lesson-types').LessonAnalysis | null>;
+  getLessonRecommendations(analysisId: string): Promise<import('./lesson-types').GameRecommendation[]>;
   onLocalAiProgress(callback: (progress: import('../ai-core/contracts').LocalAiDownloadProgress) => void): () => void;
   generateGame(payload: GenerateGameRequest): Promise<GenerateGameResponse>;
 }

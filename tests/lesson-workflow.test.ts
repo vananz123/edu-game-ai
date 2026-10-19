@@ -10,6 +10,7 @@ import {
   generateGameDraft,
   recommendGames,
   runStructuredStep,
+  validateRecommendationsAgainstAnalysis,
   type LessonChatClient,
   type LessonChatRequest
 } from '../src/services/lesson-workflow';
@@ -200,6 +201,47 @@ async function main(): Promise<void> {
     client: duplicateType, registry, requestId: 'req-dup', analysis: validAnalysis, now: NOW
   }));
   assert.equal(duplicateType.calls.length, 2);
+
+  // Recommendations pointing at a non-existent objective are rejected.
+  const unknownObjective = new MockClient([{
+    value: {
+      recommendations: [
+        { ...recommendationContent.recommendations[0], learningObjectiveIds: ['o1', 'o99'] }
+      ]
+    }
+  }]);
+  await expectWorkflowError('AI_OUTPUT_INVALID', () => recommendGames({
+    client: unknownObjective, registry, requestId: 'req-unknown-obj', analysis: validAnalysis, now: NOW
+  }));
+  assert.equal(unknownObjective.calls.length, 2, 'objective link failure triggers the repair attempt');
+
+  // Direct cross-check helper: valid links pass, unknown links throw.
+  const validRecommendations = await recommendGames({
+    client: new MockClient([{ value: recommendationContent }]),
+    registry,
+    requestId: 'req-cross-ok',
+    analysis: validAnalysis,
+    now: NOW
+  });
+  assert.equal(validateRecommendationsAgainstAnalysis(validRecommendations, validAnalysis).length, 2);
+  assert.throws(
+    () => validateRecommendationsAgainstAnalysis(
+      [{ ...validRecommendations[0], learningObjectiveIds: ['missing'] }],
+      validAnalysis
+    ),
+    /không tồn tại/
+  );
+
+  // Invalid cognitive level in the analysis is rejected and repaired.
+  const badCognitive = new MockClient([
+    { value: { ...analysisContent, objectives: [{ description: 'x', cognitiveLevel: 'memorize' }] } },
+    { value: analysisContent }
+  ]);
+  const repairedAnalysis = await analyzeLesson({
+    client: badCognitive, registry, requestId: 'req-cognitive', documentId: 'doc_1', text: 'Nội dung.', analysisId: 'analysis_cog', now: NOW
+  });
+  assert.equal(repairedAnalysis.objectives[0].cognitiveLevel, 'apply');
+  assert.equal(badCognitive.calls.length, 2);
 
   // --- Generation: normalizes missing ids ----------------------------------
   const raceContent = {

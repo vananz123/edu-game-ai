@@ -32,6 +32,12 @@ const {
   isCancelReason,
   requestChatJson
 } = require('./services/ai-transport');
+const { analyzeLesson, recommendGames } = require('./services/lesson-workflow');
+const {
+  createProjectFromAnalysis,
+  applyAnalysis,
+  advanceAfterRecommendations
+} = require('./services/lesson-projects');
 const {
   QWEN_LOCAL_MODELS,
   LLAMA_CPP_RUNTIME,
@@ -618,6 +624,61 @@ function registerIpc() {
   ipcMain.handle('project:get', async (_e, projectId) => requireLessonStore().getProject(String(projectId || '')));
   ipcMain.handle('project:list', async () => requireLessonStore().listProjects());
   ipcMain.handle('project:delete', async (_e, projectId) => ({ ok: requireLessonStore().deleteProject(String(projectId || '')) }));
+  ipcMain.handle('lesson:analyze', async (_e, payload) => {
+    const documentId = String(payload?.documentId || '');
+    const requestId = String(payload?.requestId || '');
+    if (!documentId) throw new Error('Thiếu mã tài liệu để phân tích.');
+    const store = requireLessonStore();
+    const document = await store.getDocumentWithText(documentId);
+    if (!document) throw new Error('Không tìm thấy giáo án đã lưu. Hãy nhập lại tài liệu.');
+    const analysis = await analyzeLesson({
+      client: createLessonChatClient(),
+      registry: aiRequests,
+      requestId,
+      documentId,
+      text: document.text,
+      sourceName: document.name,
+      analysisId: payload?.analysisId ? String(payload.analysisId) : undefined,
+      now: new Date().toISOString(),
+      maxTokens: payload?.mode === 'deep' ? 1536 : 1024
+    });
+    store.saveAnalysis(analysis);
+    const identity = { documentId: document.id, name: document.name, characters: document.characters };
+    const now = new Date().toISOString();
+    let project;
+    if (payload?.projectId) {
+      const existing = store.getProject(String(payload.projectId));
+      if (!existing) throw new Error('Không tìm thấy dự án để cập nhật kết quả phân tích.');
+      project = store.saveProject(applyAnalysis(existing, { document: identity, analysis, now }));
+    } else {
+      project = store.saveProject(createProjectFromAnalysis({ projectId: id('project'), document: identity, analysis, now }));
+    }
+    return { analysis, project };
+  });
+  ipcMain.handle('lesson:recommend', async (_e, payload) => {
+    const analysisId = String(payload?.analysisId || '');
+    const requestId = String(payload?.requestId || '');
+    if (!analysisId) throw new Error('Thiếu mã phân tích để gợi ý trò chơi.');
+    const store = requireLessonStore();
+    const analysis = store.getAnalysis(analysisId);
+    if (!analysis) throw new Error('Không tìm thấy kết quả phân tích. Hãy phân tích giáo án trước.');
+    const recommendations = await recommendGames({
+      client: createLessonChatClient(),
+      registry: aiRequests,
+      requestId,
+      analysis,
+      now: new Date().toISOString()
+    });
+    store.saveRecommendations(analysis.id, recommendations);
+    let project = null;
+    if (payload?.projectId) {
+      const existing = store.getProject(String(payload.projectId));
+      if (existing) project = store.saveProject(advanceAfterRecommendations(existing, new Date().toISOString()));
+    }
+    return { recommendations, project };
+  });
+  ipcMain.handle('lesson:get-analysis', async (_e, analysisId) => requireLessonStore().getAnalysis(String(analysisId || '')));
+  ipcMain.handle('lesson:recommendations', async (_e, analysisId) => requireLessonStore().listRecommendations(String(analysisId || '')));
   ipcMain.handle('files:import-document', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       title: 'Chọn giáo án hoặc tài liệu',
@@ -1068,6 +1129,48 @@ async function requestJsonFromCompatibleApi({ payload, ai, systemPrompt, userPro
         signal
       }, mode)
   });
+}
+
+/**
+ * Local-only chat client for the lesson-to-game workflow.
+ *
+ * Reuses the same llama.cpp runtime and `fetchAiEndpoint` as the legacy
+ * document assistant, but never falls back to a cloud provider and forwards the
+ * workflow's abort signal so `ai:cancel` stops the request.
+ */
+function createLessonChatClient() {
+  return {
+    async chatJson({ messages, maxTokens, responseSchema, signal }) {
+      if (!localAiManager || localAiManager.getStatus().state !== 'READY') {
+        throw new AiTransportError('AI_NOT_RUNNING', 'AI local chưa chạy. Hãy nhấn “Tổng hợp với AI trên máy” để mở cửa sổ AI local · llama.cpp, chọn model đã tải đầy đủ rồi nhấn “Bắt đầu chạy”.');
+      }
+      const settings = await readJson(SETTINGS_FILE(), {});
+      const ai = settings.ai || {};
+      const localModelId = ai.localModelId || QWEN_LOCAL_MODELS[0].id;
+      let baseUrl;
+      try {
+        baseUrl = await ensureLocalRuntime(localModelId);
+      } catch (error) {
+        throw new AiTransportError('AI_NOT_RUNNING', error instanceof Error ? error.message : String(error));
+      }
+      return requestChatJson({
+        model: localModelId,
+        mode: 'local',
+        messages,
+        generation: buildGenerationOptions('local', maxTokens),
+        responseSchema: responseSchema || null,
+        timeoutMs: 300_000,
+        signal,
+        send: (body, sendSignal) => fetchAiEndpoint(`${baseUrl}/chat/completions`, {
+          method: 'POST',
+          redirect: 'error',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          signal: sendSignal
+        }, 'local')
+      });
+    }
+  };
 }
 
 function buildDocumentAnalysisPrompt(request, text) {

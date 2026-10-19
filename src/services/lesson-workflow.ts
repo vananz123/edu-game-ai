@@ -232,13 +232,38 @@ export async function recommendGames(options: RecommendGamesOptions): Promise<Ga
       { role: 'system', content: LESSON_RECOMMENDATION_SYSTEM_PROMPT },
       { role: 'user', content: buildRecommendationPrompt({ analysis: options.analysis }) }
     ],
-    validate: value => normalizeRecommendations(value, {
-      analysisId: options.analysis.id,
-      createdAt,
-      idPrefix: options.idPrefix
-    }),
+    validate: value => validateRecommendationsAgainstAnalysis(
+      normalizeRecommendations(value, {
+        analysisId: options.analysis.id,
+        createdAt,
+        idPrefix: options.idPrefix
+      }),
+      options.analysis
+    ),
     repairMessages: buildRepairMessages
   });
+}
+
+/**
+ * Cross-check the parsed recommendations against the analysis: every
+ * `learningObjectiveIds` entry must exist. Unknown ids are treated as invalid
+ * output so the repair attempt (and then the teacher) sees the real problem
+ * instead of a silently broken objective link.
+ */
+export function validateRecommendationsAgainstAnalysis(
+  recommendations: GameRecommendation[],
+  analysis: LessonAnalysis
+): GameRecommendation[] {
+  const known = new Set(analysis.objectives.map(objective => objective.id));
+  for (const recommendation of recommendations) {
+    const unknown = recommendation.learningObjectiveIds.filter(id => !known.has(id));
+    if (unknown.length) {
+      throw new Error(
+        `Đề xuất "${recommendation.title}" tham chiếu mục tiêu không tồn tại: ${unknown.join(', ')}.`
+      );
+    }
+  }
+  return recommendations;
 }
 
 export interface GenerateDraftOptions {

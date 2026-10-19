@@ -5,6 +5,7 @@ import path from 'node:path';
 import { LessonStore, LessonStoreError, LESSON_STORE_SCHEMA_SQL } from '../src/services/lesson-store';
 import type { LessonStoreDatabase } from '../src/services/lesson-store';
 import { toEducationalGame } from '../src/services/game-project-adapter';
+import { advanceAfterRecommendations, createProjectFromAnalysis } from '../src/services/lesson-projects';
 import type {
   ArenaDraft,
   GameProject,
@@ -214,6 +215,13 @@ async function run(): Promise<void> {
   assert.equal(store.listProjects().length, 2);
   assert.deepEqual(store.getProject('project-2')?.gameSnapshot, matchingSnapshot);
 
+  // --- .egame JSON round-trip of a stored snapshot ------------------------
+  const storedMatching = store.getProject('project-2');
+  assert.ok(storedMatching?.gameSnapshot, 'stored snapshot is present before the round-trip');
+  const packageJson = JSON.parse(JSON.stringify({ packageFormat: 'edugame', packageVersion: 1, game: storedMatching?.gameSnapshot }));
+  assert.equal(packageJson.packageFormat, 'edugame');
+  assert.deepEqual(packageJson.game, storedMatching?.gameSnapshot);
+
   // Saving again updates the same row (createdAt preserved).
   const updatedProject = store.saveProject({ ...arenaProject(), step: 'edit', description: 'Đã sửa' });
   assert.equal(updatedProject.createdAt, savedProject.createdAt);
@@ -236,10 +244,22 @@ async function run(): Promise<void> {
   expectStoreError('PROJECT_SNAPSHOT_INVALID', () => store.saveProject({ ...matchingProject, id: 'p-snapshot', gameSnapshot: badSnapshot }));
 
   // --- .egame JSON round-trip of a stored snapshot ------------------------
-  const storedMatching = store.getProject('project-2');
-  const packageJson = JSON.parse(JSON.stringify({ packageFormat: 'edugame', packageVersion: 1, game: storedMatching?.gameSnapshot }));
-  assert.equal(packageJson.packageFormat, 'edugame');
-  assert.deepEqual(packageJson.game, storedMatching?.gameSnapshot);
+  // (covered above, before the project was deleted)
+
+  // --- P4 project builders produce store-valid projects --------------------
+  const builtProject = createProjectFromAnalysis({
+    projectId: 'project-built',
+    document: { documentId: document.id, name: document.name, characters: document.characters },
+    analysis,
+    now: ISO
+  });
+  const savedBuilt = store.saveProject(builtProject);
+  assert.equal(savedBuilt.step, 'recommend');
+  assert.equal(savedBuilt.analysisId, 'analysis-1');
+  const advancedBuilt = store.saveProject(advanceAfterRecommendations(savedBuilt, ISO));
+  assert.equal(advancedBuilt.step, 'configure');
+  assert.equal(advancedBuilt.status, 'review');
+  assert.equal(store.getProject('project-built')?.step, 'configure');
 
   // --- Version guards on read ---------------------------------------------
   db.prepare('INSERT INTO game_projects (id,game_id,status,step,data_json,schema_version,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)')
