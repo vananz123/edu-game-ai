@@ -477,3 +477,139 @@ Còn cần chủ dự án xác nhận khi tới phase tương ứng:
 2. **P6:** số câu mặc định và thời lượng mặc định cho từng thể loại (đề xuất: 8 câu / 10 phút; treasure 5 chặng; race 12 ô).
 3. **P6:** có cần giới hạn cứng số lần generate/ngày ở bản pilot không (spec không yêu cầu; đề xuất chưa làm).
 4. **P7:** có cần xuất kèm “nhật ký tạo bằng AI” trong `.egame` không (đề xuất không, để giữ format).
+
+---
+
+## 13. Tối ưu quy trình AI (spec chủ dự án 2026-10-20)
+
+Nguồn yêu cầu: `docs/update-AI-local.txt`. Mục tiêu: **chỉ gọi Qwen cho việc thật sự cần năng lực ngôn ngữ**, tái sử dụng mọi kết quả, không gọi AI ở bước chọn thể loại/cấu hình, không sinh lại phần đã đạt, và **đo trước/sau** trên máy mục tiêu (16 GB RAM, CPU dòng U, GPU tích hợp). Không viết lại app; giữ `EducationalGame`/`.egame`/gameplay.
+
+### 13.1 Audit hiện trạng (đo trên Qwen3.5-2B Q4_0, CPU 8 luồng)
+
+| # | Bước | Hiện tại | Vấn đề |
+|---|---|---|---|
+| 1 | Phân tích | `lesson:analyze` → `analyzeLesson` (`maxTokens` 1024/1536) gửi **12.000 ký tự** giáo án (`getLocalDocumentAnalysisExcerpt`). Lưu vào `lesson_analyses`. | Chưa có cache key: đổi cấu hình/không đổi tài liệu vẫn phân tích lại. Chưa lập chỉ mục. |
+| 2 | Đề xuất thể loại | `lesson:recommend` → `recommendGames` (`maxTokens` 1024) — **một lượt Qwen chỉ để chọn 1 trong 5 thể loại** đã biết. | **Lãng phí hoàn toàn**: đây là quy tắc xác định, chuyển sang TypeScript. Đo ~67 s/lượt. |
+| 3 | Cấu hình | Không gọi AI. | Đã đúng. |
+| 4 | Sinh nội dung | `lesson:generate` → `generateGameDraft` (`maxTokens` 2048/4096) gửi `document.text.slice(0, 6000)` + analysis + config + schema. | Gửi lại văn bản thô thay vì đoạn kiểm thức liên quan; 2048 token không đủ cho 1 bộ 4 câu với model 2B → `AI_TRUNCATED`. |
+| 5 | Sửa lỗi | `runStructuredStep` sửa **toàn bộ** output 1 lần khi JSON/schema sai. | Sửa cả bộ khi chỉ 1 câu hỏng; chưa có tạo lại từng câu. |
+| 6 | Lưu trữ | 4 bảng sidecar; tài liệu ở `userData/lessons/<id>.txt` + `sha256`. | Có `sha256` nhưng **chưa dùng để cache**; chưa có bảng đoạn/embedding/kết quả sinh. |
+| 7 | Embedding | **Chưa có.** `ai-manager` spawn llama-server với `--model/--ctx-size/--threads/--n-gpu-layers`, không có `--embedding`; catalog chỉ có 3 model Qwen. | Phải thêm runtime embedding riêng (MiniLM GGUF) + chọn model có chất lượng tiếng Việt **đã kiểm chứng**. |
+| 8 | Fast/Deep | `buildGenerationOptions` chỉ hỗ trợ `enable_thinking: false`. | Chưa có Deep “thinking”; chưa xác minh chat template của đúng GGUF. |
+| 9 | Đo lường | Không có benchmark. | Không thể chứng minh tối ưu; số liệu hiện chỉ là đo tay. |
+
+**Số đo hiện có:** request analyze y hệt (prompt thật + `json_schema` thật) → HTTP 200, **56 s / 413 token**; đo trực tiếp 179 token / 16 s ≈ **11,1 tok/s**; `lesson:recommend` ~**67 s**; analyze trong app ~**7,5 phút** (có lượt sửa) — cao hơn hẳn 56 s, cho thấy chi phí prompt + lượt sửa là đáng kể.
+
+### 13.2 Luồng đích
+
+```
+Nhập giáo án
+  └─ (TS) chuẩn hoá + sha256            [0 lượt Qwen]
+  └─ (TS) chunk + index                 [0 lượt, chỉ embedding MiniLM]
+Phân tích            analyze           [1 lượt Qwen, cache theo fingerprint+model+prompt]
+Chọn thể loại        rules             [0 lượt Qwen]  ← thay lesson:recommend
+Cấu hình             validate (TS)     [0 lượt Qwen]
+Sinh nội dung        retrieve + generate [1 lượt Qwen (+ lô nếu số lượng lớn)]
+Kiểm tra             zod + validator + quality (TS) [0 lượt]
+Sửa                  chỉ câu hỏng      [0–N lượt, có ngân sách]
+Xem trước            editor            [0 lượt]
+```
+
+### 13.3 Module mới / sửa
+
+**Tạo mới**
+
+```
+src/services/game-type-rules.ts      bảng năng lực 5 thể loại (mức nhận thức, dạng dữ liệu, mục tiêu)
+src/services/game-recommender.ts     đề xuất 2–3 thể loại bằng quy tắc (thay lượt Qwen #2)
+src/services/lesson-chunker.ts       chia giáo án theo tiêu đề/đoạn, giữ offset + sha256 từng đoạn
+src/services/lesson-retrieval.ts     cosine + khử trùng lặp + giới hạn ngân sách văn bản
+src/services/lesson-quality.ts       trùng lặp, đủ số lượng, phương án nhiễu, bao phủ mục tiêu (warning)
+src/services/generation-batching.ts  sinh cả bộ vs theo lô 4–5 (cấu hình được)
+src/ai-core/embedding-manager.ts     llama-server thứ hai với --embedding + MiniLM GGUF
+src/ai-core/embedding-catalog.ts     manifest MiniLM (nguồn, sha256, dim, license, tiếng Việt)
+tests/game-recommender.test.ts
+tests/lesson-chunker.test.ts
+tests/lesson-retrieval.test.ts
+tests/lesson-quality.test.ts
+tests/bench-ai.js                    harness benchmark (mục 12 của spec)
+docs/BENCHMARKS.md                   kết quả trước/sau
+```
+
+**Sửa**
+
+```
+src/services/lesson-store.ts     thêm bảng chunk/embedding/cache + migration additive
+src/services/lesson-prompts.ts   prompt generate chỉ nhận đoạn truy xuất (không gửi 6k thô)
+src/services/lesson-workflow.ts  dùng recommender TS; tạo lại từng câu; ngân sách token
+src/main.ts                      IPC index/search/regenerate-item; bỏ gọi AI ở recommend
+src/ai-core/ai-manager.ts        hỗ trợ chế độ embedding (hoặc tách manager riêng)
+src/ai-core/generation-options.ts thêm enable_thinking cho Deep (sau khi xác minh)
+src/shared/types.ts, preload.ts  bridge mới; giữ nguyên hàm cũ
+src/renderer/features/wizard/step-generate.ts  5 trạng thái tiến trình, Fast/Deep, huỷ
+src/renderer/features/game-editor.ts           nút "Tạo lại câu này" (chỉ khi chỉnh sửa AI)
+```
+
+Không đụng: `gameplay.ts`, `game-validation.ts` (chỉ import), `.egame`, bảng `games`.
+
+### 13.4 Lưu trữ bổ sung (additive)
+
+```sql
+CREATE TABLE IF NOT EXISTS lesson_chunks (
+  id TEXT PRIMARY KEY, document_id TEXT NOT NULL, ordinal INTEGER NOT NULL,
+  heading TEXT, text TEXT NOT NULL, char_start INTEGER, char_end INTEGER,
+  sha256 TEXT NOT NULL, FOREIGN KEY (document_id) REFERENCES lesson_documents(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS lesson_chunk_embeddings (
+  chunk_id TEXT NOT NULL, model_id TEXT NOT NULL, dim INTEGER NOT NULL,
+  vector BLOB NOT NULL, created_at TEXT NOT NULL,
+  PRIMARY KEY (chunk_id, model_id),
+  FOREIGN KEY (chunk_id) REFERENCES lesson_chunks(id) ON DELETE CASCADE
+);
+-- cache tái sử dụng
+ALTER TABLE lesson_analyses ADD COLUMN cache_key TEXT;   -- sha256(text)+model+promptVersion
+CREATE TABLE IF NOT EXISTS game_generation_cache (
+  cache_key TEXT PRIMARY KEY, draft_json TEXT NOT NULL, created_at TEXT NOT NULL
+);
+```
+
+- Cột mới thêm bằng `ALTER TABLE` có kiểm tra `PRAGMA table_info` (không phá DB cũ).
+- `cache_key` rỗng với dữ liệu cũ → coi là “không cache”, phân tích lại một lần rồi điền.
+- Vector lưu `BLOB` `Float32Array`; số đoạn nhỏ (hàng trăm) nên cosine quét tuyến tính là đủ, **không** thêm vector DB.
+
+### 13.5 Phase và cổng nghiệm thu
+
+- **O0 — Audit + kế hoạch (tài liệu này).** Cổng: chủ dự án duyệt; **không sửa code** trước khi duyệt.
+- **O1 — Đề xuất thể loại bằng TypeScript.** `game-type-rules` + `game-recommender`; `lesson:recommend` giữ nguyên shape nhưng **không gọi model**; thêm `reason`/`warnings`. Test quy tắc cho 5 thể loại + dữ liệu thiếu. **Cổng:** *số lượt Qwen khi chọn thể loại = 0*; `smoke64` vẫn xanh.
+- **O2 — Validator chất lượng + trùng lặp.** `lesson-quality` (lỗi cứng vs cảnh báo), hiển thị ở bước xem trước. **Cổng:** unit test; không có false-positive chặn giáo viên.
+- **O3 — Chunk + truy xuất (chưa cần model mới).** `lesson-chunker`, `lesson-store` chunk, `lesson-retrieval` với embedder **giả lập từ vựng** để kiểm tra đường ống; prompt generate chuyển sang dùng đoạn. **Cổng:** đường ống chạy end-to-end với fixture; `AI_TRUNCATED` giảm nhờ prompt ngắn hơn (đo).
+- **O4 — MiniLM thật.** `embedding-catalog` + `embedding-manager`; cài/verify SHA-256; đo chất lượng truy xuất trên bộ giáo án tiếng Việt; cache embedding. **Cổng:** retrieval đúng chủ đề ≥ mức đặt ra trên bộ thử; RAM đỉnh trong ngân sách 16 GB.
+- **O5 — Cache + lô + tạo lại từng câu.** Cache analysis/generation theo `cache_key`; batching cấu hình được; IPC `lesson:regenerate-item` + nút trong editor. **Cổng:** tạo game thứ hai từ cùng giáo án **không** phân tích lại; tạo lại 1 câu không đổi các câu khác.
+- **O6 — Fast/Deep + benchmark.** Xác minh `enable_thinking` trên đúng GGUF/llama.cpp; nếu không ổn định → khởi động lại cùng model với cấu hình phù hợp; chạy `tests/bench-ai.js` cho bộ giáo án, ghi `docs/BENCHMARKS.md`. **Cổng:** số liệu trước/sau + \(số lượt Qwen trung bình\).
+- **O7 — UI tiến trình + hồi quy + build.** 5 trạng thái tiến trình, Fast/Deep, huỷ an toàn; `npm run check`, `npm test`, `smoke56/62/63/64/65/66/67`; `dist:win`; cập nhật docs.
+
+### 13.6 Rủi ro mới
+
+| Rủi ro | Mức | Phương án |
+|---|---|---|
+| MiniLM “có tên” nhưng truy xuất tiếng Việt kém | Cao | Bắt buộc đo trên bộ giáo án tiếng Việt trước khi chốt (spec §4.2); nếu kém → thử model khác hoặc lai BM25 từ vựng (đã có `document-assist` overlap) |
+| Chạy 2 llama-server (Qwen + MiniLM) tranh RAM/CPU | Trung bình | MiniLM nhỏ, chỉ nạp khi index/retrieve; tắt khi rảnh; đo RAM đỉnh |
+| `--embedding` thay đổi hành vi server hiện tại | Trung bình | Dùng **tiến trình riêng**, không sửa tham số của Qwen; test health riêng |
+| Cache trả nội dung cũ khi giáo viên muốn mới | Trung bình | Cache chỉ cho analysis/embedding; generation cache **bỏ qua** khi bấm “Tạo lại”; có nút xoá cache |
+| Tạo lại từng câu làm mất cân bằng độ khó/bao phủ | Trung bình | Kiểm tra chất lượng sau mỗi lần thay; cảnh báo nếu lệch |
+| Quy tắc đề xuất sai/thiên lệch | Trung bình | Luôn cho giáo viên tự chọn thể loại khác (spec §3); test 5 thể loại |
+| Tối ưu làm mất tính đúng đắn sư phạm | Cao | Không đánh đổi: validator chỉ chặn lỗi cơ học, nội dung không xác minh được → giáo viên duyệt |
+
+### 13.7 Kế hoạch kiểm thử / benchmark (spec §12)
+
+- Bộ giáo án: 6–8 tệp tiếng Việt nhiều môn/khối (`tests/fixtures/lessons/`), không dùng dữ liệu học sinh thật.
+- Đo: thời gian phân tích, index, truy xuất, sinh, khởi động model, prompt tps, sinh tps, tổng click→preview, RAM/VRAM đỉnh, tỉ lệ JSON hợp lệ, tỉ lệ câu có căn cứ trong giáo án, bao phủ mục tiêu, số lượt Qwen trung bình, tỉ lệ phải tạo lại.
+- So sánh: hiện tại (sau P6) vs sau O5; Fast vs Deep; sinh cả bộ vs lô 4–5.
+- **Nguyên tắc:** chỉ chốt tham số khi có số đo trên máy mục tiêu; không suy đoán.
+
+### 13.8 Cần chủ dự án chốt trước khi code O1
+
+1. **Bỏ hẳn lượt Qwen cho đề xuất thể loại** (đề xuất: có) — đổi lại đề xuất do quy tắc sinh ra, không “thông minh” bằng model nhưng tức thời và ổn định.
+2. **MiniLM cụ thể** (đề xuất: `paraphrase-multilingual-MiniLM-L12-v2` dạng GGUF, ~120 MB) — cần duyệt nguồn/sha256/license trước khi tải.
+3. **Ngưỡng số câu để chuyển sang sinh theo lô** (đề xuất: bắt đầu đo ở 8 câu, chốt sau benchmark).
+4. **Cache nội dung đã sinh**: có được bật mặc định không (đề xuất: bật cho “cùng giáo án + cùng cấu hình”, luôn bỏ qua khi bấm “Tạo lại”).

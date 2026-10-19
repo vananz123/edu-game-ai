@@ -3,6 +3,10 @@
 **Status:** Prototype / handoff build. Do not describe as production-ready.
 **Last verified:** 2026-10-19 — **P6 sinh nội dung trò chơi (5 thể loại) + trình soạn thảo**: bước 5 của wizard "Tạo từ giáo án" nay thật — gọi model local rồi kiểm tra **2 lớp** (zod theo thể loại → adapter duy nhất → 4 validator cũ), mở trình soạn thảo để giáo viên sửa, lưu vào thư viện và chơi offline; mở lại draft **không gọi AI**. Verified by `npm run check`, `npm test` (build + **17 suites**), app thật CDP: `smoke67` **52/52** (cả 5 thể loại), `smoke66 fixture` **26/26**, `smoke64` **37/37**, `smoke65 runtime` **18/18** + `output` **14/14**. **E2E với model thật mới đạt một phần** (analyze ✅ + recommend ✅ chạy thật trong app; generate ❌ `AI_TRUNCATED`) — chi tiết ở mục P6 bên dưới. Trước đó: **P4**, **P3**, **P2**, **P1**, installer `release/EduGame-Studio-Setup-0.3.0.exe`.
 
+## Tối ưu quy trình AI — O0: kế hoạch chờ duyệt (2026-10-20)
+
+Chủ dự án bổ sung spec `docs/update-AI-local.txt`: giảm số lượt gọi Qwen, **không** gọi AI khi chọn thể loại/cấu hình, phân tích một lần + cache, dùng MiniLM lập chỉ mục/truy xuất thay vì gửi toàn bộ giáo án, chuyển việc xác định sang TypeScript, tạo lại từng câu, và benchmark trước/sau trên máy 16 GB / CPU dòng U. Đã làm **O0**: audit hiện trạng + luồng đích + module/bảng/phase O1–O7 + rủi ro + kế hoạch đo, ghi ở `docs/implementation-plan.md` §13 và `docs/ROADMAP.md`. **Chưa sửa một dòng code nào** cho workstream này — chờ chủ dự án duyệt (4 câu hỏi ở §13.8). Trong lúc đó, P6 được chốt theo `DECISIONS #19` (wiring verify bằng fixture; **sinh nội dung với model thật chưa verify**).
+
 ## AI-assisted Lesson-to-Game — P6: sinh nội dung 5 thể loại + editor (2026-10-19)
 
 Bước P6 của `docs/implementation-plan.md`: nối bước 5 `generate` với model local thật, kiểm tra dữ liệu 2 lớp, chuyển đổi bằng adapter duy nhất, mở editor để giáo viên duyệt/sửa rồi lưu thư viện. **Không đổi** `EducationalGame`, `.egame`, gameplay, `game-editor.ts`.
