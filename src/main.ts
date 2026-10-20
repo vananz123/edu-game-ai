@@ -775,7 +775,7 @@ function registerIpc() {
   ipcMain.handle('project:get', async (_e, projectId) => requireLessonStore().getProject(String(projectId || '')));
   ipcMain.handle('project:list', async () => requireLessonStore().listProjects());
   ipcMain.handle('project:delete', async (_e, projectId) => ({ ok: requireLessonStore().deleteProject(String(projectId || '')) }));
-  ipcMain.handle('lesson:analyze', async (_e, payload) => {
+  ipcMain.handle('lesson:analyze', async (event, payload) => {
     const documentId = String(payload?.documentId || '');
     const requestId = String(payload?.requestId || '');
     if (!documentId) throw new Error('Thiếu mã tài liệu để phân tích.');
@@ -796,6 +796,7 @@ function registerIpc() {
     let analysis = payload?.force ? null : store.findAnalysisByCacheKey(documentId, cacheKey);
     let cached = Boolean(analysis);
     if (!analysis) {
+      sendLessonProgress(event.sender, requestId, 'prepare');
       analysis = await analyzeLesson({
         client: createLessonChatClient(),
         registry: aiRequests,
@@ -809,9 +810,11 @@ function registerIpc() {
         // needed >1,024 tokens (it truncated, then succeeded on the shortened
         // repair). A 2,048 ceiling removes that extra round without costing
         // anything when the model stops earlier on its own.
-        maxTokens: mode === 'deep' ? 2560 : 2048
+        maxTokens: mode === 'deep' ? 2560 : 2048,
+        onAttempt: attempt => sendLessonProgress(event.sender, requestId, attempt > 1 ? 'repair' : 'generate')
       });
       store.saveAnalysis(analysis, { cacheKey });
+      sendLessonProgress(event.sender, requestId, 'ready');
       cached = false;
     }
     const identity = { documentId: document.id, name: document.name, characters: document.characters };

@@ -13,6 +13,40 @@ function wizardCognitiveLabel(level) {
   return found ? found.label : 'Hiểu';
 }
 
+// Real boundaries from `lesson:analyze`: cache check → model attempt →
+// repair-if-needed → stored. There is no token stream, so no fake percentage.
+const WIZARD_ANALYSIS_STAGES = [
+  ['prepare', 'Đọc giáo án và kiểm tra cache'],
+  ['generate', 'AI local phân tích mục tiêu và kiến thức'],
+  ['repair', 'Sửa phần chưa đạt (nếu cần)'],
+  ['ready', 'Lưu kết quả phân tích']
+];
+
+function renderWizardAnalysisProgress() {
+  const s = wizardState;
+  if (s.busy !== 'analyze') return '';
+  const currentIndex = Math.max(0, WIZARD_ANALYSIS_STAGES.findIndex(([id]) => id === s.lessonStage));
+  const rows = WIZARD_ANALYSIS_STAGES.map(([id, initialLabel], index) => {
+    let label = initialLabel;
+    let status = index < currentIndex ? 'done' : index === currentIndex ? 'active' : 'todo';
+    let mark = index < currentIndex ? '✓' : index === currentIndex ? '⏳' : '·';
+    if (id === 'repair' && status === 'done' && !s.lessonRepaired) {
+      status = 'skipped';
+      mark = '–';
+      label = `${label} · không cần`;
+    }
+    return `<li data-stage="${id}" data-status="${status}" class="text-[12px] ${status === 'active' ? 'font-bold text-[#3b3a63]' : status === 'skipped' ? 'text-[#98a0b0]' : 'text-[#5a6478]'}">${mark} ${escapeHtml(label)}</li>`;
+  }).join('');
+  return `<div class="field-hint mt-[8px]" data-wizard-analysis-progress="${escapeHtml(s.lessonStage || 'prepare')}">
+    <ol class="space-y-[2px] pl-[2px]" role="list">${rows}</ol>
+    <div class="mt-[5px] flex flex-wrap gap-x-[10px] gap-y-[2px]">
+      <span data-wizard-analysis-elapsed>${escapeHtml(wizardAnalysisElapsedText())}</span>
+      <span>Bạn có thể chuyển sang trang khác — AI vẫn chạy nền và kết quả sẽ được giữ.</span>
+    </div>
+    <span>AI local chạy trên máy này; giáo án không được gửi đi đâu. Có thể huỷ giữa chừng.</span>
+  </div>`;
+}
+
 function renderWizardAnalysis() {
   const s = wizardState;
   const analyzing = s.busy === 'analyze';
@@ -124,12 +158,17 @@ async function wizardAnalyzeRun(force) {
     return;
   }
   wizardState.busy = 'analyze';
+  wizardState.lessonStage = 'prepare';
+  wizardState.lessonRepaired = false;
   wizardClearMessages();
   const requestId = wizardNewRequestId('analyze');
   wizardState.activeRequestId = requestId;
   render();
+  wizardStartAnalysisClock();
+  let result = null;
+  let failure = null;
   try {
-    const result = await window.eduGame.analyzeLesson({
+    result = await window.eduGame.analyzeLesson({
       documentId: wizardState.documentId,
       projectId: wizardState.projectId || undefined,
       analysisId: wizardState.analysisId || undefined,
@@ -154,11 +193,24 @@ async function wizardAnalyzeRun(force) {
       ? 'Giáo án không đổi nên đã dùng lại kết quả phân tích trước đó (không gọi AI).'
       : 'AI local đã phân tích xong. Hãy xem lại và chỉnh sửa nếu cần.');
   } catch (error) {
+    failure = error;
     wizardSetError(error);
   }
+  wizardStopAnalysisClock();
   wizardState.busy = '';
+  wizardState.lessonStage = '';
+  wizardState.analysisStartedAt = 0;
   wizardState.activeRequestId = null;
-  render();
+  const visible = state.page === 'create-wizard' && Boolean(document.getElementById('wizardRoot'));
+  if (visible) {
+    render();
+  } else if (failure) {
+    toast(wizardErrorText());
+  } else if (result) {
+    toast(result.cached
+      ? 'Đã dùng lại kết quả phân tích trước đó (không gọi AI).'
+      : 'AI local đã phân tích xong giáo án.');
+  }
 }
 
 async function wizardAnalyzeNext() {

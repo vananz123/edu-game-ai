@@ -41,8 +41,9 @@ function renderWizardStatus() {
   const s = wizardState;
   const parts = [];
   if (s.busy) parts.push(`<div class="wizard-status is-busy" data-wizard-busy="${s.busy}">⏳ ${escapeHtml(wizardBusyText(s.busy))}</div>`);
-  // O7: real stage list for the generate step, updated in place by the
-  // `lesson:progress` events (no re-render, so the page does not jump).
+  // Real stage lists, updated in place by `lesson:progress` events (no
+  // re-render, so the page does not jump and the elapsed clock keeps running).
+  if (s.busy === 'analyze') parts.push(`<div data-wizard-analysis-progress-host="1">${renderWizardAnalysisProgress()}</div>`);
   if (s.busy === 'generate') parts.push(`<div data-wizard-progress-host="1">${renderWizardGenerationProgress()}</div>`);
   if (s.error) {
     parts.push(`<div class="wizard-status is-error" id="wizardError" data-error-code="${escapeHtml(s.error.code || '')}" role="alert">
@@ -57,7 +58,7 @@ function renderWizardStatus() {
 }
 
 function wizardBusyText(kind) {
-  if (kind === 'analyze') return 'AI local đang phân tích giáo án…';
+  if (kind === 'analyze') return 'AI local đang phân tích giáo án… (thường 1–2 phút)';
   if (kind === 'recommend') return 'AI local đang gợi ý trò chơi…';
   if (kind === 'generate') return 'AI local đang soạn nội dung trò chơi… (giáo án dài có thể mất vài phút)';
   if (kind === 'save') return 'Đang lưu dự án…';
@@ -134,8 +135,13 @@ function wireCreateWizard() {
       if (!stage) return;
       wizardState.lessonStage = stage;
       if (stage === 'repair') wizardState.lessonRepaired = true;
-      const host = document.querySelector('[data-wizard-progress-host]');
-      if (host) host.innerHTML = renderWizardGenerationProgress();
+      if (wizardState.busy === 'analyze') {
+        const analysisHost = document.querySelector('[data-wizard-analysis-progress-host]');
+        if (analysisHost) analysisHost.innerHTML = renderWizardAnalysisProgress();
+      } else {
+        const host = document.querySelector('[data-wizard-progress-host]');
+        if (host) host.innerHTML = renderWizardGenerationProgress();
+      }
     });
   }
   if (!wizardState.projectsLoaded) {
@@ -227,6 +233,7 @@ async function wizardDispatch(action, button) {
     case 'generate': return wizardGenerateRun();
     case 'regenerate': return wizardGenerateRegenerate();
     case 'regenerate-item': return wizardRegenerateItem(Number(button.dataset.itemIndex));
+    case 'another-game': return wizardStartAnotherGame();
     case 'open-editor': return wizardGenerateOpenEditor();
     case 'go-library': navigate('library'); return undefined;
     default: return undefined;
@@ -267,6 +274,12 @@ function wizardNewProject() {
 }
 
 async function wizardOpenSaved(projectId) {
+  // Opening a different draft while an analysis is running would let the late
+  // result overwrite the newly opened project. The analysis stays cancellable.
+  if (wizardState.busy) {
+    toast('AI local đang phân tích giáo án. Hãy đợi hoặc bấm Huỷ trước khi mở dự án khác.');
+    return undefined;
+  }
   wizardState.busy = 'save';
   wizardClearMessages();
   render();

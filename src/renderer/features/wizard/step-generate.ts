@@ -218,9 +218,11 @@ function renderWizardGenerate() {
           <button class="btn btn-primary" data-wizard-action="open-editor"${s.busy ? ' disabled' : ''}>✎ Mở trình chỉnh sửa</button>
           <button class="btn btn-secondary" data-wizard-action="regenerate"${s.busy ? ' disabled' : ''}>🔄 Tạo lại nội dung</button>
           ${s.busy === 'generate' ? '<button class="btn btn-secondary" data-wizard-action="cancel">Huỷ</button>' : ''}
+          <button class="btn btn-secondary" data-wizard-action="another-game"${s.busy ? ' disabled' : ''}>＋ Trò chơi khác từ giáo án này</button>
           <button class="btn btn-secondary" data-wizard-action="save"${s.busy ? ' disabled' : ''}>Lưu dự án</button>
           <button class="btn btn-secondary" data-wizard-action="go-library">📚 Vào thư viện để chơi</button>
-        </div>`
+        </div>
+        <div class="field-hint">“Trò chơi khác” mở một dự án mới nhưng dùng lại phân tích đã lưu — không gọi AI phân tích lại. Bạn chỉ cần chọn thể loại và cấu hình mới.</div>`
       : `<div class="panel-sub">AI local sẽ soạn câu hỏi/tình huống theo đúng cấu hình bên dưới, sau đó bạn duyệt và chỉnh sửa trong trình soạn thảo. Cấu hình và phân tích đã được lưu nên có thể mở lại bất cứ lúc nào — không cần chạy lại AI.</div>
         ${wizardSummaryGrid(wizardConfigSummaryRows(config))}
         <div class="publish-actions">

@@ -274,6 +274,98 @@ const EXPECTED = {
       }
       out.types[type] = info;
     }
+    // Analysis progress + background-safe clock. The elapsed value is real;
+    // there is deliberately no fake percentage.
+    const analysisProgressFor = (stage, repaired) => {
+      wizardState.busy = 'analyze';
+      wizardState.lessonStage = stage;
+      wizardState.lessonRepaired = !!repaired;
+      wizardState.analysisStartedAt = Date.now() - 65000;
+      const host = document.createElement('div');
+      host.innerHTML = renderWizardStatus();
+      const nodes = Array.from(host.querySelectorAll('[data-wizard-analysis-progress] [data-stage]'));
+      const repair = host.querySelector('[data-stage="repair"]');
+      const elapsed = host.querySelector('[data-wizard-analysis-elapsed]');
+      return {
+        stages: nodes.map(node => node.getAttribute('data-stage')),
+        statuses: nodes.map(node => node.getAttribute('data-status')),
+        repairStatus: repair ? repair.getAttribute('data-status') : null,
+        elapsed: elapsed ? elapsed.textContent || '' : '',
+        backgroundHint: /trang khác/.test(host.textContent || '')
+      };
+    };
+    out.analysisUi = analysisProgressFor('generate', false);
+    out.analysisUi.readySkipped = analysisProgressFor('ready', false).repairStatus;
+    out.analysisUi.readyDone = analysisProgressFor('ready', true).repairStatus;
+    const chip = document.getElementById('globalAiActivity');
+    wizardState.busy = 'analyze';
+    wizardStartAnalysisClock();
+    wizardState.analysisStartedAt = Date.now() - 61000;
+    wizardSyncAnalysisClock();
+    out.analysisUi.chipVisible = !!chip && chip.hidden === false;
+    const chipElapsed = chip && chip.querySelector('[data-global-ai-elapsed]');
+    out.analysisUi.chipElapsed = chipElapsed ? chipElapsed.textContent || '' : '';
+    wizardStopAnalysisClock();
+    out.analysisUi.chipHidden = !chip || chip.hidden === true;
+    wizardState.busy = 'analyze';
+    wizardStartAnalysisClock();
+    navigate('library');
+    out.analysisUi.backgroundWork = state.page === 'library' && !!chip && chip.hidden === false;
+    if (chip) chip.click();
+    out.analysisUi.chipReturns = state.page === 'create-wizard' && wizardState.step === 'analyze' && !!chip && chip.hidden === false;
+    wizardStopAnalysisClock();
+    wizardState.busy = '';
+    wizardState.analysisStartedAt = 0;
+    wizardState.lessonStage = '';
+    wizardState.lessonRepaired = false;
+
+    // Second game from the same lesson: a new project row, same document +
+    // analysis ids, no config/draft/snapshot carried over, and genres ready.
+    const sourceProjectId = 'project_smoke67_source_' + stamp;
+    wizardReset();
+    wizardState.analysis = analysis;
+    wizardState.analysisOriginal = JSON.parse(JSON.stringify(analysis));
+    wizardState.analysisId = analysisId;
+    wizardState.documentId = documentId;
+    wizardState.documentName = 'smoke67.txt';
+    wizardState.documentMeta = { characters: lessonText.length, ext: 'txt', sizeBytes: 0 };
+    wizardState.text = lessonText;
+    wizardState.projectId = sourceProjectId;
+    wizardState.createdAt = now;
+    wizardState.config = wizardDefaultConfig({ gameType: 'arena' }, analysis);
+    wizardState.step = 'generate';
+    wizardState.busy = '';
+    wizardState.recommendations = [];
+    await wizardStartAnotherGame();
+    const anotherProjectId = wizardState.projectId;
+    const anotherStored = anotherProjectId ? await window.eduGame.getProject(anotherProjectId) : null;
+    out.anotherGame = {
+      newId: anotherProjectId,
+      oldId: sourceProjectId,
+      idChanged: Boolean(anotherProjectId) && anotherProjectId !== sourceProjectId,
+      step: wizardState.step,
+      storedStep: anotherStored ? anotherStored.step : null,
+      storedStatus: anotherStored ? anotherStored.status : null,
+      sameAnalysis: Boolean(anotherStored) && anotherStored.analysisId === analysisId,
+      sameDocument: Boolean(anotherStored && anotherStored.lesson) && anotherStored.lesson.documentId === documentId,
+      clearedConfig: Boolean(anotherStored) && anotherStored.config === null,
+      clearedDraft: Boolean(anotherStored) && anotherStored.draft === null,
+      clearedGame: Boolean(anotherStored) && anotherStored.gameSnapshot === null,
+      recommendations: wizardState.recommendations.length,
+      busyCleared: wizardState.busy === '',
+      gameTypeReset: wizardState.selectedGameType === null
+    };
+    if (anotherProjectId) await window.eduGame.deleteProject(anotherProjectId);
+    wizardReset();
+    wizardState.config = wizardDefaultConfig({ gameType: 'arena' }, analysis);
+    wizardState.draft = { gameType: 'arena', questions: [] };
+    wizardState.gameSnapshot = { title: 'smoke', template: 'quiz', questions: [] };
+    const anotherUi = document.createElement('div');
+    anotherUi.innerHTML = renderWizardGenerate();
+    out.anotherGame.button = Boolean(anotherUi.querySelector('[data-wizard-action="another-game"]'));
+    out.anotherGame.hint = /không gọi AI phân tích lại/.test(anotherUi.textContent || '');
+    wizardReset();
+
     // O7: the step-5 progress list is real markup driven by state, and it must
     // not claim a repair that never happened. renderWizardStatus is the same
     // function the page calls while a generation is in flight.
@@ -340,6 +432,19 @@ const EXPECTED = {
     push(`${type}: game round-trips through the library`, info.inLibrary === true);
     push(`${type}: cleanup removes game + project`, info.cleanupGame === true && info.cleanupProject === true);
   }
+  const analysisUi = run.analysisUi || {};
+  push('analysis: progress lists the 4 real stages', JSON.stringify(analysisUi.stages) === JSON.stringify(['prepare', 'generate', 'repair', 'ready']), JSON.stringify(analysisUi.stages));
+  push('analysis: current stage highlighted, later stages pending', JSON.stringify(analysisUi.statuses) === JSON.stringify(['done', 'active', 'todo', 'todo']), JSON.stringify(analysisUi.statuses));
+  push('analysis: elapsed clock is real and can run in the background', /Đã chờ 1:0[0-9]/.test(analysisUi.elapsed || '') && analysisUi.backgroundHint === true, analysisUi.elapsed);
+  push('analysis: repair marked skipped when no repair happened', analysisUi.readySkipped === 'skipped', analysisUi.readySkipped);
+  push('analysis: repair marked done when the model had to repair', analysisUi.readyDone === 'done', analysisUi.readyDone);
+  push('analysis: global activity chip shows and hides with the run', analysisUi.chipVisible === true && analysisUi.chipHidden === true && /1:0[0-9]/.test(analysisUi.chipElapsed || ''), analysisUi.chipElapsed);
+  push('analysis: navigating away keeps the run visible and the chip returns to it', analysisUi.backgroundWork === true && analysisUi.chipReturns === true);
+  const another = run.anotherGame || {};
+  push('second game: new project keeps the same analysis + lesson document', another.idChanged === true && another.sameAnalysis === true && another.sameDocument === true, another.newId + '/' + another.oldId);
+  push('second game: starts at the genre step with no old game data', another.step === 'recommend' && another.storedStep === 'recommend' && another.storedStatus === 'review' && another.clearedConfig === true && another.clearedDraft === true && another.clearedGame === true && another.busyCleared === true && another.gameTypeReset === true, another.step + '/' + another.storedStep + '/' + another.storedStatus);
+  push('second game: deterministic recommendations are available without analysis', another.recommendations >= 2, 'n=' + another.recommendations);
+  push('second game: action is offered on the generated-content screen', another.button === true && another.hint === true);
   const stageUi = run.stageUi || {};
   push('O7: progress lists the 5 real stages', JSON.stringify(stageUi.stages) === JSON.stringify(['retrieve', 'generate', 'validate', 'repair', 'ready']), JSON.stringify(stageUi.stages));
   push('O7: current stage highlighted, later stages pending', Array.isArray(stageUi.statuses) && stageUi.statuses[0] === 'done' && stageUi.statuses[1] === 'done' && stageUi.statuses[2] === 'active' && stageUi.statuses[3] === 'todo' && stageUi.statuses[4] === 'todo', JSON.stringify(stageUi.statuses));

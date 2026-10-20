@@ -5,6 +5,14 @@ async function showHelp() {
   $('#modalRoot').querySelector('[data-close]').onclick = () => $('#modalRoot').innerHTML = '';
 }
 document.addEventListener('click', e => {
+  const activity = e.target.closest('[data-global-ai-activity]');
+  if (activity) {
+    if (wizardState.busy === 'analyze') {
+      wizardState.step = 'analyze';
+      navigate('create-wizard');
+    }
+    return;
+  }
   const nav = e.target.closest('.nav-item[data-page]');
   if (nav) navigate(nav.dataset.page);
 });

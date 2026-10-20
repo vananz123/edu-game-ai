@@ -38,6 +38,7 @@ const wizardState = {
   busy: '', // '' | 'analyze' | 'recommend' | 'generate' | 'save'
   lessonStage: '', // O7: 'retrieve' | 'generate' | 'validate' | 'repair' | 'ready' | 'cached'
   lessonRepaired: false, // O7: true when the model actually had to repair an answer
+  analysisStartedAt: 0, // timestamp of the running analysis; drives the elapsed indicator
   error: null, // { code, message }
   notice: null,
   requestNonce: 0,
@@ -84,6 +85,54 @@ function wizardNewRequestId(kind) {
   return `wizard-${kind}-${wizardState.requestNonce}`;
 }
 
+// ---------------------------------------------------------------------------
+// Analysis clock (elapsed time + global activity chip)
+// ---------------------------------------------------------------------------
+// The model call has no token stream, so a percentage would be invented. The
+// elapsed clock is real, survives page navigation, and is the only progress the
+// UI claims while the request is in flight.
+let wizardAnalysisClockTimer = null;
+
+function wizardFormatDuration(milliseconds) {
+  const totalSeconds = Math.max(0, Math.floor(Number(milliseconds) / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+function wizardAnalysisElapsedText() {
+  const startedAt = Number(wizardState.analysisStartedAt) || 0;
+  const elapsed = startedAt ? wizardFormatDuration(Date.now() - startedAt) : '0:00';
+  return `Đã chờ ${elapsed} · thường mất 1–2 phút`;
+}
+
+function wizardSyncAnalysisClock() {
+  const active = wizardState.busy === 'analyze' && Boolean(wizardState.analysisStartedAt);
+  const chip = document.getElementById('globalAiActivity');
+  if (chip) chip.hidden = !active;
+  if (!active) return;
+  const text = wizardAnalysisElapsedText();
+  document.querySelectorAll('[data-wizard-analysis-elapsed]').forEach(node => { node.textContent = text; });
+  const chipElapsed = chip && chip.querySelector('[data-global-ai-elapsed]');
+  if (chipElapsed) chipElapsed.textContent = wizardFormatDuration(Date.now() - wizardState.analysisStartedAt);
+}
+
+function wizardStartAnalysisClock() {
+  wizardStopAnalysisClock();
+  wizardState.analysisStartedAt = Date.now();
+  wizardSyncAnalysisClock();
+  wizardAnalysisClockTimer = window.setInterval(wizardSyncAnalysisClock, 1000);
+}
+
+function wizardStopAnalysisClock() {
+  if (wizardAnalysisClockTimer !== null) {
+    window.clearInterval(wizardAnalysisClockTimer);
+    wizardAnalysisClockTimer = null;
+  }
+  const chip = document.getElementById('globalAiActivity');
+  if (chip) chip.hidden = true;
+}
+
 function wizardClearMessages() {
   wizardState.error = null;
   wizardState.notice = null;
@@ -123,6 +172,7 @@ function wizardReset() {
     busy: '',
     lessonStage: '',
     lessonRepaired: false,
+    analysisStartedAt: 0,
     error: null,
     notice: null,
     activeRequestId: null
@@ -262,6 +312,72 @@ async function wizardSaveProject(step) {
   wizardState.projects = await window.eduGame.listProjects();
   wizardState.projectsLoaded = true;
   return saved;
+}
+
+/**
+ * Starts a second project from the same lesson without touching the model.
+ *
+ * The lesson document and its analysis are carried over by id, while the
+ * game-specific fields are cleared. The teacher therefore lands on the genre
+ * step with the previous analysis/recommendations already available; changing
+ * genre or config only affects generation, not analysis.
+ */
+async function wizardStartAnotherGame() {
+  if (wizardState.busy) return undefined;
+  if (!wizardState.analysisId || !wizardState.analysis) {
+    wizardSetError(new Error('Chưa có kết quả phân tích để dùng lại. Hãy phân tích giáo án trước.'));
+    if (state.page === 'create-wizard') render();
+    return undefined;
+  }
+  const lesson = {
+    documentId: wizardState.documentId,
+    documentName: wizardState.documentName,
+    documentMeta: wizardState.documentMeta,
+    text: wizardState.text,
+    analysis: wizardState.analysis,
+    analysisOriginal: wizardState.analysisOriginal,
+    analysisId: wizardState.analysisId,
+    recommendations: (wizardState.recommendations || []).slice()
+  };
+  wizardReset();
+  Object.assign(wizardState, {
+    documentId: lesson.documentId,
+    documentName: lesson.documentName,
+    documentMeta: lesson.documentMeta,
+    text: lesson.text,
+    analysis: lesson.analysis,
+    analysisOriginal: lesson.analysisOriginal,
+    analysisId: lesson.analysisId,
+    recommendations: lesson.recommendations,
+    step: 'recommend',
+    busy: 'save'
+  });
+  wizardClearMessages();
+  if (state.page === 'create-wizard') render();
+  try {
+    await wizardSaveProject('recommend');
+    // Recommendations are deterministic (no model call). Rebuild them only if
+    // this analysis has never produced a set, so the teacher still sees genres.
+    if (!wizardState.recommendations.length) {
+      try {
+        // No projectId: this only fills the deterministic suggestion list. The
+        // new project stays at `recommend` until the teacher picks a genre.
+        const result = await window.eduGame.recommendGames({
+          analysisId: wizardState.analysisId,
+          requestId: wizardNewRequestId('recommend')
+        });
+        wizardState.recommendations = result.recommendations || [];
+      } catch {
+        // The recommendation step has its own retry button.
+      }
+    }
+    wizardSetNotice('Đã tạo dự án mới từ cùng giáo án. Phân tích được dùng lại — không gọi AI phân tích lại.');
+  } catch (error) {
+    wizardSetError(error);
+  }
+  wizardState.busy = '';
+  if (state.page === 'create-wizard') render();
+  return undefined;
 }
 
 async function wizardRefreshProjects() {

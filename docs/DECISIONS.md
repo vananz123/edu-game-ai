@@ -88,6 +88,11 @@ The analysis prompt now asks for at most **6 objectives / 8 concepts** with shor
 
 Generation **batching** (§5.4) is **not shipped** in O6 either. Measured on the same 8-question arena: one call took **141 s / 1,488 prompt tokens**, while one call per item took **456 s / 13,897 prompt tokens** for the same 8 items, so per-item generation is a repair tool, not an initial generator, and no measured reason exists yet to split an 8-item draft into batches. A batched initial generator would need its own prompt contract and a measured case (very large games) before shipping; the numbers are in `docs/BENCHMARKS.md` §6.5.
 
+### 27. Analysis runs in the background and is observable; a second game reuses the stored analysis by id
+The analysis call can take 1–2 minutes, so the wizard must not pretend that time is blocked work. `lesson:analyze` now emits `lesson:progress` at the four real boundaries (`prepare`, `generate`, `repair` only when a repair really happens, `ready`) and the UI shows them with a real elapsed clock, not a made-up percentage (the local model has no token stream). Navigating to another page leaves the request running; a topbar activity chip shows the elapsed time and returns to the analysis step. Opening a different saved draft is blocked while a run is active so a late result cannot overwrite the project that was opened in the meantime. On completion away from the wizard, the renderer shows a toast instead of force-rendering the current page.
+
+The second-game path is a **clone around the same analysis**, not a second analysis. "Trò chơi khác từ giáo án này" creates a new project with the same `documentId`, `analysisId` and analysis/recommendations, clears config/draft/snapshot/game id, and returns to the genre step. Qwen is not called for analysis again, and the existing generation cache keys still decide whether content can be reused. Rule-based recommendations may be rebuilt if that analysis never produced a list; that is deterministic TypeScript work (0 Qwen calls). This keeps one lesson document and one analysis as the shared source of truth while allowing multiple games.
+
 ## Decisions still open
 - Initial GGUF model and runtime versions, verified source/checksum/size/license, and supported Windows hardware.
 - Whether/how to sync game libraries across devices.
