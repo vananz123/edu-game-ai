@@ -350,7 +350,12 @@ function wizardGenerateOpenEditor() {
   openEditor(
     JSON.parse(JSON.stringify(game)),
     true,
-    'AI local đã soạn bản nháp từ giáo án. Hãy duyệt, sửa nội dung và nhấn “Lưu vào thư viện” để chơi thử.'
+    'AI local đã soạn bản nháp từ giáo án. Hãy duyệt, sửa nội dung và nhấn “Lưu vào thư viện” để chơi thử.',
+    {
+      projectId: wizardState.projectId,
+      gameType: wizardState.config ? wizardState.config.gameType : '',
+      itemIds: (game.questions || []).map(question => question.id)
+    }
   );
   return undefined;
 }
