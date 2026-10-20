@@ -117,6 +117,95 @@ assert.throws(() => validateTreasureHuntGame({ ...treasure, treasureHunt: { ...t
 ] } }), /không giới hạn/);
 assert.throws(() => validateTreasureHuntGame({ ...treasure, treasureHunt: { ...treasure.treasureHunt, journeyBonus: 20000 } }), /0 đến 10000/);
 
+// §5.2 variant missions (matching / decode / classification) are additive.
+const variantStage = (id: string, mission: any, nextStageId: string | null = null): any => ({
+  ...stage(id, `Chặng ${id}`, nextStageId),
+  mission,
+  question: {
+    prompt: 'Nhiệm vụ của chặng',
+    options: [],
+    correctOptionId: '',
+    explanation: 'Giải thích đáp án.',
+    hint: 'Gợi ý'
+  }
+});
+const variantTreasure = {
+  template: 'treasure-hunt',
+  treasureHunt: {
+    ...treasure.treasureHunt,
+    stages: [
+      variantStage('v1', {
+        type: 'matching',
+        pairs: [{ id: 'p1', left: 'Quang hợp', right: 'Tổng hợp chất hữu cơ' }, { id: 'p2', left: 'Hô hấp', right: 'Giải phóng năng lượng' }]
+      }, 'v2'),
+      variantStage('v2', { type: 'decode', answer: 'quang hợp', cipher: 'hợp quang' })
+    ]
+  }
+};
+validateTreasureHuntGame(variantTreasure);
+validateTreasureHuntGame({
+  ...variantTreasure,
+  treasureHunt: {
+    ...variantTreasure.treasureHunt,
+    stages: [
+      variantStage('v1', {
+        type: 'classification',
+        groups: [{ id: 'g1', name: 'Thực vật' }, { id: 'g2', name: 'Động vật' }],
+        items: [{ id: 'i1', text: 'Có diệp lục', groupId: 'g1' }, { id: 'i2', text: 'Có hệ thần kinh', groupId: 'g2' }]
+      }, 'v2'),
+      variantStage('v2', { type: 'decode', answer: 'quang hợp' })
+    ]
+  }
+});
+validateTreasureHuntGame({
+  ...variantTreasure,
+  treasureHunt: {
+    ...variantTreasure.treasureHunt,
+    stages: [
+      { ...variantStage('v1', { type: 'scenario' }, 'v2'), question: stage('v1', 'Tình huống', 'v2').question },
+      variantStage('v2', { type: 'decode', answer: 'quang hợp' })
+    ]
+  }
+});
+assert.throws(() => validateTreasureHuntGame({
+  ...variantTreasure,
+  treasureHunt: {
+    ...variantTreasure.treasureHunt,
+    stages: [variantStage('v1', { type: 'matching', pairs: [{ id: 'p1', left: 'A', right: 'B' }] }, 'v2'), variantStage('v2', { type: 'decode', answer: 'x' })]
+  }
+}), /2 đến 10 cặp/);
+assert.throws(() => validateTreasureHuntGame({
+  ...variantTreasure,
+  treasureHunt: {
+    ...variantTreasure.treasureHunt,
+    stages: [variantStage('v1', { type: 'matching', pairs: [{ id: 'p1', left: 'A', right: 'B' }, { id: 'p1', left: 'C', right: 'D' }] }, 'v2'), variantStage('v2', { type: 'decode', answer: 'x' })]
+  }
+}), /ID riêng/);
+assert.throws(() => validateTreasureHuntGame({
+  ...variantTreasure,
+  treasureHunt: {
+    ...variantTreasure.treasureHunt,
+    stages: [variantStage('v1', { type: 'decode', answer: '' }, 'v2'), variantStage('v2', { type: 'decode', answer: 'x' })]
+  }
+}), /1 đến 120 ký tự/);
+assert.throws(() => validateTreasureHuntGame({
+  ...variantTreasure,
+  treasureHunt: {
+    ...variantTreasure.treasureHunt,
+    stages: [
+      variantStage('v1', {
+        type: 'classification',
+        groups: [{ id: 'g1', name: 'Nhóm 1' }, { id: 'g2', name: 'Nhóm 2' }],
+        items: [{ id: 'i1', text: 'Mục 1', groupId: 'missing' }, { id: 'i2', text: 'Mục 2', groupId: 'g2' }]
+      }, 'v2'),
+      variantStage('v2', { type: 'decode', answer: 'x' })
+    ]
+  }
+}), /nhóm hợp lệ/);
+const normalizedVariant = normalizeGame({ title: 'Hành trình biến thể', template: 'treasure-hunt', questions: [], treasureHunt: variantTreasure.treasureHunt });
+assert.equal(normalizedVariant.treasureHunt.stages[0].mission.type, 'matching');
+assert.equal(normalizedVariant.treasureHunt.stages[1].mission.answer, 'quang hợp');
+
 // §6 đường đua tri thức — validateRaceGame
 const raceQuestion = (id, difficulty) => ({
   id, prompt: 'Câu hỏi đua?', options: [{ id: 'a', text: 'A' }, { id: 'b', text: 'B' }], correctOptionId: 'a', difficulty
@@ -166,6 +255,9 @@ const huntPackage = JSON.parse(JSON.stringify({ packageFormat: 'edugame', packag
 assert.equal(huntPackage.packageFormat, 'edugame');
 runImportChecks(huntPackage.game);
 assert.deepEqual(huntPackage.game.treasureHunt, treasure.treasureHunt);
+const variantPackage = JSON.parse(JSON.stringify({ packageFormat: 'edugame', packageVersion: 1, game: { title: 'Gói biến thể', template: 'treasure-hunt', questions: [], treasureHunt: variantTreasure.treasureHunt } }));
+runImportChecks(variantPackage.game);
+assert.deepEqual(variantPackage.game.treasureHunt, variantTreasure.treasureHunt);
 const racePackage = JSON.parse(JSON.stringify({ packageFormat: 'edugame', packageVersion: 1, game: { title: 'Gói đường đua', template: 'race', questions: [], race: race.race } }));
 runImportChecks(racePackage.game);
 assert.deepEqual(racePackage.game.race, race.race);

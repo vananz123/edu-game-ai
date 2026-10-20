@@ -169,6 +169,12 @@ export interface LessonDocumentWithText extends StoredLessonDocument {
   text: string;
 }
 
+/** Browse/reopen projection for the "Giáo án" page (no text body). */
+export interface LessonDocumentSummary extends StoredLessonDocument {
+  sourceAvailable: boolean;
+  analyses: LessonAnalysis[];
+}
+
 /** A cached chunk row (O3). */
 export interface StoredLessonChunk extends LessonChunk {
   documentId: string;
@@ -353,6 +359,37 @@ export class LessonStore {
   getDocument(documentId: string): StoredLessonDocument | null {
     const row = this.getDocumentRow(documentId);
     return row ? documentFromRow(row) : null;
+  }
+
+  /**
+   * Newest first, with every saved analysis attached. The source file is checked
+   * here so the UI can explain a missing/unreadable file before the teacher opens
+   * it; no document text is loaded.
+   */
+  async listDocumentLibrary(): Promise<LessonDocumentSummary[]> {
+    const rows = this.db.prepare('SELECT * FROM lesson_documents ORDER BY created_at DESC').all() as DocumentRow[];
+    const analysisRows = this.db.prepare('SELECT * FROM lesson_analyses ORDER BY updated_at DESC').all() as AnalysisRow[];
+    const analysesByDocument = new Map<string, LessonAnalysis[]>();
+    for (const row of analysisRows) {
+      const list = analysesByDocument.get(row.document_id) || [];
+      list.push(parseAnalysisRow(row));
+      analysesByDocument.set(row.document_id, list);
+    }
+    const summaries: LessonDocumentSummary[] = [];
+    for (const row of rows) {
+      let sourceAvailable = true;
+      try {
+        await fs.access(path.join(this.lessonsDir, `${row.id}.txt`));
+      } catch {
+        sourceAvailable = false;
+      }
+      summaries.push({
+        ...documentFromRow(row),
+        sourceAvailable,
+        analyses: analysesByDocument.get(row.id) || []
+      });
+    }
+    return summaries;
   }
 
   async getDocumentWithText(documentId: string): Promise<LessonDocumentWithText | null> {

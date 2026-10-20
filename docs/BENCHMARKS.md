@@ -185,9 +185,9 @@ Ngoài ra, trước O6 một lượt phân tích ở trần 1.024 có thể cầ
 - Embedding server MiniLM (O4): **+216 MB**, ~28 ms cho mỗi lần sinh (đã đo ở §O4).
 - Toàn bộ chạy trên CPU; không cần GPU rời, không cần mạng.
 
-### 6.8 Chưa đo / chưa xác minh
+### 6.8 E2E trong app và các mục chưa đo
 
-- **Chưa chạy e2e thật trong cửa sổ app**: máy này tự đóng app sau 1–2 phút, trong khi một lượt phân tích thật mất 0,8–2 phút và sinh mất 1,7–3,2 phút. Vì vậy toàn bộ số ở trên là đo qua HTTP với prompt/schema của app; luồng IPC → store → adapter → editor với model thật **vẫn chưa được xác minh** (chủ dự án đã bỏ qua cổng này — `DECISIONS #19`).
+- **Đã chạy e2e thật trong cửa sổ app (2026-10-20)**: `tests/real-ai-e2e.js` **19/19** trên i5-10210U / 16 GB, model `qwen3.5-2b-q4_0`, runtime READY sau **14 s**. Bài ngắn 520 ký tự: phân tích thật **63 s** (3 mục tiêu, 3 khái niệm), sinh **4 câu arena trong 75 s**, 0 lỗi chất lượng, lưu game và mở màn chơi được. Trong cùng lượt chạy: huỷ giữa phân tích trả `AI_CANCELLED` và runtime vẫn READY; lượt phân tích thứ hai bị `AiSingleFlight` chặn; progress đi tới `ready`; cache không được dùng (`regenerate: true`). Đây chỉ là một bài ngắn, không phải tuyên bố tham số “tối ưu”. Các số benchmark ở trên vẫn là đo qua HTTP với prompt/schema của app; luồng IPC → store → adapter → player giờ đã được xác minh thêm bằng bài thật này.
 - **Deep**: đã đo 2 giáo án ngắn (§6.4) — không chậm hơn fast nhưng cũng chưa chứng minh tốt hơn; chưa đo trên giáo án dài (>12.000 ký tự), nơi ngân sách 8 đoạn/6.000 ký tự mới thực sự khác fast.
 - **Trò 30 câu / giáo án > 12.000 ký tự**: chưa đo. Một lượt 8 câu vừa 2.048 token; 30 câu nhiều khả năng vượt trần, nên giới hạn số câu hoặc batching vẫn là câu hỏi mở cho O7+.
 - **Sự cố runtime**: trong một lần chạy có **hai** llama-server cùng cổng 9342 (một do app Electron còn sót lại từ smoke tự khởi động lại); server thoát không log. Sau khi chỉ còn một server, cùng giáo án KHTN chạy lại bình thường. Chưa tái hiện độc lập, nhưng đây là lý do app phải coi "AI local đã dừng" là lỗi có thể xảy ra và cho phép thử lại (O7).

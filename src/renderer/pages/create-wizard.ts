@@ -207,7 +207,7 @@ function wizardHandleClick(event) {
 }
 
 async function wizardDispatch(action, button) {
-  if (wizardState.busy && ['back', 'new', 'save', 'generate', 'regenerate', 'regenerate-item', 'open-editor'].includes(action)) return undefined;
+  if (wizardState.busy && ['back', 'new', 'save', 'save-project', 'save-game', 'generate', 'regenerate', 'regenerate-item', 'open-editor'].includes(action)) return undefined;
   switch (action) {
     case 'import-file': return wizardInputImportFile();
     case 'open-ai': return openLocalAiModal();
@@ -228,6 +228,8 @@ async function wizardDispatch(action, button) {
     case 'dismiss-error': wizardState.error = null; return render();
     case 'back': return wizardGoBack();
     case 'save': return wizardConfigureSave(false);
+    case 'save-project': return wizardSaveCurrentProject();
+    case 'save-game': return wizardSaveGameToLibrary();
     case 'next': return wizardNext();
     case 'new': return wizardNewProject();
     case 'generate': return wizardGenerateRun();

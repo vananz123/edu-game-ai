@@ -135,7 +135,17 @@ async function startLocalRuntimeFromModal() {
     else if (state.page === 'settings') render();
     toast('llama.cpp đã chạy.');
   } catch (error) {
-    toast(error.message || 'Không khởi động được llama.cpp.', 6000);
+    const message = String((error && error.message) || '');
+    const shown = /\[AI_BUSY\]/.test(message)
+      ? 'AI local đang xử lý một yêu cầu khác. Hãy đợi yêu cầu đó xong hoặc huỷ nó trước khi đổi/khởi động lại model.'
+      : (message || 'Không khởi động được llama.cpp.');
+    // Keep the full native exit code/diagnostic in the modal, not only in a
+    // short-lived toast. The runtime may append its last stdout/stderr lines.
+    if (progress?.isConnected) {
+      progress.textContent = shown;
+      progress.style.whiteSpace = 'pre-wrap';
+    }
+    toast(shown, 8000);
     if (startBtn?.isConnected) { startBtn.disabled = false; startBtn.textContent = '▶ Bắt đầu chạy'; }
   }
 }
@@ -148,6 +158,9 @@ async function stopLocalRuntimeFromModal() {
     if (state.page === 'create' || state.page === 'settings') render();
     toast('Đã dừng llama.cpp.');
   } catch (error) {
-    toast(error.message || 'Không dừng được llama.cpp.');
+    const message = String((error && error.message) || '');
+    toast(/\[AI_BUSY\]/.test(message)
+      ? 'AI local đang xử lý một yêu cầu khác. Hãy đợi yêu cầu đó xong hoặc huỷ nó trước khi dừng.'
+      : (message || 'Không dừng được llama.cpp.'), 6000);
   }
 }

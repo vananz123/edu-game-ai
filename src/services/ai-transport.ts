@@ -22,7 +22,8 @@ export type AiTransportCode =
   | 'AI_HTTP'
   | 'AI_EMPTY'
   | 'AI_TRUNCATED'
-  | 'AI_INVALID_JSON';
+  | 'AI_INVALID_JSON'
+  | 'AI_BUSY';
 
 export class AiTransportError extends Error {
   readonly code: AiTransportCode;
@@ -171,6 +172,48 @@ export interface AiRequestHandle {
  * Tracks in-flight AI requests by `requestId` so `ai:cancel` can abort them.
  * One registry lives for the whole main process.
  */
+/**
+ * Process-wide single-flight gate for local-model work.
+ *
+ * Request ids only protect a single renderer action from being submitted twice;
+ * two different buttons/projects can still launch two llama.cpp generations at
+ * the same time, doubling memory use and slowing both to a crawl. This gate
+ * rejects any overlapping AI job (including a duplicate of the same logical job)
+ * with `AI_BUSY`. The lock is always released in `finally`.
+ */
+export class AiSingleFlight {
+  private active: { key: string; label: string; startedAt: number } | null = null;
+
+  get busy(): boolean {
+    return this.active !== null;
+  }
+
+  get activeLabel(): string {
+    return this.active ? this.active.label : '';
+  }
+
+  get activeKey(): string {
+    return this.active ? this.active.key : '';
+  }
+
+  async run<T>(key: string, label: string, task: () => Promise<T>): Promise<T> {
+    if (this.active) {
+      const same = this.active.key === key;
+      const message = same
+        ? `${label} đang chạy. Hãy đợi yêu cầu hiện tại hoàn tất hoặc huỷ nó trước khi thử lại.`
+        : `AI local đang xử lý “${this.active.label}”. Không thể bắt đầu “${label}” cùng lúc; hãy đợi hoặc huỷ yêu cầu hiện tại.`;
+      throw new AiTransportError('AI_BUSY', message);
+    }
+    const token = { key, label, startedAt: Date.now() };
+    this.active = token;
+    try {
+      return await task();
+    } finally {
+      if (this.active === token) this.active = null;
+    }
+  }
+}
+
 export class AiRequestRegistry {
   private readonly controllers = new Map<string, AbortController>();
 

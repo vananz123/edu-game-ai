@@ -54,9 +54,10 @@ Closes the two remaining tasknight visual-authoring items (§4 "Kéo thả để
 ### §5 Giải mã kho báu (treasure-hunt)
 - [x] 5.1 Hành trình nhiều chặng: câu đố → nhiệm vụ → thử thách tổng hợp → kết, chọn nhánh, giới hạn lượt thử (sai → gợi ý, không chơi lại từ đầu), nhiều kết thúc.
 - [x] 5.3 Điểm & phần thưởng: câu đố, hoàn thành chặng, vật phẩm ẩn, journey bonus (giá trị cấu hình được).
-- [x] 5.4 Trình soạn thảo màn chơi riêng: tạo/nhân bản/dời chặng, cốt truyện & nhiệm vụ, options + đáp án, lượt thử/điểm/gợi ý, nhánh có nhãn, vật phẩm ẩn.
-- [ ] 5.2 UI kiểu bản đồ/hình nền/nhân vật/âm thanh minh họa.
-- [ ] Kiểu nhiệm vụ đa dạng mỗi chặng (ghép cặp/giải mã/phân loại trong treasure) — hiện câu chặng chỉ trắc nghiệm.
+- [x] 5.4 Trình soạn thảo màn chơi riêng: tạo/nhân bản/dời chặng, cốt truyện & nhiệm vụ, kiểu nhiệm vụ (trắc nghiệm/tình huống/ghép cặp/giải mã/phân loại), options + đáp án, lượt thử/điểm/gợi ý, nhánh có nhãn, vật phẩm ẩn.
+- [x] 5.2 UI bản đồ hành trình: dải chặng ngang với trạng thái đã qua/đang ở/khoá/thất bại, dấu nhánh phụ và vật phẩm ẩn; dùng CSS, không cần tài nguyên ngoài (2026-10-20, `tests/smoke68.js`).
+- [x] 5.2b Hình nền/nhân vật/âm thanh minh họa — 6 cảnh SVG dựng sẵn, 5 avatar, hiệu ứng Web Audio offline, nút tắt/bật ghi nhớ; trường art là tùy chọn nên game cũ vẫn chạy (2026-10-20, `tests/smoke71.js`).
+- [x] Kiểu nhiệm vụ đa dạng mỗi chặng: trắc nghiệm, tình huống, ghép cặp, giải mã, phân loại; dữ liệu nhiệm vụ là tùy chọn nên `.egame` cũ vẫn hợp lệ (2026-10-20, `tests/smoke68.js` + unit tests).
 - [x] 5.5 AI sinh thiết kế hành trình (`treasureHunt`) — đã thực thi (design blocks + buildTreasureHunt + normalize/offline; test 10/10).
 
 ### §6 Đường đua chinh phục (race)
@@ -72,9 +73,9 @@ Closes the two remaining tasknight visual-authoring items (§4 "Kéo thả để
 
 ### Cross-cutting / unverified
 - [x] Library SQLite, chơi offline, `.egame` export/import (logic-level test), validation 4 template.
-- [~] End-to-end AI với model thật: **online (OpenCode Zen free tier) đã verify qua CDP `tests/smoke60.js` 43/43 (2026-10-18)** — analyze + generate/save/play treasure-hunt & race với `mimo-v2.6-flash-free`. Local llama.cpp/Qwen chưa verify (cần runtime + model thật trên máy). Tổng normalize/schema/unit test đã có.
+- [~] End-to-end AI với model thật: **online (OpenCode Zen free tier) đã verify qua CDP `tests/smoke60.js` 43/43 (2026-10-18)** — analyze + generate/save/play treasure-hunt & race với `mimo-v2.6-flash-free`. Local llama.cpp/Qwen **đã verify trong app** ngày 2026-10-20 bằng `tests/real-ai-e2e.js` **19/19** trên `qwen3.5-2b-q4_0` (runtime READY 14 s, phân tích 63 s, sinh 4 câu 75 s, huỷ giữa lượt trả `AI_CANCELLED`, lượt trùng bị chặn). Tổng normalize/schema/unit test đã có.
 - [ ] Native dialog import/export click-through; XLSX với cột type (parser type-agnostic, chưa smoke).
-- [~] `npm run dist:win` package Windows; nâng cấp/downgrade dữ liệu người dùng. (chưa chạy build installer trong phiên này).
+- [~] `npm run dist:win` package Windows; nâng cấp/downgrade dữ liệu người dùng. Installer hiện hành đã build ngày 2026-10-20 19:26 (`release/EduGame-Studio-Setup-0.3.0.exe`, 92.383.816 byte, SHA-256 `B6FA3410…85BA1A1F`; giữ dữ liệu khi gỡ app; `win-unpacked` vượt `smoke71` 25/25 + `smoke69` 19/19); chưa cài trên máy sạch.
 
 ## v0.3 — Existing prototype
 - Migrate Electron source to TypeScript.
@@ -134,5 +135,21 @@ Owner spec: `docs/archive/specs/update-AI-local.txt`. Full audit, target flow, m
 
 - [x] **Background-safe analysis UI.** `lesson:analyze` emits four real stages (`prepare → generate → repair → ready`), the wizard shows a real elapsed clock (no fake percentage), repair is marked "không cần" when unused, and a topbar chip keeps the run visible on other pages; clicking it returns to step 2. Opening another draft is blocked while the run is active. Completion away from the wizard uses a toast, and the wizard shows the stored analysis on return. Verified: `smoke67` **124/124** (+7 checks), `smoke66 fixture` 34/34, `smoke64` 39/39, `npm test` build + 25 suites, `npm run check` clean.
 - [x] **Second game from the same lesson.** "＋ Trò chơi khác từ giáo án này" on the generated-content screen creates a new project that keeps the same lesson document + analysis id and clears config/draft/snapshot/game id, landing on the genre step. No analysis call; deterministic recommendations are rebuilt only if needed. Verified: `smoke67` +4 checks (project clone, cleared game data, recommendations, button/hint). Fixture/CDP only; a real Qwen click-through and manual mouse pass remain unverified.
+
+## `update_plan_2` remediation — save/reopen, gameplay, AI single-flight, result history, three areas (2026-10-20)
+
+Source: `docs/archive/specs/update_plan_2.txt`. This batch hardens the existing app; it does not add chat/RAG/Gemini. Decisions: `DECISIONS #29`.
+
+- [x] **A — Save project and save game** are explicit, separate actions in step 5; game save marks the project `done/ready`; project/game/session writes are targeted upserts and idempotent.
+- [x] **B — Giáo án reopen + analysis** via `LessonStore.listDocumentLibrary()` / `lesson:library`; page lists sources + saved analyses, reopens them and starts a game from cached analysis with **0 Qwen calls**. Missing source file is reported safely.
+- [x] **C — AI single-flight**: main-side `AiSingleFlight` + `AI_BUSY`, shared analyze/generate/regenerate/legacy gate, cache-hit generate bypass, coalesced runtime start/stop, lock release on all exits, Vietnamese renderer mapping.
+- [x] **D — Matching quality**: stronger prompt relationships + advisory duplicate/generic-side checks + explanation after a correct match; no unbenchmarked hard semantic block.
+- [x] **E — Scenario sequencing**: null/missing `nextSituationId` advances sequentially; explicit end via `GameOption.endsScenario`; tests for 1/2/10 questions, correct/wrong/continuous UI (`smoke70` 7/7).
+- [x] **F — Arena**: readable/focused text input; true/false canonical two options with ✓/✗; canonicalisation only by explicit type; three options fail contract.
+- [x] **G — Result history**: completed result screens auto-save one session id, upsert/rename, no mid-game rows, 1,000-row cap, UI shows game/player/duration/time/score.
+- [x] **Three areas**: Giáo án = sources + analyses; Dự án của tôi = projects/work-in-progress; Thư viện = saved games. Deep Q&A is a disabled "Chưa khả dụng" placeholder. External `.egame` import hidden but code/data retained. Deleting a project keeps saved games.
+- [x] **Verification**: `npm run check` clean, `npm test` 25 suites, `smoke69` **19/19**, `smoke70` **8/8**, `smoke71` **25/25**, `persistence71` **3/3 write + 9/9 after restart**, regressions `smoke68` **44/44**, `smoke58` **26/26**, `smoke67` 124/124, `smoke56` **58/58**. Smoke runs use the `EDUGAME_USER_DATA` isolation hook.
+- [x] Rebuild the installer for this batch and run real-Qwen e2e; manual Windows mouse pass and clean-machine install remain open.
+- [ ] Optional future work (not in this batch): teacher-uploaded treasure art/audio, matching-pair illustrations, deeper lesson research/Q&A with citations, an explicit external `.egame` import review.
 
 Gates: O1 = **0 Qwen calls for genre choice**; O4 = retrieval quality + RAM measured, no guesses; O5 = second game from the same lesson skips analysis; O6 = before/after benchmark table. Never trade pedagogical correctness for speed.

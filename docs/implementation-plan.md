@@ -2,7 +2,7 @@
 
 **Ngày lập:** 2026-10-19
 **Phạm vi:** bổ sung luồng tạo trò chơi từ giáo án bằng AI local, không phá vỡ gameplay, `.egame` hay dữ liệu đang có.
-**Trạng thái:** P0-P6 đã code xong (2026-10-19); P6 **chưa đạt cổng e2e với model thật** (xem §8 P6) nên còn P7. Từ 2026-10-20 có **spec tối ưu mới** (`docs/archive/specs/update-AI-local.txt`) → kế hoạch ở §13, trong đó **O0–O7 đã xong** (O1: chọn thể loại bằng TypeScript, 0 lượt Qwen; O2: kiểm tra chất lượng nội dung thuần TypeScript; O3: chia đoạn + truy xuất từ vựng, prompt generate ngắn hơn; O4: embedding MiniLM thật trong process riêng, cache vector, đo chất lượng/RAM; O5: cache phân tích/nội dung theo khoá có phiên bản + tạo lại từng mục; O6: thinking bị loại bỏ có đo, prompt phân tích 6/8 mục, sinh 8 câu một lượt, batch không ship; O7: tiến trình 5 giai đoạn + huỷ an toàn + hồi quy + installer). Việc còn lại là **cổng e2e model thật trong app**; P7 đã dọn xong đường `ai:document-assist` chết (2026-10-20, xem `docs/STATUS.md` mục P7). Số liệu kiểm chứng nằm trong `docs/STATUS.md` và `docs/BENCHMARKS.md`. **2026-10-20:** đã làm nốt mục AI tạo lại từng mục **trong editor** cho cả 5 loại khi mở từ wizard (`smoke67` 113/113); game thủ công/mở từ thư viện không có nút, và matching/treasure/race vẫn có danh sách tạo lại ở wizard. Việc còn lại của cả kế hoạch chỉ là **cổng e2e model thật trong app** (môi trường hiện tự đóng cửa sổ sau 1–2 phút).
+**Trạng thái:** P0-P6 đã code xong (2026-10-19); P6 đã đạt cổng e2e với model thật **trong app** (2026-10-20, `tests/real-ai-e2e.js` 19/19). Từ 2026-10-20 có **spec tối ưu mới** (`docs/archive/specs/update-AI-local.txt`) → kế hoạch ở §13, trong đó **O0–O7 đã xong** (O1: chọn thể loại bằng TypeScript, 0 lượt Qwen; O2: kiểm tra chất lượng nội dung thuần TypeScript; O3: chia đoạn + truy xuất từ vựng, prompt generate ngắn hơn; O4: embedding MiniLM thật trong process riêng, cache vector, đo chất lượng/RAM; O5: cache phân tích/nội dung theo khoá có phiên bản + tạo lại từng mục; O6: thinking bị loại bỏ có đo, prompt phân tích 6/8 mục, sinh 8 câu một lượt, batch không ship; O7: tiến trình 5 giai đoạn + huỷ an toàn + hồi quy + installer). Cổng e2e model thật trong app đã đạt; P7 đã dọn xong đường `ai:document-assist` chết (2026-10-20, xem `docs/STATUS.md` mục P7). Số liệu kiểm chứng nằm trong `docs/STATUS.md` và `docs/BENCHMARKS.md`. **2026-10-20:** đã làm nốt mục AI tạo lại từng mục **trong editor** cho cả 5 loại khi mở từ wizard (`smoke67` 113/113); game thủ công/mở từ thư viện không có nút, và matching/treasure/race vẫn có danh sách tạo lại ở wizard. Cổng e2e model thật trong app đã đạt ngày 2026-10-20; còn **bấm chuột thật trên Windows** và **cài installer trên máy sạch**. **Cùng ngày:** §5.2 đã xong bản đồ hành trình + 5 kiểu nhiệm vụ; **§5.2b đã xong** với 6 cảnh SVG, 5 avatar và hiệu ứng Web Audio offline (xem §8 P7.1).
 
 ---
 
@@ -411,6 +411,15 @@ Không sửa: `gameplay.ts`, `game-editor.ts` (trừ điểm gọi AI regenerate
 - [x] `npm run check`, `npm test`, `smoke67` 113/113, `npm run dist:win` → `release/EduGame-Studio-Setup-0.3.0.exe` (92.346.155 byte, 11:45; `app.asar` có `editorAiContainer`/`editorAiResultItem`/`data-ai-cancel` và `wizardDraftItemIds`), cập nhật docs.
 - **Gate:** báo cáo đầy đủ file/thay đổi/lệnh/chưa verify — đã ghi trong `docs/STATUS.md`.
 
+### P7.1 — §5.2 bản đồ hành trình + nhiệm vụ đa dạng (2026-10-20)
+
+- [x] `TreasureStage.mission` tùy chọn (thiếu = trắc nghiệm cũ), `schemaVersion` giữ 1; 5 kiểu `multiple-choice`/`scenario`/`matching`/`decode`/`classification`.
+- [x] Chơi: bản đồ ngang + trạng thái node, nhánh/vật phẩm ẩn; ghép cặp, giải mã, phân loại; lượt thử, mở đáp án khi hết lượt, điểm chặng + thưởng.
+- [x] Soạn thảo: chọn kiểu + panel dữ liệu riêng, nhân bản giữ payload, validate trước lưu; AI regenerate chỉ cho trắc nghiệm/tình huống.
+- [x] Adapter/validator/zod giữ mission; `.egame`/draft/sidecar cũ vẫn hợp lệ; quality vẫn cố vấn.
+- [x] Kiểm chứng: `npm run check`, `npm test` 25 suite, `smoke68` 43/43, hồi quy `smoke67` 124/124 + `smoke56` 56/56; installer 92.364.048 byte.
+- [x] §5.2b hình nền/nhân vật/âm thanh minh họa: 6 cảnh + 5 avatar SVG dựng sẵn, hiệu ứng Web Audio offline, mute ghi nhớ; trường art tùy chọn, game cũ fallback `temple`/`explorer` (`smoke71` 25/25).
+
 ---
 
 ## 9. Rủi ro kỹ thuật và phương án
@@ -436,12 +445,14 @@ Không sửa: `gameplay.ts`, `game-editor.ts` (trừ điểm gọi AI regenerate
 | Loại | File | Nội dung |
 |---|---|---|
 | Unit | `lesson-contracts.test.ts` | zod 5 loại, case thiếu đáp án/ID trùng/ô race sai/chuỗi treasure vòng lặp |
-| Unit | `game-project-adapter.test.ts` | map 5 chiều, round-trip, version lỗi, type lạ |
+| Unit | `game-project-adapter.test.ts` | map 5 chiều, round-trip, version lỗi, type lạ; treasure mission matching/decode giữ qua adapter |
+| Unit | `game-validation` + `lesson-contracts` | treasure mission limits/ID/nhóm, `.egame` variant, scenario/choice options |
 | Unit | `lesson-store.test.ts` | SQLite temp: CRUD, cascade, draft resume, legacy game không đổi |
 | Unit | `lesson-workflow.test.ts` | mock provider: happy path, JSON hỏng + repair, timeout, cancel, model chưa chạy |
 | Tương thích | trong store/adapter test | fixture `EducationalGame` 5 template; `.egame` JSON round-trip |
 | CDP | `smoke64.js` | wizard happy path: nhập → analysis → chọn → cấu hình → generate → editor → save |
 | CDP | `smoke65.js` | lỗi AI, back không mất dữ liệu, resume draft sau reload, AI offline vẫn mở draft |
+| CDP | `smoke68.js` | treasure §5.2: lưu mission biến thể, map state, matching/decode/classification, editor + invalid-save guard |
 | Regression | `smoke56–63.js` | editor/gameplay/library/Tailwind không đổi |
 | Build | `npm run dist:win` | installer chứa code mới (P7) |
 
@@ -614,3 +625,17 @@ CREATE TABLE IF NOT EXISTS game_generation_cache (
 2. **MiniLM cụ thể** (đề xuất: `paraphrase-multilingual-MiniLM-L12-v2` dạng GGUF, ~120 MB) — cần duyệt nguồn/sha256/license trước khi tải.
 3. **Ngưỡng số câu để chuyển sang sinh theo lô** (đề xuất: bắt đầu đo ở 8 câu, chốt sau benchmark).
 4. **Cache nội dung đã sinh**: có được bật mặc định không (đề xuất: bật cho “cùng giáo án + cùng cấu hình”, luôn bỏ qua khi bấm “Tạo lại”).
+
+### 13.9 Đợt sửa lỗi `update_plan_2` (2026-10-20)
+
+Nguồn: `docs/archive/specs/update_plan_2.txt`. Đợt này không thêm backend/RAG/chat mới; chỉ sửa lưu trữ, gameplay, chống gọi AI trùng và tách ba khu vực Giáo án / Dự án của tôi / Thư viện trò chơi. Quyết định ghi ở `DECISIONS #29`.
+
+- **A — Lưu dự án và lưu trò chơi:** bước 5 tách rõ **“Lưu tiến trình”** (`project:save-draft`) và **“Lưu vào Thư viện trò chơi”** (`library:save-game`); lưu game đưa project sang `done/ready`. Ghi game/session dùng upsert theo id thay vì ghi lại toàn bộ DB, nên hai thao tác liên tiếp không xoá dữ liệu của nhau.
+- **B — Giáo án và phân tích:** `LessonStore.listDocumentLibrary()` trả tài liệu + analyses lồng nhau + `sourceAvailable`; IPC `lesson:library`; trang **Giáo án** có “Tài liệu của tôi”, “Kết quả phân tích”, mở lại tài liệu/phân tích và “Tạo trò chơi” **không gọi AI**. Tệp nguồn bị mất được báo rõ và không làm hỏng project đã có draft.
+- **C — Chống gọi AI trùng:** `AiSingleFlight` ở main trả `AI_BUSY`; mọi analyze/generate/regenerate/legacy generation đều qua một cổng. Cache hit của generation không chiếm cổng. Start/stop runtime dùng chung một promise khởi động và bị từ chối khi AI đang bận; renderer map `AI_BUSY` sang tiếng Việt.
+- **D — Ghép cặp:** prompt siết quan hệ kiến thức; quality thêm cảnh báo cặp trùng nghĩa/generic sides; đúng cặp hiện giải thích. Không thêm heuristic cứng chưa benchmark.
+- **E — Tình huống:** `nextSituationId: null`/thiếu = đi tuần tự; chỉ dừng khi hết danh sách hoặc `GameOption.endsScenario = true`. Unit test 1/2/10 câu; smoke70 chạy UI 1/2/10 câu, có một đáp án sai, tổng kết đúng.
+- **F — Đấu trường:** ô nhập có màu chữ/nền/caret/focus đọc được; câu đúng/sai có lưới 2 lựa chọn chuẩn `Đúng`/`Sai`, dấu ✓/✗, canonicalize chỉ theo `type`, không phân loại lại câu chứa chữ “đúng/sai”.
+- **G — Lịch sử kết quả:** bốn màn kết quả tự lưu **một** session khi hoàn thành, upsert theo id, đổi tên cập nhật đúng dòng; không lưu phiên bỏ dở. Trang Lịch sử hiển thị trò chơi, người chơi, thời lượng, thời điểm, điểm/%. Giữ tối đa 1.000 dòng.
+- **UI:** ba khu vực tách vai trò; “Hỏi đáp chuyên sâu” chỉ là placeholder “Chưa khả dụng”, không gọi AI; nhập `.egame` bên ngoài bị ẩn khỏi Home/Thư viện/Cài đặt nhưng IPC và mã import/export vẫn giữ; xoá project không xoá game đã lưu.
+- **Kiểm chứng:** `npm run check` sạch; `npm test` build + 25 suite; `smoke69` **19/19** (lưu/mở giáo án, tạo game từ analysis, mở project, true/false, lưu game lặp vẫn 1 dòng, ô nhập, auto-save + rename session, ẩn import, xoá project giữ game); `smoke70` **8/8** (tình huống 1/2/10 câu + ghép cặp tự lưu kết quả); `smoke71` **25/25** (§5.2b: art fields, fallback game cũ, SVG nền/nhân vật, mute + localStorage, âm thanh đúng/chuyển chặng, preview + lưu từ editor); `persistence71` **3/3** ghi + **9/9** sau khi đóng/mở app (giáo án, analysis, project, game, session, ba trang); hồi quy `smoke68` **44/44** (kho báu + auto-save), `smoke58` **26/26** (trắc nghiệm/điền từ + auto-save), `smoke67` 124/124, `smoke56` **58/58** (kho báu + đua + auto-save). Smoke dùng `EDUGAME_USER_DATA` để tách hồ sơ. `npm run dist:win` đã build lại `release/EduGame-Studio-Setup-0.3.0.exe` (92.383.816 byte, 20/10/2026 19:26, SHA-256 `B6FA34108A7B256799D3A75A8A9691695D6DC5A2F0C923211C44C2D885BA1A1F`; `deleteAppDataOnUninstall: false`) và `app.asar` chứa `treasure-art.js`/`game-audio.js` cùng các thay đổi chính. `tests/real-ai-e2e.js` đã chạy **19/19** với Qwen3.5-2B Q4_0 thật trong app: runtime READY 14 s, phân tích 63 s, sinh 4 câu 75 s, 0 lỗi chất lượng, huỷ giữa lượt trả `AI_CANCELLED`, lượt phân tích trùng bị chặn; bản `release/win-unpacked` cũng vượt `smoke71` **25/25** (§5.2b art/audio) và `smoke69` **19/19**. Chưa bấm chuột thật và chưa cài trên máy sạch.

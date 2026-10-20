@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('eduGame', Object.freeze({
   saveSession: session => ipcRenderer.invoke('library:save-session', session),
   saveLessonDocument: payload => ipcRenderer.invoke('lesson:save-document', payload),
   getLessonDocument: documentId => ipcRenderer.invoke('lesson:get-document', documentId),
+  listLessonLibrary: () => ipcRenderer.invoke('lesson:library'),
   saveProjectDraft: project => ipcRenderer.invoke('project:save-draft', project),
   getProject: projectId => ipcRenderer.invoke('project:get', projectId),
   listProjects: () => ipcRenderer.invoke('project:list'),

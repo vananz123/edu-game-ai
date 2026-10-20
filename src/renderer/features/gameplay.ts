@@ -1,5 +1,7 @@
 // @ts-nocheck -- migrated legacy UI logic; new contracts are typed in src/shared/types.ts.
 function playGame(game) {
+  state.playStartedAt = Date.now();
+  state.resultSession = null;
   if (game && game.template === 'matching') {
     const matching = game.matchingGame;
     if (!matching || !Array.isArray(matching.pairs) || matching.pairs.length < 2) {
@@ -113,9 +115,13 @@ function renderQuestion() {
   const scoringTip = ({ 'cơ bản': '✓ Đúng nhận điểm cố định, sai không bị trừ điểm', 'tốc độ': `⚡ Đúng nhanh trong 8 giây: +${scoring.timeBonus} điểm thưởng`, 'theo độ khó': `⛰️ Điểm theo độ khó: dễ ${scoring.table['dễ']} · trung bình ${scoring.table['trung bình']} · khó ${scoring.table['khó']}`, 'thi đấu đội': '👥 Điểm cộng cho đội — có thể luân phiên người trả lời', 'luyện tập': '📖 Luyện tập: không áp lực thời gian — xem kỹ giải thích' })[scoring.mode] || '';
   const textQ = isTextQuestion(q);
   const kicker = q.type==='scenario'?'TÌNH HUỐNG THỰC TẾ':q.type==='fill-in-blank'?'ĐIỀN TỪ CÒN THIẾU':q.type==='short-answer'?'TRẢ LỜI NGẮN':q.type==='true-false'?'ĐÚNG HAY SAI':'THỬ THÁCH KIẾN THỨC';
+  const trueFalse = q.type === 'true-false';
+  const optionMark = (option, index) => trueFalse
+    ? (/^đúng\b/i.test(String(option.text || '').trim()) ? '✓' : /^sai\b/i.test(String(option.text || '').trim()) ? '✗' : String.fromCharCode(65 + index))
+    : String.fromCharCode(65 + index);
   const answerArea = textQ
     ? `<div class="text-answer-box"><input id="textAnswerInput" placeholder="${q.type==='fill-in-blank'?'Nhập từ hoặc cụm từ còn thiếu…':'Nhập câu trả lời của bạn…'}" autocomplete="off"><button class="btn btn-primary" id="textAnswerBtn">Trả lời</button></div>`
-    : `<div class="answer-grid">${q.options.map((o,i)=>`<button class="answer-option" data-answer="${escapeHtml(o.id)}"><span class="letter">${String.fromCharCode(65+i)}</span><span>${escapeHtml(o.text)}</span></button>`).join('')}</div>`;
+    : `<div class="answer-grid${trueFalse ? ' true-false-grid' : ''}">${q.options.map((o,i)=>`<button class="answer-option" data-answer="${escapeHtml(o.id)}"><span class="letter">${optionMark(o, i)}</span><span>${escapeHtml(o.text)}</span></button>`).join('')}</div>`;
   root.innerHTML = `<div class="game-stage"><div class="stage-top"><span>${escapeHtml(game.subject || 'TRÒ CHƠI HỌC TẬP')} · ${game.grade ? 'LỚP '+escapeHtml(game.grade) : 'MỌI LỚP'}</span><span>${game.template==='scenario'?'QUYẾT ĐỊNH':'CÂU'} ${state.gameAnswers.length+1} / ${game.questions.length} &nbsp; · &nbsp; 🏆 ${state.gameAnswers.reduce((s,a)=>s+a.points,0)} điểm</span></div><div class="stage-progress"><div data-progress="${progress}"></div></div>${state.teamPlay ? teamTurnBarHtml() : ''}<div class="stage-center"><div class="stage-kicker">${kicker}</div>${q.context?`<p class="scenario-context">${escapeHtml(q.context).replace(/\n/g,'<br>')}</p>`:''}<div class="stage-question">${escapeHtml(q.prompt).replace(/\n/g,'<br>')}</div>${answerArea}<div id="answerFeedback"></div><div class="stage-bottom"><span>${scoringTip}</span><button class="btn hidden" id="nextQuestionBtn">Tiếp tục →</button></div></div></div>`;
   paintProgress(root);
   $$('.answer-option',root).forEach(btn => btn.addEventListener('click', () => chooseAnswer(q, btn.dataset.answer)));
@@ -211,20 +217,18 @@ async function renderResults() {
   state.lastSummary = ranked
     ? { points: top.points, max, percent: max ? Math.round(top.points / max * 100) : 0, correct: top.correct, total: game.questions.length, winnerTeam: top.name }
     : summary;
-  $('#playBody').innerHTML = `<div class="game-stage"><div class="result-screen"><div class="result-medal">${percent>=80?'🏆':percent>=50?'🎖️':'🌱'}</div><div class="stage-kicker">THỬ THÁCH HOÀN THÀNH</div><h2>${ranked&&top?`${top.icon} ${escapeHtml(top.name)} dẫn đầu!`:percent>=80?'Xuất sắc!':percent>=50?'Làm tốt lắm!':'Tiếp tục cố gắng!'}</h2><p>${escapeHtml(game.title)}</p><div class="result-score">${points.toLocaleString('vi-VN')} điểm</div><p>${game.template==='scenario'?`Hoàn thành ${state.gameAnswers.length} quyết định · ${percent}% điểm tối đa`:`Trả lời đúng ${correct}/${game.questions.length} câu · ${percent}% điểm tối đa`}</p>${state.teamPlay ? leaderboardHtml() : ''}<div class="result-actions"><button class="btn btn-secondary" id="closeResultBtn">Đóng</button><button class="btn btn-secondary" id="replayBtn">↻ Chơi lại</button><button class="btn btn-primary" id="saveResultBtn">Lưu kết quả</button></div></div></div>`;
+  $('#playBody').innerHTML = `<div class="game-stage"><div class="result-screen"><div class="result-medal">${percent>=80?'🏆':percent>=50?'🎖️':'🌱'}</div><div class="stage-kicker">THỬ THÁCH HOÀN THÀNH</div><h2>${ranked&&top?`${top.icon} ${escapeHtml(top.name)} dẫn đầu!`:percent>=80?'Xuất sắc!':percent>=50?'Làm tốt lắm!':'Tiếp tục cố gắng!'}</h2><p>${escapeHtml(game.title)}</p><div class="result-score">${points.toLocaleString('vi-VN')} điểm</div><p>${game.template==='scenario'?`Hoàn thành ${state.gameAnswers.length} quyết định · ${percent}% điểm tối đa`:`Trả lời đúng ${correct}/${game.questions.length} câu · ${percent}% điểm tối đa`}</p>${state.teamPlay ? leaderboardHtml() : ''}<p id="resultSaveStatus" class="result-save-status">Đang tự lưu kết quả…</p><div class="result-actions"><button class="btn btn-secondary" id="closeResultBtn">Đóng</button><button class="btn btn-secondary" id="replayBtn">↻ Chơi lại</button><button class="btn btn-primary" id="saveResultBtn">Đang lưu…</button></div></div></div>`;
   $('#closeResultBtn').onclick = () => $('#modalRoot').innerHTML = '';
   $('#replayBtn').onclick = () => {
     state.gameIndex=0;state.gameAnswers=[];state.gameStart=Date.now();state.scenarioSteps=0;
+    state.playStartedAt=Date.now();state.resultSession=null;
     if (state.teamPlay) { state.teamPlay.teams.forEach(t => { t.points=0;t.correct=0;t.answered=0; }); state.teamPlay.turn=0; }
     renderQuestion();
   };
-  $('#saveResultBtn').onclick = async () => {
-    const playerName = prompt('Tên học sinh hoặc đội chơi:', top ? top.name : 'Đội 1');
-    if (playerName === null) return;
-    await window.eduGame.saveSession({ gameId: game.id, gameTitle: game.title, playerName: playerName.trim() || 'Người chơi', ...state.lastSummary, answers: state.gameAnswers });
-    await refreshDb(); toast('Đã lưu kết quả lượt chơi.');
-    $('#saveResultBtn').textContent = '✓ Đã lưu'; $('#saveResultBtn').disabled = true;
-  };
+  wireResultSession(game, state.lastSummary, {
+    answers: state.gameAnswers,
+    ...(state.teamPlay ? { teams: state.teamPlay.teams, winnerTeam: top ? top.name : '' } : {})
+  }, top ? top.name : 'Người chơi');
 }
 
 function shuffled(list) {
@@ -305,7 +309,10 @@ function evaluateColumnMatch() {
     left.classList.remove('selected'); right.classList.remove('selected');
     mp.matched += 1;
     mp.selectedLeft = mp.selectedRight = null;
-    matchingFeedback('good', '✓ Ghép chính xác!');
+    const pair = state.currentGame.matchingGame.pairs.find(item => item.id === left.dataset.pair);
+    matchingFeedback('good', pair
+      ? `✓ Ghép chính xác! Hãy giải thích mối quan hệ giữa “${escapeHtml(pair.left)}” và “${escapeHtml(pair.right)}”.`
+      : '✓ Ghép chính xác! Hãy giải thích vì sao hai nội dung này đi với nhau.');
     updateMatchingHeader();
     if (mp.matched >= state.currentGame.matchingGame.pairs.length) setTimeout(renderMatchingResults, 500);
   } else {
@@ -403,16 +410,13 @@ async function renderMatchingResults() {
   const summary = calculateMatchingSummary(m.pairs.length, mp.matched, mp.wrong, elapsed, m);
   state.lastSummary = summary;
   const { points, max, percent } = summary;
-  $('#playBody').innerHTML = `<div class="game-stage"><div class="result-screen"><div class="result-medal">${percent >= 80 ? '🏆' : percent >= 50 ? '🎖️' : '🌱'}</div><div class="stage-kicker">GHÉP CẶP HOÀN THÀNH</div><h2>${percent >= 80 ? 'Xuất sắc!' : percent >= 50 ? 'Ghép tốt lắm!' : 'Tiếp tục cố gắng!'}</h2><p>${escapeHtml(game.title)}</p><div class="result-score">${points.toLocaleString('vi-VN')} / ${max.toLocaleString('vi-VN')} điểm</div><p>Hoàn thành ${m.pairs.length} cặp · sai ${mp.wrong} lần · ${Math.round(elapsed)} giây · ${percent}% điểm tối đa</p><div class="result-actions"><button class="btn btn-secondary" id="closeResultBtn">Đóng</button><button class="btn btn-secondary" id="replayBtn">↻ Chơi lại</button><button class="btn btn-primary" id="saveResultBtn">Lưu kết quả</button></div></div></div>`;
+  $('#playBody').innerHTML = `<div class="game-stage"><div class="result-screen"><div class="result-medal">${percent >= 80 ? '🏆' : percent >= 50 ? '🎖️' : '🌱'}</div><div class="stage-kicker">GHÉP CẶP HOÀN THÀNH</div><h2>${percent >= 80 ? 'Xuất sắc!' : percent >= 50 ? 'Ghép tốt lắm!' : 'Tiếp tục cố gắng!'}</h2><p>${escapeHtml(game.title)}</p><div class="result-score">${points.toLocaleString('vi-VN')} / ${max.toLocaleString('vi-VN')} điểm</div><p>Hoàn thành ${m.pairs.length} cặp · sai ${mp.wrong} lần · ${Math.round(elapsed)} giây · ${percent}% điểm tối đa</p><p id="resultSaveStatus" class="result-save-status">Đang tự lưu kết quả…</p><div class="result-actions"><button class="btn btn-secondary" id="closeResultBtn">Đóng</button><button class="btn btn-secondary" id="replayBtn">↻ Chơi lại</button><button class="btn btn-primary" id="saveResultBtn">Đang lưu…</button></div></div></div>`;
   $('#closeResultBtn').onclick = () => $('#modalRoot').innerHTML = '';
-  $('#replayBtn').onclick = () => resetMatchingPlay();
-  $('#saveResultBtn').onclick = async () => {
-    const playerName = prompt('Tên học sinh hoặc đội chơi:', 'Đội 1');
-    if (playerName === null) return;
-    await window.eduGame.saveSession({ gameId: game.id, gameTitle: game.title, playerName: playerName.trim() || 'Người chơi', ...state.lastSummary });
-    await refreshDb(); toast('Đã lưu kết quả lượt chơi.');
-    $('#saveResultBtn').textContent = '✓ Đã lưu'; $('#saveResultBtn').disabled = true;
-  };
+  $('#replayBtn').onclick = () => { state.playStartedAt=Date.now();state.resultSession=null;resetMatchingPlay(); };
+  wireResultSession(game, state.lastSummary, {
+    answers: [],
+    matching: { matched: mp.matched, wrongAttempts: mp.wrong, elapsedSeconds: Math.round(elapsed) }
+  }, 'Đội 1');
 }
 
 // ---------- §5 Hành trình giải mã kho báu ----------
@@ -423,10 +427,345 @@ function openTreasurePlay() {
   $('[data-play-close]', root).addEventListener('click', () => root.innerHTML = '');
   const hunt = game.treasureHunt;
   state.treasurePlay = { stageId: hunt.stages[0].id, earned: 0, results: [], itemsFound: {}, attemptsLeft: 0, steps: 0, answered: false, done: false };
+  GameAudio.play('open');
   renderTreasureStage();
 }
 function treasureStageById(id) {
   return state.currentGame.treasureHunt.stages.find(stage => stage.id === id);
+}
+function treasureHash(value) {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+function treasureOrder(items, seed) {
+  return items
+    .map((item, index) => ({ item, index, rank: treasureHash(`${seed}:${item.id}:${index}`) }))
+    .sort((a, b) => a.rank - b.rank || a.index - b.index)
+    .map(entry => entry.item);
+}
+function treasureScrambleAnswer(answer) {
+  const text = String(answer || '').normalize('NFC').trim();
+  if (!text) return '';
+  const words = text.split(/\s+/);
+  if (words.length > 1) {
+    const shuffled = treasureOrder(words.map((word, index) => ({ id: String(index), word })), text).map(entry => entry.word);
+    if (shuffled.join(' ') === words.join(' ')) shuffled.push(shuffled.shift());
+    return shuffled.join(' ');
+  }
+  const chars = Array.from(text);
+  if (chars.length < 2) return text;
+  const shuffled = treasureOrder(chars.map((char, index) => ({ id: String(index), char })), text).map(entry => entry.char);
+  if (shuffled.join('') === text) shuffled.push(shuffled.shift());
+  return shuffled.join('');
+}
+function treasureNormalizeAnswer(value) {
+  return String(value || '')
+    .normalize('NFC')
+    .toLocaleLowerCase('vi')
+    .replace(/[.,!?;:()[\]{}"'“”‘’]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+function treasureNodeState(stageId, tp) {
+  if (tp.results.some(result => result.stageId === stageId && result.correct)) return 'done';
+  if (tp.results.some(result => result.stageId === stageId)) return 'failed';
+  if (stageId === tp.stageId) return 'current';
+  return 'locked';
+}
+function treasureMapHtml(hunt, tp) {
+  const backgroundId = treasureBackgroundId(hunt.backgroundId);
+  const characterId = treasureCharacterId(hunt.characterId);
+  const nodes = hunt.stages.map((stage, index) => {
+    const state = treasureNodeState(stage.id, tp);
+    const meta = treasureMissionMeta[treasureMissionTypeOf(stage)];
+    const dot = state === 'done' ? '✓' : state === 'failed' ? '✕' : String(index + 1);
+    return `<div class="treasure-map-node is-${state}" data-stage-id="${escapeHtml(stage.id)}" data-state="${state}" title="${escapeHtml(stage.name || `Chặng ${index + 1}`)} · ${escapeHtml(meta.label)}">
+      <span class="treasure-map-dot">${dot}</span>
+      <span class="treasure-map-name">${escapeHtml(stage.name || `Chặng ${index + 1}`)}</span>
+      <span class="treasure-map-meta">${meta.icon} ${escapeHtml(meta.label)}</span>
+      ${stage.branchStageId ? '<span class="treasure-map-branch">↳ nhánh phụ</span>' : ''}
+      ${stage.hasHiddenItem ? '<span class="treasure-map-item" title="Có vật phẩm ẩn">🎁</span>' : ''}
+    </div>`;
+  }).join('');
+  const soundOn = GameAudio.isEnabled();
+  return `<div class="treasure-map" data-treasure-map data-background="${backgroundId}" data-character="${characterId}">
+    ${treasureBackdropHtml(backgroundId)}
+    <div class="treasure-map-head">
+      <div class="treasure-map-hero">${treasureAvatarHtml(characterId)}<span>HÀNH TRÌNH · ${escapeHtml(hunt.character || 'Nhà thám hiểm')}</span></div>
+      <div class="treasure-map-status"><span>${tp.results.length}/${hunt.stages.length} chặng</span><button type="button" class="treasure-sound-toggle" data-treasure-sound aria-pressed="${soundOn}" aria-label="${soundOn ? 'Tắt âm thanh' : 'Bật âm thanh'}" title="${soundOn ? 'Tắt âm thanh' : 'Bật âm thanh'}">${soundOn ? '🔊' : '🔇'}<span>${soundOn ? 'Âm thanh' : 'Đã tắt'}</span></button></div>
+    </div>
+    <div class="treasure-map-track">${nodes}</div>
+  </div>`;
+}
+function bindTreasureSoundToggle(root) {
+  const button = $('[data-treasure-sound]', root);
+  if (!button) return;
+  button.onclick = () => {
+    const enabled = GameAudio.toggle();
+    button.setAttribute('aria-pressed', String(enabled));
+    button.setAttribute('aria-label', enabled ? 'Tắt âm thanh' : 'Bật âm thanh');
+    button.setAttribute('title', enabled ? 'Tắt âm thanh' : 'Bật âm thanh');
+    button.innerHTML = `${enabled ? '🔊' : '🔇'}<span>${enabled ? 'Âm thanh' : 'Đã tắt'}</span>`;
+    if (enabled) GameAudio.play('toggle');
+  };
+}
+function treasureRecordStage(stage, correct) {
+  const tp = state.treasurePlay;
+  if (tp.answered) return 0;
+  tp.answered = true;
+  const gained = correct ? (Number(stage.points) || 0) + (Number(stage.completionBonus) || 0) : 0;
+  tp.earned += gained;
+  tp.results.push({ stageId: stage.id, correct, points: gained });
+  return gained;
+}
+function markTreasureMapNode(stage, correct) {
+  const node = $$('.treasure-map-node', $('#playBody')).find(entry => entry.dataset.stageId === stage.id);
+  if (!node) return;
+  node.classList.remove('is-current', 'is-done', 'is-failed');
+  node.classList.add(correct ? 'is-done' : 'is-failed');
+  node.dataset.state = correct ? 'done' : 'failed';
+  const dot = node.querySelector('.treasure-map-dot');
+  if (dot) dot.textContent = correct ? '✓' : '✕';
+}
+function treasureUseAttempt(stage) {
+  const tp = state.treasurePlay;
+  if (tp.attemptsLeft > 0) tp.attemptsLeft -= 1;
+  const out = stage.attempts > 0 && tp.attemptsLeft === 0;
+  const hint = $('#treasureAttemptsHint', $('#playBody'));
+  if (hint && stage.attempts > 0) {
+    hint.textContent = out
+      ? 'Hết lượt thử — xem gợi ý và đáp án'
+      : `Còn ${tp.attemptsLeft} lượt thử · sai không bị trừ điểm`;
+  }
+  return out;
+}
+function treasureCompleteMission(stage, correct, message) {
+  const gained = treasureRecordStage(stage, correct);
+  const fb = $('#answerFeedback', $('#playBody'));
+  if (fb) {
+    fb.className = `feedback ${correct ? 'good' : 'bad'}`;
+    fb.innerHTML = message;
+  }
+  markTreasureMapNode(stage, correct);
+  showTreasureChoices(stage, correct);
+  return gained;
+}
+function renderTreasureMissionBody(stage, missionType) {
+  const meta = treasureMissionMeta[missionType];
+  if (missionType === 'matching') {
+    const pairs = stage.mission?.pairs || [];
+    const left = pairs.map(pair => `<button type="button" class="treasure-match-item" data-match-left="${escapeHtml(pair.id)}">${escapeHtml(pair.left)}</button>`).join('');
+    const right = treasureOrder(pairs, `${stage.id}:right`)
+      .map(pair => `<button type="button" class="treasure-match-item" data-match-right="${escapeHtml(pair.id)}">${escapeHtml(pair.right)}</button>`).join('');
+    return `<div class="treasure-mission treasure-mission-matching" data-mission="matching">
+      <p class="mission-instruction">${meta.icon} ${meta.short}. Chọn một thẻ bên trái rồi chọn thẻ khớp bên phải.</p>
+      <div class="treasure-match-grid">
+        <div class="treasure-match-col"><div class="mission-col-title">VẾ TRÁI</div>${left}</div>
+        <div class="treasure-match-col"><div class="mission-col-title">VẾ PHẢI</div>${right}</div>
+      </div>
+      <div class="mission-status" id="missionStatus" role="status"></div>
+    </div>`;
+  }
+  if (missionType === 'decode') {
+    const cipher = stage.mission?.cipher || treasureScrambleAnswer(stage.mission?.answer);
+    return `<div class="treasure-mission treasure-mission-decode" data-mission="decode">
+      <p class="mission-instruction">${meta.icon} ${meta.short}. Dùng gợi ý của chặng để sắp xếp lại mật mã.</p>
+      <div class="decode-cipher" data-cipher="${escapeHtml(cipher)}">${escapeHtml(cipher)}</div>
+      <div class="decode-form"><input id="treasureDecodeInput" type="text" autocomplete="off" placeholder="Nhập đáp án đã giải mã"><button type="button" class="btn btn-primary" id="treasureDecodeSubmit">Giải mã</button></div>
+      <div class="mission-status" id="missionStatus" role="status"></div>
+    </div>`;
+  }
+  if (missionType === 'classification') {
+    const groups = stage.mission?.groups || [];
+    const items = stage.mission?.items || [];
+    const pool = items.map(item => `<button type="button" class="treasure-class-item" data-class-item="${escapeHtml(item.id)}">${escapeHtml(item.text)}</button>`).join('');
+    const columns = groups.map(group => `<div class="treasure-class-group" data-class-group="${escapeHtml(group.id)}" role="button" tabindex="0">
+      <div class="treasure-class-title">${escapeHtml(group.name)}</div>
+      <div class="treasure-class-slots" data-class-slots></div>
+    </div>`).join('');
+    return `<div class="treasure-mission treasure-mission-classification" data-mission="classification">
+      <p class="mission-instruction">${meta.icon} ${meta.short}. Chọn một mục rồi chọn nhóm phù hợp.</p>
+      <div class="treasure-class-pool" data-class-pool>${pool}</div>
+      <div class="treasure-class-groups">${columns}</div>
+      <div class="mission-status" id="missionStatus" role="status"></div>
+    </div>`;
+  }
+  const choices = (stage.question?.options || []).map((option, index) =>
+    `<button class="answer-option" data-answer="${escapeHtml(option.id)}"><span class="letter">${String.fromCharCode(65 + index)}</span><span>${escapeHtml(option.text)}</span></button>`
+  ).join('');
+  return `<div class="answer-grid treasure-mission-choices" data-mission="${missionType}">${choices}</div>`;
+}
+function bindTreasureMatching(stage) {
+  const tp = state.treasurePlay;
+  const root = $('#playBody');
+  const status = $('#missionStatus', root);
+  const leftButtons = $$('[data-match-left]', root);
+  const rightButtons = $$('[data-match-right]', root);
+  let selected = null;
+  leftButtons.forEach(button => {
+    button.onclick = () => {
+      if (tp.answered || button.classList.contains('matched')) return;
+      leftButtons.forEach(entry => entry.classList.remove('selected'));
+      button.classList.add('selected');
+      selected = button.dataset.matchLeft;
+      if (status) status.textContent = `Đã chọn “${button.textContent}”. Chọn vế khớp bên phải.`;
+    };
+  });
+  rightButtons.forEach(button => {
+    button.onclick = () => {
+      if (tp.answered || button.classList.contains('matched')) return;
+      if (!selected) { toast('Chọn một thẻ bên trái trước.'); return; }
+      const leftButton = leftButtons.find(entry => entry.dataset.matchLeft === selected);
+      if (!leftButton) return;
+      if (selected === button.dataset.matchRight) {
+        leftButton.classList.remove('selected');
+        leftButton.classList.add('matched');
+        button.classList.add('matched');
+        leftButton.disabled = true;
+        button.disabled = true;
+        selected = null;
+        const matched = leftButtons.filter(entry => entry.classList.contains('matched')).length;
+        GameAudio.play('match');
+        if (status) status.textContent = `✓ Đã ghép ${matched}/${stage.mission.pairs.length} cặp.`;
+        if (matched >= stage.mission.pairs.length) {
+          const gained = (Number(stage.points) || 0) + (Number(stage.completionBonus) || 0);
+          GameAudio.play('correct');
+          treasureCompleteMission(stage, true, `<strong>✓ Đã ghép đủ ${stage.mission.pairs.length} cặp!</strong> +${gained} điểm.<br>${escapeHtml(stage.question.explanation || '')}`);
+        }
+      } else {
+        leftButton.classList.add('wrong');
+        button.classList.add('wrong');
+        GameAudio.play('wrong');
+        setTimeout(() => { leftButton.classList.remove('wrong'); button.classList.remove('wrong'); }, 500);
+        const out = treasureUseAttempt(stage);
+        const fb = $('#answerFeedback', root);
+        if (out) {
+          leftButtons.forEach(entry => { entry.classList.add('matched', 'revealed'); entry.disabled = true; });
+          rightButtons.forEach(entry => { entry.classList.add('matched', 'revealed'); entry.disabled = true; });
+          if (status) status.textContent = 'Đáp án đúng đã được mở.';
+          treasureCompleteMission(stage, false, `<strong>✕ Hết lượt thử.</strong> ${stage.question.hint ? `💡 Gợi ý: ${escapeHtml(stage.question.hint)}<br>` : ''}Đáp án đúng đã được mở.<br>${escapeHtml(stage.question.explanation || '')}`);
+        } else if (fb) {
+          fb.className = 'feedback bad';
+          fb.innerHTML = `<strong>✕ Chưa khớp.</strong> ${stage.attempts > 0 ? `Còn ${tp.attemptsLeft} lượt thử — hãy thử vế khác.` : 'Hãy thử ghép lại.'}`;
+        }
+      }
+    };
+  });
+}
+function bindTreasureClassification(stage) {
+  const tp = state.treasurePlay;
+  const root = $('#playBody');
+  const status = $('#missionStatus', root);
+  const itemButtons = $$('[data-class-item]', root);
+  const groupButtons = $$('[data-class-group]', root);
+  let selected = null;
+  itemButtons.forEach(button => {
+    button.onclick = () => {
+      if (tp.answered || button.classList.contains('placed')) return;
+      itemButtons.forEach(entry => entry.classList.remove('selected'));
+      button.classList.add('selected');
+      selected = button;
+      if (status) status.textContent = `Đã chọn “${button.textContent}”. Chọn nhóm phù hợp.`;
+    };
+  });
+  groupButtons.forEach(group => {
+    group.onkeydown = event => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        group.click();
+      }
+    };
+    group.onclick = event => {
+      if (tp.answered || event.target.closest('[data-class-item]')) return;
+      if (!selected) { toast('Chọn một mục cần phân loại trước.'); return; }
+      const model = stage.mission.items.find(item => item.id === selected.dataset.classItem);
+      if (model && model.groupId === group.dataset.classGroup) {
+        selected.classList.remove('selected');
+        selected.classList.add('placed');
+        selected.disabled = true;
+        group.querySelector('[data-class-slots]').appendChild(selected);
+        selected = null;
+        const placed = itemButtons.filter(entry => entry.classList.contains('placed')).length;
+        GameAudio.play('match');
+        if (status) status.textContent = `✓ Đã xếp ${placed}/${itemButtons.length} mục.`;
+        if (placed >= itemButtons.length) {
+          const gained = (Number(stage.points) || 0) + (Number(stage.completionBonus) || 0);
+          GameAudio.play('correct');
+          treasureCompleteMission(stage, true, `<strong>✓ Đã xếp đúng tất cả ${itemButtons.length} mục!</strong> +${gained} điểm.<br>${escapeHtml(stage.question.explanation || '')}`);
+        }
+      } else {
+        group.classList.add('wrong');
+        GameAudio.play('wrong');
+        setTimeout(() => group.classList.remove('wrong'), 500);
+        const out = treasureUseAttempt(stage);
+        const fb = $('#answerFeedback', root);
+        if (out) {
+          itemButtons.forEach(entry => {
+            if (entry.classList.contains('placed')) return;
+            const item = stage.mission.items.find(entryItem => entryItem.id === entry.dataset.classItem);
+            const target = groupButtons.find(entryGroup => entryGroup.dataset.classGroup === item?.groupId);
+            if (target) target.querySelector('[data-class-slots]').appendChild(entry);
+            entry.classList.add('placed', 'revealed');
+            entry.disabled = true;
+          });
+          if (status) status.textContent = 'Đáp án đúng đã được mở.';
+          treasureCompleteMission(stage, false, `<strong>✕ Hết lượt thử.</strong> ${stage.question.hint ? `💡 Gợi ý: ${escapeHtml(stage.question.hint)}<br>` : ''}Đáp án đúng đã được mở.<br>${escapeHtml(stage.question.explanation || '')}`);
+        } else if (fb) {
+          fb.className = 'feedback bad';
+          fb.innerHTML = `<strong>✕ Chưa đúng nhóm.</strong> ${stage.attempts > 0 ? `Còn ${tp.attemptsLeft} lượt thử — hãy thử nhóm khác.` : 'Hãy thử lại.'}`;
+        }
+      }
+    };
+  });
+}
+function bindTreasureDecode(stage) {
+  const tp = state.treasurePlay;
+  const root = $('#playBody');
+  const input = $('#treasureDecodeInput', root);
+  const submit = $('#treasureDecodeSubmit', root);
+  const status = $('#missionStatus', root);
+  if (!input || !submit) return;
+  const tryDecode = () => {
+    if (tp.answered) return;
+    const value = input.value.trim();
+    if (!value) { toast('Hãy nhập đáp án đã giải mã.'); input.focus(); return; }
+    if (treasureNormalizeAnswer(value) === treasureNormalizeAnswer(stage.mission.answer)) {
+      input.disabled = true;
+      submit.disabled = true;
+      const gained = (Number(stage.points) || 0) + (Number(stage.completionBonus) || 0);
+      GameAudio.play('correct');
+      treasureCompleteMission(stage, true, `<strong>✓ Đã giải mã chính xác!</strong> +${gained} điểm.<br>${escapeHtml(stage.question.explanation || '')}`);
+      return;
+    }
+    GameAudio.play('wrong');
+    const out = treasureUseAttempt(stage);
+    const fb = $('#answerFeedback', root);
+    if (out) {
+      input.disabled = true;
+      submit.disabled = true;
+      if (status) status.textContent = 'Đáp án đúng đã được mở.';
+      treasureCompleteMission(stage, false, `<strong>✕ Hết lượt thử.</strong> ${stage.question.hint ? `💡 Gợi ý: ${escapeHtml(stage.question.hint)}<br>` : ''}Đáp án đúng: <strong>${escapeHtml(stage.mission.answer)}</strong>.<br>${escapeHtml(stage.question.explanation || '')}`);
+      return;
+    }
+    if (fb) {
+      fb.className = 'feedback bad';
+      fb.innerHTML = `<strong>✕ Chưa đúng.</strong> ${stage.attempts > 0 ? `Còn ${tp.attemptsLeft} lượt thử — hãy thử lại.` : 'Hãy thử lại.'}`;
+    }
+    if (status) status.textContent = 'Mật mã chưa đúng. Đọc lại gợi ý của chặng.';
+    input.select();
+  };
+  submit.onclick = tryDecode;
+  input.onkeydown = event => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      tryDecode();
+    }
+  };
+  input.focus();
 }
 function renderTreasureStage() {
   const hunt = state.currentGame.treasureHunt, tp = state.treasurePlay;
@@ -437,18 +776,24 @@ function renderTreasureStage() {
   tp.steps += 1;
   tp.attemptsLeft = stage.attempts || 0;
   tp.answered = false;
-  const stageNo = tp.results.length + 1;
+  const stageIndex = hunt.stages.findIndex(entry => entry.id === stage.id);
+  const stageNo = stageIndex >= 0 ? stageIndex + 1 : tp.results.length + 1;
+  const missionType = treasureMissionTypeOf(stage);
+  const mission = treasureMissionMeta[missionType];
   const itemCount = Object.keys(tp.itemsFound).length;
-  root.innerHTML = `<div class="game-stage">
-    <div class="stage-top"><span>HÀNH TRÌNH · ${escapeHtml(hunt.character || 'Nhà thám hiểm')}</span><span>CHẶNG ${stageNo}/${hunt.stages.length} · 🏆 ${tp.earned} điểm${itemCount ? ` · 🎁 ${itemCount} vật phẩm` : ''}</span></div>
+  const characterId = treasureCharacterId(hunt.characterId);
+  root.innerHTML = `<div class="game-stage" data-treasure-world="${treasureBackgroundId(hunt.backgroundId)}">
+    <div class="stage-top"><span>HÀNH TRÌNH · ${escapeHtml(hunt.character || 'Nhà thám hiểm')}</span><span>${mission.icon} ${escapeHtml(mission.label.toUpperCase())} · CHẶNG ${stageNo}/${hunt.stages.length} · 🏆 ${tp.earned} điểm${itemCount ? ` · 🎁 ${itemCount} vật phẩm` : ''}</span></div>
     <div class="stage-progress"><div data-progress="${Math.round((stageNo - 1) / hunt.stages.length * 100)}"></div></div>
+    ${treasureMapHtml(hunt, tp)}
     <div class="stage-center">
       <div class="stage-kicker">${escapeHtml(stage.name || 'CHẶNG')}</div>
-      ${tp.results.length === 0 && hunt.intro ? `<p class="scenario-context">${escapeHtml(hunt.intro)}</p>` : ''}
-      ${stage.story ? `<p class="scenario-context">${escapeHtml(stage.story)}</p>` : ''}
+      ${tp.results.length === 0 && hunt.intro ? `<div class="treasure-storyline">${treasureAvatarHtml(characterId, 'is-small')}<p class="scenario-context">${escapeHtml(hunt.intro)}</p></div>` : ''}
+      ${stage.story ? `<div class="treasure-storyline">${treasureAvatarHtml(characterId, 'is-small')}<p class="scenario-context">${escapeHtml(stage.story)}</p></div>` : ''}
       ${stage.taskDescription ? `<p class="small text-[#aeb5ce]">${escapeHtml(stage.taskDescription)}</p>` : ''}
       <div class="stage-question">${escapeHtml(stage.question.prompt).replace(/\n/g, '<br>')}</div>
-      <div class="answer-grid">${stage.question.options.map((o, i) => `<button class="answer-option" data-answer="${escapeHtml(o.id)}"><span class="letter">${String.fromCharCode(65 + i)}</span><span>${escapeHtml(o.text)}</span></button>`).join('')}</div>
+      <div class="treasure-mission-badge">${mission.icon} ${escapeHtml(mission.label)} · ${escapeHtml(mission.short)}</div>
+      <div id="treasureMission">${renderTreasureMissionBody(stage, missionType)}</div>
       <div id="treasureExtra">${stage.hasHiddenItem && !tp.itemsFound[stage.id] ? `<button type="button" class="btn btn-secondary btn-small mt-[10px]" id="findItemBtn">🎁 Tìm vật phẩm ẩn (+${hunt.hiddenItemBonus || 50})</button> ` : ''}${stage.question.hint ? `<button type="button" class="btn btn-secondary btn-small mt-[10px]" id="treasureHintBtn">💡 Dùng gợi ý</button>` : ''}</div>
       <div id="answerFeedback"></div>
       <div id="treasureActions"></div>
@@ -456,12 +801,17 @@ function renderTreasureStage() {
     <div class="stage-bottom"><span id="treasureAttemptsHint">${stage.attempts > 0 ? (tp.attemptsLeft > 0 ? `Còn ${tp.attemptsLeft} lượt thử` : 'Hết lượt thử') : 'Không giới hạn lượt thử'} · sai không bị trừ điểm</span></div>
   </div>`;
   paintProgress(root);
-  $$('.answer-option', root).forEach(btn => btn.addEventListener('click', () => chooseTreasureAnswer(btn.dataset.answer)));
+  bindTreasureSoundToggle(root);
+  if (missionType === 'matching') bindTreasureMatching(stage);
+  else if (missionType === 'classification') bindTreasureClassification(stage);
+  else if (missionType === 'decode') bindTreasureDecode(stage);
+  else $$('.answer-option', root).forEach(btn => btn.addEventListener('click', () => chooseTreasureAnswer(btn.dataset.answer)));
   const itemBtn = $('#findItemBtn', root);
   if (itemBtn) itemBtn.onclick = () => {
     tp.itemsFound[stage.id] = true;
     tp.earned += hunt.hiddenItemBonus || 50;
     itemBtn.remove();
+    GameAudio.play('item');
     toast(`Tìm thấy vật phẩm ẩn! +${hunt.hiddenItemBonus || 50} điểm.`);
   };
   const hintBtn = $('#treasureHintBtn', root);
@@ -469,6 +819,7 @@ function renderTreasureStage() {
     const fb = $('#answerFeedback', root);
     fb.className = 'feedback good';
     fb.innerHTML = `<strong>💡 Gợi ý:</strong> ${escapeHtml(stage.question.hint)}`;
+    GameAudio.play('hint');
   };
 }
 function showTreasureChoices(stage, answeredCorrectly) {
@@ -486,8 +837,8 @@ function showTreasureChoices(stage, answeredCorrectly) {
   actions.querySelectorAll('.treasure-choice').forEach(btn => {
     btn.onclick = () => {
       const choice = btn.dataset.choice;
-      if (choice === 'go-branch') { tp.stageId = stage.branchStageId; renderTreasureStage(); }
-      else if (choice === 'go-next') { tp.stageId = stage.nextStageId; renderTreasureStage(); }
+      if (choice === 'go-branch') { GameAudio.play('stage'); tp.stageId = stage.branchStageId; renderTreasureStage(); }
+      else if (choice === 'go-next') { GameAudio.play('stage'); tp.stageId = stage.nextStageId; renderTreasureStage(); }
       else { tp.done = true; renderTreasureResults(); }
     };
   });
@@ -496,39 +847,42 @@ function chooseTreasureAnswer(optionId) {
   const tp = state.treasurePlay;
   if (tp.answered) return;
   const stage = treasureStageById(tp.stageId);
+  if (!stage) return;
   const root = $('#playBody');
   const correct = optionId === stage.question.correctOptionId;
   const fb = $('#answerFeedback', root);
+  GameAudio.play(correct ? 'correct' : 'wrong');
   if (correct) {
-    tp.answered = true;
-    const gained = stage.points + stage.completionBonus;
-    tp.earned += gained;
-    tp.results.push({ stageId: stage.id, correct: true, points: gained });
+    const gained = treasureRecordStage(stage, true);
     $$('.answer-option', root).forEach(btn => { btn.disabled = true; if (btn.dataset.answer === stage.question.correctOptionId) btn.classList.add('correct'); });
-    fb.className = 'feedback good';
-    fb.innerHTML = `<strong>✓ Tìm được chìa khóa!</strong> +${stage.points} điểm câu đố · +${stage.completionBonus} điểm hoàn thành chặng.<br>${escapeHtml(stage.question.explanation || '')}`;
+    if (fb) {
+      fb.className = 'feedback good';
+      fb.innerHTML = `<strong>✓ Tìm được chìa khóa!</strong> +${stage.points} điểm câu đố · +${stage.completionBonus} điểm hoàn thành chặng.<br>${escapeHtml(stage.question.explanation || '')}`;
+    }
+    markTreasureMapNode(stage, true);
     showTreasureChoices(stage, true);
     return;
   }
-  if (tp.attemptsLeft > 0) tp.attemptsLeft -= 1;
-  const out = stage.attempts > 0 && tp.attemptsLeft === 0;
-  const hint = $('#treasureAttemptsHint', root);
-  if (hint && stage.attempts > 0) hint.textContent = out ? 'Hết lượt thử — xem gợi ý và đáp án' : `Còn ${tp.attemptsLeft} lượt thử · sai không bị trừ điểm`;
+  const out = treasureUseAttempt(stage);
   if (out) {
-    tp.answered = true;
-    tp.results.push({ stageId: stage.id, correct: false, points: 0 });
+    treasureRecordStage(stage, false);
     $$('.answer-option', root).forEach(btn => {
       btn.disabled = true;
       if (btn.dataset.answer === stage.question.correctOptionId) btn.classList.add('correct');
       else if (btn.dataset.answer === optionId) btn.classList.add('wrong');
     });
-    fb.className = 'feedback bad';
-    fb.innerHTML = `<strong>✕ Hết lượt thử.</strong> ${stage.question.hint ? `💡 Gợi ý: ${escapeHtml(stage.question.hint)}<br>` : ''}Đáp án đúng đã được đánh dấu.<br>${escapeHtml(stage.question.explanation || '')}`;
+    if (fb) {
+      fb.className = 'feedback bad';
+      fb.innerHTML = `<strong>✕ Hết lượt thử.</strong> ${stage.question.hint ? `💡 Gợi ý: ${escapeHtml(stage.question.hint)}<br>` : ''}Đáp án đúng đã được đánh dấu.<br>${escapeHtml(stage.question.explanation || '')}`;
+    }
+    markTreasureMapNode(stage, false);
     showTreasureChoices(stage, false);
   } else {
     $$('.answer-option', root).forEach(btn => { if (btn.dataset.answer === optionId) btn.classList.add('wrong'); });
-    fb.className = 'feedback bad';
-    fb.innerHTML = `<strong>✕ Chưa đúng.</strong> ${stage.attempts > 0 ? `Còn ${tp.attemptsLeft} lượt thử — hãy suy nghĩ kỹ.` : 'Thử lại với đáp án khác.'}`;
+    if (fb) {
+      fb.className = 'feedback bad';
+      fb.innerHTML = `<strong>✕ Chưa đúng.</strong> ${stage.attempts > 0 ? `Còn ${tp.attemptsLeft} lượt thử — hãy suy nghĩ kỹ.` : 'Thử lại với đáp án khác.'}`;
+    }
   }
 }
 function renderTreasureResults() {
@@ -540,6 +894,7 @@ function renderTreasureResults() {
     tp.done = true;
   }
   tp.resultShown = true;
+  if (completed) GameAudio.play('reward');
   const itemSlots = hunt.stages.filter(stage => stage.hasHiddenItem).length;
   const max = hunt.stages.reduce((sum, stage) => sum + (Number(stage.points) || 100) + (Number(stage.completionBonus) || 200), 0)
     + (hunt.journeyBonus || 300)
@@ -548,16 +903,18 @@ function renderTreasureResults() {
   const correctCount = tp.results.filter(r => r.correct).length;
   state.lastSummary = { points: tp.earned, max, percent, correct: correctCount, total: hunt.stages.length };
   const game = state.currentGame;
-  $('#playBody').innerHTML = `<div class="game-stage"><div class="result-screen"><div class="result-medal">${percent >= 80 ? '🏆' : percent >= 50 ? '🎖️' : '🌱'}</div><div class="stage-kicker">${completed ? 'HÀNH TRÌNH HOÀN THÀNH' : 'DỪNG HÀNH TRÌNH'}</div><h2>${completed ? 'Bạn đã tìm ra kho báu!' : 'Tiếp tục cố gắng!'}</h2><p>${escapeHtml(game.title)}</p><div class="result-score">${tp.earned.toLocaleString('vi-VN')} / ${max.toLocaleString('vi-VN')} điểm</div><p>Hoàn thành ${correctCount}/${hunt.stages.length} chặng${completed ? ` · Thưởng hành trình +${hunt.journeyBonus || 300}` : ''} · ${percent}% điểm tối đa</p><div class="result-actions"><button class="btn btn-secondary" id="closeResultBtn">Đóng</button><button class="btn btn-secondary" id="replayBtn">↻ Chơi lại</button><button class="btn btn-primary" id="saveResultBtn">Lưu kết quả</button></div></div></div>`;
+  $('#playBody').innerHTML = `<div class="game-stage"><div class="result-screen"><div class="result-medal">${percent >= 80 ? '🏆' : percent >= 50 ? '🎖️' : '🌱'}</div><div class="stage-kicker">${completed ? 'HÀNH TRÌNH HOÀN THÀNH' : 'DỪNG HÀNH TRÌNH'}</div><h2>${completed ? 'Bạn đã tìm ra kho báu!' : 'Tiếp tục cố gắng!'}</h2><p>${escapeHtml(game.title)}</p><div class="result-score">${tp.earned.toLocaleString('vi-VN')} / ${max.toLocaleString('vi-VN')} điểm</div><p>Hoàn thành ${correctCount}/${hunt.stages.length} chặng${completed ? ` · Thưởng hành trình +${hunt.journeyBonus || 300}` : ''} · ${percent}% điểm tối đa</p><p id="resultSaveStatus" class="result-save-status">Đang tự lưu kết quả…</p><div class="result-actions"><button class="btn btn-secondary" id="closeResultBtn">Đóng</button><button class="btn btn-secondary" id="replayBtn">↻ Chơi lại</button><button class="btn btn-primary" id="saveResultBtn">Đang lưu…</button></div></div></div>`;
   $('#closeResultBtn').onclick = () => $('#modalRoot').innerHTML = '';
-  $('#replayBtn').onclick = () => openTreasurePlay();
-  $('#saveResultBtn').onclick = async () => {
-    const playerName = prompt('Tên học sinh hoặc đội chơi:', 'Nhà thám hiểm 1');
-    if (playerName === null) return;
-    await window.eduGame.saveSession({ gameId: game.id, gameTitle: game.title, playerName: playerName.trim() || 'Người chơi', ...state.lastSummary });
-    await refreshDb(); toast('Đã lưu kết quả lượt chơi.');
-    $('#saveResultBtn').textContent = '✓ Đã lưu'; $('#saveResultBtn').disabled = true;
-  };
+  $('#replayBtn').onclick = () => { state.playStartedAt=Date.now();state.resultSession=null;openTreasurePlay(); };
+  wireResultSession(game, state.lastSummary, {
+    answers: tp.results,
+    treasure: {
+      completed,
+      earned: tp.earned,
+      results: tp.results,
+      itemsFound: tp.itemsFound
+    }
+  }, 'Nhà thám hiểm 1');
 }
 
 // ---------- §6 Đường đua tri thức ----------
@@ -679,14 +1036,17 @@ function renderRaceResults() {
   state.lastSummary = { points: winner.points, max: maxPoints, percent, correct: 0, total: 0, winner: winner.name };
   $('#playBody').innerHTML = `<div class="game-stage"><div class="result-screen"><div class="result-medal">${rp.winnerId ? '🏁' : '🏅'}</div><div class="stage-kicker">KẾT QUẢ ĐƯỜNG ĐUA</div><h2>${tied ? 'Về đích đồng hạng!' : `${winner.icon} ${escapeHtml(winner.name)} chiến thắng!`}</h2><p>${escapeHtml(game.title)}</p>
     <div class="race-scoreboard max-w-[460px] my-[14px] mx-auto">${byProgress.map((t, i) => `<div class="race-team-row scoreboard"><span>${i + 1}. ${t.icon} <strong>${escapeHtml(t.name)}</strong></span><span>Ô ${t.progress}/${race.trackLength}</span><span>🏆 ${t.points} điểm</span></div>`).join('')}</div>
-    <div class="result-actions"><button class="btn btn-secondary" id="closeResultBtn">Đóng</button><button class="btn btn-secondary" id="replayBtn">↻ Đua lại</button><button class="btn btn-primary" id="saveResultBtn">Lưu kết quả</button></div></div></div>`;
+    <p id="resultSaveStatus" class="result-save-status">Đang tự lưu kết quả…</p><div class="result-actions"><button class="btn btn-secondary" id="closeResultBtn">Đóng</button><button class="btn btn-secondary" id="replayBtn">↻ Đua lại</button><button class="btn btn-primary" id="saveResultBtn">Đang lưu…</button></div></div></div>`;
   $('#closeResultBtn').onclick = () => $('#modalRoot').innerHTML = '';
-  $('#replayBtn').onclick = () => openRacePlay();
-  $('#saveResultBtn').onclick = async () => {
-    const playerName = prompt('Ghi kết quả cho đội:', winner.name);
-    if (playerName === null) return;
-    await window.eduGame.saveSession({ gameId: game.id, gameTitle: game.title, playerName: playerName.trim() || winner.name, ...state.lastSummary });
-    await refreshDb(); toast('Đã lưu kết quả lượt chơi.');
-    $('#saveResultBtn').textContent = '✓ Đã lưu'; $('#saveResultBtn').disabled = true;
-  };
+  $('#replayBtn').onclick = () => { state.playStartedAt=Date.now();state.resultSession=null;openRacePlay(); };
+  wireResultSession(game, state.lastSummary, {
+    answers: [],
+    race: {
+      teams: byProgress,
+      winner: winner.name,
+      tied,
+      trackLength: race.trackLength,
+      rounds: rp.round
+    }
+  }, winner.name);
 }

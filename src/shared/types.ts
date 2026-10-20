@@ -10,6 +10,8 @@ export interface GameOption {
   text: string;
   feedback?: string;
   nextQuestionId?: string | null;
+  /** Explicit branch end (manual editor). `null` nextQuestionId alone means "next". */
+  endsScenario?: boolean;
   scenarioScore?: {
     safety: number;
     reasoning: number;
@@ -60,12 +62,61 @@ export interface TreasureStageQuestion {
   hint: string;
 }
 
+/** §5.4 — the teacher can pick a different mission mechanic for every stage. */
+export type TreasureMissionType =
+  | 'multiple-choice'
+  | 'scenario'
+  | 'matching'
+  | 'decode'
+  | 'classification';
+
+export interface TreasureMatchingPair {
+  id: string;
+  left: string;
+  right: string;
+}
+
+export interface TreasureClassificationGroup {
+  id: string;
+  name: string;
+}
+
+export interface TreasureClassificationItem {
+  id: string;
+  text: string;
+  groupId: string;
+}
+
+/**
+ * Optional per-stage mission payload. A missing `mission` means the legacy
+ * multiple-choice question in `TreasureStage.question`, so existing `.egame`
+ * files stay valid. Choice/scenario missions reuse `question.options`.
+ */
+export type TreasureStageMission =
+  | { type: 'multiple-choice' }
+  | { type: 'scenario' }
+  | { type: 'matching'; pairs: TreasureMatchingPair[] }
+  | { type: 'decode'; answer: string; cipher?: string }
+  | {
+    type: 'classification';
+    groups: TreasureClassificationGroup[];
+    items: TreasureClassificationItem[];
+  };
+
+/** Built-in illustrated scenes. Missing values fall back to `temple`. */
+export type TreasureBackgroundId = 'temple' | 'forest' | 'ice' | 'desert' | 'ocean' | 'space';
+
+/** Built-in illustrated roles. Missing values fall back to `explorer`. */
+export type TreasureCharacterId = 'explorer' | 'scientist' | 'biologist' | 'astronaut' | 'diver';
+
 export interface TreasureStage {
   id: string;
   name: string;
   story: string;
   taskDescription: string;
   question: TreasureStageQuestion;
+  /** Absent = legacy multiple-choice mission. */
+  mission?: TreasureStageMission;
   /** 0 = unlimited attempts. */
   attempts: number;
   points: number;
@@ -83,6 +134,10 @@ export interface TreasureHuntData {
   intro: string;
   journeyBonus: number;
   hiddenItemBonus: number;
+  /** Optional visual theme. Old `.egame` files omit it and get `temple`. */
+  backgroundId?: TreasureBackgroundId;
+  /** Optional avatar role. Old `.egame` files omit it and get `explorer`. */
+  characterId?: TreasureCharacterId;
   stages: TreasureStage[];
 }
 

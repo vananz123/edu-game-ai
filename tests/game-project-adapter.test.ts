@@ -81,6 +81,8 @@ const treasureDraft: GameDraft = {
   intro: 'Tìm kho báu.',
   journeyBonus: 300,
   hiddenItemBonus: 50,
+  backgroundId: 'forest',
+  characterId: 'biologist',
   stages: [
     {
       id: 'st1', name: 'Cổng rừng', story: 'Cổng gỗ.', taskDescription: 'Mở cổng.',
@@ -192,7 +194,9 @@ assert.equal(scenarioGame.template, 'scenario');
 assert.equal(scenarioGame.questions.length, 2);
 assert.equal(scenarioGame.questions[0].type, 'scenario');
 assert.equal(scenarioGame.questions[0].options[0].nextQuestionId, 's2');
+assert.equal(scenarioGame.questions[0].options[1].nextQuestionId, undefined);
 assert.equal(scenarioGame.questions[0].correctOptionId, 'a');
+assert.equal(scenarioGame.questions[1].options[0].nextQuestionId, undefined);
 validateScenarioGame(scenarioGame);
 
 const matchingGame = toEducationalGame(projectFor(matchingDraft));
@@ -206,8 +210,57 @@ assert.equal(treasureGame.template, 'treasure-hunt');
 assert.equal(treasureGame.treasureHunt?.stages.length, 2);
 assert.equal(treasureGame.treasureHunt?.stages[0].nextStageId, 'st2', 'omitted nextStageId should chain to the following stage');
 assert.equal(treasureGame.treasureHunt?.stages[1].nextStageId, null);
+assert.equal(treasureGame.treasureHunt?.backgroundId, 'forest');
+assert.equal(treasureGame.treasureHunt?.characterId, 'biologist');
 assert.equal(treasureGame.questions.length, 2);
 validateTreasureHuntGame(treasureGame);
+const roundTripArt = toEducationalGame(fromEducationalGame(treasureGame));
+assert.equal(roundTripArt.treasureHunt?.backgroundId, 'forest', 'draft round-trip preserves the background');
+assert.equal(roundTripArt.treasureHunt?.characterId, 'biologist', 'draft round-trip preserves the avatar');
+validateTreasureHuntGame(roundTripArt);
+
+const variantTreasureDraft: GameDraft = {
+  ...treasureDraft,
+  stages: [
+    {
+      ...treasureDraft.stages[0],
+      mission: {
+        type: 'matching',
+        pairs: [
+          { id: 'p1', left: 'Quang hợp', right: 'Tổng hợp chất hữu cơ' },
+          { id: 'p2', left: 'Hô hấp', right: 'Giải phóng năng lượng' }
+        ]
+      },
+      question: {
+        prompt: 'Ghép các quá trình với mô tả đúng.',
+        options: [],
+        correctOptionId: '',
+        explanation: 'Ghép đúng để mở cổng.',
+        hint: 'Đọc kỹ hai vế.'
+      }
+    },
+    {
+      ...treasureDraft.stages[1],
+      mission: { type: 'decode', answer: 'quang hợp', cipher: 'hợp quang' },
+      question: {
+        prompt: 'Giải mã từ khóa của chặng cuối.',
+        options: [],
+        correctOptionId: '',
+        explanation: 'Đáp án là quang hợp.',
+        hint: 'Đây là quá trình cây tạo chất hữu cơ.'
+      }
+    }
+  ]
+};
+const variantTreasureGame = toEducationalGame(projectFor(variantTreasureDraft));
+assert.equal(variantTreasureGame.treasureHunt?.stages[0].mission?.type, 'matching');
+assert.equal(variantTreasureGame.treasureHunt?.stages[1].mission?.type, 'decode');
+assert.equal(variantTreasureGame.questions.length, 2);
+validateTreasureHuntGame(variantTreasureGame);
+const roundTripVariant = toEducationalGame(fromEducationalGame(variantTreasureGame));
+assert.deepEqual(roundTripVariant.treasureHunt?.stages[0].mission, variantTreasureGame.treasureHunt?.stages[0].mission);
+assert.deepEqual(roundTripVariant.treasureHunt?.stages[1].mission, variantTreasureGame.treasureHunt?.stages[1].mission);
+validateTreasureHuntGame(roundTripVariant);
 
 const raceGame = toEducationalGame(projectFor(raceDraft));
 assert.equal(raceGame.template, 'race');
@@ -412,6 +465,8 @@ const roundTripTreasure = toEducationalGame(fromEducationalGame(treasureGameOld)
 assert.equal(roundTripTreasure.template, 'treasure-hunt');
 assert.equal(roundTripTreasure.treasureHunt?.stages[0].nextStageId, 's2');
 assert.equal(roundTripTreasure.treasureHunt?.stages[1].nextStageId, null);
+assert.equal(roundTripTreasure.treasureHunt?.backgroundId, undefined, 'legacy treasure keeps no art field');
+assert.equal(roundTripTreasure.treasureHunt?.characterId, undefined, 'legacy treasure keeps no avatar field');
 validateTreasureHuntGame(roundTripTreasure);
 
 const roundTripRace = toEducationalGame(fromEducationalGame(raceGameOld));

@@ -243,6 +243,23 @@ async function run(): Promise<void> {
   assert.equal(store.listAnalyses(document.id).length, 2);
   assert.equal(store.getAnalysis('analysis-2')?.topic, 'Phép trừ');
 
+  // Document library projection: newest analysis first, no text body.
+  const library = await store.listDocumentLibrary();
+  assert.equal(library.length, 1);
+  assert.equal(library[0].id, document.id);
+  assert.equal(library[0].sourceAvailable, true);
+  assert.equal(library[0].analyses.length, 2);
+  assert.deepEqual(library[0].analyses.map(item => item.id).sort(), ['analysis-1', 'analysis-2']);
+  assert.equal('text' in library[0], false);
+  const sourcePath = path.join(lessonsDir, `${document.id}.txt`);
+  await fs.rename(sourcePath, `${sourcePath}.bak`);
+  try {
+    const missingSource = await store.listDocumentLibrary();
+    assert.equal(missingSource[0].sourceAvailable, false);
+  } finally {
+    await fs.rename(`${sourcePath}.bak`, sourcePath);
+  }
+
   const recommendations = [
     { id: 'rec-1', schemaVersion: 1 as const, analysisId: 'analysis-1', gameType: 'arena' as const, title: 'Đấu trường', description: 'Mô tả', reason: 'Phù hợp', learningObjectiveIds: ['o1'], suggestedDurationMinutes: 15, createdAt: ISO },
     { id: 'rec-2', schemaVersion: 1 as const, analysisId: 'analysis-1', gameType: 'matching' as const, title: 'Ghép cặp', description: 'Mô tả', reason: 'Phù hợp', learningObjectiveIds: ['o1'], suggestedDurationMinutes: 10, createdAt: ISO }

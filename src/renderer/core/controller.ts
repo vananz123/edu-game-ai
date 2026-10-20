@@ -1,9 +1,15 @@
 // @ts-nocheck -- migrated legacy UI logic; new contracts are typed in src/shared/types.ts.
-function navigate(page) { state.page = page; render(); }
+function navigate(page) {
+  state.page = page;
+  state.search = '';
+  render();
+  if (page === 'my-projects') refreshProjectsPage();
+  if (page === 'lesson-plans') refreshLessonLibraryPage();
+}
 function wirePage() {
   if (state.page === 'create-wizard') wireCreateWizard();
   $('#pageContent').querySelectorAll('[data-page]').forEach(el => el.addEventListener('click', () => navigate(el.dataset.page)));
-  $('#pageContent').querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', () => handleAction(el.dataset.action, el.dataset.id)));
+  $('#pageContent').querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', () => handleAction(el.dataset.action, el.dataset.id, el)));
   $('#pageContent').querySelectorAll('[data-template]').forEach(el => el.addEventListener('click', () => { state.draft = { ...collectDraft() }; state.selectedTemplate = el.dataset.template; render(); }));
   ['#setupDifficulty', '#setupDuration', '#setupPoints', '#setupTimeBonus', '#setupStyle', '#setupPlayers', '#setupCompetition', '#setupPointsEasy', '#setupPointsMedium', '#setupPointsHard'].forEach(sel => $(sel)?.addEventListener('change', () => { state.draft = { ...collectDraft() }; }));
   $('#setupScoringMode')?.addEventListener('change', () => { updateScoringVisibility(); state.draft = { ...collectDraft() }; });
@@ -52,17 +58,53 @@ function wirePage() {
   $('#saveSettingsBtn')?.addEventListener('click', saveSettings);
   $('#testAiBtn')?.addEventListener('click', testAi);
 }
-async function handleAction(action, id) {
+async function handleAction(action, id, element) {
   try {
     if (action === 'play') playGame(findGame(id));
     if (action === 'edit') editGame(findGame(id));
     if (action === 'import-document') {
       const doc = await window.eduGame.importDocument();
-      if (doc) { state.importedDoc = doc; const old = state.draft || {}; state.draft = { ...old, text: doc.text, sourceName: doc.name }; render(); toast(`Đã trích xuất ${doc.characters.toLocaleString('vi-VN')} ký tự.`); }
+      if (doc) {
+        const stored = await window.eduGame.saveLessonDocument({
+          name: doc.name,
+          ext: (doc.name || '').split('.').pop() || 'txt',
+          text: doc.text,
+          characters: doc.characters,
+          sizeBytes: Number(doc.sizeBytes) || 0
+        });
+        state.importedDoc = { ...doc, id: stored.id };
+        const old = state.draft || {};
+        state.draft = { ...old, text: doc.text, sourceName: doc.name };
+        // Keep the source immediately, not only when a game is generated.
+        state.lessonLibrary = null;
+        if (state.page === 'lesson-plans') await refreshLessonLibraryPage(); else render();
+        toast(`Đã lưu giáo án “${doc.name}” (${Number(doc.characters || 0).toLocaleString('vi-VN')} ký tự).`);
+      }
     }
     if (action === 'import-game') {
-      const game = await window.eduGame.importGame();
-      if (game) { const saved = await window.eduGame.saveGame(game); await refreshDb(); toast(`Đã nhập “${saved.title}”`); }
+      // Out of the v0.3 acceptance scope: keep the service/IPC for compatibility,
+      // but do not expose a broken entry point in the UI.
+      toast('Nhập gói .egame từ bên ngoài tạm thời chưa mở trong phiên bản này.');
+    }
+    if (action === 'open-project') {
+      navigate('create-wizard');
+      await wizardOpenProject(id);
+    }
+    if (action === 'delete-project') {
+      const project = (state.projects || []).find(item => item.id === id);
+      if (confirm(`Xoá dự án “${project ? project.title : 'này'}”?\nTrò chơi đã lưu trong Thư viện trò chơi vẫn được giữ lại.`)) {
+        await window.eduGame.deleteProject(id);
+        await refreshProjectsPage();
+        toast('Đã xoá dự án.');
+      }
+    }
+    if (action === 'open-lesson') {
+      navigate('create-wizard');
+      await wizardOpenSavedLesson(id, element && element.dataset ? element.dataset.analysis : '');
+    }
+    if (action === 'create-from-lesson') {
+      navigate('create-wizard');
+      await wizardCreateGameFromSavedLesson(id, element && element.dataset ? element.dataset.analysis : '');
     }
     if (action === 'export-first') {
       const game = state.db.games[0];

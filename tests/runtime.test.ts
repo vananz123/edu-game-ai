@@ -70,10 +70,24 @@ assert.deepEqual(calculateScenarioSummary([
 ]), { points: 125, max: 200, percent: 63, correct: 1, total: 2 });
 const branchQuestions = [{ id: 'first' }, { id: 'second' }];
 assert.equal(resolveScenarioTransition({ nextQuestionId: 'second' }, 0, branchQuestions), 1);
-assert.equal(resolveScenarioTransition({ nextQuestionId: null }, 0, branchQuestions), undefined);
+// Generated scenarios often set null on every option; that means "continue",
+// not "end after situation 1". An explicit editor end still stops the branch.
+assert.equal(resolveScenarioTransition({ nextQuestionId: null }, 0, branchQuestions), 1);
+assert.equal(resolveScenarioTransition({ endsScenario: true, nextQuestionId: null }, 0, branchQuestions), undefined);
 assert.equal(resolveScenarioTransition({}, 0, branchQuestions), 1);
 assert.equal(resolveScenarioTransition({}, 1, branchQuestions), undefined);
 assert.throws(() => resolveScenarioTransition({ nextQuestionId: 'missing' }, 0, branchQuestions), /Không tìm thấy tình huống/);
+// Sequential fallback must visit every situation for 1, 2 and 10 items.
+for (const count of [1, 2, 10]) {
+  const questions = Array.from({ length: count }, (_, index) => ({ id: `s${index + 1}` }));
+  const visited = [];
+  let index = 0;
+  while (index !== undefined && visited.length <= count + 1) {
+    visited.push(index);
+    index = resolveScenarioTransition({ nextQuestionId: null }, index, questions);
+  }
+  assert.deepEqual(visited, Array.from({ length: count }, (_, position) => position));
+}
 // §4.2: trừ điểm sai theo cấu hình wrongPenalty (mặc định 0 = không trừ).
 assert.deepEqual(calculateMatchingSummary(2, 2, 1, 30, {
   pointsPerPair: 100, completionBonus: 200, wrongPenalty: 10, timeBonus: 50, bonusUnderSeconds: 60

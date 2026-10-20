@@ -74,12 +74,15 @@ function calculateScenarioSummary(answers) {
   };
 }
 function resolveScenarioTransition(option, currentIndex, questions) {
-  if (option && option.nextQuestionId === null) return undefined;
-  if (typeof option?.nextQuestionId === 'string') {
+  if (option?.endsScenario === true) return undefined;
+  if (typeof option?.nextQuestionId === 'string' && option.nextQuestionId.trim()) {
     const targetIndex = questions.findIndex(question => question.id === option.nextQuestionId);
     if (targetIndex < 0) throw new Error(`Không tìm thấy tình huống tiếp theo: ${option.nextQuestionId}`);
     return targetIndex;
   }
+  // `null`/omitted is "no explicit branch", not "stop here". Generated scenarios
+  // often set null on every option; treating that as terminal ended the game
+  // after situation 1. Only running past the last situation ends the scenario.
   return currentIndex + 1 < questions.length ? currentIndex + 1 : undefined;
 }
 function calculateMatchingSummary(pairCount, matchedCount, wrongAttempts, elapsedSeconds, config) {

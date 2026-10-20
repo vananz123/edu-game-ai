@@ -157,6 +157,6 @@ edugame-studio-v0.3/
 1. Hoàn tất TypeScript typing ở renderer/main (một số logic UI kế thừa từ v0.2 tạm dùng `@ts-nocheck`; contract dùng chung đã được định nghĩa).
 2. Nối Supabase Auth vào ứng dụng desktop và tích hợp Gateway.
 3. Thêm test schema game, kiểm thử prompt/đáp án, và kiểm thử migration SQLite.
-4. Hoàn thiện matching kéo-thả, game phân nhánh, hình ảnh/âm thanh.
+4. Hoàn thiện matching kéo-thả, game phân nhánh, ảnh minh họa cặp ghép và tài sản do giáo viên tải lên (kho báu đã có hình nền/nhân vật/âm thanh dựng sẵn).
 5. Kiểm thử cài đặt và inference Qwen local trên nhiều cấu hình máy, ưu tiên máy cấu hình thấp; AI local là tùy chọn, không bắt buộc để chơi game.
 6. Thêm thanh toán, trang quản trị, ký số installer và quy trình hỗ trợ người dùng.

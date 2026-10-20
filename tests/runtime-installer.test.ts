@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import JSZip from 'jszip';
@@ -31,8 +31,14 @@ async function run(): Promise<void> {
       sha256: createHash('sha256').update(archiveBytes).digest('hex'),
       sourceUrl: 'https://github.com/ggml-org/llama.cpp/releases/tag/test'
     };
+    const supportDirectory = path.join(root, 'vc-runtime');
+    await mkdir(supportDirectory, { recursive: true });
+    for (const fileName of ['msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll']) {
+      await writeFile(path.join(supportDirectory, fileName), `fake ${fileName}`);
+    }
     const installer = new LlamaRuntimeInstaller({
       runtimeDirectory: path.join(root, 'runtime'),
+      supportFilesDirectory: supportDirectory,
       runtimeArtifact: artifact,
       platform: 'win32',
       arch: 'x64'
@@ -43,6 +49,15 @@ async function run(): Promise<void> {
     assert.equal((await readFile(path.join(root, 'runtime', 'ggml.dll'))).toString(), 'fake ggml library');
     await assert.rejects(stat(path.join(root, 'runtime', 'README.md')), { code: 'ENOENT' });
     assert.equal(await installer.getExecutablePath(), executablePath);
+    for (const fileName of ['msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll']) {
+      assert.equal((await readFile(path.join(root, 'runtime', fileName))).toString(), `fake ${fileName}`);
+    }
+
+    // Upgrading an existing runtime must repair a missing support DLL without
+    // downloading the whole llama.cpp archive again.
+    await rm(path.join(root, 'runtime', 'msvcp140.dll'));
+    await installer.ensureSupportFiles();
+    assert.equal((await readFile(path.join(root, 'runtime', 'msvcp140.dll'))).toString(), 'fake msvcp140.dll');
 
     const redirectCalls: string[] = [];
     const redirected = await fetchTrustedDownload(async input => {

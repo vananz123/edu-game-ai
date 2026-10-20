@@ -1,0 +1,340 @@
+# EDUGAME STUDIO — KẾ HOẠCH TỔNG HỢP SỬA LỖI VÀ HOÀN THIỆN GIAO DIỆN
+
+## I. MỤC TIÊU
+
+Rà soát và hoàn thiện các chức năng hiện có của EduGame Studio, tập trung vào:
+
+1. Sửa lỗi lưu dự án, lưu trò chơi, quản lý giáo án và lịch sử kết quả.
+2. Sửa lỗi gameplay và nội dung sư phạm của các thể loại trò chơi.
+3. Ngăn AI Local bị khởi chạy nhiều lần do thao tác liên tiếp.
+4. Làm rõ vai trò của Giáo án, Dự án của tôi và Thư viện trò chơi.
+5. Cập nhật giao diện và roadmap cho tính năng nghiên cứu giáo án bằng AI trong tương lai.
+6. Bảo đảm các chức năng đã hoàn thiện không bị phá vỡ khi sửa lỗi.
+
+Đây là một đợt hoàn thiện hệ thống hiện tại, không phải viết lại ứng dụng từ đầu.
+
+## II. NGUYÊN TẮC LÀM VIỆC
+
+- Trước tiên đọc cấu trúc repository, tài liệu dự án và mã nguồn thực tế.
+- Kiểm tra `AGENTS.md`, `PROJECT_BRIEF.md`, `ARCHITECTURE.md`, `ROADMAP.md`, `STATUS.md` và các tài liệu liên quan nếu tồn tại.
+- Kiểm tra `package.json`, scripts, kiến trúc Electron, TypeScript, SQLite, IPC, service và state management.
+- Tái hiện lỗi trước khi sửa và xác định nguyên nhân gốc.
+- Tận dụng component, service, schema và hệ thống lưu trữ đang có.
+- Không tạo database hoặc service trùng lặp nếu không cần thiết.
+- Không tạo dữ liệu giả, nút bấm giả hoặc thông báo thành công giả.
+- Không thay đổi định dạng `.egame` hay cấu trúc `EducationalGame` một cách phá vỡ tương thích.
+- Không mở rộng phạm vi sang những tính năng chưa được yêu cầu triển khai.
+- Sau mỗi nhóm thay đổi phải chạy các kiểm thử phù hợp.
+- Báo cáo trung thực những gì đã sửa, những gì đã kiểm thử và những gì chưa hoàn thành.
+
+## III. DANH SÁCH LỖI CẦN SỬA
+
+### Nhóm A — Lưu dự án và lưu trò chơi
+
+Hiện tại, ở bước 5 của quy trình tạo trò chơi từ giáo án:
+- Chức năng lưu dự án chưa hoạt động.
+- Chức năng lưu trò chơi vào thư viện chưa hoạt động.
+
+Yêu cầu:
+- Kiểm tra luồng từ giao diện đến service, IPC và SQLite hoặc hệ thống lưu trữ hiện tại.
+- Sửa validation, lỗi ghi dữ liệu, transaction và cập nhật giao diện nếu có.
+- Lưu dự án phải giữ được tiến trình làm việc và dữ liệu cần thiết để tiếp tục chỉnh sửa.
+- Lưu trò chơi phải đưa trò chơi vào thư viện và cho phép mở lại, chơi được.
+- Phân biệt rõ hai thao tác: lưu tiến trình dự án và lưu trò chơi đã tạo.
+- Không tạo bản ghi trùng khi người dùng bấm nhiều lần.
+- Chỉ thông báo thành công sau khi dữ liệu thực sự được lưu.
+- Kiểm tra dữ liệu sau khi đóng và mở lại ứng dụng.
+
+### Nhóm B — Quản lý giáo án và kết quả phân tích
+
+Hiện tại, chức năng Giáo án chủ yếu nhập giáo án rồi chuyển sang trang tạo trò chơi. Khả năng lưu và xem lại tài liệu hoặc kết quả phân tích chưa đáp ứng yêu cầu.
+
+Trong đợt sửa lỗi hiện tại:
+- Kiểm tra khả năng lưu tài liệu nguồn và kết quả phân tích.
+- Nếu chức năng lưu chưa tồn tại hoặc chưa hoạt động, triển khai phần lưu cơ bản cần thiết theo kiến trúc hiện tại.
+- Cho phép xem lại tài liệu và kết quả phân tích đã lưu.
+- Hạn chế gọi lại AI không cần thiết khi kết quả phân tích còn hợp lệ.
+- Liên kết giáo án với dự án được tạo từ giáo án đó khi phù hợp.
+- Xử lý rõ trường hợp tệp nguồn bị di chuyển hoặc không còn tồn tại.
+- Không tự động gửi giáo án lên AI Cloud.
+
+Lưu ý: việc phát triển hệ thống hỏi đáp chuyên sâu với AI được tách riêng và chưa triển khai trong đợt này.
+
+### Nhóm C — Ngăn khởi chạy AI trùng lặp
+
+Hiện tại, khi AI Local đang chạy, người dùng vẫn có thể bấm các nút khởi chạy AI nhiều lần.
+
+Yêu cầu:
+- Rà soát tất cả nút khởi chạy phân tích giáo án, tạo trò chơi, tạo lại nội dung và các tác vụ AI tương ứng.
+- Vô hiệu hóa các nút xung đột trong thời gian tác vụ đang chạy.
+- Hiển thị trạng thái đang xử lý rõ ràng.
+- Thêm cơ chế chống gọi trùng ở service hoặc tầng điều phối AI, không chỉ khóa nút giao diện.
+- Đồng bộ trạng thái model và tác vụ.
+- Giải phóng khóa đúng cách khi hoàn tất, thất bại, timeout hoặc hủy.
+- Không vô tình tạo nhiều tiến trình llama.cpp cho cùng một cấu hình.
+- Không cho phép thao tác bấm liên tiếp tạo nhiều yêu cầu sinh nội dung giống nhau.
+- Bảo đảm trạng thái giao diện không bị kẹt ở “đang xử lý” sau khi xảy ra lỗi.
+
+### Nhóm D — Thể loại Ghép cặp kiến thức
+
+Nội dung hiện tại chưa có ý nghĩa sư phạm rõ ràng.
+
+Yêu cầu:
+- Kiểm tra schema và quy trình tạo nội dung của thể loại `matching`.
+- Mỗi cặp phải có quan hệ kiến thức hợp lý, chẳng hạn:
+  - Khái niệm — định nghĩa.
+  - Nguyên nhân — kết quả.
+  - Tình huống — cách xử lý.
+  - Thuật ngữ — ví dụ.
+  - Câu hỏi — đáp án.
+- Nội dung phải dựa trên giáo án và mục tiêu bài học.
+- Tránh ghép hai nội dung ngẫu nhiên hoặc mơ hồ.
+- Tránh cặp trùng lặp hoặc có nhiều đáp án hợp lý khi luật chơi chỉ cho phép một đáp án.
+- Kiểm tra độ phù hợp với lớp học, độ tuổi và độ khó.
+- Cung cấp giải thích ngắn sau khi ghép đúng nếu phù hợp với gameplay.
+- Bổ sung validation TypeScript cho dữ liệu cặp ghép.
+- Nếu nội dung AI không đạt, báo lỗi cụ thể hoặc chỉ tạo lại phần cần thiết.
+
+### Nhóm E — Thể loại Thử thách tình huống
+
+Hiện tại, người chơi chỉ chơi được một câu.
+
+Yêu cầu:
+- Kiểm tra game state, bộ câu hỏi, chỉ số câu hiện tại, điều kiện chuyển câu và điều kiện kết thúc.
+- Sau khi trả lời, chuyển đến câu tiếp theo khi vẫn còn câu hỏi.
+- Chỉ kết thúc khi đã hết câu hoặc đạt điều kiện kết thúc hợp lệ.
+- Không reset sai chỉ số câu hoặc bộ câu hỏi khi cập nhật state.
+- Bảo đảm điểm số, phản hồi, giải thích và tổng kết cuối game chính xác.
+- Kiểm thử bộ câu gồm 1, 2 và 10 câu.
+- Kiểm thử cả trường hợp trả lời đúng, sai và chuyển liên tục giữa nhiều câu.
+
+### Nhóm F — Thể loại Đấu trường kiến thức
+
+#### F1. Lỗi giao diện nhập đáp án
+
+- Sửa màu chữ nhập, màu nền, placeholder và trạng thái focus.
+- Bảo đảm chữ dễ đọc trong theme đang sử dụng.
+- Kiểm tra các trạng thái mặc định, hover, focus và disabled.
+- Kiểm tra thao tác Enter, xác nhận đáp án và xử lý nội dung rỗng.
+- Không làm ảnh hưởng đến các loại câu hỏi khác.
+
+#### F2. Câu hỏi đúng/sai
+
+- Nội dung câu hỏi phải nêu rõ nhận định cần đánh giá.
+- Người chơi được chọn “Đúng” hoặc “Sai”.
+- Không tiết lộ đáp án đúng ngay trong câu hỏi.
+- Nếu có giải thích, chỉ hiển thị theo đúng quy tắc sau khi người chơi trả lời.
+- Phân biệt đúng loại câu hỏi trong schema, đáp án và cơ chế chấm điểm.
+- Không tự động phân loại câu hỏi thành đúng/sai chỉ vì nội dung chứa các từ này.
+
+### Nhóm G — Lịch sử kết quả
+
+Hiện tại, lịch sử kết quả chưa ghi nhận được kết quả chơi.
+
+Yêu cầu:
+- Kiểm tra luồng kết thúc phiên chơi và luồng ghi dữ liệu.
+- Lưu kết quả thực tế vào SQLite hoặc hệ thống lưu trữ hiện tại.
+- Mỗi phiên chơi có ID riêng và liên kết đúng với trò chơi.
+- Lưu các thông tin có thể xác định được như thời điểm, điểm số, tổng số câu, số câu đúng và thời lượng nếu có.
+- Không ghi trùng kết quả do callback hoặc thao tác hoàn tất lặp lại.
+- Xác định rõ chính sách lưu khi người chơi thoát giữa chừng.
+- Hiển thị danh sách lịch sử và chi tiết kết quả nếu phù hợp với giao diện hiện tại.
+- Kiểm tra dữ liệu sau khi đóng và mở lại ứng dụng.
+- Kiểm thử với các thể loại trò chơi hiện có.
+
+## IV. ĐỊNH NGHĨA LẠI BA KHU VỰC CHÍNH
+
+### 1. Giáo án — Kho tài liệu và nghiên cứu bài học
+
+#### Vai trò hiện tại
+
+Tiếp tục duy trì luồng nhập giáo án và chuyển sang trang tạo trò chơi đang hoạt động.
+
+Trong đợt này:
+- Hoàn thiện phần lưu và xem lại giáo án cùng kết quả phân tích theo phạm vi Nhóm B.
+- Điều chỉnh giao diện để thể hiện rõ đây là khu vực quản lý tài liệu.
+- Không phá vỡ luồng tạo trò chơi hiện tại.
+
+#### Định hướng tương lai
+
+Giáo án sẽ trở thành nơi giáo viên:
+- Lưu các tài liệu đã gửi.
+- Xem lại giáo án và kết quả phân tích.
+- Nghiên cứu sâu nội dung bài học bằng AI.
+- Hỏi AI về kiến thức trọng tâm, mục tiêu học tập, nội dung học sinh dễ hiểu sai và các tình huống thực tế.
+- Chọn nội dung đã duyệt rồi chuyển sang tạo trò chơi.
+
+Chức năng hỏi đáp chuyên sâu chưa được triển khai trong đợt này. Chỉ ghi vào roadmap và thể hiện bằng khu vực giao diện có nhãn “Sắp ra mắt” hoặc “Chưa triển khai”.
+
+Không tạo nút AI giả, không mô phỏng kết quả hỏi đáp và không tự động gửi tài liệu lên Cloud.
+
+### 2. Dự án của tôi — Nơi làm việc và phát triển trò chơi
+
+Vai trò:
+- Quản lý các công việc tạo trò chơi đang thực hiện.
+- Lưu tiến trình, cấu hình, bản nháp và nội dung đang chỉnh sửa.
+- Cho phép tiếp tục công việc còn dang dở.
+- Liên kết dự án với giáo án nguồn và trò chơi được tạo ra.
+
+Đây là nơi quản lý quá trình làm việc, không phải nơi lưu tất cả tài liệu nguồn hoặc chỉ liệt kê các trò chơi có thể chơi.
+
+Không tạo database dự án mới nếu hệ thống hiện tại đã có cấu trúc phù hợp.
+
+### 3. Thư viện trò chơi — Nơi quản lý và sử dụng trò chơi
+
+Vai trò:
+- Tập trung các trò chơi đã lưu.
+- Cho phép mở và chơi.
+- Cho phép chỉnh sửa, nhân bản, xuất hoặc xóa nếu những chức năng đó đã được hỗ trợ.
+- Cho phép sử dụng lại trò chơi mà không cần mở lại quy trình tạo từ giáo án.
+
+Không đồng nhất thư viện với Dự án của tôi.
+
+Quy tắc dữ liệu:
+- Một dự án có thể tạo ra một hoặc nhiều phiên bản trò chơi tùy khả năng của hệ thống.
+- Trò chơi đã lưu phải có thể mở lại và chơi độc lập với phiên AI đã tạo ra nó.
+- Xóa dự án không được tự động xóa trò chơi đã lưu, trừ khi có quy tắc nghiệp vụ rõ ràng và người dùng xác nhận.
+- Không đưa trò chơi đang tạo dở vào thư viện như thể đã hoàn thành.
+
+## V. GIAO DIỆN ĐỊNH HƯỚNG CHO GIÁO ÁN
+
+Cập nhật bố cục Giáo án theo các khu vực:
+
+1. **Tài liệu của tôi**
+   - Danh sách tài liệu đã gửi.
+   - Trạng thái tài liệu.
+   - Thao tác mở lại tài liệu.
+
+2. **Kết quả phân tích**
+   - Hiển thị kết quả phân tích đã lưu.
+   - Có thể xem lại mục tiêu học tập và kiến thức trọng tâm nếu dữ liệu tương ứng tồn tại.
+   - Không tự sinh nội dung giả khi chưa phân tích.
+
+3. **Nghiên cứu và hỏi đáp chuyên sâu**
+   - Chỉ thể hiện định hướng chức năng.
+   - Ghi rõ “Chưa triển khai”.
+   - Có thể mô tả dự kiến hỗ trợ AI Local và AI Cloud trong tương lai.
+   - Không gọi AI và không triển khai backend trong đợt này.
+
+4. **Chuyển sang tạo trò chơi**
+   - Duy trì hành vi hiện tại.
+   - Khi chức năng nghiên cứu được triển khai sau này, cho phép chọn tài liệu hoặc nội dung trọng tâm làm đầu vào cho quy trình tạo game.
+
+Thiết kế giao diện phải phù hợp với hệ thống hiện tại, không tạo trang trùng lặp và không làm người dùng hiểu nhầm tính năng tương lai đã hoạt động.
+
+## VI. PHẠM VI TẠM HOÃN
+
+### Tạm hoãn nhập trò chơi từ file bên ngoài
+
+Không sửa hoặc nghiệm thu chức năng nhập trò chơi có sẵn từ file `.egame` trong đợt này.
+
+Nếu nút nhập trò chơi đang xuất hiện:
+- Tạm ẩn hoặc vô hiệu hóa an toàn.
+- Hiển thị thông báo rằng tính năng đang được hoàn thiện.
+- Không xóa mã nguồn hoặc dữ liệu mà các chức năng khác đang sử dụng.
+- Không ảnh hưởng đến chức năng lưu trò chơi do chính EduGame Studio tạo ra vào thư viện.
+
+Lý do: cần ổn định cơ chế gameplay và định dạng dữ liệu trước khi mở rộng nhập file từ bên ngoài.
+
+### Chưa triển khai hỏi đáp chuyên sâu
+
+Không triển khai:
+- Hội thoại nhiều lượt với AI.
+- RAG hoặc hệ thống embedding/truy xuất mới.
+- Backend Gemini API mới.
+- Lịch sử hội thoại AI.
+- Quy trình nghiên cứu giáo án bằng AI mới.
+
+Chỉ ghi rõ định hướng vào roadmap và giao diện.
+
+## VII. KẾ HOẠCH TRIỂN KHAI THEO GIAI ĐOẠN
+
+### Giai đoạn 1 — Audit và xác định nguyên nhân
+
+- Kiểm tra repository và kiến trúc hiện tại.
+- Lập danh sách lỗi, cách tái hiện, nguyên nhân gốc và tệp liên quan.
+- Kiểm tra schema SQLite, migration, IPC, services và game state.
+- Chạy kiểm tra nền để biết các lỗi đã tồn tại trước khi sửa.
+- Cập nhật roadmap và phân loại rõ chức năng đang hoạt động với chức năng tương lai.
+
+### Giai đoạn 2 — Hoàn thiện dữ liệu và lưu trữ
+
+Ưu tiên:
+1. Lưu dự án.
+2. Lưu trò chơi vào thư viện.
+3. Lưu và mở lại giáo án.
+4. Lưu và xem lại kết quả phân tích.
+5. Ghi nhận lịch sử kết quả chơi.
+
+Bảo đảm dữ liệu tồn tại sau khi đóng và mở lại ứng dụng.
+
+### Giai đoạn 3 — Sửa gameplay và nội dung sư phạm
+
+Ưu tiên:
+1. Thử thách tình huống chơi hết bộ câu hỏi.
+2. Đấu trường kiến thức sửa giao diện nhập đáp án.
+3. Đấu trường kiến thức sửa loại câu hỏi đúng/sai.
+4. Ghép cặp kiến thức có quan hệ sư phạm rõ ràng.
+
+Kiểm thử từng thể loại độc lập và kiểm thử luồng chơi hoàn chỉnh.
+
+### Giai đoạn 4 — Điều phối AI và chống chạy trùng
+
+- Khóa nút tương ứng trong lúc AI xử lý.
+- Chặn yêu cầu trùng ở tầng service.
+- Đồng bộ trạng thái tiến trình model và giao diện.
+- Kiểm thử bấm liên tiếp, lỗi model, timeout và hủy tác vụ.
+
+### Giai đoạn 5 — Hoàn thiện cấu trúc giao diện
+
+- Làm rõ vai trò của Giáo án.
+- Làm rõ vai trò của Dự án của tôi.
+- Làm rõ vai trò của Thư viện trò chơi.
+- Cập nhật bố cục và placeholder định hướng hỏi đáp chuyên sâu.
+- Tạm ẩn hoặc vô hiệu hóa chức năng nhập trò chơi từ file bên ngoài.
+- Giữ nguyên những luồng đang hoạt động.
+
+### Giai đoạn 6 — Kiểm thử hồi quy và nghiệm thu
+
+Kiểm thử toàn bộ luồng:
+
+Nhập giáo án → lưu giáo án → phân tích → xem lại phân tích → tạo trò chơi → lưu dự án → lưu thư viện → mở và chơi hết câu → lưu lịch sử → đóng/mở ứng dụng.
+
+Kiểm thử riêng:
+- AI Local đang chạy và người dùng bấm nút nhiều lần.
+- Cả năm thể loại trò chơi.
+- Dữ liệu thiếu hoặc sai định dạng.
+- Lưu trữ sau khi khởi động lại ứng dụng.
+- Điều hướng giữa Giáo án, Dự án của tôi và Thư viện trò chơi.
+
+Không kiểm thử nhập trò chơi từ file bên ngoài trong đợt này.
+
+## VIII. TIÊU CHÍ NGHIỆM THU
+
+Chỉ báo cáo hoàn thành khi đã xác minh:
+
+1. Lưu dự án hoạt động và mở lại được.
+2. Lưu trò chơi vào thư viện hoạt động.
+3. Giáo án và kết quả phân tích có thể lưu và xem lại.
+4. AI không khởi chạy trùng do bấm nhiều lần.
+5. Thử thách tình huống chơi hết bộ câu hỏi hợp lệ.
+6. Đấu trường kiến thức hiển thị rõ chữ nhập và chấm đúng loại câu hỏi.
+7. Ghép cặp kiến thức có quan hệ sư phạm hợp lý.
+8. Lịch sử ghi nhận và hiển thị kết quả thực tế.
+9. Giáo án, Dự án của tôi và Thư viện trò chơi có vai trò riêng biệt.
+10. Khu vực hỏi đáp chuyên sâu chỉ là định hướng giao diện, chưa gọi AI.
+11. Chức năng nhập trò chơi bên ngoài được tạm ẩn hoặc vô hiệu hóa an toàn.
+12. Build, typecheck, lint và test theo scripts hiện có không phát sinh lỗi mới chưa được giải quyết.
+
+## IX. BÁO CÁO SAU TRIỂN KHAI
+
+Agent phải báo cáo:
+- Các lỗi đã tái hiện và nguyên nhân gốc.
+- Các tệp đã sửa.
+- Các migration đã thực hiện.
+- Những kiểm thử đã chạy và kết quả thực tế.
+- Những chức năng đã hoàn thành.
+- Những chức năng chưa hoàn thành và lý do.
+- Các rủi ro hoặc quyết định kiến trúc cần người dùng phê duyệt.
+
+Bắt đầu bằng audit repository, sau đó thực hiện theo thứ tự ưu tiên. Không chỉ trả lời bằng kế hoạch; hãy sửa mã nguồn thực tế trong phạm vi đã xác định.

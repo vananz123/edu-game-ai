@@ -1,8 +1,15 @@
 // @ts-nocheck -- migrated legacy UI logic; new contracts are typed in src/shared/types.ts.
 const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage } = require('electron');
 const path = require('node:path');
+// Test/support hook: Windows resolves `%APPDATA%` through the shell API, so
+// setting the APPDATA environment variable in a smoke script does not isolate
+// the profile. An explicit path keeps automated runs away from teacher data.
+if (process.env.EDUGAME_USER_DATA) {
+  app.setPath('userData', path.resolve(process.env.EDUGAME_USER_DATA));
+}
 const os = require('node:os');
 const fs = require('node:fs/promises');
+const fsSync = require('node:fs');
 const mammoth = require('mammoth');
 const pdfParse = require('pdf-parse');
 const JSZip = require('jszip');
@@ -20,6 +27,7 @@ const { validateScenarioGame, validateMatchingGame, validateTreasureHuntGame, va
 const { isZenBaseUrl, postZenChatCompletions, readLocalOpencodeApiKey } = require('./services/opencode-zen');
 const {
   AiRequestRegistry,
+  AiSingleFlight,
   AiTransportError,
   isCancelReason,
   requestChatJson
@@ -239,12 +247,17 @@ let sqlite;
 let lessonStore;
 /** Maps renderer `requestId` → AbortController for the new lesson workflow + `ai:cancel`. */
 const aiRequests = new AiRequestRegistry();
+/** Rejects overlapping local-model work even when the renderer uses new ids. */
+const aiSingleFlight = new AiSingleFlight();
 
 let mainWindow;
 let localAiManager;
 let localAiModelId;
 let localEmbeddingRuntime;
 let localEmbeddingModelId;
+/** Shared start promises so two IPC calls cannot create two llama-server processes. */
+let localRuntimeStart = null;
+let localEmbeddingStart = null;
 let localModelInstallInProgress = false;
 let quittingAfterAiShutdown = false;
 const DATA_DIR = () => path.join(app.getPath('userData'), 'edugame-data');
@@ -396,6 +409,68 @@ async function saveDb(db) {
   return { ok: true };
 }
 
+/**
+ * Targeted game upsert used by `library:save-game`. The old read-whole-DB /
+ * delete-whole-DB / rewrite path could lose a concurrent session save; writing
+ * one row keeps saves independent. `created_at` is preserved on update.
+ */
+function upsertGameRow(game) {
+  if (!sqlite) throw new Error('Cơ sở dữ liệu chưa sẵn sàng.');
+  const now = new Date().toISOString();
+  const existing = sqlite.prepare('SELECT created_at FROM games WHERE id = ?').get(game.id);
+  const createdAt = String(game.createdAt || (existing && existing.created_at) || now);
+  const updatedAt = String(game.updatedAt || now);
+  sqlite.prepare(`
+    INSERT INTO games (id,title,subject,grade,topic,template,created_at,updated_at,data_json)
+    VALUES (@id,@title,@subject,@grade,@topic,@template,@created_at,@updated_at,@data_json)
+    ON CONFLICT(id) DO UPDATE SET
+      title=excluded.title, subject=excluded.subject, grade=excluded.grade,
+      topic=excluded.topic, template=excluded.template,
+      updated_at=excluded.updated_at, data_json=excluded.data_json
+  `).run({
+    id: String(game.id),
+    title: String(game.title || 'Trò chơi chưa đặt tên'),
+    subject: String(game.subject || ''),
+    grade: String(game.grade || ''),
+    topic: String(game.topic || ''),
+    template: String(game.template || 'quiz'),
+    created_at: createdAt,
+    updated_at: updatedAt,
+    data_json: JSON.stringify({ ...game, createdAt, updatedAt })
+  });
+}
+
+/**
+ * Idempotent session upsert. The renderer generates the session id once per
+ * completed playthrough, so rendering results twice or renaming the player
+ * updates the same history row instead of adding duplicates.
+ */
+function upsertSessionRow(session) {
+  if (!sqlite) throw new Error('Cơ sở dữ liệu chưa sẵn sàng.');
+  const now = new Date().toISOString();
+  const sessionId = String(session && session.id ? session.id : id('session'));
+  const existing = sqlite.prepare('SELECT created_at FROM sessions WHERE id = ?').get(sessionId);
+  const createdAt = String(session.createdAt || (existing && existing.created_at) || now);
+  const stored = { ...session, id: sessionId, createdAt };
+  sqlite.prepare(`
+    INSERT INTO sessions (id,created_at,data_json)
+    VALUES (@id,@created_at,@data_json)
+    ON CONFLICT(id) DO UPDATE SET data_json=excluded.data_json
+  `).run({
+    id: sessionId,
+    created_at: createdAt,
+    data_json: JSON.stringify(stored)
+  });
+  // Keep the same bounded history as before, but never prune the row that was
+  // just written (a rename of an old session must stay visible).
+  sqlite.prepare(`
+    DELETE FROM sessions WHERE id <> @id AND id NOT IN (
+      SELECT id FROM sessions WHERE id <> @id ORDER BY created_at DESC LIMIT 999
+    )
+  `).run({ id: sessionId });
+  return stored;
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1440, height: 920, minWidth: 1100, minHeight: 720,
@@ -440,10 +515,49 @@ app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(
 function localModelFilePath(model) {
   return path.join(MODEL_DIR(), `${model.id}-${model.version}.gguf`);
 }
+/**
+ * The MSVC runtime DLLs are shipped as extraResources so llama-server does not
+ * depend on an outdated system-wide Visual C++ redistributable. In development
+ * the same files live under vendor/vc-runtime.
+ */
+function vcRuntimeDirectory() {
+  const candidate = app.isPackaged
+    ? path.join(process.resourcesPath, 'vc-runtime')
+    : path.join(__dirname, '..', '..', 'vendor', 'vc-runtime');
+  return fsSync.existsSync(candidate) ? candidate : undefined;
+}
 function createRuntimeInstaller() {
   return new LlamaRuntimeInstaller({
-    runtimeDirectory: RUNTIME_DIR()
+    runtimeDirectory: RUNTIME_DIR(),
+    supportFilesDirectory: vcRuntimeDirectory()
   });
+}
+function formatMemoryBytes(bytes) {
+  return `${(bytes / 1024 ** 3).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} GB`;
+}
+/**
+ * Fail before llama-server is spawned when the machine cannot plausibly hold
+ * the model. Without this an 8 GB machine can end up with a native 0xC0000005
+ * crash instead of an actionable message. The estimate is deliberately coarse
+ * (weights + KV/runtime headroom); it is a guard, not a performance claim.
+ */
+function assertModelFitsMachine(model) {
+  const totalRam = os.totalmem();
+  const minimumRam = model.hardware.minimumRamBytes;
+  if (totalRam < minimumRam) {
+    throw new Error(
+      `Máy có ${formatMemoryBytes(totalRam)} RAM, thấp hơn mức tối thiểu ${formatMemoryBytes(minimumRam)} ` +
+      `của ${model.displayName}. Hãy chọn “Bản Nhanh” 2B hoặc dùng máy có nhiều RAM hơn.`
+    );
+  }
+  const freeRam = os.freemem();
+  const estimatedNeed = model.sizeBytes + 768 * 1024 ** 2;
+  if (freeRam < estimatedNeed) {
+    throw new Error(
+      `Máy chỉ còn ${formatMemoryBytes(freeRam)} RAM trống, không đủ để nạp ${model.displayName} ` +
+      `(cần khoảng ${formatMemoryBytes(estimatedNeed)}). Hãy đóng bớt ứng dụng hoặc chọn “Bản Nhanh” 2B.`
+    );
+  }
 }
 async function getLocalAiModels() {
   const runtimeInstalled = Boolean(await createRuntimeInstaller().getExecutablePath());
@@ -542,12 +656,33 @@ async function detectMachineGpu() {
 }
 async function ensureLocalRuntime(modelId) {
   const model = getLocalModel(modelId);
+  if (localRuntimeStart && localRuntimeStart.modelId === model.id) {
+    return localRuntimeStart.promise;
+  }
+  // A different model is starting: serialize starts instead of racing two
+  // llama-server processes against the same port.
+  if (localRuntimeStart) {
+    try { await localRuntimeStart.promise; } catch { /* its caller reports the failure */ }
+  }
+  const promise = startLocalRuntimeUnlocked(model.id);
+  localRuntimeStart = { modelId: model.id, promise };
+  try {
+    return await promise;
+  } finally {
+    if (localRuntimeStart && localRuntimeStart.promise === promise) localRuntimeStart = null;
+  }
+}
+
+async function startLocalRuntimeUnlocked(modelId) {
+  const model = getLocalModel(modelId);
   if (localAiManager && localAiModelId === model.id &&
       localAiManager.getStatus().state === 'READY') {
     return localAiManager.getBaseUrl();
   }
   const modelPath = localModelFilePath(model);
-  let executablePath = await createRuntimeInstaller().getExecutablePath();
+  assertModelFitsMachine(model);
+  const runtimeInstaller = createRuntimeInstaller();
+  let executablePath = await runtimeInstaller.getExecutablePath();
   if (!executablePath) {
     throw new Error('Runtime llama.cpp chưa được cài trong ứng dụng. Hãy chọn “Cài model” trong phần AI local trước.');
   }
@@ -565,6 +700,10 @@ async function ensureLocalRuntime(modelId) {
     localAiModelId = undefined;
     await previous.stop();
   }
+
+  // Repair runtimes installed before the VC++ DLLs were bundled. This must
+  // happen after the previous runtime has stopped so the DLLs are not in use.
+  await runtimeInstaller.ensureSupportFiles();
 
   const totalThreads = Math.max(1, os.cpus().length);
   localAiManager = new AIManager({
@@ -588,6 +727,12 @@ async function ensureLocalRuntime(modelId) {
 }
 
 async function stopLocalAiRuntime() {
+  if (localRuntimeStart) {
+    try { await localRuntimeStart.promise; } catch { /* start failure is reported to its caller */ }
+  }
+  if (localEmbeddingStart) {
+    try { await localEmbeddingStart.promise; } catch { /* optional retrieval runtime */ }
+  }
   const embedding = localEmbeddingRuntime;
   localEmbeddingRuntime = undefined;
   localEmbeddingModelId = undefined;
@@ -620,7 +765,22 @@ async function ensureEmbeddingRuntime() {
   if (localEmbeddingRuntime && localEmbeddingModelId === model.id && localEmbeddingRuntime.isReady()) {
     return localEmbeddingRuntime;
   }
-  const executablePath = await createRuntimeInstaller().getExecutablePath();
+  if (localEmbeddingStart && localEmbeddingStart.modelId === model.id) {
+    return localEmbeddingStart.promise;
+  }
+  const promise = startEmbeddingRuntimeUnlocked();
+  localEmbeddingStart = { modelId: model.id, promise };
+  try {
+    return await promise;
+  } finally {
+    if (localEmbeddingStart && localEmbeddingStart.promise === promise) localEmbeddingStart = null;
+  }
+}
+
+async function startEmbeddingRuntimeUnlocked() {
+  const model = getEmbeddingModel();
+  const runtimeInstaller = createRuntimeInstaller();
+  const executablePath = await runtimeInstaller.getExecutablePath();
   if (!executablePath) throw new Error('Runtime llama.cpp chưa được cài để chạy bộ đọc hiểu giáo án.');
   await verifyModelFile(embeddingModelFilePath(model), model);
   const previous = localEmbeddingRuntime;
@@ -629,6 +789,7 @@ async function ensureEmbeddingRuntime() {
   if (previous) {
     try { await previous.stop(); } catch (error) { /* ignored: replacing the process */ }
   }
+  await runtimeInstaller.ensureSupportFiles();
   const totalThreads = Math.max(1, os.cpus().length);
   const runtime = createEmbeddingRuntime({
     executablePath,
@@ -748,29 +909,19 @@ function registerIpc() {
     validateMatchingGame(game);
     validateTreasureHuntGame(game);
     validateRaceGame(game);
-    const db = await readDb();
     const now = new Date().toISOString();
     const normalized = { ...game, id: game.id || id('game'), updatedAt: now, createdAt: game.createdAt || now };
-    const index = db.games.findIndex(g => g.id === normalized.id);
-    if (index >= 0) db.games[index] = normalized; else db.games.unshift(normalized);
-    await saveDb(db);
+    upsertGameRow(normalized);
     return normalized;
   });
   ipcMain.handle('library:delete-game', async (_e, gameId) => {
-    const db = await readDb();
-    db.games = db.games.filter(g => g.id !== gameId);
-    await saveDb(db);
+    if (sqlite) sqlite.prepare('DELETE FROM games WHERE id = ?').run(String(gameId || ''));
     return { ok: true };
   });
-  ipcMain.handle('library:save-session', async (_e, session) => {
-    const db = await readDb();
-    db.sessions.unshift({ ...session, id: id('session'), createdAt: new Date().toISOString() });
-    db.sessions = db.sessions.slice(0, 1000);
-    await saveDb(db);
-    return { ok: true };
-  });
+  ipcMain.handle('library:save-session', async (_e, session) => upsertSessionRow(session || {}));
   ipcMain.handle('lesson:save-document', async (_e, payload) => requireLessonStore().saveDocument(payload || {}));
   ipcMain.handle('lesson:get-document', async (_e, documentId) => requireLessonStore().getDocumentWithText(String(documentId || '')));
+  ipcMain.handle('lesson:library', async () => requireLessonStore().listDocumentLibrary());
   ipcMain.handle('project:save-draft', async (_e, project) => requireLessonStore().saveProject(project));
   ipcMain.handle('project:get', async (_e, projectId) => requireLessonStore().getProject(String(projectId || '')));
   ipcMain.handle('project:list', async () => requireLessonStore().listProjects());
@@ -797,24 +948,31 @@ function registerIpc() {
     let cached = Boolean(analysis);
     if (!analysis) {
       sendLessonProgress(event.sender, requestId, 'prepare');
-      analysis = await analyzeLesson({
-        client: createLessonChatClient(),
-        registry: aiRequests,
-        requestId,
-        documentId,
-        text: document.text,
-        sourceName: document.name,
-        analysisId: payload?.analysisId ? String(payload.analysisId) : undefined,
-        now: new Date().toISOString(),
-        // O6: measured with the smaller 6/8 ask, a ~1,800-character lesson still
-        // needed >1,024 tokens (it truncated, then succeeded on the shortened
-        // repair). A 2,048 ceiling removes that extra round without costing
-        // anything when the model stops earlier on its own.
-        maxTokens: mode === 'deep' ? 2560 : 2048,
-        onAttempt: attempt => sendLessonProgress(event.sender, requestId, attempt > 1 ? 'repair' : 'generate')
-      });
-      store.saveAnalysis(analysis, { cacheKey });
-      sendLessonProgress(event.sender, requestId, 'ready');
+      analysis = await aiSingleFlight.run(
+        `analyze:${documentId}:${cacheKey}`,
+        'phân tích giáo án',
+        async () => {
+          const generated = await analyzeLesson({
+            client: createLessonChatClient(),
+            registry: aiRequests,
+            requestId,
+            documentId,
+            text: document.text,
+            sourceName: document.name,
+            analysisId: payload?.analysisId ? String(payload.analysisId) : undefined,
+            now: new Date().toISOString(),
+            // O6: measured with the smaller 6/8 ask, a ~1,800-character lesson still
+            // needed >1,024 tokens (it truncated, then succeeded on the shortened
+            // repair). A 2,048 ceiling removes that extra round without costing
+            // anything when the model stops earlier on its own.
+            maxTokens: mode === 'deep' ? 2560 : 2048,
+            onAttempt: attempt => sendLessonProgress(event.sender, requestId, attempt > 1 ? 'repair' : 'generate')
+          });
+          store.saveAnalysis(generated, { cacheKey });
+          sendLessonProgress(event.sender, requestId, 'ready');
+          return generated;
+        }
+      );
       cached = false;
     }
     const identity = { documentId: document.id, name: document.name, characters: document.characters };
@@ -880,12 +1038,11 @@ function registerIpc() {
       modelId,
       mode
     });
-    sendLessonProgress(event.sender, requestId, 'retrieve');
-    const { sourceExcerpt, context } = await buildLessonGenerationContext(store, project, analysis, mode);
-
     // §9: a second press of "Tạo nội dung" with identical inputs reuses the stored
-    // draft. "Tạo lại" (`regenerate: true`) always calls the model, because the
-    // teacher explicitly asked for different content.
+    // draft. Check the cache before retrieval/embedding so a cache hit does no
+    // model work at all (and is not blocked by an unrelated in-flight AI job).
+    // "Tạo lại" (`regenerate: true`) always calls the model, because the teacher
+    // explicitly asked for different content.
     if (!payload?.regenerate) {
       const cachedEntry = store.getGenerationCache(cacheKey);
       if (cachedEntry) {
@@ -908,7 +1065,7 @@ function registerIpc() {
             game: cachedGame,
             mode,
             quality: cachedQuality,
-            context: cachedEntry.payload.context || context,
+            context: cachedEntry.payload.context || null,
             cached: true
           };
         } catch (error) {
@@ -919,48 +1076,56 @@ function registerIpc() {
       }
     }
 
-    const draft = await generateGameDraft({
-      client: createLessonChatClient(),
-      registry: aiRequests,
-      requestId,
-      gameType: project.config.gameType,
-      config: project.config,
-      analysis,
-      sourceExcerpt,
-      maxTokens: mode === 'deep' ? 4096 : 2048,
-      onAttempt: attempt => sendLessonProgress(event.sender, requestId, attempt === 1 ? 'generate' : 'repair')
-    });
+    return await aiSingleFlight.run(
+      `generate:${projectId}:${cacheKey}`,
+      `tạo nội dung ${project.config.gameType}`,
+      async () => {
+        sendLessonProgress(event.sender, requestId, 'retrieve');
+        const { sourceExcerpt, context } = await buildLessonGenerationContext(store, project, analysis, mode);
+        const draft = await generateGameDraft({
+          client: createLessonChatClient(),
+          registry: aiRequests,
+          requestId,
+          gameType: project.config.gameType,
+          config: project.config,
+          analysis,
+          sourceExcerpt,
+          maxTokens: mode === 'deep' ? 4096 : 2048,
+          onAttempt: attempt => sendLessonProgress(event.sender, requestId, attempt === 1 ? 'generate' : 'repair')
+        });
 
-    // The adapter is the only place that builds `EducationalGame`; it also runs
-    // the existing per-template validators, so invalid content is caught here.
-    sendLessonProgress(event.sender, requestId, 'validate');
-    let game;
-    try {
-      game = toEducationalGame({ ...project, draft });
-    } catch (error) {
-      throw new Error(`[GENERATION_INVALID] ${error && error.message ? error.message : 'Nội dung AI tạo ra chưa hợp lệ.'}`);
-    }
-    const saved = store.saveProject(applyDraft(project, { draft, game, now: new Date().toISOString() }));
-    // O2: advisory content-quality report (duplicates, weak distractors, broken
-    // chains, coverage). Pure TypeScript, so it costs nothing here.
-    const quality = checkDraftQuality({ draft, config: project.config, analysis });
-    // Best effort: a cache write must never fail the generation the teacher waited for.
-    try {
-      store.putGenerationCache({
-        cacheKey,
-        kind: 'draft',
-        gameType: project.config.gameType,
-        analysisId: project.analysisId,
-        modelId,
-        promptVersion: `draft-v${LESSON_PROMPT_VERSIONS.draft}`,
-        payload: { draft, mode, context }
-      });
-      store.pruneGenerationCache(50);
-    } catch (error) {
-      console.warn('Không lưu được bộ nhớ đệm nội dung:', error && error.message ? error.message : error);
-    }
-    sendLessonProgress(event.sender, requestId, 'ready');
-    return { project: saved, game, mode, quality, context, cached: false };
+        // The adapter is the only place that builds `EducationalGame`; it also runs
+        // the existing per-template validators, so invalid content is caught here.
+        sendLessonProgress(event.sender, requestId, 'validate');
+        let game;
+        try {
+          game = toEducationalGame({ ...project, draft });
+        } catch (error) {
+          throw new Error(`[GENERATION_INVALID] ${error && error.message ? error.message : 'Nội dung AI tạo ra chưa hợp lệ.'}`);
+        }
+        const saved = store.saveProject(applyDraft(project, { draft, game, now: new Date().toISOString() }));
+        // O2: advisory content-quality report (duplicates, weak distractors, broken
+        // chains, coverage). Pure TypeScript, so it costs nothing here.
+        const quality = checkDraftQuality({ draft, config: project.config, analysis });
+        // Best effort: a cache write must never fail the generation the teacher waited for.
+        try {
+          store.putGenerationCache({
+            cacheKey,
+            kind: 'draft',
+            gameType: project.config.gameType,
+            analysisId: project.analysisId,
+            modelId,
+            promptVersion: `draft-v${LESSON_PROMPT_VERSIONS.draft}`,
+            payload: { draft, mode, context }
+          });
+          store.pruneGenerationCache(50);
+        } catch (error) {
+          console.warn('Không lưu được bộ nhớ đệm nội dung:', error && error.message ? error.message : error);
+        }
+        sendLessonProgress(event.sender, requestId, 'ready');
+        return { project: saved, game, mode, quality, context, cached: false };
+      }
+    );
   });
   // O2: recompute the advisory report when a draft is reopened (no model call).
   ipcMain.handle('lesson:quality', async (_e, payload) => {
@@ -1010,50 +1175,56 @@ function registerIpc() {
     }
 
     const mode = project.config.generationMode === 'deep' ? 'deep' : 'fast';
-    sendLessonProgress(event.sender, requestId, 'retrieve');
-    const { sourceExcerpt, context } = await buildLessonGenerationContext(store, project, analysis, mode);
-    const total = itemCount(project.draft);
-    let draft = project.draft;
-    for (const position of indexes) {
-      // One model call per item: §5.5 keeps failing items isolated so the passing
-      // ones are never regenerated (and never change). `handle.done()` frees the
-      // requestId between items, so the same id can be reused sequentially.
-      const item = await regenerateGameItem({
-        client: createLessonChatClient(),
-        registry: aiRequests,
-        requestId,
-        gameType: project.config.gameType,
-        config: project.config,
-        analysis,
-        position,
-        total,
-        itemLabel: itemLabel(project.config.gameType, position),
-        currentItem: itemAt(draft, position),
-        issues: issuesByIndex.get(position) || [],
-        sourceExcerpt,
-        maxTokens: mode === 'deep' ? 1536 : 1024,
-        onAttempt: attempt => sendLessonProgress(event.sender, requestId, attempt === 1 ? 'generate' : 'repair')
-      });
-      try {
-        draft = replaceDraftItem(draft, position, item);
-      } catch (error) {
-        throw new Error(`[GENERATION_INVALID] ${itemLabel(project.config.gameType, position)} mới chưa hợp lệ: ${error && error.message ? error.message : 'không đọc được nội dung AI trả về.'}`);
-      }
-    }
+    return await aiSingleFlight.run(
+      `regenerate:${projectId}:${indexes.join(',')}:${project.draft.gameType}`,
+      'tạo lại một mục nội dung',
+      async () => {
+        sendLessonProgress(event.sender, requestId, 'retrieve');
+        const { sourceExcerpt, context } = await buildLessonGenerationContext(store, project, analysis, mode);
+        const total = itemCount(project.draft);
+        let draft = project.draft;
+        for (const position of indexes) {
+          // One model call per item: §5.5 keeps failing items isolated so the passing
+          // ones are never regenerated (and never change). `handle.done()` frees the
+          // requestId between items, so the same id can be reused sequentially.
+          const item = await regenerateGameItem({
+            client: createLessonChatClient(),
+            registry: aiRequests,
+            requestId,
+            gameType: project.config.gameType,
+            config: project.config,
+            analysis,
+            position,
+            total,
+            itemLabel: itemLabel(project.config.gameType, position),
+            currentItem: itemAt(draft, position),
+            issues: issuesByIndex.get(position) || [],
+            sourceExcerpt,
+            maxTokens: mode === 'deep' ? 1536 : 1024,
+            onAttempt: attempt => sendLessonProgress(event.sender, requestId, attempt === 1 ? 'generate' : 'repair')
+          });
+          try {
+            draft = replaceDraftItem(draft, position, item);
+          } catch (error) {
+            throw new Error(`[GENERATION_INVALID] ${itemLabel(project.config.gameType, position)} mới chưa hợp lệ: ${error && error.message ? error.message : 'không đọc được nội dung AI trả về.'}`);
+          }
+        }
 
-    // The adapter stays the single conversion boundary and runs the legacy
-    // validators; a failed adapter must not overwrite the project.
-    sendLessonProgress(event.sender, requestId, 'validate');
-    let game;
-    try {
-      game = toEducationalGame({ ...project, draft });
-    } catch (error) {
-      throw new Error(`[GENERATION_INVALID] ${error && error.message ? error.message : 'Nội dung mới chưa hợp lệ.'}`);
-    }
-    const saved = store.saveProject(applyDraft(project, { draft, game, now: new Date().toISOString() }));
-    const quality = checkDraftQuality({ draft, config: project.config, analysis });
-    sendLessonProgress(event.sender, requestId, 'ready');
-    return { project: saved, game, quality, context, mode, itemIndexes: indexes, cached: false };
+        // The adapter stays the single conversion boundary and runs the legacy
+        // validators; a failed adapter must not overwrite the project.
+        sendLessonProgress(event.sender, requestId, 'validate');
+        let game;
+        try {
+          game = toEducationalGame({ ...project, draft });
+        } catch (error) {
+          throw new Error(`[GENERATION_INVALID] ${error && error.message ? error.message : 'Nội dung mới chưa hợp lệ.'}`);
+        }
+        const saved = store.saveProject(applyDraft(project, { draft, game, now: new Date().toISOString() }));
+        const quality = checkDraftQuality({ draft, config: project.config, analysis });
+        sendLessonProgress(event.sender, requestId, 'ready');
+        return { project: saved, game, quality, context, mode, itemIndexes: indexes, cached: false };
+      }
+    );
   });
   ipcMain.handle('files:import-document', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
@@ -1163,6 +1334,8 @@ function registerIpc() {
       const runtimeInstaller = createRuntimeInstaller();
       if (!(await runtimeInstaller.getExecutablePath())) {
         await runtimeInstaller.install(model.id, sendProgress);
+      } else {
+        await runtimeInstaller.ensureSupportFiles();
       }
       const installer = new ModelInstaller({
         modelDirectory: MODEL_DIR()
@@ -1195,19 +1368,13 @@ function registerIpc() {
     }
   });
   ipcMain.handle('ai:start-local-runtime', async (event, modelId) => {
+    if (aiSingleFlight.busy) {
+      throw new Error(`[AI_BUSY] AI local đang xử lý “${aiSingleFlight.activeLabel}”. Hãy đợi hoặc huỷ yêu cầu hiện tại trước khi đổi/khởi động lại model.`);
+    }
     const model = getLocalModel(String(modelId || ''));
-    const modelPath = localModelFilePath(model);
     const executablePath = await createRuntimeInstaller().getExecutablePath();
     if (!executablePath) {
       throw new Error('Runtime llama.cpp chưa được tải. Hãy tải model và runtime trước khi bắt đầu chạy.');
-    }
-    try {
-      await verifyModelFile(modelPath, model);
-    } catch (error) {
-      if (error.code === 'ENOENT') {
-        throw new Error(`Model ${model.friendlyName || model.displayName} chưa được tải. Hãy tải model trước khi bắt đầu chạy.`);
-      }
-      throw new Error(`Không xác minh được model ${model.friendlyName || model.displayName}: ${error.message}. Hãy tải lại model.`);
     }
     if (localAiManager && localAiModelId === model.id &&
         localAiManager.getStatus().state === 'READY') {
@@ -1230,6 +1397,9 @@ function registerIpc() {
     }
   });
   ipcMain.handle('ai:stop-local-runtime', async () => {
+    if (aiSingleFlight.busy) {
+      throw new Error(`[AI_BUSY] AI local đang xử lý “${aiSingleFlight.activeLabel}”. Hãy huỷ yêu cầu hiện tại trước khi dừng runtime.`);
+    }
     await stopLocalAiRuntime();
     return { ok: true, models: await getLocalAiModels() };
   });
@@ -1293,30 +1463,36 @@ function registerIpc() {
         { role: 'user', content: prompt }
       ]
     };
-    const response = useZen
-      ? await postZenChatCompletions({ baseUrl, apiKey, payload: requestBody, timeoutMs: 180_000 })
-      : await fetchAiEndpoint(`${baseUrl}/chat/completions`, {
-        method: 'POST',
-        redirect: 'error',
-        headers: { 'Content-Type': 'application/json', ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}) },
-        body: JSON.stringify(requestBody),
-        signal: AbortSignal.timeout(mode === 'local' ? 300_000 : 90_000)
-      }, mode);
-    if (!response.ok) throw new Error(`AI API trả về lỗi HTTP ${response.status}. Kiểm tra endpoint, model và API key.`);
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
-    if (!content) throw new Error('AI không trả về nội dung.');
-    const cleaned = content.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
-    let parsed;
-    try { parsed = JSON.parse(cleaned); } catch { throw new Error('AI trả về JSON không hợp lệ. Hãy thử lại hoặc giảm độ dài tài liệu.'); }
-    if (useStrictGameSchema) {
-      const validated = gameDraftSchema.safeParse(parsed);
-      if (!validated.success) {
-        throw new Error('AI trả về game sai cấu trúc (thiếu đáp án correctAnswer cho câu điền từ/trả lời ngắn, hoặc thiếu phương án/correctOptionId cho câu trắc nghiệm). Hãy thử lại.');
+    return await aiSingleFlight.run(
+      `legacy:${mode}`,
+      mode === 'local' ? 'tạo trò chơi bằng AI local' : 'tạo trò chơi bằng AI',
+      async () => {
+        const response = useZen
+          ? await postZenChatCompletions({ baseUrl, apiKey, payload: requestBody, timeoutMs: 180_000 })
+          : await fetchAiEndpoint(`${baseUrl}/chat/completions`, {
+            method: 'POST',
+            redirect: 'error',
+            headers: { 'Content-Type': 'application/json', ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}) },
+            body: JSON.stringify(requestBody),
+            signal: AbortSignal.timeout(mode === 'local' ? 300_000 : 90_000)
+          }, mode);
+        if (!response.ok) throw new Error(`AI API trả về lỗi HTTP ${response.status}. Kiểm tra endpoint, model và API key.`);
+        const data = await response.json();
+        const content = data.choices?.[0]?.message?.content;
+        if (!content) throw new Error('AI không trả về nội dung.');
+        const cleaned = content.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+        let parsed;
+        try { parsed = JSON.parse(cleaned); } catch { throw new Error('AI trả về JSON không hợp lệ. Hãy thử lại hoặc giảm độ dài tài liệu.'); }
+        if (useStrictGameSchema) {
+          const validated = gameDraftSchema.safeParse(parsed);
+          if (!validated.success) {
+            throw new Error('AI trả về game sai cấu trúc (thiếu đáp án correctAnswer cho câu điền từ/trả lời ngắn, hoặc thiếu phương án/correctOptionId cho câu trắc nghiệm). Hãy thử lại.');
+          }
+          parsed = validated.data;
+        }
+        return { game: normalizeAiGameService(parsed, payload, id), provider: mode };
       }
-      parsed = validated.data;
-    }
-    return { game: normalizeAiGameService(parsed, payload, id), provider: mode };
+    );
   });
 }
 

@@ -215,11 +215,12 @@ function renderWizardGenerate() {
         ${wizardDraftItemsPanel(s)}
         ${wizardContextHint(s.context)}
         <div class="publish-actions">
-          <button class="btn btn-primary" data-wizard-action="open-editor"${s.busy ? ' disabled' : ''}>✎ Mở trình chỉnh sửa</button>
+          <button class="btn btn-primary" data-wizard-action="save-game"${s.busy ? ' disabled' : ''}>${s.busy === 'save-game' ? 'Đang lưu…' : '💾 Lưu vào Thư viện trò chơi'}</button>
+          <button class="btn btn-secondary" data-wizard-action="open-editor"${s.busy ? ' disabled' : ''}>✎ Mở trình chỉnh sửa</button>
           <button class="btn btn-secondary" data-wizard-action="regenerate"${s.busy ? ' disabled' : ''}>🔄 Tạo lại nội dung</button>
           ${s.busy === 'generate' ? '<button class="btn btn-secondary" data-wizard-action="cancel">Huỷ</button>' : ''}
           <button class="btn btn-secondary" data-wizard-action="another-game"${s.busy ? ' disabled' : ''}>＋ Trò chơi khác từ giáo án này</button>
-          <button class="btn btn-secondary" data-wizard-action="save"${s.busy ? ' disabled' : ''}>Lưu dự án</button>
+          <button class="btn btn-secondary" data-wizard-action="save-project"${s.busy ? ' disabled' : ''}>Lưu tiến trình</button>
           <button class="btn btn-secondary" data-wizard-action="go-library">📚 Vào thư viện để chơi</button>
         </div>
         <div class="field-hint">“Trò chơi khác” mở một dự án mới nhưng dùng lại phân tích đã lưu — không gọi AI phân tích lại. Bạn chỉ cần chọn thể loại và cấu hình mới.</div>`
@@ -227,7 +228,7 @@ function renderWizardGenerate() {
         ${wizardSummaryGrid(wizardConfigSummaryRows(config))}
         <div class="publish-actions">
           <button class="btn btn-secondary" data-wizard-action="back">← Cấu hình</button>
-          <button class="btn btn-secondary" data-wizard-action="save"${s.busy ? ' disabled' : ''}>Lưu dự án</button>
+          <button class="btn btn-secondary" data-wizard-action="save-project"${s.busy ? ' disabled' : ''}>Lưu tiến trình</button>
           <button class="btn btn-primary" id="wizardGenerateBtn" data-wizard-action="generate"${s.busy ? ' disabled' : ''}>✦ Tạo nội dung bằng AI local</button>
           ${s.busy === 'generate' ? '<button class="btn btn-secondary" data-wizard-action="cancel">Huỷ</button>' : ''}
         </div>`}

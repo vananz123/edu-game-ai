@@ -193,6 +193,7 @@ function wizardParseError(error) {
 
 const wizardErrorMessages = {
   AI_NOT_RUNNING: 'AI local chưa chạy. Hãy mở cửa sổ AI local · llama.cpp, chọn model đã tải xong rồi nhấn “Bắt đầu chạy”.',
+  AI_BUSY: 'AI local đang xử lý một yêu cầu khác. Hãy đợi yêu cầu hiện tại hoàn tất hoặc huỷ nó trước khi thử lại.',
   AI_CONFIG: 'Chưa cấu hình AI local đúng cách. Hãy kiểm tra trong Cài đặt.',
   AI_CONNECTION: 'Không kết nối được tới AI local. Hãy kiểm tra cửa sổ AI local còn mở không rồi thử lại.',
   AI_TIMEOUT: 'AI local phản hồi quá lâu. Hãy thử lại với giáo án ngắn hơn hoặc model nhỏ hơn.',
@@ -275,7 +276,7 @@ function wizardBuildProject(step) {
   return {
     id: s.projectId,
     schemaVersion: 1,
-    status: s.analysis ? 'review' : 'draft',
+    status: step === 'done' ? 'ready' : s.analysis ? 'review' : 'draft',
     step: step || s.step,
     title,
     description: (s.analysis && s.analysis.topic) || '',
@@ -380,6 +381,62 @@ async function wizardStartAnotherGame() {
   return undefined;
 }
 
+/**
+ * Step-5 save. It must save the *current* step, not `configure`: the old button
+ * reused the configure-save helper, which rewound the persisted project every
+ * time the teacher saved after generating.
+ */
+async function wizardSaveCurrentProject() {
+  if (wizardState.busy) return undefined;
+  wizardState.busy = 'save';
+  wizardClearMessages();
+  render();
+  try {
+    // Do not rewind a project whose game was already saved to the library.
+    const savedInLibrary = Boolean(wizardState.gameId)
+      && Array.isArray(state.db.games)
+      && state.db.games.some(game => game.id === wizardState.gameId);
+    const step = savedInLibrary ? 'done' : wizardState.step === 'edit' ? 'generate' : wizardState.step;
+    await wizardSaveProject(step);
+    wizardSetNotice(`Đã lưu tiến trình dự án lúc ${new Date().toLocaleTimeString('vi-VN')}.`);
+  } catch (error) {
+    wizardSetError(error);
+  }
+  wizardState.busy = '';
+  render();
+  return undefined;
+}
+
+/**
+ * Explicit step-5 "save to library". The adapter-validated snapshot is the only
+ * object written; the project row keeps its id and points at the library game so
+ * reopening the project can continue from the same content.
+ */
+async function wizardSaveGameToLibrary() {
+  if (wizardState.busy) return undefined;
+  const game = wizardState.gameSnapshot;
+  if (!game) {
+    toast('Chưa có nội dung trò chơi để lưu. Hãy tạo nội dung trước.');
+    return undefined;
+  }
+  wizardState.busy = 'save-game';
+  wizardClearMessages();
+  render();
+  try {
+    const saved = await window.eduGame.saveGame(game);
+    wizardState.gameSnapshot = saved;
+    wizardState.gameId = saved.id;
+    await wizardSaveProject('done');
+    if (typeof refreshDb === 'function') await refreshDb();
+    wizardSetNotice(`Đã lưu “${saved.title}” vào Thư viện trò chơi lúc ${new Date().toLocaleTimeString('vi-VN')}. Bạn có thể chơi thử hoặc quay lại chỉnh sửa.`);
+  } catch (error) {
+    wizardSetError(error);
+  }
+  wizardState.busy = '';
+  render();
+  return undefined;
+}
+
 async function wizardRefreshProjects() {
   try {
     wizardState.projects = await window.eduGame.listProjects();
@@ -418,10 +475,18 @@ async function wizardOpenProject(projectId) {
   wizardState.selectedRecommendationId = project.recommendationId || null;
 
   if (project.lesson) {
-    const document = await window.eduGame.getLessonDocument(project.lesson.documentId);
-    if (document) {
-      wizardState.text = document.text || '';
-      wizardState.documentMeta = { characters: document.characters, ext: document.ext, sizeBytes: document.sizeBytes };
+    try {
+      const document = await window.eduGame.getLessonDocument(project.lesson.documentId);
+      if (document) {
+        wizardState.text = document.text || '';
+        wizardState.documentMeta = { characters: document.characters, ext: document.ext, sizeBytes: document.sizeBytes };
+      }
+    } catch {
+      // The project/draft/game snapshot is still usable even when the source file
+      // was moved or deleted; explain that instead of failing the whole open.
+      wizardState.text = '';
+      wizardState.documentMeta = { characters: project.lesson.characters || 0, ext: '', sizeBytes: 0 };
+      wizardSetNotice('Không đọc được tệp giáo án nguồn (có thể đã bị di chuyển hoặc xoá). Bạn vẫn có thể xem bản nháp đã lưu, nhưng cần nhập lại tệp nếu muốn phân tích lại.');
     }
   }
   if (project.analysisId) {
@@ -435,4 +500,85 @@ async function wizardOpenProject(projectId) {
   }
   wizardState.step = project.step === 'done' || project.step === 'edit' ? 'generate' : project.step;
   return project;
+}
+
+/**
+ * Loads a saved lesson source (and optionally one of its analyses) without
+ * creating a project or calling AI. This is the shared path for "Mở lại" in the
+ * Giáo án page; the teacher can review the cached analysis and then start another
+ * game from it.
+ */
+async function wizardLoadSavedLesson(documentId, analysisId) {
+  const document = await window.eduGame.getLessonDocument(documentId);
+  if (!document) throw new Error('Không tìm thấy tệp giáo án đã lưu. Hãy nhập lại tài liệu nguồn.');
+  const analysis = analysisId ? await window.eduGame.getLessonAnalysis(analysisId) : null;
+  if (analysisId && (!analysis || analysis.documentId !== document.id)) {
+    throw new Error('Không tìm thấy kết quả phân tích của giáo án này.');
+  }
+  wizardReset();
+  wizardState.documentId = document.id;
+  wizardState.documentName = document.name || 'giao-an.txt';
+  wizardState.documentMeta = {
+    characters: document.characters || String(document.text || '').length,
+    ext: document.ext || 'txt',
+    sizeBytes: document.sizeBytes || 0
+  };
+  wizardState.text = document.text || '';
+  if (analysis) {
+    wizardState.analysis = analysis;
+    wizardState.analysisOriginal = analysis;
+    wizardState.analysisId = analysis.id;
+    wizardState.recommendations = await window.eduGame.getLessonRecommendations(analysis.id);
+    wizardState.step = 'analyze';
+  } else {
+    wizardState.step = 'input';
+  }
+  return { document, analysis };
+}
+
+async function wizardOpenSavedLesson(documentId, analysisId) {
+  if (wizardState.busy) return undefined;
+  wizardState.busy = 'open';
+  wizardClearMessages();
+  render();
+  try {
+    const { analysis } = await wizardLoadSavedLesson(documentId, analysisId);
+    wizardSetNotice(analysis
+      ? 'Đã mở lại giáo án và kết quả phân tích đã lưu. Bạn có thể xem lại rồi chọn thể loại trò chơi.'
+      : 'Đã mở lại giáo án đã lưu. Hãy phân tích hoặc tiếp tục tạo trò chơi.');
+  } catch (error) {
+    wizardSetError(error);
+  }
+  wizardState.busy = '';
+  render();
+  return undefined;
+}
+
+/**
+ * Starts a new game from an already-analysed lesson. A new project row is created
+ * at the category step; the analysis is reused exactly as-is (zero AI calls).
+ */
+async function wizardCreateGameFromSavedLesson(documentId, analysisId) {
+  if (wizardState.busy) return undefined;
+  wizardState.busy = 'open';
+  wizardClearMessages();
+  render();
+  try {
+    const { analysis } = await wizardLoadSavedLesson(documentId, analysisId);
+    if (!analysis) throw new Error('Giáo án này chưa có kết quả phân tích. Hãy phân tích trước khi tạo trò chơi.');
+    if (!wizardState.recommendations.length) {
+      await window.eduGame.recommendGames({ analysisId: analysis.id });
+      wizardState.recommendations = await window.eduGame.getLessonRecommendations(analysis.id);
+    }
+    wizardState.step = 'recommend';
+    wizardState.projectId = wizardNewProjectId();
+    wizardState.createdAt = wizardNow();
+    await wizardSaveProject('recommend');
+    wizardSetNotice('Đã tạo dự án mới từ kết quả phân tích cũ (không gọi AI). Hãy chọn thể loại trò chơi.');
+  } catch (error) {
+    wizardSetError(error);
+  }
+  wizardState.busy = '';
+  render();
+  return undefined;
 }

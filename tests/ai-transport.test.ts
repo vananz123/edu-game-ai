@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   AiRequestRegistry,
+  AiSingleFlight,
   AiTransportError,
   buildChatRequestBody,
   cleanModelJson,
@@ -173,6 +174,24 @@ async function main(): Promise<void> {
     send: async (body) => { onlineTemperature = Number(body.temperature); return chatResponse('{"ok":1}'); }
   });
   assert.equal(onlineTemperature, 0.3);
+
+  // Process-wide single-flight: different request ids cannot overlap, and the
+  // lock is released on success/failure.
+  const flight = new AiSingleFlight();
+  let releaseFirst!: (value: string) => void;
+  const first = flight.run('analysis:1', 'phân tích giáo án', () => new Promise<string>(resolve => { releaseFirst = resolve; }));
+  assert.equal(flight.busy, true);
+  await expectAiError('AI_BUSY', () => flight.run('generate:2', 'tạo nội dung', async () => 'should not run'));
+  releaseFirst('done');
+  assert.equal(await first, 'done');
+  assert.equal(flight.busy, false);
+  assert.equal(await flight.run('generate:2', 'tạo nội dung', async () => 'next'), 'next');
+  await assert.rejects(
+    flight.run('failure:1', 'lỗi thử', async () => { throw new AiTransportError('AI_HTTP', 'boom'); }),
+    (error: AiTransportError) => error.code === 'AI_HTTP'
+  );
+  assert.equal(flight.busy, false);
+  assert.equal(await flight.run('after-failure', 'tiếp tục', async () => 42), 42);
 
   console.log('AI transport tests passed');
 }

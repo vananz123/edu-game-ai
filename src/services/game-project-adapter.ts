@@ -20,6 +20,7 @@ import type {
   RaceTeam,
   TreasureHuntData,
   TreasureStage,
+  TreasureStageMission,
   TreasureStageQuestion
 } from '../shared/types';
 import type {
@@ -310,11 +311,17 @@ function scenarioQuestions(draft: ScenarioDraft): GameQuestion[] {
 
 function scenarioGameOption(option: ScenarioOption): GameOption {
   const feedback = option.feedback || option.consequence;
+  // `null`/omitted means "not an explicit branch", not "end the game". The
+  // runtime advances sequentially in that case, so a generated multi-situation
+  // scenario cannot stop after its first decision.
+  const next = typeof option.nextSituationId === 'string' && option.nextSituationId.trim()
+    ? option.nextSituationId
+    : null;
   return {
     id: option.id,
     text: option.text,
     ...(feedback ? { feedback } : {}),
-    nextQuestionId: option.nextSituationId ?? null,
+    ...(next ? { nextQuestionId: next } : {}),
     ...(option.score ? { scenarioScore: { ...option.score } } : {})
   };
 }
@@ -353,6 +360,7 @@ function treasureStages(draft: TreasureDraft): TreasureStage[] {
       story: stage.story,
       taskDescription: stage.taskDescription,
       question: treasureStageQuestion(stage),
+      ...(stage.mission ? { mission: treasureMissionData(stage.mission) } : {}),
       attempts: stage.attempts,
       points: stage.points,
       completionBonus: stage.completionBonus,
@@ -376,12 +384,34 @@ function treasureStageQuestion(stage: TreasureStageDraft): TreasureStageQuestion
   };
 }
 
+function treasureMissionData(mission: TreasureStageMission): TreasureStageMission {
+  switch (mission.type) {
+    case 'matching':
+      return {
+        type: 'matching',
+        pairs: mission.pairs.map(pair => ({ id: pair.id, left: pair.left, right: pair.right }))
+      };
+    case 'decode':
+      return { type: 'decode', answer: mission.answer, ...(mission.cipher ? { cipher: mission.cipher } : {}) };
+    case 'classification':
+      return {
+        type: 'classification',
+        groups: mission.groups.map(group => ({ id: group.id, name: group.name })),
+        items: mission.items.map(item => ({ id: item.id, text: item.text, groupId: item.groupId }))
+      };
+    default:
+      return mission.type === 'scenario' ? { type: 'scenario' } : { type: 'multiple-choice' };
+  }
+}
+
 function treasureData(draft: TreasureDraft): TreasureHuntData {
   return {
     character: draft.character,
     intro: draft.intro,
     journeyBonus: draft.journeyBonus,
     hiddenItemBonus: draft.hiddenItemBonus,
+    ...(draft.backgroundId ? { backgroundId: draft.backgroundId } : {}),
+    ...(draft.characterId ? { characterId: draft.characterId } : {}),
     stages: treasureStages(draft)
   };
 }
@@ -499,7 +529,9 @@ function scenarioDraftFromGame(game: EducationalGame): ScenarioDraft {
         id: option.id,
         text: option.text,
         ...(option.feedback ? { feedback: option.feedback } : {}),
-        ...(option.nextQuestionId !== undefined ? { nextSituationId: option.nextQuestionId } : {}),
+        ...(option.endsScenario
+          ? { nextSituationId: null }
+          : option.nextQuestionId !== undefined ? { nextSituationId: option.nextQuestionId } : {}),
         ...(option.scenarioScore ? { score: { ...option.scenarioScore } } : {})
       })),
       ...(question.correctOptionId ? { correctOptionId: question.correctOptionId } : {}),
@@ -544,6 +576,8 @@ function treasureDraftFromGame(game: EducationalGame): TreasureDraft {
     intro: treasure.intro || '',
     journeyBonus: safeInt(treasure.journeyBonus, 0),
     hiddenItemBonus: safeInt(treasure.hiddenItemBonus, 0),
+    ...(treasure.backgroundId ? { backgroundId: treasure.backgroundId } : {}),
+    ...(treasure.characterId ? { characterId: treasure.characterId } : {}),
     stages: treasure.stages.map(stage => ({
       id: stage.id,
       name: stage.name,
@@ -556,6 +590,7 @@ function treasureDraftFromGame(game: EducationalGame): TreasureDraft {
         explanation: stage.question.explanation || '',
         ...(stage.question.hint ? { hint: stage.question.hint } : {})
       },
+      ...(stage.mission ? { mission: treasureMissionData(stage.mission) } : {}),
       attempts: safeInt(stage.attempts, 0),
       points: safeInt(stage.points, 100),
       completionBonus: safeInt(stage.completionBonus, 0),

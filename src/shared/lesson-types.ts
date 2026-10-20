@@ -5,7 +5,15 @@
  * deliberately separate from `EducationalGame` (the saved/playable artifact):
  * `game-project-adapter.ts` is the only place that converts between the two.
  */
-import type { EducationalGame, GameSetup, MatchingMode, QuestionDifficulty } from './types';
+import type {
+  EducationalGame,
+  GameSetup,
+  MatchingMode,
+  QuestionDifficulty,
+  TreasureBackgroundId,
+  TreasureCharacterId,
+  TreasureStageMission
+} from './types';
 
 export type WorkflowGameType = 'arena' | 'scenario' | 'matching' | 'treasure' | 'race';
 export type GenerationMode = 'fast' | 'deep';
@@ -261,6 +269,8 @@ export interface TreasureStageDraft {
   story: string;
   taskDescription: string;
   question: TreasureQuestionDraft;
+  /** Optional mission mechanic; absent = the legacy multiple-choice question. */
+  mission?: TreasureStageMission;
   attempts: number;
   points: number;
   completionBonus: number;
@@ -278,6 +288,8 @@ export interface TreasureDraft {
   intro: string;
   journeyBonus: number;
   hiddenItemBonus: number;
+  backgroundId?: TreasureBackgroundId;
+  characterId?: TreasureCharacterId;
   stages: TreasureStageDraft[];
 }
 

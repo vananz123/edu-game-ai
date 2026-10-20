@@ -49,6 +49,8 @@ export type QualityIssueCode =
   | 'BROKEN_LINK'
   | 'EMPTY_PAIR_SIDE'
   | 'DUPLICATE_PAIR'
+  | 'MATCHING_IDENTICAL_SIDES'
+  | 'MATCHING_GENERIC_SIDE'
   | 'DUPLICATE_STAGE_ID'
   | 'CHAIN_CYCLE'
   | 'UNREACHABLE_STAGE'
@@ -467,6 +469,25 @@ function checkMatching(draft: Extract<GameDraft, { gameType: 'matching' }>, push
     }
     if (!lefts.has(left)) lefts.set(left, index);
     if (!rights.has(right)) rights.set(right, index);
+    if (left === right) {
+      push({
+        severity: 'warning',
+        code: 'MATCHING_IDENTICAL_SIDES',
+        message: sentence(index, 'có hai vế giống nhau; học sinh có thể ghép mà không cần hiểu quan hệ.'),
+        itemId: pair.id,
+        itemIndex: index
+      });
+    }
+    const generic = new Set(['tất cả', 'khác', 'không', 'có', 'đúng', 'sai']);
+    if (generic.has(left) || generic.has(right)) {
+      push({
+        severity: 'warning',
+        code: 'MATCHING_GENERIC_SIDE',
+        message: sentence(index, 'dùng từ quá chung chung; hãy thay bằng nội dung kiến thức cụ thể.'),
+        itemId: pair.id,
+        itemIndex: index
+      });
+    }
   });
   if (!(Number(draft.pointsPerPair) > 0)) {
     push({ severity: 'warning', code: 'ZERO_POINTS', message: 'Điểm cho mỗi cặp ghép đang bằng 0.' });
@@ -488,7 +509,40 @@ function checkTreasure(draft: Extract<GameDraft, { gameType: 'treasure' }>, push
     if (!stage.question) {
       push({ severity: 'error', code: 'NO_ITEMS', message: sentence(index, 'chặng chưa có câu hỏi.'), itemId: stage.id, itemIndex: index });
     } else {
-      checkChoiceOptions(stage.question.options || [], stage.question.correctOptionId, index, push, stage.id);
+      const missionType = stage.mission?.type || 'multiple-choice';
+      if (missionType === 'multiple-choice' || missionType === 'scenario') {
+        checkChoiceOptions(stage.question.options || [], stage.question.correctOptionId, index, push, stage.id);
+      } else if (missionType === 'matching') {
+        const pairs = stage.mission?.type === 'matching' ? stage.mission.pairs : [];
+        if (pairs.length < 2) {
+          push({ severity: 'error', code: 'NO_ITEMS', message: sentence(index, 'cần ít nhất 2 cặp ghép.'), itemId: stage.id, itemIndex: index });
+        }
+        const seenPairs = new Set<string>();
+        pairs.forEach(pair => {
+          if (isBlank(pair.left) || isBlank(pair.right)) {
+            push({ severity: 'error', code: 'EMPTY_PAIR_SIDE', message: sentence(index, 'có cặp ghép bị trống một vế.'), itemId: stage.id, itemIndex: index });
+          }
+          const key = `${normalizeItemText(pair.left)}|${normalizeItemText(pair.right)}`;
+          if (seenPairs.has(key)) {
+            push({ severity: 'warning', code: 'DUPLICATE_PAIR', message: sentence(index, 'có cặp ghép trùng nội dung.'), itemId: stage.id, itemIndex: index });
+          }
+          seenPairs.add(key);
+        });
+      } else if (missionType === 'decode') {
+        if (stage.mission?.type === 'decode' && isBlank(stage.mission.answer)) {
+          push({ severity: 'error', code: 'MISSING_ANSWER', message: sentence(index, 'chưa có đáp án giải mã.'), itemId: stage.id, itemIndex: index });
+        }
+      } else if (missionType === 'classification') {
+        const groups = stage.mission?.type === 'classification' ? stage.mission.groups : [];
+        const items = stage.mission?.type === 'classification' ? stage.mission.items : [];
+        if (groups.length < 2 || items.length < 2) {
+          push({ severity: 'error', code: 'NO_ITEMS', message: sentence(index, 'cần ít nhất 2 nhóm và 2 mục phân loại.'), itemId: stage.id, itemIndex: index });
+        }
+        const groupIds = new Set(groups.map(group => group.id));
+        if (items.some(item => isBlank(item.text) || !groupIds.has(item.groupId))) {
+          push({ severity: 'error', code: 'BROKEN_LINK', message: sentence(index, 'có mục phân loại trống hoặc trỏ tới nhóm không tồn tại.'), itemId: stage.id, itemIndex: index });
+        }
+      }
       if (isBlank(stage.question.explanation)) {
         push({ severity: 'warning', code: 'EMPTY_EXPLANATION', message: sentence(index, 'thiếu giải thích khi mở khoá chặng.'), itemId: stage.id, itemIndex: index });
       }

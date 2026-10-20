@@ -247,6 +247,32 @@ function run(): void {
   }) as TreasureDraft;
   assert.equal(endingReplaced.stages[1].nextStageId, null, 'the ending stage must not gain a loop');
 
+  // A regenerated scenario mission keeps its app-owned mission type even though
+  // the model response does not echo the optional `mission` field.
+  const scenarioMissionDraft: TreasureDraft = {
+    ...treasureDraft,
+    stages: [
+      { ...treasureDraft.stages[0], mission: { type: 'scenario' } },
+      treasureDraft.stages[1]
+    ]
+  };
+  const scenarioMissionReplaced = replaceDraftItem(scenarioMissionDraft, 1, {
+    name: 'Chặng tình huống mới',
+    story: 'Bối cảnh mới.',
+    taskDescription: 'Nhiệm vụ mới.',
+    question: {
+      prompt: 'Tình huống mới?',
+      options: [{ id: 'x', text: 'Đúng' }, { id: 'y', text: 'Sai' }],
+      correctOptionId: 'x',
+      explanation: 'Vì mới.'
+    },
+    attempts: 1,
+    points: 100,
+    completionBonus: 50,
+    nextStageId: null
+  }) as TreasureDraft;
+  assert.deepEqual(scenarioMissionReplaced.stages[0].mission, { type: 'scenario' });
+
   // --- Scenario: option ids + branch links are remapped, not invented -------
   const scenarioReplaced = replaceDraftItem(scenarioDraft, 1, {
     id: 'invented',

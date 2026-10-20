@@ -135,6 +135,51 @@ export const gameRecommendationSchema = recommendationContentSchema.extend({
 // Arena
 // ---------------------------------------------------------------------------
 
+/**
+ * Canonical "Đúng/Sai" answers. Some local models emit three options, lowercase
+ * labels or "Đúng." for a true/false question. Only the labels are normalised;
+ * the teacher's/model's actual answer choice is preserved. Questions that merely
+ * mention "đúng/sai" are never reclassified here.
+ */
+const TRUE_FALSE_TRUE = new Set(['đúng', 'dung', 'true', 'phải', 'phai']);
+const TRUE_FALSE_FALSE = new Set(['sai', 'false', 'không', 'khong']);
+
+function trueFalseLabel(text: unknown): 'true' | 'false' | null {
+  const key = String(text ?? '')
+    .normalize('NFC')
+    .trim()
+    .toLowerCase()
+    .replace(/[.!?;:,]+$/g, '')
+    .replace(/\s+/g, ' ');
+  if (TRUE_FALSE_TRUE.has(key)) return 'true';
+  if (TRUE_FALSE_FALSE.has(key)) return 'false';
+  return null;
+}
+
+export function canonicalizeTrueFalseQuestion(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const question = value as Record<string, unknown>;
+  if (question.type !== 'true-false' || !Array.isArray(question.options)) return value;
+  const options = question.options.filter(option => option && typeof option === 'object' && !Array.isArray(option)) as Record<string, unknown>[];
+  // Only relabel an already two-option question. A third option is a real
+  // contract failure and must go through repair, not be silently dropped.
+  if (options.length !== 2) return value;
+  const trueOption = options.find(option => trueFalseLabel(option.text) === 'true');
+  const falseOption = options.find(option => trueFalseLabel(option.text) === 'false');
+  if (!trueOption || !falseOption || trueOption === falseOption) return value;
+  const correct = options.find(option => option.id === question.correctOptionId);
+  const correctLabel = correct ? trueFalseLabel(correct.text) : null;
+  if (!correctLabel) return value;
+  return {
+    ...question,
+    options: [
+      { id: trueOption.id, text: 'Đúng' },
+      { id: falseOption.id, text: 'Sai' }
+    ],
+    correctOptionId: correctLabel === 'true' ? trueOption.id : falseOption.id
+  };
+}
+
 const arenaChoiceQuestionSchema = (type: 'multiple-choice' | 'true-false') => z.object({
   id: nonEmpty(60),
   type: z.literal(type),
@@ -183,6 +228,24 @@ export const arenaDraftSchema = arenaDraftBase.superRefine((draft: z.infer<typeo
         path: ['questions', index, 'correctOptionId'],
         message: 'Đáp án đúng phải nằm trong danh sách phương án.'
       });
+    }
+    if (question.type === 'true-false') {
+      if (question.options.length !== 2) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['questions', index, 'options'],
+          message: 'Câu đúng/sai phải có đúng hai phương án Đúng và Sai.'
+        });
+      } else {
+        const labels = question.options.map(option => trueFalseLabel(option.text));
+        if (!labels.includes('true') || !labels.includes('false')) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['questions', index, 'options'],
+            message: 'Hai phương án của câu đúng/sai phải là “Đúng” và “Sai”.'
+          });
+        }
+      }
     }
   });
 });
@@ -295,6 +358,42 @@ export const matchingDraftContentSchema = matchingDraftBase.omit({ schemaVersion
 // Treasure
 // ---------------------------------------------------------------------------
 
+const treasureMatchingPairSchema = z.object({
+  id: nonEmpty(40),
+  left: nonEmpty(300),
+  right: nonEmpty(300)
+});
+
+const treasureClassificationGroupSchema = z.object({
+  id: nonEmpty(40),
+  name: nonEmpty(160)
+});
+
+const treasureClassificationItemSchema = z.object({
+  id: nonEmpty(40),
+  text: nonEmpty(300),
+  groupId: nonEmpty(40)
+});
+
+const treasureMissionSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('multiple-choice') }),
+  z.object({ type: z.literal('scenario') }),
+  z.object({
+    type: z.literal('matching'),
+    pairs: z.array(treasureMatchingPairSchema).min(2).max(10)
+  }),
+  z.object({
+    type: z.literal('decode'),
+    answer: nonEmpty(120),
+    cipher: optionalText(200)
+  }),
+  z.object({
+    type: z.literal('classification'),
+    groups: z.array(treasureClassificationGroupSchema).min(2).max(4),
+    items: z.array(treasureClassificationItemSchema).min(2).max(12)
+  })
+]);
+
 export const treasureStageSchema = z.object({
   id: nonEmpty(60),
   name: nonEmpty(160),
@@ -302,11 +401,13 @@ export const treasureStageSchema = z.object({
   taskDescription: nonEmpty(900),
   question: z.object({
     prompt: nonEmpty(1000),
-    options: answerOptionsSchema,
-    correctOptionId: nonEmpty(40),
+    // Variant missions keep a prompt/explanation but may omit choice options.
+    options: z.array(optionSchema).max(6),
+    correctOptionId: z.string().trim().max(40),
     explanation: nonEmpty(1200),
     hint: optionalText(500)
   }),
+  mission: treasureMissionSchema.optional(),
   attempts: z.number().int().min(0).max(99),
   points: z.number().int().min(0).max(1000),
   completionBonus: z.number().int().min(0).max(10000),
@@ -316,6 +417,9 @@ export const treasureStageSchema = z.object({
   hasHiddenItem: z.boolean().optional()
 });
 
+const treasureBackgroundSchema = z.enum(['temple', 'forest', 'ice', 'desert', 'ocean', 'space']);
+const treasureCharacterSchema = z.enum(['explorer', 'scientist', 'biologist', 'astronaut', 'diver']);
+
 const treasureDraftBase = z.object({
   gameType: z.literal('treasure'),
   schemaVersion: z.literal(1),
@@ -323,6 +427,8 @@ const treasureDraftBase = z.object({
   intro: nonEmpty(1600),
   journeyBonus: z.number().int().min(0).max(10000),
   hiddenItemBonus: z.number().int().min(0).max(1000),
+  backgroundId: treasureBackgroundSchema.optional(),
+  characterId: treasureCharacterSchema.optional(),
   stages: z.array(treasureStageSchema).min(2).max(30)
 });
 
@@ -331,12 +437,40 @@ export const treasureDraftSchema = treasureDraftBase.superRefine((draft, ctx) =>
   const ids = new Set(draft.stages.map(stage => stage.id));
   let endingCount = 0;
   draft.stages.forEach((stage, index) => {
-    assertUnique(stage.question.options.map(option => option.id), ctx, ['stages', index, 'question', 'options'], 'Mỗi đáp án cần có ID riêng.');
-    if (!stage.question.options.some(option => option.id === stage.question.correctOptionId)) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['stages', index, 'question', 'correctOptionId'],
-        message: 'Đáp án đúng của chặng phải nằm trong danh sách đáp án.'
+    const missionType = stage.mission?.type || 'multiple-choice';
+    if (missionType === 'multiple-choice' || missionType === 'scenario') {
+      assertUnique(stage.question.options.map(option => option.id), ctx, ['stages', index, 'question', 'options'], 'Mỗi đáp án cần có ID riêng.');
+      if (stage.question.options.length < 2) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['stages', index, 'question', 'options'],
+          message: 'Câu đố của chặng cần ít nhất 2 đáp án.'
+        });
+      }
+      if (!stage.question.correctOptionId ||
+          !stage.question.options.some(option => option.id === stage.question.correctOptionId)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['stages', index, 'question', 'correctOptionId'],
+          message: 'Đáp án đúng của chặng phải nằm trong danh sách đáp án.'
+        });
+      }
+    }
+    if (stage.mission?.type === 'matching') {
+      assertUnique(stage.mission.pairs.map(pair => pair.id), ctx, ['stages', index, 'mission', 'pairs'], 'Mỗi cặp ghép cần có ID riêng.');
+    }
+    if (stage.mission?.type === 'classification') {
+      assertUnique(stage.mission.groups.map(group => group.id), ctx, ['stages', index, 'mission', 'groups'], 'Mỗi nhóm phân loại cần có ID riêng.');
+      assertUnique(stage.mission.items.map(item => item.id), ctx, ['stages', index, 'mission', 'items'], 'Mỗi mục phân loại cần có ID riêng.');
+      const groupIds = new Set(stage.mission.groups.map(group => group.id));
+      stage.mission.items.forEach((item, itemIndex) => {
+        if (!groupIds.has(item.groupId)) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['stages', index, 'mission', 'items', itemIndex, 'groupId'],
+            message: 'Mục phân loại trỏ tới nhóm không tồn tại.'
+          });
+        }
       });
     }
     if (!stage.nextStageId) {
@@ -529,8 +663,15 @@ export function parseRecommendationsContent(value: unknown): GameRecommendationC
   return parsed.recommendations;
 }
 
+export function canonicalizeDraftAnswers(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const draft = value as Record<string, unknown>;
+  if (draft.gameType !== 'arena' || !Array.isArray(draft.questions)) return value;
+  return { ...draft, questions: draft.questions.map(canonicalizeTrueFalseQuestion) };
+}
+
 export function parseGameDraft(value: unknown): GameDraft {
-  return parseOrThrow(gameDraftSchema, value, 'DRAFT_INVALID', 'Dữ liệu trò chơi') as GameDraft;
+  return parseOrThrow(gameDraftSchema, canonicalizeDraftAnswers(value), 'DRAFT_INVALID', 'Dữ liệu trò chơi') as GameDraft;
 }
 
 export function parseGameConfig(value: unknown): GameConfig {
@@ -590,7 +731,8 @@ export function parseRegeneratedItem(gameType: WorkflowGameType, value: unknown)
     }
     candidate = list[0];
   }
-  return parseOrThrow(singleItemSchemas[gameType], candidate, 'ITEM_INVALID', 'Mục cần tạo lại') as unknown;
+  const normalized = gameType === 'arena' ? canonicalizeTrueFalseQuestion(candidate) : candidate;
+  return parseOrThrow(singleItemSchemas[gameType], normalized, 'ITEM_INVALID', 'Mục cần tạo lại') as unknown;
 }
 
 export function formatContractIssues(error: z.ZodError): string[] {

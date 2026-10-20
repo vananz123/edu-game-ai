@@ -188,7 +188,11 @@ function mergeTreasureStage(
     ...newItem,
     id: oldItem.id,
     attempts: oldItem.attempts,
-    nextStageId: oldItem.nextStageId === undefined ? null : oldItem.nextStageId
+    nextStageId: oldItem.nextStageId === undefined ? null : oldItem.nextStageId,
+    // Mission type is app-owned structure (like the chain and branch), not
+    // model prose. Re-generating a scenario/choice stage must not turn it back
+    // into a legacy multiple-choice stage.
+    ...(oldItem.mission ? { mission: oldItem.mission } : {})
   };
   if (oldItem.branchStageId) {
     merged.branchStageId = oldItem.branchStageId;

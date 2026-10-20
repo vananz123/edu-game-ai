@@ -45,6 +45,9 @@
     "productName": "EduGame Studio",
     "asar": true,
     "files": ["dist/**/*", "package.json", "node_modules/**/*"],
+    "extraResources": [
+      { "from": "vendor/vc-runtime", "to": "vc-runtime", "filter": ["*.dll"] }
+    ],
     "directories": { "output": "release" },
     "npmRebuild": true,
     "win": { "target": ["nsis"], "artifactName": "EduGame-Studio-Setup-${version}.${ext}" },
@@ -53,7 +56,8 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "deleteAppDataOnUninstall": true
+      "deleteAppDataOnUninstall": false,
+      "include": "build/installer.nsh"
     }
   }
 }

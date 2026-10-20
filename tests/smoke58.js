@@ -147,6 +147,14 @@ async function findTarget() {
     await new Promise(r => setTimeout(r, 250));
     push('results after 4 questions', !!document.querySelector('.result-screen'), '');
     push('summary 3/4 correct', state.lastSummary.correct === 3 && state.lastSummary.points === 300, JSON.stringify(state.lastSummary));
+    const saveStarted = Date.now();
+    let savedSession = null;
+    while (Date.now() - saveStarted < 8000) {
+      savedSession = state.db.sessions.find(item => item.gameId === g.id);
+      if (savedSession && /Đã tự lưu/.test(document.getElementById('resultSaveStatus')?.textContent || '')) break;
+      await new Promise(r => setTimeout(r, 120));
+    }
+    push('standard result auto-saved one session', !!savedSession && savedSession.correct === 3 && state.db.sessions.filter(item => item.gameId === g.id).length === 1, savedSession && JSON.stringify({ id: savedSession.id, correct: savedSession.correct }));
     document.getElementById('closeResultBtn').click();
     return out;
   })()`);

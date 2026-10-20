@@ -32,9 +32,41 @@ export function buildLlamaServerArguments(modelPath: string, runtimeOptions: Loc
     '--host', runtimeOptions.host,
     '--port', String(runtimeOptions.port),
     '--ctx-size', String(runtimeOptions.contextSize),
+    // The app serialises AI work, so one slot is enough. The llama-server
+    // default is several slots and multiplies KV-cache memory, which can make
+    // a 4B model fail to start on an 8 GB machine. Context checkpoints are not
+    // needed for this single-request flow and have a known Windows crash.
+    '--parallel', '1',
+    '--ctx-checkpoints', '0',
     '--threads', String(runtimeOptions.cpuThreads),
     '--n-gpu-layers', String(runtimeOptions.gpuLayers)
   ];
+}
+
+/**
+ * Windows native exit codes are hard to read in the UI. Keep the most useful
+ * hints next to the code so a teacher can recover instead of seeing only
+ * "code 3221225477". The runtime logs (stdout/stderr) are still appended.
+ */
+export function describeRuntimeExitCode(code: number | null): string {
+  if (code === null) return '';
+  const normalized = code < 0 ? code + 0x1_0000_0000 : code;
+  switch (normalized) {
+    case 0xC0000005:
+      return 'Mã 0xC0000005 là lỗi truy cập bộ nhớ của tiến trình llama.cpp. Nguyên nhân thường gặp: Microsoft Visual C++ 2015–2022 (x64) thiếu hoặc quá cũ, RAM trống không đủ, hoặc CPU không tương thích. Bản cài này đã kèm VC++ runtime; nếu vẫn lỗi, hãy đóng bớt ứng dụng rồi chọn “Bản Nhanh” 2B.';
+    case 0xC000001D:
+      return 'Mã 0xC000001D là lệnh CPU không được hỗ trợ. Hãy chọn “Bản Nhanh” 2B hoặc dùng máy có CPU x64 hỗ trợ AVX2.';
+    case 0xC0000135:
+      return 'Mã 0xC0000135 là thiếu thư viện DLL cần thiết. Hãy cài lại Microsoft Visual C++ 2015–2022 (x64) rồi thử lại.';
+    case 0xC0000139:
+      return 'Mã 0xC0000139 là DLL có nhưng không đúng phiên bản. Hãy cài Microsoft Visual C++ 2015–2022 (x64) mới nhất rồi thử lại.';
+    case 0xC00000FD:
+      return 'Mã 0xC00000FD là tràn ngăn xếp. Hãy chọn model nhỏ hơn (Bản Nhanh 2B) hoặc đóng bớt ứng dụng.';
+    case 0xC0000409:
+      return 'Mã 0xC0000409 là lỗi bảo vệ bộ nhớ của tiến trình. Hãy chọn model nhỏ hơn hoặc khởi động lại máy.';
+    default:
+      return '';
+  }
 }
 
 export class AIManager {
@@ -150,11 +182,14 @@ export class AIManager {
         cwd: path.dirname(this.options.executablePath),
         windowsHide: true,
         shell: false,
-          stdio: ['ignore', 'ignore', 'pipe']
+        // llama.cpp writes most startup/load messages to stdout and crashes
+        // sometimes print nothing to stderr. Keep both streams for diagnosis.
+        stdio: ['ignore', 'pipe', 'pipe']
       }
     );
     this.child = child;
-      child.stderr?.on('data', chunk => this.appendRuntimeOutput(chunk));
+    child.stdout?.on('data', chunk => this.appendRuntimeOutput(chunk));
+    child.stderr?.on('data', chunk => this.appendRuntimeOutput(chunk));
     this.exitResult = undefined;
     this.exitPromise = new Promise<ExitResult>((resolve) => {
       child.once('error', (error) => {
@@ -208,8 +243,10 @@ export class AIManager {
         if ('error' in exited) {
           throw new Error(this.withRuntimeOutput(`AI runtime không thể khởi chạy: ${exited.error.message}`));
         }
+        const hint = describeRuntimeExitCode(exited.code);
         throw new Error(this.withRuntimeOutput(
-          `AI runtime đã thoát trước khi sẵn sàng (code ${exited.code ?? 'unknown'}).`
+          `AI runtime đã thoát trước khi sẵn sàng (code ${exited.code ?? 'unknown'}).` +
+          (hint ? `\n${hint}` : '')
         ));
       }
 

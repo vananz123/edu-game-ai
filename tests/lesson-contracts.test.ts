@@ -205,6 +205,62 @@ for (const draft of [arenaDraft, scenarioDraft, matchingDraft, treasureDraft, ra
 }
 assert.equal(gameDraftSchema.safeParse(arenaDraft).success, true);
 
+// True/false questions are canonicalised only by their explicit type. The
+// correct choice is preserved; arbitrary text mentioning "đúng/sai" is not
+// reclassified.
+const canonicalTrueFalse = parseGameDraft({
+  ...arenaDraft,
+  questions: [{
+    ...arenaDraft.questions[1],
+    options: [{ id: 'a', text: 'đúng.' }, { id: 'b', text: 'SAI' }],
+    correctOptionId: 'b'
+  }]
+}) as ArenaDraft;
+const tfQuestion = canonicalTrueFalse.questions[0] as unknown as { options: Array<{ id: string; text: string }>; correctOptionId: string };
+assert.deepEqual(tfQuestion.options, [{ id: 'a', text: 'Đúng' }, { id: 'b', text: 'Sai' }]);
+assert.equal(tfQuestion.correctOptionId, 'b');
+const notTrueFalse = parseGameDraft({
+  ...arenaDraft,
+  questions: [{ ...arenaDraft.questions[0], prompt: 'Câu nào dùng từ đúng hoặc sai?' }]
+}) as ArenaDraft;
+assert.equal(notTrueFalse.questions[0].type, 'multiple-choice');
+assert.throws(() => parseGameDraft({
+  ...arenaDraft,
+  questions: [{
+    ...arenaDraft.questions[1],
+    options: [{ id: 'a', text: 'Đúng' }, { id: 'b', text: 'Sai' }, { id: 'c', text: 'Không rõ' }]
+  }]
+}), /đúng\/sai phải có đúng hai phương án/i);
+
+const variantTreasureDraft: TreasureDraft = {
+  ...treasureDraft,
+  stages: [
+    {
+      ...treasureDraft.stages[0],
+      mission: {
+        type: 'classification',
+        groups: [{ id: 'g1', name: 'Thực vật' }, { id: 'g2', name: 'Động vật' }],
+        items: [{ id: 'i1', text: 'Có diệp lục', groupId: 'g1' }, { id: 'i2', text: 'Có hệ thần kinh', groupId: 'g2' }]
+      },
+      question: {
+        prompt: 'Phân loại các đặc điểm.',
+        options: [],
+        correctOptionId: '',
+        explanation: 'Mỗi đặc điểm thuộc một nhóm.',
+        hint: 'Đọc tên nhóm.'
+      }
+    },
+    {
+      ...treasureDraft.stages[1],
+      mission: { type: 'decode', answer: 'quang hợp' }
+    }
+  ]
+};
+const parsedVariant = parseGameDraft(JSON.parse(JSON.stringify(variantTreasureDraft)));
+assert.equal(parsedVariant.gameType, 'treasure');
+assert.equal(parsedVariant.gameType === 'treasure' ? parsedVariant.stages[0].mission?.type : '', 'classification');
+assert.equal(parsedVariant.gameType === 'treasure' ? parsedVariant.stages[1].mission?.type : '', 'decode');
+
 // --- Invalid drafts are rejected -------------------------------------------
 try {
   parseGameDraft({ ...arenaDraft, questions: [{ ...arenaDraft.questions[0] }, { ...arenaDraft.questions[0] }] });
@@ -254,6 +310,25 @@ try {
     ]
   });
   assert.fail('treasure loop without ending should fail');
+} catch (error) {
+  typedIssue(error, 'DRAFT_INVALID');
+}
+try {
+  parseGameDraft({
+    ...variantTreasureDraft,
+    stages: [
+      {
+        ...variantTreasureDraft.stages[0],
+        mission: {
+          type: 'classification',
+          groups: [{ id: 'g1', name: 'Nhóm 1' }, { id: 'g2', name: 'Nhóm 2' }],
+          items: [{ id: 'i1', text: 'Mục 1', groupId: 'missing' }, { id: 'i2', text: 'Mục 2', groupId: 'g2' }]
+        }
+      },
+      variantTreasureDraft.stages[1]
+    ]
+  });
+  assert.fail('classification item pointing at a missing group should fail');
 } catch (error) {
   typedIssue(error, 'DRAFT_INVALID');
 }

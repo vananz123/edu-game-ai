@@ -48,7 +48,7 @@ export const LESSON_ITEM_REGENERATION_SYSTEM_PROMPT =
  */
 export const LESSON_PROMPT_VERSIONS = {
   analysis: 2,
-  draft: 1,
+  draft: 2,
   item: 1
 } as const;
 
@@ -128,9 +128,9 @@ const DRAFT_SHAPES: Record<WorkflowGameType, string> = {
 };
 
 const DRAFT_RULES: Record<WorkflowGameType, string> = {
-  arena: 'Tạo câu hỏi trắc nghiệm (3-4 phương án id "a".."d"), đúng/sai, điền từ và trả lời ngắn. Câu điền từ/trả lời ngắn bỏ "options" và điền "correctAnswer". Mọi câu cần "difficulty" và "points".',
-  scenario: 'Mỗi tình huống có 2-4 hành động; "correctOptionId" là hành động an toàn/tối ưu nhất; có thể nối tình huống bằng "nextSituationId" (null nếu kết thúc).',
-  matching: 'Cột "left" và "right" không được trùng lặp trong mỗi cột; mỗi cặp ghép đúng nghĩa với nhau.',
+  arena: 'Tạo câu hỏi trắc nghiệm (3-4 phương án id "a".."d"), đúng/sai, điền từ và trả lời ngắn. Câu đúng/sai chỉ dùng cho một mệnh đề trần thuật kiểm chứng được, có đúng hai phương án: {"id":"a","text":"Đúng"} và {"id":"b","text":"Sai"}; "correctOptionId" là "a" hoặc "b". Prompt chỉ nêu nhận định cần đánh giá, không viết sẵn “Đúng”, “Sai” hay lời giải trong prompt. Không đặt câu đúng/sai nếu bản thân câu hỏi yêu cầu chọn hành động hay giải thích. Câu điền từ/trả lời ngắn bỏ "options" và điền "correctAnswer". Mọi câu cần "difficulty" và "points".',
+  scenario: 'Mỗi tình huống có 2-4 hành động; "correctOptionId" là hành động an toàn/tối ưu nhất. Điền "nextSituationId" bằng id tình huống kế tiếp khi muốn rẽ nhánh; nếu không rẽ nhánh, để null — trò chơi sẽ tự chuyển sang tình huống kế tiếp và chỉ kết thúc sau tình huống cuối.',
+  matching: 'Mỗi cặp phải là một quan hệ một-một rõ ràng và kiểm chứng được (khái niệm ↔ định nghĩa, nguyên nhân ↔ kết quả, tác giả ↔ tác phẩm, ký hiệu ↔ ý nghĩa...). Không dùng cặp đồng nghĩa, trái nghĩa, từ chung chung ("tất cả", "khác", "không") hoặc hai vế có thể ghép với nhiều mục. Cột "left" và "right" không được trùng lặp trong mỗi cột; độ dài hai vế nên tương xứng và không lặp lại nguyên văn đáp án trong câu hỏi.',
   treasure: 'Mỗi chặng có một câu trắc nghiệm (3-4 phương án). "nextStageId" nối chặng kế tiếp, chặng cuối để null. Chuỗi chặng không được tạo vòng lặp.',
   race: 'Mọi câu là trắc nghiệm kèm "difficulty". "cells" nằm trong khoảng 2..trackLength và không trùng ô. Cần 2-4 đội.'
 };

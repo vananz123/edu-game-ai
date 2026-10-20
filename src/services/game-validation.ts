@@ -149,6 +149,89 @@ const TREASURE_NUMBER_LIMITS: Array<[string, number]> = [
   ['hiddenItemBonus', 1000]
 ];
 
+const TREASURE_MISSION_TYPES = new Set([
+  'multiple-choice',
+  'scenario',
+  'matching',
+  'decode',
+  'classification'
+]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isFilledText(value: unknown): boolean {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function assertUniqueIds(items: unknown[], label: string, kind: string): string[] {
+  const ids = items.map(item => isRecord(item) ? item.id : undefined);
+  if (new Set(ids).size !== ids.length || ids.some(id => typeof id !== 'string' || !id)) {
+    throw new Error(`${kind} của chặng “${label}” cần ID riêng.`);
+  }
+  return ids as string[];
+}
+
+function validateTreasureMission(label: string, mission: unknown): string {
+  if (!isRecord(mission)) {
+    throw new Error(`Kiểu nhiệm vụ của chặng “${label}” không hợp lệ.`);
+  }
+  const type = String(mission.type || '');
+  if (!TREASURE_MISSION_TYPES.has(type)) {
+    throw new Error(`Kiểu nhiệm vụ của chặng “${label}” không được hỗ trợ.`);
+  }
+  if (type === 'multiple-choice' || type === 'scenario') return type;
+
+  if (type === 'matching') {
+    const pairs = Array.isArray(mission.pairs) ? mission.pairs : [];
+    if (pairs.length < 2 || pairs.length > 10) {
+      throw new Error(`Nhiệm vụ ghép cặp của chặng “${label}” cần từ 2 đến 10 cặp.`);
+    }
+    assertUniqueIds(pairs, label, 'Các cặp ghép');
+    for (const pair of pairs) {
+      if (!isRecord(pair) || !isFilledText(pair.left) || !isFilledText(pair.right)) {
+        throw new Error(`Mỗi cặp ghép của chặng “${label}” cần đủ hai vế có nội dung.`);
+      }
+    }
+    return type;
+  }
+
+  if (type === 'decode') {
+    if (!isFilledText(mission.answer) || String(mission.answer).length > 120) {
+      throw new Error(`Đáp án giải mã của chặng “${label}” phải có từ 1 đến 120 ký tự.`);
+    }
+    if (mission.cipher !== undefined && mission.cipher !== null &&
+        (typeof mission.cipher !== 'string' || mission.cipher.length > 200)) {
+      throw new Error(`Mật mã hiển thị của chặng “${label}” không hợp lệ.`);
+    }
+    return type;
+  }
+
+  const groups = Array.isArray(mission.groups) ? mission.groups : [];
+  if (groups.length < 2 || groups.length > 4) {
+    throw new Error(`Nhiệm vụ phân loại của chặng “${label}” cần từ 2 đến 4 nhóm.`);
+  }
+  const groupIds = assertUniqueIds(groups, label, 'Các nhóm phân loại');
+  for (const group of groups) {
+    if (!isRecord(group) || !isFilledText(group.name)) {
+      throw new Error(`Mỗi nhóm phân loại của chặng “${label}” cần có tên.`);
+    }
+  }
+  const items = Array.isArray(mission.items) ? mission.items : [];
+  if (items.length < 2 || items.length > 12) {
+    throw new Error(`Nhiệm vụ phân loại của chặng “${label}” cần từ 2 đến 12 mục.`);
+  }
+  assertUniqueIds(items, label, 'Các mục phân loại');
+  for (const item of items) {
+    if (!isRecord(item) || !isFilledText(item.text) ||
+        typeof item.groupId !== 'string' || !groupIds.includes(item.groupId)) {
+      throw new Error(`Mỗi mục phân loại của chặng “${label}” cần nội dung và nhóm hợp lệ.`);
+    }
+  }
+  return type;
+}
+
 export function validateTreasureHuntGame(game: TreasureTemplateGame): void {
   if (game.template !== 'treasure-hunt') return;
   const hunt = game.treasureHunt;
@@ -181,18 +264,23 @@ export function validateTreasureHuntGame(game: TreasureTemplateGame): void {
     if (!question || typeof question.prompt !== 'string' || !String(question.prompt).trim()) {
       throw new Error(`Chặng “${label}” cần có nội dung câu đố.`);
     }
-    const options = Array.isArray(question.options) ? question.options : [];
-    if (options.length < 2) {
-      throw new Error(`Câu đố của chặng “${label}” cần ít nhất 2 đáp án.`);
-    }
-    const optionIds = options.map((option: { id?: unknown }) => option?.id);
-    if (new Set(optionIds).size !== optionIds.length ||
-        optionIds.some(id => typeof id !== 'string' || !id) ||
-        options.some((option: { text?: unknown }) => typeof option?.text !== 'string' || !option.text.trim())) {
-      throw new Error(`Đáp án của chặng “${label}” cần ID riêng và nội dung đầy đủ.`);
-    }
-    if (!optionIds.includes(question.correctOptionId)) {
-      throw new Error(`Đáp án đúng của chặng “${label}” không nằm trong danh sách đáp án.`);
+    const missionType = stage.mission === undefined
+      ? 'multiple-choice'
+      : validateTreasureMission(label, stage.mission);
+    if (missionType === 'multiple-choice' || missionType === 'scenario') {
+      const options = Array.isArray(question.options) ? question.options : [];
+      if (options.length < 2) {
+        throw new Error(`Câu đố của chặng “${label}” cần ít nhất 2 đáp án.`);
+      }
+      const optionIds = options.map((option: { id?: unknown }) => option?.id);
+      if (new Set(optionIds).size !== optionIds.length ||
+          optionIds.some(id => typeof id !== 'string' || !id) ||
+          options.some((option: { text?: unknown }) => typeof option?.text !== 'string' || !option.text.trim())) {
+        throw new Error(`Đáp án của chặng “${label}” cần ID riêng và nội dung đầy đủ.`);
+      }
+      if (!optionIds.includes(question.correctOptionId)) {
+        throw new Error(`Đáp án đúng của chặng “${label}” không nằm trong danh sách đáp án.`);
+      }
     }
     if (question.hint !== undefined && question.hint !== null && typeof question.hint !== 'string') {
       throw new Error(`Gợi ý của chặng “${label}” không hợp lệ.`);

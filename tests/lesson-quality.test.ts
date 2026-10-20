@@ -408,6 +408,14 @@ const emptySide = cleanMatching();
 emptySide.pairs[1] = { id: 'p2', left: 'Hô hấp', right: '  ' };
 assert.ok(has(checkDraftQuality({ draft: emptySide, config: matchingConfig }), 'EMPTY_PAIR_SIDE'));
 
+const identicalSides = cleanMatching();
+identicalSides.pairs[0] = { id: 'p1', left: 'Quang hợp', right: 'Quang hợp' };
+assert.ok(has(checkDraftQuality({ draft: identicalSides, config: matchingConfig }), 'MATCHING_IDENTICAL_SIDES'));
+
+const genericSide = cleanMatching();
+genericSide.pairs[1] = { id: 'p2', left: 'Có', right: 'Giải phóng năng lượng' };
+assert.ok(has(checkDraftQuality({ draft: genericSide, config: matchingConfig }), 'MATCHING_GENERIC_SIDE'));
+
 // --- treasure -------------------------------------------------------------
 
 const brokenChain = cleanTreasure();
@@ -427,6 +435,21 @@ assert.ok(has(checkDraftQuality({ draft: duplicateStage, config: treasureConfig 
 const weakStage = cleanTreasure();
 weakStage.stages[0].attempts = 0;
 assert.ok(has(checkDraftQuality({ draft: weakStage, config: treasureConfig }), 'STAGE_NO_ATTEMPTS'));
+
+const variantTreasureQuality = cleanTreasure();
+variantTreasureQuality.stages[0].mission = {
+  type: 'matching',
+  pairs: [{ id: 'p1', left: 'Quang hợp', right: 'Tổng hợp chất hữu cơ' }, { id: 'p2', left: 'Hô hấp', right: 'Giải phóng năng lượng' }]
+};
+variantTreasureQuality.stages[0].question.options = [];
+variantTreasureQuality.stages[0].question.correctOptionId = '';
+variantTreasureQuality.stages[1].mission = { type: 'decode', answer: 'quang hợp' };
+variantTreasureQuality.stages[1].question.options = [];
+variantTreasureQuality.stages[1].question.correctOptionId = '';
+const variantTreasureReport = checkDraftQuality({ draft: variantTreasureQuality, config: treasureConfig });
+assert.ok(!has(variantTreasureReport, 'TOO_FEW_OPTIONS'));
+assert.ok(!has(variantTreasureReport, 'MISSING_CORRECT_OPTION'));
+assert.ok(!has(variantTreasureReport, 'MISSING_ANSWER'));
 
 // --- race -----------------------------------------------------------------
 

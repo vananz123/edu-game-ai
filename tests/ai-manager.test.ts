@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
-import { AIManager, buildLlamaServerArguments } from '../src/ai-core/ai-manager';
+import { AIManager, buildLlamaServerArguments, describeRuntimeExitCode } from '../src/ai-core/ai-manager';
 import {
   buildGenerationOptions
 } from '../src/ai-core/generation-options';
@@ -84,11 +84,19 @@ async function run(): Promise<void> {
     '12345',
     '--ctx-size',
     '512',
+    '--parallel',
+    '1',
+    '--ctx-checkpoints',
+    '0',
     '--threads',
     '2',
     '--n-gpu-layers',
     '0'
   ]);
+  assert.match(describeRuntimeExitCode(3221225477), /0xC0000005/);
+  assert.match(describeRuntimeExitCode(-1073741819), /0xC0000005/);
+  assert.match(describeRuntimeExitCode(3221225781), /0xC0000135/);
+  assert.equal(describeRuntimeExitCode(0), '');
   assert.deepEqual(buildGenerationOptions('local', 500), {
     max_tokens: 500,
     chat_template_kwargs: { enable_thinking: false }
@@ -148,6 +156,25 @@ async function run(): Promise<void> {
   });
   await assert.rejects(diagnosticManager.start(), /unsupported model architecture: qwen3_5/);
   await diagnosticManager.stop();
+
+  const stdoutDiagnosticManager = new AIManager({
+    executablePath: process.execPath,
+    modelPath: path.join(tmpdir(), 'fake-model.gguf'),
+    modelId: 'fake-stdout-diagnostic-model',
+    contextSize: 512,
+    cpuThreads: 1,
+    gpuLayers: 0,
+    startupTimeoutMs: 1_000,
+    healthIntervalMs: 20,
+    shutdownTimeoutMs: 1_000
+  }, {
+    buildArguments: () => [
+      '-e',
+      `process.stdout.write('stdout diagnostic: model load failed\\n'); process.exit(2);`
+    ]
+  });
+  await assert.rejects(stdoutDiagnosticManager.start(), /stdout diagnostic: model load failed/);
+  await stdoutDiagnosticManager.stop();
 
   assert.throws(() => new AIManager({
     executablePath: 'llama-server.exe',

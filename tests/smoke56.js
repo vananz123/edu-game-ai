@@ -174,6 +174,14 @@ async function findTarget() {
     push('result score = ' + expected + ' (stages+bonus+item)', score.replace(/[\\s.]/g, '').includes(String(expected)), score);
     const kicker = document.querySelector('.stage-kicker')?.textContent || '';
     push('completion kicker', kicker.includes('HOÀN THÀNH'), kicker);
+    const saveStarted = Date.now();
+    let savedSession = null;
+    while (Date.now() - saveStarted < 8000) {
+      savedSession = state.db.sessions.find(item => item.gameId === g.id);
+      if (savedSession && /Đã tự lưu/.test(document.getElementById('resultSaveStatus')?.textContent || '')) break;
+      await new Promise(r => setTimeout(r, 120));
+    }
+    push('treasure result auto-saved one session', !!savedSession && savedSession.points === expected && state.db.sessions.filter(item => item.gameId === g.id).length === 1, savedSession && JSON.stringify({ points: savedSession.points, expected }));
     document.getElementById('closeResultBtn').click();
     push('play modal closed', !document.querySelector('#playBody'), '');
     return out;
@@ -259,6 +267,14 @@ async function findTarget() {
     push('game over', state.racePlay.over === true, '');
     const h2 = document.querySelector('.result-screen h2')?.textContent || '';
     push('winner banner names team1', h2.includes(state.racePlay.teams[0].name), h2);
+    const saveStarted = Date.now();
+    let savedSession = null;
+    while (Date.now() - saveStarted < 8000) {
+      savedSession = state.db.sessions.find(item => item.gameId === g.id);
+      if (savedSession && /Đã tự lưu/.test(document.getElementById('resultSaveStatus')?.textContent || '')) break;
+      await new Promise(r => setTimeout(r, 120));
+    }
+    push('race result auto-saved one session', !!savedSession && state.db.sessions.filter(item => item.gameId === g.id).length === 1, savedSession && JSON.stringify({ id: savedSession.id, player: savedSession.playerName, points: savedSession.points }));
     document.getElementById('closeResultBtn').click();
     push('play modal closed', !document.querySelector('#playBody'), '');
     return out;

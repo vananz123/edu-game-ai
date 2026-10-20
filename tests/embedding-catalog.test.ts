@@ -60,6 +60,7 @@ assert.equal(flagValue('--model'), 'C:\\models\\minilm.gguf');
 assert.equal(flagValue('--ctx-size'), '512', 'embeddings must use the model context, not the chat context');
 assert.equal(flagValue('--threads'), '4');
 assert.equal(flagValue('--n-gpu-layers'), '0');
+assert.equal(flagValue('--parallel'), '1');
 assert.equal(flagValue('--pooling'), 'mean');
 assert.equal(flagValue('--embd-normalize'), '2', 'L2 normalisation makes cosine a dot product');
 assert.ok(args.includes('--embedding'), 'the second server must run in embedding-only mode');

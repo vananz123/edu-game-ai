@@ -1,13 +1,27 @@
 import { createHash } from 'node:crypto';
-import { mkdir, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import JSZip from 'jszip';
 import type { LocalAiDownloadProgress } from './contracts';
 import { LLAMA_CPP_RUNTIME } from './model-catalog';
 import { fetchTrustedDownload } from './trusted-download';
 
+/**
+ * The official llama.cpp Windows CPU zip is linked against the Microsoft
+ * Visual C++ runtime but does not ship it. A missing or older system copy can
+ * make llama-server exit with 0xC0000005 before it prints any log line, so the
+ * installer carries the redistributable DLLs app-local next to llama-server.
+ */
+export const RUNTIME_SUPPORT_FILES = [
+  'msvcp140.dll',
+  'vcruntime140.dll',
+  'vcruntime140_1.dll'
+] as const;
+
 export interface RuntimeInstallerOptions {
   runtimeDirectory: string;
+  /** Directory containing the app-local MSVC runtime DLLs (packaged extraResources). */
+  supportFilesDirectory?: string;
   fetchRuntime?: typeof fetch;
   runtimeArtifact?: RuntimeArtifact;
   platform?: NodeJS.Platform;
@@ -46,6 +60,55 @@ export class LlamaRuntimeInstaller {
     } catch (error) {
       if (isMissingFile(error)) return undefined;
       throw error;
+    }
+  }
+
+  /**
+   * Repairs existing installations (downloaded before the runtime DLLs were
+   * bundled) and normal installs before llama-server is spawned. It is a no-op
+   * when the app has no support directory, e.g. in unit tests.
+   */
+  async ensureSupportFiles(): Promise<void> {
+    if (!this.options.supportFilesDirectory) return;
+    const executablePath = await this.getExecutablePath();
+    if (!executablePath) return;
+    await this.copySupportFiles(path.dirname(executablePath));
+  }
+
+  private async copySupportFiles(destinationDirectory: string): Promise<void> {
+    const sourceDirectory = this.options.supportFilesDirectory;
+    if (!sourceDirectory) return;
+    for (const fileName of RUNTIME_SUPPORT_FILES) {
+      const source = path.join(sourceDirectory, fileName);
+      const destination = path.join(destinationDirectory, fileName);
+      let sourceInfo;
+      try {
+        sourceInfo = await stat(source);
+      } catch (error) {
+        if (isMissingFile(error)) {
+          throw new Error(`Bộ cài thiếu thư viện hỗ trợ llama.cpp (${fileName}). Hãy cài lại ứng dụng.`);
+        }
+        throw error;
+      }
+      if (!sourceInfo.isFile() || sourceInfo.size <= 0) {
+        throw new Error(`Thư viện hỗ trợ llama.cpp không hợp lệ (${fileName}). Hãy cài lại ứng dụng.`);
+      }
+      let destinationInfo;
+      try {
+        destinationInfo = await stat(destination);
+      } catch (error) {
+        if (!isMissingFile(error)) throw error;
+      }
+      if (destinationInfo?.isFile() && destinationInfo.size === sourceInfo.size) continue;
+      try {
+        await copyFile(source, destination);
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `Không cập nhật được thư viện hỗ trợ llama.cpp (${fileName}): ${reason}. ` +
+          'Nếu llama.cpp đang chạy, hãy dừng nó rồi thử lại.'
+        );
+      }
     }
   }
 
@@ -141,6 +204,7 @@ export class LlamaRuntimeInstaller {
         if (fileName.toLowerCase() === 'llama-server.exe') foundServer = true;
       }
       if (!foundServer) throw new Error('Trong gói llama.cpp không tìm thấy llama-server.exe.');
+      await this.copySupportFiles(temporaryDirectory);
       await rm(this.options.runtimeDirectory, { recursive: true, force: true });
       await rename(temporaryDirectory, this.options.runtimeDirectory);
       return path.join(this.options.runtimeDirectory, 'llama-server.exe');

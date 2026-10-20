@@ -1,9 +1,24 @@
 // @ts-nocheck -- migrated legacy UI logic; new contracts are typed in src/shared/types.ts.
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
-const state = { db: { games: [], sessions: [] }, page: 'home', search: '', filter: 'all', settings: {}, localAiModels: [], localAiMachine: {}, draft: null, importedDoc: null, selectedTemplate: 'scenario', currentGame: null, gameIndex: 0, gameAnswers: [], gameStart: 0, answerLocked: false, lastSummary: null, matchingPlay: null, memoryCards: null, treasurePlay: null, racePlay: null, teamPlay: null, pendingTeams: null };
+const state = { db: { games: [], sessions: [] }, page: 'home', search: '', filter: 'all', projects: null, lessonLibrary: null, settings: {}, localAiModels: [], localAiMachine: {}, draft: null, importedDoc: null, selectedTemplate: 'scenario', currentGame: null, gameIndex: 0, gameAnswers: [], gameStart: 0, playStartedAt: 0, resultSession: null, answerLocked: false, lastSummary: null, matchingPlay: null, memoryCards: null, treasurePlay: null, racePlay: null, teamPlay: null, pendingTeams: null };
 const pageNames = { home: 'Tổng quan', library: 'Thư viện trò chơi', 'create-wizard': 'Tạo từ giáo án', create: 'Tạo trò chơi', 'lesson-plans': 'Giáo án', 'my-projects': 'Dự án của tôi', sessions: 'Lịch sử kết quả', settings: 'Cài đặt' };
 const icons = { quiz: '🧠', scenario: '🚦', matching: '🧩', 'treasure-hunt': '🗺️', race: '🏁' };
+const treasureMissionMeta = {
+  'multiple-choice': { label: 'Trắc nghiệm', icon: '❓', short: 'Chọn đáp án đúng' },
+  scenario: { label: 'Xử lý tình huống', icon: '🧭', short: 'Chọn cách xử lý phù hợp' },
+  matching: { label: 'Ghép cặp', icon: '🧩', short: 'Ghép hai vế thành một cặp đúng' },
+  decode: { label: 'Giải mã', icon: '🔐', short: 'Sắp xếp lại mật mã để tìm đáp án' },
+  classification: { label: 'Phân loại', icon: '🗂️', short: 'Xếp mỗi mục vào đúng nhóm' }
+};
+function treasureMissionTypeOf(stage) {
+  const type = stage && stage.mission && stage.mission.type;
+  return Object.prototype.hasOwnProperty.call(treasureMissionMeta, String(type || '')) ? type : 'multiple-choice';
+}
+function treasureMissionIsChoice(stage) {
+  const type = treasureMissionTypeOf(stage);
+  return type === 'multiple-choice' || type === 'scenario';
+}
 
 const cloudProviderPresets = {
   openai: { label: 'ChatGPT', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },

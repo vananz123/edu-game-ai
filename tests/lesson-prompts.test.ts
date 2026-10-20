@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   LESSON_PROMPT_VERSIONS,
+  buildDraftPrompt,
   buildDraftRepairMessages,
   buildItemRegenerationRepairMessages,
   buildLessonAnalysisPrompt,
@@ -27,6 +28,24 @@ assert.match(analysisPrompt, /1 đến 8 khái niệm/, 'analysis prompt caps ke
 assert.match(analysisPrompt, /tối đa 25 từ/, 'analysis prompt asks for short descriptions');
 assert.match(analysisPrompt, /tối đa 20 từ/, 'analysis prompt asks for short source excerpts');
 assert.equal(LESSON_PROMPT_VERSIONS.analysis, 2, 'analysis prompt version bumped so old cached analyses are not reused');
+
+const arenaDraftPrompt = buildDraftPrompt({
+  gameType: 'arena',
+  config: {
+    gameType: 'arena', title: 'Kiểm tra', subject: 'Sinh học', grade: '6', topic: 'Quang hợp',
+    audience: 'teen', durationMinutes: 10, difficulty: 'trung bình', playMode: 'individual',
+    style: 'fun', focusObjectiveIds: [], generationMode: 'fast', questionCount: 4,
+    scoringMode: 'basic', pointsPerCorrect: 100, timeBonus: 10
+  },
+  analysis: {
+    id: 'a1', schemaVersion: 1, documentId: 'd1', subject: 'Sinh học', grade: 6,
+    topic: 'Quang hợp', objectives: [{ id: 'o1', description: 'Hiểu quang hợp.', cognitiveLevel: 'understand' }],
+    keyConcepts: [{ id: 'k1', term: 'Quang hợp', explanation: 'Tổng hợp chất hữu cơ.' }],
+    uncertainties: [], sourceDocumentIds: ['d1'], createdAt: new Date().toISOString()
+  }
+});
+assert.match(arenaDraftPrompt, /không viết sẵn “Đúng”, “Sai” hay lời giải/i, 'true/false prompt does not reveal the answer');
+assert.equal(LESSON_PROMPT_VERSIONS.draft, 2, 'draft prompt version bumped after wording changes');
 
 // ---------------------------------------------------------------------------
 // O6: a repair after truncation must ask for a shorter answer; a repair after a

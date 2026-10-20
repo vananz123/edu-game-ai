@@ -44,6 +44,9 @@ export function buildEmbeddingServerArguments(
     '--ctx-size', String(runtimeOptions.contextSize),
     '--threads', String(runtimeOptions.cpuThreads),
     '--n-gpu-layers', String(runtimeOptions.gpuLayers),
+    // Embedding requests are batched by the client; one server slot avoids
+    // multiplying the KV buffers for no benefit.
+    '--parallel', '1',
     '--embedding',
     '--pooling', pooling,
     '--embd-normalize', '2'
