@@ -47,13 +47,24 @@ export const LESSON_ITEM_REGENERATION_SYSTEM_PROMPT =
  * (`lesson-cache.ts` mixes these into every key).
  */
 export const LESSON_PROMPT_VERSIONS = {
-  analysis: 1,
+  analysis: 2,
   draft: 1,
   item: 1
 } as const;
 
-const MAX_OBJECTIVES = 10;
-const MAX_KEY_CONCEPTS = 12;
+const MAX_OBJECTIVES = 6;
+const MAX_KEY_CONCEPTS = 8;
+
+/**
+ * O6: when the previous attempt was cut off, the repair turn must ask for a
+ * shorter answer, not just a better-shaped one; otherwise the retry truncates
+ * in exactly the same place. The transport reports this as "hết giới hạn token".
+ */
+function truncationHint(errorMessage: string, advice: string): string {
+  return /hết giới hạn token|AI_TRUNCATED|bị cắt/i.test(String(errorMessage || ''))
+    ? `\nQuan trọng: phản hồi trước bị cắt vì quá dài. ${advice}`
+    : '';
+}
 
 /** Trims a lesson to the local-AI budget and notes when it was shortened. */
 export function prepareLessonExcerpt(text: string): { excerpt: string; truncated: boolean } {
@@ -79,8 +90,9 @@ export function buildLessonAnalysisPrompt(input: { text: string } & LessonPrompt
 Trả về JSON đúng cấu trúc:
 {"subject":"môn học hoặc null","grade":5,"topic":"chủ đề chính","objectives":[{"description":"mục tiêu học tập","cognitiveLevel":"remember|understand|apply|analyze","sourceExcerpt":"câu trích trong tài liệu"}],"keyConcepts":[{"term":"thuật ngữ","explanation":"giải thích ngắn gọn","sourceExcerpt":"câu trích trong tài liệu"}],"uncertainties":["điểm chưa chắc chắn hoặc thiếu căn cứ"]}
 Yêu cầu:
-- 1 đến ${MAX_OBJECTIVES} mục tiêu; mỗi mục tiêu là một việc học sinh làm được sau bài học.
-- 1 đến ${MAX_KEY_CONCEPTS} khái niệm chính, mỗi khái niệm khác nhau.
+- 1 đến ${MAX_OBJECTIVES} mục tiêu; mỗi mục tiêu là một việc học sinh làm được sau bài học. Chỉ nêu mục tiêu quan trọng nhất.
+- 1 đến ${MAX_KEY_CONCEPTS} khái niệm chính, mỗi khái niệm khác nhau. Chỉ nêu khái niệm cần cho bài học.
+- Viết ngắn: mỗi mô tả/giải thích tối đa 25 từ; mỗi sourceExcerpt là một câu ngắn (tối đa 20 từ) lấy đúng từ tài liệu.
 - subject: môn học suy ra từ tài liệu, hoặc null nếu không rõ. grade: số lớp 1-12, hoặc null nếu không rõ.
 - uncertainties: liệt kê nội dung tài liệu chưa đủ để tạo câu hỏi an toàn (có thể để mảng rỗng).
 Môn/Lớp gợi ý của giáo viên: ${input.subject || 'chưa xác định'} / ${input.grade || 'chưa xác định'}. Tên tài liệu: ${input.sourceName || 'không có'}.
@@ -181,7 +193,8 @@ export function buildDraftRepairMessages(input: {
 }): ChatMessage[] {
   const repair = `JSON trước đó không hợp lệ hoặc sai cấu trúc cho trò chơi "${input.gameType}".
 Lỗi: ${input.errorMessage}
-Hãy trả lại DUY NHẤT một đối tượng JSON hợp lệ, đúng cấu trúc đã mô tả, không thêm chữ nào khác.`;
+Hãy trả lại DUY NHẤT một đối tượng JSON hợp lệ, đúng cấu trúc đã mô tả, không thêm chữ nào khác.` +
+    truncationHint(input.errorMessage, 'Hãy giữ đủ số mục nhưng viết ngắn hơn: câu hỏi 1 câu, phương án ngắn, giải thích 1 câu.');
   return [
     ...input.messages,
     ...(input.rawContent ? [{ role: 'assistant' as const, content: input.rawContent }] : []),
@@ -266,7 +279,8 @@ export function buildItemRegenerationRepairMessages(input: {
 }): ChatMessage[] {
   const repair = `JSON trước đó không phải một mục hợp lệ cho trò chơi "${input.gameType}".
 Lỗi: ${input.errorMessage}
-Hãy trả lại DUY NHẤT một đối tượng JSON đúng cấu trúc, với mảng chứa đúng MỘT phần tử, không thêm chữ nào khác.`;
+Hãy trả lại DUY NHẤT một đối tượng JSON đúng cấu trúc, với mảng chứa đúng MỘT phần tử, không thêm chữ nào khác.` +
+    truncationHint(input.errorMessage, 'Hãy viết mục này ngắn hơn (câu hỏi, phương án và giải thích đều ngắn gọn).');
   return [
     ...input.messages,
     ...(input.rawContent ? [{ role: 'assistant' as const, content: input.rawContent }] : []),
@@ -290,7 +304,8 @@ export function buildRepairMessages(input: {
 }): ChatMessage[] {
   const repair = `Phản hồi trước đó không phải JSON hợp lệ hoặc sai cấu trúc.
 Lỗi: ${input.errorMessage}
-Hãy trả lại DUY NHẤT một đối tượng JSON hợp lệ đúng cấu trúc đã yêu cầu, không thêm chữ nào khác.`;
+Hãy trả lại DUY NHẤT một đối tượng JSON hợp lệ đúng cấu trúc đã yêu cầu, không thêm chữ nào khác.` +
+    truncationHint(input.errorMessage, 'Hãy rút gọn: ít mục hơn mức tối đa, mỗi mô tả/giải thích ngắn hơn, chỉ giữ nội dung quan trọng nhất.');
   return [
     ...input.messages,
     ...(input.rawContent ? [{ role: 'assistant' as const, content: input.rawContent }] : []),

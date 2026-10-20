@@ -149,6 +149,59 @@ function wizardDraftItemsPanel(s) {
   </div>`;
 }
 
+/**
+ * O7: five progress states from `docs/update-AI-local.txt` §10. Each state is
+ * driven by a real IPC boundary from the main process (retrieve → generate →
+ * validate → repair-if-needed → ready), not by a timer. "Sửa phần chưa đạt" is
+ * marked "không cần" when no repair happened, so the list never claims work that
+ * was not done.
+ */
+const WIZARD_GENERATION_STAGES = [
+  ['retrieve', 'Tìm kiến thức phù hợp trong giáo án'],
+  ['generate', 'Tạo nội dung trò chơi'],
+  ['validate', 'Kiểm tra câu hỏi và cấu trúc'],
+  ['repair', 'Sửa phần chưa đạt (nếu cần)'],
+  ['ready', 'Sẵn sàng xem trước']
+];
+
+function renderWizardGenerationProgress() {
+  const s = wizardState;
+  if (s.busy !== 'generate') return '';
+  // O7: a cache hit runs no generation at all, so the five stages would be a lie.
+  if (s.lessonStage === 'cached') {
+    return `<div class="field-hint mt-[8px]" data-wizard-progress="cached">✓ Giáo án và cấu hình không đổi — dùng lại nội dung đã tạo, không gọi AI.</div>`;
+  }
+  const currentIndex = Math.max(0, WIZARD_GENERATION_STAGES.findIndex(([id]) => id === s.lessonStage));
+  const rows = WIZARD_GENERATION_STAGES.map(([id, initialLabel], index) => {
+    let label = initialLabel;
+    let status = index < currentIndex ? 'done' : index === currentIndex ? 'active' : 'todo';
+    let mark = index < currentIndex ? '✓' : index === currentIndex ? '⏳' : '·';
+    if (id === 'repair' && status === 'done' && !s.lessonRepaired) {
+      status = 'skipped';
+      mark = '–';
+      label = `${label} · không cần`;
+    }
+    return `<li data-stage="${id}" data-status="${status}" class="text-[12px] ${status === 'active' ? 'font-bold text-[#3b3a63]' : status === 'skipped' ? 'text-[#98a0b0]' : 'text-[#5a6478]'}">${mark} ${escapeHtml(label)}</li>`;
+  }).join('');
+  return `<div class="field-hint mt-[8px]" data-wizard-progress="${escapeHtml(s.lessonStage || '')}">
+    <ol class="space-y-[2px] pl-[2px]" role="list">${rows}</ol>
+    <span>AI local chạy trên máy này; giáo án không được gửi đi đâu. Có thể huỷ giữa chừng.</span>
+  </div>`;
+}
+
+/** O7: cancel while the model is generating; the request id aborts the call. */
+async function wizardCancelGenerate() {
+  const requestId = wizardState.activeRequestId;
+  try {
+    if (requestId) await window.eduGame.cancelAi(requestId);
+  } catch (error) {
+    /* cancelling is best-effort */
+  }
+  wizardSetNotice('Đã yêu cầu huỷ. Kết quả dở dang sẽ không được lưu.');
+  render();
+  return undefined;
+}
+
 function renderWizardGenerate() {
   const s = wizardState;
   const config = s.config;
@@ -164,6 +217,7 @@ function renderWizardGenerate() {
         <div class="publish-actions">
           <button class="btn btn-primary" data-wizard-action="open-editor"${s.busy ? ' disabled' : ''}>✎ Mở trình chỉnh sửa</button>
           <button class="btn btn-secondary" data-wizard-action="regenerate"${s.busy ? ' disabled' : ''}>🔄 Tạo lại nội dung</button>
+          ${s.busy === 'generate' ? '<button class="btn btn-secondary" data-wizard-action="cancel">Huỷ</button>' : ''}
           <button class="btn btn-secondary" data-wizard-action="save"${s.busy ? ' disabled' : ''}>Lưu dự án</button>
           <button class="btn btn-secondary" data-wizard-action="go-library">📚 Vào thư viện để chơi</button>
         </div>`
@@ -173,6 +227,7 @@ function renderWizardGenerate() {
           <button class="btn btn-secondary" data-wizard-action="back">← Cấu hình</button>
           <button class="btn btn-secondary" data-wizard-action="save"${s.busy ? ' disabled' : ''}>Lưu dự án</button>
           <button class="btn btn-primary" id="wizardGenerateBtn" data-wizard-action="generate"${s.busy ? ' disabled' : ''}>✦ Tạo nội dung bằng AI local</button>
+          ${s.busy === 'generate' ? '<button class="btn btn-secondary" data-wizard-action="cancel">Huỷ</button>' : ''}
         </div>`}
     ${s.projectId ? `<div class="field-hint">Dự án đã lưu: <code>${escapeHtml(s.projectId)}</code>. Nội dung AI tạo ra chỉ nằm trên máy này.</div>` : ''}
   </section>`;
@@ -199,6 +254,8 @@ async function wizardGenerateRun(options) {
   }
   wizardClearMessages();
   wizardState.busy = 'generate';
+  wizardState.lessonStage = 'retrieve';
+  wizardState.lessonRepaired = false;
   wizardState.activeRequestId = wizardNewRequestId('generate');
   render();
   try {
@@ -223,9 +280,12 @@ async function wizardGenerateRun(options) {
       ? 'Giáo án và cấu hình không đổi nên đã dùng lại nội dung đã tạo (không gọi AI). Nhấn “Tạo lại nội dung” nếu muốn nội dung mới.'
       : `Đã tạo bản nháp “${result.game.title || 'trò chơi'}”. Hãy mở trình chỉnh sửa để duyệt.`);
   } catch (error) {
-    wizardSetError(error);
+    const parsed = wizardParseError(error);
+    if (parsed.code === 'AI_CANCELLED') wizardSetNotice('Đã huỷ tạo nội dung. Chưa có thay đổi nào được lưu.');
+    else wizardSetError(error);
   }
   wizardState.busy = '';
+  wizardState.lessonStage = '';
   wizardState.activeRequestId = null;
   render();
   return undefined;
@@ -249,6 +309,8 @@ async function wizardRegenerateItem(position) {
   }
   wizardClearMessages();
   wizardState.busy = 'generate';
+  wizardState.lessonStage = 'retrieve';
+  wizardState.lessonRepaired = false;
   wizardState.activeRequestId = wizardNewRequestId('regen');
   render();
   try {
@@ -267,9 +329,12 @@ async function wizardRegenerateItem(position) {
     await wizardRefreshProjects();
     wizardSetNotice(`Đã tạo lại ${wizardDraftItemLabel(gameType, position)}. Các mục khác giữ nguyên.`);
   } catch (error) {
-    wizardSetError(error);
+    const parsed = wizardParseError(error);
+    if (parsed.code === 'AI_CANCELLED') wizardSetNotice('Đã huỷ tạo lại mục. Mục hiện tại được giữ nguyên.');
+    else wizardSetError(error);
   }
   wizardState.busy = '';
+  wizardState.lessonStage = '';
   wizardState.activeRequestId = null;
   render();
   return undefined;

@@ -308,6 +308,23 @@ twoOptions.questions[0] = {
 } as never;
 assert.ok(has(checkDraftQuality({ draft: twoOptions, config: arenaConfig }), 'ONLY_TWO_OPTIONS'));
 
+// O6: a true/false question always has exactly two options — that is not a
+// weakness of the question, so it must not produce the 2-option warning.
+const trueFalseDraft = cleanArena();
+trueFalseDraft.questions[0] = {
+  ...trueFalseDraft.questions[0],
+  type: 'true-false',
+  options: [
+    { id: 'a', text: 'Đúng' },
+    { id: 'b', text: 'Sai' }
+  ],
+  correctOptionId: 'a'
+} as never;
+assert.ok(
+  !has(checkDraftQuality({ draft: trueFalseDraft, config: arenaConfig }), 'ONLY_TWO_OPTIONS'),
+  'true/false có đúng 2 lựa chọn nên không bị cảnh báo ONLY_TWO_OPTIONS'
+);
+
 const nearDuplicate: ArenaDraft = {
   gameType: 'arena',
   schemaVersion: 1,

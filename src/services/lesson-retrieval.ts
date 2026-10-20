@@ -43,6 +43,13 @@ export interface ChunkSelection {
 
 export const DEFAULT_MAX_SELECTED_CHUNKS = 6;
 export const DEFAULT_MAX_SELECTED_CHARS = 4500;
+/**
+ * O6: "Deep" is the quality mode (docs/update-AI-local.txt §5.3). Thinking is
+ * not usable on the shipped 2B model (see docs/BENCHMARKS.md), so Deep widens
+ * what the model can see instead: more of the same lesson, still bounded.
+ */
+export const DEEP_MAX_SELECTED_CHUNKS = 8;
+export const DEEP_MAX_SELECTED_CHARS = 6000;
 
 const BM25_K1 = 1.5;
 const BM25_B = 0.75;

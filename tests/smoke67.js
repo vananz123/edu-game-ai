@@ -197,6 +197,40 @@ const EXPECTED = {
       }
       out.types[type] = info;
     }
+    // O7: the step-5 progress list is real markup driven by state, and it must
+    // not claim a repair that never happened. renderWizardStatus is the same
+    // function the page calls while a generation is in flight.
+    const progressFor = (stage, repaired) => {
+      wizardState.busy = 'generate';
+      wizardState.lessonStage = stage;
+      wizardState.lessonRepaired = !!repaired;
+      const host = document.createElement('div');
+      host.innerHTML = renderWizardStatus();
+      const nodes = Array.from(host.querySelectorAll('[data-stage]'));
+      const repair = host.querySelector('[data-stage="repair"]');
+      const validate = host.querySelector('[data-stage="validate"]');
+      const stepHost = document.createElement('div');
+      stepHost.innerHTML = renderWizardGenerate();
+      return {
+        stages: nodes.map(node => node.getAttribute('data-stage')),
+        statuses: nodes.map(node => node.getAttribute('data-status')),
+        repairSkipped: repair ? /không cần/.test(repair.textContent || '') : false,
+        repairStatus: repair ? repair.getAttribute('data-status') : null,
+        validateActive: validate ? validate.getAttribute('data-status') === 'active' : false,
+        cancelButton: Boolean(stepHost.querySelector('[data-wizard-action="cancel"]'))
+      };
+    };
+    out.stageUi = progressFor('validate', false);
+    out.stageUi.repairNotNeeded = progressFor('ready', false).repairStatus;
+    out.stageUi.repairDone = progressFor('ready', true).repairStatus;
+    wizardState.busy = 'generate';
+    wizardState.lessonStage = 'cached';
+    const cachedHost = document.createElement('div');
+    cachedHost.innerHTML = renderWizardStatus();
+    out.stageUi.cachedLine = /dùng lại nội dung/.test(cachedHost.textContent || '') && cachedHost.querySelectorAll('[data-stage]').length === 0;
+    wizardState.busy = '';
+    wizardState.lessonStage = '';
+    wizardState.lessonRepaired = false;
     out.rendererErrors = window.__smokeErrors.slice();
     return out;
   })()`);
@@ -226,6 +260,13 @@ const EXPECTED = {
     push(`${type}: game round-trips through the library`, info.inLibrary === true);
     push(`${type}: cleanup removes game + project`, info.cleanupGame === true && info.cleanupProject === true);
   }
+  const stageUi = run.stageUi || {};
+  push('O7: progress lists the 5 real stages', JSON.stringify(stageUi.stages) === JSON.stringify(['retrieve', 'generate', 'validate', 'repair', 'ready']), JSON.stringify(stageUi.stages));
+  push('O7: current stage highlighted, later stages pending', Array.isArray(stageUi.statuses) && stageUi.statuses[0] === 'done' && stageUi.statuses[1] === 'done' && stageUi.statuses[2] === 'active' && stageUi.statuses[3] === 'todo' && stageUi.statuses[4] === 'todo', JSON.stringify(stageUi.statuses));
+  push('O7: repair marked "không cần" when no repair happened', stageUi.repairNotNeeded === 'skipped' && stageUi.validateActive === true, stageUi.repairNotNeeded);
+  push('O7: repair marked done when the model had to repair', stageUi.repairDone === 'done', stageUi.repairDone);
+  push('O7: generation can be cancelled from step 5', stageUi.cancelButton === true);
+  push('O7: cache hit shows a reuse line, not fake stages', stageUi.cachedLine === true, String(stageUi.cachedLine));
   push('no uncaught renderer errors', (run.rendererErrors || []).length === 0, (run.rendererErrors || []).join(' | '));
 
   const pass = results.filter(r => r[1]).length;

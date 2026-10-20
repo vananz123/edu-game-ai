@@ -35,7 +35,9 @@ const wizardState = {
   gameSnapshot: null, // P6
   quality: null, // O2: advisory content-quality report for the draft
   context: null, // O3: which lesson chunks fed the prompt
-  busy: '', // '' | 'analyze' | 'recommend' | 'save'
+  busy: '', // '' | 'analyze' | 'recommend' | 'generate' | 'save'
+  lessonStage: '', // O7: 'retrieve' | 'generate' | 'validate' | 'repair' | 'ready' | 'cached'
+  lessonRepaired: false, // O7: true when the model actually had to repair an answer
   error: null, // { code, message }
   notice: null,
   requestNonce: 0,
@@ -119,6 +121,8 @@ function wizardReset() {
     quality: null,
     context: null,
     busy: '',
+    lessonStage: '',
+    lessonRepaired: false,
     error: null,
     notice: null,
     activeRequestId: null

@@ -275,7 +275,9 @@ function checkChoiceOptions(
   correctOptionId: string | null | undefined,
   itemIndex: number,
   push: (issue: QualityIssue) => void,
-  itemId?: string
+  itemId?: string,
+  /** True/false questions legitimately have exactly two options. */
+  allowTwoOptions = false
 ): void {
   const usable = options.filter(option => !isBlank(option.text));
   if (usable.length < 2) {
@@ -286,7 +288,7 @@ function checkChoiceOptions(
       itemId,
       itemIndex
     });
-  } else if (usable.length === 2) {
+  } else if (usable.length === 2 && !allowTwoOptions) {
     push({
       severity: 'warning',
       code: 'ONLY_TWO_OPTIONS',
@@ -352,7 +354,7 @@ function checkArena(draft: Extract<GameDraft, { gameType: 'arena' }>, config: Ga
     }
     if (question.type === 'multiple-choice' || question.type === 'true-false') {
       const choice = question as ArenaChoiceQuestion;
-      checkChoiceOptions(choice.options || [], choice.correctOptionId, index, push, question.id);
+      checkChoiceOptions(choice.options || [], choice.correctOptionId, index, push, question.id, question.type === 'true-false');
     } else {
       const textQuestion = question as ArenaTextQuestion;
       if (isBlank(textQuestion.correctAnswer)) {

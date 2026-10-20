@@ -41,6 +41,9 @@ function renderWizardStatus() {
   const s = wizardState;
   const parts = [];
   if (s.busy) parts.push(`<div class="wizard-status is-busy" data-wizard-busy="${s.busy}">⏳ ${escapeHtml(wizardBusyText(s.busy))}</div>`);
+  // O7: real stage list for the generate step, updated in place by the
+  // `lesson:progress` events (no re-render, so the page does not jump).
+  if (s.busy === 'generate') parts.push(`<div data-wizard-progress-host="1">${renderWizardGenerationProgress()}</div>`);
   if (s.error) {
     parts.push(`<div class="wizard-status is-error" id="wizardError" data-error-code="${escapeHtml(s.error.code || '')}" role="alert">
       <strong>Không hoàn tất được bước này.</strong>
@@ -100,6 +103,9 @@ function renderCreateWizard() {
 // Wiring (delegated so re-renders don't need re-binding)
 // ---------------------------------------------------------------------------
 
+/** O7: one listener for `lesson:progress`, registered on the first mount. */
+let wizardProgressWired = false;
+
 function wizardSyncDocFromDom() {
   const text = document.getElementById('wizardDocText');
   if (text) wizardState.text = text.value;
@@ -118,6 +124,20 @@ function wireCreateWizard() {
   if (!root) return;
   root.addEventListener('click', wizardHandleClick);
   root.addEventListener('input', wizardHandleInput);
+  // O7: subscribe once. Events are filtered by requestId, so a cancelled run
+  // cannot move the stages of the next one.
+  if (!wizardProgressWired && window.eduGame && typeof window.eduGame.onLessonProgress === 'function') {
+    wizardProgressWired = true;
+    window.eduGame.onLessonProgress(progress => {
+      if (!progress || progress.requestId !== wizardState.activeRequestId) return;
+      const stage = String(progress.stage || '');
+      if (!stage) return;
+      wizardState.lessonStage = stage;
+      if (stage === 'repair') wizardState.lessonRepaired = true;
+      const host = document.querySelector('[data-wizard-progress-host]');
+      if (host) host.innerHTML = renderWizardGenerationProgress();
+    });
+  }
   if (!wizardState.projectsLoaded) {
     wizardState.projectsLoaded = true;
     wizardRefreshProjects().then(() => {
@@ -187,7 +207,7 @@ async function wizardDispatch(action, button) {
     case 'open-ai': return openLocalAiModal();
     case 'analyze': return wizardAnalyzeRun(false);
     case 'rerun': return wizardAnalyzeRun(true);
-    case 'cancel': return wizardAnalyzeCancel();
+    case 'cancel': return wizardState.busy === 'generate' ? wizardCancelGenerate() : wizardAnalyzeCancel();
     case 'recommend':
     case 'rerun-recommend': return wizardRecommendRun();
     case 'select': return wizardRecommendSelect(button.dataset.id);

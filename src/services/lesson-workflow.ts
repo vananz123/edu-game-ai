@@ -95,6 +95,12 @@ export interface StructuredStepOptions<T> {
   }) => ChatMessage[];
   /** Total attempts including the first; defaults to 2 (one repair). */
   maxAttempts?: number;
+  /**
+   * O7: called before each model attempt (1 = first, 2+ = a repair after an
+   * invalid/truncated answer). Lets the UI say "đang sửa phần chưa đạt" only when
+   * a repair really happens, instead of faking stages.
+   */
+  onAttempt?: (attempt: number) => void;
 }
 
 const REPAIRABLE_TRANSPORT_CODES: ReadonlySet<string> = new Set(['AI_INVALID_JSON', 'AI_EMPTY', 'AI_TRUNCATED']);
@@ -114,6 +120,7 @@ export async function runStructuredStep<T>(options: StructuredStepOptions<T>): P
       if (handle.signal.aborted) {
         throw new LessonWorkflowError('AI_CANCELLED', 'Yêu cầu AI đã bị huỷ.');
       }
+      if (options.onAttempt) options.onAttempt(attempt);
 
       let value: unknown;
       let transportError: unknown = null;
@@ -185,6 +192,7 @@ export interface AnalyzeLessonOptions {
   analysisId?: string;
   now?: string;
   maxTokens?: number;
+  onAttempt?: (attempt: number) => void;
 }
 
 export async function analyzeLesson(options: AnalyzeLessonOptions): Promise<LessonAnalysis> {
@@ -214,7 +222,8 @@ export async function analyzeLesson(options: AnalyzeLessonOptions): Promise<Less
       createdAt,
       sourceDocumentIds: [options.documentId]
     }),
-    repairMessages: buildRepairMessages
+    repairMessages: buildRepairMessages,
+    ...(options.onAttempt ? { onAttempt: options.onAttempt } : {})
   });
 }
 
@@ -283,6 +292,7 @@ export interface GenerateDraftOptions {
   analysis: LessonAnalysis;
   sourceExcerpt?: string;
   maxTokens?: number;
+  onAttempt?: (attempt: number) => void;
 }
 
 export async function generateGameDraft(options: GenerateDraftOptions): Promise<GameDraft> {
@@ -312,7 +322,8 @@ export async function generateGameDraft(options: GenerateDraftOptions): Promise<
       messages: info.messages,
       rawContent: info.rawContent,
       errorMessage: info.errorMessage
-    })
+    }),
+    ...(options.onAttempt ? { onAttempt: options.onAttempt } : {})
   });
 }
 
@@ -331,6 +342,7 @@ export interface RegenerateItemOptions {
   issues?: string[];
   sourceExcerpt?: string;
   maxTokens?: number;
+  onAttempt?: (attempt: number) => void;
 }
 
 /**
@@ -369,7 +381,8 @@ export async function regenerateGameItem(options: RegenerateItemOptions): Promis
       messages: info.messages,
       rawContent: info.rawContent,
       errorMessage: info.errorMessage
-    })
+    }),
+    ...(options.onAttempt ? { onAttempt: options.onAttempt } : {})
   });
 }
 

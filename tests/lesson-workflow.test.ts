@@ -312,6 +312,20 @@ async function main(): Promise<void> {
     throw new Error(`expected a choice question, got ${firstArenaQuestion.type}`);
   }
 
+  // --- O7: progress hook sees the first attempt and the repair ------------
+  const attempts: number[] = [];
+  const attemptClient = new MockClient([{ value: invalidArena }, { value: validArena }]);
+  await generateGameDraft({
+    client: attemptClient,
+    registry,
+    requestId: 'req-arena-attempts',
+    gameType: 'arena',
+    config: arenaConfig,
+    analysis: validAnalysis,
+    onAttempt: attempt => attempts.push(attempt)
+  });
+  assert.deepEqual(attempts, [1, 2], 'onAttempt reports the initial call and the repair');
+
   // --- O5: single-item regeneration ---------------------------------------
   const currentQuestion = {
     id: 'q1', type: 'multiple-choice', prompt: 'Câu cũ?',

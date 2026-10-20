@@ -56,7 +56,7 @@ const { recommendGamesForAnalysis } = require('./services/game-recommender');
 const { checkDraftQuality } = require('./services/lesson-quality');
 // O3: chunk the lesson once, then retrieve only the relevant part for generation.
 const { chunkLessonText } = require('./services/lesson-chunker');
-const { selectChunks, selectChunksByVectors, buildRetrievalQuery, DEFAULT_MAX_SELECTED_CHUNKS, DEFAULT_MAX_SELECTED_CHARS } = require('./services/lesson-retrieval');
+const { selectChunks, selectChunksByVectors, buildRetrievalQuery, DEFAULT_MAX_SELECTED_CHUNKS, DEFAULT_MAX_SELECTED_CHARS, DEEP_MAX_SELECTED_CHUNKS, DEEP_MAX_SELECTED_CHARS } = require('./services/lesson-retrieval');
 const { formatRetrievedChunks, LESSON_PROMPT_VERSIONS } = require('./services/lesson-prompts');
 // O4: the retrieval model + its dedicated llama-server process (embeddings only).
 const { getEmbeddingModel, embeddingTextForChunk } = require('./ai-core/embedding-catalog');
@@ -736,7 +736,7 @@ async function embedLessonChunks(store, documentId, chunks) {
  * Retrieval is best-effort: any failure falls back to `lexical-v1` and, with no
  * chunks at all, to the head of the document.
  */
-async function buildLessonGenerationContext(store, project, analysis) {
+async function buildLessonGenerationContext(store, project, analysis, mode = 'fast') {
   let sourceExcerpt;
   let context = { chunkCount: 0, selectedChunkCount: 0, characters: 0, scorer: 'none', fallback: false };
   if (!project.lesson || !project.lesson.documentId) return { sourceExcerpt, context };
@@ -751,10 +751,9 @@ async function buildLessonGenerationContext(store, project, analysis) {
     chunks = store.listChunks(document.id);
   }
   const query = buildRetrievalQuery({ analysis, config: project.config });
-  const selectionOptions = {
-    maxChunks: DEFAULT_MAX_SELECTED_CHUNKS,
-    maxChars: DEFAULT_MAX_SELECTED_CHARS
-  };
+  const selectionOptions = mode === 'deep'
+    ? { maxChunks: DEEP_MAX_SELECTED_CHUNKS, maxChars: DEEP_MAX_SELECTED_CHARS }
+    : { maxChunks: DEFAULT_MAX_SELECTED_CHUNKS, maxChars: DEFAULT_MAX_SELECTED_CHARS };
   // O4: rank by meaning when the embedding model is available and cached;
   // otherwise (model missing, server error, first run offline) keep the lexical
   // ranking. Retrieval quality may drop, generation never blocks.
@@ -781,6 +780,21 @@ async function buildLessonGenerationContext(store, project, analysis) {
     fallback: selection.fallback
   };
   return { sourceExcerpt, context };
+}
+
+/**
+ * O7: coarse progress for the create step (docs/update-AI-local.txt §10). Each
+ * call marks a real boundary in the run — there are no timers and no invented
+ * stages. Delivery is best-effort: progress must never fail a generation.
+ */
+function sendLessonProgress(sender, requestId, stage) {
+  if (!requestId || !sender) return;
+  try {
+    if (typeof sender.isDestroyed === 'function' && sender.isDestroyed()) return;
+    sender.send('lesson:progress', { requestId, stage });
+  } catch (error) {
+    // cosmetic only
+  }
 }
 
 function registerIpc() {
@@ -849,7 +863,11 @@ function registerIpc() {
         sourceName: document.name,
         analysisId: payload?.analysisId ? String(payload.analysisId) : undefined,
         now: new Date().toISOString(),
-        maxTokens: mode === 'deep' ? 1536 : 1024
+        // O6: measured with the smaller 6/8 ask, a ~1,800-character lesson still
+        // needed >1,024 tokens (it truncated, then succeeded on the shortened
+        // repair). A 2,048 ceiling removes that extra round without costing
+        // anything when the model stops earlier on its own.
+        maxTokens: mode === 'deep' ? 2560 : 2048
       });
       store.saveAnalysis(analysis, { cacheKey });
       cached = false;
@@ -893,7 +911,7 @@ function registerIpc() {
   ipcMain.handle('lesson:recommendations', async (_e, analysisId) => requireLessonStore().listRecommendations(String(analysisId || '')));
   // P6: turn a configured project into real game content (fast/deep) and attach
   // the validated game snapshot. The teacher reviews/edits it in the editor next.
-  ipcMain.handle('lesson:generate', async (_e, payload) => {
+  ipcMain.handle('lesson:generate', async (event, payload) => {
     const projectId = String(payload?.projectId || '');
     const requestId = String(payload?.requestId || '');
     if (!projectId) throw new Error('Thiếu mã dự án để tạo nội dung.');
@@ -917,7 +935,8 @@ function registerIpc() {
       modelId,
       mode
     });
-    const { sourceExcerpt, context } = await buildLessonGenerationContext(store, project, analysis);
+    sendLessonProgress(event.sender, requestId, 'retrieve');
+    const { sourceExcerpt, context } = await buildLessonGenerationContext(store, project, analysis, mode);
 
     // §9: a second press of "Tạo nội dung" with identical inputs reuses the stored
     // draft. "Tạo lại" (`regenerate: true`) always calls the model, because the
@@ -936,6 +955,9 @@ function registerIpc() {
             now: new Date().toISOString()
           }));
           const cachedQuality = checkDraftQuality({ draft: cachedDraft, config: project.config, analysis });
+          // O7: a cache hit did no generation/validation work; say so instead of
+          // showing stages that never ran.
+          sendLessonProgress(event.sender, requestId, 'cached');
           return {
             project: cachedSaved,
             game: cachedGame,
@@ -960,11 +982,13 @@ function registerIpc() {
       config: project.config,
       analysis,
       sourceExcerpt,
-      maxTokens: mode === 'deep' ? 4096 : 2048
+      maxTokens: mode === 'deep' ? 4096 : 2048,
+      onAttempt: attempt => sendLessonProgress(event.sender, requestId, attempt === 1 ? 'generate' : 'repair')
     });
 
     // The adapter is the only place that builds `EducationalGame`; it also runs
     // the existing per-template validators, so invalid content is caught here.
+    sendLessonProgress(event.sender, requestId, 'validate');
     let game;
     try {
       game = toEducationalGame({ ...project, draft });
@@ -990,6 +1014,7 @@ function registerIpc() {
     } catch (error) {
       console.warn('Không lưu được bộ nhớ đệm nội dung:', error && error.message ? error.message : error);
     }
+    sendLessonProgress(event.sender, requestId, 'ready');
     return { project: saved, game, mode, quality, context, cached: false };
   });
   // O2: recompute the advisory report when a draft is reopened (no model call).
@@ -1004,7 +1029,7 @@ function registerIpc() {
   });
   // O5: rewrite exactly one item (docs/update-AI-local.txt §5.5). Everything else
   // in the draft is preserved; ids and links stay app-owned (lesson-item-repair).
-  ipcMain.handle('lesson:regenerate-item', async (_e, payload) => {
+  ipcMain.handle('lesson:regenerate-item', async (event, payload) => {
     const projectId = String(payload?.projectId || '');
     const requestId = String(payload?.requestId || '');
     if (!projectId) throw new Error('Thiếu mã dự án để tạo lại nội dung.');
@@ -1040,7 +1065,8 @@ function registerIpc() {
     }
 
     const mode = project.config.generationMode === 'deep' ? 'deep' : 'fast';
-    const { sourceExcerpt, context } = await buildLessonGenerationContext(store, project, analysis);
+    sendLessonProgress(event.sender, requestId, 'retrieve');
+    const { sourceExcerpt, context } = await buildLessonGenerationContext(store, project, analysis, mode);
     const total = itemCount(project.draft);
     let draft = project.draft;
     for (const position of indexes) {
@@ -1060,7 +1086,8 @@ function registerIpc() {
         currentItem: itemAt(draft, position),
         issues: issuesByIndex.get(position) || [],
         sourceExcerpt,
-        maxTokens: mode === 'deep' ? 1536 : 1024
+        maxTokens: mode === 'deep' ? 1536 : 1024,
+        onAttempt: attempt => sendLessonProgress(event.sender, requestId, attempt === 1 ? 'generate' : 'repair')
       });
       try {
         draft = replaceDraftItem(draft, position, item);
@@ -1071,6 +1098,7 @@ function registerIpc() {
 
     // The adapter stays the single conversion boundary and runs the legacy
     // validators; a failed adapter must not overwrite the project.
+    sendLessonProgress(event.sender, requestId, 'validate');
     let game;
     try {
       game = toEducationalGame({ ...project, draft });
@@ -1079,6 +1107,7 @@ function registerIpc() {
     }
     const saved = store.saveProject(applyDraft(project, { draft, game, now: new Date().toISOString() }));
     const quality = checkDraftQuality({ draft, config: project.config, analysis });
+    sendLessonProgress(event.sender, requestId, 'ready');
     return { project: saved, game, quality, context, mode, itemIndexes: indexes, cached: false };
   });
   ipcMain.handle('files:import-document', async () => {

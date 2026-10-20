@@ -39,5 +39,10 @@ contextBridge.exposeInMainWorld('eduGame', Object.freeze({
     ipcRenderer.on('ai:local-progress', listener);
     return () => ipcRenderer.removeListener('ai:local-progress', listener);
   },
+  onLessonProgress: callback => {
+    const listener = (_event, progress) => callback(progress);
+    ipcRenderer.on('lesson:progress', listener);
+    return () => ipcRenderer.removeListener('lesson:progress', listener);
+  },
   generateGame: payload => ipcRenderer.invoke('ai:generate', payload)
 }));
