@@ -2,7 +2,7 @@
 // Gateway Zen chặn request ngoài bằng 3 điều kiện: User-Agent "opencode/…", bộ header
 // x-opencode-* (session/request id theo timestamp) và body phải kèm tools + stream:true.
 // Vì vậy request đi qua Zen bắt buộc streaming; helper này gộp SSE về JSON chat/completion
-// để hai đường ai:generate và assistWithDocument dùng lại logic parse như nhà cung cấp khác.
+// để đường ai:generate dùng lại logic parse như nhà cung cấp khác.
 import { appendFileSync, readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

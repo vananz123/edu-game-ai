@@ -19,7 +19,6 @@ contextBridge.exposeInMainWorld('eduGame', Object.freeze({
   importGame: () => ipcRenderer.invoke('files:import-game'),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   saveSettings: settings => ipcRenderer.invoke('settings:save', settings),
-  assistWithDocument: request => ipcRenderer.invoke('ai:document-assist', request),
   getLocalAiModels: () => ipcRenderer.invoke('ai:local-models'),
   getLocalRuntimeStatus: () => ipcRenderer.invoke('ai:local-status'),
   installLocalAiModel: modelId => ipcRenderer.invoke('ai:install-local-model', modelId),

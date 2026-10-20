@@ -11,14 +11,6 @@ const { z } = require('zod');
 const { AIManager } = require('./ai-core/ai-manager');
 const { ModelInstaller, summarizeModelSelection, verifyModelFile } = require('./ai-core/model-installer');
 const { buildGenerationOptions } = require('./ai-core/generation-options');
-const {
-  getLocalDocumentAnalysisExcerpt,
-  LOCAL_DOCUMENT_ANALYSIS_MAX_CHARS,
-  isQuestionSetRequest,
-  isAnswerSupportedByEvidence,
-  deduplicateQuestions,
-  selectRelevantEvidence
-} = require('./ai-core/document-assist');
 const { LlamaRuntimeInstaller } = require('./ai-core/runtime-installer');
 const { importQuestionsFromFile } = require('./services/question-import');
 const { normalizeAiGame: normalizeAiGameService } = require('./services/ai-game-normalize');
@@ -76,56 +68,6 @@ const {
   recommendLocalModelId
 } = require('./ai-core/model-catalog');
 
-const documentAnalysisSchema = z.object({
-  summary: z.string().trim().min(20).max(4000),
-  keyPoints: z.array(z.string().trim().min(3).max(500)).min(3).max(5),
-  suggestedQuestions: z.array(z.string().trim().min(10).max(500)
-    .refine((item) => item.trim().endsWith('?'), { message: 'Câu hỏi gợi ý phải kết thúc bằng dấu ?.' })).min(3).max(5),
-  recommendedGames: z.array(z.object({
-    template: z.enum(['quiz', 'scenario']),
-    title: z.string().trim().min(3).max(100),
-    reason: z.string().trim().min(10).max(500)
-  })).min(1).max(3)
-});
-const documentAnswerSchema = z.object({
-  answer: z.string().trim().min(1).max(4000),
-  suggestedQuestions: z.array(z.string().trim().min(10).max(500)
-    .refine((item) => item.trim().endsWith('?'), { message: 'Câu hỏi mới phải kết thúc bằng dấu ?.' })).max(12)
-});
-const documentAnalysisResponseSchema = {
-  type: 'object',
-  properties: {
-    summary: { type: 'string' },
-    keyPoints: { type: 'array', items: { type: 'string' }, minItems: 3, maxItems: 5 },
-    suggestedQuestions: { type: 'array', items: { type: 'string' }, minItems: 3, maxItems: 5 },
-    recommendedGames: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          template: { type: 'string', enum: ['quiz', 'scenario'] },
-          title: { type: 'string' },
-          reason: { type: 'string' }
-        },
-        required: ['template', 'title', 'reason'],
-        additionalProperties: false
-      },
-      minItems: 1,
-      maxItems: 3
-    }
-  },
-  required: ['summary', 'keyPoints', 'suggestedQuestions', 'recommendedGames'],
-  additionalProperties: false
-};
-const documentAnswerResponseSchema = {
-  type: 'object',
-  properties: {
-    answer: { type: 'string' },
-    suggestedQuestions: { type: 'array', items: { type: 'string' }, maxItems: 12 }
-  },
-  required: ['answer', 'suggestedQuestions'],
-  additionalProperties: false
-};
 const gameDraftSchema = z.object({
   title: z.string().trim().min(3).max(200),
   subject: z.string().max(100).optional().default(''),
@@ -1289,85 +1231,6 @@ function registerIpc() {
     return { ok: true, models: await getLocalAiModels() };
   });
   ipcMain.handle('ai:cancel', async (_e, requestId) => ({ ok: aiRequests.cancel(String(requestId || '')) }));
-  ipcMain.handle('ai:document-assist', async (_e, request) => {
-    if (!request || !['summarize', 'ask'].includes(request.operation)) {
-      throw new Error('Yêu cầu xử lý tài liệu không hợp lệ.');
-    }
-    const text = String(request.text || '').trim();
-    if (text.length < 40) throw new Error('Hãy nhập hoặc nạp ít nhất 40 ký tự tài liệu.');
-    if (text.length > 120000) throw new Error('Tài liệu vượt quá giới hạn 120.000 ký tự.');
-    if (request.operation === 'ask' && !String(request.question || '').trim()) {
-      throw new Error('Hãy nhập câu hỏi về tài liệu.');
-    }
-    const settings = await readJson(SETTINGS_FILE(), {});
-    const ai = settings.ai || {};
-    const requestSettings = {
-      ...request,
-      mode: request.mode,
-      localModelId: request.localModelId || ai.localModelId,
-      baseUrl: request.baseUrl,
-      model: request.model,
-      apiKey: request.apiKey
-    };
-    if (request.operation === 'summarize') {
-      const result = await requestJsonFromCompatibleApi({
-        payload: requestSettings,
-        ai,
-        systemPrompt: 'Bạn là trợ lý sư phạm. Chỉ dựa trên tài liệu được cung cấp; không suy diễn thành sự thật. Trả JSON đúng schema yêu cầu bằng tiếng Việt.',
-        userPrompt: buildDocumentAnalysisPrompt(request, text),
-        maxTokens: 512,
-        responseSchema: { name: 'document_analysis', schema: documentAnalysisResponseSchema }
-      });
-      const parsed = documentAnalysisSchema.safeParse(result);
-      if (!parsed.success) throw new Error('AI trả về kết quả phân tích không đúng cấu trúc. Hãy thử lại.');
-      return {
-        ...parsed.data,
-        sourceExcerpted: request.mode === 'local' && text.length > LOCAL_DOCUMENT_ANALYSIS_MAX_CHARS
-      };
-    }
-
-    const question = String(request.question).trim();
-    const generateQuestionSet = isQuestionSetRequest(question);
-    const evidence = generateQuestionSet ? [] : selectRelevantEvidence(text, question);
-    const previousQuestions = Array.isArray(request.previousQuestions)
-      ? [...new Set(request.previousQuestions.map(item => String(item).trim()).filter(Boolean))]
-        .slice(-10)
-        .map(item => item.slice(0, 250))
-      : [];
-    const documentContext = request.mode === 'local'
-      ? getLocalDocumentAnalysisExcerpt(text)
-      : text.slice(0, 26_000);
-    const answerPrompt = generateQuestionSet
-      ? `Giáo viên yêu cầu tạo một bộ câu hỏi ôn tập KHÁC, không trùng. Hãy tạo đúng 5 câu hỏi mới, mỗi câu hỏi về một ý khác nhau trong tài liệu (ví dụ: đèn đỏ, phần đường, hàng hai/hàng ba, qua đường, mũ bảo hiểm — mỗi ý chỉ dùng 1 lần). Mỗi câu phải nhắc tới chi tiết cụ thể trong tài liệu, không hỏi chung chung kiểu "khi nào được/không được". VÍ DỤ SAI cần tránh: nếu đã có "Khi nào được phép đi theo chiều ngược lại?" thì KHÔNG được tạo "Khi nào không được phép đi theo chiều ngược lại?" vì chỉ đảo phủ định. Không bịa khái niệm ngoài tài liệu (ví dụ "phương tiện bảo hiểm"). Đưa bộ câu hỏi vào suggestedQuestions và trả lời ngắn gọn trong answer. Không cần tạo đáp án trắc nghiệm.\nYêu cầu của giáo viên: ${question}\nCâu hỏi đã có, tuyệt đối tránh lặp lại (kể cả đảo phủ định hoặc đổi vài từ):\n${previousQuestions.length ? previousQuestions.map(item => `- ${item}`).join('\n') : '(chưa có)'}\nTóm tắt hiện tại:\n${String(request.analysis?.summary || '').slice(0, 2500)}\nTài liệu nguồn:\n${documentContext}`
-      : `Chỉ dùng các câu trích nguyên văn nguồn bên dưới để trả lời; câu trả lời phải được hỗ trợ trực tiếp bởi ít nhất một câu. Hãy trả lời bằng nội dung thực, không trả số thứ tự hoặc ký hiệu trích dẫn. suggestedQuestions phải là mảng rỗng.\nCâu hỏi: ${question}\nCâu trích tài liệu:\n${evidence.join('\n')}`;
-    const result = await requestJsonFromCompatibleApi({
-      payload: requestSettings,
-      ai,
-      systemPrompt: 'Bạn là trợ lý sư phạm trò chuyện với giáo viên. Với yêu cầu thông thường, chỉ trả lời dựa trên tài liệu. Khi giáo viên yêu cầu tạo hoặc đổi bộ câu hỏi, hãy thực hiện yêu cầu dựa trên toàn bộ tài liệu và không trả lời như thể giáo viên đang hỏi về cách tạo câu hỏi. Không bịa thông tin. Trả JSON tiếng Việt theo schema, dùng suggestedQuestions=[] nếu không tạo bộ mới.',
-      userPrompt: answerPrompt,
-      maxTokens: generateQuestionSet ? 1024 : 256,
-      responseSchema: { name: 'document_answer', schema: documentAnswerResponseSchema }
-    });
-    const parsed = documentAnswerSchema.safeParse(result);
-    if (!parsed.success) throw new Error('AI trả về câu trả lời không đúng cấu trúc. Hãy thử lại.');
-    if (generateQuestionSet) {
-      const fresh = deduplicateQuestions(parsed.data.suggestedQuestions, previousQuestions);
-      if (fresh.length < 3) {
-        throw new Error(`AI chỉ tạo được ${fresh.length} câu hỏi mới không trùng (cần ít nhất 3). Hãy yêu cầu lại hoặc chọn model lớn hơn.`);
-      }
-      parsed.data.suggestedQuestions = fresh;
-    }
-    const answerEvidence = generateQuestionSet
-      ? selectRelevantEvidence(text, parsed.data.suggestedQuestions.join(' '), 8)
-      : evidence;
-    return {
-      answer: parsed.data.answer,
-      evidence: answerEvidence,
-      ...(parsed.data.suggestedQuestions.length
-        ? { suggestedQuestions: parsed.data.suggestedQuestions, supported: true }
-        : { suggestedQuestions: [], supported: isAnswerSupportedByEvidence(parsed.data.answer, answerEvidence) })
-    };
-  });
   ipcMain.handle('ai:generate', async (_e, payload) => {
     const settings = await readJson(SETTINGS_FILE(), {});
     const ai = settings.ai || {};
@@ -1502,79 +1365,6 @@ function createCancelReason(reason) {
   return error;
 }
 
-async function requestJsonFromCompatibleApi({ payload, ai, systemPrompt, userPrompt, maxTokens, responseSchema }) {
-  const mode = payload.mode || ai.mode || 'offline';
-  if (mode !== 'local' && mode !== 'online') {
-    throw new AiTransportError('AI_CONFIG', 'Hãy chọn API local hoặc online để phân tích và hỏi đáp tài liệu.');
-  }
-  if (mode === 'local' && (!localAiManager || localAiManager.getStatus().state !== 'READY')) {
-    throw new AiTransportError('AI_NOT_RUNNING', 'AI local chưa chạy. Hãy nhấn “Tổng hợp với AI trên máy” để mở cửa sổ AI local · llama.cpp, chọn model đã tải đầy đủ rồi nhấn “Bắt đầu chạy”.');
-  }
-  const localModelId = payload.localModelId || ai.localModelId || QWEN_LOCAL_MODELS[0].id;
-  const baseUrl = mode === 'local'
-    ? await ensureLocalRuntime(localModelId)
-    : String(payload.baseUrl || ai.baseUrl || '').replace(/\/+$/, '');
-  const model = mode === 'local' ? localModelId : String(payload.model || ai.model || '').trim();
-  if (!baseUrl || !model) throw new AiTransportError('AI_CONFIG', 'Hãy cấu hình API Base URL và tên model trong Cài đặt.');
-
-  let endpoint;
-  try {
-    endpoint = new URL(baseUrl);
-  } catch {
-    throw new AiTransportError('AI_CONFIG', 'API Base URL không hợp lệ.');
-  }
-  const isLoopback = ['localhost', '127.0.0.1', '[::1]'].includes(endpoint.hostname);
-  if (mode === 'local' && (!isLoopback || endpoint.protocol !== 'http:')) {
-    throw new AiTransportError('AI_CONFIG', 'Chế độ API local chỉ chấp nhận HTTP trên localhost hoặc 127.0.0.1.');
-  }
-  if (mode === 'online' && endpoint.protocol !== 'https:' &&
-      !(endpoint.protocol === 'http:' && isLoopback)) {
-    throw new AiTransportError('AI_CONFIG', 'API online phải dùng HTTPS. HTTP chỉ được phép cho endpoint loopback trong môi trường thử nghiệm.');
-  }
-  if (endpoint.username || endpoint.password || endpoint.hash) {
-    throw new AiTransportError('AI_CONFIG', 'Base URL không được chứa thông tin đăng nhập hoặc fragment.');
-  }
-
-  let apiKey = '';
-  const useZen = mode === 'online' && isZenBaseUrl(baseUrl);
-  if (mode === 'online') {
-    apiKey = String(payload.apiKey || '');
-    if (!apiKey && ai.apiKeyEncrypted && safeStorage.isEncryptionAvailable()) {
-      try {
-        apiKey = safeStorage.decryptString(Buffer.from(ai.apiKeyEncrypted, 'base64'));
-      } catch (error) {
-        if (!useZen) {
-          console.error('Could not decrypt configured AI API key:', error instanceof Error ? error.message : 'unknown');
-          throw new AiTransportError('AI_CONFIG', 'Không đọc được API key đã lưu. Hãy nhập lại khóa trong Cài đặt.');
-        }
-        apiKey = '';
-      }
-    }
-    if (useZen && !apiKey) apiKey = readLocalOpencodeApiKey();
-  }
-
-  return requestChatJson({
-    model,
-    mode,
-    temperature: mode === 'local' ? 0.2 : 0.3,
-    generation: buildGenerationOptions(mode, maxTokens),
-    responseSchema: responseSchema || null,
-    timeoutMs: mode === 'local' ? 300_000 : 90_000,
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt }
-    ],
-    send: (body, signal) => useZen
-      ? postZenChatCompletions({ baseUrl, apiKey, payload: body, timeoutMs: 180_000 })
-      : fetchAiEndpoint(`${baseUrl}/chat/completions`, {
-        method: 'POST',
-        redirect: 'error',
-        headers: { 'Content-Type': 'application/json', ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}) },
-        body: JSON.stringify(body),
-        signal
-      }, mode)
-  });
-}
 
 /**
  * Test-only fixture loader for the lesson workflow.
@@ -1661,18 +1451,6 @@ function createLessonChatClient() {
       });
     }
   };
-}
-
-function buildDocumentAnalysisPrompt(request, text) {
-  const analysisText = request.mode === 'local'
-    ? getLocalDocumentAnalysisExcerpt(text)
-    : text.slice(0, 26_000);
-  return `Phân tích tài liệu học tập dưới đây. Chỉ dùng thông tin có trong tài liệu, tuyệt đối không bịa số điện thoại, khái niệm hay sự kiện ngoài tài liệu.
-Trả JSON với schema:
-{"summary":"tóm tắt 3-6 câu","keyPoints":["ý trọng tâm"],"suggestedQuestions":["câu hỏi ôn tập để giáo viên rà soát"],"recommendedGames":[{"template":"quiz|scenario","title":"tên gợi ý","reason":"lý do và độ dễ chuẩn bị"}]}
-Yêu cầu: tóm tắt ngắn gọn; đúng 3-5 keyPoints, mỗi key là 1 ý khác nhau; đúng 3-5 suggestedQuestions, mỗi câu KẾT THÚC bằng dấu ?, mỗi câu hỏi về 1 ý khác nhau, nhắc chi tiết cụ thể trong tài liệu, KHÔNG hỏi chung chung; 1 gợi ý game. Chỉ gợi ý quiz hoặc scenario, ưu tiên loại dễ chuẩn bị. Không tạo nội dung giáo dục ngoài căn cứ tài liệu. Môn: ${request.subject || 'chưa xác định'}; lớp: ${request.grade || 'chưa xác định'}; tên tài liệu: ${request.sourceName || 'không có'}.
-Tài liệu:
-${analysisText}`;
 }
 
 function getAnalyzedSource(payload) {

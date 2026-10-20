@@ -226,22 +226,6 @@ export interface DocumentAnalysis {
   }>;
 }
 
-export interface DocumentAssistRequest {
-  operation: 'summarize' | 'ask';
-  text: string;
-  question?: string;
-  analysis?: DocumentAnalysis;
-  previousQuestions?: string[];
-  sourceName?: string;
-  subject?: string;
-  grade?: string;
-  mode: 'online' | 'local';
-  localModelId?: string;
-  baseUrl?: string;
-  model?: string;
-  apiKey?: string;
-}
-
 export interface DocumentAnswer {
   answer: string;
   evidence: string[];
@@ -272,7 +256,6 @@ export interface EduGameBridge {
   importGame(): Promise<EducationalGame | null>;
   getSettings(): Promise<AppSettings>;
   saveSettings(settings: AppSettings): Promise<{ ok: boolean }>;
-  assistWithDocument(request: DocumentAssistRequest): Promise<DocumentAnalysis | DocumentAnswer>;
   getLocalAiModels(): Promise<{
     models: import('../ai-core/contracts').LocalAiModelStatus[];
     machine: import('../ai-core/contracts').LocalAiMachineProfile;

@@ -133,10 +133,7 @@ async function startLocalRuntimeFromModal() {
     root.innerHTML = '';
     if (state.page === 'create') render();
     else if (state.page === 'settings') render();
-    toast('llama.cpp đã chạy. Ứng dụng sẽ tự tổng hợp tài liệu.');
-    const summarizeAfterStart = state.pendingDocumentSummary && state.page === 'create';
-    state.pendingDocumentSummary = false;
-    if (summarizeAfterStart) await assistWithDocument('summarize', 'local');
+    toast('llama.cpp đã chạy.');
   } catch (error) {
     toast(error.message || 'Không khởi động được llama.cpp.', 6000);
     if (startBtn?.isConnected) { startBtn.disabled = false; startBtn.textContent = '▶ Bắt đầu chạy'; }
