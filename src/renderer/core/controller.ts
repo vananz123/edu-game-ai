@@ -57,6 +57,8 @@ function wirePage() {
   $('#previewManualBtn')?.addEventListener('click', () => window.createBlankGame?.());
   $('#saveSettingsBtn')?.addEventListener('click', saveSettings);
   $('#testAiBtn')?.addEventListener('click', testAi);
+  // update_plan_3 §8: task manager + CPU-only runtime verification panel.
+  if (state.page === 'settings' && typeof wireSettingsAiTasks === 'function') wireSettingsAiTasks();
 }
 async function handleAction(action, id, element) {
   try {

@@ -46,8 +46,11 @@ function renderWizardConfigure() {
       ${wizardConfigNumber('durationMinutes', 'THỜI LƯỢNG (PHÚT)', config.durationMinutes, 1, 120)}
       ${wizardConfigSelect('playMode', 'HÌNH THỨC', config.playMode, [{ value: 'individual', label: 'Cá nhân' }, { value: 'team', label: 'Đội nhóm' }])}
       ${wizardConfigSelect('style', 'PHONG CÁCH', config.style, wizardStyleOptions)}
-      ${wizardConfigSelect('generationMode', 'CHẾ ĐỘ TẠO', config.generationMode, [{ value: 'fast', label: 'Nhanh (một lượt)' }, { value: 'deep', label: 'Kỹ (nhiều ngữ cảnh hơn)' }])}
+      ${wizardConfigSelect('generationMode', 'CHẾ ĐỘ TẠO', config.generationMode, [{ value: 'fast', label: 'Fast — Nhanh (mặc định)' }, { value: 'deep', label: 'Thinking — Kỹ, nhiều ngữ cảnh hơn' }])}
       ${wizardConfigTypeFields(config)}
+    </div>
+    <!-- update_plan_3 §9: two honest modes on the same model — the real difference is what the app controls. -->
+    <div class="field-hint">Fast ưu tiên tốc độ (ít ngữ cảnh hơn, trần output thấp hơn). Thinking gửi nhiều đoạn giáo án hơn và cho phép output dài hơn. Model Qwen 3.5 hiện chưa trả nội dung suy luận (thinking) dùng được trên CPU — ứng dụng không giả lập suy luận; khác biệt thật sự nằm ở ngữ cảnh và giới hạn token.</div>
     </div>
 
     ${objectives.length ? `<div class="section-head mt-[14px]"><h4>Mục tiêu trọng tâm</h4><small class="text-[11px] text-[#788196]">Bỏ chọn mục tiêu không muốn đưa vào trò chơi.</small></div>

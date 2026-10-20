@@ -321,6 +321,29 @@ export interface EduGameBridge {
   stopLocalRuntime(): Promise<{ ok: boolean }>;
   /** Cancels an in-flight AI request by the `requestId` passed to a workflow call. */
   cancelAi(requestId: string): Promise<{ ok: boolean }>;
+  /**
+   * update_plan_3 §8: live task registry + SQLite history. Rows restored from
+   * history always carry `restored: true` (never faked as "running").
+   */
+  listAiTasks(payload?: { limit?: number }): Promise<{
+    live: import('../services/ai-tasks').AiTaskSnapshot[];
+    history: import('../services/ai-tasks').AiTaskSnapshot[];
+  }>;
+  /** update_plan_3 §4: measured CPU-only facts about the bundled llama.cpp runtime. */
+  verifyCpuRuntime(): Promise<{
+    cpuOnly: boolean;
+    backend: string;
+    expectedVersion: string;
+    expectedDownloadUrl: string;
+    expectedSizeBytes: number;
+    executablePath: string | null;
+    installed: boolean;
+    files: string[];
+    gpuMarkers: string[];
+    gpuBackendShipped: boolean;
+    args: string[];
+    note: string;
+  }>;
   analyzeLesson(payload: {
     documentId: string;
     projectId?: string;

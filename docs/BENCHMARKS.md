@@ -97,7 +97,8 @@ Máy đo: **Intel Core i5-10210U** (4 nhân / 8 luồng, dòng U), **16 GB RAM**
 
 - Cờ **được tôn trọng** ngay cả khi không bật `--jinja`: `false` cho 0 ký tự suy luận và JSON bình thường.
 - Nhưng `true` **không bao giờ kết thúc** trong ngân sách dùng được: kể cả 2.048 token và một prompt trả lời ngắn không có grammar, model chỉ sinh `reasoning_content`, không có `content`.
-- Kết luận: **Deep không bật thinking** (xem `DECISIONS #26`). Nhãn UI đổi thành "Kỹ (nhiều ngữ cảnh hơn)" cho đúng việc nó làm.
+- **Re-probe 2026-10-20 với `--jinja`** (spec §7 yêu cầu xác minh chat template/Jinja; tool: `tests/thinking-probe.js`, cùng runtime/model, prompt một câu trả lời ngắn, không schema): `enable_thinking: true` + 900 token → 3.204 ký tự suy luận / **0 nội dung** / 67 s (`finish: length`); 2.048 token → 8.341 ký tự suy luận / **0 nội dung** / 158 s (`finish: length`). Đối chứng `enable_thinking: false` + 300 token → 0 suy luận / 23 ký tự nội dung / 1,7 s (`finish: stop`). Kết luận cũ **vẫn đúng với `--jinja`**: template không sửa được triệu chứng "suy luận không kết thúc".
+- Kết luận: **Deep không bật thinking** (xem `DECISIONS #26`). Nhãn UI là "Fast"/"Thinking" theo spec §9 nhưng phần mô tả nói thẳng giới hạn đã đo (thinking chưa dùng được trên model/runtime này); khác biệt thật sự là ngữ cảnh và trần output.
 
 ### 6.2 Phân tích giáo án: prompt cũ gây cắt, prompt mới vừa ngân sách
 

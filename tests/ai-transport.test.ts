@@ -65,6 +65,18 @@ async function main(): Promise<void> {
   await expectAiError('AI_TRUNCATED', async () => readAssistantContent({ choices: [{ finish_reason: 'length', message: { content: 'x' } }] }));
   await expectAiError('AI_EMPTY', async () => readAssistantContent({ choices: [{ finish_reason: 'stop', message: { content: '   ' } }] }));
   await expectAiError('AI_EMPTY', async () => readAssistantContent({}));
+  // update_plan_3 §7: reasoning-only replies (measured enable_thinking behaviour)
+  // get a specific message, not the generic empty-content one.
+  const reasoningOnly = await expectAiError('AI_EMPTY', async () => readAssistantContent({
+    choices: [{ finish_reason: 'stop', message: { content: '', reasoning_content: 'suy luận rất dài…' } }]
+  }));
+  assert.match(reasoningOnly.message, /reasoning_content/);
+  assert.match(reasoningOnly.message, /Thinking/);
+  // …while an empty reply without reasoning keeps the generic message.
+  const emptyNoReasoning = await expectAiError('AI_EMPTY', async () => readAssistantContent({
+    choices: [{ finish_reason: 'stop', message: { content: null } }]
+  }));
+  assert.doesNotMatch(emptyNoReasoning.message, /reasoning_content/);
 
   // --- buildChatRequestBody ------------------------------------------------
   const localBody = buildChatRequestBody({

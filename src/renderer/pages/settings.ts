@@ -28,6 +28,22 @@ function renderSettings() {
         <div class="flex items-center gap-[12px] mt-[14px]"><button class="border-0 rounded-[9px] px-[15px] py-[11px] inline-flex items-center justify-center gap-[8px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-white border border-[#e7eaf2] text-[#515c72]" id="installLocalModelBtn" ${machine.runtimeSupported===false?'disabled':''}>${selectedLocalModel?.installed&&machine.runtimeInstalled?'Xác minh model và runtime':'Tải / xác minh model và runtime'}</button><span id="localAiProgress" class="text-[11px] text-[#8d96a8]">${selectedLocalModel?.installed&&machine.runtimeInstalled?'Model và runtime đã được xác minh.':'Tải model lần đầu cần Internet; sau khi cài, AI local có thể chạy ngoại tuyến.'}</span></div>
       </div><div class="local-ai-machine"><strong>Cấu hình máy</strong><span><b>CPU:</b> ${escapeHtml(machine.cpuModel || 'Không nhận diện được')} · ${machine.logicalCpuCount || 0} luồng logic</span><span><b>RAM:</b> ${formatBytes(machine.totalRamBytes || 0)}</span><span><b>GPU:</b> ${escapeHtml(gpuDescription)}</span><span><b>Model đề xuất:</b> ${escapeHtml(recommendedLocalModel?.displayName || 'Chưa có đề xuất')}</span><small>Runtime hiện dùng CPU; thông tin GPU chỉ để tham khảo. Model AI có thể tạo nội dung chưa chính xác, hãy kiểm tra trước khi sử dụng trong lớp.</small></div></div>` : '<p>Đang nạp danh sách model AI local…</p>'}
     </section>
+    <!-- update_plan_3 §8: task manager — what ran, what is running, what failed; history survives restart. -->
+    <section class="bg-white border border-line rounded-[14px] p-[23px] mt-[18px]">
+      <div class="flex justify-between items-start">
+        <div>
+          <h3 class="text-[14px] m-0 mb-[5px]">Tác vụ AI</h3>
+          <div class="text-[11px] text-[#9199aa] mb-[17px]">Các tác vụ phân tích giáo án, sinh nội dung và tạo lại mục bằng AI local. Lịch sử được lưu trên máy và khôi phục khi mở lại ứng dụng (mục đã khôi phục không còn “đang chạy”).</div>
+        </div>
+        <div class="flex gap-[8px] shrink-0">
+          <button class="border-0 rounded-[9px] px-[15px] py-[11px] inline-flex items-center justify-center gap-[8px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-white border border-[#e7eaf2] text-[#515c72]" id="aiTasksRefreshBtn">Làm mới</button>
+          <button class="border-0 rounded-[9px] px-[15px] py-[11px] inline-flex items-center justify-center gap-[8px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-white border border-[#e7eaf2] text-[#515c72]" id="cpuRuntimeVerifyBtn">Xác minh runtime CPU</button>
+        </div>
+      </div>
+      <div id="cpuVerifyResult" class="hidden bg-[#f8f9fc] border border-line rounded-[10px] p-[14px] text-[12px] mb-[14px]"></div>
+      <div id="aiTaskList" class="grid gap-[8px]"><div class="text-[11px] text-[#9199aa]">Đang tải danh sách tác vụ…</div></div>
+    </section>
+    <div class="grid gap-[18px]">
     <div class="grid gap-[18px]"><section class="bg-white border border-line rounded-[14px] p-[23px]"><h3 class="text-[14px] m-0 mb-[5px]">Nhà cung cấp AI</h3><div class="text-[11px] text-[#9199aa] mb-[17px]">Cấu hình AI local hoặc nhà cung cấp đám mây dùng trong Tạo trò chơi.</div>
       <div class="field"><label>CHẾ ĐỘ MẶC ĐỊNH</label><select id="settingAiMode"><option value="offline" ${(!ai.mode || ai.mode==='offline')?'selected':''}>Mẫu ngoại tuyến — không gọi API</option><option value="local" ${ai.mode==='local'?'selected':''}>AI local tích hợp — llama.cpp</option><option value="online" ${ai.mode==='online'?'selected':''}>AI đám mây — ChatGPT/Gemini/OpenCode</option></select><div class="field-hint">Model local dùng chung với màn hình Tạo trò chơi. AI đám mây dùng nhà cung cấp đang chọn bên dưới.</div></div>
       <div class="field"><label>NHÀ CUNG CẤP AI ĐÁM MÂY</label><select id="settingCloudProvider"><option value="openai" ${cloud.provider==='openai'?'selected':''}>ChatGPT (OpenAI)</option><option value="gemini" ${cloud.provider==='gemini'?'selected':''}>Gemini (Google)</option><option value="opencode" ${cloud.provider==='opencode'?'selected':''}>OpenCode Zen — model miễn phí</option><option value="custom" ${cloud.provider==='custom'?'selected':''}>API tùy chỉnh tương thích OpenAI</option></select><div class="field-hint">OpenCode Zen dùng model miễn phí của opencode.ai; ứng dụng tự đọc khóa OpenCode đã đăng nhập trên máy này nếu ô khóa để trống.</div></div>

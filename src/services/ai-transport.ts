@@ -109,7 +109,7 @@ export function parseModelJson(content: string): unknown {
 }
 
 export function readAssistantContent(data: unknown): string {
-  const choice = (data as { choices?: Array<{ finish_reason?: string; message?: { content?: unknown } }> })?.choices?.[0];
+  const choice = (data as { choices?: Array<{ finish_reason?: string; message?: { content?: unknown; reasoning_content?: unknown } }> })?.choices?.[0];
   if (choice?.finish_reason === 'length') {
     throw new AiTransportError(
       'AI_TRUNCATED',
@@ -118,6 +118,18 @@ export function readAssistantContent(data: unknown): string {
   }
   const content = choice?.message?.content;
   if (typeof content !== 'string' || !content.trim()) {
+    // update_plan_3 §7: measured on llama.cpp b11681 + Qwen3.5-2B Q4_0, an
+    // `enable_thinking: true` turn can spend the whole budget on
+    // `reasoning_content` and return no `content` (with or without `--jinja`).
+    // Say so explicitly instead of a generic "empty" error.
+    const reasoning = (choice?.message as { reasoning_content?: unknown } | undefined)?.reasoning_content;
+    if (typeof reasoning === 'string' && reasoning.trim()) {
+      throw new AiTransportError(
+        'AI_EMPTY',
+        'Model chỉ trả về suy luận ẩn (reasoning_content) mà không có nội dung chính. '
+        + 'Chế độ Thinking chưa dùng được với model/runtime này — hãy chọn Fast và thử lại.'
+      );
+    }
     throw new AiTransportError(
       'AI_EMPTY',
       'AI không trả về nội dung. Hãy kiểm tra model và nhà cung cấp AI rồi thử lại.'

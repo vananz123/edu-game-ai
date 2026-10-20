@@ -13,7 +13,7 @@ function wizardConfigSummaryRows(config) {
     ['Thời lượng', `${config.durationMinutes} phút`],
     ['Độ khó', config.difficulty],
     ['Hình thức', config.playMode === 'team' ? 'Đội nhóm' : 'Cá nhân'],
-    ['Chế độ tạo', config.generationMode === 'deep' ? 'Kỹ' : 'Nhanh']
+    ['Chế độ tạo', config.generationMode === 'deep' ? 'Thinking (kỹ)' : 'Fast (nhanh)']
   ];
   if (config.gameType === 'arena') rows.push(['Số câu hỏi', String(config.questionCount)]);
   if (config.gameType === 'scenario') rows.push(['Số tình huống', String(config.situationCount)]);
@@ -207,7 +207,7 @@ function renderWizardGenerate() {
   const config = s.config;
   const hasContent = Boolean(s.gameSnapshot);
   return `<section class="form-panel" data-wizard-step-body="generate">
-    <div class="section-head"><h3>Bước 5 · Tạo nội dung trò chơi</h3><span class="tag">${hasContent ? 'Đã tạo bản nháp' : (config && config.generationMode === 'deep' ? 'Chế độ kỹ' : 'Chế độ nhanh')}</span></div>
+    <div class="section-head"><h3>Bước 5 · Tạo nội dung trò chơi</h3><span class="tag">${hasContent ? 'Đã tạo bản nháp' : (config && config.generationMode === 'deep' ? 'Chế độ Thinking' : 'Chế độ Fast')}</span></div>
     ${hasContent
       ? `<div class="panel-sub">AI local đã soạn bản nháp từ giáo án và đã được kiểm tra cấu trúc. Hãy mở trình chỉnh sửa để duyệt, sửa lại rồi lưu vào thư viện để chơi thử.</div>
         ${wizardSummaryGrid(wizardGeneratedSummaryRows(s.gameSnapshot))}
