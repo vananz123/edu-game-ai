@@ -340,6 +340,20 @@ async function wizardRegenerateItem(position) {
   return undefined;
 }
 
+/** Maps the typed draft items (or the adapted snapshot) to the ids the editor rows carry. */
+function wizardDraftItemIds(gameType, draft, game) {
+  if (draft) {
+    if (gameType === 'arena' || gameType === 'race') return (draft.questions || []).map(question => question.id);
+    if (gameType === 'scenario') return (draft.situations || []).map(situation => situation.id);
+    if (gameType === 'matching') return (draft.pairs || []).map(pair => pair.id);
+    if (gameType === 'treasure') return (draft.stages || []).map(stage => stage.id);
+  }
+  if (gameType === 'matching') return ((game.matchingGame || {}).pairs || []).map(pair => pair.id);
+  if (gameType === 'treasure') return ((game.treasureHunt || {}).stages || []).map(stage => stage.id);
+  if (gameType === 'race') return ((game.race || {}).questions || []).map(question => question.id);
+  return (game.questions || []).map(question => question.id);
+}
+
 /** Opens the generated game in the normal editor (same editor the manual path uses). */
 function wizardGenerateOpenEditor() {
   const game = wizardState.gameSnapshot;
@@ -347,14 +361,15 @@ function wizardGenerateOpenEditor() {
     toast('Chưa có nội dung để chỉnh sửa. Hãy tạo nội dung trước.');
     return undefined;
   }
+  const gameType = wizardState.config ? wizardState.config.gameType : '';
   openEditor(
     JSON.parse(JSON.stringify(game)),
     true,
     'AI local đã soạn bản nháp từ giáo án. Hãy duyệt, sửa nội dung và nhấn “Lưu vào thư viện” để chơi thử.',
     {
       projectId: wizardState.projectId,
-      gameType: wizardState.config ? wizardState.config.gameType : '',
-      itemIds: (game.questions || []).map(question => question.id)
+      gameType,
+      itemIds: wizardDraftItemIds(gameType, wizardState.draft, game)
     }
   );
   return undefined;

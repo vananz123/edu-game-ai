@@ -9,13 +9,74 @@ let editorAiContext = null;
 let editorAiBusy = false;
 let editorAiRequestId = '';
 
-function editorAiExpectedTemplate(gameType) {
-  return gameType === 'arena' ? 'quiz' : 'scenario';
+const EDITOR_AI_TEMPLATES = { arena: 'quiz', scenario: 'scenario', matching: 'matching', treasure: 'treasure-hunt', race: 'race' };
+const EDITOR_AI_KINDS = { arena: 'câu hỏi', scenario: 'tình huống', matching: 'cặp ghép', treasure: 'chặng', race: 'câu hỏi' };
+
+function editorAiSupported(gameType) {
+  return Object.prototype.hasOwnProperty.call(EDITOR_AI_TEMPLATES, String(gameType || ''));
 }
 
-function editorAiButton(q) {
+function editorAiExpectedTemplate(gameType) {
+  return EDITOR_AI_TEMPLATES[gameType] || '';
+}
+
+function editorAiKind(gameType) {
+  return EDITOR_AI_KINDS[gameType] || 'mục';
+}
+
+function editorAiContainer(root, gameType) {
+  const selector = {
+    arena: '#editorQuestions', scenario: '#editorQuestions', matching: '#matchingPairs',
+    treasure: '#treasureStages', race: '#raceQuestions'
+  }[gameType];
+  return selector ? $(selector, root) : null;
+}
+
+function editorAiItemSelector(gameType) {
+  return {
+    arena: '.editor-question', scenario: '.editor-question', matching: '.matching-pair-row',
+    treasure: '.treasure-stage-card', race: '.race-question-card'
+  }[gameType] || '';
+}
+
+function editorAiResultItem(game, gameType, position) {
+  if (!game || !position) return null;
+  if (gameType === 'arena' || gameType === 'scenario') return (game.questions || [])[position - 1] || null;
+  if (gameType === 'matching') return ((game.matchingGame || {}).pairs || [])[position - 1] || null;
+  if (gameType === 'treasure') return ((game.treasureHunt || {}).stages || [])[position - 1] || null;
+  if (gameType === 'race') return ((game.race || {}).questions || [])[position - 1] || null;
+  return null;
+}
+
+function editorAiRenderItem(item, index, root, gameType) {
+  if (gameType === 'arena' || gameType === 'scenario') return questionEditor(item, index, currentEditorQuestions(root));
+  if (gameType === 'matching') return matchingPairRow(item, index);
+  if (gameType === 'treasure') return treasureStageHtml(item, index);
+  if (gameType === 'race') return raceQuestionCard(item, index);
+  return '';
+}
+
+function editorAiRefresh(root, gameType) {
+  if (gameType === 'arena' || gameType === 'scenario') {
+    renumberQuestions(root);
+    refreshScenarioBranches(root);
+    return;
+  }
+  if (gameType === 'matching') {
+    const count = $('#matchingPairCount', root);
+    if (count) count.textContent = String($$('#matchingPairs .matching-pair-row', root).length);
+    return;
+  }
+  if (gameType === 'treasure') {
+    refreshTreasureUi(root);
+    return;
+  }
+  if (gameType === 'race') renumberRaceQuestions(root);
+}
+
+function editorAiButton(itemId) {
   if (!editorAiContext) return '';
-  const position = editorAiContext.itemIds.indexOf(String(q.id || ''));
+  const position = editorAiContext.itemIds.indexOf(String(itemId || ''));
   if (position < 0) return '';
   return `<button class="text-link" data-ai-regenerate="${position + 1}" title="AI viết lại riêng mục này từ giáo án; các mục khác và chỉnh sửa chưa lưu vẫn giữ nguyên.">🔄 Tạo lại</button>`;
 }
@@ -96,12 +157,14 @@ async function editorRegenerateItem(button) {
     toast('Mục này không còn khớp với bản nháp đã lưu. Hãy tạo lại trong wizard.');
     return;
   }
-  const kind = context.gameType === 'scenario' ? 'tình huống' : 'câu hỏi';
+  const kind = editorAiKind(context.gameType);
   if (!window.confirm(`Tạo lại ${kind} ${position} bằng AI? Nội dung hiện tại của mục này trong trình chỉnh sửa sẽ được thay bằng bản AI viết lại từ giáo án (dựa trên bản nháp đã lưu). Các mục khác giữ nguyên.`)) {
     return;
   }
-  const qEl = button.closest('.editor-question');
-  if (!qEl) return;
+  const selector = editorAiItemSelector(context.gameType);
+  const container = editorAiContainer(root, context.gameType);
+  const qEl = selector ? button.closest(selector) : null;
+  if (!qEl || !container) return;
   const requestId = `editor-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   editorAiBusy = true;
   editorAiRequestId = requestId;
@@ -114,9 +177,7 @@ async function editorRegenerateItem(button) {
       itemIndex: position
     });
     if (editorAiContext !== context) return;
-    const regenerated = result && result.game && Array.isArray(result.game.questions)
-      ? result.game.questions[position - 1]
-      : null;
+    const regenerated = editorAiResultItem(result && result.game, context.gameType, position);
     if (!regenerated) throw new Error('AI không trả về nội dung cho mục này.');
     // Keep the wizard (mounted behind the modal) in sync with the project the
     // regeneration just saved, so closing without saving and reopening the
@@ -128,19 +189,17 @@ async function editorRegenerateItem(button) {
       wizardState.context = result.context || wizardState.context;
       wizardState.gameId = result.game && result.game.id ? result.game.id : wizardState.gameId;
     }
-    const questionsHost = $('#editorQuestions', root);
-    const cards = $$('.editor-question', questionsHost || root);
+    const cards = $$(selector, container);
     const index = cards.indexOf(qEl);
     if (index < 0) {
       toast(`Đã tạo lại ${kind} ${position} trong dự án, nhưng mục này đã bị xoá khỏi trình chỉnh sửa.`);
       return;
     }
-    const all = currentEditorQuestions(root);
-    const replacement = questionEditor(regenerated, index, all);
+    const replacement = editorAiRenderItem(regenerated, index, root, context.gameType);
+    if (!replacement) throw new Error('Không dựng được nội dung mới cho mục này.');
     qEl.insertAdjacentHTML('afterend', replacement);
     qEl.remove();
-    renumberQuestions(root);
-    refreshScenarioBranches(root);
+    editorAiRefresh(root, context.gameType);
     const quality = result.quality || null;
     const advisory = quality && (quality.errors || quality.warnings)
       ? ` Còn ${quality.errors || 0} lỗi, ${quality.warnings || 0} cảnh báo chất lượng (tư vấn, không chặn lưu).`
@@ -224,7 +283,7 @@ function createBlankGame() {  const p = collectDraft();  const t = p.template ||
   const isTreasure = t === 'treasure-hunt';
   const isRace = t === 'race';
   const usesPanel = isMatching || isTreasure || isRace;
-  const game = { id: '', title: p.title || 'Trò chơi mới', subject: p.subject, grade: p.grade, topic: '', template: t, description: 'Trò chơi được tạo trong EduGame Studio.', sourceName: p.sourceName, gameSetup: p.gameSetup, questions: usesPanel ? [] : [{ id:'q1', type:t, ...sample }], matchingGame: isMatching ? defaultMatchingGame() : undefined, ...(isTreasure ? { treasureHunt: defaultTreasureHunt() } : {}), ...(isRace ? { race: defaultRaceData() } : {}) };  openEditor(game, true, 'Bạn đang tạo trò chơi mới theo cách nhập thủ công. Hãy điền đầy đủ câu hỏi, phương án và đáp án đúng.');  toast('Đã mở trò chơi trống. Hãy nhập câu hỏi, phương án và đáp án đúng rồi nhấn Lưu vào thư viện.');}function editGame(game) { if (!game) return; openEditor(JSON.parse(JSON.stringify(game)), false, 'Chỉnh sửa nội dung trò chơi.'); }function openEditor(game, isNew, note = '', aiContext = null) {  editorCancelPending();  editorAiContext = aiContext && aiContext.projectId && (aiContext.gameType === 'arena' || aiContext.gameType === 'scenario') ? { projectId: String(aiContext.projectId), gameType: aiContext.gameType, itemIds: (Array.isArray(aiContext.itemIds) ? aiContext.itemIds : []).map(id => String(id)) } : null;  editorAiBusy = false;  editorAiRequestId = '';  const root = $('#modalRoot');  root.innerHTML = `<div class="modal-backdrop"><div class="modal"><div class="modal-head"><div><h2>${isNew ? 'Duyệt và hoàn thiện trò chơi' : 'Chỉnh sửa trò chơi'}</h2><div class="small muted mt-[5px]">${escapeHtml(note)}</div></div><button class="modal-close" data-close>✕</button></div><div class="modal-body">      <div class="field-row"><div class="field"><label>TÊN TRÒ CHƠI</label><input id="editTitle" value="${escapeHtml(game.title)}"></div><div class="field"><label>THỂ LOẠI</label><select id="editTemplate">${[['quiz','Đấu trường kiến thức'],['scenario','Thử thách tình huống'],['matching','Ghép cặp kiến thức'],['treasure-hunt','Giải mã kho báu'],['race','Đường đua chinh phục']].map(([v,l])=>`<option value="${v}" ${game.template===v?'selected':''}>${l}</option>`).join('')}</select></div></div>    <div class="field-row"><div class="field"><label>MÔN HỌC</label><input id="editSubject" value="${escapeHtml(game.subject||'')}"></div><div class="field"><label>LỚP</label><input id="editGrade" value="${escapeHtml(game.grade||'')}"></div></div>    <div class="field"><label>MÔ TẢ</label><input id="editDescription" value="${escapeHtml(game.description||'')}"></div>      <div class="section-head"><h3>Câu hỏi / tình huống <span class="tag">${game.questions.length}</span></h3><div><button class="btn btn-secondary btn-small" id="importQuestionsBtn">⇧ Nhập CSV/XLSX</button> <button class="btn btn-secondary btn-small" id="addQuestionBtn">＋ Thêm câu hỏi</button></div></div>    <div id="editorQuestions">${game.questions.map((q,i)=>questionEditor(q,i,game.questions)).join('')}</div>    </div><div class="modal-foot"><button class="btn btn-secondary" data-close>Hủy</button><button class="btn btn-secondary" id="saveExportBtn">Lưu và xuất</button><button class="btn btn-primary" id="saveGameBtn">✓ Lưu vào thư viện</button></div></div></div>`;  root.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', () => { editorCancelPending(); editorAiContext = null; root.innerHTML = ''; }));  const editorQuestions = $('#editorQuestions', root);
+  const game = { id: '', title: p.title || 'Trò chơi mới', subject: p.subject, grade: p.grade, topic: '', template: t, description: 'Trò chơi được tạo trong EduGame Studio.', sourceName: p.sourceName, gameSetup: p.gameSetup, questions: usesPanel ? [] : [{ id:'q1', type:t, ...sample }], matchingGame: isMatching ? defaultMatchingGame() : undefined, ...(isTreasure ? { treasureHunt: defaultTreasureHunt() } : {}), ...(isRace ? { race: defaultRaceData() } : {}) };  openEditor(game, true, 'Bạn đang tạo trò chơi mới theo cách nhập thủ công. Hãy điền đầy đủ câu hỏi, phương án và đáp án đúng.');  toast('Đã mở trò chơi trống. Hãy nhập câu hỏi, phương án và đáp án đúng rồi nhấn Lưu vào thư viện.');}function editGame(game) { if (!game) return; openEditor(JSON.parse(JSON.stringify(game)), false, 'Chỉnh sửa nội dung trò chơi.'); }function openEditor(game, isNew, note = '', aiContext = null) {  editorCancelPending();  editorAiContext = aiContext && aiContext.projectId && editorAiSupported(aiContext.gameType) ? { projectId: String(aiContext.projectId), gameType: aiContext.gameType, itemIds: (Array.isArray(aiContext.itemIds) ? aiContext.itemIds : []).map(id => String(id)) } : null;  editorAiBusy = false;  editorAiRequestId = '';  const root = $('#modalRoot');  root.innerHTML = `<div class="modal-backdrop"><div class="modal"><div class="modal-head"><div><h2>${isNew ? 'Duyệt và hoàn thiện trò chơi' : 'Chỉnh sửa trò chơi'}</h2><div class="small muted mt-[5px]">${escapeHtml(note)}</div></div><button class="modal-close" data-close>✕</button></div><div class="modal-body">      <div class="field-row"><div class="field"><label>TÊN TRÒ CHƠI</label><input id="editTitle" value="${escapeHtml(game.title)}"></div><div class="field"><label>THỂ LOẠI</label><select id="editTemplate">${[['quiz','Đấu trường kiến thức'],['scenario','Thử thách tình huống'],['matching','Ghép cặp kiến thức'],['treasure-hunt','Giải mã kho báu'],['race','Đường đua chinh phục']].map(([v,l])=>`<option value="${v}" ${game.template===v?'selected':''}>${l}</option>`).join('')}</select></div></div>    <div class="field-row"><div class="field"><label>MÔN HỌC</label><input id="editSubject" value="${escapeHtml(game.subject||'')}"></div><div class="field"><label>LỚP</label><input id="editGrade" value="${escapeHtml(game.grade||'')}"></div></div>    <div class="field"><label>MÔ TẢ</label><input id="editDescription" value="${escapeHtml(game.description||'')}"></div>      <div class="section-head"><h3>Câu hỏi / tình huống <span class="tag">${game.questions.length}</span></h3><div><button class="btn btn-secondary btn-small" id="importQuestionsBtn">⇧ Nhập CSV/XLSX</button> <button class="btn btn-secondary btn-small" id="addQuestionBtn">＋ Thêm câu hỏi</button></div></div>    <div id="editorQuestions">${game.questions.map((q,i)=>questionEditor(q,i,game.questions)).join('')}</div>    </div><div class="modal-foot"><button class="btn btn-secondary" data-close>Hủy</button><button class="btn btn-secondary" id="saveExportBtn">Lưu và xuất</button><button class="btn btn-primary" id="saveGameBtn">✓ Lưu vào thư viện</button></div></div></div>`;  root.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', () => { editorCancelPending(); editorAiContext = null; root.innerHTML = ''; }));  const editorQuestions = $('#editorQuestions', root);
 editorQuestions.addEventListener('change', e => {
   const target=e.target;
   if(!target.matches('[data-field="type"]')) return;
@@ -306,7 +365,7 @@ $('#importQuestionsBtn', root).addEventListener('click', async () => {
         <option value="fill-in-blank" ${type==='fill-in-blank'?'selected':''}>Điền từ</option>
         <option value="short-answer" ${type==='short-answer'?'selected':''}>Trả lời ngắn</option>
       </select>
-      ${editorAiButton(q)}
+      ${editorAiButton(q.id)}
       <button class="text-link danger-text" data-remove-question>✕ Xóa câu</button>
       <button class="text-link" data-copy-question>📋 Sao chép</button>
       <button class="text-link q-move" data-move-question-up>↑</button>
@@ -605,6 +664,7 @@ function matchingPairRow(pair, index) {
     <span class="drag-handle" draggable="true" data-pair-drag title="Kéo để sắp xếp cặp">⠿</span>
     <input data-pair-left value="${escapeHtml(pair.left || '')}" placeholder="Thuật ngữ / nội dung cột A">
     <input data-pair-right value="${escapeHtml(pair.right || '')}" placeholder="Định nghĩa / nội dung cột B">
+    ${editorAiButton(pair.id)}
     <button type="button" class="text-link" data-pair-up title="Lên">↑</button>
     <button type="button" class="text-link" data-pair-down title="Xuống">↓</button>
     <button type="button" class="text-link danger-text" data-pair-remove>✕</button>
@@ -662,6 +722,8 @@ function bindMatchingEditor(root) {
     const b = e.target.closest('button');
     if (!b) return;
     const row = b.closest('.matching-pair-row');
+    if (b.matches('[data-ai-cancel]')) { editorCancelAi(); return; }
+    if (b.matches('[data-ai-regenerate]')) { editorRegenerateItem(b); return; }
     if (b.matches('[data-pair-remove]')) { row.remove(); refreshCount(); return; }
     if (b.matches('[data-pair-up]') && row.previousElementSibling) list.insertBefore(row, row.previousElementSibling);
     if (b.matches('[data-pair-down]') && row.nextElementSibling) list.insertBefore(row.nextElementSibling, row);
@@ -738,6 +800,7 @@ function treasureStageHtml(stage, index) {
     <div class="treasure-stage-head"><strong>CHẶNG <span data-stage-num>${index + 1}</span></strong>
       <input data-stage-name value="${escapeHtml(stage.name || '')}" placeholder="Tên chặng">
       <span class="tag ${stage.nextStageId ? 'hidden' : ''}" data-ending-tag>KẾT THÚC</span>
+      ${editorAiButton(stage.id)}
       <button type="button" class="text-link" data-stage-toggle>Ẩn/hiện</button>
       <button type="button" class="text-link" data-stage-copy>⧉ Nhân bản</button>
       <button type="button" class="text-link" data-stage-up>↑</button>
@@ -818,6 +881,8 @@ function bindTreasureEditor(root) {
     const b = e.target.closest('button');
     if (!b) return;
     const card = b.closest('.treasure-stage-card');
+    if (b.matches('[data-ai-cancel]')) { editorCancelAi(); return; }
+    if (b.matches('[data-ai-regenerate]')) { editorRegenerateItem(b); return; }
     if (b.matches('[data-stage-toggle]')) {
       const body = card.querySelector('.treasure-stage-body');
       body.classList.toggle('hidden');
@@ -966,6 +1031,7 @@ function raceQuestionCard(q, index) {
   return `<div class="editor-question race-question-card" data-race-q-id="${escapeHtml(q.id || `rq${index + 1}`)}">
     <div class="editor-question-head"><span class="drag-handle" draggable="true" data-rq-drag title="Kéo để sắp xếp câu hỏi">⠿</span><strong>CÂU ${index + 1}</strong>
       <select data-rq-difficulty class="w-auto"><option value="dễ" ${q.difficulty === 'dễ' ? 'selected' : ''}>Dễ (+1 ô)</option><option value="trung bình" ${!q.difficulty || q.difficulty === 'trung bình' ? 'selected' : ''}>Trung bình (+2 ô)</option><option value="khó" ${q.difficulty === 'khó' ? 'selected' : ''}>Khó (+3 ô)</option></select>
+      ${editorAiButton(q.id)}
       <button type="button" class="text-link" data-rq-copy>⧉ Nhân bản</button>
       <button type="button" class="text-link danger-text" data-rq-remove>✕ Xóa</button>
     </div>
@@ -1036,6 +1102,8 @@ function bindRaceEditor(root) {
     const b = e.target.closest('button');
     if (!b) return;
     const card = b.closest('.race-question-card');
+    if (b.matches('[data-ai-cancel]')) { editorCancelAi(); return; }
+    if (b.matches('[data-ai-regenerate]')) { editorRegenerateItem(b); return; }
     if (b.matches('[data-rq-add-option]')) {
       const rows = $$('.treasure-option-row', card);
       b.closest('[data-rq-options]').insertAdjacentHTML('beforeend',

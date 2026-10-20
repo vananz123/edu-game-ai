@@ -164,40 +164,38 @@ const EXPECTED = {
         }
 
         // Open the real editor and check the type-specific surface. The wizard
-        // passes the project context, so quiz/scenario get per-question AI
+        // passes the project context, so every type gets per-item AI
         // regeneration; manual/library opens pass no context (DECISIONS #15).
-        const aiContext = { projectId, gameType: type, itemIds: (game.questions || []).map(q => q.id) };
-        const beforeAiProject = (type === 'arena' || type === 'scenario') ? await window.eduGame.getProject(projectId) : null;
+        let beforeAiProject = await window.eduGame.getProject(projectId);
+        if (type === 'matching') {
+          // The one-pair fixture was already used at index 2 above. Move that
+          // pair's text aside so regenerating index 1 does not create a
+          // duplicate pair (which the contract correctly rejects).
+          const patched = JSON.parse(JSON.stringify(beforeAiProject));
+          const pairs = (patched.draft || {}).pairs || [];
+          if (pairs[1]) {
+            pairs[1].left = 'Mục kiểm thử độc lập';
+            pairs[1].right = 'Nội dung kiểm thử độc lập';
+            await window.eduGame.saveProjectDraft(patched);
+            beforeAiProject = await window.eduGame.getProject(projectId);
+          }
+        }
+        const aiContext = {
+          projectId,
+          gameType: type,
+          itemIds: ((beforeAiProject.draft || {})[listKey] || []).map(item => item.id)
+        };
+        const aiRows = {
+          arena: { container: '#editorQuestions', selector: '.editor-question', field: '[data-field="prompt"]' },
+          scenario: { container: '#editorQuestions', selector: '.editor-question', field: '[data-field="prompt"]' },
+          matching: { container: '#matchingPairs', selector: '.matching-pair-row', field: '[data-pair-left]' },
+          treasure: { container: '#treasureStages', selector: '.treasure-stage-card', field: '[data-stage-prompt]' },
+          race: { container: '#raceQuestions', selector: '.race-question-card', field: '[data-rq-prompt]' }
+        }[type];
         openEditor(JSON.parse(JSON.stringify(game)), true, 'smoke67', aiContext);
         await sleep(350);
         info.editorOpened = !!document.querySelector('#modalRoot .modal');
-        info.aiButtons = document.querySelectorAll('#editorQuestions [data-ai-regenerate]').length;
-        if (type === 'arena' || type === 'scenario') {
-          const aiPosition = type === 'arena' ? 3 : 1;
-          const aiButton = document.querySelector('#editorQuestions [data-ai-regenerate="' + aiPosition + '"]');
-          info.aiButtonFound = !!aiButton;
-          if (aiButton) {
-            const previousConfirm = window.confirm;
-            window.confirm = () => true;
-            try {
-              aiButton.click();
-              for (let i = 0; i < 100; i++) {
-                await sleep(200);
-                if (!document.querySelector('#editorQuestions [data-ai-cancel]')) break;
-              }
-              const afterAiProject = await window.eduGame.getProject(projectId);
-              info.aiAfterChanged = JSON.stringify((beforeAiProject.draft[listKey] || [])[aiPosition - 1])
-                !== JSON.stringify((afterAiProject.draft[listKey] || [])[aiPosition - 1]);
-              const row = document.querySelector('#editorQuestions .editor-question[data-question-index="' + (aiPosition - 1) + '"]');
-              info.aiDomPrompt = row ? row.querySelector('[data-field="prompt"]').value : '';
-              const restored = document.querySelector('#editorQuestions [data-ai-regenerate="' + aiPosition + '"]');
-              info.aiRestored = !!restored && !restored.hasAttribute('data-ai-cancel')
-                && /Tạo lại/.test(restored.textContent || '') && restored.disabled === false;
-            } finally {
-              window.confirm = previousConfirm;
-            }
-          }
-        }
+        info.aiButtons = document.querySelectorAll(aiRows.container + ' [data-ai-regenerate]').length;
         const panelId = expected[type].panel;
         if (panelId) {
           const panel = document.getElementById(panelId);
@@ -209,12 +207,60 @@ const EXPECTED = {
           info.panelVisible = true;
           info.questionCards = document.querySelectorAll('#editorQuestions > .editor-question').length;
         }
-        const closeBtn = document.querySelector('#modalRoot .modal-close');
-        if (closeBtn) closeBtn.click();
-        await sleep(150);
+        const aiPosition = type === 'arena' ? 3 : 1;
+        const aiButton = document.querySelector(aiRows.container + ' [data-ai-regenerate="' + aiPosition + '"]');
+        info.aiButtonFound = !!aiButton;
+        if (aiButton) {
+          const rowsBefore = document.querySelectorAll(aiRows.container + ' ' + aiRows.selector).length;
+          const previousConfirm = window.confirm;
+          window.confirm = () => true;
+          try {
+            aiButton.click();
+            for (let i = 0; i < 100; i++) {
+              await sleep(200);
+              if (!document.querySelector(aiRows.container + ' [data-ai-cancel]')) break;
+            }
+            const afterAiProject = await window.eduGame.getProject(projectId);
+            info.aiAfterChanged = JSON.stringify((beforeAiProject.draft[listKey] || [])[aiPosition - 1])
+              !== JSON.stringify((afterAiProject.draft[listKey] || [])[aiPosition - 1]);
+            info.aiRowsKept = document.querySelectorAll(aiRows.container + ' ' + aiRows.selector).length === rowsBefore;
+            const row = document.querySelectorAll(aiRows.container + ' ' + aiRows.selector)[aiPosition - 1];
+            info.aiDomPrompt = row ? (row.querySelector(aiRows.field).value || '') : '';
+            const restored = document.querySelector(aiRows.container + ' [data-ai-regenerate="' + aiPosition + '"]');
+            info.aiRestored = !!restored && !restored.hasAttribute('data-ai-cancel')
+              && /Tạo lại/.test(restored.textContent || '') && restored.disabled === false;
+            const saveBtn = document.querySelector('#saveGameBtn');
+            if (saveBtn) {
+              saveBtn.click();
+              for (let i = 0; i < 100; i++) {
+                await sleep(200);
+                if (!document.querySelector('#modalRoot .modal')) break;
+              }
+              const savedLibrary = await window.eduGame.getLibrary();
+              const savedGame = (savedLibrary.games || []).find(item => item.id === game.id);
+              const savedText = !savedGame ? '' : type === 'matching'
+                ? (((savedGame.matchingGame || {}).pairs || [])[aiPosition - 1] || {}).left || ''
+                : type === 'treasure'
+                  ? ((((savedGame.treasureHunt || {}).stages || [])[aiPosition - 1] || {}).question || {}).prompt || ''
+                  : type === 'race'
+                    ? (((savedGame.race || {}).questions || [])[aiPosition - 1] || {}).prompt || ''
+                    : (savedGame.questions || [])[aiPosition - 1]?.prompt || '';
+              info.editorSaved = !!savedGame;
+              info.editorSaveContent = savedText;
+              info.editorSaveOk = !!savedGame && savedText === info.aiDomPrompt;
+            }
+          } finally {
+            window.confirm = previousConfirm;
+          }
+        }
+        if (!info.editorSaved) {
+          const closeBtn = document.querySelector('#modalRoot .modal-close');
+          if (closeBtn) closeBtn.click();
+          await sleep(150);
 
-        // Round-trip through the library (playable offline).
-        await window.eduGame.saveGame(JSON.parse(JSON.stringify(game)));
+          // Round-trip through the library (playable offline).
+          await window.eduGame.saveGame(JSON.parse(JSON.stringify(game)));
+        }
         const library = await window.eduGame.getLibrary();
         info.inLibrary = (library.games || []).some(g => g.id === game.id);
 
@@ -288,10 +334,9 @@ const EXPECTED = {
     push(`${type}: one item regenerated, ids + others untouched`, Array.isArray(info.itemRegenIndexes) && info.itemRegenIndexes.length === 1 && info.itemRegenIndexes[0] === 2 && info.itemRegenCountKept === true && info.itemRegenIdKept === true && info.itemRegenChanged === true && info.itemRegenOthersUnchanged === true && info.itemRegenTemplate === expectedTemplate, JSON.stringify(info.itemRegenIndexes) + ' changed=' + info.itemRegenChanged + ' others=' + info.itemRegenOthersUnchanged);
     push(`${type}: editor opened`, info.editorOpened === true);
     push(`${type}: editor surface matches the type`, info.panelVisible === true && (EXPECTED[type].panel ? info.panelExists === true : info.questionCards === info.contentCount), EXPECTED[type].panel ? 'panel=' + info.panelExists : 'cards=' + info.questionCards + '/' + info.contentCount);
-    push(`${type}: editor AI regenerate is scoped to wizard quiz/scenario`, type === 'arena' || type === 'scenario' ? info.aiButtons === info.contentCount : info.aiButtons === 0, 'buttons=' + info.aiButtons + '/' + info.contentCount);
-    if (type === 'arena' || type === 'scenario') {
-      push(`${type}: editor AI regenerates one item and restores the button`, info.aiButtonFound === true && info.aiAfterChanged === true && info.aiRestored === true && String(info.aiDomPrompt || '').length > 0, 'changed=' + info.aiAfterChanged + ' restored=' + info.aiRestored + ' prompt=' + String(info.aiDomPrompt || '').slice(0, 40));
-    }
+    push(`${type}: editor AI buttons match every draft item`, info.aiButtons === info.contentCount, 'buttons=' + info.aiButtons + '/' + info.contentCount);
+    push(`${type}: editor AI regenerates one item and restores the button`, info.aiButtonFound === true && info.aiAfterChanged === true && info.aiRestored === true && info.aiRowsKept === true && String(info.aiDomPrompt || '').length > 0, 'changed=' + info.aiAfterChanged + ' kept=' + info.aiRowsKept + ' restored=' + info.aiRestored + ' prompt=' + String(info.aiDomPrompt || '').slice(0, 40));
+    push(`${type}: editor save writes the regenerated row`, info.editorSaveOk === true, 'saved=' + info.editorSaved + ' text=' + String(info.editorSaveContent || info.aiDomPrompt || '').slice(0, 40));
     push(`${type}: game round-trips through the library`, info.inLibrary === true);
     push(`${type}: cleanup removes game + project`, info.cleanupGame === true && info.cleanupProject === true);
   }
