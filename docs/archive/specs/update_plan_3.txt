@@ -1,0 +1,684 @@
+# PROMPT TỔNG THỂ NÂNG CẤP EDUGAME STUDIO — CPU-ONLY
+
+## 1. Vai trò và mục tiêu
+
+Bạn là Senior Software Engineer kiêm Software Architect, chịu trách nhiệm nâng cấp dự án **EduGame Studio** — ứng dụng desktop tạo trò chơi giáo dục, xây dựng trên Electron + TypeScript, sử dụng AI local thông qua llama.cpp và các mô hình GGUF.
+
+Nhiệm vụ là cải tiến codebase hiện có theo các yêu cầu bên dưới, không tùy tiện viết lại toàn bộ ứng dụng.
+
+Mục tiêu:
+
+- Hoàn thiện quy trình tạo trò chơi từ giáo án bằng AI local.
+- Tách biệt rõ xử lý dữ liệu bằng code và xử lý ngữ nghĩa bằng AI.
+- Xây dựng trang Giáo án thành không gian quản lý tài liệu và hỏi đáp chuyên sâu.
+- Cho phép chuyển trang trong khi AI chạy mà không làm mất tác vụ.
+- Quản lý vòng đời AI runtime tập trung, an toàn và ổn định.
+- Tối ưu AI theo hướng **CPU-only trên Windows trong giai đoạn hiện tại**.
+- Hoàn thiện giao diện, quản lý dự án, trải nghiệm chơi game và khả năng phục hồi lỗi.
+- Giữ kiến trúc có thể mở rộng GPU trong tương lai nhưng chưa triển khai GPU ở phiên bản hiện tại.
+
+Nguyên tắc quan trọng: **Đọc và hiểu codebase trước, lập kế hoạch sau đó mới sửa code. Không giả định tính năng đã tồn tại khi chưa kiểm tra. Không chỉ thay đổi giao diện mà bỏ qua logic, lưu trữ, vòng đời tác vụ hoặc kiểm thử.**
+
+---
+
+## 2. Quy trình làm việc bắt buộc
+
+### Giai đoạn 1 — Khảo sát codebase
+
+Trước khi chỉnh sửa, hãy kiểm tra:
+
+- Cấu trúc thư mục và kiến trúc Electron.
+- Phiên bản Node.js, Electron, TypeScript và các thư viện liên quan.
+- Các trang, component, routing và state management hiện có.
+- Quy trình tạo trò chơi và các bước nhập giáo án.
+- SQLite schema, repository, service và quan hệ dữ liệu.
+- Cách tích hợp llama.cpp, khởi chạy tiến trình, tải model và giải phóng tài nguyên.
+- Model GGUF hiện có, cấu hình suy luận và khả năng hỗ trợ thinking.
+- Cách đóng gói ứng dụng cho Windows.
+- Hệ thống theme, thông báo, logging và kiểm thử.
+- Những lỗi hiện có, phần triển khai dở dang và các tính năng trùng lặp.
+
+Không tự ý thay thế công nghệ, đổi kiến trúc lớn hoặc xóa tính năng hiện có nếu chưa đánh giá tác động.
+
+### Giai đoạn 2 — Báo cáo và lập kế hoạch
+
+Trước khi sửa code, hãy lập báo cáo gồm:
+
+1. Cấu trúc hiện tại của dự án.
+2. Những phần đã hoạt động tốt.
+3. Những lỗi cần sửa.
+4. Những tính năng chưa có hoặc mới triển khai một phần.
+5. Các file, module và database chịu ảnh hưởng.
+6. Các rủi ro tương thích, hiệu năng và dữ liệu.
+7. Kế hoạch thực hiện theo từng đợt.
+8. Tiêu chí kiểm thử cho từng đợt.
+
+Ưu tiên tận dụng lại module hiện có. Chỉ tạo module mới khi thực sự cần thiết.
+
+### Giai đoạn 3 — Triển khai từng đợt
+
+Thực hiện theo thứ tự ưu tiên:
+
+1. Ổn định AI runtime CPU-only và cơ chế quản lý tác vụ.
+2. Sửa quy trình tạo trò chơi, xác thực dữ liệu và phục hồi lỗi.
+3. Nâng cấp trang Giáo án và hệ thống quản lý tài liệu.
+4. Hoàn thiện Dự án của tôi, lưu trữ và đổi tên dự án.
+5. Cải thiện lựa chọn thể loại trò chơi và trải nghiệm chơi.
+6. Hoàn thiện theme, cỡ chữ, kéo thả file và các chi tiết giao diện.
+7. Kiểm thử tổng thể, sửa lỗi và xác minh đóng gói.
+
+Có thể điều chỉnh thứ tự khi khảo sát codebase chứng minh cần thiết, nhưng phải giải thích lý do.
+
+Sau mỗi đợt, hãy kiểm tra TypeScript, lint, build và test phù hợp; ghi rõ những gì đã thay đổi, kết quả kiểm tra và những vấn đề còn tồn tại.
+
+Không tuyên bố hoàn thành nếu chưa chạy các lệnh kiểm tra thực tế hoặc chưa xác minh được kết quả.
+
+---
+
+# PHẦN A — KIẾN TRÚC AI LOCAL CPU-ONLY
+
+## 3. Nguyên tắc kiến trúc AI
+
+Phân chia trách nhiệm giữa code thông thường và AI.
+
+### Code chịu trách nhiệm
+
+- Đọc file, kiểm tra định dạng và dung lượng.
+- Trích xuất văn bản từ các định dạng được hỗ trợ.
+- Chuẩn hóa dữ liệu đầu vào.
+- Lưu và truy xuất tài liệu, dự án, hội thoại và trò chơi.
+- Xác thực schema của dữ liệu AI trả về.
+- Kiểm tra tính đầy đủ của câu hỏi và đáp án.
+- Áp dụng luật chơi, tính điểm và quản lý thời gian.
+- Quản lý tiến trình, hàng đợi tác vụ và trạng thái giao diện.
+- Xử lý lỗi, retry có giới hạn và phục hồi tác vụ khi có thể.
+
+### AI local chịu trách nhiệm
+
+- Hiểu nội dung giáo án và ngữ cảnh.
+- Tổng hợp, phân tích và giải thích tài liệu.
+- Sinh câu hỏi, đáp án và lời giải thích.
+- Chuyển nội dung học tập thành dữ liệu phù hợp với thể loại trò chơi.
+- Trả lời câu hỏi dựa trên tài liệu được cung cấp.
+- Đề xuất cải thiện nội dung học tập.
+
+Không sử dụng AI cho những việc có thể thực hiện ổn định bằng code thông thường. Không để game engine phụ thuộc vào AI khi trò chơi đã được tạo xong.
+
+## 4. Chuyển toàn bộ triển khai hiện tại sang CPU-only
+
+Trong phiên bản hiện tại, **chỉ triển khai AI inference bằng CPU**.
+
+Yêu cầu:
+
+- Không triển khai CUDA.
+- Không triển khai Vulkan.
+- Không yêu cầu người dùng cài CUDA Toolkit, thư viện CUDA hoặc runtime GPU.
+- Không sử dụng GPU offload như `-ngl 99`.
+- Không triển khai cơ chế chuyển đổi CPU/GPU.
+- Không xây dựng tính năng quản lý VRAM hoặc GPU offloading trong giai đoạn này.
+- Không yêu cầu GPU NVIDIA để chạy AI.
+- Không để cấu hình GPU không được hỗ trợ làm ứng dụng lỗi khởi động.
+
+Kiểm tra bản llama.cpp đang dùng và xác minh đó là bản CPU-compatible thực sự. Không chỉ xóa các tham số GPU khỏi câu lệnh mà bỏ qua các dependency GPU được liên kết trong binary.
+
+Nếu binary hiện tại phụ thuộc CUDA hoặc Vulkan, hãy xây dựng hoặc thay thế bằng bản CPU phù hợp, đồng thời xác minh khả năng chạy trên môi trường Windows mục tiêu.
+
+Có thể giữ một lớp abstraction cho backend inference để mở rộng GPU trong tương lai, nhưng không triển khai backend GPU hoặc đóng gói dependency GPU ở phiên bản này.
+
+## 5. Quản lý llama.cpp runtime tập trung
+
+Xây dựng hoặc hoàn thiện một module runtime manager duy nhất.
+
+Module cần chịu trách nhiệm:
+
+- Kiểm tra runtime và model trước khi khởi động.
+- Khởi chạy và quản lý `llama-server` hoặc phương thức inference đang được dự án sử dụng.
+- Quản lý PID, trạng thái tiến trình, cổng và endpoint.
+- Chống khởi chạy nhiều runtime không cần thiết.
+- Quản lý thời gian khởi động, thời gian chờ và timeout.
+- Kiểm tra health của runtime.
+- Theo dõi trạng thái tải model và khả năng phục vụ yêu cầu.
+- Dừng tiến trình đúng cách khi người dùng yêu cầu.
+- Giải phóng tài nguyên và tránh tiến trình mồ côi.
+- Ghi log lỗi khởi động, lỗi suy luận và lỗi kết thúc tiến trình.
+- Xử lý trường hợp runtime đã chạy hoặc cổng đang bị chiếm.
+- Hạn chế khởi động lại liên tục khi model hoặc cấu hình bị lỗi.
+
+Không để mỗi component tự khởi chạy `llama-server`.
+
+Khi ứng dụng đóng, phải có quy trình shutdown an toàn. Nếu runtime không phản hồi, thực hiện cơ chế dừng dự phòng có kiểm soát và chỉ kết thúc tiến trình do ứng dụng sở hữu.
+
+## 6. Tối ưu CPU và bộ nhớ
+
+Tối ưu cho máy Windows phổ thông, lấy cấu hình tham chiếu **RAM 16 GB** làm mục tiêu kiểm thử ưu tiên. Không mặc định rằng mọi máy đều có cùng số nhân CPU hoặc cùng dung lượng bộ nhớ khả dụng.
+
+Các tham số cần khảo sát:
+
+- Số luồng CPU.
+- Context size.
+- Batch size và micro-batch size.
+- Quantization của model.
+- Mức tiêu thụ RAM khi tải model.
+- Bộ nhớ cần thiết cho KV cache và context.
+- Thời gian khởi động runtime.
+- Thời gian tải model.
+- Tốc độ sinh token.
+- Khả năng duy trì phản hồi của giao diện Electron khi AI chạy.
+
+Không tùy tiện đặt số luồng bằng số logical processors rồi coi đó là cấu hình tối ưu. Hãy đo thực tế và chọn cấu hình mặc định hợp lý, có khả năng điều chỉnh khi cần.
+
+Ưu tiên cấu hình cân bằng giữa tốc độ, bộ nhớ và khả năng sử dụng ứng dụng. Không hy sinh hoàn toàn khả năng phản hồi của UI chỉ để tăng tốc suy luận.
+
+Không tự động nạp đồng thời nhiều model lớn. Nếu cần chuyển model, phải có quy trình giải phóng model hoặc runtime cũ trước khi tải model mới, tùy theo kiến trúc đã kiểm tra.
+
+## 7. Xác minh model và chế độ Thinking
+
+Không mặc định rằng mọi model GGUF đều hỗ trợ thinking giống nhau.
+
+Trước khi triển khai, hãy xác minh:
+
+- Tên model và phiên bản chính xác.
+- Model architecture và tokenizer.
+- Chat template/Jinja template đang sử dụng.
+- Cách model biểu diễn reasoning hoặc thinking.
+- Khả năng tương thích với phiên bản llama.cpp hiện tại.
+- Cấu hình suy luận phù hợp.
+- Mức tiêu thụ RAM, context và tốc độ trên CPU.
+- Khả năng trả về JSON hoặc dữ liệu có cấu trúc.
+
+Không chỉ đổi nhãn giao diện từ Fast sang Thinking rồi cho rằng đã bật suy luận sâu.
+
+Nếu model không hỗ trợ thinking theo cách dự án kỳ vọng, hãy báo rõ giới hạn và đề xuất cấu hình khả thi. Không tự tuyên bố một model có chất lượng suy luận tốt hơn nếu chưa kiểm chứng.
+
+Thiết kế cấu hình model có thể thay đổi mà không phải sửa logic nghiệp vụ ở nhiều nơi.
+
+## 8. Trạng thái AI và quản lý tác vụ
+
+Xây dựng một hệ thống tác vụ tập trung với các trạng thái:
+
+- `queued`
+- `running`
+- `completed`
+- `failed`
+- `cancelled`
+
+Mỗi tác vụ cần có ID ổn định, loại tác vụ, dự án liên quan, trạng thái, thời điểm tạo, tiến độ nếu có, thông tin lỗi và kết quả khi hoàn thành.
+
+Yêu cầu:
+
+- Tác vụ AI không phụ thuộc vòng đời của component hoặc trang hiện tại.
+- Chuyển trang không làm mất tác vụ đang chạy.
+- Không tạo nhiều bản chạy trùng lặp khi component mount lại.
+- Có thể xem các tác vụ đang chạy, hoàn thành hoặc thất bại.
+- Có thông báo khi tác vụ hoàn thành hoặc thất bại.
+- Cho phép mở lại dự án liên quan và tiếp tục từ bước phù hợp.
+- Hỗ trợ hủy tác vụ nếu thao tác đó có thể hủy an toàn.
+- Lưu lịch sử cần thiết vào SQLite để khôi phục trạng thái sau khi ứng dụng khởi động lại.
+
+Không giả định tác vụ đang chạy vẫn tồn tại sau khi ứng dụng bị tắt đột ngột. Phân biệt trạng thái được khôi phục từ lịch sử với tác vụ thực sự vẫn đang chạy.
+
+### Trạng thái AI toàn ứng dụng
+
+Hiển thị trạng thái dễ hiểu, chẳng hạn:
+
+- Chưa khởi động.
+- Đang khởi động.
+- Đang tải model.
+- Sẵn sàng.
+- Đang xử lý.
+- Đang dừng.
+- Lỗi.
+
+Nút tắt AI phải có xác nhận nếu đang xử lý tác vụ. Thông báo rõ tác vụ nào sẽ bị ảnh hưởng, dừng runtime an toàn và giải phóng tài nguyên.
+
+Không tắt runtime đang được tác vụ khác sử dụng mà không có chính sách phối hợp rõ ràng.
+
+---
+
+# PHẦN B — QUY TRÌNH TẠO TRÒ CHƠI
+
+## 9. Chuẩn hóa quy trình tạo game
+
+Kiểm tra quy trình tạo trò chơi hiện có và giữ lại những bước đang hoạt động tốt.
+
+Mục tiêu là quy trình có thể đi từ chọn thể loại, nhập nội dung, cấu hình AI đến xác thực dữ liệu, xem trước và lưu trò chơi.
+
+Ở trang tạo trò chơi từ giáo án, chỉ hiển thị hai chế độ AI thành hai lựa chọn rõ ràng:
+
+- **Fast** — mặc định, ưu tiên tốc độ.
+- **Thinking** — ưu tiên xử lý ngữ nghĩa và suy luận nhiều bước khi model thực sự hỗ trợ.
+
+Không hiển thị thêm lựa chọn “Phân tích chuyên sâu” trên trang tạo trò chơi này. Chức năng phân tích chuyên sâu thuộc workspace Giáo án.
+
+Hai chế độ phải có hành vi khác biệt thực sự ở cấu hình, prompt, giới hạn hoặc quy trình xử lý. Nếu dùng chung model, chỉ khác prompt hoặc tham số, phải mô tả đúng sự khác biệt; không giả vờ đang dùng model khác.
+
+## 10. Chọn thể loại trò chơi
+
+Tại bước chọn thể loại:
+
+- Thể loại được chọn phải có trạng thái trực quan rõ ràng.
+- Có mô tả cách chơi, mục tiêu học tập và kiểu nội dung phù hợp.
+- Có thể xem mô tả trong panel hoặc popover.
+- Hiển thị quy tắc cơ bản và loại dữ liệu cần sinh.
+- Cập nhật đúng schema, luật chơi, prompt và cấu trúc đầu ra khi đổi thể loại.
+
+Mỗi thể loại cần có quy tắc riêng. Không dùng chung một cấu trúc câu hỏi cho tất cả trò chơi nếu luật chơi yêu cầu dữ liệu khác nhau.
+
+Nếu đổi thể loại sau khi đã sinh nội dung, kiểm tra mức tương thích. Cảnh báo người dùng khi cần tạo lại hoặc chuyển đổi dữ liệu.
+
+Không tự động xóa nội dung người dùng đã chỉnh sửa khi chuyển thể loại.
+
+## 11. Sinh dữ liệu và xác thực đầu ra AI
+
+AI phải sinh dữ liệu theo schema được định nghĩa cho từng thể loại.
+
+Xây dựng validator ở phía ứng dụng để kiểm tra:
+
+- Cấu trúc JSON hoặc định dạng dữ liệu.
+- Các trường bắt buộc.
+- Kiểu dữ liệu.
+- Số lượng câu hỏi.
+- Đáp án đúng và các lựa chọn.
+- Giải thích đáp án khi thể loại yêu cầu.
+- Quy tắc riêng của từng game.
+- Nội dung rỗng, trùng lặp hoặc không hợp lệ.
+- Những thông tin quan trọng bị thiếu.
+
+Nếu AI trả về sai định dạng ở bước 5:
+
+1. Thử sửa lỗi định dạng một cách an toàn khi có thể xác định chắc chắn.
+2. Xác thực lại dữ liệu sau khi sửa.
+3. Nếu vẫn lỗi, hiển thị thông báo rõ ràng.
+4. Cho phép người dùng thử lại.
+5. Cho phép đổi thể loại trò chơi.
+6. Nếu đang dùng Fast, cho phép chuyển sang Thinking.
+7. Giữ lại nội dung nguồn và những dữ liệu người dùng đã chỉnh sửa.
+
+Không sửa ngầm đáp án hoặc kiến thức chuyên môn khi chưa có căn cứ. Không chuyển dữ liệu chưa hợp lệ sang game engine.
+
+Nếu cần gọi AI để sửa JSON, phải giới hạn số lần thử lại, tránh vòng lặp vô hạn.
+
+## 12. Chỉnh sửa thủ công và xem trước
+
+Giáo viên phải có thể chỉnh sửa nội dung AI sinh ra trước khi lưu trò chơi.
+
+Hỗ trợ các thao tác phù hợp với cấu trúc từng game, chẳng hạn:
+
+- Thêm, sửa, xóa câu hỏi.
+- Sửa đáp án và lời giải thích.
+- Thay đổi thứ tự câu hỏi.
+- Thay đổi thời gian hoặc điểm số nếu thể loại cho phép.
+- Xem trước cách nội dung xuất hiện khi chơi.
+
+Không ép mọi thể loại dùng cùng một trình chỉnh sửa nếu cấu trúc hoặc luật chơi khác nhau.
+
+Lưu ý nội dung chỉnh sửa thủ công phải được bảo toàn khi chuyển bước, chuyển trang hoặc lưu dự án.
+
+---
+
+# PHẦN C — WORKSPACE GIÁO ÁN
+
+## 13. Chuyển trang Giáo án thành không gian làm việc
+
+Trang Giáo án hiện tại không nên chỉ là nơi nhập giáo án rồi chuyển sang tạo trò chơi.
+
+Nâng cấp thành workspace quản lý tài liệu và khai thác kiến thức, gồm các khả năng:
+
+- Tải lên và quản lý nhiều tài liệu.
+- Xem danh sách tài liệu đã nhập.
+- Theo dõi trạng thái trích xuất và xử lý.
+- Xem nội dung trích xuất.
+- Đặt câu hỏi về một tài liệu hoặc nhiều tài liệu.
+- Tóm tắt, phân tích và so sánh nội dung.
+- Trích xuất kiến thức trọng tâm.
+- Tạo bộ câu hỏi ôn tập.
+- Lưu kết quả phân tích và lịch sử hội thoại.
+- Chuyển nội dung đã tổng hợp sang quy trình tạo trò chơi.
+
+Tách biệt tài liệu nguồn, nội dung trích xuất, kết quả phân tích và nội dung được chọn để tạo trò chơi. Không ghi đè file gốc khi AI tạo kết quả mới.
+
+## 14. Hai chế độ xử lý tài liệu
+
+Cung cấp hai chế độ rõ ràng trong workspace Giáo án:
+
+### Chế độ 1 — Thinking Qwen 4B
+
+Định hướng sử dụng model nhỏ hơn, ưu tiên tốc độ và tác vụ thông thường.
+
+### Chế độ 2 — Thinking Deep Qwen2.5 7B
+
+Định hướng sử dụng model lớn hơn cho những tác vụ phân tích phức tạp hơn, khi phần cứng và runtime đáp ứng được.
+
+**Hai tên trên là nhãn định hướng, không phải bằng chứng rằng các model tương ứng đã được cài đặt hoặc tương thích.**
+
+Trước khi triển khai, kiểm tra model GGUF thực tế trong dự án, tên chính xác, quantization, dung lượng, kiến trúc, template, mức RAM cần thiết và khả năng chạy CPU-only.
+
+Nếu model được chọn chưa tồn tại, không âm thầm thay bằng model khác rồi giữ nguyên nhãn. Hãy báo trạng thái model chưa sẵn sàng và đưa ra phương án cấu hình phù hợp.
+
+Không bắt buộc cả hai model phải được tải đồng thời vào RAM. Ưu tiên nạp theo nhu cầu và quản lý vòng đời model có kiểm soát.
+
+## 15. Hỏi đáp dựa trên tài liệu
+
+Hệ thống hỏi đáp phải dựa trên nội dung tài liệu đã nhập, thay vì chỉ gửi một prompt chung cho model.
+
+Thiết kế theo hướng có thể mở rộng RAG:
+
+1. Trích xuất văn bản từ tài liệu.
+2. Chuẩn hóa và lưu nội dung.
+3. Chia văn bản thành các đoạn phù hợp.
+4. Lưu metadata liên quan đến tài liệu, trang hoặc vị trí nguồn khi có thể.
+5. Truy xuất các đoạn liên quan đến câu hỏi.
+6. Gửi ngữ cảnh phù hợp cho model.
+7. Sinh câu trả lời dựa trên ngữ cảnh.
+8. Hiển thị nguồn tham khảo.
+
+Chỉ triển khai embedding và vector database nếu thực sự cần thiết đối với quy mô dự án. Với phiên bản đầu, có thể dùng tìm kiếm từ khóa hoặc truy xuất đơn giản nếu phù hợp, miễn là có thể nâng cấp sau này.
+
+Không gửi toàn bộ tài liệu dài vào context một cách máy móc. Phải xem xét giới hạn context, RAM, thời gian xử lý và độ liên quan của nội dung truy xuất.
+
+Khi không tìm thấy bằng chứng đủ tốt trong tài liệu, AI phải thông báo rằng nguồn hiện có chưa đủ để kết luận. Phân biệt rõ nội dung trích từ tài liệu với kiến thức bổ sung do model suy luận.
+
+## 16. Trích dẫn nguồn
+
+Câu trả lời hỏi đáp và kết quả phân tích cần cho phép truy xuất về tài liệu nguồn.
+
+Mức tối thiểu:
+
+- Tên tài liệu.
+- Đoạn trích liên quan nếu có.
+- Vị trí trang hoặc số đoạn nếu metadata được trích xuất đáng tin cậy.
+
+Không bịa số trang, số đoạn hoặc nguồn trích dẫn. Nếu định dạng tài liệu không cung cấp thông tin vị trí đáng tin cậy, chỉ hiển thị tên tài liệu và đoạn văn liên quan.
+
+Không gắn nguồn vào câu trả lời nếu nguồn đó không thực sự hỗ trợ nội dung được nêu.
+
+## 17. Lưu lịch sử và chuyển nội dung sang tạo game
+
+Lưu các thông tin cần thiết:
+
+- Danh sách tài liệu.
+- Trạng thái xử lý.
+- Nội dung trích xuất.
+- Hội thoại và câu hỏi.
+- Kết quả tóm tắt hoặc phân tích.
+- Các nguồn được sử dụng.
+- Nội dung được chọn để tạo trò chơi.
+- Thời gian tạo và thông tin liên kết với dự án.
+
+Cho phép giáo viên chọn một phần hoặc toàn bộ kết quả phân tích để đưa vào quy trình tạo trò chơi.
+
+Khi chuyển nội dung, giữ lại liên kết đến tài liệu nguồn nếu có thể. Không bắt giáo viên phải tải lên cùng một tài liệu nhiều lần chỉ vì chuyển sang trang tạo trò chơi.
+
+---
+
+# PHẦN D — QUẢN LÝ DỰ ÁN VÀ LƯU TRỮ
+
+## 18. Trang Dự án của tôi
+
+Trang Dự án của tôi phải thể hiện rõ các dự án đã tạo, trạng thái và khả năng tiếp tục làm việc.
+
+Các chức năng cần có:
+
+- Danh sách dự án.
+- Tạo dự án.
+- Mở và tiếp tục dự án.
+- Đổi tên dự án.
+- Hiển thị thời gian cập nhật.
+- Hiển thị trạng thái hoặc bước đang thực hiện nếu dữ liệu hiện có hỗ trợ.
+- Cho phép truy cập các tài liệu, kết quả phân tích và trò chơi thuộc dự án.
+
+Khi đổi tên dự án:
+
+- Cập nhật tên trong SQLite.
+- Giữ nguyên ID dự án.
+- Không phá vỡ quan hệ giữa dự án và tài liệu, hội thoại, tác vụ hoặc trò chơi.
+- Cập nhật giao diện sau khi lưu thành công.
+- Xử lý lỗi lưu và giữ lại tên hiện tại nếu thao tác thất bại.
+
+Không tạo một dự án mới chỉ để đổi tên dự án cũ.
+
+## 19. SQLite và tính toàn vẹn dữ liệu
+
+Kiểm tra schema hiện có trước khi sửa.
+
+Nếu cần thay đổi database:
+
+- Sử dụng migration có phiên bản.
+- Bảo toàn dữ liệu cũ.
+- Thiết lập khóa và quan hệ phù hợp.
+- Xác định rõ dữ liệu nào thuộc dự án.
+- Tránh lưu trùng lặp nội dung lớn khi có thể tham chiếu an toàn.
+- Có cơ chế xử lý lỗi và phục hồi phù hợp.
+
+Không tự ý xóa database hoặc reset dữ liệu người dùng trong quá trình nâng cấp.
+
+---
+
+# PHẦN E — GIAO DIỆN VÀ TRẢI NGHIỆM SỬ DỤNG
+
+## 20. Dark mode và tăng cỡ chữ
+
+Bổ sung ba tùy chọn giao diện:
+
+- Light.
+- Dark.
+- System.
+
+Yêu cầu:
+
+- Theme áp dụng nhất quán trên toàn ứng dụng.
+- Có thể đổi theme trong phần cài đặt.
+- Tùy chọn được lưu và khôi phục khi mở ứng dụng.
+- Các thành phần như modal, dropdown, tooltip, thông báo, input và trang chơi game phải tương thích với theme.
+- Không để chữ, đường viền hoặc nền mất độ tương phản.
+- Hỗ trợ tăng cỡ chữ theo mức hợp lý.
+- Bố cục không vỡ khi tăng cỡ chữ.
+
+Ưu tiên tính nhất quán và khả năng đọc. Không bắt buộc pixel-parity tuyệt đối với một phiên bản Tailwind trước đây nếu điều đó làm tăng rủi ro hoặc không phù hợp với kiến trúc hiện tại.
+
+Tái sử dụng design tokens và hệ thống theme đang có nếu phù hợp. Tránh tạo nhiều cơ chế theme song song.
+
+## 21. Kéo thả file giáo án
+
+Tại khu vực nhập giáo án, hỗ trợ kéo thả file từ máy tính.
+
+Yêu cầu:
+
+- Hiển thị vùng kéo thả rõ ràng.
+- Phân biệt trạng thái đang kéo, file hợp lệ và file không hợp lệ.
+- Hiển thị tên file và trạng thái xử lý.
+- Kiểm tra định dạng và giới hạn dung lượng.
+- Hỗ trợ chọn file bằng hộp thoại như trước.
+- Thông báo lỗi dễ hiểu.
+- Không làm mất nội dung đang nhập khi file mới không hợp lệ.
+
+Giữ đúng ranh giới bảo mật Electron. Không bật Node integration trong renderer chỉ để xử lý kéo thả file. Không tin tưởng đường dẫn hoặc dữ liệu từ renderer; xác thực lại tại main process hoặc service phù hợp.
+
+## 22. Toàn màn hình khi chơi game
+
+Trong lúc chơi:
+
+- Có khả năng vào chế độ toàn màn hình.
+- Cho phép thoát bằng phím Esc.
+- Giao diện thích ứng với kích thước màn hình.
+- Các nút, câu hỏi, đáp án và thông tin điểm số dễ nhìn.
+- Không làm mất trạng thái trò chơi khi vào hoặc thoát toàn màn hình.
+
+Trạng thái cần được bảo toàn gồm:
+
+- Câu hỏi hiện tại.
+- Đáp án đã chọn.
+- Điểm số.
+- Thời gian còn lại.
+- Trạng thái thắng/thua hoặc hoàn thành.
+- Các dữ liệu phiên chơi khác.
+
+Không khởi tạo lại game chỉ vì kích thước cửa sổ thay đổi. Xử lý đúng sự khác nhau giữa fullscreen của cửa sổ Electron và fullscreen của nội dung web, tùy kiến trúc thực tế.
+
+---
+
+# PHẦN F — BẢO MẬT, HIỆU NĂNG VÀ ĐÓNG GÓI
+
+## 23. Bảo mật Electron
+
+Không làm suy yếu cấu hình bảo mật để tiện tích hợp AI.
+
+Kiểm tra và giữ các nguyên tắc:
+
+- `contextIsolation` phù hợp.
+- `nodeIntegration` tắt trong renderer nếu kiến trúc hiện tại cho phép.
+- Sử dụng preload và API bridge có giới hạn.
+- Kiểm tra và xác thực dữ liệu IPC.
+- Không để renderer tùy ý chạy lệnh hệ thống.
+- Quản lý quyền truy cập file rõ ràng.
+- Không lưu thông tin nhạy cảm trong log.
+- Chỉ cho phép giao tiếp với endpoint runtime local theo chính sách của ứng dụng.
+
+Các tác vụ nặng không được chạy đồng bộ trên UI thread. Sử dụng tiến trình hoặc cơ chế bất đồng bộ phù hợp với kiến trúc hiện tại.
+
+## 24. Đóng gói Windows CPU-only
+
+Kiểm tra cách dự án đóng gói ứng dụng hiện tại.
+
+Mục tiêu:
+
+- Bộ cài ứng dụng không yêu cầu người dùng tự cài CUDA hoặc Vulkan.
+- Bao gồm hoặc quản lý runtime CPU theo chiến lược phù hợp.
+- Xác minh các thư viện native cần thiết cho Windows.
+- Không đóng gói thừa model hoặc dependency GPU.
+- Không mặc định đưa các model lớn vào bộ cài nếu chiến lược tải model riêng phù hợp hơn.
+- Có thông báo rõ nếu model chưa được tải hoặc chưa sẵn sàng.
+- Có kiểm tra tính toàn vẹn của model sau khi tải.
+- Có thể hiển thị tiến độ tải model và lỗi tải.
+- Không tải model từ internet trong quá trình sử dụng thông thường nếu sản phẩm đang được cấu hình ở chế độ offline.
+
+Có thể áp dụng phương án bộ cài nhỏ và tải model ở lần sử dụng đầu tiên, nhưng phải bảo đảm người dùng hiểu dung lượng cần tải và biết cách tiếp tục nếu tải thất bại.
+
+Sau khi model đã được tải và cấu hình đầy đủ, các chức năng AI local phải hoạt động không cần kết nối internet. Không để ứng dụng vô tình gọi API đám mây khi runtime local gặp lỗi.
+
+---
+
+# PHẦN G — KIỂM THỬ VÀ NGHIỆM THU
+
+## 25. Kiểm thử chức năng
+
+Tối thiểu phải kiểm tra các tình huống sau.
+
+### AI runtime
+
+- Runtime khởi động thành công.
+- Model không tồn tại.
+- Model không tương thích.
+- Cổng bị chiếm.
+- Runtime khởi động chậm hoặc lỗi.
+- Model hết RAM hoặc không đủ tài nguyên.
+- Người dùng yêu cầu dừng AI khi đang chạy.
+- Ứng dụng đóng khi tác vụ đang hoạt động.
+- Không có tiến trình mồ côi.
+- Không khởi chạy runtime trùng lặp.
+
+### Tạo trò chơi
+
+- Chọn và đổi thể loại.
+- Sinh dữ liệu với Fast.
+- Sinh dữ liệu với Thinking khi model hỗ trợ.
+- Đầu ra hợp lệ.
+- Đầu ra sai JSON.
+- Thiếu câu hỏi hoặc đáp án.
+- Dữ liệu không phù hợp với thể loại.
+- Retry có giới hạn.
+- Chuyển Fast sang Thinking.
+- Chỉnh sửa thủ công và lưu trò chơi.
+
+### Quản lý tác vụ
+
+- Chuyển trang khi AI đang chạy.
+- Quay lại đúng dự án.
+- Thông báo khi hoàn thành.
+- Xử lý tác vụ thất bại hoặc bị hủy.
+- Khôi phục lịch sử sau khi khởi động lại.
+- Không hiển thị một tác vụ đã hoàn thành như đang chạy thật nếu runtime không còn hoạt động.
+
+### Workspace Giáo án
+
+- Nhập tài liệu hợp lệ.
+- Xử lý file lỗi hoặc định dạng không hỗ trợ.
+- Hỏi đáp với một tài liệu.
+- Hỏi đáp với nhiều tài liệu.
+- Trả lời có nguồn.
+- Không tìm thấy bằng chứng.
+- Lưu hội thoại và kết quả phân tích.
+- Chuyển nội dung sang tạo trò chơi.
+- Đổi chế độ AI và xử lý trường hợp model chưa sẵn sàng.
+
+### Giao diện và dữ liệu
+
+- Đổi tên dự án.
+- Giữ nguyên quan hệ dữ liệu trong SQLite.
+- Đổi Light/Dark/System.
+- Tăng cỡ chữ.
+- Kéo thả file.
+- Chơi toàn màn hình.
+- Thoát bằng Esc.
+- Giữ nguyên điểm số, thời gian và câu hỏi.
+- Kiểm tra khả năng đọc và phản hồi UI khi AI đang chạy.
+
+## 26. Benchmark CPU
+
+Thực hiện benchmark trên môi trường thực tế có thể tiếp cận và ghi rõ cấu hình thử nghiệm.
+
+Các chỉ số cần ghi nhận:
+
+- Thời gian khởi động runtime.
+- Thời gian tải model.
+- RAM khi rảnh.
+- RAM khi suy luận.
+- Tốc độ sinh token trung bình.
+- Thời gian hoàn thành một tác vụ mẫu.
+- Mức độ phản hồi của giao diện trong lúc suy luận.
+- Thời gian dừng runtime và giải phóng tài nguyên.
+
+Nếu có điều kiện, ưu tiên thử trên máy Windows RAM 16 GB. Nếu không có phần cứng tương ứng, phải ghi rõ môi trường thực tế; không được tự bịa số liệu benchmark.
+
+So sánh cấu hình trước và sau tối ưu nếu có baseline. Không khẳng định hiệu năng đã tăng khi chưa có phép đo.
+
+## 27. Tiêu chí nghiệm thu
+
+Chỉ coi một hạng mục hoàn thành khi:
+
+- Đã triển khai vào đúng vị trí trong codebase.
+- TypeScript không có lỗi mới chưa được giải quyết.
+- Build và test liên quan đã chạy.
+- Luồng dữ liệu từ giao diện đến service và SQLite hoạt động.
+- Lỗi phổ biến được xử lý rõ ràng.
+- Không làm hỏng chức năng cũ ngoài phạm vi đã thống nhất.
+- Có bằng chứng kiểm thử hoặc giải thích chính xác phần chưa thể kiểm thử.
+
+Nếu chưa thể hoàn thành một hạng mục, hãy báo rõ lý do, phần đã làm, phần còn thiếu và bước tiếp theo.
+
+---
+
+# PHẦN H — BÁO CÁO SAU KHI TRIỂN KHAI
+
+Sau mỗi đợt, hãy báo cáo theo cấu trúc:
+
+1. **Đã kiểm tra:** Các module, file và luồng dữ liệu đã khảo sát.
+2. **Đã sửa:** Những lỗi được khắc phục.
+3. **Đã bổ sung:** Các tính năng mới.
+4. **File đã thay đổi:** Đường dẫn và mục đích của từng thay đổi quan trọng.
+5. **Database:** Migration hoặc thay đổi schema, nếu có.
+6. **AI runtime:** Cấu hình CPU, model được xác minh và kết quả kiểm thử.
+7. **Kiểm thử:** Các lệnh đã chạy và kết quả thực tế.
+8. **Benchmark:** Số liệu thực tế nếu đã đo.
+9. **Vấn đề còn lại:** Những giới hạn chưa giải quyết.
+10. **Bước tiếp theo:** Hạng mục nên triển khai tiếp theo.
+
+Không chỉ trả về kế hoạch hoặc những đoạn code minh họa khi được giao quyền sửa codebase. Hãy thực sự khảo sát, triển khai và kiểm thử trong phạm vi môi trường cho phép.
+
+## Yêu cầu cuối cùng
+
+Hãy bắt đầu bằng việc khảo sát repository hiện tại, xác minh kiến trúc Electron + TypeScript, SQLite, llama.cpp và model GGUF đang có.
+
+Sau đó, báo cáo những gì đã phát hiện và đưa ra kế hoạch triển khai theo từng đợt. Tiếp tục thực hiện các đợt sửa chữa có thể triển khai an toàn, kiểm tra kết quả sau mỗi đợt và không dừng lại ở việc chỉ đưa ra đề xuất.
+
+**Định hướng ưu tiên: ổn định trước, đúng dữ liệu trước, CPU-only trước, sau đó mới tối ưu tốc độ và mở rộng tính năng. Không triển khai CUDA/Vulkan ở phiên bản hiện tại.**

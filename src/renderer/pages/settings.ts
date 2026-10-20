@@ -11,11 +11,8 @@ function renderSettings() {
   const selectedLocalModelId = ai.localModelId || machine.recommendedModelId || state.localAiModels[0]?.id || '';
   const selectedLocalModel = state.localAiModels.find(model => model.id === selectedLocalModelId);
   const recommendedLocalModel = state.localAiModels.find(model => model.id === machine.recommendedModelId);
-  const gpuDescription = machine.gpu
-    ? `${machine.gpu.name}${machine.gpu.vramBytes ? ` · ${formatBytes(machine.gpu.vramBytes)} VRAM` : ''}`
-    : machine.gpuDetectionStatus === 'unavailable'
-      ? machine.gpuDetectionMessage || 'Không đọc được thông tin GPU.'
-      : 'Không phát hiện GPU.';
+  // update_plan_3 §4: CPU-only release — never show VRAM/GPU offload in the UI.
+  const gpuDescription = 'Bản CPU-only: AI local chạy hoàn toàn trên CPU, không dùng GPU.';
   const modelStatus = selectedLocalModel
     ? selectedLocalModel.installed
       ? machine.runtimeInstalled ? 'Model và runtime đã sẵn sàng trên máy.' : 'Model đã có; runtime sẽ được cài khi bạn bắt đầu dùng AI local.'

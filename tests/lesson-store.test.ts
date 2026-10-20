@@ -454,6 +454,50 @@ async function run(): Promise<void> {
   assert.equal(db.prepare("SELECT data_json FROM games WHERE id='legacy-game'").get().data_json, '{"id":"legacy-game"}');
   assert.equal(db.prepare("SELECT data_json FROM sessions WHERE id='legacy-session'").get().data_json, '{"id":"legacy-session"}');
 
+  // --- update_plan_3 §8: AI task history (summaries only, upsert, prune) ---
+  assert.equal(store.getAiTask('missing-task'), null);
+  const savedTask = store.saveAiTask({
+    taskId: 'task_1',
+    requestId: 'req-1',
+    kind: 'analyze',
+    projectId: 'project-1',
+    documentId: document.id,
+    label: 'phân tích giáo án',
+    state: 'running',
+    progress: 'generate',
+    startedAt: ISO
+  });
+  assert.equal(savedTask.taskId, 'task_1');
+  assert.equal(savedTask.state, 'running');
+  const finishedTask = store.saveAiTask({
+    taskId: 'task_1',
+    requestId: 'req-1',
+    kind: 'analyze',
+    projectId: 'project-1',
+    documentId: document.id,
+    label: 'phân tích giáo án',
+    state: 'completed',
+    progress: 'ready',
+    resultSummary: '3 mục tiêu',
+    startedAt: ISO,
+    finishedAt: ISO
+  });
+  assert.equal(finishedTask.state, 'completed');
+  assert.equal(finishedTask.resultSummary, '3 mục tiêu');
+  assert.equal(store.listAiTasks(10).length, 1);
+  store.saveAiTask({
+    taskId: 'task_old',
+    requestId: 'req-old',
+    kind: 'generate',
+    label: 'cũ',
+    state: 'completed',
+    startedAt: '2025-01-01T00:00:00.000Z',
+    finishedAt: '2025-01-01T00:01:00.000Z'
+  });
+  assert.equal(store.pruneAiTasks(1), 1);
+  assert.equal(store.getAiTask('task_old'), null);
+  assert.ok(store.getAiTask('task_1'));
+
   // --- .egame JSON round-trip of a stored snapshot ------------------------
   const stored = store.getProject('project-1');
   assert.equal(stored?.gameSnapshot, null);

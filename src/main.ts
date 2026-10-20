@@ -22,6 +22,7 @@ const { LlamaRuntimeInstaller } = require('./ai-core/runtime-installer');
 const { importQuestionsFromFile } = require('./services/question-import');
 const { normalizeAiGame: normalizeAiGameService } = require('./services/ai-game-normalize');
 const { LessonStore } = require('./services/lesson-store');
+const { AiTaskManager, newAiTaskId } = require('./services/ai-tasks');
 const { buildTreasureHunt: buildTreasureHuntService, buildRaceData: buildRaceDataService } = require('./services/ai-game-design');
 const { validateScenarioGame, validateMatchingGame, validateTreasureHuntGame, validateRaceGame } = require('./services/game-validation');
 const { isZenBaseUrl, postZenChatCompletions, readLocalOpencodeApiKey } = require('./services/opencode-zen');
@@ -249,6 +250,18 @@ let lessonStore;
 const aiRequests = new AiRequestRegistry();
 /** Rejects overlapping local-model work even when the renderer uses new ids. */
 const aiSingleFlight = new AiSingleFlight();
+// update_plan_3 §8: central CPU task registry (one stable id per task).
+const aiTasks = new AiTaskManager();
+
+/** Best-effort task history write: history must never fail the teacher's run. */
+function recordAiTask(record) {
+  if (!record || !record.taskId) return;
+  try {
+    requireLessonStore().saveAiTask(record);
+  } catch (error) {
+    console.warn('Không lưu được lịch sử tác vụ AI:', error && error.message ? error.message : error);
+  }
+}
 
 let mainWindow;
 let localAiManager;
@@ -531,6 +544,47 @@ function createRuntimeInstaller() {
     runtimeDirectory: RUNTIME_DIR(),
     supportFilesDirectory: vcRuntimeDirectory()
   });
+}
+/**
+ * update_plan_3 §4/§6: CPU-only runtime verification.
+ * Confirms the bundled artifact + installed files are the pinned CPU build:
+ * no CUDA/Vulkan Toolkit, no `-ngl`/VRAM switching, because this release does
+ * not ship a GPU backend. Returns measured facts only, never estimates.
+ */
+async function verifyCpuRuntime() {
+  const installer = createRuntimeInstaller();
+  const executablePath = await installer.getExecutablePath();
+  const files = [];
+  if (executablePath) {
+    try {
+      const entries = await fs.readdir(path.dirname(executablePath));
+      for (const entry of entries) files.push(entry);
+    } catch (error) {
+      console.warn('Không đọc được thư mục runtime:', error && error.message ? error.message : error);
+    }
+  }
+  const lower = files.map(name => String(name).toLowerCase());
+  const gpuMarkers = lower.filter(name =>
+    name.includes('cuda') || name.includes('cublas') || name.includes('cudart') ||
+    name.includes('vulkan') || name.includes('nccl') || name.includes('cudnn')
+  );
+  const expected = LLAMA_CPP_RUNTIME;
+  return {
+    cpuOnly: true,
+    backend: 'llama.cpp CPU (Windows x64)',
+    expectedVersion: expected.version,
+    expectedDownloadUrl: expected.downloadUrl,
+    expectedSizeBytes: expected.sizeBytes,
+    executablePath: executablePath || null,
+    installed: Boolean(executablePath),
+    files,
+    gpuMarkers,
+    gpuBackendShipped: gpuMarkers.length > 0,
+    args: ['--n-gpu-layers', '0', '--parallel', '1', '--ctx-checkpoints', '0'],
+    note: gpuMarkers.length
+      ? 'Phát hiện tệp gợi ý backend GPU trong thư mục runtime. Bản CPU-only không dùng các tệp này.'
+      : 'Không phát hiện backend GPU trong thư mục runtime. Mọi tiến trình đều chạy CPU (`--n-gpu-layers 0`).'
+  };
 }
 function formatMemoryBytes(bytes) {
   return `${(bytes / 1024 ** 3).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} GB`;
@@ -947,33 +1001,56 @@ function registerIpc() {
     let analysis = payload?.force ? null : store.findAnalysisByCacheKey(documentId, cacheKey);
     let cached = Boolean(analysis);
     if (!analysis) {
+      const task = aiTasks.start({
+        taskId: newAiTaskId('analyze'),
+        requestId,
+        kind: 'analyze',
+        projectId: payload?.projectId ? String(payload.projectId) : null,
+        documentId,
+        label: 'phân tích giáo án'
+      });
+      recordAiTask(task);
       sendLessonProgress(event.sender, requestId, 'prepare');
-      analysis = await aiSingleFlight.run(
-        `analyze:${documentId}:${cacheKey}`,
-        'phân tích giáo án',
-        async () => {
-          const generated = await analyzeLesson({
-            client: createLessonChatClient(),
-            registry: aiRequests,
-            requestId,
-            documentId,
-            text: document.text,
-            sourceName: document.name,
-            analysisId: payload?.analysisId ? String(payload.analysisId) : undefined,
-            now: new Date().toISOString(),
-            // O6: measured with the smaller 6/8 ask, a ~1,800-character lesson still
-            // needed >1,024 tokens (it truncated, then succeeded on the shortened
-            // repair). A 2,048 ceiling removes that extra round without costing
-            // anything when the model stops earlier on its own.
-            maxTokens: mode === 'deep' ? 2560 : 2048,
-            onAttempt: attempt => sendLessonProgress(event.sender, requestId, attempt > 1 ? 'repair' : 'generate')
-          });
-          store.saveAnalysis(generated, { cacheKey });
-          sendLessonProgress(event.sender, requestId, 'ready');
-          return generated;
+      try {
+        analysis = await aiSingleFlight.run(
+          `analyze:${documentId}:${cacheKey}`,
+          'phân tích giáo án',
+          async () => {
+            const generated = await analyzeLesson({
+              client: createLessonChatClient(),
+              registry: aiRequests,
+              requestId,
+              documentId,
+              text: document.text,
+              sourceName: document.name,
+              analysisId: payload?.analysisId ? String(payload.analysisId) : undefined,
+              now: new Date().toISOString(),
+              // O6: measured with the smaller 6/8 ask, a ~1,800-character lesson still
+              // needed >1,024 tokens (it truncated, then succeeded on the shortened
+              // repair). A 2,048 ceiling removes that extra round without costing
+              // anything when the model stops earlier on its own.
+              maxTokens: mode === 'deep' ? 2560 : 2048,
+              onAttempt: attempt => {
+                recordAiTask(aiTasks.progress(task.taskId, attempt > 1 ? 'repair' : 'generate'));
+                sendLessonProgress(event.sender, requestId, attempt > 1 ? 'repair' : 'generate');
+              }
+            });
+            store.saveAnalysis(generated, { cacheKey });
+            sendLessonProgress(event.sender, requestId, 'ready');
+            return generated;
+          }
+        );
+        cached = false;
+        recordAiTask(aiTasks.complete(task.taskId, `${analysis.objectives.length} mục tiêu · ${analysis.keyConcepts.length} khái niệm`));
+      } catch (error) {
+        const code = String((error && error.code) || (error && error.message && /\[([A-Z_]+)\]/.exec(error.message)?.[1]) || 'AI_OUTPUT_INVALID');
+        if (code === 'AI_CANCELLED' || isCancelReason(error)) {
+          recordAiTask(aiTasks.cancel(task.taskId));
+        } else {
+          recordAiTask(aiTasks.fail(task.taskId, code, error && error.message ? error.message : 'Phân tích thất bại.'));
         }
-      );
-      cached = false;
+        throw error;
+      }
     }
     const identity = { documentId: document.id, name: document.name, characters: document.characters };
     const now = new Date().toISOString();
@@ -1076,56 +1153,81 @@ function registerIpc() {
       }
     }
 
-    return await aiSingleFlight.run(
-      `generate:${projectId}:${cacheKey}`,
-      `tạo nội dung ${project.config.gameType}`,
-      async () => {
-        sendLessonProgress(event.sender, requestId, 'retrieve');
-        const { sourceExcerpt, context } = await buildLessonGenerationContext(store, project, analysis, mode);
-        const draft = await generateGameDraft({
-          client: createLessonChatClient(),
-          registry: aiRequests,
-          requestId,
-          gameType: project.config.gameType,
-          config: project.config,
-          analysis,
-          sourceExcerpt,
-          maxTokens: mode === 'deep' ? 4096 : 2048,
-          onAttempt: attempt => sendLessonProgress(event.sender, requestId, attempt === 1 ? 'generate' : 'repair')
-        });
-
-        // The adapter is the only place that builds `EducationalGame`; it also runs
-        // the existing per-template validators, so invalid content is caught here.
-        sendLessonProgress(event.sender, requestId, 'validate');
-        let game;
-        try {
-          game = toEducationalGame({ ...project, draft });
-        } catch (error) {
-          throw new Error(`[GENERATION_INVALID] ${error && error.message ? error.message : 'Nội dung AI tạo ra chưa hợp lệ.'}`);
-        }
-        const saved = store.saveProject(applyDraft(project, { draft, game, now: new Date().toISOString() }));
-        // O2: advisory content-quality report (duplicates, weak distractors, broken
-        // chains, coverage). Pure TypeScript, so it costs nothing here.
-        const quality = checkDraftQuality({ draft, config: project.config, analysis });
-        // Best effort: a cache write must never fail the generation the teacher waited for.
-        try {
-          store.putGenerationCache({
-            cacheKey,
-            kind: 'draft',
+    const generateTask = aiTasks.start({
+      taskId: newAiTaskId('generate'),
+      requestId,
+      kind: 'generate',
+      projectId,
+      documentId: project.lesson ? project.lesson.documentId : null,
+      label: `tạo nội dung ${project.config.gameType}`
+    });
+    recordAiTask(generateTask);
+    try {
+      return await aiSingleFlight.run(
+        `generate:${projectId}:${cacheKey}`,
+        `tạo nội dung ${project.config.gameType}`,
+        async () => {
+          recordAiTask(aiTasks.progress(generateTask.taskId, 'retrieve'));
+          sendLessonProgress(event.sender, requestId, 'retrieve');
+          const { sourceExcerpt, context } = await buildLessonGenerationContext(store, project, analysis, mode);
+          const draft = await generateGameDraft({
+            client: createLessonChatClient(),
+            registry: aiRequests,
+            requestId,
             gameType: project.config.gameType,
-            analysisId: project.analysisId,
-            modelId,
-            promptVersion: `draft-v${LESSON_PROMPT_VERSIONS.draft}`,
-            payload: { draft, mode, context }
+            config: project.config,
+            analysis,
+            sourceExcerpt,
+            maxTokens: mode === 'deep' ? 4096 : 2048,
+            onAttempt: attempt => {
+              recordAiTask(aiTasks.progress(generateTask.taskId, attempt === 1 ? 'generate' : 'repair'));
+              sendLessonProgress(event.sender, requestId, attempt === 1 ? 'generate' : 'repair');
+            }
           });
-          store.pruneGenerationCache(50);
-        } catch (error) {
-          console.warn('Không lưu được bộ nhớ đệm nội dung:', error && error.message ? error.message : error);
+
+          // The adapter is the only place that builds `EducationalGame`; it also runs
+          // the existing per-template validators, so invalid content is caught here.
+          recordAiTask(aiTasks.progress(generateTask.taskId, 'validate'));
+          sendLessonProgress(event.sender, requestId, 'validate');
+          let game;
+          try {
+            game = toEducationalGame({ ...project, draft });
+          } catch (error) {
+            throw new Error(`[GENERATION_INVALID] ${error && error.message ? error.message : 'Nội dung AI tạo ra chưa hợp lệ.'}`);
+          }
+          const saved = store.saveProject(applyDraft(project, { draft, game, now: new Date().toISOString() }));
+          // O2: advisory content-quality report (duplicates, weak distractors, broken
+          // chains, coverage). Pure TypeScript, so it costs nothing here.
+          const quality = checkDraftQuality({ draft, config: project.config, analysis });
+          // Best effort: a cache write must never fail the generation the teacher waited for.
+          try {
+            store.putGenerationCache({
+              cacheKey,
+              kind: 'draft',
+              gameType: project.config.gameType,
+              analysisId: project.analysisId,
+              modelId,
+              promptVersion: `draft-v${LESSON_PROMPT_VERSIONS.draft}`,
+              payload: { draft, mode, context }
+            });
+            store.pruneGenerationCache(50);
+          } catch (error) {
+            console.warn('Không lưu được bộ nhớ đệm nội dung:', error && error.message ? error.message : error);
+          }
+          sendLessonProgress(event.sender, requestId, 'ready');
+          recordAiTask(aiTasks.complete(generateTask.taskId, `${project.config.gameType} · ${mode}`));
+          return { project: saved, game, mode, quality, context, cached: false };
         }
-        sendLessonProgress(event.sender, requestId, 'ready');
-        return { project: saved, game, mode, quality, context, cached: false };
+      );
+    } catch (error) {
+      const code = String((error && error.code) || (error && error.message && /\[([A-Z_]+)\]/.exec(error.message)?.[1]) || 'AI_OUTPUT_INVALID');
+      if (code === 'AI_CANCELLED' || isCancelReason(error)) {
+        recordAiTask(aiTasks.cancel(generateTask.taskId));
+      } else {
+        recordAiTask(aiTasks.fail(generateTask.taskId, code, error && error.message ? error.message : 'Tạo nội dung thất bại.'));
       }
-    );
+      throw error;
+    }
   });
   // O2: recompute the advisory report when a draft is reopened (no model call).
   ipcMain.handle('lesson:quality', async (_e, payload) => {
@@ -1175,56 +1277,81 @@ function registerIpc() {
     }
 
     const mode = project.config.generationMode === 'deep' ? 'deep' : 'fast';
-    return await aiSingleFlight.run(
-      `regenerate:${projectId}:${indexes.join(',')}:${project.draft.gameType}`,
-      'tạo lại một mục nội dung',
-      async () => {
-        sendLessonProgress(event.sender, requestId, 'retrieve');
-        const { sourceExcerpt, context } = await buildLessonGenerationContext(store, project, analysis, mode);
-        const total = itemCount(project.draft);
-        let draft = project.draft;
-        for (const position of indexes) {
-          // One model call per item: §5.5 keeps failing items isolated so the passing
-          // ones are never regenerated (and never change). `handle.done()` frees the
-          // requestId between items, so the same id can be reused sequentially.
-          const item = await regenerateGameItem({
-            client: createLessonChatClient(),
-            registry: aiRequests,
-            requestId,
-            gameType: project.config.gameType,
-            config: project.config,
-            analysis,
-            position,
-            total,
-            itemLabel: itemLabel(project.config.gameType, position),
-            currentItem: itemAt(draft, position),
-            issues: issuesByIndex.get(position) || [],
-            sourceExcerpt,
-            maxTokens: mode === 'deep' ? 1536 : 1024,
-            onAttempt: attempt => sendLessonProgress(event.sender, requestId, attempt === 1 ? 'generate' : 'repair')
-          });
-          try {
-            draft = replaceDraftItem(draft, position, item);
-          } catch (error) {
-            throw new Error(`[GENERATION_INVALID] ${itemLabel(project.config.gameType, position)} mới chưa hợp lệ: ${error && error.message ? error.message : 'không đọc được nội dung AI trả về.'}`);
+    const regenTask = aiTasks.start({
+      taskId: newAiTaskId('regen'),
+      requestId,
+      kind: 'regenerate-item',
+      projectId,
+      documentId: project.lesson ? project.lesson.documentId : null,
+      label: `tạo lại ${indexes.length} mục ${project.draft.gameType}`
+    });
+    recordAiTask(regenTask);
+    try {
+      return await aiSingleFlight.run(
+        `regenerate:${projectId}:${indexes.join(',')}:${project.draft.gameType}`,
+        'tạo lại một mục nội dung',
+        async () => {
+          recordAiTask(aiTasks.progress(regenTask.taskId, 'retrieve'));
+          sendLessonProgress(event.sender, requestId, 'retrieve');
+          const { sourceExcerpt, context } = await buildLessonGenerationContext(store, project, analysis, mode);
+          const total = itemCount(project.draft);
+          let draft = project.draft;
+          for (const position of indexes) {
+            // One model call per item: §5.5 keeps failing items isolated so the passing
+            // ones are never regenerated (and never change). `handle.done()` frees the
+            // requestId between items, so the same id can be reused sequentially.
+            const item = await regenerateGameItem({
+              client: createLessonChatClient(),
+              registry: aiRequests,
+              requestId,
+              gameType: project.config.gameType,
+              config: project.config,
+              analysis,
+              position,
+              total,
+              itemLabel: itemLabel(project.config.gameType, position),
+              currentItem: itemAt(draft, position),
+              issues: issuesByIndex.get(position) || [],
+              sourceExcerpt,
+              maxTokens: mode === 'deep' ? 1536 : 1024,
+              onAttempt: attempt => {
+                recordAiTask(aiTasks.progress(regenTask.taskId, attempt === 1 ? 'generate' : 'repair'));
+                sendLessonProgress(event.sender, requestId, attempt === 1 ? 'generate' : 'repair');
+              }
+            });
+            try {
+              draft = replaceDraftItem(draft, position, item);
+            } catch (error) {
+              throw new Error(`[GENERATION_INVALID] ${itemLabel(project.config.gameType, position)} mới chưa hợp lệ: ${error && error.message ? error.message : 'không đọc được nội dung AI trả về.'}`);
+            }
           }
-        }
 
-        // The adapter stays the single conversion boundary and runs the legacy
-        // validators; a failed adapter must not overwrite the project.
-        sendLessonProgress(event.sender, requestId, 'validate');
-        let game;
-        try {
-          game = toEducationalGame({ ...project, draft });
-        } catch (error) {
-          throw new Error(`[GENERATION_INVALID] ${error && error.message ? error.message : 'Nội dung mới chưa hợp lệ.'}`);
+          // The adapter stays the single conversion boundary and runs the legacy
+          // validators; a failed adapter must not overwrite the project.
+          recordAiTask(aiTasks.progress(regenTask.taskId, 'validate'));
+          sendLessonProgress(event.sender, requestId, 'validate');
+          let game;
+          try {
+            game = toEducationalGame({ ...project, draft });
+          } catch (error) {
+            throw new Error(`[GENERATION_INVALID] ${error && error.message ? error.message : 'Nội dung mới chưa hợp lệ.'}`);
+          }
+          const saved = store.saveProject(applyDraft(project, { draft, game, now: new Date().toISOString() }));
+          const quality = checkDraftQuality({ draft, config: project.config, analysis });
+          sendLessonProgress(event.sender, requestId, 'ready');
+          recordAiTask(aiTasks.complete(regenTask.taskId, `${indexes.length} mục ${project.config.gameType}`));
+          return { project: saved, game, quality, context, mode, itemIndexes: indexes, cached: false };
         }
-        const saved = store.saveProject(applyDraft(project, { draft, game, now: new Date().toISOString() }));
-        const quality = checkDraftQuality({ draft, config: project.config, analysis });
-        sendLessonProgress(event.sender, requestId, 'ready');
-        return { project: saved, game, quality, context, mode, itemIndexes: indexes, cached: false };
+      );
+    } catch (error) {
+      const code = String((error && error.code) || (error && error.message && /\[([A-Z_]+)\]/.exec(error.message)?.[1]) || 'AI_OUTPUT_INVALID');
+      if (code === 'AI_CANCELLED' || isCancelReason(error)) {
+        recordAiTask(aiTasks.cancel(regenTask.taskId));
+      } else {
+        recordAiTask(aiTasks.fail(regenTask.taskId, code, error && error.message ? error.message : 'Tạo lại mục thất bại.'));
       }
-    );
+      throw error;
+    }
   });
   ipcMain.handle('files:import-document', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
@@ -1403,7 +1530,26 @@ function registerIpc() {
     await stopLocalAiRuntime();
     return { ok: true, models: await getLocalAiModels() };
   });
-  ipcMain.handle('ai:cancel', async (_e, requestId) => ({ ok: aiRequests.cancel(String(requestId || '')) }));
+  ipcMain.handle('ai:cancel', async (_e, requestId) => {
+    const cancelled = aiRequests.cancel(String(requestId || ''));
+    const tracked = aiTasks.getByRequest(String(requestId || ''));
+    if (tracked) recordAiTask(aiTasks.cancel(tracked.taskId));
+    return { ok: cancelled };
+  });
+  // update_plan_3 §8: live tasks + persisted history (history is never "running").
+  ipcMain.handle('ai:tasks', async (_e, payload) => {
+    const limit = Number(payload?.limit) || 50;
+    const live = aiTasks.list(limit).map(record => ({ ...record, restored: false }));
+    let history = [];
+    try {
+      history = requireLessonStore().listAiTasks(limit).map(row => ({ ...row, restored: true }));
+    } catch (error) {
+      console.warn('Không đọc được lịch sử tác vụ AI:', error && error.message ? error.message : error);
+    }
+    return { live, history };
+  });
+  // update_plan_3 §4/§6: CPU-only runtime verification for the bundled llama.cpp.
+  ipcMain.handle('ai:runtime-verify', async () => verifyCpuRuntime());
   ipcMain.handle('ai:generate', async (_e, payload) => {
     const settings = await readJson(SETTINGS_FILE(), {});
     const ai = settings.ai || {};

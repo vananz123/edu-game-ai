@@ -105,6 +105,26 @@ export const LESSON_STORE_SCHEMA_SQL = `
     created_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_ai_generation_cache_created ON ai_generation_cache(created_at DESC);
+  -- update_plan_3 §8: central AI task history (queued/running/completed/failed/cancelled).
+  -- Only summaries live here; full payloads stay in their own tables. Rows are
+  -- history after a restart and must never be reported as still running.
+  CREATE TABLE IF NOT EXISTS ai_tasks (
+    task_id TEXT PRIMARY KEY,
+    request_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    project_id TEXT,
+    document_id TEXT,
+    label TEXT NOT NULL,
+    state TEXT NOT NULL,
+    progress TEXT NOT NULL DEFAULT 'running',
+    error_code TEXT,
+    error_message TEXT,
+    result_summary TEXT,
+    started_at TEXT NOT NULL,
+    finished_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_ai_tasks_request ON ai_tasks(request_id);
+  CREATE INDEX IF NOT EXISTS idx_ai_tasks_started ON ai_tasks(started_at DESC);
 `;
 
 export type LessonStoreErrorCode =
@@ -203,6 +223,55 @@ export interface PutGenerationCacheInput {
   modelId: string;
   promptVersion: string;
   payload: unknown;
+}
+
+/** update_plan_3 §8: persisted AI task history row (summaries only). */
+export interface StoredAiTask {
+  taskId: string;
+  requestId: string;
+  kind: string;
+  projectId: string | null;
+  documentId: string | null;
+  label: string;
+  state: string;
+  progress: string;
+  errorCode: string | null;
+  errorMessage: string | null;
+  resultSummary: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+}
+
+export interface SaveAiTaskInput {
+  taskId: string;
+  requestId: string;
+  kind: string;
+  projectId?: string | null;
+  documentId?: string | null;
+  label: string;
+  state: string;
+  progress?: string;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  resultSummary?: string | null;
+  startedAt: string;
+  finishedAt?: string | null;
+}
+
+interface AiTaskRow {
+  task_id: string;
+  request_id: string;
+  kind: string;
+  project_id: string | null;
+  document_id: string | null;
+  label: string;
+  state: string;
+  progress: string;
+  error_code: string | null;
+  error_message: string | null;
+  result_summary: string | null;
+  started_at: string;
+  finished_at: string | null;
 }
 
 interface ChunkRow {
@@ -720,6 +789,64 @@ export class LessonStore {
     return result ? Number(result.changes) || 0 : 0;
   }
 
+  // -------------------------------------------------------------------------
+  // update_plan_3 §8: central AI task history (summaries only, additive)
+  // -------------------------------------------------------------------------
+
+  saveAiTask(input: SaveAiTaskInput): StoredAiTask {
+    if (!input || !input.taskId || !input.requestId || !input.kind || !input.label || !input.state || !input.startedAt) {
+      throw new LessonStoreError('STORE_INVALID_ANALYSIS', 'Thiếu thông tin để lưu lịch sử tác vụ AI.');
+    }
+    this.db.prepare(`
+      INSERT INTO ai_tasks (task_id,request_id,kind,project_id,document_id,label,state,progress,error_code,error_message,result_summary,started_at,finished_at)
+      VALUES (@task_id,@request_id,@kind,@project_id,@document_id,@label,@state,@progress,@error_code,@error_message,@result_summary,@started_at,@finished_at)
+      ON CONFLICT(task_id) DO UPDATE SET
+        request_id=excluded.request_id, kind=excluded.kind, project_id=excluded.project_id,
+        document_id=excluded.document_id, label=excluded.label, state=excluded.state,
+        progress=excluded.progress, error_code=excluded.error_code, error_message=excluded.error_message,
+        result_summary=excluded.result_summary, started_at=excluded.started_at, finished_at=excluded.finished_at
+    `).run({
+      task_id: input.taskId,
+      request_id: input.requestId,
+      kind: input.kind,
+      project_id: input.projectId || null,
+      document_id: input.documentId || null,
+      label: input.label,
+      state: input.state,
+      progress: input.progress || 'running',
+      error_code: input.errorCode || null,
+      error_message: input.errorMessage || null,
+      result_summary: input.resultSummary || null,
+      started_at: input.startedAt,
+      finished_at: input.finishedAt || null
+    });
+    const saved = this.getAiTask(input.taskId);
+    if (!saved) throw new LessonStoreError('STORE_INVALID_ANALYSIS', `Không lưu được tác vụ AI ${input.taskId}.`);
+    return saved;
+  }
+
+  getAiTask(taskId: string): StoredAiTask | null {
+    if (!taskId) return null;
+    const row = this.db.prepare('SELECT * FROM ai_tasks WHERE task_id = ?').get(taskId) as AiTaskRow | undefined;
+    return row ? aiTaskFromRow(row) : null;
+  }
+
+  listAiTasks(limit = 50): StoredAiTask[] {
+    const capped = Number.isFinite(limit) && limit >= 1 ? Math.min(200, Math.floor(limit)) : 50;
+    const rows = this.db.prepare('SELECT * FROM ai_tasks ORDER BY started_at DESC LIMIT ?').all(capped) as AiTaskRow[];
+    return rows.map(aiTaskFromRow);
+  }
+
+  pruneAiTasks(keep = 200): number {
+    const limit = Number.isFinite(keep) && Number(keep) >= 1 ? Math.floor(Number(keep)) : 200;
+    const result = this.db.prepare(`
+      DELETE FROM ai_tasks WHERE task_id NOT IN (
+        SELECT task_id FROM ai_tasks ORDER BY started_at DESC LIMIT ?
+      )
+    `).run(limit) as { changes?: number };
+    return result ? Number(result.changes) || 0 : 0;
+  }
+
   saveRecommendations(analysisId: string, recommendations: GameRecommendation[]): GameRecommendation[] {
     if (!analysisId) {
       throw new LessonStoreError('STORE_INVALID_RECOMMENDATION', 'Thiếu mã phân tích cho danh sách đề xuất.');
@@ -839,6 +966,24 @@ function blobToVector(blob: unknown, dimension: number): Float32Array | null {
   if (!buffer || buffer.byteLength !== dim * 4) return null;
   const copy = new Uint8Array(buffer);
   return new Float32Array(copy.buffer, 0, dim);
+}
+
+function aiTaskFromRow(row: AiTaskRow): StoredAiTask {
+  return {
+    taskId: row.task_id,
+    requestId: row.request_id,
+    kind: row.kind,
+    projectId: row.project_id ?? null,
+    documentId: row.document_id ?? null,
+    label: row.label,
+    state: row.state,
+    progress: row.progress,
+    errorCode: row.error_code ?? null,
+    errorMessage: row.error_message ?? null,
+    resultSummary: row.result_summary ?? null,
+    startedAt: row.started_at,
+    finishedAt: row.finished_at ?? null
+  };
 }
 
 function documentFromRow(row: DocumentRow): StoredLessonDocument {
