@@ -1,5 +1,5 @@
 /**
- * Embedding model catalog (O4 of docs/update-AI-local.txt).
+ * Embedding model catalog (O4 of docs/archive/specs/update-AI-local.txt).
  *
  * One small multilingual sentence-embedding model is enough to rank lesson
  * chunks by meaning instead of shared words. It runs in a **separate**

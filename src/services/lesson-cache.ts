@@ -1,7 +1,7 @@
 /**
- * Cache keys for the AI lesson-to-game workflow (O5 of docs/update-AI-local.txt).
+ * Cache keys for the AI lesson-to-game workflow (O5 of docs/archive/specs/update-AI-local.txt).
  *
- * docs/update-AI-local.txt §4 and §9: never analyze the same document twice when
+ * docs/archive/specs/update-AI-local.txt §4 and §9: never analyze the same document twice when
  * the document fingerprint, model and analysis configuration are unchanged, and
  * cache generated content with the same versioning rules. The key is a SHA-256
  * over an explicit, ordered list of inputs; anything that changes what the model

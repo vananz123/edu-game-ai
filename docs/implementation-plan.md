@@ -2,7 +2,7 @@
 
 **Ngày lập:** 2026-10-19
 **Phạm vi:** bổ sung luồng tạo trò chơi từ giáo án bằng AI local, không phá vỡ gameplay, `.egame` hay dữ liệu đang có.
-**Trạng thái:** P0-P6 đã code xong (2026-10-19); P6 **chưa đạt cổng e2e với model thật** (xem §8 P6) nên còn P7. Từ 2026-10-20 có **spec tối ưu mới** (`docs/update-AI-local.txt`) → kế hoạch ở §13, trong đó **O0–O7 đã xong** (O1: chọn thể loại bằng TypeScript, 0 lượt Qwen; O2: kiểm tra chất lượng nội dung thuần TypeScript; O3: chia đoạn + truy xuất từ vựng, prompt generate ngắn hơn; O4: embedding MiniLM thật trong process riêng, cache vector, đo chất lượng/RAM; O5: cache phân tích/nội dung theo khoá có phiên bản + tạo lại từng mục; O6: thinking bị loại bỏ có đo, prompt phân tích 6/8 mục, sinh 8 câu một lượt, batch không ship; O7: tiến trình 5 giai đoạn + huỷ an toàn + hồi quy + installer). Việc còn lại là **cổng e2e model thật trong app**; P7 đã dọn xong đường `ai:document-assist` chết (2026-10-20, xem `docs/STATUS.md` mục P7). Số liệu kiểm chứng nằm trong `docs/STATUS.md` và `docs/BENCHMARKS.md`.
+**Trạng thái:** P0-P6 đã code xong (2026-10-19); P6 **chưa đạt cổng e2e với model thật** (xem §8 P6) nên còn P7. Từ 2026-10-20 có **spec tối ưu mới** (`docs/archive/specs/update-AI-local.txt`) → kế hoạch ở §13, trong đó **O0–O7 đã xong** (O1: chọn thể loại bằng TypeScript, 0 lượt Qwen; O2: kiểm tra chất lượng nội dung thuần TypeScript; O3: chia đoạn + truy xuất từ vựng, prompt generate ngắn hơn; O4: embedding MiniLM thật trong process riêng, cache vector, đo chất lượng/RAM; O5: cache phân tích/nội dung theo khoá có phiên bản + tạo lại từng mục; O6: thinking bị loại bỏ có đo, prompt phân tích 6/8 mục, sinh 8 câu một lượt, batch không ship; O7: tiến trình 5 giai đoạn + huỷ an toàn + hồi quy + installer). Việc còn lại là **cổng e2e model thật trong app**; P7 đã dọn xong đường `ai:document-assist` chết (2026-10-20, xem `docs/STATUS.md` mục P7). Số liệu kiểm chứng nằm trong `docs/STATUS.md` và `docs/BENCHMARKS.md`.
 
 ---
 
@@ -482,7 +482,7 @@ Còn cần chủ dự án xác nhận khi tới phase tương ứng:
 
 ## 13. Tối ưu quy trình AI (spec chủ dự án 2026-10-20)
 
-Nguồn yêu cầu: `docs/update-AI-local.txt`. Mục tiêu: **chỉ gọi Qwen cho việc thật sự cần năng lực ngôn ngữ**, tái sử dụng mọi kết quả, không gọi AI ở bước chọn thể loại/cấu hình, không sinh lại phần đã đạt, và **đo trước/sau** trên máy mục tiêu (16 GB RAM, CPU dòng U, GPU tích hợp). Không viết lại app; giữ `EducationalGame`/`.egame`/gameplay.
+Nguồn yêu cầu: `docs/archive/specs/update-AI-local.txt`. Mục tiêu: **chỉ gọi Qwen cho việc thật sự cần năng lực ngôn ngữ**, tái sử dụng mọi kết quả, không gọi AI ở bước chọn thể loại/cấu hình, không sinh lại phần đã đạt, và **đo trước/sau** trên máy mục tiêu (16 GB RAM, CPU dòng U, GPU tích hợp). Không viết lại app; giữ `EducationalGame`/`.egame`/gameplay.
 
 ### 13.1 Audit hiện trạng (đo trên Qwen3.5-2B Q4_0, CPU 8 luồng)
 

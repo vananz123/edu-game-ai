@@ -117,7 +117,7 @@ Closes the two remaining tasknight visual-authoring items (§4 "Kéo thả để
 
 ## AI lesson-to-game optimization (O0–O7, spec 2026-10-20)
 
-Owner spec: `docs/update-AI-local.txt`. Full audit, target flow, modules, storage and risks: `docs/implementation-plan.md` §13. Rule of the workstream: **only call Qwen for work that truly needs language/pedagogical ability**; reuse everything; never call AI to pick a genre or apply ordinary config; never regenerate parts that already pass.
+Owner spec: `docs/archive/specs/update-AI-local.txt`. Full audit, target flow, modules, storage and risks: `docs/implementation-plan.md` §13. Rule of the workstream: **only call Qwen for work that truly needs language/pedagogical ability**; reuse everything; never call AI to pick a genre or apply ordinary config; never regenerate parts that already pass.
 
 - [x] **O0** Audit + phased plan approved by owner (plan §13) — **no code before approval**. Approved and committed 2026-10-20 (`c99cf2a`).
 - [x] **O1** Genre recommendation in TypeScript (`game-type-rules` + `game-recommender`); `lesson:recommend` keeps its shape but makes **0 Qwen calls**. Verified 2026-10-20: 18 test suites, `smoke64` 39/39, `smoke65 output` 18/18 (rewritten to test the AI error at generate), `smoke56/62/63/66/67` green, no model running.

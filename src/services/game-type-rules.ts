@@ -3,7 +3,7 @@ import type { CognitiveLevel, WorkflowGameType } from '../shared/lesson-types';
 /**
  * The kind of lesson content a game format turns into gameplay well.
  * Used by the rule-based recommender so that choosing a genre never costs a
- * model call (see docs/update-AI-local.txt, section 3 and DECISIONS #20).
+ * model call (see docs/archive/specs/update-AI-local.txt, section 3 and DECISIONS #20).
  */
 export type ContentShape = 'facts' | 'decisions' | 'pairs' | 'sequence' | 'competition';
 

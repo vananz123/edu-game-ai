@@ -13,6 +13,6 @@ project, and the teacher's analysis edit surviving the walk back.
 
 There is deliberately **no** `game_recommendations.json` here: since O1 the
 genre-suggestion step is rule-based and consumes no model response at all
-(docs/update-AI-local.txt section 3, DECISIONS #20). A stale corrupt
+(docs/archive/specs/update-AI-local.txt section 3, DECISIONS #20). A stale corrupt
 `game_recommendations.json` used to live here; it was removed with the same
 change.

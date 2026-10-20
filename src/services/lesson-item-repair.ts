@@ -1,5 +1,5 @@
 /**
- * Single-item regeneration helpers (O5, docs/update-AI-local.txt §5.5).
+ * Single-item regeneration helpers (O5, docs/archive/specs/update-AI-local.txt §5.5).
  *
  * The rule the spec asks for is narrow: detect the bad item with TypeScript, ask
  * the model only for that item with minimal context, and keep every other item

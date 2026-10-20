@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Retrieval quality + latency benchmark (O4 of docs/update-AI-local.txt).
+ * Retrieval quality + latency benchmark (O4 of docs/archive/specs/update-AI-local.txt).
  *
  * Compares the lexical scorer (`lexical-v1`, no model) with the embedding
  * scorer (`embeddings-v1`, MiniLM via llama-server --embedding) on the same

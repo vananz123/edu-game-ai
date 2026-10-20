@@ -1,5 +1,5 @@
 /**
- * Deterministic lesson chunker (O3 of docs/update-AI-local.txt).
+ * Deterministic lesson chunker (O3 of docs/archive/specs/update-AI-local.txt).
  *
  * Generation used to send `document.text.slice(0, 6000)` — the first 6000
  * characters regardless of whether they were relevant to the configured game.

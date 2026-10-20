@@ -98,7 +98,7 @@ function wizardContextHint(context) {
 }
 
 /**
- * O5: per-item regeneration (docs/update-AI-local.txt §5.5). The list is built
+ * O5: per-item regeneration (docs/archive/specs/update-AI-local.txt §5.5). The list is built
  * from the typed draft (not the snapshot) so the position matches the quality
  * report and the `lesson:regenerate-item` payload. One request rewrites one item;
  * every other item (and its id/links) stays untouched.
@@ -150,7 +150,7 @@ function wizardDraftItemsPanel(s) {
 }
 
 /**
- * O7: five progress states from `docs/update-AI-local.txt` §10. Each state is
+ * O7: five progress states from `docs/archive/specs/update-AI-local.txt` §10. Each state is
  * driven by a real IPC boundary from the main process (retrieve → generate →
  * validate → repair-if-needed → ready), not by a timer. "Sửa phần chưa đạt" is
  * marked "không cần" when no repair happened, so the list never claims work that

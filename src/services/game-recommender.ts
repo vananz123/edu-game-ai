@@ -7,7 +7,7 @@ import { GAME_TYPE_ORDER, GAME_TYPE_RULES, getGameTypeRule, type ContentShape } 
  * The wizard used to spend one Qwen call only to choose between five genres it
  * already knows how to build. That step is deterministic, so it now runs in
  * TypeScript: zero model calls, instant, stable and explainable
- * (docs/update-AI-local.txt section 3, DECISIONS #20). The output shape is
+ * (docs/archive/specs/update-AI-local.txt section 3, DECISIONS #20). The output shape is
  * unchanged, so the renderer, storage and project step machine keep working.
  *
  * The teacher can still pick any other genre; these are suggestions only.

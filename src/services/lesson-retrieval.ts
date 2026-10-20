@@ -1,5 +1,5 @@
 /**
- * Lesson chunk retrieval (O3 of docs/update-AI-local.txt).
+ * Lesson chunk retrieval (O3 of docs/archive/specs/update-AI-local.txt).
  *
  * Generation needs a *short, relevant* slice of the lesson, not its first 6000
  * characters. This module picks that slice. O3 ships the lexical scorer only —
@@ -44,7 +44,7 @@ export interface ChunkSelection {
 export const DEFAULT_MAX_SELECTED_CHUNKS = 6;
 export const DEFAULT_MAX_SELECTED_CHARS = 4500;
 /**
- * O6: "Deep" is the quality mode (docs/update-AI-local.txt §5.3). Thinking is
+ * O6: "Deep" is the quality mode (docs/archive/specs/update-AI-local.txt §5.3). Thinking is
  * not usable on the shipped 2B model (see docs/BENCHMARKS.md), so Deep widens
  * what the model can see instead: more of the same lesson, still bounded.
  */

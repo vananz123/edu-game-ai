@@ -9,7 +9,7 @@ import type {
 } from '../shared/lesson-types';
 
 /**
- * Deterministic content-quality checks (O2 of docs/update-AI-local.txt).
+ * Deterministic content-quality checks (O2 of docs/archive/specs/update-AI-local.txt).
  *
  * Structural validity is already guaranteed before this runs: the draft passes
  * per-type zod, the single adapter builds `EducationalGame`, and the four legacy

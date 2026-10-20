@@ -203,7 +203,7 @@ Hãy trả lại DUY NHẤT một đối tượng JSON hợp lệ, đúng cấu 
 }
 
 // ---------------------------------------------------------------------------
-// O5: regenerate one item (docs/update-AI-local.txt §5.5)
+// O5: regenerate one item (docs/archive/specs/update-AI-local.txt §5.5)
 // ---------------------------------------------------------------------------
 
 export interface ItemRegenerationPromptInput {

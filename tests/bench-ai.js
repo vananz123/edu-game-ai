@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * O6 benchmark for the lesson-to-game workflow (docs/update-AI-local.txt §5.3,
+ * O6 benchmark for the lesson-to-game workflow (docs/archive/specs/update-AI-local.txt §5.3,
  * §5.4, §12).
  *
  * It talks to a llama-server that is already listening (same arguments the app

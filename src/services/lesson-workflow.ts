@@ -346,7 +346,7 @@ export interface RegenerateItemOptions {
 }
 
 /**
- * O5: rewrites exactly one draft item (docs/update-AI-local.txt §5.5). The caller
+ * O5: rewrites exactly one draft item (docs/archive/specs/update-AI-local.txt §5.5). The caller
  * merges the result with `replaceDraftItem`, which keeps ids/links and re-validates
  * the whole draft. No cache: "Tạo lại" must always produce new content.
  */

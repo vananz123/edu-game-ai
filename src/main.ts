@@ -725,7 +725,7 @@ async function buildLessonGenerationContext(store, project, analysis, mode = 'fa
 }
 
 /**
- * O7: coarse progress for the create step (docs/update-AI-local.txt §10). Each
+ * O7: coarse progress for the create step (docs/archive/specs/update-AI-local.txt §10). Each
  * call marks a real boundary in the run — there are no timers and no invented
  * stages. Delivery is best-effort: progress must never fail a generation.
  */
@@ -783,7 +783,7 @@ function registerIpc() {
     const document = await store.getDocumentWithText(documentId);
     if (!document) throw new Error('Không tìm thấy giáo án đã lưu. Hãy nhập lại tài liệu.');
     const mode = payload?.mode === 'deep' ? 'deep' : 'fast';
-    // O5 (docs/update-AI-local.txt §4): never analyze the same text twice when the
+    // O5 (docs/archive/specs/update-AI-local.txt §4): never analyze the same text twice when the
     // document hash, model, mode and prompt version are unchanged. `force` is the
     // teacher's explicit "Phân tích lại" action, and also what a changed lesson
     // produces automatically (different hash → different key).
@@ -969,7 +969,7 @@ function registerIpc() {
     const analysis = project.analysisId ? store.getAnalysis(project.analysisId) : null;
     return checkDraftQuality({ draft: project.draft, config: project.config, analysis });
   });
-  // O5: rewrite exactly one item (docs/update-AI-local.txt §5.5). Everything else
+  // O5: rewrite exactly one item (docs/archive/specs/update-AI-local.txt §5.5). Everything else
   // in the draft is preserved; ids and links stay app-owned (lesson-item-repair).
   ipcMain.handle('lesson:regenerate-item', async (event, payload) => {
     const projectId = String(payload?.projectId || '');
