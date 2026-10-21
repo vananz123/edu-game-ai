@@ -632,7 +632,11 @@ function checkRace(draft: Extract<GameDraft, { gameType: 'race' }>, config: Game
   });
 }
 
-function requestedCount(config: GameConfig | null): { requested: number | null; unit: string } {
+/**
+ * How many items the teacher asked for, with the Vietnamese unit used in both the
+ * quality warning and the generation shortfall retry (O9).
+ */
+export function requestedItemCount(config: GameConfig | null): { requested: number | null; unit: string } {
   if (!config) return { requested: null, unit: 'mục' };
   switch (config.gameType) {
     case 'arena':
@@ -734,7 +738,7 @@ export function checkDraftQuality(options: QualityCheckOptions): QualityReport {
   checkDuplicatePrompts(items, push);
   const uncoveredObjectiveIds = checkObjectiveCoverage(analysis, config, items, push);
 
-  const { requested, unit } = requestedCount(config);
+  const { requested, unit } = requestedItemCount(config);
   const found = foundCount(draft);
   if (requested && found > 0 && found < requested) {
     push({

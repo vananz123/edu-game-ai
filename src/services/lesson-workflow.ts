@@ -21,6 +21,7 @@ import {
 import {
   buildDraftPrompt,
   buildDraftRepairMessages,
+  buildDraftShortfallMessages,
   buildItemRegenerationPrompt,
   buildItemRegenerationRepairMessages,
   buildLessonAnalysisPrompt,
@@ -44,6 +45,8 @@ import {
   recommendationsJsonSchema,
   regenerateItemJsonSchemas
 } from './lesson-contracts';
+import { itemCount } from './lesson-item-repair';
+import { requestedItemCount } from './lesson-quality';
 import type {
   GameConfig,
   GameDraft,
@@ -93,6 +96,16 @@ export interface StructuredStepOptions<T> {
     errorMessage: string;
     messages: ChatMessage[];
   }) => ChatMessage[];
+  /**
+   * O9: a structurally valid answer can still be unusable — e.g. the model
+   * returned fewer items than the teacher configured. Returns a short reason, or
+   * null when the answer is complete.
+   */
+  incompleteReason?: (value: T) => string | null;
+  /** Higher wins when every attempt is incomplete; keeps the fullest answer. */
+  completenessScore?: (value: T) => number;
+  /** Follow-up turn for an incomplete answer (the model sees its own reply). */
+  incompleteMessages?: (info: { validated: T; reason: string; attempt: number; messages: ChatMessage[] }) => ChatMessage[];
   /** Total attempts including the first; defaults to 2 (one repair). */
   maxAttempts?: number;
   /**
@@ -116,6 +129,8 @@ export async function runStructuredStep<T>(options: StructuredStepOptions<T>): P
 
   try {
     let messages = options.messages;
+    // O9: fullest structurally valid answer, kept in case no attempt is complete.
+    let best: { value: T; score: number } | null = null;
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       if (handle.signal.aborted) {
         throw new LessonWorkflowError('AI_CANCELLED', 'Yêu cầu AI đã bị huỷ.');
@@ -155,8 +170,9 @@ export async function runStructuredStep<T>(options: StructuredStepOptions<T>): P
         throw toWorkflowError(transportError);
       }
 
+      let validated: T;
       try {
-        return options.validate(value);
+        validated = options.validate(value);
       } catch (validationError) {
         if (attempt < maxAttempts && options.repairMessages) {
           messages = options.repairMessages({
@@ -168,6 +184,18 @@ export async function runStructuredStep<T>(options: StructuredStepOptions<T>): P
         }
         throw new LessonWorkflowError('AI_OUTPUT_INVALID', messageOf(validationError));
       }
+
+      // O9: valid but short (fewer items than configured). Ask once more with the
+      // previous answer attached; never fake a full result if the retry is short too.
+      const incomplete = options.incompleteReason ? options.incompleteReason(validated) : null;
+      if (!incomplete) return validated;
+      const score = options.completenessScore ? options.completenessScore(validated) : 0;
+      if (!best || score > best.score) best = { value: validated, score };
+      if (attempt < maxAttempts && options.incompleteMessages) {
+        messages = options.incompleteMessages({ validated, reason: incomplete, attempt, messages });
+        continue;
+      }
+      return best ? best.value : validated;
     }
     // Unreachable: the loop either returns or throws.
     throw new LessonWorkflowError('AI_OUTPUT_INVALID', 'AI chưa trả về kết quả hợp lệ.');
@@ -297,6 +325,9 @@ export interface GenerateDraftOptions {
 
 export async function generateGameDraft(options: GenerateDraftOptions): Promise<GameDraft> {
   const schema = gameDraftJsonSchemas[options.gameType];
+  // O9: the model sometimes stops at 1 of 4 items. Count what the teacher asked
+  // for so a short (but structurally valid) draft triggers one explicit retry.
+  const requested = requestedItemCount(options.config);
   const baseMessages: ChatMessage[] = [
     { role: 'system', content: LESSON_GENERATION_SYSTEM_PROMPT },
     {
@@ -323,6 +354,23 @@ export async function generateGameDraft(options: GenerateDraftOptions): Promise<
       rawContent: info.rawContent,
       errorMessage: info.errorMessage
     }),
+    ...(requested.requested ? {
+      incompleteReason: (draft: GameDraft) => {
+        const found = itemCount(draft);
+        return found < requested.requested!
+          ? `Mới có ${found}/${requested.requested} ${requested.unit}`
+          : null;
+      },
+      completenessScore: (draft: GameDraft) => itemCount(draft),
+      incompleteMessages: info => buildDraftShortfallMessages({
+        gameType: options.gameType,
+        messages: info.messages,
+        previous: info.validated,
+        found: itemCount(info.validated),
+        requested: requested.requested!,
+        unit: requested.unit
+      })
+    } : {}),
     ...(options.onAttempt ? { onAttempt: options.onAttempt } : {})
   });
 }

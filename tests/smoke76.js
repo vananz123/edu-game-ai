@@ -163,6 +163,12 @@ async function findTarget() {
   check('T4 chip is hidden again after the run', during.after.chipHidden, JSON.stringify(during.after));
   check('T4 no wizard error after the run', !during.after.error, during.after.error);
 
+  const shortfallBanner = await must(`(async () => {
+    const banner = document.querySelector('[data-wizard-shortfall]');
+    return { banner: Boolean(banner), text: banner ? banner.textContent.trim() : '' };
+  })()`);
+  check('T4 a complete draft shows no shortfall banner', !shortfallBanner.banner, JSON.stringify(shortfallBanner));
+
   check('T5 no uncaught renderer exceptions', uncaught.length === 0, uncaught.slice(0, 2).join(' | '));
   check('T6 no console errors', consoleErrs.length === 0, consoleErrs.slice(0, 2).join(' | '));
 

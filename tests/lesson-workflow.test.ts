@@ -326,6 +326,54 @@ async function main(): Promise<void> {
   });
   assert.deepEqual(attempts, [1, 2], 'onAttempt reports the initial call and the repair');
 
+  // --- O9: a valid but short draft is retried once, then kept honest ------
+  const shortConfig = { ...arenaConfig, questionCount: 2 };
+  const shortQuestion = (id: string, prompt: string) => ({
+    id, type: 'true-false' as const, prompt,
+    options: [{ id: 'a', text: 'Đúng' }, { id: 'b', text: 'Sai' }],
+    correctOptionId: 'a', explanation: 'Đúng theo bài.', difficulty: 'dễ', points: 100
+  });
+  const shortDraft = { gameType: 'arena', questions: [shortQuestion('q1', 'Nước sôi ở 100°C?')] };
+  const fullDraft = {
+    gameType: 'arena',
+    questions: [
+      shortQuestion('q1', 'Nước sôi ở 100°C?'),
+      shortQuestion('q2', 'Nước đóng băng ở 0°C?')
+    ]
+  };
+  const shortfallClient = new MockClient([{ value: shortDraft }, { value: fullDraft }]);
+  const shortfallAttempts: number[] = [];
+  const completedDraft = await generateGameDraft({
+    client: shortfallClient, registry, requestId: 'req-shortfall', gameType: 'arena',
+    config: shortConfig, analysis: validAnalysis,
+    onAttempt: attempt => shortfallAttempts.push(attempt)
+  });
+  assert.equal(shortfallClient.calls.length, 2, 'a short but valid draft triggers exactly one retry');
+  if (completedDraft.gameType !== 'arena') throw new Error('expected arena draft');
+  assert.equal(completedDraft.questions.length, 2, 'the retried answer is used');
+  const followUp = shortfallClient.calls[1].messages;
+  assert.equal(followUp[followUp.length - 2].role, 'assistant', 'the model sees its own short answer');
+  assert.match(String(followUp[followUp.length - 1].content), /1\/2 câu hỏi/, 'the follow-up names the shortfall');
+  assert.deepEqual(shortfallAttempts, [1, 2]);
+
+  // Both attempts short: return the fullest answer and never invent items.
+  const stillShortClient = new MockClient([{ value: shortDraft }, { value: shortDraft }]);
+  const stillShort = await generateGameDraft({
+    client: stillShortClient, registry, requestId: 'req-shortfall-2', gameType: 'arena',
+    config: shortConfig, analysis: validAnalysis
+  });
+  assert.equal(stillShortClient.calls.length, 2, 'one retry, then stop');
+  if (stillShort.gameType !== 'arena') throw new Error('expected arena draft');
+  assert.equal(stillShort.questions.length, 1, 'a draft that stays short is returned as-is');
+
+  // A complete draft is never retried.
+  const completeClient = new MockClient([{ value: fullDraft }]);
+  await generateGameDraft({
+    client: completeClient, registry, requestId: 'req-complete', gameType: 'arena',
+    config: shortConfig, analysis: validAnalysis
+  });
+  assert.equal(completeClient.calls.length, 1, 'complete drafts cost one model call');
+
   // --- O5: single-item regeneration ---------------------------------------
   const currentQuestion = {
     id: 'q1', type: 'multiple-choice', prompt: 'Câu cũ?',

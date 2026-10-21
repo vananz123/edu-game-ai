@@ -87,6 +87,23 @@ function wizardQualityPanel(report) {
 }
 
 /**
+ * O9: a valid draft can still be short — the local model sometimes stops before
+ * the configured item count. Surface the exact numbers and a one-click retry
+ * above the advisory list. Saving stays allowed (DECISIONS #21); a teacher who
+ * prefers to add the missing items by hand can still open the editor.
+ */
+function wizardShortfallNotice(report, busy) {
+  const counts = report && report.counts;
+  if (!counts || !counts.requested || !counts.found || counts.found >= counts.requested) return '';
+  const missing = counts.requested - counts.found;
+  return `<div class="field mt-[10px] rounded-[10px] border border-[#e0b13a] bg-[#fff8e1] p-[12px]" data-wizard-shortfall="${counts.found}/${counts.requested}" role="alert">
+    <strong class="text-[13px] text-[#7a5a00]">AI mới tạo ${counts.found}/${counts.requested} ${escapeHtml(counts.unit)} — còn thiếu ${missing}.</strong>
+    <div class="field-hint mt-[4px]">Bản nháp vẫn dùng được nhưng ngắn hơn cấu hình. Tạo lại để AI soạn đủ, hoặc mở trình chỉnh sửa để tự thêm.</div>
+    <button class="btn btn-secondary btn-small mt-[8px]" data-wizard-action="regenerate"${busy ? ' disabled' : ''}>🔄 Tạo lại cho đủ ${counts.requested} ${escapeHtml(counts.unit)}</button>
+  </div>`;
+}
+
+/**
  * O3: transparency about what the model actually read. Not a warning — just so a
  * teacher is not surprised that a long lesson produced questions from one section.
  */
@@ -215,6 +232,7 @@ function renderWizardGenerate() {
     ${hasContent
       ? `<div class="panel-sub">AI local đã soạn bản nháp từ giáo án và đã được kiểm tra cấu trúc. Hãy mở trình chỉnh sửa để duyệt, sửa lại rồi lưu vào thư viện để chơi thử.</div>
         ${wizardSummaryGrid(wizardGeneratedSummaryRows(s.gameSnapshot))}
+        ${wizardShortfallNotice(s.quality, Boolean(s.busy))}
         ${wizardQualityPanel(s.quality)}
         ${wizardDraftItemsPanel(s)}
         ${wizardContextHint(s.context)}

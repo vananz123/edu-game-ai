@@ -203,6 +203,32 @@ Hãy trả lại DUY NHẤT một đối tượng JSON hợp lệ, đúng cấu 
 }
 
 // ---------------------------------------------------------------------------
+// O9: the model returned a valid but short draft (fewer items than requested)
+// ---------------------------------------------------------------------------
+
+/**
+ * Asks the model to return the complete list after under-delivery. Unlike a
+ * structural repair, the previous answer is kept as the assistant turn so the
+ * model extends it instead of starting over from nothing.
+ */
+export function buildDraftShortfallMessages(input: {
+  gameType: WorkflowGameType;
+  messages: ChatMessage[];
+  previous: unknown;
+  found: number;
+  requested: number;
+  unit: string;
+}): ChatMessage[] {
+  const repair = `JSON trước đó đúng cấu trúc nhưng CHƯA ĐỦ số mục: mới có ${input.found}/${input.requested} ${input.unit} cho trò chơi "${input.gameType}".
+Hãy trả lại DUY NHẤT một đối tượng JSON hợp lệ với ĐÚNG ${input.requested} ${input.unit}. Giữ những mục đã có và bổ sung cho đủ; không thêm chữ nào ngoài JSON.`;
+  return [
+    ...input.messages,
+    { role: 'assistant' as const, content: JSON.stringify(input.previous) },
+    { role: 'user' as const, content: repair }
+  ];
+}
+
+// ---------------------------------------------------------------------------
 // O5: regenerate one item (docs/archive/specs/update-AI-local.txt §5.5)
 // ---------------------------------------------------------------------------
 
