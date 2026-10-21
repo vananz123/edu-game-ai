@@ -16,6 +16,7 @@ const JSZip = require('jszip');
 const Database = require('better-sqlite3');
 const { z } = require('zod');
 const { AIManager } = require('./ai-core/ai-manager');
+const { resolveCpuThreads } = require('./ai-core/runtime-threads');
 const { ModelInstaller, summarizeModelSelection, verifyModelFile } = require('./ai-core/model-installer');
 const { buildGenerationOptions } = require('./ai-core/generation-options');
 const { LlamaRuntimeInstaller } = require('./ai-core/runtime-installer');
@@ -891,7 +892,7 @@ async function startLocalRuntimeUnlocked(modelId) {
     modelPath,
     modelId: model.id,
     contextSize: 8192,
-    cpuThreads: Math.max(1, Math.min(totalThreads, model.hardware.recommendedCpuThreads)),
+    cpuThreads: resolveCpuThreads(totalThreads, model.hardware.recommendedCpuThreads),
     gpuLayers: 0,
     startupTimeoutMs: 300_000
   });
@@ -978,7 +979,7 @@ async function startEmbeddingRuntimeUnlocked() {
     dimension: model.dimension,
     pooling: model.pooling,
     contextLength: model.contextLength,
-    cpuThreads: Math.max(1, Math.min(totalThreads, model.hardware.recommendedCpuThreads))
+    cpuThreads: resolveCpuThreads(totalThreads, model.hardware.recommendedCpuThreads)
   });
   try {
     await runtime.start();

@@ -9,6 +9,7 @@ import type {
   ModelSelectionSummary
 } from './contracts';
 import { fetchTrustedDownload } from './trusted-download';
+import { resolveCpuThreads } from './runtime-threads';
 
 export interface ModelInstallerOptions {
   modelDirectory: string;
@@ -225,7 +226,7 @@ export function summarizeModelSelection(
       logicalCpuCount: machine.logicalCpuCount,
       recommendedThreads: profile.recommendedCpuThreads
     },
-    cpuThreads: Math.min(machine.logicalCpuCount, profile.recommendedCpuThreads),
+    cpuThreads: resolveCpuThreads(machine.logicalCpuCount, profile.recommendedCpuThreads),
     gpu: {
       status: gpu,
       ...(machine.gpu ? { machineName: machine.gpu.name } : {}),
