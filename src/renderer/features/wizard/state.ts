@@ -329,12 +329,18 @@ function wizardDefaultConfig(recommendation, analysis) {
 function wizardBuildProject(step) {
   const s = wizardState;
   const config = s.config || null;
+  // The store requires `config.gameType === draft.gameType` and rejects the whole
+  // project otherwise. Changing genre clears the draft (see
+  // `wizardDiscardGeneratedContent`); this is the last-resort guard so a stale
+  // pair can never block a save.
+  const staleContent = Boolean(config && s.draft && config.gameType !== s.draft.gameType);
+  const effectiveStep = staleContent && step === 'done' ? 'generate' : step;
   const title = (config && config.title) || (s.analysis && s.analysis.topic) || s.documentName || 'Dự án mới';
   return {
     id: s.projectId,
     schemaVersion: 1,
-    status: step === 'done' ? 'ready' : s.analysis ? 'review' : 'draft',
-    step: step || s.step,
+    status: effectiveStep === 'done' ? 'ready' : s.analysis ? 'review' : 'draft',
+    step: effectiveStep || s.step,
     title,
     description: (s.analysis && s.analysis.topic) || '',
     tags: ['AI local'],
@@ -345,9 +351,9 @@ function wizardBuildProject(step) {
     analysisId: s.analysisId || null,
     recommendationId: s.selectedRecommendationId || null,
     config,
-    draft: s.draft || null,
-    gameSnapshot: s.gameSnapshot || null,
-    gameId: s.gameId || null,
+    draft: staleContent ? null : s.draft || null,
+    gameSnapshot: staleContent ? null : s.gameSnapshot || null,
+    gameId: staleContent ? null : s.gameId || null,
     createdAt: s.createdAt || wizardNow(),
     updatedAt: wizardNow()
   };
@@ -370,6 +376,46 @@ async function wizardSaveProject(step) {
   wizardState.projects = await window.eduGame.listProjects();
   wizardState.projectsLoaded = true;
   return saved;
+}
+
+/**
+ * True when the generated game is already a row in the library, so the copy in
+ * the project can be dropped without losing the teacher's work. Generation sets
+ * `gameId` before anything is saved, so the library is the only reliable check.
+ */
+function wizardGameSavedToLibrary() {
+  return Boolean(wizardState.gameId)
+    && Array.isArray(state.db.games)
+    && state.db.games.some(game => game.id === wizardState.gameId);
+}
+
+/**
+ * Drops the generated content (draft, snapshot, quality report, retrieval
+ * summary). Used when the teacher switches genre: content belongs to one genre
+ * and the store refuses a project whose config and draft disagree.
+ */
+function wizardDiscardGeneratedContent() {
+  wizardState.draft = null;
+  wizardState.gameSnapshot = null;
+  wizardState.gameId = null;
+  wizardState.quality = null;
+  wizardState.context = null;
+  wizardState.lessonStage = '';
+  wizardState.lessonRepaired = false;
+}
+
+/**
+ * Genre changes invalidate the draft. Saved-to-library content is redundant (the
+ * game stays playable in the library) and is dropped silently; an unsaved draft
+ * costs minutes of generation, so ask first.
+ */
+function wizardConfirmGenreChange() {
+  if (!wizardState.draft) return true;
+  if (wizardGameSavedToLibrary()) return true;
+  const label = wizardGameMeta(wizardState.draft.gameType).label;
+  return window.confirm(
+    `Nội dung “${label}” chưa được lưu vào Thư viện trò chơi. Đổi thể loại sẽ bỏ nội dung này. Tiếp tục?`
+  );
 }
 
 /**
@@ -450,9 +496,7 @@ async function wizardSaveCurrentProject() {
   render();
   try {
     // Do not rewind a project whose game was already saved to the library.
-    const savedInLibrary = Boolean(wizardState.gameId)
-      && Array.isArray(state.db.games)
-      && state.db.games.some(game => game.id === wizardState.gameId);
+    const savedInLibrary = wizardGameSavedToLibrary();
     const step = savedInLibrary ? 'done' : wizardState.step === 'edit' ? 'generate' : wizardState.step;
     await wizardSaveProject(step);
     wizardSetNotice(`Đã lưu tiến trình dự án lúc ${new Date().toLocaleTimeString('vi-VN')}.`);

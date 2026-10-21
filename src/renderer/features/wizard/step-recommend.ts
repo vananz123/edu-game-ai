@@ -103,11 +103,14 @@ function wizardRecommendSelect(recommendationId) {
   const recommendation = wizardState.recommendations.find(item => item.id === recommendationId);
   if (!recommendation) return;
   const changed = wizardState.selectedGameType !== recommendation.gameType;
+  const staleDraft = Boolean(wizardState.draft) && wizardState.draft.gameType !== recommendation.gameType;
+  if (staleDraft && !wizardConfirmGenreChange()) return;
   wizardState.selectedRecommendationId = recommendation.id;
   wizardState.selectedGameType = recommendation.gameType;
   if (changed || !wizardState.config) {
     wizardState.config = wizardDefaultConfig(recommendation, wizardState.analysis);
   }
+  if (staleDraft || (changed && !wizardState.draft)) wizardDiscardGeneratedContent();
   wizardClearMessages();
   render();
 }
@@ -120,11 +123,14 @@ function wizardRecommendSelect(recommendationId) {
 function wizardRecommendSelectType(gameType) {
   if (!gameType) return;
   const changed = wizardState.selectedGameType !== gameType;
+  const staleDraft = Boolean(wizardState.draft) && wizardState.draft.gameType !== gameType;
+  if (staleDraft && !wizardConfirmGenreChange()) return;
   wizardState.selectedRecommendationId = null;
   wizardState.selectedGameType = gameType;
   if (changed || !wizardState.config) {
     wizardState.config = wizardDefaultConfig({ gameType }, wizardState.analysis);
   }
+  if (staleDraft || (changed && !wizardState.draft)) wizardDiscardGeneratedContent();
   wizardClearMessages();
   render();
 }
