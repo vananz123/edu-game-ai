@@ -343,10 +343,13 @@ async function main(): Promise<void> {
   };
   const shortfallClient = new MockClient([{ value: shortDraft }, { value: fullDraft }]);
   const shortfallAttempts: number[] = [];
+  // O10: the diagnostics hook sees the reason and whether a retry follows.
+  const shortfallEvents: { reason: string; attempt: number; retrying: boolean }[] = [];
   const completedDraft = await generateGameDraft({
     client: shortfallClient, registry, requestId: 'req-shortfall', gameType: 'arena',
     config: shortConfig, analysis: validAnalysis,
-    onAttempt: attempt => shortfallAttempts.push(attempt)
+    onAttempt: attempt => shortfallAttempts.push(attempt),
+    onIncomplete: info => shortfallEvents.push(info)
   });
   assert.equal(shortfallClient.calls.length, 2, 'a short but valid draft triggers exactly one retry');
   if (completedDraft.gameType !== 'arena') throw new Error('expected arena draft');
@@ -355,16 +358,20 @@ async function main(): Promise<void> {
   assert.equal(followUp[followUp.length - 2].role, 'assistant', 'the model sees its own short answer');
   assert.match(String(followUp[followUp.length - 1].content), /1\/2 câu hỏi/, 'the follow-up names the shortfall');
   assert.deepEqual(shortfallAttempts, [1, 2]);
+  assert.deepEqual(shortfallEvents, [{ reason: 'Mới có 1/2 câu hỏi', attempt: 1, retrying: true }]);
 
   // Both attempts short: return the fullest answer and never invent items.
   const stillShortClient = new MockClient([{ value: shortDraft }, { value: shortDraft }]);
+  const stillShortEvents: { reason: string; attempt: number; retrying: boolean }[] = [];
   const stillShort = await generateGameDraft({
     client: stillShortClient, registry, requestId: 'req-shortfall-2', gameType: 'arena',
-    config: shortConfig, analysis: validAnalysis
+    config: shortConfig, analysis: validAnalysis,
+    onIncomplete: info => stillShortEvents.push(info)
   });
   assert.equal(stillShortClient.calls.length, 2, 'one retry, then stop');
   if (stillShort.gameType !== 'arena') throw new Error('expected arena draft');
   assert.equal(stillShort.questions.length, 1, 'a draft that stays short is returned as-is');
+  assert.deepEqual(stillShortEvents.map(event => event.retrying), [true, false], 'the second short answer reports no further retry');
 
   // A complete draft is never retried.
   const completeClient = new MockClient([{ value: fullDraft }]);

@@ -106,6 +106,11 @@ export interface StructuredStepOptions<T> {
   completenessScore?: (value: T) => number;
   /** Follow-up turn for an incomplete answer (the model sees its own reply). */
   incompleteMessages?: (info: { validated: T; reason: string; attempt: number; messages: ChatMessage[] }) => ChatMessage[];
+  /**
+   * O10: called when a structurally valid answer is short. Diagnostics use it to
+   * record what the model returned without ever storing the content itself.
+   */
+  onIncomplete?: (info: { reason: string; attempt: number; retrying: boolean }) => void;
   /** Total attempts including the first; defaults to 2 (one repair). */
   maxAttempts?: number;
   /**
@@ -191,8 +196,10 @@ export async function runStructuredStep<T>(options: StructuredStepOptions<T>): P
       if (!incomplete) return validated;
       const score = options.completenessScore ? options.completenessScore(validated) : 0;
       if (!best || score > best.score) best = { value: validated, score };
-      if (attempt < maxAttempts && options.incompleteMessages) {
-        messages = options.incompleteMessages({ validated, reason: incomplete, attempt, messages });
+      const retrying = attempt < maxAttempts && Boolean(options.incompleteMessages);
+      if (options.onIncomplete) options.onIncomplete({ reason: incomplete, attempt, retrying });
+      if (retrying) {
+        messages = options.incompleteMessages!({ validated, reason: incomplete, attempt, messages });
         continue;
       }
       return best ? best.value : validated;
@@ -321,6 +328,8 @@ export interface GenerateDraftOptions {
   sourceExcerpt?: string;
   maxTokens?: number;
   onAttempt?: (attempt: number) => void;
+  /** O10: diagnostics hook for a short (valid but incomplete) draft. */
+  onIncomplete?: (info: { reason: string; attempt: number; retrying: boolean }) => void;
 }
 
 export async function generateGameDraft(options: GenerateDraftOptions): Promise<GameDraft> {
@@ -371,7 +380,8 @@ export async function generateGameDraft(options: GenerateDraftOptions): Promise<
         unit: requested.unit
       })
     } : {}),
-    ...(options.onAttempt ? { onAttempt: options.onAttempt } : {})
+    ...(options.onAttempt ? { onAttempt: options.onAttempt } : {}),
+    ...(options.onIncomplete ? { onIncomplete: options.onIncomplete } : {})
   });
 }
 

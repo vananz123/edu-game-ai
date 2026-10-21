@@ -347,6 +347,18 @@ export interface EduGameBridge {
     args: string[];
     note: string;
   }>;
+  /**
+   * O10: writes a single diagnostics .txt (machine facts + recent log lines) to
+   * the Desktop (fallback: the log folder) and returns its absolute path.
+   * Never uploads anything; no lesson/AI content.
+   */
+  exportDiagnostics(): Promise<{ path: string; lines: number; bytes: number; folder: string }>;
+  /** O10: log folder + how many files/bytes are stored there. */
+  diagnosticsInfo(): Promise<{ folder: string; files: number; bytes: number; retentionDays: number }>;
+  /** O10: deletes the app's own log and bundle files (not files on the Desktop). */
+  clearDiagnostics(): Promise<{ removed: number; bytes: number; folder: string }>;
+  /** Opens the folder that holds the diagnostic log files. */
+  openDiagnosticsFolder(): Promise<{ ok: boolean; path: string; error?: string }>;
   analyzeLesson(payload: {
     documentId: string;
     projectId?: string;

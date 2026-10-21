@@ -148,9 +148,99 @@ async function verifyCpuRuntimeUi() {
   }
 }
 
+/** O10: one file to send back — machine facts + recent id/count/timing log lines. */
+async function exportDiagnosticsUi() {
+  const button = $('#exportDiagnosticsBtn');
+  const box = $('#diagnosticsResult');
+  if (!box) return;
+  if (button) { button.disabled = true; button.textContent = 'Đang xuất…'; }
+  try {
+    const result = await window.eduGame.exportDiagnostics();
+    box.classList.remove('hidden');
+    box.innerHTML = `<strong>Đã lưu ${result.lines} dòng log.</strong><br>Gửi tệp này cho người hỗ trợ:<br><code>${escapeHtml(result.path)}</code>`;
+  } catch (error) {
+    box.classList.remove('hidden');
+    box.innerHTML = `<span class="text-[#b3261e]">Không xuất được gói chẩn đoán: ${escapeHtml(String(error && error.message ? error.message : error))}</span>`;
+  } finally {
+    if (button) { button.disabled = false; button.textContent = 'Xuất gói chẩn đoán'; }
+  }
+}
+
+/** O10: opens the folder that holds ai-YYYY-MM-DD.jsonl and diagnostics-*.txt. */
+async function openLogFolderUi() {
+  const box = $('#diagnosticsResult');
+  try {
+    const result = await window.eduGame.openDiagnosticsFolder();
+    if (!box) return;
+    box.classList.remove('hidden');
+    box.innerHTML = result.ok
+      ? `Đã mở thư mục log:<br><code>${escapeHtml(result.path)}</code>`
+      : `<span class="text-[#b3261e]">Không mở được thư mục log: ${escapeHtml(result.error || result.path)}</span>`;
+  } catch (error) {
+    if (!box) return;
+    box.classList.remove('hidden');
+    box.innerHTML = `<span class="text-[#b3261e]">Không mở được thư mục log: ${escapeHtml(String(error && error.message ? error.message : error))}</span>`;
+  }
+}
+
+/** O10: shows where the log lives and how much is stored, before the teacher exports. */
+async function refreshDiagnosticsInfo() {
+  const info = $('#diagnosticsInfo');
+  if (!info) return;
+  try {
+    const result = await window.eduGame.diagnosticsInfo();
+    const megabytes = (result.bytes / (1024 * 1024)).toFixed(1);
+    info.textContent = `Log trên máy: ${result.files} tệp · ${megabytes} MB · tự xóa sau ${result.retentionDays} ngày · ${result.folder}`;
+  } catch (error) {
+    info.textContent = `Không đọc được thư mục log: ${String(error && error.message ? error.message : error)}`;
+  }
+}
+
+// O10: deleting is irreversible, so the button asks for a second click within 4 s
+// instead of a native confirm dialog (which would block the window).
+let diagnosticsClearArmed = false;
+let diagnosticsClearTimer = null;
+
+async function clearDiagnosticsUi() {
+  const button = $('#clearDiagnosticsBtn');
+  const box = $('#diagnosticsResult');
+  if (!button || !box) return;
+  if (!diagnosticsClearArmed) {
+    diagnosticsClearArmed = true;
+    button.textContent = 'Bấm lần nữa để xóa';
+    if (diagnosticsClearTimer) clearTimeout(diagnosticsClearTimer);
+    diagnosticsClearTimer = setTimeout(() => {
+      diagnosticsClearArmed = false;
+      diagnosticsClearTimer = null;
+      button.textContent = 'Xóa log trên máy';
+    }, 4000);
+    return;
+  }
+  diagnosticsClearArmed = false;
+  if (diagnosticsClearTimer) { clearTimeout(diagnosticsClearTimer); diagnosticsClearTimer = null; }
+  button.disabled = true;
+  try {
+    const result = await window.eduGame.clearDiagnostics();
+    const megabytes = (result.bytes / (1024 * 1024)).toFixed(1);
+    box.classList.remove('hidden');
+    box.innerHTML = `Đã xóa ${result.removed} tệp log (${megabytes} MB) trong dữ liệu ứng dụng.`;
+    await refreshDiagnosticsInfo();
+  } catch (error) {
+    box.classList.remove('hidden');
+    box.innerHTML = `<span class="text-[#b3261e]">Không xóa được log: ${escapeHtml(String(error && error.message ? error.message : error))}</span>`;
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Xóa log trên máy';
+  }
+}
+
 /** Called by the controller when the settings page is (re)wired. */
 function wireSettingsAiTasks() {
   $('#aiTasksRefreshBtn')?.addEventListener('click', refreshAiTaskList);
   $('#cpuRuntimeVerifyBtn')?.addEventListener('click', verifyCpuRuntimeUi);
+  $('#exportDiagnosticsBtn')?.addEventListener('click', exportDiagnosticsUi);
+  $('#openLogFolderBtn')?.addEventListener('click', openLogFolderUi);
+  $('#clearDiagnosticsBtn')?.addEventListener('click', clearDiagnosticsUi);
   refreshAiTaskList();
+  refreshDiagnosticsInfo();
 }

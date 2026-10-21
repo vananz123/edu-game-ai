@@ -54,7 +54,9 @@ const { parseGameDraft } = require('./services/lesson-contracts');
 // O1: genre suggestions are rule-based, so this step never calls the model.
 const { recommendGamesForAnalysis } = require('./services/game-recommender');
 // O2: deterministic content-quality checks (no model call).
-const { checkDraftQuality } = require('./services/lesson-quality');
+const { checkDraftQuality, requestedItemCount } = require('./services/lesson-quality');
+// O10: on-machine diagnostic log so a teacher can send back what happened.
+const { createAiLogWriter, formatDiagnosticBundle, writeDiagnosticBundle, sanitizeLogMessage, clearAiLogs } = require('./services/ai-log');
 // O3: chunk the lesson once, then retrieve only the relevant part for generation.
 const { chunkLessonText } = require('./services/lesson-chunker');
 const { selectChunks, selectChunksByVectors, buildRetrievalQuery, DEFAULT_MAX_SELECTED_CHUNKS, DEFAULT_MAX_SELECTED_CHARS, DEEP_MAX_SELECTED_CHUNKS, DEEP_MAX_SELECTED_CHARS } = require('./services/lesson-retrieval');
@@ -274,6 +276,28 @@ let localEmbeddingStart = null;
 let localModelInstallInProgress = false;
 let quittingAfterAiShutdown = false;
 const DATA_DIR = () => path.join(app.getPath('userData'), 'edugame-data');
+// O10: diagnostics live next to the SQLite database, never in the repo or installer.
+const LOG_DIR = () => path.join(DATA_DIR(), 'logs');
+const AI_LOG_RETENTION_DAYS = 14;
+/**
+ * O10: the exported bundle goes somewhere a teacher can find without knowing
+ * about AppData. The env hook exists only so automated runs do not litter a real
+ * Desktop; teachers never set it.
+ */
+const DIAGNOSTICS_EXPORT_DIR = () => process.env.EDUGAME_DIAGNOSTICS_DIR || app.getPath('desktop');
+/** Set once after `ensureData()`; callers must tolerate `null` (early errors). */
+let aiLog = null;
+function aiLogWrite(level, event, data) {
+  if (!aiLog) return;
+  aiLog.write(level, event, data);
+}
+/** Error facts only: code + a short message with quoted content elided. */
+function errorFacts(error) {
+  return {
+    code: String((error && error.code) || (error && error.message && /\[([A-Z_]+)\]/.exec(error.message)?.[1]) || 'UNKNOWN'),
+    message: sanitizeLogMessage(error, 240)
+  };
+}
 const DB_FILE = () => path.join(DATA_DIR(), 'edugame.sqlite');
 const LEGACY_DB_FILE = () => path.join(DATA_DIR(), 'library.json');
 const SETTINGS_FILE = () => path.join(DATA_DIR(), 'settings.json');
@@ -509,6 +533,29 @@ function createWindow() {
 }
 app.whenReady().then(async () => {
   await ensureData();
+  // O10: start the diagnostic log as early as possible so runtime/analyze/generate
+  // events on a teacher's machine can be sent back as one file.
+  aiLog = createAiLogWriter({ directory: LOG_DIR(), retentionDays: AI_LOG_RETENTION_DAYS });
+  try {
+    const aiSettings = (await readJson(SETTINGS_FILE(), {})).ai || {};
+    const cpus = os.cpus();
+    aiLog.info('app.start', {
+      version: app.getVersion(),
+      platform: process.platform,
+      arch: process.arch,
+      electron: process.versions.electron,
+      cpuModel: cpus[0]?.model || '',
+      logicalCpuCount: cpus.length,
+      totalRamBytes: os.totalmem(),
+      modelIds: QWEN_LOCAL_MODELS.map(model => model.id),
+      aiMode: aiSettings.mode || 'unknown',
+      localModelId: aiSettings.localModelId || '',
+      runtimeInstalled: Boolean(await createRuntimeInstaller().getExecutablePath()),
+      fixtureMode: Boolean(process.env.EDUGAME_AI_TEST_DIR)
+    });
+  } catch (error) {
+    aiLog.warn('app.start.failed', errorFacts(error));
+  }
   registerIpc();
   createWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
@@ -685,6 +732,76 @@ async function getLocalAiModels() {
     }
   };
 }
+/**
+ * O10: one human-readable .txt the teacher can attach to a message. It holds
+ * machine facts plus the last 200 log lines; the lines never include lesson
+ * text, prompts, model answers or API keys (see services/ai-log.ts).
+ *
+ * The file is written to the Desktop (easy to find, attach and delete); if that
+ * folder is not writable it falls back to the log folder inside the app data.
+ */
+async function exportDiagnosticsBundle() {
+  const writer = aiLog || createAiLogWriter({ directory: LOG_DIR(), retentionDays: AI_LOG_RETENTION_DAYS });
+  const [catalog, aiSettings] = await Promise.all([getLocalAiModels(), readAiSettings()]);
+  const cpus = os.cpus();
+  const machine = catalog.machine || {};
+  const lines = writer.readRecent(200);
+  const text = formatDiagnosticBundle({
+    generatedAt: new Date().toISOString(),
+    appVersion: app.getVersion(),
+    electronVersion: process.versions.electron,
+    platform: process.platform,
+    arch: process.arch,
+    cpuModel: machine.cpuModel || cpus[0]?.model || '',
+    logicalCpuCount: machine.logicalCpuCount || cpus.length,
+    totalRamBytes: machine.totalRamBytes || os.totalmem(),
+    models: (catalog.models || []).map(model => ({
+      id: model.id,
+      displayName: model.displayName,
+      installed: Boolean(model.installed)
+    })),
+    runtime: {
+      installed: Boolean(machine.runtimeInstalled),
+      state: machine.runtimeState || 'STOPPED',
+      modelId: aiSettings.localModelId || machine.runtimeModelId || null
+    },
+    logDirectory: writer.directory,
+    retentionDays: AI_LOG_RETENTION_DAYS
+  }, lines);
+  let folder = DIAGNOSTICS_EXPORT_DIR();
+  let written;
+  try {
+    written = writeDiagnosticBundle(folder, text, () => new Date(), 'EduGame-Studio-chan-doan');
+  } catch (error) {
+    folder = writer.directory;
+    written = writeDiagnosticBundle(folder, text);
+    aiLogWrite('warn', 'diagnostics.export.fallback', { folder, ...errorFacts(error) });
+  }
+  writer.info('diagnostics.export', { file: written.path, lines: lines.length, bytes: written.bytes });
+  return { path: written.path, lines: lines.length, bytes: written.bytes, folder };
+}
+
+/** O10: what is currently on disk, so the panel can show it before exporting. */
+function diagnosticsSummary() {
+  const writer = aiLog || createAiLogWriter({ directory: LOG_DIR(), retentionDays: AI_LOG_RETENTION_DAYS });
+  let files = 0;
+  let bytes = 0;
+  try {
+    for (const name of fsSync.readdirSync(writer.directory)) {
+      if (!/^(ai-.*\.jsonl|diagnostics-.*\.txt)$/.test(name)) continue;
+      files += 1;
+      try {
+        bytes += fsSync.statSync(path.join(writer.directory, name)).size;
+      } catch {
+        // A file can disappear between readdir and stat; keep the count.
+      }
+    }
+  } catch {
+    // No folder yet: report an empty log.
+  }
+  return { folder: writer.directory, files, bytes, retentionDays: AI_LOG_RETENTION_DAYS };
+}
+
 async function detectMachineGpu() {
   try {
     const info = await app.getGPUInfo('complete');
@@ -997,6 +1114,8 @@ function registerIpc() {
     const document = await store.getDocumentWithText(documentId);
     if (!document) throw new Error('Không tìm thấy giáo án đã lưu. Hãy nhập lại tài liệu.');
     const mode = payload?.mode === 'deep' ? 'deep' : 'fast';
+    // O10: the diagnostic log records timing and counts, never the lesson text.
+    const analyzeStartedAt = Date.now();
     // O5 (docs/archive/specs/update-AI-local.txt §4): never analyze the same text twice when the
     // document hash, model, mode and prompt version are unchanged. `force` is the
     // teacher's explicit "Phân tích lại" action, and also what a changed lesson
@@ -1051,8 +1170,23 @@ function registerIpc() {
         );
         cached = false;
         recordAiTask(aiTasks.complete(task.taskId, `${analysis.objectives.length} mục tiêu · ${analysis.keyConcepts.length} khái niệm`));
+        aiLogWrite('info', 'analyze.done', {
+          documentId,
+          mode,
+          cached: false,
+          seconds: Math.round((Date.now() - analyzeStartedAt) / 1000),
+          objectives: analysis.objectives.length,
+          concepts: analysis.keyConcepts.length
+        });
       } catch (error) {
         const code = String((error && error.code) || (error && error.message && /\[([A-Z_]+)\]/.exec(error.message)?.[1]) || 'AI_OUTPUT_INVALID');
+        aiLogWrite('error', 'analyze.error', {
+          documentId,
+          mode,
+          cached: false,
+          seconds: Math.round((Date.now() - analyzeStartedAt) / 1000),
+          ...errorFacts(error)
+        });
         if (code === 'AI_CANCELLED' || isCancelReason(error)) {
           recordAiTask(aiTasks.cancel(task.taskId));
         } else {
@@ -1060,6 +1194,16 @@ function registerIpc() {
         }
         throw error;
       }
+    }
+    if (cached) {
+      aiLogWrite('info', 'analyze.done', {
+        documentId,
+        mode,
+        cached: true,
+        seconds: Math.round((Date.now() - analyzeStartedAt) / 1000),
+        objectives: analysis.objectives.length,
+        concepts: analysis.keyConcepts.length
+      });
     }
     const identity = { documentId: document.id, name: document.name, characters: document.characters };
     const now = new Date().toISOString();
@@ -1146,6 +1290,14 @@ function registerIpc() {
           // O7: a cache hit did no generation/validation work; say so instead of
           // showing stages that never ran.
           sendLessonProgress(event.sender, requestId, 'cached');
+          aiLogWrite('info', 'generate.cached', {
+            projectId,
+            gameType: project.config.gameType,
+            mode,
+            modelId,
+            requested: cachedQuality.counts.requested,
+            found: cachedQuality.counts.found
+          });
           return {
             project: cachedSaved,
             game: cachedGame,
@@ -1171,6 +1323,19 @@ function registerIpc() {
       label: `tạo nội dung ${project.config.gameType}`
     });
     recordAiTask(generateTask);
+    // O10: counts/timings only — enough to diagnose a short draft without storing content.
+    const generateStartedAt = Date.now();
+    const generateRequest = requestedItemCount(project.config);
+    let generateAttempts = 0;
+    aiLogWrite('info', 'generate.start', {
+      projectId,
+      gameType: project.config.gameType,
+      mode,
+      modelId,
+      requested: generateRequest.requested,
+      unit: generateRequest.unit,
+      regenerate: Boolean(payload?.regenerate)
+    });
     try {
       return await aiSingleFlight.run(
         `generate:${projectId}:${cacheKey}`,
@@ -1189,8 +1354,13 @@ function registerIpc() {
             sourceExcerpt,
             maxTokens: mode === 'deep' ? 4096 : 2048,
             onAttempt: attempt => {
+              generateAttempts = attempt;
+              aiLogWrite('info', 'generate.attempt', { projectId, attempt });
               recordAiTask(aiTasks.progress(generateTask.taskId, attempt === 1 ? 'generate' : 'repair'));
               sendLessonProgress(event.sender, requestId, attempt === 1 ? 'generate' : 'repair');
+            },
+            onIncomplete: info => {
+              aiLogWrite('warn', 'generate.incomplete', { projectId, ...info });
             }
           });
 
@@ -1208,6 +1378,21 @@ function registerIpc() {
           // O2: advisory content-quality report (duplicates, weak distractors, broken
           // chains, coverage). Pure TypeScript, so it costs nothing here.
           const quality = checkDraftQuality({ draft, config: project.config, analysis });
+          aiLogWrite('info', 'generate.done', {
+            projectId,
+            gameType: project.config.gameType,
+            mode,
+            modelId,
+            seconds: Math.round((Date.now() - generateStartedAt) / 1000),
+            attempts: generateAttempts,
+            requested: quality.counts.requested,
+            found: quality.counts.found,
+            unit: quality.counts.unit,
+            errors: quality.errors,
+            warnings: quality.warnings,
+            canPublish: quality.canPublish,
+            cached: false
+          });
           // Best effort: a cache write must never fail the generation the teacher waited for.
           try {
             store.putGenerationCache({
@@ -1235,6 +1420,15 @@ function registerIpc() {
       } else {
         recordAiTask(aiTasks.fail(generateTask.taskId, code, error && error.message ? error.message : 'Tạo nội dung thất bại.'));
       }
+      aiLogWrite('error', 'generate.error', {
+        projectId,
+        gameType: project.config.gameType,
+        mode,
+        seconds: Math.round((Date.now() - generateStartedAt) / 1000),
+        attempts: generateAttempts,
+        cancelled: code === 'AI_CANCELLED' || isCancelReason(error),
+        ...errorFacts(error)
+      });
       throw error;
     }
   });
@@ -1590,18 +1784,30 @@ function registerIpc() {
       const settings = await readJson(SETTINGS_FILE(), {});
       settings.ai = { ...settings.ai, mode: 'local', localModelId: model.id };
       await writeJson(SETTINGS_FILE(), settings);
+      aiLogWrite('info', 'runtime.reuse', { modelId: model.id, state: localAiManager.getStatus().state });
       return { ok: true, baseUrl: localAiManager.getBaseUrl(), models: await getLocalAiModels() };
     }
     if (event.sender && !event.sender.isDestroyed()) {
       event.sender.send('ai:local-progress', { stage: 'starting', modelId: model.id, receivedBytes: 0, totalBytes: 1, bytesPerSecond: 0 });
     }
+    const runtimeStartedAt = Date.now();
+    aiLogWrite('info', 'runtime.start', { modelId: model.id });
     try {
       const baseUrl = await ensureLocalRuntime(model.id);
       const settings = await readJson(SETTINGS_FILE(), {});
       settings.ai = { ...settings.ai, mode: 'local', localModelId: model.id };
       await writeJson(SETTINGS_FILE(), settings);
+      aiLogWrite('info', 'runtime.ready', {
+        modelId: model.id,
+        seconds: Math.round((Date.now() - runtimeStartedAt) / 1000)
+      });
       return { ok: true, baseUrl, models: await getLocalAiModels() };
     } catch (error) {
+      aiLogWrite('error', 'runtime.error', {
+        modelId: model.id,
+        seconds: Math.round((Date.now() - runtimeStartedAt) / 1000),
+        ...errorFacts(error)
+      });
       throw new Error(error.message || 'Không khởi động được llama.cpp.');
     }
   });
@@ -1609,8 +1815,30 @@ function registerIpc() {
     if (aiSingleFlight.busy) {
       throw new Error(`[AI_BUSY] AI local đang xử lý “${aiSingleFlight.activeLabel}”. Hãy huỷ yêu cầu hiện tại trước khi dừng runtime.`);
     }
+    const stoppedModelId = localAiModelId || null;
     await stopLocalAiRuntime();
+    aiLogWrite('info', 'runtime.stop', { modelId: stoppedModelId });
     return { ok: true, models: await getLocalAiModels() };
+  });
+  // O10: teacher-facing diagnostics. The exported .txt is written to the Desktop
+  // (fallback: the log folder); nothing is uploaded and no lesson/AI content is included.
+  ipcMain.handle('diagnostics:export', async () => exportDiagnosticsBundle());
+  ipcMain.handle('diagnostics:info', async () => diagnosticsSummary());
+  ipcMain.handle('diagnostics:clear', async () => {
+    const writer = aiLog || createAiLogWriter({ directory: LOG_DIR(), retentionDays: AI_LOG_RETENTION_DAYS });
+    const result = clearAiLogs(writer.directory);
+    // Leave one fresh line so the next export shows that the clear happened.
+    writer.info('diagnostics.clear', { removed: result.removed, bytes: result.bytes });
+    return { removed: result.removed, bytes: result.bytes, folder: writer.directory };
+  });
+  ipcMain.handle('diagnostics:open-folder', async () => {
+    try {
+      await fs.mkdir(LOG_DIR(), { recursive: true });
+    } catch {
+      // openPath below still reports a useful error.
+    }
+    const failure = await shell.openPath(LOG_DIR());
+    return failure ? { ok: false, path: LOG_DIR(), error: failure } : { ok: true, path: LOG_DIR() };
   });
   ipcMain.handle('ai:cancel', async (_e, requestId) => {
     const cancelled = aiRequests.cancel(String(requestId || ''));

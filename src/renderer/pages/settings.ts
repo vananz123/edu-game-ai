@@ -43,6 +43,22 @@ function renderSettings() {
       <div id="cpuVerifyResult" class="hidden bg-[#f8f9fc] border border-line rounded-[10px] p-[14px] text-[12px] mb-[14px]"></div>
       <div id="aiTaskList" class="grid gap-[8px]"><div class="text-[11px] text-[#9199aa]">Đang tải danh sách tác vụ…</div></div>
     </section>
+    <!-- O10: diagnostic log — reproduce on another machine, export one file, send it back. -->
+    <section class="bg-white border border-line rounded-[14px] p-[23px] mt-[18px]" data-diagnostics-panel>
+      <div class="flex justify-between items-start">
+        <div>
+          <h3 class="text-[14px] m-0 mb-[5px]">Chẩn đoán AI (log)</h3>
+          <div class="text-[11px] text-[#9199aa] mb-[9px]">Ứng dụng tự ghi lại thời gian chạy, model, số mục đã tạo, số lần thử lại và lỗi — kể cả khi chạy bằng bộ cài trên máy khác. Log chỉ chứa id, số lượng, thời gian và mã lỗi; không có nội dung giáo án, câu trả lời của AI hay khóa API. Khi cần gửi cho người hỗ trợ, bấm “Xuất gói chẩn đoán”: tệp .txt được lưu trên Desktop để dễ tìm, gửi và xóa.</div>
+          <div id="diagnosticsInfo" class="text-[11px] text-[#8d96a8] mb-[12px]">Đang đọc thư mục log…</div>
+        </div>
+        <div class="flex gap-[8px] shrink-0">
+          <button class="border-0 rounded-[9px] px-[15px] py-[11px] inline-flex items-center justify-center gap-[8px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-white border border-[#e7eaf2] text-[#515c72]" id="exportDiagnosticsBtn">Xuất gói chẩn đoán</button>
+          <button class="border-0 rounded-[9px] px-[15px] py-[11px] inline-flex items-center justify-center gap-[8px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-white border border-[#e7eaf2] text-[#515c72]" id="openLogFolderBtn">Mở thư mục log</button>
+          <button class="border-0 rounded-[9px] px-[15px] py-[11px] inline-flex items-center justify-center gap-[8px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-white border border-[#e7eaf2] text-[#b3261e]" id="clearDiagnosticsBtn">Xóa log trên máy</button>
+        </div>
+      </div>
+      <div id="diagnosticsResult" class="hidden bg-[#f8f9fc] border border-line rounded-[10px] p-[14px] text-[12px] break-all"></div>
+    </section>
     <div class="grid gap-[18px]">
     <div class="grid gap-[18px]"><section class="bg-white border border-line rounded-[14px] p-[23px]"><h3 class="text-[14px] m-0 mb-[5px]">Nhà cung cấp AI</h3><div class="text-[11px] text-[#9199aa] mb-[17px]">Cấu hình AI local hoặc nhà cung cấp đám mây dùng trong Tạo trò chơi.</div>
       <div class="field"><label>CHẾ ĐỘ MẶC ĐỊNH</label><select id="settingAiMode"><option value="offline" ${(!ai.mode || ai.mode==='offline')?'selected':''}>Mẫu ngoại tuyến — không gọi API</option><option value="local" ${ai.mode==='local'?'selected':''}>AI local tích hợp — llama.cpp</option><option value="online" ${ai.mode==='online'?'selected':''}>AI đám mây — ChatGPT/Gemini/OpenCode</option></select><div class="field-hint">Model local dùng chung với màn hình Tạo trò chơi. AI đám mây dùng nhà cung cấp đang chọn bên dưới.</div></div>
