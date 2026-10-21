@@ -65,6 +65,26 @@ function applyCloudProvider(provider) {
     apiKey: ''
   };
 }
+function applyTheme(theme) {
+  const preference = theme || (state.settings && state.settings.preferences && state.settings.preferences.theme) || 'light';
+  let resolved = preference;
+  if (preference === 'system') {
+    resolved = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+  }
+  document.documentElement.dataset.theme = resolved;
+  if (window.matchMedia) {
+    try {
+      const media = window.matchMedia('(prefers-color-scheme: dark)');
+      if (!media.__edugameThemeListener) {
+        media.__edugameThemeListener = () => {
+          const current = state.settings && state.settings.preferences && state.settings.preferences.theme;
+          if (current === 'system') applyTheme('system');
+        };
+        media.addEventListener('change', media.__edugameThemeListener);
+      }
+    } catch (e) {}
+  }
+} 
 function toast(message, duration = 3000) { const el = $('#toast'); el.textContent = message; el.classList.add('show'); clearTimeout(toast.timer); toast.timer = setTimeout(() => el.classList.remove('show'), duration); }
 function fmtDate(value) { try { return new Date(value).toLocaleDateString('vi-VN', { day:'2-digit', month:'2-digit', year:'numeric' }); } catch { return '—'; } }
 function fmtDateTime(value) { try { return new Date(value).toLocaleString('vi-VN', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }); } catch { return '—'; } }

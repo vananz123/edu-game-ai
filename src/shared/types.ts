@@ -250,7 +250,7 @@ export interface TeachingStyle {
 
 export interface AppSettings {
   ai: AiSettings;
-  preferences: { sound: boolean; largeText: boolean; teachingStyle?: TeachingStyle; audience?: 'child' | 'teen' | 'adult' };
+  preferences: { sound: boolean; largeText: boolean; teachingStyle?: TeachingStyle; audience?: 'child' | 'teen' | 'adult'; theme?: 'light' | 'dark' | 'system' };
 }
 
 export interface GenerateGameRequest {
@@ -306,6 +306,9 @@ export interface EduGameBridge {
   listProjects(): Promise<GameProject[]>;
   deleteProject(projectId: string): Promise<{ ok: boolean }>;
   importDocument(): Promise<{ name: string; text: string } | null>;
+  importDocumentFromPath(filePath: string): Promise<{ name: string; text: string; path?: string; characters?: number; sizeBytes?: number } | null>;
+  setFullscreen(enabled: boolean): Promise<{ ok: boolean }>;
+  onFullscreenChanged(callback: (enabled: boolean) => void): () => void;
   importQuestions(): Promise<{ name: string; questions: GameQuestion[] } | null>;
   exportGame(game: EducationalGame): Promise<{ ok: boolean }>;
   importGame(): Promise<EducationalGame | null>;

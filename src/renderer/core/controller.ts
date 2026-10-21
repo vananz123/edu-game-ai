@@ -60,8 +60,40 @@ function wirePage() {
   // update_plan_3 §8: task manager + CPU-only runtime verification panel.
   if (state.page === 'settings' && typeof wireSettingsAiTasks === 'function') wireSettingsAiTasks();
 }
-async function handleAction(action, id, element) {
+async function handleLessonDrop(event) {
   try {
+    if (event && event.preventDefault) event.preventDefault();
+    const zone = document.getElementById('lessonDropzone');
+    if (zone) zone.classList.remove('border-[#6258e8]', 'bg-[#f4f3ff]');
+    const file = event && event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0];
+    const filePath = file && file.path;
+    if (!filePath) {
+      toast('Không lấy được đường dẫn tệp. Hãy dùng nút nhập giáo án.');
+      return;
+    }
+    const doc = await window.eduGame.importDocumentFromPath(filePath);
+    if (doc) {
+      const stored = await window.eduGame.saveLessonDocument({
+        name: doc.name,
+        ext: (doc.name || '').split('.').pop() || 'txt',
+        text: doc.text,
+        characters: doc.characters,
+        sizeBytes: Number(doc.sizeBytes) || 0
+      });
+      state.importedDoc = { ...doc, id: stored.id };
+      const old = state.draft || {};
+      state.draft = { ...old, text: doc.text, sourceName: doc.name };
+      state.lessonLibrary = null;
+      if (state.page === 'lesson-plans') await refreshLessonLibraryPage(); else render();
+      toast(`Đã lưu giáo án “${doc.name}” (${Number(doc.characters || 0).toLocaleString('vi-VN')} ký tự).`);
+    }
+  } catch (error) {
+    toast(`Không nhập được tệp: ${(error && error.message) || 'lỗi không xác định'}`);
+  }
+}
+window.handleLessonDrop = handleLessonDrop;
+
+async function handleAction(action, id, element) { try {
     if (action === 'play') playGame(findGame(id));
     if (action === 'edit') editGame(findGame(id));
     if (action === 'import-document') {
@@ -91,6 +123,19 @@ async function handleAction(action, id, element) {
     if (action === 'open-project') {
       navigate('create-wizard');
       await wizardOpenProject(id);
+    }
+    if (action === 'rename-project') {
+      const project = (state.projects || []).find(item => item.id === id);
+      const currentTitle = project ? (project.title || '') : '';
+      const nextTitle = window.prompt('Đổi tên dự án:', currentTitle);
+      if (nextTitle === null) return;
+      const trimmed = String(nextTitle).trim();
+      if (!trimmed) return toast('Tên dự án không được để trống.');
+      if (!project) return toast('Không tìm thấy dự án.');
+      const updated = { ...project, title: trimmed, updatedAt: new Date().toISOString() };
+      await window.eduGame.saveProjectDraft(updated);
+      await refreshProjectsPage();
+      toast('Đã đổi tên dự án.');
     }
     if (action === 'delete-project') {
       const project = (state.projects || []).find(item => item.id === id);
@@ -124,6 +169,19 @@ async function handleAction(action, id, element) {
     if (action === 'delete') {
       const target = findGame(id);
       if (confirm('Xóa vĩnh viễn “' + (target?.title || 'trò chơi này') + '” khỏi máy?\nKhông thể hoàn tác — hãy xuất gói .egame trước nếu muốn giữ bản sao.')) { await window.eduGame.deleteGame(id); await refreshDb(); render(); toast('Đã xóa “' + (target?.title || 'trò chơi') + '”.'); }
+    }
+    if (action === 'qa-ask') {
+      const docId = $('#qaDocSelect')?.value;
+      const question = String($('#qaQuestion')?.value || '').trim();
+      const answerBox = $('#qaAnswer');
+      if (!docId) { toast('Chọn giáo án để hỏi.'); return; }
+      if (!question) { toast('Nhập câu hỏi.'); return; }
+      if (answerBox) { answerBox.classList.remove('hidden'); answerBox.textContent = 'Đang trả lời...'; }
+      try {
+        const result = await window.eduGame.answerLessonQuestion({ documentId: docId, question });
+        if (answerBox) answerBox.innerHTML = `<div class="font-semibold mb-[6px]">${escapeHtml(result?.answer || '')}</div>` + (Array.isArray(result?.citations) ? result.citations : []).map((c, i) => `<div class="mt-[8px] text-[11px] text-[#6f7890]"><strong>[${i + 1}]</strong> ${escapeHtml(c)}</div>`).join('');
+      } catch (e) { if (answerBox) answerBox.textContent = (e && e.message) || 'Lỗi hỏi đáp.'; }
+      return;
     }
     if (action === 'export-results') exportResults();
   } catch (e) { toast(e.message || 'Đã xảy ra lỗi.'); }

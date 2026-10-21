@@ -26,6 +26,7 @@ function renderLessonPlans() {
   });
   return `<div class="flex justify-between items-start gap-[20px] mb-[25px]"><div><div class="text-[10px] text-[#6258e8] font-extrabold tracking-[1.3px] uppercase mb-[8px]">LESSON SOURCES</div><h1 class="text-[27px] tracking-[-0.9px] m-0 font-[780]">Giáo án</h1><p class="mt-[9px] text-[#788196] text-[13px] leading-[1.6]">Kho <strong>tài liệu nguồn và kết quả phân tích</strong>. Mở lại một giáo án để xem phân tích cũ hoặc tạo thêm trò chơi khác mà không phải phân tích lại.</p></div><div class="flex gap-[8px] flex-wrap"><button class="border-0 rounded-[9px] px-[15px] py-[11px] inline-flex items-center justify-center gap-[8px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-white border border-[#e7eaf2] text-[#515c72]" data-action="import-document">⇧ Nhập giáo án từ tệp</button><button class="border-0 rounded-[9px] px-[15px] py-[11px] inline-flex items-center justify-center gap-[8px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-[#6258e8] text-white shadow-[0_6px_14px_#6258e82b]" data-page="create-wizard">✳ Tạo dự án mới</button></div></div>
     <div class="flex gap-[10px] items-center mb-[20px] flex-wrap"><div class="relative flex-1 min-w-[200px]"><input id="librarySearch" placeholder="Tìm theo tên tệp, chủ đề, môn, lớp..." value="${escapeHtml(state.search || '')}" class="w-full px-[13px] py-[11px] pl-[37px] border border-line rounded-[9px] bg-white outline-0 text-[12px]"></div><span class="px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#788196] text-[9px]">${library === null ? 'Đang tải…' : `${docs.length} giáo án`}</span></div>
+    <div id="lessonDropzone" class="mb-[16px] border-2 border-dashed border-[#dfe2ed] rounded-[12px] p-[18px] text-center text-[#788196] text-[12px] transition-colors" ondragover="event.preventDefault(); this.classList.add('border-[#6258e8]','bg-[#f4f3ff]')" ondragleave="this.classList.remove('border-[#6258e8]','bg-[#f4f3ff]')" ondrop="handleLessonDrop(event)">Kéo thả tệp giáo án (TXT, MD, DOCX, PDF, PPTX) vào đây</div>
     <section class="bg-white border border-line rounded-[14px] p-[20px]">
       <div class="flex items-center justify-between gap-[12px] mb-[14px]"><div><h3 class="text-[14px] m-0 tracking-[-0.2px]">Tài liệu của tôi</h3><p class="text-[11px] text-[#8b94a6] mt-[4px] mb-0">Tệp nguồn được lưu trên máy. Mở lại để xem kết quả phân tích hoặc tạo trò chơi mới.</p></div><span class="px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#788196] text-[9px]">${library === null ? 'Đang tải…' : `${docs.length} tệp`}</span></div>
       ${library === null
@@ -37,8 +38,17 @@ function renderLessonPlans() {
     <section class="bg-[linear-gradient(135deg,#f8f7ff,#efedff)] border border-[#e4e0ff] rounded-[14px] p-[20px] mt-[18px]">
       <div class="flex items-start gap-[14px]">
         <div class="w-[42px] h-[42px] rounded-[11px] bg-white grid place-items-center text-[20px] shrink-0">💬</div>
-        <div class="min-w-0 flex-1"><div class="text-[9px] font-extrabold tracking-[1.1px] text-[#8b84d8] mb-[5px]">NGHIÊN CỨU &amp; HỎI ĐÁP CHUYÊN SÂU</div><div class="flex items-center gap-[8px] flex-wrap"><h3 class="text-[14px] m-0 tracking-[-0.2px]">Hỏi đáp chuyên sâu</h3><span class="px-[4px] py-[7px] bg-white text-[#6258e8] rounded-[5px] text-[9px] font-bold">SẮP CÓ</span></div><p class="text-[12px] text-[#6f7890] leading-[1.7] mt-[7px] mb-0">Hỏi trực tiếp trên nội dung giáo án đã lưu, kèm trích dẫn nguồn. Dự kiến hỗ trợ AI Local trước, AI Cloud sau khi có backend an toàn. Khu vực này <strong>chưa triển khai</strong> và được giữ chỗ để không trộn với luồng tạo trò chơi hiện tại.</p></div>
-        <button class="border-0 rounded-[9px] px-[12px] py-[9px] inline-flex items-center gap-[7px] font-bold text-[11px] bg-white/[70%] text-[#9aa1b3] cursor-not-allowed" disabled title="Tính năng đang được phát triển">Chưa khả dụng</button>
+        <div class="min-w-0 flex-1">
+          <div class="text-[9px] font-extrabold tracking-[1.1px] text-[#8b84d8] mb-[5px]">NGHIÊN CỨU &amp; HỎI ĐÁP CHUYÊN SÂU</div>
+          <div class="flex items-center gap-[8px] flex-wrap"><h3 class="text-[14px] m-0 tracking-[-0.2px]">Hỏi đáp chuyên sâu</h3><span class="px-[4px] py-[7px] bg-white text-[#6258e8] rounded-[5px] text-[9px] font-bold">BETA</span></div>
+          <p class="text-[12px] text-[#6f7890] leading-[1.7] mt-[7px] mb-[10px]">Hỏi trực tiếp trên nội dung giáo án đã lưu, kèm trích dẫn nguồn. Ưu tiên AI Local; nếu chưa chạy được thì vẫn trả về đoạn liên quan.</p>
+          <div class="flex gap-[8px] flex-wrap mb-[8px]">
+            <select id="qaDocSelect" class="px-[10px] py-[8px] border border-line rounded-[9px] text-[12px] bg-white min-w-[220px]">${(library && library.documents || []).map(d => `<option value="${escapeHtml(d.id)}">${escapeHtml(d.name || 'Tài liệu')}</option>`).join('')}</select>
+            <input id="qaQuestion" class="flex-1 min-w-[220px] px-[10px] py-[8px] border border-line rounded-[9px] text-[12px]" placeholder="Nhập câu hỏi về giáo án...">
+            <button class="border-0 rounded-[9px] px-[12px] py-[9px] inline-flex items-center gap-[7px] font-bold text-[11px] bg-[#6258e8] text-white" data-action="qa-ask">Hỏi</button>
+          </div>
+          <div id="qaAnswer" class="text-[12px] text-[#394256] leading-[1.7] bg-white rounded-[10px] border border-[#e4e0ff] p-[12px] hidden"></div>
+        </div>
       </div>
     </section>`;
 }

@@ -132,8 +132,8 @@ async function findTarget() {
   const afterRefresh = await must(`Boolean(document.querySelector('#aiTaskList')?.children.length)`);
   check('T5 refresh keeps task list rendered', afterRefresh, afterRefresh);
 
-  // T6 — wizard step 4 shows the two honest modes Fast/Thinking (§9) and no
-  // "Phân tích chuyên sâu" option on the game-creation page.
+  // T6 — wizard step 4 shows the two honest modes Fast/Thinking (§9) as visible
+  // choices (not a dropdown) and no "Phân tích chuyên sâu" option.
   const modeLabels = await must(`(async () => {
     if (typeof wizardState === 'undefined' || typeof render !== 'function') return { error: 'wizard missing' };
     wizardState.step = 'configure';
@@ -145,18 +145,27 @@ async function findTarget() {
     };
     navigate('create-wizard');
     await new Promise(r => setTimeout(r, 300));
-    const select = document.querySelector('[data-wizard-config="generationMode"]');
-    const options = select ? Array.from(select.options).map(o => ({ value: o.value, label: o.label })) : [];
+    const group = document.querySelector('.wizard-mode-choice');
+    const cards = Array.from(document.querySelectorAll('[data-wizard-mode]')).map(node => ({
+      mode: node.dataset.wizardMode,
+      label: (node.textContent || '').replace(/\\s+/g, ' ').trim(),
+      checked: node.getAttribute('aria-checked')
+    }));
     return {
-      options,
-      deepLabeling: options.some(o => o.value === 'deep' && /Thinking/.test(o.label)),
-      fastLabeling: options.some(o => o.value === 'fast' && /Fast/.test(o.label)),
+      cards,
+      radiogroup: Boolean(group && group.getAttribute('role') === 'radiogroup'),
+      checkedCount: cards.filter(card => card.checked === 'true').length,
+      selectGone: !document.querySelector('[data-wizard-config="generationMode"]'),
+      fastLabeling: cards.some(card => card.mode === 'fast' && /Fast/.test(card.label)),
+      deepLabeling: cards.some(card => card.mode === 'deep' && /Thinking/.test(card.label)),
       honestHint: (document.body.innerText || '').includes('chưa trả nội dung suy luận'),
       noDeepResearch: !(document.body.innerText || '').includes('Phân tích chuyên sâu')
     };
   })()`);
-  check('T6 wizard offers Fast option', modeLabels.fastLabeling, JSON.stringify(modeLabels.options || modeLabels));
-  check('T6 wizard offers Thinking (deep) option', modeLabels.deepLabeling, JSON.stringify(modeLabels.options || modeLabels));
+  check('T6 wizard offers Fast option', modeLabels.fastLabeling, JSON.stringify(modeLabels.cards || modeLabels));
+  check('T6 wizard offers Thinking (deep) option', modeLabels.deepLabeling, JSON.stringify(modeLabels.cards || modeLabels));
+  check('T6 mode is a radiogroup with exactly one checked', modeLabels.radiogroup && modeLabels.checkedCount === 1, JSON.stringify(modeLabels));
+  check('T6 generationMode is no longer a dropdown', modeLabels.selectGone, JSON.stringify(modeLabels));
   check('T6 honest thinking-limit hint present', modeLabels.honestHint, JSON.stringify(modeLabels));
   check('T6 no "Phân tích chuyên sâu" on game-creation page', modeLabels.noDeepResearch, JSON.stringify(modeLabels));
 

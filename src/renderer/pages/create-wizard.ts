@@ -142,6 +142,9 @@ function wireCreateWizard() {
         const host = document.querySelector('[data-wizard-progress-host]');
         if (host) host.innerHTML = renderWizardGenerationProgress();
       }
+      // Keep the global AI status bar on the same stage instead of waiting for
+      // the next 2 s poll (the bar shows the Vietnamese stage + elapsed time).
+      if (typeof window.refreshAiStatusBar === 'function') window.refreshAiStatusBar();
     });
   }
   if (!wizardState.projectsLoaded) {
@@ -219,6 +222,7 @@ async function wizardDispatch(action, button) {
     case 'select': return wizardRecommendSelect(button.dataset.id);
     // O1: the teacher may pick a genre the rule-based recommender did not list.
     case 'select-type': return wizardRecommendSelectType(button.dataset.gameType);
+    case 'set-mode': return wizardSetGenerationMode(button.dataset.mode);
     case 'add-objective': return wizardEditAnalysis('add-objective');
     case 'remove-objective': return wizardEditAnalysis('remove-objective', Number(button.dataset.index));
     case 'add-concept': return wizardEditAnalysis('add-concept');

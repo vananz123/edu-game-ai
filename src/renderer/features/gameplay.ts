@@ -34,6 +34,27 @@ function playGame(game) {
   if (game.gameSetup?.scoringMode === 'thi đấu đội') return openTeamSetup();
   openPlayModal();
 }
+// ---------- Toàn màn hình khi trình chiếu ----------
+// The native window state is authoritative: main sends it back through
+// onFullscreenChanged, so the flag only reflects what really happened.
+async function setPlayFullscreen(enabled) {
+  try {
+    const result = await window.eduGame.setFullscreen(Boolean(enabled));
+    if (result && result.ok) return true;
+  } catch (error) {}
+  toast('Không đổi được chế độ toàn màn hình. Hãy thử lại.', 5000);
+  return false;
+}
+if (window.eduGame && typeof window.eduGame.onFullscreenChanged === 'function') {
+  window.eduGame.onFullscreenChanged((enabled) => {
+    document.documentElement.dataset.fullscreen = enabled ? '1' : '0';
+  });
+}
+// Leaving the play surface must also release the window back to normal size.
+function closePlaySurface() {
+  setPlayFullscreen(false);
+  $('#modalRoot').innerHTML = '';
+}
 // ---------- G4 — player theme (chỉ áp dụng trong lúc trình chiếu game) ----------
 function playerTheme() {
   const audience = state.settings?.preferences?.audience;
@@ -46,7 +67,7 @@ function paintProgress(scope) {
 // ---------- §2.3 Thi đấu đội (quiz/scenario) ----------
 function openTeamSetup() {
   const root = $('#modalRoot');
-  root.innerHTML = `<div class="modal-backdrop"><div class="modal w-[min(720px,96vw)] bg-[#11152b] border border-[#303651]" data-player-theme="${playerTheme()}"><div class="modal-head bg-[#11152b] border-[#303651] text-white"><div><h2>${escapeHtml(state.currentGame.title)}</h2><div class="small text-[#aeb5ce] mt-1">THI ĐẤU ĐỘI · CHIA ĐỘ TRƯỚC KHI BẮT ĐẦU</div></div><button class="modal-close bg-[#292f49] text-white" data-play-close>✕</button></div><div class="modal-body p-[18px]" id="playBody"></div></div></div>`;
+  root.innerHTML = `<div class="modal-backdrop"><div class="modal w-[min(720px,96vw)] bg-[#11152b] border border-[#303651]" data-player-theme="${playerTheme()}"><div class="modal-head bg-[#11152b] border-[#303651] text-white"><div><h2>${escapeHtml(state.currentGame.title)}</h2><div class="small text-[#aeb5ce] mt-1">THI ĐẤU ĐỘI · CHIA ĐỘ TRƯỚC KHI BẮT ĐẦU</div></div><button class="modal-close bg-[#292f49] text-white" data-play-fullscreen>⛶</button><button class="modal-close bg-[#292f49] text-white" data-play-close>✕</button></div><div class="modal-body p-[18px]" id="playBody"></div></div></div>`;
   $('[data-play-close]', root).addEventListener('click', () => root.innerHTML = '');
   state.pendingTeams = [
     { id: 't1', name: 'Đội A', icon: '🏎️' },
@@ -74,7 +95,7 @@ function renderTeamSetup() {
     state.pendingTeams.push({ id: `t${n}-${Date.now().toString(36)}`, name: `Đội ${String.fromCharCode(64 + n)}`, icon: '🏁' });
     renderTeamSetup();
   });
-  $('[data-play-close2]', root).addEventListener('click', () => $('#modalRoot').innerHTML = '');
+  $('[data-play-close2]', root).addEventListener('click', () => closePlaySurface());
   $('#startTeamGameBtn', root).addEventListener('click', startTeamGame);
 }
 function startTeamGame() {
@@ -102,7 +123,7 @@ function leaderboardHtml() {
 }
 function openPlayModal() {
   const root = $('#modalRoot');
-  root.innerHTML = `<div class="modal-backdrop"><div class="modal w-[min(980px,96vw)] bg-[#11152b] border border-[#303651]" data-player-theme="${playerTheme()}"><div class="modal-head bg-[#11152b] border-[#303651] text-white"><div><h2>${escapeHtml(state.currentGame.title)}</h2><div class="small text-[#aeb5ce] mt-1">CHẾ ĐỘ TRÌNH CHIẾU · NGOẠI TUYẾN</div></div><button class="modal-close bg-[#292f49] text-white" data-play-close>✕</button></div><div class="modal-body p-[18px]" id="playBody"></div></div></div>`;
+  root.innerHTML = `<div class="modal-backdrop"><div class="modal w-[min(980px,96vw)] bg-[#11152b] border border-[#303651]" data-player-theme="${playerTheme()}"><div class="modal-head bg-[#11152b] border-[#303651] text-white"><div><h2>${escapeHtml(state.currentGame.title)}</h2><div class="small text-[#aeb5ce] mt-1">CHẾ ĐỘ TRÌNH CHIẾU · NGOẠI TUYẾN</div></div><button class="modal-close bg-[#292f49] text-white" data-play-fullscreen>⛶</button><button class="modal-close bg-[#292f49] text-white" data-play-close>✕</button></div><div class="modal-body p-[18px]" id="playBody"></div></div></div>`;
   $('[data-play-close]',root).addEventListener('click', () => root.innerHTML = '');
   renderQuestion();
 }
@@ -218,7 +239,7 @@ async function renderResults() {
     ? { points: top.points, max, percent: max ? Math.round(top.points / max * 100) : 0, correct: top.correct, total: game.questions.length, winnerTeam: top.name }
     : summary;
   $('#playBody').innerHTML = `<div class="game-stage"><div class="result-screen"><div class="result-medal">${percent>=80?'🏆':percent>=50?'🎖️':'🌱'}</div><div class="stage-kicker">THỬ THÁCH HOÀN THÀNH</div><h2>${ranked&&top?`${top.icon} ${escapeHtml(top.name)} dẫn đầu!`:percent>=80?'Xuất sắc!':percent>=50?'Làm tốt lắm!':'Tiếp tục cố gắng!'}</h2><p>${escapeHtml(game.title)}</p><div class="result-score">${points.toLocaleString('vi-VN')} điểm</div><p>${game.template==='scenario'?`Hoàn thành ${state.gameAnswers.length} quyết định · ${percent}% điểm tối đa`:`Trả lời đúng ${correct}/${game.questions.length} câu · ${percent}% điểm tối đa`}</p>${state.teamPlay ? leaderboardHtml() : ''}<p id="resultSaveStatus" class="result-save-status">Đang tự lưu kết quả…</p><div class="result-actions"><button class="btn btn-secondary" id="closeResultBtn">Đóng</button><button class="btn btn-secondary" id="replayBtn">↻ Chơi lại</button><button class="btn btn-primary" id="saveResultBtn">Đang lưu…</button></div></div></div>`;
-  $('#closeResultBtn').onclick = () => $('#modalRoot').innerHTML = '';
+  $('#closeResultBtn').onclick = () => closePlaySurface();
   $('#replayBtn').onclick = () => {
     state.gameIndex=0;state.gameAnswers=[];state.gameStart=Date.now();state.scenarioSteps=0;
     state.playStartedAt=Date.now();state.resultSession=null;
@@ -243,7 +264,7 @@ function openMatchingPlay() {
   const root = $('#modalRoot');
   const game = state.currentGame;
   const modeLabel = ({ columns: 'GHÉP HAI CỘT', memory: 'LẬT THẺ GHI NHỚ', categorize: 'PHÂN LOẠI KIẾN THỨC' })[game.matchingGame.mode] || 'GHÉP CẶP KIẾN THỨC';
-  root.innerHTML = `<div class="modal-backdrop"><div class="modal w-[min(980px,96vw)] bg-[#11152b] border border-[#303651]" data-player-theme="${playerTheme()}"><div class="modal-head bg-[#11152b] border-[#303651] text-white"><div><h2>${escapeHtml(game.title)}</h2><div class="small text-[#aeb5ce] mt-1">${modeLabel} · NGOẠI TUYẾN</div></div><button class="modal-close bg-[#292f49] text-white" data-play-close>✕</button></div><div class="modal-body p-[18px]" id="playBody"></div></div></div>`;
+  root.innerHTML = `<div class="modal-backdrop"><div class="modal w-[min(980px,96vw)] bg-[#11152b] border border-[#303651]" data-player-theme="${playerTheme()}"><div class="modal-head bg-[#11152b] border-[#303651] text-white"><div><h2>${escapeHtml(game.title)}</h2><div class="small text-[#aeb5ce] mt-1">${modeLabel} · NGOẠI TUYẾN</div></div><button class="modal-close bg-[#292f49] text-white" data-play-fullscreen>⛶</button><button class="modal-close bg-[#292f49] text-white" data-play-close>✕</button></div><div class="modal-body p-[18px]" id="playBody"></div></div></div>`;
   $('[data-play-close]', root).addEventListener('click', () => root.innerHTML = '');
   resetMatchingPlay();
 }
@@ -411,7 +432,7 @@ async function renderMatchingResults() {
   state.lastSummary = summary;
   const { points, max, percent } = summary;
   $('#playBody').innerHTML = `<div class="game-stage"><div class="result-screen"><div class="result-medal">${percent >= 80 ? '🏆' : percent >= 50 ? '🎖️' : '🌱'}</div><div class="stage-kicker">GHÉP CẶP HOÀN THÀNH</div><h2>${percent >= 80 ? 'Xuất sắc!' : percent >= 50 ? 'Ghép tốt lắm!' : 'Tiếp tục cố gắng!'}</h2><p>${escapeHtml(game.title)}</p><div class="result-score">${points.toLocaleString('vi-VN')} / ${max.toLocaleString('vi-VN')} điểm</div><p>Hoàn thành ${m.pairs.length} cặp · sai ${mp.wrong} lần · ${Math.round(elapsed)} giây · ${percent}% điểm tối đa</p><p id="resultSaveStatus" class="result-save-status">Đang tự lưu kết quả…</p><div class="result-actions"><button class="btn btn-secondary" id="closeResultBtn">Đóng</button><button class="btn btn-secondary" id="replayBtn">↻ Chơi lại</button><button class="btn btn-primary" id="saveResultBtn">Đang lưu…</button></div></div></div>`;
-  $('#closeResultBtn').onclick = () => $('#modalRoot').innerHTML = '';
+  $('#closeResultBtn').onclick = () => closePlaySurface();
   $('#replayBtn').onclick = () => { state.playStartedAt=Date.now();state.resultSession=null;resetMatchingPlay(); };
   wireResultSession(game, state.lastSummary, {
     answers: [],
@@ -423,7 +444,7 @@ async function renderMatchingResults() {
 function openTreasurePlay() {
   const root = $('#modalRoot');
   const game = state.currentGame;
-  root.innerHTML = `<div class="modal-backdrop"><div class="modal w-[min(980px,96vw)] bg-[#11152b] border border-[#303651]" data-player-theme="${playerTheme()}"><div class="modal-head bg-[#11152b] border-[#303651] text-white"><div><h2>${escapeHtml(game.title)}</h2><div class="small text-[#aeb5ce] mt-1">HÀNH TRÌNH KHÁM PHÁ · NGOẠI TUYẾN</div></div><button class="modal-close bg-[#292f49] text-white" data-play-close>✕</button></div><div class="modal-body p-[18px]" id="playBody"></div></div></div>`;
+  root.innerHTML = `<div class="modal-backdrop"><div class="modal w-[min(980px,96vw)] bg-[#11152b] border border-[#303651]" data-player-theme="${playerTheme()}"><div class="modal-head bg-[#11152b] border-[#303651] text-white"><div><h2>${escapeHtml(game.title)}</h2><div class="small text-[#aeb5ce] mt-1">HÀNH TRÌNH KHÁM PHÁ · NGOẠI TUYẾN</div></div><button class="modal-close bg-[#292f49] text-white" data-play-fullscreen>⛶</button><button class="modal-close bg-[#292f49] text-white" data-play-close>✕</button></div><div class="modal-body p-[18px]" id="playBody"></div></div></div>`;
   $('[data-play-close]', root).addEventListener('click', () => root.innerHTML = '');
   const hunt = game.treasureHunt;
   state.treasurePlay = { stageId: hunt.stages[0].id, earned: 0, results: [], itemsFound: {}, attemptsLeft: 0, steps: 0, answered: false, done: false };
@@ -904,7 +925,7 @@ function renderTreasureResults() {
   state.lastSummary = { points: tp.earned, max, percent, correct: correctCount, total: hunt.stages.length };
   const game = state.currentGame;
   $('#playBody').innerHTML = `<div class="game-stage"><div class="result-screen"><div class="result-medal">${percent >= 80 ? '🏆' : percent >= 50 ? '🎖️' : '🌱'}</div><div class="stage-kicker">${completed ? 'HÀNH TRÌNH HOÀN THÀNH' : 'DỪNG HÀNH TRÌNH'}</div><h2>${completed ? 'Bạn đã tìm ra kho báu!' : 'Tiếp tục cố gắng!'}</h2><p>${escapeHtml(game.title)}</p><div class="result-score">${tp.earned.toLocaleString('vi-VN')} / ${max.toLocaleString('vi-VN')} điểm</div><p>Hoàn thành ${correctCount}/${hunt.stages.length} chặng${completed ? ` · Thưởng hành trình +${hunt.journeyBonus || 300}` : ''} · ${percent}% điểm tối đa</p><p id="resultSaveStatus" class="result-save-status">Đang tự lưu kết quả…</p><div class="result-actions"><button class="btn btn-secondary" id="closeResultBtn">Đóng</button><button class="btn btn-secondary" id="replayBtn">↻ Chơi lại</button><button class="btn btn-primary" id="saveResultBtn">Đang lưu…</button></div></div></div>`;
-  $('#closeResultBtn').onclick = () => $('#modalRoot').innerHTML = '';
+  $('#closeResultBtn').onclick = () => closePlaySurface();
   $('#replayBtn').onclick = () => { state.playStartedAt=Date.now();state.resultSession=null;openTreasurePlay(); };
   wireResultSession(game, state.lastSummary, {
     answers: tp.results,
@@ -923,7 +944,7 @@ const RACE_CELL_ICON = { boost: '⚡', penalty: '🪨', lucky: '🎁', challenge
 function openRacePlay() {
   const root = $('#modalRoot');
   const game = state.currentGame;
-  root.innerHTML = `<div class="modal-backdrop"><div class="modal w-[min(1040px,96vw)] bg-[#11152b] border border-[#303651]" data-player-theme="${playerTheme()}"><div class="modal-head bg-[#11152b] border-[#303651] text-white"><div><h2>${escapeHtml(game.title)}</h2><div class="small text-[#aeb5ce] mt-1">ĐƯỜNG ĐUA TRI THỨC · GIẢNG VIÊN ĐIỀU KHIỂN MÀN CHUNG</div></div><button class="modal-close bg-[#292f49] text-white" data-play-close>✕</button></div><div class="modal-body p-[18px]" id="playBody"></div></div></div>`;
+  root.innerHTML = `<div class="modal-backdrop"><div class="modal w-[min(1040px,96vw)] bg-[#11152b] border border-[#303651]" data-player-theme="${playerTheme()}"><div class="modal-head bg-[#11152b] border-[#303651] text-white"><div><h2>${escapeHtml(game.title)}</h2><div class="small text-[#aeb5ce] mt-1">ĐƯỜNG ĐUA TRI THỨC · GIẢNG VIÊN ĐIỀU KHIỂN MÀN CHUNG</div></div><button class="modal-close bg-[#292f49] text-white" data-play-fullscreen>⛶</button><button class="modal-close bg-[#292f49] text-white" data-play-close>✕</button></div><div class="modal-body p-[18px]" id="playBody"></div></div></div>`;
   $('[data-play-close]', root).addEventListener('click', () => root.innerHTML = '');
   const race = game.race;
   state.racePlay = {
@@ -1037,7 +1058,7 @@ function renderRaceResults() {
   $('#playBody').innerHTML = `<div class="game-stage"><div class="result-screen"><div class="result-medal">${rp.winnerId ? '🏁' : '🏅'}</div><div class="stage-kicker">KẾT QUẢ ĐƯỜNG ĐUA</div><h2>${tied ? 'Về đích đồng hạng!' : `${winner.icon} ${escapeHtml(winner.name)} chiến thắng!`}</h2><p>${escapeHtml(game.title)}</p>
     <div class="race-scoreboard max-w-[460px] my-[14px] mx-auto">${byProgress.map((t, i) => `<div class="race-team-row scoreboard"><span>${i + 1}. ${t.icon} <strong>${escapeHtml(t.name)}</strong></span><span>Ô ${t.progress}/${race.trackLength}</span><span>🏆 ${t.points} điểm</span></div>`).join('')}</div>
     <p id="resultSaveStatus" class="result-save-status">Đang tự lưu kết quả…</p><div class="result-actions"><button class="btn btn-secondary" id="closeResultBtn">Đóng</button><button class="btn btn-secondary" id="replayBtn">↻ Đua lại</button><button class="btn btn-primary" id="saveResultBtn">Đang lưu…</button></div></div></div>`;
-  $('#closeResultBtn').onclick = () => $('#modalRoot').innerHTML = '';
+  $('#closeResultBtn').onclick = () => closePlaySurface();
   $('#replayBtn').onclick = () => { state.playStartedAt=Date.now();state.resultSession=null;openRacePlay(); };
   wireResultSession(game, state.lastSummary, {
     answers: [],
@@ -1050,3 +1071,13 @@ function renderRaceResults() {
     }
   }, winner.name);
 }
+
+document.addEventListener('click', (e) => {
+  const fsBtn = e.target && e.target.closest ? e.target.closest('[data-play-fullscreen]') : null;
+  if (fsBtn) setPlayFullscreen(document.documentElement.dataset.fullscreen !== '1');
+  const closeBtn = e.target && e.target.closest ? e.target.closest('[data-play-close]') : null;
+  if (closeBtn) setPlayFullscreen(false);
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && document.documentElement.dataset.fullscreen === '1') setPlayFullscreen(false);
+});

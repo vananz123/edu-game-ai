@@ -150,6 +150,6 @@ Source: `docs/archive/specs/update_plan_2.txt`. This batch hardens the existing 
 - [x] **Three areas**: Giáo án = sources + analyses; Dự án của tôi = projects/work-in-progress; Thư viện = saved games. Deep Q&A is a disabled "Chưa khả dụng" placeholder. External `.egame` import hidden but code/data retained. Deleting a project keeps saved games.
 - [x] **Verification**: `npm run check` clean, `npm test` 25 suites, `smoke69` **19/19**, `smoke70` **8/8**, `smoke71` **25/25**, `persistence71` **3/3 write + 9/9 after restart**, regressions `smoke68` **44/44**, `smoke58` **26/26**, `smoke67` 124/124, `smoke56` **58/58**. Smoke runs use the `EDUGAME_USER_DATA` isolation hook.
 - [x] Rebuild the installer for this batch and run real-Qwen e2e; manual Windows mouse pass and clean-machine install remain open.
-- [ ] Optional future work (not in this batch): teacher-uploaded treasure art/audio, matching-pair illustrations, deeper lesson research/Q&A with citations, an explicit external `.egame` import review.
+- [ ] Optional future work (not in this batch): teacher-uploaded treasure art/audio, matching-pair illustrations, deeper lesson research/Q&A with citations, an explicit external `.egame` import review. Theme/drag-drop/fullscreen/project rename baseline shipped in Đợt 3.
 
 Gates: O1 = **0 Qwen calls for genre choice**; O4 = retrieval quality + RAM measured, no guesses; O5 = second game from the same lesson skips analysis; O6 = before/after benchmark table. Never trade pedagogical correctness for speed.

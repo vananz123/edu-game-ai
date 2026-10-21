@@ -385,7 +385,7 @@ async function ensureData() {
     saveDb({ version: 1, games, sessions: Array.isArray(legacy.sessions) ? legacy.sessions : [] });
   }
   try { await fs.access(SETTINGS_FILE()); }
-  catch { await writeJson(SETTINGS_FILE(), { ai: { mode: 'offline', baseUrl: 'http://127.0.0.1:11434/v1', model: 'qwen2.5:7b', apiKeyEncrypted: '' }, preferences: { sound: true, largeText: true } }); }
+  catch { await writeJson(SETTINGS_FILE(), { ai: { mode: 'offline', baseUrl: 'http://127.0.0.1:11434/v1', model: 'qwen2.5:7b', apiKeyEncrypted: '' }, preferences: { sound: true, largeText: true, theme: 'light' } }); }
 }
 async function readJson(file, fallback = {}) {
   try { return JSON.parse(await fs.readFile(file, 'utf8')); } catch { return fallback; }
@@ -484,6 +484,13 @@ function upsertSessionRow(session) {
   return stored;
 }
 
+// Main is the source of truth for the native window state, so the renderer
+// flag cannot drift if Windows or a shortcut leaves fullscreen on its own.
+function sendFullscreenState(enabled) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send('window:fullscreen-changed', Boolean(enabled));
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1440, height: 920, minWidth: 1100, minHeight: 720,
@@ -496,6 +503,8 @@ function createWindow() {
       sandbox: true
     }
   });
+  mainWindow.on('enter-full-screen', () => sendFullscreenState(true));
+  mainWindow.on('leave-full-screen', () => sendFullscreenState(false));
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
 }
 app.whenReady().then(async () => {
@@ -1353,6 +1362,40 @@ function registerIpc() {
       throw error;
     }
   });
+  ipcMain.handle('lesson:answer-question', async (_e, payload) => {
+    const documentId = String(payload?.documentId || '');
+    const question = String(payload?.question || '').trim();
+    if (!documentId) throw new Error('Thiếu mã tài liệu để hỏi đáp.');
+    if (question.length < 3) throw new Error('Câu hỏi quá ngắn.');
+    const store = requireLessonStore();
+    const document = await store.getDocumentWithText(documentId);
+    if (!document) throw new Error('Không tìm thấy giáo án đã lưu. Hãy nhập lại tài liệu.');
+    const { selectRelevantEvidence } = require('./ai-core/document-assist');
+    const citations = selectRelevantEvidence(document.text, question, 4);
+    let answer = '';
+    try {
+      const client = createLessonChatClient();
+      const result = await client.chatJson({
+        messages: [
+          { role: 'system', content: 'Bạn là trợ lý giáo dục. Chỉ trả lời dựa trên các đoạn trích dẫn được cung cấp. Nếu không đủ thông tin, nói rõ không đủ dữ liệu. Trả lời ngắn gọn bằng tiếng Việt.' },
+          { role: 'user', content: `Câu hỏi: ${question}\n\nĐoạn trích:\n${citations.map((c, i) => `[${i + 1}] ${c}`).join('\n\n')}\n\nTrả về JSON: {"answer":"..."}` }
+        ],
+        maxTokens: 512,
+        responseSchema: { type: 'object', properties: { answer: { type: 'string' } }, required: ['answer'] }
+      });
+      answer = String(result && result.answer ? result.answer : '').trim();
+    } catch (error) {
+      answer = citations.length
+        ? 'AI local chưa sẵn sàng. Các đoạn liên quan được trích dẫn bên dưới.'
+        : 'Không tìm thấy đoạn liên quan trong giáo án.';
+    }
+    if (!answer) {
+      answer = citations.length
+        ? 'Không có câu trả lời tự động; xem các trích dẫn bên dưới.'
+        : 'Không tìm thấy đoạn liên quan trong giáo án.';
+    }
+    return { answer, citations };
+  });
   ipcMain.handle('files:import-document', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       title: 'Chọn giáo án hoặc tài liệu',
@@ -1389,6 +1432,36 @@ function registerIpc() {
     } else throw new Error('Định dạng này chưa được hỗ trợ.');
     return { name: path.basename(filePath), path: filePath, text: text.trim().slice(0, 120000), characters: text.length };
   });
+  ipcMain.handle('files:import-document-from-path', async (_e, filePath) => {
+    const target = String(filePath || '').trim();
+    if (!target) return null;
+    const ext = path.extname(target).toLowerCase();
+    if (!['.txt', '.md', '.docx', '.pdf', '.pptx'].includes(ext)) throw new Error('Định dạng này chưa được hỗ trợ.');
+    const buffer = await fs.readFile(target);
+    let text = '';
+    if (ext === '.txt' || ext === '.md') text = buffer.toString('utf8');
+    else if (ext === '.docx') {
+      const parsed = await mammoth.extractRawText({ buffer });
+      text = parsed.value || '';
+    } else if (ext === '.pdf') {
+      const parsed = await pdfParse(buffer);
+      text = parsed.text || '';
+    } else if (ext === '.pptx') {
+      const zip = await JSZip.loadAsync(buffer);
+      const slides = Object.keys(zip.files).filter(n => /^ppt\/slides\/slide\d+\.xml$/.test(n)).sort((a,b) => {
+        const na = Number(a.match(/slide(\d+)/)[1]), nb = Number(b.match(/slide(\d+)/)[1]); return na - nb;
+      });
+      const chunks = [];
+      for (const slide of slides) {
+        const xml = await zip.files[slide].async('text');
+        const words = [...xml.matchAll(/<a:t>([\s\S]*?)<\/a:t>/g)].map(m => m[1].replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"'));
+        if (words.length) chunks.push(words.join(' '));
+      }
+      text = chunks.join('\n\n');
+    }
+    return { name: path.basename(target), path: target, text: text.trim().slice(0, 120000), characters: text.length, sizeBytes: buffer.length };
+  });
+
   ipcMain.handle('files:import-questions', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       title: 'Nhập câu hỏi từ bảng tính',
@@ -1409,6 +1482,15 @@ function registerIpc() {
     if (result.canceled || !result.filePath) return { canceled: true };
     await fs.writeFile(result.filePath, JSON.stringify({ packageFormat: 'edugame', packageVersion: 1, game }, null, 2), 'utf8');
     return { ok: true, path: result.filePath };
+  });
+  // The ⛶ button in gameplay must work on any page, before any game has been
+  // imported. This handler used to be nested inside files:import-game, so it
+  // was only registered after an import (and the second import threw
+  // "Attempted to register a second handler").
+  ipcMain.handle('window:set-fullscreen', (_e, enabled) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return { ok: false };
+    mainWindow.setFullScreen(Boolean(enabled));
+    return { ok: true };
   });
   ipcMain.handle('files:import-game', async () => {
     const result = await dialog.showOpenDialog(mainWindow, { title: 'Nhập trò chơi', properties: ['openFile'], filters: [{ name: 'EduGame package', extensions: ['egame', 'json'] }] });
@@ -1541,8 +1623,11 @@ function registerIpc() {
     const limit = Number(payload?.limit) || 50;
     const live = aiTasks.list(limit).map(record => ({ ...record, restored: false }));
     let history = [];
+    // The status bar polls every couple of seconds and only needs live tasks;
+    // skip the SQLite read when the caller says it does not need history.
+    const includeHistory = payload?.history !== false;
     try {
-      history = requireLessonStore().listAiTasks(limit).map(row => ({ ...row, restored: true }));
+      if (includeHistory) history = requireLessonStore().listAiTasks(limit).map(row => ({ ...row, restored: true }));
     } catch (error) {
       console.warn('Không đọc được lịch sử tác vụ AI:', error && error.message ? error.message : error);
     }

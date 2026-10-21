@@ -13,6 +13,50 @@ function wizardConfigToggle(key, label, checked) {
   return `<label class="switch-row"><span class="switch-copy"><strong>${label}</strong></span><input type="checkbox" data-wizard-config-toggle="${key}"${checked ? ' checked' : ''}></label>`;
 }
 
+/**
+ * Fast/Thinking is the most consequential choice on this screen (how much of the
+ * lesson is sent + the output cap), so it is a pair of visible cards instead of a
+ * dropdown that hides one of the two options. The click is handled in place, so
+ * the other fields keep their focus and caret.
+ */
+function wizardModeChoice(config) {
+  const value = config.generationMode === 'deep' ? 'deep' : 'fast';
+  const card = (mode, icon, title, note, description) => `<button type="button" role="radio" class="wizard-mode-card" data-wizard-mode="${mode}" data-wizard-action="set-mode" data-mode="${mode}" aria-checked="${value === mode ? 'true' : 'false'}" title="${escapeHtml(description)}">
+      <span class="wizard-mode-icon" aria-hidden="true">${icon}</span>
+      <span class="wizard-mode-copy"><strong>${title} <small>· ${note}</small></strong><span>${description}</span></span>
+      <span class="wizard-mode-check" aria-hidden="true">✓</span>
+    </button>`;
+  return `<div class="wizard-mode-block" data-wizard-mode-block="1">
+    <div class="wizard-mode-head">
+      <div>
+        <div class="wizard-mode-title" id="wizardModeLabel">CHẾ ĐỘ TẠO</div>
+        <div class="wizard-mode-sub">Chọn cách AI local đọc giáo án — khác biệt thật nằm ở lượng ngữ cảnh và giới hạn độ dài câu trả lời.</div>
+      </div>
+      <span class="tag" data-wizard-mode-badge>${value === 'deep' ? 'Thinking' : 'Fast'}</span>
+    </div>
+    <div class="wizard-mode-choice" role="radiogroup" aria-labelledby="wizardModeLabel">
+      ${card('fast', '⚡', 'Fast', 'Nhanh (mặc định)', 'Ít ngữ cảnh hơn, phản hồi nhanh. Phù hợp giáo án ngắn hoặc khi cần tạo nhanh trong lớp.')}
+      ${card('deep', '🧠', 'Thinking', 'Kỹ, nhiều ngữ cảnh', 'Gửi nhiều đoạn giáo án hơn và cho phép câu trả lời dài hơn. Phù hợp giáo án dài, cần nội dung chi tiết.')}
+    </div>
+    <div class="field-hint">Model Qwen 3.5 trên CPU chưa trả nội dung suy luận dùng được — ứng dụng không giả lập suy luận. Fast/Thinking chỉ đổi ngữ cảnh và trần token, không đổi model.</div>
+  </div>`;
+}
+
+/** In-place switch so typed fields are not lost while choosing a mode. */
+function wizardSetGenerationMode(mode) {
+  if (wizardState.busy) return undefined;
+  const next = mode === 'deep' ? 'deep' : 'fast';
+  wizardSyncConfigFromDom();
+  if (!wizardState.config) return undefined;
+  wizardState.config.generationMode = next;
+  document.querySelectorAll('[data-wizard-mode]').forEach(node => {
+    node.setAttribute('aria-checked', node.dataset.wizardMode === next ? 'true' : 'false');
+  });
+  const badge = document.querySelector('[data-wizard-mode-badge]');
+  if (badge) badge.textContent = next === 'deep' ? 'Thinking' : 'Fast';
+  return undefined;
+}
+
 function renderWizardConfigure() {
   const s = wizardState;
   const config = s.config;
@@ -31,6 +75,8 @@ function renderWizardConfigure() {
     <div class="section-head"><h3>Bước 4 · Cấu hình ${escapeHtml(meta.label)}</h3><span class="tag">${meta.icon} ${escapeHtml(config.gameType)}</span></div>
     <div class="panel-sub">${escapeHtml(meta.hint)} Giáo viên có thể chỉnh lại toàn bộ trong trình soạn thảo sau khi tạo nội dung.</div>
 
+    ${wizardModeChoice(config)}
+
     <div class="field-row">
       <div class="field"><label>TÊN TRÒ CHƠI *</label><input data-wizard-config="title" value="${escapeHtml(config.title || '')}"></div>
       <div class="field"><label>CHỦ ĐỀ</label><input data-wizard-config="topic" value="${escapeHtml(config.topic || '')}"></div>
@@ -46,11 +92,7 @@ function renderWizardConfigure() {
       ${wizardConfigNumber('durationMinutes', 'THỜI LƯỢNG (PHÚT)', config.durationMinutes, 1, 120)}
       ${wizardConfigSelect('playMode', 'HÌNH THỨC', config.playMode, [{ value: 'individual', label: 'Cá nhân' }, { value: 'team', label: 'Đội nhóm' }])}
       ${wizardConfigSelect('style', 'PHONG CÁCH', config.style, wizardStyleOptions)}
-      ${wizardConfigSelect('generationMode', 'CHẾ ĐỘ TẠO', config.generationMode, [{ value: 'fast', label: 'Fast — Nhanh (mặc định)' }, { value: 'deep', label: 'Thinking — Kỹ, nhiều ngữ cảnh hơn' }])}
       ${wizardConfigTypeFields(config)}
-    </div>
-    <!-- update_plan_3 §9: two honest modes on the same model — the real difference is what the app controls. -->
-    <div class="field-hint">Fast ưu tiên tốc độ (ít ngữ cảnh hơn, trần output thấp hơn). Thinking gửi nhiều đoạn giáo án hơn và cho phép output dài hơn. Model Qwen 3.5 hiện chưa trả nội dung suy luận (thinking) dùng được trên CPU — ứng dụng không giả lập suy luận; khác biệt thật sự nằm ở ngữ cảnh và giới hạn token.</div>
     </div>
 
     ${objectives.length ? `<div class="section-head mt-[14px]"><h4>Mục tiêu trọng tâm</h4><small class="text-[11px] text-[#788196]">Bỏ chọn mục tiêu không muốn đưa vào trò chơi.</small></div>

@@ -39,6 +39,7 @@ const wizardState = {
   lessonStage: '', // O7: 'retrieve' | 'generate' | 'validate' | 'repair' | 'ready' | 'cached'
   lessonRepaired: false, // O7: true when the model actually had to repair an answer
   analysisStartedAt: 0, // timestamp of the running analysis; drives the elapsed indicator
+  generationStartedAt: 0, // timestamp of the running generation; drives the elapsed indicator
   error: null, // { code, message }
   notice: null,
   requestNonce: 0,
@@ -91,7 +92,7 @@ function wizardNewRequestId(kind) {
 // The model call has no token stream, so a percentage would be invented. The
 // elapsed clock is real, survives page navigation, and is the only progress the
 // UI claims while the request is in flight.
-let wizardAnalysisClockTimer = null;
+let wizardActivityClockTimer = null;
 
 function wizardFormatDuration(milliseconds) {
   const totalSeconds = Math.max(0, Math.floor(Number(milliseconds) / 1000));
@@ -106,32 +107,86 @@ function wizardAnalysisElapsedText() {
   return `Đã chờ ${elapsed} · thường mất 1–2 phút`;
 }
 
-function wizardSyncAnalysisClock() {
-  const active = wizardState.busy === 'analyze' && Boolean(wizardState.analysisStartedAt);
+/**
+ * Generation is slower than analysis and the real time depends on the model and
+ * the CPU, so the UI shows an honest range derived from the mode and the number
+ * of items — never a fake countdown or a made-up percentage.
+ */
+function wizardGenerationEstimateText() {
+  const config = wizardState.config || {};
+  const deep = config.generationMode === 'deep';
+  const itemCount = Number(
+    config.questionCount || config.situationCount || config.pairCount || config.stageCount || 0
+  ) || 0;
+  const low = (deep ? 2 : 1) + Math.floor(itemCount / 12);
+  const high = low + (deep ? 3 : 2);
+  return `dự kiến ${low}–${high} phút`;
+}
+
+function wizardGenerationElapsedText() {
+  const startedAt = Number(wizardState.generationStartedAt) || 0;
+  const elapsed = startedAt ? wizardFormatDuration(Date.now() - startedAt) : '0:00';
+  return `Đã chạy ${elapsed} · ${wizardGenerationEstimateText()}`;
+}
+
+/** Which long-running wizard job owns the shared top-bar activity chip. */
+function wizardActivityKind() {
+  if (wizardState.busy === 'analyze' && wizardState.analysisStartedAt) return 'analyze';
+  if (wizardState.busy === 'generate' && wizardState.generationStartedAt) return 'generate';
+  return '';
+}
+
+function wizardSyncActivityClock() {
+  const kind = wizardActivityKind();
   const chip = document.getElementById('globalAiActivity');
-  if (chip) chip.hidden = !active;
-  if (!active) return;
-  const text = wizardAnalysisElapsedText();
-  document.querySelectorAll('[data-wizard-analysis-elapsed]').forEach(node => { node.textContent = text; });
-  const chipElapsed = chip && chip.querySelector('[data-global-ai-elapsed]');
-  if (chipElapsed) chipElapsed.textContent = wizardFormatDuration(Date.now() - wizardState.analysisStartedAt);
+  if (chip) {
+    chip.hidden = !kind;
+    chip.title = kind === 'generate' ? 'Mở tiến trình tạo nội dung' : 'Mở tiến trình phân tích';
+    const label = chip.querySelector('[data-global-ai-label]');
+    if (label) label.textContent = kind === 'generate' ? 'AI đang tạo nội dung' : 'AI đang phân tích';
+    const chipElapsed = chip.querySelector('[data-global-ai-elapsed]');
+    if (chipElapsed && kind) {
+      const startedAt = kind === 'generate' ? wizardState.generationStartedAt : wizardState.analysisStartedAt;
+      chipElapsed.textContent = wizardFormatDuration(Date.now() - startedAt);
+    }
+  }
+  if (!kind) return;
+  if (kind === 'analyze') {
+    const text = wizardAnalysisElapsedText();
+    document.querySelectorAll('[data-wizard-analysis-elapsed]').forEach(node => { node.textContent = text; });
+  } else {
+    const text = wizardGenerationElapsedText();
+    document.querySelectorAll('[data-wizard-generate-elapsed]').forEach(node => { node.textContent = text; });
+  }
 }
 
-function wizardStartAnalysisClock() {
-  wizardStopAnalysisClock();
-  wizardState.analysisStartedAt = Date.now();
-  wizardSyncAnalysisClock();
-  wizardAnalysisClockTimer = window.setInterval(wizardSyncAnalysisClock, 1000);
+function wizardStartActivityClock(kind) {
+  wizardStopActivityClock();
+  if (kind === 'generate') {
+    wizardState.generationStartedAt = Date.now();
+    wizardState.analysisStartedAt = 0;
+  } else {
+    wizardState.analysisStartedAt = Date.now();
+    wizardState.generationStartedAt = 0;
+  }
+  wizardSyncActivityClock();
+  wizardActivityClockTimer = window.setInterval(wizardSyncActivityClock, 1000);
 }
 
-function wizardStopAnalysisClock() {
-  if (wizardAnalysisClockTimer !== null) {
-    window.clearInterval(wizardAnalysisClockTimer);
-    wizardAnalysisClockTimer = null;
+function wizardStartAnalysisClock() { wizardStartActivityClock('analyze'); }
+function wizardStartGenerationClock() { wizardStartActivityClock('generate'); }
+
+function wizardStopActivityClock() {
+  if (wizardActivityClockTimer !== null) {
+    window.clearInterval(wizardActivityClockTimer);
+    wizardActivityClockTimer = null;
   }
   const chip = document.getElementById('globalAiActivity');
   if (chip) chip.hidden = true;
 }
+
+/** Kept as an alias so the analysis step keeps one obvious start/stop pair. */
+function wizardStopAnalysisClock() { wizardStopActivityClock(); }
 
 function wizardClearMessages() {
   wizardState.error = null;
@@ -149,6 +204,7 @@ function wizardSetNotice(message) {
 }
 
 function wizardReset() {
+  wizardStopActivityClock();
   Object.assign(wizardState, {
     step: 'input',
     projectId: null,
@@ -173,6 +229,7 @@ function wizardReset() {
     lessonStage: '',
     lessonRepaired: false,
     analysisStartedAt: 0,
+    generationStartedAt: 0,
     error: null,
     notice: null,
     activeRequestId: null

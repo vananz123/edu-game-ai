@@ -41,6 +41,9 @@ document.addEventListener('click', e => {
     if (wizardState.busy === 'analyze') {
       wizardState.step = 'analyze';
       navigate('create-wizard');
+    } else if (wizardState.busy === 'generate') {
+      wizardState.step = 'generate';
+      navigate('create-wizard');
     }
     return;
   }
@@ -52,9 +55,11 @@ $('#helpBtn').addEventListener('click', showHelp);
   try {
     state.db = await window.eduGame.getLibrary();
     state.settings = await window.eduGame.getSettings();
+    applyTheme(state.settings && state.settings.preferences && state.settings.preferences.theme);
     const localAi = await window.eduGame.getLocalAiModels();
     state.localAiModels = localAi.models;
     state.localAiMachine = localAi.machine;
     render();
+    if (typeof window.initAiStatusBar === 'function') window.initAiStatusBar();
   } catch(e) { $('#pageContent').innerHTML = `<div class="empty-state"><div class="big">⚠️</div><h3>Không thể khởi tạo ứng dụng</h3><p>${escapeHtml(e.message)}</p></div>`; }
 })();

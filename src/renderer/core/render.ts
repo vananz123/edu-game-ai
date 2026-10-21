@@ -6,4 +6,5 @@ function render() {
   const renderers = { home: renderHome, library: renderLibrary, 'create-wizard': renderCreateWizard, create: renderCreate, 'lesson-plans': renderLessonPlans, 'my-projects': renderMyProjects, sessions: renderSessions, settings: renderSettings };
   $('#pageContent').innerHTML = (renderers[state.page] || renderHome)();
   wirePage();
+  if (typeof window.refreshAiStatusBar === "function") window.refreshAiStatusBar();
 }

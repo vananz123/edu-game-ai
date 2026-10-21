@@ -185,6 +185,10 @@ function renderWizardGenerationProgress() {
   }).join('');
   return `<div class="field-hint mt-[8px]" data-wizard-progress="${escapeHtml(s.lessonStage || '')}">
     <ol class="space-y-[2px] pl-[2px]" role="list">${rows}</ol>
+    <div class="mt-[5px] flex flex-wrap gap-x-[10px] gap-y-[2px]">
+      <span data-wizard-generate-elapsed>${escapeHtml(wizardGenerationElapsedText())}</span>
+      <span>Bạn có thể chuyển sang trang khác — AI vẫn chạy nền và kết quả sẽ được giữ.</span>
+    </div>
     <span>AI local chạy trên máy này; giáo án không được gửi đi đâu. Có thể huỷ giữa chừng.</span>
   </div>`;
 }
@@ -261,6 +265,7 @@ async function wizardGenerateRun(options) {
   wizardState.lessonRepaired = false;
   wizardState.activeRequestId = wizardNewRequestId('generate');
   render();
+  wizardStartGenerationClock();
   try {
     const result = await window.eduGame.generateLessonDraft({
       projectId: wizardState.projectId,
@@ -287,8 +292,10 @@ async function wizardGenerateRun(options) {
     if (parsed.code === 'AI_CANCELLED') wizardSetNotice('Đã huỷ tạo nội dung. Chưa có thay đổi nào được lưu.');
     else wizardSetError(error);
   }
+  wizardStopActivityClock();
   wizardState.busy = '';
   wizardState.lessonStage = '';
+  wizardState.generationStartedAt = 0;
   wizardState.activeRequestId = null;
   render();
   return undefined;
@@ -316,6 +323,7 @@ async function wizardRegenerateItem(position) {
   wizardState.lessonRepaired = false;
   wizardState.activeRequestId = wizardNewRequestId('regen');
   render();
+  wizardStartGenerationClock();
   try {
     const result = await window.eduGame.regenerateLessonItem({
       projectId: wizardState.projectId,
@@ -336,8 +344,10 @@ async function wizardRegenerateItem(position) {
     if (parsed.code === 'AI_CANCELLED') wizardSetNotice('Đã huỷ tạo lại mục. Mục hiện tại được giữ nguyên.');
     else wizardSetError(error);
   }
+  wizardStopActivityClock();
   wizardState.busy = '';
   wizardState.lessonStage = '';
+  wizardState.generationStartedAt = 0;
   wizardState.activeRequestId = null;
   render();
   return undefined;

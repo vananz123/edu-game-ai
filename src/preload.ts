@@ -15,6 +15,13 @@ contextBridge.exposeInMainWorld('eduGame', Object.freeze({
   listProjects: () => ipcRenderer.invoke('project:list'),
   deleteProject: projectId => ipcRenderer.invoke('project:delete', projectId),
   importDocument: () => ipcRenderer.invoke('files:import-document'),
+  importDocumentFromPath: filePath => ipcRenderer.invoke('files:import-document-from-path', filePath),
+  setFullscreen: enabled => ipcRenderer.invoke('window:set-fullscreen', enabled),
+  onFullscreenChanged: callback => {
+    const listener = (_event, enabled) => callback(Boolean(enabled));
+    ipcRenderer.on('window:fullscreen-changed', listener);
+    return () => ipcRenderer.removeListener('window:fullscreen-changed', listener);
+  },
   importQuestions: () => ipcRenderer.invoke('files:import-questions'),
   exportGame: game => ipcRenderer.invoke('files:export-game', game),
   importGame: () => ipcRenderer.invoke('files:import-game'),
@@ -29,6 +36,7 @@ contextBridge.exposeInMainWorld('eduGame', Object.freeze({
   listAiTasks: payload => ipcRenderer.invoke('ai:tasks', payload || {}),
   verifyCpuRuntime: () => ipcRenderer.invoke('ai:runtime-verify'),
   analyzeLesson: payload => ipcRenderer.invoke('lesson:analyze', payload),
+  answerLessonQuestion: payload => ipcRenderer.invoke('lesson:answer-question', payload),
   recommendGames: payload => ipcRenderer.invoke('lesson:recommend', payload),
   getLessonAnalysis: analysisId => ipcRenderer.invoke('lesson:get-analysis', analysisId),
   saveLessonAnalysis: analysis => ipcRenderer.invoke('lesson:save-analysis', analysis),

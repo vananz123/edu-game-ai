@@ -7,6 +7,7 @@ async function saveSettings() {
       largeText: $('#settingLargeText').checked,
       sound: $('#settingSound').checked,
       audience: $('#settingAudience')?.value || 'teen',
+      theme: $('#settingTheme')?.value || state.settings.preferences?.theme || 'light',
       teachingStyle: {
         tone: $('#settingStyleTone')?.value || 'thân thiện',
         humor: $('#settingStyleHumor')?.value || 'vừa phải',
@@ -18,6 +19,7 @@ async function saveSettings() {
   };
   await window.eduGame.saveSettings(settings);
   state.settings = await window.eduGame.getSettings();
+  applyTheme(state.settings && state.settings.preferences && state.settings.preferences.theme);
   if (state.draft) {
     state.draft = {
       ...state.draft,
