@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Single-item regeneration helpers (O5, docs/archive/specs/update-AI-local.txt §5.5).
  *
  * The rule the spec asks for is narrow: detect the bad item with TypeScript, ask
@@ -17,6 +17,7 @@
  * Positions are **1-based** everywhere in this module, the IPC payload and the
  * quality report (`QualityIssue.itemIndex`), so the UI never converts bases.
  */
+import { applyItemAssetPatch, type ItemAssetPatch } from '../shared/asset-validation';
 import { parseGameDraft } from './lesson-contracts';
 import type { GameDraft, WorkflowGameType } from '../shared/lesson-types';
 import type { QualityReport } from './lesson-quality';
@@ -83,6 +84,45 @@ export function replaceDraftItem(draft: GameDraft, position: number, regenerated
 }
 
 /**
+ * Replaces only the three asset fields of one item — no model, no other key
+ * touched (DECISIONS #72, `lesson:patch-item-assets`).
+ *
+ * `applyItemAssetPatch` owns the whitelist and the normalisation; this function
+ * owns the two rules a *draft* adds on top:
+ *
+ *  1. **A treasure item is its nested `question`.** The stage carries the story
+ *     and the chain; the artwork belongs to the question the student answers,
+ *     which is where `EducationalGame` stores it (`TreasureStageQuestion`).
+ *     Patching the stage instead would save a value no renderer reads.
+ *  2. **The result is re-parsed.** A patch cannot alter text, but re-parsing
+ *     keeps one validation path for every write to a draft and turns any future
+ *     schema mistake into a loud failure instead of a silently dropped key.
+ */
+export function patchDraftItemAssets(draft: GameDraft, position: number, patch: ItemAssetPatch): GameDraft {
+  const list = itemList(draft);
+  const index = toArrayIndex(position, list.length);
+  const current = asRecord(list[index]);
+  if (!current) {
+    throw new LessonItemError('ITEM_INVALID', `Không đọc được ${itemLabel(draft.gameType, position)} hiện tại.`);
+  }
+
+  let patched: Record<string, unknown>;
+  if (draft.gameType === 'treasure') {
+    const question = asRecord(current.question);
+    if (!question) {
+      throw new LessonItemError('ITEM_INVALID', `${itemLabel(draft.gameType, position)} chưa có câu hỏi để gắn minh hoạ.`);
+    }
+    patched = { ...current, question: applyItemAssetPatch(question, patch).item };
+  } else {
+    patched = applyItemAssetPatch(current, patch).item;
+  }
+
+  const nextItems = list.slice();
+  nextItems[index] = patched;
+  return parseGameDraft({ ...draft, [listKeyOf(draft.gameType)]: nextItems });
+}
+
+/**
  * Which positions the teacher asked for. Invalid/duplicate positions are dropped;
  * with no explicit position, the items flagged by the quality report are used
  * (that is the "fix the broken ones" path of §5.5).
@@ -107,7 +147,7 @@ export function resolveItemIndexes(
   return clean(fromQuality);
 }
 
-function itemList(draft: GameDraft): unknown[] {
+export function itemList(draft: GameDraft): unknown[] {
   switch (draft.gameType) {
     case 'arena':
     case 'race':
@@ -123,7 +163,7 @@ function itemList(draft: GameDraft): unknown[] {
   }
 }
 
-function listKeyOf(gameType: WorkflowGameType): 'questions' | 'situations' | 'pairs' | 'stages' {
+export function listKeyOf(gameType: WorkflowGameType): 'questions' | 'situations' | 'pairs' | 'stages' {
   switch (gameType) {
     case 'arena':
     case 'race':
@@ -139,7 +179,7 @@ function listKeyOf(gameType: WorkflowGameType): 'questions' | 'situations' | 'pa
   }
 }
 
-function toArrayIndex(position: number, count: number): number {
+export function toArrayIndex(position: number, count: number): number {
   const numeric = Number(position);
   if (!Number.isFinite(numeric) || Math.trunc(numeric) !== numeric || numeric < 1 || numeric > count) {
     throw new LessonItemError(
@@ -150,7 +190,7 @@ function toArrayIndex(position: number, count: number): number {
   return numeric - 1;
 }
 
-function asRecord(value: unknown): Record<string, unknown> | null {
+export function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;

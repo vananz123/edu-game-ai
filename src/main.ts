@@ -1,5 +1,5 @@
 // @ts-nocheck -- migrated legacy UI logic; new contracts are typed in src/shared/types.ts.
-const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, Menu } = require('electron');
 const path = require('node:path');
 // Test/support hook: Windows resolves `%APPDATA%` through the shell API, so
 // setting the APPDATA environment variable in a smoke script does not isolate
@@ -32,9 +32,20 @@ const {
   AiSingleFlight,
   AiTransportError,
   isCancelReason,
+  readPromptTokens,
   requestChatJson
 } = require('./services/ai-transport');
 const { analyzeLesson, generateGameDraft, regenerateGameItem } = require('./services/lesson-workflow');
+// O6d: per-mode excerpt budget for the analysis preprocessor.
+const { preprocessBudgetForMode } = require('./services/lesson-preprocess');
+// #76: offline document structure + teacher selection (spec update_AI_plan_7).
+const { normalizeLessonSource } = require('./services/lesson-chunker');
+const { buildLessonStructure } = require('./services/lesson-structure');
+const {
+  prepareSelectedLessonText,
+  prepareWholeLessonText,
+  selectionFingerprint
+} = require('./services/lesson-selection');
 // O5: cache keys (document hash + model + prompt/schema version + config).
 const {
   buildAnalysisCacheKey,
@@ -46,25 +57,34 @@ const {
 // O5: replace exactly one item while the app keeps ids/links (§5.5).
 const {
   replaceDraftItem,
+  patchDraftItemAssets,
   resolveItemIndexes,
   itemCount,
   itemAt,
   itemLabel
 } = require('./services/lesson-item-repair');
+// Phase B: the asset whitelist lives in shared code so main, editor and wizard
+// cannot disagree about which fields a teacher may change (DECISIONS #72).
+const { applyItemAssetPatch } = require('./shared/asset-validation');
 const { parseGameDraft } = require('./services/lesson-contracts');
 // O1: genre suggestions are rule-based, so this step never calls the model.
 const { recommendGamesForAnalysis } = require('./services/game-recommender');
+// O12: prediction for a sensible item count (document + analysis + model + mode).
+const { estimateItemCapacity } = require('./services/item-capacity');
+const { WORKFLOW_GAME_TYPES } = require('./shared/lesson-types');
 // O2: deterministic content-quality checks (no model call).
 const { checkDraftQuality, requestedItemCount } = require('./services/lesson-quality');
 // O10: on-machine diagnostic log so a teacher can send back what happened.
 const { createAiLogWriter, formatDiagnosticBundle, writeDiagnosticBundle, sanitizeLogMessage, clearAiLogs } = require('./services/ai-log');
 // O3: chunk the lesson once, then retrieve only the relevant part for generation.
 const { chunkLessonText } = require('./services/lesson-chunker');
-const { selectChunks, selectChunksByVectors, buildRetrievalQuery, DEFAULT_MAX_SELECTED_CHUNKS, DEFAULT_MAX_SELECTED_CHARS, DEEP_MAX_SELECTED_CHUNKS, DEEP_MAX_SELECTED_CHARS } = require('./services/lesson-retrieval');
+const { selectChunks, selectChunksByVectors, selectChunksForItem, buildRetrievalQuery, DEFAULT_MAX_SELECTED_CHUNKS, DEFAULT_MAX_SELECTED_CHARS, DEEP_MAX_SELECTED_CHUNKS, DEEP_MAX_SELECTED_CHARS } = require('./services/lesson-retrieval');
 const { formatRetrievedChunks, LESSON_PROMPT_VERSIONS } = require('./services/lesson-prompts');
 // O4: the retrieval model + its dedicated llama-server process (embeddings only).
 const { getEmbeddingModel, embeddingTextForChunk } = require('./ai-core/embedding-catalog');
 const { createEmbeddingRuntime, chunkTextsForEmbedding } = require('./ai-core/embedding-manager');
+// Presentation Mode
+const { registerPresentationIpc, unregisterPresentationIpc } = require('./presentation/presentation-ipc');
 const {
   createProjectFromAnalysis,
   applyAnalysis,
@@ -72,12 +92,20 @@ const {
   applyDraft
 } = require('./services/lesson-projects');
 const { toEducationalGame } = require('./services/game-project-adapter');
+const { SetupOrchestrator } = require('./ai-core/setup-orchestrator');
+const { registerSetupIpc } = require('./ai-core/setup-ipc');
+const { SetupStateStore, parseSetupState, createInitialSetupState, SETUP_STATE_SCHEMA_VERSION, needsSetup } = require('./ai-core/setup-state');
+const { detectHardware, diskFreeBytes } = require('./ai-core/hardware-detector');
+const { RUNTIME_MANIFEST } = require('./ai-core/runtime-manifest');
+const { detectInstalledBackend } = require('./ai-core/runtime-manifest');
+const { resolveRuntime } = require('./ai-core/runtime-resolver');
 const {
   QWEN_LOCAL_MODELS,
   LLAMA_CPP_RUNTIME,
   getLocalModel,
   getLocalModelRecommendation,
-  recommendLocalModelId
+  recommendLocalModelId,
+  resolveBackendAttempts
 } = require('./ai-core/model-catalog');
 
 const gameDraftSchema = z.object({
@@ -130,6 +158,7 @@ const gameDraftSchema = z.object({
     })).min(0).max(4).optional(),
     correctOptionId: z.enum(['a', 'b', 'c', 'd']).optional(),
     correctAnswer: z.string().trim().min(1).max(500).optional(),
+    hint: z.string().trim().max(200).optional(),
     explanation: z.string().max(1000).optional().default(''),
     points: z.number().int().min(10).max(500).optional(),
     difficulty: z.enum(['dễ', 'trung bình', 'khó']).optional()
@@ -234,6 +263,7 @@ const gameDraftResponseSchema = {
           },
           correctOptionId: { type: 'string', enum: ['a', 'b', 'c', 'd'] },
           correctAnswer: { type: 'string' },
+          hint: { type: 'string' },
           explanation: { type: 'string' },
           points: { type: 'number' },
           difficulty: { type: 'string', enum: ['dễ', 'trung bình', 'khó'] }
@@ -528,6 +558,24 @@ function createWindow() {
       sandbox: true
     }
   });
+  /* Hide the default Electron menu bar (File / Edit / View / Window / Help).
+     It is a framework leftover: its only useful entries are Reload / Force
+     Reload / Toggle DevTools / Zoom, none of which a teacher needs, and it ate
+     a strip of the window.
+     A real application menu is still installed because Electron's built-in F11
+     handling comes from the default menu's View role — removing the menu
+     outright would take the shortcut with it. The single top-level item is
+     `visible: false`, so nothing is drawn, and auto-hide keeps the bar shut
+     (pressing Alt reveals it temporarily, which is standard Windows behaviour).
+     Measured at devicePixelRatio 1.5, same window size: outerHeight -
+     innerHeight was 63 CSS px with the default menu and is 37 CSS px now, i.e.
+     the ~39 device-px menu strip is gone and only the title bar remains. */
+  const windowMenu = Menu.buildFromTemplate([
+    { label: 'View', visible: false, submenu: [{ role: 'togglefullscreen', accelerator: 'F11' }] }
+  ]);
+  Menu.setApplicationMenu(windowMenu);
+  mainWindow.setAutoHideMenuBar(true);
+  mainWindow.setMenuBarVisibility(false);
   mainWindow.on('enter-full-screen', () => sendFullscreenState(true));
   mainWindow.on('leave-full-screen', () => sendFullscreenState(false));
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
@@ -540,6 +588,10 @@ app.whenReady().then(async () => {
   try {
     const aiSettings = (await readJson(SETTINGS_FILE(), {})).ai || {};
     const cpus = os.cpus();
+    // Which build is actually on disk, not just whether *an* executable exists.
+    // The first report of "I chose Vulkan but the CPU is still busy" could not be
+    // diagnosed from a log that only said `runtimeInstalled: true`.
+    const installedBackend = await createRuntimeInstaller().getInstalledBackend().catch(() => undefined);
     aiLog.info('app.start', {
       version: app.getVersion(),
       platform: process.platform,
@@ -551,6 +603,8 @@ app.whenReady().then(async () => {
       modelIds: QWEN_LOCAL_MODELS.map(model => model.id),
       aiMode: aiSettings.mode || 'unknown',
       localModelId: aiSettings.localModelId || '',
+      runtimeBackend: aiSettings.runtimeBackend || 'auto',
+      installedBackend: installedBackend || 'none',
       runtimeInstalled: Boolean(await createRuntimeInstaller().getExecutablePath()),
       fixtureMode: Boolean(process.env.EDUGAME_AI_TEST_DIR)
     });
@@ -558,11 +612,14 @@ app.whenReady().then(async () => {
     aiLog.warn('app.start.failed', errorFacts(error));
   }
   registerIpc();
+  registerSetup();
+  registerPresentationIpc();
   createWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 app.on('before-quit', async event => {
   aiRequests.cancelAll();
+  unregisterPresentationIpc();
   if (quittingAfterAiShutdown) return;
   if (!localAiManager) return;
 
@@ -596,19 +653,100 @@ function vcRuntimeDirectory() {
     : path.join(__dirname, '..', '..', 'vendor', 'vc-runtime');
   return fsSync.existsSync(candidate) ? candidate : undefined;
 }
-function createRuntimeInstaller() {
+/**
+ * Display adapter names from WMI. Used only to classify the GPU vendor; the
+ * value is never shown as fact, and a failure yields `undefined` so the
+ * detector reports `unknown` rather than guessing.
+ */
+async function readGpuAdapterNames() {
+  try {
+    const { execFile } = require('node:child_process');
+    const { promisify } = require('node:util');
+    const run = promisify(execFile);
+    const { stdout } = await run(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-Command', 'Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name'],
+      { timeout: 8000, windowsHide: true }
+    );
+    return String(stdout).split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  } catch (error) {
+    console.warn('Không đọc được danh sách GPU:', error && error.message ? error.message : error);
+    return undefined;
+  }
+}
+/**
+ * Resolves which runtime build this machine should run. Kept in one place so
+ * setup, install, verification and startup can never disagree about the
+ * backend — a mismatch would install the Vulkan files and then spawn the CPU
+ * command line, or the reverse.
+ *
+ * The teacher's saved `ai.runtimeBackend` is the *request*; the resolver is
+ * still the decision. Passing it here (rather than at each call site) means
+ * Settings, the setup wizard, verification and every later start all honour the
+ * same choice. `auto` is indistinguishable from the old behaviour, so a
+ * settings file written before this option existed resolves exactly as before.
+ */
+async function resolveRuntimeForThisMachine() {
+  const hardware = await detectHardware(MODEL_DIR(), {
+    getDiskFreeBytes: diskFreeBytes,
+    getGpuNames: readGpuAdapterNames
+  });
+  const preferredBackend = await readRuntimeBackendPreference();
+  return {
+    hardware,
+    resolution: resolveRuntime(hardware, RUNTIME_MANIFEST, {
+      ...(preferredBackend !== 'auto' ? { backend: preferredBackend } : {})
+    })
+  };
+}
+/**
+ * Reads the teacher's backend choice from settings, defensively.
+ *
+ * A malformed or unknown value must never reach the resolver as a surprise, and
+ * must never break startup: anything that is not an exact known option reads as
+ * `auto`. `'openvino'` is deliberately *not* offered (no verified build ships),
+ * so it is treated as unknown rather than silently forwarded.
+ */
+async function readRuntimeBackendPreference() {
+  try {
+    const settings = await readJson(SETTINGS_FILE(), {});
+    const value = settings && settings.ai ? settings.ai.runtimeBackend : undefined;
+    return value === 'cpu' || value === 'vulkan' ? value : 'auto';
+  } catch {
+    return 'auto';
+  }
+}
+/**
+ * `entry` is the manifest entry chosen by the resolver. Passing it explicitly
+ * matters: the downloader must fetch the same build the resolver promised, or a
+ * setup wizard that announced "Vulkan" would install the CPU zip.
+ */
+function createRuntimeInstaller(entry) {
   return new LlamaRuntimeInstaller({
     runtimeDirectory: RUNTIME_DIR(),
-    supportFilesDirectory: vcRuntimeDirectory()
+    supportFilesDirectory: vcRuntimeDirectory(),
+    ...(entry ? { runtimeArtifact: entry } : {})
   });
 }
 /**
- * update_plan_3 §4/§6: CPU-only runtime verification.
- * Confirms the bundled artifact + installed files are the pinned CPU build:
- * no CUDA/Vulkan Toolkit, no `-ngl`/VRAM switching, because this release does
- * not ship a GPU backend. Returns measured facts only, never estimates.
+ * GPU layers to offload when the Vulkan build is selected. `99` exceeds any
+ * layer count the models here have, and llama.cpp clamps it to the real number,
+ * so the whole model lands on the GPU without hard-coding an architecture.
  */
-async function verifyCpuRuntime() {
+const VULKAN_GPU_LAYERS = 99;
+/**
+ * Runtime verification (§4/§6). Reports the backend the resolver actually
+ * chose for this machine and the flags it will run with.
+ *
+ * Previously this asserted "CPU only": it hard-coded `llama.cpp CPU`, forced
+ * `--n-gpu-layers 0`, and treated any Vulkan/CUDA DLL as an anomaly. Once a GPU
+ * build can legitimately be installed, that assertion would fire on a *correct*
+ * install and tell the teacher their working setup was broken. So the expected
+ * backend now comes from the resolver, and GPU files are only flagged when they
+ * do not match the selected build.
+ */
+async function verifyRuntime() {
+  const { hardware, resolution } = await resolveRuntimeForThisMachine();
   const installer = createRuntimeInstaller();
   const executablePath = await installer.getExecutablePath();
   const files = [];
@@ -625,10 +763,26 @@ async function verifyCpuRuntime() {
     name.includes('cuda') || name.includes('cublas') || name.includes('cudart') ||
     name.includes('vulkan') || name.includes('nccl') || name.includes('cudnn')
   );
-  const expected = LLAMA_CPP_RUNTIME;
+  const selectedBackend = resolution.status === 'ok' ? resolution.entry.backend : 'cpu';
+  const expected = resolution.status === 'ok' ? resolution.entry : LLAMA_CPP_RUNTIME;
+  // What is *actually* on disk. Reporting `selectedBackend` alone claimed the
+  // GPU build was in use while the CPU files were still installed, which is how
+  // "I chose Vulkan but the CPU is still busy" went unnoticed.
+  const installedBackend = executablePath
+    ? detectInstalledBackend(files.map(name => String(name)))
+    : undefined;
+  const backendMismatch = Boolean(executablePath) && installedBackend !== selectedBackend;
+  const gpuLayers = selectedBackend === 'vulkan' ? VULKAN_GPU_LAYERS : 0;
   return {
-    cpuOnly: true,
-    backend: 'llama.cpp CPU (Windows x64)',
+    cpuOnly: selectedBackend === 'cpu',
+    backend: resolution.status === 'ok'
+      ? resolution.entry.displayName
+      : `Không chọn được runtime (${resolution.code}); dùng CPU.`,
+    selectedBackend,
+    installedBackend: installedBackend || null,
+    backendMismatch,
+    gpuVendor: hardware.gpuVendor || 'unknown',
+    gpuNames: hardware.gpuNames || [],
     expectedVersion: expected.version,
     expectedDownloadUrl: expected.downloadUrl,
     expectedSizeBytes: expected.sizeBytes,
@@ -637,10 +791,19 @@ async function verifyCpuRuntime() {
     files,
     gpuMarkers,
     gpuBackendShipped: gpuMarkers.length > 0,
-    args: ['--n-gpu-layers', '0', '--parallel', '1', '--ctx-checkpoints', '0'],
-    note: gpuMarkers.length
-      ? 'Phát hiện tệp gợi ý backend GPU trong thư mục runtime. Bản CPU-only không dùng các tệp này.'
-      : 'Không phát hiện backend GPU trong thư mục runtime. Mọi tiến trình đều chạy CPU (`--n-gpu-layers 0`).'
+    args: [
+      '--n-gpu-layers', String(gpuLayers),
+      ...(selectedBackend === 'vulkan' ? ['--device', 'Vulkan0'] : []),
+      '--parallel', '1', '--ctx-checkpoints', '0'
+    ],
+    note: backendMismatch
+      ? `Thư mục runtime đang chứa bản ${installedBackend || 'không rõ'}, nhưng cấu hình chọn ${selectedBackend}. `
+        + 'Bấm “Cài model” (hoặc chạy lại AI local) để thay bằng bản đã chọn.'
+      : selectedBackend === 'vulkan'
+        ? 'Đang dùng bản GPU (Vulkan) — tùy chọn nâng cao; đo trên máy phổ thông thấy chưa nhanh hơn CPU. Nếu máy không khởi động được, ứng dụng tự chuyển về CPU.'
+        : gpuMarkers.length
+          ? 'Thư mục runtime có tệp GPU, nhưng cấu hình này chọn bản CPU nên các tệp đó không được dùng.'
+          : 'Không có backend GPU trong thư mục runtime. Mọi tiến trình chạy CPU (`--n-gpu-layers 0`).'
   };
 }
 function formatMemoryBytes(bytes) {
@@ -887,24 +1050,111 @@ async function startLocalRuntimeUnlocked(modelId) {
   await runtimeInstaller.ensureSupportFiles();
 
   const totalThreads = Math.max(1, os.cpus().length);
-  localAiManager = new AIManager({
-    executablePath,
-    modelPath,
-    modelId: model.id,
-    contextSize: 8192,
-    cpuThreads: resolveCpuThreads(totalThreads, model.hardware.recommendedCpuThreads),
-    gpuLayers: 0,
-    startupTimeoutMs: 300_000
-  });
-  localAiModelId = model.id;
-  try {
-    await localAiManager.start();
-    return localAiManager.getBaseUrl();
-  } catch (error) {
+  const { resolution } = await resolveRuntimeForThisMachine();
+  // 'auto' resolves to CPU on today's measured evidence, but the request is
+  // honoured if a caller/config ever selects Vulkan: the entry is real and was
+  // verified to run. Keep the CPU retry for that case, because a GPU that
+  // cannot start must not cost the teacher the whole app.
+  const wantsGpu = resolution.status === 'ok' && resolution.entry.backend === 'vulkan';
+  let attempts: string[] = wantsGpu ? ['vulkan', 'cpu'] : ['cpu'];
+
+  // The runtime directory is shared by every backend, so an installed
+  // `llama-server.exe` may still be the *other* build. Switching to Vulkan in
+  // Settings must replace the CPU files; otherwise `--n-gpu-layers 99` is passed
+  // to a binary with no GPU code and nothing is offloaded.
+  //
+  // This download is reported like a normal install: without progress the
+  // window looks frozen for the ~32 MB it takes, and the teacher has no way to
+  // tell that the app is doing what they asked for.
+  if (resolution.status === 'ok') {
+    const wanted = resolution.entry;
+    if (!(await runtimeInstaller.matchesBackend(wanted.backend))) {
+      const installed = await runtimeInstaller.getInstalledBackend();
+      console.info(installed
+        ? `Đang thay bản AI local ${installed} bằng ${wanted.backend} theo lựa chọn trong Cài đặt.`
+        : `Đang cài bản AI local ${wanted.backend} theo lựa chọn trong Cài đặt.`);
+      const sendProgress = progress => {
+        if (setupProgressSink) setupProgressSink(progress);
+      };
+      await runtimeInstaller.install(model.id, sendProgress);
+      const now = await runtimeInstaller.getInstalledBackend();
+      if (now !== wanted.backend) {
+        // Not fatal any more. A backend mismatch used to throw here, which left
+        // local AI completely unavailable even when a working CPU build was on
+        // disk — the exact "post-install GPU failure bricks AI" report. CPU is
+        // the default runtime, so fall back and say so instead of failing.
+        //
+        // `install()` replaces the whole directory and verifies the archive's
+        // SHA-256 before extracting, so an unrecognised layout here means the
+        // package is not one this app can run. Only a missing executable makes
+        // the mismatch fatal; anything else continues on CPU.
+        const executablePresent = Boolean(await runtimeInstaller.getExecutablePath());
+        const fallback = resolveBackendAttempts({
+          requestedBackends: attempts,
+          installedBackend: now,
+          executablePresent
+        });
+        if (fallback.attempts.length === 0) {
+          throw new Error(
+            `Đã tải xong nhưng thư mục runtime vẫn là bản ${now || 'không rõ'} thay vì ${wanted.backend}. `
+            + 'Hãy xoá thư mục runtime trong phần AI local rồi cài lại.'
+          );
+        }
+        aiLog.warn('runtime.backend-swap-failed', {
+          wanted: wanted.backend,
+          installed: now ?? 'unknown',
+          continuation: fallback.attempts.join(',')
+        });
+        attempts = fallback.attempts;
+        console.warn(`Đã tải xong nhưng không nhận ra bản ${wanted.backend} (thấy ${now || 'không rõ'}). `
+          + `Ứng dụng tiếp tục chạy AI local trên ${attempts.join(' → ')}.`);
+      } else {
+        console.info(`Đã cài xong bản AI local ${wanted.backend}.`);
+      }
+    }
+  }
+
+  let lastError;
+  for (const backend of attempts) {
+    const gpuLayers = backend === 'vulkan' ? VULKAN_GPU_LAYERS : 0;
+    const manager = new AIManager({
+      executablePath,
+      modelPath,
+      modelId: model.id,
+      contextSize: 8192,
+      cpuThreads: resolveCpuThreads(totalThreads, model.hardware.recommendedCpuThreads),
+      gpuLayers,
+      backend,
+      ...(backend === 'vulkan' ? { device: 'Vulkan0' } : {}),
+      startupTimeoutMs: 300_000
+    });
+    localAiManager = manager;
+    localAiModelId = model.id;
+    // Stop first, then report: disposing a half-started server is housekeeping
+    // and must never replace the real startup error with its own.
+    let failure;
+    try {
+      await manager.start();
+    } catch (error) {
+      failure = error;
+    }
+    if (!failure) {
+      if (backend === 'cpu' && attempts[0] === 'vulkan') {
+        // The GPU path was tried and failed. Say so in the diagnostic log too, so
+        // a later slowdown is explainable instead of mysterious: `console.warn`
+        // alone is invisible in the packaged app.
+        const reason = lastError && lastError.message ? lastError.message : String(lastError);
+        console.warn('GPU (Vulkan) không khởi động được; đã tự chuyển sang CPU.', reason);
+        aiLog.warn('runtime.gpu-fallback', { modelId: model.id, reason: String(reason).slice(0, 500) });
+      }
+      return manager.getBaseUrl();
+    }
+    lastError = failure;
     localAiManager = undefined;
     localAiModelId = undefined;
-    throw new Error(`Không khởi chạy được model ${model.displayName}: ${error.message}`);
+    try { await manager.stop(); } catch { /* best effort: the failed child is already gone */ }
   }
+  throw new Error(`Không khởi chạy được model ${model.displayName}: ${lastError && lastError.message ? lastError.message : lastError}`);
 }
 
 async function stopLocalAiRuntime() {
@@ -931,6 +1181,167 @@ async function stopLocalAiRuntime() {
     localAiManager = undefined;
     localAiModelId = undefined;
   }
+}
+
+/**
+ * First-run AI setup, §11 (docs/archive/specs/update_AI_plan_5.txt).
+ *
+ * This block is wiring only: it tells `SetupOrchestrator` where files live and
+ * which existing functions to call. The sequencing, retry and state logic live
+ * in `ai-core/setup-orchestrator.ts`, and the only thing the renderer may
+ * choose is a model id (see `ai-core/setup-ipc.ts`).
+ */
+const SETUP_STATE_FILE = () => path.join(AI_LOCAL_ROOT(), 'setup-state.json');
+
+/**
+ * Model first-run setup installs when the renderer does not pin one.
+ *
+ * This must follow `recommendLocalModelId()` (RAM/CPU), not the catalog's first
+ * entry: the Settings → Model page recommends 4B on a 12 GB machine while the
+ * catalog's first entry is 2B, so a hard-coded 2B here made the wizard and the
+ * settings page disagree about the same computer. A fallback is kept only for the
+ * pathological case where the recommendation throws — refusing to set up at all
+ * would be worse. That fallback is the catalog's first entry, the lightest model.
+ */
+async function recommendedSetupModelId(): Promise<string> {
+  try {
+    const capabilities = { totalRamBytes: os.totalmem(), logicalCpuCount: Math.max(1, os.cpus().length) };
+    const detectedGpu = await detectMachineGpu();
+    const recommended = recommendLocalModelId(
+      detectedGpu.gpu ? { ...capabilities, gpu: detectedGpu.gpu } : capabilities
+    );
+    if (recommended) return recommended;
+    aiLog.warn('runtime.model-recommendation-empty', {});
+  } catch (error) {
+    // Must stay visible: silently falling back to 2B hides a broken catalog.
+    aiLog.warn('runtime.model-recommendation-failed', errorFacts(error));
+  }
+  return QWEN_LOCAL_MODELS[0].id;
+}
+
+let setupOrchestrator = null;
+let setupProgressSink = null;
+
+/**
+ * Reads the persisted setup state. A corrupt file must never keep the app from
+ * starting, so read and parse failures both degrade to "not set up yet".
+ */
+async function readSetupState() {
+  try {
+    return parseSetupState(JSON.parse(await fs.readFile(SETUP_STATE_FILE(), 'utf8')));
+  } catch {
+    return createInitialSetupState();
+  }
+}
+
+async function writeSetupState(state) {
+  await fs.mkdir(AI_LOCAL_ROOT(), { recursive: true });
+  await writeJson(SETUP_STATE_FILE(), state);
+}
+
+/** True when the model file exists and matches the catalog size. */
+async function isModelFileInstalled(model) {
+  try {
+    const file = await fs.stat(localModelFilePath(model));
+    return file.isFile() && file.size === model.sizeBytes;
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+    return false;
+  }
+}
+
+/**
+ * §3 step 12: prove the freshly started runtime can actually generate before
+ * declaring setup complete. This is the one place setup proves itself; a
+ * server that started but answers nothing would otherwise look "installed".
+ *
+ * The request must carry the same local generation options the app uses
+ * (`buildGenerationOptions('local', …)`), above all
+ * `chat_template_kwargs: { enable_thinking: false }`. Measured on llama.cpp
+ * b11681 + Qwen3.5-4B Q4_K_M (and the same on 2B): the chat template thinks by
+ * default, so this probe without that flag spent all 8 tokens on
+ * `reasoning_content`, returned `content: ""` with `finish_reason: "length"`,
+ * and every first-run setup failed with "AI local khởi động nhưng không trả về
+ * nội dung thử nghiệm" while the model was in fact working. The token ceiling is
+ * kept at 8 because the flag is what makes the answer short, not the budget.
+ */
+async function runSetupSmokeTest({ baseUrl }) {
+  const response = await fetch(`${String(baseUrl).replace(/\/+$/, '')}/health`, {
+    method: 'GET',
+    signal: AbortSignal.timeout(30_000)
+  }).catch(() => {
+    throw new Error('Không kết nối được máy chủ AI local vừa khởi động.');
+  });
+  if (!response.ok) {
+    throw new Error(`Máy chủ AI local trả về trạng thái ${response.status} khi kiểm tra.`);
+  }
+  const completion = await fetch(`${String(baseUrl).replace(/\/+$/, '')}/chat/completions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'local',
+      messages: [{ role: 'user', content: 'Trả lời đúng một chữ: OK' }],
+      temperature: 0,
+      stream: false,
+      ...buildGenerationOptions('local', 8)
+    }),
+    signal: AbortSignal.timeout(120_000)
+  }).catch(() => {
+    throw new Error('Không gửi được yêu cầu thử nghiệm tới máy chủ AI local.');
+  });
+  if (!completion.ok) {
+    throw new Error(`Máy chủ AI local không trả lời được yêu cầu thử nghiệm (HTTP ${completion.status}).`);
+  }
+  const body = await completion.json().catch(() => null);
+  const content = body?.choices?.[0]?.message?.content;
+  if (typeof content !== 'string' || !content.trim()) {
+    throw new Error('AI local khởi động nhưng không trả về nội dung thử nghiệm.');
+  }
+}
+
+/** Builds the orchestrator once per process, reading the state from disk first. */
+async function ensureSetupOrchestrator() {
+  if (setupOrchestrator) return setupOrchestrator;
+  const initial = await readSetupState();
+  const store = new SetupStateStore(initial, state => writeSetupState(state));
+  setupOrchestrator = new SetupOrchestrator({
+    store,
+    detectHardware: () => detectHardware(MODEL_DIR(), { getDiskFreeBytes: diskFreeBytes, getGpuNames: readGpuAdapterNames }),
+    getRuntimeExecutablePath: () => createRuntimeInstaller().getExecutablePath(),
+    createRuntimeInstaller: () => createRuntimeInstaller(),
+    createModelInstaller: () => new ModelInstaller({ modelDirectory: MODEL_DIR() }),
+    startRuntime: model => ensureLocalRuntime(model.id),
+    stopRuntime: () => stopLocalAiRuntime(),
+    runSmokeTest: input => runSetupSmokeTest(input),
+    getDiskFreeBytes: diskFreeBytes,
+    modelDirectory: MODEL_DIR(),
+    isModelInstalled: model => isModelFileInstalled(model),
+    onProgress: progress => {
+      if (setupProgressSink) setupProgressSink(progress);
+    }
+  });
+  return setupOrchestrator;
+}
+
+function registerSetup() {
+  registerSetupIpc({
+    orchestrator: {
+      getStatus: async () => (await ensureSetupOrchestrator()).getStatus(),
+      preflight: async options => (await ensureSetupOrchestrator()).preflight(options),
+      start: async options => (await ensureSetupOrchestrator()).start(options),
+      cancel: () => {
+        if (setupOrchestrator) setupOrchestrator.cancel();
+      }
+    },
+    ipcMain,
+    defaultModelId: recommendedSetupModelId,
+    // Setup installs the build the teacher chose, so re-running the wizard cannot
+    // quietly swap a working Vulkan install for the CPU one.
+    defaultBackend: readRuntimeBackendPreference,
+    setProgressSink: sink => {
+      setupProgressSink = sink;
+    }
+  });
 }
 
 /**
@@ -1013,6 +1424,29 @@ async function embedLessonChunks(store, documentId, chunks) {
 }
 
 /**
+ * #76: validates the teacher's section scope against the stored text and returns
+ * the exact prepared input. Throws the same Vietnamese errors the UI already
+ * shows, so an unknown/stale/empty selection is a message, never a silent
+ * fallback to "analyse the whole document" (§10.12).
+ *
+ * `mode` only selects the budget (`fast` 12k / `deep` 18k, unchanged).
+ */
+function prepareSelectionForAnalyze(text, selectedIds, mode) {
+  const source = normalizeLessonSource(text ?? '');
+  const structure = buildLessonStructure(source);
+  const prepared = prepareSelectedLessonText(source, structure, selectedIds, { mode });
+  const fingerprint = selectionFingerprint(structure, selectedIds, { maxChars: preprocessBudgetForMode(mode) });
+  return {
+    text: prepared.text,
+    truncated: prepared.truncated,
+    fingerprint: fingerprint || '',
+    sectionCount: prepared.ranges.filter(range => range.selected).length,
+    chars: prepared.chars,
+    warnings: prepared.warnings
+  };
+}
+
+/**
  * Builds the lesson slice sent to the model (O3 retrieval + O4 embeddings).
  *
  * Shared by full generation and by single-item regeneration, so a regenerated
@@ -1063,7 +1497,10 @@ async function buildLessonGenerationContext(store, project, analysis, mode = 'fa
     scorer: selection.scorer,
     fallback: selection.fallback
   };
-  return { sourceExcerpt, context };
+  // #54 follow-up: `selection` is returned so single-item regeneration can narrow
+  // the same slice to one item (`selectChunksForItem`) without re-reading the
+  // document. Full generation only uses `sourceExcerpt` + `context`.
+  return { sourceExcerpt, context, selection };
 }
 
 /**
@@ -1101,6 +1538,36 @@ function registerIpc() {
   });
   ipcMain.handle('library:save-session', async (_e, session) => upsertSessionRow(session || {}));
   ipcMain.handle('lesson:save-document', async (_e, payload) => requireLessonStore().saveDocument(payload || {}));
+  // #76: offline structure tree for step 1. Pure and local — no AI, no disk, no
+  // network — so it is safe to call on every debounced keystroke. Either an
+  // already-saved `documentId` or the `text` the teacher is editing.
+  ipcMain.handle('lesson:get-structure', async (_e, payload) => {
+    const store = requireLessonStore();
+    let text = typeof payload?.text === 'string' ? payload.text : null;
+    if (text === null && payload?.documentId) {
+      const document = await store.getDocumentWithText(String(payload.documentId));
+      if (!document) throw new Error('Không tìm thấy giáo án đã lưu. Hãy nhập lại tài liệu.');
+      text = document.text || '';
+    }
+    if (text === null) throw new Error('Thiếu nội dung tài liệu để đọc cấu trúc.');
+    return buildLessonStructure(text);
+  });
+  // #76: the preview the teacher reviews. It runs the *same* preparation the
+  // analysis uses, so what is shown cannot drift from what is sent (§4.2/§5.5).
+  ipcMain.handle('lesson:preview-selection', async (_e, payload) => {
+    const text = String(payload?.text ?? '');
+    if (!text.trim()) throw new Error('Thiếu nội dung tài liệu để dựng bản xem trước.');
+    const mode = payload?.mode === 'deep' ? 'deep' : 'fast';
+    const structure = payload?.structure && typeof payload.structure === 'object'
+      ? payload.structure
+      : buildLessonStructure(text);
+    const selectedIds = Array.isArray(payload?.selectedIds) ? payload.selectedIds.map(id => String(id || '')) : null;
+    if (!selectedIds || !selectedIds.length) {
+      // No selection = whole document: exactly what `lesson:analyze` sends today.
+      return prepareWholeLessonText(text, { mode });
+    }
+    return prepareSelectedLessonText(text, structure, selectedIds, { mode });
+  });
   ipcMain.handle('lesson:get-document', async (_e, documentId) => requireLessonStore().getDocumentWithText(String(documentId || '')));
   ipcMain.handle('lesson:library', async () => requireLessonStore().listDocumentLibrary());
   ipcMain.handle('project:save-draft', async (_e, project) => requireLessonStore().saveProject(project));
@@ -1117,6 +1584,13 @@ function registerIpc() {
     const mode = payload?.mode === 'deep' ? 'deep' : 'fast';
     // O10: the diagnostic log records timing and counts, never the lesson text.
     const analyzeStartedAt = Date.now();
+    // #76: the teacher's section scope from step 1, validated against the stored
+    // text *before* anything is hashed or sent. No `selectedIds` = whole document,
+    // which is the previous behaviour and the previous cache key.
+    let selection = null;
+    if (Array.isArray(payload?.selectedIds)) {
+      selection = prepareSelectionForAnalyze(document.text, payload.selectedIds, mode);
+    }
     // O5 (docs/archive/specs/update-AI-local.txt §4): never analyze the same text twice when the
     // document hash, model, mode and prompt version are unchanged. `force` is the
     // teacher's explicit "Phân tích lại" action, and also what a changed lesson
@@ -1125,7 +1599,10 @@ function registerIpc() {
       documentSha256: sha256Hex(document.text),
       modelId: await currentChatModelId(),
       mode,
-      sourceName: document.name
+      sourceName: document.name,
+      // #76: two different picks on the same document must never share a cached
+      // analysis. `undefined` (whole document) leaves the key byte-identical.
+      ...(selection ? { selectionFingerprint: selection.fingerprint } : {})
     });
     let analysis = payload?.force ? null : store.findAnalysisByCacheKey(documentId, cacheKey);
     let cached = Boolean(analysis);
@@ -1140,6 +1617,9 @@ function registerIpc() {
       });
       recordAiTask(task);
       sendLessonProgress(event.sender, requestId, 'prepare');
+      // O6d: offline preprocessing metrics (never the lesson text itself).
+      let preprocessMetrics = null;
+      lastPromptTokens = null;
       try {
         analysis = await aiSingleFlight.run(
           `analyze:${documentId}:${cacheKey}`,
@@ -1154,6 +1634,30 @@ function registerIpc() {
               sourceName: document.name,
               analysisId: payload?.analysisId ? String(payload.analysisId) : undefined,
               now: new Date().toISOString(),
+              // O6d: structure-aware excerpt with a per-mode budget; block ranking
+              // stays off until the O6 quality gate passes.
+              maxChars: preprocessBudgetForMode(mode),
+              // #76: with a scope, the model reads exactly the prepared selection;
+              // without one, `analyzeLesson` uses the whole-document excerpt.
+              ...(selection ? { preparedSelection: { text: selection.text, truncated: selection.truncated } } : {}),
+              onPreprocess: metrics => {
+                preprocessMetrics = metrics;
+                aiLogWrite('info', 'analyze.preprocess', {
+                  documentId,
+                  mode,
+                  version: metrics.version,
+                  ms: metrics.ms,
+                  originalChars: metrics.originalChars,
+                  cleanedChars: metrics.cleanedChars,
+                  excerptChars: metrics.excerptChars,
+                  removedControl: metrics.removedControl,
+                  removedRepeatedLines: metrics.removedRepeatedLines,
+                  truncated: metrics.truncated,
+                  excerptReason: metrics.excerptReason,
+                  rankingSavingsChars: metrics.rankingSavingsChars,
+                  ...(metrics.error ? { error: metrics.error } : {})
+                });
+              },
               // O6: measured with the smaller 6/8 ask, a ~1,800-character lesson still
               // needed >1,024 tokens (it truncated, then succeeded on the shortened
               // repair). A 2,048 ceiling removes that extra round without costing
@@ -1177,7 +1681,9 @@ function registerIpc() {
           cached: false,
           seconds: Math.round((Date.now() - analyzeStartedAt) / 1000),
           objectives: analysis.objectives.length,
-          concepts: analysis.keyConcepts.length
+          concepts: analysis.keyConcepts.length,
+          ...(lastPromptTokens !== null ? { promptTokens: lastPromptTokens } : {}),
+          ...(preprocessMetrics ? { excerptChars: preprocessMetrics.excerptChars } : {})
         });
       } catch (error) {
         const code = String((error && error.code) || (error && error.message && /\[([A-Z_]+)\]/.exec(error.message)?.[1]) || 'AI_OUTPUT_INVALID');
@@ -1227,18 +1733,43 @@ function registerIpc() {
     // Rule-based: no model call, so no requestId/registry entry is needed here.
     // Recommendation ids are globally unique (they are a primary key), so scope
     // them to the analysis: re-running for the same analysis replaces the set.
+    const projectId = String(payload?.projectId || '');
+    const existing = projectId ? store.getProject(projectId) : null;
+    // O12: the suggested count shown on each card already respects the document
+    // length and the model the teacher is running, so it matches step 4.
     const recommendations = recommendGamesForAnalysis({
       analysis,
       idPrefix: `rec_${analysis.id}_`,
-      now: new Date().toISOString()
+      now: new Date().toISOString(),
+      documentCharacters: existing && existing.lesson ? existing.lesson.characters : 0,
+      modelId: await currentChatModelId(),
+      mode: payload?.mode === 'deep' ? 'deep' : 'fast'
     });
     store.saveRecommendations(analysis.id, recommendations);
-    let project = null;
-    if (payload?.projectId) {
-      const existing = store.getProject(String(payload.projectId));
-      if (existing) project = store.saveProject(advanceAfterRecommendations(existing, new Date().toISOString()));
-    }
+    const project = existing
+      ? store.saveProject(advanceAfterRecommendations(existing, new Date().toISOString()))
+      : null;
     return { recommendations, project };
+  });
+  // O12: predict how many items the document + analysis + model can support.
+  // Advisory and deterministic — no AI call, no writes.
+  ipcMain.handle('lesson:capacity', async (_e, payload) => {
+    const projectId = String(payload?.projectId || '');
+    if (!projectId) throw new Error('Thiếu mã dự án để ước lượng số lượng nội dung.');
+    const gameType = String(payload?.gameType || '');
+    if (!WORKFLOW_GAME_TYPES.includes(gameType)) throw new Error('Thể loại trò chơi không hợp lệ.');
+    const store = requireLessonStore();
+    const project = store.getProject(projectId);
+    if (!project) throw new Error('Không tìm thấy dự án. Hãy lưu dự án trước khi cấu hình.');
+    const analysis = project.analysisId ? store.getAnalysis(project.analysisId) : null;
+    return estimateItemCapacity({
+      gameType,
+      documentCharacters: project.lesson ? project.lesson.characters : 0,
+      objectiveCount: analysis ? analysis.objectives.length : 0,
+      conceptCount: analysis ? analysis.keyConcepts.length : 0,
+      modelId: await currentChatModelId(),
+      mode: payload?.mode === 'deep' ? 'deep' : 'fast'
+    });
   });
   ipcMain.handle('lesson:get-analysis', async (_e, analysisId) => requireLessonStore().getAnalysis(String(analysisId || '')));
   ipcMain.handle('lesson:save-analysis', async (_e, analysis) => requireLessonStore().saveAnalysis(analysis));
@@ -1443,6 +1974,52 @@ function registerIpc() {
     const analysis = project.analysisId ? store.getAnalysis(project.analysisId) : null;
     return checkDraftQuality({ draft: project.draft, config: project.config, analysis });
   });
+  // Phase B (DECISIONS #72): change the artwork of ONE item, no model involved.
+  //
+  // Deliberately narrow: this channel can only touch `contentCategory`,
+  // `iconName` and `illustrationAssetId` of one item (whitelist enforced inside
+  // `applyItemAssetPatch`), so it cannot be used to rewrite a question, an
+  // answer or an id. It also never calls the AI stack — a teacher picking a
+  // picture must not cost tokens, wait on a model, or fail when offline.
+  //
+  // The adapter still runs: it is the single conversion boundary, and a draft
+  // that cannot be adapted must not be saved (the same rule as regeneration).
+  ipcMain.handle('lesson:patch-item-assets', async (_e, payload) => {
+    const projectId = String(payload?.projectId || '');
+    if (!projectId) throw new Error('Thiếu mã dự án để đổi minh hoạ.');
+    const position = Number(payload?.itemIndex);
+    const patch = payload?.patch;
+    if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+      throw new Error('Thiếu thông tin minh hoạ cần đổi.');
+    }
+    const applied = applyItemAssetPatch({}, patch);
+    if (!applied.changed) {
+      throw new Error('Không có trường minh hoạ nào được gửi lên. Chỉ đổi được chủ đề, biểu tượng và hình minh hoạ.');
+    }
+    const store = requireLessonStore();
+    const project = store.getProject(projectId);
+    if (!project) throw new Error('Không tìm thấy dự án. Hãy lưu dự án trước khi đổi minh hoạ.');
+    if (!project.draft) throw new Error('Dự án chưa có nội dung. Hãy tạo nội dung trước khi đổi minh hoạ.');
+    if (!project.config) throw new Error('Dự án chưa có cấu hình trò chơi. Hãy hoàn tất bước cấu hình.');
+    if (project.draft.gameType !== project.config.gameType) {
+      throw new Error('[GENERATION_INVALID] Nội dung hiện tại không khớp thể loại đã chọn. Hãy tạo lại toàn bộ nội dung.');
+    }
+
+    let draft;
+    try {
+      draft = patchDraftItemAssets(project.draft, position, patch);
+    } catch (error) {
+      throw new Error(error && error.message ? error.message : 'Không đổi được minh hoạ cho mục này.');
+    }
+    let game;
+    try {
+      game = toEducationalGame({ ...project, draft });
+    } catch (error) {
+      throw new Error(`[GENERATION_INVALID] ${error && error.message ? error.message : 'Nội dung sau khi đổi minh hoạ chưa hợp lệ.'}`);
+    }
+    const saved = store.saveProject(applyDraft(project, { draft, game, now: new Date().toISOString() }));
+    return { project: saved, game, itemIndex: position, applied: applied.applied };
+  });
   // O5: rewrite exactly one item (docs/archive/specs/update-AI-local.txt §5.5). Everything else
   // in the draft is preserved; ids and links stay app-owned (lesson-item-repair).
   ipcMain.handle('lesson:regenerate-item', async (event, payload) => {
@@ -1497,13 +2074,25 @@ function registerIpc() {
         async () => {
           recordAiTask(aiTasks.progress(regenTask.taskId, 'retrieve'));
           sendLessonProgress(event.sender, requestId, 'retrieve');
-          const { sourceExcerpt, context } = await buildLessonGenerationContext(store, project, analysis, mode);
+          const { sourceExcerpt, context, selection } = await buildLessonGenerationContext(store, project, analysis, mode);
           const total = itemCount(project.draft);
           let draft = project.draft;
+          let itemsNarrowed = 0;
           for (const position of indexes) {
             // One model call per item: §5.5 keeps failing items isolated so the passing
             // ones are never regenerated (and never change). `handle.done()` frees the
             // requestId between items, so the same id can be reused sequentially.
+            // #54 follow-up: an item usually needs only the passage it paraphrases, so
+            // send the item-scoped slice when one section clearly dominates the item
+            // (measured: the full slice makes one regeneration cost 2.2–2.8× the whole
+            // lesson analysis). Multi-section items keep the full slice, because a
+            // missing source chunk costs correctness and extra prefill only costs time.
+            const currentItem = itemAt(draft, position);
+            const itemSelection = selectChunksForItem(selection, {
+              reference: currentItem ? JSON.stringify(currentItem) : ''
+            });
+            const itemExcerpt = itemSelection.selected.length ? formatRetrievedChunks(itemSelection.selected) : sourceExcerpt;
+            if (itemExcerpt !== sourceExcerpt) itemsNarrowed += 1;
             const item = await regenerateGameItem({
               client: createLessonChatClient(),
               registry: aiRequests,
@@ -1514,9 +2103,9 @@ function registerIpc() {
               position,
               total,
               itemLabel: itemLabel(project.config.gameType, position),
-              currentItem: itemAt(draft, position),
+              currentItem,
               issues: issuesByIndex.get(position) || [],
-              sourceExcerpt,
+              sourceExcerpt: itemExcerpt,
               maxTokens: mode === 'deep' ? 1536 : 1024,
               onAttempt: attempt => {
                 recordAiTask(aiTasks.progress(regenTask.taskId, attempt === 1 ? 'generate' : 'repair'));
@@ -1544,7 +2133,7 @@ function registerIpc() {
           const quality = checkDraftQuality({ draft, config: project.config, analysis });
           sendLessonProgress(event.sender, requestId, 'ready');
           recordAiTask(aiTasks.complete(regenTask.taskId, `${indexes.length} mục ${project.config.gameType}`));
-          return { project: saved, game, quality, context, mode, itemIndexes: indexes, cached: false };
+          return { project: saved, game, quality, context, mode, itemIndexes: indexes, cached: false, itemContext: { items: indexes.length, narrowed: itemsNarrowed } };
         }
       );
     } catch (error) {
@@ -1735,11 +2324,19 @@ function registerIpc() {
       if (!event.sender.isDestroyed()) event.sender.send('ai:local-progress', progress);
     };
     try {
-      const runtimeInstaller = createRuntimeInstaller();
-      if (!(await runtimeInstaller.getExecutablePath())) {
-        await runtimeInstaller.install(model.id, sendProgress);
-      } else {
+      // Install exactly the build the resolver picked for this machine; the
+      // installer's default artifact is the CPU zip, which would silently
+      // defeat GPU offload on an iGPU machine.
+      const { resolution } = await resolveRuntimeForThisMachine();
+      const entry = resolution.status === 'ok' ? resolution.entry : undefined;
+      const runtimeInstaller = createRuntimeInstaller(entry);
+      // Compare the *build*, not just the presence of the file: a teacher who
+      // switched to Vulkan already has a CPU `llama-server.exe` on disk.
+      const backendWanted = entry ? entry.backend : 'cpu';
+      if (await runtimeInstaller.matchesBackend(backendWanted)) {
         await runtimeInstaller.ensureSupportFiles();
+      } else {
+        await runtimeInstaller.install(model.id, sendProgress);
       }
       const installer = new ModelInstaller({
         modelDirectory: MODEL_DIR()
@@ -1863,7 +2460,7 @@ function registerIpc() {
     return { live, history };
   });
   // update_plan_3 §4/§6: CPU-only runtime verification for the bundled llama.cpp.
-  ipcMain.handle('ai:runtime-verify', async () => verifyCpuRuntime());
+  ipcMain.handle('ai:runtime-verify', async () => verifyRuntime());
   ipcMain.handle('ai:generate', async (_e, payload) => {
     const settings = await readJson(SETTINGS_FILE(), {});
     const ai = settings.ai || {};
@@ -1919,7 +2516,7 @@ function registerIpc() {
         ? { response_format: { type: 'json_schema', json_schema: { name: 'game_draft', strict: true, schema: gameDraftResponseSchema } } }
         : {}),
       messages: [
-        { role: 'system', content: 'Bạn là trợ lý thiết kế trò chơi giáo dục tiếng Việt. Chỉ trả về JSON hợp lệ, không markdown. Câu trắc nghiệm có 3-4 phương án với id "a","b","c","d" và correctOptionId là một trong các id đó. Câu đúng/sai đặt type "true-false", correctOptionId là "a" (Đúng) hoặc "b" (Sai). Câu điền từ/trả lời ngắn đặt type "fill-in-blank" hoặc "short-answer", bỏ options, điền correctAnswer bằng văn bản đáp án đúng. Với template "treasure-hunt": mọi câu là trắc nghiệm và phải kèm treasureDesign (cốt truyện, tên chặng, vật phẩm ẩn). Với template "race": mọi câu là trắc nghiệm có difficulty và phải kèm raceDesign (chiều dài đường đua, đội, ô đặc biệt). Không bịa quy định pháp luật hoặc số liệu; nếu không chắc, hãy ghi chú cần giáo viên xác minh.' },
+        { role: 'system', content: 'Bạn là trợ lý thiết kế trò chơi giáo dục tiếng Việt. Chỉ trả về JSON hợp lệ, không markdown. Câu trắc nghiệm có 3-4 phương án với id "a","b","c","d" và correctOptionId là một trong các id đó. Câu đúng/sai đặt type "true-false", correctOptionId là "a" (Đúng) hoặc "b" (Sai). Câu điền từ/trả lời ngắn đặt type "fill-in-blank" hoặc "short-answer", bỏ options, điền correctAnswer bằng văn bản đáp án đúng (tối đa 5 từ, nếu cần nhiều ý thì ngăn bằng ";") và thêm hint là một gợi ý ngắn (tối đa 20 từ) giúp học sinh nhớ ra đáp án nhưng KHÔNG được chứa chính đáp án. Với template "treasure-hunt": mọi câu là trắc nghiệm và phải kèm treasureDesign (cốt truyện, tên chặng, vật phẩm ẩn). Với template "race": mọi câu là trắc nghiệm có difficulty và phải kèm raceDesign (chiều dài đường đua, đội, ô đặc biệt). Không bịa quy định pháp luật hoặc số liệu; nếu không chắc, hãy ghi chú cần giáo viên xác minh.' },
         { role: 'user', content: prompt }
       ]
     };
@@ -2044,6 +2641,13 @@ function loadLessonTestFixture(responseSchema) {
 }
 
 /**
+ * O6d: `prompt_tokens` reported by the server for the most recent local chat
+ * round trip. Filled by `createLessonChatClient`, read by `lesson:analyze` for
+ * the diagnostics log; `null` when the runtime does not report usage.
+ */
+let lastPromptTokens: number | null = null;
+
+/**
  * Local-only chat client for the lesson-to-game workflow.
  *
  * Reuses the same llama.cpp runtime and `fetchAiEndpoint` as the legacy
@@ -2086,7 +2690,21 @@ function createLessonChatClient() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
           signal: sendSignal
-        }, 'local')
+        }, 'local').then(async response => {
+          // O6d: record the server-reported input size for prefill metrics.
+          // Wrapping `json` keeps `requestChatJson` unchanged; if the body is not
+          // JSON or reports no usage we simply store null.
+          if (response && response.ok && typeof response.json === 'function') {
+            const originalJson = response.json.bind(response);
+            response.json = async () => {
+              const data = await originalJson();
+              const tokens = readPromptTokens(data);
+              if (tokens !== null) lastPromptTokens = tokens;
+              return data;
+            };
+          }
+          return response;
+        })
       });
     }
   };
@@ -2120,7 +2738,7 @@ function buildPrompt(payload) {
   const template = ['quiz', 'scenario', 'matching', 'treasure-hunt', 'race'].includes(String(payload.template)) ? String(payload.template) : 'scenario';
   const questionCount = Math.max(3, Math.min(15, Number(payload.questionCount) || 8));
   const genericStructure = '{"title":"...","subject":"...","grade":"...","topic":"...","template":"quiz|scenario|matching","description":"...","questions":[{"id":"q1","type":"multiple-choice|true-false|fill-in-blank|short-answer|scenario|matching","prompt":"...","options":[{"id":"a","text":"..."},{"id":"b","text":"..."},{"id":"c","text":"..."},{"id":"d","text":"..."}],"correctOptionId":"b","explanation":"...","points":100}]}';
-  const genericRules = 'trộn đa dạng kiểu câu hỏi: trắc nghiệm (3-4 lựa chọn id "a","b","c","d", correctOptionId là một trong các id đó), đúng/sai (type "true-false", correctOptionId "a" cho Đúng hoặc "b" cho Sai), điền từ (type "fill-in-blank", không options, correctAnswer là đáp án cần điền) và trả lời ngắn (type "short-answer", không options, correctAnswer là đáp án mẫu); Thể loại mong muốn: ' + template + '.';
+  const genericRules = 'trộn đa dạng kiểu câu hỏi: trắc nghiệm (3-4 lựa chọn id "a","b","c","d", correctOptionId là một trong các id đó), đúng/sai (type "true-false", correctOptionId "a" cho Đúng hoặc "b" cho Sai), điền từ (type "fill-in-blank", không options, correctAnswer là đáp án cần điền) và trả lời ngắn (type "short-answer", không options, correctAnswer là đáp án mẫu); với hai kiểu này đáp án tối đa 5 từ (nhiều ý thì ngăn bằng ";") và câu hỏi phải kèm hint là một câu gợi ý ngắn (tối đa 20 từ, không chứa đáp án); Thể loại mong muốn: ' + template + '.';
   const treasureStructure = '{"title":"...","subject":"...","grade":"...","topic":"...","template":"treasure-hunt","description":"...","questions":[{"id":"q1","type":"multiple-choice","prompt":"...","options":[{"id":"a","text":"..."},{"id":"b","text":"..."},{"id":"c","text":"..."}],"correctOptionId":"a","explanation":"..."}],"treasureDesign":{"character":"Nhà thám hiểm","intro":"...","journeyBonus":300,"hiddenItemBonus":50,"stages":[{"name":"Chặng 1 — ...","story":"...","taskDescription":"...","hint":"...","attempts":0,"points":100,"completionBonus":200,"hasHiddenItem":true}]}}';
   const treasureRules = `Thể loại mong muốn: treasure-hunt (Giải mã kho báu). Tạo ${questionCount} câu ứng với ${questionCount} chặng (tối thiểu 2); MỌI câu hỏi đều là trắc nghiệm nhiều phương án (type "multiple-choice", 3-4 phương án; KHÔNG dùng đúng/sai, điền từ hay trả lời ngắn trong thể loại này). Kèm treasureDesign: stages có MỖI PHẦN tương ứng theo đúng thứ tự questions — name (tên chặng), story (bối cảnh, lời dẫn nối tiếp mạch lạc giữa các chặng), taskDescription (nhiệm vụ của học sinh ở chặng này), hint (gợi ý khi trả lời sai), attempts (số lượt thử 0-99, 0 = không giới hạn), points (0-1000), completionBonus (0-10000), hasHiddenItem (true cho khoảng một nửa số chặng cất vật phẩm ẩn). character là nhân vật của học sinh, intro là lời mở đầu hành trình; journeyBonus (0-10000) thưởng khi hoàn thành cả hành trình; hiddenItemBonus (0-1000) điểm cho mỗi vật phẩm ẩn. Hệ thống tự nối các chặng thành hành trình một nhánh, chặng cuối là kết thúc.`;
   const raceStructure = '{"title":"...","subject":"...","grade":"...","topic":"...","template":"race","description":"...","questions":[{"id":"q1","type":"multiple-choice","prompt":"...","options":[{"id":"a","text":"..."},{"id":"b","text":"..."},{"id":"c","text":"..."}],"correctOptionId":"a","explanation":"...","difficulty":"dễ"}],"raceDesign":{"trackLength":12,"maxRounds":6,"stepByDifficulty":true,"luckEnabled":true,"teams":[{"name":"Đội Sao Mộc","icon":"🚀"},{"name":"Đội Sao Kim","icon":"🏎️"}],"specialCells":[{"cell":5,"type":"boost","label":"Tăng tốc"},{"cell":9,"type":"challenge","label":"Thử thách"}]}}';

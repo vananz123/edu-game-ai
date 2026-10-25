@@ -1,38 +1,98 @@
 // @ts-nocheck -- migrated legacy UI logic; new contracts are typed in src/shared/types.ts.
-function playGame(game) {
+function playGame(game, options = {}) {
+  stopPresentationMode();
   state.playStartedAt = Date.now();
   state.resultSession = null;
+  state.lastSummary = null;
+  const wantsFullscreen = Boolean(options && options.fullscreen);
+  const enterFullscreen = () => {
+    if (wantsFullscreen) setPlayFullscreen(true);
+  };
   if (game && game.template === 'matching') {
     const matching = game.matchingGame;
     if (!matching || !Array.isArray(matching.pairs) || matching.pairs.length < 2) {
-      return toast('Trò chơi ghép cặp chưa có dữ liệu cặp. Hãy chỉnh sửa và lưu lại.');
+      toast('Trò chơi ghép cặp chưa có dữ liệu cặp. Hãy chỉnh sửa và lưu lại.');
+      return false;
     }
     state.currentGame = game;
     state.gameAnswers = [];
     state.matchingPlay = null;
     state.memoryCards = [];
-    return openMatchingPlay();
+    enterFullscreen();
+    openMatchingPlay();
+    return true;
   }
   if (game && game.template === 'treasure-hunt') {
     const hunt = game.treasureHunt;
     if (!hunt || !Array.isArray(hunt.stages) || hunt.stages.length < 1 || !hunt.stages[0]?.question) {
-      return toast('Hành trình chưa có chặng. Hãy chỉnh sửa và lưu lại.');
+      toast('Hành trình chưa có chặng. Hãy chỉnh sửa và lưu lại.');
+      return false;
     }
     state.currentGame = game;
-    return openTreasurePlay();
+    enterFullscreen();
+    openTreasurePlay();
+    return true;
   }
   if (game && game.template === 'race') {
     const race = game.race;
     if (!race || !Array.isArray(race.teams) || race.teams.length < 2 || !Array.isArray(race.questions) || !race.questions.length) {
-      return toast('Đường đua chưa đủ dữ liệu (đội hoặc câu hỏi). Hãy chỉnh sửa và lưu lại.');
+      toast('Đường đua chưa đủ dữ liệu (đội hoặc câu hỏi). Hãy chỉnh sửa và lưu lại.');
+      return false;
     }
     state.currentGame = game;
-    return openRacePlay();
+    enterFullscreen();
+    openRacePlay();
+    return true;
   }
-  if (!game || !game.questions?.length) return toast('Trò chơi chưa có câu hỏi.');
+  if (!game || !game.questions?.length) {
+    toast('Trò chơi chưa có câu hỏi.');
+    return false;
+  }
   state.currentGame = game; state.gameIndex = 0; state.gameAnswers = []; state.gameStart = Date.now(); state.answerLocked = false; state.scenarioSteps = 0; state.teamPlay = null;
-  if (game.gameSetup?.scoringMode === 'thi đấu đội') return openTeamSetup();
-  openPlayModal();
+  enterFullscreen();
+  if (game.gameSetup?.scoringMode === 'thi đấu đội') {
+    openTeamSetup();
+  } else {
+    openPlayModal();
+  }
+  return true;
+}
+
+/** Read display info from the main process; null means unknown (treat as one screen). */
+async function getDisplayInfo() {
+  const eduGame = window.eduGame;
+  if (!eduGame || typeof eduGame.getDisplays !== 'function') return null;
+  try {
+    const result = await eduGame.getDisplays();
+    if (!result || !result.ok || !result.data) return null;
+    return result.data;
+  } catch {
+    return null;
+  }
+}
+
+/** True when a projector/secondary display is available. */
+function hasSecondaryDisplay(data) {
+  return Boolean(data && Array.isArray(data.displays) && data.displays.some((display) => !display.primary));
+}
+
+/**
+ * Card-level fullscreen action:
+ * - one screen: native fullscreen + the existing play modal;
+ * - two or more: control the game in the main window and mirror it on the projector.
+ */
+async function playGameFullscreen(game) {
+  if (!game) return playGame(game);
+  const displays = await getDisplayInfo();
+  if (hasSecondaryDisplay(displays)) {
+    if (!playGame(game)) return false;
+    const started = await startPresentationMode();
+    if (started) return true;
+    setPlayFullscreen(true);
+    toast('Không mở được trình chiếu; đã chuyển sang toàn màn hình trên màn hình chính.', 5000);
+    return true;
+  }
+  return playGame(game, { fullscreen: true });
 }
 // ---------- Toàn màn hình khi trình chiếu ----------
 // The native window state is authoritative: main sends it back through
@@ -53,8 +113,344 @@ if (window.eduGame && typeof window.eduGame.onFullscreenChanged === 'function') 
 // Leaving the play surface must also release the window back to normal size.
 function closePlaySurface() {
   setPlayFullscreen(false);
+  stopPresentationMode();
   $('#modalRoot').innerHTML = '';
 }
+
+// ---------- Presentation Mode ----------
+let presentationRevision = 0;
+let presentationStarted = false;
+let presentationStarting = false;
+let presentationToken = 0;
+
+// ---------- Presentation view builders ----------
+function presentationOptions(options) {
+  return Array.isArray(options)
+    ? options.map(option => ({ id: String(option.id ?? ''), text: String(option.text ?? '') }))
+    : [];
+}
+
+function buildResultsView() {
+  const game = state.currentGame;
+  const summary = state.lastSummary || {};
+  const template = game?.template || 'quiz';
+  const points = Number(summary.points) || 0;
+  const max = Number(summary.max) || 0;
+  const percent = Number(summary.percent) || 0;
+  const rows = [{ label: 'Điểm', value: `${points.toLocaleString('vi-VN')} / ${max.toLocaleString('vi-VN')} (${percent}%)`, highlight: true }];
+  if (template === 'matching') {
+    const matching = game?.matchingGame;
+    const play = state.matchingPlay;
+    rows.push({ label: 'Cặp đã ghép', value: `${play?.matched ?? 0}/${matching?.pairs?.length ?? 0}` });
+    rows.push({ label: 'Lần sai', value: `${play?.wrong ?? 0}` });
+  } else if (template === 'treasure-hunt') {
+    const hunt = game?.treasureHunt;
+    const play = state.treasurePlay;
+    rows.push({ label: 'Chặng đúng', value: `${(play?.results || []).filter(result => result.correct).length}/${hunt?.stages?.length ?? 0}` });
+    rows.push({ label: 'Vật phẩm ẩn', value: `${Object.keys(play?.itemsFound || {}).length}` });
+  } else if (template === 'race') {
+    const play = state.racePlay;
+    const race = game?.race;
+    const sorted = (play?.teams || []).slice().sort((a, b) => b.progress - a.progress || b.points - a.points);
+    sorted.forEach((team, index) => {
+      rows.push({
+        label: `${index + 1}. ${team.icon || ''} ${team.name}`.trim(),
+        value: `Ô ${team.progress}/${race?.trackLength ?? 0} · ${team.points} điểm`,
+        highlight: index === 0,
+      });
+    });
+    if (summary.winner) rows.push({ label: 'Đội thắng', value: summary.winner, highlight: true });
+  } else {
+    rows.push({ label: 'Số câu đúng', value: `${summary.correct ?? 0}/${summary.total ?? 0}` });
+  }
+  const medal = template === 'race' ? '🏁' : percent >= 80 ? '🏆' : percent >= 50 ? '🎖️' : '🌱';
+  return {
+    kind: 'results',
+    title: template === 'race' && summary.winner
+      ? `${summary.winner} chiến thắng!`
+      : percent >= 80 ? 'Xuất sắc!' : percent >= 50 ? 'Làm tốt lắm!' : 'Tiếp tục cố gắng!',
+    subtitle: game?.title || '',
+    medal,
+    scoreText: `${points.toLocaleString('vi-VN')} điểm`,
+    rows,
+    message: 'Trò chơi đã kết thúc.',
+  };
+}
+
+function buildQuizView() {
+  const game = state.currentGame;
+  if (!game) return null;
+  const questions = game.questions || [];
+  const q = questions[Math.min(state.gameIndex || 0, Math.max(questions.length - 1, 0))];
+  if (!q) return null;
+  const answers = state.gameAnswers || [];
+  const last = answers[answers.length - 1];
+  const answered = Boolean(last && last.questionId === q.id);
+  const team = state.teamPlay ? state.teamPlay.teams[state.teamPlay.turn] : null;
+  return {
+    kind: 'quiz',
+    prompt: String(q.prompt || ''),
+    context: String(q.context || ''),
+    type: String(q.type || 'quiz'),
+    options: presentationOptions(q.options),
+    selectedOptionId: answered ? last.selectedOptionId ?? null : null,
+    correctOptionId: answered ? q.correctOptionId : undefined,
+    answerText: answered ? String(last.answerText ?? '') : '',
+    correctAnswer: answered ? String(q.correctAnswer ?? '') : '',
+    revealed: answered,
+    explanation: answered ? String(q.explanation || '') : '',
+    teamTurn: team ? `${team.icon || ''} ${team.name || ''}`.trim() : '',
+    progressLabel: `Câu ${Math.min((state.gameIndex || 0) + 1, questions.length)} / ${questions.length}`,
+  };
+}
+
+function buildMatchingView() {
+  const game = state.currentGame;
+  const matching = game?.matchingGame;
+  const play = state.matchingPlay;
+  if (!matching || !play) return null;
+  const matchedIds = [...new Set(
+    $$('#playBody .match-card.matched, #playBody [data-category-card].matched, #playBody .memory-card.matched')
+      .map(el => el.dataset.pair)
+      .filter(Boolean)
+  )];
+  const selected = $('#playBody .match-card.selected, #playBody [data-category-card].selected, #playBody .memory-card.flipped');
+  const memoryCards = $$('#playBody .memory-card').map((el, index) => ({
+    index,
+    pairId: el.dataset.pair || '',
+    text: el.querySelector('.memory-face')?.textContent || '?',
+    matched: el.classList.contains('matched'),
+    flipped: el.classList.contains('flipped'),
+  }));
+  const categoryGroups = $$('#playBody .group-box').map(box => ({
+    name: box.dataset.group || '',
+    items: $$('.group-chip', box).map(chip => chip.textContent || ''),
+  }));
+  return {
+    kind: 'matching',
+    mode: ['columns', 'memory', 'categorize'].includes(matching.mode) ? matching.mode : 'columns',
+    pairs: (matching.pairs || []).map(pair => ({ id: String(pair.id), left: String(pair.left), right: String(pair.right) })),
+    matchedIds,
+    matched: play.matched || 0,
+    total: (matching.pairs || []).length,
+    wrong: play.wrong || 0,
+    selectedPairId: selected ? selected.dataset.pair || null : null,
+    memoryCards,
+    categoryGroups,
+  };
+}
+
+function buildTreasureMission(stage, missionType) {
+  if (!stage) return undefined;
+  if (missionType === 'matching') {
+    return {
+      type: 'matching',
+      instruction: treasureMissionMeta[missionType]?.short || '',
+      pairs: (stage.mission?.pairs || []).map(pair => ({ id: String(pair.id), left: String(pair.left), right: String(pair.right) })),
+      matchedIds: $$('#playBody [data-match-left].matched').map(el => el.dataset.matchLeft).filter(Boolean),
+    };
+  }
+  if (missionType === 'classification') {
+    const groups = (stage.mission?.groups || []).map(group => ({ id: String(group.id), name: String(group.name) }));
+    const items = (stage.mission?.items || []).map(item => {
+      const el = $$('#playBody [data-class-item]').find(entry => entry.dataset.classItem === String(item.id));
+      const groupEl = el?.closest('[data-class-group]');
+      return { id: String(item.id), text: String(item.text), groupId: groupEl?.dataset.classGroup || '' };
+    });
+    return {
+      type: 'classification',
+      instruction: treasureMissionMeta[missionType]?.short || '',
+      groups,
+      items,
+    };
+  }
+  if (missionType === 'decode') {
+    const cipher = stage.mission?.cipher || treasureScrambleAnswer(stage.mission?.answer);
+    return {
+      type: 'decode',
+      instruction: treasureMissionMeta[missionType]?.short || '',
+      cipher: String(cipher || ''),
+    };
+  }
+  return { type: 'question', options: presentationOptions(stage.question?.options) };
+}
+
+function buildTreasureView() {
+  const game = state.currentGame;
+  const hunt = game?.treasureHunt;
+  const play = state.treasurePlay;
+  if (!hunt || !play) return null;
+  const stages = (hunt.stages || []).map((stage, index) => ({
+    id: String(stage.id),
+    name: String(stage.name || `Chặng ${index + 1}`),
+    status: treasureNodeState(stage.id, play),
+  }));
+  const stage = play.stageId ? treasureStageById(play.stageId) : null;
+  const missionType = stage ? treasureMissionTypeOf(stage) : '';
+  const result = (play.results || []).find(entry => entry.stageId === play.stageId);
+  const revealed = Boolean(result) || Boolean(play.answered);
+  return {
+    kind: 'treasure',
+    character: String(hunt.character || ''),
+    stages,
+    currentStageId: play.stageId,
+    stageName: stage ? String(stage.name || '') : '',
+    prompt: stage ? String(stage.question?.prompt || '') : '',
+    story: stage ? String(stage.story || '') : '',
+    taskDescription: stage ? String(stage.taskDescription || '') : '',
+    missionType,
+    mission: buildTreasureMission(stage, missionType),
+    options: presentationOptions(stage?.question?.options),
+    selectedOptionId: play.lastSelectedOptionId || null,
+    correctOptionId: revealed ? stage?.question?.correctOptionId : undefined,
+    revealed,
+    explanation: revealed ? String(stage?.question?.explanation || '') : '',
+    earned: Number(play.earned) || 0,
+    itemsFound: Object.keys(play.itemsFound || {}).length,
+    totalStages: (hunt.stages || []).length,
+  };
+}
+
+function buildRaceView() {
+  const game = state.currentGame;
+  const race = game?.race;
+  const play = state.racePlay;
+  if (!race || !play) return null;
+  const active = play.teams?.[play.turn];
+  return {
+    kind: 'race',
+    teams: (play.teams || []).map(team => ({
+      id: String(team.id),
+      name: String(team.name),
+      icon: String(team.icon || ''),
+      progress: Number(team.progress) || 1,
+      points: Number(team.points) || 0,
+      active: team.id === active?.id,
+    })),
+    trackLength: Number(race.trackLength) || 30,
+    round: Number(play.round) || 1,
+    maxRounds: Number(race.maxRounds) || 10,
+    currentTeamName: active ? String(active.name) : '',
+    currentTeamIcon: active ? String(active.icon || '') : '',
+    prompt: play.currentQ ? String(play.currentQ.prompt || '') : '',
+    options: presentationOptions(play.currentQ?.options),
+    lastEvent: String(play.lastEvent || ''),
+    winnerName: play.winnerId ? String(play.teams.find(team => team.id === play.winnerId)?.name || '') : '',
+    completed: Boolean(play.over),
+  };
+}
+
+function buildPresentationView(extra = {}) {
+  if (!state.currentGame) return null;
+  if (extra.isComplete || state.lastSummary) return buildResultsView();
+  const template = state.currentGame.template || 'quiz';
+  if (template === 'matching') return buildMatchingView();
+  if (template === 'treasure-hunt') return buildTreasureView();
+  if (template === 'race') return buildRaceView();
+  return buildQuizView();
+}
+
+/** Build a PresentationState snapshot from current renderer state. */
+function buildPresentationState(extra = {}): object {
+  const game = state.currentGame;
+  if (!game) return null;
+  const answers = state.gameAnswers || [];
+  const last = answers[answers.length - 1];
+  const score = state.lastSummary || (last ? { points: last.points, max: 0, percent: 0, correct: last.correct ? 1 : 0, total: 1 } : undefined);
+  const timer = state.gameStart ? Math.max(0, Math.round((Date.now() - state.gameStart) / 1000)) : 0;
+  presentationRevision += 1;
+  return {
+    sessionId: `sess_${state.playStartedAt || Date.now()}`,
+    gameId: game.id,
+    gameTitle: game.title,
+    template: game.template || 'quiz',
+    gameIndex: state.gameIndex,
+    gameAnswers: answers.map(a => a.selectedOptionId ?? a.answerText ?? ''),
+    score,
+    timer,
+    isComplete: extra.isComplete || false,
+    revision: presentationRevision,
+    view: buildPresentationView(extra),
+    ...extra,
+  };
+}
+
+/** Send current presentation state to an already-open presentation window. */
+function sendPresentationState(extra = {}): void {
+  if (!presentationStarted) return;
+  const eduGame = window.eduGame;
+  if (!eduGame || typeof eduGame.sendPresentationState !== 'function') return;
+  const payload = buildPresentationState(extra);
+  if (!payload) return;
+  eduGame.sendPresentationState(payload);
+}
+
+/** Explicitly start Presentation Mode. Never called from normal question rendering. */
+async function startPresentationMode(options = {}): Promise<boolean> {
+  if (presentationStarted) return true;
+  if (presentationStarting) return false;
+  const eduGame = window.eduGame;
+  if (!eduGame || typeof eduGame.startPresentation !== 'function') {
+    toast('Bản này không hỗ trợ trình chiếu.', 5000);
+    return false;
+  }
+  if (options.requireSecondary) {
+    const displays = await getDisplayInfo();
+    if (!hasSecondaryDisplay(displays)) {
+      toast('Chưa phát hiện màn hình phụ/máy chiếu. Dùng nút ⛶ để chơi toàn màn hình trên máy này.', 5000);
+      return false;
+    }
+  }
+  if (document.documentElement.dataset.fullscreen === '1') {
+    try {
+      await setPlayFullscreen(false);
+    } catch {
+      // Keep going: the presentation window is still the important part.
+    }
+  }
+  const payload = buildPresentationState();
+  if (!payload) {
+    toast('Chưa có trò chơi để trình chiếu.');
+    return false;
+  }
+  const token = ++presentationToken;
+  presentationStarting = true;
+  try {
+    const result = await eduGame.startPresentation(payload);
+    if (token !== presentationToken) return false;
+    if (result && result.ok) {
+      presentationStarted = true;
+      return true;
+    }
+    toast((result && result.error) || 'Không mở được cửa sổ trình chiếu. Hãy kiểm tra màn hình phụ.', 5000);
+    return false;
+  } catch (error) {
+    if (token === presentationToken) {
+      toast(`Không mở được cửa sổ trình chiếu: ${(error && error.message) || 'lỗi không xác định'}`, 5000);
+    }
+    return false;
+  } finally {
+    if (token === presentationToken) presentationStarting = false;
+  }
+}
+
+/** Stop presentation mode and reset tracking. */
+function stopPresentationMode(): void {
+  const eduGame = window.eduGame;
+  presentationToken += 1;
+  presentationStarting = false;
+  if (eduGame && typeof eduGame.stopPresentation === 'function') {
+    try {
+      const result = eduGame.stopPresentation();
+      if (result && typeof result.catch === 'function') result.catch(() => {});
+    } catch {
+      // Stopping a presentation that was never open is harmless.
+    }
+  }
+  presentationStarted = false;
+  presentationRevision = 0;
+}
+
 // ---------- G4 — player theme (chỉ áp dụng trong lúc trình chiếu game) ----------
 function playerTheme() {
   const audience = state.settings?.preferences?.audience;
@@ -121,10 +517,18 @@ function leaderboardHtml() {
   const medals = ['🥇', '🥈', '🥉'];
   return `<div class="leaderboard"><div class="stage-kicker">BẢNG XẾP HẠNG ĐỘI</div>${sorted.map((t, i) => `<div class="leaderboard-row ${i === 0 && t.points > 0 ? 'leader' : ''}"><span>${t.points > 0 ? (medals[i] || `#${i + 1}`) : '·'} <strong>${t.icon} ${escapeHtml(t.name)}</strong></span><span>Đúng ${t.correct}/${t.answered} câu</span><span>🏆 ${t.points} điểm</span></div>`).join('')}</div>`;
 }
+function bindPlayHeader(root) {
+  const present = $('[data-play-present]', root);
+  if (present) {
+    present.addEventListener('click', () => { startPresentationMode({ requireSecondary: true }); });
+  }
+}
+
 function openPlayModal() {
   const root = $('#modalRoot');
-  root.innerHTML = `<div class="modal-backdrop"><div class="modal w-[min(980px,96vw)] bg-[#11152b] border border-[#303651]" data-player-theme="${playerTheme()}"><div class="modal-head bg-[#11152b] border-[#303651] text-white"><div><h2>${escapeHtml(state.currentGame.title)}</h2><div class="small text-[#aeb5ce] mt-1">CHẾ ĐỘ TRÌNH CHIẾU · NGOẠI TUYẾN</div></div><button class="modal-close bg-[#292f49] text-white" data-play-fullscreen>⛶</button><button class="modal-close bg-[#292f49] text-white" data-play-close>✕</button></div><div class="modal-body p-[18px]" id="playBody"></div></div></div>`;
+  root.innerHTML = `<div class="modal-backdrop"><div class="modal w-[min(1180px,97vw)] bg-[#11152b] border border-[#303651]" data-player-theme="${playerTheme()}"><div class="modal-head play-head bg-[#11152b] border-[#303651] text-white"><div class="play-head-title"><h2>${escapeHtml(state.currentGame.title)}</h2><div class="small text-[#aeb5ce] mt-1">CHẾ ĐỘ TRÌNH CHIẾU · NGOẠI TUYẾN</div></div><div class="play-head-actions"><button class="play-tool" data-play-fullscreen title="Toàn màn hình" aria-label="Toàn màn hình"><span class="play-tool-icon">⛶</span></button><button class="play-tool play-tool-present" data-play-present title="Trình chiếu lên máy chiếu" aria-label="Trình chiếu"><span class="play-tool-icon">📽</span><span class="play-tool-label">Trình chiếu</span></button><button class="play-tool play-tool-danger" data-play-close title="Đóng" aria-label="Đóng"><span class="play-tool-icon">✕</span></button></div></div><div class="modal-body p-[18px]" id="playBody"></div></div></div>`;
   $('[data-play-close]',root).addEventListener('click', () => root.innerHTML = '');
+  bindPlayHeader(root);
   renderQuestion();
 }
 function renderQuestion() {
@@ -140,10 +544,11 @@ function renderQuestion() {
   const optionMark = (option, index) => trueFalse
     ? (/^đúng\b/i.test(String(option.text || '').trim()) ? '✓' : /^sai\b/i.test(String(option.text || '').trim()) ? '✗' : String.fromCharCode(65 + index))
     : String.fromCharCode(65 + index);
+  const shortAnswerPlaceholder = q.type==='fill-in-blank'?'Nhập từ hoặc cụm từ còn thiếu…':'Nhập câu trả lời ngắn (tối đa 5 từ)…';
   const answerArea = textQ
-    ? `<div class="text-answer-box"><input id="textAnswerInput" placeholder="${q.type==='fill-in-blank'?'Nhập từ hoặc cụm từ còn thiếu…':'Nhập câu trả lời của bạn…'}" autocomplete="off"><button class="btn btn-primary" id="textAnswerBtn">Trả lời</button></div>`
+    ? `<div class="text-answer-box"><input id="textAnswerInput" placeholder="${shortAnswerPlaceholder}" autocomplete="off"><button class="btn btn-primary" id="textAnswerBtn">Trả lời</button>${q.hint?`<button class="btn btn-secondary text-answer-hint" type="button" data-answer-hint>💡 Gợi ý</button>`:''}</div>${q.hint?`<div class="text-answer-hint-text hidden" id="textAnswerHint">💡 <strong>Gợi ý:</strong> ${escapeHtml(q.hint)}</div>`:''}`
     : `<div class="answer-grid${trueFalse ? ' true-false-grid' : ''}">${q.options.map((o,i)=>`<button class="answer-option" data-answer="${escapeHtml(o.id)}"><span class="letter">${optionMark(o, i)}</span><span>${escapeHtml(o.text)}</span></button>`).join('')}</div>`;
-  root.innerHTML = `<div class="game-stage"><div class="stage-top"><span>${escapeHtml(game.subject || 'TRÒ CHƠI HỌC TẬP')} · ${game.grade ? 'LỚP '+escapeHtml(game.grade) : 'MỌI LỚP'}</span><span>${game.template==='scenario'?'QUYẾT ĐỊNH':'CÂU'} ${state.gameAnswers.length+1} / ${game.questions.length} &nbsp; · &nbsp; 🏆 ${state.gameAnswers.reduce((s,a)=>s+a.points,0)} điểm</span></div><div class="stage-progress"><div data-progress="${progress}"></div></div>${state.teamPlay ? teamTurnBarHtml() : ''}<div class="stage-center"><div class="stage-kicker">${kicker}</div>${q.context?`<p class="scenario-context">${escapeHtml(q.context).replace(/\n/g,'<br>')}</p>`:''}<div class="stage-question">${escapeHtml(q.prompt).replace(/\n/g,'<br>')}</div>${answerArea}<div id="answerFeedback"></div><div class="stage-bottom"><span>${scoringTip}</span><button class="btn hidden" id="nextQuestionBtn">Tiếp tục →</button></div></div></div>`;
+  root.innerHTML = `<div class="game-stage"><div class="stage-top"><span class="stage-meta">${escapeHtml(game.subject || 'TRÒ CHƠI HỌC TẬP')} · ${game.grade ? 'LỚP '+escapeHtml(game.grade) : 'MỌI LỚP'}</span><span class="stage-meta stage-meta-right"><span class="stage-chip">${game.template==='scenario'?'QUYẾT ĐỊNH':'CÂU'} <b>${state.gameAnswers.length+1}</b>/${game.questions.length}</span><span class="stage-chip stage-chip-score">🏆 <b>${state.gameAnswers.reduce((s,a)=>s+a.points,0)}</b> điểm</span></span></div><div class="stage-progress"><div data-progress="${progress}"></div></div>${state.teamPlay ? teamTurnBarHtml() : ''}<div class="stage-center"><div class="stage-kicker">${kicker}</div>${q.context?`<p class="scenario-context">${escapeHtml(q.context).replace(/\n/g,'<br>')}</p>`:''}${stageIllustrationHtml(q, game, 'is-stage')}<div class="stage-question">${escapeHtml(q.prompt).replace(/\n/g,'<br>')}</div>${answerArea}<div id="answerFeedback"></div><div class="stage-bottom"><span class="stage-tip">${scoringTip}</span><button class="btn hidden" id="nextQuestionBtn">Tiếp tục →</button></div></div></div>`;
   paintProgress(root);
   $$('.answer-option',root).forEach(btn => btn.addEventListener('click', () => chooseAnswer(q, btn.dataset.answer)));
   if (textQ) {
@@ -151,10 +556,19 @@ function renderQuestion() {
     const submit = () => { const value = input.value; if (!value.trim()) return toast('Hãy nhập câu trả lời trước.'); chooseAnswer(q, null, value); };
     $('#textAnswerBtn', root).addEventListener('click', submit);
     input.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+    const hintBtn = $('[data-answer-hint]', root);
+    if (hintBtn) hintBtn.addEventListener('click', () => {
+      const hint = $('#textAnswerHint', root);
+      if (hint) hint.classList.toggle('hidden');
+      hintBtn.disabled = true;
+      hintBtn.textContent = '💡 Đã mở gợi ý';
+      input.focus();
+    });
     input.focus();
   }
   const turnSelect = $('#teamTurnSelect', root);
   if (turnSelect) turnSelect.addEventListener('change', () => { state.teamPlay.turn = Number(turnSelect.value); renderQuestion(); });
+  sendPresentationState();
 }
 function chooseAnswer(question, optionId, answerText) {
   if (state.answerLocked) return; state.answerLocked = true;
@@ -194,6 +608,8 @@ function chooseAnswer(question, optionId, answerText) {
     const submitBtn = document.getElementById('textAnswerBtn');
     if (input) { input.disabled = true; }
     if (submitBtn) submitBtn.disabled = true;
+    const hintBtn = document.querySelector('[data-answer-hint]');
+    if (hintBtn) hintBtn.disabled = true;
   }
   $$('.answer-option').forEach(btn => {
     btn.disabled = true;
@@ -208,7 +624,7 @@ function chooseAnswer(question, optionId, answerText) {
     ? `<br>Điểm quyết định: ${points}/100 (an toàn ${scenarioScore.breakdown.safety}/60 · giải thích ${scenarioScore.breakdown.reasoning}/25 · giảm hậu quả ${scenarioScore.breakdown.harmReduction}/15).`
     : '';
   const answerReveal = textQ
-    ? `<br><strong>Đáp án đúng:</strong> ${escapeHtml(question.correctAnswer || '')}${question.alternateAnswers?.length ? ` (hoặc: ${question.alternateAnswers.map(a => escapeHtml(a)).join(', ')})` : ''}`
+    ? `<br><strong>Đáp án đúng:</strong> ${escapeHtml(question.correctAnswer || '')}${question.alternateAnswers?.length ? ` (hoặc: ${question.alternateAnswers.map(a => escapeHtml(a)).join(', ')})` : ''}${question.hint && !correct ? `<br><strong>💡 Gợi ý:</strong> ${escapeHtml(question.hint)}` : ''}`
     : '';
   const teacherFeedback = scenario && selectedOption?.feedback
     ? selectedOption.feedback
@@ -226,6 +642,7 @@ function chooseAnswer(question, optionId, answerText) {
   $('#nextQuestionBtn').classList.remove('hidden');
   $('#nextQuestionBtn').textContent = state.nextQuestionIndex >= state.currentGame.questions.length ? 'Xem kết quả →' : 'Tình huống tiếp theo →';
   $('#nextQuestionBtn').onclick = () => { state.gameIndex=state.nextQuestionIndex; state.gameStart = Date.now(); renderQuestion(); };
+  sendPresentationState();
 }
 async function renderResults() {
   const game = state.currentGame;
@@ -250,6 +667,7 @@ async function renderResults() {
     answers: state.gameAnswers,
     ...(state.teamPlay ? { teams: state.teamPlay.teams, winnerTeam: top ? top.name : '' } : {})
   }, top ? top.name : 'Người chơi');
+  sendPresentationState({ isComplete: true });
 }
 
 function shuffled(list) {
@@ -264,8 +682,9 @@ function openMatchingPlay() {
   const root = $('#modalRoot');
   const game = state.currentGame;
   const modeLabel = ({ columns: 'GHÉP HAI CỘT', memory: 'LẬT THẺ GHI NHỚ', categorize: 'PHÂN LOẠI KIẾN THỨC' })[game.matchingGame.mode] || 'GHÉP CẶP KIẾN THỨC';
-  root.innerHTML = `<div class="modal-backdrop"><div class="modal w-[min(980px,96vw)] bg-[#11152b] border border-[#303651]" data-player-theme="${playerTheme()}"><div class="modal-head bg-[#11152b] border-[#303651] text-white"><div><h2>${escapeHtml(game.title)}</h2><div class="small text-[#aeb5ce] mt-1">${modeLabel} · NGOẠI TUYẾN</div></div><button class="modal-close bg-[#292f49] text-white" data-play-fullscreen>⛶</button><button class="modal-close bg-[#292f49] text-white" data-play-close>✕</button></div><div class="modal-body p-[18px]" id="playBody"></div></div></div>`;
+  root.innerHTML = `<div class="modal-backdrop"><div class="modal w-[min(980px,96vw)] bg-[#11152b] border border-[#303651]" data-player-theme="${playerTheme()}"><div class="modal-head bg-[#11152b] border-[#303651] text-white"><div><h2>${escapeHtml(game.title)}</h2><div class="small text-[#aeb5ce] mt-1">${modeLabel} · NGOẠI TUYẾN</div></div><button class="modal-close bg-[#292f49] text-white" data-play-fullscreen>⛶</button><button class="modal-close bg-[#292f49] text-white" data-play-present>Trình chiếu</button><button class="modal-close bg-[#292f49] text-white" data-play-close>✕</button></div><div class="modal-body p-[18px]" id="playBody"></div></div></div>`;
   $('[data-play-close]', root).addEventListener('click', () => root.innerHTML = '');
+  bindPlayHeader(root);
   resetMatchingPlay();
 }
 function resetMatchingPlay() {
@@ -296,6 +715,7 @@ function updateMatchingHeader() {
   stats.textContent = `ĐÃ GHÉP ${mp.matched}/${m.pairs.length} · SAI ${mp.wrong} · ${elapsed}s · ${m.practiceMode ? '📖 Luyện tập' : '🏆 Chinh phục'}`;
   const bar = $('.stage-progress > div');
   if (bar) bar.style.width = `${Math.round(mp.matched / m.pairs.length * 100)}%`;
+  sendPresentationState();
 }
 function renderMatchingBoard() {
   const m = state.currentGame.matchingGame;
@@ -306,11 +726,21 @@ function renderMatchingBoard() {
   else if (mode === 'categorize') renderCategorizeBoard(root, m);
   else renderColumnsBoard(root, m);
 }
+/** Matching has no single "current item"; the game-level illustration comes
+    from the first pair, which is what the plan/AI populates. Returns '' when
+    the board should stay clean. */
+function matchingIllustrationHtml(game) {
+  const m = game && game.matchingGame;
+  const first = m && Array.isArray(m.pairs) ? m.pairs[0] : null;
+  return first ? stageIllustrationHtml(first, game, 'is-matching') : '';
+}
+
 function renderColumnsBoard(root, m) {
   const rights = shuffled(m.pairs);
-  root.innerHTML = `<div class="game-stage">${matchingHeader()}<div class="stage-center"><div class="stage-kicker">GHÉP HAI CỘT</div><p class="field-hint">Chọn một mục ở cột A, rồi chọn mục tương ứng ở cột B.</p><div class="matching-board"><div class="matching-col">${m.pairs.map(p => `<button type="button" class="match-card" data-match-side="left" data-pair="${escapeHtml(p.id)}">${escapeHtml(p.left)}</button>`).join('')}</div><div class="matching-col">${rights.map(p => `<button type="button" class="match-card" data-match-side="right" data-pair="${escapeHtml(p.id)}">${escapeHtml(p.right)}</button>`).join('')}</div></div><div id="matchFeedback"></div></div>${matchingFooter(m)}</div>`;
+  root.innerHTML = `<div class="game-stage">${matchingHeader()}<div class="stage-center"><div class="stage-kicker">GHÉP HAI CỘT</div>${matchingIllustrationHtml(state.currentGame)}<p class="field-hint">Chọn một mục ở cột A, rồi chọn mục tương ứng ở cột B.</p><div class="matching-board"><div class="matching-col">${m.pairs.map(p => `<button type="button" class="match-card" data-match-side="left" data-pair="${escapeHtml(p.id)}">${escapeHtml(p.left)}</button>`).join('')}</div><div class="matching-col">${rights.map(p => `<button type="button" class="match-card" data-match-side="right" data-pair="${escapeHtml(p.id)}">${escapeHtml(p.right)}</button>`).join('')}</div></div><div id="matchFeedback"></div></div>${matchingFooter(m)}</div>`;
   paintProgress(root);
   $$('.match-card', root).forEach(btn => btn.addEventListener('click', () => onColumnCardClick(btn)));
+  sendPresentationState();
 }
 function onColumnCardClick(btn) {
   const mp = state.matchingPlay;
@@ -320,6 +750,7 @@ function onColumnCardClick(btn) {
   $$(selector).forEach(b => b.classList.remove('selected'));
   btn.classList.add('selected');
   if (side === 'left') mp.selectedLeft = btn; else mp.selectedRight = btn;
+  sendPresentationState();
   if (mp.selectedLeft && mp.selectedRight) evaluateColumnMatch();
 }
 function evaluateColumnMatch() {
@@ -354,9 +785,10 @@ function renderMemoryBoard(root, m) {
     { pair: p.id, text: p.left },
     { pair: p.id, text: p.right }
   ]));
-  root.innerHTML = `<div class="game-stage">${matchingHeader()}<div class="stage-center"><div class="stage-kicker">LẬT THẺ GHI NHỚ</div><p class="field-hint">Lật từng thẻ để tìm hai nội dung tương ứng.</p><div class="memory-grid">${state.memoryCards.map((c, i) => `<button type="button" class="memory-card" data-memory="${i}" data-pair="${escapeHtml(c.pair)}"><span class="memory-face">?</span></button>`).join('')}</div><div id="matchFeedback"></div></div>${matchingFooter(m)}</div>`;
+  root.innerHTML = `<div class="game-stage">${matchingHeader()}<div class="stage-center"><div class="stage-kicker">LẬT THẺ GHI NHỚ</div>${matchingIllustrationHtml(state.currentGame)}<p class="field-hint">Lật từng thẻ để tìm hai nội dung tương ứng.</p><div class="memory-grid">${state.memoryCards.map((c, i) => `<button type="button" class="memory-card" data-memory="${i}" data-pair="${escapeHtml(c.pair)}"><span class="memory-face">?</span></button>`).join('')}</div><div id="matchFeedback"></div></div>${matchingFooter(m)}</div>`;
   paintProgress(root);
   $$('.memory-card', root).forEach(btn => btn.addEventListener('click', () => onMemoryCardClick(btn)));
+  sendPresentationState();
 }
 function onMemoryCardClick(btn) {
   const mp = state.matchingPlay;
@@ -365,6 +797,7 @@ function onMemoryCardClick(btn) {
   btn.classList.add('flipped');
   btn.querySelector('.memory-face').textContent = card.text;
   mp.flipped.push(btn);
+  sendPresentationState();
   if (mp.flipped.length < 2) return;
   const [a, b] = mp.flipped;
   if (a.dataset.pair === b.dataset.pair) {
@@ -392,13 +825,14 @@ function onMemoryCardClick(btn) {
 function renderCategorizeBoard(root, m) {
   const groups = [...new Set(m.pairs.map(p => p.left))];
   state.memoryCards = shuffled(m.pairs);
-  root.innerHTML = `<div class="game-stage">${matchingHeader()}<div class="stage-center"><div class="stage-kicker">PHÂN LOẠI KIẾN THỨC</div><p class="field-hint">Chọn một thẻ nội dung, rồi chọn đúng nhóm.</p><div class="category-cards">${state.memoryCards.map((p, i) => `<button type="button" class="match-card" data-category-card="${i}" data-pair="${escapeHtml(p.id)}">${escapeHtml(p.right)}</button>`).join('')}</div><div class="category-groups">${groups.map(g => `<div class="group-box" data-group="${escapeHtml(g)}"><strong>${escapeHtml(g)}</strong><div class="group-slots"></div></div>`).join('')}</div><div id="matchFeedback"></div></div>${matchingFooter(m)}</div>`;
+  root.innerHTML = `<div class="game-stage">${matchingHeader()}<div class="stage-center"><div class="stage-kicker">PHÂN LOẠI KIẾN THỨC</div>${matchingIllustrationHtml(state.currentGame)}<p class="field-hint">Chọn một thẻ nội dung, rồi chọn đúng nhóm.</p><div class="category-cards">${state.memoryCards.map((p, i) => `<button type="button" class="match-card" data-category-card="${i}" data-pair="${escapeHtml(p.id)}">${escapeHtml(p.right)}</button>`).join('')}</div><div class="category-groups">${groups.map(g => `<div class="group-box" data-group="${escapeHtml(g)}"><strong>${escapeHtml(g)}</strong><div class="group-slots"></div></div>`).join('')}</div><div id="matchFeedback"></div></div>${matchingFooter(m)}</div>`;
   paintProgress(root);
   $$('[data-category-card]', root).forEach(btn => btn.addEventListener('click', () => {
     if (btn.classList.contains('matched') || state.matchingPlay.lock) return;
     $$('[data-category-card]').forEach(b => b.classList.remove('selected'));
     btn.classList.add('selected');
     state.matchingPlay.selectedCard = btn;
+    sendPresentationState();
   }));
   $$('.group-box', root).forEach(box => box.addEventListener('click', () => {
     const mp = state.matchingPlay;
@@ -424,6 +858,7 @@ function renderCategorizeBoard(root, m) {
       updateMatchingHeader();
     }
   }));
+  sendPresentationState();
 }
 async function renderMatchingResults() {
   const game = state.currentGame, m = game.matchingGame, mp = state.matchingPlay;
@@ -438,16 +873,18 @@ async function renderMatchingResults() {
     answers: [],
     matching: { matched: mp.matched, wrongAttempts: mp.wrong, elapsedSeconds: Math.round(elapsed) }
   }, 'Đội 1');
+  sendPresentationState({ isComplete: true });
 }
 
 // ---------- §5 Hành trình giải mã kho báu ----------
 function openTreasurePlay() {
   const root = $('#modalRoot');
   const game = state.currentGame;
-  root.innerHTML = `<div class="modal-backdrop"><div class="modal w-[min(980px,96vw)] bg-[#11152b] border border-[#303651]" data-player-theme="${playerTheme()}"><div class="modal-head bg-[#11152b] border-[#303651] text-white"><div><h2>${escapeHtml(game.title)}</h2><div class="small text-[#aeb5ce] mt-1">HÀNH TRÌNH KHÁM PHÁ · NGOẠI TUYẾN</div></div><button class="modal-close bg-[#292f49] text-white" data-play-fullscreen>⛶</button><button class="modal-close bg-[#292f49] text-white" data-play-close>✕</button></div><div class="modal-body p-[18px]" id="playBody"></div></div></div>`;
+  root.innerHTML = `<div class="modal-backdrop"><div class="modal w-[min(980px,96vw)] bg-[#11152b] border border-[#303651]" data-player-theme="${playerTheme()}"><div class="modal-head bg-[#11152b] border-[#303651] text-white"><div><h2>${escapeHtml(game.title)}</h2><div class="small text-[#aeb5ce] mt-1">HÀNH TRÌNH KHÁM PHÁ · NGOẠI TUYẾN</div></div><button class="modal-close bg-[#292f49] text-white" data-play-fullscreen>⛶</button><button class="modal-close bg-[#292f49] text-white" data-play-present>Trình chiếu</button><button class="modal-close bg-[#292f49] text-white" data-play-close>✕</button></div><div class="modal-body p-[18px]" id="playBody"></div></div></div>`;
   $('[data-play-close]', root).addEventListener('click', () => root.innerHTML = '');
+  bindPlayHeader(root);
   const hunt = game.treasureHunt;
-  state.treasurePlay = { stageId: hunt.stages[0].id, earned: 0, results: [], itemsFound: {}, attemptsLeft: 0, steps: 0, answered: false, done: false };
+  state.treasurePlay = { stageId: hunt.stages[0].id, earned: 0, results: [], itemsFound: {}, attemptsLeft: 0, steps: 0, answered: false, done: false, lastSelectedOptionId: null };
   GameAudio.play('open');
   renderTreasureStage();
 }
@@ -652,6 +1089,7 @@ function bindTreasureMatching(stage) {
         const matched = leftButtons.filter(entry => entry.classList.contains('matched')).length;
         GameAudio.play('match');
         if (status) status.textContent = `✓ Đã ghép ${matched}/${stage.mission.pairs.length} cặp.`;
+        sendPresentationState();
         if (matched >= stage.mission.pairs.length) {
           const gained = (Number(stage.points) || 0) + (Number(stage.completionBonus) || 0);
           GameAudio.play('correct');
@@ -713,6 +1151,7 @@ function bindTreasureClassification(stage) {
         const placed = itemButtons.filter(entry => entry.classList.contains('placed')).length;
         GameAudio.play('match');
         if (status) status.textContent = `✓ Đã xếp ${placed}/${itemButtons.length} mục.`;
+        sendPresentationState();
         if (placed >= itemButtons.length) {
           const gained = (Number(stage.points) || 0) + (Number(stage.completionBonus) || 0);
           GameAudio.play('correct');
@@ -812,6 +1251,7 @@ function renderTreasureStage() {
       ${tp.results.length === 0 && hunt.intro ? `<div class="treasure-storyline">${treasureAvatarHtml(characterId, 'is-small')}<p class="scenario-context">${escapeHtml(hunt.intro)}</p></div>` : ''}
       ${stage.story ? `<div class="treasure-storyline">${treasureAvatarHtml(characterId, 'is-small')}<p class="scenario-context">${escapeHtml(stage.story)}</p></div>` : ''}
       ${stage.taskDescription ? `<p class="small text-[#aeb5ce]">${escapeHtml(stage.taskDescription)}</p>` : ''}
+      ${stageIllustrationHtml(stage.question, state.currentGame, 'is-stage is-treasure')}
       <div class="stage-question">${escapeHtml(stage.question.prompt).replace(/\n/g, '<br>')}</div>
       <div class="treasure-mission-badge">${mission.icon} ${escapeHtml(mission.label)} · ${escapeHtml(mission.short)}</div>
       <div id="treasureMission">${renderTreasureMissionBody(stage, missionType)}</div>
@@ -834,6 +1274,7 @@ function renderTreasureStage() {
     itemBtn.remove();
     GameAudio.play('item');
     toast(`Tìm thấy vật phẩm ẩn! +${hunt.hiddenItemBonus || 50} điểm.`);
+    sendPresentationState();
   };
   const hintBtn = $('#treasureHintBtn', root);
   if (hintBtn) hintBtn.onclick = () => {
@@ -842,6 +1283,7 @@ function renderTreasureStage() {
     fb.innerHTML = `<strong>💡 Gợi ý:</strong> ${escapeHtml(stage.question.hint)}`;
     GameAudio.play('hint');
   };
+  sendPresentationState();
 }
 function showTreasureChoices(stage, answeredCorrectly) {
   const tp = state.treasurePlay;
@@ -863,10 +1305,12 @@ function showTreasureChoices(stage, answeredCorrectly) {
       else { tp.done = true; renderTreasureResults(); }
     };
   });
+  sendPresentationState();
 }
 function chooseTreasureAnswer(optionId) {
   const tp = state.treasurePlay;
   if (tp.answered) return;
+  tp.lastSelectedOptionId = optionId;
   const stage = treasureStageById(tp.stageId);
   if (!stage) return;
   const root = $('#playBody');
@@ -905,6 +1349,7 @@ function chooseTreasureAnswer(optionId) {
       fb.innerHTML = `<strong>✕ Chưa đúng.</strong> ${stage.attempts > 0 ? `Còn ${tp.attemptsLeft} lượt thử — hãy suy nghĩ kỹ.` : 'Thử lại với đáp án khác.'}`;
     }
   }
+  sendPresentationState();
 }
 function renderTreasureResults() {
   const hunt = state.currentGame.treasureHunt, tp = state.treasurePlay;
@@ -936,6 +1381,7 @@ function renderTreasureResults() {
       itemsFound: tp.itemsFound
     }
   }, 'Nhà thám hiểm 1');
+  sendPresentationState({ isComplete: true });
 }
 
 // ---------- §6 Đường đua tri thức ----------
@@ -944,8 +1390,9 @@ const RACE_CELL_ICON = { boost: '⚡', penalty: '🪨', lucky: '🎁', challenge
 function openRacePlay() {
   const root = $('#modalRoot');
   const game = state.currentGame;
-  root.innerHTML = `<div class="modal-backdrop"><div class="modal w-[min(1040px,96vw)] bg-[#11152b] border border-[#303651]" data-player-theme="${playerTheme()}"><div class="modal-head bg-[#11152b] border-[#303651] text-white"><div><h2>${escapeHtml(game.title)}</h2><div class="small text-[#aeb5ce] mt-1">ĐƯỜNG ĐUA TRI THỨC · GIẢNG VIÊN ĐIỀU KHIỂN MÀN CHUNG</div></div><button class="modal-close bg-[#292f49] text-white" data-play-fullscreen>⛶</button><button class="modal-close bg-[#292f49] text-white" data-play-close>✕</button></div><div class="modal-body p-[18px]" id="playBody"></div></div></div>`;
+  root.innerHTML = `<div class="modal-backdrop"><div class="modal w-[min(1040px,96vw)] bg-[#11152b] border border-[#303651]" data-player-theme="${playerTheme()}"><div class="modal-head bg-[#11152b] border-[#303651] text-white"><div><h2>${escapeHtml(game.title)}</h2><div class="small text-[#aeb5ce] mt-1">ĐƯỜNG ĐUA TRI THỨC · GIẢNG VIÊN ĐIỀU KHIỂN MÀN CHUNG</div></div><button class="modal-close bg-[#292f49] text-white" data-play-fullscreen>⛶</button><button class="modal-close bg-[#292f49] text-white" data-play-present>Trình chiếu</button><button class="modal-close bg-[#292f49] text-white" data-play-close>✕</button></div><div class="modal-body p-[18px]" id="playBody"></div></div></div>`;
   $('[data-play-close]', root).addEventListener('click', () => root.innerHTML = '');
+  bindPlayHeader(root);
   const race = game.race;
   state.racePlay = {
     teams: race.teams.map(t => ({ ...t, progress: 1, points: 0 })),
@@ -982,15 +1429,16 @@ function renderRaceBoard() {
   $$('[data-race-answer]', root).forEach(btn => { btn.onclick = () => answerRace(btn.dataset.raceAnswer); });
   const noAnsBtn = $('#raceNoAnswerBtn', root);
   if (noAnsBtn) noAnsBtn.onclick = () => answerRace('__no_answer__');
+  sendPresentationState();
 }
 function raceTurnPanelHtml() {
   const rp = state.racePlay, team = rp.teams[rp.turn];
   if (!rp.currentQ) {
-    return `<div class="race-turn"><p class="small text-[#aeb5ce]">Lượt của <strong>${team.icon} ${escapeHtml(team.name)}</strong>. Giáo viên bốc câu hỏi, đọc cho đội, rồi chọn đáp án mà đội trả lời.</p><button type="button" class="btn btn-primary" id="drawQuestionBtn">🃏 Bốc câu hỏi</button></div>`;
+    return `<div class="race-turn"><p class="small text-[#5b6478]">Lượt của <strong>${team.icon} ${escapeHtml(team.name)}</strong>. Giáo viên bốc câu hỏi, đọc cho đội, rồi chọn đáp án mà đội trả lời.</p><button type="button" class="btn btn-primary" id="drawQuestionBtn">🃏 Bốc câu hỏi</button></div>`;
   }
   const q = rp.currentQ;
   const diff = q.difficulty || 'trung bình';
-  return `<div class="race-turn"><div class="stage-kicker">CÂU HỎI · ĐỘ KHÓ ${escapeHtml(diff.toUpperCase())}${raceStepLabel(diff)}</div><div class="stage-question">${escapeHtml(q.prompt).replace(/\n/g, '<br>')}</div>
+  return `<div class="race-turn"><div class="stage-kicker">CÂU HỎI · ĐỘ KHÓ ${escapeHtml(diff.toUpperCase())}${raceStepLabel(diff)}</div>${stageIllustrationHtml(q, state.currentGame, 'is-race')}<div class="stage-question">${escapeHtml(q.prompt).replace(/\n/g, '<br>')}</div>
     <div class="answer-grid">${q.options.map((o, i) => `<button class="answer-option" data-race-answer="${escapeHtml(o.id)}"><span class="letter">${String.fromCharCode(65 + i)}</span><span>${escapeHtml(o.text)}</span></button>`).join('')}</div>
     <div class="mt-[10px]"><button type="button" class="btn btn-secondary btn-small" id="raceNoAnswerBtn">Đội không trả lời được</button></div></div>`;
 }
@@ -1070,6 +1518,7 @@ function renderRaceResults() {
       rounds: rp.round
     }
   }, winner.name);
+  sendPresentationState({ isComplete: true });
 }
 
 document.addEventListener('click', (e) => {
@@ -1081,3 +1530,15 @@ document.addEventListener('click', (e) => {
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && document.documentElement.dataset.fullscreen === '1') setPlayFullscreen(false);
 });
+
+/** Keep the flag in sync when the presentation window is closed outside the app. */
+function initPresentationTracking() {
+  const eduGame = window.eduGame;
+  if (!eduGame || typeof eduGame.onPresentationExit !== 'function') return;
+  eduGame.onPresentationExit(() => {
+    presentationStarted = false;
+    presentationStarting = false;
+    presentationToken += 1;
+  });
+}
+initPresentationTracking();

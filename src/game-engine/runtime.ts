@@ -28,18 +28,49 @@ function normalizeTextAnswer(value) {
   return String(value ?? '').trim().toLowerCase().normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/đ/g, 'd')
-    .replace(/\s+/g, ' ');
+    .replace(/[.!?…:;,،]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+// Đáp án văn bản có thể gồm nhiều phần cách nhau bằng ";". Học sinh thường gõ bằng dấu phẩy,
+// nên khi so khớp ";", "," (và dấu câu) đều được coi là dấu ngăn.
+function splitTextAnswer(value) {
+  return String(value ?? '').split(/[;,]/).map(normalizeTextAnswer).filter(Boolean);
+}
+function textAnswerMatches(expected, normalizedAnswer) {
+  if (!expected) return false;
+  const normalizedExpected = normalizeTextAnswer(expected);
+  if (!normalizedExpected) return false;
+  if (normalizedExpected === normalizedAnswer) return true;
+  const expectedParts = splitTextAnswer(expected);
+  const answerParts = splitTextAnswer(normalizedAnswer);
+  return expectedParts.length > 1 && answerParts.length > 1 &&
+    expectedParts.length === answerParts.length &&
+    expectedParts.every((part, index) => part === answerParts[index]);
 }
 function isTextQuestion(question) {
   const type = question && question.type;
   return type === 'fill-in-blank' || type === 'short-answer';
+}
+/** Giới hạn độ dài đáp án nhập: câu hỏi tự luận dài phải đổi sang dạng khác. */
+const TEXT_ANSWER_WORD_LIMIT = 5;
+function textAnswerWordCount(value) {
+  const text = String(value ?? '').trim();
+  if (!text) return 0;
+  // Mỗi phần (ngăn bởi ";" hoặc ",") tính riêng: "a; b" là hai cụm ngắn, không phải bốn từ.
+  return text.split(/[;,]/)
+    .map(part => part.trim().split(/\s+/).filter(Boolean).length)
+    .reduce((max, count) => Math.max(max, count), 0);
+}
+function textAnswerTooLong(value) {
+  return textAnswerWordCount(value) > TEXT_ANSWER_WORD_LIMIT;
 }
 function scoreTextAnswer(question, answerText, elapsedSeconds = 0, gameSetup) {
   const expected = Array.isArray(question.alternateAnswers) && question.alternateAnswers.length
     ? [question.correctAnswer, ...question.alternateAnswers]
     : [question.correctAnswer];
   const normalized = normalizeTextAnswer(answerText);
-  const correct = normalized.length > 0 && expected.some(value => normalizeTextAnswer(value) === normalized);
+  const correct = normalized.length > 0 && expected.some(value => textAnswerMatches(value, normalized));
   const scoring = resolveScoring(gameSetup);
   const base = questionPoints(question, scoring);
   const speedBonus = correct && scoring.mode === 'tốc độ' && elapsedSeconds <= 8 ? scoring.timeBonus : 0;
@@ -144,6 +175,9 @@ if (typeof module !== 'undefined') module.exports = {
   scoreTextAnswer,
   normalizeTextAnswer,
   isTextQuestion,
+  TEXT_ANSWER_WORD_LIMIT,
+  textAnswerWordCount,
+  textAnswerTooLong,
   questionFingerprint,
   dedupeImportedQuestions,
   calculateSummary,

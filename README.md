@@ -132,22 +132,30 @@ Backend nằm trong `server/` và được viết bằng TypeScript. Gateway:
 ```text
 edugame-studio-v0.3/
 ├── src/
-│   ├── main.ts                 # Electron main process + SQLite
+│   ├── main.ts                 # Electron main process + SQLite (~120 KB)
 │   ├── preload.ts              # API IPC an toàn
 │   ├── index.html              # Khung cửa sổ ứng dụng
+│   ├── ai-core/                # AI local: runtime, model, manifest, cài đặt lần đầu
+│   ├── presentation/           # Trình chiếu trên màn hình phụ / máy chiếu
 │   ├── renderer/
 │   │   ├── core/               # Điều phối trang, điều hướng, khởi tạo
-│   │   ├── features/           # Tạo game, AI, biên tập, chơi và kết quả
+│   │   ├── features/           # Tạo game, AI, wizard, biên tập, chơi, kết quả
+│   │   ├── features/wizard/    # Các bước của luồng giáo án → game
 │   │   ├── pages/              # Màn hình tổng quan, thư viện, tạo game...
-│   │   ├── styles/             # CSS nền, bố cục, thành phần, trang, responsive
+│   │   ├── styles/             # app.css (Tailwind v4 + @layer components)
+│   │   ├── setup-wizard-model.ts  # Quyết định của wizard (thuần, test bằng node)
 │   │   └── shared.ts           # Trạng thái và tiện ích giao diện dùng chung
-│   ├── shared/types.ts         # Kiểu dữ liệu dùng chung
-│   ├── services/game-service.ts
-│   ├── game-engine/runtime.ts
+│   ├── services/               # Giáo án, AI transport, kiểm tra chất lượng, SQLite store
+│   ├── shared/                 # Kiểu dữ liệu dùng chung
+│   └── game-engine/runtime.ts
 ├── server/
 │   ├── index.ts                # AI Gateway TypeScript
 │   └── schema.sql              # Supabase quota schema/RPC
-├── tests/runtime.test.ts
+├── tests/                      # unit/ · ui/ · smoke/ · manual/ · fixtures/ · legacy/
+│   └── README.md               # Cái nào chạy bằng `npm test`, cái nào chạy tay
+├── vendor/vc-runtime/          # DLL VC++ đóng gói cùng runtime llama.cpp
+├── build/installer.nsh         # Hook NSIS của electron-builder
+├── docs/                       # Bàn giao, quyết định, trạng thái, kế hoạch
 ├── tsconfig.json
 └── package.json
 ```

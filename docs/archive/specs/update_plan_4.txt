@@ -1,0 +1,265 @@
+# TASK: Implement Presentation Mode for EduGame Studio
+
+## 1. Project Context
+
+You are working on **EduGame Studio**, an existing Windows desktop application built with Electron + TypeScript.
+
+The application already has:
+- An existing game creation and gameplay system.
+- An existing local AI pipeline for generating educational game content.
+- An existing game UI that runs inside the main EduGame Studio interface.
+- Existing game state, question navigation, scoring, and game session logic.
+
+**Your task is ONLY to implement Presentation Mode.**
+
+Do not rebuild, replace, or refactor the existing game engine or AI pipeline unless a small, necessary integration change is required.
+
+Do not assume the project uses React, a particular router, or a specific state management library. Inspect the actual source code first.
+
+## 2. Main Objective
+
+Allow teachers to present an existing game on a classroom projector or secondary monitor while retaining control of EduGame Studio.
+
+The intended experience:
+
+1. The teacher opens a game inside EduGame Studio.
+2. The teacher clicks the "Trình chiếu" (Present) button.
+3. The application detects available displays.
+4. If a secondary display exists, open the presentation window on that display automatically.
+5. If no secondary display exists, present on the primary display.
+6. The game appears fullscreen without window borders or unnecessary application controls.
+7. The existing game session continues without resetting questions, scores, timers, or progress.
+8. The teacher can exit Presentation Mode and return to the existing application without losing the game session.
+
+The interface and user-facing labels should be in Vietnamese, consistent with the existing application.
+
+## 3. Mandatory Step: Inspect Before Coding
+
+Before making changes:
+
+1. Inspect the project structure, package.json, Electron main process, preload scripts, renderer entry points, routing, and build configuration.
+2. Locate the existing game screen, game session state, scoring logic, timer, and question navigation.
+3. Determine how the existing renderer communicates with the Electron main process.
+4. Identify the existing design system and UI conventions.
+5. Identify the current packaging and development configuration for Windows.
+
+Provide a short implementation plan based on the actual codebase.
+
+Do not create duplicate infrastructure if an equivalent implementation already exists.
+
+## 4. Presentation Window Architecture
+
+Implement a dedicated presentation window using Electron BrowserWindow.
+
+Responsibilities:
+
+### Main application window
+- Retain the existing EduGame Studio interface.
+- Preserve the existing game session and teacher controls.
+- Provide a "Trình chiếu" button in the appropriate existing game interface.
+- Allow teachers to stop presenting without ending the game.
+
+### Presentation window
+- Display the existing game UI in presentation mode.
+- Run fullscreen on the selected display.
+- Hide unnecessary window chrome and presentation-irrelevant controls.
+- Preserve the existing game appearance and gameplay behavior.
+- Do not initialize a separate game session.
+- Do not implement a second scoring engine.
+
+Reuse existing game components wherever possible. If necessary, introduce a dedicated presentation route or a presentation-specific rendering mode.
+
+Do not redesign unrelated application screens.
+
+## 5. Display Detection and Selection
+
+Use Electron's screen API.
+
+Requirements:
+
+- Wait until Electron is ready before accessing screen APIs.
+- Detect available displays using screen.getAllDisplays().
+- Identify the primary display using screen.getPrimaryDisplay().
+- Prefer a non-primary display when available.
+- Fall back to the primary display when only one display exists.
+- Use the selected display's bounds to position the presentation window.
+- Support common classroom resolutions, including 1366×768 and 1920×1080.
+- Handle display-added, display-removed, and display-metrics-changed events.
+- If the projector disconnects while presenting, move the presentation window to a valid remaining display or close it safely.
+- Never leave the presentation window inaccessible outside all available displays.
+
+Important UX decision:
+
+Automatically detect and select the display, but do not automatically launch the game just because a projector is connected. The teacher explicitly starts Presentation Mode by clicking the button.
+
+If a projector is connected while the main application is already running, update the available display information.
+
+## 6. Fullscreen and Window Lifecycle
+
+Implement safe and predictable lifecycle management:
+
+- Reuse an existing presentation window instead of creating duplicates.
+- Handle repeated clicks on the "Trình chiếu" button.
+- Wait for the presentation page to load before showing the window.
+- Enter fullscreen on the selected display.
+- Prevent duplicate event listeners.
+- Clean up event listeners when appropriate.
+- Handle load failures and window destruction.
+- Prevent accidental loss of the game session when closing the presentation window.
+- Ensure the main application can continue operating after presentation ends.
+- Handle application shutdown without orphaned windows or invalid references.
+
+Do not force the application into fullscreen on startup.
+
+## 7. Game State Synchronization
+
+The existing game session must remain the source of truth.
+
+Inspect the existing state management before choosing an implementation.
+
+Preferred approach:
+- Reuse the existing game state and game UI.
+- Introduce a minimal adapter or synchronization mechanism only if required.
+- Keep the presentation renderer read-only where possible.
+- Let the existing game controller continue to handle question navigation, answer evaluation, scoring, and timers.
+- Synchronize question changes, answer reveals, score updates, timer changes, pause/resume, and game completion.
+- If the presentation window reloads, request the latest state rather than creating a new game session.
+
+If state must be transmitted between renderers:
+- Use a typed message contract.
+- Include a session identifier to prevent stale session data.
+- Use a revision number or equivalent mechanism to handle outdated updates.
+- Validate incoming messages.
+- Prevent duplicate scoring or duplicate game actions.
+
+Do not move the entire game engine into the Electron main process unless the existing architecture makes it strictly necessary.
+
+## 8. Secure Electron Integration
+
+Follow the existing security conventions and maintain secure Electron defaults.
+
+- Use contextIsolation: true.
+- Use nodeIntegration: false.
+- Keep sandboxing enabled where compatible with the existing application.
+- Expose only the necessary API through preload and contextBridge.
+- Validate IPC sender identity and message payloads.
+- Use explicit IPC channel names and TypeScript types.
+- Do not expose unrestricted ipcRenderer, Node.js APIs, filesystem access, or arbitrary shell execution to the renderer.
+- Do not allow the presentation renderer to access the AI runtime or local files directly.
+- Prevent untrusted navigation and unexpected new windows.
+
+Reuse the existing preload and IPC architecture if appropriate.
+
+## 9. Keyboard Controls and Safe Exit
+
+Implement keyboard controls only where they fit the existing game interaction model.
+
+Suggested behavior:
+- Escape: show an exit confirmation or return to the normal interface without ending the game.
+- Ctrl+Shift+P: toggle Presentation Mode, provided this does not conflict with existing shortcuts.
+- Existing gameplay shortcuts must continue to work.
+- Avoid triggering presentation shortcuts while the teacher is typing into an input or textarea.
+- Do not intercept normal keyboard input unnecessarily.
+
+The teacher must be able to exit presentation without accidentally ending the game or losing progress.
+
+If a shortcut conflicts with existing behavior, document the conflict and select a safe alternative.
+
+## 10. Presentation UI
+
+Keep the presentation interface focused on the game itself.
+
+Requirements:
+- Fullscreen rendering.
+- No unnecessary title bar or window controls.
+- No editing controls, AI generation controls, or unrelated application navigation.
+- Preserve the existing game design and gameplay UI.
+- Avoid unnecessary animations or expensive visual effects that could degrade performance on classroom computers.
+- Ensure Vietnamese text renders correctly.
+- Prevent question text and answer choices from overflowing common projector resolutions.
+
+Do not redesign the game itself as part of this task.
+
+## 11. Suggested Module Organization
+
+Adapt these names to the actual repository structure instead of blindly creating every file.
+
+Potential modules:
+
+- presentation-manager.ts: presentation window lifecycle.
+- display-manager.ts: display detection and selection.
+- presentation-ipc.ts: IPC integration.
+- presentation-api.ts: typed, restricted preload API.
+- presentation-types.ts: shared types and message contracts.
+- PresentationPage or equivalent: presentation-specific rendering.
+
+Do not duplicate existing modules or state management systems.
+
+## 12. Explicit Non-Goals
+
+Do NOT:
+- Rewrite the existing game engine.
+- Rewrite question generation or the local AI pipeline.
+- Change the AI model or its runtime.
+- Redesign the entire application.
+- Rebuild the game library or manual game creation flow.
+- Introduce cloud services or an Internet dependency.
+- Require students to log in or use personal devices.
+- Add multiplayer networking.
+- Add new game types.
+- Change existing scoring rules.
+- Introduce new dependencies unless necessary and justified.
+
+The application must continue to support offline gameplay.
+
+## 13. Required Tests
+
+Test or provide reproducible test procedures for:
+
+1. Starting presentation with one display.
+2. Starting presentation with two displays.
+3. Repeatedly clicking "Trình chiếu".
+4. Exiting presentation while a game is in progress.
+5. Preserving question index, scores, and timer state.
+6. Updating the presentation after the teacher changes a question or score.
+7. Disconnecting a projector during presentation.
+8. Changing display resolution.
+9. Reloading or failing to load the presentation page.
+10. Closing the main application safely.
+11. Preventing duplicate scoring and duplicate game sessions.
+12. Ensuring the presentation window cannot access unrestricted Node.js APIs.
+
+Run the existing relevant tests, type checking, linting, and build commands where available.
+
+Do not claim tests passed unless they were actually executed.
+
+## 14. Implementation and Delivery Requirements
+
+Implement the feature directly in the existing repository.
+
+Work in this order:
+
+1. Inspect and report the existing architecture.
+2. Identify the minimum files that need to change.
+3. Implement display detection and presentation window management.
+4. Add the presentation entry point to the existing game UI.
+5. Integrate with the existing game state.
+6. Implement safe exit and display-disconnection handling.
+7. Test the feature and fix regressions.
+8. Summarize all changes.
+
+At completion, report:
+
+- Files created and modified.
+- How display selection works.
+- How game state synchronization works.
+- How the teacher enters and exits Presentation Mode.
+- How projector disconnection is handled.
+- Tests actually executed and their results.
+- Any remaining limitations or integration decisions.
+
+**Acceptance criteria:**
+
+A teacher can open an existing game, click "Trình chiếu", display it fullscreen on a connected secondary monitor, continue controlling the same game session, and exit without losing progress. The feature works offline and does not regress the existing game or AI functionality.
+
+Do not stop after writing a plan or providing code snippets. Implement the feature in the actual repository, following its existing architecture.

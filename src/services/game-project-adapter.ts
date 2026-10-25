@@ -11,6 +11,7 @@ import type {
   GameOption,
   GameQuestion,
   GameSetup,
+  ItemAssetFields,
   MatchingGameData,
   QuestionDifficulty,
   RaceCellType,
@@ -39,6 +40,11 @@ import type {
   TreasureStageDraft
 } from '../shared/lesson-types';
 import { LESSON_SCHEMA_VERSION } from '../shared/lesson-types';
+import {
+  normalizeContentCategory,
+  normalizeIconName,
+  normalizeIllustrationAssetId
+} from '../shared/asset-validation';
 import {
   LessonContractError,
   parseGameConfig,
@@ -259,6 +265,38 @@ function buildCommonFields(project: GameProject, config: GameConfig): Omit<Educa
   };
 }
 
+// ---------------------------------------------------------------------------
+// Optional item assets (docs/DECISIONS.md #60, #61, #62)
+// ---------------------------------------------------------------------------
+
+/**
+ * Draft/legacy item -> saved item: keeps only the asset fields that survived
+ * normalisation. Normalisation happens BEFORE the JSON round trip, so a project
+ * file can never reintroduce a value the registry does not recognise.
+ */
+function itemAssetsFromDraft(source: ItemAssetFields | undefined): ItemAssetFields {
+  if (!source || typeof source !== 'object') return {};
+  const contentCategory = normalizeContentCategory(source.contentCategory);
+  const iconName = normalizeIconName(source.iconName);
+  const illustrationAssetId = normalizeIllustrationAssetId(source.illustrationAssetId);
+  return {
+    ...(contentCategory !== 'general' ? { contentCategory } : {}),
+    ...(iconName ? { iconName } : {}),
+    ...(illustrationAssetId ? { illustrationAssetId } : {})
+  };
+}
+
+/**
+ * Saved item -> draft: identical output rule, except that the category is
+ * always materialised. Writing `general` (which is what a missing category
+ * already means) loses nothing and lets the editor distinguish "teacher chose
+ * General" from "never set" without re-deriving it.
+ */
+function itemAssetsForDraft(source: ItemAssetFields | undefined): ItemAssetFields {
+  const assets = itemAssetsFromDraft(source);
+  return { ...assets, contentCategory: assets.contentCategory ?? 'general' };
+}
+
 function arenaQuestions(draft: ArenaDraft): GameQuestion[] {
   return draft.questions.map(question => {
     if (question.type === 'fill-in-blank' || question.type === 'short-answer') {
@@ -272,7 +310,8 @@ function arenaQuestions(draft: ArenaDraft): GameQuestion[] {
         ...(question.alternateAnswers ? { alternateAnswers: [...question.alternateAnswers] } : {}),
         explanation: question.explanation,
         points: question.points,
-        difficulty: question.difficulty
+        difficulty: question.difficulty,
+        ...itemAssetsFromDraft(question)
       };
     }
     if (question.type !== 'multiple-choice' && question.type !== 'true-false') {
@@ -286,7 +325,8 @@ function arenaQuestions(draft: ArenaDraft): GameQuestion[] {
       correctOptionId: question.correctOptionId,
       explanation: question.explanation,
       points: question.points,
-      difficulty: question.difficulty
+      difficulty: question.difficulty,
+      ...itemAssetsFromDraft(question)
     };
   });
 }
@@ -304,7 +344,8 @@ function scenarioQuestions(draft: ScenarioDraft): GameQuestion[] {
       correctOptionId: bestId,
       explanation: best?.feedback || best?.consequence || '',
       points: 100,
-      ...(situation.discussionPrompt ? { discussionPrompt: situation.discussionPrompt } : {})
+      ...(situation.discussionPrompt ? { discussionPrompt: situation.discussionPrompt } : {}),
+      ...itemAssetsFromDraft(situation)
     };
   });
 }
@@ -339,7 +380,7 @@ function scenarioScoreValue(option: ScenarioOption): number {
 function matchingData(draft: MatchingDraft): MatchingGameData {
   return {
     mode: draft.mode,
-    pairs: draft.pairs.map(pair => ({ id: pair.id, left: pair.left, right: pair.right })),
+    pairs: draft.pairs.map(pair => ({ id: pair.id, left: pair.left, right: pair.right, ...itemAssetsFromDraft(pair) })),
     pointsPerPair: draft.pointsPerPair,
     completionBonus: draft.completionBonus,
     wrongPenalty: draft.wrongPenalty,
@@ -380,7 +421,8 @@ function treasureStageQuestion(stage: TreasureStageDraft): TreasureStageQuestion
     options: stage.question.options.map(option => ({ id: option.id, text: option.text })),
     correctOptionId: stage.question.correctOptionId,
     explanation: stage.question.explanation,
-    hint: stage.question.hint || ''
+    hint: stage.question.hint || '',
+    ...itemAssetsFromDraft(stage.question)
   };
 }
 
@@ -424,7 +466,8 @@ function treasureQuestions(draft: TreasureDraft): GameQuestion[] {
     options: stage.question.options.map(option => ({ id: option.id, text: option.text })),
     correctOptionId: stage.question.correctOptionId,
     explanation: stage.question.explanation,
-    points: stage.points
+    points: stage.points,
+    ...itemAssetsFromDraft(stage.question)
   }));
 }
 
@@ -439,7 +482,8 @@ function raceQuestion(question: RaceDraft['questions'][number]): RaceQuestion {
     options: question.options.map(option => ({ id: option.id, text: option.text })),
     correctOptionId: question.correctOptionId,
     explanation: question.explanation,
-    difficulty: question.difficulty
+    difficulty: question.difficulty,
+    ...itemAssetsFromDraft(question)
   };
 }
 
@@ -490,7 +534,8 @@ function arenaDraftFromGame(game: EducationalGame): ArenaDraft {
           ...(question.alternateAnswers ? { alternateAnswers: [...question.alternateAnswers] } : {}),
           explanation: question.explanation || '',
           difficulty,
-          points: safeInt(question.points, 100)
+          points: safeInt(question.points, 100),
+          ...itemAssetsForDraft(question)
         };
       }
       if (question.type !== 'multiple-choice' && question.type !== 'true-false') {
@@ -507,7 +552,8 @@ function arenaDraftFromGame(game: EducationalGame): ArenaDraft {
         correctOptionId: question.correctOptionId,
         explanation: question.explanation || '',
         difficulty,
-        points: safeInt(question.points, 100)
+        points: safeInt(question.points, 100),
+        ...itemAssetsForDraft(question)
       };
     });
 
@@ -535,7 +581,8 @@ function scenarioDraftFromGame(game: EducationalGame): ScenarioDraft {
         ...(option.scenarioScore ? { score: { ...option.scenarioScore } } : {})
       })),
       ...(question.correctOptionId ? { correctOptionId: question.correctOptionId } : {}),
-      ...(question.discussionPrompt ? { discussionPrompt: question.discussionPrompt } : {})
+      ...(question.discussionPrompt ? { discussionPrompt: question.discussionPrompt } : {}),
+      ...itemAssetsForDraft(question)
     }));
 
   if (!situations.length) {
@@ -554,7 +601,7 @@ function matchingDraftFromGame(game: EducationalGame): MatchingDraft {
     gameType: 'matching',
     schemaVersion: LESSON_SCHEMA_VERSION,
     mode: matching.mode,
-    pairs: matching.pairs.map(pair => ({ id: pair.id, left: pair.left, right: pair.right })),
+    pairs: matching.pairs.map(pair => ({ id: pair.id, left: pair.left, right: pair.right, ...itemAssetsForDraft(pair) })),
     pointsPerPair: safeInt(matching.pointsPerPair, 100),
     completionBonus: safeInt(matching.completionBonus, 0),
     wrongPenalty: safeInt(matching.wrongPenalty, 0),
@@ -588,7 +635,8 @@ function treasureDraftFromGame(game: EducationalGame): TreasureDraft {
         options: stage.question.options.map(option => ({ id: option.id, text: option.text })),
         correctOptionId: stage.question.correctOptionId,
         explanation: stage.question.explanation || '',
-        ...(stage.question.hint ? { hint: stage.question.hint } : {})
+        ...(stage.question.hint ? { hint: stage.question.hint } : {}),
+        ...itemAssetsForDraft(stage.question)
       },
       ...(stage.mission ? { mission: treasureMissionData(stage.mission) } : {}),
       attempts: safeInt(stage.attempts, 0),
@@ -630,7 +678,8 @@ function raceDraftFromGame(game: EducationalGame): RaceDraft {
       options: question.options.map(option => ({ id: option.id, text: option.text })),
       correctOptionId: question.correctOptionId,
       explanation: question.explanation || '',
-      difficulty: normalizeDifficulty(question.difficulty)
+      difficulty: normalizeDifficulty(question.difficulty),
+      ...itemAssetsForDraft(question)
     }))
   };
 }

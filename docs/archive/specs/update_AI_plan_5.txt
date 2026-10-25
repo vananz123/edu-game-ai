@@ -1,0 +1,260 @@
+# TASK: Implement First-run AI Setup for EduGame Studio
+
+## 1. Project Context
+
+EduGame Studio is a Windows desktop application built with Electron + TypeScript. It helps teachers generate interactive educational games from lesson plans and teaching documents using local AI.
+
+The existing project already has AI and game-generation functionality. The task is to implement a lightweight installer experience and an automatic first-run setup system.
+
+**IMPORTANT: Do not rewrite the existing AI pipeline, game-generation logic, MiniLM integration, game rules, or completed game features. Inspect the existing codebase first and integrate with its current architecture.**
+
+## 2. Confirmed Product Decisions
+
+- Application framework: Electron + TypeScript.
+- Distribution: lightweight application installer.
+- AI operation: fully local and offline after initial setup.
+- Default LLM: Qwen3-4B, GGUF format, Q4_K_M quantization.
+- LLM runtime: llama.cpp.
+- Optional acceleration: OpenVINO backend when supported and verified.
+- Embedding and retrieval: preserve the existing MiniLM implementation.
+- Target devices: Windows x64 first; design the runtime system to support additional architectures, including ARM64, when validated.
+- Target hardware includes systems with 16 GB RAM and Intel or AMD CPUs.
+- AI models and runtime binaries must not be bundled into the initial lightweight installer.
+- The first-run setup downloads the appropriate runtime and AI models.
+- Once setup completes, teachers must be able to use all installed AI functionality without Internet access.
+
+Do not assume OpenVINO is faster on every Intel CPU. Do not select OpenVINO solely based on CPU vendor.
+
+## 3. First-run Setup Workflow
+
+Implement the following workflow:
+
+1. Launch EduGame Studio after installation.
+2. Check whether initial AI setup has already been completed.
+3. If not, open a dedicated Setup Wizard.
+4. Detect the operating system, OS architecture, CPU capabilities, available RAM, disk space, and supported runtime configurations.
+5. Resolve a compatible llama.cpp runtime using a versioned runtime manifest.
+6. Select the appropriate runtime:
+   - Default to a verified llama.cpp CPU build.
+   - Use an OpenVINO-enabled build only when the exact configuration is supported and has passed compatibility tests.
+   - Fall back to a verified CPU build if optional acceleration fails.
+7. Download the selected runtime.
+8. Download the default Qwen3-4B Q4_K_M GGUF model.
+9. Download or initialize the existing MiniLM model and its required runtime, if not already installed.
+10. Verify file integrity and compatibility.
+11. Start the local AI server and perform a health check.
+12. Run a minimal test generation and validate the response.
+13. Persist the completed setup state and runtime configuration.
+14. Open the main application.
+
+Do not allow the application to report setup as complete until all required components pass validation.
+
+## 4. Runtime and Hardware Detection
+
+Create or adapt the following TypeScript modules to fit the existing project structure:
+
+- `HardwareDetector.ts`
+- `RuntimeResolver.ts`
+- `RuntimeDownloader.ts`
+- `ModelDownloader.ts`
+- `SetupOrchestrator.ts`
+- `AiRuntimeManager.ts`
+- `RuntimeHealthCheck.ts`
+
+Responsibilities:
+
+### HardwareDetector
+- Detect OS and actual process/OS architecture.
+- Detect CPU model and supported instruction sets where possible.
+- Estimate available RAM and available disk space.
+- Detect relevant acceleration capabilities only when reliable.
+- Return a structured hardware profile.
+- Handle unknown or unsupported hardware gracefully.
+
+### RuntimeResolver
+- Resolve a compatible runtime from a trusted, versioned manifest.
+- Match OS, architecture, runtime version, backend and required CPU capabilities.
+- Prefer a verified CPU runtime as the universal fallback.
+- Select OpenVINO only when a compatible build exists and has been validated.
+- Never construct arbitrary download URLs from hardware strings.
+- Never assume AMD, Intel, or ARM automatically guarantees support for a particular backend.
+
+### RuntimeDownloader
+- Download only from trusted sources defined in the manifest.
+- Display download progress.
+- Support retries and resumable downloads where technically possible.
+- Verify SHA-256 checksums or signed release metadata before installation.
+- Prevent execution of unverified binaries.
+- Handle cancellation, network loss, insufficient disk space and corrupted files.
+- Install atomically so partially downloaded files cannot be mistaken for installed runtimes.
+
+### ModelDownloader
+- Download the pinned Qwen3-4B Q4_K_M GGUF artifact.
+- Download or initialize the existing MiniLM artifact as required.
+- Verify checksums and expected file sizes.
+- Avoid duplicate downloads.
+- Resume interrupted downloads where supported.
+- Keep models separate from application binaries and source files.
+
+## 5. Model Selection and Configuration
+
+Qwen3-4B Q4_K_M is the default model. Do not automatically substitute a smaller model or a different quantization.
+
+Pin the exact model repository, revision, filename, license information and checksum in configuration. Do not invent repository URLs or checksum values. If verified metadata is unavailable, report that configuration as incomplete rather than silently downloading an arbitrary model.
+
+Use the existing application's prompt templates, chat template, inference parameters and response validators.
+
+Do not change the model's thinking/non-thinking behavior as part of runtime setup. Preserve the existing Fast and Deep Analysis modes.
+
+Context size, CPU threads, batch size and other performance parameters must be configurable and validated against available resources. Use conservative defaults until benchmark data supports better values.
+
+## 6. Lightweight Installer Requirements
+
+The initial installer should contain only:
+- Electron application and required application assets.
+- TypeScript-compiled application code.
+- Setup Wizard.
+- Hardware detection and runtime selection logic.
+- Runtime manifest and trusted download configuration.
+- Essential licenses and notices.
+
+Do not include the full LLM, embedding model or every runtime variant.
+
+Store downloaded runtime files, models, cache and setup metadata in appropriate application-data directories. Do not write large model files into the installation directory or assume the application directory is writable.
+
+Make storage paths configurable when practical.
+
+## 7. Setup Wizard UI
+
+Implement a teacher-friendly interface with these states:
+
+- Welcome and explanation.
+- Hardware detection.
+- Selected runtime and system requirements.
+- Model and runtime download progress.
+- Verification and installation.
+- AI startup and health check.
+- Setup completed.
+- Recoverable error with retry action.
+
+Display:
+- Runtime being installed.
+- Model name and approximate download size when known.
+- Download progress and current step.
+- Available disk space.
+- Clear error messages and recovery options.
+
+Avoid technical jargon where possible. Do not require teachers to install Python, CMake, Visual Studio, llama.cpp manually, or understand OpenVINO.
+
+Prevent duplicate setup processes and keep the UI responsive.
+
+## 8. Electron Security and Process Management
+
+Follow Electron security best practices.
+
+- Keep hardware detection, downloads, filesystem access and process management in the main process or suitable utility processes.
+- Expose only narrow, validated IPC methods through preload.
+- Do not expose arbitrary shell execution to the renderer.
+- Do not accept arbitrary executable paths or URLs from renderer input.
+- Start llama-server with explicit arguments and a restricted local binding, normally `127.0.0.1`.
+- Manage process startup, readiness, shutdown, timeouts and crashes.
+- Avoid duplicate server processes.
+- Stop managed processes when appropriate during application shutdown.
+- Do not log sensitive file contents or full lesson plans unnecessarily.
+
+## 9. Offline Guarantee
+
+After setup has succeeded:
+- All required runtime binaries and model files must be available locally.
+- Model loading, MiniLM embedding, retrieval, question generation, game generation and local document Q&A must not depend on remote AI APIs.
+- The app must not require an Internet connection for normal use.
+- If a component is missing or corrupted, show a clear repair/setup flow.
+- Never silently switch to a cloud model.
+
+Support a future offline provisioning option in which administrators can prepare the required runtime and model files for computers without Internet access.
+
+## 10. Preserve Existing Functionality
+
+Before changing code:
+1. Inspect the project structure.
+2. Identify the existing AI service, llama.cpp process manager, MiniLM implementation, model paths, configuration storage and IPC contracts.
+3. Reuse existing services wherever possible.
+4. Identify and document the minimum required changes.
+5. Avoid duplicate runtime managers or competing model-download systems.
+
+Do not rewrite:
+- Game generation.
+- Game rules and templates.
+- Manual game creation.
+- MiniLM embedding and retrieval pipeline.
+- Existing document ingestion and Q&A.
+- Fast and Deep Analysis behavior.
+- Existing game presentation features.
+
+The setup system should integrate with these features through the existing interfaces.
+
+## 11. Failure Handling and Recovery
+
+Handle:
+- Unsupported OS architecture.
+- No Internet during initial setup.
+- Interrupted downloads.
+- Checksum mismatch.
+- Insufficient disk space.
+- Missing runtime dependencies.
+- Model load failures.
+- Unsupported backend operations.
+- Server startup timeout.
+- Invalid model output during smoke tests.
+- Application restart during setup.
+
+Keep a persistent setup state machine so the application can resume after restarting.
+
+If OpenVINO fails validation, switch to the verified CPU runtime when available. If no compatible runtime is available, explain the issue and do not mark setup complete.
+
+Never delete the working runtime before its replacement has passed validation.
+
+## 12. Benchmarking and Acceptance Criteria
+
+Create a repeatable benchmark procedure comparing the current llama.cpp CPU runtime against an OpenVINO-enabled build on the same machine.
+
+Keep the model, prompt, context size, generation parameters and test documents identical.
+
+Record:
+- Runtime and model initialization time.
+- Prompt-processing time.
+- Generation tokens per second.
+- End-to-end time to generate a fixed question set.
+- Peak RAM usage.
+- Output validity and quality.
+- Failures and timeouts.
+
+Do not claim that OpenVINO is faster without measured results.
+
+Test question correctness, answer correctness, explanations, game-rule compliance and output-schema validity against a fixed evaluation set. Performance improvements must not come at the expense of educational quality.
+
+## 13. Implementation Deliverables
+
+Complete the task in the existing repository and provide:
+
+1. A summary of the existing architecture discovered.
+2. The implementation and updated TypeScript files.
+3. The runtime manifest schema and example entries based on verified artifacts.
+4. Setup Wizard UI and state management.
+5. Hardware detection and runtime-resolution logic.
+6. Download, checksum verification and recovery logic.
+7. AI process management and health checks.
+8. Tests for runtime selection, architecture handling, interrupted downloads and failure recovery.
+9. Build and packaging instructions for the lightweight Windows installer.
+10. A manual test checklist for offline operation.
+11. A benchmark report template and remaining limitations.
+
+Do not claim that a feature is implemented or tested unless it actually is.
+
+## Final Instruction
+
+Start by inspecting the existing codebase and report the relevant files and architecture. Then implement the smallest safe set of changes that achieves the requirements above.
+
+Do not replace existing working functionality merely to match the proposed file names. Do not fabricate download URLs, checksums, runtime compatibility or benchmark results.
+
+Prioritize correctness, maintainability, small installer size, safe fallback behavior and a simple experience for teachers.

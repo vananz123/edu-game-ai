@@ -5,6 +5,88 @@ function wizardConfigNumber(key, label, value, min, max, step) {
   return `<div class="field"><label>${label}</label><input type="number" data-wizard-config="${key}" min="${min}" max="${max}"${step ? ` step="${step}"` : ''} value="${escapeHtml(String(value))}"></div>`;
 }
 
+const WIZARD_AUTO_COUNT_MIN = 4;
+const WIZARD_AUTO_COUNT_MAX = 7;
+
+/**
+ * O12: explains the predicted count under the item-count field. The prediction
+ * comes from the main process (document length + analysis + model + mode) and is
+ * advisory: the teacher can always type another number, which then disables the
+ * automatic adjustment for the rest of this generation.
+ */
+function wizardCapacityHintHtml(currentValue) {
+  const s = wizardState;
+  const config = s.config;
+  if (!config) return '<div data-wizard-capacity-hint="1"></div>';
+  const key = wizardCapacityCountKey(config.gameType);
+  if (!key) return '<div data-wizard-capacity-hint="1"></div>';
+  const unit = wizardItemUnit(config.gameType);
+  const value = currentValue !== undefined ? Number(currentValue) : (Number(config[key]) || 0);
+  const capacity = s.capacity;
+  if (!capacity) {
+    return `<div data-wizard-capacity-hint="1" class="field-hint">Đang ước lượng số ${escapeHtml(unit)} phù hợp với tài liệu và model…</div>`;
+  }
+  const material = capacity.material || {};
+  const model = capacity.model || {};
+  const chars = Number(material.documentCharacters) || 0;
+  const details = `Gợi ý ${capacity.suggested} ${unit} · tài liệu ${chars.toLocaleString('vi-VN')} ký tự, ${material.objectiveCount || 0} mục tiêu, ${material.conceptCount || 0} khái niệm · model ${escapeHtml(model.label || 'chưa rõ')}`;
+  const contentCapacity = Number(capacity.contentCapacity) || WIZARD_AUTO_COUNT_MIN;
+  const over = value > contentCapacity + 1;
+  return `<div data-wizard-capacity-hint="1" class="field-hint">
+    <span>${details}.</span>
+    ${value !== capacity.suggested ? ` <button type="button" class="btn btn-secondary btn-small" data-wizard-action="use-capacity">Dùng ${capacity.suggested} ${escapeHtml(unit)}</button>` : ''}
+    ${over ? `<div class="mt-[4px] text-[#8a6d00]">Giáo án chỉ có khoảng ${contentCapacity} ý chính; ${value} ${escapeHtml(unit)} dễ tạo câu trùng lặp. Nên chọn ${capacity.suggested} hoặc bổ sung tài liệu.</div>` : ''}
+  </div>`;
+}
+
+/** Applies a fresh prediction in place (no re-render, so the caret survives). */
+function wizardApplyCapacity() {
+  const s = wizardState;
+  if (!s.config || !s.capacity) return;
+  const key = wizardCapacityCountKey(s.config.gameType);
+  if (!key) return;
+  if (!s.countTouched) {
+    const next = wizardClamp(s.capacity.suggested, WIZARD_AUTO_COUNT_MIN, WIZARD_AUTO_COUNT_MAX);
+    s.config[key] = next;
+    const input = document.querySelector(`[data-wizard-config="${key}"]`);
+    if (input) input.value = String(next);
+  }
+  const host = document.querySelector('[data-wizard-capacity-hint]');
+  if (host) {
+    const input = document.querySelector(`[data-wizard-config="${key}"]`);
+    host.outerHTML = wizardCapacityHintHtml(input ? Number(input.value) : undefined);
+  }
+}
+
+/** Re-renders only the hint when the teacher types a different count. */
+function wizardUpdateCapacityUi() {
+  const s = wizardState;
+  if (!s.config) return;
+  const key = wizardCapacityCountKey(s.config.gameType);
+  const host = document.querySelector('[data-wizard-capacity-hint]');
+  if (!host || !key) return;
+  const input = document.querySelector(`[data-wizard-config="${key}"]`);
+  host.outerHTML = wizardCapacityHintHtml(input ? Number(input.value) : undefined);
+}
+
+function wizardUseCapacity() {
+  const s = wizardState;
+  if (s.busy || !s.config || !s.capacity) return undefined;
+  const key = wizardCapacityCountKey(s.config.gameType);
+  if (!key) return undefined;
+  s.config[key] = wizardClamp(s.capacity.suggested, WIZARD_AUTO_COUNT_MIN, WIZARD_AUTO_COUNT_MAX);
+  s.countTouched = false;
+  const input = document.querySelector(`[data-wizard-config="${key}"]`);
+  if (input) input.value = String(s.config[key]);
+  wizardUpdateCapacityUi();
+  return undefined;
+}
+
+/** Item-count field + the predicted-count hint that belongs underneath it. */
+function wizardConfigCount(key, label, value, min, max, step) {
+  return wizardConfigNumber(key, label, value, min, max, step) + wizardCapacityHintHtml(value);
+}
+
 function wizardConfigSelect(key, label, value, options) {
   return `<div class="field"><label>${label}</label><select data-wizard-config="${key}">${options.map(option => `<option value="${option.value}"${String(value) === String(option.value) ? ' selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}</select></div>`;
 }
@@ -54,6 +136,9 @@ function wizardSetGenerationMode(mode) {
   });
   const badge = document.querySelector('[data-wizard-mode-badge]');
   if (badge) badge.textContent = next === 'deep' ? 'Thinking' : 'Fast';
+  // More context/output budget can support one more item, so re-predict.
+  wizardState.capacity = null;
+  void wizardEnsureCapacity();
   return undefined;
 }
 
@@ -70,6 +155,13 @@ function renderWizardConfigure() {
   }
   const meta = wizardGameMeta(config.gameType);
   const objectives = (analysis && analysis.objectives) || [];
+  // Fetch the prediction after this render (never during it), then patch the
+  // count field/hint in place when it arrives.
+  if (typeof wizardEnsureCapacity === 'function') {
+    setTimeout(() => {
+      if (wizardState.step === 'configure' && wizardState.config === config) wizardEnsureCapacity();
+    }, 0);
+  }
 
   return `<section class="form-panel" data-wizard-step-body="configure">
     <div class="section-head"><h3>Bước 4 · Cấu hình ${escapeHtml(meta.label)}</h3><span class="tag">${meta.icon} ${escapeHtml(config.gameType)}</span></div>
@@ -109,7 +201,7 @@ function renderWizardConfigure() {
 function wizardConfigTypeFields(config) {
   switch (config.gameType) {
     case 'arena':
-      return wizardConfigNumber('questionCount', 'SỐ CÂU HỎI', config.questionCount, 1, 30)
+      return wizardConfigCount('questionCount', 'SỐ CÂU HỎI', config.questionCount, 1, 30)
         + wizardConfigSelect('scoringMode', 'TÍNH ĐIỂM', config.scoringMode, [
           { value: 'basic', label: 'Cơ bản' }, { value: 'speed', label: 'Tốc độ' },
           { value: 'difficulty', label: 'Theo độ khó' }, { value: 'team', label: 'Thi đấu đội' },
@@ -118,24 +210,24 @@ function wizardConfigTypeFields(config) {
         + wizardConfigNumber('pointsPerCorrect', 'ĐIỂM / CÂU', config.pointsPerCorrect, 10, 1000, 10)
         + wizardConfigNumber('timeBonus', 'THƯỞNG NHANH', config.timeBonus, 0, 50, 5);
     case 'scenario':
-      return wizardConfigNumber('situationCount', 'SỐ TÌNH HUỐNG', config.situationCount, 1, 30)
+      return wizardConfigCount('situationCount', 'SỐ TÌNH HUỐNG', config.situationCount, 1, 30)
         + wizardConfigSelect('scoringMode', 'TÍNH ĐIỂM', config.scoringMode, [
           { value: 'quality', label: 'Theo chất lượng quyết định' }, { value: 'simple', label: 'Đơn giản' }
         ]);
     case 'matching':
-      return wizardConfigNumber('pairCount', 'SỐ CẶP GHÉP', config.pairCount, 2, 30)
+      return wizardConfigCount('pairCount', 'SỐ CẶP GHÉP', config.pairCount, 2, 30)
         + wizardConfigSelect('matchingMode', 'KIỂU GHÉP', config.matchingMode, [
           { value: 'columns', label: 'Hai cột' }, { value: 'memory', label: 'Lật thẻ' }, { value: 'categorize', label: 'Phân loại' }
         ])
         + wizardConfigNumber('wrongPenalty', 'TRỪ ĐIỂM SAI', config.wrongPenalty, 0, 1000, 10);
     case 'treasure':
-      return wizardConfigNumber('stageCount', 'SỐ CHẶNG', config.stageCount, 2, 30)
+      return wizardConfigCount('stageCount', 'SỐ CHẶNG', config.stageCount, 2, 30)
         + wizardConfigNumber('attemptsPerStage', 'LƯỢT THỬ MỖI CHẶNG', config.attemptsPerStage, 0, 99)
         + wizardConfigNumber('journeyBonus', 'THƯỞNG HÀNH TRÌNH', config.journeyBonus, 0, 10000, 50)
         + wizardConfigNumber('hiddenItemBonus', 'THƯỞNG VẬT PHẨM ẨN', config.hiddenItemBonus, 0, 1000, 50);
     case 'race':
       return wizardConfigNumber('trackLength', 'ĐỘ DÀI ĐƯỜNG ĐUA', config.trackLength, 3, 100)
-        + wizardConfigNumber('maxRounds', 'SỐ LƯỢT TỐI ĐA', config.maxRounds, 1, 50)
+        + wizardConfigCount('maxRounds', 'SỐ LƯỢT TỐI ĐA', config.maxRounds, 1, 50)
         + wizardConfigNumber('teamCount', 'SỐ ĐỘI', config.teamCount, 2, 6)
         + wizardConfigToggle('stepByDifficulty', 'Bước tiến theo độ khó', config.stepByDifficulty)
         + wizardConfigToggle('luckEnabled', 'Bật ô may mắn', config.luckEnabled);

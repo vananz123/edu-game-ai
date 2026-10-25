@@ -61,5 +61,13 @@ $('#helpBtn').addEventListener('click', showHelp);
     state.localAiMachine = localAi.machine;
     render();
     if (typeof window.initAiStatusBar === 'function') window.initAiStatusBar();
+    // §3 steps 2–3: after startup, ask whether AI setup is done and open the
+    // wizard only when it is not. Deliberately not awaited before `render()`:
+    // saved games must open immediately, and a teacher whose AI is already
+    // installed must never see a flash of the wizard. A failure here (older
+    // build, missing IPC) resolves to "don't show" inside the wizard module.
+    if (typeof window.openSetupWizard === 'function') {
+      window.openSetupWizard({ probe: true }).catch(() => {});
+    }
   } catch(e) { $('#pageContent').innerHTML = `<div class="empty-state"><div class="big">⚠️</div><h3>Không thể khởi tạo ứng dụng</h3><p>${escapeHtml(e.message)}</p></div>`; }
 })();

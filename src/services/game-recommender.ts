@@ -1,5 +1,6 @@
 import type { CognitiveLevel, GameRecommendation, LessonAnalysis, WorkflowGameType } from '../shared/lesson-types';
 import { GAME_TYPE_ORDER, GAME_TYPE_RULES, getGameTypeRule, type ContentShape } from './game-type-rules';
+import { estimateItemCapacity, type GenerationMode } from './item-capacity';
 
 /**
  * Rule-based genre recommender.
@@ -229,13 +230,23 @@ function buildDescription(analysis: LessonAnalysis, gameType: WorkflowGameType, 
   return truncate(`${rule.description} Dự kiến ${itemCount} ${rule.itemNoun}${scope}.`, MAX_DESCRIPTION);
 }
 
-function suggestedItemCount(analysis: LessonAnalysis, gameType: WorkflowGameType, signals: LessonSignals): number {
-  const rule = getGameTypeRule(gameType);
-  const available = Math.max(signals.conceptCount, signals.objectiveCount * 2, 3);
-  const target = Math.min(rule.defaultItemCount, available);
-  // matching needs two sides per item, treasure needs a chain of stages.
-  const floor = gameType === 'matching' ? 3 : gameType === 'treasure' ? 3 : 3;
-  return clampInt(Math.max(floor, target), 3, 30);
+function suggestedItemCount(
+  analysis: LessonAnalysis,
+  gameType: WorkflowGameType,
+  signals: LessonSignals,
+  options: Pick<RecommendGamesOptions, 'documentCharacters' | 'modelId' | 'mode'>
+): number {
+  // O12: the same estimator the config step uses, so the card's "Dự kiến N"
+  // matches the count the wizard starts from. Automatic counts are 4..7 and
+  // capped by the model tier; the teacher can still edit the number later.
+  return estimateItemCapacity({
+    gameType,
+    documentCharacters: options.documentCharacters || 0,
+    objectiveCount: signals.objectiveCount,
+    conceptCount: signals.conceptCount,
+    modelId: options.modelId,
+    mode: options.mode
+  }).suggested;
 }
 
 export interface RecommendGamesOptions {
@@ -245,6 +256,11 @@ export interface RecommendGamesOptions {
   now?: string;
   /** How many genres to offer (2 or 3). Defaults from how rich the lesson is. */
   limit?: number;
+  /** Document length, when known, so suggested counts respect the material. */
+  documentCharacters?: number;
+  /** Model used for generation (affects the suggested count ceiling). */
+  modelId?: string;
+  mode?: GenerationMode;
 }
 
 /**
@@ -262,7 +278,7 @@ export function recommendGamesForAnalysis(options: RecommendGamesOptions): GameR
 
   return ranked.map(item => {
     const rule = getGameTypeRule(item.gameType);
-    const itemCount = suggestedItemCount(analysis, item.gameType, signals);
+    const itemCount = suggestedItemCount(analysis, item.gameType, signals, options);
     const topic = (analysis.topic || '').trim();
     return {
       id: `${idPrefix}${item.gameType}`,

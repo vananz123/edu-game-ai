@@ -35,17 +35,36 @@ const wizardState = {
   gameSnapshot: null, // P6
   quality: null, // O2: advisory content-quality report for the draft
   context: null, // O3: which lesson chunks fed the prompt
+  capacity: null, // O12: predicted item count for the current document + model + mode
+  countTouched: false, // teacher edited the item count; auto-adjust must not override it
+  quick: null, // O13: inline confirmation for "AI gợi ý & tạo ngay"
   busy: '', // '' | 'analyze' | 'recommend' | 'generate' | 'save'
   lessonStage: '', // O7: 'retrieve' | 'generate' | 'validate' | 'repair' | 'ready' | 'cached'
   lessonRepaired: false, // O7: true when the model actually had to repair an answer
+  generationHistory: [], // #71: finished generation rows, used only for the ETA baseline
+  generationHistoryLoadedAt: 0, // #71: throttle; the baseline is not re-read every second
   analysisStartedAt: 0, // timestamp of the running analysis; drives the elapsed indicator
   generationStartedAt: 0, // timestamp of the running generation; drives the elapsed indicator
+  analysisFinishedMs: 0, // #75: frozen total of the last finished analysis (0 = none to show)
+  generationFinishedMs: 0, // #75: frozen total of the last finished generation
   error: null, // { code, message }
   notice: null,
   requestNonce: 0,
   projects: [],
   projectsLoaded: false,
-  activeRequestId: null
+  activeRequestId: null,
+  // Phase B (DECISIONS #72): which item's artwork popover is open in step 5,
+  // keyed as `${gameType}:${position}` because the position alone changes
+  // meaning when the genre changes. null = every popover closed.
+  openArtItem: null,
+  // True while one `lesson:patch-item-assets` call is in flight. Kept apart from
+  // `busy` on purpose: `busy` blocks the generate toolbar, and picking a picture
+  // must not look like (or block) content generation.
+  artBusy: false,
+  // #76: step-1 document structure + teacher selection. Created lazily by
+  // `wizardStructureState()` in `step-structure.ts`; null = nothing reviewed yet,
+  // which means "whole document".
+  structure: null
 };
 
 const wizardGameMetaMap = {
@@ -104,7 +123,24 @@ function wizardFormatDuration(milliseconds) {
 function wizardAnalysisElapsedText() {
   const startedAt = Number(wizardState.analysisStartedAt) || 0;
   const elapsed = startedAt ? wizardFormatDuration(Date.now() - startedAt) : '0:00';
-  return `Đã chờ ${elapsed} · thường mất 1–2 phút`;
+  // #75: the only claim is the real elapsed time; step 2 has no measured
+  // baseline for an ETA, so the old constant guess is gone for good.
+  return `⏱ Đã chạy ${elapsed}`;
+}
+
+/**
+ * #75: the finished total, shown after the run instead of the running clock.
+ * Returns '' when there is nothing frozen (never ran, or cancelled), so callers
+ * can drop the line entirely rather than print "0:00".
+ */
+function wizardAnalysisTotalText() {
+  const total = wizardFormatStopwatch(wizardState.analysisFinishedMs);
+  return total ? `Tổng thời gian phân tích: ${total}` : '';
+}
+
+function wizardGenerationTotalText() {
+  const total = wizardFormatStopwatch(wizardState.generationFinishedMs);
+  return total ? `Tổng thời gian tạo nội dung: ${total}` : '';
 }
 
 /**
@@ -123,11 +159,175 @@ function wizardGenerationEstimateText() {
   return `dự kiến ${low}–${high} phút`;
 }
 
+/**
+ * #71: remaining-time estimate built from this machine's own finished
+ * generations, never from a constant.
+ *
+ * The renderer is a flat set of classic scripts (no bundler, nothing imports
+ * `src/shared`), so the maths has to live here. `src/shared/generation-eta.ts`
+ * holds the identical pure logic for the main process and the unit tests; the
+ * `generation-eta-drift` test keeps the two in step.
+ */
+function wizardGenerationEtaMs(elapsedMs, stageIndex, stageCount, samples) {
+  const order = WIZARD_GENERATION_STAGES_ORDER;
+  const index = Math.max(0, Math.min(Number(stageIndex) || 0, order.length - 1));
+  const stage = order[index] || null;
+  const medianMs = wzEtaBaselineMs(samples);
+  if (medianMs === null) return null;
+
+  const elapsed = Math.max(0, Number(elapsedMs) || 0);
+  const fraction = wzEtaStageFraction(stage) || 1 / Math.max(1, Number(stageCount) || order.length);
+  const expectedTotal = medianMs / fraction;
+  const remaining = expectedTotal - elapsed;
+  const sampleCount = wzEtaSampleCount(samples);
+  if (remaining <= 0) return { remainingMs: 0, overrunMs: -remaining, medianMs, sampleCount };
+  return { remainingMs: remaining, overrunMs: 0, medianMs, sampleCount };
+}
+
+/** Spans outside this window are clock skew or abandoned rows, not a baseline. */
+const WZ_ETA_MIN_SAMPLE_MS = 1000;
+const WZ_ETA_MAX_SAMPLE_MS = 3 * 60 * 60 * 1000;
+
+function wzEtaDurations(samples) {
+  return (Array.isArray(samples) ? samples : [])
+    .map(sample => {
+      const started = Date.parse(String((sample && sample.startedAt) || ''));
+      const finished = Date.parse(String((sample && sample.finishedAt) || ''));
+      if (!Number.isFinite(started) || !Number.isFinite(finished)) return 0;
+      const span = finished - started;
+      return span >= WZ_ETA_MIN_SAMPLE_MS && span <= WZ_ETA_MAX_SAMPLE_MS ? span : 0;
+    })
+    .filter(span => span > 0)
+    .sort((a, b) => a - b);
+}
+
+/** Median total duration, or null when there is nothing to learn from. */
+function wzEtaBaselineMs(samples) {
+  const durations = wzEtaDurations(samples);
+  if (!durations.length) return null;
+  return durations[Math.floor(durations.length / 2)];
+}
+
+function wzEtaSampleCount(samples) {
+  return wzEtaDurations(samples).length;
+}
+
+/**
+ * Stage fraction. `ready` is always 1 so a skipped repair stage cannot leave the
+ * bar stuck below done; unknown stages report 0.
+ */
+function wzEtaStageFraction(stage) {
+  const order = WIZARD_GENERATION_STAGES_ORDER;
+  if (stage === 'ready') return 1;
+  const index = order.indexOf(stage);
+  if (index < 0) return 0;
+  return Math.min(1, (index + 1) / order.length);
+}
+
+/** Compact Vietnamese duration for an ETA: "45 giây", "3 phút", "1 phút 20 giây". */
+function wizardFormatEta(milliseconds) {
+  const totalSeconds = Math.max(0, Math.round((Number(milliseconds) || 0) / 1000));
+  if (totalSeconds < 60) return `${totalSeconds} giây`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  // Past half an hour the seconds are noise, so they are dropped.
+  if (minutes >= 30) return `${minutes} phút`;
+  return seconds ? `${minutes} phút ${seconds} giây` : `${minutes} phút`;
+}
+
+
 function wizardGenerationElapsedText() {
   const startedAt = Number(wizardState.generationStartedAt) || 0;
   const elapsed = startedAt ? wizardFormatDuration(Date.now() - startedAt) : '0:00';
   return `Đã chạy ${elapsed} · ${wizardGenerationEstimateText()}`;
 }
+
+/**
+ * #71: read finished lesson generations once per generation run so the ETA has a
+ * measured baseline. Failures are swallowed: a missing baseline only costs the
+ * estimate, never the generation.
+ *
+ * Only rows with a real `finishedAt` and a matching kind are used, and the
+ * currently running task is excluded by construction (it has no `finishedAt`).
+ */
+async function wizardLoadGenerationHistory(force) {
+  const now = Date.now();
+  if (!force && wizardState.generationHistory.length && now - (wizardState.generationHistoryLoadedAt || 0) < 60000) {
+    return wizardState.generationHistory;
+  }
+  try {
+    const result = await window.eduGame.listAiTasks({ limit: 50 });
+    const history = (result && result.history) || [];
+    wizardState.generationHistory = history.filter(row => row && row.kind === 'generate-lesson' && row.finishedAt);
+    wizardState.generationHistoryLoadedAt = now;
+  } catch (error) {
+    wizardState.generationHistory = [];
+    wizardState.generationHistoryLoadedAt = now;
+  }
+  return wizardState.generationHistory;
+}
+
+/**
+ * #71: the stage order drives both the checklist (`step-generate.ts`) and the ETA
+ * (`state.ts`), so it lives here once. Labels stay in the renderer step file.
+ */
+const WIZARD_GENERATION_STAGES_ORDER = ['retrieve', 'generate', 'validate', 'repair', 'ready'];
+
+/**
+ * #75: the same contract for step 2 (`lesson:analyze`), mirroring
+ * `ANALYSIS_STAGE_ORDER` in `src/shared/generation-eta.ts`. Kept as a plain
+ * renderer copy for the same reason as the generation order: the renderer has no
+ * bundler and cannot import `src/shared` at runtime.
+ */
+const WIZARD_ANALYSIS_STAGES_ORDER = ['prepare', 'generate', 'repair', 'ready'];
+
+/**
+ * #75: stage fraction for step 2 — a stage counter, not a timer. `ready` is
+ * always 1 so a skipped repair stage cannot leave the bar stuck at 75%.
+ */
+function wizardAnalysisProgressFraction(stage) {
+  const order = WIZARD_ANALYSIS_STAGES_ORDER;
+  if (stage === 'ready') return 1;
+  const index = order.indexOf(stage);
+  if (index < 0) return 0;
+  return Math.min(1, (index + 1) / order.length);
+}
+
+/**
+ * #75: total elapsed time of a finished run as "mm:ss" (or "h:mm:ss" past the
+ * hour), or '' when nothing was frozen. Mirrors `formatStopwatch` in
+ * `src/shared/generation-eta.ts`; the `generation-eta` test keeps them in step.
+ */
+function wizardFormatStopwatch(milliseconds) {
+  const totalSeconds = Math.max(0, Math.floor((Number(milliseconds) || 0) / 1000));
+  if (totalSeconds <= 0) return '';
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes < 60) return `${minutes}:${String(seconds).padStart(2, '0')}`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}:${String(minutes % 60).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+/**
+ * #71: the honest ETA line under the stage list.
+ *
+ * Three states, in order of honesty:
+ *   - no measured baseline  -> "Đang chạy…" (no number is invented)
+ *   - projected finish      -> "Còn khoảng X"
+ *   - already past it       -> "Đã lâu hơn lần trước" (no false countdown)
+ */
+function wizardGenerationEtaText() {
+  const s = wizardState;
+  const startedAt = Number(s.generationStartedAt) || 0;
+  const elapsed = startedAt ? Date.now() - startedAt : 0;
+  const stages = WIZARD_GENERATION_STAGES_ORDER;
+  const index = Math.max(0, stages.indexOf(s.lessonStage));
+  const estimate = wizardGenerationEtaMs(elapsed, index, stages.length, s.generationHistory, Date.now());
+  if (!estimate) return '';
+  if (estimate.overrunMs > 0) return 'Đã lâu hơn lần tạo trước — vẫn đang chạy.';
+  return `Còn khoảng ${wizardFormatEta(estimate.remainingMs)}`;
+}
+
 
 /** Which long-running wizard job owns the shared top-bar activity chip. */
 function wizardActivityKind() {
@@ -157,6 +357,10 @@ function wizardSyncActivityClock() {
   } else {
     const text = wizardGenerationElapsedText();
     document.querySelectorAll('[data-wizard-generate-elapsed]').forEach(node => { node.textContent = text; });
+    // #71: the ETA is a separate element from the elapsed clock because it can be
+    // absent (no baseline yet) while the clock is always present.
+    const eta = wizardGenerationEtaText();
+    document.querySelectorAll('[data-wizard-generate-eta]').forEach(node => { node.textContent = eta; });
   }
 }
 
@@ -165,9 +369,11 @@ function wizardStartActivityClock(kind) {
   if (kind === 'generate') {
     wizardState.generationStartedAt = Date.now();
     wizardState.analysisStartedAt = 0;
+    wizardState.generationFinishedMs = 0;
   } else {
     wizardState.analysisStartedAt = Date.now();
     wizardState.generationStartedAt = 0;
+    wizardState.analysisFinishedMs = 0;
   }
   wizardSyncActivityClock();
   wizardActivityClockTimer = window.setInterval(wizardSyncActivityClock, 1000);
@@ -176,17 +382,34 @@ function wizardStartActivityClock(kind) {
 function wizardStartAnalysisClock() { wizardStartActivityClock('analyze'); }
 function wizardStartGenerationClock() { wizardStartActivityClock('generate'); }
 
-function wizardStopActivityClock() {
+/**
+ * #75: stops the ticking clock and, when the caller says the run finished, keeps
+ * its total so the step can print it after the panel is gone.
+ *
+ * Only a finished run is frozen: a cancelled or failed one stores nothing, so the
+ * UI can never show a total for work that was thrown away. The span is clamped at
+ * zero because a clock adjusted backwards mid-run would otherwise print a
+ * negative duration.
+ */
+function wizardStopActivityClock(options) {
   if (wizardActivityClockTimer !== null) {
     window.clearInterval(wizardActivityClockTimer);
     wizardActivityClockTimer = null;
   }
   const chip = document.getElementById('globalAiActivity');
   if (chip) chip.hidden = true;
+  if (!options || !options.finished) return;
+  const now = Date.now();
+  const analysisStartedAt = Number(wizardState.analysisStartedAt) || 0;
+  const generationStartedAt = Number(wizardState.generationStartedAt) || 0;
+  if (analysisStartedAt) wizardState.analysisFinishedMs = Math.max(0, now - analysisStartedAt);
+  if (generationStartedAt) wizardState.generationFinishedMs = Math.max(0, now - generationStartedAt);
 }
 
 /** Kept as an alias so the analysis step keeps one obvious start/stop pair. */
-function wizardStopAnalysisClock() { wizardStopActivityClock(); }
+function wizardStopAnalysisClock(options) { wizardStopActivityClock(options); }
+/** Step 5 equivalent of `wizardStopAnalysisClock`. */
+function wizardStopGenerationClock(options) { wizardStopActivityClock(options); }
 
 function wizardClearMessages() {
   wizardState.error = null;
@@ -225,11 +448,18 @@ function wizardReset() {
     gameSnapshot: null,
     quality: null,
     context: null,
+    capacity: null,
+    countTouched: false,
+    quick: null,
     busy: '',
     lessonStage: '',
     lessonRepaired: false,
     analysisStartedAt: 0,
     generationStartedAt: 0,
+    analysisFinishedMs: 0,
+    generationFinishedMs: 0,
+    // #76: a new project has no reviewed scope yet.
+    structure: null,
     error: null,
     notice: null,
     activeRequestId: null
@@ -292,7 +522,9 @@ const wizardStyleOptions = [
 /** Builds a schema-valid default config for a recommended game type. */
 function wizardDefaultConfig(recommendation, analysis) {
   const gameType = recommendation.gameType;
-  const suggestedCount = Number(recommendation.suggestedQuestionCount) || 8;
+  // O12: automatic counts live in 4..7 (content/time guard). The capacity
+  // endpoint refines this with document length + the model actually in use.
+  const suggestedCount = wizardClamp(Number(recommendation.suggestedQuestionCount) || 5, 4, 7);
   const base = {
     gameType,
     title: recommendation.title || (analysis && analysis.topic) || 'Trò chơi mới',
@@ -320,7 +552,7 @@ function wizardDefaultConfig(recommendation, analysis) {
     return { ...base, stageCount: wizardClamp(suggestedCount, 2, 30), attemptsPerStage: 3, journeyBonus: 300, hiddenItemBonus: 100 };
   }
   if (gameType === 'race') {
-    return { ...base, trackLength: 20, maxRounds: 12, teamCount: 2, stepByDifficulty: true, luckEnabled: true };
+    return { ...base, trackLength: 20, maxRounds: wizardClamp(suggestedCount, 4, 7), teamCount: 2, stepByDifficulty: true, luckEnabled: true };
   }
   return base;
 }
@@ -404,6 +636,64 @@ function wizardDiscardGeneratedContent() {
   wizardState.lessonRepaired = false;
 }
 
+// ---------------------------------------------------------------------------
+// O12 — predicted item count (document length + analysis richness + model/mode)
+// ---------------------------------------------------------------------------
+
+/** Config key that holds the item count for each genre, or '' for none. */
+function wizardCapacityCountKey(gameType) {
+  return {
+    arena: 'questionCount',
+    scenario: 'situationCount',
+    matching: 'pairCount',
+    treasure: 'stageCount',
+    race: 'maxRounds'
+  }[gameType] || '';
+}
+
+/** Vietnamese unit used by the count hints/warnings for each genre. */
+function wizardItemUnit(gameType) {
+  return {
+    arena: 'câu hỏi',
+    scenario: 'tình huống',
+    matching: 'cặp ghép',
+    treasure: 'chặng',
+    race: 'câu hỏi'
+  }[gameType] || 'mục';
+}
+
+let wizardCapacityInflight = '';
+
+/**
+ * Asks the main process to predict a sensible item count for the current
+ * document + analysis + model + mode (no AI call). The result is advisory and
+ * cached per project/genre/mode; `countTouched` keeps a teacher's own number.
+ */
+async function wizardEnsureCapacity() {
+  const s = wizardState;
+  const config = s.config;
+  if (!config || !s.projectId || typeof window.eduGame.estimateLessonCapacity !== 'function') return;
+  const key = `${s.projectId}|${config.gameType}|${config.generationMode}`;
+  if (s.capacity && s.capacity.key === key) return;
+  if (wizardCapacityInflight === key) return;
+  wizardCapacityInflight = key;
+  try {
+    const estimate = await window.eduGame.estimateLessonCapacity({
+      projectId: s.projectId,
+      gameType: config.gameType,
+      mode: config.generationMode
+    });
+    if (!estimate) return;
+    if (!wizardState.config || `${wizardState.projectId}|${wizardState.config.gameType}|${wizardState.config.generationMode}` !== key) return;
+    wizardState.capacity = { ...estimate, key };
+    if (typeof wizardApplyCapacity === 'function') wizardApplyCapacity();
+  } catch {
+    // Prediction is an optimisation; never block configuration or generation.
+  } finally {
+    if (wizardCapacityInflight === key) wizardCapacityInflight = '';
+  }
+}
+
 /**
  * Genre changes invalidate the draft. Saved-to-library content is redundant (the
  * game stays playable in the library) and is dropped silently; an unsaved draft
@@ -476,8 +766,10 @@ async function wizardStartAnotherGame() {
       }
     }
     wizardSetNotice('Đã tạo dự án mới từ cùng giáo án. Phân tích được dùng lại — không gọi AI phân tích lại.');
+    toast('Đã tạo dự án mới từ cùng giáo án.');
   } catch (error) {
     wizardSetError(error);
+    toast(wizardErrorText());
   }
   wizardState.busy = '';
   if (state.page === 'create-wizard') render();
@@ -500,8 +792,12 @@ async function wizardSaveCurrentProject() {
     const step = savedInLibrary ? 'done' : wizardState.step === 'edit' ? 'generate' : wizardState.step;
     await wizardSaveProject(step);
     wizardSetNotice(`Đã lưu tiến trình dự án lúc ${new Date().toLocaleTimeString('vi-VN')}.`);
+    // The status area is above the long step-5 body, so the teacher may not see
+    // the inline notice from the bottom action row. Confirm with a toast too.
+    toast('Đã lưu tiến trình dự án.');
   } catch (error) {
     wizardSetError(error);
+    toast(wizardErrorText());
   }
   wizardState.busy = '';
   render();
@@ -530,8 +826,10 @@ async function wizardSaveGameToLibrary() {
     await wizardSaveProject('done');
     if (typeof refreshDb === 'function') await refreshDb();
     wizardSetNotice(`Đã lưu “${saved.title}” vào Thư viện trò chơi lúc ${new Date().toLocaleTimeString('vi-VN')}. Bạn có thể chơi thử hoặc quay lại chỉnh sửa.`);
+    toast(`Đã lưu “${saved.title}” vào Thư viện trò chơi.`);
   } catch (error) {
     wizardSetError(error);
+    toast(wizardErrorText());
   }
   wizardState.busy = '';
   render();
@@ -565,6 +863,11 @@ async function wizardOpenProject(projectId) {
   wizardState.quality = null;
   // O3: the retrieval summary belongs to the last generation, not the project.
   wizardState.context = null;
+  wizardState.capacity = null;
+  // Reopened projects are already settled: a saved draft means the teacher
+  // accepted its item count, so never rewrite it automatically.
+  wizardState.countTouched = Boolean(project.draft || project.gameSnapshot);
+  wizardState.quick = null;
   if (project.draft && project.config && typeof window.eduGame.checkLessonQuality === 'function') {
     try {
       wizardState.quality = await window.eduGame.checkLessonQuality({ projectId: project.id });

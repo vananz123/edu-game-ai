@@ -26,10 +26,11 @@ function renderWizardInput() {
     </div>
     ${wizardAiReadinessHint()}
     <div class="publish-actions">
-      <button class="btn btn-primary" id="wizardNextBtn" data-wizard-action="next"${ready && !s.busy ? '' : ' disabled'}>${s.busy === 'save' ? 'Đang lưu…' : 'Tiếp tục · Phân tích →'}</button>
+      <button class="btn btn-primary" id="wizardNextBtn" data-wizard-action="next"${ready && !s.busy && !wizardStructureScopeError() ? '' : ' disabled'}>${s.busy === 'save' ? 'Đang lưu…' : 'Tiếp tục · Phân tích →'}</button>
       <button class="btn btn-secondary" data-page="create">Tôi đã biết muốn tạo trò chơi nào</button>
     </div>
-  </section>`;
+  </section>
+  ${renderWizardStructureTree()}`;
 }
 
 /** Small status strip about the local AI runtime, reused by the analyze step. */
@@ -69,6 +70,8 @@ async function wizardInputImportFile() {
     wizardClearMessages();
     if (!wizardHasText()) wizardSetError(new Error('Tệp không có nội dung văn bản đọc được. Hãy dùng tệp khác hoặc dán nội dung thủ công.'));
     else wizardSetNotice(`Đã trích xuất ${wizardState.documentMeta.characters.toLocaleString('vi-VN')} ký tự từ “${wizardState.documentName}”.`);
+    // A new document invalidates the reviewed scope: the tree is rebuilt locally.
+    wizardResetStructure({ rebuild: true });
   } catch (error) {
     wizardSetError(error);
   }
@@ -79,6 +82,12 @@ async function wizardInputImportFile() {
 async function wizardInputNext() {
   if (!wizardHasText()) {
     wizardSetError(new Error(`Hãy nhập hoặc chọn giáo án có tối thiểu ${WIZARD_MIN_CHARACTERS} ký tự.`));
+    render();
+    return;
+  }
+  const scopeError = wizardStructureScopeError();
+  if (scopeError) {
+    wizardSetError(new Error(scopeError));
     render();
     return;
   }

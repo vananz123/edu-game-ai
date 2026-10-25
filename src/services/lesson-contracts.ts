@@ -36,7 +36,47 @@ const difficultySchema = z.enum(['dễ', 'trung bình', 'khó']);
 const cognitiveLevelSchema = z.enum(['remember', 'understand', 'apply', 'analyze']);
 const gameTypeSchema = z.enum(['arena', 'scenario', 'matching', 'treasure', 'race']);
 const nonEmpty = (max: number) => z.string().trim().min(1).max(max);
+/** Optional text field: absent/blank becomes `undefined` instead of failing. */
 const optionalText = (max: number) => z.string().trim().max(max).optional();
+
+/**
+ * Old/foreign data must never break a lesson over a decoration field. A value
+ * that is not a string is treated as "not set"; a blank string is treated as
+ * absent. A real string is still bounded, so a giant blob is rejected as
+ * `too_big` rather than stored.
+ *
+ * Two zod v4 constraints shaped this:
+ *  - `isOptional()` crashes `discriminatedUnion` ("Cannot read properties of
+ *    undefined (reading 'values')"), which `arenaQuestionSchema` relies on.
+ *  - `transform` / `preprocess` make `z.toJSONSchema()` throw unless it is asked
+ *    for the input side, and that JSON schema is the `response_format` handed to
+ *    llama.cpp. `toJSONSchema` must therefore be called with `{ io: 'input' }`
+ *    for the constrained-decoding schemas to keep being emitted.
+ */
+const tolerantText = (max: number) =>
+  z.preprocess(
+    value => (typeof value === 'string' ? value : undefined),
+    z.string().trim().max(max).transform(value => (value === '' ? undefined : value)).optional()
+  );
+
+/**
+ * Optional per-item content metadata (docs/DECISIONS.md #60, #61, #62).
+ *
+ * Lenient on purpose, and deliberately NOT enums: these are presentation-only
+ * fields, so an unknown category or icon must degrade (the adapter normalises it
+ * to `general` / no icon) rather than refuse to open a saved lesson or reject a
+ * whole AI draft.
+ *
+ * All three are plain strings for a second reason: `illustrationAssetId` needs
+ * to round-trip a cleared value, and `nullable()` would emit
+ * `"type": ["string", "null"]`, which llama.cpp's `response_format` subset does
+ * not accept. An empty string already means "cleared", so nothing is lost.
+ */
+const itemAssetFieldsSchema = {
+  contentCategory: tolerantText(40),
+  iconName: tolerantText(60),
+  illustrationAssetId: tolerantText(120)
+};
 
 const optionSchema = z.object({
   id: nonEmpty(40),
@@ -188,7 +228,8 @@ const arenaChoiceQuestionSchema = (type: 'multiple-choice' | 'true-false') => z.
   correctOptionId: nonEmpty(40),
   explanation: nonEmpty(1200),
   difficulty: difficultySchema,
-  points: z.number().int().min(0).max(1000)
+  points: z.number().int().min(0).max(1000),
+  ...itemAssetFieldsSchema
 });
 
 const arenaTextQuestionSchema = (type: 'fill-in-blank' | 'short-answer') => z.object({
@@ -199,7 +240,8 @@ const arenaTextQuestionSchema = (type: 'fill-in-blank' | 'short-answer') => z.ob
   alternateAnswers: z.array(nonEmpty(300)).max(8).optional(),
   explanation: nonEmpty(1200),
   difficulty: difficultySchema,
-  points: z.number().int().min(0).max(1000)
+  points: z.number().int().min(0).max(1000),
+  ...itemAssetFieldsSchema
 });
 
 export const arenaQuestionSchema = z.discriminatedUnion('type', [
@@ -275,7 +317,8 @@ export const scenarioSituationSchema = z.object({
   prompt: nonEmpty(1000),
   options: z.array(scenarioOptionSchema).min(2).max(6),
   correctOptionId: z.string().trim().min(1).max(40).optional(),
-  discussionPrompt: optionalText(900)
+  discussionPrompt: optionalText(900),
+  ...itemAssetFieldsSchema
 });
 
 const scenarioDraftBase = z.object({
@@ -324,7 +367,12 @@ export const scenarioDraftContentSchema = scenarioDraftBase.omit({ schemaVersion
 export const matchingPairSchema = z.object({
   id: nonEmpty(60),
   left: nonEmpty(400),
-  right: nonEmpty(400)
+  right: nonEmpty(400),
+  // A pair is an item like any other: the editor has always written these three
+  // keys (DECISIONS #65), but the schema did not declare them, so zod stripped
+  // them before the adapter ever saw them. Declared here so the promise "every
+  // item can carry its own artwork" holds for matching too.
+  ...itemAssetFieldsSchema
 });
 
 const matchingDraftBase = z.object({
@@ -405,7 +453,8 @@ export const treasureStageSchema = z.object({
     options: z.array(optionSchema).max(6),
     correctOptionId: z.string().trim().max(40),
     explanation: nonEmpty(1200),
-    hint: optionalText(500)
+    hint: optionalText(500),
+    ...itemAssetFieldsSchema
   }),
   mission: treasureMissionSchema.optional(),
   attempts: z.number().int().min(0).max(99),
@@ -524,7 +573,8 @@ export const raceQuestionSchema = z.object({
   options: answerOptionsSchema,
   correctOptionId: nonEmpty(40),
   explanation: nonEmpty(1200),
-  difficulty: difficultySchema
+  difficulty: difficultySchema,
+  ...itemAssetFieldsSchema
 });
 
 const raceDraftBase = z.object({
@@ -670,8 +720,52 @@ export function canonicalizeDraftAnswers(value: unknown): unknown {
   return { ...draft, questions: draft.questions.map(canonicalizeTrueFalseQuestion) };
 }
 
+/**
+ * Restores the asset keys that `isOptional` dropped.
+ *
+ * Because the asset schemas are `isOptional`, an absent key is removed from the
+ * parsed output instead of being preserved as `undefined`. Padding it back here
+ * keeps the parsed draft's key set identical to the previous contract, so
+ * existing consumers that enumerate keys are unaffected.
+ */
+function padItemAssetKeys<T>(item: T): T {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return item;
+  const record = item as Record<string, unknown>;
+  return {
+    ...record,
+    contentCategory: record.contentCategory,
+    iconName: record.iconName,
+    illustrationAssetId: record.illustrationAssetId
+  } as T;
+}
+
+function padDraftAssetKeys(draft: GameDraft): GameDraft {
+  if (!draft || typeof draft !== 'object') return draft;
+  switch (draft.gameType) {
+    case 'arena':
+      return { ...draft, questions: draft.questions.map(padItemAssetKeys) };
+    case 'scenario':
+      return { ...draft, situations: draft.situations.map(padItemAssetKeys) };
+    case 'matching':
+      return { ...draft, pairs: draft.pairs.map(padItemAssetKeys) };
+    case 'treasure':
+      return {
+        ...draft,
+        stages: draft.stages.map(stage => ({
+          ...stage,
+          question: padItemAssetKeys(stage.question)
+        }))
+      };
+    case 'race':
+      return { ...draft, questions: draft.questions.map(padItemAssetKeys) };
+    default:
+      return draft;
+  }
+}
+
 export function parseGameDraft(value: unknown): GameDraft {
-  return parseOrThrow(gameDraftSchema, canonicalizeDraftAnswers(value), 'DRAFT_INVALID', 'Dữ liệu trò chơi') as GameDraft;
+  const parsed = parseOrThrow(gameDraftSchema, canonicalizeDraftAnswers(value), 'DRAFT_INVALID', 'Dữ liệu trò chơi') as GameDraft;
+  return padDraftAssetKeys(parsed);
 }
 
 export function parseGameConfig(value: unknown): GameConfig {
@@ -766,12 +860,19 @@ function assertUnique(values: string[], ctx: z.RefinementCtx, path: (string | nu
 // ---------------------------------------------------------------------------
 
 type JsonSchema = Record<string, unknown>;
-const toJsonSchema = (z as unknown as { toJSONSchema?: (schema: unknown) => unknown }).toJSONSchema;
+const toJsonSchema = (z as unknown as { toJSONSchema?: (schema: unknown, options?: { io?: 'input' | 'output' }) => unknown }).toJSONSchema;
 
+/**
+ * `response_format` describes what the MODEL must emit, so the input side of the
+ * schema is the correct projection. It is also required: zod v4 throws
+ * "Transforms cannot be represented in JSON Schema" for any `.trim()` /
+ * `.transform()` by default, which would silently blank out constrained
+ * decoding (this used to return null for every game draft).
+ */
 function safeJsonSchema(schema: unknown): JsonSchema | null {
   if (typeof toJsonSchema !== 'function') return null;
   try {
-    return toJsonSchema(schema) as JsonSchema;
+    return toJsonSchema(schema, { io: 'input' }) as JsonSchema;
   } catch {
     return null;
   }

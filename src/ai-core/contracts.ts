@@ -105,6 +105,13 @@ export interface LocalAiRuntimeOptions {
   contextSize: number;
   cpuThreads: number;
   gpuLayers: number;
+  /**
+   * Vulkan device to offload to, e.g. `Vulkan0`. Undefined means "no explicit
+   * device", which is correct for the CPU build. Selecting a device by name
+   * matters because a machine can expose several (iGPU + discrete + a virtual
+   * display adapter), and llama.cpp would otherwise pick the first one listed.
+   */
+  device?: string;
 }
 
 export interface LocalAiModelStatus {

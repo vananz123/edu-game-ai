@@ -31,8 +31,10 @@ import {
   LESSON_GENERATION_SYSTEM_PROMPT,
   LESSON_ITEM_REGENERATION_SYSTEM_PROMPT,
   LESSON_RECOMMENDATION_SYSTEM_PROMPT,
+  preprocessLessonContext,
   type ChatMessage
 } from './lesson-prompts';
+import type { PreprocessMetrics } from './lesson-preprocess';
 import {
   normalizeAnalysis,
   normalizeDraft,
@@ -47,6 +49,7 @@ import {
 } from './lesson-contracts';
 import { itemCount } from './lesson-item-repair';
 import { requestedItemCount } from './lesson-quality';
+import { inferContentCategory } from '../shared/content-categories';
 import type {
   GameConfig,
   GameDraft,
@@ -227,12 +230,47 @@ export interface AnalyzeLessonOptions {
   analysisId?: string;
   now?: string;
   maxTokens?: number;
+  /** O6d: excerpt budget and ranking switch, forwarded to the preprocessor. */
+  maxChars?: number;
+  ranking?: boolean;
+  /**
+   * #58: supervised ranking query (topic / objectives / concepts). The analyse
+   * step normally has none; it is here so the O6 gate and tests can run both
+   * paths through the same function.
+   */
+  query?: string;
+  /** O6d: receives the preprocessing metrics even when the step later fails. */
+  onPreprocess?: (metrics: PreprocessMetrics) => void;
+  /**
+   * #76: the teacher's section scope from step 1. When present, the model reads
+   * exactly this prepared selection (ancestor context included) instead of the
+   * whole-document excerpt. Absent = today's behaviour, byte for byte.
+   */
+  preparedSelection?: { text: string; truncated: boolean };
   onAttempt?: (attempt: number) => void;
 }
 
 export async function analyzeLesson(options: AnalyzeLessonOptions): Promise<LessonAnalysis> {
   const analysisId = options.analysisId || defaultId('analysis');
   const createdAt = options.now || new Date().toISOString();
+  // Built once so the metrics are reported exactly once and the prompt uses the
+  // same excerpt the metrics describe.
+  const prepared = preprocessLessonContext(options.text, {
+    maxChars: options.maxChars,
+    ranking: options.ranking,
+    query: options.query
+  });
+  if (options.onPreprocess) options.onPreprocess(prepared.metrics);
+  // #76: a teacher selection is already prepared and budgeted, and it respects
+  // section boundaries, so re-running the whole-document preprocessor over it
+  // would only re-clean text that was sliced from the same normalized source.
+  // The `[Đã lược bớt …]` note keeps the prompt honest when part of the pick did
+  // not fit the budget.
+  const selection = options.preparedSelection;
+  const excerpt = selection
+    ? `${selection.truncated ? '[Phần đã chọn đã được lược bớt để vừa hạn mức của model.]\n\n' : ''}${selection.text}`
+    : prepared.excerpt;
+  const truncated = selection ? selection.truncated : prepared.truncated;
   return runStructuredStep({
     client: options.client,
     registry: options.registry,
@@ -247,7 +285,8 @@ export async function analyzeLesson(options: AnalyzeLessonOptions): Promise<Less
           text: options.text,
           subject: options.subject,
           grade: options.grade,
-          sourceName: options.sourceName
+          sourceName: options.sourceName,
+          prepared: { excerpt, truncated }
         })
       }
     ],
@@ -332,6 +371,48 @@ export interface GenerateDraftOptions {
   onIncomplete?: (info: { reason: string; attempt: number; retrying: boolean }) => void;
 }
 
+/**
+ * Phase 3 of `update_plan_6` (docs/DECISIONS.md #63): fill `contentCategory`
+ * when the model omitted it.
+ *
+ * The prompt asks for the field but explicitly allows omitting it, so a draft
+ * must never lose content just because a small model skipped a decorative key.
+ * Two properties matter:
+ *  - **Never overwrite.** A value the model actually returned is kept, even if
+ *    it is not one the app would have inferred; the adapter still normalises
+ *    an unknown category to `general`.
+ *  - **Never throw.** `inferContentCategory` is a keyword heuristic; if it ever
+ *    misbehaves the draft must still be usable, so the failure falls back to
+ *    leaving the field alone.
+ *
+ * The inference reads the item's own text plus the analysis topic, because a
+ * question like "Con mèo kêu thế nào?" usually carries the topic itself while
+ * the lesson topic ("Động vật") disambiguates short items.
+ */
+function fillMissingContentCategories(draft: GameDraft, analysis: LessonAnalysis): GameDraft {
+  const withCategory = (item: Record<string, unknown>): Record<string, unknown> => {
+    if (typeof item.contentCategory === 'string' && item.contentCategory.trim() !== '') return item;
+    const texts = [item.prompt, item.question, item.context, item.left, item.right, item.term, item.name, item.story, item.taskDescription]
+      .filter((value): value is string => typeof value === 'string')
+      .concat(analysis.topic);
+    try {
+      return { ...item, contentCategory: inferContentCategory(...texts) };
+    } catch {
+      return item;
+    }
+  };
+  const array = (value: unknown): Record<string, unknown>[] | null =>
+    Array.isArray(value) ? value as Record<string, unknown>[] : null;
+
+  const filled: GameDraft = { ...draft };
+  for (const key of ['questions', 'situations', 'pairs', 'stages'] as const) {
+    const items = array((draft as unknown as Record<string, unknown>)[key]);
+    if (!items) continue;
+    (filled as unknown as Record<string, unknown>)[key] = items.map(withCategory);
+  }
+  return filled;
+}
+
 export async function generateGameDraft(options: GenerateDraftOptions): Promise<GameDraft> {
   const schema = gameDraftJsonSchemas[options.gameType];
   // O9: the model sometimes stops at 1 of 4 items. Count what the teacher asked
@@ -356,7 +437,7 @@ export async function generateGameDraft(options: GenerateDraftOptions): Promise<
     maxTokens: options.maxTokens ?? 2048,
     responseSchema: schema ? { name: `game_draft_${options.gameType}`, schema } : null,
     messages: baseMessages,
-    validate: value => normalizeDraft(options.gameType, value),
+    validate: value => fillMissingContentCategories(normalizeDraft(options.gameType, value), options.analysis),
     repairMessages: info => buildDraftRepairMessages({
       gameType: options.gameType,
       messages: info.messages,

@@ -1,0 +1,358 @@
+# Implement Offline Document Structure Analyzer and AI Input Optimization — EduGame Studio
+
+## 1. Project Context
+
+EduGame Studio is an existing Windows desktop application built with Electron + TypeScript. It uses local AI models through the existing inference pipeline to analyze teaching documents, generate educational games, and support lesson-related workflows.
+
+The existing application already includes document storage, MiniLM, local AI inference, Fast/Think modes, structured analysis, caching, validation, and five existing game types.
+
+**The task is to extend the existing application, not rebuild it.**
+
+Implement a fully offline, non-AI document structure analyzer and input preparation pipeline. Teachers should be able to import a document, review its structure, select relevant chapters or sections, and send only the prepared content to the existing AI system.
+
+The primary objectives are:
+- Reduce unnecessary AI input and processing time.
+- Preserve educational knowledge, context, and relationships.
+- Give teachers control over which content is analyzed.
+- Keep the existing AI and game-generation workflows compatible.
+- Avoid additional AI calls during document import and structural analysis.
+
+## 2. Inspect the Existing Codebase First
+
+Before making changes:
+
+1. Inspect the current document import, extraction, storage, analysis, caching, and game-generation workflows.
+2. Locate the existing handlers and functions, including `lesson:save-document`, `lesson:analyze`, `lesson-store.saveDocument`, `getDocumentWithText`, `buildAnalysisCacheKey`, `prepareLessonExcerpt`, and `runStructuredStep`, if they still exist under those names.
+3. Identify the current PDF, DOCX, and TXT extraction libraries and how extracted text, tables, page boundaries, and source metadata are represented.
+4. Identify how the current renderer communicates with the Electron main process and how document state is stored.
+5. Inspect the existing MiniLM integration, AI prompts, response schemas, Fast/Think modes, cache invalidation, and all five game-generation workflows.
+
+Reuse existing code, libraries, types, and conventions wherever practical.
+
+Do not assume the current code matches historical descriptions exactly. Verify the actual implementation before editing.
+
+## 3. Document Import and Non-AI Structural Analysis
+
+After a document is imported, analyze its structure locally without calling any AI model.
+
+Supported formats:
+- PDF
+- DOCX
+- TXT
+
+Reuse existing text extraction functionality whenever possible. Do not introduce duplicate extraction pipelines without a clear technical reason.
+
+### 3.1 Detect document structure
+
+Detect the following elements when possible:
+
+- Document title and metadata.
+- Chapters and major topics.
+- Sections and subsections.
+- Lessons, periods, and learning units.
+- Headings and subheadings.
+- Paragraphs and content blocks.
+- Tables, numerical data, and captions.
+- Examples, exercises, and real-life scenarios.
+- Questions, answers, solutions, and explanations.
+- References, appendices, and administrative sections.
+- Page boundaries and source locations when reliable metadata is available.
+
+Use deterministic techniques such as:
+- Heading styles and document outline metadata.
+- Numbering patterns, including chapter and lesson numbering.
+- Text formatting metadata when available.
+- Regular expressions and Vietnamese-aware heading patterns.
+- Paragraph boundaries, indentation, and surrounding structural context.
+- PDF page and layout information when exposed by the existing extraction library.
+
+Do not rely on regular expressions alone. For example, a numbered list item must not automatically be classified as a chapter or section.
+
+Do not use MiniLM or another AI model merely to build the initial structure tree.
+
+### 3.2 Handle uncertain structures
+
+Not every document has consistent headings or formatting.
+
+When structure cannot be detected reliably:
+- Create reasonable fallback content blocks using paragraph boundaries and available page information.
+- Mark uncertain headings or classifications for review.
+- Allow teachers to rename, reclassify, split, or merge sections.
+- Allow full-document processing even when no reliable hierarchy can be detected.
+- Never invent chapter names, section titles, page numbers, or missing content.
+
+For scanned PDFs, detect when extracted text is unavailable or insufficient. Reuse existing OCR functionality if available. Otherwise, explain the limitation and allow the teacher to use supported alternatives. Do not silently treat an image-only PDF as an empty document.
+
+## 4. Content Tree and Teacher Selection UI
+
+Add a document structure review step between document import and AI analysis or game generation.
+
+The UI should fit the existing application design and support both light and dark themes where currently available.
+
+### 4.1 Default selection behavior
+
+- Select all detected chapters, sections, and content blocks by default.
+- Show the complete document hierarchy in a collapsible tree.
+- Display the document title, number of detected sections, and selection state.
+- Support selecting and deselecting individual sections.
+- Selecting a parent selects all its descendants.
+- Deselecting a parent deselects all its descendants.
+- If only some descendants are selected, show the parent as partially selected.
+- Update parent selection states whenever child selections change.
+- Provide Select All and Clear Selection actions.
+- Allow teachers to choose specific chapters, lessons, subsections, or individual content blocks.
+- Allow manual correction of incorrectly detected structures.
+- Preserve the original document and its original text.
+
+### 4.2 Preview and selection feedback
+
+Show:
+- The selected chapters and sections.
+- The number of selected content blocks.
+- The prepared AI input size, when available.
+- A preview of the actual content that will be sent to AI.
+- Any uncertain, excluded, or potentially omitted content that needs review.
+
+The preview must represent the real prepared input, not a separate approximation of what the AI will receive.
+
+Provide an option to return to the document tree and modify the selection before processing.
+
+### 4.3 User notifications
+
+When all content is selected, display a neutral message explaining that the AI will process the selected document content and that selecting fewer sections may reduce processing time.
+
+When a smaller selection is used, display a message such as:
+
+"Only the selected sections will be sent to AI. A smaller input may reduce processing time and help focus the analysis."
+
+When the selected input is large, warn the teacher that processing may take longer and offer options to narrow the selection.
+
+Do not invent processing-time estimates or percentage savings without reliable measurements.
+
+Do not force teachers to select individual chapters when they want to process the entire document.
+
+## 5. AI Input Preparation — Preserve Knowledge and Context
+
+Implement a dedicated input preparation layer between document selection and AI inference.
+
+This is a critical requirement. The objective is not simply to truncate a document to a character limit. The objective is to reduce unnecessary input while preserving the educational information required for accurate analysis.
+
+### 5.1 Preserve semantic structure
+
+When preparing selected content:
+- Preserve chapter, section, and lesson headings.
+- Preserve the original order of content.
+- Maintain the relationship between headings and their paragraphs.
+- Maintain relationships between questions, exercises, answers, solutions, and explanations.
+- Preserve table headers, rows, numerical values, units, captions, and relevant notes.
+- Preserve examples and real-life scenarios when they are part of the selected content.
+- Retain formulas, scientific notation, mathematical expressions, and other meaningful symbols.
+- Preserve important warnings, exceptions, definitions, and learning objectives.
+
+Do not flatten structured content in a way that changes its meaning.
+
+### 5.2 Include necessary parent context
+
+When a teacher selects a subsection without selecting its parent section, include the minimum necessary context, such as:
+- The parent chapter title.
+- The parent section title.
+- A short introductory paragraph or definition when necessary to understand the selected content.
+
+Do not automatically include the entire parent chapter. Context expansion must be limited, relevant, and transparent to the teacher.
+
+Clearly distinguish automatically included context from the teacher's explicitly selected content when practical.
+
+### 5.3 Remove redundant content safely
+
+Remove or normalize content only when it can be identified with reasonable confidence as redundant or irrelevant.
+
+Examples:
+- Repeated page headers and footers.
+- Repeated document titles introduced by extraction.
+- Duplicate paragraphs caused by extraction errors.
+- Redundant table-of-contents entries when the actual corresponding content is available.
+- Navigation text and clearly irrelevant administrative material.
+- Content belonging exclusively to unselected sections, except for explicitly included contextual material.
+
+Do not remove a paragraph merely because it looks repetitive. Repetition can be pedagogically meaningful, particularly in summaries, exercises, definitions, and revision materials.
+
+Do not delete references to diagrams, figures, tables, or other content when those references are necessary to understand the lesson.
+
+### 5.4 Handle uncertain content conservatively
+
+If the system cannot confidently determine whether a block is important:
+- Preserve it by default.
+- Mark it as uncertain when appropriate.
+- Allow the teacher to include or exclude it.
+- Never silently discard it solely to meet an input-size target.
+
+Content preservation takes priority over aggressive compression.
+
+### 5.5 Support teacher review
+
+Before sending content to AI, provide a preview of the prepared input.
+
+Teachers should be able to:
+- Review included content.
+- See automatically included contextual content.
+- Identify excluded sections.
+- Return to the structure tree to change the selection.
+- Switch to full-document processing when necessary.
+
+The preview must not trigger an AI request.
+
+## 6. Input Length and Token Limits
+
+The existing analysis pipeline uses a document excerpt limit, historically described as `LOCAL_DOCUMENT_ANALYSIS_MAX_CHARS` with a value of 12,000 characters. Verify the current implementation before changing it.
+
+Do not treat character count as an exact substitute for model token count.
+
+The preparation pipeline must:
+1. Build the selected, cleaned, context-preserving content.
+2. Measure its character count and estimate or calculate token usage using the available model-compatible tokenizer, if supported.
+3. Account for the system prompt, user prompt, output budget, and model context-window limits.
+4. Respect the actual limits of the currently selected model and inference runtime.
+5. Warn the teacher when the input exceeds the supported budget.
+6. Suggest narrowing the selection or processing separate sections when appropriate.
+7. Preserve the original document and allow the teacher to change the selection.
+
+Do not silently truncate the prepared content.
+
+If the current AI pipeline requires an excerpt limit, replace blind truncation with a transparent, structure-aware strategy. Any unavoidable omission must be visible and must not be presented as a complete analysis of the entire selected content.
+
+For large documents, support analyzing selected sections separately where compatible with the existing architecture. Do not introduce automatic multi-pass AI analysis unless it is explicitly needed and remains compatible with current workflows.
+
+## 7. Integration with the Existing AI Pipeline
+
+Integrate the new functionality into the existing workflow without replacing the current AI infrastructure.
+
+The expected logical flow is:
+
+1. `lesson:save-document` stores the original extracted text and its existing metadata.
+2. A new non-AI structure analyzer builds the document hierarchy.
+3. The application stores or derives the structural metadata without duplicating the full original document unnecessarily.
+4. The teacher reviews the hierarchy and selects the desired scope.
+5. An input preparation component builds the final content from the selection.
+6. The existing AI analysis or game-generation workflow receives the prepared content.
+7. Existing inference, structured output validation, normalization, and error handling continue to work.
+
+Keep the original document text immutable during structural analysis and preprocessing.
+
+Avoid coupling the document analyzer directly to a specific model or game type.
+
+The same prepared-content mechanism should be reusable by:
+- Lesson analysis.
+- AI-generated question creation.
+- Educational game generation.
+- Document-based question answering, where compatible with the current implementation.
+
+### Existing lesson analysis
+
+The existing flow has previously been described as:
+
+`lesson:analyze` → `getDocumentWithText(documentId)` → `buildAnalysisCacheKey(...)` → cache lookup → `aiSingleFlight.run(...)` → `runStructuredStep(...)` → schema validation and normalization.
+
+Verify the actual code and integrate the selected-content preparation at the correct point before inference.
+
+Do not break the current IPC contract or other callers that expect full-document analysis. Provide backward-compatible defaults or an explicit full-document selection when no selection has been supplied.
+
+Keep existing system prompts, response schemas, model selection, Fast/Think modes, and validation unless a specific change is required for correct integration.
+
+## 8. Caching and Data Integrity
+
+Update caching so that different selections or preprocessing results cannot incorrectly reuse one another's analysis.
+
+The cache key must account for all inputs that can materially affect the output, including:
+- Original document content hash.
+- Selected section identifiers or selection fingerprint.
+- Hash of the final prepared AI input.
+- Preprocessing algorithm or version.
+- Model identifier.
+- Analysis mode.
+- Relevant prompt or schema version when the existing cache design supports it.
+- Other existing cache dimensions that affect the result.
+
+Preserve existing single-flight deduplication and cache invalidation behavior.
+
+Do not rely only on the original document hash when different subsets of the same document can produce different results.
+
+Do not store unnecessary duplicate copies of the entire document for each selection. Prefer stable section identifiers and references to original content ranges where feasible.
+
+Ensure that manually edited structure metadata does not corrupt the original document or produce stale prepared content.
+
+## 9. Performance and Reliability
+
+Structural analysis should be lightweight, deterministic, and entirely local.
+
+- Do not start an AI model during document import solely to detect structure.
+- Do not add unnecessary model downloads or external services.
+- Avoid expensive repeated parsing of the same unchanged document.
+- Reuse existing extracted text and document metadata.
+- Use appropriate caching or incremental recomputation where beneficial.
+- Avoid blocking the Electron renderer with large-document processing.
+- Follow the existing main-process, worker, and IPC architecture.
+- Validate document identifiers, section identifiers, and input sizes.
+- Handle malformed documents, empty extraction results, unsupported structures, and parsing errors gracefully.
+- Keep logs useful for debugging without logging sensitive document content unnecessarily.
+
+Ensure that the feature remains usable on the existing target hardware, including Windows computers with 16 GB RAM and CPU-based local inference.
+
+## 10. Testing Requirements
+
+Add tests consistent with the existing project test framework.
+
+Cover at least:
+
+1. Chapter and subsection detection in Vietnamese documents.
+2. DOCX heading-style recognition.
+3. PDF and TXT fallback structure detection.
+4. Documents with missing, inconsistent, or ambiguous headings.
+5. Parent-child selection and partial-selection states.
+6. Default Select All behavior.
+7. Correct exclusion of unselected content.
+8. Preservation of tables, numerical data, formulas, examples, scenarios, answers, and explanations.
+9. Preservation of necessary parent headings and context.
+10. Safe handling of repeated headers, footers, and duplicate extraction artifacts.
+11. Preservation and review of uncertain content.
+12. Correct handling of empty selections.
+13. Oversized input warnings and no silent truncation.
+14. Cache separation for different selections and prepared inputs.
+15. Backward compatibility with full-document analysis.
+16. Compatibility with existing Fast/Think modes and all five game types.
+17. Verification that document import and structural analysis do not invoke AI.
+18. Graceful handling of image-only PDFs when OCR is unavailable.
+
+Use representative synthetic documents and existing fixtures. Do not require real AI inference for deterministic structural-analysis unit tests.
+
+## 11. Implementation Constraints
+
+- Do not rebuild or redesign the entire application.
+- Do not replace the current AI models, inference runtime, or MiniLM.
+- Do not introduce a new AI dependency for document structure detection.
+- Do not remove existing functionality.
+- Do not silently discard meaningful educational content.
+- Do not claim that processing is faster without benchmark evidence.
+- Do not invent document metadata or structural information.
+- Do not change the five existing game types or their game rules unnecessarily.
+- Reuse existing libraries and project conventions whenever possible.
+- Avoid unrelated refactoring.
+- Implement incrementally and keep the application buildable.
+
+## 12. Required Deliverables
+
+After implementation, report:
+
+1. The existing architecture and integration points discovered.
+2. The new components, modules, types, and IPC changes.
+3. The document structure detection and selection strategy.
+4. The content-preservation and input-preparation rules.
+5. How context limits and oversized input are handled.
+6. How caching and backward compatibility are maintained.
+7. The exact files changed.
+8. Tests added and their actual results.
+9. Build, type-check, and test verification results.
+10. Any limitations that remain unresolved.
+
+Clearly distinguish implemented and verified functionality from proposed or unverified functionality.
+
+**Final acceptance criterion:** Teachers can import a supported document without triggering AI, review a detected content tree with all sections selected by default, select specific chapters or lessons, inspect the actual prepared AI input, and run existing analysis or game-generation workflows using the selected content without silently losing meaningful educational information.

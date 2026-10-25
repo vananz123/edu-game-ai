@@ -95,6 +95,7 @@ window.handleLessonDrop = handleLessonDrop;
 
 async function handleAction(action, id, element) { try {
     if (action === 'play') playGame(findGame(id));
+    if (action === 'play-fullscreen') await playGameFullscreen(findGame(id));
     if (action === 'edit') editGame(findGame(id));
     if (action === 'import-document') {
       const doc = await window.eduGame.importDocument();

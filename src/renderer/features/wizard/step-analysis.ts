@@ -25,6 +25,10 @@ const WIZARD_ANALYSIS_STAGES = [
 function renderWizardAnalysisProgress() {
   const s = wizardState;
   if (s.busy !== 'analyze') return '';
+  // #75: a cache hit runs no analysis at all, so the four stages would be a lie.
+  if (s.lessonStage === 'cached') {
+    return `<div class="field-hint mt-[8px]" data-wizard-progress="cached">✓ Giáo án không đổi — dùng lại kết quả phân tích trước đó, không gọi AI.</div>`;
+  }
   const currentIndex = Math.max(0, WIZARD_ANALYSIS_STAGES.findIndex(([id]) => id === s.lessonStage));
   const rows = WIZARD_ANALYSIS_STAGES.map(([id, initialLabel], index) => {
     let label = initialLabel;
@@ -35,9 +39,16 @@ function renderWizardAnalysisProgress() {
       mark = '–';
       label = `${label} · không cần`;
     }
-    return `<li data-stage="${id}" data-status="${status}" class="text-[12px] ${status === 'active' ? 'font-bold text-[#3b3a63]' : status === 'skipped' ? 'text-[#98a0b0]' : 'text-[#5a6478]'}">${mark} ${escapeHtml(label)}</li>`;
+    // #75: same spinner as step 5 (one declaration, `step-generate.ts`), so a
+    // running stage moves here too instead of sitting on a still "⏳" glyph.
+    const prefix = status === 'active' ? WIZARD_GENERATION_SPINNER : `${mark} `;
+    return `<li data-stage="${id}" data-status="${status}" class="text-[12px] ${status === 'active' ? 'font-bold text-[#3b3a63]' : status === 'skipped' ? 'text-[#98a0b0]' : 'text-[#5a6478]'}">${prefix}${escapeHtml(label)}</li>`;
   }).join('');
-  return `<div class="field-hint mt-[8px]" data-wizard-analysis-progress="${escapeHtml(s.lessonStage || 'prepare')}">
+  const fraction = wizardAnalysisProgressFraction(s.lessonStage);
+  const percent = Math.round(fraction * 100);
+  return `<div class="field-hint mt-[8px]" data-wizard-analysis-progress="${escapeHtml(s.lessonStage || 'prepare')}" data-wizard-progress-percent="${percent}">
+    <div class="wizard-gen-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}" aria-label="Tiến trình phân tích"><div class="wizard-gen-progress-fill" style="width:${percent}%"></div></div>
+    <div class="wizard-gen-meta"><span><strong>${percent}%</strong> · ${Math.max(1, currentIndex + 1)}/${WIZARD_ANALYSIS_STAGES.length} bước</span><span>Đang chạy…</span></div>
     <ol class="space-y-[2px] pl-[2px]" role="list">${rows}</ol>
     <div class="mt-[5px] flex flex-wrap gap-x-[10px] gap-y-[2px]">
       <span data-wizard-analysis-elapsed>${escapeHtml(wizardAnalysisElapsedText())}</span>
@@ -64,8 +75,11 @@ function renderWizardAnalysis() {
     </section>`;
   }
   const analysis = s.analysis;
+  // #75: the frozen total from the run that produced this analysis, if any.
+  const analysisTotal = wizardAnalysisTotalText();
   return `<section class="form-panel" data-wizard-step-body="analyze">
     <div class="section-head"><h3>Bước 2 · Xem lại phân tích</h3><span class="tag">Giáo viên duyệt</span></div>
+    ${analysisTotal ? `<div class="field-hint" data-wizard-analysis-total-line>⏱ ${escapeHtml(analysisTotal)}</div>` : ''}
     <div class="panel-sub">Đây là kết quả do AI local tạo. Hãy sửa cho chính xác — mọi chỉnh sửa được dùng cho bước chọn và cấu hình trò chơi.</div>
     <div class="field-row">
       <div class="field"><label>CHỦ ĐỀ</label><input id="wizardTopic" data-wizard-analysis="topic" value="${escapeHtml(analysis.topic || '')}"></div>
@@ -105,9 +119,11 @@ function renderWizardAnalysis() {
     <div class="publish-actions">
       <button class="btn btn-secondary" data-wizard-action="rerun"${analyzing ? ' disabled' : ''}>↻ Phân tích lại</button>
       <button class="btn btn-secondary" data-wizard-action="back">← Nhập giáo án</button>
-      <button class="btn btn-primary" id="wizardNextBtn" data-wizard-action="next">Tiếp tục · Chọn trò chơi →</button>
+      ${s.quick ? '' : `<button class="btn btn-primary" data-wizard-action="quick-generate"${s.busy ? ' disabled' : ''}>⚡ AI gợi ý &amp; tạo ngay</button>`}
+      <button class="btn ${s.quick ? 'btn-primary' : 'btn-secondary'}" id="wizardNextBtn" data-wizard-action="next"${s.busy === 'prepare' ? ' disabled' : ''}>Tiếp tục · Chọn trò chơi →</button>
     </div>
-    <div class="field-hint">“Phân tích lại” sẽ thay thế nội dung đang sửa bằng kết quả mới từ AI local.</div>
+    ${renderWizardQuickPanel()}
+    <div class="field-hint">“Phân tích lại” sẽ thay thế nội dung đang sửa bằng kết quả mới từ AI local. “AI gợi ý &amp; tạo ngay” tự chọn thể loại và số lượng phù hợp — bạn xác nhận trước khi AI chạy.</div>
   </section>`;
 }
 
@@ -161,6 +177,8 @@ async function wizardAnalyzeRun(force) {
   wizardState.lessonStage = 'prepare';
   wizardState.lessonRepaired = false;
   wizardClearMessages();
+  // #75: a new run invalidates the previous run's frozen total right away.
+  wizardState.analysisFinishedMs = 0;
   const requestId = wizardNewRequestId('analyze');
   wizardState.activeRequestId = requestId;
   render();
@@ -176,7 +194,10 @@ async function wizardAnalyzeRun(force) {
       // O5: only the explicit "Phân tích lại" button bypasses the cache; the
       // automatic call reuses a stored analysis when the lesson is unchanged.
       force: Boolean(force),
-      requestId
+      requestId,
+      // #76: the teacher's scope from step 1. Absent = whole document, which keeps
+      // the old cache key and the old behaviour byte-for-byte.
+      ...wizardStructureAnalyzePayload()
     });
     wizardState.analysis = result.analysis;
     wizardState.analysisOriginal = JSON.parse(JSON.stringify(result.analysis));
@@ -188,6 +209,9 @@ async function wizardAnalyzeRun(force) {
     wizardState.recommendations = [];
     wizardState.selectedGameType = null;
     wizardState.selectedRecommendationId = null;
+    // A pending quick-create card belongs to the previous analysis.
+    wizardState.quick = null;
+    wizardState.capacity = null;
     await wizardRefreshProjects();
     wizardSetNotice(result.cached
       ? 'Giáo án không đổi nên đã dùng lại kết quả phân tích trước đó (không gọi AI).'
@@ -196,7 +220,9 @@ async function wizardAnalyzeRun(force) {
     failure = error;
     wizardSetError(error);
   }
-  wizardStopAnalysisClock();
+  // #75: a cache hit is not a run to time — it never started a clock, so only a
+  // real analysis freezes a total. A cancelled or failed run stores nothing.
+  wizardStopAnalysisClock({ finished: Boolean(result) && !result.cached });
   wizardState.busy = '';
   wizardState.lessonStage = '';
   wizardState.analysisStartedAt = 0;
@@ -222,6 +248,8 @@ async function wizardAnalyzeNext() {
   }
   wizardState.busy = 'save';
   wizardClearMessages();
+  // Leaving step 2 through the normal path discards a pending quick-choice card.
+  wizardState.quick = null;
   render();
   try {
     wizardState.analysis = await window.eduGame.saveLessonAnalysis(wizardState.analysis);
@@ -243,4 +271,142 @@ async function wizardAnalyzeCancel() {
   } catch {
     /* cancelling is best-effort */
   }
+}
+
+// ---------------------------------------------------------------------------
+// O13 — "Tạo trò chơi ngay": one button from step 2, but always confirmed
+// ---------------------------------------------------------------------------
+
+/** Inline confirmation/status card shown under the reviewed analysis. */
+function renderWizardQuickPanel() {
+  const s = wizardState;
+  if (s.busy === 'prepare') {
+    return `<div class="field mt-[12px] rounded-[10px] border border-[#c9c4ff] bg-[#f7f6ff] p-[12px]" data-wizard-quick="prepare" role="status">
+      <strong class="text-[13px]">⚡ Đang chọn thể loại và số lượng phù hợp…</strong>
+      <div class="field-hint mt-[4px]">Không gọi AI — hệ thống chỉ đọc kết quả phân tích, độ dài tài liệu và model đang dùng.</div>
+    </div>`;
+  }
+  const quick = s.quick;
+  if (!quick) return '';
+  const meta = wizardGameMeta(quick.gameType);
+  const unit = wizardItemUnit(quick.gameType);
+  const mode = quick.mode === 'deep' ? 'Thinking (kỹ)' : 'Fast (nhanh)';
+  const replaces = quick.replaces
+    ? `<div class="field-hint mt-[4px] text-[#8a6d00]">⚠ Nội dung ${quick.replacesSaved ? 'của dự án' : 'nháp chưa lưu vào Thư viện'} sẽ bị thay thế khi tạo.</div>`
+    : '';
+  return `<div class="field mt-[12px] rounded-[10px] border border-[#6258e8] bg-[#f7f6ff] p-[12px]" data-wizard-quick="ready" role="status">
+    <strong class="text-[13px]">⚡ Sẵn sàng tạo: ${meta.icon} ${escapeHtml(meta.label)} · ${quick.count} ${escapeHtml(unit)} · ${mode}</strong>
+    ${quick.reason ? `<div class="field-hint mt-[4px]">${escapeHtml(quick.reason)}</div>` : ''}
+    ${replaces}
+    <div class="publish-actions mt-[8px]">
+      <button class="btn btn-primary" data-wizard-action="quick-confirm"${s.busy ? ' disabled' : ''}>✦ Bắt đầu tạo</button>
+      <button class="btn btn-secondary" data-wizard-action="quick-cancel"${s.busy ? ' disabled' : ''}>Huỷ</button>
+    </div>
+    <div class="field-hint mt-[4px]">Có thể quay lại bước 3–4 để đổi thể loại hoặc cấu hình sau khi xem bản nháp.</div>
+  </div>`;
+}
+
+/**
+ * Step-2 shortcut: persist the reviewed analysis, run the rule-based recommender,
+ * build the top genre's config with a model-aware count, and stop for explicit
+ * confirmation. No AI generation happens until `wizardQuickGenerateConfirm`.
+ */
+async function wizardQuickGenerate() {
+  const s = wizardState;
+  if (s.busy) return undefined;
+  wizardSyncAnalysisFromDom();
+  if (!wizardAnalysisValid()) {
+    wizardSetError(new Error('Cần ít nhất một mục tiêu học tập và một chủ đề trước khi tạo trò chơi.'));
+    render();
+    return undefined;
+  }
+  if (!s.analysisId) {
+    wizardSetError(new Error('Chưa có kết quả phân tích đã lưu. Hãy phân tích giáo án trước.'));
+    render();
+    return undefined;
+  }
+  s.busy = 'prepare';
+  s.quick = null;
+  wizardClearMessages();
+  render();
+  try {
+    // Teacher edits must be stored before the rule-based recommender reads them.
+    s.analysis = await window.eduGame.saveLessonAnalysis(s.analysis);
+    const result = await window.eduGame.recommendGames({
+      analysisId: s.analysisId,
+      projectId: s.projectId || undefined,
+      requestId: wizardNewRequestId('recommend')
+    });
+    s.recommendations = result.recommendations || [];
+    if (!s.recommendations.length) throw new Error('Chưa chọn được thể loại phù hợp. Hãy thử “Gợi ý lại” hoặc tự chọn thể loại.');
+    const top = s.recommendations[0];
+    s.selectedRecommendationId = top.id;
+    s.selectedGameType = top.gameType;
+    s.config = wizardDefaultConfig(top, s.analysis);
+    s.countTouched = false;
+    s.capacity = null;
+    if (!s.projectId) {
+      s.projectId = wizardNewProjectId();
+      s.createdAt = wizardNow();
+    }
+    // Save at "configure" so the capacity endpoint can read the project's lesson
+    // length, and so closing the app mid-confirmation loses nothing.
+    s.step = 'configure';
+    await wizardSaveProject('configure');
+    // Model-aware count (2B/4B/7B + fast/deep); only applies while !countTouched.
+    await wizardEnsureCapacity();
+    const countKey = wizardCapacityCountKey(s.config.gameType);
+    s.quick = {
+      id: top.id,
+      gameType: top.gameType,
+      title: s.config.title,
+      countKey,
+      count: Number(s.config[countKey]) || 0,
+      mode: s.config.generationMode,
+      reason: top.reason || '',
+      replaces: Boolean(s.draft),
+      replacesSaved: s.draft ? wizardGameSavedToLibrary() : false
+    };
+    // Stay on step 2 until the teacher confirms; the stepper can still go back.
+    s.step = 'analyze';
+    wizardSetNotice('Đã chọn thể loại và số lượng phù hợp. Xem lại rồi bấm “Bắt đầu tạo”.');
+  } catch (error) {
+    s.quick = null;
+    wizardSetError(error);
+  }
+  s.busy = '';
+  render();
+  return undefined;
+}
+
+/** Confirms the quick card, then hands over to the normal generation path. */
+async function wizardQuickGenerateConfirm() {
+  const s = wizardState;
+  if (s.busy || !s.quick) return undefined;
+  s.busy = 'save';
+  wizardClearMessages();
+  render();
+  try {
+    // The card already warned that a draft would be replaced.
+    if (s.draft) wizardDiscardGeneratedContent();
+    s.quick = null;
+    s.step = 'generate';
+    await wizardSaveProject('generate');
+    s.busy = '';
+    render();
+    await wizardGenerateRun();
+  } catch (error) {
+    s.busy = '';
+    wizardSetError(error);
+    render();
+  }
+  return undefined;
+}
+
+function wizardQuickGenerateCancel() {
+  if (wizardState.busy) return undefined;
+  wizardState.quick = null;
+  wizardClearMessages();
+  render();
+  return undefined;
 }

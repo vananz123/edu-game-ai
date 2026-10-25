@@ -41,7 +41,13 @@
   --animate-pulse-soft: pulse-soft 1.6s ease-in-out infinite;
   --animate-stagger-in: stagger-in 0.32s ease-out backwards;
   --animate-celebrate: celebrate 0.6s ease-out;
+  /* Wizard step 5 (DECISIONS #71): the active generation stage spins so the
+     list reads as "working" even while one stage takes several minutes. */
+  --animate-spin-slow: spin-slow 1.1s linear infinite;
 
+  @keyframes spin-slow {
+    to { transform: rotate(360deg); }
+  }
   @keyframes fade-in {
     from { opacity: 0; }
     to { opacity: 1; }
@@ -190,6 +196,28 @@
 .q-move{font-size:12px;padding:2px 8px;line-height:1}
 .correct-select{display:flex;gap:10px;align-items:center;margin:6px 0;flex-wrap:wrap}
 .correct-select span{font-size:12px;color:#515c72}
+.editor-item-assets{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:6px 0 0}
+.editor-item-assets.is-compact{margin:0}
+.editor-asset-chip{display:inline-flex;gap:4px;align-items:center;padding:3px 7px;border-radius:5px;background:#f5f6fa;color:#788196;font-size:9px;font-weight:700;letter-spacing:.2px}
+
+/* Phase B (DECISIONS #72): per-item artwork in the wizard's step-5 preview.
+   The thumbnails reuse `.stage-illustration` so what the teacher picks here is
+   the same SVG the play surface draws — not a separate approximation. */
+.wizard-art-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.wizard-art-card{position:relative;border:1px solid var(--line);border-radius:10px;background:#f8f9fc;padding:8px;display:flex;flex-direction:column;gap:6px}
+.wizard-art-card.is-open{border-color:var(--purple);background:#fff}
+.wizard-art-thumb{position:relative;width:100%;aspect-ratio:16/10;border-radius:8px;overflow:hidden;background:#eef0f7}
+.wizard-art-thumb .stage-illustration{position:absolute;inset:0;width:100%;height:100%;border-radius:8px}
+.wizard-art-thumb .stage-illustration-svg{width:100%;height:100%;display:block}
+.wizard-art-thumb.is-empty{display:flex;align-items:center;justify-content:center;color:#a2a9b8;font-size:10px;border:1px dashed #dfe2ed;background:#f4f5f9}
+.wizard-art-meta{font-size:10px;color:#788196;line-height:1.4}
+.wizard-art-meta strong{display:block;font-size:11px;color:#394256;font-weight:800}
+.wizard-art-pick{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding-top:6px}
+.wizard-art-pick label{font-size:9px;font-weight:800;letter-spacing:.3px;color:#9199aa}
+.wizard-art-pick select{font-size:11px;padding:6px;border:1px solid var(--line);border-radius:7px;background:#fff;color:#515c72}
+.wizard-art-actions{display:flex;gap:6px;flex-wrap:wrap}
+.wizard-art-hint{font-size:9px;color:#a2a9b8;line-height:1.5}
+
 .panel-sub{font-size:11px;color:#9199aa;margin-bottom:17px}
 .select{border:1px solid var(--line);border-radius:9px;padding:10px 12px;background:#fff;color:#5d6679;font-size:12px;outline:0}
 .empty-state{background:#fff;border:1px dashed #dfe2ed;border-radius:14px;padding:50px 20px;text-align:center;color:#929bad}
@@ -212,6 +240,31 @@
 .modal-head h2{font-size:16px;margin:0}
 .modal-close{border:0;background:#f3f4f8;border-radius:8px;width:30px;height:30px;color:#727b8f}
 .modal-body{padding:22px 23px}
+
+/* ============================================================
+   Scrollbars — thin, rounded and theme-aware, app-wide.
+   Only the play surface used to be styled, so every other scroll area
+   (library lists, editor forms, the presentation window) showed Electron's
+   default ~15px bar, which looked bulky and out of place next to the
+   compact UI. Chromium uses ::-webkit-scrollbar when it is declared and
+   ignores `scrollbar-width`, so both syntaxes are set to the same values
+   to keep Firefox/edge cases consistent.
+   ============================================================ */
+::-webkit-scrollbar { width: 7px; height: 7px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: #c6c9d6;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background: #a8acbe; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:active { background: #8f93a8; background-clip: padding-box; }
+::-webkit-scrollbar-corner { background: transparent; }
+/* Dark surfaces need their own thumb colour, otherwise a light bar floats
+   over a near-black panel. */
+html[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #3c4363; background-clip: padding-box; }
+html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #4d5578; background-clip: padding-box; }
 .modal-foot{display:flex;justify-content:flex-end;gap:9px;padding:16px 23px;border-top:1px solid var(--line);position:sticky;bottom:0;background:#fff}
 .toast{position:fixed;bottom:22px;right:24px;background:#20263b;color:#fff;padding:12px 16px;border-radius:10px;font-size:12px;box-shadow:var(--shadow);opacity:0;transform:translateY(8px);transition:.2s;pointer-events:none;z-index:50;max-width:440px}
 .toast.show{opacity:1;transform:translateY(0)}
@@ -347,9 +400,15 @@
 .race-cell-lucky{border-color:#c9a94f;background:#3a3119}
 .race-cell-challenge{border-color:#8f6ad4;background:#281f45}
 .race-scoreboard{display:flex;flex-direction:column;gap:7px}
-.race-team-row{display:flex;justify-content:space-between;gap:9px;padding:9px 13px;border:1px solid var(--line);border-radius:9px;background:#fff;font-size:12px}
-.race-team-row.active{border-color:#6258e8;background:#f4f3ff}
-.race-turn{border:1px solid var(--line);border-radius:11px;padding:15px;background:#fbfbfe;margin-top:13px}
+/* The race board sits inside .game-stage (dark + white text). The team rows and
+   the turn panel used to be light panels (#fff / #fbfbfe) nested in the dark
+   stage, and they rely on inheriting the stage's white text — so the prompt and
+   the standings came out white-on-white. They are dark surfaces now, matching
+   .game-stage, and every one of them states its own colour instead of
+   inheriting, so a future stage colour change cannot break contrast again. */
+.race-team-row{display:flex;justify-content:space-between;gap:9px;padding:9px 13px;border:1px solid #3d4468;border-radius:9px;background:#1b2140;color:#e8ebf7;font-size:12px}
+.race-team-row.active{border-color:#8a7cf8;background:#262c50;color:#fff;box-shadow:inset 3px 0 0 #8a7cf8}
+.race-turn{border:1px solid #3d4468;border-radius:11px;padding:15px;background:#1b2140;color:#e8ebf7;margin-top:13px}
 .race-team-row[data-team-id]{display:grid;grid-template-columns:auto 74px minmax(0,1fr) auto auto auto;gap:7px;align-items:center}
 .race-team-row[data-cell-row]{display:grid;grid-template-columns:auto 74px auto minmax(0,1fr) auto;gap:7px;align-items:center}
 .race-team-row input,.race-team-row select{border:1px solid #e4e7f0;border-radius:7px;padding:7px 9px;font-size:11px;outline:0;background:#fff}
@@ -401,12 +460,16 @@
 .text-answer-fields label{display:block;font-size:10px;font-weight:700;color:#505a70;margin-bottom:4px}
 .text-answer-fields .field-hint{font-size:10px;color:#8a91ab;margin-top:4px}
 /* === from pages.css === */
-.quick-action{display:flex;align-items:center;gap:11px;padding:12px;border:1px solid var(--line);background:#fff;border-radius:10px;text-align:left}
+/* A long project title must not widen the grid track: keep the implicit column
+   at minmax(0,1fr) and let the copy block shrink + ellipsis instead. */
+#wizardProjectList{display:grid;grid-template-columns:minmax(0,1fr);gap:8px}
+.quick-action{display:flex;align-items:center;gap:11px;padding:12px;border:1px solid var(--line);background:#fff;border-radius:10px;text-align:left;min-width:0;overflow:hidden}
 .quick-action:hover{border-color:#c9c4ff;background:#fbfaff}
-.quick-icon{width:35px;height:35px;display:grid;place-items:center;border-radius:9px;background:#f0efff;color:#6559e9;font-size:18px}
+.quick-icon{width:35px;height:35px;display:grid;place-items:center;border-radius:9px;background:#f0efff;color:#6559e9;font-size:18px;flex-shrink:0}
+.quick-copy{flex:1 1 auto;min-width:0;overflow:hidden}
 .quick-action strong{font-size:11px;display:block}
 .quick-action small{font-size:10px;color:#929bad;display:block;margin-top:4px}
-.quick-arrow{margin-left:auto;color:#a7adbb}
+.quick-arrow{margin-left:auto;color:#a7adbb;flex-shrink:0}
 .upload-zone{border:1px dashed #c9cbe0;background:#fafaff;border-radius:10px;padding:18px;display:flex;gap:12px;align-items:center;margin-bottom:17px}
 .upload-icon{width:42px;height:42px;border-radius:10px;background:#eeedff;color:#6559e9;display:grid;place-items:center;font-size:20px}
 .upload-copy{flex:1}
@@ -505,6 +568,12 @@
 .local-ai-machine{display:grid;align-content:start;gap:11px;padding:16px;background:#f8f8fc;border:1px solid var(--line);border-radius:11px;color:#717b90;font-size:11px;line-height:1.5}
 .local-ai-machine>strong{color:var(--text);font-size:12px}
 .local-ai-machine small{color:#8b94a6;line-height:1.6}
+/* Advanced backend choice: collapsed by default so the GPU build is never the
+   obvious path (CPU is the measured default, see docs/BENCHMARKS.md). */
+.runtime-advanced{border:1px dashed #dfe3ee;border-radius:10px;padding:11px 13px;background:#fbfbfe}
+.runtime-advanced>summary{cursor:pointer;display:grid;gap:3px;color:#717b90;font-size:11px;line-height:1.5}
+.runtime-advanced>summary strong{color:var(--text);font-size:12px}
+.runtime-advanced[open]>summary{margin-bottom:11px}
 .help-list{display:grid;gap:12px}
 .help-item{display:flex;gap:12px}
 .help-number{width:28px;height:28px;background:#efedff;color:#6559e9;border-radius:9px;display:grid;place-items:center;font-weight:800;flex-shrink:0}
@@ -680,3 +749,1085 @@
 [data-theme="dark"] .bg-white { background-color: var(--panel) !important; }
 [data-theme="dark"] .text-white { color: #ffffff !important; }
 [data-theme="dark"] .border-white { border-color: var(--line) !important; }
+
+/* Fullscreen play: reuse the existing play modal and let it fill the viewport. */
+html[data-fullscreen="1"] .modal-backdrop { padding: 0; }
+html[data-fullscreen="1"] .modal {
+  width: 100vw;
+  height: 100vh;
+  max-height: 100vh;
+  /* .modal carries a Tailwind `border`; with content-box sizing that 2px of
+     border made the panel 100vh + 2px tall and pushed the document into a
+     36px scroll. border-box keeps it exactly one viewport. */
+  box-sizing: border-box;
+  overflow: hidden;
+  border-radius: 0;
+  display: flex;
+  flex-direction: column;
+}
+html[data-fullscreen="1"] .modal-body { flex: 1; min-height: 0; overflow: auto; }
+/* In fullscreen the play panel scrolls internally. A light background here
+   showed through as a white flash above/below the dark stage while scrolling. */
+html[data-fullscreen="1"] .modal { background: #0b0e1a; }
+/* The game takes over the whole window: the app shell (sidebar + topbar)
+   must not show through. .modal-backdrop defaults to z-index 20, which is
+   below .topbar's 30, so the nav stayed visible on top of the game.
+   visibility (not display) keeps the game panel measurable while hiding the
+   shell, and the backdrop is made visible again for its subtree. */
+html[data-fullscreen="1"] body { overflow: hidden; }
+/* The shell keeps laying out at its full height while hidden (it is a normal
+   flex child with min-h-screen), and with `overflow: visible` on the root that
+   made the document taller than the viewport — which produced a scrollbar on
+   the game screen. Clip it at the root as well. */
+html[data-fullscreen="1"],
+html[data-fullscreen="1"] body { height: 100%; overflow: hidden; }
+html[data-fullscreen="1"] .app-shell { visibility: hidden; }
+html[data-fullscreen="1"] .topbar,
+html[data-fullscreen="1"] .ai-status-bar { visibility: hidden; }
+html[data-fullscreen="1"] .modal-backdrop {
+  z-index: 60;
+  background: #0b0e1a;
+  visibility: visible;
+}
+
+
+/* ============================================================
+   Fullscreen overrides shared by the gameplay and layout sheets.
+
+   `app.css` và `gameplay-layout.css` cùng chạy qua một lần build Tailwind, và
+   ở đó quy tắc nào KHAI BÁO SAU thì thắng khi độ ưu tiên bằng nhau — bất kể
+   nó nằm ở tệp nào. Khi tách bố cục màn chơi sang `gameplay-layout.css` (cuối
+   thư viện nạp), các quy tắc `!important` cũ không còn cần thiết nữa: khối
+   toàn màn hình ở dưới chỉ cần đứng sau. Ngược lại, quy tắc "thường" trong
+   `gameplay-layout.css` sẽ đè quy tắc toàn màn hình của `app.css`, nên những
+   quy tắc đó phải được khai lại ở đây.
+   ============================================================ */
+
+/* Trần nội dung của .stage-center (1120px) và `flex:1` là bố cục THƯỜNG; khối
+   toàn màn hình khai lại chúng ngay sau quy tắc thường (xem "Mật độ chỗ trình
+   chiếu" bên dưới), vì ở đây bản khai báo sau sẽ thắng. */
+
+/* Lưới đáp án ở toàn màn hình không bị chặn bởi trần 1040px của bố cục thường
+   (khai báo sau khối này). */
+html[data-fullscreen="1"] .modal[data-player-theme] .answer-grid {
+  width: 100%;
+  max-width: 100%;
+  margin: 0 auto;
+  gap: clamp(10px, 1.6vh, 20px);
+}
+/* Số đo trên app thật (1280x721 — cửa sổ laptop 1366x768 bị Windows trừ
+   taskbar): cỡ cũ ra 16px/59px vì `vh` quá thấp. Cộng thêm một phần `vw` để
+   cỡ chữ bám bề rộng thật: 2.9vh + 0.5vw = 27px ở 1280x721. min-height khai
+   lại bên dưới vì quy tắc thường (trần 92px) đứng sau khối này. */
+html[data-fullscreen="1"] .modal[data-player-theme] .answer-option {
+  /* `+ 4px` ở sàn dưới chừa chỗ cho dòng cuối khi cửa sổ thấp và lưới đáp án
+     bị chia đúng bằng phần dư (đo được ô 113px thiếu 3px ở 1366x705). */
+  padding: clamp(12px, 2.2vh, 26px) clamp(14px, 1.4vw, 22px) calc(clamp(12px, 2.2vh, 26px) + 4px);
+  font-size: clamp(20px, 3.2vh + 0.5vw, 30px);
+  line-height: 1.35;
+  border-radius: 16px;
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .answer-option .letter {
+  width: clamp(34px, 6vh, 62px);
+  height: clamp(34px, 6vh, 62px);
+  font-size: clamp(16px, 2.6vh, 28px);
+  border-radius: 13px;
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .answer-grid.true-false-grid { max-width: none; }
+html[data-fullscreen="1"] .modal[data-player-theme] .answer-grid.true-false-grid .answer-option {
+  min-height: clamp(88px, 18vh, 210px);
+  font-size: clamp(20px, 3.6vh, 42px);
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .stage-question {
+  max-width: min(100%, 68ch);
+  width: 100%;
+  margin: 0 auto;
+  font-size: clamp(28px, 4.5vh + 1vw, 60px);
+  /* 1.22 clipped stacked diacritics (ế/ộ/ữ) on wrapped questions. Raised for
+     Vietnamese; see --line-height-vi. */
+  line-height: 1.22;
+  letter-spacing: -0.5px;
+}
+
+/* Cửa sổ thấp (1366x768, laptop): sàn chỉ được NÂNG cỡ chữ, không hạ. Sàn cũ
+   `clamp(16px, 2.5vh, 24px)` từng thắng khối toàn màn hình ở mọi cửa sổ thấp
+   hơn 800px và kéo đáp án từ 27px xuống đúng 16px — chính là số đo mà giáo
+   viên phàn nàn. */
+@media (max-height: 800px) {
+  html[data-fullscreen="1"] .modal[data-player-theme] .answer-option {
+    font-size: clamp(20px, 2.5vh + 0.6vw, 30px);
+  }
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-center { gap: clamp(8px, 1.4vh, 16px); }
+}
+
+/* ============================================================
+   Mật độ chỗ trình chiếu ở chế độ Toàn màn hình.
+
+   Đo trên app thật (tests/manual/repro-fullscreen-density.js) TRƯỚC khi sửa,
+   cửa sổ 1280x721 (màn 1366x768 trừ taskbar): câu hỏi 31.7px rộng 1095px,
+   lưới đáp án 1040px (81% bề rộng), mỗi đáp án 16px cao 59px, 70% diện tích
+   stage trống và 141px trống dưới lưới — đúng điều giáo viên phàn nàn.
+
+   Ba nguyên nhân (tất cả đều là "quy tắc khai báo sau thắng"):
+     1. `.modal[data-player-theme] .answer-option { font-size: clamp(15px,
+        1.25vw, 18px) }` trong `@media (max-height:800px)` của bố cục thường;
+     2. `.modal[data-player-theme] .answer-grid { max-width:1040px }` của bố
+        cục thường;
+     3. `.stage-center { max-width:1120px }` không có ngoại lệ toàn màn hình.
+   Ngoài ra các quy tắc toàn màn hình cũ dùng `:where(.modal[data-player-theme])`,
+   và Tailwind v4 XOÁ `:where()` khi nó không mang độ ưu tiên nào — quy tắc
+   biến thành `html[data-fullscreen="1"] .answer-option` (0,1,1) trong khi quy
+   tắc thường là `.modal[data-player-theme] .answer-option` (0,2,0), nên thua
+   chắc. Vì vậy khối này dùng selector thường, không dùng `:where()`.
+   ============================================================ */
+
+/* Trần cột nội dung của bố cục thường (1120px) không dùng ở toàn màn hình. */
+html[data-fullscreen="1"] .modal[data-player-theme] .modal-body { padding: 10px 16px 14px; }
+html[data-fullscreen="1"] .modal[data-player-theme] .play-head { padding: 9px 16px; }
+
+/* Ba vùng của stage: thanh trên, khung giữa co giãn, thanh dưới.
+   `flex` chứ không phải `grid`: với `grid` + `align-content:center`, hàng giữa
+   `minmax(0,1fr)` bị cấp đúng bằng chiều cao nội dung của `.stage-center` rồi cả
+   lưới co lại và canh giữa stage (74px trống trên/dưới). Flex column cấp cho
+   `.stage-center` phần cao còn lại thật (đo được 548px thay vì 430px). */
+html[data-fullscreen="1"] .modal[data-player-theme] .game-stage {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  padding: clamp(14px, 2vh, 26px) clamp(16px, 2.2vw, 44px);
+}
+
+/* `.stage-center` ở toàn màn hình được khai báo NGAY SAU quy tắc thường của nó
+   (xem khối "Toàn màn hình override" gần dòng 1066) — quy tắc thường đó khai
+   báo sau chỗ này nên đè mất mọi tuyên bố `flex`/`align-self`/`max-width` viết
+   ở đây. Ghi chú số đo trước/sau khi sửa nằm ở khối "Mật độ chỗ trình chiếu". */
+/* Trần 1040px của bố cục thường (khai báo SAU khối này trong tệp) đè bản
+   toàn màn hình ở đây, nên bản toàn màn hình được khai lại ngay sau quy tắc
+   đó. Ghi chú số đo trước/sau khi sửa nằm ở khối "Mật độ chỗ trình chiếu". */
+html[data-fullscreen="1"] .modal[data-player-theme] .stage-kicker { font-size: clamp(12px, 1.6vh, 17px); }
+html[data-fullscreen="1"] .modal[data-player-theme] .scenario-context {
+  max-width: min(100%, 74ch);
+  margin: 0 auto;
+  padding: clamp(10px, 1.4vh, 16px) clamp(14px, 1.4vw, 20px);
+  font-size: clamp(16px, 2vh, 24px);
+  line-height: 1.5;
+}
+
+/* Câu trả lời nhập tay: ô nhập to lên cho khớp các loại câu hỏi khác. */
+html[data-fullscreen="1"] .modal[data-player-theme] .text-answer-box {
+  display: flex;
+  align-items: center;
+  max-width: min(100%, 70ch);
+  margin: 0 auto;
+  gap: 10px;
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .text-answer-box input {
+  font-size: clamp(18px, 2.6vh, 28px);
+  padding: clamp(12px, 1.8vh, 20px) 18px;
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .text-answer-box .btn {
+  font-size: clamp(15px, 2.1vh, 24px);
+  min-height: clamp(48px, 7vh, 64px);
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .text-answer-hint-text {
+  max-width: min(100%, 70ch);
+  margin: 10px auto 0;
+  font-size: clamp(15px, 2vh, 22px);
+}
+
+/* Phản hồi sau khi chọn: chữ nhỏ nhất trên màn này, nên chỉ nới vừa phải để
+   nó vẫn đọc được mà không đẩy phần còn lại xuống dưới màn. */
+html[data-fullscreen="1"] .modal[data-player-theme] .feedback {
+  font-size: clamp(14px, 1.9vh, 21px);
+  padding: clamp(12px, 1.6vh, 18px) clamp(14px, 1.4vw, 20px);
+}
+
+/* Hàng cuối nằm ngay dưới đáp án chứ không cách một quãng trống. */
+html[data-fullscreen="1"] .modal[data-player-theme] .stage-bottom { margin: 0; }
+html[data-fullscreen="1"] .modal[data-player-theme] .stage-tip { font-size: clamp(12px, 1.6vh, 16px); }
+html[data-fullscreen="1"] .modal[data-player-theme] #nextQuestionBtn {
+  font-size: clamp(14px, 1.9vh, 20px);
+  padding: clamp(10px, 1.5vh, 16px) clamp(20px, 2vw, 30px);
+}
+
+/* Đường đua chia stage thành nhiều vùng (track + bảng điểm + câu hỏi) nên
+   chiếm chỗ nhiều hơn: câu hỏi trong lượt chơi giữ cỡ vừa phải nhưng vẫn to
+   hơn bản thường (33px → 3.4vh ≈ 25px ở cửa sổ cao 721px). */
+html[data-fullscreen="1"] .modal[data-player-theme] .race-turn .stage-question {
+  font-size: clamp(24px, 3.4vh, 44px);
+  margin: clamp(8px, 1.4vh, 16px) 0 clamp(10px, 1.8vh, 20px);
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .race-turn .answer-option {
+  min-height: clamp(56px, 8vh, 90px);
+  font-size: clamp(16px, 2.2vh, 24px);
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .race-turn .answer-grid { max-width: 100%; }
+html[data-fullscreen="1"] .modal[data-player-theme] .race-team-row { font-size: clamp(13px, 1.8vh, 18px); }
+html[data-fullscreen="1"] .modal[data-player-theme] .race-track { max-height: clamp(120px, 20vh, 200px); }
+
+/* Màn kết quả và bảng đội trong toàn màn hình. */
+html[data-fullscreen="1"] .modal[data-player-theme] .result-medal { font-size: clamp(56px, 11vh, 130px); }
+html[data-fullscreen="1"] .modal[data-player-theme] .result-title { font-size: clamp(30px, 5vh, 60px); }
+html[data-fullscreen="1"] .modal[data-player-theme] .result-score { font-size: clamp(26px, 4.4vh, 54px); }
+html[data-fullscreen="1"] .modal[data-player-theme] .leaderboard-row { font-size: clamp(14px, 2vh, 20px); }
+
+/* Cửa sổ thấp (1366x768, laptop): hạ sàn để câu hỏi dài + 4 đáp án + phản hồi
+   vẫn vừa một màn. Sàn ở đây vẫn cao hơn cỡ cũ (câu hỏi 34px · đáp án
+   16px/59px) mà bố cục thường đang cho.
+
+   Sàn chỉ được NÂNG cỡ chữ, không được hạ: bản `font-size: clamp(16px, 2.5vh,
+   24px)` ở đây từng thắng khối toàn màn hình ở mọi cửa sổ thấp hơn 800px và
+   kéo đáp án từ 27px xuống đúng 16px — chính là số đo giáo viên phàn nàn.
+   Câu hỏi giữ nguyên 4.5vh + 1vw của khối trên vì nó đã co theo `vh` đúng. */
+@media (max-height: 800px) {
+  html[data-fullscreen="1"] .modal[data-player-theme] .answer-option {
+    font-size: clamp(20px, 2.9vh + 0.6vw, 30px);
+  }
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-center { gap: clamp(8px, 1.6vh, 18px); }
+}
+
+/* ============================================================
+   Play surface — game screen shown when a teacher plays a game.
+   Goals: use the whole window (not a narrow column), keep text
+   comfortably large for a classroom, and add colour so it reads as
+   a game rather than a dark form.
+   ============================================================ */
+
+/* --- header: title on the left, grouped tool buttons on the right --- */
+.play-head { gap: 16px; }
+.play-head-title { min-width: 0; }
+.play-head-title h2 {
+  font-size: 18px;
+  line-height: 1.25;
+  letter-spacing: -0.2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.play-head-title .small { font-size: 10px; letter-spacing: 0.9px; font-weight: 700; }
+.play-head-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* Tool buttons. The old markup reused .modal-close (a fixed 30x30 square),
+   which squeezed the "Trình chiếu" label into two clipped lines. These are
+   sized by their content instead. */
+.play-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 38px;
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid #3a4266;
+  border-radius: 10px;
+  background: #232a45;
+  color: #dfe3f5;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.12s, box-shadow 0.15s;
+}
+.play-tool:hover { background: #2d3556; border-color: #5a5f9a; transform: translateY(-1px); }
+.play-tool:active { transform: translateY(0); }
+.play-tool:focus-visible { outline: 2px solid #8b82ff; outline-offset: 2px; }
+.play-tool-icon { font-size: 15px; line-height: 1; }
+
+/* Primary action: the projector button is the one that matters, so it gets
+   the strongest colour and a subtle glow. */
+.play-tool-present {
+  background: linear-gradient(135deg, #7b6cf6, #5b4fd8);
+  border-color: #8b82ff;
+  color: #fff;
+  padding: 0 15px;
+  box-shadow: 0 4px 14px #6258e84d;
+}
+.play-tool-present:hover {
+  background: linear-gradient(135deg, #8a7cf8, #6a5df0);
+  border-color: #a9a3ff;
+  box-shadow: 0 6px 18px #6258e86b;
+}
+.play-tool-danger:hover { background: #4a2338; border-color: #ef6d89; color: #ffd9e2; }
+
+
+/* --- stage: fill the available height and scale type for the room --- */
+.modal[data-player-theme] .game-stage {
+  display: flex;
+  flex-direction: column;
+  min-height: 400px;
+  /* Fill the panel instead of guessing a height from 100vh. body is a flex
+     column whose only child is the stage, so 100% of its content box (= viewport
+     minus header and body padding) is exactly what we want; with
+     box-sizing:border-box the stage then ends flush with the window edge and
+     .stage-center can centre the question vertically. */
+  flex: 1 1 auto;
+  height: 100%;
+  box-sizing: border-box;
+  padding: clamp(20px, 2.2vw, 32px) clamp(18px, 3vw, 44px) clamp(16px, 1.8vw, 24px);
+  border-radius: var(--player-radius);
+  /* Soft radial glow + very subtle grid so the surface is not flat black. */
+  background:
+    radial-gradient(1100px 520px at 50% -12%, #2b2a63 0%, transparent 62%),
+    radial-gradient(760px 420px at 100% 108%, #1d2a52 0%, transparent 60%),
+    linear-gradient(180deg, #141a35 0%, #0f1428 100%);
+  border: 1px solid #2a3152;
+  box-shadow: inset 0 1px 0 #ffffff0f;
+}
+
+/* The old rule capped every question inside a 690px column, which left most
+   of the window empty. Let content breathe across the full width. */
+.modal[data-player-theme] .stage-center {
+  max-width: 1120px;
+  /* `flex: 1` (không phải `flex: 1 1 auto`) để chiều cao flex-item phụ thuộc
+     container: nếu không, chiều cao nội dung của khối (312px) trở thành
+     min-height ngầm của hàng `minmax(0,1fr)` trong lưới .game-stage, và hàng bị
+     khoá ở 424px — đúng dải trống không giải thích được giữa câu hỏi và đáp án
+     ở chế độ toàn màn hình (DECISIONS #59). */
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  /* .game-stage is a scroll container (overflow-y:auto), so its 18-44px side
+     padding is clipped and a `flex:1` child could only ever be as wide as the
+     padding box — the question ended up narrower than the answer grid and the
+     "use the whole window" fix silently stopped working. Claim an intrinsic
+     size instead; margin:auto then centres it (auto margins already fill the
+     free space, so stretch alignment must be off). */
+  align-self: center;
+  width: 100%;
+  min-width: min(1120px, 100%);
+}
+/* Toàn màn hình override — bản NGUYÊN VẸN cho `.stage-center`.
+   Quy tắc thường ngay trên là `.modal[data-player-theme] .stage-center` (0,2,0)
+   với `flex:1` + `align-self:center` + trần 1120px; đứng SAU là đủ thắng, không
+   cần tăng độ ưu tiên. Bản cũ `html[data-fullscreen="1"] html ...` thì KHÔNG
+   BAO GIỜ khớp (không có `<html>` lồng trong `<html>`), nên cả khối là dead
+   rule: `el.matches()` trả `false` và mọi khai báo trong đó (kể cả
+   `max-width:none`) chưa từng chạy. Đo trên app thật (1280x720): `.stage-center`
+   vẫn bị trần 1120px và `align-self:center`, nội dung cao đúng bằng nội dung
+   (424px) nhưng nằm giữa stage → 74px trống phía trên và 122px dưới lưới đáp án
+   (`.stage-bottom` nằm trong cùng cột bị canh giữa đó).
+   Đây là nơi DUY NHẤT định nghĩa `.stage-center` ở toàn màn hình; muốn đổi thì
+   sửa ở đây, đừng thêm bản sao ở chỗ khác. */
+html[data-fullscreen="1"] .modal[data-player-theme] .stage-center {
+  /* Giữ flex column: quy tắc thường đặt `display:flex` và mọi cháu của stage
+     (kicker, câu hỏi, lưới đáp án, thanh dưới) được dựng theo flow cột đó.
+     Đổi sang grid ở đây làm các hàng `auto` co về 0 khi có tràn (thấy rõ ở
+     fixture "Tìm kho báu": `#treasureActions` cao 0px, nằm ngoài stage). */
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  /* `.stage-center` là item của `.game-stage` (flex column): nhận hết chiều cao
+     còn lại giữa thanh trên và thanh dưới. `min-height:0` cho nó co lại được
+     khi nội dung cao hơn stage; khi đó phần tràn thuộc về `.game-stage`
+     (`overflow:auto` của stage) nên giáo viên vẫn cuộn tới được nút cuối. */
+  flex: 1 1 auto;
+  align-self: stretch;
+  min-height: 0;
+  max-width: none;
+  min-width: 0;
+  /* 2.6vh ≈ 19px ở cửa sổ cao 721px; gấp đôi bản cũ để câu hỏi + đáp án phủ
+     phần lớn stage. */
+  gap: clamp(10px, 2.6vh, 34px);
+}
+/* Lưới đáp án nhận hết phần dư của cột: các hàng ô chia đều phần dư NHƯNG sàn
+   là `auto` (min-content của ô: padding + số dòng chữ + min-height), nên không
+   bao giờ nhỏ hơn nội dung — đo được `minmax(0,1fr)` làm ô 113px bị cắt 3px ở
+   cửa sổ 1366x705. Đây là khác biệt so với `grid-auto-rows: auto` (bản đó bỏ
+   hẳn phần dư và để lại dải trống 112px dưới lưới ở 1280x720). */
+html[data-fullscreen="1"] .modal[data-player-theme] .stage-center > .answer-grid,
+html[data-fullscreen="1"] .modal[data-player-theme] .stage-center > .answer-grid.true-false-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  align-content: stretch;
+  grid-auto-rows: minmax(min-content, 1fr);
+}
+/* Hàng ô đáp án chia đều phần dư, nhưng KHÔNG được thấp hơn nội dung của chính
+   ô: `min-content` ở ô = padding + số dòng chữ, nên dòng cuối không bị cắt khi
+   cửa sổ thấp (`minmax(0, 1fr)` từng để ô 113px thiếu 3px ở 1366x705). */
+html[data-fullscreen="1"] .modal[data-player-theme] .stage-center > .answer-grid > .answer-option {
+  min-height: min-content;
+}
+
+.modal[data-player-theme] .stage-question {
+  font-size: clamp(26px, 3.1vw, 42px);
+  line-height: 1.34;
+  font-weight: 750;
+  letter-spacing: -0.4px;
+  max-width: 1100px;
+  margin: 14px auto 30px;
+  text-wrap: balance;
+  color: #f4f6ff;
+}
+
+.modal[data-player-theme] .stage-kicker {
+  font-size: clamp(11px, 1vw, 14px);
+  letter-spacing: 2px;
+  color: #b3adff;
+}
+
+.modal[data-player-theme] .stage-top { font-size: 12px; }
+.stage-meta-right { display: flex; align-items: center; gap: 8px; }
+.stage-meta { color: #a9b1cd; font-weight: 650; }
+
+/* Pill chips for question counter + score. */
+.stage-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: #232a45;
+  border: 1px solid #3a4266;
+  color: #c9cfe6;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+}
+.stage-chip b { color: #fff; font-size: 12px; }
+.stage-chip-score {
+  background: linear-gradient(135deg, #3a2f10, #4a3a12);
+  border-color: #8a6d1f;
+  color: #ffd977;
+}
+.stage-chip-score b { color: #ffe9a8; }
+
+.modal[data-player-theme] .stage-progress {
+  height: 7px;
+  margin: 14px 0 22px;
+  background: #262d48;
+}
+.modal[data-player-theme] .stage-progress div {
+  background: linear-gradient(90deg, #8b82ff, #5ad1c8);
+  box-shadow: 0 0 12px #8b82ff86;
+}
+
+
+/* --- answer options: large tap targets with coloured key badges --- */
+.modal[data-player-theme] .answer-grid {
+  gap: clamp(10px, 1.1vw, 16px);
+  width: 100%;
+  /* Trần này chỉ để giữ độ dài dòng ở bố cục cửa sổ thường (thẻ chơi rộng tối
+     đa 1180px). Ở toàn màn hình nó từng thắng khối `html[data-fullscreen]`
+     khai báo trước và kéo lưới xuống 1040px/81% cửa sổ — nên khối toàn màn
+     hình phải khai lại max-width NGAY SAU quy tắc này (bên dưới), không phải
+     trước nó. */
+  max-width: 1040px;
+  margin: 0 auto;
+}
+/* Bản toàn màn hình khai lại ngay sau quy tắc thường ở trên: cùng độ ưu tiên
+   nên quy tắc khai báo sau thắng, và khối "Mật độ chỗ trình chiếu" ở đầu tệp
+   không áp dụng được vì đứng trước. Đáp án là hai cột nên không cần trần theo
+   `ch`: mỗi đáp án vẫn chỉ ~45 ký tự. */
+html[data-fullscreen="1"] .modal[data-player-theme] .answer-grid {
+  width: 100%;
+  max-width: 100%;
+  margin: 0 auto;
+  gap: clamp(10px, 1.6vh, 20px);
+}
+/* Số đo trên app thật (1280x721): cỡ cũ ra 16px vì `vh` thấp và sàn `vh`
+   thấp theo. Cộng một phần `vw` để cỡ chữ bám bề rộng thật: 2.9vh + 0.5vw =
+   27px ở 1280x721, 30px (trần) từ 1024px bề rộng trở lên. */
+html[data-fullscreen="1"] .modal[data-player-theme] .answer-option {
+  min-height: clamp(72px, 12vh, 132px);
+  padding: clamp(12px, 1.8vh, 22px) clamp(14px, 1.4vw, 22px);
+  font-size: clamp(20px, 2.9vh + 0.5vw, 30px);
+  line-height: 1.35;
+  border-radius: 16px;
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .answer-option .letter {
+  width: clamp(34px, 6vh, 62px);
+  height: clamp(34px, 6vh, 62px);
+  font-size: clamp(16px, 2.6vh, 28px);
+  border-radius: 13px;
+}
+.modal[data-player-theme] .answer-option {
+  min-height: clamp(64px, 7vh, 92px);
+  padding: clamp(13px, 1.3vw, 19px) clamp(14px, 1.4vw, 20px);
+  gap: clamp(12px, 1.3vw, 18px);
+  font-size: clamp(16px, 1.45vw, 21px);
+  font-weight: 600;
+  line-height: 1.4;
+  border-width: 2px;
+  border-color: #39406080;
+  background: linear-gradient(180deg, #232a48 0%, #1d233c 100%);
+  cursor: pointer;
+  transition: transform 0.12s, background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+/* Toàn màn hình: trần 92px của quy tắc trên chặn mất ô đáp án cao theo `vh`,
+   nên chiều cao tối thiểu được khai lại NGAY SAU quy tắc đó (16vh ≈ 115px ở
+   cửa sổ 1280x721, vẫn còn đủ chỗ cho câu hỏi 2 dòng ở trên). */
+html[data-fullscreen="1"] .modal[data-player-theme] .answer-option {
+  min-height: clamp(72px, 16vh, 150px);
+}
+.modal[data-player-theme] .answer-option:hover:not(:disabled) {
+  transform: translateY(-2px);
+  border-color: #8c84ff;
+  background: linear-gradient(180deg, #2c3459 0%, #232a48 100%);
+  box-shadow: 0 8px 22px #6d63ff3d;
+}
+.modal[data-player-theme] .answer-option:focus-visible { outline: 2px solid #a9a3ff; outline-offset: 2px; }
+
+/* Key badge: one accent colour per position so options are easy to tell
+   apart from the back of the classroom. */
+.modal[data-player-theme] .answer-option .letter {
+  width: clamp(30px, 2.6vw, 40px);
+  height: clamp(30px, 2.6vw, 40px);
+  border-radius: 10px;
+  font-size: clamp(14px, 1.25vw, 18px);
+  color: #fff;
+  box-shadow: 0 2px 8px #00000040;
+}
+.modal[data-player-theme] .answer-option:nth-child(4n + 1) .letter { background: linear-gradient(145deg, #7b6cf6, #5b4fd8); }
+.modal[data-player-theme] .answer-option:nth-child(4n + 2) .letter { background: linear-gradient(145deg, #2fb8a4, #1c8f7e); }
+.modal[data-player-theme] .answer-option:nth-child(4n + 3) .letter { background: linear-gradient(145deg, #e8a33d, #c97f16); }
+.modal[data-player-theme] .answer-option:nth-child(4n + 4) .letter { background: linear-gradient(145deg, #e2688a, #c44a6d); }
+
+/* Result states must stay unmistakable for colour-blind users: colour plus a
+   distinct border, and the letter keeps its own accent on hover. */
+.modal[data-player-theme] .answer-option.correct {
+  background: linear-gradient(180deg, #12463c 0%, #0f3b33 100%);
+  border-color: #35d39f;
+  box-shadow: 0 0 0 2px #35d39f38, 0 8px 24px #0d5c4433;
+}
+.modal[data-player-theme] .answer-option.correct .letter { background: linear-gradient(145deg, #35d39f, #1fa87c); }
+.modal[data-player-theme] .answer-option.wrong {
+  background: linear-gradient(180deg, #4b2637 0%, #3d1f2d 100%);
+  border-color: #f0738d;
+  box-shadow: 0 0 0 2px #f0738d33;
+}
+.modal[data-player-theme] .answer-option.wrong .letter { background: linear-gradient(145deg, #f0738d, #cd4a68); }
+.modal[data-player-theme] .answer-option.selected { border-color: #a9a3ff; background: linear-gradient(180deg, #2f3560 0%, #272c50 100%); }
+.modal[data-player-theme] .answer-option:disabled { cursor: default; transform: none; }
+
+/* True/False keeps two wide buttons but they should not look like a
+   squeezed 560px box in a 1280px window. */
+.modal[data-player-theme] .answer-grid.true-false-grid { max-width: 860px; }
+.modal[data-player-theme] .answer-grid.true-false-grid .answer-option {
+  justify-content: center;
+  font-weight: 800;
+  min-height: clamp(84px, 11vh, 130px);
+  font-size: clamp(18px, 1.7vw, 25px);
+}
+/* True/False ở toàn màn hình: hai nút rộng hết khung, chữ to hơn hẳn. */
+html[data-fullscreen="1"] .modal[data-player-theme] .answer-grid.true-false-grid { max-width: none; }
+html[data-fullscreen="1"] .modal[data-player-theme] .answer-grid.true-false-grid .answer-option {
+  min-height: clamp(88px, 18vh, 210px);
+  font-size: clamp(20px, 3.6vh, 42px);
+}
+
+/* Context / scenario block. */
+.modal[data-player-theme] .scenario-context {
+  max-width: 1000px;
+  font-size: clamp(15px, 1.3vw, 19px);
+  padding: 14px 20px;
+  border-left-width: 4px;
+  border-left-color: #8b82ff;
+  background: #202641;
+}
+
+/* Text-answer row. */
+.modal[data-player-theme] .text-answer-box { max-width: 820px; margin: 4px auto 0; }
+.modal[data-player-theme] .text-answer-box input {
+  font-size: clamp(15px, 1.3vw, 19px);
+  padding: 15px 18px;
+  border-radius: 12px;
+}
+.modal[data-player-theme] .text-answer-box .btn { font-size: 14px; padding: 0 22px; }
+
+/* Hint: on demand only, so a teacher can let the class try first. */
+.modal[data-player-theme] .text-answer-hint {
+  background: #232a45;
+  border: 1px solid #3a4266;
+  color: #d9d6ff;
+  white-space: nowrap;
+}
+.modal[data-player-theme] .text-answer-hint:hover:not(:disabled) { background: #2c3457; border-color: #8b82ff; }
+.modal[data-player-theme] .text-answer-hint:disabled { opacity: 0.6; cursor: default; }
+.modal[data-player-theme] .text-answer-hint-text {
+  max-width: 820px;
+  margin: 10px auto 0;
+  padding: 10px 16px;
+  border-left: 3px solid #ffd977;
+  border-radius: 8px;
+  background: #232a45;
+  color: #ffe6a8;
+  font-size: clamp(13px, 1.15vw, 16px);
+  text-align: left;
+}
+.text-answer-fields .text-answer-hint-label { margin-top: 8px; }
+
+/* Footer tip + next button. */
+.modal[data-player-theme] .stage-bottom { margin-top: 20px; font-size: 12px; }
+.stage-tip { color: #9aa2bd; }
+.modal[data-player-theme] #nextQuestionBtn { font-size: 14px; padding: 13px 26px; }
+
+
+/* ============================================================
+   Navigation icons — make them read as icons instead of grey text.
+   The markup uses a bare glyph inside .nav-icon, so the styling has
+   to come from here rather than from per-icon markup.
+   ============================================================ */
+.nav-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  border-radius: 9px;
+  background: #f1f2f9;
+  color: #6a7290;
+  font-size: 16px !important;
+  line-height: 1;
+  transition: background 0.15s, color 0.15s, transform 0.12s, box-shadow 0.15s;
+}
+.nav-item:hover .nav-icon { background: #e6e4ff; color: var(--purple); transform: scale(1.04); }
+
+/* Nút "Cài đặt" nằm ngoài <nav> (trong .sidebar-bottom, một div thường) nên
+   button không bị grid kéo đầy cột: nó co lại bằng nội dung và lệch hàng so với
+   7 mục phía trên. Ép đầy chiều rộng cho khớp các mục trong nav. */
+.sidebar-bottom .nav-item { width: 100%; }
+
+/* Active page: filled brand tile with a soft glow, matching .brand-mark. */
+.nav-item.active .nav-icon {
+  background: linear-gradient(145deg, #786dff, #5145d6);
+  color: #fff;
+  box-shadow: 0 4px 10px #6258e84d;
+}
+
+/* Keep the collapsed rail tidy: hide the tile background there so the
+   icons stay centred in the 64px sidebar. */
+@media (max-width: 1100px) {
+  .nav-icon { width: 32px; height: 32px; min-width: 32px; font-size: 18px !important; }
+}
+
+/* Topbar help button + avatar get the same treatment so the header does
+   not look washed out next to the new nav. */
+.icon-button {
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.12s;
+}
+.icon-button:hover {
+  background: #f1f0ff;
+  border-color: #cdc9f7;
+  color: var(--purple);
+  transform: translateY(-1px);
+}
+
+
+/* --- after answering: feedback legibility + dark scrollbar --- */
+.modal[data-player-theme] .feedback {
+  width: 100%;
+  max-width: 1040px;
+  margin: 16px auto 0;
+  padding: clamp(13px, 1.2vw, 18px) clamp(15px, 1.4vw, 20px);
+  border-radius: 12px;
+  font-size: clamp(13px, 1.15vw, 16px);
+  line-height: 1.65;
+  color: #dfe3f2;
+}
+.modal[data-player-theme] .feedback strong { color: #fff; }
+.modal[data-player-theme] .feedback.good {
+  border: 1px solid #2f9e80;
+  border-left-width: 4px;
+  background: linear-gradient(180deg, #14332c 0%, #122a25 100%);
+}
+.modal[data-player-theme] .feedback.bad {
+  border: 1px solid #a35468;
+  border-left-width: 4px;
+  background: linear-gradient(180deg, #35202a 0%, #2b1b23 100%);
+}
+
+/* The play modal scrolls on short windows; the default white scrollbar on a
+   dark surface is very distracting on a projector, so it gets an even thinner
+   bar with muted navy colours. */
+.modal[data-player-theme] { scrollbar-width: thin; scrollbar-color: #454d75 #141a35; }
+.modal[data-player-theme] ::-webkit-scrollbar { width: 8px; height: 8px; }
+.modal[data-player-theme] ::-webkit-scrollbar-track { background: #141a35; }
+.modal[data-player-theme] ::-webkit-scrollbar-thumb {
+  background: #454d75;
+  border: 2px solid #141a35;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+.modal[data-player-theme] ::-webkit-scrollbar-thumb:hover { background: #5b638f; }
+.modal[data-player-theme] ::-webkit-scrollbar-corner { background: #141a35; }
+
+/* Trimming the stage so a scenario question + 4 options + feedback still fit
+   in a 1366x768 projector window without scrolling. */
+.modal[data-player-theme] .stage-progress { margin: 12px 0 18px; }
+.modal[data-player-theme] .stage-question { margin: 10px auto 22px; line-height: 1.3; }
+
+@media (max-height: 800px) {
+  .modal[data-player-theme] .stage-question { font-size: clamp(24px, 2.7vw, 34px); margin: 8px auto 16px; }
+  .modal[data-player-theme] .answer-option { min-height: 58px; padding: 11px 14px; font-size: clamp(15px, 1.25vw, 18px); }
+  .modal[data-player-theme] .answer-grid { gap: 10px; }
+  .modal[data-player-theme] .feedback { margin-top: 11px; font-size: 13px; line-height: 1.55; }
+  .modal[data-player-theme] .stage-progress { margin: 10px 0 14px; }
+  /* Toàn màn hình trên cửa sổ thấp: sàn chỉ được NÂNG cỡ chữ, không hạ. Sàn cũ
+     `clamp(16px, 2.5vh, 24px)` ở đây từng thắng khối toàn màn hình ở mọi cửa
+     sổ thấp hơn 800px và kéo đáp án xuống đúng 16px. */
+  html[data-fullscreen="1"] .modal[data-player-theme] .answer-option {
+    font-size: clamp(20px, 2.9vh + 0.6vw, 30px);
+  }
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-center { gap: clamp(8px, 1.6vh, 18px); }
+}
+
+/* ============================================================
+   Race board (game "Đường đua") on the play surface.
+   The play screen now uses very large question type; the race board packs a
+   track + standings + a second question into the same stage, so it gets
+   slightly smaller type and a bounded track. Without the bound, a long track
+   (20+ cells at 54px with wrapping) pushed the turn panel and its answers
+   below the fold and the teacher had to scroll to see the question.
+   ============================================================ */
+.modal[data-player-theme] .race-track {
+  max-height: 172px;
+  overflow: auto;
+  margin: 14px 0;
+  padding: 2px 2px 4px;
+  flex: 0 0 auto;
+}
+.modal[data-player-theme] .race-cell { background: #1b2140; color: #eef1ff; }
+.modal[data-player-theme] .race-cell-boost { background: #17322a; }
+.modal[data-player-theme] .race-cell-penalty { background: #3a1f31; }
+.modal[data-player-theme] .race-cell-lucky { background: #3a3119; }
+.modal[data-player-theme] .race-cell-challenge { background: #281f45; }
+
+.modal[data-player-theme] .race-scoreboard { flex: 0 0 auto; }
+.modal[data-player-theme] .race-team-row { font-size: 13px; padding: 10px 14px; }
+
+.modal[data-player-theme] .race-turn {
+  flex: 0 0 auto;
+  margin-top: 14px;
+  padding: clamp(14px, 1.4vw, 20px);
+}
+/* The turn panel holds the drawer's question, so it is the primary content. */
+.modal[data-player-theme] .race-turn .stage-question {
+  font-size: clamp(22px, 2.4vw, 33px);
+  margin: 12px 0 18px;
+  max-width: 100%;
+  text-align: left;
+}
+.modal[data-player-theme] .race-turn .stage-kicker { text-align: left; }
+.modal[data-player-theme] .race-turn .answer-grid { max-width: 100%; }
+.modal[data-player-theme] .race-turn .answer-option {
+  min-height: clamp(54px, 6vh, 76px);
+  font-size: clamp(15px, 1.3vw, 19px);
+}
+/* Empty-state copy inside the turn panel is dark-surface text, not grey. */
+.modal[data-player-theme] .race-turn .small { color: #aeb5ce !important; font-size: 14px; }
+
+@media (max-height: 800px) {
+  .modal[data-player-theme] .race-track { max-height: 130px; }
+  .modal[data-player-theme] .race-turn .stage-question { font-size: clamp(20px, 2.1vw, 28px); }
+}
+
+/* ============================================================
+   Scrolling a long game stage (treasure hunt fullscreen, etc.).
+
+   The stage is a flex column that is pinned to `height:100%` so a short
+   question can be centred vertically. That is fine when the content fits,
+   but the treasure hunt is much taller (map + storyline + mission body +
+   actions), and with `overflow:hidden` the bottom half — including the
+   answer controls — was clipped, while `body{overflow:hidden}` in fullscreen
+   removed the page scrollbar as well. Nothing could be reached.
+
+   `min-height:0` lets the flex item shrink to its container so the overflow
+   becomes scrollable, and the stage itself becomes the scroll container.
+   ============================================================ */
+.modal[data-player-theme] .game-stage {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .game-stage {
+  border-radius: 0;
+}
+/* Keep the map pinned to the top of a scrolling stage so the teacher can
+   always see which mission the class is on. */
+.modal[data-player-theme] .treasure-map {
+  position: sticky;
+  top: calc(-1 * clamp(20px, 2.2vw, 32px));
+  z-index: 3;
+}
+
+/* ============================================================
+   First-run AI setup wizard (§7). Styles only — every decision
+   (which screen, which button, what the text says) comes from
+   `renderer/setup-wizard-model.ts`, which is unit-tested.
+
+   Setup takes the whole window, not a dialog over the dashboard:
+   `renderSetupWizard()` sets `html[data-setup-fullscreen="1"]`
+   while a run is pending and renders `.setup-fullscreen` into
+   `#modalRoot`. The shell is hidden with `visibility` (not
+   `display`) so it keeps its layout and nothing reflows when the
+   teacher returns to it. That mirrors `html[data-fullscreen="1"]`,
+   which the game screen already uses.
+
+   Colours mirror `.info-box` / `.local-ai-model-summary`, which
+   are also light-only.
+   ============================================================ */
+html[data-setup-fullscreen="1"],
+html[data-setup-fullscreen="1"] body{height:100%;overflow:hidden}
+html[data-setup-fullscreen="1"] .app-shell{visibility:hidden}
+/* The backdrop and the topbar are siblings of `#modalRoot`, so hiding the
+   shell is not enough: the 72px topbar sits above it at z-index 30. */
+html[data-setup-fullscreen="1"] .topbar,
+html[data-setup-fullscreen="1"] .ai-status-bar{visibility:hidden}
+
+/* One viewport, two rows: a fixed head and a scrolling body, so the action
+   buttons can never be pushed below the fold on a 1366x768 classroom laptop. */
+.setup-fullscreen{
+  position:fixed;inset:0;z-index:60;
+  display:flex;flex-direction:column;
+  background:linear-gradient(180deg,#f7f7ff 0%,var(--color-canvas,#f5f6fa) 42%);
+  animation:var(--animate-fade-in);
+}
+.setup-fullscreen-inner{
+  flex:1;min-height:0;overflow:auto;
+  width:min(760px,100%);
+  margin:0 auto;
+  padding:34px 32px 30px;
+  display:flex;flex-direction:column;
+  gap:0;
+}
+.setup-fullscreen-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:22px}
+.setup-fullscreen-head h2{font-size:22px;margin:0;letter-spacing:-.4px;color:#30384b}
+.setup-fullscreen-head .setup-eyebrow{margin-bottom:5px;color:var(--purple)}
+.setup-fullscreen-foot{
+  margin-top:auto;
+  display:flex;justify-content:flex-end;gap:9px;
+  padding-top:20px;
+}
+@media (max-width:640px){
+  .setup-fullscreen-inner{padding:22px 18px 24px}
+  .setup-fullscreen-head h2{font-size:19px}
+}
+.setup-headline{padding:15px 16px;border-radius:11px;background:#f8f8fc;border:1px solid var(--line);margin-bottom:16px}
+
+.setup-eyebrow{font-size:9px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:#9199aa;margin-bottom:6px}
+.setup-title{font-size:16px;margin:0 0 7px;letter-spacing:-.2px;color:#394256}
+.setup-message{font-size:11.5px;line-height:1.65;color:#717b90;margin:0}
+/* Tone is a left rule, not a full background: red text on a red panel is
+   harder to read than dark text beside a red accent, and the wizard is often
+   the first screen a teacher sees. */
+.setup-tone-progress{border-left:3px solid var(--purple)}
+.setup-tone-success{border-left:3px solid #2f9e6f;background:#f4fbf7}
+.setup-tone-danger{border-left:3px solid #d84b5a;background:#fff6f7}
+.setup-tone-warning{border-left:3px solid #c9792b;background:#fff9f2}
+.setup-tone-danger .setup-title{color:#a8303d}
+.setup-tone-success .setup-title{color:#1f7a55}
+.setup-tone-warning .setup-title{color:#9a5a17}
+
+.setup-progress{height:8px;border-radius:999px;background:#ececf6;overflow:hidden;margin-bottom:8px}
+.setup-progress-fill{height:100%;background:linear-gradient(90deg,var(--purple),#8a7dff);border-radius:999px;transition:width .25s ease-out}
+/* Indeterminate work (detection, health check) has no percentage; a static bar
+   at 0% reads as "frozen", so a moving stripe is used instead. */
+.setup-progress-indeterminate .setup-progress-fill{width:35%;animation:setup-progress-slide 1.4s ease-in-out infinite}
+@keyframes setup-progress-slide{
+  0%{transform:translateX(-100%)}
+  100%{transform:translateX(300%)}
+}
+.setup-progress-meta{display:flex;justify-content:space-between;gap:10px;font-size:10.5px;color:#717b90;margin-bottom:14px}
+.setup-progress-meta strong{color:var(--purple);font-variant-numeric:tabular-nums}
+
+.setup-req-row{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;align-items:baseline}
+.setup-req-label{font-size:10px;font-weight:750;color:#9199aa;text-transform:uppercase;letter-spacing:.4px}
+.setup-req-row strong{font-size:11.5px;color:#394256;font-weight:700}
+.setup-req-row[data-ok="0"] strong{color:#a8303d}
+.setup-req-row .field-hint{grid-column:2;margin-top:-2px}
+
+.setup-checklist{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.setup-checklist-item{display:flex;align-items:center;gap:8px;font-size:11px;color:#9aa1af}
+.setup-checklist-mark{display:grid;place-items:center;width:16px;height:16px;border-radius:50%;border:1px solid #dfe2eb;font-size:9px;font-weight:800;flex-shrink:0}
+.setup-checklist-item[data-state="done"]{color:#4a5366}
+.setup-checklist-item[data-state="done"] .setup-checklist-mark{background:#eaf7f1;border-color:#bfe6d4;color:#1f7a55}
+.setup-checklist-item[data-state="current"]{color:#394256;font-weight:700}
+.setup-checklist-item[data-state="current"] .setup-checklist-mark{background:#efedff;border-color:#c8c3ff;color:var(--purple)}
+.setup-checklist-item[data-state="failed"]{color:#a8303d;font-weight:700}
+.setup-checklist-item[data-state="failed"] .setup-checklist-mark{background:#fff1f2;border-color:#f3c4ca;color:#d84b5a}
+
+/* Teachers may have reduced-motion enabled; the bar still reports progress,
+   it just stops sliding. */
+@media (prefers-reduced-motion: reduce){
+  .setup-progress-fill{transition:none}
+  .setup-progress-indeterminate .setup-progress-fill{animation:none;width:100%;opacity:.55}
+}
+
+/* ---- Wizard AI progress: steps 2 and 5 (docs/DECISIONS.md #71, #75) ----
+   Both steps report real IPC stages, so the bar advances per stage. It is a
+   stage counter, not a time estimate: the width never claims more than the
+   stages already finished, and it stays at 0% until the first stage reports.
+   Steps 2 and 5 share these classes on purpose — one look for the same job. */
+.wizard-gen-progress{height:6px;border-radius:999px;background:#ececf6;overflow:hidden;margin-top:8px}
+.wizard-gen-progress-fill{height:100%;background:linear-gradient(90deg,var(--purple),#8a7dff);border-radius:999px;transition:width .3s ease-out}
+.wizard-gen-meta{display:flex;justify-content:space-between;gap:10px;font-size:10.5px;color:#717b90;margin-top:5px}
+.wizard-gen-meta strong{color:var(--purple);font-variant-numeric:tabular-nums}
+/* The spinner is a stroke-only ring so it inherits the text colour and needs
+   no image asset. Hidden from assistive tech: the stage text already says what
+   is running. */
+.wizard-gen-spinner{display:inline-block;width:11px;height:11px;vertical-align:-1px;margin-right:5px;animation:spin-slow 1.1s linear infinite}
+.wizard-gen-spinner circle{fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-dasharray:22 44}
+@media (prefers-reduced-motion: reduce){
+  .wizard-gen-progress-fill{transition:none}
+  .wizard-gen-spinner{animation:none;opacity:.75}
+}
+
+
+/* ---- Stage illustration (docs/DECISIONS.md #67, #70) ----
+   Sibling of `.stage-question`, inserted by game-illustration.ts for every
+   template. Height is a HARD ceiling, not a suggestion: the density checks
+   (#59) require question + answers to cover most of the stage, so the
+   illustration must give up height before they do.
+
+   #70: the artwork is now a layered 320x200 scene, not one icon. With
+   `width: auto` the box shrank to the height and drew the scene at ~150x94 -
+   the layers were there but unreadable. The box now takes the available width
+   and the scene keeps its own 16:10 ratio inside it.
+
+   TRAP: `width: min(320px, 46%)` with a smaller clamped `height` made the SVG
+   paint outside the box and cover the question and answers (caught by
+   screenshotting the real play surface, not by any assertion). `aspect-ratio`
+   + `max-width` lets the box shrink to whatever both constraints allow.
+
+   TRAP: do not cap the height below what a 320px-wide scene needs. The scene is
+   authored 16:10 with `preserveAspectRatio: meet`, so a 132px cap letterboxed a
+   320x102 slice of it - the ground band was clipped and the subject looked like
+   it was floating. Measured on the real play surface: stage overflow stayed 0
+   at 132/160/180/200px, so the height was never competing with the answers. The
+   cap is now 320/1.6 = 200px, i.e. the scene is never downscaled below its
+   authored size. */
+.modal[data-player-theme] .stage-illustration {
+  display: block;
+  aspect-ratio: 16 / 10;
+  width: min(320px, 46%);
+  max-width: min(320px, 46%);
+  max-height: 200px;
+  margin: 0 auto 10px;
+  border-radius: 18px;
+  overflow: hidden;
+  line-height: 0;
+  flex: 0 0 auto;
+  opacity: 0.96;
+}
+.modal[data-player-theme] .stage-illustration-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+/* Treasure stages already carry a map and a storyline above the question; a
+   second large block pushes the mission controls off a 720px stage. */
+.modal[data-player-theme] .stage-illustration.is-treasure {
+  width: min(240px, 34%);
+  max-width: min(240px, 34%);
+  max-height: 150px;
+  margin-bottom: 6px;
+}
+/* The race turn panel is the densest surface in the product (turn bar, cards,
+   options, "no answer" button). Keep it small so nothing scrolls. */
+.modal[data-player-theme] .race-turn .stage-illustration.is-race {
+  width: min(190px, 26%);
+  max-width: min(190px, 26%);
+  max-height: 119px;
+  margin: 2px auto 4px;
+}
+/* Fullscreen is the surface teachers project: give the scene more room than
+   the windowed panel, but never a `height` on its own - with `aspect-ratio`
+   that produced a box the 16:10 scene could not fill, so the artwork was
+   letterboxed and the ground band looked clipped. Width only; height follows. */
+html[data-fullscreen="1"] .modal[data-player-theme] .stage-illustration {
+  width: min(420px, 46%);
+  max-width: min(420px, 46%);
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .stage-illustration.is-treasure {
+  width: min(260px, 30%);
+  max-width: min(260px, 30%);
+  max-height: 163px;
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .race-turn .stage-illustration.is-race {
+  width: min(200px, 22%);
+  max-width: min(200px, 22%);
+  max-height: 125px;
+}
+/* Short windows (1366x705 laptops teachers actually use). Previously the
+   illustration was removed outright at <=760px, which is why the very first
+   measurement of this surface reported a 150x94 frame: the scene was not
+   squashed, it was hidden. Scale it down instead - `aspect-ratio` keeps the
+   whole scene visible at any height, and the answer grid keeps its space. */
+@media (max-height: 760px) {
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-illustration {
+    width: min(320px, 34%);
+    max-width: min(320px, 34%);
+    max-height: 200px;
+    margin-bottom: 6px;
+  }
+}
+
+
+/* ---- Bước 1: cây cấu trúc tài liệu (docs/DECISIONS.md #76, #77) ----
+   `step-structure.ts` sinh các class `wizard-tree-*`; trước đây chúng chưa có
+   CSS nào nên cây hiện ra như một <ul> thô: mất thụt cấp, mất dấu tam giác mở
+   rộng, số ký tự dính vào tiêu đề. Khối này chỉ tạo hình thức, không đổi hàm ý:
+   - `data-depth` (không phải margin lồng nhau) quyết định thụt cấp, nên cây sâu
+     không bị thu hẹp dần đến không đọc được;
+   - ô `indeterminate` do JS gán (`wizardSyncStructureCheckboxes`) nên không thể
+     tô màu bằng CSS; trạng thái "chọn một phần" được `is-partial` trên tiêu đề
+     gánh thay, và không dùng màu để truyền đạt thông tin duy nhất;
+   - số ký tự dùng `tabular-nums` để các dòng thẳng cột khi đọc lướt. */
+
+.wizard-tree{list-style:none;margin:10px 0 0;padding:0;border:1px solid var(--line);border-radius:10px;background:#fff;max-height:320px;overflow-y:auto}
+.wizard-tree-node{display:flex;align-items:center;gap:6px;padding:4px 10px;border-bottom:1px solid #f1f2f7;font-size:11.5px;line-height:1.45}
+.wizard-tree-node:last-child{border-bottom:0}
+.wizard-tree-node:hover{background:#faf9ff}
+/* Thụt cấp tính bằng biến cục bộ để mỗi cấp chỉ cộng thêm một khoảng cố định. */
+.wizard-tree-node[data-depth="1"]{padding-left:24px}
+.wizard-tree-node[data-depth="2"]{padding-left:38px}
+.wizard-tree-node[data-depth="3"]{padding-left:52px}
+.wizard-tree-node[data-depth="4"]{padding-left:66px}
+.wizard-tree-node[data-depth="5"]{padding-left:80px}
+.wizard-tree-node[data-depth="6"]{padding-left:94px}
+
+.wizard-tree-caret{flex-shrink:0;display:grid;place-items:center;width:16px;height:16px;padding:0;border:0;border-radius:4px;background:transparent;color:#7b8499;font-size:10px;line-height:1}
+.wizard-tree-caret:hover{background:#efedff;color:var(--purple)}
+.wizard-tree-caret.is-leaf{cursor:default;color:#c7ccd8}
+.wizard-tree-caret.is-leaf:hover{background:transparent;color:#c7ccd8}
+.wizard-tree-node input[type="checkbox"]{flex-shrink:0;width:13px;height:13px;margin:0;accent-color:var(--purple);cursor:pointer}
+.wizard-tree-title{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+.wizard-tree-title.is-partial{font-weight:700;color:#4a405f}
+.wizard-tree-size{flex-shrink:0;color:#9098a8;font-size:10.5px;font-variant-numeric:tabular-nums}
+.wizard-tree-empty{flex-shrink:0;min-width:13px;color:#b6bcc9;font-size:10px;font-style:italic}
+
+.wizard-tree-badge{flex-shrink:0;padding:1px 6px;border-radius:999px;background:#f1f2f7;color:#666f83;font-size:9.5px;font-weight:700;white-space:nowrap}
+/* “cần xem lại” là cảnh báo mềm: viền + chữ, không chỉ dựa vào màu nền. */
+.wizard-tree-badge.is-uncertain{background:#fff7e8;border:1px solid #f0dbb2;color:#8a6216}
+
+.wizard-tree-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px}
+.wizard-tree-warning{margin-top:8px;padding:7px 10px;border:1px solid #f0dbb2;border-radius:8px;background:#fff7e8;color:#7d5a12;font-size:10.5px;line-height:1.5}
+ul.wizard-tree-warning{list-style:disc;padding-left:26px}
+ul.wizard-tree-warning li+li{margin-top:3px}
+.wizard-tree-figures{color:#788196;font-size:10.5px;font-variant-numeric:tabular-nums}
+
+.wizard-tree-preview{margin-top:12px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+.wizard-tree-preview-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:4px;font-size:11px}
+.wizard-tree-preview-head strong{font-size:11.5px}
+.wizard-tree-preview[data-structure-truncated="true"] .wizard-tree-preview-head strong{color:#8a6216}
+/* Bản xem trước là đúng chuỗi sẽ gửi đi, nên phải giữ nguyên khoảng trắng và
+   xuống dòng; cuộn riêng để một giáo án dài không đẩy nút "Tiếp tục" khỏi màn. */
+.wizard-tree-text{margin:8px 0 0;padding:9px 11px;max-height:220px;overflow:auto;border:1px solid #e6e8f0;border-radius:8px;background:#fbfbfe;color:#3c4457;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:10.5px;line-height:1.55;white-space:pre-wrap;word-break:break-word}
+
+/* Giáo viên có thể đã bật giảm chuyển động: vẫn thấy đúng trạng thái, chỉ bỏ
+   hiệu ứng. (Cùng chính sách với .setup-progress và .wizard-gen-progress.) */
+@media (prefers-reduced-motion: reduce){
+  .wizard-tree-node{transition:none}
+  .wizard-tree-caret{transition:none}
+}
+
+

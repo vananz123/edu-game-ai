@@ -1,0 +1,529 @@
+# BỔ SUNG: MỞ RỘNG CATEGORY, ICON VÀ THƯ VIỆN SVG CHO EDUGAME STUDIO
+
+## 1. Mục tiêu
+
+Mở rộng hệ thống phân loại và tài nguyên minh họa để phục vụ nhiều môn học, bài học và hoạt động giáo dục THCS.
+
+Yêu cầu:
+- Tạo 24 category nội dung ban đầu.
+- Xây dựng danh sách khoảng 60 icon Lucide được phép sử dụng.
+- Phân biệt category kiến thức, loại minh họa và icon.
+- Có thể mở rộng thư viện mà không phải sửa nhiều nơi trong code.
+- AI chỉ chọn mã có trong danh sách cho phép.
+- Tài nguyên SVG phải tồn tại thực tế, được quản lý tập trung và hoạt động offline.
+- Không bắt buộc mỗi category phải có một file SVG riêng nếu có thể tái sử dụng hình phù hợp.
+- Không làm thay đổi luật chơi hoặc pipeline AI hiện tại.
+
+## 2. Danh sách 24 category nội dung
+
+### Nhóm A — Toán học và khoa học tự nhiên
+
+| Category ID | Chủ đề |
+|---|---|
+| `mathematics` | Toán học tổng quát |
+| `geometry` | Hình học, hình khối, góc và đường |
+| `algebra` | Đại số, phương trình, biểu thức |
+| `physics` | Vật lý, lực, chuyển động, năng lượng |
+| `chemistry` | Hóa học, nguyên tử, phân tử, phản ứng |
+| `biology` | Sinh học tổng quát |
+| `human_body` | Cơ thể người, hô hấp, tuần hoàn |
+| `ecology` | Sinh thái, hệ sinh thái, chuỗi thức ăn |
+| `environment` | Môi trường, ô nhiễm, tái chế |
+| `earth_space` | Trái Đất, địa chất, thiên văn, vũ trụ |
+
+### Nhóm B — Xã hội và nhân văn
+
+| Category ID | Chủ đề |
+|---|---|
+| `history` | Lịch sử |
+| `geography` | Địa lý, bản đồ, địa hình |
+| `civics` | Giáo dục công dân, trách nhiệm, pháp luật |
+| `culture` | Văn hóa, di sản, phong tục |
+| `literature` | Văn học, truyện và tác phẩm |
+| `language` | Ngôn ngữ, ngữ pháp, từ vựng |
+| `foreign_language` | Học ngoại ngữ |
+| `economics` | Kinh tế, tiêu dùng, tài chính cơ bản |
+
+### Nhóm C — Công nghệ và kỹ năng sống
+
+| Category ID | Chủ đề |
+|---|---|
+| `computer_science` | Tin học, lập trình, thuật toán |
+| `artificial_intelligence` | AI, dữ liệu, học máy |
+| `engineering` | Kỹ thuật, thiết kế, chế tạo |
+| `traffic_safety` | An toàn giao thông |
+| `life_skills` | Kỹ năng sống, giao tiếp, tự chủ |
+| `health_safety` | Sức khỏe, vệ sinh và an toàn |
+
+### Category dự phòng
+
+Ngoài 24 category trên, duy trì `general` làm category mặc định cho nội dung chưa phân loại được.
+
+Không dùng `general` thay cho các category chuyên biệt đã xác định rõ.
+
+## 3. Quy tắc chọn category
+
+AI chọn đúng một category chính cho mỗi câu hỏi hoặc nhóm câu hỏi theo schema hiện tại.
+
+Ví dụ:
+- Bài trao đổi chất và hô hấp → `human_body`.
+- Bài về lực ma sát → `physics`.
+- Bài về phương trình bậc nhất → `algebra`.
+- Bài bảo vệ môi trường → `environment`.
+- Bài xử lý tình huống giao thông → `traffic_safety`.
+- Bài nhận biết lừa đảo trên mạng → `computer_science` hoặc category an toàn phù hợp theo nội dung thực tế.
+- Bài định hướng nghề nghiệp kỹ thuật → `engineering`.
+- Bài về di tích lịch sử → `history` hoặc `culture`, tùy trọng tâm câu hỏi.
+
+Nếu bài học kết hợp nhiều lĩnh vực, chọn category phản ánh nội dung chính của câu hỏi. Không yêu cầu AI phân loại hoàn hảo; TypeScript phải kiểm tra giá trị và có fallback.
+
+Nếu cần thể hiện chủ đề phụ, có thể bổ sung trường `tags` tùy chọn sau khi kiểm tra schema hiện tại. Không bắt buộc triển khai tags nếu làm tăng độ phức tạp không cần thiết.
+
+## 4. Danh sách icon Lucide mở rộng
+
+Tạo registry khoảng 60 icon, được chia thành các nhóm theo mục đích.
+
+### Toán học và khoa học
+
+- `Calculator`
+- `Sigma`
+- `Pi`
+- `Radical`
+- `Atom`
+- `Dna`
+- `Microscope`
+- `FlaskConical`
+- `TestTube`
+- `Magnet`
+- `Orbit`
+- `Telescope`
+- `Ruler`
+- `Triangle`
+- `Shapes`
+- `Activity`
+
+### Sinh học, sức khỏe và môi trường
+
+- `HeartPulse`
+- `Brain`
+- `Eye`
+- `Stethoscope`
+- `Leaf`
+- `Sprout`
+- `Trees`
+- `Flower2`
+- `Bird`
+- `Bug`
+- `Waves`
+- `Droplets`
+
+### Lịch sử, địa lý và xã hội
+
+- `BookOpen`
+- `BookMarked`
+- `Globe`
+- `Map`
+- `MapPin`
+- `Compass`
+- `Landmark`
+- `Castle`
+- `Mountain`
+- `Languages`
+- `ScrollText`
+- `Scale`
+- `Users`
+- `Handshake`
+
+### Tin học, kỹ thuật và AI
+
+- `Monitor`
+- `Laptop`
+- `Code`
+- `Binary`
+- `Cpu`
+- `Database`
+- `Network`
+- `Bot`
+- `BrainCircuit`
+- `Workflow`
+- `Wrench`
+- `Cog`
+- `Lightbulb`
+- `Rocket`
+
+### Kỹ năng sống và tình huống
+
+- `ShieldCheck`
+- `ShieldAlert`
+- `TrafficCone`
+- `Bike`
+- `Car`
+- `Footprints`
+- `MessageCircle`
+- `MessagesSquare`
+- `Target`
+- `Trophy`
+- `Medal`
+- `Puzzle`
+- `Search`
+- `Clock`
+- `CheckCircle`
+- `CircleHelp`
+
+Danh sách trên là danh sách đề xuất. Trước khi sử dụng, agent phải kiểm tra tên export thực tế của phiên bản Lucide đang cài đặt. Nếu tên không tồn tại hoặc đã thay đổi, hãy chọn icon tương đương hợp lệ, cập nhật registry và kiểm thử. Không tạo import gây lỗi chỉ vì tên icon có trong danh sách đề xuất.
+
+Không cần dùng tất cả icon trong mọi màn hình. Registry có thể chứa nhiều icon, nhưng từng câu hỏi chỉ sử dụng icon phù hợp.
+
+## 5. Phân biệt ba loại dữ liệu
+
+Không gộp mọi thứ vào một trường `category`.
+
+### A. Content category
+
+Xác định lĩnh vực kiến thức, ví dụ `physics`, `history`, `traffic_safety`.
+
+### B. Illustration asset
+
+Xác định hình minh họa thực tế trong thư viện SVG, ví dụ một cảnh học sinh tham gia giao thông hoặc một mô hình nguyên tử.
+
+### C. Icon name
+
+Xác định biểu tượng Lucide, ví dụ `Atom`, `Bike`, `BookOpen`.
+
+AI không được tự tạo `illustrationAsset` dưới dạng đường dẫn file. Nếu muốn AI chọn hình cụ thể, hãy cho AI chọn `assetId` từ danh sách asset ID đã được phép; nếu không, ứng dụng tự ánh xạ từ category sang asset.
+
+Ví dụ schema tương đương:
+
+- `question`: nội dung câu hỏi.
+- `math_latex`: công thức tùy chọn.
+- `category`: category hợp lệ.
+- `icon_name`: icon hợp lệ.
+- `illustration_asset_id`: tùy chọn, chỉ được sử dụng khi đã có registry asset ID.
+
+Giữ tương thích với schema hiện có. Không bắt buộc thêm `illustration_asset_id` nếu cơ chế ánh xạ category hiện tại đã đủ dùng.
+
+## 6. Thiết kế Asset Registry có khả năng mở rộng
+
+Tổ chức dữ liệu tập trung, có thể tách thành các module như:
+
+- `content-categories.ts`: danh sách category và mô tả.
+- `icon-registry.ts`: danh sách icon và ánh xạ component.
+- `illustration-registry.ts`: asset ID, category, đường dẫn local và metadata.
+- `asset-validation.ts`: kiểm tra dữ liệu và fallback.
+
+Đây là cấu trúc gợi ý; hãy tuân theo kiến trúc dự án nếu đã có cách tổ chức tương đương.
+
+Mỗi SVG nên có metadata phù hợp:
+- ID ổn định.
+- Category chính.
+- Tên hiển thị.
+- Đường dẫn tài nguyên local do ứng dụng quản lý.
+- Tags tùy chọn để tìm kiếm hoặc lọc.
+- Trạng thái hợp lệ nếu dự án cần kiểm tra tài nguyên.
+
+Không tạo đường dẫn giả hoặc khai báo asset chưa tồn tại.
+
+## 7. Quy tắc chọn SVG
+
+Khi giáo viên chọn chế độ tự động:
+
+1. Xác định category từ dữ liệu AI đã được validate.
+2. Tìm các asset local phù hợp trong registry.
+3. Ưu tiên asset đúng chủ đề; nếu có tags thì dùng tags làm tiêu chí bổ sung.
+4. Nếu có nhiều asset phù hợp, có thể chọn một asset theo quy tắc xác định để tránh thay đổi ngẫu nhiên không cần thiết.
+5. Nếu không tìm được asset phù hợp, sử dụng fallback hoặc không hiển thị hình.
+6. Không yêu cầu AI sinh SVG hoặc gọi thêm lượt AI chỉ để chọn asset.
+
+Khi giáo viên chọn chế độ tùy chỉnh, hiển thị thư viện SVG local có xem trước, lọc theo category và cho phép đổi lựa chọn.
+
+Khi giáo viên tắt minh họa, không hiển thị SVG minh họa nội dung; các icon chức năng của giao diện vẫn hoạt động.
+
+## 8. Phạm vi triển khai và kiểm thử
+
+- Tích hợp registry vào cả 5 thể loại game hiện có.
+- Giữ nguyên luật chơi, đáp án, tính điểm và luồng câu hỏi.
+- Giữ nguyên hoạt động offline.
+- Đảm bảo các trò chơi cũ không có trường mới vẫn hoạt động.
+- Kiểm tra category không hợp lệ và icon không hợp lệ.
+- Kiểm tra tất cả asset được tham chiếu đều tồn tại.
+- Kiểm tra import Lucide không lỗi.
+- Kiểm tra SVG thực sự hiển thị trong bản build Windows.
+- Chạy typecheck, lint, test và build theo script thực tế của dự án.
+
+Không tuyên bố đã tạo đủ 24 category hoặc 60 icon nếu registry và các bài kiểm thử thực tế chưa phản ánh đúng.
+
+## 9. Nguyên tắc cuối cùng
+
+Mục tiêu là xây dựng thư viện có thể mở rộng lâu dài, không phải nhồi mọi icon vào từng câu hỏi.
+
+Ưu tiên:
+- Category rõ nghĩa, phục vụ chương trình học THCS.
+- SVG trực quan, tái sử dụng được.
+- Icon phù hợp với nội dung.
+- Registry tập trung, dễ bảo trì.
+- Giáo viên luôn kiểm soát việc sử dụng hình minh họa.
+- Không ảnh hưởng hiệu năng, AI local và các tính năng hiện có.# BỔ SUNG: MỞ RỘNG CATEGORY, ICON VÀ THƯ VIỆN SVG CHO EDUGAME STUDIO
+
+## 1. Mục tiêu
+
+Mở rộng hệ thống phân loại và tài nguyên minh họa để phục vụ nhiều môn học, bài học và hoạt động giáo dục THCS.
+
+Yêu cầu:
+- Tạo 24 category nội dung ban đầu.
+- Xây dựng danh sách khoảng 60 icon Lucide được phép sử dụng.
+- Phân biệt category kiến thức, loại minh họa và icon.
+- Có thể mở rộng thư viện mà không phải sửa nhiều nơi trong code.
+- AI chỉ chọn mã có trong danh sách cho phép.
+- Tài nguyên SVG phải tồn tại thực tế, được quản lý tập trung và hoạt động offline.
+- Không bắt buộc mỗi category phải có một file SVG riêng nếu có thể tái sử dụng hình phù hợp.
+- Không làm thay đổi luật chơi hoặc pipeline AI hiện tại.
+
+## 2. Danh sách 24 category nội dung
+
+### Nhóm A — Toán học và khoa học tự nhiên
+
+| Category ID | Chủ đề |
+|---|---|
+| `mathematics` | Toán học tổng quát |
+| `geometry` | Hình học, hình khối, góc và đường |
+| `algebra` | Đại số, phương trình, biểu thức |
+| `physics` | Vật lý, lực, chuyển động, năng lượng |
+| `chemistry` | Hóa học, nguyên tử, phân tử, phản ứng |
+| `biology` | Sinh học tổng quát |
+| `human_body` | Cơ thể người, hô hấp, tuần hoàn |
+| `ecology` | Sinh thái, hệ sinh thái, chuỗi thức ăn |
+| `environment` | Môi trường, ô nhiễm, tái chế |
+| `earth_space` | Trái Đất, địa chất, thiên văn, vũ trụ |
+
+### Nhóm B — Xã hội và nhân văn
+
+| Category ID | Chủ đề |
+|---|---|
+| `history` | Lịch sử |
+| `geography` | Địa lý, bản đồ, địa hình |
+| `civics` | Giáo dục công dân, trách nhiệm, pháp luật |
+| `culture` | Văn hóa, di sản, phong tục |
+| `literature` | Văn học, truyện và tác phẩm |
+| `language` | Ngôn ngữ, ngữ pháp, từ vựng |
+| `foreign_language` | Học ngoại ngữ |
+| `economics` | Kinh tế, tiêu dùng, tài chính cơ bản |
+
+### Nhóm C — Công nghệ và kỹ năng sống
+
+| Category ID | Chủ đề |
+|---|---|
+| `computer_science` | Tin học, lập trình, thuật toán |
+| `artificial_intelligence` | AI, dữ liệu, học máy |
+| `engineering` | Kỹ thuật, thiết kế, chế tạo |
+| `traffic_safety` | An toàn giao thông |
+| `life_skills` | Kỹ năng sống, giao tiếp, tự chủ |
+| `health_safety` | Sức khỏe, vệ sinh và an toàn |
+
+### Category dự phòng
+
+Ngoài 24 category trên, duy trì `general` làm category mặc định cho nội dung chưa phân loại được.
+
+Không dùng `general` thay cho các category chuyên biệt đã xác định rõ.
+
+## 3. Quy tắc chọn category
+
+AI chọn đúng một category chính cho mỗi câu hỏi hoặc nhóm câu hỏi theo schema hiện tại.
+
+Ví dụ:
+- Bài trao đổi chất và hô hấp → `human_body`.
+- Bài về lực ma sát → `physics`.
+- Bài về phương trình bậc nhất → `algebra`.
+- Bài bảo vệ môi trường → `environment`.
+- Bài xử lý tình huống giao thông → `traffic_safety`.
+- Bài nhận biết lừa đảo trên mạng → `computer_science` hoặc category an toàn phù hợp theo nội dung thực tế.
+- Bài định hướng nghề nghiệp kỹ thuật → `engineering`.
+- Bài về di tích lịch sử → `history` hoặc `culture`, tùy trọng tâm câu hỏi.
+
+Nếu bài học kết hợp nhiều lĩnh vực, chọn category phản ánh nội dung chính của câu hỏi. Không yêu cầu AI phân loại hoàn hảo; TypeScript phải kiểm tra giá trị và có fallback.
+
+Nếu cần thể hiện chủ đề phụ, có thể bổ sung trường `tags` tùy chọn sau khi kiểm tra schema hiện tại. Không bắt buộc triển khai tags nếu làm tăng độ phức tạp không cần thiết.
+
+## 4. Danh sách icon Lucide mở rộng
+
+Tạo registry khoảng 60 icon, được chia thành các nhóm theo mục đích.
+
+### Toán học và khoa học
+
+- `Calculator`
+- `Sigma`
+- `Pi`
+- `Radical`
+- `Atom`
+- `Dna`
+- `Microscope`
+- `FlaskConical`
+- `TestTube`
+- `Magnet`
+- `Orbit`
+- `Telescope`
+- `Ruler`
+- `Triangle`
+- `Shapes`
+- `Activity`
+
+### Sinh học, sức khỏe và môi trường
+
+- `HeartPulse`
+- `Brain`
+- `Eye`
+- `Stethoscope`
+- `Leaf`
+- `Sprout`
+- `Trees`
+- `Flower2`
+- `Bird`
+- `Bug`
+- `Waves`
+- `Droplets`
+
+### Lịch sử, địa lý và xã hội
+
+- `BookOpen`
+- `BookMarked`
+- `Globe`
+- `Map`
+- `MapPin`
+- `Compass`
+- `Landmark`
+- `Castle`
+- `Mountain`
+- `Languages`
+- `ScrollText`
+- `Scale`
+- `Users`
+- `Handshake`
+
+### Tin học, kỹ thuật và AI
+
+- `Monitor`
+- `Laptop`
+- `Code`
+- `Binary`
+- `Cpu`
+- `Database`
+- `Network`
+- `Bot`
+- `BrainCircuit`
+- `Workflow`
+- `Wrench`
+- `Cog`
+- `Lightbulb`
+- `Rocket`
+
+### Kỹ năng sống và tình huống
+
+- `ShieldCheck`
+- `ShieldAlert`
+- `TrafficCone`
+- `Bike`
+- `Car`
+- `Footprints`
+- `MessageCircle`
+- `MessagesSquare`
+- `Target`
+- `Trophy`
+- `Medal`
+- `Puzzle`
+- `Search`
+- `Clock`
+- `CheckCircle`
+- `CircleHelp`
+
+Danh sách trên là danh sách đề xuất. Trước khi sử dụng, agent phải kiểm tra tên export thực tế của phiên bản Lucide đang cài đặt. Nếu tên không tồn tại hoặc đã thay đổi, hãy chọn icon tương đương hợp lệ, cập nhật registry và kiểm thử. Không tạo import gây lỗi chỉ vì tên icon có trong danh sách đề xuất.
+
+Không cần dùng tất cả icon trong mọi màn hình. Registry có thể chứa nhiều icon, nhưng từng câu hỏi chỉ sử dụng icon phù hợp.
+
+## 5. Phân biệt ba loại dữ liệu
+
+Không gộp mọi thứ vào một trường `category`.
+
+### A. Content category
+
+Xác định lĩnh vực kiến thức, ví dụ `physics`, `history`, `traffic_safety`.
+
+### B. Illustration asset
+
+Xác định hình minh họa thực tế trong thư viện SVG, ví dụ một cảnh học sinh tham gia giao thông hoặc một mô hình nguyên tử.
+
+### C. Icon name
+
+Xác định biểu tượng Lucide, ví dụ `Atom`, `Bike`, `BookOpen`.
+
+AI không được tự tạo `illustrationAsset` dưới dạng đường dẫn file. Nếu muốn AI chọn hình cụ thể, hãy cho AI chọn `assetId` từ danh sách asset ID đã được phép; nếu không, ứng dụng tự ánh xạ từ category sang asset.
+
+Ví dụ schema tương đương:
+
+- `question`: nội dung câu hỏi.
+- `math_latex`: công thức tùy chọn.
+- `category`: category hợp lệ.
+- `icon_name`: icon hợp lệ.
+- `illustration_asset_id`: tùy chọn, chỉ được sử dụng khi đã có registry asset ID.
+
+Giữ tương thích với schema hiện có. Không bắt buộc thêm `illustration_asset_id` nếu cơ chế ánh xạ category hiện tại đã đủ dùng.
+
+## 6. Thiết kế Asset Registry có khả năng mở rộng
+
+Tổ chức dữ liệu tập trung, có thể tách thành các module như:
+
+- `content-categories.ts`: danh sách category và mô tả.
+- `icon-registry.ts`: danh sách icon và ánh xạ component.
+- `illustration-registry.ts`: asset ID, category, đường dẫn local và metadata.
+- `asset-validation.ts`: kiểm tra dữ liệu và fallback.
+
+Đây là cấu trúc gợi ý; hãy tuân theo kiến trúc dự án nếu đã có cách tổ chức tương đương.
+
+Mỗi SVG nên có metadata phù hợp:
+- ID ổn định.
+- Category chính.
+- Tên hiển thị.
+- Đường dẫn tài nguyên local do ứng dụng quản lý.
+- Tags tùy chọn để tìm kiếm hoặc lọc.
+- Trạng thái hợp lệ nếu dự án cần kiểm tra tài nguyên.
+
+Không tạo đường dẫn giả hoặc khai báo asset chưa tồn tại.
+
+## 7. Quy tắc chọn SVG
+
+Khi giáo viên chọn chế độ tự động:
+
+1. Xác định category từ dữ liệu AI đã được validate.
+2. Tìm các asset local phù hợp trong registry.
+3. Ưu tiên asset đúng chủ đề; nếu có tags thì dùng tags làm tiêu chí bổ sung.
+4. Nếu có nhiều asset phù hợp, có thể chọn một asset theo quy tắc xác định để tránh thay đổi ngẫu nhiên không cần thiết.
+5. Nếu không tìm được asset phù hợp, sử dụng fallback hoặc không hiển thị hình.
+6. Không yêu cầu AI sinh SVG hoặc gọi thêm lượt AI chỉ để chọn asset.
+
+Khi giáo viên chọn chế độ tùy chỉnh, hiển thị thư viện SVG local có xem trước, lọc theo category và cho phép đổi lựa chọn.
+
+Khi giáo viên tắt minh họa, không hiển thị SVG minh họa nội dung; các icon chức năng của giao diện vẫn hoạt động.
+
+## 8. Phạm vi triển khai và kiểm thử
+
+- Tích hợp registry vào cả 5 thể loại game hiện có.
+- Giữ nguyên luật chơi, đáp án, tính điểm và luồng câu hỏi.
+- Giữ nguyên hoạt động offline.
+- Đảm bảo các trò chơi cũ không có trường mới vẫn hoạt động.
+- Kiểm tra category không hợp lệ và icon không hợp lệ.
+- Kiểm tra tất cả asset được tham chiếu đều tồn tại.
+- Kiểm tra import Lucide không lỗi.
+- Kiểm tra SVG thực sự hiển thị trong bản build Windows.
+- Chạy typecheck, lint, test và build theo script thực tế của dự án.
+
+Không tuyên bố đã tạo đủ 24 category hoặc 60 icon nếu registry và các bài kiểm thử thực tế chưa phản ánh đúng.
+
+## 9. Nguyên tắc cuối cùng
+
+Mục tiêu là xây dựng thư viện có thể mở rộng lâu dài, không phải nhồi mọi icon vào từng câu hỏi.
+
+Ưu tiên:
+- Category rõ nghĩa, phục vụ chương trình học THCS.
+- SVG trực quan, tái sử dụng được.
+- Icon phù hợp với nội dung.
+- Registry tập trung, dễ bảo trì.
+- Giáo viên luôn kiểm soát việc sử dụng hình minh họa.
+- Không ảnh hưởng hiệu năng, AI local và các tính năng hiện có.

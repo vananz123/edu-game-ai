@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="vi">
+<html lang="vi" data-fullscreen="0">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -73,7 +73,8 @@
   <script src="renderer/pages/lesson-plans.js"></script>
   <script src="renderer/pages/my-projects.js"></script>
   <script src="renderer/features/wizard/state.js"></script>
-  <script src="renderer/features/wizard/step-input.js"></script>
+  <script src="renderer/features/wizard/step-structure.js"></script>
+<script src="renderer/features/wizard/step-input.js"></script>
   <script src="renderer/features/wizard/step-analysis.js"></script>
   <script src="renderer/features/wizard/step-recommend.js"></script>
   <script src="renderer/features/wizard/step-configure.js"></script>
@@ -83,12 +84,21 @@
   <script src="renderer/features/game-editor.js"></script>
   <script src="renderer/core/controller.js"></script>
   <script src="renderer/features/local-ai.js"></script>
+<!-- First-run AI setup (§7): the typed, unit-tested decisions load before the
+     DOM layer that renders them. -->
+<script src="renderer/setup-wizard-model.js"></script>
+<script src="renderer/features/setup-wizard.js"></script>
   <script src="renderer/features/game-generation.js"></script>
   <script src="game-engine/runtime.js"></script>
+  <script src="renderer/features/icon-data.js"></script>
+
+  <script src="renderer/features/game-illustration.js"></script>
+
   <script src="renderer/features/gameplay.js"></script>
   <script src="renderer/features/results.js"></script>
   <script src="renderer/features/settings.js"></script>
   <script src="renderer/features/ai-status.js"></script>
   <script src="renderer/core/bootstrap.js"></script>
+  <script src="renderer/features/presentation.js"></script>
 </body>
 </html>

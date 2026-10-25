@@ -92,15 +92,50 @@ function wizardQualityPanel(report) {
  * above the advisory list. Saving stays allowed (DECISIONS #21); a teacher who
  * prefers to add the missing items by hand can still open the editor.
  */
-function wizardShortfallNotice(report, busy) {
+function wizardShortfallNotice(report, busy, manual) {
   const counts = report && report.counts;
   if (!counts || !counts.requested || !counts.found || counts.found >= counts.requested) return '';
   const missing = counts.requested - counts.found;
+  const explanation = manual
+    ? 'Bạn đã tự chọn số lượng này, nên bản nháp ngắn hơn cấu hình. Tạo lại để AI soạn đủ, hoặc mở trình chỉnh sửa để tự thêm.'
+    : 'AI tạo ít hơn cả mức tối thiểu 4 mục. Hãy tạo lại, giảm yêu cầu hoặc bổ sung thêm tài liệu.';
   return `<div class="field mt-[10px] rounded-[10px] border border-[#e0b13a] bg-[#fff8e1] p-[12px]" data-wizard-shortfall="${counts.found}/${counts.requested}" role="alert">
     <strong class="text-[13px] text-[#7a5a00]">AI mới tạo ${counts.found}/${counts.requested} ${escapeHtml(counts.unit)} — còn thiếu ${missing}.</strong>
-    <div class="field-hint mt-[4px]">Bản nháp vẫn dùng được nhưng ngắn hơn cấu hình. Tạo lại để AI soạn đủ, hoặc mở trình chỉnh sửa để tự thêm.</div>
+    <div class="field-hint mt-[4px]">${escapeHtml(explanation)}</div>
     <button class="btn btn-secondary btn-small mt-[8px]" data-wizard-action="regenerate"${busy ? ' disabled' : ''}>🔄 Tạo lại cho đủ ${counts.requested} ${escapeHtml(counts.unit)}</button>
   </div>`;
+}
+
+/**
+ * O12 fallback: the predicted count is usually right, but a weak model can still
+ * stop early. When the teacher never edited the count and the draft is still in
+ * the automatic 4..7 range, save the observed count so the configuration matches
+ * the content instead of showing a permanent "AI tạo thiếu" warning. Manual
+ * counts and drafts below 4 keep the warning — those are real quality problems.
+ */
+async function wizardAutoAdjustCount(report) {
+  const s = wizardState;
+  const config = s.config;
+  if (!config || s.countTouched) return;
+  const counts = report && report.counts;
+  if (!counts || !counts.requested || !counts.found) return;
+  if (counts.found >= counts.requested) return;
+  if (counts.found < 4 || counts.found > 7) return;
+  const key = wizardCapacityCountKey(config.gameType);
+  if (!key) return;
+  const previous = Number(config[key]);
+  if (previous === counts.found) return;
+  config[key] = counts.found;
+  try {
+    await wizardSaveProject('generate');
+    if (typeof window.eduGame.checkLessonQuality === 'function') {
+      s.quality = (await window.eduGame.checkLessonQuality({ projectId: s.projectId })) || s.quality;
+    }
+    toast(`AI tạo được ${counts.found} ${counts.unit} — đã tự điều chỉnh cấu hình xuống ${counts.found}.`);
+  } catch {
+    // If the save fails, keep the original configuration and the warning.
+    config[key] = previous;
+  }
 }
 
 /**
@@ -167,6 +202,245 @@ function wizardDraftItemsPanel(s) {
 }
 
 /**
+ * Phase B (DECISIONS #72): per-item artwork in the step-5 preview.
+ *
+ * Why the wizard and not the editor: the editor's `contentCategory`/`iconName`/
+ * `illustrationAssetId` inputs are hidden and only carry what the AI produced, so
+ * a teacher had no way to see or change the picture of one question without
+ * regenerating it (which costs a model call and rewrites the text). Here the
+ * teacher sees the actual rendered scene per item and may change it.
+ *
+ * Two hard rules, both enforced in the main process rather than trusted here:
+ *  - **No AI.** `lesson:patch-item-assets` only writes the three asset fields,
+ *    so changing artwork never costs tokens and works with the model stopped.
+ *  - **No guessing.** `resolveStageIllustration` is the same resolver the play
+ *    surface uses, including `manual` mode ("only what the teacher picked"), so
+ *    this preview cannot promise art the play surface would then refuse to draw.
+ */
+
+/**
+ * Category id -> Vietnamese label, for the step-5 artwork picker.
+ *
+ * A plain object on purpose. `generation-eta.test.ts` scans this file for lines
+ * shaped like `['stage', 'label']` and asserts they are exactly the five MỤC 5
+ * checklist stages; a 25-pair literal written that way silently joined that
+ * match and the checklist assertion started comparing against category ids.
+ * The keys are the same ids as `CONTENT_CATEGORY_IDS` (hand-copied, because the
+ * renderer cannot import `src/shared`), and they only drive picker labels.
+ */
+const WIZARD_ART_CATEGORY_LABELS = {
+  general: 'Tổng quát',
+  animals: 'Động vật',
+  plants: 'Thực vật',
+  space: 'Vũ trụ',
+  'human-body': 'Cơ thể người',
+  transport: 'Giao thông',
+  safety: 'An toàn',
+  environment: 'Môi trường',
+  history: 'Lịch sử',
+  geography: 'Địa lí',
+  jobs: 'Nghề nghiệp',
+  sports: 'Thể thao',
+  music: 'Âm nhạc',
+  art: 'Mỹ thuật',
+  math: 'Toán',
+  language: 'Tiếng Việt',
+  science: 'Khoa học',
+  technology: 'Công nghệ',
+  health: 'Sức khỏe',
+  family: 'Gia đình',
+  community: 'Cộng đồng',
+  weather: 'Thời tiết',
+  food: 'Thực phẩm',
+  objects: 'Đồ vật',
+  'water-world': 'Thế giới nước'
+};
+
+/** `[id, label]` pairs, in registry order, for the pickers below. */
+const WIZARD_ART_CATEGORIES = Object.keys(WIZARD_ART_CATEGORY_LABELS)
+  .map(id => [id, WIZARD_ART_CATEGORY_LABELS[id]]);
+
+/**
+ * Categories with a hand-tuned scene, i.e. the ones `resolveStageIllustration` accepts.
+ *
+ * **Lazy on purpose.** This file is a classic script loaded at `index.html:80`, but
+ * `STAGE_ILLUSTRATION_CATEGORY_ICONS` is declared by `renderer/features/game-illustration.js`
+ * at `index.html:94` — *after* this file. Computing this list at top level therefore read
+ * a not-yet-initialised binding and threw before the page finished loading (the whole
+ * wizard died, the error surfaced as "Cannot access '…' before initialization"). The list
+ * is now built on first call, by which point every script has run.
+ */
+let wizardArtSceneCategoriesCache = null;
+function wizardArtSceneCategories() {
+  if (!wizardArtSceneCategoriesCache) {
+    const icons = typeof STAGE_ILLUSTRATION_CATEGORY_ICONS === 'object' && STAGE_ILLUSTRATION_CATEGORY_ICONS
+      ? STAGE_ILLUSTRATION_CATEGORY_ICONS
+      : {};
+    wizardArtSceneCategoriesCache = WIZARD_ART_CATEGORIES
+      .map(([id]) => id)
+      .filter(id => Object.prototype.hasOwnProperty.call(icons, id));
+  }
+  return wizardArtSceneCategoriesCache;
+}
+
+function wizardArtCategoryLabel(id) {
+  return Object.prototype.hasOwnProperty.call(WIZARD_ART_CATEGORY_LABELS, id)
+    ? WIZARD_ART_CATEGORY_LABELS[id]
+    : id;
+}
+
+/** The object that owns the artwork, which for treasure is the nested question. */
+function wizardArtSource(gameType, item) {
+  if (!item || typeof item !== 'object') return {};
+  if (gameType === 'treasure') return (item.question && typeof item.question === 'object') ? item.question : {};
+  return item;
+}
+
+function wizardArtSelectedAsset(gameType, item) {
+  const source = wizardArtSource(gameType, item);
+  const id = typeof source.illustrationAssetId === 'string' ? source.illustrationAssetId.trim() : '';
+  return id && wizardArtSceneCategories().some(category => `${category}-scene` === id) ? id : '';
+}
+
+/** Previews a *candidate* asset id without touching the draft. */
+function wizardArtPreviewItem(gameType, item, assetId) {
+  const source = Object.assign({}, wizardArtSource(gameType, item));
+  if (assetId) source.illustrationAssetId = assetId;
+  else delete source.illustrationAssetId;
+  return source;
+}
+
+/** The illustration mode this draft would be played with (projects carry no setup yet). */
+function wizardArtMode() {
+  const setup = (wizardState.gameSnapshot && wizardState.gameSnapshot.gameSetup) || {};
+  return setup.illustrationMode === 'manual' || setup.illustrationMode === 'off' ? setup.illustrationMode : 'auto';
+}
+
+/** The resolver reads `game.gameSetup.illustrationMode`; this is the only field it needs. */
+function wizardArtGame() {
+  return { gameSetup: { illustrationMode: wizardArtMode() } };
+}
+
+/**
+ * Thumbnail for one item: the real play-surface SVG when there is something to
+ * draw, otherwise an honest "no artwork" tile (never a stand-in that looks like art).
+ */
+function wizardArtThumb(gameType, item, game, assetId) {
+  const html = stageIllustrationHtml(wizardArtPreviewItem(gameType, item, assetId), game, 'is-wizard-preview');
+  if (!html) {
+    const reason = game.gameSetup.illustrationMode === 'off' ? 'Minh hoạ đang tắt' : 'Chưa có hình minh hoạ';
+    return `<div class="wizard-art-thumb is-empty">${escapeHtml(reason)}</div>`;
+  }
+  return `<div class="wizard-art-thumb">${html}</div>`;
+}
+/**
+ * Saves one item's artwork. `patch` is a partial object of the three whitelisted
+ * keys; the main process normalises and re-validates, then returns a fresh
+ * snapshot so this preview and the editor cannot drift.
+ *
+ * Errors are surfaced in the wizard banner, never swallowed: a pick that did not
+ * save must not look saved.
+ */
+async function wizardPatchItemAssets(position, patch) {
+  if (wizardState.artBusy) return undefined;
+  if (!wizardState.projectId) {
+    toast('Hãy lưu dự án trước khi đổi minh hoạ.');
+    return undefined;
+  }
+  wizardState.artBusy = true;
+  render();
+  try {
+    const result = await window.eduGame.patchLessonItemAssets({
+      projectId: wizardState.projectId,
+      itemIndex: position,
+      patch
+    });
+    wizardState.projectId = result.project.id;
+    wizardState.draft = result.project.draft || wizardState.draft;
+    wizardState.gameSnapshot = result.game || wizardState.gameSnapshot;
+    if (result.game && result.game.id) wizardState.gameId = result.game.id;
+    const gameType = (wizardState.config && wizardState.config.gameType) || '';
+    wizardSetNotice(`Đã đổi minh hoạ cho ${wizardDraftItemLabel(gameType, position)}. Nội dung câu hỏi giữ nguyên.`);
+  } catch (error) {
+    wizardSetError(error);
+  }
+  wizardState.artBusy = false;
+  render();
+  return undefined;
+}
+
+/**
+ * Opens/closes the "Đổi" popover of one item. Only one is open at a time so the
+ * grid cannot turn into a wall of selects, and the choice is kept in
+ * `wizardState` because `render()` rebuilds the whole step from scratch.
+ */
+function wizardToggleArtItem(position) {
+  if (wizardState.artBusy) return undefined;
+  const gameType = (wizardState.config && wizardState.config.gameType) || '';
+  const key = `${gameType}:${position}`;
+  wizardState.openArtItem = wizardState.openArtItem === key ? null : key;
+  return render();
+}
+
+function wizardArtCard(gameType, item, position, index) {
+  const game = wizardArtGame();
+  const open = wizardState.openArtItem === `${gameType}:${position}`;
+  const source = wizardArtSource(gameType, item);
+  const rawCategory = typeof source.contentCategory === 'string' ? source.contentCategory.trim() : '';
+  const category = WIZARD_ART_CATEGORIES.some(([value]) => value === rawCategory) ? rawCategory : '';
+  const asset = wizardArtSelectedAsset(gameType, item);
+  const assetOptions = [
+    `<option value="">Theo chủ đề nội dung</option>`,
+    ...wizardArtSceneCategories().map(id => `<option value="${escapeHtml(id)}-scene"${asset === `${id}-scene` ? ' selected' : ''}>${escapeHtml(wizardArtCategoryLabel(id))}</option>`)
+  ].join('');
+  const categoryOptions = [
+    `<option value="">Tự nhận diện theo nội dung</option>`,
+    ...WIZARD_ART_CATEGORIES.map(([id, label]) => `<option value="${escapeHtml(id)}"${category === id ? ' selected' : ''}>${escapeHtml(label)}</option>`)
+  ].join('');
+  const badge = asset
+    ? wizardArtCategoryLabel(asset.slice(0, -'-scene'.length))
+    : (category ? wizardArtCategoryLabel(category) : 'Tự động');
+  const disabled = wizardState.artBusy ? ' disabled' : '';
+  return `<div class="wizard-art-card${open ? ' is-open' : ''}" data-wizard-art-card="${position}">
+    ${wizardArtThumb(gameType, item, game, asset)}
+    <div class="wizard-art-meta"><strong>${escapeHtml(wizardDraftItemLabel(gameType, index + 1))}</strong>${escapeHtml(badge)}</div>
+    <div class="wizard-art-actions">
+      <button class="btn btn-secondary btn-small" data-wizard-action="toggle-art" data-item-index="${position}"${disabled}>${open ? 'Đóng' : '🖼 Đổi'}</button>
+      ${asset || category ? `<button class="btn btn-secondary btn-small" data-wizard-action="reset-art" data-item-index="${position}"${disabled}>Tự động</button>` : ''}
+    </div>
+    ${open ? `<div class="wizard-art-pick">
+      <label>HÌNH MINH HOẠ</label>
+      <select data-wizard-art-asset data-item-index="${position}"${disabled}>${assetOptions}</select>
+      <label>CHỦ ĐỀ NỘI DUNG</label>
+      <select data-wizard-art-category data-item-index="${position}"${disabled}>${categoryOptions}</select>
+      <div class="wizard-art-hint">Chọn xong là lưu ngay, không gọi AI và không tốn thời gian. Nội dung câu hỏi không thay đổi.</div>
+    </div>` : ''}
+  </div>`;
+}
+
+function wizardIllustrationGrid(s) {
+  const draft = s.draft;
+  const items = wizardDraftItemList(draft);
+  if (!items.length) return '';
+  const game = wizardArtGame();
+  const mode = wizardArtMode();
+  const missing = items.filter(item => !stageIllustrationHtml(wizardArtSource(draft.gameType, item), game)).length;
+  const modeHint = mode === 'off'
+    ? 'Chế độ “Tắt” đang bật nên khi chơi sẽ không hiện minh hoạ nào. Mở trình chỉnh sửa để bật lại.'
+    : mode === 'manual'
+      ? 'Chế độ “Chọn thủ công” chỉ hiện hình bạn chọn — mục chưa chọn sẽ không có hình khi chơi.'
+      : 'Chế độ “Tự động”: mục chưa chọn hình sẽ dùng hình theo chủ đề nội dung.';
+  return `<div class="field mt-[12px]" data-wizard-art-grid="1">
+    <div class="flex items-center gap-[8px] mb-[8px] flex-wrap"><strong class="text-[12px]">Minh hoạ từng mục</strong><span class="tag">${items.length} mục</span>${missing ? `<span class="tag">${missing} mục chưa có hình</span>` : ''}</div>
+    <div class="wizard-art-grid">${items.map((item, index) => wizardArtCard(draft.gameType, item, index + 1, index)).join('')}</div>
+    <div class="field-hint">${escapeHtml(modeHint)}</div>
+  </div>`;
+}
+
+
+
+
+/**
  * O7: five progress states from `docs/archive/specs/update-AI-local.txt` §10. Each state is
  * driven by a real IPC boundary from the main process (retrieve → generate →
  * validate → repair-if-needed → ready), not by a timer. "Sửa phần chưa đạt" is
@@ -180,6 +454,22 @@ const WIZARD_GENERATION_STAGES = [
   ['repair', 'Sửa phần chưa đạt (nếu cần)'],
   ['ready', 'Sẵn sàng xem trước']
 ];
+
+/** The spinning ring drawn beside the running stage. Purely decorative. */
+const WIZARD_GENERATION_SPINNER =
+  '<svg class="wizard-gen-spinner" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="7"/></svg>';
+
+/**
+ * #71: how far the run has actually got, as a fraction of the reported stages.
+ *
+ * This is a *stage counter*, not a time estimate, which is why it is allowed to
+ * show a percentage at all: the previous comment in this file correctly refused
+ * to invent one from a timer. The number only ever reflects stages the main
+ * process has really reported, and a skipped repair stage counts as reached.
+ */
+function wizardGenerationProgressFraction(stage) {
+  return wzEtaStageFraction(stage);
+}
 
 function renderWizardGenerationProgress() {
   const s = wizardState;
@@ -198,9 +488,15 @@ function renderWizardGenerationProgress() {
       mark = '–';
       label = `${label} · không cần`;
     }
-    return `<li data-stage="${id}" data-status="${status}" class="text-[12px] ${status === 'active' ? 'font-bold text-[#3b3a63]' : status === 'skipped' ? 'text-[#98a0b0]' : 'text-[#5a6478]'}">${mark} ${escapeHtml(label)}</li>`;
+    const prefix = status === 'active' ? WIZARD_GENERATION_SPINNER : `${mark} `;
+    return `<li data-stage="${id}" data-status="${status}" class="text-[12px] ${status === 'active' ? 'font-bold text-[#3b3a63]' : status === 'skipped' ? 'text-[#98a0b0]' : 'text-[#5a6478]'}">${prefix}${escapeHtml(label)}</li>`;
   }).join('');
-  return `<div class="field-hint mt-[8px]" data-wizard-progress="${escapeHtml(s.lessonStage || '')}">
+  const fraction = wizardGenerationProgressFraction(s.lessonStage);
+  const percent = Math.round(fraction * 100);
+  const eta = wizardGenerationEtaText();
+  return `<div class="field-hint mt-[8px]" data-wizard-progress="${escapeHtml(s.lessonStage || '')}" data-wizard-progress-percent="${percent}">
+    <div class="wizard-gen-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}" aria-label="Tiến trình tạo nội dung"><div class="wizard-gen-progress-fill" style="width:${percent}%"></div></div>
+    <div class="wizard-gen-meta"><span><strong>${percent}%</strong> · ${Math.max(1, currentIndex + 1)}/${WIZARD_GENERATION_STAGES.length} bước</span><span data-wizard-generate-eta>${escapeHtml(eta || 'Đang chạy…')}</span></div>
     <ol class="space-y-[2px] pl-[2px]" role="list">${rows}</ol>
     <div class="mt-[5px] flex flex-wrap gap-x-[10px] gap-y-[2px]">
       <span data-wizard-generate-elapsed>${escapeHtml(wizardGenerationElapsedText())}</span>
@@ -232,18 +528,21 @@ function renderWizardGenerate() {
     ${hasContent
       ? `<div class="panel-sub">AI local đã soạn bản nháp từ giáo án và đã được kiểm tra cấu trúc. Hãy mở trình chỉnh sửa để duyệt, sửa lại rồi lưu vào thư viện để chơi thử.</div>
         ${wizardSummaryGrid(wizardGeneratedSummaryRows(s.gameSnapshot))}
-        ${wizardShortfallNotice(s.quality, Boolean(s.busy))}
+        ${wizardShortfallNotice(s.quality, Boolean(s.busy), s.countTouched)}
         ${wizardQualityPanel(s.quality)}
         ${wizardDraftItemsPanel(s)}
+        ${wizardIllustrationGrid(s)}
         ${wizardContextHint(s.context)}
+        ${wizardGenerationTotalText() ? `<div class="field-hint" data-wizard-generate-total-line>⏱ ${escapeHtml(wizardGenerationTotalText())}</div>` : ''}
         <div class="publish-actions">
+          <button class="btn btn-secondary" data-wizard-action="back"${s.busy ? ' disabled' : ''}>← Cấu hình</button>
           <button class="btn btn-primary" data-wizard-action="save-game"${s.busy ? ' disabled' : ''}>${s.busy === 'save-game' ? 'Đang lưu…' : '💾 Lưu vào Thư viện trò chơi'}</button>
           <button class="btn btn-secondary" data-wizard-action="open-editor"${s.busy ? ' disabled' : ''}>✎ Mở trình chỉnh sửa</button>
           <button class="btn btn-secondary" data-wizard-action="regenerate"${s.busy ? ' disabled' : ''}>🔄 Tạo lại nội dung</button>
           ${s.busy === 'generate' ? '<button class="btn btn-secondary" data-wizard-action="cancel">Huỷ</button>' : ''}
           <button class="btn btn-secondary" data-wizard-action="another-game"${s.busy ? ' disabled' : ''}>＋ Trò chơi khác từ giáo án này</button>
           <button class="btn btn-secondary" data-wizard-action="save-project"${s.busy ? ' disabled' : ''}>Lưu tiến trình</button>
-          <button class="btn btn-secondary" data-wizard-action="go-library">📚 Vào thư viện để chơi</button>
+          <button class="btn btn-secondary" data-wizard-action="go-library"${s.busy ? ' disabled' : ''}>📚 Vào thư viện để chơi</button>
         </div>
         <div class="field-hint">“Trò chơi khác” mở một dự án mới nhưng dùng lại phân tích đã lưu — không gọi AI phân tích lại. Bạn chỉ cần chọn thể loại và cấu hình mới.</div>`
       : `<div class="panel-sub">AI local sẽ soạn câu hỏi/tình huống theo đúng cấu hình bên dưới, sau đó bạn duyệt và chỉnh sửa trong trình soạn thảo. Cấu hình và phân tích đã được lưu nên có thể mở lại bất cứ lúc nào — không cần chạy lại AI.</div>
@@ -282,6 +581,9 @@ async function wizardGenerateRun(options) {
   wizardState.lessonStage = 'retrieve';
   wizardState.lessonRepaired = false;
   wizardState.activeRequestId = wizardNewRequestId('generate');
+  // #71: refresh the measured ETA baseline before the clock starts. Not awaited on
+  // the critical path — a failed read only removes the estimate, never the run.
+  wizardLoadGenerationHistory(true).catch(() => {});
   render();
   wizardStartGenerationClock();
   try {
@@ -301,6 +603,7 @@ async function wizardGenerateRun(options) {
     wizardState.context = result.context || null;
     wizardState.gameId = result.game.id;
     wizardState.step = 'generate';
+    if (!result.cached) await wizardAutoAdjustCount(wizardState.quality);
     await wizardRefreshProjects();
     wizardSetNotice(result.cached
       ? 'Giáo án và cấu hình không đổi nên đã dùng lại nội dung đã tạo (không gọi AI). Nhấn “Tạo lại nội dung” nếu muốn nội dung mới.'
@@ -310,7 +613,9 @@ async function wizardGenerateRun(options) {
     if (parsed.code === 'AI_CANCELLED') wizardSetNotice('Đã huỷ tạo nội dung. Chưa có thay đổi nào được lưu.');
     else wizardSetError(error);
   }
-  wizardStopActivityClock();
+  // #75: keep the total of a finished run so step 5 can print it after the panel
+  // is gone. A cache hit never called the AI, so there is no run to time.
+  wizardStopGenerationClock({ finished: Boolean(wizardState.gameSnapshot) && wizardState.lessonStage !== 'cached' });
   wizardState.busy = '';
   wizardState.lessonStage = '';
   wizardState.generationStartedAt = 0;

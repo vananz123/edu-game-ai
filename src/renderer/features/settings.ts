@@ -1,7 +1,25 @@
 // @ts-nocheck -- migrated legacy UI logic; new contracts are typed in src/shared/types.ts.
+/**
+ * The backend the teacher picked in Settings.
+ *
+ * Returns `'cpu'`/`'vulkan'` for an explicit choice, and `undefined` for
+ * "Tự động" (or when the select is not rendered). Returning `undefined` on
+ * purpose rather than `'auto'` matters twice over: the key disappears from the
+ * saved file (the main process round-trips settings through
+ * `JSON.parse(JSON.stringify(...))`, which drops `undefined` values), so
+ * switching back from Vulkan really clears the preference instead of leaving the
+ * old value in place; and "no preference" stays defined in exactly one place,
+ * the resolver.
+ */
+function readRuntimeBackendSelection() {
+  const select = $('#localRuntimeBackendSelect');
+  if (!select) return undefined;
+  const value = select.value;
+  return value === 'cpu' || value === 'vulkan' ? value : undefined;
+}
 async function saveSettings() {
   const settings = {
-    ai: { ...state.settings.ai, mode: $('#settingAiMode').value, cloudProvider: $('#settingCloudProvider').value, baseUrl: $('#settingBaseUrl').value.trim(), model: $('#settingModel').value.trim(), apiKey: $('#settingApiKey').value },
+    ai: { ...state.settings.ai, mode: $('#settingAiMode').value, cloudProvider: $('#settingCloudProvider').value, baseUrl: $('#settingBaseUrl').value.trim(), model: $('#settingModel').value.trim(), runtimeBackend: readRuntimeBackendSelection(), apiKey: $('#settingApiKey').value },
     preferences: {
       ...(state.settings.preferences || {}),
       largeText: $('#settingLargeText').checked,
@@ -121,7 +139,11 @@ async function refreshAiTaskList() {
   }
 }
 
-/** update_plan_3 §4: shows measured CPU-only facts for the bundled runtime. */
+/**
+ * update_plan_3 §4, extended for the backend choice: reports which llama.cpp
+ * build this machine will actually run, with the real flags, so a teacher who
+ * picked the GPU can confirm the choice took effect (or that it fell back).
+ */
 async function verifyCpuRuntimeUi() {
   const box = $('#cpuVerifyResult');
   const button = $('#cpuRuntimeVerifyBtn');
@@ -130,11 +152,12 @@ async function verifyCpuRuntimeUi() {
   try {
     const result = await window.eduGame.verifyCpuRuntime();
     const lines = [
-      `Backend: ${result.backend}`,
+      `Bộ xử lý đang dùng: ${result.backend}`,
       `Phiên bản runtime: ${result.expectedVersion}`,
       `Đã cài: ${result.installed ? 'có' : 'chưa'}`,
       `Số tệp trong thư mục runtime: ${(result.files || []).length}`,
       `Tệp gợi ý backend GPU: ${(result.gpuMarkers || []).length ? result.gpuMarkers.join(', ') : 'không'}`,
+      `GPU nhận diện được: ${(result.gpuNames || []).length ? result.gpuNames.join(', ') : 'không đọc được'}`,
       `Tham số khởi động: ${(result.args || []).join(' ')}`,
       result.note
     ];
@@ -144,7 +167,7 @@ async function verifyCpuRuntimeUi() {
     box.innerHTML = `<div class="text-[#b3261e]">Không xác minh được runtime: ${escapeHtml(String(error && error.message ? error.message : error))}</div>`;
     box.classList.remove('hidden');
   } finally {
-    if (button) { button.disabled = false; button.textContent = 'Xác minh runtime CPU'; }
+    if (button) { button.disabled = false; button.textContent = 'Xác minh runtime AI local'; }
   }
 }
 
@@ -238,6 +261,12 @@ async function clearDiagnosticsUi() {
 function wireSettingsAiTasks() {
   $('#aiTasksRefreshBtn')?.addEventListener('click', refreshAiTaskList);
   $('#cpuRuntimeVerifyBtn')?.addEventListener('click', verifyCpuRuntimeUi);
+  // Repair surface for first-run setup: the wizard is the only place that
+  // drives `setup:*`, so Settings just reopens it rather than duplicating the
+  // download logic. `probe: false` shows it even when setup already succeeded.
+  $('#openSetupWizardBtn')?.addEventListener('click', () => {
+    if (typeof window.openSetupWizard === 'function') window.openSetupWizard({ probe: false });
+  });
   $('#exportDiagnosticsBtn')?.addEventListener('click', exportDiagnosticsUi);
   $('#openLogFolderBtn')?.addEventListener('click', openLogFolderUi);
   $('#clearDiagnosticsBtn')?.addEventListener('click', clearDiagnosticsUi);

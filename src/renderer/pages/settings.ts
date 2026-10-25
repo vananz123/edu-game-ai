@@ -11,8 +11,28 @@ function renderSettings() {
   const selectedLocalModelId = ai.localModelId || machine.recommendedModelId || state.localAiModels[0]?.id || '';
   const selectedLocalModel = state.localAiModels.find(model => model.id === selectedLocalModelId);
   const recommendedLocalModel = state.localAiModels.find(model => model.id === machine.recommendedModelId);
-  // update_plan_3 §4: CPU-only release — never show VRAM/GPU offload in the UI.
-  const gpuDescription = 'Bản CPU-only: AI local chạy hoàn toàn trên CPU, không dùng GPU.';
+  // The teacher's saved choice; anything unrecognised reads as 'auto' so an old
+  // or hand-edited settings file can never leave the select without a match.
+  const savedRuntimeBackend = ai.runtimeBackend === 'cpu' || ai.runtimeBackend === 'vulkan' ? ai.runtimeBackend : 'auto';
+  const selectedRuntimeBackend = savedRuntimeBackend;
+  // Policy: CPU is the default runtime because it measured faster than Vulkan on
+  // the iGPU of the pilot hardware (docs/BENCHMARKS.md). The GPU build stays
+  // available, but only behind an explicit "advanced" choice, and the hint says
+  // what it costs instead of promising speed-up.
+  const gpuDetected = Array.isArray(machine.gpuNames) && machine.gpuNames.length > 0;
+  const runtimeBackendHint = selectedRuntimeBackend === 'vulkan'
+    ? 'Tùy chọn nâng cao: AI local sẽ tải bản GPU (Vulkan) và đẩy phần đọc tài liệu sang GPU tích hợp. '
+      + 'Đo trên máy phổ thông cho thấy bước đọc tài liệu dài chậm hơn CPU; hãy thử và so sánh. '
+      + 'Nếu GPU không khởi động được, ứng dụng tự chuyển về CPU.'
+    : selectedRuntimeBackend === 'cpu'
+      ? 'AI local chỉ chạy trên CPU, không dùng GPU (nhanh nhất theo đo đạc hiện tại và ổn định nhất).'
+      : 'Mặc định: CPU — nhanh nhất theo đo đạc hiện tại, không cần GPU. '
+        + (gpuDetected ? 'Máy có GPU tích hợp: mở “Tùy chọn nâng cao” nếu muốn thử bản Vulkan.' : '');
+  // update_plan_3 §4: CPU-first release — GPU offload is never advertised as the
+  // normal path, only as an advanced experiment.
+  const gpuDescription = savedRuntimeBackend === 'vulkan'
+    ? 'Đang chọn bản GPU tích hợp (Vulkan) — tùy chọn nâng cao, thử nghiệm.'
+    : 'AI local chạy trên CPU; GPU tích hợp chỉ dùng nếu chọn trong “Tùy chọn nâng cao”.';
   const modelStatus = selectedLocalModel
     ? selectedLocalModel.installed
       ? machine.runtimeInstalled ? 'Model và runtime đã sẵn sàng trên máy.' : 'Model đã có; runtime sẽ được cài khi bạn bắt đầu dùng AI local.'
@@ -21,12 +41,20 @@ function renderSettings() {
 
   return `<div class="flex justify-between items-start gap-[20px] mb-[25px]"><div><div class="text-[10px] text-[#6258e8] font-extrabold tracking-[1.3px] uppercase mb-[8px]">PREFERENCES & INTEGRATIONS</div><h1 class="text-[27px] tracking-[-0.9px] m-0 font-[780]">Cài đặt ứng dụng</h1><p class="mt-[9px] text-[#788196] text-[13px] leading-[1.6]">Quản lý AI local tích hợp, nhà cung cấp AI tùy chọn và trải nghiệm ứng dụng.</p></div><button class="border-0 rounded-[9px] px-[15px] py-[11px] inline-flex items-center justify-center gap-[8px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-[#6258e8] text-white shadow-[0_6px_14px_#6258e82b]" id="saveSettingsBtn">Lưu cài đặt</button></div>
     <section class="bg-white border border-line rounded-[14px] p-[23px]"><div class="flex justify-between items-start"><div><h3 class="text-[14px] m-0 mb-[5px]">AI local tích hợp</h3><div class="text-[11px] text-[#9199aa] mb-[17px]">Cài và chọn model Qwen chạy cùng llama.cpp ngay trong ứng dụng. Model và runtime được lưu trong dữ liệu ứng dụng trên máy này.</div></div><span class="inline-block px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#788196] text-[9px] ${selectedLocalModel?.installed && machine.runtimeInstalled ? 'ready' : ''}">${selectedLocalModel?.installed && machine.runtimeInstalled ? 'Sẵn sàng' : 'Chưa cài đầy đủ'}</span></div>
+      <div class="mt-[4px]"><button class="border-0 rounded-[9px] px-[15px] py-[11px] inline-flex items-center justify-center gap-[8px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-white border border-[#e7eaf2] text-[#515c72]" id="openSetupWizardBtn">Cài đặt lại AI từ đầu</button><div class="field-hint mt-[6px]">Mở lại trình hướng dẫn cài AI: kiểm tra máy, tải bộ AI và model, rồi chạy thử. Phần đã tải xong được giữ nguyên.</div></div>
       ${machine.runtimeSupported === false ? '<div class="bg-white border border-line rounded-[14px] p-[23px]"><strong>Chưa hỗ trợ cấu hình này</strong><p class="mt-[4px]">Runtime AI local tích hợp hiện chỉ hỗ trợ Windows x64.</p></div>' : ''}
       ${state.localAiModels.length ? `<div class="grid gap-[18px]"><div>
         <div class="field"><label class="block text-[11px] font-bold mb-[4px]">MODEL ĐANG CHỌN</label><select id="localModelSelect">${state.localAiModels.map(model=>`<option value="${escapeHtml(model.id)}" ${model.id===selectedLocalModelId?'selected':''}>${escapeHtml(model.displayName)} · ${formatBytes(model.sizeBytes)}${model.id===machine.recommendedModelId?' · Đề xuất':''}${model.installed?' · Đã cài':''}</option>`).join('')}</select><div class="text-[11px] text-[#8d96a8] mt-[4px]">Model được chọn sẽ dùng chung ở đây và trong màn hình Tạo trò chơi.</div></div>
         ${selectedLocalModel ? `<div class="local-ai-model-summary"><strong>${escapeHtml(selectedLocalModel.displayName)}</strong><span>${modelStatus}</span><span>Đánh giá máy: ${escapeHtml(selectedLocalModel.recommendationReason)}</span><span>RAM ${formatBytes(machine.totalRamBytes || 0)} · cần tối thiểu ${formatBytes(selectedLocalModel.minimumRamBytes)}, khuyến nghị ${formatBytes(selectedLocalModel.recommendedRamBytes)}</span><span>${selectedLocalModel.memoryStatus==='insufficient'?'RAM thấp hơn mức tối thiểu; model có thể không chạy ổn định.':selectedLocalModel.memoryStatus==='below-recommended'?'RAM thấp hơn mức khuyến nghị.':'RAM đạt mức khuyến nghị.'}</span></div>` : ''}
+        <details class="runtime-advanced" ${selectedRuntimeBackend==='vulkan'?'open':''}><summary><strong>Tùy chọn nâng cao: dùng GPU tích hợp</strong><span>Mặc định AI local chạy trên CPU. Chỉ mở phần này nếu muốn thử bản Vulkan và tự so tốc độ.</span></summary>
+        <div class="field"><label class="block text-[11px] font-bold mb-[4px]">BỘ XỬ LÝ AI LOCAL</label><select id="localRuntimeBackendSelect">
+          <option value="auto" ${selectedRuntimeBackend==='auto'?'selected':''}>CPU — mặc định, khuyến nghị</option>
+          <option value="cpu" ${selectedRuntimeBackend==='cpu'?'selected':''}>Chỉ CPU — ổn định nhất</option>
+          <option value="vulkan" ${selectedRuntimeBackend==='vulkan'?'selected':''}>GPU tích hợp (Vulkan) — thử nghiệm, thường chậm hơn CPU</option>
+        </select><div class="text-[11px] text-[#8d96a8] mt-[4px]">${escapeHtml(runtimeBackendHint)}</div></div>
+        </details>
         <div class="flex items-center gap-[12px] mt-[14px]"><button class="border-0 rounded-[9px] px-[15px] py-[11px] inline-flex items-center justify-center gap-[8px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-white border border-[#e7eaf2] text-[#515c72]" id="installLocalModelBtn" ${machine.runtimeSupported===false?'disabled':''}>${selectedLocalModel?.installed&&machine.runtimeInstalled?'Xác minh model và runtime':'Tải / xác minh model và runtime'}</button><span id="localAiProgress" class="text-[11px] text-[#8d96a8]">${selectedLocalModel?.installed&&machine.runtimeInstalled?'Model và runtime đã được xác minh.':'Tải model lần đầu cần Internet; sau khi cài, AI local có thể chạy ngoại tuyến.'}</span></div>
-      </div><div class="local-ai-machine"><strong>Cấu hình máy</strong><span><b>CPU:</b> ${escapeHtml(machine.cpuModel || 'Không nhận diện được')} · ${machine.logicalCpuCount || 0} luồng logic</span><span><b>RAM:</b> ${formatBytes(machine.totalRamBytes || 0)}</span><span><b>GPU:</b> ${escapeHtml(gpuDescription)}</span><span><b>Model đề xuất:</b> ${escapeHtml(recommendedLocalModel?.displayName || 'Chưa có đề xuất')}</span><small>Runtime hiện dùng CPU; thông tin GPU chỉ để tham khảo. Model AI có thể tạo nội dung chưa chính xác, hãy kiểm tra trước khi sử dụng trong lớp.</small></div></div>` : '<p>Đang nạp danh sách model AI local…</p>'}
+      </div><div class="local-ai-machine"><strong>Cấu hình máy</strong><span><b>CPU:</b> ${escapeHtml(machine.cpuModel || 'Không nhận diện được')} · ${machine.logicalCpuCount || 0} luồng logic</span><span><b>RAM:</b> ${formatBytes(machine.totalRamBytes || 0)}</span><span><b>GPU:</b> ${escapeHtml(gpuDescription)}</span><span><b>Bộ xử lý AI đang chọn:</b> ${escapeHtml(selectedRuntimeBackend==='vulkan'?'GPU tích hợp (Vulkan) — thử nghiệm':selectedRuntimeBackend==='cpu'?'Chỉ CPU':'CPU (mặc định)')}</span><span><b>Model đề xuất:</b> ${escapeHtml(recommendedLocalModel?.displayName || 'Chưa có đề xuất')}</span><small>Model AI có thể tạo nội dung chưa chính xác, hãy kiểm tra trước khi sử dụng trong lớp.</small></div></div>` : '<p>Đang nạp danh sách model AI local…</p>'}
     </section>
     <!-- update_plan_3 §8: task manager — what ran, what is running, what failed; history survives restart. -->
     <section class="bg-white border border-line rounded-[14px] p-[23px] mt-[18px]">
@@ -37,7 +65,7 @@ function renderSettings() {
         </div>
         <div class="flex gap-[8px] shrink-0">
           <button class="border-0 rounded-[9px] px-[15px] py-[11px] inline-flex items-center justify-center gap-[8px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-white border border-[#e7eaf2] text-[#515c72]" id="aiTasksRefreshBtn">Làm mới</button>
-          <button class="border-0 rounded-[9px] px-[15px] py-[11px] inline-flex items-center justify-center gap-[8px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-white border border-[#e7eaf2] text-[#515c72]" id="cpuRuntimeVerifyBtn">Xác minh runtime CPU</button>
+          <button class="border-0 rounded-[9px] px-[15px] py-[11px] inline-flex items-center justify-center gap-[8px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-white border border-[#e7eaf2] text-[#515c72]" id="cpuRuntimeVerifyBtn">Xác minh runtime AI local</button>
         </div>
       </div>
       <div id="cpuVerifyResult" class="hidden bg-[#f8f9fc] border border-line rounded-[10px] p-[14px] text-[12px] mb-[14px]"></div>

@@ -9,8 +9,9 @@
  * Content schemas (no `schemaVersion`) live in `lesson-contracts.ts`; the
  * matching JSON schema is sent as `response_format` for llama.cpp in `main.ts`.
  */
-import { getLocalDocumentAnalysisExcerpt } from '../ai-core/document-assist';
+import { preprocessLessonSource, type PreprocessMetrics } from './lesson-preprocess';
 import type { LessonChunk } from './lesson-chunker';
+import { CONTENT_CATEGORY_IDS } from '../shared/content-categories';
 import type {
   GameConfig,
   LessonAnalysis,
@@ -48,12 +49,40 @@ export const LESSON_ITEM_REGENERATION_SYSTEM_PROMPT =
  */
 export const LESSON_PROMPT_VERSIONS = {
   analysis: 2,
-  draft: 2,
-  item: 1
+  draft: 3,
+  // #54 follow-up: regeneration now sends only the chunks that feed the item
+  // (`selectItemChunks`), so older item content must not be reused silently.
+  item: 2
 } as const;
 
 const MAX_OBJECTIVES = 6;
 const MAX_KEY_CONCEPTS = 8;
+
+/**
+ * O6d: full analysis input preparation — offline preprocessing (L1 + L2/L3 per
+ * `lesson-preprocess.ts`) followed by the existing local-AI excerpt step.
+ *
+ * `prepareLessonExcerpt` keeps its old `{ excerpt, truncated }` shape so no
+ * caller breaks; `preprocessLessonContext` additionally exposes the metrics the
+ * IPC handler logs.
+ */
+export interface LessonExcerptPreparation {
+  excerpt: string;
+  truncated: boolean;
+  metrics: PreprocessMetrics;
+}
+
+export function preprocessLessonContext(
+  text: string,
+  options: { maxChars?: number; ranking?: boolean; query?: string } = {}
+): LessonExcerptPreparation {
+  const preprocessed = preprocessLessonSource(text, options);
+  return {
+    excerpt: preprocessed.text,
+    truncated: preprocessed.metrics.truncated,
+    metrics: preprocessed.metrics
+  };
+}
 
 /**
  * O6: when the previous attempt was cut off, the repair turn must ask for a
@@ -67,10 +96,11 @@ function truncationHint(errorMessage: string, advice: string): string {
 }
 
 /** Trims a lesson to the local-AI budget and notes when it was shortened. */
-export function prepareLessonExcerpt(text: string): { excerpt: string; truncated: boolean } {
-  const source = String(text ?? '');
-  const excerpt = getLocalDocumentAnalysisExcerpt(source);
-  return { excerpt, truncated: excerpt.length < source.length };
+export function prepareLessonExcerpt(
+  text: string,
+  options: { maxChars?: number; ranking?: boolean; query?: string } = {}
+): { excerpt: string; truncated: boolean; metrics: PreprocessMetrics } {
+  return preprocessLessonContext(text, options);
 }
 
 /**
@@ -84,8 +114,20 @@ export function formatRetrievedChunks(chunks: Array<Pick<LessonChunk, 'index' | 
     .join('\n\n');
 }
 
-export function buildLessonAnalysisPrompt(input: { text: string } & LessonPromptContext): string {
-  const { excerpt, truncated } = prepareLessonExcerpt(input.text);
+export function buildLessonAnalysisPrompt(
+  input: { text: string; maxChars?: number; ranking?: boolean; query?: string; prepared?: { excerpt: string; truncated: boolean } } & LessonPromptContext
+): string {
+  // #58: `analyzeLesson` already ran preprocessing to log its metrics; reusing
+  // that result keeps the prompt and the metrics describing the same text and
+  // avoids preprocessing a 30k-character lesson twice.
+  const { excerpt, truncated } = input.prepared
+    ? input.prepared
+    : prepareLessonExcerpt(
+      input.text,
+      input.maxChars === undefined && input.ranking === undefined && input.query === undefined
+        ? {}
+        : { maxChars: input.maxChars, ranking: input.ranking, query: input.query }
+    );
   return `Phân tích giáo án dưới đây để chuẩn bị thiết kế trò chơi.
 Trả về JSON đúng cấu trúc:
 {"subject":"môn học hoặc null","grade":5,"topic":"chủ đề chính","objectives":[{"description":"mục tiêu học tập","cognitiveLevel":"remember|understand|apply|analyze","sourceExcerpt":"câu trích trong tài liệu"}],"keyConcepts":[{"term":"thuật ngữ","explanation":"giải thích ngắn gọn","sourceExcerpt":"câu trích trong tài liệu"}],"uncertainties":["điểm chưa chắc chắn hoặc thiếu căn cứ"]}
@@ -135,6 +177,27 @@ const DRAFT_RULES: Record<WorkflowGameType, string> = {
   race: 'Mọi câu là trắc nghiệm kèm "difficulty". "cells" nằm trong khoảng 2..trackLength và không trùng ô. Cần 2-4 đội.'
 };
 
+/**
+ * Phase 3 of `update_plan_6`: the three per-item asset keys (docs/DECISIONS.md
+ * #60–#63). Deliberately an *optional* ask:
+ *  - `contentCategory` must come from the fixed list, because the icon and
+ *    illustration lookups are keyed on it; an invented value is useless.
+ *  - `iconName` is restricted to the registry so the model cannot invent an icon
+ *    that `getIconNode()` would have to reject.
+ *  - `illustrationAssetId` is NOT offered. Selection is deterministic in the app
+ *    (`pickIllustrationForCategory`), so a model-chosen id would only add tokens
+ *    and a way to pick art that does not match the category.
+ *  - The model may OMIT all three. Omitting is never wrong: the app fills the
+ *    category from the lesson text (`inferContentCategory`) and the editor can
+ *    still set the values later. Asking for a field that is cosmetically
+ *    optional must not cost the model output budget it needs for the questions,
+ *    which is why this is one short line rather than a per-shape field list.
+ */
+const ITEM_ASSET_KEYS_RULE =
+  `Trường tuỳ chọn cho từng mục (câu hỏi, cặp ghép, tình huống, chặng): "contentCategory" (một trong: ${CONTENT_CATEGORY_IDS.join(', ')}) ` +
+  'và "iconName" (một tên biểu tượng hợp lệ, ví dụ: paw-print, leaf, rocket). ' +
+  'Nếu không chắc, hãy BỎ QUA hai trường này — app sẽ tự điền; đừng bịa giá trị ngoài danh sách.';
+
 export function buildDraftPrompt(input: {
   gameType: WorkflowGameType;
   config: GameConfig;
@@ -171,6 +234,7 @@ export function buildDraftPrompt(input: {
 Trả về JSON đúng cấu trúc:
 ${DRAFT_SHAPES[gameType]}
 Quy tắc thể loại: ${DRAFT_RULES[gameType]}
+${ITEM_ASSET_KEYS_RULE}
 Thiết lập của giáo viên:
 - Tiêu đề: ${config.title}
 - Môn: ${config.subject || analysis.subject || 'chưa xác định'} — Lớp: ${config.grade || (analysis.grade ? `Lớp ${analysis.grade}` : 'chưa xác định')}
@@ -276,6 +340,7 @@ Mục cần viết lại: ${input.itemLabel} (mục ${input.position}/${input.to
 Trả về JSON đúng cấu trúc sau, trong đó mảng chỉ chứa ĐÚNG MỘT phần tử:
 ${DRAFT_SHAPES[gameType]}
 Quy tắc thể loại: ${DRAFT_RULES[gameType]}
+${ITEM_ASSET_KEYS_RULE}
 ${reason}
 Mục hiện tại (phải thay bằng nội dung mới, không lặp lại y nguyên):
 ${safeItemJson(input.currentItem)}

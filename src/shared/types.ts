@@ -1,5 +1,24 @@
 /** Shared, versioned domain contracts for EduGame Studio. */
 import type { GameProject } from './lesson-types';
+import type { ContentCategory } from './content-categories';
+
+/**
+ * Optional per-item content metadata (docs/DECISIONS.md #60, #61, #62).
+ *
+ * All three fields are optional on purpose: every `.egame` file saved before
+ * these existed must keep loading, and a missing value means "derive it"
+ * (`contentCategory` -> `general`, `iconName` -> the category icon, no
+ * illustration). Readers must normalise through `asset-validation.ts`, which
+ * never throws.
+ */
+export interface ItemAssetFields {
+  /** What the item is about. Unknown ids degrade to `general`. */
+  contentCategory?: ContentCategory;
+  /** Registry icon id (subset of Lucide). Unknown ids degrade to "no icon". */
+  iconName?: string;
+  /** App-owned illustration id; behaviour depends on the teacher's mode. */
+  illustrationAssetId?: string | null;
+}
 
 export type GameTemplate = 'quiz' | 'scenario' | 'matching' | 'treasure-hunt' | 'race';
 export type QuestionType = 'multiple-choice' | 'true-false' | 'fill-in-blank' | 'short-answer' | 'scenario' | 'matching' | 'treasure-hunt' | 'race';
@@ -19,7 +38,7 @@ export interface GameOption {
   };
 }
 
-export interface GameQuestion {
+export interface GameQuestion extends ItemAssetFields {
   id: string;
   type: QuestionType;
   prompt: string;
@@ -27,6 +46,8 @@ export interface GameQuestion {
   correctOptionId: string;
   correctAnswer?: string;
   alternateAnswers?: string[];
+  /** Hint shown on demand for text answers (fill-in-blank / short-answer). Never the answer itself. */
+  hint?: string;
   explanation: string;
   points: number;
   difficulty?: QuestionDifficulty;
@@ -36,7 +57,7 @@ export interface GameQuestion {
 
 export type MatchingMode = 'columns' | 'memory' | 'categorize';
 
-export interface MatchingPair {
+export interface MatchingPair extends ItemAssetFields {
   id: string;
   left: string;
   right: string;
@@ -54,7 +75,7 @@ export interface MatchingGameData {
 }
 
 /** §5 tasknight.docx — journey/treasure-hunt stage data. */
-export interface TreasureStageQuestion {
+export interface TreasureStageQuestion extends ItemAssetFields {
   prompt: string;
   options: Array<{ id: string; text: string }>;
   correctOptionId: string;
@@ -156,7 +177,7 @@ export interface RaceSpecialCell {
   label: string;
 }
 
-export interface RaceQuestion {
+export interface RaceQuestion extends ItemAssetFields {
   id: string;
   prompt: string;
   options: Array<{ id: string; text: string }>;
@@ -188,6 +209,8 @@ export interface GameSetup {
   style?: string;
   players?: string;
   competition?: string;
+  /** Teacher's illustration choice (docs/DECISIONS.md #62, #65): 'auto' | 'manual' | 'off'. */
+  illustrationMode?: string;
   [key: string]: string | undefined;
 }
 
@@ -229,12 +252,30 @@ export interface LocalLibrary {
 }
 
 export type AiMode = 'offline' | 'online' | 'local';
+
+/**
+ * Which llama.cpp build the local runtime runs on.
+ *
+ * `auto` keeps the measured default (CPU). `vulkan` asks for GPU offload —
+ * useful on an integrated GPU because it shares system RAM and moves prefill
+ * work off the CPU — and is always backed by a CPU retry, so a GPU that cannot
+ * start never costs the teacher the app. `openvino` is declarable but no
+ * verified build ships for it, so it falls back to CPU with a stated reason.
+ */
+export type RuntimeBackendPreference = 'auto' | 'cpu' | 'vulkan';
+
 export interface AiSettings {
   mode: AiMode;
   cloudProvider?: 'openai' | 'gemini' | 'custom';
   baseUrl: string;
   model: string;
   localModelId?: string;
+  /**
+   * Teacher's explicit choice of runtime backend. Absent means `auto`, which
+   * keeps the existing CPU default — an older settings file therefore keeps
+   * behaving exactly as before.
+   */
+  runtimeBackend?: RuntimeBackendPreference;
   apiKey?: string;
   apiKeyEncrypted?: string;
 }
@@ -371,6 +412,12 @@ export interface EduGameBridge {
     projectId?: string;
     requestId: string;
   }): Promise<{ recommendations: import('./lesson-types').GameRecommendation[]; project: GameProject | null }>;
+  /** Predicts a sensible item count from document length + analysis + model (no AI call). */
+  estimateLessonCapacity(payload: {
+    projectId: string;
+    gameType: import('./lesson-types').WorkflowGameType;
+    mode?: 'fast' | 'deep';
+  }): Promise<import('../services/item-capacity').ItemCapacityEstimate>;
   getLessonAnalysis(analysisId: string): Promise<import('./lesson-types').LessonAnalysis | null>;
   /** Persists teacher edits to an analysis without calling the model again. */
   saveLessonAnalysis(analysis: import('./lesson-types').LessonAnalysis): Promise<import('./lesson-types').LessonAnalysis>;
@@ -397,6 +444,26 @@ export interface EduGameBridge {
   }>;
   /** Recomputes the advisory quality report for a stored draft (no model call). */
   checkLessonQuality(payload: { projectId: string }): Promise<import('../services/lesson-quality').QualityReport | null>;
+  /**
+   * Phase B: changes only the artwork of one item (DECISIONS #72). Never calls the
+   * model and never rewrites question text; the main process whitelists the three
+   * asset fields. Positions are 1-based, like `regenerateLessonItem`.
+   */
+  patchLessonItemAssets(payload: {
+    projectId: string;
+    itemIndex: number;
+    patch: {
+      contentCategory?: string;
+      iconName?: string;
+      illustrationAssetId?: string;
+    };
+  }): Promise<{
+    project: GameProject;
+    game: import('./types').EducationalGame;
+    itemIndex: number;
+    /** Normalised values that were actually applied. */
+    applied: import('./asset-validation').ItemAssetFieldsForSave;
+  }>;
   onLocalAiProgress(callback: (progress: import('../ai-core/contracts').LocalAiDownloadProgress) => void): () => void;
   generateGame(payload: GenerateGameRequest): Promise<GenerateGameResponse>;
 }

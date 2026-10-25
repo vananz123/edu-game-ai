@@ -8,6 +8,7 @@
 import type {
   EducationalGame,
   GameSetup,
+  ItemAssetFields,
   MatchingMode,
   QuestionDifficulty,
   TreasureBackgroundId,
@@ -175,7 +176,7 @@ export interface ArenaOption {
   text: string;
 }
 
-export interface ArenaChoiceQuestion {
+export interface ArenaChoiceQuestion extends ItemAssetFields {
   id: string;
   type: 'multiple-choice' | 'true-false';
   prompt: string;
@@ -186,7 +187,7 @@ export interface ArenaChoiceQuestion {
   points: number;
 }
 
-export interface ArenaTextQuestion {
+export interface ArenaTextQuestion extends ItemAssetFields {
   id: string;
   type: 'fill-in-blank' | 'short-answer';
   prompt: string;
@@ -220,7 +221,7 @@ export interface ScenarioOption {
   score?: ScenarioDecisionScore;
 }
 
-export interface ScenarioSituation {
+export interface ScenarioSituation extends ItemAssetFields {
   id: string;
   context?: string;
   prompt: string;
@@ -236,7 +237,7 @@ export interface ScenarioDraft {
   situations: ScenarioSituation[];
 }
 
-export interface MatchingPairDraft {
+export interface MatchingPairDraft extends ItemAssetFields {
   id: string;
   left: string;
   right: string;
@@ -255,7 +256,7 @@ export interface MatchingDraft {
   practiceMode: boolean;
 }
 
-export interface TreasureQuestionDraft {
+export interface TreasureQuestionDraft extends ItemAssetFields {
   prompt: string;
   options: ArenaOption[];
   correctOptionId: string;
@@ -305,7 +306,7 @@ export interface RaceCellDraft {
   label: string;
 }
 
-export interface RaceQuestionDraft {
+export interface RaceQuestionDraft extends ItemAssetFields {
   id: string;
   prompt: string;
   options: ArenaOption[];

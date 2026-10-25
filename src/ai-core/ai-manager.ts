@@ -10,6 +10,14 @@ export interface AiManagerOptions {
   contextSize: number;
   cpuThreads: number;
   gpuLayers: number;
+  /** Vulkan device name from the manifest, e.g. `Vulkan0`. Omit for CPU. */
+  device?: string;
+  /**
+   * Backend label reported in the status, e.g. 'vulkan' or 'cpu'.
+   * The manager does not select it — the caller resolved it already — but the
+   * UI must be able to say which one actually ended up running.
+   */
+  backend?: string;
   startupTimeoutMs?: number;
   healthIntervalMs?: number;
   shutdownTimeoutMs?: number;
@@ -26,7 +34,7 @@ type ExitResult = { code: number | null; signal: NodeJS.Signals | null } | { err
 const LOOPBACK_HOST = '127.0.0.1';
 
 export function buildLlamaServerArguments(modelPath: string, runtimeOptions: LocalAiRuntimeOptions): string[] {
-  return [
+  const args = [
     '--model', modelPath,
     '--alias', runtimeOptions.modelId,
     '--host', runtimeOptions.host,
@@ -41,6 +49,10 @@ export function buildLlamaServerArguments(modelPath: string, runtimeOptions: Loc
     '--threads', String(runtimeOptions.cpuThreads),
     '--n-gpu-layers', String(runtimeOptions.gpuLayers)
   ];
+  // Only the Vulkan build understands `--device`; passing it to the CPU build
+  // would fail startup, so it is gated on an explicit device name.
+  if (runtimeOptions.device) args.push('--device', runtimeOptions.device);
+  return args;
 }
 
 /**
@@ -173,7 +185,8 @@ export class AIManager {
       port,
       contextSize: this.options.contextSize,
       cpuThreads: this.options.cpuThreads,
-      gpuLayers: this.options.gpuLayers
+      gpuLayers: this.options.gpuLayers,
+      ...(this.options.device ? { device: this.options.device } : {})
     };
     const child = this.spawnProcess(
       this.options.executablePath,

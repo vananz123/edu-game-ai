@@ -35,9 +35,12 @@ export function normalizeAiGame(raw: any, payload: NormalizeAiGamePayload, makeI
         questions.push({ id, type: 'multiple-choice', prompt, options: fallbackOptions, correctOptionId, explanation, points, ...(difficulty ? { difficulty } : {}) });
         return;
       }
+      // Gợi ý chỉ dành cho câu nhập đáp án; cắt ngắn để không tràn màn chơi.
+      const hint = String(q?.hint || '').trim().slice(0, 200);
       questions.push({
         id, type, prompt, options: [], correctOptionId: '', correctAnswer: accepted[0],
         ...(accepted.length > 1 ? { alternateAnswers: accepted.slice(1) } : {}),
+        ...(hint ? { hint } : {}),
         explanation, points, ...(difficulty ? { difficulty } : {})
       });
       return;

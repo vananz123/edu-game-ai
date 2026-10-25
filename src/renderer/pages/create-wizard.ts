@@ -62,6 +62,7 @@ function wizardBusyText(kind) {
   if (kind === 'recommend') return 'AI local đang gợi ý trò chơi…';
   if (kind === 'generate') return 'AI local đang soạn nội dung trò chơi… (giáo án dài có thể mất vài phút)';
   if (kind === 'save') return 'Đang lưu dự án…';
+  if (kind === 'prepare') return 'Đang chuẩn bị thể loại và số lượng phù hợp…';
   return 'Đang xử lý…';
 }
 
@@ -76,7 +77,7 @@ function renderWizardProjects() {
       const active = project.id === wizardState.projectId;
       return `<button class="quick-action${active ? ' active' : ''}" data-wizard-open="${escapeHtml(project.id)}">
         <span class="quick-icon">📁</span>
-        <span class="min-w-0"><strong class="block truncate">${escapeHtml(project.title || 'Dự án')}</strong><small class="block text-[10px] text-[#98a0b0]">Bước: ${escapeHtml(label)} · ${fmtDate(project.updatedAt)}</small></span>
+        <span class="quick-copy"><strong class="block truncate">${escapeHtml(project.title || 'Dự án')}</strong><small class="block text-[10px] text-[#98a0b0]">Bước: ${escapeHtml(label)} · ${fmtDate(project.updatedAt)}</small></span>
         <span class="quick-arrow">→</span>
       </button>`;
     }).join('')}</div>` : '<div class="field-hint">Chưa có dự án nào. Nhập giáo án để bắt đầu.</div>'}
@@ -123,8 +124,15 @@ function wizardSyncCurrentStepFromDom() {
 function wireCreateWizard() {
   const root = document.getElementById('wizardRoot');
   if (!root) return;
+  // #76: `innerHTML` cannot express `indeterminate`, so the derived tristate is
+  // re-applied on every render of step 1.
+  if (wizardState.step === 'input' && typeof wizardSyncStructureCheckboxes === 'function') wizardSyncStructureCheckboxes();
   root.addEventListener('click', wizardHandleClick);
   root.addEventListener('input', wizardHandleInput);
+  // Phase B: `<select>` in the artwork popover. `change` is used rather than
+  // `input` so a keyboard user scrolling through options does not fire one
+  // write per keystroke.
+  root.addEventListener('change', wizardHandleChange);
   // O7: subscribe once. Events are filtered by requestId, so a cancelled run
   // cannot move the stages of the next one.
   if (!wizardProgressWired && window.eduGame && typeof window.eduGame.onLessonProgress === 'function') {
@@ -165,6 +173,9 @@ function wizardHandleInput(event) {
   if (target.id === 'wizardDocText') {
     wizardState.text = target.value;
     wizardSyncDocAffordances();
+    // #76: the local analyzer walks the text off the keystroke (debounced), so
+    // the tree and the preview describe the document the teacher is looking at.
+    if (typeof wizardStructureSchedule === 'function') wizardStructureSchedule();
     return;
   }
   if (target.id === 'wizardDocName') {
@@ -182,6 +193,14 @@ function wizardHandleInput(event) {
     } else {
       wizardState.analysis[analysisField] = value;
     }
+    return;
+  }
+  // O12: once the teacher types a count, keep it — auto-prediction and the
+  // post-generation adjustment must not overwrite a deliberate choice.
+  const configField = target.dataset.wizardConfig;
+  if (configField && wizardState.config && configField === wizardCapacityCountKey(wizardState.config.gameType)) {
+    wizardState.countTouched = true;
+    if (typeof wizardUpdateCapacityUi === 'function') wizardUpdateCapacityUi();
   }
 }
 
@@ -190,7 +209,9 @@ function wizardSyncDocAffordances() {
   const characters = String(wizardState.text || '').trim().length;
   const ready = characters >= WIZARD_MIN_CHARACTERS;
   const button = document.getElementById('wizardNextBtn');
-  if (button) button.disabled = !ready || Boolean(wizardState.busy);
+  // #76: an empty scope blocks "next" as firmly as missing text does.
+  const scopeError = typeof wizardStructureScopeError === 'function' ? wizardStructureScopeError() : '';
+  if (button) button.disabled = !ready || Boolean(wizardState.busy) || Boolean(scopeError);
   const hint = document.getElementById('wizardDocHint');
   if (hint) {
     hint.textContent = ready
@@ -209,8 +230,31 @@ function wizardHandleClick(event) {
   return wizardDispatch(actionBtn.dataset.wizardAction, actionBtn);
 }
 
+/**
+ * Phase B (#72): `<select>`s in the artwork popover of step 5. Each write goes
+ * through `wizardPatchItemAssets`, which sends exactly one whitelisted key, so a
+ * category change can never clear a chosen picture and vice versa.
+ */
+function wizardHandleChange(event) {
+  const target = event.target;
+  if (!target || !target.closest) return undefined;
+  // #76: a section checkbox in the step-1 tree. The checked value is derived
+  // from the tree, so only the id is read from the DOM.
+  const section = target.closest('[data-wizard-section]');
+  if (section) return wizardStructureToggle(section.getAttribute('data-wizard-section'));
+  const assetSelect = target.closest('[data-wizard-art-asset]');
+  if (assetSelect) {
+    return wizardPatchItemAssets(Number(assetSelect.dataset.itemIndex), { illustrationAssetId: assetSelect.value || '' });
+  }
+  const categorySelect = target.closest('[data-wizard-art-category]');
+  if (categorySelect) {
+    return wizardPatchItemAssets(Number(categorySelect.dataset.itemIndex), { contentCategory: categorySelect.value || '' });
+  }
+  return undefined;
+}
+
 async function wizardDispatch(action, button) {
-  if (wizardState.busy && ['back', 'new', 'save', 'save-project', 'save-game', 'generate', 'regenerate', 'regenerate-item', 'open-editor'].includes(action)) return undefined;
+  if (wizardState.busy && ['back', 'new', 'save', 'save-project', 'save-game', 'generate', 'regenerate', 'regenerate-item', 'open-editor', 'quick-generate', 'quick-confirm', 'quick-cancel'].includes(action)) return undefined;
   switch (action) {
     case 'import-file': return wizardInputImportFile();
     case 'open-ai': return openLocalAiModal();
@@ -223,6 +267,10 @@ async function wizardDispatch(action, button) {
     // O1: the teacher may pick a genre the rule-based recommender did not list.
     case 'select-type': return wizardRecommendSelectType(button.dataset.gameType);
     case 'set-mode': return wizardSetGenerationMode(button.dataset.mode);
+    case 'use-capacity': return wizardUseCapacity();
+    case 'quick-generate': return wizardQuickGenerate();
+    case 'quick-confirm': return wizardQuickGenerateConfirm();
+    case 'quick-cancel': return wizardQuickGenerateCancel();
     case 'add-objective': return wizardEditAnalysis('add-objective');
     case 'remove-objective': return wizardEditAnalysis('remove-objective', Number(button.dataset.index));
     case 'add-concept': return wizardEditAnalysis('add-concept');
@@ -239,6 +287,16 @@ async function wizardDispatch(action, button) {
     case 'generate': return wizardGenerateRun();
     case 'regenerate': return wizardGenerateRegenerate();
     case 'regenerate-item': return wizardRegenerateItem(Number(button.dataset.itemIndex));
+    // Phase B (#72): per-item artwork. Kept out of the `busy` guard above on
+    // purpose — picking a picture is a local write, so it stays usable while a
+    // generation is running and never blocks the generate toolbar. The other
+    // direction is guarded inside `wizardPatchItemAssets` (`artBusy`).
+    case 'toggle-art': return wizardToggleArtItem(Number(button.dataset.itemIndex));
+    case 'reset-art': return wizardPatchItemAssets(Number(button.dataset.itemIndex), { contentCategory: '', illustrationAssetId: '' });
+    // #76: the structure tree in step 1. Local writes only — no AI, no disk.
+    case 'toggle-section': return wizardStructureToggleCollapse(button.dataset.sectionId);
+    case 'structure-select-all': return wizardStructureSelectAll();
+    case 'structure-clear-all': return wizardStructureClearAll();
     case 'another-game': return wizardStartAnotherGame();
     case 'open-editor': return wizardGenerateOpenEditor();
     case 'go-library': navigate('library'); return undefined;

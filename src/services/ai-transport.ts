@@ -108,6 +108,18 @@ export function parseModelJson(content: string): unknown {
   }
 }
 
+/**
+ * O6d: input-token count reported by the server, when it reports one. Used for
+ * prefill metrics only — `null` is normal (older llama.cpp builds omit `usage`)
+ * and must never be treated as a failure.
+ */
+export function readPromptTokens(data: unknown): number | null {
+  const usage = (data as { usage?: { prompt_tokens?: unknown } } | undefined)?.usage;
+  const value = usage?.prompt_tokens;
+  const numeric = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(numeric) && numeric >= 0 ? Math.round(numeric) : null;
+}
+
 export function readAssistantContent(data: unknown): string {
   const choice = (data as { choices?: Array<{ finish_reason?: string; message?: { content?: unknown; reasoning_content?: unknown } }> })?.choices?.[0];
   if (choice?.finish_reason === 'length') {

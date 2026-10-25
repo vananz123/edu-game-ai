@@ -291,7 +291,7 @@ function createBlankGame() {  const p = collectDraft();  const t = p.template ||
   const isTreasure = t === 'treasure-hunt';
   const isRace = t === 'race';
   const usesPanel = isMatching || isTreasure || isRace;
-  const game = { id: '', title: p.title || 'Trò chơi mới', subject: p.subject, grade: p.grade, topic: '', template: t, description: 'Trò chơi được tạo trong EduGame Studio.', sourceName: p.sourceName, gameSetup: p.gameSetup, questions: usesPanel ? [] : [{ id:'q1', type:t, ...sample }], matchingGame: isMatching ? defaultMatchingGame() : undefined, ...(isTreasure ? { treasureHunt: defaultTreasureHunt() } : {}), ...(isRace ? { race: defaultRaceData() } : {}) };  openEditor(game, true, 'Bạn đang tạo trò chơi mới theo cách nhập thủ công. Hãy điền đầy đủ câu hỏi, phương án và đáp án đúng.');  toast('Đã mở trò chơi trống. Hãy nhập câu hỏi, phương án và đáp án đúng rồi nhấn Lưu vào thư viện.');}function editGame(game) { if (!game) return; openEditor(JSON.parse(JSON.stringify(game)), false, 'Chỉnh sửa nội dung trò chơi.'); }function openEditor(game, isNew, note = '', aiContext = null) {  editorCancelPending();  editorAiContext = aiContext && aiContext.projectId && editorAiSupported(aiContext.gameType) ? { projectId: String(aiContext.projectId), gameType: aiContext.gameType, itemIds: (Array.isArray(aiContext.itemIds) ? aiContext.itemIds : []).map(id => String(id)) } : null;  editorAiBusy = false;  editorAiRequestId = '';  const root = $('#modalRoot');  root.innerHTML = `<div class="modal-backdrop"><div class="modal"><div class="modal-head"><div><h2>${isNew ? 'Duyệt và hoàn thiện trò chơi' : 'Chỉnh sửa trò chơi'}</h2><div class="small muted mt-[5px]">${escapeHtml(note)}</div></div><button class="modal-close" data-close>✕</button></div><div class="modal-body">      <div class="field-row"><div class="field"><label>TÊN TRÒ CHƠI</label><input id="editTitle" value="${escapeHtml(game.title)}"></div><div class="field"><label>THỂ LOẠI</label><select id="editTemplate">${[['quiz','Đấu trường kiến thức'],['scenario','Thử thách tình huống'],['matching','Ghép cặp kiến thức'],['treasure-hunt','Giải mã kho báu'],['race','Đường đua chinh phục']].map(([v,l])=>`<option value="${v}" ${game.template===v?'selected':''}>${l}</option>`).join('')}</select></div></div>    <div class="field-row"><div class="field"><label>MÔN HỌC</label><input id="editSubject" value="${escapeHtml(game.subject||'')}"></div><div class="field"><label>LỚP</label><input id="editGrade" value="${escapeHtml(game.grade||'')}"></div></div>    <div class="field"><label>MÔ TẢ</label><input id="editDescription" value="${escapeHtml(game.description||'')}"></div>      <div class="section-head"><h3>Câu hỏi / tình huống <span class="tag">${game.questions.length}</span></h3><div><button class="btn btn-secondary btn-small" id="importQuestionsBtn">⇧ Nhập CSV/XLSX</button> <button class="btn btn-secondary btn-small" id="addQuestionBtn">＋ Thêm câu hỏi</button></div></div>    <div id="editorQuestions">${game.questions.map((q,i)=>questionEditor(q,i,game.questions)).join('')}</div>    </div><div class="modal-foot"><button class="btn btn-secondary" data-close>Hủy</button><button class="btn btn-secondary" id="saveExportBtn">Lưu và xuất</button><button class="btn btn-primary" id="saveGameBtn">✓ Lưu vào thư viện</button></div></div></div>`;  root.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', () => { editorCancelPending(); editorAiContext = null; root.innerHTML = ''; }));  const editorQuestions = $('#editorQuestions', root);
+  const game = { id: '', title: p.title || 'Trò chơi mới', subject: p.subject, grade: p.grade, topic: '', template: t, description: 'Trò chơi được tạo trong EduGame Studio.', sourceName: p.sourceName, gameSetup: p.gameSetup, questions: usesPanel ? [] : [{ id:'q1', type:t, ...sample }], matchingGame: isMatching ? defaultMatchingGame() : undefined, ...(isTreasure ? { treasureHunt: defaultTreasureHunt() } : {}), ...(isRace ? { race: defaultRaceData() } : {}) };  openEditor(game, true, 'Bạn đang tạo trò chơi mới theo cách nhập thủ công. Hãy điền đầy đủ câu hỏi, phương án và đáp án đúng.');  toast('Đã mở trò chơi trống. Hãy nhập câu hỏi, phương án và đáp án đúng rồi nhấn Lưu vào thư viện.');}function editGame(game) { if (!game) return; openEditor(JSON.parse(JSON.stringify(game)), false, 'Chỉnh sửa nội dung trò chơi.'); }function openEditor(game, isNew, note = '', aiContext = null) {  editorCancelPending();  editorAiContext = aiContext && aiContext.projectId && editorAiSupported(aiContext.gameType) ? { projectId: String(aiContext.projectId), gameType: aiContext.gameType, itemIds: (Array.isArray(aiContext.itemIds) ? aiContext.itemIds : []).map(id => String(id)) } : null;  editorAiBusy = false;  editorAiRequestId = '';  const root = $('#modalRoot');  root.innerHTML = `<div class="modal-backdrop"><div class="modal"><div class="modal-head"><div><h2>${isNew ? 'Duyệt và hoàn thiện trò chơi' : 'Chỉnh sửa trò chơi'}</h2><div class="small muted mt-[5px]">${escapeHtml(note)}</div></div><button class="modal-close" data-close>✕</button></div><div class="modal-body">      <div class="field-row"><div class="field"><label>TÊN TRÒ CHƠI</label><input id="editTitle" value="${escapeHtml(game.title)}"></div><div class="field"><label>THỂ LOẠI</label><select id="editTemplate">${[['quiz','Đấu trường kiến thức'],['scenario','Thử thách tình huống'],['matching','Ghép cặp kiến thức'],['treasure-hunt','Giải mã kho báu'],['race','Đường đua chinh phục']].map(([v,l])=>`<option value="${v}" ${game.template===v?'selected':''}>${l}</option>`).join('')}</select></div></div>    <div class="field-row"><div class="field"><label>MÔN HỌC</label><input id="editSubject" value="${escapeHtml(game.subject||'')}"></div><div class="field"><label>LỚP</label><input id="editGrade" value="${escapeHtml(game.grade||'')}"></div></div>    <div class="field"><label>MÔ TẢ</label><input id="editDescription" value="${escapeHtml(game.description||'')}"></div>    <div class="field"><label>MINH HỌA</label><select id="editIllustrationMode"><option value="auto" ${editorIllustrationMode(game)==='auto'?'selected':''}>Tự động theo lĩnh vực nội dung</option><option value="manual" ${editorIllustrationMode(game)==='manual'?'selected':''}>Chọn thủ công từng mục</option><option value="off" ${editorIllustrationMode(game)==='off'?'selected':''}>Tắt minh họa</option></select><p class="field-hint">Giáo viên luôn kiểm soát hình minh họa. Tắt minh họa chỉ ẩn hình nội dung; icon chức năng của giao diện vẫn hoạt động.</p></div>      <div class="section-head"><h3>Câu hỏi / tình huống <span class="tag">${game.questions.length}</span></h3><div><button class="btn btn-secondary btn-small" id="importQuestionsBtn">⇧ Nhập CSV/XLSX</button> <button class="btn btn-secondary btn-small" id="addQuestionBtn">＋ Thêm câu hỏi</button></div></div>    <div id="editorQuestions">${game.questions.map((q,i)=>questionEditor(q,i,game.questions)).join('')}</div>    </div><div class="modal-foot"><button class="btn btn-secondary" data-close>Hủy</button><button class="btn btn-secondary" id="saveExportBtn">Lưu và xuất</button><button class="btn btn-primary" id="saveGameBtn">✓ Lưu vào thư viện</button></div></div></div>`;  root.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', () => { editorCancelPending(); editorAiContext = null; root.innerHTML = ''; }));  const editorQuestions = $('#editorQuestions', root);
 editorQuestions.addEventListener('change', e => {
   const target=e.target;
   if(!target.matches('[data-field="type"]')) return;
@@ -332,7 +332,7 @@ editorQuestions.addEventListener('click', e => {
   const qEl=b.closest('.editor-question');
   if(b.matches('[data-remove-option]')){ b.closest('.editor-option').remove(); return; }
   if(b.matches('.add-option')){ const opts=qEl.querySelectorAll('[data-option-id]'); const j=opts.length; const id=String.fromCharCode(97+j); const question=qEl.querySelector('[data-field="prompt"]').value; const isScenario=qEl.querySelector('[data-field="type"]').value==='scenario'; qEl.querySelector('.editor-options').insertAdjacentHTML('beforeend',editorOption({id,text:''},j,isScenario,{id:qEl.dataset.questionId,prompt:question},currentEditorQuestions(root))); return; }
-  if(b.matches('[data-copy-question]')){ const i=$$('.editor-question', $('#editorQuestions', root) || root).length; const src=qEl; const opts=[...src.querySelectorAll('[data-option-id]')].map(o=>readEditorOption(o.closest('.editor-option'))); const html=questionEditor({id:newQuestionId(),prompt:src.querySelector('[data-field="prompt"]').value,type:src.querySelector('[data-field="type"]').value,context:src.querySelector('[data-field="context"]')?.value,discussionPrompt:src.querySelector('[data-field="discussion"]')?.value,options:opts,correctOptionId:src.querySelector('[data-field="correct"]')?.value,correctAnswer:src.querySelector('[data-field="correct-answer"]')?.value,points:Number(src.querySelector('[data-field="points"]')?.value)||100,explanation:src.querySelector('[data-field="explanation"]').value},i,currentEditorQuestions(root)); $('#editorQuestions',root).insertAdjacentHTML('beforeend',html); renumberQuestions(root); refreshScenarioBranches(root); return; }
+  if(b.matches('[data-copy-question]')){ const i=$$('.editor-question', $('#editorQuestions', root) || root).length; const src=qEl; const opts=[...src.querySelectorAll('[data-option-id]')].map(o=>readEditorOption(o.closest('.editor-option'))); const html=questionEditor({id:newQuestionId(),prompt:src.querySelector('[data-field="prompt"]').value,type:src.querySelector('[data-field="type"]').value,context:src.querySelector('[data-field="context"]')?.value,discussionPrompt:src.querySelector('[data-field="discussion"]')?.value,options:opts,correctOptionId:src.querySelector('[data-field="correct"]')?.value,correctAnswer:src.querySelector('[data-field="correct-answer"]')?.value,hint:src.querySelector('[data-field="hint"]')?.value,points:Number(src.querySelector('[data-field="points"]')?.value)||100,explanation:src.querySelector('[data-field="explanation"]').value,...readEditorItemAssets(src)},i,currentEditorQuestions(root)); $('#editorQuestions',root).insertAdjacentHTML('beforeend',html); renumberQuestions(root); refreshScenarioBranches(root); return; }
   if(b.matches('[data-move-question-up]')){ if(qEl.previousElementSibling){qEl.parentNode.insertBefore(qEl,qEl.previousElementSibling); renumberQuestions(root);} return; }
   if(b.matches('[data-move-question-down]')){ if(qEl.nextElementSibling){qEl.parentNode.insertBefore(qEl.nextElementSibling,qEl); renumberQuestions(root);} return; }
   if(b.matches('[data-remove-question]')){ qEl.remove(); renumberQuestions(root); refreshScenarioBranches(root); return; }
@@ -391,8 +391,11 @@ $('#importQuestionsBtn', root).addEventListener('click', async () => {
     </div>
     <div class="text-answer-fields ${isText?'':'hidden'}">
       <label>ĐÁP ÁN ĐÚNG (VĂN BẢN)</label>
-      <input data-field="correct-answer" value="${escapeHtml(q.correctAnswer||'')}" placeholder="${type==='fill-in-blank'?'Ví dụ: quang hợp — chấp nhận không phân biệt hoa/thường và dấu':'Nhập đáp án học sinh cần nhập'}">
-      <p class="field-hint">Chấm không phân biệt hoa/thường, dấu tiếng Việt và khoảng trắng thừa. Có thể nhập nhiều đáp án hợp lệ, cách nhau bằng dấu chấm phẩy (;).</p>
+      <input data-field="correct-answer" value="${escapeHtml(q.correctAnswer||'')}" placeholder="${type==='fill-in-blank'?'Ví dụ: quang hợp — chấp nhận không phân biệt hoa/thường và dấu':'Nhập đáp án ngắn (tối đa 5 từ)'}">
+      <p class="field-hint">Chấm không phân biệt hoa/thường, dấu tiếng Việt, khoảng trắng thừa và dấu câu cuối. Có thể nhập nhiều đáp án hợp lệ, cách nhau bằng dấu chấm phẩy (;). Đáp án nhiều ý cũng chấp nhận học sinh gõ bằng dấu phẩy.</p>
+      <label class="text-answer-hint-label">GỢI Ý (HIỆN KHI HỌC SINH BẤM 💡)</label>
+      <input data-field="hint" value="${escapeHtml(q.hint||'')}" maxlength="200" placeholder="Ví dụ: Đây là quá trình cây xanh tạo chất hữu cơ nhờ ánh sáng">
+      <p class="field-hint">Gợi ý chỉ nên nhắc học sinh nhớ ra đáp án, không chứa chính đáp án. Để trống nếu không cần.</p>
     </div>
     <div class="correct-select ${(isScenario||isText)?'hidden':''}">
       <span>Đáp án đúng:</span>
@@ -401,10 +404,79 @@ $('#importQuestionsBtn', root).addEventListener('click', async () => {
       <span>Thời gian (giây)</span><input data-field="timelimit" type="number" min="0" value="${timeLimit}" placeholder="mặc định" class="w-[90px] m-0 p-[6px]">
     </div>
     <div class="correct-select"><span>Độ khó</span><select data-field="difficulty" class="w-auto"><option value="" ${!q.difficulty?'selected':''}>— Chưa đặt</option><option value="dễ" ${q.difficulty==='dễ'?'selected':''}>Dễ</option><option value="trung bình" ${q.difficulty==='trung bình'?'selected':''}>Trung bình</option><option value="khó" ${q.difficulty==='khó'?'selected':''}>Khó</option></select></div>
+    ${editorAssetFieldsHtml(q)}
     <textarea data-field="explanation" rows="2" placeholder="Giải thích đáp án">${escapeHtml(q.explanation||'')}</textarea>
   </div>`;
 }
 function newQuestionId() { return `q-${Date.now()}-${Math.random().toString(36).slice(2,7)}`; }
+
+/* Phase 4 of update_plan_6: the per-item asset keys (`contentCategory`,
+   `iconName`, `illustrationAssetId`) live in the DOM as hidden inputs, exactly
+   like `data-option-id` does for option ids. Without them every read/save cycle
+   would silently erase what the AI returned, because the editor rebuilds each
+   item object field by field — a field that is not read is a field deleted.
+
+   NOTE: the renderer is loaded as classic <script> tags (src/index.html) and
+   never imports src/shared/*, which compile to CommonJS. So the constants below
+   are local copies. They only drive display and a defensive re-normalisation;
+   the authoritative validation is `itemAssetFieldsForSave` in src/shared/
+   asset-validation.ts, which runs in the main process on save. The values read
+   here are passed through untouched, so a copy drifting cannot corrupt data. */
+const EDITOR_CONTENT_CATEGORY_IDS = ['general','animals','plants','space','human-body','transport','safety','environment','history','geography','jobs','sports','music','art','math','language','science','technology','health','family','community','weather','food','objects','water-world'];
+/* Only ids that are `true` in src/shared/icon-registry.ts; anything else is
+   hidden rather than rendered as a broken glyph. */
+const EDITOR_ICON_NAMES = new Set(['paw-print','leaf','rocket','heart-pulse','car','shield-check','recycle','landmark','map','briefcase','trophy','file-music','palette','calculator','languages','flask-conical','cpu','stethoscope','users','house','cloud-sun','apple','box','waves-horizontal','layout-grid','book-open','lightbulb','star','check','x','arrow-right','arrow-left','play','pause','rotate-ccw','skip-forward','volume-2','volume-x','maximize','minimize','search','settings','library','pencil','trash','plus','download','upload','clock','target','brain','zap','sparkles','gift','shield-alert','mountain','fish','bird','bug','utility-pole']);
+const EDITOR_CATEGORY_LABEL = {'general':"Tổng quát",'animals':"Động vật",'plants':"Thực vật",'space':"Vũ trụ",'human-body':"Cơ thể người",'transport':"Giao thông",'safety':"An toàn",'environment':"Môi trường",'history':"Lịch sử",'geography':"Địa lí",'jobs':"Nghề nghiệp",'sports':"Thể thao",'music':"Âm nhạc",'art':"Mỹ thuật",'math':"Toán",'language':"Tiếng Việt",'science':"Khoa học",'technology':"Công nghệ",'health':"Sức khỏe",'family':"Gia đình",'community':"Cộng đồng",'weather':"Thời tiết",'food':"Thực phẩm",'objects':"Đồ vật",'water-world':"Thế giới nước"};
+function editorAssetFieldsHtml(item, options) {
+  const source = item || {};
+  const compact = !!(options && options.compact);
+  const rawCategory = typeof source.contentCategory === 'string' ? source.contentCategory.trim() : '';
+  const category = EDITOR_CONTENT_CATEGORY_IDS.includes(rawCategory) ? rawCategory : 'general';
+  const rawIcon = typeof source.iconName === 'string' ? source.iconName.trim() : '';
+  const iconName = EDITOR_ICON_NAMES.has(rawIcon) ? rawIcon : '';
+  const illustration = typeof source.illustrationAssetId === 'string' ? source.illustrationAssetId.trim() : '';
+  const chips = compact ? '' : `<span class="editor-asset-chip" title="Lĩnh vực nội dung của mục này">${escapeHtml(EDITOR_CATEGORY_LABEL[category] || category)}</span>
+    ${illustration ? `<span class="editor-asset-chip" title="Minh họa đã gán">🖼 ${escapeHtml(illustration)}</span>` : ''}`;
+  return `<div class="editor-item-assets${compact ? ' is-compact' : ''}">
+    ${chips}
+    <input type="hidden" data-field="contentCategory" value="${escapeHtml(category === 'general' ? '' : category)}">
+    <input type="hidden" data-field="iconName" value="${escapeHtml(iconName)}">
+    <input type="hidden" data-field="illustrationAssetId" value="${escapeHtml(illustration)}">
+  </div>`;
+}
+/**
+ * Reads the three hidden asset inputs of an item. A value is only returned when
+ * it is non-blank, and `general` is dropped because a missing category already
+ * means general — the same rule the project adapter applies on save. Returns {}
+ * when the row has no asset inputs, so spreading it never invents fields.
+ */
+function readEditorItemAssets(scope) {
+  const category = scope?.querySelector('[data-field="contentCategory"]');
+  const icon = scope?.querySelector('[data-field="iconName"]');
+  const illustration = scope?.querySelector('[data-field="illustrationAssetId"]');
+  if (!category && !icon && !illustration) return {};
+  const fields = {};
+  const categoryValue = (category?.value || '').trim();
+  if (categoryValue && categoryValue !== 'general') fields.contentCategory = categoryValue;
+  const iconValue = (icon?.value || '').trim();
+  if (iconValue) fields.iconName = iconValue;
+  const illustrationValue = (illustration?.value || '').trim();
+  if (illustrationValue) fields.illustrationAssetId = illustrationValue;
+  return fields;
+}
+/* "Minh họa" is a game-level choice (docs/DECISIONS.md #62, #65), stored in
+   `gameSetup.illustrationMode` so it survives the project adapter unchanged.
+   Anything unrecognised reads as 'auto', which is what a game with no setting
+   already means — so old saved games keep working untouched. */
+function editorIllustrationMode(game) {
+  const mode = game && game.gameSetup ? game.gameSetup.illustrationMode : '';
+  return mode === 'manual' || mode === 'off' ? mode : 'auto';
+}
+function withEditorIllustrationMode(game, root) {
+  const select = $('#editIllustrationMode', root);
+  const mode = select && (select.value === 'manual' || select.value === 'off') ? select.value : 'auto';
+  return { ...game, gameSetup: { ...(game.gameSetup || {}), illustrationMode: mode } };
+}
 function editorOption(option, index, isScenario, question, allQuestions) {
   const nextValue = option.endsScenario === true || option.nextQuestionId === null
     ? '__end__'
@@ -449,6 +521,9 @@ function readEditorOption(container) {
 async function saveEditedGame(original, exportAfter) {
   if (editorAiBusy) return toast('AI đang viết lại một mục. Hãy chờ hoặc bấm “Huỷ” trước khi lưu.');
   const root = $('#modalRoot');
+  // Applied once here so every template's save path persists the teacher's
+  // "Minh họa" choice without each branch remembering to repeat it.
+  original = withEditorIllustrationMode(original, root);
   if ($('#editTemplate', root).value === 'matching') {
     const matching = readMatchingEditor(root);
     if (!$('#editTitle', root).value.trim()) return toast('Tên trò chơi không được để trống.');
@@ -535,7 +610,8 @@ async function saveEditedGame(original, exportAfter) {
       type,
       prompt: $('[data-field="prompt"]', el).value.trim(),
       points: Number($('[data-field="points"]', el).value) || 100,
-      explanation: $('[data-field="explanation"]', el).value.trim()
+      explanation: $('[data-field="explanation"]', el).value.trim(),
+      ...readEditorItemAssets(el)
     };
     if (timelimit) q.timeLimit = timelimit;
     if (difficulty) q.difficulty = difficulty;
@@ -553,6 +629,8 @@ async function saveEditedGame(original, exportAfter) {
       const accepted = raw.split(';').map(v => v.trim()).filter(Boolean);
       q.correctAnswer = accepted[0] || '';
       if (accepted.length > 1) q.alternateAnswers = accepted.slice(1);
+      const hint = ($('[data-field="hint"]', el)?.value || '').trim();
+      if (hint) q.hint = hint;
     }
     else { q.options = opts.length ? opts : [{ id: 'a', text: '' }]; q.correctOptionId = 'a'; }
     return q;
@@ -563,6 +641,8 @@ async function saveEditedGame(original, exportAfter) {
   if (questions.some(q => q.type === 'multiple-choice' && (q.options.length < 2 || q.options.some(o => !o.text)))) return toast('Câu trắc nghiệm cần ít nhất 2 phương án đầy đủ.');
   if (questions.some(q => q.type === 'scenario' && (q.options.length < 2 || q.options.some(o => !o.text)))) return toast('Mỗi tình huống cần ít nhất hai hành động đầy đủ.');
   if (questions.some(q => (q.type === 'fill-in-blank' || q.type === 'short-answer') && !q.correctAnswer)) return toast('Câu điền từ hoặc trả lời ngắn cần có đáp án đúng (mục ĐÁP ÁN ĐÚNG).');
+  const tooLong = questions.find(q => (q.type === 'fill-in-blank' || q.type === 'short-answer') && typeof textAnswerTooLong === 'function' && textAnswerTooLong(q.correctAnswer));
+  if (tooLong) return toast(`Đáp án “${tooLong.correctAnswer}” dài hơn ${typeof TEXT_ANSWER_WORD_LIMIT === 'number' ? TEXT_ANSWER_WORD_LIMIT : 5} từ. Câu nhập đáp án chỉ nên có đáp án ngắn — hãy rút gọn hoặc đổi câu này sang trắc nghiệm.`);
   const scenarioIds = new Set(questions.filter(question => question.type === 'scenario').map(question => question.id));
   if (questions.some(question => question.type === 'scenario' && question.options.some(option =>
     option.nextQuestionId && !scenarioIds.has(option.nextQuestionId)
@@ -674,6 +754,7 @@ function matchingPairRow(pair, index) {
     <span class="drag-handle" draggable="true" data-pair-drag title="Kéo để sắp xếp cặp">⠿</span>
     <input data-pair-left value="${escapeHtml(pair.left || '')}" placeholder="Thuật ngữ / nội dung cột A">
     <input data-pair-right value="${escapeHtml(pair.right || '')}" placeholder="Định nghĩa / nội dung cột B">
+    ${editorAssetFieldsHtml(pair, { compact: true })}
     ${editorAiButton(pair.id)}
     <button type="button" class="text-link" data-pair-up title="Lên">↑</button>
     <button type="button" class="text-link" data-pair-down title="Xuống">↓</button>
@@ -746,7 +827,8 @@ function readMatchingEditor(root) {
   const pairs = $$('#matchingPairs .matching-pair-row', root).map((row, index) => ({
     id: row.dataset.pairId || `p${index + 1}`,
     left: row.querySelector('[data-pair-left]').value.trim(),
-    right: row.querySelector('[data-pair-right]').value.trim()
+    right: row.querySelector('[data-pair-right]').value.trim(),
+    ...readEditorItemAssets(row)
   }));
   return {
     mode: $('#matchingMode', root).value,
@@ -884,6 +966,7 @@ function treasureStageHtml(stage, index) {
       <div class="field"><label>KIỂU NHIỆM VỤ</label><select data-stage-mission data-stage-select>${Object.entries(treasureMissionMeta).map(([value, meta]) => `<option value="${value}" ${missionType === value ? 'selected' : ''}>${meta.icon} ${meta.label}</option>`).join('')}</select></div>
       <label>CÂU ĐỐ / LỜI DẪN NHIỆM VỤ</label><textarea data-stage-prompt rows="2" placeholder="Nội dung câu đố hoặc lời dẫn nhiệm vụ">${escapeHtml(stage.question?.prompt || '')}</textarea>
       ${treasureMissionPanel(stage)}
+      ${editorAssetFieldsHtml(stage.question)}
       <div class="field-row"><div class="field"><label>GIẢI THÍCH</label><textarea data-stage-explanation rows="2">${escapeHtml(stage.question?.explanation || '')}</textarea></div><div class="field"><label>GỢI Ý KHI THỬ SAI</label><textarea data-stage-hint rows="2" placeholder="Hiển thị khi hết lượt thử">${escapeHtml(stage.question?.hint || '')}</textarea></div></div>
       <div class="field-row"><div class="field"><label>LƯỢT THỬ (0 = KHÔNG GIỚI HẠN)</label><input data-stage-attempts type="number" min="0" max="99" value="${Number(stage.attempts) || 0}"></div><div class="field"><label>ĐIỂM GIẢI CÂU ĐỐ</label><input data-stage-points type="number" min="0" max="1000" value="${Number(stage.points) || 100}"></div><div class="field"><label>THƯỞNG HOÀN THÀNH CHẶNG</label><input data-stage-bonus type="number" min="0" max="10000" value="${Number(stage.completionBonus) || 200}"></div></div>
       <div class="field-row"><div class="field"><label>ĐI TỚI SAU KHI XONG CHẶNG</label><select data-stage-next data-stage-select>${stage.nextStageId ? `<option value="${escapeHtml(stage.nextStageId)}">Chặng liên kết</option>` : '<option value="__ending__">🏠 Kết thúc tại đây — nhận kho báu</option>'}</select></div><div class="field"><label>NHÁNH PHỤ — LỰA CHỌN CỦA HỌC SINH</label><input data-stage-branch-label value="${escapeHtml(stage.branchLabel || '')}" placeholder="Tên nhánh (để trống nếu không dùng)"><select data-stage-branch data-stage-select><option value="">— Không có nhánh phụ —</option>${stage.branchStageId ? `<option value="${escapeHtml(stage.branchStageId)}">Nhánh liên kết</option>` : ''}</select></div></div>
@@ -1008,7 +1091,8 @@ function readTreasureStageCard(card, nextStageId) {
       options: choice ? $$('.treasure-option-row', card).map(row => ({ id: row.dataset.optId, text: row.querySelector('[data-opt-text]').value.trim() })) : [],
       correctOptionId: choice && correct ? correct.closest('.treasure-option-row').dataset.optId : '',
       explanation: card.querySelector('[data-stage-explanation]').value.trim(),
-      hint: card.querySelector('[data-stage-hint]').value.trim()
+      hint: card.querySelector('[data-stage-hint]').value.trim(),
+      ...readEditorItemAssets(card)
     },
     ...(mission ? { mission } : {}),
     attempts: Math.max(0, Number(card.querySelector('[data-stage-attempts]').value) || 0),
@@ -1224,6 +1308,7 @@ function raceQuestionCard(q, index) {
       <button type="button" class="text-link danger-text" data-rq-remove>✕ Xóa</button>
     </div>
     <textarea data-rq-prompt rows="2" placeholder="Nội dung câu hỏi">${escapeHtml(q.prompt || '')}</textarea>
+    ${editorAssetFieldsHtml(q)}
     <div class="treasure-options" data-rq-options>${options.map((o, j) => raceQuestionOptionRow(o, q.id, q.correctOptionId, j)).join('')}<button type="button" class="btn btn-secondary btn-small" data-rq-add-option>＋ Thêm đáp án</button></div>
     <textarea data-rq-explanation rows="2" placeholder="Giải thích đáp án">${escapeHtml(q.explanation || '')}</textarea>
   </div>`;
@@ -1312,7 +1397,8 @@ function bindRaceEditor(root) {
         options: $$('.treasure-option-row', card).map(row => ({ id: row.dataset.optId, text: row.querySelector('[data-opt-text]').value })),
         correctOptionId: card.querySelector('[data-opt-correct]:checked')?.closest('.treasure-option-row')?.dataset.optId || 'a',
         explanation: card.querySelector('[data-rq-explanation]').value,
-        difficulty: card.querySelector('[data-rq-difficulty]').value
+        difficulty: card.querySelector('[data-rq-difficulty]').value,
+        ...readEditorItemAssets(card)
       }, $$('.race-question-card', questions).length);
       card.insertAdjacentHTML('afterend', html);
       renumberRaceQuestions(root);
@@ -1494,7 +1580,8 @@ function readRaceEditor(root) {
         options: $$('.treasure-option-row', card).map(row => ({ id: row.dataset.optId, text: row.querySelector('[data-opt-text]').value.trim() })),
         correctOptionId: correct ? correct.closest('.treasure-option-row').dataset.optId : '',
         explanation: card.querySelector('[data-rq-explanation]').value.trim(),
-        difficulty: card.querySelector('[data-rq-difficulty]').value
+        difficulty: card.querySelector('[data-rq-difficulty]').value,
+        ...readEditorItemAssets(card)
       };
     })
   };

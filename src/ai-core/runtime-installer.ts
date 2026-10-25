@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
-import { copyFile, mkdir, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import JSZip from 'jszip';
 import type { LocalAiDownloadProgress } from './contracts';
 import { LLAMA_CPP_RUNTIME } from './model-catalog';
+import { detectInstalledBackend } from './runtime-manifest';
 import { fetchTrustedDownload } from './trusted-download';
 
 /**
@@ -34,6 +35,8 @@ export interface RuntimeArtifact {
   sizeBytes: number;
   sha256: string;
   sourceUrl: string;
+  /** Which build this archive is. Used to refuse reusing the wrong install. */
+  backend?: string;
 }
 
 export class LlamaRuntimeInstaller {
@@ -61,6 +64,39 @@ export class LlamaRuntimeInstaller {
       if (isMissingFile(error)) return undefined;
       throw error;
     }
+  }
+
+  /**
+   * Which backend the extracted runtime on disk actually is.
+   *
+   * The directory path is the same for every backend, so the caller cannot tell
+   * a CPU install from a Vulkan one by looking at the path or at the presence
+   * of `llama-server.exe`. Returns `undefined` when nothing is installed yet or
+   * the layout is not recognised.
+   */
+  async getInstalledBackend(): Promise<string | undefined> {
+    if (!(await this.getExecutablePath())) return undefined;
+    let entries: string[];
+    try {
+      entries = await readdir(this.options.runtimeDirectory);
+    } catch (error) {
+      if (isMissingFile(error)) return undefined;
+      throw error;
+    }
+    return detectInstalledBackend(entries);
+  }
+
+  /**
+   * True when the directory already holds a working executable *of the backend
+   * this installer would install*. "A file exists" is not enough: keeping a CPU
+   * install while the caller asked for Vulkan is exactly the bug this guards.
+   */
+  async matchesBackend(backend: string): Promise<boolean> {
+    if (!(await this.getExecutablePath())) return false;
+    const installed = await this.getInstalledBackend();
+    // An unrecognised layout is treated as "not a match" so it gets replaced by
+    // a verified archive instead of being trusted.
+    return installed === backend;
   }
 
   /**
@@ -117,8 +153,18 @@ export class LlamaRuntimeInstaller {
     onProgress?: (progress: LocalAiDownloadProgress) => void,
     signal?: AbortSignal
   ): Promise<string> {
-    const existing = await this.getExecutablePath();
-    if (existing) return existing;
+    // Reuse an existing install only when it is the *same build*. Checking for
+    // `llama-server.exe` alone kept a CPU install in place when the caller had
+    // resolved (and persisted) Vulkan, so the GPU choice did nothing.
+    //
+    // The default artifact (`LLAMA_CPP_RUNTIME`) carries no `backend` field but
+    // *is* the CPU build; without this fallback any caller that omits the field
+    // would re-download over a perfectly good install.
+    const wantedBackend = this.runtimeArtifact.backend || 'cpu';
+    if ((await this.getInstalledBackend()) === wantedBackend) {
+      const existing = await this.getExecutablePath();
+      if (existing) return existing;
+    }
     if (this.platform !== 'win32' || this.arch !== 'x64') {
       throw new Error('Runtime llama.cpp tự quản lý hiện được hỗ trợ trên Windows x64.');
     }

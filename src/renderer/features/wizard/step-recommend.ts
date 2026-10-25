@@ -39,12 +39,14 @@ function renderWizardRecommend() {
     <div class="grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-[12px]" id="wizardRecommendations">
       ${s.recommendations.map(recommendation => {
         const meta = wizardGameMeta(recommendation.gameType);
-        const selected = recommendation.id === s.selectedRecommendationId;
-        return `<article class="border rounded-[12px] p-[15px] bg-white min-w-0 flex flex-col gap-[8px] ${selected ? 'border-[#6258e8] shadow-[0_0_0_2px_#6258e826]' : 'border-line'}" data-wizard-recommendation="${escapeHtml(recommendation.id)}" data-game-type="${recommendation.gameType}">
+        // The config is the source of truth: a genre picked from "thể loại khác"
+        // has no recommendation id, but it is still the active choice.
+        const selected = recommendation.gameType === s.selectedGameType;
+        return `<article class="border rounded-[12px] p-[15px] bg-white min-w-0 flex flex-col gap-[8px] ${selected ? 'border-[#6258e8] shadow-[0_0_0_2px_#6258e826]' : 'border-line'}" data-wizard-recommendation="${escapeHtml(recommendation.id)}" data-game-type="${recommendation.gameType}" data-selected="${selected ? 'true' : 'false'}">
           <div class="flex items-center gap-[9px]"><span class="text-[24px]">${meta.icon}</span><div class="min-w-0"><strong class="text-[13px] block">${escapeHtml(recommendation.title || meta.label)}</strong><small class="text-[11px] text-[#788196]">${escapeHtml(meta.label)} · gợi ý ${Number(recommendation.suggestedDurationMinutes) || 10} phút</small></div></div>
           <p class="text-[11px] text-[#5b6478] leading-[1.6] m-0">${escapeHtml(recommendation.reason || recommendation.description || meta.hint)}</p>
           ${recommendation.learningObjectiveIds && recommendation.learningObjectiveIds.length ? `<ul class="m-0 pl-[16px] text-[11px] text-[#6d7688]">${recommendation.learningObjectiveIds.map(id => `<li>${escapeHtml(wizardObjectiveTitle(id))}</li>`).join('')}</ul>` : ''}
-          <button class="btn ${selected ? 'btn-primary' : 'btn-secondary'} btn-small mt-auto" data-wizard-action="select" data-id="${escapeHtml(recommendation.id)}" data-game-type="${recommendation.gameType}">${selected ? '✓ Đã chọn' : 'Chọn thể loại này'}</button>
+          <button class="btn ${selected ? 'btn-primary' : 'btn-secondary'} btn-small mt-auto" data-wizard-action="select" data-id="${escapeHtml(recommendation.id)}" data-game-type="${recommendation.gameType}" aria-pressed="${selected ? 'true' : 'false'}">${selected ? '✓ Đã chọn' : 'Chọn thể loại này'}</button>
         </article>`;
       }).join('')}
     </div>
@@ -55,9 +57,11 @@ function renderWizardRecommend() {
       return `<div class="field mt-[10px]"><small class="block text-[11px] text-[#788196] mb-[6px]">Hoặc chọn thể loại khác:</small>
         <div class="flex flex-wrap gap-[6px]">${others.map(gameType => {
           const meta = wizardGameMeta(gameType);
-          return `<button class="btn btn-secondary btn-small" data-wizard-action="select-type" data-game-type="${escapeHtml(gameType)}">${meta.icon} ${escapeHtml(meta.label)}</button>`;
+          const selected = gameType === s.selectedGameType;
+          return `<button class="btn ${selected ? 'btn-primary' : 'btn-secondary'} btn-small" data-wizard-action="select-type" data-game-type="${escapeHtml(gameType)}" aria-pressed="${selected ? 'true' : 'false'}">${selected ? '✓ ' : ''}${meta.icon} ${escapeHtml(meta.label)}</button>`;
         }).join('')}</div></div>`;
     })()}
+    ${s.selectedGameType ? `<div class="field-hint mt-[10px]" data-wizard-selected-type="1">Đang chọn: <strong>${escapeHtml(wizardGameMeta(s.selectedGameType).label)}</strong>. Bấm “Tiếp tục” để chỉnh cấu hình.</div>` : ''}
     <div class="publish-actions">
       <button class="btn btn-secondary" data-wizard-action="rerun-recommend"${loading ? ' disabled' : ''}>↻ Gợi ý lại</button>
       <button class="btn btn-secondary" data-wizard-action="back">← Xem lại phân tích</button>
@@ -107,8 +111,11 @@ function wizardRecommendSelect(recommendationId) {
   if (staleDraft && !wizardConfirmGenreChange()) return;
   wizardState.selectedRecommendationId = recommendation.id;
   wizardState.selectedGameType = recommendation.gameType;
+  wizardState.quick = null;
   if (changed || !wizardState.config) {
     wizardState.config = wizardDefaultConfig(recommendation, wizardState.analysis);
+    wizardState.countTouched = false;
+    wizardState.capacity = null;
   }
   if (staleDraft || (changed && !wizardState.draft)) wizardDiscardGeneratedContent();
   wizardClearMessages();
@@ -125,10 +132,16 @@ function wizardRecommendSelectType(gameType) {
   const changed = wizardState.selectedGameType !== gameType;
   const staleDraft = Boolean(wizardState.draft) && wizardState.draft.gameType !== gameType;
   if (staleDraft && !wizardConfirmGenreChange()) return;
-  wizardState.selectedRecommendationId = null;
+  // Keep the recommendation id when this genre was also suggested, so the saved
+  // project keeps its provenance; a non-suggested genre simply has no id.
+  const suggested = wizardState.recommendations.find(item => item.gameType === gameType);
+  wizardState.selectedRecommendationId = suggested ? suggested.id : null;
   wizardState.selectedGameType = gameType;
+  wizardState.quick = null;
   if (changed || !wizardState.config) {
-    wizardState.config = wizardDefaultConfig({ gameType }, wizardState.analysis);
+    wizardState.config = wizardDefaultConfig(suggested || { gameType }, wizardState.analysis);
+    wizardState.countTouched = false;
+    wizardState.capacity = null;
   }
   if (staleDraft || (changed && !wizardState.draft)) wizardDiscardGeneratedContent();
   wizardClearMessages();

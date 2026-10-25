@@ -1,0 +1,448 @@
+# Task: Comprehensive UI/UX Redesign and Improvement for EduGame Studio
+
+## 1. Project Context
+
+EduGame Studio is an existing Windows desktop educational game creation application built with Electron and TypeScript. It enables teachers to create, edit, and present interactive educational games using lesson documents and local AI.
+
+The application already has an established architecture, document analysis, AI-assisted question generation, manual editing, game configuration, scoring, and five existing game types.
+
+Your task is to **audit, redesign, and improve the actual UI/UX across the entire application and all five existing game types**, with particular emphasis on classroom projector presentation.
+
+The goal is a polished, intuitive, visually attractive, and reliable educational application that teachers can use easily and students can understand and enjoy during classroom activities.
+
+## 2. Non-Negotiable Constraints
+
+- Inspect the existing codebase and running application before making changes.
+- Identify the actual five game types from the source code. Do not invent, rename, replace, or assume their mechanics.
+- Preserve the existing Electron + TypeScript architecture, data models, game logic, and working features.
+- Preserve the local AI pipeline, document analysis, manual question creation, AI-generated content, saving, scoring, and presentation functionality.
+- Do not rebuild the application from scratch or introduce unnecessary dependencies.
+- Reuse existing components, styling conventions, state management, and asset libraries wherever possible.
+- Avoid large refactors unless strictly necessary.
+- Do not replace functional interfaces with static mockups or demonstrations.
+- Implement actual code changes, not merely design recommendations.
+- Keep the application offline-first and compatible with its existing Windows packaging.
+- Do not remove functionality simply to simplify the interface.
+
+Prioritize usability, visual quality, readability, reliability, and maintainability over decorative effects.
+
+## 3. Audit the Entire Application
+
+Inspect all existing screens, components, navigation paths, and interaction flows, including:
+
+- Main dashboard and navigation.
+- Lesson document import, storage, and analysis.
+- Saved projects and lesson materials.
+- Game library and game type selection.
+- Manual question creation and editing.
+- AI-assisted content generation.
+- Game settings and configuration.
+- Game preview and editing.
+- Active gameplay and projector presentation.
+- Scores, leaderboards, and final results.
+- Application settings, dialogs, notifications, and error states.
+
+Identify and fix:
+
+- Inconsistent typography, spacing, colors, icons, and component behavior.
+- Poor information hierarchy and confusing navigation.
+- Overcrowded screens and excessive empty space.
+- Redundant steps, unnecessary dialogs, and confusing forms.
+- Inconsistent button labels and unclear primary actions.
+- Missing loading, success, error, and empty states.
+- Poor feedback during AI generation and document analysis.
+- Incorrect text wrapping, clipping, overlapping, and layout shifts.
+- Accessibility problems, weak contrast, and poor keyboard navigation.
+- Visual inconsistencies between game creation, preview, and active gameplay.
+
+Document the main issues before implementation and prioritize them by user impact.
+
+## 4. Improve the Overall Teacher Workflow
+
+Make the application intuitive for teachers who have limited technical experience.
+
+The recommended workflow is:
+
+1. Select or open a lesson document.
+2. Review the analyzed lesson content.
+3. Select one of the five existing game types.
+4. Create questions manually or with local AI.
+5. Review, edit, and validate the content.
+6. Configure game-specific rules and presentation settings.
+7. Preview the game.
+8. Save and start the game or present it on a projector.
+9. Review results and reuse the saved game later.
+
+Requirements:
+
+- Make the current step and next action clear.
+- Use sensible defaults while allowing teacher customization.
+- Preserve entered data when navigating between steps.
+- Allow teachers to review and edit AI-generated questions before use.
+- Display AI progress, completion, failure, and retry options clearly.
+- Keep technical model and runtime settings out of the normal teacher workflow.
+- Provide clear validation and helpful explanations for unfamiliar settings.
+- Prevent accidental data loss when navigating, editing, or closing dialogs.
+- Avoid forcing every game into an identical creation process when their mechanics differ.
+
+Improve the workflow without changing the underlying game behavior.
+
+## 5. Establish a Consistent Design System
+
+Create a coherent visual language for the entire application.
+
+Improve and standardize:
+
+- Typography and font hierarchy.
+- Spacing, margins, alignment, and content density.
+- Color palette and semantic colors.
+- Buttons, inputs, dropdowns, dialogs, and form controls.
+- Cards, panels, navigation, and section headers.
+- Icons, illustrations, image previews, and educational assets.
+- Loading indicators, progress displays, notifications, and validation messages.
+- Empty states, error states, and completion states.
+
+Design direction:
+
+- Modern, polished educational software.
+- Friendly and engaging without looking childish.
+- Clean layouts with purposeful use of color.
+- Clear visual hierarchy and strong readability.
+- Attractive but restrained animations.
+- Consistent light and dark themes if already supported.
+- Responsive layouts that adapt to different window sizes.
+
+Avoid excessive gradients, glassmorphism, shadows, nested cards, decorative borders, oversized headings, and unnecessary animation.
+
+Use the project's existing styling system and icon libraries. Do not introduce a new framework without a clear technical justification.
+
+## 6. Separate Teacher, Preview, and Gameplay Experiences
+
+Treat these as distinct interfaces that share the same underlying game data.
+
+### Teacher interface
+
+Prioritize efficient content creation, editing, configuration, validation, saving, and presentation controls.
+
+### Preview interface
+
+Show a realistic representation of the actual gameplay layout so teachers can identify readability and layout problems before starting the game.
+
+### Active gameplay and projector interface
+
+Prioritize large readable content, clear instructions, prominent questions, visible answers, understandable progress, and minimal distractions.
+
+Do not display unnecessary editing controls during active gameplay.
+
+Keep existing full-screen behavior, keyboard controls, game progression, and teacher-controlled actions working correctly.
+
+## 7. Projector-First UI/UX: Readability and Layout
+
+**This is one of the highest-priority requirements.** The games must look attractive on a computer while remaining easy to read when projected in a real classroom.
+
+### 7.1. Screen layout and resolution
+
+- Optimize full-screen presentation for 16:9 displays at 1920×1080 and 1366×768.
+- Adapt gracefully to other window sizes and resolutions.
+- Use screen space efficiently without overcrowding the content or leaving excessive empty areas.
+- Maintain safe margins so important information is not cut off by projector alignment.
+- Prevent text, images, answer options, timers, and scores from overlapping.
+- Avoid unnecessary scrolling during active gameplay.
+- Use responsive layouts and controlled text wrapping instead of shrinking all content to fit.
+- Keep frequently changing information in stable positions to prevent distracting layout shifts.
+
+### 7.2. Readability from the back of the classroom
+
+- Use large, high-legibility fonts suitable for projection.
+- Ensure questions, answer choices, instructions, scores, and timers remain readable at a distance.
+- Use strong foreground/background contrast.
+- Avoid thin fonts, low-contrast colors, overly long text lines, and busy backgrounds.
+- Separate questions, answers, instructions, and supporting information with clear spacing.
+- Use bold emphasis selectively for important words and data.
+- Handle long Vietnamese text, mathematical formulas, tables, and special characters correctly.
+- Avoid placing essential information over visually complex images.
+- Preserve readability in both bright and dim classroom conditions.
+
+Do not use a single fixed font size for every element. Establish a clear hierarchy between the main question, answer choices, supporting instructions, and secondary information.
+
+### 7.3. Attractive visual presentation
+
+Make the games feel like professionally designed educational experiences rather than generic forms or administrative dashboards.
+
+Use:
+
+- Purposeful color palettes and visual identities.
+- Consistent icons and appropriate educational illustrations.
+- Well-composed layouts with balanced spacing.
+- Clear answer-option shapes and visual grouping.
+- Meaningful visual feedback for correct answers, incorrect answers, progress, achievements, and completion.
+- Subtle transitions and animations that reinforce game events.
+- Existing offline images, SVG assets, and icons where appropriate.
+
+Preserve image aspect ratios and avoid distorted illustrations.
+
+Avoid excessive particles, flashing elements, glowing effects, distracting backgrounds, and animations that interfere with reading or gameplay.
+
+Visual effects must never delay input, change scoring, hide essential information, or block teacher controls.
+
+## 8. Improve All Five Existing Game Types Individually
+
+Inspect the actual five game implementations and improve each one according to its existing mechanics.
+
+**Do not apply one generic layout to all five games.** Each game should retain its own identity, interaction pattern, educational purpose, and visual presentation.
+
+For each game, review the following.
+
+### 8.1. Game creation
+
+- Clearly explain the game's purpose, basic rules, and suitable classroom use.
+- Provide a creation form appropriate to that game's mechanics.
+- Support existing manual and AI-assisted content creation.
+- Distinguish required fields from optional settings.
+- Provide helpful defaults and clear validation.
+- Preserve existing content types and game-specific data structures.
+
+### 8.2. Content editing
+
+- Improve question, answer, instruction, and feedback editors.
+- Make adding, editing, duplicating, reordering, and deleting content intuitive.
+- Support existing image and educational asset features.
+- Show realistic previews of questions and answers.
+- Prevent incomplete or invalid content from breaking gameplay.
+- Preserve content when users switch between creation and configuration.
+
+### 8.3. Game configuration
+
+- Organize settings into clear, understandable groups.
+- Separate common settings from game-specific rules.
+- Preserve existing scoring, timing, difficulty, turn order, team, and other supported options.
+- Explain settings when their effects are not obvious.
+- Keep advanced settings available without overwhelming beginners.
+- Do not introduce new mechanics or change existing rules solely for visual consistency.
+
+### 8.4. Active gameplay
+
+- Make the primary task immediately obvious.
+- Allocate sufficient space to questions, challenges, images, and answer options.
+- Position timers, progress indicators, and scores where students can find them easily.
+- Keep related content visually connected.
+- Provide clear visual feedback after student actions.
+- Prevent accidental double submissions and inconsistent state transitions.
+- Make gameplay readable and usable on a classroom projector.
+- Keep the interface responsive when question lengths and image dimensions vary.
+
+### 8.5. Results and completion
+
+- Present scores, rankings, progress, and winners clearly where applicable.
+- Preserve the game's actual scoring rules.
+- Handle ties, unanswered questions, and incomplete sessions consistently with existing behavior.
+- Design an attractive completion screen without hiding important results.
+- Provide clear actions to replay, return to editing, or start another session where supported.
+
+For every game, determine its own layout, information hierarchy, and visual feedback according to the actual gameplay.
+
+## 9. Game-Specific Layout Rules
+
+Apply these rules wherever relevant to the existing mechanics.
+
+### Questions and answers
+
+- Give the main question sufficient visual prominence and screen space.
+- Use a balanced answer grid or vertical arrangement according to the number of options and text length.
+- Maintain consistent spacing and alignment.
+- Ensure long answer choices do not overlap or become unreadable.
+- Make selected, disabled, correct, and incorrect states visually distinct where applicable.
+
+### Image-based activities
+
+- Display images at an appropriate size.
+- Preserve aspect ratios and avoid cropping important details.
+- Keep images close to their related questions or answer options.
+- Prevent images from dominating the screen when text or interaction is more important.
+
+### Long questions and reading activities
+
+- Use readable text blocks and logical content grouping.
+- Allocate additional space to content-heavy questions.
+- Avoid compressing long questions into small cards.
+- Preserve essential educational content rather than silently truncating it.
+- Use scrolling or staged presentation only when appropriate for the game's existing mechanics.
+
+### Timers and progress
+
+- Make remaining time and game progress easy to identify.
+- Use color changes and animations sparingly.
+- Avoid timers competing visually with the main question.
+- Keep timer placement stable between gameplay states.
+
+### Team-based and competitive games
+
+- Make team identities, active turns, and scores easy to distinguish.
+- Keep rankings and score comparisons readable from a distance.
+- Use consistent visual indicators for the leading team or participant where appropriate.
+- Preserve individual and team modes supported by the existing implementation.
+
+### Final results
+
+- Make completion immediately recognizable.
+- Present the most important results first.
+- Use celebratory effects when appropriate without obscuring scores or feedback.
+- Keep replay and navigation actions clearly visible.
+
+These are presentation guidelines, not assumptions that every game supports every feature.
+
+## 10. Gameplay States and Transitions
+
+Review the full lifecycle of each game:
+
+1. Introduction and instructions.
+2. Ready-to-start state.
+3. Active question or challenge.
+4. Answer submission and feedback.
+5. Score and progress updates.
+6. Transition to the next question or activity.
+7. Final results and replay options.
+
+Requirements:
+
+- Use consistent visual language across states.
+- Keep layout changes predictable and intentional.
+- Avoid unnecessary animations between questions.
+- Prevent content from jumping unexpectedly when feedback appears.
+- Ensure transitions do not block input or teacher controls.
+- Preserve all existing gameplay state management and scoring behavior.
+- Handle restarting, returning, and completing a game without corrupting state.
+
+## 11. Shared Components and Reusability
+
+Audit and improve existing shared components before creating replacements.
+
+Potential components include:
+
+- Buttons and action groups.
+- Forms and validation messages.
+- Dialogs and confirmation prompts.
+- Game-type selectors and game cards.
+- Question and answer editors.
+- Image previews and educational asset selectors.
+- Timers, progress indicators, and score displays.
+- Leaderboards and team panels.
+- Loading states, notifications, and error recovery.
+- Gameplay layouts and result screens.
+
+Reuse components where the behavior is genuinely shared, but allow game-specific layouts and styling when the mechanics require them.
+
+Avoid unnecessary duplication and avoid forcing visually identical structures onto fundamentally different activities.
+
+## 12. Accessibility, Performance, and Reliability
+
+Ensure that:
+
+- Interactive controls have clear labels and visible focus states.
+- Keyboard navigation continues to work.
+- Text and controls have adequate contrast.
+- Long Vietnamese text and large question sets remain usable.
+- Missing images and AI failures are handled gracefully.
+- Repeated clicks cannot accidentally trigger duplicate submissions.
+- UI changes do not introduce memory leaks or excessive rerenders.
+- Animations remain smooth on the application's target hardware.
+- Existing saved projects remain compatible.
+- Teachers do not lose data because of navigation or UI errors.
+- Full-screen presentation and existing keyboard shortcuts continue to work.
+
+Do not trade reliability or readability for visual effects.
+
+## 13. Implementation Plan
+
+Work incrementally and verify each phase before proceeding.
+
+### Phase 1 — Audit
+
+Inspect the source code and running application. Identify the actual five game types, existing screens, shared components, design conventions, and high-impact usability issues.
+
+Produce a concise implementation plan.
+
+### Phase 2 — Shared design system
+
+Improve typography, spacing, colors, buttons, forms, dialogs, navigation, and common states.
+
+Verify that existing application functions still work.
+
+### Phase 3 — Teacher workflow
+
+Improve document selection, content review, game creation, manual editing, AI generation, configuration, preview, and saving.
+
+### Phase 4 — Five individual games
+
+Improve each game separately, including creation, editing, settings, active gameplay, and results.
+
+Preserve its existing mechanics and test it before moving to the next game.
+
+### Phase 5 — Projector presentation
+
+Optimize all five gameplay interfaces for classroom presentation, focusing on screen composition, readable text, balanced layouts, answer visibility, visual appeal, and stable gameplay transitions.
+
+### Phase 6 — Verification and regression testing
+
+Run available type checks, linting, automated tests, and production builds.
+
+Verify the critical workflows for all five games.
+
+Fix discovered regressions before declaring completion.
+
+Do not modify every screen simultaneously without intermediate verification.
+
+## 14. Visual Verification and Acceptance Tests
+
+Do not evaluate success solely by reading the code or confirming that the application compiles.
+
+Run the application and inspect the actual rendered interfaces.
+
+Capture screenshots of all five games in full-screen presentation mode at:
+
+- 1920×1080.
+- 1366×768.
+
+Where possible, also test intermediate window sizes and long-content scenarios.
+
+For each game, verify:
+
+- The question or primary challenge is immediately visible.
+- Text and answers are readable from a distance.
+- Layouts are balanced and visually attractive.
+- There is no clipping, overlapping, unintended scrolling, or excessive empty space.
+- Long Vietnamese text wraps correctly.
+- Images, formulas, and tables remain legible.
+- Timers, scores, progress, and team indicators remain visible where applicable.
+- Correct-answer feedback, incorrect-answer feedback, transitions, and final results render correctly.
+- Layouts remain usable when questions have different lengths.
+- Animations do not obscure content or interfere with interaction.
+- The design remains consistent without making all five games look identical.
+- Existing game mechanics and scoring remain unchanged.
+
+If screenshot capture or a particular test cannot be performed, report that limitation explicitly instead of claiming verification.
+
+## 15. Final Deliverables
+
+After implementation, provide:
+
+1. A summary of the most important UI/UX problems identified.
+2. A list of modified files and shared components.
+3. A summary of application-wide design improvements.
+4. A separate description of the improvements made to each of the five games.
+5. A summary of projector layout and readability improvements.
+6. Screenshot evidence or a clear description of visual verification performed.
+7. Type-check, lint, test, and build results.
+8. Any unresolved issues, limitations, and recommended next steps.
+
+Clearly distinguish verified results from work that could not be tested.
+
+## Final Success Criteria
+
+EduGame Studio must feel like one cohesive, professional educational application.
+
+Teachers must be able to create, edit, configure, save, and launch games intuitively. Students must be able to understand the activity immediately and participate without struggling to read the projected content.
+
+All five existing games must retain their unique mechanics while gaining carefully composed layouts, clear information hierarchy, attractive educational visuals, reliable interactions, and readable full-screen presentation.
+
+**Prioritize real classroom usability: students sitting at the back of the classroom must be able to read the questions and answers clearly, understand what to do, and remain engaged throughout the game.**

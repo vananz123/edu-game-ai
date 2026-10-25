@@ -8,6 +8,7 @@
  * would see (or which model would answer) produces a different key:
  *
  *   analysis:   document text hash + model id + mode + source name + prompt version
+ *               + preprocessor version (O6d)
  *   generation: document id + analysis content fingerprint + game type +
  *               config fingerprint + model id + mode + prompt version
  *
@@ -25,6 +26,7 @@ import {
   type LessonAnalysis
 } from '../shared/lesson-types';
 import { LESSON_PROMPT_VERSIONS } from './lesson-prompts';
+import { LESSON_PREPROCESS_VERSION } from './lesson-preprocess';
 
 export function sha256Hex(value: string): string {
   return createHash('sha256').update(String(value), 'utf8').digest('hex');
@@ -64,15 +66,36 @@ export interface AnalysisCacheKeyInput {
   modelId: string;
   mode: string;
   sourceName?: string;
+  /**
+   * O6d: version of the offline preprocessor that produced the excerpt. It
+   * changes what the model reads without changing the document hash, so it must
+   * be part of the key; a bump invalidates cached analyses automatically.
+   */
+  preprocessVersion?: number;
+  /**
+   * #76: fingerprint of the teacher's section scope (`selectionFingerprint`).
+   * Two different picks on the same document produce different text and must not
+   * share an analysis. Absent keeps the key byte-identical to the pre-#76 one, so
+   * every analysis cached for a whole-document run still hits.
+   */
+  selectionFingerprint?: string;
 }
 
 export function buildAnalysisCacheKey(input: AnalysisCacheKeyInput): string {
   return cacheKey('analysis', [
     LESSON_PROMPT_VERSIONS.analysis,
+    // O6d: the preprocessor changes what the model reads, so its version is part
+    // of the key; `input.preprocessVersion` lets a caller pin a specific one.
+    input.preprocessVersion === undefined ? LESSON_PREPROCESS_VERSION : input.preprocessVersion,
     input.documentSha256,
     input.modelId,
     input.mode,
-    input.sourceName || ''
+    input.sourceName || '',
+    // #76: appended last and empty when absent. NOTE: this changes the hash of
+    // every whole-document key by one separator (`…\u001f`), so each document is
+    // analysed once more after the upgrade; no stored analysis is *mis*-reused,
+    // which is the property that matters (a stale hit would be a wrong answer).
+    input.selectionFingerprint || ''
   ]);
 }
 
