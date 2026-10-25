@@ -188,3 +188,503 @@ Verified by `tests/smoke80.js` **17/17** (fixture): finish a scenario game, go b
 - Initial GGUF model and runtime versions, verified source/checksum/size/license, and supported Windows hardware.
 - Whether/how to sync game libraries across devices.
 - Retention period for usage logs and account deletion workflow.
+
+## #57 — Preprocessor on real teacher documents: header detection must be shape-based, and the retention loss must be stated
+
+> **Reconstructed 2026-10-23.** The original wording of #57–#59 was lost in an accidental overwrite and is not recoverable from git (those entries were never committed). This entry was rebuilt from `docs/STATUS.md` and `docs/BENCHMARKS.md` §O6e, which are intact. Facts and numbers are sourced; prose is not the original.
+
+Date: 2026-10-23.
+
+**Context.** #56 shipped three gated preprocessing layers, but its numbers came from synthetic fixtures. Running L1+L2 on the four real PDFs in `tests/tailieu/` (11–29 pages, extracted with the same `pdfParse(buffer)` call `src/main.ts` uses) exposed three real bugs.
+
+**Bug 1 — L1 was deleting real content.** The repeated-header filter only required: line ≤80 characters, appearing ≥3 times, and not matching a content pattern. Two-column PDFs repeat every table cell across pages, so genuine content was treated as a repeated page header and removed:
+
+| File | Wrongly removed |
+| --- | --- |
+| Giải quyết mâu thuẫn hiệu quả | `-` (×3), `–` (×3), `mâu thuẫn.` (×3), `chọi với nhau, không hòa thuận.` (×3) |
+| K6 định hướng học tập (2 cột) | `Trò chơi:` (×5), `Khám phá`, `kiến thức`, `mới`, `tập.`, `lớp:` |
+| Tư duy tích cực | `-`, `–`, `Vận dụng` (×4) |
+| Tư duy phản biện | `-`, `–` |
+
+Removing a standalone bullet also glued words together. **Fix:** `isHeaderLike()` plus `SENTENCE_END` so only lines that *look* like a header/footer can be dropped, and a split bullet is re-joined onto the start of the next line instead of deleted. `LESSON_PREPROCESS_VERSION` 1 → **2**. After the fix only the true page header and the two-column table header are removed.
+
+**Bug 2 — the L2 loss is large and must not be hidden.** Retention on real documents (`node tests/manual/measure-retention.js`):
+
+| Document | raw | fast 12k | deep 18k | bigram recall fast | deep | content chars fast | deep |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Giải quyết mâu thuẫn (17 tr) | 26.389 | 11.989 | 17.989 | 55% | 78% | 49% | 73% |
+| K6 định hướng (29 tr, 2 cột) | 33.971 | 11.988 | 17.990 | 42% | 60% | 37% | 56% |
+| Tư duy tích cực (12 tr) | 19.850 | 11.995 | 17.985 | 67% | 97% | 66% | 99% |
+| Tư duy phản biện (11 tr) | 19.660 | 11.960 | 17.971 | 73% | 98% | 66% | 99% |
+
+So fast keeps **42–73%** and a real 11–29-page plan loses **27–58%**. This is still better than the previous ~8.000 + ~3.900 character cut (which split sentences and tables), but **"fewer tokens and nothing lost" must never be claimed** — the change moves *where* it cuts and improves *cleanliness*, it does not reduce loss.
+
+**Bug 3 — a silent API trap.** Passing `{ mode: 'deep' }` (a field that does not exist on the options type) **silently** fell back to the fast budget instead of failing.
+
+**Verification.** `npm run check` exit 0; `npm test` exit 0 (40 Node suites plus `lesson-store` through Electron).
+
+**Unverified.** Question quality from the truncated excerpt (needs the real model — O6 gate) and real prefill seconds were not measured.
+
+
+## #58 — Budget policy after #57: rank with a *real* query, never higher budgets, never unqueried ranking
+
+> **Reconstructed 2026-10-23.** See the note on #57.
+
+Date: 2026-10-23.
+
+**Context.** #57 left one question open: real Vietnamese plans do not fit the 12.000-character fast budget, so what should be done?
+
+**Options considered.**
+1. **Raise the budget.** Rejected on measured grounds: at #54's ~22,6 tok/s prefill a 771-token prompt is ~36 s, so 12k characters is already ≈2,5 minutes and ×1,5 would be ≈4 minutes per analysis on the pilot machine (i5-10210U, 4C/8T). Too slow.
+2. **Analyze in parts.** Deferred: it multiplies the cheapest step by 2–4 calls.
+3. **Rank the excerpt with the teacher's query (chosen).** `preprocessLessonSource(..., { query })` plus `rankBlocksForQuery()` — *supervised* ranking driven by `buildRetrievalQuery()`.
+
+**Decision.**
+- Selection order is `fits` → `ranked-query` → `head-tail`. A query that matches nothing **falls back to head+tail** rather than sending an arbitrary excerpt.
+- `lesson:analyze` behaviour is **unchanged**: it has no query, so it stays on head+tail.
+- `LESSON_PREPROCESS_RANKING_ENABLED` stays `false`. Unsupervised L3 still waits on the O6 gate (#56); only the query-driven path ships.
+- `LESSON_PREPROCESS_VERSION` stays **2**.
+- Separate real fix: `analyzeLesson` previously preprocessed **twice** (once to log metrics, once for the prompt). It now builds `prepared` once and passes it to `buildLessonAnalysisPrompt({ prepared })`.
+
+**Measured** (`node tests/manual/measure-query-ranking.js`, 4 real PDFs, fast 12.000-character budget, queries taken from the middle third that head+tail discards — a synthetic and therefore *optimistic* query):
+
+| Document (chars after L1) | bigram recall head+tail / ranked / ranked-query | query sentences kept (of 2) |
+| --- | --- | --- |
+| Kỹ năng sống, 17 tr (24.663) | 55% / 53% / 53% | 0/2 / 2/2 / **2/2** |
+| Định hướng AI, 29 tr, 2 cột (31.861) | 42% / 48% / 48% | 0/2 / 0/2 / **0/2** |
+| Tư duy tích cực, 12 tr (18.238) | 67% / 72% / 67% | 0/2 / 2/2 / **2/2** |
+| Tư duy phản biện, 11 tr (18.184) | 73% / 73% / 74% | 0/2 / 2/2 / **2/2** |
+
+**How this must be described.** head+tail keeps **0/2** queried sentences in **all four** documents; ranking keeps **2/2** in **3/4**. Overall bigram recall is essentially unchanged (it sometimes drops 2 points) — expected, because ranking selects for the *question* and therefore discards more of the unqueried middle. So L3 must be described as **"keeps the part the question targets"**, never as **"keeps more content"**.
+
+**The one failure is diagnosed, not a scoring bug.** `diagnose-query-ranking.js` shows the queried sentence sits in a 1.186-character block, but the two-column document has **7** blocks with `blockValue() === Infinity` (tables / question lists) that consume the whole 12k **before** the unprotected block is reached. That is a deliberate trade (never drop a question list), so the lever is the **budget** or the priority of `Infinity` blocks — not the scoring formula.
+
+**Verification.** `npm run check` exit 0; `npm test` exit 0 (41 Node suites plus `lesson-store` through Electron; `lesson-preprocess: ok`).
+
+**Unverified.** Generated question quality (O6 gate); no product caller passes `query` yet, so the prefill benefit is unmeasured; real teacher queries will be harder than the synthetic ones above.
+
+
+## #59 — Fullscreen play surface: the "122px dead strip" was a **dead CSS rule**, and the density check measured the wrong edge
+
+> **Reconstructed 2026-10-23.** See the note on #57. The measured table and the list of rejected alternatives are reproduced from `docs/BENCHMARKS.md` §U1 and `docs/STATUS.md`.
+
+Date: 2026-10-23.
+
+**Symptom.** In presentation mode the play surface left a 122px empty strip under the answer grid and used only 1120px of the available width, even though the fullscreen CSS set `max-width: none`.
+
+**Root cause.** The fullscreen rule for `.stage-center` was written as `html[data-fullscreen="1"] html …`. There is no `<html>` nested inside `<html>`, so the selector **never matched**. `max-width: none` and the larger `gap` inside it had never applied, while the normal rule's **1120px** cap and `align-self: center` stayed in force.
+
+**Fix (all in `src/renderer/styles/app.css`).**
+- The fullscreen `.stage-center` rule was rewritten with a **single** `html`, placed *after* the normal rule so equal specificity wins by order: `display:flex; flex-direction:column; justify-content:flex-start; flex:1 1 auto; align-self:stretch; min-height:0; max-width:none; min-width:0`.
+- `.game-stage` under fullscreen became an explicit `display:flex; flex-direction:column` (it was `display:grid` with `align-content:center`). A flex column gives `.stage-center` the real leftover height; the grid's `minmax(0,1fr)` row was sized by the item's content, with `align-content:center` adding 74px above and below.
+- `.stage-center > .answer-grid` gets `flex:1 1 auto` plus `grid-auto-rows: minmax(min-content, 1fr)`: leftover height goes into taller answer buttons, and the `min-content` floor guarantees the last line of an answer is never clipped. `min-height: min-content` on `.answer-option` makes that floor explicit.
+- Answer font `2.9vh + 0.5vw` → `3.2vh + 0.5vw` (and the `max-height:800px` floor `2.5vh` → `2.9vh`) so buttons use the reclaimed height. The three duplicate `gap: clamp(8px, 1.4vh, 16px)` rules on `.stage-center` were raised to `1.6vh`/`18px`; the copies are kept because Tailwind's `@layer` output order is not something this fix should depend on.
+- Removed a stray `.ZZPlaceholder{}` inserted mid-rule in `.stage-question`, which split it in two and turned half its declarations into an invalid block.
+
+**Rejected alternatives.** `grid-auto-rows: minmax(0, 1fr)` clipped 3px at 1366×705; plain `auto` brought the 112px strip back; making `.stage-center` a one-column grid collapsed `auto` rows to 0px under overflow and broke the "Tìm kho báu" fixture.
+
+**Measured after the fix** (same machine, same fixture, 1280×721).
+
+| Metric | before | after |
+| --- | --- | --- |
+| Question | 45.3px / 1120px | 45.3px / 1189px (93% of width) |
+| Answer | 25.7px, 115px tall | **28.6px**, 174px tall |
+| Grid | 1120px, 2 cols | 1189px, 2 cols |
+| Empty area of stage | 49.0% | **27.9%** |
+| Free space below content | 122px | **12px** (39px of it is the `Tiếp tục` bar, inside `.stage-center`) |
+| `ui-fullscreen-density-check` | 7/9 | **9/9** |
+
+**Edge cases.** A long question (6 lines) with 4 long answers, via CDP device-metrics override at 1280×720 / 1024×600 / 1366×705 / 1920×1010: 0 clipped answers and no page scroll at every size; the stage self-scrolls (by design) when content genuinely does not fit, as at 1024×600.
+
+**Harness corrections made with this fix.** `tests/ui/ui-fullscreen-density-check.js` measured "space under the answers" from the *answer grid* downward, which counted the `Tiếp tục` bar as empty space; it now measures to the last **visible** child of `.stage-center` and prints the gap directly under the grid separately. `tests/ui/ui-race-treasure-check.js` was left unchanged — its treasure fixture fails to save (`questions: []`), which throws before any of this work is involved.
+
+**Verification.** `npm run build` exit 0; `npm run check` exit 0.
+
+**Unverified.** No visual check by a person on a projector; only the synthetic fixtures above. `ui-play-surface-check.js` (27 checks, unrelated to this area) errors at its first frame on an unmodified build too, so it was not used as evidence either way.
+
+
+## #60 — Content categories are an additive, optional field; `general` is a value, not an error
+
+Date: 2026-10-23.
+
+**Context.** `docs/archive/specs/update_plan_6.txt` asks for one *content category* per game item so icons and illustrations can be chosen per topic. Before this, no such field existed anywhere: `GameQuestion`, `MatchingPair`, the five draft schemas in `lesson-contracts.ts`, and every `.egame` already written by teachers carried no category at all. So this is new schema, not an extension of an existing one.
+
+**Decision.** A new field `contentCategory` is added to game items as an **optional, additive** property:
+- It is never required. A missing or unknown value normalises to `general`; that is not a validation error and must never fail a generation, a save, or an import.
+- Saved games without it keep working unchanged, and the field is only written when something actually chose a value.
+- 24 topic categories plus `general`. The list is **topic-shaped** (Động vật, Thực vật, Không gian, …), not subject-shaped, because the assets it drives are topical — a cat illustration illustrates "Động vật", not "Tiếng Việt".
+- Category → illustration/icon mapping is done **in TypeScript**, never by asking a model for a path or a file name.
+
+**Naming.** The field is `contentCategory`, not `category`. `category` is already taken three separate ways in this codebase and reusing the word would be ambiguous: the wizard's "category step" (game-type recommendation), `PresentationCategoryGroup` (the `categorize` matching-mode groups), and `GameType` itself.
+
+**Unverified.** No teacher has reviewed the 24-category list yet; the ids are chosen to match primary-school Vietnamese topics and can still be renamed before any release ships them.
+
+## #61 — Content icons are inline SVG nodes in a committed TypeScript registry, not an npm dependency
+
+Date: 2026-10-23.
+
+**Context.** No icon library was installed — `dependencies` is supabase, better-sqlite3, express, jszip, mammoth, pdf-parse, zod and nothing else, and `node_modules` has no icon package. The renderer is loaded as plain `<script>` tags with no bundler, so an ESM import of an icon package is not even available to it. #31 had already chosen code-drawn inline SVG over asset files so `.egame` export/import can never point at a missing file; `treasure-art.ts` is the working precedent.
+
+**Decision.**
+- Icons are `[tag, attrs][]` node arrays compiled into `src/shared/icon-registry.ts`, rendered by `renderIconSvg()` which emits a self-contained `<svg viewBox="0 0 24 24">` string.
+- The nodes are extracted **once** from `lucide@1.61.0` (ISC licence, attribution kept in the file header) by `scripts/build-icon-registry.js`. The generator's output is committed; it never runs during `build`, and Lucide is **not** added to `dependencies` or `devDependencies`.
+- Consequence: the packaged app carries no icon runtime, the renderer needs no module loader, and nothing is fetched from the network — preserving #31 and the offline gameplay rule (#4).
+- The registry is total: `getIconNode()` returns `null` for an unknown name and never throws. A bad name degrades to "no icon", never to a broken screen.
+
+**Unverified.** The 60 names are a proposal. Each must be confirmed present in 1.61.0 by the generator before any "60 icons" claim is made; the generator fails loudly and lists substitutions when a name is absent.
+
+## #62 — Illustrations are referenced by app-owned `assetId` only; a missing asset degrades, never throws
+
+Date: 2026-10-23.
+
+**Context.** `update_plan_6` requires local SVG illustrations per category and forbids storing fake paths to files that do not exist. That rules out both "the model returns a file path" and "the registry references an asset that may be absent".
+
+**Decision.**
+- Items store `illustrationAssetId`, an opaque id resolved through `illustration-registry.ts`. No model output ever becomes a path, a URL, or a file name.
+- Resolution is total. An unknown, missing, or disabled id yields "no illustration"; it never throws and never renders a broken image.
+- Selection is **deterministic** (`pickIllustrationForCategory(category, seed)` hashed from the item id), so the same game always shows the same art and nothing flickers between renders.
+- The teacher can switch illustration rendering off (Tự động / Chọn thủ công / Tắt). Turning it off affects decorative content art only; functional UI icons are unaffected.
+- Teacher-uploaded artwork stays deferred under #31's reasoning — validation, size, cleanup and export rules are a separate piece of work.
+
+**Unverified.** The starter illustration set is deliberately small. No "24 categories of art" claim is made until the assets actually exist in the registry.
+
+## #63 — Per-item asset fields are lenient optional strings; zod must be asked for the *input* JSON schema
+
+Date: 2026-10-23.
+
+**Context.** `update_plan_6` Phase 2 threads `contentCategory` / `iconName` / `illustrationAssetId` through every item shape (`GameQuestion`, `RaceQuestion`, `TreasureStageQuestion`, `ArenaChoiceQuestion`, `ArenaTextQuestion`, `ScenarioSituation`, plus the drafts). Two guarantees had to hold at once: a legacy `.egame` file with none of these fields must still open, and an AI draft with a wrong-typed or unknown value must not be rejected wholesale. Adding the fields nearly broke constrained decoding, which is why this is written down.
+
+**Decision.**
+- The fields are **optional, lenient strings, not enums**. An unknown category/icon degrades in the adapter (`general` / no icon) instead of failing validation. Nothing here is worth refusing a saved lesson or an entire draft over (#60, #61, #62).
+- `illustrationAssetId` is a plain string, **not nullable**. `nullable()` emits `"type": ["string","null"]`, which llama.cpp's `response_format` subset does not accept. An empty string already means "cleared", so no information is lost.
+- Do **not** use `.isOptional()` to build these. In zod v4 it crashes `discriminatedUnion` with *"Cannot read properties of undefined (reading 'values')"*, and the arena question schema is a discriminated union. `z.preprocess(...)` + `.optional()` gives the same leniency safely.
+- `safeJsonSchema()` must call `z.toJSONSchema(schema, { io: 'input' })`. Two reasons: `response_format` describes what the *model* must emit, so the input side is the correct projection; and zod v4 throws *"Transforms cannot be represented in JSON Schema"* for **any** `.trim()` / `.transform()` by default.
+
+**Regression this caught.** `safeJsonSchema` swallowed its own exception and returned `null`, and nothing asserted otherwise. Once transforms were involved, the constrained-decoding schema silently disappeared for the game templates — colour would still parse, so a whole suite of "it works" was possible while `response_format` was empty. `tests/unit/lesson-workflow.test.ts` is what surfaced it. Two follow-ups are expected of future changes here: keep the assertion that `responseSchema` reaches the model call, and treat a `null` JSON schema as a failure, not a fallback.
+
+## #64 — The model is *invited* to fill the item asset keys and the app fills the gap; the model never chooses art
+
+Date: 2026-10-23.
+
+**Context.** Phase 3 had to put the new keys in front of the model. The risk is asymmetric: `contentCategory` and `iconName` are decoration, while the questions themselves are the product. On the pilot CPU every extra output token is paid for on a 2B model, and a model that is *forced* to emit a category will sometimes invent one (`"động-vật"`), which the adapter then has to discard anyway.
+
+**Decision.**
+- The draft **and** item-regeneration prompts list the **real** 24 ids from `CONTENT_CATEGORY_IDS` (never a hand-copied list, so the prompt cannot drift from the validator) and state explicitly that the keys may be **omitted** if the model is unsure. Omitting is never an error.
+- **`illustrationAssetId` is not offered to the model.** Illustration choice is deterministic in the app (`pickIllustrationForCategory`, #62); letting the model pick an id could only produce art that contradicts the category, and costs tokens to say so.
+- `fillMissingContentCategories` (`lesson-workflow.ts`) runs inside `generateGameDraft`'s `validate`, i.e. the single choke point shared by the app and `bench-ai.js`. It fills `inferContentCategory(item text…, analysis.topic)` **only** when the field is missing or blank, **never overwrites** a value the model returned (even an unknown one — normalising is the adapter's job, #60, and two layers disagreeing about the raw draft is worse than one wrong category), and **never throws**.
+- `LESSON_PROMPT_VERSIONS.draft` 2 → 3 so content produced under the old wording is not reused from the cache (O5).
+
+**Unverified.** No llama-server and no `.gguf` exist on the development machine, so `bench-ai.js` was not re-run: the token/latency cost of the extra line is **unmeasured**, and it is not yet known whether the model actually emits either field. The app-side fill is what makes the feature work regardless; the prompt is an optimisation that still needs a real lesson run to justify.
+
+
+## #65 — The editor keeps item asset keys in hidden inputs, not in a JS map
+
+Date: 2026-10-23.
+
+**Context.** `saveEditedGame` rebuilds every item object **field by field** from the DOM (`id`, `prompt`, `points`, `explanation`, …). Anything not represented in the DOM is therefore deleted on the first save — silently, and with no error to notice. Phase 2 made the keys survive load/export; without Phase 4 the first trip through the editor would have erased them again.
+
+**Decision.**
+- Each item row renders three hidden inputs (`data-field="contentCategory"`, `iconName`, `illustrationAssetId`), the same pattern already used for `data-option-id`. Rendered in all five templates: arena/scenario cards, matching pairs, treasure stages, race questions.
+- `readEditorItemAssets(scope)` is the single reader; the editor never touches the raw field values anywhere else. It returns `{}` for a row with no asset inputs, so spreading it cannot invent fields.
+- A value is persisted **only** if it survived normalisation, and `general` is omitted because a missing category already means general. This is `itemAssetFieldsForSave` (`src/shared/asset-validation.ts`), deliberately mirroring `itemAssetsFromDraft` in the project adapter so the two cannot disagree.
+- The renderer is loaded as **classic `<script>` tags** (`src/index.html`) and cannot import `src/shared/*`, which compiles to CommonJS. The editor therefore holds **local copies** of the category-id list, the icon-id set and the labels. They only drive display and a defensive blank-out; **the main process re-validates on save**, so a copy drifting can only hide a chip, never corrupt data. This was a real trap: a hand-written first draft of these lists invented 20 categories that do not exist and 47 icon ids that the registry does not contain.
+- The "Minh họa" choice is game-level and stored in `gameSetup.illustrationMode` (`auto` | `manual` | `off`), because `GameSetup` already round-trips through the project adapter unchanged and has a string index signature. Applied once at the top of `saveEditedGame` rather than in each of the four template branches. An unrecognised or absent value reads as `auto`, so every existing saved game keeps working untouched.
+
+**Verification.** The DOM half cannot run in Node (no DOM, and the renderer has no test harness), so it is verified by driving the **real renderer** over the Chrome DevTools Protocol instead — see **#66**. In short: `tests/ui/ui-item-assets-editor-check.js` passes **13/13** against a built app, including a real save read back from the on-disk store. The one gap left is the **packaged NSIS install** (only the dev build was exercised). Phase 5 must still consume `illustrationMode` when rendering; nothing reads it yet beyond saving it.
+
+## #66 — The editor's DOM half is tested over CDP against the real app, not in Node
+
+Date: 2026-10-23.
+
+**Context.** #65 added DOM-mutating code (`editorAssetFieldsHtml` / `readEditorItemAssets`) that no unit test can reach: the renderer is classic `<script>` tags with no module system, so there is nothing to `require`. A throwaway `vm` string check during development was not reproducible, and the previously recorded "click through in the packaged build" step named a file (`tests/smoke/smoke82.js`) that does not exist. The risk being guarded is nasty and silent: a template that forgets the hidden inputs **deletes the teacher's metadata on the first save** without any error.
+
+**Decision.**
+- New check `tests/ui/ui-item-assets-editor-check.js`, built on the existing `tests/manual/lib/ui-check-lib.js` CDP helper (the same one `ui-fullscreen-density-check` uses), added as `npm run check:item-assets-ui`. It launches against a **built** app, so it tests the compiled renderer, not a mock.
+- It asserts behaviour, not implementation: render→read returns all three keys; `general` and unknown icon ids are dropped; quiz and matching both render the inputs; **a real save read back through `window.eduGame.getLibrary()` still has all three keys and `illustrationMode`**; and a legacy game gains none.
+- Persistence is read back **through IPC from the store**, not from a JS variable, because the bug class is "the value survived in memory but never reached disk".
+- Two setup traps are recorded here because both produced misleading red/green results: (1) `state.db` is only refreshed by `refreshDb()`, so a game saved via `window.eduGame.saveGame` is **not** in `state.db` and a lookup by title yields `undefined` (prefer `getLibrary()` for assertions); (2) the item test values must be **real** ids from `src/shared/icon-registry.ts` (e.g. `paw-print`, not `paw`) — a fake id is blanked at render time by design, which looks like a lost key but is correct behaviour.
+- `ui-check-lib` reads the port from `argv[2]` **or** `CDP_PORT`; under `node -e` or `npm run` the argv form does not work, so set `CDP_PORT`.
+
+**Unverified.** Only the **dev build** was exercised, not the packaged NSIS installer. `treasure-hunt` and `race` are covered by code review plus `item-assets-editor.test.ts` (adapter round-trip) but are not yet driven through the CDP check.
+
+
+
+
+## #67 — Illustrations are a fixed, generated set, and `illustrationMode` is honoured in exactly one place
+
+**Date.** 2026-10-23
+
+**Context.** Phase 4 saved `gameSetup.illustrationMode` (`auto` / `manual` / `off`) but **nothing read it**, so a teacher choosing "Tắt" still saw artwork and "Chọn thủ công" silently fell back to a category default. Phase 5 had to make the switch real and put something visible on the play surface. Three constraints shaped it: saved games must play **offline**, `.egame` files must not grow image payloads, and AGENTS.md forbids executing or trusting model output — so "generate an image" was never an option.
+
+**Decision.**
+- **A fixed set, not generated art.** `src/shared/illustration-registry.ts` defines 24 illustrations, each a pure inline SVG composed from an existing `icon-registry` icon plus a per-category palette. No binary assets, no network, nothing model-authored. An unknown id can only ever mean "draw nothing".
+- **One resolver owns the switch.** `resolveIllustration()` is the only consumer of `illustrationMode`. `off` → `null`, always (the item is not even inspected). `manual` → **only** an explicitly picked, resolvable illustration; a missing pick stays empty, because inventing one would break the promise the mode makes. `auto` → the pick, else the category default. Unknown/absent mode → `auto`, so games saved before #65 render exactly as they did. Like `asset-validation.ts`, it is **total**: hostile input yields `null`, never an exception.
+- **`.stage-illustration` is a sibling immediately before `.stage-question`** in arena/scenario, treasure-hunt and race, and sits inside `.stage-center` for the three matching boards. Matching has **no** `.stage-question` by design (the cards are the content), so it takes the game-level illustration from the first pair instead of forcing a question surface that does not exist.
+- **Height is a hard ceiling.** The density rules (#59) require the question and answers to fill most of the stage, so the illustration is capped (~132px, smaller for treasure and race, `clamp`ed) and is **dropped entirely under `max-height: 760px`** rather than squeezing the answer grid. `ui-fullscreen-density-check` stays **9/9**.
+- **Icon data is generated into the renderer.** `src/renderer/*` is loaded as classic `<script>` tags and cannot import `src/shared/*` (CommonJS). `scripts/build-icon-data.js` writes `src/renderer/features/icon-data.ts` from the registry; `npm run build` regenerates it (bootstrapping a placeholder so `tsc` can resolve `getIconNode`) and then runs `build:icons:check`, which **fails the build** if the committed copy drifts.
+
+**Trap found the hard way (do not repeat).** The first attempt exposed `getIconNode` from the **preload** by `require`-ing `../shared/icon-registry`. The preload runs with `sandbox: true`, where only `require('electron')` is permitted: the `require` threw, **the entire preload aborted, and `window.eduGame` disappeared** — breaking every IPC feature in the app, not just icons. The build stayed green and the UI still rendered, so the only signal was `typeof window.eduGame === 'undefined'` over CDP. Verified by stashing the change: the bridge reappeared as an `object`. **Never `require` a local module from the preload.**
+
+**Verification.** `npm run check` exit 0; `npm test` exit 0 (includes the new `illustration-registry` suite, 15 checks). `tests/ui/ui-stage-illustration-check.js` on a live built Electron app over CDP: **44/44** — all five templates × `auto` / `off` (nothing drawn even with a pick) / `manual` without a pick (nothing invented) / `manual` with a pick (exactly that one) / legacy game with no mode (behaves as `auto`), plus size and real-icon assertions. `ui-fullscreen-density-check` **9/9**. The drift guard was proven by tampering with `icon-data.ts` (exit 1) and restoring it (exit 0).
+
+**Known-preexisting failures, not caused by this change.** `ui-race-treasure-check` reports **1 FAIL** (`treasure: mission controls are reachable after scrolling`); it reproduces with the illustration **removed entirely by CSS**, which is the proof it is not this work. `ui-fullscreen-check` (14/16) and `ui-play-surface-check` (26/27) likewise fail on unrelated assertions. These are tracked for Phase 6, not hidden. **Baseline recorded on 2026-10-23 for future sessions: do not re-investigate these three suites as regressions of Phases 4–5 — the counts above are the expected state of this checkout.**
+
+**Unverified.** Only the **dev build**; the packaged NSIS installer has not been run. Phase 3's benchmark is still blocked (no `llama-server` / `.gguf` on this machine).
+
+
+## #68 — The offline promise is verified on the packaged app by a request-counting check with a mandatory positive control
+
+The offline claim ("saved games play without a network") was the one part of Phases 4–5 that had only ever been exercised on a dev build. `tests/ui/offline-packaged-check.js` now closes that gap: it runs against `release/win-unpacked`, plays one synthetic game per template, and counts every outbound request it can observe (fetch, XHR, WebSocket, `sendBeacon`, and remote `src`/`href` in the stage) while doing so.
+
+- **The count must count.** A check that reports `0` is worthless unless something proves the counter is live, so the runner fires one deliberately failing request at the end and **fails the whole run if the wrapper did not see it**. This is not ceremony: the first working version of the check recorded nothing at all and still passed every other assertion. Two distinct bugs were hidden behind the `0`.
+- **`EDUGAME_USER_DATA` is the only way to get a clean profile.** `src/main.ts` pins `app.setPath('userData', process.env.EDUGAME_USER_DATA)`, so `--user-data-dir` is ignored. Restarting the exe "fresh" silently reused the previous profile, which reused the same renderer document, which kept prototypes patched by the previous run. Hours went into chasing a `window.fetch` that was already somebody else's wrapper. **Any CDP check that patches globals needs a fresh `EDUGAME_USER_DATA` per run.**
+- **A positive control must call the wrapper, never the saved original.** `origFetch.call(window, url)` bypasses the wrapper by construction and therefore always looks blind. The control must go through `window.fetch` (i.e. the thing being validated), not around it.
+- **Never `await` a request to an unreachable host in these checks.** The promise may never settle; the wrapper's synchronous observation is the signal worth asserting, and the response is irrelevant. Use a reserved-TLD host (`example.invalid`) and don't await it.
+- **What this check does *not* cover, on purpose.** It drives `playGame` with synthetic objects rather than importing a real `.egame`, so the import/export round-trip and the NSIS installer are still unverified for these phases. Recorded in `docs/STATUS.md` rather than implied.
+
+**Verification.** `npm run dist:dir` exit 0; the packaged asar contains `dist/src/renderer/features/icon-data.js`, `game-illustration.js`, `dist/src/shared/illustration-registry.js`, `dist/src/preload.js`, `dist/src/main.js`. Against that exe over CDP: `offline-packaged-check` **11/11** (reproduced on two ports with two fresh profiles), `ui-stage-illustration-check` **44/44**, `grading-packaged-check` **7/7**. Zero outbound requests; `illustrationMode: 'off'` still draws nothing; all five templates draw inline SVG.
+
+## #69 — Offline is proven against a *blocked* network, and local 2B generation is not yet reliable
+
+#68 proved `attempts === 0`. That is a claim about what the app *did*, not about what it could have done: if the counter had a blind spot, a passing run and a broken app would look identical. #69 removes that ambiguity by making the internet genuinely unreachable at the process level and re-running everything.
+
+- **Block without admin rights: `--proxy-server=127.0.0.1:9`.** A `netsh`/firewall block needs elevation, which a normal session does not have. Pointing Chromium's proxy at a closed port makes every http(s) request fail for the whole app while leaving loopback (`127.0.0.1:57952`, where `llama-server` listens) untouched — which is exactly the boundary we want to test, since gameplay and local AI are loopback-only by design.
+- **Prove the block before trusting anything measured under it.** The first assertion in every such run must be that a *real host* fails from inside the app. Measured: `fetch('https://huggingface.co/')` → `Failed to fetch` in **2 025 ms**. Without this line the "11/11, attempts=0" below would prove nothing.
+- **`--host-resolver-rules` is not a substitute here** — it logged `Failed parsing rule: MAP` and never applied. Do not assume it silently worked; the proxy did the blocking. Verify block effectiveness by measuring, never by passing the flag.
+- **Loopback must stay reachable.** A firewall rule that blocks everything would also kill `llama-server` and produce a false "offline broken" verdict. The proxy approach is preferred precisely because it is *app-to-internet*, not *app-to-anything*.
+- **Installed models are never re-downloaded.** `installLocalAiModel()` on an already-present file ran for ~100 s and returned `installOk: true` — that time is the SHA-256 of the 1,2 GB `.gguf`, not a transfer (`model-installer.ts` verifies then `return`s before any `fetch`; `runtime-installer.ts` does the same for `llama-server`). A future reader seeing "100 s to install" must not conclude it re-downloaded.
+- **The honesty finding: `qwen3.5-2b-q4_k_m` passed the game schema 3 times out of 10.** Ten identical offline requests produced **3 valid games** and **7 rejections** by `gameDraftSchema.safeParse` (`thiếu correctOptionId …`), each attempt costing 34–42 s. The validator is behaving correctly — it refused to hand a teacher a malformed game — but the pass rate is unacceptable for the primary flow. **Do not claim local generation is reliable on the 2B model.** The §O6 6/6 result covers the *analysis* prompt, which is a different and easier task; the two numbers are not interchangeable.
+- **How to measure this again.** Ten attempts, packaged build, network blocked, fresh profile — then count `generateOk` vs validator rejections. Anything less than ten attempts cannot distinguish "generally works" from "works sometimes", and a single lucky run is exactly how a 30% success rate gets written down as a success.
+
+**Verification.** Packaged exe + `--proxy-server=127.0.0.1:9` + fresh `EDUGAME_USER_DATA`: block proven (2 025 ms `Failed to fetch`); `offline-packaged-check` **11/11** with a live positive control; boot `bootRequests: 0`; `installOk: true` (~100 s, verify only); `startLocalRuntime` → `READY`; generation **3/10**. No product code changed.
+
+## #70 — An "illustration" is a composed scene, and its box geometry is part of the feature
+
+**Problem.** Each of the 24 illustrations rendered **one 72px Lucide icon inside a 320×200 frame** — about 5% coverage. On the play surface it read as a floating icon on a coloured rectangle, not as a picture. Teachers would not recognise that as artwork.
+
+**Decision.** An illustration is now a *scene*: `src/shared/illustration-scene.ts` owns `SCENE_WIDTH/HEIGHT` (320×200), `SCENE_SUBJECT_SIZE` (72 → **168**), a `SceneSpec` per category (motif + `subjectY`) and `renderSceneSvg()`, which layers **sky → ground → motif → halo → subject**. Eleven motifs cover the 24 categories. `illustration-registry.ts` gained optional `sky`/`ground` palette entries (a distinct hex pair per category) and delegates to `renderSceneSvg()`. `src/renderer/features/game-illustration.ts` is a classic script that cannot import, so it mirrors the scene table, motif builder and palettes and rebuilds `stageIllustrationHtml()` with the same layer order; a unit test compares the two copies so they cannot drift.
+
+**The geometry is the hard part, and it bit twice.**
+
+- **Trap 1 — a width the box cannot honour.** `width: min(320px, 46%)` with a *separate* clamped `height` let the SVG paint outside its box and cover the question, answers and CTAs. No assertion caught it: the CSS was valid and every check was green. Only screenshotting the real play surface showed it. Fix: `aspect-ratio: 16 / 10` + `max-width` + `max-height`, so the box shrinks to whatever both constraints allow.
+- **Trap 2 — a `height` without a `width`.** Three pre-existing fullscreen rules set `height: clamp(...)` alone. With `aspect-ratio`, a height-only rule leaves the width free, so the box became a shape the 16:10 scene could not fill; `preserveAspectRatio: meet` letterboxed it and the ground band read as *clipped*. Any `.stage-illustration` rule must set width and let height follow.
+- **Trap 3 — `display: none` under a media query.** A `@media (max-height: 760px)` block removed the illustration outright on 1366×768 laptops. This is why the very first measurement of this surface reported a 150×94 frame: **the scene was not squashed, it was hidden.** Short windows now scale it down instead.
+
+**What the measurements actually said.** Probing the real play surface at 720px tall: hiding the scene left the lowest answer at 524px, showing it at 200px moved it to 687px against a 683px viewport — so a 200px scene costs ~210px and can push an answer off-screen. That was measured before the CSS traps above were fixed, so it over-states the cost; after the fix the same surface reports `stageOverflow: 0`, `pageOverflow: 0` and all four answers visible with the scene at its authored **320×200** in fullscreen, 320×200 in the windowed panel, and a reduced width on short windows. The rule that matters is therefore "size by width, never shrink the scene below 320px wide unless the window forbids it", not a hard pixel cap picked by hand.
+
+**Guard against recurrence.** `tests/unit/illustration-registry.test.ts` reads `app.css` raw and fails if any `.stage-illustration` rule sets height without width, or if the short-window block hides the illustration. **Both guards were proven to fail on the reverted rule** (exit 1), not merely to pass on the fixed one.
+
+**Consequence for string tests.** Assertions cannot see a bad picture. A cloud motif painted behind `cloud-sun` and waves behind `waves-horizontal` passed every check; only a rendered PNG found them. All 24 scenes were reviewed by eye through Electron `capturePage`, and motif mismatches were corrected (environment trees → hills, language clouds → none, weather clouds → sparkles, water-world waves → hills, tree motif redrawn).
+
+**Method note.** Two earlier probes in this task returned confident but *false* readings — `closest('.stage')` was `null` so the comparison silently measured nothing, and a stateful `display: none` left over from a previous probe made every later sweep read `0x0`. A measurement that returns the same number for both conditions is broken, not reassuring. Check the counter before trusting the count.
+
+**Verification.** `npm test` exit 0 (**25/25** illustration checks), `npx tsc --noEmit` clean, `npm run build` exit 0, `check:stage-illustration-ui` **44/44**, `ui-fullscreen-density-check` **9/9**, play surface screenshotted and read at 320×200 with all four answers on screen.
+
+
+## #71 — Step-5 progress is a stage counter; the ETA is measured, never invented
+
+**Problem.** Step 5 showed five stage labels, a `⏳` glyph and an elapsed clock. On a slow machine the single "Tạo nội dung trò chơi" stage can run for minutes with nothing moving, so the run reads as frozen. The file's own comment refused a percentage because the model has no token stream — correct for a *timer-based* percentage, but it also blocked the one number the UI can honestly show.
+
+**Decision.** Three different things, kept deliberately separate:
+
+1. **Percentage = stage counter.** `generationProgressFraction()` maps the stage reported by the main process (`lesson:progress`) to `1/5 … 5/5`. It never advances on a timer, so it cannot claim progress that did not happen. `ready` is hard-coded to 100% so a skipped repair stage cannot leave the bar stuck at 80%.
+2. **ETA = measured baseline.** `ai_tasks` already stores `started_at`/`finished_at` per generation, so the remaining time is derived from this machine's own finished runs (median of the last 50, excluding the in-flight row which has no `finished_at`). The median is used instead of the mean so one abandoned six-hour run cannot inflate every later estimate. Samples under 1 s or over 3 h are discarded as clock skew. **With no samples the UI prints "Đang chạy…" — it never shows a made-up number.** Past the learned total it says "Đã lâu hơn lần tạo trước" instead of a countdown that never reaches zero.
+3. **Spinner = the only indeterminate element.** The running stage gets an 11px stroke-only SVG ring (`aria-hidden`), so it needs no image asset and inherits the text colour. `prefers-reduced-motion` stops both the spin and the bar transition.
+
+**Why the maths exists twice.** The renderer is a flat set of classic `<script>` tags — nothing in `src/renderer` imports `src/shared`, and there is no bundler. A shared module therefore *cannot* be reached at runtime. The pure maths lives in `src/shared/generation-eta.ts` (imported by the test) and is mirrored in `wizard/state.ts` (what actually runs). `tests/unit/generation-eta.test.ts` asserts the renderer's constants, median index and fraction formula against the tested module, and was **proven to fail** (exit 1, `ngưỡng mẫu tối thiểu trong renderer bị lệch`) when the threshold was changed from 1000 to 2000.
+
+**Chosen over the alternatives.** A CSS-only indeterminate bar was rejected: five real stages are reported, so a bar with no position would throw away information the main process already has. A per-stage weighted ETA was rejected: only the *total* is persisted, so weights would be another invented number.
+
+**Trap found while working.** PowerShell rendered the Vietnamese source as mojibake, which looked like a corrupted file. It was not: a byte-level scan over all 93 `src` files found exactly **one** corrupted file (`app.css`, 11 comment lines) and every `.ts` file clean — the console code page was the problem, not the repository. Do not "fix" Vietnamese text on the strength of terminal output; check code points.
+
+**Verification.** `npx tsc --noEmit` clean; `npm run build` exit 0; `generation-eta: ok`; `npm test` exit 0 (whole suite); drift guard proven to fail on injected skew. **Not verified:** the spinner, bar and ETA have not been seen on a real run — a live generation needs the local model, and no screenshot was taken. Visual review is still owed before this can be called done.
+
+## #72 — An illustration is a depth stack, not one motif (the second rewrite of #70)
+
+**Problem.** #70 replaced a 72px icon with a 168px icon plus *one* backdrop motif. Rendered at 320×200 that is still a big icon on a coloured card: the subject covers ~84% of the height, so there is no room for anything to be behind it or in front of it, and "animals" and "jobs" differ only in hue and in one decoration. The scene demonstrates the *noun*, never a *place*.
+
+**Decision.** Seven painted layers, in this order:
+
+```
+sky → far → mid → halo → subject → props → fg
+```
+
+and four paint slots on `SceneSpec`: `sky`, `horizon`, `standing`, `fg`, plus `subjectY`. `standing` feeds both `mid` and `props` on purpose — one choice of environment ("this looks like a street / a meadow / a lab") should not have to be made twice, and a category with nothing to put beside the subject gets no `props` layer rather than a filler object.
+
+`SCENE_SUBJECT_SIZE` 168 → **120** and `SCENE_HORIZON` = 150. The subject is now ~36% of the height: still the focal point, but it stands *in* a place. `fg` (grass, stones, waves) is what sells the depth — it overlaps the subject's feet. `line` was added as a bare-horizon far layer for interior/abstract categories, because without any horizon the subject floats even when it has a foreground.
+
+**What the preview caught that no assertion could.** `tests/manual/scene-preview.js` renders the *shipped* renderer (`dist/`) into a 320×200 node and saves a PNG via CDP. Three defects were only visible there:
+
+1. The ground band ran through the middle of the icon — the subject read as "cut in half". Fixed by raising the horizon to 150 and keeping every `subjectY` ≤ 92; now pinned by a geometry test.
+2. `stones` were wide flat ellipses that read as smudges. Redrawn as small pebbles.
+3. `books` were two floating bars that read as a slider. Redrawn as a stack with three spines.
+
+The lesson repeats #70 and is the reason Phase A is previewed before scaling: **a scene can pass every string test and still be ugly.** Tests were added for the *rules* the previews taught (subject below the horizon, every scene has a foreground, layer order, no layer repeating the subject) — but the previews remain the only check for "does it look like anything".
+
+**Mirroring to the renderer.** `game-illustration.ts` cannot import `illustration-scene.ts` (classic `<script>`), so the layer renderers are copied. Drift is guarded by: scene table equality, `STAGE_ILLUSTRATION_SUBJECT_SIZE`/`STAGE_ILLUSTRATION_HORIZON` equality, and "every `data-scene-primitive` the renderer can emit exists in the shared composer". The horizon guard was **proven to fail** (`AssertionError: horizon in the renderer drifted`) by changing only the renderer's 150 → 160.
+
+**Full review of all 24 (follow-up).** Rendering the other 18 scenes found five more defects, every one of them invisible to string assertions:
+
+4. `stones` sat at `foot + 10/12`, i.e. 2–4px below a 200px canvas, and read as a **grey bar clipped at the bottom edge** (`art`, `language`, `history`).
+5. `props` and `fg` were both pinned to the frame edges, so in `art` the easel boards painted **over** the book stack — an unreadable tangle of bars in the corner.
+6. `graph` was moved to the mid layer but `math` still asked for it as `horizon`; `renderFar()` returned `''` and the scene **silently lost its whole backdrop** while still emitting valid SVG.
+7. `plants`/`food`: the first `roots` shape curled back on itself (**a caterpillar**) and `bushes` straddled the horizon (**a floating cloud**).
+8. `art` had only one depth cue; `fg: 'stones'` became `fg: 'boards'`.
+
+**Two rules the review turned into tests.** (a) `props` and `fg` occupy disjoint horizontal spans — every primitive's `[min,max]` at the ground line is tabulated and checked for all 24 scenes. (b) Every primitive named in a scene table must be one *the layer receiving it* can draw; `graph`-as-horizon passed 30 checks because an unknown primitive renders as empty string rather than as an error. `fg` now lives inside x 84..244 and the frame edges belong to `props`, which is what makes rule (a) possible.
+
+**Not done.** The 24 scenes were authored and now all reviewed in preview form; the play surface itself is still unrendered with the stack. Whether a scene is *recognisable* to a teacher remains a judgement call no test makes.
+
+## #73 — Changing an item's artwork is a whitelisted write, and matching pairs were silently losing it
+
+**Problem (two, and the second is the interesting one).**
+
+1. A teacher could see one illustration per item on the play surface but had **no way to change it**. The editor's `contentCategory` / `iconName` / `illustrationAssetId` inputs are hidden and only carry what the model produced, so the only path to different artwork was regenerating the item — a model call that also rewrites the text.
+2. **Matching pairs lost their artwork entirely.** The editor has written the three asset keys into matching pairs since #65, but `matchingPairSchema` never declared them, and zod strips unknown keys silently. So the fields were written, validated away, and the adapter then read nothing. Nothing failed: the pair just had no picture.
+
+**Decision.**
+
+- `matchingPairSchema` now spreads `itemAssetFieldsSchema`; `MatchingPairDraft` / `MatchingPair` extend `ItemAssetFields`; the adapter maps both directions; `padDraftAssetKeys` covers `matching`. A test round-trips a pair through `parseGameDraft` → adapter, which is the check that would have caught the hole (a test exercising only the adapter stays green with it).
+- New IPC **`lesson:patch-item-assets`** with `applyItemAssetPatch()` (`src/shared/asset-validation.ts`) as its whole security surface. The patch is a **whitelist over `ITEM_ASSET_PATCH_KEYS`** — `contentCategory`, `iconName`, `illustrationAssetId` — not a merge: keys outside it are ignored even when sent, so a compromised renderer cannot rewrite a prompt, an id, an answer or a link through this channel. Absent key = leave as is; `''` = clear.
+- **No AI on this path.** It never touches the model, so changing artwork costs nothing and works with the runtime stopped.
+- `patchDraftItemAssets()` owns the two draft-level rules: a **treasure item is its nested `question`** (the stage carries the story, the artwork belongs to the question the student answers — patching the stage would write a value no renderer reads), and **every write is re-parsed** by `parseGameDraft`, so a patch cannot introduce a value the schema would have rejected.
+- Step 5 gained `wizardIllustrationGrid()`: a card per item showing the **real play-surface SVG** from `stageIllustrationHtml()`, not a stand-in, plus a one-at-a-time "Đổi" popover with two `<select>`s (asset, content category). The grid header states the active `illustrationMode`, so the `manual` mode that produces no picture is honest ("mục chưa chọn sẽ không có hình khi chơi") instead of looking broken.
+
+**Cleared means absent, and that is not a detail.** `tolerantText` maps `''` → `undefined` on re-parse, and both the adapter and the UI read *absent* as "no pick". The tests assert the measured behaviour (`undefined` after the round-trip) rather than `''`; asserting `''` would pin a value nothing else in the app ever sees. `contentCategory: ''` is different — `general` is a real category, so it survives as itself.
+
+**Trap for the next person touching `step-generate.ts`.** `generation-eta.test.ts` scans that file with `/^\s*\['([a-z]+)', '[^']*'\]/gm` and asserts the hits are exactly the five MỤC 5 stages. The artwork picker first listed its 25 categories as `['animals', 'Động vật']` pairs, which **silently joined that match** and turned the checklist assertion into a comparison against category ids. The labels are now a plain object (`WIZARD_ART_CATEGORY_LABELS`) so they cannot match, and a comment says why. This is the third time in #72/#73 that a string-scraping test was broken by an innocuous-looking literal rather than by the feature.
+
+## #74 — A classic script may not touch another script's binding at top level (step 5 crashed on load)
+
+**Problem.** Step 5 threw **"Cannot access '…' before initialization"** the moment it was opened, and the page died before painting. Introduced by #73's artwork grid, which added this to `step-generate.ts`:
+
+```ts
+const WIZARD_ART_SCENE_CATEGORIES = WIZARD_ART_CATEGORIES
+  .map(([id]) => id)
+  .filter(id => Object.prototype.hasOwnProperty.call(STAGE_ILLUSTRATION_CATEGORY_ICONS, id));
+```
+
+`STAGE_ILLUSTRATION_CATEGORY_ICONS` is declared by `renderer/features/game-illustration.js`, which `index.html` loads at line 94. `step-generate.js` is loaded at line 80 — **fourteen `<script>` tags earlier**. A top-level statement runs as its own script loads, so it read a `const` that still sat in its temporal dead zone in the shared global lexical environment. The result is not `undefined`, it is a hard `ReferenceError` that stops that script, and every later reference to it fails too.
+
+**Decision.** Anything in the renderer that depends on a binding owned by a *later* script must be **computed on first use, never at top level**. `wizardArtSceneCategories()` builds the list lazily behind `wizardArtSceneCategoriesCache`, and guards with `typeof … === 'object'` so a missing registry degrades to "no scene-backed categories" instead of throwing again.
+
+**Why the existing gates missed it.** `tsc` reports exit 0: the renderer is checked with `strict: false`, all files share one global scope, and TypeScript models no script order — the cross-file dead-zone read is perfectly type-correct. `npm test` was green because every renderer test reads the source **as text** and asserts on strings; none of them *executes* it. `npm run build` and `npm run build:css` are both happy. Only the browser's loader knew.
+
+**The guard.** `tests/unit/renderer-load-order.test.ts` parses `index.html`, evaluates every renderer script in listed order inside **one shared `vm` context** with a minimal DOM stub (`bootstrap.js` excluded — it needs real nodes), and then calls the step-5 functions with real arguments, asserting real output. It also pins the very load order that caused the bug, with a comment saying to revisit the guard if that order ever changes. Proven to fail by re-injecting the old top-level `const` into `dist/`: `AssertionError: renderer/features/wizard/step-generate.js threw while loading: STAGE_ILLUSTRATION_CATEGORY_ICONS is not defined`.
+
+**Lesson, and it is the fourth of its kind.** #72/#73 kept finding that string-scraping tests prove *shape*, never *execution*. This one proves the page boots. A renderer change is not verified until something has run it.
+
+
+
+
+## #75 — Step 2 shows the same progress as step 5, and a finished run keeps its total time
+
+**Problem.** Step 5 (content generation) had three honest progress signals since #71: a stage-based bar, a spinner, and a ticking elapsed clock. Step 2 (analysis) — which runs the same kind of long local model call — had none of them: a still `⏳` glyph, no bar, no percentage, and an elapsed line reading "Đã chờ 0:12 · thường mất 1–2 phút", where "thường mất 1–2 phút" was a **hard-coded guess** that contradicted the real number printed next to it. Worse, when either run finished, the clock vanished with the panel, so the teacher never learned how long the job actually took.
+
+**Decision.** Step 2 reuses step 5's vocabulary instead of getting a parallel one.
+
+1. **Same markup, same classes.** `renderWizardAnalysisProgress()` now emits the `wizard-gen-progress` / `-fill` / `-meta` panel, `role="progressbar"` with its own `aria-label` ("Tiến trình phân tích"), and the **same** `WIZARD_GENERATION_SPINNER` const declared once in `step-generate.ts`. The CSS comment was updated rather than duplicated: one look for one kind of job.
+2. **The percentage is a stage counter, never a timer** — `analysisProgressFraction()` maps the main process's `prepare → generate → repair → ready` to 25/50/75/100 %, `ready` hard-coded to 100 % so a skipped repair stage cannot strand the bar at 75 %, and `cached` → 0 because a cache hit runs no stages at all (it now renders "dùng lại kết quả phân tích trước đó, không gọi AI" instead).
+3. **No ETA for step 2, on purpose.** The #71 baseline is built from `ai_tasks` rows filtered to `kind === 'generate-lesson'`; analysis rows are a different kind with a different duration profile. Rather than widen the filter and mix two populations into one median, the line reads "Đang chạy…" — the same honest fallback #71 uses when no samples exist. The old constant is deleted.
+4. **A finished run freezes its total.** `wizardStopActivityClock({ finished: true })` stores the real span in `analysisFinishedMs` / `generationFinishedMs`; step 2 prints `⏱ Tổng thời gian phân tích: m:ss` above the review form and step 5 prints its own total after the draft. Only a run that truly finished freezes: cancellation, failure, and a cache hit store nothing, so the UI can never show a duration for work that was thrown away. `formatStopwatch` returns `''` for a non-positive span, so the line is *omitted* rather than printed as `0:00` — the difference between "no data" and "instant".
+
+**Chosen over the alternatives.** A separate `wizard-analysis-progress` CSS block was rejected: two identical stylesheets drift silently, and the `generation-eta` test already has to police one duplicated copy of the maths. A real ETA for step 2 was rejected as invented — there is no measured baseline for that kind, and #71's whole point was that the UI may not claim a number it did not measure. Persisting the frozen total in `ai_tasks` instead of renderer state was rejected as out of scope: it would need a schema/migration change for a display-only convenience.
+
+**Duplication, and the guard for it.** `src/shared/generation-eta.ts` cannot be imported by the renderer (flat classic scripts, no bundler — the constraint recorded in #71), so `WIZARD_ANALYSIS_STAGES_ORDER`, `wizardAnalysisProgressFraction` and `wizardFormatStopwatch` are mirrored in `wizard/state.ts`. `tests/unit/generation-eta.test.ts` asserts the renderer's stage order equals `ANALYSIS_STAGE_ORDER`, scrapes the step-2 checklist for the same four ids, checks 25/50/75/100/0, and pins `formatStopwatch`'s shapes. `tests/unit/renderer-load-order.test.ts` executes the real `renderWizardAnalysisProgress()` inside the shared `vm` context — which is what catches the failure mode #74 recorded: step 2 now reaches a binding declared in another script, and a load-order mistake there would be a `ReferenceError` on the page, not a compile error.
+
+**Traps found while working.**
+1. **A guard that matched a comment.** The first drift check was `doesNotMatch(/thường mất 1–2 phút/)` over the renderer sources — and it *failed* not because the guess survived, but because a comment quoting the removed string did. The assertion now targets the code the renderer actually returns (`/Đã chờ/`), and the comment was reworded so the guard cannot be satisfied or broken by prose.
+2. **Stale state between probes.** A `vm` probe asserting "no `finished`, no total" passed the *previous* probe's frozen value. Each probe now resets `analysisFinishedMs` first. The same class of bug — a cache-branch probe taken while `busy` was `''` — was also caught by the first run.
+3. Both guards were **proven to fail** by injecting the fault into `dist/` (a non-existent spinner binding → `ReferenceError`, exit 1) and then restoring it.
+
+**Verification.** `npx tsc --noEmit` exit 0; `npm run build` exit 0; `generation-eta: ok`; `renderer-load-order: 32 scripts loaded` exit 0; `npm test` exit 0 (whole suite). **Not verified:** nothing has been seen in a running Electron window — the bar, the spinner and both total lines are asserted at string/render level only. A live analysis (needs the local model) is still required, as is a `prefers-reduced-motion` check that has been owed since #71.
+
+## #77 — The structure contract: what a section is, and what an id means
+
+Source: `docs/archive/specs/update_AI_plan_7.txt` §3.2, §3.4, §4.2, §5.1, §5.2, §10.1. The analyzer is the only thing standing between a teacher's document and "the AI read text I excluded", so its output is a contract, not a best guess.
+
+**What the tree may say.**
+
+1. **Never invent a title (§3.2).** A node's title is the *source line* at its `charStart` (whitespace collapsed, trailing colon trimmed). The document title line is a real line, so it is a heading like any other. An attempt to add a synthetic "Mở đầu tài liệu" wrapper for the text before the first heading was written and then **removed**: it invented a name the document never had, and it made `headingsFound` disagree with the visible tree.
+2. **Offsets, not copies.** `id = sec_<charStart>` into the normalized source, so no node carries a second copy of the text and ranges cannot drift from it. The exception is a heading at offset 0, which is `sec_0h`: `sec_0` is the document root, and the collision made `resolveSelection(['sec_0'])` resolve to the root and return **empty text** for a lesson whose first line is already its heading (found by `lesson-selection.test.ts`, 2026-10-24). `resolveSelection` also refuses the root id outright instead of dropping it silently.
+3. **A parent covers its whole subtree.** Ranges nest on purpose: ticking "III. Tiến trình dạy học" must send "Hoạt động 1" and "Hoạt động 2". Only *sibling* sections must never overlap, and the last one must reach the end of the document, or its final paragraph is unselectable.
+4. **Numbering alone is not a heading (§10.1).** A block that opens with a run of `1, 2, 3…` is a list, and no line inside it is a heading however title-like. A single-word numbered line ("4. Bỏ rác") is a list item unless it uses a Roman numeral.
+5. **Uncertainty is shown, never hidden (§3.4).** An inferred heading is `confidence: 'low'` and counted in `lowConfidence`, so the wizard can badge it. A page header repeated on every page is dropped. A title that *immediately* repeats itself is a page break and is merged into one section, but a repeat separated by its own body is a second, real section — collapsing those removed every "Hoạt động 1" after the first in a real lesson (measured 2026-10-24).
+6. **Never throws (§3.5).** Any failure returns one whole-document node plus a reason; under 80 characters the reason is `no_text`, so an image-only PDF is *reported*, not treated as an empty document.
+
+**What the selection adds on top.** Un-ticked text is never sent (§4.2/§5.1). An ancestor that was not ticked contributes **its heading line plus one real sentence of its own body** (§5.2), capped — and never a line that is itself a heading or a table row, because such a line belongs to a sibling, which was exactly the leak the tests caught. A section that only partly fits the budget is reported in **both** `partialIds` and `omitted`: §5.4 forbids discarding content to meet a size target *silently*, so a shortened section must appear in the omission panel as well.
+
+**Verification.** `tests/unit/lesson-structure.test.ts` and `tests/unit/lesson-selection.test.ts`, both registered in `npm test`; `npm test` exit 0 on 2026-10-24. **Not verified:** the analyzer has not been run against real `pdf-parse`/`mammoth` output inside the app — it is tested on synthetic fixtures shaped like that output, plus one real Vietnamese lesson plan during development.
+
+## #76 — The character budget stays authoritative in both modes; a selection narrows, never widens
+
+**Decision (owner, 2026-10-24).** A teacher's selection changes **which** text is sent, never **how much** may be sent: the analysis budget stays **12 000 characters (fast)** and **18 000 (deep)**, exactly as `lesson-preprocess` defines them. `SELECTION_BUDGET_CEILING_CHARS` is pinned to `LESSON_PREPROCESS_BUDGET_FAST` by a test, so raising it is a deliberate one-line change with a failing test, not a quiet constant.
+
+**The limitation, in plain words (the owner asked for this to be written down).** Ticking more sections **cannot** make more content fit. If a teacher selects four sections that add up to 20 000 characters in fast mode, the fourth is **not** sent in full: it is cut at a line boundary, and every dropped or shortened section is listed in the omission panel and in `warnings`. The wizard must therefore show the budget next to the size estimate *before* the run, so the teacher narrows the selection on purpose instead of discovering a cut afterwards. Deep mode is the intended escape hatch (18 000), not a bigger selection.
+
+**Backward compatibility.** With no selection, `selectionFingerprint` is `null`, so the analysis cache key is **byte-identical** to today's, and the whole-document path still routes through `preprocessLessonSource`. `smoke66`, the `bench` harness and `real-ai-e2e` keep their baselines as long as nobody ticks anything.
+
+## #78 — A new step is not done until its classes are styled and asserted; a test must be shown to fail
+
+**Context (2026-10-24).** `step-structure.ts` (449 lines) shipped emitting eleven `wizard-tree-*` classes. `src/renderer/styles/app.css` contained **zero** rules for any of them: no test and no smoke looks at whether a class is styled, and Tailwind v4 only generates utilities it finds in markup, so nothing complained. The step would have opened with a flat, unindented list, no expand/collapse affordance, character counts touching titles, and a preview with collapsed whitespace. In the same session, the handoff note asserted four "unverified" items that were already implemented — the import path, the cache fingerprint, the sliced call and this very step — because the note described the plan rather than the call chain.
+
+**Decision.**
+
+1. **Behaviour that a teacher sees needs a style rule *and* a check that the rule survived the build.** The tree's rules are now verified in the **minified** `dist` stylesheet, not only in the source, because `tailwindcss --minify` is a separate step (`build:css`) that `npm run check` never runs.
+2. **`prefers-reduced-motion` is per step, not global.** Each animated surface declares its own reduced-motion rule next to its styles (`setup-progress`, `wizard-gen-progress`, now `wizard-tree`). A teacher who enabled it must still see the correct *state*, only without the motion.
+3. **No meaning may be carried by colour alone**, and `indeterminate` cannot be styled by CSS. The tri-state therefore also marks the title with `.is-partial`, and the low-confidence badge carries a border as well as a background.
+4. **A regression test must be demonstrated to fail.** The new zero-model-call/prompt-scope test was run against deliberately broken emitted JS (`preparedSelection` forced to `null`) and failed with the leaked table row, then passed again once restored. A test whose failure mode was never observed is treated as unverified, the same way an unrun test is.
+5. **Trust the call chain, not the handoff prose.** Before marking a phase open or closed, follow the actual caller path (IPC handler → service → helper). `getLocalDocumentAnalysisExcerpt` is the standing example: it looks like a live bypass but has had no product caller since O6d, and its old test in `ai-manager.test.ts` keeps it alive.
+
+## #79 — A section's range must contain its whole subtree, and an overlap test must only compare non-ancestors
+
+**Context (2026-10-25).** `lesson-structure.ts` gave each section the end of *the next heading in document order*. For a sibling that is correct; for a **parent** it is wrong — "III. TIẾN TRÌNH DẠY HỌC" ended where "Hoạt động 1" began, measured `[261,285)` instead of `[261,455)`. Ticking the parent therefore sent its title and nothing else, and its activities were reachable only one at a time. The same defect existed on the extractor shape (no blank lines), `[183,210)` instead of `[183,374)`, which is what a real PDF/DOCX upload produces — so §5.1's "a parent selection includes its subsections" was not actually true for real input.
+
+**Decision.**
+
+1. **One pass computes both nesting and extent** (`headingRanges`). A new heading closes every open heading at the same or deeper level **and extends every still-open ancestor** at the same time; whatever is left open at the end extends to `sourceLength`. Consequences relied on by the tests: a parent starts strictly before its first child, every child lies strictly inside its parent's range, no two non-ancestor sections overlap, and the last section reaches the end of the source.
+2. **Overlap is a property of sections, not of the flattened node list.** Because ranges nest on purpose, an "all nodes must not overlap" assertion is simply the wrong invariant and rejects correct output. The tests compare `root.children` in order, and separately assert containment for a parent and its children.
+3. **Extending only the innermost open heading is not enough** — it was tried first because it looked minimal, and it left the parent ending exactly at its first child's start. Recorded because the failing assertions ("sections overlap", "a sibling section leaked in") pointed at the *selection* layer while the defect was in range computation; the message named the symptom's location, not the cause.
+4. **Fixtures must look like real extractor output.** `lesson-selection.test.ts` now uses the exactly-one-`\n`-per-line shape of `pdf-parse`/`mammoth`, because the blank-line version was hiding the extractor regression behind a friendlier layout.
+
+**Verification.** `npx tsc --noEmit` exit 0; `npm run build` exit 0; `lesson-structure` and `lesson-selection` both `ok`; `npm test` exit 0; `npm run verify:css` 12/12. Ranges measured by probe on both fixtures (values in `docs/STATUS.md`). **Not verified:** no test drives real `pdf-parse`/`mammoth` output through the analyzer, and nothing has been seen in an Electron window.
+
+
+## #80 — CPU stays the only default backend, a runtime mismatch is never fatal, and Gemma 4 is manual-only
+
+**Problem.** Three separate ways the local-AI path could disappoint a teacher: (1) the Settings page offered the Vulkan build as an equal-looking choice even though it measured **~2.3× slower than CPU** on the pilot hardware; (2) `startLocalRuntimeUnlocked()` **threw** when the backend on disk after an install disagreed with the one requested, so a single wrong detection left local AI unusable while a working `llama-server.exe` sat on disk; (3) the catalog's third tier was Qwen2.5 **7B** — 4.7 GB, slow on CPU, and only reachable by hand.
+
+**Decision.**
+1. **CPU is the presented default, the GPU build is "advanced".** `DEFAULT_RUNTIME_BACKEND` was already `'cpu'`, so this is a UI contract, not a behaviour change: the selector lives inside a collapsed `<details>` ("Tùy chọn nâng cao: dùng GPU tích hợp"), opens only if Vulkan is already saved, and its labels state the measured trade-off instead of promising speed. No string may claim Vulkan accelerates anything.
+2. **A backend mismatch degrades, it does not throw.** `resolveBackendAttempts()` (pure, unit-tested) decides the attempt list: fatal **only** when there is no executable, because `install()` has already verified the archive's size and SHA-256 before extracting — so a wrong layout means "unrecognised build", not "corrupt download". Everything else continues on CPU and logs `runtime.backend-swap-failed`.
+3. **Catalog is 2B / Gemma 4 E2B / 4B; auto-install is 2B / 4B.** Gemma 4 E2B (Apache-2.0, rev `0314792d7f1f`) is selectable but never auto-selected, and every fallback that used to be "the strongest model" — `recommendLocalModelId()`'s last resort and `SETUP_DEFAULT_MODEL_ID` — is now the **weakest** (2B). Rationale: an unknown machine must never be handed a 2.7–4.7 GB download by an accident of code, and an unmeasured model must never become someone's first run.
+4. **A removed model is refused, not remapped.** `getLocalModel('qwen2.5-7b-q4_k_m')` throws. Silently installing a different model when a stale id is requested would change the teacher's content without telling them.
+
+**Consequences (accepted).** A teacher who used 7B keeps the file on disk but must pick 2B/4B/Gemma once. `item-capacity` loses its 7-item tier (4B + Thinking still reaches the hard cap of 7). Gemma 4 enables thinking by default and `buildGenerationOptions()` sends a Qwen-style `chat_template_kwargs.enable_thinking=false`; whether that is enough for Gemma is **unmeasured** and only affects teachers who opt in.
+
+**Verification.** `npm run check` exit 0; `npm test` exit 0 (`model-catalog`, `item-capacity`, `setup-ipc`, `setup-wizard-ui`, `runtime-backend-install` all updated and passing). Gemma 4 E2B was later downloaded and run with `b11681` on the pilot machine: it loads, but it is **slower than 2B** (8.4 vs 11.1 tok/s decoding, pp1024 not finishing in 200 s), spends **~80% of all 8 threads** while decoding, runs **worse on Vulkan** (5.0 tok/s), and returns `[Start thinking]` inside a short window — the thinking risk above is now measured, not hypothetical (`docs/BENCHMARKS.md`). **Not verified:** Gemma content quality, real-lesson prefill through `llama-server`, the new Settings layout in a real window, and the 2B Vulkan/CPU comparison.
+
+## #81 — Presentation Mode is a separate renderer, so projector sizing must be fixed there too; and a build asset is only real if a test opens the built file
+
+**Context.** The UI/UX pass (`docs/archive/specs/update_UI.txt` §7, §14) targets the classroom projector, and `app.css` already carries measured fullscreen rules (`html[data-fullscreen="1"] .modal[data-player-theme] …`, `clamp()` floors documented against a real 1280×721 window). An audit before changing anything found two things that made all of that unreachable.
+
+**Finding 1 — the projector path was never the path being optimized.** Presentation Mode is not the game modal in a bigger window. It is `src/presentation/presentation.html`, a separate `BrowserWindow` (`frame:false`, `fullscreen:true`, `sandbox:true`) that loads **only** `renderer/features/presentation.js` and injects its own `<style>`. Its DOM root is `document.body > .presentation-root`, not `.modal[data-player-theme]`, so **not one** fullscreen rule in `app.css` applies — `presentation-root` had **0** matches in `app.css`. Its text floors were hardcoded and as low as **12px** (race cells) and **15–16px** (badges, chips, score rows): the smallest text on the classroom projector belonged to the surface written last.
+
+**Finding 2 — Presentation Mode did not exist in a built app.** `npm run build` is `tsc` (emits only `.js`/`.js.map`) plus an explicit `copyfiles` list. `src/presentation/presentation.html` and `presentation-preload.js` were **not on that list**, and electron-builder ships `dist/**`, so every built/packaged app 404'd the page (`net::ERR_FILE_NOT_FOUND`). `docs/STATUS.md` recorded "package.json (copy presentation-preload.js vào dist)" as done; it was not, and `tsc` cannot notice a file it never reads.
+
+
+
+**Chosen.**
+1. Add both presentation assets to the `build` `copyfiles` list.
+2. Raise every hardcoded floor in `presentation.ts` to ≥20px and fix the layout defects the measurements exposed: root pinned to the viewport with the body scrolling instead of the page; 2-column answers kept down to 1000px (1366px used to fall to 1 column, making a 4-answer quiz 871px tall in a 768px frame and cutting option D off-screen entirely); `line-height` raised for stacked Vietnamese diacritics; and `.explanation` — which had **no** `font-size` and inherited `app.css`'s 14px body, measuring 18.4px — given a floor plus an inheritable root size.
+3. Assert it numerically **and visually**: `tests/ui/ui-presentation-check.js` drives the real `presentation.js` over the real DOM root at 1920×1080 and 1366×768 for all five views, asserting minimum computed font ≥20px, no clipped text, nothing outside the viewport, no page scroll, no inner scroller hiding content, and no question/answer overlap — writing a PNG per case as human evidence.
+4. Guard the asset bug in `npm test` with `tests/unit/build-assets.test.ts`: every copied asset must exist in `dist/` byte-identical, and both HTML pages' own references must resolve from `dist/`.
+
+**Rejected.** (a) "Fix it in `app.css`" — it cannot reach that page at all; (b) making `presentation.ts` import shared CSS — it is a classic script loaded by a bare `<script>` with no bundler (the #71 constraint), and the copy pattern already exists; (c) shrinking text so race fits at 1366×768 — the floor is the whole point, so the *track and scoreboard* were made denser instead (single-line score rows, fluid cells); (d) a golden-image diff baseline — the build machine's fonts differ from a projector's, so byte comparison would fail for reasons that are not defects. The PNGs are evidence for a human; the numbers are the gate.
+
+
+**Trap — driving a second renderer from CDP is not like driving the first.** `window.eduGame` in the presentation page is a `contextBridge` object: `Object.isFrozen() === true` and its descriptor is non-writable **and** non-configurable, so it cannot be stubbed in place; `Target.createTarget` is unimplemented in Electron ("Not supported"); `window.open()` to a `file://` URL from a `file://` page is blocked; and `Page.addScriptToEvaluateOnNewDocument` registered on the `index.html` session does **not** fire for the new document, because `/json/list` yields a different target. What works is a same-origin **iframe** inside the presentation document: its `window` is writable, the real script is fetched and evaluated into it, and measurement/screenshots read `frame.contentDocument`. Only the IPC layer is faked; the DOM root, the script and its `<style>` are production's.
+
+**Trap — a failing assertion that was measuring the wrong node.** `ui-race-treasure-check.js` started failing as the panel got tighter. Bisecting `presentation.ts` and every token first produced **contradictory** results, so the geometry was read directly instead: the check measured `#treasureActions`, an **empty placeholder that sits *before* `.stage-bottom`** in the markup (`gameplay.ts:1260` vs `:1262`) and is only filled after the answer is checked (`showTreasureChoices`). It was reporting the bottom of the *content*, not a control, and drifted out of the stage as soon as the stage ended earlier. After scrolling to the bottom, `.stage-bottom` was inside the stage (`visibleInStage: true`) while the placeholder sat at `top 729` past the stage's `bottom 707`. The assertion now targets `.stage-bottom`, the real last node; 19/19.
+
+**Verification.** `npm run build` exit 0 with both presentation files in `dist/`; `build-assets.test.ts` exit 0 and **proven to fail** by removing `presentation.html` from `dist/` (exit 1, `build did not emit …`); `npm run check` exit 0; `npm test` exit 0; `npm run verify:css` 12/12; `check:renderer-globals` no undefined globals; `ui-presentation-check` **60/60** (was 40/50 before the fix); `ui-fullscreen-density-check` 9/9; `ui-fullscreen-check` 16/16; `ui-race-treasure-check` 19/19. **Not verified:** real projector brightness, contrast in a lit room, and physical viewing distance — device-metrics emulation reproduces 1920×1080 and 1366×768 exactly but says nothing about how a bulb renders them; also unverified is the real presentation window's z-order/alwaysOnTop behaviour, since the harness runs the page in an iframe of the main window.
