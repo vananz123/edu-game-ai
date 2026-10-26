@@ -1,5 +1,99 @@
 ﻿@import "tailwindcss";
 
+/* ============================================================
+   daisyUI 5 (DECISIONS #87) — CHỈ cung cấp component class, cố ý
+   KHÔNG đụng vào bất cứ thứ gì đã có.
+
+   Bốn chốt an toàn, mỗi chốt chặn một kiểu hư hại:
+
+     prefix: "d-"      `btn` → `d-btn`. app.css đã có `.btn` dùng ở 61
+                       chỗ; nếu không prefix thì daisyUI sẽ định nghĩa
+                       lại `.btn` và đổi toàn bộ nút trong app.
+     exclude: …        bỏ các base style toàn cục (rootcolor,
+                       rootscrollgutter, rootscrolllock, scrollbar, svg).
+                       `rootcolor` sẽ đặt background/color lên :root và
+                       đè theme sáng hiện có; `rootscrollgutter` thêm
+                       scrollbar-gutter vào :root và làm lệch bề rộng
+                       đo được của các check bố cục.
+
+   Về `root:` — ĐÃ THỬ VÀ BỎ (ghi lại để người sau khỏi thử lại):
+   `root: "#modalRoot"` chỉ đổi selector của `@plugin "daisyui"`, còn
+   `@plugin "daisyui/theme"` LUÔN phát ra
+   `:where(:root), :root:has(input.theme-controller…), [data-theme=edugame]`
+   bất kể `root:` đặt gì — đã kiểm bằng cách grep output build và thấy
+   đúng selector đó, không có `#modalRoot`. Nên đã bỏ `root:` cho khỏi
+   gây hiểu lầm.
+
+   Vì sao chấp nhận được: `:where()` có độ đặc hiệu 0, nên khối theme chỉ
+   THÊM biến `--color-base-*`/`--color-primary`… vào `:root`; nó không
+   ghi đè biến nào của app (`--bg`, `--panel`, `--purple`… tên khác hẳn)
+   và `rootcolor` đã bị exclude nên không có background/color nào bị đặt
+   lên `:root`. Đã đo: 103.272 ký tự đầu của CSS build giống hệt bản
+   không có daisyUI; khác biệt duy nhất là 1 `@keyframes progress` thừa.
+
+
+   Theme: KHÔNG dùng theme dựng sẵn nào của daisyUI. `themes: false` tắt cả
+   35 theme, rồi theme `edugame` bên dưới ánh xạ đúng 10 design token của
+   app (@theme ở dòng 47). Nhờ vậy component daisyUI mặc định đã đúng nhận
+   diện thương hiệu, không phải viết đè màu.
+
+   KHÔNG dùng theme dựng sẵn vì: bật `light` sẽ kéo theo --color-base-100
+   là trắng/xám riêng của daisyUI, lệch với --color-canvas #f4f6fb; và
+   `--depth`/`--noise` của theme dựng sẵn tạo bóng dày không khớp
+   --shadow-card hiện có.
+
+   Không có JS nào được nạp: daisyUI 5 là plugin CSS thuần.
+   Rollback: xoá 2 khối @plugin này, không cần gỡ markup.
+   ============================================================ */
+@plugin "daisyui" {
+  themes: false;
+  prefix: "d-";
+  include: card, badge, progress, avatar, steps, join, stat, timeline, alert, divider, indicator, radial-progress;
+  exclude: rootcolor, rootscrollgutter, rootscrolllock, scrollbar, svg;
+  logs: false;
+}
+
+/* Ánh xạ token EduGame → biến của daisyUI. Giá trị ở đây PHẢI khớp
+   @theme bên dưới; nếu đổi một token thì đổi cả hai chỗ.
+   `--depth: 0` và `--noise: 0` để component phẳng, đúng gu hiện có. */
+@plugin "daisyui/theme" {
+  name: "edugame";
+  default: true;
+  color-scheme: light;
+
+  --color-base-100: #ffffff;         /* --color-panel  */
+  --color-base-200: #f4f6fb;         /* --color-canvas */
+  --color-base-300: #e7eaf2;         /* --color-line   */
+  --color-base-content: #172033;     /* --color-ink    */
+
+  --color-primary: #6258e8;          /* --color-brand      */
+  --color-primary-content: #ffffff;
+  --color-secondary: #eeeefe;        /* --color-brand-soft */
+  --color-secondary-content: #172033;
+  --color-accent: #6258e8;           /* --color-brand      */
+  --color-accent-content: #ffffff;
+  --color-neutral: #788196;          /* --color-muted      */
+  --color-neutral-content: #ffffff;
+
+  --color-info: #6258e8;             /* --color-brand */
+  --color-info-content: #ffffff;
+  --color-success: #159b72;          /* --color-ok    */
+  --color-success-content: #ffffff;
+  --color-warning: #f29d38;          /* --color-warn  */
+  --color-warning-content: #172033;
+  --color-error: #e65b68;            /* --color-bad   */
+  --color-error-content: #ffffff;
+
+  --radius-selector: 999px;
+  --radius-field: 10px;
+  --radius-box: 16px;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
 /* G5 (2026-10-18): 5 stylesheet legacy (global/layout/components/pages/responsive)
    Ä‘Ã£ bá»‹ XÃ“A. CÃ¡c rule cÃ²n dÃ¹ng Ä‘Æ°á»£c port vÃ o @layer components bÃªn dÆ°á»›i (chá»‰ giá»¯
    rule cÃ³ class cÃ²n xuáº¥t hiá»‡n trong markup/JS â€” survey báº±ng script; race-cell-*
