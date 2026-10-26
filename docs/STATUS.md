@@ -1,3 +1,37 @@
+## Handoff - Anh trong game to hon + anh mac dinh khi data khong co anh (2026-10-26, tiep theo #87/#88)
+
+**TL;DR:** Hai yeu cau cua giao vien deu lam duoc, va khi do truoc thi thay ca mot loi thu ba khong ai goi ten. Anh minh hoa tang tu **219x137 -> 382x239** (1366x768) va **300x188 -> 440x275** (1920x1080) o quiz/scenario/matching, treasure **178x111 -> 301x188**, va **khong mot man nao bi tran** (`stage overflow` = 0 o moi the loai, ca hai do phan giai). Truong hop data **khong co anh nao** (khong pick, khong category, khong icon - dung thu mot game go tay hoac mot file CSV trung tinh sinh ra) truoc day ve mot **cot TRONG rong 300px** giua man chieu; nay ve canh mac dinh **`language-scene` / `book-open`**. Cong tac cua giao vien van thang: `off` khong ve gi, `manual` khong tu bia. Chi tiet: **#89** trong `docs/DECISIONS.md`.
+
+1. **Files changed.**
+   - `src/shared/illustration-registry.ts` - them `DEFAULT_ILLUSTRATION_CATEGORY` / `_ICON` / `_ASSET_ID`, `ResolvedIllustration.isDefault`, va `resolveIllustration()` tra anh mac dinh cho `auto` khi khong con gi khac.
+   - `src/renderer/features/game-illustration.ts` - ban sao cua giao keo mac dinh (`STAGE_ILLUSTRATION_FALLBACK_*`) + `resolveStageIllustration()` theo dung thu tu uu tien cua ban shared.
+   - `src/renderer/styles/app.css` - nang tran tu 320px len 420px (bo `max-height`, chieu cao theo `aspect-ratio`), cot 2-cot `clamp(200px,16vw,300px)` -> `clamp(300px,28vw,440px)`, treasure `clamp(240px,22vw,360px)`, race `min(280px,24%)`, va nhanh `@media (max-height:760px)` (cung chinh la nhanh 1 COT) tu `min(320px,34%)` -> `min(420px,46%,46.4vh)`.
+   - `tests/unit/illustration-registry.test.ts` - 2 test moi (anh mac dinh + anh mac dinh phai dang ky & ve duoc) va 1 guard chong lech giua 2 ban sao; sua 1 assertion cu dang khoa hanh vi "khong co gi -> khong ve".
+   - `tests/ui/ui-stage-illustration-check.js` - nguong `h <= 220` -> `h <= 300`, them 5 assertion/the loai cho anh mac dinh va chay do o ca 2 do phan giai.
+   - `tests/ui/ui-fullscreen-density-check.js` - **go** assertion "cau hoi + dap an phu >= 62% dien tich stage" (ly do o muc 4 ben duoi va trong #89).
+   - `docs/DECISIONS.md` - them **#89**, va cap nhat muc known-bad cua #87.
+
+2. **Behavior implemented.**
+   - Anh lon hon o ca 5 man choi, theo mot tran duy nhat 420px, khong bao gio dat `height` rieng (giu nguyen bay #70).
+   - Man hinh thap (1366x768 -> bo cuc 1 cot) **khong con bi thu nho xuong 199x124**; anh duoc gioi han ca chieu rong lan chieu cao qua danh sach `min()` nen khong an vao dap an.
+   - Vat pham khong co thong tin anh -> ve anh mac dinh (scene that trong bo 24 canh co dinh, **khong** sinh anh, **khong** goi mang, **khong** them payload vao `.egame`).
+   - `off` / `manual` giu nguyen hop dong cu; duoc assert cho ca 5 the loai.
+
+3. **Commands run and results.**
+   - `npm run check` -> exit 0.
+   - `npm test` -> exit 0. `illustration-registry` **33** checks (truoc 31).
+   - `npm run build` -> exit 0 (`icon-data.ts is in sync (60 icons)`).
+   - App that + CDP: `node tests/ui/ui-stage-illustration-check.js 9341` -> **169/169** (truoc 94); `ui-play-surface-check` -> **156/156**; `ui-fullscreen-density-check` -> **8/8**; `ui-race-treasure-check` -> **19/19**.
+
+4. **What remains unverified / open.**
+   - "Anh to hon co dep hon khong" la phep danh gia khong co test nao lam duoc: anh chup 1366x768 va 1920x1080 da duoc xem va chap nhan, nhung **chua co giao vien nao xem**.
+   - **Mat mot guard:** assertion "noi dung phu >=62% stage" da bi go vi no do sai (no khong nhin thay anh). Hai ban sua da thu va deu **bi chung minh la vo nghia bang negative control** (thu anh ve 200px, bop cau hoi, do them padding - con so khong doi). Can mot phep do dung cho ca khoi noi dung 2 cot, la viec rieng.
+   - `ui-race-treasure-check` van ke thua kich thuoc cua so OS (xem #87); cho **16/19** o 1920x1080, da xac nhan la fixture chu khong phai hoi quy.
+   - Khong co anh tai len (upload) - van de nghi hoan theo #31. "Anh mac dinh" o day la mot canh co dinh, khong phai anh cua giao vien.
+
+5. **Next recommended task.** Cho giao vien xem 4 anh chup `tests/ui/shots/illustration-*` o 1366x768 truoc khi mo rong; sau do moi do lai khoi noi dung 2 cot cho dung (thay cho assertion da go), va cho `ui-race-treasure-check` tu dat viewport.
+
+
 ## Handoff - DaisyUI: cai dat an toan + don chien tranh do uu tien + sua check do sai (2026-10-26)
 
 **TL;DR:** daisyUI 5.7.50 da duoc cai **an toan** (prefix `d-`, theme rieng map vao 10 token cua app, chi 12 component, khong base style toan cuc) va da chung minh **khong doi mot pixel nao**: 103.272 ky tu dau cua CSS build giong het ban khong co plugin. Nhung thu that su sua loi "chat tren may chieu" la viec **don CSS**, khong phai thu vien: `.answer-option` tung duoc khai **6 lan**, `.stage-center` **8 lan**, moi ban sau chi de de ban truoc. Da don ve **mot dinh nghia moi selector**. Them vao do, 2 loi **1280px** cua `ui-fullscreen-density-check` tu truoc khong phai loi san pham ma la **check do sai tu #84** (do cot chu thay vi do ca hang 2 cot) - da sua va dua check ve **9/9**. Chi tiet: **#87** va **#88** trong `docs/DECISIONS.md`.

@@ -542,6 +542,18 @@ The lesson repeats #70 and is the reason Phase A is previewed before scaling: **
 1. A teacher could see one illustration per item on the play surface but had **no way to change it**. The editor's `contentCategory` / `iconName` / `illustrationAssetId` inputs are hidden and only carry what the model produced, so the only path to different artwork was regenerating the item — a model call that also rewrites the text.
 2. **Matching pairs lost their artwork entirely.** The editor has written the three asset keys into matching pairs since #65, but `matchingPairSchema` never declared them, and zod strips unknown keys silently. So the fields were written, validated away, and the adapter then read nothing. Nothing failed: the pair just had no picture.
 
+**Traps hit and recorded.**
+
+- **A declared "fallback icon" is not the icon that gets drawn.** `resolvedFor()` prefers the *category's* icon, so the first version of the default quietly rendered `languages` while the constant said `book-open`. Caught by a unit assertion, fixed by passing the icon explicitly. If a future default wants its category's own icon, say so in the constant instead of adding a second rule.
+- **`ui-fullscreen-density-check`'s "≥62% of the stage" assertion had to be removed, not repaired.** It measures the `question..answer-grid` rectangle with `offsetWidth`/`offsetHeight`, so it cannot see the illustration. At 1280×720 (the OS window that check runs in) the layout is one column and the illustration sits *above* the question, which is why it read ~48% "empty" on a screen with no visible gap. Two repairs were attempted and both were **proven meaningless by negative control** (shrink the art to 200px, squeeze the question, pad the text column — the number did not move): taking the block's top edge from the first child mixes `getBoundingClientRect()` on the row with `offsetTop` on a `position: sticky` stage, and dropping the illustration from the measurement on purpose removes the very content teachers pay to see. The check is now **8/8** with the two assertions that measure what a teacher sees directly (`no >90px gap under the answers`, `no page scroll`). Measuring the whole content block of the two-column layout properly is a separate task, recorded in `docs/STATUS.md`.
+- **Rebuilding `dist/` while the app is running wedges the CDP session**, and a stray `electron`/`node` process keeps port 9341 answering so the next check hangs with no output. Kill both before every relaunch — this bit twice in this session.
+- **PowerShell mangles nested quotes in `node -e`**, which silently truncated a control script into something that ran different code than intended (and produced a false "negative control passed"). Write a temp `.js` file for any multi-token probe; the inline form only works for trivial expressions.
+
+**Verification.** `npm run check` exit 0. `npm test` exit 0 (`illustration-registry` **33** checks, up from 31: the default scene, its renderability, and a renderer/shared drift guard on the two constants). Live Electron over CDP: `ui-stage-illustration-check` **169/169** (was 94 — added default-scene assertions × 5 templates and projector runs of the default), `ui-play-surface-check` **156/156**, `ui-fullscreen-density-check` **8/8**, `ui-race-treasure-check` **19/19**. Stage overflow stayed **0** on every template at both resolutions, which is what makes the larger art safe. Screenshots reviewed at 1366×768 and 1920×1080 for quiz, matching, treasure and race.
+
+**Still unverified / open.** Whether the bigger picture *looks* right is a judgement no assertion makes — the screenshots were reviewed and accepted, but no teacher has seen them. `ui-race-treasure-check` still inherits the OS window size (pre-existing, see #87). The "content covers the stage" property has lost its guard until a correct measurement exists (above).
+
+
 **Decision.**
 
 - `matchingPairSchema` now spreads `itemAssetFieldsSchema`; `MatchingPairDraft` / `MatchingPair` extend `ItemAssetFields`; the adapter maps both directions; `padDraftAssetKeys` covers `matching`. A test round-trips a pair through `parseGameDraft` → adapter, which is the check that would have caught the hole (a test exercising only the adapter stays green with it).
@@ -859,5 +871,32 @@ The map figure is the important one: `min-height: 190px` was bought for a long j
 **Not verified / known-bad, recorded honestly.**
 - Real projector hardware — all measurement is via `Emulation.setDeviceMetricsOverride`.
 - No screenshot was reviewed for the daisyUI components: they are registered and compute correct styles, but no screen uses them yet, so "does it look right" is unanswered.
-- `ui-race-treasure-check` reports **16/19** when the OS window is **1920×1080** instead of a 1366×768 projector: the 40-cell track fits in 121px and never engages its height cap, and the treasure fixture has nothing left to scroll. This is **identical on unmodified HEAD** — proved by stashing the CSS, rebuilding, relaunching and re-running — so it is a fixture that inherits the OS window instead of setting its own viewport, not a regression from this work. The proper fix is for that check to call `Emulation.setDeviceMetricsOverride`, as the other three do. Left unfixed here because it is outside this change's scope and touching it would mix an unverified test edit into a CSS consolidation.
+- `ui-race-treasure-check` reports **16/19** when the OS window is **1920×1080** instead of a 1366×768 projector: the 40-cell track fits in 121px and never engages its height cap, and the treasure fixture has nothing left to scroll. This is **identical on unmodified HEAD** — proved by stashing the CSS, rebuilding, relaunching and re-running — so it is a fixture that inherits the OS window instead of setting its own viewport, not a regression from this work. The proper fix is for that check to call `Emulation.setDeviceMetricsOverride`, as the other three do. **Confirmed still true in #89:** with the CSS changed substantially, that suite is **19/19** at the default 1366×768 window and still **16/19** at 1920×1080, reproducing the same two failures — so the diagnosis holds and it is not a regression from #87–#89 either.
+
+
+## #89 — The game's picture is bigger, and data with no artwork gets a default scene
+
+**Date.** 2026-10-26
+
+**Context.** A teacher asked for two things after #87/#88: *"cho ảnh ở trò chơi to thêm"* and *"khi không có ảnh trong data thì tự động hiển thị ảnh mặc định"*. Measuring the built app first (1366×768 and 1920×1080 over CDP) showed both were real, plus a third defect nobody had named:
+
+| surface | before 1366×768 | before 1920×1080 |
+|---|---|---|
+| quiz / scenario / matching | 219×137 | 300×188 |
+| treasure-hunt | 178×111 | 240×150 |
+| race | 219×137 | 300×188 |
+| item with no category and no icon | **empty column** | **empty column** |
+
+219×137 is the size of a card, not of a picture on a projector, and the text column beside it had hundreds of spare pixels. Separately: `resolveIllustration()` returned `null` when an item carried no `illustrationAssetId`, no `contentCategory` and no `iconName`, so `gameplay.ts` rendered an **empty `.stage-col`**. That is what a hand-typed game and a neutral CSV import produce, and the empty column was still 300px wide — a hole in the middle of a projected screen.
+
+**Decision.**
+
+1. **One ceiling, raised everywhere, never a height on its own.** The base rule went from `min(320px, 46%)` to `min(420px, 46%)` and `max-height` was removed; height follows `aspect-ratio: 16/10` as #70 requires. 420px is the stop line: the scene is authored at 16px-icon scale, so ~2.1× is where the subject stroke starts thickening faster than the layer detail and the art reads as a scaled-up icon.
+2. **The two-column column width moved with it** — `clamp(200px, 16vw, 300px)` → `clamp(300px, 28vw, 440px)`. Treasure and race keep their relative priority (they still owe vertical space to a map / a track) but move on the same scale: `clamp(240px, 22vw, 360px)` and `min(280px, 24%)`.
+3. **The short-window media query is also the one-column rule**, which is why it mattered most. The two-column layout only starts at `min-width: 1180px` of `.stage-center`, so a 1366×768 projector fell through to `min(320px, 34%)` and drew the scene at **199×124 — smaller than before the two-column work**. It now uses `min(420px, 46%, 46.4vh)`: width-capped *and* height-capped inside the `min()` list (222px tall at 768), which is what the old `max-height: 200px` protected, without reintroducing the #70 aspect-ratio trap.
+4. **A fixed default, not a generated image.** `DEFAULT_ILLUSTRATION_CATEGORY = 'language'`, `DEFAULT_ILLUSTRATION_ICON = 'book-open'`, `DEFAULT_ILLUSTRATION_ASSET_ID = 'language-scene'`. `resolveIllustration()` returns it for `auto` when nothing else resolves, and `ResolvedIllustration.isDefault` lets callers tell it apart. Rendering needs **no special case**: it is an ordinary registered scene with a real palette. `general` deliberately is *not* the vehicle — it has no palette, so drawing it would mean inventing one.
+5. **The teacher's switch still wins.** `off` returns `null` before anything is inspected, and `manual` still never invents artwork — the default is not "artwork the teacher did not pick", it is the picture the product shows in the mode that promises one. Both are asserted for all five templates.
+
+**What this deliberately does NOT do.** It adds no teacher-uploaded image, no cover-image field and no raster asset. `.egame` files still carry no image payload, games still play offline, and nothing is model-generated — the default is one of the 24 existing scenes. Uploads stay deferred under #31's reasoning.
+
 
