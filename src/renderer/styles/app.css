@@ -102,6 +102,21 @@
    do JS toggle + há»‡ thá»‘ng chÆ°a migrate (modal, field, editor, play modes, chat). */
 @source "../../index.html";
 @source "../";
+/* E6 (DECISIONS #88): daisyUI chỉ sinh class nào xuất hiện trong markup mà
+   Tailwind quét được. Các component dùng trong template string của
+   `gameplay.ts` CÓ được quét (file .ts nằm trong `../`), nhưng class dựng
+   động và class dùng trong tài liệu/test thì không. `@source inline()` là
+   cách chính thức của Tailwind v4 để bảo đảm danh sách này luôn có mặt —
+   đồng thời biến danh sách `include:` ở `@plugin "daisyui"` thành hợp đồng
+   có thể kiểm chứng: thêm component mới ở đây là sinh CSS ngay, không phải
+   chờ ai đó dùng nó.
+   Chỉ liệt kê đúng những gì đang dùng; KHÔNG safelist cả thư viện. */
+@source inline("d-card {d-card-body,d-card-title,d-card-actions}");
+@source inline("d-badge {d-badge-primary,d-badge-secondary,d-badge-success,d-badge-warning,d-badge-error,d-badge-neutral,d-badge-outline,d-badge-sm,d-badge-lg}");
+@source inline("d-progress {d-progress-primary,d-progress-success,d-progress-warning,d-progress-error}");
+@source inline("d-steps d-step {d-step-primary,d-step-success,d-step-neutral} d-step-icon");
+@source inline("d-avatar d-stat {d-stat-title,d-stat-value,d-stat-desc} d-timeline d-timeline-middle d-timeline-start d-timeline-end");
+@source inline("d-alert {d-alert-info,d-alert-success,d-alert-warning,d-alert-error} d-divider d-join d-join-item d-indicator d-indicator-item");
 
 @theme {
   /* === 10 design token hiá»‡n cÃ³ trong global.css (:root) === */
