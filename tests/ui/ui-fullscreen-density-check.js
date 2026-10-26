@@ -58,6 +58,19 @@ const MEASURE = `
   const body = document.querySelector('.modal-body');
   if (!q || !grid || !opt) return { missing: true };
   const qBox = box(q), gridBox = box(grid), stageBox = box(stage);
+  // DECISIONS #84/#88: the play surface is TWO columns above 1180px — artwork
+  // on the left, question + answers on the right. Measuring only
+  // .stage-question therefore reports the text column (956 of 1280px = 75%)
+  // and fails, even though no space is wasted: the missing 205px went to the
+  // illustration on purpose. What the teacher actually sees as "the content
+  // spans the window" is the whole row, so that is what gets measured, and a
+  // separate assertion below still guards that the TEXT column keeps at least
+  // half of the window (the original intent) instead of being deleted.
+  const rowHost = q.closest('.stage-center');
+  const cols = rowHost ? [...rowHost.children].filter(el => el.offsetWidth > 0 || el.offsetHeight > 0) : [];
+  const rowLeft = cols.length ? Math.min(...cols.map(el => el.getBoundingClientRect().left)) : 0;
+  const rowRight = cols.length ? Math.max(...cols.map(el => el.getBoundingClientRect().right)) : 0;
+  const rowWidth = Math.round(rowRight - rowLeft);
   const blockHeight = gridBox.bottom - qBox.top;
   const blockWidth = Math.max(qBox.w, gridBox.w);
   // Đáy nội dung thật của stage: phần tử con hiển thị cuối cùng của khối
@@ -73,6 +86,10 @@ const MEASURE = `
     viewport: { w: innerWidth, h: innerHeight },
     questionFont: px(cs(q).fontSize),
     questionWidth: qBox.w,
+    // Width of the whole content row (artwork column + text column), which is
+    // what "the content spans the window" means under the 2-column layout.
+    rowWidth: rowWidth,
+    columnCount: cols.length,
     answerFont: px(cs(opt).fontSize),
     answerHeight: box(opt).h,
     answerLines: Math.round(box(opt).h / (px(cs(opt).lineHeight) || px(cs(opt).fontSize) * 1.2)),
@@ -115,6 +132,7 @@ const CLOSE = `
     `question ${m.questionFont.toFixed(1)}px / ${Math.round(m.questionWidth)}px wide`,
     `answer ${m.answerFont.toFixed(1)}px / ${m.answerLines} line(s) / ${Math.round(m.answerHeight)}px tall`,
     `grid ${Math.round(m.gridWidth)}px, ${m.gridColumns} cols`,
+    `row ${m.rowWidth}px over ${m.columnCount} column(s)`,
     `stage ${Math.round(m.stage.w)}x${Math.round(m.stage.h)}`,
     `empty ${(m.emptyRatio * 100).toFixed(1)}% of the stage`,
     `bottom gap ${m.contentBottomGap}px (${m.gapUnderAnswers}px right under the answers)`,
@@ -127,10 +145,19 @@ const CLOSE = `
   check('đáp án >= 20px ở toàn màn hình', m.answerFont >= 20, `${m.answerFont.toFixed(1)}px`);
   check('đáp án cao >= 64px (bấm từ xa)', m.answerHeight >= 64, `${Math.round(m.answerHeight)}px`);
   // Bề rộng: dải trống hai bên là thứ giáo viên nhìn thấy rõ nhất trên máy chiếu.
-  check('câu hỏi chiếm >= 86% bề rộng cửa sổ',
-    m.questionWidth >= vp.w * 0.86, `${Math.round(m.questionWidth)}px / ${vp.w}px`);
-  check('lưới đáp án chiếm >= 86% bề rộng cửa sổ',
-    m.gridWidth >= vp.w * 0.86, `${Math.round(m.gridWidth)}px / ${vp.w}px`);
+  //
+  // Đo KHỐI NỘI DUNG (hàng gồm cột minh hoạ + cột chữ), không đo mỗi
+  // `.stage-question`. Từ DECISIONS #84 màn chơi là hai cột ở bề rộng >1180px:
+  // cột minh hoạ giữ ~205px một cách CÓ CHỦ ĐÍCH, nên đo riêng cột chữ luôn ra
+  // ~75% và luôn đỏ dù không hề lãng phí chỗ. Dùng lại đúng cách #84 đã sửa cho
+  // `ui-play-surface-check`; #84 chỉ sửa check đó và bỏ sót check này, nên hai
+  // phép đo 1280px ở đây đỏ suốt từ đó (xem DECISIONS #88).
+  check('khối nội dung chiếm >= 86% bề rộng cửa sổ',
+    m.rowWidth >= vp.w * 0.86, `${m.rowWidth}px / ${vp.w}px (${m.columnCount} cột)`);
+  // Giữ lại ý định GỐC của assertion cũ thay vì xoá nó: cột chữ phải chiếm ít
+  // nhất một nửa cửa sổ, để "hai cột" không bị dùng làm cớ thu hẹp chữ.
+  check('cột chữ chiếm >= 50% bề rộng cửa sổ',
+    m.gridWidth >= vp.w * 0.5, `${Math.round(m.gridWidth)}px / ${vp.w}px`);
   // Chỗ trống theo chiều cao: vùng câu hỏi + đáp án phải phủ phần lớn stage, và
   // không còn dải trống lớn ngay dưới đáp án.
   check('câu hỏi + đáp án phủ >= 62% diện tích stage',
