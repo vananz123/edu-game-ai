@@ -899,4 +899,24 @@ The map figure is the important one: `min-height: 190px` was bought for a long j
 
 **What this deliberately does NOT do.** It adds no teacher-uploaded image, no cover-image field and no raster asset. `.egame` files still carry no image payload, games still play offline, and nothing is model-generated — the default is one of the 24 existing scenes. Uploads stay deferred under #31's reasoning.
 
+**Traps hit and recorded.**
+
+- **A declared "fallback icon" is not the icon that gets drawn.** `resolvedFor()` in the renderer prefers *the category's own* icon whenever a category is known, so simply passing the default category through it produced `graduation-cap` (the icon of `language`) instead of the declared `book-open`. The default was invisible in the resolved data until `resolvedFor()` took an explicit `iconName` argument. **Rule: a constant that names an icon must be the constant that reaches the DOM, and the only way to know is to assert the rendered `class` list, not the resolver's return value.**
+- **Two copies of the fallback constants can drift silently.** `src/shared/illustration-registry.ts` cannot be `import`ed by the renderer (load-order, #74), so `game-illustration.ts` holds its own copy. A regex drift-guard unit test now pins the renderer's literals to the shared ones; it fails on any edit to one side only.
+- **A test can encode the bug as the contract.** One existing assertion in `illustration-registry.test.ts` locked in "no category, no icon -> `null`". It was green and it was the defect. **Rule: when changing intended behaviour, grep the tests for the old behaviour before assuming the suite will tell you.**
+- **The 62%-of-stage assertion was measuring a rectangle the illustration is not inside.** It measured `question..answer-grid` via `offsetWidth`/`offsetHeight`; at 1280×720 the layout is one column and the art sits *above* the question, so the number could not see it. Two repair attempts were each disproved by negative control (shrink the art to 200px / squeeze the question / pad the text column — the number did not move). Removed rather than left as a guard that can never fail. **Rule: before trusting a layout number, break the layout on purpose and confirm the number changes.**
+- **Rebuilding `dist/` while the app is running wedges port 9341.** The old renderer keeps the CDP socket and the next check hangs after a handful of lines with no error. Kill `electron` *and* `node` before relaunching.
+- **A long check in Windows PowerShell can stall its own stdout.** A correct 169-step run (`exit 0`, 169/169) produced no streaming output past line 5. Redirecting to a file with `Start-Process -RedirectStandardOutput` and polling the file size is the reliable way to watch it. Do not conclude the check is hung from a silent console.
+- **PowerShell mangles nested quotes in `node -e`.** Multi-token probes go in a temp `.js` file.
+
+**Verification.** `npm run check` exit 0. `node dist/tests/unit/illustration-registry.test.js` — **33** checks (was 31; 2 new for the default scene, 1 drift guard). `npm test` exit 0. Live app via CDP, all after killing `electron`/`node` and relaunching on the fresh `dist/`: `ui-stage-illustration-check` **169/169** (was 94 — five new default-scene assertions × 5 templates, run at 1366×768 and 1920×1080), `ui-play-surface-check` **156/156**, `ui-fullscreen-density-check` **8/8**, `ui-race-treasure-check` **19/19**. Measured sizes and `stage overflow = 0` at both resolutions are in the table above and were re-read from the live DOM, not inferred from the CSS. Screenshots `tests/ui/shots/illustration-{quiz,matching,treasure-hunt,race,scenario}-{1366x768,1920x1080}.png` were captured and looked at, plus a `-default-` variant per template (`illustration-<template>-default-<size>.png`, 20 files) which is the no-artwork fixture and therefore the direct evidence for the default scene.
+
+**Still unverified / open.**
+- **Nobody has judged whether bigger is better.** Screenshots were reviewed by me and accepted; no teacher has seen them. That is the one acceptance criterion this change cannot test.
+- **The property that lost its guard is unmeasured.** "The two-column content block uses the stage's height" is now checked only indirectly (no >90px gap under the answers, no page scroll). A correct measurement of the whole content block is a separate task, written into `docs/STATUS.md`.
+- **`ui-race-treasure-check` still inherits the OS window size** (see #87). `19/19` at the default 1366×768 window, `16/19` at 1920×1080 — reproduced identically with this CSS in place, so it is a fixture, not a regression.
+- **Real projector hardware** — every size above comes from `Emulation.setDeviceMetricsOverride`.
+- **No teacher-uploaded images** — deferred under #31. The "default illustration" is a fixed scene, not the teacher's own picture.
+
+
 

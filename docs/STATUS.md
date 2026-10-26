@@ -28,8 +28,9 @@
    - **Mat mot guard:** assertion "noi dung phu >=62% stage" da bi go vi no do sai (no khong nhin thay anh). Hai ban sua da thu va deu **bi chung minh la vo nghia bang negative control** (thu anh ve 200px, bop cau hoi, do them padding - con so khong doi). Can mot phep do dung cho ca khoi noi dung 2 cot, la viec rieng.
    - `ui-race-treasure-check` van ke thua kich thuoc cua so OS (xem #87); cho **16/19** o 1920x1080, da xac nhan la fixture chu khong phai hoi quy.
    - Khong co anh tai len (upload) - van de nghi hoan theo #31. "Anh mac dinh" o day la mot canh co dinh, khong phai anh cua giao vien.
+   - **Luu y van hanh (da tra gia 2 lan):** check UI >3 phut chay trong PowerShell co the treo stdout du script van dung (`exit 0`). Lan dau toi tuong no ket va da giet tien trinh - sai. Cach on: `Start-Process node ... -RedirectStandardOutput tmp-out.txt` roi poll kich thuoc file. Kiem chung rieng rang viewport co duoc ap that (probe `[innerWidth,innerHeight]` sau moi lan dat) truoc khi ket luan la CSS hong.
 
-5. **Next recommended task.** Cho giao vien xem 4 anh chup `tests/ui/shots/illustration-*` o 1366x768 truoc khi mo rong; sau do moi do lai khoi noi dung 2 cot cho dung (thay cho assertion da go), va cho `ui-race-treasure-check` tu dat viewport.
+5. **Next recommended task.** Cho giao vien xem anh chup o 1366x768 truoc khi mo rong: `tests/ui/shots/illustration-quiz-default-1366x768.png` (truong hop khong co anh), `illustration-matching-default-1366x768.png`, `illustration-treasure-hunt-1366x768.png`, `illustration-race-1366x768.png` (20 file tat ca, ca 2 do phan giai). Sau do moi do lai khoi noi dung 2 cot cho dung (thay cho assertion da go), va cho `ui-race-treasure-check` tu dat viewport.
 
 
 ## Handoff - DaisyUI: cai dat an toan + don chien tranh do uu tien + sua check do sai (2026-10-26)
