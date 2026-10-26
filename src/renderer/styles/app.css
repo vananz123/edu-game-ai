@@ -1922,13 +1922,19 @@ html[data-setup-fullscreen="1"] .ai-status-bar{visibility:hidden}
    it was floating. Measured on the real play surface: stage overflow stayed 0
    at 132/160/180/200px, so the height was never competing with the answers. The
    cap is now 320/1.6 = 200px, i.e. the scene is never downscaled below its
-   authored size. */
+   authored size.
+
+   #89: the 320px ceiling is what held the scene at "card" size. A 320x200 SVG
+   scene is authored at 16px-icon scale, so up to 420px (2.1x) it still reads as
+   a picture rather than a scaled-up icon; above that the icon stroke thickens
+   faster than the layer detail and the scene looks blurry. 420 is therefore the
+   new ceiling, and the height follows from `aspect-ratio` (420 => 262px). */
 .modal[data-player-theme] .stage-illustration {
   display: block;
   aspect-ratio: 16 / 10;
-  width: min(320px, 46%);
-  max-width: min(320px, 46%);
-  max-height: 200px;
+  width: min(420px, 46%);
+  max-width: min(420px, 46%);
+  max-height: none;
   margin: 0 auto 10px;
   border-radius: 18px;
   overflow: hidden;
@@ -2002,19 +2008,22 @@ html[data-fullscreen="1"] .modal[data-player-theme] .stage-col.is-main > #treasu
 }
 
 /* Treasure stages already carry a map and a storyline above the question; a
-   second large block pushes the mission controls off a 720px stage. */
+   second large block pushes the mission controls off a 720px stage.
+   #89: 240 -> 300 (windowed) with the same reasoning as the base rule: the
+   ceiling moved, the relative priority did not. */
 .modal[data-player-theme] .stage-illustration.is-treasure {
-  width: min(240px, 34%);
-  max-width: min(240px, 34%);
-  max-height: 150px;
+  width: min(300px, 38%);
+  max-width: min(300px, 38%);
+  max-height: none;
   margin-bottom: 6px;
 }
 /* The race turn panel is the densest surface in the product (turn bar, cards,
-   options, "no answer" button). Keep it small so nothing scrolls. */
+   options, "no answer" button). Keep it small so nothing scrolls.
+   #89: 190 -> 260; it still stays the smallest scene in the product. */
 .modal[data-player-theme] .race-turn .stage-illustration.is-race {
-  width: min(190px, 26%);
-  max-width: min(190px, 26%);
-  max-height: 119px;
+  width: min(260px, 30%);
+  max-width: min(260px, 30%);
+  max-height: none;
   margin: 2px auto 4px;
 }
 /* Fullscreen is the surface teachers project: give the scene more room than
@@ -2026,25 +2035,34 @@ html[data-fullscreen="1"] .modal[data-player-theme] .stage-illustration {
   max-width: min(420px, 46%);
 }
 html[data-fullscreen="1"] .modal[data-player-theme] .stage-illustration.is-treasure {
-  width: min(260px, 30%);
-  max-width: min(260px, 30%);
-  max-height: 163px;
+  width: min(340px, 32%);
+  max-width: min(340px, 32%);
+  max-height: none;
 }
 html[data-fullscreen="1"] .modal[data-player-theme] .race-turn .stage-illustration.is-race {
-  width: min(200px, 22%);
-  max-width: min(200px, 22%);
-  max-height: 125px;
+  width: min(280px, 24%);
+  max-width: min(280px, 24%);
+  max-height: none;
 }
 /* Short windows (1366x705 laptops teachers actually use). Previously the
    illustration was removed outright at <=760px, which is why the very first
    measurement of this surface reported a 150x94 frame: the scene was not
    squashed, it was hidden. Scale it down instead - `aspect-ratio` keeps the
-   whole scene visible at any height, and the answer grid keeps its space. */
+   whole scene visible at any height, and the answer grid keeps its space.
+
+   DECISIONS #89: this is ALSO the one-column rule, because the 2-column layout
+   only starts at min-width 1180px. A 1366x768 projector therefore fell through
+   to `min(320px, 34%)` and drew the scene at 199x124 - smaller than before the
+   2-column work. The box now has BOTH caps: width (420px, 46% of the stage)
+   and HEIGHT via the `min()` list (46.4vh => 222px tall @768), so the scene
+   cannot grow into the answers. That is what the old `max-height: 200px`
+   protected; the height now comes from the winning `width`/`aspect-ratio` pair
+   instead of a separate `max-height` (see the aspect-ratio trap, DECISIONS #70). */
 @media (max-height: 760px) {
   html[data-fullscreen="1"] .modal[data-player-theme] .stage-illustration {
-    width: min(320px, 34%);
-    max-width: min(320px, 34%);
-    max-height: 200px;
+    width: min(420px, 46%, 46.4vh);
+    max-width: min(420px, 46%, 46.4vh);
+    max-height: none;
     margin-bottom: 6px;
   }
 }
@@ -2101,10 +2119,14 @@ html[data-fullscreen="1"] .modal[data-player-theme] .race-turn .stage-illustrati
      Bẫy: `.stage-illustration` gốc là `width: min(320px, 46%)` — 46% của
      container. Trong một cột hẹp, phần trăm đó làm hộp co lại và cảnh
      320x200 bị letterbox thành một vệt mảnh (đúng lỗi #70: cảnh vẽ ở
-     ~150x94). Vì vậy ở đây đặt px tuyệt đối và cho `flex: 0 0 auto`. */
+     ~150x94). Vì vậy ở đây đặt px tuyệt đối và cho `flex: 0 0 auto`.
+     ĐO LƯỜNG (DECISIONS #89): khung cũ `clamp(200px, 16vw, 300px)` cho cảnh
+     chỉ 219x137 ở 1366x768 và 300x188 ở 1920x1080 — ngang một tấm thẻ, không
+     phải một bức tranh, dù cột chữ còn rất nhiều chỗ trống. Khung mới
+     `clamp(300px, 28vw, 440px)`: 383px @1366, 400px @1440, 440px @1920. */
   html[data-fullscreen="1"] .modal[data-player-theme] .stage-center > .stage-col:not(.is-main) {
     flex: 0 0 auto;
-    width: clamp(200px, 16vw, 300px);
+    width: clamp(300px, 28vw, 440px);
   }
   html[data-fullscreen="1"] .modal[data-player-theme] .stage-col > .stage-illustration {
     width: 100%;
@@ -2113,9 +2135,11 @@ html[data-fullscreen="1"] .modal[data-player-theme] .race-turn .stage-illustrati
     margin: 0;
   }
   /* Treasure đã tốn chiều dọc cho bản đồ + cốt truyện phía trên, nên ảnh của
-     nó nhỏ hơn để nhường chỗ cho ĐÁP ÁN. */
+     nó nhỏ hơn để nhường chỗ cho ĐÁP ÁN.
+     #89: 240px @1920 / 178px @1366 được nâng lên nhưng VẪN nhỏ hơn khung
+     thường, vì đây là cột duy nhất phải nhường chiều cao cho bản đồ. */
   html[data-fullscreen="1"] .modal[data-player-theme] .stage-col:has(> .stage-illustration.is-treasure) {
-    width: clamp(170px, 13vw, 240px) !important;
+    width: clamp(240px, 22vw, 360px) !important;
   }
   /* Cột văn bản: chiếm phần còn lại, co giãn được. `min-width: 0` để nội dung
      dài (chuỗi không khoảng trắng) không đẩy cột ra ngoài khung. */
