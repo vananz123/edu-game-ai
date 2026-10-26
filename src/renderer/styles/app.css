@@ -979,7 +979,7 @@ html[data-fullscreen="1"] .modal[data-player-theme] .answer-option {
        `@media (max-height:800px)` khai `gap` này — `1.4vh` rồi `1.6vh` ngay
        sau — và bản khai báo sau thắng, nên giá trị đang có hiệu lực là
        `1.6vh/18px`. (Đã thử `1.4vh` và SAI: `.stage-bottom` của scenario bị
-       đẩy 14px ra ngoài viewport, `ui-stage-illustration-check` 93/94.) */
+       đẩy 14px ra ngoài viewport, `ui-stage-illustration-check` 93/94.)
 
    Bài học của #88: gộp bản đè phải giữ giá trị của bản ĐANG THẮNG — kiểm bằng
    cách xem bản khai báo SAU CÙNG khớp selector, không phải bản xuất hiện đầu. */
