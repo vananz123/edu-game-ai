@@ -548,7 +548,7 @@ function renderQuestion() {
   const answerArea = textQ
     ? `<div class="text-answer-box"><input id="textAnswerInput" placeholder="${shortAnswerPlaceholder}" autocomplete="off"><button class="btn btn-primary" id="textAnswerBtn">Trả lời</button>${q.hint?`<button class="btn btn-secondary text-answer-hint" type="button" data-answer-hint>💡 Gợi ý</button>`:''}</div>${q.hint?`<div class="text-answer-hint-text hidden" id="textAnswerHint">💡 <strong>Gợi ý:</strong> ${escapeHtml(q.hint)}</div>`:''}`
     : `<div class="answer-grid${trueFalse ? ' true-false-grid' : ''}">${q.options.map((o,i)=>`<button class="answer-option" data-answer="${escapeHtml(o.id)}"><span class="letter">${optionMark(o, i)}</span><span>${escapeHtml(o.text)}</span></button>`).join('')}</div>`;
-  root.innerHTML = `<div class="game-stage"><div class="stage-top"><span class="stage-meta">${escapeHtml(game.subject || 'TRÒ CHƠI HỌC TẬP')} · ${game.grade ? 'LỚP '+escapeHtml(game.grade) : 'MỌI LỚP'}</span><span class="stage-meta stage-meta-right"><span class="stage-chip">${game.template==='scenario'?'QUYẾT ĐỊNH':'CÂU'} <b>${state.gameAnswers.length+1}</b>/${game.questions.length}</span><span class="stage-chip stage-chip-score">🏆 <b>${state.gameAnswers.reduce((s,a)=>s+a.points,0)}</b> điểm</span></span></div><div class="stage-progress"><div data-progress="${progress}"></div></div>${state.teamPlay ? teamTurnBarHtml() : ''}<div class="stage-center"><div class="stage-kicker">${kicker}</div>${q.context?`<p class="scenario-context">${escapeHtml(q.context).replace(/\n/g,'<br>')}</p>`:''}${stageIllustrationHtml(q, game, 'is-stage')}<div class="stage-question">${escapeHtml(q.prompt).replace(/\n/g,'<br>')}</div>${answerArea}<div id="answerFeedback"></div><div class="stage-bottom"><span class="stage-tip">${scoringTip}</span><button class="btn hidden" id="nextQuestionBtn">Tiếp tục →</button></div></div></div>`;
+  root.innerHTML = `<div class="game-stage"><div class="stage-top"><span class="stage-meta">${escapeHtml(game.subject || 'TRÒ CHƠI HỌC TẬP')} · ${game.grade ? 'LỚP '+escapeHtml(game.grade) : 'MỌI LỚP'}</span><span class="stage-meta stage-meta-right"><span class="stage-chip">${game.template==='scenario'?'QUYẾT ĐỊNH':'CÂU'} <b>${state.gameAnswers.length+1}</b>/${game.questions.length}</span><span class="stage-chip stage-chip-score">🏆 <b>${state.gameAnswers.reduce((s,a)=>s+a.points,0)}</b> điểm</span></span></div><div class="stage-progress"><div data-progress="${progress}"></div></div>${state.teamPlay ? teamTurnBarHtml() : ''}<div class="stage-center"><div class="stage-col">${stageIllustrationHtml(q, game, 'is-stage')}</div><div class="stage-col is-main"><div class="stage-kicker">${kicker}</div>${q.context?`<p class="scenario-context">${escapeHtml(q.context).replace(/\n/g,'<br>')}</p>`:''}<div class="stage-question">${escapeHtml(q.prompt).replace(/\n/g,'<br>')}</div>${answerArea}<div id="answerFeedback"></div><div class="stage-bottom"><span class="stage-tip">${scoringTip}</span><button class="btn hidden" id="nextQuestionBtn">Tiếp tục →</button></div></div></div></div>`;
   paintProgress(root);
   $$('.answer-option',root).forEach(btn => btn.addEventListener('click', () => chooseAnswer(q, btn.dataset.answer)));
   if (textQ) {
@@ -737,7 +737,7 @@ function matchingIllustrationHtml(game) {
 
 function renderColumnsBoard(root, m) {
   const rights = shuffled(m.pairs);
-  root.innerHTML = `<div class="game-stage">${matchingHeader()}<div class="stage-center"><div class="stage-kicker">GHÉP HAI CỘT</div>${matchingIllustrationHtml(state.currentGame)}<p class="field-hint">Chọn một mục ở cột A, rồi chọn mục tương ứng ở cột B.</p><div class="matching-board"><div class="matching-col">${m.pairs.map(p => `<button type="button" class="match-card" data-match-side="left" data-pair="${escapeHtml(p.id)}">${escapeHtml(p.left)}</button>`).join('')}</div><div class="matching-col">${rights.map(p => `<button type="button" class="match-card" data-match-side="right" data-pair="${escapeHtml(p.id)}">${escapeHtml(p.right)}</button>`).join('')}</div></div><div id="matchFeedback"></div></div>${matchingFooter(m)}</div>`;
+  root.innerHTML = `<div class="game-stage">${matchingHeader()}<div class="stage-center"><div class="stage-col">${matchingIllustrationHtml(state.currentGame)}</div><div class="stage-col is-main"><div class="stage-kicker">GHÉP HAI CỘT</div><p class="field-hint">Chọn một mục ở cột A, rồi chọn mục tương ứng ở cột B.</p><div class="matching-board"><div class="matching-col">${m.pairs.map(p => `<button type="button" class="match-card" data-match-side="left" data-pair="${escapeHtml(p.id)}">${escapeHtml(p.left)}</button>`).join('')}</div><div class="matching-col">${rights.map(p => `<button type="button" class="match-card" data-match-side="right" data-pair="${escapeHtml(p.id)}">${escapeHtml(p.right)}</button>`).join('')}</div></div><div id="matchFeedback"></div></div></div>${matchingFooter(m)}</div>`;
   paintProgress(root);
   $$('.match-card', root).forEach(btn => btn.addEventListener('click', () => onColumnCardClick(btn)));
   sendPresentationState();
@@ -785,7 +785,7 @@ function renderMemoryBoard(root, m) {
     { pair: p.id, text: p.left },
     { pair: p.id, text: p.right }
   ]));
-  root.innerHTML = `<div class="game-stage">${matchingHeader()}<div class="stage-center"><div class="stage-kicker">LẬT THẺ GHI NHỚ</div>${matchingIllustrationHtml(state.currentGame)}<p class="field-hint">Lật từng thẻ để tìm hai nội dung tương ứng.</p><div class="memory-grid">${state.memoryCards.map((c, i) => `<button type="button" class="memory-card" data-memory="${i}" data-pair="${escapeHtml(c.pair)}"><span class="memory-face">?</span></button>`).join('')}</div><div id="matchFeedback"></div></div>${matchingFooter(m)}</div>`;
+  root.innerHTML = `<div class="game-stage">${matchingHeader()}<div class="stage-center"><div class="stage-col">${matchingIllustrationHtml(state.currentGame)}</div><div class="stage-col is-main"><div class="stage-kicker">LẬT THẺ GHI NHỚ</div><p class="field-hint">Lật từng thẻ để tìm hai nội dung tương ứng.</p><div class="memory-grid">${state.memoryCards.map((c, i) => `<button type="button" class="memory-card" data-memory="${i}" data-pair="${escapeHtml(c.pair)}"><span class="memory-face">?</span></button>`).join('')}</div><div id="matchFeedback"></div></div></div>${matchingFooter(m)}</div>`;
   paintProgress(root);
   $$('.memory-card', root).forEach(btn => btn.addEventListener('click', () => onMemoryCardClick(btn)));
   sendPresentationState();
@@ -825,7 +825,7 @@ function onMemoryCardClick(btn) {
 function renderCategorizeBoard(root, m) {
   const groups = [...new Set(m.pairs.map(p => p.left))];
   state.memoryCards = shuffled(m.pairs);
-  root.innerHTML = `<div class="game-stage">${matchingHeader()}<div class="stage-center"><div class="stage-kicker">PHÂN LOẠI KIẾN THỨC</div>${matchingIllustrationHtml(state.currentGame)}<p class="field-hint">Chọn một thẻ nội dung, rồi chọn đúng nhóm.</p><div class="category-cards">${state.memoryCards.map((p, i) => `<button type="button" class="match-card" data-category-card="${i}" data-pair="${escapeHtml(p.id)}">${escapeHtml(p.right)}</button>`).join('')}</div><div class="category-groups">${groups.map(g => `<div class="group-box" data-group="${escapeHtml(g)}"><strong>${escapeHtml(g)}</strong><div class="group-slots"></div></div>`).join('')}</div><div id="matchFeedback"></div></div>${matchingFooter(m)}</div>`;
+  root.innerHTML = `<div class="game-stage">${matchingHeader()}<div class="stage-center"><div class="stage-col">${matchingIllustrationHtml(state.currentGame)}</div><div class="stage-col is-main"><div class="stage-kicker">PHÂN LOẠI KIẾN THỨC</div><p class="field-hint">Chọn một thẻ nội dung, rồi chọn đúng nhóm.</p><div class="category-cards">${state.memoryCards.map((p, i) => `<button type="button" class="match-card" data-category-card="${i}" data-pair="${escapeHtml(p.id)}">${escapeHtml(p.right)}</button>`).join('')}</div><div class="category-groups">${groups.map(g => `<div class="group-box" data-group="${escapeHtml(g)}"><strong>${escapeHtml(g)}</strong><div class="group-slots"></div></div>`).join('')}</div><div id="matchFeedback"></div></div></div>${matchingFooter(m)}</div>`;
   paintProgress(root);
   $$('[data-category-card]', root).forEach(btn => btn.addEventListener('click', () => {
     if (btn.classList.contains('matched') || state.matchingPlay.lock) return;
@@ -1247,17 +1247,19 @@ function renderTreasureStage() {
     <div class="stage-progress"><div data-progress="${Math.round((stageNo - 1) / hunt.stages.length * 100)}"></div></div>
     ${treasureMapHtml(hunt, tp)}
     <div class="stage-center">
+      <div class="stage-col">${stageIllustrationHtml(stage.question, state.currentGame, 'is-stage is-treasure')}</div>
+      <div class="stage-col is-main">
       <div class="stage-kicker">${escapeHtml(stage.name || 'CHẶNG')}</div>
       ${tp.results.length === 0 && hunt.intro ? `<div class="treasure-storyline">${treasureAvatarHtml(characterId, 'is-small')}<p class="scenario-context">${escapeHtml(hunt.intro)}</p></div>` : ''}
       ${stage.story ? `<div class="treasure-storyline">${treasureAvatarHtml(characterId, 'is-small')}<p class="scenario-context">${escapeHtml(stage.story)}</p></div>` : ''}
       ${stage.taskDescription ? `<p class="small text-[#aeb5ce]">${escapeHtml(stage.taskDescription)}</p>` : ''}
-      ${stageIllustrationHtml(stage.question, state.currentGame, 'is-stage is-treasure')}
       <div class="stage-question">${escapeHtml(stage.question.prompt).replace(/\n/g, '<br>')}</div>
       <div class="treasure-mission-badge">${mission.icon} ${escapeHtml(mission.label)} · ${escapeHtml(mission.short)}</div>
       <div id="treasureMission">${renderTreasureMissionBody(stage, missionType)}</div>
       <div id="treasureExtra">${stage.hasHiddenItem && !tp.itemsFound[stage.id] ? `<button type="button" class="btn btn-secondary btn-small mt-[10px]" id="findItemBtn">🎁 Tìm vật phẩm ẩn (+${hunt.hiddenItemBonus || 50})</button> ` : ''}${stage.question.hint ? `<button type="button" class="btn btn-secondary btn-small mt-[10px]" id="treasureHintBtn">💡 Dùng gợi ý</button>` : ''}</div>
       <div id="answerFeedback"></div>
       <div id="treasureActions"></div>
+      </div>
     </div>
     <div class="stage-bottom"><span id="treasureAttemptsHint">${stage.attempts > 0 ? (tp.attemptsLeft > 0 ? `Còn ${tp.attemptsLeft} lượt thử` : 'Hết lượt thử') : 'Không giới hạn lượt thử'} · sai không bị trừ điểm</span></div>
   </div>`;
@@ -1438,9 +1440,9 @@ function raceTurnPanelHtml() {
   }
   const q = rp.currentQ;
   const diff = q.difficulty || 'trung bình';
-  return `<div class="race-turn"><div class="stage-kicker">CÂU HỎI · ĐỘ KHÓ ${escapeHtml(diff.toUpperCase())}${raceStepLabel(diff)}</div>${stageIllustrationHtml(q, state.currentGame, 'is-race')}<div class="stage-question">${escapeHtml(q.prompt).replace(/\n/g, '<br>')}</div>
+  return `<div class="race-turn"><div class="race-turn-row"><div class="stage-col">${stageIllustrationHtml(q, state.currentGame, 'is-race')}</div><div class="stage-col is-main"><div class="stage-kicker">CÂU HỎI · ĐỘ KHÓ ${escapeHtml(diff.toUpperCase())}${raceStepLabel(diff)}</div><div class="stage-question">${escapeHtml(q.prompt).replace(/\n/g, '<br>')}</div>
     <div class="answer-grid">${q.options.map((o, i) => `<button class="answer-option" data-race-answer="${escapeHtml(o.id)}"><span class="letter">${String.fromCharCode(65 + i)}</span><span>${escapeHtml(o.text)}</span></button>`).join('')}</div>
-    <div class="mt-[10px]"><button type="button" class="btn btn-secondary btn-small" id="raceNoAnswerBtn">Đội không trả lời được</button></div></div>`;
+    <div class="mt-[10px]"><button type="button" class="btn btn-secondary btn-small" id="raceNoAnswerBtn">Đội không trả lời được</button></div></div></div></div>`;
 }
 function raceStepLabel(diff) {
   const race = state.currentGame.race;

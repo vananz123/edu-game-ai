@@ -695,6 +695,21 @@ async function wizardEnsureCapacity() {
 }
 
 /**
+ * True when generated content exists that closing the window would destroy.
+ *
+ * Spec §4/§12: a teacher must not lose work by closing or navigating. Content
+ * already in the library is redundant (the library row survives), so it does not
+ * count as dirty — otherwise a teacher who finished correctly could not close.
+ *
+ * Deliberately narrower than "anything typed": in-flight text lives in the
+ * wizard's own fields and is recoverable from the project row on reload, while
+ * a generated draft costs minutes of AI/local work and cannot be reconstructed.
+ */
+function wizardHasUnsavedDraft() {
+  return Boolean(wizardState.draft) && !wizardGameSavedToLibrary();
+}
+
+/**
  * Genre changes invalidate the draft. Saved-to-library content is redundant (the
  * game stays playable in the library) and is dropped silently; an unsaved draft
  * costs minutes of generation, so ask first.

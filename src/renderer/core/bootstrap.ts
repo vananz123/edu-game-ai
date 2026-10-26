@@ -35,6 +35,22 @@ async function showHelp() {
   $('#modalRoot').innerHTML = `<div class="modal-backdrop"><div class="modal"><div class="modal-head"><h2>Bắt đầu với EduGame Studio</h2><button class="modal-close" data-close>✕</button></div><div class="modal-body"><div class="help-list"><div class="help-item"><div class="help-number">1</div><div><strong>Tạo trò chơi</strong><p>Vào Tạo trò chơi, dán nội dung hoặc nạp giáo án DOCX/PDF/PPTX/TXT. Chọn thể loại và tạo bản nháp.</p></div></div><div class="help-item"><div class="help-number">2</div><div><strong>Duyệt đáp án</strong><p>Chế độ offline tạo bản nháp theo quy tắc, không phải AI. Hãy kiểm tra kỹ từng câu trước khi lưu.</p></div></div><div class="help-item"><div class="help-number">3</div><div><strong>Chơi trong lớp</strong><p>Mở game, chọn đáp án, đọc phần giải thích rồi lưu điểm theo tên học sinh hoặc đội.</p></div></div><div class="help-item"><div class="help-number">4</div><div><strong>Dùng AI</strong><p>Vào Cài đặt để cấu hình API tương thích OpenAI hoặc endpoint local. API online có thể gửi nội dung tài liệu tới nhà cung cấp.</p></div></div></div><div class="info-box mt-[18px]">Mẹo: xuất gói .egame để sao chép trò chơi sang máy khác. Sau khi nhập vào thư viện, game có thể chạy không cần Internet.</div></div></div></div>`;
   $('#modalRoot').querySelector('[data-close]').onclick = () => $('#modalRoot').innerHTML = '';
 }
+/**
+ * Unsaved-work guard (spec §4, §12): block closing the window while a generated
+ * game exists only in memory. `wizardHasUnsavedDraft()` owns the decision and is
+ * false once the game is in the library, so a finished wizard closes normally.
+ *
+ * Chromium turns a cancelled `beforeunload` into `will-prevent-unload` in main,
+ * which is where the close is actually stopped; this handler cannot prevent the
+ * close by itself. Both halves are required.
+ */
+window.addEventListener('beforeunload', event => {
+  if (typeof wizardHasUnsavedDraft !== 'function' || !wizardHasUnsavedDraft()) return;
+  // `preventDefault()` and `returnValue` are both set: Chromium and Electron
+  // differ in which one they honour, and the cost of setting both is nil.
+  event.preventDefault();
+  event.returnValue = '';
+});
 document.addEventListener('click', e => {
   const activity = e.target.closest('[data-global-ai-activity]');
   if (activity) {

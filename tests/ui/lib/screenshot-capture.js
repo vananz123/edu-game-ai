@@ -52,15 +52,22 @@ async function setViewport(send, size) {
  * height of an over-long page (which is itself a defect worth failing on,
  * see `measureOverflow`).
  */
-async function capture(send, name) {
+async function capture(send, name, timeoutMs = 8000) {
   fs.mkdirSync(SHOTS_DIR, { recursive: true });
   let r;
   try {
-    r = await send('Page.captureScreenshot', {
-      format: 'png',
-      captureBeyondViewport: false,
-      fromSurface: true
-    });
+    // The `send()` in ui-check-lib.js has no timeout of its own: a hidden or
+    // occluded window cannot be composited, Chromium simply never answers, and
+    // the promise hangs forever instead of letting the check report anything.
+    // Race it so an unavailable image degrades to `error` below.
+    r = await Promise.race([
+      send('Page.captureScreenshot', {
+        format: 'png',
+        captureBeyondViewport: false,
+        fromSurface: true
+      }),
+      new Promise((_, rej) => setTimeout(() => rej(new Error(`capture timed out after ${timeoutMs}ms (window not composited)`)), timeoutMs))
+    ]);
   } catch (e) {
     // A hidden/occluded window cannot be composited, so Chromium never answers.
     // Measurements below still run — only the image is unavailable.
@@ -89,11 +96,25 @@ const MEASURE_LAYOUT = `
     const cs = el => win.getComputedStyle(el);
     const rootEl = doc.documentElement;
     const viewport = { w: win.innerWidth, h: win.innerHeight };
+    // Only genuinely PAINTED content counts.
+    //
+    // offsetParent/offsetWidth are not enough: while a modal is open the app
+    // sets .app-shell to display:none, yet Chromium keeps layout boxes for a
+    // display:none subtree, so sidebar labels (8px) and the 1398px-tall shell
+    // were counted as "smallest text" and as "outside the viewport" even though
+    // nothing on them is painted. checkVisibility() walks the ancestor chain
+    // (display, visibility, opacity, content-visibility) and is the honest test.
+    // Without this the play-surface check reported a font-floor failure naming a
+    // hidden element - a false positive that buries the real ones.
+    const painted = el => el === doc.body || el === rootEl ||
+      (typeof el.checkVisibility === 'function'
+        ? el.checkVisibility({ visibilityProperty: true, opacityProperty: true, contentVisibilityAuto: true })
+        : Boolean(el.offsetParent || el.getClientRects().length));
     // Every visible element that carries text; used to detect clipping and to
     // report the smallest font actually on screen (the defect that the
     // presentation window had at 12px).
     const textEls = [...doc.querySelectorAll('body *')].filter(el => {
-      if (!el.offsetParent && el !== doc.body) return false;
+      if (!painted(el)) return false;
       const own = [...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim());
       return own && el.offsetWidth > 0 && el.offsetHeight > 0;
     });
@@ -127,12 +148,46 @@ const MEASURE_LAYOUT = `
     }));
     // Anything painted outside the viewport is unreachable for a projector
     // audience even if it is technically in the DOM.
+    //
+    // Two exclusions, both essential or the number is meaningless:
+
+    //   1. hidden chrome (a display:none app shell behind a modal) is not painted;
+    //   2. content inside a SCROLLABLE PANEL is reachable by scrolling, which is
+    //      normal for an editor form (.modal has max-height 90vh, overflow auto).
+    //      Counting it reported .modal-body as 189px "outside" while its parent
+    //      .modal sat correctly inside the viewport.
+    //   The game stage is NOT such a panel: a projector audience cannot scroll,
+    //   so its overflowing children still count here (and innerScrollers also
+    //   fails the stage itself).
+    const PANEL_SELECTOR = '.modal, .modal-body, .modal-card, .drawer, .panel';
+    const inScroller = el => {
+      // The game-stage modal is the projector surface, not a form: do not excuse
+      // its overflow.
+      if (el.closest('.game-stage')) return false;
+      for (let n = el.parentElement; n && n !== doc.body; n = n.parentElement) {
+        if (!n.matches(PANEL_SELECTOR)) continue;
+        const s = cs(n);
+        if ((s.overflowY === 'auto' || s.overflowY === 'scroll') && n.scrollHeight > n.clientHeight + 2) return true;
+        if ((s.overflowX === 'auto' || s.overflowX === 'scroll') && n.scrollWidth > n.clientWidth + 2) return true;
+      }
+      return false;
+    };
     const outside = [...doc.querySelectorAll('body *')].filter(el => {
-      if (!el.offsetParent) return false;
+      if (!painted(el) || inScroller(el)) return false;
       const r = el.getBoundingClientRect();
       if (r.width === 0 && r.height === 0) return false;
       return r.left < -2 || r.top < -2 || r.right > viewport.w + 2 || r.bottom > viewport.h + 2;
-    }).length;
+    }).map(el => {
+      const r = el.getBoundingClientRect();
+      return {
+        tag: el.tagName.toLowerCase(),
+        cls: String(el.className || el.id || '').slice(0, 40),
+        text: el.textContent.trim().slice(0, 24),
+        box: [Math.round(r.left), Math.round(r.top), Math.round(r.right), Math.round(r.bottom)],
+        // How many px it hangs past the closest edge; the actionable number.
+        pastBy: Math.round(Math.max(-r.left, -r.top, r.right - viewport.w, r.bottom - viewport.h))
+      };
+    });
     // Real overlap only. If one box *contains* the other (e.g. .options inside
     // .question-panel) that is nesting, not a layout collision.
     const q = doc.querySelector('.stage-question, .question-text');
@@ -152,6 +207,7 @@ const MEASURE_LAYOUT = `
       // A scroll container inside the stage hides content from the class just
       // as effectively as a clipped box, and a projector audience cannot scroll.
       innerScrollers: [...doc.querySelectorAll('body *')].filter(el => {
+        if (!painted(el)) return false;
         const s = cs(el);
         const scrollsY = (s.overflowY === 'auto' || s.overflowY === 'scroll') && el.scrollHeight > el.clientHeight + 2;
         const scrollsX = (s.overflowX === 'auto' || s.overflowX === 'scroll') && el.scrollWidth > el.clientWidth + 2;
@@ -161,11 +217,11 @@ const MEASURE_LAYOUT = `
       smallest,
       clippedCount: clipped.length,
       clipped: clipped.slice(0, 6),
-      outsideCount: outside,
+      outsideCount: outside.length,
+      outside: outside.slice(0, 6),
       questionAnswerOverlap: overlap
     };
-  })(DOC_SEL)
-`;
+  })(DOC_SEL)`;
 
 /** Measure the current page (or an iframe inside it) with the shared probe. */
 async function measureLayout(evaluate, docSelector) {
@@ -187,12 +243,125 @@ async function findTarget(port, pattern) {
   return (await listTargets(port)).find(t => pattern.test(t.url));
 }
 
+/**
+ * Set the emulated viewport and wait until the renderer really reports it.
+ *
+ * Device metrics are applied asynchronously, so a `setViewport()` that resolves
+ * has not necessarily resized the page yet. Opening or measuring in that window
+ * captures the PREVIOUS size's layout — the bug that made a 1920x1080 run report
+ * six elements outside a 1366x768 viewport. Always use this instead of a bare
+ * `setViewport` before driving the UI.
+ */
+async function setViewportAndWait(ctx, size, timeoutMs = 5000) {
+  await setViewport(ctx.send, size);
+  if (!size) return;
+  const deadline = Date.now() + timeoutMs;
+  let got = null;
+  while (Date.now() < deadline) {
+    got = await ctx.evaluate(`[innerWidth, innerHeight]`);
+    if (got && got[0] === size.width && got[1] === size.height) return got;
+    await new Promise(r => setTimeout(r, 60));
+  }
+  throw new Error(`viewport did not become ${size.width}x${size.height} (got ${JSON.stringify(got)})`);
+}
+
+/**
+ * Apply the projector-surface assertions that every measured screen owes.
+ *
+ * These are the same five properties `ui-presentation-check.js` proves for the
+ * presentation window, generalised so the *main* window — where teachers spend
+ * their time — is measured the same way. Kept here rather than in each check so
+ * a new check cannot quietly apply four of the five.
+ *
+ * `opts.fontFloor` is the minimum computed font size in px. It differs per
+ * surface on purpose: a projector board can afford 20px, while a dense editor
+ * toolbar legitimately uses 12–13px labels, so the caller states its contract.
+ */
+function assertLayout(check, label, m, opts = {}) {
+  const fontFloor = opts.fontFloor ?? 12;
+  const prefix = opts.prefix ? `${opts.prefix} ${label}` : label;
+  const where = m.smallest ? `${m.smallest.tag}.${m.smallest.cls} "${m.smallest.text}"` : 'no text';
+  check(`${prefix}: smallest text >= ${fontFloor}px`, m.minFont >= fontFloor,
+    `${(m.minFont || 0).toFixed(1)}px (${where})`);
+  check(`${prefix}: no clipped text`, m.clippedCount === 0,
+    m.clippedCount ? JSON.stringify(m.clipped[0]) : '');
+  check(`${prefix}: nothing outside the viewport`, m.outsideCount === 0,
+    m.outsideCount ? `${m.outsideCount} element(s), worst: ${JSON.stringify(m.outside[0])}` : '');
+  check(`${prefix}: no page scroll`, !m.scrolls, `${m.docHeight} vs ${m.viewport.h}`);
+  if (opts.innerScrollAreas !== 0) {
+    check(`${prefix}: no inner scroll area hides content`,
+      m.innerScrollers.length === (opts.innerScrollAreas || 0), m.innerScrollers.join(', '));
+  }
+  if (opts.questionAnswerOverlap === 'assert') {
+    check(`${prefix}: question and answers do not overlap`, !m.questionAnswerOverlap);
+  }
+  return m;
+}
+
+/**
+ * The measurement rig shared by the surface checks (docs/UI-PLAN-V2.md Phase B).
+ *
+ * One call = set the viewport, settle animations, measure, capture a PNG, and
+ * apply the five projector assertions. Everything is measured at the emulated
+ * size, never at whatever size the OS window happens to be — a check that does
+ * not pin the viewport cannot notice a 1366×768-only defect at all.
+ *
+ * Passing `null` as the size restores the real window metrics and measures the
+ * live window, which is only useful for diagnosing the emulated run.
+ *
+ * `ctx` is the object returned by `ui-check-lib.connect()` (`{ send, evaluate }`).
+ * `beforeMeasure` runs after the viewport is applied and animations are settled,
+ * for checks that must drive the UI *at that size*.
+ */
+async function measureAt(ctx, size, name, opts = {}) {
+  // `check` is passed in by the caller rather than required here: this file
+  // lives in `tests/ui/lib/`, so `require('../manual/lib/ui-check-lib')` would
+  // resolve to a path that does not exist, and requiring the caller's module
+  // from inside a module the caller requires is a cycle for no benefit.
+  const check = opts.check;
+  if (typeof check !== 'function') throw new Error('measureAt requires opts.check (from ui-check-lib)');
+  const label = opts.label || (size ? size.label : 'window');
+
+  await setViewportAndWait(ctx, size);
+  // Two frames + a beat so a layout pass triggered by the resize has finished.
+  await ctx.evaluate(`new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(() => r(true), 180))))`);
+
+  if (opts.beforeMeasure) await opts.beforeMeasure(ctx, label);
+
+  // Animations are suspended while the window is backgrounded, so `.modal` sits
+  // at the first frame of its pop-in (scale 0.92) and every measured px comes
+  // out ~8% small. Finish them before reading geometry.
+  await ctx.evaluate(`(docSel => {
+    const host = docSel ? document.querySelector(docSel) : null;
+    const doc = host ? host.contentDocument : document;
+    const win = host ? host.contentWindow : window;
+    doc.querySelectorAll('.modal, .modal-backdrop').forEach(el =>
+      el.getAnimations().forEach(a => { try { a.finish(); } catch {} }));
+    return { docHeight: doc.documentElement.scrollHeight, innerHeight: win.innerHeight };
+  })(${JSON.stringify(opts.docSelector || null)})`);
+  await new Promise(r => setTimeout(r, 200));
+
+  const m = await measureLayout(ctx.evaluate, opts.docSelector || null);
+  const shot = await capture(ctx.send, name);
+
+  console.log(`  ${label.padEnd(10)} ${m.viewport.w}x${m.viewport.h}  minFont ${(m.minFont || 0).toFixed(0)}px  clipped ${m.clippedCount}  outside ${m.outsideCount}  scrolls ${m.scrolls}  -> ${shot.file || '(no image: ' + shot.error + ')'}`);
+  shot.assertion = (opts.requireScreenshot !== false)
+    ? check(`${label}: screenshot captured`, Boolean(shot.file), shot.file || shot.error)
+    : null;
+
+  if (opts.assertLayout !== false) assertLayout(check, label, m, opts);
+  return { m, shot, label };
+}
+
 module.exports = {
   PROJECTOR_SIZES,
   SHOTS_DIR,
   setViewport,
+  setViewportAndWait,
   capture,
   measureLayout,
+  measureAt,
+  assertLayout,
   listTargets,
   findTarget
 };

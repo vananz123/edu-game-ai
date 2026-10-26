@@ -1,4 +1,250 @@
+## Handoff - Pha B (tiep): kho bau la man CUON theo hop dong, race da do lai (2026-10-25)
+
+**TL;DR:** Da retract con so **"treasure 0/0"** cua #85 - no sai. Do lai bang fixture that cua check: tran **~237-355px** o 1366x768 va **~56px** o 1920x1080, va **khong the** dua ve 0 ma khong xoa chu cua giao vien. Nhung ben duoi co **1 loi that** da sua: `.stage-center` bi bop con **415px** trong khi cot con can **656px**, nen phan tran **241px** nam NGOAI vung cuon -> khong bao gio cuon toi duoc, va nhan tren ban do bi cat. `race` cung da do lai: **tran 0px** o ca 2 do phan giai. Chi tiet: **#86** trong `docs/DECISIONS.md`.
+
+1. **Files changed.**
+   - `src/renderer/styles/app.css` - `html[data-fullscreen="1"] .modal[data-player-theme] .stage-center:has(> .stage-col.is-main > #treasureMission) { flex-shrink: 0 }`. Chi bo kha nang CO, khong khoa chieu cao (bai hoc #85 muc 3).
+   - `tests/ui/ui-play-surface-check.js` - (a) khoi treasure viet lai theo hop dong "cuon duoc" thay cho "khong tran"; (b) them assertion `no column spills past its scroll container`; (c) them fixture + 4 luot do `race` o 2 do phan giai.
+   - `docs/DECISIONS.md` - them **#86**; sua lai #85 muc Verification (retract `0/0`).
+   - `docs/STATUS.md` - muc nay.
+   - Da xoa `tests/ui/tmp-boot-probe.js`, `tmp-tr-budget.js`, `tmp-tr-budget12.js`.
+
+2. **Behavior implemented.**
+   - Man kho bau o 1366x768 **cuon duoc** (stage la vung cuon), moi dap an + nut cuoi + toan bo hanh trinh deu toi duoc, trang **khong** cuon kep (`docHeight == viewport`), ban do **khong** bi bop (`flex-shrink: 0`), **khong** cot nao tran ra ngoai vung cuon cua no.
+   - `race`: 40 o + 4 dap an dai **van vua** man o ca 2 do phan giai; gio da duoc assert.
+
+3. **Commands run.**
+   - `npm run check` -> **exit 0**; `npm test` -> **exit 0**.
+   - App that, 1 port, chay lien tiep: `ui-play-surface-check` **156/156**, `ui-race-treasure-check` **19/19**, `ui-stage-illustration-check` **94/94**, `ui-fullscreen-density-check` **7/9** (2 fail 1280px la co tu truoc, khong doi), `ui-item-assets-editor-check` **21/27** (dung baseline).
+   - Kiem nguoc (A/B): doi `flex-shrink: 0 -> 1`, build lai, chay lai -> **126/130, exit 1**, bao `stage-col is-main` tran **359px** khoi hop **415px**.
+
+4. **Unverified.**
+   - Chua chay tren may chieu that (toan bo do qua `Emulation.setDeviceMetricsOverride`).
+   - Cam giac **cuon** man kho bau trong gio hoc: check chi chung minh "toi duoc", khong chung minh giao vien thay chap nhan duoc - can hoi trong pilot.
+   - #85 tung ghi `treasure 0/0`; con so **0px** trong muc STATUS cua #85 phai doc kem **#86**.
+
+5. **Next recommended task.**
+   - Thay "tran bang 0" bang mot **ngan sach chieu cao** cho kho bau (vi du: canh bao trong editor khi story + taskDescription + dap an vuot muc ma mot man 768px cuon 1 lan), de giao vien biet truoc thay vi gap man phai cuon.
+   - Sau do: commit toan bo Pha A + B + #84 + #85 + #86 (hien **tat ca con chua commit**).
+
+---
+
+
+## Handoff - Pha B: dong het phan tran cua man cho (treasure 0px, quiz 0px) (2026-10-25)
+
+**TL;DR:** Da dong **ca hai** loi may chieu con lai cua Pha B. `treasure-hunt` tran **311px** (luc phat hien) / **124px** (sau #84) va bay gio **0px**; quiz la **0px** o ca 2 do phan giai, ca luc chua va luc da tra loi. `ui-stage-illustration-check` tu **90/94** len **94/94** (lan dau tien xanh hoan toan). Chi tiet quyet dinh: **#85** trong `docs/DECISIONS.md`.
+
+Nguyen nhan khong phai "qua nhieu noi dung" ma la **3 dai trong rieng biet**, do truoc khi sua:
+
+| | 1366x768 | 1920x1080 |
+|---|---|---|
+| `.stage-center` co | 594px | 887px |
+| noi dung dung toi | 611 (khung 737) => **149px chet** | 663 => **224px chet** |
+| khoang cau hoi -> dap an | **0px** (cung bat dau y=337) | **0px** |
+| chieu cao o dap an | 123px | **150px, bi chan boi `16vh`** |
+| hop `.treasure-map` | 190px cho **124px noi dung** | nhu tren |
+
+1. **Files changed.**
+   - `src/renderer/styles/app.css` - (a) `.stage-col.is-main > .answer-grid` tro thanh noi NHAN chieu cao thua (`flex: 1 1 auto` + `grid-auto-rows: minmax(min-content, 1fr)`); (b) cot chu `height: 100%` (co guard) de that su co phan du; (c) trang thai da-tra-loi tra lai chieu cao (`:has(> #answerFeedback:not(:empty))`); (d) `.treasure-map` `min-height: auto` + `flex-shrink: 0` (truoc do bi bop 120px cho 143px noi dung va `overflow: hidden` **cat mat nhan "Trac nghiem"**); (e) storyline dung het be rong cot thay vi 221px giua khoang trong; (f) `#treasureExtra` dat canh nhau thay vi chong 2 hang.
+   - `src/renderer/features/treasure-art.ts` - 6 hinh nen doi `preserveAspectRatio` tu `slice` sang `meet`. Voi `slice` trong hop 1800x149, tranh 1200x420 bi ve thanh 1800x**630** va `<rect>` nen nam o **y = -74** - dung phan tu ma check bao "outside the viewport".
+   - `docs/DECISIONS.md` - them **#85** (Chosen / Rejected / Trap / Verification). #84 cap nhat lai ghi chu "con fail co y".
+   - `docs/STATUS.md` - muc nay.
+
+2. **Behavior implemented.**
+   - O dap an cao theo cho trong thuc te (1920: hang 150 -> **301px**), khong con chan cung `16vh`; sau khi tra loi thi nhuong lai cho phan hoi + nut "Tiep tuc" (o ve 78px, **khong cat chu**: `scrollHeight 74 = clientHeight 74`).
+   - Cau hoi va dap an khong con dinh nhau: co khoang 16px (truoc la 0px).
+   - `treasure-hunt`: ban do cao dung bang noi dung, khong cat nhan; **khong bo chu nao** tren man.
+
+3. **Commands run.**
+   - `npm run check` -> **exit 0**.
+   - `npm test` -> **exit 0** (`check-renderer-undefined-globals: 34 scripts, 502 declared functions, 4221 call sites`).
+   - `node tests/ui/ui-play-surface-check.js 9377` -> **82/82** (`outside 0`, `scrolls false`, `clipped 0` o ca 4 luot do, ke ca 2 luot DA TRA LOI).
+   - `node tests/ui/ui-stage-illustration-check.js 9377` -> **94/94** (truoc: 90/94).
+   - `node tests/ui/ui-item-assets-editor-check.js 9377` -> **21/27**, **giong het baseline** (6 fail la `brand-sub` 8px + tran viewport cua trang editor, khong lien quan man cho).
+
+4. **Unverified.**
+   - Chua chay tren may chieu that; toan bo do qua `Emulation.setDeviceMetricsOverride`.
+   - Ban do kho bau voi **hanh trinh dai** (10+ chang) o 1366x768: fixture chi co 1 chang, nen `flex-shrink: 0` cho ban do cao la **suy luan**, chua do.
+   - `race` dung chung khoi 2 cot nhung **chua do lai** sau thay doi nay.
+   - `ui-item-assets-editor-check` **21/27**: con so **27/27** o handoff Pha B khong tai lap duoc; coi la ghi sai, khong phai muc tieu.
+
+5. **Next recommended task.**
+   - Do lai `race` o ca 2 do phan giai (dung chung khoi 2 cot; guard `height: 100%` chi loai tru treasure).
+   - Them fixture "hanh trinh dai" (10+ chang) cho `treasure-hunt` de chot hanh vi `flex-shrink: 0`.
+   - Con treo tu truoc: commit toan bo (Pha A + Pha B + #84 + #85).
+
+
 # Current Project Status — v0.3
+## Handoff — Bo cuc 2 cot cho stage: sua 5/6 loi may chieu (2026-10-25)
+
+**TL;DR:** Da sua **goc** cua 5 trong 6 loi may chieu ma Pha B phat hien. Cach sua: dua anh minh hoa sang **canh** cau hoi thay vi **tren** cau hoi. Anh SVG 320x200 dang tieu 200px cua TRUC KHAN HIEM (chieu cao ~683px) trong khi TRUC DU THUA (chieu rong 1255px) gan nhu bo trong. Do truoc khi sua, bang cach mo phong bo cuc 2 cot trong DOM that:
+
+| Viewport | 1 cot (truoc) | 2 cot (sau) |
+|---|---|---|
+| 1366x768 | tran **67px** | **0px** (cot chu 1023px) |
+| 1440x900 | tran **15px** | **0px** (cot chu 1080px) |
+| 1920x1080 | 0 | 0 (cot chu 1467px) |
+
+Ket qua check sau khi sua:
+
+| Check | Truoc | Sau |
+|---|---|---|
+| `ui-play-surface-check` | 78/80 | **82/82** |
+| `ui-stage-illustration-check` | 90/94 | **92/94** |
+| `ui-item-assets-editor-check` | 27/27 (do luc do) | 21/27 — **gio da xac nhan baseline cung 21/27**, xem muc 5 |
+
+Loi con lai (2 fail cua illustration check) la **treasure-hunt**: tran giam tu **311px xuong 124px** nhung chua het, vi ban do kho bau (`min-height:190px`) + storyline van chiem chieu doc phia tren. Day la loi that, **co y de fail**, khong noi nguong.
+
+1. **Files changed.**
+   - `src/renderer/styles/app.css` — (a) khoi `/* === Bo cuc 2 cot ... */`: `.stage-center > .stage-col { display: contents }` mac dinh (1 cot, khong doi 1 pixel), roi `@media (min-width: 1180px)` bat 2 cot khi `data-fullscreen`; (b) `html[data-fullscreen="1"] #modalRoot { position: fixed; inset: 0 }` — sua loi **co san** khien `#modalRoot` bi day xuong `top: 1436` tren viewport 768.
+   - `src/renderer/features/gameplay.ts` — boc DOM o **5 call site** thanh `<div class="stage-col">` (anh) + `<div class="stage-col is-main">` (chu). Day la thay doi **bat buoc**: CSS thuan khong gop duoc 5-11 flex-item thanh mot cot. Da thu `flex: 1 1 0` tran -> cau hoi bi bop con 174px, cao 1294px, tran **684px** (te hon truoc khi sua); da revert.
+   - `tests/ui/ui-play-surface-check.js` — assertion "content uses most of the width" do khoi **anh + chu** thay vi rieng cau hoi (voi 2 cot, cau hoi hep di la co y), them assertion moi "text column still readable (>=50% viewport)".
+   - `tests/ui/ui-stage-illustration-check.js` — `isSiblingOfQuestion` so voi khoi chua cau hoi thay vi doi hoi cung parent; `probe` mo game voi `{ fullscreen: true }` (truoc do mo khong fullscreen nen `.app-shell` cao 1436px lam moi assertion viewport fail vinh vien).
+   - `docs/DECISIONS.md` — them #84. `docs/STATUS.md` — muc nay.
+
+2. **Behavior implemented.**
+   - Tu 1180px chieu rong va chi khi trinh chieu: anh minh hoa thanh cot trai (200-300px, treasure 170-240px), chu thanh cot phai. Duoi nguong do: bo cuc **1 cot y nhu cu** (kiem chung: 1179x768 va 1024x700 van `flex-direction: column`).
+   - Anh dung `px` tuyet doi, **khong** dung `%`: `width: min(320px, 46%)` cua rule goc la 46% cua container, trong cot hep se lam canh bi letterbox (dung loi #70: canh ve o ~150x94).
+   - `#modalRoot` o che do trinh chieu chuyen sang `position: fixed` — no chi chua `.modal-backdrop` (da `fixed`), nen khong gi nhin thay phu thuoc vao viec no nam trong luong.
+
+3. **Commands run.**
+   - `npm run check` (tsc --noEmit) -> **exit 0**.
+   - `npm test` -> **exit 0** (gom `check-renderer-globals: 34 scripts, 502 declared functions, 4221 call sites — no undefined globals`; quan trong vi da sua DOM trong `gameplay.ts`).
+   - `node tests/ui/ui-play-surface-check.js 9380` -> **82/82**, exit 0, `outside 0` o ca 4 luot do.
+   - `node tests/ui/ui-stage-illustration-check.js 9380` -> **92/94**, exit 1 (2 fail = treasure-hunt, loi that).
+   - `node tests/ui/ui-item-assets-editor-check.js 9380` -> **21/27**, exit 1.
+   - Anh chup xac nhan: `tests/ui/shots/stage-2col-quiz-1366x768.png` (2 cot, khong tran).
+
+4. **Unverified.**
+   - `treasure-hunt` van tran **124px** o 1366x768 va **55px** o 1920x1080 (mot `<rect>` cua SVG bi day len tren). Chua sua.
+   - `ui-item-assets-editor-check` **21/27**: 6 fail la `brand-sub` 8px + tran viewport cua trang editor. Da chay **stash A/B** tren code goc: baseline cung **21/27, cung 6 fail**. Vay day la trang thai co san, khong phai hoi quy — nhung con so **27/27** ghi o handoff Pha B **khong tai lap duoc** o trang thai hien tai; can xac dinh lai truoc khi tin con so do.
+   - Chua chay tren may chieu that; toan bo do qua `Emulation.setDeviceMetricsOverride`.
+   - Nut "Trinh chieu" xuong 2 dong o 1366x768: **van khong co assertion** (da co dong nay tu Pha B).
+
+5. **Next recommended task.**
+   - Sua `treasure-hunt` (124px): `min-height:190px` cua `.treasure-map` va khoi `.treasure-storyline` la hai thu chi phi chieu doc lon nhat con lai; hoac thu nho ban do khi `max-height` thap, hoac dua storyline vao cot phai.
+   - Xac dinh lai trang thai dung cua `ui-item-assets-editor-check` (27/27 hay 21/27) va ghi lai so dung.
+
+## Handoff — Pha B: pho cap luoi do UI o 2 do phan giai that (2026-10-25)
+
+**TL;DR:** Da dua "do o dung do phan giai + chup anh" thanh mot ham dung chung (`measureAt()` trong `tests/ui/lib/screenshot-capture.js`), roi retrofit **3 check** len **1920x1080 + 1366x768**. Ket qua khong chi la ha tang: no **bat duoc 6 loi that** ma truoc day khong the thay, vi check cu do o kich thuoc cua so bat ky.
+
+Nhung loi moi bat duoc — tat ca deu la loi THAT cua san pham, khong phai loi test:
+
+| Man hinh | Do phan giai | Loi |
+|---|---|---|
+| `treasure-hunt` | 1366x768 | `.game-stage` tran **311px** xuong duoi, **24 element** bi che; anh chup cho thay **toan bo dap an nam ngoai man hinh** |
+| `treasure-hunt` | 1920x1080 | `.game-stage` tran **93px** |
+| `race` | 1366x768 | `.game-stage` tran **116px**, 13 element |
+| `scenario` | 1366x768 | `.game-stage` tran **25px** |
+| play surface (quiz) | 1366x768 | hang dap an C/D tran **52px** xuong duoi (bottom 820 > viewport 768) |
+| nut "Trinh chieu" | 1366x768 | nhan bi xuong **2 dong** (chi thay trong anh chup) |
+
+Tong ket: `ui-play-surface-check` **78/80**, `ui-stage-illustration-check` **90/94**, `ui-item-assets-editor-check` **27/27**. Toan bo assertion cu (27 cua play-surface, 13 cua editor, 60 assertion ve mode minh hoa) van giu nguyen va van xanh.
+
+1. **Files changed.**
+   - `tests/ui/lib/screenshot-capture.js` — them `measureAt()` (khoa viewport, cho viewport *that su* doi, settle animation, do, chup PNG, roi tu ap 5 assertion projector), `assertLayout()`, `setViewportAndWait()`. Sua probe `MEASURE_LAYOUT` de chi dem phan tu **that su duoc ve**.
+   - `tests/ui/ui-play-surface-check.js` — retrofit: chay o ca 2 do phan giai, chup 4 PNG, giu 27 assertion cu.
+   - `tests/ui/ui-stage-illustration-check.js` — them luot do layout o ca 2 do phan giai cho ca 5 template.
+   - `tests/ui/ui-item-assets-editor-check.js` — them luot do layout o ca 2 do phan giai.
+   - `package.json` — them script `check:play-surface-ui` (truoc day **khong co** script nao cho file nay).
+   - `docs/STATUS.md` — muc handoff nay. `docs/DECISIONS.md` — them #83.
+
+2. **Behavior implemented.** Chi test; **khong doi hanh vi san pham**.
+   - Mot call `measureAt()` = khoa viewport, cho viewport that su doi, settle animation, do, chup PNG, va ap 5 assertion: san font, khong clipping, khong tran viewport, khong scroll trang, khong vung scroll noi bo (tuy chon: khong chong lan question/answer).
+   - Assertion bao **ten phan tu + so px tran**, vi du `{"tag":"div","cls":"game-stage","pastBy":311}` — nen loi "chu 12px" lan sau tu chi ra nguyen nhan.
+
+3. **Commands run.**
+   - `npm test` → **exit 0** (gom `unload-guard`, `renderer-load-order`, `check-renderer-undefined-globals: 34 scripts / 4221 call sites`).
+   - `node tests/ui/ui-play-surface-check.js 9371` → **78/80**, exit 1 (2 fail = loi that o 1366x768).
+   - `node tests/ui/ui-stage-illustration-check.js 9372` → **90/94**, exit 1 (4 fail = loi that).
+   - `node tests/ui/ui-item-assets-editor-check.js 9372` → **27/27 passed**, exit 0.
+   - 16 file PNG sinh ra trong `tests/ui/shots/` (da nam trong `.gitignore`).
+
+4. **Unverified.**
+   - Chua sua loi layout nao — Pha B chi *do* chu khong *chua*. Cac con so tren la ket qua do, chua ai quyet dinh sua the nao.
+   - Nut "Trinh chieu" bi xuong 2 dong: chi thay bang mat tren anh chup, **khong co assertion** nao bat; neu muon chan tai phat thi phai them.
+   - Gia dinh (co chu y): chat luong "dep" van can mat nguoi xem PNG; assertion chi bat duoc clipping/tran/scroll.
+
+5. **Next recommended task.**
+   - **Sua loi `treasure-hunt` + `race` tran stage o 1366x768** — nang nhat (311px, mat toan bo dap an). Day la loi projector that, dung uu tien.
+   - Sau do: hang dap an C/D o play surface 1366x768 (52px).
+   - Tuy chon re: sua **mojibake** (`Ã`/`Â`) dang lan rong trong `app.css` va `docs/`.
+
+---
+## Handoff — Pha A: chan mat ban nhap khi dong cua so (2026-10-25)
+
+**TL;DR:** Truoc phien nay, dong cua so khi dang co game vua tao ma chua luu = **mat sach, khong canh bao** (0 lan `beforeunload`/`will-prevent-unload` trong repo). Da them guard 2 tang va kiem chung that:
+- **Renderer** (`bootstrap.ts`): huy `beforeunload` khi `wizardHasUnsavedDraft()` dung.
+- **Main** (`main.ts`): `will-prevent-unload` hien hop thoai hoi, chi dong khi giao vien chon "Đóng và bỏ nội dung".
+- Do lai tren cua so that: post `WM_CLOSE` → **app song, hop thoai chan dung** (khong phai suy dien).
+- `tests/ui/ui-draft-guard-check.js`: **10/10 pass** (da thay no fail truoc khi them code).
+- **Bat duoc mot loi that cua chinh minh:** polarity cua `will-prevent-unload` **nguoc** voi `beforeunload` — viet sai lan dau, sua, roi viet unit test de chan tai phat.
+
+1. **Files changed.**
+   - Moi: `src/ai-core/unload-guard.ts` — ham thuan `unloadMayProceed()`, tach khoi `main.ts` de test duoc khong can Electron.
+   - Moi: `tests/unit/unload-guard.test.ts` — khoa chieu cua truth table.
+   - Moi: `tests/ui/ui-draft-guard-check.js` — 10 check tren app that (CDP).
+   - `src/renderer/features/wizard/state.ts` — them `wizardHasUnsavedDraft()`.
+   - `src/renderer/core/bootstrap.ts` — listener `beforeunload`.
+   - `src/main.ts` — listener `will-prevent-unload` + `require('./ai-core/unload-guard')`.
+   - `package.json` — dang ky `unload-guard.test.js` vao `npm test`, them script `check:draft-guard-ui`.
+   - `docs/STATUS.md` — muc handoff nay.
+
+2. **Behavior implemented.**
+   - Dong cua so khi co ban nhap chua luu → hop thoai: "Ở lại" (mac dinh, Escape cung la o lai) / "Đóng và bỏ nội dung". Chon o lai thi cua so giu nguyen.
+   - Khong co draft, hoac game **da nam trong Thu vien** → dong binh thuong, **khong hoi**. Dieu nay bat buoc: neu khong, giao vien lam dung quy trinh se khong dong duoc app.
+   - Quyet dinh pham vi: **chi chan luc dong cua so**, khong chan khi stepper quay lai buoc 2. Duong stepper da co `wizardConfirmGenreChange` hoi rieng, chan o day se hoi hai lan.
+
+3. **Commands run.**
+   - `node tests/ui/ui-draft-guard-check.js 9362` (truoc khi sua code) → `FAIL ... hasPredicate:false`, exit 1. Chay tren app cu.
+   - `npm run check` → 0 loi. `npm test` → **tat ca xanh**, gom `unload-guard: polarity verified`, `renderer-load-order: 33 scripts`, `check-renderer-undefined-globals: 34 scripts / 4221 call sites`.
+   - `node tests/ui/ui-draft-guard-check.js 9365` → **10/10 passed**; chay lai sau khi refactor tren cong 9366 → **10/10 passed**.
+   - Kiem tra unit test co bat duoc loi that: tam dao `unloadMayProceed` sang `=== 'stay'` → test **fail** (`actual: true, expected: false`), da khoi phuc va xac nhan.
+   - Kiem chung cua so that: dat draft chua luu, post `WM_CLOSE`, sau 4s van **4 process electron** ⇒ app song, hop thoai dang chan.
+
+4. **Unverified.**
+   - Chua ai **bam nut** trong hop thoai that: kiem chung tren la "cua so khong dong" (dung ky vong), nhung chua quay video viec bam "Đóng và bỏ nội dung" roi app thoat that.
+   - Chua thu nhanh thoat bang `Alt+F4` khi app dang fullscreen (F11).
+   - Van nguyen: giam dinh may chieu that (do sang/tuong phan) ngoai tam.
+
+5. **Next recommended task.**
+   - **Pha B** — pho cap luoi do: dua `ui-play-surface-check.js` (27 assertion, hien **khong khoa viewport, khong chup anh**) len 1920x1080 + 1366x768, them screenshot va assertion san chu/ clipping/ overflow. Lam tuong tu cho `ui-stage-illustration-check.js`, `ui-item-assets-editor-check.js`.
+   - Tuy chon re: sua **mojibake** (`Ã`/`Â`) dang lan rong — dong 1 cua chinh file nay hien thi thanh `Current Project Status â€”` trong PowerShell; da co trong comment `app.css`.
+
+---
+## Handoff — Ke hoach UI v2 va bang do kiem tra moi truong UI hien tai (2026-10-25)
+
+**TL;DR:** Viet `docs/UI-PLAN-V2.md`. **Khong sua code, khong commit** — day la buoc lap ke hoach.
+Ba so lieu do lai hom nay, khong phai nho lai:
+(1) Luoi chup anh + khoa viewport chi duoc dung o **1/13** file `tests/ui` — va la be mat *it dung nhat* (cua so trinh chieu rieng). Be mat giao vien thao tac (`ui-play-surface-check.js`, 27 assertion) **khong khoa viewport, khong chup anh**.
+(2) **749** ma mau hex inline trong renderer TS, tren 10 token `--color-*` — trong khi spec Phase 2 coi day la "design system".
+(3) `beforeunload` / `will-prevent-unload`: **0 lan xuat hien** trong toan repo ⇒ mat ban nhap khong canh bao.
+
+1. **Files changed.**
+   - Moi: `docs/UI-PLAN-V2.md` (133 dong, 10 muc).
+   - `docs/STATUS.md` — muc handoff nay.
+
+2. **Behavior implemented.**
+   - Khong co thay doi hanh vi. Ke hoach dat lai thu tu 5 pha: **A** (chan mat ban nhap) → **B** (pho cap luoi do: viewport + screenshot) → **C** (hoan tat Phase 5 tren be mat gameplay cua cua so chinh, tung game mot commit) → **D** (749 hex → token) → **E** (workflow giao vien, chua len lich).
+   - Ly do doi thu tu so voi spec: Phase 5 da xong o be mat it dung nhat; Phase 2 (token) neu lam truoc se phai cham lai dung nhung file sap doi layout; loi mat du lieu khong nam trong pha nao cua spec.
+
+3. **Commands run.**
+   - `git log --oneline -1` → `1b5f63b`, `git status --porcelain` → sach.
+   - Dem hex inline / token / `beforeunload` bang regex tren `src/renderer` va toan repo.
+   - Dem assertion va `setDeviceMetricsOverride`/`captureScreenshot` tren 13 file `tests/ui`.
+   - Kiem tra cau truc `docs/UI-PLAN-V2.md` bang `Select-String '^#{1,3} '` → dung thu tu A→E, 0 heading trung.
+
+4. **Unverified.**
+   - Toan bo la ke hoach: **chua co dong code nao duoc viet hay kiem chung**. Khong co test nao chay trong phien nay.
+   - Gia dinh chua kiem: `will-prevent-unload` trong Electron co chan duoc dong cua so theo y renderer hay khong — phai thu tren cua so that.
+   - Giam dinh may chieu that (do sang/tuong phan/phong hoc) van ngoai tam: emulate chi tai hien dung kich thuoc.
+
+5. **Next recommended task.**
+   - **Pha A** — viet check `tests/ui/ui-draft-guard-check.js` truoc (de thay no fail), roi moi them `beforeunload` + `will-prevent-unload`.
+   - Can quyet dinh: guard chi o luc **dong cua so**, hay ca khi bam stepper quay lai buoc 2 (phan tich lai se xoa noi dung)?
+
+---
 ## Handoff — UI/UX projector pass: Presentation Mode khong ve duoc trong ban build, va co chu trinh chieu 12-16px (2026-10-25)
 
 **TL;DR:** Hai loi that, ca hai deu nam tren **duong may chieu** — duong ma truoc gio chua ai do.

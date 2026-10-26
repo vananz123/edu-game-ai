@@ -318,7 +318,16 @@ html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #4d5578; b
 .treasure-map[data-background="ocean"]{border-color:#25677a;background:#0b273d}
 .treasure-map[data-background="space"]{border-color:#554b91;background:#0d1028}
 .treasure-backdrop{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden}
-.treasure-backdrop svg{width:100%;height:100%;display:block;object-fit:cover}
+/* `object-fit` chỉ có tác dụng trên `<img>`/`<video>`; với `<svg>` nội tuyến nó
+   bị bỏ qua và phép co giãn do `preserveAspectRatio` của chính SVG quyết định.
+   Cả 6 hình nền trong `treasure-art.ts` đều khai `viewBox="0 0 1200 420"` +
+   `preserveAspectRatio="xMidYMid slice"`: trong một hộp 1800x149 (bản đồ đã thu
+   gọn ở chế độ trình chiếu) `slice` phóng tranh lên 1800 rộng **630 cao** rồi
+   canh giữa, nên phần `<rect>` nền chạy lên **y = -74** — đúng phần tử mà
+   `ui-stage-illustration-check` báo "outside the viewport" ở 1920x1080.
+   Hình nền chỉ để trang trí và hộp cha đã `overflow: hidden`, nên cách đúng là
+   `meet` (vừa khít, không tràn) chứ không phải che cho khuất. */
+.treasure-backdrop svg{width:100%;height:100%;display:block}
 .treasure-map-head{display:flex;align-items:center;justify-content:space-between;gap:12px;position:relative;z-index:2;color:#e8ebf7;font-size:10px;font-weight:800;letter-spacing:.06em}
 .treasure-map-hero{display:flex;align-items:center;gap:9px;min-width:0}
 .treasure-map-hero > span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -784,6 +793,20 @@ html[data-fullscreen="1"] body { height: 100%; overflow: hidden; }
 html[data-fullscreen="1"] .app-shell { visibility: hidden; }
 html[data-fullscreen="1"] .topbar,
 html[data-fullscreen="1"] .ai-status-bar { visibility: hidden; }
+/* `visibility: hidden` still lays out: the shell keeps its full height (measured
+   at 1436px for a 768px viewport), so the document's scroll height grows and
+   `#modalRoot` -- a normal in-flow block that follows it -- is pushed down to
+   `top: 1436`, entirely below the viewport. `overflow: hidden` on html/body
+   above clips the scrollbar but does NOT stop that offset: the projector
+   assertions still find `#modalRoot` at 1436px "outside the viewport".
+   Taking the modal host out of flow fixes the cause rather than the symptom:
+   it only ever contains `.modal-backdrop`, which is already `position: fixed`,
+   so nothing visible depends on it being in flow. */
+html[data-fullscreen="1"] #modalRoot {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+}
 html[data-fullscreen="1"] .modal-backdrop {
   z-index: 60;
   background: #0b0e1a;
@@ -1132,6 +1155,23 @@ html[data-fullscreen="1"] .modal[data-player-theme] .stage-center {
      phần lớn stage. */
   gap: clamp(10px, 2.6vh, 34px);
 }
+/* "Tìm kho báu" KHÔNG được co `.stage-center`.
+   Đo ở 1366x768 với bản kho báu 6 chặng thật (cốt truyện 3 câu ~300 ký tự,
+   nhiệm vụ, gợi ý, vật phẩm ẩn — tất cả nằm trong giới hạn `story` 1600 ký tự
+   của `lesson-contracts.ts`): cột chữ cần **656px** nhưng `.stage-center` chỉ
+   được **415px**, vì `flex-shrink: 1` ở trên bóp nó lại cho vừa stage 662px.
+   Bản đồ đã có `flex-shrink: 0` (#85) nên phần thiếu 241px dồn xuống dưới và
+   đẩy `#treasureMission` ra ngoài màn hình → tràn **211px**.
+   `flex-shrink: 0` ở đây trả lại đúng hành vi đã ghi trong comment trên: nội
+   dung cao hơn stage thì `overflow: auto` của `.game-stage` cuộn, và
+   `.stage-bottom` vẫn tới được. Chỉ áp cho kho báu: quiz/race/scenario cần
+   `flex-shrink: 1` để lưới đáp án nhận phần dư (DECISIONS #85 mục 1).
+   BẪY: đừng đặt kèm `height: 100%` — đó chính là điều làm kho báu tệ hơn
+   (60 → 140px) trước đây; ở đây chỉ bỏ khả năng CO, không khoá chiều cao. */
+html[data-fullscreen="1"] .modal[data-player-theme] .stage-center:has(> .stage-col.is-main > #treasureMission) {
+  flex-shrink: 0;
+}
+
 /* Lưới đáp án nhận hết phần dư của cột: các hàng ô chia đều phần dư NHƯNG sàn
    là `auto` (min-content của ô: padding + số dòng chữ + min-height), nên không
    bao giờ nhỏ hơn nội dung — đo được `minmax(0,1fr)` làm ô 113px bị cắt 3px ở
@@ -1558,6 +1598,47 @@ html[data-fullscreen="1"] .modal[data-player-theme] .game-stage {
   top: calc(-1 * clamp(20px, 2.2vw, 32px));
   z-index: 3;
 }
+/* `min-height: 190px` on `.treasure-map` is the base rule's decision for a long
+   journey (many nodes). Measured on the play surface at 1366x768 with a 1-stage
+   fixture: the box is 190px tall but its content -- head 38px + track 86px --
+   ends at y=288, i.e. **124px of real content and 66px of empty padding**. On a
+   768px board that empty band is the single largest block of wasted height
+   (`overBy` 139px, and `.stage-bottom` ends up overlaid on answers C/D).
+   The fix is to let the map be as tall as its content: `min-height: auto`.
+   Measured: overflow 139 -> 76 at 1366x768; at 1920x1080 the map shrinks
+   190 -> 150, which it has room for. The long-journey case is unaffected
+   because `auto` still grows to fit every node in the track.
+   BẪY: `min-height: auto` một mình vẫn cắt node. `.treasure-map` không phải flex
+   container nhưng các khối con (`head` 38px + `track` 86px) cộng với padding
+   vượt quá `min-height` và `overflow: hidden` cắt phần dưới của track — đo được
+   `scrollHeight 143` trong `clientHeight 120`. Vì vậy chiều cao được khai báo
+   là `auto` cho CẢ hai (`min-height` không còn chặn).
+   BẪY 2: đổi sang `overflow: visible` để "không bao giờ cắt node" thì nhãn dưới
+   node (`Trắc nghiệm`) lại **tràn ra ngoài đường viền** của bản đồ và đè lên
+   cột câu hỏi. `overflow: hidden` phải giữ nguyên; cách đúng là để hộp đủ cao
+   cho nội dung (`height: auto`), chứ không phải để nội dung chạy ra ngoài. */
+html[data-fullscreen="1"] .modal[data-player-theme] .treasure-map {
+  min-height: auto;
+  height: auto;
+  /* `.treasure-map` là flex item của `.game-stage` (flex column). `height: auto`
+     một mình để nó bị SHRINK khi stage thiếu chỗ — đo được hộp 122px cho nội
+     dung 143px, và `overflow: hidden` cắt mất nhãn dưới node. `flex-shrink: 0`
+     giữ hộp đúng bằng nội dung; phần thiếu chỗ phải do chính `.game-stage`
+     cuộn (`overflow: auto` đã có), không phải do bản đồ bị bóp. */
+  flex-shrink: 0;
+}
+/* A short projector board gets a compact map too. The map's own outer padding is
+   the cheapest height win -- but only 6px of it. Measured: trimming to 8/6
+   padding gave a 102px box for 138px of content that `overflow: hidden` then
+   CLIPPED (the track overflowed the map's bottom edge). The 190px → ~125px win
+   already comes from `min-height: auto`; this only shaves the margin. */
+@media (max-height: 800px) {
+  html[data-fullscreen="1"] .modal[data-player-theme] .treasure-map {
+    padding-top: 10px;
+    padding-bottom: 9px;
+    margin-bottom: 12px;
+  }
+}
 
 /* ============================================================
    First-run AI setup wizard (§7). Styles only — every decision
@@ -1723,6 +1804,66 @@ html[data-setup-fullscreen="1"] .ai-status-bar{visibility:hidden}
   width: 100%;
   height: 100%;
 }
+/* Treasure storyline bubbles are centred inside `.stage-center` by the base
+   rule (`margin: 0 auto; max-width: 760px`). That is right for the one-column
+   layout, where they are the only thing on the line. Measured in the 2-column
+   layout at 1366x768: the text column is 1047px wide but each bubble is 221px,
+   centred, leaving ~830px of dead space beside two short sentences -- while the
+   answers below are pushed 76px past the bottom of the board. Left-aligning
+   them inside the text column costs no height and recovers the width. */
+html[data-fullscreen="1"] .modal[data-player-theme] .stage-col.is-main > .treasure-storyline {
+  margin-left: 0;
+  margin-right: 0;
+  max-width: 100%;
+}
+/* Bong bóng cốt truyện rộng 221px vì `.scenario-context` bên trong giữ
+   `max-width: 1000px` + `padding` của nó, nhưng ở cột hẹp thì bong bóng chỉ co
+   theo nội dung ngắn nhất. Cho bong bóng `flex: 1` để nó dùng hết bề rộng cột
+   thay vì để ~830px trống bên cạnh hai câu ngắn. */
+html[data-fullscreen="1"] .modal[data-player-theme] .stage-col.is-main > .treasure-storyline {
+  flex: 0 1 auto;
+  width: 100%;
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .stage-col.is-main > .treasure-storyline > .scenario-context {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Cột chữ "Tìm kho báu" là surface DÀY NHẤT của sản phẩm: 10 khối xếp dọc
+   (kicker 17 + 2 cốt truyện 46+46 + mô tả 13 + câu hỏi 59 + badge 23 + lưới
+   258 + hàng nút 42). Đo ở 1366x768 cột cần 531px trong khi `.stage-center`
+   chỉ còn 412px sau bản đồ ⇒ tràn 88px.
+   Hai phần thừa đã đo được và bỏ đi không mất thông tin:
+     1. `treasure-mission-badge` chồng lên đáy câu hỏi (badge y=502 nằm trong
+        khoảng câu hỏi 451–510) vì câu hỏi ở đây có `margin: 0` trong khi badge
+        dùng margin âm của bố cục 1 cột. Đệm đúng 6px cho thẳng hàng.
+     2. Hai dòng cốt truyện dùng `gap` 10px + bong bóng 18px padding; ở cột
+        rộng chúng chỉ cần một dòng mỗi câu, nhưng padding dọc vẫn lấy 46px.
+   Giữ nguyên mọi chữ trên màn: chỉ bỏ khoảng đệm dọc. */
+html[data-fullscreen="1"] .modal[data-player-theme] .stage-col.is-main > .treasure-mission-badge {
+  margin-top: 6px;
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .stage-col.is-main > .treasure-storyline > .scenario-context {
+  padding-top: 8px;
+  padding-bottom: 8px;
+  font-size: clamp(14px, 1.9vh, 19px);
+}
+/* 42px cuối cùng không phải `.stage-bottom` (hàng đó nằm NGOÀI cột chữ, là con
+   ruột của `.game-stage`) mà là `#treasureExtra` — hai nút phụ "Tìm vật phẩm ẩn"
+   và "Dùng gợi ý". Chúng là hành động tuỳ chọn, đặt cạnh nhau thay vì chồng
+   hai hàng, và không cần lề trên 10px vì đã có khoảng đệm của lưới đáp án.
+   Đây là 12px cuối của phần tràn ở 1366x768; không bỏ chữ nào. */
+html[data-fullscreen="1"] .modal[data-player-theme] .stage-col.is-main > #treasureExtra {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 0;
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .stage-col.is-main > #treasureExtra > .btn {
+  margin-top: 0;
+}
+
 /* Treasure stages already carry a map and a storyline above the question; a
    second large block pushes the mission controls off a 720px stage. */
 .modal[data-player-theme] .stage-illustration.is-treasure {
@@ -1771,6 +1912,212 @@ html[data-fullscreen="1"] .modal[data-player-theme] .race-turn .stage-illustrati
   }
 }
 
+
+/* === Bố cục 2 cột cho .stage-center (ảnh minh hoạ cạnh câu hỏi) ===
+   Đo trên play surface thật (Phase B UI-PLAN-V2):
+     - 1366x768: `.game-stage` cần 750px, chỉ có 683px  -> tràn 67px, mọi đáp
+       án nằm dưới đáy màn hình.
+     - 1440x900: tràn 15px.
+   Nguyên nhân không phải "nội dung quá nhiều" mà là ảnh SVG 320x200 tiêu
+   200px của TRỤC KHAN HIẾM (chiều cao ~683px) trong khi TRỤC DƯ THỪA (chiều
+   rộng 1255px) gần như bỏ trống: `.stage-question` chỉ cần 4 dòng.
+   Đưa ảnh sang bên cạnh biến chi phí 200px dọc thành chi phí ngang.
+   Mô phỏng trong DOM thật trước khi viết rule này:
+     1366x768  tràn 67 -> 0   (cột chữ 987px)
+     1440x900  tràn 15 -> 0   (cột chữ 1058px)
+     1920x1080 tràn  0 -> 0   (cột chữ 1517px)
+
+   MẶC ĐỊNH LÀ 1 CỘT. Hai `.stage-col` chỉ nằm cạnh nhau khi container đủ
+   rộng; dưới ngưỡng đó chúng xếp dọc y như bố cục cũ, nên màn hình hẹp
+   không thay đổi gì. */
+
+/* Trong suốt với bố cục 1 cột: khối bọc không được đổi bất cứ thứ gì.
+   `display: contents` cho phép con của nó tiếp tục là flex-item của
+   `.stage-center` => bố cục cũ giữ nguyên từng pixel. */
+.stage-center > .stage-col {
+  display: contents;
+}
+
+@media (min-width: 1180px) {
+  /* Chỉ áp dụng khi trình chiếu: cửa sổ nhỏ trong app không phải mục tiêu
+     của bố cục máy chiếu. */
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-center {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    align-content: flex-start;
+    justify-content: center;
+    column-gap: clamp(18px, 2.2vw, 34px);
+    row-gap: clamp(10px, 1.4vh, 18px);
+  }
+  /* Container thật cho 2 cột: chỉ 2 phần tử, nên `row` cho kết quả xác định
+     (trước đây các phần tử văn bản là 5-11 flex-item riêng và `row` biến
+     chúng thành các CỘT hẹp cạnh nhau — câu hỏi bị bóp còn 174px, cao
+     1294px, tràn 684px. Đó là lý do phải bọc DOM thay vì chỉ sửa CSS). */
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-center > .stage-col {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    min-width: 0;
+  }
+  /* Cột ảnh: bề rộng px cố định, KHÔNG dùng %.
+     Bẫy: `.stage-illustration` gốc là `width: min(320px, 46%)` — 46% của
+     container. Trong một cột hẹp, phần trăm đó làm hộp co lại và cảnh
+     320x200 bị letterbox thành một vệt mảnh (đúng lỗi #70: cảnh vẽ ở
+     ~150x94). Vì vậy ở đây đặt px tuyệt đối và cho `flex: 0 0 auto`. */
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-center > .stage-col:not(.is-main) {
+    flex: 0 0 auto;
+    width: clamp(200px, 16vw, 300px);
+  }
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-col > .stage-illustration {
+    width: 100%;
+    max-width: 100%;
+    max-height: none;
+    margin: 0;
+  }
+  /* Treasure đã tốn chiều dọc cho bản đồ + cốt truyện phía trên, nên ảnh của
+     nó nhỏ hơn để nhường chỗ cho ĐÁP ÁN. */
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-col:has(> .stage-illustration.is-treasure) {
+    width: clamp(170px, 13vw, 240px) !important;
+  }
+  /* Cột văn bản: chiếm phần còn lại, co giãn được. `min-width: 0` để nội dung
+     dài (chuỗi không khoảng trắng) không đẩy cột ra ngoài khung. */
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-center > .stage-col.is-main {
+    flex: 1 1 340px;
+    align-items: stretch;
+    min-height: 0;
+  }
+  /* Khoảng cách câu hỏi -> đáp án. Ở bố cục 1 cột khoảng cách này do
+     `margin: 14px auto 30px` của `.stage-question` tạo; ở bố cục 2 cột hai khối
+     là phần tử liền kề nên đo được **0px** và câu hỏi dính thẳng vào ô A/B
+     (thấy trên ảnh chụp 1366x768, y=337 cho cả hai).
+     BẪY: đừng đặt `row-gap` lên cả cột. "Tìm kho báu" có **10** phần tử con
+     (kicker, 2 cốt truyện, mô tả, câu hỏi, badge, #treasureMission, #treasureExtra,
+     #answerFeedback, #treasureActions) mà mỗi phần tử đã có `margin` riêng, nên
+     cộng thêm gap vào từng khe làm cột cao thêm ~125px: đo được tràn
+     60 → **168px** @1366x768 chỉ vì `row-gap: clamp(10px, 1.8vh, 22px)`.
+     Vì vậy chỉ khai gap ở ĐÚNG khe giữa hai khối lớn, qua `margin-top` của lưới
+     đáp án — cùng một giá trị cho mọi template, không nhân theo số phần tử. */
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-col.is-main > .answer-grid {
+    margin-top: clamp(10px, 1.8vh, 22px);
+  }
+  /* Lưới đáp án là nơi TIÊU THỤ phần chiều cao thừa của cột, thay vì để nó
+     thành dải trống dưới cùng.
+     Số đo trước khi sửa (app thật, fixture 4 đáp án):
+       - 1366x768: cột chữ cao 468px nhưng nội dung chỉ tới 611 trong khi
+         `.stage-center` cao 594 và khung chứa tới 737 => **149px chết**.
+       - 1920x1080: ô đáp án bị chặn ở đúng 150px (`16vh` + trần) trong khi
+         còn **224px** chiều cao chưa dùng.
+     `flex: 1 1 auto` cấp phần dư đó cho lưới, và `grid-auto-rows:
+     minmax(min-content, 1fr)` chia đều cho các hàng ô — sàn `min-content` giữ
+     nguyên quy tắc "dòng cuối không bao giờ bị cắt" đã ghi ở #59.
+     Nhưng phần dư này là CON TRĂNG: sau khi chọn đáp án, `#answerFeedback`
+     (71px @1366x768) + `.stage-bottom` (42px, có nút "Tiếp tục") xuất hiện và
+     không còn chỗ. Đo được cột chữ cao **774px** so với stage 662px khi lưới
+     vẫn giữ 258px. Vì vậy khi đã trả lời, lưới trả lại phần dư nó đang chiếm:
+     `:has()` chọn trạng thái "có phản hồi" mà không cần thêm class từ JS, và
+     `flex: 0 1 auto` + `grid-auto-rows: min-content` đưa các hàng về đúng nội
+     dung. `#answerFeedback` không rỗng và không có `.hidden`, nên `:not(:empty)`
+     là đủ phân biệt hai trạng thái (trước khi trả lời nó luôn rỗng). */
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-col.is-main > .answer-grid {
+    flex: 1 1 auto;
+    min-height: 0;
+    align-content: stretch;
+    grid-auto-rows: minmax(min-content, 1fr);
+  }
+  /* "Tìm kho báu" nạp đáp án qua `#treasureMission` chứ không qua `.answer-grid`
+     trực tiếp, nên lưới ở đó là CHÁU (`#treasureMission > .answer-grid`) — lưu ý
+     dấu `>`: selector anh-em ruột sẽ không khớp gì cả (đã đo: sửa xong tràn chỉ
+     giảm 88 → 87px, tức là gần như không có tác dụng).
+     Bản đồ + cốt truyện phía trên đã tốn chỗ, nên lưới ở đây KHÔNG nhận phần dư,
+     và sàn `12vh` của ô đáp án phải nhường — giống trạng thái đã-trả-lời của quiz. */
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-col.is-main > #treasureMission > .answer-grid {
+    flex: 0 1 auto;
+    grid-auto-rows: min-content;
+    margin-top: clamp(10px, 1.8vh, 22px);
+  }
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-col.is-main > #treasureMission > .answer-grid > .answer-option {
+    min-height: 0;
+  }
+  /* `.stage-center` đặt `align-items: flex-start` cho hàng 2 cột (đúng cho cột
+     ảnh, để nó không bị kéo cao), nhưng cột chữ phải CAO HẾT stage thì lưới đáp
+     án mới có phần dư để nhận. Đo trước khi thêm dòng này ở 1920x1080: cột chữ
+     585px (bằng đúng nội dung), nội dung kết thúc ở y=741 trong khi stage còn
+     chỗ tới y=1043 → **300px trống** dưới đáp án, đúng như bản 1 cột ban đầu.
+     BẪY 1: `align-self: stretch` KHÔNG đủ ở đây. `.stage-center` có
+     `flex-wrap: wrap`, nên hai cột nằm trên MỘT flex line và cross-size của line
+     co theo nội dung (585px); `align-self: stretch` chỉ kéo item tới đúng
+     585px của line đó — đo được `mainAlignSelf: "stretch"` mà vẫn cao 585px.
+     BẪY 2: `height: 100%` thì sửa được phép đo đó nhưng làm HỎNG "Tìm kho báu":
+     cột chữ bị khoá đúng bằng chiều cao `.stage-center`, nên khi nội dung cao
+     hơn (bản đồ + cốt truyện + đáp án), cột không còn lớn hơn stage được và
+     phần tràn tăng 60 → **140px** @1366x768, 0 → **34px** @1920x1080.
+     Vì vậy chiều cao tường minh chỉ áp cho các màn KHÔNG có phần tử "cao theo
+     nội dung" phía trên câu hỏi (`.treasure-storyline`, `#treasureMission`).
+     `:not(:has(...))` giữ nguyên hành vi cũ (nội dung tự quyết chiều cao, stage
+     tự cuộn) cho "Tìm kho báu", và chỉ áp `height: 100%` cho quiz/race/scenario
+     — nơi mà `flex: 1` của lưới đáp án biến phần dư thành ô đáp án cao hơn. */
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-center > .stage-col.is-main {
+    align-self: stretch;
+  }
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-center > .stage-col.is-main:not(:has(> .treasure-storyline)):not(:has(> #treasureMission)) {
+    height: 100%;
+    max-height: 100%;
+  }
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-col.is-main:has(> #answerFeedback:not(:empty)) > .answer-grid {
+    flex: 0 1 auto;
+    grid-auto-rows: min-content;
+  }
+  /* Trong cùng trạng thái đó, sàn `min-height: 12vh` của ô đáp án phải nhường.
+     Đo được: giữ sàn thì cột chữ cao 774px (tràn 21px, stage 662px); bỏ sàn thì
+     hàng co về 168px, ô 78px, **không cắt chữ** (`scrollHeight 74` < `clientHeight
+     74`) và tràn về 0 — đáp án vẫn đọc được, chỉ bớt khoảng thở dọc sau khi
+     giáo viên đã chốt đáp án. Trước khi trả lời, sàn giữ nguyên: đó là lúc ô
+     đáp án là thứ duy nhất trên màn và cần to.
+     `#answerFeedback` là nơi DUY NHẤT chứa phản hồi, nên `:has()` ở đây chỉ
+     khớp đúng trạng thái đã-trả-lời. */
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-col.is-main:has(> #answerFeedback:not(:empty)) > .answer-grid > .answer-option {
+    min-height: 0;
+  }
+  /* Câu hỏi trong cột hẹp không cần khung 68ch của bản 1 cột. */
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-col.is-main > .stage-question {
+    max-width: 100%;
+    margin: 0;
+  }
+  /* Câu hỏi vốn canh giữa cho một cột rộng; trong 2 cột, canh trái để mép
+     phải lởm chởm không lộ ra. Chỉ đổi canh lề, không đổi nội dung. */
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-col.is-main > .stage-question,
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-col.is-main > .stage-kicker {
+    text-align: left;
+  }
+  /* Race: ảnh + câu hỏi nằm trong `.race-turn`, không có `.stage-center`. */
+  html[data-fullscreen="1"] .modal[data-player-theme] .race-turn > .race-turn-row {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    column-gap: clamp(18px, 2.2vw, 34px);
+    row-gap: clamp(10px, 1.4vh, 18px);
+  }
+  html[data-fullscreen="1"] .modal[data-player-theme] .race-turn-row > .stage-col:not(.is-main) {
+    flex: 0 0 auto;
+    width: clamp(200px, 16vw, 300px);
+  }
+  html[data-fullscreen="1"] .modal[data-player-theme] .race-turn-row > .stage-col.is-main {
+    flex: 1 1 340px;
+    min-width: 0;
+  }
+  html[data-fullscreen="1"] .modal[data-player-theme] .race-turn-row .stage-col > .stage-illustration {
+    width: 100%;
+    max-width: 100%;
+    max-height: none;
+    margin: 0;
+  }
+  html[data-fullscreen="1"] .modal[data-player-theme] .race-turn-row .stage-col.is-main > .stage-kicker,
+  html[data-fullscreen="1"] .modal[data-player-theme] .race-turn-row .stage-col.is-main > .stage-question {
+    text-align: left;
+  }
+}
 
 /* ---- Bước 1: cây cấu trúc tài liệu (docs/DECISIONS.md #76, #77) ----
    `step-structure.ts` sinh các class `wizard-tree-*`; trước đây chúng chưa có

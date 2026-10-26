@@ -17,9 +17,11 @@
 //
 // Dữ liệu trong bài là TỔNG HỢP, không có dữ liệu học sinh thật.
 const { check, connect, results } = require('../manual/lib/ui-check-lib');
+const { PROJECTOR_SIZES, measureAt, setViewport, setViewportAndWait } = require('./lib/screenshot-capture');
 
 (async () => {
-  const { evaluate } = await connect();
+  const ctx = await connect();
+  const { evaluate } = ctx;
 
   const out = await evaluate(`(async () => {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -176,6 +178,32 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
   check('item asset keys survive a real editor save', out.assetsSurvivedSave === true, JSON.stringify(out.afterSave));
   check('illustrationMode survives a real editor save', out.modeSurvivedSave === true);
   check('a game with no asset fields gains none on save', out.legacyStayedClean === true);
+
+  // ---- Phase B (docs/UI-PLAN-V2.md): the editor is where a teacher spends the
+  // longest single stretch, so it is measured at both real resolutions too.
+  //
+  // Contract, measured rather than invented:
+  //  - fontFloor 9px: `.tag { font-size: 9px }` is the app's own smallest text,
+  //    used for the step badges. Asserting 12px failed on correct design; 9px
+  //    still catches a real shrink.
+  //  - innerScrollAreas 1: `.modal { max-height: 90vh; overflow: auto }` means a
+  //    long form legitimately scrolls. Skipping the assertion would let a second,
+  //    unintended scroller appear unnoticed, so exactly 1 is expected.
+  for (const size of PROJECTOR_SIZES) {
+    const tag = size.label;
+    await setViewportAndWait(ctx, size);
+    const opened = await evaluate(`(async () => {
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      document.getElementById('modalRoot').innerHTML = '';
+      openEditor(${JSON.stringify({ id: 'ue-layout', title: 'Kiểm tra bố cục', subject: 'Tự nhiên', grade: '3', template: 'quiz', description: '', tags: [], sourceName: 'ui-check', createdAt: '2026-01-01T00:00:00.000Z', gameSetup: { scoringMode: 'cơ bản', illustrationMode: 'manual' }, questions: [{ id: 'q1', type: 'multiple-choice', prompt: 'Con vật nào kêu meo?', options: [{ id: 'a', text: 'Con mèo' }, { id: 'b', text: 'Con chó' }], correctOptionId: 'a', correctAnswer: '', explanation: 'Mèo kêu meo.', points: 100, contentCategory: 'animals', iconName: 'paw-print', illustrationAssetId: 'animals-meadow' }] })}, false, 'test');
+      await sleep(600);
+      return { modal: Boolean(document.querySelector('.modal')), row: Boolean(document.querySelector('#editorQuestions .editor-question')) };
+    })()`);
+    check(`[${tag}] editor renders its item row`, Boolean(opened && opened.modal && opened.row), JSON.stringify(opened));
+    await measureAt(ctx, size, `item-assets-editor-${tag}`, { check, fontFloor: 9, innerScrollAreas: 1 });
+    await evaluate(`document.getElementById('modalRoot').innerHTML = ''; true`);
+  }
+  await setViewport(ctx.send, null);
 
   const failed = results.filter(r => !r.ok).length;
   console.log(`\n${results.length - failed}/${results.length} checks passed`);

@@ -17,6 +17,7 @@ const Database = require('better-sqlite3');
 const { z } = require('zod');
 const { AIManager } = require('./ai-core/ai-manager');
 const { resolveCpuThreads } = require('./ai-core/runtime-threads');
+const { unloadMayProceed } = require('./ai-core/unload-guard');
 const { ModelInstaller, summarizeModelSelection, verifyModelFile } = require('./ai-core/model-installer');
 const { buildGenerationOptions } = require('./ai-core/generation-options');
 const { LlamaRuntimeInstaller } = require('./ai-core/runtime-installer');
@@ -578,6 +579,30 @@ function createWindow() {
   mainWindow.setMenuBarVisibility(false);
   mainWindow.on('enter-full-screen', () => sendFullscreenState(true));
   mainWindow.on('leave-full-screen', () => sendFullscreenState(false));
+  /* Unsaved-work guard, main half (spec §4, §12).
+     The renderer cancels `beforeunload` while a generated game exists only in
+     memory, which Chromium relays here. The polarity is the opposite of the
+     renderer's and is easy to invert: *calling* `preventDefault()` ignores the
+     `beforeunload` handler and lets the window close; *ignoring* the event keeps
+     it open (electron.d.ts, Electron 33). So "stay" must do nothing, and only
+     "discard" may call preventDefault. Left unhandled, the window could never be
+     closed at all — a trap rather than a guard. */
+  mainWindow.webContents.on('will-prevent-unload', event => {
+    const choice = dialog.showMessageBoxSync(mainWindow, {
+      type: 'warning',
+      buttons: ['Ở lại', 'Đóng và bỏ nội dung'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+      title: 'Nội dung chưa được lưu',
+      message: 'Trò chơi vừa tạo chưa được lưu vào Thư viện trò chơi.',
+      detail: 'Đóng cửa sổ bây giờ sẽ mất nội dung vừa tạo. Hãy chọn “Lưu vào thư viện” trong màn hình tạo trò chơi nếu muốn giữ lại.'
+    });
+    // Index 0 ("Ở lại") is the default and the cancel action, so a dismissed
+    // dialog keeps the work. See `unloadMayProceed` for why the polarity reads
+    // backwards here.
+    if (unloadMayProceed(choice === 1 ? 'discard' : 'stay')) event.preventDefault();
+  });
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
 }
 app.whenReady().then(async () => {

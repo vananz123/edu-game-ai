@@ -8,7 +8,7 @@ const TREASURE_BACKGROUNDS = {
   temple: {
     label: 'Ngôi đền tri thức',
     short: 'Đền cổ',
-    svg: `<svg viewBox="0 0 1200 420" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
+    svg: `<svg viewBox="0 0 1200 420" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">
       <rect width="1200" height="420" fill="#151832"/>
       <circle cx="970" cy="88" r="48" fill="#f5d58b" opacity=".48"/>
       <circle cx="970" cy="88" r="78" fill="#f5d58b" opacity=".08"/>
@@ -29,7 +29,7 @@ const TREASURE_BACKGROUNDS = {
   forest: {
     label: 'Rừng nhiệt đới',
     short: 'Rừng xanh',
-    svg: `<svg viewBox="0 0 1200 420" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
+    svg: `<svg viewBox="0 0 1200 420" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">
       <rect width="1200" height="420" fill="#122c2b"/>
       <circle cx="982" cy="82" r="38" fill="#c8f0c1" opacity=".55"/>
       <path d="M0 310 150 235 300 292 470 220 650 286 830 226 1010 282 1200 232V420H0Z" fill="#173b35"/>
@@ -49,7 +49,7 @@ const TREASURE_BACKGROUNDS = {
   ice: {
     label: 'Hang băng cổ',
     short: 'Băng tuyết',
-    svg: `<svg viewBox="0 0 1200 420" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
+    svg: `<svg viewBox="0 0 1200 420" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">
       <rect width="1200" height="420" fill="#101d38"/>
       <path d="M0 128Q190 54 390 118T790 96T1200 142V0H0Z" fill="#2a5c86" opacity=".42"/>
       <path d="M0 154Q220 92 430 146T860 118T1200 168V0H0Z" fill="#54c8c0" opacity=".18"/>
@@ -65,7 +65,7 @@ const TREASURE_BACKGROUNDS = {
   desert: {
     label: 'Sa mạc cổ đại',
     short: 'Sa mạc',
-    svg: `<svg viewBox="0 0 1200 420" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
+    svg: `<svg viewBox="0 0 1200 420" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">
       <rect width="1200" height="420" fill="#30213a"/>
       <circle cx="950" cy="96" r="58" fill="#ffc978" opacity=".7"/>
       <circle cx="950" cy="96" r="88" fill="#ffc978" opacity=".12"/>
@@ -83,7 +83,7 @@ const TREASURE_BACKGROUNDS = {
   ocean: {
     label: 'Đại dương sâu',
     short: 'Đại dương',
-    svg: `<svg viewBox="0 0 1200 420" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
+    svg: `<svg viewBox="0 0 1200 420" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">
       <rect width="1200" height="420" fill="#0b263d"/>
       <path d="M0 120Q140 84 280 120T560 118T840 122T1200 112V0H0Z" fill="#1c5b78" opacity=".55"/>
       <path d="M0 152Q160 116 320 150T640 146T960 152T1200 142V0H0Z" fill="#5ac6c8" opacity=".12"/>
@@ -104,7 +104,7 @@ const TREASURE_BACKGROUNDS = {
   space: {
     label: 'Trạm không gian',
     short: 'Vũ trụ',
-    svg: `<svg viewBox="0 0 1200 420" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
+    svg: `<svg viewBox="0 0 1200 420" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">
       <rect width="1200" height="420" fill="#0d1028"/>
       <circle cx="900" cy="132" r="88" fill="#3f3d86"/>
       <path d="M812 132q88-44 176 0-88 44-176 0Z" fill="#8d8ad8" opacity=".65"/>

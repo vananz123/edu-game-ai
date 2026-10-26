@@ -15,6 +15,7 @@
 // Port: the check lib reads argv[2] at require-time, and falls back to 9341 when
 // `node` is invoked without it. Pass the port explicitly (or set CDP_PORT).
 const { check, connect, results } = require('../manual/lib/ui-check-lib');
+const { PROJECTOR_SIZES, measureAt, setViewport, setViewportAndWait } = require('./lib/screenshot-capture');
 
 /** Synthetic fixtures only — never real student data. */
 const ANIMAL_ITEM = { contentCategory: 'animals', iconName: 'paw-print' };
@@ -118,7 +119,14 @@ const probe = (game, opener) => `
   document.querySelector('[data-play-close]')?.click();
   document.getElementById('modalRoot').innerHTML = '';
   await sleep(200);
-  playGame(${JSON.stringify(game)});
+  playGame(${JSON.stringify(game)}, { fullscreen: true });
+  await sleep(700);
+  // Trình chiếu: đây là bề mặt máy chiếu (docs/UI-PLAN-V2.md Phase B). Không bật
+  // cờ này thì .app-shell vẫn nằm trong luồng và cao 1436px, đẩy mọi
+  // assertion "outside the viewport" vào trạng thái fail vĩnh viễn — đo sai
+  // màn hình. Hình minh hoạ là thứ bị đánh giá, và nó chỉ được nhìn thấy ở
+  // chế độ trình chiếu trên lớp.
+  document.documentElement.dataset.fullscreen = '1';
   await sleep(700);
   ${opener || ''}
   await sleep(500);
@@ -130,8 +138,19 @@ const probe = (game, opener) => `
     drawn: Boolean(el),
     assetId: el ? el.getAttribute('data-illustration') : null,
     iconClass: el ? (el.querySelector('.stage-illustration-icon')?.getAttribute('class') || '') : '',
-    isSiblingOfQuestion: Boolean(el && q && el.parentElement === q.parentElement
-      && el.nextElementSibling === q),
+    // The illustration must be the element immediately BEFORE the question's
+    // block, so the reading order is "picture, then question". Since the
+    // 2-column layout (DECISIONS #84) the picture lives in its own
+    // .stage-col wrapper, so the direct nextElementSibling === q test no longer
+    // holds: the comparison is against the container that holds the question.
+    isSiblingOfQuestion: Boolean(el && q && (() => {
+      const qBlock = q.parentElement;
+      const illBlock = el.closest('.stage-col') || el;
+      if (illBlock.parentElement === qBlock) return illBlock.nextElementSibling === q;
+      // 2-column: both are .stage-col children of the same row.
+      return illBlock.parentElement === qBlock.parentElement
+        && illBlock.nextElementSibling === qBlock;
+    })()),
     size: svg ? rect(svg) : null,
     questionPresent: Boolean(q),
     // Matching has no question surface by design (the cards ARE the content),
@@ -141,7 +160,8 @@ const probe = (game, opener) => `
 `;
 
 (async () => {
-  const { ws, evaluate } = await connect();
+  const ctx = await connect();
+  const { ws, evaluate } = ctx;
   const skipped = [];
   const run = (game, opener) => evaluate(`(async () => {${probe(game, opener)}})()`);
 
@@ -185,6 +205,29 @@ const probe = (game, opener) => `
     check(`${tpl.key}: a game saved before the switch behaves as auto`,
       legacy.drawn && legacy.assetId === 'animals-scene', legacy.drawn ? legacy.assetId : 'nothing drawn');
   }
+
+  // ---- Phase B (docs/UI-PLAN-V2.md): the illustration must also LAY OUT
+  // correctly at the two real classroom resolutions. The assertions above prove
+  // the right asset is chosen; these prove it is actually visible and does not
+  // push the question or the answers off a 1366x768 projector.
+  //
+  // fontFloor 8: .treasure-map-meta is font-size:8px by design, and the header
+  // status line is 10px -- the app's real floor on this surface. Asserting 14px
+  // failed on correct design; 8px still catches a shrink below what ships.
+  // The overflow assertions are where the real projector failures show up:
+  // treasure-hunt and race push .game-stage past the bottom of a 1366x768 board.
+  for (const size of PROJECTOR_SIZES) {
+    const tag = size.label;
+    for (const tpl of TEMPLATES) {
+      await setViewportAndWait(ctx, size);
+      const opened = await run(tpl.build('auto', ANIMAL_ITEM), tpl.opener);
+      if (!opened || (!opened.questionPresent && !opened.drawn)) continue;
+      await measureAt(ctx, size, `illustration-${tpl.key}-${tag}`, {
+        check, fontFloor: 8, innerScrollAreas: 0
+      });
+    }
+  }
+  await setViewport(ctx.send, null);
 
   await evaluate(`(async () => {
     document.querySelector('[data-play-close]')?.click();
