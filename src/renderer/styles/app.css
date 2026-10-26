@@ -924,26 +924,59 @@ html[data-fullscreen="1"] .modal-backdrop {
    toàn màn hình khai lại chúng ngay sau quy tắc thường (xem "Mật độ chỗ trình
    chiếu" bên dưới), vì ở đây bản khai báo sau sẽ thắng. */
 
-/* Lưới đáp án ở toàn màn hình không bị chặn bởi trần 1040px của bố cục thường
-   (khai báo sau khối này). */
+/* Lưới đáp án + ô đáp án ở toàn màn hình: MỘT khối duy nhất.
+   Trước DECISIONS #88 hai selector này bị khai 2 và 6 lần rải khắp tệp
+   (929/1359 cho lưới; 939/974/1101/1368/1397/1610 cho ô), mỗi bản sau chỉ
+   tồn tại để đè bản trước — đó là "chiến tranh độ ưu tiên" làm bố cục máy
+   chiếu chật. Giờ cùng một selector, cùng một chỗ: không còn bản nào để đè.
+
+   Giá trị dưới đây là giá trị của bản ĐANG THẮNG trong baseline, không phải
+   bản xuất hiện đầu tiên. Bản `[0]` ở dòng 939 cũ có
+   `padding: … calc(clamp(12px, 2.2vh, 26px) + 4px)` và
+   `font-size: clamp(20px, 3.2vh + 0.5vw, 30px)`, nhưng bản `[3]` ở dòng 1368
+   khai lại CẢ HAI (`padding: clamp(12px, 1.8vh, 22px) …`,
+   `font-size: clamp(20px, 2.9vh + 0.5vw, 30px)`) và đứng sau nên thắng.
+   Chép nhầm bản `[0]` làm ô đáp án cao thêm 10px, treasure tràn và
+   `ui-stage-illustration-check` tụt về 93/94. `min-height` lấy từ bản `[4]`
+   (`16vh/150px`) vì đó là bản cuối cùng khai nó. */
 html[data-fullscreen="1"] .modal[data-player-theme] .answer-grid {
   width: 100%;
   max-width: 100%;
   margin: 0 auto;
   gap: clamp(10px, 1.6vh, 20px);
 }
-/* Số đo trên app thật (1280x721 — cửa sổ laptop 1366x768 bị Windows trừ
-   taskbar): cỡ cũ ra 16px/59px vì `vh` quá thấp. Cộng thêm một phần `vw` để
-   cỡ chữ bám bề rộng thật: 2.9vh + 0.5vw = 27px ở 1280x721. min-height khai
-   lại bên dưới vì quy tắc thường (trần 92px) đứng sau khối này. */
 html[data-fullscreen="1"] .modal[data-player-theme] .answer-option {
-  /* `+ 4px` ở sàn dưới chừa chỗ cho dòng cuối khi cửa sổ thấp và lưới đáp án
-     bị chia đúng bằng phần dư (đo được ô 113px thiếu 3px ở 1366x705). */
-  padding: clamp(12px, 2.2vh, 26px) clamp(14px, 1.4vw, 22px) calc(clamp(12px, 2.2vh, 26px) + 4px);
-  font-size: clamp(20px, 3.2vh + 0.5vw, 30px);
+  min-height: clamp(72px, 16vh, 150px);
+  padding: clamp(12px, 1.8vh, 22px) clamp(14px, 1.4vw, 22px);
+  font-size: clamp(20px, 2.9vh + 0.5vw, 30px);
   line-height: 1.35;
   border-radius: 16px;
 }
+/* Cửa sổ thấp (1366x768, laptop trừ taskbar): sàn chỉ được NÂNG cỡ chữ, không
+   hạ.
+
+   Hai giá trị dưới đây lấy từ bản ĐANG THẮNG của baseline, không phải bản đầu
+   tiên gặp trong tệp cũ:
+     · `2.9vh + 0.6vw` cho đáp án — baseline có 4 bản `@media` và bản CUỐI CÙNG
+       thắng là `2.9vh`. Gộp về một chỗ mà lấy `2.5vh` làm cỡ đáp án nhỏ đi và
+       treasure tràn 88px @1920x1080, 362-373px @1366x768.
+     · `1.6vh / 18px` cho `gap` của `.stage-center`. Baseline có HAI bản
+       `@media (max-height:800px)` khai `gap` này — `1.4vh` rồi `1.6vh` ngay
+       sau — và bản khai báo sau thắng, nên giá trị đang có hiệu lực là
+       `1.6vh/18px`. (Đã thử `1.4vh` và SAI: `.stage-bottom` của scenario bị
+       đẩy 14px ra ngoài viewport, `ui-stage-illustration-check` 93/94.) */
+
+   Bài học của #88: gộp bản đè phải giữ giá trị của bản ĐANG THẮNG — kiểm bằng
+   cách xem bản khai báo SAU CÙNG khớp selector, không phải bản xuất hiện đầu. */
+@media (max-height: 800px) {
+  html[data-fullscreen="1"] .modal[data-player-theme] .answer-option {
+    font-size: clamp(20px, 2.9vh + 0.6vw, 30px);
+  }
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-center { gap: clamp(8px, 1.6vh, 18px); }
+}
+/* Cỡ chữ / padding đáp án ở toàn màn hình được khai MỘT LẦN DUY NHẤT trong
+   khối "Đáp án toàn màn hình" (hợp nhất, DECISIONS #88). Bản ở đây từng là bản
+   thứ nhất của 6 bản đè nhau (939/974/1101/1368/1397/1610) — đã gộp. */
 html[data-fullscreen="1"] .modal[data-player-theme] .answer-option .letter {
   width: clamp(34px, 6vh, 62px);
   height: clamp(34px, 6vh, 62px);
@@ -970,12 +1003,8 @@ html[data-fullscreen="1"] .modal[data-player-theme] .stage-question {
    `clamp(16px, 2.5vh, 24px)` từng thắng khối toàn màn hình ở mọi cửa sổ thấp
    hơn 800px và kéo đáp án từ 27px xuống đúng 16px — chính là số đo mà giáo
    viên phàn nàn. */
-@media (max-height: 800px) {
-  html[data-fullscreen="1"] .modal[data-player-theme] .answer-option {
-    font-size: clamp(20px, 2.5vh + 0.6vw, 30px);
-  }
-  html[data-fullscreen="1"] .modal[data-player-theme] .stage-center { gap: clamp(8px, 1.4vh, 16px); }
-}
+/* Bản `@media (max-height:800px)` thứ hai từng đứng ở đây (988/991) đã gộp vào
+   khối "Lưới đáp án + ô đáp án ở toàn màn hình" phía trên (DECISIONS #88). */
 
 /* ============================================================
    Mật độ chỗ trình chiếu ở chế độ Toàn màn hình.
@@ -1096,14 +1125,10 @@ html[data-fullscreen="1"] .modal[data-player-theme] .leaderboard-row { font-size
    Sàn chỉ được NÂNG cỡ chữ, không được hạ: bản `font-size: clamp(16px, 2.5vh,
    24px)` ở đây từng thắng khối toàn màn hình ở mọi cửa sổ thấp hơn 800px và
    kéo đáp án từ 27px xuống đúng 16px — chính là số đo giáo viên phàn nàn.
-   Câu hỏi giữ nguyên 4.5vh + 1vw của khối trên vì nó đã co theo `vh` đúng. */
-@media (max-height: 800px) {
-  html[data-fullscreen="1"] .modal[data-player-theme] .answer-option {
-    font-size: clamp(20px, 2.9vh + 0.6vw, 30px);
-  }
-  html[data-fullscreen="1"] .modal[data-player-theme] .stage-center { gap: clamp(8px, 1.6vh, 18px); }
-}
+   Câu hỏi giữ nguyên 4.5vh + 1vw của khối trên vì nó đã co theo `vh` đúng.
 
+   Bản `@media` thứ ba từng ở đây (1110-1115) đã gộp vào khối "Lưới đáp án + ô
+   đáp án ở toàn màn hình" (DECISIONS #88). */
 /* ============================================================
    Play surface — game screen shown when a teacher plays a game.
    Goals: use the whole window (not a narrow column), keep text
@@ -1261,7 +1286,20 @@ html[data-fullscreen="1"] .modal[data-player-theme] .stage-center {
    `.stage-bottom` vẫn tới được. Chỉ áp cho kho báu: quiz/race/scenario cần
    `flex-shrink: 1` để lưới đáp án nhận phần dư (DECISIONS #85 mục 1).
    BẪY: đừng đặt kèm `height: 100%` — đó chính là điều làm kho báu tệ hơn
-   (60 → 140px) trước đây; ở đây chỉ bỏ khả năng CO, không khoá chiều cao. */
+   (60 → 140px) trước đây; ở đây chỉ bỏ khả năng CO, không khoá chiều cao.
+
+   BẪY ĐÃ GẶP (DECISIONS #88): KHÔNG dùng
+   `.game-stage[data-game="treasure"] .stage-center` cho rule này. Tailwind v4
+   coi chuỗi attribute-value trong selector như một candidate cần có mặt trong
+   markup; `data-game="treasure"` là giá trị ĐỘNG (`${stageGame}` trong
+   gameplay.ts), không xuất hiện nguyên văn trong file nguồn, nên Tailwind LOẠI
+   BỎ cả rule. Đo được: nguồn có 2 rule `data-game`, output build chỉ còn 1
+   (`:not([data-game=treasure])`, sống sót vì nó khớp mọi phần tử). Hệ quả:
+   treasure mất `flex-shrink: 0`, tràn 88px @1920x1080 và 362-373px @1366x768 —
+   `ui-play-surface-check` 152/156. Nếu buộc phải selector theo attribute thì
+   phải thêm giá trị đó vào `@source inline(...)`; ở đây đơn giản hơn là trả lại
+   `:has()`, đã được chứng minh khớp và không phụ thuộc Tailwind có nhìn thấy
+   giá trị động hay không. */
 html[data-fullscreen="1"] .modal[data-player-theme] .stage-center:has(> .stage-col.is-main > #treasureMission) {
   flex-shrink: 0;
 }
@@ -1345,33 +1383,26 @@ html[data-fullscreen="1"] .modal[data-player-theme] .stage-center > .answer-grid
   gap: clamp(10px, 1.1vw, 16px);
   width: 100%;
   /* Trần này chỉ để giữ độ dài dòng ở bố cục cửa sổ thường (thẻ chơi rộng tối
-     đa 1180px). Ở toàn màn hình nó từng thắng khối `html[data-fullscreen]`
-     khai báo trước và kéo lưới xuống 1040px/81% cửa sổ — nên khối toàn màn
-     hình phải khai lại max-width NGAY SAU quy tắc này (bên dưới), không phải
-     trước nó. */
+     đa 1180px). */
   max-width: 1040px;
   margin: 0 auto;
 }
-/* Bản toàn màn hình khai lại ngay sau quy tắc thường ở trên: cùng độ ưu tiên
-   nên quy tắc khai báo sau thắng, và khối "Mật độ chỗ trình chiếu" ở đầu tệp
-   không áp dụng được vì đứng trước. Đáp án là hai cột nên không cần trần theo
-   `ch`: mỗi đáp án vẫn chỉ ~45 ký tự. */
-html[data-fullscreen="1"] .modal[data-player-theme] .answer-grid {
-  width: 100%;
-  max-width: 100%;
-  margin: 0 auto;
-  gap: clamp(10px, 1.6vh, 20px);
-}
-/* Số đo trên app thật (1280x721): cỡ cũ ra 16px vì `vh` thấp và sàn `vh`
-   thấp theo. Cộng một phần `vw` để cỡ chữ bám bề rộng thật: 2.9vh + 0.5vw =
-   27px ở 1280x721, 30px (trần) từ 1024px bề rộng trở lên. */
-html[data-fullscreen="1"] .modal[data-player-theme] .answer-option {
-  min-height: clamp(72px, 12vh, 132px);
-  padding: clamp(12px, 1.8vh, 22px) clamp(14px, 1.4vw, 22px);
-  font-size: clamp(20px, 2.9vh + 0.5vw, 30px);
-  line-height: 1.35;
-  border-radius: 16px;
-}
+/* NGOẠI LỆ toàn màn hình cho trần 1040px ở trên. Quy tắc thường này có độ ưu
+   tiên (0,2,0) và đứng sau khối "Lưới đáp án + ô đáp án ở toàn màn hình" ở đầu
+   tệp, nên riêng `max-width` phải được khai lại ở đây — nếu không lưới bị kẹp
+   1040px/81% cửa sổ ở 1280px, đúng lỗi "hai phép đo 1280px" mà
+   `ui-fullscreen-density-check` báo (956/1280 < 86%).
+   ĐÂY LÀ CHỖ DUY NHẤT còn khai `max-width` cho lưới ở toàn màn hình: mọi thuộc
+   tính khác của lưới nằm ở khối đầu tệp, chỉ riêng trần này phải đứng sau trần
+   thường mới thắng được (DECISIONS #88 — ngoại lệ có lý do, không phải bản đè
+   tích luỹ). */
+html[data-fullscreen="1"] .modal[data-player-theme] .answer-grid { max-width: 100%; }
+/* Bản toàn màn hình của lưới đáp án (1365-1370) và của ô đáp án (1374-1380,
+   1403-1405) từng đứng ở đây để đè quy tắc thường phía trên. Chúng đã được gộp
+   về khối "Lưới đáp án + ô đáp án ở toàn màn hình" ở đầu tệp (DECISIONS #88):
+   cùng một selector chỉ nên có một nơi định nghĩa, nếu không thì thứ tự khai
+   báo trong tệp trở thành thứ quyết định giao diện và mỗi lần chỉnh lại phải
+   thêm một bản đè nữa. */
 html[data-fullscreen="1"] .modal[data-player-theme] .answer-option .letter {
   width: clamp(34px, 6vh, 62px);
   height: clamp(34px, 6vh, 62px);
@@ -1391,12 +1422,10 @@ html[data-fullscreen="1"] .modal[data-player-theme] .answer-option .letter {
   cursor: pointer;
   transition: transform 0.12s, background 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
-/* Toàn màn hình: trần 92px của quy tắc trên chặn mất ô đáp án cao theo `vh`,
-   nên chiều cao tối thiểu được khai lại NGAY SAU quy tắc đó (16vh ≈ 115px ở
-   cửa sổ 1280x721, vẫn còn đủ chỗ cho câu hỏi 2 dòng ở trên). */
-html[data-fullscreen="1"] .modal[data-player-theme] .answer-option {
-  min-height: clamp(72px, 16vh, 150px);
-}
+/* Toàn màn hình: `min-height` cao hơn sàn 92px của quy tắc trên (16vh ≈ 115px ở
+   cửa sổ 1280x721, vẫn đủ chỗ cho câu hỏi 2 dòng) — khai MỘT LẦN ở khối đầu tệp
+   `html[data-fullscreen="1"] .modal[data-player-theme] .answer-option`
+   (DECISIONS #88); bản đè cũ ở đây đã gộp. */
 .modal[data-player-theme] .answer-option:hover:not(:disabled) {
   transform: translateY(-2px);
   border-color: #8c84ff;
@@ -1600,17 +1629,16 @@ html[data-fullscreen="1"] .modal[data-player-theme] .answer-grid.true-false-grid
 
 @media (max-height: 800px) {
   .modal[data-player-theme] .stage-question { font-size: clamp(24px, 2.7vw, 34px); margin: 8px auto 16px; }
-  .modal[data-player-theme] .answer-option { min-height: 58px; padding: 11px 14px; font-size: clamp(15px, 1.25vw, 18px); }
+  /* Cửa sổ thường (không toàn màn hình) khi thấp <800px: sàn 18px thay cho 15px
+     cũ. 15px là đúng con số giáo viên phàn nàn "chữ đáp án quá nhỏ trên máy
+     chiếu" — dù rule này chỉ dành cho chế độ cửa sổ, nó từng thắng cả khối toàn
+     màn hình vì khai báo sau (DECISIONS #88 đã tách hai trường hợp ra). */
+  .modal[data-player-theme] .answer-option { min-height: 58px; padding: 11px 14px; font-size: clamp(18px, 1.35vw, 21px); }
   .modal[data-player-theme] .answer-grid { gap: 10px; }
   .modal[data-player-theme] .feedback { margin-top: 11px; font-size: 13px; line-height: 1.55; }
   .modal[data-player-theme] .stage-progress { margin: 10px 0 14px; }
-  /* Toàn màn hình trên cửa sổ thấp: sàn chỉ được NÂNG cỡ chữ, không hạ. Sàn cũ
-     `clamp(16px, 2.5vh, 24px)` ở đây từng thắng khối toàn màn hình ở mọi cửa
-     sổ thấp hơn 800px và kéo đáp án xuống đúng 16px. */
-  html[data-fullscreen="1"] .modal[data-player-theme] .answer-option {
-    font-size: clamp(20px, 2.9vh + 0.6vw, 30px);
-  }
-  html[data-fullscreen="1"] .modal[data-player-theme] .stage-center { gap: clamp(8px, 1.6vh, 18px); }
+  /* Bản `html[data-fullscreen]` thứ tư từng ở đây (1607-1610) đã gộp vào khối
+     "Lưới đáp án + ô đáp án ở toàn màn hình" ở đầu tệp (DECISIONS #88). */
 }
 
 /* ============================================================
@@ -2154,6 +2182,12 @@ html[data-fullscreen="1"] .modal[data-player-theme] .race-turn .stage-illustrati
   html[data-fullscreen="1"] .modal[data-player-theme] .stage-center > .stage-col.is-main {
     align-self: stretch;
   }
+  /* DECISIONS #88: giữ `:has()` ở đây thay vì `:not([data-game="treasure"])`.
+     Selector attribute-value trỏ tới giá trị ĐỘNG bị Tailwind v4 loại khỏi
+     output khi giá trị đó không xuất hiện nguyên văn trong markup (xem "BẪY ĐÃ
+     GẶP" ở khối `flex-shrink: 0` phía trên). Bản `:not([data-game=treasure])`
+     chỉ sống sót vì tình cờ khớp mọi phần tử — dựa vào may mắn đó là quá mong
+     manh cho một rule điều khiển chiều cao cột. */
   html[data-fullscreen="1"] .modal[data-player-theme] .stage-center > .stage-col.is-main:not(:has(> .treasure-storyline)):not(:has(> #treasureMission)) {
     height: 100%;
     max-height: 100%;
