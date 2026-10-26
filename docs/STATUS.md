@@ -1,3 +1,44 @@
+## Handoff - DaisyUI: cai dat an toan + don chien tranh do uu tien + sua check do sai (2026-10-26)
+
+**TL;DR:** daisyUI 5.7.50 da duoc cai **an toan** (prefix `d-`, theme rieng map vao 10 token cua app, chi 12 component, khong base style toan cuc) va da chung minh **khong doi mot pixel nao**: 103.272 ky tu dau cua CSS build giong het ban khong co plugin. Nhung thu that su sua loi "chat tren may chieu" la viec **don CSS**, khong phai thu vien: `.answer-option` tung duoc khai **6 lan**, `.stage-center` **8 lan**, moi ban sau chi de de ban truoc. Da don ve **mot dinh nghia moi selector**. Them vao do, 2 loi **1280px** cua `ui-fullscreen-density-check` tu truoc khong phai loi san pham ma la **check do sai tu #84** (do cot chu thay vi do ca hang 2 cot) - da sua va dua check ve **9/9**. Chi tiet: **#87** va **#88** trong `docs/DECISIONS.md`.
+
+1. **Files changed.**
+   - `package.json` / `package-lock.json` - them devDependency `daisyui@5.7.50` (plugin CSS thuan, khong nap JS nao).
+   - `src/renderer/styles/app.css` - (a) 2 khoi `@plugin "daisyui"` + `@plugin "daisyui/theme"`; (b) 6 dong `@source inline(...)`; (c) don 6 ban de `.answer-option` va 2 ban de `.answer-grid` ve mot cho; (d) nang san chu dap an o cua so thuong tu **15px len 18px** (`@media max-height:800px`); (e) moi khoi bi xoa de lai comment ghi so dong cu.
+   - `src/renderer/features/gameplay.ts` - them `data-game="quiz|scenario|matching|treasure|race|team-setup"` cho **11/11** `.game-stage`.
+   - `tests/ui/ui-fullscreen-density-check.js` - do **ca hang noi dung** (cot minh hoa + cot chu) thay vi do moi `.stage-question`, va them assertion **moi** "cot chu chiem >= 50% be rong cua so".
+   - `docs/DECISIONS.md` - them **#87**, **#88**; `docs/STATUS.md` - muc nay.
+
+2. **Behavior implemented.**
+   - **Khong doi gi** ve giao dien: chung minh bang diff CSS (103.272 ky tu dau giong het; khac biet duy nhat la 1 `@keyframes progress` thua, 53 ky tu).
+   - **Chu dap an o cua so laptop thap (1366x768 khong toan man hinh) tu 15px len 18px** - dung con so giao vien phan nan. Day la thay doi giao dien **duy nhat** va la **co chu dich**.
+   - Selector nao cung chi con **mot** dinh nghia -> sua CSS khong con phai them ban de moi lan.
+   - daisyUI component **da san sang dung that** (truoc day class `d-*` khong he duoc sinh ra: do duoc `d-card` radius `0px`).
+
+3. **Commands run.**
+   - `npm i -D daisyui@5.7.50` -> exit 0. `npm audit` xac nhan cac lo hong deu thuoc `electron` / `electron-builder` / `tar` (**co tu truoc**), khong co muc nao cua daisyui.
+   - `npm run build:css` -> **exit 0** sau moi buoc.
+   - `npm run check` -> **exit 0**. `npm test` -> **exit 0** (`34 scripts, 502 declared functions, 4221 call sites - no undefined globals`).
+   - App that, 1 port, chay **tuan tu** (moi lan chay lai app tu dau): `ui-play-surface-check` **156/156**, `ui-stage-illustration-check` **94/94**, `ui-race-treasure-check` **19/19**, `ui-fullscreen-density-check` **9/9** (truoc la 7/9).
+   - Kiem nguoc cho assertion moi (do trong DOM that): bop `.stage-center` + `.answer-grid` ve `1040px` -> hang noi dung tut **1189 -> 1040px** so voi nguong 1101px, tuc assertion **do dung loi no cam ket bat**; guard cot chu van xanh (807px > 640px).
+
+4. **Ba loi toi tu gay ra va da sua (ghi lai vi chung la bai hoc).**
+   - Gop ban de nhung lay gia tri cua ban **dau tien** thay vi ban **dang thang** -> treasure tran 88px / 362-373px, `ui-play-surface-check` **152/156**.
+   - Lay `padding` tu ban 939 thay vi ban 1368 -> o dap an cao them 10px, `.stage-bottom` bi day **14px** ra ngoai, `ui-stage-illustration-check` **93/94**.
+   - Doi `:has(...)` sang `[data-game="treasure"]` -> **Tailwind v4 xoa han rule** vi gia tri thuoc tinh la **dong**, khong xuat hien nguyen van trong file nao. Da tra ve `:has()`.
+
+5. **Unverified.**
+   - Chua chay tren may chieu that (toan bo do qua `Emulation.setDeviceMetricsOverride`).
+   - **Chua co man nao dung daisyUI that** - component da duoc sinh CSS va tinh dung style, nhung chua dua vao markup, nen "nhin co dep khong" **chua tra loi duoc**. E6 chi lam phan ha tang.
+   - `ui-race-treasure-check` ra **16/19** khi cua so OS la **1920x1080** thay vi may chieu 1366x768 (track 40 o vua 121px nen khong "engage the cap"; treasure khong con gi de cuon). Da A/B bang `git stash`: **giong het tren HEAD chua sua**, nen day la **fixture phu thuoc cua so OS**, khong phai hoi quy. Cach sua dung: cho check do tu goi `Emulation.setDeviceMetricsOverride` nhu 3 check kia.
+
+6. **Next recommended task.**
+   - **E6 that su:** ap `d-card` / `d-badge` / `d-progress` / `d-steps` vao **mot** man (de xuat: the chang cua `treasure-hunt`) roi chup anh o 1366x768 va 1920x1080, doi chieu voi `ui-play-surface-check` + `ui-race-treasure-check`. Chi mo rong sang 4 man con lai khi man dau tien da xanh va da duoc nhin bang mat.
+   - Cho `ui-race-treasure-check` tu dat viewport -> het phu thuoc kich thuoc cua so OS.
+
+---
+
+
 ## Handoff - Pha B (tiep): kho bau la man CUON theo hop dong, race da do lai (2026-10-25)
 
 **TL;DR:** Da retract con so **"treasure 0/0"** cua #85 - no sai. Do lai bang fixture that cua check: tran **~237-355px** o 1366x768 va **~56px** o 1920x1080, va **khong the** dua ve 0 ma khong xoa chu cua giao vien. Nhung ben duoi co **1 loi that** da sua: `.stage-center` bi bop con **415px** trong khi cot con can **656px**, nen phan tran **241px** nam NGOAI vung cuon -> khong bao gio cuon toi duoc, va nhan tren ban do bi cat. `race` cung da do lai: **tran 0px** o ca 2 do phan giai. Chi tiet: **#86** trong `docs/DECISIONS.md`.
