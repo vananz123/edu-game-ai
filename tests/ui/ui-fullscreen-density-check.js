@@ -134,7 +134,7 @@ const CLOSE = `
     `grid ${Math.round(m.gridWidth)}px, ${m.gridColumns} cols`,
     `row ${m.rowWidth}px over ${m.columnCount} column(s)`,
     `stage ${Math.round(m.stage.w)}x${Math.round(m.stage.h)}`,
-    `empty ${(m.emptyRatio * 100).toFixed(1)}% of the stage`,
+    `empty ${(m.emptyRatio * 100).toFixed(1)}% of the stage (diagnostic only, see #89)`,
     `bottom gap ${m.contentBottomGap}px (${m.gapUnderAnswers}px right under the answers)`,
     `body ${m.bodyScrolls ? 'SCROLLS' : 'no scroll'}, doc ${m.docHeight}/${vp.h}`
   ].join('\n') + '\n');
@@ -160,8 +160,25 @@ const CLOSE = `
     m.gridWidth >= vp.w * 0.5, `${Math.round(m.gridWidth)}px / ${vp.w}px`);
   // Chỗ trống theo chiều cao: vùng câu hỏi + đáp án phải phủ phần lớn stage, và
   // không còn dải trống lớn ngay dưới đáp án.
-  check('câu hỏi + đáp án phủ >= 62% diện tích stage',
-    m.emptyRatio <= 0.38, `empty ${(m.emptyRatio * 100).toFixed(1)}%`);
+  //
+  // ĐÃ GỠ Ở #89 — đọc kỹ trước khi định thêm lại. Assertion này đo hình chữ
+  // nhật "câu hỏi..lưới đáp án" bằng `offsetWidth/offsetHeight`, tức là nó
+  // KHÔNG thấy khối ảnh. Từ #84 màn hình 1280x720 rơi về 1 CỘT và ảnh nằm
+  // CHỒNG trên câu hỏi, nên hình chữ nhật bị đo thiếu hẳn bề rộng thật của hàng
+  // và luôn báo ~48% "trống" dù mắt không thấy khoảng trống nào.
+  //
+  // Đã thử hai cách sửa và CẢ HAI đều làm con số này mất ý nghĩa (kiểm chứng
+  // bằng negative control: thu ảnh về 200px, co câu hỏi, kéo dài cột chữ — số
+  // không đổi, tức phép đo mù với đúng thứ nó định bảo vệ):
+  //   - đo từ đỉnh phần tử đầu tiên của khối: vẫn ra đúng 19.5% ở mọi biến thể
+  //     vì `getBoundingClientRect()` của khối và `offsetTop` của stage trộn
+  //     hai hệ toạ độ khác nhau (stage có `position: sticky` bên trong);
+  //   - bỏ hẳn ảnh ra khỏi phép đo: sai chủ đích — ảnh là nội dung giáo viên
+  //     trả tiền để thấy trên máy chiếu.
+  // Hai assertion dưới đây phủ đúng điều người dùng quan tâm mà không cần con
+  // số này: "đáp án không còn dải trống phía dưới" (đo trực tiếp khoảng cách
+  // thật) và "không có thanh cuộn trang". Việc đo đúng toàn bộ khối nội dung
+  // của bố cục 2 cột được tách thành việc riêng, xem docs/STATUS.md.
   check('đáp án không còn dải trống > 90px phía dưới',
     m.contentBottomGap <= 90, `${m.contentBottomGap}px below the answers`);
   check('đáp án vẫn 2 cột', m.gridColumns === 2, `${m.gridColumns} cols`);
