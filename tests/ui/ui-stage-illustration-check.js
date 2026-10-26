@@ -180,7 +180,11 @@ const probe = (game, opener) => `
         auto.isSiblingOfQuestion === true, String(auto.isSiblingOfQuestion));
     }
     check(`${tpl.key}: the illustration has a real size (not a collapsed box)`,
-      Boolean(auto.size && auto.size.w > 0 && auto.size.h > 0 && auto.size.h <= 220),
+      // Was `h <= 220` while the scene was capped at 320px wide. DECISIONS #89
+      // raised the ceiling to 420px so the picture fills the projector column
+      // (420 / 1.6 = 262px). The assertion still catches a collapsed box, and
+      // the projector runs below are what prove it does not push content off.
+      Boolean(auto.size && auto.size.w > 0 && auto.size.h > 0 && auto.size.h <= 300),
       auto.size ? `${auto.size.w}x${auto.size.h}` : 'no size');
     check(`${tpl.key}: the icon really renders (generated icon data)`,
       auto.iconClass.includes('lucide-paw-print'), auto.iconClass || 'no icon');
@@ -223,6 +227,45 @@ const probe = (game, opener) => `
       const opened = await run(tpl.build('auto', ANIMAL_ITEM), tpl.opener);
       if (!opened || (!opened.questionPresent && !opened.drawn)) continue;
       await measureAt(ctx, size, `illustration-${tpl.key}-${tag}`, {
+        check, fontFloor: 8, innerScrollAreas: 0
+      });
+    }
+  }
+
+  // ---- DECISIONS #89: data with NO artwork must still show a picture --------
+  // The default scene is a real illustration from the fixed set (it draws
+  // `book-open` in the `language` palette), never a generated or remote image.
+  // The empty item is deliberately the LAST-resort case: no pick, no category,
+  // no icon - which is what a hand-typed or neutral-CSV game produces.
+  const NO_ART = { contentCategory: 'general', iconName: '', illustrationAssetId: '' };
+  for (const tpl of TEMPLATES) {
+    const bare = await run(tpl.build('auto', NO_ART), tpl.opener);
+    if (!bare || (!bare.questionPresent && !bare.drawn)) continue;
+    check(`${tpl.key}: an item with no artwork gets the default illustration`,
+      bare.drawn === true && bare.assetId === 'language-scene',
+      bare.drawn ? bare.assetId : 'nothing drawn (empty column)');
+    check(`${tpl.key}: the default illustration renders the fallback icon`,
+      bare.iconClass.includes('lucide-book-open'), bare.iconClass || 'no icon');
+    check(`${tpl.key}: the default is still a real scene, not a collapsed box`,
+      Boolean(bare.size && bare.size.w > 0 && bare.size.h > 0), bare.size ? `${bare.size.w}x${bare.size.h}` : 'no size');
+    // ...but `off` and `manual` must NOT get it: the teacher's switch wins.
+    const bareOff = await run(tpl.build('off', NO_ART), tpl.opener);
+    check(`${tpl.key}: off draws nothing even when the data has no artwork`,
+      bareOff.drawn === false, bareOff.drawn ? `still drew ${bareOff.assetId}` : 'none');
+    const bareManual = await run(tpl.build('manual', NO_ART), tpl.opener);
+    check(`${tpl.key}: manual does not invent the default illustration`,
+      bareManual.drawn === false, bareManual.drawn ? `invented ${bareManual.assetId}` : 'none');
+  }
+
+  // The default must also survive a real projector: it is 23% taller than the
+  // 320px-cap scene it replaces, so it is measured rather than assumed.
+  for (const size of PROJECTOR_SIZES) {
+    const tag = size.label;
+    for (const tpl of TEMPLATES) {
+      await setViewportAndWait(ctx, size);
+      const opened = await run(tpl.build('auto', NO_ART), tpl.opener);
+      if (!opened || (!opened.questionPresent && !opened.drawn)) continue;
+      await measureAt(ctx, size, `illustration-${tpl.key}-default-${tag}`, {
         check, fontFloor: 8, innerScrollAreas: 0
       });
     }

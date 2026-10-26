@@ -16,6 +16,9 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
+  DEFAULT_ILLUSTRATION_ASSET_ID,
+  DEFAULT_ILLUSTRATION_CATEGORY,
+  DEFAULT_ILLUSTRATION_ICON,
   ILLUSTRATION_ASSET_IDS,
   getIllustrationPalette,
   isIllustrationAssetId,
@@ -78,9 +81,32 @@ test('auto falls back to the category illustration', () => {
   assert.equal(resolved!.explicit, false);
 });
 
-test('auto draws nothing for general, which has no icon by design', () => {
-  assert.equal(resolveIllustration({ mode: 'auto' }), null);
-  assert.equal(resolveIllustration({ contentCategory: 'general' }), null);
+test('auto draws the default scene for an item that carries no artwork at all', () => {
+  // #89: this used to resolve to null, which left an EMPTY column on the play
+  // surface. A blank half of a projected screen is a defect, so `auto` now
+  // draws a real scene from the same fixed set.
+  const resolved = resolveIllustration({ mode: 'auto' });
+  assert.ok(resolved, 'an item with no artwork must still get a picture in auto');
+  assert.equal(resolved!.assetId, DEFAULT_ILLUSTRATION_ASSET_ID);
+  assert.equal(resolved!.category, DEFAULT_ILLUSTRATION_CATEGORY);
+  assert.equal(resolved!.iconName, DEFAULT_ILLUSTRATION_ICON);
+  assert.equal(resolved!.isDefault, true, 'callers must be able to tell it is the default');
+  assert.equal(resolved!.explicit, false, 'the default is never the teacher\'s pick');
+
+  // `general` and "no fields at all" are the same case: the default.
+  const general = resolveIllustration({ contentCategory: 'general', mode: 'auto' });
+  assert.equal(general!.assetId, DEFAULT_ILLUSTRATION_ASSET_ID);
+  assert.equal(general!.isDefault, true);
+});
+
+test('the default illustration is a registered, renderable scene', () => {
+  // It must not be a special case in the renderer: same id shape, same palette,
+  // same scene composer as every other illustration.
+  assert.ok(ILLUSTRATION_ASSET_IDS.includes(DEFAULT_ILLUSTRATION_ASSET_ID));
+  assert.equal(DEFAULT_ILLUSTRATION_ASSET_ID, `${DEFAULT_ILLUSTRATION_CATEGORY}-scene`);
+  assert.notEqual(DEFAULT_ILLUSTRATION_CATEGORY, 'general', 'general has no palette to draw with');
+  assert.ok(getCategoryIcon(DEFAULT_ILLUSTRATION_CATEGORY), 'the fallback category must have a palette icon');
+  assert.doesNotMatch(renderIllustrationSvg(resolveIllustration({ mode: 'auto' })), /<img|href="http/);
 });
 
 test('an unknown mode behaves as auto, so old games render unchanged', () => {
@@ -149,6 +175,20 @@ const RENDERER_SOURCE = readFileSync(
   require('node:path').join(__dirname, '..', '..', '..', 'src', 'renderer', 'features', 'game-illustration.ts'),
   'utf8'
 );
+
+test('the renderer default illustration matches the shared registry', () => {
+  // #89: the renderer cannot import the registry, so it carries its own copy of
+  // the fallback. If they disagree, the shared contract and the play surface
+  // draw different pictures for the same "no artwork" item - exactly the drift
+  // class that #67 had to fix with a data generator. A regex is enough here
+  // because the values are two string literals.
+  const category = /const STAGE_ILLUSTRATION_FALLBACK_CATEGORY = '([a-z-]+)';/.exec(RENDERER_SOURCE);
+  const icon = /const STAGE_ILLUSTRATION_FALLBACK_ICON = '([a-z-]+)';/.exec(RENDERER_SOURCE);
+  assert.ok(category, 'the renderer fallback category is missing');
+  assert.ok(icon, 'the renderer fallback icon is missing');
+  assert.equal(category![1], DEFAULT_ILLUSTRATION_CATEGORY);
+  assert.equal(icon![1], DEFAULT_ILLUSTRATION_ICON);
+});
 
 /** Extracts the object literal of a `const NAME = { ... };` from renderer source. */
 function constBody(constName: string): string {

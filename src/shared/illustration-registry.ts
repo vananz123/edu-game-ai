@@ -45,6 +45,28 @@ const DEFAULT_PALETTE: IllustrationPalette = Object.freeze({
 });
 
 /**
+ * The illustration drawn when the data carries no artwork at all
+ * (docs/DECISIONS.md #89).
+ *
+ * Before #89 an item with no `illustrationAssetId`, no `contentCategory` and no
+ * `iconName` resolved to `null`, so the play surface rendered an EMPTY
+ * `.stage-col`: a 300px-wide hole beside every question of a game whose content
+ * the teacher typed by hand or imported from a neutral CSV. The play surface is
+ * projected, so a blank half of the screen is a defect, not a neutral default.
+ *
+ * The fallback is a REAL scene from the same fixed set - not a generated image,
+ * not a remote asset - and it deliberately does NOT reuse a topic: `general` has
+ * no palette, so it borrows `language`'s (reading/knowledge) and draws the
+ * `book-open` icon. `assetId` is `<category>-scene`, so it is interchangeable
+ * with any other registered illustration and needs no special-case rendering.
+ */
+export const DEFAULT_ILLUSTRATION_CATEGORY = 'language';
+export const DEFAULT_ILLUSTRATION_ICON = 'book-open';
+
+export const DEFAULT_ILLUSTRATION_ASSET_ID = `${DEFAULT_ILLUSTRATION_CATEGORY}-scene`;
+
+
+/**
  * Category -> palette. Low saturation so a projected slide still reads as
  * text-first. Categories absent here use `DEFAULT_PALETTE`; that is
  * intentional, not an oversight.
@@ -117,28 +139,43 @@ export interface ResolvedIllustration {
   label: string;
   /** True when the teacher chose it, false when derived from the category. */
   explicit: boolean;
+  /**
+   * True when neither a pick nor a category produced this: the item carried no
+   * artwork information at all and `DEFAULT_ILLUSTRATION_*` was drawn instead
+   * (#89). Callers may show it differently; rendering is identical.
+   */
+  isDefault?: boolean;
 }
 
-function resolvedFor(category: string, fallbackIcon: string, explicit: boolean): ResolvedIllustration {
+function resolvedFor(
+  category: string,
+  fallbackIcon: string,
+  explicit: boolean,
+  isDefault = false,
+  iconName?: string
+): ResolvedIllustration {
   return {
     assetId: `${category}-scene`,
     category,
-    iconName: getCategoryIcon(category) || fallbackIcon,
+    iconName: iconName || getCategoryIcon(category) || fallbackIcon,
     palette: getIllustrationPalette(category),
     label: getCategoryLabel(category),
     explicit,
+    isDefault,
   };
 }
 
 /**
  * Decides whether and what to draw for one item. Never throws.
  *
- * - `off`    -> null, always. Nothing is computed.
+ * - `off`    -> null, always. Nothing is computed. This is the ONLY way to get
+ *               no picture on the play surface now that #89 added a default.
  * - `manual` -> only an illustration the teacher explicitly picked. Missing
  *               means null: the mode promises "don't invent artwork", so
  *               falling back to the category would break that promise.
  * - `auto`   -> the explicit pick when known, otherwise the category default.
- *               `general` has no icon by design, so it resolves to null.
+ *               Items with NOTHING to go on (`general` and no icon) get the
+ *               default illustration instead of an empty column (#89).
  * - unknown mode -> treated as `auto` (matches `normalizeIllustrationMode`).
  */
 export function resolveIllustration(request: IllustrationRequest | null | undefined): ResolvedIllustration | null {
@@ -154,9 +191,14 @@ export function resolveIllustration(request: IllustrationRequest | null | undefi
   // `manual` never invents artwork, so an explicit pick is the only path above.
   if (mode === 'manual') return null;
 
-  // auto: fall back to the item/category icon. No icon -> nothing to draw.
-  if (!assets.iconName) return null;
-  return resolvedFor(assets.contentCategory, assets.iconName, false);
+  // auto: the category's own icon / illustration.
+  if (assets.iconName) return resolvedFor(assets.contentCategory, assets.iconName, false);
+
+  // auto with nothing at all -> the default scene, never a blank column (#89).
+  // The icon is passed explicitly: `resolvedFor` normally prefers the category's
+  // own icon, which here would draw `languages` and silently ignore the
+  // fallback icon this file declares.
+  return resolvedFor(DEFAULT_ILLUSTRATION_CATEGORY, DEFAULT_ILLUSTRATION_ICON, false, true, DEFAULT_ILLUSTRATION_ICON);
 }
 
 export interface IllustrationSvgOptions {

@@ -42,6 +42,13 @@ const STAGE_ILLUSTRATION_PALETTES = {
   'water-world': { glow: '#2f97c9', fill: '#0f2230', ink: '#d6eef9', sky: '#123043', ground: '#081722' }
 };
 const STAGE_ILLUSTRATION_DEFAULT_PALETTE = { glow: '#5b6cff', fill: '#1b2140', ink: '#dfe4ff' };
+/* Must match DEFAULT_ILLUSTRATION_* in src/shared/illustration-registry.ts
+   (docs/DECISIONS.md #89): the scene drawn when the item carries no artwork at
+   all. `language` is a real palette, so the default is an ordinary scene and
+   needs no special-case rendering. */
+const STAGE_ILLUSTRATION_FALLBACK_CATEGORY = 'language';
+const STAGE_ILLUSTRATION_FALLBACK_ICON = 'book-open';
+
 const STAGE_ILLUSTRATION_CATEGORY_ICONS = {
   animals: 'paw-print', plants: 'leaf', space: 'rocket', 'human-body': 'heart-pulse',
   transport: 'car', safety: 'shield-check', environment: 'recycle', history: 'landmark',
@@ -335,10 +342,20 @@ function resolveStageIllustration(item, game) {
   // `manual` never invents artwork: only a picked illustration is allowed.
   if (mode === 'manual') return null;
   const iconName = stageIllustrationIcon(source);
-  if (!iconName) return null;
-  const own = typeof source.contentCategory === 'string' ? source.contentCategory.trim() : '';
-  if (!Object.prototype.hasOwnProperty.call(STAGE_ILLUSTRATION_CATEGORY_ICONS, own)) return null;
-  return { assetId: own + '-scene', category: own, iconName: iconName, explicit: false };
+  if (iconName) {
+    const own = typeof source.contentCategory === 'string' ? source.contentCategory.trim() : '';
+    if (Object.prototype.hasOwnProperty.call(STAGE_ILLUSTRATION_CATEGORY_ICONS, own)) {
+      return { assetId: own + '-scene', category: own, iconName: iconName, explicit: false };
+    }
+  }
+  /* Nothing to go on -> the default scene instead of an empty column (#89).
+     Mirrors the last line of resolveIllustration() in the shared registry. */
+  return {
+    assetId: STAGE_ILLUSTRATION_FALLBACK_CATEGORY + '-scene',
+    category: STAGE_ILLUSTRATION_FALLBACK_CATEGORY,
+    iconName: STAGE_ILLUSTRATION_FALLBACK_ICON,
+    explicit: false
+  };
 }
 
 /**
