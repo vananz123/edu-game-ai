@@ -211,7 +211,7 @@ function renderPresentation(state) {
       * { box-sizing: border-box; }
       html, body { margin: 0; min-height: 100%; background: #0b1120; }
       .presentation-root {
-        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        font-family: 'Segoe UI', 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif;
         /* Sàn kế thừa: mọi phần tử chưa khai báo cỡ chữ nhận 20px, không phải
            14px của body app.css (đo được 18.4px ở .explanation trước khi có
            dòng này). */

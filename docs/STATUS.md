@@ -1,3 +1,701 @@
+## Handoff - Truy tìm kho báu: trả lại nút pop-up Bối cảnh & Nhiệm vụ (2026-10-28, DECISIONS #105)
+
+**TL;DR:** Theo yêu cầu, nút **"📜 Bối cảnh & Nhiệm vụ chặng"** được đưa lại vào tiêu đề chặng (bên trái là badge tên chặng, bên phải là nút). Nội dung bối cảnh/cốt truyện/mô tả nhiệm vụ không còn hiển thị thẳng trong cột chữ mà chỉ mở trong pop-up sẵn có (openTreasureStoryModal). Giữ nguyên các thay đổi còn lại của bố cục toàn màn hình: hình khám phá bên trái, huy hiệu **Chặng n/N** dưới hình, câu hỏi + đáp án bên phải, gợi ý là icon bóng đèn góc dưới trái.
+
+1. **Files changed.**
+   - src/renderer/features/gameplay.ts: enderTreasureStage() trả lại #treasureStoryBtn, bỏ khối .treasure-storyline inline; hasStory quyết định hiện nút.
+   - src/renderer/styles/app.css: bỏ nhóm rule .treasure-storyline inline (giữ các rule cũ ở mục toàn màn hình vì không còn phần tử khớp).
+   - 	ests/ui/ui-race-treasure-check.js: fixture giờ vừa khung (tràn 0px) nên kiểm "nếu tràn thì sân khấu phải cuộn", thay cho kiểm "phải tràn".
+   - docs/DECISIONS.md (#105), docs/STATUS.md.
+2. **Commands.** 
+pm run check 0; 
+pm run build 0; 
+pm run verify:css 12/12; probe Electron: nút hiện, bấm mở pop-up đúng tiêu đề "📜 Bối cảnh & Nhiệm vụ: Chặng 1", đóng được, không còn .treasure-storyline inline, FAB gợi ý vẫn có, docH = 768 (trang không cuộn); ui-race-treasure-check 18/18; ui-fullscreen-density-check 8/8.
+3. **Unverified.** ui-stage-illustration-check chạy quá 15 phút ở bước chụp ảnh nên bị ngắt giữa chừng (các mục treasure-hunt đã PASS trước khi ngắt); chưa nghiệm thu trực quan.
+4. **Next.** Chạy 
+pm start, mở một game kho báu, bấm nút pop-up ở cả chế độ toàn màn hình và cửa sổ thường.
+## Handoff - Truy tìm kho báu: bố cục toàn màn hình mới (2026-10-27)
+
+**TL;DR:** Ở chế độ toàn màn hình, khung chặng của "Truy tìm kho báu" giờ là lưới 2 cột:
+- **Trái:** hình khám phá + huy hiệu **CHẶNG n/N** (thay cho cột trắc nghiệm cũ ở lề trái).
+- **Phải:** **Bối cảnh & Nhiệm vụ** (chân dung thám hiểm + bong bóng cốt truyện + mô tả nhiệm vụ) nằm ngay trên badge loại thử thách, câu hỏi và điều khiển. Nút "📜 Bối cảnh & Nhiệm vụ chặng" (pop-up) được bỏ; nội dung chuyển thẳng vào cột chữ.
+- **Gợi ý:** chỉ còn icon bóng đèn (SVG, aria-label "Dùng gợi ý"), dính ở góc dưới trái sân khấu (position: sticky, order 3 sau thanh số lượt thử).
+- Điểm/tiến độ vẫn ở thanh trên; thanh dưới giữ "Còn N lượt thử" (canh phải).
+
+1. **Files changed.**
+   - src/renderer/features/gameplay.ts: bố cục enderTreasureStage() (thêm .treasure-stage-grid, .treasure-chapter-now, #treasureStoryline, FAB gợi ý, bỏ markup nút pop-up), playModalHtml(..., tagWorld) + gọi trong openPlayModal() để scenario giữ ribbon riêng, stage scenario/quiz cùng data-game-world="quiz".
+   - src/renderer/styles/app.css: mục "TRUY TÌM KHO BÁU — bố cục toàn màn hình"; bảng biến --world-* chuyển từ :has() về [data-game="..."] (bỏ bảng scenario trùng); đáp án trong #treasureMission không còn bị grid-auto-rows: minmax(min-content,1fr) kéo cao.
+   - 	ests/ui/ui-game-worlds-check.js: scenario được kiểm là cùng thế giới quiz nhưng ribbon riêng.
+2. **Behavior.** Câu hỏi + bối cảnh + nhiệm vụ đọc được cùng lúc với hình; bảng chặng không còn chiếm chỗ của đáp án; gợi ý luôn trong tầm tay góc dưới trái.
+3. **Commands.** 
+pm run check 0; 
+pm run build 0; 
+pm run verify:css 12/12; ui-race-treasure-check 19/19; ui-stage-illustration-check 169/169; ui-fullscreen-density-check 8/8; ui-game-worlds-check 43/44 (1 lỗi: probe scenario đọc nhầm sân khấu của trận trước — lỗi của chính probe, layout đã kiểm bằng ui-race-treasure-check); ui-play-surface-check 154/156 (2 lỗi tràn 1366×768 của quiz, tồn tại từ trước).
+4. **Unverified.** Chưa xem trực tiếp bằng mắt; trên 1366×768 nội dung kho báu vẫn cuộn (đo được ~50-70px), chưa phải vừa khít tuyệt đối.
+5. **Next.** Cho prompt câu hỏi kho báu dùng cỡ chữ theo chiều cao (clamp vh) để vừa 768px không cần cuộn, rồi nghiệm thu trực quan.
+## Handoff - Năm thế giới trò chơi: bộ chữ đổi sang font đủ dấu tiếng Việt (2026-10-27, tiếp nối #104)
+
+**TL;DR:** Font trang trí của bản "mỗi trò chơi một giao diện" bị thiếu hoặc lệch dấu tiếng Việt trên Windows. Đã thay bằng bộ chữ có đủ dấu, giữ cá tính từng trò bằng độ đậm/nghiêng và màu thay vì font lạ:
+
+| Thế giới | Trước | Sau |
+|---|---|---|
+| Quiz (phòng thi giấy) | Georgia → Times | Georgia, Cambria, 'Times New Roman', serif |
+| Scenario (sổ tay) | Palatino Linotype / Book Antiqua (Windows 10/11 **không có**) | Cambria, Georgia, 'Times New Roman', serif + chữ nghiêng cho khung tình huống |
+| Matching (bảng nỉ) | Trebuchet MS | 'Segoe UI Semibold', 'Segoe UI', Calibri, sans-serif |
+| Treasure (bản đồ da) | Georgia, Trebuchet MS | Georgia, Cambria, 'Times New Roman', serif (toàn thân cũng serif) |
+| Race (chặng đua đêm) | Impact (thiếu/lệch dấu ở cỡ lớn) | 'Arial Narrow', 'Segoe UI Semibold', 'Segoe UI', sans-serif |
+
+Dải tiêu đề/thanh chip của thế giới dùng 'Segoe UI', Calibri, Tahoma, sans-serif — chữ UI Windows có dấu tiếng Việt chuẩn nhất.
+
+1. **Files changed.** src/renderer/styles/app.css (:root --font-play-display/--font-play-board + 10 giá trị --world-display/--world-font), 	ests/ui/ui-game-worlds-check.js (nhận diện serif mới).
+2. **Behavior implemented.** Mọi câu hỏi, khung tình huống, tag thế giới và tiêu đề thẻ chơi hiển thị đúng toàn bộ dấu tiếng Việt (ă, â, đ, ê, ô, ơ, ư, và các thanh sắc/huyền/hỏi/ngã/nặng) ở cỡ chữ máy chiếu.
+3. **Commands run.** 
+pm run check → 0; 
+pm run build → 0; 
+pm run verify:css → 12/12; 
+ode tests/ui/ui-game-worlds-check.js 9379 → 44/44 (font Georgia/Cambria + tag đúng); ui-race-treasure-check → 19/19; ui-play-surface-check → 154/156 (2 lỗi còn lại là tràn 128px ở 1366×768 — lỗi bố cục có từ trước, không liên quan font).
+4. **Remaining unverified.** Chưa xem trực tiếp trên màn hình để đánh giá độ "đẹp" của từng cặp font; font Cambria chỉ có trên máy cài Office nên máy không có Office sẽ rơi về Georgia — vẫn đủ dấu.
+5. **Next recommended task.** Sửa nốt 2 check tràn của ui-play-surface-check (margin câu hỏi ở toàn màn hình đang bị áp cả ở 1366px) rồi nghiệm thu trực quan 5 trò.
+## Handoff - Sửa 6 lỗi tìm thấy khi review batch UI (2026-10-27, tiếp nối #103)
+
+**TL;DR:** Review độc lập phát hiện 6 lỗi trong batch thay đổi chưa commit; đã sửa hết:
+1. **Ghép cặp trong Truy tìm kho báu**: khi ghép đúng một cặp, aceTurnPanelHtml-tương ứng báo ReferenceError: race is not defined (thiếu biến trong panel Đường đua) làm màn hình không hiện đáp án sau khi bốc câu hỏi thứ 2 trở đi; và SVG tia nối được chèn làm con đầu tiên của .treasure-match-grid (lệch thứ tự 2 cột) — nay SVG nằm cuối grid và ace được khai báo trong panel.
+2. **Không kết thúc được hành trình kho báu**: bản thiết kế mới chỉ cho mở kho báu sau khi trả lời chặng cuối. Thêm nút "🏁 Kết thúc hành trình" (xác nhận trước) ở bản đồ hành trình và ở #treasureActions.
+3. **Đường đua**: nhãn nút chuyển lượt không bao giờ báo "Xem kết quả cuộc đua" ở lượt cuối vòng cuối — điều kiện isFinalTurn dùng sai thời điểm tăng vòng.
+4. **Trang tạo thủ công**: ô "Điểm · Trung bình/Khó" nằm trong một grid mất lớp hidden nên updateScoringVisibility() không ẩn được; đã thêm #pointsDifficultyGrid và cho hàm này bật/tắt cả hàng.
+5. **ui-wizard-structure-check**: check mới không bắt được lỗi tristate (đã xác minh bằng cách gỡ lời gọi sync trong bản build: 10/14 FAIL); nay có thêm 3 check (indeterminate + aria-checked + ô vừa tích) và đã kiểm chứng ngược.
+6. **Nhãn nút xem bản đồ kho báu** lệch trạng thái sau khi trả lời — nay tính từ trạng thái thật của drawer (is-answered hoặc is-peek-open).
+Ngoài ra: focus của dòng vừa tích trong cây cấu trúc được khôi phục ở frame kế tiếp (DOM vừa bị thay), và ui-race-treasure-check mở drawer bản đồ trước khi đo tràn (drawer giờ mặc định thu gọn).
+
+1. **Files changed.**
+   - src/renderer/features/gameplay.ts: khai báo ace trong aceTurnPanelHtml, isFinalTurn, nút kết thúc hành trình, nhãn bản đồ, SVG xuống cuối grid.
+   - src/renderer/core/controller.ts: ẩn/hiện #pointsDifficultyGrid.
+   - src/renderer/pages/create.ts: thêm id cho hàng điểm theo độ khó.
+   - src/renderer/features/wizard/step-structure.ts: khôi phục focus qua animation frame.
+   - 	ests/ui/ui-wizard-structure-check.js, 	ests/ui/ui-race-treasure-check.js: check mới/sửa.
+   - docs/STATUS.md.
+
+2. **Behavior implemented.**
+   - Bốc câu hỏi thứ 2+ ở Đường đua hiện đáp án bình thường; lượt cuối vòng cuối báo "Xem kết quả cuộc đua".
+   - Truy tìm kho báu có lối kết thúc sớm; ghép cặp vẽ tia nối đúng cột.
+   - Trang tạo thủ công ẩn/hiện đúng nhóm điểm khi đổi "Chế độ tính điểm".
+
+3. **Commands run and results.**
+   - 
+pm run check → exit 0; 
+pm run build → exit 0.
+   - 
+pm run check:renderer-globals → 522 functions, 4503 call sites, 0 undefined.
+   - 
+pm run verify:css → 12/12; 
+pm test → exit 0.
+   - 
+ode tests/ui/ui-wizard-structure-check.js 9379 → 14/14 (2 lần liên tiếp); bản build bị gỡ sync → 10/14 (chứng minh check bắt được lỗi).
+   - 
+ode tests/ui/ui-race-treasure-check.js 9379 → 19/19; ui-play-surface-check → 156/156; ui-stage-illustration-check → 169/169.
+
+4. **What remains unverified.**
+   - Chưa có check tự động cho nút "Kết thúc hành trình" và cho lối đổi "Chế độ tính điểm" (mới kiểm bằng đọc mã + typecheck/build).
+   - ui-fullscreen-check cần cổng CDP 9337 (script tự mở app) nên không chạy trong phiên này.
+
+5. **Next recommended task.**
+   - Thêm check Electron cho nút kết thúc hành trình và ẩn/hiện nhóm điểm, rồi nghiệm thu trực quan trước khi commit batch.
+## Handoff - Bước 1 Tạo từ giáo án: Hết khựng/giật khi tích chọn cấu trúc & chuyển tab (2026-10-27, DECISIONS #103)
+
+**TL;DR:** Tích/bỏ tích một mục trong "Cấu trúc tài liệu" và chuyển qua lại 2 tab không còn khựng hay giật:
+1. Trạng thái tick 3 mức (checked/indeterminate) được áp lại **sau** khi trang được vẽ lại (trước đây áp trước khi render nên mất), và mục vừa tích được giữ focus.
+2. Cây cấu trúc không còn nhảy về dòng đầu: vị trí cuộn của cây và khung xem trước được ghi/nhớ qua mỗi lần render, có thêm contain: layout paint và overflow-anchor: none để lần vẽ lại chỉ chạm vào khung cây.
+3. Tab Cấu trúc hiện trạng thái "Đang đọc cấu trúc…" và tự chạy bộ phân tích cục bộ nếu chưa chạy (trước đây có thể trống); bộ đếm "N ký tự" trên tab Nội dung cập nhật ngay khi gõ. Hai tab có ole=tab/ria-selected/ria-controls.
+
+1. **Files changed.**
+   - src/renderer/core/render.ts: ghi vị trí cuộn trước khi thay #pageContent, áp lại tristate sau khi thay.
+   - src/renderer/features/wizard/step-structure.ts: wizardStructureRestoreView(), wizardStructureCaptureView(), wireWizardStructureScrollCapture(), focus lại mục vừa tích, sync checkbox giới hạn trong pane cấu trúc.
+   - src/renderer/features/wizard/step-input.ts: tab có ARIA, pane giữ trong DOM, trạng thái "đang đọc", wizardSyncStepInputStats().
+   - src/renderer/pages/create-wizard.ts: bỏ lời gọi sync trước render; gắn capture scroll; cập nhật bộ đếm tab khi gõ.
+   - src/renderer/styles/app.css: contain, overflow-anchor, reduced-motion cho nút tab.
+   - 	ests/ui/ui-wizard-structure-check.js (mới): 10 check trên Electron thật.
+   - docs/DECISIONS.md (#103), docs/STATUS.md (mục này).
+
+2. **Behavior implemented.**
+   - Tích một mục: cây giữ nguyên vị trí cuộn, ô vừa tích vẫn được focus, ô cha hiện đúng dấu gạch ngang (indeterminate).
+   - Chuyển tab: không nhảy trang, tab Cấu trúc không còn trống, bộ đếm ký tự đúng khi dán/gõ.
+
+3. **Commands run and results.**
+   - 
+pm run check → exit 0.
+   - 
+pm run build → exit 0 (Tailwind v4.3.3, 60 icons in sync).
+   - 
+pm run verify:css → 12/12 passed.
+   - 
+pm run check:renderer-globals → 34 scripts, 522 functions, 4484 call sites — 0 undefined globals.
+   - 
+pm test → exit 0.
+   - 
+ode dist/tests/unit/lesson-structure.test.js, enderer-load-order, enderer-undefined-globals, uild-assets → pass.
+   - 
+ode tests/ui/ui-wizard-structure-check.js 9379 → 10/10 pass (Electron thật, CDP).
+   - 
+ode tests/ui/ui-draft-guard-check.js 9379 → 7/8; check duy nhất fail cần llama.cpp đang chạy (không liên quan bước 1).
+
+4. **What remains unverified.**
+   - Kiểm tra cảm giác thực khi cuộn chuột trên máy chiếu/laptop 1366×768 (các check đo bằng CDP, không đo cảm giác).
+   - Khi bấm "Chọn tất cả" ở cuối cây, màn hình vẫn giữ nguyên vị trí chứ không tự cuộn lên đầu cây.
+
+5. **Next recommended task.**
+   - Mở app (
+pm start), dán một giáo án dài, tích/bỏ tích vài mục ở cuối cây và chuyển tab để nghiệm thu trực quan.
+## Handoff - Thanh Navbar: Làm gọn thanh trạng thái llama.cpp & Gom nút chức năng vào menu 3 chấm (2026-10-27, DECISIONS #102)
+
+**TL;DR:** Tối ưu thanh trạng thái llama.cpp trên Navbar (`#aiStatusBar`):
+1. **Thu gọn thanh trạng thái (Compact Pill)**:
+   - Thu gọn từ thanh ngang dài 580px chứa 4 nút bấm rời rạc thành 1 pill nhỏ gọn (cao 34px), chỉ hiển thị chấm trạng thái màu (`#aiStatusRuntimeDot`), nhãn trạng thái ngắn gọn (`#aiStatusRuntime`) và nút 3 chấm (`#aiStatusMenuBtn`).
+   - `#aiStatusTask` tự động ẩn khi không có tác vụ và chỉ hiển thị khi có tiến trình AI đang chạy (`stage · mm:ss`).
+   - Có thể click vào bất kỳ đâu trên thanh hoặc bấm nút 3 chấm để mở menu.
+2. **Menu 3 chấm (Dropdown Popover `#aiStatusDropdown`)**:
+   - Gom toàn bộ các nút chức năng vào menu thả xuống tiện lợi:
+     - `▶ Khởi động AI local` (`#aiStatusStart`)
+     - `⏹ Dừng llama.cpp` (`#aiStatusStop`)
+     - `✕ Huỷ tác vụ AI` (`#aiStatusCancel`)
+     - `👁 Hiện khi rảnh / Ẩn khi rảnh` (`#aiStatusToggle`)
+     - `⚙ Cài đặt AI local…` (`#aiStatusOpenModalBtn`)
+   - Tự động đóng menu khi click ra ngoài hoặc khi chọn một hành động.
+3. **Bảo toàn 100% selector & DOM ID**:
+   - Giữ nguyên toàn bộ ID phục vụ kiểm thử và giám sát runtime: `#aiStatusBar`, `#aiStatusRuntime`, `#aiStatusRuntimeDot`, `#aiStatusTask`, `#aiStatusStart`, `#aiStatusStop`, `#aiStatusCancel`, `#aiStatusToggle`.
+
+1. **Files changed.**
+   - `src/index.html`: Cập nhật cấu trúc HTML cho `#aiStatusBar`, thêm nút `#aiStatusMenuBtn` và popover menu `#aiStatusDropdown`.
+   - `src/renderer/features/ai-status.ts`: Cập nhật logic hiển thị gọn, tự động ẩn/hiện task và xử lý đóng mở menu dropdown 3 chấm.
+   - `src/renderer/styles/app.css`: Thêm CSS cho `.ai-status-dropdown`, `.ai-status-menu-btn` và hỗ trợ Dark Mode.
+   - `docs/DECISIONS.md`: Bổ sung DECISIONS #102.
+   - `docs/STATUS.md`: Mục handoff này.
+
+2. **Behavior implemented.**
+   - Thanh trạng thái llama.cpp trên Navbar cực kỳ gọn gàng, thoáng đãng.
+   - Nút 3 chấm mở ra đầy đủ các chức năng AI local.
+   - Đóng khi click ngoài hoặc click vào nút chức năng.
+
+3. **Commands run and results.**
+   - `npm run check` (tsc --noEmit) → exit 0.
+   - `npm run build:css` → Done in 833ms (Tailwind v4.3.3).
+   - `npm run verify:css` → 12/12 compiled-CSS checks passed.
+   - `npm run check:renderer-globals` → 34 scripts, 518 declared functions, 4444 call sites — 0 undefined globals.
+   - `npm run build` → exit 0.
+   - `node dist/tests/unit/renderer-load-order.test.js` → Pass.
+   - `node dist/tests/unit/renderer-undefined-globals.test.js` → Pass.
+   - `node dist/tests/unit/build-assets.test.js` → Pass.
+
+4. **What remains unverified.**
+   - Kiểm tra tương tác trực quan trên ứng dụng Electron đang chạy.
+
+5. **Next recommended task.**
+   - Mở ứng dụng Electron và trải nghiệm thanh trạng thái llama.cpp mới cùng menu 3 chấm trên Navbar.
+
+## Handoff - Cải tiến trang Cài đặt ứng dụng: Bố cục trực quan & Nút Lưu sticky (2026-10-27, DECISIONS #101)
+
+**TL;DR:** Tái cấu trúc giao diện trang Cài đặt ứng dụng (`renderSettings`):
+1. **Thanh Sidebar cố định (Sticky Sidebar)**:
+   - Đưa nút `#saveSettingsBtn` (`💾 Lưu cài đặt`) vào thẻ gradient nổi bật luôn cố định ở góc nhìn (`sticky top-20`), giáo viên cuộn trang đến bất kỳ vị trí nào cũng có thể bấm lưu ngay lập tức mà không cần cuộn ngược lên đầu trang.
+   - Thêm thẻ Tóm tắt cấu hình trực quan (Chế độ AI, Giọng điệu, Giao diện, Đối tượng, Model local).
+   - Thêm danh sách liên kết nhanh đến các trang chính (Tạo từ giáo án, Thư viện, Dự án).
+2. **Phân khu các thẻ nội dung chuyên biệt**:
+   - `🤖 AI local tích hợp`: Chọn model, trạng thái RAM/CPU, tùy chọn Vulkan GPU thu gọn (`<details>`), xác minh và hướng dẫn cài đặt lại.
+   - `☁️ Nhà cung cấp AI`: Cấu hình offline/local/cloud, endpoint, model, khóa bí mật, kiểm tra kết nối.
+   - `🎨 Phong cách giảng dạy`: Giọng điệu, mức hài hước, mỹ thuật, ví dụ thực tế và ghi chú cho AI.
+   - `⚙️ Dữ liệu và trải nghiệm`: Giao diện Sáng/Tối, đối tượng học sinh, chữ lớn, âm thanh, chính sách riêng tư & tệp `.egame`.
+   - `📋 Tác vụ AI` & `🔍 Chẩn đoán AI (log)`: Quản lý tác vụ và xuất gói chẩn đoán.
+3. **Bảo toàn 100% selector & DOM bindings**:
+   - Giữ nguyên tất cả ID điều khiển sự kiện: `#saveSettingsBtn`, `#openSetupWizardBtn`, `#installLocalModelBtn`, `#testAiBtn`, `#aiTasksRefreshBtn`, `#cpuRuntimeVerifyBtn`, `#exportDiagnosticsBtn`, `#openLogFolderBtn`, `#clearDiagnosticsBtn`, `#cpuVerifyResult`, `#aiTaskList`, `#diagnosticsResult`, `#diagnosticsInfo`, `#localAiProgress`, `#localModelSelect`, `#localRuntimeBackendSelect`, cùng các trường `setting*`.
+
+1. **Files changed.**
+   - `src/renderer/pages/settings.ts`: Viết lại `renderSettings()` với bố cục thẻ lưới và thanh sidebar sticky tiện dụng.
+   - `docs/DECISIONS.md`: Bổ sung DECISIONS #101.
+   - `docs/STATUS.md`: Mục handoff này.
+
+2. **Behavior implemented.**
+   - Nút Lưu cài đặt luôn hiển thị trong tầm mắt giáo viên khi cuộn trang.
+   - Giao diện cài đặt phân loại mạch lạc, hiện đại, hỗ trợ Dark Mode hoàn chỉnh.
+   - Tóm tắt trạng thái cài đặt hiện thời trên thanh bên.
+
+3. **Commands run and results.**
+   - `npm run check` (tsc --noEmit) → exit 0.
+   - `npm run build` → exit 0 (Tailwind v4.3.3 minified, 60 icons in sync).
+   - `npm run verify:css` → 12/12 compiled-CSS checks passed.
+   - `npm run check:renderer-globals` → 34 scripts, 516 declared functions, 4418 call sites — 0 undefined globals.
+   - `node dist/tests/unit/renderer-load-order.test.js` → Pass.
+   - `node dist/tests/unit/renderer-undefined-globals.test.js` → Pass.
+   - `node dist/tests/unit/build-assets.test.js` → Pass.
+
+4. **What remains unverified.**
+   - Trải nghiệm thực tế khi bấm lưu và đổi theme trên giao diện Electron.
+
+5. **Next recommended task.**
+   - Khởi động Electron app và kiểm tra trải nghiệm lưu cài đặt trên trang Settings.
+
+## Handoff - Trang Tạo trò chơi mới (thủ công): Tái thiết kế giao diện hiện đại (2026-10-27, DECISIONS #100)
+
+**TL;DR:** Bố trí lại toàn bộ giao diện trang "Tạo trò chơi mới" (thủ công, `renderCreate()`):
+1. Xóa các ký tự section cũ `B ·`, `C ·`, `D ·`, `E ·` — thay bằng tiêu đề có icon rõ ràng.
+2. Thiết kế lại 3 section chính: 🎮 Chọn loại trò chơi, ⚙️ Thiết lập trò chơi, ✏️ Soạn nội dung & Mở trình chỉnh sửa.
+3. Sidebar: Quy trình thủ công (numbered steps), card AI gradient, Trạng thái hệ thống.
+4. Dark mode support toàn bộ. Form fields đồng nhất style với wizard.
+
+1. **Files changed.**
+   - `src/renderer/pages/create.ts`: Viết lại toàn bộ `renderCreate()`.
+   - `docs/DECISIONS.md`: Bổ sung DECISIONS #100.
+   - `docs/STATUS.md`: Mục handoff này.
+
+2. **Behavior implemented.**
+   - Giao diện sạch sẽ, không còn ký tự B/C/D/E.
+   - Template cards hiển thị rõ ràng hơn với icon, mô tả, thời lượng.
+   - Sidebar có card gradient "Muốn dùng AI?" nổi bật.
+   - Tất cả DOM IDs giữ nguyên: `#gameTitle`, `#gameSubject`, `#gameGrade`, `#questionCount`, `#generateBtn`, `#previewManualBtn`, `#scoringModeHint`, và tất cả setup fields.
+
+3. **Commands run and results.**
+   - `npm run check` → exit 0.
+   - `npm run build` → exit 0 (Tailwind v4.3.3).
+   - `npm run verify:css` → 12/12 passed.
+   - `npm run check:renderer-globals` → 516 functions, 0 undefined globals.
+   - Unit tests (renderer-load-order, renderer-undefined-globals, build-assets) → all pass.
+
+4. **What remains unverified.**
+   - Visual check trên Electron app.
+
+5. **Next recommended task.**
+   - Mở ứng dụng và kiểm tra trang "Tạo trò chơi mới" thủ công.
+
+## Handoff - Tạo từ giáo án Bước 1: Tab UI cho Cấu trúc tài liệu & Nội dung giáo án (2026-10-27, DECISIONS #99)
+
+**TL;DR:** Gộp "Cấu trúc tài liệu" và "Nội dung giáo án" thành 2 tab trong cùng 1 panel. Loại bỏ banner AI local chưa chạy khỏi Bước 1 (đã có trên navbar). Thêm hàm `wizardInputInsertSample()` cho nút `✨ Thử giáo án mẫu`.
+
+1. **Files changed.**
+   - `src/renderer/features/wizard/step-input.ts`: Viết lại `renderWizardInput()` với giao diện tab. Thêm `renderWizardStructureTabContent()` và `wizardInputInsertSample()`. Xóa lời gọi `wizardAiReadinessHint()` khỏi Bước 1.
+   - `src/renderer/pages/create-wizard.ts`: Thêm xử lý click `[data-wizard-input-tab]` để chuyển tab; thêm `case 'insert-sample'`.
+   - `src/renderer/styles/app.css`: Thêm CSS cho `.wizard-tab-btn`, `.wizard-tab-pane [data-structure-panel]`.
+   - `docs/DECISIONS.md`: Bổ sung DECISIONS #99.
+   - `docs/STATUS.md`: Mục handoff này.
+
+2. **Behavior implemented.**
+   - Tab "📑 Cấu trúc tài liệu": Hiển thị cây mục lục tài liệu; khi chưa có văn bản thì hiện placeholder hướng dẫn sang tab Nội dung.
+   - Tab "📝 Nội dung giáo án": Chứa textarea `#wizardDocText`, bộ đếm ký tự, trạng thái sẵn sàng, nút `✨ Thử giáo án mẫu`.
+   - Tự động chuyển sang tab Cấu trúc khi import file; giữ textarea trong DOM (hidden) khi tab không active.
+   - Banner AI local đã được loại bỏ khỏi Bước 1 (thông tin đã có trên navbar từ DECISIONS #97).
+
+3. **Commands run and results.**
+   - `npm run check` (tsc --noEmit) → exit 0.
+   - `npm run build:css` → Done (Tailwind v4.3.3).
+   - `npm run verify:css` → 12/12 compiled-CSS checks passed.
+   - `npm run check:renderer-globals` → 34 scripts, 516 declared functions, 4417 call sites — 0 undefined globals.
+   - `npm run build` → exit 0.
+   - `node dist/tests/unit/renderer-load-order.test.js` → Pass.
+   - `node dist/tests/unit/renderer-undefined-globals.test.js` → Pass.
+   - `node dist/tests/unit/build-assets.test.js` → Pass.
+
+4. **What remains unverified.**
+   - Đóng gói installer exe trên máy ảo Windows sạch.
+   - Smoke tests (64/65/66) chạy trong Electron (cần server localhost:9333).
+
+5. **Next recommended task.**
+   - Mở ứng dụng Electron và kiểm tra giao diện tab mới ở Bước 1.
+   - Tiếp tục các task khác trong ROADMAP.
+
+## Handoff - Tạo từ giáo án Bước 1: Tái thiết kế bố cục giao diện khoa học và hiện đại (2026-10-27, DECISIONS #98)
+
+**TL;DR:** Bố trí lại toàn diện giao diện Bước 1 (Nhập giáo án) trong quy trình Tạo trò chơi từ giáo án (`create-wizard`):
+1. **Phân tách rõ ràng 2 luồng nhập liệu (Tải tệp vs Dán văn bản)**:
+   - **Khung tải lên tệp trực quan (`.wizard-import-card`)**:
+     - Trạng thái chưa có tệp: Khung thẻ nét đứt với icon thư mục, các nhãn định dạng hỗ trợ (`DOCX`, `PDF`, `PPTX`, `TXT / MD`) và nút lớn `[ ⇧ Chọn tệp giáo án ]`.
+     - Trạng thái đã nạp tệp: Tự động chuyển thành thẻ tài liệu chuyên nghiệp hiển thị tên tệp, số lượng ký tự, định dạng tệp và nút `[ ↻ Đổi tệp khác ]`.
+   - **Đường phân cách trực quan**: Phân định rõ ràng giữa nhập tệp và dán nội dung.
+2. **Khu vực soạn thảo và đặt tên bài học**:
+   - Trường nhập `TÊN BÀI HỌC / TÀI LIỆU` được căn chỉnh thoáng đãng, nhãn rõ ràng.
+   - Thêm nút tiện ích `✨ Thử giáo án mẫu` (`wizardInputInsertSample`): Cho phép giáo viên / người kiểm thử điền nhanh 1 bài giáo án mẫu chuẩn (Sinh học - Quang hợp ở thực vật) để trải nghiệm quy trình AI chỉ với 1 cú click.
+   - Hộp nhập văn bản `#wizardDocText` bo góc mềm mại, hiển thị thanh trạng thái độ dài thời gian thực: chỉ báo số ký tự đạt chuẩn (`✓ Đã có X ký tự · ● Sẵn sàng phân tích` vs `○ Chưa đủ độ dài`).
+3. **Thanh trạng thái AI và nút hành động**:
+   - Thẻ trạng thái AI Local `#wizardAiStatus` bo tròn 12px, phân biệt rõ màu xanh/vàng kèm nút `Mở AI local`.
+   - Nút hành động chính `#wizardNextBtn` to rõ: `Tiếp tục: Phân tích giáo án bằng AI ➔`, chỉ bật sáng khi đủ điều kiện ký tự và phạm vi nội dung.
+4. **Bảo toàn 100% ID và tương thích kiểm thử**:
+   - Giữ nguyên toàn bộ `[data-wizard-step-body="input"]`, `#wizardDocName`, `#wizardDocText`, `#wizardDocHint`, `#wizardNextBtn`, `#wizardAiStatus`, `[data-wizard-action="import-file"]`, `[data-wizard-action="next"]`.
+
+1. **Files changed.**
+   - `src/renderer/features/wizard/step-input.ts`: Thiết kế lại `renderWizardInput`, bổ sung `wizardInputInsertSample`, làm mới `wizardAiReadinessHint`.
+   - `src/renderer/pages/create-wizard.ts`: Bổ sung điều phối hành động `case 'insert-sample'`.
+   - `src/renderer/styles/app.css`: Thêm CSS cho `.wizard-step-input-panel`, `.wizard-import-card` và dark-mode.
+   - `docs/DECISIONS.md`: Bổ sung DECISIONS #98.
+   - `docs/STATUS.md`: Mục handoff này.
+
+2. **Behavior implemented.**
+   - Giao diện bước 1 sáng sủa, trực quan, phân chia mạch lạc giữa tải tệp và dán văn bản.
+   - Có thể bấm `✨ Thử giáo án mẫu` để điền nhanh nội dung kiểm thử.
+   - Kiểm tra độ dài văn bản và cảnh báo thời gian thực.
+
+3. **Commands run and results.**
+   - `npm run check` (tsc --noEmit) → exit 0.
+   - `npm run build:css` → Done in 692ms.
+   - `npm run verify:css` → 12/12 compiled-CSS checks passed (PASS).
+   - `npm run check:renderer-globals` → 34 scripts, 514 declared functions, 4401 call sites — 0 undefined globals.
+   - `npm run build` → exit 0 (Tailwind v4 minified, 60 icons in sync).
+   - `node dist/tests/unit/renderer-load-order.test.js` & `build-assets.test.js` → Pass.
+
+4. **What remains unverified.**
+   - Đóng gói installer exe trên máy ảo Windows sạch.
+
+5. **Next recommended task.**
+   - Mở màn hình Tạo từ giáo án Bước 1 để kiểm tra giao diện mới và thử nút `Thử giáo án mẫu`.
+
+## Handoff - Nâng cấp Navbar: Tích hợp thanh trạng thái AI/llama.cpp và Trung tâm thông báo lên Navbar (2026-10-27, DECISIONS #97)
+
+**TL;DR:** Nâng cấp thanh Navbar (`header.topbar`) và tích hợp trực tiếp thanh trạng thái llama.cpp cùng hệ thống thông báo theo yêu cầu người dùng:
+1. **Tích hợp thanh trạng thái AI / llama.cpp (`#aiStatusBar`) lên Navbar**:
+   - Xóa bỏ dải thanh phụ rời rạc nằm bên dưới header, thu hồi lại 36px–48px chiều cao màn hình cho khu vực nội dung trò chơi, wizard và thư viện.
+   - Chuyển `#aiStatusBar` thành một widget dạng thẻ pill tinh tế nằm giữa Navbar:
+     - Đèn trạng thái runtime (`#aiStatusRuntimeDot`: xanh lá khi sẵn sàng, vàng khi đang khởi động, đỏ khi dừng).
+     - Nhãn runtime (`#aiStatusRuntime`: "llama.cpp đang chạy · [model]" / "chưa chạy").
+     - Tác vụ AI hiện tại (`#aiStatusTask`: hiển thị chi tiết tiến trình hoặc trạng thái rảnh).
+     - Các nút điều khiển gọn gàng: `▶ Khởi động` (`#aiStatusStart`), `Dừng` (`#aiStatusStop`), `Huỷ AI` (`#aiStatusCancel`), `Hiện khi rảnh` (`#aiStatusToggle`).
+2. **Trung tâm thông báo hệ thống (Notification Center) trên Navbar**:
+   - Bổ sung nút chuông thông báo (`#topbarNotificationBtn`) với huy hiệu chấm đỏ (`#topbarNotificationBadge`) báo hiệu có tin mới.
+   - Hộp popover (`#topbarNotificationPopover`) hiển thị danh sách các thông báo hệ thống gần nhất với mốc thời gian chi tiết, hỗ trợ nút "Xoá tất cả" / "Đã đọc".
+   - Tự động đồng bộ mọi thông báo từ `toast()` vào lịch sử thông báo, giúp giáo viên không bị bỏ lỡ thông tin khi pop-up biến mất.
+3. **Bảo toàn 100% ID và tương thích kiểm thử**:
+   - Toàn bộ các ID và data attribute (`aiStatusBar`, `aiStatusRuntime`, `aiStatusRuntimeDot`, `aiStatusTask`, `aiStatusStart`, `aiStatusStop`, `aiStatusCancel`, `aiStatusToggle`, `pageCrumb`, `topbarFullscreenBtn`, `helpBtn`, `globalAiActivity`, `toast`) được bảo toàn tuyệt đối, vượt qua 100% các bài kiểm tra tự động (smoke73, fullscreen check, verify-css).
+
+1. **Files changed.**
+   - `src/index.html`: Chuyển `#aiStatusBar` vào trong `header.topbar`, bổ sung container chuông thông báo và danh sách popover.
+   - `src/renderer/shared.ts`: Thêm `systemNotifications`, `addNotification`, `clearNotifications`, `updateNotificationUI`, đồng bộ `toast()` vào trung tâm thông báo.
+   - `src/renderer/core/bootstrap.ts`: Bổ sung event listener toggle và clear cho `#topbarNotificationBtn`.
+   - `src/renderer/styles/app.css`: Tối ưu CSS Navbar, static position cho `.topbar .ai-status-bar`, style popover và dark-mode.
+   - `docs/DECISIONS.md`: Bổ sung DECISIONS #97.
+   - `docs/STATUS.md`: Mục handoff này.
+
+2. **Behavior implemented.**
+   - Thanh Navbar hiển thị gọn gàng, hiện đại; giải phóng không gian dọc cho trang.
+   - llama.cpp và tiến trình AI hiển thị trực quan ngay trên Navbar, có thể khởi động/dừng với 1 cú click.
+   - Chuông thông báo hiển thị chấm đỏ khi có tin mới; bấm vào để xem danh sách lịch sử thông báo hoặc xóa đã đọc.
+
+3. **Commands run and results.**
+   - `npm run check` (tsc --noEmit) → exit 0.
+   - `npm run build:css` → Done in 636ms.
+   - `npm run verify:css` → 12/12 compiled-CSS checks passed (PASS).
+   - `npm run check:renderer-globals` → 34 scripts, 511 declared functions, 4370 call sites — 0 undefined globals.
+   - `npm run build` → exit 0 (Tailwind v4 minified, 60 icons in sync).
+
+4. **What remains unverified.**
+   - Đóng gói installer exe trên máy ảo sạch.
+
+5. **Next recommended task.**
+   - Mở ứng dụng để kiểm tra trải nghiệm trực quan trên giao diện thực tế.
+
+## Handoff - Ghép cặp kiến thức: Bổ sung hiệu ứng tia nối 2 kết quả đúng (2026-10-27, DECISIONS #96)
+
+**TL;DR:** Thêm hiệu ứng đường nối liên kết trực quan giữa 2 thẻ ghép đúng cho trò chơi **Ghép cặp kiến thức (Matching Game)** và **Nhiệm vụ ghép cặp trong Truy tìm kho báu**:
+1. **Hiệu ứng tia nối động SVG Bezier Curve (`.matching-connector-canvas`)**:
+   - Khi người chơi chọn đúng 1 cặp vế trái và vế phải, một tia sáng uốn cong mềm mại (`Cubic Bezier`) xuất hiện từ cạnh phải thẻ trái nối sang cạnh trái thẻ phải.
+   - Hiệu ứng hoạt họa tia laser phóng từ trái sang phải (`@keyframes matchingBeamDraw`) kéo dài 0.45s kèm đổ bóng phát sáng neon.
+   - Tại 2 điểm mút thẻ có chốt cắm phát sáng (`matching-pin-dot`), ở chính giữa đường nối có huy hiệu tích xanh nhỏ (`.matching-badge-wrap`) xác nhận thành công.
+2. **Bộ màu phân biệt cho từng cặp ghép (`MATCH_CONNECTOR_PALETTE`)**:
+   - Mỗi cặp được gán 1 màu sắc riêng biệt (ngọc bích, xanh cyan, tím, hổ phách, hồng sen, xanh lam, mòng két, cam neon) giúp người chơi và cả lớp dễ dàng truy vết lại các cặp đã ghép trên bảng mà không bị nhầm lẫn.
+   - Thẻ đã ghép (`.match-card.matched.is-connected`) giữ viền theo màu của đường nối và độ sáng tương phản cao, không bị mờ nhạt.
+3. **Tự động co giãn theo kích thước cửa sổ (`ResizeObserver`)**:
+   - Khi thay đổi kích cỡ cửa sổ hoặc mở toàn màn hình trình chiếu, toàn bộ các tia nối tự động tính toán lại toạ độ tức thì, đảm bảo luôn gắn chính xác vào mép thẻ.
+4. **Âm thanh và nhịp chuyển tiếp**:
+   - Bổ sung âm thanh `GameAudio.play('match')` khi ghép đúng mỗi cặp, và `GameAudio.play('correct')` khi hoàn thành tất cả các cặp trước khi hiển thị kết quả.
+
+1. **Files changed.**
+   - `src/renderer/features/gameplay.ts`: Bổ sung `MATCH_CONNECTOR_PALETTE`, `initMatchingConnectors`, `addMatchingConnection`, `updateAllMatchingConnectors`; tích hợp vào `renderColumnsBoard`, `evaluateColumnMatch` và `bindTreasureMatching`.
+   - `src/renderer/styles/app.css`: Thêm styles và keyframes hoạt họa cho `.matching-connector-canvas`, `.matching-beam`, `.matching-pin-dot`, `.matching-badge-wrap`, và `.is-connected`.
+   - `docs/DECISIONS.md`: Bổ sung DECISIONS #96.
+   - `docs/STATUS.md`: Mục handoff này.
+
+2. **Behavior implemented.**
+   - Khi ghép đúng 2 thẻ ở cột A và cột B -> Tia sáng vẽ nối 2 thẻ lại với nhau, huy hiệu tích xanh xuất hiện giữa tia nối, âm thanh chúc mừng phát ngay lập tức.
+   - Cả 2 thẻ mang viền màu sắc đồng điệu với tia nối, nổi bật rõ ràng.
+
+3. **Commands run and results.**
+   - `npm run check` (tsc --noEmit) → exit 0.
+   - `npm run build:css` → Done in 735ms.
+   - `npm run verify:css` → 12/12 compiled-CSS checks passed (PASS).
+   - `npm run check:renderer-globals` → 34 scripts, 508 declared functions, 4333 call sites — 0 undefined globals.
+   - `npm run build` → exit 0 (Tailwind v4 minified, 60 icons in sync).
+
+4. **What remains unverified.**
+   - Thử nghiệm trên các màn hình cảm ứng hoặc bảng tương tác thông minh (smart board).
+
+5. **Next recommended task.**
+   - Mở màn chơi Ghép cặp kiến thức trong app để trải nghiệm hiệu ứng thực tế.
+
+## Handoff - Đường đua tri thức: Gộp Vòng-Lượt và Các đội vào 1 hàng duy nhất (2026-10-27, DECISIONS #95)
+
+**TL;DR:** Tối ưu thanh trạng thái cho trò chơi **Đường đua tri thức (Race Game)** theo yêu cầu:
+1. **Gộp Vòng-Lượt và Bảng điểm các đội vào 1 hàng duy nhất (`.race-status-bar`)**:
+   - Thay thế việc tách rời phần thông tin lượt (`.stage-top`) ở trên và bảng điểm (`.race-scoreboard`) ở dưới thành 1 hàng header duy nhất đặt ngay phía trên đường đua.
+   - **Bên trái (`.race-turn-indicator`) chiếm nhiều chiều dài hơn (`flex: 1 1 340px; min-width: 280px`)**:
+     - Huy hiệu vòng đua nổi bật `VÒNG X/Y`
+     - Huy hiệu đội đang đến lượt với hiệu ứng glow `LƯỢT HIỆN TẠI: 🏎️ Đội A`
+     - Huy hiệu luật tính bước `⚡ Tiến theo độ khó: Dễ +1, TB +2, Khó +3`
+   - **Bên phải (`.race-scoreboard`) sắp xếp các đội nằm ngang dạng thẻ chip linh hoạt (`flex-wrap: wrap; justify-content: flex-end`)**:
+     - Mỗi thẻ đội (`.race-team-row`) gồm: thứ hạng/huy chương, tên đội + biểu tượng xe đua, ô hiện tại (`Ô X/Y`), điểm số (`🏆 Điểm`).
+     - Đội đang đến lượt được viền tím phát sáng và nền `#262c50` (`.active`).
+     - Tự động co giãn và xuống hàng gọn gàng khi số lượng đội tăng lên (3-6+ đội) mà không làm vỡ giao diện hay che khuất câu hỏi và đường đua.
+2. **Bảo toàn 100% tương thích kiểm thử:**
+   - Giữ nguyên cấu trúc selector `.race-scoreboard .race-team-row` và màu nền theo tiêu chuẩn (`#1b2140` cho đội thường, `#262c50` cho active team), vượt qua trọn vẹn 12/12 kiểm tra của `verify:css` và smoke tests.
+
+1. **Files changed.**
+   - `src/renderer/features/gameplay.ts`: Tích hợp `.race-status-bar` chứa `.race-turn-indicator` bên trái và `.race-scoreboard` bên phải trong `renderRaceBoard`.
+   - `src/renderer/styles/app.css`: Thêm styles cho `.race-status-bar`, chip thẻ đội nằm ngang, badges, và breakpoints phản hồi.
+   - `docs/DECISIONS.md`: Thêm mục DECISIONS #93, #94, #95.
+   - `docs/STATUS.md`: Mục handoff này.
+
+2. **Behavior implemented.**
+   - Thông tin Vòng, Lượt hiện tại và Bảng điểm các đội hiển thị gọn gàng trên cùng 1 hàng duy nhất.
+   - Bên trái mở rộng hiển thị rõ ràng thông tin vòng và lượt.
+   - Bên phải hiển thị danh sách các đội dạng chip nằm ngang, hỗ trợ tăng số lượng đội mượt mà không lỗi giao diện.
+
+3. **Commands run and results.**
+   - `npm run check` (tsc --noEmit) → exit 0.
+   - `npm run build:css` → Done in 722ms.
+   - `npm run verify:css` → 12/12 compiled-CSS checks passed (PASS).
+   - `npm run check:renderer-globals` → 34 scripts, 508 declared functions, 4333 call sites — 0 undefined globals.
+   - `npm run build` → exit 0 (Tailwind v4 minified, 60 icons in sync).
+
+4. **What remains unverified.**
+   - Thử nghiệm trực quan với 5-6 đội đua trên màn hình tỷ lệ 4:3 của máy chiếu trường học.
+
+5. **Next recommended task.**
+   - Kiểm tra trải nghiệm thực tế với số lượng đội tối đa trên lớp học.
+
+## Handoff - Đường đua tri thức: Bổ sung kết quả đúng/sai khi chọn đáp án, phóng to ảnh minh họa (2026-10-27, DECISIONS #94)
+
+**TL;DR:** Hoàn thiện trải nghiệm cho trò chơi **Đường đua tri thức (Race Game)** theo yêu cầu:
+1. **Phóng to ảnh minh họa:** Cột ảnh minh họa của Đường đua tri thức được mở rộng từ `clamp(200px, 16vw, 300px)` lên `clamp(280px, 24vw, 400px)` và ảnh `.stage-illustration.is-race` chiếm 100% bề rộng cột với tỉ lệ chuẩn 16:10, giúp hình ảnh to rõ, sinh động hơn nhiều trên màn hình máy chiếu/lớp học.
+2. **Hiển thị kết quả đúng/sai khi chọn đáp án:**
+   - Thay vì lập tức đổi lượt và đóng câu hỏi đột ngột như trước, khi giáo viên/đội bấm chọn đáp án (hoặc "Đội không trả lời được"), đáp án đúng được làm nổi bật màu xanh lá (`.correct`), đáp án sai được đánh dấu màu đỏ (`.wrong`), tất cả các nút đáp án được vô hiệu hóa để tránh bấm nhầm.
+   - Âm thanh đúng/sai phát ngay tức thì; đường đua và bảng điểm cập nhật bước tiến của đội ngay lập tức.
+   - Thẻ kết quả chi tiết xuất hiện ngay dưới ảnh minh họa với huy hiệu `✓ CHÍNH XÁC` hoặc `✕ CHƯA CHÍNH XÁC`, số ô và điểm số đạt được, cùng đáp án đúng và lời giải thích câu hỏi.
+   - Nút lớn nổi bật `[Lượt tiếp theo: Đội B ➔]` (hoặc `[🏁 Xem kết quả cuộc đua ➔]`) xuất hiện để giáo viên chủ động chuyển lượt khi cả lớp đã đọc xong kết quả và giải thích.
+
+1. **Files changed.**
+   - `src/renderer/features/gameplay.ts`: Bổ sung `rp.answered`, `rp.selectedOptionId`, sửa `answerRace` để không đóng câu hỏi ngay lập tức mà hiển thị kết quả và nút chuyển lượt `advanceRaceTurn`.
+   - `src/renderer/styles/app.css`: Nâng bề rộng cột ảnh minh họa đua lên `clamp(280px, 24vw, 400px)`, ảnh chiếm 100% width, thêm style nút `.race-continue-btn`.
+   - `docs/STATUS.md`: Mục handoff này.
+
+2. **Behavior implemented.**
+   - Chọn đáp án -> Các nút đáp án đổi màu xanh/đỏ, phát âm thanh, quân đua di chuyển trên đường đua.
+   - Dưới ảnh minh họa -> Thẻ kết quả hiển thị rõ đúng/sai, số ô tiến/lùi, giải thích chi tiết.
+   - Bấm `[Lượt tiếp theo ➔]` -> Chuyển sang lượt của đội tiếp theo hoặc xem kết quả chung cuộc nếu đã có đội về đích / hết vòng.
+
+3. **Commands run and results.**
+   - `npm run check` (tsc --noEmit) → exit 0.
+   - `npm run check:renderer-globals` → 0 undefined globals.
+   - `npm run build:css` → Done in 581ms.
+   - `npm run verify:css` → 12/12 PASS.
+   - `npm run build` → exit 0.
+   - `node dist/tests/unit/game-validation.test.js` → Pass.
+
+4. **What remains unverified.**
+   - Trải nghiệm thực tế với 2-4 đội đua trong lớp học.
+
+5. **Next recommended task.**
+   - Chạy thử một ván Đường đua tri thức để kiểm tra luồng chuyển lượt mới.
+
+## Handoff - Tối ưu Truy tìm kho báu: Gợi ý và kết quả đúng/sai dưới ảnh minh họa, giữ nguyên tỉ lệ khi ảnh co giãn (2026-10-27, DECISIONS #93)
+
+**TL;DR:** Hoàn thiện chuyên sâu cho trò chơi **Truy tìm kho báu (Treasure Hunt)**:
+1. **Ảnh minh họa kho báu:** Xóa bỏ giới hạn `width: min(340px, 32%)` cũ (từng làm ảnh bị bóp nhỏ còn ~90px). Trong cột ảnh 2 cột, ảnh minh họa kho báu hiện chiếm trọn 100% bề rộng cột (`.stage-col:has(> .stage-illustration.is-treasure)`), giữ tỉ lệ chuẩn 16:10, cố định `flex-shrink: 0`.
+2. **Khối phản hồi & gợi ý dưới ảnh minh họa:** `#answerFeedback` nằm ngay dưới ảnh minh họa trong `.stage-side-col`, có độ rộng 100% khớp tuyệt đối với ảnh. Khi bấm "💡 Dùng gợi ý", thẻ gợi ý xuất hiện rực rỡ dưới ảnh; khi trả lời đúng/sai, kết quả và giải thích chặng xuất hiện ngay dưới ảnh.
+3. **Độc lập kích thước:** Khi ảnh minh họa co dãn theo kích thước cửa sổ (240px - 360px), phần feedback bên dưới tự động thích ứng chiều rộng; chiều cao của feedback có `max-height` và thanh cuộn riêng, đảm bảo ảnh không bị co ép và cột câu hỏi/nhiệm vụ bên phải không bị xô lệch.
+
+1. **Files changed.**
+   - `src/renderer/features/gameplay.ts`: `renderTreasureStage` xử lý hiển thị `#answerFeedback` dưới ảnh khi có ảnh minh họa; nút `treasureHintBtn` tạo thẻ gợi ý chuyên nghiệp.
+   - `src/renderer/styles/app.css`: Thêm rule ghi đè cho `.stage-col > .stage-illustration.is-treasure` (100% width, aspect-ratio 16/10, flex-shrink 0) và khung cuộn mượt cho feedback.
+   - `docs/STATUS.md`: Mục handoff này.
+
+2. **Behavior implemented.**
+   - Truy tìm kho báu: Bấm "💡 Dùng gợi ý" -> Gợi ý chặng xuất hiện ngay dưới ảnh minh họa.
+   - Trả lời đúng hoặc sai -> Kết quả và giải thích xuất hiện ngay dưới ảnh minh họa.
+   - Thay đổi kích cỡ màn hình / cửa sổ -> Ảnh minh họa và feedback dưới ảnh luôn cân xứng, câu hỏi và bảng nhiệm vụ bên phải thoáng đãng, không bị đẩy tràn ra ngoài.
+
+3. **Commands run and results.**
+   - `npm run check` (tsc --noEmit) → exit 0.
+   - `npm run check:renderer-globals` → 0 undefined globals.
+   - `npm run build:css` → Done in 479ms.
+   - `npm run verify:css` → 12/12 PASS.
+   - `npm run build` → exit 0.
+
+4. **What remains unverified.**
+   - Trải nghiệm trực quan của người chơi khi chơi thử full 5 chặng kho báu.
+
+5. **Next recommended task.**
+   - Kiểm tra trực quan trên màn hình máy chiếu hoặc cửa sổ để tận hưởng giao diện mới.
+
+## Handoff - Gợi ý, kết quả đúng/sai hiển thị dưới ảnh minh họa, tách biệt hoàn toàn với layout câu hỏi (2026-10-27, DECISIONS #93)
+
+**TL;DR:** Toàn bộ 5 trò chơi được cập nhật để đưa **phần phản hồi (đúng/sai/gợi ý)** vào **cột ảnh minh họa**, hiển thị ngay bên dưới ảnh. Khi không có ảnh, phản hồi vẫn xuất hiện bình thường trong cột câu hỏi. Layout câu hỏi, đáp án không bị ảnh hưởng dù ảnh to hay nhỏ.
+
+1. **Files changed.**
+   - `src/renderer/features/gameplay.ts`:
+     - `renderQuestion` (Quiz/Scenario): Cột ảnh đổi thành `.stage-side-col`; `#answerFeedback` đặt ngay sau ảnh (`class="feedback-under-illustration"`); nếu không có ảnh, `#answerFeedback` vẫn xuất hiện trong cột câu hỏi như cũ. Thêm nút **💡 Gợi ý** vào góc trên phải kicker (chỉ khi câu trắc nghiệm có hint, không phải text-question).
+     - `renderColumnsBoard` (Ghép cặp): Tương tự, `#matchFeedback` xuất hiện dưới ảnh.
+     - `renderTreasureStage` (Kho báu): `#answerFeedback` dưới ảnh, dùng class `is-hint` cho feedback gợi ý.
+     - `raceTurnPanelHtml` (Đường đua): `#raceSideFeedback` dưới ảnh ở cột trái.
+     - Guard `if (!feedback) return` để không crash khi feedback ở vị trí khác.
+   - `src/renderer/styles/app.css`: Thêm bộ rule DECISIONS #93:
+     - `.stage-side-col` + `.stage-col:not(.is-main)`: `flex-direction:column` để ảnh và feedback xếp dọc.
+     - `.stage-illustration`: `flex: 0 0 auto; flex-shrink: 0` — ảnh không bao giờ bị co.
+     - `.feedback-under-illustration`: max-height + overflow-y:auto để feedback cuộn khi dài.
+     - `.feedback.is-hint`: theme xanh dương phân biệt với phản hồi đúng/sai.
+     - `.quiz-hint-btn`: nút gợi ý vàng nhỏ cạnh kicker.
+   - `docs/STATUS.md`: Mục handoff này.
+
+2. **Behavior implemented.**
+   - **Có ảnh minh họa:** Kết quả (✓ Chính xác / ✕ Chưa chính xác) và nội dung giải thích hiện ngay **dưới ảnh**, trong cùng cột ảnh, không chiếm chỗ của câu hỏi/đáp án.
+   - **Không có ảnh:** Phản hồi hiện trong cột câu hỏi như cũ.
+   - **Gợi ý (💡):** Nút "💡 Gợi ý" nhỏ gọn cạnh kicker; bấm vào hiện phản hồi màu xanh dưới ảnh (hoặc trong cột câu hỏi nếu không có ảnh); không bị nhầm lẫn với phản hồi đúng/sai.
+   - **Ảnh thay đổi kích thước:** Layout câu hỏi hoàn toàn độc lập — ảnh dùng `flex: 0 0 auto`, feedback cuộn nếu cần.
+
+3. **Commands run and results.**
+   - `npm run check` (tsc --noEmit) → exit 0.
+   - `npm run check:renderer-globals` → 0 undefined globals.
+   - `npm run build:css` → Done in 509ms.
+   - `npm run verify:css` → 12/12 PASS.
+   - `node dist/tests/unit/game-validation.test.js` → pass.
+
+4. **What remains unverified.**
+   - Cần chạy app thực để xác nhận vị trí phản hồi trên màn hình thực.
+
+5. **Next recommended task.**
+   - Thử chơi từng trò chơi, kiểm tra visual feedback dưới ảnh ở các kích thước màn hình khác nhau.
+
+## Handoff - Sửa lỗi nút "Bước vào chặng tiếp theo" không hoạt động trong Bản đồ Hành trình (2026-10-27, DECISIONS #92 Hotfix)
+
+**TL;DR:** Đã sửa triệt để lỗi người chơi bấm "Bước vào chặng tiếp theo ➔" không vào được chặng:
+- **Nguyên nhân cốt lõi:** Tại dòng 1470 trong `src/renderer/features/gameplay.ts`, mã nguồn sử dụng `$('.treasure-map-node', root).find(...)`. Vì `$` là alias của `querySelector` trả về 1 phần tử DOM (không có hàm `.find`), JavaScript ném ngoại lệ `TypeError: $(...).find is not a function` ngay trước dòng gắn sự kiện `goNextBtn.onclick = ...`, khiến sự kiện click không bao giờ được kích hoạt.
+- **Khắc phục:** Đổi sang `$$('.treasure-map-node', root).find(...)` (với `$$` là mảng các phần tử).
+- **Kết quả:** Khi bấm "Bước vào chặng tiếp theo ➔", âm thanh chuyển chặng phát ngay lập tức, `stageId` được cập nhật chính xác và trò chơi chuyển ngay vào chặng tiếp theo mượt mà không có bất kỳ lỗi nào.
+
+1. **Files changed.**
+   - `src/renderer/features/gameplay.ts`: Đổi `$('.treasure-map-node', root).find` thành `$$('.treasure-map-node', root).find` ở dòng 1470.
+   - `docs/STATUS.md`: Mục handoff này.
+
+2. **Behavior implemented.**
+   - Bấm nút `[Bước vào chặng tiếp theo ➔]` trên màn hình bản đồ hành trình lập tức chuyển sang chặng tiếp theo, tải câu hỏi và thử thách mới.
+   - Nếu chặng có nhánh rẽ, nút nhánh rẽ cũng hoạt động chuẩn xác.
+   - Ở chặng cuối cùng, nút `[🏠 Mở kho báu ngay ➔]` đưa thẳng tới màn hình mở kho báu nhận quà/lời chúc.
+
+3. **Commands run and results.**
+   - `npm run check` -> exit 0 (`tsc --noEmit`).
+   - `npm run check:renderer-globals` -> exit 0 (34 scripts, 507 declared functions, 4298 call sites — 0 undefined globals).
+   - `npm run verify:css` -> exit 0 (12/12 compiled-CSS checks passed).
+   - `npm run build` -> exit 0 (TailwindCSS v4.3.3 minified, 60 icons in sync).
+   - `node dist/tests/unit/game-validation.test.js` -> exit 0.
+
+4. **What remains unverified.**
+   - Cần người dùng chạy trực tiếp trên Electron để trải nghiệm cảm giác chuyển cảnh thực tế.
+
+5. **Next recommended task.**
+   - Khởi động ứng dụng và thử toàn bộ hành trình truy tìm kho báu từ chặng 1 đến chặng cuối.
+
+## Handoff - Sửa lỗi không tiếp tục được, thiết kế lại Bản đồ Hành trình Full màn hình cho Kho báu (2026-10-27, DECISIONS #92)
+
+**TL;DR:** Đã sửa triệt để lỗi không bấm tiếp tục được và tái thiết kế luồng chuyển chặng theo đúng yêu cầu:
+1. **Khắc phục lỗi không tiếp tục được:** Sửa lỗi gọi `.find()` trên `$` (querySelector) thành gán trực tiếp, đồng thời bổ sung cơ chế fallback (`treasureNextStage`) tự động tìm chặng tiếp theo trong mảng `hunt.stages[currentIndex + 1]` nếu `nextStageId` bị thiếu hoặc null. Người chơi sẽ không bao giờ bị đứng hình hay kẹt ở chặng trung gian.
+2. **Bố trí lại nút Tiếp tục:** Khi trả lời xong câu hỏi (đúng hoặc hết lượt thử), một nút lớn, nổi bật `[Tiếp tục: Xem bản đồ hành trình ➔]` được căn giữa gọn gàng ngay dưới phần giải thích.
+3. **Màn hình Bản đồ Hành trình Full (`renderTreasureJourneyMap`):** Khi bấm Tiếp tục, toàn màn hình chuyển sang giao diện Bản đồ Hành trình Full (`.is-journey-screen`). Người chơi nhìn thấy toàn bộ bản đồ thế giới, chặng vừa xong hiện dấu ✓ / ✕, vị trí nhà thám hiểm nhấp nháy chuyển động tiến đến chặng tiếp theo. Thẻ chặng tiếp theo hiển thị rõ tên chặng, nhiệm vụ và loại thử thách, cùng nút bấm lớn `[Bước vào chặng tiếp theo ➔]` (hoặc `[🏠 Mở kho báu ngay ➔]` ở chặng cuối).
+
+1. **Files changed.**
+   - `src/renderer/features/gameplay.ts`: Thêm hàm `treasureNextStage()`, `treasureBranchStage()`, `renderTreasureJourneyMap()`, đơn giản hóa `showTreasureChoices()` với nút Tiếp tục to rõ ràng.
+   - `src/renderer/styles/app.css`: Bổ sung CSS cho giao diện bản đồ Full `.is-journey-screen`, khung bản đồ `.journey-map-frame`, thẻ chặng tiếp theo `.journey-next-stage-card`, nút chính `.journey-btn-main`, nút tiếp tục `.treasure-continue-btn`, và hiệu ứng chuyển động node `.is-target-advance`.
+   - `docs/DECISIONS.md`: Bổ sung mục kiến trúc #92.
+   - `docs/STATUS.md`: Mục handoff này.
+
+2. **Behavior implemented.**
+   - Màn hình câu hỏi: Không bị che khuất hay chật chội, người chơi tập trung làm bài; trả lời xong thấy nút Tiếp tục lớn.
+   - Bấm Tiếp tục: Chuyển sang màn hình Bản đồ Hành trình Full, thấy rõ toàn bộ lộ trình, chặng vừa vượt qua và chặng sắp tới.
+   - Bấm "Bước vào chặng tiếp theo ➔": Âm thanh chuyển chặng vang lên và mở ra chặng mới mượt mà.
+   - Luôn chuyển chặng thành công, không phụ thuộc vào việc tệp dữ liệu có ghi `nextStageId` hay không.
+
+3. **Commands run and results.**
+   - `npm run check` -> exit 0 (`tsc --noEmit`).
+   - `npm run check:renderer-globals` -> exit 0 (34 scripts, 507 declared functions, 4298 call sites — 0 undefined globals).
+   - `npm run build` -> exit 0 (TailwindCSS v4.3.3 minified, 60 icons in sync).
+   - `npm run verify:css` -> exit 0 (12/12 compiled-CSS checks passed).
+   - `node dist/tests/unit/build-assets.test.js` -> exit 0.
+
+4. **What remains unverified.**
+   - Thử nghiệm trên các bộ câu hỏi kho báu có đường đi rẽ nhánh phức tạp cùng học sinh thực tế.
+
+5. **Next recommended task.**
+   - Chạy thử app và tận hưởng luồng chơi mới của Truy tìm kho báu!
+
+## Handoff - Tối ưu Truy tìm kho báu: Ẩn/Hiện bản đồ hành trình kèm chuyển động, Modal bối cảnh & luật chơi, Phần thưởng 80-90% và 100% (2026-10-27, DECISIONS #91)
+
+**TL;DR:** Hoàn thiện 3 cải tiến quan trọng cho trò chơi "Truy tìm kho báu" (Treasure Hunt) theo yêu cầu:
+1. **Hành trình nhà thám hiểm (.treasure-map-drawer):** Tự động ẩn đi khi đang làm bài / trả lời câu hỏi để tập trung toàn bộ không gian cho câu hỏi, mật mã, ghép cặp; khi trả lời xong, bản đồ trượt xuống với hiệu ứng chuyển động mượt mà (`treasure-map-slide-down`), cập nhật trạng thái chặng; khi ấn "Tiếp tục →", chặng đích nhấp nháy phát sáng (`node-advance-pulse`) mô phỏng bước tiến của nhà thám hiểm trước khi sang chặng mới. Cung cấp nút "🗺️ Xem bản đồ" trên thanh đầu để người chơi mở xem bất kỳ lúc nào.
+2. **Bối cảnh & Nhiệm vụ chặng dạng Modal Pop-up (`openTreasureStoryModal`):** Thay thế khối `<details>` cũ bằng nút bấm tinh gọn "📜 Bối cảnh & Nhiệm vụ chặng". Khi bấm, một pop-up modal hiển thị với thông tin nhân vật, cốt truyện chặng, luật giải đố cụ thể, số lượt thử và điểm thưởng chặng.
+3. **Phần thưởng và lời chúc theo mức điểm hoàn thành:**
+   - Đạt 100% điểm: Vinh danh tuyệt đỉnh "👑 BẠN LÀ NGƯỜI ĐỈNH NHẤT HÔM NAY! 🏆" với thẻ quán quân rực rỡ vàng kim.
+   - Đạt 80% đến 99% điểm: Mở khóa kho báu là một câu chúc ý nghĩa truyền cảm hứng từ ngôi đền tri thức cùng thẻ chúc mừng xanh ngọc.
+   - Dưới 80%: Thẻ động viên tích cực khuyến khích tiếp tục rèn luyện.
+
+1. **Files changed.**
+   - `src/renderer/features/gameplay.ts`: Thêm `openTreasureStoryModal()`, bọc bản đồ trong `.treasure-map-drawer`, kết nối nút toggle bản đồ và nút mở bối cảnh, bổ sung hiệu ứng bước tiến nhà thám hiểm khi bấm Tiếp tục, cập nhật màn hình kết quả với phần thưởng phân cấp 100% vs 80-99% vs <80%.
+   - `src/renderer/styles/app.css`: Thêm style cho `.treasure-map-drawer` (ẩn khi đang trả lời, hiệu ứng slide-down khi hoàn thành), hiệu ứng `.treasure-map-node.is-advancing`, modal `.treasure-story-backdrop` / `.treasure-story-dialog`, và thẻ kết quả `.treasure-reward-card` (`.is-champion`, `.is-blessing`, `.is-encouragement`).
+   - `docs/DECISIONS.md`: Thêm mục kiến trúc #91.
+   - `docs/STATUS.md`: Bổ sung mục handoff này.
+
+2. **Behavior implemented.**
+   - Khi đang trả lời: Bản đồ hành trình được ẩn gọn gàng, người chơi có thể bấm "🗺️ Xem bản đồ" nếu muốn xem vị trí hiện tại.
+   - Khi trả lời xong: Bản đồ hành trình tự động hiển thị với chuyển động mượt mà, node hiện tại hiện ✓ hoặc ✕.
+   - Khi bấm "Tiếp tục →": Node tiếp theo rung sáng chuyển động, sau đó chuyển sang chặng tiếp theo.
+   - Bối cảnh và luật chặng mở dưới dạng pop-up modal rõ ràng, có nút đóng "Đã hiểu luật, bắt đầu giải mã!".
+   - Hoàn thành trò chơi: Phân loại phần thưởng chính xác theo tỷ lệ điểm (100% = "Người đỉnh nhất hôm nay", 80-99% = kho báu câu chúc ý nghĩa).
+
+3. **Commands run and results.**
+   - `npm run check` -> exit 0 (`tsc --noEmit`).
+   - `npm run check:renderer-globals` -> exit 0 (34 scripts, 504 declared functions, 4274 call sites — 0 undefined globals).
+   - `npm run build` -> exit 0 (TailwindCSS v4.3.3 minified, 60 icons in sync).
+   - `npm run verify:css` -> exit 0 (12/12 compiled-CSS checks passed).
+   - `node dist/tests/unit/build-assets.test.js` -> exit 0 (4 copied assets present, all HTML references resolve).
+
+4. **What remains unverified.**
+   - Thử nghiệm trực quan cùng giáo viên trên lớp học để chọn thêm các câu chúc mở rộng nếu cần.
+
+5. **Next recommended task.**
+   - Trải nghiệm thực tế trò chơi Kho báu và các trò chơi khác trên bản build; chuẩn bị đóng gói bản phát hành thử nghiệm.
+
+## Handoff - Tối ưu bố cục 5 trò chơi, hiển thị đội nhóm & điểm, xử lý lúc có/không có ảnh, hoạt ảnh chuyển động toàn màn hình (2026-10-27, DECISIONS #90)
+
+**TL;DR:** Hoàn thiện nâng cấp giao diện toàn màn hình cho cả 5 game engine theo yêu cầu: (1) Khi KHÔNG có ảnh minh hoạ (chế độ tắt hoặc câu hỏi thuần text), cột ảnh tự động co về 0 để cột câu hỏi và đáp án chiếm 100% bề rộng và căn giữa cân đối, không còn dải trống chết 300-440px; khi CÓ ảnh, bố cục 2 cột hiển thị sắc nét; (2) Thanh thi đấu đội nhóm (`.team-turn-bar`) được thiết kế lại theo phong cách gamified hiện đại trong nền tối, hiển thị rõ lượt đội đang chơi, chip điểm vàng cho từng đội (`.team-score-chip.is-active`), và chọn đổi lượt; (3) Bổ sung hoạt ảnh chuyển động (keyframes `answer-celebrate`, `answer-shake`, `feedback-pop`, `memory-flip`, hover badge letter scale); (4) Tinh chỉnh thẻ bài Ghép cột (`.match-card`), Lật thẻ ghi nhớ (`.memory-card`), Phân loại kiến thức (`.group-box`, `.group-chip`), và Đường đua tri thức (`.race-cell`, `.race-team-row`); (5) Bổ sung nút ⛶ tại topbar và phím tắt F11/Esc toàn app.
+
+1. **Files changed.**
+   - `package.json`: Sửa lệnh `clean` chống lỗi khoá tệp EPERM trên Windows.
+   - `src/index.html`: Thêm nút `#topbarFullscreenBtn` (⛶) vào thanh điều hướng đầu trang.
+   - `src/renderer/core/bootstrap.ts`: Gắn sự kiện click `#topbarFullscreenBtn` và phím tắt F11 toàn ứng dụng.
+   - `src/renderer/features/gameplay.ts`: Tích hợp các DaisyUI badge (`d-badge-primary`, `d-badge-neutral`, `d-badge-warning`), thanh chuyển lượt đội hiện đại, thống nhất `playHeaderHtml()`, thoát toàn màn hình an toàn với Esc/Close.
+   - `src/renderer/styles/app.css`: Thêm keyframes hoạt ảnh (`answer-celebrate`, `answer-shake`, `feedback-pop`, `memory-flip`), giao diện `.team-turn-bar` & `.team-score-chip`, luật co cột ảnh khi rỗng `:empty` / `:not(:has(.stage-illustration))` cho cả `.stage-center` và `.race-turn-row`, tinh chỉnh `.match-card`, `.memory-card`, `.group-box`, `.group-chip`, `.race-cell`.
+   - `tests/ui/ui-fullscreen-check.js`: Thêm kiểm tra F11 phím tắt và đóng game fullscreen.
+   - `docs/DECISIONS.md`: Thêm mục #90.
+   - `docs/STATUS.md`: Mục handoff này.
+
+2. **Behavior implemented.**
+   - Khi không có ảnh: không còn khoảng trống 300-440px bên trái; câu hỏi và lưới đáp án dàn đều toàn màn hình và căn giữa chuẩn mắt.
+   - Khi có ảnh: hiển thị ảnh cảnh 16:10 sắc nét bên trái, câu hỏi & đáp án bên phải.
+   - Đội nhóm: bảng điểm các đội trực quan với chip điểm tích cực nổi bật, lượt đi rõ ràng.
+   - Hoạt ảnh: chọn đúng nảy nhẹ chúc mừng (`answer-celebrate`), chọn sai rung cảnh báo (`answer-shake`), lật thẻ memory 3D (`memory-flip`), phản hồi xuất hiện mượt mà (`feedback-pop`), hỗ trợ tắt animation khi bật `prefers-reduced-motion`.
+
+3. **Commands run and results.**
+   - `npm run check` -> exit 0 (`tsc --noEmit`).
+   - `npm run check:renderer-globals` -> exit 0 (34 scripts, 503 declared functions, 4232 call sites — 0 undefined globals).
+   - `npm run build` -> exit 0 (TailwindCSS v4.3.3 minified, 60 icons in sync).
+   - `npm run verify:css` -> exit 0 (12/12 compiled-CSS checks passed).
+   - `node dist/tests/unit/build-assets.test.js` -> exit 0 (4 copied assets present, all HTML references resolve).
+
+4. **What remains unverified.**
+   - Trải nghiệm cảm quan của giáo viên trên máy chiếu độ phân giải thực tế.
+
+5. **Next recommended task.**
+   - Mở app chạy thử thực tế và nghiệm thu giao diện 5 game cùng giáo viên; chuẩn bị đóng gói bản thử nghiệm tiếp theo.
+
 ## Handoff - Anh trong game to hon + anh mac dinh khi data khong co anh (2026-10-26, tiep theo #87/#88)
 
 **TL;DR:** Hai yeu cau cua giao vien deu lam duoc, va khi do truoc thi thay ca mot loi thu ba khong ai goi ten. Anh minh hoa tang tu **219x137 -> 382x239** (1366x768) va **300x188 -> 440x275** (1920x1080) o quiz/scenario/matching, treasure **178x111 -> 301x188**, va **khong mot man nao bi tran** (`stage overflow` = 0 o moi the loai, ca hai do phan giai). Truong hop data **khong co anh nao** (khong pick, khong category, khong icon - dung thu mot game go tay hoac mot file CSV trung tinh sinh ra) truoc day ve mot **cot TRONG rong 300px** giua man chieu; nay ve canh mac dinh **`language-scene` / `book-open`**. Cong tac cua giao vien van thang: `off` khong ve gi, `manual` khong tu bia. Chi tiet: **#89** trong `docs/DECISIONS.md`.
@@ -1916,3 +2614,31 @@ Các mục từ 2026-10-16 đến 2026-10-18 (Tailwind G0–G5, tasknight, Windo
 - **Chưa verify:** mới chạy với fixture, chưa chạy với model thật; chưa build lại installer/`release/win-unpacked`; hộp thoại confirm chưa bấm tay (smoke ghi đè `window.confirm`).
 - **Quan sát:** ở bước 5 khi đã có nội dung, UI chỉ có "← Cấu hình" ở trạng thái trống; muốn quay lại phải dùng thanh stepper. Giữ nguyên trong lần sửa này, có thể thêm nút quay lại nếu giáo viên phản hồi khó tìm.
 - **Tiếp theo đề xuất:** build lại installer và kiểm tra luồng đổi thể loại bằng chuột thật trên `win-unpacked`; nếu cần, thêm nút "← Cấu hình" cho trạng thái đã có nội dung ở bước 5.
+## Handoff - Man hinh choi toan man hinh nhat quan (2026-10-27)
+
+**TL;DR:** Thanh dieu khien cua nam mau tro choi da duoc dua ve cung mot mau de giao vien khong phai nho cac nut khac nhau theo the loai. `F11` bat/tat toan man hinh; `Esc` thoat toan man hinh truoc, va `Esc` lan hai dong tro choi. Nut dong trong khi dang toan man hinh nay khoi phuc shell cua ung dung thay vi de sidebar/topbar bi an sau khi modal bien mat.
+
+1. **Files changed.**
+   - `src/renderer/features/gameplay.ts` - them `playHeaderHtml()` dung chung cho Arena/Tinh huong, Ghep cap, Kho bau, Duong dua; ket noi nut Dong vao `closePlaySurface()`, va them phim tat `F11` / `Esc`.
+   - `src/renderer/styles/app.css` - them nhan phim tat nhe trong thanh dieu khien trinh chieu.
+   - `tests/ui/ui-fullscreen-check.js` - them hoi quy cho F11 va dong game khi dang fullscreen.
+   - `docs/STATUS.md` - muc handoff nay.
+
+2. **Behavior implemented.**
+   - Ca nam engine chia se cung bo nut: toan man hinh, trinh chieu man hinh phu, va dong game; nhan phim tat hien ngay tren thanh nay.
+   - Dong game goi mot duong thoat duy nhat: neu cua so dang fullscreen thi yeu cau thoat fullscreen, dung presentation neu co, roi xoa play surface.
+   - `Esc` giu luong an toan trong lop: lan dau chi tro ve cua so thuong, khong huy ván dang choi; lan sau dong game. Khong bat phim tat khi con tro dang trong input/textarea/select.
+
+3. **Commands run and results.**
+   - `npm run check` -> khong chay duoc do PowerShell chan `npm.ps1` theo execution policy.
+   - `npm.cmd run check` -> exit 0.
+   - `npm.cmd run build` -> exit 0; Tailwind CSS va icon registry deu build thanh cong.
+   - `powershell -ExecutionPolicy Bypass -File tests\\ui\\launch-app.ps1 -Port 9338` -> Electron CDP san sang sau 1 giay.
+   - `$env:CDP_PORT='9338'; node tests\\ui\\ui-fullscreen-check.js` -> **20/20**: fullscreen phu viewport, shell an/hien dung, F11 bat fullscreen, nut Dong khoi phuc shell.
+
+4. **What remains unverified.**
+   - CDP da click va do trinh quiz; bốn giao dien con lai dung chung header nhung chua co mouse-pass rieng tung mau o may chieu that.
+   - Chua chay `npm test` day du va chua dong goi NSIS cho thay doi UI nho nay.
+
+5. **Next recommended task.**
+   - Chay CDP screenshot/mouse-pass cho Ghep cap, Kho bau va Duong dua o 1366x768; sau do nhờ mot giao vien danh gia co chu va mat do tren may chieu that.

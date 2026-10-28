@@ -162,6 +162,10 @@ tests/ui/shots/
 # Throwaway Electron profile used by tests/ui/ui-race-treasure-check.js
 tests/.ui-check-profile/
 
+# Output of tests/manual/* (bench tables, scene previews, A/B dumps). Regenerated
+# on every run; the scripts themselves are tracked.
+tests/manual/out/
+
 # Editor / agent scratch folders
 .qodo/
 .vscode/settings.json.bak

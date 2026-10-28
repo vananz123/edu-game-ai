@@ -180,7 +180,28 @@ async function findTarget() {
   check('topbar is visible again after exit', restored.topbarVisibility === 'visible', restored.topbarVisibility);
   check('backdrop z-index returns to the normal modal layer', restored.backdropZ === 20, restored.backdropZ);
 
-  await evaluate(`(() => { const b = document.querySelector('[data-play-close]'); if (b) b.click(); return true; })()`);
+  // The classroom shortcut must enter fullscreen without relying on a mouse.
+  const shortcut = await evaluate(`(async () => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'F11', bubbles: true, cancelable: true }));
+    await new Promise(r => setTimeout(r, 900));
+    return { flag: document.documentElement.dataset.fullscreen, modal: Boolean(document.querySelector('.modal-backdrop')) };
+  })()`);
+  check('F11 enters fullscreen while a game is open', shortcut.flag === '1' && shortcut.modal === true, JSON.stringify(shortcut));
+
+  // This used to remove only the modal and leave the hidden app shell behind.
+  const closed = await evaluate(`(async () => {
+    document.querySelector('[data-play-close]')?.click();
+    await new Promise(r => setTimeout(r, 900));
+    const shell = document.querySelector('.app-shell');
+    return {
+      flag: document.documentElement.dataset.fullscreen,
+      modal: Boolean(document.querySelector('.modal-backdrop')),
+      shellVisibility: shell ? getComputedStyle(shell).visibility : null
+    };
+  })()`);
+  check('closing a fullscreen game clears the native fullscreen state', closed.flag === '0', closed.flag);
+  check('closing a fullscreen game removes the play surface', closed.modal === false, JSON.stringify(closed));
+  check('closing a fullscreen game restores the app shell', closed.shellVisibility === 'visible', closed.shellVisibility);
   ws.close();
   finish();
 })().catch(err => {

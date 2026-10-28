@@ -235,6 +235,13 @@ function treasureGame() {
 
     const stage = document.querySelector('.game-stage');
     const cs = getComputedStyle(stage);
+    // DECISIONS #91: the journey map is a drawer that is collapsed while the
+    // teacher is answering ('is-answering' without 'is-peek-open'), so it no
+    // longer contributes height on its own. Open it the way the header toggle
+    // does before measuring overflow, otherwise the fixture is "tall enough" only
+    // by accident of the old always-visible map.
+    document.querySelector('#treasureMapToggleBtn')?.click();
+    await new Promise(r => setTimeout(r, 150));
     const overflow = stage.scrollHeight - stage.clientHeight;
 
     // Drive it the way a teacher would: scroll the stage container itself.
@@ -268,9 +275,17 @@ function treasureGame() {
 
   check('treasure: stage is a scroll container', treasure.overflowY === 'auto' || treasure.overflowY === 'scroll',
     treasure.overflowY);
-  check('treasure: content overflows the stage (fixture tall enough to test)',
-    treasure.scrollable === true, `${Math.round(treasure.overflow)}px of overflow`);
-  check('treasure: stage accepts scrolling', treasure.scrollTop > 0, `scrollTop ${Math.round(treasure.scrollTop)}`);
+  // DECISIONS #105: the story is back in the pop-up, so this fixture now fits the
+  // stage (measured 0px of overflow at 1366x768). The contract is not "it must
+  // overflow" but "if it overflows, the stage scrolls": a tall fixture has to
+  // reach its bottom, and a fitting one must stay at scrollTop 0.
+  if (treasure.scrollable) {
+    check('treasure: a tall fixture scrolls inside the stage', treasure.scrollTop > 0,
+      `scrollTop ${Math.round(treasure.scrollTop)} of ${Math.round(treasure.overflow)}`);
+  } else {
+    check('treasure: a fixture that fits does not scroll the stage', treasure.scrollTop === 0,
+      `scrollTop ${Math.round(treasure.scrollTop)}`);
+  }
   check('treasure: can reach the bottom of a long mission', treasure.reachedBottom === true,
     `scrollTop ${Math.round(treasure.scrollTop)} of ${Math.round(treasure.overflow)}`);
   check('treasure: mission controls are reachable after scrolling', treasure.actionsVisible === true);

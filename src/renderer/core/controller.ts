@@ -196,6 +196,10 @@ function updateScoringVisibility() {
     const field = document.getElementById(id);
     if (field) field.classList.toggle('hidden', mode !== 'theo độ khó');
   });
+  // "Trung bình"/"Khó" sit in their own grid row; the row must follow the same
+  // mode or it leaves an empty band (and now the row is the only container).
+  const difficultyGrid = document.getElementById('pointsDifficultyGrid');
+  if (difficultyGrid) difficultyGrid.classList.toggle('hidden', mode !== 'theo độ khó');
   const hint = $('#scoringModeHint');
   if (hint) hint.textContent = scoringModeHint(mode);
 }

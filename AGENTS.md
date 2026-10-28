@@ -1,11 +1,12 @@
 # Instructions for AI agents working on EduGame Studio
 
 ## Read first
-1. `docs/AGENT_HANDOFF.md`
-2. `docs/PROJECT_BRIEF.md`
-3. `docs/ARCHITECTURE.md`
-4. `docs/STATUS.md`
-5. `docs/ROADMAP.md` and `docs/DECISIONS.md`
+1. `docs/PROJECT_MAP.md` — which file to open for a given change (start here)
+2. `docs/AGENT_HANDOFF.md`
+3. `docs/PROJECT_BRIEF.md`
+4. `docs/ARCHITECTURE.md`
+5. `docs/STATUS.md`
+6. `docs/ROADMAP.md` and `docs/DECISIONS.md`
 
 ## Product direction
 - EduGame Studio is a Windows desktop application for teachers to create educational games from lesson plans and documents.
@@ -16,6 +17,9 @@
 
 ## Engineering rules
 - Before changing code, inspect the relevant files and run the existing checks when possible.
+- The renderer is plain global scripts loaded in the order given by `src/index.html`. Keep that order consistent with `tests/unit/renderer-load-order.test.ts`; `npm run check:renderer-globals` catches calls to functions that were never declared.
+- Unit tests are discovered automatically by `tests/run-unit.js`; a new `tests/unit/*.test.ts` needs no `package.json` change. `lesson-store` needs the Electron ABI: run it with `npm run test:native`.
+- Edit source files with the read/write/edit tools, never with shell redirection or `Get-Content`/`Set-Content` PowerShell pipelines: that has silently destroyed a 1.5k-line source file (encoding + full overwrite) once.
 - Do not claim a feature works unless you have run a relevant test or clearly label it unverified.
 - Keep API provider secrets (`GEMINI_API_KEY`, Supabase service-role key) on the backend only. Never put product-owned secrets in Electron, renderer code, installer, or repository.
 - Do not remove SQLite migration, `.egame` import/export, or offline behavior without explicit approval.

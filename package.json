@@ -6,12 +6,12 @@
   "author": "EduGame Studio",
   "license": "MIT",
   "scripts": {
-    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "clean": "node -e \"try{require('node:fs').rmSync('dist',{recursive:true,force:true})}catch(e){console.warn('clean warning:',e.message)}\"",
     "build": "npm run clean && node scripts/build-icon-data.js --bootstrap && tsc -p tsconfig.json && npm run build:icons && tsc -p tsconfig.json && npm run build:icons:check && copyfiles -u 1 \"src/index.html\" \"src/renderer/styles/*.css\" \"src/presentation/presentation.html\" \"src/presentation/presentation-preload.js\" dist/src && npm run build:css",
     "build:css": "tailwindcss -i src/renderer/styles/app.css -o dist/src/renderer/styles/app.css --minify",
     "start": "npm run build && electron .",
     "check": "tsc --noEmit -p tsconfig.json",
-    "test": "npm run build && node dist/tests/unit/runtime.test.js && node dist/tests/unit/ai-manager.test.js && node dist/tests/unit/model-installer.test.js && node dist/tests/unit/runtime-installer.test.js && node dist/tests/unit/model-catalog.test.js && node dist/tests/unit/runtime-threads.test.js && node dist/tests/unit/hardware-detector.test.js && node dist/tests/unit/runtime-manifest.test.js && node dist/tests/unit/runtime-resolver.test.js && node dist/tests/unit/runtime-backend-choice.test.js && node dist/tests/unit/runtime-backend-install.test.js && node dist/tests/unit/setup-state.test.js && node dist/tests/unit/setup-orchestrator.test.js && node dist/tests/unit/setup-ipc.test.js && node dist/tests/unit/setup-wiring.test.js && node dist/tests/unit/setup-wizard-model.test.js && node dist/tests/unit/setup-wizard-ui.test.js && node dist/tests/unit/display-policy.test.js && node dist/tests/unit/item-capacity.test.js && node dist/tests/unit/document-assist.test.js && node dist/tests/unit/question-import.test.js && node dist/tests/unit/game-validation.test.js && node dist/tests/unit/ai-game-normalize.test.js && node dist/tests/unit/ai-game-design.test.js && node dist/tests/unit/opencode-zen.test.js && node dist/tests/unit/lesson-contracts.test.js && node dist/tests/unit/game-project-adapter.test.js && node dist/tests/unit/ai-transport.test.js && node dist/tests/unit/ai-tasks.test.js && node dist/tests/unit/lesson-workflow.test.js && node dist/tests/unit/lesson-prompts.test.js && node dist/tests/unit/lesson-projects.test.js && node dist/tests/unit/game-recommender.test.js && node dist/tests/unit/lesson-quality.test.js && node dist/tests/unit/lesson-chunker.test.js && node dist/tests/unit/lesson-retrieval.test.js && node dist/tests/unit/embedding-catalog.test.js && node dist/tests/unit/lesson-cache.test.js && node dist/tests/unit/lesson-item-repair.test.js && node dist/tests/unit/lesson-preprocess.test.js && node dist/tests/unit/lesson-structure.test.js && node dist/tests/unit/lesson-selection.test.js && node dist/tests/unit/asset-registry.test.js && node dist/tests/unit/item-assets-adapter.test.js && node dist/tests/unit/item-assets-fallback.test.js && node dist/tests/unit/item-assets-editor.test.js && node dist/tests/unit/item-assets-patch.test.js && node dist/tests/unit/illustration-registry.test.js && node dist/tests/unit/generation-eta.test.js && node dist/tests/unit/unload-guard.test.js && node dist/tests/unit/renderer-undefined-globals.test.js && node dist/tests/unit/renderer-load-order.test.js && node dist/tests/unit/build-assets.test.js && node dist/tests/unit/ai-log.test.js && node tests/manual/run-electron-node.js dist/tests/unit/lesson-store.test.js && npm run check:renderer-globals",
+    "test": "npm run build && node tests/run-unit.js",
     "dist:win": "npm run build && electron-builder --win nsis",
     "dist:dir": "npm run build && electron-builder --dir",
     "server:dev": "tsx watch server/index.ts",
@@ -28,7 +28,8 @@
     "check:play-surface-ui": "node tests/ui/ui-play-surface-check.js",
     "check:offline-packaged": "node tests/ui/offline-packaged-check.js",
     "check:presentation-ui": "node tests/ui/ui-presentation-check.js",
-    "launch:ui": "powershell -ExecutionPolicy Bypass -File tests/ui/launch-app.ps1"
+    "launch:ui": "powershell -ExecutionPolicy Bypass -File tests/ui/launch-app.ps1",
+    "test:native": "node tests/run-unit.js lesson-store"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.0",

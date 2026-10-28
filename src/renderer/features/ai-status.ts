@@ -1,4 +1,4 @@
-﻿// @ts-nocheck -- status bar for llama.cpp / AI-local: independent runtime + task state.
+// @ts-nocheck -- status bar for llama.cpp / AI-local: independent runtime + task state.
 (function () {
   const IDLE_KEY = 'edugame.aiStatus.idleVisible';
   // Keys written by the first iteration of this bar; read once so the teacher's
@@ -142,7 +142,14 @@
       runtimeEl.title = runtime.message || runtimeLabel();
     }
     const taskEl = $('#aiStatusTask');
-    if (taskEl) taskEl.textContent = taskLabel(activeTask);
+    if (taskEl) {
+      taskEl.textContent = taskLabel(activeTask);
+      if (taskActive) {
+        taskEl.classList.remove('hidden');
+      } else {
+        taskEl.classList.add('hidden');
+      }
+    }
 
     const dot = $('#aiStatusRuntimeDot');
     if (dot) {
@@ -231,10 +238,53 @@
     if (el) el.addEventListener('click', handler);
   }
   function wire() {
-    bind('aiStatusStart', startRuntime);
-    bind('aiStatusStop', stopRuntime);
-    bind('aiStatusCancel', cancelAi);
+    function closeDropdown() {
+      const dropdown = $('aiStatusDropdown');
+      if (dropdown) dropdown.classList.add('hidden');
+    }
+    function toggleDropdown(e) {
+      if (e) e.stopPropagation();
+      const dropdown = $('aiStatusDropdown');
+      if (dropdown) dropdown.classList.toggle('hidden');
+    }
+
+    bind('aiStatusStart', function() {
+      closeDropdown();
+      startRuntime();
+    });
+    bind('aiStatusStop', function() {
+      closeDropdown();
+      stopRuntime();
+    });
+    bind('aiStatusCancel', function() {
+      closeDropdown();
+      cancelAi();
+    });
     bind('aiStatusToggle', toggleIdle);
+
+    const bar = $('aiStatusBar');
+    const menuBtn = $('aiStatusMenuBtn');
+    const modalBtn = $('aiStatusOpenModalBtn');
+
+    if (menuBtn) menuBtn.addEventListener('click', toggleDropdown);
+    if (bar) {
+      bar.addEventListener('click', function(e) {
+        if (!e.target.closest('#aiStatusMenuBtn') && !e.target.closest('#aiStatusDropdown')) {
+          toggleDropdown(e);
+        }
+      });
+    }
+    if (modalBtn) {
+      modalBtn.addEventListener('click', function() {
+        closeDropdown();
+        startRuntime();
+      });
+    }
+    document.addEventListener('click', function(e) {
+      if (!e.target.closest('#aiStatusContainer')) {
+        closeDropdown();
+      }
+    });
   }
 
   function init() {

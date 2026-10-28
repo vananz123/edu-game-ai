@@ -85,7 +85,49 @@ function applyTheme(theme) {
     } catch (e) {}
   }
 } 
-function toast(message, duration = 3000) { const el = $('#toast'); el.textContent = message; el.classList.add('show'); clearTimeout(toast.timer); toast.timer = setTimeout(() => el.classList.remove('show'), duration); }
+const systemNotifications = [
+  { id: 'notif-init', text: 'Sẵn sàng ngoại tuyến: Trò chơi đã lưu có thể chơi không cần kết nối mạng.', time: Date.now(), read: true }
+];
+function addNotification(text) {
+  if (!text) return;
+  systemNotifications.unshift({ id: 'notif-' + Date.now(), text: String(text), time: Date.now(), read: false });
+  if (systemNotifications.length > 25) systemNotifications.pop();
+  updateNotificationUI();
+}
+function clearNotifications() {
+  systemNotifications.length = 0;
+  updateNotificationUI();
+}
+function updateNotificationUI() {
+  const badge = $('#topbarNotificationBadge');
+  const list = $('#topbarNotificationList');
+  if (badge) {
+    const unread = systemNotifications.some(n => !n.read);
+    badge.classList.toggle('hidden', !unread);
+  }
+  if (list) {
+    if (!systemNotifications.length) {
+      list.innerHTML = '<div class="text-center py-4 text-[#94a3b8] text-[11px]">Không có thông báo mới</div>';
+      return;
+    }
+    list.innerHTML = systemNotifications.map(n => `
+      <div class="p-2 rounded-lg bg-[#f8fafc] border border-[#f1f5f9] flex flex-col gap-0.5 text-left">
+        <span class="text-[#334155] font-medium leading-snug">${escapeHtml(n.text)}</span>
+        <span class="text-[9px] text-[#94a3b8]">${fmtDateTime(n.time)}</span>
+      </div>
+    `).join('');
+  }
+}
+function toast(message, duration = 3000) {
+  const el = $('#toast');
+  if (el) {
+    el.textContent = message;
+    el.classList.add('show');
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(() => el.classList.remove('show'), duration);
+  }
+  addNotification(message);
+}
 function fmtDate(value) { try { return new Date(value).toLocaleDateString('vi-VN', { day:'2-digit', month:'2-digit', year:'numeric' }); } catch { return '—'; } }
 function fmtDateTime(value) { try { return new Date(value).toLocaleString('vi-VN', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }); } catch { return '—'; } }
 function formatBytes(bytes) { return `${(bytes / 1024 ** 3).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} GB`; }

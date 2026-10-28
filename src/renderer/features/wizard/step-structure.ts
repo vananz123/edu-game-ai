@@ -121,6 +121,7 @@ function wizardStructureEverythingSelected(tree) {
 // ---------------------------------------------------------------------------
 
 function wizardStructureToggle(id) {
+  wizardStructureToggle.pendingFocus = id;
   const s = wizardStructureState();
   const tree = s.tree;
   if (!tree) return;
@@ -135,8 +136,8 @@ function wizardStructureToggle(id) {
   // request itself is never made (the main process refuses an empty selection).
   s.customized = true;
   s.selected = Array.from(selected);
-  s.preview = null;
-  s.warnings = [];
+  // The preview is rebuilt after the debounce, so clearing it here only made
+  // the panel flash "Chưa có bản xem trước." on every tick.
   wizardStructureSchedulePreview();
   render();
 }
@@ -145,8 +146,6 @@ function wizardStructureSelectAll() {
   const s = wizardStructureState();
   s.customized = false;
   s.selected = [];
-  s.preview = null;
-  s.warnings = [];
   wizardStructureSchedulePreview();
   render();
 }
@@ -168,6 +167,73 @@ function wizardStructureToggleCollapse(id) {
   else collapsed.add(id);
   s.collapsed = Array.from(collapsed);
   render();
+}
+
+/**
+ * Carries the step-1 tree state across the `innerHTML` re-render: the scroll
+ * offset of the tree and the preview text, `aria-checked` on the partial rows,
+ * and the section the teacher just ticked.
+ *
+ * Re-rendering used to reset the tree to its top and gave the browser nothing
+ * to keep the caret/label steady, which read as a jump on every click.
+ */
+function wizardStructureRestoreView(focusSectionId) {
+  const treeList = document.querySelector('[data-structure-tree]');
+  const tree = wizardStructureState().tree;
+  if (!tree) return;
+  // Always write the remembered offset. Leaving it at 0 simply scrolls to the
+  // top; skipping the write is NOT the same thing, because the preview block
+  // below the tree changes height when the debounced preview lands, and the
+  // browser re-anchors the scroll position to keep its old first visible node —
+  // which showed up as "the tree jumps to a neighbour row after a tick".
+  const treeTarget = Number(wizardStructureRestoreView.treeScroll || 0);
+  if (treeList) treeList.scrollTop = treeTarget;
+  const previewTarget = Number(wizardStructureRestoreView.previewScroll || 0);
+  const preview = document.querySelector('[data-structure-preview-text]');
+  if (preview) preview.scrollTop = previewTarget;
+  if (focusSectionId) {
+    const input = document.querySelector(`[data-wizard-section="${focusSectionId.replace(/"/g, '\\"')}"]`);
+    // The page was just replaced, so the browser has already moved the focus to
+    // <body>. Defer one frame (the DOM is connected and laid out by then) so the
+    // focus lands on the fresh checkbox instead of failing silently.
+    const restoreFocus = () => {
+      const target = document.querySelector(`[data-wizard-section="${focusSectionId.replace(/"/g, '\\"')}"]`);
+      if (target) target.focus({ preventScroll: true });
+    };
+    if (input && input.isConnected) restoreFocus();
+    else requestAnimationFrame(restoreFocus);
+    // A nested tick awaits a microtask before `wizardStructureToggle` runs, which
+    // would send the focus back to <body> after the render; re-apply next frame.
+    requestAnimationFrame(() => {
+      if (/^(INPUT|BUTTON)$/.test(document.activeElement ? document.activeElement.tagName : '')) return;
+      restoreFocus();
+    });
+  }
+}
+
+/**
+ * Persists the two scroll offsets right before the DOM is thrown away.
+ * Called by `render()` (core/render.ts) and by a passive capture listener on
+ * the page root, so a plain scroll — with no click following it — is recorded
+ * too, without adding a listener to a node that is replaced on every render.
+ */
+function wizardStructureCaptureView() {
+  const treeList = document.querySelector('[data-structure-tree]');
+  // A hidden pane (the content tab) reports 0 for `scrollTop`; keeping the last
+  // real offset is what lets the teacher come back to the same row.
+  if (treeList && treeList.scrollTop > 0) wizardStructureRestoreView.treeScroll = treeList.scrollTop;
+  const preview = document.querySelector('[data-structure-preview-text]');
+  if (preview && preview.scrollTop > 0) wizardStructureRestoreView.previewScroll = preview.scrollTop;
+}
+
+let wizardStructureScrollCaptureWired = false;
+function wireWizardStructureScrollCapture() {
+  if (wizardStructureScrollCaptureWired) return;
+  wizardStructureScrollCaptureWired = true;
+  document.addEventListener('scroll', () => {
+    if (wizardState.step !== 'input') return;
+    wizardStructureCaptureView();
+  }, { capture: true, passive: true });
 }
 
 // ---------------------------------------------------------------------------
@@ -406,18 +472,37 @@ function wizardStructurePreviewPanel() {
   </div>`;
 }
 
-/** Restores the tristate that `innerHTML` cannot express. */
+/**
+ * Restores the tristate that `innerHTML` cannot express.
+ *
+ * `core/render.ts` calls this right after replacing `#pageContent`, so it must
+ * use the element-rooted `$$`, not `document.querySelectorAll`: the document
+ * <head> is writable and survives the re-render, so a query that leaked into it
+ * (or a stale copy of this function in another bundle) is caught the next time
+ * this runs. The previous version queried the <head> and threw
+ * `HTMLCollection does not support named properties`, which aborted the restore
+ * before the scroll offset and the focus were re-applied — the "giật" on click.
+ */
 function wizardSyncStructureCheckboxes() {
   const s = wizardStructureState();
   const tree = s.tree;
   if (!tree) return;
+  const host = document.querySelector('[data-tab-pane="structure"]') || document.getElementById('pageContent') || document;
+  if (!host) return;
   const { states } = wizardStructureNodeStates(tree);
-  document.querySelectorAll('[data-wizard-section]').forEach(input => {
+  $$('[data-wizard-section]', host).forEach(input => {
     const state = states.get(input.getAttribute('data-wizard-section'));
     if (!state) return;
     input.checked = Boolean(state.checked);
     input.indeterminate = Boolean(state.partial);
+    // Exposed as an attribute so a screen reader and the UI checks can read the
+    // derived state; `indeterminate` alone is a live DOM property only.
+    const row = input.closest('.wizard-tree-node');
+    if (row) row.setAttribute('aria-checked', state.partial ? 'mixed' : String(Boolean(state.checked)));
   });
+  const focusId = wizardStructureToggle.pendingFocus;
+  wizardStructureToggle.pendingFocus = null;
+  if (focusId) wizardStructureRestoreView(focusId);
 }
 
 /** The review block shown under the document text in step 1. */
@@ -481,3 +566,5 @@ function renderWizardStructurePanel(s, tree, view) {
     ${wizardStructurePreviewPanel()}
   </div>`;
 }
+
+

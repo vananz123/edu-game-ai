@@ -124,9 +124,9 @@ function wizardSyncCurrentStepFromDom() {
 function wireCreateWizard() {
   const root = document.getElementById('wizardRoot');
   if (!root) return;
-  // #76: `innerHTML` cannot express `indeterminate`, so the derived tristate is
-  // re-applied on every render of step 1.
-  if (wizardState.step === 'input' && typeof wizardSyncStructureCheckboxes === 'function') wizardSyncStructureCheckboxes();
+  if (typeof wireWizardStructureScrollCapture === 'function') wireWizardStructureScrollCapture();
+  // #76: `innerHTML` cannot express `indeterminate`; `render()` (core/render.ts)
+  // re-applies the derived tristate right after the markup is replaced.
   root.addEventListener('click', wizardHandleClick);
   root.addEventListener('input', wizardHandleInput);
   // Phase B: `<select>` in the artwork popover. `change` is used rather than
@@ -218,9 +218,19 @@ function wizardSyncDocAffordances() {
       ? `Đã có ${characters.toLocaleString('vi-VN')} ký tự. Tiếp tục để phân tích bằng AI local.`
       : `Cần tối thiểu ${WIZARD_MIN_CHARACTERS} ký tự. Tài liệu scan không có chữ cần OCR trước khi nhập.`;
   }
+  // The tabs render their counters into the page; typing only patched the hint,
+  // so "0 ký tự" stuck on the content tab (and "N mục" on the structure tab)
+  // until some later click happened to re-render.
+  if (typeof wizardSyncStepInputStats === 'function') wizardSyncStepInputStats();
 }
 
 function wizardHandleClick(event) {
+  const tabBtn = event.target.closest('[data-wizard-input-tab]');
+  if (tabBtn) {
+    wizardState.inputTab = tabBtn.dataset.wizardInputTab;
+    render();
+    return;
+  }
   const goto = event.target.closest('[data-wizard-goto]');
   if (goto) return wizardGoto(goto.dataset.wizardGoto);
   const open = event.target.closest('[data-wizard-open]');
@@ -257,6 +267,7 @@ async function wizardDispatch(action, button) {
   if (wizardState.busy && ['back', 'new', 'save', 'save-project', 'save-game', 'generate', 'regenerate', 'regenerate-item', 'open-editor', 'quick-generate', 'quick-confirm', 'quick-cancel'].includes(action)) return undefined;
   switch (action) {
     case 'import-file': return wizardInputImportFile();
+    case 'insert-sample': return wizardInputInsertSample();
     case 'open-ai': return openLocalAiModal();
     case 'analyze': return wizardAnalyzeRun(false);
     case 'rerun': return wizardAnalyzeRun(true);

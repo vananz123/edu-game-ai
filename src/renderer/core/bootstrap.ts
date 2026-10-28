@@ -67,6 +67,50 @@ document.addEventListener('click', e => {
   if (nav) navigate(nav.dataset.page);
 });
 $('#helpBtn').addEventListener('click', showHelp);
+
+const notifBtn = $('#topbarNotificationBtn');
+const notifPopover = $('#topbarNotificationPopover');
+if (notifBtn && notifPopover) {
+  notifBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    notifPopover.classList.toggle('hidden');
+    if (!notifPopover.classList.contains('hidden')) {
+      if (typeof systemNotifications !== 'undefined') {
+        systemNotifications.forEach(n => n.read = true);
+      }
+      const badge = $('#topbarNotificationBadge');
+      if (badge) badge.classList.add('hidden');
+    }
+  });
+  document.addEventListener('click', e => {
+    if (!e.target.closest('#topbarNotificationContainer')) {
+      notifPopover.classList.add('hidden');
+    }
+  });
+  const clearBtn = $('#clearNotificationsBtn');
+  if (clearBtn) {
+    clearBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      if (typeof clearNotifications === 'function') clearNotifications();
+    });
+  }
+}
+if (typeof updateNotificationUI === 'function') updateNotificationUI();
+
+const topbarFs = $('#topbarFullscreenBtn');
+if (topbarFs) {
+  topbarFs.addEventListener('click', async () => {
+    const isFs = document.documentElement.dataset.fullscreen === '1';
+    try { await window.eduGame.setFullscreen(!isFs); } catch {}
+  });
+}
+window.addEventListener('keydown', async e => {
+  if (e.key === 'F11' && !Boolean($('#modalRoot')?.children.length)) {
+    e.preventDefault();
+    const isFs = document.documentElement.dataset.fullscreen === '1';
+    try { await window.eduGame.setFullscreen(!isFs); } catch {}
+  }
+});
 (async function init() {
   try {
     state.db = await window.eduGame.getLibrary();

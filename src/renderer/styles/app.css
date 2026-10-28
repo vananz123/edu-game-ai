@@ -1,4 +1,4 @@
-﻿@import "tailwindcss";
+@import "tailwindcss";
 
 /* ============================================================
    daisyUI 5 (DECISIONS #87) — CHỈ cung cấp component class, cố ý
@@ -131,8 +131,8 @@
   --color-warn: #f29d38;
   --color-bad: #e65b68;
 
-  /* Font + shadow khá»›p global.css */
-  --font-sans: Inter, "Segoe UI", Arial, sans-serif;
+  /* Font + shadow khớp global.css */
+  --font-sans: 'Segoe UI', 'Be Vietnam Pro', Inter, -apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif;
   --shadow-card: 0 10px 35px rgba(28, 37, 75, 0.06);
 
   /* Breakpoint khá»›p 6 media query hiá»‡n cÃ³ (responsive.css 1200/900/700) */
@@ -1008,10 +1008,10 @@ html[data-fullscreen="1"] .modal[data-player-theme] .stage-question {
   width: 100%;
   margin: 0 auto;
   font-size: clamp(28px, 4.5vh + 1vw, 60px);
-  /* 1.22 clipped stacked diacritics (ế/ộ/ữ) on wrapped questions. Raised for
-     Vietnamese; see --line-height-vi. */
-  line-height: 1.22;
-  letter-spacing: -0.5px;
+  /* Tối ưu tiếng Việt: line-height 1.34 giúp dấu hai tầng (ế/ộ/ữ/ẵ/ể) không bị cắt ngọn;
+     letter-spacing 0 để dấu thanh không va chạm chữ kế bên. */
+  line-height: 1.34;
+  letter-spacing: 0;
 }
 
 /* Cửa sổ thấp (1366x768, laptop): sàn chỉ được NÂNG cỡ chữ, không hạ. Sàn cũ
@@ -1163,6 +1163,7 @@ html[data-fullscreen="1"] .modal[data-player-theme] .leaderboard-row { font-size
   white-space: nowrap;
 }
 .play-head-title .small { font-size: 10px; letter-spacing: 0.9px; font-weight: 700; }
+.play-shortcut { color: #8f98b6; font-size: 11px; font-weight: 650; letter-spacing: .01em; white-space: nowrap; }
 .play-head-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 
 /* Tool buttons. The old markup reused .modal-close (a fixed 30x30 square),
@@ -1224,13 +1225,14 @@ html[data-fullscreen="1"] .modal[data-player-theme] .leaderboard-row { font-size
   box-sizing: border-box;
   padding: clamp(20px, 2.2vw, 32px) clamp(18px, 3vw, 44px) clamp(16px, 1.8vw, 24px);
   border-radius: var(--player-radius);
-  /* Soft radial glow + very subtle grid so the surface is not flat black. */
-  background:
-    radial-gradient(1100px 520px at 50% -12%, #2b2a63 0%, transparent 62%),
-    radial-gradient(760px 420px at 100% 108%, #1d2a52 0%, transparent 60%),
-    linear-gradient(180deg, #141a35 0%, #0f1428 100%);
-  border: 1px solid #2a3152;
+  /* The world palette (--world-*) is set on the stage by the block "Năm thế
+     giới trò chơi" further down in this file. The fallbacks keep the previous
+     indigo surface for any stage that has no world (team setup of an unknown
+     template). Two glows + a wash give the surface depth without a texture. */
+  background: var(--world-stage-bg);
+  border: 1px solid var(--world-stage-border, #2a3152);
   box-shadow: inset 0 1px 0 #ffffff0f;
+  font-family: var(--world-font, inherit);
 }
 
 /* The old rule capped every question inside a 690px column, which left most
@@ -1338,26 +1340,39 @@ html[data-fullscreen="1"] .modal[data-player-theme] .stage-center > .answer-grid
   min-height: min-content;
 }
 
-.modal[data-player-theme] .stage-question {
+.modal[data-player-theme] .modal[data-player-theme] .game-stage .stage-question {
   font-size: clamp(26px, 3.1vw, 42px);
   line-height: 1.34;
-  font-weight: 750;
-  letter-spacing: -0.4px;
   max-width: 1100px;
   margin: 14px auto 30px;
   text-wrap: balance;
-  color: #f4f6ff;
+  color: var(--world-ink, #f4f6ff);
+}
+/* Chữ câu hỏi theo thế giới: tách khỏi quy tắc trên để phần CHỮ không bị bản
+   toàn màn hình (khai báo sau, và bị minify rút thành [data-player-theme]) đè
+   thành chữ không đậm/không serif. Hai thuộc tính bố cục (max-width, margin)
+   vẫn ở quy tắc trên như cũ. Đây cũng là nơi đặt độ đậm cho mực tối trên nền
+   sáng của bảng nỉ. */
+.modal[data-player-theme] .game-stage .stage-question {
+  font-family: var(--world-display, inherit);
+  font-weight: var(--world-display-weight, 750);
+  letter-spacing: var(--world-display-tracking, 0px);
+  line-height: 1.36;
 }
 
 .modal[data-player-theme] .stage-kicker {
   font-size: clamp(11px, 1vw, 14px);
   letter-spacing: 2px;
-  color: #b3adff;
+  /* The kicker has the same base-vs-specific cascade problem as the question:
+     the compiled sheet is minified, which shortens .modal[data-player-theme] to
+     [data-player-theme] and would let the base rule win. One extra compound
+     keeps this block's order authoritative. */
+  color: var(--world-accent, #b3adff);
 }
 
 .modal[data-player-theme] .stage-top { font-size: 12px; }
 .stage-meta-right { display: flex; align-items: center; gap: 8px; }
-.stage-meta { color: #a9b1cd; font-weight: 650; }
+.stage-meta { color: var(--world-meta, #a9b1cd); font-weight: 650; }
 
 /* Pill chips for question counter + score. */
 .stage-chip {
@@ -1366,9 +1381,9 @@ html[data-fullscreen="1"] .modal[data-player-theme] .stage-center > .answer-grid
   gap: 5px;
   padding: 5px 11px;
   border-radius: 999px;
-  background: #232a45;
-  border: 1px solid #3a4266;
-  color: #c9cfe6;
+  background: var(--world-chip-bg, #232a45);
+  border: 1px solid var(--world-chip-border, #3a4266);
+  color: var(--world-chip-ink, #c9cfe6);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.4px;
@@ -1385,11 +1400,11 @@ html[data-fullscreen="1"] .modal[data-player-theme] .stage-center > .answer-grid
 .modal[data-player-theme] .stage-progress {
   height: 7px;
   margin: 14px 0 22px;
-  background: #262d48;
+  background: var(--world-track-bg, #262d48);
 }
 .modal[data-player-theme] .stage-progress div {
-  background: linear-gradient(90deg, #8b82ff, #5ad1c8);
-  box-shadow: 0 0 12px #8b82ff86;
+  background: var(--world-progress, linear-gradient(90deg, #8b82ff, #5ad1c8));
+  box-shadow: var(--world-progress-glow, 0 0 12px #8b82ff86);
 }
 
 
@@ -1431,9 +1446,12 @@ html[data-fullscreen="1"] .modal[data-player-theme] .answer-option .letter {
   font-size: clamp(16px, 1.45vw, 21px);
   font-weight: 600;
   line-height: 1.4;
-  border-width: 2px;
-  border-color: #39406080;
-  background: linear-gradient(180deg, #232a48 0%, #1d233c 100%);
+  border-width: var(--world-option-border-w, 2px);
+  border-color: var(--world-option-border, #39406080);
+  border-style: solid;
+  background: var(--world-option-bg, linear-gradient(180deg, #232a48 0%, #1d233c 100%));
+  color: var(--world-ink, #f4f6ff);
+  box-shadow: var(--world-option-shadow, none);
   cursor: pointer;
   transition: transform 0.12s, background 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
@@ -1443,11 +1461,11 @@ html[data-fullscreen="1"] .modal[data-player-theme] .answer-option .letter {
    (DECISIONS #88); bản đè cũ ở đây đã gộp. */
 .modal[data-player-theme] .answer-option:hover:not(:disabled) {
   transform: translateY(-2px);
-  border-color: #8c84ff;
-  background: linear-gradient(180deg, #2c3459 0%, #232a48 100%);
-  box-shadow: 0 8px 22px #6d63ff3d;
+  border-color: var(--world-option-hover-border, #8c84ff);
+  background: var(--world-option-hover-bg, linear-gradient(180deg, #2c3459 0%, #232a48 100%));
+  box-shadow: var(--world-option-hover-shadow, 0 8px 22px #6d63ff3d);
 }
-.modal[data-player-theme] .answer-option:focus-visible { outline: 2px solid #a9a3ff; outline-offset: 2px; }
+.modal[data-player-theme] .answer-option:focus-visible { outline: 2px solid var(--world-focus, #a9a3ff); outline-offset: 2px; }
 
 /* Key badge: one accent colour per position so options are easy to tell
    apart from the back of the classroom. */
@@ -1503,8 +1521,9 @@ html[data-fullscreen="1"] .modal[data-player-theme] .answer-grid.true-false-grid
   font-size: clamp(15px, 1.3vw, 19px);
   padding: 14px 20px;
   border-left-width: 4px;
-  border-left-color: #8b82ff;
-  background: #202641;
+  border-left-color: var(--world-accent, #8b82ff);
+  background: var(--world-soft-bg, #202641);
+  color: var(--world-ink, #f4f6ff);
 }
 
 /* Text-answer row. */
@@ -1625,7 +1644,7 @@ html[data-fullscreen="1"] .modal[data-player-theme] .answer-grid.true-false-grid
 /* The play modal scrolls on short windows; the default white scrollbar on a
    dark surface is very distracting on a projector, so it gets an even thinner
    bar with muted navy colours. */
-.modal[data-player-theme] { scrollbar-width: thin; scrollbar-color: #454d75 #141a35; }
+.modal[data-player-theme] { scrollbar-width: thin; scrollbar-color: #454d75 var(--world-scroll, #141a35); }
 .modal[data-player-theme] ::-webkit-scrollbar { width: 8px; height: 8px; }
 .modal[data-player-theme] ::-webkit-scrollbar-track { background: #141a35; }
 .modal[data-player-theme] ::-webkit-scrollbar-thumb {
@@ -1705,6 +1724,270 @@ html[data-fullscreen="1"] .modal[data-player-theme] .answer-grid.true-false-grid
   .modal[data-player-theme] .race-track { max-height: 130px; }
   .modal[data-player-theme] .race-turn .stage-question { font-size: clamp(20px, 2.1vw, 28px); }
 }
+
+/* ============================================================
+   Enhanced Gameplay UI & Animations for 5 Educational Games
+   - Team competition & turn indicator
+   - Matching cards & 3D Memory flips
+   - Categorize tokens & baskets
+   - Dynamic motion & answer celebration/shake
+   ============================================================ */
+
+/* --- Motion keyframes for educational gameplay --- */
+@keyframes answer-celebrate {
+  0% { transform: scale(0.98); }
+  50% { transform: scale(1.025); }
+  100% { transform: scale(1); }
+}
+@keyframes answer-shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+@keyframes feedback-pop {
+  0% { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes memory-flip {
+  0% { transform: rotateY(90deg) scale(0.92); opacity: 0.6; }
+  100% { transform: rotateY(0deg) scale(1); opacity: 1; }
+}
+
+.modal[data-player-theme] .answer-option.correct {
+  animation: answer-celebrate 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.modal[data-player-theme] .answer-option.wrong {
+  animation: answer-shake 0.4s ease-in-out;
+}
+.modal[data-player-theme] .feedback {
+  animation: feedback-pop 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.modal[data-player-theme] .answer-option:hover:not(:disabled) .letter {
+  transform: scale(1.08);
+}
+.modal[data-player-theme] .answer-option .letter {
+  transition: transform 0.15s ease;
+}
+
+/* --- Gamified team turn bar on play surface --- */
+.modal[data-player-theme] .team-turn-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 10px 0 16px;
+  padding: 10px 16px;
+  border: 1px solid rgba(139, 130, 255, 0.28);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(32, 38, 68, 0.95), rgba(20, 25, 47, 0.95));
+  color: #e2e7f8;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  flex-shrink: 0;
+}
+.modal[data-player-theme] .team-turn-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: clamp(13px, 1.1vw, 15px);
+  color: #f0f3ff;
+}
+.modal[data-player-theme] .team-score-list {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.modal[data-player-theme] .team-score-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: #192038;
+  border: 1px solid #333c62;
+  color: #cad1ea;
+  font-size: 12px;
+  font-weight: 650;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.modal[data-player-theme] .team-score-chip.is-active {
+  background: linear-gradient(135deg, #373373, #232252);
+  border-color: #8b82ff;
+  color: #ffffff;
+  box-shadow: 0 0 14px rgba(139, 130, 255, 0.4);
+  transform: translateY(-1px);
+}
+.modal[data-player-theme] .team-score-chip b {
+  color: #ffd977;
+  font-size: 13px;
+  font-weight: 800;
+}
+.modal[data-player-theme] .team-turn-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: #aeb6d5;
+}
+.modal[data-player-theme] .team-turn-select select {
+  background: #232a48;
+  border: 1px solid #3e4873;
+  color: #f1f4ff;
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  outline: none;
+  cursor: pointer;
+}
+.modal[data-player-theme] .team-turn-select select:hover { border-color: #8b82ff; }
+html[data-fullscreen="1"] .modal[data-player-theme] .team-turn-bar {
+  padding: clamp(10px, 1.4vh, 16px) clamp(16px, 1.8vw, 24px);
+  margin-bottom: clamp(10px, 1.5vh, 20px);
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .team-turn-summary {
+  font-size: clamp(14px, 1.3vw, 17px);
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .team-score-chip {
+  padding: clamp(6px, 0.8vh, 9px) clamp(12px, 1vw, 16px);
+  font-size: clamp(12px, 1.1vw, 15px);
+}
+
+/* --- Matching, Memory, and Categorize play styles --- */
+.modal[data-player-theme] .matching-board {
+  max-width: 1040px;
+  margin: 16px auto 0;
+  gap: clamp(14px, 1.8vw, 24px);
+  width: 100%;
+}
+.modal[data-player-theme] .match-card {
+  padding: clamp(12px, 1.4vh, 18px) clamp(16px, 1.5vw, 22px);
+  border: 2px solid #394266;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #212848 0%, #19203c 100%);
+  color: #f1f4ff;
+  font-size: clamp(14px, 1.25vw, 18px);
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  transition: transform 0.15s, border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+.modal[data-player-theme] .match-card:hover:not(:disabled) {
+  transform: translateY(-2px);
+  border-color: var(--world-card-hover-border, #8b82ff);
+  background: var(--world-card-hover-bg, linear-gradient(180deg, #2a335a 0%, #212848 100%));
+  box-shadow: 0 8px 20px rgba(109, 99, 255, 0.28);
+}
+.modal[data-player-theme] .match-card.selected {
+  border-color: var(--world-card-selected-border, #8b82ff);
+  background: var(--world-card-selected-bg, linear-gradient(180deg, #323b6b 0%, #252d54 100%));
+  box-shadow: 0 0 0 2px var(--world-focus-soft, rgba(139, 130, 255, 0.4)), 0 8px 24px rgba(109, 99, 255, 0.35);
+  transform: scale(1.02);
+}
+.modal[data-player-theme] .match-card.matched {
+  background: linear-gradient(180deg, #133a32 0%, #0e2a24 100%);
+  border-color: #2f9e80;
+  opacity: 0.65;
+  box-shadow: none;
+  cursor: default;
+  transform: none;
+}
+.modal[data-player-theme] .match-card.wrong {
+  animation: answer-shake 0.4s ease-in-out;
+}
+.modal[data-player-theme] .memory-grid {
+  max-width: 960px;
+  margin: 16px auto 0;
+  gap: clamp(10px, 1.3vw, 18px);
+  width: 100%;
+}
+.modal[data-player-theme] .memory-card {
+  min-height: clamp(80px, 12vh, 130px);
+  padding: 12px;
+  border: 2px solid #394266;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #1d2444 0%, #171c36 100%);
+  color: #f1f4ff;
+  font-size: clamp(15px, 1.35vw, 20px);
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.modal[data-player-theme] .memory-card:hover:not(:disabled) {
+  transform: translateY(-2px) scale(1.02);
+  border-color: #8b82ff;
+  box-shadow: 0 8px 22px rgba(109, 99, 255, 0.3);
+}
+.modal[data-player-theme] .memory-card.flipped {
+  animation: memory-flip 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  background: var(--world-card-selected-bg, linear-gradient(180deg, #2b3360 0%, #202648 100%));
+  border-color: var(--world-card-selected-border, #8b82ff);
+}
+.modal[data-player-theme] .memory-card .memory-face {
+  font-size: clamp(20px, 2.5vw, 32px);
+}
+.modal[data-player-theme] .category-cards {
+  max-width: 1040px;
+  margin: 14px auto 0;
+  gap: 10px;
+}
+.modal[data-player-theme] .category-groups {
+  max-width: 1040px;
+  margin: 18px auto 0;
+  gap: 14px;
+}
+.modal[data-player-theme] .group-box {
+  border: 2px dashed #4f5b91;
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: rgba(22, 27, 54, 0.85);
+  color: #f1f4ff;
+  transition: border-color 0.15s, background 0.15s;
+}
+.modal[data-player-theme] .group-box:hover {
+  border-color: #8b82ff;
+  background: rgba(33, 40, 78, 0.9);
+}
+.modal[data-player-theme] .group-box strong {
+  font-size: clamp(14px, 1.2vw, 17px);
+  color: #ffd977;
+}
+.modal[data-player-theme] .group-chip {
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: #252e59;
+  border: 1px solid #3e497a;
+  color: #e2e7f8;
+  font-size: 13px;
+  font-weight: 600;
+}
+.modal[data-player-theme] .race-cell {
+  transition: transform 0.12s, box-shadow 0.15s;
+}
+.modal[data-player-theme] .race-cell:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+.modal[data-player-theme] .race-team-row {
+  border-radius: 10px;
+  transition: transform 0.12s, background 0.15s;
+}
+.modal[data-player-theme] .race-team-row.active {
+  box-shadow: 0 0 14px rgba(139, 130, 255, 0.35);
+}
+@media (prefers-reduced-motion: reduce) {
+  .modal[data-player-theme] .answer-option.correct,
+  .modal[data-player-theme] .answer-option.wrong,
+  .modal[data-player-theme] .feedback,
+  .modal[data-player-theme] .memory-card.flipped,
+  .modal[data-player-theme] .match-card.wrong {
+    animation: none !important;
+  }
+}
+
 
 /* ============================================================
    Scrolling a long game stage (treasure hunt fullscreen, etc.).
@@ -2284,6 +2567,40 @@ html[data-fullscreen="1"] .modal[data-player-theme] .race-turn .stage-illustrati
   html[data-fullscreen="1"] .modal[data-player-theme] .race-turn-row .stage-col.is-main > .stage-question {
     text-align: left;
   }
+
+  /* Khi không có ảnh minh hoạ (chế độ tắt hoặc câu hỏi không có ảnh), co cột ảnh về 0
+     để nội dung chính mở rộng toàn màn hình và cân bằng bố cục. */
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-center > .stage-col:not(.is-main):empty,
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-center > .stage-col:not(.is-main):not(:has(.stage-illustration)) {
+    display: none !important;
+    width: 0 !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-center:not(:has(> .stage-col > .stage-illustration)) > .stage-col.is-main {
+    flex: 1 1 100%;
+    width: 100%;
+    max-width: 100%;
+  }
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-center:not(:has(> .stage-col > .stage-illustration)) > .stage-col.is-main > .stage-question,
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-center:not(:has(> .stage-col > .stage-illustration)) > .stage-col.is-main > .stage-kicker {
+    text-align: center;
+  }
+
+  html[data-fullscreen="1"] .modal[data-player-theme] .race-turn-row > .stage-col:not(.is-main):empty,
+  html[data-fullscreen="1"] .modal[data-player-theme] .race-turn-row > .stage-col:not(.is-main):not(:has(.stage-illustration)) {
+    display: none !important;
+    width: 0 !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  html[data-fullscreen="1"] .modal[data-player-theme] .race-turn-row:not(:has(> .stage-col > .stage-illustration)) > .stage-col.is-main {
+    flex: 1 1 100%;
+    width: 100%;
+    max-width: 100%;
+  }
 }
 
 /* ---- Bước 1: cây cấu trúc tài liệu (docs/DECISIONS.md #76, #77) ----
@@ -2345,3 +2662,1425 @@ ul.wizard-tree-warning li+li{margin-top:3px}
 }
 
 
+
+
+/* ============================================================
+   Treasure Hunt Enhanced Interaction, Map Drawer, Pop-up Modal,
+   and Champion / Blessing Rewards (DECISIONS #91)
+   ============================================================ */
+
+/* Drawer ẩn hiện bản đồ khi trả lời / khi hoàn thành chặng */
+.modal[data-player-theme] .treasure-map-drawer {
+  flex-shrink: 0;
+  width: 100%;
+}
+.modal[data-player-theme] .treasure-map-drawer.is-answering:not(.is-peek-open) {
+  display: none;
+}
+.modal[data-player-theme] .treasure-map-drawer.is-answering.is-peek-open {
+  display: block;
+  animation: treasure-map-slide-down 0.3s ease-out forwards;
+}
+.modal[data-player-theme] .treasure-map-drawer.is-answered {
+  display: block;
+  animation: treasure-map-slide-down 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes treasure-map-slide-down {
+  0% { opacity: 0; transform: translateY(-16px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.modal[data-player-theme] .treasure-map-node.is-advancing {
+  animation: node-advance-pulse 0.4s ease-in-out infinite alternate;
+}
+@keyframes node-advance-pulse {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.22) translateY(-4px); box-shadow: 0 0 16px #8b82ff; filter: brightness(1.25); }
+}
+
+/* Popup bối cảnh & nhiệm vụ chặng */
+.treasure-story-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(10, 13, 26, 0.82);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: fade-in 0.2s ease-out;
+}
+.treasure-story-backdrop.is-closing {
+  opacity: 0;
+  transition: opacity 0.18s ease-in;
+}
+.treasure-story-dialog {
+  background: linear-gradient(180deg, #181d38 0%, #11152a 100%);
+  border: 1px solid #3c4672;
+  border-radius: 18px;
+  width: min(620px, 94vw);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65);
+  animation: dialog-pop 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+@keyframes dialog-pop {
+  0% { opacity: 0; transform: scale(0.94) translateY(12px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+.treasure-story-dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  background: #141830;
+  border-bottom: 1px solid #2d3558;
+}
+.treasure-story-close-btn {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: #232b4b;
+  color: #c5cced;
+  border: 1px solid #3c4672;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.treasure-story-close-btn:hover {
+  background: #364170;
+  color: #fff;
+}
+.treasure-story-dialog-body {
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.treasure-story-block {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #19203a;
+  border: 1px solid #2e375e;
+}
+.treasure-story-block.is-mission {
+  background: linear-gradient(135deg, rgba(39, 48, 88, 0.8), rgba(24, 30, 58, 0.8));
+  border-color: #4a5792;
+}
+.story-block-tag {
+  margin-bottom: 8px;
+}
+.story-block-text {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: #e2e6f7;
+  margin: 0;
+}
+.mission-lead {
+  font-size: 14px;
+  color: #ffd977;
+  margin-bottom: 6px;
+}
+.mission-specs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.spec-chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #222a4c;
+  border: 1px solid #394473;
+  font-size: 11.5px;
+  color: #c9d0eb;
+}
+.spec-chip b {
+  color: #fff;
+}
+.treasure-story-dialog-foot {
+  padding: 14px 20px;
+  border-top: 1px solid #2f375e;
+  background: #141830;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Thẻ vinh danh và câu chúc hoàn thành trò chơi kho báu */
+.treasure-reward-card {
+  margin: 18px auto;
+  max-width: 620px;
+  padding: 20px 24px;
+  border-radius: 18px;
+  text-align: center;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  animation: reward-pop 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes reward-pop {
+  0% { opacity: 0; transform: scale(0.92); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.treasure-reward-card.is-champion {
+  background: linear-gradient(135deg, rgba(68, 48, 12, 0.95), rgba(46, 28, 76, 0.95));
+  border: 2px solid #ffd977;
+  box-shadow: 0 0 40px rgba(255, 217, 119, 0.38);
+}
+.treasure-reward-card.is-blessing {
+  background: linear-gradient(135deg, rgba(22, 50, 42, 0.95), rgba(28, 38, 78, 0.95));
+  border: 2px solid #35d39f;
+  box-shadow: 0 0 35px rgba(53, 211, 159, 0.32);
+}
+.treasure-reward-card.is-encouragement {
+  background: #1a213c;
+  border: 1px solid #364270;
+}
+.reward-badge {
+  display: inline-block;
+  margin-bottom: 12px;
+}
+.reward-headline {
+  font-size: clamp(16px, 1.4vw, 20px);
+  font-weight: 850;
+  color: #ffd977;
+  margin-bottom: 8px;
+}
+.reward-quote {
+  font-size: clamp(14px, 1.25vw, 17px);
+  font-style: italic;
+  line-height: 1.65;
+  color: #ffffff;
+  margin: 8px 0;
+}
+.reward-sub {
+  font-size: 13px;
+  color: #c9d0eb;
+  font-weight: 600;
+  margin-top: 10px;
+}
+
+
+/* ============================================================
+   Full-Screen Journey Map Screen & Continue Flow (DECISIONS #92)
+   ============================================================ */
+.modal[data-player-theme] .game-stage.is-journey-screen {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  min-height: 100%;
+  padding: clamp(16px, 2vh, 28px) clamp(16px, 2.5vw, 36px);
+  animation: fade-in 0.3s ease-out;
+}
+
+.journey-map-full-container {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(14px, 1.8vh, 22px);
+  max-width: 1100px;
+  width: 100%;
+  margin: 0 auto;
+  flex: 1 1 auto;
+}
+
+.journey-map-headline {
+  text-align: center;
+  margin-top: 4px;
+}
+.journey-map-headline h2 {
+  font-size: clamp(20px, 2.2vw, 30px);
+  font-weight: 850;
+  color: #fff;
+  letter-spacing: -0.3px;
+  margin: 0 0 6px;
+}
+.journey-map-sub {
+  font-size: clamp(13px, 1.2vw, 16px);
+  color: #cdd4ee;
+  margin: 0;
+}
+
+.journey-map-frame {
+  width: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+  border: 1px solid #38426b;
+}
+.journey-map-frame .treasure-map {
+  margin-bottom: 0;
+  border: none;
+}
+
+.journey-next-stage-card {
+  background: linear-gradient(135deg, rgba(28, 35, 68, 0.95), rgba(18, 23, 46, 0.95));
+  border: 1px solid #434e7f;
+  border-radius: 18px;
+  padding: clamp(16px, 2vh, 24px) clamp(18px, 2.4vw, 32px);
+  text-align: center;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+  animation: dialog-pop 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.next-stage-badge {
+  font-size: 13px;
+  padding: 6px 14px;
+  margin-bottom: 10px;
+}
+.next-stage-desc {
+  margin: 10px 0 16px;
+}
+.next-stage-task {
+  font-size: clamp(14px, 1.3vw, 18px);
+  font-weight: 600;
+  color: #f1f4ff;
+  margin: 0 0 6px;
+}
+.next-stage-type {
+  font-size: 13px;
+  color: #ffd977;
+  margin: 0;
+}
+
+.journey-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.journey-btn-main {
+  font-size: clamp(15px, 1.3vw, 18px) !important;
+  font-weight: 750 !important;
+  padding: 13px 32px !important;
+  border-radius: 12px !important;
+  background: linear-gradient(135deg, #7b6cf6, #5b4fd8) !important;
+  border-color: #8b82ff !important;
+  color: #ffffff !important;
+  box-shadow: 0 6px 20px rgba(98, 88, 232, 0.45) !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+}
+.journey-btn-main:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 8px 24px rgba(98, 88, 232, 0.6) !important;
+}
+.journey-btn-main.is-finish {
+  background: linear-gradient(135deg, #e5a93b, #c47b14) !important;
+  border-color: #ffd977 !important;
+  color: #1a1400 !important;
+  box-shadow: 0 6px 20px rgba(229, 169, 59, 0.45) !important;
+}
+
+.journey-btn-branch {
+  font-size: clamp(14px, 1.2vw, 16px) !important;
+  padding: 12px 24px !important;
+  border-radius: 12px !important;
+  cursor: pointer !important;
+}
+
+.treasure-continue-btn {
+  font-size: 16px !important;
+  font-weight: 750 !important;
+  padding: 13px 30px !important;
+  border-radius: 12px !important;
+  background: linear-gradient(135deg, #7b6cf6, #5b4fd8) !important;
+  border-color: #8b82ff !important;
+  color: #ffffff !important;
+  box-shadow: 0 6px 20px rgba(98, 88, 232, 0.45) !important;
+  margin-top: 14px;
+  cursor: pointer !important;
+  transition: transform 0.15s, box-shadow 0.15s !important;
+}
+.treasure-continue-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(98, 88, 232, 0.6) !important;
+}
+
+.treasure-map-node.is-target-advance {
+  animation: node-target-glow 0.6s ease-in-out infinite alternate;
+}
+@keyframes node-target-glow {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.28) translateY(-6px); filter: drop-shadow(0 0 12px #8b82ff) brightness(1.3); }
+}
+
+/* --- Phản hồi và gợi ý nằm dưới ảnh minh họa (DECISIONS #93) --- */
+.modal[data-player-theme] .stage-center > .stage-col:not(.is-main),
+.modal[data-player-theme] .stage-col.stage-side-col,
+.modal[data-player-theme] .race-turn-row > .stage-col:not(.is-main) {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  justify-content: flex-start !important;
+  min-width: 0 !important;
+}
+
+/* Đảm bảo ảnh minh họa giữ kích thước chuẩn, không bao giờ bị co rúm hay ảnh hưởng bởi phần feedback bên dưới */
+.modal[data-player-theme] .stage-illustration {
+  flex: 0 0 auto !important;
+  flex-shrink: 0 !important;
+}
+
+/* Khối feedback / gợi ý nằm dưới ảnh minh họa */
+.modal[data-player-theme] .feedback-under-illustration,
+.modal[data-player-theme] .stage-col:not(.is-main) > #answerFeedback,
+.modal[data-player-theme] .stage-col:not(.is-main) > #matchFeedback,
+.modal[data-player-theme] .stage-col:not(.is-main) > #raceSideFeedback {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  margin: 12px 0 0 0 !important;
+  flex: 0 1 auto !important;
+  flex-shrink: 1 !important;
+  max-height: clamp(150px, 28vh, 280px) !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: #48527a transparent !important;
+  animation: feedback-pop 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  word-break: break-word !important;
+}
+
+/* Thanh cuộn riêng cho phần feedback dưới ảnh khi có nhiều chữ */
+.modal[data-player-theme] .feedback-under-illustration::-webkit-scrollbar,
+.modal[data-player-theme] .stage-col:not(.is-main) > #answerFeedback::-webkit-scrollbar {
+  width: 6px;
+}
+.modal[data-player-theme] .feedback-under-illustration::-webkit-scrollbar-thumb,
+.modal[data-player-theme] .stage-col:not(.is-main) > #answerFeedback::-webkit-scrollbar-thumb {
+  background: #48527a;
+  border-radius: 4px;
+}
+
+/* Ẩn hoàn toàn khi không có nội dung */
+.modal[data-player-theme] #answerFeedback:empty,
+.modal[data-player-theme] #matchFeedback:empty,
+.modal[data-player-theme] #raceSideFeedback:empty {
+  display: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+}
+
+/* Định dạng thẻ gợi ý (.is-hint) */
+.modal[data-player-theme] .feedback.is-hint {
+  border: 1px solid #227093 !important;
+  border-left-width: 4px !important;
+  background: linear-gradient(180deg, #132738 0%, #101e2c 100%) !important;
+  box-shadow: 0 4px 16px rgba(56, 189, 248, 0.12) !important;
+  color: #d1ecf1 !important;
+}
+.modal[data-player-theme] .feedback.is-hint strong {
+  color: #7dd3fc !important;
+}
+
+/* Nút mở gợi ý cho Quiz / Scenario */
+.quiz-hint-btn {
+  font-size: 12px !important;
+  padding: 4px 10px !important;
+  border-radius: 8px !important;
+  border-color: #3b4268 !important;
+  color: #ffd166 !important;
+  background: rgba(255, 209, 102, 0.08) !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+.quiz-hint-btn:hover:not(:disabled) {
+  background: rgba(255, 209, 102, 0.18) !important;
+  border-color: #ffd166 !important;
+}
+.quiz-hint-btn:disabled {
+  opacity: 0.6 !important;
+  cursor: default !important;
+}
+
+/* Đảm bảo ảnh minh họa kho báu trong cột ảnh luôn chiếm 100% bề rộng cột và không bị co ép */
+.modal[data-player-theme] .stage-col > .stage-illustration.is-treasure,
+html[data-fullscreen="1"] .modal[data-player-theme] .stage-col > .stage-illustration.is-treasure {
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
+  aspect-ratio: 16 / 10 !important;
+  flex: 0 0 auto !important;
+  flex-shrink: 0 !important;
+  margin: 0 0 10px 0 !important;
+  opacity: 0.98 !important;
+}
+
+/* Phần phản hồi & gợi ý dưới ảnh minh họa kho báu */
+.modal[data-player-theme] .stage-col.stage-side-col > #answerFeedback {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  flex: 0 1 auto !important;
+  flex-shrink: 1 !important;
+  margin-top: 10px !important;
+  max-height: clamp(160px, 30vh, 300px) !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain !important;
+}
+
+/* --- Tối ưu Đường đua tri thức: Ảnh minh họa to lên & kết quả đúng/sai (DECISIONS #94) --- */
+html[data-fullscreen="1"] .modal[data-player-theme] .race-turn-row > .stage-col:not(.is-main) {
+  flex: 0 0 auto !important;
+  width: clamp(280px, 24vw, 400px) !important;
+}
+
+.modal[data-player-theme] .race-turn .stage-illustration,
+.modal[data-player-theme] .race-turn .stage-illustration.is-race,
+html[data-fullscreen="1"] .modal[data-player-theme] .race-turn .stage-illustration.is-race {
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
+  aspect-ratio: 16 / 10 !important;
+  flex: 0 0 auto !important;
+  flex-shrink: 0 !important;
+  margin: 0 0 10px 0 !important;
+  opacity: 0.98 !important;
+}
+
+.race-continue-btn {
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  padding: 12px 28px !important;
+  border-radius: 12px !important;
+  background: linear-gradient(135deg, #7b6cf6, #5b4fd8) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 16px rgba(98, 88, 232, 0.4) !important;
+  cursor: pointer !important;
+  transition: transform 0.15s, box-shadow 0.15s !important;
+}
+.race-continue-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(98, 88, 232, 0.55) !important;
+}
+
+/* --- Gộp Vòng-Lượt và Các đội chung 1 hàng (DECISIONS #95) --- */
+.modal[data-player-theme] .race-status-bar {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  padding: 8px 14px !important;
+  background: rgba(17, 21, 43, 0.85) !important;
+  border: 1px solid #303651 !important;
+  border-radius: 12px !important;
+  margin-bottom: 12px !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+.modal[data-player-theme] .race-turn-indicator {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 10px !important;
+  flex: 1 1 340px !important;
+  min-width: 280px !important;
+}
+
+.modal[data-player-theme] .race-round-badge {
+  font-size: clamp(12px, 1.4vh, 14px) !important;
+  padding: 4px 10px !important;
+  border-radius: 8px !important;
+}
+
+.modal[data-player-theme] .race-active-team-pill {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 4px 12px !important;
+  border-radius: 8px !important;
+  background: rgba(139, 130, 255, 0.15) !important;
+  border: 1px solid rgba(139, 130, 255, 0.45) !important;
+  color: #ffffff !important;
+  font-size: clamp(13px, 1.5vh, 16px) !important;
+}
+
+.modal[data-player-theme] .race-active-kicker {
+  font-size: 11px !important;
+  letter-spacing: 0.5px !important;
+  color: #aeb5ce !important;
+  font-weight: 700 !important;
+}
+
+.modal[data-player-theme] .race-active-name {
+  font-weight: 800 !important;
+  color: #ffd166 !important;
+}
+
+.modal[data-player-theme] .race-rule-pill {
+  font-size: clamp(11px, 1.3vh, 13px) !important;
+  color: #9aa2c2 !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  padding: 3px 9px !important;
+  border-radius: 6px !important;
+  white-space: nowrap !important;
+}
+
+.modal[data-player-theme] .race-status-bar > .race-scoreboard {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 6px 8px !important;
+  flex: 1 1 auto !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.modal[data-player-theme] .race-status-bar .race-team-row {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 5px 11px !important;
+  border: 1px solid #384166 !important;
+  border-radius: 8px !important;
+  background: #1b2140 !important;
+  color: #e8ebf7 !important;
+  font-size: clamp(12px, 1.4vh, 14px) !important;
+  white-space: nowrap !important;
+  flex: 0 1 auto !important;
+  transition: all 0.15s ease !important;
+}
+
+.modal[data-player-theme] .race-status-bar .race-team-row.active {
+  background: #262c50 !important;
+  border-color: #8b82ff !important;
+  box-shadow: 0 0 12px rgba(139, 130, 255, 0.4) !important;
+  transform: translateY(-1px) !important;
+}
+
+.modal[data-player-theme] .race-team-rank {
+  font-size: 12px !important;
+  opacity: 0.85 !important;
+}
+
+.modal[data-player-theme] .race-team-identity {
+  font-weight: 700 !important;
+  color: #ffffff !important;
+}
+
+.modal[data-player-theme] .race-team-pos {
+  color: #8ce8c5 !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  background: rgba(16, 185, 129, 0.12) !important;
+  padding: 1px 6px !important;
+  border-radius: 4px !important;
+}
+
+.modal[data-player-theme] .race-team-pts {
+  color: #ffd166 !important;
+  font-weight: 700 !important;
+  font-size: 12px !important;
+}
+
+
+/* --- Hiệu ứng nối 2 kết quả đúng trong Ghép cặp kiến thức (DECISIONS #96) --- */
+.matching-board,
+.treasure-match-grid {
+  position: relative !important;
+}
+
+.matching-connector-canvas {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  pointer-events: none !important;
+  overflow: visible !important;
+  z-index: 10 !important;
+}
+
+.matching-beam {
+  animation: matchingBeamDraw 0.45s cubic-bezier(0.2, 0.8, 0.25, 1) forwards;
+}
+
+@keyframes matchingBeamDraw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.matching-pin-dot {
+  transform-origin: center;
+  animation: matchingPinPop 0.35s ease-out;
+}
+
+@keyframes matchingPinPop {
+  0% { opacity: 0; transform: scale(0); }
+  70% { opacity: 1; transform: scale(1.3); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.matching-badge-wrap {
+  opacity: 0;
+  animation: matchingBadgeFade 0.35s 0.2s cubic-bezier(0.2, 0.9, 0.3, 1) forwards;
+}
+
+@keyframes matchingBadgeFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.modal[data-player-theme] .match-card.matched.is-connected,
+.modal[data-player-theme] .treasure-match-item.matched.is-connected {
+  opacity: 0.95 !important;
+  cursor: default !important;
+  transform: none !important;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease, opacity 0.3s ease !important;
+}
+
+/* --- Tối ưu thanh Navbar & Đưa thanh trạng thái AI/llama.cpp, thông báo lên Navbar (DECISIONS #97) --- */
+.topbar {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 30 !important;
+  background: #ffffff !important;
+  border-bottom: 1px solid var(--line) !important;
+}
+
+.topbar .ai-status-bar {
+  position: relative !important;
+  top: auto !important;
+  z-index: 1 !important;
+}
+
+.notification-popover,
+.ai-status-dropdown {
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
+}
+
+[data-theme="dark"] .topbar {
+  background: #111528 !important;
+  border-bottom-color: #262c45 !important;
+}
+
+[data-theme="dark"] .topbar .ai-status-bar {
+  background: #171c32 !important;
+  border-color: #2b3352 !important;
+}
+
+[data-theme="dark"] .topbar .ai-status-bar:hover {
+  background: #1d233e !important;
+  border-color: #3b456e !important;
+}
+
+[data-theme="dark"] .topbar #aiStatusRuntime {
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .topbar #aiStatusTask {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .topbar .ai-status-menu-btn {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .topbar .ai-status-menu-btn:hover {
+  background: #283060 !important;
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .ai-status-dropdown {
+  background: #171c32 !important;
+  border-color: #2b3352 !important;
+  color: #e2e8f0 !important;
+}
+
+[data-theme="dark"] .ai-status-dropdown button {
+  color: #cbd5e1;
+}
+
+[data-theme="dark"] .ai-status-dropdown button:hover {
+  background: #1e2544 !important;
+}
+
+[data-theme="dark"] .ai-status-dropdown #aiStatusStart {
+  color: #4ade80 !important;
+}
+[data-theme="dark"] .ai-status-dropdown #aiStatusStart:hover {
+  background: #132d24 !important;
+}
+
+[data-theme="dark"] .ai-status-dropdown #aiStatusStop {
+  color: #f87171 !important;
+}
+[data-theme="dark"] .ai-status-dropdown #aiStatusStop:hover {
+  background: #2d1313 !important;
+}
+
+[data-theme="dark"] .ai-status-dropdown #aiStatusCancel {
+  color: #fbbf24 !important;
+}
+[data-theme="dark"] .ai-status-dropdown #aiStatusCancel:hover {
+  background: #2d2413 !important;
+}
+
+[data-theme="dark"] .notification-popover {
+  background: #171c32 !important;
+  border-color: #2b3352 !important;
+  color: #e2e8f0 !important;
+}
+
+[data-theme="dark"] .notification-popover strong {
+  color: #f1f5f9 !important;
+}
+
+/* --- Bố trí lại giao diện trang tạo từ giáo án bước 1 (DECISIONS #98) --- */
+.wizard-step-input-panel {
+  border-radius: 16px !important;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05) !important;
+}
+
+.wizard-import-card {
+  transition: all 0.2s ease !important;
+}
+
+.wizard-import-card:hover {
+  background: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .wizard-import-card:hover {
+  background: #1a223f !important;
+}
+
+/* --- Tab Cấu trúc tài liệu và Nội dung giáo án (DECISIONS #99) --- */
+.wizard-tab-btn {
+  background: transparent;
+  cursor: pointer;
+}
+
+.wizard-tab-pane [data-structure-panel] {
+  margin-top: 0 !important;
+  border: none !important;
+  padding: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.wizard-tab-pane [data-structure-panel] .section-head {
+  padding-top: 4px;
+}
+
+/* Ticking a section used to repaint the whole page (the tree was replaced by
+   `innerHTML`). Containing layout + paint on the structure panel keeps a repaint
+   inside that box, so the sibling form fields, the tabs and the action row are not
+   re-laid-out on every click.
+
+   Scope: only the tree lives inside this panel, and it is already a scroll box
+   (`.wizard-tree`, overflow-y:auto). Containment is never put on the tree itself:
+   `contain: layout` would make it a containing block and shift the offsets the
+   scroll restore in `wizardStructureRestoreView()` relies on. */
+.wizard-tab-pane [data-structure-panel] {
+  contain: layout paint;
+}
+
+/* Both panes share a box model so switching tabs cannot change the page height
+   by a border/padding difference (that was a visible jump). */
+.wizard-tab-pane {
+  min-height: 0;
+}
+
+/* The pane is re-created on every render; anchoring would move the scroll
+   position of the page to keep an unrelated node still. */
+.wizard-tab-pane {
+  overflow-anchor: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wizard-tab-btn {
+    transition: none !important;
+  }
+}
+
+/* ============================================================
+   NĂM THẾ GIỚI TRÒ CHƠI — nền, màu, chữ riêng cho từng engine
+   (DECISIONS #104)
+
+   Mỗi trò chơi là một không gian khác nhau, không phải năm bản của cùng một
+   màn hình tối: phòng thi giấy cho quiz, sổ tay quyết định cho tình huống,
+   bảng nỉ cho ghép cặp, bản đồ da cho kho báu, chặng đua đêm cho đường đua.
+
+   Cách hoạt động: `gameplay.ts` gắn `data-game-world` lên thẻ chơi (modal) và
+   lên thẻ sân khấu (.game-stage); khối này chỉ đặt BIẾN trên hai mốc đó, các
+   quy tắc phía trên đọc biến đó (--world-*). Nhờ vậy không phải nhân bản toàn
+   bộ luật bố cục cho từng trò, và trạng thái đúng/sai vẫn giữ nguyên màu.
+
+   BẪY: Tailwind v4 loại bỏ selector có giá trị thuộc tính không xuất hiện
+   nguyên văn trong mã nguồn. Vì vậy mọi selector ở đây viết `data-game-world`
+   KHÔNG kèm giá trị; trạng thái riêng (chế độ ghép cặp) cũng chỉ dùng thuộc
+   tính trần. Đừng viết `[data-game-world="quiz"]`.
+   ============================================================ */
+
+:root {
+  /* Bộ font chuẩn tiếng Việt cho game và trình chiếu:
+     - 'Segoe UI', 'Be Vietnam Pro': font sans-serif chuẩn mực cho tiếng Việt trên Windows,
+       đầy đủ bảng mã OpenType, dấu thanh (hỏi, ngã, nặng, sắc, huyền) to rõ, không méo hay vỡ dấu.
+     - Fallbacks: Calibri, Tahoma, Arial, sans-serif.
+     - Loại bỏ Cambria và Arial Narrow vì dấu tiếng Việt bị co méo hoặc kích thước quá nhỏ. */
+  --font-play-display: 'Segoe UI', 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif;
+  --font-play-board: 'Segoe UI', 'Be Vietnam Pro', Calibri, Tahoma, Arial, sans-serif;
+  --grain-overlay:
+    radial-gradient(circle at 20% 12%, rgba(255, 255, 255, 0.06), transparent 42%),
+    radial-gradient(rgba(0, 0, 0, 0.16) 1px, transparent 1px);
+}
+
+/* Mọi sân khấu có thế giới đều nhận nền theo biến. */
+.modal[data-player-theme][data-game-world],
+.modal[data-player-theme] .game-stage[data-game-world] {
+  --world-stage-bg: radial-gradient(1100px 520px at 50% -12%, #2b2a63 0%, transparent 62%),
+    radial-gradient(760px 420px at 100% 108%, #1d2a52 0%, transparent 60%),
+    linear-gradient(180deg, #141a35 0%, #0f1428 100%);
+}
+
+/* Thẻ thế giới: dải băng nhỏ ở đầu sân khấu, đổi chữ và màu theo trò chơi. */
+.stage-world-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  align-self: flex-start;
+  margin: 0 0 10px;
+  padding: 3px 11px 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--world-tag-border, rgba(255, 255, 255, 0.14));
+  background: var(--world-tag-bg, rgba(255, 255, 255, 0.06));
+  color: var(--world-accent, #b3adff);
+  font-family: var(--font-play-board);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.stage-world-symbol {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--world-accent-soft, rgba(179, 173, 255, 0.16));
+  font-size: 11px;
+  letter-spacing: 0;
+}
+.stage-world-sub {
+  padding-left: 9px;
+  border-left: 1px solid var(--world-tag-border, rgba(255, 255, 255, 0.14));
+  color: var(--world-meta, #a9b1cd);
+  font-family: var(--world-font, inherit);
+  font-weight: 650;
+  letter-spacing: 0.4px;
+  text-transform: none;
+}
+html[data-fullscreen="1"] .stage-world-tag { font-size: clamp(10px, 1.1vh, 13px); }
+html[data-fullscreen="1"] .stage-world-sub { display: none; }
+.play-head-world {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 5px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--world-accent-soft, rgba(179, 173, 255, 0.16));
+  color: var(--world-accent, #b3adff);
+  /* 10px is the floor the play-surface check enforces for painted text. */
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  line-height: 1.2;
+}
+
+/* Hoa văn nền: mỗi thế giới một kiểu (giấy kẻ, giấy kem, nỉ, giấy da, đèn đua). */
+.modal[data-player-theme] .game-stage[data-game-world] {
+  position: relative;
+  isolation: isolate;
+}
+.modal[data-player-theme] .game-stage[data-game-world]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  opacity: var(--world-texture-opacity, 0.5);
+  background-image: var(--world-texture, none);
+  background-size: var(--world-texture-size, auto);
+  mix-blend-mode: var(--world-texture-blend, normal);
+}
+.modal[data-player-theme] .game-stage[data-game-world] > * {
+  z-index: 1;
+}
+
+/* Thanh tiêu đề của thẻ chơi: cùng accent với thế giới. */
+.modal[data-player-theme][data-game-world] .play-head {
+  border-bottom: 2px solid var(--world-accent, #3a4266);
+  background: var(--world-head-bg, #11152b);
+}
+
+/* ---------- 1. Quiz — phòng thi giấy kẻ ô, mực navy, nhấn hổ phách ----------
+   Scenario dùng CHUNG thế giới nền/chữ với quiz (cùng engine trắc nghiệm, chỉ
+   khác cách trình bày); điểm nhận diện của scenario nằm ở màu khung tình huống
+   và chữ nghiêng bên dưới, không phải một bảng biến riêng. Nhờ vậy stage chỉ cần
+   `data-game-world="quiz"` là đủ, kể cả khi câu scenario nằm lẫn trong game quiz
+   (data-game và data-game-world không còn phải trùng nhau). */
+.modal[data-player-theme] .game-stage[data-game="quiz"] {
+  --world-ink: #f1ead9;
+  --world-accent: #f2b24a;
+  --world-accent-soft: rgba(242, 178, 74, 0.16);
+  --world-meta: #c3b9a3;
+  --world-focus: #ffd48a;
+  --world-focus-soft: rgba(242, 178, 74, 0.42);
+  --world-display: 'Segoe UI', 'Be Vietnam Pro', Georgia, sans-serif;
+  --world-display-weight: 700;
+  --world-display-tracking: 0px;
+  --world-font: 'Segoe UI', 'Be Vietnam Pro', Calibri, Tahoma, sans-serif;
+  --world-stage-border: #3c3524;
+  --world-stage-bg:
+    radial-gradient(900px 460px at 12% -10%, rgba(242, 178, 74, 0.16), transparent 60%),
+    radial-gradient(780px 420px at 100% 105%, rgba(58, 96, 128, 0.28), transparent 62%),
+    linear-gradient(180deg, #1a2230 0%, #131a26 100%);
+  --world-texture: repeating-linear-gradient(0deg, transparent 0 27px, rgba(255, 255, 255, 0.055) 27px 28px);
+  --world-texture-opacity: 0.9;
+  --world-texture-blend: screen;
+  --world-chip-bg: #222b3b;
+  --world-chip-border: #3f4a5e;
+  --world-chip-ink: #e6dcc8;
+  --world-track-bg: #263042;
+  --world-progress: linear-gradient(90deg, #f2b24a, #ffe2a1);
+  --world-progress-glow: 0 0 14px rgba(242, 178, 74, 0.42);
+  --world-option-bg: linear-gradient(180deg, #232c3c 0%, #1b2330 100%);
+  --world-option-border: #3b4759;
+  --world-option-border-w: 1px 1px 1px 4px;
+  --world-option-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --world-option-hover-border: #f2b24a;
+  --world-option-hover-bg: linear-gradient(180deg, #2b3546 0%, #212a39 100%);
+  --world-option-hover-shadow: 0 10px 24px rgba(242, 178, 74, 0.22);
+  --world-soft-bg: rgba(242, 178, 74, 0.1);
+  --world-card-hover-border: #f2b24a;
+  --world-card-hover-bg: linear-gradient(180deg, #2b3546 0%, #212a39 100%);
+  --world-card-selected-border: #f2b24a;
+  --world-card-selected-bg: linear-gradient(180deg, #3a3427 0%, #2a261c 100%);
+  --world-tag-bg: rgba(242, 178, 74, 0.12);
+  --world-tag-border: rgba(242, 178, 74, 0.35);
+  --world-head-bg: linear-gradient(180deg, #151d29, #111824);
+  --world-scroll: #131a26;
+}
+.modal[data-player-theme] .game-stage[data-game-world] .stage-question {
+  padding-left: 18px;
+  border-left: 3px solid rgba(242, 178, 74, 0.55);
+  text-align: left;
+}
+/* Scenario: khung tình huống là "trang sổ tay" — nghiêng, viền trái phẳng. */
+.modal[data-player-theme] .game-stage[data-game="scenario"] .scenario-context {
+  font-style: italic;
+  border-radius: 0 10px 10px 0;
+}
+.modal[data-player-theme] .game-stage[data-game="scenario"] .stage-question {
+  text-align: center;
+  border-left-color: transparent;
+}
+
+/* ---------- 3. Matching — bảng nỉ xanh, thẻ giấy trắng, nhấn vàng phấn ---------- */
+.modal[data-player-theme] .game-stage[data-game="matching"] {
+  --world-ink: #f4f7ee;
+  --world-accent: #ffd86b;
+  --world-accent-soft: rgba(255, 216, 107, 0.18);
+  --world-meta: #b8cdbf;
+  --world-focus: #ffe9a8;
+  --world-focus-soft: rgba(255, 216, 107, 0.42);
+  --world-display: 'Segoe UI', 'Be Vietnam Pro', Calibri, sans-serif;
+  --world-display-weight: 700;
+  --world-display-tracking: 0px;
+  --world-font: 'Segoe UI', 'Be Vietnam Pro', Calibri, Tahoma, sans-serif;
+  --world-stage-border: #23463a;
+  --world-stage-bg:
+    radial-gradient(900px 500px at 50% -14%, rgba(94, 176, 138, 0.22), transparent 64%),
+    radial-gradient(700px 420px at 105% 108%, rgba(17, 60, 47, 0.6), transparent 60%),
+    linear-gradient(180deg, #17453a 0%, #0f3329 100%);
+  --world-texture:
+    radial-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, transparent 49.5%, rgba(0, 0, 0, 0.18) 49.5% 50.5%, transparent 50.5%);
+  --world-texture-size: 5px 5px, 240px auto;
+  --world-texture-opacity: 0.75;
+  --world-chip-bg: #1d4d40;
+  --world-chip-border: #3d6f5d;
+  --world-chip-ink: #e3f2e8;
+  --world-track-bg: #1b493c;
+  --world-progress: linear-gradient(90deg, #ffd86b, #fff1bf);
+  --world-progress-glow: 0 0 14px rgba(255, 216, 107, 0.4);
+  --world-option-bg: linear-gradient(180deg, #2a6a56 0%, #215545 100%);
+  --world-option-border: rgba(255, 255, 255, 0.16);
+  --world-option-border-w: 1px;
+  --world-option-shadow: 0 3px 0 rgba(0, 0, 0, 0.24);
+  --world-option-hover-border: #ffd86b;
+  --world-option-hover-bg: linear-gradient(180deg, #337a63 0%, #276250 100%);
+  --world-option-hover-shadow: 0 6px 0 rgba(0, 0, 0, 0.22);
+  --world-soft-bg: rgba(255, 255, 255, 0.07);
+  --world-card-hover-border: #ffd86b;
+  --world-card-hover-bg: linear-gradient(180deg, #2f8a6f 0%, #27705b 100%);
+  --world-card-selected-border: #ffd86b;
+  --world-card-selected-bg: linear-gradient(180deg, #3a3b26 0%, #2d2f1e 100%);
+  --world-tag-bg: rgba(255, 216, 107, 0.14);
+  --world-tag-border: rgba(255, 216, 107, 0.34);
+  --world-head-bg: linear-gradient(180deg, #174537, #123a2f);
+  --world-scroll: #0f3329;
+}
+/* Thẻ ghép giống miếng giấy ghim lên nỉ: góc trắng, đổ bóng ngắn. */
+.modal[data-player-theme] .game-stage[data-game="matching"] .match-card {
+  background: linear-gradient(180deg, #fdfbf2 0%, #f1ecda 100%);
+  color: #22322c;
+  border-color: #dcd2b8;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.22), 0 8px 16px rgba(0, 0, 0, 0.14);
+}
+.modal[data-player-theme] .game-stage[data-game="matching"] .match-card:hover:not(:disabled) {
+  border-color: #ffd86b;
+  background: linear-gradient(180deg, #ffffff 0%, #f6f1de 100%);
+}
+.modal[data-player-theme] .game-stage[data-game="matching"] .match-card.selected {
+  border-color: #e2a800;
+  background: linear-gradient(180deg, #fff4c9 0%, #f7e6a2 100%);
+  box-shadow: 0 0 0 3px rgba(255, 216, 107, 0.55), 0 6px 0 rgba(0, 0, 0, 0.2);
+}
+/* Lật thẻ ghi nhớ: ô úp là nỉ đậm in dấu ?, ô ngửa là giấy trắng. */
+.modal[data-player-theme] .game-stage[data-game="matching"] .memory-card {
+  background: linear-gradient(135deg, #1f5a4a 0%, #174538 100%);
+  border-color: rgba(255, 216, 107, 0.35);
+}
+.modal[data-player-theme] .game-stage[data-game="matching"] .memory-card.flipped {
+  background: linear-gradient(180deg, #fdfbf2 0%, #efe9d6 100%);
+  color: #22322c;
+  border-color: #e2a800;
+}
+.modal[data-player-theme] .game-stage[data-game="matching"] .group-box {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+.modal[data-player-theme] .game-stage[data-game="matching"] .group-box strong { color: #ffd86b; }
+
+/* ---------- 4. Treasure — bản đồ giấy da, mực nâu, nhấn vàng kim ---------- */
+.modal[data-player-theme] .game-stage[data-game="treasure"] {
+  --world-ink: #f6ecd6;
+  --world-accent: #e9b95b;
+  --world-accent-soft: rgba(233, 185, 91, 0.18);
+  --world-meta: #cbb894;
+  --world-focus: #ffe0a0;
+  --world-focus-soft: rgba(233, 185, 91, 0.42);
+  --world-display: Georgia, 'Times New Roman', 'Segoe UI', serif;
+  --world-display-weight: 700;
+  --world-display-tracking: 0px;
+  --world-font: 'Segoe UI', 'Be Vietnam Pro', Calibri, Tahoma, sans-serif;
+  --world-stage-border: #4a3a22;
+  --world-stage-bg:
+    radial-gradient(940px 520px at 16% -12%, rgba(233, 185, 91, 0.2), transparent 62%),
+    radial-gradient(820px 460px at 104% 106%, rgba(89, 54, 26, 0.55), transparent 60%),
+    linear-gradient(180deg, #2b2117 0%, #1d160f 100%);
+  --world-texture:
+    repeating-linear-gradient(92deg, rgba(255, 236, 200, 0.04) 0 2px, transparent 2px 7px),
+    radial-gradient(rgba(0, 0, 0, 0.18) 1px, transparent 1.6px);
+  --world-texture-size: auto, 6px 6px;
+  --world-texture-opacity: 1;
+  --world-chip-bg: #35291b;
+  --world-chip-border: #5c4729;
+  --world-chip-ink: #f2e2c4;
+  --world-track-bg: #3a2d1d;
+  --world-progress: linear-gradient(90deg, #c98f33, #f7d995);
+  --world-progress-glow: 0 0 16px rgba(233, 185, 91, 0.5);
+  --world-option-bg: linear-gradient(180deg, #3a2d1d 0%, #2e2416 100%);
+  --world-option-border: #5d4a2c;
+  --world-option-shadow: inset 0 1px 0 rgba(255, 236, 200, 0.07);
+  --world-option-hover-border: #e9b95b;
+  --world-option-hover-bg: linear-gradient(180deg, #473724 0%, #372b1b 100%);
+  --world-option-hover-shadow: 0 10px 24px rgba(233, 185, 91, 0.22);
+  --world-soft-bg: rgba(233, 185, 91, 0.1);
+  --world-card-hover-border: #e9b95b;
+  --world-card-hover-bg: linear-gradient(180deg, #473724 0%, #372b1b 100%);
+  --world-card-selected-border: #e9b95b;
+  --world-card-selected-bg: linear-gradient(180deg, #56442a 0%, #42331f 100%);
+  --world-tag-bg: rgba(233, 185, 91, 0.14);
+  --world-tag-border: rgba(233, 185, 91, 0.36);
+  --world-head-bg: linear-gradient(180deg, #2a2016, #241c13);
+  --world-scroll: #1d160f;
+}
+
+/* ---------- 5. Race — chặng đua đêm, cờ kẻ sọc, nhấn cam đua ---------- */
+.modal[data-player-theme] .game-stage[data-game="race"] {
+  --world-ink: #eef4ff;
+  --world-accent: #ff8a3d;
+  --world-accent-soft: rgba(255, 138, 61, 0.18);
+  --world-meta: #a9b6cf;
+  --world-focus: #ffc59b;
+  --world-focus-soft: rgba(255, 138, 61, 0.42);
+  --world-display: 'Segoe UI', 'Be Vietnam Pro', Arial, sans-serif;
+  --world-display-weight: 700;
+  --world-display-tracking: 0px;
+  --world-font: 'Segoe UI', 'Be Vietnam Pro', Calibri, Tahoma, sans-serif;
+  --world-stage-border: #283047;
+  --world-stage-bg:
+    radial-gradient(1000px 520px at 50% -16%, rgba(255, 138, 61, 0.16), transparent 62%),
+    radial-gradient(720px 400px at 102% 104%, rgba(66, 220, 255, 0.14), transparent 60%),
+    linear-gradient(180deg, #141a2c 0%, #0d1120 100%);
+  --world-texture:
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.035) 0 18px, transparent 18px 36px);
+  --world-texture-opacity: 0.55;
+  --world-chip-bg: #1f2740;
+  --world-chip-border: #38446180;
+  --world-chip-ink: #dbe4f7;
+  --world-track-bg: #1c2439;
+  --world-progress: linear-gradient(90deg, #ff8a3d, #42dcff);
+  --world-progress-glow: 0 0 16px rgba(255, 138, 61, 0.5);
+  --world-option-bg: linear-gradient(180deg, #252e46 0%, #1c2336 100%);
+  --world-option-border: #3a4560;
+  --world-option-shadow: none;
+  --world-option-hover-border: #ff8a3d;
+  --world-option-hover-bg: linear-gradient(180deg, #2f3a56 0%, #232c43 100%);
+  --world-option-hover-shadow: 0 10px 24px rgba(255, 138, 61, 0.26);
+  --world-soft-bg: rgba(255, 138, 61, 0.1);
+  --world-card-hover-border: #ff8a3d;
+  --world-card-hover-bg: linear-gradient(180deg, #2f3a56 0%, #232c43 100%);
+  --world-card-selected-border: #ff8a3d;
+  --world-card-selected-bg: linear-gradient(180deg, #3a3040 0%, #2a2433 100%);
+  --world-tag-bg: rgba(255, 138, 61, 0.14);
+  --world-tag-border: rgba(255, 138, 61, 0.36);
+  --world-head-bg: linear-gradient(180deg, #131a2b, #101627);
+  --world-scroll: #0d1120;
+}
+/* Ô đường đua là vạch xuất phát: vạch kẻ sọc đen-trắng ở ô 1 và ô đích. */
+.modal[data-player-theme] .game-stage[data-game="race"] .race-round-badge {
+  background: var(--world-accent);
+  color: #1a1208;
+  border-color: #ffb37e;
+}
+.modal[data-player-theme] .game-stage[data-game="race"] .race-active-name strong {
+  color: #ffd2b0;
+}
+
+/* Thẻ kết quả: `.game-stage` là flex column, nên khối kết quả phải canh giữa
+   theo trục ngang thay vì kéo full chiều rộng. */
+.modal[data-player-theme] .game-stage > .result-screen {
+  margin-inline: auto;
+  width: 100%;
+}
+
+/* ---------- Không có animation: nền tĩnh nhưng vẫn đúng màu ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .modal[data-player-theme] .game-stage[data-game-world] { transition: none; }
+}
+/* ============================================================
+   TRUY TÌM KHO BÁU — bố cục toàn màn hình (bàn giao 2026-10-27)
+
+   Trước đây khung chặng là một cột: bản đồ thu gọn → câu hỏi trắc nghiệm →
+   đáp án → nút. Ở máy chiếu, giáo viên và học sinh phải cuộn để thấy hết, và
+   phần chữ (bối cảnh, nhiệm vụ) bị đẩy xuống dưới hình.
+
+   Bố cục mới, chỉ ở `html[data-fullscreen="1"]`:
+     ┌──────────────────────────── bản đồ chặng (thu gọn) ────────────────────────────┐
+     │  ┌──────────────┐  ┌──────────────────────────────────────────────────────┐   │
+     │  │  hình khám phá │  │  Bối cảnh + nhiệm vụ (cột chữ, bên phải)             │   │
+     │  │  + huy hiệu    │  │  → badge loại thử thách → câu hỏi → điều khiển        │   │
+     │  │  CHẶNG n/N     │  │                                                      │   │
+     │  └──────────────┘  └──────────────────────────────────────────────────────┘   │
+     └────────────────────────────────────────────────────────────────────────────────┘
+   Cửa sổ thường giữ bố cục 1 cột như cũ, chỉ thêm huy hiệu chặng.
+
+   GHI CHÚ CHO NGƯỜI SỬA SAU:
+   - `data-game="treasure"` là giá trị ĐỘNG (`${stageGame}`), nên KHÔNG dùng
+     selector theo giá trị thuộc tính do Tailwind sẽ loại bỏ (DECISIONS #88/#104).
+     Ở đây chọn theo cấu trúc: `.stage-center.treasure-stage-grid` — lớp này chỉ
+     được render bởi `renderTreasureStage()`, không dùng ở trò khác.
+   - Item của lưới KHÔNG được `position: relative` tuỳ tiện: nó tràn qua biên
+     container scrolling và làm cả sân khấu trượt khỏi khung (lỗi đã gặp ở bản
+     thế giới trò chơi). Chỉ dùng `position` cho phần tử con bên trong.
+   ============================================================ */
+
+/* Huy hiệu "CHẶNG n/N" đặt ngay dưới hình khám phá (thay chỗ cột trắc nghiệm
+   cũ ở lề trái). */
+.treasure-chapter-now {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 10px 0 0;
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--world-tag-border, rgba(233, 185, 91, 0.36));
+  background: var(--world-tag-bg, rgba(233, 185, 91, 0.14));
+  color: var(--world-ink, #f6ecd6);
+  font-family: var(--world-font, inherit);
+  text-align: center;
+  flex-shrink: 0;
+}
+.treasure-chapter-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--world-accent, #e9b95b);
+}
+.treasure-chapter-value {
+  font-family: var(--world-display, inherit);
+  font-size: clamp(26px, 3vw, 38px);
+  font-weight: 800;
+  line-height: 1;
+}
+.treasure-chapter-total {
+  font-size: 0.55em;
+  font-weight: 700;
+  opacity: 0.72;
+  margin-left: 2px;
+}
+.treasure-chapter-name {
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--world-meta, #cbb894);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Bối cảnh & Nhiệm vụ hiển thị qua pop-up (`.treasure-story-*`, DECISIONS #91);
+   cột chữ không còn khối `.treasure-storyline` inline (DECISIONS #105). Các rule
+   `.treasure-storyline` phía trên vẫn giữ nhưng không còn phần tử nào khớp. */
+
+/* Gợi ý: chỉ còn là nút hình bóng đèn, ghim ở góc dưới bên trái sân khấu. */
+.modal[data-player-theme] .treasure-hint-fab {
+  position: sticky;
+  left: clamp(10px, 1.4vw, 18px);
+  bottom: clamp(10px, 1.6vh, 18px);
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(44px, 5.4vh, 54px);
+  height: clamp(44px, 5.4vh, 54px);
+  margin: 8px 0 0;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid var(--world-tag-border, rgba(233, 185, 91, 0.5));
+  background: radial-gradient(circle at 35% 30%, #ffd977, #d99a2b 70%);
+  color: #4a3208;
+  cursor: pointer;
+  flex-shrink: 0;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45), 0 0 0 4px rgba(255, 217, 119, 0.12);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+.modal[data-player-theme] .treasure-hint-fab:hover {
+  transform: translateY(-2px) scale(1.04);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.5), 0 0 0 6px rgba(255, 217, 119, 0.18);
+}
+.modal[data-player-theme] .treasure-hint-fab:focus-visible {
+  outline: 3px solid var(--world-focus, #ffe0a0);
+  outline-offset: 3px;
+}
+.modal[data-player-theme] .treasure-hint-fab:active { transform: translateY(0) scale(0.97); }
+
+/* ---------- Toàn màn hình: hình trái — chữ phải ---------- */
+html[data-fullscreen="1"] .modal[data-player-theme] .stage-center.treasure-stage-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  align-content: start;
+  align-items: start;
+  justify-content: stretch;
+  column-gap: clamp(16px, 2.2vw, 34px);
+  row-gap: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-width: none;
+  min-width: 0;
+  width: 100%;
+  align-self: stretch;
+  /* The global fullscreen rule for `.stage-center` sets flex-direction: row and
+     flex-wrap: wrap; a grid element ignores them, and `flex: 1 1 auto` above is
+     what makes the grid grow inside the stage column. */
+}
+/* Cột hình: hình vẽ + huy hiệu chặng xếp dọc, canh đầu cột. */
+html[data-fullscreen="1"] .modal[data-player-theme] .treasure-stage-grid > .treasure-illustration-col {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  min-width: 0;
+  width: auto;
+  flex: initial;
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .treasure-stage-grid > .treasure-illustration-col > .stage-illustration.is-treasure {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  aspect-ratio: 16 / 10 !important;
+}
+/* Cột chữ: bối cảnh → badge → câu hỏi → điều khiển, đủ chỗ cho câu hỏi dài. */
+html[data-fullscreen="1"] .modal[data-player-theme] .treasure-stage-grid > .stage-col.is-main {
+  flex: initial;
+  min-width: 0;
+  width: auto;
+  align-items: stretch;
+  gap: 0;
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .treasure-stage-grid .stage-question {
+  margin: 10px 0 12px;
+  max-width: 100%;
+  text-align: left;
+  font-size: clamp(20px, 1.9vw, 30px);
+  line-height: 1.32;
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .treasure-stage-grid .treasure-mission-badge {
+  margin: 0 0 8px;
+  align-self: flex-start;
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .treasure-stage-grid > .stage-col.is-main > #treasureExtra {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+/* Đáp án ở cột phải của kho báu: ô chữ dài không được chiếm 194px chỉ vì
+   hàng lưới kéo giãn theo cột cao nhất. Giữ độ cao theo nội dung, chừa chỗ
+   cho câu hỏi và thông báo đúng/sai. `min-height` sàn toàn màn hình (12vh)
+   vẫn đủ lớn để đọc từ cuối lớp. */
+html[data-fullscreen="1"] .modal[data-player-theme] .treasure-stage-grid > .stage-col.is-main > #treasureMission > .answer-grid {
+  flex: 0 0 auto;
+  align-content: start;
+  grid-auto-rows: auto;
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .treasure-stage-grid > .stage-col.is-main > #treasureMission > .answer-grid > .answer-option {
+  min-height: clamp(56px, 7vh, 74px);
+  padding-block: clamp(8px, 1.1vh, 12px);
+}
+
+/* Thanh dưới cùng: số lượt thử bên phải, nút gợi ý (sticky) bên trái. */
+html[data-fullscreen="1"] .modal[data-player-theme] .game-stage[data-game="treasure"] > .stage-bottom {
+  order: 2;
+  margin-top: 6px;
+  text-align: right;
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .game-stage[data-game="treasure"] > .treasure-hint-fab {
+  order: 3;
+}
+
+/* Bảng hẹp / cửa sổ thường: giữ một cột, huy hiệu chặng nằm gọn bên dưới hình. */
+@media (max-width: 1179px) {
+  .modal[data-player-theme] .treasure-hint-fab {
+    position: static;
+    margin: 8px 0 0;
+    align-self: flex-start;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .modal[data-player-theme] .treasure-hint-fab { transition: none; }
+}

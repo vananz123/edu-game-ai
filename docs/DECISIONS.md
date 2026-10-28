@@ -920,3 +920,412 @@ The map figure is the important one: `min-height: 190px` was bought for a long j
 
 
 
+
+
+### 90. 5-Game Play Surface: Dynamic Layout (Illustration Present vs Absent), Gamified Team Turn Bar, and Fullscreen Motion
+
+**Context.**
+Teachers and students use the 5 game templates (Quiz/Scenario, Matching, Memory, Categorize, Treasure Hunt, and Race) primarily on classroom projectors. Feedback indicated several UX bottlenecks:
+1. When illustration mode is turned `off` or data has no illustration, the 2-column layout kept a 300-440px empty column (`.stage-col:not(.is-main)`), creating an asymmetric dead gap and pushing questions to the right.
+2. The team competition turn bar and score indicators lacked gamified styling inside the dark player stage.
+3. Games 2-5 (Matching, Memory, Categorize, Race) lacked interactive feedback states, cards, and tokens scaled for projection.
+4. Answer interactions were static, lacking classroom feedback motions (celebrate on correct, gentle shake on wrong, 3D flip on memory card).
+
+**Decision.**
+1. **Dynamic 2-column illustration collapse:** Added `:empty` and `:not(:has(.stage-illustration))` rules on `.stage-col:not(.is-main)` in both `.stage-center` and `.race-turn-row`. When no artwork is drawn, the column collapses to `display: none !important; width: 0 !important;` and `.stage-col.is-main` expands to 100% width with centered question typography. When artwork is present, the 2-column layout cleanly displays art on the left and content on the right.
+2. **Gamified Team Turn Bar:** Polished `.team-turn-bar`, `.team-turn-summary`, `.team-score-list`, `.team-score-chip`, and `.team-turn-select` with glowing active team indicator (`.is-active`), gold score pill, and dark-themed dropdown selector.
+3. **Motion & Feedback Animations:** Added keyframe animations (`@keyframes answer-celebrate`, `@keyframes answer-shake`, `@keyframes feedback-pop`, `@keyframes memory-flip`) with `@media (prefers-reduced-motion: reduce)` accessibility guard.
+4. **Enhanced 5-Game UI Elements:** Polished matching cards (`.match-card`), memory grid & 3D card flip (`.memory-card`), categorize boxes & chips (`.group-box`, `.group-chip`), and race cell hover elevations.
+5. **App-wide Fullscreen Toggle:** Added `#topbarFullscreenBtn` (`⛶`) and `F11` shortcut toggle.
+
+**Verification.**
+- `npm run check` (TypeScript): exit 0.
+- `npm run check:renderer-globals`: 34 scripts, 503 declared functions, 4232 call sites — 0 undefined globals.
+- `npm run verify:css`: 12/12 compiled-CSS checks passed.
+- `dist/src/renderer/styles/app.css`: verified all keyframes and selectors compiled properly.
+- `node dist/tests/unit/build-assets.test.js`: 4 copied assets present, all HTML references resolve.
+
+
+### 91. Treasure Hunt UX: Hidden Journey Map During Answering with Reveal & Advance Motion, Context Popup Modal, and 80-90% vs 100% Rewards
+
+**Context.**
+In the Treasure Hunt ("Truy tìm kho báu") game, classroom feedback and user requests highlighted three key UX improvements:
+1. When answering questions, the explorer journey map (`.treasure-map`) took up prominent vertical space at the top, pushing questions, hints, and answers downward.
+2. The stage storyline and mission rules (`.treasure-context`) occupied substantial vertical space inline via `<details>`, adding cognitive load before students could focus on the puzzle.
+3. Upon finishing the game, the victory screen had generic medal states without differentiated rewards matching performance (specifically, 80-99% awarding a meaningful treasure blessing/wish, and 100% awarding the ultimate "Người đỉnh nhất hôm nay" championship).
+
+**Decision.**
+1. **Dynamic Map Drawer (`.treasure-map-drawer`)**: During question answering (`!tp.answered`), the journey map is hidden by default (`.is-answering:not(.is-peek-open)`), giving full vertical prominence to the puzzle, decoding, or matching. A toggle button in `.stage-top` (`🗺️ Xem bản đồ`) allows peeking at any time. When the player answers, the drawer smoothly slides open (`.is-answered`, `@keyframes treasure-map-slide-down`) revealing the updated node. When the player clicks "Tiếp tục →", the map displays the explorer advance motion (`.treasure-map-node.is-advancing`, `@keyframes node-advance-pulse`) and plays audio before advancing.
+2. **Context & Mission Rules Pop-up Modal (`openTreasureStoryModal`)**: Replaced inline `<details>` with a prominent trigger button (`📜 Bối cảnh & Nhiệm vụ chặng`). Clicking opens a backdrop modal popup containing explorer intro, stage narrative, task rules, attempts left, and completion points.
+3. **Tiered Victory & Treasure Blessing Rewards**:
+   - `percent === 100`: Crown medal `👑`, championship celebration card (`.treasure-reward-card.is-champion`) with golden glow, awarding the highest praise: "BẠN LÀ NGƯỜI ĐỈNH NHẤT HÔM NAY! 🏆👑".
+   - `percent >= 80 && percent < 100`: Scroll medal `📜`, blessing card (`.treasure-reward-card.is-blessing`) with emerald/cyan glow, unlocking an inspiring educational wish/blessing quote from the Temple of Knowledge.
+   - `percent < 80`: Encouragement card recognizing effort and inspiring another run.
+
+**Verification.**
+- `npm run check` (TypeScript `tsc --noEmit`): exit 0.
+- `npm run check:renderer-globals`: 34 scripts, 504 declared functions, 4274 call sites — 0 undefined globals.
+- `npm run build`: exit 0.
+- `npm run verify:css`: 12/12 compiled-CSS checks passed.
+- `node dist/tests/unit/build-assets.test.js`: exit 0.
+- Verified compiled CSS in `dist/src/renderer/styles/app.css` for drawer, dialog, champion, and blessing classes.
+
+
+### 92. Treasure Hunt: Full-Screen Journey Map View & Robust Stage Advancement
+
+**Context.**
+When playing the Treasure Hunt ("Truy tìm kho báu") game:
+1. Attempting to click "Tiếp tục" threw a TypeError due to calling `.find()` on a querySelector result (`$`), causing the advance flow to freeze and fail.
+2. In games where `stage.nextStageId` was null, omitted, or malformed, the game prematurely treated intermediate stages as the final stage, offering only "Nhận kho báu".
+3. Cramming the journey map directly above the question after answering created awkward vertical layout contention. Users requested that upon answering, clicking "Tiếp tục" should transition to a dedicated full-screen journey map view so players clearly see the entire world map, which stage they just completed, and where the explorer is advancing to next, before clicking to enter the next challenge.
+
+**Decision.**
+1. **Fallback next stage resolution (`treasureNextStage`)**: If `stage.nextStageId` is missing, invalid, or null, automatically link to `hunt.stages[currentIndex + 1]`. Only the true final stage triggers the treasure completion.
+2. **Dedicated Full-Screen Journey Map View (`renderTreasureJourneyMap`)**:
+   - Question stage focus: Answering screen contains only the puzzle/question, illustration, and context modal button.
+   - Post-answer action: A centered, large `[Tiếp tục: Xem bản đồ hành trình ➔]` button is displayed beneath the explanation.
+   - Transition to full-screen map: Clicking transitions the entire game surface into the full journey map (`.is-journey-screen`), showing the full-width world backdrop, the entire track, the completed node marked `✓`/`✕`, and the next target node pulsing with advance motion (`.is-target-advance`).
+   - Next stage preview card: Displays next stage name, task description, and mission challenge type, with a prominent primary button `[Bước vào chặng tiếp theo ➔]` (or `[🏠 Mở kho báu ngay ➔]`).
+3. **Branch support (`treasureBranchStage`)**: If the current stage defines a branch, both main route and branch route buttons are presented clearly on the journey card.
+
+**Verification.**
+- `npm run check` (TypeScript): exit 0.
+- `npm run check:renderer-globals`: 34 scripts, 507 declared functions, 4298 call sites — 0 undefined globals.
+- `npm run build`: exit 0.
+- `npm run verify:css`: 12/12 compiled-CSS checks passed.
+- `dist/src/renderer/styles/app.css`: verified all journey screen, button, and advance animations.
+
+
+### 93. Treasure Hunt: Hint and Feedback Positioning Directly Under Illustration
+
+**Context.**
+In Treasure Hunt ("Truy tìm kho báu"), feedback and hint messages were previously positioned in varying places or crammed under question cards, causing layout shifts. Additionally, the illustration container width constraints caused images to shrink disproportionately on smaller viewports.
+
+**Decision.**
+1. Fix illustration column width and ratio (`.stage-col:has(> .stage-illustration.is-treasure)`) with 100% width, aspect ratio 16/10, and flex-shrink 0.
+2. Position `#answerFeedback` directly under the illustration inside `.stage-side-col`. When the teacher/player clicks "💡 Dùng gợi ý" or submits an answer, hint cards and correct/wrong feedback cards render neatly underneath the image.
+3. Decouple feedback dimensions with an independent scrollable box (`max-height: 220px; overflow-y: auto;`) so changing image size or screen height does not distort questions or force page overflow.
+
+**Verification.**
+- `npm run check`: exit 0.
+- `npm run build:css` and `npm run verify:css`: 12/12 PASS.
+- Verified responsive stability across different window sizes.
+
+
+### 94. Race Game: Immediate Correct/Wrong Answer Feedback and Enlarged Illustration
+
+**Context.**
+In the Race Game ("Đường đua tri thức"), when a team answered a question, the game immediately closed the question modal and advanced turns, leaving no time for teachers or students to see if the chosen answer was correct or read explanations. Additionally, the race illustration column was constrained to a small size (`clamp(200px, 16vw, 300px)`), making images hard to view on classroom projectors.
+
+**Decision.**
+1. Widen the illustration column to `clamp(280px, 24vw, 400px)` with standard 16:10 aspect ratio and 100% width.
+2. In `answerRace`, retain question view upon submission:
+   - Highlight the correct option in green (`.correct`) and wrong options in red (`.wrong`).
+   - Disable all option buttons to prevent accidental re-submission.
+   - Play positive/negative sound cues immediately.
+   - Display detailed feedback card (`.race-feedback-card`) under the illustration showing right/wrong status, cells moved, points gained, and answer explanation.
+   - Render a prominent primary button `[Lượt tiếp theo: Đội X ➔]` (or `[🏁 Xem kết quả cuộc đua ➔]`) allowing the teacher to manually advance the turn when ready.
+
+**Verification.**
+- `npm run check`: exit 0.
+- `npm run build:css` and `npm run verify:css`: 12/12 PASS.
+- Smoke tests pass.
+
+
+### 95. Race Game: Unified Header Bar Combining Round-Turn and Scalable Team Scoreboard Chips
+
+**Context.**
+Previously in Race Game ("Đường đua tri thức"), the board had two separate rows/containers for status: a `.stage-top` header for round/turn info and a bottom `.race-scoreboard` taking up substantial vertical space. Teachers requested consolidating Round/Turn and Teams into a single top row, where the round and current active team occupy more horizontal space on the left, while the right side displays team chips compactly, with support for scaling to more teams (3–6+ teams) without breaking the layout or pushing track/questions off screen.
+
+**Decision.**
+1. Combine into a single top container `.race-status-bar` placed above the racetrack.
+2. **Left Section (`.race-turn-indicator`)**: Takes more length (`flex: 1 1 340px; min-width: 280px`), featuring:
+   - Round pill: `VÒNG X/Y`
+   - Active team pill: `LƯỢT HIỆN TẠI: [Icon] [Name]`
+   - Rule pill: `⚡ Tiến theo độ khó: Dễ +1, TB +2, Khó +3`
+3. **Right Section (`.race-scoreboard`)**: Styled as a horizontal chip list (`display: flex; flex-direction: row; flex-wrap: wrap; justify-content: flex-end; gap: 6px 8px;`).
+   - Each chip (`.race-team-row`) contains rank medal, team identity (`[Icon] [Name]`), position chip (`Ô X/Y`), and points (`🏆 PTS`).
+   - Active team chip is highlighted with `.active` (purple background `#262c50`, violet border `#8b82ff`, and subtle glow).
+   - If 3, 4, 5, or more teams are present, chips wrap neatly without vertical distortion or clipping.
+   - Preserved exact selector `.race-scoreboard .race-team-row` and theme colors to maintain backward compatibility with all smoke tests and `verify-css.js`.
+
+**Verification.**
+- `npm run check` (`tsc --noEmit`): exit 0.
+- `npm run build:css`: exit 0.
+- `npm run verify:css`: 12/12 PASS (maintains `.race-team-row` #1b2140 and `.active` #262c50).
+- `npm run check:renderer-globals`: 34 scripts, 508 declared functions, 4333 call sites — 0 undefined globals.
+- `npm run build`: exit 0.
+
+
+### 96. Matching Game: Animated SVG Connector Beams for Matched Pairs
+
+**Context.**
+In the Matching Game ("Ghép cặp kiến thức") and the Treasure Hunt matching mission ("Nhiệm vụ ghép cặp"), when a player selected a correct pair across two columns, the cards were simply grayed out with a dashed border (`.matched`). Users requested adding a visual connection effect that physically links the two matching cards together so players and classroom audiences can clearly trace which term corresponds to which definition.
+
+**Decision.**
+1. **Dynamic SVG Canvas Overlay (`.matching-connector-canvas`)**:
+   - Injected into `.matching-board` and `.treasure-match-grid` with `position: absolute; inset: 0; pointer-events: none; z-index: 10;`.
+2. **Smooth Cubic Bezier Connecting Beam**:
+   - Calculates exact boundary connection points between the right edge of the left card and the left edge of the right card.
+   - Draws a cubic Bezier curve (`M x1 y1 C cx1 y1, cx2 y2, x2 y2`) with a glowing stroke.
+   - Animated laser beam drawing using `stroke-dasharray` and `stroke-dashoffset` (`@keyframes matchingBeamDraw 0.45s`).
+   - Glowing connection pins (`<circle>`) at both endpoints and a centered checkmark badge (`.matching-badge-wrap`) at the midpoint of the curve.
+3. **Distinct Color Palette per Matched Pair**:
+   - Utilizes `MATCH_CONNECTOR_PALETTE` (emerald, cyan, purple, amber, pink, blue, teal, orange) so multiple matched pairs each have a unique, identifiable color on the board.
+   - Cards are highlighted with matching border color, glowing box-shadow, and elevated contrast (`.is-connected`).
+4. **Responsive Recalculation**:
+   - Integrated `ResizeObserver` and window resize listeners (`updateAllMatchingConnectors()`) so resizing the window or presentation view immediately realigns all connection lines without clipping or distortion.
+5. **Immediate Audio Feedback**:
+   - Plays `GameAudio.play('match')` on every successful pair and `GameAudio.play('correct')` on completing all pairs before transitioning to the results screen.
+
+**Verification.**
+- `npm run check` (`tsc --noEmit`): exit 0.
+- `npm run build:css`: exit 0.
+- `npm run verify:css`: 12/12 compiled-CSS checks passed.
+- `npm run check:renderer-globals`: 34 scripts, 508 declared functions, 4333 call sites — 0 undefined globals.
+- `npm run build`: exit 0.
+
+
+### 97. Navbar Modernization: Embedding AI / llama.cpp Status Bar and System Notification Center
+
+**Context.**
+Previously, the desktop application had an independent `#aiStatusBar` rendered as a separate, full-width secondary strip immediately below `<header class="topbar">`. This took up ~40px of vertical space on every screen, pushing page content down. Furthermore, notifications were solely transient bottom toasts without a centralized place for teachers to review system events or offline readiness alerts. Users requested unifying and improving the navbar layout, moving the llama.cpp status indicator and system notifications directly up into the top navbar.
+
+**Decision.**
+1. **Unified Navbar Integration (`<header class="topbar">`)**:
+   - Integrated `#aiStatusBar` directly into the top navbar between the breadcrumb (left) and action buttons (right).
+   - Removed the separate secondary bar, reclaiming 36px–48px of vertical screen height for games, library cards, and wizards.
+   - Styled the embedded `#aiStatusBar` as a sleek, rounded pill container with light background `#f8fafc`, soft borders, status dot, live task description, and compact action controls (`▶ Khởi động`, `Dừng`, `Huỷ AI`, `Hiện khi rảnh`).
+2. **System Notification Center (`#topbarNotificationContainer`)**:
+   - Added a notification bell button (`#topbarNotificationBtn`) with an unread badge counter (`#topbarNotificationBadge`).
+   - Integrated a floating popover (`#topbarNotificationPopover`) displaying recent system notifications and status logs with timestamps.
+   - Wired `toast(message)` to automatically log all transient notifications to the Notification Center history.
+   - Provided a "Xoá tất cả" action to clear notifications.
+3. **100% Backward Compatibility**:
+   - Maintained all existing element IDs (`aiStatusBar`, `aiStatusRuntime`, `aiStatusRuntimeDot`, `aiStatusTask`, `aiStatusStart`, `aiStatusStop`, `aiStatusCancel`, `aiStatusToggle`, `pageCrumb`, `topbarFullscreenBtn`, `helpBtn`, `globalAiActivity`, `toast`) and data attributes.
+   - Preserved compatibility with automated smoke tests (`smoke73`, `ui-fullscreen-check`) and theme switches.
+
+**Verification.**
+- `npm run check` (`tsc --noEmit`): exit 0.
+- `npm run build:css`: exit 0.
+- `npm run verify:css`: 12/12 compiled-CSS checks passed.
+- `npm run check:renderer-globals`: 34 scripts, 511 declared functions, 4370 call sites — 0 undefined globals.
+- `npm run build`: exit 0.
+
+
+### 98. Lesson Wizard Step 1: Layout Modernization with Structured Upload Dropzone & Sample Injection
+
+**Context.**
+Step 1 of the "Create from lesson plan" wizard previously had a cramped and unorganized layout: a tiny, unadorned "Chọn tệp giáo án" button was placed above a plain document name input and a giant raw textarea, without visual distinction between importing a file vs pasting text. There was no instant visual feedback when a file was loaded, no one-click sample for testing, and the AI status box sat awkwardly between the textarea and primary action button.
+
+**Decision.**
+1. **Redesigned Step 1 Panel Layout (`.wizard-step-input-panel`)**:
+   - **Header**: Added step badge `BƯỚC 1 / 5`, clear title, and privacy guarantee badge (`🔒 Bảo mật cục bộ · 100% Offline`).
+   - **Visual File Upload Card (`.wizard-import-card`)**:
+     - Empty state: Clean dropzone card with document folder icon, supported formats pills (`DOCX`, `PDF`, `PPTX`, `TXT / MD`), and prominent primary upload button `[ ⇧ Chọn tệp giáo án ]`.
+     - Loaded state: Turns into a document card displaying file icon, filename, character count, file format tag, and a quick `[ ↻ Đổi tệp khác ]` button.
+   - **Visual Divider**: `── HOẶC DÁN NỘI DUNG VĂN BẢN ──` clearly distinguishing the two input paths.
+   - **Document Name & Textarea Editor**:
+     - Name input `#wizardDocName` positioned cleanly with label `TÊN BÀI HỌC / TÀI LIỆU`.
+     - Textarea toolbar with quick action button `✨ Thử giáo án mẫu` (`wizardInputInsertSample`), populating a full Biology lesson sample for immediate 1-click test runs.
+     - Live length counter `#wizardDocHint` showing real-time character count and readiness state (`● Sẵn sàng phân tích` vs `○ Chưa đủ độ dài`).
+   - **Local AI Status Card**:
+     - Refined card layout with clear indicator dot, status message, and direct `Mở AI local` action.
+   - **Action Bar**:
+     - Prominent large action button `#wizardNextBtn` (`Tiếp tục: Phân tích giáo án bằng AI ➔`) and secondary button `Tôi đã biết muốn tạo trò chơi nào`.
+2. **100% Backward Compatibility**:
+   - Maintained all selectors and DOM IDs: `data-wizard-step-body="input"`, `#wizardDocName`, `#wizardDocText`, `#wizardDocHint`, `#wizardNextBtn`, `#wizardAiStatus`, `[data-wizard-action="import-file"]`, `[data-wizard-action="next"]`.
+
+**Verification.**
+- `npm run check` (`tsc --noEmit`): exit 0.
+- `npm run build:css`: exit 0.
+- `npm run verify:css`: 12/12 compiled-CSS checks passed.
+- `npm run check:renderer-globals`: 34 scripts, 514 declared functions, 4401 call sites — 0 undefined globals.
+- `npm run build`: exit 0.
+- `node dist/tests/unit/renderer-load-order.test.js`: exit 0.
+- `node dist/tests/unit/build-assets.test.js`: exit 0.
+
+
+### 99. Lesson Wizard Step 1: Tab UI for Document Structure & Content, Remove Redundant AI Status Banner
+
+**Context.**
+After the Step 1 redesign (Decision #98), the AI local status banner (`wizardAiReadinessHint()`) still rendered inline in the Step 1 panel even though the same information was already available on the top navbar (Decision #97). Additionally, the document structure tree (`renderWizardStructureTree()`) was rendered below the entire Step 1 section as a separate panel, making the relationship between content input and structure preview unclear.
+
+**Decision.**
+1. **Removed the inline AI status banner from Step 1**: The `wizardAiReadinessHint()` call was removed from `renderWizardInput()`. The function definition remains because it is reused by `step-analysis.ts`.
+2. **Unified 2-tab interface** replacing the separate structure panel:
+   - **Tab 1 — 📑 Cấu trúc tài liệu**: Shows the document heading tree (`renderWizardStructureTree()`). When no text is loaded, displays a placeholder with a button to switch to the content tab.
+   - **Tab 2 — 📝 Nội dung giáo án**: Contains `#wizardDocText` textarea, live character counter `#wizardDocHint`, readiness indicator, and `✨ Thử giáo án mẫu` quick action.
+   - Tab state stored in `wizardState.inputTab` (`'structure'` | `'content'`); defaults to `'content'` when no text, auto-switches to `'structure'` after file import.
+   - Inactive tab pane uses `class="hidden"` (display:none) so `#wizardDocText` stays in the DOM — smoke tests (64/65/66) and `renderer-load-order.test.ts` continue to pass.
+3. **Added `wizardInputInsertSample()` function** to `step-input.ts`: Populates a full Biology lesson plan sample text (Quang hợp ở thực vật) for one-click testing, wired through `data-wizard-action="insert-sample"` in `create-wizard.ts`.
+4. **Added `renderWizardStructureTabContent()` helper**: Shows a friendly empty-state when text is below minimum, otherwise delegates to `renderWizardStructureTree()`.
+5. **CSS for tab styling**: `.wizard-tab-btn` with transparent background, `.wizard-tab-pane [data-structure-panel]` strips redundant borders/shadows.
+
+**Verification.**
+- `npm run check` (`tsc --noEmit`): exit 0.
+- `npm run build:css`: exit 0 (Tailwind v4.3.3).
+- `npm run verify:css`: 12/12 compiled-CSS checks passed.
+- `npm run check:renderer-globals`: 34 scripts, 516 declared functions, 4417 call sites — 0 undefined globals.
+- `npm run build`: exit 0.
+- `node dist/tests/unit/renderer-load-order.test.js`: exit 0.
+- `node dist/tests/unit/renderer-undefined-globals.test.js`: exit 0.
+- `node dist/tests/unit/build-assets.test.js`: exit 0.
+
+
+
+
+### 100. Manual Game Creator Page: Layout Modernization & Section Label Cleanup
+
+**Context.**
+The "Tạo trò chơi mới" (manual game creation) page used cryptic letter-prefixed section headers (`B · Chọn loại trò chơi`, `C · Soạn nội dung thủ công`, `D · Thiết lập trò chơi`, `E · Mở trình chỉnh sửa`) inherited from an earlier prototype. The letters were meaningless to teachers and cluttered the UI. The page also lacked dark-mode support and had inconsistent form styling compared to the modernized wizard pages.
+
+**Decision.**
+1. **Removed all letter-prefixed section headers** (`B ·`, `C ·`, `D ·`, `E ·`) — replaced with descriptive icon-prefixed headers (🎮 Chọn loại trò chơi, ⚙️ Thiết lập trò chơi, ✏️ Soạn nội dung & Mở trình chỉnh sửa).
+2. **Restructured into 3 main content sections** (down from 4): template selection, game setup, and content editing/launch — in a logical top-to-bottom flow.
+3. **Modernized sidebar** with numbered step guide, a gradient AI call-to-action card, and a system status panel.
+4. **Unified form styling** with the wizard: rounded-2xl cards, consistent label/input styling, dark-mode variants for all elements.
+5. **100% backward compatible**: All DOM IDs preserved (`#gameTitle`, `#gameSubject`, `#gameGrade`, `#questionCount`, `#generateBtn`, `#previewManualBtn`, `#scoringModeHint`, all `setup*` fields, `data-template`, `data-page`).
+
+**Verification.**
+- `npm run check` (`tsc --noEmit`): exit 0.
+- `npm run build`: exit 0 (Tailwind v4.3.3).
+- `npm run verify:css`: 12/12 compiled-CSS checks passed.
+- `npm run check:renderer-globals`: 34 scripts, 516 declared functions, 4417 call sites — 0 undefined globals.
+- `node dist/tests/unit/renderer-load-order.test.js`: exit 0.
+- `node dist/tests/unit/renderer-undefined-globals.test.js`: exit 0.
+- `node dist/tests/unit/build-assets.test.js`: exit 0.
+
+
+
+### 101. Settings Page: Modern Layout Restructuring with Sticky Save Action & Configuration Summary
+
+**Context.**
+The Settings page ("Cài đặt ứng dụng", `renderSettings`) was previously organized as a long single-column sequence of raw panels. The "Lưu cài đặt" button was placed only once at the top-right header, requiring teachers to scroll all the way back up after tweaking AI providers, teaching styles, or classroom presentation preferences. Form fields lacked clear visual grouping, hierarchy, and dark-mode styling consistent with recent page modernizations.
+
+**Decision.**
+1. **Sticky Floating Sidebar with Action Card**:
+   - Moved the primary `#saveSettingsBtn` into a high-visibility, sticky gradient card in the right sidebar (`sticky top-20`), ensuring teachers can click `💾 Lưu cài đặt` at any scroll position without having to hunt for the button.
+   - Added a live configuration overview card in the sidebar summarizing active AI mode, teaching tone, theme, audience, and local model installation status.
+   - Added quick links in the sidebar to jump directly to "Tạo trò chơi từ giáo án", "Thư viện trò chơi", and "Dự án của tôi".
+2. **Modular Section Cards with Icon Titles**:
+   - **🤖 AI local tích hợp**: Model selection, readiness status chip, model evaluation details, collapsible GPU advanced options, verification/reinstall actions, hardware spec summary.
+   - **☁️ Nhà cung cấp AI**: AI mode switch (Offline, Local, Cloud), cloud providers (ChatGPT, Gemini, OpenCode Zen, custom), base URL, model, and API key with test connection button (`#testAiBtn`).
+   - **🎨 Phong cách giảng dạy của tôi**: Tone, humor, artistic visual style, real-world examples, and guidance notes for AI generation.
+   - **⚙️ Dữ liệu và trải nghiệm**: Theme switch, audience mode, large text, audio toggles, plus localized privacy & `.egame` package specs.
+   - **📋 Tác vụ AI**: Task list manager with refresh and CPU runtime verification affordances.
+   - **🔍 Chẩn đoán AI (log)**: Diagnostic log exporter, log folder launcher, and log clearing controls.
+3. **100% Backward Compatibility**:
+   - All critical DOM IDs and event bindings preserved: `#saveSettingsBtn`, `#openSetupWizardBtn`, `#installLocalModelBtn`, `#testAiBtn`, `#aiTasksRefreshBtn`, `#cpuRuntimeVerifyBtn`, `#exportDiagnosticsBtn`, `#openLogFolderBtn`, `#clearDiagnosticsBtn`, `#cpuVerifyResult`, `#aiTaskList`, `#diagnosticsResult`, `#diagnosticsInfo`, `#localAiProgress`, `#localModelSelect`, `#localRuntimeBackendSelect`, and all `setting*` inputs.
+
+**Verification.**
+- `npm run check` (`tsc --noEmit`): exit 0.
+- `npm run build`: exit 0 (Tailwind v4.3.3).
+- `npm run verify:css`: 12/12 compiled-CSS checks passed.
+- `npm run check:renderer-globals`: 34 scripts, 516 declared functions, 4418 call sites — 0 undefined globals.
+- `node dist/tests/unit/renderer-load-order.test.js`: exit 0.
+- `node dist/tests/unit/renderer-undefined-globals.test.js`: exit 0.
+- `node dist/tests/unit/build-assets.test.js`: exit 0.
+
+
+### 102. Navbar: Compact llama.cpp Status Pill & 3-Dots Action Dropdown Menu
+
+**Context.**
+After moving the llama.cpp status bar to the top navbar in Decision #97, the bar rendered 4 full text action buttons (`▶ Khởi động`, `Dừng`, `Huỷ AI`, `Hiện khi rảnh`) plus long status text inline across a wide 580px container. This cluttered the navbar and left minimal breathing room for breadcrumbs and title navigation. The user requested compacting the llama.cpp status bar and grouping its functional buttons into a 3-dots button that reveals the actions when clicked.
+
+**Decision.**
+1. **Ultra-Compact Status Pill (`#aiStatusBar`)**:
+   - Transformed the wide bar into an elegant, compact pill (height 34px) containing only the status dot (`#aiStatusRuntimeDot`), concise status label (`#aiStatusRuntime`), and the 3-dots trigger button (`#aiStatusMenuBtn`).
+   - `#aiStatusTask` is hidden when idle and automatically shown with task details (`stage · mm:ss`) only when an AI task is actively running.
+   - Clicking anywhere on the pill or the 3-dots button opens the action dropdown.
+2. **3-Dots Action Dropdown Menu (`#aiStatusDropdown`)**:
+   - Replaced the 4 scattered inline text buttons with a unified dropdown menu triggered by `#aiStatusMenuBtn` (⋮ icon):
+     - `▶ Khởi động AI local` (`#aiStatusStart`) — enabled when idle.
+     - `⏹ Dừng llama.cpp` (`#aiStatusStop`) — enabled when ready.
+     - `✕ Huỷ tác vụ AI` (`#aiStatusCancel`) — enabled when task is active.
+     - `👁 Hiện khi rảnh / Ẩn khi rảnh` (`#aiStatusToggle`) — toggles idle indicator.
+     - `⚙ Cài đặt AI local…` (`#aiStatusOpenModalBtn`) — quick shortcut to open local AI configuration modal.
+   - Click-outside-to-close behavior implemented cleanly, matching the notifications popover pattern.
+3. **100% Backward Compatibility**:
+   - Preserved all element IDs: `#aiStatusBar`, `#aiStatusRuntime`, `#aiStatusRuntimeDot`, `#aiStatusTask`, `#aiStatusStart`, `#aiStatusStop`, `#aiStatusCancel`, `#aiStatusToggle`, ensuring smoke tests (`smoke73.js`, `smoke75.js`) and status monitors continue passing 100%.
+
+**Verification.**
+- `npm run check` (`tsc --noEmit`): exit 0.
+- `npm run build:css`: exit 0 (Tailwind v4.3.3).
+- `npm run verify:css`: 12/12 compiled-CSS checks passed.
+- `npm run check:renderer-globals`: 34 scripts, 518 declared functions, 4444 call sites — 0 undefined globals.
+- `npm run build`: exit 0.
+- `node dist/tests/unit/renderer-load-order.test.js`: exit 0.
+- `node dist/tests/unit/renderer-undefined-globals.test.js`: exit 0.
+- `node dist/tests/unit/build-assets.test.js`: exit 0.
+
+### 103. Lesson Wizard Step 1: Stop the Structure Tree / Tabs From Jumping on Tick and Tab Switch
+
+**Context.**
+On "Tạo từ giáo án" step 1, ticking a section in "Cấu trúc tài liệu" (and switching between the structure/content tabs) felt stuck and jumpy. Three independent causes, found in this order:
+
+1. **The tristate restore never ran.** `innerHTML` cannot express `indeterminate`, so `wizardSyncStructureCheckboxes()` existed for it — but it was called from `wireCreateWizard()`, which runs *before* `render()` replaces `#pageContent`. It restored the checkboxes of the old, about-to-be-thrown-away DOM. After the render, parents whose children are partly ticked stayed visually unchecked until an unrelated later render.
+2. **The tree scrolled back to its first row** on every tick, because the whole page (not just the tree) is re-rendered and nothing stored the scroll offset.
+3. **Switching to the structure tab could show a blank pane**, and the character counter on the content tab stayed at "0 ký tự" while typing, because the tabs only re-render on click.
+
+**Decision.**
+- `core/render.ts` now captures the step-1 tree/preview scroll offsets *before* `innerHTML` and re-applies the tristate *after* it (`wizardStructureCaptureView()` / `wizardSyncStructureCheckboxes()`), so the restore runs against the DOM that is on screen.
+- `wizardSyncStructureCheckboxes()` is rooted at `[data-tab-pane="structure"]` (falling back to `#pageContent`) instead of `document`. The document <head> is writable, and a package test dumping a report into `document` had previously left a stale `document`-wide query throwing `HTMLCollection does not support named properties`; rooting the query keeps the sync inside the page.
+- The ticked section is re-focused after the render (`wizardStructureToggle.pendingFocus`) and both scroll offsets are restored, so the row under the pointer stays put.
+- Tabs: panes carry `role="tabpanel"`, buttons `role="tab"`/`aria-selected`/`aria-controls`. Both panes stay `display`-toggled (never `aria-hidden`), which keeps the tree reachable for `wizardSyncStructureCheckboxes()` and for screen readers. A pane shown before the debounced analyzer has run renders a "Đang đọc cấu trúc…" state and schedules the analysis immediately instead of staying blank.
+- Typing now patches the tab counters through `wizardSyncStepInputStats()` (marker: `[data-wizard-tab-count]`) instead of waiting for the next click.
+- CSS: `[data-tab-pane] [data-structure-panel]` gets `contain: layout paint` so a tick repaints only the tree box; `.wizard-tab-pane { overflow-anchor: none }` prevents the browser's scroll anchoring from dragging the page when the pane is re-created; the structure panel itself is never a containment root (`contain: layout` would make it a containing block and shift the offsets the restore reads).
+
+**Verification.**
+- `npm run check`: exit 0. `npm run build`: exit 0. `npm run verify:css`: 12/12.
+- `npm run check:renderer-globals`: 34 scripts, 522 declared functions, 4484 call sites — 0 undefined globals.
+- `npm test`: exit 0.
+- New Electron check `node tests/ui/ui-wizard-structure-check.js <port>`: 10/10 — scroll offset and focus survive a tick, the tab counter follows typing, both panes stay in the DOM, `aria-selected` is set, and the structure tab fills in once the analyzer finishes.
+- `node tests/ui/ui-draft-guard-check.js <port>`: 7/8. The one failure is the AI-generation row (no llama.cpp runtime in the check environment), not related to step 1.
+
+**Traps for the next change.**
+- Do **not** move the tristate sync back into `wireCreateWizard()`: it runs before the markup exists.
+- `scrollTop` cannot be set on a pane that is `display:none`; the offset is written only while the structure pane is visible.
+- `aria-hidden` on a pane would hide the tree from `wizardSyncStructureCheckboxes()`'s own visibility rules and from the UI checks; use the `hidden` class only.
+**Review follow-up (same batch).**
+An independent review of this uncommitted batch found six defects; all are fixed and verified:
+
+1. `raceTurnPanelHtml()` used `race` without declaring it. The live build therefore threw `ReferenceError: race is not defined` whenever a race question was drawn, so from the second turn on the answer grid never rendered (the earlier UI check passed because it only drew once). `const race = state.currentGame.race;` is now declared in the function.
+2. The treasure matching SVG was the first child of `.treasure-match-grid`; the connector canvas is now the last child so the two columns keep their positional order.
+3. The journey-map redesign removed the only way to finish early. `#journeyEndBtn` and `#treasureEndBtn` now end the hunt after a confirmation and render the results.
+4. `isFinalTurn` compared `rp.round >= maxRounds` before `advanceRaceTurn()` increments the round, so the last turn of the last round offered "next team" and the following click jumped to the results. It is now `lastTeam && rp.round >= race.maxRounds`.
+5. `renderCreate` moved the medium/hard point fields into a grid that lost its `hidden` class, so `updateScoringVisibility()` could no longer hide them. The row has `#pointsDifficultyGrid` and the toggler drives it together with the fields.
+6. The new `ui-wizard-structure-check` still passed with the post-render sync removed. It now asserts the parent's indeterminate state and `aria-checked="mixed"` right after a nested tick; re-verified by removing the call from the built bundle (10/14 instead of 14/14).
+
+The focus restore added in #103 lands one frame late (the page is replaced during the tick), and `ui-race-treasure-check` opens the map drawer before measuring stage overflow, since the drawer is collapsed while answering.
+### 104. Treasure Hunt Fullscreen Layout: Diagram Left, Story Right, Hint as a Corner FAB
+
+**Context.** In fullscreen the treasure stage was still one column: collapsed map → question → answer grid → actions. The story (hunt.intro, stage.story, stage.taskDescription) was behind a "📜 Bối cảnh & Nhiệm vụ" pop-up, the hint was a text button inside the optional-actions row, and the previous screen's answer area (the left illustration column) was mostly empty. The teacher had to scroll and open a dialog to know what the stage was about.
+
+**Decision.**
+- Stage markup is a grid (.stage-center.treasure-stage-grid), only in \html[data-fullscreen="1"]\:
+  - **left column** \.treasure-illustration-col\: the scene, then \.treasure-chapter-now\ (label "Chặng", \
+ / total\, stage name). The chapter badge replaces the empty area the old exam column occupied.
+  - **right column** \.stage-col.is-main\: \#treasureStoryline\ (avatar + \.scenario-context\ with intro/story/task), the mission badge, the question, \#treasureMission\, optional actions.
+- The "Bối cảnh & Nhiệm vụ" pop-up trigger is removed from the stage; \openTreasureStoryModal()\ and its CSS stay (they are still reachable code and harmless), but the content now lives inline.
+- Hint is \#treasureHintBtn\ as \.treasure-hint-fab\: an inline SVG bulb with \ria-label="Dùng gợi ý"\, \position: sticky; left; bottom; align-self: flex-start\ so it sits in the bottom-left corner of the stage (order 3, after \.stage-bottom\). Text is gone; the title attribute keeps the wording for hover.
+- Answer rows inside \#treasureMission\ override the global fullscreen \grid-auto-rows: minmax(min-content, 1fr)\ with \uto\: the \1fr\ row can never shrink below the tallest item's min-content, so one long answer inflated all four cards (measured 194px per card at 1366×768).
+- World variables are now set by \[data-game="..."]\ on the stage, not by \:has()\ on the modal. Reason: the treasure stage selects plain-\data-game\ attributes that always exist in the template, while \:has()\ selectors were fragile (a Tailwind build dropped \[data-game-world="quiz"]\ and cascades fell back to the default indigo). Scenario shares the quiz world (same engine, two setups) and keeps only its ribbon, italic context and centred question; \openPlayModal()\ passes a separate \	agWorld\ so the header badge still says "Tình huống thực tế".
+- Stage items must not get \position: relative\ for decoration: on a scrolling flex container that pushes the stage's children past the clip and the whole stage slides (the regression seen when the five worlds were added).
+
+**Verification.** \ui-race-treasure-check\ 19/19 (treasure stage still scrolls, map sticky, controls reachable, no page double-scroll); \ui-stage-illustration-check\ 169/169 (treasure scene 301×188 default, still a real scene); \ui-fullscreen-density-check\ 8/8. Measured at 1366×768: grid 520px + 704px columns, stage scrollHeight 709 vs clientHeight 657 (~50px scroll), chapter badge "Chặng 1/6 Chặng 1", hint FAB 44×44 at (65, 681), \document.documentElement.scrollHeight === 768\.
+
+**Traps.** Do not select the stage by a dynamic \data-game\ VALUE in CSS (Tailwind v4 drops those selectors); use the structural class. Do not put \grid-auto-rows: 1fr\ back on \#treasureMission > .answer-grid\. The FAB is \sticky\, not \ixed\, so it never escapes the stage on a projector.
+### 105. Treasure Hunt: Restore the "Bối cảnh & Nhiệm vụ" Pop-up Trigger
+
+**Context.** DECISIONS #104 moved the story inline (avatar + .treasure-storyline bubble above the mission badge) and dropped the "📜 Bối cảnh & Nhiệm vụ chặng" button, so the text was always on screen. The teacher asked for the pop-up back: the inline block competed with the question and answers for height on a projector board.
+
+**Decision.**
+- enderTreasureStage() renders #treasureStoryBtn again in .stage-kicker-row (badge left, button right), guarded by hasStory = intro on the first stage, or stage.story, or stage.taskDescription. Its click opens the existing openTreasureStoryModal().
+- The inline .treasure-storyline block is removed from the stage; the story is only visible inside the pop-up (.treasure-story-*, DECISIONS #91).
+- Everything else from #104 stays: the fullscreen grid (scene left with the \Chặng n/N\ badge, question/answers right), the hint as a bulb FAB in the bottom-left corner, and the \#treasureMission\ answer-row fix.
+- ui-race-treasure-check no longer requires overflow. With the story inside the pop-up the 6-stage fixture fits at 1366×768 (measured 0px), so the check now asserts "tall fixture scrolls to its bottom" OR "fitting fixture stays at scrollTop 0".
+
+**Verification.** Electron probe on a 6-stage hunt at 1366×768: button present, pop-up opens with title "📜 Bối cảnh & Nhiệm vụ: Chặng 1", closes, no .treasure-storyline element, hint FAB present, \document.documentElement.scrollHeight === 768\. \ui-race-treasure-check\ 18/18, \ui-fullscreen-density-check\ 8/8.
+
+**Traps.** Keep the pop-up CSS (it is still the only renderer of the story). If a future layout needs the story inline again, reintroduce it from openTreasureStoryModal()'s content, not from a second copy of the markup.

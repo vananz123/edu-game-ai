@@ -410,6 +410,11 @@ function assertNav(nav, tag) {
         Boolean(opened && opened.stage && opened.question && opened.option),
         opened ? JSON.stringify(opened) : 'no result');
       if (!opened || !opened.option) continue;
+      // DECISIONS #91/#104: the journey map is a collapsed drawer while the
+      // teacher is answering, so this fixture opens it through the stage control
+      // before its height is measured (the same step a teacher takes).
+      await evaluate("(document.querySelector('#treasureMapToggleBtn') || { click() {} }).click()");
+      await new Promise(r => setTimeout(r, 150));
 
       // Photograph it for humans. `assertLayout: false` because the universal
       // "nothing outside the viewport" rule is the wrong contract for a template
