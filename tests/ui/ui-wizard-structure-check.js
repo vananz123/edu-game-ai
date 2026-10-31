@@ -17,6 +17,19 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 (async () => {
   const { ws, evaluate } = await connect();
 
+  // A fresh profile opens the setup onboarding as a full-screen page:
+  // `html[data-setup-fullscreen]` hides `.app-shell`, and a hidden page cannot take
+  // keyboard focus — `focus()` leaves `activeElement` on <body>. That alone made the
+  // focus assertion below fail, which was misread for a long time as "the window has
+  // no OS focus". Canonical guard, same as the other UI checks.
+  await evaluate(`(async () => {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    for (let i = 0; i < 40; i++) { if (document.querySelector('#modalRoot .setup-fullscreen')) break; await sleep(100); }
+    if (typeof closeSetupWizard === 'function') closeSetupWizard('close');
+    await sleep(250);
+    return true;
+  })()`);
+
   const surface = await evaluate(`(() => ({
     capture: typeof wizardStructureCaptureView === 'function',
     restore: typeof wizardStructureRestoreView === 'function',

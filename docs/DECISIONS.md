@@ -456,4 +456,16 @@ Nguyên nhân gốc nằm ở chỗ editor render cả ba panel ẩn để thầ
 
 **Chưa xử lý.** Chưa lọc/tìm theo cách chơi (bộ lọc thể loại giữ nguyên); chưa hiện cách chơi ở chỗ khác ngoài thẻ (ví dụ màn Dự án của tôi hay Lịch sử kết quả).
 
+## #156 — `ui-wizard-structure-check` xanh nhờ guard setup onboarding, không phải "thiếu focus OS"
+
+**Bối cảnh.** Check này đỏ **13/14** từ lâu; assertion "the render keeps the keyboard focus on the ticked row" thấy `activeElement = BODY` dù `document.hasFocus()` trả `true`. Kết luận cũ (bàn giao #150) là "cửa sổ chạy nền không lấy được focus OS", nên mục này bị treo lại như việc chỉ làm được trên máy có cửa sổ thật.
+
+**Điều tra.** Probe trên profile mới: `#librarySearch.focus()`, `#wizardDocText.focus()` và checkbox `[data-wizard-section].focus()` **đều** để `activeElement = BODY`; cùng lúc `document.documentElement` mang `data-setup-fullscreen` và `.setup-fullscreen` đang mở trong `#modalRoot`. Đóng overlay bằng `closeSetupWizard('close')` thì `focus()` đặt đúng vào `librarySearch`. Nguyên nhân là **màn setup toàn màn hình ẩn `.app-shell`** (CSS theo `html[data-setup-fullscreen]`) — trang ẩn thì không nhận được focus bàn phím. `Page.bringToFront`, `Emulation.setFocusEmulationEnabled` và `WScript.Shell.AppActivate` đều không cứu được khi shell còn ẩn, nên mọi nỗ lực "ép focus OS" trước đây vô ích.
+
+**Thay đổi.** `tests/ui/ui-wizard-structure-check.js`: thêm guard chuẩn ngay sau `connect()` (chờ `#modalRoot .setup-fullscreen`, `closeSetupWizard('close')`, chờ 250ms) như các check khác, kèm chú thích vì sao lỗi focus từng bị hiểu sai. Không đổi mã ứng dụng.
+
+**Kết quả.** `ui-wizard-structure-check` **14/14**; chạy hai lần trên hai profile mới đều 14/14, assertion focus thấy `focused: "sec_2583"` = `expected`. `ui-draft-guard-check` vẫn **7/8** (profile mới không có nhà cung cấp AI — nguyên nhân thật, cần model/API key chứ không phải overlay).
+
+**Chưa xử lý.** `ui-draft-guard-check` cần một nhà cung cấp AI dùng được (không đưa API key thật vào check); chưa có script chạy trọn bộ UI check bằng một lệnh.
+
 

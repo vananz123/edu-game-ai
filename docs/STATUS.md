@@ -8,6 +8,7 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 ## Mục lục bàn giao
 
 ### 2026-10-31 — [docs/handoff/status/2026-10-31.md](handoff/status/2026-10-31.md)
+- `ui-wizard-structure-check` xanh 14/14 nhờ guard setup onboarding (#156)
 - Nhãn "Cách chơi" (Cổ điển / Xây nhà) trên thẻ trò chơi (#155)
 - Phân trang và xoá nhiều ở Thư viện trò chơi (#154)
 - Bốn yêu cầu #153: bỏ ảnh theo câu, nhãn "Đấu trường tri thức", ảnh thay nhãn xám, hạ HUD Xây nhà
@@ -190,6 +191,23 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - Lịch sử trước 2026-10-19
 ## Bàn giao gần nhất
 
+## Handoff - `ui-wizard-structure-check` xanh nhờ guard setup onboarding (2026-10-31, DECISIONS #156)
+
+**Files changed.**
+- `tests/ui/ui-wizard-structure-check.js`: thêm guard chuẩn ngay sau `connect()` (chờ `#modalRoot .setup-fullscreen`, `closeSetupWizard('close')`, chờ 250ms), kèm chú thích về chẩn đoán cũ sai.
+- Docs: `docs/DECISIONS.md` (#156), `docs/STATUS.md`, `docs/handoff/status/2026-10-31.md` (chuyển bàn giao #153 vào lưu trữ).
+- Không đổi mã ứng dụng: renderer/CSS/IPC giữ nguyên.
+
+**Behavior.** Chỉ test. Assertion "the render keeps the keyboard focus on the ticked row" trước đây thấy `activeElement = BODY` không phải vì cửa sổ nền thiếu focus OS, mà vì profile mới đang mở màn setup toàn màn hình — `.app-shell` bị ẩn (`html[data-setup-fullscreen]`) nên **mọi** `focus()` trên trang đều vô hiệu. Probe: `#librarySearch.focus()`, `#wizardDocText.focus()`, checkbox `[data-wizard-section].focus()` đều để `activeElement = BODY` khi overlay mở; đóng overlay thì focus đúng ngay. `Page.bringToFront`, `Emulation.setFocusEmulationEnabled`, `WScript.Shell.AppActivate` đều không cứu được khi shell còn ẩn.
+
+**Commands run.** Electron thật, mỗi lần một profile sạch qua `run-ui-153.sh`: `ui-wizard-structure-check` **14/14** (chạy 2 lần, cả hai 14/14; assertion focus: `focused: "sec_2583"` = `expected`), `ui-draft-guard-check` **7/8** (vẫn đỏ ở bước sinh nội dung thật: "Chưa có nhà cung cấp AI nào sẵn sàng"). Không đổi mã nguồn nên không chạy lại build/unit.
+
+**Chưa xác minh.** `ui-draft-guard-check` cần một nhà cung cấp AI dùng được (model local hoặc API key) — không đưa key thật vào check. Chưa chạy toàn bộ bộ UI check bằng một lệnh; chưa chạy installer đóng gói.
+
+**Next task.** Roadmap `Packaged check` (cần máy sạch); nếu muốn `ui-draft-guard-check` xanh thì cần chốt cách cấp model cho check (ví dụ dựng một provider giả qua IPC như các check khác vẫn làm với `window.eduGame`).
+
+---
+
 ## Handoff - Nhãn "Cách chơi" trên thẻ trò chơi (2026-10-31, DECISIONS #155)
 
 **Files changed.**
@@ -227,28 +245,6 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 **Next task.** Roadmap `Packaged check` (cần máy sạch); nếu phải sửa cả ba trang danh sách lần nữa thì gom pager thành helper dùng chung (giáo án / thư viện / lịch sử).
 
----
-
-## Handoff - Bốn yêu cầu #153: bỏ ảnh theo câu, nhãn "Đấu trường tri thức", ảnh thay nhãn xám, hạ HUD Xây nhà (2026-10-31, DECISIONS #153)
-
-**Files changed.**
-- `src/shared/illustration-registry.ts`: hằng `ILLUSTRATION_NONE_ID = 'none'`; `resolveIllustration` trả `null` khi gặp sentinel (sau `normalizeItemAssets`); cập nhật chú thích `off` / bullet mới cho `'none'`.
-- `src/renderer/features/game-illustration.ts`: `resolveStageIllustration` mirror đúng luật đó (unit test có guard chống lệch).
-- `src/renderer/features/editor/questions.ts`: `editorItemArtHtml` thêm option `Không dùng ảnh` trong picker, badge/thumb riêng, nút **"✕ Bỏ ảnh"** (`data-editor-art-remove`, disabled khi đã bỏ), chip `🚫 Không ảnh`; `wireEditorItemArtRow` ghi sentinel `'none'` (không ghi `''`).
-- `src/renderer/features/games/result-screen.ts`: `GAME_WORLDS.quiz.label` → `ĐẤU TRƯỜNG TRI THỨC` (badge đầu màn chơi + dải băng sân khấu dùng chung nguồn này).
-- `src/renderer/features/games/quiz.ts` (`renderQuestion`): bỏ pill xám cho trắc nghiệm thường (giữ cho tình huống / điền từ / trả lời ngắn / đúng-sai); ảnh chỉ định của câu trong Xây nhà đặt ngang hàng bên trái ô nhà (`.house-art-row`).
-- `src/renderer/styles/game-house.css`: khối `.house-art-row` / `.house-question-art` kích thước theo `vh`, thêm vào danh sách ẩn của `.is-house-showcase`; `.house-progress` có `margin-top` theo `vh` (chỉ trạng thái trước khi trả lời).
-- Tests: `tests/ui/ui-editor-art-check.js` (4 check "Bỏ ảnh"), `tests/ui/ui-game-worlds-check.js` (nhãn mới + `pickedBesideSlot` + check ảnh thế chỗ pill), `tests/ui/ui-house-building-check.js` (`hudTop`/`progressBarBottom`/`houseArt`, check HUD cách thanh tiến độ ≥12px), `tests/unit/illustration-registry.test.ts` (2 test hành vi + guard lệch renderer); `tests/ui/ui-fullscreen-density-check.js` và `tests/ui/ui-stage-illustration-check.js` thêm guard đóng setup onboarding cho profile mới.
-- Docs: `docs/DECISIONS.md` (#153), `docs/STATUS.md`.
-- Không đổi: hợp đồng IPC, engine matching/treasure/race, `normalizeGame` (đường `.egame`), `playGame`.
-
-**Behavior.** Giáo viên bỏ được ảnh của **một câu** mà không phải tắt ảnh cả game, và ảnh đã bỏ không bị chế độ `auto` vẽ lại. Game quiz ở toàn màn hình mang tên "ĐẤU TRƯỜNG TRI THỨC" ở badge và dải băng. Ở chế độ Xây nhà, pill xám "THỬ THÁCH KIẾN THỨC" đã bỏ; nếu câu hỏi có ảnh **giáo viên chọn** thì ảnh nằm đúng chỗ đó (ngang hàng bên trái ô nhà 3D), tranh tự động thì không. HUD "Đã xây 1/5 phần" hạ xuống: cách đáy thanh tiến độ **61px** @1920×1080 và **45px** @1366×768; ảnh đo được **324×203** và **230×144**, không tràn màn hình.
-
-**Commands run.** `npm run check` 0 · `node tests/run-unit.js` **68/68** · `npm run build` 0 · `npm run check:renderer-globals` 0 undefined · `npm run verify:css` **17/17** · Electron thật qua CDP, mỗi check một instance sạch: `ui-game-worlds-check` **52/52**, `ui-house-building-check` **85/85**, `ui-editor-art-check` pass, `ui-stage-illustration-check` **169/169**, `ui-item-assets-editor-check` **29/29**, `ui-fullscreen-density-check` **8/8**.
-
-**Chưa xác minh.** Chưa mở app bằng mắt để đối chiếu ảnh chụp của chủ dự án (kết luận dựa trên probe CDP + số đo). WebGL không hiện trong `Page.captureScreenshot` (chỉ thấy sàn xám ở 1366×768) — hạn chế chụp, ngôi nhà 3D được chứng minh bằng assertion toạ độ chiếu. Chưa chạy installer đóng gói. `ui-wizard-structure-check` (focus môi trường) và `ui-draft-guard-check` (thiếu model AI) vẫn đỏ do nguyên nhân có sẵn.
-
-**Next task.** Roadmap `Packaged check` (cần máy sạch); các mục AI/giáo án chưa chốt thứ tự.
 
 
 
