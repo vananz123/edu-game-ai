@@ -24,7 +24,7 @@ import {
   LESSON_SCHEMA_VERSION,
   type GameConfig,
   type LessonAnalysis
-} from '../shared/lesson-types';
+} from '../../shared/lesson-types';
 import { LESSON_PROMPT_VERSIONS } from './lesson-prompts';
 import { LESSON_PREPROCESS_VERSION } from './lesson-preprocess';
 

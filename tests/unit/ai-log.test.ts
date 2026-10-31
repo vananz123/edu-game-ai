@@ -10,7 +10,7 @@ import {
   redactValue,
   sanitizeLogMessage,
   writeDiagnosticBundle
-} from '../../src/services/ai-log';
+} from '../../src/services/ai/ai-log';
 
 function tempDir(label: string): string {
   return mkdtempSync(path.join(os.tmpdir(), `edugame-ai-log-${label}-`));

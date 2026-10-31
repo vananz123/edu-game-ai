@@ -6,7 +6,7 @@ import {
   buildItemRegenerationRepairMessages,
   buildLessonAnalysisPrompt,
   buildRepairMessages
-} from '../../src/services/lesson-prompts';
+} from '../../src/services/lesson/lesson-prompts';
 
 // ---------------------------------------------------------------------------
 // O6: the analysis prompt must produce JSON that fits the output budget.

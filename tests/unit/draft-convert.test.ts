@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import {
   convertDraft,
   type ConversionResult
-} from '../../src/services/draft-convert';
-import { parseGameDraft } from '../../src/services/lesson-contracts';
+} from '../../src/services/game/draft-convert';
+import { parseGameDraft } from '../../src/services/lesson/lesson-contracts';
 import {
   LESSON_SCHEMA_VERSION,
   type ArenaDraft,

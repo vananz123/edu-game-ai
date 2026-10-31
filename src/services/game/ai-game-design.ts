@@ -1,4 +1,4 @@
-import type { GameQuestion, RaceData, RaceQuestion, RaceSpecialCell, RaceTeam, TreasureHuntData, TreasureStage } from '../shared/types';
+import type { GameQuestion, RaceData, RaceQuestion, RaceSpecialCell, RaceTeam, TreasureHuntData, TreasureStage } from '../../shared/types';
 
 const RACE_CELL_TYPES = new Set(['boost', 'penalty', 'lucky', 'challenge']);
 const DIFFICULTIES = new Set(['dễ', 'trung bình', 'khó']);

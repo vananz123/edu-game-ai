@@ -1,4 +1,4 @@
-// @ts-nocheck -- renderer UI logic; the tree/selection contracts are typed in src/services/lesson-structure.ts and lesson-selection.ts.
+// @ts-nocheck -- renderer UI logic; the tree/selection contracts are typed in src/services/lesson/lesson-structure.ts and lesson-selection.ts.
 /**
  * Step 1 — document structure tree and teacher selection
  * (docs/archive/specs/update_AI_plan_7.txt §4, §5.5).

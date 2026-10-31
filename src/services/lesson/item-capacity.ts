@@ -1,4 +1,4 @@
-import type { WorkflowGameType } from '../shared/lesson-types';
+import type { WorkflowGameType } from '../../shared/lesson-types';
 
 /**
  * O12 — predicts how many game items (questions / situations / pairs / stages)

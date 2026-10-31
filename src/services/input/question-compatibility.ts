@@ -17,7 +17,7 @@
  *
  * Pure: no I/O, no clock, no Electron. Unit-tested as a 5 × 7 matrix.
  */
-import type { WorkflowGameType } from '../shared/lesson-types';
+import type { WorkflowGameType } from '../../shared/lesson-types';
 import type { ParsedQuestion, ParsedQuestionKind } from './question-import';
 
 export interface GameCompatibility {

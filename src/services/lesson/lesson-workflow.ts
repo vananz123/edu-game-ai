@@ -17,7 +17,7 @@ import {
   isCancelReason,
   type AiTransportCode,
   type ResponseSchemaRef
-} from './ai-transport';
+} from '../ai/ai-transport';
 import {
   buildDraftPrompt,
   buildDraftRepairMessages,
@@ -49,14 +49,14 @@ import {
 } from './lesson-contracts';
 import { itemCount } from './lesson-item-repair';
 import { requestedItemCount } from './lesson-quality';
-import { inferContentCategory } from '../shared/content-categories';
+import { inferContentCategory } from '../../shared/content-categories';
 import type {
   GameConfig,
   GameDraft,
   GameRecommendation,
   LessonAnalysis,
   WorkflowGameType
-} from '../shared/lesson-types';
+} from '../../shared/lesson-types';
 
 export type LessonWorkflowCode = AiTransportCode | 'AI_OUTPUT_INVALID';
 

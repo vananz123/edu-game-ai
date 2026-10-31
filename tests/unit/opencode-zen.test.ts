@@ -6,7 +6,7 @@ import {
   buildZenRequestPayload,
   isZenBaseUrl,
   sanitizeZenContent
-} from '../../src/services/opencode-zen';
+} from '../../src/services/ai/opencode-zen';
 
 function run(): void {
   // isZenBaseUrl — chỉ nhận đúng host opencode.ai

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import JSZip from 'jszip';
-import { importQuestionsFromFile, parseQuestionsFromText } from '../../src/services/question-import';
+import { importQuestionsFromFile, parseQuestionsFromText } from '../../src/services/input/question-import';
 
 async function run(): Promise<void> {
   const csv = '\uFEFFCâu hỏi;Phương án A;Phương án B;Phương án C;Đáp án đúng;Giải thích;Điểm;Độ khó\r\n' +

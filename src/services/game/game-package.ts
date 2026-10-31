@@ -13,7 +13,7 @@
  *
  * Pure: no I/O, no clock, no Electron.
  */
-import type { EducationalGame } from '../shared/types';
+import type { EducationalGame } from '../../shared/types';
 import { validateMatchingGame, validateRaceGame, validateScenarioGame, validateTreasureHuntGame } from './game-validation';
 
 // `game-service` is a CommonJS module (legacy, `@ts-nocheck`); require it the way the

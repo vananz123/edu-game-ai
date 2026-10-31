@@ -14,9 +14,9 @@
  * the analysis, would leave every assertion below on `general`.
  */
 import assert from 'node:assert/strict';
-import { AiRequestRegistry } from '../../src/services/ai-transport';
-import { generateGameDraft, type LessonChatClient, type LessonChatRequest } from '../../src/services/lesson-workflow';
-import { normalizeAnalysis } from '../../src/services/lesson-normalize';
+import { AiRequestRegistry } from '../../src/services/ai/ai-transport';
+import { generateGameDraft, type LessonChatClient, type LessonChatRequest } from '../../src/services/lesson/lesson-workflow';
+import { normalizeAnalysis } from '../../src/services/lesson/lesson-normalize';
 import type { GameConfig, GameDraft, LessonAnalysis } from '../../src/shared/lesson-types';
 
 type ArenaDraft = Extract<GameDraft, { gameType: 'arena' }>;

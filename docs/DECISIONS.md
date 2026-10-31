@@ -231,3 +231,24 @@ Các mục #57–#145 được tách sang `docs/handoff/decisions/` để file n
 **Không làm.** Không đổi tên/tham số hàm toàn cục, không gộp file, không chuyển renderer sang ES module, không sửa logic tính điểm, 3D, CSS hay luồng offline/LAN.
 
 **Verification.** `npm run build` 0 · unit **68/68** · `check:renderer-globals` 0 undefined (44/45 script, 756 hàm, 6192 call site) · `verify:css` **17/17**. Electron thật qua CDP: `ui-three-game-check` **19/19**, `ui-three-game-reactions-check` **11/11**, `ui-three-game-check-4games` **41/41** (instance sạch), `ui-three-game-patterns-check` **31/31**, `ui-house-building-check` **84/84** (instance sạch), `ui-game-worlds-check` **42/42**, `ui-play-surface-check` **156/156**, `ui-presentation-check` **60/60**, `ui-stage-illustration-check` **169/169**, `ui-matching-finish-check` **22/22**, `ui-race-treasure-check` **18/18**, `ui-lan-wiring-check` **7/7**, `ui-lan-treasure-finish-check` **5/5**, `ui-fullscreen-density-check` **8/8**, `ui-fullscreen-check` **20/20** (chỉ đạt sau khi xoá `data-setup-fullscreen="1"` còn sót trong profile mới — lỗi môi trường, không do bản tách).
+
+## #148 — Nhóm `src/services/` thành lesson / ai / game / storage / input (P3 restructure)
+
+**Bối cảnh.** P3 của mục "Restructure the project tree" (#146/#147): `src/services/` có 35 file phẳng, 14.040 dòng, tên file đủ rõ nhưng mở thư mục không thấy ranh giới giữa luồng giáo án, lớp gọi AI, nghiệp vụ trò chơi, lưu trữ và nhập liệu.
+
+**Bố cục mới (35 file, không gộp/tách file nào).**
+- `services/lesson/` (14) — giáo án → game: `lesson-contracts`, `lesson-prompts`, `lesson-normalize`, `lesson-chunker`, `lesson-retrieval`, `lesson-preprocess`, `lesson-structure`, `lesson-selection`, `lesson-quality`, `lesson-cache`, `lesson-workflow`, `lesson-projects`, `lesson-item-repair`, `item-capacity`.
+- `services/ai/` (5) — gọi model: `ai-transport`, `ai-providers`, `ai-tasks`, `ai-log`, `opencode-zen`.
+- `services/game/` (9) — trò chơi: `game-service`, `game-validation`, `game-project-adapter`, `game-package`, `ai-game-normalize`, `ai-game-design`, `game-type-rules`, `game-recommender`, `draft-convert`.
+- `services/storage/` (2) — lưu trữ: `lesson-store`, `custom-illustration`.
+- `services/input/` (5) — nhập liệu: `input-classifier`, `input-classifier-semantic`, `question-import`, `question-compatibility`, `question-text`.
+- `ai-game-design`/`ai-game-normalize` nằm ở `game/` vì chúng dựng dữ liệu trò chơi; `custom-illustration` ở `storage/` vì nó chép ảnh vào thư mục dữ liệu; `draft-convert` ở `game/` vì nó đổi giữa các dạng draft trò chơi.
+
+**Cách làm.** `git mv` giữ lịch sử, rồi một codemod Node resolve **mọi** specifier tương đối theo vị trí *cũ* của file gọi rồi ghi lại theo vị trí *mới* (phủ `import … from`, `require(`, `import(` trong `src/**` và `tests/**`). Không có file nào khác bị sửa ngoài dòng import/require; 7 chú thích đường dẫn trong mã được cập nhật tay. Kiểm 400 specifier tương đối: 0 không resolve được. Không đổi tên/xuất/tham số hàm, không đổi hình dạng module, không đụng `preload.ts`, IPC channel, SQLite schema, `.egame`, hay renderer.
+
+**Sửa kèm một test hỏng sẵn.** `tests/unit/lesson-store.test.ts` (mục #121) đọc 3 trang ở offset 0/10/30 nhưng đòi hợp của chúng bằng 36 dòng — 3 trang đó chỉ phủ 26 dòng (thiếu trang offset 20). Test chưa từng chạy vì `npm test` bỏ qua `lesson-store` (cần ABI Electron, chạy bằng `npm run test:native`); lỗi có từ commit 7e5571b. Đã thêm `thirdPage = listAiTasks(10, 20)` và đưa vào phép hợp; không đổi hành vi sản phẩm.
+
+**Verification.** `npm run check` 0 · `npm run build` 0 · unit **68/68** · `npm run test:native` **1/1** (sau khi sửa) · `check:renderer-globals` 0 undefined · `verify:css` **17/17**. Electron thật (CDP, profile tạm, fixture AI): app khởi động được với các `require` mới trong `main.ts`; `ui-input-routing-check` **52/52** (phân loại + nhập câu hỏi + wizard), `ui-lessons-paging-check` all pass (LessonStore qua IPC). `ui-classifier-outline-check` **14/15**: assertion "safety gate explains itself" cần lớp ngữ nghĩa chạy, máy này không có model MiniLM nên nhánh `semantic-unavailable` trả thông báo khác — lỗi môi trường, không liên quan P3. `ui-ai-tasks-paging-check` **6/8**: profile mới chỉ có 1 trang lịch sử (check giả định instance đã có ≥11 tác vụ); phần phân trang đã được test native phủ. `ui-item-assets-editor-check` (chụp màn hình nhiều cỡ) treo/không ổn định khi cửa sổ bị che — đúng ghi chú môi trường của #144; không dùng làm bằng chứng. File `.js` cũ trong `dist/src/services/` không xoá được vì app đang chạy giữ khoá (chỉ là artifact, build sạch lần sau sẽ hết).
+
+**Không làm.** Không đổi hợp đồng IPC/preload, không gộp/tách file dịch vụ, không đổi logic nghiệp vụ, không sửa renderer/CSS, không đụng LAN/presentation/SQLite/`.egame`.
+

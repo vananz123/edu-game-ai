@@ -9,7 +9,7 @@ import {
   parseLessonAnalysisContent,
   parseRecommendationsContent,
   recommendationsContentSchema
-} from '../../src/services/lesson-contracts';
+} from '../../src/services/lesson/lesson-contracts';
 import type { ArenaConfig, ArenaDraft, GameConfig, MatchingDraft, RaceDraft, ScenarioDraft, TreasureDraft } from '../../src/shared/lesson-types';
 
 const arenaDraft: ArenaDraft = {

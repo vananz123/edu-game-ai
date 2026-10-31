@@ -12,8 +12,8 @@ import {
   type GameProject,
   type LessonAnalysis,
   type WorkflowStep
-} from '../shared/lesson-types';
-import type { EducationalGame } from '../shared/types';
+} from '../../shared/lesson-types';
+import type { EducationalGame } from '../../shared/types';
 
 export const WORKFLOW_STEP_ORDER: readonly WorkflowStep[] = [
   'input',

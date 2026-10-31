@@ -6,7 +6,7 @@ import type {
   LessonAnalysis,
   ScenarioSituation,
   WorkflowGameType
-} from '../shared/lesson-types';
+} from '../../shared/lesson-types';
 
 /**
  * Deterministic content-quality checks (O2 of docs/archive/specs/update-AI-local.txt).

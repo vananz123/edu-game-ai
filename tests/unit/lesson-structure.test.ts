@@ -22,8 +22,8 @@ import {
   isNumberedListBlock,
   repeatedMarkers,
   splitSourceLines
-} from '../../src/services/lesson-structure';
-import { normalizeLessonSource } from '../../src/services/lesson-chunker';
+} from '../../src/services/lesson/lesson-structure';
+import { normalizeLessonSource } from '../../src/services/lesson/lesson-chunker';
 
 const LESSON = [
   'Giáo án Khoa học 6',

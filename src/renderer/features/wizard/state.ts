@@ -111,7 +111,7 @@ const wizardGameMetaMap = {
 const wizardGameTypeOrder = ['arena', 'scenario', 'matching', 'treasure', 'race'];
 /**
  * #115: tie-break order for imported banks, identical to
- * `COMPATIBILITY_GAME_ORDER` in `services/question-compatibility.ts` (pinned by
+ * `COMPATIBILITY_GAME_ORDER` in `services/input/question-compatibility.ts` (pinned by
  * `tests/unit/question-compatibility.test.ts`). The renderer cannot import it.
  */
 const wizardCompatGameOrder = ['arena', 'race', 'treasure', 'matching', 'scenario'];

@@ -23,7 +23,7 @@ import type {
   TreasureStage,
   TreasureStageMission,
   TreasureStageQuestion
-} from '../shared/types';
+} from '../../shared/types';
 import type {
   ArenaDraft,
   ArenaQuestion,
@@ -39,18 +39,18 @@ import type {
   ScenarioSituation,
   TreasureDraft,
   TreasureStageDraft
-} from '../shared/lesson-types';
-import { LESSON_SCHEMA_VERSION } from '../shared/lesson-types';
+} from '../../shared/lesson-types';
+import { LESSON_SCHEMA_VERSION } from '../../shared/lesson-types';
 import {
   normalizeContentCategory,
   normalizeIconName,
   normalizeIllustrationAssetId
-} from '../shared/asset-validation';
+} from '../../shared/asset-validation';
 import {
   LessonContractError,
   parseGameConfig,
   parseGameDraft
-} from './lesson-contracts';
+} from '../lesson/lesson-contracts';
 import {
   validateMatchingGame,
   validateRaceGame,

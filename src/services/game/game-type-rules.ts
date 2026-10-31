@@ -1,4 +1,4 @@
-import type { CognitiveLevel, WorkflowGameType } from '../shared/lesson-types';
+import type { CognitiveLevel, WorkflowGameType } from '../../shared/lesson-types';
 
 /**
  * The kind of lesson content a game format turns into gameplay well.

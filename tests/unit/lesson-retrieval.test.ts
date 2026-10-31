@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chunkLessonText } from '../../src/services/lesson-chunker';
+import { chunkLessonText } from '../../src/services/lesson/lesson-chunker';
 import {
   buildRetrievalQuery,
   cosineSimilarity,
@@ -13,7 +13,7 @@ import {
   DEFAULT_MAX_SELECTED_CHUNKS,
   DEFAULT_MAX_SELECTED_CHARS,
   DEEP_MAX_SELECTED_CHARS
-} from '../../src/services/lesson-retrieval';
+} from '../../src/services/lesson/lesson-retrieval';
 import type { ArenaConfig, LessonAnalysis } from '../../src/shared/lesson-types';
 
 const LESSON = [

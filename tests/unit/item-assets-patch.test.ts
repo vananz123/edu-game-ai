@@ -18,9 +18,9 @@
  *     that only exercised the adapter would still be green with that bug.
  */
 import assert from 'node:assert/strict';
-import { fromEducationalGame, toEducationalGame } from '../../src/services/game-project-adapter';
-import { parseGameDraft } from '../../src/services/lesson-contracts';
-import { patchDraftItemAssets, LessonItemError } from '../../src/services/lesson-item-repair';
+import { fromEducationalGame, toEducationalGame } from '../../src/services/game/game-project-adapter';
+import { parseGameDraft } from '../../src/services/lesson/lesson-contracts';
+import { patchDraftItemAssets, LessonItemError } from '../../src/services/lesson/lesson-item-repair';
 import { applyItemAssetPatch, ITEM_ASSET_PATCH_KEYS } from '../../src/shared/asset-validation';
 import type { GameConfig, GameDraft, GameProject } from '../../src/shared/lesson-types';
 

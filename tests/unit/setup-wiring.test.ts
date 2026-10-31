@@ -24,7 +24,7 @@ import { SetupOrchestrator } from '../../src/ai-core/setup-orchestrator';
 import type { SetupOrchestratorDependencies } from '../../src/ai-core/setup-orchestrator';
 import { createInitialSetupState, parseSetupState, SetupStateStore } from '../../src/ai-core/setup-state';
 import { buildGenerationOptions } from '../../src/ai-core/generation-options';
-import { buildChatRequestBody, readAssistantContent } from '../../src/services/ai-transport';
+import { buildChatRequestBody, readAssistantContent } from '../../src/services/ai/ai-transport';
 import { SETUP_CHANNELS } from '../../src/ai-core/setup-ipc';
 import type { ModelManifestEntry } from '../../src/ai-core/contracts';
 import { createHarness, SYNTHETIC_MODEL } from '../helpers/setup-fake';

@@ -18,7 +18,7 @@ import {
   resolveProviderState,
   type AiSettingsShape,
   toPublicProviderView
-} from '../../src/services/ai-providers';
+} from '../../src/services/ai/ai-providers';
 
 function registryShape(): void {
   assert.equal(AI_PROVIDERS.length, 5, 'five providers are declared');

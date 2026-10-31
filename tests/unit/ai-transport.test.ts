@@ -13,8 +13,8 @@ import {
   readAssistantContent,
   requestChatJson,
   type ChatSendResult
-} from '../../src/services/ai-transport';
-import type { ChatMessage } from '../../src/services/lesson-prompts';
+} from '../../src/services/ai/ai-transport';
+import type { ChatMessage } from '../../src/services/lesson/lesson-prompts';
 
 const messages: ChatMessage[] = [
   { role: 'system', content: 'system' },

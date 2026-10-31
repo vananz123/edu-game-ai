@@ -3,7 +3,7 @@ import {
   chunkLessonText,
   normalizeLessonSource,
   DEFAULT_MAX_CHUNK_CHARS
-} from '../../src/services/lesson-chunker';
+} from '../../src/services/lesson/lesson-chunker';
 
 const LESSON = [
   'Bài 21: Quang hợp ở thực vật',

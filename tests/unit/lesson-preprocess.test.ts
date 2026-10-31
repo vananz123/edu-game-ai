@@ -18,9 +18,9 @@ import {
   preprocessBudgetForMode,
   preprocessLessonSource,
   rankBlocksForExcerpt
-} from '../../src/services/lesson-preprocess';
-import { buildAnalysisCacheKey, sha256Hex } from '../../src/services/lesson-cache';
-import { prepareLessonExcerpt, buildLessonAnalysisPrompt } from '../../src/services/lesson-prompts';
+} from '../../src/services/lesson/lesson-preprocess';
+import { buildAnalysisCacheKey, sha256Hex } from '../../src/services/lesson/lesson-cache';
+import { prepareLessonExcerpt, buildLessonAnalysisPrompt } from '../../src/services/lesson/lesson-prompts';
 
 const TABLE = [
   '| Thời gian | Nhiệt độ | Ghi chú |',

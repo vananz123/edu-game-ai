@@ -4,7 +4,7 @@ import {
   AUTO_ITEM_MIN,
   capacityModelProfile,
   estimateItemCapacity
-} from '../../src/services/item-capacity';
+} from '../../src/services/lesson/item-capacity';
 
 // --- model tiers ----------------------------------------------------------
 

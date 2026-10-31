@@ -3,7 +3,7 @@ import {
   AiTaskManager,
   isAiTaskTerminal,
   type AiTaskState
-} from '../../src/services/ai-tasks';
+} from '../../src/services/ai/ai-tasks';
 
 async function main(): Promise<void> {
   const terminal: AiTaskState[] = ['completed', 'failed', 'cancelled'];

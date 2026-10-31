@@ -6,8 +6,8 @@ import {
   applyDraft,
   createProjectFromAnalysis,
   WORKFLOW_STEP_ORDER
-} from '../../src/services/lesson-projects';
-import { normalizeAnalysis } from '../../src/services/lesson-normalize';
+} from '../../src/services/lesson/lesson-projects';
+import { normalizeAnalysis } from '../../src/services/lesson/lesson-normalize';
 import type { GameProject } from '../../src/shared/lesson-types';
 
 const NOW = '2026-02-02T00:00:00.000Z';

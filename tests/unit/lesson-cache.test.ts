@@ -9,7 +9,7 @@ import {
   configFingerprint,
   sha256Hex,
   stableJson
-} from '../../src/services/lesson-cache';
+} from '../../src/services/lesson/lesson-cache';
 import type { ArenaConfig, LessonAnalysis } from '../../src/shared/lesson-types';
 
 const analysis: LessonAnalysis = {

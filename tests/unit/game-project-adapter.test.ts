@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
-import { GameAdapterError, fromEducationalGame, toEducationalGame } from '../../src/services/game-project-adapter';
+import { GameAdapterError, fromEducationalGame, toEducationalGame } from '../../src/services/game/game-project-adapter';
 import {
   validateMatchingGame,
   validateRaceGame,
   validateScenarioGame,
   validateTreasureHuntGame
-} from '../../src/services/game-validation';
+} from '../../src/services/game/game-validation';
 import type {
   EducationalGame,
   GameOption,

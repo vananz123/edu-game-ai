@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import type { GameQuestion } from '../../src/shared/types';
-import { buildRaceData, buildTreasureHunt } from '../../src/services/ai-game-design';
-import { normalizeAiGame } from '../../src/services/ai-game-normalize';
-import { validateRaceGame, validateTreasureHuntGame } from '../../src/services/game-validation';
+import { buildRaceData, buildTreasureHunt } from '../../src/services/game/ai-game-design';
+import { normalizeAiGame } from '../../src/services/game/ai-game-normalize';
+import { validateRaceGame, validateTreasureHuntGame } from '../../src/services/game/game-validation';
 
 const makeId = (prefix: string) => `${prefix}-test`;
 

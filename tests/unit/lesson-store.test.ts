@@ -2,11 +2,11 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { LessonStore, LessonStoreError, LESSON_STORE_SCHEMA_SQL } from '../../src/services/lesson-store';
-import type { LessonStoreDatabase } from '../../src/services/lesson-store';
-import { chunkLessonText } from '../../src/services/lesson-chunker';
-import { toEducationalGame } from '../../src/services/game-project-adapter';
-import { advanceAfterRecommendations, createProjectFromAnalysis } from '../../src/services/lesson-projects';
+import { LessonStore, LessonStoreError, LESSON_STORE_SCHEMA_SQL } from '../../src/services/storage/lesson-store';
+import type { LessonStoreDatabase } from '../../src/services/storage/lesson-store';
+import { chunkLessonText } from '../../src/services/lesson/lesson-chunker';
+import { toEducationalGame } from '../../src/services/game/game-project-adapter';
+import { advanceAfterRecommendations, createProjectFromAnalysis } from '../../src/services/lesson/lesson-projects';
 import type {
   ArenaDraft,
   GameProject,
@@ -518,14 +518,16 @@ async function run(): Promise<void> {
   const everything = store.listAiTasks(100, 0);
   const firstPage = store.listAiTasks(10, 0);
   const secondPage = store.listAiTasks(10, 10);
+  const thirdPage = store.listAiTasks(10, 20);
   const lastPage = store.listAiTasks(10, 30);
   assert.equal(firstPage.length, 10);
   assert.equal(secondPage.length, 10);
+  assert.equal(thirdPage.length, 10);
   assert.equal(lastPage.length, 6, 'the last page is short, not padded');
   assert.equal(firstPage[0].taskId, 'page_task_34', 'newest first');
   assert.equal(lastPage[lastPage.length - 1].taskId, 'task_1', 'the oldest row ends the list');
   // Pages never overlap and together cover every row exactly once.
-  const seen = [...firstPage, ...secondPage, ...lastPage].map(task => task.taskId);
+  const seen = [...firstPage, ...secondPage, ...thirdPage, ...lastPage].map(task => task.taskId);
   assert.equal(new Set(seen).size, 36);
   assert.deepEqual(seen, everything.map(task => task.taskId), 'paging in order equals one full read');
   assert.equal(new Set(seen).has('task_1'), true, 'every stored row is on exactly one page');

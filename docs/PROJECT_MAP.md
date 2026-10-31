@@ -24,8 +24,13 @@ src/
   index.html           Nạp CSS + liệt kê MỌI script renderer THEO THỨ TỰ
   shared/              Kiểu + hằng số dùng chung cho main, preload, renderer
   ai-core/             AI local (llama.cpp): tải model/runtime, đo máy, chạy server
-  services/            Nghiệp vụ thuần (không DOM, không Electron):
-                       tài liệu giáo án, tạo game, lưu trữ, chấm điểm, SQLite
+  services/            Nghiệp vụ thuần (không DOM, không Electron), chia theo khu vực:
+    lesson/            giáo án → game: contracts/prompts, chunk + retrieval, preprocess,
+                       structure, quality, cache, workflow, projects, item-repair, capacity
+    ai/                gọi model: transport, providers, tasks, log, opencode-zen
+    game/              5 thể loại: validation, normalize, adapter, .egame, draft-convert, rules
+    storage/           lưu trữ: lesson-store (SQLite + file giáo án), custom-illustration
+    input/             nhập liệu: phân loại đầu vào, nhập câu hỏi CSV/XLSX, chuẩn hoá câu
   presentation/        Cửa sổ trình chiếu sang màn hình thứ hai
   lan/                 Chơi LAN: máy giáo viên làm máy chủ, học sinh trả lời
                        trên điện thoại (Express + Socket.IO trong main process)
@@ -69,12 +74,12 @@ vendor/                DLL VC++ đóng gói kèm
 | Một trang (dashboard, thư viện, cài đặt…) | `src/renderer/pages/<ten>.ts` |
 | Điều hướng / render trang | `src/renderer/core/render.ts`, `core/controller.ts` |
 | Luồng tạo game từ giáo án | `src/renderer/pages/create-wizard.ts` + `features/wizard/*.ts` |
-| Phân luồng đầu vào (giáo án / câu hỏi / dàn ý) | `src/services/input-classifier.ts` (quy tắc), `input-classifier-semantic.ts` (lớp xác nhận MiniLM), IPC `lesson:classify-input`, UI trong `features/wizard/step-input.ts` |
-| Đổi thể loại không sinh lại nội dung | `src/services/draft-convert.ts`, IPC `lesson:convert-draft`, `wizardConvertOrDiscardForGenre` trong `features/wizard/state.ts` |
-| Nhập câu hỏi soạn sẵn (CSV/XLSX/dán văn bản) | `src/services/question-import.ts` (`importQuestionsFromFile`, `parseQuestionsFromText`) |
-| Ngân hàng câu hỏi: 7 loại câu + chấm điểm thể loại tương thích (#115) | `src/services/question-import.ts` (phần `readQuestionBlock`/`ParsedQuestion`), `src/services/question-compatibility.ts` (thuần), `src/services/question-text.ts` (chuẩn hoá dùng chung), UI trong `features/wizard/step-recommend.ts` |
-| Làm sạch ký hiệu/emoji khi tài liệu giống ngân hàng câu hỏi (#116) | `src/services/question-text.ts` (`cleanQuestionLine`, `cleanQuestionText`, `looksLikeQuestionBankText`), `splitInlineQuestion` trong `src/services/question-import.ts` |
-| Bóc tách cấu trúc tài liệu | `src/services/lesson-structure.ts` (+ `features/wizard/step-structure.ts`) |
+| Phân luồng đầu vào (giáo án / câu hỏi / dàn ý) | `src/services/input/input-classifier.ts` (quy tắc), `input/input-classifier-semantic.ts` (lớp xác nhận MiniLM), IPC `lesson:classify-input`, UI trong `features/wizard/step-input.ts` |
+| Đổi thể loại không sinh lại nội dung | `src/services/game/draft-convert.ts`, IPC `lesson:convert-draft`, `wizardConvertOrDiscardForGenre` trong `features/wizard/state.ts` |
+| Nhập câu hỏi soạn sẵn (CSV/XLSX/dán văn bản) | `src/services/input/question-import.ts` (`importQuestionsFromFile`, `parseQuestionsFromText`) |
+| Ngân hàng câu hỏi: 7 loại câu + chấm điểm thể loại tương thích (#115) | `src/services/input/question-import.ts` (phần `readQuestionBlock`/`ParsedQuestion`), `input/question-compatibility.ts` (thuần), `input/question-text.ts` (chuẩn hoá dùng chung), UI trong `features/wizard/step-recommend.ts` |
+| Làm sạch ký hiệu/emoji khi tài liệu giống ngân hàng câu hỏi (#116) | `src/services/input/question-text.ts` (`cleanQuestionLine`, `cleanQuestionText`, `looksLikeQuestionBankText`), `splitInlineQuestion` trong `input/question-import.ts` |
+| Bóc tách cấu trúc tài liệu | `src/services/lesson/lesson-structure.ts` (+ `features/wizard/step-structure.ts`) |
 | Năm trò chơi (quiz, tình huống, ghép cặp, kho báu, đường đua) | `src/renderer/features/games/quiz.ts`, `matching.ts`, `treasure.ts`, `race.ts`; vào/ra và toàn màn hình ở `games/shell.ts` |
 | Hình minh họa trò chơi | `features/game-illustration.ts`, `features/treasure-art.ts`, `shared/illustration-*` |
 | Âm thanh | `features/game-audio.ts` |
@@ -82,9 +87,9 @@ vendor/                DLL VC++ đóng gói kèm
 | Chơi LAN (học sinh trên điện thoại) | `src/lan/lan-reducer.ts` (trạng thái), `lan-adapters.ts` (điểm), `lan-server.ts` (mạng), `features/lan.ts` (màn hình giáo viên) |
 | Trình sửa game | `features/game-editor.ts`, `features/setup-wizard.ts` |
 | AI local (cài model, chạy llama.cpp) | `src/ai-core/*`, `features/local-ai.ts`, `features/setup-wizard.ts` |
-| Prompt / schema gọi AI | `src/services/lesson-prompts.ts`, `lesson-contracts.ts`, `ai-tasks.ts` |
-| Nhà cung cấp AI của Step 2/Step 5, khoá theo từng nhà cung cấp, trạng thái sẵn sàng (#132) | `src/services/ai-providers.ts` (registry + chọn nhà cung cấp + migration khoá), `main.ts` (`createChatClientForProvider`, `ai:test-provider`, `settings:get/save` không trả khoá), `pages/settings.ts` + `features/settings.ts` (thẻ từng nhà cung cấp), `features/wizard/state.ts` (`wizardProviderCard`/`wizardProviderPickerHtml`) |
-| Lưu trữ (SQLite, `.egame`) | `src/services/lesson-store.ts`, `main.ts` (IPC), `preload.ts` (API) |
+| Prompt / schema gọi AI | `src/services/lesson/lesson-prompts.ts`, `lesson/lesson-contracts.ts`, `ai/ai-tasks.ts` |
+| Nhà cung cấp AI của Step 2/Step 5, khoá theo từng nhà cung cấp, trạng thái sẵn sàng (#132) | `src/services/ai/ai-providers.ts` (registry + chọn nhà cung cấp + migration khoá), `main.ts` (`createChatClientForProvider`, `ai:test-provider`, `settings:get/save` không trả khoá), `pages/settings.ts` + `features/settings.ts` (thẻ từng nhà cung cấp), `features/wizard/state.ts` (`wizardProviderCard`/`wizardProviderPickerHtml`) |
+| Lưu trữ (SQLite, `.egame`) | `src/services/storage/lesson-store.ts`, `src/services/game/game-package.ts`, `main.ts` (IPC), `preload.ts` (API) |
 | Màu nền 5 thế giới trò chơi | `styles/app.css`, mục "NĂM THẾ GIỚI TRÒ CHƠI" + `GAME_WORLDS` trong `games/result-screen.ts` |
 | Màn hình kết quả, trình chiếu, thi đấu đội | `features/games/result-screen.ts` |
 | Lớp 3D dùng chung và thế giới theo trò | `features/three-game-interaction.ts` (API), `features/games/three-stage.ts` (mount/world/reactThree) |

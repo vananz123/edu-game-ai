@@ -281,14 +281,14 @@ export interface AiSettings {
   /** @deprecated #132: migrated into `providers` on first read. */
   apiKeyEncrypted?: string;
   /** #132: the provider Step 2 / Step 5 use by default (`local` on a new profile). */
-  provider?: import('../services/ai-providers').AiProviderId;
+  provider?: import('../services/ai/ai-providers').AiProviderId;
   /** #132: `auto` = local → gemini → openai, first usable provider. */
   providerPolicy?: 'auto';
   /**
    * #132: per-provider configuration and the result of its last real request.
    * The renderer receives this as the key-free view (`AiProviderPublicView[]`).
    */
-  providers?: Record<string, import('../services/ai-providers').StoredProviderConfig | undefined> | import('../services/ai-providers').AiProviderPublicView[];
+  providers?: Record<string, import('../services/ai/ai-providers').StoredProviderConfig | undefined> | import('../services/ai/ai-providers').AiProviderPublicView[];
   /** #132: true when the active provider has a stored key (the key itself never leaves main). */
   hasKey?: boolean;
   /** #132: `••••` + last four characters of the active provider's key. */
@@ -398,8 +398,8 @@ export interface EduGameBridge {
    * write), so there is at most one page beyond the current one.
    */
   listAiTasks(payload?: { limit?: number; offset?: number; history?: boolean }): Promise<{
-    live: import('../services/ai-tasks').AiTaskSnapshot[];
-    history: import('../services/ai-tasks').AiTaskSnapshot[];
+    live: import('../services/ai/ai-tasks').AiTaskSnapshot[];
+    history: import('../services/ai/ai-tasks').AiTaskSnapshot[];
     /** Rows in `ai_tasks` (history limit included). */
     total?: number;
   }>;
@@ -432,9 +432,9 @@ export interface EduGameBridge {
   openDiagnosticsFolder(): Promise<{ ok: boolean; path: string; error?: string }>;
   /** Rules-only input classification + question parsing (update_quy_trinh §2). No AI. */
   classifyLessonInput(payload: { text: string }): Promise<{
-    classification: import('../services/input-classifier').InputClassification;
-    kind: import('../services/input-classifier').InputKind;
-    import: import('../services/question-import').QuestionImportResult | null;
+    classification: import('../services/input/input-classifier').InputClassification;
+    kind: import('../services/input/input-classifier').InputKind;
+    import: import('../services/input/question-import').QuestionImportResult | null;
     /**
      * How the verdict was reached (update_quy_trinh_2 §2): `'confirm'` / `'flipped'`
      * when MiniLM ran, `'unavailable'` when it was needed but not installed,
@@ -448,14 +448,14 @@ export interface EduGameBridge {
      * questions; computed in main so the renderer needs no module import, and empty
      * when the input is not a question bank.
      */
-    compatibility: import('../services/question-compatibility').GameCompatibility[];
+    compatibility: import('../services/input/question-compatibility').GameCompatibility[];
   }>;
   /** Convert an existing draft to another genre locally (update_quy_trinh §4). No AI. */
   convertLessonDraft(payload: {
     draft: import('./lesson-types').GameDraft;
     target: import('./lesson-types').WorkflowGameType;
     config: import('./lesson-types').GameConfig;
-  }): Promise<import('../services/draft-convert').ConversionResult>;
+  }): Promise<import('../services/game/draft-convert').ConversionResult>;
   analyzeLesson(payload: {
     documentId: string;
     projectId?: string;
@@ -475,7 +475,7 @@ export interface EduGameBridge {
     projectId: string;
     gameType: import('./lesson-types').WorkflowGameType;
     mode?: 'fast' | 'deep';
-  }): Promise<import('../services/item-capacity').ItemCapacityEstimate>;
+  }): Promise<import('../services/lesson/item-capacity').ItemCapacityEstimate>;
   getLessonAnalysis(analysisId: string): Promise<import('./lesson-types').LessonAnalysis | null>;
   /** Persists teacher edits to an analysis without calling the model again. */
   saveLessonAnalysis(analysis: import('./lesson-types').LessonAnalysis): Promise<import('./lesson-types').LessonAnalysis>;
@@ -497,7 +497,7 @@ export interface EduGameBridge {
     game: import('./types').EducationalGame;
     mode: 'fast' | 'deep';
     /** Deterministic content-quality findings (O2); advisory, no model call. */
-    quality: import('../services/lesson-quality').QualityReport;
+    quality: import('../services/lesson/lesson-quality').QualityReport;
     /** Which lesson chunks were retrieved for the prompt (O3); no model call. */
     context: {
       chunkCount: number;
@@ -508,7 +508,7 @@ export interface EduGameBridge {
     };
   }>;
   /** Recomputes the advisory quality report for a stored draft (no model call). */
-  checkLessonQuality(payload: { projectId: string }): Promise<import('../services/lesson-quality').QualityReport | null>;
+  checkLessonQuality(payload: { projectId: string }): Promise<import('../services/lesson/lesson-quality').QualityReport | null>;
   /**
    * Phase B: changes only the artwork of one item (DECISIONS #72). Never calls the
    * model and never rewrites question text; the main process whitelists the three

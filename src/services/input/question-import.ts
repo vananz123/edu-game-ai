@@ -1,5 +1,5 @@
 import JSZip from 'jszip';
-import type { GameQuestion, QuestionDifficulty } from '../shared/types';
+import type { GameQuestion, QuestionDifficulty } from '../../shared/types';
 import {
   ANSWER_VALUE_LINE,
   EXPLANATION_VALUE_LINE,

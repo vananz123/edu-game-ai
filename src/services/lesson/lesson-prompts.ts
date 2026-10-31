@@ -11,12 +11,12 @@
  */
 import { preprocessLessonSource, type PreprocessMetrics } from './lesson-preprocess';
 import type { LessonChunk } from './lesson-chunker';
-import { CONTENT_CATEGORY_IDS } from '../shared/content-categories';
+import { CONTENT_CATEGORY_IDS } from '../../shared/content-categories';
 import type {
   GameConfig,
   LessonAnalysis,
   WorkflowGameType
-} from '../shared/lesson-types';
+} from '../../shared/lesson-types';
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';

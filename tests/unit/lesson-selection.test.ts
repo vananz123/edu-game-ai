@@ -8,7 +8,7 @@
  * changing the key for "no selection".
  */
 import assert from 'node:assert/strict';
-import { buildLessonStructure } from '../../src/services/lesson-structure';
+import { buildLessonStructure } from '../../src/services/lesson/lesson-structure';
 import {
   CONTEXT_MARKER,
   MAX_CONTEXT_CHARS,
@@ -17,16 +17,16 @@ import {
   prepareWholeLessonText,
   resolveSelection,
   selectionFingerprint
-} from '../../src/services/lesson-selection';
+} from '../../src/services/lesson/lesson-selection';
 import {
   LESSON_PREPROCESS_BUDGET_DEEP,
   LESSON_PREPROCESS_BUDGET_FAST
-} from '../../src/services/lesson-preprocess';
-import { AiRequestRegistry } from '../../src/services/ai-transport';
+} from '../../src/services/lesson/lesson-preprocess';
+import { AiRequestRegistry } from '../../src/services/ai/ai-transport';
 import {
   analyzeLesson,
   type LessonChatRequest
-} from '../../src/services/lesson-workflow';
+} from '../../src/services/lesson/lesson-workflow';
 
 const LESSON_BLANK_LINES = [
   'Giáo án Khoa học 6',

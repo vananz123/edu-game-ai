@@ -22,7 +22,7 @@ function treasureMissionIsChoice(stage) {
 
 /**
  * #132: the provider list is no longer duplicated here. Main owns the registry
- * (`src/services/ai-providers.ts`) and ships it inside `settings.ai.providers`, so
+ * (`src/services/ai/ai-providers.ts`) and ships it inside `settings.ai.providers`, so
  * Settings and the wizard picker render the same labels, defaults and states —
  * and the renderer never receives an API key. These helpers only read that view.
  */

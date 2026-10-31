@@ -10,7 +10,7 @@
  *
  * Deliberately not here: any model call, any I/O, any random tie-break.
  */
-import type { GameConfig, LessonAnalysis } from '../shared/lesson-types';
+import type { GameConfig, LessonAnalysis } from '../../shared/lesson-types';
 import type { LessonChunk } from './lesson-chunker';
 
 export type ChunkScorerId = 'lexical-v1' | 'embeddings-v1';

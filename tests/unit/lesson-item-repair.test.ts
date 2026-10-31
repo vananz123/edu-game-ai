@@ -6,8 +6,8 @@ import {
   itemLabel,
   replaceDraftItem,
   resolveItemIndexes
-} from '../../src/services/lesson-item-repair';
-import type { QualityReport } from '../../src/services/lesson-quality';
+} from '../../src/services/lesson/lesson-item-repair';
+import type { QualityReport } from '../../src/services/lesson/lesson-quality';
 import type {
   ArenaDraft,
   MatchingDraft,

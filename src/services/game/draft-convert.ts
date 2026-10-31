@@ -29,7 +29,7 @@ import {
   type TreasureDraft,
   type TreasureStageDraft,
   type WorkflowGameType
-} from '../shared/lesson-types';
+} from '../../shared/lesson-types';
 
 /** One thing that could not be carried over, phrased for the teacher. */
 export interface ConversionGap {

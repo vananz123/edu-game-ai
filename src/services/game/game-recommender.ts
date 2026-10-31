@@ -1,6 +1,6 @@
-import type { CognitiveLevel, GameRecommendation, LessonAnalysis, WorkflowGameType } from '../shared/lesson-types';
+import type { CognitiveLevel, GameRecommendation, LessonAnalysis, WorkflowGameType } from '../../shared/lesson-types';
 import { GAME_TYPE_ORDER, GAME_TYPE_RULES, getGameTypeRule, type ContentShape } from './game-type-rules';
-import { estimateItemCapacity, type GenerationMode } from './item-capacity';
+import { estimateItemCapacity, type GenerationMode } from '../lesson/item-capacity';
 
 /**
  * Rule-based genre recommender.

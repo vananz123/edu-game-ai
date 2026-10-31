@@ -4,8 +4,8 @@ import {
   inputKindLabel,
   resolveInputKind,
   type InputClassification
-} from '../../src/services/input-classifier';
-import { parseQuestionsFromText } from '../../src/services/question-import';
+} from '../../src/services/input/input-classifier';
+import { parseQuestionsFromText } from '../../src/services/input/question-import';
 
 // docs/archive/specs/update_quy_trinh.txt §2 + §5: the app must not call the model
 // to classify input. These tests pin the *rules*, so a routing change can never

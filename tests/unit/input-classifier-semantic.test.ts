@@ -14,7 +14,7 @@ const {
   CLASSIFIER_ANCHORS,
   SEMANTIC_FLIP_MARGIN,
   SEMANTIC_OVERRIDE_MAX_RULE_CONFIDENCE
-} = require('../../src/services/input-classifier-semantic');
+} = require('../../src/services/input/input-classifier-semantic');
 
 let passed = 0;
 function it(name, fn) {

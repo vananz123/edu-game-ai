@@ -5,7 +5,7 @@ import {
   textSimilarity,
   type QualityIssueCode,
   type QualityReport
-} from '../../src/services/lesson-quality';
+} from '../../src/services/lesson/lesson-quality';
 import type {
   ArenaConfig,
   ArenaDraft,

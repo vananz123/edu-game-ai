@@ -12,8 +12,8 @@
  * a game with no new keys at all, so existing `.egame` files stay unchanged.
  */
 import assert from 'node:assert/strict';
-import { fromEducationalGame, toEducationalGame } from '../../src/services/game-project-adapter';
-import { parseGameDraft } from '../../src/services/lesson-contracts';
+import { fromEducationalGame, toEducationalGame } from '../../src/services/game/game-project-adapter';
+import { parseGameDraft } from '../../src/services/lesson/lesson-contracts';
 import { normalizeItemAssets, isIconName } from '../../src/shared/asset-validation';
 import type { EducationalGame } from '../../src/shared/types';
 import type { GameConfig, GameDraft, GameProject } from '../../src/shared/lesson-types';

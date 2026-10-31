@@ -28,25 +28,25 @@ const { unloadMayProceed } = require('./ai-core/unload-guard');
 const { ModelInstaller, summarizeModelSelection, verifyModelFile } = require('./ai-core/model-installer');
 const { buildGenerationOptions } = require('./ai-core/generation-options');
 const { LlamaRuntimeInstaller } = require('./ai-core/runtime-installer');
-const { importQuestionsFromFile, parseQuestionsFromText } = require('./services/question-import');
-const { classifyInput, resolveInputKind } = require('./services/input-classifier');
-const { evaluateCompatibility } = require('./services/question-compatibility');
-const { readGamePackage, IMPORT_GAME_MAX_BYTES } = require('./services/game-package');
-const customIllustration = require('./services/custom-illustration');
-const { cleanQuestionText } = require('./services/question-text');
+const { importQuestionsFromFile, parseQuestionsFromText } = require('./services/input/question-import');
+const { classifyInput, resolveInputKind } = require('./services/input/input-classifier');
+const { evaluateCompatibility } = require('./services/input/question-compatibility');
+const { readGamePackage, IMPORT_GAME_MAX_BYTES } = require('./services/game/game-package');
+const customIllustration = require('./services/storage/custom-illustration');
+const { cleanQuestionText } = require('./services/input/question-text');
 const {
   CLASSIFIER_ANCHORS,
   confirmWithSemantics,
   similarityToAnchors
-} = require('./services/input-classifier-semantic');
-const { buildClassificationCacheKey } = require('./services/lesson-cache');
-const { convertDraft } = require('./services/draft-convert');
-const { normalizeAiGame: normalizeAiGameService } = require('./services/ai-game-normalize');
-const { LessonStore } = require('./services/lesson-store');
-const { AiTaskManager, newAiTaskId } = require('./services/ai-tasks');
-const { buildTreasureHunt: buildTreasureHuntService, buildRaceData: buildRaceDataService } = require('./services/ai-game-design');
-const { validateScenarioGame, validateMatchingGame, validateTreasureHuntGame, validateRaceGame } = require('./services/game-validation');
-const { isZenBaseUrl, postZenChatCompletions, readLocalOpencodeApiKey } = require('./services/opencode-zen');
+} = require('./services/input/input-classifier-semantic');
+const { buildClassificationCacheKey } = require('./services/lesson/lesson-cache');
+const { convertDraft } = require('./services/game/draft-convert');
+const { normalizeAiGame: normalizeAiGameService } = require('./services/game/ai-game-normalize');
+const { LessonStore } = require('./services/storage/lesson-store');
+const { AiTaskManager, newAiTaskId } = require('./services/ai/ai-tasks');
+const { buildTreasureHunt: buildTreasureHuntService, buildRaceData: buildRaceDataService } = require('./services/game/ai-game-design');
+const { validateScenarioGame, validateMatchingGame, validateTreasureHuntGame, validateRaceGame } = require('./services/game/game-validation');
+const { isZenBaseUrl, postZenChatCompletions, readLocalOpencodeApiKey } = require('./services/ai/opencode-zen');
 const {
   AiRequestRegistry,
   AiSingleFlight,
@@ -55,7 +55,7 @@ const {
   isCancelReason,
   readPromptTokens,
   requestChatJson
-} = require('./services/ai-transport');
+} = require('./services/ai/ai-transport');
 // #132: provider registry + per-provider key lifecycle. Pure data/helpers, so the
 // same module is unit-tested without Electron and is the only place a provider is
 // described (the renderer receives it over IPC).
@@ -68,18 +68,18 @@ const {
   migrateLegacyAiSettings,
   resolveProviderState,
   toPublicProviderView
-} = require('./services/ai-providers');
-const { analyzeLesson, generateGameDraft, regenerateGameItem } = require('./services/lesson-workflow');
+} = require('./services/ai/ai-providers');
+const { analyzeLesson, generateGameDraft, regenerateGameItem } = require('./services/lesson/lesson-workflow');
 // O6d: per-mode excerpt budget for the analysis preprocessor.
-const { preprocessBudgetForMode } = require('./services/lesson-preprocess');
+const { preprocessBudgetForMode } = require('./services/lesson/lesson-preprocess');
 // #76: offline document structure + teacher selection (spec update_AI_plan_7).
-const { normalizeLessonSource } = require('./services/lesson-chunker');
-const { buildLessonStructure } = require('./services/lesson-structure');
+const { normalizeLessonSource } = require('./services/lesson/lesson-chunker');
+const { buildLessonStructure } = require('./services/lesson/lesson-structure');
 const {
   prepareSelectedLessonText,
   prepareWholeLessonText,
   selectionFingerprint
-} = require('./services/lesson-selection');
+} = require('./services/lesson/lesson-selection');
 // O5: cache keys (document hash + model + prompt/schema version + config).
 const {
   buildAnalysisCacheKey,
@@ -87,7 +87,7 @@ const {
   analysisFingerprint,
   configFingerprint,
   sha256Hex
-} = require('./services/lesson-cache');
+} = require('./services/lesson/lesson-cache');
 // O5: replace exactly one item while the app keeps ids/links (§5.5).
 const {
   replaceDraftItem,
@@ -96,24 +96,24 @@ const {
   itemCount,
   itemAt,
   itemLabel
-} = require('./services/lesson-item-repair');
+} = require('./services/lesson/lesson-item-repair');
 // Phase B: the asset whitelist lives in shared code so main, editor and wizard
 // cannot disagree about which fields a teacher may change (DECISIONS #72).
 const { applyItemAssetPatch } = require('./shared/asset-validation');
-const { parseGameDraft } = require('./services/lesson-contracts');
+const { parseGameDraft } = require('./services/lesson/lesson-contracts');
 // O1: genre suggestions are rule-based, so this step never calls the model.
-const { recommendGamesForAnalysis } = require('./services/game-recommender');
+const { recommendGamesForAnalysis } = require('./services/game/game-recommender');
 // O12: prediction for a sensible item count (document + analysis + model + mode).
-const { estimateItemCapacity } = require('./services/item-capacity');
+const { estimateItemCapacity } = require('./services/lesson/item-capacity');
 const { WORKFLOW_GAME_TYPES } = require('./shared/lesson-types');
 // O2: deterministic content-quality checks (no model call).
-const { checkDraftQuality, requestedItemCount } = require('./services/lesson-quality');
+const { checkDraftQuality, requestedItemCount } = require('./services/lesson/lesson-quality');
 // O10: on-machine diagnostic log so a teacher can send back what happened.
-const { createAiLogWriter, formatDiagnosticBundle, writeDiagnosticBundle, sanitizeLogMessage, clearAiLogs } = require('./services/ai-log');
+const { createAiLogWriter, formatDiagnosticBundle, writeDiagnosticBundle, sanitizeLogMessage, clearAiLogs } = require('./services/ai/ai-log');
 // O3: chunk the lesson once, then retrieve only the relevant part for generation.
-const { chunkLessonText } = require('./services/lesson-chunker');
-const { selectChunks, selectChunksByVectors, selectChunksForItem, buildRetrievalQuery, DEFAULT_MAX_SELECTED_CHUNKS, DEFAULT_MAX_SELECTED_CHARS, DEEP_MAX_SELECTED_CHUNKS, DEEP_MAX_SELECTED_CHARS } = require('./services/lesson-retrieval');
-const { formatRetrievedChunks, LESSON_PROMPT_VERSIONS } = require('./services/lesson-prompts');
+const { chunkLessonText } = require('./services/lesson/lesson-chunker');
+const { selectChunks, selectChunksByVectors, selectChunksForItem, buildRetrievalQuery, DEFAULT_MAX_SELECTED_CHUNKS, DEFAULT_MAX_SELECTED_CHARS, DEEP_MAX_SELECTED_CHUNKS, DEEP_MAX_SELECTED_CHARS } = require('./services/lesson/lesson-retrieval');
+const { formatRetrievedChunks, LESSON_PROMPT_VERSIONS } = require('./services/lesson/lesson-prompts');
 // O4: the retrieval model + its dedicated llama-server process (embeddings only).
 const { getEmbeddingModel, embeddingTextForChunk } = require('./ai-core/embedding-catalog');
 const { createEmbeddingRuntime, chunkTextsForEmbedding } = require('./ai-core/embedding-manager');
@@ -127,8 +127,8 @@ const {
   applyAnalysis,
   advanceAfterRecommendations,
   applyDraft
-} = require('./services/lesson-projects');
-const { toEducationalGame } = require('./services/game-project-adapter');
+} = require('./services/lesson/lesson-projects');
+const { toEducationalGame } = require('./services/game/game-project-adapter');
 const { SetupOrchestrator } = require('./ai-core/setup-orchestrator');
 const { registerSetupIpc } = require('./ai-core/setup-ipc');
 const { SetupStateStore, parseSetupState, createInitialSetupState, SETUP_STATE_SCHEMA_VERSION, needsSetup } = require('./ai-core/setup-state');
@@ -318,7 +318,7 @@ let sqlite;
 let lessonStore;
 /** Maps renderer `requestId` → AbortController for the new lesson workflow + `ai:cancel`. */
 // #118: the package reader (`readGamePackage`, `IMPORT_GAME_MAX_BYTES`) lives in
-// `services/game-package.ts` so its rules are unit-tested without Electron.
+// `services/game/game-package.ts` so its rules are unit-tested without Electron.
 
 /**
  * #121: how many AI task rows are kept. The settings page pages through history at 10
@@ -1089,7 +1089,7 @@ async function getLocalAiModels() {
 /**
  * O10: one human-readable .txt the teacher can attach to a message. It holds
  * machine facts plus the last 200 log lines; the lines never include lesson
- * text, prompts, model answers or API keys (see services/ai-log.ts).
+ * text, prompts, model answers or API keys (see services/ai/ai-log.ts).
  *
  * The file is written to the Desktop (easy to find, attach and delete); if that
  * folder is not writable it falls back to the log folder inside the app data.

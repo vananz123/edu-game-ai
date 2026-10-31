@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { normalizeAiGame } from '../../src/services/ai-game-normalize';
+import { normalizeAiGame } from '../../src/services/game/ai-game-normalize';
 
 const makeId = (prefix: string) => `${prefix}-test`;
 

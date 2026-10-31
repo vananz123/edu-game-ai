@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import { validateScenarioGame, validateMatchingGame, validateTreasureHuntGame, validateRaceGame } from '../../src/services/game-validation';
+import { validateScenarioGame, validateMatchingGame, validateTreasureHuntGame, validateRaceGame } from '../../src/services/game/game-validation';
 
-const { normalizeGame } = require('../../src/services/game-service');
+const { normalizeGame } = require('../../src/services/game/game-service');
 
 const game = {
   template: 'scenario',

@@ -12,7 +12,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import type { EducationalGame } from '../shared/types';
+import type { EducationalGame } from '../../shared/types';
 import type {
   GameConfig,
   GameDraft,
@@ -20,16 +20,16 @@ import type {
   LessonAnalysis,
   LessonDocument,
   GameRecommendation
-} from '../shared/lesson-types';
-import type { LessonChunk } from './lesson-chunker';
-import { LESSON_SCHEMA_VERSION } from '../shared/lesson-types';
-import { parseGameConfig, parseGameDraft } from './lesson-contracts';
+} from '../../shared/lesson-types';
+import type { LessonChunk } from '../lesson/lesson-chunker';
+import { LESSON_SCHEMA_VERSION } from '../../shared/lesson-types';
+import { parseGameConfig, parseGameDraft } from '../lesson/lesson-contracts';
 import {
   validateMatchingGame,
   validateRaceGame,
   validateScenarioGame,
   validateTreasureHuntGame
-} from './game-validation';
+} from '../game/game-validation';
 
 export const LESSON_STORE_SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS lesson_documents (

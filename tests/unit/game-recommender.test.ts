@@ -3,10 +3,10 @@ import {
   analyzeLessonSignals,
   recommendGamesForAnalysis,
   scoreGameTypes
-} from '../../src/services/game-recommender';
-import { GAME_TYPE_RULES, getGameTypeRule } from '../../src/services/game-type-rules';
-import { gameRecommendationSchema } from '../../src/services/lesson-contracts';
-import { normalizeAnalysis } from '../../src/services/lesson-normalize';
+} from '../../src/services/game/game-recommender';
+import { GAME_TYPE_RULES, getGameTypeRule } from '../../src/services/game/game-type-rules';
+import { gameRecommendationSchema } from '../../src/services/lesson/lesson-contracts';
+import { normalizeAnalysis } from '../../src/services/lesson/lesson-normalize';
 import { WORKFLOW_GAME_TYPES, type LessonAnalysis } from '../../src/shared/lesson-types';
 
 const NOW = '2026-03-03T00:00:00.000Z';

@@ -428,7 +428,7 @@ python report_llama.py; python report_item.py                        # in độ 
 
 ## O6d — Chi phí và hiệu quả của tiền xử lý offline trước bước phân tích (2026-10-23)
 
-**Đo cái gì:** không phải tốc độ model (không gọi model), mà **đầu vào** của bước `lesson:analyze` thay đổi bao nhiêu khi đi qua `src/services/lesson-preprocess.ts`, và **chi phí CPU** của việc tiền xử lý đó.
+**Đo cái gì:** không phải tốc độ model (không gọi model), mà **đầu vào** của bước `lesson:analyze` thay đổi bao nhiêu khi đi qua `src/services/lesson/lesson-preprocess.ts`, và **chi phí CPU** của việc tiền xử lý đó.
 
 ```powershell
 npm run build

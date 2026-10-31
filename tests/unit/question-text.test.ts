@@ -12,7 +12,7 @@ import {
   looksLikeQuestionBankText,
   normalizeQuestionLine,
   stripLeadingSymbols
-} from '../../src/services/question-text';
+} from '../../src/services/input/question-text';
 
 const BANK = `Câu 1: Thủ đô Việt Nam là gì?
 A. Hà Nội

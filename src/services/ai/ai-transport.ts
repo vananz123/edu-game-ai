@@ -11,7 +11,7 @@
  *  - `requestChatJson` performs one HTTP round trip through an injected `send`
  *    function, so tests can mock the provider completely.
  */
-import type { ChatMessage } from './lesson-prompts';
+import type { ChatMessage } from '../lesson/lesson-prompts';
 
 export type AiTransportCode =
   | 'AI_CONFIG'

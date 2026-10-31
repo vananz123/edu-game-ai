@@ -18,7 +18,7 @@ import type {
   LessonAnalysis,
   LessonAnalysisContent,
   WorkflowGameType
-} from '../shared/lesson-types';
+} from '../../shared/lesson-types';
 
 export class LessonContractError extends Error {
   readonly code: string;

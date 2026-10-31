@@ -1,4 +1,4 @@
-import type { GameQuestion } from '../shared/types';
+import type { GameQuestion } from '../../shared/types';
 import { buildRaceData, buildTreasureHunt } from './ai-game-design';
 
 const TEXT_QUESTION_TYPES = new Set(['fill-in-blank', 'short-answer']);

@@ -3,7 +3,7 @@ import {
   AiRequestRegistry,
   AiTransportError,
   createCancelError
-} from '../../src/services/ai-transport';
+} from '../../src/services/ai/ai-transport';
 import {
   LessonWorkflowError,
   analyzeLesson,
@@ -14,8 +14,8 @@ import {
   validateRecommendationsAgainstAnalysis,
   type LessonChatClient,
   type LessonChatRequest
-} from '../../src/services/lesson-workflow';
-import { normalizeAnalysis } from '../../src/services/lesson-normalize';
+} from '../../src/services/lesson/lesson-workflow';
+import { normalizeAnalysis } from '../../src/services/lesson/lesson-normalize';
 import type { LessonAnalysis } from '../../src/shared/lesson-types';
 
 const NOW = '2026-01-01T00:00:00.000Z';

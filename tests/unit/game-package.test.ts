@@ -10,7 +10,7 @@ import {
   GamePackageError,
   readGamePackage,
   stripImportedAssetUrls
-} from '../../src/services/game-package';
+} from '../../src/services/game/game-package';
 
 let counter = 0;
 const newId = () => `imported-${++counter}`;

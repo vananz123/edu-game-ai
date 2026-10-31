@@ -18,7 +18,7 @@
  */
 import assert from 'node:assert/strict';
 import { itemAssetFieldsForSave, normalizeIllustrationMode } from '../../src/shared/asset-validation';
-import { fromEducationalGame, toEducationalGame } from '../../src/services/game-project-adapter';
+import { fromEducationalGame, toEducationalGame } from '../../src/services/game/game-project-adapter';
 import type { EducationalGame } from '../../src/shared/types';
 
 let passed = 0;

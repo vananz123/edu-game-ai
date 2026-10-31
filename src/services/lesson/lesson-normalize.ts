@@ -22,7 +22,7 @@ import {
   type GameRecommendationContent,
   type LessonAnalysis,
   type WorkflowGameType
-} from '../shared/lesson-types';
+} from '../../shared/lesson-types';
 
 export interface AnalysisIdentity {
   id: string;

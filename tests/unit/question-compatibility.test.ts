@@ -4,13 +4,13 @@
  * the expected numbers are the ones `draft-convert.ts` would honour.
  */
 import assert from 'node:assert/strict';
-import { parseQuestionsFromText, type ParsedQuestion, type ParsedQuestionKind } from '../../src/services/question-import';
+import { parseQuestionsFromText, type ParsedQuestion, type ParsedQuestionKind } from '../../src/services/input/question-import';
 import {
   blockedQuestions,
   evaluateCompatibility,
   recommendedGame,
   usableQuestions
-} from '../../src/services/question-compatibility';
+} from '../../src/services/input/question-compatibility';
 
 function parsed(kind: ParsedQuestionKind, status: ParsedQuestion['status'] = 'ready', options = 4): ParsedQuestion {
   const optionList = Array.from({ length: options }, (_, index) => ({ id: String.fromCharCode(97 + index), text: `Phương án ${index + 1}` }));

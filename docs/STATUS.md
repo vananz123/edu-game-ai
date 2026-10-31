@@ -8,6 +8,7 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 ## Mục lục bàn giao
 
 ### 2026-10-31 — [docs/handoff/status/2026-10-31.md](handoff/status/2026-10-31.md)
+- Nhóm src/services theo lesson/ai/game/storage/input
 - Tách gameplay.ts thành features/games/*
 - Tách lịch sử docs sang docs/handoff + .gitattributes
 - Rollout pattern gameplay cho matching/treasure/race
@@ -182,6 +183,33 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - Lịch sử trước 2026-10-19
 ## Bàn giao gần nhất
 
+## Handoff - Nhóm src/services theo lesson/ai/game/storage/input (2026-10-31, DECISIONS #148)
+
+**Files changed.**
+- `src/services/`: **35 file chuyển bằng `git mv`** (giữ lịch sử), nội dung từng file nguyên văn — chỉ đổi các dòng `import`/`require`/`import()`. Không còn file `.ts` nào ở cấp `src/services/`:
+  - `lesson/` (14): `lesson-contracts`, `lesson-prompts`, `lesson-chunker`, `lesson-retrieval`, `lesson-preprocess`, `lesson-structure`, `lesson-selection`, `lesson-quality`, `lesson-cache`, `lesson-workflow`, `lesson-projects`, `lesson-item-repair`, `lesson-normalize`, `item-capacity`.
+  - `ai/` (5): `ai-transport`, `ai-providers`, `ai-tasks`, `ai-log`, `opencode-zen`.
+  - `game/` (9): `game-schema`-nhóm 5 thể loại (`game-validation`, `game-normalize`, `game-project-adapter`), `game-package` (`.egame`), `draft-convert`, `game-type-rules`, `game-recommender`, `ai-game-design`.
+  - `storage/` (2): `lesson-store` (SQLite + file giáo án), `custom-illustration`.
+  - `input/` (5): `input-classifier`, `input-kind`-nhóm (`sanitize`/`question-import`/`question-compatibility`/`question-text`).
+- `src/main.ts`, `src/shared/types.ts`: chỉ đổi specifier (require tĩnh và `import(...)` trong type).
+- 5 file renderer chỉ đổi **chú thích** trỏ đường dẫn mới: `features/game-generation.ts`, `features/wizard/{state,step-input,step-structure}.ts`, `shared.ts`.
+- `tests/unit/*.test.ts` **37 file**: chỉ đổi specifier import; riêng `lesson-store.test.ts` sửa thêm một assertion phân trang **hỏng sẵn** (xem bên dưới).
+- Docs: `docs/DECISIONS.md` (#148), `docs/ROADMAP.md` (P3 xong, P4 kế tiếp), `docs/PROJECT_MAP.md` (cây services + 7 dòng bảng "sửa gì mở đâu"), `docs/AGENT_HANDOFF.md`.
+- Không đổi: hợp đồng IPC/preload, `src/index.html`, CSS, `src/game-engine`, `three-game-interaction`, wizard/editor logic, LAN/presentation/SQLite/`.egame`, tên và tham số hàm.
+
+**Behavior.** Không đổi hành vi. Codemod resolve specifier theo vị trí cũ của file đang sửa (kể cả file đã `git mv`) rồi viết lại tương đối theo vị trí mới — **400 specifier, 0 không giải được**; giữ nguyên kiểu không có đuôi `.ts` như trước. Chỉ di chuyển + sửa import, đúng phạm vi P3 (không đụng hợp đồng IPC), nên app chạy y như trước; cây `src/services/` giờ chia theo khu vực, mở đúng thư mục là thấy hết file liên quan.
+
+**Commands run.** `npm run check` 0 · `npm run build` 0 (chỉ cảnh báo EPERM khi dọn `dist/server/index.js` do app đang chạy) · `node tests/run-unit.js` **68/68** · `npm run test:native` **1/1** · `npm run check:renderer-globals` 0 undefined (44/45 script, 756 hàm, 6192 call site) · `npm run verify:css` **17/17**. Electron thật qua CDP: app khởi động được với require mới ở main process; `ui-input-routing-check` **52/52**, `ui-lessons-paging-check` toàn bộ pass.
+
+**Sửa một test hỏng sẵn.** `tests/unit/lesson-store.test.ts` (mục #121) đọc 3 trang ở offset 0/10/30 nhưng assert hợp của chúng có 36 dòng — thực tế chỉ lấy 26 (thiếu trang offset 20). Test này chưa từng chạy vì `npm test` loại `lesson-store` (better-sqlite3 build cho ABI Electron, phải chạy `npm run test:native`). Thêm `thirdPage` offset 20 và đưa vào `seen`; không đổi logic store.
+
+**Chưa xác minh.** Chưa bấm tay trọn một luồng giáo án → game sau khi đổi cây (mới chạy check CDP + unit). `dist/src/services/` còn bản `.js` phẳng cũ do `clean` bị EPERM khi app đang mở; không file nào import đường dẫn cũ (đã kiểm `dist/src/main.js`), sẽ tự mất khi build sạch lúc app đóng. `ui-classifier-outline-check` **14/15** — assertion chờ nhánh MiniLM, máy này thiếu model nên rơi vào fallback (lỗi môi trường, không liên quan P3). `ui-ai-tasks-paging-check` **6/8** — profile mới chỉ có 1 trang lịch sử, check giả định sẵn ≥11 tác vụ; phân trang đã được kiểm bằng `test:native`. `ui-item-assets-editor-check` không dùng được làm bằng chứng ở đây (chụp màn hình treo khi cửa sổ bị che, xem #144).
+
+**Next task.** P4 — tách `src/renderer/styles/app.css` theo khu vực (base / components / games / results / responsive), giữ `verify:css` **17/17**; sau đó P5 (các file lớn còn lại) chỉ khi P4 ổn định.
+
+---
+
 ## Handoff - Tách gameplay.ts thành features/games/* (2026-10-31, DECISIONS #147)
 
 **Files changed.**
@@ -225,27 +253,4 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 **Chưa xác minh.** Mới kiểm link mục lục bằng script (mỗi ngày trỏ đúng file trong `docs/handoff/`), chưa bấm từng link trong trình xem markdown; việc tách file mới kiểm bằng hash nội dung, chưa đọc lại toàn bộ 620 KB bằng mắt. Chưa chạy `git add --renormalize` (cố ý) nên `.gitattributes` chưa có tác dụng hồi tố. Các check UI không chạy lại trong đợt này vì không sửa mã.
 
 **Next task.** P2 — tách `src/renderer/features/gameplay.ts` (3.269 dòng) thành `features/games/*` theo ranh giới đo được (stage/house/shell/quiz/matching/treasure/race), thêm `<script>` đúng thứ tự trong `src/index.html` và cập nhật `tests/unit/renderer-load-order.test.ts`.
-
----
-
-## Handoff - Rollout pattern gameplay cho matching/treasure/race (2026-10-31, DECISIONS #145)
-
-**Files changed.**
-- `src/renderer/features/gameplay.ts`: thêm `buildMatchingWorld()`/`reactMatching()`, `buildTreasureWorld()`/`reactTreasure()`, `buildRaceWorld()`/`reactRace()`; `mountThreeStage()` chọn thế giới theo `game.template`; `reactThree()` phát event rồi rẽ nhánh theo template (quiz/scenario/house giữ nguyên). Thay `burstThreeStage` trực tiếp bằng `reactThree` trong `evaluateColumnMatch`, `onMemoryCardClick`, nhánh phân loại, `chooseTreasureAnswer`, `treasureCompleteMission`, `answerRace`; `showMatchingComplete` phát `game:completed`. Thêm `state.racePlay.correctCount` (chỉ trình diễn) và `raceAnswerCelebrate`; `renderRaceBoard()` chuyển phản ứng/confetti sang handle mới sau repaint.
-- `src/renderer/features/three-game-interaction.ts`: camera lấy aspect ngay trong `mount()` (trước đây chờ frame đầu, nên `stagePoint()` gọi đồng bộ sau mount bị sai trục ngang); thêm `threeGame.anchor(handle, object, fx, fy, z)` giữ vật thể ở một **phân số màn hình** của stage và chiếu lại mỗi frame trong `step()`, để vật thể sống qua lần đổi kích thước fullscreen đến sau (native fullscreen áp dụng bất đồng bộ).
-- `src/renderer/features/gameplay.ts` (đặt vật thể): helper `addAnchoredObject()` dùng `stagePoint` + `anchor` thay toạ độ thế giới cố định — matching: rương (0.93, 0.47) + khối vỡ (0.93, 0.32) ở lề phải; treasure: rương (0.28, 0.86) ở dải trống dưới thẻ đáp án; race: tháp (0.06, 0.93, `blockSize` 0.7) ở dải trống dưới thẻ lượt chơi, cầu (0.962, 0.03, size 0.4) ở dải trên thanh trạng thái.
-- `tests/ui/ui-three-game-patterns-check.js` (mới): 31 assertion cho 3 trò (rương/khối/hồi, mở rương khi đủ cặp, treasure sai chỉ mất lượt rồi đúng mở rương + 150 điểm + chặng cuối celebrate, race tháp 0→1, cầu chớp xanh/đỏ, thắng celebrate, điểm/ô đua và số canvas không đổi).
-- `tests/unit/three-game-interaction.test.ts`: danh sách API bắt buộc thêm `stagePoint`, `anchor`; kiểm null-safety cho cả hai.
-- `docs/DECISIONS.md` (#145), `docs/ROADMAP.md` (đánh dấu xong mục rollout), `.kilo/skills/threejs-game-interaction/` (SKILL.md + references/gameplay-integration.md + interaction-patterns.md).
-- Không đổi: `game-engine/runtime.ts`, house mode/quiz, scenario, editor/wizard/adapter, `src/index.html`, CSS, LAN/presentation/SQLite/`.egame`.
-
-**Behavior.** Ba trò ngoài quiz giờ có pattern 3D riêng, cùng một dispatcher: **matching** có rương mở khi ghép đủ cặp, khối vỡ khi ghép sai (tự hồi sau 1,3 s để lần sai sau vẫn thấy) và confetti khi hoàn thành; **treasure** có rương của từng chặng mở khi trả lời đúng, chặng cuối có confetti; **race** có tháp cao thêm 1 khối mỗi câu đúng, quả cầu chớp xanh/đỏ mỗi câu và confetti ở câu ấn định đội thắng. Bảng đua vẽ lại toàn bộ sau mỗi câu nên tháp/phản ứng/confetti được chuyển sang handle mới. Đúng/sai vẫn do 2D quyết định; điểm, số cặp, số ô đua không đổi; mỗi màn vẫn đúng 1 canvas.
-
-**Commands run.** `npm run build` 0 · `node tests/run-unit.js` **68/68** · `npm run check:renderer-globals` 0 undefined (37/38 script, **756** hàm, **6192** call site) · `npm run verify:css` **17/17**. Electron thật CDP (mỗi nhóm check một instance sạch, `env -u ELECTRON_RUN_AS_NODE`): `ui-three-game-patterns-check` **31/31**. Không hồi quy: `ui-three-game-check` **19/19**, `ui-three-game-reactions-check` **11/11**, `ui-three-game-check-4games` **41/41**, `ui-house-building-check` **84/84**, `ui-game-worlds-check` **42/42**, `ui-presentation-check` **60/60**, `ui-play-surface-check` **156/156**, `ui-stage-illustration-check` **169/169**.
-
-**Kiểm bằng mắt (ảnh chụp CDP, fixture thật, `tests/ui/shots/`).** Fullscreen 1920×1080 và 1366×768: matching — rương + mảnh khối vỡ nằm ở lề phải, không đè chữ; treasure — rương mở ở dải trống dưới thẻ đáp án (1920); race — cầu nằm ở dải trên thanh trạng thái, thấy ở cả hai cỡ; tháp đứng trong dải trống dưới thẻ lượt chơi ở 1920×1080. Điểm kiểm bằng `elementsFromPoint` xác nhận các điểm đặt chỉ trúng `.game-stage`/`#playBody` (không có card che) tại 1920×1080 và 1366×768 fullscreen.
-
-**Chưa xác minh.** Ở race fullscreen **1366×768** thẻ lượt chơi đã tràn stage (giới hạn mật độ có từ trước, chưa thuộc #145), nên **tháp bị khuất sau thẻ** ở cỡ này; phản ứng vẫn thấy qua cầu chớp + burst/confetti, còn tháp chỉ thấy ở 1920×1080. Trong modal cửa sổ cao (race/matching/treasure ở 1366) canvas cao hơn màn hình nên vật thể phân số có thể nằm dưới vùng nhìn khi chưa cuộn — chưa kiểm bằng mắt từng vị trí cuộn. Chưa xem trên máy chiếu/màn hình phụ thật; chưa đo FPS máy cấu hình thấp khi có 3 object 3D cùng lúc; chưa chơi hết một ván race nhiều vòng để thấy tháp đầy; chưa bấm tay qua LAN/presentation; chưa build/install NSIS. Lưu ý: `ui-three-game-patterns-check` và các check đếm mount/spy cần **instance Electron mới** mỗi lần chạy; `ui-house-building-check` nhạy thời gian — lần chạy trên instance vừa bị probe/check khác dùng có thể trượt layout, chạy lại trên instance sạch cho 84/84.
-
-**Next task.** Mục roadmap còn mở duy nhất của phần Three.js là **Packaged check** (`npm run dist:win` + cài trên máy sạch, đo ảnh hưởng bundle 732 KB, xem trên máy chiếu/máy yếu) — cần môi trường cài đặt thật. Ngoài phần Three.js, các mục còn mở trong roadmap thuộc mảng AI/giáo án (phân bổ độ khó, slicing O6, GGUF runtime) và các mục nhỏ của tasknight.
 

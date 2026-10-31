@@ -138,7 +138,7 @@ function renderWizardInput() {
 
 /**
  * Teacher-facing label for a detected input kind. Duplicated from
- * `services/input-classifier.ts` because the renderer is a classic script and cannot
+ * `services/input/input-classifier.ts` because the renderer is a classic script and cannot
  * import a module; `tests/unit/input-classifier.test.ts` pins the same strings.
  */
 function wizardInputKindLabel(kind) {

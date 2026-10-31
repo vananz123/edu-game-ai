@@ -17,9 +17,9 @@
  * Positions are **1-based** everywhere in this module, the IPC payload and the
  * quality report (`QualityIssue.itemIndex`), so the UI never converts bases.
  */
-import { applyItemAssetPatch, type ItemAssetPatch } from '../shared/asset-validation';
+import { applyItemAssetPatch, type ItemAssetPatch } from '../../shared/asset-validation';
 import { parseGameDraft } from './lesson-contracts';
-import type { GameDraft, WorkflowGameType } from '../shared/lesson-types';
+import type { GameDraft, WorkflowGameType } from '../../shared/lesson-types';
 import type { QualityReport } from './lesson-quality';
 
 export type LessonItemErrorCode = 'ITEM_INDEX_INVALID' | 'ITEM_INVALID' | 'ITEM_LIST_MISSING';
