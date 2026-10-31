@@ -7,6 +7,9 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-01 — inline (chưa có file lưu trữ)
+- Năm mục Cài đặt thành năm tab; mọi utility `dark:` trong app đều chết (#159)
+
 ### 2026-10-31 — [docs/handoff/status/2026-10-31.md](handoff/status/2026-10-31.md)
 - Mục AI duy nhất, chia tab "AI local" / "AI cloud"; còn năm mục accordion (#158)
 - Trang Cài đặt là accordion sáu mục; sửa `ai:test-provider` đọc cache key rỗng (#157)
@@ -193,6 +196,27 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - Lịch sử trước 2026-10-19
 ## Bàn giao gần nhất
 
+## Handoff - Năm mục Cài đặt thành năm tab (2026-11-01, DECISIONS #159)
+
+**Files changed.**
+- `src/renderer/pages/settings.ts`: `SETTINGS_SECTION_IDS` → `SETTINGS_TABS` (mỗi mục có `tab` ngắn cho dải tab và `title` đầy đủ cho heading trong panel); một builder `settingsTabStripHtml(cfg)` dựng cả dải năm mục lẫn dải "AI local"/"AI cloud" lồng trong thẻ AI; xoá `settingsSectionHeader()` + `settingsAiTabsHtml()`; mỗi section giờ **là** `role="tabpanel"` (`data-settings-panel`, id `settingsPanel-<id>`, `aria-labelledby`) nên wrapper `mt-4` bị bỏ; chip trạng thái (🤖 ✓/○, ☁️ n/4, giọng điệu, chủ đề) chuyển lên nhãn tab; không còn state gập hết (`openSection` fallback về tab đầu).
+- `src/renderer/features/settings.ts`: `wireSettingsAiTabs()` và phần accordion của `wireSettingsSections()` nhập thành một helper `wireSettingsTabStrip(tabSelector, panelSelector, key, onSelect)` dùng cho cả hai cấp; panel chỉ tìm qua `aria-controls` → id; vẫn toggle class `hidden` tại chỗ, **không re-render**; ArrowLeft/ArrowRight đổi cả lựa chọn lẫn focus.
+- `src/renderer/styles/components.css`: `.settings-ai-tab` → `.settings-tab` + thêm `.settings-tablist` (đường kẻ có bản `html[data-theme="dark"]`); padding `8px 13px` → `8px 10px`, gap 6→5px sau khi đo dải 5 tab tràn 2 hàng ở 1366×768.
+- `src/renderer/shared.ts`, `src/renderer/core/controller.ts`: chỉ cập nhật chú thích theo #159 (state và chỗ gọi wiring giữ nguyên).
+- `tests/manual/verify-css.js` 18 → **20** expectation; `tests/ui/ui-settings-sections-check.js` viết lại thành **24** check.
+- Docs: `docs/DECISIONS.md` (#159), `docs/STATUS.md`, `docs/handoff/status/2026-10-31.md` (chuyển bàn giao #156 vào lưu trữ), `docs/ROADMAP.md` (ghi nợ `dark:`).
+- Không đổi: schema `settings`, hợp đồng IPC, `saveSettings()`, `readAiProviderPatches()`, registry 5 provider, `tests/legacy/smoke-ui.js`.
+
+**Behavior.** Trang Cài đặt là một dải năm tab — Nhà cung cấp AI / Phong cách / Giao diện / Tác vụ / Chẩn đoán — mỗi tab mở một thẻ, bên trong thẻ AI vẫn là hai tab con AI local / AI cloud. Nhãn tab ngắn + chip nên tab đang ẩn vẫn tự nói tình trạng của mình (đây là mục đích chip header của #157, nay chuyển lên trên). Không tab nào "đóng hết" được nữa; bấm lại tab đang mở chỉ giữ nguyên. Toàn bộ điều khiển vẫn nằm trong DOM khi ẩn nên "Lưu cài đặt" lấy được giá trị ở tab đang ẩn, đang gõ base URL/API key chưa lưu rồi đổi tab (kể cả đổi tab con) vẫn còn nguyên, tab + tab con sống sót sau khi lưu, và *Tác vụ*/*Chẩn đoán* refresh đúng khi mở. Phát hiện ngoài ý muốn: **mọi class `dark:*` trong renderer đều inert** (Tailwind v4 biên dịch biến thể `dark` theo `prefers-color-scheme` trong khi `applyTheme()` đặt `data-theme`), đo bằng probe buộc theme tối; một dòng `@custom-variant dark` sửa được tận gốc nhưng **cố ý không áp dụng** vì nó bật lại hàng trăm utility đang ngủ trên mọi trang — đã ghi thành nợ trong ROADMAP để quyết định riêng. Phần #159 thêm mới không dùng `dark:` nữa: heading panel thừa hưởng mực của thẻ, đường kẻ dải tab viết tay theo `html[data-theme="dark"]`.
+
+**Commands run.** `npm run check` 0 · `node tests/run-unit.js` **68/68** · `npm run build` 0 · `npm run check:renderer-globals` 0 undefined (54/55 script, 766 hàm, 6.295 call site) · `npm run verify:css` **20/20**. Electron thật, mỗi check một profile sạch qua `run-ui-153.sh`: `ui-settings-sections-check` **24/24** (probe tối: heading `rgb(232,234,242)` = mực thẻ, kẻ `rgb(42,50,75)`, tab `rgb(100,116,139)`), `ui-ai-provider-settings-check` / `ui-ai-provider-key-check` / `ui-ai-provider-wizard-check` / `ui-ai-status-bar-check` pass, `node tests/legacy/smoke-ui.js` **27/27**; `ui-ai-tasks-paging-check` vẫn 6/8 như trước. Ảnh: 1366×768 sáu trạng thái tab, 1920×1080, 1120 (dải tab tự ngắt 2 hàng), 1366 bản tối + bản sáng.
+
+**Chưa xác minh.** Chưa bấm tay luồng giáo viên thật (không API key, không model local) để xem cảm nhận khi đổi tab; chưa đo lại toàn bộ các trang khác trong theme tối — nợ `dark:` có thể còn chỗ khác chưa lộ. Chưa chạy installer đóng gói.
+
+**Next task.** Chốt hướng xử lý nợ `dark:` (một dòng `@custom-variant` + review mọi trang, hay gỡ hết class `dark:`); Roadmap `Packaged check` (cần máy sạch).
+
+---
+
 ## Handoff - Mục AI duy nhất với hai tab "AI local" / "AI cloud" (2026-10-31, DECISIONS #158)
 
 **Files changed.**
@@ -233,23 +257,6 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 **Chưa xác minh.** `ui-ai-tasks-paging-check` vẫn 6/8 trên profile mới (cần ≥11 tác vụ lịch sử — có sẵn từ trước, không do accordion). Chưa mở/đóng có animation; chưa nhớ mục đã mở giữa các lần khởi động. Chưa chạy installer đóng gói.
 
 **Next task.** Roadmap `Packaged check` (cần máy sạch); nếu muốn xanh nốt `ui-ai-tasks-paging-check` thì check phải tự tạo ≥11 mục lịch sử giả thay vì giả định profile đã có.
-
----
-
-## Handoff - `ui-wizard-structure-check` xanh nhờ guard setup onboarding (2026-10-31, DECISIONS #156)
-
-**Files changed.**
-- `tests/ui/ui-wizard-structure-check.js`: thêm guard chuẩn ngay sau `connect()` (chờ `#modalRoot .setup-fullscreen`, `closeSetupWizard('close')`, chờ 250ms), kèm chú thích về chẩn đoán cũ sai.
-- Docs: `docs/DECISIONS.md` (#156), `docs/STATUS.md`, `docs/handoff/status/2026-10-31.md` (chuyển bàn giao #153 vào lưu trữ).
-- Không đổi mã ứng dụng: renderer/CSS/IPC giữ nguyên.
-
-**Behavior.** Chỉ test. Assertion "the render keeps the keyboard focus on the ticked row" trước đây thấy `activeElement = BODY` không phải vì cửa sổ nền thiếu focus OS, mà vì profile mới đang mở màn setup toàn màn hình — `.app-shell` bị ẩn (`html[data-setup-fullscreen]`) nên **mọi** `focus()` trên trang đều vô hiệu. Probe: `#librarySearch.focus()`, `#wizardDocText.focus()`, checkbox `[data-wizard-section].focus()` đều để `activeElement = BODY` khi overlay mở; đóng overlay thì focus đúng ngay. `Page.bringToFront`, `Emulation.setFocusEmulationEnabled`, `WScript.Shell.AppActivate` đều không cứu được khi shell còn ẩn.
-
-**Commands run.** Electron thật, mỗi lần một profile sạch qua `run-ui-153.sh`: `ui-wizard-structure-check` **14/14** (chạy 2 lần, cả hai 14/14; assertion focus: `focused: "sec_2583"` = `expected`), `ui-draft-guard-check` **7/8** (vẫn đỏ ở bước sinh nội dung thật: "Chưa có nhà cung cấp AI nào sẵn sàng"). Không đổi mã nguồn nên không chạy lại build/unit.
-
-**Chưa xác minh.** `ui-draft-guard-check` cần một nhà cung cấp AI dùng được (model local hoặc API key) — không đưa key thật vào check. Chưa chạy toàn bộ bộ UI check bằng một lệnh; chưa chạy installer đóng gói.
-
-**Next task.** Roadmap `Packaged check` (cần máy sạch); nếu muốn `ui-draft-guard-check` xanh thì cần chốt cách cấp model cho check (ví dụ dựng một provider giả qua IPC như các check khác vẫn làm với `window.eduGame`).
 
 
 

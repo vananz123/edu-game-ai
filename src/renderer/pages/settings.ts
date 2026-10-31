@@ -46,31 +46,61 @@ function settingsProviderCard(provider, inputCls, labelCls, hintCls, btnSecondar
 }
 
 /**
- * #157: Settings is an accordion — five headers, one open at a time.
+ * #157 made Settings an accordion; #159 turns it into tabs because a five-section scroll
+ * still buried the part teachers open most (only the open section was readable, so
+ * reaching "Giao diện" meant clicking a header and re-reading the whole page). The strip
+ * keeps a status chip per tab, which is what the accordion headers were for: a closed tab
+ * still says what state its panel is in.
  *
- * The header is a button inside its `<h3>` (phrasing content, so the markup stays
- * valid) and carries the state chip, so a closed section still tells the teacher
- * what it holds. The body is only hidden, never removed: `saveSettings` reads
- * `#settingLargeText`/`#settingSound` without guards and `readAiProviderPatches`
- * walks every `[data-ai-provider]`, so every control must stay in the DOM no
- * matter which section is open.
+ * A panel is hidden, never removed: `saveSettings` reads `#settingLargeText`/
+ * `#settingSound` without guards and `readAiProviderPatches` walks every
+ * `[data-ai-provider]`, so a value typed on a tab nobody is looking at must still save.
+ * `tab` is the strip label — short enough that all five fit one row in the ~739px content
+ * column of a 1366px window — and `title` is the heading inside the panel.
  */
-function settingsSectionHeader(id, icon, title, chipHtml, openSection) {
-  const open = openSection === id;
-  return `<h3 class="m-0 text-[15px] font-bold text-[#1e293b] dark:text-[#f1f5f9]"><button type="button" class="w-full flex items-center justify-between gap-3 text-left bg-transparent border-0 p-0 cursor-pointer" data-settings-section="${id}" aria-expanded="${open ? 'true' : 'false'}" aria-controls="settingsPanel-${id}">
-      <span class="flex items-center gap-2 min-w-0 flex-wrap"><span class="text-[18px]">${icon}</span><span>${title}</span>${chipHtml || ''}</span>
-      <span class="shrink-0 text-[11px] font-semibold text-[#94a3b8] dark:text-[#64748b]" data-settings-chevron>${open ? 'Thu gọn ▴' : 'Mở ▾'}</span>
-    </button></h3>`;
+const SETTINGS_TABS = [
+  { id: 'ai', icon: '🧠', tab: 'Nhà cung cấp AI', title: 'Nhà cung cấp AI' },
+  { id: 'teaching', icon: '🎨', tab: 'Phong cách', title: 'Phong cách giảng dạy' },
+  { id: 'interface', icon: '⚙️', tab: 'Giao diện', title: 'Giao diện' },
+  { id: 'tasks', icon: '📋', tab: 'Tác vụ', title: 'Tác vụ dùng AI' },
+  { id: 'diagnostics', icon: '🔍', tab: 'Chẩn đoán', title: 'Chẩn đoán trực trặc (log)' }
+];
+
+const SETTINGS_SECTION_IDS = SETTINGS_TABS.map(tab => tab.id);
+
+/** #158: the AI panel holds two tabs; #159 keeps them as a nested strip inside its panel. */
+const SETTINGS_AI_TABS = [
+  { id: 'local', icon: '🤖', tab: 'AI local' },
+  { id: 'cloud', icon: '☁️', tab: 'AI cloud' }
+];
+
+/**
+ * #159: one builder for both strips so they cannot drift apart in markup or ARIA.
+ *
+ * `aria-controls` is the only link wiring uses to find a panel, so the panel ids here must
+ * match it exactly — `wireSettingsTabStrip` hides every panel of the group and reveals the
+ * one the clicked tab points at.
+ */
+function settingsTabStripHtml(cfg) {
+  return `<div class="${cfg.cls} settings-tablist flex items-center gap-1 flex-wrap" role="tablist" aria-label="${escapeHtml(cfg.ariaLabel)}">`
+    + cfg.tabs.map(tab => `<button type="button" role="tab" id="${cfg.idPrefix}-${tab.id}" class="settings-tab" data-${cfg.attr}="${tab.id}" aria-selected="${cfg.selected === tab.id ? 'true' : 'false'}" aria-controls="${cfg.panelPrefix}-${tab.id}" tabindex="${cfg.selected === tab.id ? '0' : '-1'}">`
+      + `<span>${tab.icon ? `<span class="mr-1">${tab.icon}</span>` : ''}${escapeHtml(tab.tab)}</span>${tab.chip || ''}</button>`).join('')
+    + '</div>';
 }
 
-const SETTINGS_SECTION_IDS = ['ai', 'teaching', 'interface', 'tasks', 'diagnostics'];
-
-/** #158: the merged AI section holds two tabs; the strip is ARIA-correct tablist markup. */
-const SETTINGS_AI_TABS = [{ id: 'local', label: '🤖 AI local' }, { id: 'cloud', label: '☁️ AI cloud' }];
-
-function settingsAiTabsHtml(selectedTab) {
-  return `<div class="flex items-center gap-1 flex-wrap border-b border-[#e2e8f0] dark:border-[#2a324b] mb-3" role="tablist" aria-label="Nhà cung cấp AI">${SETTINGS_AI_TABS.map(tab =>
-    `<button type="button" role="tab" id="settingsAiTabBtn-${tab.id}" class="settings-ai-tab" data-ai-tab="${tab.id}" aria-selected="${selectedTab === tab.id ? 'true' : 'false'}" aria-controls="settingsAiTabPanel-${tab.id}" tabindex="${selectedTab === tab.id ? '0' : '-1'}">${tab.label}</button>`).join('')}</div>`;
+/**
+ * The heading of a panel: full title on the left, the detailed state chips on the right.
+ *
+ * No text-colour class on purpose — the card it sits in already carries the theme's ink
+ * (`#172033` light / `#e8eaf2` dark) and `dark:text-…` utilities do not fire in this app
+ * (they compile under `prefers-color-scheme`, while the theme is driven by
+ * `[data-theme="dark"]`), so a hard-coded dark colour would be unreadable in dark mode.
+ */
+function settingsPanelHeader(tab, chipHtml) {
+  return `<div class="flex items-center justify-between gap-3 flex-wrap mb-3">
+    <h3 class="m-0 text-[15px] font-bold">${tab.icon} ${escapeHtml(tab.title)}</h3>
+    ${chipHtml ? `<div class="flex items-center gap-1.5 flex-wrap">${chipHtml}</div>` : ''}
+  </div>`;
 }
 
 function renderSettings() {
@@ -120,26 +150,38 @@ function renderSettings() {
   const hintCls = 'text-[11px] text-[#94a3b8] dark:text-[#64748b] leading-relaxed';
   const btnSecondaryCls = 'btn btn-secondary btn-small';
 
-  // #157: `''` is a real state (the teacher collapsed everything); only the first visit
-  // opens the AI section, and every re-render after a save or a model change keeps the choice.
-  const openSection = SETTINGS_SECTION_IDS.includes(state.settingsSection) ? state.settingsSection : '';
+  // #159: a tab is always open, so `''` (the old "everything collapsed" accordion state)
+  // is gone — an unrecognised value falls back to the first tab and every re-render after
+  // a save or a model change keeps the teacher's choice.
+  const openSection = SETTINGS_SECTION_IDS.includes(state.settingsSection) ? state.settingsSection : SETTINGS_SECTION_IDS[0];
   // #158: an unrecognised tab falls back to local, same policy as the section.
   const aiTab = SETTINGS_AI_TABS.some(tab => tab.id === state.settingsAiTab) ? state.settingsAiTab : 'local';
   const localReady = Boolean(selectedLocalModel?.installed && machine.runtimeInstalled);
-  const chipCls = ok => `px-2 py-0.5 rounded text-[10px] font-semibold ${ok
+  const chipTone = ok => ok
     ? 'bg-[#effaf5] dark:bg-[#132d24] text-[#16a34a] dark:text-[#4ade80]'
-    : 'bg-[#fef3c7] dark:bg-[#2d2413] text-[#d97706] dark:text-[#fbbf24]'}`;
+    : 'bg-[#fef3c7] dark:bg-[#2d2413] text-[#d97706] dark:text-[#fbbf24]';
+  const chipCls = ok => `px-2 py-0.5 rounded text-[10px] font-semibold ${chipTone(ok)}`;
   // #158: the cloud tab lists only the providers that actually need a key — the local
   // runtime has its own tab, and "AI local (llama.cpp)" sitting under "AI cloud" reads
   // as a bug. The policy strip still names every eligible provider, local included.
   const cloudProviders = providers.filter(provider => provider.id !== 'local');
   const readyCloud = cloudProviders.filter(provider => provider.status === 'ready').length;
-  // One chip per tab, so the closed section still reports both halves of itself.
+  // Full wording in the panel header, minimal wording in the tab label: five tabs have to
+  // share one row on a 1366px screen, so the chip there is `🤖 ○` / `☁️ 0/4`, not a sentence.
+  const tabChip = (text, ok, title) => `<span class="px-1 py-0.5 rounded text-[9px] font-semibold shrink-0 ${chipTone(ok)}" title="${escapeHtml(title || text)}">${escapeHtml(text)}</span>`;
   const aiChips = `<span class="${chipCls(localReady)}">🤖 ${localReady ? '✓ Sẵn sàng' : '○ Chưa cài đầy đủ'}</span>`
     + `<span class="${chipCls(readyCloud > 0)}">☁️ ${readyCloud ? `✓ ${readyCloud}/${cloudProviders.length} sẵn sàng` : 'Chưa có API key'}</span>`;
-  const teachingChip = `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-[#eef2ff] dark:bg-[#1e1b4b] text-[#4f46e5] dark:text-[#a5b4fc]">${escapeHtml(tone)}</span>`;
-  const themeLabel = state.settings.preferences?.theme==='dark' ? 'Tối' : state.settings.preferences?.theme==='system' ? 'Theo hệ thống' : 'Sáng';
-  const interfaceChip = `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-[#f5f6fa] dark:bg-[#1e2544] text-[#788196] dark:text-[#94a3b8]">${escapeHtml(themeLabel)}</span>`;
+  const themeLabel = state.settings.preferences?.theme==='dark' ? 'Tối' : state.settings.preferences?.theme==='system' ? 'Hệ thống' : 'Sáng';
+  // Only the AI panel repeats its state in the heading: the two chips there spell out both
+  // sub-tabs, one of which is off-screen. Phong cách/Giao diện already say the same thing
+  // in their tab label, so the heading stays a plain title.
+  const sectionTabChips = {
+    ai: tabChip(`🤖 ${localReady ? '✓' : '○'}`, localReady, `AI local: ${localReady ? 'sẵn sàng' : 'chưa cài đủ model và runtime'}`)
+      + tabChip(`☁️ ${readyCloud}/${cloudProviders.length}`, readyCloud > 0, `${readyCloud}/${cloudProviders.length} nhà cung cấp cloud đã có khoá và sẵn sàng`),
+    teaching: tabChip(tone, true, `Giọng điệu: ${tone}`),
+    interface: tabChip(themeLabel, true, `Chủ đề giao diện: ${themeLabel}`)
+  };
+  const sectionTabs = SETTINGS_TABS.map(tab => ({ ...tab, chip: sectionTabChips[tab.id] || '' }));
 
   return `<!-- Header -->
   <div class="flex items-center justify-between gap-4 mb-6 flex-wrap pb-4 border-b border-[#f1f5f9] dark:border-[#2a324b]">
@@ -149,7 +191,7 @@ function renderSettings() {
         <h1 class="text-[22px] tracking-[-0.5px] m-0 font-extrabold text-[#1e293b] dark:text-[#f1f5f9]">Cài đặt ứng dụng</h1>
       </div>
       <p class="mt-1 text-[12px] text-[#64748b] dark:text-[#94a3b8] leading-relaxed m-0">
-        Chọn một mục để mở. Mục Nhà cung cấp AI chia hai tab: <b>AI local</b> chạy trên máy và <b>AI cloud</b> qua API key. Mọi thay đổi chỉ được lưu khi bạn bấm “Lưu cài đặt”, kể cả ở mục đang đóng.
+        Mỗi mục là một tab; tab nào cũng hiện sẵn tình trạng của mình nên không cần mở ra mới biết. Mục <b>Nhà cung cấp AI</b> chia hai tab con: <b>AI local</b> chạy trên máy và <b>AI cloud</b> qua API key. Mọi thay đổi chỉ được lưu khi bạn bấm “Lưu cài đặt”, kể cả ở tab đang ẩn.
       </p>
     </div>
   </div>
@@ -157,11 +199,12 @@ function renderSettings() {
   <div class="grid grid-cols-[minmax(0,1fr)_280px] gap-5 items-start">
     <div class="flex flex-col gap-5 min-w-0">
 
-      <!-- ═══ 1. AI: MỘT MỤC, HAI TAB (local + cloud) ═══ -->
-      <section class="${sectionCls}" id="settingAiProviders" data-ai-providers data-settings-card="ai">
-        ${settingsSectionHeader('ai', '🧠', 'Nhà cung cấp AI', aiChips, openSection)}
-        <div class="mt-4 ${openSection === 'ai' ? '' : 'hidden'}" data-settings-panel="ai" id="settingsPanel-ai">
-        ${settingsAiTabsHtml(aiTab)}
+      ${settingsTabStripHtml({ tabs: sectionTabs, selected: openSection, attr: 'settings-section', idPrefix: 'settingsTabBtn', panelPrefix: 'settingsPanel', ariaLabel: 'Các mục cài đặt', cls: '' })}
+
+      <!-- ═══ 1. AI: MỘT TAB, HAI TAB CON (local + cloud) ═══ -->
+      <section class="${sectionCls} ${openSection === 'ai' ? '' : 'hidden'}" role="tabpanel" aria-labelledby="settingsTabBtn-ai" data-ai-providers data-settings-card="ai" data-settings-panel="ai" id="settingsPanel-ai">
+        ${settingsPanelHeader(SETTINGS_TABS[0], aiChips)}
+        ${settingsTabStripHtml({ tabs: SETTINGS_AI_TABS, selected: aiTab, attr: 'ai-tab', idPrefix: 'settingsAiTabBtn', panelPrefix: 'settingsAiTabPanel', ariaLabel: 'Nhà cung cấp AI', cls: 'mb-3' })}
         <div role="tabpanel" id="settingsAiTabPanel-local" data-ai-tabpanel="local" aria-labelledby="settingsAiTabBtn-local" class="${aiTab === 'local' ? '' : 'hidden'}">
         <p class="${hintCls} mb-4">Cài và chọn model Qwen chạy cùng llama.cpp ngay trong ứng dụng. Model và runtime được lưu trong dữ liệu ứng dụng trên máy này.</p>
 
@@ -238,14 +281,12 @@ function renderSettings() {
           <div class="grid gap-3">${cloudProviders.map(provider => settingsProviderCard(provider, inputCls, labelCls, hintCls, btnSecondaryCls)).join('')}</div>
         ` : `<p class="${hintCls}">Đang nạp danh sách nhà cung cấp AI…</p>`}
         </div>
-        </div>
       </section>
 
 
       <!-- ═══ 2. PHONG CÁCH GIẢNG DẠY ═══ -->
-      <section class="${sectionCls}" data-settings-card="teaching">
-        ${settingsSectionHeader('teaching', '🎨', 'Phong cách giảng dạy', teachingChip, openSection)}
-        <div class="mt-4 ${openSection === 'teaching' ? '' : 'hidden'}" data-settings-panel="teaching" id="settingsPanel-teaching">
+      <section class="${sectionCls} ${openSection === 'teaching' ? '' : 'hidden'}" role="tabpanel" aria-labelledby="settingsTabBtn-teaching" data-settings-card="teaching" data-settings-panel="teaching" id="settingsPanel-teaching">
+        ${settingsPanelHeader(SETTINGS_TABS[1])}
         <p class="${hintCls} mb-4">Thiết lập một lần cho giáo viên; AI dùng làm mặc định cho những trò chơi mới.</p>
 
         <div class="grid gap-3">
@@ -287,13 +328,11 @@ function renderSettings() {
           </div>
           <div class="${hintCls}">Phong cách áp dụng khi tạo trò chơi mới bằng AI local hoặc đám mây; model AI chọn ở tab “AI cloud” của mục Nhà cung cấp AI. Chế độ ngoại tuyến không gọi AI nên không dùng phong cách này.</div>
         </div>
-        </div>
       </section>
 
       <!-- ═══ 3. GIAO DIỆN (trước đây: Dữ liệu và trải nghiệm) ═══ -->
-      <section class="${sectionCls}" data-settings-card="interface">
-        ${settingsSectionHeader('interface', '⚙️', 'Giao diện', interfaceChip, openSection)}
-        <div class="mt-4 ${openSection === 'interface' ? '' : 'hidden'}" data-settings-panel="interface" id="settingsPanel-interface">
+      <section class="${sectionCls} ${openSection === 'interface' ? '' : 'hidden'}" role="tabpanel" aria-labelledby="settingsTabBtn-interface" data-settings-card="interface" data-settings-panel="interface" id="settingsPanel-interface">
+        ${settingsPanelHeader(SETTINGS_TABS[2])}
         <div class="grid gap-4">
           <div class="grid grid-cols-3 gap-3">
             <div class="field">
@@ -346,14 +385,12 @@ function renderSettings() {
             </div>
           </div>
         </div>
-        </div>
       </section>
 
       <!-- ═══ 4. TÁC VỤ DÙNG AI ═══ -->
       <!-- update_plan_3 §8: task manager — what ran, what is running, what failed; history survives restart. -->
-      <section class="${sectionCls}" data-settings-card="tasks">
-        ${settingsSectionHeader('tasks', '📋', 'Tác vụ dùng AI', '', openSection)}
-        <div class="mt-4 ${openSection === 'tasks' ? '' : 'hidden'}" data-settings-panel="tasks" id="settingsPanel-tasks">
+      <section class="${sectionCls} ${openSection === 'tasks' ? '' : 'hidden'}" role="tabpanel" aria-labelledby="settingsTabBtn-tasks" data-settings-card="tasks" data-settings-panel="tasks" id="settingsPanel-tasks">
+        ${settingsPanelHeader(SETTINGS_TABS[3])}
         <div class="flex items-start justify-between gap-3 flex-wrap mb-3">
           <p class="${hintCls} m-0 max-w-[60ch]">Các tác vụ phân tích giáo án, sinh nội dung và tạo lại mục bằng AI local. Lịch sử được lưu trên máy và khôi phục khi mở lại ứng dụng. Mỗi trang 10 tác vụ; hệ thống chỉ giữ <b>30 tác vụ gần nhất</b> và tự xoá tác vụ cũ hơn.</p>
           <div class="flex gap-2 shrink-0">
@@ -363,14 +400,12 @@ function renderSettings() {
         </div>
         <div id="cpuVerifyResult" class="hidden bg-[#f8fafc] dark:bg-[#151a30] border border-[#e2e8f0] dark:border-[#2a324b] rounded-lg p-3 text-[12px] mb-3"></div>
         <div id="aiTaskList" class="grid gap-2"><div class="${hintCls}">Đang tải danh sách tác vụ…</div></div>
-        </div>
       </section>
 
       <!-- ═══ 5. CHẨN ĐOÁN TRỰC TRẶC (LOG) ═══ -->
       <!-- O10: diagnostic log — reproduce on another machine, export one file, send it back. -->
-      <section class="${sectionCls}" data-diagnostics-panel data-settings-card="diagnostics">
-        ${settingsSectionHeader('diagnostics', '🔍', 'Chẩn đoán trực trặc (log)', '', openSection)}
-        <div class="mt-4 ${openSection === 'diagnostics' ? '' : 'hidden'}" data-settings-panel="diagnostics" id="settingsPanel-diagnostics">
+      <section class="${sectionCls} ${openSection === 'diagnostics' ? '' : 'hidden'}" role="tabpanel" aria-labelledby="settingsTabBtn-diagnostics" data-diagnostics-panel data-settings-card="diagnostics" data-settings-panel="diagnostics" id="settingsPanel-diagnostics">
+        ${settingsPanelHeader(SETTINGS_TABS[4])}
         <div class="flex items-start justify-between gap-3 flex-wrap mb-2">
           <p class="${hintCls} m-0 max-w-[60ch]">Chẩn đoán AI: ứng dụng tự ghi lại thời gian chạy, model, số mục đã tạo, số lần thử lại và lỗi. Log chỉ chứa id, số lượng, thời gian và mã lỗi; không có nội dung giáo án hay khóa API.</p>
           <div class="flex gap-2 shrink-0 flex-wrap">
@@ -381,7 +416,6 @@ function renderSettings() {
         </div>
         <div id="diagnosticsInfo" class="${hintCls} mb-3">Đang đọc thư mục log…</div>
         <div id="diagnosticsResult" class="hidden bg-[#f8fafc] dark:bg-[#151a30] border border-[#e2e8f0] dark:border-[#2a324b] rounded-lg p-3 text-[12px] break-all"></div>
-        </div>
       </section>
 
     </div>
@@ -391,7 +425,7 @@ function renderSettings() {
       <!-- Nút Lưu cài đặt — sticky -->
       <section class="bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] rounded-2xl p-5 text-white">
         <h3 class="text-[14px] font-bold m-0 mb-2">Lưu thay đổi</h3>
-        <p class="text-[11px] text-[#e0e7ff] mb-3 leading-relaxed m-0">Lưu toàn bộ cài đặt trên trang này — kể cả các mục đang đóng.</p>
+        <p class="text-[11px] text-[#e0e7ff] mb-3 leading-relaxed m-0">Lưu toàn bộ cài đặt trên trang này — kể cả các tab đang ẩn.</p>
         <button class="bg-white text-[#6366f1] border-0 rounded-lg px-4 py-2.5 font-bold text-[13px] cursor-pointer w-full hover:bg-[#f8f7ff] transition shadow-[0_4px_12px_rgba(0,0,0,0.1)]" id="saveSettingsBtn">💾 Lưu cài đặt</button>
       </section>
 

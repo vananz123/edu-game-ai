@@ -248,7 +248,8 @@ function wirePage() {
   // #132: the old single-provider test button is gone; each provider has its own.
   // update_plan_3 §8: task manager + CPU-only runtime verification panel.
   if (state.page === 'settings' && typeof wireSettingsAiTasks === 'function') wireSettingsAiTasks();
-  // #157: the six Settings sections open/close in place, never by re-rendering.
+  // #159: the Settings tabs switch in place, never by re-rendering (a re-render would drop
+  // whatever the teacher typed but has not saved yet).
   if (state.page === 'settings' && typeof wireSettingsSections === 'function') wireSettingsSections();
 }
 async function handleLessonDrop(event) {

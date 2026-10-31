@@ -33,9 +33,15 @@ const expectations = [
   // button loses its place at the right (DECISIONS #109).
   ['treasure header row splits left/right', /\.treasure-head-row\{[^}]*justify-content:space-between/],
   ['treasure header row spans the stage', /\.treasure-head-row\{[^}]*align-self:stretch/],
-  // Settings AI tabs (#158): the only cue that a tab is selected is its underline, and
-  // it is keyed off the ARIA attribute the wiring sets — dropped, both tabs look equal.
-  ['AI tab underline follows aria-selected', /\.settings-ai-tab\[aria-selected=("?)true\1\]\{[^}]*border-bottom-color/]
+  // Settings tabs (#158, #159): the only cue that a tab is selected is its underline, and
+  // it is keyed off the ARIA attribute the wiring sets — dropped, every tab looks equal.
+  ['Settings tab underline follows aria-selected', /\.settings-tab\[aria-selected=("?)true\1\]\{[^}]*border-bottom-color/],
+  // Five tabs share one row on a 1366px screen; if the label may wrap, the strip becomes
+  // two ragged rows and the underline of a split tab lands under half a word.
+  ['Settings tab label stays on one line', /\.settings-tab\{[^}]*white-space:nowrap/],
+  // The strip's rule under it must go dark with the theme. `dark:border-…` cannot be used
+  // here: Tailwind compiles that variant under prefers-color-scheme, not [data-theme].
+  ['Settings tab strip rule has a dark colour', /html\[data-theme=("?)dark\1\] \.settings-tablist\{[^}]*border-bottom-color/]
 ];
 
 let failed = 0;

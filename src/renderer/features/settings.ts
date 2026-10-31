@@ -440,70 +440,57 @@ async function clearDiagnosticsUi() {
 }
 
 /**
- * #158: the merged AI section switches between "AI local" and "AI cloud" with tabs.
+ * #159: one switcher for both Settings tab strips — the five section tabs and the
+ * local/cloud tabs inside the AI panel.
  *
- * Same rule as the accordion: switching is a class toggle, never a re-render, because a
- * key typed on the cloud tab and not yet saved must survive a look at the local tab.
- * Only the selected tab stays in the tab order, so the arrow keys are the only way a
- * keyboard user reaches the other label — they have to move focus, not just selection.
+ * Switching is a class toggle, never a re-render: `render()` rebuilds the form from
+ * `state.settings`, so a key typed on one tab and not yet saved would vanish the moment
+ * the teacher looked at another. Panels are found through `aria-controls`, which is also
+ * what assistive tech uses, so the visual state and the announced state cannot drift.
+ * Only the selected tab keeps tabIndex 0, so the arrow keys — the only way a keyboard user
+ * reaches the other labels — must move focus, not just selection.
  */
-function wireSettingsAiTabs() {
-  const tabs = $$('[data-ai-tab]');
+function wireSettingsTabStrip(tabSelector, panelSelector, key, onSelect) {
+  const tabs = $$(tabSelector);
   if (!tabs.length) return;
   const select = (tabId, focus) => {
+    const active = tabs.find(tab => tab.dataset[key] === tabId);
+    if (!active) return;
     tabs.forEach(tab => {
-      const on = tab.dataset.aiTab === tabId;
+      const on = tab === active;
       tab.setAttribute('aria-selected', on ? 'true' : 'false');
       tab.tabIndex = on ? 0 : -1;
       if (on && focus) tab.focus();
     });
-    $$('[data-ai-tabpanel]').forEach(panel => {
-      panel.classList.toggle('hidden', panel.dataset.aiTabpanel !== tabId);
-    });
-    state.settingsAiTab = tabId;
+    const panelId = active.getAttribute('aria-controls');
+    $$(panelSelector).forEach(panel => panel.classList.toggle('hidden', panel.id !== panelId));
+    if (onSelect) onSelect(tabId);
   };
   tabs.forEach(tab => {
-    tab.addEventListener('click', () => select(tab.dataset.aiTab));
+    tab.addEventListener('click', () => select(tab.dataset[key]));
     tab.addEventListener('keydown', event => {
       const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
       if (!step) return;
       event.preventDefault();
-      select(tabs[(tabs.indexOf(tab) + step + tabs.length) % tabs.length].dataset.aiTab, true);
+      select(tabs[(tabs.indexOf(tab) + step + tabs.length) % tabs.length].dataset[key], true);
     });
   });
 }
 
 /**
- * #157: opens/closes one Settings section without re-rendering. A re-render would
- * rebuild the form from `state.settings` and silently drop whatever the teacher typed
- * but has not saved yet (an API key, a base URL), so the panels are toggled in place
- * and `state.settingsSection` only records which one is open for the next render.
+ * #159: the Settings page is a tab page. `state.settingsSection` records the open tab so
+ * the next render (after a save, a model change, a page revisit) starts on the same one.
  */
 function wireSettingsSections() {
-  const headers = $$('[data-settings-section]');
-  if (!headers.length) return;
-  const setOpen = sectionId => {
-    headers.forEach(header => {
-      const open = header.dataset.settingsSection === sectionId;
-      header.setAttribute('aria-expanded', open ? 'true' : 'false');
-      const chevron = header.querySelector('[data-settings-chevron]');
-      if (chevron) chevron.textContent = open ? 'Thu gọn ▴' : 'Mở ▾';
-    });
-    $$('[data-settings-panel]').forEach(panel => {
-      panel.classList.toggle('hidden', panel.dataset.settingsPanel !== sectionId);
-    });
+  wireSettingsTabStrip('[data-settings-section]', '[data-settings-panel]', 'settingsSection', sectionId => {
     state.settingsSection = sectionId;
-    // A section loaded while closed still gets a refresh the moment it opens.
+    // A tab that loaded while hidden still gets its data the moment it opens.
     if (sectionId === 'tasks') refreshAiTaskList();
     if (sectionId === 'diagnostics') refreshDiagnosticsInfo();
-  };
-  headers.forEach(header => {
-    header.addEventListener('click', () => {
-      const willOpen = header.getAttribute('aria-expanded') !== 'true';
-      setOpen(willOpen ? header.dataset.settingsSection : '');
-    });
   });
-  wireSettingsAiTabs();
+  wireSettingsTabStrip('[data-ai-tab]', '[data-ai-tabpanel]', 'aiTab', tabId => {
+    state.settingsAiTab = tabId;
+  });
 }
 
 /** Called by the controller when the settings page is (re)wired. */
