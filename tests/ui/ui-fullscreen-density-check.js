@@ -114,6 +114,16 @@ const CLOSE = `
 
 (async () => {
   const { ws, evaluate, settle } = await connect();
+  // A fresh profile opens the setup onboarding into #modalRoot a moment after the
+  // window loads; it would replace the play surface this check measures. Same
+  // guard as ui-game-worlds-check / ui-house-building-check.
+  await evaluate(`(async () => {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    for (let i = 0; i < 40; i++) { if (document.querySelector('#modalRoot .setup-fullscreen')) break; await sleep(100); }
+    if (typeof closeSetupWizard === 'function') closeSetupWizard('close');
+    await sleep(250);
+    return true;
+  })()`);
   await evaluate('(async () => {' + OPEN + '})()');
   // Hoàn tất animation trước khi đo (cửa sổ nền làm timeline tạm dừng).
   await settle();

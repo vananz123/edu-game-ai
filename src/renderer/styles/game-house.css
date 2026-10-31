@@ -28,6 +28,51 @@ html[data-fullscreen="1"] .house-stage-slot {
   height: clamp(170px, 22vh, 260px);
 }
 
+/* #153: ảnh minh hoạ giáo viên chọn cho câu hỏi, thay chỗ nhãn thể loại xám vừa
+   bỏ. Đặt NGANG HÀNG với ô giữ chỗ của nhà, không xếp chồng lên trên: đo ở
+   1920x1080, một ảnh 320x200 xếp trên đẩy 6 phần tử đáp án ra ngoài màn hình và ở
+   1366x768 làm lưới đáp án co về 0. Hàng ngang dùng khoảng trống bên trái của ô
+   nhà (ô nhà rộng 1784px nhưng ngôi nhà chỉ chiếm ~340px giữa), nên nó không ăn
+   thêm chiều cao nào.
+   Kích thước theo `vh` chứ không theo `%`: ảnh nằm trong flex item co theo nội
+   dung, nên `%` sẽ tính quanh chính nó (đo được 34% của 300px = 102px — quá nhỏ). */
+.house-art-row {
+  display: flex;
+  align-items: center;
+  gap: clamp(12px, 2vw, 32px);
+  width: 100%;
+}
+.house-art-row .house-stage-slot {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+.house-question-art {
+  display: flex;
+  justify-content: center;
+  flex: 0 0 auto;
+  margin: 0;
+}
+.house-question-art .stage-illustration.is-house-art {
+  width: clamp(150px, 22vh, 280px);
+  max-width: clamp(150px, 22vh, 280px);
+  margin: 0;
+}
+html[data-fullscreen="1"] .house-question-art .stage-illustration.is-house-art {
+  width: clamp(180px, 30vh, 360px);
+  max-width: clamp(180px, 30vh, 360px);
+}
+
+/* #153: hộp "Đã xây n/m phần" dịch xuống (+Y), rời khỏi thanh tiến độ câu hỏi để
+   cụm nhãn đầu màn chơi không bị dồn vào một góc. Chỉ lúc đang trả lời: màn
+   showcase bên dưới cần HUD gọn để nhường chiều cao cho ngôi nhà. */
+.game-stage:not(.is-house-showcase) .house-progress {
+  margin-top: clamp(12px, 2.6vh, 30px);
+}
+html[data-fullscreen="1"] .game-stage:not(.is-house-showcase) .house-progress {
+  margin-top: clamp(18px, 4vh, 52px);
+}
+
 /* Một cột duy nhất, canh đáy: banner + nút ở dưới, phần trên nhường cho nhà. */
 .modal[data-player-theme] .game-stage.is-house-showcase .stage-center {
   flex-direction: column;
@@ -51,6 +96,8 @@ html[data-fullscreen="1"] .house-stage-slot {
   min-height: 0;
 }
 .game-stage.is-house-showcase .stage-kicker-row,
+.game-stage.is-house-showcase .house-art-row,
+.game-stage.is-house-showcase .house-question-art,
 .game-stage.is-house-showcase .scenario-context,
 .game-stage.is-house-showcase .stage-question,
 .game-stage.is-house-showcase .answer-grid,

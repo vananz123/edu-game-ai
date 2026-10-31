@@ -89,7 +89,7 @@ function treasureGame() {
 }
 
 const GAMES = [
-  { world: 'quiz', label: 'THỬ THÁCH KIẾN THỨC', make: quizGame, serif: true },
+  { world: 'quiz', label: 'ĐẤU TRƯỜNG TRI THỨC', make: quizGame, serif: true },
   // Scenario uses the SAME engine surface as quiz (one exam world, two setups), so
   // its stage reports data-game-world="quiz" by design; `tag` keeps the check's
   // labels distinct and expects the scenario ribbon.
@@ -244,10 +244,73 @@ const GAMES = [
     out.storedHasRace = stored ? 'race' in stored : null;
     return out;
   })()`);
-  check('a stray panel does not change the play world', panels.world === 'quiz' && /THỬ THÁCH KIẾN THỨC/.test(panels.header), JSON.stringify(panels));
+  check('a stray panel does not change the play world', panels.world === 'quiz' && /ĐẤU TRƯỜNG TRI THỨC/.test(panels.header), JSON.stringify(panels));
   check('saving drops the panels the template does not own', panels.savedHasMatching === false, JSON.stringify(panels.savedKeys));
   check('opening the editor adds no panel keys', !panels.editorKeys.includes('matchingGame') && !panels.editorKeys.includes('treasureHunt') && !panels.editorKeys.includes('race'), JSON.stringify(panels.editorKeys));
   check('an editor save stores only the template panel', panels.storedHasMatching === false && panels.storedHasTreasure === false && panels.storedHasRace === false, JSON.stringify({ matching: panels.storedHasMatching, treasure: panels.storedHasTreasure, race: panels.storedHasRace }));
+
+  // ---- #153: tên thế giới + ảnh minh hoạ thay nhãn xám ---------------------
+  // Ba nhãn từng cùng nói một điều: badge đầu màn chơi, dải băng sân khấu và pill
+  // xám trên câu hỏi. Pill bị bỏ; ảnh giáo viên CHỌN cho câu hỏi chiếm chỗ đó ở
+  // chế độ Xây nhà (nhà 3D vẫn giữ ô riêng). Ảnh "tự động" không tính là có ảnh.
+  const art = await evaluate(`(async () => {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const out = {};
+    const base = ${JSON.stringify(quizGame())};
+    const close = async () => { document.querySelector('[data-play-close]')?.click(); await sleep(220); };
+    const open = async (game, wait = 700) => { await close(); playGame(game); await sleep(wait); };
+    const house = extra => Object.assign({}, base, {
+      id: 'ui-world-art-' + Math.random().toString(36).slice(2, 7),
+      title: 'UI world house art',
+      gameSetup: { gameplayMode: 'house' },
+      questions: base.questions.map(q => Object.assign({}, q, extra))
+    });
+
+    await open(base);
+    out.classicPills = Array.from(document.querySelectorAll('.stage-kicker')).map(el => el.textContent.trim());
+    out.classicHeader = document.querySelector('.play-head-world') ? document.querySelector('.play-head-world').textContent.trim() : '';
+
+    await open(house({ illustrationAssetId: 'animals-scene' }));
+    const picked = document.querySelector('.house-question-art .stage-illustration');
+    out.pickedArt = Boolean(picked);
+    out.pickedHeight = picked ? Math.round(picked.getBoundingClientRect().height) : 0;
+    out.pickedWidth = picked ? Math.round(picked.getBoundingClientRect().width) : 0;
+    out.pickedSlot = Boolean(document.querySelector('.house-stage-slot'));
+    // #153: the picture shares one row with the house slot instead of stacking above
+    // it. Stacked, a usable-size picture pushed the answer grid off the projector
+    // (measured: 6 elements past 1080px, and 0px of answers at 768px).
+    out.pickedBesideSlot = (() => {
+      const slot = document.querySelector('.house-stage-slot');
+      if (!picked || !slot) return false;
+      const a = picked.getBoundingClientRect(), s = slot.getBoundingClientRect();
+      return a.right <= s.left + 2 && a.top < s.bottom && a.bottom > s.top;
+    })();
+    document.querySelector('.answer-option')?.click();
+    await sleep(900);
+    out.showcase = Boolean(document.querySelector('.game-stage.is-house-showcase'));
+    const showcaseArt = document.querySelector('.house-question-art');
+    out.showcaseArtHidden = showcaseArt ? getComputedStyle(showcaseArt).display === 'none' : null;
+
+    await open(house({ illustrationAssetId: 'none' }));
+    out.noneArt = Boolean(document.querySelector('.stage-illustration'));
+
+    await open(house({}));
+    out.autoArt = Boolean(document.querySelector('.house-question-art'));
+    out.autoAnyArt = Boolean(document.querySelector('.stage-illustration'));
+    await close();
+    return out;
+  })()`);
+  check('the quiz world is named Đấu trường tri thức', /ĐẤU TRƯỜNG TRI THỨC/.test(art.classicHeader), JSON.stringify(art.classicHeader));
+  check('the grey genre pill is gone from a plain quiz question', art.classicPills.length === 0, JSON.stringify(art.classicPills));
+  check('a picked picture takes the pill place in house mode',
+    art.pickedArt === true && art.pickedWidth >= 140 && art.pickedHeight >= 85 &&
+      art.pickedSlot === true && art.pickedBesideSlot === true,
+    JSON.stringify({ art: art.pickedArt, w: art.pickedWidth, h: art.pickedHeight, slot: art.pickedSlot, beside: art.pickedBesideSlot }));
+  check('the house showcase hides the question picture', art.showcase === true && art.showcaseArtHidden === true,
+    JSON.stringify({ showcase: art.showcase, hidden: art.showcaseArtHidden }));
+  check('"Bỏ ảnh" leaves no picture on the play surface', art.noneArt === false, JSON.stringify(art.noneArt));
+  check('auto artwork does not invent a picture in house mode', art.autoArt === false && art.autoAnyArt === false,
+    JSON.stringify({ houseArt: art.autoArt, anyArt: art.autoAnyArt }));
 
   // Different worlds must actually look different: no two stages share a
   // background, and each panel washes the header with its own colour.

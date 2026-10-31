@@ -384,3 +384,33 @@ Nguyên nhân gốc nằm ở chỗ editor render cả ba panel ẩn để thầ
 
 **Next.** Chốt với chủ dự án xem có siết bố cục Xây nhà trước khi trả lời không; nếu không, quay lại roadmap `Packaged check` / các mục AI.
 
+## #153 — Bỏ ảnh theo từng câu, nhãn quiz mới, ảnh thay nhãn xám và hạ HUD Xây nhà
+
+**Bối cảnh.** Bốn yêu cầu từ chủ dự án:
+1. giáo viên cần **bỏ ảnh minh hoạ của riêng một câu** (trước đây chỉ tắt được cả game, hoặc để trống — mà trống thì chế độ `auto` lại tự vẽ tranh chủ đề);
+2. game quiz ở chế độ Xây nhà khi mở toàn màn hình phải mang tên **"Đấu trường tri thức"**;
+3. **xoá pill xám "THỬ THÁCH KIẾN THỨC"** ở đầu cột câu hỏi và **thay bằng ảnh minh hoạ nếu có**;
+4. **hạ hộp HUD Xây nhà ("Đã xây 1/5 phần") xuống** theo +Y.
+
+**Thay đổi.**
+- **Bỏ ảnh theo câu.** `src/shared/illustration-registry.ts`: sentinel `ILLUSTRATION_NONE_ID = 'none'`; `resolveIllustration` trả `null` ngay sau khi normalize. Phải là sentinel riêng vì `''` nghĩa là "chưa chọn" và vẫn để `auto` tự vẽ. Renderer mirror trong `src/renderer/features/game-illustration.ts` (`resolveStageIllustration`) — unit test có guard chống lệch giữa hai bản. Editor (`features/editor/questions.ts`): nút **"✕ Bỏ ảnh"** ghi sentinel (không ghi `''`), thêm option `Không dùng ảnh` trong picker, badge/thumb riêng, chip `🚫 Không ảnh` ở danh sách mục, và nút disabled khi câu đã ở trạng thái bỏ ảnh.
+- **Nhãn quiz.** `src/renderer/features/games/result-screen.ts`: `GAME_WORLDS.quiz.label` → `ĐẤU TRƯỜNG TRI THỨC`. Nhãn này là nguồn duy nhất cho cả badge đầu màn chơi (`.play-head-world`) và dải băng sân khấu (`.stage-world-tag`), nên đổi một chỗ là cả hai đổi.
+- **Bỏ pill xám.** `src/renderer/features/games/quiz.ts` (`renderQuestion`): `kicker` để rỗng với trắc nghiệm thường; các loại câu đặc biệt (tình huống, điền từ, trả lời ngắn, đúng/sai) vẫn giữ nhãn vì nó nói cho học sinh biết đang trả lời kiểu gì. Nút "Gợi ý" vẫn dùng chung hàng đó khi câu có gợi ý.
+- **Ảnh thay chỗ nhãn (Xây nhà).** Ảnh của câu hỏi được đặt **ngang hàng, bên trái ô giữ chỗ của nhà** (`.house-art-row`), chỉ khi ảnh là **chỉ định** (`explicit`: hình có sẵn hoặc ảnh tải lên) — tranh "tự động" không tính, nếu không mọi câu Xây nhà đều mọc thêm một cảnh mặc định. CSS `src/renderer/styles/game-house.css`: kích thước theo `vh` (`clamp(150px, 22vh, 280px)`, toàn màn hình `clamp(180px, 30vh, 360px)`).
+- **Hạ HUD.** `.game-stage:not(.is-house-showcase) .house-progress` có `margin-top: clamp(12px, 2.6vh, 30px)` (toàn màn hình `clamp(18px, 4vh, 52px)`); trạng thái showcase giữ nguyên.
+
+**Vì sao xếp ngang, không xếp trên.** Đo bằng probe CDP ở đúng hai cỡ máy chiếu:
+- `%` không dùng được: `.stage-col.is-main` là flex column `align-items:center`, nên `.house-question-art` co theo nội dung và `34%` tính quanh chính nó — đo được **102×64px**.
+- Xếp ảnh **trên** câu hỏi: ở 1920×1080 đẩy **6 phần tử** (đáp án + nút) ra ngoài 1080px; ở 1366×768 lưới đáp án co về **0px**.
+- Xếp **ngang** bên trái ô nhà: ô nhà rộng 1784px nhưng ngôi nhà 3D chỉ chiếm ~340px giữa, nên hàng ảnh dùng chỗ trống vốn có và **không ăn thêm chiều cao**: tràn 0px ở cả hai cỡ.
+
+**Kết quả.** Ảnh **324×203** @1920×1080 và **230×144** @1366×768, nằm bên trái ô nhà (`pickedBesideSlot`). HUD cách đáy thanh tiến độ **61px** @1920×1080 và **45px** @1366×768 (assertion đòi ≥12); trạng thái showcase vẫn gọn (50px).
+
+**Kiểm tra.** `npm run check` 0 · `npm run build` 0 · `node tests/run-unit.js` **68/68** (illustration-registry 36 check) · `npm run check:renderer-globals` 0 undefined · `npm run verify:css` **17/17** · Electron thật qua CDP, mỗi check một instance sạch: `ui-game-worlds-check` **52/52** (39→52), `ui-house-building-check` **85/85**, `ui-editor-art-check` pass (thêm 4 check cho "Bỏ ảnh"), `ui-stage-illustration-check` **169/169** (trước 160/160 + `(could not open: quiz)`: thiếu guard nên mẫu quiz bị bỏ qua; guard đóng onboarding đã thêm, xem dưới), `ui-item-assets-editor-check` **29/29**, `ui-fullscreen-density-check` **8/8** (trước đó `FAIL không tìm thấy .stage-question …` vì cùng lý do thiếu guard).
+
+**Không đổi.** Không đổi hợp đồng IPC, engine matching/treasure/race, `normalizeGame` (đường `.egame` cũ vẫn mở được), `playGame`. Câu không có ảnh và game không phải Xây nhà vẫn chạy đúng như trước.
+
+**Chưa xử lý.** WebGL không hiện trong `Page.captureScreenshot` (chỉ thấy sàn xám ở 1366×768) — đây là hạn chế chụp, ngôi nhà 3D được chứng minh bằng assertion toạ độ chiếu của `ui-house-building-check`. `ui-stage-illustration-check` và `ui-fullscreen-density-check` trước đó đỏ/thiếu mẫu trên profile mới vì không có guard đóng setup onboarding; đã thêm cùng guard như #151/#152.
+
+**Next.** Roadmap `Packaged check` (cần máy sạch); các mục AI/giáo án chưa chốt thứ tự.
+

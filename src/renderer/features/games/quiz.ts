@@ -11,7 +11,11 @@ function renderQuestion() {
     const scoring = resolveScoring(game.gameSetup);
     const scoringTip = ({ 'cơ bản': '✓ Đúng nhận điểm cố định, sai không bị trừ điểm', 'tốc độ': `⚡ Đúng nhanh trong 8 giây: +${scoring.timeBonus} điểm thưởng`, 'theo độ khó': `⛰️ Điểm theo độ khó: dễ ${scoring.table['dễ']} · trung bình ${scoring.table['trung bình']} · khó ${scoring.table['khó']}`, 'thi đấu đội': '👥 Điểm cộng cho đội — có thể luân phiên người trả lời', 'luyện tập': '📖 Luyện tập: không áp lực thời gian — xem kỹ giải thích' })[scoring.mode] || '';
     const textQ = isTextQuestion(q);
-    const kicker = q.type === 'scenario' ? 'TÌNH HUỐNG THỰC TẾ' : q.type === 'fill-in-blank' ? 'ĐIỀN TỪ CÒN THIẾU' : q.type === 'short-answer' ? 'TRẢ LỜI NGẮN' : q.type === 'true-false' ? 'ĐÚNG HAY SAI' : 'THỬ THÁCH KIẾN THỨC';
+    // #153: trắc nghiệm thường không còn pill thể loại — tên thế giới đã nằm ở
+    // badge đầu màn chơi ("ĐẤU TRƯỜNG TRI THỨC") và dải băng sân khấu, nên nhãn
+    // xám thứ ba chỉ lặp lại. Các loại câu đặc biệt vẫn giữ nhãn để học sinh biết
+    // mình đang trả lời kiểu gì.
+    const kicker = q.type === 'scenario' ? 'TÌNH HUỐNG THỰC TẾ' : q.type === 'fill-in-blank' ? 'ĐIỀN TỪ CÒN THIẾU' : q.type === 'short-answer' ? 'TRẢ LỜI NGẮN' : q.type === 'true-false' ? 'ĐÚNG HAY SAI' : '';
     /* DECISIONS #87: quiz và scenario dùng CHUNG một render function, phân biệt
        bằng `q.type`, nên `data-game` cũng phải theo `q.type` — không theo
        `game.template`. Teacher có thể trộn câu scenario vào game quiz
@@ -29,10 +33,24 @@ function renderQuestion() {
     // showcase needs to keep it below the house (DECISIONS #142).
     const illusHtml = houseMode ? '' : stageIllustrationHtml(q, game, 'is-stage');
     const hasIllus = Boolean(illusHtml);
+    // #153: nhà 3D chiếm ô giữ chỗ, nhưng ảnh giáo viên CHỌN cho câu hỏi vẫn được
+    // hiện — đặt ngang hàng, bên trái ô nhà. Chỉ ảnh chỉ định (hình có sẵn / ảnh
+    // tải lên): tranh "tự động" không phải là "câu hỏi có ảnh", nếu không mọi câu
+    // Xây nhà đều mọc thêm một cảnh mặc định. Đặt ngang thay vì xếp trên để không
+    // ăn chiều cao: đo ở 1920x1080, ảnh xếp trên đẩy 6 phần tử đáp án ra ngoài màn.
+    const houseArt = houseMode ? resolveStageIllustration(q, game) : null;
+    const houseSlotHtml = houseMode ? '<div class="house-stage-slot" aria-hidden="true"></div>' : '';
+    const houseBlock = houseArt && houseArt.explicit
+        ? `<div class="house-art-row"><div class="house-question-art">${stageIllustrationHtml(q, game, 'is-stage is-house-art')}</div>${houseSlotHtml}</div>`
+        : houseSlotHtml;
+    const hintButton = q.hint && !textQ ? `<button type="button" class="btn btn-secondary btn-small quiz-hint-btn" id="quizHintBtn">💡 Gợi ý</button>` : '';
+    const kickerRow = kicker || hintButton
+        ? `<div class="stage-kicker-row flex items-center justify-between gap-2 mb-2 flex-wrap">${kicker ? `<div class="stage-kicker d-badge d-badge-neutral">${kicker}</div>` : ''}${hintButton}</div>`
+        : '';
     const answerArea = textQ
         ? `<div class="text-answer-box"><input id="textAnswerInput" placeholder="${shortAnswerPlaceholder}" autocomplete="off"><button class="btn btn-primary" id="textAnswerBtn">Trả lời</button>${q.hint ? `<button class="btn btn-secondary text-answer-hint" type="button" data-answer-hint>💡 Gợi ý</button>` : ''}</div>${q.hint ? `<div class="text-answer-hint-text hidden" id="textAnswerHint">💡 <strong>Gợi ý:</strong> ${escapeHtml(q.hint)}</div>` : ''}`
         : `<div class="answer-grid${trueFalse ? ' true-false-grid' : ''}">${q.options.map((o, i) => `<button class="answer-option" data-answer="${escapeHtml(o.id)}"><span class="letter">${optionMark(o, i)}</span><span>${escapeHtml(o.text)}</span></button>`).join('')}</div>`;
-    root.innerHTML = `<div class="game-stage" data-game="${stageGame}" data-game-world="quiz">${gameWorldLabel(stageGame)}<div class="stage-top"><span class="stage-meta">${escapeHtml(game.subject || 'TRÒ CHƠI HỌC TẬP')} · ${game.grade ? 'LỚP ' + escapeHtml(game.grade) : 'MỌI LỚP'}</span><span class="stage-meta stage-meta-right"><span class="stage-chip">${game.template === 'scenario' ? 'QUYẾT ĐỊNH' : 'CÂU'} <b>${state.gameAnswers.length + 1}</b>/${game.questions.length}</span><span class="stage-chip stage-chip-score">🏆 <b>${state.gameAnswers.reduce((s, a) => s + a.points, 0)}</b> điểm</span></span></div><div class="stage-progress"><div data-progress="${progress}"></div></div>${isHouseMode(game) ? houseProgressHtml() : ''}${state.teamPlay ? teamTurnBarHtml() : ''}<div class="stage-center"><div class="stage-col stage-side-col">${illusHtml}${hasIllus ? '<div id="answerFeedback" class="feedback-under-illustration"></div>' : ''}</div><div class="stage-col is-main"><div class="stage-kicker-row flex items-center justify-between gap-2 mb-2 flex-wrap"><div class="stage-kicker d-badge d-badge-neutral">${kicker}</div>${q.hint && !textQ ? `<button type="button" class="btn btn-secondary btn-small quiz-hint-btn" id="quizHintBtn">💡 Gợi ý</button>` : ''}</div>${houseMode ? '<div class="house-stage-slot" aria-hidden="true"></div>' : ''}${q.context ? `<p class="scenario-context">${escapeHtml(q.context).replace(/\n/g, '<br>')}</p>` : ''}<div class="stage-question">${escapeHtml(q.prompt).replace(/\n/g, '<br>')}</div>${answerArea}${!hasIllus ? '<div id="answerFeedback"></div>' : ''}<div class="stage-bottom"><span class="stage-tip">${scoringTip}</span><button class="btn hidden" id="nextQuestionBtn">Tiếp tục →</button></div></div></div></div>`;
+    root.innerHTML = `<div class="game-stage" data-game="${stageGame}" data-game-world="quiz">${gameWorldLabel(stageGame)}<div class="stage-top"><span class="stage-meta">${escapeHtml(game.subject || 'TRÒ CHƠI HỌC TẬP')} · ${game.grade ? 'LỚP ' + escapeHtml(game.grade) : 'MỌI LỚP'}</span><span class="stage-meta stage-meta-right"><span class="stage-chip">${game.template === 'scenario' ? 'QUYẾT ĐỊNH' : 'CÂU'} <b>${state.gameAnswers.length + 1}</b>/${game.questions.length}</span><span class="stage-chip stage-chip-score">🏆 <b>${state.gameAnswers.reduce((s, a) => s + a.points, 0)}</b> điểm</span></span></div><div class="stage-progress"><div data-progress="${progress}"></div></div>${isHouseMode(game) ? houseProgressHtml() : ''}${state.teamPlay ? teamTurnBarHtml() : ''}<div class="stage-center"><div class="stage-col stage-side-col">${illusHtml}${hasIllus ? '<div id="answerFeedback" class="feedback-under-illustration"></div>' : ''}</div><div class="stage-col is-main">${kickerRow}${houseBlock}${q.context ? `<p class="scenario-context">${escapeHtml(q.context).replace(/\n/g, '<br>')}</p>` : ''}<div class="stage-question">${escapeHtml(q.prompt).replace(/\n/g, '<br>')}</div>${answerArea}${!hasIllus ? '<div id="answerFeedback"></div>' : ''}<div class="stage-bottom"><span class="stage-tip">${scoringTip}</span><button class="btn hidden" id="nextQuestionBtn">Tiếp tục →</button></div></div></div></div>`;
     paintProgress(root);
     $$('.answer-option', root).forEach(btn => btn.addEventListener('click', () => chooseAnswer(q, btn.dataset.answer)));
     const qHintBtn = $('#quizHintBtn', root);

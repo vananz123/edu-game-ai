@@ -81,7 +81,8 @@ function editorAssetFieldsHtml(item, options) {
   const iconName = EDITOR_ICON_NAMES.has(rawIcon) ? rawIcon : '';
   const illustration = typeof source.illustrationAssetId === 'string' ? source.illustrationAssetId.trim() : '';
   const chips = compact ? '' : `<span class="editor-asset-chip" title="Lĩnh vực nội dung của mục này">${escapeHtml(EDITOR_CATEGORY_LABEL[category] || category)}</span>
-    ${illustration ? `<span class="editor-asset-chip" title="Minh họa đã gán">🖼 ${escapeHtml(illustration)}</span>` : ''}`;
+    ${illustration === 'none' ? `<span class="editor-asset-chip" title="Câu hỏi này không dùng ảnh minh hoạ">🚫 Không ảnh</span>` : ''}
+    ${illustration && illustration !== 'none' ? `<span class="editor-asset-chip" title="Minh họa đã gán">🖼 ${escapeHtml(illustration)}</span>` : ''}`;
   return `<div class="editor-item-assets${compact ? ' is-compact' : ''}">
     ${chips}
     <input type="hidden" data-field="contentCategory" value="${escapeHtml(category === 'general' ? '' : category)}">
@@ -108,14 +109,19 @@ function editorItemArtHtml(item) {
   const rawCategory = typeof source.contentCategory === 'string' ? source.contentCategory.trim() : '';
   const category = EDITOR_CONTENT_CATEGORY_IDS.includes(rawCategory) ? rawCategory : 'general';
   const isCustom = /^ci-[a-f0-9]{32}$/u.test(assetId);
-  const builtIn = !isCustom && /-scene$/u.test(assetId) && EDITOR_CONTENT_CATEGORY_IDS.includes(assetId.replace(/-scene$/u, ''))
+  // #153: 'none' is the teacher's explicit "no picture on this question". It is not
+  // an asset id, so neither the custom nor the built-in branch may claim it.
+  const isNone = assetId === 'none';
+  const builtIn = !isCustom && !isNone && /-scene$/u.test(assetId) && EDITOR_CONTENT_CATEGORY_IDS.includes(assetId.replace(/-scene$/u, ''))
     ? assetId
     : '';
-  const badge = isCustom
-    ? 'Ảnh tự tải lên'
-    : builtIn
-      ? `Hình có sẵn: ${EDITOR_CATEGORY_LABEL[builtIn.replace(/-scene$/u, '')] || builtIn}`
-      : `Theo chủ đề: ${EDITOR_CATEGORY_LABEL[category] || 'Tổng quát'}`;
+  const badge = isNone
+    ? 'Không dùng ảnh'
+    : isCustom
+      ? 'Ảnh tự tải lên'
+      : builtIn
+        ? `Hình có sẵn: ${EDITOR_CATEGORY_LABEL[builtIn.replace(/-scene$/u, '')] || builtIn}`
+        : `Theo chủ đề: ${EDITOR_CATEGORY_LABEL[category] || 'Tổng quát'}`;
   // The preview is the play-surface renderer itself, so the editor shows exactly what
   // the class will see.
   const previewItem = Object.assign({}, source, { illustrationAssetId: assetId });
@@ -124,19 +130,21 @@ function editorItemArtHtml(item) {
     : '';
   const options = [
     `<option value="">Tự động (theo chủ đề)</option>`,
+    `<option value="none"${isNone ? ' selected' : ''}>Không dùng ảnh</option>`,
     ...EDITOR_CONTENT_CATEGORY_IDS.map(id => `<option value="${escapeHtml(id)}-scene"${builtIn === `${id}-scene` ? ' selected' : ''}>${escapeHtml(EDITOR_CATEGORY_LABEL[id] || id)}</option>`),
     ...(isCustom ? [`<option value="${escapeHtml(assetId)}" selected>Ảnh tự tải lên (giữ nguyên)</option>`] : [])
   ].join('');
   return `<div class="editor-item-art" data-editor-art>
-    <div class="editor-art-thumb${preview ? '' : ' is-empty'}" data-editor-art-thumb>${preview || '<span>Chưa có hình</span>'}</div>
+    <div class="editor-art-thumb${preview ? '' : ' is-empty'}" data-editor-art-thumb>${preview || `<span>${isNone ? 'Không dùng ảnh' : 'Chưa có hình'}</span>`}</div>
     <div class="editor-art-controls">
       <div class="editor-art-badge" data-editor-art-badge>${escapeHtml(badge)}</div>
       <div class="editor-art-buttons">
         <button type="button" class="btn btn-secondary btn-small" data-editor-art-upload title="Chọn ảnh PNG/JPG/WEBP/GIF từ máy">📷 Tải ảnh lên</button>
         <select data-editor-art-pick data-art-picker title="Chọn hình minh hoạ có sẵn">${options}</select>
         <button type="button" class="btn btn-secondary btn-small" data-editor-art-reset>↺ Tự động</button>
+        <button type="button" class="btn btn-secondary btn-small" data-editor-art-remove title="Bỏ hẳn ảnh minh hoạ của riêng câu hỏi này"${isNone ? ' disabled' : ''}>✕ Bỏ ảnh</button>
       </div>
-      <div class="editor-art-hint">Minh hoạ đi kèm câu hỏi này. Ảnh tải lên được lưu trên máy và chơi được khi không có mạng.</div>
+      <div class="editor-art-hint">Minh hoạ đi kèm câu hỏi này. Ảnh tải lên được lưu trên máy và chơi được khi không có mạng. “✕ Bỏ ảnh” tắt hình riêng câu hỏi này; “↺ Tự động” trả lại hình theo chủ đề.</div>
     </div>
   </div>`;
 }
@@ -206,6 +214,13 @@ function wireEditorItemArtRow(row) {
   if (reset) reset.addEventListener('click', () => {
     const live = reset.closest('[data-editor-art]');
     applyEditorItemArt(live, '');
+  });
+  // #153: "Bỏ ảnh" writes the opt-out sentinel, not '' — '' would let `auto` draw the
+  // topic picture again, which is the opposite of what the teacher asked for.
+  const remove = row.querySelector('[data-editor-art-remove]');
+  if (remove) remove.addEventListener('click', () => {
+    const live = remove.closest('[data-editor-art]');
+    applyEditorItemArt(live, 'none');
   });
   const upload = row.querySelector('[data-editor-art-upload]');
   if (upload) {

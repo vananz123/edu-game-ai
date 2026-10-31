@@ -33,6 +33,14 @@ fs.writeFileSync(pngPath, Buffer.from(
 
 const SCENARIO = String.raw`(async () => {
   const out = {};
+  // A fresh profile opens the setup onboarding into #modalRoot a moment after load.
+  // It hides the shell, so the editor this check drives would never be visible.
+  for (let i = 0; i < 40; i++) {
+    if (document.querySelector('#modalRoot .setup-fullscreen')) break;
+    await new Promise(r => setTimeout(r, 100));
+  }
+  if (typeof closeSetupWizard === 'function') closeSetupWizard('close');
+  await new Promise(r => setTimeout(r, 250));
   const game = await window.eduGame.saveGame({
     title: 'Kiểm tra ảnh trình soạn thảo', template: 'quiz', description: '', subject: 'Toán', grade: '4',
     gameSetup: { illustrationMode: 'auto' },
@@ -146,6 +154,41 @@ const SCENARIO = String.raw`(async () => {
   // #129: saving leaves the editor page and lands back in the library.
   out.pageAfterSave = state.page;
 
+  // 5. #153: "✕ Bỏ ảnh" — tắt hình riêng câu 2, lưu thật rồi chơi lại hàng đã lưu.
+  //    '' (Tự động) để chế độ auto vẽ lại hình theo chủ đề, nên bỏ ảnh cần sentinel
+  //    riêng; câu 1 phải giữ nguyên hình của nó.
+  openEditor(JSON.parse(JSON.stringify(stored)), false, 'check');
+  await new Promise(r => setTimeout(r, 700));
+  const removeButton = () => listRows()[1].querySelector('[data-editor-art-remove]');
+  out.removeFound = Boolean(removeButton());
+  if (out.removeFound) removeButton().click();
+  await new Promise(r => setTimeout(r, 250));
+  out.removeField = listRows()[1].parentElement.querySelector('[data-field="illustrationAssetId"]').value;
+  out.removeBadge = listRows()[1].querySelector('[data-editor-art-badge]').textContent.trim();
+  out.removeThumb = Boolean(listRows()[1].querySelector('.editor-art-thumb .stage-illustration'));
+  out.removeThumbText = listRows()[1].querySelector('[data-editor-art-thumb]').textContent.trim();
+  out.removeDisabled = removeButton() ? removeButton().disabled === true : null;
+  out.removePicker = listRows()[1].querySelector('[data-editor-art-pick]').value;
+  out.removeOther = listRows()[0].parentElement.querySelector('[data-field="illustrationAssetId"]').value;
+  document.querySelector('#pageContent #saveGameBtn')?.click();
+  await new Promise(r => setTimeout(r, 1200));
+  const afterNone = await window.eduGame.getLibrary();
+  const storedNone = afterNone.games.find(g => g.id === game.id);
+  out.savedNone1 = storedNone && storedNone.questions[0].illustrationAssetId;
+  out.savedNone2 = storedNone && storedNone.questions[1].illustrationAssetId;
+  // Chơi lại chính hàng đã lưu: câu 1 còn hình, câu 2 không còn hình nào.
+  playGame(storedNone);
+  await new Promise(r => setTimeout(r, 800));
+  out.playQ1Art = Boolean(document.querySelector('.stage-illustration'));
+  document.querySelector('.answer-option')?.click();
+  await new Promise(r => setTimeout(r, 500));
+  document.getElementById('nextQuestionBtn')?.click();
+  await new Promise(r => setTimeout(r, 800));
+  out.playQ2Art = Boolean(document.querySelector('.stage-illustration'));
+  out.playQ2Prompt = document.querySelector('.stage-question') ? document.querySelector('.stage-question').textContent.trim() : '';
+  document.querySelector('[data-play-close]')?.click();
+  await new Promise(r => setTimeout(r, 300));
+
   try { await window.eduGame.deleteGame(game.id); } catch (e) { void e; }
   try { await window.eduGame.deleteIllustration(out.uploadField); } catch (e) { void e; }
   state.db = await window.eduGame.getLibrary();
@@ -171,6 +214,15 @@ const SCENARIO = String.raw`(async () => {
     `${result.resetField} / ${result.resetOther} vs ${result.uploadField} / ${result.resetBadge}`);
   check('saving keeps both pictures', result.saved1 === 'space-scene' && result.saved2 === result.uploadField,
     `${result.saved1} / ${result.saved2}`);
+  check('"✕ Bỏ ảnh" writes the opt-out, empties the thumb and locks itself',
+    result.removeFound === true && result.removeField === 'none' && result.removeThumb === false
+      && /Không dùng ảnh/.test(result.removeBadge || '') && result.removePicker === 'none' && result.removeDisabled === true,
+    JSON.stringify({ field: result.removeField, badge: result.removeBadge, thumb: result.removeThumbText, picker: result.removePicker, disabled: result.removeDisabled }));
+  check('removing one picture leaves the other question alone', result.removeOther === 'space-scene', result.removeOther);
+  check('saving keeps the opt-out on that question only',
+    result.savedNone1 === 'space-scene' && result.savedNone2 === 'none', `${result.savedNone1} / ${result.savedNone2}`);
+  check('the play surface honours the opt-out', result.playQ1Art === true && result.playQ2Art === false && /Câu hai/.test(result.playQ2Prompt || ''),
+    JSON.stringify({ q1: result.playQ1Art, q2: result.playQ2Art, prompt: result.playQ2Prompt }));
   check('the editor opened as a page, not a modal', result.isPage === true && result.noModal === true,
     `page ${result.isPage} / no modal ${result.noModal}`);
   check('its save actions are pinned in a bar on the page', result.hasPageHeader === true && result.saveBarSticky === 'sticky',

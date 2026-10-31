@@ -115,6 +115,13 @@ export function isIllustrationAssetId(value: unknown): value is string {
   return typeof value === 'string' && ILLUSTRATION_ASSET_IDS.includes(value);
 }
 
+/**
+ * Per-item opt-out (#153): the teacher removed the picture on this one question.
+ * Distinct from `''`, which means "no explicit pick" and still lets `auto` invent
+ * artwork, and from the game-level `off` mode, which silences every item.
+ */
+export const ILLUSTRATION_NONE_ID = 'none';
+
 /** `animals-scene` -> `animals`; anything else -> null. */
 export function illustrationCategoryOf(assetId: unknown): string | null {
   if (!isIllustrationAssetId(assetId)) return null;
@@ -168,8 +175,10 @@ function resolvedFor(
 /**
  * Decides whether and what to draw for one item. Never throws.
  *
- * - `off`    -> null, always. Nothing is computed. This is the ONLY way to get
- *               no picture on the play surface now that #89 added a default.
+ * - `off`    -> null, always. Nothing is computed. This is the game-level way to
+ *               get no picture on the play surface now that #89 added a default.
+ * - `illustrationAssetId: 'none'` -> null, whatever the mode (#153). The teacher
+ *               removed the picture on this item only; `auto` must not invent one.
  * - `manual` -> only an illustration the teacher explicitly picked. Missing
  *               means null: the mode promises "don't invent artwork", so
  *               falling back to the category would break that promise.
@@ -185,6 +194,7 @@ export function resolveIllustration(request: IllustrationRequest | null | undefi
   if (mode === 'off') return null;
 
   const assets = normalizeItemAssets(request);
+  if (assets.illustrationAssetId === ILLUSTRATION_NONE_ID) return null;
   const explicitCategory = illustrationCategoryOf(assets.illustrationAssetId);
   if (explicitCategory) return resolvedFor(explicitCategory, assets.iconName, true);
 

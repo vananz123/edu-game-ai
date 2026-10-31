@@ -164,6 +164,17 @@ function RUN(gameJson, answers) {
           const hud = document.querySelector('.house-progress');
           return hud ? Math.round(hud.getBoundingClientRect().bottom) : null;
         })(),
+        // #153: HUD dịch xuống (+Y) khỏi thanh tiến độ câu hỏi; ảnh câu hỏi chỉ
+        // hiện khi giáo viên chọn, không phải tranh "tự động".
+        hudTop: (() => {
+          const hud = document.querySelector('.house-progress');
+          return hud ? Math.round(hud.getBoundingClientRect().top) : null;
+        })(),
+        progressBarBottom: (() => {
+          const bar = document.querySelector('.stage-progress');
+          return bar ? Math.round(bar.getBoundingClientRect().bottom) : null;
+        })(),
+        houseArt: Boolean(document.querySelector('.house-question-art .stage-illustration')),
         feedbackTop: (() => {
           const fb = document.querySelector('#answerFeedback');
           return fb ? Math.round(fb.getBoundingClientRect().top) : null;
@@ -337,6 +348,9 @@ const byLabel = (snaps, label) => snaps.find(s => s.label === label) || {};
 
   const open6 = byLabel(g6, 'open');
   check('house mode renders the parts progress panel', open6.progressPanel === true);
+  check('the house HUD is pushed below the question progress bar (#153)',
+    open6.hudTop != null && open6.progressBarBottom != null && open6.hudTop - open6.progressBarBottom >= 12,
+    `hud=${open6.hudTop} progress=${open6.progressBarBottom}`);
   check('a 3D house world mounts behind the stage', open6.canvas === true);
   check('the game opens with only the foundation (parts 0/6)',
     open6.parts === 0 && open6.maxParts === 6 && (open6.count || '').includes('0/6'),
@@ -346,9 +360,9 @@ const byLabel = (snaps, label) => snaps.find(s => s.label === label) || {};
 
   // --------------------------------- showcase (#142) ---------------------------------
   console.log('\n=== showcase ===');
-  check('house mode reserves a house slot instead of the placeholder picture',
-    open6.slot === true && open6.illustration === false,
-    `slot=${open6.slot} illustration=${open6.illustration}`);
+  check('house mode reserves a house slot instead of the auto placeholder picture',
+    open6.slot === true && open6.illustration === false && open6.houseArt === false,
+    `slot=${open6.slot} illustration=${open6.illustration} houseArt=${open6.houseArt}`);
   check('house mode parks the decorative emblem', open6.emblemVisible === false,
     `emblem=${open6.emblemVisible}`);
   check('stagePoint projects the stage centre to the world origin',

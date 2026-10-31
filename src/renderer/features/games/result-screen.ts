@@ -363,7 +363,7 @@ function playerTheme() {
  *   race     — chặng đua đêm, nhấn cam đua và xanh neon
  */
 const GAME_WORLDS = {
-    quiz: { label: 'THỬ THÁCH KIẾN THỨC', symbol: '✦', kicker: 'Lớp học trên giấy' },
+    quiz: { label: 'ĐẤU TRƯỜNG TRI THỨC', symbol: '✦', kicker: 'Lớp học trên giấy' },
     scenario: { label: 'TÌNH HUỐNG THỰC TẾ', symbol: '☘', kicker: 'Sổ tay quyết định' },
     matching: { label: 'GHÉP CẶP KIẾN THỨC', symbol: '◈', kicker: 'Bảng nỉ tri thức' },
     treasure: { label: 'HÀNH TRÌNH KHÁM PHÁ', symbol: '⌖', kicker: 'Bản đồ nhà thám hiểm' },

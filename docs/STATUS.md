@@ -8,6 +8,7 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 ## Mục lục bàn giao
 
 ### 2026-10-31 — [docs/handoff/status/2026-10-31.md](handoff/status/2026-10-31.md)
+- Bốn yêu cầu #153: bỏ ảnh theo câu, nhãn "Đấu trường tri thức", ảnh thay nhãn xám, hạ HUD Xây nhà
 - Màn chơi đặt tên theo template, không theo panel còn sót (#152)
 - Sửa Phase B của ui-item-assets-editor-check đo đúng trang soạn thảo
 - Tách game-editor + wizard/state theo khu vực
@@ -187,6 +188,29 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - Lịch sử trước 2026-10-19
 ## Bàn giao gần nhất
 
+## Handoff - Bốn yêu cầu #153: bỏ ảnh theo câu, nhãn "Đấu trường tri thức", ảnh thay nhãn xám, hạ HUD Xây nhà (2026-10-31, DECISIONS #153)
+
+**Files changed.**
+- `src/shared/illustration-registry.ts`: hằng `ILLUSTRATION_NONE_ID = 'none'`; `resolveIllustration` trả `null` khi gặp sentinel (sau `normalizeItemAssets`); cập nhật chú thích `off` / bullet mới cho `'none'`.
+- `src/renderer/features/game-illustration.ts`: `resolveStageIllustration` mirror đúng luật đó (unit test có guard chống lệch).
+- `src/renderer/features/editor/questions.ts`: `editorItemArtHtml` thêm option `Không dùng ảnh` trong picker, badge/thumb riêng, nút **"✕ Bỏ ảnh"** (`data-editor-art-remove`, disabled khi đã bỏ), chip `🚫 Không ảnh`; `wireEditorItemArtRow` ghi sentinel `'none'` (không ghi `''`).
+- `src/renderer/features/games/result-screen.ts`: `GAME_WORLDS.quiz.label` → `ĐẤU TRƯỜNG TRI THỨC` (badge đầu màn chơi + dải băng sân khấu dùng chung nguồn này).
+- `src/renderer/features/games/quiz.ts` (`renderQuestion`): bỏ pill xám cho trắc nghiệm thường (giữ cho tình huống / điền từ / trả lời ngắn / đúng-sai); ảnh chỉ định của câu trong Xây nhà đặt ngang hàng bên trái ô nhà (`.house-art-row`).
+- `src/renderer/styles/game-house.css`: khối `.house-art-row` / `.house-question-art` kích thước theo `vh`, thêm vào danh sách ẩn của `.is-house-showcase`; `.house-progress` có `margin-top` theo `vh` (chỉ trạng thái trước khi trả lời).
+- Tests: `tests/ui/ui-editor-art-check.js` (4 check "Bỏ ảnh"), `tests/ui/ui-game-worlds-check.js` (nhãn mới + `pickedBesideSlot` + check ảnh thế chỗ pill), `tests/ui/ui-house-building-check.js` (`hudTop`/`progressBarBottom`/`houseArt`, check HUD cách thanh tiến độ ≥12px), `tests/unit/illustration-registry.test.ts` (2 test hành vi + guard lệch renderer); `tests/ui/ui-fullscreen-density-check.js` và `tests/ui/ui-stage-illustration-check.js` thêm guard đóng setup onboarding cho profile mới.
+- Docs: `docs/DECISIONS.md` (#153), `docs/STATUS.md`.
+- Không đổi: hợp đồng IPC, engine matching/treasure/race, `normalizeGame` (đường `.egame`), `playGame`.
+
+**Behavior.** Giáo viên bỏ được ảnh của **một câu** mà không phải tắt ảnh cả game, và ảnh đã bỏ không bị chế độ `auto` vẽ lại. Game quiz ở toàn màn hình mang tên "ĐẤU TRƯỜNG TRI THỨC" ở badge và dải băng. Ở chế độ Xây nhà, pill xám "THỬ THÁCH KIẾN THỨC" đã bỏ; nếu câu hỏi có ảnh **giáo viên chọn** thì ảnh nằm đúng chỗ đó (ngang hàng bên trái ô nhà 3D), tranh tự động thì không. HUD "Đã xây 1/5 phần" hạ xuống: cách đáy thanh tiến độ **61px** @1920×1080 và **45px** @1366×768; ảnh đo được **324×203** và **230×144**, không tràn màn hình.
+
+**Commands run.** `npm run check` 0 · `node tests/run-unit.js` **68/68** · `npm run build` 0 · `npm run check:renderer-globals` 0 undefined · `npm run verify:css` **17/17** · Electron thật qua CDP, mỗi check một instance sạch: `ui-game-worlds-check` **52/52**, `ui-house-building-check` **85/85**, `ui-editor-art-check` pass, `ui-stage-illustration-check` **169/169**, `ui-item-assets-editor-check` **29/29**, `ui-fullscreen-density-check` **8/8**.
+
+**Chưa xác minh.** Chưa mở app bằng mắt để đối chiếu ảnh chụp của chủ dự án (kết luận dựa trên probe CDP + số đo). WebGL không hiện trong `Page.captureScreenshot` (chỉ thấy sàn xám ở 1366×768) — hạn chế chụp, ngôi nhà 3D được chứng minh bằng assertion toạ độ chiếu. Chưa chạy installer đóng gói. `ui-wizard-structure-check` (focus môi trường) và `ui-draft-guard-check` (thiếu model AI) vẫn đỏ do nguyên nhân có sẵn.
+
+**Next task.** Roadmap `Packaged check` (cần máy sạch); các mục AI/giáo án chưa chốt thứ tự.
+
+---
+
 ## Handoff - Màn chơi đặt tên theo template, không theo panel còn sót (2026-10-31, DECISIONS #152)
 
 **Files changed.**
@@ -223,28 +247,6 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 **Chưa xác minh.** Mới chạy ở 1920×1080 và 1366×768 với một profile mới; chưa thử profile đã hoàn tất setup (nhánh `closeSetupWizard` là no-op, có vòng chờ overlay nên dự kiến vẫn đúng), chưa thử màn hình khác. `ui-wizard-structure-check` (13/14, focus môi trường) và `ui-draft-guard-check` (7/8, thiếu model) vẫn đỏ do nguyên nhân có sẵn.
 
 **Next task.** Chạy `ui-wizard-structure-check` trong cửa sổ có focus thật; sau đó roadmap `Packaged check` (cần máy sạch).
-
----
-
-## Handoff - Tách game-editor + wizard/state theo khu vực (2026-10-31, DECISIONS #150)
-
-**Files changed.**
-- `src/renderer/features/editor/` (mới, 7 file): `ai.ts` (AI tạo lại từng mục), `page.ts` (nhập câu từ tệp, mở/đóng trang, markup, nối sự kiện, `saveEditedGame`), `questions.ts` (sửa câu hỏi), `drag.ts` (dựng thẻ kéo-thả dùng chung), `matching.ts`, `treasure.ts`, `race.ts`. `src/renderer/features/game-editor.ts` (1.966 dòng) đã xoá; nội dung chuyển **nguyên văn từng dòng** — chỉ dòng 1 của mỗi file thay bằng banner `@ts-nocheck` mới.
-- `src/renderer/features/wizard/state/` (mới, 5 file): `core.ts` (state dùng chung, đồng hồ/ETA, reset), `providers.ts`, `config.ts` (cấu hình sinh nội dung), `draft.ts` (đọc/ghi bản nháp), `actions.ts` (chuyển bản nháp → dự án). `src/renderer/features/wizard/state.ts` (1.752 dòng) đã xoá, chuyển nguyên văn (giữ CRLF).
-- `src/index.html`: thay 1 thẻ `game-editor.js` bằng 7 thẻ `features/editor/*.js` (AI → page → questions → drag → matching → treasure → race) và 1 thẻ `state.js` bằng 5 thẻ `features/wizard/state/*.js` (core → providers → config → draft → actions), kèm chú thích thứ tự nạp.
-- `tests/legacy/smoke-p1.js`: đọc và nối mọi file `dist/src/renderer/features/editor/*.js` đã sắp xếp thay vì một file.
-- `tests/unit/generation-eta.test.ts`: nguồn `STATE_SRC` là toàn bộ `wizard/state/*.ts` đã sắp xếp; `tests/unit/renderer-load-order.test.ts` chỉ đổi chú thích.
-- Chỉ đổi chú thích trỏ đường dẫn mới: `src/renderer/features/game-illustration.ts`, `src/renderer/features/wizard/state/core.ts`.
-- Docs: `docs/DECISIONS.md` (#150, kèm bảng khoảng dòng gốc và hash), `docs/ROADMAP.md` (P1–P5 xong), `docs/PROJECT_MAP.md` (cây `editor/` + `wizard/state/` và 4 dòng bảng), `docs/AGENT_HANDOFF.md`.
-- Không đổi: tên/tham số mọi hàm toàn cục, logic soạn thảo và wizard, `three-game-interaction.ts`, các bước wizard, CSS, LAN/presentation/SQLite/`.egame`.
-
-**Behavior.** Không đổi hành vi. Ghép lại 7 lát cắt editor cho đúng file gốc từng byte (SHA-256 `eaa83ce5…9b6043`, 125.959 B; phần thân bỏ dòng 1 `29d4e236…30444e`) và 5 lát cắt wizard state cũng vậy (`098459d1…99d6cc`, 83.771 B; thân `b034a258…7cc0aa`) — cách tách kiểm từng lát là substring thật, mọi dòng không thuộc lát đều rỗng, rồi so hash bản ghép. Sửa trình soạn thảo giờ mở đúng file vùng đó (kho báu ~400 dòng thay vì 1.966), sửa dòng state wizard mở đúng nhóm chức năng thay vì 1.752 dòng. Renderer vẫn là script toàn cục; không file mới nào đọc binding của file khác lúc nạp.
-
-**Commands run.** `npm run build` 0 · `node tests/run-unit.js` **68/68** (gồm load-order với 55 script) · `npm run check:renderer-globals` 54/55 script, 756 hàm, 6.192 call site — **0 undefined** · `npm run verify:css` **17/17**. Electron thật qua CDP (mỗi nhóm instance sạch, cổng 9338): `ui-editor-art-check` **11/11**, `ui-race-editor-check` **10/10**, `ui-race-treasure-check` **18/18**, `ui-wizard-cancel-genre-check` **8/8**, `ui-wizard-structure-check` **13/14**, `ui-draft-guard-check` **7/8**, `ui-item-assets-editor-check` **17/27**. Thêm một probe một lần: 34 hàm toàn cục của editor/wizard state đều tồn tại và matching/treasure/race đọc + validate được.
-
-**Chưa xác minh.** Ba check CDP đỏ đều do nguyên nhân có sẵn, không do đợt tách: `ui-wizard-structure-check` hỏng ở assertion giữ focus bàn phím (cửa sổ chạy nền không lấy được focus OS — probe cho thấy `input.focus()` vẫn để `activeElement` là BODY); `ui-draft-guard-check` hỏng ở E2E sinh nội dung vì profile mới không có nhà cung cấp AI usable ("Chưa có model"); `ui-item-assets-editor-check` Phase B còn chờ `.modal` trong khi editor đã thành trang `.editor-page` từ #129 (đã đối chiếu bản `8d5562c:game-editor.ts`, 12 assertion Phase A đều pass). Chưa bấm tay trọn một luồng tạo game → sửa từng mục trong editor; chưa chạy installer đóng gói. Cố ý **không tách** `three-game-interaction.ts` (một IIFE exposing `window.threeGame` — tách sẽ phá ranh giới module chứ không chỉ là chia file) và các bước wizard (mỗi file < 1.000 dòng, một trách nhiệm).
-
-**Next task.** Roadmap còn `Packaged check` (cần môi trường cài sạch) và các mục AI/giáo án — chưa chốt thứ tự. Việc nhỏ nên làm trước khi chạy lại bộ UI: cập nhật Phase B của `ui-item-assets-editor-check` sang `.editor-page` để check này hết đỏ giả.
 
 
 

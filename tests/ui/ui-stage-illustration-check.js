@@ -165,6 +165,19 @@ const probe = (game, opener) => `
   const skipped = [];
   const run = (game, opener) => evaluate(`(async () => {${probe(game, opener)}})()`);
 
+  // A fresh profile opens the setup onboarding into #modalRoot a moment after the
+  // window loads. The first probe clears #modalRoot and then opens the play
+  // surface; without this guard the onboarding can land on top of it in that
+  // window and the first template (quiz) is silently reported as "could not
+  // open". Same guard as ui-game-worlds-check / ui-house-building-check.
+  await evaluate(`(async () => {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    for (let i = 0; i < 40; i++) { if (document.querySelector('#modalRoot .setup-fullscreen')) break; await sleep(100); }
+    if (typeof closeSetupWizard === 'function') closeSetupWizard('close');
+    await sleep(250);
+    return true;
+  })()`);
+
   for (const tpl of TEMPLATES) {
     const auto = await run(tpl.build('auto', ANIMAL_ITEM), tpl.opener);
     // The play surface opened if it drew either a question or the illustration.

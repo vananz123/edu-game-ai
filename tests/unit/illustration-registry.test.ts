@@ -20,6 +20,7 @@ import {
   DEFAULT_ILLUSTRATION_CATEGORY,
   DEFAULT_ILLUSTRATION_ICON,
   ILLUSTRATION_ASSET_IDS,
+  ILLUSTRATION_NONE_ID,
   getIllustrationPalette,
   isIllustrationAssetId,
   resolveIllustration,
@@ -44,6 +45,25 @@ const PICKED = { contentCategory: 'animals', iconName: 'paw-print', illustration
 test('off never draws, even with a picked illustration', () => {
   assert.equal(resolveIllustration({ ...PICKED, mode: 'off' }), null);
   assert.equal(resolveIllustration({ ...ANIMAL, mode: 'off' }), null);
+});
+
+// --- per-item opt-out (#153) -----------------------------------------------
+
+test('the per-item opt-out draws nothing in every mode', () => {
+  // "✕ Bỏ ảnh" in the editor writes this sentinel. '' would let `auto` invent the
+  // topic picture again, which is the opposite of removing it.
+  for (const mode of ['auto', 'manual', 'off', undefined, 'banana']) {
+    assert.equal(resolveIllustration({ ...ANIMAL, illustrationAssetId: ILLUSTRATION_NONE_ID, mode }), null, String(mode));
+    assert.equal(resolveIllustration({ contentCategory: 'general', illustrationAssetId: ILLUSTRATION_NONE_ID, mode }), null, String(mode));
+  }
+});
+
+test('the opt-out is not an asset id and does not disturb the picked ones', () => {
+  assert.equal(isIllustrationAssetId(ILLUSTRATION_NONE_ID), false);
+  assert.equal(ILLUSTRATION_ASSET_IDS.includes(ILLUSTRATION_NONE_ID), false);
+  assert.equal(resolveIllustration({ ...PICKED, mode: 'auto' })!.assetId, 'space-scene');
+  // Clearing back to '' restores the auto behaviour the reset button promises.
+  assert.ok(resolveIllustration({ ...ANIMAL, illustrationAssetId: '', mode: 'auto' }));
 });
 
 // --- mode: manual ----------------------------------------------------------
@@ -188,6 +208,13 @@ test('the renderer default illustration matches the shared registry', () => {
   assert.ok(icon, 'the renderer fallback icon is missing');
   assert.equal(category![1], DEFAULT_ILLUSTRATION_CATEGORY);
   assert.equal(icon![1], DEFAULT_ILLUSTRATION_ICON);
+});
+
+test('the renderer honours the same per-item opt-out (#153)', () => {
+  // The play surface resolves through its own copy, so a sentinel handled only
+  // here would still draw a picture in class. The literal must match the export.
+  const guard = new RegExp(`illustrationAssetId\\.trim\\(\\) === '${ILLUSTRATION_NONE_ID}'`);
+  assert.ok(guard.test(RENDERER_SOURCE), 'resolveStageIllustration does not check the opt-out sentinel');
 });
 
 /** Extracts the object literal of a `const NAME = { ... };` from renderer source. */

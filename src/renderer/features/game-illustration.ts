@@ -335,6 +335,10 @@ function resolveStageIllustration(item, game) {
   const mode = stageIllustrationMode(game);
   if (mode === 'off') return null;
   const source = item && typeof item === 'object' ? item : {};
+  // #153: the teacher's per-question opt-out ("✕ Bỏ ảnh"). '' means "no explicit
+  // pick" and still lets auto invent artwork, so removing a picture needs its own
+  // sentinel — mirrors ILLUSTRATION_NONE_ID in src/shared/illustration-registry.ts.
+  if (typeof source.illustrationAssetId === 'string' && source.illustrationAssetId.trim() === 'none') return null;
   // #124: a teacher-uploaded picture wins, and it wins in `manual` mode too — picking a
   // picture is itself the explicit choice. `off` still draws nothing, as set.
   if (typeof source.illustrationAssetId === 'string' && /^ci-[a-f0-9]{32}$/u.test(source.illustrationAssetId)) {
