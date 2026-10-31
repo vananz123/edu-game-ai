@@ -34,3 +34,8 @@ Update `docs/STATUS.md` and, if decisions or sequencing changed, `docs/DECISIONS
 3. exact commands run and their results;
 4. what remains unverified;
 5. next recommended task.
+
+Keep `docs/STATUS.md` small: it holds the 3 newest handoffs plus the full index.
+Move older handoffs to `docs/handoff/status/<YYYY-MM-DD>.md` (the day the work was
+done) and update the index. Detailed decisions #57–#145 live in
+`docs/handoff/decisions/`; new decisions are appended to `docs/DECISIONS.md`.

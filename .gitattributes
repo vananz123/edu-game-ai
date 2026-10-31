@@ -1,0 +1,12 @@
+# Normalize text files to LF in the repository. Checkouts on Windows may still
+# convert to CRLF via core.autocrlf; do not run a full renormalize commit unless
+# it is reviewed on its own.
+* text=auto
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.dll binary
+*.exe binary
+*.zip binary
+*.sqlite binary

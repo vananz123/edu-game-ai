@@ -9,8 +9,9 @@ tài liệu khác vẫn cần đọc nhưng trả lời câu hỏi khác:
 | `AGENTS.md` | Quy tắc bắt buộc cho AI agent |
 | `docs/ARCHITECTURE.md` | Luồng dữ liệu giữa main / renderer / AI core |
 | `docs/PROJECT_MAP.md` (file này) | **Sửa X thì mở file nào** |
-| `docs/DECISIONS.md` | Vì sao làm vậy (≥105 quyết định) |
-| `docs/STATUS.md` | Việc gì đã xong, việc gì còn |
+| `docs/DECISIONS.md` | Vì sao làm vậy: tóm tắt #1–#56 + chỉ dẫn sang `docs/handoff/decisions/` cho #57–#145 |
+| `docs/STATUS.md` | Việc gì đã xong: 3 bàn giao mới nhất + mục lục đầy đủ (lịch sử ở `docs/handoff/status/`) |
+| `docs/handoff/` | Lịch sử bàn giao theo ngày và chi tiết quyết định cũ (chỉ đọc khi cần tra cứu) |
 | `tests/README.md` | Chạy test thế nào |
 
 ## Cây thư mục
@@ -51,6 +52,8 @@ tests/
   fixtures/            Dữ liệu giả lập (KHÔNG BAO GIỜ dùng dữ liệu học sinh thật)
   legacy/              Smoke cũ, không bảo trì
 docs/                  Tài liệu dự án (xem bảng trên)
+  handoff/status/      Lịch sử bàn giao theo ngày (tách từ STATUS.md, 2026-10-31)
+  handoff/decisions/   Chi tiết quyết định #57–#145 (tách từ DECISIONS.md)
 build/                 installer.nsh cho electron-builder
 vendor/                DLL VC++ đóng gói kèm
 ```
@@ -59,6 +62,7 @@ vendor/                DLL VC++ đóng gói kèm
 
 | Muốn sửa | Mở |
 | --- | --- |
+| Tra bàn giao cũ / quyết định cũ | `docs/STATUS.md` (mục lục) → `docs/handoff/status/<ngày>.md`; `docs/DECISIONS.md` (mục lục) → `docs/handoff/decisions/` |
 | Một trang (dashboard, thư viện, cài đặt…) | `src/renderer/pages/<ten>.ts` |
 | Điều hướng / render trang | `src/renderer/core/render.ts`, `core/controller.ts` |
 | Luồng tạo game từ giáo án | `src/renderer/pages/create-wizard.ts` + `features/wizard/*.ts` |
@@ -125,4 +129,6 @@ Renderer **không dùng ES module**: mỗi file là một script toàn cục, h�
 3. IPC mới → `registerIpc` trong `main.ts` + `preload.ts` + kiểu trong `shared/`.
 4. Kiểm chứng: `npm run check`, `npm test`, `npm run verify:css`,
    `npm run check:renderer-globals`; với UI thì thêm một check trong `tests/ui/`.
-5. Ghi `docs/STATUS.md` (và `docs/DECISIONS.md` nếu đổi quyết định).
+5. Ghi `docs/STATUS.md` (và `docs/DECISIONS.md` nếu đổi quyết định). STATUS giữ
+   3 bàn giao mới nhất + mục lục; chuyển bàn giao cũ sang `docs/handoff/status/`
+   đúng ngày của nó. Chi tiết quyết định cũ đã ở `docs/handoff/decisions/`.
