@@ -136,6 +136,15 @@ function gameCard(game, index = 0, deletable = false) {
   const id = escapeHtml(game.id);
   const menuId = 'gameMenu-' + String(index + 1);
   const item = (action, label, extra = '') => `<button type="button" role="menuitem" class="w-full border-0 bg-transparent text-left px-[12px] py-[9px] text-[12px] font-semibold text-[#515c72] hover:bg-[#f5f6fa] focus:bg-[#f5f6fa] outline-0 ${extra}" data-action="${action}" data-id="${id}">${label}</button>`;
+  // #155: the way the quiz is played belongs on the card — a teacher deciding what to
+  // open at class time must see "Xây nhà" without opening the editor. Only quiz has a
+  // play mode; absent `gameplayMode` is classic (editorGameplayMode).
+  const playMode = template === 'quiz' ? ((game.gameSetup && game.gameSetup.gameplayMode === 'house') ? 'house' : 'classic') : '';
+  const playModeChip = playMode === 'house'
+    ? '<span class="px-[4px] py-[7px] bg-[#fff4e9] text-[#c9792b] rounded-[5px] text-[9px] font-bold" data-play-mode="house" title="Cách chơi: Xây nhà — mỗi câu đúng dựng thêm một phần của ngôi nhà 3D">🏗 Cách chơi: Xây nhà</span>'
+    : playMode === 'classic'
+      ? '<span class="px-[4px] py-[7px] bg-[#edf2ff] text-[#4565c9] rounded-[5px] text-[9px] font-semibold" data-play-mode="classic" title="Cách chơi: Cổ điển — trả lời câu hỏi nhận điểm">🎯 Cách chơi: Cổ điển</span>'
+      : '';
   return `<article class="bg-white border border-line rounded-[14px] overflow-hidden min-w-0 transition-all duration-180 hover:-translate-y-[3px] hover:shadow-card hover:border-[#d8d5ff]" data-game-card="${id}">
     <div class="${coverGrad} h-[130px] relative flex items-center justify-center overflow-hidden">
       <div class="absolute [border:1px_solid_#ffffffaa] w-[130px] h-[130px] rounded-full -left-[15px] top-[40px]"></div>
@@ -160,7 +169,7 @@ function gameCard(game, index = 0, deletable = false) {
         </div>
       </div>
       <p class="text-[11px] text-[#8b94a6] leading-[1.6] mt-[8px] mb-[13px] min-h-[35px]">${escapeHtml(game.description || 'Trò chơi học tập tương tác, có thể chơi ngoại tuyến.')}</p>
-      <div class="flex gap-[5px] flex-wrap"><span class="px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#788196] text-[9px]">${escapeHtml(game.subject || 'Chưa phân môn')}</span><span class="px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#788196] text-[9px]">${game.grade ? 'Lớp ' + escapeHtml(game.grade) : 'Mọi lớp'}</span><span class="px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#788196] text-[9px]">${game.questions?.length || 0} câu</span></div>
+      <div class="flex gap-[5px] flex-wrap">${playModeChip}<span class="px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#788196] text-[9px]">${escapeHtml(game.subject || 'Chưa phân môn')}</span><span class="px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#788196] text-[9px]">${game.grade ? 'Lớp ' + escapeHtml(game.grade) : 'Mọi lớp'}</span><span class="px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#788196] text-[9px]">${game.questions?.length || 0} câu</span></div>
       <div class="flex items-center justify-between border-t border-[#f0f1f6] pt-[12px] text-[#8b94a6] text-[10px]"><span>▣ ${escapeHtml(game.topic || 'Bài học')}</span><span>↻ ${fmtDate(game.updatedAt || game.createdAt)}</span></div>
       <div class="flex gap-[8px] mt-[13px]">
         <button class="border-0 rounded-[9px] px-[11px] py-[8px] inline-flex items-center justify-center gap-[8px] font-bold text-[11px] transition-transform duration-120 hover:-translate-y-[1px] bg-[#6258e8] text-white shadow-[0_6px_14px_#6258e82b]" data-action="play" data-id="${id}">▶ Chơi ngay</button>

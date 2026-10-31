@@ -8,6 +8,7 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 ## Mục lục bàn giao
 
 ### 2026-10-31 — [docs/handoff/status/2026-10-31.md](handoff/status/2026-10-31.md)
+- Nhãn "Cách chơi" (Cổ điển / Xây nhà) trên thẻ trò chơi (#155)
 - Phân trang và xoá nhiều ở Thư viện trò chơi (#154)
 - Bốn yêu cầu #153: bỏ ảnh theo câu, nhãn "Đấu trường tri thức", ảnh thay nhãn xám, hạ HUD Xây nhà
 - Màn chơi đặt tên theo template, không theo panel còn sót (#152)
@@ -189,6 +190,24 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - Lịch sử trước 2026-10-19
 ## Bàn giao gần nhất
 
+## Handoff - Nhãn "Cách chơi" trên thẻ trò chơi (2026-10-31, DECISIONS #155)
+
+**Files changed.**
+- `src/renderer/shared.ts` (`gameCard`): thêm `playMode` + `playModeChip` — chip đầu hàng chip cho template `quiz`: `🏗 Cách chơi: Xây nhà` (hổ phách, đậm) khi `gameSetup.gameplayMode === 'house'`, `🎯 Cách chơi: Cổ điển` (xanh nhạt) cho mọi quiz còn lại (vắng key = cổ điển, theo `editorGameplayMode`); mỗi chip có `data-play-mode` + `title` giải thích.
+- `tests/ui/ui-play-mode-card-check.js` (mới, 7 check): 4 game tổng hợp qua IPC thật (quiz house / quiz không đặt mode / quiz `'classic'` tường minh / matching), lọc thư viện về đúng fixture, đọc `data-play-mode` + chữ chip, kiểm matching không có chip và chip không thêm nút vào thẻ; dọn fixture cuối.
+- Docs: `docs/DECISIONS.md` (#155), `docs/STATUS.md`, `docs/handoff/status/2026-10-31.md` (chuyển bàn giao #152 vào lưu trữ).
+- Không đổi: dữ liệu lưu (`gameplayMode` có từ #140), editor, engine, IPC, markup/nút của thẻ.
+
+**Behavior.** Thẻ trò chơi quiz ở Thư viện (và mục "Trò chơi gần đây" ở Tổng quan, vì dùng chung `gameCard()`) hiện thêm một chip cách chơi ngay trước chip môn học, nên giáo viên biết game đang ở Cổ điển hay Xây nhà mà không phải mở editor. Bốn thể loại khác không có chip. Ảnh chụp 1920×1080 và 1366×768: chip nằm gọn một dòng cùng môn/lớp/số câu.
+
+**Commands run.** `npm run check` 0 · `npm run check:renderer-globals` 0 undefined (54/55 script, 762 hàm, 6.252 call site) · `npm run build` 0 · `node tests/run-unit.js` **68/68** · Electron thật, mỗi check một profile sạch: `ui-play-mode-card-check` **7/7**, `ui-library-paging-check` pass, `ui-card-menu-check` pass.
+
+**Chưa xác minh.** Chưa bấm tay trên profile nhiều game để cảm nhận chip khi hàng chip xuống hai dòng ở cửa sổ hẹp (đã xem ảnh 1366×768, vẫn một dòng). Chưa lọc/tìm theo cách chơi; chưa hiện cách chơi ngoài thẻ. Chưa chạy installer đóng gói.
+
+**Next task.** Roadmap `Packaged check` (cần máy sạch); các mục AI/giáo án chưa chốt thứ tự.
+
+---
+
 ## Handoff - Phân trang và xoá nhiều ở Thư viện trò chơi (2026-10-31, DECISIONS #154)
 
 **Files changed.**
@@ -231,26 +250,6 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 **Next task.** Roadmap `Packaged check` (cần máy sạch); các mục AI/giáo án chưa chốt thứ tự.
 
----
-
-## Handoff - Màn chơi đặt tên theo template, không theo panel còn sót (2026-10-31, DECISIONS #152)
-
-**Files changed.**
-- `src/renderer/features/editor/page.ts` (`wireEditorPage`): default của ba panel ẩn (`matchingPanel`, `treasurePanel`, `racePanel`) giữ ở biến cục bộ, không gán ngược vào object game đang sửa.
-- `src/renderer/features/games/result-screen.ts`: `gameWorld()` chỉ suy thế giới từ `template`, bỏ nhánh fallback theo `matchingGame`.
-- `src/main.ts` (`library:save-game`): sao `stored`, xoá panel không thuộc template **trước** khi validate rồi mới upsert — vừa không lưu rác, vừa tự chữa hàng đã lưu sai khi lưu lại.
-- `tests/ui/ui-game-worlds-check.js`: thêm 4 check #152 (lưu quiz có `matchingGame` rác → hàng lưu sạch; chơi đúng "THỬ THÁCH KIẾN THỨC" + `data-game-world='quiz'`; mở editor không thêm key; lưu từ editor chỉ còn panel của template) và guard đóng setup onboarding cho profile mới.
-- `tests/ui/ui-house-building-check.js`: thêm cùng guard (trước đó vỡ `null.click` vì overlay onboarding thay `#modalRoot`).
-- Docs: `docs/DECISIONS.md` (#152), `docs/STATUS.md`.
-- Không đổi: DOM/CSS, hợp đồng IPC, engine matching/treasure/race, `normalizeGame` (đường `.egame`).
-
-**Behavior.** Badge thể loại ở đầu màn chơi và HUD giờ luôn khớp engine đang chạy (engine chọn theo `template`). Trước đây mở trang soạn thảo rồi lưu là đủ để mọi game quiz mọc thêm `matchingGame`/`treasureHunt`/`race` mặc định, và `gameWorld()` thấy `matchingGame` nên gọi game quiz là "GHÉP CẶP KIẾN THỨC". Nay editor vẫn hiện đủ ba panel để đổi thể loại tại chỗ nhưng default không ghi vào game; hàng cũ mang panel rác được dọn ngay lần lưu kế tiếp. Probe CDP sau sửa: mở editor không thêm key, hàng lưu `hasMatchingGame/hasTreasureHunt/hasRace = false`, `world: "quiz"`, `headerLabel: "THỬ THÁCH KIẾN THỨC"`.
-
-**Commands run.** `npm run check` 0 · `node tests/run-unit.js` **68/68** · `npm run build` 0 · Electron thật qua CDP: `ui-game-worlds-check` **46/46** (trước 39/43), `ui-house-building-check` **84/84**, `ui-item-assets-editor-check` **29/29**, `ui-race-editor-check` pass, `ui-editor-art-check` pass.
-
-**Chưa xác minh.** Chưa mở app bằng mắt để xem lại đúng ảnh chụp của chủ dự án (kết luận dựa trên probe CDP + số đo). `ui-house-building-check` từng đỏ một lần ở assertion "showcase lấp kín sân khấu" (lệch 18px) khi chạy trên HEAD — đã đối chứng bằng stash: HEAD **84/84**, bản sửa cũng **84/84**, nên là flake có sẵn, không do #152. `ui-wizard-structure-check` (focus môi trường) và `ui-draft-guard-check` (thiếu model trên profile mới) vẫn đỏ do nguyên nhân có sẵn.
-
-**Next task.** Chốt có siết bố cục màn Xây nhà trước khi trả lời hay không (`.stage-kicker` nằm sát trái, cách xa câu hỏi căn giữa; 1920×1080 còn khoảng trống lớn bên phải) — đây là thay đổi thiết kế, chưa làm. Sau đó roadmap `Packaged check` (cần máy sạch).
 
 
 

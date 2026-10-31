@@ -436,4 +436,24 @@ Nguyên nhân gốc nằm ở chỗ editor render cả ba panel ẩn để thầ
 
 **Next.** Roadmap `Packaged check` (cần máy sạch); cân nhắc thống nhất ba trang danh sách (giáo án / thư viện / lịch sử) vào một helper phân trang dùng chung nếu lần sau phải sửa cả ba.
 
+## #155 — Nhãn "Cách chơi" trên thẻ trò chơi
+
+**Bối cảnh.** Một game quiz chơi theo một trong hai cách: **Cổ điển** (trả lời câu hỏi nhận điểm) hoặc **Xây nhà** (`gameSetup.gameplayMode === 'house'`, #140). Cách chơi chỉ hiện trong editor (ô `#editGameplayMode`) và trên màn chơi; thẻ ở Thư viện trò chơi và trang Tổng quan trông giống hệt nhau, nên giáo viên phải mở editor hoặc chơi thử mới biết game nào là Xây nhà.
+
+**Thay đổi.**
+- `src/renderer/shared.ts` (`gameCard`): thêm **chip cách chơi ở đầu hàng chip** (trước môn học) cho template `quiz`:
+  - `🏗 Cách chơi: Xây nhà` — nền hổ phách, chữ đậm, khi `gameSetup.gameplayMode === 'house'`.
+  - `🎯 Cách chơi: Cổ điển` — nền xanh nhạt, khi `gameplayMode` vắng mặt **hoặc** `'classic'`; đúng luật `editorGameplayMode()` (vắng = cổ điển).
+  - Bốn thể loại khác không có cách chơi nên **không** có chip.
+- Mỗi chip mang `data-play-mode="house|classic"` (móc cho test) và `title` giải thích bằng câu chữ của option trong editor.
+- Vì `gameCard()` dùng chung với trang Tổng quan, chip cũng xuất hiện ở "Trò chơi gần đây" — cùng một thẻ, không thêm đường code riêng.
+- `tests/ui/ui-play-mode-card-check.js` (mới, 7 check): tạo 4 game tổng hợp qua IPC thật (quiz house, quiz không đặt `gameplayMode`, quiz `'classic'` tường minh, matching), lọc thư viện về đúng fixture rồi đọc `data-play-mode` + chữ trên chip, kiểm matching không có chip và chip không thêm nút nào vào thẻ; dọn fixture cuối.
+- **Không đổi**: dữ liệu lưu (key `gameplayMode` đã có từ #140), editor, engine, hợp đồng IPC, bố cục/nút trên thẻ.
+
+**Lựa chọn thiết kế.** Hiện nhãn cho **cả hai** cách chơi chứ không chỉ Xây nhà: câu hỏi cần trả lời là "trò chơi đó đang ở cách chơi nào", nên để trống rồi ngầm hiểu là cổ điển vẫn bắt giáo viên suy luận. Chip Xây nhà dùng màu đậm để game khác biệt nổi bật; chip Cổ điển nhạt để không tranh chỗ với môn/lớp/số câu.
+
+**Kết quả.** `ui-play-mode-card-check` **7/7**: "🏗 Cách chơi: Xây nhà" (house), "🎯 Cách chơi: Cổ điển" (thiếu key và key tường minh), matching `data-play-mode=""`, thẻ house vẫn chỉ có `play,play-fullscreen`. Ảnh chụp 1920×1080 và 1366×768 (`tests/ui/shots/play-mode-card-*.png`) cho thấy chip nằm gọn một dòng cùng ba chip cũ. Regression: `ui-library-paging-check` và `ui-card-menu-check` pass.
+
+**Chưa xử lý.** Chưa lọc/tìm theo cách chơi (bộ lọc thể loại giữ nguyên); chưa hiện cách chơi ở chỗ khác ngoài thẻ (ví dụ màn Dự án của tôi hay Lịch sử kết quả).
+
 
