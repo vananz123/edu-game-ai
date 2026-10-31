@@ -63,7 +63,7 @@ function renderCreate() {
             </span>
           </button>`).join('')}
         </div>
-        <div class="text-[11px] text-[#94a3b8] dark:text-[#64748b] mt-3 leading-relaxed p-3 bg-[#f8fafc] dark:bg-[#151a30] rounded-lg border border-[#f1f5f9] dark:border-[#2a324b]">
+        <div class="text-[11px] text-[#64748b] dark:text-[#94a3b8] mt-3 leading-relaxed p-3 bg-[#f8fafc] dark:bg-[#151a30] rounded-lg border border-[#f1f5f9] dark:border-[#2a324b]">
           ${templateDetails[state.selectedTemplate] || templateDetails.quiz}
         </div>
       </section>
@@ -109,7 +109,7 @@ function renderCreate() {
         </div>
 
         <div class="text-[11px] text-[#64748b] dark:text-[#94a3b8] leading-relaxed p-3 bg-[#f8fafc] dark:bg-[#151a30] rounded-lg border border-[#f1f5f9] dark:border-[#2a324b]" id="scoringModeHint">${scoringModeHint(scoringMode)}</div>
-        <div class="text-[10px] text-[#94a3b8] dark:text-[#64748b] mt-2 leading-relaxed">Trả lời sai không bị trừ điểm; xem lại giải thích sau mỗi câu. "Tốc độ" cộng điểm nhanh tối đa 50; "Theo độ khó" dùng bảng điểm dễ 100 · trung bình 200 · khó 300; "Luyện tập" bỏ áp lực thời gian. Giáo viên có thể sửa luật trong trình chỉnh sửa.</div>
+        <div class="text-[10px] text-[#64748b] dark:text-[#94a3b8] mt-2 leading-relaxed">Trả lời sai không bị trừ điểm; xem lại giải thích sau mỗi câu. "Tốc độ" cộng điểm nhanh tối đa 50; "Theo độ khó" dùng bảng điểm dễ 100 · trung bình 200 · khó 300; "Luyện tập" bỏ áp lực thời gian. Giáo viên có thể sửa luật trong trình chỉnh sửa.</div>
       </section>
 
       <!-- Mở trình chỉnh sửa -->
@@ -130,7 +130,7 @@ function renderCreate() {
           <button class="btn btn-primary !py-2.5 !px-5 !text-[13px] !font-bold" id="generateBtn">✦ Mở trình chỉnh sửa câu hỏi</button>
           <button class="btn btn-secondary" id="previewManualBtn">👁 Xem trước mẫu trống</button>
         </div>
-        <div class="text-[10px] text-[#94a3b8] dark:text-[#64748b] mt-3 leading-relaxed">Trình chỉnh sửa mở đúng thể loại đã chọn để bạn tự nhập câu hỏi, đáp án và điểm số. Sau khi lưu, vào "Dự án của tôi" để chạy thử như học sinh, tiếp tục chỉnh sửa và xuất gói .egame chạy ngoại tuyến.</div>
+        <div class="text-[10px] text-[#64748b] dark:text-[#94a3b8] mt-3 leading-relaxed">Trình chỉnh sửa mở đúng thể loại đã chọn để bạn tự nhập câu hỏi, đáp án và điểm số. Sau khi lưu, vào "Dự án của tôi" để chạy thử như học sinh, tiếp tục chỉnh sửa và xuất gói .egame chạy ngoại tuyến.</div>
       </section>
 
     </div>
@@ -139,7 +139,7 @@ function renderCreate() {
     <aside class="flex flex-col gap-4">
       <section class="bg-white dark:bg-[#171c32] border border-[#e2e8f0] dark:border-[#2a324b] rounded-2xl p-5">
         <h3 class="text-[14px] font-bold text-[#1e293b] dark:text-[#f1f5f9] m-0 mb-1">Quy trình thủ công</h3>
-        <div class="text-[11px] text-[#94a3b8] dark:text-[#64748b] mb-4">Tự soạn nội dung, không cần AI.</div>
+        <div class="text-[11px] text-[#64748b] dark:text-[#94a3b8] mb-4">Tự soạn nội dung, không cần AI.</div>
         <div class="flex flex-col gap-3">
           <div class="flex items-start gap-3">
             <div class="w-7 h-7 rounded-lg bg-[#eef2ff] dark:bg-[#262c55] text-[#6366f1] dark:text-[#818cf8] grid place-items-center text-[12px] font-bold shrink-0">1</div>

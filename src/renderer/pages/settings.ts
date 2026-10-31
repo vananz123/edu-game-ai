@@ -92,9 +92,9 @@ function settingsTabStripHtml(cfg) {
  * The heading of a panel: full title on the left, the detailed state chips on the right.
  *
  * No text-colour class on purpose — the card it sits in already carries the theme's ink
- * (`#172033` light / `#e8eaf2` dark) and `dark:text-…` utilities do not fire in this app
- * (they compile under `prefers-color-scheme`, while the theme is driven by
- * `[data-theme="dark"]`), so a hard-coded dark colour would be unreadable in dark mode.
+ * (`#172033` light / `#e8eaf2` dark), so naming one here only creates a second thing to
+ * keep in step. When #159 was written there was a stronger reason: `dark:text-…` did not
+ * fire at all in this app, which #160 fixed by keying the variant on `[data-theme="dark"]`.
  */
 function settingsPanelHeader(tab, chipHtml) {
   return `<div class="flex items-center justify-between gap-3 flex-wrap mb-3">
@@ -147,7 +147,7 @@ function renderSettings() {
   const inputCls = 'w-full px-3 py-2 border border-[#cbd5e1] dark:border-[#334155] rounded-lg bg-white dark:bg-[#1e2544] text-[#1e293b] dark:text-[#f8fafc] text-[13px] focus:outline-none focus:border-[#6366f1]';
   const labelCls = 'text-[10px] font-bold text-[#475569] dark:text-[#cbd5e1] mb-1 block';
   const sectionCls = 'bg-white dark:bg-[#171c32] border border-[#e2e8f0] dark:border-[#2a324b] rounded-2xl p-5';
-  const hintCls = 'text-[11px] text-[#94a3b8] dark:text-[#64748b] leading-relaxed';
+  const hintCls = 'text-[11px] text-[#64748b] dark:text-[#94a3b8] leading-relaxed';
   const btnSecondaryCls = 'btn btn-secondary btn-small';
 
   // #159: a tab is always open, so `''` (the old "everything collapsed" accordion state)

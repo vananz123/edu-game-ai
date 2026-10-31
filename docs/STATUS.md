@@ -8,6 +8,7 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 ## Mục lục bàn giao
 
 ### 2026-11-01 — inline (chưa có file lưu trữ)
+- Biến thể `dark:` nối vào `[data-theme]` — dark mode 149/223 → 5/223 chữ dưới ngưỡng AA (#160, G6)
 - Năm mục Cài đặt thành năm tab; mọi utility `dark:` trong app đều chết (#159)
 
 ### 2026-10-31 — [docs/handoff/status/2026-10-31.md](handoff/status/2026-10-31.md)
@@ -196,6 +197,28 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - Lịch sử trước 2026-10-19
 ## Bàn giao gần nhất
 
+## Handoff - Biến thể `dark:` nối vào `[data-theme]`: dark mode từ 149/223 chữ dưới ngưỡng AA còn 5/223 (2026-11-01, DECISIONS #160, ROADMAP G6)
+
+**Files changed.**
+- `src/renderer/styles/app.css`: `@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));` ngay sau `@import "tailwindcss";` + comment ghi lại bằng chứng đo được (1.16:1 trên `#settingStyleTone`, 297 lượt dùng toàn bộ là màu, `:where()` đặc tính 0 nên bảng dịch `!important` trong `shell.css` vẫn thắng).
+- `src/renderer/styles/shell.css`: `[data-theme="dark"] .form-panel { background: var(--panel); border-color: var(--line); color: var(--text); }` — thẻ wizard là class component nên bảng dịch class utility chưa bao giờ với tới, nó vẫn trắng trong dark mode.
+- `src/renderer/pages/settings.ts` (`hintCls`) và `src/renderer/pages/create.ts` (4 vị trí): đảo cặp `text-[#94a3b8] dark:text-[#64748b]` → `text-[#64748b] dark:text-[#94a3b8]`; JSDoc `settingsPanelHeader()` bỏ câu "utility `dark:` không chạy ở app này".
+- `src/renderer/features/wizard/step-input.ts:23`: tab đang chọn thêm `dark:text-[#a5b4fc]` (`#6366f1` trên `#1e2544` chỉ 3.81:1).
+- `src/renderer/styles/components.css`: comment P159 sửa lại cho đúng sự thật mới.
+- `tests/manual/verify-css.js` 20 → **22** expectation; `tests/ui/ui-dark-theme-check.js` (**mới**, 9 check) + script `check:dark-theme-ui` trong `package.json`.
+- Docs: `docs/DECISIONS.md` (#160), `docs/STATUS.md`, `docs/ROADMAP.md` (G6 → xong), `docs/handoff/status/2026-10-31.md` (chuyển bàn giao #157 vào lưu trữ).
+- Không đổi: schema `settings`, hợp đồng IPC, `saveSettings()`, `readAiProviderPatches()`, `wireSettingsTabStrip()`, engine trò chơi, hành vi light mode ngoài 5 chỗ đảo cặp màu.
+
+**Behavior.** Chọn "Tối"/"Sáng" trong Cài đặt → Giao diện giờ đổi **toàn bộ** màu, không chỉ phần do rule viết tay: 297 utility `dark:` trong 5 file renderer bắt đầu có hiệu lực. Trước: 149/223 phần tử mang `dark:` dưới 4.5:1 (69 dưới 2:1, median 2.45) — chữ đậm `#1e293b` nằm trên nền `#0f1220`. Sau: 5/223 (0 dưới 3:1, median 11.47), 136 phần tử vượt ngưỡng đi lên, **0 tụt hạng**. Không có đảo trắng còn sót: không phần tử `dark:` nào ngồi trên thẻ trắng nữa. Light mode chỉ đổi 5 chỗ chữ gợi ý (2.8 → 4.6:1 trên nền trắng, đi lên); phần còn lại được bảo vệ bằng cấu trúc vì `[data-theme="dark"]` không khớp khi app sáng.
+
+**Commands run.** `npm run check` 0 · `node tests/run-unit.js` **68/68** · `npm run build` 0 · `npm run check:renderer-globals` 0 undefined (54/55 script, 766 hàm, 6.295 call site) · `npm run verify:css` **22/22**. Electron thật, mỗi check một profile sạch: `ui-dark-theme-check` **9/9** (dark `rgb(51,65,85)` / light `rgb(203,213,225)` trên cùng phần tử; hint `rgb(148,163,184)` dark, `rgb(100,116,139)` light; 5/253 dưới 4.5:1, worst 4.47), `ui-settings-sections-check` **24/24**, `ui-wizard-structure-check`, `ui-ai-provider-settings-check`, `ui-ai-provider-key-check`, `ui-ai-provider-wizard-check`, `ui-ai-status-bar-check` pass, `tests/legacy/smoke2.js` **4/4**. Ảnh 1366×768 cả hai theme cho Cài đặt / Tạo giáo án / wizard bước 1.
+
+**Chưa xác minh.** Chưa review bằng mắt từng trang ngoài ba trang có ảnh (đã chứng minh bằng kiểm kê là chỉ có utility màu, không có hình học, nên quyết định tin số đo). 5 badge bước vẫn 4.47:1 — class component, nằm ngoài 297 utility. **Hai đỏ có sẵn, không do #160** (đã probe để tách bạch): `npm run test:ui` (`ui-setup-fullscreen-check`) fail 2/9 check vì wizard trên profile sạch dừng ở màn `detecting`, markup chỉ có `data-setup-action="close"`, còn check tìm `"start"`/`"skip-ai"` — selector của check đã cũ; và `tests/legacy/smoke-ui.js` **không parse được từ HEAD** (`node --check`: `missing ) after argument list` dòng 248), nên dòng "smoke-ui 27/27" ở bàn giao #159 là sai, đã đính chính trong DECISIONS #160. `tests/legacy/smoke60.js` 33/43 trên profile sạch vì không có nhà cung cấp AI. Chưa chạy installer đóng gói.
+
+**Next task.** Sửa `ui-setup-fullscreen-check` theo markup thật của wizard (chọn action theo màn `detecting`, và đợi `renderSetupWizard()` thay vì sleep 200ms) — việc nhỏ, tách bạch; Roadmap `Packaged check` (cần máy sạch).
+
+---
+
 ## Handoff - Năm mục Cài đặt thành năm tab (2026-11-01, DECISIONS #159)
 
 **Files changed.**
@@ -236,27 +259,6 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 **Next task.** Roadmap `Packaged check` (cần máy sạch); nếu tiếp tục tinh chỉnh trang Cài đặt thì cân nhắc chuyển cả năm mục sang tab thay vì accordion.
 
----
-
-## Handoff - Trang Cài đặt là accordion sáu mục + sửa `ai:test-provider` đọc cache key rỗng (2026-10-31, DECISIONS #157)
-
-**Files changed.**
-- `src/renderer/pages/settings.ts`: helper `settingsSectionHeader(id, icon, title, chipHtml, openSection)` + `SETTINGS_SECTION_IDS`; sáu `<section>` thành header + `div[data-settings-panel]`, chỉ mục mở bỏ `hidden`; "Dữ liệu và trải nghiệm" → **Giao diện** (phần quyền riêng tư/.egame vào mục này dưới nhãn "Dữ liệu trên máy"); mỗi header có chip trạng thái (AI local `✓ Sẵn sàng`/`○ Chưa cài đầy đủ`, nhà cung cấp `✓ n/5 sẵn sàng`, giọng điệu, chủ đề); nút tác vụ/chẩn đoán vào trong panel của nó; câu dẫn đầu trang + card Lưu nói rõ "kể cả các mục đang đóng".
-- `src/renderer/shared.ts`: `state.settingsSection = 'aiLocal'` (state UI, không nằm trong `settings`).
-- `src/renderer/features/settings.ts`: `wireSettingsSections()` — toggle `hidden` tại chỗ, không re-render, đổi `aria-expanded` + nhãn "Mở ▾/Thu gọn ▴", mở *Tác vụ*/*Chẩn đoán* thì gọi refresh ngay.
-- `src/renderer/core/controller.ts`: gọi `wireSettingsSections()` từ `wirePage()` khi ở trang settings.
-- `src/main.ts`: handler `ai:test-provider` nạp `settingsProvidersCache` từ settings vừa đọc — trước đó hàm này đọc cache rỗng nên báo "chưa có API key" với khoá đã lưu đúng.
-- `tests/ui/ui-settings-sections-check.js` (mới, 17 check) + script `check:settings-sections-ui` trong `package.json`.
-- Docs: `docs/DECISIONS.md` (#157), `docs/STATUS.md`, `docs/handoff/status/2026-10-31.md` (chuyển bàn giao #154 vào lưu trữ).
-- Không đổi: schema lưu `settings`, hợp đồng IPC, `saveSettings()`, `readAiProviderPatches()`, engine trò chơi.
-
-**Behavior.** Trang Cài đặt gồm sáu mục gập được, một mục mở tại một thời điểm, bấm header để mở/đóng và bấm lại mục đang mở để gập hết. Nội dung chỉ hiện khi chọn mục, nhưng mọi điều khiển vẫn nằm trong DOM nên "Lưu cài đặt" lấy được cả giá trị ở mục đang đóng; đang gõ base URL/API key chưa lưu rồi chuyển mục vẫn còn nguyên chữ (không re-render). Mục đóng vẫn tự hiện tình trạng qua chip. Bug chính: "Kiểm tra kết nối" ngay sau khi lưu khoá trả kết quả sai ("chưa có API key") — nay test một lần là ra kết quả thật.
-
-**Commands run.** `npm run check` 0 · `node tests/run-unit.js` **68/68** · `npm run build` 0 · `npm run check:renderer-globals` 0 undefined (54/55 script, 764 hàm, 6.274 call site) · `npm run verify:css` **17/17** · Electron thật, mỗi check một profile sạch: `ui-settings-sections-check` **17/17** (2 lần), `ui-ai-provider-settings-check` pass hết (trước khi sửa main: 6 FAIL), `ui-ai-provider-key-check` pass, `ui-ai-provider-wizard-check` pass · ảnh chụp 1366×768 ba trạng thái (AI local / Nhà cung cấp / Giao diện).
-
-**Chưa xác minh.** `ui-ai-tasks-paging-check` vẫn 6/8 trên profile mới (cần ≥11 tác vụ lịch sử — có sẵn từ trước, không do accordion). Chưa mở/đóng có animation; chưa nhớ mục đã mở giữa các lần khởi động. Chưa chạy installer đóng gói.
-
-**Next task.** Roadmap `Packaged check` (cần máy sạch); nếu muốn xanh nốt `ui-ai-tasks-paging-check` thì check phải tự tạo ≥11 mục lịch sử giả thay vì giả định profile đã có.
 
 
 

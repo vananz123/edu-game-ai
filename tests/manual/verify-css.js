@@ -39,9 +39,20 @@ const expectations = [
   // Five tabs share one row on a 1366px screen; if the label may wrap, the strip becomes
   // two ragged rows and the underline of a split tab lands under half a word.
   ['Settings tab label stays on one line', /\.settings-tab\{[^}]*white-space:nowrap/],
-  // The strip's rule under it must go dark with the theme. `dark:border-…` cannot be used
-  // here: Tailwind compiles that variant under prefers-color-scheme, not [data-theme].
-  ['Settings tab strip rule has a dark colour', /html\[data-theme=("?)dark\1\] \.settings-tablist\{[^}]*border-bottom-color/]
+  // The strip's rule under it is a hand-written selector rather than a utility: it has to
+  // recolour the border of the container the tabs sit on, and the app had no working dark
+  // variant when #159 was written. (#160 has since wired `dark:` to [data-theme] — see the
+  // two checks below, which are what actually guard that.)
+  ['Settings tab strip rule has a dark colour', /html\[data-theme=("?)dark\1\] \.settings-tablist\{[^}]*border-bottom-color/],
+  // G6 / #160: the `dark` variant must key off [data-theme], because applyTheme() sets that
+  // attribute and the OS scheme is not what the teacher picked. Revert the @custom-variant
+  // and every `dark:` class in the renderer silently stops firing again (measured: 149 of
+  // 223 dark-themed elements fell below 4.5:1 contrast, 69 of them below 2:1).
+  ['dark: utilities are keyed on [data-theme=dark]', /\.dark\\:[^{]+:where\(\[data-theme=("?)dark\1\]/],
+  // The wizard's card is a component class, so the utility translation table in shell.css
+  // never reached it: without this rule the wizard stays a white card in dark mode and the
+  // `dark:text-[#f1f5f9]` markup inside it becomes white-on-white.
+  ['wizard form panel goes dark with the theme', /\[data-theme=("?)dark\1\] \.form-panel\{[^}]*background:var\(--panel\)/]
 ];
 
 let failed = 0;

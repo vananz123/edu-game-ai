@@ -20,7 +20,7 @@ function renderWizardInput() {
   // The panes are layout-only visibility (`display`), never `aria-hidden`:
   // keeping both panes in the accessibility tree means a screen reader, the
   // DOM checks and `wizardSyncStructureCheckboxes()` always find the tree.
-  const tabButton = (id, label, badge) => `<button type="button" role="tab" aria-selected="${activeTab === id ? 'true' : 'false'}" aria-controls="wizardTabPane-${id}" id="wizardTab-${id}" class="wizard-tab-btn flex items-center gap-2 py-2.5 px-4 font-bold text-[13px] border-b-2 rounded-t-lg transition-colors ${activeTab === id ? 'border-[#6366f1] text-[#6366f1] bg-[#f8f7ff] dark:bg-[#1e2544]' : 'border-transparent text-[#64748b] dark:text-[#94a3b8] hover:text-[#1e293b]'}" data-wizard-input-tab="${id}">
+  const tabButton = (id, label, badge) => `<button type="button" role="tab" aria-selected="${activeTab === id ? 'true' : 'false'}" aria-controls="wizardTabPane-${id}" id="wizardTab-${id}" class="wizard-tab-btn flex items-center gap-2 py-2.5 px-4 font-bold text-[13px] border-b-2 rounded-t-lg transition-colors ${activeTab === id ? 'border-[#6366f1] text-[#6366f1] dark:text-[#a5b4fc] bg-[#f8f7ff] dark:bg-[#1e2544]' : 'border-transparent text-[#64748b] dark:text-[#94a3b8] hover:text-[#1e293b]'}" data-wizard-input-tab="${id}">
         <span>${label}</span>
         ${badge}
       </button>`;

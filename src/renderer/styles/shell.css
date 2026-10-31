@@ -120,6 +120,14 @@
 [data-theme="dark"] .bg-white { background-color: var(--panel) !important; }
 [data-theme="dark"] .text-white { color: #ffffff !important; }
 [data-theme="dark"] .border-white { border-color: var(--line) !important; }
+/* .form-panel là thẻ trắng của riêng wizard (7 file features/wizard/*). Danh sách
+   dịch màu ở trên chỉ đánh trúng utility Tailwind, còn đây là component class nên
+   lọt qua — kết quả: mọi trang tối thì wizard vẫn là một tấm trắng giữa nền tối,
+   và từ #160 (biến thể `dark:` nối vào [data-theme]) chữ `dark:text-[#f1f5f9]` bên
+   trong nó thành chữ gần trắng trên nền trắng, đo được 1,1:1. Cho nó đúng màu thẻ
+   là cả hai cùng hết: khoảng trắng biến mất và các class `dark:` của wizard trở
+   lại đúng bảng màu tối mà #1e2544/#2a324b/#f1f5f9 trong markup đã nhắm tới. */
+[data-theme="dark"] .form-panel { background: var(--panel); border-color: var(--line); color: var(--text); }
 
 /* Fullscreen play: reuse the existing play modal and let it fill the viewport. */
 html[data-fullscreen="1"] .modal-backdrop { padding: 0; }

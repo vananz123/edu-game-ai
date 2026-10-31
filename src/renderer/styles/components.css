@@ -563,8 +563,9 @@ html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #4d5578; b
    tính ARIA, nên không thể để lệch trạng thái giữa nhãn ARIA và giao diện.
    Năm nhãn + chip phải nằm gọn một hàng ở cửa sổ 1366 (cột nội dung chỉ rộng ~739px), nên
    viên tab rất chặt: padding 8px 10px, không gấp nhãn — hàng tab tự xuống dòng ở cửa sổ hẹp hơn.
-   Kẻ dưới của hàng tab viết tay vì utility `dark:` của Tailwind trong app này không bật
-   (nó compile theo `prefers-color-scheme`, còn chủ đề đổi bằng `[data-theme="dark"]`). */
+   Kẻ dưới của hàng tab viết tay thay vì dùng `dark:border-…` cho rõ tầng: nó thuộc về
+   container của cả dải tab, không phải của một viên tab nào. (Lúc #159 viết thì utility
+   `dark:` còn chưa bật ở app này — #160 đã nối biến thể vào [data-theme="dark"].) */
 @layer components {
 .settings-tablist{border-bottom:1px solid #e2e8f0}
 html[data-theme="dark"] .settings-tablist{border-bottom-color:#2a324b}

@@ -1,6 +1,41 @@
 @import "tailwindcss";
 
 /* ============================================================
+   Biến thể `dark` nối vào [data-theme="dark"] (DECISIONS #160, ROADMAP G6)
+
+   Mặc định của Tailwind v4: `dark:` compile thành
+   `@media (prefers-color-scheme: dark)`. Nhưng chủ đề tối của app này KHÔNG
+   do hệ điều hành quyết định — `applyTheme()` (src/renderer/shared.ts) đặt
+   `document.documentElement.dataset.theme` = 'light'|'dark', trong đó
+   'system' tự phân giải qua matchMedia và có listener đổi theo. Hai cơ chế
+   không gặp nhau, nên **toàn bộ 297 lượt dùng `dark:` trong 5 file renderer**
+   (124 create.ts, 83 settings.ts, 79 step-input.ts, 8 providers.ts,
+   3 step-recommend.ts — số sau khi chính thay đổi này thêm một
+   `dark:text-[#a5b4fc]`) **chưa bao giờ bật** cho tới dòng dưới đây. Đo trên
+   bản build thật, theme tối: ô nhập `#settingStyleTone` có mực rgb(30,41,59)
+   trên nền rgb(23,27,46) = tương phản 1,16:1 (gần như vô hình), label 2,25:1,
+   tên nhà cung cấp 1,16:1. Ảnh chụp #159 là chỗ đầu tình cờ thoát nạn vì
+   heading thừa hưởng mực của thẻ.
+
+   Một dòng dưới đây làm đúng những gì các class ấy đã hứa. An toàn vì đã
+   kiểm trước: 297/297 lượt đều là màu (text 153 / bg 79 / border 65, trong đó
+   một `dark:hover:border-`), không có utility nào đổi kích thước hay layout,
+   nên không phép đo hình học nào bị ảnh hưởng; và bảng màu chúng dùng
+   (#1e2544, #151a30, #f1f5f9, #cbd5e1…) chính là bảng mà các rule
+   `html[data-theme="dark"]` viết tay đang dùng — hai bên cùng một thiết kế,
+   chỉ là một bên chưa từng chạy.
+
+   `:where()` không cộng độ đặc hiệu, nên thứ tự layer vẫn quyết định: utilities
+   thắng các rule trong @layer components, nhưng **thua** bảng dịch màu
+   `!important` không nằm trong layer nào ở `shell.css` ("Dark mode coverage
+   Đợt 3"). Tức là một `dark:bg-[#1e2544]` đặt trên phần tử còn mang `.bg-white`
+   vẫn ra `var(--panel)`. Muốn chứng minh biến thể đang chạy bằng probe thì chọn
+   giá trị bảng đó không đụng tới — `tests/ui/ui-dark-theme-check.js` dùng
+   `dark:border-[#334155]`.
+   ============================================================ */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* ============================================================
    daisyUI 5 (DECISIONS #87) — CHỈ cung cấp component class, cố ý
    KHÔNG đụng vào bất cứ thứ gì đã có.
 
