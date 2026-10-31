@@ -1,18 +1,21 @@
 #!/usr/bin/env node
 /**
- * DECISIONS #157 — Settings is an accordion of six sections.
+ * DECISIONS #157 + #158 — Settings is an accordion of five sections, and the AI one
+ * holds two tabs.
  *
- * The page used to be six long blocks stacked on top of each other. It now groups
- * them as AI local tích hợp, Nhà cung cấp API Key, Phong cách giảng dạy, Giao diện,
- * Tác vụ dùng AI and Chẩn đoán trực trặc (log), and selecting a header reveals that
- * section. This check pins the behaviour the rest of the app depends on:
- *   - one section open at a time, AI local first;
- *   - every body stays in the DOM while collapsed, because `saveSettings` reads
- *     `#settingLargeText`/`#settingSound` and `readAiProviderPatches` walks
- *     `[data-ai-provider]` — hiding must never mean removing;
- *   - selecting another section never loses what was typed but not saved;
+ * The page used to be six long blocks stacked on top of each other. It now groups them
+ * as Nhà cung cấp AI, Phong cách giảng dạy, Giao diện, Tác vụ dùng AI and Chẩn đoán
+ * trực trặc (log); selecting a header reveals that section, and the AI section splits
+ * into "AI local" (model on this machine) and "AI cloud" (API providers). This check
+ * pins the behaviour the rest of the app depends on:
+ *   - one section open at a time, AI first, local tab first;
+ *   - every body stays in the DOM while collapsed or hidden behind a tab, because
+ *     `saveSettings` reads `#settingLargeText`/`#settingSound` and
+ *     `readAiProviderPatches` walks `[data-ai-provider]` — hiding must never mean
+ *     removing;
+ *   - switching section or tab never loses what was typed but not saved;
  *   - the task list and diagnostics info still load while their section is closed;
- *   - the open section survives a save and a page change.
+ *   - the open section and the selected tab survive a save and a page change.
  *
  * Usage: launch with --remote-debugging-port=PORT, then
  * `node tests/ui/ui-settings-sections-check.js [port]`.
@@ -26,8 +29,8 @@ function check(label, ok, detail = '') {
   if (!ok) failures += 1;
 }
 
-const SECTIONS = ['aiLocal', 'providers', 'teaching', 'interface', 'tasks', 'diagnostics'];
-const TITLES = ['AI local tích hợp', 'Nhà cung cấp API Key', 'Phong cách giảng dạy', 'Giao diện', 'Tác vụ dùng AI', 'Chẩn đoán trực trặc (log)'];
+const SECTIONS = ['ai', 'teaching', 'interface', 'tasks', 'diagnostics'];
+const TITLES = ['Nhà cung cấp AI', 'Phong cách giảng dạy', 'Giao diện', 'Tác vụ dùng AI', 'Chẩn đoán trực trặc (log)'];
 
 const SCENARIO = String.raw`(async () => {
   const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -48,6 +51,14 @@ const SCENARIO = String.raw`(async () => {
   const expandedSections = () => [...document.querySelectorAll('[data-settings-section]')]
     .filter(node => node.getAttribute('aria-expanded') === 'true')
     .map(node => node.dataset.settingsSection);
+  const tabOf = id => document.querySelector('[data-ai-tab="' + id + '"]');
+  const tabPanelShown = id => {
+    const panel = document.querySelector('[data-ai-tabpanel="' + id + '"]');
+    return Boolean(panel) && !panel.classList.contains('hidden');
+  };
+  const shownTabs = () => [...document.querySelectorAll('[data-ai-tabpanel]')]
+    .filter(panel => !panel.classList.contains('hidden'))
+    .map(panel => panel.dataset.aiTabpanel);
 
   navigate('settings');
   await sleep(800);
@@ -66,33 +77,69 @@ const SCENARIO = String.raw`(async () => {
     aiTaskList: Boolean(document.querySelector('#aiTaskList')),
     diagnosticsInfo: Boolean(document.querySelector('#diagnosticsInfo'))
   };
-  out.providerCards = document.querySelectorAll('[data-ai-provider]').length;
   const theme = (state.settings.preferences && state.settings.preferences.theme) || 'light';
   out.themeLabel = theme === 'dark' ? 'Tối' : theme === 'system' ? 'Theo hệ thống' : 'Sáng';
-  out.providerHeaderText = (header('providers') || {}).textContent || '';
+  out.aiHeaderText = (header('ai') || {}).textContent || '';
   out.interfaceHeaderText = (header('interface') || {}).textContent || '';
 
-  // Selecting another section closes the previous one.
-  header('providers').click();
-  await sleep(250);
-  out.afterProviders = {
-    visible: visiblePanels(),
-    expanded: expandedSections(),
-    stateValue: state.settingsSection,
-    cards: document.querySelectorAll('[data-ai-provider]').length
+  // ── the AI section: two tabs, one visible at a time, both present in the DOM ──
+  out.tabIds = [...document.querySelectorAll('[data-ai-tab]')].map(node => node.dataset.aiTab);
+  out.tabLabels = [...document.querySelectorAll('[data-ai-tab]')].map(node => node.textContent.trim());
+  out.tabSelected = [...document.querySelectorAll('[data-ai-tab]')]
+    .filter(node => node.getAttribute('aria-selected') === 'true')
+    .map(node => node.dataset.aiTab);
+  out.defaultTabPanels = shownTabs();
+  out.cardsWhileLocal = document.querySelectorAll('[data-ai-provider]').length;
+  out.cardIds = [...document.querySelectorAll('[data-ai-provider]')].map(node => node.dataset.aiProvider).join(',');
+  out.localControlsWhileLocal = {
+    modelSelect: Boolean(document.querySelector('#localModelSelect')),
+    installBtn: Boolean(document.querySelector('#installLocalModelBtn'))
   };
 
-  // A value typed but not saved must survive moving between sections (no re-render —
-  // a re-render would rebuild the form from state.settings and drop it).
+  tabOf('cloud').click();
+  await sleep(200);
+  out.afterCloudClick = {
+    panels: visiblePanels(),          // the section itself must stay open
+    tabs: shownTabs(),
+    selected: [...document.querySelectorAll('[data-ai-tab]')]
+      .filter(node => node.getAttribute('aria-selected') === 'true')
+      .map(node => node.dataset.aiTab),
+    tabState: state.settingsAiTab,
+    cards: document.querySelectorAll('[data-ai-provider]').length,
+    localHidden: !tabPanelShown('local'),
+    modelSelectStillThere: Boolean(document.querySelector('#localModelSelect'))
+  };
+
+  // A value typed but not saved must survive moving between tabs *and* between
+  // sections — neither is allowed to re-render (that would rebuild the form from
+  // state.settings and silently drop it).
   const base = document.querySelector('[data-ai-provider-baseurl="gemini"]');
   const originalBase = base ? base.value : '';
   if (base) base.value = 'http://127.0.0.1:9/v1';
+  tabOf('local').click();
+  await sleep(120);
+  tabOf('cloud').click();
+  await sleep(120);
+  out.survivedTabSwitch = base ? base.value === 'http://127.0.0.1:9/v1' : false;
   header('teaching').click();
   await sleep(150);
-  header('providers').click();
+  out.tabAfterLeavingSection = { tabState: state.settingsAiTab, cloudPanel: tabPanelShown('cloud') };
+  header('ai').click();
   await sleep(150);
-  out.unsavedSurvived = base ? base.value === 'http://127.0.0.1:9/v1' : false;
+  out.survivedSectionSwitch = base ? base.value === 'http://127.0.0.1:9/v1' : false;
+  out.tabPanelAfterReturning = shownTabs();
   if (base) base.value = originalBase;
+
+  // Only the selected tab is in the tab order, so the arrow keys are the keyboard path.
+  tabOf('local').focus();
+  tabOf('local').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+  await sleep(150);
+  out.arrowMoved = {
+    focused: document.activeElement === tabOf('cloud'),
+    tabs: shownTabs(),
+    localTabIndex: tabOf('local').tabIndex,
+    cloudTabIndex: tabOf('cloud').tabIndex
+  };
 
   // A control inside a closed section is still saved: "Chữ lớn khi chơi" lives in Giao diện.
   out.interfaceHiddenBeforeSave = !panelVisible('interface');
@@ -104,7 +151,8 @@ const SCENARIO = String.raw`(async () => {
   await sleep(1300);
   out.savedLargeText = ((await window.eduGame.getSettings()).preferences || {}).largeText;
   out.sectionAfterSave = state.settingsSection;
-  out.providersOpenAfterSave = panelVisible('providers');
+  out.aiOpenAfterSave = panelVisible('ai');
+  out.tabAfterSave = { state: state.settingsAiTab, panels: shownTabs() };
   // Put the profile back the way it was found (fresh profiles default to true).
   const largeTextAfter = document.querySelector('#settingLargeText');
   if (largeTextAfter) largeTextAfter.checked = originalLargeText;
@@ -144,31 +192,57 @@ const SCENARIO = String.raw`(async () => {
   const cdp = await connect();
   const out = await cdp.evaluate(SCENARIO);
 
-  check('six section headers in the asked-for order', out.ids.join(',') === SECTIONS.join(','), out.ids.join(','));
+  check('five section headers in the asked-for order', out.ids.join(',') === SECTIONS.join(','), out.ids.join(','));
   check('each header carries its title',
     TITLES.every((title, index) => String(out.texts[index] || '').includes(title)),
     out.texts.join(' | ').slice(0, 240));
-  check('the AI local section is open on the first visit',
-    out.defaultVisible.length === 1 && out.defaultVisible[0] === 'aiLocal' && out.defaultExpanded.join(',') === 'aiLocal',
+  check('the AI section is open on the first visit',
+    out.defaultVisible.length === 1 && out.defaultVisible[0] === 'ai' && out.defaultExpanded.join(',') === 'ai',
     `${out.defaultVisible.join(',')} / ${out.defaultExpanded.join(',')}`);
-  check('every section body stays in the DOM while collapsed', out.panelCount === 6, String(out.panelCount));
+  check('every section body stays in the DOM while collapsed', out.panelCount === 5, String(out.panelCount));
   check('the controls saveSettings reads are present while collapsed',
     Object.values(out.controlsPresent).every(Boolean), JSON.stringify(out.controlsPresent));
-  check('all five provider cards are rendered before the section is opened', out.providerCards === 5, String(out.providerCards));
+  check('the closed AI header carries one chip per tab',
+    /🤖/.test(out.aiHeaderText) && /☁️/.test(out.aiHeaderText), out.aiHeaderText.slice(0, 90));
   check('the closed sections still show a state chip',
-    /sẵn sàng|Chưa có nhà cung cấp/.test(out.providerHeaderText) && out.interfaceHeaderText.includes(out.themeLabel),
-    `${out.providerHeaderText.slice(0, 70)} / theme ${out.themeLabel}`);
-  check('selecting a section opens it and closes the previous one',
-    out.afterProviders.visible.join(',') === 'providers' && out.afterProviders.expanded.join(',') === 'providers' && out.afterProviders.stateValue === 'providers',
-    JSON.stringify(out.afterProviders));
-  check('provider cards stay rendered while the section is closed', out.afterProviders.cards === 5, String(out.afterProviders.cards));
-  check('typing then switching sections keeps the unsaved value', out.unsavedSurvived === true, String(out.unsavedSurvived));
+    out.interfaceHeaderText.includes(out.themeLabel), `theme ${out.themeLabel} / ${out.interfaceHeaderText.slice(0, 70)}`);
+
+  check('the AI section holds exactly the two asked-for tabs',
+    out.tabIds.join(',') === 'local,cloud' && /AI local/.test(out.tabLabels[0]) && /AI cloud/.test(out.tabLabels[1]),
+    `${out.tabIds.join(',')} / ${out.tabLabels.join(' | ')}`);
+  check('AI local is the tab shown on the first visit',
+    out.tabSelected.join(',') === 'local' && out.defaultTabPanels.join(',') === 'local',
+    `${out.tabSelected.join(',')} / ${out.defaultTabPanels.join(',')}`);
+  check('the cloud tab hides nothing: provider cards are rendered while it is off-screen',
+    out.cardsWhileLocal === 4 && !out.cardIds.split(',').includes('local'),
+    `${out.cardsWhileLocal} / ${out.cardIds}`);
+
+  check('switching to AI cloud shows the providers and keeps the section open',
+    out.afterCloudClick.panels.join(',') === 'ai' && out.afterCloudClick.tabs.join(',') === 'cloud'
+      && out.afterCloudClick.selected.join(',') === 'cloud' && out.afterCloudClick.tabState === 'cloud'
+      && out.afterCloudClick.cards === 4 && out.afterCloudClick.localHidden === true,
+    JSON.stringify(out.afterCloudClick));
+  check('the local tab keeps its controls while off-screen',
+    out.afterCloudClick.modelSelectStillThere === true && Object.values(out.localControlsWhileLocal).every(Boolean),
+    JSON.stringify(out.afterCloudClick.modelSelectStillThere) + ' / ' + JSON.stringify(out.localControlsWhileLocal));
+
+  check('typing then switching tabs keeps the unsaved value', out.survivedTabSwitch === true, String(out.survivedTabSwitch));
+  check('the selected tab survives leaving and reopening the section',
+    out.tabAfterLeavingSection.tabState === 'cloud' && out.survivedSectionSwitch === true
+      && out.tabPanelAfterReturning.join(',') === 'cloud',
+    JSON.stringify(out.tabAfterLeavingSection) + ' / ' + out.tabPanelAfterReturning.join(','));
+  check('the arrow keys move tab selection and focus',
+    out.arrowMoved.focused === true && out.arrowMoved.tabs.join(',') === 'cloud'
+      && out.arrowMoved.localTabIndex === -1 && out.arrowMoved.cloudTabIndex === 0,
+    JSON.stringify(out.arrowMoved));
+
   check('saving reads a control inside a closed section',
     out.interfaceHiddenBeforeSave === true && out.savedLargeText === out.expectedLargeText,
     `${out.interfaceHiddenBeforeSave} / ${out.savedLargeText} vs ${out.expectedLargeText}`);
-  check('the open section survives the save re-render',
-    out.sectionAfterSave === 'providers' && out.providersOpenAfterSave === true,
-    `${out.sectionAfterSave}/${out.providersOpenAfterSave}`);
+  check('the open section and the selected tab survive the save re-render',
+    out.sectionAfterSave === 'ai' && out.aiOpenAfterSave === true && out.tabAfterSave.state === 'cloud'
+      && out.tabAfterSave.panels.join(',') === 'cloud',
+    `${out.sectionAfterSave}/${out.aiOpenAfterSave}/${JSON.stringify(out.tabAfterSave)}`);
   check('the AI task list still loads while its section is closed',
     out.tasksHiddenNow === true && /Trang \d+\/\d+|Chưa có tác vụ AI nào/.test(out.taskListText),
     out.taskListText.slice(0, 100));

@@ -46,7 +46,7 @@ function settingsProviderCard(provider, inputCls, labelCls, hintCls, btnSecondar
 }
 
 /**
- * #157: Settings is an accordion — six headers, one open at a time.
+ * #157: Settings is an accordion — five headers, one open at a time.
  *
  * The header is a button inside its `<h3>` (phrasing content, so the markup stays
  * valid) and carries the state chip, so a closed section still tells the teacher
@@ -63,7 +63,15 @@ function settingsSectionHeader(id, icon, title, chipHtml, openSection) {
     </button></h3>`;
 }
 
-const SETTINGS_SECTION_IDS = ['aiLocal', 'providers', 'teaching', 'interface', 'tasks', 'diagnostics'];
+const SETTINGS_SECTION_IDS = ['ai', 'teaching', 'interface', 'tasks', 'diagnostics'];
+
+/** #158: the merged AI section holds two tabs; the strip is ARIA-correct tablist markup. */
+const SETTINGS_AI_TABS = [{ id: 'local', label: '🤖 AI local' }, { id: 'cloud', label: '☁️ AI cloud' }];
+
+function settingsAiTabsHtml(selectedTab) {
+  return `<div class="flex items-center gap-1 flex-wrap border-b border-[#e2e8f0] dark:border-[#2a324b] mb-3" role="tablist" aria-label="Nhà cung cấp AI">${SETTINGS_AI_TABS.map(tab =>
+    `<button type="button" role="tab" id="settingsAiTabBtn-${tab.id}" class="settings-ai-tab" data-ai-tab="${tab.id}" aria-selected="${selectedTab === tab.id ? 'true' : 'false'}" aria-controls="settingsAiTabPanel-${tab.id}" tabindex="${selectedTab === tab.id ? '0' : '-1'}">${tab.label}</button>`).join('')}</div>`;
+}
 
 function renderSettings() {
   const ai = state.settings.ai || {};
@@ -113,16 +121,22 @@ function renderSettings() {
   const btnSecondaryCls = 'btn btn-secondary btn-small';
 
   // #157: `''` is a real state (the teacher collapsed everything); only the first visit
-  // opens AI local, and every re-render after a save or a model change keeps the choice.
+  // opens the AI section, and every re-render after a save or a model change keeps the choice.
   const openSection = SETTINGS_SECTION_IDS.includes(state.settingsSection) ? state.settingsSection : '';
+  // #158: an unrecognised tab falls back to local, same policy as the section.
+  const aiTab = SETTINGS_AI_TABS.some(tab => tab.id === state.settingsAiTab) ? state.settingsAiTab : 'local';
   const localReady = Boolean(selectedLocalModel?.installed && machine.runtimeInstalled);
-  const localChip = `<span class="px-2 py-0.5 rounded text-[10px] font-semibold ${localReady
+  const chipCls = ok => `px-2 py-0.5 rounded text-[10px] font-semibold ${ok
     ? 'bg-[#effaf5] dark:bg-[#132d24] text-[#16a34a] dark:text-[#4ade80]'
-    : 'bg-[#fef3c7] dark:bg-[#2d2413] text-[#d97706] dark:text-[#fbbf24]'}">${localReady ? '✓ Sẵn sàng' : '○ Chưa cài đầy đủ'}</span>`;
-  const readyProviders = providers.filter(provider => provider.status === 'ready').length;
-  const providersChip = readyProviders
-    ? `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-[#effaf5] dark:bg-[#132d24] text-[#16a34a] dark:text-[#4ade80]">✓ ${readyProviders}/${providers.length} sẵn sàng</span>`
-    : `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-[#f5f6fa] dark:bg-[#1e2544] text-[#788196] dark:text-[#94a3b8]">Chưa có nhà cung cấp sẵn sàng</span>`;
+    : 'bg-[#fef3c7] dark:bg-[#2d2413] text-[#d97706] dark:text-[#fbbf24]'}`;
+  // #158: the cloud tab lists only the providers that actually need a key — the local
+  // runtime has its own tab, and "AI local (llama.cpp)" sitting under "AI cloud" reads
+  // as a bug. The policy strip still names every eligible provider, local included.
+  const cloudProviders = providers.filter(provider => provider.id !== 'local');
+  const readyCloud = cloudProviders.filter(provider => provider.status === 'ready').length;
+  // One chip per tab, so the closed section still reports both halves of itself.
+  const aiChips = `<span class="${chipCls(localReady)}">🤖 ${localReady ? '✓ Sẵn sàng' : '○ Chưa cài đầy đủ'}</span>`
+    + `<span class="${chipCls(readyCloud > 0)}">☁️ ${readyCloud ? `✓ ${readyCloud}/${cloudProviders.length} sẵn sàng` : 'Chưa có API key'}</span>`;
   const teachingChip = `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-[#eef2ff] dark:bg-[#1e1b4b] text-[#4f46e5] dark:text-[#a5b4fc]">${escapeHtml(tone)}</span>`;
   const themeLabel = state.settings.preferences?.theme==='dark' ? 'Tối' : state.settings.preferences?.theme==='system' ? 'Theo hệ thống' : 'Sáng';
   const interfaceChip = `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-[#f5f6fa] dark:bg-[#1e2544] text-[#788196] dark:text-[#94a3b8]">${escapeHtml(themeLabel)}</span>`;
@@ -135,7 +149,7 @@ function renderSettings() {
         <h1 class="text-[22px] tracking-[-0.5px] m-0 font-extrabold text-[#1e293b] dark:text-[#f1f5f9]">Cài đặt ứng dụng</h1>
       </div>
       <p class="mt-1 text-[12px] text-[#64748b] dark:text-[#94a3b8] leading-relaxed m-0">
-        Chọn một mục để mở. Mọi thay đổi chỉ được lưu khi bạn bấm “Lưu cài đặt”, kể cả ở mục đang đóng.
+        Chọn một mục để mở. Mục Nhà cung cấp AI chia hai tab: <b>AI local</b> chạy trên máy và <b>AI cloud</b> qua API key. Mọi thay đổi chỉ được lưu khi bạn bấm “Lưu cài đặt”, kể cả ở mục đang đóng.
       </p>
     </div>
   </div>
@@ -143,10 +157,12 @@ function renderSettings() {
   <div class="grid grid-cols-[minmax(0,1fr)_280px] gap-5 items-start">
     <div class="flex flex-col gap-5 min-w-0">
 
-      <!-- ═══ 1. AI LOCAL TÍCH HỢP ═══ -->
-      <section class="${sectionCls}" data-settings-card="aiLocal">
-        ${settingsSectionHeader('aiLocal', '🤖', 'AI local tích hợp', localChip, openSection)}
-        <div class="mt-4 ${openSection === 'aiLocal' ? '' : 'hidden'}" data-settings-panel="aiLocal" id="settingsPanel-aiLocal">
+      <!-- ═══ 1. AI: MỘT MỤC, HAI TAB (local + cloud) ═══ -->
+      <section class="${sectionCls}" id="settingAiProviders" data-ai-providers data-settings-card="ai">
+        ${settingsSectionHeader('ai', '🧠', 'Nhà cung cấp AI', aiChips, openSection)}
+        <div class="mt-4 ${openSection === 'ai' ? '' : 'hidden'}" data-settings-panel="ai" id="settingsPanel-ai">
+        ${settingsAiTabsHtml(aiTab)}
+        <div role="tabpanel" id="settingsAiTabPanel-local" data-ai-tabpanel="local" aria-labelledby="settingsAiTabBtn-local" class="${aiTab === 'local' ? '' : 'hidden'}">
         <p class="${hintCls} mb-4">Cài và chọn model Qwen chạy cùng llama.cpp ngay trong ứng dụng. Model và runtime được lưu trong dữ liệu ứng dụng trên máy này.</p>
 
         ${machine.runtimeSupported === false ? `<div class="p-3 bg-[#fef2f2] dark:bg-[#2d1313] border border-[#fecaca] dark:border-[#4a1b1b] rounded-lg mb-4 text-[12px] text-[#b91c1c] dark:text-[#fca5a5]"><strong>Chưa hỗ trợ cấu hình này</strong> — Runtime AI local tích hợp hiện chỉ hỗ trợ Windows x64.</div>` : ''}
@@ -210,26 +226,23 @@ function renderSettings() {
           </div>
         ` : `<p class="${hintCls}">Đang nạp danh sách model AI local…</p>`}
         </div>
-      </section>
 
-      <!-- ═══ 2. NHÀ CUNG CẤP API KEY (#132) ═══ -->
-      <section class="${sectionCls}" id="settingAiProviders" data-ai-providers data-settings-card="providers">
-        ${settingsSectionHeader('providers', '☁️', 'Nhà cung cấp API Key', providersChip, openSection)}
-        <div class="mt-4 ${openSection === 'providers' ? '' : 'hidden'}" data-settings-panel="providers" id="settingsPanel-providers">
-        <p class="${hintCls} mb-4">Base URL, tên model và khoá API của từng nhà cung cấp. Luồng tạo trò chơi chỉ dùng nhà cung cấp đã cấu hình sẵn. Khoá API được mã hoá bằng khoá của Windows và <b>không bao giờ</b> gửi lại vào màn hình.</p>
-        ${providers.length ? `
+        <div role="tabpanel" id="settingsAiTabPanel-cloud" data-ai-tabpanel="cloud" aria-labelledby="settingsAiTabBtn-cloud" class="${aiTab === 'cloud' ? '' : 'hidden'}">
+        <p class="${hintCls} mb-4">Base URL, tên model và khoá API của từng nhà cung cấp đám mây. Model tải ở tab <b>AI local</b> không có ở đây vì nó không cần khoá. Luồng tạo trò chơi chỉ dùng nhà cung cấp đã cấu hình sẵn. Khoá API được mã hoá bằng khoá của Windows và <b>không bao giờ</b> gửi lại vào màn hình.</p>
+        ${cloudProviders.length ? `
           <div class="p-3 mb-3 bg-[#f8fafc] dark:bg-[#151a30] rounded-xl border border-[#f1f5f9] dark:border-[#2a324b]" data-ai-policy>
             <strong class="text-[12px] text-[#1e293b] dark:text-[#f1f5f9] block">Cho trò chơi mới: tự chọn nhà cung cấp sẵn sàng</strong>
             <div class="${hintCls} mt-1">Không tự đổi nhà cung cấp khi đang lỗi. Thứ tự tự động: AI local → Gemini → ChatGPT. Bước 2 và bước 5 luôn hiện nhà cung cấp đang dùng và cho chọn nếu có từ hai nhà cung cấp sẵn sàng.</div>
             <div class="flex flex-wrap gap-1.5 mt-2">${providers.filter(p => p.wizardEligible).map(p => `<span class="px-2 py-0.5 rounded text-[10px] font-semibold ${p.usable ? 'bg-[#effaf5] text-[#16a34a]' : 'bg-[#f5f6fa] text-[#788196]'}">${escapeHtml(p.label)}</span>`).join('')}</div>
           </div>
-          <div class="grid gap-3">${providers.map(provider => settingsProviderCard(provider, inputCls, labelCls, hintCls, btnSecondaryCls)).join('')}</div>
+          <div class="grid gap-3">${cloudProviders.map(provider => settingsProviderCard(provider, inputCls, labelCls, hintCls, btnSecondaryCls)).join('')}</div>
         ` : `<p class="${hintCls}">Đang nạp danh sách nhà cung cấp AI…</p>`}
+        </div>
         </div>
       </section>
 
 
-      <!-- ═══ 3. PHONG CÁCH GIẢNG DẠY ═══ -->
+      <!-- ═══ 2. PHONG CÁCH GIẢNG DẠY ═══ -->
       <section class="${sectionCls}" data-settings-card="teaching">
         ${settingsSectionHeader('teaching', '🎨', 'Phong cách giảng dạy', teachingChip, openSection)}
         <div class="mt-4 ${openSection === 'teaching' ? '' : 'hidden'}" data-settings-panel="teaching" id="settingsPanel-teaching">
@@ -272,12 +285,12 @@ function renderSettings() {
             <label class="${labelCls}">GHI CHÚ CHO AI</label>
             <textarea id="settingStyleNotes" rows="2" class="${inputCls}" placeholder="VD: ngắn gọn, ưu tiên ví dụ địa phương, không dùng thuật ngữ khó">${escapeHtml(teachingStyle.notes || '')}</textarea>
           </div>
-          <div class="${hintCls}">Phong cách áp dụng khi tạo trò chơi mới bằng AI local hoặc đám mây; model AI chọn ở mục Nhà cung cấp API Key. Chế độ ngoại tuyến không gọi AI nên không dùng phong cách này.</div>
+          <div class="${hintCls}">Phong cách áp dụng khi tạo trò chơi mới bằng AI local hoặc đám mây; model AI chọn ở tab “AI cloud” của mục Nhà cung cấp AI. Chế độ ngoại tuyến không gọi AI nên không dùng phong cách này.</div>
         </div>
         </div>
       </section>
 
-      <!-- ═══ 4. GIAO DIỆN (trước đây: Dữ liệu và trải nghiệm) ═══ -->
+      <!-- ═══ 3. GIAO DIỆN (trước đây: Dữ liệu và trải nghiệm) ═══ -->
       <section class="${sectionCls}" data-settings-card="interface">
         ${settingsSectionHeader('interface', '⚙️', 'Giao diện', interfaceChip, openSection)}
         <div class="mt-4 ${openSection === 'interface' ? '' : 'hidden'}" data-settings-panel="interface" id="settingsPanel-interface">
@@ -336,7 +349,7 @@ function renderSettings() {
         </div>
       </section>
 
-      <!-- ═══ 5. TÁC VỤ DÙNG AI ═══ -->
+      <!-- ═══ 4. TÁC VỤ DÙNG AI ═══ -->
       <!-- update_plan_3 §8: task manager — what ran, what is running, what failed; history survives restart. -->
       <section class="${sectionCls}" data-settings-card="tasks">
         ${settingsSectionHeader('tasks', '📋', 'Tác vụ dùng AI', '', openSection)}
@@ -353,7 +366,7 @@ function renderSettings() {
         </div>
       </section>
 
-      <!-- ═══ 6. CHẨN ĐOÁN TRỰC TRẶC (LOG) ═══ -->
+      <!-- ═══ 5. CHẨN ĐOÁN TRỰC TRẶC (LOG) ═══ -->
       <!-- O10: diagnostic log — reproduce on another machine, export one file, send it back. -->
       <section class="${sectionCls}" data-diagnostics-panel data-settings-card="diagnostics">
         ${settingsSectionHeader('diagnostics', '🔍', 'Chẩn đoán trực trặc (log)', '', openSection)}

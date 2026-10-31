@@ -2,8 +2,9 @@
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 // #157: `settingsSection` is the section open on the Settings accordion (`''` = all
-// collapsed). It is UI state only and never saved; the first visit opens AI local.
-const state = { db: { games: [], sessions: [] }, page: 'home', search: '', filter: 'all', projects: null, lessonLibrary: null, settings: {}, localAiModels: [], localAiMachine: {}, draft: null, importedDoc: null, selectedTemplate: 'scenario', currentGame: null, gameIndex: 0, gameAnswers: [], gameStart: 0, playStartedAt: 0, resultSession: null, answerLocked: false, lastSummary: null, matchingPlay: null, memoryCards: null, treasurePlay: null, racePlay: null, teamPlay: null, pendingTeams: null, settingsSection: 'aiLocal' };
+// collapsed). #158: `settingsAiTab` is the tab shown inside the merged AI section.
+// Both are UI state only and never saved; the first visit opens AI local on its local tab.
+const state = { db: { games: [], sessions: [] }, page: 'home', search: '', filter: 'all', projects: null, lessonLibrary: null, settings: {}, localAiModels: [], localAiMachine: {}, draft: null, importedDoc: null, selectedTemplate: 'scenario', currentGame: null, gameIndex: 0, gameAnswers: [], gameStart: 0, playStartedAt: 0, resultSession: null, answerLocked: false, lastSummary: null, matchingPlay: null, memoryCards: null, treasurePlay: null, racePlay: null, teamPlay: null, pendingTeams: null, settingsSection: 'ai', settingsAiTab: 'local' };
 const pageNames = { home: 'Tổng quan', library: 'Thư viện trò chơi', 'create-wizard': 'Tạo từ giáo án', create: 'Tạo trò chơi', 'lesson-plans': 'Giáo án', 'my-projects': 'Dự án của tôi', sessions: 'Lịch sử kết quả', settings: 'Cài đặt' };
 const icons = { quiz: '🧠', scenario: '🚦', matching: '🧩', 'treasure-hunt': '🗺️', race: '🏁' };
 const treasureMissionMeta = {

@@ -97,7 +97,9 @@ function check(label, ok, detail = '') {
       hasBridge: typeof window.eduGame.testAiProvider === 'function' && typeof window.eduGame.getAiProviders === 'function'
     };
   })()`);
-  check('every provider has a card in Settings', initial.cards === 5, `${initial.cards} / ${initial.ids}`);
+  // #158: the AI section splits into tabs and the cloud tab lists only the providers
+  // that need a key; `local` has its own tab, so it is deliberately not a card here.
+  check('every key-based provider has a card in Settings', initial.cards === 4 && !initial.ids.split(',').includes('local'), `${initial.cards} / ${initial.ids}`);
   check('the provider bridges exist', initial.hasBridge === true);
   // On a fresh isolated profile local is the only candidate; after an earlier run left a
   // verified cloud key the view may name that one instead (it is what the policy picks).

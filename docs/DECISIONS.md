@@ -485,4 +485,21 @@ Nguyên nhân gốc nằm ở chỗ editor render cả ba panel ẩn để thầ
 
 **Chưa xử lý.** `ui-ai-tasks-paging-check` vẫn 6/8 trên profile mới — cần ≥11 tác vụ lịch sử, không liên quan accordion (đã ghi ở bàn giao #153). Chưa có animation mở/đóng; chưa nhớ mục đã mở giữa các lần khởi động (chỉ trong một phiên).
 
+## #158 — Gộp AI local + Nhà cung cấp thành một mục, chia tab "AI local" / "AI cloud"
+
+**Bối cảnh.** Sau #157, hai mục đầu vẫn là "AI local tích hợp" và "Nhà cung cấp API Key" — hai chỗ cho cùng một quyết định "model chạy ở đâu", nên giáo viên vẫn phải mở hai mục. Yêu cầu: gộp thành một mục, bên trong chia tab — tab 1 AI local, tab 2 AI cloud.
+
+**Thay đổi.**
+- `src/renderer/pages/settings.ts`: `SETTINGS_SECTION_IDS` còn năm mục `['ai','teaching','interface','tasks','diagnostics']`; hai section cũ nhập thành một `data-settings-card="ai"` tên **Nhà cung cấp AI**, `id="settingAiProviders"`/`data-ai-providers` chuyển lên section gộp. Thêm `SETTINGS_AI_TABS` + `settingsAiTabsHtml()` dựng `role="tablist"` với hai `role="tab"`; mỗi nội dung nằm trong `div[data-ai-tabpanel]` `role="tabpanel"`, `aria-labelledby` đúng tab. Chip header thành hai chiếc, một cho mỗi tab — `🤖 ✓ Sẵn sàng / ○ Chưa cài đầy đủ` và `☁️ ✓ n/4 sẵn sàng / Chưa có API key` — nên mục đang đóng vẫn tự nói cả hai nửa.
+- **Nội dung đúng theo tên tab**: tab cloud chỉ liệt kê `providers.filter(p => p.id !== 'local')`. Để "AI local (llama.cpp)" nằm trong tab "AI cloud" là tự mâu thuẫn với nhãn vừa đặt, mà model local đã có tab riêng (chọn model, trạng thái runtime, nút xác minh). Thẻ local vốn không có input nào (`settingsProviderCard` bỏ `fields` khi `provider.id === 'local'`) nên `readAiProviderPatches()` không mất gì; hàng chính sách "Cho trò chơi mới" vẫn liệt kê cả AI local vì đó là thứ tự tự động thật.
+- `src/renderer/shared.ts`: thêm `state.settingsAiTab = 'local'` (state UI, không nằm trong `settings`).
+- `src/renderer/features/settings.ts`: `wireSettingsAiTabs()` đổi `aria-selected` + `tabIndex` + class `hidden` tại chỗ, **không re-render** — cùng lý do #157: khoá đang gõ trên tab cloud phải sống sót khi xem tab local rồi quay lại. Vì chỉ tab đang chọn nằm trong tab order, phím trái/phải phải đổi cả lựa chọn **và** focus. `wireSettingsSections()` gọi `wireSettingsAiTabs()` ở cuối.
+- `src/renderer/styles/components.css`: khối `.settings-ai-tab` — gạch dưới 2px theo `[aria-selected="true"]` (kèm bản `html[data-theme="dark"]`), `margin-bottom:-1px` để vạch nằm đè lên đường kẻ của hàng tab.
+- `tests/manual/verify-css.js`: thêm expectation "AI tab underline follows aria-selected" — gạch dưới là dấu hiệu duy nhất cho biết đang ở tab nào, mất nó thì hai tab nhìn như nhau.
+- `tests/ui/ui-settings-sections-check.js` viết lại: 22 check cho năm mục + hai tab. `tests/ui/ui-ai-provider-settings-check.js`: "every provider has a card" → "every key-based provider has a card" (4 thẻ, không có `local`).
+
+**Kết quả.** `npm run check` 0 · `node tests/run-unit.js` **68/68** · `npm run build` 0 · `npm run check:renderer-globals` 0 undefined (54/55 script, 766 hàm, 6.286 call site) · `npm run verify:css` **18/18**. Electron thật, mỗi check một profile sạch: `ui-settings-sections-check` **22/22**, `ui-ai-provider-settings-check` / `ui-ai-provider-key-check` / `ui-ai-provider-wizard-check` pass hết; `ui-ai-tasks-paging-check` vẫn đúng 6/8 như trước. Ảnh 1366×768: tab local (model + cấu hình máy), tab cloud (mở đầu là Gemini, không còn thẻ AI local), và cả năm mục gập với chip trạng thái.
+
+**Chưa xử lý.** Tab không có animation; chưa nhớ tab đã chọn giữa các lần khởi động. `ui-ai-tasks-paging-check` vẫn chờ check tự tạo ≥11 mục lịch sử giả.
+
 

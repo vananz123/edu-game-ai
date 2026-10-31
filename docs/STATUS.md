@@ -8,6 +8,7 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 ## Mục lục bàn giao
 
 ### 2026-10-31 — [docs/handoff/status/2026-10-31.md](handoff/status/2026-10-31.md)
+- Mục AI duy nhất, chia tab "AI local" / "AI cloud"; còn năm mục accordion (#158)
 - Trang Cài đặt là accordion sáu mục; sửa `ai:test-provider` đọc cache key rỗng (#157)
 - `ui-wizard-structure-check` xanh 14/14 nhờ guard setup onboarding (#156)
 - Nhãn "Cách chơi" (Cổ điển / Xây nhà) trên thẻ trò chơi (#155)
@@ -192,6 +193,27 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - Lịch sử trước 2026-10-19
 ## Bàn giao gần nhất
 
+## Handoff - Mục AI duy nhất với hai tab "AI local" / "AI cloud" (2026-10-31, DECISIONS #158)
+
+**Files changed.**
+- `src/renderer/pages/settings.ts`: `SETTINGS_SECTION_IDS` còn năm mục (`ai, teaching, interface, tasks, diagnostics`); hai section AI nhập thành `data-settings-card="ai"` tên **Nhà cung cấp AI**, mang `id="settingAiProviders"` + `data-ai-providers`. Thêm `SETTINGS_AI_TABS` + `settingsAiTabsHtml()` (`role="tablist"`/`role="tab"`/`div[data-ai-tabpanel][role="tabpanel"]`); header mang hai chip, một cho mỗi tab; tab cloud chỉ render `providers.filter(p => p.id !== 'local')`; câu dẫn đầu trang và hint của tab cloud nói rõ model tải ở tab local không có khoá API.
+- `src/renderer/shared.ts`: `state.settingsAiTab = 'local'`.
+- `src/renderer/features/settings.ts`: `wireSettingsAiTabs()` — đổi `aria-selected`/`tabIndex`/`hidden` tại chỗ, không re-render; ArrowLeft/ArrowRight đổi cả lựa chọn lẫn focus; `wireSettingsSections()` gọi ở cuối.
+- `src/renderer/styles/components.css`: `.settings-ai-tab` + gạch dưới theo `[aria-selected="true"]` (có bản `html[data-theme="dark"]`).
+- `tests/ui/ui-settings-sections-check.js` viết lại (22 check); `tests/ui/ui-ai-provider-settings-check.js` đổi assertion "every provider has a card" → "every key-based provider" (4 thẻ, không `local`); `tests/manual/verify-css.js` thêm expectation cho gạch dưới tab.
+- Docs: `docs/DECISIONS.md` (#158), `docs/STATUS.md`, `docs/handoff/status/2026-10-31.md` (chuyển bàn giao #155 vào lưu trữ).
+- Không đổi: schema `settings`, hợp đồng IPC, `readAiProviderPatches()`, registry 5 provider trong `src/services/ai/ai-providers.ts`.
+
+**Behavior.** Trang Cài đặt còn năm mục; mục đầu "Nhà cung cấp AI" gộp toàn bộ phần AI vào một thẻ, bên trong là hai tab: **AI local** (chọn model, trạng thái runtime, tùy chọn GPU, cấu hình máy) và **AI cloud** (Base URL / tên model / API key của các nhà cung cấp cần khoá). Thẻ "AI local (llama.cpp)" không còn nằm trong tab cloud vì đúng ra nó thuộc tab kia. Chuyển tab không làm mất chữ đang gõ chưa lưu, mục vẫn mở khi chuyển tab, tab vẫn chọn khi chuyển mục hoặc sau khi bấm "Lưu cài đặt". Bàn phím: chỉ tab đang chọn nằm trong tab order, phím mũi tên chuyển tab.
+
+**Commands run.** `npm run check` 0 · `node tests/run-unit.js` **68/68** · `npm run build` 0 · `npm run check:renderer-globals` 0 undefined (54/55 script, 766 hàm, 6.286 call site) · `npm run verify:css` **18/18** · Electron thật, mỗi check một profile sạch: `ui-settings-sections-check` **22/22**, `ui-ai-provider-settings-check` pass, `ui-ai-provider-key-check` pass, `ui-ai-provider-wizard-check` pass, `ui-ai-tasks-paging-check` vẫn đúng 6/8 như trước · ảnh 1366×768 ba trạng thái (tab local, tab cloud, năm mục gập).
+
+**Chưa xác minh.** Chưa có animation khi đổi tab; chưa nhớ tab đã chọn giữa các lần khởi động (chỉ trong một phiên). Chưa chạy installer đóng gói.
+
+**Next task.** Roadmap `Packaged check` (cần máy sạch); nếu tiếp tục tinh chỉnh trang Cài đặt thì cân nhắc chuyển cả năm mục sang tab thay vì accordion.
+
+---
+
 ## Handoff - Trang Cài đặt là accordion sáu mục + sửa `ai:test-provider` đọc cache key rỗng (2026-10-31, DECISIONS #157)
 
 **Files changed.**
@@ -228,24 +250,6 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 **Chưa xác minh.** `ui-draft-guard-check` cần một nhà cung cấp AI dùng được (model local hoặc API key) — không đưa key thật vào check. Chưa chạy toàn bộ bộ UI check bằng một lệnh; chưa chạy installer đóng gói.
 
 **Next task.** Roadmap `Packaged check` (cần máy sạch); nếu muốn `ui-draft-guard-check` xanh thì cần chốt cách cấp model cho check (ví dụ dựng một provider giả qua IPC như các check khác vẫn làm với `window.eduGame`).
-
----
-
-## Handoff - Nhãn "Cách chơi" trên thẻ trò chơi (2026-10-31, DECISIONS #155)
-
-**Files changed.**
-- `src/renderer/shared.ts` (`gameCard`): thêm `playMode` + `playModeChip` — chip đầu hàng chip cho template `quiz`: `🏗 Cách chơi: Xây nhà` (hổ phách, đậm) khi `gameSetup.gameplayMode === 'house'`, `🎯 Cách chơi: Cổ điển` (xanh nhạt) cho mọi quiz còn lại (vắng key = cổ điển, theo `editorGameplayMode`); mỗi chip có `data-play-mode` + `title` giải thích.
-- `tests/ui/ui-play-mode-card-check.js` (mới, 7 check): 4 game tổng hợp qua IPC thật (quiz house / quiz không đặt mode / quiz `'classic'` tường minh / matching), lọc thư viện về đúng fixture, đọc `data-play-mode` + chữ chip, kiểm matching không có chip và chip không thêm nút vào thẻ; dọn fixture cuối.
-- Docs: `docs/DECISIONS.md` (#155), `docs/STATUS.md`, `docs/handoff/status/2026-10-31.md` (chuyển bàn giao #152 vào lưu trữ).
-- Không đổi: dữ liệu lưu (`gameplayMode` có từ #140), editor, engine, IPC, markup/nút của thẻ.
-
-**Behavior.** Thẻ trò chơi quiz ở Thư viện (và mục "Trò chơi gần đây" ở Tổng quan, vì dùng chung `gameCard()`) hiện thêm một chip cách chơi ngay trước chip môn học, nên giáo viên biết game đang ở Cổ điển hay Xây nhà mà không phải mở editor. Bốn thể loại khác không có chip. Ảnh chụp 1920×1080 và 1366×768: chip nằm gọn một dòng cùng môn/lớp/số câu.
-
-**Commands run.** `npm run check` 0 · `npm run check:renderer-globals` 0 undefined (54/55 script, 762 hàm, 6.252 call site) · `npm run build` 0 · `node tests/run-unit.js` **68/68** · Electron thật, mỗi check một profile sạch: `ui-play-mode-card-check` **7/7**, `ui-library-paging-check` pass, `ui-card-menu-check` pass.
-
-**Chưa xác minh.** Chưa bấm tay trên profile nhiều game để cảm nhận chip khi hàng chip xuống hai dòng ở cửa sổ hẹp (đã xem ảnh 1366×768, vẫn một dòng). Chưa lọc/tìm theo cách chơi; chưa hiện cách chơi ngoài thẻ. Chưa chạy installer đóng gói.
-
-**Next task.** Roadmap `Packaged check` (cần máy sạch); các mục AI/giáo án chưa chốt thứ tự.
 
 
 

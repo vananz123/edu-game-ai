@@ -440,6 +440,40 @@ async function clearDiagnosticsUi() {
 }
 
 /**
+ * #158: the merged AI section switches between "AI local" and "AI cloud" with tabs.
+ *
+ * Same rule as the accordion: switching is a class toggle, never a re-render, because a
+ * key typed on the cloud tab and not yet saved must survive a look at the local tab.
+ * Only the selected tab stays in the tab order, so the arrow keys are the only way a
+ * keyboard user reaches the other label — they have to move focus, not just selection.
+ */
+function wireSettingsAiTabs() {
+  const tabs = $$('[data-ai-tab]');
+  if (!tabs.length) return;
+  const select = (tabId, focus) => {
+    tabs.forEach(tab => {
+      const on = tab.dataset.aiTab === tabId;
+      tab.setAttribute('aria-selected', on ? 'true' : 'false');
+      tab.tabIndex = on ? 0 : -1;
+      if (on && focus) tab.focus();
+    });
+    $$('[data-ai-tabpanel]').forEach(panel => {
+      panel.classList.toggle('hidden', panel.dataset.aiTabpanel !== tabId);
+    });
+    state.settingsAiTab = tabId;
+  };
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => select(tab.dataset.aiTab));
+    tab.addEventListener('keydown', event => {
+      const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+      if (!step) return;
+      event.preventDefault();
+      select(tabs[(tabs.indexOf(tab) + step + tabs.length) % tabs.length].dataset.aiTab, true);
+    });
+  });
+}
+
+/**
  * #157: opens/closes one Settings section without re-rendering. A re-render would
  * rebuild the form from `state.settings` and silently drop whatever the teacher typed
  * but has not saved yet (an API key, a base URL), so the panels are toggled in place
@@ -469,6 +503,7 @@ function wireSettingsSections() {
       setOpen(willOpen ? header.dataset.settingsSection : '');
     });
   });
+  wireSettingsAiTabs();
 }
 
 /** Called by the controller when the settings page is (re)wired. */

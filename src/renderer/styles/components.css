@@ -556,3 +556,16 @@ html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #4d5578; b
 .wizard-mode-card[aria-checked="true"] .wizard-mode-check{background:#6258e8;opacity:1}
 @media (max-width:760px){.wizard-mode-choice{grid-template-columns:1fr}}
 }
+
+/* === P158 - Settings: hai tab "AI local" / "AI cloud" trong một mục (2026-10-31) ===
+   Nổi bật theo [aria-selected] chứ không theo class: wireSettingsAiTabs() chỉ đổi thuộc
+   tính ARIA, nên không thể để lệch trạng thái giữa nhãn ARIA và giao diện. */
+@layer components {
+.settings-ai-tab{margin-bottom:-1px;padding:8px 13px;border:0;border-bottom:2px solid transparent;border-radius:8px 8px 0 0;background:transparent;font-size:12px;font-weight:750;color:#94a3b8;cursor:pointer;transition:color .15s,border-color .15s,background .15s}
+.settings-ai-tab:hover{color:#6366f1;background:#f8f7ff}
+.settings-ai-tab:focus-visible{outline:2px solid #6258e8;outline-offset:2px}
+.settings-ai-tab[aria-selected="true"]{color:#4f46e5;border-bottom-color:#6366f1}
+html[data-theme="dark"] .settings-ai-tab{color:#64748b}
+html[data-theme="dark"] .settings-ai-tab:hover{color:#a5b4fc;background:#1e2544}
+html[data-theme="dark"] .settings-ai-tab[aria-selected="true"]{color:#a5b4fc;border-bottom-color:#818cf8}
+}

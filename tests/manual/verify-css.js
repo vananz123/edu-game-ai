@@ -32,7 +32,10 @@ const expectations = [
   // on one row, pushed to opposite ends. Without `space-between` they stack and the
   // button loses its place at the right (DECISIONS #109).
   ['treasure header row splits left/right', /\.treasure-head-row\{[^}]*justify-content:space-between/],
-  ['treasure header row spans the stage', /\.treasure-head-row\{[^}]*align-self:stretch/]
+  ['treasure header row spans the stage', /\.treasure-head-row\{[^}]*align-self:stretch/],
+  // Settings AI tabs (#158): the only cue that a tab is selected is its underline, and
+  // it is keyed off the ARIA attribute the wiring sets — dropped, both tabs look equal.
+  ['AI tab underline follows aria-selected', /\.settings-ai-tab\[aria-selected=("?)true\1\]\{[^}]*border-bottom-color/]
 ];
 
 let failed = 0;
