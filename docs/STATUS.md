@@ -8,6 +8,7 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 ## Mục lục bàn giao
 
 ### 2026-10-31 — [docs/handoff/status/2026-10-31.md](handoff/status/2026-10-31.md)
+- Phân trang và xoá nhiều ở Thư viện trò chơi (#154)
 - Bốn yêu cầu #153: bỏ ảnh theo câu, nhãn "Đấu trường tri thức", ảnh thay nhãn xám, hạ HUD Xây nhà
 - Màn chơi đặt tên theo template, không theo panel còn sót (#152)
 - Sửa Phase B của ui-item-assets-editor-check đo đúng trang soạn thảo
@@ -188,6 +189,27 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - Lịch sử trước 2026-10-19
 ## Bàn giao gần nhất
 
+## Handoff - Phân trang và xoá nhiều ở Thư viện trò chơi (2026-10-31, DECISIONS #154)
+
+**Files changed.**
+- `src/renderer/pages/library.ts` (viết lại, 7 → ~75 dòng): `LIBRARY_PAGE_SIZE = 9` (ba hàng của lưới ba cột), `libraryCurrentPage`, `librarySelectedIds`, `libraryPagerHtml`, `librarySelectionBarHtml`, `libraryCardHtml` — thẻ game giữ nguyên `gameCard()`, chỉ bọc thêm `div` có ô tick + viền khi chọn.
+- `src/renderer/core/controller.ts`: `updateLibrarySelectionUi()`; action `library-page` / `library-select` / `library-clear-selection` / `library-delete-selected`; select-all chỉ tick thẻ đang render; gõ tìm kiếm hoặc đổi thể loại đưa về trang 1.
+- `src/preload.ts`: `deleteGames(ids)` → `library:delete-games`.
+- `src/main.ts`: handler `library:delete-games` — id chuỗi duy nhất, từ chối lô rỗng, tối đa 500; xoá mọi hàng trong một transaction rồi mới dọn ảnh tải lên (#124), trả `{ ok, deleted, missing }`.
+- `tests/ui/ui-library-paging-check.js` (mới, 12 check): 11 game tổng hợp qua IPC thật, lọc về đúng fixture (không bao giờ tick/xoá game sẵn có của giáo viên), kiểm 9 thẻ/trang, pager, chọn-tất-cả theo trang, lựa chọn sống qua trang, xoá đúng nhóm, game khác còn nguyên, IPC từ chối lô rỗng; dọn fixture cuối.
+- Docs: `docs/DECISIONS.md` (#154), `docs/STATUS.md`.
+- Không đổi: `library:delete-game` (xoá lẻ từ menu "•••"), `gameCard()`, markup thẻ, SQLite schema, `.egame`, trang chủ.
+
+**Behavior.** Thư viện trò chơi chia 9 game/trang có pager (Trước / số trang / Sau) và chỉ tick được thẻ đang hiện; đã tick thì viền tím, đếm "Đã chọn N trò chơi", lựa chọn giữ khi đổi trang. Nút "🗑 Xoá đã chọn" hỏi xác nhận kèm tối đa 5 tên, xoá đúng nhóm trong một transaction, dọn ảnh không còn ai dùng, bỏ chọn và ẩn pager khi còn một trang. Gõ tìm kiếm/đổi thể loại luôn quay về trang 1.
+
+**Commands run.** `npm run check` 0 · `npm run build` 0 · `npm run check:renderer-globals` 0 undefined (55 script, 6.194 call site) · `node tests/run-unit.js` **68/68** · Electron thật, mỗi check một instance sạch: `ui-library-paging-check` **12/12**, `ui-card-menu-check` pass, `ui-lessons-paging-check` **10/10**, `ui-results-paging-check` **11/11**.
+
+**Chưa xác minh.** Chưa bấm tay trên profile thật nhiều game để cảm nhận bố cục 9 thẻ/trang ở 1366×768; chưa có "chọn tất cả mọi trang" và chưa có hoàn tác (lời xác nhận đã ghi rõ không thể hoàn tác, nhắc xuất `.egame` trước). Chưa chạy installer đóng gói.
+
+**Next task.** Roadmap `Packaged check` (cần máy sạch); nếu phải sửa cả ba trang danh sách lần nữa thì gom pager thành helper dùng chung (giáo án / thư viện / lịch sử).
+
+---
+
 ## Handoff - Bốn yêu cầu #153: bỏ ảnh theo câu, nhãn "Đấu trường tri thức", ảnh thay nhãn xám, hạ HUD Xây nhà (2026-10-31, DECISIONS #153)
 
 **Files changed.**
@@ -229,24 +251,6 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 **Chưa xác minh.** Chưa mở app bằng mắt để xem lại đúng ảnh chụp của chủ dự án (kết luận dựa trên probe CDP + số đo). `ui-house-building-check` từng đỏ một lần ở assertion "showcase lấp kín sân khấu" (lệch 18px) khi chạy trên HEAD — đã đối chứng bằng stash: HEAD **84/84**, bản sửa cũng **84/84**, nên là flake có sẵn, không do #152. `ui-wizard-structure-check` (focus môi trường) và `ui-draft-guard-check` (thiếu model trên profile mới) vẫn đỏ do nguyên nhân có sẵn.
 
 **Next task.** Chốt có siết bố cục màn Xây nhà trước khi trả lời hay không (`.stage-kicker` nằm sát trái, cách xa câu hỏi căn giữa; 1920×1080 còn khoảng trống lớn bên phải) — đây là thay đổi thiết kế, chưa làm. Sau đó roadmap `Packaged check` (cần máy sạch).
-
----
-
-## Handoff - Sửa Phase B của ui-item-assets-editor-check đo đúng trang soạn thảo (2026-10-31, DECISIONS #151)
-
-**Files changed.**
-- `tests/ui/lib/screenshot-capture.js`: `assertLayout` thêm `pageMode` (trang cuộn dọc hợp lệ; vẫn bắt tràn ngang, hộp cuộn lồng và trang cao mà không cuộn được), `textScopeSelector` giới hạn mẫu font/clipping vào vùng đang kiểm; `measureLayout` nhận thêm scope và dùng `replaceAll` (placeholder xuất hiện hai lần trên một dòng).
-- `tests/ui/ui-item-assets-editor-check.js`: Phase B đóng setup onboarding của profile mới, assert `.editor-page` + `.editor-question`, fontFloor 9px, `pageMode`, scope `#pageContent`; hai check template đổi selector từ `#modalRoot` sang `#pageContent`; đóng editor sau khi đo.
-- Docs: `docs/DECISIONS.md` (#151), `docs/ROADMAP.md` (mục sau P5), `docs/STATUS.md`.
-- Không đổi: renderer/CSS/hợp đồng IPC, 5 assertion của surface checks, caller `measureLayout` 2 tham số (`ui-presentation-check`).
-
-**Behavior.** Chỉ test. Check trước đây đo trang trống (17/27, `minFont 0px`, `modalRoot` ngoài viewport) và hai check template đếm 0 vì editor rời modal từ #129; nay đo đúng editor mở trong `#pageContent` và đếm đúng input ở quiz/matching. Số đo thật: 1920×1080 doc 1495px, 1366×768 doc 1509px, font nhỏ nhất 9px (`span.tag`), 0 clipped, 0 tràn ngang, 0 hộp cuộn lồng, tài liệu cuộn được; ảnh `tests/ui/shots/item-assets-editor-{1920x1080,1366x768}.png`.
-
-**Commands run.** `node tests/run-unit.js` **68/68** · Electron thật, profile sạch: `CDP_PORT=9347 node tests/ui/ui-item-assets-editor-check.js` **29/29** · `CDP_PORT=9348 node tests/ui/ui-editor-art-check.js` **11/11** (regression cho rig dùng chung).
-
-**Chưa xác minh.** Mới chạy ở 1920×1080 và 1366×768 với một profile mới; chưa thử profile đã hoàn tất setup (nhánh `closeSetupWizard` là no-op, có vòng chờ overlay nên dự kiến vẫn đúng), chưa thử màn hình khác. `ui-wizard-structure-check` (13/14, focus môi trường) và `ui-draft-guard-check` (7/8, thiếu model) vẫn đỏ do nguyên nhân có sẵn.
-
-**Next task.** Chạy `ui-wizard-structure-check` trong cửa sổ có focus thật; sau đó roadmap `Packaged check` (cần máy sạch).
 
 
 

@@ -1813,6 +1813,33 @@ function registerIpc() {
     }
     return { ok: true };
   });
+  // #154: deleting one or many saved games from the library page. The rows go first,
+  // as one transaction, and the pictures are cleaned afterwards — so an image shared
+  // by two games deleted in the same batch is not kept just because the second row
+  // still looked like a reference while the first one was being cleaned.
+  ipcMain.handle('library:delete-games', async (_e, gameIds) => {
+    if (!sqlite) throw new Error('Cơ sở dữ liệu chưa sẵn sàng.');
+    const ids = Array.isArray(gameIds) ? [...new Set(gameIds.filter(value => typeof value === 'string' && value))] : [];
+    if (!ids.length) throw new Error('Chưa chọn trò chơi nào để xoá.');
+    if (ids.length > 500) throw new Error('Mỗi lần chỉ xoá tối đa 500 trò chơi.');
+    const removed: unknown[] = [];
+    // `better-sqlite3` requires the transaction body to be synchronous; the prepared
+    // statements are created inside so they are never shared with another call.
+    const deleted = sqlite.transaction((list: string[]) => {
+      let count = 0;
+      const select = sqlite.prepare('SELECT data_json FROM games WHERE id = ?');
+      const statement = sqlite.prepare('DELETE FROM games WHERE id = ?');
+      for (const value of list) {
+        const row = select.get(value);
+        if (!row) continue;
+        try { removed.push(JSON.parse(row.data_json)); } catch { /* a broken row has no pictures to clean */ }
+        count += Number(statement.run(value).changes || 0);
+      }
+      return count;
+    })(ids);
+    for (const game of removed) await removeUnusedCustomImages(game);
+    return { ok: deleted > 0, deleted, missing: ids.length - deleted };
+  });
   ipcMain.handle('library:save-session', async (_e, session) => upsertSessionRow(session || {}));
   // #123: deleting finished-play results from the "Lịch sử kết quả" page, one or many.
   ipcMain.handle('library:delete-sessions', async (_e, sessionIds) => {

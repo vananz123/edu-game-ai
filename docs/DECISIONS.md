@@ -414,3 +414,26 @@ Nguyên nhân gốc nằm ở chỗ editor render cả ba panel ẩn để thầ
 
 **Next.** Roadmap `Packaged check` (cần máy sạch); các mục AI/giáo án chưa chốt thứ tự.
 
+## #154 — Phân trang và xoá nhiều ở Thư viện trò chơi
+
+**Bối cảnh.** Trang Thư viện trò chơi render **toàn bộ** game đã lưu trong một lưới ba cột, không có phân trang; muốn dọn nhiều game thì phải mở menu "•••" của từng thẻ và xoá từng cái. Giáo án (#122) và Lịch sử kết quả (#123) đã có đúng mô hình "phân trang + tick nhiều + xoá một lần", nên trang thư viện được làm theo cùng khuôn thay vì phát minh cách khác.
+
+**Thay đổi.**
+- `src/renderer/pages/library.ts` (viết lại, 7 → ~75 dòng):
+  - `LIBRARY_PAGE_SIZE = 9` — lưới ba cột nên một trang là đúng **ba hàng thẻ**, cùng quy tắc "một trang vừa màn hình" như #122 (12 giáo án) và #123 (15 lượt).
+  - `libraryCurrentPage` (kẹp trang theo danh sách hiện tại), `librarySelectedIds` (bộ id đã tick, bỏ id không còn tồn tại), `libraryPagerHtml` (Trước / số trang / Sau + "Trang X/Y · N trò chơi · 9 mỗi trang"), `librarySelectionBarHtml` (chọn tất cả trang này, đếm, xoá, bỏ chọn).
+  - `libraryCardHtml` bọc `gameCard()` trong một `div` có ô tick ở góc phải-trên và viền `ring-2` khi được chọn. **Không sửa `gameCard()`**: trang chủ dùng chung hàm này và không cần affordance chọn.
+- `src/renderer/core/controller.ts`: `updateLibrarySelectionUi()` (cập nhật viền/thẻ/nút mà không render lại, giữ focus ô vừa bấm — cùng cách #122/#123); bốn action `library-page`, `library-select`, `library-clear-selection`, `library-delete-selected`; select-all `#librarySelectAll` chỉ tick thẻ đang render; gõ tìm kiếm hoặc đổi bộ lọc đều đưa về **trang 1**.
+- `src/preload.ts` + `src/main.ts`: IPC mới `library:delete-games` (`deleteGames(ids)`), đối xứng `library:delete-sessions` (#123). Kiểm tra: mảng id chuỗi duy nhất, từ chối rỗng, tối đa 500 mỗi lần; xoá **tất cả hàng trong một transaction** rồi mới dọn ảnh đã tải (#124) — dọn sau khi xoá hết để ảnh dùng chung bởi hai game bị xoá cùng lượt không bị giữ lại vì hàng kia còn "trông như" đang tham chiếu. Trả `{ ok, deleted, missing }`.
+- `tests/ui/ui-library-paging-check.js` (mới, 12 check): tạo 11 game tổng hợp qua IPC thật, lọc danh sách về đúng fixture đó (để check không bao giờ tick/xoá game sẵn có của giáo viên), rồi kiểm 9 thẻ/trang, pager, chọn tất cả chỉ tick trang đang xem, lựa chọn sống qua trang, xoá đúng nhóm đã chọn, game khác còn nguyên, pager biến mất khi còn một trang, IPC từ chối lô rỗng; dọn sạch fixture ở cuối.
+- `preload.ts` lặp literal kênh (file chạy sandbox, không import được) — đúng quy ước ghi trong chính file.
+
+**Kết quả.** `ui-library-paging-check` **12/12**. Log thật: "9 of 11 listed (12 in the library)" (profile mới đã có 1 game sẵn), "Trang 1/2 · 11 trò chơi · 9 mỗi trang", chọn-tất-cả 9/9, "Đã chọn 10 trò chơi" sau khi tick thêm 1 thẻ ở trang 2, xoá 10 → còn 1 probe và 2 game tổng cộng (1 sẵn có + 1 probe), lựa chọn reset. Regression: `ui-card-menu-check` pass, `ui-lessons-paging-check` và `ui-results-paging-check` pass.
+
+**Không đổi.** `library:delete-game` (xoá lẻ từ menu "•••") giữ nguyên; `gameCard()`, markup thẻ, IPC cũ, SQLite schema, đường `.egame` không đổi. Trang chủ vẫn hiện tối đa 6 game gần đây như trước.
+
+**Chưa xử lý.** Chưa có "chọn tất cả mọi trang" (chỉ chọn theo trang, giống #122/#123) và chưa có hoàn tác sau khi xoá — lời xác nhận đã ghi rõ không thể hoàn tác và nhắc xuất `.egame` trước.
+
+**Next.** Roadmap `Packaged check` (cần máy sạch); cân nhắc thống nhất ba trang danh sách (giáo án / thư viện / lịch sử) vào một helper phân trang dùng chung nếu lần sau phải sửa cả ba.
+
+

@@ -75,6 +75,33 @@ function updateLessonSelectionUi() {
 }
 
 /**
+ * #154: updates the game-library selection bar without re-rendering the grid, so
+ * the checkbox just clicked keeps focus (same approach as #122/#123).
+ */
+function updateLibrarySelectionUi() {
+  const selected = state.librarySelection instanceof Set ? state.librarySelection : new Set();
+  document.querySelectorAll('#pageContent [data-library-item]').forEach(card => {
+    const isSelected = selected.has(card.dataset.libraryItem);
+    card.classList.toggle('ring-2', isSelected);
+    card.classList.toggle('ring-[#6258e8]', isSelected);
+    if (isSelected) card.setAttribute('data-selected', 'true');
+    else card.removeAttribute('data-selected');
+  });
+  const count = document.querySelector('[data-library-selected-count]');
+  if (count) count.textContent = selected.size ? `Đã chọn ${selected.size} trò chơi` : 'Hoặc tick từng trò chơi để xoá nhiều cùng lúc';
+  const remove = document.querySelector('#libraryDeleteSelectedBtn');
+  if (remove) {
+    remove.disabled = selected.size === 0;
+    remove.textContent = selected.size ? `🗑 Xoá đã chọn (${selected.size})` : '🗑 Xoá đã chọn';
+  }
+  const clear = document.querySelector('#libraryClearSelectionBtn');
+  if (clear) clear.disabled = selected.size === 0;
+  const boxes = [...document.querySelectorAll('#pageContent [data-action="library-select"]')];
+  const all = document.querySelector('#librarySelectAll');
+  if (all) all.checked = boxes.length > 0 && boxes.every(box => box.checked);
+}
+
+/**
  * #123: updates the results selection bar without re-rendering the table, so the
  * checkbox just clicked keeps focus (same approach as #122 on the lesson page).
  */
@@ -127,6 +154,7 @@ function wirePage() {
       state.search = event.target.value;
       // Typing a filter always starts at the first page of the new result set.
       state.lessonPage = 0;
+      state.libraryPage = 0;
       const pos = event.target.selectionStart;
       render();
       const next = $(selector);
@@ -135,7 +163,22 @@ function wirePage() {
       next.setSelectionRange(pos, pos);
     });
   });
-  const filter = $('#templateFilter'); if (filter) filter.addEventListener('change', e => { state.filter = e.target.value; render(); });
+  const filter = $('#templateFilter'); if (filter) filter.addEventListener('change', e => { state.filter = e.target.value; state.libraryPage = 0; render(); });
+  // #154: "Chọn tất cả trang này" for the game library — only the rendered cards.
+  const librarySelectAll = $('#librarySelectAll');
+  if (librarySelectAll) {
+    librarySelectAll.addEventListener('change', () => {
+      if (!(state.librarySelection instanceof Set)) state.librarySelection = new Set();
+      document.querySelectorAll('#pageContent [data-action="library-select"]').forEach(box => {
+        const gameId = box.dataset.id;
+        if (!gameId) return;
+        box.checked = librarySelectAll.checked;
+        if (librarySelectAll.checked) state.librarySelection.add(gameId);
+        else state.librarySelection.delete(gameId);
+      });
+      updateLibrarySelectionUi();
+    });
+  }
   // #123: "Chọn tất cả trang này" for the results table — only the rendered rows.
   const sessionSelectAll = $('#sessionSelectAll');
   if (sessionSelectAll) {
@@ -307,6 +350,51 @@ async function handleAction(action, id, element) { try {
         await refreshProjectsPage();
         toast('Đã xoá dự án.');
       }
+    }
+    // #154: game library — paging and batch delete, mirroring #122 (lessons) and
+    // #123 (results). Selection lives in `state.librarySelection` (a Set of game
+    // ids), so it survives moving between pages.
+    if (action === 'library-page') {
+      const target = Number(element && element.dataset ? element.dataset.pageIndex : 0);
+      state.libraryPage = Number.isFinite(target) && target >= 0 ? Math.floor(target) : 0;
+      render();
+      return;
+    }
+    if (action === 'library-select') {
+      if (!(state.librarySelection instanceof Set)) state.librarySelection = new Set();
+      if (element && element.checked) state.librarySelection.add(id);
+      else state.librarySelection.delete(id);
+      // Re-render only the count and the buttons: a full render would rebuild the
+      // checkbox the teacher just clicked and lose keyboard focus.
+      updateLibrarySelectionUi();
+      return;
+    }
+    if (action === 'library-clear-selection') {
+      state.librarySelection = new Set();
+      render();
+      return;
+    }
+    if (action === 'library-delete-selected') {
+      const ids = state.librarySelection instanceof Set ? [...state.librarySelection] : [];
+      if (!ids.length) return;
+      const games = Array.isArray(state.db.games) ? state.db.games : [];
+      const names = ids.map(gameId => (games.find(game => game.id === gameId) || {}).title || 'trò chơi');
+      const preview = names.slice(0, 5).map(name => `• ${name}`).join('\n') + (names.length > 5 ? `\n• … và ${names.length - 5} trò chơi khác` : '');
+      // Deleting a saved game is irreversible and takes the pictures uploaded for it
+      // with it (#124), so the wording says both before anything is touched.
+      if (!confirm(`Xoá ${ids.length} trò chơi đã chọn khỏi máy?\n${preview}\nKhông thể hoàn tác — hãy xuất gói .egame trước nếu muốn giữ bản sao.`)) return;
+      try {
+        const result = await window.eduGame.deleteGames(ids);
+        state.librarySelection = new Set();
+        await refreshDb();
+        render();
+        const parts = [`Đã xoá ${result.deleted} trò chơi`];
+        if (result.missing) parts.push(`${result.missing} không còn tồn tại`);
+        toast(`${parts.join(', ')}.`);
+      } catch (error) {
+        toast(`Không xoá được trò chơi: ${(error && error.message) || 'lỗi không xác định'}`);
+      }
+      return;
     }
     // #122: lesson list paging and batch selection. Selection lives in
     // `state.lessonSelection` (a Set of ids), so it survives moving between pages.

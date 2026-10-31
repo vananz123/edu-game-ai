@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('eduGame', Object.freeze({
   getLibrary: () => ipcRenderer.invoke('library:get'),
   saveGame: game => ipcRenderer.invoke('library:save-game', game),
   deleteGame: id => ipcRenderer.invoke('library:delete-game', id),
+  deleteGames: gameIds => ipcRenderer.invoke('library:delete-games', gameIds),
   saveSession: session => ipcRenderer.invoke('library:save-session', session),
   deleteSessions: sessionIds => ipcRenderer.invoke('library:delete-sessions', sessionIds),
   saveLessonDocument: payload => ipcRenderer.invoke('lesson:save-document', payload),
