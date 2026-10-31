@@ -360,3 +360,27 @@ Lý do không gom đúng 5 tên trong roadmap: các khối game/kết quả nằ
 
 **Next.** (1) `ui-wizard-structure-check` trong cửa sổ có focus thật; (2) roadmap `Packaged check` (cần máy sạch).
 
+## #152 — Màn chơi đặt tên theo template, không theo panel còn sót
+
+**Bối cảnh.** Ảnh chụp chế độ trình chiếu của một game quiz đang chạy Xây nhà lại hiện badge đầu trang "GHÉP CẶP KIẾN THỨC". Probe CDP trên HEAD trước khi sửa cho thấy chuỗi nhân quả:
+1. game quiz mới lưu từ wizard **không** có panel nào (`matchingGame`/`treasureHunt`/`race`);
+2. mở trang soạn thảo rồi đóng: `editorPageState.game` đã mọc thêm cả ba panel (default của các panel ẩn);
+3. bấm Lưu: hàng trong kho có `matchingGame` với 2 cặp mặc định;
+4. chơi lại: `gameWorld()` trả `"matching"` → badge "GHÉP CẶP KIẾN THỨC" dù engine thật vẫn là quiz/house (engine chọn theo `template`).
+
+Nguyên nhân gốc nằm ở chỗ editor render cả ba panel ẩn để thầy cô đổi thể loại tại chỗ, nhưng gán default của panel **vào chính object game**, và `gameWorld()` suy thế giới từ sự tồn tại của `matchingGame` thay vì từ `template`.
+
+**Thay đổi.**
+- `src/renderer/features/editor/page.ts` (`wireEditorPage`): default của ba panel giữ trong biến cục bộ (`matchingPanel`, `treasurePanel`, `racePanel`), không gán ngược vào `game`; panel vẫn render đủ để đổi thể loại.
+- `src/renderer/features/games/result-screen.ts`: `gameWorld()` chỉ xét `template`; bỏ nhánh fallback theo `matchingGame` (chú thích ghi rõ payload sót không phải bằng chứng của engine).
+- `src/main.ts` (`library:save-game`): sao `stored`, xoá các panel không thuộc template **trước khi validate** (để validate của template sở hữu không thấy panel rỗng), rồi mới validate + upsert. Cách này cũng tự chữa các hàng đã lưu sai khi thầy cô lưu lại lần sau.
+- Tests: `tests/ui/ui-game-worlds-check.js` thêm 4 check #152 — lưu quiz có `matchingGame` rác thì hàng lưu sạch, chơi đúng `THỬ THÁCH KIẾN THỨC` + `data-game-world='quiz'`, mở editor không thêm key, lưu từ editor chỉ còn panel của template; đồng thời thêm guard đóng setup onboarding cho profile mới. `tests/ui/ui-house-building-check.js` thêm cùng guard (trước đó vỡ `null.click` vì overlay onboarding thay `#modalRoot`).
+
+**Kết quả.** `node tests/run-unit.js` **68/68** · `npm run check` 0 · `npm run build` 0 · `ui-game-worlds-check` **46/46** (trước 39/43) · `ui-house-building-check` **84/84** · `ui-item-assets-editor-check` **29/29** · `ui-race-editor-check` và `ui-editor-art-check` pass. Probe sau sửa: editor không thêm key, hàng lưu có `hasMatchingGame/hasTreasureHunt/hasRace = false`, `world: "quiz"`, `headerLabel: "THỬ THÁCH KIẾN THỨC"`.
+
+**Không đổi.** `playGame` vốn đã chọn engine theo `template`; không đổi DOM/CSS/hợp đồng IPC; không đụng engine matching/treasure/race; `normalizeGame` (đường `.egame`) giữ nguyên nên file cũ vẫn mở được.
+
+**Chưa xử lý.** Bố cục màn Xây nhà **trước khi trả lời** ở 1920×1080 còn khoảng trống lớn bên phải và `.stage-kicker` nằm sát trái, cách xa câu hỏi đang căn giữa; sau khi trả lời (`.is-house-showcase`) thì gọn và cân. Đây là thay đổi thiết kế nên chưa làm khi chưa chốt.
+
+**Next.** Chốt với chủ dự án xem có siết bố cục Xây nhà trước khi trả lời không; nếu không, quay lại roadmap `Packaged check` / các mục AI.
+

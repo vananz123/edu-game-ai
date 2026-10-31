@@ -8,6 +8,7 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 ## Mục lục bàn giao
 
 ### 2026-10-31 — [docs/handoff/status/2026-10-31.md](handoff/status/2026-10-31.md)
+- Màn chơi đặt tên theo template, không theo panel còn sót (#152)
 - Sửa Phase B của ui-item-assets-editor-check đo đúng trang soạn thảo
 - Tách game-editor + wizard/state theo khu vực
 - Tách app.css thành 13 file khu vực
@@ -186,6 +187,27 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - Lịch sử trước 2026-10-19
 ## Bàn giao gần nhất
 
+## Handoff - Màn chơi đặt tên theo template, không theo panel còn sót (2026-10-31, DECISIONS #152)
+
+**Files changed.**
+- `src/renderer/features/editor/page.ts` (`wireEditorPage`): default của ba panel ẩn (`matchingPanel`, `treasurePanel`, `racePanel`) giữ ở biến cục bộ, không gán ngược vào object game đang sửa.
+- `src/renderer/features/games/result-screen.ts`: `gameWorld()` chỉ suy thế giới từ `template`, bỏ nhánh fallback theo `matchingGame`.
+- `src/main.ts` (`library:save-game`): sao `stored`, xoá panel không thuộc template **trước** khi validate rồi mới upsert — vừa không lưu rác, vừa tự chữa hàng đã lưu sai khi lưu lại.
+- `tests/ui/ui-game-worlds-check.js`: thêm 4 check #152 (lưu quiz có `matchingGame` rác → hàng lưu sạch; chơi đúng "THỬ THÁCH KIẾN THỨC" + `data-game-world='quiz'`; mở editor không thêm key; lưu từ editor chỉ còn panel của template) và guard đóng setup onboarding cho profile mới.
+- `tests/ui/ui-house-building-check.js`: thêm cùng guard (trước đó vỡ `null.click` vì overlay onboarding thay `#modalRoot`).
+- Docs: `docs/DECISIONS.md` (#152), `docs/STATUS.md`.
+- Không đổi: DOM/CSS, hợp đồng IPC, engine matching/treasure/race, `normalizeGame` (đường `.egame`).
+
+**Behavior.** Badge thể loại ở đầu màn chơi và HUD giờ luôn khớp engine đang chạy (engine chọn theo `template`). Trước đây mở trang soạn thảo rồi lưu là đủ để mọi game quiz mọc thêm `matchingGame`/`treasureHunt`/`race` mặc định, và `gameWorld()` thấy `matchingGame` nên gọi game quiz là "GHÉP CẶP KIẾN THỨC". Nay editor vẫn hiện đủ ba panel để đổi thể loại tại chỗ nhưng default không ghi vào game; hàng cũ mang panel rác được dọn ngay lần lưu kế tiếp. Probe CDP sau sửa: mở editor không thêm key, hàng lưu `hasMatchingGame/hasTreasureHunt/hasRace = false`, `world: "quiz"`, `headerLabel: "THỬ THÁCH KIẾN THỨC"`.
+
+**Commands run.** `npm run check` 0 · `node tests/run-unit.js` **68/68** · `npm run build` 0 · Electron thật qua CDP: `ui-game-worlds-check` **46/46** (trước 39/43), `ui-house-building-check` **84/84**, `ui-item-assets-editor-check` **29/29**, `ui-race-editor-check` pass, `ui-editor-art-check` pass.
+
+**Chưa xác minh.** Chưa mở app bằng mắt để xem lại đúng ảnh chụp của chủ dự án (kết luận dựa trên probe CDP + số đo). `ui-house-building-check` từng đỏ một lần ở assertion "showcase lấp kín sân khấu" (lệch 18px) khi chạy trên HEAD — đã đối chứng bằng stash: HEAD **84/84**, bản sửa cũng **84/84**, nên là flake có sẵn, không do #152. `ui-wizard-structure-check` (focus môi trường) và `ui-draft-guard-check` (thiếu model trên profile mới) vẫn đỏ do nguyên nhân có sẵn.
+
+**Next task.** Chốt có siết bố cục màn Xây nhà trước khi trả lời hay không (`.stage-kicker` nằm sát trái, cách xa câu hỏi căn giữa; 1920×1080 còn khoảng trống lớn bên phải) — đây là thay đổi thiết kế, chưa làm. Sau đó roadmap `Packaged check` (cần máy sạch).
+
+---
+
 ## Handoff - Sửa Phase B của ui-item-assets-editor-check đo đúng trang soạn thảo (2026-10-31, DECISIONS #151)
 
 **Files changed.**
@@ -224,31 +246,5 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 **Next task.** Roadmap còn `Packaged check` (cần môi trường cài sạch) và các mục AI/giáo án — chưa chốt thứ tự. Việc nhỏ nên làm trước khi chạy lại bộ UI: cập nhật Phase B của `ui-item-assets-editor-check` sang `.editor-page` để check này hết đỏ giả.
 
----
-
-## Handoff - Nhóm src/services theo lesson/ai/game/storage/input (2026-10-31, DECISIONS #148)
-
-**Files changed.**
-- `src/services/`: **35 file chuyển bằng `git mv`** (giữ lịch sử), nội dung từng file nguyên văn — chỉ đổi các dòng `import`/`require`/`import()`. Không còn file `.ts` nào ở cấp `src/services/`:
-  - `lesson/` (14): `lesson-contracts`, `lesson-prompts`, `lesson-chunker`, `lesson-retrieval`, `lesson-preprocess`, `lesson-structure`, `lesson-selection`, `lesson-quality`, `lesson-cache`, `lesson-workflow`, `lesson-projects`, `lesson-item-repair`, `lesson-normalize`, `item-capacity`.
-  - `ai/` (5): `ai-transport`, `ai-providers`, `ai-tasks`, `ai-log`, `opencode-zen`.
-  - `game/` (9): `game-schema`-nhóm 5 thể loại (`game-validation`, `game-normalize`, `game-project-adapter`), `game-package` (`.egame`), `draft-convert`, `game-type-rules`, `game-recommender`, `ai-game-design`.
-  - `storage/` (2): `lesson-store` (SQLite + file giáo án), `custom-illustration`.
-  - `input/` (5): `input-classifier`, `input-kind`-nhóm (`sanitize`/`question-import`/`question-compatibility`/`question-text`).
-- `src/main.ts`, `src/shared/types.ts`: chỉ đổi specifier (require tĩnh và `import(...)` trong type).
-- 5 file renderer chỉ đổi **chú thích** trỏ đường dẫn mới: `features/game-generation.ts`, `features/wizard/{state,step-input,step-structure}.ts`, `shared.ts`.
-- `tests/unit/*.test.ts` **37 file**: chỉ đổi specifier import; riêng `lesson-store.test.ts` sửa thêm một assertion phân trang **hỏng sẵn** (xem bên dưới).
-- Docs: `docs/DECISIONS.md` (#148), `docs/ROADMAP.md` (P3 xong, P4 kế tiếp), `docs/PROJECT_MAP.md` (cây services + 7 dòng bảng "sửa gì mở đâu"), `docs/AGENT_HANDOFF.md`.
-- Không đổi: hợp đồng IPC/preload, `src/index.html`, CSS, `src/game-engine`, `three-game-interaction`, wizard/editor logic, LAN/presentation/SQLite/`.egame`, tên và tham số hàm.
-
-**Behavior.** Không đổi hành vi. Codemod resolve specifier theo vị trí cũ của file đang sửa (kể cả file đã `git mv`) rồi viết lại tương đối theo vị trí mới — **400 specifier, 0 không giải được**; giữ nguyên kiểu không có đuôi `.ts` như trước. Chỉ di chuyển + sửa import, đúng phạm vi P3 (không đụng hợp đồng IPC), nên app chạy y như trước; cây `src/services/` giờ chia theo khu vực, mở đúng thư mục là thấy hết file liên quan.
-
-**Commands run.** `npm run check` 0 · `npm run build` 0 (chỉ cảnh báo EPERM khi dọn `dist/server/index.js` do app đang chạy) · `node tests/run-unit.js` **68/68** · `npm run test:native` **1/1** · `npm run check:renderer-globals` 0 undefined (44/45 script, 756 hàm, 6192 call site) · `npm run verify:css` **17/17**. Electron thật qua CDP: app khởi động được với require mới ở main process; `ui-input-routing-check` **52/52**, `ui-lessons-paging-check` toàn bộ pass.
-
-**Sửa một test hỏng sẵn.** `tests/unit/lesson-store.test.ts` (mục #121) đọc 3 trang ở offset 0/10/30 nhưng assert hợp của chúng có 36 dòng — thực tế chỉ lấy 26 (thiếu trang offset 20). Test này chưa từng chạy vì `npm test` loại `lesson-store` (better-sqlite3 build cho ABI Electron, phải chạy `npm run test:native`). Thêm `thirdPage` offset 20 và đưa vào `seen`; không đổi logic store.
-
-**Chưa xác minh.** Chưa bấm tay trọn một luồng giáo án → game sau khi đổi cây (mới chạy check CDP + unit). `dist/src/services/` còn bản `.js` phẳng cũ do `clean` bị EPERM khi app đang mở; không file nào import đường dẫn cũ (đã kiểm `dist/src/main.js`), sẽ tự mất khi build sạch lúc app đóng. `ui-classifier-outline-check` **14/15** — assertion chờ nhánh MiniLM, máy này thiếu model nên rơi vào fallback (lỗi môi trường, không liên quan P3). `ui-ai-tasks-paging-check` **6/8** — profile mới chỉ có 1 trang lịch sử, check giả định sẵn ≥11 tác vụ; phân trang đã được kiểm bằng `test:native`. `ui-item-assets-editor-check` không dùng được làm bằng chứng ở đây (chụp màn hình treo khi cửa sổ bị che, xem #144).
-
-**Next task.** P4 — tách `src/renderer/styles/app.css` theo khu vực (base / components / games / results / responsive), giữ `verify:css` **17/17**; sau đó P5 (các file lớn còn lại) chỉ khi P4 ổn định.
 
 

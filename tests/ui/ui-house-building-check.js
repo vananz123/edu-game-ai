@@ -225,6 +225,17 @@ const byLabel = (snaps, label) => snaps.find(s => s.label === label) || {};
     width: 1600, height: 1000, deviceScaleFactor: 1, mobile: false
   }).catch(() => { });
 
+  // A fresh profile opens the setup onboarding into #modalRoot a moment after the
+  // window loads. It replaces the play surface this check steps through, so wait
+  // for it and dismiss it before the first game.
+  await evaluate(`(async () => {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    for (let i = 0; i < 40; i++) { if (document.querySelector('#modalRoot .setup-fullscreen')) break; await sleep(100); }
+    if (typeof closeSetupWizard === 'function') closeSetupWizard('close');
+    await sleep(250);
+    return true;
+  })()`);
+
   // -------------------------------------------------- House shape (cubes) ----
   console.log('\n=== house shape ===');
   const shape = await evaluate(`(() => {

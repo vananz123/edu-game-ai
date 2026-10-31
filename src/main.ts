@@ -1782,12 +1782,22 @@ function registerIpc() {
   ipcMain.handle('library:get', async () => readDb());
   ipcMain.handle('library:save-game', async (_e, game) => {
     if (!game || typeof game.title !== 'string' || !Array.isArray(game.questions)) throw new Error('Dữ liệu trò chơi không hợp lệ.');
-    validateScenarioGame(game);
-    validateMatchingGame(game);
-    validateTreasureHuntGame(game);
-    validateRaceGame(game);
+    // One panel per template (#152). The editor renders all three hidden panels so
+    // the teacher can switch genre on the page, and their defaults used to be
+    // written onto the game and saved with it — a quiz/house game then arrived at
+    // the play surface carrying a matching board. Strip before validating: the
+    // panels this template does not own are not part of the game, and dropping
+    // them also heals rows saved before the fix.
+    const stored = { ...game };
+    if (stored.template !== 'matching') delete stored.matchingGame;
+    if (stored.template !== 'treasure-hunt') delete stored.treasureHunt;
+    if (stored.template !== 'race') delete stored.race;
+    validateScenarioGame(stored);
+    validateMatchingGame(stored);
+    validateTreasureHuntGame(stored);
+    validateRaceGame(stored);
     const now = new Date().toISOString();
-    const normalized = { ...game, id: game.id || id('game'), updatedAt: now, createdAt: game.createdAt || now };
+    const normalized = { ...stored, id: stored.id || id('game'), updatedAt: now, createdAt: stored.createdAt || now };
     upsertGameRow(normalized);
     return normalized;
   });

@@ -369,14 +369,21 @@ const GAME_WORLDS = {
     treasure: { label: 'HÀNH TRÌNH KHÁM PHÁ', symbol: '⌖', kicker: 'Bản đồ nhà thám hiểm' },
     race: { label: 'ĐƯỜNG ĐUA TRI THỨC', symbol: '⏱', kicker: 'Đường đua về đích' }
 };
-/** World for the current game, by template (the engine actually playing). */
+/**
+ * World for the current game, by template (the engine actually playing).
+ *
+ * Template only: a leftover `matchingGame` payload is not evidence of the matching
+ * engine. Older editor saves wrote every panel's defaults onto every game, so a
+ * quiz/house game carried a matching board and the header badge named the wrong
+ * genre (#152).
+ */
 function gameWorld() {
     const template = String(state.currentGame && state.currentGame.template || '');
     if (template === 'treasure-hunt')
         return 'treasure';
     if (template === 'race')
         return 'race';
-    if (template === 'matching' || state.currentGame && state.currentGame.matchingGame)
+    if (template === 'matching')
         return 'matching';
     if (template === 'scenario')
         return 'scenario';

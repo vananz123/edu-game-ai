@@ -103,6 +103,16 @@ const GAMES = [
   const { ws, evaluate } = await connect();
   const seen = [];
 
+  // A fresh profile opens the setup onboarding into #modalRoot a moment after the
+  // window loads; it would replace the first play surface this check measures.
+  await evaluate(`(async () => {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    for (let i = 0; i < 40; i++) { if (document.querySelector('#modalRoot .setup-fullscreen')) break; await sleep(100); }
+    if (typeof closeSetupWizard === 'function') closeSetupWizard('close');
+    await sleep(250);
+    return true;
+  })()`);
+
   for (const game of GAMES) {
     const probe = await evaluate(`(async () => {
       const game = ${JSON.stringify(game.make())};
@@ -187,6 +197,57 @@ const GAMES = [
     );
     seen.push(probe);
   }
+
+  // ---- one panel per template (#152) ------------------------------------
+  // The editor renders the matching/treasure/race panels for every game so the
+  // teacher can switch genre in place. Their defaults used to be written onto the
+  // game object and saved with it, so a quiz game reached the play surface with a
+  // matching board attached and the header badge named the wrong genre. Both
+  // halves are asserted: the template decides the world, and the store keeps only
+  // the panel that template owns.
+  const panels = await evaluate(`(async () => {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    for (let i = 0; i < 40; i++) { if (document.querySelector('#modalRoot .setup-fullscreen')) break; await sleep(100); }
+    if (typeof closeSetupWizard === 'function') closeSetupWizard('close');
+    await sleep(200);
+    const out = {};
+    const quiz = ${JSON.stringify(quizGame())};
+    quiz.title = 'UI world stale panel';
+    quiz.gameSetup = Object.assign({}, quiz.gameSetup, { gameplayMode: 'house' });
+    quiz.matchingGame = { mode: 'columns', pairs: [{ id: 'p1', left: 'L1', right: 'R1' }, { id: 'p2', left: 'L2', right: 'R2' }] };
+    const saved = await window.eduGame.saveGame(quiz);
+    out.savedKeys = Object.keys(saved);
+    out.savedHasMatching = 'matchingGame' in saved;
+    document.querySelector('[data-play-close]')?.click();
+    await sleep(200);
+    // Play the polluted object itself: a row written before the fix must still be
+    // labelled by its template.
+    playGame(quiz);
+    await sleep(700);
+    out.header = document.querySelector('.play-head-world') ? document.querySelector('.play-head-world').textContent.trim() : '';
+    out.world = document.querySelector('.game-stage') ? document.querySelector('.game-stage').getAttribute('data-game-world') : '';
+    document.querySelector('[data-play-close]')?.click();
+    await sleep(200);
+    document.querySelector('.nav-item[data-page="library"]')?.click();
+    await refreshDb();
+    await sleep(250);
+    // The clean row the store returned: opening it must not grow new panel keys.
+    openEditor(JSON.parse(JSON.stringify(saved)), true, 'check');
+    await sleep(400);
+    out.editorKeys = Object.keys(editorPageState.game);
+    document.getElementById('saveGameBtn')?.click();
+    await sleep(1200);
+    const lib = await window.eduGame.getLibrary();
+    const stored = (lib.games || []).find(g => g.title === 'UI world stale panel');
+    out.storedHasMatching = stored ? 'matchingGame' in stored : null;
+    out.storedHasTreasure = stored ? 'treasureHunt' in stored : null;
+    out.storedHasRace = stored ? 'race' in stored : null;
+    return out;
+  })()`);
+  check('a stray panel does not change the play world', panels.world === 'quiz' && /THỬ THÁCH KIẾN THỨC/.test(panels.header), JSON.stringify(panels));
+  check('saving drops the panels the template does not own', panels.savedHasMatching === false, JSON.stringify(panels.savedKeys));
+  check('opening the editor adds no panel keys', !panels.editorKeys.includes('matchingGame') && !panels.editorKeys.includes('treasureHunt') && !panels.editorKeys.includes('race'), JSON.stringify(panels.editorKeys));
+  check('an editor save stores only the template panel', panels.storedHasMatching === false && panels.storedHasTreasure === false && panels.storedHasRace === false, JSON.stringify({ matching: panels.storedHasMatching, treasure: panels.storedHasTreasure, race: panels.storedHasRace }));
 
   // Different worlds must actually look different: no two stages share a
   // background, and each panel washes the header with its own colour.

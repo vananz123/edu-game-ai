@@ -214,16 +214,21 @@ $('#importQuestionsBtn', root).addEventListener('click', async () => {
   }
 });  $('#addQuestionBtn', root).addEventListener('click', () => { const i = $$('.editor-question', $('#editorQuestions', root) || root).length; const type=$('#editTemplate',root).value==='scenario'?'scenario':'multiple-choice'; const existing=currentEditorQuestions(root); $('#editorQuestions', root).insertAdjacentHTML('beforeend', questionEditor({id:newQuestionId(),type,prompt:type==='scenario'?'Tình huống mới':'Câu hỏi mới',options:[{id:'a',text:'Phương án A'},{id:'b',text:'Phương án B'},{id:'c',text:'Phương án C'}],correctOptionId:'a',explanation:'',points:100},i,existing)); refreshScenarioBranches(root); });  $('#saveGameBtn', root).addEventListener('click', () => saveEditedGame(game, false));  $('#saveExportBtn', root).addEventListener('click', () => saveEditedGame(game, true));
   $('#editTemplate', root).addEventListener('change', () => toggleEditorSections(root));
-  if (!game.matchingGame) game.matchingGame = defaultMatchingGame();
-  if (!game.treasureHunt) game.treasureHunt = defaultTreasureHunt();
-  if (!game.race) game.race = defaultRaceData();
+  // The three hidden panels exist so the teacher can switch template on this page,
+  // but their defaults belong to the panel, not to the game: writing them onto the
+  // edited object made `saveEditedGame` persist a full matching/treasure/race
+  // payload on every quiz game, and the play surface then named the wrong world
+  // (#152). Keep the fallbacks local.
+  const matchingPanel = game.matchingGame || defaultMatchingGame();
+  const treasurePanel = game.treasureHunt || defaultTreasureHunt();
+  const racePanel = game.race || defaultRaceData();
   // #129/#130: the hidden template editors (ghép cặp / kho báu / đường đua) append to
   // the page body that replaced `.modal-body`; guarding keeps a later class rename from
   // throwing here and killing the whole editor page.
   const editorBody = $('.editor-page-body', root) || $('.modal-body', root);
   if (editorBody) {
     editorBody.insertAdjacentHTML('beforeend',
-      matchingEditorHtml(game.matchingGame) + treasureEditorHtml(game.treasureHunt) + raceEditorHtml(game.race));
+      matchingEditorHtml(matchingPanel) + treasureEditorHtml(treasurePanel) + raceEditorHtml(racePanel));
     // #131: these panels are inserted *after* the editor page was wired, so their picture
     // controls (race questions and treasure stages) had no listeners and the upload
     // button did nothing. Bind them now that they are in the DOM.
