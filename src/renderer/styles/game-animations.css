@@ -1,0 +1,336 @@
+/* game-animations.css — Chuyển động 5 trò chơi: thanh lượt đội, thẻ matching/memory, phân loại, cuộn stage. — tách từ app.css, giữ nguyên thứ tự (DECISIONS #149). */
+/* ============================================================
+   Enhanced Gameplay UI & Animations for 5 Educational Games
+   - Team competition & turn indicator
+   - Matching cards & 3D Memory flips
+   - Categorize tokens & baskets
+   - Dynamic motion & answer celebration/shake
+   ============================================================ */
+
+/* --- Motion keyframes for educational gameplay --- */
+@keyframes answer-celebrate {
+  0% { transform: scale(0.98); }
+  50% { transform: scale(1.025); }
+  100% { transform: scale(1); }
+}
+@keyframes answer-shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+@keyframes feedback-pop {
+  0% { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes memory-flip {
+  0% { transform: rotateY(90deg) scale(0.92); opacity: 0.6; }
+  100% { transform: rotateY(0deg) scale(1); opacity: 1; }
+}
+
+.modal[data-player-theme] .answer-option.correct {
+  animation: answer-celebrate 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.modal[data-player-theme] .answer-option.wrong {
+  animation: answer-shake 0.4s ease-in-out;
+}
+.modal[data-player-theme] .feedback {
+  animation: feedback-pop 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.modal[data-player-theme] .answer-option:hover:not(:disabled) .letter {
+  transform: scale(1.08);
+}
+.modal[data-player-theme] .answer-option .letter {
+  transition: transform 0.15s ease;
+}
+
+/* --- Gamified team turn bar on play surface --- */
+.modal[data-player-theme] .team-turn-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 10px 0 16px;
+  padding: 10px 16px;
+  border: 1px solid rgba(139, 130, 255, 0.28);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(32, 38, 68, 0.95), rgba(20, 25, 47, 0.95));
+  color: #e2e7f8;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  flex-shrink: 0;
+}
+.modal[data-player-theme] .team-turn-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: clamp(13px, 1.1vw, 15px);
+  color: #f0f3ff;
+}
+.modal[data-player-theme] .team-score-list {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.modal[data-player-theme] .team-score-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: #192038;
+  border: 1px solid #333c62;
+  color: #cad1ea;
+  font-size: 12px;
+  font-weight: 650;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.modal[data-player-theme] .team-score-chip.is-active {
+  background: linear-gradient(135deg, #373373, #232252);
+  border-color: #8b82ff;
+  color: #ffffff;
+  box-shadow: 0 0 14px rgba(139, 130, 255, 0.4);
+  transform: translateY(-1px);
+}
+.modal[data-player-theme] .team-score-chip b {
+  color: #ffd977;
+  font-size: 13px;
+  font-weight: 800;
+}
+.modal[data-player-theme] .team-turn-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: #aeb6d5;
+}
+.modal[data-player-theme] .team-turn-select select {
+  background: #232a48;
+  border: 1px solid #3e4873;
+  color: #f1f4ff;
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  outline: none;
+  cursor: pointer;
+}
+.modal[data-player-theme] .team-turn-select select:hover { border-color: #8b82ff; }
+html[data-fullscreen="1"] .modal[data-player-theme] .team-turn-bar {
+  padding: clamp(10px, 1.4vh, 16px) clamp(16px, 1.8vw, 24px);
+  margin-bottom: clamp(10px, 1.5vh, 20px);
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .team-turn-summary {
+  font-size: clamp(14px, 1.3vw, 17px);
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .team-score-chip {
+  padding: clamp(6px, 0.8vh, 9px) clamp(12px, 1vw, 16px);
+  font-size: clamp(12px, 1.1vw, 15px);
+}
+
+/* --- Matching, Memory, and Categorize play styles --- */
+.modal[data-player-theme] .matching-board {
+  max-width: 1040px;
+  margin: 16px auto 0;
+  gap: clamp(14px, 1.8vw, 24px);
+  width: 100%;
+}
+.modal[data-player-theme] .match-card {
+  padding: clamp(12px, 1.4vh, 18px) clamp(16px, 1.5vw, 22px);
+  border: 2px solid #394266;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #212848 0%, #19203c 100%);
+  color: #f1f4ff;
+  font-size: clamp(14px, 1.25vw, 18px);
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  transition: transform 0.15s, border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+.modal[data-player-theme] .match-card:hover:not(:disabled) {
+  transform: translateY(-2px);
+  border-color: var(--world-card-hover-border, #8b82ff);
+  background: var(--world-card-hover-bg, linear-gradient(180deg, #2a335a 0%, #212848 100%));
+  box-shadow: 0 8px 20px rgba(109, 99, 255, 0.28);
+}
+.modal[data-player-theme] .match-card.selected {
+  border-color: var(--world-card-selected-border, #8b82ff);
+  background: var(--world-card-selected-bg, linear-gradient(180deg, #323b6b 0%, #252d54 100%));
+  box-shadow: 0 0 0 2px var(--world-focus-soft, rgba(139, 130, 255, 0.4)), 0 8px 24px rgba(109, 99, 255, 0.35);
+  transform: scale(1.02);
+}
+.modal[data-player-theme] .match-card.matched {
+  background: linear-gradient(180deg, #133a32 0%, #0e2a24 100%);
+  border-color: #2f9e80;
+  opacity: 0.65;
+  box-shadow: none;
+  cursor: default;
+  transform: none;
+}
+.modal[data-player-theme] .match-card.wrong {
+  animation: answer-shake 0.4s ease-in-out;
+}
+.modal[data-player-theme] .memory-grid {
+  max-width: 960px;
+  margin: 16px auto 0;
+  gap: clamp(10px, 1.3vw, 18px);
+  width: 100%;
+}
+.modal[data-player-theme] .memory-card {
+  min-height: clamp(80px, 12vh, 130px);
+  padding: 12px;
+  border: 2px solid #394266;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #1d2444 0%, #171c36 100%);
+  color: #f1f4ff;
+  font-size: clamp(15px, 1.35vw, 20px);
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.modal[data-player-theme] .memory-card:hover:not(:disabled) {
+  transform: translateY(-2px) scale(1.02);
+  border-color: #8b82ff;
+  box-shadow: 0 8px 22px rgba(109, 99, 255, 0.3);
+}
+.modal[data-player-theme] .memory-card.flipped {
+  animation: memory-flip 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  background: var(--world-card-selected-bg, linear-gradient(180deg, #2b3360 0%, #202648 100%));
+  border-color: var(--world-card-selected-border, #8b82ff);
+}
+.modal[data-player-theme] .memory-card .memory-face {
+  font-size: clamp(20px, 2.5vw, 32px);
+}
+.modal[data-player-theme] .category-cards {
+  max-width: 1040px;
+  margin: 14px auto 0;
+  gap: 10px;
+}
+.modal[data-player-theme] .category-groups {
+  max-width: 1040px;
+  margin: 18px auto 0;
+  gap: 14px;
+}
+.modal[data-player-theme] .group-box {
+  border: 2px dashed #4f5b91;
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: rgba(22, 27, 54, 0.85);
+  color: #f1f4ff;
+  transition: border-color 0.15s, background 0.15s;
+}
+.modal[data-player-theme] .group-box:hover {
+  border-color: #8b82ff;
+  background: rgba(33, 40, 78, 0.9);
+}
+.modal[data-player-theme] .group-box strong {
+  font-size: clamp(14px, 1.2vw, 17px);
+  color: #ffd977;
+}
+.modal[data-player-theme] .group-chip {
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: #252e59;
+  border: 1px solid #3e497a;
+  color: #e2e7f8;
+  font-size: 13px;
+  font-weight: 600;
+}
+.modal[data-player-theme] .race-cell {
+  transition: transform 0.12s, box-shadow 0.15s;
+}
+.modal[data-player-theme] .race-cell:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+.modal[data-player-theme] .race-team-row {
+  border-radius: 10px;
+  transition: transform 0.12s, background 0.15s;
+}
+.modal[data-player-theme] .race-team-row.active {
+  box-shadow: 0 0 14px rgba(139, 130, 255, 0.35);
+}
+@media (prefers-reduced-motion: reduce) {
+  .modal[data-player-theme] .answer-option.correct,
+  .modal[data-player-theme] .answer-option.wrong,
+  .modal[data-player-theme] .feedback,
+  .modal[data-player-theme] .memory-card.flipped,
+  .modal[data-player-theme] .match-card.wrong {
+    animation: none !important;
+  }
+}
+
+
+/* ============================================================
+   Scrolling a long game stage (treasure hunt fullscreen, etc.).
+
+   The stage is a flex column that is pinned to `height:100%` so a short
+   question can be centred vertically. That is fine when the content fits,
+   but the treasure hunt is much taller (map + storyline + mission body +
+   actions), and with `overflow:hidden` the bottom half — including the
+   answer controls — was clipped, while `body{overflow:hidden}` in fullscreen
+   removed the page scrollbar as well. Nothing could be reached.
+
+   `min-height:0` lets the flex item shrink to its container so the overflow
+   becomes scrollable, and the stage itself becomes the scroll container.
+   ============================================================ */
+.modal[data-player-theme] .game-stage {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .game-stage {
+  border-radius: 0;
+}
+/* Keep the map pinned to the top of a scrolling stage so the teacher can
+   always see which mission the class is on. */
+.modal[data-player-theme] .treasure-map {
+  position: sticky;
+  top: calc(-1 * clamp(20px, 2.2vw, 32px));
+  z-index: 3;
+}
+/* `min-height: 190px` on `.treasure-map` is the base rule's decision for a long
+   journey (many nodes). Measured on the play surface at 1366x768 with a 1-stage
+   fixture: the box is 190px tall but its content -- head 38px + track 86px --
+   ends at y=288, i.e. **124px of real content and 66px of empty padding**. On a
+   768px board that empty band is the single largest block of wasted height
+   (`overBy` 139px, and `.stage-bottom` ends up overlaid on answers C/D).
+   The fix is to let the map be as tall as its content: `min-height: auto`.
+   Measured: overflow 139 -> 76 at 1366x768; at 1920x1080 the map shrinks
+   190 -> 150, which it has room for. The long-journey case is unaffected
+   because `auto` still grows to fit every node in the track.
+   BẪY: `min-height: auto` một mình vẫn cắt node. `.treasure-map` không phải flex
+   container nhưng các khối con (`head` 38px + `track` 86px) cộng với padding
+   vượt quá `min-height` và `overflow: hidden` cắt phần dưới của track — đo được
+   `scrollHeight 143` trong `clientHeight 120`. Vì vậy chiều cao được khai báo
+   là `auto` cho CẢ hai (`min-height` không còn chặn).
+   BẪY 2: đổi sang `overflow: visible` để "không bao giờ cắt node" thì nhãn dưới
+   node (`Trắc nghiệm`) lại **tràn ra ngoài đường viền** của bản đồ và đè lên
+   cột câu hỏi. `overflow: hidden` phải giữ nguyên; cách đúng là để hộp đủ cao
+   cho nội dung (`height: auto`), chứ không phải để nội dung chạy ra ngoài. */
+html[data-fullscreen="1"] .modal[data-player-theme] .treasure-map {
+  min-height: auto;
+  height: auto;
+  /* `.treasure-map` là flex item của `.game-stage` (flex column). `height: auto`
+     một mình để nó bị SHRINK khi stage thiếu chỗ — đo được hộp 122px cho nội
+     dung 143px, và `overflow: hidden` cắt mất nhãn dưới node. `flex-shrink: 0`
+     giữ hộp đúng bằng nội dung; phần thiếu chỗ phải do chính `.game-stage`
+     cuộn (`overflow: auto` đã có), không phải do bản đồ bị bóp. */
+  flex-shrink: 0;
+}
+/* A short projector board gets a compact map too. The map's own outer padding is
+   the cheapest height win -- but only 6px of it. Measured: trimming to 8/6
+   padding gave a 102px box for 138px of content that `overflow: hidden` then
+   CLIPPED (the track overflowed the map's bottom edge). The 190px → ~125px win
+   already comes from `min-height: auto`; this only shaves the margin. */
+@media (max-height: 800px) {
+  html[data-fullscreen="1"] .modal[data-player-theme] .treasure-map {
+    padding-top: 10px;
+    padding-bottom: 9px;
+    margin-bottom: 12px;
+  }
+}
+

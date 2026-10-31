@@ -8,7 +8,8 @@
   <!-- G5 (2026-10-19): app.css là stylesheet DUY NHẤT (Tailwind v4 + các rule
        component ported từ 5 file legacy đã xóa). Utility @layer utilities thắng
        @layer components; state class JS-toggle và hệ thống chưa migrate sống
-       trong components layer của app.css. -->
+       trong components layer. Từ DECISIONS #149 app.css chỉ là entry: nó @import
+       13 file khu vực trong renderer/styles/ theo thứ tự cascade. -->
   <link rel="stylesheet" href="renderer/styles/app.css">
 </head>
 <body>

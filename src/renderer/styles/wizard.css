@@ -1,0 +1,502 @@
+/* wizard.css — Wizard tạo từ giáo án: tiến trình AI, ảnh minh hoạ stage, cây cấu trúc bước 1. — tách từ app.css, giữ nguyên thứ tự (DECISIONS #149). */
+/* ---- Wizard AI progress: steps 2 and 5 (docs/DECISIONS.md #71, #75) ----
+   Both steps report real IPC stages, so the bar advances per stage. It is a
+   stage counter, not a time estimate: the width never claims more than the
+   stages already finished, and it stays at 0% until the first stage reports.
+   Steps 2 and 5 share these classes on purpose — one look for the same job. */
+.wizard-gen-progress{height:6px;border-radius:999px;background:#ececf6;overflow:hidden;margin-top:8px}
+.wizard-gen-progress-fill{height:100%;background:linear-gradient(90deg,var(--purple),#8a7dff);border-radius:999px;transition:width .3s ease-out}
+.wizard-gen-meta{display:flex;justify-content:space-between;gap:10px;font-size:10.5px;color:#717b90;margin-top:5px}
+.wizard-gen-meta strong{color:var(--purple);font-variant-numeric:tabular-nums}
+/* The spinner is a stroke-only ring so it inherits the text colour and needs
+   no image asset. Hidden from assistive tech: the stage text already says what
+   is running. */
+.wizard-gen-spinner{display:inline-block;width:11px;height:11px;vertical-align:-1px;margin-right:5px;animation:spin-slow 1.1s linear infinite}
+.wizard-gen-spinner circle{fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-dasharray:22 44}
+@media (prefers-reduced-motion: reduce){
+  .wizard-gen-progress-fill{transition:none}
+  .wizard-gen-spinner{animation:none;opacity:.75}
+}
+
+
+/* ---- Stage illustration (docs/DECISIONS.md #67, #70) ----
+   Sibling of `.stage-question`, inserted by game-illustration.ts for every
+   template. Height is a HARD ceiling, not a suggestion: the density checks
+   (#59) require question + answers to cover most of the stage, so the
+   illustration must give up height before they do.
+
+   #70: the artwork is now a layered 320x200 scene, not one icon. With
+   `width: auto` the box shrank to the height and drew the scene at ~150x94 -
+   the layers were there but unreadable. The box now takes the available width
+   and the scene keeps its own 16:10 ratio inside it.
+
+   TRAP: `width: min(320px, 46%)` with a smaller clamped `height` made the SVG
+   paint outside the box and cover the question and answers (caught by
+   screenshotting the real play surface, not by any assertion). `aspect-ratio`
+   + `max-width` lets the box shrink to whatever both constraints allow.
+
+   TRAP: do not cap the height below what a 320px-wide scene needs. The scene is
+   authored 16:10 with `preserveAspectRatio: meet`, so a 132px cap letterboxed a
+   320x102 slice of it - the ground band was clipped and the subject looked like
+   it was floating. Measured on the real play surface: stage overflow stayed 0
+   at 132/160/180/200px, so the height was never competing with the answers. The
+   cap is now 320/1.6 = 200px, i.e. the scene is never downscaled below its
+   authored size.
+
+   #89: the 320px ceiling is what held the scene at "card" size. A 320x200 SVG
+   scene is authored at 16px-icon scale, so up to 420px (2.1x) it still reads as
+   a picture rather than a scaled-up icon; above that the icon stroke thickens
+   faster than the layer detail and the scene looks blurry. 420 is therefore the
+   new ceiling, and the height follows from `aspect-ratio` (420 => 262px). */
+.modal[data-player-theme] .stage-illustration {
+  display: block;
+  aspect-ratio: 16 / 10;
+  width: min(420px, 46%);
+  max-width: min(420px, 46%);
+  max-height: none;
+  margin: 0 auto 10px;
+  border-radius: 18px;
+  overflow: hidden;
+  line-height: 0;
+  flex: 0 0 auto;
+  opacity: 0.96;
+}
+.modal[data-player-theme] .stage-illustration-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+/* Treasure storyline bubbles are centred inside `.stage-center` by the base
+   rule (`margin: 0 auto; max-width: 760px`). That is right for the one-column
+   layout, where they are the only thing on the line. Measured in the 2-column
+   layout at 1366x768: the text column is 1047px wide but each bubble is 221px,
+   centred, leaving ~830px of dead space beside two short sentences -- while the
+   answers below are pushed 76px past the bottom of the board. Left-aligning
+   them inside the text column costs no height and recovers the width. */
+html[data-fullscreen="1"] .modal[data-player-theme] .stage-col.is-main > .treasure-storyline {
+  margin-left: 0;
+  margin-right: 0;
+  max-width: 100%;
+}
+/* Bong bóng cốt truyện rộng 221px vì `.scenario-context` bên trong giữ
+   `max-width: 1000px` + `padding` của nó, nhưng ở cột hẹp thì bong bóng chỉ co
+   theo nội dung ngắn nhất. Cho bong bóng `flex: 1` để nó dùng hết bề rộng cột
+   thay vì để ~830px trống bên cạnh hai câu ngắn. */
+html[data-fullscreen="1"] .modal[data-player-theme] .stage-col.is-main > .treasure-storyline {
+  flex: 0 1 auto;
+  width: 100%;
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .stage-col.is-main > .treasure-storyline > .scenario-context {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Cột chữ "Tìm kho báu" là surface DÀY NHẤT của sản phẩm: 10 khối xếp dọc
+   (kicker 17 + 2 cốt truyện 46+46 + mô tả 13 + câu hỏi 59 + badge 23 + lưới
+   258 + hàng nút 42). Đo ở 1366x768 cột cần 531px trong khi `.stage-center`
+   chỉ còn 412px sau bản đồ ⇒ tràn 88px.
+   Hai phần thừa đã đo được và bỏ đi không mất thông tin:
+     1. `treasure-mission-badge` chồng lên đáy câu hỏi (badge y=502 nằm trong
+        khoảng câu hỏi 451–510) vì câu hỏi ở đây có `margin: 0` trong khi badge
+        dùng margin âm của bố cục 1 cột. Đệm đúng 6px cho thẳng hàng.
+     2. Hai dòng cốt truyện dùng `gap` 10px + bong bóng 18px padding; ở cột
+        rộng chúng chỉ cần một dòng mỗi câu, nhưng padding dọc vẫn lấy 46px.
+   Giữ nguyên mọi chữ trên màn: chỉ bỏ khoảng đệm dọc. */
+html[data-fullscreen="1"] .modal[data-player-theme] .stage-col.is-main > .treasure-mission-badge {
+  margin-top: 6px;
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .stage-col.is-main > .treasure-storyline > .scenario-context {
+  padding-top: 8px;
+  padding-bottom: 8px;
+  font-size: clamp(14px, 1.9vh, 19px);
+}
+/* 42px cuối cùng không phải `.stage-bottom` (hàng đó nằm NGOÀI cột chữ, là con
+   ruột của `.game-stage`) mà là `#treasureExtra` — hai nút phụ "Tìm vật phẩm ẩn"
+   và "Dùng gợi ý". Chúng là hành động tuỳ chọn, đặt cạnh nhau thay vì chồng
+   hai hàng, và không cần lề trên 10px vì đã có khoảng đệm của lưới đáp án.
+   Đây là 12px cuối của phần tràn ở 1366x768; không bỏ chữ nào. */
+html[data-fullscreen="1"] .modal[data-player-theme] .stage-col.is-main > #treasureExtra {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 0;
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .stage-col.is-main > #treasureExtra > .btn {
+  margin-top: 0;
+}
+
+/* Treasure stages already carry a map and a storyline above the question; a
+   second large block pushes the mission controls off a 720px stage.
+   #89: 240 -> 300 (windowed) with the same reasoning as the base rule: the
+   ceiling moved, the relative priority did not. */
+.modal[data-player-theme] .stage-illustration.is-treasure {
+  width: min(300px, 38%);
+  max-width: min(300px, 38%);
+  max-height: none;
+  margin-bottom: 6px;
+}
+/* The race turn panel is the densest surface in the product (turn bar, cards,
+   options, "no answer" button). Keep it small so nothing scrolls.
+   #89: 190 -> 260; it still stays the smallest scene in the product. */
+.modal[data-player-theme] .race-turn .stage-illustration.is-race {
+  width: min(260px, 30%);
+  max-width: min(260px, 30%);
+  max-height: none;
+  margin: 2px auto 4px;
+}
+/* Fullscreen is the surface teachers project: give the scene more room than
+   the windowed panel, but never a `height` on its own - with `aspect-ratio`
+   that produced a box the 16:10 scene could not fill, so the artwork was
+   letterboxed and the ground band looked clipped. Width only; height follows. */
+html[data-fullscreen="1"] .modal[data-player-theme] .stage-illustration {
+  width: min(420px, 46%);
+  max-width: min(420px, 46%);
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .stage-illustration.is-treasure {
+  width: min(340px, 32%);
+  max-width: min(340px, 32%);
+  max-height: none;
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .race-turn .stage-illustration.is-race {
+  width: min(280px, 24%);
+  max-width: min(280px, 24%);
+  max-height: none;
+}
+/* Short windows (1366x705 laptops teachers actually use). Previously the
+   illustration was removed outright at <=760px, which is why the very first
+   measurement of this surface reported a 150x94 frame: the scene was not
+   squashed, it was hidden. Scale it down instead - `aspect-ratio` keeps the
+   whole scene visible at any height, and the answer grid keeps its space.
+
+   DECISIONS #89: this is ALSO the one-column rule, because the 2-column layout
+   only starts at min-width 1180px. A 1366x768 projector therefore fell through
+   to `min(320px, 34%)` and drew the scene at 199x124 - smaller than before the
+   2-column work. The box now has BOTH caps: width (420px, 46% of the stage)
+   and HEIGHT via the `min()` list (46.4vh => 222px tall @768), so the scene
+   cannot grow into the answers. That is what the old `max-height: 200px`
+   protected; the height now comes from the winning `width`/`aspect-ratio` pair
+   instead of a separate `max-height` (see the aspect-ratio trap, DECISIONS #70). */
+@media (max-height: 760px) {
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-illustration {
+    width: min(420px, 46%, 46.4vh);
+    max-width: min(420px, 46%, 46.4vh);
+    max-height: none;
+    margin-bottom: 6px;
+  }
+}
+
+
+/* === Bố cục 2 cột cho .stage-center (ảnh minh hoạ cạnh câu hỏi) ===
+   Đo trên play surface thật (Phase B UI-PLAN-V2):
+     - 1366x768: `.game-stage` cần 750px, chỉ có 683px  -> tràn 67px, mọi đáp
+       án nằm dưới đáy màn hình.
+     - 1440x900: tràn 15px.
+   Nguyên nhân không phải "nội dung quá nhiều" mà là ảnh SVG 320x200 tiêu
+   200px của TRỤC KHAN HIẾM (chiều cao ~683px) trong khi TRỤC DƯ THỪA (chiều
+   rộng 1255px) gần như bỏ trống: `.stage-question` chỉ cần 4 dòng.
+   Đưa ảnh sang bên cạnh biến chi phí 200px dọc thành chi phí ngang.
+   Mô phỏng trong DOM thật trước khi viết rule này:
+     1366x768  tràn 67 -> 0   (cột chữ 987px)
+     1440x900  tràn 15 -> 0   (cột chữ 1058px)
+     1920x1080 tràn  0 -> 0   (cột chữ 1517px)
+
+   MẶC ĐỊNH LÀ 1 CỘT. Hai `.stage-col` chỉ nằm cạnh nhau khi container đủ
+   rộng; dưới ngưỡng đó chúng xếp dọc y như bố cục cũ, nên màn hình hẹp
+   không thay đổi gì. */
+
+/* Trong suốt với bố cục 1 cột: khối bọc không được đổi bất cứ thứ gì.
+   `display: contents` cho phép con của nó tiếp tục là flex-item của
+   `.stage-center` => bố cục cũ giữ nguyên từng pixel. */
+.stage-center > .stage-col {
+  display: contents;
+}
+
+@media (min-width: 1180px) {
+  /* Chỉ áp dụng khi trình chiếu: cửa sổ nhỏ trong app không phải mục tiêu
+     của bố cục máy chiếu. */
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-center {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    align-content: flex-start;
+    justify-content: center;
+    column-gap: clamp(18px, 2.2vw, 34px);
+    row-gap: clamp(10px, 1.4vh, 18px);
+  }
+  /* Container thật cho 2 cột: chỉ 2 phần tử, nên `row` cho kết quả xác định
+     (trước đây các phần tử văn bản là 5-11 flex-item riêng và `row` biến
+     chúng thành các CỘT hẹp cạnh nhau — câu hỏi bị bóp còn 174px, cao
+     1294px, tràn 684px. Đó là lý do phải bọc DOM thay vì chỉ sửa CSS). */
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-center > .stage-col {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    min-width: 0;
+  }
+  /* Cột ảnh: bề rộng px cố định, KHÔNG dùng %.
+     Bẫy: `.stage-illustration` gốc là `width: min(320px, 46%)` — 46% của
+     container. Trong một cột hẹp, phần trăm đó làm hộp co lại và cảnh
+     320x200 bị letterbox thành một vệt mảnh (đúng lỗi #70: cảnh vẽ ở
+     ~150x94). Vì vậy ở đây đặt px tuyệt đối và cho `flex: 0 0 auto`.
+     ĐO LƯỜNG (DECISIONS #89): khung cũ `clamp(200px, 16vw, 300px)` cho cảnh
+     chỉ 219x137 ở 1366x768 và 300x188 ở 1920x1080 — ngang một tấm thẻ, không
+     phải một bức tranh, dù cột chữ còn rất nhiều chỗ trống. Khung mới
+     `clamp(300px, 28vw, 440px)`: 383px @1366, 400px @1440, 440px @1920. */
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-center > .stage-col:not(.is-main) {
+    flex: 0 0 auto;
+    width: clamp(300px, 28vw, 440px);
+  }
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-col > .stage-illustration {
+    width: 100%;
+    max-width: 100%;
+    max-height: none;
+    margin: 0;
+  }
+  /* Treasure đã tốn chiều dọc cho bản đồ + cốt truyện phía trên, nên ảnh của
+     nó nhỏ hơn để nhường chỗ cho ĐÁP ÁN.
+     #89: 240px @1920 / 178px @1366 được nâng lên nhưng VẪN nhỏ hơn khung
+     thường, vì đây là cột duy nhất phải nhường chiều cao cho bản đồ. */
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-col:has(> .stage-illustration.is-treasure) {
+    width: clamp(240px, 22vw, 360px) !important;
+  }
+  /* Cột văn bản: chiếm phần còn lại, co giãn được. `min-width: 0` để nội dung
+     dài (chuỗi không khoảng trắng) không đẩy cột ra ngoài khung. */
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-center > .stage-col.is-main {
+    flex: 1 1 340px;
+    align-items: stretch;
+    min-height: 0;
+  }
+  /* Khoảng cách câu hỏi -> đáp án. Ở bố cục 1 cột khoảng cách này do
+     `margin: 14px auto 30px` của `.stage-question` tạo; ở bố cục 2 cột hai khối
+     là phần tử liền kề nên đo được **0px** và câu hỏi dính thẳng vào ô A/B
+     (thấy trên ảnh chụp 1366x768, y=337 cho cả hai).
+     BẪY: đừng đặt `row-gap` lên cả cột. "Tìm kho báu" có **10** phần tử con
+     (kicker, 2 cốt truyện, mô tả, câu hỏi, badge, #treasureMission, #treasureExtra,
+     #answerFeedback, #treasureActions) mà mỗi phần tử đã có `margin` riêng, nên
+     cộng thêm gap vào từng khe làm cột cao thêm ~125px: đo được tràn
+     60 → **168px** @1366x768 chỉ vì `row-gap: clamp(10px, 1.8vh, 22px)`.
+     Vì vậy chỉ khai gap ở ĐÚNG khe giữa hai khối lớn, qua `margin-top` của lưới
+     đáp án — cùng một giá trị cho mọi template, không nhân theo số phần tử. */
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-col.is-main > .answer-grid {
+    margin-top: clamp(10px, 1.8vh, 22px);
+  }
+  /* Lưới đáp án là nơi TIÊU THỤ phần chiều cao thừa của cột, thay vì để nó
+     thành dải trống dưới cùng.
+     Số đo trước khi sửa (app thật, fixture 4 đáp án):
+       - 1366x768: cột chữ cao 468px nhưng nội dung chỉ tới 611 trong khi
+         `.stage-center` cao 594 và khung chứa tới 737 => **149px chết**.
+       - 1920x1080: ô đáp án bị chặn ở đúng 150px (`16vh` + trần) trong khi
+         còn **224px** chiều cao chưa dùng.
+     `flex: 1 1 auto` cấp phần dư đó cho lưới, và `grid-auto-rows:
+     minmax(min-content, 1fr)` chia đều cho các hàng ô — sàn `min-content` giữ
+     nguyên quy tắc "dòng cuối không bao giờ bị cắt" đã ghi ở #59.
+     Nhưng phần dư này là CON TRĂNG: sau khi chọn đáp án, `#answerFeedback`
+     (71px @1366x768) + `.stage-bottom` (42px, có nút "Tiếp tục") xuất hiện và
+     không còn chỗ. Đo được cột chữ cao **774px** so với stage 662px khi lưới
+     vẫn giữ 258px. Vì vậy khi đã trả lời, lưới trả lại phần dư nó đang chiếm:
+     `:has()` chọn trạng thái "có phản hồi" mà không cần thêm class từ JS, và
+     `flex: 0 1 auto` + `grid-auto-rows: min-content` đưa các hàng về đúng nội
+     dung. `#answerFeedback` không rỗng và không có `.hidden`, nên `:not(:empty)`
+     là đủ phân biệt hai trạng thái (trước khi trả lời nó luôn rỗng). */
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-col.is-main > .answer-grid {
+    flex: 1 1 auto;
+    min-height: 0;
+    align-content: stretch;
+    grid-auto-rows: minmax(min-content, 1fr);
+  }
+  /* "Tìm kho báu" nạp đáp án qua `#treasureMission` chứ không qua `.answer-grid`
+     trực tiếp, nên lưới ở đó là CHÁU (`#treasureMission > .answer-grid`) — lưu ý
+     dấu `>`: selector anh-em ruột sẽ không khớp gì cả (đã đo: sửa xong tràn chỉ
+     giảm 88 → 87px, tức là gần như không có tác dụng).
+     Bản đồ + cốt truyện phía trên đã tốn chỗ, nên lưới ở đây KHÔNG nhận phần dư,
+     và sàn `12vh` của ô đáp án phải nhường — giống trạng thái đã-trả-lời của quiz. */
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-col.is-main > #treasureMission > .answer-grid {
+    flex: 0 1 auto;
+    grid-auto-rows: min-content;
+    margin-top: clamp(10px, 1.8vh, 22px);
+  }
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-col.is-main > #treasureMission > .answer-grid > .answer-option {
+    min-height: 0;
+  }
+  /* `.stage-center` đặt `align-items: flex-start` cho hàng 2 cột (đúng cho cột
+     ảnh, để nó không bị kéo cao), nhưng cột chữ phải CAO HẾT stage thì lưới đáp
+     án mới có phần dư để nhận. Đo trước khi thêm dòng này ở 1920x1080: cột chữ
+     585px (bằng đúng nội dung), nội dung kết thúc ở y=741 trong khi stage còn
+     chỗ tới y=1043 → **300px trống** dưới đáp án, đúng như bản 1 cột ban đầu.
+     BẪY 1: `align-self: stretch` KHÔNG đủ ở đây. `.stage-center` có
+     `flex-wrap: wrap`, nên hai cột nằm trên MỘT flex line và cross-size của line
+     co theo nội dung (585px); `align-self: stretch` chỉ kéo item tới đúng
+     585px của line đó — đo được `mainAlignSelf: "stretch"` mà vẫn cao 585px.
+     BẪY 2: `height: 100%` thì sửa được phép đo đó nhưng làm HỎNG "Tìm kho báu":
+     cột chữ bị khoá đúng bằng chiều cao `.stage-center`, nên khi nội dung cao
+     hơn (bản đồ + cốt truyện + đáp án), cột không còn lớn hơn stage được và
+     phần tràn tăng 60 → **140px** @1366x768, 0 → **34px** @1920x1080.
+     Vì vậy chiều cao tường minh chỉ áp cho các màn KHÔNG có phần tử "cao theo
+     nội dung" phía trên câu hỏi (`.treasure-storyline`, `#treasureMission`).
+     `:not(:has(...))` giữ nguyên hành vi cũ (nội dung tự quyết chiều cao, stage
+     tự cuộn) cho "Tìm kho báu", và chỉ áp `height: 100%` cho quiz/race/scenario
+     — nơi mà `flex: 1` của lưới đáp án biến phần dư thành ô đáp án cao hơn. */
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-center > .stage-col.is-main {
+    align-self: stretch;
+  }
+  /* DECISIONS #88: giữ `:has()` ở đây thay vì `:not([data-game="treasure"])`.
+     Selector attribute-value trỏ tới giá trị ĐỘNG bị Tailwind v4 loại khỏi
+     output khi giá trị đó không xuất hiện nguyên văn trong markup (xem "BẪY ĐÃ
+     GẶP" ở khối `flex-shrink: 0` phía trên). Bản `:not([data-game=treasure])`
+     chỉ sống sót vì tình cờ khớp mọi phần tử — dựa vào may mắn đó là quá mong
+     manh cho một rule điều khiển chiều cao cột. */
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-center > .stage-col.is-main:not(:has(> .treasure-storyline)):not(:has(> #treasureMission)) {
+    height: 100%;
+    max-height: 100%;
+  }
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-col.is-main:has(> #answerFeedback:not(:empty)) > .answer-grid {
+    flex: 0 1 auto;
+    grid-auto-rows: min-content;
+  }
+  /* Trong cùng trạng thái đó, sàn `min-height: 12vh` của ô đáp án phải nhường.
+     Đo được: giữ sàn thì cột chữ cao 774px (tràn 21px, stage 662px); bỏ sàn thì
+     hàng co về 168px, ô 78px, **không cắt chữ** (`scrollHeight 74` < `clientHeight
+     74`) và tràn về 0 — đáp án vẫn đọc được, chỉ bớt khoảng thở dọc sau khi
+     giáo viên đã chốt đáp án. Trước khi trả lời, sàn giữ nguyên: đó là lúc ô
+     đáp án là thứ duy nhất trên màn và cần to.
+     `#answerFeedback` là nơi DUY NHẤT chứa phản hồi, nên `:has()` ở đây chỉ
+     khớp đúng trạng thái đã-trả-lời. */
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-col.is-main:has(> #answerFeedback:not(:empty)) > .answer-grid > .answer-option {
+    min-height: 0;
+  }
+  /* Câu hỏi trong cột hẹp không cần khung 68ch của bản 1 cột. */
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-col.is-main > .stage-question {
+    max-width: 100%;
+    margin: 0;
+  }
+  /* Câu hỏi vốn canh giữa cho một cột rộng; trong 2 cột, canh trái để mép
+     phải lởm chởm không lộ ra. Chỉ đổi canh lề, không đổi nội dung. */
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-col.is-main > .stage-question,
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-col.is-main > .stage-kicker {
+    text-align: left;
+  }
+  /* Race: ảnh + câu hỏi nằm trong `.race-turn`, không có `.stage-center`. */
+  html[data-fullscreen="1"] .modal[data-player-theme] .race-turn > .race-turn-row {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    column-gap: clamp(18px, 2.2vw, 34px);
+    row-gap: clamp(10px, 1.4vh, 18px);
+  }
+  html[data-fullscreen="1"] .modal[data-player-theme] .race-turn-row > .stage-col:not(.is-main) {
+    flex: 0 0 auto;
+    width: clamp(200px, 16vw, 300px);
+  }
+  html[data-fullscreen="1"] .modal[data-player-theme] .race-turn-row > .stage-col.is-main {
+    flex: 1 1 340px;
+    min-width: 0;
+  }
+  html[data-fullscreen="1"] .modal[data-player-theme] .race-turn-row .stage-col > .stage-illustration {
+    width: 100%;
+    max-width: 100%;
+    max-height: none;
+    margin: 0;
+  }
+  html[data-fullscreen="1"] .modal[data-player-theme] .race-turn-row .stage-col.is-main > .stage-kicker,
+  html[data-fullscreen="1"] .modal[data-player-theme] .race-turn-row .stage-col.is-main > .stage-question {
+    text-align: left;
+  }
+
+  /* Khi không có ảnh minh hoạ (chế độ tắt hoặc câu hỏi không có ảnh), co cột ảnh về 0
+     để nội dung chính mở rộng toàn màn hình và cân bằng bố cục. */
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-center > .stage-col:not(.is-main):empty,
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-center > .stage-col:not(.is-main):not(:has(.stage-illustration)) {
+    display: none !important;
+    width: 0 !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-center:not(:has(> .stage-col > .stage-illustration)) > .stage-col.is-main {
+    flex: 1 1 100%;
+    width: 100%;
+    max-width: 100%;
+  }
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-center:not(:has(> .stage-col > .stage-illustration)) > .stage-col.is-main > .stage-question,
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-center:not(:has(> .stage-col > .stage-illustration)) > .stage-col.is-main > .stage-kicker {
+    text-align: center;
+  }
+
+  html[data-fullscreen="1"] .modal[data-player-theme] .race-turn-row > .stage-col:not(.is-main):empty,
+  html[data-fullscreen="1"] .modal[data-player-theme] .race-turn-row > .stage-col:not(.is-main):not(:has(.stage-illustration)) {
+    display: none !important;
+    width: 0 !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  html[data-fullscreen="1"] .modal[data-player-theme] .race-turn-row:not(:has(> .stage-col > .stage-illustration)) > .stage-col.is-main {
+    flex: 1 1 100%;
+    width: 100%;
+    max-width: 100%;
+  }
+}
+
+/* ---- Bước 1: cây cấu trúc tài liệu (docs/DECISIONS.md #76, #77) ----
+   `step-structure.ts` sinh các class `wizard-tree-*`; trước đây chúng chưa có
+   CSS nào nên cây hiện ra như một <ul> thô: mất thụt cấp, mất dấu tam giác mở
+   rộng, số ký tự dính vào tiêu đề. Khối này chỉ tạo hình thức, không đổi hàm ý:
+   - `data-depth` (không phải margin lồng nhau) quyết định thụt cấp, nên cây sâu
+     không bị thu hẹp dần đến không đọc được;
+   - ô `indeterminate` do JS gán (`wizardSyncStructureCheckboxes`) nên không thể
+     tô màu bằng CSS; trạng thái "chọn một phần" được `is-partial` trên tiêu đề
+     gánh thay, và không dùng màu để truyền đạt thông tin duy nhất;
+   - số ký tự dùng `tabular-nums` để các dòng thẳng cột khi đọc lướt. */
+
+.wizard-tree{list-style:none;margin:10px 0 0;padding:0;border:1px solid var(--line);border-radius:10px;background:#fff;max-height:320px;overflow-y:auto}
+.wizard-tree-node{display:flex;align-items:center;gap:6px;padding:4px 10px;border-bottom:1px solid #f1f2f7;font-size:11.5px;line-height:1.45}
+.wizard-tree-node:last-child{border-bottom:0}
+.wizard-tree-node:hover{background:#faf9ff}
+/* Thụt cấp tính bằng biến cục bộ để mỗi cấp chỉ cộng thêm một khoảng cố định. */
+.wizard-tree-node[data-depth="1"]{padding-left:24px}
+.wizard-tree-node[data-depth="2"]{padding-left:38px}
+.wizard-tree-node[data-depth="3"]{padding-left:52px}
+.wizard-tree-node[data-depth="4"]{padding-left:66px}
+.wizard-tree-node[data-depth="5"]{padding-left:80px}
+.wizard-tree-node[data-depth="6"]{padding-left:94px}
+
+.wizard-tree-caret{flex-shrink:0;display:grid;place-items:center;width:16px;height:16px;padding:0;border:0;border-radius:4px;background:transparent;color:#7b8499;font-size:10px;line-height:1}
+.wizard-tree-caret:hover{background:#efedff;color:var(--purple)}
+.wizard-tree-caret.is-leaf{cursor:default;color:#c7ccd8}
+.wizard-tree-caret.is-leaf:hover{background:transparent;color:#c7ccd8}
+.wizard-tree-node input[type="checkbox"]{flex-shrink:0;width:13px;height:13px;margin:0;accent-color:var(--purple);cursor:pointer}
+.wizard-tree-title{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+.wizard-tree-title.is-partial{font-weight:700;color:#4a405f}
+.wizard-tree-size{flex-shrink:0;color:#9098a8;font-size:10.5px;font-variant-numeric:tabular-nums}
+.wizard-tree-empty{flex-shrink:0;min-width:13px;color:#b6bcc9;font-size:10px;font-style:italic}
+
+.wizard-tree-badge{flex-shrink:0;padding:1px 6px;border-radius:999px;background:#f1f2f7;color:#666f83;font-size:9.5px;font-weight:700;white-space:nowrap}
+/* “cần xem lại” là cảnh báo mềm: viền + chữ, không chỉ dựa vào màu nền. */
+.wizard-tree-badge.is-uncertain{background:#fff7e8;border:1px solid #f0dbb2;color:#8a6216}
+
+.wizard-tree-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px}
+.wizard-tree-warning{margin-top:8px;padding:7px 10px;border:1px solid #f0dbb2;border-radius:8px;background:#fff7e8;color:#7d5a12;font-size:10.5px;line-height:1.5}
+ul.wizard-tree-warning{list-style:disc;padding-left:26px}
+ul.wizard-tree-warning li+li{margin-top:3px}
+.wizard-tree-figures{color:#788196;font-size:10.5px;font-variant-numeric:tabular-nums}
+
+.wizard-tree-preview{margin-top:12px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+.wizard-tree-preview-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:4px;font-size:11px}
+.wizard-tree-preview-head strong{font-size:11.5px}
+.wizard-tree-preview[data-structure-truncated="true"] .wizard-tree-preview-head strong{color:#8a6216}
+/* Bản xem trước là đúng chuỗi sẽ gửi đi, nên phải giữ nguyên khoảng trắng và
+   xuống dòng; cuộn riêng để một giáo án dài không đẩy nút "Tiếp tục" khỏi màn. */
+.wizard-tree-text{margin:8px 0 0;padding:9px 11px;max-height:220px;overflow:auto;border:1px solid #e6e8f0;border-radius:8px;background:#fbfbfe;color:#3c4457;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:10.5px;line-height:1.55;white-space:pre-wrap;word-break:break-word}
+
+/* Giáo viên có thể đã bật giảm chuyển động: vẫn thấy đúng trạng thái, chỉ bỏ
+   hiệu ứng. (Cùng chính sách với .setup-progress và .wizard-gen-progress.) */
+@media (prefers-reduced-motion: reduce){
+  .wizard-tree-node{transition:none}
+  .wizard-tree-caret{transition:none}
+}
+
+
+
+

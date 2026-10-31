@@ -1,0 +1,645 @@
+/* gameplay.css — Play surface: khung màn chơi, stage, đáp án, màn kết quả. — tách từ app.css, giữ nguyên thứ tự (DECISIONS #149). */
+/* ============================================================
+   Play surface — game screen shown when a teacher plays a game.
+   Goals: use the whole window (not a narrow column), keep text
+   comfortably large for a classroom, and add colour so it reads as
+   a game rather than a dark form.
+   ============================================================ */
+
+/* --- header: title on the left, grouped tool buttons on the right --- */
+.play-head { gap: 16px; }
+.play-head-title { min-width: 0; }
+.play-head-title h2 {
+  font-size: 18px;
+  line-height: 1.25;
+  letter-spacing: -0.2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.play-head-title .small { font-size: 10px; letter-spacing: 0.9px; font-weight: 700; }
+.play-shortcut { color: #8f98b6; font-size: 11px; font-weight: 650; letter-spacing: .01em; white-space: nowrap; }
+.play-head-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* Tool buttons. The old markup reused .modal-close (a fixed 30x30 square),
+   which squeezed the "Trình chiếu" label into two clipped lines. These are
+   sized by their content instead. */
+.play-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 38px;
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid #3a4266;
+  border-radius: 10px;
+  background: #232a45;
+  color: #dfe3f5;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.12s, box-shadow 0.15s;
+}
+.play-tool:hover { background: #2d3556; border-color: #5a5f9a; transform: translateY(-1px); }
+.play-tool:active { transform: translateY(0); }
+.play-tool:focus-visible { outline: 2px solid #8b82ff; outline-offset: 2px; }
+.play-tool-icon { font-size: 15px; line-height: 1; }
+
+/* Primary action: the projector button is the one that matters, so it gets
+   the strongest colour and a subtle glow. */
+.play-tool-present {
+  background: linear-gradient(135deg, #7b6cf6, #5b4fd8);
+  border-color: #8b82ff;
+  color: #fff;
+  padding: 0 15px;
+  box-shadow: 0 4px 14px #6258e84d;
+}
+.play-tool-present:hover {
+  background: linear-gradient(135deg, #8a7cf8, #6a5df0);
+  border-color: #a9a3ff;
+  box-shadow: 0 6px 18px #6258e86b;
+}
+.play-tool-danger:hover { background: #4a2338; border-color: #ef6d89; color: #ffd9e2; }
+
+/* Chơi LAN: secondary to "Trình chiếu" (the projector is still the main action),
+   but coloured so a teacher can find it at a glance. Green = the room is open. */
+.play-tool-lan {
+  background: #1f3b34;
+  border-color: #2f6b58;
+  color: #c9f5e3;
+  padding: 0 13px;
+}
+.play-tool-lan:hover { background: #265045; border-color: #3f8f74; }
+.play-tool-lan.is-open { background: #17493a; border-color: #3ecf8e; color: #e2fff3; }
+
+/* LAN room panel: reuses .modal so it matches every other modal, but is wide
+   enough for the QR + the class list side by side on a projector. */
+.lan-modal { width: min(1040px, 96vw); max-height: 92vh; display: flex; flex-direction: column; }
+.lan-modal .modal-body { overflow-y: auto; }
+.lan-backdrop { z-index: 60; }
+.lan-room { display: flex; flex-direction: column; gap: 16px; }
+/* The lobby's "Bắt đầu câu 1" bar: the teacher's missing control. Loud on purpose —
+   without pressing it the class stays waiting, which is what went wrong before. */
+.lan-startbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  border: 1px solid #3ecf8e66;
+  border-radius: 14px;
+  background: #14352b;
+}
+.lan-startbar-text { display: flex; flex-direction: column; gap: 3px; min-width: 260px; flex: 1 1 320px; }
+.lan-startbar-text strong { font-size: 16px; color: #e2fff3; }
+.lan-startbar-text span { color: #a9cbbd; font-size: 13px; line-height: 1.45; }
+.lan-start-btn { min-height: 44px; padding: 0 20px; white-space: nowrap; }
+.lan-start-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.lan-progress { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; border: 1px solid #2d3556; border-radius: 12px; background: #1c2340; font-size: 14px; }
+.lan-progress strong { color: #fff; }
+.lan-progress .lan-note { margin-left: auto; }
+.lan-invite { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
+.lan-qr { width: 184px; height: 184px; flex: 0 0 auto; border-radius: 10px; background: #fff; padding: 8px; }
+.lan-invite-text { flex: 1 1 320px; min-width: 260px; }
+.lan-kicker { color: #b9b3ff; font-size: 12px; font-weight: 800; letter-spacing: 0.08em; }
+.lan-url { margin: 8px 0 6px; font-size: 15px; overflow-wrap: anywhere; }
+.lan-alt { margin: 0 0 6px; color: #aeb5ce; font-size: 13px; }
+.lan-alt code { background: #1c2340; padding: 1px 6px; border-radius: 6px; }
+.lan-roomcode { margin: 10px 0 0; font-size: 18px; }
+.lan-roomcode strong { font-size: 26px; letter-spacing: 0.16em; color: #c9f5e3; }
+.lan-hint { margin: 8px 0 0; color: #aeb5ce; font-size: 13px; line-height: 1.5; }
+.lan-players-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 14px; color: #cfd5ea; border-top: 1px solid #2d3556; padding-top: 12px; }
+.lan-note { color: #aeb5ce; font-size: 13px; }
+.lan-teams { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.lan-team { background: #1c2340; border: 1px solid #2d3556; border-radius: 12px; padding: 10px 12px; }
+.lan-team-head { display: flex; justify-content: space-between; font-weight: 700; margin-bottom: 6px; }
+.lan-players, .lan-team ul, .lan-ranking { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.lan-player { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+.lan-player.is-offline { opacity: 0.45; }
+.lan-player-name { flex: 1 1 auto; overflow-wrap: anywhere; }
+.lan-player-meta { color: #aeb5ce; font-size: 13px; white-space: nowrap; }
+.lan-dot { width: 8px; height: 8px; border-radius: 50%; background: #3ecf8e; flex: 0 0 auto; }
+.lan-player.is-offline .lan-dot { background: #6b7392; }
+.lan-move { display: flex; gap: 3px; }
+.lan-move-btn { border: 1px solid #2d3556; background: #232a45; border-radius: 6px; font-size: 13px; line-height: 1; padding: 4px 5px; cursor: pointer; }
+.lan-move-btn.is-current { border-color: #7b6cf6; background: #2a2450; }
+.lan-empty { color: #aeb5ce; font-size: 14px; margin: 6px 0; }
+.lan-scoring { margin: 0; color: #ffd9a0; font-size: 13px; }
+.lan-error { color: #ffd2db; background: #4a2338; border: 1px solid #7d3352; border-radius: 10px; padding: 12px 14px; }
+.lan-actions { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+.lan-ranking { gap: 8px; }
+.lan-ranking li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 10px; background: #1c2340; border-radius: 10px; }
+.lan-finished { display: flex; flex-direction: column; gap: 12px; }
+
+/* Vinh danh cuối trận LAN: bục 3 hạng, người nhất đứng giữa và cao nhất.
+   Dùng grid 3 cột cố định nên thứ tự DOM (2, 1, 3) không làm lệch bục. */
+.lan-podium-wrap { display: flex; flex-direction: column; gap: 12px; }
+.lan-podium { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; align-items: end; }
+.lan-podium-step { display: flex; flex-direction: column; align-items: center; gap: 3px; text-align: center; min-width: 0; }
+.lan-podium-step.is-rank-1 { order: 2; }
+.lan-podium-step.is-rank-2 { order: 1; }
+.lan-podium-step.is-rank-3 { order: 3; }
+.lan-podium-medal { font-size: 34px; line-height: 1; min-height: 34px; }
+.lan-podium-name { font-weight: 800; font-size: 15px; color: #fff; overflow-wrap: anywhere; }
+.lan-podium-tie { font-size: 11px; font-weight: 600; color: #ffd977; }
+.lan-podium-points { font-size: 14px; font-weight: 700; color: #c9f5e3; }
+.lan-podium-meta { font-size: 12px; color: #aeb5ce; overflow-wrap: anywhere; }
+/* The block's height is the "step": gold tallest. Not earned = flat, no shine. */
+.lan-podium-block {
+  width: 100%;
+  margin-top: 6px;
+  border-radius: 10px 10px 0 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 8px;
+  background: #232a45;
+  border: 1px solid #2d3556;
+  border-bottom: 0;
+  color: #8b93b4;
+  font-size: 20px;
+  font-weight: 900;
+}
+.lan-podium-step.is-rank-1 .lan-podium-block { height: 96px; }
+.lan-podium-step.is-rank-2 .lan-podium-block { height: 74px; }
+.lan-podium-step.is-rank-3 .lan-podium-block { height: 58px; }
+.lan-podium-step.is-earned.is-rank-1 .lan-podium-block { background: linear-gradient(180deg, #b8871f, #6d4d10); border-color: #e9b95b; color: #fff5d6; }
+.lan-podium-step.is-earned.is-rank-2 .lan-podium-block { background: linear-gradient(180deg, #7c8698, #454d5c); border-color: #b9c2d1; color: #f2f5fa; }
+.lan-podium-step.is-earned.is-rank-3 .lan-podium-block { background: linear-gradient(180deg, #8a5a34, #4d311b); border-color: #c98d5b; color: #ffe8d4; }
+.lan-ranking-rest { margin-top: 4px; }
+@media (max-width: 560px) {
+  .lan-podium-medal { font-size: 26px; min-height: 26px; }
+  .lan-podium-name { font-size: 13px; }
+  .lan-podium-step.is-rank-1 .lan-podium-block { height: 76px; }
+  .lan-podium-step.is-rank-2 .lan-podium-block { height: 58px; }
+  .lan-podium-step.is-rank-3 .lan-podium-block { height: 46px; }
+}
+@media (max-width: 720px) {
+  .lan-qr { width: 148px; height: 148px; }
+}
+
+/* --- stage: fill the available height and scale type for the room --- */
+.modal[data-player-theme] .game-stage {
+  display: flex;
+  flex-direction: column;
+  min-height: 400px;
+  /* Fill the panel instead of guessing a height from 100vh. body is a flex
+     column whose only child is the stage, so 100% of its content box (= viewport
+     minus header and body padding) is exactly what we want; with
+     box-sizing:border-box the stage then ends flush with the window edge and
+     .stage-center can centre the question vertically. */
+  flex: 1 1 auto;
+  height: 100%;
+  box-sizing: border-box;
+  padding: clamp(20px, 2.2vw, 32px) clamp(18px, 3vw, 44px) clamp(16px, 1.8vw, 24px);
+  border-radius: var(--player-radius);
+  /* The world palette (--world-*) is set on the stage by the block "Năm thế
+     giới trò chơi" further down in this file. The fallbacks keep the previous
+     indigo surface for any stage that has no world (team setup of an unknown
+     template). Two glows + a wash give the surface depth without a texture. */
+  background: var(--world-stage-bg);
+  border: 1px solid var(--world-stage-border, #2a3152);
+  box-shadow: inset 0 1px 0 #ffffff0f;
+  font-family: var(--world-font, inherit);
+}
+
+/* The old rule capped every question inside a 690px column, which left most
+   of the window empty. Let content breathe across the full width. */
+.modal[data-player-theme] .stage-center {
+  max-width: 1120px;
+  /* `flex: 1` (không phải `flex: 1 1 auto`) để chiều cao flex-item phụ thuộc
+     container: nếu không, chiều cao nội dung của khối (312px) trở thành
+     min-height ngầm của hàng `minmax(0,1fr)` trong lưới .game-stage, và hàng bị
+     khoá ở 424px — đúng dải trống không giải thích được giữa câu hỏi và đáp án
+     ở chế độ toàn màn hình (DECISIONS #59). */
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  /* .game-stage is a scroll container (overflow-y:auto), so its 18-44px side
+     padding is clipped and a `flex:1` child could only ever be as wide as the
+     padding box — the question ended up narrower than the answer grid and the
+     "use the whole window" fix silently stopped working. Claim an intrinsic
+     size instead; margin:auto then centres it (auto margins already fill the
+     free space, so stretch alignment must be off). */
+  align-self: center;
+  width: 100%;
+  min-width: min(1120px, 100%);
+}
+/* Toàn màn hình override — bản NGUYÊN VẸN cho `.stage-center`.
+   Quy tắc thường ngay trên là `.modal[data-player-theme] .stage-center` (0,2,0)
+   với `flex:1` + `align-self:center` + trần 1120px; đứng SAU là đủ thắng, không
+   cần tăng độ ưu tiên. Bản cũ `html[data-fullscreen="1"] html ...` thì KHÔNG
+   BAO GIỜ khớp (không có `<html>` lồng trong `<html>`), nên cả khối là dead
+   rule: `el.matches()` trả `false` và mọi khai báo trong đó (kể cả
+   `max-width:none`) chưa từng chạy. Đo trên app thật (1280x720): `.stage-center`
+   vẫn bị trần 1120px và `align-self:center`, nội dung cao đúng bằng nội dung
+   (424px) nhưng nằm giữa stage → 74px trống phía trên và 122px dưới lưới đáp án
+   (`.stage-bottom` nằm trong cùng cột bị canh giữa đó).
+   Đây là nơi DUY NHẤT định nghĩa `.stage-center` ở toàn màn hình; muốn đổi thì
+   sửa ở đây, đừng thêm bản sao ở chỗ khác. */
+html[data-fullscreen="1"] .modal[data-player-theme] .stage-center {
+  /* Giữ flex column: quy tắc thường đặt `display:flex` và mọi cháu của stage
+     (kicker, câu hỏi, lưới đáp án, thanh dưới) được dựng theo flow cột đó.
+     Đổi sang grid ở đây làm các hàng `auto` co về 0 khi có tràn (thấy rõ ở
+     fixture "Tìm kho báu": `#treasureActions` cao 0px, nằm ngoài stage). */
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  /* `.stage-center` là item của `.game-stage` (flex column): nhận hết chiều cao
+     còn lại giữa thanh trên và thanh dưới. `min-height:0` cho nó co lại được
+     khi nội dung cao hơn stage; khi đó phần tràn thuộc về `.game-stage`
+     (`overflow:auto` của stage) nên giáo viên vẫn cuộn tới được nút cuối. */
+  flex: 1 1 auto;
+  align-self: stretch;
+  min-height: 0;
+  max-width: none;
+  min-width: 0;
+  /* 2.6vh ≈ 19px ở cửa sổ cao 721px; gấp đôi bản cũ để câu hỏi + đáp án phủ
+     phần lớn stage. */
+  gap: clamp(10px, 2.6vh, 34px);
+}
+/* "Tìm kho báu" KHÔNG được co `.stage-center`.
+   Đo ở 1366x768 với bản kho báu 6 chặng thật (cốt truyện 3 câu ~300 ký tự,
+   nhiệm vụ, gợi ý, vật phẩm ẩn — tất cả nằm trong giới hạn `story` 1600 ký tự
+   của `lesson-contracts.ts`): cột chữ cần **656px** nhưng `.stage-center` chỉ
+   được **415px**, vì `flex-shrink: 1` ở trên bóp nó lại cho vừa stage 662px.
+   Bản đồ đã có `flex-shrink: 0` (#85) nên phần thiếu 241px dồn xuống dưới và
+   đẩy `#treasureMission` ra ngoài màn hình → tràn **211px**.
+   `flex-shrink: 0` ở đây trả lại đúng hành vi đã ghi trong comment trên: nội
+   dung cao hơn stage thì `overflow: auto` của `.game-stage` cuộn, và
+   `.stage-bottom` vẫn tới được. Chỉ áp cho kho báu: quiz/race/scenario cần
+   `flex-shrink: 1` để lưới đáp án nhận phần dư (DECISIONS #85 mục 1).
+   BẪY: đừng đặt kèm `height: 100%` — đó chính là điều làm kho báu tệ hơn
+   (60 → 140px) trước đây; ở đây chỉ bỏ khả năng CO, không khoá chiều cao.
+
+   BẪY ĐÃ GẶP (DECISIONS #88): KHÔNG dùng
+   `.game-stage[data-game="treasure"] .stage-center` cho rule này. Tailwind v4
+   coi chuỗi attribute-value trong selector như một candidate cần có mặt trong
+   markup; `data-game="treasure"` là giá trị ĐỘNG (`${stageGame}` trong
+   gameplay.ts), không xuất hiện nguyên văn trong file nguồn, nên Tailwind LOẠI
+   BỎ cả rule. Đo được: nguồn có 2 rule `data-game`, output build chỉ còn 1
+   (`:not([data-game=treasure])`, sống sót vì nó khớp mọi phần tử). Hệ quả:
+   treasure mất `flex-shrink: 0`, tràn 88px @1920x1080 và 362-373px @1366x768 —
+   `ui-play-surface-check` 152/156. Nếu buộc phải selector theo attribute thì
+   phải thêm giá trị đó vào `@source inline(...)`; ở đây đơn giản hơn là trả lại
+   `:has()`, đã được chứng minh khớp và không phụ thuộc Tailwind có nhìn thấy
+   giá trị động hay không. */
+html[data-fullscreen="1"] .modal[data-player-theme] .stage-center:has(> .stage-col.is-main > #treasureMission) {
+  flex-shrink: 0;
+}
+
+/* Lưới đáp án nhận hết phần dư của cột: các hàng ô chia đều phần dư NHƯNG sàn
+   là `auto` (min-content của ô: padding + số dòng chữ + min-height), nên không
+   bao giờ nhỏ hơn nội dung — đo được `minmax(0,1fr)` làm ô 113px bị cắt 3px ở
+   cửa sổ 1366x705. Đây là khác biệt so với `grid-auto-rows: auto` (bản đó bỏ
+   hẳn phần dư và để lại dải trống 112px dưới lưới ở 1280x720). */
+html[data-fullscreen="1"] .modal[data-player-theme] .stage-center > .answer-grid,
+html[data-fullscreen="1"] .modal[data-player-theme] .stage-center > .answer-grid.true-false-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  align-content: stretch;
+  grid-auto-rows: minmax(min-content, 1fr);
+}
+/* Hàng ô đáp án chia đều phần dư, nhưng KHÔNG được thấp hơn nội dung của chính
+   ô: `min-content` ở ô = padding + số dòng chữ, nên dòng cuối không bị cắt khi
+   cửa sổ thấp (`minmax(0, 1fr)` từng để ô 113px thiếu 3px ở 1366x705). */
+html[data-fullscreen="1"] .modal[data-player-theme] .stage-center > .answer-grid > .answer-option {
+  min-height: min-content;
+}
+
+.modal[data-player-theme] .modal[data-player-theme] .game-stage .stage-question {
+  font-size: clamp(26px, 3.1vw, 42px);
+  line-height: 1.34;
+  max-width: 1100px;
+  margin: 14px auto 30px;
+  text-wrap: balance;
+  color: var(--world-ink, #f4f6ff);
+}
+/* Chữ câu hỏi theo thế giới: tách khỏi quy tắc trên để phần CHỮ không bị bản
+   toàn màn hình (khai báo sau, và bị minify rút thành [data-player-theme]) đè
+   thành chữ không đậm/không serif. Hai thuộc tính bố cục (max-width, margin)
+   vẫn ở quy tắc trên như cũ. Đây cũng là nơi đặt độ đậm cho mực tối trên nền
+   sáng của bảng nỉ. */
+.modal[data-player-theme] .game-stage .stage-question {
+  font-family: var(--world-display, inherit);
+  font-weight: var(--world-display-weight, 750);
+  letter-spacing: var(--world-display-tracking, 0px);
+  line-height: 1.36;
+}
+
+.modal[data-player-theme] .stage-kicker {
+  font-size: clamp(11px, 1vw, 14px);
+  letter-spacing: 2px;
+  /* The kicker has the same base-vs-specific cascade problem as the question:
+     the compiled sheet is minified, which shortens .modal[data-player-theme] to
+     [data-player-theme] and would let the base rule win. One extra compound
+     keeps this block's order authoritative. */
+  color: var(--world-accent, #b3adff);
+}
+
+.modal[data-player-theme] .stage-top { font-size: 12px; }
+.stage-meta-right { display: flex; align-items: center; gap: 8px; }
+.stage-meta { color: var(--world-meta, #a9b1cd); font-weight: 650; }
+
+/* Pill chips for question counter + score. */
+.stage-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: var(--world-chip-bg, #232a45);
+  border: 1px solid var(--world-chip-border, #3a4266);
+  color: var(--world-chip-ink, #c9cfe6);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+}
+.stage-chip b { color: #fff; font-size: 12px; }
+.stage-chip-score {
+  background: linear-gradient(135deg, #3a2f10, #4a3a12);
+  border-color: #8a6d1f;
+  color: #ffd977;
+}
+.stage-chip-score b { color: #ffe9a8; }
+
+.modal[data-player-theme] .stage-progress {
+  height: 7px;
+  margin: 14px 0 22px;
+  background: var(--world-track-bg, #262d48);
+}
+.modal[data-player-theme] .stage-progress div {
+  background: var(--world-progress, linear-gradient(90deg, #8b82ff, #5ad1c8));
+  box-shadow: var(--world-progress-glow, 0 0 12px #8b82ff86);
+}
+
+/* --- House Building Mode: parts progress bar + result summary --- */
+.house-progress {
+  max-width: 680px;
+  margin: 2px auto 20px;
+  padding: 12px 14px;
+  border: 1px solid #363d5c;
+  background: #202641;
+  border-radius: 12px;
+  text-align: left;
+}
+.house-progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.house-progress-title {
+  color: #a9a3ff;
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  font-weight: 800;
+}
+.house-count {
+  color: #c9cfe6;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.house-count b {
+  color: #ffd977;
+  font-size: 13px;
+}
+.house-bar {
+  height: 8px;
+  background: #303651;
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 11px 0 8px;
+}
+.house-bar-fill {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, #8b82ff, #34d399);
+  border-radius: 999px;
+  transition: width 0.25s;
+}
+.house-materials {
+  color: #b9bfd6;
+  font-size: 11px;
+}
+.house-materials b {
+  color: #fff;
+  font-size: 12px;
+}
+.result-house {
+  display: inline-block;
+  margin: 10px auto 2px;
+  padding: 10px 14px;
+  border: 1px solid #363d5c;
+  background: #202641;
+  border-radius: 11px;
+  color: #d7dced;
+  font-size: 12px;
+}
+.result-house b { color: #fff; }
+/* Màn kết quả + ngôi nhà 3D (DECISIONS #144): cột trái là mô hình nhà đã xây
+   (canvas nằm dưới slot trong suốt), cột phải giữ nguyên khối kết quả cũ. Chỉ
+   house mode mới có hero — kết quả Classic và 4 trò khác giữ đúng bố cục cũ. */
+.result-screen.is-house-result {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.85fr) minmax(320px, 1.15fr);
+  align-items: center;
+  gap: clamp(14px, 2.4vw, 32px);
+  text-align: center;
+}
+.result-house-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.result-house-hero .house-stage-slot {
+  width: 100%;
+  height: clamp(220px, 32vh, 360px);
+  margin: 0;
+}
+html[data-fullscreen="1"] .result-house-hero .house-stage-slot {
+  height: clamp(260px, 42vh, 520px);
+}
+.result-summary { min-width: 0; }
+.result-house-style {
+  display: block;
+  margin-top: 4px;
+  color: #9aa2bd;
+  font-size: 11px;
+}
+@media (max-width: 980px) {
+  .result-screen.is-house-result { grid-template-columns: 1fr; }
+  .result-house-hero .house-stage-slot { height: clamp(150px, 22vh, 220px); }
+}
+
+
+/* --- answer options: large tap targets with coloured key badges --- */
+.modal[data-player-theme] .answer-grid {
+  gap: clamp(10px, 1.1vw, 16px);
+  width: 100%;
+  /* Trần này chỉ để giữ độ dài dòng ở bố cục cửa sổ thường (thẻ chơi rộng tối
+     đa 1180px). */
+  max-width: 1040px;
+  margin: 0 auto;
+}
+/* NGOẠI LỆ toàn màn hình cho trần 1040px ở trên. Quy tắc thường này có độ ưu
+   tiên (0,2,0) và đứng sau khối "Lưới đáp án + ô đáp án ở toàn màn hình" ở đầu
+   tệp, nên riêng `max-width` phải được khai lại ở đây — nếu không lưới bị kẹp
+   1040px/81% cửa sổ ở 1280px, đúng lỗi "hai phép đo 1280px" mà
+   `ui-fullscreen-density-check` báo (956/1280 < 86%).
+   ĐÂY LÀ CHỖ DUY NHẤT còn khai `max-width` cho lưới ở toàn màn hình: mọi thuộc
+   tính khác của lưới nằm ở khối đầu tệp, chỉ riêng trần này phải đứng sau trần
+   thường mới thắng được (DECISIONS #88 — ngoại lệ có lý do, không phải bản đè
+   tích luỹ). */
+html[data-fullscreen="1"] .modal[data-player-theme] .answer-grid { max-width: 100%; }
+/* Bản toàn màn hình của lưới đáp án (1365-1370) và của ô đáp án (1374-1380,
+   1403-1405) từng đứng ở đây để đè quy tắc thường phía trên. Chúng đã được gộp
+   về khối "Lưới đáp án + ô đáp án ở toàn màn hình" ở đầu tệp (DECISIONS #88):
+   cùng một selector chỉ nên có một nơi định nghĩa, nếu không thì thứ tự khai
+   báo trong tệp trở thành thứ quyết định giao diện và mỗi lần chỉnh lại phải
+   thêm một bản đè nữa. */
+html[data-fullscreen="1"] .modal[data-player-theme] .answer-option .letter {
+  width: clamp(34px, 6vh, 62px);
+  height: clamp(34px, 6vh, 62px);
+  font-size: clamp(16px, 2.6vh, 28px);
+  border-radius: 13px;
+}
+.modal[data-player-theme] .answer-option {
+  min-height: clamp(64px, 7vh, 92px);
+  padding: clamp(13px, 1.3vw, 19px) clamp(14px, 1.4vw, 20px);
+  gap: clamp(12px, 1.3vw, 18px);
+  font-size: clamp(16px, 1.45vw, 21px);
+  font-weight: 600;
+  line-height: 1.4;
+  border-width: var(--world-option-border-w, 2px);
+  border-color: var(--world-option-border, #39406080);
+  border-style: solid;
+  background: var(--world-option-bg, linear-gradient(180deg, #232a48 0%, #1d233c 100%));
+  color: var(--world-ink, #f4f6ff);
+  box-shadow: var(--world-option-shadow, none);
+  cursor: pointer;
+  transition: transform 0.12s, background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+/* Toàn màn hình: `min-height` cao hơn sàn 92px của quy tắc trên (16vh ≈ 115px ở
+   cửa sổ 1280x721, vẫn đủ chỗ cho câu hỏi 2 dòng) — khai MỘT LẦN ở khối đầu tệp
+   `html[data-fullscreen="1"] .modal[data-player-theme] .answer-option`
+   (DECISIONS #88); bản đè cũ ở đây đã gộp. */
+.modal[data-player-theme] .answer-option:hover:not(:disabled) {
+  transform: translateY(-2px);
+  border-color: var(--world-option-hover-border, #8c84ff);
+  background: var(--world-option-hover-bg, linear-gradient(180deg, #2c3459 0%, #232a48 100%));
+  box-shadow: var(--world-option-hover-shadow, 0 8px 22px #6d63ff3d);
+}
+.modal[data-player-theme] .answer-option:focus-visible { outline: 2px solid var(--world-focus, #a9a3ff); outline-offset: 2px; }
+
+/* Key badge: one accent colour per position so options are easy to tell
+   apart from the back of the classroom. */
+.modal[data-player-theme] .answer-option .letter {
+  width: clamp(30px, 2.6vw, 40px);
+  height: clamp(30px, 2.6vw, 40px);
+  border-radius: 10px;
+  font-size: clamp(14px, 1.25vw, 18px);
+  color: #fff;
+  box-shadow: 0 2px 8px #00000040;
+}
+.modal[data-player-theme] .answer-option:nth-child(4n + 1) .letter { background: linear-gradient(145deg, #7b6cf6, #5b4fd8); }
+.modal[data-player-theme] .answer-option:nth-child(4n + 2) .letter { background: linear-gradient(145deg, #2fb8a4, #1c8f7e); }
+.modal[data-player-theme] .answer-option:nth-child(4n + 3) .letter { background: linear-gradient(145deg, #e8a33d, #c97f16); }
+.modal[data-player-theme] .answer-option:nth-child(4n + 4) .letter { background: linear-gradient(145deg, #e2688a, #c44a6d); }
+
+/* Result states must stay unmistakable for colour-blind users: colour plus a
+   distinct border, and the letter keeps its own accent on hover. */
+.modal[data-player-theme] .answer-option.correct {
+  background: linear-gradient(180deg, #12463c 0%, #0f3b33 100%);
+  border-color: #35d39f;
+  box-shadow: 0 0 0 2px #35d39f38, 0 8px 24px #0d5c4433;
+}
+.modal[data-player-theme] .answer-option.correct .letter { background: linear-gradient(145deg, #35d39f, #1fa87c); }
+.modal[data-player-theme] .answer-option.wrong {
+  background: linear-gradient(180deg, #4b2637 0%, #3d1f2d 100%);
+  border-color: #f0738d;
+  box-shadow: 0 0 0 2px #f0738d33;
+}
+.modal[data-player-theme] .answer-option.wrong .letter { background: linear-gradient(145deg, #f0738d, #cd4a68); }
+/* Scenario "đã chọn quyết định": theo thế giới thay vì tím cứng (DECISIONS #104). */
+.modal[data-player-theme] .answer-option.selected {
+  border-color: var(--world-card-selected-border, #a9a3ff);
+  background: var(--world-card-selected-bg, linear-gradient(180deg, #2f3560 0%, #272c50 100%));
+  box-shadow: 0 0 0 2px var(--world-accent-soft, rgba(169, 163, 255, 0.22));
+}
+.modal[data-player-theme] .answer-option:disabled { cursor: default; transform: none; }
+
+/* True/False keeps two wide buttons but they should not look like a
+   squeezed 560px box in a 1280px window. */
+.modal[data-player-theme] .answer-grid.true-false-grid { max-width: 860px; }
+.modal[data-player-theme] .answer-grid.true-false-grid .answer-option {
+  justify-content: center;
+  font-weight: 800;
+  min-height: clamp(84px, 11vh, 130px);
+  font-size: clamp(18px, 1.7vw, 25px);
+}
+/* True/False ở toàn màn hình: hai nút rộng hết khung, chữ to hơn hẳn. */
+html[data-fullscreen="1"] .modal[data-player-theme] .answer-grid.true-false-grid { max-width: none; }
+html[data-fullscreen="1"] .modal[data-player-theme] .answer-grid.true-false-grid .answer-option {
+  min-height: clamp(88px, 18vh, 210px);
+  font-size: clamp(20px, 3.6vh, 42px);
+}
+
+/* Context / scenario block. */
+.modal[data-player-theme] .scenario-context {
+  max-width: 1000px;
+  font-size: clamp(15px, 1.3vw, 19px);
+  padding: 14px 20px;
+  border-left-width: 4px;
+  border-left-color: var(--world-accent, #8b82ff);
+  background: var(--world-soft-bg, #202641);
+  color: var(--world-ink, #f4f6ff);
+}
+
+/* Text-answer row. */
+.modal[data-player-theme] .text-answer-box { max-width: 820px; margin: 4px auto 0; }
+.modal[data-player-theme] .text-answer-box input {
+  font-size: clamp(15px, 1.3vw, 19px);
+  padding: 15px 18px;
+  border-radius: 12px;
+}
+.modal[data-player-theme] .text-answer-box .btn { font-size: 14px; padding: 0 22px; }
+
+/* Hint: on demand only, so a teacher can let the class try first. */
+.modal[data-player-theme] .text-answer-hint {
+  background: #232a45;
+  border: 1px solid #3a4266;
+  color: #d9d6ff;
+  white-space: nowrap;
+}
+.modal[data-player-theme] .text-answer-hint:hover:not(:disabled) { background: #2c3457; border-color: #8b82ff; }
+.modal[data-player-theme] .text-answer-hint:disabled { opacity: 0.6; cursor: default; }
+.modal[data-player-theme] .text-answer-hint-text {
+  max-width: 820px;
+  margin: 10px auto 0;
+  padding: 10px 16px;
+  border-left: 3px solid #ffd977;
+  border-radius: 8px;
+  background: #232a45;
+  color: #ffe6a8;
+  font-size: clamp(13px, 1.15vw, 16px);
+  text-align: left;
+}
+.text-answer-fields .text-answer-hint-label { margin-top: 8px; }
+
+/* Footer tip + next button. */
+.modal[data-player-theme] .stage-bottom { margin-top: 20px; font-size: 12px; }
+.stage-tip { color: #9aa2bd; }
+.modal[data-player-theme] #nextQuestionBtn { font-size: 14px; padding: 13px 26px; }
+
+

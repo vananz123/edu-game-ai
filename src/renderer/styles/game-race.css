@@ -1,0 +1,51 @@
+/* game-race.css — Bảng Đường đua trên play surface. — tách từ app.css, giữ nguyên thứ tự (DECISIONS #149). */
+/* ============================================================
+   Race board (game "Đường đua") on the play surface.
+   The play screen now uses very large question type; the race board packs a
+   track + standings + a second question into the same stage, so it gets
+   slightly smaller type and a bounded track. Without the bound, a long track
+   (20+ cells at 54px with wrapping) pushed the turn panel and its answers
+   below the fold and the teacher had to scroll to see the question.
+   ============================================================ */
+.modal[data-player-theme] .race-track {
+  max-height: 172px;
+  overflow: auto;
+  margin: 14px 0;
+  padding: 2px 2px 4px;
+  flex: 0 0 auto;
+}
+.modal[data-player-theme] .race-cell { background: #1b2140; color: #eef1ff; }
+.modal[data-player-theme] .race-cell-boost { background: #17322a; }
+.modal[data-player-theme] .race-cell-penalty { background: #3a1f31; }
+.modal[data-player-theme] .race-cell-lucky { background: #3a3119; }
+.modal[data-player-theme] .race-cell-challenge { background: #281f45; }
+
+.modal[data-player-theme] .race-scoreboard { flex: 0 0 auto; }
+.modal[data-player-theme] .race-team-row { font-size: 13px; padding: 10px 14px; }
+
+.modal[data-player-theme] .race-turn {
+  flex: 0 0 auto;
+  margin-top: 14px;
+  padding: clamp(14px, 1.4vw, 20px);
+}
+/* The turn panel holds the drawer's question, so it is the primary content. */
+.modal[data-player-theme] .race-turn .stage-question {
+  font-size: clamp(22px, 2.4vw, 33px);
+  margin: 12px 0 18px;
+  max-width: 100%;
+  text-align: left;
+}
+.modal[data-player-theme] .race-turn .stage-kicker { text-align: left; }
+.modal[data-player-theme] .race-turn .answer-grid { max-width: 100%; }
+.modal[data-player-theme] .race-turn .answer-option {
+  min-height: clamp(54px, 6vh, 76px);
+  font-size: clamp(15px, 1.3vw, 19px);
+}
+/* Empty-state copy inside the turn panel is dark-surface text, not grey. */
+.modal[data-player-theme] .race-turn .small { color: #aeb5ce !important; font-size: 14px; }
+
+@media (max-height: 800px) {
+  .modal[data-player-theme] .race-track { max-height: 130px; }
+  .modal[data-player-theme] .race-turn .stage-question { font-size: clamp(20px, 2.1vw, 28px); }
+}
+

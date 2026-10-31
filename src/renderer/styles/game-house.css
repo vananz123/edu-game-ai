@@ -1,0 +1,115 @@
+/* game-house.css — Chế độ Xây nhà — ngôi nhà 3D là nhân vật chính (DECISIONS #142). — tách từ app.css, giữ nguyên thứ tự (DECISIONS #149). */
+/* ============================================================
+   CHẾ ĐỘ XÂY NHÀ — ngôi nhà là nhân vật chính (DECISIONS #142)
+
+   Ngôi nhà là WebGL: canvas phủ toàn `.game-stage` và nằm DƯỚI nội dung DOM
+   (`.game-stage[data-game-world] > * { z-index: 1 }`). Vì vậy muốn "đưa nhà ra
+   trước" thì phải dọn nội dung DOM khỏi vùng nhà chiếm chứ không thể tăng
+   z-index cho canvas.
+
+   · Lúc trả lời: `.house-stage-slot` giữ chỗ cho nhà (thay ảnh minh hoạ);
+     gameplay.ts chiếu tâm ô này qua camera để đặt nhà đúng chỗ.
+   · Sau khi trả lời: `.is-house-showcase` ẩn câu hỏi/đáp án, nhà được tween ra
+     giữa và phóng to, banner phản hồi thành thẻ dưới nhà, nút "Tiếp tục" ở đáy.
+     Chiều cao stage được ghim bằng inline `min-height` trước khi bật class —
+     nếu không, stage co từ ~843px xuống ~283px và canvas đổi tỉ lệ giữa
+     animation.
+   ============================================================ */
+
+/* Vùng giữ chỗ cho ngôi nhà trong lúc học sinh đọc câu hỏi. */
+.house-stage-slot {
+  width: 100%;
+  height: clamp(110px, 16vh, 160px);
+  flex: 0 0 auto;
+  margin: 2px 0 4px;
+  pointer-events: none;
+}
+html[data-fullscreen="1"] .house-stage-slot {
+  height: clamp(170px, 22vh, 260px);
+}
+
+/* Một cột duy nhất, canh đáy: banner + nút ở dưới, phần trên nhường cho nhà. */
+.modal[data-player-theme] .game-stage.is-house-showcase .stage-center {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-end;
+  gap: clamp(8px, 1.4vh, 14px);
+  max-width: none;
+  min-width: 0;
+  width: 100%;
+  margin: 0;
+  text-align: center;
+}
+.modal[data-player-theme] .game-stage.is-house-showcase .stage-center > .stage-col.is-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: none;
+  min-height: 0;
+}
+.game-stage.is-house-showcase .stage-kicker-row,
+.game-stage.is-house-showcase .scenario-context,
+.game-stage.is-house-showcase .stage-question,
+.game-stage.is-house-showcase .answer-grid,
+.game-stage.is-house-showcase .text-answer-box,
+.game-stage.is-house-showcase .text-answer-hint-text,
+.game-stage.is-house-showcase .house-stage-slot,
+.game-stage.is-house-showcase .stage-tip {
+  display: none;
+}
+
+/* HUD gọn trong màn trình diễn: đủ "đã xây n/7 + thanh tiến độ" như ảnh mẫu,
+   nhường chiều cao cho ngôi nhà (đo trên 1600x1000: 85px -> 45px). */
+.game-stage.is-house-showcase .house-progress {
+  max-width: 360px;
+  margin: 0 auto 8px;
+  padding: 8px 12px;
+}
+.game-stage.is-house-showcase .house-bar {
+  margin: 7px 0 0;
+}
+.game-stage.is-house-showcase .house-materials {
+  display: none;
+}
+
+/* Banner phản hồi: thẻ lớn ở đáy sân khấu, không đè lên nhà. */
+.modal[data-player-theme] .game-stage.is-house-showcase #answerFeedback {
+  width: min(760px, 94%);
+  max-width: 760px;
+  max-height: 30vh;
+  overflow-y: auto;
+  margin: 0 auto;
+  padding: 14px 20px 16px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #143f38, #12302c);
+  border: 1px solid #35b68e;
+  box-shadow: 0 18px 40px #0009;
+  color: #e7fff8;
+  font-size: clamp(12px, 1.55vh, 15px);
+  text-align: center;
+  animation: feedback-pop 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+.modal[data-player-theme] .game-stage.is-house-showcase #answerFeedback.bad {
+  background: linear-gradient(180deg, #482a3b, #3a2030);
+  border-color: #ef6d89;
+  color: #ffe9ef;
+}
+.game-stage.is-house-showcase #answerFeedback > strong:first-child {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 1.45em;
+  letter-spacing: 0.4px;
+}
+.modal[data-player-theme] .game-stage.is-house-showcase .stage-bottom {
+  justify-content: center;
+  width: 100%;
+  margin-top: 0;
+}
+.modal[data-player-theme] .game-stage.is-house-showcase #nextQuestionBtn {
+  padding: 10px 28px;
+  font-size: clamp(13px, 1.6vh, 16px);
+  box-shadow: 0 12px 28px #0007;
+}

@@ -1,0 +1,87 @@
+/* base.css — Token alias (:root), layer base và biến cỡ chữ/animation dùng chung. — tách từ app.css, giữ nguyên thứ tự (DECISIONS #149). */
+@layer base {
+  /* Alias :root cũ (global.css) → token @theme v4. Ported rules trong components
+     layer dùng var(--purple)/var(--line)/var(--shadow)... nên bắt buộc có ở đây. */
+  :root {
+    --bg: var(--color-canvas);
+    --panel: var(--color-panel);
+    --text: var(--color-ink);
+    --muted: var(--color-muted);
+    --line: var(--color-line);
+    --purple: var(--color-brand);
+    --purple2: var(--color-brand-soft);
+    --green: var(--color-ok);
+    --orange: var(--color-warn);
+    --red: var(--color-bad);
+    --shadow: var(--shadow-card);
+  }
+
+  body {
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+    background: var(--color-canvas);
+    font-family: var(--font-sans);
+    color: var(--color-ink);
+  }
+  button { cursor: pointer; }
+
+  /* UA normalization (giữ lại ở G5 — không còn "tạm"): Tailwind preflight v4
+     khác UA defaults (line-height 1.5, heading inherit, bolder b/strong, reset
+     margin/padding form control). Markup G2–G4 được viết DƯỚI chuẩn này nên
+     xóa block sinh 3775 geometry diffs (CDP A/B 7 trang) + h2/button diffs ở
+     modal. Chỉ xóa được sau khi migrate markup bù cho toàn bộ khác biệt. */
+  html,
+  :host {
+    line-height: normal;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-size: revert;
+    font-weight: revert;
+  }
+  a {
+    color: revert;
+    text-decoration: revert;
+  }
+  b, strong {
+    font-weight: revert;
+  }
+  p, ul, ol, dl, dd, figure, blockquote, pre, fieldset {
+    margin: revert;
+  }
+  ul, ol {
+    padding: revert;
+  }
+  button, input, select, textarea, optgroup, option {
+    margin: revert;
+    padding: revert;
+  }
+  small {
+    font-size: revert;
+  }
+}
+
+/* State class do JS toggle qua classList (selected/correct/wrong/...) â€”
+   KHÃ”NG Ä‘Æ°á»£c chuyá»ƒn sang utility thuáº§n vÃ¬ tá»“n táº¡i ngoÃ i template. */
+@layer components {
+  .motion-safe-off *,
+  .motion-safe-off *::before,
+  .motion-safe-off *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* G4 â€” Player theme: chá»‰ sá»‘ng khi modal trÃ¬nh chiáº¿u game Ä‘ang má»Ÿ
+   (data-player-theme do gameplay.ts Ä‘áº·t tá»« preferences.audience).
+   --player-fs: cá»¡ chá»¯ cÃ¢u há»i Â· --player-radius: bo gÃ³c Â· --motion-scale: há»‡ sá»‘ animation. */
+@layer components {
+  .modal[data-player-theme="child"] { --player-fs: 27px; --player-radius: 20px; --motion-scale: 1.2; }
+  .modal[data-player-theme="teen"] { --player-fs: 24px; --player-radius: 16px; --motion-scale: 1; }
+  .modal[data-player-theme="adult"] { --player-fs: 21px; --player-radius: 12px; --motion-scale: 0.8; }
+
+  .modal[data-player-theme] { border-radius: var(--player-radius); }
+  .modal[data-player-theme] .stage-question { font-size: var(--player-fs); }
+  .modal[data-player-theme] .answer-option { border-radius: calc(var(--player-radius) * 0.7); transition-duration: calc(180ms * var(--motion-scale)); }
+  .modal[data-player-theme] .btn { transition-duration: calc(160ms * var(--motion-scale)); }
+}
+

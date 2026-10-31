@@ -1,0 +1,606 @@
+/* game-worlds.css — Năm thế giới trò chơi (DECISIONS #104) và bố cục kho báu toàn màn hình. — tách từ app.css, giữ nguyên thứ tự (DECISIONS #149). */
+/* ============================================================
+   NĂM THẾ GIỚI TRÒ CHƠI — nền, màu, chữ riêng cho từng engine
+   (DECISIONS #104)
+
+   Mỗi trò chơi là một không gian khác nhau, không phải năm bản của cùng một
+   màn hình tối: phòng thi giấy cho quiz, sổ tay quyết định cho tình huống,
+   bảng nỉ cho ghép cặp, bản đồ da cho kho báu, chặng đua đêm cho đường đua.
+
+   Cách hoạt động: `gameplay.ts` gắn `data-game-world` lên thẻ chơi (modal) và
+   lên thẻ sân khấu (.game-stage); khối này chỉ đặt BIẾN trên hai mốc đó, các
+   quy tắc phía trên đọc biến đó (--world-*). Nhờ vậy không phải nhân bản toàn
+   bộ luật bố cục cho từng trò, và trạng thái đúng/sai vẫn giữ nguyên màu.
+
+   BẪY: Tailwind v4 loại bỏ selector có giá trị thuộc tính không xuất hiện
+   nguyên văn trong mã nguồn. Vì vậy mọi selector ở đây viết `data-game-world`
+   KHÔNG kèm giá trị; trạng thái riêng (chế độ ghép cặp) cũng chỉ dùng thuộc
+   tính trần. Đừng viết `[data-game-world="quiz"]`.
+   ============================================================ */
+
+:root {
+  /* Bộ font chuẩn tiếng Việt cho game và trình chiếu:
+     - 'Segoe UI', 'Be Vietnam Pro': font sans-serif chuẩn mực cho tiếng Việt trên Windows,
+       đầy đủ bảng mã OpenType, dấu thanh (hỏi, ngã, nặng, sắc, huyền) to rõ, không méo hay vỡ dấu.
+     - Fallbacks: Calibri, Tahoma, Arial, sans-serif.
+     - Loại bỏ Cambria và Arial Narrow vì dấu tiếng Việt bị co méo hoặc kích thước quá nhỏ. */
+  --font-play-display: 'Segoe UI', 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif;
+  --font-play-board: 'Segoe UI', 'Be Vietnam Pro', Calibri, Tahoma, Arial, sans-serif;
+  --grain-overlay:
+    radial-gradient(circle at 20% 12%, rgba(255, 255, 255, 0.06), transparent 42%),
+    radial-gradient(rgba(0, 0, 0, 0.16) 1px, transparent 1px);
+}
+
+/* Mọi sân khấu có thế giới đều nhận nền theo biến. */
+.modal[data-player-theme][data-game-world],
+.modal[data-player-theme] .game-stage[data-game-world] {
+  --world-stage-bg: radial-gradient(1100px 520px at 50% -12%, #2b2a63 0%, transparent 62%),
+    radial-gradient(760px 420px at 100% 108%, #1d2a52 0%, transparent 60%),
+    linear-gradient(180deg, #141a35 0%, #0f1428 100%);
+}
+
+/* Thẻ thế giới: dải băng nhỏ ở đầu sân khấu, đổi chữ và màu theo trò chơi. */
+.stage-world-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  align-self: flex-start;
+  margin: 0 0 10px;
+  padding: 3px 11px 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--world-tag-border, rgba(255, 255, 255, 0.14));
+  background: var(--world-tag-bg, rgba(255, 255, 255, 0.06));
+  color: var(--world-accent, #b3adff);
+  font-family: var(--font-play-board);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.stage-world-symbol {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--world-accent-soft, rgba(179, 173, 255, 0.16));
+  font-size: 11px;
+  letter-spacing: 0;
+}
+.stage-world-sub {
+  padding-left: 9px;
+  border-left: 1px solid var(--world-tag-border, rgba(255, 255, 255, 0.14));
+  color: var(--world-meta, #a9b1cd);
+  font-family: var(--world-font, inherit);
+  font-weight: 650;
+  letter-spacing: 0.4px;
+  text-transform: none;
+}
+html[data-fullscreen="1"] .stage-world-tag { font-size: clamp(10px, 1.1vh, 13px); }
+html[data-fullscreen="1"] .stage-world-sub { display: none; }
+.play-head-world {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 5px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--world-accent-soft, rgba(179, 173, 255, 0.16));
+  color: var(--world-accent, #b3adff);
+  /* 10px is the floor the play-surface check enforces for painted text. */
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  line-height: 1.2;
+}
+
+/* Hoa văn nền: mỗi thế giới một kiểu (giấy kẻ, giấy kem, nỉ, giấy da, đèn đua). */
+.modal[data-player-theme] .game-stage[data-game-world] {
+  position: relative;
+  isolation: isolate;
+}
+.modal[data-player-theme] .game-stage[data-game-world]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  opacity: var(--world-texture-opacity, 0.5);
+  background-image: var(--world-texture, none);
+  background-size: var(--world-texture-size, auto);
+  mix-blend-mode: var(--world-texture-blend, normal);
+}
+.modal[data-player-theme] .game-stage[data-game-world] > * {
+  z-index: 1;
+}
+
+/* Thanh tiêu đề của thẻ chơi: cùng accent với thế giới. */
+.modal[data-player-theme][data-game-world] .play-head {
+  border-bottom: 2px solid var(--world-accent, #3a4266);
+  background: var(--world-head-bg, #11152b);
+}
+
+/* ---------- 1. Quiz — phòng thi giấy kẻ ô, mực navy, nhấn hổ phách ----------
+   Scenario dùng CHUNG thế giới nền/chữ với quiz (cùng engine trắc nghiệm, chỉ
+   khác cách trình bày); điểm nhận diện của scenario nằm ở màu khung tình huống
+   và chữ nghiêng bên dưới, không phải một bảng biến riêng. Nhờ vậy stage chỉ cần
+   `data-game-world="quiz"` là đủ, kể cả khi câu scenario nằm lẫn trong game quiz
+   (data-game và data-game-world không còn phải trùng nhau). */
+.modal[data-player-theme] .game-stage[data-game="quiz"],
+.modal[data-player-theme] .game-stage[data-game="scenario"] {
+  --world-ink: #f1ead9;
+  --world-accent: #f2b24a;
+  --world-accent-soft: rgba(242, 178, 74, 0.16);
+  --world-meta: #c3b9a3;
+  --world-focus: #ffd48a;
+  --world-focus-soft: rgba(242, 178, 74, 0.42);
+  --world-display: 'Segoe UI', 'Be Vietnam Pro', Georgia, sans-serif;
+  --world-display-weight: 700;
+  --world-display-tracking: 0px;
+  --world-font: 'Segoe UI', 'Be Vietnam Pro', Calibri, Tahoma, sans-serif;
+  --world-stage-border: #3c3524;
+  --world-stage-bg:
+    radial-gradient(900px 460px at 12% -10%, rgba(242, 178, 74, 0.16), transparent 60%),
+    radial-gradient(780px 420px at 100% 105%, rgba(58, 96, 128, 0.28), transparent 62%),
+    linear-gradient(180deg, #1a2230 0%, #131a26 100%);
+  --world-texture: repeating-linear-gradient(0deg, transparent 0 27px, rgba(255, 255, 255, 0.055) 27px 28px);
+  --world-texture-opacity: 0.9;
+  --world-texture-blend: screen;
+  --world-chip-bg: #222b3b;
+  --world-chip-border: #3f4a5e;
+  --world-chip-ink: #e6dcc8;
+  --world-track-bg: #263042;
+  --world-progress: linear-gradient(90deg, #f2b24a, #ffe2a1);
+  --world-progress-glow: 0 0 14px rgba(242, 178, 74, 0.42);
+  --world-option-bg: linear-gradient(180deg, #232c3c 0%, #1b2330 100%);
+  --world-option-border: #3b4759;
+  --world-option-border-w: 1px 1px 1px 4px;
+  --world-option-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --world-option-hover-border: #f2b24a;
+  --world-option-hover-bg: linear-gradient(180deg, #2b3546 0%, #212a39 100%);
+  --world-option-hover-shadow: 0 10px 24px rgba(242, 178, 74, 0.22);
+  --world-soft-bg: rgba(242, 178, 74, 0.1);
+  --world-card-hover-border: #f2b24a;
+  --world-card-hover-bg: linear-gradient(180deg, #2b3546 0%, #212a39 100%);
+  --world-card-selected-border: #f2b24a;
+  --world-card-selected-bg: linear-gradient(180deg, #3a3427 0%, #2a261c 100%);
+  --world-tag-bg: rgba(242, 178, 74, 0.12);
+  --world-tag-border: rgba(242, 178, 74, 0.35);
+  --world-head-bg: linear-gradient(180deg, #151d29, #111824);
+  --world-scroll: #131a26;
+}
+.modal[data-player-theme] .game-stage[data-game-world] .stage-question {
+  padding-left: 18px;
+  border-left: 3px solid rgba(242, 178, 74, 0.55);
+  text-align: left;
+}
+/* Scenario: khung tình huống là "trang sổ tay" — nghiêng, viền trái phẳng. */
+.modal[data-player-theme] .game-stage[data-game="scenario"] .scenario-context {
+  font-style: italic;
+  border-radius: 0 10px 10px 0;
+}
+.modal[data-player-theme] .game-stage[data-game="scenario"] .stage-question {
+  text-align: center;
+  border-left-color: transparent;
+}
+
+/* ---------- 3. Matching — bảng nỉ xanh, thẻ giấy trắng, nhấn vàng phấn ---------- */
+.modal[data-player-theme] .game-stage[data-game="matching"] {
+  --world-ink: #f4f7ee;
+  --world-accent: #ffd86b;
+  --world-accent-soft: rgba(255, 216, 107, 0.18);
+  --world-meta: #b8cdbf;
+  --world-focus: #ffe9a8;
+  --world-focus-soft: rgba(255, 216, 107, 0.42);
+  --world-display: 'Segoe UI', 'Be Vietnam Pro', Calibri, sans-serif;
+  --world-display-weight: 700;
+  --world-display-tracking: 0px;
+  --world-font: 'Segoe UI', 'Be Vietnam Pro', Calibri, Tahoma, sans-serif;
+  --world-stage-border: #23463a;
+  --world-stage-bg:
+    radial-gradient(900px 500px at 50% -14%, rgba(94, 176, 138, 0.22), transparent 64%),
+    radial-gradient(700px 420px at 105% 108%, rgba(17, 60, 47, 0.6), transparent 60%),
+    linear-gradient(180deg, #17453a 0%, #0f3329 100%);
+  --world-texture:
+    radial-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, transparent 49.5%, rgba(0, 0, 0, 0.18) 49.5% 50.5%, transparent 50.5%);
+  --world-texture-size: 5px 5px, 240px auto;
+  --world-texture-opacity: 0.75;
+  --world-chip-bg: #1d4d40;
+  --world-chip-border: #3d6f5d;
+  --world-chip-ink: #e3f2e8;
+  --world-track-bg: #1b493c;
+  --world-progress: linear-gradient(90deg, #ffd86b, #fff1bf);
+  --world-progress-glow: 0 0 14px rgba(255, 216, 107, 0.4);
+  --world-option-bg: linear-gradient(180deg, #2a6a56 0%, #215545 100%);
+  --world-option-border: rgba(255, 255, 255, 0.16);
+  --world-option-border-w: 1px;
+  --world-option-shadow: 0 3px 0 rgba(0, 0, 0, 0.24);
+  --world-option-hover-border: #ffd86b;
+  --world-option-hover-bg: linear-gradient(180deg, #337a63 0%, #276250 100%);
+  --world-option-hover-shadow: 0 6px 0 rgba(0, 0, 0, 0.22);
+  --world-soft-bg: rgba(255, 255, 255, 0.07);
+  --world-card-hover-border: #ffd86b;
+  --world-card-hover-bg: linear-gradient(180deg, #2f8a6f 0%, #27705b 100%);
+  --world-card-selected-border: #ffd86b;
+  --world-card-selected-bg: linear-gradient(180deg, #3a3b26 0%, #2d2f1e 100%);
+  --world-tag-bg: rgba(255, 216, 107, 0.14);
+  --world-tag-border: rgba(255, 216, 107, 0.34);
+  --world-head-bg: linear-gradient(180deg, #174537, #123a2f);
+  --world-scroll: #0f3329;
+}
+/* Thẻ ghép giống miếng giấy ghim lên nỉ: góc trắng, đổ bóng ngắn. */
+.modal[data-player-theme] .game-stage[data-game="matching"] .match-card {
+  background: linear-gradient(180deg, #fdfbf2 0%, #f1ecda 100%);
+  color: #22322c;
+  border-color: #dcd2b8;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.22), 0 8px 16px rgba(0, 0, 0, 0.14);
+}
+.modal[data-player-theme] .game-stage[data-game="matching"] .match-card:hover:not(:disabled) {
+  border-color: #ffd86b;
+  background: linear-gradient(180deg, #ffffff 0%, #f6f1de 100%);
+}
+.modal[data-player-theme] .game-stage[data-game="matching"] .match-card.selected {
+  border-color: #e2a800;
+  background: linear-gradient(180deg, #fff4c9 0%, #f7e6a2 100%);
+  box-shadow: 0 0 0 3px rgba(255, 216, 107, 0.55), 0 6px 0 rgba(0, 0, 0, 0.2);
+}
+/* Lật thẻ ghi nhớ: ô úp là nỉ đậm in dấu ?, ô ngửa là giấy trắng. */
+.modal[data-player-theme] .game-stage[data-game="matching"] .memory-card {
+  background: linear-gradient(135deg, #1f5a4a 0%, #174538 100%);
+  border-color: rgba(255, 216, 107, 0.35);
+}
+.modal[data-player-theme] .game-stage[data-game="matching"] .memory-card.flipped {
+  background: linear-gradient(180deg, #fdfbf2 0%, #efe9d6 100%);
+  color: #22322c;
+  border-color: #e2a800;
+}
+.modal[data-player-theme] .game-stage[data-game="matching"] .group-box {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+.modal[data-player-theme] .game-stage[data-game="matching"] .group-box strong { color: #ffd86b; }
+
+/* ---------- 4. Treasure — bản đồ giấy da, mực nâu, nhấn vàng kim ---------- */
+.modal[data-player-theme] .game-stage[data-game="treasure"] {
+  --world-ink: #f6ecd6;
+  --world-accent: #e9b95b;
+  --world-accent-soft: rgba(233, 185, 91, 0.18);
+  --world-meta: #cbb894;
+  --world-focus: #ffe0a0;
+  --world-focus-soft: rgba(233, 185, 91, 0.42);
+  --world-display: Georgia, 'Times New Roman', 'Segoe UI', serif;
+  --world-display-weight: 700;
+  --world-display-tracking: 0px;
+  --world-font: 'Segoe UI', 'Be Vietnam Pro', Calibri, Tahoma, sans-serif;
+  --world-stage-border: #4a3a22;
+  --world-stage-bg:
+    radial-gradient(940px 520px at 16% -12%, rgba(233, 185, 91, 0.2), transparent 62%),
+    radial-gradient(820px 460px at 104% 106%, rgba(89, 54, 26, 0.55), transparent 60%),
+    linear-gradient(180deg, #2b2117 0%, #1d160f 100%);
+  --world-texture:
+    repeating-linear-gradient(92deg, rgba(255, 236, 200, 0.04) 0 2px, transparent 2px 7px),
+    radial-gradient(rgba(0, 0, 0, 0.18) 1px, transparent 1.6px);
+  --world-texture-size: auto, 6px 6px;
+  --world-texture-opacity: 1;
+  --world-chip-bg: #35291b;
+  --world-chip-border: #5c4729;
+  --world-chip-ink: #f2e2c4;
+  --world-track-bg: #3a2d1d;
+  --world-progress: linear-gradient(90deg, #c98f33, #f7d995);
+  --world-progress-glow: 0 0 16px rgba(233, 185, 91, 0.5);
+  --world-option-bg: linear-gradient(180deg, #3a2d1d 0%, #2e2416 100%);
+  --world-option-border: #5d4a2c;
+  --world-option-shadow: inset 0 1px 0 rgba(255, 236, 200, 0.07);
+  --world-option-hover-border: #e9b95b;
+  --world-option-hover-bg: linear-gradient(180deg, #473724 0%, #372b1b 100%);
+  --world-option-hover-shadow: 0 10px 24px rgba(233, 185, 91, 0.22);
+  --world-soft-bg: rgba(233, 185, 91, 0.1);
+  --world-card-hover-border: #e9b95b;
+  --world-card-hover-bg: linear-gradient(180deg, #473724 0%, #372b1b 100%);
+  --world-card-selected-border: #e9b95b;
+  --world-card-selected-bg: linear-gradient(180deg, #56442a 0%, #42331f 100%);
+  --world-tag-bg: rgba(233, 185, 91, 0.14);
+  --world-tag-border: rgba(233, 185, 91, 0.36);
+  --world-head-bg: linear-gradient(180deg, #2a2016, #241c13);
+  --world-scroll: #1d160f;
+}
+
+/* ---------- 5. Race — chặng đua đêm, cờ kẻ sọc, nhấn cam đua ---------- */
+.modal[data-player-theme] .game-stage[data-game="race"] {
+  --world-ink: #eef4ff;
+  --world-accent: #ff8a3d;
+  --world-accent-soft: rgba(255, 138, 61, 0.18);
+  --world-meta: #a9b6cf;
+  --world-focus: #ffc59b;
+  --world-focus-soft: rgba(255, 138, 61, 0.42);
+  --world-display: 'Segoe UI', 'Be Vietnam Pro', Arial, sans-serif;
+  --world-display-weight: 700;
+  --world-display-tracking: 0px;
+  --world-font: 'Segoe UI', 'Be Vietnam Pro', Calibri, Tahoma, sans-serif;
+  --world-stage-border: #283047;
+  --world-stage-bg:
+    radial-gradient(1000px 520px at 50% -16%, rgba(255, 138, 61, 0.16), transparent 62%),
+    radial-gradient(720px 400px at 102% 104%, rgba(66, 220, 255, 0.14), transparent 60%),
+    linear-gradient(180deg, #141a2c 0%, #0d1120 100%);
+  --world-texture:
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.035) 0 18px, transparent 18px 36px);
+  --world-texture-opacity: 0.55;
+  --world-chip-bg: #1f2740;
+  --world-chip-border: #38446180;
+  --world-chip-ink: #dbe4f7;
+  --world-track-bg: #1c2439;
+  --world-progress: linear-gradient(90deg, #ff8a3d, #42dcff);
+  --world-progress-glow: 0 0 16px rgba(255, 138, 61, 0.5);
+  --world-option-bg: linear-gradient(180deg, #252e46 0%, #1c2336 100%);
+  --world-option-border: #3a4560;
+  --world-option-shadow: none;
+  --world-option-hover-border: #ff8a3d;
+  --world-option-hover-bg: linear-gradient(180deg, #2f3a56 0%, #232c43 100%);
+  --world-option-hover-shadow: 0 10px 24px rgba(255, 138, 61, 0.26);
+  --world-soft-bg: rgba(255, 138, 61, 0.1);
+  --world-card-hover-border: #ff8a3d;
+  --world-card-hover-bg: linear-gradient(180deg, #2f3a56 0%, #232c43 100%);
+  --world-card-selected-border: #ff8a3d;
+  --world-card-selected-bg: linear-gradient(180deg, #3a3040 0%, #2a2433 100%);
+  --world-tag-bg: rgba(255, 138, 61, 0.14);
+  --world-tag-border: rgba(255, 138, 61, 0.36);
+  --world-head-bg: linear-gradient(180deg, #131a2b, #101627);
+  --world-scroll: #0d1120;
+}
+/* Ô đường đua là vạch xuất phát: vạch kẻ sọc đen-trắng ở ô 1 và ô đích. */
+.modal[data-player-theme] .game-stage[data-game="race"] .race-round-badge {
+  background: var(--world-accent);
+  color: #1a1208;
+  border-color: #ffb37e;
+}
+.modal[data-player-theme] .game-stage[data-game="race"] .race-active-name strong {
+  color: #ffd2b0;
+}
+
+/* Thẻ kết quả: `.game-stage` là flex column, nên khối kết quả phải canh giữa
+   theo trục ngang thay vì kéo full chiều rộng. */
+.modal[data-player-theme] .game-stage > .result-screen {
+  margin-inline: auto;
+  width: 100%;
+}
+
+/* ---------- Không có animation: nền tĩnh nhưng vẫn đúng màu ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .modal[data-player-theme] .game-stage[data-game-world] { transition: none; }
+}
+/* ============================================================
+   TRUY TÌM KHO BÁU — bố cục toàn màn hình (bàn giao 2026-10-27)
+
+   Trước đây khung chặng là một cột: bản đồ thu gọn → câu hỏi trắc nghiệm →
+   đáp án → nút. Ở máy chiếu, giáo viên và học sinh phải cuộn để thấy hết, và
+   phần chữ (bối cảnh, nhiệm vụ) bị đẩy xuống dưới hình.
+
+   Bố cục mới, chỉ ở `html[data-fullscreen="1"]`:
+     ┌──────────────────────────── bản đồ chặng (thu gọn) ────────────────────────────┐
+     │  ┌──────────────┐  ┌──────────────────────────────────────────────────────┐   │
+     │  │  hình khám phá │  │  Bối cảnh + nhiệm vụ (cột chữ, bên phải)             │   │
+     │  │  + huy hiệu    │  │  → badge loại thử thách → câu hỏi → điều khiển        │   │
+     │  │  CHẶNG n/N     │  │                                                      │   │
+     │  └──────────────┘  └──────────────────────────────────────────────────────┘   │
+     └────────────────────────────────────────────────────────────────────────────────┘
+   Cửa sổ thường giữ bố cục 1 cột như cũ, chỉ thêm huy hiệu chặng.
+
+   GHI CHÚ CHO NGƯỜI SỬA SAU:
+   - `data-game="treasure"` là giá trị ĐỘNG (`${stageGame}`), nên KHÔNG dùng
+     selector theo giá trị thuộc tính do Tailwind sẽ loại bỏ (DECISIONS #88/#104).
+     Ở đây chọn theo cấu trúc: `.stage-center.treasure-stage-grid` — lớp này chỉ
+     được render bởi `renderTreasureStage()`, không dùng ở trò khác.
+   - Item của lưới KHÔNG được `position: relative` tuỳ tiện: nó tràn qua biên
+     container scrolling và làm cả sân khấu trượt khỏi khung (lỗi đã gặp ở bản
+     thế giới trò chơi). Chỉ dùng `position` cho phần tử con bên trong.
+   ============================================================ */
+
+/* Huy hiệu "CHẶNG n/N" đặt ngay dưới hình khám phá (thay chỗ cột trắc nghiệm
+   cũ ở lề trái). */
+.treasure-chapter-now {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 10px 0 0;
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--world-tag-border, rgba(233, 185, 91, 0.36));
+  background: var(--world-tag-bg, rgba(233, 185, 91, 0.14));
+  color: var(--world-ink, #f6ecd6);
+  font-family: var(--world-font, inherit);
+  text-align: center;
+  flex-shrink: 0;
+}
+.treasure-chapter-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--world-accent, #e9b95b);
+}
+.treasure-chapter-value {
+  font-family: var(--world-display, inherit);
+  font-size: clamp(26px, 3vw, 38px);
+  font-weight: 800;
+  line-height: 1;
+}
+.treasure-chapter-total {
+  font-size: 0.55em;
+  font-weight: 700;
+  opacity: 0.72;
+  margin-left: 2px;
+}
+.treasure-chapter-name {
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--world-meta, #cbb894);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Bối cảnh & Nhiệm vụ hiển thị qua pop-up (`.treasure-story-*`, DECISIONS #91);
+   cột chữ không còn khối `.treasure-storyline` inline (DECISIONS #105). Các rule
+   `.treasure-storyline` phía trên vẫn giữ nhưng không còn phần tử nào khớp. */
+
+/* DECISIONS #108: nhãn xám "Chặng n" phía trên câu hỏi đã bỏ (trùng với huy hiệu
+   chặng dưới hình).
+   DECISIONS #109: hàng đầu sân khấu là flex hai bên — nhãn thế giới bên TRÁI, nút
+   "📜 Bối cảnh & Nhiệm vụ chặng" bên PHẢI. Hàng nằm trong `.game-stage` (flex column
+   căn giữa), nên phải tự giãn hết bề rộng thì `space-between` mới có tác dụng. */
+.treasure-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  align-self: stretch;
+  width: 100%;
+  flex-wrap: wrap;
+  margin: 0 0 8px;
+}
+.treasure-head-world {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.treasure-story-row {
+  display: flex;
+  align-items: center;
+  margin: 0;
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .treasure-head-row {
+  margin: 0 0 6px;
+}
+
+/* Gợi ý: chỉ còn là nút hình bóng đèn, ghim ở góc dưới bên trái sân khấu. */
+.modal[data-player-theme] .treasure-hint-fab {
+  position: sticky;
+  left: clamp(10px, 1.4vw, 18px);
+  bottom: clamp(10px, 1.6vh, 18px);
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(44px, 5.4vh, 54px);
+  height: clamp(44px, 5.4vh, 54px);
+  margin: 8px 0 0;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid var(--world-tag-border, rgba(233, 185, 91, 0.5));
+  background: radial-gradient(circle at 35% 30%, #ffd977, #d99a2b 70%);
+  color: #4a3208;
+  cursor: pointer;
+  flex-shrink: 0;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45), 0 0 0 4px rgba(255, 217, 119, 0.12);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+.modal[data-player-theme] .treasure-hint-fab:hover {
+  transform: translateY(-2px) scale(1.04);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.5), 0 0 0 6px rgba(255, 217, 119, 0.18);
+}
+.modal[data-player-theme] .treasure-hint-fab:focus-visible {
+  outline: 3px solid var(--world-focus, #ffe0a0);
+  outline-offset: 3px;
+}
+.modal[data-player-theme] .treasure-hint-fab:active { transform: translateY(0) scale(0.97); }
+
+/* ---------- Toàn màn hình: hình trái — chữ phải ---------- */
+html[data-fullscreen="1"] .modal[data-player-theme] .stage-center.treasure-stage-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  align-content: start;
+  align-items: start;
+  justify-content: stretch;
+  column-gap: clamp(16px, 2.2vw, 34px);
+  row-gap: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-width: none;
+  min-width: 0;
+  width: 100%;
+  align-self: stretch;
+  /* The global fullscreen rule for `.stage-center` sets flex-direction: row and
+     flex-wrap: wrap; a grid element ignores them, and `flex: 1 1 auto` above is
+     what makes the grid grow inside the stage column. */
+}
+/* Cột hình: hình vẽ + huy hiệu chặng xếp dọc, canh đầu cột. */
+html[data-fullscreen="1"] .modal[data-player-theme] .treasure-stage-grid > .treasure-illustration-col {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  min-width: 0;
+  width: auto;
+  flex: initial;
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .treasure-stage-grid > .treasure-illustration-col > .stage-illustration.is-treasure {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  aspect-ratio: 16 / 10 !important;
+}
+/* Cột chữ: bối cảnh → badge → câu hỏi → điều khiển, đủ chỗ cho câu hỏi dài. */
+html[data-fullscreen="1"] .modal[data-player-theme] .treasure-stage-grid > .stage-col.is-main {
+  flex: initial;
+  min-width: 0;
+  width: auto;
+  align-items: stretch;
+  gap: 0;
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .treasure-stage-grid .stage-question {
+  margin: 10px 0 12px;
+  max-width: 100%;
+  text-align: left;
+  font-size: clamp(20px, 1.9vw, 30px);
+  line-height: 1.32;
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .treasure-stage-grid .treasure-mission-badge {
+  margin: 0 0 8px;
+  align-self: flex-start;
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .treasure-stage-grid > .stage-col.is-main > #treasureExtra {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+/* Đáp án ở cột phải của kho báu: ô chữ dài không được chiếm 194px chỉ vì
+   hàng lưới kéo giãn theo cột cao nhất. Giữ độ cao theo nội dung, chừa chỗ
+   cho câu hỏi và thông báo đúng/sai. `min-height` sàn toàn màn hình (12vh)
+   vẫn đủ lớn để đọc từ cuối lớp. */
+html[data-fullscreen="1"] .modal[data-player-theme] .treasure-stage-grid > .stage-col.is-main > #treasureMission > .answer-grid {
+  flex: 0 0 auto;
+  align-content: start;
+  grid-auto-rows: auto;
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .treasure-stage-grid > .stage-col.is-main > #treasureMission > .answer-grid > .answer-option {
+  min-height: clamp(56px, 7vh, 74px);
+  padding-block: clamp(8px, 1.1vh, 12px);
+}
+
+/* Thanh dưới cùng: số lượt thử bên phải, nút gợi ý (sticky) bên trái. */
+html[data-fullscreen="1"] .modal[data-player-theme] .game-stage[data-game="treasure"] > .stage-bottom {
+  order: 2;
+  margin-top: 6px;
+  text-align: right;
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .game-stage[data-game="treasure"] > .treasure-hint-fab {
+  order: 3;
+}
+
+/* Bảng hẹp / cửa sổ thường: giữ một cột, huy hiệu chặng nằm gọn bên dưới hình. */
+@media (max-width: 1179px) {
+  .modal[data-player-theme] .treasure-hint-fab {
+    position: static;
+    margin: 8px 0 0;
+    align-self: flex-start;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .modal[data-player-theme] .treasure-hint-fab { transition: none; }
+}
+

@@ -1,0 +1,113 @@
+/* navigation.css — Icon điều hướng của navbar. — tách từ app.css, giữ nguyên thứ tự (DECISIONS #149). */
+/* ============================================================
+   Navigation icons — make them read as icons instead of grey text.
+   The markup uses a bare glyph inside .nav-icon, so the styling has
+   to come from here rather than from per-icon markup.
+   ============================================================ */
+.nav-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  border-radius: 9px;
+  background: #f1f2f9;
+  color: #6a7290;
+  font-size: 16px !important;
+  line-height: 1;
+  transition: background 0.15s, color 0.15s, transform 0.12s, box-shadow 0.15s;
+}
+.nav-item:hover .nav-icon { background: #e6e4ff; color: var(--purple); transform: scale(1.04); }
+
+/* Nút "Cài đặt" nằm ngoài <nav> (trong .sidebar-bottom, một div thường) nên
+   button không bị grid kéo đầy cột: nó co lại bằng nội dung và lệch hàng so với
+   7 mục phía trên. Ép đầy chiều rộng cho khớp các mục trong nav. */
+.sidebar-bottom .nav-item { width: 100%; }
+
+/* Active page: filled brand tile with a soft glow, matching .brand-mark. */
+.nav-item.active .nav-icon {
+  background: linear-gradient(145deg, #786dff, #5145d6);
+  color: #fff;
+  box-shadow: 0 4px 10px #6258e84d;
+}
+
+/* Keep the collapsed rail tidy: hide the tile background there so the
+   icons stay centred in the 64px sidebar. */
+@media (max-width: 1100px) {
+  .nav-icon { width: 32px; height: 32px; min-width: 32px; font-size: 18px !important; }
+}
+
+/* Topbar help button + avatar get the same treatment so the header does
+   not look washed out next to the new nav. */
+.icon-button {
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.12s;
+}
+.icon-button:hover {
+  background: #f1f0ff;
+  border-color: #cdc9f7;
+  color: var(--purple);
+  transform: translateY(-1px);
+}
+
+
+/* --- after answering: feedback legibility + dark scrollbar --- */
+.modal[data-player-theme] .feedback {
+  width: 100%;
+  max-width: 1040px;
+  margin: 16px auto 0;
+  padding: clamp(13px, 1.2vw, 18px) clamp(15px, 1.4vw, 20px);
+  border-radius: 12px;
+  font-size: clamp(13px, 1.15vw, 16px);
+  line-height: 1.65;
+  color: #dfe3f2;
+}
+.modal[data-player-theme] .feedback strong { color: #fff; }
+.modal[data-player-theme] .feedback.good {
+  border: 1px solid #2f9e80;
+  border-left-width: 4px;
+  background: linear-gradient(180deg, #14332c 0%, #122a25 100%);
+}
+.modal[data-player-theme] .feedback.bad {
+  border: 1px solid #a35468;
+  border-left-width: 4px;
+  background: linear-gradient(180deg, #35202a 0%, #2b1b23 100%);
+}
+
+/* The play modal scrolls on short windows; the default white scrollbar on a
+   dark surface is very distracting on a projector, so it gets an even thinner
+   bar with muted navy colours. */
+.modal[data-player-theme] { scrollbar-width: thin; scrollbar-color: #454d75 var(--world-scroll, #141a35); }
+.modal[data-player-theme] ::-webkit-scrollbar { width: 8px; height: 8px; }
+.modal[data-player-theme] ::-webkit-scrollbar-track { background: #141a35; }
+.modal[data-player-theme] ::-webkit-scrollbar-thumb {
+  background: #454d75;
+  border: 2px solid #141a35;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+.modal[data-player-theme] ::-webkit-scrollbar-thumb:hover { background: #5b638f; }
+.modal[data-player-theme] ::-webkit-scrollbar-corner { background: #141a35; }
+
+/* Trimming the stage so a scenario question + 4 options + feedback still fit
+   in a 1366x768 projector window without scrolling. */
+.modal[data-player-theme] .stage-progress { margin: 12px 0 18px; }
+.modal[data-player-theme] .stage-question { margin: 10px auto 22px; line-height: 1.3; }
+
+@media (max-height: 800px) {
+  .modal[data-player-theme] .stage-question { font-size: clamp(24px, 2.7vw, 34px); margin: 8px auto 16px; }
+  /* Cửa sổ thường (không toàn màn hình) khi thấp <800px: sàn 18px thay cho 15px
+     cũ. 15px là đúng con số giáo viên phàn nàn "chữ đáp án quá nhỏ trên máy
+     chiếu" — dù rule này chỉ dành cho chế độ cửa sổ, nó từng thắng cả khối toàn
+     màn hình vì khai báo sau (DECISIONS #88 đã tách hai trường hợp ra). */
+  .modal[data-player-theme] .answer-option { min-height: 58px; padding: 11px 14px; font-size: clamp(18px, 1.35vw, 21px); }
+  .modal[data-player-theme] .answer-grid { gap: 10px; }
+  .modal[data-player-theme] .feedback { margin-top: 11px; font-size: 13px; line-height: 1.55; }
+  .modal[data-player-theme] .stage-progress { margin: 10px 0 14px; }
+  /* Bản `html[data-fullscreen]` thứ tư từng ở đây (1607-1610) đã gộp vào khối
+     "Lưới đáp án + ô đáp án ở toàn màn hình" ở đầu tệp (DECISIONS #88). */
+}
+

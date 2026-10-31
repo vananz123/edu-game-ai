@@ -47,7 +47,20 @@ src/
                        toàn màn hình), three-stage (3D), house, result-screen
                        (kết quả + trình chiếu + modal), quiz, matching, treasure, race
     features/wizard/   Luồng "Tạo từ giáo án" (bước 1→5)
-    styles/app.css     CSS tay + Tailwind (xem "Thứ tự CSS" bên dưới)
+    styles/app.css     Entry Tailwind + daisyUI: @import các file khu vực theo thứ tự
+      base.css           token alias (:root), layer base, biến cỡ chữ/animation
+      components.css     component dùng chung port từ 5 stylesheet cũ (nút, thẻ, form…)
+      shell.css          topbar/sidebar cố định, dark theme, override toàn màn hình
+      fullscreen.css     bố cục toàn màn hình/máy chiếu + mật độ chỗ trình chiếu
+      gameplay.css       play surface: stage, đáp án, màn kết quả
+      navigation.css     icon navbar
+      game-race.css      bảng Đường đua
+      game-animations.css chuyển động 5 trò (thanh lượt, thẻ, phân loại, cuộn stage)
+      setup-wizard.css   wizard cài AI lần đầu
+      wizard.css         wizard tạo từ giáo án: tiến trình, ảnh minh hoạ, cây bước 1
+      game-treasure.css  kho báu: tương tác nâng cao + bản đồ hành trình
+      game-worlds.css    5 thế giới trò chơi + bố cục kho báu toàn màn hình
+      game-house.css     chế độ Xây nhà (#142)
   game-engine/         Runtime chạy game đã lưu (offline)
 server/                Cloud AI Gateway (Express + Supabase + Gemini) — không chạy khi chơi
 scripts/               Script build (icon, kiểm tra global renderer)
@@ -90,7 +103,7 @@ vendor/                DLL VC++ đóng gói kèm
 | Prompt / schema gọi AI | `src/services/lesson/lesson-prompts.ts`, `lesson/lesson-contracts.ts`, `ai/ai-tasks.ts` |
 | Nhà cung cấp AI của Step 2/Step 5, khoá theo từng nhà cung cấp, trạng thái sẵn sàng (#132) | `src/services/ai/ai-providers.ts` (registry + chọn nhà cung cấp + migration khoá), `main.ts` (`createChatClientForProvider`, `ai:test-provider`, `settings:get/save` không trả khoá), `pages/settings.ts` + `features/settings.ts` (thẻ từng nhà cung cấp), `features/wizard/state.ts` (`wizardProviderCard`/`wizardProviderPickerHtml`) |
 | Lưu trữ (SQLite, `.egame`) | `src/services/storage/lesson-store.ts`, `src/services/game/game-package.ts`, `main.ts` (IPC), `preload.ts` (API) |
-| Màu nền 5 thế giới trò chơi | `styles/app.css`, mục "NĂM THẾ GIỚI TRÒ CHƠI" + `GAME_WORLDS` trong `games/result-screen.ts` |
+| Màu nền 5 thế giới trò chơi | `styles/game-worlds.css`, mục "NĂM THẾ GIỚI TRÒ CHƠI" + `GAME_WORLDS` trong `games/result-screen.ts` |
 | Màn hình kết quả, trình chiếu, thi đấu đội | `features/games/result-screen.ts` |
 | Lớp 3D dùng chung và thế giới theo trò | `features/three-game-interaction.ts` (API), `features/games/three-stage.ts` (mount/world/reactThree) |
 | House Building Mode (kinh tế nhà, mẫu nhà) | `src/game-engine/house-build.ts` (kinh tế), `features/games/house.ts` (UI/3D) |
@@ -113,12 +126,16 @@ sửa, đi theo thứ tự này:
 
 ## Thứ tự CSS (dễ gây lỗi)
 
-`src/renderer/styles/app.css` là CSS viết tay **cộng** Tailwind: phần viết tay
-dài (~4.1k dòng) nằm trên, các khối thế giới trò chơi nằm dưới cùng. Sau khi biên
-dịch, Tailwind rút gọn selector (`.modal[data-player-theme]` → `[data-player-theme]`)
-nên **một rule đặt sau có thể mất ưu thế** nếu selector của nó "nhẹ" hơn. Quy tắc:
-rule mới đặt sau phải có ít nhất bằng số đơn vị specificity của rule cũ mà nó ghi đè.
-`npm run verify:css` kiểm tra một số bất biến đã biết.
+`src/renderer/styles/app.css` là entry Tailwind: `@import "tailwindcss"` + daisyUI
+`@plugin`/`@theme`/`@source`, rồi `@import` 13 file khu vực (base → components →
+shell → fullscreen → gameplay → navigation → game-race → game-animations →
+setup-wizard → wizard → game-treasure → game-worlds → game-house). Tailwind inline
+từng `@import` đúng tại chỗ, nên **thứ tự import là thứ tự cascade**: không đổi
+thứ tự, không import muộn hơn vị trí cũ của một khối. Sau khi biên dịch, Tailwind
+rút gọn selector (`.modal[data-player-theme]` → `[data-player-theme]`) nên **một
+rule đặt sau có thể mất ưu thế** nếu selector của nó "nhẹ" hơn. Quy tắc: rule mới
+đặt sau phải có ít nhất bằng số đơn vị specificity của rule cũ mà nó ghi đè.
+`npm run verify:css` kiểm tra một số bất biến đã biết trên file biên dịch.
 
 ## Thứ tự script renderer (dễ gây lỗi)
 

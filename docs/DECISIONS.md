@@ -252,3 +252,40 @@ Các mục #57–#145 được tách sang `docs/handoff/decisions/` để file n
 
 **Không làm.** Không đổi hợp đồng IPC/preload, không gộp/tách file dịch vụ, không đổi logic nghiệp vụ, không sửa renderer/CSS, không đụng LAN/presentation/SQLite/`.egame`.
 
+## #149 — Tách `app.css` thành 13 file khu vực, giữ nguyên cascade (P4 restructure)
+
+**Bối cảnh.** `src/renderer/styles/app.css` là 4.567 dòng / 227 KB trộn đủ thứ: token, component legacy, khung ứng dụng, play surface, wizard, 5 thế giới trò chơi, xây nhà. Sửa một trò phải cuộn qua toàn bộ file. Đây là P4 của kế hoạch cấu trúc lại cây dự án (#146–#148) với nguyên tắc **chỉ di chuyển, không đổi hành vi**.
+
+**Quyết định.** `app.css` trở thành **entry** giữ nguyên 200 dòng đầu (`@import "tailwindcss"`, daisyUI `@plugin` + theme, `@theme`, `@source`), rồi `@import` 13 file khu vực. Tailwind v4 inline từng `@import` CSS cục bộ **đúng tại vị trí**, nên chỉ cần xếp import đúng thứ tự cũ là cascade không đổi. Các mảnh là **lát cắt liên tiếp** của file gốc — không cắt giữa một block, không đổi thứ tự, không gộp các khối rời rạc:
+
+| File | Dòng gốc | Nội dung |
+| --- | --- | --- |
+| `base.css` | 201–286 | token alias `:root`, `@layer base`, `motion-safe-off`, biến player theme |
+| `components.css` | 287–843 | component legacy port từ 5 stylesheet cũ (nút, thẻ, form, editor, scrollbar, trang chủ, stepper wizard) |
+| `shell.css` | 844–1020 | topbar/sidebar sticky, dark theme, override toàn màn hình cơ bản |
+| `fullscreen.css` | 1021–1257 | override toàn màn hình dùng chung + mật độ chỗ trình chiếu |
+| `gameplay.css` | 1258–1901 | play surface: stage, đáp án, màn kết quả (+ hero nhà #144) |
+| `navigation.css` | 1902–2013 | icon navbar |
+| `game-race.css` | 2014–2063 | bảng Đường đua |
+| `game-animations.css` | 2064–2398 | thanh lượt đội, matching/memory/phân loại, cuộn stage |
+| `setup-wizard.css` | 2399–2501 | wizard cài AI lần đầu |
+| `wizard.css` | 2502–3002 | tiến trình AI, ảnh minh hoạ stage, cây cấu trúc bước 1 |
+| `game-treasure.css` | 3003–3848 | kho báu #91, bản đồ hành trình #92 |
+| `game-worlds.css` | 3849–4453 | 5 thế giới #104, bố cục kho báu toàn màn hình |
+| `game-house.css` | 4454–4567 | chế độ Xây nhà #142 |
+
+Lý do không gom đúng 5 tên trong roadmap: các khối game/kết quả nằm **rải rác** giữa các khu vực khác; muốn giữ nguyên thứ tự cascade thì mỗi file phải là một lát cắt liên tiếp. Ranh giới vì vậy men theo các section comment sẵn có (và #91/#92/#104/#142 vốn đã chia khối), đặt tên theo nội dung thật thay vì ép về 5 thư mục.
+
+**Cách làm.** Script Node đọc bản gốc, tính độ sâu ngoặc **bỏ qua comment/chuỗi** để khẳng định mỗi mốc cắt nằm ở cấp 0, ghi từng file = banner một dòng + đúng lát cắt gốc (không sửa ký tự nào), rồi **nối lại và so SHA-256 với bản gốc**: `3a75462e…10c08e2`, 217.386 ký tự khớp tuyệt đối. Bằng chứng mạnh hơn: chạy `build:css` trước và sau khi tách, file biên dịch `dist/src/renderer/styles/app.css` **giống hệt từng byte** (`a3cf605f…4f3f40a`, 197.047 ký tự).
+
+**Test đọc CSS nguồn được cập nhật.** Ba guard trước đây đọc trực tiếp `app.css`; sau khi tách phần lớn rule nằm ở file khác nên chúng đọc **cả thư mục** `src/renderer/styles/*.css` (sắp xếp tên, nối lại):
+- `tests/unit/generation-eta.test.ts` — keyframes `spin-slow` + `.wizard-gen-spinner` + `prefers-reduced-motion` (nay ở `wizard.css`).
+- `tests/unit/illustration-registry.test.ts` — `.stage-illustration` + media `max-height:760px` (nay ở `wizard.css`).
+- `tests/unit/build-assets.test.ts` — thêm guard 2b: mọi `@import "./x.css"` trong entry phải tồn tại cạnh nó ở `src` **và** trong `dist`, để đổi tên file khu vực không âm thầm làm mất cả vùng CSS khỏi bản đóng gói.
+
+`tests/manual/verify-css.js` không đổi: nó đọc file **biên dịch** `dist/.../app.css`, vẫn là một file duy nhất.
+
+**Verification.** `npm run build` 0 · `node tests/run-unit.js` **68/68** · `npm run verify:css` **17/17** · `npm run check:renderer-globals` 0 undefined. Không chạy lại CDP UI checks vì đầu ra CSS biên dịch trùng byte với baseline — mọi rule, thứ tự và specificity không đổi.
+
+**Không làm.** Không đổi selector, giá trị, thứ tự rule, không gộp/tách block, không thêm `<link>` mới (vẫn đúng một link `app.css`), không đổi Tailwind/daisyUI config hay `@source`. Các file khu vực không được nạp trực tiếp bởi `index.html` (không thể, vì chúng chưa qua Tailwind).
+

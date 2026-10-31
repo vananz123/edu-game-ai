@@ -490,12 +490,14 @@ test('the rendered stack is ordered back to front', () => {
 
 
 
-// The stylesheet is read raw (not compiled) so this guard can see the declared
-// rules. app.css has been the only place the play-surface geometry lives.
-const APP_CSS = readFileSync(
-  require('node:path').join(__dirname, '..', '..', '..', 'src', 'renderer', 'styles', 'app.css'),
-  'utf8'
-);
+// The stylesheet was split into area files (DECISIONS #149); read the whole
+// directory raw (not compiled) so this guard still sees the declared rules.
+const APP_CSS_DIR = require('node:path').join(__dirname, '..', '..', '..', 'src', 'renderer', 'styles');
+const APP_CSS = require('node:fs').readdirSync(APP_CSS_DIR)
+  .filter((name: string) => name.endsWith('.css'))
+  .sort()
+  .map((name: string) => readFileSync(require('node:path').join(APP_CSS_DIR, name), 'utf8'))
+  .join('\n');
 
 test('no stage-illustration rule sets height without width (aspect-ratio trap)', () => {
   // #70 trap: the scene is authored 16:10 and the box uses `aspect-ratio`. A

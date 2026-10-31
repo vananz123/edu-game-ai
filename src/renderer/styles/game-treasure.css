@@ -1,0 +1,847 @@
+/* game-treasure.css — Kho báu: tương tác nâng cao, bản đồ hành trình (DECISIONS #91, #92). — tách từ app.css, giữ nguyên thứ tự (DECISIONS #149). */
+/* ============================================================
+   Treasure Hunt Enhanced Interaction, Map Drawer, Pop-up Modal,
+   and Champion / Blessing Rewards (DECISIONS #91)
+   ============================================================ */
+
+/* Drawer ẩn hiện bản đồ khi trả lời / khi hoàn thành chặng */
+.modal[data-player-theme] .treasure-map-drawer {
+  flex-shrink: 0;
+  width: 100%;
+}
+.modal[data-player-theme] .treasure-map-drawer.is-answering:not(.is-peek-open) {
+  display: none;
+}
+.modal[data-player-theme] .treasure-map-drawer.is-answering.is-peek-open {
+  display: block;
+  animation: treasure-map-slide-down 0.3s ease-out forwards;
+}
+.modal[data-player-theme] .treasure-map-drawer.is-answered {
+  display: block;
+  animation: treasure-map-slide-down 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes treasure-map-slide-down {
+  0% { opacity: 0; transform: translateY(-16px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.modal[data-player-theme] .treasure-map-node.is-advancing {
+  animation: node-advance-pulse 0.4s ease-in-out infinite alternate;
+}
+@keyframes node-advance-pulse {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.22) translateY(-4px); box-shadow: 0 0 16px #8b82ff; filter: brightness(1.25); }
+}
+
+/* Popup bối cảnh & nhiệm vụ chặng */
+.treasure-story-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(10, 13, 26, 0.82);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: fade-in 0.2s ease-out;
+}
+.treasure-story-backdrop.is-closing {
+  opacity: 0;
+  transition: opacity 0.18s ease-in;
+}
+.treasure-story-dialog {
+  background: linear-gradient(180deg, #181d38 0%, #11152a 100%);
+  border: 1px solid #3c4672;
+  border-radius: 18px;
+  width: min(620px, 94vw);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65);
+  animation: dialog-pop 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+@keyframes dialog-pop {
+  0% { opacity: 0; transform: scale(0.94) translateY(12px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+.treasure-story-dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  background: #141830;
+  border-bottom: 1px solid #2d3558;
+}
+.treasure-story-close-btn {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: #232b4b;
+  color: #c5cced;
+  border: 1px solid #3c4672;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.treasure-story-close-btn:hover {
+  background: #364170;
+  color: #fff;
+}
+.treasure-story-dialog-body {
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.treasure-story-block {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #19203a;
+  border: 1px solid #2e375e;
+}
+.treasure-story-block.is-mission {
+  background: linear-gradient(135deg, rgba(39, 48, 88, 0.8), rgba(24, 30, 58, 0.8));
+  border-color: #4a5792;
+}
+.story-block-tag {
+  margin-bottom: 8px;
+}
+.story-block-text {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: #e2e6f7;
+  margin: 0;
+}
+.mission-lead {
+  font-size: 14px;
+  color: #ffd977;
+  margin-bottom: 6px;
+}
+.mission-specs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.spec-chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #222a4c;
+  border: 1px solid #394473;
+  font-size: 11.5px;
+  color: #c9d0eb;
+}
+.spec-chip b {
+  color: #fff;
+}
+.treasure-story-dialog-foot {
+  padding: 14px 20px;
+  border-top: 1px solid #2f375e;
+  background: #141830;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Thẻ vinh danh và câu chúc hoàn thành trò chơi kho báu */
+.treasure-reward-card {
+  margin: 18px auto;
+  max-width: 620px;
+  padding: 20px 24px;
+  border-radius: 18px;
+  text-align: center;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  animation: reward-pop 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes reward-pop {
+  0% { opacity: 0; transform: scale(0.92); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.treasure-reward-card.is-champion {
+  background: linear-gradient(135deg, rgba(68, 48, 12, 0.95), rgba(46, 28, 76, 0.95));
+  border: 2px solid #ffd977;
+  box-shadow: 0 0 40px rgba(255, 217, 119, 0.38);
+}
+.treasure-reward-card.is-blessing {
+  background: linear-gradient(135deg, rgba(22, 50, 42, 0.95), rgba(28, 38, 78, 0.95));
+  border: 2px solid #35d39f;
+  box-shadow: 0 0 35px rgba(53, 211, 159, 0.32);
+}
+.treasure-reward-card.is-encouragement {
+  background: #1a213c;
+  border: 1px solid #364270;
+}
+.reward-badge {
+  display: inline-block;
+  margin-bottom: 12px;
+}
+.reward-headline {
+  font-size: clamp(16px, 1.4vw, 20px);
+  font-weight: 850;
+  color: #ffd977;
+  margin-bottom: 8px;
+}
+.reward-quote {
+  font-size: clamp(14px, 1.25vw, 17px);
+  font-style: italic;
+  line-height: 1.65;
+  color: #ffffff;
+  margin: 8px 0;
+}
+.reward-sub {
+  font-size: 13px;
+  color: #c9d0eb;
+  font-weight: 600;
+  margin-top: 10px;
+}
+
+
+/* ============================================================
+   Full-Screen Journey Map Screen & Continue Flow (DECISIONS #92)
+   ============================================================ */
+.modal[data-player-theme] .game-stage.is-journey-screen {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  min-height: 100%;
+  padding: clamp(16px, 2vh, 28px) clamp(16px, 2.5vw, 36px);
+  animation: fade-in 0.3s ease-out;
+}
+
+.journey-map-full-container {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(14px, 1.8vh, 22px);
+  max-width: 1100px;
+  width: 100%;
+  margin: 0 auto;
+  flex: 1 1 auto;
+}
+
+.journey-map-headline {
+  text-align: center;
+  margin-top: 4px;
+}
+.journey-map-headline h2 {
+  font-size: clamp(20px, 2.2vw, 30px);
+  font-weight: 850;
+  color: #fff;
+  letter-spacing: -0.3px;
+  margin: 0 0 6px;
+}
+.journey-map-sub {
+  font-size: clamp(13px, 1.2vw, 16px);
+  color: #cdd4ee;
+  margin: 0;
+}
+
+.journey-map-frame {
+  width: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+  border: 1px solid #38426b;
+}
+.journey-map-frame .treasure-map {
+  margin-bottom: 0;
+  border: none;
+}
+
+.journey-next-stage-card {
+  background: linear-gradient(135deg, rgba(28, 35, 68, 0.95), rgba(18, 23, 46, 0.95));
+  border: 1px solid #434e7f;
+  border-radius: 18px;
+  padding: clamp(16px, 2vh, 24px) clamp(18px, 2.4vw, 32px);
+  text-align: center;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+  animation: dialog-pop 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.next-stage-badge {
+  font-size: 13px;
+  padding: 6px 14px;
+  margin-bottom: 10px;
+}
+.next-stage-desc {
+  margin: 10px 0 16px;
+}
+.next-stage-task {
+  font-size: clamp(14px, 1.3vw, 18px);
+  font-weight: 600;
+  color: #f1f4ff;
+  margin: 0 0 6px;
+}
+.next-stage-type {
+  font-size: 13px;
+  color: #ffd977;
+  margin: 0;
+}
+
+.journey-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.journey-btn-main {
+  font-size: clamp(15px, 1.3vw, 18px) !important;
+  font-weight: 750 !important;
+  padding: 13px 32px !important;
+  border-radius: 12px !important;
+  background: linear-gradient(135deg, #7b6cf6, #5b4fd8) !important;
+  border-color: #8b82ff !important;
+  color: #ffffff !important;
+  box-shadow: 0 6px 20px rgba(98, 88, 232, 0.45) !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+}
+.journey-btn-main:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 8px 24px rgba(98, 88, 232, 0.6) !important;
+}
+.journey-btn-main.is-finish {
+  background: linear-gradient(135deg, #e5a93b, #c47b14) !important;
+  border-color: #ffd977 !important;
+  color: #1a1400 !important;
+  box-shadow: 0 6px 20px rgba(229, 169, 59, 0.45) !important;
+}
+
+.journey-btn-branch {
+  font-size: clamp(14px, 1.2vw, 16px) !important;
+  padding: 12px 24px !important;
+  border-radius: 12px !important;
+  cursor: pointer !important;
+}
+
+.treasure-continue-btn {
+  font-size: 16px !important;
+  font-weight: 750 !important;
+  padding: 13px 30px !important;
+  border-radius: 12px !important;
+  background: linear-gradient(135deg, #7b6cf6, #5b4fd8) !important;
+  border-color: #8b82ff !important;
+  color: #ffffff !important;
+  box-shadow: 0 6px 20px rgba(98, 88, 232, 0.45) !important;
+  margin-top: 14px;
+  cursor: pointer !important;
+  transition: transform 0.15s, box-shadow 0.15s !important;
+}
+.treasure-continue-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(98, 88, 232, 0.6) !important;
+}
+
+.treasure-map-node.is-target-advance {
+  animation: node-target-glow 0.6s ease-in-out infinite alternate;
+}
+@keyframes node-target-glow {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.28) translateY(-6px); filter: drop-shadow(0 0 12px #8b82ff) brightness(1.3); }
+}
+
+/* --- Phản hồi và gợi ý nằm dưới ảnh minh họa (DECISIONS #93) --- */
+.modal[data-player-theme] .stage-center > .stage-col:not(.is-main),
+.modal[data-player-theme] .stage-col.stage-side-col,
+.modal[data-player-theme] .race-turn-row > .stage-col:not(.is-main) {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  justify-content: flex-start !important;
+  min-width: 0 !important;
+}
+
+/* Đảm bảo ảnh minh họa giữ kích thước chuẩn, không bao giờ bị co rúm hay ảnh hưởng bởi phần feedback bên dưới */
+.modal[data-player-theme] .stage-illustration {
+  flex: 0 0 auto !important;
+  flex-shrink: 0 !important;
+}
+
+/* Khối feedback / gợi ý nằm dưới ảnh minh họa */
+.modal[data-player-theme] .feedback-under-illustration,
+.modal[data-player-theme] .stage-col:not(.is-main) > #answerFeedback,
+.modal[data-player-theme] .stage-col:not(.is-main) > #matchFeedback,
+.modal[data-player-theme] .stage-col:not(.is-main) > #raceSideFeedback {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  margin: 12px 0 0 0 !important;
+  flex: 0 1 auto !important;
+  flex-shrink: 1 !important;
+  max-height: clamp(150px, 28vh, 280px) !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: #48527a transparent !important;
+  animation: feedback-pop 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  word-break: break-word !important;
+}
+
+/* Thanh cuộn riêng cho phần feedback dưới ảnh khi có nhiều chữ */
+.modal[data-player-theme] .feedback-under-illustration::-webkit-scrollbar,
+.modal[data-player-theme] .stage-col:not(.is-main) > #answerFeedback::-webkit-scrollbar {
+  width: 6px;
+}
+.modal[data-player-theme] .feedback-under-illustration::-webkit-scrollbar-thumb,
+.modal[data-player-theme] .stage-col:not(.is-main) > #answerFeedback::-webkit-scrollbar-thumb {
+  background: #48527a;
+  border-radius: 4px;
+}
+
+/* Ẩn hoàn toàn khi không có nội dung */
+.modal[data-player-theme] #answerFeedback:empty,
+.modal[data-player-theme] #matchFeedback:empty,
+.modal[data-player-theme] #raceSideFeedback:empty {
+  display: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+}
+
+/* Định dạng thẻ gợi ý (.is-hint) */
+.modal[data-player-theme] .feedback.is-hint {
+  border: 1px solid #227093 !important;
+  border-left-width: 4px !important;
+  background: linear-gradient(180deg, #132738 0%, #101e2c 100%) !important;
+  box-shadow: 0 4px 16px rgba(56, 189, 248, 0.12) !important;
+  color: #d1ecf1 !important;
+}
+.modal[data-player-theme] .feedback.is-hint strong {
+  color: #7dd3fc !important;
+}
+
+/* Nút mở gợi ý cho Quiz / Scenario */
+.quiz-hint-btn {
+  font-size: 12px !important;
+  padding: 4px 10px !important;
+  border-radius: 8px !important;
+  border-color: #3b4268 !important;
+  color: #ffd166 !important;
+  background: rgba(255, 209, 102, 0.08) !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+.quiz-hint-btn:hover:not(:disabled) {
+  background: rgba(255, 209, 102, 0.18) !important;
+  border-color: #ffd166 !important;
+}
+.quiz-hint-btn:disabled {
+  opacity: 0.6 !important;
+  cursor: default !important;
+}
+
+/* Đảm bảo ảnh minh họa kho báu trong cột ảnh luôn chiếm 100% bề rộng cột và không bị co ép */
+.modal[data-player-theme] .stage-col > .stage-illustration.is-treasure,
+html[data-fullscreen="1"] .modal[data-player-theme] .stage-col > .stage-illustration.is-treasure {
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
+  aspect-ratio: 16 / 10 !important;
+  flex: 0 0 auto !important;
+  flex-shrink: 0 !important;
+  margin: 0 0 10px 0 !important;
+  opacity: 0.98 !important;
+}
+
+/* Phần phản hồi & gợi ý dưới ảnh minh họa kho báu */
+.modal[data-player-theme] .stage-col.stage-side-col > #answerFeedback {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  flex: 0 1 auto !important;
+  flex-shrink: 1 !important;
+  margin-top: 10px !important;
+  max-height: clamp(160px, 30vh, 300px) !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain !important;
+}
+
+/* --- Tối ưu Đường đua tri thức: Ảnh minh họa to lên & kết quả đúng/sai (DECISIONS #94) --- */
+html[data-fullscreen="1"] .modal[data-player-theme] .race-turn-row > .stage-col:not(.is-main) {
+  flex: 0 0 auto !important;
+  width: clamp(280px, 24vw, 400px) !important;
+}
+
+.modal[data-player-theme] .race-turn .stage-illustration,
+.modal[data-player-theme] .race-turn .stage-illustration.is-race,
+html[data-fullscreen="1"] .modal[data-player-theme] .race-turn .stage-illustration.is-race {
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
+  aspect-ratio: 16 / 10 !important;
+  flex: 0 0 auto !important;
+  flex-shrink: 0 !important;
+  margin: 0 0 10px 0 !important;
+  opacity: 0.98 !important;
+}
+
+.race-continue-btn {
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  padding: 12px 28px !important;
+  border-radius: 12px !important;
+  background: linear-gradient(135deg, #7b6cf6, #5b4fd8) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 16px rgba(98, 88, 232, 0.4) !important;
+  cursor: pointer !important;
+  transition: transform 0.15s, box-shadow 0.15s !important;
+}
+.race-continue-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(98, 88, 232, 0.55) !important;
+}
+
+/* --- Gộp Vòng-Lượt và Các đội chung 1 hàng (DECISIONS #95) --- */
+.modal[data-player-theme] .race-status-bar {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  padding: 8px 14px !important;
+  background: rgba(17, 21, 43, 0.85) !important;
+  border: 1px solid #303651 !important;
+  border-radius: 12px !important;
+  margin-bottom: 12px !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+.modal[data-player-theme] .race-turn-indicator {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 10px !important;
+  flex: 1 1 340px !important;
+  min-width: 280px !important;
+}
+
+.modal[data-player-theme] .race-round-badge {
+  font-size: clamp(12px, 1.4vh, 14px) !important;
+  padding: 4px 10px !important;
+  border-radius: 8px !important;
+}
+
+.modal[data-player-theme] .race-active-team-pill {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 4px 12px !important;
+  border-radius: 8px !important;
+  background: rgba(139, 130, 255, 0.15) !important;
+  border: 1px solid rgba(139, 130, 255, 0.45) !important;
+  color: #ffffff !important;
+  font-size: clamp(13px, 1.5vh, 16px) !important;
+}
+
+.modal[data-player-theme] .race-active-kicker {
+  font-size: 11px !important;
+  letter-spacing: 0.5px !important;
+  color: #aeb5ce !important;
+  font-weight: 700 !important;
+}
+
+.modal[data-player-theme] .race-active-name {
+  font-weight: 800 !important;
+  color: #ffd166 !important;
+}
+
+.modal[data-player-theme] .race-rule-pill {
+  font-size: clamp(11px, 1.3vh, 13px) !important;
+  color: #9aa2c2 !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  padding: 3px 9px !important;
+  border-radius: 6px !important;
+  white-space: nowrap !important;
+}
+
+.modal[data-player-theme] .race-status-bar > .race-scoreboard {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 6px 8px !important;
+  flex: 1 1 auto !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.modal[data-player-theme] .race-status-bar .race-team-row {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 5px 11px !important;
+  border: 1px solid #384166 !important;
+  border-radius: 8px !important;
+  background: #1b2140 !important;
+  color: #e8ebf7 !important;
+  font-size: clamp(12px, 1.4vh, 14px) !important;
+  white-space: nowrap !important;
+  flex: 0 1 auto !important;
+  transition: all 0.15s ease !important;
+}
+
+.modal[data-player-theme] .race-status-bar .race-team-row.active {
+  background: #262c50 !important;
+  border-color: #8b82ff !important;
+  box-shadow: 0 0 12px rgba(139, 130, 255, 0.4) !important;
+  transform: translateY(-1px) !important;
+}
+
+.modal[data-player-theme] .race-team-rank {
+  font-size: 12px !important;
+  opacity: 0.85 !important;
+}
+
+.modal[data-player-theme] .race-team-identity {
+  font-weight: 700 !important;
+  color: #ffffff !important;
+}
+
+.modal[data-player-theme] .race-team-pos {
+  color: #8ce8c5 !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  background: rgba(16, 185, 129, 0.12) !important;
+  padding: 1px 6px !important;
+  border-radius: 4px !important;
+}
+
+.modal[data-player-theme] .race-team-pts {
+  color: #ffd166 !important;
+  font-weight: 700 !important;
+  font-size: 12px !important;
+}
+
+
+/* --- Hiệu ứng nối 2 kết quả đúng trong Ghép cặp kiến thức (DECISIONS #96) --- */
+.matching-board,
+.treasure-match-grid {
+  position: relative !important;
+}
+
+.matching-connector-canvas {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  pointer-events: none !important;
+  overflow: visible !important;
+  z-index: 10 !important;
+}
+
+.matching-beam {
+  animation: matchingBeamDraw 0.45s cubic-bezier(0.2, 0.8, 0.25, 1) forwards;
+}
+
+@keyframes matchingBeamDraw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.matching-pin-dot {
+  transform-origin: center;
+  animation: matchingPinPop 0.35s ease-out;
+}
+
+@keyframes matchingPinPop {
+  0% { opacity: 0; transform: scale(0); }
+  70% { opacity: 1; transform: scale(1.3); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.matching-badge-wrap {
+  opacity: 0;
+  animation: matchingBadgeFade 0.35s 0.2s cubic-bezier(0.2, 0.9, 0.3, 1) forwards;
+}
+
+@keyframes matchingBadgeFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.modal[data-player-theme] .match-card.matched.is-connected,
+.modal[data-player-theme] .treasure-match-item.matched.is-connected {
+  opacity: 0.95 !important;
+  cursor: default !important;
+  transform: none !important;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease, opacity 0.3s ease !important;
+}
+
+/* --- Tối ưu thanh Navbar & Đưa thanh trạng thái AI/llama.cpp, thông báo lên Navbar (DECISIONS #97) --- */
+.topbar {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 30 !important;
+  background: #ffffff !important;
+  border-bottom: 1px solid var(--line) !important;
+}
+
+.topbar .ai-status-bar {
+  position: relative !important;
+  top: auto !important;
+  z-index: 1 !important;
+}
+
+.notification-popover,
+.ai-status-dropdown {
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
+}
+
+[data-theme="dark"] .topbar {
+  background: #111528 !important;
+  border-bottom-color: #262c45 !important;
+}
+
+[data-theme="dark"] .topbar .ai-status-bar {
+  background: #171c32 !important;
+  border-color: #2b3352 !important;
+}
+
+[data-theme="dark"] .topbar .ai-status-bar:hover {
+  background: #1d233e !important;
+  border-color: #3b456e !important;
+}
+
+[data-theme="dark"] .topbar #aiStatusRuntime {
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .topbar #aiStatusTask {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .topbar .ai-status-menu-btn {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .topbar .ai-status-menu-btn:hover {
+  background: #283060 !important;
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .ai-status-dropdown {
+  background: #171c32 !important;
+  border-color: #2b3352 !important;
+  color: #e2e8f0 !important;
+}
+
+[data-theme="dark"] .ai-status-dropdown button {
+  color: #cbd5e1;
+}
+
+[data-theme="dark"] .ai-status-dropdown button:hover {
+  background: #1e2544 !important;
+}
+
+[data-theme="dark"] .ai-status-dropdown #aiStatusStart {
+  color: #4ade80 !important;
+}
+[data-theme="dark"] .ai-status-dropdown #aiStatusStart:hover {
+  background: #132d24 !important;
+}
+
+[data-theme="dark"] .ai-status-dropdown #aiStatusStop {
+  color: #f87171 !important;
+}
+[data-theme="dark"] .ai-status-dropdown #aiStatusStop:hover {
+  background: #2d1313 !important;
+}
+
+[data-theme="dark"] .ai-status-dropdown #aiStatusCancel {
+  color: #fbbf24 !important;
+}
+[data-theme="dark"] .ai-status-dropdown #aiStatusCancel:hover {
+  background: #2d2413 !important;
+}
+
+[data-theme="dark"] .notification-popover {
+  background: #171c32 !important;
+  border-color: #2b3352 !important;
+  color: #e2e8f0 !important;
+}
+
+[data-theme="dark"] .notification-popover strong {
+  color: #f1f5f9 !important;
+}
+
+/* --- Bố trí lại giao diện trang tạo từ giáo án bước 1 (DECISIONS #98) --- */
+.wizard-step-input-panel {
+  border-radius: 16px !important;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05) !important;
+}
+
+.wizard-import-card {
+  transition: all 0.2s ease !important;
+}
+
+.wizard-import-card:hover {
+  background: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .wizard-import-card:hover {
+  background: #1a223f !important;
+}
+
+/* --- Tab Cấu trúc tài liệu và Nội dung giáo án (DECISIONS #99) --- */
+.wizard-tab-btn {
+  background: transparent;
+  cursor: pointer;
+}
+
+.wizard-tab-pane [data-structure-panel] {
+  margin-top: 0 !important;
+  border: none !important;
+  padding: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.wizard-tab-pane [data-structure-panel] .section-head {
+  padding-top: 4px;
+}
+
+/* Ticking a section used to repaint the whole page (the tree was replaced by
+   `innerHTML`). Containing layout + paint on the structure panel keeps a repaint
+   inside that box, so the sibling form fields, the tabs and the action row are not
+   re-laid-out on every click.
+
+   Scope: only the tree lives inside this panel, and it is already a scroll box
+   (`.wizard-tree`, overflow-y:auto). Containment is never put on the tree itself:
+   `contain: layout` would make it a containing block and shift the offsets the
+   scroll restore in `wizardStructureRestoreView()` relies on. */
+.wizard-tab-pane [data-structure-panel] {
+  contain: layout paint;
+}
+
+/* Both panes share a box model so switching tabs cannot change the page height
+   by a border/padding difference (that was a visible jump). */
+.wizard-tab-pane {
+  min-height: 0;
+}
+
+/* The pane is re-created on every render; anchoring would move the scroll
+   position of the page to keep an unrelated node still. */
+.wizard-tab-pane {
+  overflow-anchor: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wizard-tab-btn {
+    transition: none !important;
+  }
+}
+

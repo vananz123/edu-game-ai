@@ -31,7 +31,14 @@ const ROOT = path.join(__dirname, '..', '..', '..');
 const STATE_SRC = fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'features', 'wizard', 'state.ts'), 'utf8');
 const STEP_SRC = fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'features', 'wizard', 'step-generate.ts'), 'utf8');
 const ANALYSIS_SRC = fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'features', 'wizard', 'step-analysis.ts'), 'utf8');
-const CSS_SRC = fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'styles', 'app.css'), 'utf8');
+// The stylesheet was split into area files (DECISIONS #149); read the whole
+// directory so a rule moving between files cannot silently drop this guard.
+const CSS_DIR = path.join(ROOT, 'src', 'renderer', 'styles');
+const CSS_SRC = fs.readdirSync(CSS_DIR)
+  .filter((name) => name.endsWith('.css'))
+  .sort()
+  .map((name) => fs.readFileSync(path.join(CSS_DIR, name), 'utf8'))
+  .join('\n');
 
 /** Pull a top-level `const NAME = [...]` array of string literals out of a source file. */
 function readStringArray(source: string, name: string): string[] {

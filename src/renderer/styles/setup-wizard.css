@@ -1,0 +1,104 @@
+/* setup-wizard.css — Wizard cài AI lần đầu (toàn cửa sổ). — tách từ app.css, giữ nguyên thứ tự (DECISIONS #149). */
+/* ============================================================
+   First-run AI setup wizard (§7). Styles only — every decision
+   (which screen, which button, what the text says) comes from
+   `renderer/setup-wizard-model.ts`, which is unit-tested.
+
+   Setup takes the whole window, not a dialog over the dashboard:
+   `renderSetupWizard()` sets `html[data-setup-fullscreen="1"]`
+   while a run is pending and renders `.setup-fullscreen` into
+   `#modalRoot`. The shell is hidden with `visibility` (not
+   `display`) so it keeps its layout and nothing reflows when the
+   teacher returns to it. That mirrors `html[data-fullscreen="1"]`,
+   which the game screen already uses.
+
+   Colours mirror `.info-box` / `.local-ai-model-summary`, which
+   are also light-only.
+   ============================================================ */
+html[data-setup-fullscreen="1"],
+html[data-setup-fullscreen="1"] body{height:100%;overflow:hidden}
+html[data-setup-fullscreen="1"] .app-shell{visibility:hidden}
+/* The backdrop and the topbar are siblings of `#modalRoot`, so hiding the
+   shell is not enough: the 72px topbar sits above it at z-index 30. */
+html[data-setup-fullscreen="1"] .topbar,
+html[data-setup-fullscreen="1"] .ai-status-bar{visibility:hidden}
+
+/* One viewport, two rows: a fixed head and a scrolling body, so the action
+   buttons can never be pushed below the fold on a 1366x768 classroom laptop. */
+.setup-fullscreen{
+  position:fixed;inset:0;z-index:60;
+  display:flex;flex-direction:column;
+  background:linear-gradient(180deg,#f7f7ff 0%,var(--color-canvas,#f5f6fa) 42%);
+  animation:var(--animate-fade-in);
+}
+.setup-fullscreen-inner{
+  flex:1;min-height:0;overflow:auto;
+  width:min(760px,100%);
+  margin:0 auto;
+  padding:34px 32px 30px;
+  display:flex;flex-direction:column;
+  gap:0;
+}
+.setup-fullscreen-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:22px}
+.setup-fullscreen-head h2{font-size:22px;margin:0;letter-spacing:-.4px;color:#30384b}
+.setup-fullscreen-head .setup-eyebrow{margin-bottom:5px;color:var(--purple)}
+.setup-fullscreen-foot{
+  margin-top:auto;
+  display:flex;justify-content:flex-end;gap:9px;
+  padding-top:20px;
+}
+@media (max-width:640px){
+  .setup-fullscreen-inner{padding:22px 18px 24px}
+  .setup-fullscreen-head h2{font-size:19px}
+}
+.setup-headline{padding:15px 16px;border-radius:11px;background:#f8f8fc;border:1px solid var(--line);margin-bottom:16px}
+
+.setup-eyebrow{font-size:9px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:#9199aa;margin-bottom:6px}
+.setup-title{font-size:16px;margin:0 0 7px;letter-spacing:-.2px;color:#394256}
+.setup-message{font-size:11.5px;line-height:1.65;color:#717b90;margin:0}
+/* Tone is a left rule, not a full background: red text on a red panel is
+   harder to read than dark text beside a red accent, and the wizard is often
+   the first screen a teacher sees. */
+.setup-tone-progress{border-left:3px solid var(--purple)}
+.setup-tone-success{border-left:3px solid #2f9e6f;background:#f4fbf7}
+.setup-tone-danger{border-left:3px solid #d84b5a;background:#fff6f7}
+.setup-tone-warning{border-left:3px solid #c9792b;background:#fff9f2}
+.setup-tone-danger .setup-title{color:#a8303d}
+.setup-tone-success .setup-title{color:#1f7a55}
+.setup-tone-warning .setup-title{color:#9a5a17}
+
+.setup-progress{height:8px;border-radius:999px;background:#ececf6;overflow:hidden;margin-bottom:8px}
+.setup-progress-fill{height:100%;background:linear-gradient(90deg,var(--purple),#8a7dff);border-radius:999px;transition:width .25s ease-out}
+/* Indeterminate work (detection, health check) has no percentage; a static bar
+   at 0% reads as "frozen", so a moving stripe is used instead. */
+.setup-progress-indeterminate .setup-progress-fill{width:35%;animation:setup-progress-slide 1.4s ease-in-out infinite}
+@keyframes setup-progress-slide{
+  0%{transform:translateX(-100%)}
+  100%{transform:translateX(300%)}
+}
+.setup-progress-meta{display:flex;justify-content:space-between;gap:10px;font-size:10.5px;color:#717b90;margin-bottom:14px}
+.setup-progress-meta strong{color:var(--purple);font-variant-numeric:tabular-nums}
+
+.setup-req-row{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;align-items:baseline}
+.setup-req-label{font-size:10px;font-weight:750;color:#9199aa;text-transform:uppercase;letter-spacing:.4px}
+.setup-req-row strong{font-size:11.5px;color:#394256;font-weight:700}
+.setup-req-row[data-ok="0"] strong{color:#a8303d}
+.setup-req-row .field-hint{grid-column:2;margin-top:-2px}
+
+.setup-checklist{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.setup-checklist-item{display:flex;align-items:center;gap:8px;font-size:11px;color:#9aa1af}
+.setup-checklist-mark{display:grid;place-items:center;width:16px;height:16px;border-radius:50%;border:1px solid #dfe2eb;font-size:9px;font-weight:800;flex-shrink:0}
+.setup-checklist-item[data-state="done"]{color:#4a5366}
+.setup-checklist-item[data-state="done"] .setup-checklist-mark{background:#eaf7f1;border-color:#bfe6d4;color:#1f7a55}
+.setup-checklist-item[data-state="current"]{color:#394256;font-weight:700}
+.setup-checklist-item[data-state="current"] .setup-checklist-mark{background:#efedff;border-color:#c8c3ff;color:var(--purple)}
+.setup-checklist-item[data-state="failed"]{color:#a8303d;font-weight:700}
+.setup-checklist-item[data-state="failed"] .setup-checklist-mark{background:#fff1f2;border-color:#f3c4ca;color:#d84b5a}
+
+/* Teachers may have reduced-motion enabled; the bar still reports progress,
+   it just stops sliding. */
+@media (prefers-reduced-motion: reduce){
+  .setup-progress-fill{transition:none}
+  .setup-progress-indeterminate .setup-progress-fill{animation:none;width:100%;opacity:.55}
+}
+

@@ -67,6 +67,19 @@ for (const rel of editedAssets) {
   assert.ok(src.equals(out), `dist/${rel} does not match src/${rel}`);
 }
 
+// 2b. app.css is a Tailwind entry that imports the area files (DECISIONS #149).
+//     Every import must exist beside it in src and be copied into dist, or a
+//     whole area silently disappears from the shipped stylesheet.
+const cssEntry = fs.readFileSync(path.join(SOURCE_ROOT, 'src', 'renderer', 'styles', 'app.css'), 'utf8');
+const areaImports = [...cssEntry.matchAll(/@import\s+"\.\/([^"]+)"/g)].map((match) => match[1]);
+assert.ok(areaImports.length >= 10, `app.css should import its area files, saw ${areaImports.length}`);
+for (const name of areaImports) {
+  for (const base of [SOURCE_ROOT, BUILD_ROOT]) {
+    const file = path.join(base, 'src', 'renderer', 'styles', name);
+    assert.ok(fs.existsSync(file), `app.css imports ${name}, which is missing at ${file}`);
+  }
+}
+
 // 3. The references the two HTML pages make must resolve inside dist/.
 //    A wrong relative depth here is how the projector page would 404 its script.
 const distHtml = path.join(BUILD_ROOT, 'src', 'presentation', 'presentation.html');

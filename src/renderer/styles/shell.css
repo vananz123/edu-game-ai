@@ -1,0 +1,178 @@
+/* shell.css — Khung ứng dụng: topbar/sidebar cố định, dark theme và override toàn màn hình. — tách từ app.css, giữ nguyên thứ tự (DECISIONS #149). */
+
+/* === Shell: keep the header + AI status bar (and nav) in view while scrolling === */
+@layer components {
+.topbar{position:sticky;top:0;z-index:30}
+.ai-status-bar{position:sticky;top:72px;z-index:20}
+.app-shell>.sidebar{position:sticky;top:0;height:100vh;overflow-y:auto;overflow-x:hidden}
+}
+
+[data-theme="dark"] {
+  --bg: #0f1220;
+  --panel: #171b2e;
+  --text: #e8eaf2;
+  --muted: #a0a7bc;
+  --line: #2a3148;
+  --purple: #8f88e8;
+  --purple2: #2a2f4a;
+  --green: #34d399;
+  --orange: #fbbf24;
+  --red: #f87171;
+  --shadow: 0 10px 35px rgba(0, 0, 0, 0.35);
+}
+
+/* Dark mode coverage (Đợt 3) */
+[data-theme="dark"] body { background: var(--bg); color: var(--text); }
+[data-theme="dark"] .bg-\[\#e7f8f0\],
+[data-theme="dark"] .bg-\[\#e8e6ff\],
+[data-theme="dark"] .bg-\[\#e8f8f1\],
+[data-theme="dark"] .bg-\[\#e8f8f2\],
+[data-theme="dark"] .bg-\[\#eaf4ff\],
+[data-theme="dark"] .bg-\[\#edf2ff\],
+[data-theme="dark"] .bg-\[\#edf9f2\],
+[data-theme="dark"] .bg-\[\#eeeefe\],
+[data-theme="dark"] .bg-\[\#eef9f3\],
+[data-theme="dark"] .bg-\[\#efedff\],
+[data-theme="dark"] .bg-\[\#effaf5\],
+[data-theme="dark"] .bg-\[\#f0efff\],
+[data-theme="dark"] .bg-\[\#f4f3ff\],
+[data-theme="dark"] .bg-\[\#f5f6fa\],
+[data-theme="dark"] .bg-\[\#f6f6ff\],
+[data-theme="dark"] .bg-\[\#f7f8fb\],
+[data-theme="dark"] .bg-\[\#f8f7ff\],
+[data-theme="dark"] .bg-\[\#f8f9fc\],
+[data-theme="dark"] .bg-\[\#fdecea\],
+[data-theme="dark"] .bg-\[\#fdf7ec\],
+[data-theme="dark"] .bg-\[\#fff0f1\],
+[data-theme="dark"] .bg-\[\#fff1f2\],
+[data-theme="dark"] .bg-\[\#fff3e5\],
+[data-theme="dark"] .bg-\[\#fff4e9\],
+[data-theme="dark"] .bg-\[\#fff8e1\] { background-color: var(--panel) !important; }
+[data-theme="dark"] .bg-\[\#f5f6fa\],
+[data-theme="dark"] .bg-\[\#f7f8fb\],
+[data-theme="dark"] .bg-\[\#f8f9fc\] { background-color: var(--bg) !important; }
+[data-theme="dark"] .text-\[\#0f7b5c\],
+[data-theme="dark"] .text-\[\#16976d\],
+[data-theme="dark"] .text-\[\#169c70\],
+[data-theme="dark"] .text-\[\#21845c\],
+[data-theme="dark"] .text-\[\#2f8b57\],
+[data-theme="dark"] .text-\[\#30384b\],
+[data-theme="dark"] .text-\[\#394256\],
+[data-theme="dark"] .text-\[\#3b3a63\],
+[data-theme="dark"] .text-\[\#4389e5\],
+[data-theme="dark"] .text-\[\#4565c9\],
+[data-theme="dark"] .text-\[\#5145d6\],
+[data-theme="dark"] .text-\[\#515c72\],
+[data-theme="dark"] .text-\[\#596175\],
+[data-theme="dark"] .text-\[\#5a6478\],
+[data-theme="dark"] .text-\[\#5b6478\],
+[data-theme="dark"] .text-\[\#5c51df\],
+[data-theme="dark"] .text-\[\#5f58b8\],
+[data-theme="dark"] .text-\[\#6258e8\],
+[data-theme="dark"] .text-\[\#6559e9\],
+[data-theme="dark"] .text-\[\#6b5600\],
+[data-theme="dark"] .text-\[\#6d7688\],
+[data-theme="dark"] .text-\[\#7a839a\],
+[data-theme="dark"] .text-\[\#8790a3\],
+[data-theme="dark"] .text-\[\#879183\],
+[data-theme="dark"] .text-\[\#8a6d00\],
+[data-theme="dark"] .text-\[\#8b84d8\],
+[data-theme="dark"] .text-\[\#8d96a8\],
+[data-theme="dark"] .text-\[\#9299aa\],
+[data-theme="dark"] .text-\[\#aeb5ce\],
+[data-theme="dark"] .text-\[\#b3261e\],
+[data-theme="dark"] .text-\[\#c9792b\],
+[data-theme="dark"] .text-\[\#d3d6e0\],
+[data-theme="dark"] .text-\[\#d84b5a\],
+[data-theme="dark"] .text-\[\#d9d6ff\],
+[data-theme="dark"] .text-\[\#e5e2ff\],
+[data-theme="dark"] .text-\[\#e9932d\],
+[data-theme="dark"] .text-\[\#ffd77c\] { color: var(--text) !important; }
+[data-theme="dark"] .text-\[\#6f7890\],
+[data-theme="dark"] .text-\[\#6f7a8d\],
+[data-theme="dark"] .text-\[\#707a90\],
+[data-theme="dark"] .text-\[\#717b90\],
+[data-theme="dark"] .text-\[\#788196\],
+[data-theme="dark"] .text-\[\#8b94a6\],
+[data-theme="dark"] .text-\[\#9199aa\],
+[data-theme="dark"] .text-\[\#929bad\],
+[data-theme="dark"] .text-\[\#98a0b0\],
+[data-theme="dark"] .text-\[\#9aa1b1\],
+[data-theme="dark"] .text-\[\#9aa1b2\],
+[data-theme="dark"] .text-\[\#9ba2b1\],
+[data-theme="dark"] .text-\[\#a0a6b5\],
+[data-theme="dark"] .text-\[\#a0a7b5\],
+[data-theme="dark"] .text-\[\#a1a8b7\] { color: var(--muted) !important; }
+[data-theme="dark"] .border-\[\#b9b3ff\],
+[data-theme="dark"] .border-\[\#c8c3ff\],
+[data-theme="dark"] .border-\[\#c9c5ff\],
+[data-theme="dark"] .border-\[\#d8d5ff\],
+[data-theme="dark"] .border-\[\#ddf4e8\],
+[data-theme="dark"] .border-\[\#dfe2ed\],
+[data-theme="dark"] .border-\[\#e3e3fb\],
+[data-theme="dark"] .border-\[\#e4e0ff\],
+[data-theme="dark"] .border-\[\#e7eaf2\],
+[data-theme="dark"] .border-\[\#e8e9f2\],
+[data-theme="dark"] .border-\[\#e9ecf3\],
+[data-theme="dark"] .border-\[\#f0f1f5\],
+[data-theme="dark"] .border-\[\#f0f1f6\],
+[data-theme="dark"] .border-\[\#f2e3c8\] { border-color: var(--line) !important; }
+[data-theme="dark"] .bg-white { background-color: var(--panel) !important; }
+[data-theme="dark"] .text-white { color: #ffffff !important; }
+[data-theme="dark"] .border-white { border-color: var(--line) !important; }
+
+/* Fullscreen play: reuse the existing play modal and let it fill the viewport. */
+html[data-fullscreen="1"] .modal-backdrop { padding: 0; }
+html[data-fullscreen="1"] .modal {
+  width: 100vw;
+  height: 100vh;
+  max-height: 100vh;
+  /* .modal carries a Tailwind `border`; with content-box sizing that 2px of
+     border made the panel 100vh + 2px tall and pushed the document into a
+     36px scroll. border-box keeps it exactly one viewport. */
+  box-sizing: border-box;
+  overflow: hidden;
+  border-radius: 0;
+  display: flex;
+  flex-direction: column;
+}
+html[data-fullscreen="1"] .modal-body { flex: 1; min-height: 0; overflow: auto; }
+/* In fullscreen the play panel scrolls internally. A light background here
+   showed through as a white flash above/below the dark stage while scrolling. */
+html[data-fullscreen="1"] .modal { background: #0b0e1a; }
+/* The game takes over the whole window: the app shell (sidebar + topbar)
+   must not show through. .modal-backdrop defaults to z-index 20, which is
+   below .topbar's 30, so the nav stayed visible on top of the game.
+   visibility (not display) keeps the game panel measurable while hiding the
+   shell, and the backdrop is made visible again for its subtree. */
+html[data-fullscreen="1"] body { overflow: hidden; }
+/* The shell keeps laying out at its full height while hidden (it is a normal
+   flex child with min-h-screen), and with `overflow: visible` on the root that
+   made the document taller than the viewport — which produced a scrollbar on
+   the game screen. Clip it at the root as well. */
+html[data-fullscreen="1"],
+html[data-fullscreen="1"] body { height: 100%; overflow: hidden; }
+html[data-fullscreen="1"] .app-shell { visibility: hidden; }
+html[data-fullscreen="1"] .topbar,
+html[data-fullscreen="1"] .ai-status-bar { visibility: hidden; }
+/* `visibility: hidden` still lays out: the shell keeps its full height (measured
+   at 1436px for a 768px viewport), so the document's scroll height grows and
+   `#modalRoot` -- a normal in-flow block that follows it -- is pushed down to
+   `top: 1436`, entirely below the viewport. `overflow: hidden` on html/body
+   above clips the scrollbar but does NOT stop that offset: the projector
+   assertions still find `#modalRoot` at 1436px "outside the viewport".
+   Taking the modal host out of flow fixes the cause rather than the symptom:
+   it only ever contains `.modal-backdrop`, which is already `position: fixed`,
+   so nothing visible depends on it being in flow. */
+html[data-fullscreen="1"] #modalRoot {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+}
+html[data-fullscreen="1"] .modal-backdrop {
+  z-index: 60;
+  background: #0b0e1a;
+  visibility: visible;
+}
+
+

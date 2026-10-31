@@ -8,6 +8,7 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 ## Mục lục bàn giao
 
 ### 2026-10-31 — [docs/handoff/status/2026-10-31.md](handoff/status/2026-10-31.md)
+- Tách app.css thành 13 file khu vực
 - Nhóm src/services theo lesson/ai/game/storage/input
 - Tách gameplay.ts thành features/games/*
 - Tách lịch sử docs sang docs/handoff + .gitattributes
@@ -183,6 +184,27 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - Lịch sử trước 2026-10-19
 ## Bàn giao gần nhất
 
+## Handoff - Tách app.css thành 13 file khu vực (2026-10-31, DECISIONS #149)
+
+**Files changed.**
+- `src/renderer/styles/app.css`: 4.567 dòng → **216 dòng**, chỉ còn phần đầu Tailwind (`@import "tailwindcss"`, daisyUI `@plugin` + theme, `@theme`, `@source`) và `@import` 13 file khu vực theo thứ tự cascade.
+- 13 file mới (mỗi file = banner 1 dòng + **đúng lát cắt gốc**, không sửa ký tự): `base.css` (201–286), `components.css` (287–843), `shell.css` (844–1020), `fullscreen.css` (1021–1257), `gameplay.css` (1258–1901), `navigation.css` (1902–2013), `game-race.css` (2014–2063), `game-animations.css` (2064–2398), `setup-wizard.css` (2399–2501), `wizard.css` (2502–3002), `game-treasure.css` (3003–3848), `game-worlds.css` (3849–4453), `game-house.css` (4454–4567).
+- `tests/unit/generation-eta.test.ts`, `tests/unit/illustration-registry.test.ts`: đọc cả thư mục `src/renderer/styles/*.css` thay vì riêng `app.css` (rule cần kiểm nay nằm ở `wizard.css`).
+- `tests/unit/build-assets.test.ts`: thêm guard 2b — mọi `@import "./x.css"` của entry phải tồn tại ở `src` và trong `dist`.
+- `src/index.html`: chỉ cập nhật chú thích (vẫn đúng một `<link rel="stylesheet" href="renderer/styles/app.css">`).
+- Docs: `docs/DECISIONS.md` (#149), `docs/ROADMAP.md` (P4 xong, P5 kế tiếp), `docs/PROJECT_MAP.md` (cây styles + mục "Thứ tự CSS"), `docs/AGENT_HANDOFF.md`.
+- Không đổi: selector, giá trị, thứ tự rule, Tailwind/daisyUI config, `@source`, `verify-css.js`, JS/TS ngoài 3 test trên.
+
+**Behavior.** Không đổi hành vi. Tailwind v4 inline từng `@import` cục bộ đúng tại vị trí, nên nối 13 file theo đúng thứ tự import cho lại **đúng file gốc từng byte** (SHA-256 `3a75462e…10c08e2`, 217.386 ký tự). Bằng chứng mạnh hơn: `build:css` trước và sau khi tách cho file biên dịch **giống hệt từng byte** (`a3cf605f…4f3f40a`, 197.047 ký tự) — mọi rule, specificity và thứ tự cascade giữ nguyên. Sửa CSS một trò giờ chỉ mở đúng file của vùng đó (kho báu ~847 dòng thay vì 4.567).
+
+**Commands run.** `npm run build` 0 (three bundle 732 KB như cũ) · `node tests/run-unit.js` **68/68** · `npm run verify:css` **17/17** · `npm run check:renderer-globals` 0 undefined (44/45 script, 756 hàm, 6192 call site). Kiểm riêng: so SHA-256 bản nối lại với bản gốc, và so file CSS biên dịch với baseline chụp trước khi tách — cả hai trùng khớp.
+
+**Chưa xác minh.** Không chạy lại các check CDP UI trong đợt này: đầu ra CSS biên dịch trùng byte với baseline nên không có gì để UI kiểm thêm. Chưa mở app bằng mắt sau khi tách (chỉ chạy build + test tĩnh) — nếu muốn chắc chắn về đường nạp, mở app và xem một màn chơi là đủ. Bản sao các file khu vực trong `dist/.../styles/` không được nạp (chỉ entry biên dịch được dùng), giữ lại do `copyfiles "*"`; vô hại.
+
+**Next task.** P5 — tách các file lớn còn lại (`features/game-editor.ts`, `features/three-game-interaction.ts`, các bước wizard) — chỉ bắt đầu khi P1–P4 đã ổn định như hiện tại.
+
+---
+
 ## Handoff - Nhóm src/services theo lesson/ai/game/storage/input (2026-10-31, DECISIONS #148)
 
 **Files changed.**
@@ -228,29 +250,4 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 **Chưa xác minh.** Chưa chơi tay trọn một ván mỗi trò sau khi tách (mới chạy check CDP); chưa xem trên máy chiếu/màn hình phụ thật; chưa chạy installer đóng gói. `ui-three-game-check-4games` lần đầu chỉ 36/41 khi dùng lại instance đã bị check khác probe (bộ đếm mount/burst tích luỹ) — chạy lại trên instance sạch đạt 41/41. `ui-fullscreen-check` chỉ đạt 20/20 sau khi xoá `data-setup-fullscreen="1"` còn sót trong profile mới (17/20 trước đó, lỗi môi trường: setup state giữ `visibility:hidden` trên `.app-shell`), chưa sửa nguyên nhân gốc.
 
 **Next task.** P3 — nhóm `src/services/` theo giáo án / AI / trò chơi / lưu trữ / nhập liệu, chỉ di chuyển file và sửa import (không đổi hợp đồng IPC); sau đó P4 tách `app.css`.
-
----
-
-## Handoff - Tách lịch sử docs sang docs/handoff + .gitattributes (2026-10-31, DECISIONS #146)
-
-**Files changed.**
-- `docs/STATUS.md`: 3.517 dòng / 634 KB → **249 dòng / 32 KB**; giữ 3 bàn giao mới nhất + mục lục đầy đủ theo ngày.
-- `docs/handoff/status/*.md` (13 file, 619.806 byte): 12 file theo ngày + `undated-070-079.md` (17 mục #70–#79 không ghi ngày trong tiêu đề — không suy đoán ngày); bàn giao mới nối thêm vào cuối file đúng ngày.
-- `docs/DECISIONS.md`: 2.056 dòng / 398 KB → **~56 KB**; giữ tóm tắt #1–#56, danh sách quyết định còn mở, bảng mục lục `#57–#145`; quyết định mới (#146+) ghi trực tiếp vào file này.
-- `docs/handoff/decisions/{057-089,090-105,106-145}.md`: 33 + 16 + 40 mục chi tiết.
-- `docs/handoff/README.md` (mới): quy ước chèn bàn giao (giữ 3 mục inline, nối mục cũ vào `status/<ngày>.md`, cập nhật mục lục) và ngưỡng cắt decisions (~300 KB).
-- `docs/PROJECT_MAP.md`: cây thư mục có `handoff/status/` + `handoff/decisions/`; thêm dòng "Tra bàn giao cũ / quyết định cũ"; bước đọc đầu phiên đổi sang quy ước rolling.
-- `AGENTS.md`: mục "Required handoff after each task" ghi quy ước mới.
-- `docs/ROADMAP.md`: thêm mục "Restructure the project tree" với 5 pha P1–P5; P1 đánh dấu xong, P2 là việc kế tiếp.
-- `.gitattributes` (mới): `* text=auto` + khai báo binary cho png/jpg/jpeg/ico/dll/exe/zip/sqlite; **chưa** chạy renormalize toàn kho (theo chú thích trong file, tránh commit nhiễu).
-- Cùng đợt push: `.env.example` bỏ dòng `API_KEY=rv_...` (không dùng trong code, chưa từng vào git history); `.gitignore` bỏ phần nháp agent (`.kilo/worktrees/`, `plans/`, `agents/`, `agent-manager.json`), vẫn theo dõi `.kilo/skills/`.
-- Không đổi: mã ứng dụng, `src/index.html`, CSS, tests, LAN/presentation/SQLite/`.egame`.
-
-**Behavior.** Không đổi hành vi ứng dụng — chỉ tài liệu và cấu hình git. Mỗi phiên agent giờ đọc `docs/STATUS.md` ~32 KB thay vì 634 KB; toàn bộ 146 bàn giao cũ và 89 mục quyết định chi tiết vẫn tra được qua mục lục (không mất, không sửa ký tự nào). `.env.example` chỉ còn placeholder, không còn khoá thật.
-
-**Commands run.** Script tách (Node, đọc bản gốc sao lưu ở `%LOCALAPPDATA%\Temp`) so khớp **SHA-256 từng block** trước/sau và parse lại vòng tròn: 146 mục STATUS + 89 mục DECISIONS khớp nguyên văn; tổng byte lưu trữ + phần giữ lại khớp bản gốc (+~2 KB tiêu đề file lưu trữ). `npm run build` 0 · `node tests/run-unit.js` **68/68** · `npm run check:renderer-globals` 0 undefined (37/38 script, 756 hàm, 6192 call site) · `npm run verify:css` **17/17**. `git grep`/`git log --all -S "rv_L2glwIz"` rỗng — khoá trong `.env.example` chưa từng vào history.
-
-**Chưa xác minh.** Mới kiểm link mục lục bằng script (mỗi ngày trỏ đúng file trong `docs/handoff/`), chưa bấm từng link trong trình xem markdown; việc tách file mới kiểm bằng hash nội dung, chưa đọc lại toàn bộ 620 KB bằng mắt. Chưa chạy `git add --renormalize` (cố ý) nên `.gitattributes` chưa có tác dụng hồi tố. Các check UI không chạy lại trong đợt này vì không sửa mã.
-
-**Next task.** P2 — tách `src/renderer/features/gameplay.ts` (3.269 dòng) thành `features/games/*` theo ranh giới đo được (stage/house/shell/quiz/matching/treasure/race), thêm `<script>` đúng thứ tự trong `src/index.html` và cập nhật `tests/unit/renderer-load-order.test.ts`.
 
