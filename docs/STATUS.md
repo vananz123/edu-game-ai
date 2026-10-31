@@ -8,6 +8,7 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 ## Mục lục bàn giao
 
 ### 2026-10-31 — [docs/handoff/status/2026-10-31.md](handoff/status/2026-10-31.md)
+- Sửa Phase B của ui-item-assets-editor-check đo đúng trang soạn thảo
 - Tách game-editor + wizard/state theo khu vực
 - Tách app.css thành 13 file khu vực
 - Nhóm src/services theo lesson/ai/game/storage/input
@@ -185,6 +186,24 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - Lịch sử trước 2026-10-19
 ## Bàn giao gần nhất
 
+## Handoff - Sửa Phase B của ui-item-assets-editor-check đo đúng trang soạn thảo (2026-10-31, DECISIONS #151)
+
+**Files changed.**
+- `tests/ui/lib/screenshot-capture.js`: `assertLayout` thêm `pageMode` (trang cuộn dọc hợp lệ; vẫn bắt tràn ngang, hộp cuộn lồng và trang cao mà không cuộn được), `textScopeSelector` giới hạn mẫu font/clipping vào vùng đang kiểm; `measureLayout` nhận thêm scope và dùng `replaceAll` (placeholder xuất hiện hai lần trên một dòng).
+- `tests/ui/ui-item-assets-editor-check.js`: Phase B đóng setup onboarding của profile mới, assert `.editor-page` + `.editor-question`, fontFloor 9px, `pageMode`, scope `#pageContent`; hai check template đổi selector từ `#modalRoot` sang `#pageContent`; đóng editor sau khi đo.
+- Docs: `docs/DECISIONS.md` (#151), `docs/ROADMAP.md` (mục sau P5), `docs/STATUS.md`.
+- Không đổi: renderer/CSS/hợp đồng IPC, 5 assertion của surface checks, caller `measureLayout` 2 tham số (`ui-presentation-check`).
+
+**Behavior.** Chỉ test. Check trước đây đo trang trống (17/27, `minFont 0px`, `modalRoot` ngoài viewport) và hai check template đếm 0 vì editor rời modal từ #129; nay đo đúng editor mở trong `#pageContent` và đếm đúng input ở quiz/matching. Số đo thật: 1920×1080 doc 1495px, 1366×768 doc 1509px, font nhỏ nhất 9px (`span.tag`), 0 clipped, 0 tràn ngang, 0 hộp cuộn lồng, tài liệu cuộn được; ảnh `tests/ui/shots/item-assets-editor-{1920x1080,1366x768}.png`.
+
+**Commands run.** `node tests/run-unit.js` **68/68** · Electron thật, profile sạch: `CDP_PORT=9347 node tests/ui/ui-item-assets-editor-check.js` **29/29** · `CDP_PORT=9348 node tests/ui/ui-editor-art-check.js` **11/11** (regression cho rig dùng chung).
+
+**Chưa xác minh.** Mới chạy ở 1920×1080 và 1366×768 với một profile mới; chưa thử profile đã hoàn tất setup (nhánh `closeSetupWizard` là no-op, có vòng chờ overlay nên dự kiến vẫn đúng), chưa thử màn hình khác. `ui-wizard-structure-check` (13/14, focus môi trường) và `ui-draft-guard-check` (7/8, thiếu model) vẫn đỏ do nguyên nhân có sẵn.
+
+**Next task.** Chạy `ui-wizard-structure-check` trong cửa sổ có focus thật; sau đó roadmap `Packaged check` (cần máy sạch).
+
+---
+
 ## Handoff - Tách game-editor + wizard/state theo khu vực (2026-10-31, DECISIONS #150)
 
 **Files changed.**
@@ -204,27 +223,6 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 **Chưa xác minh.** Ba check CDP đỏ đều do nguyên nhân có sẵn, không do đợt tách: `ui-wizard-structure-check` hỏng ở assertion giữ focus bàn phím (cửa sổ chạy nền không lấy được focus OS — probe cho thấy `input.focus()` vẫn để `activeElement` là BODY); `ui-draft-guard-check` hỏng ở E2E sinh nội dung vì profile mới không có nhà cung cấp AI usable ("Chưa có model"); `ui-item-assets-editor-check` Phase B còn chờ `.modal` trong khi editor đã thành trang `.editor-page` từ #129 (đã đối chiếu bản `8d5562c:game-editor.ts`, 12 assertion Phase A đều pass). Chưa bấm tay trọn một luồng tạo game → sửa từng mục trong editor; chưa chạy installer đóng gói. Cố ý **không tách** `three-game-interaction.ts` (một IIFE exposing `window.threeGame` — tách sẽ phá ranh giới module chứ không chỉ là chia file) và các bước wizard (mỗi file < 1.000 dòng, một trách nhiệm).
 
 **Next task.** Roadmap còn `Packaged check` (cần môi trường cài sạch) và các mục AI/giáo án — chưa chốt thứ tự. Việc nhỏ nên làm trước khi chạy lại bộ UI: cập nhật Phase B của `ui-item-assets-editor-check` sang `.editor-page` để check này hết đỏ giả.
-
----
-
-## Handoff - Tách app.css thành 13 file khu vực (2026-10-31, DECISIONS #149)
-
-**Files changed.**
-- `src/renderer/styles/app.css`: 4.567 dòng → **216 dòng**, chỉ còn phần đầu Tailwind (`@import "tailwindcss"`, daisyUI `@plugin` + theme, `@theme`, `@source`) và `@import` 13 file khu vực theo thứ tự cascade.
-- 13 file mới (mỗi file = banner 1 dòng + **đúng lát cắt gốc**, không sửa ký tự): `base.css` (201–286), `components.css` (287–843), `shell.css` (844–1020), `fullscreen.css` (1021–1257), `gameplay.css` (1258–1901), `navigation.css` (1902–2013), `game-race.css` (2014–2063), `game-animations.css` (2064–2398), `setup-wizard.css` (2399–2501), `wizard.css` (2502–3002), `game-treasure.css` (3003–3848), `game-worlds.css` (3849–4453), `game-house.css` (4454–4567).
-- `tests/unit/generation-eta.test.ts`, `tests/unit/illustration-registry.test.ts`: đọc cả thư mục `src/renderer/styles/*.css` thay vì riêng `app.css` (rule cần kiểm nay nằm ở `wizard.css`).
-- `tests/unit/build-assets.test.ts`: thêm guard 2b — mọi `@import "./x.css"` của entry phải tồn tại ở `src` và trong `dist`.
-- `src/index.html`: chỉ cập nhật chú thích (vẫn đúng một `<link rel="stylesheet" href="renderer/styles/app.css">`).
-- Docs: `docs/DECISIONS.md` (#149), `docs/ROADMAP.md` (P4 xong, P5 kế tiếp), `docs/PROJECT_MAP.md` (cây styles + mục "Thứ tự CSS"), `docs/AGENT_HANDOFF.md`.
-- Không đổi: selector, giá trị, thứ tự rule, Tailwind/daisyUI config, `@source`, `verify-css.js`, JS/TS ngoài 3 test trên.
-
-**Behavior.** Không đổi hành vi. Tailwind v4 inline từng `@import` cục bộ đúng tại vị trí, nên nối 13 file theo đúng thứ tự import cho lại **đúng file gốc từng byte** (SHA-256 `3a75462e…10c08e2`, 217.386 ký tự). Bằng chứng mạnh hơn: `build:css` trước và sau khi tách cho file biên dịch **giống hệt từng byte** (`a3cf605f…4f3f40a`, 197.047 ký tự) — mọi rule, specificity và thứ tự cascade giữ nguyên. Sửa CSS một trò giờ chỉ mở đúng file của vùng đó (kho báu ~847 dòng thay vì 4.567).
-
-**Commands run.** `npm run build` 0 (three bundle 732 KB như cũ) · `node tests/run-unit.js` **68/68** · `npm run verify:css` **17/17** · `npm run check:renderer-globals` 0 undefined (44/45 script, 756 hàm, 6192 call site). Kiểm riêng: so SHA-256 bản nối lại với bản gốc, và so file CSS biên dịch với baseline chụp trước khi tách — cả hai trùng khớp.
-
-**Chưa xác minh.** Không chạy lại các check CDP UI trong đợt này: đầu ra CSS biên dịch trùng byte với baseline nên không có gì để UI kiểm thêm. Chưa mở app bằng mắt sau khi tách (chỉ chạy build + test tĩnh) — nếu muốn chắc chắn về đường nạp, mở app và xem một màn chơi là đủ. Bản sao các file khu vực trong `dist/.../styles/` không được nạp (chỉ entry biên dịch được dùng), giữ lại do `copyfiles "*"`; vô hại.
-
-**Next task.** P5 — tách các file lớn còn lại (`features/game-editor.ts`, `features/three-game-interaction.ts`, các bước wizard) — chỉ bắt đầu khi P1–P4 đã ổn định như hiện tại.
 
 ---
 

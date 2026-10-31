@@ -96,6 +96,10 @@ const MEASURE_LAYOUT = `
     const cs = el => win.getComputedStyle(el);
     const rootEl = doc.documentElement;
     const viewport = { w: win.innerWidth, h: win.innerHeight };
+    // Font floor and clipping describe the surface under test, not shared chrome:
+    // the sidebar's 8px brand subtitle belongs to the app shell and would mask a
+    // real shrink inside a page.
+    const textScope = TEXT_SCOPE_SEL ? doc.querySelector(TEXT_SCOPE_SEL) : null;
     // Only genuinely PAINTED content counts.
     //
     // offsetParent/offsetWidth are not enough: while a modal is open the app
@@ -115,6 +119,7 @@ const MEASURE_LAYOUT = `
     // presentation window had at 12px).
     const textEls = [...doc.querySelectorAll('body *')].filter(el => {
       if (!painted(el)) return false;
+      if (textScope && !textScope.contains(el)) return false;
       const own = [...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim());
       return own && el.offsetWidth > 0 && el.offsetHeight > 0;
     });
@@ -188,6 +193,9 @@ const MEASURE_LAYOUT = `
         pastBy: Math.round(Math.max(-r.left, -r.top, r.right - viewport.w, r.bottom - viewport.h))
       };
     });
+    // On a normal page the document scrolls vertically, so only sideways escape
+    // is a layout defect there; the surface checks keep using the full count.
+    const outsideX = outside.filter(o => o.box[0] < -2 || o.box[2] > viewport.w + 2);
     // Real overlap only. If one box *contains* the other (e.g. .options inside
     // .question-panel) that is nesting, not a layout collision.
     const q = doc.querySelector('.stage-question, .question-text');
@@ -219,13 +227,19 @@ const MEASURE_LAYOUT = `
       clipped: clipped.slice(0, 6),
       outsideCount: outside.length,
       outside: outside.slice(0, 6),
+      outsideXCount: outsideX.length,
+      outsideX: outsideX.slice(0, 6),
+      // A page taller than the viewport is fine only if it really scrolls.
+      docScrollable: cs(rootEl).overflowY !== 'hidden' || cs(doc.body).overflowY !== 'hidden',
       questionAnswerOverlap: overlap
     };
   })(DOC_SEL)`;
 
 /** Measure the current page (or an iframe inside it) with the shared probe. */
-async function measureLayout(evaluate, docSelector) {
-  return evaluate(MEASURE_LAYOUT.replace('DOC_SEL', JSON.stringify(docSelector || null)));
+async function measureLayout(evaluate, docSelector, textScopeSelector) {
+  return evaluate(MEASURE_LAYOUT
+    .replaceAll('DOC_SEL', JSON.stringify(docSelector || null))
+    .replaceAll('TEXT_SCOPE_SEL', JSON.stringify(textScopeSelector || null)));
 }
 
 /**
@@ -276,6 +290,10 @@ async function setViewportAndWait(ctx, size, timeoutMs = 5000) {
  * `opts.fontFloor` is the minimum computed font size in px. It differs per
  * surface on purpose: a projector board can afford 20px, while a dense editor
  * toolbar legitimately uses 12–13px labels, so the caller states its contract.
+ * `opts.textScopeSelector` limits the font/clipping sample to the surface under
+ * test (shared chrome such as the sidebar is not part of that contract).
+ * `opts.pageMode` is for ordinary app pages: the document scrolls vertically by
+ * design, so only sideways escape and nested scroll boxes are defects.
  */
 function assertLayout(check, label, m, opts = {}) {
   const fontFloor = opts.fontFloor ?? 12;
@@ -285,12 +303,21 @@ function assertLayout(check, label, m, opts = {}) {
     `${(m.minFont || 0).toFixed(1)}px (${where})`);
   check(`${prefix}: no clipped text`, m.clippedCount === 0,
     m.clippedCount ? JSON.stringify(m.clipped[0]) : '');
-  check(`${prefix}: nothing outside the viewport`, m.outsideCount === 0,
-    m.outsideCount ? `${m.outsideCount} element(s), worst: ${JSON.stringify(m.outside[0])}` : '');
-  check(`${prefix}: no page scroll`, !m.scrolls, `${m.docHeight} vs ${m.viewport.h}`);
-  if (opts.innerScrollAreas !== 0) {
-    check(`${prefix}: no inner scroll area hides content`,
-      m.innerScrollers.length === (opts.innerScrollAreas || 0), m.innerScrollers.join(', '));
+  if (opts.pageMode) {
+    check(`${prefix}: nothing escapes horizontally`, m.outsideXCount === 0,
+      m.outsideXCount ? `${m.outsideXCount} element(s), worst: ${JSON.stringify(m.outsideX[0])}` : '');
+    check(`${prefix}: no inner scroll box hides content`, m.innerScrollers.length === 0,
+      m.innerScrollers.join(', '));
+    check(`${prefix}: a taller page can scroll`, !m.scrolls || m.docScrollable,
+      `doc ${m.docHeight}px vs viewport ${m.viewport.h}px, scrollable=${m.docScrollable}`);
+  } else {
+    check(`${prefix}: nothing outside the viewport`, m.outsideCount === 0,
+      m.outsideCount ? `${m.outsideCount} element(s), worst: ${JSON.stringify(m.outside[0])}` : '');
+    check(`${prefix}: no page scroll`, !m.scrolls, `${m.docHeight} vs ${m.viewport.h}`);
+    if (opts.innerScrollAreas !== 0) {
+      check(`${prefix}: no inner scroll area hides content`,
+        m.innerScrollers.length === (opts.innerScrollAreas || 0), m.innerScrollers.join(', '));
+    }
   }
   if (opts.questionAnswerOverlap === 'assert') {
     check(`${prefix}: question and answers do not overlap`, !m.questionAnswerOverlap);
@@ -341,7 +368,7 @@ async function measureAt(ctx, size, name, opts = {}) {
   })(${JSON.stringify(opts.docSelector || null)})`);
   await new Promise(r => setTimeout(r, 200));
 
-  const m = await measureLayout(ctx.evaluate, opts.docSelector || null);
+  const m = await measureLayout(ctx.evaluate, opts.docSelector || null, opts.textScopeSelector || null);
   const shot = await capture(ctx.send, name);
 
   console.log(`  ${label.padEnd(10)} ${m.viewport.w}x${m.viewport.h}  minFont ${(m.minFont || 0).toFixed(0)}px  clipped ${m.clippedCount}  outside ${m.outsideCount}  scrolls ${m.scrolls}  -> ${shot.file || '(no image: ' + shot.error + ')'}`);

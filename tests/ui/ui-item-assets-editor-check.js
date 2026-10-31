@@ -149,7 +149,7 @@ const { PROJECTOR_SIZES, measureAt, setViewport, setViewportAndWait } = require(
       document.getElementById('modalRoot').innerHTML = '';
       openEditor(Object.assign({}, base, { template }, patch), false, 'test');
       await sleep(250);
-      const inputs = document.querySelectorAll('#modalRoot [data-field="contentCategory"]');
+      const inputs = document.querySelectorAll('#pageContent [data-field="contentCategory"]');
       results[template] = { count: inputs.length, first: inputs[0]?.value || '' };
     };
     await probe('quiz', { questions: [{ id: 'q1', type: 'multiple-choice', prompt: 'P',
@@ -182,27 +182,46 @@ const { PROJECTOR_SIZES, measureAt, setViewport, setViewportAndWait } = require(
   // ---- Phase B (docs/UI-PLAN-V2.md): the editor is where a teacher spends the
   // longest single stretch, so it is measured at both real resolutions too.
   //
-  // Contract, measured rather than invented:
-  //  - fontFloor 9px: `.tag { font-size: 9px }` is the app's own smallest text,
-  //    used for the step badges. Asserting 12px failed on correct design; 9px
-  //    still catches a real shrink.
-  //  - innerScrollAreas 1: `.modal { max-height: 90vh; overflow: auto }` means a
-  //    long form legitimately scrolls. Skipping the assertion would let a second,
-  //    unintended scroller appear unnoticed, so exactly 1 is expected.
+  // The editor is a *page* since DECISIONS #129: it renders into `#pageContent`
+  // and the document scrolls vertically like any other page, so this uses the
+  // rig's page mode rather than the modal-surface assertions.
+  //  - fontFloor 9px: `.tag { font-size: 9px }` is the editor's own smallest
+  //    text. The sidebar brand (8px) is shared chrome, excluded via textScope.
+  //  - nothing may escape sideways, and no nested scroll box may hide content.
+  //  - a page taller than the viewport is fine only if it really scrolls.
+  //
+  // A fresh profile opens the setup onboarding, which owns the window
+  // (`html[data-setup-fullscreen]`) and would otherwise be measured instead of
+  // the editor. Dismiss it before opening the editor.
   for (const size of PROJECTOR_SIZES) {
     const tag = size.label;
     await setViewportAndWait(ctx, size);
     const opened = await evaluate(`(async () => {
       const sleep = ms => new Promise(r => setTimeout(r, ms));
-      document.getElementById('modalRoot').innerHTML = '';
+      for (let i = 0; i < 40; i++) {
+        if (document.querySelector('#modalRoot .setup-fullscreen')) break;
+        await sleep(100);
+      }
+      if (typeof closeSetupWizard === 'function') closeSetupWizard('close');
+      await sleep(200);
       openEditor(${JSON.stringify({ id: 'ue-layout', title: 'Kiểm tra bố cục', subject: 'Tự nhiên', grade: '3', template: 'quiz', description: '', tags: [], sourceName: 'ui-check', createdAt: '2026-01-01T00:00:00.000Z', gameSetup: { scoringMode: 'cơ bản', illustrationMode: 'manual' }, questions: [{ id: 'q1', type: 'multiple-choice', prompt: 'Con vật nào kêu meo?', options: [{ id: 'a', text: 'Con mèo' }, { id: 'b', text: 'Con chó' }], correctOptionId: 'a', correctAnswer: '', explanation: 'Mèo kêu meo.', points: 100, contentCategory: 'animals', iconName: 'paw-print', illustrationAssetId: 'animals-meadow' }] })}, false, 'test');
       await sleep(600);
-      return { modal: Boolean(document.querySelector('.modal')), row: Boolean(document.querySelector('#editorQuestions .editor-question')) };
+      return {
+        page: Boolean(document.querySelector('.editor-page')),
+        row: Boolean(document.querySelector('#editorQuestions .editor-question')),
+        setup: document.documentElement.getAttribute('data-setup-fullscreen')
+      };
     })()`);
-    check(`[${tag}] editor renders its item row`, Boolean(opened && opened.modal && opened.row), JSON.stringify(opened));
-    await measureAt(ctx, size, `item-assets-editor-${tag}`, { check, fontFloor: 9, innerScrollAreas: 1 });
-    await evaluate(`document.getElementById('modalRoot').innerHTML = ''; true`);
+    check(`[${tag}] editor page renders its item row`, Boolean(opened && opened.page && opened.row), JSON.stringify(opened));
+    check(`[${tag}] setup onboarding no longer owns the window`, Boolean(opened && !opened.setup), JSON.stringify(opened));
+    await measureAt(ctx, size, `item-assets-editor-${tag}`, {
+      check, fontFloor: 9, pageMode: true, textScopeSelector: '#pageContent'
+    });
   }
+  await evaluate(`(async () => {
+    if (typeof closeEditorPage === 'function') closeEditorPage();
+    return true;
+  })()`);
   await setViewport(ctx.send, null);
 
   const failed = results.filter(r => !r.ok).length;

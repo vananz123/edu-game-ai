@@ -340,3 +340,23 @@ Lý do không gom đúng 5 tên trong roadmap: các khối game/kết quả nằ
 
 **Next.** (1) Sửa Phase B của `ui-item-assets-editor-check` sang `.editor-page` và đo đúng trang soạn thảo; (2) chạy lại `ui-wizard-structure-check` trong cửa sổ có focus thật để xác nhận assertion focus; (3) roadmap còn `Packaged check` (cần máy sạch) — không thuộc đợt cấu trúc cây.
 
+## #151 — Phase B của `ui-item-assets-editor-check` đo đúng trang soạn thảo
+
+**Bối cảnh.** Phase B (docs/UI-PLAN-V2.md) đo editor ở 1920×1080 và 1366×768. Từ #129 editor là **trang** (`.editor-page` trong `#pageContent`) chứ không còn `.modal`, nhưng check vẫn đòi `document.querySelector('.modal')` nên đỏ từ trước P5 (đối chiếu `git show 8d5562c:src/renderer/features/game-editor.ts`). Phần đo vì thế chạy trên trang trống (`minFont 0px`, `modalRoot` ngoài viewport) — chỉ số 17/27 không nói gì về editor.
+
+**Thay đổi.**
+- `tests/ui/lib/screenshot-capture.js`:
+  - `assertLayout` có `pageMode`: trang thường cuộn dọc theo thiết kế, nên thay cặp "no page scroll" + "nothing outside the viewport" bằng (a) không phần tử nào tràn **ngang** (`outsideX`), (b) không hộp cuộn lồng nhau che nội dung, (c) nếu trang cao hơn viewport thì tài liệu phải **cuộn được** (`docScrollable`, để bắt lỗi shell `overflow:hidden` làm mất nội dung). Surface checks giữ nguyên 5 assertion cũ.
+  - `textScopeSelector`: giới hạn mẫu font/clipping vào đúng vùng đang kiểm; chrome dùng chung (brand 8px ở sidebar) không thuộc hợp đồng mật độ của editor.
+  - `measureLayout` nhận thêm tham số scope và dùng `replaceAll` — placeholder xuất hiện **hai lần trên một dòng** (`TEXT_SCOPE_SEL ? … querySelector(TEXT_SCOPE_SEL)`), `replace` chỉ thay lần đầu.
+- `tests/ui/ui-item-assets-editor-check.js`:
+  - Phase B chờ setup onboarding của profile mới xuất hiện rồi `closeSetupWizard('close')`: overlay đó chiếm cửa sổ (`html[data-setup-fullscreen]`) nên trước đây số đo thuộc về onboarding chứ không phải editor.
+  - Assert `.editor-page` + `.editor-question`, fontFloor 9px, `pageMode`, scope `#pageContent`; đóng editor sau khi đo.
+  - Hai check template đổi selector từ `#modalRoot` sang `#pageContent` (editor rời modal từ #129) — trước đó trả `count=0` dù editor render đúng.
+
+**Kết quả.** `ui-item-assets-editor-check` **29/29** (trước 17/27). Số đo thật: 1920×1080 doc 1495px; 1366×768 doc 1509px; font nhỏ nhất 9px (`span.tag`), 0 clipped, 0 tràn ngang, 0 hộp cuộn lồng, tài liệu cuộn được; ảnh `tests/ui/shots/item-assets-editor-{1920x1080,1366x768}.png`. Regression: `ui-editor-art-check` **11/11**, unit **68/68**.
+
+**Không đổi.** Không sửa renderer/CSS/hợp đồng IPC; caller cũ của `measureLayout` (2 tham số, `ui-presentation-check`) giữ nguyên hành vi; không đổi 5 assertion của surface checks.
+
+**Next.** (1) `ui-wizard-structure-check` trong cửa sổ có focus thật; (2) roadmap `Packaged check` (cần máy sạch).
+
