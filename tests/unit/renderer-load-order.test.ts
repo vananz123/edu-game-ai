@@ -128,7 +128,7 @@ assert.ok(progressHtml.includes('data-stage="ready"'), 'step-5 progress should s
 // DECISIONS #75: step 2 renders the same pieces and depends on two bindings that
 // live in *other* scripts — `WIZARD_GENERATION_SPINNER` (step-generate.js, which
 // is only guaranteed to have loaded while this order holds) and the clock helpers
-// in state.js. Reaching one of them before its script ran would throw here.
+// in wizard/state/core.js. Reaching one of them before its script ran would throw here.
 const analysisProgressHtml = evalInContext(
   "wizardState.busy = 'analyze'; wizardState.lessonStage = 'generate'; renderWizardAnalysisProgress()"
 );

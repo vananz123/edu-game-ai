@@ -289,3 +289,54 @@ Lý do không gom đúng 5 tên trong roadmap: các khối game/kết quả nằ
 
 **Không làm.** Không đổi selector, giá trị, thứ tự rule, không gộp/tách block, không thêm `<link>` mới (vẫn đúng một link `app.css`), không đổi Tailwind/daisyUI config hay `@source`. Các file khu vực không được nạp trực tiếp bởi `index.html` (không thể, vì chúng chưa qua Tailwind).
 
+## #150 — Tách `game-editor.ts` và `wizard/state.ts` theo khu vực (P5 restructure)
+
+**Bối cảnh.** P5 — pha cuối của kế hoạch cấu trúc lại cây dự án (#146–#149). Hai file renderer lớn nhất còn lại là `features/game-editor.ts` (1.966 dòng / 125.959 byte) và `features/wizard/state.ts` (1.752 dòng / 83.771 byte). Sửa một panel (kho báu, đường đua, nhà cung cấp AI, lưu project) phải cuộn qua cả file. Nguyên tắc giữ nguyên: **chỉ di chuyển, không đổi hành vi**; renderer là script toàn cục nạp theo thứ tự `src/index.html`.
+
+**Quyết định — trình soạn thảo.** `features/game-editor.ts` → `features/editor/` (7 file, mỗi file một banner `@ts-nocheck` + lát cắt nguyên văn):
+
+| File | Dòng gốc | Nội dung |
+| --- | --- | --- |
+| `ai.ts` | 1–231 | nút "Tạo lại câu này" (P7) + gọi `lesson:regenerate-item` |
+| `page.ts` | 233–505, 844–996 | nhập câu từ tệp, mở/đóng trang, markup, nối sự kiện, **lưu** (`saveEditedGame`) |
+| `questions.ts` | 507–843 | hàng câu hỏi quiz/tình huống, đáp án, ảnh từng mục, tuỳ chọn minh hoạ/cách chơi/mẫu nhà |
+| `drag.ts` | 998–1001, 1007–1062 | kéo-thả đổi thứ tự (dùng chung matching + race) |
+| `matching.ts` | 1064–1183 | panel ghép cặp + `toggleEditorSections` |
+| `treasure.ts` | 1185–1581 | panel Kho báu tri thức + kiểm dữ liệu |
+| `race.ts` | 1002–1006, 1583–1966 | panel Đường đua + hằng số hiệu ứng + xem trước + kiểm dữ liệu |
+
+`src/index.html` thay 1 thẻ `game-editor.js` bằng 7 thẻ `editor/*.js` đúng thứ tự cũ. File gốc xoá; chỉ dòng 1 (`@ts-nocheck` cũ) được thay bằng banner của từng file, phần còn lại giữ nguyên từng byte (LF).
+
+**Quyết định — state wizard.** `features/wizard/state.ts` → `features/wizard/state/` (5 file, CRLF giữ nguyên):
+
+| File | Dòng gốc | Nội dung |
+| --- | --- | --- |
+| `core.ts` | 1–539 | `wizardSteps`, `wizardState`, metadata trò chơi, đồng hồ/ETA, thông báo, reset |
+| `providers.ts` | 541–771 | nhãn/mô tả provider, thẻ chọn provider, bảng mã lỗi, danh sách lựa chọn cấu hình |
+| `config.ts` | 773–1010 | `wizardDefaultConfig`, nhận dạng kiểu đầu vào, mức tương thích câu hỏi |
+| `draft.ts` | 1012–1397 | ngân hàng câu hỏi đã nhận, dựng draft, origin, giới hạn số mục |
+| `actions.ts` | 1399–1752 | đổi thể loại, lưu project/thư viện, mở project, mở giáo án đã lưu |
+
+`src/index.html` nạp 5 script đúng thứ tự cũ, trước `step-structure.js`. **Không đảo thứ tự**: một số hằng số cấp cao được tính ngay lúc nạp (bài học `WIZARD_ART_SCENE_CATEGORIES`, xem test load-order).
+
+**Cách làm.** Script Node chia theo **dải dòng chính xác**, chỉ cắt ở ranh giới khai báo cấp 0; mỗi file = banner + đúng các dải của nó; dòng trống phân cách được chèn lại khi dựng lại. Kiểm tra trước khi ghi: mỗi dải trùng bản gốc, mọi dòng không trống đều thuộc một dải, và **nối các dải theo thứ tự gốc ra đúng phần thân file gốc**: editor `29d4e236…30444e` (125.867 byte, file `eaa83ce5…9b6043`), state `b034a258…7cc0aa` (83.673 byte, file `098459d1…99d6cc`). Bản gốc sao lưu ở `%LOCALAPPDATA%\Temp` trong lúc làm; script tách giữ lại để chạy lại được.
+
+**Test đọc nguồn được cập nhật.**
+- `tests/unit/generation-eta.test.ts`: đọc cả thư mục `features/wizard/state/*.ts` thay vì một file.
+- `tests/legacy/smoke-p1.js`: nạp cả thư mục `dist/src/renderer/features/editor/*.js` khi chèn editor vào trang.
+- `tests/unit/renderer-load-order.test.ts`: chỉ cập nhật chú thích (`wizard/state/core.js`); test tự đọc thứ tự script từ `index.html` nên 12 script mới được phủ ngay.
+- `features/game-illustration.ts`: chú thích trỏ `editor/questions.ts`.
+
+**Verification.** `npm run build` 0 · `node tests/run-unit.js` **68/68** (gồm load-order với 12 script mới) · `npm run check:renderer-globals` 54/55 script, 756 hàm, 6.192 call site, **0 undefined** · `npm run verify:css` **17/17**. Electron thật qua CDP (instance sạch, `env -u ELECTRON_RUN_AS_NODE`, cổng 9338): `ui-editor-art-check` **11/11** (mở trang soạn thảo, chọn ảnh có sẵn/tải lên/Tự động, lưu rồi đọc lại từ kho), `ui-race-editor-check` **10/10**, `ui-race-treasure-check` **18/18**, `ui-wizard-cancel-genre-check` **8/8**. Probe CDP một lần: 34 hàm toàn cục của editor đều `typeof === 'function'`; mở editor cho matching/treasure/race, `readMatchingEditor`/`readTreasureEditor`/`readRaceEditor` + `validateTreasureData`/`validateRaceData` chạy đúng, đóng trang sạch.
+
+**Hai check đỏ sẵn, không do đợt này.**
+- `ui-item-assets-editor-check` **17/27**: 12 assertion Phase A (render → đọc → lưu thật → mở lại) đều pass; Phase B fail vì vẫn đòi `document.querySelector('.modal')`, trong khi editor đã thành **trang** `.editor-page` từ #129 — `git show 8d5562c:...game-editor.ts` đã có `class="editor-page"`, nên assertion này đỏ từ trước P5. Vì thế phần đo màn hình cũng đo trang trống (`minFont 0px`, `modalRoot` ngoài viewport).
+- `ui-wizard-structure-check` **13/14**: assertion "giữ focus bàn phím" nhận `document.activeElement` = BODY. Không phải lỗi code: trên chính instance đó, gọi `focus()` vào một `<input>` cũng để `activeElement` = BODY — cửa sổ chạy từ shell nền không nhận focus cấp OS. Các assertion còn lại (cuộn, tristate, tab, cây) pass.
+- `ui-draft-guard-check` **7/8**: predicate + `beforeunload` pass; bước sinh draft thật báo "Chưa có nhà cung cấp AI nào sẵn sàng" vì profile mới không có model local (`aiActiveProvider().usable === false`); không liên quan editor/state.
+
+**Không tách.** `features/three-game-interaction.ts` (813 dòng) là **một IIFE duy nhất** xuất `window.threeGame`; chia thành nhiều script sẽ phải bỏ closure hoặc chia sẻ state qua global — đổi ranh giới module chứ không phải di chuyển file, nên để nguyên. Các bước wizard (`step-generate` 973, `step-structure` 570, `step-input` 501, `step-analysis` 496, `step-configure` 338, `step-recommend` 321) mỗi file đã là một trách nhiệm và dưới 1.000 dòng.
+
+**Không làm.** Không đổi tên/tham số hàm toàn cục, không đổi DOM/CSS, không đổi hợp đồng IPC/preload, không đụng `three-game-interaction`, `gameplay`/`games/*`, `src/game-engine`, LAN/presentation/SQLite/`.egame`.
+
+**Next.** (1) Sửa Phase B của `ui-item-assets-editor-check` sang `.editor-page` và đo đúng trang soạn thảo; (2) chạy lại `ui-wizard-structure-check` trong cửa sổ có focus thật để xác nhận assertion focus; (3) roadmap còn `Packaged check` (cần máy sạch) — không thuộc đợt cấu trúc cây.
+

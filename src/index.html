@@ -124,7 +124,15 @@
   <script src="renderer/pages/settings.js"></script>
   <script src="renderer/pages/lesson-plans.js"></script>
   <script src="renderer/pages/my-projects.js"></script>
-  <script src="renderer/features/wizard/state.js"></script>
+  <!-- State dùng chung của wizard, tách theo khu vực (DECISIONS #150). Nạp đúng
+       thứ tự cũ: một số hằng số cấp cao được tính ngay lúc nạp, nên đảo thứ tự
+       có thể gây "Cannot access … before initialization" (xem
+       tests/unit/renderer-load-order.test.ts). -->
+  <script src="renderer/features/wizard/state/core.js"></script>
+  <script src="renderer/features/wizard/state/providers.js"></script>
+  <script src="renderer/features/wizard/state/config.js"></script>
+  <script src="renderer/features/wizard/state/draft.js"></script>
+  <script src="renderer/features/wizard/state/actions.js"></script>
   <script src="renderer/features/wizard/step-structure.js"></script>
 <script src="renderer/features/wizard/step-input.js"></script>
   <script src="renderer/features/wizard/step-analysis.js"></script>
@@ -133,7 +141,17 @@
   <script src="renderer/features/wizard/step-generate.js"></script>
   <script src="renderer/pages/create-wizard.js"></script>
   <script src="renderer/core/render.js"></script>
-  <script src="renderer/features/game-editor.js"></script>
+  <!-- Trình soạn thảo, tách theo khu vực (DECISIONS #150). Renderer là script
+       toàn cục nạp theo thứ tự, nên chỉ khai báo hàm ở đỉnh tệp; không tệp nào
+       đọc biến của tệp khác lúc nạp. Thứ tự: AI → trang/lưu → câu hỏi → kéo-thả
+       → matching → treasure → race. -->
+  <script src="renderer/features/editor/ai.js"></script>
+  <script src="renderer/features/editor/page.js"></script>
+  <script src="renderer/features/editor/questions.js"></script>
+  <script src="renderer/features/editor/drag.js"></script>
+  <script src="renderer/features/editor/matching.js"></script>
+  <script src="renderer/features/editor/treasure.js"></script>
+  <script src="renderer/features/editor/race.js"></script>
   <script src="renderer/core/controller.js"></script>
   <script src="renderer/features/local-ai.js"></script>
 <!-- First-run AI setup (§7): the typed, unit-tested decisions load before the

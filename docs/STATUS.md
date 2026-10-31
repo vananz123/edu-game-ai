@@ -8,6 +8,7 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 ## Mục lục bàn giao
 
 ### 2026-10-31 — [docs/handoff/status/2026-10-31.md](handoff/status/2026-10-31.md)
+- Tách game-editor + wizard/state theo khu vực
 - Tách app.css thành 13 file khu vực
 - Nhóm src/services theo lesson/ai/game/storage/input
 - Tách gameplay.ts thành features/games/*
@@ -184,6 +185,28 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - Lịch sử trước 2026-10-19
 ## Bàn giao gần nhất
 
+## Handoff - Tách game-editor + wizard/state theo khu vực (2026-10-31, DECISIONS #150)
+
+**Files changed.**
+- `src/renderer/features/editor/` (mới, 7 file): `ai.ts` (AI tạo lại từng mục), `page.ts` (nhập câu từ tệp, mở/đóng trang, markup, nối sự kiện, `saveEditedGame`), `questions.ts` (sửa câu hỏi), `drag.ts` (dựng thẻ kéo-thả dùng chung), `matching.ts`, `treasure.ts`, `race.ts`. `src/renderer/features/game-editor.ts` (1.966 dòng) đã xoá; nội dung chuyển **nguyên văn từng dòng** — chỉ dòng 1 của mỗi file thay bằng banner `@ts-nocheck` mới.
+- `src/renderer/features/wizard/state/` (mới, 5 file): `core.ts` (state dùng chung, đồng hồ/ETA, reset), `providers.ts`, `config.ts` (cấu hình sinh nội dung), `draft.ts` (đọc/ghi bản nháp), `actions.ts` (chuyển bản nháp → dự án). `src/renderer/features/wizard/state.ts` (1.752 dòng) đã xoá, chuyển nguyên văn (giữ CRLF).
+- `src/index.html`: thay 1 thẻ `game-editor.js` bằng 7 thẻ `features/editor/*.js` (AI → page → questions → drag → matching → treasure → race) và 1 thẻ `state.js` bằng 5 thẻ `features/wizard/state/*.js` (core → providers → config → draft → actions), kèm chú thích thứ tự nạp.
+- `tests/legacy/smoke-p1.js`: đọc và nối mọi file `dist/src/renderer/features/editor/*.js` đã sắp xếp thay vì một file.
+- `tests/unit/generation-eta.test.ts`: nguồn `STATE_SRC` là toàn bộ `wizard/state/*.ts` đã sắp xếp; `tests/unit/renderer-load-order.test.ts` chỉ đổi chú thích.
+- Chỉ đổi chú thích trỏ đường dẫn mới: `src/renderer/features/game-illustration.ts`, `src/renderer/features/wizard/state/core.ts`.
+- Docs: `docs/DECISIONS.md` (#150, kèm bảng khoảng dòng gốc và hash), `docs/ROADMAP.md` (P1–P5 xong), `docs/PROJECT_MAP.md` (cây `editor/` + `wizard/state/` và 4 dòng bảng), `docs/AGENT_HANDOFF.md`.
+- Không đổi: tên/tham số mọi hàm toàn cục, logic soạn thảo và wizard, `three-game-interaction.ts`, các bước wizard, CSS, LAN/presentation/SQLite/`.egame`.
+
+**Behavior.** Không đổi hành vi. Ghép lại 7 lát cắt editor cho đúng file gốc từng byte (SHA-256 `eaa83ce5…9b6043`, 125.959 B; phần thân bỏ dòng 1 `29d4e236…30444e`) và 5 lát cắt wizard state cũng vậy (`098459d1…99d6cc`, 83.771 B; thân `b034a258…7cc0aa`) — cách tách kiểm từng lát là substring thật, mọi dòng không thuộc lát đều rỗng, rồi so hash bản ghép. Sửa trình soạn thảo giờ mở đúng file vùng đó (kho báu ~400 dòng thay vì 1.966), sửa dòng state wizard mở đúng nhóm chức năng thay vì 1.752 dòng. Renderer vẫn là script toàn cục; không file mới nào đọc binding của file khác lúc nạp.
+
+**Commands run.** `npm run build` 0 · `node tests/run-unit.js` **68/68** (gồm load-order với 55 script) · `npm run check:renderer-globals` 54/55 script, 756 hàm, 6.192 call site — **0 undefined** · `npm run verify:css` **17/17**. Electron thật qua CDP (mỗi nhóm instance sạch, cổng 9338): `ui-editor-art-check` **11/11**, `ui-race-editor-check` **10/10**, `ui-race-treasure-check` **18/18**, `ui-wizard-cancel-genre-check` **8/8**, `ui-wizard-structure-check` **13/14**, `ui-draft-guard-check` **7/8**, `ui-item-assets-editor-check` **17/27**. Thêm một probe một lần: 34 hàm toàn cục của editor/wizard state đều tồn tại và matching/treasure/race đọc + validate được.
+
+**Chưa xác minh.** Ba check CDP đỏ đều do nguyên nhân có sẵn, không do đợt tách: `ui-wizard-structure-check` hỏng ở assertion giữ focus bàn phím (cửa sổ chạy nền không lấy được focus OS — probe cho thấy `input.focus()` vẫn để `activeElement` là BODY); `ui-draft-guard-check` hỏng ở E2E sinh nội dung vì profile mới không có nhà cung cấp AI usable ("Chưa có model"); `ui-item-assets-editor-check` Phase B còn chờ `.modal` trong khi editor đã thành trang `.editor-page` từ #129 (đã đối chiếu bản `8d5562c:game-editor.ts`, 12 assertion Phase A đều pass). Chưa bấm tay trọn một luồng tạo game → sửa từng mục trong editor; chưa chạy installer đóng gói. Cố ý **không tách** `three-game-interaction.ts` (một IIFE exposing `window.threeGame` — tách sẽ phá ranh giới module chứ không chỉ là chia file) và các bước wizard (mỗi file < 1.000 dòng, một trách nhiệm).
+
+**Next task.** Roadmap còn `Packaged check` (cần môi trường cài sạch) và các mục AI/giáo án — chưa chốt thứ tự. Việc nhỏ nên làm trước khi chạy lại bộ UI: cập nhật Phase B của `ui-item-assets-editor-check` sang `.editor-page` để check này hết đỏ giả.
+
+---
+
 ## Handoff - Tách app.css thành 13 file khu vực (2026-10-31, DECISIONS #149)
 
 **Files changed.**
@@ -230,24 +253,4 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 **Next task.** P4 — tách `src/renderer/styles/app.css` theo khu vực (base / components / games / results / responsive), giữ `verify:css` **17/17**; sau đó P5 (các file lớn còn lại) chỉ khi P4 ổn định.
 
----
-
-## Handoff - Tách gameplay.ts thành features/games/* (2026-10-31, DECISIONS #147)
-
-**Files changed.**
-- `src/renderer/features/games/` (mới, 8 file): `shell.ts` (`playGame`, display/fullscreen, `closePlaySurface`, listener click/keydown của play surface), `three-stage.ts` (mount/unmount, `addAnchoredObject`, thế giới 3D theo template, `reactThree`), `house.ts` (House Building Mode), `result-screen.ts` (màn kết quả, Presentation Mode, team setup, play modal/header, `initPresentationTracking()`), `quiz.ts`, `matching.ts`, `treasure.ts`, `race.ts` (UI từng trò).
-- `src/renderer/features/gameplay.ts` (3.270 dòng) đã xoá; nội dung được chuyển **nguyên văn từng dòng** (CRLF 3.269 dòng, bỏ dòng `sourceMappingURL=gameplay.js.map` cũ bị dán từ JS biên dịch; chỉ dòng 1 của `shell.ts` thay bằng header `@ts-nocheck` mới). Script tách kiểm SHA-256 lúc ghép lại và đọc lại file đã ghi.
-- `src/index.html`: thay 1 thẻ `gameplay.js` bằng 8 thẻ `features/games/*.js` theo thứ tự shell → three-stage → house → result-screen → quiz → matching → treasure → race (sau `three-game-interaction.js`).
-- `tests/unit/lan-adapters.test.ts`: drift guard đọc toàn bộ `src/renderer/features/games/*.ts` thay vì một file; đổi tên test cho đúng.
-- `src/lan/lan-adapters.ts`, `tests/ui/ui-presentation-check.js`, `tests/ui/ui-race-treasure-check.js`: chỉ cập nhật chú thích trỏ file mới.
-- Docs: `docs/DECISIONS.md` (#147), `docs/ROADMAP.md` (P2 xong, P3 kế tiếp), `docs/PROJECT_MAP.md` (cây `features/games/` + 4 dòng bảng "sửa gì mở đâu"), `.kilo/skills/threejs-game-interaction/` (SKILL.md + 2 reference: bảng "Where the code lives").
-- Không đổi: logic tính điểm `game-engine/runtime.ts`, `three-game-interaction.ts`, CSS, wizard/editor, LAN/presentation/SQLite/`.egame`, tên và tham số mọi hàm toàn cục.
-
-**Behavior.** Không đổi hành vi. Renderer vẫn là script toàn cục; mỗi file chỉ khai báo hàm/biến hoặc đăng ký listener ở top level, không file nào đọc binding của file khác lúc nạp. Sửa một trò giờ chỉ mở đúng file của trò đó (kho báu ~880 dòng thay vì 3.269), còn vào/ra và toàn màn hình ở `shell.ts`, 3D ở `three-stage.ts`, kết quả/trình chiếu ở `result-screen.ts`.
-
-**Commands run.** `npm run build` 0 (chỉ cảnh báo EPERM khi dọn `dist/server/index.js` do app đang chạy) · `node tests/run-unit.js` **68/68** · `npm run check:renderer-globals` 0 undefined (44/45 script, 756 hàm, 6192 call site) · `npm run verify:css` **17/17**. Electron thật CDP (mỗi nhóm cần instance sạch, `env -u ELECTRON_RUN_AS_NODE`, cổng 9361/9337): `ui-three-game-check` **19/19**, `ui-three-game-reactions-check` **11/11**, `ui-three-game-check-4games` **41/41**, `ui-three-game-patterns-check` **31/31**, `ui-house-building-check` **84/84**, `ui-game-worlds-check` **42/42**, `ui-play-surface-check` **156/156**, `ui-presentation-check` **60/60**, `ui-stage-illustration-check` **169/169**, `ui-matching-finish-check` **22/22**, `ui-race-treasure-check` **18/18**, `ui-lan-wiring-check` **7/7**, `ui-lan-treasure-finish-check` **5/5**, `ui-fullscreen-density-check` **8/8**, `ui-fullscreen-check` **20/20**.
-
-**Chưa xác minh.** Chưa chơi tay trọn một ván mỗi trò sau khi tách (mới chạy check CDP); chưa xem trên máy chiếu/màn hình phụ thật; chưa chạy installer đóng gói. `ui-three-game-check-4games` lần đầu chỉ 36/41 khi dùng lại instance đã bị check khác probe (bộ đếm mount/burst tích luỹ) — chạy lại trên instance sạch đạt 41/41. `ui-fullscreen-check` chỉ đạt 20/20 sau khi xoá `data-setup-fullscreen="1"` còn sót trong profile mới (17/20 trước đó, lỗi môi trường: setup state giữ `visibility:hidden` trên `.app-shell`), chưa sửa nguyên nhân gốc.
-
-**Next task.** P3 — nhóm `src/services/` theo giáo án / AI / trò chơi / lưu trữ / nhập liệu, chỉ di chuyển file và sửa import (không đổi hợp đồng IPC); sau đó P4 tách `app.css`.
 

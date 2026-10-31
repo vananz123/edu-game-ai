@@ -19,7 +19,7 @@ import {
  * Two kinds of check:
  *   1. the pure maths (`src/shared/generation-eta.ts`);
  *   2. drift between that module and the renderer copy in
- *      `src/renderer/features/wizard/state.ts`. The renderer is a flat set of
+ *      `src/renderer/features/wizard/state/`. The renderer is a flat set of
  *      classic scripts with no bundler, so the maths is duplicated by necessity;
  *      without this test the two copies would silently diverge and the bar would
  *      report numbers the tested code never produced.
@@ -28,7 +28,14 @@ import {
 // `__dirname` is `dist/tests/unit` at runtime, so three levels up is the repo
 // root (same convention as tests/unit/illustration-registry.test.ts).
 const ROOT = path.join(__dirname, '..', '..', '..');
-const STATE_SRC = fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'features', 'wizard', 'state.ts'), 'utf8');
+// state.ts was split into area files (DECISIONS #150); read the whole directory
+// so a helper moving between files cannot silently drop this guard.
+const STATE_DIR = path.join(ROOT, 'src', 'renderer', 'features', 'wizard', 'state');
+const STATE_SRC = fs.readdirSync(STATE_DIR)
+  .filter((name) => name.endsWith('.ts'))
+  .sort()
+  .map((name) => fs.readFileSync(path.join(STATE_DIR, name), 'utf8'))
+  .join('\n');
 const STEP_SRC = fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'features', 'wizard', 'step-generate.ts'), 'utf8');
 const ANALYSIS_SRC = fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'features', 'wizard', 'step-analysis.ts'), 'utf8');
 // The stylesheet was split into area files (DECISIONS #149); read the whole

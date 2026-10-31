@@ -47,6 +47,11 @@ src/
                        toàn màn hình), three-stage (3D), house, result-screen
                        (kết quả + trình chiếu + modal), quiz, matching, treasure, race
     features/wizard/   Luồng "Tạo từ giáo án" (bước 1→5)
+    features/wizard/state/  State + hành động dùng chung, tách theo khu vực (#150):
+                       core (state, đồng hồ/ETA), providers, config, draft, actions
+    features/editor/   Trình soạn thảo game, tách theo khu vực (#150): ai (tạo lại
+                       mục), page (nhập/mở/đóng/lưu), questions, drag, matching,
+                       treasure, race
     styles/app.css     Entry Tailwind + daisyUI: @import các file khu vực theo thứ tự
       base.css           token alias (:root), layer base, biến cỡ chữ/animation
       components.css     component dùng chung port từ 5 stylesheet cũ (nút, thẻ, form…)
@@ -86,9 +91,9 @@ vendor/                DLL VC++ đóng gói kèm
 | Tra bàn giao cũ / quyết định cũ | `docs/STATUS.md` (mục lục) → `docs/handoff/status/<ngày>.md`; `docs/DECISIONS.md` (mục lục) → `docs/handoff/decisions/` |
 | Một trang (dashboard, thư viện, cài đặt…) | `src/renderer/pages/<ten>.ts` |
 | Điều hướng / render trang | `src/renderer/core/render.ts`, `core/controller.ts` |
-| Luồng tạo game từ giáo án | `src/renderer/pages/create-wizard.ts` + `features/wizard/*.ts` |
+| Luồng tạo game từ giáo án | `src/renderer/pages/create-wizard.ts` + `features/wizard/step-*.ts` + `features/wizard/state/*.ts` |
 | Phân luồng đầu vào (giáo án / câu hỏi / dàn ý) | `src/services/input/input-classifier.ts` (quy tắc), `input/input-classifier-semantic.ts` (lớp xác nhận MiniLM), IPC `lesson:classify-input`, UI trong `features/wizard/step-input.ts` |
-| Đổi thể loại không sinh lại nội dung | `src/services/game/draft-convert.ts`, IPC `lesson:convert-draft`, `wizardConvertOrDiscardForGenre` trong `features/wizard/state.ts` |
+| Đổi thể loại không sinh lại nội dung | `src/services/game/draft-convert.ts`, IPC `lesson:convert-draft`, `wizardConvertOrDiscardForGenre` trong `features/wizard/state/actions.ts` |
 | Nhập câu hỏi soạn sẵn (CSV/XLSX/dán văn bản) | `src/services/input/question-import.ts` (`importQuestionsFromFile`, `parseQuestionsFromText`) |
 | Ngân hàng câu hỏi: 7 loại câu + chấm điểm thể loại tương thích (#115) | `src/services/input/question-import.ts` (phần `readQuestionBlock`/`ParsedQuestion`), `input/question-compatibility.ts` (thuần), `input/question-text.ts` (chuẩn hoá dùng chung), UI trong `features/wizard/step-recommend.ts` |
 | Làm sạch ký hiệu/emoji khi tài liệu giống ngân hàng câu hỏi (#116) | `src/services/input/question-text.ts` (`cleanQuestionLine`, `cleanQuestionText`, `looksLikeQuestionBankText`), `splitInlineQuestion` trong `input/question-import.ts` |
@@ -98,10 +103,10 @@ vendor/                DLL VC++ đóng gói kèm
 | Âm thanh | `features/game-audio.ts` |
 | Trình chiếu màn hình 2 | `features/presentation.ts` + `src/presentation/*` + IPC trong `main.ts` |
 | Chơi LAN (học sinh trên điện thoại) | `src/lan/lan-reducer.ts` (trạng thái), `lan-adapters.ts` (điểm), `lan-server.ts` (mạng), `features/lan.ts` (màn hình giáo viên) |
-| Trình sửa game | `features/game-editor.ts`, `features/setup-wizard.ts` |
+| Trình sửa game | `features/editor/*.ts` (tách #150: `page`, `questions`, `matching`, `treasure`, `race`, `ai`, `drag`), `features/setup-wizard.ts` |
 | AI local (cài model, chạy llama.cpp) | `src/ai-core/*`, `features/local-ai.ts`, `features/setup-wizard.ts` |
 | Prompt / schema gọi AI | `src/services/lesson/lesson-prompts.ts`, `lesson/lesson-contracts.ts`, `ai/ai-tasks.ts` |
-| Nhà cung cấp AI của Step 2/Step 5, khoá theo từng nhà cung cấp, trạng thái sẵn sàng (#132) | `src/services/ai/ai-providers.ts` (registry + chọn nhà cung cấp + migration khoá), `main.ts` (`createChatClientForProvider`, `ai:test-provider`, `settings:get/save` không trả khoá), `pages/settings.ts` + `features/settings.ts` (thẻ từng nhà cung cấp), `features/wizard/state.ts` (`wizardProviderCard`/`wizardProviderPickerHtml`) |
+| Nhà cung cấp AI của Step 2/Step 5, khoá theo từng nhà cung cấp, trạng thái sẵn sàng (#132) | `src/services/ai/ai-providers.ts` (registry + chọn nhà cung cấp + migration khoá), `main.ts` (`createChatClientForProvider`, `ai:test-provider`, `settings:get/save` không trả khoá), `pages/settings.ts` + `features/settings.ts` (thẻ từng nhà cung cấp), `features/wizard/state/providers.ts` (`wizardProviderCard`/`wizardProviderPickerHtml`) |
 | Lưu trữ (SQLite, `.egame`) | `src/services/storage/lesson-store.ts`, `src/services/game/game-package.ts`, `main.ts` (IPC), `preload.ts` (API) |
 | Màu nền 5 thế giới trò chơi | `styles/game-worlds.css`, mục "NĂM THẾ GIỚI TRÒ CHƠI" + `GAME_WORLDS` trong `games/result-screen.ts` |
 | Màn hình kết quả, trình chiếu, thi đấu đội | `features/games/result-screen.ts` |

@@ -2,8 +2,8 @@
 //
 // Why a copy and not an import: the renderer is loaded as classic `<script>`
 // tags (src/index.html) and src/shared/* compiles to CommonJS, so this file
-// cannot `require` the registry. `game-editor.ts` already carries the same kind
-// of copy for the item asset fields (#65).
+// cannot `require` the registry. `editor/questions.ts` already carries the same
+// kind of copy for the item asset fields (#65).
 //
 // What is duplicated, and how drift is prevented:
 //   - the category -> palette table below is the only hand-maintained copy, and

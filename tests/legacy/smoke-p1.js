@@ -2,7 +2,14 @@
 const fs = require('fs');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 (async () => {
-  const geSrc = fs.readFileSync('dist/src/renderer/features/game-editor.js', 'utf8');
+  // The editor was split into src/renderer/features/editor/* (DECISIONS #150);
+  // load every compiled area file back into the page as one script.
+  const editorDir = 'dist/src/renderer/features/editor';
+  const geSrc = fs.readdirSync(editorDir)
+    .filter(name => name.endsWith('.js'))
+    .sort()
+    .map(name => fs.readFileSync(`${editorDir}/${name}`, 'utf8'))
+    .join('\n');
   const b64 = Buffer.from(geSrc).toString('base64');
   const res = await fetch('http://127.0.0.1:9333/json/list');
   const targets = await res.json();
