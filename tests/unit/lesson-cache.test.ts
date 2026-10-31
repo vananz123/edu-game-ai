@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import {
   analysisFingerprint,
   buildAnalysisCacheKey,
+  buildClassificationCacheKey,
   buildGenerationCacheKey,
   cacheKey,
+  CLASSIFIER_VERSION,
   configFingerprint,
   sha256Hex,
   stableJson
@@ -105,6 +107,46 @@ function run(): void {
 
   // Analysis and generation keys never collide.
   assert.notEqual(analysisKey, generationKey);
+
+  // --- Classification key (update_quy_trinh_2 §6) ---------------------------
+  const classifyInput = { text: 'I. Mục tiêu\nII. Hoạt động', embeddingModelId: 'minilm-1' };
+  const classifyKey = buildClassificationCacheKey(classifyInput);
+  assert.equal(buildClassificationCacheKey({ ...classifyInput }), classifyKey, 'deterministic');
+  assert.notEqual(buildClassificationCacheKey({ ...classifyInput, text: 'I. Mục tiêu' }), classifyKey, 'editing the selected text invalidates');
+  assert.notEqual(buildClassificationCacheKey({ ...classifyInput, embeddingModelId: 'minilm-2' }), classifyKey, 'another embedding model invalidates');
+  assert.notEqual(buildClassificationCacheKey({ ...classifyInput, classifierVersion: CLASSIFIER_VERSION + 1 }), classifyKey, 'a rules change invalidates');
+  assert.notEqual(buildClassificationCacheKey({ text: 'abc' }), classifyKey, 'rules-only key differs from a semantic key');
+  // The key must never carry lesson content.
+  assert.ok(!classifyKey.includes('Mục tiêu'), 'the key is a hash, not the text');
+  assert.notEqual(classifyKey, analysisKey);
+  assert.notEqual(classifyKey, generationKey);
+
+  // #132: the provider is part of the analysis key. Same lesson + model on two
+  // providers must not share a cached analysis; no provider keeps the old key.
+  const docHash = sha256Hex('giáo án');
+  const localKey = buildAnalysisCacheKey({ documentSha256: docHash, modelId: 'm', mode: 'fast', provider: 'local' });
+  const geminiKey = buildAnalysisCacheKey({ documentSha256: docHash, modelId: 'm', mode: 'fast', provider: 'gemini' });
+  const noProvider = buildAnalysisCacheKey({ documentSha256: docHash, modelId: 'm', mode: 'fast' });
+  assert.notEqual(localKey, geminiKey, 'two providers never share an analysis');
+  assert.notEqual(noProvider, localKey, 'a provider is part of the key');
+  assert.equal(
+    buildAnalysisCacheKey({ documentSha256: docHash, modelId: 'm', mode: 'fast' }),
+    buildAnalysisCacheKey({ documentSha256: docHash, modelId: 'm', mode: 'fast', provider: '' }),
+    'an absent provider is stable'
+  );
+
+  // #132 D13: a draft is also per provider (the explicit cloud button vs. AI local).
+  const draftBase = { documentId: 'd', analysisFingerprint: 'f', gameType: 'arena', configFingerprint: 'c', modelId: 'm', mode: 'fast' };
+  assert.equal(
+    buildGenerationCacheKey(draftBase),
+    buildGenerationCacheKey({ ...draftBase, provider: '' }),
+    'no provider keeps the pre-#132 draft key'
+  );
+  assert.notEqual(
+    buildGenerationCacheKey({ ...draftBase, provider: 'gemini' }),
+    buildGenerationCacheKey({ ...draftBase, provider: 'local' }),
+    'a draft from one provider is not reused by another'
+  );
 
   console.log('Lesson cache tests passed');
 }

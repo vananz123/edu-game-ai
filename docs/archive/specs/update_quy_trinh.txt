@@ -1,0 +1,219 @@
+# Yêu cầu: Chuẩn hóa quy trình đầu vào, phân tích AI local và tạo trò chơi trong EduGame Studio
+
+## 1. Mục tiêu
+
+Cải tiến quy trình tiếp nhận nội dung, phân tích kiến thức và tạo trò chơi bằng AI local trong EduGame Studio (Electron + TypeScript).
+
+Hỗ trợ nhiều loại đầu vào mà không bắt buộc giáo viên phải gửi toàn bộ giáo án. Tối ưu thời gian xử lý trên CPU, bảo toàn nội dung do giáo viên cung cấp và tái sử dụng các thành phần hiện có.
+
+**Nguyên tắc bắt buộc:**
+- Không viết lại ứng dụng hoặc thay thế kiến trúc hiện tại.
+- Không phân tích AI nếu tác vụ không cần suy luận.
+- Không bắt buộc gọi AI để chuẩn hóa dữ liệu có cấu trúc rõ ràng.
+- Không tự ý sửa câu hỏi, đáp án hoặc lời giải gốc của giáo viên.
+- Chỉ bổ sung AI vào những bước thực sự cần thiết.
+- Giữ nguyên 5 thể loại trò chơi, luật chơi, cách tính điểm và hệ thống trình chiếu hiện có.
+- Duy trì hai chế độ AI hiện có: Fast và Think.
+
+## 2. Các loại đầu vào
+
+Hỗ trợ các trường hợp sau:
+
+1. **Giáo án hoặc tài liệu đầy đủ:** Phân tích kiến thức bằng AI local để xác định nội dung trọng tâm, khái niệm, ví dụ, tình huống và thông tin cần thiết cho việc tạo trò chơi.
+2. **Danh sách câu hỏi soạn sẵn:** Nhận diện câu hỏi, phương án, đáp án, lời giải và hình ảnh liên quan. Nếu dữ liệu đã đầy đủ, bỏ qua bước phân tích giáo án và chuyển sang chuẩn hóa câu hỏi.
+3. **Đoạn văn bản hoặc kiến thức ngắn:** Phân tích phạm vi nội dung hiện có và tạo câu hỏi phù hợp. Không tự bịa kiến thức ngoài nguồn.
+4. **Nhập thủ công:** Cho phép giáo viên tự tạo và chỉnh sửa câu hỏi mà không cần gọi AI.
+5. **Tài liệu hoặc kết quả phân tích đã lưu:** Tái sử dụng dữ liệu đã có nếu còn hợp lệ, không phân tích lại không cần thiết.
+
+Cho phép giáo viên lựa chọn loại đầu vào khi có thể xác định rõ. Chỉ sử dụng nhận diện tự động để hỗ trợ khi cần thiết; không gọi LLM chỉ để phân loại một cấu trúc dữ liệu đơn giản.
+
+## 3. Quy trình xử lý
+
+### Bước 1 — Tiếp nhận đầu vào
+
+Nhận nội dung từ nguồn hiện có. Lưu tài liệu gốc và giữ nguyên dữ liệu đầu vào.
+
+Phân biệt rõ:
+- Nội dung gốc của giáo viên.
+- Nội dung đã chuẩn hóa.
+- Nội dung do AI tạo hoặc đề xuất.
+- Kết quả phân tích kiến thức.
+
+Không ghi đè nội dung gốc bằng kết quả AI.
+
+### Bước 2 — Phân luồng xử lý
+
+Dựa trên loại đầu vào và mức độ hoàn chỉnh của dữ liệu để lựa chọn một trong các nhánh:
+
+**Nhánh A: Giáo án hoặc tài liệu đầy đủ**
+- Làm sạch văn bản, giữ tiêu đề, cấu trúc bài học, bảng biểu, số liệu, ví dụ, tình huống, đáp án và lời giải liên quan.
+- Tái sử dụng bộ tiền xử lý tài liệu hiện có.
+- Gọi pipeline phân tích kiến thức hiện có.
+- Lưu kết quả để tái sử dụng.
+
+**Nhánh B: Câu hỏi soạn sẵn**
+- Phân tích cấu trúc bằng quy tắc xử lý thông thường trước.
+- Chuẩn hóa định dạng câu hỏi, phương án, đáp án, lời giải và hình ảnh.
+- Giữ nguyên câu chữ và đáp án gốc.
+- Không gọi pipeline phân tích giáo án nếu không cần kiến thức bổ sung.
+- Nếu cấu trúc không xác định được, hiển thị phần cần giáo viên kiểm tra thay vì tự suy đoán.
+
+**Nhánh C: Văn bản ngắn**
+- Kiểm tra nội dung có đủ thông tin để tạo câu hỏi hay không.
+- Chỉ gọi AI cho tác vụ cần suy luận.
+- Giới hạn việc tạo nội dung trong phạm vi thông tin có căn cứ từ đầu vào.
+- Thông báo nếu nguồn không đủ để tạo câu hỏi đáng tin cậy.
+
+**Nhánh D: Nhập thủ công**
+- Không gọi AI mặc định.
+- Cho phép giáo viên tự nhập, sửa, xóa và quản lý câu hỏi.
+- Chỉ gọi AI khi giáo viên chủ động yêu cầu hỗ trợ.
+
+**Nhánh E: Tái sử dụng dữ liệu đã lưu**
+- Kiểm tra dữ liệu, phiên bản và cache key hiện có.
+- Tái sử dụng kết quả nếu còn hợp lệ.
+- Không dùng kết quả cũ khi nội dung nguồn hoặc các tham số ảnh hưởng đến kết quả đã thay đổi.
+
+### Bước 3 — Chuẩn hóa dữ liệu trung gian
+
+Đưa các loại đầu vào về cấu trúc dữ liệu tương thích với hệ thống tạo trò chơi hiện tại.
+
+Dữ liệu cần hỗ trợ:
+- Nội dung kiến thức.
+- Câu hỏi và loại câu hỏi.
+- Danh sách phương án.
+- Đáp án đúng nếu có.
+- Lời giải hoặc giải thích nếu có.
+- Hình ảnh hoặc tham chiếu asset.
+- Nguồn gốc dữ liệu và trạng thái xác minh.
+- Trạng thái thiếu dữ liệu hoặc cần giáo viên kiểm tra.
+
+Tái sử dụng các interface, schema và model hiện có nếu phù hợp. Không tạo thêm một hệ thống dữ liệu song song không cần thiết.
+
+Không bắt buộc mọi câu hỏi phải có đáp án hoặc lời giải. Chỉ áp dụng yêu cầu bắt buộc theo luật chơi của thể loại được chọn.
+
+### Bước 4 — Chọn trò chơi và tạo nội dung
+
+Tái sử dụng hệ thống của 5 thể loại trò chơi hiện có.
+
+Khi giáo viên chọn thể loại:
+- Đọc luật chơi và yêu cầu dữ liệu của thể loại đó.
+- Kiểm tra nội dung đã có có đáp ứng yêu cầu hay không.
+- Nếu đáp ứng, chuyển đổi dữ liệu và sử dụng trực tiếp.
+- Nếu thiếu thông tin, chỉ yêu cầu bổ sung phần cần thiết.
+- Chỉ gọi AI tạo mới, viết lại hoặc biến đổi nội dung khi cần thiết hoặc khi giáo viên chủ động yêu cầu.
+
+Không sinh lại toàn bộ câu hỏi chỉ vì giáo viên thay đổi thể loại trò chơi.
+
+Bảo toàn cơ chế tính điểm, trình chiếu, chỉnh sửa, lưu trò chơi và các hành vi hiện có.
+
+## 4. Quy tắc thông báo cho giáo viên
+
+Thông báo rõ ràng, ngắn gọn và đúng thời điểm. Không hiển thị hộp thoại xác nhận cho mọi thao tác thông thường.
+
+### Trường hợp 1: Câu hỏi hoàn chỉnh
+
+Thông báo:
+
+“Nội dung câu hỏi đã sẵn sàng. Hệ thống sẽ giữ nguyên câu hỏi, đáp án và lời giải hiện có; chỉ chuẩn hóa định dạng để phù hợp với trò chơi.”
+
+Cho phép tiếp tục ngay, không bắt buộc giáo viên xác nhận.
+
+### Trường hợp 2: Phân tích giáo án
+
+Thông báo:
+
+“Đang phân tích kiến thức từ tài liệu để chuẩn bị nội dung trò chơi.”
+
+Hiển thị trạng thái xử lý thực tế. Chỉ báo hoàn thành khi tác vụ thực sự hoàn tất.
+
+### Trường hợp 3: Thiếu dữ liệu
+
+Thông báo cụ thể câu hỏi hoặc trường dữ liệu nào đang thiếu.
+
+Cho phép:
+- Giữ nguyên để giáo viên bổ sung sau.
+- Yêu cầu AI đề xuất nội dung bổ sung.
+- Mở trình chỉnh sửa để giáo viên tự xử lý.
+
+Không tự tạo đáp án rồi coi đó là đáp án chính thức của giáo viên.
+
+### Trường hợp 4: AI đề xuất thay đổi nội dung
+
+Trước khi viết lại câu hỏi, bổ sung đáp án hoặc tạo thêm nội dung, phải cho giáo viên biết phạm vi thay đổi và yêu cầu họ chủ động chọn thao tác.
+
+Không ghi đè nội dung gốc. Phân biệt nội dung gốc và nội dung AI đề xuất.
+
+### Trường hợp 5: Tạo trò chơi thủ công
+
+Không hiển thị thông báo AI không cần thiết và không tự khởi chạy model local.
+
+## 5. Tích hợp với pipeline hiện tại
+
+Trước khi chỉnh sửa, kiểm tra mã nguồn và xác định chính xác:
+- `lesson:save-document` và `lesson-store.saveDocument`.
+- `lesson:analyze`.
+- `getDocumentWithText`.
+- `buildAnalysisCacheKey`.
+- `prepareLessonExcerpt`.
+- `buildLessonAnalysisPrompt`.
+- `runStructuredStep`.
+- Schema phân tích bài học.
+- Pipeline tạo nội dung và lưu trò chơi của cả 5 thể loại.
+
+Giữ lại cơ chế cache, single-flight, kiểm tra schema, chuẩn hóa kết quả và giới hạn token hiện có nếu chúng vẫn phù hợp.
+
+Không tạo bản sao pipeline phân tích giáo án cho nhánh câu hỏi soạn sẵn.
+
+Bổ sung một lớp phân luồng đầu vào hoặc service điều phối nhỏ để lựa chọn đúng pipeline. Tách biệt rõ:
+- Tiếp nhận và chuẩn hóa.
+- Phân tích kiến thức.
+- Sinh hoặc bổ sung câu hỏi.
+- Chuyển đổi sang dữ liệu của trò chơi.
+
+Điều chỉnh kiến trúc theo mã nguồn thực tế. Không giả định tên file, interface hoặc API chưa được xác minh.
+
+## 6. Cache và hiệu năng
+
+- Chỉ cache kết quả phân tích hoặc sinh nội dung khi có thể xác định chính xác đầu vào và các tham số liên quan.
+- Tận dụng cache khi cùng một tài liệu được dùng cho nhiều trò chơi.
+- Không tái sử dụng kết quả lỗi thời sau khi nguồn hoặc model, prompt, chế độ xử lý hay schema liên quan đã thay đổi.
+- Không chạy AI tuần tự cho các bước có thể bỏ qua.
+- Không khởi động model local khi tác vụ chỉ cần chuẩn hóa dữ liệu.
+- Không giảm chất lượng nội dung chỉ để đạt tốc độ.
+- Không làm thay đổi mặc định Fast/Think của ứng dụng nếu không có lý do kỹ thuật đã xác minh.
+
+## 7. Kiểm thử và tiêu chí nghiệm thu
+
+Bổ sung kiểm thử cho các trường hợp:
+
+1. Giáo án đầy đủ đi qua pipeline phân tích hiện có.
+2. Câu hỏi trắc nghiệm có đáp án được chuẩn hóa mà không gọi phân tích giáo án.
+3. Câu hỏi thiếu đáp án được đánh dấu chính xác.
+4. Câu hỏi tự luận không bị ép thành trắc nghiệm.
+5. Câu hỏi có lời giải, bảng biểu hoặc hình ảnh không bị mất dữ liệu.
+6. Nội dung gốc không bị ghi đè khi AI đề xuất thay đổi.
+7. Văn bản ngắn không dẫn đến việc AI tự bịa kiến thức.
+8. Nhập thủ công không khởi chạy model khi không yêu cầu AI.
+9. Tài liệu đã phân tích được tái sử dụng khi cache còn hợp lệ.
+10. Đổi thể loại trò chơi không tự động sinh lại toàn bộ nội dung.
+11. Cả 5 trò chơi vẫn hoạt động đúng luật, tính điểm, chỉnh sửa, lưu và trình chiếu.
+12. Trạng thái loading, lỗi, hủy tác vụ và hoàn thành phản ánh đúng trạng thái thực tế.
+
+## 8. Cách thực hiện
+
+Trước tiên, khảo sát mã nguồn hiện tại và trình bày:
+- Pipeline đang hoạt động.
+- Các thành phần có thể tái sử dụng.
+- Các điểm cần sửa hoặc bổ sung.
+- Nguy cơ ảnh hưởng tới 5 trò chơi hiện có.
+
+Sau đó triển khai thay đổi nhỏ nhất cần thiết, giữ tương thích với cấu trúc dữ liệu và giao diện hiện tại.
+
+Chạy các bài kiểm thử liên quan và báo cáo rõ:
+- File đã sửa.
+- Hành vi đã thay đổi.
+- Kết quả kiểm thử thực tế.
+- Các giới hạn hoặc trường hợp chưa xử lý.
+
+Không tuyên bố tính năng đã hoàn thành nếu chưa kiểm thử. Không tự ý tái cấu trúc các module không liên quan.

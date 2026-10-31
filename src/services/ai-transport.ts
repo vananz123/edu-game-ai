@@ -17,9 +17,19 @@ export type AiTransportCode =
   | 'AI_CONFIG'
   | 'AI_NOT_RUNNING'
   | 'AI_CONNECTION'
+  | 'AI_NETWORK'
   | 'AI_TIMEOUT'
   | 'AI_CANCELLED'
   | 'AI_HTTP'
+  | 'AI_PROVIDER_HTTP'
+  | 'AI_AUTH'
+  | 'AI_QUOTA'
+  | 'AI_RATE_LIMIT'
+  | 'AI_MODEL_NOT_FOUND'
+  | 'AI_NO_PROVIDER'
+  | 'AI_PROVIDER_NOT_READY'
+  | 'AI_PROVIDER_NOT_ELIGIBLE'
+  | 'AI_KEY_STORAGE_UNAVAILABLE'
   | 'AI_EMPTY'
   | 'AI_TRUNCATED'
   | 'AI_INVALID_JSON'
@@ -120,6 +130,44 @@ export function readPromptTokens(data: unknown): number | null {
   return Number.isFinite(numeric) && numeric >= 0 ? Math.round(numeric) : null;
 }
 
+/**
+ * Maps a failed cloud response to the code the teacher can act on (DECISIONS #132
+ * §D6). Status alone is not enough: OpenAI answers an exhausted balance with `429`,
+ * and a Gemini key over its free allowance also arrives as `429`, so the body is
+ * inspected for the provider's own error code before falling back to the status.
+ *
+ * `body` is the response text (already truncated by the caller is fine); it is only
+ * pattern-matched, never stored in the error, because it may echo request details.
+ */
+export function classifyProviderHttpError(
+  status: number,
+  body = ''
+): { code: AiTransportCode; message: string } {
+  const text = String(body || '').toLowerCase();
+  const modelMissing = /model[_ ]?not[_ ]?found|does not exist|not found|unsupported model|unknown model|invalid model/.test(text);
+  // An exhausted balance outranks the status: OpenAI reports it as 429, and a 429
+  // the teacher can only fix by topping up must not read "wait and retry".
+  if (status === 402 || text.includes('insufficient_quota') || text.includes('billing') || text.includes('exceeded your current quota')) {
+    return { code: 'AI_QUOTA', message: 'Tài khoản nhà cung cấp đã hết hạn mức hoặc chưa bật thanh toán. Hãy kiểm tra trang quản lý của nhà cung cấp.' };
+  }
+  if (status === 401 || status === 403) {
+    return { code: 'AI_AUTH', message: 'API key không hợp lệ, bị thu hồi hoặc không có quyền dùng model này. Hãy nhập lại khoá trong Cài đặt.' };
+  }
+  if (status === 404 || (status === 400 && modelMissing)) {
+    return { code: 'AI_MODEL_NOT_FOUND', message: 'Nhà cung cấp không có model này (hoặc điểm cuối sai). Hãy kiểm tra tên model và base URL trong Cài đặt.' };
+  }
+  if (status === 429) {
+    return { code: 'AI_RATE_LIMIT', message: 'Nhà cung cấp đang giới hạn số yêu cầu. Hãy đợi một lát rồi thử lại.' };
+  }
+  if (status >= 500) {
+    return { code: 'AI_PROVIDER_HTTP', message: `Nhà cung cấp báo lỗi máy chủ (HTTP ${status}). Hãy thử lại sau.` };
+  }
+  if (status === 400) {
+    return { code: 'AI_PROVIDER_HTTP', message: 'Nhà cung cấp từ chối yêu cầu (HTTP 400). Hãy kiểm tra model và nội dung gửi đi.' };
+  }
+  return { code: 'AI_PROVIDER_HTTP', message: `Nhà cung cấp AI trả về lỗi HTTP ${status}. Kiểm tra endpoint, model và cấu hình xác thực.` };
+}
+
 export function readAssistantContent(data: unknown): string {
   const choice = (data as { choices?: Array<{ finish_reason?: string; message?: { content?: unknown; reasoning_content?: unknown } }> })?.choices?.[0];
   if (choice?.finish_reason === 'length') {
@@ -206,7 +254,7 @@ export interface AiRequestHandle {
  * with `AI_BUSY`. The lock is always released in `finally`.
  */
 export class AiSingleFlight {
-  private active: { key: string; label: string; startedAt: number } | null = null;
+  private active: { key: string; label: string; startedAt: number; providerId: string } | null = null;
 
   get busy(): boolean {
     return this.active !== null;
@@ -216,19 +264,24 @@ export class AiSingleFlight {
     return this.active ? this.active.label : '';
   }
 
+  /** Which provider the running task uses (empty when unknown). */
+  get activeProviderId(): string {
+    return this.active ? this.active.providerId : '';
+  }
+
   get activeKey(): string {
     return this.active ? this.active.key : '';
   }
 
-  async run<T>(key: string, label: string, task: () => Promise<T>): Promise<T> {
+  async run<T>(key: string, label: string, task: () => Promise<T>, providerId = ''): Promise<T> {
     if (this.active) {
       const same = this.active.key === key;
       const message = same
         ? `${label} đang chạy. Hãy đợi yêu cầu hiện tại hoàn tất hoặc huỷ nó trước khi thử lại.`
-        : `AI local đang xử lý “${this.active.label}”. Không thể bắt đầu “${label}” cùng lúc; hãy đợi hoặc huỷ yêu cầu hiện tại.`;
+        : `AI đang xử lý “${this.active.label}”. Không thể bắt đầu “${label}” cùng lúc; hãy đợi hoặc huỷ yêu cầu hiện tại.`;
       throw new AiTransportError('AI_BUSY', message);
     }
-    const token = { key, label, startedAt: Date.now() };
+    const token = { key, label, startedAt: Date.now(), providerId: String(providerId || '') };
     this.active = token;
     try {
       return await task();
@@ -328,14 +381,19 @@ export async function requestChatJson(options: ChatJsonOptions): Promise<unknown
   }
 
   if (!response.ok) {
-    const detail = options.mode === 'local' && typeof response.text === 'function'
-      ? (await response.text()).slice(0, 500).trim()
-      : '';
-    throw new AiTransportError(
-      'AI_HTTP',
-      `AI API trả về lỗi HTTP ${response.status}.${detail ? ` ${detail}` : ' Kiểm tra endpoint, model và cấu hình xác thực.'}`,
-      { status: response.status }
-    );
+    const body = typeof response.text === 'function' ? (await response.text()).slice(0, 2_000) : '';
+    if (options.mode === 'local') {
+      const detail = body.slice(0, 500).trim();
+      throw new AiTransportError(
+        'AI_HTTP',
+        `AI API trả về lỗi HTTP ${response.status}.${detail ? ` ${detail}` : ' Kiểm tra endpoint, model và cấu hình xác thực.'}`,
+        { status: response.status }
+      );
+    }
+    // #132: a cloud provider's failure is classified (auth/quota/rate limit/model)
+    // so Settings can show what to fix instead of one generic HTTP error.
+    const classified = classifyProviderHttpError(response.status, body);
+    throw new AiTransportError(classified.code, classified.message, { status: response.status });
   }
 
   const data = await response.json();

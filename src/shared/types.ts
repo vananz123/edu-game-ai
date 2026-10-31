@@ -276,8 +276,25 @@ export interface AiSettings {
    * behaving exactly as before.
    */
   runtimeBackend?: RuntimeBackendPreference;
+  /** @deprecated #132: keys are per provider (`providers[id].apiKeyEncrypted`). */
   apiKey?: string;
+  /** @deprecated #132: migrated into `providers` on first read. */
   apiKeyEncrypted?: string;
+  /** #132: the provider Step 2 / Step 5 use by default (`local` on a new profile). */
+  provider?: import('../services/ai-providers').AiProviderId;
+  /** #132: `auto` = local → gemini → openai, first usable provider. */
+  providerPolicy?: 'auto';
+  /**
+   * #132: per-provider configuration and the result of its last real request.
+   * The renderer receives this as the key-free view (`AiProviderPublicView[]`).
+   */
+  providers?: Record<string, import('../services/ai-providers').StoredProviderConfig | undefined> | import('../services/ai-providers').AiProviderPublicView[];
+  /** #132: true when the active provider has a stored key (the key itself never leaves main). */
+  hasKey?: boolean;
+  /** #132: `••••` + last four characters of the active provider's key. */
+  keyMasked?: string;
+  /** #132 §D7: the wizard picker, shown only when more than one provider is usable. */
+  picker?: { show: boolean; options: Array<{ id: string; label: string; model: string }>; activeId: string };
 }
 
 /** §7 tasknight.docx: one-time teacher style profile reused as AI default for new games. */
@@ -340,6 +357,8 @@ export interface EduGameBridge {
   saveGame(game: EducationalGame): Promise<EducationalGame>;
   deleteGame(id: string): Promise<{ ok: boolean }>;
   saveSession(session: GameSession): Promise<{ ok: boolean }>;
+  /** #123: deletes finished-play results by id; games are not affected. */
+  deleteSessions(sessionIds: string[]): Promise<{ ok: boolean; deleted: number; missing: number }>;
   saveLessonDocument(payload: { documentId?: string; name: string; ext: string; sizeBytes?: number; text: string; characters?: number }): Promise<import('./lesson-types').LessonDocument>;
   getLessonDocument(documentId: string): Promise<(import('./lesson-types').LessonDocument & { text: string }) | null>;
   saveProjectDraft(project: GameProject): Promise<GameProject>;
@@ -353,8 +372,13 @@ export interface EduGameBridge {
   importQuestions(): Promise<{ name: string; questions: GameQuestion[] } | null>;
   exportGame(game: EducationalGame): Promise<{ ok: boolean }>;
   importGame(): Promise<EducationalGame | null>;
+  /** #132: key-free view — `ai.providers[].hasKey`/`keyMasked`, never `apiKey`. */
   getSettings(): Promise<AppSettings>;
-  saveSettings(settings: AppSettings): Promise<{ ok: boolean }>;
+  saveSettings(settings: AppSettings): Promise<{ ok: boolean; settings?: AppSettings }>;
+  /** #132: registry + provider state (same key-free view as `getSettings`). */
+  getAiProviders(): Promise<AppSettings>;
+  /** #132 §D6: one minimal real request to the named provider (never a generation). */
+  testAiProvider(payload: { providerId: string }): Promise<{ ok: boolean; providerId: string; model: string; durationMs: number; detail: string; settings: AppSettings }>;
   getLocalAiModels(): Promise<{
     models: import('../ai-core/contracts').LocalAiModelStatus[];
     machine: import('../ai-core/contracts').LocalAiMachineProfile;
@@ -368,10 +392,16 @@ export interface EduGameBridge {
   /**
    * update_plan_3 §8: live task registry + SQLite history. Rows restored from
    * history always carry `restored: true` (never faked as "running").
+   *
+   * #121: `limit`/`offset` page the history (newest first); `total` is the full count
+   * so a caller can draw page numbers. History is capped at 30 rows (pruned on every
+   * write), so there is at most one page beyond the current one.
    */
-  listAiTasks(payload?: { limit?: number }): Promise<{
+  listAiTasks(payload?: { limit?: number; offset?: number; history?: boolean }): Promise<{
     live: import('../services/ai-tasks').AiTaskSnapshot[];
     history: import('../services/ai-tasks').AiTaskSnapshot[];
+    /** Rows in `ai_tasks` (history limit included). */
+    total?: number;
   }>;
   /** update_plan_3 §4: measured CPU-only facts about the bundled llama.cpp runtime. */
   verifyCpuRuntime(): Promise<{
@@ -400,12 +430,40 @@ export interface EduGameBridge {
   clearDiagnostics(): Promise<{ removed: number; bytes: number; folder: string }>;
   /** Opens the folder that holds the diagnostic log files. */
   openDiagnosticsFolder(): Promise<{ ok: boolean; path: string; error?: string }>;
+  /** Rules-only input classification + question parsing (update_quy_trinh §2). No AI. */
+  classifyLessonInput(payload: { text: string }): Promise<{
+    classification: import('../services/input-classifier').InputClassification;
+    kind: import('../services/input-classifier').InputKind;
+    import: import('../services/question-import').QuestionImportResult | null;
+    /**
+     * How the verdict was reached (update_quy_trinh_2 §2): `'confirm'` / `'flipped'`
+     * when MiniLM ran, `'unavailable'` when it was needed but not installed,
+     * `'skipped'` when the text is empty or too long to embed.
+     */
+    semantic: 'confirm' | 'flipped' | 'unavailable' | 'skipped';
+    /** Vietnamese note for the step-1 verdict line; empty when nothing to say. */
+    semanticNote: string;
+    /**
+     * Which game can play this bank (DECISIONS #115). Pure scoring over the parsed
+     * questions; computed in main so the renderer needs no module import, and empty
+     * when the input is not a question bank.
+     */
+    compatibility: import('../services/question-compatibility').GameCompatibility[];
+  }>;
+  /** Convert an existing draft to another genre locally (update_quy_trinh §4). No AI. */
+  convertLessonDraft(payload: {
+    draft: import('./lesson-types').GameDraft;
+    target: import('./lesson-types').WorkflowGameType;
+    config: import('./lesson-types').GameConfig;
+  }): Promise<import('../services/draft-convert').ConversionResult>;
   analyzeLesson(payload: {
     documentId: string;
     projectId?: string;
     analysisId?: string;
     mode?: 'fast' | 'deep';
     requestId: string;
+    /** #132: a provider the teacher picked; absent = the automatic policy. */
+    providerId?: string;
   }): Promise<{ analysis: import('./lesson-types').LessonAnalysis; project: GameProject }>;
   recommendGames(payload: {
     analysisId: string;
@@ -427,6 +485,13 @@ export interface EduGameBridge {
     projectId: string;
     requestId: string;
     mode?: 'fast' | 'deep';
+    /** #132: a provider the teacher picked; absent = the automatic policy. */
+    providerId?: string;
+    /**
+     * #117: build the game from the draft only and never call the model. Used when a
+     * recognised question bank already is the finished content.
+     */
+    localOnly?: boolean;
   }): Promise<{
     project: GameProject;
     game: import('./types').EducationalGame;
@@ -449,6 +514,13 @@ export interface EduGameBridge {
    * model and never rewrites question text; the main process whitelists the three
    * asset fields. Positions are 1-based, like `regenerateLessonItem`.
    */
+  /**
+   * #124: picks one picture from disk. Main copies it into the app folder and answers
+   * with an opaque id (`ci-…`) to store on the item, or `null` when cancelled.
+   */
+  importIllustration(sourcePath?: string): Promise<{ id: string; bytes: number; format?: string } | null>;
+  /** #124: removes one uploaded picture by id (only ids this app produced). */
+  deleteIllustration(imageId: string): Promise<{ ok: boolean }>;
   patchLessonItemAssets(payload: {
     projectId: string;
     itemIndex: number;
@@ -466,6 +538,22 @@ export interface EduGameBridge {
   }>;
   onLocalAiProgress(callback: (progress: import('../ai-core/contracts').LocalAiDownloadProgress) => void): () => void;
   generateGame(payload: GenerateGameRequest): Promise<GenerateGameResponse>;
+
+  /**
+   * LAN Classroom Mode. The teacher PC hosts the room; phones answer on the LAN.
+   * Points are computed on the host, so the renderer only receives snapshots.
+   * Returns `null` from `onLanState` when the room closes.
+   */
+  lanStart(payload: { game: EducationalGame }): Promise<import('./lan-types').LanStartResult>;
+  lanStop(): Promise<{ ok: boolean }>;
+  lanAssignTeam(payload: import('./lan-types').LanAssignTeamPayload): Promise<import('./lan-types').LanIpcResult>;
+  /** Teacher opened the first question (the lobby stops waiting). */
+  lanBegin(): Promise<import('./lan-types').LanIpcResult>;
+  /** Teacher advanced the play screen: closes the open round for late answers. */
+  lanNext(): Promise<import('./lan-types').LanIpcResult>;
+  /** The desktop game reached its results: end the room and show the honour roll. */
+  lanFinish(): Promise<import('./lan-types').LanIpcResult>;
+  onLanState(callback: (snapshot: import('./lan-types').LanSnapshot | null) => void): () => void;
 }
 
 declare global {

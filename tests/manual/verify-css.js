@@ -22,7 +22,17 @@ const expectations = [
   ['race turn question sized', /\[data-player-theme\] \.race-turn \.stage-question\{/],
   ['fullscreen panel is dark', /html\[data-fullscreen=("?)1\1\] \.modal\{[^}]*background:#0b0e1a/],
   ['fullscreen body clips (no page scroll)', /html\[data-fullscreen=("?)1\1\] body\{overflow:hidden\}/],
-  ['treasure map pinned', /\[data-player-theme\] \.treasure-map\{[^}]*position:sticky/]
+  ['treasure map pinned', /\[data-player-theme\] \.treasure-map\{[^}]*position:sticky/],
+  // LAN honour roll: without these the podium collapses to three equal cards and the
+  // winner's "higher step" (the whole point) is invisible (DECISIONS #107).
+  ['LAN podium is a 3-column grid', /\.lan-podium\{[^}]*grid-template-columns:repeat\(3/],
+  ['LAN winner block is the tallest', /is-rank-1 \.lan-podium-block\{[^}]*height:96px/],
+  ['LAN winner block keeps its gold', /is-earned\.is-rank-1 \.lan-podium-block\{[^}]*linear-gradient/],
+  // Treasure header: the world label and the "Bối cảnh & Nhiệm vụ" button must sit
+  // on one row, pushed to opposite ends. Without `space-between` they stack and the
+  // button loses its place at the right (DECISIONS #109).
+  ['treasure header row splits left/right', /\.treasure-head-row\{[^}]*justify-content:space-between/],
+  ['treasure header row spans the stage', /\.treasure-head-row\{[^}]*align-self:stretch/]
 ];
 
 let failed = 0;

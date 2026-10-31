@@ -49,7 +49,8 @@ function renderWizardStatus() {
     parts.push(`<div class="wizard-status is-error" id="wizardError" data-error-code="${escapeHtml(s.error.code || '')}" role="alert">
       <strong>Không hoàn tất được bước này.</strong>
       <span>${escapeHtml(wizardErrorText())}</span>
-      ${wizardNeedsAiRuntime() ? '<button class="btn btn-secondary btn-small" data-wizard-action="open-ai">Mở AI local</button>' : ''}
+      ${wizardNeedsAiRuntime() && !wizardNeedsProviderSettings() ? '<button class="btn btn-secondary btn-small" data-wizard-action="open-ai">Mở AI local</button>' : ''}
+      ${wizardNeedsProviderSettings() ? '<button class="btn btn-secondary btn-small" data-wizard-action="open-ai-settings">Mở Cài đặt AI</button>' : ''}
       <button class="btn btn-secondary btn-small" data-wizard-action="dismiss-error">Đóng</button>
     </div>`);
   }
@@ -58,9 +59,9 @@ function renderWizardStatus() {
 }
 
 function wizardBusyText(kind) {
-  if (kind === 'analyze') return 'AI local đang phân tích giáo án… (thường 1–2 phút)';
-  if (kind === 'recommend') return 'AI local đang gợi ý trò chơi…';
-  if (kind === 'generate') return 'AI local đang soạn nội dung trò chơi… (giáo án dài có thể mất vài phút)';
+  if (kind === 'analyze') return `${wizardProviderLabel()} đang phân tích giáo án… (thường 1–2 phút)`;
+  if (kind === 'recommend') return `${wizardProviderLabel()} đang gợi ý trò chơi…`;
+  if (kind === 'generate') return `${wizardProviderLabel()} đang soạn nội dung trò chơi… (giáo án dài có thể mất vài phút)`;
   if (kind === 'save') return 'Đang lưu dự án…';
   if (kind === 'prepare') return 'Đang chuẩn bị thể loại và số lượng phù hợp…';
   return 'Đang xử lý…';
@@ -176,6 +177,9 @@ function wizardHandleInput(event) {
     // #76: the local analyzer walks the text off the keystroke (debounced), so
     // the tree and the preview describe the document the teacher is looking at.
     if (typeof wizardStructureSchedule === 'function') wizardStructureSchedule();
+    // update_quy_trinh §2: keep the input-type verdict current while typing. Rules
+    // only, never the model; debounced so pasting 50 KB does not run per keystroke.
+    if (typeof wizardInputKindSchedule === 'function') wizardInputKindSchedule();
     return;
   }
   if (target.id === 'wizardDocName') {
@@ -215,7 +219,7 @@ function wizardSyncDocAffordances() {
   const hint = document.getElementById('wizardDocHint');
   if (hint) {
     hint.textContent = ready
-      ? `Đã có ${characters.toLocaleString('vi-VN')} ký tự. Tiếp tục để phân tích bằng AI local.`
+      ? `Đã có ${characters.toLocaleString('vi-VN')} ký tự. Tiếp tục để phân tích bằng AI.`
       : `Cần tối thiểu ${WIZARD_MIN_CHARACTERS} ký tự. Tài liệu scan không có chữ cần OCR trước khi nhập.`;
   }
   // The tabs render their counters into the page; typing only patched the hint,
@@ -264,12 +268,19 @@ function wizardHandleChange(event) {
 }
 
 async function wizardDispatch(action, button) {
-  if (wizardState.busy && ['back', 'new', 'save', 'save-project', 'save-game', 'generate', 'regenerate', 'regenerate-item', 'open-editor', 'quick-generate', 'quick-confirm', 'quick-cancel'].includes(action)) return undefined;
+  // #132 D13: both analysis buttons are blocked too — `wizardAnalyzeRun` already refuses
+  // a second run, but the cloud button must not scroll away/text-swap mid-run.
+  if (wizardState.busy && ['back', 'new', 'save', 'save-project', 'save-game', 'generate', 'regenerate', 'regenerate-item', 'open-editor', 'quick-generate', 'quick-confirm', 'quick-cancel', 'analyze', 'analyze-cloud'].includes(action)) return undefined;
   switch (action) {
     case 'import-file': return wizardInputImportFile();
     case 'insert-sample': return wizardInputInsertSample();
     case 'open-ai': return openLocalAiModal();
-    case 'analyze': return wizardAnalyzeRun(false);
+    // #132: Settings owns every provider configuration; the wizard only links there.
+    case 'open-ai-settings': return navigate('settings');
+    // #132 D13: both analysis buttons name their provider on the element, so a stale
+    // page cannot point a run at something else. The primary one is AI local.
+    case 'analyze': return wizardAnalyzeRun(false, (button && button.dataset && button.dataset.providerId) || 'local');
+    case 'analyze-cloud': return wizardAnalyzeRun(false, button && button.dataset ? button.dataset.providerId : undefined);
     case 'rerun': return wizardAnalyzeRun(true);
     case 'cancel': return wizardState.busy === 'generate' ? wizardCancelGenerate() : wizardAnalyzeCancel();
     case 'recommend':
@@ -289,6 +300,13 @@ async function wizardDispatch(action, button) {
     case 'add-uncertainty': return wizardEditAnalysis('add-uncertainty');
     case 'remove-uncertainty': return wizardEditAnalysis('remove-uncertainty', Number(button.dataset.index));
     case 'dismiss-error': wizardState.error = null; return render();
+    case 'select-provider': return wizardSelectProvider(button.value);
+    // update_quy_trinh §2: pick the input type explicitly, or go back to auto-detect.
+    case 'input-kind': return wizardSetInputKind(button.dataset.inputKind);
+    // #115: a recognised question bank offers two explicit choices (plan §2.4a).
+    case 'bank-create-now': return wizardStartGameFromBank(wizardRecommendedGame() || 'arena');
+    case 'bank-analyze': return wizardAnalyzeWithBank();
+    case 'bank-drop-blocked': return wizardDropBlockedQuestions(button.dataset.gameType);
     case 'back': return wizardGoBack();
     case 'save': return wizardConfigureSave(false);
     case 'save-project': return wizardSaveCurrentProject();
@@ -303,6 +321,8 @@ async function wizardDispatch(action, button) {
     // generation is running and never blocks the generate toolbar. The other
     // direction is guarded inside `wizardPatchItemAssets` (`artBusy`).
     case 'toggle-art': return wizardToggleArtItem(Number(button.dataset.itemIndex));
+    // #124: a picture picked by the teacher, copied into the app folder by main.
+    case 'upload-art': return wizardUploadArt(Number(button.dataset.itemIndex));
     case 'reset-art': return wizardPatchItemAssets(Number(button.dataset.itemIndex), { contentCategory: '', illustrationAssetId: '' });
     // #76: the structure tree in step 1. Local writes only — no AI, no disk.
     case 'toggle-section': return wizardStructureToggleCollapse(button.dataset.sectionId);
@@ -352,7 +372,7 @@ async function wizardOpenSaved(projectId) {
   // Opening a different draft while an analysis is running would let the late
   // result overwrite the newly opened project. The analysis stays cancellable.
   if (wizardState.busy) {
-    toast('AI local đang phân tích giáo án. Hãy đợi hoặc bấm Huỷ trước khi mở dự án khác.');
+    toast(`${wizardProviderLabel()} đang phân tích giáo án. Hãy đợi hoặc bấm Huỷ trước khi mở dự án khác.`);
     return undefined;
   }
   wizardState.busy = 'save';

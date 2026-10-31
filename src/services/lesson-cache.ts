@@ -65,6 +65,13 @@ export interface AnalysisCacheKeyInput {
   documentSha256: string;
   modelId: string;
   mode: string;
+  /**
+   * #132: the provider that runs the model. Two providers can serve an identically
+   * named model (`gemini-2.5-flash` behind two gateways), and their analyses must
+   * not share a cache row. Appended empty when absent, which keeps every pre-#132
+   * key byte-identical.
+   */
+  provider?: string;
   sourceName?: string;
   /**
    * O6d: version of the offline preprocessor that produced the excerpt. It
@@ -95,7 +102,35 @@ export function buildAnalysisCacheKey(input: AnalysisCacheKeyInput): string {
     // every whole-document key by one separator (`…\u001f`), so each document is
     // analysed once more after the upgrade; no stored analysis is *mis*-reused,
     // which is the property that matters (a stale hit would be a wrong answer).
-    input.selectionFingerprint || ''
+    input.selectionFingerprint || '',
+    // #132: same lesson analysed by another provider is a different analysis.
+    input.provider || ''
+  ]);
+}
+
+/**
+ * update_quy_trinh_2 §6: a classification is derived from the selected text and the
+ * rule/embedding versions, so the cache key includes both. Bumping
+ * `CLASSIFIER_VERSION` after changing the rules invalidates every stored verdict.
+ */
+export const CLASSIFIER_VERSION = 1;
+
+export interface ClassificationCacheKeyInput {
+  /** Exact text the classifier saw (the prepared selection, not the whole document). */
+  text: string;
+  /** Embedding model id when the semantic layer was available; `''` for rules only. */
+  embeddingModelId?: string;
+  /** Classifier version; defaults to the current one. */
+  classifierVersion?: number;
+}
+
+export function buildClassificationCacheKey(input: ClassificationCacheKeyInput): string {
+  return cacheKey('classify', [
+    input.classifierVersion === undefined ? CLASSIFIER_VERSION : input.classifierVersion,
+    input.embeddingModelId || '',
+    // A hash, not the text: the key must not carry lesson content into logs or rows.
+    sha256Hex(String(input.text ?? '')),
+    String(input.text ?? '').length
   ]);
 }
 
@@ -135,6 +170,12 @@ export interface GenerationCacheKeyInput {
   configFingerprint: string;
   modelId: string;
   mode: string;
+  /**
+   * #132: who produced the draft. A draft made by the explicit cloud button must not
+   * be reused when the teacher goes back to AI local, even with the same model id.
+   * Appended empty when absent, so every pre-#132 key stays byte-identical.
+   */
+  provider?: string;
 }
 
 export function buildGenerationCacheKey(input: GenerationCacheKeyInput): string {
@@ -145,6 +186,7 @@ export function buildGenerationCacheKey(input: GenerationCacheKeyInput): string 
     input.gameType,
     input.configFingerprint,
     input.modelId,
-    input.mode
+    input.mode,
+    input.provider || ''
   ]);
 }

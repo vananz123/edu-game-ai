@@ -17,7 +17,7 @@ function wizardCognitiveLabel(level) {
 // repair-if-needed → stored. There is no token stream, so no fake percentage.
 const WIZARD_ANALYSIS_STAGES = [
   ['prepare', 'Đọc giáo án và kiểm tra cache'],
-  ['generate', 'AI local phân tích mục tiêu và kiến thức'],
+  ['generate', 'AI phân tích mục tiêu và kiến thức'],
   ['repair', 'Sửa phần chưa đạt (nếu cần)'],
   ['ready', 'Lưu kết quả phân tích']
 ];
@@ -54,24 +54,35 @@ function renderWizardAnalysisProgress() {
       <span data-wizard-analysis-elapsed>${escapeHtml(wizardAnalysisElapsedText())}</span>
       <span>Bạn có thể chuyển sang trang khác — AI vẫn chạy nền và kết quả sẽ được giữ.</span>
     </div>
-    <span>AI local chạy trên máy này; giáo án không được gửi đi đâu. Có thể huỷ giữa chừng.</span>
+    <span>${wizardProviderPrivacyText()}</span>
   </div>`;
 }
 
 function renderWizardAnalysis() {
   const s = wizardState;
   const analyzing = s.busy === 'analyze';
+  // Entering the step (re)loads the provider view: Settings can be visited after the
+  // wizard was opened, and a provider verified there must appear here without a
+  // reload. Fire and forget; the next render draws the button (D16).
+  if (!analyzing && typeof wizardProvidersShouldSync === 'function' && wizardProvidersShouldSync()) {
+    wizardSyncProviders();
+  }
   if (!s.analysis) {
     return `<section class="form-panel" data-wizard-step-body="analyze">
-      <div class="section-head"><h3>Bước 2 · Phân tích giáo án</h3><span class="tag">AI local · llama.cpp</span></div>
-      <div class="panel-sub">AI local sẽ đọc giáo án và rút ra mục tiêu, kiến thức trọng tâm và những điểm chưa chắc chắn. Bạn xem lại và chỉnh sửa trước khi chọn trò chơi.</div>
+      <div class="section-head"><h3>Bước 2 · Phân tích giáo án</h3><span class="tag">${escapeHtml(wizardProviderLabel())}</span></div>
+      <div class="panel-sub">${escapeHtml(wizardProviderLabel())} sẽ đọc giáo án và rút ra mục tiêu, kiến thức trọng tâm và những điểm chưa chắc chắn. Bạn xem lại và chỉnh sửa trước khi chọn trò chơi.</div>
+      ${wizardProviderCard()}
       ${wizardAiReadinessHint()}
+      ${wizardProviderPickerHtml()}
+      ${wizardLocalAiNoticeHtml()}
       <div class="publish-actions">
-        <button class="btn btn-primary" id="wizardAnalyzeBtn" data-wizard-action="analyze"${analyzing ? ' disabled' : ''}>${analyzing ? 'AI đang phân tích…' : '✦ Phân tích bằng AI local'}</button>
+        <button class="btn btn-primary" id="wizardAnalyzeBtn" data-wizard-action="analyze" data-provider-id="local"${analyzing ? ' disabled' : ''}>${analyzing ? 'AI đang phân tích…' : `✦ Phân tích bằng AI local`}</button>
+        ${wizardCloudAnalyzeButtonHtml()}
         ${analyzing ? '<button class="btn btn-secondary" data-wizard-action="cancel">Huỷ</button>' : ''}
         <button class="btn btn-secondary" data-wizard-action="back">← Quay lại</button>
       </div>
-      ${analyzing ? '<div class="field-hint" data-wizard-loading="analyze">Đang đọc giáo án trên máy. Quá trình có thể mất vài chục giây tuỳ cấu hình.</div>' : ''}
+      ${wizardCloudAnalyzeHintHtml()}
+      ${analyzing ? '<div class="field-hint" data-wizard-loading="analyze">Đang đọc giáo án. Quá trình có thể mất vài chục giây tuỳ nhà cung cấp.</div>' : ''}
     </section>`;
   }
   const analysis = s.analysis;
@@ -80,7 +91,7 @@ function renderWizardAnalysis() {
   return `<section class="form-panel" data-wizard-step-body="analyze">
     <div class="section-head"><h3>Bước 2 · Xem lại phân tích</h3><span class="tag">Giáo viên duyệt</span></div>
     ${analysisTotal ? `<div class="field-hint" data-wizard-analysis-total-line>⏱ ${escapeHtml(analysisTotal)}</div>` : ''}
-    <div class="panel-sub">Đây là kết quả do AI local tạo. Hãy sửa cho chính xác — mọi chỉnh sửa được dùng cho bước chọn và cấu hình trò chơi.</div>
+    <div class="panel-sub">Đây là kết quả do ${escapeHtml(wizardProviderLabel())} tạo. Hãy sửa cho chính xác — mọi chỉnh sửa được dùng cho bước chọn và cấu hình trò chơi.</div>
     <div class="field-row">
       <div class="field"><label>CHỦ ĐỀ</label><input id="wizardTopic" data-wizard-analysis="topic" value="${escapeHtml(analysis.topic || '')}"></div>
       <div class="field"><label>MÔN HỌC</label><input id="wizardSubject" data-wizard-analysis="subject" value="${escapeHtml(analysis.subject || '')}"></div>
@@ -123,7 +134,7 @@ function renderWizardAnalysis() {
       <button class="btn ${s.quick ? 'btn-primary' : 'btn-secondary'}" id="wizardNextBtn" data-wizard-action="next"${s.busy === 'prepare' ? ' disabled' : ''}>Tiếp tục · Chọn trò chơi →</button>
     </div>
     ${renderWizardQuickPanel()}
-    <div class="field-hint">“Phân tích lại” sẽ thay thế nội dung đang sửa bằng kết quả mới từ AI local. “AI gợi ý &amp; tạo ngay” tự chọn thể loại và số lượng phù hợp — bạn xác nhận trước khi AI chạy.</div>
+    <div class="field-hint">“Phân tích lại” sẽ thay thế nội dung đang sửa bằng kết quả mới từ ${escapeHtml(wizardProviderLabel())}. “AI gợi ý &amp; tạo ngay” tự chọn thể loại và số lượng phù hợp — bạn xác nhận trước khi AI chạy.</div>
   </section>`;
 }
 
@@ -166,14 +177,78 @@ function wizardAnalysisValid() {
   return objectives.length >= 1;
 }
 
-async function wizardAnalyzeRun(force) {
+/**
+ * The second analysis button (DECISIONS #132 §D13): it exists only when a cloud
+ * provider is configured AND passed its connection test, and it always asks for that
+ * provider explicitly — the run never silently switches to it.
+ */
+function wizardCloudAnalyzeButtonHtml() {
+  const cloud = wizardCloudActionProvider();
+  if (!cloud || wizardState.busy === 'analyze') return '';
+  // DECISIONS #132 D14: a verified provider is a normal button. Red is reserved for a
+  // request that really failed, so a working cloud provider never looks broken.
+  const failed = wizardState.cloudAnalysisFailed === cloud.id;
+  const tone = failed ? ' style="color:#dc2626;border-color:#fca5a5"' : '';
+  return `<button class="btn btn-secondary" data-wizard-action="analyze-cloud" data-provider-id="${escapeHtml(cloud.id)}"${tone} title="${escapeHtml(cloud.label)} đã kiểm tra kết nối. Giáo án sẽ được gửi qua Internet.">☁ Phân tích bằng AI (${escapeHtml(wizardCloudShortName(cloud))})</button>`;
+}
+
+/** "Gemini" / "ChatGPT" in the button text; the full label stays in the tooltip. */
+function wizardCloudShortName(cloud) {
+  if (!cloud) return '';
+  if (cloud.id === 'gemini') return 'Gemini';
+  // A custom endpoint has no short name of its own; "AI ngoài" keeps the button readable.
+  if (cloud.id === 'custom') return 'AI ngoài';
+  if (cloud.id === 'openai') return 'ChatGPT';
+  return String(cloud.label || cloud.id);
+}
+
+/** Says out loud that the cloud button sends the lesson away, so nobody clicks it by accident. */
+function wizardCloudAnalyzeHintHtml() {
+  const cloud = wizardCloudActionProvider();
+  if (!cloud) {
+    // Without a verified cloud provider the teacher only sees where to enable it.
+    const anyCloud = Array.isArray(state.settings.ai && state.settings.ai.providers) ? state.settings.ai.providers : [];
+    const configured = anyCloud.filter(provider => provider.wizardEligible && provider.id !== 'local' && provider.hasKey);
+    // Say what was actually observed: a provider that failed its last test is not
+    // "untested", and a passing one that is still missing the button is a different
+    // message (a stale view), not a claim that the teacher forgot to test. See D16.
+    const failed = configured.find(provider => provider.lastTestOk === false);
+    const untested = configured.find(provider => provider.lastTestOk === null);
+    const retest = '<button type="button" class="btn btn-secondary btn-small" data-wizard-action="open-ai-settings">Cài đặt AI</button>';
+    if (failed) {
+      return `<div class="field-hint" data-wizard-cloud-hint="failed">AI ngoài (${escapeHtml(failed.label)}) kiểm tra kết nối thất bại lần gần nhất. Hãy sửa khoá/model trong ${retest} rồi kiểm tra lại để dùng nút AI ngoài.</div>`;
+    }
+    return untested
+      ? `<div class="field-hint" data-wizard-cloud-hint="untested">Có AI ngoài đã nhập khoá nhưng chưa kiểm tra kết nối. Hãy kiểm tra một lần trong ${retest} để nút “Phân tích bằng AI ngoài” xuất hiện.</div>`
+      : `<div class="field-hint" data-wizard-cloud-hint="stale">AI ngoài đã nhập khoá nhưng bước này chưa nhận được trạng thái mới. Hãy mở lại bước 2 hoặc mở ${retest} để kiểm tra lại.</div>`;
+  }
+  // Informational only (D14): a verified provider is never shown as a problem.
+  return `<div class="field-hint" data-wizard-cloud-hint="ready">Nút AI ngoài gửi giáo án tới ${escapeHtml(cloud.label)} qua Internet. AI local vẫn là mặc định.</div>`;
+}
+
+async function wizardAnalyzeRun(force, providerId) {
   if (wizardState.busy) return;
+  // #132 D14: pressing "Phân tích với AI local" while llama.cpp/model is not ready
+  // opens the AI-local window instead of starting a run that can only fail. Nothing
+  // is started here — the teacher chooses the model and presses "Bắt đầu chạy".
+  if (!providerId || providerId === 'local') {
+    const launch = wizardLocalAiLaunchState();
+    if (!launch.ready) {
+      wizardSetNotice('Để phân tích bằng AI local, hãy chọn model và khởi chạy AI local trong cửa sổ vừa mở.');
+      render();
+      await openLocalAiModal();
+      return;
+    }
+  }
   if (!wizardState.documentId) {
     wizardSetError(new Error('Chưa có giáo án đã lưu. Hãy quay lại bước 1 và nhập giáo án.'));
     render();
     return;
   }
   wizardState.busy = 'analyze';
+  // An explicit cloud run also moves the step to that provider, so the busy text, the
+  // card and the picker keep telling the truth while it runs (DECISIONS #132 §D13).
+  if (providerId && providerId !== 'local') wizardState.selectedProviderId = providerId;
   wizardState.lessonStage = 'prepare';
   wizardState.lessonRepaired = false;
   wizardClearMessages();
@@ -195,10 +270,14 @@ async function wizardAnalyzeRun(force) {
       // automatic call reuses a stored analysis when the lesson is unchanged.
       force: Boolean(force),
       requestId,
+      // #132: an explicit button wins over the picker; otherwise the picker / policy.
+      ...wizardProviderRequestPayload(providerId),
       // #76: the teacher's scope from step 1. Absent = whole document, which keeps
       // the old cache key and the old behaviour byte-for-byte.
       ...wizardStructureAnalyzePayload()
     });
+    // A successful run clears the red "last cloud attempt failed" mark.
+    wizardState.cloudAnalysisFailed = '';
     wizardState.analysis = result.analysis;
     wizardState.analysisOriginal = JSON.parse(JSON.stringify(result.analysis));
     wizardState.analysisId = result.analysis.id;
@@ -215,9 +294,14 @@ async function wizardAnalyzeRun(force) {
     await wizardRefreshProjects();
     wizardSetNotice(result.cached
       ? 'Giáo án không đổi nên đã dùng lại kết quả phân tích trước đó (không gọi AI).'
-      : 'AI local đã phân tích xong. Hãy xem lại và chỉnh sửa nếu cần.');
+      : `${wizardProviderLabel()} đã phân tích xong. Hãy xem lại và chỉnh sửa nếu cần.`);
   } catch (error) {
     failure = error;
+    // DECISIONS #132 D14: the only case that turns the cloud button red is a cloud
+    // request that really failed; the banner below carries the reason.
+    if (providerId && providerId !== 'local' && !wizardErrorIsCancellation(error)) {
+      wizardState.cloudAnalysisFailed = providerId;
+    }
     wizardSetError(error);
   }
   // #75: a cache hit is not a run to time — it never started a clock, so only a
@@ -235,7 +319,7 @@ async function wizardAnalyzeRun(force) {
   } else if (result) {
     toast(result.cached
       ? 'Đã dùng lại kết quả phân tích trước đó (không gọi AI).'
-      : 'AI local đã phân tích xong giáo án.');
+      : `${wizardProviderLabel()} đã phân tích xong giáo án.`);
   }
 }
 

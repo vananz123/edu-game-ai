@@ -1,3 +1,876 @@
+## Handoff - Rollout pattern gameplay cho matching/treasure/race (2026-10-31, DECISIONS #145)
+
+**Files changed.**
+- `src/renderer/features/gameplay.ts`: thêm `buildMatchingWorld()`/`reactMatching()`, `buildTreasureWorld()`/`reactTreasure()`, `buildRaceWorld()`/`reactRace()`; `mountThreeStage()` chọn thế giới theo `game.template`; `reactThree()` phát event rồi rẽ nhánh theo template (quiz/scenario/house giữ nguyên). Thay `burstThreeStage` trực tiếp bằng `reactThree` trong `evaluateColumnMatch`, `onMemoryCardClick`, nhánh phân loại, `chooseTreasureAnswer`, `treasureCompleteMission`, `answerRace`; `showMatchingComplete` phát `game:completed`. Thêm `state.racePlay.correctCount` (chỉ trình diễn) và `raceAnswerCelebrate`; `renderRaceBoard()` chuyển phản ứng/confetti sang handle mới sau repaint.
+- `src/renderer/features/three-game-interaction.ts`: camera lấy aspect ngay trong `mount()` (trước đây chờ frame đầu, nên `stagePoint()` gọi đồng bộ sau mount bị sai trục ngang); thêm `threeGame.anchor(handle, object, fx, fy, z)` giữ vật thể ở một **phân số màn hình** của stage và chiếu lại mỗi frame trong `step()`, để vật thể sống qua lần đổi kích thước fullscreen đến sau (native fullscreen áp dụng bất đồng bộ).
+- `src/renderer/features/gameplay.ts` (đặt vật thể): helper `addAnchoredObject()` dùng `stagePoint` + `anchor` thay toạ độ thế giới cố định — matching: rương (0.93, 0.47) + khối vỡ (0.93, 0.32) ở lề phải; treasure: rương (0.28, 0.86) ở dải trống dưới thẻ đáp án; race: tháp (0.06, 0.93, `blockSize` 0.7) ở dải trống dưới thẻ lượt chơi, cầu (0.962, 0.03, size 0.4) ở dải trên thanh trạng thái.
+- `tests/ui/ui-three-game-patterns-check.js` (mới): 31 assertion cho 3 trò (rương/khối/hồi, mở rương khi đủ cặp, treasure sai chỉ mất lượt rồi đúng mở rương + 150 điểm + chặng cuối celebrate, race tháp 0→1, cầu chớp xanh/đỏ, thắng celebrate, điểm/ô đua và số canvas không đổi).
+- `tests/unit/three-game-interaction.test.ts`: danh sách API bắt buộc thêm `stagePoint`, `anchor`; kiểm null-safety cho cả hai.
+- `docs/DECISIONS.md` (#145), `docs/ROADMAP.md` (đánh dấu xong mục rollout), `.kilo/skills/threejs-game-interaction/` (SKILL.md + references/gameplay-integration.md + interaction-patterns.md).
+- Không đổi: `game-engine/runtime.ts`, house mode/quiz, scenario, editor/wizard/adapter, `src/index.html`, CSS, LAN/presentation/SQLite/`.egame`.
+
+**Behavior.** Ba trò ngoài quiz giờ có pattern 3D riêng, cùng một dispatcher: **matching** có rương mở khi ghép đủ cặp, khối vỡ khi ghép sai (tự hồi sau 1,3 s để lần sai sau vẫn thấy) và confetti khi hoàn thành; **treasure** có rương của từng chặng mở khi trả lời đúng, chặng cuối có confetti; **race** có tháp cao thêm 1 khối mỗi câu đúng, quả cầu chớp xanh/đỏ mỗi câu và confetti ở câu ấn định đội thắng. Bảng đua vẽ lại toàn bộ sau mỗi câu nên tháp/phản ứng/confetti được chuyển sang handle mới. Đúng/sai vẫn do 2D quyết định; điểm, số cặp, số ô đua không đổi; mỗi màn vẫn đúng 1 canvas.
+
+**Commands run.** `npm run build` 0 · `node tests/run-unit.js` **68/68** · `npm run check:renderer-globals` 0 undefined (37/38 script, **756** hàm, **6192** call site) · `npm run verify:css` **17/17**. Electron thật CDP (mỗi nhóm check một instance sạch, `env -u ELECTRON_RUN_AS_NODE`): `ui-three-game-patterns-check` **31/31**. Không hồi quy: `ui-three-game-check` **19/19**, `ui-three-game-reactions-check` **11/11**, `ui-three-game-check-4games` **41/41**, `ui-house-building-check` **84/84**, `ui-game-worlds-check` **42/42**, `ui-presentation-check` **60/60**, `ui-play-surface-check` **156/156**, `ui-stage-illustration-check` **169/169**.
+
+**Kiểm bằng mắt (ảnh chụp CDP, fixture thật, `tests/ui/shots/`).** Fullscreen 1920×1080 và 1366×768: matching — rương + mảnh khối vỡ nằm ở lề phải, không đè chữ; treasure — rương mở ở dải trống dưới thẻ đáp án (1920); race — cầu nằm ở dải trên thanh trạng thái, thấy ở cả hai cỡ; tháp đứng trong dải trống dưới thẻ lượt chơi ở 1920×1080. Điểm kiểm bằng `elementsFromPoint` xác nhận các điểm đặt chỉ trúng `.game-stage`/`#playBody` (không có card che) tại 1920×1080 và 1366×768 fullscreen.
+
+**Chưa xác minh.** Ở race fullscreen **1366×768** thẻ lượt chơi đã tràn stage (giới hạn mật độ có từ trước, chưa thuộc #145), nên **tháp bị khuất sau thẻ** ở cỡ này; phản ứng vẫn thấy qua cầu chớp + burst/confetti, còn tháp chỉ thấy ở 1920×1080. Trong modal cửa sổ cao (race/matching/treasure ở 1366) canvas cao hơn màn hình nên vật thể phân số có thể nằm dưới vùng nhìn khi chưa cuộn — chưa kiểm bằng mắt từng vị trí cuộn. Chưa xem trên máy chiếu/màn hình phụ thật; chưa đo FPS máy cấu hình thấp khi có 3 object 3D cùng lúc; chưa chơi hết một ván race nhiều vòng để thấy tháp đầy; chưa bấm tay qua LAN/presentation; chưa build/install NSIS. Lưu ý: `ui-three-game-patterns-check` và các check đếm mount/spy cần **instance Electron mới** mỗi lần chạy; `ui-house-building-check` nhạy thời gian — lần chạy trên instance vừa bị probe/check khác dùng có thể trượt layout, chạy lại trên instance sạch cho 84/84.
+
+**Next task.** Mục roadmap còn mở duy nhất của phần Three.js là **Packaged check** (`npm run dist:win` + cài trên máy sạch, đo ảnh hưởng bundle 732 KB, xem trên máy chiếu/máy yếu) — cần môi trường cài đặt thật. Ngoài phần Three.js, các mục còn mở trong roadmap thuộc mảng AI/giáo án (phân bổ độ khó, slicing O6, GGUF runtime) và các mục nhỏ của tasknight.
+
+---
+
+## Handoff - Hiện nhà ở màn kết quả + 4 mẫu nhà (2026-10-31, DECISIONS #144)
+
+**Files changed.**
+- `src/game-engine/house-build.ts`: thêm registry mẫu — `HOUSE_STYLE_IDS` (`nha-mai-do`, `nha-vuon`, `thap-canh`, `nha-go`), `HOUSE_STYLE_LABELS`, `houseStyleOptions()`, `houseStyleLabel(style)`, `houseStyleFor(style, seed)` (id hợp lệ thắng; nếu không thì băm seed bằng `hash * 31 + charCode` để chọn ổn định; seed rỗng → `nha-mai-do`).
+- `src/renderer/features/gameplay.ts`: `houseRing()` tổng quát hoá; 4 bộ hình `houseClassicParts()` (giữ nguyên hình cũ từng byte), `houseGardenParts()`, `houseTowerParts()`, `houseCabinParts()`; `houseParts(style)` điều phối; `HOUSE_BOUNDS[style]` + `houseBounds(style)` thay `HOUSE_WORLD_W/H`; `houseTarget()` lấy bounds theo mẫu; `buildHouseWorld()` lưu `world.style`/`world.bounds`; `renderResults()` dựng `.result-screen.is-house-result` 2 cột: cột trái `.result-house-hero` (`.house-stage-slot` + dòng `.result-house` + `.result-house-style`), cột phải `.result-summary`; house mode mount lại world nên hero hiện nhà ở đúng trạng thái cuối; thêm `HOUSE_RESULT_FILL = 0.8` cho riêng màn kết quả.
+- `src/renderer/styles/app.css`: grid `.result-screen.is-house-result` (nhà trái, tổng kết phải, gap theo clamp), `.result-house-hero` + slot cao `clamp(220px,32vh,360px)` (fullscreen cao hơn), `.result-house-style`; dưới 980px xếp một cột. Dùng selector 2 lớp cho slot để thắng rule `.house-stage-slot` phía sau.
+- `src/shared/lesson-types.ts`: `export type HouseStyle = 'nha-mai-do' | 'nha-vuon' | 'thap-canh' | 'nha-go'`; `ArenaConfig.houseStyle?: 'auto' | HouseStyle`.
+- `src/renderer/features/game-editor.ts`: `#houseStyleField` + `<select id="editHouseStyle">` (chỉ quiz), `editorHouseStyle(game)`, `withEditorHouseStyle(game, root)`, gọi trong `saveEditedGame`, bật/tắt trong `toggleEditorSections`.
+- `src/renderer/features/wizard/step-configure.ts`: select "MẪU NHÀ 3D (XÂY NHÀ)" cho arena (auto + 4 mẫu).
+- `src/services/game-project-adapter.ts`: `HouseStyle`/`HOUSE_STYLE_IDS`/`isHouseStyle`; `gameSetupFor` lưu `gameplayMode`+`houseStyle`; `configFromGame` trả lại hai trường (bỏ giá trị lạ).
+- `src/services/lesson-contracts.ts`: arena `gameConfigSchema` thêm `gameplayMode?` và `houseStyle?`. **Đây là lỗi tiềm ẩn được sửa:** `z.object` mặc định bỏ key lạ, nên trước đó `parseGameConfig` sẽ nuốt cả hai trường trước khi adapter đọc.
+- Tests: `tests/unit/house-build.test.ts` (registry/auto/explicit), `tests/unit/lesson-contracts.test.ts` (parse giữ trường, giá trị lạ bị từ chối), `tests/unit/game-project-adapter.test.ts` (round trip `gameplayMode`+`houseStyle`, style legacy lạ bị loại khỏi config), `tests/ui/ui-house-building-check.js` (**84** assertion: hình 4 mẫu, bounds riêng, auto ổn định/khác nhau giữa game, override tường minh, hero 3D + caption + vị trí trong slot, classic không có hero).
+- Docs: `docs/DECISIONS.md` (#144), `docs/ROADMAP.md`, `.kilo/skills/threejs-game-interaction/` (SKILL.md + references/gameplay-integration.md).
+- Không đổi: `runtime.ts`, `three-game-interaction.ts`, 4 trò khác, scenario, `src/index.html`, LAN/presentation/SQLite/`.egame`.
+
+**Behavior.** Màn kết quả của Chế độ Xây nhà không còn chỉ có chữ: bên trái là **ngôi nhà 3D thật** (chiếu vào đúng khe `.house-stage-slot` như lúc trả lời) + dòng "🏠 Ngôi nhà: N/M phần · Đã hoàn thiện 🎉/Còn dang dở" + tên mẫu; bên phải là điểm, thống kê và các nút như cũ; dưới 980px tự xếp dọc. Quiz house mode giờ có **4 mẫu nhà** dùng chung hợp đồng 9 stage (móng + 8 phần xây): nhà mái đỏ (mặc định), nhà vườn, tháp canh, nhà gỗ — mỗi mẫu có phong cách và bao hình riêng (rộng/cao) nên được đo và đặt theo `HOUSE_BOUNDS`. Giáo viên chọn mẫu trong editor hoặc wizard; `auto`/vắng mặt thì mẫu suy ra ổn định từ id trò chơi (một game luôn cùng một mẫu, các game khác nhau có thể khác nhau), nên mở lại không bị đổi nhà. Toàn bộ kinh tế +1/−1, mục tiêu theo số câu (#143), scoring và chế độ Classic giữ nguyên.
+
+**Commands run.** `npm run build` 0 (cảnh báo EPERM khi dọn `dist/server/index.js` do app đang chạy; tsc/CSS/three vẫn hoàn tất) · `node tests/run-unit.js` **68/68** · `npm run check:renderer-globals` 0 undefined (37/38 script, **747** hàm, **6119** call site) · `npm run verify:css` **17/17**. Electron thật CDP 9341 (instance sạch, `unset ELECTRON_RUN_AS_NODE`): `ui-house-building-check` **84/84**. Không hồi quy: `ui-three-game-check` **19/19**, `ui-three-game-reactions-check` **11/11**, `ui-game-worlds-check` **42/42**, `ui-presentation-check` **60/60**, `ui-play-surface-check` **156/156**, `ui-stage-illustration-check` **169/169**, `ui-three-game-check-4games` **41/41**. CDP probe xác nhận wizard trả đúng select (`auto`+4 mẫu, giá trị đang chọn) và editor: hiển thị mẫu hợp lệ, giá trị lạ → `auto`, lưu quiz giữ mẫu + `gameplayMode`, chọn `auto`/template khác thì xoá mẫu. Ảnh chụp thật 1600×1000 cho đủ 4 mẫu ở màn kết quả: `tests/ui/shots/house-result-{nha-mai-do,nha-vuon,thap-canh,nha-go}.png`.
+
+**Chưa xác minh.** Chưa bấm tay qua editor/wizard trên app thật (mới gọi helper qua CDP với DOM tách rời); chưa xem trên máy chiếu/màn hình phụ thật hay đo FPS máy yếu; chưa chạy installer đóng gói. Lần đầu hero bị tràn slot 31px ngang/16px đáy (chạm caption) — đã sửa bằng `HOUSE_RESULT_FILL = 0.8` và kiểm lại 84/84; các mẫu khác chỉ kiểm bằng AABB của mẫu đang chạy, không kiểm từng mẫu trong hero. Ghi chú vận hành: khi cửa sổ Electron bị ẩn/occluded, `Page.captureScreenshot` không composite và timer bị throttle — cần đưa cửa sổ ra trước khi chụp.
+
+**Next task.** Chạy thử tay trên máy chiếu: mở wizard → chọn "Xây nhà 3D" + từng mẫu → lưu → chơi hết câu → xem hero kết quả; sau đó xem xét mục roadmap "Rollout the patterns to matching/treasure/race".
+
+---
+
+## Handoff - Mục tiêu số phần nhà theo số câu hỏi (2026-10-31, DECISIONS #143)
+
+**Files changed.**
+- `src/renderer/features/gameplay.ts`: thêm `houseTargetParts(game)` (= `max(1, min(8, questions.length))`) và `houseVisualStages(parts, target)` (= `ceil(8 × parts / target)`, kẹp 0..8); `houseProgressHtml`/`paintHouseProgress`/`buildHouseWorld`/`reactHouse`/`chooseAnswer`/`renderResults` đều lấy mục tiêu từ số câu thật thay cho 7 cứng; tách stage mái/ống khói của `houseParts()` thành **8 phần xây** (móng + 8 = 9 stage 3D).
+- `src/game-engine/house-build.ts`: kinh tế +1/−1 giữ nguyên, chỉ cập nhật chú thích đầu file (`maxParts` = mục tiêu theo số câu, trần 8).
+- `src/renderer/features/game-editor.ts`: help text house mode nói rõ "chia đều theo số câu hỏi (tối đa 8 phần)".
+- `src/renderer/features/wizard/step-configure.ts`: nhãn lựa chọn → "Xây nhà 3D (theo số câu)".
+- `tests/unit/house-build.test.ts`: thêm 4 kịch bản theo mục tiêu (5 câu, 8 câu, 4/5 câu, 1 câu) + mục tiêu 0 kẹp về 1.
+- `tests/ui/ui-house-building-check.js`: 67 assertion (thêm lượt 5 câu → 5/5 hoàn thiện, lượt 8 câu → 7/8 dang dở rồi 8/8 hoàn thiện, lượt 3 câu sai hết → 0/3).
+- `docs/DECISIONS.md` (#143), `docs/ROADMAP.md`, `.kilo/skills/threejs-game-interaction/` (SKILL.md + references/gameplay-integration.md).
+- Không đổi: `runtime.ts`, `three-game-interaction.ts`, adapter, 4 trò khác, scenario, `src/index.html`, CSS, LAN/presentation/SQLite/`.egame`.
+
+**Behavior.** Mục tiêu xây nhà giờ **theo đúng số câu của đề**: đề 5 câu → `0/5 → 5/5`, đề 8 câu → `0/8 → 8/8`, đề 20 câu → `0/8` (trần 8). Mỗi câu đúng +1 phần, sai −1 phần (sàn 0), nên trả lời đúng **tất cả** câu luôn vừa đủ hoàn thiện ngôi nhà ở câu cuối, còn sai bất kỳ câu nào thì nhà còn dở (không tự bù). 3D chia 8 stage theo tỉ lệ `ceil(8 × parts / target)` nên đề 5 câu vẫn mọc nhà theo từng bậc thay vì nhảy cóc; đủ mục tiêu = đủ 9 stage (móng + 8) hiện trọn nhà: tường, cửa lớn, cửa sổ, mái, ống khói, cây/bụi/lối đi.
+
+**Commands run.** `npm run build` 0 (chỉ cảnh báo EPERM khi dọn `dist/server/index.js` do Electron đang chạy) · `node tests/run-unit.js` **68/68** · `npm run check:renderer-globals` 0 undefined (736 hàm, 6071 call site) · `npm run verify:css` **17/17**. Electron thật CDP 9341 (instance sạch, `unset ELECTRON_RUN_AS_NODE`): `ui-house-building-check` **67/67**. Không hồi quy: `ui-three-game-check` **19/19**, `ui-three-game-reactions-check` **11/11**, `ui-game-worlds-check` **42/42**, `ui-presentation-check` **60/60**, `ui-play-surface-check` **156/156**, `ui-stage-illustration-check` **169/169**, `ui-three-game-check-4games` **41/41**. Ảnh chụp thật 1600×1000 cho đề 5 câu và 8 câu: `%TEMP%\house-shots-143`.
+
+**Chưa xác minh.** Chưa xem trên máy chiếu/màn hình phụ thật; chưa đo FPS máy cấu hình thấp; đề **trên 8 câu** chỉ kiểm bằng unit (hoàn thiện khi đạt 8 phần, tức phải đúng 8 câu thực chất — không kiểm bằng CDP); chưa bấm tay qua editor/wizard (chỉ CDP gọi `playGame` trực tiếp). Các check đếm mount/unmount cần **instance Electron mới**. Ghi chú quy trình: mục #143 của `docs/DECISIONS.md` được thêm bằng heredoc shell (đã đối chiếu `tail` để chắc chắn nội dung và encoding tiếng Việt nguyên vẹn); từ nay mọi sửa docs dùng Write/Edit.
+
+**Next task.** Chạy thử tay trên máy chiếu thật: tạo đề 5 câu và đề 8 câu trong editor → chơi đúng hết để xác nhận hoàn thiện đúng câu cuối; sau đó xem xét mục roadmap "Rollout the patterns to matching/treasure/race".
+
+---
+
+## Handoff - Đưa ngôi nhà ra trước sau mỗi câu (2026-10-31, DECISIONS #142)
+
+**Files changed.**
+- `src/renderer/features/three-game-interaction.ts`: thêm `stagePoint(handle, fx, fy, z)` (đổi toạ độ màn hình 0..1 → toạ độ thế giới trên mặt phẳng z, kèm `pxPerUnit`) và tuỳ chọn `mount(..., { emblem:false })` ẩn emblem; vòng xoay emblem bỏ qua khi ẩn. API cũ giữ nguyên.
+- `src/renderer/features/gameplay.ts`: khe `.house-stage-slot` trong house mode (thay ảnh minh hoạ); `houseTarget()` (đặt nhà theo pixel qua `stagePoint`, dải đo từ đáy `.house-progress` đến đỉnh `#answerFeedback`, fill 0,78); `placeHouse()` (đặt tức thì hoặc tween 0,55 s, có guard remount); `showcaseHouse()`/`pinShowcaseStage()` (ghim stage vào vùng nhìn thấy được, ghim lại khi resize/fullscreen); `chooseAnswer` gọi showcase sau khi feedback + nút "Tiếp tục" đã layout và thêm "Đáp án đúng: …" cho trắc nghiệm house mode; `renderResults` mount `{ world: !house }`.
+- `src/renderer/styles/app.css`: `.house-stage-slot`; khối `.is-house-showcase` (ẩn câu hỏi/đáp án/kicker/context/tip/khe, cột dồn đáy, thẻ feedback 760px + nút, HUD gọn 50px thay vì 85px, feedback xanh/đỏ).
+- `tests/ui/ui-house-building-check.js`: mở rộng lên **57** assertion; test tự đặt `Emulation.setDeviceMetricsOverride(1600×1000)` và `clearDeviceMetricsOverride` khi xong; snapshot thêm `houseBox` (chiếu 8 góc AABB thật), `hudBottom`, `feedbackTop`, `stageTop/Bottom`, `modalTop/Bottom`, `stageMinHeight`.
+- `docs/DECISIONS.md` (#142), `docs/ROADMAP.md`, `.kilo/skills/threejs-game-interaction/` (SKILL.md + references/gameplay-integration.md).
+- Không đổi: `house-build.ts`, `runtime.ts`, editor/wizard/adapter, 4 trò khác, scenario, `src/index.html`, LAN/presentation/SQLite/`.egame`.
+
+**Behavior.** Sau **mỗi** câu trả lời ở Chế độ Xây nhà, câu hỏi và các đáp án rời sân khấu; ngôi nhà 3D được đưa ra giữa, phóng to và tween vào dải trống giữa thẻ tiến độ và thẻ phản hồi; thẻ phản hồi (xanh/đỏ) nêu kết quả, điểm, đáp án đúng và giải thích, nút "Tiếp tục →" nằm ngay dưới. Stage được ghim đúng vùng nhìn thấy nên không tràn đáy modal; nhà luôn nằm giữa HUD và banner, không đè lên nhau. Khi đang hỏi, khe 3D giữ chỗ cho móng/phần đã xây thay cho ảnh minh hoạ. Màn kết quả không còn vẽ nhà 3D phía sau chữ (đã có dòng `.result-house`). Classic và 4 trò khác không đổi.
+
+**Commands run.** `npm run build` 0 · `node tests/run-unit.js` **68/68** · `npm run check:renderer-globals` 0 undefined (37/38 script, 734 hàm, 6062 call site) · `npm run verify:css` **17/17**. Electron thật CDP 9341 (instance sạch, `unset ELECTRON_RUN_AS_NODE`): `ui-house-building-check` **57/57**. Không hồi quy trên instance mới: `ui-three-game-check` **19/19**, `ui-three-game-reactions-check` **11/11**, `ui-presentation-check` **60/60**, `ui-play-surface-check` **156/156**, `ui-stage-illustration-check` **169/169**, `ui-game-worlds-check` **42/42**. Ảnh chụp thật 1600×1000 và 1266×683 (5 trạng thái: câu hỏi, showcase 1 phần, showcase đủ nhà, fullscreen, kết quả).
+
+**Chưa xác minh.** Chưa xem trên máy chiếu/màn hình phụ thật; chưa đo FPS khi canvas đổi kích thước liên tục lúc chuyển showcase; ở cửa sổ chiều cao 683px (màn 1280×720) ngôi nhà buộc phải nhỏ vì thẻ phản hồi chiếm chỗ — không đè UI nhưng chưa đẹp như ảnh mẫu; chưa bấm tay qua editor/wizard (chỉ CDP gọi `playGame` trực tiếp). Lưu ý khi chạy test: các check đếm mount/unmount (`ui-three-game-check`, `ui-house-building-check`) cần **instance Electron mới** vì spy đếm tích luỹ trong page; `ui-house-building-check` tự đặt và trả lại viewport 1600×1000.
+
+**Next task.** Chạy thử tay trên máy chiếu thật: F11 → trả lời đúng/sai vài câu, xem nhà tween và thẻ phản hồi ở 1920×1080; sau đó xem xét mục roadmap "Rollout the patterns to matching/treasure/race".
+
+---
+
+## Handoff - Thiết kế lại Chế độ Xây nhà: mỗi câu +1/−1 phần (2026-10-31, DECISIONS #141, thay #140)
+
+**Files changed.**
+- `src/game-engine/house-build.ts`: rút gọn còn `houseCreate()` (`{parts, correct, wrong}`), `houseApplyAnswer(state, maxParts, correct)` (+1 đúng / −1 sai, sàn 0, cap `maxParts`, `completedNow`), `houseSummary(state, maxParts)`; bỏ toàn bộ logic mốc + streak của #140.
+- `tests/unit/house-build.test.ts`: viết lại — +1 mỗi câu đúng, −1 mỗi câu sai, sàn 0, cap `maxParts`, `completedNow` chỉ khi chạm cap.
+- `src/renderer/features/gameplay.ts`: `houseProgressHtml`/`paintHouseProgress` (thanh tiến độ, cập nhật tại chỗ mỗi câu), `houseRing` + `houseParts` (8 stage: móng + 3 vòng khối lập phương + cửa lớn + 2 cửa sổ + mái/ống khói + trang trí), `houseMaxParts()` = 7, `buildHouseWorld` (giới thiệu móng ở câu 1), `reactHouse` (pop-in/co lại theo từng phần), `chooseAnswer`/`renderResults` dùng mô hình phần.
+- `src/renderer/styles/app.css`: thay `.house-chip*`/`.house-streak` bằng `.house-count`/`.house-bar`/`.house-bar-fill`; giữ `.result-house`.
+- `tests/ui/ui-house-building-check.js`: viết lại 41 assertion cho mô hình +1/−1.
+- `docs/DECISIONS.md` (#141), `docs/ROADMAP.md`, skill `threejs-game-interaction` (SKILL.md + references/gameplay-integration.md).
+- Không đổi: `src/index.html`, `src/shared/lesson-types.ts`, editor/wizard/adapter (chọn mode giữ nguyên từ #140), `game-engine/runtime.ts`, 4 trò khác, scenario.
+
+**Behavior.** Khi mở game, ngôi nhà hiện với **móng sẵn** (giới thiệu, animation pop-in) và bộ đếm "0/7 phần". Mỗi câu **đúng** xây thêm **đúng 1 phần** (3D pop-in + thanh đếm nhảy ngay), rồi sang câu tiếp theo. Mỗi câu **sai** **xoá đúng 1 phần** (3D co lại, thanh giảm), không bao giờ dưới móng. Nhà gồm các khối lập phương xếp tầng, thêm cửa lớn, hai cửa sổ, mái + ống khói và một chút trang trí. Màn kết quả hiện `N/7 phần` ở đúng trạng thái thật (`Đã hoàn thiện 🎉`/`Còn dang dở`). Tính điểm vẫn qua `runtime.ts`; Classic và 4 trò khác không đổi.
+
+**Commands run.** `npm run build` 0 · `node tests/run-unit.js` **68/68** · `npm run check:renderer-globals` 0 undefined (37/38 script) · `npm run verify:css` **17/17**. Electron thật CDP 9341 (instance sạch, `unset ELECTRON_RUN_AS_NODE`): `node tests/ui/ui-house-building-check.js 9341` **41/41**. Không hồi quy: `ui-three-game-check` **19/19**, `ui-three-game-reactions-check` **11/11** (mỗi check trên app mới — tự cài spy).
+
+**Chưa xác minh.** Chưa nhìn bằng mắt thật trên máy chiếu/màn hình phụ; chưa đo FPS máy cấu hình thấp; chưa build/install NSIS; chưa thao tác chuột thật để chọn mode trong editor/wizard (chỉ CDP gọi `playGame` trực tiếp với `gameplayMode`).
+
+**Next task.** Chạy thử tay: editor → chọn "Xây nhà" → lưu → chơi, trả lời đúng/sai để xem phần nhà mọc/biến mất và thanh đếm, rồi mở lại xác nhận `gameplayMode` sống qua `.egame`. Sau đó xem xét mục roadmap "Rollout the patterns to matching/treasure/race".
+
+---
+
+## Handoff - Chế độ Xây nhà cho quiz (2026-10-31, DECISIONS #140)
+
+**Files changed.**
+- `src/game-engine/house-build.ts` (mới): kinh tế xây dựng thuần (vật liệu bền vững + streak tạm thời), 4 mốc thích ứng số câu, tách biệt khỏi render lẫn tính điểm. Pattern `// @ts-nocheck` + plain functions + `module.exports` như `runtime.ts`.
+- `tests/unit/house-build.test.ts` (mới): ngưỡng thích ứng, streak bonus, sai giữ vật liệu, ánh xạ mốc, `pointsToNext`.
+- `src/renderer/features/three-game-interaction.ts`: `makeConstruction` thêm tuỳ chọn `parts` (stage = danh sách primitive; `blocks` phẳng; `steps` = số stage; bỏ `parts` = hành vi cũ nguyên vẹn).
+- `src/renderer/features/gameplay.ts`: `isHouseMode`/`houseState`/`houseMilestoneLabel`/`houseProgressHtml`/`houseParts`/`buildHouseWorld`/`reactHouse`; `playGame` khởi tạo `state.houseBuild`; `mountThreeStage`/`reactThree`/`chooseAnswer`/`renderQuestion`/`renderResults` chèn nhánh house mode.
+- `src/shared/lesson-types.ts`: `ArenaConfig.gameplayMode?: 'classic' | 'house'`.
+- `src/renderer/features/game-editor.ts` + `src/renderer/features/wizard/step-configure.ts` + `src/services/game-project-adapter.ts`: chọn mode `classic`/`house` (chỉ hiện cho quiz), ánh xạ hai chiều.
+- `src/index.html`: nạp `game-engine/house-build.js` sau `runtime.js`.
+- `src/renderer/styles/app.css`: `.house-progress*`/`.house-chip*`/`.house-streak`/`.house-materials`/`.result-house`.
+- `tests/ui/ui-house-building-check.js` (mới): CDP check 26 assertion.
+
+**Behavior.** Quiz (Knowledge Arena) có thêm **Chế độ Xây nhà** bên cạnh Classic: nhà 3D khởi đầu **đã xây một phần** (móng + tường cơ bản); mỗi câu đúng +1 vật liệu (bền vững), 2 câu đúng liên tiếp +1 bonus (streak, tạm thời, sai thì reset nhưng **không** xoá vật liệu); 4 mốc (tường → mái → cửa+sổ → vườn) với ngưỡng thích ứng số câu; chip mốc + streak + vật liệu hiển thị trên bàn chơi; màn kết quả hiện nhà ở **đúng trạng thái thật** (không tự hoàn thiện). Tính điểm vẫn qua `game-engine/runtime.ts` nguyên vẹn. 4 trò kia + scenario + Classic **không đổi**.
+
+**Commands run.** `npm run build` 0 · `node tests/run-unit.js` **68/68** · `npm run check:renderer-globals` 0 undefined (37/38 script, 728 hàm, 5998 call site) · `npm run verify:css` **17/17**. Electron thật CDP 9341 (instance sạch, `unset ELECTRON_RUN_AS_NODE`): `node tests/ui/ui-house-building-check.js 9341` **26/26** (xem DECISIONS #140). Không hồi quy: `ui-three-game-check` **19/19**, `ui-three-game-reactions-check` **11/11** (mỗi check trên app mới — tự cài spy).
+
+**Chưa xác minh.** Chưa nhìn bằng mắt thật trên máy chiếu/màn hình phụ; chưa đo FPS trên máy cấu hình thấp; chưa build/install NSIS installer; chưa kiểm tra chọn mode qua giao diện editor/wizard bằng thao tác chuột thật (chỉ đơn vị + CDP gọi `playGame` trực tiếp với `gameplayMode`).
+
+**Next task.** Chạy thử bằng tay: mở editor → tạo/sửa quiz → chọn "Xây nhà 3D" → lưu → chơi và quan sát nhà mọc theo câu trả lời, rồi mở lại để xác nhận `gameplayMode` sống qua vòng lưu/tải (`.egame`). Sau đó quyết định có rollout `parts` cho 4 trò còn lại (ngoài phạm vi spec này) hay không.
+
+---
+
+## Handoff - Tổng quát hoá `makeConstruction` với tham số `parts` (2026-10-31, chuẩn bị DECISIONS #140)
+
+**Files changed.**
+- `src/renderer/features/three-game-interaction.ts`: `makeConstruction` giờ nhận tuỳ chọn `parts` — mảng các *stage*, mỗi stage là danh sách primitive spec (`kind: 'box'|'roof'|'cylinder'` + `w/h/d/r/color/x/y/z`). Mỗi stage gom vào một `stageGroup` (hiện/ẩn bằng scale tween như cũ); `blocks` vẫn là danh sách mesh phẳng; `steps` = số stage; thêm helper `buildPartMesh(s)` (roof xoay `Math.PI/4` quanh z thành mái). **Bỏ `parts` thì giữ nguyên hành vi cũ** (chồng N khối đều, một khối mỗi câu đúng) — không hồi quy cho `buildThreeWorld()` đang dùng `{ steps, color, blockSize }`.
+- `tests/unit/three-game-interaction.test.ts`: thêm 3 assertion cho nhánh `parts` (số stage-group = số entry, `blocks` phẳng, roof nghiêng đúng góc).
+
+**Behavior.** Cùng một factory `makeConstruction` giờ vẽ được cấu trúc **không đồng nhất** (móng + tường + mái + cửa/cây) — nền tảng cho "Chế độ xây nhà" của quiz (spec `docs/archive/specs/tttt.txt`). Chưa đổi gameplay nào; 4 trò khác và tính điểm trong `game-engine/runtime.ts` không đụng tới.
+
+**Commands run.** `npm run build` 0 · `node tests/run-unit.js` **67/67** (gồm 3 assertion `parts` mới) · `npm run check:renderer-globals` 0 undefined · `npm run verify:css` **17/17** · CDP thật: `ui-three-game-check` **19/19** (9341), `ui-three-game-check-4games` **41/41** (9343), `ui-three-game-reactions-check` **11/11** (9342) — không hồi quy.
+
+**Next task.** Triển khai **Chế độ xây nhà** cho quiz (DECISIONS #140) theo `tttt.txt`: Classic vs Xây nhà, 4 mốc (tường → mái → cửa+sổ → vườn+trang trí) bằng `parts`, ngưỡng mốc **thích ứng số câu**, streak bonus 2 câu liên tiếp (tách biệt khỏi điểm xây dựng tích luỹ), khởi đầu nhà **đã xây một phần**, kết thúc hiện đúng trạng thái thật (không tự hoàn thiện). **Bị chặn một phần**: `tttt.txt` bị cắt ở dòng 91 (mục 7 "Reuse the current..." trở đi — toàn bộ phần Technical Requirements còn thiếu); cần chủ dự án cung cấp phần còn lại trước khi code chi tiết.
+
+---
+
+## Handoff - Hệ tương tác 3D gameplay-driven: lớp animation + 5 pattern + pilot quiz/scenario (2026-10-30, DECISIONS #139)
+
+**Files changed.**
+- `src/renderer/features/three-game-interaction.ts` (lớp dùng chung `window.threeGame`): thêm animation manager `tween`/`effect` (handle thêm `tweens[]`/`effects[]`, xử lý trong `step()`), 5 pattern factory `makeDestructible`/`makeUnlockable`/`makeConstruction`/`makeReactive`/`celebrate`, event registry `on`/`emit`, helper `addObject` (gameplay không chạm vào `handle.scene`). Tổng 16 phương thức export.
+- `src/renderer/features/gameplay.ts`: thêm `threeWorld`, `buildThreeWorld()` (tháp xây dựng dưới-trái + khối phá huỷ trên-phải, **chỉ** cho template `quiz`/`scenario`), `reactThree(event, detail)` (điểm nối duy nhất gameplay→3D), `mountThreeStage(stage, opts)` thêm cờ `opts.world === false`. `chooseAnswer` gọi `reactThree(...)` **sau** `state.gameAnswers.push`; `renderResults` mount backdrop `{world:false}` + `reactThree('game:completed')`.
+- `tests/unit/three-game-interaction.test.ts`: mở rộng API surface (16 phương thức) + kiểm tra factory sinh hình học thật (THREE có sẵn trong VM) + no-op trên handle null + `on/emit`.
+- `tests/ui/ui-three-game-reactions-check.js` (mới): CDP check 11 assertion cho phản ứng quiz.
+
+**Behavior.** Quiz/scenario giờ có "thế giới" 3D phản ứng theo gameplay: trả lời **sai** → khối đỏ phía trên-phải **vỡ tung** (Destruction); trả lời **đúng** → tháp xanh dưới-trái **mọc thêm một bậc** (Construction, số bậc = số câu, chỉ vẽ theo số câu đã đúng); hoàn thành game → màn kết quả **bắn confetti nhiều màu** (Celebration). 3D thuần trình bày: chỉ đọc `state.gameAnswers` để vẽ, **không chấm điểm, không đổi đáp án**; nút đáp án DOM vẫn là đường nhập duy nhất; máy không WebGL rơi về 2D DOM nguyên vẹn. 4 trò còn lại (matching/treasure/race) giữ nguyên backdrop + burst của #138 (chưa nối pattern, theo tuần tự có điểm dừng).
+
+**Commands run.** `npm run check` 0 · `npm run build` 0 · `node tests/run-unit.js` **67/67** · `npm run check:renderer-globals` 0 undefined (36/37 script, 713 hàm, 5925 call site) · `npm run verify:css` **17/17**. Electron thật CDP 9342 (phải `unset ELECTRON_RUN_AS_NODE`): `node tests/ui/ui-three-game-reactions-check.js 9342` **11/11** — sai → `isBroken()===true` + emit `answer:incorrect`; đúng → tháp `currentStage()===1` + `answer:correct`; hoàn thành → `celebrate>=1` + `game:completed` + màn kết quả; tính điểm không đổi (sai 0, đúng 100, 2 câu = 2 bản ghi). Không hồi quy: `ui-three-game-check` **19/19** (9341) và `ui-three-game-check-4games` **41/41** (9343). Ảnh chụp thật xác nhận emblem + khối đỏ + hạt hiển thị (tháp xanh xác nhận qua `currentStage()` trong CDP).
+
+**Chưa xác minh.** Chưa nhìn bằng mắt thật trên máy chiếu/màn hình phụ; chưa đo FPS trên máy cấu hình thấp (thêm tower/shatter/confetti mỗi câu — cần đo ở rollout sau); chưa build/install NSIS installer. Lưu ý vận hành cũ giữ nguyên: mỗi check CDP tự cài spy `window.__threeSpy`/`window.__reactSpy` nên **không chạy chung một instance app** — mỗi check phải chạy trên app mới.
+
+**Next task.** **DỪNG để xem lại** (theo lựa chọn "Incremental with a review stop" của chủ dự án) trước khi mở rộng sang matching/treasure/race. Khi được duyệt: đọc `interaction-patterns.md`, nối `makeUnlockable`/`makeDestructible`/`makeReactive`/`makeConstruction`/`celebrate` vào đúng handler (`evaluateColumnMatch`, `onMemoryCardClick`, `chooseTreasureAnswer`, `answerRace`) theo pattern map đã chốt, giữ tính điểm trong `game-engine/runtime.ts`.
+
+---
+
+## Handoff - Mở rộng 3D trang trí sang matching/treasure/race (2026-10-30, DECISIONS #138)
+
+**Files changed.**
+- `src/renderer/features/gameplay.ts` (mỗi trò chỉ thêm mount/unmount/burst, không đổi logic tính điểm):
+  - Matching: `mountThreeStage` ở cuối `renderColumnsBoard`/`renderMemoryBoard`/`renderCategorizeBoard`; `unmountThreeStage` ở đầu `renderMatchingResults`; burst xanh `#34d399` khi ghép đúng + đỏ `#f87171` khi sai trong `evaluateColumnMatch`, `onMemoryCardClick`, `renderCategorizeBoard`.
+  - Treasure: `mountThreeStage` ở cuối `renderTreasureStage`/`renderTreasureJourneyMap`; `unmountThreeStage` ở đầu `renderTreasureResults`; burst xanh/đỏ trong `chooseTreasureAnswer` và `treasureCompleteMission`.
+  - Race: `mountThreeStage` ở cuối `renderRaceBoard`; `unmountThreeStage` ở đầu `renderRaceResults`; biến mô-đun `raceAnswerBurst` mang màu burst qua lần render lại bàn (`answerRace` ghi màu trước, `renderRaceBoard` burst rồi xoá) — vì race render lại toàn bộ bàn sau mỗi câu trả lời.
+- `tests/ui/ui-three-game-check-4games.js` (mới): CDP check 41 assertion cho matching/treasure/race.
+
+**Behavior.** Cả 5 trò giờ có cùng một nền 3D trang trí (hạt + emblem torus-knot nhuộm theo `--world-accent`) và burst hạt xanh/đỏ khi trả lời đúng/sai. 3D thuần trình bày: không chấm điểm, không đổi đáp án, canvas `pointer-events:none; z-index:0` nằm dưới DOM. Máy không WebGL rơi về 2D DOM nguyên vẹn. API click/hover vẫn chưa nối (đúng nguyên tắc cuối của spec).
+
+**Commands run.** `npm run check` 0 · `npm run build` 0 · `node tests/run-unit.js` **67/67** · `npm run check:renderer-globals` 0 undefined (36/37 script, 690 hàm, 5821 call site) · `npm run verify:css` **17/17**. Electron thật CDP 9341 (phải `unset ELECTRON_RUN_AS_NODE`): `node tests/ui/ui-three-game-check-4games.js 9341` **41/41** — mỗi trò: canvas mount đúng style, burst nổ khi đúng, tính điểm không đổi (matching `matched=1/wrong=0`; treasure `answered=true/earned=150`; race `progress=2/points=100`), đúng 1 canvas sau mỗi lần render lại, unmount khi đóng; fallback tắt WebGL = 2D surface còn nguyên không canvas. `node tests/ui/ui-three-game-check.js 9341` **19/19** trên instance sạch (quiz không hồi quy).
+
+**Chưa xác minh.** Chưa nhìn bằng mắt thật trên máy chiếu/màn hình phụ; chưa đo FPS trên máy cấu hình thấp; chưa build/install NSIS installer để đo ảnh hưởng bundle 732 KB. Lưu ý vận hành: hai check CDP (`ui-three-game-check` và `ui-three-game-check-4games`) mỗi cái tự cài spy `window.__threeSpy` nên **không chạy chung một instance app** — phải chạy từng check trên app mới (nếu không mount-count sẽ lệch do trạng thái rò rỉ giữa hai check).
+
+**Next task.** Khép rollout. Có thể xem xét nối `addHoverEffect`/`addClickableObject` vào từng handler (pattern 1–2 trong `interaction-patterns.md`) nếu muốn tương tác 3D thật — nhưng phải giữ nút đáp án 2D là đường nhập duy nhất.
+
+---
+
+## Handoff - Skill tương tác Three.js: bundle esbuild + `window.threeGame` + pilot quiz/scenario (2026-10-30, DECISIONS #137)
+
+**Files changed.**
+- `scripts/build-three.js` (mới): esbuild bundle `three.module.js` → `dist/src/renderer/vendor/three.global.js` (IIFE `--global-name=THREE`, minify, target es2022, ~732 KB).
+- `package.json`: chuỗi build thêm `build:three`; devDeps thêm `esbuild@^0.28.2`; deps thêm `three@0.187.0` (runtime).
+- `src/index.html`: nạp `<script>` `renderer/vendor/three.global.js` (trước `gameplay.js`) và `renderer/features/three-game-interaction.js` (trước `gameplay.js`, sau THREE).
+- `src/renderer/features/three-game-interaction.ts` (mới): lớp dùng chung `window.threeGame` (7 phương thức: `isAvailable`, `mount`, `unmount`, `setPaused`, `burst`, `addHoverEffect`, `addClickableObject`), scoring-agnostic, một vòng rAF mỗi handle, dispose đầy đủ khi unmount, `mount` trả `null` khi lỗi (fallback 2D).
+- `src/renderer/features/gameplay.ts`: `mountThreeStage`/`unmountThreeStage`/`burstThreeStage`; gọi mount cuối `renderQuestion`, unmount đầu `renderQuestion` + `closePlaySurface`, burst ngay sau tính điểm ở `chooseAnswer`.
+- `scripts/check-renderer-undefined-globals.js`: bỏ qua tiền tố `renderer/vendor/` (bundle minified sinh 586 cảnh báo giả vì scanner neo theo dòng).
+- `tests/unit/three-game-interaction.test.ts` (mới): API surface + fallback khi không có WebGL.
+- `tests/ui/ui-three-game-check.js` (mới): CDP check 19 assertion.
+- `.kilo/skills/threejs-game-interaction/` (SKILL.md + 3 references, tạo ở task #4); `references/gameplay-integration.md` cập nhật khớp API thật.
+- Docs: `DECISIONS.md` #137, `STATUS.md` (mục này), `ROADMAP.md` (mục mới).
+
+**Behavior.** Trò quiz (và scenario — dùng chung engine trắc nghiệm) giờ có một **nền 3D trang trí** phía sau sân khấu: hạt điểm trôi + emblem torus-knot xoay nhuộm theo `--world-accent` của thế giới, và một **burst hạt** màu xanh/đỏ khi trả lời đúng/sai. 3D thuần trình bày: **không chấm điểm, không đổi đáp án, không chặn click** (canvas `pointer-events:none; z-index:0` nằm dưới DOM). Máy không có WebGL tự rơi về 2D DOM nguyên vẹn. API click/hover (`addClickableObject`/`addHoverEffect`) có sẵn và được unit-test nhưng **cố ý chưa nối vào pilot** (tránh nhân đôi nút đáp án 2D).
+
+**Commands run.** `npm run check` 0 · `npm run build` 0 · `node tests/run-unit.js` **67/67** · `npm run verify:css` **17/17** · `npm run check:renderer-globals` 0 undefined (36/37 script quét, vendor bỏ qua). Electron thật CDP 9361 (lưu ý phải `unset ELECTRON_RUN_AS_NODE` — môi trường shell có biến này khiến electron chạy như Node thường và `require('electron')` trả đường dẫn, gây crash `registerSchemesAsPrivileged` ở `dist/src/main.js:8`): `node tests/ui/ui-three-game-check.js 9361` **19/19** — WebGL khả dụng; canvas mount đúng style; burst nổ khi trả lời; tính điểm không đổi (`state.gameAnswers` = 1, feedback xanh); vòng đời 2 mount/2 unmount đúng; fallback tắt WebGL = 2D DOM không canvas. Ảnh chụp `tests/ui/shots/three-quiz-backdrop.png` xác nhận emblem hiển thị thật.
+
+**Chưa xác minh.** Chưa nhìn bằng mắt thật trên máy chiếu/màn hình phụ (chỉ CDP + ảnh chụp); chưa build/install NSIS installer (`npm run dist:win`) để đo ảnh hưởng bundle 732 KB lên thời gian khởi động; treasure/race/matching chưa có 3D; chưa đo FPS trên máy cấu hình thấp.
+
+**Next task.** Dùng skill để mở rộng 3D sang 4 trò còn lại (treasure-hunt, race, matching, và hoàn thiện scenario): đọc `interaction-patterns.md` chọn pattern theo từng gameplay, nối `addClickableObject`/`addHoverEffect` vào đúng handler (`chooseTreasureAnswer`, `answerRace`, `onColumnCardClick`, `onMemoryCardClick`) mà **không** tái cài đặt tính điểm.
+
+---
+
+## Handoff - Ảnh minh hoạ tự tải lên hiện trọn vẹn thay vì bị cắt (2026-10-30, DECISIONS #136)
+
+**Files changed.**
+- `src/renderer/features/game-illustration.ts`: nhánh ảnh tự tải lên (`resolved.custom`) đổi `preserveAspectRatio="xMidYMid slice"` → `"xMidYMid meet"` trên **cả** thẻ `<svg>` ngoài lẫn `<image>` trong, kèm chú thích lý do. Trước đây `slice` phóng ảnh phủ kín khung 16:10 rồi cắt phần thừa — ảnh dọc/vuông/panorama mất phần trên-dưới hoặc hai bên (đúng "tỉ lệ ảnh không hợp lý" ở trò truy tìm kho báu, nhưng cùng cơ chế cho cả 5 trò).
+
+**Behavior.** Ảnh giáo viên tự tải lên giờ co đều vừa khít khung 16:10, phần thừa thành viền nền xám `.stage-illustration.is-custom { background:#eef0f7 }` (letterbox), hiển thị **trọn vẹn** ảnh thay vì cắt. Nhất quán với tiền lệ hình nền kho báu (`.treasure-backdrop` đã dùng `meet` vì `object-fit` vô hiệu với SVG nội tuyến). Khung 16:10 và bố cục toàn màn hình không đổi.
+
+**Commands run.** `npm run build` 0 (clean cảnh báo EPERM `dist/server/index.js` vô hại; bản dịch `dist/.../game-illustration.js` còn 3 `xMidYMid meet`, 0 `slice`) · `npm run verify:css` **17/17** (đổi thuần TS) · `npm run check:renderer-globals` 0 undefined (674 hàm) · Electron thật CDP 9341: `ui-item-art-check` **toàn bộ pass** (kênh tải ảnh thật `importIllustration`, `.stage-illustration.is-custom`, href `edugame-file://img/…`), `ui-stage-illustration-check` **169/169** trên profile sạch. Probe trực tiếp ảnh dọc 240×480 vào trò kho báu trình chiếu: khung 360×225 (1920×1080) và 301×188 (1366×768), ảnh hiện trọn (nửa trên đỏ / nửa dưới xanh / viền trắng) với hai thanh nền xám — hết cắt.
+
+**Chưa xác minh.** Chưa nhìn bằng mắt thật với ảnh chụp của giáo viên trên máy chiếu/màn hình phụ (probe dùng ảnh dọc tổng hợp). Lưu ý vận hành: chạy `ui-stage-illustration-check` **cùng phiên** ngay sau `ui-item-art-check` sẽ lệch vì trạng thái ảnh `ci-…` rò rỉ giữa hai check — chạy từng check trên app mới thì đúng.
+
+**Next task.** Không còn việc trong danh sách ban đầu (task #3 đã xong, xem mục kế). Có thể chuyển sang kiểm tra thủ công tổng thể hoặc yêu cầu mới.
+
+---
+
+## Handoff - Toàn màn hình/máy chiếu: nén mật độ ở cửa sổ thấp 1366×768 (2026-10-30, DECISIONS #135)
+
+**Files changed.**
+- `src/renderer/styles/app.css` (2 khối, không đổi markup): (1) trong `@media (max-height: 800px)`, `.answer-option` toàn màn hình hạ xuống `font-size: clamp(18px, 1.9vh + 0.55vw, 23px)` + `min-height: clamp(56px, 9vh, 96px)` + padding co lại, và `.stage-center` gap `clamp(8px, 1.6vh, 18px)`; (2) `.stage-question` toàn màn hình cửa sổ thấp xuống `font-size: clamp(34px, 3.7vh + 0.7vw, 46px)`.
+
+**Behavior.** Ở laptop 1366×768, câu hỏi và đáp án được nén vừa đủ (vẫn trên sàn `ui-fullscreen-density-check`: câu hỏi ≥34px, đáp án ≥20px, đáp án cao ≥64px) để 2 hàng đáp án không còn tràn 93px ra ngoài viewport — sửa 2 lỗi tràn quiz 1366×768 ghi nhận ở #134. Ở độ phân giải trình chiếu thật (1920×1080, 1280×720) không có `max-height: 800px` nào kích hoạt nên cỡ chữ projector giữ nguyên; ảnh minh hoạ không bị thu nhỏ (đúng #89).
+
+**Commands run.** `npm run check` 0 · `npm run build` 0 · `node tests/run-unit.js` **66/66** · `npm run verify:css` **17/17** · `npm run check:renderer-globals` 0 undefined. Electron thật CDP 9341: `ui-fullscreen-density-check` **8/8** · `ui-play-surface-check` **156/156** · `ui-race-treasure-check` **18/18** · `ui-stage-illustration-check` exit 0. Một lần `ui-race-treasure-check` đỏ 17/18 ("long track cap 200px, content 121px") đã chẩn đoán là **rò rỉ** `Emulation.setDeviceMetricsOverride` 1920×1080 từ check trước (probe lại ở 1280×720: cap 144px/content 182px = pass; race-turn độ đặc hiệu 0,5,1 thắng khối này) — không phải lỗi CSS.
+
+**Chưa xác minh.** Chưa nhìn bằng mắt thật trên máy chiếu/màn hình phụ (chỉ đo CDP + ảnh chụp ở 1920×1080/1366×768); cỡ chữ đáp án trên laptop thấp hơn bình thường là cố ý để vừa khung, chưa có phản hồi giáo viên thật.
+
+**Next task.** Đã xong — khép task #3. Ba task cải thiện giao diện (#1 kết quả, #2 thế giới, #3 toàn màn hình) hoàn tất.
+
+---
+
+## Handoff - Tinh chỉnh 5 thế giới: scenario nhận lại bảng màu quiz + trạng thái "đã chọn" theo accent (2026-10-30, DECISIONS #134)
+
+**Files changed.**
+- `src/renderer/styles/app.css`: (1) `.modal[data-player-theme] .answer-option.selected` bỏ tím cứng, dùng `border-color: var(--world-card-selected-border, #a9a3ff)` + `background: var(--world-card-selected-bg, …)` + `box-shadow: 0 0 0 2px var(--world-accent-soft, …)` — ô "Đã ghi nhận quyết định" của scenario giờ theo accent hổ phách của thế giới. (2) Sửa lỗi bảng màu scenario: selector `.game-stage[data-game="quiz"]` thêm `.game-stage[data-game="scenario"]` vào cùng nhóm, để sân khấu scenario nhận nền/mực/nhấn của quiz (trước đây `data-game="scenario"` không khớp `[data-game="quiz"]` nên rơi về tím mặc định `--world-stage-bg` và `--world-accent` **rỗng** — trái với thiết kế "dùng chung thế giới quiz" ở DECISIONS #87).
+- `tests/ui/ui-game-worlds-check.js`: vòng so sánh theo cặp bỏ qua cặp cùng thế giới (`GAMES[i].world === GAMES[j].world`) — quiz và scenario **cố ý dùng chung** bảng màu nên không được so là "khác nhau".
+
+**Behavior.** Scenario (sổ tay quyết định) giờ thực sự dùng chung bảng màu quiz (hổ phách `#f2b24a`, nền phòng thi navy) thay vì tím mặc định; điểm nhận diện riêng vẫn là ribbon "☘ TÌNH HUỐNG THỰC TẾ · Sổ tay quyết định", khung tình huống nghiêng và câu hỏi canh giữa. Trạng thái ô quyết định đã chọn giờ viền + viền sáng theo accent thế giới. Mọi thay đổi đều là CSS/check, không đổi markup hay logic.
+
+**Commands run.** `npm run check` 0 · `npm run build` 0 · `node tests/run-unit.js` **66/66** (22.9 s) · `npm run verify:css` **17/17** · `npm run check:renderer-globals` 0 undefined (674 hàm). Electron thật CDP 9341 (profile cách ly `EDUGAME_USER_DATA=%TEMP%\edugame-worlds-133`): `ui-game-worlds-check` **42/42** (trước là 43/44 — lỗi kia đúng là scenario thiếu bảng màu, không phải "lỗi probe" như ghi chú cũ); probe trực tiếp sân khấu scenario: `--world-accent` = `#f2b24a`, nền quiz, kicker `rgb(242,178,74)`; ô `.answer-option.selected` border = `rgb(242,178,74)` + glow `rgba(242,178,74,.16)` (sau transition 400 ms). `ui-play-surface-check` **154/156** (2 lỗi tràn quiz 1366×768 có từ trước, không đổi).
+
+**Chưa xác minh.** Chưa nhìn bằng mắt thật trên máy chiếu/màn hình phụ; chưa chạy lại `ui-fullscreen-density-check`/`ui-stage-illustration-check` trong đợt này (thay đổi chỉ chạm selector thế giới scenario + `.answer-option.selected`, không chạm layout toàn màn hình).
+
+**Next task.** Cải thiện trải nghiệm toàn màn hình/máy chiếu (task #3): mật độ chữ, thẻ số liệu, bố cục 1366×768 — giữ bất biến `ui-play-surface-check` và `ui-fullscreen-density-check`.
+
+---
+
+## Handoff - Màn hình kết quả 5 trò chơi: màu theo thế giới + dải thẻ số liệu (2026-10-30, DECISIONS #133)
+
+**Files changed.**
+- `src/renderer/features/gameplay.ts`: thêm `formatClock()` (mm:ss) và `resultStatsHtml(stats)`; bốn hàm kết quả (`renderResults`, `renderMatchingResults`, `renderTreasureResults`, `renderRaceResults`) chèn dải thẻ `.result-stats` ngay dưới dòng "% điểm tối đa", trên leaderboard/reward box; stage kết quả matching thêm `data-game-world="matching"` + `gameWorldLabel('matching')` (trước chỉ có `data-game="matching"`).
+- `src/renderer/styles/app.css`: `.result-score` đổi màu `#a9a3ff` → `var(--world-accent, #a9a3ff)` + `text-shadow` theo `--world-accent-soft`; thêm `.result-stats`/`.result-stat` (icon/value/label, nền `--world-tag-bg`, viền `--world-tag-border`, value `--world-accent`), `@keyframes result-medal-pop` + `result-stat-in` (stagger 50 ms) và nhánh `prefers-reduced-motion: reduce` tắt hết chuyển động.
+- Docs: `DECISIONS.md` #133, `STATUS.md` (mục này).
+
+**Behavior.** Bốn màn hình kết quả giờ cùng màu nhấn với thế giới vừa chơi (không còn tím cứng), có một hàng thẻ số liệu riêng cho từng trò (câu đúng/thời gian/% cho quiz-scenario; cặp ghép/lần sai/thời gian/% cho matching; chặng/vật phẩm ẩn/thời gian/% cho treasure; ô về đích/vòng/đội cho race) và huân chương phóng to khi xuất hiện. Văn bản và selector mà smoke test khoá giữ nguyên.
+
+**Commands run.** `npm run check` 0 · `npm test` build + **66/66** unit (25.5 s) · `npm run verify:css` **17/17** · `npm run check:renderer-globals` 0 undefined (674 hàm). Electron thật CDP 9333 (profile cách ly `EDUGAME_USER_DATA= tests/.ui-check-profile-9333`): probe trực tiếp 4 màn kết quả đều có `.result-screen`, đủ nút, đúng `data-game-world`, `getComputedStyle(.result-score).color` = accent đúng thế giới (quiz `rgb(242,178,74)`, matching `rgb(255,216,107)`, treasure `rgb(233,185,91)`); team-quiz 3 thẻ + leaderboard 3 dòng + `h2` "Sao đỏ dẫn đầu!" + `lastSummary.winnerTeam`. Đã đóng app kiểm và dọn profile tạm.
+
+**Chưa xác minh.** `smoke56/57/68` không chạy hết được **vì lý do có từ trước**: smoke dùng `.treasure-choice` (và `.treasure-choice` trong smoke68) trong khi luồng kho báu hiện tại render `#treasureContinueBtn`/`#treasureEndBtn` — tên đã đổi ở một đợt chưa bàn giao, không phải do đợt này (probe xác nhận `showTreasureChoices` không còn tạo `.treasure-choice`). Chưa nhìn bằng mắt thật trên máy chiếu/màn hình phụ; chưa chạy lại `ui-matching-finish-check` trên profile sạch.
+
+**Next task.** Tinh chỉnh 5 thế giới trò chơi (nền/hoa văn/accent từng engine — task #2 trong danh sách), giữ nguyên selector và 17 bất biến `verify:css`.
+
+---
+
+## Handoff - Nhà cung cấp AI chỉ cấu hình ở Cài đặt; Step 2/Step 5 dùng nhà cung cấp đã kiểm tra (2026-10-29, DECISIONS #132)
+
+**Files changed.**
+- `src/services/ai-providers.ts` (mới, thuần): registry 5 nhà cung cấp (`local/gemini/openai` dùng được cho wizard, `opencode/custom` không), `resolveProviderState` (not-configured/configured/ready/failing, `usable`), `chooseProvider` (`auto`: local → gemini → openai; `providerId` chỉ định không bao giờ bị thay), `maskApiKey`, `migrateLegacyAiSettings`, `toPublicProviderView` (không khoá).
+- `src/services/ai-transport.ts`: `classifyProviderHttpError` (AI_AUTH/AI_QUOTA/AI_RATE_LIMIT/AI_MODEL_NOT_FOUND/AI_HTTP), mã lỗi mới (`AI_NETWORK`, `AI_NO_PROVIDER`, `AI_PROVIDER_*`, `AI_KEY_STORAGE_UNAVAILABLE`); cloud 4xx/5xx giờ trả mã cụ thể, thân lỗi không vào message.
+- `src/services/lesson-cache.ts`: `provider` trong `buildAnalysisCacheKey`.
+- `src/main.ts`: `settings:get`/`settings:save` không còn trả khoá (chỉ `hasKey`/`keyMasked`), khoá theo `providers[id]`, `AI_KEY_STORAGE_UNAVAILABLE` thay cho ghi rỗng; `ai:providers`; `ai:test-provider`; `ai:health` (chỉ bản unpackaged, cho check UI); `createChatClientForProvider` thay `createLessonChatClient` ở 4 chỗ; `sendChatJson`/`sendChatText`; `publicSettingsView`; migration trong `loadAiSettingsWithMigration` (mọi chỗ đọc settings); `ai:generate` cũ đọc khoá đã migrated.
+- `src/preload.ts`, `src/shared/types.ts`: `getAiProviders`, `testAiProvider`, `providerId` cho `analyzeLesson`/`generateLessonDraft`, kiểu AI settings mới.
+- `src/renderer/shared.ts`: bỏ `cloudProviderPresets`/`getCloudProviderConfig`/`applyCloudProvider`; `aiProviderView`/`aiActiveProvider`/`aiProviderPicker`.
+- `src/renderer/pages/settings.ts` + `features/settings.ts` + `core/controller.ts`: mỗi nhà cung cấp một thẻ (chip trạng thái, base URL/model, ô khoá trống + "Đã lưu khoá (••••)", "Lưu khoá", "Xoá khoá" qua nút Lưu, "Kiểm tra kết nối" gọi `ai:test-provider`); bảng chính sách tự động; bỏ select chế độ/cloud cũ và nút test gọi `ai:generate`.
+- `src/renderer/features/wizard/*`, `pages/create-wizard.ts`: thẻ nhà cung cấp + select nhỏ (chỉ khi ≥2 sẵn sàng), nút "Phân tích bằng AI…/Tạo nội dung bằng AI…", tên nhà cung cấp trong tiến trình/lời nhắc, banner lỗi có "Mở Cài đặt AI" (`wizardNeedsProviderSettings`), `providerId` trong 3 request; bỏ dòng "AI local" khi đang dùng cloud.
+- Tests: `tests/unit/ai-providers.test.ts` (mới), mở rộng `ai-transport.test.ts`, `lesson-cache.test.ts`; `tests/ui/ui-ai-provider-key-check.js`, `ui-ai-provider-settings-check.js`, `ui-ai-provider-wizard-check.js` (mới).
+- Docs: `DECISIONS.md` #132, `STATUS.md` (mục này).
+
+**Behavior.** Cài đặt chỉ còn một nơi cấu hình AI: khoá được mã hoá bằng `safeStorage` và **không** trả về màn hình; mỗi nhà cung cấp có trạng thái thật từ lần kiểm tra gần nhất; bước 2/5 dùng `local`/`gemini`/`openai` **đã kiểm tra** (chính sách local → Gemini → ChatGPT), giáo viên chọn được khi có từ hai nhà cung cấp, lỗi không tự đổi nhà cung cấp, không có nhà cung cấp thì chỉ đường sang Cài đặt. Câu hỏi có sẵn, soạn thủ công và AI local vẫn chạy như cũ.
+
+**Commands run.** `npm run check` 0 · `npm run build` 0 · `node tests/run-unit.js` **66/66** · `check:renderer-globals` 0 undefined · `verify:css` 17/17 · `npm run test:native` **lỗi tải `better-sqlite3`** (ABI 130 vs node 127, không phải lỗi test). Electron CDP 9344, profile cách ly `EDUGAME_USER_DATA=%TEMP%\edugame-ai132`: `ui-ai-provider-key-check` **17/17**, `ui-ai-provider-settings-check` **24/24**, `ui-ai-provider-wizard-check` **25/25**, `ui-input-routing-check` 51/51, `ui-classifier-outline-check` 13/14 (`semanticNote` có từ #118), `ui-wizard-cancel-genre-check` 8/8, `ui-race-treasure-check` 18/18, `ui-item-art-check` all, `ui-race-editor-check` all.
+
+**Follow-up (same task): AI local là mặc định, AI ngoài là nút thứ hai (DECISIONS #132 §D13).**
+- `src/renderer/features/wizard/step-analysis.ts`: nút chính "✦ Phân tích bằng AI local" (gửi `data-provider-id="local"`); nút phụ "☁ Phân tích bằng …" (`analyze-cloud`) chỉ xuất hiện khi có nhà cung cấp ngoài `wizardEligible && usable` đã qua kiểm tra, kèm dòng nhắc "gửi giáo án tới … qua Internet"; chưa cấu hình thì hiện lời mời mở Cài đặt AI, đã nhập khoá nhưng chưa kiểm tra thì nói rõ như vậy. Bấm nút AI ngoài ghi lựa chọn vào bước hiện tại.
+- `src/renderer/features/wizard/state.ts`, `shared.ts`: `wizardCloudActionProvider`, `wizardProviderSuffix(providerId)`, `wizardProviderRequestPayload(explicitProviderId)` (local ⇒ `{ providerId: 'local', localPreferred: true }`), thẻ nhà cung cấp nói AI local là mặc định khi có nút AI ngoài.
+- `src/renderer/pages/create-wizard.ts`: `analyze` / `analyze-cloud` đọc `data-provider-id` của nút và được thêm vào danh sách bị chặn khi bước đang bận (trước đây nút phân tích chỉ tự từ chối bên trong `wizardAnalyzeRun`).
+- `src/services/ai-providers.ts`: tuỳ chọn `localPreferred` — khi AI local chưa chạy trả `AI_NOT_RUNNING` thay vì rơi sang đám mây; `publicSettingsView` vẫn dùng chính sách `auto` nên giữ AI local làm mặc định khi nó đang chạy.
+- `src/main.ts`: `createChatClientForProvider` nhận `local` là yêu cầu rõ ràng; cache và khoá single-flight của `lesson:analyze`/`lesson:generate`/`regenerate` có thêm id nhà cung cấp; `buildGenerationCacheKey` nhận `provider` (rỗng giữ nguyên khoá cũ); test kết nối AI local vẫn chạy không qua chính sách.
+- Tests: `ai-providers.test.ts` thêm `explicitLocalButton` (local dừng ⇒ `AI_NOT_RUNNING`, không rơi sang đám mây; nút đám mây vẫn chạy đúng nhà cung cấp); `lesson-cache.test.ts` thêm provider cho khoá draft; `ui-ai-provider-wizard-check.js` kiểm 2 nút, payload rõ ràng, ẩn nút AI ngoài khi chưa có nhà cung cấp đã kiểm tra; `ui-ai-provider-settings-check.js` tự dọn khoá ở đầu và cuối mỗi lần chạy (trước đây trạng thái còn sót giữa các lần chạy làm check sai khi chạy theo thứ tự khác).
+- Đã chạy lại: `check` 0, `build` 0, unit 66/66, `check:renderer-globals` 0 undefined, `verify:css` 17/17; ba check provider chạy **hai vòng, hai thứ tự** đều qua; `ui-input-routing` 51/51, `ui-classifier-outline` 13/14 (`semanticNote` có từ #118), `ui-wizard-cancel-genre` 8/8, `ui-race-treasure` 18/18, `ui-item-art` all, `ui-race-editor` all.
+- Chưa xác minh: một lượt phân tích bằng Gemini/OpenAI **thật** từ nút mới (chỉ bấm qua fixture/stub); AI local chạy thật trong phiên kiểm tra (không có model trên môi trường này).
+**Follow-up 2 (same task): một nút "Tiếp tục", AI local tải/khởi chạy tại chỗ, AI ngoài tự xuất hiện (DECISIONS #132 §D14).**
+- `src/renderer/features/wizard/step-input.ts`: nhãn nút bước 1 luôn là "Tiếp tục ➔" (`wizardInputNextLabel`), nhánh đi nằm ở dòng gợi ý `[data-wizard-next-hint]` (`wizardInputNextHint`).
+- `src/renderer/features/wizard/state.ts`: `wizardLocalAiLaunchState()` (model đã tải? llama.cpp đang chạy?), `wizardLocalAiNoticeHtml()` (dòng đỏ ngắn, không tự chạy), `wizardErrorIsCancellation()`, `cloudAnalysisFailed`.
+- `src/renderer/features/wizard/step-analysis.ts`: dòng cảnh báo AI local phía trên nút; bấm nút AI local khi chưa sẵn sàng → thông báo + mở cửa sổ AI local (không gọi `lesson:analyze`); nút "☁ Phân tích bằng AI (Gemini/ChatGPT)" (`wizardCloudAnalyzeButtonHtml`, đỏ chỉ sau một lượt đám mây thất bại thật).
+- Tests: `ui-input-routing-check` và `ui-classifier-outline-check` đọc nhãn "Tiếp tục" + dòng gợi ý (thêm 1 check); `ui-ai-provider-wizard-check` thêm check nút AI ngoài không đỏ mặc định và dòng cảnh báo AI local; `ui-ai-provider-settings-check` gọi bước dọn khoá ngay sau khi kết nối (trước đây khối dọn nằm ngoài hàm nên không có tác dụng, làm check đỏ theo thứ tự).
+- Đã chạy lại: `check` 0, `build` 0, unit 66/66, `check:renderer-globals` 0 undefined, `verify:css` 17/17; ba check provider qua (settings qua 3 lần liên tiếp, cả ba thứ tự), `ui-input-routing` 52/52, `ui-classifier-outline` 14/15 (`semanticNote` có từ #118), `ui-wizard-cancel-genre` 8/8, `ui-race-treasure` 18/18, `ui-item-art` all, `ui-race-editor` all.
+- Chưa xác minh: luồng bấm "Phân tích với AI local" mở cửa sổ rồi giáo viên bấm "Bắt đầu chạy" **trên máy có model thật** (máy kiểm thử không có model); một lỗi Gemini thật để thấy nút đỏ (chỉ thử qua state).
+**Fix: menu "•••" trên thanh llama.cpp không mở được (DECISIONS #132 §D15).**
+- `src/renderer/features/ai-status.ts`: một đường mở menu (click thanh hoặc nút) với trạng thái đọc từ DOM; `ensureWired()` so `wiredNodes` (đúng tham chiếu node) và tự gắn lại nút còn thiếu trên mỗi `render`/`refresh`; listener document chạy capture chỉ để sửa thanh vừa bị thay khi click nằm trong thanh; click ra ngoài/Escape đóng menu; `aria-expanded` đồng bộ.
+- Lỗi kèm theo tìm thấy trong lúc làm: `wizardCloudAnalyzeButtonHtml()` từng là `async`, renderer render `[object Promise]` làm `render()` ném lỗi ở MỌI trang (thêm từ lượt D14) — nay là hàm thường; đã kiểm lại bước 1/2 sau khi sửa.
+- Test mới `tests/ui/ui-ai-status-bar-check.js` (11 check): mở/đóng bằng nút và bằng thanh, menu giữ mở qua poll 2 s, đóng khi click ra ngoài, vẫn chạy **sau khi navbar bị render lại từ markup của chính nó**, và "Cài đặt AI local…" mở cửa sổ sau lần render lại — check cố ý không gọi `aiStatusRefresh` cho bước render lại để lỗi tái hiện.
+- Đã chạy: `check` 0, `build` 0, `check:renderer-globals` 0 undefined; `ui-ai-status-bar` 11/11 (2 lần), `ui-input-routing` 52/52, `ui-classifier-outline` 14/15 (`semanticNote` có từ #118), `ui-ai-provider-wizard` toàn bộ, `ui-ai-provider-key` toàn bộ, `ui-ai-provider-settings` toàn bộ (3 lần), `ui-wizard-cancel-genre` 8/8, `ui-race-treasure` 18/18, `ui-item-art` all, `ui-race-editor` all.
+- Chưa xác minh: mở menu bằng **chuột thật** khi llama.cpp đang chạy (máy kiểm thử không có model; check dùng `element.click()` trên trạng thái web thật).
+**Fix: nút dừng llama.cpp và nút AI ngoài ở bước 2 (DECISIONS #132 §D16).**
+- `src/renderer/core/render.ts`: `render()` bọc phần vẽ trang và `wirePage()`; một trang ném lỗi không còn làm thanh trạng thái (và nút dừng) đứng im. `src/renderer/features/ai-status.ts`: "Dừng" luôn hiện và luôn bấm được, tự đọc lại runtime, báo rõ khi không có gì để dừng / khi main từ chối; "Bắt đầu" cũng đọc lại trạng thái; bảng dừng không còn `disabled` theo cờ cũ.
+- `src/main.ts`: `ai:stop-local-runtime` chỉ từ chối khi **AI local** đang chạy (single-flight có thêm `providerId`, gắn ở cả bốn chỗ `aiSingleFlight.run`); trước đây một lượt chạy cloud cũng chặn dừng. `src/services/ai-transport.ts`: `activeProviderId`, thông điệp bận không còn nói "AI local" cho lượt chạy cloud.
+- `src/renderer/features/wizard/*`: Step 2 tự làm mới view nhà cung cấp khi mở (`wizardSyncProviders`), nút AI ngoài yêu cầu `wizardEligible && usable`, nhãn "☁ Phân tích bằng AI (Gemini/ChatGPT)", dòng gợi ý phân biệt "thất bại / chưa kiểm tra / view chưa cập nhật"; `aiProviderView`/`aiProviderList` chịu được view không phải mảng.
+- `src/renderer/features/settings.ts`: "Kiểm tra kết nối" chờ lần "Lưu khoá" đang chạy (trước đây có thể đọc khoá cũ và báo AI_AUTH oan).
+- Tests: `ui-ai-status-bar-check` thêm kiểm tra "Dừng luôn có và trả lời"; `ui-ai-provider-wizard-check` dùng lại view nhà cung cấp trên mỗi render (không proxy bridge — bridge bị đóng băng); `ui-ai-provider-key-check` và `ui-ai-provider-settings-check` bắt đầu từ trang mới + dọn khoá/điểm cuối, nên chạy theo thứ tự nào cũng đúng; `tests/legacy/smoke2.js` chuyển sang kiểm tra "lưu cài đặt không xoá sở thích khác" (không còn chế độ offline/testAi).
+- Đã chạy: `check` 0, `build` 0, unit 66/66, `check:renderer-globals` 0 undefined (673 hàm), `verify:css` 17/17; `ui-ai-status-bar`, `ui-ai-provider-key`, `ui-ai-provider-settings`, `ui-ai-provider-wizard` qua ở **cả hai thứ tự**, `ui-input-routing` 52/52, `ui-classifier-outline` 14/15 (`semanticNote` từ #118), `ui-wizard-cancel-genre` 8/8, `ui-race-treasure` 18/18, `ui-item-art` toàn bộ, `ui-race-editor` toàn bộ.
+- Chưa xác minh: dừng một phiên llama.cpp **thật đang chạy** (máy kiểm thử không có model) — mới kiểm nhánh "không chạy" và main từ chối; `ui-card-menu-check` hỏng từ trước (tìm `[data-menu-toggle]`, không file renderer nào tạo — kiểm lại trên `HEAD` cũng vậy, không thuộc đợt này).
+**Fix: AI ngoài "tự cấu hình" đã kiểm tra nhưng bước 2 không có nút (DECISIONS #132 §D17).**
+- `src/services/ai-providers.ts`: `custom` (`wizardEligible: true`, `requiresKey: true`); chính sách tự động vẫn local → Gemini → ChatGPT rồi mới tới `custom`; lý do của provider đã kiểm tra nhưng ngoài luồng nói rõ "Chưa dùng được cho luồng tạo trò chơi" thay vì gộp vào "Đã cấu hình".
+- `src/renderer/features/wizard/step-analysis.ts`: tên ngắn "AI ngoài" cho nút custom.
+- Tests: `ai-providers.test.ts` cập nhật danh sách nhà cung cấp dùng được và thêm ca "custom là lựa chọn cuối, OpenAI vẫn được ưu tiên"; `ui-ai-provider-settings-check` không còn coi `custom` là bị loại và dọn khoá của cả hai provider stub khi kết thúc.
+- Đã chạy: `check` 0, `build` 0, unit 66/66, `check:renderer-globals` 0 undefined, `verify:css` 17/17; bấm thử trên bản thật: cấu hình `custom` (base URL/model/khoá) → kiểm tra kết nối → `ready/usable` → bước 2 hiện "☁ Phân tích bằng AI (AI ngoài)" và gời request kèm khoá tới điểm cuối; `ui-ai-provider-key`, `-settings`, `-wizard`, `ui-ai-status-bar`, `ui-input-routing` 52/52, `ui-classifier-outline` 14/15 (`semanticNote` từ #118), `ui-race-treasure` 18/18, `ui-item-art` toàn bộ, `ui-race-editor` toàn bộ, `ui-wizard-cancel-genre` 8/8.
+- Lưu ý khi tự kiểm: sau khi bấm "Lưu khoá", nút "Kiểm tra kết nối" đã chờ lần lưu xong; script điều khiển thẳng thủ công phải tự chờ (khoá chỉ có sau khi lưu hoàn tất).
+**Sửa: thẻ ở Thư viện trò chơi (DECISIONS #119/#120 §D18).**
+- `src/renderer/shared.ts`: `gameCard` chỉ còn **Chơi ngay** + **Toàn màn hình** ở ngoài; nút **•••** (`data-menu-toggle`, `aria-expanded`, `aria-controls`) mở menu `role="menu"` với **Chơi LAN**, **Chỉnh sửa**, **Xuất game**, **Xoá**; bọc nút+menu trong `data-game-menu-root` để bộ đóng menu ở `bootstrap.ts` không đóng ngay cú bấm mở.
+- Tests: `ui-card-menu-check` thêm kiểm tra đúng 4 mục và đúng thứ tự/nhãn; `ui-lan-card-start-check` cập nhật (LAN nằm trong menu, có trên mọi thể loại).
+- Đã chạy: `check` 0, `build` 0, unit 66/66, `check:renderer-globals` 0 undefined, `verify:css` 17/17; `ui-card-menu` toàn bộ (12 check), `ui-lan-card-start` 12/12, `ui-editor-art` toàn bộ, `ui-input-routing` 52/52, `ui-ai-provider-wizard`, `ui-ai-status-bar` toàn bộ — tất cả trên một phiên bản mới, profile cách ly.
+- Chưa xác minh: bấm bằng chuột thật trên Windows (check dùng `element.click()`); `ui-fullscreen-check` cần cổng CDP riêng (9337) nên chưa chạy trong đợt này.
+**Review fixes (same task, after `/review uncommitted`).**
+- `src/main.ts`: `ai:health` chỉ đăng ký khi `!app.isPackaged && process.env.EDUGAME_AI_TEST_DIR` (trước đây một bản build chưa đóng gói vẫn bật kênh dùng khoá đã lưu); `publicSettingsView` gọi `chooseProvider` đúng như request nên `ai.provider` trong view là nhà cung cấp chạy được bây giờ, và tham số cục bộ không còn bị dùng trước khi khai báo; `lesson:analyze` đưa **nhà cung cấp thực sự chạy** vào `buildAnalysisCacheKey` (`analysisCacheProvider`) thay cho `ai.provider`.
+- `src/services/ai-transport.ts`: lỗi cloud không phân loại được đổi sang mã riêng `AI_PROVIDER_HTTP` (kể cả 5xx/400 không rõ nghĩa) để wizard và editor không dùng câu "AI local báo lỗi"; `state.ts`, `game-editor.ts`, `ai-providers.ts` có nhãn riêng và wizard mở Cài đặt AI cho mã này.
+- `src/renderer/shared.ts`, `features/wizard/state.ts`: `aiActiveProvider()` ưu tiên nhà cung cấp giáo viên vừa chọn trong wizard (khi dùng được) để thẻ "Dùng …" khớp với request.
+- Tests: `ai-transport.test.ts` khẳng định 400/418/500 → `AI_PROVIDER_HTTP`; `ai-providers.test.ts` khẳng định chính sách chọn Gemini khi cả hai sẵn sàng và bỏ qua local đã dừng; `ui-ai-provider-settings-check.js` kiểm provider lỗi không còn được chào lại.
+**Unverified.** Nhà cung cấp đám mây **thật** (Gemini/OpenAI với khoá thật) chưa chạy — chỉ kiểm qua stub loopback và fixture; chưa chạy `npm run test:native` được trong môi trường này; `ui-editor-art-check` (1 lỗi "no modal") và `ui-card-menu-check` (lỗi `dataset`) cần đối chứng trên profile sạch trước khi kết luận; chưa thử `ui-play-surface-check`, `ui-card-menu-check`, `ui-art-upload-flow-check` trong đợt này; chưa đóng gói cài đặt.
+
+**Next.** Một ván đầy đủ bằng Gemini thật (khoá của người dùng, không log), rồi đối chứng `ui-editor-art-check`/`ui-card-menu-check` trên profile mới để xác định lỗi có sẵn hay do đợt này.
+
+## Handoff - Sửa trình chỉnh sửa Đường đua (2026-10-29, DECISIONS #131)
+
+**Files changed.**
+- `src/renderer/features/game-editor.ts`: `EDITOR_TEAM_COLORS`; `raceTeamRow` có ô chọn màu + `--team-color`; `readRaceEditor` lưu `color`; bấm ô trên preview để xoá hiệu ứng; `wireEditorItemArt` gọi lại sau khi chèn panel template / thêm câu hỏi / nhân bản câu hỏi.
+- `src/renderer/styles/app.css`: `[data-team-id]` và `[data-cell-row]` dùng nền sáng + chữ tối (chỉ hàng trong editor).
+- `tests/ui/ui-race-editor-check.js` (mới): 10 check cho cả ba lỗi + lưu/đọc lại.
+- Docs: `DECISIONS.md` #131, `STATUS.md` (mục này).
+
+**Behavior.** Trong trình chỉnh sửa Đường đua: tên đội đọc được trên nền sáng, mỗi đội chọn được màu và màu được lưu; bấm một ô có hiệu ứng trên đường đua là xoá hiệu ứng đó; "📷 Tải ảnh lên" ở câu hỏi đường đua mở hộp chọn ảnh, gắn ảnh vào đúng câu và lưu cùng trò chơi.
+
+**Commands run.** `npm run check` 0 · `npm run build` 0 · `check:renderer-globals` 0 undefined · `node tests/run-unit.js` **65/65** · `verify:css` 17/17 · Electron (CDP 9534): `ui-race-editor-check` 10/10, `ui-editor-art-check` 12/12, `ui-item-art-check` 13/13, `ui-race-treasure-check` 18/18, `ui-input-routing-check` 51/51.
+
+**Unverified.** Hộp thoại chọn tệp native vẫn được thay trong check; chưa thử tay việc kéo-thả bằng chuột thật (xoá thì đã kiểm), và chưa chạy `ui-play-surface-check`.
+
+**Next.** Thử tay một ván đường đua với 3 đội màu khác nhau trên máy chiếu.
+## Handoff - Thanh lưu của trình chỉnh sửa luôn hiện (2026-10-29, DECISIONS #130)
+
+**Files changed.**
+- `src/renderer/features/game-editor.ts`: `renderEditorPage` trả markup qua `editorPageHtml`; binding trường chuyển vào `wireEditorPage`; thanh `.editor-save-bar` (sticky) chứa Hủy / Lưu và xuất / Lưu vào thư viện; gợi ý thay đổi; `.editor-page-body` thay `.modal-body` (có null-check).
+- `src/renderer/core/render.ts`: gọi renderer trước khi gán `innerHTML`, phát hiện đổi trang; class `editor-active`.
+- `src/renderer/core/controller.ts`: gọi `wireEditorPage` khi trang là editor.
+- `src/renderer/styles/app.css`: `.editor-save-bar`, `.editor-save-hint`, `.editor-save-actions`, `.page-content.editor-active`.
+- `tests/ui/ui-editor-art-check.js`: kiểm thanh lưu `position: sticky`, lưu xong về Thư viện.
+- Docs: `DECISIONS.md` #130, `STATUS.md` (mục này).
+
+**Behavior.** Khi sửa một trò (bất kỳ thể loại nào), thanh Hủy / Lưu và xuất / Lưu vào thư viện dính ngay dưới thanh trên, vẫn bấm được khi cuộn tới câu hỏi cuối; Lưu trả về Thư viện và lưu đúng ảnh/nội dung đã sửa.
+
+**Commands run.** `npm run check` 0 · `npm run build` 0 · `check:renderer-globals` 0 undefined · `node tests/run-unit.js` **65/65** · `verify:css` 17/17 · Electron: các check liệt kê ở DECISIONS #130 đều qua; đo thanh dính bằng toạ độ sau khi cuộn.
+
+**Unverified.** Chưa xem tay trên 1366×768 (thanh 3 nút có thể xuống dòng); chưa chạy `ui-play-surface-check` đợt này.
+
+**Next.** Thử tay 1366×768 và máy chiếu; nếu 3 nút xuống dòng, đổi thành icon + nhãn ngắn.
+## Handoff - Trình chỉnh sửa trò chơi thành trang (2026-10-29, DECISIONS #129)
+
+**Files changed.**
+- `src/renderer/features/game-editor.ts`: `editorPageState`, `editorPageRoot`, `renderEditorPage`, `renderEditorInto`, `openEditor` (navigate), `closeEditorPage`; markup modal → `.editor-page` (header dính + body); back/Hủy có xác nhận; lưu xong xoá state rồi về Thư viện; `$('#modalRoot')` → `editorPageRoot()`.
+- `src/renderer/core/render.ts`: thêm `editor: renderEditorPage` vào router.
+- `src/renderer/core/controller.ts`: ghi chú wiring cho trang editor.
+- `src/renderer/shared.ts`: `pageNames.editor = 'Chỉnh sửa trò chơi'`.
+- `src/renderer/styles/app.css`: `.editor-page`, `.editor-page-head`, `.editor-page-title`, `.editor-page-actions`, `.editor-page-body`, `.editor-page-empty`.
+- `tests/ui/ui-editor-art-check.js`: selector chuyển sang `#pageContent`, thêm 3 check cho hành vi trang.
+- Docs: `DECISIONS.md` #129, `STATUS.md` (mục này).
+
+**Behavior.** Bấm "Chỉnh sửa" ở Thư viện (hoặc tạo trò mới thủ công) mở **trang** Chỉnh sửa trò chơi trong khung ứng dụng; header dính giữ nút Lưu luôn thấy khi cuộn danh sách câu hỏi; "← Thư viện"/"Hủy" hỏi lại nếu đang có thay đổi; "Lưu vào thư viện" lưu và quay về Thư viện.
+
+**Commands run.** `npm run check` 0 · `npm run build` 0 · `check:renderer-globals` 0 undefined · `node tests/run-unit.js` **65/65** · `verify:css` 17/17 · Electron 9522: `ui-editor-art-check` 12/12, `ui-item-art-check` 13/13, `ui-art-upload-flow-check` 10/10, `ui-input-routing-check` 51/51, `ui-wizard-cancel-genre-check` 8/8, `ui-card-menu-check` 10/10, `ui-race-treasure-check` 18/18.
+
+**Unverified.** Chưa xem tay trên 1920×1080 và 1366×768 (header dính + bảng câu hỏi dài); chưa chạy `ui-play-surface-check`.
+
+**Next.** Thử tay: sửa một trò có 30+ câu, cuộn xuống cuối — header còn Lưu; bấm ← khi đã sửa — có hỏi xác nhận.
+## Handoff - Ảnh minh hoạ trong trình soạn thảo (tạo thủ công) (2026-10-29, DECISIONS #128)
+
+**Files changed.**
+- `src/renderer/features/game-editor.ts`: `editorItemArtHtml`, `editorItemArtValue`, `applyEditorItemArt`, `redrawEditorArtRow`, `wireEditorItemArtRow`, `wireEditorItemArt`, `editorImportIllustration`; chèn điều khiển vào câu hỏi quiz/scenario, câu Đường đua, chặng Kho báu; sự kiện `art-change`; gắn lại handler sau mỗi lần vẽ lại.
+- `src/renderer/styles/app.css`: `.editor-item-art`, `.editor-art-*` (ảnh 16:10 cạnh đề bài; hẹp thì xếp dọc).
+- `tests/ui/ui-editor-art-check.js` (mới): 9 check qua UI thật.
+- Docs: `DECISIONS.md` #128, `STATUS.md` (mục này).
+
+**Behavior.** Mở "Tạo trò chơi (thủ công)" hoặc sửa một trò trong Thư viện: mỗi câu có khung ảnh riêng với "📷 Tải ảnh lên", chọn hình có sẵn theo chủ đề, và "↺ Tự động". Ảnh tải lên được lưu trên máy, hiện ngay trong khung, và vào trò chơi khi bấm "Lưu vào thư viện".
+
+**Commands run.** `npm run check` 0 · `npm run build` 0 · `check:renderer-globals` 0 undefined · `node tests/run-unit.js` **65/65** · `verify:css` 17/17 · Electron: `ui-editor-art-check` 9/9, `ui-item-art-check` 13/13, `ui-art-upload-flow-check` 10/10, `ui-input-routing-check` 51/51, `ui-card-menu-check` 10/10.
+
+**Unverified.** Hộp thoại native vẫn chỉ được thay trong test; chưa chạy `ui-play-surface-check` đợt này. Ảnh tải thử trong các lần kiểm tra còn nằm trong `edugame-data/images` (tệp rác); bản xoá dự án/game dọn chúng khi dự án tương ứng bị xoá.
+
+**Next.** Thử tay một trò mới tạo thủ công: chọn ảnh cho câu 1, tải ảnh cho câu 2, lưu, rồi chơi.
+## Handoff - Tải ảnh: hàng đợi ghi + không kẹt nút + dọn ảnh (2026-10-29, DECISIONS #127)
+
+**Files changed.**
+- `src/renderer/features/wizard/step-generate.ts`: `wizardQueueArtTask`, `wizardApplyItemPatch`, `wizardItemArtSummary`, `wizardImportIllustration`; `wizardUploadArt`/`wizardPatchItemAssets` đi qua hàng đợi và luôn nhả `artBusy`; `wizardRegenerateItem` tự lưu dự án; xoá ảnh cũ của mục sau khi đổi thành công.
+- `src/main.ts`: `files:delete-illustration` từ chối ảnh đang dùng; `project:delete` xoá ảnh của dự án; `collectCustomImageIds`/`referencedCustomImageIds`/`removeUnreferencedImages`/`removeProjectImages`.
+- `tests/ui/ui-art-upload-flow-check.js` (mới): 10 check cho toàn bộ chuỗi tải ảnh, gồm huỷ hộp thoại và hai lần tải liên tiếp.
+- Tests cũ: `ui-item-art-check` dọn cả hai dự án của nó (ảnh đi theo dự án).
+- Docs: `DECISIONS.md` #127, `STATUS.md` (mục này).
+
+**Behavior.** Bấm "📷 Tải ảnh lên": hộp thoại → ảnh được copy và gắn ngay vào **câu đang bấm**, thẻ đổi nhãn "Ảnh tự tải lên" và hiện ảnh. Huỷ hộp thoại thì không đổi gì và bấm lại được. Bấm liên tiếp hai câu khác nhau thì cả hai đều được ghi. "Tự động" chỉ ảnh hưởng câu đó. Xoá dự án xoá luôn ảnh nó tải lên.
+
+**Commands run.** `npm run check` 0 · `npm run build` 0 · `check:renderer-globals` 0 undefined · `node tests/run-unit.js` **65/65** · `verify:css` 17/17 · Electron 9507: `ui-art-upload-flow-check` 10/10, `ui-item-art-check` 13/13, `ui-input-routing-check` 51/51, `ui-card-menu-check` 10/10.
+
+**Unverified.** Hộp thoại native thật vẫn chưa được điều khiển tự động (test thay đúng hàm mở hộp thoại); chưa thử tay trên máy giáo viên sau bản này.
+
+**Next.** Thử tay: dự án có sẵn → bước hoàn tất → tải ảnh cho câu 1 và câu 2; nếu vẫn lỗi, xem banner (không còn toast im lặng).
+## Handoff - Sửa "Tải ảnh lên" không gắn ảnh ở bước 5 (2026-10-29, DECISIONS #126)
+
+**Files changed.**
+- `src/renderer/features/wizard/step-generate.ts`: `wizardEnsureProjectSaved()` (lưu dự án trước khi patch/tải ảnh), lỗi hiển thị trong banner thay vì toast; `wizardUploadArt` dừng trước khi mở hộp thoại nếu không lưu được.
+- `tests/manual/lib/ui-check-lib.js`: retry "x is not defined" tối đa 3 lần (khởi động lạnh).
+- `tests/ui/ui-item-art-check.js`: thêm trường hợp "bước 5 không có projectId".
+- Docs: `DECISIONS.md` #126, `STATUS.md` (mục này).
+
+**Behavior.** Tải ảnh lên ở bước 5 giờ **luôn** gắn được: nếu dự án chưa lưu, hệ thống tự lưu trước; nếu không lưu được thì báo rõ trong banner và không mở hộp thoại chọn ảnh. Thẻ hiện "Ảnh tự tải lên" và ảnh thật, màn chơi dùng ảnh đó.
+
+**Root cause.** `wizardPatchItemAssets` yêu cầu `wizardState.projectId`, nhưng một dự án mở lại có thể đến bước 5 mà không có id; thao tác chỉ hiện toast rồi dừng. Bằng chứng: tệp ảnh 1914×1078 có trong `images/`, **không** id nào trong `game_projects`/`games`, và patch thẳng với projectId của giáo viên lưu thành công ngay.
+
+**Commands run.** `npm run check` 0 · `npm run build` 0 · `check:renderer-globals` 0 undefined · `node tests/run-unit.js` **65/65** · `verify:css` 17/17 · Electron 9503: `ui-item-art-check` 13/13, `ui-input-routing-check` 51/51, `ui-card-menu-check` 10/10.
+
+**Unverified.** Chưa thử tay bằng hộp thoại native sau bản sửa; dự án thật của giáo viên đã được kiểm ở mức dữ liệu + DOM + tải ảnh.
+
+**Next.** Nếu còn tái hiện: kiểm tra trong `data_json` của dự án có `ci-…` hay không (xem Traps của #126) để phân biệt lỗi lưu với lỗi hiển thị.
+## Handoff - Sửa ảnh tải lên không hiện trong thẻ câu hỏi (2026-10-29, DECISIONS #125)
+
+**Files changed.**
+- `src/renderer/features/wizard/step-generate.ts`: `wizardRepaintArtThumbs()` gọi sau `wizardUploadArt` (ngay + 700 ms).
+- `tests/manual/lib/ui-check-lib.js`: `evaluate` retry một lần cho "x is not defined" khi khởi động lạnh (lỗi khác vẫn ném).
+- `tests/ui/ui-item-art-check.js`: kiểm tra ảnh trong thẻ **load được** (thêm check "card picture actually loads").
+- Docs: `DECISIONS.md` #125, `STATUS.md` (mục này).
+
+**Behavior.** Tải ảnh lên xong, thumbnail trong thẻ và màn chơi hiện **ảnh vừa tải** ngay, không còn phải rời bước rồi quay lại.
+
+**Evidence (bản dựng thật).** Patch lưu `ci-…` đúng; màn chơi vẽ `stage-illustration is-custom is-stage` với `edugame-file://img/ci-…` và ảnh load `ok 1x1`; id lạ/`..%2F` bị từ chối. Thumbnail trước đây có cùng URL nhưng frame cũ được giữ đến lần paint sau — đó là phần đã sửa.
+
+**Commands run.** `npm run check` 0 · `npm run build` 0 · `check:renderer-globals` 0 undefined · `node tests/run-unit.js` **65/65** · Electron 9501: `ui-item-art-check` 12/12, `ui-input-routing-check` 51/51, `ui-card-menu-check` 10/10, `ui-lessons-paging-check` 10/10, `ui-results-paging-check` 11/11, `ui-ai-tasks-paging-check` 8/8.
+
+**Unverified.**
+- Chưa tải thử bằng hộp thoại native trên máy thật sau bản sửa này (kiểm thử đi qua cùng kênh với đường dẫn).
+- Không chứng minh được bằng ảnh chụp màn hình (không có công cụ chụp trong môi trường này); bằng chứng là DOM + sự kiện `onload`.
+
+**Next.** Thử tay: vào "Tạo từ giáo án" → [A] → tải một ảnh JPG lớn → thấy thumbnail đổi ngay; sau đó chơi thử để xem ảnh trong màn chơi.
+## Handoff - Câu hỏi đi cùng ảnh minh hoạ, tải ảnh từ máy (2026-10-29, DECISIONS #124)
+
+**Files changed.**
+- `src/services/custom-illustration.ts` (mới): `inspectCustomImage`, `isCustomImageId`, `customImageFileName`, `customImageMime`, `CUSTOM_IMAGE_MAX_BYTES`.
+- `src/main.ts`: scheme `edugame-file` (privileged) + `protocol.handle` chỉ phục vụ thư mục ảnh; IPC `files:import-illustration`, `files:delete-illustration`; dọn ảnh khi xoá trò chơi; `CUSTOM_IMAGE_DIR`.
+- `src/index.html`: CSP `img-src` thêm `edugame-file:`.
+- `src/renderer/features/game-illustration.ts`: `resolveStageIllustration` nhận `ci-…`; `stageIllustrationHtml` vẽ khung ảnh tự tải.
+- `src/renderer/features/wizard/step-generate.ts`: `wizardItemCardsPanel`, `wizardItemCard`, `wizardDraftItemAnswers`, `wizardUploadArt`; `wizardArtSelectedAsset` giữ `ci-…`; bỏ hai danh sách cũ khỏi cả hai màn hình bước 5.
+- `src/renderer/pages/create-wizard.ts`: action `upload-art`.
+- `src/preload.ts`, `src/shared/types.ts`: `importIllustration(sourcePath?)`, `deleteIllustration`.
+- `src/renderer/styles/app.css`: `.wizard-item-*`, `.stage-illustration.is-custom`.
+- Tests: `tests/unit/custom-illustration.test.ts` (mới), `tests/ui/ui-item-art-check.js` (mới).
+- Docs: `DECISIONS.md` #124, `STATUS.md` (mục này).
+
+**Behavior.** Bước 5 hiện mỗi câu hỏi trong một thẻ cùng ảnh của chính nó. "📷 Tải ảnh lên" chọn PNG/JPG/WEBP/GIF ≤8 MB, ảnh được copy vào thư mục dữ liệu và hiện ngay trong thẻ, ghi nhãn "Ảnh tự tải lên"; khi chơi, ảnh đó thay hình có sẵn. "Đổi hình có sẵn"/"Tự động"/"Tạo lại câu" vẫn nằm trong cùng thẻ. Không tốn token cho việc đổi ảnh.
+
+**Commands run.** `npm run check` 0 · `npm run build` 0 · `node tests/run-unit.js` **65/65** · `check:renderer-globals` 0 undefined · `verify:css` 17/17 · Electron: `ui-item-art-check` 11/11, `ui-input-routing-check` 51/51, `ui-card-menu-check` 10/10, `ui-lessons-paging-check` 10/10, `ui-results-paging-check` 11/11, `ui-ai-tasks-paging-check` 8/8.
+
+**Unverified.**
+- Chưa thử tay bằng hộp thoại chọn tệp native (kiểm thử đi qua `files:import-illustration` với đường dẫn cùng mọi kiểm tra).
+- Chưa thử ảnh lớn thật (JPEG 4000×3000) về cảm giác hiển thị/khung 16:10 trên máy chiếu.
+- Chưa thử đóng gói `.egame` có ảnh tự tải: gói chỉ chứa id, máy khác sẽ không có tệp ảnh (rơi về "chưa có hình"). Nếu cần mang ảnh sang máy khác, phải đóng gói kèm ảnh — việc riêng.
+- `npm run test:native` vẫn chưa chạy xong trong môi trường này.
+
+**Next.** (1) Thử tay: tải một ảnh JPEG lớn, mở trình chiếu, xem ảnh có bị cắt xấu không. (2) Quyết định có đóng gói ảnh trong `.egame` hay không.
+## Handoff - Lịch sử kết quả: phân trang + chọn nhiều để xoá (2026-10-29, DECISIONS #123)
+
+**Files changed.**
+- `src/renderer/pages/sessions.ts`: `SESSION_PAGE_SIZE`, `sessionCurrentPage`, `sessionSelectedIds`, `sessionPagerHtml`, `sessionSelectionBarHtml`, `sessionTableHeadHtml`, `sessionRowHtml`; bảng có cột checkbox + pager.
+- `src/renderer/core/controller.ts`: actions `session-page`, `session-select`, `session-clear-selection`, `session-delete-selected`; `updateSessionSelectionUi`; listener "Chọn tất cả trang này".
+- `src/renderer/shared.ts`: `sessionPage`, `sessionSelection` (kèm `lessonPage`, `lessonSelection` của #122).
+- `src/main.ts`: IPC `library:delete-sessions`.
+- `src/preload.ts`, `src/shared/types.ts`: `deleteSessions`.
+- Tests: `tests/ui/ui-results-paging-check.js` (mới).
+- Docs: `DECISIONS.md` #123, `STATUS.md` (mục này).
+
+**Behavior.** Lịch sử kết quả hiện 15 lượt/trang với Trước/Sau và "Trang X/Y · N lượt chơi". Tick từng dòng hoặc "Chọn tất cả trang này"; bộ đếm và nút "Xoá đã chọn (N)" cập nhật ngay, lựa chọn giữ khi sang trang. Xác nhận rồi xoá: đúng các lượt đã chọn, báo "Đã xoá N lượt chơi", trò chơi và giáo án không đổi.
+
+**Commands run.** `npm run check` 0 · `npm run build` 0 · `check:renderer-globals` 0 undefined · `verify:css` 17/17 · Electron: `ui-results-paging-check` 11/11, `ui-lessons-paging-check` 10/10, `ui-card-menu-check` 10/10, `ui-ai-tasks-paging-check` 8/8, `ui-input-routing-check` 51/51.
+
+**Unverified.**
+- `npm run test:native` vẫn chưa chạy xong trong môi trường này (xem #122) — đợt này không sửa `lesson-store` nên không thêm test native mới.
+- Chưa có UI check cho việc xoá kết quả **từng dòng** (chỉ có xoá hàng loạt); hiện trang chưa có nút xoá từng dòng.
+- Chưa thử tay trên 100+ lượt chơi thật.
+
+**Next.** (1) Nếu cần, thêm nút "Xoá lượt này" trong từng dòng (hiện chọn 1 dòng rồi xoá là được). (2) Chạy lại `npm run test:native`.
+## Handoff - Giáo án: phân trang + chọn nhiều để xoá (2026-10-29, DECISIONS #122)
+
+**Files changed.**
+- `src/renderer/pages/lesson-plans.ts`: `LESSON_PAGE_SIZE`, `lessonCurrentPage`, `lessonPagerHtml`, `lessonSelectedIds`, `lessonSelectBoxHtml`, `lessonSelectionBarHtml`; thẻ có checkbox; pager; ô Hỏi đáp dùng `library`; id ô tìm `#lessonSearch`.
+- `src/renderer/core/controller.ts`: actions `lesson-page`, `lesson-select`, `lesson-clear-selection`, `lesson-delete-selected`; `updateLessonSelectionUi`; listener "Chọn tất cả trang này"; listener tìm kiếm cho `#librarySearch` + `#lessonSearch`.
+- `src/renderer/core/bootstrap.ts`: `refreshLessonLibraryPage` reset trang/lựa chọn.
+- `src/services/lesson-store.ts`: `deleteDocuments(ids)` trả `{ deleted, missing, failed }`.
+- `src/main.ts`: IPC `lesson:delete-documents` (tối đa 200 id).
+- `src/preload.ts`: `deleteLessonDocuments`.
+- Tests: `tests/unit/lesson-store.test.ts` (batch delete; sửa fixture phân trang #121), `tests/ui/ui-lessons-paging-check.js` (mới).
+- Docs: `DECISIONS.md` #122, `STATUS.md` (mục này).
+
+**Behavior.** Giáo án hiện 12 tài liệu/trang với Trước/Sau/số trang. Tick checkbox từng thẻ hoặc "Chọn tất cả trang này"; bộ đếm và nút "Xoá đã chọn (N)" cập nhật ngay, lựa chọn giữ khi sang trang. Bấm xoá: xác nhận nêu tên và số phân tích, xoá đúng các tài liệu đã chọn (trò chơi đã lưu vẫn còn), báo "Đã xoá N giáo án". Ô chọn ở "Hỏi đáp chuyên sâu" giờ có danh sách tài liệu.
+
+**Commands run.** `npm run check` 0 · `npm run build` 0 · `check:renderer-globals` 0 undefined · `verify:css` 17/17 · unit từng nhóm (`game` 6/6, `question` 3/3, `classifier` 2/2, `draft-convert` 1/1, `renderer` 2/2) PASS; `node tests/run-unit.js` toàn bộ **64/64** nhưng **không gồm** `lesson-store` · Electron: `ui-lessons-paging-check` 10/10, `ui-card-menu-check` 10/10, `ui-ai-tasks-paging-check` 8/8, `ui-input-routing-check` 51/51.
+
+**Unverified.**
+- `npm run test:native` (lesson-store, có test `deleteDocuments` mới và test phân trang #121 đã sửa) **chưa chạy xong** trong môi trường này (lệnh treo/timeout khi khởi động Electron runner). Cần chạy lại `npm run test:native` trước khi phát hành.
+- Chưa thử tay xoá >12 tài liệu trên máy thật (test dùng tài liệu tổng hợp).
+
+**Next.** (1) Chạy `npm run test:native` và xác nhận 2 khối test mới. (2) Chạy `ui-play-surface-check` đủ độ phân giải.
+## Handoff - Tác vụ AI có phân trang, giữ 30 tác vụ (2026-10-29, DECISIONS #121)
+
+**Files changed.**
+- `src/main.ts`: `AI_TASK_HISTORY_LIMIT = 30`; `recordAiTask` prune sau mỗi lần ghi; `ai:tasks` nhận `offset`, trả `total`, prune trước khi đọc.
+- `src/services/lesson-store.ts`: `listAiTasks(limit, offset)`, `countAiTasks()`.
+- `src/shared/types.ts`: kiểu IPC `listAiTasks` có `offset` và `total`.
+- `src/renderer/features/settings.ts`: `AI_TASK_PAGE_SIZE`, `aiTaskPage`, pager (Trước/Sau + "Trang X/3 · N tác vụ"), "Làm mới" về trang 1, tự làm mới khi trạng thái live đổi.
+- `src/renderer/pages/settings.ts`: mô tả nói rõ 10 tác vụ/trang và giữ 30 tác vụ gần nhất.
+- Tests: `tests/unit/lesson-store.test.ts` (phân trang + prune 30), `tests/ui/ui-ai-tasks-paging-check.js` (mới).
+- Docs: `DECISIONS.md` #121, `STATUS.md` (mục này).
+
+**Behavior.** Cài đặt → Tác vụ AI: 10 tác vụ một trang với nút Trước/Sau và dòng "Trang 1/3 · 30 tác vụ gần nhất (cũ hơn tự động xoá)". Mỗi tác vụ mới ghi xong, tác vụ cũ nhất bị xoá; danh sách tự cập nhật khi đang mở trang.
+
+**Commands run.** `npm run check` 0 · `npm run build` 0 · `check:renderer-globals` 0 undefined · `npm run test:native` PASS · `node tests/run-unit.js` **64/64** · `verify:css` 17/17 · `node tests/ui/ui-ai-tasks-paging-check.js 9491` **8/8** · `ui-card-menu-check` 10/10 · `ui-input-routing-check` 51/51.
+
+**Unverified.** Chưa thử tay trên máy có hơn 30 tác vụ thật trong nhiều ngày; chưa chạy `ui-play-surface-check` trong đợt này.
+
+**Next.** Nếu giáo viên cần xem lại lịch sử lâu dài, cân nhắc xuất CSV trước khi prune thay vì tăng giới hạn.
+## Handoff - Menu "•••" tự đóng (2026-10-29, DECISIONS #120)
+
+**Files changed.**
+- `src/renderer/core/controller.ts`: `closeGameMenus()` dùng chung; toggle đóng hết trước khi mở; `navigate()` và listener `[data-action]` đóng menu trước khi hành động.
+- `src/renderer/core/bootstrap.ts`: click ngoài (document, capture), Escape, `scroll` capture, `resize` đều gọi `closeGameMenus()`.
+- `tests/ui/ui-card-menu-check.js` (mới): 10 check hồi quy cho menu thẻ.
+- Docs: `DECISIONS.md` #120, `STATUS.md` (mục này).
+
+**Behavior.** Menu "•••" của thẻ trò chơi đóng ngay khi: chọn một mục (LAN / Chỉnh sửa / Xuất gói / Xoá), bấm bất kỳ chỗ nào ngoài menu, nhấn Escape, cuộn trang, đổi kích thước cửa sổ, hoặc chuyển trang. Chỉ một menu mở một lúc.
+
+**Commands run.** `npm run check` 0 · `npm run build` 0 · `check:renderer-globals` 0 undefined · `node tests/ui/ui-card-menu-check.js 9490` **10/10** · `node tests/ui/ui-input-routing-check.js 9490` 51/51 · `node tests/run-unit.js` **64/64**.
+
+**Unverified.** Chưa thử bằng chuột thật trên màn hình cảm ứng (chỉ mô phỏng sự kiện qua CDP); chưa chạy `ui-play-surface-check` trong đợt này.
+
+**Next.** Thêm `ui-card-menu-check` vào bộ lệnh kiểm tra UI định kỳ (nếu có script tổng hợp).
+## Handoff - Thẻ trò chơi gọn + menu 3 chấm + xoá giáo án (2026-10-29, DECISIONS #119)
+
+**Files changed.**
+- `src/renderer/shared.ts`: `gameCard` chỉ còn "Chơi ngay"/"Toàn màn hình" + menu "•••" (LAN, Chỉnh sửa, Xuất gói `.egame`, Xoá khi `deletable`).
+- `src/renderer/core/controller.ts`: `wireGameMenus` (một menu mở), action `delete-lesson` (xác nhận, xoá, làm mới, toast đúng kết quả boolean).
+- `src/renderer/core/bootstrap.ts`: Escape và click ra ngoài / resize đóng menu.
+- `src/renderer/pages/library.ts`: bỏ "⇩ Xuất game" khỏi thanh công cụ.
+- `src/renderer/pages/lesson-plans.ts`: nút "🗑 Xoá" trên mỗi thẻ giáo án.
+- `src/services/lesson-store.ts`: `deleteDocument` xoá con-trước-cha trong transaction + tệp văn bản (async, best-effort), tuỳ chọn `{ voidIO }`.
+- `src/main.ts`: IPC `lesson:delete-document`.
+- `src/preload.ts`: `deleteLessonDocument`.
+- Docs: `DECISIONS.md` #119, `STATUS.md` (mục này).
+
+**Behavior.** Thư viện: mỗi thẻ chỉ có hai nút chính; "•••" mở menu Chơi LAN / Chỉnh sửa / Xuất gói .egame / Xoá trò chơi; bấm ra ngoài, Escape hoặc đổi cửa sổ là đóng. Thanh công cụ chỉ còn tìm kiếm, bộ lọc, "Nhập gói .egame". Trang Giáo án: mỗi tài liệu có "Xoá", xác nhận nêu rõ số phân tích bị xoá và rằng trò chơi đã lưu vẫn giữ.
+
+**Commands run.** `npm run check` 0 · `npm run build` 0 · `node tests/run-unit.js` **64/64** · `npm run test:native` PASS · `check:renderer-globals` 0 undefined · `verify:css` 17/17 · Electron (CDP 9489): card/menu/toolbar/lesson-delete như mô tả, `ui-input-routing-check` 51/51, `ui-classifier-outline-check` 14/14, `ui-wizard-cancel-genre-check` 8/8, `ui-race-treasure-check` 18/18.
+
+**Unverified.**
+- Chưa chạy `ui-play-surface-check` sau đợt này (chỉ đổi thẻ thư viện và nút giáo án).
+- Hành vi menu trên màn hình cảm ứng/máy chiếu chưa thử tay; menu dùng click, không mở bằng hover.
+- Chưa có UI check tự động cho menu "•••" (chỉ kiểm qua CDP một lần); nếu cần, thêm vào `tests/ui/`.
+
+**Next.** (1) Thêm check UI cho menu "•••" và xoá giáo án vào bộ `tests/ui/`. (2) Thử tay trên máy chiếu.
+## Handoff - Nhập gói .egame (2026-10-29, DECISIONS #118)
+
+**Files changed.**
+- `src/services/game-package.ts` (mới): `readGamePackage`, `stripImportedAssetUrls`, `IMPORT_GAME_MAX_BYTES`, `collectItemAssets`/`reattachItemAssets`, `validateQuizAnswers`.
+- `src/main.ts`: `files:import-game` chỉ mở hộp thoại + giới hạn 20 MB + gọi `readGamePackage`.
+- `src/renderer/core/controller.ts`: `import-game` đọc gói, lưu vào thư viện, làm mới và báo kết quả; lỗi được báo bằng toast tiếng Việt.
+- `src/renderer/pages/library.ts`: nút "⇧ Nhập gói .egame" cạnh "⇩ Xuất game".
+- `src/renderer/pages/settings.ts`: nút nhập trong thẻ "Định dạng gói".
+- Tests: `tests/unit/game-package.test.ts` (mới; wrapper/trần, id mới, bỏ URL tài nguyên, giữ minh hoạ, từ chối JSON hỏng/thiếu câu hỏi/quiz <2 phương án/race thiếu đội, round-trip đúng wrapper export).
+- Docs: `DECISIONS.md` #118, `STATUS.md` (mục này).
+
+**Behavior.** Thư viện (và Cài đặt) có nút nhập gói `.egame`/`.json`. Chọn tệp → gói được kiểm tra, mọi tài nguyên ngoài bị bỏ, trò chơi vào Thư viện với id mới (không ghi đè bản cũ), thông báo "Đã nhập “…” vào Thư viện trò chơi". Huỷ hộp thoại thì không thay đổi gì. Tệp hỏng báo câu tiếng Việt cụ thể.
+
+**Commands run.** `npm run check` 0 · `npm run build` 0 · `node tests/run-unit.js` **64/64** · `npm run check:renderer-globals` 0 undefined · `npm run verify:css` 17/17 · Electron (CDP): nút nhập hiện ở Thư viện, `window.eduGame.importGame` có trên bridge.
+
+**Unverified.**
+- Luồng bấm nút → chọn tệp trong hộp thoại native → lưu chưa có UI check tự động (hộp thoại native không điều khiển được bằng CDP); cần thử tay một lần: xuất một game, xoá, nhập lại, chơi thử.
+- Chưa thử gói tạo bởi phiên bản app cũ hơn (schemaVersion cũ) ngoài hình dạng "game trần" đã có trong test.
+
+**Next.** (1) Thử tay vòng xuất → xoá → nhập → chơi trên 2 độ phân giải. (2) Nếu giáo viên cần, thêm "Nhập nhiều gói một lúc" (multiSelections) — hiện mỗi lần một gói.
+## Handoff - Đáp án không lẫn vào câu hỏi + ngân hàng đi thẳng bước lưu (2026-10-28, DECISIONS #117)
+
+**Files changed.**
+- `src/services/question-import.ts`: `splitTrailingAnswer`, `stripTrailingAnswer`, `answerLetters` (ranh giới từ), `answerMatchesText`, nhận dòng chỉ có nội dung phương án làm đáp án khi chưa có đáp án nêu phương án đó.
+- `src/renderer/features/wizard/state.ts`: `wizardUseImportedQuestions` lưu dự án rồi dựng game local (`localOnly`), sang bước `generate`; `wizardBuildGameAfterSave`, `wizardApplyConfigToGame`; nhánh [B] xoá cờ dựng-từ-ngân-hàng.
+- `src/renderer/features/wizard/step-configure.ts`: `wizardIsBankRun`, `wizardBankConfigureNote` (ẩn Fast/Thinking), nút "Xong" cho lần chạy ngân hàng, áp tên/chủ đề/môn/lớp vào snapshot khi rời bước.
+- `src/renderer/features/wizard/step-generate.ts`: màn hình "Bước 4 · Hoàn tất trò chơi" cho lần chạy ngân hàng, nút chính `save-game` "Lưu vào thư viện".
+- `src/renderer/features/wizard/step-recommend.ts`: nút "Tạo trò chơi", quay lại bước 3 khi game đã có thì mở bước hoàn tất chứ không dựng lại.
+- `src/main.ts`, `src/shared/types.ts`: `localOnly` cho `lesson:generate`, lỗi rõ ràng khi thiếu draft soạn sẵn.
+- Tests: `tests/unit/question-import.test.ts` (5 kiểm tra #117), `tests/ui/ui-input-routing-check.js` (51 check).
+- Docs: `DECISIONS.md` #117, `STATUS.md` (mục này).
+
+**Behavior.** `B. Huế  Đáp án: B` → phương án B là "Huế", đáp án B. `Đáp án đúng: C (Ba)` → đáp án C. `Đáp án: Ba` → đáp án C. `Đáp án: C` rồi dòng "Ba" → vẫn C. Chọn [A]: bước 3 "Tạo trò chơi" dựng game ngay (không AI), sang bước 4 không có Fast/Thinking, nút chính "Lưu vào thư viện"; bước 3 của lần chạy đó chỉ còn thông tin trò chơi (không có lựa chọn AI).
+
+**Commands run.** `npm run check` 0 · `npm run build` 0 · `node tests/run-unit.js` **63/63** · `npm run check:renderer-globals` 0 undefined · `npm run verify:css` 17/17 · Electron (CDP 9483): `ui-input-routing-check` **51/51**, `ui-classifier-outline-check` 14/14, `ui-wizard-cancel-genre-check` 8/8, `ui-race-treasure-check` 18/18.
+
+**Unverified.**
+- Chưa chạy `ui-play-surface-check` đủ độ phân giải sau thay đổi này.
+- Chưa thử tay luồng "quay lại bước 3 → đổi thể loại khác arena" trên UI thật sau khi game đã dựng (mã có xử lý: draft cũ bị thay khi đổi thể loại, game cũ bị bỏ).
+- Title/chủ đề sửa ở bước 3 được áp vào snapshot trước khi lưu, nhưng mô tả/độ khó vẫn theo bản đã dựng.
+
+**Next.** (1) Thử tay: ngân hàng → [A] → sửa tên → Lưu → kiểm tra thư viện và chơi. (2) Chạy `ui-play-surface-check` đủ độ phân giải. (3) Nếu giáo viên muốn bước 4 đi thẳng không qua cấu hình, thêm tuỳ chọn "Lưu ngay" ở bước 3.
+## Handoff - Làm sạch ký hiệu ngân hàng câu hỏi (2026-10-28, DECISIONS #116)
+
+**Context.** Kế hoạch `.kilo/plans/1793193273992-question-bank-symbol-cleanup-plan.md`. Văn bản thật của giáo viên (`👉 Đáp án đúng: B`, phương án cùng dòng với đề) bị báo "Chưa có câu hỏi nào dùng được".
+
+**Files changed.**
+- `src/services/question-text.ts`: `stripLeadingSymbols`, `cleanQuestionLine`, `cleanQuestionText`, `looksLikeQuestionBankText`; `decodeHtmlEntities` decode lặp ≤3 lượt + bảng tên Latin-1/Word; `normalizeQuestionLine` dùng nó.
+- `src/services/question-import.ts`: làm sạch trong `parseQuestionsFromText`; `splitInlineQuestion` tách câu dán một dòng tại mỗi nhãn (≥2 nhãn phương án mới cắt); `sourceLine` giữ dòng gốc.
+- `src/services/input-classifier.ts`: `classifiedLines`; `hasAnswerMarker` đếm từng dòng; `markBlockLines` để dòng trong khối câu hỏi không bị tính là văn xuôi; nhánh "một câu soạn sẵn" → `questions`.
+- `src/main.ts`: làm sạch một lần trong `lesson:classify-input`, dùng cho classify + parse + compat.
+- `src/renderer/features/wizard/state.ts`: `wizardHasRecognizedQuestions`; `wizardUsableParsed` nhận câu chỉ thiếu giải thích.
+- `src/renderer/features/wizard/step-input.ts`: hộp ngân hàng hiện cả khi classifier chọn nhánh khác nhưng đã nhận diện câu; "Tiếp tục" đi nhánh câu hỏi cho một câu.
+- Tests: `tests/unit/question-text.test.ts` (mới), `tests/unit/question-import.test.ts` (nhánh #116), `tests/ui/ui-input-routing-check.js` (49 check).
+- Docs: `DECISIONS.md` #116, `STATUS.md` (mục này), `PROJECT_MAP.md`.
+
+**Behavior.** Dán đúng văn bản của giáo viên (2 câu, phương án A cùng dòng với đề, `👉 Đáp án đúng: B/C`) → tài liệu được nhận là ngân hàng, cả 2 câu vào `parsed`, đáp án B/C đọc đúng; chỉ còn cảnh báo "chưa có Giải thích" (chặn lưu, không tự viết). Một câu duy nhất cũng đi nhánh câu hỏi, không gọi model và không rơi vào lỗi cấu trúc tài liệu. Ký hiệu giữa nội dung (`→`, `★`) không bị đụng; giáo án văn xuôi không bị làm sạch.
+
+**Commands run.** `npm run check` 0 · `npm run build` 0 · `node tests/run-unit.js` **63/63** · `npm run check:renderer-globals` 0 undefined · `npm run verify:css` 17/17 · Electron (CDP 9475–9478): `ui-input-routing-check` **49/49**, `ui-classifier-outline-check` 14/14, `ui-wizard-cancel-genre-check` 8/8, `ui-race-treasure-check` 18/18, `ui-play-surface-check` 1920×1080 toàn bộ PASS.
+
+**Unverified.**
+- `ui-play-surface-check` cho 1366×768 và các độ phân giải sau chưa chạy xong (timeout của công cụ, không phải lỗi kiểm tra); cần chạy lại trọn bộ ở lần kiểm tra UI kế tiếp.
+- Chưa thử trên ngân hàng thật khác (PDF→Word, Moodle export) ngoài fixture của giáo viên.
+- Phương án A viết cùng dòng với đề nhưng **cuối dòng** (không có phương án B cùng dòng) được giữ trong đề, không thành phương án: đây là lựa chọn có chủ ý (tránh cắt chữ của phương án thành dòng rác); nếu giáo viên cần, phải xuống dòng cho phương án A.
+
+**Next.** (1) Chạy lại `ui-play-surface-check` đủ độ phân giải. (2) Thử với ngân hàng thật từ Word/Moodle và ghi lại dạng còn sai. (3) Cân nhắc hộp thông báo "đã làm sạch biểu tượng" ở bước 1 (kế hoạch mục 3.6) nếu cần minh bạch hơn.
+## Handoff - Ngân hàng câu hỏi linh hoạt + gợi ý thể loại theo dữ liệu (2026-10-28, DECISIONS #115)
+
+**Context.** Kế hoạch `.kilo/plans/1793156341247-flexible-question-recognition-plan.md`. Nhánh "câu hỏi soạn sẵn" chỉ đọc A–D, mất câu thiếu đáp án, và luôn ép thể loại `arena`. Đợt này mở rộng parser và thêm bước chấm điểm tương thích trước khi tạo trò chơi — không xây lại luồng, không đổi schema.
+
+**Files changed.**
+- `src/services/question-text.ts` (mới): `decodeHtmlEntities` + `normalizeQuestionLine(s)` + `normalizePromptKey`, dùng chung cho classifier/parser.
+- `src/services/question-import.ts`: 7 loại câu, nhãn A–H/`A1`/số, phương án nhiều dòng, `ParsedQuestion[]` (`parsed`) với `status`/`warnings`/`sourceLine`/`duplicateOf`/`pairs`, nhóm-theo-dòng-trống khi không đánh số.
+- `src/services/question-compatibility.ts` (mới): `evaluateCompatibility`, `recommendedGame`, `usableQuestions`, `blockedQuestions`, `COMPATIBILITY_GAME_ORDER`, `GAME_LABELS`.
+- `src/services/input-classifier.ts`: `OPTION_LINE` A–H + `A1`, `OPTION_NUMBER_LINE`, `PAIR_LINE`, `MULTI_ANSWER_VALUE`, `TRUE_FALSE_VALUE`; `ANSWER_LINE`/`ANSWER_VALUE_LINE` dựng chung từ một chuỗi hằng, neo đầu dòng, thêm `ĐA:` và marker dạng HTML entity.
+- `src/services/draft-convert.ts`: gap `race-text-only` cho câu điền khuyết/trả lời ngắn khi đích là Đường đua, gap `too-many-options` cho câu hơn 6 phương án.
+- `src/main.ts`: `lesson:classify-input` trả `compatibility`, log `parseMs`/`compatMs`.
+- `src/shared/types.ts`: kiểu IPC `compatibility`.
+- `src/renderer/features/wizard/state.ts`: `parsedQuestions`, `questionCompatibility`, `draftOrigin`, `importedMode`; `wizardRecommendedGame`, `wizardCompatibilityFor`, `wizardUsableParsed`, `wizardBlockedParsed`, `wizardQuestionBankStats`, `wizardStartGameFromBank`, `wizardAnalyzeWithBank`, `wizardSetImportedOrigin`; `wizardUseImportedQuestions` chỉ dùng câu `ready` và đúng thể loại.
+- `src/renderer/features/wizard/step-input.ts`: hộp ngân hàng câu hỏi (số câu · cần xem lại · không tương thích, thể loại đề xuất) + hai nút [A]/[B]; "Tiếp tục" của ngân hàng sang bước 3 (không lưu); tách `wizardInputNextLesson`.
+- `src/renderer/features/wizard/step-recommend.ts`: `renderWizardRecommendFromBank` (5 thẻ chấm điểm, "Được đề xuất", lý do, số liệu), ghi chú inline câu bị loại + "Bỏ các câu đó", `wizardRecommendNext` chuyển đổi theo thể loại đã chọn (không chuyển lại nếu draft đã đúng thể loại).
+- `src/renderer/pages/create-wizard.ts`: action `bank-create-now`, `bank-analyze`, `bank-drop-blocked`.
+- Tests: `tests/unit/question-import.test.ts` (mở rộng), `tests/unit/question-compatibility.test.ts` (mới), `tests/ui/ui-input-routing-check.js` (21 → 40 check).
+- Docs: `docs/DECISIONS.md` #115, file này.
+
+**Behavior.**
+- Ngân hàng câu hỏi được nhận diện đầy đủ: trắc nghiệm 2–8 phương án, `A1`, chữ thường, phương án nhiều dòng, Đúng/Sai (kể cả `Đ/S:`), `multi-tf`, `multi-answer` (dấu phẩy / "và" / dấu chấm phẩy), điền khuyết (`___`, "Điền"), trả lời ngắn ("Trả lời:"/"Nêu"), ghép cặp `A. … – 1. …`. Mọi khối có nội dung đều có `status` — không câu nào biến mất im lặng.
+- Câu `multi-*`, câu hơn 6 phương án, câu ghép cặp **không** vào draft; câu thiếu đáp án/phương án ở lại với cảnh báo cá nhân hoá; câu trùng giữ cả hai và ghi `duplicateOf`.
+- Bước 1 có hai lựa chọn thật: [A] tạo trò chơi ngay (không AI), [B] phân tích & thêm câu hỏi (pipeline cũ giữ ngân hàng).
+- Bước 3 khi có ngân hàng: 5 thể loại chấm điểm từ câu hỏi thật, thể loại điểm cao nhất mang nhãn "Được đề xuất" kèm lý do và "Dùng được X/N câu · cần xem lại Y · không tương thích Z". Đổi thể loại tính lại ngay, không gọi AI/convert/generate. Thể loại không phủ hết hiện ghi chú inline với "Đổi sang thể loại khác" hoặc "Bỏ các câu đó" (chỉ bấm tay mới bỏ).
+
+**Commands run.**
+- `npm run check` → 0 lỗi. `npm run build` → 0. `node tests/run-unit.js` → **62/62** suite. `npm run check:renderer-globals` → 0 undefined (579 hàm). `npm run verify:css` → 17/17.
+- Electron (CDP 9470; phải xoá biến `ELECTRON_RUN_AS_NODE` trước khi khởi động, nếu không Electron chạy như Node và app chết ngay): `ui-input-routing-check` **40/40**, `ui-classifier-outline-check` 14/14, `ui-wizard-cancel-genre-check` 8/8, `ui-race-treasure-check` 18/18, `ui-play-surface-check` **154/156** (baseline cũ, 2 lỗi tràn quiz).
+
+**Unverified.**
+- Chưa thử tay trên máy chiếu với ngân hàng thật do giáo viên soạn (chỉ fixture trong test).
+- `matching` hiện chỉ *nhận diện* và báo `incompatible`; chưa có đường tự sinh cặp cho thể loại Ghép cặp từ ngân hàng ghép cặp (ngoài phạm vi kế hoạch).
+- `wizardSetImportedOrigin` có sẵn để đánh dấu câu nguồn/AI nhưng nhánh [B] hiện đi pipeline giáo án hiện có; việc **hợp nhất** câu AI với câu giáo viên chưa làm (cần quyết định riêng về cách trộn).
+- `lan-smoke` và các check LAN không chạy lại trong đợt này (không đụng mã LAN).
+
+**Next.** (1) Chạy thử 1–2 ngân hàng thật của giáo viên và ghi lại trường hợp parser đoán sai. (2) Quyết định cách trộn câu AI với câu giáo viên ở nhánh [B] (hiện chỉ giữ ngân hàng). (3) Nếu cần, cho Ghép cặp nhận `pairs` từ ngân hàng qua một API riêng thay vì `GameQuestion`.
+
+## Handoff - Sửa 14 finding review: LAN rò dữ liệu, treasure không lưu được, classifier/parser lệch (2026-10-28, DECISIONS #114)
+
+**Context.** Review uncommitted trên bản LAN + phân luồng/MiniLM. 6 track (security, business logic, performance, deploy safety, duplication, dead code). Đã sửa **toàn bộ** 14 finding được chấp nhận, và **đính chính 3 finding sai**.
+
+**Fixed.**
+- **CRITICAL — Chuyển sang Kho báu không lưu được.** `toTreasure` đặt `intro`/`story`/`taskDescription` rỗng nhưng schema yêu cầu `nonEmpty`. Đo thật: `convertDraft` trả `complete: true` rồi `parseGameDraft` ném `STORE_INVALID_PROJECT`. Nay `convertDraft` từ chối target `treasure` khi nguồn không có narrative, trả gap `needs-narrative` (không bịa nội dung).
+- **CRITICAL — Rò đáp án và điểm học sinh khác xuống điện thoại.** `phoneSnapshot` gửi nguyên `lastResult` (gồm `correctOptionId` + `perPlayer[]` của cả lớp) cho mọi máy khi lượt đóng. Nay gửi **theo từng người**: chỉ dòng của chính em đó, không có key.
+- **WARNING — Socket chưa join vẫn nhận state.** `io.emit` cho mọi kết nối, kể cả client không có mã phòng, làm lộ `roomCode` (bí mật join duy nhất) + `prompt`. Nay có `joinedSockets` map; chỉ socket đã join nhận `lan:state`, và `roomCode` bị bỏ khỏi payload (phone lấy từ URL).
+- **WARNING — Classifier và parser lệch nhau.** `Đáp án - B`, `Đáp án = B`, `Câu hỏi 1:` được classifier gọi là `questions` nhưng parser ra **0 câu**, khiến giáo viên bấm "Dùng câu hỏi có sẵn" rồi nhận "Chưa có câu hỏi nào dùng được". Nay `question-import.ts` import regex dùng chung từ `input-classifier.ts`; test mới chạy classifier rồi parser trên mọi fixture.
+- **WARNING — Câu thiếu "Giải thích:" bị xoá nhưng thông báo nói ngược.** Nay câu được **giữ** (với `explanation: ''`) và báo issue; wizard chặn lưu kèm thông báo đúng ("Còn N câu chưa có Giải thích:"), không để schema nổ khó hiểu.
+- **WARNING — Nhánh không-AI dựa chỉ vào `!analysisId`.** Thêm `GameProject.draftSource = 'imported-questions'` (field tuỳ chọn, zod bỏ qua nên không đổi schema lưu); `lesson:generate` chỉ bỏ qua model khi có cờ này.
+- **WARNING — Phân loại chạy chồng.** Thêm `classifySeq`; kết quả cũ bị bỏ thay vì ghi đè `importedQuestions` của văn bản mới.
+- **WARNING — Embed lại 12 anchor hằng số mỗi lần.** Cache vector anchor theo `model.id`.
+- **SUGGESTION** — header `X-Frame-Options: DENY` + `frame-ancestors 'none'`; giới hạn `text` IPC ở 6.000 ký tự; xoá dead code (`LAN_UI.attachToResults`, `LanChannel`, `centroid`); dùng `LAN_START_CHANNEL_RESULT` trong `lan-ipc.ts`; thêm `engines.node >= 22.13`; `build.files` loại `@types/**`, `*.d.ts`, `*.map`, thư mục test khỏi asar.
+
+**Đính chính (finding tôi kết luận SAI, không sửa code).**
+- **`@types/node` thành package production KHÔNG phải lỗi lockfile.** Chuỗi `socket.io → engine.io → @types/ws → @types/node` đều là prod, nên npm bỏ `dev: true` là đúng. Rủi ro thật là typings vào asar, đã xử lý bằng `build.files` loại trừ.
+- **`convertDraft` same-type passthrough không phải lỗ hổng**: caller (`wizardConvertOrDiscardForGenre`) đã chặn khi `source.gameType === target`, và renderer không tự gửi draft tuỳ ý.
+- **`reconnect` token replay** hạ xuống không sửa: token 48 hex không đoán được; chỉ lộ nếu giáo viên chia sẻ URL có `?token=`.
+
+**Verification.** `npm run check` 0 · `npm run build` 0 · `node tests/run-unit.js` **61/61** · `check:renderer-globals` 0 undefined (579 hàm) · `verify:css` 17/17 · `lan-smoke` **20/20** (thêm check "socket chưa join không nhận state").
+Electron thật: `ui-classifier-outline-check` 14/14 · `ui-input-routing-check` **21/21** · `ui-wizard-cancel-genre-check` **8/8** · `ui-lan-card-start-check` 12/12 · `ui-matching-finish-check` 22/22 · `ui-lan-wiring-check` 7/7 · `ui-lan-treasure-finish-check` 5/5 · `ui-race-treasure-check` 18/18 · `ui-play-surface-check` 154/156 (2 lỗi tràn quiz có từ trước).
+
+**Traps.**
+- **Test mới "every draft the converter returns passes the store schema" bắt được 3 lỗi thật** mà test cũ bỏ sót (treasure narrative, `scenario` thiếu explanation, race thiếu đội). Giữ test này: nó kiểm bằng chính `parseGameDraft` mà `saveProject` dùng.
+- **`tsc` không bắt khai báo `const` trùng trong script `@ts-nocheck`**; `tests/unit/renderer-load-order.test.js` bắt được (đã cứu lần này với `missingWhy`). Luôn chạy `npm test`, không chỉ `npm run check`.
+- Khi thêm field vào `GameProject`, zod mặc định **bỏ qua field thừa**, nên field tuỳ chọn không cần migration — nhưng phải chắc store không dùng `.strict()`.
+- Đổi hành vi chuyển đổi cần cập nhật cả UI check: `arena→treasure` giờ **bị từ chối có lý do**, `arena→race` là đường chuyển được.
+
+## Handoff - Phân loại 4 nhóm + lớp xác nhận MiniLM + đo thời gian (2026-10-28, DECISIONS #113)
+
+**Context.** Spec `docs/archive/specs/update_quy_trinh_2.txt` yêu cầu phân loại theo 4 nhóm, dùng MiniLM có kiểm soát, cảnh báo Path C, và đo hiệu năng. Audit cho thấy chỉ có `lesson`/`questions`, chưa đo thời gian bước, Path C không nói AI sẽ viết gì. Quyết định với người dùng: **luôn chạy MiniLM** nhưng **quy tắc trước, MiniLM chỉ xác nhận**; không chặn giáo viên, không tự tải model.
+
+**Decision.**
+- **Nhánh `outline`** (`input-classifier.ts`): có ≥ 2 tiêu đề mục, ≤ 1 đoạn văn dài, < 2 câu hỏi, trung bình ≤ 90 ký tự/dòng. Ngưỡng là hằng số có tên (`OUTLINE_MIN_MARKERS`, `OUTLINE_MAX_PROSE_BLOCKS`, `OUTLINE_MAX_CHARS_PER_LINE`) để test chốt biên.
+- **`outline` là *nhãn*, không phải đường thứ ba.** `resolveInputKind()` vẫn chỉ trả `questions | lesson`, nên dàn ý đi đường phân tích giáo án hiện có — không mở nhánh AI mới, không đụng Fast/Think.
+- **MiniLM là lớp xác nhận** (`input-classifier-semantic.ts`, thuần): chỉ lật khi (1) quy tắc có độ tin cậy `< 0.8`, (2) mô hình thích nhóm khác, (3) chênh ≥ `SEMANTIC_FLIP_MARGIN = 0.08`. Ba điều kiện này là chống dao động; test có ca sát biên.
+- **Cổng an toàn bắt buộc khi lật sang `questions`**: chỉ cho lật nếu `parseQuestionsFromText(text)` nhận ra **≥ 2 câu**. Lý do là lỗi đo được trong app: câu văn ngắn "Quang hợp là quá trình…" bị lật thành `questions` với **0 câu hỏi**, đủ để đẩy giáo viên vào nhánh bỏ qua phân tích mà không có gì để nhập.
+- **Không dùng Qwen ở bước 2.** Chỉ `ensureEmbeddingRuntime()` (process embedding riêng, tái dùng nếu đã chạy). Lỗi/chưa cài ⇒ giữ kết quả quy tắc và trả `semantic: 'unavailable'` để UI nói đúng sự thật.
+- **Cache phân loại** (`buildClassificationCacheKey`): `CLASSIFIER_VERSION` + embedding model id + sha256 văn bản + độ dài. Chỉ trong bộ nhớ (giới hạn 50) — **không thêm migration** ở đợt này.
+- **Path C**: hai hộp thoại đổi thể loại nay nêu rõ AI sẽ viết thêm gì (lấy từ `gaps`), và nói nội dung gốc vẫn được giữ trước khi thay bản nháp.
+- **Đo hiệu năng**: `classify.done` (mới) ghi `ruleMs`/`semanticMs`/`totalMs`; `analyze.done` và `generate.done` thêm `durationMs`; `generate.from-questions` ghi `durationMs` để so với đường AI. Log đã có redaction, test xác nhận không lộ nội dung bài học.
+
+**Verification.** `npm run check` 0 · `npm run build` 0 · `node tests/run-unit.js` **61/61** (mới: `input-classifier-semantic` 15; `input-classifier` +6 = 19; `lesson-cache` +6 assertion) · `check:renderer-globals` 0 undefined (579 hàm) · `verify:css` 17/17.
+Electron thật: `ui-classifier-outline-check` **14/14** — dàn ý ⇒ `outline`, vẫn đi đường phân tích, có thông báo §7, có lựa chọn "Dàn ý"; giáo án viết đủ không bị cảnh báo dàn ý; câu hỏi soạn sẵn vẫn "Dùng câu hỏi có sẵn"; **câu văn ngắn không bị lật** vào nhánh câu hỏi.
+Đo thật trong app: phân loại lần đầu (có MiniLM) **252 ms**, lần sau (cache) **1 ms**.
+Hồi quy: `ui-input-routing-check` 20/20 · `ui-wizard-cancel-genre-check` 7/7 · `ui-lan-treasure-finish-check` 5/5 · `ui-matching-finish-check` 22/22 · `ui-race-treasure-check` 18/18 · `lan-smoke` 19/19 · `ui-play-surface-check` 154/156 (2 lỗi tràn quiz có từ trước).
+
+**Traps.**
+- **`npm run check` KHÔNG bắt khai báo trùng `const` trong `src/main.ts`.** Tôi khai báo lại `analyzeStartedAt` và tsc báo sạch, nhưng app **crash ngay khi khởi động** (`Identifier ... already been declared`). `main.ts` lớn và có vùng `@ts-nocheck`; sau khi sửa phải **chạy app thật** hoặc kiểm cú pháp `dist/src/main.js`, đừng tin tsc một mình.
+- Lật sang `questions` là thay đổi **có hệ quả** (bỏ qua phân tích, chuyển sang nhập câu hỏi) nên luôn kiểm bằng `parseQuestionsFromText` trước khi chấp nhận.
+- `ambiguous` được "chốt" thành `lesson` ngay trong `confirmWithSemantics`, nên caller không phải gọi lại `resolveInputKind`.
+- Kết quả cache trả `semanticMs: 0`; muốn có số MiniLM phải dùng văn bản mới (test dùng `Date.now()` trong nội dung).
+
+## Handoff - Sửa 2 lỗi CRITICAL + 3 WARNING từ code review (2026-10-28, DECISIONS #112)
+
+**Context.** Review `/review uncommitted` trên bản LAN + phân luồng đầu vào phát hiện 2 lỗi CRITICAL, 5 WARNING, 2 SUGGESTION. Đã sửa CRITICAL + các WARNING chính (theo lựa chọn của người dùng). Hai SUGGESTION (CSP `frame-ancestors`, dead code nhỏ) để đợt sau.
+
+**Fixed.**
+- **CRITICAL — kho báu chơi LAN không bao giờ kết thúc.** `lanAdvanceRound()` chỉ có ở nút "Câu tiếp theo" của quiz và "Tiếp tục" của kho báu. Bấm "Kết thúc hành trình", hết chặng cuối, hay chọn nhánh rẽ thì phòng vẫn `question` ⇒ học sinh không thấy kết thúc và **bục vinh danh không bao giờ hiện**. Đã thêm kênh `LAN_CHANNELS.FINISH` (`lan:finish`), `lanFinishRoom()` trong renderer, và gọi ở `renderResults`, `renderMatchingResults`, `renderTreasureResults`, cùng các nút branch/finish/end.
+- **CRITICAL — Cancel ở hộp thoại đổi thể loại xoá bài của giáo viên.** `wizardConvertOrDiscardForGenre` trả **draft thể loại cũ** khi giáo viên Cancel; caller coi là "đã chuyển" và gán nó với config thể loại mới ⇒ guard stale xoá nội dung. Nay trả kết quả phân biệt `{ kind: 'converted' | 'restart' | 'cancelled' }`; caller `return` sớm khi `'cancelled'` (không đổi thể loại, không đổi draft, không đổi config).
+- **WARNING — CORS phản chiếu mọi Origin.** `cors: { origin: true }` đã **kiểm chứng bằng request thật**: `Origin: http://evil.example` được trả `Access-Control-Allow-Origin: http://evil.example`. Nay `origin: false`; kiểm lại: không còn header ACAO ⇒ trình duyệt chặn cross-origin (trang phone là same-origin nên không ảnh hưởng).
+- **WARNING — socket không có giới hạn tần suất.** Thêm token bucket theo socket: `lan:join`/`lan:rejoin` (6 lần, nạp 0.5/s), `lan:answer` (20 lần, nạp 4/s). Trả `too-many`; phone đã biết hiển thị lỗi.
+- **WARNING — `close()` có thể treo, `before-quit` không thoát.** Thêm `httpServer.closeAllConnections()` (Node ≥18.2) trước `close()`, race 2s cho `close()` và 2.5s cho `shutdownLanForQuit()` ở `before-quit`. Bỏ `void stopLanSession('quit')` trong `unregisterLanIpc()` — nó chạy song song với teardown được await, tạo hai đường đóng và làm `lanServerIsRunning()` sai thời điểm.
+- **WARNING — `wizardReset()` bỏ sót state mới** ⇒ rò `inputKind`/`importedQuestions` sang dự án mới (đi nhầm nhánh B với nội dung cũ). Đã reset cả bốn trường.
+- **WARNING — `convertDraft` nhận `target` lạ.** Chuỗi lạ rơi vào nhánh `toTreasure` (đã kiểm chứng với `'constructor'`). Nay kiểm `WORKFLOW_GAME_TYPES` ở cả `main.ts` (biên IPC) và `convertDraft`, trả gap `unknown-target`.
+- **WARNING — chuyển sang kho báu với 1 câu trả `complete: true`** nhưng schema cần `stages.min(2)`, nên draft lưu được rồi vỡ ở generation. Nay trả `draft: null` + gap `too-few-items` (áp cho cả `matching` < 2 cặp).
+
+**Verification.** `npm run check` 0 · `npm run build` 0 · `node tests/run-unit.js` **60/60** (`draft-convert` 16, thêm 2 test cho target lạ và treasure 1 chặng) · `check:renderer-globals` 0 undefined (577 hàm) · `verify:css` 17/17. Electron thật: `ui-lan-treasure-finish-check` **5/5** (trước khi sửa phòng kẹt ở `question`; nay `finished` + bục hiện) · `ui-wizard-cancel-genre-check` **7/7** (Cancel giữ nguyên thể loại + 2 câu; OK vẫn chuyển arena→treasure 2 chặng) · `ui-input-routing-check` 20/20 · `ui-lan-card-start-check` 12/12 · `ui-matching-finish-check` 22/22 · `lan-smoke` 19/19 · `ui-race-treasure-check` 18/18 · `ui-play-surface-check` 154/156 (2 lỗi tràn quiz có từ trước).
+
+**Không sửa (để đợt sau).** CSP chưa có `frame-ancestors 'none'` / header `X-Frame-Options` (clickjacking trên cùng mạng); dead code nhỏ (`LAN_UI.attachToResults`, kiểu `LanChannel`/`LAN_START_CHANNEL_RESULT` không dùng ngoài file định nghĩa).
+
+**Traps.**
+- `unregisterLanIpc()` **không** được tự đóng phòng: việc đóng nằm ở `shutdownLanForQuit()` mà `before-quit` await, sau khi đã kiểm `lanServerIsRunning()`.
+- Mọi đường kết thúc trò chơi phải gọi `lanFinishRoom()`; đường nào quên thì phòng LAN sẽ treo ở `question` (đúng lỗi CRITICAL vừa sửa).
+- `convertDraft` phải tôn trọng mức tối thiểu của schema (`treasure` ≥ 2 chặng, `matching` ≥ 2 cặp) — trả `complete: true` với ít hơn sẽ nổ muộn ở generation.
+- Finding "lanProfileFor fail-open" và "finish không ghi lượt cuối" do sub-agent báo đã **kiểm lại và sai** — `lanProfileFor` fail-closed, `finish` chỉ bỏ qua khi `next-round` đã ghi.
+
+## Handoff - Phân luồng đầu vào & chặn gọi AI thừa (2026-10-28, DECISIONS #111)
+
+**TL;DR:** Bước 1 của wizard có vùng chọn **loại nội dung** (`Tự phát hiện` mặc định / `Giáo án / tài liệu` / `Danh sách câu hỏi`) và hiện kết quả nhận diện của hệ thống. Khi nội dung là **danh sách câu hỏi soạn sẵn**, app **bỏ qua phân tích giáo án** (không gọi AI) và đi thẳng tới cấu hình trò chơi; `lesson:generate` cũng **không gọi model** mà dùng luôn câu hỏi của giáo viên. Đổi thể loại (Đấu trường ⇄ Kho báu ⇄ Đường đua) **chuyển đổi cục bộ**, chỉ hỏi một lần khi có phần không chuyển được.
+
+1. **Files changed.**
+   - Mới: `src/services/input-classifier.ts`, `src/services/draft-convert.ts`, `tests/unit/input-classifier.test.ts`, `tests/unit/draft-convert.test.ts`, `tests/ui/ui-input-routing-check.js`.
+   - Sửa: `src/services/question-import.ts` (thêm `parseQuestionsFromText` + `issues`/`needsTeacherInput`, không ném lỗi theo dòng), `src/main.ts` (IPC `lesson:classify-input`, `lesson:convert-draft`, nhánh câu-hỏi-có-sẵn cho `lesson:generate`), `src/preload.ts`, `src/shared/types.ts` (2 API mới), `src/renderer/features/wizard/state.ts` (state + `wizardResolveInputKind`, `wizardClassifyInput`, `wizardInputKindSchedule`, `wizardSetInputKind`, `wizardUseImportedQuestions`, `wizardConvertOrDiscardForGenre`), `src/renderer/features/wizard/step-input.ts` (picker + nhãn nút + rẽ nhánh B), `src/renderer/features/wizard/step-recommend.ts` (chuyển đổi thay vì xoá draft), `src/renderer/pages/create-wizard.ts` (action `input-kind`, debounce phân loại), `tests/unit/question-import.test.ts` (+6 nhóm test).
+2. **Behavior implemented.** Nhận diện bằng quy tắc (không LLM); giáo viên đổi được loại; nhánh câu hỏi soạn sẵn bỏ qua bước 2–3, tạo draft từ câu hỏi và lưu; `lesson:generate` trả `source: 'imported-questions'` không gọi model; đổi thể loại chuyển đổi cục bộ với hộp thoại nêu rõ phần thiếu; câu thiếu `Giải thích:` bị báo (không bịa lời giải).
+3. **Commands run and results.** `npm run check` 0; `npm run build` 0; `node tests/run-unit.js` **60/60**; `check:renderer-globals` 0 undefined (35 script / 576 hàm / 4944 lời gọi); `verify:css` 17/17. Electron thật: `ui-input-routing-check` **20/20**; hồi quy `ui-race-treasure-check` 18/18, `ui-matching-finish-check` 22/22, `ui-play-surface-check` 154/156 (2 lỗi tràn quiz có từ trước).
+4. **Unverified.**
+   - **Chưa chạy pipeline AI thật** (cần model local + tải model) — nhánh A chỉ được kiểm ở mức phân loại và mức đường đi, chưa chạy end-to-end với model.
+   - **Nhánh B chưa chạy trọn qua UI** tới "Tạo nội dung" rồi mở trình chỉnh sửa: mới kiểm tới `configure` + gọi `generateLessonDraft` trực tiếp qua IPC.
+   - **Đổi thể loại qua UI chưa kiểm** (`wizardRecommendSelect(Type)` + hộp thoại `window.confirm`); chỉ kiểm `convertLessonDraft` qua IPC. `confirm()` cũng không script được trong CDP.
+   - Chưa hỗ trợ nhập câu hỏi sẵn ở dạng **file giáo án** (chỉ dán văn bản, hoặc dùng nút "Nhập câu hỏi" trong trình sửa như trước).
+   - `matching`/`scenario` từ câu hỏi soạn sẵn **không** được hỗ trợ (báo lỗi rõ) — đúng phạm vi đã chốt, nhưng giáo viên có thể mong đợi hơn.
+5. **Next recommended task.** Chạy thử nhánh B trọn vẹn trên máy có model local: dán câu hỏi → cấu hình → Tạo nội dung → mở trình chỉnh sửa → chơi thử Cờ-cá-rô/Đấu trường; sau đó thêm `tests/ui/` cho luồng đổi thể loại (cần bỏ `window.confirm` hoặc stub nó).
+
+## Handoff - Ghép cặp kiến thức: ghép xong dừng lại, có nút "Xem kết quả" (2026-10-28, DECISIONS #110)
+
+**TL;DR:** Ghép đủ cặp thì trò chơi **dừng lại ở bàn ghép** — không còn tự nhảy sang bảng điểm sau 0.5–0.8s. Trên đầu sân khấu hiện thanh **"🎉 Đã ghép đủ n/n cặp!"** cùng nút **"Xem kết quả →"**; điểm, phần trăm và việc lưu phiên chơi chỉ xảy ra khi giáo viên bấm nút. Áp dụng cho cả ba chế độ: **ghép hai cột**, **lật thẻ ghi nhớ**, **phân loại kiến thức**.
+
+1. **Files changed.** `src/renderer/features/gameplay.ts` (`showMatchingComplete()`, `matchingCompleteBar()`, `bindMatchingCompleteBar()`; đổi 3 chỗ `setTimeout(renderMatchingResults, …)` → `showMatchingComplete`; nhánh `renderMatchingBoard()`; bỏ `isComplete: true` ở màn dừng); `src/renderer/styles/app.css` (`.matching-complete-bar` / `-text` / `-btn` + keyframe vào); `tests/ui/ui-matching-finish-check.js` (mới, 22 check).
+2. **Behavior implemented.** Ghép cặp cuối → cập nhật header, chèn thanh dừng, giữ nguyên bàn ghép và các đường nối; nút "Xem kết quả →" mới hiện `result-screen` + lưu phiên; máy chiếu **không** chuyển sang màn kết quả ở bước dừng; "Chơi lại" vẫn về bàn mới.
+3. **Commands run and results.** `npm run check` 0; `npm run build` 0; `node tests/run-unit.js` **58/58**; `check:renderer-globals` 0 undefined (566 hàm, 4852 lời gọi); `verify:css` **17/17**. Electron thật: `ui-matching-finish-check` **22/22** — cả 3 chế độ, ghép 4/4 bằng cú bấm thật → có thanh + nút, bàn còn, không có markup điểm; bấm → `470 / 470 điểm`, thanh mất; vẽ lại bàn đã xong vẫn dừng ở nút. Hồi quy: `ui-race-treasure-check` 18/18, `ui-play-surface-check` 154/156 (2 lỗi tràn quiz có từ trước).
+4. **Unverified.** Chưa xem bằng mắt trên máy chiếu; chưa thử luồng **Trình chiếu** thật (một màn hình phụ) để xác nhận máy chiếu giữ bàn ghép đã xong thay vì màn kết quả — mới suy ra từ `buildPresentationView()`.
+5. **Next recommended task.** Mở Trình chiếu, chơi hết một ván ghép cặp và xác nhận màn phụ vẫn là bàn ghép cho tới khi bấm "Xem kết quả".
+
+## Handoff - Kho báu: hàng đầu sân khấu flex hai bên (nhãn thế giới trái, nút Bối cảnh phải) (2026-10-28, DECISIONS #109)
+
+**TL;DR:** Hàng đầu màn chơi Kho báu giờ là **một hàng flex**: nhãn thế giới **HÀNH TRÌNH KHÁM PHÁ** nằm sát mép **trái**, nút **📜 Bối cảnh & Nhiệm vụ chặng** nằm sát mép **phải**. Nút đã ra khỏi cột chữ nên không còn phụ thuộc vào bố cục `display:contents` đã gây lỗi lệch cột ở #108.
+
+1. **Files changed.** `src/renderer/features/gameplay.ts` (`renderTreasureStage()`: `<div class="flex">` → `.treasure-head-row`, nhãn bọc `.treasure-head-world`, nút ra ngoài `.stage-col.is-main`); `src/renderer/styles/app.css` (thay các rule #108 của `.treasure-story-row`/`.treasure-story-trigger` bằng `.treasure-head-row` / `.treasure-head-world` / `.treasure-story-row`); `tests/manual/verify-css.js` (2 invariant mới thay 2 invariant cũ).
+2. **Behavior implemented.** Nhãn và nút cùng một hàng, đẩy về hai phía; căn giữa theo trục dọc; hàng giãn hết bề rộng sân khấu; xuống dòng trên màn hẹp (`flex-wrap`); không có bối cảnh thì chỉ còn nhãn; pop-up không đổi.
+3. **Commands run and results.** `npm run check` 0; `npm run build` 0; `node tests/run-unit.js` **58/58**; `check:renderer-globals` 0 undefined; `verify:css` **17/17**. Electron thật **10/10**: cửa sổ → nhãn x=232 = hàng x, nút right=1017 = hàng right, cùng tâm dọc, rộng bằng `stage-top`; toàn màn hình → x=45 / right=1221 đúng hai mép; pop-up mở; không có bối cảnh → nút mất, nhãn còn. Hồi quy: `ui-race-treasure-check` 18/18, `ui-stage-illustration-check` **169/169**.
+4. **Unverified.** Chưa xem bằng mắt trên máy chiếu/điện thoại (phiên này không đọc được ảnh) — kiểm bằng số đo DOM. Chưa thử cửa sổ rất hẹp (< 900px) để xem nhãn và nút xuống dòng.
+5. **Next recommended task.** Xem lại trên máy chiếu thật ở 1366×768 và 1920×1080; nếu muốn nút sát mép hơn nữa thì chỉnh `gap`/`padding` của `.treasure-head-row`.
+
+## Handoff - Kho báu: bỏ nhãn xám "Chặng n", nút Bối cảnh & Nhiệm vụ lên trên dải nhiệm vụ (2026-10-28, DECISIONS #108)
+
+**TL;DR:** Trên màn chơi Kho báu, nhãn xám **"Chặng 1"** ở đầu cột chữ đã được **xoá** (nó trùng với huy hiệu "Chặng 1/3 · Chặng 1" dưới bức hình). Nút **📜 Bối cảnh & Nhiệm vụ chặng** chuyển từ góc phải cột chữ xuống **ngay trên** dải "TRẮC NGHIỆM · CHẶNG 1/3 · 🏆 0 điểm". Pop-up giữ nguyên cấu trúc và nội dung.
+
+1. **Files changed.** `src/renderer/features/gameplay.ts` (bỏ `.stage-kicker` trong cột chữ; nút nằm trong `.treasure-story-row` ngay trên `.treasure-mission-badge`); `src/renderer/styles/app.css` (`.treasure-story-row`, `.treasure-story-trigger` cho cả cửa sổ và toàn màn hình); `tests/manual/verify-css.js` (+2 invariant).
+2. **Behavior implemented.** Không còn nhãn chặng trùng lặp ở cột chữ; nút mở bối cảnh đứng trên dải nhiệm vụ; trò chơi không có bối cảnh thì không có nút; pop-up không đổi.
+3. **Commands run and results.** `npm run check` 0; `npm run build` 0; `node tests/run-unit.js` **58/58**; `check:renderer-globals` 0 undefined (563 hàm); `verify:css` **17/17**. Electron thật: toàn màn hình → 8/8 (nút trên dải, thẳng trái cùng x=567, câu hỏi vẫn sau dải, huy hiệu dưới hình còn, pop-up mở); cửa sổ → nút trên dải, tim (cx) khớp dải và câu hỏi (624/624/624), chồng 0px, không tràn ngang. Hồi quy: `ui-race-treasure-check` 18/18, `ui-stage-illustration-check` **169/169**.
+4. **Unverified.** Chưa xem bằng mắt trên máy chiếu/điện thoại — phiên này không đọc được ảnh, nên mọi kiểm tra là số đo DOM. Chưa thử cửa sổ rất hẹp (< 900px).
+5. **Next recommended task.** Xem lại trên máy chiếu thật ở 1366×768 và 1920×1080 để chốt thẩm mỹ (khoảng cách 8px giữa nút và dải).
+
+## Handoff - Chơi LAN: bục vinh danh hạng 1–2–3 khi kết thúc (2026-10-28, DECISIONS #107)
+
+**TL;DR:** Khi trò chơi LAN kết thúc, màn hình giáo viên hiện **bục vinh danh 3 hạng**: người nhất đứng **giữa và bục cao nhất**, huy chương 🥇/🥈/🥉, tên + điểm + đội + số câu đúng, hạng 4 trở đi nằm trong danh sách dưới bục. Bằng điểm **và** bằng số câu đúng thì **đồng hạng** (hiện 1, 1, 2 — không bỏ số hạng); người 0 điểm không được phát huy chương.
+
+**Hai lỗi tự phát hiện khi làm (đã sửa):**
+- Cách tính hạng ban đầu cho ra 1, 1, 3 (bỏ mất hạng 2) khi hai bạn bằng điểm — nay xếp hạng kiểu thi đấu, không nhảy số.
+- **Bục bị xoá ngay khi vẽ:** `lanFinishRoomPanel()` vẽ bục rồi gọi `lanStop()`, mà `onClosed` phát snapshot `null` và `lanApplySnapshot()` xoá panel theo. Thêm cờ `LAN_UI.showingPodium` để giữ bục sau khi phòng đã đóng; bấm "Đóng" hoặc mở phòng mới thì bục mất.
+
+1. **Files changed.** `src/lan/lan-adapters.ts` (`lanRankPlayers` + `LanPodiumEntry`, thuần, test được); `src/renderer/features/lan.ts` (`lanMedalFor`, `lanPodiumHtml`, `lanFinishRoomPanel`, cờ `showingPodium`); `src/renderer/styles/app.css` (`.lan-podium*` — grid 3 cột, bục 96/74/58px, vàng/bạc/đồng); `tests/unit/lan-podium.test.ts` (mới), `tests/unit/lan-adapters.test.ts` (+8 check xếp hạng), `tests/manual/verify-css.js` (+3 invariant bục).
+2. **Behavior implemented.** Bục 1–2–3 với huy chương; đồng hạng dùng chung thứ hạng và cùng huy chương; 0 điểm không có huy chương và bục phẳng; hạng 4+ ở danh sách dưới; không có ai → không vẽ gì; tên học sinh được escape; bục giữ nguyên sau khi máy chủ đóng phòng.
+3. **Commands run and results.** `npm run check` 0; `npm run build` 0; `node tests/run-unit.js` **58/58** (thêm `lan-podium` 9 check); `check:renderer-globals` 0 undefined; `verify:css` **15/15** (thêm 3 check bục); `lan-smoke` 19/19. Electron thật: 3 bạn cùng điểm 100 → bục 3 bước, 2 bạn đồng hạng nhất + 1 bạn hạng 2 bạc, không có đồng; 3 điểm khác nhau (300/200/100) → 🥇🥈🥉 đúng, chiều cao bục 88 > 68 > 53px, người nhất `order: 2` (giữa). Đo layout: 3 cột cạnh nhau, đáy bục thẳng hàng, không tràn ngang (1259 < 1266), không phải cuộn. Hồi quy: `ui-race-treasure-check` 18/18, `ui-game-worlds-check` 43/44 (lỗi probe đã biết), `ui-lan-card-start-check` 12/12.
+4. **Unverified.** Chưa xem bằng mắt trên máy chiếu thật (ảnh chụp không đọc được trong phiên này; chỉ kiểm bằng số đo DOM: vị trí, chiều cao, order, không tràn). `ui-play-surface-check` không chạy trọn trong phiên headless (quá chậm, dừng ở 1920×1080); trước thay đổi này nó đã là 154/156 với 2 lỗi tràn quiz có từ trước.
+5. **Next recommended task.** Xem bục trên máy chiếu thật ở 1366×768 và 1920×1080, rồi thử một lớp 8–10 bạn để kiểm danh sách hạng 4+ và trường hợp nhiều bạn đồng hạng.
+
+## Handoff - Chơi LAN: nút trên thẻ thư viện + nút "Bắt đầu câu 1" cho giáo viên (2026-10-28, tiếp nối #106)
+
+**TL;DR:** Hai lỗi giáo viên báo sau bản LAN đầu tiên đã sửa. (1) Thẻ trò chơi trong **Thư viện** giờ có nút **📱 Chơi LAN** (chỉ với quiz/tình huống/kho báu) — bấm là mở trò chơi và mở phòng luôn. (2) Máy điện thoại đã vào phòng nhưng đứng ở "Chờ giáo viên bắt đầu" vì **máy chủ chưa từng gửi trạng thái xuống điện thoại** và **không có nút bắt đầu**. Nay màn LAN có thanh **"▶ Bắt đầu câu 1 (n câu)"** (bật khi có ít nhất một bạn vào phòng); bấm là điện thoại chuyển sang câu hỏi. Khi giáo viên bấm "Tiếp tục →" trên màn chiếu (hoặc "Tiếp tục: Xem bản đồ hành trình" ở kho báu), máy chủ đóng lượt và đẩy câu kế tiếp xuống điện thoại, nên máy chiếu và điện thoại luôn cùng một câu.
+
+**Nguyên nhân gốc (quan trọng).** `emit()` trong `lan-server.ts` chỉ gọi `onSnapshot` cho renderer desktop; không có `io.emit('lan:state', …)` nào, nên `mobile.js` không bao giờ nhận trạng thái. `LanServerHandle.begin()`/`nextRound()` có sẵn nhưng **không có kênh IPC**, nên không nút nào gọi được.
+
+1. **Files changed.**
+   - `src/shared/lan-types.ts`: thêm `LAN_CHANNELS.BEGIN` (`lan:begin`), `LAN_CHANNELS.NEXT` (`lan:next`).
+   - `src/lan/lan-ipc.ts`: handler cho hai kênh mới (+ `removeHandler` khi unregister).
+   - `src/lan/lan-server.ts`: `emit()` giờ đẩy `lan:state` xuống **mọi điện thoại**, qua `phoneSnapshot()` — bản rút gọn **không có** `players`, điểm từng bạn hay `lastResult` khi câu đang mở; gửi ngay sau `lan:joined` để điện thoại vào phòng là có trạng thái liền.
+   - `src/preload.ts`, `src/shared/types.ts`: `lanBegin()`, `lanNext()`.
+   - `src/renderer/shared.ts`: `gameCard()` thêm nút `data-action="lan"` khi `lanGameSupported(game)`, hàng nút `flex-wrap`.
+   - `src/renderer/core/controller.ts`: action `'lan'` (mở game rồi mở phòng).
+   - `src/renderer/features/lan.ts`: thanh bắt đầu/tiến độ (`lanRoomBarHtml`), `lanBeginRound()`, `lanAdvanceRound()`; panel chỉ vẽ lại thanh trên khi đổi pha (không rebuild cả phòng khi đang chọn đội).
+   - `src/renderer/features/gameplay.ts`: gọi `lanAdvanceRound()` ở `nextQuestionBtn.onclick` và ở nút "Tiếp tục" của bản đồ kho báu (thêm 2 chèn có guard).
+   - `src/renderer/styles/app.css`: `.lan-startbar`, `.lan-start-btn`, `.lan-progress`.
+   - Test: `tests/unit/lan-mobile.test.ts` (mới, jsdom), `tests/manual/lan-smoke.js` (+4 check), `tests/ui/ui-lan-card-start-check.js` (mới); `package.json` thêm devDependency `jsdom`.
+2. **Behavior implemented.** Nút LAN trên thẻ → mở trò chơi + mở phòng. Thanh "Bắt đầu câu 1" (khoá khi chưa có ai, hiện số bạn đã sẵn sàng). Điện thoại vào phòng nhận trạng thái ngay. Bấm bắt đầu → điện thoại chuyển sang câu 1 có đáp án. "Tiếp tục →" trên máy chiếu → điện thoại sang câu kế tiếp; câu đang mở không bao giờ gửi đáp án đúng hay bảng điểm xuống điện thoại.
+3. **Commands run and results.** `npm run check` 0; `npm run build` 0; `node tests/run-unit.js` **57/57** (thêm `lan-mobile` 14 check); `check:renderer-globals` 35 script / 0 undefined (561 hàm, 4821 lời gọi); `verify:css` 12/12; `lan-smoke` **19/19** (thêm: điện thoại nhận trạng thái khi vào phòng, khi bắt đầu, khi chuyển câu; bản rút gọn không có `players`/`lastResult` khi mở). Trong Electron thật: `ui-lan-card-start-check` **12/12** (nút trên thẻ quiz/kho báu, không có ở ghép cặp, bấm thẻ mở phòng, nút bắt đầu khoá/bật đúng, điện thoại nhận "Câu 1?" + 2 đáp án, chuyển câu → round 2/2) và `ui-lan-wiring-check` **7/7**.
+4. **Unverified.** Vẫn **chưa thử trên điện thoại thật** (camera QR, bàn phím tiếng Việt, nhiều máy cùng lúc); hành vi trang điện thoại kiểm bằng jsdom và socket client, chưa bằng trình duyệt di động. Windows Firewall và `npm run dist:win` vẫn chưa kiểm.
+5. **Next recommended task.** Chạy `ui-lan-card-start-check` + `lan-smoke` trên máy thật với 2–3 điện thoại cùng Wi-Fi, gồm cả lần Windows hỏi Firewall.
+
+## Handoff - Chơi LAN: học sinh trả lời trên điện thoại (2026-10-28, DECISIONS #106)
+
+**TL;DR:** Giáo viên mở trò chơi như cũ, bấm nút mới **📱 Chơi LAN** ở header màn chơi. Máy giáo viên trở thành máy chủ (Express + Socket.IO trong main process, cổng do OS chọn), hiện **mã QR + URL LAN + mã phòng 6 ký tự** và danh sách học sinh đã vào. Học sinh quét QR trên điện thoại (cùng Wi-Fi, không cần Internet), nhập tên, chọn đáp án; **điểm do máy chủ tính** bằng đúng `game-engine/runtime.ts` của desktop, điện thoại chỉ nhận "đã ghi nhận" (không biết đúng/sai). Phạm vi v1: `quiz`, `scenario` (chỉ khi không rẽ nhánh), `treasure-hunt` (chặng trắc nghiệm/tình huống); `matching` và `race` không hiện nút LAN.
+
+1. **Files changed.**
+   - Mới: `src/shared/lan-types.ts`, `src/lan/lan-reducer.ts` (máy trạng thái thuần), `src/lan/lan-adapters.ts` (Game → lượt LAN + chấm điểm), `src/lan/lan-server.ts`, `src/lan/lan-ipc.ts`, `src/lan/mobile/{index.html,mobile.css,mobile.js}`.
+   - Mới: `src/renderer/features/lan.ts` (nút 📱, màn mời vào phòng, chia đội, QR tự sinh, khối `lan` cho phiên), `tests/unit/lan-reducer.test.ts`, `tests/unit/lan-adapters.test.ts`, `tests/manual/lan-smoke.js`, `tests/manual/lan-qr-verify.js`, `tests/ui/ui-lan-wiring-check.js`.
+   - Sửa: `src/index.html` (nạp `features/lan.js` sau gameplay/results, trước bootstrap), `src/renderer/features/gameplay.ts` (3 chèn nhỏ có guard: `lanReleaseForNewGame()` trong `playGame`, nút trong `playHeaderHtml`, listener trong `bindPlayHeader`), `src/renderer/features/results.ts` (gắn khối `lan` khi lưu phiên), `src/renderer/core/bootstrap.ts` (`lanInit()`, đóng phòng khi `beforeunload`), `src/renderer/styles/app.css` (`.play-tool-lan`, `.lan-*`), `src/main.ts` (`registerLanIpc`/`unregisterLanIpc`, teardown trong `before-quit`), `src/preload.ts` + `src/shared/types.ts` (`lanStart`/`lanStop`/`lanAssignTeam`/`onLanState`), `package.json` (`socket.io`, `socket.io-client` dev, copyfiles `src/lan/mobile/*`), `tests/unit/build-assets.test.ts`.
+   - Sửa nhỏ ngoài phạm vi: `src/services/lesson-retrieval.ts` — kiểu tường minh cho `raw` (import `socket.io` đổi cách TS suy luận `String#match` khi `strictNullChecks` tắt, làm file này báo lỗi `never[]`). Không đổi hành vi.
+2. **Behavior implemented.** Mở/đóng phòng LAN, mã QR + URL LAN (mọi IPv4 riêng của máy), mã phòng 6 ký tự loại bỏ ký tự dễ nhầm, chống trùng tên (không phân biệt hoa/thường, gộp khoảng trắng), chia đội trước khi bắt đầu (khoá sau đó), mỗi em 1 đáp án/câu, câu tự chốt sau 60 giây, mất mạng giữ điểm + vào lại bằng token, đóng phòng/chuẩn bị thoát app giải phóng cổng, lưu phiên có khối `lan.players`. Mã phòng chỉ mở 1 phòng cùng lúc.
+3. **Commands run and results.**
+   - `npm run check` → 0 lỗi.
+   - `npm run build` → 0 (sau khi `npm ci` và `npx electron-rebuild -f -w better-sqlite3`: bản cài lại build cho Node ABI 127, Electron cần 130).
+   - `node tests/run-unit.js` → **56/56 suite** (gồm `lan-reducer` 18 check, `lan-adapters` 22 check, `build-assets` với 3 file mobile).
+   - `npm run check:renderer-globals` → 35 script, 556 hàm, 4770 lời gọi, **0 undefined**.
+   - `npm run verify:css` → 12/12.
+   - `node tests/manual/lan-smoke.js` → **15/15** (server thật + 3 client giả: join, trùng tên, sai phòng, trả lời 2 lần, mất mạng, chốt câu, kết thúc, đóng cổng; `/health` chỉ trả `{ok:true}`, không route nào lộ dữ liệu app).
+   - QR: `tests/manual/lan-qr-verify.js` render PGM từ `lanQrMatrix`, OpenCV `detectAndDecode` giải đúng 4/4 payload; QR lấy từ **app đang chạy** (`tests/manual/out/qr-live.pgm`) giải đúng `http://192.168.1.4:<port>/?room=…`; ma trận khớp 0 ô lệch so với thư viện `qrcode` ở version 1, 2, 3, 5, 6, 8, 9.
+   - `node tests/ui/ui-lan-wiring-check.js <port>` trong Electron thật → **7/7** (bridge có trong preload, nút LAN hiện, mở phòng, QR, mã phòng, URL `http://192.168.1.4:53172/?room=BYLJMD`, đóng phòng). Trang điện thoại và join qua đúng địa chỉ Wi-Fi đã thử bằng socket client.
+   - Hồi quy: `ui-play-surface-check` **154/156** (2 lỗi tràn của quiz, đã có từ trước), `ui-race-treasure-check` **18/18**, `ui-game-worlds-check` **43/44** (lỗi probe đã biết ở #89).
+4. **Unverified.**
+   - **Chưa thử trên điện thoại thật.** Mọi kiểm tra là socket client/trình duyệt headless và OpenCV, chưa quét QR bằng camera thật, chưa thử bàn phím tiếng Việt trên iOS/Android.
+   - Chưa đo với **8 điện thoại đồng thời** (kế hoạch §10.2), chưa thử tắt/bật Wi-Fi thật trên máy (reconnect bằng token mới kiểm ở mức reducer + một nhánh smoke).
+   - **Windows Firewall**: app không tự mở rule (cần quyền admin); màn LAN chỉ hiện hướng dẫn. Lần đầu chạy trên máy khác Windows sẽ hỏi — chưa kiểm chứng luồng này.
+   - Không có ảnh minh họa trên điện thoại (v1 chỉ chữ + đáp án) — đúng kế hoạch §8.3 nhưng khác spec §5.2.
+   - Chưa kiểm tra `npm run dist:win` với `socket.io` trong asar (chỉ kiểm bản `npm run build` + Electron dev).
+   - Câu hỏi mở §11 của kế hoạch (ảnh thật, bảng xếp hạng cá nhân vs đội, chống trùng tên) được chốt theo mặc định trong kế hoạch; nếu giáo viên muốn khác thì phải đổi `lan-reducer.ts`.
+5. **Next recommended task.** Chạy `lan-smoke`/`ui-lan-wiring-check` trên một máy thật với 2–3 điện thoại trong cùng Wi-Fi (kể cả lần Windows hỏi Firewall), rồi thử một game quiz 5 câu và một hành trình kho báu; sau đó đo trường hợp 8 điện thoại và quyết định có thêm ảnh (SVG→PNG phía main) hay bảng xếp hạng cá nhân.
+
 ## Handoff - Truy tìm kho báu: trả lại nút pop-up Bối cảnh & Nhiệm vụ (2026-10-28, DECISIONS #105)
 
 **TL;DR:** Theo yêu cầu, nút **"📜 Bối cảnh & Nhiệm vụ chặng"** được đưa lại vào tiêu đề chặng (bên trái là badge tên chặng, bên phải là nút). Nội dung bối cảnh/cốt truyện/mô tả nhiệm vụ không còn hiển thị thẳng trong cột chữ mà chỉ mở trong pop-up sẵn có (openTreasureStoryModal). Giữ nguyên các thay đổi còn lại của bố cục toàn màn hình: hình khám phá bên trái, huy hiệu **Chặng n/N** dưới hình, câu hỏi + đáp án bên phải, gợi ý là icon bóng đèn góc dưới trái.

@@ -21,6 +21,10 @@ async function refreshProjectsPage() {
 
 async function refreshLessonLibraryPage() {
   state.lessonLibrary = null;
+  // #122: a fresh list (import, delete, re-open) starts at page 1 with nothing ticked,
+  // so ids from another workspace's list can never be acted on.
+  state.lessonPage = 0;
+  state.lessonSelection = new Set();
   if (state.page === 'lesson-plans') render();
   try {
     const documents = await window.eduGame.listLessonLibrary();
@@ -45,6 +49,9 @@ async function showHelp() {
  * close by itself. Both halves are required.
  */
 window.addEventListener('beforeunload', event => {
+  // A reload or window close must not leave the LAN server listening (Windows keeps
+  // the port busy and the next launch trips Firewall again).
+  if (typeof lanReleaseForNewGame === 'function') lanReleaseForNewGame();
   if (typeof wizardHasUnsavedDraft !== 'function' || !wizardHasUnsavedDraft()) return;
   // `preventDefault()` and `returnValue` are both set: Chromium and Electron
   // differ in which one they honour, and the cost of setting both is nil.
@@ -110,12 +117,36 @@ window.addEventListener('keydown', async e => {
     const isFs = document.documentElement.dataset.fullscreen === '1';
     try { await window.eduGame.setFullscreen(!isFs); } catch {}
   }
+  // #119/#120: Escape closes an open card menu.
+  if (e.key === 'Escape' && typeof closeGameMenus === 'function') closeGameMenus();
+});
+// The card menu is a popover: a click anywhere outside it, a scroll of any ancestor,
+// or a window resize closes it. `capture` so the outside click is seen before the
+// page's own listeners (a click on another "•••" must close the first menu).
+document.addEventListener('click', event => {
+  const target = event.target;
+  if (!target || !target.closest) return;
+  // The toggle handles its own open/close; a click inside an open menu picks an item,
+  // which the action handler closes.
+  if (target.closest('[data-game-menu-root]')) return;
+  if (typeof closeGameMenus === 'function') closeGameMenus();
+}, true);
+// `scroll` does not bubble: listen in the capture phase so a scroll of the page
+// content (or any ancestor) closes the menu too.
+window.addEventListener('scroll', () => {
+  if (typeof closeGameMenus === 'function') closeGameMenus();
+}, true);
+window.addEventListener('resize', () => {
+  if (typeof closeGameMenus === 'function') closeGameMenus();
 });
 (async function init() {
   try {
     state.db = await window.eduGame.getLibrary();
     state.settings = await window.eduGame.getSettings();
     applyTheme(state.settings && state.settings.preferences && state.settings.preferences.theme);
+    // Chơi LAN: subscribes to `lan:state` so a room opened before a reload (or on a
+    // second window) is drawn again. Never throws when the bridge is absent.
+    if (typeof lanInit === 'function') lanInit();
     const localAi = await window.eduGame.getLocalAiModels();
     state.localAiModels = localAi.models;
     state.localAiMachine = localAi.machine;

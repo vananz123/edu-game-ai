@@ -183,50 +183,109 @@ function wizardDraftItemPreview(gameType, item) {
   return compact.length > 140 ? `${compact.slice(0, 137)}…` : compact;
 }
 
-function wizardDraftItemsPanel(s) {
+/**
+ * #124: the step-5 list, one card per question, with its picture in the same card.
+ *
+ * Before this the question text and the artwork were two separate lists ("Từng mục"
+ * and "Minh hoạ từng mục") and the teacher had to match them by position — the very
+ * thing the user asked to fix ("câu hỏi và ảnh minh phải đi cùng nhau"). The card now
+ * holds: the question, its answers (collapsed), the picture, the "Đổi ảnh" /
+ * "Tải ảnh lên" actions, and "Tạo lại" — so every decision about one item happens in
+ * one place.
+ */
+function wizardItemCardsPanel(s) {
   const draft = s.draft;
   const items = wizardDraftItemList(draft);
   if (!items.length) return '';
-  const rows = items.map((item, index) => `<li class="flex items-start justify-between gap-[10px] py-[7px] border-t border-line first:border-t-0">
-      <div class="min-w-0">
-        <div class="text-[11px] text-[#788196]">${escapeHtml(wizardDraftItemLabel(draft.gameType, index + 1))}</div>
-        <div class="text-[12px] break-words">${escapeHtml(wizardDraftItemPreview(draft.gameType, item))}</div>
-      </div>
-      <button class="btn btn-secondary btn-small shrink-0" data-wizard-action="regenerate-item" data-item-index="${index + 1}"${s.busy ? ' disabled' : ''}>🔄 Tạo lại</button>
-    </li>`).join('');
-  return `<div class="field mt-[10px]" data-wizard-draft-items="1">
-    <div class="flex items-center gap-[8px] mb-[6px] flex-wrap"><strong class="text-[12px]">Từng mục</strong><span class="tag">${items.length} mục</span></div>
-    <ul class="bg-[#f8f9fc] border border-line rounded-[10px] px-[12px]">${rows}</ul>
-    <div class="field-hint">“Tạo lại” chỉ viết lại đúng một mục và giữ nguyên mọi mục còn lại.</div>
+  const gameType = draft.gameType;
+  const game = wizardArtGame();
+  const mode = wizardArtMode();
+  const missing = items.filter(item => !stageIllustrationHtml(wizardArtSource(gameType, item), game)).length;
+  const modeHint = mode === 'off'
+    ? 'Chế độ “Tắt” đang bật nên khi chơi sẽ không hiện minh hoạ nào. Tải ảnh lên sẽ bật lại minh hoạ cho mục đó.'
+    : mode === 'manual'
+      ? 'Chế độ “Chọn thủ công” chỉ hiện ảnh bạn chọn — mục chưa chọn sẽ không có hình khi chơi.'
+      : 'Chế độ “Tự động”: mục chưa chọn hình sẽ dùng hình theo chủ đề nội dung.';
+  return `<div class="field mt-[12px]" data-wizard-item-cards="1">
+    <div class="flex items-center gap-[8px] mb-[8px] flex-wrap"><strong class="text-[12px]">Câu hỏi và ảnh minh hoạ</strong><span class="tag">${items.length} mục</span>${missing ? `<span class="tag">${missing} mục chưa có hình</span>` : ''}</div>
+    <div class="wizard-item-list">${items.map((item, index) => wizardItemCard(s, gameType, item, index + 1, index)).join('')}</div>
+    <div class="field-hint">${escapeHtml(modeHint)} Ảnh lưu trên máy này; trò chơi vẫn chơi được khi không có mạng.</div>
   </div>`;
 }
 
-/**
- * Phase B (DECISIONS #72): per-item artwork in the step-5 preview.
- *
- * Why the wizard and not the editor: the editor's `contentCategory`/`iconName`/
- * `illustrationAssetId` inputs are hidden and only carry what the AI produced, so
- * a teacher had no way to see or change the picture of one question without
- * regenerating it (which costs a model call and rewrites the text). Here the
- * teacher sees the actual rendered scene per item and may change it.
- *
- * Two hard rules, both enforced in the main process rather than trusted here:
- *  - **No AI.** `lesson:patch-item-assets` only writes the three asset fields,
- *    so changing artwork never costs tokens and works with the model stopped.
- *  - **No guessing.** `resolveStageIllustration` is the same resolver the play
- *    surface uses, including `manual` mode ("only what the teacher picked"), so
- *    this preview cannot promise art the play surface would then refuse to draw.
- */
+/** One question with its picture: the unit the teacher thinks in. */
+function wizardItemCard(s, gameType, item, position, index) {
+  const game = wizardArtGame();
+  const open = s.openArtItem === `${gameType}:${position}`;
+  const source = wizardArtSource(gameType, item);
+  const assetId = typeof source.illustrationAssetId === 'string' ? source.illustrationAssetId : '';
+  const isCustom = /^ci-[a-f0-9]{32}$/u.test(assetId);
+  const rawCategory = typeof source.contentCategory === 'string' ? source.contentCategory.trim() : '';
+  const category = WIZARD_ART_CATEGORIES.some(([value]) => value === rawCategory) ? rawCategory : '';
+  const asset = wizardArtSelectedAsset(gameType, item);
+  const assetOptions = [
+    `<option value=""${isCustom ? '' : ' selected'}>Theo chủ đề nội dung</option>`,
+    ...wizardArtSceneCategories().map(id => `<option value="${escapeHtml(id)}-scene"${!isCustom && asset === `${id}-scene` ? ' selected' : ''}>${escapeHtml(wizardArtCategoryLabel(id))}</option>`),
+    // An uploaded picture is listed so the select shows the true state instead of
+    // "Theo chủ đề nội dung" while the card draws the upload.
+    ...(isCustom ? [`<option value="${escapeHtml(assetId)}" selected>Ảnh tự tải lên (giữ nguyên)</option>`] : [])
+  ].join('');
+  const categoryOptions = [
+    `<option value="">Tự nhận diện theo nội dung</option>`,
+    ...WIZARD_ART_CATEGORIES.map(([id, label]) => `<option value="${escapeHtml(id)}"${category === id ? ' selected' : ''}>${escapeHtml(label)}</option>`)
+  ].join('');
+  const badge = isCustom
+    ? 'Ảnh tự tải lên'
+    : asset ? wizardArtCategoryLabel(asset.slice(0, -'-scene'.length)) : (category ? wizardArtCategoryLabel(category) : 'Tự động');
+  const disabled = s.artBusy ? ' disabled' : '';
+  const answers = wizardDraftItemAnswers(gameType, item);
+  return `<article class="wizard-item-card${open ? ' is-open' : ''}" data-wizard-item-card="${position}" data-wizard-art-card="${position}">
+    <div class="wizard-item-main">
+      <div class="wizard-item-text">
+        <div class="wizard-item-label">${escapeHtml(wizardDraftItemLabel(gameType, position))}</div>
+        <div class="wizard-item-prompt">${escapeHtml(wizardDraftItemPreview(gameType, item))}</div>
+        ${answers.length ? `<ul class="wizard-item-answers">${answers.map(answer => `<li${answer.correct ? ' class="is-correct"' : ''}>${escapeHtml(answer.text)}</li>`).join('')}</ul>` : ''}
+      </div>
+      <div class="wizard-item-art">
+        ${wizardArtThumb(gameType, item, game, asset)}
+        <div class="wizard-item-art-badge">${escapeHtml(badge)}</div>
+      </div>
+    </div>
+    <div class="wizard-item-actions">
+      <button class="btn btn-secondary btn-small" data-wizard-action="upload-art" data-item-index="${position}"${disabled} title="Chọn một ảnh PNG/JPG/WEBP/GIF từ máy">📷 Tải ảnh lên</button>
+      <button class="btn btn-secondary btn-small" data-wizard-action="toggle-art" data-item-index="${position}"${disabled}>${open ? 'Đóng' : '🖼 Đổi hình có sẵn'}</button>
+      ${isCustom || asset || category ? `<button class="btn btn-secondary btn-small" data-wizard-action="reset-art" data-item-index="${position}"${disabled}>Tự động</button>` : ''}
+      <button class="btn btn-secondary btn-small ml-auto" data-wizard-action="regenerate-item" data-item-index="${position}"${s.busy ? ' disabled' : ''} title="Viết lại nội dung câu này, giữ nguyên các câu còn lại">🔄 Tạo lại câu</button>
+    </div>
+    ${open ? `<div class="wizard-art-pick">
+      <label>HÌNH MINH HOẠ CÓ SẴN</label>
+      <select data-wizard-art-asset data-item-index="${position}"${disabled}>${assetOptions}</select>
+      <label>CHỦ ĐỀ NỘI DUNG</label>
+      <select data-wizard-art-category data-item-index="${position}"${disabled}>${categoryOptions}</select>
+      <div class="wizard-art-hint">Hoặc tải ảnh từ máy bằng “📷 Tải ảnh lên”. Chọn xong là lưu ngay, không gọi AI và không đổi nội dung câu hỏi.</div>
+    </div>` : ''}
+  </article>`;
+}
 
 /**
- * Category id -> Vietnamese label, for the step-5 artwork picker.
- *
- * A plain object on purpose. `generation-eta.test.ts` scans this file for lines
- * shaped like `['stage', 'label']` and asserts they are exactly the five MỤC 5
- * checklist stages; a 25-pair literal written that way silently joined that
- * match and the checklist assertion started comparing against category ids.
- * The keys are the same ids as `CONTENT_CATEGORY_IDS` (hand-copied, because the
- * renderer cannot import `src/shared`), and they only drive picker labels.
+ * The answers of one item, with the correct one flagged — so the picture sits next to
+ * the question it helps, not next to a title only.
+ */
+function wizardDraftItemAnswers(gameType, item) {
+  const options = item && Array.isArray(item.options) ? item.options : [];
+  if (!options.length) return [];
+  const correctId = String((item && item.correctOptionId) || '');
+  return options
+    .map(option => ({
+      text: String((option && option.text) || ''),
+      correct: Boolean(correctId) && String(option && option.id) === correctId
+    }))
+    .filter(answer => answer.text);
+}
+
+/**
+ * Thumbnail for one item: the real play-surface SVG when there is something to
+ * draw, otherwise an honest "no artwork" tile (never a stand-in that looks like art).
  */
 const WIZARD_ART_CATEGORY_LABELS = {
   general: 'Tổng quát',
@@ -299,6 +358,10 @@ function wizardArtSource(gameType, item) {
 function wizardArtSelectedAsset(gameType, item) {
   const source = wizardArtSource(gameType, item);
   const id = typeof source.illustrationAssetId === 'string' ? source.illustrationAssetId.trim() : '';
+  // #124: a teacher-uploaded picture is a selected asset too. Before this, an uploaded
+  // id fell through to '' and the thumbnail silently showed the built-in scene — the
+  // card said "Ảnh tự tải lên" while drawing something else.
+  if (/^ci-[a-f0-9]{32}$/u.test(id)) return id;
   return id && wizardArtSceneCategories().some(category => `${category}-scene` === id) ? id : '';
 }
 
@@ -341,32 +404,203 @@ function wizardArtThumb(gameType, item, game, assetId) {
  * Errors are surfaced in the wizard banner, never swallowed: a pick that did not
  * save must not look saved.
  */
+/**
+ * #127: one queue for every artwork write (built-in pick, "Tự động", uploaded file).
+ *
+ * #124–#126 left two flaws that a teacher can hit in normal use:
+ *  - an "upload in progress" flag blocked actions but **nothing reset it** when the
+ *    native dialog hung or the project could not be saved, so every later click did
+ *    nothing (the button looked dead — "vẫn chưa hoạt động");
+ *  - each call ran on its own, so two quick picks raced and the last one to finish won,
+ *    not the last one clicked.
+ *
+ * Writes are now serialised: a click enqueues an operation, the queue runs them one at a
+ * time, the busy flag is cleared in `finally`, and the preview is redrawn from the
+ * project the main process returns — so what the card shows is always what was saved.
+ */
+
+/** Serialises artwork writes for one wizard session. */
+let wizardArtQueue = Promise.resolve();
+/** Bumped on every queued write so a stale refresh cannot overwrite a newer draft. */
+let wizardArtWriteSeq = 0;
+
+/** Runs `task` after every artwork write already queued, then releases the UI. */
+function wizardQueueArtTask(task) {
+  wizardState.artBusy = true;
+  render();
+  const seq = ++wizardArtWriteSeq;
+  wizardArtQueue = wizardArtQueue
+    .then(async () => {
+      try {
+        await task(seq);
+      } catch (error) {
+        // Always shown, never swallowed: a pick that did not save must not look saved.
+        if (seq === wizardArtWriteSeq) wizardSetError(error);
+      }
+    })
+    .catch(() => undefined)
+    .finally(() => {
+      if (seq !== wizardArtWriteSeq) return;
+      // Only the last queued write clears the flag, so the card cannot be left disabled
+      // while another write is still on its way.
+      wizardState.artBusy = false;
+      render();
+      wizardRepaintArtThumbs();
+    });
+  return undefined;
+}
+
+/** Applies a patch to one item and adopts the project/ game main returns. */
+async function wizardApplyItemPatch(position, patch) {
+  const result = await window.eduGame.patchLessonItemAssets({
+    projectId: wizardState.projectId,
+    itemIndex: position,
+    patch
+  });
+  if (!result || !result.project) throw new Error('Hệ thống không trả về dự án sau khi đổi minh hoạ.');
+  const previousId = (() => {
+    const gameType = (wizardState.config && wizardState.config.gameType) || '';
+    const item = wizardDraftItemList(wizardState.draft)[position - 1];
+    const source = item ? wizardArtSource(gameType, item) : {};
+    return typeof source.illustrationAssetId === 'string' ? source.illustrationAssetId : '';
+  })();
+  wizardState.projectId = result.project.id;
+  wizardState.draft = result.project.draft || wizardState.draft;
+  wizardState.gameSnapshot = result.game || wizardState.gameSnapshot;
+  if (result.game && result.game.id) wizardState.gameId = result.game.id;
+  // #127: a picture this project uploaded and that is no longer on the item is deleted
+  // once the save succeeded. main refuses to delete anything another game or project
+  // still points at, so this only removes what would otherwise be an orphan file.
+  if (/^ci-[a-f0-9]{32}$/u.test(previousId) && previousId !== String(patch.illustrationAssetId || '')) {
+    window.eduGame.deleteIllustration(previousId).catch(() => {});
+  }
+  return result;
+}
+
+/** What one item's picture is, as the data model sees it (for the success message). */
+function wizardItemArtSummary(position) {
+  const draft = wizardState.draft;
+  const gameType = (wizardState.config && wizardState.config.gameType) || (draft && draft.gameType) || '';
+  const items = wizardDraftItemList(draft);
+  const item = items[position - 1];
+  const source = item ? wizardArtSource(gameType, item) : {};
+  const id = typeof source.illustrationAssetId === 'string' ? source.illustrationAssetId.trim() : '';
+  if (/^ci-[a-f0-9]{32}$/u.test(id)) return 'ảnh tải lên từ máy';
+  if (id) return wizardArtCategoryLabel(id.slice(0, -'-scene'.length)) || 'hình có sẵn';
+  return 'hình theo chủ đề nội dung';
+}
+
 async function wizardPatchItemAssets(position, patch) {
+  if (!(await wizardEnsureProjectSaved())) {
+    // Shown in the wizard banner, not a toast: a toast disappears before a teacher reads
+    // it and the preview then looks "unchanged" with no explanation (#126).
+    wizardSetError(new Error('Chưa lưu được dự án nên chưa gắn được ảnh. Hãy bấm “Lưu tiến trình” rồi thử tải ảnh lại.'));
+    render();
+    return undefined;
+  }
+  return wizardQueueArtTask(async () => {
+    await wizardApplyItemPatch(position, patch);
+    const gameType = (wizardState.config && wizardState.config.gameType) || '';
+    wizardSetNotice(`Đã đổi minh hoạ cho ${wizardDraftItemLabel(gameType, position)} → ${wizardItemArtSummary(position)}. Nội dung câu hỏi giữ nguyên.`);
+  });
+}
+
+/**
+ * #126: guarantees step 5 has a stored project before anything is written to it.
+ *
+ * The artwork channels (`lesson:patch-item-assets`, and the picture upload) address a
+ * *saved* project. A project opened from the list can arrive at step 5 with no
+ * `projectId` in the wizard state (the id was not restored with the rest of the
+ * project), and every picture action then did nothing but show a toast — the teacher
+ * saw "uploaded" and an unchanged picture. Saving here makes the invariant true instead
+ * of asking the teacher to discover an invisible precondition.
+ */
+async function wizardEnsureProjectSaved() {
+  if (wizardState.projectId) return true;
+  if (!wizardState.config || !wizardState.draft) return false;
+  try {
+    await wizardSaveProject(wizardState.step || 'generate');
+    return Boolean(wizardState.projectId);
+  } catch (error) {
+    wizardSetError(error);
+    return false;
+  }
+}
+
+/**
+ * The one call that opens the file dialog and copies the picture.
+ *
+ * It is a named function rather than a direct `window.eduGame` call so the dialog — the
+ * only step a headless check cannot drive — can be replaced while everything after it
+ * (validation, patch, project save, card) stays the real code path (see
+ * `tests/ui/ui-art-upload-flow-check.js`).
+ */
+function wizardImportIllustration() {
+  return window.eduGame.importIllustration();
+}
+
+/**
+ * #124: "📷 Tải ảnh lên" — the teacher's own picture for one question.
+ *
+ * The file is chosen first (the native dialog), then the id is written through the same
+ * whitelisted patch as a built-in illustration. Choosing before touching the project
+ * means a cancelled dialog changes nothing, and the busy flag is cleared by the queue
+ * even when the dialog is dismissed or the save fails (#127).
+ */
+async function wizardUploadArt(position) {
+  // The dialog is the only long wait; while it is open a second click is ignored. The
+  // flag is reset on *every* path below, so a dismissed dialog can never leave the
+  // buttons disabled (that was #127's "button does nothing").
   if (wizardState.artBusy) return undefined;
-  if (!wizardState.projectId) {
-    toast('Hãy lưu dự án trước khi đổi minh hoạ.');
+  if (!(await wizardEnsureProjectSaved())) {
+    // No dialog is opened: asking a teacher to pick a picture that cannot be saved is
+    // worse than saying why (#126).
+    wizardSetError(new Error('Chưa lưu được dự án nên chưa tải được ảnh. Hãy bấm “Lưu tiến trình” rồi thử lại.'));
+    render();
     return undefined;
   }
   wizardState.artBusy = true;
   render();
+  let picked = null;
   try {
-    const result = await window.eduGame.patchLessonItemAssets({
-      projectId: wizardState.projectId,
-      itemIndex: position,
-      patch
-    });
-    wizardState.projectId = result.project.id;
-    wizardState.draft = result.project.draft || wizardState.draft;
-    wizardState.gameSnapshot = result.game || wizardState.gameSnapshot;
-    if (result.game && result.game.id) wizardState.gameId = result.game.id;
-    const gameType = (wizardState.config && wizardState.config.gameType) || '';
-    wizardSetNotice(`Đã đổi minh hoạ cho ${wizardDraftItemLabel(gameType, position)}. Nội dung câu hỏi giữ nguyên.`);
+    picked = await wizardImportIllustration();
   } catch (error) {
+    wizardState.artBusy = false;
     wizardSetError(error);
+    render();
+    return undefined;
   }
-  wizardState.artBusy = false;
-  render();
-  return undefined;
+  if (!picked || !picked.id) {
+    // The teacher cancelled the dialog: nothing changes, nothing is reported.
+    wizardState.artBusy = false;
+    render();
+    return undefined;
+  }
+  return wizardQueueArtTask(async () => {
+    await wizardApplyItemPatch(position, { illustrationAssetId: picked.id });
+    const gameType = (wizardState.config && wizardState.config.gameType) || '';
+    wizardSetNotice(`Đã tải ảnh lên và gắn vào ${wizardDraftItemLabel(gameType, position)}. Ảnh được lưu trên máy này.`);
+  });
+}
+
+/**
+ * #124: forces the play surface to load the pictures again.
+ *
+ * Chromium caches an `<img>`/SVG `<image>` by URL. When a teacher replaces a picture,
+ * the *new* URL is different (a new id), so a cache miss is normal — but the browser
+ * can also keep the previous node alive across an innerHTML rebuild in a way that
+ * leaves a stale frame until the next paint. Re-adding the `src`/`href` after a frame
+ * is cheap and makes the thumbnail and the play screen show the current file.
+ */
+function wizardRepaintArtThumbs() {
+  if (wizardState.step !== 'generate') return;
+  document.querySelectorAll('[data-wizard-item-card] .stage-illustration.is-custom image').forEach(node => {
+    const href = node.getAttribute('href');
+    if (!href) return;
+    node.removeAttribute('href');
+    // Re-adding in the next frame guarantees a fresh paint rather than a no-op.
+    setTimeout(() => { if (node.isConnected) node.setAttribute('href', href); }, 0);
+  });
 }
 
 /**
@@ -502,7 +736,7 @@ function renderWizardGenerationProgress() {
       <span data-wizard-generate-elapsed>${escapeHtml(wizardGenerationElapsedText())}</span>
       <span>Bạn có thể chuyển sang trang khác — AI vẫn chạy nền và kết quả sẽ được giữ.</span>
     </div>
-    <span>AI local chạy trên máy này; giáo án không được gửi đi đâu. Có thể huỷ giữa chừng.</span>
+    <span>${wizardProviderPrivacyText()}</span>
   </div>`;
 }
 
@@ -523,15 +757,34 @@ function renderWizardGenerate() {
   const s = wizardState;
   const config = s.config;
   const hasContent = Boolean(s.gameSnapshot);
+  // #117: a run that started from the teacher's question bank never uses the model, so
+  // it has no Fast/Thinking choice and its forward action is saving to the library.
+  const bankRun = s.draftOrigin === 'source' && s.draftSource === 'imported-questions';
+  const tag = bankRun
+    ? 'Từ câu hỏi có sẵn'
+    : (hasContent ? 'Đã tạo bản nháp' : (config && config.generationMode === 'deep' ? 'Chế độ Thinking' : 'Chế độ Fast'));
+  if (bankRun && hasContent) {
+    return `<section class="form-panel" data-wizard-step-body="generate" data-wizard-bank-finish="1">
+    <div class="section-head"><h3>Bước 4 · Hoàn tất trò chơi</h3><span class="tag">${tag}</span></div>
+    <div class="panel-sub">Trò chơi đã được tạo từ đúng câu hỏi giáo viên cung cấp và đã qua kiểm tra cấu trúc. Không dùng AI ở bước này — bấm “Lưu vào thư viện” để có thể chơi ngay, hoặc mở trình chỉnh sửa nếu muốn sửa.</div>
+    ${wizardSummaryGrid(wizardGeneratedSummaryRows(s.gameSnapshot))}
+    ${wizardItemCardsPanel(s)}
+    <div class="publish-actions">
+      <button class="btn btn-secondary" data-wizard-action="back"${s.busy ? ' disabled' : ''}>← Cấu hình</button>
+      <button class="btn btn-primary" id="wizardNextBtn" data-wizard-action="save-game"${s.busy ? ' disabled' : ''}>${s.busy === 'save-game' ? 'Đang lưu…' : '💾 Lưu vào thư viện'}</button>
+      <button class="btn btn-secondary" data-wizard-action="open-editor"${s.busy ? ' disabled' : ''}>✎ Mở trình chỉnh sửa</button>
+      <button class="btn btn-secondary" data-wizard-action="save-project"${s.busy ? ' disabled' : ''}>Lưu tiến trình</button>
+    </div>
+  </section>`;
+  }
   return `<section class="form-panel" data-wizard-step-body="generate">
-    <div class="section-head"><h3>Bước 5 · Tạo nội dung trò chơi</h3><span class="tag">${hasContent ? 'Đã tạo bản nháp' : (config && config.generationMode === 'deep' ? 'Chế độ Thinking' : 'Chế độ Fast')}</span></div>
+    <div class="section-head"><h3>Bước 5 · Tạo nội dung trò chơi</h3><span class="tag">${tag}</span></div>
     ${hasContent
-      ? `<div class="panel-sub">AI local đã soạn bản nháp từ giáo án và đã được kiểm tra cấu trúc. Hãy mở trình chỉnh sửa để duyệt, sửa lại rồi lưu vào thư viện để chơi thử.</div>
+      ? `<div class="panel-sub">${escapeHtml(wizardProviderLabel())} đã soạn bản nháp từ giáo án và đã được kiểm tra cấu trúc. Hãy mở trình chỉnh sửa để duyệt, sửa lại rồi lưu vào thư viện để chơi thử.</div>
         ${wizardSummaryGrid(wizardGeneratedSummaryRows(s.gameSnapshot))}
         ${wizardShortfallNotice(s.quality, Boolean(s.busy), s.countTouched)}
         ${wizardQualityPanel(s.quality)}
-        ${wizardDraftItemsPanel(s)}
-        ${wizardIllustrationGrid(s)}
+        ${wizardItemCardsPanel(s)}
         ${wizardContextHint(s.context)}
         ${wizardGenerationTotalText() ? `<div class="field-hint" data-wizard-generate-total-line>⏱ ${escapeHtml(wizardGenerationTotalText())}</div>` : ''}
         <div class="publish-actions">
@@ -545,12 +798,14 @@ function renderWizardGenerate() {
           <button class="btn btn-secondary" data-wizard-action="go-library"${s.busy ? ' disabled' : ''}>📚 Vào thư viện để chơi</button>
         </div>
         <div class="field-hint">“Trò chơi khác” mở một dự án mới nhưng dùng lại phân tích đã lưu — không gọi AI phân tích lại. Bạn chỉ cần chọn thể loại và cấu hình mới.</div>`
-      : `<div class="panel-sub">AI local sẽ soạn câu hỏi/tình huống theo đúng cấu hình bên dưới, sau đó bạn duyệt và chỉnh sửa trong trình soạn thảo. Cấu hình và phân tích đã được lưu nên có thể mở lại bất cứ lúc nào — không cần chạy lại AI.</div>
+      : `<div class="panel-sub">${escapeHtml(wizardProviderLabel())} sẽ soạn câu hỏi/tình huống theo đúng cấu hình bên dưới, sau đó bạn duyệt và chỉnh sửa trong trình soạn thảo. Cấu hình và phân tích đã được lưu nên có thể mở lại bất cứ lúc nào — không cần chạy lại AI.</div>
+        ${wizardProviderCard()}
+        ${wizardProviderPickerHtml()}
         ${wizardSummaryGrid(wizardConfigSummaryRows(config))}
         <div class="publish-actions">
           <button class="btn btn-secondary" data-wizard-action="back">← Cấu hình</button>
           <button class="btn btn-secondary" data-wizard-action="save-project"${s.busy ? ' disabled' : ''}>Lưu tiến trình</button>
-          <button class="btn btn-primary" id="wizardGenerateBtn" data-wizard-action="generate"${s.busy ? ' disabled' : ''}>✦ Tạo nội dung bằng AI local</button>
+          <button class="btn btn-primary" id="wizardGenerateBtn" data-wizard-action="generate"${s.busy ? ' disabled' : ''}>✦ Tạo nội dung${wizardProviderSuffix()}</button>
           ${s.busy === 'generate' ? '<button class="btn btn-secondary" data-wizard-action="cancel">Huỷ</button>' : ''}
         </div>`}
     ${s.projectId ? `<div class="field-hint">Dự án đã lưu: <code>${escapeHtml(s.projectId)}</code>. Nội dung AI tạo ra chỉ nằm trên máy này.</div>` : ''}
@@ -591,6 +846,8 @@ async function wizardGenerateRun(options) {
       projectId: wizardState.projectId,
       requestId: wizardState.activeRequestId,
       mode: wizardState.config.generationMode,
+      // #132: the provider picked in the wizard (absent = the automatic policy).
+      ...wizardProviderRequestPayload(),
       // O5: "Tạo lại" always asks the model for new content; a plain "Tạo nội
       // dung" may reuse the cached draft when nothing changed (§9).
       regenerate: Boolean(options && options.regenerate)
@@ -636,8 +893,10 @@ function wizardGenerateRegenerate() {
 /** O5: rewrite one item only; the other items are not sent to the model. */
 async function wizardRegenerateItem(position) {
   if (wizardState.busy) return undefined;
-  if (!wizardState.projectId) {
-    toast('Hãy lưu dự án trước khi tạo lại một mục.');
+  if (!(await wizardEnsureProjectSaved())) {
+    // Same invisible precondition as the artwork actions (#126): say it in the banner.
+    wizardSetError(new Error('Chưa lưu được dự án nên chưa tạo lại được câu này. Hãy bấm “Lưu tiến trình” rồi thử lại.'));
+    render();
     return undefined;
   }
   wizardClearMessages();
@@ -651,7 +910,9 @@ async function wizardRegenerateItem(position) {
     const result = await window.eduGame.regenerateLessonItem({
       projectId: wizardState.projectId,
       requestId: wizardState.activeRequestId,
-      itemIndex: position
+      itemIndex: position,
+      // #132: regenerating one item stays on the provider the draft used.
+      ...wizardProviderRequestPayload()
     });
     wizardState.projectId = result.project.id;
     wizardState.draft = result.project.draft || wizardState.draft;
@@ -701,7 +962,7 @@ function wizardGenerateOpenEditor() {
   openEditor(
     JSON.parse(JSON.stringify(game)),
     true,
-    'AI local đã soạn bản nháp từ giáo án. Hãy duyệt, sửa nội dung và nhấn “Lưu vào thư viện” để chơi thử.',
+      'Đã soạn bản nháp từ giáo án. Hãy duyệt, sửa nội dung và nhấn “Lưu vào thư viện” để chơi thử.',
     {
       projectId: wizardState.projectId,
       gameType,

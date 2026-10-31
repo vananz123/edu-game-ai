@@ -93,6 +93,9 @@ function editorAiErrorText(error) {
     AI_TIMEOUT: 'AI local phản hồi quá lâu. Hãy thử lại với giáo án ngắn hơn hoặc model nhỏ hơn.',
     AI_CANCELLED: 'Đã huỷ yêu cầu AI.',
     AI_HTTP: 'AI local báo lỗi khi xử lý. Hãy thử lại.',
+  // #132: a cloud provider's own HTTP failure; keep it apart from AI_HTTP so the
+  // message never blames the local model.
+  AI_PROVIDER_HTTP: 'Nhà cung cấp AI trả lỗi khi xử lý. Hãy thử lại sau, hoặc kiểm tra model và endpoint trong Cài đặt AI.',
     AI_EMPTY: 'AI local không trả về nội dung. Hãy thử lại.',
     AI_TRUNCATED: 'Câu trả lời bị cắt do giới hạn độ dài. Hãy thử lại.',
     AI_INVALID_JSON: 'AI local trả về dữ liệu không đọc được. Hãy thử lại.',
@@ -146,7 +149,7 @@ async function editorCancelAi() {
 async function editorRegenerateItem(button) {
   if (editorAiBusy || !editorAiContext) return;
   const context = editorAiContext;
-  const root = $('#modalRoot');
+  const root = editorPageRoot();
   const position = Number(button.dataset.aiRegenerate);
   const template = $('#editTemplate', root)?.value || '';
   const expected = editorAiExpectedTemplate(context.gameType);
@@ -291,7 +294,104 @@ function createBlankGame() {  const p = collectDraft();  const t = p.template ||
   const isTreasure = t === 'treasure-hunt';
   const isRace = t === 'race';
   const usesPanel = isMatching || isTreasure || isRace;
-  const game = { id: '', title: p.title || 'Trò chơi mới', subject: p.subject, grade: p.grade, topic: '', template: t, description: 'Trò chơi được tạo trong EduGame Studio.', sourceName: p.sourceName, gameSetup: p.gameSetup, questions: usesPanel ? [] : [{ id:'q1', type:t, ...sample }], matchingGame: isMatching ? defaultMatchingGame() : undefined, ...(isTreasure ? { treasureHunt: defaultTreasureHunt() } : {}), ...(isRace ? { race: defaultRaceData() } : {}) };  openEditor(game, true, 'Bạn đang tạo trò chơi mới theo cách nhập thủ công. Hãy điền đầy đủ câu hỏi, phương án và đáp án đúng.');  toast('Đã mở trò chơi trống. Hãy nhập câu hỏi, phương án và đáp án đúng rồi nhấn Lưu vào thư viện.');}function editGame(game) { if (!game) return; openEditor(JSON.parse(JSON.stringify(game)), false, 'Chỉnh sửa nội dung trò chơi.'); }function openEditor(game, isNew, note = '', aiContext = null) {  editorCancelPending();  editorAiContext = aiContext && aiContext.projectId && editorAiSupported(aiContext.gameType) ? { projectId: String(aiContext.projectId), gameType: aiContext.gameType, itemIds: (Array.isArray(aiContext.itemIds) ? aiContext.itemIds : []).map(id => String(id)) } : null;  editorAiBusy = false;  editorAiRequestId = '';  const root = $('#modalRoot');  root.innerHTML = `<div class="modal-backdrop"><div class="modal"><div class="modal-head"><div><h2>${isNew ? 'Duyệt và hoàn thiện trò chơi' : 'Chỉnh sửa trò chơi'}</h2><div class="small muted mt-[5px]">${escapeHtml(note)}</div></div><button class="modal-close" data-close>✕</button></div><div class="modal-body">      <div class="field-row"><div class="field"><label>TÊN TRÒ CHƠI</label><input id="editTitle" value="${escapeHtml(game.title)}"></div><div class="field"><label>THỂ LOẠI</label><select id="editTemplate">${[['quiz','Đấu trường kiến thức'],['scenario','Thử thách tình huống'],['matching','Ghép cặp kiến thức'],['treasure-hunt','Giải mã kho báu'],['race','Đường đua chinh phục']].map(([v,l])=>`<option value="${v}" ${game.template===v?'selected':''}>${l}</option>`).join('')}</select></div></div>    <div class="field-row"><div class="field"><label>MÔN HỌC</label><input id="editSubject" value="${escapeHtml(game.subject||'')}"></div><div class="field"><label>LỚP</label><input id="editGrade" value="${escapeHtml(game.grade||'')}"></div></div>    <div class="field"><label>MÔ TẢ</label><input id="editDescription" value="${escapeHtml(game.description||'')}"></div>    <div class="field"><label>MINH HỌA</label><select id="editIllustrationMode"><option value="auto" ${editorIllustrationMode(game)==='auto'?'selected':''}>Tự động theo lĩnh vực nội dung</option><option value="manual" ${editorIllustrationMode(game)==='manual'?'selected':''}>Chọn thủ công từng mục</option><option value="off" ${editorIllustrationMode(game)==='off'?'selected':''}>Tắt minh họa</option></select><p class="field-hint">Giáo viên luôn kiểm soát hình minh họa. Tắt minh họa chỉ ẩn hình nội dung; icon chức năng của giao diện vẫn hoạt động.</p></div>      <div class="section-head"><h3>Câu hỏi / tình huống <span class="tag">${game.questions.length}</span></h3><div><button class="btn btn-secondary btn-small" id="importQuestionsBtn">⇧ Nhập CSV/XLSX</button> <button class="btn btn-secondary btn-small" id="addQuestionBtn">＋ Thêm câu hỏi</button></div></div>    <div id="editorQuestions">${game.questions.map((q,i)=>questionEditor(q,i,game.questions)).join('')}</div>    </div><div class="modal-foot"><button class="btn btn-secondary" data-close>Hủy</button><button class="btn btn-secondary" id="saveExportBtn">Lưu và xuất</button><button class="btn btn-primary" id="saveGameBtn">✓ Lưu vào thư viện</button></div></div></div>`;  root.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', () => { editorCancelPending(); editorAiContext = null; root.innerHTML = ''; }));  const editorQuestions = $('#editorQuestions', root);
+  const game = { id: '', title: p.title || 'Trò chơi mới', subject: p.subject, grade: p.grade, topic: '', template: t, description: 'Trò chơi được tạo trong EduGame Studio.', sourceName: p.sourceName, gameSetup: p.gameSetup, questions: usesPanel ? [] : [{ id:'q1', type:t, ...sample }], matchingGame: isMatching ? defaultMatchingGame() : undefined, ...(isTreasure ? { treasureHunt: defaultTreasureHunt() } : {}), ...(isRace ? { race: defaultRaceData() } : {}) };  openEditor(game, true, 'Bạn đang tạo trò chơi mới theo cách nhập thủ công. Hãy điền đầy đủ câu hỏi, phương án và đáp án đúng.');  toast('Đã mở trò chơi trống. Hãy nhập câu hỏi, phương án và đáp án đúng rồi nhấn Lưu vào thư viện.');}function editGame(game) { if (!game) return; openEditor(JSON.parse(JSON.stringify(game)), false, 'Chỉnh sửa nội dung trò chơi.'); }/**
+ * #129: the game editor is a **page**, not a modal.
+ *
+ * A full-screen dialog was the wrong container for a screen a teacher works in for
+ * minutes: the backdrop hid the library, Escape and backdrop clicks could throw away
+ * typing, the page behind still scrolled, and it read as a pop-up rather than a
+ * workspace. It is now `state.page === 'editor'`, rendered into `#pageContent` like any
+ * other page, with a sticky header (back, title, save) and the same body markup — every
+ * field binding below reads `root` and keeps working unchanged.
+ *
+ * `editGame`/`openEditor` keep their names so every caller (library card, wizard, the new
+ * game flow) needs no change.
+ */
+function editorPageRoot() {
+  return document.getElementById('pageContent');
+}
+
+/**
+ * Markup of the editor page from `editorPageState`.
+ *
+ * A *pure* page renderer: the shell assigns what this returns to `#pageContent` and
+ * then wires the fields. Rendering into the DOM here instead made the shell write
+ * `undefined` over the page (#130).
+ */
+function renderEditorPage() {
+  const page = editorPageState;
+  if (!page) {
+    return `<section class="editor-page-empty"><h1>Chưa chọn trò chơi</h1>
+      <p>Mở một trò chơi trong Thư viện để chỉnh sửa, hoặc tạo trò chơi mới.</p>
+      <button class="btn btn-primary" data-page="library">← Về Thư viện</button></section>`;
+  }
+  return editorPageHtml(page.game, page.isNew, page.note);
+}
+
+/** The single entry point: every caller opens the editor page through this. */
+function openEditor(game, isNew, note = '', aiContext = null) {
+  editorCancelPending();
+  editorAiContext = aiContext && aiContext.projectId && editorAiSupported(aiContext.gameType)
+    ? {
+      projectId: String(aiContext.projectId),
+      gameType: aiContext.gameType,
+      itemIds: (Array.isArray(aiContext.itemIds) ? aiContext.itemIds : []).map(id => String(id))
+    }
+    : null;
+  editorAiBusy = false;
+  editorAiRequestId = '';
+  editorPicturesBeforeSave = null;
+  editorPageState = { game, isNew: Boolean(isNew), note };
+  navigate('editor');
+}
+
+/** Leaves the editor page; `cancel` also stops a pending per-item AI request. */
+function closeEditorPage(options = {}) {
+  if (options.cancel) {
+    editorCancelPending();
+    editorAiContext = null;
+    editorPicturesBeforeSave = null;
+  }
+  editorPageState = null;
+  navigate('library');
+}
+
+/** Markup of the editor page (the shell assigns it to `#pageContent`). */
+function editorPageHtml(game, isNew, note) {
+  return `<section class="editor-page" data-editor-page="1">
+    <header class="editor-page-head">
+      <button class="btn btn-secondary btn-small" data-editor-back>← Thư viện</button>
+      <div class="editor-page-title"><h1>${isNew ? 'Duyệt và hoàn thiện trò chơi' : 'Chỉnh sửa trò chơi'}</h1>
+        <div class="small muted">${escapeHtml(note)}</div></div>
+    </header>
+    <div class="editor-save-bar" data-editor-save-bar data-dirty="0">
+      <span class="editor-save-hint" data-editor-save-hint>Bấm “Lưu vào thư viện” để lưu các thay đổi trên trang này.</span>
+      <div class="editor-save-actions">
+        <button class="btn btn-secondary" id="editorCancelBtn">Hủy</button>
+        <button class="btn btn-secondary" id="saveExportBtn">Lưu và xuất</button>
+        <button class="btn btn-primary" id="saveGameBtn">✓ Lưu vào thư viện</button>
+      </div>
+    </div>
+    <div class="editor-page-body">      <div class="field-row"><div class="field"><label>TÊN TRÒ CHƠI</label><input id="editTitle" value="${escapeHtml(game.title)}"></div><div class="field"><label>THỂ LOẠI</label><select id="editTemplate">${[['quiz','Đấu trường kiến thức'],['scenario','Thử thách tình huống'],['matching','Ghép cặp kiến thức'],['treasure-hunt','Giải mã kho báu'],['race','Đường đua chinh phục']].map(([v,l])=>`<option value="${v}" ${game.template===v?'selected':''}>${l}</option>`).join('')}</select></div></div>    <div class="field-row"><div class="field"><label>MÔN HỌC</label><input id="editSubject" value="${escapeHtml(game.subject||'')}"></div><div class="field"><label>LỚP</label><input id="editGrade" value="${escapeHtml(game.grade||'')}"></div></div>    <div class="field"><label>MÔ TẢ</label><input id="editDescription" value="${escapeHtml(game.description||'')}"></div>    <div class="field"><label>MINH HỌA</label><select id="editIllustrationMode"><option value="auto" ${editorIllustrationMode(game)==='auto'?'selected':''}>Tự động theo lĩnh vực nội dung</option><option value="manual" ${editorIllustrationMode(game)==='manual'?'selected':''}>Chọn thủ công từng mục</option><option value="off" ${editorIllustrationMode(game)==='off'?'selected':''}>Tắt minh họa</option></select><p class="field-hint">Giáo viên luôn kiểm soát hình minh họa. Tắt minh họa chỉ ẩn hình nội dung; icon chức năng của giao diện vẫn hoạt động.</p></div>    <div class="field ${game.template === 'quiz' ? '' : 'hidden'}" id="gameplayModeField"><label>CÁCH CHƠI</label><select id="editGameplayMode"><option value="classic" ${editorGameplayMode(game)==='classic'?'selected':''}>Cổ điển — trả lời câu hỏi nhận điểm</option><option value="house" ${editorGameplayMode(game)==='house'?'selected':''}>Xây nhà — câu đúng dần dựng ngôi nhà 3D</option></select><p class="field-hint">Chế độ Xây nhà biến mỗi câu trả lời đúng thành vật liệu dựng nhà (tường → mái → cửa sổ → vườn). Ngôi nhà chia đều theo số câu hỏi (tối đa 8 phần): trả lời đúng tất cả sẽ hoàn thiện ngôi nhà. Chế độ Cổ điển giữ nguyên cách chơi hiện tại.</p></div>    <div class="field ${game.template === 'quiz' ? '' : 'hidden'}" id="houseStyleField"><label>MẪU NHÀ 3D</label><select id="editHouseStyle"><option value="auto" ${editorHouseStyle(game)==='auto'?'selected':''}>Tự động — mỗi trò một mẫu riêng</option>${houseStyleOptions().map(option=>`<option value="${option.id}" ${editorHouseStyle(game)===option.id?'selected':''}>${escapeHtml(option.label)}</option>`).join('')}</select><p class="field-hint">Chỉ dùng ở chế độ Xây nhà. “Tự động” chọn mẫu cố định theo trò chơi để ngôi nhà không đổi giữa các lần chơi; chọn tay để hợp chủ đề bài học.</p></div>      <div class="section-head"><h3>Câu hỏi / tình huống <span class="tag">${game.questions.length}</span></h3><div><button class="btn btn-secondary btn-small" id="importQuestionsBtn">⇧ Nhập CSV/XLSX</button> <button class="btn btn-secondary btn-small" id="addQuestionBtn">＋ Thêm câu hỏi</button></div></div>    <div id="editorQuestions">${game.questions.map((q,i)=>questionEditor(q,i,game.questions)).join('')}</div>      </div></section>`;
+}
+
+/** Binds the editor page once it is in the DOM. */
+function wireEditorPage(root) {
+  if (!root) root = editorPageRoot();
+  if (!root) return;
+  // The fields belong to the page the shell just inserted; `game` is the one the markup
+  // was built from.
+  const game = editorPageState ? editorPageState.game : null;
+  if (!game) return;
+  const editorQuestions = $('#editorQuestions', root);
+// #128: picture control (upload / built-in / auto) for every item row.
+if (typeof wireEditorItemArt === 'function') wireEditorItemArt(root);
+// The picker's own event: the options box calls `stopPropagation` on `change` and would
+// swallow a delegated listener, so the control listens on itself (`art-change`).
+root.addEventListener('change', e => {
+  const picker = e.target && e.target.closest ? e.target.closest('[data-art-picker]') : null;
+  if (picker) picker.dispatchEvent(new CustomEvent('art-change', { bubbles: false }));
+});
 editorQuestions.addEventListener('change', e => {
   const target=e.target;
   if(!target.matches('[data-field="type"]')) return;
@@ -348,13 +448,63 @@ $('#importQuestionsBtn', root).addEventListener('click', async () => {
   if (!game.matchingGame) game.matchingGame = defaultMatchingGame();
   if (!game.treasureHunt) game.treasureHunt = defaultTreasureHunt();
   if (!game.race) game.race = defaultRaceData();
-  $('.modal-body', root).insertAdjacentHTML('beforeend',
-    matchingEditorHtml(game.matchingGame) + treasureEditorHtml(game.treasureHunt) + raceEditorHtml(game.race));
+  // #129/#130: the hidden template editors (ghép cặp / kho báu / đường đua) append to
+  // the page body that replaced `.modal-body`; guarding keeps a later class rename from
+  // throwing here and killing the whole editor page.
+  const editorBody = $('.editor-page-body', root) || $('.modal-body', root);
+  if (editorBody) {
+    editorBody.insertAdjacentHTML('beforeend',
+      matchingEditorHtml(game.matchingGame) + treasureEditorHtml(game.treasureHunt) + raceEditorHtml(game.race));
+    // #131: these panels are inserted *after* the editor page was wired, so their picture
+    // controls (race questions and treasure stages) had no listeners and the upload
+    // button did nothing. Bind them now that they are in the DOM.
+    if (typeof wireEditorItemArt === 'function') wireEditorItemArt(root);
+  }
   bindMatchingEditor(root);
   bindTreasureEditor(root);
   bindRaceEditor(root);
   toggleEditorSections(root);
-}function questionEditor(q, i, allQuestions = []) {
+
+  // #129: leaving the page. Back and Hủy both cancel a pending per-item AI request;
+  // they no longer blank a modal, which never discarded the teacher's typing silently
+  // because the page keeps the draft in the DOM until it is replaced by the library.
+  // #130: ask only when there is something to lose; a clean editor leaves at once.
+  root.querySelectorAll('[data-editor-back], #editorCancelBtn').forEach(el => el.addEventListener('click', () => {
+    const dirty = $('[data-editor-save-bar]', root);
+    if (!dirty || dirty.dataset.dirty !== '1' || window.confirm('Rời trình chỉnh sửa? Thay đổi chưa lưu sẽ mất.')) closeEditorPage({ cancel: true });
+  }));
+  // The pinned bar tracks work in progress: any edit in the form marks it dirty.
+  const markDirty = () => {
+    const bar = $('[data-editor-save-bar]', root);
+    if (!bar) return;
+    bar.dataset.dirty = '1';
+    const hint = $('[data-editor-save-hint]', bar);
+    if (hint) hint.textContent = 'Bấm “Lưu vào thư viện” để lưu các thay đổi trên trang này.';
+  };
+  root.addEventListener('input', markDirty);
+  root.addEventListener('change', markDirty);
+  root.addEventListener('click', event => {
+    const target = event.target;
+    // Adding/removing/reordering rows is a change too; the buttons that only *save*
+    // are excluded so the hint does not flip right before the page closes.
+    if (target && target.closest && target.closest('[id^="save"], [data-editor-back], #editorCancelBtn')) return;
+    if (target && target.closest && target.closest('button, [data-rq-remove], [data-ai-regenerate]')) markDirty();
+  });
+}
+
+/**
+ * #130: turns the bindings of `editorPageHtml` into one function the shell calls after
+ * it inserted the markup. The body below is the former tail of `renderEditorInto`; each
+ * line is bound to `root` (the `#pageContent` holder) and to `game`.
+ */
+function bindEditorPageFields(root, game) {
+  bindMatchingEditor(root);
+  bindTreasureEditor(root);
+  bindRaceEditor(root);
+  toggleEditorSections(root);
+}
+
+function questionEditor(q, i, allQuestions = []) {
   const type = q.type || 'multiple-choice';
   const isScenario = type === 'scenario';
   const isMC = type === 'multiple-choice' || isScenario;
@@ -404,7 +554,7 @@ $('#importQuestionsBtn', root).addEventListener('click', async () => {
       <span>Thời gian (giây)</span><input data-field="timelimit" type="number" min="0" value="${timeLimit}" placeholder="mặc định" class="w-[90px] m-0 p-[6px]">
     </div>
     <div class="correct-select"><span>Độ khó</span><select data-field="difficulty" class="w-auto"><option value="" ${!q.difficulty?'selected':''}>— Chưa đặt</option><option value="dễ" ${q.difficulty==='dễ'?'selected':''}>Dễ</option><option value="trung bình" ${q.difficulty==='trung bình'?'selected':''}>Trung bình</option><option value="khó" ${q.difficulty==='khó'?'selected':''}>Khó</option></select></div>
-    ${editorAssetFieldsHtml(q)}
+    ${editorAssetFieldsHtml(q)}${editorItemArtHtml(q)}
     <textarea data-field="explanation" rows="2" placeholder="Giải thích đáp án">${escapeHtml(q.explanation||'')}</textarea>
   </div>`;
 }
@@ -444,12 +594,155 @@ function editorAssetFieldsHtml(item, options) {
     <input type="hidden" data-field="illustrationAssetId" value="${escapeHtml(illustration)}">
   </div>`;
 }
+
+/* #129: the editor page state. `null` means "no game in hand" — opening the page then
+   shows an empty state instead of an editor over nothing. */
+let editorPageState = null;
+
 /**
- * Reads the three hidden asset inputs of an item. A value is only returned when
- * it is non-blank, and `general` is dropped because a missing category already
- * means general — the same rule the project adapter applies on save. Returns {}
- * when the row has no asset inputs, so spreading it never invents fields.
+ * #128: the teacher's own picture on every item of the manual editor.
+ *
+ * The manual path only carried `illustrationAssetId` in hidden inputs, so a game created
+ * here could neither get a picture nor change one. This control is the one step 5 uses
+ * (#124): thumb, source badge, "📷 Tải ảnh lên", the built-in choices and "Tự động". It
+ * writes into the same hidden input the save path already reads, so saving is unchanged.
  */
+function editorItemArtHtml(item) {
+  const source = item || {};
+  const assetId = typeof source.illustrationAssetId === 'string' ? source.illustrationAssetId.trim() : '';
+  const rawCategory = typeof source.contentCategory === 'string' ? source.contentCategory.trim() : '';
+  const category = EDITOR_CONTENT_CATEGORY_IDS.includes(rawCategory) ? rawCategory : 'general';
+  const isCustom = /^ci-[a-f0-9]{32}$/u.test(assetId);
+  const builtIn = !isCustom && /-scene$/u.test(assetId) && EDITOR_CONTENT_CATEGORY_IDS.includes(assetId.replace(/-scene$/u, ''))
+    ? assetId
+    : '';
+  const badge = isCustom
+    ? 'Ảnh tự tải lên'
+    : builtIn
+      ? `Hình có sẵn: ${EDITOR_CATEGORY_LABEL[builtIn.replace(/-scene$/u, '')] || builtIn}`
+      : `Theo chủ đề: ${EDITOR_CATEGORY_LABEL[category] || 'Tổng quát'}`;
+  // The preview is the play-surface renderer itself, so the editor shows exactly what
+  // the class will see.
+  const previewItem = Object.assign({}, source, { illustrationAssetId: assetId });
+  const preview = typeof stageIllustrationHtml === 'function'
+    ? stageIllustrationHtml(previewItem, { template: 'quiz', gameSetup: { illustrationMode: 'auto' } }, 'is-editor-preview')
+    : '';
+  const options = [
+    `<option value="">Tự động (theo chủ đề)</option>`,
+    ...EDITOR_CONTENT_CATEGORY_IDS.map(id => `<option value="${escapeHtml(id)}-scene"${builtIn === `${id}-scene` ? ' selected' : ''}>${escapeHtml(EDITOR_CATEGORY_LABEL[id] || id)}</option>`),
+    ...(isCustom ? [`<option value="${escapeHtml(assetId)}" selected>Ảnh tự tải lên (giữ nguyên)</option>`] : [])
+  ].join('');
+  return `<div class="editor-item-art" data-editor-art>
+    <div class="editor-art-thumb${preview ? '' : ' is-empty'}" data-editor-art-thumb>${preview || '<span>Chưa có hình</span>'}</div>
+    <div class="editor-art-controls">
+      <div class="editor-art-badge" data-editor-art-badge>${escapeHtml(badge)}</div>
+      <div class="editor-art-buttons">
+        <button type="button" class="btn btn-secondary btn-small" data-editor-art-upload title="Chọn ảnh PNG/JPG/WEBP/GIF từ máy">📷 Tải ảnh lên</button>
+        <select data-editor-art-pick data-art-picker title="Chọn hình minh hoạ có sẵn">${options}</select>
+        <button type="button" class="btn btn-secondary btn-small" data-editor-art-reset>↺ Tự động</button>
+      </div>
+      <div class="editor-art-hint">Minh hoạ đi kèm câu hỏi này. Ảnh tải lên được lưu trên máy và chơi được khi không có mạng.</div>
+    </div>
+  </div>`;
+}
+
+/**
+ * #128: reads the picture choice of one row from the hidden input the editor saves.
+ *
+ * The control is drawn from this value and nothing else, so the thumb, the badge, the
+ * picker and the saved game can never disagree.
+ */
+function editorItemArtValue(row) {
+  const scope = row && row.parentElement;
+  const field = scope ? scope.querySelector('[data-field="illustrationAssetId"]') : null;
+  const category = scope ? scope.querySelector('[data-field="contentCategory"]') : null;
+  return { illustrationAssetId: field ? field.value : '', contentCategory: category ? category.value : '' };
+}
+
+/** The one call that opens the file dialog for the editor (a seam for the UI check). */
+function editorImportIllustration() {
+  return window.eduGame.importIllustration();
+}
+
+/** Writes the choice to the hidden input, then redraws the control from that input. */
+function applyEditorItemArt(row, assetId) {
+  if (!row) return;
+  const scope = row.parentElement;
+  const field = scope ? scope.querySelector('[data-field="illustrationAssetId"]') : null;
+  if (field) field.value = assetId || '';
+  redrawEditorArtRow(row);
+}
+
+/** Replaces one control with a fresh one drawn from the hidden input. */
+function redrawEditorArtRow(row) {
+  if (!row) return;
+  const fresh = document.createElement('div');
+  fresh.innerHTML = editorItemArtHtml(editorItemArtValue(row));
+  const next = fresh.firstElementChild;
+  if (!next) return;
+  // The listeners live on the *old* node, so the replacement is bound from scratch. The
+  // `data-art-bound` marker must not be copied: it means "already bound", and copying it
+  // made every control dead after its first redraw (#128).
+  next.removeAttribute('data-art-bound');
+  row.replaceWith(next);
+  wireEditorItemArtRow(next);
+}
+
+/**
+ * Binds one control.
+ *
+ * The change is a custom `art-change` event dispatched by the control itself: the
+ * editor's own change handler on the question list starts with `if (!target.matches(
+ * '[data-field="type"]')) return;`, and the options box stops propagation, so a shared
+ * `change` listener is not a reliable path for this control.
+ */
+function wireEditorItemArtRow(row) {
+  if (!row || row.dataset.artBound === '1') return;
+  row.dataset.artBound = '1';
+  // The handlers resolve the *current* row from the clicked node each time: a redraw
+  // replaces the control, and a closure over the old node would write into a detached
+  // element (the "second click does nothing" bug).
+  const picker = row.querySelector('[data-editor-art-pick]');
+  if (picker) picker.addEventListener('art-change', () => {
+    const live = picker.closest('[data-editor-art]');
+    applyEditorItemArt(live, picker.value);
+  });
+  const reset = row.querySelector('[data-editor-art-reset]');
+  if (reset) reset.addEventListener('click', () => {
+    const live = reset.closest('[data-editor-art]');
+    applyEditorItemArt(live, '');
+  });
+  const upload = row.querySelector('[data-editor-art-upload]');
+  if (upload) {
+    upload.addEventListener('click', async () => {
+      if (typeof editorImportIllustration !== 'function') return;
+      const control = upload.closest('[data-editor-art]');
+      upload.disabled = true;
+      try {
+        const picked = await editorImportIllustration();
+        // A cancelled dialog changes nothing and reports nothing.
+        if (picked && picked.id) {
+          // The control may have been redrawn while the dialog was open: write into the
+          // row that holds the button now, falling back to the original one.
+          const live = (upload.isConnected ? upload.closest('[data-editor-art]') : null) || control;
+          applyEditorItemArt(live, picked.id);
+        }
+      } catch (error) {
+        // Same rule as step 5: an upload that did not save must not look saved.
+        toast('Không tải được ảnh: ' + String((error && error.message) || 'lỗi không xác định'));
+      } finally {
+        if (upload.isConnected) upload.disabled = false;
+      }
+    });
+  }
+}
+
+/** Binds every control in the editor modal (called when the modal is built). */
+function wireEditorItemArt(root) {
+  if (!root) return;
+  root.querySelectorAll('[data-editor-art]').forEach(row => wireEditorItemArtRow(row));
+}
+
 function readEditorItemAssets(scope) {
   const category = scope?.querySelector('[data-field="contentCategory"]');
   const icon = scope?.querySelector('[data-field="iconName"]');
@@ -476,6 +769,36 @@ function withEditorIllustrationMode(game, root) {
   const select = $('#editIllustrationMode', root);
   const mode = select && (select.value === 'manual' || select.value === 'off') ? select.value : 'auto';
   return { ...game, gameSetup: { ...(game.gameSetup || {}), illustrationMode: mode } };
+}
+/* "Cách chơi" (Classic vs House Building) is a quiz-only choice (DECISIONS #140),
+   stored in `gameSetup.gameplayMode`. Absent = Classic, which keeps every saved
+   game working untouched. Cleared when the template is not quiz so a house mode
+   can never leak onto the other four game types. */
+function editorGameplayMode(game) {
+  return game && game.gameSetup && game.gameSetup.gameplayMode === 'house' ? 'house' : 'classic';
+}
+function withEditorGameplayMode(game, root) {
+  const template = $('#editTemplate', root)?.value || game.template;
+  const setup = { ...(game.gameSetup || {}) };
+  if (template === 'quiz' && $('#editGameplayMode', root)?.value === 'house') setup.gameplayMode = 'house';
+  else delete setup.gameplayMode;
+  return { ...game, gameSetup: setup };
+}
+/* "Mẫu nhà" (DECISIONS #144) is a quiz-only presentation choice stored in
+   `gameSetup.houseStyle`. Absent/'auto' keeps a stable model per game id, so a
+   saved game never reshuffles its house between replays. Cleared for non-quiz
+   templates just like `gameplayMode`. */
+function editorHouseStyle(game) {
+  const style = game && game.gameSetup ? String(game.gameSetup.houseStyle || '') : '';
+  return houseStyleOptions().some(option => option.id === style) ? style : 'auto';
+}
+function withEditorHouseStyle(game, root) {
+  const template = $('#editTemplate', root)?.value || game.template;
+  const setup = { ...(game.gameSetup || {}) };
+  const value = $('#editHouseStyle', root)?.value;
+  if (template === 'quiz' && value && value !== 'auto') setup.houseStyle = value;
+  else delete setup.houseStyle;
+  return { ...game, gameSetup: setup };
 }
 function editorOption(option, index, isScenario, question, allQuestions) {
   const nextValue = option.endsScenario === true || option.nextQuestionId === null
@@ -520,10 +843,12 @@ function readEditorOption(container) {
 }
 async function saveEditedGame(original, exportAfter) {
   if (editorAiBusy) return toast('AI đang viết lại một mục. Hãy chờ hoặc bấm “Huỷ” trước khi lưu.');
-  const root = $('#modalRoot');
+  const root = editorPageRoot();
   // Applied once here so every template's save path persists the teacher's
   // "Minh họa" choice without each branch remembering to repeat it.
   original = withEditorIllustrationMode(original, root);
+  original = withEditorGameplayMode(original, root);
+  original = withEditorHouseStyle(original, root);
   if ($('#editTemplate', root).value === 'matching') {
     const matching = readMatchingEditor(root);
     if (!$('#editTitle', root).value.trim()) return toast('Tên trò chơi không được để trống.');
@@ -545,7 +870,7 @@ async function saveEditedGame(original, exportAfter) {
     try {
       const saved = await window.eduGame.saveGame(game);
       if (exportAfter) await window.eduGame.exportGame(saved);
-      root.innerHTML = '';
+      editorPageState = null;
       await refreshDb();
       navigate('library');
       toast(`Đã lưu “${saved.title}”.`);
@@ -569,7 +894,7 @@ async function saveEditedGame(original, exportAfter) {
     try {
       const saved = await window.eduGame.saveGame(game);
       if (exportAfter) await window.eduGame.exportGame(saved);
-      root.innerHTML = '';
+      editorPageState = null;
       await refreshDb();
       navigate('library');
       toast(`Đã lưu “${saved.title}”.`);
@@ -593,7 +918,7 @@ async function saveEditedGame(original, exportAfter) {
     try {
       const saved = await window.eduGame.saveGame(game);
       if (exportAfter) await window.eduGame.exportGame(saved);
-      root.innerHTML = '';
+      editorPageState = null;
       await refreshDb();
       navigate('library');
       toast(`Đã lưu “${saved.title}”.`);
@@ -675,6 +1000,8 @@ async function saveEditedGame(original, exportAfter) {
    chỉ đổi thứ tự/tham chiếu trong DOM rồi vẽ lại preview. Handle có draggable
    riêng vì row chứa <input> (draggable cả row sẽ chặn chọn/sửa chữ). */
 const EDITOR_CELL_ICON = { boost: '⚡', penalty: '🪨', lucky: '🎁', challenge: '⚔️' };
+/** #131: default team colours, dark enough for white text on top. */
+const EDITOR_TEAM_COLORS = ['#2563eb', '#dc2626', '#059669', '#7c3aed', '#d97706', '#0891b2'];
 const EDITOR_CELL_NAME = { boost: 'Tăng tốc', penalty: 'Chướng ngại', lucky: 'May mắn', challenge: 'Thử thách' };
 let racePreviewTheme = 'editor';
 let dragState = null;
@@ -847,6 +1174,8 @@ function toggleEditorSections(root) {
   set('#matchingEditor', t === 'matching');
   set('#treasureEditor', t === 'treasure-hunt');
   set('#raceEditor', t === 'race');
+  set('#gameplayModeField', t === 'quiz');
+  set('#houseStyleField', t === 'quiz');
   const usesQuestions = t === 'quiz' || t === 'scenario';
   const sectionHead = $('#importQuestionsBtn', root)?.closest('.section-head');
   if (sectionHead) sectionHead.classList.toggle('hidden', !usesQuestions);
@@ -966,7 +1295,7 @@ function treasureStageHtml(stage, index) {
       <div class="field"><label>KIỂU NHIỆM VỤ</label><select data-stage-mission data-stage-select>${Object.entries(treasureMissionMeta).map(([value, meta]) => `<option value="${value}" ${missionType === value ? 'selected' : ''}>${meta.icon} ${meta.label}</option>`).join('')}</select></div>
       <label>CÂU ĐỐ / LỜI DẪN NHIỆM VỤ</label><textarea data-stage-prompt rows="2" placeholder="Nội dung câu đố hoặc lời dẫn nhiệm vụ">${escapeHtml(stage.question?.prompt || '')}</textarea>
       ${treasureMissionPanel(stage)}
-      ${editorAssetFieldsHtml(stage.question)}
+      ${editorAssetFieldsHtml(stage.question)}${editorItemArtHtml(stage.question)}
       <div class="field-row"><div class="field"><label>GIẢI THÍCH</label><textarea data-stage-explanation rows="2">${escapeHtml(stage.question?.explanation || '')}</textarea></div><div class="field"><label>GỢI Ý KHI THỬ SAI</label><textarea data-stage-hint rows="2" placeholder="Hiển thị khi hết lượt thử">${escapeHtml(stage.question?.hint || '')}</textarea></div></div>
       <div class="field-row"><div class="field"><label>LƯỢT THỬ (0 = KHÔNG GIỚI HẠN)</label><input data-stage-attempts type="number" min="0" max="99" value="${Number(stage.attempts) || 0}"></div><div class="field"><label>ĐIỂM GIẢI CÂU ĐỐ</label><input data-stage-points type="number" min="0" max="1000" value="${Number(stage.points) || 100}"></div><div class="field"><label>THƯỞNG HOÀN THÀNH CHẶNG</label><input data-stage-bonus type="number" min="0" max="10000" value="${Number(stage.completionBonus) || 200}"></div></div>
       <div class="field-row"><div class="field"><label>ĐI TỚI SAU KHI XONG CHẶNG</label><select data-stage-next data-stage-select>${stage.nextStageId ? `<option value="${escapeHtml(stage.nextStageId)}">Chặng liên kết</option>` : '<option value="__ending__">🏠 Kết thúc tại đây — nhận kho báu</option>'}</select></div><div class="field"><label>NHÁNH PHỤ — LỰA CHỌN CỦA HỌC SINH</label><input data-stage-branch-label value="${escapeHtml(stage.branchLabel || '')}" placeholder="Tên nhánh (để trống nếu không dùng)"><select data-stage-branch data-stage-select><option value="">— Không có nhánh phụ —</option>${stage.branchStageId ? `<option value="${escapeHtml(stage.branchStageId)}">Nhánh liên kết</option>` : ''}</select></div></div>
@@ -1272,9 +1601,14 @@ function defaultRaceData() {
   };
 }
 function raceTeamRow(team, index) {
-  return `<div class="race-team-row" data-team-id="${escapeHtml(team.id || `t${index + 1}`)}">
+  // #131: the colour was never editable (the editor only kept id/name/icon), so every
+  // team fell back to the same default and the name could sit on a background of the same
+  // tone. A colour picker per team makes it the teacher's choice and stores it.
+  const color = /^#[0-9a-f]{6}$/iu.test(String((team && team.color) || '')) ? String(team.color) : EDITOR_TEAM_COLORS[index % EDITOR_TEAM_COLORS.length];
+  return `<div class="race-team-row" data-team-id="${escapeHtml(team.id || `t${index + 1}`)}" style="--team-color:${escapeHtml(color)}">
     <span class="drag-handle" draggable="true" data-team-drag title="Kéo để sắp xếp đội">⠿</span>
     <input data-team-icon value="${escapeHtml(team.icon || '🏎️')}" class="w-[60px]" placeholder="🏎️" title="Biểu tượng đội">
+    <input data-team-color type="color" value="${escapeHtml(color)}" class="race-team-color" title="Màu của đội">
     <input data-team-name value="${escapeHtml(team.name || '')}" placeholder="Tên đội ${index + 1}">
     <button type="button" class="text-link" data-team-up>↑</button>
     <button type="button" class="text-link" data-team-down>↓</button>
@@ -1308,7 +1642,7 @@ function raceQuestionCard(q, index) {
       <button type="button" class="text-link danger-text" data-rq-remove>✕ Xóa</button>
     </div>
     <textarea data-rq-prompt rows="2" placeholder="Nội dung câu hỏi">${escapeHtml(q.prompt || '')}</textarea>
-    ${editorAssetFieldsHtml(q)}
+    ${editorAssetFieldsHtml(q)}${editorItemArtHtml(q)}
     <div class="treasure-options" data-rq-options>${options.map((o, j) => raceQuestionOptionRow(o, q.id, q.correctOptionId, j)).join('')}<button type="button" class="btn btn-secondary btn-small" data-rq-add-option>＋ Thêm đáp án</button></div>
     <textarea data-rq-explanation rows="2" placeholder="Giải thích đáp án">${escapeHtml(q.explanation || '')}</textarea>
   </div>`;
@@ -1353,6 +1687,9 @@ function bindRaceEditor(root) {
     questions.insertAdjacentHTML('beforeend', raceQuestionCard({
       id: newPanelId('rq'), prompt: '', options: [{ id: 'a', text: '' }, { id: 'b', text: '' }], correctOptionId: 'a', explanation: '', difficulty: 'trung bình'
     }, $$('.race-question-card', questions).length));
+    // #131: a card inserted after the editor was wired has no listeners — its picture
+    // upload silently did nothing. Wire the new card now.
+    wireEditorItemArt(questions.lastElementChild);
     renumberRaceQuestions(root);
   });
   teams.addEventListener('click', e => {
@@ -1401,6 +1738,8 @@ function bindRaceEditor(root) {
         ...readEditorItemAssets(card)
       }, $$('.race-question-card', questions).length);
       card.insertAdjacentHTML('afterend', html);
+      // #131: the copy is new DOM, so its picture control needs binding too.
+      wireEditorItemArt(card.nextElementSibling);
       renumberRaceQuestions(root);
     }
   });
@@ -1458,6 +1797,25 @@ function bindRacePreview(root) {
     endDrag(preview);
   });
   preview.addEventListener('dragend', () => endDrag(preview));
+  // #131: an effect placed by dragging could only be removed by finding the matching row
+  // far below — so clicking a cell with an effect removes it. Clicking an empty cell
+  // (or the start/finish) explains why nothing happens instead of staying silent.
+  preview.addEventListener('click', event => {
+    const cell = event.target.closest('[data-track-cell]');
+    if (!cell) return;
+    const cellNumber = Number(cell.dataset.trackNum);
+    const row = $$('#raceCells [data-cell-row]', root)
+      .find(candidate => Number(candidate.querySelector('[data-cell-number]').value) === cellNumber);
+    if (!row) {
+      if (!(cellNumber >= 2)) toast('Ô 1 là vạch xuất phát, không có hiệu ứng để xoá.');
+      return;
+    }
+    row.remove();
+    const count = $('#raceCellCount', root);
+    if (count) count.textContent = String($$('#raceCells [data-cell-row]', root).length);
+    renderRaceTrackPreview(root);
+    toast(`Đã xoá hiệu ứng ở ô ${cellNumber}.`);
+  });
 
   // Re-render preview khi thầy/cô sửa tay (không đụng tới các <input> đang gõ).
   if (cells) {
@@ -1565,7 +1923,12 @@ function readRaceEditor(root) {
     teams: $$('#raceTeams .race-team-row', root).map((row, i) => ({
       id: row.dataset.teamId || `t${i + 1}`,
       name: row.querySelector('[data-team-name]').value.trim(),
-      icon: row.querySelector('[data-team-icon]').value.trim() || '🏎️'
+      icon: row.querySelector('[data-team-icon]').value.trim() || '🏎️',
+      // #131: keep the teacher's colour (normalised; a broken value falls back to the
+      // default the row was created with).
+      color: /^#[0-9a-f]{6}$/iu.test(row.querySelector('[data-team-color]') ? row.querySelector('[data-team-color]').value : '')
+        ? String(row.querySelector('[data-team-color]').value).toLowerCase()
+        : EDITOR_TEAM_COLORS[i % EDITOR_TEAM_COLORS.length]
     })),
     cells: $$('#raceCells .race-team-row', root).map(row => ({
       cell: Number(row.querySelector('[data-cell-number]').value) || 2,

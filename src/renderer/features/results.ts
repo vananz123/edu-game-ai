@@ -57,7 +57,11 @@ async function saveResultSession(game, summary, details, playerName, options) {
   const session = ensureResultSession(game);
   if (session.saved && !(options && options.rename)) return session.saved;
   if (session.saving) return session.saving;
-  const payload = resultSessionPayload(game, summary, details, playerName || session.playerName);
+  // { lan: { room, players: [{name, teamName, points, correct, answered}] } } when the
+  // round was played on phones. `GameSession` has an open index signature, so the
+  // sessions table needs no migration (plan §5).
+  const lanDetails = typeof lanCollectSessionPayload === 'function' ? lanCollectSessionPayload() : {};
+  const payload = resultSessionPayload(game, summary, { ...details, ...lanDetails }, playerName || session.playerName);
   session.playerName = payload.playerName;
   session.saving = window.eduGame.saveSession(payload)
     .then(async stored => {

@@ -1,0 +1,126 @@
+# Enhance EduGame Studio Games with Meaningful Three.js Interactions
+
+## 1. Objective
+
+Improve the interactivity and visual feedback of EduGame Studio's existing educational games using Three.js.
+
+The goal is to make gameplay more engaging than simply answering questions, while keeping the existing game system, question flow, scoring, and classroom presentation experience intact.
+
+Do not build complex 3D worlds or replace the current game architecture.
+
+## 2. Interaction Design Direction
+
+Use Three.js to create simple, meaningful gameplay reactions connected to student actions and progress.
+
+Possible interaction patterns include:
+
+- Correct answer: break, activate, or transform a 3D object.
+- Complete a challenge: unlock a door, reveal an area, or activate an object.
+- Accumulate points: progressively build or upgrade a structure.
+- Choose an answer: trigger an immediate visual reaction from the scene.
+- Complete a round: show a character or object celebrating the achievement.
+
+These interactions should communicate gameplay progress, not function as decorative 3D elements behind ordinary UI.
+
+Use lightweight models, simple geometry, reusable animations, and clear visual feedback suitable for classroom computers.
+
+## 3. Implementation Scope
+
+Start by enhancing the existing **Knowledge Arena (Đấu trường tri thức)** game.
+
+Do not create a separate standalone game. Add an optional gameplay mode to the existing game:
+
+- **Classic Mode**: Preserve the current gameplay unchanged.
+- **House Building Mode**: Correct answers progressively build a house using Three.js.
+
+Keep the implementation isolated and minimize changes to the existing game system. Do not modify the other four game types in this phase.
+
+Design the interaction approach so it can be reused by the other existing game types in future updates, without implementing those games now.
+
+## 4. House Building Gameplay
+
+### Starting State
+- Begin with a partially built house, such as a foundation and basic walls.
+- Do not start from an empty plot.
+- The student’s goal is to complete or improve the house by answering questions correctly.
+
+### Construction Progress
+- Each correct answer grants construction points or materials.
+- Construction progress is persistent throughout the game.
+- Completing a construction milestone visibly adds a house component, such as:
+  1. Completing the walls
+  2. Building the roof
+  3. Adding doors and windows
+  4. Adding a garden and decorations
+- Adapt milestone thresholds to the number of questions so short quizzes still provide visible progress.
+- At the end of the game, show the house in its actual state based on the student's performance. Do not automatically complete unfinished parts.
+
+### Streak Bonus
+- A short streak, such as **2 consecutive correct answers**, grants bonus materials or accelerates the next construction milestone.
+- An incorrect answer resets the streak.
+- Incorrect answers must not remove already earned materials or completed construction.
+- Do not require a long uninterrupted streak to finish the house.
+
+Keep the construction-point system and streak bonus separate: construction points represent persistent progress, while streaks provide temporary excitement and bonuses.
+
+## 5. Three.js Gameplay Feedback
+
+Three.js must be directly connected to gameplay events.
+
+- Animate house components being assembled when a milestone is reached.
+- Provide immediate visual feedback for correct and incorrect answers.
+- Show construction progress, materials, milestone status, and streak clearly.
+- Use satisfying but brief animations for construction milestones.
+- Show a completion animation when the house is fully built.
+- Keep the 3D scene focused on the house and its construction.
+
+Do not create a large explorable world, complex terrain, physics simulation, character navigation, or unnecessary environmental details.
+
+## 6. UI/UX Requirements
+
+- Keep questions and answer options readable during projector presentation.
+- Integrate the 3D scene into the existing Knowledge Arena layout without obscuring educational content.
+- Make progress understandable at a glance.
+- Use polished, attractive visuals suitable for middle-school students.
+- Ensure the interface remains usable with mouse, keyboard, and classroom presentation controls.
+- Keep the 3D interaction responsive and avoid excessive visual effects that distract from learning.
+
+## 7. Technical Requirements
+
+- Inspect the existing project architecture before making changes.
+- Reuse the current question flow, scoring, timers, game settings, and result screen.
+- Reuse the project's existing Three.js setup and asset conventions, if available.
+- Keep gameplay state and construction progress separate from rendering logic.
+- Make construction progression deterministic and testable.
+- Handle scene initialization, animation loops, resizing, and cleanup correctly.
+- Optimize rendering for typical classroom computers.
+- Use static or procedural lightweight assets; do not use cloud services or AI-generated 3D assets.
+- Avoid unnecessary dependencies and large architectural rewrites.
+- Ensure the existing Classic Mode remains unchanged.
+
+## 8. Acceptance Criteria
+
+- Classic Mode behaves exactly as it did before.
+- House Building Mode works with manually created and AI-generated questions.
+- Correct answers visibly advance construction.
+- Streak bonuses are clear and do not make progression too difficult.
+- Incorrect answers do not erase completed construction.
+- Construction thresholds adapt to quiz length.
+- The final screen accurately reflects the house's actual progress.
+- Three.js interactions are meaningful gameplay feedback, not merely decorative visuals.
+- The experience is engaging, readable on a projector, lightweight, and stable.
+- The other four game types remain unchanged.
+
+## 9. Implementation Approach
+
+First inspect the current Knowledge Arena implementation and identify the smallest integration points.
+
+Then:
+1. Add the Classic / House Building mode selection.
+2. Implement construction progress and streak bonus logic.
+3. Connect gameplay events to Three.js animations.
+4. Integrate the 3D house into the existing game UI.
+5. Update the result screen to display the final house state.
+6. Test both modes and verify that existing gameplay remains unaffected.
+
+Prioritize a complete, polished House Building Mode over adding many unfinished interaction types.

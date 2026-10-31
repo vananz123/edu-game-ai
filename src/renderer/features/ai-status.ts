@@ -27,6 +27,8 @@
 
   let timer = null;
   let initialized = false;
+  let wiredBar = null;
+  let wiredNodes = [];
   let modelsLoaded = false;
   let lastRuntimeState = null;
   let runtime = { state: 'STOPPED', modelId: null, message: '' };
@@ -131,6 +133,7 @@
   }
 
   function render() {
+    ensureWired();
     const ready = runtime.state === 'READY';
     const starting = runtime.state === 'STARTING';
     const idle = !ready && !starting;
@@ -167,9 +170,13 @@
     }
     const stop = $('#aiStatusStop');
     if (stop) {
-      stop.hidden = !ready;
-      stop.disabled = !ready || taskActive;
-      stop.title = taskActive ? 'Đang có tác vụ AI, không thể dừng llama.cpp' : '';
+      // Visible whenever llama.cpp may be running; a stale "not ready" hid the one
+      // control the teacher needed. stopRuntime() re-checks before doing anything.
+      stop.hidden = false;
+      stop.disabled = false;
+      stop.title = ready
+        ? (taskActive ? 'Đang có tác vụ AI, sẽ dừng sau khi tác vụ xong' : 'Dừng llama.cpp')
+        : 'llama.cpp hiện không chạy';
     }
     const cancel = $('#aiStatusCancel');
     if (cancel) {
@@ -196,6 +203,17 @@
   }
 
   async function stopRuntime() {
+    // The bar can be stale after a page re-render (it is refreshed at the end of every
+    // render, but a page whose render threw leaves the previous state on screen). Read
+    // the truth first: starting from a stale "running" view after llama.cpp really
+    // stopped must not end in a silent failure.
+    await refreshRuntime(false).catch(function () {});
+    await refreshTasks().catch(function () {});
+    render();
+    if (runtime.state !== 'READY') {
+      notify('llama.cpp hiện không chạy nên không có gì để dừng.');
+      return;
+    }
     if (isTaskActive()) {
       notify('Đang có tác vụ AI, không thể dừng llama.cpp.');
       return;
@@ -209,10 +227,23 @@
       }
       lastRuntimeState = null;
       await refresh();
+      if (runtime.state === 'READY') {
+        notify('Yêu cầu dừng đã được gửi nhưng llama.cpp vẫn đang chạy. Hãy thử lại sau vài giây.', 6000);
+        return;
+      }
       notify('Đã dừng llama.cpp.');
     } catch (e) {
-      notify((e && e.message) || 'Không dừng được llama.cpp.', 6000);
+      lastRuntimeState = null;
+      await refresh().catch(function () {});
+      const detail = bridgeMessage(e);
+      notify(detail ? 'Không dừng được llama.cpp: ' + detail : 'Không dừng được llama.cpp.', 7000);
     }
+  }
+
+  /** The message an IPC refusal carries, without Electron's wrapper text. */
+  function bridgeMessage(error) {
+    const text = String((error && error.message) || error || '');
+    return text.replace(/^Error invoking remote method '[^']*':\s*/, '').replace(/^Error:\s*/, '').trim();
   }
 
   async function cancelAi() {
@@ -227,29 +258,98 @@
     }
   }
 
+  /**
+   * Identifies "the same bar element" across re-renders of the shell. When the page
+   * is re-rendered the navbar markup is replaced, and this bar was created once with
+   * the old markup, so its controls (and therefore the menu's buttons) would be dead
+   * on every page after the first navigation. Re-wiring is idempotent (`wire()`
+   * and `bind()` both guard on a data flag).
+   */
+  function currentBar() {
+    // The bar is replaced whenever the shell re-renders the navbar.
+    const bar = $('aiStatusBar');
+    return bar || null;
+  }
+  let wiring = false;
+  function ensureWired() {
+    const bar = currentBar();
+    // Never start a pass inside a pass; the outer pass finishes the job.
+    if (!bar || wiring) return;
+    // A node is "wired" when this module attached its own listener, marked by a
+    // property (not a data attribute: the shell round-trips innerHTML, which would keep
+    // a stale marker on brand-new nodes). `wiredNodes` remembers the exact nodes, so a
+    // navbar that was replaced (even with identical markup) is detected at once.
+    const controls = [bar, $('aiStatusMenuBtn'), $('aiStatusOpenModalBtn')];
+    const stale = bar !== wiredBar
+      || wiredNodes.length !== controls.length
+      || controls.some(function (node, index) { return Boolean(node) && wiredNodes[index] !== node; });
+    if (stale) {
+      wiredBar = bar;
+      wiredNodes = controls;
+      wiring = true;
+      try {
+        wire();
+      } catch (error) {
+        // A failed pass must not leave the module half-bound; report it and let the
+        // next click/refresh try again.
+        try { console.error('[ai-status] could not wire the status bar:', error && error.message ? error.message : error); } catch (e) {}
+        wiredBar = null;
+      } finally {
+        wiring = false;
+      }
+    }
+  }
+  // Whether the menu is open is derived from the DOM, never from a module variable that a
+  // re-rendered navbar could contradict.
+  function menuIsOpen() {
+    const dropdown = $('aiStatusDropdown');
+    return Boolean(dropdown && !dropdown.classList.contains('hidden'));
+  }
+  function syncAria() {
+    const menuBtn = $('aiStatusMenuBtn');
+    if (menuBtn) menuBtn.setAttribute('aria-expanded', menuIsOpen() ? 'true' : 'false');
+  }
+  function openDropdown() {
+    const dropdown = $('aiStatusDropdown');
+    if (dropdown) dropdown.classList.remove('hidden');
+    syncAria();
+  }
+  function closeDropdown() {
+    const dropdown = $('aiStatusDropdown');
+    if (dropdown) dropdown.classList.add('hidden');
+    const menuBtn = $('aiStatusMenuBtn');
+    if (menuBtn) menuBtn.setAttribute('aria-expanded', 'false');
+  }  function bind(id, handler) {
+    const el = $(id);
+    // Nodes are replaced when the shell re-renders the navbar, so every fresh node is
+    // bound once; a property flag (unlike a data attribute) cannot survive a
+    // serialise/parse round trip.
+    if (!el || el.aiStatusWired === true) return;
+    el.aiStatusWired = true;
+    el.addEventListener('click', handler);
+  }
+
   function toggleIdle() {
     idleVisible = !idleVisible;
     writeIdlePref(idleVisible);
     render();
   }
 
-  function bind(id, handler) {
-    const el = $(id);
-    if (el) el.addEventListener('click', handler);
-  }
   function wire() {
-    function closeDropdown() {
-      const dropdown = $('aiStatusDropdown');
-      if (dropdown) dropdown.classList.add('hidden');
-    }
     function toggleDropdown(e) {
       if (e) e.stopPropagation();
       const dropdown = $('aiStatusDropdown');
-      if (dropdown) dropdown.classList.toggle('hidden');
+      if (!dropdown) return;
+      dropdown.classList.toggle('hidden');
+      syncAria();
     }
 
-    bind('aiStatusStart', function() {
+    // Every control first reads the live runtime state: the bar's render can be a
+    // poll behind (or a page whose render threw), and a control that silently refuses
+    // because of a stale flag is indistinguishable from a broken button.
+    bind('aiStatusStart', async function() {
       closeDropdown();
+      await refresh().catch(function () {});
       startRuntime();
     });
     bind('aiStatusStop', function() {
@@ -266,25 +366,54 @@
     const menuBtn = $('aiStatusMenuBtn');
     const modalBtn = $('aiStatusOpenModalBtn');
 
-    if (menuBtn) menuBtn.addEventListener('click', toggleDropdown);
-    if (bar) {
-      bar.addEventListener('click', function(e) {
-        if (!e.target.closest('#aiStatusMenuBtn') && !e.target.closest('#aiStatusDropdown')) {
-          toggleDropdown(e);
-        }
-      });
-    }
-    if (modalBtn) {
+    // The bar toggles the menu; the button handler below stops propagation so the
+    // same click never toggles twice (that used to end closed → open → closed).
+    bind('aiStatusBar', function(e) {
+      if (e.target.closest('#aiStatusDropdown')) return;
+      // Always open. A page re-render re-created the bar this very click targeted, and
+      // its fresh dropdown starts hidden, so "toggle" would look like "nothing happened"
+      // (this module is refreshed after `render()`, see the note in `render()`).
+      openDropdown();
+    });
+    if (modalBtn && modalBtn.aiStatusWired !== true) {
+      modalBtn.aiStatusWired = true;
       modalBtn.addEventListener('click', function() {
         closeDropdown();
         startRuntime();
       });
     }
-    document.addEventListener('click', function(e) {
-      if (!e.target.closest('#aiStatusContainer')) {
-        closeDropdown();
-      }
-    });
+    if (menuBtn && menuBtn.aiStatusWired !== true) {
+      // Its own handler: stop the bar handler from toggling again in the same click.
+      menuBtn.aiStatusWired = true;
+      menuBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        toggleDropdown(e);
+      });
+    }
+    // Document-level listeners belong to the page, not to the bar: bind them once per
+    // document, and outside any bar click so they cannot fight with the bar handler.
+    // Document-level listeners belong to this page: bind them once per document (a new
+    // document is a new page and gets its own copy). Bubble phase, not capture:
+    // capture fires before the bar/button handlers, so it would see this very click as
+    // "outside" and close the menu the same click opened. The button's
+    // stopPropagation keeps an opening click away from this listener.
+    if (!document.documentElement.__aiStatusDocBound) {
+      document.documentElement.__aiStatusDocBound = true;
+      // Capture phase: repair a bar that a page re-render replaced after the render
+      // that was meant to do it, before this click reaches the fresh nodes. Only
+      // clicks on the bar itself: anywhere else the next status poll will do it, and
+      // re-wiring during an unrelated click could act on the page being swapped.
+      document.addEventListener('click', function(e) {
+        if (e.target.closest('#aiStatusContainer')) ensureWired();
+        if (!e.target.closest('#aiStatusContainer')) closeDropdown();
+      }, true);
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeDropdown();
+      });
+      document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'hidden') closeDropdown();
+      });
+    }
   }
 
   function init() {
@@ -292,6 +421,7 @@
     initialized = true;
     idleVisible = readIdlePref();
     wire();
+    wiredBar = currentBar();
     render();
     if (timer) clearInterval(timer);
     timer = setInterval(function () { refresh().catch(function () {}); }, POLL_MS);

@@ -84,7 +84,10 @@ const STOP_WORDS = new Set([
  */
 export function tokenizeForRetrieval(text: string): string[] {
   const normalized = String(text ?? '').toLowerCase().normalize('NFC');
-  const raw = normalized.match(/[\p{L}\p{N}]+/gu) || [];
+  // Annotated because adding a library type (socket.io, in src/lan) changes how
+  // `String#match` resolves with `strictNullChecks` off, which made `raw` infer as
+  // `never[]`. The explicit type keeps this function independent of the lib set.
+  const raw: string[] = normalized.match(/[\p{L}\p{N}]+/gu) || [];
   return raw.filter(token => token.length >= 2);
 }
 

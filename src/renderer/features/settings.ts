@@ -17,9 +17,37 @@ function readRuntimeBackendSelection() {
   const value = select.value;
   return value === 'cpu' || value === 'vulkan' ? value : undefined;
 }
+/**
+ * #132: the settings form sends only what changed, and never a stored key.
+ *
+ * `providerPatches` carries one entry per provider the teacher touched:
+ *  - `baseUrl`/`model` are sent always (they are visible and editable);
+ *  - `apiKey` is sent only when the field is non-empty (an empty field means
+ *    "keep the stored key", never "delete it");
+ *  - `clearKey` removes the stored key explicitly.
+ * Main drops everything else from `ai` (keys included), so a stale renderer can
+ * never overwrite the encrypted blobs.
+ */
+function readAiProviderPatches() {
+  const patches = {};
+  $$('[data-ai-provider]').forEach(node => {
+    const id = node.dataset.aiProvider;
+    if (!id) return;
+    const baseUrl = $(`[data-ai-provider-baseurl="${id}"]`);
+    const model = $(`[data-ai-provider-model="${id}"]`);
+    const key = $(`[data-ai-key-input="${id}"]`);
+    const patch = {};
+    if (baseUrl) patch.baseUrl = baseUrl.value.trim();
+    if (model) patch.model = model.value.trim();
+    if (key && key.value.trim()) patch.apiKey = key.value.trim();
+    if (node.dataset.aiKeyClear === '1') patch.clearKey = true;
+    patches[id] = patch;
+  });
+  return patches;
+}
 async function saveSettings() {
   const settings = {
-    ai: { ...state.settings.ai, mode: $('#settingAiMode').value, cloudProvider: $('#settingCloudProvider').value, baseUrl: $('#settingBaseUrl').value.trim(), model: $('#settingModel').value.trim(), runtimeBackend: readRuntimeBackendSelection(), apiKey: $('#settingApiKey').value },
+    ai: { ...state.settings.ai, runtimeBackend: readRuntimeBackendSelection(), providers: readAiProviderPatches() },
     preferences: {
       ...(state.settings.preferences || {}),
       largeText: $('#settingLargeText').checked,
@@ -35,8 +63,12 @@ async function saveSettings() {
       }
     }
   };
-  await window.eduGame.saveSettings(settings);
-  state.settings = await window.eduGame.getSettings();
+  // Strip any key-shaped field a stale page may still hold: keys travel only via
+  // `providers[id].apiKey`, and that is decided above.
+  delete settings.ai.apiKey;
+  delete settings.ai.apiKeyEncrypted;
+  const result = await window.eduGame.saveSettings(settings);
+  state.settings = (result && result.settings) || await window.eduGame.getSettings();
   applyTheme(state.settings && state.settings.preferences && state.settings.preferences.theme);
   if (state.draft) {
     state.draft = {
@@ -46,18 +78,91 @@ async function saveSettings() {
     };
   }
   toast('Đã lưu cài đặt.');
+  if (state.page === 'settings') render();
 }
+/**
+ * Connection test for one provider (spec §4: real, minimal requests, independent of
+ * game creation). The result moves the provider between `ready` and `failing`.
+ */
 async function testAi() {
-  const settings = { ai: { ...state.settings.ai, mode: $('#settingAiMode').value, cloudProvider: $('#settingCloudProvider').value, baseUrl: $('#settingBaseUrl').value.trim(), model: $('#settingModel').value.trim(), apiKey: $('#settingApiKey').value }, preferences: state.settings.preferences };
-  await window.eduGame.saveSettings(settings); state.settings = await window.eduGame.getSettings();
-  if ($('#settingAiMode').value === 'offline') return toast('Chế độ ngoại tuyến không cần kiểm tra kết nối.');
-  const button = $('#testAiBtn'); button.disabled = true; button.textContent = 'Đang kiểm tra…';
-  try {
-    const result = await window.eduGame.generateGame({ mode:settings.ai.mode, localModelId: state.settings.ai?.localModelId, baseUrl: settings.ai.baseUrl, model: settings.ai.model, apiKey: settings.ai.apiKey, text:'Bài học mẫu: Cây cần ánh sáng, nước và chất dinh dưỡng để sinh trưởng. Hãy tạo 3 câu hỏi ngắn.', questionCount:3, template:'quiz', subject:'Khoa học' });
-    toast(`Kết nối AI thành công (${result.provider}).`);
-  } catch(e) { toast(`Chưa kết nối được: ${e.message}`, 5000); }
-  finally { button.disabled = false; button.textContent = 'Kiểm tra kết nối AI'; }
+  const ai = state.settings.ai || {};
+  if (ai.mode === 'offline') {
+    // Kept for the legacy callers (tests/legacy/smoke2.js): offline needs no test.
+    await saveSettings();
+    return toast('Chế độ ngoại tuyến không cần kiểm tra kết nối.');
+  }
+  return testAiProvider(ai.provider);
 }
+async function testAiProvider(providerId) {
+  // Wait for a key that is still being saved: the test must check what the teacher
+  // just typed, not the key that was there before it.
+  if (aiKeySaveInFlight) {
+    try { await aiKeySaveInFlight; } catch (error) { /* reported by its own caller */ }
+  }
+  const id = String(providerId || (state.settings.ai && state.settings.ai.provider) || '');
+  const button = document.querySelector(`[data-ai-test="${id}"]`);
+  const restore = button ? button.textContent : '';
+  if (button) { button.disabled = true; button.textContent = 'Đang kiểm tra…'; }
+  try {
+    // Save what the form shows first: a test must check the values the teacher sees,
+    // not the previous saved state.
+    await window.eduGame.saveSettings({ ai: { ...state.settings.ai, providers: readAiProviderPatches() }, preferences: state.settings.preferences });
+    const result = await window.eduGame.testAiProvider({ providerId: id });
+    state.settings = (result && result.settings) || await window.eduGame.getSettings();
+    toast(`Kết nối ${(aiProviderView(id) || {}).label || id} thành công (${result.durationMs} ms).`);
+  } catch (error) {
+    state.settings = await window.eduGame.getSettings();
+    const message = String((error && error.message) || error || '').replace(/^Error invoking remote method '[^']*':\s*/, '').replace(/^[A-Za-z]*Error:\s*/, '');
+    toast(`Chưa kết nối được ${(aiProviderView(id) || {}).label || id}: ${message}`, 7000);
+  } finally {
+    if (button) { button.disabled = false; button.textContent = restore; }
+    if (state.page === 'settings') render();
+  }
+}
+/** Saves the key typed for one provider; an empty field is not a change. */
+// #132: the pending "save key" request. A connection test must wait for it, or it can
+// read the previous key and report AI_AUTH for a key that was just entered.
+let aiKeySaveInFlight = null;
+async function saveAiProviderKey(providerId) {
+  const input = document.querySelector(`[data-ai-key-input="${providerId}"]`);
+  if (!input || !input.value.trim()) return toast('Hãy nhập khoá mới trước khi lưu.');
+  try {
+    // The key save sends the form as it stands: a base URL or model typed just
+    // before the key must not be lost when the page re-renders afterwards.
+    const request = window.eduGame.saveSettings({ ai: { ...state.settings.ai, providers: { ...readAiProviderPatches(), [providerId]: { ...(readAiProviderPatches()[providerId] || {}), apiKey: input.value.trim() } } }, preferences: state.settings.preferences });
+    aiKeySaveInFlight = request;
+    const result = await request;
+    state.settings = (result && result.settings) || await window.eduGame.getSettings();
+    toast('Đã lưu khoá. Hãy bấm “Kiểm tra kết nối”.');
+  } catch (error) {
+    const message = String((error && error.message) || error || '');
+    if (/AI_KEY_STORAGE_UNAVAILABLE/.test(message)) {
+      toast('Máy này không lưu được khoá an toàn. Khoá chưa được lưu; cấu hình cũ giữ nguyên.', 8000);
+    } else {
+      toast(`Không lưu được khoá: ${message}`, 7000);
+    }
+  } finally {
+    aiKeySaveInFlight = null;
+  }
+  if (state.page === 'settings') render();
+}
+/**
+ * Removes a stored key through the Save bar (never on the keystroke, so the teacher
+ * can still change their mind before leaving the page): the flag is shown on the
+ * card and sent by `readAiProviderPatches` on the next save.
+ */
+function markAiProviderKeyClear(providerId) {
+  const node = document.querySelector(`[data-ai-provider="${providerId}"]`);
+  if (!node) return;
+  node.dataset.aiKeyClear = node.dataset.aiKeyClear === '1' ? '0' : '1';
+  const stateLine = node.querySelector(`[data-ai-key-state="${providerId}"]`);
+  if (stateLine) {
+    stateLine.textContent = node.dataset.aiKeyClear === '1'
+      ? 'Khoá sẽ bị xoá khi bạn bấm “Lưu cài đặt” (bấm lại để huỷ).'
+      : 'Đã lưu khoá.';
+  }
+}
+
 
 // ---------------------------------------------------------------------------
 // update_plan_3 §8: AI task manager UI (settings page).
@@ -120,24 +225,101 @@ function aiTaskRowHtml(task) {
   </div>`;
 }
 
-/** Loads live tasks + SQLite history and renders them (newest first, deduped by taskId). */
+/**
+ * #121: history pages. 10 rows a page over the 30 rows the store keeps, so a teacher
+ * can still reach a task from earlier today without the page growing forever.
+ */
+const AI_TASK_PAGE_SIZE = 10;
+const AI_TASK_PAGES_MAX = 3;
+let aiTaskPage = 0;
+/** Set while a refresh is in flight, so two `refreshAiTaskList` calls cannot race. */
+let aiTaskRefreshToken = 0;
+
+function aiTaskPageCount(total) {
+  const pages = Math.ceil(Math.max(0, Number(total) || 0) / AI_TASK_PAGE_SIZE);
+  return Math.max(1, Math.min(AI_TASK_PAGES_MAX, pages));
+}
+
+/** Previous / next / "Trang 2/3 · 30 tác vụ gần nhất" under the list. */
+function aiTaskPagerHtml(page, pages, total) {
+  const button = (label, target, disabled, id) =>
+    `<button type="button" class="px-[10px] py-[6px] rounded-[7px] border border-[#e7eaf2] bg-white text-[11px] font-semibold text-[#515c72] disabled:opacity-50 disabled:cursor-not-allowed" id="${id}" data-ai-task-page="${target}"${disabled ? ' disabled' : ''}>${label}</button>`;
+  return `<div class="flex items-center justify-between gap-[10px] mt-[8px] flex-wrap" data-ai-task-pager>
+    <span class="text-[11px] text-[#9199aa]">Trang <b>${page + 1}</b>/${pages} · ${total} tác vụ gần nhất${total >= AI_TASK_PAGE_SIZE * AI_TASK_PAGES_MAX ? ' (cũ hơn tự động xoá)' : ''}</span>
+    <div class="flex gap-[6px]">${button('← Trước', Math.max(0, page - 1), page <= 0, 'aiTasksPrevBtn')}${button('Sau →', Math.min(pages - 1, page + 1), page >= pages - 1, 'aiTasksNextBtn')}</div>
+  </div>`;
+}
+
+/**
+ * Loads live tasks + one page of SQLite history and renders them (newest first,
+ * deduped by taskId). The live registry is merged in on every page: a task running
+ * right now belongs at the top, and it also pushes the history rows down a slot — the
+ * page index follows that shift so the teacher's view does not jump.
+ */
 async function refreshAiTaskList() {
   const container = $('#aiTaskList');
   if (!container) return;
+  const token = ++aiTaskRefreshToken;
   try {
-    const result = await window.eduGame.listAiTasks({ limit: 30 });
+    // The first page is where a brand-new task shows up; other pages also need live
+    // rows so a running task is visible from anywhere.
+    const result = await window.eduGame.listAiTasks({
+      limit: AI_TASK_PAGE_SIZE,
+      offset: aiTaskPage * AI_TASK_PAGE_SIZE,
+      history: true
+    });
+    if (token !== aiTaskRefreshToken || !$('#aiTaskList')) return;
     const byTaskId = new Map();
     for (const task of result.history || []) byTaskId.set(task.taskId, task);
     // Live rows override history: they carry the true current state of this session.
     for (const task of result.live || []) byTaskId.set(task.taskId, task);
     const tasks = [...byTaskId.values()].sort((a, b) => String(b.startedAt || '').localeCompare(String(a.startedAt || '')));
-    container.innerHTML = tasks.length
-      ? tasks.map(aiTaskRowHtml).join('')
-      : '<div class="text-[11px] text-[#9199aa]">Chưa có tác vụ AI nào. Các tác vụ phân tích/sinh nội dung sẽ xuất hiện ở đây.</div>';
+    const total = Number(result.total) || tasks.length;
+    const pages = aiTaskPageCount(total);
+    if (aiTaskPage > pages - 1) aiTaskPage = pages - 1;
+    const rows = tasks.slice(0, AI_TASK_PAGE_SIZE);
+    container.innerHTML = (rows.length
+      ? rows.map(aiTaskRowHtml).join('')
+      : '<div class="text-[11px] text-[#9199aa]">Chưa có tác vụ AI nào. Các tác vụ phân tích/sinh nội dung sẽ xuất hiện ở đây.</div>')
+      + aiTaskPagerHtml(aiTaskPage, pages, total);
+    container.querySelectorAll('[data-ai-task-page]').forEach(button => {
+      button.addEventListener('click', () => {
+        const target = Number(button.dataset.aiTaskPage);
+        if (!Number.isFinite(target) || target === aiTaskPage) return;
+        aiTaskPage = Math.max(0, Math.min(pages - 1, target));
+        refreshAiTaskList();
+      });
+    });
   } catch (error) {
+    if (token !== aiTaskRefreshToken) return;
     container.innerHTML = `<div class="text-[11px] text-[#b3261e]">Không đọc được danh sách tác vụ: ${escapeHtml(String(error && error.message ? error.message : error))}</div>`;
   }
 }
+
+/**
+ * Keeps the list current while the settings page is open: a new task is recorded in
+ * the database by main, so the page re-reads the first page when the live count grows.
+ */
+function startAiTaskAutoRefresh() {
+  const timer = setInterval(async () => {
+    if (state.page !== 'settings') { clearInterval(timer); return; }
+    try {
+      const live = await window.eduGame.listAiTasks({ limit: 5, history: false });
+      const key = (live.live || []).map(task => `${task.taskId}:${task.state}`).join('|');
+      if (key !== startAiTaskAutoRefresh.lastLive) {
+        startAiTaskAutoRefresh.lastLive = key;
+        if (aiTaskPage !== 0) aiTaskPage = 0;
+        refreshAiTaskList();
+      }
+    } catch {
+      // The page still works with the rows it has; the next tick tries again.
+    }
+  }, 5000);
+  clearTimeout(startAiTaskAutoRefresh.timer);
+  startAiTaskAutoRefresh.timer = timer;
+}
+startAiTaskAutoRefresh.lastLive = '';
+startAiTaskAutoRefresh.timer = null;
 
 /**
  * update_plan_3 §4, extended for the backend choice: reports which llama.cpp
@@ -259,7 +441,8 @@ async function clearDiagnosticsUi() {
 
 /** Called by the controller when the settings page is (re)wired. */
 function wireSettingsAiTasks() {
-  $('#aiTasksRefreshBtn')?.addEventListener('click', refreshAiTaskList);
+  // #121: "Làm mới" jumps back to the newest page, then re-reads it.
+  $('#aiTasksRefreshBtn')?.addEventListener('click', () => { aiTaskPage = 0; refreshAiTaskList(); });
   $('#cpuRuntimeVerifyBtn')?.addEventListener('click', verifyCpuRuntimeUi);
   // Repair surface for first-run setup: the wizard is the only place that
   // drives `setup:*`, so Settings just reopens it rather than duplicating the
@@ -272,4 +455,6 @@ function wireSettingsAiTasks() {
   $('#clearDiagnosticsBtn')?.addEventListener('click', clearDiagnosticsUi);
   refreshAiTaskList();
   refreshDiagnosticsInfo();
+  // #121: a task recorded while this page is open reappears without a manual refresh.
+  startAiTaskAutoRefresh();
 }

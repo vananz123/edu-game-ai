@@ -9,6 +9,7 @@ import {
   createRequestSignal,
   isCancelReason,
   parseModelJson,
+  classifyProviderHttpError,
   readAssistantContent,
   requestChatJson,
   type ChatSendResult
@@ -205,6 +206,8 @@ async function main(): Promise<void> {
   assert.equal(flight.busy, false);
   assert.equal(await flight.run('after-failure', 'tiếp tục', async () => 42), 42);
 
+  await providerErrorClassification(messages);
+
   console.log('AI transport tests passed');
 }
 
@@ -212,3 +215,45 @@ main().catch(error => {
   console.error(error);
   process.exit(1);
 });
+
+/**
+ * #132: a cloud provider's failure must name what the teacher can fix. Status alone
+ * is not enough — an exhausted OpenAI balance arrives as 429, and a missing model can
+ * arrive as 400 with a message.
+ */
+async function providerErrorClassification(messages: ChatMessage[]): Promise<void> {
+  assert.equal(classifyProviderHttpError(401).code, 'AI_AUTH');
+  assert.equal(classifyProviderHttpError(403).code, 'AI_AUTH');
+  assert.equal(classifyProviderHttpError(429).code, 'AI_RATE_LIMIT');
+  assert.equal(classifyProviderHttpError(429, '{"error":{"code":"insufficient_quota"}}').code, 'AI_QUOTA');
+  assert.equal(classifyProviderHttpError(402).code, 'AI_QUOTA');
+  assert.equal(classifyProviderHttpError(400, '{"error":{"message":"The model `gpt-x` does not exist"}}').code, 'AI_MODEL_NOT_FOUND');
+  assert.equal(classifyProviderHttpError(404).code, 'AI_MODEL_NOT_FOUND');
+  // A cloud failure is never labelled with the local runtime's code: the wizard and
+  // the editor explain AI_HTTP as "AI local báo lỗi" (DECISIONS #132 §D8).
+  assert.equal(classifyProviderHttpError(500).code, 'AI_PROVIDER_HTTP');
+  assert.equal(classifyProviderHttpError(400).code, 'AI_PROVIDER_HTTP');
+  assert.equal(classifyProviderHttpError(418).code, 'AI_PROVIDER_HTTP');
+
+  // A cloud 401 becomes AI_AUTH through `requestChatJson`, and the body is not echoed.
+  const auth = await expectAiError('AI_AUTH', () => requestChatJson({
+    model: 'gpt', mode: 'online', messages, generation: {},
+    send: async () => chatResponse(null, { status: 401, bodyText: 'Incorrect API key provided: sk-abcdefgh' })
+  }));
+  assert.equal(auth.status, 401);
+  assert.ok(!String(auth.message).includes('sk-abcdefgh'), 'the provider error body is not copied into the message');
+
+  // A dead endpoint is a network failure, not a timeout.
+  await expectAiError('AI_CONNECTION', () => requestChatJson({
+    model: 'gpt', mode: 'online', messages, generation: {},
+    send: async () => { throw new TypeError('fetch failed'); }
+  }));
+
+  const timeout = await expectAiError('AI_TIMEOUT', () => requestChatJson({
+    model: 'gpt', mode: 'online', messages, generation: {}, timeoutMs: 5,
+    send: (_body, signal) => new Promise((_resolve, reject) => {
+      signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'TimeoutError' })));
+    })
+  }));
+  assert.equal(timeout.code, 'AI_TIMEOUT');
+}

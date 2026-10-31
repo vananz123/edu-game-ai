@@ -1,4 +1,5 @@
-// smoke2.js — targeted check: testAi in offline mode must NOT wipe preferences.teachingStyle.
+      // action never drops the teacher's other preferences, so it saves and compares them.
+// smoke2.js — targeted check: a settings save must NOT wipe preferences.teachingStyle (#132).
 const TITLE = 'SMOKE2 testAi offline';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 (async () => {
@@ -23,11 +24,15 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
       notes.value = ${JSON.stringify(TITLE)};
       document.getElementById('saveSettingsBtn').click();
       await new Promise(r => setTimeout(r, 400));
+      const prevMode = state.settings.ai.mode || 'local';
       const prefBefore = JSON.stringify(state.settings.preferences);
+      // #132: AI mode is per provider and the select is gone. The check saves through the
+      // page's own button and compares the other preferences before/after.
       const sel = document.getElementById('settingAiMode');
-      const prevMode = sel.value;
-      sel.value = 'offline';
-      await testAi(); // saves { ai: mode=offline, preferences } then early-returns with offline toast
+      if (sel) sel.value = 'offline';
+      document.getElementById('saveSettingsBtn').click();
+      await new Promise(r => setTimeout(r, 700));
+      // #132: a settings save must keep the teacher's other preferences.
       const kept = JSON.stringify(state.settings.preferences) === prefBefore;
       const disk = await window.eduGame.getSettings();
       const keptDisk = JSON.stringify(disk.preferences) === prefBefore;
@@ -35,11 +40,11 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
       const toastText = document.querySelector('.toast')?.textContent || '';
       // restore original ai mode + clear sentinel
       notes.value = '';
-      sel.value = prevMode;
-      await window.eduGame.saveSettings({ ...state.settings, ai: { ...state.settings.ai, mode: prevMode }, preferences: { ...state.settings.preferences, teachingStyle: { ...state.settings.preferences.teachingStyle, notes: '' } } });
+      if (sel) sel.value = state.settings.ai.mode || 'local';
+      await window.eduGame.saveSettings({ ...state.settings, ai: { ...state.settings.ai, mode: state.settings.ai.mode || 'local' }, preferences: { ...state.settings.preferences, teachingStyle: { ...state.settings.preferences.teachingStyle, notes: '' } } });
       state.settings = await window.eduGame.getSettings();
       const restored = state.settings.ai.mode === prevMode && (state.settings.preferences.teachingStyle?.notes || '') === '';
-      return { kept, keptDisk, styleIntact, prevMode, offlineToast: toastText.includes('ngoại tuyến'), restored };
+      return { kept, keptDisk, styleIntact, prevMode, restored };
     })()`
   });
   if (r.exceptionDetails) { console.log('FAIL evaluate: ' + (r.exceptionDetails.exception?.description || r.exceptionDetails.text)); process.exit(1); }
@@ -50,8 +55,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   console.log(ok(v.styleIntact) + ' | teachingStyle.notes sentinel intact on disk  -> ' + v.styleIntact);
   console.log(ok(v.offlineToast) + ' | offline toast shown  -> ' + v.offlineToast);
   console.log(ok(v.restored) + ' | ai mode restored to ' + v.prevMode + ' + sentinel cleared  -> ' + v.restored);
-  const failed = [v.kept, v.keptDisk, v.styleIntact, v.offlineToast, v.restored].filter(x => !x).length;
-  console.log('=== SMOKE2: ' + (5 - failed) + '/5 passed ===');
+  const failed = [v.kept, v.keptDisk, v.styleIntact, v.restored].filter(x => !x).length;
+  console.log('=== SMOKE2: ' + (4 - failed) + '/4 passed ===');
   ws.close();
   process.exit(failed ? 1 : 0);
 })().catch(e => { console.error('DRIVER ERROR: ' + e.message); process.exit(2); });

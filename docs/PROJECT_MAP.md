@@ -26,6 +26,13 @@ src/
   services/            Nghiệp vụ thuần (không DOM, không Electron):
                        tài liệu giáo án, tạo game, lưu trữ, chấm điểm, SQLite
   presentation/        Cửa sổ trình chiếu sang màn hình thứ hai
+  lan/                 Chơi LAN: máy giáo viên làm máy chủ, học sinh trả lời
+                       trên điện thoại (Express + Socket.IO trong main process)
+    lan-reducer.ts     Máy trạng thái THUẦN (join, trả lời, chốt câu) — test kỹ nhất
+    lan-adapters.ts    Game → các "lượt" LAN, chấm điểm bằng game-engine/runtime.ts
+    lan-server.ts      HTTP + Socket.IO, chỉ phục vụ trang trong lan/mobile/
+    lan-ipc.ts         IPC lan:start / lan:stop / lan:assign-team / lan:state
+    mobile/            Trang điện thoại (HTML/CSS/JS thuần, copyfiles chép vào dist)
   renderer/            Toàn bộ UI chạy trong cửa sổ (script toàn cục, KHÔNG module)
     core/              render() + điều hướng trang + wirePage
     pages/             Một file cho mỗi trang (home, library, create, settings…)
@@ -55,14 +62,21 @@ vendor/                DLL VC++ đóng gói kèm
 | Một trang (dashboard, thư viện, cài đặt…) | `src/renderer/pages/<ten>.ts` |
 | Điều hướng / render trang | `src/renderer/core/render.ts`, `core/controller.ts` |
 | Luồng tạo game từ giáo án | `src/renderer/pages/create-wizard.ts` + `features/wizard/*.ts` |
+| Phân luồng đầu vào (giáo án / câu hỏi / dàn ý) | `src/services/input-classifier.ts` (quy tắc), `input-classifier-semantic.ts` (lớp xác nhận MiniLM), IPC `lesson:classify-input`, UI trong `features/wizard/step-input.ts` |
+| Đổi thể loại không sinh lại nội dung | `src/services/draft-convert.ts`, IPC `lesson:convert-draft`, `wizardConvertOrDiscardForGenre` trong `features/wizard/state.ts` |
+| Nhập câu hỏi soạn sẵn (CSV/XLSX/dán văn bản) | `src/services/question-import.ts` (`importQuestionsFromFile`, `parseQuestionsFromText`) |
+| Ngân hàng câu hỏi: 7 loại câu + chấm điểm thể loại tương thích (#115) | `src/services/question-import.ts` (phần `readQuestionBlock`/`ParsedQuestion`), `src/services/question-compatibility.ts` (thuần), `src/services/question-text.ts` (chuẩn hoá dùng chung), UI trong `features/wizard/step-recommend.ts` |
+| Làm sạch ký hiệu/emoji khi tài liệu giống ngân hàng câu hỏi (#116) | `src/services/question-text.ts` (`cleanQuestionLine`, `cleanQuestionText`, `looksLikeQuestionBankText`), `splitInlineQuestion` trong `src/services/question-import.ts` |
 | Bóc tách cấu trúc tài liệu | `src/services/lesson-structure.ts` (+ `features/wizard/step-structure.ts`) |
 | Năm trò chơi (quiz, tình huống, ghép cặp, kho báu, đường đua) | `src/renderer/features/gameplay.ts` |
 | Hình minh họa trò chơi | `features/game-illustration.ts`, `features/treasure-art.ts`, `shared/illustration-*` |
 | Âm thanh | `features/game-audio.ts` |
 | Trình chiếu màn hình 2 | `features/presentation.ts` + `src/presentation/*` + IPC trong `main.ts` |
+| Chơi LAN (học sinh trên điện thoại) | `src/lan/lan-reducer.ts` (trạng thái), `lan-adapters.ts` (điểm), `lan-server.ts` (mạng), `features/lan.ts` (màn hình giáo viên) |
 | Trình sửa game | `features/game-editor.ts`, `features/setup-wizard.ts` |
 | AI local (cài model, chạy llama.cpp) | `src/ai-core/*`, `features/local-ai.ts`, `features/setup-wizard.ts` |
 | Prompt / schema gọi AI | `src/services/lesson-prompts.ts`, `lesson-contracts.ts`, `ai-tasks.ts` |
+| Nhà cung cấp AI của Step 2/Step 5, khoá theo từng nhà cung cấp, trạng thái sẵn sàng (#132) | `src/services/ai-providers.ts` (registry + chọn nhà cung cấp + migration khoá), `main.ts` (`createChatClientForProvider`, `ai:test-provider`, `settings:get/save` không trả khoá), `pages/settings.ts` + `features/settings.ts` (thẻ từng nhà cung cấp), `features/wizard/state.ts` (`wizardProviderCard`/`wizardProviderPickerHtml`) |
 | Lưu trữ (SQLite, `.egame`) | `src/services/lesson-store.ts`, `main.ts` (IPC), `preload.ts` (API) |
 | Màu nền 5 thế giới trò chơi | `styles/app.css`, mục "NĂM THẾ GIỚI TRÒ CHƠI" + `GAME_WORLDS` trong `gameplay.ts` |
 | Gói cài đặt | `package.json` → `build`, `build/installer.nsh`, `vendor/` |

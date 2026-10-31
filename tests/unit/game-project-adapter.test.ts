@@ -12,6 +12,7 @@ import type {
   GameQuestion
 } from '../../src/shared/types';
 import type {
+  ArenaConfig,
   GameConfig,
   GameDraft,
   GameProject
@@ -448,6 +449,28 @@ assert.equal(roundTripArena.questions[1].type, 'short-answer');
 assert.equal(roundTripArena.gameSetup?.pointsPerCorrect, '250');
 assert.deepEqual(roundTripArena.tags, ['Cũ']);
 assert.equal(roundTripArena.title, quizGame.title);
+
+// House Building Mode (#140/#144): the setup the 3D layer reads must survive the
+// project round trip, and an unknown legacy style must not leak through.
+const houseArenaConfig: ArenaConfig = {
+  ...(configFor(arenaDraft) as ArenaConfig),
+  gameplayMode: 'house',
+  houseStyle: 'nha-vuon'
+};
+const houseArenaGame = toEducationalGame(projectFor(arenaDraft, { config: houseArenaConfig }));
+assert.equal(houseArenaGame.gameSetup?.gameplayMode, 'house');
+assert.equal(houseArenaGame.gameSetup?.houseStyle, 'nha-vuon');
+const houseArenaProject = fromEducationalGame(houseArenaGame);
+assert.equal(houseArenaProject.config?.gameType, 'arena');
+assert.equal(houseArenaProject.config?.gameType === 'arena' ? houseArenaProject.config.houseStyle : null, 'nha-vuon');
+const houseArenaRoundTrip = toEducationalGame(houseArenaProject);
+assert.equal(houseArenaRoundTrip.gameSetup?.gameplayMode, 'house');
+assert.equal(houseArenaRoundTrip.gameSetup?.houseStyle, 'nha-vuon');
+const legacyUnknownProject = fromEducationalGame({
+  ...houseArenaGame,
+  gameSetup: { ...houseArenaGame.gameSetup, houseStyle: 'khong-co' as never }
+});
+assert.equal(legacyUnknownProject.config?.gameType === 'arena' ? legacyUnknownProject.config.houseStyle : 'x', undefined);
 
 const roundTripScenario = toEducationalGame(fromEducationalGame(scenarioGameOld));
 assert.equal(roundTripScenario.template, 'scenario');

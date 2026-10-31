@@ -12,9 +12,12 @@ contextBridge.exposeInMainWorld('eduGame', Object.freeze({
   saveGame: game => ipcRenderer.invoke('library:save-game', game),
   deleteGame: id => ipcRenderer.invoke('library:delete-game', id),
   saveSession: session => ipcRenderer.invoke('library:save-session', session),
+  deleteSessions: sessionIds => ipcRenderer.invoke('library:delete-sessions', sessionIds),
   saveLessonDocument: payload => ipcRenderer.invoke('lesson:save-document', payload),
   getLessonDocument: documentId => ipcRenderer.invoke('lesson:get-document', documentId),
   listLessonLibrary: () => ipcRenderer.invoke('lesson:library'),
+  deleteLessonDocument: documentId => ipcRenderer.invoke('lesson:delete-document', documentId),
+  deleteLessonDocuments: documentIds => ipcRenderer.invoke('lesson:delete-documents', documentIds),
   saveProjectDraft: project => ipcRenderer.invoke('project:save-draft', project),
   getProject: projectId => ipcRenderer.invoke('project:get', projectId),
   listProjects: () => ipcRenderer.invoke('project:list'),
@@ -32,6 +35,10 @@ contextBridge.exposeInMainWorld('eduGame', Object.freeze({
   importGame: () => ipcRenderer.invoke('files:import-game'),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   saveSettings: settings => ipcRenderer.invoke('settings:save', settings),
+  // #132: provider state + the real, minimal connection test. Both answer with the
+  // key-free settings view; the key itself never crosses into this context.
+  getAiProviders: () => ipcRenderer.invoke('ai:providers'),
+  testAiProvider: payload => ipcRenderer.invoke('ai:test-provider', payload || {}),
   getLocalAiModels: () => ipcRenderer.invoke('ai:local-models'),
   getLocalRuntimeStatus: () => ipcRenderer.invoke('ai:local-status'),
   installLocalAiModel: modelId => ipcRenderer.invoke('ai:install-local-model', modelId),
@@ -54,6 +61,8 @@ contextBridge.exposeInMainWorld('eduGame', Object.freeze({
   clearDiagnostics: () => ipcRenderer.invoke('diagnostics:clear'),
   openDiagnosticsFolder: () => ipcRenderer.invoke('diagnostics:open-folder'),
   analyzeLesson: payload => ipcRenderer.invoke('lesson:analyze', payload),
+  classifyLessonInput: payload => ipcRenderer.invoke('lesson:classify-input', payload),
+  convertLessonDraft: payload => ipcRenderer.invoke('lesson:convert-draft', payload),
   // #76: offline document structure + selection preview. Both are pure and
   // local; neither touches a model or the network.
   inspectLessonStructure: payload => ipcRenderer.invoke('lesson:get-structure', payload),
@@ -68,6 +77,8 @@ contextBridge.exposeInMainWorld('eduGame', Object.freeze({
   regenerateLessonItem: payload => ipcRenderer.invoke('lesson:regenerate-item', payload),
   checkLessonQuality: payload => ipcRenderer.invoke('lesson:quality', payload),
   patchLessonItemAssets: payload => ipcRenderer.invoke('lesson:patch-item-assets', payload),
+  importIllustration: sourcePath => ipcRenderer.invoke('files:import-illustration', sourcePath),
+  deleteIllustration: imageId => ipcRenderer.invoke('files:delete-illustration', imageId),
   onLocalAiProgress: callback => {
     const listener = (_event, progress) => callback(progress);
     ipcRenderer.on('ai:local-progress', listener);
@@ -98,4 +109,18 @@ contextBridge.exposeInMainWorld('eduGame', Object.freeze({
   sendPresentationExit: payload => ipcRenderer.send('presentation:exit', payload || {}),
   requestPresentationState: () => ipcRenderer.send('presentation:request-state'),
   sendPresentationState: state => ipcRenderer.send('presentation:state-update', state),
+
+  // LAN Classroom Mode API. Channels mirror LAN_CHANNELS in src/shared/lan-types.ts;
+  // this file runs sandboxed and cannot import it, so the literals are repeated.
+  lanStart: payload => ipcRenderer.invoke('lan:start', payload),
+  lanStop: () => ipcRenderer.invoke('lan:stop'),
+  lanAssignTeam: payload => ipcRenderer.invoke('lan:assign-team', payload),
+  lanBegin: () => ipcRenderer.invoke('lan:begin'),
+  lanNext: () => ipcRenderer.invoke('lan:next'),
+  lanFinish: () => ipcRenderer.invoke('lan:finish'),
+  onLanState: callback => {
+    const listener = (_event, snapshot) => callback(snapshot);
+    ipcRenderer.on('lan:state', listener);
+    return () => ipcRenderer.removeListener('lan:state', listener);
+  },
 }));

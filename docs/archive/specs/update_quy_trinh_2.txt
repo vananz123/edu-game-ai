@@ -1,0 +1,165 @@
+# Audit and Incrementally Improve the EduGame Studio 5-Step Game Creation Workflow
+
+## Objective
+
+Audit the existing Electron + TypeScript implementation and incrementally improve the current 5-step workflow. The architecture and game system have already been configured. **Do not rebuild the workflow or rewrite existing modules unnecessarily.** Reuse existing classifiers, MiniLM, local AI services, IPC handlers, game adapters, caches, and UI components wherever possible.
+
+## 1. Audit Before Changing Code
+
+Inspect the actual codebase and verify:
+
+- The existing 5-step game creation workflow and navigation state.
+- Document selection, storage, preprocessing, and analysis behavior.
+- Existing input classification and question-import utilities.
+- MiniLM initialization, embedding reuse, and inference lifecycle.
+- Qwen/llama.cpp startup, model loading, inference modes, and timeout handling.
+- Compatibility adapters and data schemas for all five existing game types.
+- Existing caching, error handling, loading indicators, and AI status notifications.
+
+Identify which requirements are already implemented, partially implemented, or missing. Do not duplicate existing functionality. Do not assume that a component is missing before inspecting the code.
+
+## 2. Preserve and Refine the Five-Step Workflow
+
+### Step 1 — Import and Select Content
+
+Preserve the current document import and content-selection interface.
+
+- Support existing document formats and selected sections.
+- Preserve source content and existing document storage behavior.
+- Do not run AI analysis during import or content selection.
+
+### Step 2 — Classify Content and Determine the Processing Path
+
+After the teacher clicks Continue, classify the selected content using the cheapest reliable method first.
+
+Support these categories:
+
+- Complete lesson/document.
+- Prepared questions and answers.
+- Lesson outline or incomplete question framework.
+- Ambiguous or mixed content.
+
+Requirements:
+
+1. Run lightweight, deterministic rules before any model inference.
+2. Reuse the existing MiniLM model for semantic classification when rules cannot confidently classify the content and MiniLM is appropriate.
+3. Use existing Qwen/local AI only when semantic classification is insufficient or actual lesson analysis is required.
+4. Do not load Qwen solely to classify a document when a reliable non-AI path is available.
+5. Reuse already-loaded models and cached results. Avoid duplicate initialization and repeated inference.
+6. Keep classification separate from full lesson analysis.
+7. Make classification asynchronous where appropriate, without blocking the UI.
+
+For complete prepared questions, skip full lesson analysis. For complete lesson documents, retain the existing lesson-analysis pipeline. For incomplete outlines, assess content sufficiency before deciding whether lightweight analysis or optional AI-assisted development is needed.
+
+Classification must never silently rewrite source content.
+
+## 3. Step 3 — Recommend a Compatible Game Type
+
+Inspect the actual schemas, adapters, and conversion logic of all five existing game types.
+
+- Automatically select the most suitable game type when compatibility can be determined reliably.
+- Explain the recommendation briefly and allow the teacher to choose another game.
+- Determine compatibility from actual game requirements and data structures, not MiniLM similarity alone.
+- Prefer deterministic conversion when the source data can be mapped safely.
+- Preserve questions, answers, order, explanations, and other existing fields wherever supported.
+- Identify missing required fields explicitly.
+- Do not fabricate missing answers, relationships, situations, consequences, or other required content.
+
+When the teacher selects another game type, attempt a safe local conversion first. Invoke AI only if the target game requires genuinely new content or transformations that cannot be performed reliably with existing rules.
+
+Do not rerun full lesson analysis merely because the selected game type changes. Reuse compatible analysis and cached results.
+
+## 4. Step 4 — Configure the Game
+
+Preserve the existing configuration interface and game-specific rules.
+
+- Keep each game type's own settings and data requirements.
+- Do not force all five games into a shared content schema that removes game-specific behavior.
+- Preserve existing individual/team modes, scoring, timing, and other settings.
+- Clearly indicate missing required content before generation.
+- Avoid unnecessary changes to the current UI and navigation.
+
+## 5. Step 5 — Populate the Game
+
+Choose the least expensive correct processing path:
+
+**Path A: Direct conversion, no AI**
+- Use complete, compatible prepared questions and answers.
+- Map the existing data into the target game's schema.
+- Validate the result and populate the game directly.
+
+**Path B: Existing lesson analysis**
+- Reuse the existing analysis result when valid.
+- Generate game content using the existing AI generation pipeline.
+
+**Path C: AI-assisted conversion or content development**
+- Use only when the target game requires content that cannot be safely derived from the source.
+- Clearly inform the teacher what additional content AI will generate or transform.
+- Require explicit teacher action before substantial content development.
+- Preserve the original source and distinguish generated content from original data where the current architecture supports this.
+
+Maintain compatibility with existing save, validation, cache, and game-launch behavior.
+
+## 6. Performance and Model Lifecycle
+
+Investigate actual execution paths before optimizing.
+
+- Measure classification time, MiniLM inference time, model startup time, prompt preparation, AI inference, validation, retries, and total step duration.
+- Avoid loading Qwen when the selected path does not need it.
+- Avoid running both MiniLM and Qwen for the same classification unless measurements justify it.
+- Reuse embeddings and cached classification results where safe.
+- Include content hash and classifier/version information in cache invalidation where appropriate.
+- Avoid stale results when the teacher changes the selected content or source document.
+- Do not introduce a new model or dependency unless necessary and justified.
+- Do not claim performance improvements without measurements.
+
+## 7. UI Feedback
+
+Keep feedback concise and contextual.
+
+Examples:
+
+- Prepared questions: “Existing questions detected. You can create a compatible game directly without AI analysis.”
+- Complete lesson: “Lesson content detected. Analyzing lesson knowledge.”
+- Incomplete outline: “This document contains an outline with limited detailed content. You can use the available content or ask AI to develop it.”
+- Incompatible game selection: “Some fields required by this game are missing. Convert the available content or ask AI to generate the missing content.”
+
+Do not show unnecessary modal dialogs or repetitive notifications. Prefer inline status messages and automatic continuation when the correct path is clear. Never imply that AI analysis has completed when it has not.
+
+## 8. Compatibility and Regression Tests
+
+Add or update tests for:
+
+- Classification of all supported input categories.
+- Prepared questions bypassing full lesson analysis.
+- Complete lesson documents retaining the existing analysis path.
+- Incomplete outlines avoiding unnecessary full analysis.
+- MiniLM reuse and classification caching.
+- All five game types retaining their existing schemas and behavior.
+- Safe conversion between compatible game types.
+- Missing fields and incompatible conversions.
+- No silent changes to original questions or answers.
+- No duplicate model loading or redundant AI calls.
+- UI loading states, navigation, errors, and cancellation.
+- Existing generation and game-launch workflows remaining functional.
+
+Run the relevant tests, type checks, and build checks. Report any failures honestly.
+
+## Constraints
+
+- Inspect before modifying.
+- Make minimal, incremental changes.
+- Reuse existing architecture and dependencies.
+- Do not rewrite the five games.
+- Do not replace the existing local AI stack.
+- Do not change Fast/Think behavior unless a verified defect requires it.
+- Do not add unrelated features or redesign the UI.
+- Do not fabricate implementation details, test results, or performance claims.
+
+## Deliverables
+
+1. A brief audit of existing versus missing functionality.
+2. A minimal implementation plan based on the actual code.
+3. The implemented changes.
+4. Tests and verification results.
+5. A concise summary of changed files, remaining limitations, and measured performance before/after where available.

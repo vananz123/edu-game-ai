@@ -307,6 +307,22 @@
 .correct-select span{font-size:12px;color:#515c72}
 .editor-item-assets{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:6px 0 0}
 .editor-item-assets.is-compact{margin:0}
+/* #128: per-item picture control in the manual editor — the question and its picture
+   sit side by side so a teacher never has to guess which item a picture belongs to. */
+.editor-item-art{display:flex;gap:10px;align-items:flex-start;margin:6px 0 2px;padding:8px;border:1px solid var(--line);border-radius:10px;background:#f9fafd}
+.editor-art-thumb{position:relative;width:132px;flex:0 0 132px;aspect-ratio:16/10;border-radius:8px;overflow:hidden;background:#eef0f7}
+.editor-art-thumb .stage-illustration{position:absolute;inset:0;width:100%;height:100%;border-radius:8px}
+.editor-art-thumb .stage-illustration-svg{width:100%;height:100%;display:block}
+.editor-art-thumb.is-empty{display:flex;align-items:center;justify-content:center;border:1px dashed #dfe2ed;color:#a2a9b8;font-size:10px;background:#f4f5f9}
+.editor-art-controls{display:flex;flex-direction:column;gap:6px;min-width:0;flex:1}
+.editor-art-badge{font-size:10px;font-weight:800;color:#515c72;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.editor-art-buttons{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.editor-art-buttons select{font-size:11px;padding:6px;border:1px solid var(--line);border-radius:7px;background:#fff;color:#515c72;max-width:220px}
+.editor-art-hint{font-size:9px;color:#a2a9b8;line-height:1.5}
+@media (max-width:640px){
+  .editor-item-art{flex-direction:column}
+  .editor-art-thumb{width:100%;flex-basis:auto}
+}
 .editor-asset-chip{display:inline-flex;gap:4px;align-items:center;padding:3px 7px;border-radius:5px;background:#f5f6fa;color:#788196;font-size:9px;font-weight:700;letter-spacing:.2px}
 
 /* Phase B (DECISIONS #72): per-item artwork in the wizard's step-5 preview.
@@ -326,6 +342,29 @@
 .wizard-art-pick select{font-size:11px;padding:6px;border:1px solid var(--line);border-radius:7px;background:#fff;color:#515c72}
 .wizard-art-actions{display:flex;gap:6px;flex-wrap:wrap}
 .wizard-art-hint{font-size:9px;color:#a2a9b8;line-height:1.5}
+
+/* #124: one card per question with its picture, so the two cannot be mixed up.
+   The text column grows, the picture keeps a fixed 16:10 thumb; below 640px the card
+   stacks (picture first) so a narrow window stays readable. */
+.wizard-item-list{display:flex;flex-direction:column;gap:10px}
+.wizard-item-card{border:1px solid var(--line);border-radius:12px;background:#fff;padding:11px;display:flex;flex-direction:column;gap:9px}
+.wizard-item-card.is-open{border-color:var(--purple);box-shadow:0 0 0 2px #6258e81f}
+.wizard-item-main{display:flex;gap:12px;align-items:flex-start}
+.wizard-item-text{flex:1;min-width:0}
+.wizard-item-label{font-size:10px;font-weight:800;letter-spacing:.3px;color:#9199aa;margin-bottom:3px}
+.wizard-item-prompt{font-size:12px;line-height:1.55;color:#394256;font-weight:600;overflow-wrap:anywhere}
+.wizard-item-answers{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:3px}
+.wizard-item-answers li{font-size:11px;line-height:1.45;color:#788196;padding:3px 7px;border-radius:6px;background:#f6f7fb}
+.wizard-item-answers li.is-correct{color:#0f7b5c;background:#e8f8f2;font-weight:700}
+.wizard-item-art{position:relative;width:168px;flex:0 0 168px}
+.wizard-item-art .wizard-art-thumb{border-radius:9px}
+.wizard-item-art-badge{position:absolute;left:6px;bottom:6px;max-width:calc(100% - 12px);font-size:9px;font-weight:700;color:#394256;background:#ffffffd9;border-radius:5px;padding:2px 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wizard-item-actions{display:flex;gap:6px;flex-wrap:wrap;align-items:center;border-top:1px solid var(--line);padding-top:8px}
+.stage-illustration.is-custom{background:#eef0f7}
+@media (max-width:640px){
+  .wizard-item-main{flex-direction:column-reverse}
+  .wizard-item-art{width:100%;flex-basis:auto}
+}
 
 .panel-sub{font-size:11px;color:#9199aa;margin-bottom:17px}
 .select{border:1px solid var(--line);border-radius:9px;padding:10px 12px;background:#fff;color:#5d6679;font-size:12px;outline:0}
@@ -349,6 +388,41 @@
 .modal-head h2{font-size:16px;margin:0}
 .modal-close{border:0;background:#f3f4f8;border-radius:8px;width:30px;height:30px;color:#727b8f}
 .modal-body{padding:22px 23px}
+
+/* #129/#130: the game editor is a page, so it owns the content area instead of floating
+   over it. The save actions are pinned the same way the settings page pins "Lưu cài
+   đặt": a bar that stays at a fixed offset from the window top while the question list
+   scrolls under it. `#pageContent` is the scrolling document, so `position: sticky` with
+   `inset-block-start` does the job without a nested scroll container. */
+.editor-page{display:flex;flex-direction:column;min-height:100%;max-width:1180px;margin:0 auto}
+.editor-page-head{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:12px 22px;background:#ffffff;border-bottom:1px solid var(--line);box-shadow:0 6px 18px #1f29370d}
+/* Anchor for `position: sticky`: the sticky bars cannot leave the flow of their
+   containing block, so the block must cover the whole scrollable height (the page, not a
+   short wrapper). */
+.page-content.editor-active{padding-top:0}
+/* The save actions are always on screen — the same contract as "Lưu cài đặt" in Cài
+   đặt. They sit directly under the 68px top bar and stay there while the question list
+   scrolls, with the hint saying whether anything still needs saving. */
+.editor-save-bar{position:sticky;top:68px;z-index:29;display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:space-between;padding:10px 22px;background:#ffffff;border-bottom:1px solid var(--line);box-shadow:0 8px 18px #1f29370f}
+.editor-save-hint{font-size:11px;color:#788196}
+.editor-save-bar[data-dirty="1"] .editor-save-hint{color:#b45309;font-weight:700}
+.editor-save-actions{display:flex;gap:8px;flex-wrap:wrap}
+@media (max-width:760px){
+  .editor-save-bar{top:68px;justify-content:flex-end}
+  .editor-save-hint{order:2;width:100%}
+}
+.editor-page-title{flex:1;min-width:200px}
+.editor-page-title h1{margin:0;font-size:18px;letter-spacing:-.4px;font-weight:800;color:#1e293b}
+.editor-page-title .small{margin-top:2px;font-size:11px}
+.editor-page-actions{display:flex;gap:8px;flex-wrap:wrap}
+.editor-page-body{padding:18px 22px 34px;display:flex;flex-direction:column;gap:4px}
+.editor-page-empty{max-width:520px;margin:60px auto;text-align:center;color:#64748b}
+.editor-page-empty h1{font-size:20px;color:#1e293b;margin:0 0 8px}
+.editor-page-empty p{margin:0 0 18px;font-size:13px;line-height:1.6}
+@media (max-width:760px){
+  .editor-page-head{align-items:flex-start}
+  .editor-page-actions{width:100%}
+}
 
 /* ============================================================
    Scrollbars — thin, rounded and theme-aware, app-wide.
@@ -378,6 +452,16 @@ html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #4d5578; b
 .toast{position:fixed;bottom:22px;right:24px;background:#20263b;color:#fff;padding:12px 16px;border-radius:10px;font-size:12px;box-shadow:var(--shadow);opacity:0;transform:translateY(8px);transition:.2s;pointer-events:none;z-index:50;max-width:440px}
 .toast.show{opacity:1;transform:translateY(0)}
 .matching-pair-row{display:grid;grid-template-columns:auto minmax(0,1fr) minmax(0,1fr) auto auto auto;gap:6px;align-items:center;margin:6px 0}
+/* Ghép xong: thanh "Đã ghép đủ" ghim trên cùng sân khấu, điểm CHƯA hiện — giáo viên
+   còn chỗ cho cả lớp nhìn lại các đường nối (DECISIONS #110). Nổi hơn nền để mắt
+   học sinh bắt được nút mà không che bàn ghép (nằm ở luồng, không đè lên). */
+.matching-complete-bar{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin:0 0 12px;padding:12px 16px;border:1px solid #3ecf8e66;border-radius:14px;background:#14352b;color:#e2fff3}
+.matching-complete-text{display:flex;flex-direction:column;gap:3px;min-width:240px;flex:1 1 320px}
+.matching-complete-text strong{font-size:16px}
+.matching-complete-text span{color:#a9cbbd;font-size:13px;line-height:1.45}
+.matching-complete-btn{min-height:44px;padding:0 20px;white-space:nowrap}
+@media (prefers-reduced-motion: no-preference){.matching-complete-bar{animation:matchCompleteIn .28s ease-out}}
+@keyframes matchCompleteIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
 .matching-board{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
 .matching-col{display:flex;flex-direction:column;gap:9px}
 .match-card{padding:12px 14px;border:1px solid #3d4468;border-radius:10px;background:#1b2140;color:#eef1ff;font:inherit;text-align:left;cursor:pointer;transition:border-color .15s,background .15s,opacity .2s}
@@ -527,8 +611,8 @@ html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #4d5578; b
 .race-team-row{display:flex;justify-content:space-between;gap:9px;padding:9px 13px;border:1px solid #3d4468;border-radius:9px;background:#1b2140;color:#e8ebf7;font-size:12px}
 .race-team-row.active{border-color:#8a7cf8;background:#262c50;color:#fff;box-shadow:inset 3px 0 0 #8a7cf8}
 .race-turn{border:1px solid #3d4468;border-radius:11px;padding:15px;background:#1b2140;color:#e8ebf7;margin-top:13px}
-.race-team-row[data-team-id]{display:grid;grid-template-columns:auto 74px minmax(0,1fr) auto auto auto;gap:7px;align-items:center}
-.race-team-row[data-cell-row]{display:grid;grid-template-columns:auto 74px auto minmax(0,1fr) auto;gap:7px;align-items:center}
+.race-team-row[data-team-id]{display:grid;grid-template-columns:auto 74px minmax(0,1fr) auto auto auto;gap:7px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:9px;padding:8px 10px;color:#394256}
+.race-team-row[data-cell-row]{display:grid;grid-template-columns:auto 74px auto minmax(0,1fr) auto;gap:7px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:9px;padding:8px 10px;color:#394256}
 .race-team-row input,.race-team-row select{border:1px solid #e4e7f0;border-radius:7px;padding:7px 9px;font-size:11px;outline:0;background:#fff}
 /* G6 — kéo-thả trong editor + xem trước đường đua */
 .drag-handle{cursor:grab;user-select:none;color:#a0a6b5;font-size:13px;line-height:1;padding:0 2px}
@@ -663,10 +747,21 @@ html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #4d5578; b
 .stage-bottom{display:flex;align-items:center;justify-content:space-between;margin-top:23px;color:#b9bfd6;font-size:11px}
 .stage-bottom .btn{background:#8278ff;color:#fff}
 .result-screen{text-align:center;padding:25px 10px}
-.result-medal{font-size:58px}
+.result-medal{font-size:58px;line-height:1;display:inline-block;animation:result-medal-pop .5s cubic-bezier(.34,1.56,.64,1) both}
 .result-screen h2{font-size:26px;margin:12px 0 8px}
 .result-screen p{color:#bbc1d5;font-size:12px}
-.result-score{font-size:44px;font-weight:850;color:#a9a3ff;margin:18px 0 6px}
+.result-score{font-size:44px;font-weight:850;color:var(--world-accent,#a9a3ff);margin:18px 0 6px;text-shadow:0 0 28px var(--world-accent-soft,rgba(169,163,255,.22))}
+.result-stats{display:flex;justify-content:center;flex-wrap:wrap;gap:10px;margin:16px auto 0;max-width:640px}
+.result-stat{display:grid;justify-items:center;gap:3px;min-width:112px;padding:12px 16px;border:1px solid var(--world-tag-border,rgba(255,255,255,.14));border-radius:13px;background:var(--world-tag-bg,rgba(255,255,255,.06));color:var(--world-ink,#fff);animation:result-stat-in .4s ease both}
+.result-stat:nth-child(2){animation-delay:.05s}
+.result-stat:nth-child(3){animation-delay:.1s}
+.result-stat:nth-child(4){animation-delay:.15s}
+.result-stat-icon{font-size:18px;line-height:1;opacity:.9}
+.result-stat-value{font-size:20px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--world-accent,#d5d2ff)}
+.result-stat-label{font-size:10px;letter-spacing:.4px;color:var(--world-meta,#a9b1cd);font-weight:650;text-transform:uppercase}
+@keyframes result-medal-pop{0%{transform:scale(0) rotate(-14deg);opacity:0}60%{transform:scale(1.18) rotate(4deg)}100%{transform:scale(1) rotate(0);opacity:1}}
+@keyframes result-stat-in{0%{transform:translateY(10px);opacity:0}100%{transform:translateY(0);opacity:1}}
+@media (prefers-reduced-motion: reduce){.result-medal{animation:none}.result-stat{animation:none}}
 .result-actions{display:flex;justify-content:center;gap:9px;margin-top:24px}
 .editor-question{border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:12px}
 .editor-question-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
@@ -985,7 +1080,14 @@ html[data-fullscreen="1"] .modal[data-player-theme] .answer-option {
    cách xem bản khai báo SAU CÙNG khớp selector, không phải bản xuất hiện đầu. */
 @media (max-height: 800px) {
   html[data-fullscreen="1"] .modal[data-player-theme] .answer-option {
-    font-size: clamp(20px, 2.9vh + 0.6vw, 30px);
+    /* DECISIONS #135: ở cửa sổ thấp (1366x768), đáp án 30px + câu hỏi 48px khiến
+       hàng đáp án dưới tràn 93px ra ngoài viewport (đáp án dài quấn 4 dòng trong
+       cột hẹp 308px). Hạ cỡ đáp án về ~22px — vẫn trên sàn 20px của
+       ui-fullscreen-density-check — để 4 đáp án xuống còn 3 dòng, và câu hỏi hạ
+       riêng ở khối kế sau. Ảnh minh hoạ KHÔNG bị thu nhỏ (đúng hướng #89). */
+    font-size: clamp(18px, 1.9vh + 0.55vw, 23px);
+    min-height: clamp(56px, 9vh, 96px);
+    padding: clamp(10px, 1.2vh, 15px) clamp(14px, 1.4vw, 20px);
   }
   html[data-fullscreen="1"] .modal[data-player-theme] .stage-center { gap: clamp(8px, 1.6vh, 18px); }
 }
@@ -1012,6 +1114,15 @@ html[data-fullscreen="1"] .modal[data-player-theme] .stage-question {
      letter-spacing 0 để dấu thanh không va chạm chữ kế bên. */
   line-height: 1.34;
   letter-spacing: 0;
+}
+/* Cửa sổ thấp (1366x768): câu hỏi 48px chiếm 4 dòng = 258px trong cột chữ hẹp,
+   đẩy 2 hàng đáp án (4 dòng/đáp án ở 30px) tràn 93px ra ngoài viewport. Hạ câu
+   hỏi về ~38px — vẫn trên sàn 34px của ui-fullscreen-density-check — trả lại
+   chiều cao cho lưới đáp án. (DECISIONS #135, đi cùng khối đáp án phía trên.) */
+@media (max-height: 800px) {
+  html[data-fullscreen="1"] .modal[data-player-theme] .stage-question {
+    font-size: clamp(34px, 3.7vh + 0.7vw, 46px);
+  }
 }
 
 /* Cửa sổ thấp (1366x768, laptop): sàn chỉ được NÂNG cỡ chữ, không hạ. Sàn cũ
@@ -1209,6 +1320,123 @@ html[data-fullscreen="1"] .modal[data-player-theme] .leaderboard-row { font-size
 }
 .play-tool-danger:hover { background: #4a2338; border-color: #ef6d89; color: #ffd9e2; }
 
+/* Chơi LAN: secondary to "Trình chiếu" (the projector is still the main action),
+   but coloured so a teacher can find it at a glance. Green = the room is open. */
+.play-tool-lan {
+  background: #1f3b34;
+  border-color: #2f6b58;
+  color: #c9f5e3;
+  padding: 0 13px;
+}
+.play-tool-lan:hover { background: #265045; border-color: #3f8f74; }
+.play-tool-lan.is-open { background: #17493a; border-color: #3ecf8e; color: #e2fff3; }
+
+/* LAN room panel: reuses .modal so it matches every other modal, but is wide
+   enough for the QR + the class list side by side on a projector. */
+.lan-modal { width: min(1040px, 96vw); max-height: 92vh; display: flex; flex-direction: column; }
+.lan-modal .modal-body { overflow-y: auto; }
+.lan-backdrop { z-index: 60; }
+.lan-room { display: flex; flex-direction: column; gap: 16px; }
+/* The lobby's "Bắt đầu câu 1" bar: the teacher's missing control. Loud on purpose —
+   without pressing it the class stays waiting, which is what went wrong before. */
+.lan-startbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  border: 1px solid #3ecf8e66;
+  border-radius: 14px;
+  background: #14352b;
+}
+.lan-startbar-text { display: flex; flex-direction: column; gap: 3px; min-width: 260px; flex: 1 1 320px; }
+.lan-startbar-text strong { font-size: 16px; color: #e2fff3; }
+.lan-startbar-text span { color: #a9cbbd; font-size: 13px; line-height: 1.45; }
+.lan-start-btn { min-height: 44px; padding: 0 20px; white-space: nowrap; }
+.lan-start-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.lan-progress { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; border: 1px solid #2d3556; border-radius: 12px; background: #1c2340; font-size: 14px; }
+.lan-progress strong { color: #fff; }
+.lan-progress .lan-note { margin-left: auto; }
+.lan-invite { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
+.lan-qr { width: 184px; height: 184px; flex: 0 0 auto; border-radius: 10px; background: #fff; padding: 8px; }
+.lan-invite-text { flex: 1 1 320px; min-width: 260px; }
+.lan-kicker { color: #b9b3ff; font-size: 12px; font-weight: 800; letter-spacing: 0.08em; }
+.lan-url { margin: 8px 0 6px; font-size: 15px; overflow-wrap: anywhere; }
+.lan-alt { margin: 0 0 6px; color: #aeb5ce; font-size: 13px; }
+.lan-alt code { background: #1c2340; padding: 1px 6px; border-radius: 6px; }
+.lan-roomcode { margin: 10px 0 0; font-size: 18px; }
+.lan-roomcode strong { font-size: 26px; letter-spacing: 0.16em; color: #c9f5e3; }
+.lan-hint { margin: 8px 0 0; color: #aeb5ce; font-size: 13px; line-height: 1.5; }
+.lan-players-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 14px; color: #cfd5ea; border-top: 1px solid #2d3556; padding-top: 12px; }
+.lan-note { color: #aeb5ce; font-size: 13px; }
+.lan-teams { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.lan-team { background: #1c2340; border: 1px solid #2d3556; border-radius: 12px; padding: 10px 12px; }
+.lan-team-head { display: flex; justify-content: space-between; font-weight: 700; margin-bottom: 6px; }
+.lan-players, .lan-team ul, .lan-ranking { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.lan-player { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+.lan-player.is-offline { opacity: 0.45; }
+.lan-player-name { flex: 1 1 auto; overflow-wrap: anywhere; }
+.lan-player-meta { color: #aeb5ce; font-size: 13px; white-space: nowrap; }
+.lan-dot { width: 8px; height: 8px; border-radius: 50%; background: #3ecf8e; flex: 0 0 auto; }
+.lan-player.is-offline .lan-dot { background: #6b7392; }
+.lan-move { display: flex; gap: 3px; }
+.lan-move-btn { border: 1px solid #2d3556; background: #232a45; border-radius: 6px; font-size: 13px; line-height: 1; padding: 4px 5px; cursor: pointer; }
+.lan-move-btn.is-current { border-color: #7b6cf6; background: #2a2450; }
+.lan-empty { color: #aeb5ce; font-size: 14px; margin: 6px 0; }
+.lan-scoring { margin: 0; color: #ffd9a0; font-size: 13px; }
+.lan-error { color: #ffd2db; background: #4a2338; border: 1px solid #7d3352; border-radius: 10px; padding: 12px 14px; }
+.lan-actions { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+.lan-ranking { gap: 8px; }
+.lan-ranking li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 10px; background: #1c2340; border-radius: 10px; }
+.lan-finished { display: flex; flex-direction: column; gap: 12px; }
+
+/* Vinh danh cuối trận LAN: bục 3 hạng, người nhất đứng giữa và cao nhất.
+   Dùng grid 3 cột cố định nên thứ tự DOM (2, 1, 3) không làm lệch bục. */
+.lan-podium-wrap { display: flex; flex-direction: column; gap: 12px; }
+.lan-podium { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; align-items: end; }
+.lan-podium-step { display: flex; flex-direction: column; align-items: center; gap: 3px; text-align: center; min-width: 0; }
+.lan-podium-step.is-rank-1 { order: 2; }
+.lan-podium-step.is-rank-2 { order: 1; }
+.lan-podium-step.is-rank-3 { order: 3; }
+.lan-podium-medal { font-size: 34px; line-height: 1; min-height: 34px; }
+.lan-podium-name { font-weight: 800; font-size: 15px; color: #fff; overflow-wrap: anywhere; }
+.lan-podium-tie { font-size: 11px; font-weight: 600; color: #ffd977; }
+.lan-podium-points { font-size: 14px; font-weight: 700; color: #c9f5e3; }
+.lan-podium-meta { font-size: 12px; color: #aeb5ce; overflow-wrap: anywhere; }
+/* The block's height is the "step": gold tallest. Not earned = flat, no shine. */
+.lan-podium-block {
+  width: 100%;
+  margin-top: 6px;
+  border-radius: 10px 10px 0 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 8px;
+  background: #232a45;
+  border: 1px solid #2d3556;
+  border-bottom: 0;
+  color: #8b93b4;
+  font-size: 20px;
+  font-weight: 900;
+}
+.lan-podium-step.is-rank-1 .lan-podium-block { height: 96px; }
+.lan-podium-step.is-rank-2 .lan-podium-block { height: 74px; }
+.lan-podium-step.is-rank-3 .lan-podium-block { height: 58px; }
+.lan-podium-step.is-earned.is-rank-1 .lan-podium-block { background: linear-gradient(180deg, #b8871f, #6d4d10); border-color: #e9b95b; color: #fff5d6; }
+.lan-podium-step.is-earned.is-rank-2 .lan-podium-block { background: linear-gradient(180deg, #7c8698, #454d5c); border-color: #b9c2d1; color: #f2f5fa; }
+.lan-podium-step.is-earned.is-rank-3 .lan-podium-block { background: linear-gradient(180deg, #8a5a34, #4d311b); border-color: #c98d5b; color: #ffe8d4; }
+.lan-ranking-rest { margin-top: 4px; }
+@media (max-width: 560px) {
+  .lan-podium-medal { font-size: 26px; min-height: 26px; }
+  .lan-podium-name { font-size: 13px; }
+  .lan-podium-step.is-rank-1 .lan-podium-block { height: 76px; }
+  .lan-podium-step.is-rank-2 .lan-podium-block { height: 58px; }
+  .lan-podium-step.is-rank-3 .lan-podium-block { height: 46px; }
+}
+@media (max-width: 720px) {
+  .lan-qr { width: 148px; height: 148px; }
+}
 
 /* --- stage: fill the available height and scale type for the room --- */
 .modal[data-player-theme] .game-stage {
@@ -1407,6 +1635,109 @@ html[data-fullscreen="1"] .modal[data-player-theme] .stage-center > .answer-grid
   box-shadow: var(--world-progress-glow, 0 0 12px #8b82ff86);
 }
 
+/* --- House Building Mode: parts progress bar + result summary --- */
+.house-progress {
+  max-width: 680px;
+  margin: 2px auto 20px;
+  padding: 12px 14px;
+  border: 1px solid #363d5c;
+  background: #202641;
+  border-radius: 12px;
+  text-align: left;
+}
+.house-progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.house-progress-title {
+  color: #a9a3ff;
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  font-weight: 800;
+}
+.house-count {
+  color: #c9cfe6;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.house-count b {
+  color: #ffd977;
+  font-size: 13px;
+}
+.house-bar {
+  height: 8px;
+  background: #303651;
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 11px 0 8px;
+}
+.house-bar-fill {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, #8b82ff, #34d399);
+  border-radius: 999px;
+  transition: width 0.25s;
+}
+.house-materials {
+  color: #b9bfd6;
+  font-size: 11px;
+}
+.house-materials b {
+  color: #fff;
+  font-size: 12px;
+}
+.result-house {
+  display: inline-block;
+  margin: 10px auto 2px;
+  padding: 10px 14px;
+  border: 1px solid #363d5c;
+  background: #202641;
+  border-radius: 11px;
+  color: #d7dced;
+  font-size: 12px;
+}
+.result-house b { color: #fff; }
+/* Màn kết quả + ngôi nhà 3D (DECISIONS #144): cột trái là mô hình nhà đã xây
+   (canvas nằm dưới slot trong suốt), cột phải giữ nguyên khối kết quả cũ. Chỉ
+   house mode mới có hero — kết quả Classic và 4 trò khác giữ đúng bố cục cũ. */
+.result-screen.is-house-result {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.85fr) minmax(320px, 1.15fr);
+  align-items: center;
+  gap: clamp(14px, 2.4vw, 32px);
+  text-align: center;
+}
+.result-house-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.result-house-hero .house-stage-slot {
+  width: 100%;
+  height: clamp(220px, 32vh, 360px);
+  margin: 0;
+}
+html[data-fullscreen="1"] .result-house-hero .house-stage-slot {
+  height: clamp(260px, 42vh, 520px);
+}
+.result-summary { min-width: 0; }
+.result-house-style {
+  display: block;
+  margin-top: 4px;
+  color: #9aa2bd;
+  font-size: 11px;
+}
+@media (max-width: 980px) {
+  .result-screen.is-house-result { grid-template-columns: 1fr; }
+  .result-house-hero .house-stage-slot { height: clamp(150px, 22vh, 220px); }
+}
+
 
 /* --- answer options: large tap targets with coloured key badges --- */
 .modal[data-player-theme] .answer-grid {
@@ -1496,7 +1827,12 @@ html[data-fullscreen="1"] .modal[data-player-theme] .answer-option .letter {
   box-shadow: 0 0 0 2px #f0738d33;
 }
 .modal[data-player-theme] .answer-option.wrong .letter { background: linear-gradient(145deg, #f0738d, #cd4a68); }
-.modal[data-player-theme] .answer-option.selected { border-color: #a9a3ff; background: linear-gradient(180deg, #2f3560 0%, #272c50 100%); }
+/* Scenario "đã chọn quyết định": theo thế giới thay vì tím cứng (DECISIONS #104). */
+.modal[data-player-theme] .answer-option.selected {
+  border-color: var(--world-card-selected-border, #a9a3ff);
+  background: var(--world-card-selected-bg, linear-gradient(180deg, #2f3560 0%, #272c50 100%));
+  box-shadow: 0 0 0 2px var(--world-accent-soft, rgba(169, 163, 255, 0.22));
+}
 .modal[data-player-theme] .answer-option:disabled { cursor: default; transform: none; }
 
 /* True/False keeps two wide buttons but they should not look like a
@@ -3640,7 +3976,8 @@ html[data-fullscreen="1"] .stage-world-sub { display: none; }
    và chữ nghiêng bên dưới, không phải một bảng biến riêng. Nhờ vậy stage chỉ cần
    `data-game-world="quiz"` là đủ, kể cả khi câu scenario nằm lẫn trong game quiz
    (data-game và data-game-world không còn phải trùng nhau). */
-.modal[data-player-theme] .game-stage[data-game="quiz"] {
+.modal[data-player-theme] .game-stage[data-game="quiz"],
+.modal[data-player-theme] .game-stage[data-game="scenario"] {
   --world-ink: #f1ead9;
   --world-accent: #f2b24a;
   --world-accent-soft: rgba(242, 178, 74, 0.16);
@@ -3957,6 +4294,35 @@ html[data-fullscreen="1"] .stage-world-sub { display: none; }
    cột chữ không còn khối `.treasure-storyline` inline (DECISIONS #105). Các rule
    `.treasure-storyline` phía trên vẫn giữ nhưng không còn phần tử nào khớp. */
 
+/* DECISIONS #108: nhãn xám "Chặng n" phía trên câu hỏi đã bỏ (trùng với huy hiệu
+   chặng dưới hình).
+   DECISIONS #109: hàng đầu sân khấu là flex hai bên — nhãn thế giới bên TRÁI, nút
+   "📜 Bối cảnh & Nhiệm vụ chặng" bên PHẢI. Hàng nằm trong `.game-stage` (flex column
+   căn giữa), nên phải tự giãn hết bề rộng thì `space-between` mới có tác dụng. */
+.treasure-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  align-self: stretch;
+  width: 100%;
+  flex-wrap: wrap;
+  margin: 0 0 8px;
+}
+.treasure-head-world {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.treasure-story-row {
+  display: flex;
+  align-items: center;
+  margin: 0;
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .treasure-head-row {
+  margin: 0 0 6px;
+}
+
 /* Gợi ý: chỉ còn là nút hình bóng đèn, ghim ở góc dưới bên trái sân khấu. */
 .modal[data-player-theme] .treasure-hint-fab {
   position: sticky;
@@ -4083,4 +4449,119 @@ html[data-fullscreen="1"] .modal[data-player-theme] .game-stage[data-game="treas
 }
 @media (prefers-reduced-motion: reduce) {
   .modal[data-player-theme] .treasure-hint-fab { transition: none; }
+}
+
+/* ============================================================
+   CHẾ ĐỘ XÂY NHÀ — ngôi nhà là nhân vật chính (DECISIONS #142)
+
+   Ngôi nhà là WebGL: canvas phủ toàn `.game-stage` và nằm DƯỚI nội dung DOM
+   (`.game-stage[data-game-world] > * { z-index: 1 }`). Vì vậy muốn "đưa nhà ra
+   trước" thì phải dọn nội dung DOM khỏi vùng nhà chiếm chứ không thể tăng
+   z-index cho canvas.
+
+   · Lúc trả lời: `.house-stage-slot` giữ chỗ cho nhà (thay ảnh minh hoạ);
+     gameplay.ts chiếu tâm ô này qua camera để đặt nhà đúng chỗ.
+   · Sau khi trả lời: `.is-house-showcase` ẩn câu hỏi/đáp án, nhà được tween ra
+     giữa và phóng to, banner phản hồi thành thẻ dưới nhà, nút "Tiếp tục" ở đáy.
+     Chiều cao stage được ghim bằng inline `min-height` trước khi bật class —
+     nếu không, stage co từ ~843px xuống ~283px và canvas đổi tỉ lệ giữa
+     animation.
+   ============================================================ */
+
+/* Vùng giữ chỗ cho ngôi nhà trong lúc học sinh đọc câu hỏi. */
+.house-stage-slot {
+  width: 100%;
+  height: clamp(110px, 16vh, 160px);
+  flex: 0 0 auto;
+  margin: 2px 0 4px;
+  pointer-events: none;
+}
+html[data-fullscreen="1"] .house-stage-slot {
+  height: clamp(170px, 22vh, 260px);
+}
+
+/* Một cột duy nhất, canh đáy: banner + nút ở dưới, phần trên nhường cho nhà. */
+.modal[data-player-theme] .game-stage.is-house-showcase .stage-center {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-end;
+  gap: clamp(8px, 1.4vh, 14px);
+  max-width: none;
+  min-width: 0;
+  width: 100%;
+  margin: 0;
+  text-align: center;
+}
+.modal[data-player-theme] .game-stage.is-house-showcase .stage-center > .stage-col.is-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: none;
+  min-height: 0;
+}
+.game-stage.is-house-showcase .stage-kicker-row,
+.game-stage.is-house-showcase .scenario-context,
+.game-stage.is-house-showcase .stage-question,
+.game-stage.is-house-showcase .answer-grid,
+.game-stage.is-house-showcase .text-answer-box,
+.game-stage.is-house-showcase .text-answer-hint-text,
+.game-stage.is-house-showcase .house-stage-slot,
+.game-stage.is-house-showcase .stage-tip {
+  display: none;
+}
+
+/* HUD gọn trong màn trình diễn: đủ "đã xây n/7 + thanh tiến độ" như ảnh mẫu,
+   nhường chiều cao cho ngôi nhà (đo trên 1600x1000: 85px -> 45px). */
+.game-stage.is-house-showcase .house-progress {
+  max-width: 360px;
+  margin: 0 auto 8px;
+  padding: 8px 12px;
+}
+.game-stage.is-house-showcase .house-bar {
+  margin: 7px 0 0;
+}
+.game-stage.is-house-showcase .house-materials {
+  display: none;
+}
+
+/* Banner phản hồi: thẻ lớn ở đáy sân khấu, không đè lên nhà. */
+.modal[data-player-theme] .game-stage.is-house-showcase #answerFeedback {
+  width: min(760px, 94%);
+  max-width: 760px;
+  max-height: 30vh;
+  overflow-y: auto;
+  margin: 0 auto;
+  padding: 14px 20px 16px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #143f38, #12302c);
+  border: 1px solid #35b68e;
+  box-shadow: 0 18px 40px #0009;
+  color: #e7fff8;
+  font-size: clamp(12px, 1.55vh, 15px);
+  text-align: center;
+  animation: feedback-pop 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+.modal[data-player-theme] .game-stage.is-house-showcase #answerFeedback.bad {
+  background: linear-gradient(180deg, #482a3b, #3a2030);
+  border-color: #ef6d89;
+  color: #ffe9ef;
+}
+.game-stage.is-house-showcase #answerFeedback > strong:first-child {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 1.45em;
+  letter-spacing: 0.4px;
+}
+.modal[data-player-theme] .game-stage.is-house-showcase .stage-bottom {
+  justify-content: center;
+  width: 100%;
+  margin-top: 0;
+}
+.modal[data-player-theme] .game-stage.is-house-showcase #nextQuestionBtn {
+  padding: 10px 28px;
+  font-size: clamp(13px, 1.6vh, 16px);
+  box-shadow: 0 12px 28px #0007;
 }

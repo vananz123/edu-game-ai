@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#11152b">
+  <!-- No third-party origins: the classroom Wi-Fi may have no Internet at all. -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' ws: wss:; form-action 'none'; base-uri 'none'">
+  <title>Chơi LAN · EduGame Studio</title>
+  <link rel="stylesheet" href="mobile.css">
+</head>
+<body>
+  <main id="app">
+    <header class="brand">
+      <span class="brand-mark" aria-hidden="true">📱</span>
+      <div><strong>Chơi LAN</strong><small id="roomTag">Phòng —</small></div>
+    </header>
+
+    <!-- Join -->
+    <section id="view-join" class="card">
+      <label class="field">
+        <span>Mã phòng</span>
+        <input id="roomInput" inputmode="text" autocomplete="off" autocapitalize="characters"
+               spellcheck="false" maxlength="6" placeholder="VD: K7M2QP">
+      </label>
+      <label class="field">
+        <span>Tên của em</span>
+        <input id="nameInput" autocomplete="name" maxlength="24" placeholder="VD: Minh · 8A2" enterkeyhint="go">
+      </label>
+      <button id="joinBtn" class="primary" type="button">Vào lớp</button>
+      <p id="joinError" class="error" role="alert" hidden></p>
+    </section>
+
+    <!-- Waiting / lobby -->
+    <section id="view-wait" class="card" hidden>
+      <p class="kicker">Đã vào phòng</p>
+      <h1 id="waitName">—</h1>
+      <p id="waitHint" class="muted">Chờ giáo viên bắt đầu…</p>
+      <div id="teamPill" class="pill" hidden></div>
+    </section>
+
+    <!-- Question -->
+    <section id="view-question" class="card" hidden>
+      <p id="qKicker" class="kicker">Câu 1</p>
+      <h1 id="qPrompt">—</h1>
+      <div id="qOptions" class="options" role="radiogroup" aria-labelledby="qPrompt"></div>
+      <form id="qTextForm" class="field" hidden>
+        <input id="qTextInput" autocomplete="off" placeholder="Nhập câu trả lời (tối đa 5 từ)" enterkeyhint="send">
+        <button class="primary" type="submit">Gửi câu trả lời</button>
+      </form>
+      <p id="qError" class="error" role="alert" hidden></p>
+    </section>
+
+    <!-- Answered / round closed / finished -->
+    <section id="view-status" class="card" hidden>
+      <div id="statusIcon" class="status-icon" aria-hidden="true">✓</div>
+      <h1 id="statusTitle">—</h1>
+      <p id="statusNote" class="muted"></p>
+    </section>
+  </main>
+  <script src="/socket.io/socket.io.min.js"></script>
+  <script src="mobile.js"></script>
+</body>
+</html>

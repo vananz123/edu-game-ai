@@ -10,7 +10,7 @@ import {
   parseRecommendationsContent,
   recommendationsContentSchema
 } from '../../src/services/lesson-contracts';
-import type { ArenaDraft, GameConfig, MatchingDraft, RaceDraft, ScenarioDraft, TreasureDraft } from '../../src/shared/lesson-types';
+import type { ArenaConfig, ArenaDraft, GameConfig, MatchingDraft, RaceDraft, ScenarioDraft, TreasureDraft } from '../../src/shared/lesson-types';
 
 const arenaDraft: ArenaDraft = {
   gameType: 'arena',
@@ -355,6 +355,29 @@ try {
 for (const config of validConfigs) {
   const parsed = parseGameConfig(JSON.parse(JSON.stringify(config)));
   assert.equal(parsed.gameType, config.gameType);
+}
+// House Building Mode fields are optional, but z.object strips unknown keys:
+// leaving them out of the arena schema silently reset the saved model (#144).
+const houseConfig = parseGameConfig({
+  ...(validConfigs[0] as ArenaConfig),
+  gameplayMode: 'house',
+  houseStyle: 'nha-go'
+});
+assert.equal(houseConfig.gameType, 'arena');
+if (houseConfig.gameType === 'arena') {
+  assert.equal(houseConfig.gameplayMode, 'house');
+  assert.equal(houseConfig.houseStyle, 'nha-go');
+}
+const plainArena = parseGameConfig(JSON.parse(JSON.stringify(validConfigs[0])));
+if (plainArena.gameType === 'arena') {
+  assert.equal(plainArena.gameplayMode, undefined);
+  assert.equal(plainArena.houseStyle, undefined);
+}
+try {
+  parseGameConfig({ ...(validConfigs[0] as ArenaConfig), houseStyle: 'khong-co' as never });
+  assert.fail('an unknown house style should fail');
+} catch (error) {
+  typedIssue(error, 'CONFIG_INVALID');
 }
 try {
   parseGameConfig({ ...validConfigs[0], questionCount: 0 });

@@ -101,6 +101,28 @@ function wizardConfigToggle(key, label, checked) {
  * dropdown that hides one of the two options. The click is handled in place, so
  * the other fields keep their focus and caret.
  */
+/**
+ * #117: true when this run started from the teacher's question bank. Such a run has no
+ * model step at all, so the Fast/Thinking buttons and the "Tạo nội dung" button would
+ * be controls that do nothing — they are replaced by a short explanation instead.
+ */
+function wizardIsBankRun() {
+  return wizardState.draftOrigin === 'source' && wizardState.draftSource === 'imported-questions';
+}
+
+/** Explains why there is no Fast/Thinking choice on a question-bank run. */
+function wizardBankConfigureNote() {
+  return `<div class="wizard-mode-block" data-wizard-bank-no-ai="1">
+    <div class="wizard-mode-head">
+      <div>
+        <div class="wizard-mode-title">KHÔNG DÙNG AI</div>
+        <div class="wizard-mode-sub">Trò chơi dùng đúng câu hỏi và đáp án giáo viên đã cung cấp, nên không có chế độ Fast/Thinking. Chỉ cần chỉnh thông tin trò chơi rồi bấm “Xong”.</div>
+      </div>
+      <span class="tag">Từ câu hỏi có sẵn</span>
+    </div>
+  </div>`;
+}
+
 function wizardModeChoice(config) {
   const value = config.generationMode === 'deep' ? 'deep' : 'fast';
   const card = (mode, icon, title, note, description) => `<button type="button" role="radio" class="wizard-mode-card" data-wizard-mode="${mode}" data-wizard-action="set-mode" data-mode="${mode}" aria-checked="${value === mode ? 'true' : 'false'}" title="${escapeHtml(description)}">
@@ -112,7 +134,7 @@ function wizardModeChoice(config) {
     <div class="wizard-mode-head">
       <div>
         <div class="wizard-mode-title" id="wizardModeLabel">CHẾ ĐỘ TẠO</div>
-        <div class="wizard-mode-sub">Chọn cách AI local đọc giáo án — khác biệt thật nằm ở lượng ngữ cảnh và giới hạn độ dài câu trả lời.</div>
+        <div class="wizard-mode-sub">Chọn cách AI đọc giáo án — khác biệt thật nằm ở lượng ngữ cảnh và giới hạn độ dài câu trả lời.</div>
       </div>
       <span class="tag" data-wizard-mode-badge>${value === 'deep' ? 'Thinking' : 'Fast'}</span>
     </div>
@@ -167,7 +189,7 @@ function renderWizardConfigure() {
     <div class="section-head"><h3>Bước 4 · Cấu hình ${escapeHtml(meta.label)}</h3><span class="tag">${meta.icon} ${escapeHtml(config.gameType)}</span></div>
     <div class="panel-sub">${escapeHtml(meta.hint)} Giáo viên có thể chỉnh lại toàn bộ trong trình soạn thảo sau khi tạo nội dung.</div>
 
-    ${wizardModeChoice(config)}
+    ${wizardIsBankRun() ? wizardBankConfigureNote() : wizardModeChoice(config)}
 
     <div class="field-row">
       <div class="field"><label>TÊN TRÒ CHƠI *</label><input data-wizard-config="title" value="${escapeHtml(config.title || '')}"></div>
@@ -193,7 +215,9 @@ function renderWizardConfigure() {
     <div class="publish-actions">
       <button class="btn btn-secondary" data-wizard-action="back">← Chọn trò chơi</button>
       <button class="btn btn-secondary" data-wizard-action="save"${s.busy ? ' disabled' : ''}>${s.busy === 'save' ? 'Đang lưu…' : 'Lưu dự án'}</button>
-      <button class="btn btn-primary" id="wizardNextBtn" data-wizard-action="next"${s.busy ? ' disabled' : ''}>Tiếp tục · Tạo nội dung →</button>
+      ${wizardIsBankRun()
+        ? `<button class="btn btn-primary" id="wizardNextBtn" data-wizard-action="next"${s.busy ? ' disabled' : ''}>Xong · ${s.gameSnapshot ? 'Mở bước lưu' : 'Lưu vào thư viện'} →</button>`
+        : `<button class="btn btn-primary" id="wizardNextBtn" data-wizard-action="next"${s.busy ? ' disabled' : ''}>Tiếp tục · Tạo nội dung →</button>`}
     </div>
   </section>`;
 }
@@ -206,6 +230,13 @@ function wizardConfigTypeFields(config) {
           { value: 'basic', label: 'Cơ bản' }, { value: 'speed', label: 'Tốc độ' },
           { value: 'difficulty', label: 'Theo độ khó' }, { value: 'team', label: 'Thi đấu đội' },
           { value: 'practice', label: 'Luyện tập' }
+        ])
+        + wizardConfigSelect('gameplayMode', 'CÁCH CHƠI', config.gameplayMode || 'classic', [
+          { value: 'classic', label: 'Cổ điển' }, { value: 'house', label: 'Xây nhà 3D (theo số câu)' }
+        ])
+        + wizardConfigSelect('houseStyle', 'MẪU NHÀ 3D (XÂY NHÀ)', config.houseStyle || 'auto', [
+          { value: 'auto', label: 'Tự động theo trò chơi' },
+          ...houseStyleOptions().map(option => ({ value: option.id, label: option.label }))
         ])
         + wizardConfigNumber('pointsPerCorrect', 'ĐIỂM / CÂU', config.pointsPerCorrect, 10, 1000, 10)
         + wizardConfigNumber('timeBonus', 'THƯỞNG NHANH', config.timeBonus, 0, 50, 5);
@@ -286,8 +317,19 @@ async function wizardConfigureSave(advance) {
   try {
     const step = advance ? 'generate' : 'configure';
     await wizardSaveProject(step);
+    // #117: on a bank run the title/topic/subject/grade edits belong to the game the
+    // teacher is about to save, so apply them to the built snapshot too — otherwise the
+    // library would keep the placeholder title while the wizard shows the new one.
+    if (advance && wizardIsBankRun() && wizardState.gameSnapshot && typeof wizardApplyConfigToGame === 'function') {
+      wizardState.gameSnapshot = wizardApplyConfigToGame(wizardState.gameSnapshot);
+    }
     if (advance) wizardState.step = 'generate';
-    wizardSetNotice(advance ? 'Đã lưu cấu hình. Bước tiếp theo: tạo nội dung bằng AI local.' : 'Đã lưu cấu hình dự án.');
+    // #117: a bank run is already built, so there is no model step to announce.
+    if (advance && wizardIsBankRun()) {
+      wizardSetNotice('Đã lưu cấu hình. Trò chơi đã sẵn sàng — bấm “Lưu vào thư viện” để có thể chơi.');
+    } else {
+      wizardSetNotice(advance ? 'Đã lưu cấu hình. Bước tiếp theo: tạo nội dung bằng AI.' : 'Đã lưu cấu hình dự án.');
+    }
   } catch (error) {
     wizardSetError(error);
   }

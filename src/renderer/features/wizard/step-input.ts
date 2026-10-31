@@ -113,7 +113,7 @@ function renderWizardInput() {
         <textarea id="wizardDocText" rows="13" class="w-full p-3 border border-[#cbd5e1] dark:border-[#334155] rounded-xl bg-white dark:bg-[#1e2544] text-[#1e293b] dark:text-[#f8fafc] text-[13px] leading-relaxed focus:outline-none focus:border-[#6366f1] transition font-sans" placeholder="Dán nội dung bài học, mục tiêu cần đạt, kiến thức trọng tâm, câu hỏi hoặc ví dụ thực tế..."${s.busy ? ' disabled' : ''}>${escapeHtml(s.text || '')}</textarea>
         <div class="flex items-center justify-between mt-1.5 flex-wrap gap-2 text-[11px]">
           <div class="field-hint text-[#64748b] dark:text-[#94a3b8]" id="wizardDocHint">
-            ${ready ? `✓ Đã có ${characters.toLocaleString('vi-VN')} ký tự. Đủ điều kiện phân tích bằng AI local.` : `Cần tối thiểu ${WIZARD_MIN_CHARACTERS} ký tự (${characters}/${WIZARD_MIN_CHARACTERS}).`}
+            ${ready ? `✓ Đã có ${characters.toLocaleString('vi-VN')} ký tự. Đủ điều kiện phân tích bằng AI.` : `Cần tối thiểu ${WIZARD_MIN_CHARACTERS} ký tự (${characters}/${WIZARD_MIN_CHARACTERS}).`}
           </div>
           <div class="text-[11px] font-semibold ${ready ? 'text-[#16a34a]' : 'text-[#f59e0b]'}">
             ${ready ? '● Sẵn sàng phân tích' : '○ Chưa đủ độ dài'}
@@ -122,14 +122,136 @@ function renderWizardInput() {
       </div>
     </div>
 
+    <!-- Loại đầu vào (update_quy_trinh §2): chọn tay hoặc để hệ thống nhận diện bằng quy tắc. -->
+    ${wizardInputKindPickerHtml(s)}
+
     <!-- Actions Row -->
     <div class="publish-actions flex items-center justify-between pt-3 border-t border-[#f1f5f9] dark:border-[#2a324b] gap-3 flex-wrap mt-4">
       <button class="btn btn-secondary" data-page="create">Tôi đã biết muốn tạo trò chơi nào</button>
       <button class="btn btn-primary btn-large !py-2.5 !px-5 !text-[13px] !font-bold" id="wizardNextBtn" data-wizard-action="next"${ready && !s.busy && !wizardStructureScopeError() ? '' : ' disabled'}>
-        ${s.busy === 'save' ? '⏳ Đang lưu giáo án…' : 'Tiếp tục: Phân tích giáo án bằng AI ➔'}
+        ${s.busy === 'save' ? '⏳ Đang lưu giáo án…' : wizardInputNextLabel()}
       </button>
     </div>
+    <div class="field-hint" data-wizard-next-hint>${escapeHtml(wizardInputNextHint())}</div>
   </section>`;
+}
+
+/**
+ * Teacher-facing label for a detected input kind. Duplicated from
+ * `services/input-classifier.ts` because the renderer is a classic script and cannot
+ * import a module; `tests/unit/input-classifier.test.ts` pins the same strings.
+ */
+function wizardInputKindLabel(kind) {
+  if (kind === 'questions') return 'Danh sách câu hỏi';
+  if (kind === 'outline') return 'Dàn ý / khung sườn';
+  if (kind === 'lesson') return 'Giáo án / tài liệu';
+  return 'Chưa xác định';
+}
+
+/**
+ * Step-1 input-type picker + the classifier's verdict.
+ *
+ * update_quy_trinh §2: the teacher may choose the input type; auto-detection only
+ * helps, and the verdict is always shown so a wrong guess is one click away from
+ * being fixed. §4.1: a complete question bank gets an informational notice, not a
+ * confirmation dialog.
+ */
+function wizardInputKindPickerHtml(s) {
+  const choice = s.inputKind || 'auto';
+  const detected = s.inputClassification;
+  // Shown kind can be `outline`/`ambiguous`; the *path* stays two-valued.
+  const shownKind = typeof wizardDetectedKind === 'function' ? wizardDetectedKind() : (detected ? detected.kind : null);
+  const kind = wizardResolveInputKind();
+  const questionCount = (s.importedQuestions || []).length;
+  const issueCount = (s.importIssues || []).length;
+  const option = (value, label, hint) => `<button type="button" role="radio" aria-checked="${choice === value ? 'true' : 'false'}" class="flex-1 min-w-[150px] text-left px-3 py-2 rounded-xl border transition ${choice === value ? 'border-[#6366f1] bg-[#f5f3ff] dark:bg-[#262c55] text-[#4338ca] dark:text-[#c7d2fe]' : 'border-[#e2e8f0] dark:border-[#334155] bg-white dark:bg-[#1e2544] text-[#475569] dark:text-[#cbd5e1] hover:border-[#a5b4fc]'}" data-wizard-input-kind="${value}"${s.busy ? ' disabled' : ''}>
+      <div class="font-bold text-[12px]">${label}</div>
+      <div class="text-[11px] opacity-80 mt-0.5 leading-snug">${hint}</div>
+    </button>`;
+  const verdict = !detected
+    ? ''
+    : `<div class="mt-2 text-[11px] leading-relaxed flex items-start gap-1.5 flex-wrap">
+        <span class="font-semibold text-[#64748b] dark:text-[#94a3b8]">Hệ thống nhận diện:</span>
+        <span class="px-1.5 py-0.5 rounded bg-[#eef2ff] dark:bg-[#262c55] font-bold text-[#4f46e5] dark:text-[#a5b4fc]">${escapeHtml(wizardInputKindLabel(shownKind))}</span>
+        ${choice === 'auto' ? '<span class="text-[#94a3b8]">(đang dùng kết quả này)</span>' : '<span class="text-[#f59e0b] font-semibold">(bạn đã chọn khác — đang dùng lựa chọn của bạn)</span>'}
+        ${detected.reasons && detected.reasons.length ? `<span class="text-[#64748b] dark:text-[#94a3b8]">· ${escapeHtml(detected.reasons.slice(0, 3).join(' · '))}</span>` : ''}
+        ${wizardSemanticNote(s)}
+      </div>`;
+  // update_quy_trinh_2 §7: an outline is usable but thin, so say so instead of
+  // silently treating it as a finished lesson.
+  const outlineNote = shownKind !== 'outline'
+    ? ''
+    : `<div class="mt-2 text-[11px] px-2.5 py-2 rounded-lg bg-[#fff8e6] border border-[#f6e3b4] text-[#7a5b00] dark:bg-[#2d2614] dark:border-[#4a3d1a] dark:text-[#fbbf24] leading-relaxed">
+        Tài liệu là <b>dàn ý</b>, chưa đủ chi tiết. Có thể dùng nội dung hiện có hoặc để AI phát triển thêm khi tạo trò chơi.
+      </div>`;
+  // #116: also shown when the parser recognized questions but the classifier settled
+  // on another kind, so the teacher is never left without the two choices.
+  const recognized = kind === 'questions'
+    || (typeof wizardHasRecognizedQuestions === 'function' && wizardHasRecognizedQuestions());
+  const questionsNote = recognized ? wizardQuestionBankNote(s, questionCount, issueCount) : '';
+  return `<div class="mb-4 rounded-xl border border-[#e2e8f0] dark:border-[#334155] p-3" data-wizard-input-kind-picker>
+    <div class="flex items-center gap-2 mb-2 flex-wrap">
+      <span class="text-[11px] font-bold text-[#475569] dark:text-[#cbd5e1]">LOẠI NỘI DUNG</span>
+      <span class="text-[10px] text-[#94a3b8]">quy tắc trước, bộ đọc hiểu chỉ xác nhận</span>
+    </div>
+    <div class="flex gap-2 flex-wrap" role="radiogroup" aria-label="Loại nội dung đầu vào">
+      ${option('auto', 'Tự phát hiện', 'Hệ thống đoán theo cấu trúc văn bản; bạn đổi được bất cứ lúc nào.')}
+      ${option('lesson', 'Giáo án / tài liệu', 'Phân tích kiến thức bằng AI rồi mới tạo trò chơi.')}
+      ${option('outline', 'Dàn ý / khung sườn', 'Mới có tiêu đề các phần; có thể dùng hoặc để AI phát triển thêm.')}
+      ${option('questions', 'Danh sách câu hỏi', 'Dùng câu hỏi có sẵn, bỏ qua bước phân tích giáo án.')}
+    </div>
+    ${verdict}
+    ${outlineNote}
+    ${questionsNote}
+  </div>`;
+}
+
+/**
+ * What the app found in the text, and the two explicit choices (#115, plan §2.4a).
+ *
+ * The counts come from the parser's own statuses so they cannot disagree with the
+ * list the teacher will see: "N câu · M cần xem lại · K không tương thích". The
+ * buttons are two real choices — nothing is decided silently on the teacher's behalf.
+ */
+function wizardQuestionBankNote(s, questionCount, issueCount) {
+  const parsed = Array.isArray(s.parsedQuestions) ? s.parsedQuestions : [];
+  const needsReview = parsed.filter(item => item.status === 'needs-review').length;
+  const incompatible = parsed.filter(item => item.status === 'incompatible').length;
+  const total = parsed.length || questionCount;
+  const recommended = typeof wizardRecommendedGame === 'function' ? wizardRecommendedGame() : null;
+  const recommendedLabel = recommended ? wizardGameMeta(recommended).label : '';
+  const counts = [`${total} câu`];
+  if (needsReview) counts.push(`${needsReview} cần xem lại`);
+  if (incompatible) counts.push(`${incompatible} không tương thích`);
+  const busy = s.busy ? ' disabled' : '';
+  return `<div class="mt-2 text-[11px] px-2.5 py-2 rounded-lg bg-[#effaf5] border border-[#ddf4e8] text-[#166534] dark:bg-[#132d24] dark:border-[#1e4a3b] dark:text-[#86efac] leading-relaxed" data-question-bank-summary>
+        Tài liệu có vẻ là <b>ngân hàng câu hỏi</b> (${counts.join(' · ')}).${recommendedLabel ? ` Đề xuất: <b>${escapeHtml(recommendedLabel)}</b>.` : ''}
+        ${issueCount ? `<br><span class="text-[#b45309] dark:text-[#fbbf24]">Còn ${issueCount} dòng cần bổ sung — giáo viên sửa được sau.</span>` : ''}
+        <br>Câu hỏi, đáp án và lời giải được giữ nguyên, chỉ chuẩn hóa định dạng. <b>Không cần phân tích giáo án.</b>
+        <div class="mt-2 flex flex-col gap-1.5">
+          <button type="button" class="text-left px-2 py-1.5 rounded-lg border border-[#bbf7d0] bg-white text-[#166534] font-semibold hover:border-[#4ade80] disabled:opacity-60" data-wizard-action="bank-create-now"${busy}>
+            [A] Tạo trò chơi ngay — dùng lại câu hỏi, không phân tích AI
+          </button>
+          <button type="button" class="text-left px-2 py-1.5 rounded-lg border border-[#e2e8f0] bg-white text-[#334155] font-semibold hover:border-[#a5b4fc] disabled:opacity-60" data-wizard-action="bank-analyze"${busy}>
+            [B] Phân tích &amp; thêm câu hỏi — dùng AI hiện có, giữ câu gốc
+          </button>
+        </div>
+      </div>`;
+}
+
+/**
+ * One short line saying how the verdict was reached (update_quy_trinh_2 §2/§7).
+ * Never claims the semantic layer ran when it did not.
+ */
+function wizardSemanticNote(s) {
+  const semantic = s.inputSemantic;
+  const note = s.inputSemanticNote;
+  if (!semantic || semantic === 'skipped') return '';
+  if (semantic === 'unavailable') {
+    return '<span class="text-[#94a3b8]">(phân loại bằng quy tắc — chưa có bộ đọc hiểu trên máy)</span>';
+  }
+  if (!note) return '';
+  return `<span class="text-[#0f766e] dark:text-[#5eead4]">${escapeHtml(note)}</span>`;
 }
 
 /** Patches the tab counters in place (typing must not re-render the page). */
@@ -216,7 +338,24 @@ Xảy ra tại chất nền (stroma) của lục lạp. Sử dụng CO2 cùng AT
 }
 
 /** Small status strip about the local AI runtime, reused by the analyze step. */
+/**
+ * The one forward button of step 1 (DECISIONS #132 §D14). It always says "Tiếp tục";
+ * the branch (reuse a question bank, or analyse a lesson) is explained next to it,
+ * because a button label is not the place to teach two different flows.
+ */
+function wizardInputNextLabel() {
+  return 'Tiếp tục ➔';
+}
+
+/** Said under the button, not inside it: which path "Tiếp tục" will take. */
+function wizardInputNextHint() {
+  if (wizardResolveInputKind() === 'questions') return 'Tiếp tục sẽ dùng các câu hỏi có sẵn — không cần chạy AI.';
+  return 'Tiếp tục sẽ mở bước 2 để phân tích giáo án bằng AI.';
+}
 function wizardAiReadinessHint() {
+  // #132: this strip is about the local runtime only. A teacher using a cloud
+  // provider does not need it (and must not be told their model is missing).
+  if ((state.settings.ai || {}).provider !== 'local') return '';
   const machine = state.localAiMachine || {};
   const models = state.localAiModels || [];
   const selectedId = state.settings.ai && state.settings.ai.localModelId;
@@ -266,8 +405,62 @@ async function wizardInputImportFile() {
   render();
 }
 
-/** Stores the lesson text and moves to the analysis step. */
+/**
+ * Step 1's primary action. When the text is a recognised question bank the teacher
+ * gets two explicit choices (#115, plan §2.4a) instead of one "use the questions"
+ * button — the bank is recognised, but deciding what to do with it is theirs:
+ *
+ *   A. "Tạo trò chơi ngay"          — reuse the questions, no AI at all.
+ *   B. "Phân tích & thêm câu hỏi"   — run the normal pipeline, keep the bank too.
+ *
+ * Nothing is chosen silently: the business path is the default continuation, while
+ * the options are rendered right above the button.
+ */
 async function wizardInputNext() {
+  if (!wizardHasText()) {
+    wizardSetError(new Error(`Hãy nhập hoặc chọn giáo án có tối thiểu ${WIZARD_MIN_CHARACTERS} ký tự.`));
+    render();
+    return;
+  }
+  // #116: one question, or a bank the classifier was not sure about, is still a bank —
+  // the parser reads it (after cleaning symbols) and the recognized questions are
+  // reused without a model. Without this the wizard fell through to the lesson path
+  // and reported "Chưa chọn phần nào trong cấu trúc tài liệu" for a question bank.
+  if (wizardResolveInputKind() !== 'questions' && wizardHasRecognizedQuestions()) {
+    if (typeof wizardRecommendedGame === 'function' && wizardRecommendedGame()) {
+      wizardState.selectedGameType = wizardRecommendedGame();
+      wizardState.importedMode = true;
+      wizardState.draftOrigin = 'source';
+      wizardState.step = 'recommend';
+      wizardClearMessages();
+      render();
+      return;
+    }
+    await wizardUseImportedQuestions(wizardRecommendedGame() || 'arena');
+    return;
+  }
+  if (wizardResolveInputKind() === 'questions') {
+    // Choosing "Tiếp tục" on a bank keeps the least surprising behaviour: reuse the
+    // questions without a model run (branch A). The teacher can still pick B above.
+    // The recommended genre is preselected, so step 3 can show the choice straight
+    // away; nothing is saved or converted until the teacher confirms there.
+    if (typeof wizardRecommendedGame === 'function' && wizardRecommendedGame()) {
+      wizardState.selectedGameType = wizardRecommendedGame();
+      wizardState.importedMode = true;
+      wizardState.draftOrigin = 'source';
+      wizardState.step = 'recommend';
+      wizardClearMessages();
+      render();
+      return;
+    }
+    await wizardUseImportedQuestions(wizardRecommendedGame() || 'arena');
+    return;
+  }
+  await wizardInputNextLesson();
+}
+
+/** The lesson path: store the text, then move to the analysis step (model runs there). */
+async function wizardInputNextLesson() {
   if (!wizardHasText()) {
     wizardSetError(new Error(`Hãy nhập hoặc chọn giáo án có tối thiểu ${WIZARD_MIN_CHARACTERS} ký tự.`));
     render();
@@ -299,7 +492,7 @@ async function wizardInputNext() {
     wizardState.step = 'analyze';
     await wizardSaveProject('analyze');
     wizardState.busy = '';
-    wizardSetNotice('Đã lưu giáo án và tạo dự án. Bước tiếp theo: phân tích bằng AI local.');
+    wizardSetNotice('Đã lưu giáo án và tạo dự án. Bước tiếp theo: phân tích bằng AI.');
   } catch (error) {
     wizardState.busy = '';
     wizardSetError(error);

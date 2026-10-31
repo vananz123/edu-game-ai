@@ -40,7 +40,13 @@ const COPIED_ASSETS = [
   'src/index.html',
   'src/renderer/styles/app.css',
   'src/presentation/presentation.html',
-  'src/presentation/presentation-preload.js'
+  'src/presentation/presentation-preload.js',
+  // LAN Classroom Mode: the phone page is served from dist/src/lan/mobile by
+  // `startLanServer()`. If it is missing from the installer, every phone gets a
+  // 404 while the desktop happily shows "Đã mở phòng".
+  'src/lan/mobile/index.html',
+  'src/lan/mobile/mobile.css',
+  'src/lan/mobile/mobile.js'
 ];
 
 // 1. Each source asset exists in the repository at all.
@@ -80,5 +86,21 @@ for (const m of index.matchAll(/<(?:script[^>]*src|link[^>]*href)="([^"]+)"/g)) 
   const resolved = path.resolve(path.dirname(indexHtml), ref);
   assert.ok(fs.existsSync(resolved), `index.html references ${ref}, which resolves to ${resolved} and does not exist`);
 }
+
+// 4. The phone page must resolve its own assets inside dist/src/lan/mobile.
+//    `mobile.js` is plain JS (no bundler), so a typo in its <script> tag is only
+//    visible on a real phone — assert it here instead.
+const mobileHtml = path.join(BUILD_ROOT, 'src', 'lan', 'mobile', 'index.html');
+const mobilePage = fs.readFileSync(mobileHtml, 'utf8');
+const mobileRefs = [...mobilePage.matchAll(/<(?:script[^>]*src|link[^>]*href)="([^"]+)"/g)].map((m) => m[1]);
+assert.ok(mobileRefs.length >= 2, 'the LAN mobile page should load mobile.js and mobile.css');
+for (const src of mobileRefs) {
+  // `/socket.io/socket.io.min.js` is served by the Socket.IO server at runtime.
+  if (src.startsWith('/')) continue;
+  const resolved = path.resolve(path.dirname(mobileHtml), src);
+  assert.ok(fs.existsSync(resolved), `lan/mobile/index.html references ${src}, which resolves to ${resolved} and does not exist`);
+}
+assert.match(mobilePage, /http-equiv="Content-Security-Policy"/, 'the LAN page must keep its CSP: classroom Wi-Fi may have no trusted origins');
+assert.doesNotMatch(mobilePage, /<script[^>]+src="https?:/, 'the LAN page must not load scripts from the Internet');
 
 console.log(`build-assets: ${COPIED_ASSETS.length} copied assets present, all HTML references resolve`);

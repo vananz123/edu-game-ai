@@ -335,6 +335,11 @@ function resolveStageIllustration(item, game) {
   const mode = stageIllustrationMode(game);
   if (mode === 'off') return null;
   const source = item && typeof item === 'object' ? item : {};
+  // #124: a teacher-uploaded picture wins, and it wins in `manual` mode too — picking a
+  // picture is itself the explicit choice. `off` still draws nothing, as set.
+  if (typeof source.illustrationAssetId === 'string' && /^ci-[a-f0-9]{32}$/u.test(source.illustrationAssetId)) {
+    return { assetId: source.illustrationAssetId, category: 'custom', iconName: '', explicit: true, custom: true };
+  }
   const explicit = stageIllustrationCategory(source.illustrationAssetId);
   if (explicit) {
     return { assetId: explicit + '-scene', category: explicit, iconName: STAGE_ILLUSTRATION_CATEGORY_ICONS[explicit], explicit: true };
@@ -398,6 +403,20 @@ function stageIconSvg(name, size, className) {
 function stageIllustrationHtml(item, game, extraClass) {
   const resolved = resolveStageIllustration(item, game);
   if (!resolved) return '';
+  if (resolved.custom) {
+    // #124: the teacher's own picture, framed like a built-in scene so the layout does
+    // not change between the two. `edugame-file:` is the only source CSP allows besides
+    // `self`/`data:`; the protocol serves nothing outside the app's image folder.
+    // `meet` (contain) not `slice`: an uploaded picture can be portrait, square or
+    // panorama, and `slice` cropped it to the fixed 16:10 frame (a portrait photo lost
+    // top and bottom). `meet` shows the whole picture, letterboxed on `.is-custom`.
+    const cls = 'stage-illustration is-custom' + (extraClass ? ' ' + extraClass : '');
+    const src = `edugame-file://img/${encodeURIComponent(resolved.assetId)}`;
+    return `<div class="${cls}" data-illustration="${escapeHtml(resolved.assetId)}" aria-hidden="true">` +
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" preserveAspectRatio="xMidYMid meet" class="stage-illustration-svg" aria-hidden="true" focusable="false">` +
+      `<image href="${escapeHtml(src)}" x="0" y="0" width="320" height="200" preserveAspectRatio="xMidYMid meet"/>` +
+      `</svg></div>`;
+  }
   const icon = stageIconSvg(resolved.iconName, STAGE_ILLUSTRATION_SUBJECT_SIZE, 'stage-illustration-icon');
   if (!icon) return '';
   const palette = STAGE_ILLUSTRATION_PALETTES[resolved.category] || STAGE_ILLUSTRATION_DEFAULT_PALETTE;

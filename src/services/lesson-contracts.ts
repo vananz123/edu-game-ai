@@ -661,7 +661,11 @@ export const gameConfigSchema = z.discriminatedUnion('gameType', [
     timeBonus: z.number().int().min(0).max(50),
     pointsEasy: z.number().int().min(0).max(1000).optional(),
     pointsMedium: z.number().int().min(0).max(1000).optional(),
-    pointsHard: z.number().int().min(0).max(1000).optional()
+    pointsHard: z.number().int().min(0).max(1000).optional(),
+    // House Building Mode (DECISIONS #140, #144). Optional so older configs
+    // keep parsing; kept here so parseGameConfig doesn't strip the fields.
+    gameplayMode: z.enum(['classic', 'house']).optional(),
+    houseStyle: z.enum(['auto', 'nha-mai-do', 'nha-vuon', 'thap-canh', 'nha-go']).optional()
   }),
   configBase.extend({
     gameType: z.literal('scenario'),

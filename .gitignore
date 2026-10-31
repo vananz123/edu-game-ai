@@ -169,3 +169,9 @@ tests/manual/out/
 # Editor / agent scratch folders
 .qodo/
 .vscode/settings.json.bak
+
+# Agent workspace: only the reusable skills are tracked, local scratch is not
+.kilo/worktrees/
+.kilo/plans/
+.kilo/agents/
+.kilo/agent-manager.json

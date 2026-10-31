@@ -192,6 +192,9 @@ const GAMES = [
   // background, and each panel washes the header with its own colour.
   for (let i = 0; i < seen.length; i++) {
     for (let j = i + 1; j < seen.length; j++) {
+      // Scenario deliberately shares the quiz world (DECISIONS #87): the two
+      // entries have identical palettes by design and must not be compared.
+      if (GAMES[i].world === GAMES[j].world) continue;
       check(
         `${GAMES[i].world} and ${GAMES[j].world} do not share a stage background`,
         seen[i].stageBg !== seen[j].stageBg,

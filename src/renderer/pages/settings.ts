@@ -1,4 +1,50 @@
 // @ts-nocheck -- migrated legacy UI logic; new contracts are typed in src/shared/types.ts.
+function settingsProviderCard(provider, inputCls, labelCls, hintCls, btnSecondaryCls) {
+  const chip = provider.status === 'ready'
+    ? 'bg-[#effaf5] dark:bg-[#132d24] text-[#16a34a] dark:text-[#4ade80]'
+    : provider.status === 'configured'
+      ? 'bg-[#eef2ff] dark:bg-[#1e1b4b] text-[#4f46e5] dark:text-[#a5b4fc]'
+      : provider.status === 'failing'
+        ? 'bg-[#fef2f2] dark:bg-[#2d1313] text-[#dc2626] dark:text-[#fca5a5]'
+        : 'bg-[#f5f6fa] dark:bg-[#1e2544] text-[#788196] dark:text-[#94a3b8]';
+  // #132 D17: "verified" and "used by the lesson workflow" are different facts; a
+  // provider that passed its test but is kept out of the flow must not read as merely
+  // configured, or the teacher tests it again and again.
+  const chipLabel = provider.status === 'ready' ? '✓ Sẵn sàng'
+    : provider.status === 'configured' ? '● Đã cấu hình'
+      : provider.status === 'failing' ? '⚠ Đang lỗi' : '○ Chưa cấu hình';
+  const note = provider.note ? '<div class=\'mt-1 text-[10px] text-[#94a3b8]\'>' + escapeHtml(provider.note) + '</div>' : '';
+  const fields = provider.id === 'local' ? '' : [
+    '<div class="grid grid-cols-2 gap-2 mt-2">',
+    '  <div class="field"><label class="' + labelCls + '">API BASE URL</label>',
+    '<input class="' + inputCls + '" data-ai-provider-baseurl="' + escapeHtml(provider.id) + '" value="' + escapeHtml(provider.baseUrl) + '" placeholder="' + escapeHtml(provider.defaultBaseUrl || 'https://…/v1') + '"></div>',
+    '  <div class="field"><label class="' + labelCls + '">TÊN MODEL</label>',
+    '<input class="' + inputCls + '" data-ai-provider-model="' + escapeHtml(provider.id) + '" value="' + escapeHtml(provider.model) + '" placeholder="' + escapeHtml(provider.defaultModel || 'Tên model') + '"></div>',
+    '</div>',
+    '<div class="field mt-2"><label class="' + labelCls + '">API KEY</label>',
+    '<input class="' + inputCls + '" type="password" autocomplete="off" data-ai-key-input="' + escapeHtml(provider.id) + '" value="" placeholder="' + escapeHtml(provider.hasKey ? 'Đã lưu khoá — gõ khoá mới để thay' : (provider.requiresKey ? 'Nhập khoá của nhà cung cấp' : 'Khoá (nếu có)')) + '">',
+    '<div class="' + hintCls + ' mt-1" data-ai-key-state="' + escapeHtml(provider.id) + '">' + (provider.hasKey ? 'Đã lưu khoá (' + escapeHtml(provider.keyMasked || '••••') + ').' : 'Chưa lưu khoá.') + '</div></div>',
+    '<div class="flex items-center gap-2 flex-wrap mt-2">',
+    '<button class="' + btnSecondaryCls + '" data-ai-test="' + escapeHtml(provider.id) + '">🔗 Kiểm tra kết nối</button>',
+    '<button class="' + btnSecondaryCls + '" data-ai-key-save="' + escapeHtml(provider.id) + '">Lưu khoá</button>',
+    '<button class="' + btnSecondaryCls + '" data-ai-key-clear="' + escapeHtml(provider.id) + '"' + (provider.hasKey ? '' : ' disabled') + '>Xoá khoá</button>',
+    '</div>',
+    '<div class="' + hintCls + ' mt-1">Kiểm tra gửi một yêu cầu thật rất nhỏ (tối đa 8 token) tới nhà cung cấp — không phải tạo trò chơi.</div>'
+  ].join('');
+  const localActions = provider.id === 'local' ? [
+    '<div class="flex items-center gap-2 flex-wrap mt-2">',
+    '<button class="' + btnSecondaryCls + '" data-ai-test="local">🔗 Kiểm tra kết nối</button>',
+    '<div class="' + hintCls + '">Kiểm tra chạy một câu hỏi ngắn trên model local đang chạy.</div>',
+    '</div>'
+  ].join('') : '';
+  const badge = provider.wizardEligible ? '' : '<span class="ml-1.5 px-1.5 py-0.5 rounded bg-[#f5f6fa] dark:bg-[#1e2544] text-[10px] font-semibold text-[#788196] dark:text-[#94a3b8]">Chưa dùng cho luồng tạo trò chơi</span>';
+  return '<div class="p-3 rounded-xl border border-[#e2e8f0] dark:border-[#2a324b]" data-ai-provider="' + escapeHtml(provider.id) + '" data-ai-provider-status="' + escapeHtml(provider.status) + '">'
+    + '<div class="flex items-center justify-between gap-2 flex-wrap"><div class="min-w-0"><strong class="text-[13px] text-[#1e293b] dark:text-[#f1f5f9]">' + escapeHtml(provider.label) + '</strong>' + badge + '</div>'
+    + '<span class="px-2 py-0.5 rounded text-[10px] font-semibold ' + chip + '" data-ai-provider-chip>' + chipLabel + '</span></div>'
+    + '<div class="' + hintCls + ' mt-1" data-ai-provider-reason>' + escapeHtml(provider.reason || '') + '</div>'
+    + note + fields + localActions + '</div>';
+}
+
 function renderSettings() {
   const ai = state.settings.ai || {};
   const teachingStyle = state.settings.preferences?.teachingStyle || {};
@@ -6,7 +52,8 @@ function renderSettings() {
   const humor = String(teachingStyle.humor || 'vừa phải');
   const visualStyle = String(teachingStyle.visualStyle || 'hiện đại sinh động');
   const audience = ['child', 'adult'].includes(state.settings.preferences?.audience) ? state.settings.preferences.audience : 'teen';
-  const cloud = getCloudProviderConfig(ai);
+  // #132: key-free provider view shipped by main (`settings.ai.providers`).
+  const providers = Array.isArray(ai.providers) ? ai.providers : [];
   const machine = state.localAiMachine || {};
   const selectedLocalModelId = ai.localModelId || machine.recommendedModelId || state.localAiModels[0]?.id || '';
   const selectedLocalModel = state.localAiModels.find(model => model.id === selectedLocalModelId);
@@ -136,54 +183,23 @@ function renderSettings() {
         ` : `<p class="${hintCls}">Đang nạp danh sách model AI local…</p>`}
       </section>
 
-      <!-- ═══ NHÀ CUNG CẤP AI ═══ -->
-      <section class="${sectionCls}">
-        <div class="flex items-center gap-2 mb-4">
+      <!-- ═══ NHÀ CUNG CẤP AI (#132) ═══ -->
+      <section class="${sectionCls}" id="settingAiProviders" data-ai-providers>
+        <div class="flex items-center gap-2 mb-2">
           <span class="text-[18px]">☁️</span>
           <h3 class="text-[15px] font-bold text-[#1e293b] dark:text-[#f1f5f9] m-0">Nhà cung cấp AI</h3>
         </div>
-        <p class="${hintCls} mb-4">Cấu hình AI local hoặc nhà cung cấp đám mây dùng trong Tạo trò chơi.</p>
-
-        <div class="grid gap-3">
-          <div class="grid grid-cols-2 gap-3">
-            <div class="field">
-              <label class="${labelCls}">CHẾ ĐỘ MẶC ĐỊNH</label>
-              <select id="settingAiMode" class="${inputCls}">
-                <option value="offline" ${(!ai.mode || ai.mode==='offline')?'selected':''}>Mẫu ngoại tuyến — không gọi API</option>
-                <option value="local" ${ai.mode==='local'?'selected':''}>AI local tích hợp — llama.cpp</option>
-                <option value="online" ${ai.mode==='online'?'selected':''}>AI đám mây — ChatGPT/Gemini/OpenCode</option>
-              </select>
-            </div>
-            <div class="field">
-              <label class="${labelCls}">NHÀ CUNG CẤP AI ĐÁM MÂY</label>
-              <select id="settingCloudProvider" class="${inputCls}">
-                <option value="openai" ${cloud.provider==='openai'?'selected':''}>ChatGPT (OpenAI)</option>
-                <option value="gemini" ${cloud.provider==='gemini'?'selected':''}>Gemini (Google)</option>
-                <option value="opencode" ${cloud.provider==='opencode'?'selected':''}>OpenCode Zen — model miễn phí</option>
-                <option value="custom" ${cloud.provider==='custom'?'selected':''}>API tùy chỉnh tương thích OpenAI</option>
-              </select>
-            </div>
+        <p class="${hintCls} mb-4">Mọi cấu hình AI nằm ở đây — luồng tạo trò chơi chỉ dùng nhà cung cấp đã cấu hình sẵn. Khoá API được mã hoá bằng khoá của Windows và <b>không bao giờ</b> gửi lại vào màn hình.</p>
+        ${providers.length ? `
+          <div class="p-3 mb-3 bg-[#f8fafc] dark:bg-[#151a30] rounded-xl border border-[#f1f5f9] dark:border-[#2a324b]" data-ai-policy>
+            <strong class="text-[12px] text-[#1e293b] dark:text-[#f1f5f9] block">Cho trò chơi mới: tự chọn nhà cung cấp sẵn sàng</strong>
+            <div class="${hintCls} mt-1">Không tự đổi nhà cung cấp khi đang lỗi. Thứ tự tự động: AI local → Gemini → ChatGPT. Bước 2 và bước 5 luôn hiện nhà cung cấp đang dùng và cho chọn nếu có từ hai nhà cung cấp sẵn sàng.</div>
+            <div class="flex flex-wrap gap-1.5 mt-2">${providers.filter(p => p.wizardEligible).map(p => `<span class="px-2 py-0.5 rounded text-[10px] font-semibold ${p.usable ? 'bg-[#effaf5] text-[#16a34a]' : 'bg-[#f5f6fa] text-[#788196]'}">${escapeHtml(p.label)}</span>`).join('')}</div>
           </div>
-          <div class="grid grid-cols-2 gap-3">
-            <div class="field">
-              <label class="${labelCls}">API BASE URL</label>
-              <input id="settingBaseUrl" class="${inputCls}" value="${escapeHtml(cloud.baseUrl)}" placeholder="https://api.openai.com/v1">
-            </div>
-            <div class="field">
-              <label class="${labelCls}">TÊN MODEL</label>
-              <input id="settingModel" class="${inputCls}" value="${escapeHtml(cloud.model)}" placeholder="Tên model API">
-            </div>
-          </div>
-          <div class="field">
-            <label class="${labelCls}">API KEY</label>
-            <input id="settingApiKey" class="${inputCls}" type="password" value="${escapeHtml(ai.apiKey || '')}" placeholder="${cloud.provider==='opencode' ? 'Để trống nếu máy đã đăng nhập OpenCode' : 'Nhập khóa của nhà cung cấp đã chọn'}">
-            <div class="${hintCls} mt-1">${cloud.provider==='opencode' ? 'OpenCode Zen: để trống ô khóa nếu bạn đã đăng nhập OpenCode trên máy này — ứng dụng tự đọc khóa cục bộ, không lưu sang nơi khác.' : 'Khóa hiện tại dùng cho nhà cung cấp được chọn. Đổi nhà cung cấp sẽ xóa khóa trên biểu mẫu để tránh gửi nhầm khóa.'}</div>
-          </div>
-          <div>
-            <button class="${btnSecondaryCls}" id="testAiBtn">🔗 Kiểm tra kết nối AI</button>
-          </div>
-        </div>
+          <div class="grid gap-3">${providers.map(provider => settingsProviderCard(provider, inputCls, labelCls, hintCls, btnSecondaryCls)).join('')}</div>
+        ` : `<p class="${hintCls}">Đang nạp danh sách nhà cung cấp AI…</p>`}
       </section>
+
 
       <!-- ═══ PHONG CÁCH GIẢNG DẠY ═══ -->
       <section class="${sectionCls}">
@@ -285,7 +301,10 @@ function renderSettings() {
             <div class="p-3 bg-[#f8fafc] dark:bg-[#151a30] rounded-lg border border-[#f1f5f9] dark:border-[#2a324b]">
               <strong class="text-[12px] text-[#1e293b] dark:text-[#f1f5f9] block mb-1">📦 Định dạng gói</strong>
               <p class="${hintCls} m-0"><code class="text-[#6366f1] dark:text-[#818cf8]">.egame</code> là JSON có phiên bản schema. Chỉ nhập gói từ nguồn tin cậy; nội dung không được phép thực thi mã.</p>
-              <button class="${btnSecondaryCls} mt-2" data-action="export-first">⇩ Xuất trò chơi</button>
+              <div class="flex gap-2 mt-2 flex-wrap">
+                <button class="${btnSecondaryCls}" data-action="export-first">⇩ Xuất trò chơi</button>
+                <button class="${btnSecondaryCls}" data-action="import-game">⇧ Nhập gói .egame</button>
+              </div>
             </div>
           </div>
         </div>
@@ -304,7 +323,7 @@ function renderSettings() {
             <button class="${btnSecondaryCls}" id="cpuRuntimeVerifyBtn">Xác minh runtime</button>
           </div>
         </div>
-        <p class="${hintCls} mb-3">Các tác vụ phân tích giáo án, sinh nội dung và tạo lại mục bằng AI local. Lịch sử được lưu trên máy và khôi phục khi mở lại ứng dụng.</p>
+        <p class="${hintCls} mb-3">Các tác vụ phân tích giáo án, sinh nội dung và tạo lại mục bằng AI local. Lịch sử được lưu trên máy và khôi phục khi mở lại ứng dụng. Mỗi trang 10 tác vụ; hệ thống chỉ giữ <b>30 tác vụ gần nhất</b> và tự xoá tác vụ cũ hơn.</p>
         <div id="cpuVerifyResult" class="hidden bg-[#f8fafc] dark:bg-[#151a30] border border-[#e2e8f0] dark:border-[#2a324b] rounded-lg p-3 text-[12px] mb-3"></div>
         <div id="aiTaskList" class="grid gap-2"><div class="${hintCls}">Đang tải danh sách tác vụ…</div></div>
       </section>
@@ -346,9 +365,9 @@ function renderSettings() {
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
               <span class="text-[14px]">🤖</span>
-              <span class="text-[11px] text-[#475569] dark:text-[#cbd5e1]">Chế độ AI</span>
+              <span class="text-[11px] text-[#475569] dark:text-[#cbd5e1]">Nhà cung cấp AI</span>
             </div>
-            <span class="text-[10px] font-semibold text-[#6366f1] dark:text-[#818cf8]">${(!ai.mode || ai.mode==='offline') ? 'Ngoại tuyến' : ai.mode==='local' ? 'AI local' : 'Đám mây'}</span>
+            <span class="text-[10px] font-semibold text-[#6366f1] dark:text-[#818cf8]" data-ai-active-label>${escapeHtml((aiProviderView(ai.provider) || {}).label || 'AI local')}</span>
           </div>
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">

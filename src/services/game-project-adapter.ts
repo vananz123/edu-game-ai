@@ -31,6 +31,7 @@ import type {
   GameConfig,
   GameDraft,
   GameProject,
+  HouseStyle,
   MatchingDraft,
   RaceDraft,
   ScenarioDraft,
@@ -688,6 +689,12 @@ function raceDraftFromGame(game: EducationalGame): RaceDraft {
 // Config / setup
 // ---------------------------------------------------------------------------
 
+// House models accepted from a draft. Keep in sync with HOUSE_STYLE_IDS in
+// src/game-engine/house-build.ts (DECISIONS #144).
+const HOUSE_STYLE_IDS: readonly HouseStyle[] = ['nha-mai-do', 'nha-vuon', 'thap-canh', 'nha-go'];
+const isHouseStyle = (value: unknown): value is HouseStyle =>
+  typeof value === 'string' && (HOUSE_STYLE_IDS as readonly string[]).includes(value);
+
 function gameSetupFor(config: GameConfig, legacy?: GameSetup): GameSetup {
   const derived: GameSetup = {
     difficulty: config.difficulty,
@@ -701,6 +708,8 @@ function gameSetupFor(config: GameConfig, legacy?: GameSetup): GameSetup {
       derived.scoringMode = arenaScoringLabel(config.scoringMode);
       derived.pointsPerCorrect = String(config.pointsPerCorrect);
       derived.timeBonus = String(config.timeBonus);
+      if (config.gameplayMode === 'house') derived.gameplayMode = 'house';
+      if (isHouseStyle(config.houseStyle)) derived.houseStyle = config.houseStyle;
       if (config.pointsEasy !== undefined) derived.pointsEasy = String(config.pointsEasy);
       if (config.pointsMedium !== undefined) derived.pointsMedium = String(config.pointsMedium);
       if (config.pointsHard !== undefined) derived.pointsHard = String(config.pointsHard);
@@ -749,6 +758,8 @@ function configFromGame(game: EducationalGame, gameType: GameDraft['gameType']):
         scoringMode: arenaScoringFromLabel(setup.scoringMode),
         pointsPerCorrect: clamp(safeInt(setup.pointsPerCorrect, 100), 0, 1000),
         timeBonus: clamp(safeInt(setup.timeBonus, 0), 0, 50),
+        ...(setup.gameplayMode === 'house' ? { gameplayMode: 'house' as const } : {}),
+        ...(isHouseStyle(setup.houseStyle) ? { houseStyle: setup.houseStyle } : {}),
         ...(setup.pointsEasy !== undefined ? { pointsEasy: clamp(safeInt(setup.pointsEasy, 100), 0, 1000) } : {}),
         ...(setup.pointsMedium !== undefined ? { pointsMedium: clamp(safeInt(setup.pointsMedium, 200), 0, 1000) } : {}),
         ...(setup.pointsHard !== undefined ? { pointsHard: clamp(safeInt(setup.pointsHard, 300), 0, 1000) } : {})

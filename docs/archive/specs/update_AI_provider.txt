@@ -1,0 +1,163 @@
+# EduGame Studio — Complete AI API Provider Integration with Settings-Only Configuration
+
+## Project Context
+
+EduGame Studio is an existing Electron + TypeScript desktop application with a working local AI system and five educational game types.
+
+Google Gemini integration is partially implemented. Cloud AI providers are intended as an optional extension for low-performance computers, not a replacement for local AI.
+
+Potential providers include:
+- Local AI (existing implementation).
+- Google Gemini.
+- OpenAI API (ChatGPT).
+- Additional providers in the future, when explicitly implemented.
+
+## 1. Mandatory UX Architecture
+
+All provider configuration MUST exist exclusively in the application's Settings page, under a dedicated AI Providers section.
+
+Settings must own:
+- API Key entry, secure storage, replacement, and deletion.
+- Provider selection and configuration.
+- Model selection.
+- Connection testing.
+- Connection status and configuration validation.
+- Provider-specific settings and capability information.
+
+Do NOT put API Key forms, model configuration forms, connection setup, or provider onboarding inside the lesson-to-game creation workflow.
+
+The creation workflow must remain clean and focused on teaching content and gameplay.
+
+## 2. Lesson-to-Game Workflow Integration
+
+Inspect the existing workflow and preserve its current step structure.
+
+### Step 2 — Add/Integrate with AI
+
+Add or refine the existing Step 2 AI action with a clear label such as "Add/Integrate with AI".
+
+This action must invoke the actual Step 2 business operation identified during the repository audit. Reuse its existing input preparation, processing logic, validation, and output contract.
+
+Do not assume Step 2 generates the same output as Step 5.
+
+Use a configured and available provider. If multiple providers are ready, allow a lightweight provider selection at the point of use.
+
+Do not expose configuration forms here. If no suitable provider is configured, show a concise message and a direct navigation action to AI Settings.
+
+### Step 5 — Create with AI
+
+Add or refine the existing Step 5 action with a clear label such as "Create with AI".
+
+Generate game content using:
+- The selected game type.
+- Its specific gameplay rules.
+- Existing question and content schemas.
+- Teacher-provided settings and preferences.
+- Validated lesson context and prepared source material.
+
+Preserve the current game-generation pipeline, output validation, normalization, and error recovery.
+
+If multiple providers are ready, allow the teacher to select one without leaving Step 5. If the application has an established default provider policy, preserve it and make the active provider clear.
+
+Never make Step 5 depend on configuring a provider inside the creation wizard.
+
+## 3. Shared Provider Architecture
+
+Inspect the existing implementation before changing it.
+
+Reuse existing Gemini code, AI services, IPC handlers, settings components, and provider abstractions where possible.
+
+Create or extend a shared provider registry/service that exposes only providers implemented and configured by the application.
+
+The registry must distinguish:
+- Not configured.
+- Configured but not verified.
+- Ready based on the latest successful connection test.
+- Temporarily unavailable or failing during a real request.
+
+A previous successful test must not be treated as a guarantee that future requests will succeed.
+
+Do not display unimplemented providers as working integrations. OpenAI may be included only if its provider implementation is actually completed and tested.
+
+Keep provider-specific network code in Electron Main Process or a trusted backend. Never expose API Keys to the Renderer.
+
+## 4. Settings and Connection Behavior
+
+- Store provider configuration persistently.
+- Use an appropriate secure storage strategy for API Keys.
+- Do not silently fall back to plaintext if secure storage is unavailable.
+- Test connections using real, minimal provider requests.
+- Display actionable error categories.
+- Allow changing and deleting keys.
+- Never log secrets or include them in diagnostic reports.
+- Preserve the existing local AI configuration and behavior.
+
+Connection testing must be independent of game creation. Do not test every provider on every application startup or on every wizard step.
+
+Do not silently switch providers after a request fails. Offer retry or explicit provider selection.
+
+## 5. Workflow-Specific Orchestration
+
+Step 2 and Step 5 may share provider transport, configuration, security, and error handling, but they must retain their own business logic.
+
+Preserve:
+- Separate prompts and instructions.
+- Relevant input preparation and context.
+- Output schemas and validation.
+- Game-specific rules.
+- Existing cache and task-management safeguards.
+- Manual workflows that do not require AI.
+
+Do not route every task through a generic prompt.
+
+Do not introduce duplicate pipelines or rewrite completed local AI functionality.
+
+## 6. Provider Selection and Availability
+
+At the point of use:
+- If only one suitable provider is ready, use it according to the existing selection policy.
+- If multiple suitable providers are ready, provide a compact selection control.
+- Clearly identify the active provider.
+- If no suitable provider is ready, show a short explanation and a direct link to Settings.
+- Preserve the ability to use local AI without configuring any cloud API.
+- Do not block manual question creation or other non-AI functionality.
+
+Validate the selected provider's model and capabilities before dispatching incompatible operations.
+
+## 7. Implementation and Regression Tests
+
+First audit the repository and document the current state of Step 2, Step 5, Settings, and Gemini integration.
+
+Implement in small stages:
+1. Audit existing code and identify missing functionality.
+2. Complete secure provider configuration in Settings.
+3. Complete connection testing and provider readiness state.
+4. Integrate the Step 2 AI action.
+5. Integrate the Step 5 AI generation action.
+6. Add tests and run regression checks.
+
+Test:
+- Key storage, replacement, deletion, and masking.
+- Successful and failed connection tests.
+- Provider readiness and selection.
+- Both workflow actions with each supported provider.
+- Invalid responses, timeout, quota errors, and network failure.
+- Local AI functionality and offline manual workflows.
+- All five game types and their existing gameplay rules.
+- Application build and packaging.
+
+## 8. Deliverables
+
+Report:
+- Existing functionality discovered.
+- Files changed and their purpose.
+- Final Settings UX and provider lifecycle.
+- Exact behavior of the Step 2 and Step 5 buttons.
+- Providers actually implemented and verified.
+- Security and migration details.
+- Test and build results.
+- Any remaining limitations.
+
+Do not claim success without verification.
+
+Acceptance criterion: AI providers are configured exclusively in Settings; Step 2 and Step 5 expose only contextual AI actions; existing local AI, manual workflows, game logic, and user data remain functional.

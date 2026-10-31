@@ -11,6 +11,67 @@ function lessonExtTone(ext) {
   return 'bg-[#eef9f3] text-[#21845c]';
 }
 
+/**
+ * #122: page size for the lesson list. 12 keeps the cards readable and the page short
+ * on a projector, and it is a multiple of the 1x/2x grid a projector often uses.
+ */
+const LESSON_PAGE_SIZE = 12;
+
+/** 1-based page the teacher is on, clamped to what the current list allows. */
+function lessonCurrentPage(total, pageSize = LESSON_PAGE_SIZE) {
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  const page = Number(state.lessonPage) || 0;
+  return Math.min(Math.max(0, page), pages - 1);
+}
+
+/** Trước / Sau / "Trang X/Y · N giáo án". Hidden when everything fits one page. */
+function lessonPagerHtml(page, total, pageSize = LESSON_PAGE_SIZE) {
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  if (pages <= 1) return '';
+  const button = (label, target, disabled, id) =>
+    `<button type="button" class="px-[10px] py-[6px] rounded-[7px] border border-[#e7eaf2] bg-white text-[11px] font-semibold text-[#515c72] disabled:opacity-50 disabled:cursor-not-allowed" id="${id}" data-action="lesson-page" data-page-index="${target}"${disabled ? ' disabled' : ''}>${label}</button>`;
+  const numbers = [];
+  for (let index = 0; index < pages; index += 1) {
+    numbers.push(`<button type="button" class="min-w-[26px] h-[26px] rounded-[7px] border text-[11px] font-bold ${index === page ? 'border-[#6258e8] bg-[#6258e8] text-white' : 'border-[#e7eaf2] bg-white text-[#515c72] hover:border-[#c8c3ff]'}" data-action="lesson-page" data-page-index="${index}" aria-current="${index === page ? 'page' : 'false'}">${index + 1}</button>`);
+  }
+  return `<div class="flex items-center justify-between gap-[10px] mt-[14px] flex-wrap" data-lesson-pager>
+    <span class="text-[11px] text-[#9199aa]">Trang <b>${page + 1}</b>/${pages} · ${total} giáo án · ${pageSize} mỗi trang</span>
+    <div class="flex gap-[6px] items-center">${button('← Trước', Math.max(0, page - 1), page === 0, 'lessonPrevBtn')}${numbers.join('')}${button('Sau →', Math.min(pages - 1, page + 1), page >= pages - 1, 'lessonNextBtn')}</div>
+  </div>`;
+}
+
+/** Ids ticked for batch actions. Survives paging; drops ids that no longer exist. */
+function lessonSelectedIds(library) {
+  const existing = new Set((Array.isArray(library) ? library : []).map(document => document.id));
+  const selected = state.lessonSelection instanceof Set ? state.lessonSelection : new Set();
+  for (const id of [...selected]) if (!existing.has(id)) selected.delete(id);
+  state.lessonSelection = selected;
+  return selected;
+}
+
+/** The per-card checkbox (rendered inside `.lesson-select`). */
+function lessonSelectBoxHtml(document, checked) {
+  const id = `lesson-pick-${escapeHtml(document.id)}`;
+  return `<input type="checkbox" id="${id}" class="lesson-check" data-action="lesson-select" data-id="${escapeHtml(document.id)}"${checked ? ' checked' : ''} aria-label="Chọn ${escapeHtml(document.name || 'giáo án')}">`;
+}
+
+/** The batch bar: select-all, count, rename-free delete, clear. */
+function lessonSelectionBarHtml(docs, pageDocs, selected) {
+  if (!docs.length) return '';
+  const allOnPage = pageDocs.length > 0 && pageDocs.every(document => selected.has(document.id));
+  return `<div class="flex items-center justify-between gap-[12px] mb-[12px] flex-wrap bg-[#f8f7ff] border border-[#e4e0ff] rounded-[10px] px-[12px] py-[9px]" data-lesson-selection-bar>
+    <label class="inline-flex items-center gap-[8px] text-[12px] font-semibold text-[#4c4680] cursor-pointer">
+      <input type="checkbox" id="lessonSelectAll" class="lesson-check"${allOnPage ? ' checked' : ''} ${pageDocs.length ? '' : 'disabled'} aria-label="Chọn tất cả trong trang">
+      Chọn tất cả trang này
+    </label>
+    <div class="flex items-center gap-[10px] flex-wrap">
+      <span class="text-[12px] text-[#5b5680]" data-lesson-selected-count>${selected.size ? `Đã chọn ${selected.size} giáo án` : 'Hoặc tick từng giáo án để xoá nhiều cùng lúc'}</span>
+      <button type="button" class="border-0 rounded-[8px] px-[11px] py-[7px] font-bold text-[11px] bg-[#c33b4b] text-white hover:bg-[#a92f3e] disabled:opacity-50" id="lessonDeleteSelectedBtn" data-action="lesson-delete-selected"${selected.size ? '' : ' disabled'}>🗑 Xoá đã chọn${selected.size ? ` (${selected.size})` : ''}</button>
+      <button type="button" class="border-0 rounded-[8px] px-[10px] py-[7px] font-semibold text-[11px] bg-transparent text-[#6b6690] hover:underline disabled:opacity-50" id="lessonClearSelectionBtn" data-action="lesson-clear-selection"${selected.size ? '' : ' disabled'}>Bỏ chọn</button>
+    </div>
+  </div>`;
+}
+
 function renderLessonPlans() {
   const query = String(state.search || '').trim().toLowerCase();
   const library = Array.isArray(state.lessonLibrary) ? state.lessonLibrary : null;
@@ -24,15 +85,18 @@ function renderLessonPlans() {
       latest && latest.grade ? `lớp ${latest.grade}` : ''
     ].filter(Boolean).join(' ').toLowerCase().includes(query);
   });
+  const selected = lessonSelectedIds(library);
+  const page = lessonCurrentPage(docs.length);
+  const pageDocs = docs.slice(page * LESSON_PAGE_SIZE, page * LESSON_PAGE_SIZE + LESSON_PAGE_SIZE);
   return `<div class="flex justify-between items-start gap-[20px] mb-[25px]"><div><div class="text-[10px] text-[#6258e8] font-extrabold tracking-[1.3px] uppercase mb-[8px]">LESSON SOURCES</div><h1 class="text-[27px] tracking-[-0.9px] m-0 font-[780]">Giáo án</h1><p class="mt-[9px] text-[#788196] text-[13px] leading-[1.6]">Kho <strong>tài liệu nguồn và kết quả phân tích</strong>. Mở lại một giáo án để xem phân tích cũ hoặc tạo thêm trò chơi khác mà không phải phân tích lại.</p></div><div class="flex gap-[8px] flex-wrap"><button class="border-0 rounded-[9px] px-[15px] py-[11px] inline-flex items-center justify-center gap-[8px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-white border border-[#e7eaf2] text-[#515c72]" data-action="import-document">⇧ Nhập giáo án từ tệp</button><button class="border-0 rounded-[9px] px-[15px] py-[11px] inline-flex items-center justify-center gap-[8px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-[#6258e8] text-white shadow-[0_6px_14px_#6258e82b]" data-page="create-wizard">✳ Tạo dự án mới</button></div></div>
-    <div class="flex gap-[10px] items-center mb-[20px] flex-wrap"><div class="relative flex-1 min-w-[200px]"><input id="librarySearch" placeholder="Tìm theo tên tệp, chủ đề, môn, lớp..." value="${escapeHtml(state.search || '')}" class="w-full px-[13px] py-[11px] pl-[37px] border border-line rounded-[9px] bg-white outline-0 text-[12px]"></div><span class="px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#788196] text-[9px]">${library === null ? 'Đang tải…' : `${docs.length} giáo án`}</span></div>
+    <div class="flex gap-[10px] items-center mb-[20px] flex-wrap"><div class="relative flex-1 min-w-[200px]"><input id="lessonSearch" placeholder="Tìm theo tên tệp, chủ đề, môn, lớp..." value="${escapeHtml(state.search || '')}" class="w-full px-[13px] py-[11px] pl-[37px] border border-line rounded-[9px] bg-white outline-0 text-[12px]"></div><span class="px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#788196] text-[9px]">${library === null ? 'Đang tải…' : `${docs.length} giáo án`}</span></div>
     <div id="lessonDropzone" class="mb-[16px] border-2 border-dashed border-[#dfe2ed] rounded-[12px] p-[18px] text-center text-[#788196] text-[12px] transition-colors" ondragover="event.preventDefault(); this.classList.add('border-[#6258e8]','bg-[#f4f3ff]')" ondragleave="this.classList.remove('border-[#6258e8]','bg-[#f4f3ff]')" ondrop="handleLessonDrop(event)">Kéo thả tệp giáo án (TXT, MD, DOCX, PDF, PPTX) vào đây</div>
     <section class="bg-white border border-line rounded-[14px] p-[20px]">
       <div class="flex items-center justify-between gap-[12px] mb-[14px]"><div><h3 class="text-[14px] m-0 tracking-[-0.2px]">Tài liệu của tôi</h3><p class="text-[11px] text-[#8b94a6] mt-[4px] mb-0">Tệp nguồn được lưu trên máy. Mở lại để xem kết quả phân tích hoặc tạo trò chơi mới.</p></div><span class="px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#788196] text-[9px]">${library === null ? 'Đang tải…' : `${docs.length} tệp`}</span></div>
       ${library === null
         ? `<div class="p-[30px] text-center text-[#929bad] text-[12px]">Đang tải kho giáo án…</div>`
         : docs.length
-          ? `<div class="flex flex-col gap-[12px]">${docs.map(document => lessonLibraryCard(document)).join('')}</div>`
+          ? `${lessonSelectionBarHtml(docs, pageDocs, selected)}<div class="flex flex-col gap-[12px]">${pageDocs.map(document => lessonLibraryCard(document, selected.has(document.id))).join('')}</div>${lessonPagerHtml(page, docs.length)}`
           : `<div class="bg-white border border-dashed border-[#dfe2ed] rounded-[14px] p-[40px] text-center text-[#929bad] flex flex-col items-center justify-center"><div class="text-[42px] mb-[12px]">📄</div><h3 class="text-[#394256] mb-[8px] mt-0">${query ? 'Không tìm thấy giáo án phù hợp' : 'Chưa có giáo án nào'}</h3><p class="max-w-[470px] mx-auto mb-[17px] leading-[1.7] text-[12px]">${query ? 'Thử từ khóa khác hoặc xoá bộ lọc.' : 'Nhập tệp DOCX, PDF, PPTX hoặc TXT để lưu tài liệu nguồn. Kết quả phân tích sẽ được giữ lại để dùng cho nhiều trò chơi.'}</p><button class="border-0 rounded-[9px] px-[15px] py-[11px] inline-flex items-center justify-center gap-[8px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-white border border-[#e7eaf2] text-[#515c72]" data-action="import-document">⇧ Nhập giáo án đầu tiên</button></div>`}
     </section>
     <section class="bg-[linear-gradient(135deg,#f8f7ff,#efedff)] border border-[#e4e0ff] rounded-[14px] p-[20px] mt-[18px]">
@@ -43,7 +107,7 @@ function renderLessonPlans() {
           <div class="flex items-center gap-[8px] flex-wrap"><h3 class="text-[14px] m-0 tracking-[-0.2px]">Hỏi đáp chuyên sâu</h3><span class="px-[4px] py-[7px] bg-white text-[#6258e8] rounded-[5px] text-[9px] font-bold">BETA</span></div>
           <p class="text-[12px] text-[#6f7890] leading-[1.7] mt-[7px] mb-[10px]">Hỏi trực tiếp trên nội dung giáo án đã lưu, kèm trích dẫn nguồn. Ưu tiên AI Local; nếu chưa chạy được thì vẫn trả về đoạn liên quan.</p>
           <div class="flex gap-[8px] flex-wrap mb-[8px]">
-            <select id="qaDocSelect" class="px-[10px] py-[8px] border border-line rounded-[9px] text-[12px] bg-white min-w-[220px]">${(library && library.documents || []).map(d => `<option value="${escapeHtml(d.id)}">${escapeHtml(d.name || 'Tài liệu')}</option>`).join('')}</select>
+            <select id="qaDocSelect" class="px-[10px] py-[8px] border border-line rounded-[9px] text-[12px] bg-white min-w-[220px]">${(library || []).map(d => `<option value="${escapeHtml(d.id)}">${escapeHtml(d.name || 'Tài liệu')}</option>`).join('')}</select>
             <input id="qaQuestion" class="flex-1 min-w-[220px] px-[10px] py-[8px] border border-line rounded-[9px] text-[12px]" placeholder="Nhập câu hỏi về giáo án...">
             <button class="border-0 rounded-[9px] px-[12px] py-[9px] inline-flex items-center gap-[7px] font-bold text-[11px] bg-[#6258e8] text-white" data-action="qa-ask">Hỏi</button>
           </div>
@@ -66,7 +130,7 @@ function lessonAnalysisDetails(analysis) {
   </details>`;
 }
 
-function lessonLibraryCard(document) {
+function lessonLibraryCard(document, selected = false) {
   const analyses = Array.isArray(document.analyses) ? document.analyses : [];
   const latest = analyses[0] || null;
   const available = document.sourceAvailable !== false;
@@ -77,7 +141,10 @@ function lessonLibraryCard(document) {
     `${Number(document.characters || 0).toLocaleString('vi-VN')} ký tự`,
     fmtDate(document.createdAt)
   ];
-  return `<article class="border border-line rounded-[12px] p-[15px] flex gap-[14px] items-start" data-lesson-id="${escapeHtml(document.id)}">
+  // The checkbox sits outside the card's content flow so a tick never re-flows the
+  // text; the card itself stays the click target for "Mở lại".
+  return `<article class="border rounded-[12px] p-[15px] flex gap-[12px] items-start ${selected ? 'border-[#c8c3ff] bg-[#faf9ff]' : 'border-line'}" data-lesson-id="${escapeHtml(document.id)}"${selected ? ' data-selected="true"' : ''}>
+    <label class="lesson-select shrink-0 pt-[4px] cursor-pointer" title="Chọn giáo án này">${lessonSelectBoxHtml(document, selected)}</label>
     <div class="w-[46px] h-[46px] rounded-[11px] grid place-items-center text-[12px] font-extrabold shrink-0 ${lessonExtTone(document.ext)}">${escapeHtml(lessonExtLabel(document.ext))}</div>
     <div class="min-w-0 flex-1">
       <div class="flex items-start justify-between gap-[12px] flex-wrap">
@@ -85,6 +152,7 @@ function lessonLibraryCard(document) {
         <div class="flex gap-[7px] flex-wrap">
           ${latest && available ? `<button class="border-0 rounded-[9px] px-[11px] py-[8px] inline-flex items-center justify-center gap-[8px] font-bold text-[11px] transition-transform duration-120 hover:-translate-y-[1px] bg-[#6258e8] text-white shadow-[0_6px_14px_#6258e82b]" data-action="create-from-lesson" data-id="${escapeHtml(document.id)}" data-analysis="${escapeHtml(latest.id)}">✳ Tạo trò chơi</button>` : ''}
           ${available ? `<button class="border-0 rounded-[9px] px-[11px] py-[8px] inline-flex items-center justify-center gap-[8px] font-bold text-[11px] transition-transform duration-120 hover:-translate-y-[1px] bg-white border border-[#e7eaf2] text-[#515c72]" data-action="open-lesson" data-id="${escapeHtml(document.id)}"${latest ? ` data-analysis="${escapeHtml(latest.id)}"` : ''}>↻ Mở lại</button>` : ''}
+          <button class="border-0 rounded-[9px] px-[11px] py-[8px] inline-flex items-center justify-center gap-[8px] font-bold text-[11px] transition-transform duration-120 hover:-translate-y-[1px] bg-white border border-[#f3d6da] text-[#c33b4b] hover:bg-[#fff1f2]" data-action="delete-lesson" data-id="${escapeHtml(document.id)}" title="Xoá tài liệu khỏi kho giáo án">🗑 Xoá</button>
         </div>
       </div>
       ${latest

@@ -53,6 +53,16 @@ const DIST = path.resolve(ROOT, argValue('--dist', path.join('dist', 'src')));
 const INDEX = path.join(DIST, 'index.html');
 
 /**
+ * Third-party bundles (esbuild outputs under renderer/vendor/, e.g. three.global.js)
+ * are skipped. They are minified: their function declarations land mid-line
+ * (`...;function C(){...}`), which the line-anchored DECL_FN_LINE scanner cannot
+ * see, so every internal call would read as a false "undefined function". Their
+ * own globals (`var THREE=`) are still the renderer's responsibility to reference
+ * correctly, which the load-order test and runtime cover.
+ */
+const VENDOR_PREFIX = 'renderer/vendor/';
+
+/**
  * Call names legitimately provided by the browser, by the preload bridge, or by
  * the renderer's own shims. Without this the check is too noisy to trust.
  */
@@ -338,8 +348,11 @@ function main() {
   const declaredFunctions = new Set();
   const localNames = new Set();
   const calls = [];
+  let scanned = 0;
 
   for (const rel of scripts) {
+    if (rel.startsWith(VENDOR_PREFIX)) continue;
+    scanned++;
     const file = path.join(DIST, rel);
     if (!fs.existsSync(file)) {
       console.error(`check-renderer-undefined-globals: ${rel} is listed in index.html but missing from dist/.`);
@@ -357,7 +370,7 @@ function main() {
 
   if (unresolved.length === 0) {
     console.log(
-      `check-renderer-undefined-globals: ${scripts.length} scripts, ` +
+      `check-renderer-undefined-globals: ${scanned} of ${scripts.length} scripts scanned, ` +
         `${declaredFunctions.size} declared functions, ${calls.length} call sites — no undefined globals.`
     );
     process.exit(0);

@@ -478,28 +478,6 @@ export class LessonStore {
     return { ...documentFromRow(row), text };
   }
 
-  async deleteDocument(documentId: string): Promise<boolean> {
-    if (!documentId) return false;
-    const row = this.getDocumentRow(documentId);
-    if (!row) return false;
-    const remove = this.db.transaction(() => {
-      const analysisIds = (this.db.prepare('SELECT id FROM lesson_analyses WHERE document_id = ?')
-        .all(documentId) as Array<{ id: string }>).map(item => item.id);
-      const deleteRecommendation = this.db.prepare('DELETE FROM game_recommendations WHERE analysis_id = ?');
-      for (const analysisId of analysisIds) deleteRecommendation.run(analysisId);
-      this.db.prepare('DELETE FROM lesson_analyses WHERE document_id = ?').run(documentId);
-      this.db.prepare('DELETE FROM lesson_chunks WHERE document_id = ?').run(documentId);
-      this.db.prepare('DELETE FROM lesson_documents WHERE id = ?').run(documentId);
-    });
-    remove();
-    try {
-      await fs.rm(path.join(this.lessonsDir, `${documentId}.txt`), { force: true });
-    } catch {
-      // File cleanup is best-effort; the DB row is the source of truth.
-    }
-    return true;
-  }
-
   private getDocumentRow(documentId: string): DocumentRow | undefined {
     return this.db.prepare('SELECT * FROM lesson_documents WHERE id = ?').get(documentId) as DocumentRow | undefined;
   }
@@ -831,10 +809,21 @@ export class LessonStore {
     return row ? aiTaskFromRow(row) : null;
   }
 
-  listAiTasks(limit = 50): StoredAiTask[] {
+  /**
+   * One page of AI task history, newest first (#121). `offset` is clamped to a whole
+   * row so a page number cannot produce a fractional LIMIT/OFFSET.
+   */
+  listAiTasks(limit = 50, offset = 0): StoredAiTask[] {
     const capped = Number.isFinite(limit) && limit >= 1 ? Math.min(200, Math.floor(limit)) : 50;
-    const rows = this.db.prepare('SELECT * FROM ai_tasks ORDER BY started_at DESC LIMIT ?').all(capped) as AiTaskRow[];
+    const skip = Number.isFinite(offset) && offset > 0 ? Math.min(1e6, Math.floor(offset)) : 0;
+    const rows = this.db.prepare('SELECT * FROM ai_tasks ORDER BY started_at DESC LIMIT ? OFFSET ?').all(capped, skip) as AiTaskRow[];
     return rows.map(aiTaskFromRow);
+  }
+
+  /** Number of stored AI tasks (for page counts). */
+  countAiTasks(): number {
+    const row = this.db.prepare('SELECT COUNT(*) AS n FROM ai_tasks').get() as { n?: number } | undefined;
+    return Number(row && row.n) || 0;
   }
 
   pruneAiTasks(keep = 200): number {
@@ -928,6 +917,72 @@ export class LessonStore {
   deleteProject(projectId: string): boolean {
     const result = this.db.prepare('DELETE FROM game_projects WHERE id = ?').run(projectId) as { changes?: number };
     return Boolean(result && result.changes);
+  }
+
+  /**
+   * Deletes a lesson document and everything derived from it (#119).
+   *
+   * The schema declares `ON DELETE CASCADE`, but that only fires when the connection
+   * has `PRAGMA foreign_keys = ON`; deleting the parent without it would leave the
+   * analyses, recommendations and chunks behind forever (invisible, but still counted
+   * by retrieval). So the dependent rows are removed explicitly, in one transaction,
+   * child-first. Games already saved in the library are kept: they are independent
+   * rows the teacher may still want.
+   *
+   * `voidIO: true` skips the best-effort file removal, so the store stays synchronous
+   * for tests that never created a text file.
+   */
+  /**
+   * Deletes several lesson documents (#122). Each one goes through `deleteDocument`,
+   * so the same child-first cleanup applies, and a failure on one does not silently
+   * stop the others: the counts say exactly what happened.
+   */
+  async deleteDocuments(
+    documentIds: string[],
+    options: { voidIO?: boolean } = {}
+  ): Promise<{ deleted: number; missing: number; failed: number }> {
+    const ids = Array.isArray(documentIds) ? [...new Set(documentIds.map(id => String(id || '')).filter(Boolean))] : [];
+    let deleted = 0;
+    let missing = 0;
+    let failed = 0;
+    for (const id of ids) {
+      try {
+        if (await this.deleteDocument(id, options)) deleted += 1;
+        else missing += 1;
+      } catch {
+        failed += 1;
+      }
+    }
+    return { deleted, missing, failed };
+  }
+
+  async deleteDocument(documentId: string, options: { voidIO?: boolean } = {}): Promise<boolean> {
+    const id = String(documentId || '');
+    if (!id) return false;
+    const analysisIds = (this.db.prepare('SELECT id FROM lesson_analyses WHERE document_id = ?').all(id) as Array<{ id: string }>)
+      .map(row => row.id);
+    const run = this.db.transaction((document: string, analyses: string[]) => {
+      for (const analysisId of analyses) {
+        this.db.prepare('DELETE FROM game_recommendations WHERE analysis_id = ?').run(analysisId);
+      }
+      this.db.prepare('DELETE FROM lesson_chunks WHERE document_id = ?').run(document);
+      this.db.prepare('DELETE FROM lesson_analyses WHERE document_id = ?').run(document);
+      const deleted = this.db.prepare('DELETE FROM lesson_documents WHERE id = ?').run(document) as { changes?: number };
+      return Number(deleted && deleted.changes) || 0;
+    });
+    if (run(id, analysisIds) === 0) return false;
+    // The text lives on disk, not in SQLite: remove it too so the source cannot be
+    // half-deleted (row gone, text still readable from the data folder). Best-effort —
+    // an orphan file is harmless, a half-deleted document is not. `voidIO` skips it for
+    // callers that never wrote a file (a plain in-memory database in tests).
+    if (!options.voidIO) {
+      try {
+        await fs.rm(path.join(this.lessonsDir, `${id}.txt`), { force: true });
+      } catch {
+        // Best-effort: the database row is the source of truth.
+      }
+    }
+    return true;
   }
 
   private getProjectRow(projectId: string): ProjectRow | undefined {

@@ -3,12 +3,16 @@
   "version": "0.3.0",
   "description": "EduGame Studio - Ã¡Â»Â©ng dÃ¡Â»Â¥ng Windows tÃ¡ÂºÂ¡o, quÃ¡ÂºÂ£n lÃƒÂ½ vÃƒÂ  chÃ†Â¡i game giÃƒÂ¡o dÃ¡Â»Â¥c offline, TypeScript",
   "main": "dist/src/main.js",
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "author": "EduGame Studio",
   "license": "MIT",
   "scripts": {
     "clean": "node -e \"try{require('node:fs').rmSync('dist',{recursive:true,force:true})}catch(e){console.warn('clean warning:',e.message)}\"",
-    "build": "npm run clean && node scripts/build-icon-data.js --bootstrap && tsc -p tsconfig.json && npm run build:icons && tsc -p tsconfig.json && npm run build:icons:check && copyfiles -u 1 \"src/index.html\" \"src/renderer/styles/*.css\" \"src/presentation/presentation.html\" \"src/presentation/presentation-preload.js\" dist/src && npm run build:css",
+    "build": "npm run clean && node scripts/build-icon-data.js --bootstrap && tsc -p tsconfig.json && npm run build:icons && tsc -p tsconfig.json && npm run build:icons:check && copyfiles -u 1 \"src/index.html\" \"src/renderer/styles/*.css\" \"src/presentation/presentation.html\" \"src/presentation/presentation-preload.js\" \"src/lan/mobile/*\" dist/src && npm run build:css && npm run build:three",
     "build:css": "tailwindcss -i src/renderer/styles/app.css -o dist/src/renderer/styles/app.css --minify",
+    "build:three": "node scripts/build-three.js",
     "start": "npm run build && electron .",
     "check": "tsc --noEmit -p tsconfig.json",
     "test": "npm run build && node tests/run-unit.js",
@@ -39,6 +43,8 @@
     "jszip": "^3.10.1",
     "mammoth": "^1.8.0",
     "pdf-parse": "1.1.1",
+    "socket.io": "^4.8.4",
+    "three": "^0.187.0",
     "zod": "^4.1.5"
   },
   "devDependencies": {
@@ -50,6 +56,9 @@
     "daisyui": "^5.7.50",
     "electron": "^33.2.1",
     "electron-builder": "^25.1.8",
+    "esbuild": "^0.28.2",
+    "jsdom": "^29.1.1",
+    "socket.io-client": "^4.8.4",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2"
@@ -61,7 +70,11 @@
     "files": [
       "dist/**/*",
       "package.json",
-      "node_modules/**/*"
+      "node_modules/**/*",
+      "!node_modules/**/@types/**",
+      "!node_modules/**/*.d.ts",
+      "!node_modules/**/*.map",
+      "!node_modules/**/{test,tests,__tests__,docs,example,examples}/**"
     ],
     "extraResources": [
       {

@@ -275,7 +275,9 @@ async function findTarget() {
     push('fields refilled after re-render', document.getElementById('settingStyleNotes').value === 'SMOKE-NOTES-2026' && document.getElementById('settingStyleTone').value === 'dí dỏm', '');
     if (state.settings.ai && state.settings.ai.mode === 'offline') {
       const prefBefore = JSON.stringify(state.settings.preferences);
-      await testAi();
+      // #132: `state.settings.ai.mode` is what testAi() reads now (the old select is gone).
+  state.settings.ai = { ...(state.settings.ai || {}), mode: 'offline' };
+  await testAi();
       push('testAi keeps preferences (offline path)', JSON.stringify(state.settings.preferences) === prefBefore, '');
     } else {
       push('testAi skipped (not offline mode)', true, 'SKIP');

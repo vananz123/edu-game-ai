@@ -1,6 +1,10 @@
 // @ts-nocheck -- migrated legacy UI logic; new contracts are typed in src/shared/types.ts.
 function playGame(game, options = {}) {
     stopPresentationMode();
+    // A LAN room belongs to one playing of one game: opening another game must not
+    // leave the old room answering new questions (features/lan.js).
+    if (typeof lanReleaseForNewGame === 'function')
+        lanReleaseForNewGame();
     state.playStartedAt = Date.now();
     state.resultSession = null;
     state.lastSummary = null;
@@ -56,6 +60,9 @@ function playGame(game, options = {}) {
     state.answerLocked = false;
     state.scenarioSteps = 0;
     state.teamPlay = null;
+    state.houseBuild = null;
+    if (isHouseMode(game))
+        state.houseBuild = houseCreate();
     enterFullscreen();
     if (game.gameSetup?.scoringMode === 'thi đấu đội') {
         openTeamSetup();
@@ -131,7 +138,724 @@ function closePlaySurface() {
     if (document.documentElement.dataset.fullscreen === '1')
         setPlayFullscreen(false);
     stopPresentationMode();
+    unmountThreeStage();
     $('#modalRoot').innerHTML = '';
+}
+// ---------- Three.js presentation (DECISIONS #137) ----------
+// Decorative only: the 3D layer never scores and never changes answers. The DOM
+// answer buttons stay the single input path; this adds a world-tinted backdrop
+// and a particle burst on answer. Machines without WebGL keep the 2D surface.
+let threeStageHandle = null;
+let threeWorld = null;
+// Race fully re-renders its board on every answer (answerRace → renderRaceBoard),
+// so a burst fired on the pre-render handle would be unmounted before it shows.
+// This flag carries the colour across the re-render so the fresh handle bursts.
+let raceAnswerBurst = null;
+// The same re-render problem applies to the race celebration: the winning
+// answer repaints the board, so the confetti must fire on the fresh handle.
+let raceAnswerCelebrate = false;
+function unmountThreeStage() {
+    if (threeStageHandle && window.threeGame)
+        window.threeGame.unmount(threeStageHandle);
+    threeStageHandle = null;
+    threeWorld = null;
+}
+function mountThreeStage(stage, opts = {}) {
+    if (!stage || !window.threeGame || !window.threeGame.isAvailable())
+        return;
+    unmountThreeStage();
+    let accent = '#6d7cf0';
+    try {
+        const css = getComputedStyle(stage).getPropertyValue('--world-accent');
+        if (css && css.trim())
+            accent = css.trim();
+    }
+    catch (err) { /* keep the default accent */ }
+    // The house owns the stage centre in house mode; the spinning emblem would
+    // only fight it (DECISIONS #142).
+    threeStageHandle = window.threeGame.mount(stage, { accent, emblem: !isHouseMode(state.currentGame) });
+    const template = state.currentGame && state.currentGame.template;
+    if (opts.world !== false && isHouseMode(state.currentGame))
+        buildHouseWorld();
+    else if (opts.world !== false && (template === 'quiz' || template === 'scenario'))
+        buildThreeWorld();
+    else if (opts.world !== false && template === 'matching')
+        buildMatchingWorld();
+    else if (opts.world !== false && template === 'treasure-hunt')
+        buildTreasureWorld();
+    else if (opts.world !== false && template === 'race')
+        buildRaceWorld();
+}
+function burstThreeStage(color) {
+    if (threeStageHandle && window.threeGame)
+        window.threeGame.burst(threeStageHandle, { color });
+}
+// Place a prop at a screen FRACTION of the stage (0..1, origin top-left) rather
+// than a fixed world coordinate. The stage aspect flips between the compact
+// preview (narrow, tall) and fullscreen (wide, short): a world x that reads as
+// "outer margin" in one lands in the middle of the answer grid in the other.
+// `anchor` re-projects every frame, so the spot survives the asynchronous
+// native-fullscreen resize that happens after the surface is first rendered.
+function addAnchoredObject(object, fx, fy, z = -1) {
+    window.threeGame.addObject(threeStageHandle, object, 0, 0, z);
+    window.threeGame.anchor(threeStageHandle, object, fx, fy, z);
+}
+// The quiz/scenario "game world" (DECISIONS #139): a construction tower
+// (bottom-left) that grows one block per correct answer and a destructible block
+// (top-right) that shatters on a wrong one. Built fresh on each question so the
+// tower reflects the running correct count. Presentation only — it reads
+// state.gameAnswers but never scores or changes answers.
+function buildThreeWorld() {
+    if (!threeStageHandle || !window.threeGame)
+        return;
+    const world = {};
+    const game = state.currentGame;
+    const total = game && game.questions && game.questions.length ? game.questions.length : 1;
+    const construction = window.threeGame.makeConstruction({ steps: total, color: '#34d399', blockSize: 0.7 });
+    window.threeGame.addObject(threeStageHandle, construction.group, -6.2, -2.8, -1);
+    construction.setStage(threeStageHandle, state.gameAnswers.reduce((s, a) => s + (a.correct ? 1 : 0), 0), { animate: false });
+    world.construction = construction;
+    const destructible = window.threeGame.makeDestructible({ color: '#f87171', size: 1.1 });
+    window.threeGame.addObject(threeStageHandle, destructible.group, 6.2, 2.6, -1);
+    world.destructible = destructible;
+    threeWorld = world;
+}
+// Matching (DECISIONS #145): the chest is the "unlock" reward and opens when the
+// last pair is matched; a destructible block shatters on a wrong pair and resets
+// itself on a timer so the next wrong attempt can break it again. The board is
+// only re-rendered on open, so this world lives for the whole game.
+function buildMatchingWorld() {
+    if (!threeStageHandle || !window.threeGame)
+        return;
+    const world = {};
+    // The board is centred, so the outer right margin is empty in BOTH layouts;
+    // the left margin is taken by the emblem, and the bottom by feedback+answers.
+    const unlockable = window.threeGame.makeUnlockable({ color: '#e9b95b' });
+    addAnchoredObject(unlockable.group, 0.93, 0.47);
+    world.unlockable = unlockable;
+    const destructible = window.threeGame.makeDestructible({ color: '#f87171', size: 1.1 });
+    addAnchoredObject(destructible.group, 0.93, 0.32);
+    world.destructible = destructible;
+    threeWorld = world;
+}
+function reactMatching(event, detail) {
+    const world = threeWorld;
+    if (event === 'match:correct') {
+        burstThreeStage('#34d399');
+    }
+    else if (event === 'match:incorrect') {
+        burstThreeStage('#f87171');
+        if (world && world.destructible) {
+            world.destructible.shatter(threeStageHandle);
+            window.threeGame.effect(threeStageHandle, () => { }, 1.3, () => world.destructible.reset());
+        }
+    }
+    else if (event === 'game:completed') {
+        if (world && world.unlockable)
+            world.unlockable.open(threeStageHandle);
+        if (window.threeGame.celebrate)
+            window.threeGame.celebrate(threeStageHandle);
+    }
+}
+// Treasure (DECISIONS #145): every stage gets a sealed chest; a correct answer
+// opens it, a wrong one only bursts red so the stage can still be retried. Each
+// stage render remounts the world, so the chest starts closed again.
+function buildTreasureWorld() {
+    if (!threeStageHandle || !window.threeGame)
+        return;
+    const world = {};
+    // Below the answer cards: the one band that is empty in the projected
+    // layout at both resolutions. The compact preview scrolls at 1366 (treasure
+    // is the template allowed to be taller than the window), so it is not the
+    // placement target here.
+    const unlockable = window.threeGame.makeUnlockable({ color: '#e9b95b' });
+    addAnchoredObject(unlockable.group, 0.28, 0.86);
+    world.unlockable = unlockable;
+    threeWorld = world;
+}
+function reactTreasure(event) {
+    const world = threeWorld;
+    if (event === 'answer:correct') {
+        burstThreeStage('#34d399');
+        if (world && world.unlockable)
+            world.unlockable.open(threeStageHandle);
+    }
+    else if (event === 'answer:incorrect') {
+        burstThreeStage('#f87171');
+    }
+    else if (event === 'game:completed') {
+        if (window.threeGame.celebrate)
+            window.threeGame.celebrate(threeStageHandle);
+    }
+}
+// Race (DECISIONS #145): a tower grows one block per correct answer and an orb
+// flashes green/red on every answer. The board fully re-renders on each answer,
+// so the tower is rebuilt from `rp.correctCount` (minus the block the fresh
+// handle is about to animate in) and the reaction is carried by `raceAnswerBurst`.
+function buildRaceWorld() {
+    if (!threeStageHandle || !window.threeGame || !state.racePlay)
+        return;
+    const world = {};
+    // Race is the densest board: at 1920x1080 fullscreen the area under the turn
+    // card is the only free band, so the tower stands there (bottom-left, the
+    // quiz's "progress" corner). At 1366x768 the turn card already overflows the
+    // stage (known density limit), so the tower sits behind it; the orb in the
+    // strip above the status bar and the answer burst stay visible at both sizes.
+    const total = state.currentGame && state.currentGame.race ? state.currentGame.race.questions.length : 1;
+    const construction = window.threeGame.makeConstruction({ steps: Math.min(8, Math.max(1, total)), color: '#34d399', blockSize: 0.7 });
+    addAnchoredObject(construction.group, 0.06, 0.93);
+    const count = state.racePlay.correctCount || 0;
+    const pendingCorrect = raceAnswerBurst === '#34d399';
+    construction.setStage(threeStageHandle, Math.max(0, count - (pendingCorrect ? 1 : 0)), { animate: false });
+    world.construction = construction;
+    const reactive = window.threeGame.makeReactive({ color: '#6d7cf0', size: 0.4 });
+    addAnchoredObject(reactive.group, 0.962, 0.03);
+    world.reactive = reactive;
+    threeWorld = world;
+}
+function reactRace(event) {
+    const world = threeWorld;
+    if (event === 'answer:correct') {
+        burstThreeStage('#34d399');
+        if (world && world.construction)
+            world.construction.setStage(threeStageHandle, state.racePlay ? state.racePlay.correctCount : 0);
+        if (world && world.reactive)
+            world.reactive.flash(threeStageHandle, 'correct');
+    }
+    else if (event === 'answer:incorrect') {
+        burstThreeStage('#f87171');
+        if (world && world.reactive)
+            world.reactive.flash(threeStageHandle, 'incorrect');
+    }
+    else if (event === 'game:completed') {
+        if (window.threeGame.celebrate)
+            window.threeGame.celebrate(threeStageHandle);
+    }
+}
+// One entry point for gameplay → 3D reactions. Emits the named intent (for any
+// 3D listeners) then drives the world of the game that is on screen. Scoring
+// stays in the engine.
+function reactThree(event, detail) {
+    if (!window.threeGame || !threeStageHandle)
+        return;
+    window.threeGame.emit(event, detail);
+    if (isHouseMode(state.currentGame)) {
+        reactHouse(event, detail);
+        return;
+    }
+    const template = state.currentGame && state.currentGame.template;
+    if (template === 'matching') {
+        reactMatching(event, detail);
+        return;
+    }
+    if (template === 'treasure-hunt') {
+        reactTreasure(event, detail);
+        return;
+    }
+    if (template === 'race') {
+        reactRace(event, detail);
+        return;
+    }
+    const world = threeWorld;
+    if (event === 'answer:correct') {
+        burstThreeStage('#34d399');
+        if (world && world.construction)
+            world.construction.setStage(threeStageHandle, state.gameAnswers.reduce((s, a) => s + (a.correct ? 1 : 0), 0));
+    }
+    else if (event === 'answer:incorrect') {
+        burstThreeStage('#f87171');
+        if (world && world.destructible)
+            world.destructible.shatter(threeStageHandle);
+    }
+    else if (event === 'game:completed') {
+        if (window.threeGame.celebrate)
+            window.threeGame.celebrate(threeStageHandle);
+    }
+}
+// ---------- House Building Mode (DECISIONS #140, revised #141) ----------
+// Quiz-only alternate mode: the house starts with only its foundation. Each correct
+// answer adds one cube-built part; each wrong answer removes one (never below the
+// foundation). Scoring stays in game-engine/runtime.ts. Classic mode (the default,
+// and the only mode for the other four games) is untouched.
+function isHouseMode(game) {
+    const g = game || state.currentGame;
+    return Boolean(g && g.template === 'quiz' && g.gameSetup && g.gameSetup.gameplayMode === 'house');
+}
+function houseState() {
+    return state.houseBuild || houseCreate();
+}
+function houseProgressHtml() {
+    const max = houseTargetParts(state.currentGame);
+    const sum = houseSummary(houseState(), max);
+    const pct = max ? Math.round(sum.parts / max * 100) : 0;
+    const hint = sum.completed ? 'Ngôi nhà đã hoàn thiện! 🎉' : `Còn ${sum.remaining} phần nữa để hoàn thiện`;
+    return `<div class="house-progress"><div class="house-progress-head"><span class="house-progress-title">🏗️ CHẾ ĐỘ XÂY NHÀ</span><span class="house-count">Đã xây <b>${sum.parts}</b>/${max} phần</span></div><div class="house-bar"><div class="house-bar-fill" data-progress="${pct}"></div></div><div class="house-materials">${hint}</div></div>`;
+}
+// The answer changes the part count and the 3D house immediately; refresh the
+// panel in place so the counter and the bar move on the same beat (the panel is
+// otherwise only rebuilt by renderQuestion on the next question).
+function paintHouseProgress() {
+    const panel = $('.house-progress');
+    if (!panel)
+        return;
+    const max = houseTargetParts(state.currentGame);
+    const sum = houseSummary(houseState(), max);
+    const pct = max ? Math.round(sum.parts / max * 100) : 0;
+    const count = $('.house-count', panel);
+    if (count)
+        count.innerHTML = `Đã xây <b>${sum.parts}</b>/${max} phần`;
+    const fill = $('.house-bar-fill', panel);
+    if (fill)
+        fill.dataset.progress = String(pct);
+    const hint = $('.house-materials', panel);
+    if (hint)
+        hint.textContent = sum.completed ? 'Ngôi nhà đã hoàn thiện! 🎉' : `Còn ${sum.remaining} phần nữa để hoàn thiện`;
+    paintProgress(panel);
+}
+// The house is built from cubes (blocky, "stacked blocks") plus a big front door,
+// two windows and a little decoration (tree, bush, path). Stage 0 is the foundation
+// and is always visible — the "partially built" starting point. The eight buildable
+// stages are added one at a time on a correct answer and removed one at a time on a
+// wrong answer. How many parts a game needs is `houseTargetParts()` (the question
+// count, capped at these eight stages), and `houseVisualStages()` maps a part back
+// to the stage index, so a short quiz still reaches the full model (DECISIONS #143).
+//
+// Every style in `houseParts(style)` keeps that same nine-stage layout so the
+// economy and the target mapping are style-independent; only the block model
+// changes (DECISIONS #144). `houseStyleFor()` picks the model.
+function houseRing(y, color, cube = 0.7, spread = 1.05) {
+    const specs = [];
+    const xs = [-spread, -spread / 3, spread / 3, spread];
+    xs.forEach(x => {
+        specs.push({ kind: 'box', w: cube, h: cube, d: cube, color, x, y, z: -cube });
+        specs.push({ kind: 'box', w: cube, h: cube, d: cube, color, x, y, z: cube });
+    });
+    [-spread, spread].forEach(x => {
+        specs.push({ kind: 'box', w: cube, h: cube, d: cube, color, x, y, z: 0 });
+    });
+    return specs;
+}
+function houseStyleForCurrentGame() {
+    const game = state.currentGame;
+    return houseStyleFor(game && game.gameSetup ? game.gameSetup.houseStyle : '', game && game.id);
+}
+// Classic: warm plaster walls, red blocky roof, brick chimney, a tree and a path.
+function houseClassicParts() {
+    return [
+        // 0 — foundation (always present)
+        [
+            { kind: 'box', w: 3.1, h: 0.2, d: 2.3, color: 0x8d99ae, x: 0, y: 0.1, z: 0 }
+        ],
+        // 1 — bottom cube ring
+        houseRing(0.55, 0xd4a373),
+        // 2 — big front door
+        [
+            { kind: 'box', w: 0.72, h: 1.2, d: 0.16, color: 0x6b4f3a, x: 0, y: 0.8, z: 1.08 },
+            { kind: 'box', w: 0.16, h: 0.16, d: 0.08, color: 0xe0b070, x: 0.22, y: 0.68, z: 1.14 }
+        ],
+        // 3 — second cube ring
+        houseRing(1.25, 0xd4a373),
+        // 4 — two windows
+        [
+            { kind: 'box', w: 0.5, h: 0.5, d: 0.12, color: 0xa8dadc, x: -0.6, y: 1.25, z: 1.08 },
+            { kind: 'box', w: 0.5, h: 0.5, d: 0.12, color: 0xa8dadc, x: 0.6, y: 1.25, z: 1.08 }
+        ],
+        // 5 — third cube ring
+        houseRing(1.95, 0xe6b98a),
+        // 6 — blocky roof
+        [
+            { kind: 'box', w: 3.05, h: 0.24, d: 2.35, color: 0xc05c48, x: 0, y: 2.42, z: 0 },
+            { kind: 'box', w: 2.1, h: 0.24, d: 1.5, color: 0xc05c48, x: 0, y: 2.66, z: 0 }
+        ],
+        // 7 — chimney
+        [
+            { kind: 'box', w: 0.42, h: 0.7, d: 0.42, color: 0x8d5524, x: 0.8, y: 2.75, z: -0.4 }
+        ],
+        // 8 — decoration: tree, bush, path
+        [
+            { kind: 'box', w: 0.16, h: 0.6, d: 0.16, color: 0x7f5539, x: -1.95, y: 0.4, z: 0.5 },
+            { kind: 'box', w: 0.7, h: 0.7, d: 0.7, color: 0x6a994e, x: -1.95, y: 1.0, z: 0.5 },
+            { kind: 'box', w: 0.42, h: 0.42, d: 0.42, color: 0x8ab17d, x: 1.75, y: 0.35, z: 0.6 },
+            { kind: 'box', w: 0.9, h: 0.06, d: 0.5, color: 0xb08968, x: 0, y: 0.23, z: 1.5 }
+        ]
+    ];
+}
+// Garden cottage: cream walls, green roof, veranda and a picket fence.
+function houseGardenParts() {
+    const wall = 0xf2e6cc, wallLight = 0xf7efd8, green = 0x4f8a5b;
+    return [
+        // 0 — mossy garden foundation
+        [
+            { kind: 'box', w: 3.5, h: 0.2, d: 2.6, color: 0x8fae9b, x: 0, y: 0.1, z: 0 }
+        ],
+        // 1 — ground floor
+        houseRing(0.52, wall, 0.64, 0.95),
+        // 2 — teal door with a step
+        [
+            { kind: 'box', w: 0.64, h: 1.1, d: 0.14, color: 0x2f7d6d, x: -0.18, y: 0.74, z: 1.02 },
+            { kind: 'box', w: 0.14, h: 0.14, d: 0.08, color: 0xe0b070, x: 0.06, y: 0.62, z: 1.1 },
+            { kind: 'box', w: 0.9, h: 0.08, d: 0.34, color: 0xc9b99a, x: -0.18, y: 0.16, z: 1.2 }
+        ],
+        // 3 — upper floor
+        houseRing(1.16, wallLight, 0.64, 0.95),
+        // 4 — windows with green shutters
+        [
+            { kind: 'box', w: 0.46, h: 0.46, d: 0.12, color: 0xa8dadc, x: -0.52, y: 1.18, z: 1.02 },
+            { kind: 'box', w: 0.46, h: 0.46, d: 0.12, color: 0xa8dadc, x: 0.52, y: 1.18, z: 1.02 },
+            { kind: 'box', w: 0.1, h: 0.5, d: 0.1, color: green, x: -0.83, y: 1.18, z: 1.02 },
+            { kind: 'box', w: 0.1, h: 0.5, d: 0.1, color: green, x: 0.83, y: 1.18, z: 1.02 }
+        ],
+        // 5 — veranda canopy on two posts
+        [
+            { kind: 'box', w: 2.1, h: 0.14, d: 0.92, color: green, x: 0, y: 1.66, z: 1.1 },
+            { kind: 'box', w: 0.12, h: 0.92, d: 0.12, color: 0xe6dcc3, x: -0.88, y: 1.08, z: 1.42 },
+            { kind: 'box', w: 0.12, h: 0.92, d: 0.12, color: 0xe6dcc3, x: 0.88, y: 1.08, z: 1.42 }
+        ],
+        // 6 — green roof, two blocky layers
+        [
+            { kind: 'box', w: 3.0, h: 0.24, d: 2.15, color: green, x: 0, y: 1.78, z: 0 },
+            { kind: 'box', w: 1.95, h: 0.24, d: 1.45, color: 0x3f6b4a, x: 0, y: 2.02, z: 0 }
+        ],
+        // 7 — dormer window on the roof
+        [
+            { kind: 'box', w: 0.72, h: 0.5, d: 0.55, color: wallLight, x: 0.32, y: 2.16, z: 0.1 },
+            { kind: 'box', w: 0.95, h: 0.14, d: 0.8, color: 0x3f6b4a, x: 0.32, y: 2.47, z: 0.1 }
+        ],
+        // 8 — picket fence, flowers, bush and a stone path
+        [
+            { kind: 'box', w: 0.08, h: 0.5, d: 0.08, color: wall, x: -2.0, y: 0.33, z: 0.9 },
+            { kind: 'box', w: 0.08, h: 0.5, d: 0.08, color: wall, x: -1.7, y: 0.33, z: 1.1 },
+            { kind: 'box', w: 0.08, h: 0.5, d: 0.08, color: wall, x: 1.7, y: 0.33, z: 1.1 },
+            { kind: 'box', w: 0.08, h: 0.5, d: 0.08, color: wall, x: 2.0, y: 0.33, z: 0.9 },
+            { kind: 'box', w: 0.18, h: 0.18, d: 0.18, color: 0xe4572e, x: -1.55, y: 0.28, z: 0.6 },
+            { kind: 'box', w: 0.18, h: 0.18, d: 0.18, color: 0xe8b23a, x: -1.25, y: 0.25, z: 0.55 },
+            { kind: 'box', w: 0.5, h: 0.4, d: 0.5, color: 0x6a994e, x: 1.45, y: 0.35, z: 0.55 },
+            { kind: 'box', w: 0.9, h: 0.06, d: 0.5, color: 0xb08968, x: -0.18, y: 0.21, z: 1.7 }
+        ]
+    ];
+}
+// Watchtower: a narrow stone shaft, widened lookout ring, slate spire and a flag.
+function houseTowerParts() {
+    const stone = 0xa8b0ba, stoneDark = 0x98a2ae;
+    return [
+        // 0 — stone base
+        [
+            { kind: 'box', w: 3.0, h: 0.24, d: 2.2, color: 0x7c8794, x: 0, y: 0.12, z: 0 }
+        ],
+        // 1 — lower shaft
+        houseRing(0.5, stone, 0.58, 0.66),
+        // 2 — heavy door with lintel
+        [
+            { kind: 'box', w: 0.6, h: 1.02, d: 0.14, color: 0x5a4630, x: 0, y: 0.66, z: 0.72 },
+            { kind: 'box', w: 0.16, h: 0.16, d: 0.08, color: 0xc9a227, x: 0.18, y: 0.6, z: 0.79 },
+            { kind: 'box', w: 0.84, h: 0.14, d: 0.2, color: 0x6f7b87, x: 0, y: 1.22, z: 0.72 }
+        ],
+        // 3 — middle shaft
+        houseRing(1.02, stoneDark, 0.58, 0.66),
+        // 4 — arrow slits
+        [
+            { kind: 'box', w: 0.14, h: 0.42, d: 0.1, color: 0x2c3440, x: -0.38, y: 1.02, z: 0.72 },
+            { kind: 'box', w: 0.14, h: 0.42, d: 0.1, color: 0x2c3440, x: 0.38, y: 1.02, z: 0.72 }
+        ],
+        // 5 — lookout ring, wider than the shaft
+        houseRing(1.58, 0x8d98a5, 0.58, 0.95),
+        // 6 — slate spire, shrinking block layers
+        [
+            { kind: 'box', w: 2.7, h: 0.18, d: 2.0, color: 0x4a6fa5, x: 0, y: 1.94, z: 0 },
+            { kind: 'box', w: 2.0, h: 0.18, d: 1.45, color: 0x4a6fa5, x: 0, y: 2.12, z: 0 },
+            { kind: 'box', w: 1.25, h: 0.18, d: 0.9, color: 0x3f5f8c, x: 0, y: 2.3, z: 0 },
+            { kind: 'box', w: 0.5, h: 0.2, d: 0.4, color: 0x3f5f8c, x: 0, y: 2.49, z: 0 }
+        ],
+        // 7 — flag pole and pennant
+        [
+            { kind: 'box', w: 0.07, h: 0.55, d: 0.07, color: 0x5b6472, x: 0, y: 2.85, z: 0 },
+            { kind: 'box', w: 0.48, h: 0.28, d: 0.06, color: 0xe4572e, x: 0.27, y: 3.0, z: 0 }
+        ],
+        // 8 — rocks and a pine
+        [
+            { kind: 'box', w: 0.55, h: 0.3, d: 0.55, color: 0x8a8f98, x: -1.25, y: 0.27, z: 0.55 },
+            { kind: 'box', w: 0.35, h: 0.3, d: 0.35, color: 0x9aa0a8, x: -1.62, y: 0.27, z: 0.85 },
+            { kind: 'box', w: 0.14, h: 0.5, d: 0.14, color: 0x7f5539, x: 1.3, y: 0.37, z: 0.5 },
+            { kind: 'box', w: 0.6, h: 0.5, d: 0.6, color: 0x3f6b4a, x: 1.3, y: 0.85, z: 0.5 },
+            { kind: 'box', w: 0.4, h: 0.4, d: 0.4, color: 0x4f8a5b, x: 1.3, y: 1.3, z: 0.5 }
+        ]
+    ];
+}
+// Log cabin: stacked log rings, warm windows with bars, dark green roof, pines.
+function houseCabinParts() {
+    const log = 0x8b5a2b, logLight = 0x9c6b3a, logTop = 0xa4713f;
+    return [
+        // 0 — stone footing
+        [
+            { kind: 'box', w: 3.2, h: 0.2, d: 2.4, color: 0x8b8d8a, x: 0, y: 0.1, z: 0 }
+        ],
+        // 1 — lower logs
+        houseRing(0.55, logLight, 0.72, 1.05),
+        // 2 — plank door with a threshold
+        [
+            { kind: 'box', w: 0.78, h: 1.2, d: 0.16, color: 0x5a3a22, x: 0, y: 0.82, z: 1.1 },
+            { kind: 'box', w: 0.12, h: 0.12, d: 0.08, color: 0xc9a227, x: 0.24, y: 0.7, z: 1.18 },
+            { kind: 'box', w: 1.0, h: 0.08, d: 0.3, color: 0x6f6f6b, x: 0, y: 0.16, z: 1.25 }
+        ],
+        // 3 — middle logs
+        houseRing(1.3, log, 0.72, 1.05),
+        // 4 — warm windows with cross bars
+        [
+            { kind: 'box', w: 0.5, h: 0.5, d: 0.12, color: 0xffd27f, x: -0.62, y: 1.3, z: 1.1 },
+            { kind: 'box', w: 0.5, h: 0.5, d: 0.12, color: 0xffd27f, x: 0.62, y: 1.3, z: 1.1 },
+            { kind: 'box', w: 0.06, h: 0.52, d: 0.14, color: 0x5a3a22, x: -0.62, y: 1.3, z: 1.12 },
+            { kind: 'box', w: 0.52, h: 0.06, d: 0.14, color: 0x5a3a22, x: -0.62, y: 1.3, z: 1.12 },
+            { kind: 'box', w: 0.06, h: 0.52, d: 0.14, color: 0x5a3a22, x: 0.62, y: 1.3, z: 1.12 },
+            { kind: 'box', w: 0.52, h: 0.06, d: 0.14, color: 0x5a3a22, x: 0.62, y: 1.3, z: 1.12 }
+        ],
+        // 5 — top logs
+        houseRing(2.05, logTop, 0.72, 1.05),
+        // 6 — deep green roof
+        [
+            { kind: 'box', w: 3.15, h: 0.24, d: 2.4, color: 0x3f6b4a, x: 0, y: 2.53, z: 0 },
+            { kind: 'box', w: 2.15, h: 0.24, d: 1.55, color: 0x355a3e, x: 0, y: 2.77, z: 0 }
+        ],
+        // 7 — stone chimney
+        [
+            { kind: 'box', w: 0.5, h: 0.7, d: 0.5, color: 0x7d7d7d, x: 0.9, y: 2.8, z: -0.45 }
+        ],
+        // 8 — pines, firewood and a trail
+        [
+            { kind: 'box', w: 0.16, h: 0.55, d: 0.16, color: 0x7f5539, x: -1.95, y: 0.38, z: 0.4 },
+            { kind: 'box', w: 0.66, h: 0.55, d: 0.66, color: 0x355a3e, x: -1.95, y: 0.93, z: 0.4 },
+            { kind: 'box', w: 0.44, h: 0.44, d: 0.44, color: 0x4f8a5b, x: -1.95, y: 1.42, z: 0.4 },
+            { kind: 'box', w: 0.7, h: 0.3, d: 0.4, color: 0x6b4a2b, x: 1.75, y: 0.3, z: 0.55 },
+            { kind: 'box', w: 0.9, h: 0.06, d: 0.5, color: 0xb08968, x: 0, y: 0.21, z: 1.6 }
+        ]
+    ];
+}
+function houseParts(style) {
+    const id = houseStyleFor(style, '');
+    if (id === 'nha-vuon') return houseGardenParts();
+    if (id === 'thap-canh') return houseTowerParts();
+    if (id === 'nha-go') return houseCabinParts();
+    return houseClassicParts();
+}
+function houseMaxParts() {
+    return houseParts().length - 1;
+}
+// How many buildable parts this game must earn. One per question, so a quiz of
+// five questions is a five-part house and all-correct still finishes it; longer
+// quizzes stop at the visual maximum (eight) and complete once eight net parts
+// are standing (DECISIONS #143).
+function houseTargetParts(game) {
+    const questions = game && Array.isArray(game.questions) ? game.questions.length : 0;
+    return Math.max(1, Math.min(houseMaxParts(), questions || 1));
+}
+// A part can cover more than one visual stage on a short quiz (five questions over
+// eight stages), so the full model still appears exactly when the last part lands.
+// Ceil keeps the reveal monotonic and front-loaded: the first correct answer always
+// changes the house.
+function houseVisualStages(parts, target) {
+    const max = houseMaxParts();
+    const t = Math.max(1, Math.min(max, Math.round(Number(target) || 0)));
+    const p = Math.max(0, Math.min(t, Math.round(Number(parts) || 0)));
+    return Math.ceil(max * p / t);
+}
+// Measured envelope of each model (width × height in world units). Placement sizes
+// the house from the pixel box it has to fill, so the envelope must follow the
+// style: the tower is narrow and tall, the cottage is low and wide (#144).
+const HOUSE_BOUNDS = {
+    'nha-mai-do': { w: 4.3, h: 3.2 },
+    'nha-vuon': { w: 4.1, h: 2.7 },
+    'thap-canh': { w: 3.5, h: 3.2 },
+    'nha-go': { w: 4.4, h: 3.2 }
+};
+const HOUSE_SLOT_FILL = 0.92;
+function houseBounds(style) {
+    return HOUSE_BOUNDS[style] || HOUSE_BOUNDS['nha-mai-do'];
+}
+// The house is ~2.3 units deep and the camera is close, so its near corners
+// project well outside the plane the target is centred on. Filling the whole
+// band made the roof reach the HUD and the base slide under the banner
+// (measured 1600x1000); 0.78 keeps ~10px of air on both sides.
+const HOUSE_SHOWCASE_FILL = 0.78;
+// The result hero has a caption directly under its slot, and garden props make the
+// measured box asymmetric, so the house needs more air there than the invisible
+// answer-phase slot does (#144).
+const HOUSE_RESULT_FILL = 0.8;
+// Screen-space target for the 3D house. The WebGL canvas covers the whole
+// stage, so the only reliable way to line the house up with the DOM is to
+// project the reserved slot (answer phase) or the stage centre (showcase)
+// through the camera. DECISIONS #142.
+function houseTarget() {
+    if (!threeStageHandle || !window.threeGame || !window.threeGame.stagePoint)
+        return null;
+    const stage = threeStageHandle.container.getBoundingClientRect();
+    if (!stage.width || !stage.height)
+        return null;
+    const showcase = Boolean($('.game-stage.is-house-showcase'));
+    let fx, fy, widthPx, heightPx, fill;
+    if (showcase) {
+        // Fit the house into the band the stage actually leaves free: below the
+        // score/progress HUD and above the feedback card. A long explanation
+        // raises the card, and the house shrinks instead of hiding under it.
+        // Measured after `.is-house-showcase` lands, so the card is already
+        // anchored to the bottom.
+        const hud = $('.house-progress') || $('.stage-progress') || $('.stage-top');
+        const hudBox = hud ? hud.getBoundingClientRect() : null;
+        const feedback = $('#answerFeedback');
+        const feedbackBox = feedback ? feedback.getBoundingClientRect() : null;
+        const top = hudBox && hudBox.height ? hudBox.bottom + 4 : stage.top + stage.height * 0.16;
+        const bottom = feedbackBox && feedbackBox.height ? feedbackBox.top - 4 : stage.top + stage.height * 0.9;
+        const bandTop = (top - stage.top) / stage.height;
+        const bandBottom = (bottom - stage.top) / stage.height;
+        // Never trade the measured band for a prettier guess: on short windows
+        // that put the house behind the HUD or the banner. A degenerate band
+        // means the card has not laid out yet; leave the house in its slot.
+        if (!(bandBottom - bandTop > 0.02))
+            return null;
+        fx = 0.5;
+        fy = (bandTop + bandBottom) / 2;
+        widthPx = stage.width * 0.9;
+        heightPx = (bandBottom - bandTop) * stage.height;
+        fill = HOUSE_SHOWCASE_FILL;
+    }
+    else {
+        const slot = $('.game-stage .house-stage-slot');
+        if (!slot)
+            return null;
+        const box = slot.getBoundingClientRect();
+        if (!box.width || !box.height)
+            return null;
+        fx = (box.left + box.width / 2 - stage.left) / stage.width;
+        fy = (box.top + box.height / 2 - stage.top) / stage.height;
+        widthPx = box.width;
+        heightPx = box.height;
+        fill = $('.result-house-hero') ? HOUSE_RESULT_FILL : HOUSE_SLOT_FILL;
+    }
+    const point = window.threeGame.stagePoint(threeStageHandle, fx, fy, 0);
+    if (!point.pxPerUnit)
+        return null;
+    const bounds = (threeWorld && threeWorld.bounds) || houseBounds('nha-mai-do');
+    const scale = Math.min(heightPx * fill / (bounds.h * point.pxPerUnit), widthPx * 0.92 / (bounds.w * point.pxPerUnit));
+    // Part coordinates start at the ground (the foundation slab), so the group
+    // origin is the house's base, not its centre. Drop the base half a house so
+    // the box straddles the target instead of growing up into the stage header.
+    point.y -= bounds.h / 2 * scale;
+    return { point, scale };
+}
+function placeHouse(animate) {
+    const world = threeWorld;
+    const handle = threeStageHandle;
+    if (!world || !world.construction || !handle || !window.threeGame)
+        return;
+    const target = houseTarget();
+    if (!target)
+        return;
+    const group = world.construction.group;
+    if (!animate) {
+        group.position.set(target.point.x, target.point.y, target.point.z);
+        group.scale.setScalar(target.scale);
+        return;
+    }
+    const from = { x: group.position.x, y: group.position.y, scale: group.scale.x };
+    window.threeGame.tween(handle, {
+        from: 0,
+        to: 1,
+        duration: 0.55,
+        ease: 'easeOutCubic',
+        apply: (v) => {
+            // A remount while the tween runs must not move the new world's house.
+            if (threeWorld !== world || threeStageHandle !== handle)
+                return;
+            group.position.set(from.x + (target.point.x - from.x) * v, from.y + (target.point.y - from.y) * v, target.point.z);
+            group.scale.setScalar(from.scale + (target.scale - from.scale) * v);
+        }
+    });
+}
+let houseRelayoutBound = false;
+function buildHouseWorld() {
+    if (!threeStageHandle || !window.threeGame)
+        return;
+    const world = {};
+    const style = houseStyleForCurrentGame();
+    const construction = window.threeGame.makeConstruction({ parts: houseParts(style) });
+    window.threeGame.addObject(threeStageHandle, construction.group, 0, -0.6, -1.2);
+    const target = houseTargetParts(state.currentGame);
+    const parts = houseSummary(houseState(), target).parts;
+    // On the very first question, pop the foundation in as a short introduction.
+    const intro = state.gameAnswers.length === 0;
+    construction.setStage(threeStageHandle, 1 + houseVisualStages(parts, target), { animate: intro });
+    world.construction = construction;
+    world.style = style;
+    world.bounds = houseBounds(style);
+    threeWorld = world;
+    // The canvas is still 1x1 until step() runs, so the camera aspect is not
+    // final this tick; place on the next two frames instead.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (threeWorld === world)
+            placeHouse(false);
+    }));
+    if (!houseRelayoutBound) {
+        houseRelayoutBound = true;
+        window.addEventListener('resize', () => {
+            if (!threeWorld || !threeWorld.construction)
+                return;
+            // Fullscreen/projector toggles change the visible band too.
+            if ($('.game-stage.is-house-showcase'))
+                pinShowcaseStage();
+            placeHouse(false);
+        });
+    }
+}
+// Height the play surface actually shows from the top of the stage to the
+// bottom of the modal/window. Hiding the question collapses a content-sized
+// stage and the feedback card then stretches it past the viewport (measured
+// 957px stage vs 950px modal bottom at 1600x1000), so the showcase freezes the
+// stage to the visible area instead of to its current content.
+function showcaseStageHeight(stage) {
+    const box = stage.getBoundingClientRect();
+    const modal = $('.modal');
+    const modalBox = modal ? modal.getBoundingClientRect() : null;
+    const bottom = Math.min(window.innerHeight, modalBox && modalBox.bottom ? modalBox.bottom : window.innerHeight);
+    return Math.max(320, Math.round(bottom - box.top));
+}
+function pinShowcaseStage() {
+    const stage = $('.game-stage');
+    if (stage)
+        stage.style.minHeight = `${showcaseStageHeight(stage)}px`;
+}
+// After an answer the house steps forward as the achievement: the question and
+// answers leave the stage, the feedback becomes a card under the house and the
+// house grows into the free space (DECISIONS #142).
+function showcaseHouse() {
+    const stage = $('.game-stage');
+    if (!stage || !threeWorld || !threeWorld.construction)
+        return;
+    if (!stage.classList.contains('is-house-showcase')) {
+        pinShowcaseStage();
+        stage.classList.add('is-house-showcase');
+    }
+    placeHouse(true);
+}
+function reactHouse(event, detail) {
+    const world = threeWorld;
+    const house = detail && detail.house;
+    paintHouseProgress();
+    if (event === 'answer:correct') {
+        burstThreeStage('#34d399');
+        if (world && world.construction && house)
+            world.construction.setStage(threeStageHandle, 1 + houseVisualStages(house.parts, house.maxParts));
+        if (house && house.completedNow && window.threeGame.celebrate)
+            window.threeGame.celebrate(threeStageHandle);
+    }
+    else if (event === 'answer:incorrect') {
+        burstThreeStage('#f87171');
+        // A wrong answer removes the last-added part (shrink animation on the
+        // remaining handle — no remount happens until "next").
+        if (world && world.construction && house)
+            world.construction.setStage(threeStageHandle, 1 + houseVisualStages(house.parts, house.maxParts));
+    }
+    else if (event === 'game:completed') {
+        if (detail && detail.houseCompleted && window.threeGame.celebrate)
+            window.threeGame.celebrate(threeStageHandle);
+    }
 }
 // ---------- Presentation Mode ----------
 let presentationRevision = 0;
@@ -599,6 +1323,11 @@ function bindPlayHeader(root) {
     if (present) {
         present.addEventListener('click', () => { startPresentationMode({ requireSecondary: true }); });
     }
+    // Chơi LAN: one extra tool button, built by features/lan.js. It is inserted
+    // before the fullscreen button so the projector action stays rightmost.
+    const lanButton = $('[data-play-lan]', root);
+    if (lanButton && typeof lanOpenRoom === 'function')
+        lanButton.addEventListener('click', lanOpenRoom);
     const close = $('[data-play-close]', root);
     if (close)
         close.addEventListener('click', closePlaySurface);
@@ -608,7 +1337,10 @@ function playHeaderHtml(title, subtitle, world) {
     const tag = world && GAME_WORLDS[world]
         ? `<span class="play-head-world" data-world-tag="${world}"><span aria-hidden="true">${GAME_WORLDS[world].symbol}</span> ${GAME_WORLDS[world].label}</span>`
         : '';
-    return `<div class="modal-head play-head bg-[#11152b] border-[#303651] text-white"><div class="play-head-title">${tag}<h2>${escapeHtml(title)}</h2><div class="small text-[#aeb5ce] mt-1">${subtitle}</div></div><div class="play-head-actions"><span class="play-shortcut" aria-hidden="true">F11 toàn màn hình · Esc quay lại</span><button class="play-tool" data-play-fullscreen title="Bật hoặc tắt toàn màn hình (F11)" aria-label="Bật hoặc tắt toàn màn hình"><span class="play-tool-icon">⛶</span></button><button class="play-tool play-tool-present" data-play-present title="Trình chiếu lên máy chiếu" aria-label="Trình chiếu lên máy chiếu"><span class="play-tool-icon">📽</span><span class="play-tool-label">Trình chiếu</span></button><button class="play-tool play-tool-danger" data-play-close title="Đóng trò chơi (Esc)" aria-label="Đóng trò chơi"><span class="play-tool-icon">✕</span></button></div></div>`;
+    // Chơi LAN (features/lan.js): quiz/scenario/treasure only, and hidden entirely
+    // when the bridge is missing, so an older build shows no dead button.
+    const lanButton = typeof lanButtonHtml === 'function' ? lanButtonHtml(state.currentGame) : '';
+    return `<div class="modal-head play-head bg-[#11152b] border-[#303651] text-white"><div class="play-head-title">${tag}<h2>${escapeHtml(title)}</h2><div class="small text-[#aeb5ce] mt-1">${subtitle}</div></div><div class="play-head-actions"><span class="play-shortcut" aria-hidden="true">F11 toàn màn hình · Esc quay lại</span>${lanButton}<button class="play-tool" data-play-fullscreen title="Bật hoặc tắt toàn màn hình (F11)" aria-label="Bật hoặc tắt toàn màn hình"><span class="play-tool-icon">⛶</span></button><button class="play-tool play-tool-present" data-play-present title="Trình chiếu lên máy chiếu" aria-label="Trình chiếu lên máy chiếu"><span class="play-tool-icon">📽</span><span class="play-tool-label">Trình chiếu</span></button><button class="play-tool play-tool-danger" data-play-close title="Đóng trò chơi (Esc)" aria-label="Đóng trò chơi"><span class="play-tool-icon">✕</span></button></div></div>`;
 }
 function openPlayModal() {
     const root = $('#modalRoot');
@@ -623,8 +1355,11 @@ function openPlayModal() {
 }
 function renderQuestion() {
     const game = state.currentGame, q = game.questions[state.gameIndex], root = $('#playBody');
-    if (!q)
+    if (!q) {
+        unmountThreeStage();
         return renderResults();
+    }
+    unmountThreeStage();
     state.answerLocked = false;
     const progress = Math.round(state.gameAnswers.length / game.questions.length * 100);
     const scoring = resolveScoring(game.gameSetup);
@@ -641,12 +1376,17 @@ function renderQuestion() {
         ? (/^đúng\b/i.test(String(option.text || '').trim()) ? '✓' : /^sai\b/i.test(String(option.text || '').trim()) ? '✗' : String.fromCharCode(65 + index))
         : String.fromCharCode(65 + index);
     const shortAnswerPlaceholder = q.type === 'fill-in-blank' ? 'Nhập từ hoặc cụm từ còn thiếu…' : 'Nhập câu trả lời ngắn (tối đa 5 từ)…';
-    const illusHtml = stageIllustrationHtml(q, game, 'is-stage');
+    const houseMode = isHouseMode(game);
+    // House mode puts the 3D house where the placeholder picture used to be,
+    // so the illustration is dropped and a slot reserves its screen area. With
+    // no illustration the feedback renders in the main column, which the
+    // showcase needs to keep it below the house (DECISIONS #142).
+    const illusHtml = houseMode ? '' : stageIllustrationHtml(q, game, 'is-stage');
     const hasIllus = Boolean(illusHtml);
     const answerArea = textQ
         ? `<div class="text-answer-box"><input id="textAnswerInput" placeholder="${shortAnswerPlaceholder}" autocomplete="off"><button class="btn btn-primary" id="textAnswerBtn">Trả lời</button>${q.hint ? `<button class="btn btn-secondary text-answer-hint" type="button" data-answer-hint>💡 Gợi ý</button>` : ''}</div>${q.hint ? `<div class="text-answer-hint-text hidden" id="textAnswerHint">💡 <strong>Gợi ý:</strong> ${escapeHtml(q.hint)}</div>` : ''}`
         : `<div class="answer-grid${trueFalse ? ' true-false-grid' : ''}">${q.options.map((o, i) => `<button class="answer-option" data-answer="${escapeHtml(o.id)}"><span class="letter">${optionMark(o, i)}</span><span>${escapeHtml(o.text)}</span></button>`).join('')}</div>`;
-    root.innerHTML = `<div class="game-stage" data-game="${stageGame}" data-game-world="quiz">${gameWorldLabel(stageGame)}<div class="stage-top"><span class="stage-meta">${escapeHtml(game.subject || 'TRÒ CHƠI HỌC TẬP')} · ${game.grade ? 'LỚP ' + escapeHtml(game.grade) : 'MỌI LỚP'}</span><span class="stage-meta stage-meta-right"><span class="stage-chip">${game.template === 'scenario' ? 'QUYẾT ĐỊNH' : 'CÂU'} <b>${state.gameAnswers.length + 1}</b>/${game.questions.length}</span><span class="stage-chip stage-chip-score">🏆 <b>${state.gameAnswers.reduce((s, a) => s + a.points, 0)}</b> điểm</span></span></div><div class="stage-progress"><div data-progress="${progress}"></div></div>${state.teamPlay ? teamTurnBarHtml() : ''}<div class="stage-center"><div class="stage-col stage-side-col">${illusHtml}${hasIllus ? '<div id="answerFeedback" class="feedback-under-illustration"></div>' : ''}</div><div class="stage-col is-main"><div class="stage-kicker-row flex items-center justify-between gap-2 mb-2 flex-wrap"><div class="stage-kicker d-badge d-badge-neutral">${kicker}</div>${q.hint && !textQ ? `<button type="button" class="btn btn-secondary btn-small quiz-hint-btn" id="quizHintBtn">💡 Gợi ý</button>` : ''}</div>${q.context ? `<p class="scenario-context">${escapeHtml(q.context).replace(/\n/g, '<br>')}</p>` : ''}<div class="stage-question">${escapeHtml(q.prompt).replace(/\n/g, '<br>')}</div>${answerArea}${!hasIllus ? '<div id="answerFeedback"></div>' : ''}<div class="stage-bottom"><span class="stage-tip">${scoringTip}</span><button class="btn hidden" id="nextQuestionBtn">Tiếp tục →</button></div></div></div></div>`;
+    root.innerHTML = `<div class="game-stage" data-game="${stageGame}" data-game-world="quiz">${gameWorldLabel(stageGame)}<div class="stage-top"><span class="stage-meta">${escapeHtml(game.subject || 'TRÒ CHƠI HỌC TẬP')} · ${game.grade ? 'LỚP ' + escapeHtml(game.grade) : 'MỌI LỚP'}</span><span class="stage-meta stage-meta-right"><span class="stage-chip">${game.template === 'scenario' ? 'QUYẾT ĐỊNH' : 'CÂU'} <b>${state.gameAnswers.length + 1}</b>/${game.questions.length}</span><span class="stage-chip stage-chip-score">🏆 <b>${state.gameAnswers.reduce((s, a) => s + a.points, 0)}</b> điểm</span></span></div><div class="stage-progress"><div data-progress="${progress}"></div></div>${isHouseMode(game) ? houseProgressHtml() : ''}${state.teamPlay ? teamTurnBarHtml() : ''}<div class="stage-center"><div class="stage-col stage-side-col">${illusHtml}${hasIllus ? '<div id="answerFeedback" class="feedback-under-illustration"></div>' : ''}</div><div class="stage-col is-main"><div class="stage-kicker-row flex items-center justify-between gap-2 mb-2 flex-wrap"><div class="stage-kicker d-badge d-badge-neutral">${kicker}</div>${q.hint && !textQ ? `<button type="button" class="btn btn-secondary btn-small quiz-hint-btn" id="quizHintBtn">💡 Gợi ý</button>` : ''}</div>${houseMode ? '<div class="house-stage-slot" aria-hidden="true"></div>' : ''}${q.context ? `<p class="scenario-context">${escapeHtml(q.context).replace(/\n/g, '<br>')}</p>` : ''}<div class="stage-question">${escapeHtml(q.prompt).replace(/\n/g, '<br>')}</div>${answerArea}${!hasIllus ? '<div id="answerFeedback"></div>' : ''}<div class="stage-bottom"><span class="stage-tip">${scoringTip}</span><button class="btn hidden" id="nextQuestionBtn">Tiếp tục →</button></div></div></div></div>`;
     paintProgress(root);
     $$('.answer-option', root).forEach(btn => btn.addEventListener('click', () => chooseAnswer(q, btn.dataset.answer)));
     const qHintBtn = $('#quizHintBtn', root);
@@ -690,6 +1430,7 @@ function renderQuestion() {
     const turnSelect = $('#teamTurnSelect', root);
     if (turnSelect)
         turnSelect.addEventListener('change', () => { state.teamPlay.turn = Number(turnSelect.value); renderQuestion(); });
+    mountThreeStage($('.game-stage', root));
     sendPresentationState();
 }
 function chooseAnswer(question, optionId, answerText) {
@@ -716,6 +1457,13 @@ function chooseAnswer(question, optionId, answerText) {
         questionId: question.id, selectedOptionId: textQ ? null : optionId, ...(textQ ? { answerText: String(answerText ?? '') } : {}), correct, points, elapsedSeconds: elapsed,
         ...(scenarioScore ? { scoringBreakdown: scenarioScore.breakdown } : {})
     });
+    if (isHouseMode(state.currentGame)) {
+        const house = houseApplyAnswer(houseState(), houseTargetParts(state.currentGame), correct);
+        state.houseBuild = house.state;
+        reactThree(correct ? 'answer:correct' : 'answer:incorrect', { correct, points, house });
+    } else {
+        reactThree(correct ? 'answer:correct' : 'answer:incorrect', { correct, points });
+    }
     let teamNote = '';
     if (state.teamPlay) {
         const tp = state.teamPlay;
@@ -758,9 +1506,14 @@ function chooseAnswer(question, optionId, answerText) {
     const rubric = scenarioScore
         ? `<br>Điểm quyết định: ${points}/100 (an toàn ${scenarioScore.breakdown.safety}/60 · giải thích ${scenarioScore.breakdown.reasoning}/25 · giảm hậu quả ${scenarioScore.breakdown.harmReduction}/15).`
         : '';
+    // In house mode the showcase hides the answer grid, so the feedback must
+    // name the correct option itself (DECISIONS #142).
+    const correctOption = textQ ? null : question.options.find(option => option.id === question.correctOptionId);
     const answerReveal = textQ
         ? `<br><strong>Đáp án đúng:</strong> ${escapeHtml(question.correctAnswer || '')}${question.alternateAnswers?.length ? ` (hoặc: ${question.alternateAnswers.map(a => escapeHtml(a)).join(', ')})` : ''}${question.hint && !correct ? `<br><strong>💡 Gợi ý:</strong> ${escapeHtml(question.hint)}` : ''}`
-        : '';
+        : isHouseMode(state.currentGame) && correctOption
+            ? `<br><strong>Đáp án đúng:</strong> ${escapeHtml(correctOption.text)}`
+            : '';
     const teacherFeedback = scenario && selectedOption?.feedback
         ? selectedOption.feedback
         : question.explanation || 'Hãy ôn lại nội dung bài học.';
@@ -776,21 +1529,57 @@ function chooseAnswer(question, optionId, answerText) {
         : next;
     $('#nextQuestionBtn').classList.remove('hidden');
     $('#nextQuestionBtn').textContent = state.nextQuestionIndex >= state.currentGame.questions.length ? 'Xem kết quả →' : 'Tình huống tiếp theo →';
-    $('#nextQuestionBtn').onclick = () => { state.gameIndex = state.nextQuestionIndex; state.gameStart = Date.now(); renderQuestion(); };
+    $('#nextQuestionBtn').onclick = () => { state.gameIndex = state.nextQuestionIndex; state.gameStart = Date.now(); lanAdvanceRound(); renderQuestion(); };
+    // The showcase fits the house into the space the feedback card leaves, so
+    // it runs after the banner and the "next" button are laid out (#142).
+    if (isHouseMode(state.currentGame))
+        showcaseHouse();
     sendPresentationState();
+}
+/** mm:ss for the result stat cards (language-neutral, compact on the projector). */
+function formatClock(totalSeconds) {
+    const s = Math.max(0, Math.round(totalSeconds));
+    const m = Math.floor(s / 60);
+    return `${m}:${String(s % 60).padStart(2, '0')}`;
+}
+/** A row of stat cards shared by every result screen. Values are pre-escaped strings. */
+function resultStatsHtml(stats) {
+    if (!stats || !stats.length)
+        return '';
+    return `<div class="result-stats">${stats.map(s => `<div class="result-stat"><span class="result-stat-icon" aria-hidden="true">${s.icon}</span><span class="result-stat-value">${s.value}</span><span class="result-stat-label">${s.label}</span></div>`).join('')}</div>`;
 }
 async function renderResults() {
     const game = state.currentGame;
+    // LAN: the game is over by definition here, so end the room. Every "results"
+    // route calls this, which is why the finish hook lives here too.
+    lanFinishRoom();
     const summary = game.template === 'scenario'
         ? calculateScenarioSummary(state.gameAnswers)
         : calculateSummary(state.gameAnswers, game.questions, game.gameSetup);
     const { points, max, correct, percent } = summary;
+    const house = isHouseMode(game) ? houseSummary(houseState(), houseTargetParts(game)) : null;
     const ranked = state.teamPlay ? state.teamPlay.teams.slice().sort((a, b) => b.points - a.points || b.correct - a.correct) : null;
     const top = ranked ? ranked[0] : null;
     state.lastSummary = ranked
         ? { points: top.points, max, percent: max ? Math.round(top.points / max * 100) : 0, correct: top.correct, total: game.questions.length, winnerTeam: top.name }
         : summary;
-    $('#playBody').innerHTML = `<div class="game-stage" data-game="${game.template === 'scenario' ? 'scenario' : 'quiz'}" data-game-world="quiz">${gameWorldLabel(game.template === 'scenario' ? 'scenario' : 'quiz')}<div class="result-screen"><div class="result-medal">${percent >= 80 ? '🏆' : percent >= 50 ? '🎖️' : '🌱'}</div><div class="stage-kicker">THỬ THÁCH HOÀN THÀNH</div><h2>${ranked && top ? `${top.icon} ${escapeHtml(top.name)} dẫn đầu!` : percent >= 80 ? 'Xuất sắc!' : percent >= 50 ? 'Làm tốt lắm!' : 'Tiếp tục cố gắng!'}</h2><p>${escapeHtml(game.title)}</p><div class="result-score">${points.toLocaleString('vi-VN')} điểm</div><p>${game.template === 'scenario' ? `Hoàn thành ${state.gameAnswers.length} quyết định · ${percent}% điểm tối đa` : `Trả lời đúng ${correct}/${game.questions.length} câu · ${percent}% điểm tối đa`}</p>${state.teamPlay ? leaderboardHtml() : ''}<p id="resultSaveStatus" class="result-save-status">Đang tự lưu kết quả…</p><div class="result-actions"><button class="btn btn-secondary" id="closeResultBtn">Đóng</button><button class="btn btn-secondary" id="replayBtn">↻ Chơi lại</button><button class="btn btn-primary" id="saveResultBtn">Đang lưu…</button></div></div></div>`;
+    const elapsed = Date.now() - (state.playStartedAt || state.gameStart);
+    const statTotal = game.template === 'scenario' ? state.gameAnswers.length : game.questions.length;
+    const statCorrect = ranked && top ? top.correct : correct;
+    const stats = resultStatsHtml([
+        { icon: '✓', value: `${statCorrect}/${statTotal}`, label: game.template === 'scenario' ? 'Quyết định đúng' : 'Câu trả lời đúng' },
+        { icon: '⏱', value: formatClock(elapsed / 1000), label: 'Thời gian' },
+        { icon: '🎯', value: `${percent}%`, label: 'Điểm tối đa' }
+    ]);
+    const houseStyleName = house ? houseStyleLabel(houseStyleForCurrentGame()) : '';
+    const houseHeroHtml = house ? `<div class="result-house-hero"><div class="house-stage-slot result-house-slot"></div><div class="result-house">🏠 Ngôi nhà: <b>${house.parts}/${house.maxParts} phần</b>${house.completed ? ' · Đã hoàn thiện 🎉' : ' · Còn dang dở'}${houseStyleName ? `<span class="result-house-style">Mẫu: ${escapeHtml(houseStyleName)}</span>` : ''}</div></div>` : '';
+    const resultBodyHtml = `<div class="result-medal">${percent >= 80 ? '🏆' : percent >= 50 ? '🎖️' : '🌱'}</div><div class="stage-kicker">THỬ THÁCH HOÀN THÀNH</div><h2>${ranked && top ? `${top.icon} ${escapeHtml(top.name)} dẫn đầu!` : percent >= 80 ? 'Xuất sắc!' : percent >= 50 ? 'Làm tốt lắm!' : 'Tiếp tục cố gắng!'}</h2><p>${escapeHtml(game.title)}</p><div class="result-score">${points.toLocaleString('vi-VN')} điểm</div><p>${game.template === 'scenario' ? `Hoàn thành ${state.gameAnswers.length} quyết định · ${percent}% điểm tối đa` : `Trả lời đúng ${correct}/${game.questions.length} câu · ${percent}% điểm tối đa`}</p>${stats}${state.teamPlay ? leaderboardHtml() : ''}<p id="resultSaveStatus" class="result-save-status">Đang tự lưu kết quả…</p><div class="result-actions"><button class="btn btn-secondary" id="closeResultBtn">Đóng</button><button class="btn btn-secondary" id="replayBtn">↻ Chơi lại</button><button class="btn btn-primary" id="saveResultBtn">Đang lưu…</button></div>`;
+    $('#playBody').innerHTML = `<div class="game-stage" data-game="${game.template === 'scenario' ? 'scenario' : 'quiz'}" data-game-world="quiz">${gameWorldLabel(game.template === 'scenario' ? 'scenario' : 'quiz')}<div class="result-screen${house ? ' is-house-result' : ''}">${house ? `${houseHeroHtml}<div class="result-summary">${resultBodyHtml}</div>` : resultBodyHtml}</div></div>`;
+    // House mode shows the finished model on the result screen: the hero keeps a
+    // `.house-stage-slot`, the same slot the answer phase uses, so buildHouseWorld()
+    // projects the house (at its final part count) straight into it (DECISIONS #144).
+    mountThreeStage($('#playBody .game-stage'));
+    reactThree('game:completed', { correct, points, houseCompleted: house ? house.completed : false });
     $('#closeResultBtn').onclick = () => closePlaySurface();
     $('#replayBtn').onclick = () => {
         state.gameIndex = 0;
@@ -799,6 +1588,7 @@ async function renderResults() {
         state.scenarioSteps = 0;
         state.playStartedAt = Date.now();
         state.resultSession = null;
+        state.houseBuild = isHouseMode(game) ? houseCreate() : null;
         if (state.teamPlay) {
             state.teamPlay.teams.forEach(t => { t.points = 0; t.correct = 0; t.answered = 0; });
             state.teamPlay.turn = 0;
@@ -862,8 +1652,11 @@ function updateMatchingHeader() {
 }
 function renderMatchingBoard() {
     const m = state.currentGame.matchingGame;
+    // Ghép xong KHÔNG tự nhảy sang bảng điểm (yêu cầu giáo viên): giữ nguyên bàn ghép
+    // và chỉ hiện thanh "Đã ghép đủ" + nút "Xem kết quả". Điểm chỉ hiện khi bấm nút
+    // (`showMatchingResults`) hoặc khi `showMatchingComplete` chạy sau cú ghép cuối.
     if (state.matchingPlay.matched >= m.pairs.length)
-        return renderMatchingResults();
+        return showMatchingComplete();
     const mode = ['columns', 'memory', 'categorize'].includes(m.mode) ? m.mode : 'columns';
     const root = $('#playBody');
     if (mode === 'memory')
@@ -1045,6 +1838,7 @@ function renderColumnsBoard(root, m) {
     if (board)
         initMatchingConnectors(board);
     $$('.match-card', root).forEach(btn => btn.addEventListener('click', () => onColumnCardClick(btn)));
+    mountThreeStage($('.game-stage', root));
     sendPresentationState();
 }
 function onColumnCardClick(btn) {
@@ -1077,6 +1871,7 @@ function evaluateColumnMatch() {
             addMatchingConnection(board, left, right, mp.matched - 1);
         }
         GameAudio.play('match');
+        reactThree('match:correct', { matched: mp.matched });
         mp.selectedLeft = mp.selectedRight = null;
         const pair = state.currentGame.matchingGame.pairs.find(item => item.id === left.dataset.pair);
         matchingFeedback('good', pair
@@ -1085,11 +1880,12 @@ function evaluateColumnMatch() {
         updateMatchingHeader();
         if (mp.matched >= state.currentGame.matchingGame.pairs.length) {
             GameAudio.play('correct');
-            setTimeout(renderMatchingResults, 800);
+            setTimeout(showMatchingComplete, 800);
         }
     }
     else {
         mp.wrong += 1;
+        reactThree('match:incorrect', { wrong: mp.wrong });
         mp.lock = true;
         left.classList.add('wrong');
         right.classList.add('wrong');
@@ -1111,6 +1907,7 @@ function renderMemoryBoard(root, m) {
     root.innerHTML = `<div class="game-stage" data-game="matching" data-game-world="matching" data-match-mode="memory">${gameWorldLabel('matching')}${matchingHeader()}<div class="stage-center"><div class="stage-col">${matchingIllustrationHtml(state.currentGame)}</div><div class="stage-col is-main"><div class="stage-kicker d-badge d-badge-neutral">LẬT THẺ GHI NHỚ</div><p class="field-hint">Lật từng thẻ để tìm hai nội dung tương ứng.</p><div class="memory-grid">${state.memoryCards.map((c, i) => `<button type="button" class="memory-card" data-memory="${i}" data-pair="${escapeHtml(c.pair)}"><span class="memory-face">?</span></button>`).join('')}</div><div id="matchFeedback"></div></div></div>${matchingFooter(m)}</div>`;
     paintProgress(root);
     $$('.memory-card', root).forEach(btn => btn.addEventListener('click', () => onMemoryCardClick(btn)));
+    mountThreeStage($('.game-stage', root));
     sendPresentationState();
 }
 function onMemoryCardClick(btn) {
@@ -1131,14 +1928,16 @@ function onMemoryCardClick(btn) {
         mp.flipped = [];
         mp.matched += 1;
         matchingFeedback('good', '✓ Tìm thấy một cặp!');
+        reactThree('match:correct', { matched: mp.matched });
         updateMatchingHeader();
         if (mp.matched >= state.currentGame.matchingGame.pairs.length)
-            setTimeout(renderMatchingResults, 500);
+            setTimeout(showMatchingComplete, 500);
     }
     else {
         mp.wrong += 1;
         mp.lock = true;
         matchingFeedback('bad', '✕ Không phải một cặp — lật lại.');
+        reactThree('match:incorrect', { wrong: mp.wrong });
         setTimeout(() => {
             [a, b].forEach(el => {
                 el.classList.remove('flipped', 'selected');
@@ -1178,27 +1977,91 @@ function renderCategorizeBoard(root, m) {
             mp.selectedCard = null;
             mp.matched += 1;
             matchingFeedback('good', `✓ Đúng nhóm “${box.dataset.group}”!`);
+            reactThree('match:correct', { matched: mp.matched });
             updateMatchingHeader();
             if (mp.matched >= state.currentGame.matchingGame.pairs.length)
-                setTimeout(renderMatchingResults, 500);
+                setTimeout(showMatchingComplete, 500);
         }
         else {
             mp.wrong += 1;
             mp.selectedCard.classList.remove('selected');
             mp.selectedCard = null;
             matchingFeedback('bad', `✕ “${pair.right}” không thuộc nhóm “${box.dataset.group}”.`);
+            reactThree('match:incorrect', { wrong: mp.wrong });
             updateMatchingHeader();
         }
     }));
+    mountThreeStage($('.game-stage', root));
+    sendPresentationState();
+}
+/**
+ * Màn "đã ghép đủ cặp" — dừng lại, KHÔNG hiện điểm.
+ *
+ * Yêu cầu giáo viên: ghép xong thì dừng để cả lớp nhìn lại các đường nối và cùng
+ * giải thích mối quan hệ, rồi mới bấm "Xem kết quả". Điểm, phần trăm và việc lưu
+ * phiên chơi đều nằm SAU nút này (`renderMatchingResults`), nên một lần bấm nhầm
+ * không thể làm mất cơ hội thảo luận.
+ */
+function matchingCompleteBar() {
+    const mp = state.matchingPlay;
+    const total = state.currentGame.matchingGame.pairs.length;
+    return `<div class="matching-complete-bar" data-matching-complete>
+      <div class="matching-complete-text">
+        <strong>🎉 Đã ghép đủ ${mp.matched}/${total} cặp!</strong>
+        <span>Cả lớp cùng nhìn lại các đường nối và giải thích mối quan hệ giữa hai nội dung của mỗi cặp. Kết quả chỉ hiện khi bấm nút.</span>
+      </div>
+      <button type="button" class="btn btn-primary matching-complete-btn" id="matchingResultsBtn">Xem kết quả →</button>
+    </div>`;
+}
+
+/** Bind the bar's button; safe to call when the bar is absent. */
+function bindMatchingCompleteBar() {
+    const btn = $('#matchingResultsBtn');
+    if (btn)
+        btn.onclick = () => renderMatchingResults();
+}
+
+/**
+ * Called when every pair is matched. Re-renders the board so the final connection
+ * is visible, then pins the completion bar above it.
+ */
+function showMatchingComplete() {
+    if (!state.matchingPlay) return;
+    const m = state.currentGame.matchingGame;
+    if (state.matchingPlay.matched < m.pairs.length) return;
+    // The board is already drawn at this point for column/memory/categorize: the last
+    // match mutated the DOM. Only the header and the bar need updating, so the
+    // connection lines the class is looking at are never redrawn away.
+    updateMatchingHeader();
+    const root = $('#playBody');
+    const stage = root && root.querySelector('.game-stage');
+    if (!stage) return;
+    if (!stage.querySelector('[data-matching-complete]')) {
+        stage.insertAdjacentHTML('afterbegin', matchingCompleteBar());
+    }
+    bindMatchingCompleteBar();
+    matchingFeedback('good', 'Hoàn thành! Bấm “Xem kết quả” khi cả lớp đã sẵn sàng.');
+    reactThree('game:completed', { matched: state.matchingPlay.matched });
+    // Deliberately NOT `isComplete: true`: that flips the projector to the results
+    // view (`buildPresentationView`), which would reveal the score the teacher just
+    // asked to hold back. The projector keeps showing the finished board.
     sendPresentationState();
 }
 async function renderMatchingResults() {
     const game = state.currentGame, m = game.matchingGame, mp = state.matchingPlay;
+    lanFinishRoom();
+    unmountThreeStage();
     const elapsed = (Date.now() - state.gameStart) / 1000;
     const summary = calculateMatchingSummary(m.pairs.length, mp.matched, mp.wrong, elapsed, m);
     state.lastSummary = summary;
     const { points, max, percent } = summary;
-    $('#playBody').innerHTML = `<div class="game-stage" data-game="matching"><div class="result-screen"><div class="result-medal">${percent >= 80 ? '🏆' : percent >= 50 ? '🎖️' : '🌱'}</div><div class="stage-kicker">GHÉP CẶP HOÀN THÀNH</div><h2>${percent >= 80 ? 'Xuất sắc!' : percent >= 50 ? 'Ghép tốt lắm!' : 'Tiếp tục cố gắng!'}</h2><p>${escapeHtml(game.title)}</p><div class="result-score">${points.toLocaleString('vi-VN')} / ${max.toLocaleString('vi-VN')} điểm</div><p>Hoàn thành ${m.pairs.length} cặp · sai ${mp.wrong} lần · ${Math.round(elapsed)} giây · ${percent}% điểm tối đa</p><p id="resultSaveStatus" class="result-save-status">Đang tự lưu kết quả…</p><div class="result-actions"><button class="btn btn-secondary" id="closeResultBtn">Đóng</button><button class="btn btn-secondary" id="replayBtn">↻ Chơi lại</button><button class="btn btn-primary" id="saveResultBtn">Đang lưu…</button></div></div></div>`;
+    const stats = resultStatsHtml([
+        { icon: '◈', value: `${mp.matched}/${m.pairs.length}`, label: 'Cặp đã ghép' },
+        { icon: '✕', value: `${mp.wrong}`, label: 'Lần ghép sai' },
+        { icon: '⏱', value: formatClock(elapsed), label: 'Thời gian' },
+        { icon: '🎯', value: `${percent}%`, label: 'Điểm tối đa' }
+    ]);
+    $('#playBody').innerHTML = `<div class="game-stage" data-game="matching" data-game-world="matching">${gameWorldLabel('matching')}<div class="result-screen"><div class="result-medal">${percent >= 80 ? '🏆' : percent >= 50 ? '🎖️' : '🌱'}</div><div class="stage-kicker">GHÉP CẶP HOÀN THÀNH</div><h2>${percent >= 80 ? 'Xuất sắc!' : percent >= 50 ? 'Ghép tốt lắm!' : 'Tiếp tục cố gắng!'}</h2><p>${escapeHtml(game.title)}</p><div class="result-score">${points.toLocaleString('vi-VN')} / ${max.toLocaleString('vi-VN')} điểm</div><p>Hoàn thành ${m.pairs.length} cặp · sai ${mp.wrong} lần · ${Math.round(elapsed)} giây · ${percent}% điểm tối đa</p>${stats}<p id="resultSaveStatus" class="result-save-status">Đang tự lưu kết quả…</p><div class="result-actions"><button class="btn btn-secondary" id="closeResultBtn">Đóng</button><button class="btn btn-secondary" id="replayBtn">↻ Chơi lại</button><button class="btn btn-primary" id="saveResultBtn">Đang lưu…</button></div></div></div>`;
     $('#closeResultBtn').onclick = () => closePlaySurface();
     $('#replayBtn').onclick = () => { state.playStartedAt = Date.now(); state.resultSession = null; resetMatchingPlay(); };
     wireResultSession(game, state.lastSummary, {
@@ -1346,6 +2209,9 @@ function treasureUseAttempt(stage) {
 }
 function treasureCompleteMission(stage, correct, message) {
     const gained = treasureRecordStage(stage, correct);
+    reactThree(correct ? 'answer:correct' : 'answer:incorrect', { correct });
+    if (correct && !treasureNextStage(stage) && !treasureBranchStage(stage))
+        reactThree('game:completed', { stageId: stage.id });
     const fb = $('#answerFeedback', $('#playBody'));
     if (fb) {
         fb.className = `feedback ${correct ? 'good' : 'bad'}`;
@@ -1688,7 +2554,7 @@ function renderTreasureStage() {
     // tiêu đề chặng). Bản inline đã bị bỏ theo yêu cầu: cột chữ trả lại chỗ cho
     // câu hỏi và đáp án.
     const hasStory = Boolean((tp.results.length === 0 && hunt.intro) || stage.story || stage.taskDescription);
-    root.innerHTML = `<div class="game-stage" data-game="treasure" data-game-world="treasure" data-treasure-world="${treasureBackgroundId(hunt.backgroundId)}">${gameWorldLabel('treasure')}
+    root.innerHTML = `<div class="game-stage" data-game="treasure" data-game-world="treasure" data-treasure-world="${treasureBackgroundId(hunt.backgroundId)}"><div class="treasure-head-row"><div class="treasure-head-world">${gameWorldLabel('treasure')}</div>${hasStory ? `<div class="treasure-story-row"><button type="button" class="btn btn-secondary btn-small treasure-story-trigger d-btn d-btn-sm d-btn-outline" id="treasureStoryBtn">${treasureAvatarHtml(characterId, 'is-small')} 📜 <span>Bối cảnh & Nhiệm vụ chặng</span></button></div>` : ''}</div>
     <div class="stage-top"><span class="stage-meta flex items-center gap-2"><span>HÀNH TRÌNH · ${escapeHtml(hunt.character || 'Nhà thám hiểm')}</span><button type="button" class="treasure-map-toggle-btn d-btn d-btn-xs d-btn-ghost text-[#b3adff]" id="treasureMapToggleBtn" title="Xem/ẩn bản đồ">🗺️ <span id="treasureMapToggleLabel">${tp.answered ? 'Bản đồ hành trình' : 'Xem bản đồ'}</span></button></span><span class="stage-meta stage-meta-right">${mission.icon} ${escapeHtml(mission.label.toUpperCase())} · CHẶNG ${stageNo}/${hunt.stages.length} · 🏆 ${tp.earned} điểm${itemCount ? ` · 🎁 ${itemCount} vật phẩm` : ''}</span></div>
     <div class="stage-progress"><div data-progress="${Math.round((stageNo - 1) / hunt.stages.length * 100)}"></div></div>
     <div class="treasure-map-drawer ${tp.answered ? 'is-answered' : 'is-answering'}" id="treasureMapDrawer">
@@ -1705,10 +2571,7 @@ function renderTreasureStage() {
         ${illustrationHtml ? '<div id="answerFeedback" class="feedback-under-illustration"></div>' : ''}
       </div>
       <div class="stage-col is-main">
-      <div class="stage-kicker-row flex items-center justify-between gap-3 mb-2 flex-wrap">
-        <div class="stage-kicker d-badge d-badge-neutral">${escapeHtml(stage.name || 'CHẶNG')}</div>
-        ${hasStory ? `<button type="button" class="btn btn-secondary btn-small treasure-story-trigger d-btn d-btn-sm d-btn-outline" id="treasureStoryBtn">${treasureAvatarHtml(characterId, 'is-small')} 📜 <span>Bối cảnh & Nhiệm vụ chặng</span></button>` : ''}
-      </div>
+
       <div class="treasure-mission-badge d-badge d-badge-warning d-badge-lg font-bold">${mission.icon} ${escapeHtml(mission.label)} · ${escapeHtml(mission.short)}</div>
       <div class="stage-question">${escapeHtml(stage.question.prompt).replace(/\n/g, '<br>')}</div>
       <div id="treasureMission">${renderTreasureMissionBody(stage, missionType)}</div>
@@ -1774,6 +2637,7 @@ function renderTreasureStage() {
             fb.innerHTML = `<strong>💡 Gợi ý:</strong> ${escapeHtml(stage.question.hint)}`;
             GameAudio.play('hint');
         };
+    mountThreeStage($('.game-stage', root));
     sendPresentationState();
 }
 function treasureNextStage(stage) {
@@ -1875,6 +2739,7 @@ function renderTreasureJourneyMap(stage, answeredCorrectly) {
             GameAudio.play('stage');
             goNextBtn.disabled = true;
             tp.stageId = nextStage.id;
+            lanAdvanceRound();
             renderTreasureStage();
         };
     }
@@ -1884,6 +2749,8 @@ function renderTreasureJourneyMap(stage, answeredCorrectly) {
             GameAudio.play('stage');
             goBranchBtn.disabled = true;
             tp.stageId = branchStage.id;
+            // LAN: a branch jumps to a different stage, so the phones must follow.
+            lanAdvanceRound();
             renderTreasureStage();
         };
     }
@@ -1891,6 +2758,8 @@ function renderTreasureJourneyMap(stage, answeredCorrectly) {
     if (goFinishBtn) {
         goFinishBtn.onclick = () => {
             tp.done = true;
+            // LAN: the journey is over — end the room so the honour roll can show.
+            lanFinishRoom();
             renderTreasureResults();
         };
     }
@@ -1901,9 +2770,11 @@ function renderTreasureJourneyMap(stage, answeredCorrectly) {
                 return;
             tp.done = true;
             GameAudio.play('stage');
+            lanFinishRoom();
             renderTreasureResults();
         };
     }
+    mountThreeStage($('.game-stage', root));
     sendPresentationState();
 }
 function showTreasureChoices(stage, answeredCorrectly) {
@@ -1947,6 +2818,9 @@ function chooseTreasureAnswer(optionId) {
     const correct = optionId === stage.question.correctOptionId;
     const fb = $('#answerFeedback', root);
     GameAudio.play(correct ? 'correct' : 'wrong');
+    reactThree(correct ? 'answer:correct' : 'answer:incorrect', { correct });
+    if (correct && !treasureNextStage(stage) && !treasureBranchStage(stage))
+        reactThree('game:completed', { stageId: stage.id });
     if (correct) {
         const gained = treasureRecordStage(stage, true);
         $$('.answer-option', root).forEach(btn => { btn.disabled = true; if (btn.dataset.answer === stage.question.correctOptionId)
@@ -1988,8 +2862,11 @@ function chooseTreasureAnswer(optionId) {
 }
 function renderTreasureResults() {
     const hunt = state.currentGame.treasureHunt, tp = state.treasurePlay;
+    unmountThreeStage();
     if (tp.done && tp.resultShown)
         return;
+    // LAN: the last stage and the "end journey" button both land here.
+    lanFinishRoom();
     const completed = tp.done;
     if (completed) {
         tp.earned += hunt.journeyBonus || 300;
@@ -2006,6 +2883,16 @@ function renderTreasureResults() {
     const correctCount = tp.results.filter(r => r.correct).length;
     state.lastSummary = { points: tp.earned, max, percent, correct: correctCount, total: hunt.stages.length };
     const game = state.currentGame;
+    const elapsed = Date.now() - (state.playStartedAt || state.gameStart);
+    const foundItems = Object.keys(tp.itemsFound || {}).length;
+    const statCards = [
+        { icon: '⌖', value: `${correctCount}/${hunt.stages.length}`, label: 'Chặng hoàn thành' },
+        { icon: '⏱', value: formatClock(elapsed / 1000), label: 'Thời gian' },
+        { icon: '🎯', value: `${percent}%`, label: 'Điểm tối đa' }
+    ];
+    if (itemSlots > 0)
+        statCards.splice(1, 0, { icon: '🎁', value: `${foundItems}/${itemSlots}`, label: 'Vật phẩm ẩn' });
+    const stats = resultStatsHtml(statCards);
     const TREASURE_BLESSINGS = [
         '🌟 "Kho báu quý giá nhất không nằm ở đích đến mà ở tri thức và sự kiên trì bạn đã tôi luyện suốt chặng đường. Chúc bạn luôn giữ vững niềm tin, không ngừng học hỏi và luôn tỏa sáng rực rỡ!" ✨🍀',
         '💎 "Mỗi câu đố bạn vượt qua là một viên ngọc sáng trong hành trang tương lai. Chúc bạn luôn tràn đầy năng lượng, đam mê khám phá và vươn tới những ước mơ cao đẹp nhất!" 🚀🌈',
@@ -2051,7 +2938,7 @@ function renderTreasureResults() {
       </div>
     </div>`;
     }
-    $('#playBody').innerHTML = `<div class="game-stage" data-game="treasure" data-game-world="treasure"><div class="result-screen"><div class="result-medal">${medal}</div><div class="stage-kicker d-badge d-badge-neutral">${kicker}</div><h2>${headline}</h2><p>${escapeHtml(game.title)}</p><div class="result-score">${tp.earned.toLocaleString('vi-VN')} / ${max.toLocaleString('vi-VN')} điểm</div><p>Hoàn thành ${correctCount}/${hunt.stages.length} chặng${completed ? ` · Thưởng hành trình +${hunt.journeyBonus || 300}` : ''} · ${percent}% điểm tối đa</p>${rewardBoxHtml}<p id="resultSaveStatus" class="result-save-status">Đang tự lưu kết quả…</p><div class="result-actions"><button class="btn btn-secondary" id="closeResultBtn">Đóng</button><button class="btn btn-secondary" id="replayBtn">↻ Chơi lại</button><button class="btn btn-primary" id="saveResultBtn">Đang lưu…</button></div></div></div>`;
+    $('#playBody').innerHTML = `<div class="game-stage" data-game="treasure" data-game-world="treasure"><div class="result-screen"><div class="result-medal">${medal}</div><div class="stage-kicker d-badge d-badge-neutral">${kicker}</div><h2>${headline}</h2><p>${escapeHtml(game.title)}</p><div class="result-score">${tp.earned.toLocaleString('vi-VN')} / ${max.toLocaleString('vi-VN')} điểm</div><p>Hoàn thành ${correctCount}/${hunt.stages.length} chặng${completed ? ` · Thưởng hành trình +${hunt.journeyBonus || 300}` : ''} · ${percent}% điểm tối đa</p>${stats}${rewardBoxHtml}<p id="resultSaveStatus" class="result-save-status">Đang tự lưu kết quả…</p><div class="result-actions"><button class="btn btn-secondary" id="closeResultBtn">Đóng</button><button class="btn btn-secondary" id="replayBtn">↻ Chơi lại</button><button class="btn btn-primary" id="saveResultBtn">Đang lưu…</button></div></div></div>`;
     $('#closeResultBtn').onclick = () => closePlaySurface();
     $('#replayBtn').onclick = () => { state.playStartedAt = Date.now(); state.resultSession = null; openTreasurePlay(); };
     wireResultSession(game, state.lastSummary, {
@@ -2076,7 +2963,9 @@ function openRacePlay() {
     const race = game.race;
     state.racePlay = {
         teams: race.teams.map(t => ({ ...t, progress: 1, points: 0 })),
-        turn: 0, round: 1, currentQ: null, usedQ: [], over: false, winnerId: null, lastEvent: ''
+        turn: 0, round: 1, currentQ: null, usedQ: [], over: false, winnerId: null, lastEvent: '',
+        // Presentation only: how many blocks the 3D tower has grown (DECISIONS #145).
+        correctCount: 0
     };
     renderRaceBoard();
 }
@@ -2135,6 +3024,16 @@ function renderRaceBoard() {
     const continueBtn = $('#raceContinueBtn', root);
     if (continueBtn)
         continueBtn.onclick = advanceRaceTurn;
+    mountThreeStage($('.game-stage', root));
+    if (raceAnswerBurst) {
+        const reaction = raceAnswerBurst;
+        raceAnswerBurst = null;
+        reactThree(reaction === '#34d399' ? 'answer:correct' : 'answer:incorrect', { correct: reaction === '#34d399' });
+    }
+    if (raceAnswerCelebrate) {
+        raceAnswerCelebrate = false;
+        reactThree('game:completed', { winner: rp.winnerId });
+    }
     sendPresentationState();
 }
 function raceTurnPanelHtml() {
@@ -2258,8 +3157,11 @@ function answerRace(optionId) {
             event += ` · ${RACE_CELL_ICON[cell.type] || ''} ô ${cell.cell}${extra ? ` ${extra > 0 ? '+' : ''}${extra}` : ''}`;
         }
         team.progress = Math.max(1, Math.min(race.trackLength, team.progress));
-        if (team.progress >= race.trackLength)
+        if (team.progress >= race.trackLength) {
             rp.winnerId = team.id;
+            raceAnswerCelebrate = true;
+        }
+        rp.correctCount = (rp.correctCount || 0) + 1;
         GameAudio.play('correct');
     }
     else {
@@ -2270,6 +3172,7 @@ function answerRace(optionId) {
     rp.answered = true;
     rp.selectedOptionId = optionId;
     rp.usedQ.push(q.id);
+    raceAnswerBurst = correct ? '#34d399' : '#f87171';
     renderRaceBoard();
 }
 function advanceRaceTurn() {
@@ -2298,15 +3201,21 @@ function advanceRaceTurn() {
 function renderRaceResults() {
     const race = state.currentGame.race, rp = state.racePlay;
     const game = state.currentGame;
+    unmountThreeStage();
     const byProgress = rp.teams.slice().sort((a, b) => b.progress - a.progress || b.points - a.points);
     const winner = rp.winnerId ? rp.teams.find(t => t.id === rp.winnerId) : byProgress[0];
     const tied = byProgress.filter(t => t.progress === byProgress[0].progress).length > 1 && !rp.winnerId;
     const maxPoints = Math.max(100, race.questions.length * 100);
     const percent = Math.round(winner.progress / race.trackLength * 100);
     state.lastSummary = { points: winner.points, max: maxPoints, percent, correct: 0, total: 0, winner: winner.name };
+    const stats = resultStatsHtml([
+        { icon: '🏁', value: `${winner.progress}/${race.trackLength}`, label: 'Ô về đích' },
+        { icon: '🔄', value: `${rp.round}/${race.maxRounds}`, label: 'Vòng đấu' },
+        { icon: '👥', value: `${rp.teams.length}`, label: 'Đội thi đấu' }
+    ]);
     $('#playBody').innerHTML = `<div class="game-stage" data-game="race" data-game-world="race">${gameWorldLabel('race')}<div class="result-screen"><div class="result-medal">${rp.winnerId ? '🏁' : '🏅'}</div><div class="stage-kicker">KẾT QUẢ ĐƯỜNG ĐUA</div><h2>${tied ? 'Về đích đồng hạng!' : `${winner.icon} ${escapeHtml(winner.name)} chiến thắng!`}</h2><p>${escapeHtml(game.title)}</p>
     <div class="race-scoreboard max-w-[460px] my-[14px] mx-auto">${byProgress.map((t, i) => `<div class="race-team-row scoreboard"><span>${i + 1}. ${t.icon} <strong>${escapeHtml(t.name)}</strong></span><span>Ô ${t.progress}/${race.trackLength}</span><span>🏆 ${t.points} điểm</span></div>`).join('')}</div>
-    <p id="resultSaveStatus" class="result-save-status">Đang tự lưu kết quả…</p><div class="result-actions"><button class="btn btn-secondary" id="closeResultBtn">Đóng</button><button class="btn btn-secondary" id="replayBtn">↻ Đua lại</button><button class="btn btn-primary" id="saveResultBtn">Đang lưu…</button></div></div></div>`;
+    ${stats}<p id="resultSaveStatus" class="result-save-status">Đang tự lưu kết quả…</p><div class="result-actions"><button class="btn btn-secondary" id="closeResultBtn">Đóng</button><button class="btn btn-secondary" id="replayBtn">↻ Đua lại</button><button class="btn btn-primary" id="saveResultBtn">Đang lưu…</button></div></div></div>`;
     $('#closeResultBtn').onclick = () => closePlaySurface();
     $('#replayBtn').onclick = () => { state.playStartedAt = Date.now(); state.resultSession = null; openRacePlay(); };
     wireResultSession(game, state.lastSummary, {

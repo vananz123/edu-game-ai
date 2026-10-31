@@ -1,6 +1,13 @@
 // @ts-nocheck -- migrated legacy UI logic; new contracts are typed in src/shared/types.ts.
-const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, Menu } = require('electron');
+  const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, Menu, protocol } = require('electron');
 const path = require('node:path');
+const crypto = require('node:crypto');
+// #124: a custom scheme for teacher-uploaded illustrations. It must be registered as
+// privileged *before* `app.whenReady()`, and it only ever serves files from the app's
+// own image folder (below), so nothing else on disk becomes readable from a page.
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'edugame-file', privileges: { standard: true, secure: true, supportFetchAPI: false, bypassCSP: false } }
+]);
 // Test/support hook: Windows resolves `%APPDATA%` through the shell API, so
 // setting the APPDATA environment variable in a smoke script does not isolate
 // the profile. An explicit path keeps automated runs away from teacher data.
@@ -21,7 +28,19 @@ const { unloadMayProceed } = require('./ai-core/unload-guard');
 const { ModelInstaller, summarizeModelSelection, verifyModelFile } = require('./ai-core/model-installer');
 const { buildGenerationOptions } = require('./ai-core/generation-options');
 const { LlamaRuntimeInstaller } = require('./ai-core/runtime-installer');
-const { importQuestionsFromFile } = require('./services/question-import');
+const { importQuestionsFromFile, parseQuestionsFromText } = require('./services/question-import');
+const { classifyInput, resolveInputKind } = require('./services/input-classifier');
+const { evaluateCompatibility } = require('./services/question-compatibility');
+const { readGamePackage, IMPORT_GAME_MAX_BYTES } = require('./services/game-package');
+const customIllustration = require('./services/custom-illustration');
+const { cleanQuestionText } = require('./services/question-text');
+const {
+  CLASSIFIER_ANCHORS,
+  confirmWithSemantics,
+  similarityToAnchors
+} = require('./services/input-classifier-semantic');
+const { buildClassificationCacheKey } = require('./services/lesson-cache');
+const { convertDraft } = require('./services/draft-convert');
 const { normalizeAiGame: normalizeAiGameService } = require('./services/ai-game-normalize');
 const { LessonStore } = require('./services/lesson-store');
 const { AiTaskManager, newAiTaskId } = require('./services/ai-tasks');
@@ -32,10 +51,24 @@ const {
   AiRequestRegistry,
   AiSingleFlight,
   AiTransportError,
+  classifyProviderHttpError,
   isCancelReason,
   readPromptTokens,
   requestChatJson
 } = require('./services/ai-transport');
+// #132: provider registry + per-provider key lifecycle. Pure data/helpers, so the
+// same module is unit-tested without Electron and is the only place a provider is
+// described (the renderer receives it over IPC).
+const {
+  AI_PROVIDERS,
+  chooseProvider,
+  errorLabel,
+  getProviderDefinition,
+  maskApiKey,
+  migrateLegacyAiSettings,
+  resolveProviderState,
+  toPublicProviderView
+} = require('./services/ai-providers');
 const { analyzeLesson, generateGameDraft, regenerateGameItem } = require('./services/lesson-workflow');
 // O6d: per-mode excerpt budget for the analysis preprocessor.
 const { preprocessBudgetForMode } = require('./services/lesson-preprocess');
@@ -86,6 +119,9 @@ const { getEmbeddingModel, embeddingTextForChunk } = require('./ai-core/embeddin
 const { createEmbeddingRuntime, chunkTextsForEmbedding } = require('./ai-core/embedding-manager');
 // Presentation Mode
 const { registerPresentationIpc, unregisterPresentationIpc } = require('./presentation/presentation-ipc');
+// LAN Classroom Mode (teacher PC hosts, pupils answer on phones)
+const { registerLanIpc, unregisterLanIpc, shutdownLanForQuit } = require('./lan/lan-ipc');
+const { lanServerIsRunning } = require('./lan/lan-server');
 const {
   createProjectFromAnalysis,
   applyAnalysis,
@@ -281,6 +317,15 @@ const gameDraftResponseSchema = {
 let sqlite;
 let lessonStore;
 /** Maps renderer `requestId` → AbortController for the new lesson workflow + `ai:cancel`. */
+// #118: the package reader (`readGamePackage`, `IMPORT_GAME_MAX_BYTES`) lives in
+// `services/game-package.ts` so its rules are unit-tested without Electron.
+
+/**
+ * #121: how many AI task rows are kept. The settings page pages through history at 10
+ * rows a page, so 30 is three pages; older tasks are deleted as new ones are recorded.
+ */
+const AI_TASK_HISTORY_LIMIT = 30;
+
 const aiRequests = new AiRequestRegistry();
 /** Rejects overlapping local-model work even when the renderer uses new ids. */
 const aiSingleFlight = new AiSingleFlight();
@@ -291,7 +336,12 @@ const aiTasks = new AiTaskManager();
 function recordAiTask(record) {
   if (!record || !record.taskId) return;
   try {
-    requireLessonStore().saveAiTask(record);
+    const store = requireLessonStore();
+    store.saveAiTask(record);
+    // #121: the history keeps the newest 30 tasks. Pruning on every write — not on a
+    // timer — means the table can never grow past the page the teacher is shown, and a
+    // crash cannot leave an oversized table behind.
+    store.pruneAiTasks(AI_TASK_HISTORY_LIMIT);
   } catch (error) {
     console.warn('Không lưu được lịch sử tác vụ AI:', error && error.message ? error.message : error);
   }
@@ -310,6 +360,12 @@ let quittingAfterAiShutdown = false;
 const DATA_DIR = () => path.join(app.getPath('userData'), 'edugame-data');
 // O10: diagnostics live next to the SQLite database, never in the repo or installer.
 const LOG_DIR = () => path.join(DATA_DIR(), 'logs');
+/**
+ * #124: teacher-uploaded illustrations. One flat folder, files named `<id>.img`; the
+ * renderer only ever sees the opaque id, and `edugame-file:` resolves an id inside this
+ * folder and nowhere else.
+ */
+const CUSTOM_IMAGE_DIR = () => path.join(DATA_DIR(), 'images');
 const AI_LOG_RETENTION_DAYS = 14;
 /**
  * O10: the exported bundle goes somewhere a teacher can find without knowing
@@ -350,7 +406,7 @@ function clampInteger(value, min, max, fallback) {
 }
 
 async function readAiSettings() {
-  const settings = await readJson(SETTINGS_FILE(), {});
+  const { settings } = await loadAiSettingsWithMigration(await readJson(SETTINGS_FILE(), {}));
   return (settings && settings.ai) || {};
 }
 
@@ -440,8 +496,9 @@ async function ensureData() {
     const games = Array.isArray(legacy.games) && legacy.games.length ? legacy.games : [seedGame()];
     saveDb({ version: 1, games, sessions: Array.isArray(legacy.sessions) ? legacy.sessions : [] });
   }
+  // #132: a fresh profile starts on the local provider and never on a cloud key.
   try { await fs.access(SETTINGS_FILE()); }
-  catch { await writeJson(SETTINGS_FILE(), { ai: { mode: 'offline', baseUrl: 'http://127.0.0.1:11434/v1', model: 'qwen2.5:7b', apiKeyEncrypted: '' }, preferences: { sound: true, largeText: true, theme: 'light' } }); }
+  catch { await writeJson(SETTINGS_FILE(), { ai: { mode: 'local', provider: 'local', providerPolicy: 'auto', providers: {} }, preferences: { sound: true, largeText: true, theme: 'light' } }); }
 }
 async function readJson(file, fallback = {}) {
   try { return JSON.parse(await fs.readFile(file, 'utf8')); } catch { return fallback; }
@@ -514,6 +571,78 @@ function upsertGameRow(game) {
  * completed playthrough, so rendering results twice or renaming the player
  * updates the same history row instead of adding duplicates.
  */
+/**
+ * #124: deletes the teacher-uploaded images referenced by `game` when nothing else
+ * references them — not another saved game, not a project draft. Best effort: a
+ * leftover file is harmless, a missing picture is not. Runs after the delete, so the
+ * reference that just went away no longer counts.
+ */
+/** Collects every uploaded-image id referenced anywhere in an object. */
+function collectCustomImageIds(value, into) {
+  if (Array.isArray(value)) { value.forEach(entry => collectCustomImageIds(entry, into)); return; }
+  if (!value || typeof value !== 'object') return;
+  for (const [key, entry] of Object.entries(value)) {
+    if (key === 'illustrationAssetId' && customIllustration.isCustomImageId(entry)) into.add(entry);
+    else collectCustomImageIds(entry, into);
+  }
+}
+
+/** Uploaded-image ids used by every saved game and every stored project. */
+function referencedCustomImageIds() {
+  const ids = new Set();
+  if (!sqlite) return ids;
+  const rows = [
+    ...sqlite.prepare('SELECT data_json FROM games').all(),
+    ...sqlite.prepare('SELECT data_json FROM game_projects').all()
+  ];
+  for (const row of rows) {
+    try { collectCustomImageIds(JSON.parse(row.data_json), ids); } catch { /* a malformed row references nothing safely */ }
+  }
+  return ids;
+}
+
+/** Removes the files of the given ids that nothing references any more. */
+async function removeUnreferencedImages(ids) {
+  const stillUsed = referencedCustomImageIds();
+  for (const imageId of ids) {
+    if (stillUsed.has(imageId)) continue;
+    try { await fs.rm(path.join(CUSTOM_IMAGE_DIR(), `${imageId}.img`), { force: true }); } catch { /* best effort */ }
+  }
+}
+
+/**
+ * #127: deletes the pictures of one project together with the project.
+ *
+ * The artwork lives in the app folder and the project draft is the first place that
+ * references it (a picture can be picked before the game is saved), so removing a
+ * draft has to take its pictures too — otherwise the folder grows with orphans that no
+ * screen can ever show again. Games already saved keep their own references and are
+ * untouched.
+ */
+async function removeProjectImages(projectId) {
+  if (!sqlite) return;
+  const row = sqlite.prepare('SELECT data_json FROM game_projects WHERE id = ?').get(String(projectId || ''));
+  if (!row) return;
+  const ids = new Set();
+  try { collectCustomImageIds(JSON.parse(row.data_json), ids); } catch { return; }
+  if (!ids.size) return;
+  sqlite.prepare('DELETE FROM game_projects WHERE id = ?').run(String(projectId));
+  await removeUnreferencedImages(ids);
+}
+
+/** The cleanup used when a saved game is deleted (see `library:delete-game`). */
+async function removeUnusedCustomImages(game) {
+  try {
+    const ids = new Set();
+    collectCustomImageIds(game, ids);
+    if (!ids.size) return;
+    // The row is already gone, so what remains is exactly "still referenced elsewhere".
+    await removeUnreferencedImages(ids);
+  } catch (error) {
+    console.warn('Không dọn được ảnh minh hoạ đã tải lên:', error && error.message ? error.message : error);
+  }
+}
+
 function upsertSessionRow(session) {
   if (!sqlite) throw new Error('Cơ sở dữ liệu chưa sẵn sàng.');
   const now = new Date().toISOString();
@@ -606,6 +735,26 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
 }
 app.whenReady().then(async () => {
+  // #124: serve teacher images. The URL is `edugame-file://img/<id>`; only `<id>` that
+  // this module produced is accepted, and the path is checked to stay inside the folder.
+  protocol.handle('edugame-file', async request => {
+    try {
+      const url = new URL(request.url);
+      const requested = decodeURIComponent(url.pathname.replace(/^\/+/, ''));
+      const id = path.basename(requested).replace(/\.img$/u, '');
+      const fileName = customIllustration.customImageFileName(id);
+      if (!fileName) return new Response('Not found', { status: 404 });
+      const filePath = path.join(CUSTOM_IMAGE_DIR(), fileName);
+      const folder = path.resolve(CUSTOM_IMAGE_DIR());
+      if (!path.resolve(filePath).startsWith(folder + path.sep)) return new Response('Not found', { status: 404 });
+      const bytes = await fs.readFile(filePath);
+      const mime = customIllustration.customImageMime(bytes);
+      if (!mime) return new Response('Not found', { status: 404 });
+      return new Response(bytes, { headers: { 'Content-Type': mime, 'Cache-Control': 'no-cache' } });
+    } catch {
+      return new Response('Not found', { status: 404 });
+    }
+  });
   await ensureData();
   // O10: start the diagnostic log as early as possible so runtime/analyze/generate
   // events on a teacher's machine can be sent back as one file.
@@ -639,14 +788,20 @@ app.whenReady().then(async () => {
   registerIpc();
   registerSetup();
   registerPresentationIpc();
+  registerLanIpc();
   createWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 app.on('before-quit', async event => {
   aiRequests.cancelAll();
   unregisterPresentationIpc();
+  unregisterLanIpc();
   if (quittingAfterAiShutdown) return;
-  if (!localAiManager) return;
+
+  // LAN must release its listening socket before the process exits, otherwise
+  // Windows keeps the port in TIME_WAIT and the next launch trips Firewall again.
+  const lanRunning = lanServerIsRunning();
+  if (!localAiManager && !lanRunning) return;
 
   event.preventDefault();
   const manager = localAiManager;
@@ -654,7 +809,17 @@ app.on('before-quit', async event => {
   localAiModelId = undefined;
 
   try {
-    await manager.stop();
+    // Never let a wedged socket hold the app open: `close()` may wait on a phone's
+    // keep-alive connection, and the user pressing Quit must win.
+    await Promise.race([
+      shutdownLanForQuit(),
+      new Promise<void>(resolve => { const timer = setTimeout(resolve, 2500); timer.unref(); })
+    ]);
+  } catch (error) {
+    console.error('Could not stop the LAN classroom server:', error);
+  }
+  try {
+    if (manager) await manager.stop();
   } catch (error) {
     console.error('Could not stop local llama.cpp runtime:', error);
   } finally {
@@ -1449,6 +1614,75 @@ async function embedLessonChunks(store, documentId, chunks) {
 }
 
 /**
+ * update_quy_trinh_2 §2/§6: semantic confirmation of the rule classifier.
+ *
+ * Only runs when the embedding runtime is already usable on this machine, so a
+ * teacher without the local AI still gets the instant rule verdict. Sending a huge
+ * document through the embedder would be slow for no gain (the rules are very
+ * accurate on long, prose-heavy text), so there is a length cap.
+ */
+const SEMANTIC_CLASSIFY_MAX_CHARS = 6000;
+/** How much of the text is embedded: enough signal, bounded cost. */
+const SEMANTIC_CLASSIFY_SAMPLE_CHARS = 1200;
+
+function shouldRunSemanticClassifier(text: string): boolean {
+  const length = text.trim().length;
+  return length > 0 && length <= SEMANTIC_CLASSIFY_MAX_CHARS;
+}
+
+/** Cached verdicts for the current process. Bounded so a long session cannot grow. */
+const classificationCache = new Map();
+const CLASSIFICATION_CACHE_LIMIT = 50;
+
+function classificationCacheSet(key, value) {
+  if (classificationCache.size >= CLASSIFICATION_CACHE_LIMIT) {
+    const oldest = classificationCache.keys().next().value;
+    if (oldest !== undefined) classificationCache.delete(oldest);
+  }
+  classificationCache.set(key, value);
+}
+
+/**
+ * Embed the text sample plus the category anchors and confirm the rule verdict.
+ * Throws when the runtime/model is unavailable; the caller degrades to the rules.
+ *
+ * Anchor vectors are computed once per embedding model: they are constants, and
+ * re-embedding 12 identical strings on every debounced keystroke was pure waste.
+ */
+let semanticAnchorCache = { modelId: '', vectors: null };
+
+async function semanticAnchors(runtime, model) {
+  if (semanticAnchorCache.modelId === model.id && semanticAnchorCache.vectors) return semanticAnchorCache.vectors;
+  const kinds = ['lesson', 'questions', 'outline'];
+  const texts = [];
+  const layout = [];
+  for (const kind of kinds) {
+    for (const anchor of CLASSIFIER_ANCHORS[kind]) {
+      layout.push({ kind, index: texts.length });
+      texts.push(anchor);
+    }
+  }
+  const vectors = await runtime.embed(texts.map(value => embeddingTextForChunk({ text: value }, model)));
+  const byKind = { lesson: [], questions: [], outline: [] };
+  for (const { kind, index } of layout) {
+    const vector = vectors[index];
+    if (vector && vector.length) byKind[kind].push(vector);
+  }
+  semanticAnchorCache = { modelId: model.id, vectors: byKind };
+  return byKind;
+}
+
+async function semanticClassification(text, rule) {
+  const runtime = await ensureEmbeddingRuntime();
+  const model = getEmbeddingModel();
+  const sample = String(text).trim().slice(0, SEMANTIC_CLASSIFY_SAMPLE_CHARS);
+  const anchors = await semanticAnchors(runtime, model);
+  const [sampleVector = []] = await runtime.embed([embeddingTextForChunk({ text: sample }, model)]);
+  const similarity = similarityToAnchors(sampleVector, anchors);
+  return confirmWithSemantics({ rule, similarity });
+}
+
+/**
  * #76: validates the teacher's section scope against the stored text and returns
  * the exact prepared input. Throws the same Vietnamese errors the UI already
  * shows, so an unknown/stale/empty selection is a message, never a silent
@@ -1558,10 +1792,37 @@ function registerIpc() {
     return normalized;
   });
   ipcMain.handle('library:delete-game', async (_e, gameId) => {
-    if (sqlite) sqlite.prepare('DELETE FROM games WHERE id = ?').run(String(gameId || ''));
+    let removed;
+    if (sqlite) {
+      const row = sqlite.prepare('SELECT data_json FROM games WHERE id = ?').get(String(gameId || ''));
+      removed = row ? JSON.parse(row.data_json) : null;
+      sqlite.prepare('DELETE FROM games WHERE id = ?').run(String(gameId || ''));
+      // #124: a deleted game no longer shows its pictures, so the files it referenced
+      // are removed too — but only those no other game or draft still points at.
+      if (removed) await removeUnusedCustomImages(removed);
+    }
     return { ok: true };
   });
   ipcMain.handle('library:save-session', async (_e, session) => upsertSessionRow(session || {}));
+  // #123: deleting finished-play results from the "Lịch sử kết quả" page, one or many.
+  ipcMain.handle('library:delete-sessions', async (_e, sessionIds) => {
+    if (!sqlite) throw new Error('Cơ sở dữ liệu chưa sẵn sàng.');
+    const ids = Array.isArray(sessionIds) ? [...new Set(sessionIds.filter(value => typeof value === 'string' && value))] : [];
+    if (!ids.length) throw new Error('Chưa chọn lượt chơi nào để xoá.');
+    if (ids.length > 1000) throw new Error('Mỗi lần chỉ xoá tối đa 1000 lượt chơi.');
+    // Removing a result only removes that result: games and lesson documents are
+    // separate rows and stay untouched.
+    // `better-sqlite3` requires the transaction body to be synchronous and returns
+    // whatever it returns; the prepared statement is created inside so it is never
+    // shared with another call.
+    const deleted = sqlite.transaction((list: string[]) => {
+      let count = 0;
+      const statement = sqlite.prepare('DELETE FROM sessions WHERE id = ?');
+      for (const value of list) count += Number(statement.run(value).changes || 0);
+      return count;
+    })(ids);
+    return { ok: deleted > 0, deleted, missing: ids.length - deleted };
+  });
   ipcMain.handle('lesson:save-document', async (_e, payload) => requireLessonStore().saveDocument(payload || {}));
   // #76: offline structure tree for step 1. Pure and local — no AI, no disk, no
   // network — so it is safe to call on every debounced keystroke. Either an
@@ -1594,11 +1855,156 @@ function registerIpc() {
     return prepareSelectedLessonText(text, structure, selectedIds, { mode });
   });
   ipcMain.handle('lesson:get-document', async (_e, documentId) => requireLessonStore().getDocumentWithText(String(documentId || '')));
+  // update_quy_trinh §2/§5 + update_quy_trinh_2 §2: decide the input path with the
+  // cheapest reliable method first.
+  //
+  //   1. rules       — always, pure, microseconds (`classifyInput`)
+  //   2. MiniLM      — confirmation layer, only when the embedding runtime is already
+  //                    installed. It may flip a low-confidence verdict; it never
+  //                    overrides a confident rule and never blocks the teacher.
+  //   3. cache       — the verdict is keyed by text hash + model + classifier version.
+  //
+  // Qwen is never started here (§2.4): only the small embedding server is used, and
+  // only if the machine already has it.
+  ipcMain.handle('lesson:classify-input', async (_e, payload) => {
+    const raw = typeof payload?.text === 'string' ? payload.text : '';
+    // Bound the work done on the debounced typing path: beyond this the verdict is
+    // already obvious (huge text is a lesson) and classification would block main.
+    const text = raw.length > SEMANTIC_CLASSIFY_MAX_CHARS ? raw.slice(0, SEMANTIC_CLASSIFY_MAX_CHARS) : raw;
+    // #116: clean once, here, and hand the *same* string to the classifier, the parser
+    // and the scorer. Each of them cleaning separately is how the classifier and the
+    // parser drifted before: one saw `👉 Đáp án: B`, the other did not.
+    const cleanedText = cleanQuestionText(text);
+    const ruleStartedAt = Date.now();
+    const rule = classifyInput(cleanedText);
+    const ruleMs = Date.now() - ruleStartedAt;
+
+    let classification = rule;
+    let semantic = 'skipped';   // 'confirm' | 'flipped' | 'unavailable' | 'skipped'
+    let semanticMs = 0;
+    let semanticNote = '';
+    const embeddingModel = getEmbeddingModel();
+    const cacheKeyFor = modelId => buildClassificationCacheKey({
+      text,
+      embeddingModelId: modelId
+    });
+
+    if (text.trim()) {
+      const cached = classificationCache.get(cacheKeyFor(embeddingModel.id));
+      if (cached) {
+        classification = cached.classification;
+        semantic = cached.semantic;
+        semanticNote = cached.note;
+      } else if (shouldRunSemanticClassifier(text)) {
+        const semanticStartedAt = Date.now();
+        try {
+          const verdict = await semanticClassification(text, rule);
+          // Safety gate: a flip to `questions` sends the teacher down the AI-free
+          // import path, so it is only allowed when the text really parses into
+          // questions. Without this, a short prose sentence ("Quang hợp là …") could
+          // be "confirmed" as a question bank with zero questions — measured in the
+          // app and rejected here.
+          if (verdict.flipped && verdict.classification.kind === 'questions'
+            && parseQuestionsFromText(cleanedText).questions.length < 2) {
+            classification = rule;
+            semantic = 'confirm';
+            semanticNote = 'Bộ đọc hiểu nghiêng về câu hỏi nhưng chưa nhận ra câu hỏi nào — giữ kết quả quy tắc.';
+          } else {
+            classification = verdict.classification;
+            semantic = verdict.flipped ? 'flipped' : 'confirm';
+            semanticNote = verdict.note;
+          }
+          classificationCacheSet(cacheKeyFor(embeddingModel.id), { classification, semantic, note: semanticNote });
+        } catch (error) {
+          // Any failure (runtime/model not installed, HTTP, timeout) degrades to the
+          // rule verdict. The teacher is never blocked and nothing is downloaded.
+          semantic = 'unavailable';
+          semanticNote = 'Bộ đọc hiểu chưa sẵn sàng — phân loại bằng quy tắc.';
+          aiLogWrite('info', 'classify.semantic-unavailable', { code: errorFacts(error).code });
+        }
+        semanticMs = Date.now() - semanticStartedAt;
+      }
+    }
+
+    const kind = resolveInputKind(classification);
+    // Parsing and scoring are pure and local (#115); timed separately so the log can
+    // say whether a slow keystroke came from the rules, the model, or a huge bank.
+    const parseStartedAt = Date.now();
+    const parsed = kind === 'questions' ? parseQuestionsFromText(cleanedText) : null;
+    const parseMs = Date.now() - parseStartedAt;
+    const compatStartedAt = Date.now();
+    const compatibility = parsed && parsed.parsed.length ? evaluateCompatibility(parsed.parsed) : [];
+    const compatMs = Date.now() - compatStartedAt;
+
+    aiLogWrite('info', 'classify.done', {
+      kind: classification.kind,
+      semantic,
+      chars: text.length,
+      ruleMs,
+      semanticMs,
+      parseMs,
+      compatMs,
+      totalMs: ruleMs + semanticMs + parseMs + compatMs
+    });
+
+    return { classification, kind, import: parsed, semantic, semanticNote, compatibility };
+  });
+  // update_quy_trinh §4: changing the game genre must not regenerate everything.
+  // Pure conversion, so it also never starts the model.
+  ipcMain.handle('lesson:convert-draft', async (_e, payload) => {
+    const draft = payload && payload.draft;
+    if (!draft || typeof draft !== 'object') throw new Error('Chưa có bản nháp để chuyển đổi.');
+    const target = String(payload.target || '');
+    // Reject an unknown target at the boundary: the renderer must not be able to
+    // drive the converter's genre branch with an arbitrary string.
+    if (!WORKFLOW_GAME_TYPES.includes(target)) throw new Error('Thể loại trò chơi đích không hợp lệ.');
+    const config = payload.config;
+    if (!config || typeof config !== 'object') throw new Error('Chưa có cấu hình trò chơi để chuyển đổi.');
+    return convertDraft(draft, target, config);
+  });
   ipcMain.handle('lesson:library', async () => requireLessonStore().listDocumentLibrary());
+  // #119: deleting a lesson source from the "Giáo án" page. Analyses, recommendations,
+  // chunks and the text file go with it; games already in the library stay.
+  ipcMain.handle('lesson:delete-document', async (_e, documentId) => {
+    const id = String(documentId || '');
+    if (!id) throw new Error('Thiếu mã tài liệu để xoá.');
+    return requireLessonStore().deleteDocument(id);
+  });
+  /**
+   * #124: removes one uploaded picture by id. Refuses any id this module did not
+   * produce (so a path can never reach it) and only ever unlinks inside the folder.
+   */
+  ipcMain.handle('files:delete-illustration', async (_e, imageId) => {
+    if (!customIllustration.isCustomImageId(imageId)) return { ok: false };
+    // #127: never delete a picture a saved game or a project still points at — "Tự
+    // động" on one card must not blank another. An unreferenced id (a cancelled upload)
+    // is removed.
+    if (referencedCustomImageIds().has(imageId)) return { ok: false, inUse: true };
+    try {
+      await fs.rm(path.join(CUSTOM_IMAGE_DIR(), `${imageId}.img`), { force: true });
+      return { ok: true };
+    } catch {
+      return { ok: false };
+    }
+  });
+  // #122: deleting several ticked documents from the "Giáo án" page at once.
+  ipcMain.handle('lesson:delete-documents', async (_e, documentIds) => {
+    const ids = Array.isArray(documentIds) ? documentIds.filter(id => typeof id === 'string' && id) : [];
+    if (!ids.length) throw new Error('Chưa chọn giáo án nào để xoá.');
+    // A teacher cannot realistically tick thousands; the cap also keeps one request
+    // from holding the store's single connection for an unbounded time.
+    if (ids.length > 200) throw new Error('Mỗi lần chỉ xoá tối đa 200 giáo án.');
+    return requireLessonStore().deleteDocuments(ids);
+  });
   ipcMain.handle('project:save-draft', async (_e, project) => requireLessonStore().saveProject(project));
   ipcMain.handle('project:get', async (_e, projectId) => requireLessonStore().getProject(String(projectId || '')));
   ipcMain.handle('project:list', async () => requireLessonStore().listProjects());
-  ipcMain.handle('project:delete', async (_e, projectId) => ({ ok: requireLessonStore().deleteProject(String(projectId || '')) }));
+  ipcMain.handle('project:delete', async (_e, projectId) => {
+    const id = String(projectId || '');
+    // #127: a draft's pictures are deleted with it (once nothing else uses them).
+    if (id) await removeProjectImages(id);
+    return { ok: requireLessonStore().deleteProject(id) };
+  });
   ipcMain.handle('lesson:analyze', async (event, payload) => {
     const documentId = String(payload?.documentId || '');
     const requestId = String(payload?.requestId || '');
@@ -1620,9 +2026,20 @@ function registerIpc() {
     // document hash, model, mode and prompt version are unchanged. `force` is the
     // teacher's explicit "Phân tích lại" action, and also what a changed lesson
     // produces automatically (different hash → different key).
+    // #132 (R3): the provider is part of the key. Before this decision only the
+    // local runtime could run an analysis, so a stored non-local row did not exist
+    // and `provider ?? 'local'` keeps every old key byte-identical (still a hit);
+    // two providers sharing one model id can no longer reuse each other's analysis.
+    // A different provider therefore costs one analysis, not a wrong one.
+    // #132: the key names the provider that will actually run the analysis, not the
+    // one Settings happens to highlight: the auto policy can skip a stopped local
+    // runtime, and a pick in the wizard overrides the default.
+    const analysisAi = await readAiSettings();
+    const analysisProvider = analysisCacheProvider(analysisAi, payload?.providerId, payload?.localPreferred === true);
     const cacheKey = buildAnalysisCacheKey({
       documentSha256: sha256Hex(document.text),
       modelId: await currentChatModelId(),
+      provider: analysisProvider,
       mode,
       sourceName: document.name,
       // #76: two different picks on the same document must never share a cached
@@ -1631,6 +2048,8 @@ function registerIpc() {
     });
     let analysis = payload?.force ? null : store.findAnalysisByCacheKey(documentId, cacheKey);
     let cached = Boolean(analysis);
+    // `analyzeStartedAt` is declared above (before the cache lookup) so hits and
+    // misses are measured on the same clock.
     if (!analysis) {
       const task = aiTasks.start({
         taskId: newAiTaskId('analyze'),
@@ -1646,12 +2065,17 @@ function registerIpc() {
       let preprocessMetrics = null;
       lastPromptTokens = null;
       try {
+        // #132: the provider is chosen from Settings (requested ?: auto policy) and
+        // resolved *before* the single-flight lock is taken: a missing or unusable
+        // provider is not a busy runtime. Prompts, schema and cache are untouched.
+        const client = await createChatClientForProvider(payload?.providerId);
+        aiLogWrite('info', 'analyze.provider', { documentId, provider: client.providerId });
         analysis = await aiSingleFlight.run(
-          `analyze:${documentId}:${cacheKey}`,
+          `analyze:${documentId}:${cacheKey}:${client.providerId}`,
           'phân tích giáo án',
           async () => {
             const generated = await analyzeLesson({
-              client: createLessonChatClient(),
+              client,
               registry: aiRequests,
               requestId,
               documentId,
@@ -1696,7 +2120,9 @@ function registerIpc() {
             store.saveAnalysis(generated, { cacheKey });
             sendLessonProgress(event.sender, requestId, 'ready');
             return generated;
-          }
+          },
+          // Which runtime this run occupies: Stop may only refuse while llama.cpp is in use.
+          client.providerId
         );
         cached = false;
         recordAiTask(aiTasks.complete(task.taskId, `${analysis.objectives.length} mục tiêu · ${analysis.keyConcepts.length} khái niệm`));
@@ -1705,6 +2131,7 @@ function registerIpc() {
           mode,
           cached: false,
           seconds: Math.round((Date.now() - analyzeStartedAt) / 1000),
+          durationMs: Date.now() - analyzeStartedAt,
           objectives: analysis.objectives.length,
           concepts: analysis.keyConcepts.length,
           ...(lastPromptTokens !== null ? { promptTokens: lastPromptTokens } : {}),
@@ -1733,6 +2160,7 @@ function registerIpc() {
         mode,
         cached: true,
         seconds: Math.round((Date.now() - analyzeStartedAt) / 1000),
+        durationMs: Date.now() - analyzeStartedAt,
         objectives: analysis.objectives.length,
         concepts: analysis.keyConcepts.length
       });
@@ -1809,6 +2237,58 @@ function registerIpc() {
     const project = store.getProject(projectId);
     if (!project) throw new Error('Không tìm thấy dự án. Hãy lưu dự án trước khi tạo nội dung.');
     if (!project.config) throw new Error('Dự án chưa có cấu hình trò chơi. Hãy hoàn tất bước cấu hình.');
+
+    // update_quy_trinh §3 nhánh B / §7.2: a project built from questions the teacher
+    // already wrote has a complete draft and no analysis, because the analysis step
+    // (and its model call) was skipped on purpose. In that case there is nothing for
+    // the model to do: convert the draft, validate it, save — no AI run at all.
+    const sourceDraft = project.draft && project.draft.gameType === project.config.gameType ? project.draft : null;
+    // The no-AI path is only for drafts the teacher authored in step 1. A null
+    // `analysisId` alone is not proof: an AI draft whose analysis was lost would
+    // otherwise be saved as a finished game with no model run and no analysis.
+    if (!project.analysisId && sourceDraft && project.draftSource === 'imported-questions') {
+      const pathAStartedAt = Date.now();
+      const task = aiTasks.start({
+        taskId: newAiTaskId('generate'),
+        requestId,
+        kind: 'generate',
+        projectId,
+        documentId: project.lesson ? project.lesson.documentId : null,
+        label: 'dùng câu hỏi có sẵn'
+      });
+      recordAiTask(task);
+      sendLessonProgress(event.sender, requestId, 'validate');
+      let game;
+      try {
+        // The adapter is still the only place that builds `EducationalGame` and it
+        // runs the per-template validators, so imported questions get the same check.
+        game = toEducationalGame({ ...project, draft: sourceDraft });
+      } catch (error) {
+        recordAiTask(aiTasks.fail(task.taskId, 'GENERATION_INVALID', 'Câu hỏi soạn sẵn chưa hợp lệ cho thể loại này.'));
+        throw new Error(`[GENERATION_INVALID] ${error && error.message ? error.message : 'Câu hỏi soạn sẵn chưa hợp lệ cho thể loại này.'}`);
+      }
+      const saved = store.saveProject(applyDraft(project, { draft: sourceDraft, game, now: new Date().toISOString() }));
+      const quality = checkDraftQuality({ draft: sourceDraft, config: project.config, analysis: null });
+      sendLessonProgress(event.sender, requestId, 'ready');
+      recordAiTask(aiTasks.complete(task.taskId, 'câu hỏi có sẵn, không gọi AI'));
+      aiLogWrite('info', 'generate.from-questions', {
+        projectId,
+        gameType: project.config.gameType,
+        questions: Array.isArray(game.questions) ? game.questions.length : 0,
+        // Path A does no model work; the number shows what the AI path would have cost.
+        durationMs: Date.now() - pathAStartedAt
+      });
+      return { project: saved, game, mode: 'fast', quality, context: null, cached: true, source: 'imported-questions' };
+    }
+
+    // #117: the wizard asked for the *local* build only (a recognised question bank is
+    // finished content). Never fall through to the model here: without a teacher
+    // draft there is nothing safe to convert, and pretending otherwise would call AI
+    // on a run the teacher chose to do without it.
+    if (payload?.localOnly) {
+      throw new Error('[GENERATION_INVALID] Chưa có nội dung soạn sẵn hợp lệ để tạo trò chơi. Hãy kiểm tra lại câu hỏi.');
+    }
+
     if (!project.analysisId) throw new Error('Dự án chưa có kết quả phân tích giáo án.');
     const analysis = store.getAnalysis(project.analysisId);
     if (!analysis) throw new Error('Không tìm thấy kết quả phân tích giáo án. Hãy phân tích lại.');
@@ -1823,7 +2303,10 @@ function registerIpc() {
       gameType: project.config.gameType,
       configFingerprint: configFingerprint(project.config),
       modelId,
-      mode
+      mode,
+      // #132 D13: a draft produced by the explicit cloud button is not reused when
+      // the teacher goes back to AI local (same model id, different provider).
+      provider: payload?.providerId ? String(payload.providerId) : 'auto'
     });
     // §9: a second press of "Tạo nội dung" with identical inputs reuses the stored
     // draft. Check the cache before retrieval/embedding so a cache hit does no
@@ -1894,15 +2377,20 @@ function registerIpc() {
       regenerate: Boolean(payload?.regenerate)
     });
     try {
+      // #132: Step 5 uses the same provider choice as Step 2, with its own prompt and
+      // schema. Resolved before the lock so "no provider" is a config answer, not a
+      // busy-model answer.
+      const client = await createChatClientForProvider(payload?.providerId);
+      aiLogWrite('info', 'generate.provider', { projectId, provider: client.providerId });
       return await aiSingleFlight.run(
-        `generate:${projectId}:${cacheKey}`,
+        `generate:${projectId}:${cacheKey}:${client.providerId}`,
         `tạo nội dung ${project.config.gameType}`,
         async () => {
           recordAiTask(aiTasks.progress(generateTask.taskId, 'retrieve'));
           sendLessonProgress(event.sender, requestId, 'retrieve');
           const { sourceExcerpt, context } = await buildLessonGenerationContext(store, project, analysis, mode);
           const draft = await generateGameDraft({
-            client: createLessonChatClient(),
+            client,
             registry: aiRequests,
             requestId,
             gameType: project.config.gameType,
@@ -1941,6 +2429,9 @@ function registerIpc() {
             mode,
             modelId,
             seconds: Math.round((Date.now() - generateStartedAt) / 1000),
+            // update_quy_trinh_2 §6: a precise number next to the rounded one, so a
+            // before/after comparison is possible without re-reading `seconds`.
+            durationMs: Date.now() - generateStartedAt,
             attempts: generateAttempts,
             requested: quality.counts.requested,
             found: quality.counts.found,
@@ -1968,7 +2459,8 @@ function registerIpc() {
           sendLessonProgress(event.sender, requestId, 'ready');
           recordAiTask(aiTasks.complete(generateTask.taskId, `${project.config.gameType} · ${mode}`));
           return { project: saved, game, mode, quality, context, cached: false };
-        }
+        },
+        client.providerId
       );
     } catch (error) {
       const code = String((error && error.code) || (error && error.message && /\[([A-Z_]+)\]/.exec(error.message)?.[1]) || 'AI_OUTPUT_INVALID');
@@ -2093,8 +2585,11 @@ function registerIpc() {
     });
     recordAiTask(regenTask);
     try {
+      // #132: regenerating one item follows the same provider choice as the run that
+      // produced the draft; it never switches provider on its own.
+      const client = await createChatClientForProvider(payload?.providerId);
       return await aiSingleFlight.run(
-        `regenerate:${projectId}:${indexes.join(',')}:${project.draft.gameType}`,
+        `regenerate:${projectId}:${indexes.join(',')}:${project.draft.gameType}:${client.providerId}`,
         'tạo lại một mục nội dung',
         async () => {
           recordAiTask(aiTasks.progress(regenTask.taskId, 'retrieve'));
@@ -2119,7 +2614,7 @@ function registerIpc() {
             const itemExcerpt = itemSelection.selected.length ? formatRetrievedChunks(itemSelection.selected) : sourceExcerpt;
             if (itemExcerpt !== sourceExcerpt) itemsNarrowed += 1;
             const item = await regenerateGameItem({
-              client: createLessonChatClient(),
+              client,
               registry: aiRequests,
               requestId,
               gameType: project.config.gameType,
@@ -2159,7 +2654,8 @@ function registerIpc() {
           sendLessonProgress(event.sender, requestId, 'ready');
           recordAiTask(aiTasks.complete(regenTask.taskId, `${indexes.length} mục ${project.config.gameType}`));
           return { project: saved, game, quality, context, mode, itemIndexes: indexes, cached: false, itemContext: { items: indexes.length, narrowed: itemsNarrowed } };
-        }
+        },
+        client.providerId
       );
     } catch (error) {
       const code = String((error && error.code) || (error && error.message && /\[([A-Z_]+)\]/.exec(error.message)?.[1]) || 'AI_OUTPUT_INVALID');
@@ -2183,7 +2679,8 @@ function registerIpc() {
     const citations = selectRelevantEvidence(document.text, question, 4);
     let answer = '';
     try {
-      const client = createLessonChatClient();
+      // #132: Q&A with the lesson follows the same provider choice as the steps.
+      const client = await createChatClientForProvider(payload?.providerId);
       const result = await client.chatJson({
         messages: [
           { role: 'system', content: 'Bạn là trợ lý giáo dục. Chỉ trả lời dựa trên các đoạn trích dẫn được cung cấp. Nếu không đủ thông tin, nói rõ không đủ dữ liệu. Trả lời ngắn gọn bằng tiếng Việt.' },
@@ -2271,6 +2768,42 @@ function registerIpc() {
     return { name: path.basename(target), path: target, text: text.trim().slice(0, 120000), characters: text.length, sizeBytes: buffer.length };
   });
 
+  /**
+   * #124: picks one picture and copies it into the app's image folder. Returns the id
+   * to store on the item (`ci-…`); `null` when the teacher cancelled the dialog.
+   * Nothing about the teacher's original path reaches the renderer.
+   */
+  ipcMain.handle('files:import-illustration', async (_event, sourcePath) => {
+    // `sourcePath` exists so a check or a drag-and-drop can hand over a file the teacher
+    // already chose; the button passes nothing and gets the dialog. The same validation
+    // runs either way — this is never a "trusted path" shortcut.
+    let source = typeof sourcePath === 'string' ? sourcePath.trim() : '';
+    if (!source) {
+      const picked = await dialog.showOpenDialog(mainWindow, {
+        title: 'Chọn ảnh minh hoạ cho câu hỏi',
+        properties: ['openFile'],
+        filters: [{ name: 'Ảnh (PNG, JPG, WEBP, GIF)', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] }]
+      });
+      if (picked.canceled || !picked.filePaths[0]) return null;
+      source = picked.filePaths[0];
+    }
+    const stat = await fs.stat(source);
+    if (stat.size > customIllustration.CUSTOM_IMAGE_MAX_BYTES) {
+      throw new Error(`Ảnh lớn hơn ${Math.round(customIllustration.CUSTOM_IMAGE_MAX_BYTES / (1024 * 1024))} MB — hãy chọn ảnh nhỏ hơn.`);
+    }
+    const bytes = await fs.readFile(source);
+    // Extension, size and magic bytes are all checked; a renamed .exe is refused.
+    const { ext } = customIllustration.inspectCustomImage(source, bytes);
+    // Opaque id: random, fixed length, and the only part of this that ever reaches the
+    // renderer or the database.
+    const id = `ci-${crypto.randomBytes(16).toString('hex')}`;
+    // The bytes are stored as-is with an `.img` name: the MIME type is re-read from the
+    // content when serving, so renaming the file cannot change how it is interpreted.
+    // `ext` was only used to prove the bytes match a supported format.
+    await fs.mkdir(CUSTOM_IMAGE_DIR(), { recursive: true });
+    await fs.writeFile(path.join(CUSTOM_IMAGE_DIR(), `${id}.img`), bytes);
+    return { id, bytes: bytes.length, format: ext };
+  });
   ipcMain.handle('files:import-questions', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       title: 'Nhập câu hỏi từ bảng tính',
@@ -2304,34 +2837,72 @@ function registerIpc() {
   ipcMain.handle('files:import-game', async () => {
     const result = await dialog.showOpenDialog(mainWindow, { title: 'Nhập trò chơi', properties: ['openFile'], filters: [{ name: 'EduGame package', extensions: ['egame', 'json'] }] });
     if (result.canceled || !result.filePaths[0]) return null;
-    const raw = JSON.parse(await fs.readFile(result.filePaths[0], 'utf8'));
-    const game = raw.game || raw;
-    if (!game || typeof game.title !== 'string' || !Array.isArray(game.questions)) throw new Error('Tệp không phải gói trò chơi hợp lệ.');
-    validateScenarioGame(game);
-    validateMatchingGame(game);
-    validateTreasureHuntGame(game);
-    validateRaceGame(game);
-    game.id = id('imported');
-    return game;
+    // #118: the file is untrusted input; `readGamePackage` parses, validates, strips
+    // external resource URLs and assigns a fresh id (pure and unit-tested).
+    const size = await fs.stat(result.filePaths[0]);
+    if (size.size > IMPORT_GAME_MAX_BYTES) {
+      throw new Error(`Tệp lớn hơn ${Math.round(IMPORT_GAME_MAX_BYTES / (1024 * 1024))} MB — có thể đã chọn nhầm tệp.`);
+    }
+    return readGamePackage(await fs.readFile(result.filePaths[0], 'utf8'), () => id('imported'));
   });
+  // #132: the renderer never receives a key again. It gets the active provider, the
+  // per-provider state (hasKey / keyMasked / last test) and the registry, and sends
+  // back only replacements. Decryption happens here, only when a client is built.
   ipcMain.handle('settings:get', async () => {
-    const settings = await readJson(SETTINGS_FILE(), {});
-    let apiKey = '';
-    if (settings.ai?.apiKeyEncrypted && safeStorage.isEncryptionAvailable()) {
-      try { apiKey = safeStorage.decryptString(Buffer.from(settings.ai.apiKeyEncrypted, 'base64')); } catch {}
-    }
-    return { ...settings, ai: { ...settings.ai, apiKey } };
+    const raw = await readJson(SETTINGS_FILE(), {});
+    const { settings } = await loadAiSettingsWithMigration(raw);
+    return publicSettingsView(settings);
   });
-  ipcMain.handle('settings:save', async (_e, settings) => {
-    const safe = JSON.parse(JSON.stringify(settings || {}));
-    const key = safe.ai?.apiKey || '';
-    if (safe.ai) {
-      if (key && safeStorage.isEncryptionAvailable()) safe.ai.apiKeyEncrypted = safeStorage.encryptString(key).toString('base64');
-      else safe.ai.apiKeyEncrypted = '';
-      delete safe.ai.apiKey;
+  ipcMain.handle('settings:save', async (_e, incoming) => {
+    const safe = JSON.parse(JSON.stringify(incoming || {}));
+    const current = await readJson(SETTINGS_FILE(), {});
+    const { settings: base } = await loadAiSettingsWithMigration(current);
+    const baseAi = base.ai || {};
+    const incomingAi = safe.ai || {};
+    const ai = { ...baseAi, ...incomingAi };
+    // Keys: an omitted/empty entry means "keep the stored key"; `clearKey` removes
+    // it. A new key is encrypted with the OS store or refused outright — the app
+    // never writes a key in plaintext and never drops it silently (spec §4).
+    const incomingProviders = incomingAi.providers && typeof incomingAi.providers === 'object' ? incomingAi.providers : {};
+    const providers = { ...(baseAi.providers || {}) };
+    for (const definition of AI_PROVIDERS) {
+      const patch = incomingProviders[definition.id] || {};
+      const next = { ...(providers[definition.id] || {}) };
+      if (typeof patch.baseUrl === 'string') next.baseUrl = patch.baseUrl.trim().replace(/\/+$/, '');
+      if (typeof patch.model === 'string') next.model = patch.model.trim();
+      if (typeof patch.enabled === 'boolean') next.enabled = patch.enabled;
+      if (patch.clearKey === true) delete next.apiKeyEncrypted;
+      const replacement = typeof patch.apiKey === 'string' ? patch.apiKey.trim() : '';
+      if (replacement) {
+        if (!safeStorage.isEncryptionAvailable()) {
+          throw new AiTransportError(
+            'AI_KEY_STORAGE_UNAVAILABLE',
+            'Máy này không lưu được khoá an toàn (Windows credential store không khả dụng). Khoá mới chưa được lưu; cấu hình cũ giữ nguyên.'
+          );
+        }
+        next.apiKeyEncrypted = safeStorage.encryptString(replacement).toString('base64');
+        // A replaced key invalidates the previous test: a stale "ready" would claim
+        // the new key was verified.
+        delete next.lastTestAt;
+        delete next.lastTestOk;
+        delete next.lastTestCode;
+      }
+      providers[definition.id] = next;
     }
+    if (typeof incomingAi.provider === 'string' && getProviderDefinition(incomingAi.provider)) {
+      ai.provider = incomingAi.provider;
+    }
+    ai.providers = providers;
+    delete ai.apiKey;
+    delete ai.apiKeyEncrypted;
+    safe.ai = ai;
     await writeJson(SETTINGS_FILE(), safe);
-    return { ok: true };
+    return { ok: true, settings: publicSettingsView(await readJson(SETTINGS_FILE(), {})) };
+  });
+  // The registry + current state, for the Settings page and the wizard picker.
+  ipcMain.handle('ai:providers', async () => {
+    const { settings } = await loadAiSettingsWithMigration(await readJson(SETTINGS_FILE(), {}));
+    return publicSettingsView(settings);
   });
   ipcMain.handle('ai:local-models', async () => getLocalAiModels());
   ipcMain.handle('ai:local-status', async () => {
@@ -2385,8 +2956,9 @@ function registerIpc() {
       } catch (error) {
         console.warn('Không cài được bộ đọc hiểu giáo án (sẽ dùng truy xuất từ vựng):', error && error.message ? error.message : error);
       }
-      const settings = await readJson(SETTINGS_FILE(), {});
-      settings.ai = { ...settings.ai, mode: 'local', localModelId: model.id };
+      const { settings } = await loadAiSettingsWithMigration(await readJson(SETTINGS_FILE(), {}));
+      // #132: the active provider is the local one whenever a teacher runs it.
+      settings.ai = { ...settings.ai, mode: 'local', localModelId: model.id, provider: 'local' };
       await writeJson(SETTINGS_FILE(), settings);
       return { ok: true, models: await getLocalAiModels() };
     } finally {
@@ -2404,8 +2976,9 @@ function registerIpc() {
     }
     if (localAiManager && localAiModelId === model.id &&
         localAiManager.getStatus().state === 'READY') {
-      const settings = await readJson(SETTINGS_FILE(), {});
-      settings.ai = { ...settings.ai, mode: 'local', localModelId: model.id };
+      const { settings } = await loadAiSettingsWithMigration(await readJson(SETTINGS_FILE(), {}));
+      // #132: the active provider is the local one whenever a teacher runs it.
+      settings.ai = { ...settings.ai, mode: 'local', localModelId: model.id, provider: 'local' };
       await writeJson(SETTINGS_FILE(), settings);
       aiLogWrite('info', 'runtime.reuse', { modelId: model.id, state: localAiManager.getStatus().state });
       return { ok: true, baseUrl: localAiManager.getBaseUrl(), models: await getLocalAiModels() };
@@ -2417,8 +2990,9 @@ function registerIpc() {
     aiLogWrite('info', 'runtime.start', { modelId: model.id });
     try {
       const baseUrl = await ensureLocalRuntime(model.id);
-      const settings = await readJson(SETTINGS_FILE(), {});
-      settings.ai = { ...settings.ai, mode: 'local', localModelId: model.id };
+      const { settings } = await loadAiSettingsWithMigration(await readJson(SETTINGS_FILE(), {}));
+      // #132: the active provider is the local one whenever a teacher runs it.
+      settings.ai = { ...settings.ai, mode: 'local', localModelId: model.id, provider: 'local' };
       await writeJson(SETTINGS_FILE(), settings);
       aiLogWrite('info', 'runtime.ready', {
         modelId: model.id,
@@ -2435,7 +3009,13 @@ function registerIpc() {
     }
   });
   ipcMain.handle('ai:stop-local-runtime', async () => {
-    if (aiSingleFlight.busy) {
+    // A run on a CLOUD provider is not this runtime's business (DECISIONS #132): the
+    // single-flight lock is shared, but nothing of it uses llama.cpp, and refusing Stop
+    // there reads as "the stop button is broken".
+    const providerId = aiSingleFlight.busy && typeof aiSingleFlight.activeProviderId === 'string'
+      ? aiSingleFlight.activeProviderId
+      : '';
+    if (aiSingleFlight.busy && providerId === 'local') {
       throw new Error(`[AI_BUSY] AI local đang xử lý “${aiSingleFlight.activeLabel}”. Hãy huỷ yêu cầu hiện tại trước khi dừng runtime.`);
     }
     const stoppedModelId = localAiModelId || null;
@@ -2472,22 +3052,92 @@ function registerIpc() {
   // update_plan_3 §8: live tasks + persisted history (history is never "running").
   ipcMain.handle('ai:tasks', async (_e, payload) => {
     const limit = Number(payload?.limit) || 50;
+    const offset = Math.max(0, Math.floor(Number(payload?.offset) || 0));
     const live = aiTasks.list(limit).map(record => ({ ...record, restored: false }));
     let history = [];
+    let total = 0;
     // The status bar polls every couple of seconds and only needs live tasks;
     // skip the SQLite read when the caller says it does not need history.
     const includeHistory = payload?.history !== false;
     try {
-      if (includeHistory) history = requireLessonStore().listAiTasks(limit).map(row => ({ ...row, restored: true }));
+      if (includeHistory) {
+        const store = requireLessonStore();
+        // Never older than the retention cap, even on a database written by an older
+        // build (which had no pruning): the page cannot show rows that should be gone.
+        store.pruneAiTasks(AI_TASK_HISTORY_LIMIT);
+        history = store.listAiTasks(Math.min(limit, AI_TASK_HISTORY_LIMIT), offset).map(row => ({ ...row, restored: true }));
+        total = store.countAiTasks();
+      }
     } catch (error) {
       console.warn('Không đọc được lịch sử tác vụ AI:', error && error.message ? error.message : error);
     }
-    return { live, history };
+    return { live, history, total };
   });
   // update_plan_3 §4/§6: CPU-only runtime verification for the bundled llama.cpp.
   ipcMain.handle('ai:runtime-verify', async () => verifyRuntime());
+  // #132 §D6: connection test that is *independent of game creation*. One minimal
+  // real request (a few tokens) to the provider named in the payload, never a
+  // generation, and the result is what moves the provider to `ready`/`failing`.
+  ipcMain.handle('ai:test-provider', async (_e, payload) => {
+    const providerId = String(payload?.providerId || '');
+    const definition = getProviderDefinition(providerId);
+    if (!definition) throw new AiTransportError('AI_CONFIG', 'Nhà cung cấp AI không tồn tại.');
+    const { settings } = await loadAiSettingsWithMigration(await readJson(SETTINGS_FILE(), {}));
+    const resolved = resolveProviderState({ settings: settings.ai || {}, ...localRuntimeFacts() })
+      .find(provider => provider.id === definition.id);
+    const startedAt = Date.now();
+    let result;
+    try {
+      result = await runProviderProbe(definition, resolved, settings);
+    } catch (error) {
+      const code = providerErrorCode(error);
+      await recordProviderTest(definition.id, { ok: false, code, message: error instanceof Error ? error.message : String(error) });
+      aiLogWrite('warn', 'provider.test', {
+        provider: definition.id, ok: false, code, durationMs: Date.now() - startedAt, ...errorFacts(error)
+      });
+      throw error instanceof AiTransportError
+        ? error
+        : new AiTransportError('AI_CONNECTION', error instanceof Error ? error.message : String(error));
+    }
+    await recordProviderTest(definition.id, { ok: true, code: '', message: '' });
+    aiLogWrite('info', 'provider.test', {
+      provider: definition.id, ok: true, durationMs: Date.now() - startedAt, model: resolved ? resolved.model : ''
+    });
+    const updated = publicSettingsView(await readJson(SETTINGS_FILE(), {}));
+    return {
+      ok: true,
+      providerId: definition.id,
+      model: resolved ? resolved.model : '',
+      durationMs: Date.now() - startedAt,
+      /** What the probe asked for; the UI says this out loud (R5). */
+      detail: definition.id === 'local' ? 'Model local trả lời được.' : 'Nhà cung cấp trả lời được yêu cầu thử nhỏ.',
+      settings: updated
+    };
+  });
+  // #132: hands-on test hook for the UI checks only. It exercises the same client the
+  // workflow uses — provider choice, key decryption, transport — so it must never exist
+  // in a build that a teacher can run: an unpackaged build is not a test build, and a
+  // renderer call could spend the stored key. It is gated on the same explicit switch
+  // as the canned lesson fixtures (`loadLessonTestFixture`).
+  if (!app.isPackaged && process.env.EDUGAME_AI_TEST_DIR) {
+    ipcMain.handle('ai:health', async (_e, payload) => {
+      const startedAt = Date.now();
+      try {
+        const client = await createChatClientForProvider(payload && payload.providerId);
+        const answer = await client.chatJson({
+          messages: [{ role: 'user', content: 'Trả lời đúng một từ: OK' }],
+          maxTokens: 16,
+          responseSchema: null,
+          textResponse: true
+        });
+        return { ok: true, providerId: client.providerId, answered: Boolean(answer && answer.content), durationMs: Date.now() - startedAt };
+      } catch (error) {
+        return { ok: false, code: providerErrorCode(error), message: error instanceof Error ? error.message : String(error), durationMs: Date.now() - startedAt };
+      }
+    });
+  }
   ipcMain.handle('ai:generate', async (_e, payload) => {
-    const settings = await readJson(SETTINGS_FILE(), {});
+    const { settings } = await loadAiSettingsWithMigration(await readJson(SETTINGS_FILE(), {}));
     const ai = settings.ai || {};
     const mode = payload.mode || ai.mode || 'offline';
     if (mode === 'offline') {
@@ -2515,8 +3165,11 @@ function registerIpc() {
     if (endpoint.username || endpoint.password || endpoint.hash) throw new Error('Base URL không được chứa thông tin đăng nhập hoặc fragment.');
     let apiKey = mode === 'online' ? payload.apiKey || '' : '';
     const useZen = mode === 'online' && isZenBaseUrl(baseUrl);
-    if (mode === 'online' && !apiKey && ai.apiKeyEncrypted && safeStorage.isEncryptionAvailable()) {
-      try { apiKey = safeStorage.decryptString(Buffer.from(ai.apiKeyEncrypted, 'base64')); }
+    // #132: the legacy key moved to its provider; read it there, never from the renderer.
+    const legacyProvider = getProviderDefinition(ai.cloudProvider || ai.provider) ? String(ai.cloudProvider || ai.provider) : 'openai';
+    const legacyBlob = ai.providers && ai.providers[legacyProvider] && ai.providers[legacyProvider].apiKeyEncrypted;
+    if (mode === 'online' && !apiKey && legacyBlob && safeStorage.isEncryptionAvailable()) {
+      try { apiKey = safeStorage.decryptString(Buffer.from(legacyBlob, 'base64')); }
       catch (error) {
         if (!useZen) {
           console.error('Could not decrypt configured AI API key:', error instanceof Error ? error.message : 'unknown');
@@ -2573,7 +3226,8 @@ function registerIpc() {
           parsed = validated.data;
         }
         return { game: normalizeAiGameService(parsed, payload, id), provider: mode };
-      }
+      },
+      String(mode || 'local')
     );
   });
 }
@@ -2673,15 +3327,282 @@ function loadLessonTestFixture(responseSchema) {
 let lastPromptTokens: number | null = null;
 
 /**
- * Local-only chat client for the lesson-to-game workflow.
- *
- * Reuses the same llama.cpp runtime and `fetchAiEndpoint` as the legacy
- * document assistant, but never falls back to a cloud provider and forwards the
- * workflow's abort signal so `ai:cancel` stops the request.
+ * Everything the registry needs to judge the local provider, read from the runtime
+ * manager once (main only — the renderer passes what it polls).
  */
-function createLessonChatClient() {
+function localRuntimeFacts() {
+  const running = Boolean(localAiManager && localAiManager.getStatus().state === 'READY');
+  let localModelReady = false;
+  try {
+    const model = getLocalModel(localAiManager && localAiModelId ? localAiModelId : QWEN_LOCAL_MODELS[0].id);
+    localModelReady = Boolean(model && model.installed);
+  } catch {
+    localModelReady = false;
+  }
+  return { localRunning: running, localModelReady };
+}
+
+/**
+ * Reads settings and moves the pre-#132 single key into its provider once
+ * (DECISIONS #132 §D3). `writeJson` preserves the file mode (no secrets in a
+ * world-readable copy); the old `ai.apiKeyEncrypted` is only removed by the write
+ * of the migrated shape, so a failed write leaves the key where it was.
+ */
+async function loadAiSettingsWithMigration(raw) {
+  const { settings, changed } = migrateLegacyAiSettings(raw || {});
+  if (!changed) return { settings, migrated: false };
+  try {
+    await writeJson(SETTINGS_FILE(), settings);
+  } catch (error) {
+    console.error('Could not write the migrated AI settings; keeping the old file:', error && error.message ? error.message : error);
+    return { settings, migrated: false };
+  }
+  return { settings, migrated: true };
+}
+
+/** Decrypts one stored key. Only `createChatClientForProvider` may call this. */
+function readStoredProviderKey(providerId) {
+  const config = (settingsProvidersCache && settingsProvidersCache[providerId]) || {};
+  const blob = config.apiKeyEncrypted;
+  if (!blob) return '';
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new AiTransportError(
+      'AI_KEY_STORAGE_UNAVAILABLE',
+      'Máy này không mở được khoá đã lưu an toàn. Hãy nhập lại khoá trong Cài đặt AI trên máy này.'
+    );
+  }
+  try {
+    return safeStorage.decryptString(Buffer.from(String(blob), 'base64'));
+  } catch {
+    throw new AiTransportError('AI_CONFIG', 'Không đọc được API key đã lưu. Hãy nhập lại khoá trong Cài đặt AI.');
+  }
+}
+/** Latest `settings.ai.providers`, filled by `loadAiSettingsWithMigration` callers. */
+let settingsProvidersCache = null;
+
+/**
+ * The provider the analysis cache row belongs to (DECISIONS #132 §D9). It follows
+ * `chooseProvider` exactly — the same call `createChatClientForProvider` makes — so a
+ * cached analysis can never be stored under a provider that did not produce it.
+ */
+function analysisCacheProvider(ai, requestedId, localPreferred = false) {
+  const choice = chooseProvider({
+    settings: ai || {},
+    requested: requestedId,
+    localPreferred: localPreferred || requestedId === 'local',
+    ...localRuntimeFacts()
+  });
+  // A request that named its provider is stored under that provider; without a name
+  // the row would be looked up again by `ai.provider` and miss on every run.
+  if (requestedId) return String(requestedId);
+  return choice.provider ? choice.provider.id : 'local';
+}
+
+/**
+ * The settings shape the renderer is allowed to see (DECISIONS #132 §D4).
+ * Every key is replaced by `hasKey` + `keyMasked`; the mask needs the last four
+ * characters, so the key is decrypted here and never leaves main.
+ */
+function publicSettingsView(settings) {
+  const ai = (settings && settings.ai) || {};
+  const keys = {};
+  for (const definition of AI_PROVIDERS) {
+    const blob = ai.providers && ai.providers[definition.id] && ai.providers[definition.id].apiKeyEncrypted;
+    if (!blob) continue;
+    try {
+      if (safeStorage.isEncryptionAvailable()) keys[definition.id] = safeStorage.decryptString(Buffer.from(String(blob), 'base64'));
+    } catch { /* an unreadable blob shows as "has key" with no mask */ }
+  }
+  // #132 §D7: the view names the provider the workflow would use *now* — the same
+  // `chooseProvider` call the request makes (explicit pick, else the auto policy). A
+  // fresh profile therefore shows Gemini when local is stopped and Gemini is verified,
+  // never a provider that could not run.
+  // A running local runtime is the default provider of the lesson workflow, so the
+  // view names it even when a verified cloud provider exists (the wizard offers the
+  // cloud one as a second, explicit button). Otherwise the view names the provider the
+  // request would use (explicit pick, else the auto policy), never a dead one.
+  const facts = localRuntimeFacts();
+  // "Local first" here means: keep the provider the policy already chose (local is its
+  // first entry), not "an explicit local request" — that rule belongs to the button.
+  const choice = chooseProvider({ settings: ai, ...facts });
+  const fallbackId = getProviderDefinition(ai.provider)
+    ? ai.provider
+    : (resolveProviderState({ settings: ai, ...facts }).find(provider => provider.usable) || { id: 'local' }).id;
+  const activeId0 = choice.provider ? choice.provider.id : fallbackId;
+  const resolved = resolveProviderState({ settings: { ...ai, provider: activeId0 }, ...facts });
+  const providers = toPublicProviderView(resolved, keys);
+  const activeId = activeId0;
+  const active = resolved.find(provider => provider.id === activeId) || resolved[0];
+  const picker = resolved.filter(provider => provider.definition.wizardEligible && provider.usable);
+  const view = {
+    ...settings,
+    ai: {
+      ...ai,
+      provider: activeId,
+      providerPolicy: ai.providerPolicy || 'auto',
+      providers,
+      /** Mirrors the active provider so old readers see a coherent pair. */
+      mode: activeId === 'local' ? 'local' : 'online',
+      hasKey: Boolean(active && active.hasKey),
+      keyMasked: (providers.find(provider => provider.id === activeId) || {}).keyMasked || '',
+      /** #132 §D7: the picker only exists when more than one provider is usable. */
+      picker: {
+        show: picker.length > 1,
+        options: picker.map(provider => ({ id: provider.id, label: provider.definition.label, model: provider.model })),
+        activeId
+      }
+    }
+  };
+  delete view.ai.apiKey;
+  delete view.ai.apiKeyEncrypted;
+  if (view.ai.providers) {
+    view.ai.providers = view.ai.providers.map(provider => ({ ...provider }));
+  }
+  return view;
+}
+
+/** One chat round trip, source-agnostic (local runtime or an OpenAI-compatible API). */
+async function sendChatJson({ target, messages, maxTokens, responseSchema, signal }) {
+  const { mode, model, baseUrl, apiKey, timeoutMs } = target;
+  return requestChatJson({
+    model,
+    mode,
+    messages,
+    generation: buildGenerationOptions(mode, maxTokens),
+    responseSchema: responseSchema || null,
+    timeoutMs,
+    signal,
+    send: (body, sendSignal) => fetchAiEndpoint(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      redirect: 'error',
+      headers: { 'Content-Type': 'application/json', ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}) },
+      body: JSON.stringify(body),
+      signal: sendSignal
+    }, mode).then(async response => {
+      // O6d: record the server-reported input size for prefill metrics.
+      // Wrapping `json` keeps `requestChatJson` unchanged; if the body is not
+      // JSON or reports no usage we simply store null.
+      if (response && response.ok && typeof response.json === 'function') {
+        const originalJson = response.json.bind(response);
+        response.json = async () => {
+          const data = await originalJson();
+          const tokens = readPromptTokens(data);
+          if (tokens !== null) lastPromptTokens = tokens;
+          return data;
+        };
+      }
+      return response;
+    })
+  });
+}
+
+/**
+ * One free-text round trip. Used by the connection test only: the model answers
+ * "OK", so the check verifies reachability, the key and the model name without
+ * depending on JSON formatting.
+ */
+async function sendChatText({ target, messages, maxTokens, signal }) {
+  const { mode, model, baseUrl, apiKey } = target;
+  const startedAt = Date.now();
+  const response = await fetchAiEndpoint(`${baseUrl}/chat/completions`, {
+    method: 'POST',
+    redirect: 'error',
+    headers: { 'Content-Type': 'application/json', ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}) },
+    body: JSON.stringify({
+      model,
+      temperature: 0,
+      max_tokens: Math.max(8, Number(maxTokens) || 16),
+      ...(mode === 'local' ? { top_p: 1, top_k: 20 } : {}),
+      messages
+    }),
+    signal: signal || AbortSignal.timeout(mode === 'local' ? 120_000 : 30_000)
+  }, mode);
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    const classified = classifyProviderHttpError(response.status, text.slice(0, 2_000));
+    throw new AiTransportError(classified.code, classified.message, { status: response.status });
+  }
+  const data = await response.json().catch(() => null);
+  const content = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+  if (typeof content !== 'string' || !content.trim()) {
+    throw new AiTransportError('AI_EMPTY', 'Nhà cung cấp nhận được yêu cầu nhưng trả về nội dung rỗng. Hãy kiểm tra model.');
+  }
+  return { content: content.trim(), durationMs: Date.now() - startedAt };
+}
+
+/**
+ * Chat client for the lesson-to-game workflow (DECISIONS #132).
+ *
+ * Same interface the workflow has always used — `chatJson({ messages, maxTokens,
+ * responseSchema, signal })` — but the provider is chosen from Settings instead of
+ * being hard-wired to llama.cpp. Nothing else changes: prompts, schemas, the
+ * analysis cache, `aiSingleFlight` and `aiRequests` stay as they were.
+ *
+ * - `providerId` from the renderer wins if it is usable; otherwise the policy
+ *   (`local → gemini → openai`) picks one. No provider, or a requested one that is
+ *   not usable, is an error — never a silent switch (spec §4/#132 §D8).
+ * - A real request that fails records `failing` for that provider, and a success
+ *   clears a previous failure, so "ready" never outlives the state it described.
+ */
+async function createChatClientForProvider(requestedId) {
+  const raw = await readJson(SETTINGS_FILE(), {});
+  const { settings } = await loadAiSettingsWithMigration(raw);
+  const ai = settings.ai || {};
+  settingsProvidersCache = ai.providers || {};
+  // The workflow carries two buttons: "Phân tích bằng AI local" and, when a cloud
+  // provider is verified, "… bằng AI ngoài". A named provider is always taken at its
+  // word: local means the local runtime (never a silent cloud fallback), a cloud pick
+  // is used only when verified. No pick at all uses the policy (D13).
+  const requested = requestedId === 'local' ? { ...ai, provider: 'local' } : ai;
+  const choice = chooseProvider({
+    settings: requested,
+    requested: requestedId,
+    localPreferred: requestedId === 'local',
+    ...localRuntimeFacts()
+  });
+  if (!choice.provider) {
+    throw new AiTransportError(choice.code || 'AI_NO_PROVIDER', choice.reason);
+  }
+  const provider = choice.provider;
+  let target;
+  if (provider.id === 'local') {
+    if (!localAiManager || localAiManager.getStatus().state !== 'READY') {
+      throw new AiTransportError('AI_NOT_RUNNING', 'AI local chưa chạy. Hãy nhấn “Tổng hợp với AI trên máy” để mở cửa sổ AI local · llama.cpp, chọn model đã tải đầy đủ rồi nhấn “Bắt đầu chạy”.');
+    }
+    let baseUrl;
+    try {
+      baseUrl = await ensureLocalRuntime(provider.model || ai.localModelId || QWEN_LOCAL_MODELS[0].id);
+    } catch (error) {
+      throw new AiTransportError('AI_NOT_RUNNING', error instanceof Error ? error.message : String(error));
+    }
+    target = { mode: 'local', model: provider.model || ai.localModelId || QWEN_LOCAL_MODELS[0].id, baseUrl, apiKey: '', timeoutMs: 300_000 };
+  } else {
+    if (!provider.baseUrl || !provider.model) {
+      throw new AiTransportError('AI_CONFIG', `${provider.definition.label}: thiếu base URL hoặc tên model trong Cài đặt AI.`);
+    }
+    let endpoint;
+    try { endpoint = new URL(provider.baseUrl); } catch { throw new AiTransportError('AI_CONFIG', 'API Base URL không hợp lệ.'); }
+    const isLoopback = ['localhost', '127.0.0.1', '[::1]'].includes(endpoint.hostname);
+    if (endpoint.protocol !== 'https:' && !(endpoint.protocol === 'http:' && isLoopback)) {
+      throw new AiTransportError('AI_CONFIG', 'API online phải dùng HTTPS. HTTP chỉ được phép cho endpoint loopback trong môi trường thử nghiệm.');
+    }
+    const apiKey = provider.hasKey ? readStoredProviderKey(provider.id) : '';
+    if (provider.definition.requiresKey && !apiKey) {
+      throw new AiTransportError('AI_CONFIG', `${provider.definition.label}: thiếu API key. Hãy nhập khoá trong Cài đặt AI.`);
+    }
+    target = { mode: 'online', model: provider.model, baseUrl: provider.baseUrl, apiKey, timeoutMs: 90_000 };
+  }
   return {
-    async chatJson({ messages, maxTokens, responseSchema, signal }) {
+    providerId: provider.id,
+    providerLabel: provider.definition.label,
+    /** The provider the caller asked for (absent means the policy; `local` is explicit). */
+    requestedProviderId: requestedId || '',
+    async chatJson({ messages, maxTokens, responseSchema, signal, textResponse }) {
+      // `textResponse` is only for the connection test: the workflow always asks for
+      // JSON and never takes this branch.
+      if (textResponse) {
+        return sendChatText({ target, messages, maxTokens, signal });
+      }
       const fixture = loadLessonTestFixture(responseSchema);
       if (fixture.found) {
         if (fixture.error) {
@@ -2689,50 +3610,118 @@ function createLessonChatClient() {
         }
         return fixture.value;
       }
-      if (!localAiManager || localAiManager.getStatus().state !== 'READY') {
-        throw new AiTransportError('AI_NOT_RUNNING', 'AI local chưa chạy. Hãy nhấn “Tổng hợp với AI trên máy” để mở cửa sổ AI local · llama.cpp, chọn model đã tải đầy đủ rồi nhấn “Bắt đầu chạy”.');
-      }
-      const settings = await readJson(SETTINGS_FILE(), {});
-      const ai = settings.ai || {};
-      const localModelId = ai.localModelId || QWEN_LOCAL_MODELS[0].id;
-      let baseUrl;
       try {
-        baseUrl = await ensureLocalRuntime(localModelId);
+        const value = await sendChatJson({ target, messages, maxTokens, responseSchema, signal });
+        if (provider.lastTestOk === false) await recordProviderTest(provider.id, { ok: true, code: '', message: '' });
+        return value;
       } catch (error) {
-        throw new AiTransportError('AI_NOT_RUNNING', error instanceof Error ? error.message : String(error));
+        if (!isCancelReason(error) && !(error && error.code === 'AI_CANCELLED')) {
+          await recordProviderTest(provider.id, { ok: false, code: providerErrorCode(error), message: error instanceof Error ? error.message : String(error) });
+        }
+        throw error;
       }
-      return requestChatJson({
-        model: localModelId,
-        mode: 'local',
-        messages,
-        generation: buildGenerationOptions('local', maxTokens),
-        responseSchema: responseSchema || null,
-        timeoutMs: 300_000,
-        signal,
-        send: (body, sendSignal) => fetchAiEndpoint(`${baseUrl}/chat/completions`, {
-          method: 'POST',
-          redirect: 'error',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-          signal: sendSignal
-        }, 'local').then(async response => {
-          // O6d: record the server-reported input size for prefill metrics.
-          // Wrapping `json` keeps `requestChatJson` unchanged; if the body is not
-          // JSON or reports no usage we simply store null.
-          if (response && response.ok && typeof response.json === 'function') {
-            const originalJson = response.json.bind(response);
-            response.json = async () => {
-              const data = await originalJson();
-              const tokens = readPromptTokens(data);
-              if (tokens !== null) lastPromptTokens = tokens;
-              return data;
-            };
-          }
-          return response;
-        })
-      });
     }
   };
+}
+
+/** The typed code of a provider failure, for storage/diagnostics (never a key). */
+function providerErrorCode(error) {
+  const direct = error && typeof error.code === 'string' && /^AI_/.test(error.code) ? error.code : '';
+  if (direct) return direct;
+  const fromMessage = error && error.message && /\[([A-Z_]+)\]/.exec(error.message);
+  return fromMessage ? fromMessage[1] : 'UNKNOWN';
+}
+
+/** Writes the outcome of a connection test or a real request to the provider. */
+async function recordProviderTest(providerId, { ok, code, message }) {
+  try {
+    const raw = await readJson(SETTINGS_FILE(), {});
+    const { settings } = migrateLegacyAiSettings(raw || {});
+    const ai = settings.ai || {};
+    const providers = { ...(ai.providers || {}) };
+    const current = { ...(providers[providerId] || {}) };
+    current.lastTestAt = new Date().toISOString();
+    current.lastTestOk = Boolean(ok);
+    if (ok) delete current.lastTestCode;
+    else current.lastTestCode = String(code || 'UNKNOWN');
+    providers[providerId] = current;
+    settings.ai = { ...ai, providers };
+    await writeJson(SETTINGS_FILE(), settings);
+    settingsProvidersCache = providers;
+    return { ok: Boolean(ok), code: ok ? '' : String(code || 'UNKNOWN'), message: message || '' };
+  } catch (error) {
+    console.error('Could not record the AI provider test result:', error && error.message ? error.message : error);
+    return { ok: Boolean(ok), code: ok ? '' : String(code || 'UNKNOWN'), message: message || '', notStored: true };
+  }
+}
+
+/**
+ * The minimal real request behind `ai:test-provider` (spec §4 "real, minimal
+ * provider requests"): a handful of output tokens, no schema, no lesson content.
+ */
+async function runProviderProbe(definition, resolved, settings) {
+  if (!resolved) throw new AiTransportError('AI_CONFIG', 'Nhà cung cấp AI không tồn tại.');
+  const ai = settings.ai || {};
+  if (definition.id === 'local') {
+    // The bundled runtime speaks the same chat API; asking for free text keeps the
+    // test about "can this model answer", not about JSON formatting. A test of the local
+    // provider never means "whatever is ready" (D13).
+    const client = await createChatClientForProvider('local');
+    // `chatJson` answers the plain-text probe when `textResponse` is set.
+    await client.chatJson({
+      messages: [{ role: 'user', content: 'Trả lời đúng một từ: OK' }],
+      maxTokens: 16,
+      responseSchema: null,
+      textResponse: true
+    });
+    return { ok: true };
+  }
+  if (!resolved.baseUrl || !resolved.model) {
+    throw new AiTransportError('AI_CONFIG', `${definition.label}: thiếu base URL hoặc tên model.`);
+  }
+  let endpoint;
+  try { endpoint = new URL(resolved.baseUrl); } catch { throw new AiTransportError('AI_CONFIG', 'API Base URL không hợp lệ.'); }
+  const isLoopback = ['localhost', '127.0.0.1', '[::1]'].includes(endpoint.hostname);
+  if (endpoint.protocol !== 'https:' && !(endpoint.protocol === 'http:' && isLoopback)) {
+    throw new AiTransportError('AI_CONFIG', 'API online phải dùng HTTPS.');
+  }
+  const apiKey = resolved.hasKey ? readStoredProviderKey(definition.id) : '';
+  if (definition.requiresKey && !apiKey) {
+    throw new AiTransportError('AI_CONFIG', `${definition.label}: chưa có API key. Hãy nhập khoá rồi kiểm tra lại.`);
+  }
+  const body = {
+    model: resolved.model,
+    temperature: 0,
+    max_tokens: 8,
+    messages: [{ role: 'user', content: 'Trả lời đúng một từ: OK' }]
+  };
+  const signal = AbortSignal.timeout(30_000);
+  let response;
+  try {
+    response = await fetchAiEndpoint(`${resolved.baseUrl}/chat/completions`, {
+      method: 'POST',
+      redirect: 'error',
+      headers: { 'Content-Type': 'application/json', ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}) },
+      body: JSON.stringify(body),
+      signal
+    }, 'online');
+  } catch (error) {
+    // `fetchAiEndpoint` already typed the timeout/network cases; anything else is a
+    // provider we could not reach, never a config error of ours.
+    if (error instanceof AiTransportError) throw error;
+    throw new AiTransportError('AI_NETWORK', `${definition.label}: không kết nối được (${error instanceof Error ? error.message : String(error)}).`);
+  }
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    const classified = classifyProviderHttpError(response.status, text.slice(0, 2_000));
+    throw new AiTransportError(classified.code, `${definition.label}: ${classified.message}`, { status: response.status });
+  }
+  const data = await response.json().catch(() => null);
+  const content = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+  if (typeof content !== 'string' || !content.trim()) {
+    throw new AiTransportError('AI_EMPTY', `${definition.label} nhận được yêu cầu nhưng trả về nội dung rỗng. Hãy kiểm tra model.`);
+  }
+  return { ok: true };
 }
 
 function getAnalyzedSource(payload) {

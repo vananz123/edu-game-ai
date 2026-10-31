@@ -124,6 +124,9 @@ export interface GameConfigBase {
 
 export type ArenaScoringMode = 'basic' | 'speed' | 'difficulty' | 'team' | 'practice';
 
+/** House model used by the quiz's House Building Mode (DECISIONS #144). */
+export type HouseStyle = 'nha-mai-do' | 'nha-vuon' | 'thap-canh' | 'nha-go';
+
 export interface ArenaConfig extends GameConfigBase {
   gameType: 'arena';
   questionCount: number;
@@ -133,6 +136,10 @@ export interface ArenaConfig extends GameConfigBase {
   pointsEasy?: number;
   pointsMedium?: number;
   pointsHard?: number;
+  /** Knowledge Arena mode (DECISIONS #140): 'classic' (default) | 'house'. */
+  gameplayMode?: 'classic' | 'house';
+  /** House model (DECISIONS #144): 'auto' (default) picks a stable model per game. */
+  houseStyle?: 'auto' | HouseStyle;
 }
 
 export interface ScenarioConfig extends GameConfigBase {
@@ -347,6 +354,14 @@ export interface GameProject {
   recommendationId: string | null;
   config: GameConfig | null;
   draft: GameDraft | null;
+  /**
+   * Where `draft` came from (update_quy_trinh_2 review). `'imported-questions'` means
+   * the teacher pasted a question bank and the analysis step was skipped on purpose,
+   * so generating must not call the model. Absent means "AI-produced", which still
+   * requires an analysis — a draft is never treated as teacher-authored just because
+   * `analysisId` happens to be null.
+   */
+  draftSource?: 'imported-questions';
   /** Adapter output used to open the existing editor without calling AI again. */
   gameSnapshot: EducationalGame | null;
   /** Preserves the exact legacy setup when a saved game is opened in the wizard. */

@@ -498,6 +498,58 @@ async function run(): Promise<void> {
   assert.equal(store.getAiTask('task_old'), null);
   assert.ok(store.getAiTask('task_1'));
 
+  // --- #121: paging the AI task history (10 a page) and the 30-row cap ----
+  // 35 synthetic tasks after `task_1` (saved above at `ISO` = `2026-01-01T00:00:00Z`),
+  // one minute each, so the expected order is fully known: 34…0 on the first page,
+  // task_1 last.
+  for (let index = 0; index < 35; index += 1) {
+    store.saveAiTask({
+      taskId: `page_task_${index}`,
+      requestId: `req-page-${index}`,
+      kind: 'analyze',
+      label: `tác vụ ${index}`,
+      state: 'completed',
+      startedAt: new Date(Date.UTC(2026, 0, 1, 0, index + 1)).toISOString(),
+      finishedAt: new Date(Date.UTC(2026, 0, 1, 0, index + 1, 30)).toISOString()
+    });
+  }
+  assert.equal(store.countAiTasks(), 36, 'task_1 plus the 35 paged tasks');
+  // `listAiTasks` caps `limit` at 200, so a single read of 100 sees every row.
+  const everything = store.listAiTasks(100, 0);
+  const firstPage = store.listAiTasks(10, 0);
+  const secondPage = store.listAiTasks(10, 10);
+  const lastPage = store.listAiTasks(10, 30);
+  assert.equal(firstPage.length, 10);
+  assert.equal(secondPage.length, 10);
+  assert.equal(lastPage.length, 6, 'the last page is short, not padded');
+  assert.equal(firstPage[0].taskId, 'page_task_34', 'newest first');
+  assert.equal(lastPage[lastPage.length - 1].taskId, 'task_1', 'the oldest row ends the list');
+  // Pages never overlap and together cover every row exactly once.
+  const seen = [...firstPage, ...secondPage, ...lastPage].map(task => task.taskId);
+  assert.equal(new Set(seen).size, 36);
+  assert.deepEqual(seen, everything.map(task => task.taskId), 'paging in order equals one full read');
+  assert.equal(new Set(seen).has('task_1'), true, 'every stored row is on exactly one page');
+  // Past the end is empty, a negative offset is treated as 0.
+  assert.deepEqual(store.listAiTasks(10, 200), []);
+  assert.deepEqual(store.listAiTasks(10, -5).map(task => task.taskId), firstPage.map(task => task.taskId));
+
+  // The retention cap: pruning to 30 keeps the newest 30 and deletes the rest.
+  assert.equal(store.pruneAiTasks(30), 6);
+  assert.equal(store.countAiTasks(), 30);
+  assert.equal(store.listAiTasks(100)[0].taskId, 'page_task_34');
+  assert.equal(store.listAiTasks(100).some(task => task.taskId === 'task_1'), false, 'the oldest rows are the ones pruned');
+
+  // --- #122: deleting several documents at once ----------------------------
+  // Every id goes through `deleteDocument`; a missing id is counted, not thrown, and a
+  // duplicate id is removed once.
+  const batchA = await store.saveDocument({ name: 'batch-a.txt', ext: 'txt', text: 'A'.repeat(120), characters: 120 });
+  const batchB = await store.saveDocument({ name: 'batch-b.txt', ext: 'txt', text: 'B'.repeat(120), characters: 120 });
+  const batchResult = await store.deleteDocuments([batchA.id, batchB.id, batchA.id, 'doc-missing'], { voidIO: true });
+  assert.deepEqual(batchResult, { deleted: 2, missing: 1, failed: 0 });
+  assert.equal(store.getDocument(batchA.id), null);
+  assert.equal(store.getDocument(batchB.id), null);
+  assert.deepEqual(await store.deleteDocuments([], { voidIO: true }), { deleted: 0, missing: 0, failed: 0 }, 'no ids is a no-op');
+
   // --- .egame JSON round-trip of a stored snapshot ------------------------
   const stored = store.getProject('project-1');
   assert.equal(stored?.gameSnapshot, null);
