@@ -439,6 +439,38 @@ async function clearDiagnosticsUi() {
   }
 }
 
+/**
+ * #157: opens/closes one Settings section without re-rendering. A re-render would
+ * rebuild the form from `state.settings` and silently drop whatever the teacher typed
+ * but has not saved yet (an API key, a base URL), so the panels are toggled in place
+ * and `state.settingsSection` only records which one is open for the next render.
+ */
+function wireSettingsSections() {
+  const headers = $$('[data-settings-section]');
+  if (!headers.length) return;
+  const setOpen = sectionId => {
+    headers.forEach(header => {
+      const open = header.dataset.settingsSection === sectionId;
+      header.setAttribute('aria-expanded', open ? 'true' : 'false');
+      const chevron = header.querySelector('[data-settings-chevron]');
+      if (chevron) chevron.textContent = open ? 'Thu gọn ▴' : 'Mở ▾';
+    });
+    $$('[data-settings-panel]').forEach(panel => {
+      panel.classList.toggle('hidden', panel.dataset.settingsPanel !== sectionId);
+    });
+    state.settingsSection = sectionId;
+    // A section loaded while closed still gets a refresh the moment it opens.
+    if (sectionId === 'tasks') refreshAiTaskList();
+    if (sectionId === 'diagnostics') refreshDiagnosticsInfo();
+  };
+  headers.forEach(header => {
+    header.addEventListener('click', () => {
+      const willOpen = header.getAttribute('aria-expanded') !== 'true';
+      setOpen(willOpen ? header.dataset.settingsSection : '');
+    });
+  });
+}
+
 /** Called by the controller when the settings page is (re)wired. */
 function wireSettingsAiTasks() {
   // #121: "Làm mới" jumps back to the newest page, then re-reads it.

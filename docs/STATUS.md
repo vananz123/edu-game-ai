@@ -8,6 +8,7 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 ## Mục lục bàn giao
 
 ### 2026-10-31 — [docs/handoff/status/2026-10-31.md](handoff/status/2026-10-31.md)
+- Trang Cài đặt là accordion sáu mục; sửa `ai:test-provider` đọc cache key rỗng (#157)
 - `ui-wizard-structure-check` xanh 14/14 nhờ guard setup onboarding (#156)
 - Nhãn "Cách chơi" (Cổ điển / Xây nhà) trên thẻ trò chơi (#155)
 - Phân trang và xoá nhiều ở Thư viện trò chơi (#154)
@@ -191,6 +192,28 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - Lịch sử trước 2026-10-19
 ## Bàn giao gần nhất
 
+## Handoff - Trang Cài đặt là accordion sáu mục + sửa `ai:test-provider` đọc cache key rỗng (2026-10-31, DECISIONS #157)
+
+**Files changed.**
+- `src/renderer/pages/settings.ts`: helper `settingsSectionHeader(id, icon, title, chipHtml, openSection)` + `SETTINGS_SECTION_IDS`; sáu `<section>` thành header + `div[data-settings-panel]`, chỉ mục mở bỏ `hidden`; "Dữ liệu và trải nghiệm" → **Giao diện** (phần quyền riêng tư/.egame vào mục này dưới nhãn "Dữ liệu trên máy"); mỗi header có chip trạng thái (AI local `✓ Sẵn sàng`/`○ Chưa cài đầy đủ`, nhà cung cấp `✓ n/5 sẵn sàng`, giọng điệu, chủ đề); nút tác vụ/chẩn đoán vào trong panel của nó; câu dẫn đầu trang + card Lưu nói rõ "kể cả các mục đang đóng".
+- `src/renderer/shared.ts`: `state.settingsSection = 'aiLocal'` (state UI, không nằm trong `settings`).
+- `src/renderer/features/settings.ts`: `wireSettingsSections()` — toggle `hidden` tại chỗ, không re-render, đổi `aria-expanded` + nhãn "Mở ▾/Thu gọn ▴", mở *Tác vụ*/*Chẩn đoán* thì gọi refresh ngay.
+- `src/renderer/core/controller.ts`: gọi `wireSettingsSections()` từ `wirePage()` khi ở trang settings.
+- `src/main.ts`: handler `ai:test-provider` nạp `settingsProvidersCache` từ settings vừa đọc — trước đó hàm này đọc cache rỗng nên báo "chưa có API key" với khoá đã lưu đúng.
+- `tests/ui/ui-settings-sections-check.js` (mới, 17 check) + script `check:settings-sections-ui` trong `package.json`.
+- Docs: `docs/DECISIONS.md` (#157), `docs/STATUS.md`, `docs/handoff/status/2026-10-31.md` (chuyển bàn giao #154 vào lưu trữ).
+- Không đổi: schema lưu `settings`, hợp đồng IPC, `saveSettings()`, `readAiProviderPatches()`, engine trò chơi.
+
+**Behavior.** Trang Cài đặt gồm sáu mục gập được, một mục mở tại một thời điểm, bấm header để mở/đóng và bấm lại mục đang mở để gập hết. Nội dung chỉ hiện khi chọn mục, nhưng mọi điều khiển vẫn nằm trong DOM nên "Lưu cài đặt" lấy được cả giá trị ở mục đang đóng; đang gõ base URL/API key chưa lưu rồi chuyển mục vẫn còn nguyên chữ (không re-render). Mục đóng vẫn tự hiện tình trạng qua chip. Bug chính: "Kiểm tra kết nối" ngay sau khi lưu khoá trả kết quả sai ("chưa có API key") — nay test một lần là ra kết quả thật.
+
+**Commands run.** `npm run check` 0 · `node tests/run-unit.js` **68/68** · `npm run build` 0 · `npm run check:renderer-globals` 0 undefined (54/55 script, 764 hàm, 6.274 call site) · `npm run verify:css` **17/17** · Electron thật, mỗi check một profile sạch: `ui-settings-sections-check` **17/17** (2 lần), `ui-ai-provider-settings-check` pass hết (trước khi sửa main: 6 FAIL), `ui-ai-provider-key-check` pass, `ui-ai-provider-wizard-check` pass · ảnh chụp 1366×768 ba trạng thái (AI local / Nhà cung cấp / Giao diện).
+
+**Chưa xác minh.** `ui-ai-tasks-paging-check` vẫn 6/8 trên profile mới (cần ≥11 tác vụ lịch sử — có sẵn từ trước, không do accordion). Chưa mở/đóng có animation; chưa nhớ mục đã mở giữa các lần khởi động. Chưa chạy installer đóng gói.
+
+**Next task.** Roadmap `Packaged check` (cần máy sạch); nếu muốn xanh nốt `ui-ai-tasks-paging-check` thì check phải tự tạo ≥11 mục lịch sử giả thay vì giả định profile đã có.
+
+---
+
 ## Handoff - `ui-wizard-structure-check` xanh nhờ guard setup onboarding (2026-10-31, DECISIONS #156)
 
 **Files changed.**
@@ -223,27 +246,6 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 **Chưa xác minh.** Chưa bấm tay trên profile nhiều game để cảm nhận chip khi hàng chip xuống hai dòng ở cửa sổ hẹp (đã xem ảnh 1366×768, vẫn một dòng). Chưa lọc/tìm theo cách chơi; chưa hiện cách chơi ngoài thẻ. Chưa chạy installer đóng gói.
 
 **Next task.** Roadmap `Packaged check` (cần máy sạch); các mục AI/giáo án chưa chốt thứ tự.
-
----
-
-## Handoff - Phân trang và xoá nhiều ở Thư viện trò chơi (2026-10-31, DECISIONS #154)
-
-**Files changed.**
-- `src/renderer/pages/library.ts` (viết lại, 7 → ~75 dòng): `LIBRARY_PAGE_SIZE = 9` (ba hàng của lưới ba cột), `libraryCurrentPage`, `librarySelectedIds`, `libraryPagerHtml`, `librarySelectionBarHtml`, `libraryCardHtml` — thẻ game giữ nguyên `gameCard()`, chỉ bọc thêm `div` có ô tick + viền khi chọn.
-- `src/renderer/core/controller.ts`: `updateLibrarySelectionUi()`; action `library-page` / `library-select` / `library-clear-selection` / `library-delete-selected`; select-all chỉ tick thẻ đang render; gõ tìm kiếm hoặc đổi thể loại đưa về trang 1.
-- `src/preload.ts`: `deleteGames(ids)` → `library:delete-games`.
-- `src/main.ts`: handler `library:delete-games` — id chuỗi duy nhất, từ chối lô rỗng, tối đa 500; xoá mọi hàng trong một transaction rồi mới dọn ảnh tải lên (#124), trả `{ ok, deleted, missing }`.
-- `tests/ui/ui-library-paging-check.js` (mới, 12 check): 11 game tổng hợp qua IPC thật, lọc về đúng fixture (không bao giờ tick/xoá game sẵn có của giáo viên), kiểm 9 thẻ/trang, pager, chọn-tất-cả theo trang, lựa chọn sống qua trang, xoá đúng nhóm, game khác còn nguyên, IPC từ chối lô rỗng; dọn fixture cuối.
-- Docs: `docs/DECISIONS.md` (#154), `docs/STATUS.md`.
-- Không đổi: `library:delete-game` (xoá lẻ từ menu "•••"), `gameCard()`, markup thẻ, SQLite schema, `.egame`, trang chủ.
-
-**Behavior.** Thư viện trò chơi chia 9 game/trang có pager (Trước / số trang / Sau) và chỉ tick được thẻ đang hiện; đã tick thì viền tím, đếm "Đã chọn N trò chơi", lựa chọn giữ khi đổi trang. Nút "🗑 Xoá đã chọn" hỏi xác nhận kèm tối đa 5 tên, xoá đúng nhóm trong một transaction, dọn ảnh không còn ai dùng, bỏ chọn và ẩn pager khi còn một trang. Gõ tìm kiếm/đổi thể loại luôn quay về trang 1.
-
-**Commands run.** `npm run check` 0 · `npm run build` 0 · `npm run check:renderer-globals` 0 undefined (55 script, 6.194 call site) · `node tests/run-unit.js` **68/68** · Electron thật, mỗi check một instance sạch: `ui-library-paging-check` **12/12**, `ui-card-menu-check` pass, `ui-lessons-paging-check` **10/10**, `ui-results-paging-check` **11/11**.
-
-**Chưa xác minh.** Chưa bấm tay trên profile thật nhiều game để cảm nhận bố cục 9 thẻ/trang ở 1366×768; chưa có "chọn tất cả mọi trang" và chưa có hoàn tác (lời xác nhận đã ghi rõ không thể hoàn tác, nhắc xuất `.egame` trước). Chưa chạy installer đóng gói.
-
-**Next task.** Roadmap `Packaged check` (cần máy sạch); nếu phải sửa cả ba trang danh sách lần nữa thì gom pager thành helper dùng chung (giáo án / thư viện / lịch sử).
 
 
 

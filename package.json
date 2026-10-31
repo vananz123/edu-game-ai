@@ -25,6 +25,7 @@
     "check:renderer-globals": "node scripts/check-renderer-undefined-globals.js",
     "check:item-assets-ui": "node tests/ui/ui-item-assets-editor-check.js",
     "check:draft-guard-ui": "node tests/ui/ui-draft-guard-check.js",
+    "check:settings-sections-ui": "node tests/ui/ui-settings-sections-check.js",
     "test:ui": "node tests/ui/ui-setup-fullscreen-check.js",
     "build:icons": "node scripts/build-icon-data.js",
     "build:icons:check": "node scripts/build-icon-data.js --check",

@@ -468,4 +468,21 @@ Nguyên nhân gốc nằm ở chỗ editor render cả ba panel ẩn để thầ
 
 **Chưa xử lý.** `ui-draft-guard-check` cần một nhà cung cấp AI dùng được (không đưa API key thật vào check); chưa có script chạy trọn bộ UI check bằng một lệnh.
 
+## #157 — Trang Cài đặt là accordion sáu mục; sửa `ai:test-provider` đọc cache key rỗng
+
+**Bối cảnh.** Yêu cầu: gom trang Cài đặt thành sáu mục — *AI local tích hợp*, *Nhà cung cấp API Key*, *Phong cách giảng dạy*, *Giao diện* (đổi tên từ "Dữ liệu và trải nghiệm"), *Tác vụ dùng AI*, *Chẩn đoán trực trặc (log)* — và khi chọn mục thì nội dung mới hiện ra. Trước đó trang này là một cuộn dài gồm các thẻ mở hết, giáo viên muốn đổi khoá API phải cuộn qua toàn bộ phần AI local.
+
+**Thay đổi — renderer.**
+- `src/renderer/pages/settings.ts`: thêm `settingsSectionHeader(id, icon, title, chipHtml, openSection)` và `SETTINGS_SECTION_IDS`. Sáu `<section data-settings-card>` giờ là header + `<div data-settings-panel id="settingsPanel-…">`; chỉ mục đang mở bỏ `hidden`, năm mục kia vẫn render đầy đủ rồi ẩn bằng class. Header là `<button>` nằm **trong** `<h3>` (nguyên tắc: `h3` không được đặt inside `button`) nên assertion cũ `panel.querySelector('h3')` vẫn đúng. Chữ "Dữ liệu và trải nghiệm" → "Giao diện", phần quyền riêng tư/`.egame` chuyển vào mục này dưới nhãn "Dữ liệu trên máy". Mỗi header mang chip trạng thái: `✓ Sẵn sàng` / `○ Chưa cài đầy đủ` (AI local), `✓ n/5 sẵn sàng` / "Chưa có nhà cung cấp sẵn sàng", giọng điệu, chủ đề sáng/tối — mục đóng vẫn tự nói được tình trạng của mình. Các nút tác vụ (`#aiTasksRefreshBtn`, `#cpuRuntimeVerifyBtn`, `#exportDiagnosticsBtn`, `#openLogFolderBtn`, `#clearDiagnosticsBtn`) vào trong panel của chính nó.
+- `src/renderer/shared.ts`: `state.settingsSection = 'aiLocal'` — state UI thuần, không nằm trong `settings` nên không bao giờ được lưu.
+- `src/renderer/features/settings.ts`: `wireSettingsSections()` toggle tại chỗ, **không re-render**. Lý do: `render()` dựng lại input từ `state.settings`, nên bấm sang mục khác khi đang gõ một base URL/API key chưa lưu sẽ xoá mất chữ đó. Panel cũng giữ nguyên DOM để `saveSettings()` (đọc `#settingLargeText`, `#settingSound` không guard) và `readAiProviderPatches()` (duyệt mọi `[data-ai-provider]`) tiếp tục chạy đúng với mục đang đóng. Mở mục *Tác vụ*/*Chẩn đoán* thì gọi `refreshAiTaskList()` / `refreshDiagnosticsInfo()` ngay tại chỗ.
+- `src/renderer/core/controller.ts`: gọi `wireSettingsSections()` trong `wirePage()` khi `state.page === 'settings'`.
+- `package.json`: script `check:settings-sections-ui`.
+
+**Thay đổi — sửa bug thật ở main.** `ui-ai-provider-settings-check` đỏ 6/8 sau khi gom mục. Probe qua CDP cho thấy provider lưu đúng (`hasKey: true`, base URL và model đúng) nhưng main trả `AI_CONFIG` "chưa có API key". Nguyên nhân: handler `ai:test-provider` gọi `readStoredProviderKey()`, vốn chỉ đọc `settingsProvidersCache` — cache này chỉ được `createChatClientForProvider` và `recordProviderTest` nạp. Test ngay sau khi "Lưu khoá", chưa từng sinh nội dung trong process, vì thế luôn thấy cache rỗng. Trước đây bug bị che vì cả ba check provider chạy chung một instance Electron (đã sinh nội dung nên cache đã đầy); nay mỗi check một profile sạch nên nó lộ ra. Sửa: `ai:test-provider` gán `settingsProvidersCache = (settings.ai || {}).providers || {}` ngay sau khi load settings.
+
+**Kết quả.** `npm run check` 0 · `node tests/run-unit.js` **68/68** · `npm run build` 0 · `npm run check:renderer-globals` 0 undefined (54/55 script, 764 hàm, 6.274 call site) · `npm run verify:css` **17/17**. Electron thật, mỗi check một profile sạch: `ui-settings-sections-check` (mới) **17/17** hai lần, `ui-ai-provider-settings-check` pass hết sau khi sửa main, `ui-ai-provider-key-check` pass, `ui-ai-provider-wizard-check` pass. Ảnh chụp 1366×768 cho cả ba trạng thái (AI local mở, Nhà cung cấp mở, Giao diện mở): một header mở, các header còn lại ẩn nội dung nhưng vẫn hiện chip, sidebar "Lưu thay đổi / Tóm tắt cấu hình / Liên kết nhanh" không đổi.
+
+**Chưa xử lý.** `ui-ai-tasks-paging-check` vẫn 6/8 trên profile mới — cần ≥11 tác vụ lịch sử, không liên quan accordion (đã ghi ở bàn giao #153). Chưa có animation mở/đóng; chưa nhớ mục đã mở giữa các lần khởi động (chỉ trong một phiên).
+
 

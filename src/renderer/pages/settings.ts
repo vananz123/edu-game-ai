@@ -45,6 +45,26 @@ function settingsProviderCard(provider, inputCls, labelCls, hintCls, btnSecondar
     + note + fields + localActions + '</div>';
 }
 
+/**
+ * #157: Settings is an accordion — six headers, one open at a time.
+ *
+ * The header is a button inside its `<h3>` (phrasing content, so the markup stays
+ * valid) and carries the state chip, so a closed section still tells the teacher
+ * what it holds. The body is only hidden, never removed: `saveSettings` reads
+ * `#settingLargeText`/`#settingSound` without guards and `readAiProviderPatches`
+ * walks every `[data-ai-provider]`, so every control must stay in the DOM no
+ * matter which section is open.
+ */
+function settingsSectionHeader(id, icon, title, chipHtml, openSection) {
+  const open = openSection === id;
+  return `<h3 class="m-0 text-[15px] font-bold text-[#1e293b] dark:text-[#f1f5f9]"><button type="button" class="w-full flex items-center justify-between gap-3 text-left bg-transparent border-0 p-0 cursor-pointer" data-settings-section="${id}" aria-expanded="${open ? 'true' : 'false'}" aria-controls="settingsPanel-${id}">
+      <span class="flex items-center gap-2 min-w-0 flex-wrap"><span class="text-[18px]">${icon}</span><span>${title}</span>${chipHtml || ''}</span>
+      <span class="shrink-0 text-[11px] font-semibold text-[#94a3b8] dark:text-[#64748b]" data-settings-chevron>${open ? 'Thu gọn ▴' : 'Mở ▾'}</span>
+    </button></h3>`;
+}
+
+const SETTINGS_SECTION_IDS = ['aiLocal', 'providers', 'teaching', 'interface', 'tasks', 'diagnostics'];
+
 function renderSettings() {
   const ai = state.settings.ai || {};
   const teachingStyle = state.settings.preferences?.teachingStyle || {};
@@ -92,6 +112,21 @@ function renderSettings() {
   const hintCls = 'text-[11px] text-[#94a3b8] dark:text-[#64748b] leading-relaxed';
   const btnSecondaryCls = 'btn btn-secondary btn-small';
 
+  // #157: `''` is a real state (the teacher collapsed everything); only the first visit
+  // opens AI local, and every re-render after a save or a model change keeps the choice.
+  const openSection = SETTINGS_SECTION_IDS.includes(state.settingsSection) ? state.settingsSection : '';
+  const localReady = Boolean(selectedLocalModel?.installed && machine.runtimeInstalled);
+  const localChip = `<span class="px-2 py-0.5 rounded text-[10px] font-semibold ${localReady
+    ? 'bg-[#effaf5] dark:bg-[#132d24] text-[#16a34a] dark:text-[#4ade80]'
+    : 'bg-[#fef3c7] dark:bg-[#2d2413] text-[#d97706] dark:text-[#fbbf24]'}">${localReady ? '✓ Sẵn sàng' : '○ Chưa cài đầy đủ'}</span>`;
+  const readyProviders = providers.filter(provider => provider.status === 'ready').length;
+  const providersChip = readyProviders
+    ? `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-[#effaf5] dark:bg-[#132d24] text-[#16a34a] dark:text-[#4ade80]">✓ ${readyProviders}/${providers.length} sẵn sàng</span>`
+    : `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-[#f5f6fa] dark:bg-[#1e2544] text-[#788196] dark:text-[#94a3b8]">Chưa có nhà cung cấp sẵn sàng</span>`;
+  const teachingChip = `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-[#eef2ff] dark:bg-[#1e1b4b] text-[#4f46e5] dark:text-[#a5b4fc]">${escapeHtml(tone)}</span>`;
+  const themeLabel = state.settings.preferences?.theme==='dark' ? 'Tối' : state.settings.preferences?.theme==='system' ? 'Theo hệ thống' : 'Sáng';
+  const interfaceChip = `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-[#f5f6fa] dark:bg-[#1e2544] text-[#788196] dark:text-[#94a3b8]">${escapeHtml(themeLabel)}</span>`;
+
   return `<!-- Header -->
   <div class="flex items-center justify-between gap-4 mb-6 flex-wrap pb-4 border-b border-[#f1f5f9] dark:border-[#2a324b]">
     <div>
@@ -100,7 +135,7 @@ function renderSettings() {
         <h1 class="text-[22px] tracking-[-0.5px] m-0 font-extrabold text-[#1e293b] dark:text-[#f1f5f9]">Cài đặt ứng dụng</h1>
       </div>
       <p class="mt-1 text-[12px] text-[#64748b] dark:text-[#94a3b8] leading-relaxed m-0">
-        Quản lý AI local tích hợp, nhà cung cấp AI tùy chọn và trải nghiệm ứng dụng.
+        Chọn một mục để mở. Mọi thay đổi chỉ được lưu khi bạn bấm “Lưu cài đặt”, kể cả ở mục đang đóng.
       </p>
     </div>
   </div>
@@ -108,17 +143,10 @@ function renderSettings() {
   <div class="grid grid-cols-[minmax(0,1fr)_280px] gap-5 items-start">
     <div class="flex flex-col gap-5 min-w-0">
 
-      <!-- ═══ AI LOCAL TÍCH HỢP ═══ -->
-      <section class="${sectionCls}">
-        <div class="flex justify-between items-center mb-4">
-          <div class="flex items-center gap-2">
-            <span class="text-[18px]">🤖</span>
-            <h3 class="text-[15px] font-bold text-[#1e293b] dark:text-[#f1f5f9] m-0">AI local tích hợp</h3>
-          </div>
-          <span class="px-2 py-0.5 rounded text-[10px] font-semibold ${selectedLocalModel?.installed && machine.runtimeInstalled
-            ? 'bg-[#effaf5] dark:bg-[#132d24] text-[#16a34a] dark:text-[#4ade80]'
-            : 'bg-[#fef3c7] dark:bg-[#2d2413] text-[#d97706] dark:text-[#fbbf24]'}">${selectedLocalModel?.installed && machine.runtimeInstalled ? '✓ Sẵn sàng' : '○ Chưa cài đầy đủ'}</span>
-        </div>
+      <!-- ═══ 1. AI LOCAL TÍCH HỢP ═══ -->
+      <section class="${sectionCls}" data-settings-card="aiLocal">
+        ${settingsSectionHeader('aiLocal', '🤖', 'AI local tích hợp', localChip, openSection)}
+        <div class="mt-4 ${openSection === 'aiLocal' ? '' : 'hidden'}" data-settings-panel="aiLocal" id="settingsPanel-aiLocal">
         <p class="${hintCls} mb-4">Cài và chọn model Qwen chạy cùng llama.cpp ngay trong ứng dụng. Model và runtime được lưu trong dữ liệu ứng dụng trên máy này.</p>
 
         ${machine.runtimeSupported === false ? `<div class="p-3 bg-[#fef2f2] dark:bg-[#2d1313] border border-[#fecaca] dark:border-[#4a1b1b] rounded-lg mb-4 text-[12px] text-[#b91c1c] dark:text-[#fca5a5]"><strong>Chưa hỗ trợ cấu hình này</strong> — Runtime AI local tích hợp hiện chỉ hỗ trợ Windows x64.</div>` : ''}
@@ -181,15 +209,14 @@ function renderSettings() {
             </div>
           </div>
         ` : `<p class="${hintCls}">Đang nạp danh sách model AI local…</p>`}
+        </div>
       </section>
 
-      <!-- ═══ NHÀ CUNG CẤP AI (#132) ═══ -->
-      <section class="${sectionCls}" id="settingAiProviders" data-ai-providers>
-        <div class="flex items-center gap-2 mb-2">
-          <span class="text-[18px]">☁️</span>
-          <h3 class="text-[15px] font-bold text-[#1e293b] dark:text-[#f1f5f9] m-0">Nhà cung cấp AI</h3>
-        </div>
-        <p class="${hintCls} mb-4">Mọi cấu hình AI nằm ở đây — luồng tạo trò chơi chỉ dùng nhà cung cấp đã cấu hình sẵn. Khoá API được mã hoá bằng khoá của Windows và <b>không bao giờ</b> gửi lại vào màn hình.</p>
+      <!-- ═══ 2. NHÀ CUNG CẤP API KEY (#132) ═══ -->
+      <section class="${sectionCls}" id="settingAiProviders" data-ai-providers data-settings-card="providers">
+        ${settingsSectionHeader('providers', '☁️', 'Nhà cung cấp API Key', providersChip, openSection)}
+        <div class="mt-4 ${openSection === 'providers' ? '' : 'hidden'}" data-settings-panel="providers" id="settingsPanel-providers">
+        <p class="${hintCls} mb-4">Base URL, tên model và khoá API của từng nhà cung cấp. Luồng tạo trò chơi chỉ dùng nhà cung cấp đã cấu hình sẵn. Khoá API được mã hoá bằng khoá của Windows và <b>không bao giờ</b> gửi lại vào màn hình.</p>
         ${providers.length ? `
           <div class="p-3 mb-3 bg-[#f8fafc] dark:bg-[#151a30] rounded-xl border border-[#f1f5f9] dark:border-[#2a324b]" data-ai-policy>
             <strong class="text-[12px] text-[#1e293b] dark:text-[#f1f5f9] block">Cho trò chơi mới: tự chọn nhà cung cấp sẵn sàng</strong>
@@ -198,15 +225,14 @@ function renderSettings() {
           </div>
           <div class="grid gap-3">${providers.map(provider => settingsProviderCard(provider, inputCls, labelCls, hintCls, btnSecondaryCls)).join('')}</div>
         ` : `<p class="${hintCls}">Đang nạp danh sách nhà cung cấp AI…</p>`}
+        </div>
       </section>
 
 
-      <!-- ═══ PHONG CÁCH GIẢNG DẠY ═══ -->
-      <section class="${sectionCls}">
-        <div class="flex items-center gap-2 mb-4">
-          <span class="text-[18px]">🎨</span>
-          <h3 class="text-[15px] font-bold text-[#1e293b] dark:text-[#f1f5f9] m-0">Phong cách giảng dạy của tôi</h3>
-        </div>
+      <!-- ═══ 3. PHONG CÁCH GIẢNG DẠY ═══ -->
+      <section class="${sectionCls}" data-settings-card="teaching">
+        ${settingsSectionHeader('teaching', '🎨', 'Phong cách giảng dạy', teachingChip, openSection)}
+        <div class="mt-4 ${openSection === 'teaching' ? '' : 'hidden'}" data-settings-panel="teaching" id="settingsPanel-teaching">
         <p class="${hintCls} mb-4">Thiết lập một lần cho giáo viên; AI dùng làm mặc định cho những trò chơi mới.</p>
 
         <div class="grid gap-3">
@@ -246,17 +272,15 @@ function renderSettings() {
             <label class="${labelCls}">GHI CHÚ CHO AI</label>
             <textarea id="settingStyleNotes" rows="2" class="${inputCls}" placeholder="VD: ngắn gọn, ưu tiên ví dụ địa phương, không dùng thuật ngữ khó">${escapeHtml(teachingStyle.notes || '')}</textarea>
           </div>
-          <div class="${hintCls}">Phong cách áp dụng khi tạo trò chơi mới bằng AI local hoặc đám mây; model AI chọn ở mục Nhà cung cấp AI. Chế độ ngoại tuyến không gọi AI nên không dùng phong cách này.</div>
+          <div class="${hintCls}">Phong cách áp dụng khi tạo trò chơi mới bằng AI local hoặc đám mây; model AI chọn ở mục Nhà cung cấp API Key. Chế độ ngoại tuyến không gọi AI nên không dùng phong cách này.</div>
+        </div>
         </div>
       </section>
 
-      <!-- ═══ DỮ LIỆU VÀ TRẢI NGHIỆM ═══ -->
-      <section class="${sectionCls}">
-        <div class="flex items-center gap-2 mb-4">
-          <span class="text-[18px]">⚙️</span>
-          <h3 class="text-[15px] font-bold text-[#1e293b] dark:text-[#f1f5f9] m-0">Dữ liệu và trải nghiệm</h3>
-        </div>
-
+      <!-- ═══ 4. GIAO DIỆN (trước đây: Dữ liệu và trải nghiệm) ═══ -->
+      <section class="${sectionCls}" data-settings-card="interface">
+        ${settingsSectionHeader('interface', '⚙️', 'Giao diện', interfaceChip, openSection)}
+        <div class="mt-4 ${openSection === 'interface' ? '' : 'hidden'}" data-settings-panel="interface" id="settingsPanel-interface">
         <div class="grid gap-4">
           <div class="grid grid-cols-3 gap-3">
             <div class="field">
@@ -293,6 +317,7 @@ function renderSettings() {
             </div>
           </div>
 
+          <div class="text-[12px] font-bold text-[#1e293b] dark:text-[#f1f5f9]">Dữ liệu trên máy</div>
           <div class="grid grid-cols-2 gap-3">
             <div class="p-3 bg-[#f8fafc] dark:bg-[#151a30] rounded-lg border border-[#f1f5f9] dark:border-[#2a324b]">
               <strong class="text-[12px] text-[#1e293b] dark:text-[#f1f5f9] block mb-1">🔒 Quyền riêng tư</strong>
@@ -308,43 +333,42 @@ function renderSettings() {
             </div>
           </div>
         </div>
+        </div>
       </section>
 
-      <!-- ═══ TÁC VỤ AI ═══ -->
+      <!-- ═══ 5. TÁC VỤ DÙNG AI ═══ -->
       <!-- update_plan_3 §8: task manager — what ran, what is running, what failed; history survives restart. -->
-      <section class="${sectionCls}">
-        <div class="flex justify-between items-center mb-4">
-          <div class="flex items-center gap-2">
-            <span class="text-[18px]">📋</span>
-            <h3 class="text-[15px] font-bold text-[#1e293b] dark:text-[#f1f5f9] m-0">Tác vụ AI</h3>
-          </div>
+      <section class="${sectionCls}" data-settings-card="tasks">
+        ${settingsSectionHeader('tasks', '📋', 'Tác vụ dùng AI', '', openSection)}
+        <div class="mt-4 ${openSection === 'tasks' ? '' : 'hidden'}" data-settings-panel="tasks" id="settingsPanel-tasks">
+        <div class="flex items-start justify-between gap-3 flex-wrap mb-3">
+          <p class="${hintCls} m-0 max-w-[60ch]">Các tác vụ phân tích giáo án, sinh nội dung và tạo lại mục bằng AI local. Lịch sử được lưu trên máy và khôi phục khi mở lại ứng dụng. Mỗi trang 10 tác vụ; hệ thống chỉ giữ <b>30 tác vụ gần nhất</b> và tự xoá tác vụ cũ hơn.</p>
           <div class="flex gap-2 shrink-0">
             <button class="${btnSecondaryCls}" id="aiTasksRefreshBtn">Làm mới</button>
             <button class="${btnSecondaryCls}" id="cpuRuntimeVerifyBtn">Xác minh runtime</button>
           </div>
         </div>
-        <p class="${hintCls} mb-3">Các tác vụ phân tích giáo án, sinh nội dung và tạo lại mục bằng AI local. Lịch sử được lưu trên máy và khôi phục khi mở lại ứng dụng. Mỗi trang 10 tác vụ; hệ thống chỉ giữ <b>30 tác vụ gần nhất</b> và tự xoá tác vụ cũ hơn.</p>
         <div id="cpuVerifyResult" class="hidden bg-[#f8fafc] dark:bg-[#151a30] border border-[#e2e8f0] dark:border-[#2a324b] rounded-lg p-3 text-[12px] mb-3"></div>
         <div id="aiTaskList" class="grid gap-2"><div class="${hintCls}">Đang tải danh sách tác vụ…</div></div>
+        </div>
       </section>
 
-      <!-- ═══ CHẨN ĐOÁN AI ═══ -->
+      <!-- ═══ 6. CHẨN ĐOÁN TRỰC TRẶC (LOG) ═══ -->
       <!-- O10: diagnostic log — reproduce on another machine, export one file, send it back. -->
-      <section class="${sectionCls}" data-diagnostics-panel>
-        <div class="flex justify-between items-center mb-4">
-          <div class="flex items-center gap-2">
-            <span class="text-[18px]">🔍</span>
-            <h3 class="text-[15px] font-bold text-[#1e293b] dark:text-[#f1f5f9] m-0">Chẩn đoán AI (log)</h3>
-          </div>
-          <div class="flex gap-2 shrink-0">
+      <section class="${sectionCls}" data-diagnostics-panel data-settings-card="diagnostics">
+        ${settingsSectionHeader('diagnostics', '🔍', 'Chẩn đoán trực trặc (log)', '', openSection)}
+        <div class="mt-4 ${openSection === 'diagnostics' ? '' : 'hidden'}" data-settings-panel="diagnostics" id="settingsPanel-diagnostics">
+        <div class="flex items-start justify-between gap-3 flex-wrap mb-2">
+          <p class="${hintCls} m-0 max-w-[60ch]">Chẩn đoán AI: ứng dụng tự ghi lại thời gian chạy, model, số mục đã tạo, số lần thử lại và lỗi. Log chỉ chứa id, số lượng, thời gian và mã lỗi; không có nội dung giáo án hay khóa API.</p>
+          <div class="flex gap-2 shrink-0 flex-wrap">
             <button class="${btnSecondaryCls}" id="exportDiagnosticsBtn">Xuất gói chẩn đoán</button>
             <button class="${btnSecondaryCls}" id="openLogFolderBtn">Mở thư mục log</button>
             <button class="btn btn-small border border-[#e2e8f0] dark:border-[#2a324b] text-[#dc2626] dark:text-[#fca5a5] bg-white dark:bg-[#171c32] hover:bg-[#fef2f2] text-[11px] font-semibold px-3 py-1.5 rounded-lg" id="clearDiagnosticsBtn">Xóa log</button>
           </div>
         </div>
-        <p class="${hintCls} mb-2">Ứng dụng tự ghi lại thời gian chạy, model, số mục đã tạo, số lần thử lại và lỗi. Log chỉ chứa id, số lượng, thời gian và mã lỗi; không có nội dung giáo án hay khóa API.</p>
         <div id="diagnosticsInfo" class="${hintCls} mb-3">Đang đọc thư mục log…</div>
         <div id="diagnosticsResult" class="hidden bg-[#f8fafc] dark:bg-[#151a30] border border-[#e2e8f0] dark:border-[#2a324b] rounded-lg p-3 text-[12px] break-all"></div>
+        </div>
       </section>
 
     </div>
@@ -354,7 +378,7 @@ function renderSettings() {
       <!-- Nút Lưu cài đặt — sticky -->
       <section class="bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] rounded-2xl p-5 text-white">
         <h3 class="text-[14px] font-bold m-0 mb-2">Lưu thay đổi</h3>
-        <p class="text-[11px] text-[#e0e7ff] mb-3 leading-relaxed m-0">Nhấn nút bên dưới để lưu toàn bộ cài đặt trên trang này.</p>
+        <p class="text-[11px] text-[#e0e7ff] mb-3 leading-relaxed m-0">Lưu toàn bộ cài đặt trên trang này — kể cả các mục đang đóng.</p>
         <button class="bg-white text-[#6366f1] border-0 rounded-lg px-4 py-2.5 font-bold text-[13px] cursor-pointer w-full hover:bg-[#f8f7ff] transition shadow-[0_4px_12px_rgba(0,0,0,0.1)]" id="saveSettingsBtn">💾 Lưu cài đặt</button>
       </section>
 

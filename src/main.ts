@@ -3120,6 +3120,12 @@ function registerIpc() {
     const definition = getProviderDefinition(providerId);
     if (!definition) throw new AiTransportError('AI_CONFIG', 'Nhà cung cấp AI không tồn tại.');
     const { settings } = await loadAiSettingsWithMigration(await readJson(SETTINGS_FILE(), {}));
+    // `readStoredProviderKey` reads `settingsProvidersCache`, which only
+    // `createChatClientForProvider` and `recordProviderTest` fill. Without this line a
+    // test run straight after "Lưu khoá" (no generation yet in this process) found an
+    // empty cache, read no blob and answered "chưa có API key" for a key that was stored
+    // correctly — the teacher had to test twice to get a real result.
+    settingsProvidersCache = (settings.ai || {}).providers || {};
     const resolved = resolveProviderState({ settings: settings.ai || {}, ...localRuntimeFacts() })
       .find(provider => provider.id === definition.id);
     const startedAt = Date.now();
