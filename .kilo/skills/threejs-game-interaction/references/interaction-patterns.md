@@ -4,8 +4,8 @@ Reusable Three.js interaction patterns. Each entry states its purpose, which
 game it suits, and what to watch for. All go through `window.threeGame` — do not
 build these with raw `THREE` calls scattered across gameplay code.
 
-The five games and their answer handlers (source of truth — see
-`src/renderer/features/gameplay.ts`; all of them call the shared
+The five games and their answer handlers (source of truth — the files under
+`src/renderer/features/games/`; all of them call the shared
 `reactThree(event, detail)` dispatcher):
 
 | Game | Entry point | Answer handler | Shipped 3D world |

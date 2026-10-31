@@ -4,6 +4,22 @@ How 3D interactions connect to the existing game engine without changing its
 rules, scoring, or offline behaviour. The hard rule: **existing gameplay remains
 the source of truth; Three.js only presents and emits.**
 
+## Where the code lives (DECISIONS #147)
+
+The play surface was split out of the old `features/gameplay.ts`:
+
+| File | Owns |
+| --- | --- |
+| `features/games/shell.ts` | `playGame`, fullscreen/display, `closePlaySurface`, play-surface click/key listeners |
+| `features/games/three-stage.ts` | `mountThreeStage`/`unmountThreeStage`, `addAnchoredObject`, per-template worlds, `reactThree` |
+| `features/games/house.ts` | House Building Mode UI + 3D (economy stays in `game-engine/house-build.ts`) |
+| `features/games/result-screen.ts` | results screens, Presentation Mode, team setup, play modal/header |
+| `features/games/quiz.ts`, `matching.ts`, `treasure.ts`, `race.ts` | per-game render entry points and answer handlers |
+
+Load order is fixed in `src/index.html` (shell → three-stage → house →
+result-screen → quiz → matching → treasure → race) and guarded by
+`tests/unit/renderer-load-order.test.ts`.
+
 ## What shipped (DECISIONS #137 → #139)
 
 The **decorative + celebratory** layer is wired across all five games:
@@ -38,7 +54,7 @@ event registry. The quiz/scenario engine uses three of them:
   **construction tower** (`makeConstruction`, bottom-left, one block per question,
   initial `setStage(handle, correctSoFar, { animate: false })`) and a
   **destructible block** (`makeDestructible`, top-right). Groups are added via
-  `threeGame.addObject(handle, group, x, y, z)` — `gameplay.ts` never reaches into
+  `threeGame.addObject(handle, group, x, y, z)` — `three-stage.ts` never reaches into
   `handle.scene`.
 - `reactThree(event, detail)` is the **single** gameplay → 3D dispatcher: it calls
   `threeGame.emit(event, detail)` (for any 3D listeners) then drives the world of the
@@ -110,7 +126,7 @@ rendering and scoring:
 
 **The target comes from the quiz, not a constant (DECISIONS #143).** Owner ask:
 "cho chọn số lượng câu hỏi … hoặc 1 cơ chế linh hoạt giúp số lượng nào cũng có thể
-hoàn thành được ngôi nhà khi trả lời đúng tất cả câu hỏi". `gameplay.ts` derives it:
+hoàn thành được ngôi nhà khi trả lời đúng tất cả câu hỏi". `games/house.ts` derives it:
 
 ```ts
 function houseTargetParts(game) {
@@ -125,7 +141,7 @@ perfect run always lands exactly on the target and any wrong answer leaves the
 house unfinished — no adaptive catch-up that would let a late right answer finish
 a house the student mostly skipped.
 
-Rendering stays in `gameplay.ts` + the shared layer: `buildHouseWorld()` calls
+Rendering stays in `games/house.ts` + the shared layer: `buildHouseWorld()` calls
 `makeConstruction({ parts: houseParts(style) })` — the `parts` option is an array of
 stages, each a list of primitive specs (`kind: 'box'|'roof'|'cylinder'` +
 `w/h/d/r/color/x/y/z`). Every model keeps the same contract: stage `0` is the
@@ -242,7 +258,7 @@ its reserved slot into the empty band (0.55 s).
 | Layer | Owns | Must never do |
 | --- | --- | --- |
 | `src/game-engine/runtime.ts` | Scoring: `scoreAnswer`, `scoreTextAnswer`, `scoreScenarioDecision`, `calculateSummary`, `resolveScoring`, `questionPoints`. | Touch the DOM or WebGL. |
-| `src/renderer/features/gameplay.ts` | The play flow: `renderQuestion`, `chooseAnswer`, `chooseTreasureAnswer`, `answerRace`, matching/treasure/race handlers, `state` (answers, lock, teams). | Delegate scoring to 3D. |
+| `src/renderer/features/games/*.ts` | The play flow (split by responsibility, #147): `quiz.ts`/`matching.ts`/`treasure.ts`/`race.ts` own `renderQuestion`, `chooseAnswer`, `chooseTreasureAnswer`, `answerRace`, matching/treasure/race handlers; `state` lives in `shared.js`. | Delegate scoring to 3D. |
 | `three-game-interaction.ts` (`window.threeGame`) | Renderer lifecycle, raycasting, tweens/effects, pattern factories, particles, pointer input, named-event registry. | Validate answers, change `state.gameAnswers`, decide correct/wrong. |
 
 ## Event flow (one direction)
@@ -288,7 +304,7 @@ options.forEach(option => {
   handle. Call sites: top of `renderQuestion()`, top of `renderTreasureStage()`
   and the four results screens (`renderResults`, `renderMatchingResults`,
   `renderTreasureResults`, `renderRaceResults`), plus `closePlaySurface()`.
-- `closePlaySurface()` (`gameplay.ts` ~:131) is the single "leave the play
+- `closePlaySurface()` (`games/shell.ts`) is the single "leave the play
   surface" path — unmount there so closing a game never leaks a renderer or a
   `requestAnimationFrame` loop.
 - Unmount must also run when the game ends (before results render) and when the

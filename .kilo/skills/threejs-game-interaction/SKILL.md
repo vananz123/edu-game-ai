@@ -6,7 +6,7 @@ description: >-
   changing their gameplay, scoring, or offline behaviour. Use when asked to make
   a game more interactive, add 3D answer objects, drag-and-drop, reveal/unlock
   effects, or celebrations — and whenever Three.js work touches
-  src/renderer/features/gameplay.ts.
+  src/renderer/features/games/ (the play surface, split by game in DECISIONS #147).
 metadata:
   category: game-interaction
 ---
@@ -75,8 +75,10 @@ truth.** Read the three references before writing code:
 
 ## How to apply
 
-1. Read `src/renderer/features/gameplay.ts` to find the target game's entry
-   point and its answer handler (the map is in `gameplay-integration.md`).
+1. Read the target game's file under `src/renderer/features/games/` (`quiz.ts`,
+   `matching.ts`, `treasure.ts`, `race.ts`; `shell.ts` owns entering/leaving) to
+   find its entry point and answer handler (the map is in
+   `gameplay-integration.md`).
 2. Check `window.threeGame.isAvailable()` before mounting anything. If false,
    the existing 2D UI is the whole experience — return early.
 3. `threeGame.mount(container, opts)` to attach a canvas, add objects, then wire

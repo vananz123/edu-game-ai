@@ -8,6 +8,7 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 ## Mục lục bàn giao
 
 ### 2026-10-31 — [docs/handoff/status/2026-10-31.md](handoff/status/2026-10-31.md)
+- Tách gameplay.ts thành features/games/*
 - Tách lịch sử docs sang docs/handoff + .gitattributes
 - Rollout pattern gameplay cho matching/treasure/race
 - Hiện nhà ở màn kết quả + 4 mẫu nhà
@@ -181,6 +182,27 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - Lịch sử trước 2026-10-19
 ## Bàn giao gần nhất
 
+## Handoff - Tách gameplay.ts thành features/games/* (2026-10-31, DECISIONS #147)
+
+**Files changed.**
+- `src/renderer/features/games/` (mới, 8 file): `shell.ts` (`playGame`, display/fullscreen, `closePlaySurface`, listener click/keydown của play surface), `three-stage.ts` (mount/unmount, `addAnchoredObject`, thế giới 3D theo template, `reactThree`), `house.ts` (House Building Mode), `result-screen.ts` (màn kết quả, Presentation Mode, team setup, play modal/header, `initPresentationTracking()`), `quiz.ts`, `matching.ts`, `treasure.ts`, `race.ts` (UI từng trò).
+- `src/renderer/features/gameplay.ts` (3.270 dòng) đã xoá; nội dung được chuyển **nguyên văn từng dòng** (CRLF 3.269 dòng, bỏ dòng `sourceMappingURL=gameplay.js.map` cũ bị dán từ JS biên dịch; chỉ dòng 1 của `shell.ts` thay bằng header `@ts-nocheck` mới). Script tách kiểm SHA-256 lúc ghép lại và đọc lại file đã ghi.
+- `src/index.html`: thay 1 thẻ `gameplay.js` bằng 8 thẻ `features/games/*.js` theo thứ tự shell → three-stage → house → result-screen → quiz → matching → treasure → race (sau `three-game-interaction.js`).
+- `tests/unit/lan-adapters.test.ts`: drift guard đọc toàn bộ `src/renderer/features/games/*.ts` thay vì một file; đổi tên test cho đúng.
+- `src/lan/lan-adapters.ts`, `tests/ui/ui-presentation-check.js`, `tests/ui/ui-race-treasure-check.js`: chỉ cập nhật chú thích trỏ file mới.
+- Docs: `docs/DECISIONS.md` (#147), `docs/ROADMAP.md` (P2 xong, P3 kế tiếp), `docs/PROJECT_MAP.md` (cây `features/games/` + 4 dòng bảng "sửa gì mở đâu"), `.kilo/skills/threejs-game-interaction/` (SKILL.md + 2 reference: bảng "Where the code lives").
+- Không đổi: logic tính điểm `game-engine/runtime.ts`, `three-game-interaction.ts`, CSS, wizard/editor, LAN/presentation/SQLite/`.egame`, tên và tham số mọi hàm toàn cục.
+
+**Behavior.** Không đổi hành vi. Renderer vẫn là script toàn cục; mỗi file chỉ khai báo hàm/biến hoặc đăng ký listener ở top level, không file nào đọc binding của file khác lúc nạp. Sửa một trò giờ chỉ mở đúng file của trò đó (kho báu ~880 dòng thay vì 3.269), còn vào/ra và toàn màn hình ở `shell.ts`, 3D ở `three-stage.ts`, kết quả/trình chiếu ở `result-screen.ts`.
+
+**Commands run.** `npm run build` 0 (chỉ cảnh báo EPERM khi dọn `dist/server/index.js` do app đang chạy) · `node tests/run-unit.js` **68/68** · `npm run check:renderer-globals` 0 undefined (44/45 script, 756 hàm, 6192 call site) · `npm run verify:css` **17/17**. Electron thật CDP (mỗi nhóm cần instance sạch, `env -u ELECTRON_RUN_AS_NODE`, cổng 9361/9337): `ui-three-game-check` **19/19**, `ui-three-game-reactions-check` **11/11**, `ui-three-game-check-4games` **41/41**, `ui-three-game-patterns-check` **31/31**, `ui-house-building-check` **84/84**, `ui-game-worlds-check` **42/42**, `ui-play-surface-check` **156/156**, `ui-presentation-check` **60/60**, `ui-stage-illustration-check` **169/169**, `ui-matching-finish-check` **22/22**, `ui-race-treasure-check` **18/18**, `ui-lan-wiring-check` **7/7**, `ui-lan-treasure-finish-check` **5/5**, `ui-fullscreen-density-check` **8/8**, `ui-fullscreen-check` **20/20**.
+
+**Chưa xác minh.** Chưa chơi tay trọn một ván mỗi trò sau khi tách (mới chạy check CDP); chưa xem trên máy chiếu/màn hình phụ thật; chưa chạy installer đóng gói. `ui-three-game-check-4games` lần đầu chỉ 36/41 khi dùng lại instance đã bị check khác probe (bộ đếm mount/burst tích luỹ) — chạy lại trên instance sạch đạt 41/41. `ui-fullscreen-check` chỉ đạt 20/20 sau khi xoá `data-setup-fullscreen="1"` còn sót trong profile mới (17/20 trước đó, lỗi môi trường: setup state giữ `visibility:hidden` trên `.app-shell`), chưa sửa nguyên nhân gốc.
+
+**Next task.** P3 — nhóm `src/services/` theo giáo án / AI / trò chơi / lưu trữ / nhập liệu, chỉ di chuyển file và sửa import (không đổi hợp đồng IPC); sau đó P4 tách `app.css`.
+
+---
+
 ## Handoff - Tách lịch sử docs sang docs/handoff + .gitattributes (2026-10-31, DECISIONS #146)
 
 **Files changed.**
@@ -226,29 +248,4 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 **Chưa xác minh.** Ở race fullscreen **1366×768** thẻ lượt chơi đã tràn stage (giới hạn mật độ có từ trước, chưa thuộc #145), nên **tháp bị khuất sau thẻ** ở cỡ này; phản ứng vẫn thấy qua cầu chớp + burst/confetti, còn tháp chỉ thấy ở 1920×1080. Trong modal cửa sổ cao (race/matching/treasure ở 1366) canvas cao hơn màn hình nên vật thể phân số có thể nằm dưới vùng nhìn khi chưa cuộn — chưa kiểm bằng mắt từng vị trí cuộn. Chưa xem trên máy chiếu/màn hình phụ thật; chưa đo FPS máy cấu hình thấp khi có 3 object 3D cùng lúc; chưa chơi hết một ván race nhiều vòng để thấy tháp đầy; chưa bấm tay qua LAN/presentation; chưa build/install NSIS. Lưu ý: `ui-three-game-patterns-check` và các check đếm mount/spy cần **instance Electron mới** mỗi lần chạy; `ui-house-building-check` nhạy thời gian — lần chạy trên instance vừa bị probe/check khác dùng có thể trượt layout, chạy lại trên instance sạch cho 84/84.
 
 **Next task.** Mục roadmap còn mở duy nhất của phần Three.js là **Packaged check** (`npm run dist:win` + cài trên máy sạch, đo ảnh hưởng bundle 732 KB, xem trên máy chiếu/máy yếu) — cần môi trường cài đặt thật. Ngoài phần Three.js, các mục còn mở trong roadmap thuộc mảng AI/giáo án (phân bổ độ khó, slicing O6, GGUF runtime) và các mục nhỏ của tasknight.
-
----
-
-## Handoff - Hiện nhà ở màn kết quả + 4 mẫu nhà (2026-10-31, DECISIONS #144)
-
-**Files changed.**
-- `src/game-engine/house-build.ts`: thêm registry mẫu — `HOUSE_STYLE_IDS` (`nha-mai-do`, `nha-vuon`, `thap-canh`, `nha-go`), `HOUSE_STYLE_LABELS`, `houseStyleOptions()`, `houseStyleLabel(style)`, `houseStyleFor(style, seed)` (id hợp lệ thắng; nếu không thì băm seed bằng `hash * 31 + charCode` để chọn ổn định; seed rỗng → `nha-mai-do`).
-- `src/renderer/features/gameplay.ts`: `houseRing()` tổng quát hoá; 4 bộ hình `houseClassicParts()` (giữ nguyên hình cũ từng byte), `houseGardenParts()`, `houseTowerParts()`, `houseCabinParts()`; `houseParts(style)` điều phối; `HOUSE_BOUNDS[style]` + `houseBounds(style)` thay `HOUSE_WORLD_W/H`; `houseTarget()` lấy bounds theo mẫu; `buildHouseWorld()` lưu `world.style`/`world.bounds`; `renderResults()` dựng `.result-screen.is-house-result` 2 cột: cột trái `.result-house-hero` (`.house-stage-slot` + dòng `.result-house` + `.result-house-style`), cột phải `.result-summary`; house mode mount lại world nên hero hiện nhà ở đúng trạng thái cuối; thêm `HOUSE_RESULT_FILL = 0.8` cho riêng màn kết quả.
-- `src/renderer/styles/app.css`: grid `.result-screen.is-house-result` (nhà trái, tổng kết phải, gap theo clamp), `.result-house-hero` + slot cao `clamp(220px,32vh,360px)` (fullscreen cao hơn), `.result-house-style`; dưới 980px xếp một cột. Dùng selector 2 lớp cho slot để thắng rule `.house-stage-slot` phía sau.
-- `src/shared/lesson-types.ts`: `export type HouseStyle = 'nha-mai-do' | 'nha-vuon' | 'thap-canh' | 'nha-go'`; `ArenaConfig.houseStyle?: 'auto' | HouseStyle`.
-- `src/renderer/features/game-editor.ts`: `#houseStyleField` + `<select id="editHouseStyle">` (chỉ quiz), `editorHouseStyle(game)`, `withEditorHouseStyle(game, root)`, gọi trong `saveEditedGame`, bật/tắt trong `toggleEditorSections`.
-- `src/renderer/features/wizard/step-configure.ts`: select "MẪU NHÀ 3D (XÂY NHÀ)" cho arena (auto + 4 mẫu).
-- `src/services/game-project-adapter.ts`: `HouseStyle`/`HOUSE_STYLE_IDS`/`isHouseStyle`; `gameSetupFor` lưu `gameplayMode`+`houseStyle`; `configFromGame` trả lại hai trường (bỏ giá trị lạ).
-- `src/services/lesson-contracts.ts`: arena `gameConfigSchema` thêm `gameplayMode?` và `houseStyle?`. **Đây là lỗi tiềm ẩn được sửa:** `z.object` mặc định bỏ key lạ, nên trước đó `parseGameConfig` sẽ nuốt cả hai trường trước khi adapter đọc.
-- Tests: `tests/unit/house-build.test.ts` (registry/auto/explicit), `tests/unit/lesson-contracts.test.ts` (parse giữ trường, giá trị lạ bị từ chối), `tests/unit/game-project-adapter.test.ts` (round trip `gameplayMode`+`houseStyle`, style legacy lạ bị loại khỏi config), `tests/ui/ui-house-building-check.js` (**84** assertion: hình 4 mẫu, bounds riêng, auto ổn định/khác nhau giữa game, override tường minh, hero 3D + caption + vị trí trong slot, classic không có hero).
-- Docs: `docs/DECISIONS.md` (#144), `docs/ROADMAP.md`, `.kilo/skills/threejs-game-interaction/` (SKILL.md + references/gameplay-integration.md).
-- Không đổi: `runtime.ts`, `three-game-interaction.ts`, 4 trò khác, scenario, `src/index.html`, LAN/presentation/SQLite/`.egame`.
-
-**Behavior.** Màn kết quả của Chế độ Xây nhà không còn chỉ có chữ: bên trái là **ngôi nhà 3D thật** (chiếu vào đúng khe `.house-stage-slot` như lúc trả lời) + dòng "🏠 Ngôi nhà: N/M phần · Đã hoàn thiện 🎉/Còn dang dở" + tên mẫu; bên phải là điểm, thống kê và các nút như cũ; dưới 980px tự xếp dọc. Quiz house mode giờ có **4 mẫu nhà** dùng chung hợp đồng 9 stage (móng + 8 phần xây): nhà mái đỏ (mặc định), nhà vườn, tháp canh, nhà gỗ — mỗi mẫu có phong cách và bao hình riêng (rộng/cao) nên được đo và đặt theo `HOUSE_BOUNDS`. Giáo viên chọn mẫu trong editor hoặc wizard; `auto`/vắng mặt thì mẫu suy ra ổn định từ id trò chơi (một game luôn cùng một mẫu, các game khác nhau có thể khác nhau), nên mở lại không bị đổi nhà. Toàn bộ kinh tế +1/−1, mục tiêu theo số câu (#143), scoring và chế độ Classic giữ nguyên.
-
-**Commands run.** `npm run build` 0 (cảnh báo EPERM khi dọn `dist/server/index.js` do app đang chạy; tsc/CSS/three vẫn hoàn tất) · `node tests/run-unit.js` **68/68** · `npm run check:renderer-globals` 0 undefined (37/38 script, **747** hàm, **6119** call site) · `npm run verify:css` **17/17**. Electron thật CDP 9341 (instance sạch, `unset ELECTRON_RUN_AS_NODE`): `ui-house-building-check` **84/84**. Không hồi quy: `ui-three-game-check` **19/19**, `ui-three-game-reactions-check` **11/11**, `ui-game-worlds-check` **42/42**, `ui-presentation-check` **60/60**, `ui-play-surface-check` **156/156**, `ui-stage-illustration-check` **169/169**, `ui-three-game-check-4games` **41/41**. CDP probe xác nhận wizard trả đúng select (`auto`+4 mẫu, giá trị đang chọn) và editor: hiển thị mẫu hợp lệ, giá trị lạ → `auto`, lưu quiz giữ mẫu + `gameplayMode`, chọn `auto`/template khác thì xoá mẫu. Ảnh chụp thật 1600×1000 cho đủ 4 mẫu ở màn kết quả: `tests/ui/shots/house-result-{nha-mai-do,nha-vuon,thap-canh,nha-go}.png`.
-
-**Chưa xác minh.** Chưa bấm tay qua editor/wizard trên app thật (mới gọi helper qua CDP với DOM tách rời); chưa xem trên máy chiếu/màn hình phụ thật hay đo FPS máy yếu; chưa chạy installer đóng gói. Lần đầu hero bị tràn slot 31px ngang/16px đáy (chạm caption) — đã sửa bằng `HOUSE_RESULT_FILL = 0.8` và kiểm lại 84/84; các mẫu khác chỉ kiểm bằng AABB của mẫu đang chạy, không kiểm từng mẫu trong hero. Ghi chú vận hành: khi cửa sổ Electron bị ẩn/occluded, `Page.captureScreenshot` không composite và timer bị throttle — cần đưa cửa sổ ra trước khi chụp.
-
-**Next task.** Chạy thử tay trên máy chiếu: mở wizard → chọn "Xây nhà 3D" + từng mẫu → lưu → chơi hết câu → xem hero kết quả; sau đó xem xét mục roadmap "Rollout the patterns to matching/treasure/race".
 

@@ -4,10 +4,11 @@
 // Two kinds of assertion here:
 //   1. Behaviour — LAN rounds are scored by runtime.ts, so answers match the
 //      desktop's `chooseAnswer()` branches (quiz, text, scenario, treasure).
-//   2. Drift guard — `gameplay.ts` cannot be imported (it is a renderer script
-//      with no exports), so the treasure constants are asserted against its raw
-//      text. If someone changes the desktop formula, this test fails instead of
-//      the projector and the phones quietly reporting different scores.
+//   2. Drift guard — the play surface (`renderer/features/games/*.ts`, split from
+//      `gameplay.ts` in DECISIONS #147) cannot be imported (renderer scripts have
+//      no exports), so the treasure constants are asserted against the raw text
+//      of every file. If someone changes the desktop formula, this test fails
+//      instead of the projector and the phones quietly reporting different scores.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -18,7 +19,12 @@ const {
 const { scoreAnswer, scoreTextAnswer } = require('../../src/game-engine/runtime');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
-const GAMEPLAY = fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'features', 'gameplay.ts'), 'utf8');
+const GAMEPLAY_DIR = path.join(ROOT, 'src', 'renderer', 'features', 'games');
+const GAMEPLAY = fs.readdirSync(GAMEPLAY_DIR)
+  .filter(name => name.endsWith('.ts'))
+  .sort()
+  .map(name => fs.readFileSync(path.join(GAMEPLAY_DIR, name), 'utf8'))
+  .join('\n');
 
 let passed = 0;
 function it(name, fn) {
@@ -293,9 +299,9 @@ it('question rounds skip questions with no options instead of showing a dead but
   assert.equal(buildLanPlan(game).rounds[0].prompt, 'Fine?');
 });
 
-// --- drift guard: the copied constants must still exist in gameplay.ts ---------
+// --- drift guard: the copied constants must still exist in the play surface ----
 
-it('gameplay.ts still awards treasure points + completionBonus verbatim', () => {
+it('the play surface still awards treasure points + completionBonus verbatim', () => {
   assert.match(
     GAMEPLAY,
     /const gained = correct \? \(Number\(stage\.points\) \|\| 0\) \+ \(Number\(stage\.completionBonus\) \|\| 0\) : 0;/,
@@ -303,7 +309,7 @@ it('gameplay.ts still awards treasure points + completionBonus verbatim', () => 
   );
 });
 
-it('gameplay.ts still uses the 100/200/300/50 defaults for the treasure maximum', () => {
+it('the play surface still uses the 100/200/300/50 defaults for the treasure maximum', () => {
   assert.match(GAMEPLAY, /\(Number\(stage\.points\) \|\| 100\) \+ \(Number\(stage\.completionBonus\) \|\| 200\)/);
   assert.match(GAMEPLAY, /hunt\.journeyBonus \|\| 300/);
   assert.match(GAMEPLAY, /hunt\.hiddenItemBonus \|\| 50/);
@@ -313,7 +319,7 @@ it('the LAN defaults table matches those literals', () => {
   assert.deepEqual(TREASURE_DEFAULTS, { stagePoints: 100, stageCompletionBonus: 200, journeyBonus: 300, hiddenItemBonus: 50 });
 });
 
-it('gameplay.ts still falls back to question.points || 100 for scenario answers', () => {
+it('the play surface still falls back to question.points || 100 for scenario answers', () => {
   assert.match(GAMEPLAY, /Number\(question\.points\) \|\| 100 : 0/);
 });
 

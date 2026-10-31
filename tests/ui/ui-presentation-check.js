@@ -3,7 +3,7 @@
 //
 // Why this exists (update_UI.txt §7.1, §7.2, §14):
 // The presentation window is a SEPARATE renderer. It does not reuse
-// gameplay.ts, it does not load app.css, and its own <style> block hardcodes
+// the play surface (renderer/features/games/*), it does not load app.css, and its own <style> block hardcodes
 // font sizes. None of the measured fullscreen rules
 // (`html[data-fullscreen="1"] .modal[data-player-theme] …` in app.css) can
 // reach it, because its DOM root is `document.body > .presentation-root`.
@@ -124,7 +124,8 @@ function stateFor(kind, revision) {
         prompt: LONG_PROMPT, story: 'Nhà thám hiểm bước vào ngôi đền tri thức.',
         missionType: 'multiple-choice',
         stages: [
-          // Statuses are exactly what gameplay.ts:931 treasureNodeState() emits:
+          // Statuses are exactly what treasureNodeState() in
+          // renderer/features/games/treasure.ts emits:
           // done | failed | current | locked. Anything else renders unstyled.
           { id: 's1', name: 'Chặng 1', status: 'done' },
           { id: 's2', name: 'Chặng 2', status: 'current' },

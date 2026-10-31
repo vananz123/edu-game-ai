@@ -212,3 +212,22 @@ Các mục #57–#145 được tách sang `docs/handoff/decisions/` để file n
 **Không làm.** Không đổi tên hay đánh số lại quyết định/bàn giao cũ (tham chiếu `#142`, `#145` vẫn đúng); không gộp hai tài liệu; không chuyển sang site tài liệu.
 
 **Verification.** Tổng byte lưu trữ + phần giữ lại khớp bản gốc (619.806 + 16.641 = 636.447 ≈ 634.490 gốc + 2 KB tiêu đề file lưu trữ); `docs/STATUS.md` còn 32 KB, `docs/DECISIONS.md` 56 KB; mục lục có đủ 146 mục trong 13 nhóm; mọi link tương đối trỏ đúng file trong `docs/handoff/`. Quy ước được ghi lại ở `docs/handoff/README.md`, `AGENTS.md` và `docs/PROJECT_MAP.md`.
+
+## #147 — Tách `features/gameplay.ts` thành `features/games/*` (P2 restructure)
+
+**Context.** `src/renderer/features/gameplay.ts` dài 3.270 dòng, chứa cả năm trò chơi, 3D stage, House Building Mode, màn kết quả, Presentation Mode và toàn màn hình; mọi sửa đều phải cuộn qua một file khổng lồ. Owner yêu cầu "chuẩn bị cấu trúc lại cây dự án để dể đọc code và sửa code"; đây là pha P2 của kế hoạch trong `docs/ROADMAP.md`.
+
+**Quyết định.** Tách theo trách nhiệm, **không đổi hành vi**, renderer vẫn là script toàn cục nạp bằng `<script>`:
+- `games/shell.ts` — `playGame`, display/fullscreen (`getDisplayInfo`, `hasSecondaryDisplay`, `playGameFullscreen`, `setPlayFullscreen`), `closePlaySurface`, listener click/keydown của play surface.
+- `games/three-stage.ts` — mount/unmount stage, `addAnchoredObject`, thế giới 3D theo template, `reactThree`.
+- `games/house.ts` — House Building Mode: tiến trình, 4 mẫu nhà, đặt nhà, phản ứng.
+- `games/result-screen.ts` — builder màn kết quả 5 trò, Presentation Mode (`startPresentationMode`/`stopPresentationMode`), team setup, play modal/header, `initPresentationTracking()`.
+- `games/quiz.ts` — `renderQuestion`, `chooseAnswer`, `formatClock`, `resultStatsHtml`, `renderResults`, `shuffled`.
+- `games/matching.ts`, `games/treasure.ts`, `games/race.ts` — toàn bộ UI từng trò.
+- `src/index.html` nạp 8 script theo thứ tự shell → three-stage → house → result-screen → quiz → matching → treasure → race, sau `three-game-interaction.js`. Mỗi file chỉ khai báo hàm/biến hoặc đăng ký listener ở top level; không file nào đọc binding của file khác lúc nạp (đúng điều `tests/unit/renderer-load-order.test.ts` canh).
+- Nội dung **nguyên văn từng dòng** (CRLF): script tách sao chép đúng khoảng dòng của file gốc (bỏ dòng `sourceMappingURL=gameplay.js.map` cũ bị dán từ JS biên dịch) và kiểm SHA-256 khi ghép lại. Chỉ dòng 1 của `shell.ts` được thay bằng header `@ts-nocheck` mới.
+- `tests/unit/lan-adapters.test.ts` đọc drift guard từ **toàn bộ** `src/renderer/features/games/*.ts` thay vì một file.
+
+**Không làm.** Không đổi tên/tham số hàm toàn cục, không gộp file, không chuyển renderer sang ES module, không sửa logic tính điểm, 3D, CSS hay luồng offline/LAN.
+
+**Verification.** `npm run build` 0 · unit **68/68** · `check:renderer-globals` 0 undefined (44/45 script, 756 hàm, 6192 call site) · `verify:css` **17/17**. Electron thật qua CDP: `ui-three-game-check` **19/19**, `ui-three-game-reactions-check` **11/11**, `ui-three-game-check-4games` **41/41** (instance sạch), `ui-three-game-patterns-check` **31/31**, `ui-house-building-check` **84/84** (instance sạch), `ui-game-worlds-check` **42/42**, `ui-play-surface-check` **156/156**, `ui-presentation-check` **60/60**, `ui-stage-illustration-check` **169/169**, `ui-matching-finish-check` **22/22**, `ui-race-treasure-check` **18/18**, `ui-lan-wiring-check` **7/7**, `ui-lan-treasure-finish-check` **5/5**, `ui-fullscreen-density-check` **8/8**, `ui-fullscreen-check` **20/20** (chỉ đạt sau khi xoá `data-setup-fullscreen="1"` còn sót trong profile mới — lỗi môi trường, không do bản tách).

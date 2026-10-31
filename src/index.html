@@ -142,7 +142,7 @@
   <script src="renderer/features/game-generation.js"></script>
   <script src="game-engine/runtime.js"></script>
   <!-- House Building Mode (DECISIONS #140): pure construction/streak economy,
-       loaded before gameplay.js which drives the 3D house from it. -->
+       loaded before games/house.js which drives the 3D house from it. -->
   <script src="game-engine/house-build.js"></script>
   <script src="renderer/features/icon-data.js"></script>
 
@@ -154,10 +154,20 @@
   <script src="renderer/vendor/three.global.js"></script>
 
   <!-- window.threeGame: the shared, scoring-agnostic 3D presentation layer
-       (DECISIONS #137). Loaded after THREE, before gameplay.js which calls it. -->
+       (DECISIONS #137). Loaded after THREE, before games/three-stage.js which calls it. -->
   <script src="renderer/features/three-game-interaction.js"></script>
 
-  <script src="renderer/features/gameplay.js"></script>
+  <!-- Play surface, split by responsibility (DECISIONS #147). The renderer is plain
+       global scripts, so the files only declare; nothing reads another file's
+       binding while loading. Order: entry → 3D → house → results → games. -->
+  <script src="renderer/features/games/shell.js"></script>
+  <script src="renderer/features/games/three-stage.js"></script>
+  <script src="renderer/features/games/house.js"></script>
+  <script src="renderer/features/games/result-screen.js"></script>
+  <script src="renderer/features/games/quiz.js"></script>
+  <script src="renderer/features/games/matching.js"></script>
+  <script src="renderer/features/games/treasure.js"></script>
+  <script src="renderer/features/games/race.js"></script>
   <script src="renderer/features/results.js"></script>
   <!-- Chơi LAN: after gameplay/results (adds the header button and the saved `lan`
        block). Before bootstrap, which calls lanInit(). -->

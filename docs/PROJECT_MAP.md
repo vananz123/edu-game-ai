@@ -38,6 +38,9 @@ src/
     core/              render() + điều hướng trang + wirePage
     pages/             Một file cho mỗi trang (home, library, create, settings…)
     features/          Tính năng dùng nhiều trang
+    features/games/    Bề mặt chơi, tách theo trách nhiệm (#147): shell (vào/ra,
+                       toàn màn hình), three-stage (3D), house, result-screen
+                       (kết quả + trình chiếu + modal), quiz, matching, treasure, race
     features/wizard/   Luồng "Tạo từ giáo án" (bước 1→5)
     styles/app.css     CSS tay + Tailwind (xem "Thứ tự CSS" bên dưới)
   game-engine/         Runtime chạy game đã lưu (offline)
@@ -72,7 +75,7 @@ vendor/                DLL VC++ đóng gói kèm
 | Ngân hàng câu hỏi: 7 loại câu + chấm điểm thể loại tương thích (#115) | `src/services/question-import.ts` (phần `readQuestionBlock`/`ParsedQuestion`), `src/services/question-compatibility.ts` (thuần), `src/services/question-text.ts` (chuẩn hoá dùng chung), UI trong `features/wizard/step-recommend.ts` |
 | Làm sạch ký hiệu/emoji khi tài liệu giống ngân hàng câu hỏi (#116) | `src/services/question-text.ts` (`cleanQuestionLine`, `cleanQuestionText`, `looksLikeQuestionBankText`), `splitInlineQuestion` trong `src/services/question-import.ts` |
 | Bóc tách cấu trúc tài liệu | `src/services/lesson-structure.ts` (+ `features/wizard/step-structure.ts`) |
-| Năm trò chơi (quiz, tình huống, ghép cặp, kho báu, đường đua) | `src/renderer/features/gameplay.ts` |
+| Năm trò chơi (quiz, tình huống, ghép cặp, kho báu, đường đua) | `src/renderer/features/games/quiz.ts`, `matching.ts`, `treasure.ts`, `race.ts`; vào/ra và toàn màn hình ở `games/shell.ts` |
 | Hình minh họa trò chơi | `features/game-illustration.ts`, `features/treasure-art.ts`, `shared/illustration-*` |
 | Âm thanh | `features/game-audio.ts` |
 | Trình chiếu màn hình 2 | `features/presentation.ts` + `src/presentation/*` + IPC trong `main.ts` |
@@ -82,7 +85,10 @@ vendor/                DLL VC++ đóng gói kèm
 | Prompt / schema gọi AI | `src/services/lesson-prompts.ts`, `lesson-contracts.ts`, `ai-tasks.ts` |
 | Nhà cung cấp AI của Step 2/Step 5, khoá theo từng nhà cung cấp, trạng thái sẵn sàng (#132) | `src/services/ai-providers.ts` (registry + chọn nhà cung cấp + migration khoá), `main.ts` (`createChatClientForProvider`, `ai:test-provider`, `settings:get/save` không trả khoá), `pages/settings.ts` + `features/settings.ts` (thẻ từng nhà cung cấp), `features/wizard/state.ts` (`wizardProviderCard`/`wizardProviderPickerHtml`) |
 | Lưu trữ (SQLite, `.egame`) | `src/services/lesson-store.ts`, `main.ts` (IPC), `preload.ts` (API) |
-| Màu nền 5 thế giới trò chơi | `styles/app.css`, mục "NĂM THẾ GIỚI TRÒ CHƠI" + `GAME_WORLDS` trong `gameplay.ts` |
+| Màu nền 5 thế giới trò chơi | `styles/app.css`, mục "NĂM THẾ GIỚI TRÒ CHƠI" + `GAME_WORLDS` trong `games/result-screen.ts` |
+| Màn hình kết quả, trình chiếu, thi đấu đội | `features/games/result-screen.ts` |
+| Lớp 3D dùng chung và thế giới theo trò | `features/three-game-interaction.ts` (API), `features/games/three-stage.ts` (mount/world/reactThree) |
+| House Building Mode (kinh tế nhà, mẫu nhà) | `src/game-engine/house-build.ts` (kinh tế), `features/games/house.ts` (UI/3D) |
 | Gói cài đặt | `package.json` → `build`, `build/installer.nsh`, `vendor/` |
 
 ## `main.ts` (2.814 dòng)

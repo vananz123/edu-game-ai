@@ -250,7 +250,8 @@ function treasureGame() {
 
     // The last control of a mission must become reachable after scrolling.
     // NB: #treasureActions is an empty placeholder that sits BEFORE
-    // .stage-bottom in the markup (gameplay.ts:1260 vs :1262) and is only
+    // .stage-bottom in the markup (both in renderTreasureStage, now
+    // renderer/features/games/treasure.ts) and is only
     // filled after the answer is checked (showTreasureChoices). Measuring it
     // therefore reported the bottom of the content, not a control, and drifted
     // out of the stage as soon as the panel got tighter. .stage-bottom is the

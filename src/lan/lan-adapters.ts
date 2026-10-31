@@ -3,14 +3,15 @@
  * Why this file is separate from the reducer: the reducer only decides whether an
  * answer counts, while this file decides what an answer is *worth*. Both desktop
  * and LAN must agree, so every scoring path here delegates to the very same
- * `src/game-engine/runtime.ts` helpers `gameplay.ts` calls:
+ * `src/game-engine/runtime.ts` helpers the play surface
+ * (`src/renderer/features/games/*.ts`) calls:
  *
  *   chooseAnswer()      scenarioScore -> scoreAnswer()      scoreTextAnswer()
  *   treasureRecordStage()  points = stage.points + stage.completionBonus
  *
- * IMPORTANT: `gameplay.ts` is a renderer script with no module exports, so those
- * constants cannot be imported from it. `tests/unit/lan-adapters.test.ts` reads
- * gameplay.ts as text and fails if either side drifts.
+ * IMPORTANT: those renderer scripts have no module exports, so their constants
+ * cannot be imported. `tests/unit/lan-adapters.test.ts` reads every file under
+ * `src/renderer/features/games/` as text and fails if either side drifts.
  */
 
 import type { EducationalGame, GameQuestion, TreasureStage } from '../shared/types';
@@ -242,7 +243,8 @@ function stageMissionType(stage: TreasureStage): string {
 
 /**
  * Read the journey maximum straight from the desktop formula in
- * `renderTreasureResults()` (gameplay.ts:2002), including its 100/200 defaults.
+ * `renderTreasureResults()` (renderer/features/games/treasure.ts), including its
+ * 100/200 defaults.
  */
 function treasureHuntMax(game: EducationalGame): number {
   const hunt = game.treasureHunt;
