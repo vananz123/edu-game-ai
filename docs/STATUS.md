@@ -8,6 +8,7 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 ## Mục lục bàn giao
 
 ### 2026-11-01 — [docs/handoff/status/2026-11-01.md](handoff/status/2026-11-01.md)
+- Năm badge bước lên AA cả hai theme — gate đọc luôn nhánh light, 16 → 18 check, dark 0/263 dưới ngưỡng (#165)
 - Dark mode cho bốn thanh chọn hàng loạt — sửa bằng bảng dịch màu, gate dark 9 → 16 check (#164)
 - "Xoá đã chọn" cho trang Dự án của tôi — IPC `project:delete-many` + thanh chọn (#163)
 - Bỏ brand + navbar; trạng thái llama.cpp, thông báo, toàn màn hình/trợ giúp vào sidebar (#162)
@@ -201,6 +202,25 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - Lịch sử trước 2026-10-19
 ## Bàn giao gần nhất
 
+## Handoff - Năm badge bước cuối cùng lên AA ở cả hai theme (2026-11-01, DECISIONS #165)
+
+**Files changed.**
+- `src/renderer/pages/create.ts` (4 dòng, `:145/152/159/166`) và `src/renderer/features/wizard/step-input.ts` (1 dòng, `:69`): mực của năm con chip đổi từ `text-[#6366f1] dark:text-[#818cf8]` sang `text-[#4f46e5] dark:text-[#a5b4fc]` — cặp đã dùng ở `step-input.ts:50/:176` và `pages/settings.ts`. **Không có file CSS nào đổi**: `git diff --stat` = 3 file (2 template + 1 check), `npx tsc` + `build:css` chỉ để tái sinh `dist/`.
+- `tests/ui/ui-dark-theme-check.js` (16 → **18** check): bỏ dung sai `weak.length <= 8` thành `=== 0`; row của `walk()` thêm `bg: rgb(...)` (nền *đã giải*) để chi tiết FAIL tái hiện được phép tính; check mới "every step chip clears 4.5:1 in BOTH themes" (lọc theo mặt `dark:bg-[#262c55]`, 6 phần tử); check mới "light mode keeps its known sub-4.5:1 set from growing" (`<= 32`); docstring đầu file viết lại hai gạch đầu dòng. `median()` phải khai báo trước vì TDZ.
+- Không đổi: mặt nền `#eef2ff` / `#262c55` (token dùng chung, đổi là kéo theo thẻ khác và vô hiệu phép đo #164), `shell.css`, bốn thanh chọn của #164, biến thể `dark:` của #160, markup sáng còn lại của hai trang.
+
+**Behavior.** Dark mode không còn phần tử `dark:` nào dưới 4,5:1: **5/263 → 0/263**, worst **4,47 → 5,71**, median giữ **11,47**. Năm chip đạt **6,69:1** (tối) và **5,62:1** (sáng). Con số sáng là phát hiện mới, không phải cái đã biết: `#6366f1` trên `#eef2ff` = **3,99:1**, *tệ hơn* bên tối, và chưa từng được ghi vì gate đi hết hai theme nhưng **chỉ đọc nhánh `dark`** — nhánh `light` thu thập rồi bỏ đi. Trần toán học quyết định hướng sửa: `#6366f1` đặt trên trắng tinh đã ra 4,47:1, nên mực đó không thể đạt AA trên bất kỳ mặt trắng-nhạt nào → buộc đổi **mực**, không có nước đổi nền.
+- **Khác #164 ở đúng một điểm kỹ thuật**: grep xác nhận `#6366f1`/`#818cf8`/`#4f46e5`/`#a5b4fc` **không** có trong bảng dịch `shell.css`, nên `:where()` của biến thể `dark:` không gặp đối thủ và utility thắng outright — một chuỗi class là xong, không cần rule `!important` nào.
+- **28 phần tử sub-4,5:1 bên sáng để lại, có chủ đích**: pill trạng thái ngữ nghĩa (`#d97706`/`#fef3c7` = 2,86:1, `#16a34a`/`#effaf5` = 3,09:1, `#788196`/`#f5f6fa` = 3,61:1) + 9 link indigo-on-white (= 4,47:1). Đóng nhóm này cần **2–3 giá trị mực chưa tồn tại ở đâu trong codebase** cho bộ pill vàng/xanh/đỏ → quyết định palette, không phải phép đo. Gate ghim thành trần `<= 32` chứ không assert sạch; bản đầu của assertion là `weakLight.length === 0` và nó **đỏ chính vì 28 offender đó** — độ đỏ đó là cách tìm ra nhóm này.
+
+**Commands run.** `npm run check` 0 · `npm run check:renderer-globals` 0 undefined (55/56 script, 774 hàm, 6.434 call site) · `npx tsc -p tsconfig.json` 0 + `npm run build:css` 0 · `npm run verify:css` **28/28** (không thêm expectation mới — bằng chứng phạm vi thuần markup: `#4f46e5` ×7, `#a5b4fc` ×6, `#eef2ff` ×2, `#262c55` ×2 đã có sẵn trong `dist/src/renderer/styles/app.css`) · `node tests/run-unit.js` **68/68** (25,1s). Electron thật, instance riêng + profile sạch `/tmp/egame-165gate` (cổng 9349): `ui-dark-theme-check` **18/18** — `0 of 263 (worst 5.71, median 11.47)`, `dark 6 chips worst 6.69 | light 6 chips worst 5.62`, `light 28 of 263 (worst 2.86)`; bốn thanh chọn của #164 giữ nguyên số (`10,56/5,28/5,19/5,28`, strip `rgb(42, 50, 75)`, light worst control 5,02:1); fixture `seeded 4 → còn lại 0`. Anh em, instance **riêng** + profile sạch (cổng 9351): `ui-chrome-icons-check` **15/15** · `ui-classifier-outline-check` **14/15** (đỏ còn lại = cần model local, đúng baseline #161) · `ui-wizard-structure-check` **13/14** (đỏ còn lại do `requestAnimationFrame` bị đóng băng khi trang ẩn — probe `{visibility:"hidden", rafCallbacks:0, timerTicks:2}`; xem phần Chưa xác minh).
+
+**Chưa xác minh.** Không có ảnh chụp, chưa review bằng mắt: cửa sổ vẫn bị che nên `Page.captureScreenshot` không trả lời — 5,62/6,69 là tương phản, chưa phải phán đoán "đẹp". Anh em chạy trên instance **riêng, profile sạch** (cổng 9351): `ui-chrome-icons-check` **15/15** và `ui-classifier-outline-check` **14/15** — check sau khớp đúng baseline #161 (1 đỏ là "the safety gate explains itself", cần model local mà profile sạch không có) và nó dựng lại đúng bước 1 của file tôi sửa, nên phần badge/thuật đoán nguyên lành. `ui-wizard-structure-check` **13/14**, một đỏ là "the render keeps the keyboard focus on the ticked row" — **đã chứng minh là môi trường bằng cơ chế, không phải suy đoán**: probe trên cùng instance đo `visibilityState:"hidden"` + **`rafCallbacks: 0` trong 1,2 giây**, trong khi `step-structure.ts:204/:207` hẹn `restoreFocus()` bằng `requestAnimationFrame`, và Chromium không chạy rAF cho trang ẩn. File hiện thực hiện việc đó không nằm trong diff của tôi. **Hệ quả dài hạn**: mọi assertion dựa vào rAF đều không thể xanh trên máy này lúc cửa sổ bị che — và chiều ngược cũng thật, `ui-chrome-icons-check` từng báo 1 đỏ chỉ vì chạy *sau* gate trên cùng instance (gate lật theme toàn app + seed/xoá dòng); lần chạy sạch ngay sau đó cho 15/15. Ring chọn thẻ `#6258e8` vẫn chưa có gate. Checkbox native vẫn sáng vì chưa khai báo `color-scheme`. `ui-draft-guard-check` **không chạy** đợt này (baseline #161 đã 7/8 vì cần nhà cung cấp AI). Chưa chạy installer đóng gói.
+
+**Next task.** (1) Làm cho các assertion dựa-vào-rAF sống được trong môi trường này: hoặc cho `ui-wizard-structure-check` tự đưa cửa sổ lên trước khi đo, hoặc đổi `step-structure.ts:204/:207` sang kênh không bị đóng băng khi trang ẩn — cần quyết định vì nó đụng hành vi focus thật, không chỉ test. (2) Nếu muốn đóng nốt AA bên sáng: chọn palette cho ba pill trạng thái (vàng/xanh/xám) — cần quyết định của người dùng, đã ghim trần `<= 32` để không âm thầm xấu thêm. (3) `color-scheme` theo `[data-theme]` cho control native (nợ #164). (4) Roadmap `Packaged check` vẫn cần máy sạch.
+
+---
+
 ## Handoff - Dark mode cho bốn thanh chọn hàng loạt, sửa bằng bảng dịch màu (2026-11-01, DECISIONS #164)
 
 **Files changed.**
@@ -241,30 +261,6 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 **Next task.** (1) Nếu danh sách dự án dài thật sự, tách riêng một đợt phân trang cho trang này theo #154 (bar sẽ đổi nhãn thành "trang này"). (2) Nợ `dark:` cho hai bar chọn (thư viện + dự án) nên xử lý một lần. (3) Roadmap `Packaged check` vẫn cần máy sạch.
 
----
-
-## Handoff - Bỏ brand + navbar, trạng thái llama.cpp và thông báo vào sidebar (2026-11-01, DECISIONS #162)
-
-**Files changed.**
-- `src/index.html`: xoá khối `.brand` và toàn bộ `<header class="topbar">` (breadcrumb `#pageCrumb`, `.local-pill`, `.top-avatar`); `<aside class="sidebar">` mở đầu bằng `<div class="sidebar-status" data-sidebar-status>` chứa thanh llama.cpp (nguyên `#aiStatusBar`, dropdown `#aiStatusDropdown`), chip `#globalAiActivity`, chuông `#topbarNotificationBtn` + popover `#topbarNotificationPopover`, `#topbarFullscreenBtn`, `#helpBtn`; khối ẩn ở rail hẹp (`max-compact:hidden`). Mọi `#id` và id `topbarNotification*` giữ nguyên để không phải sửa `ai-status.ts`/`shared.ts`/`bootstrap.ts`.
-- `src/renderer/core/render.ts`: bỏ dòng ghi `#pageCrumb` (phần tử đã xoá; giữ lại sẽ ném lỗi mỗi lần render).
-- `src/renderer/shared.ts`: xoá `pageNames` (chỉ breadcrumb dùng).
-- `src/renderer/core/bootstrap.ts`: handler uỷ nhiệm click của `.sidebar` bỏ qua `[data-sidebar-status]` (nếu không, nút menu AI mang `data-action="ai-status-*"` bị `handleAction()` xử lý lần nữa); `$('#helpBtn')?.addEventListener`.
-- `src/renderer/core/controller.ts`: **sửa lỗi thật** — `closeGameMenus()` chỉ đóng `[data-game-menu-root] [role="menu"]:not([hidden])`. Trước đó nó gắn thuộc tính `hidden` cho **mọi** `role="menu"` (kể cả dropdown llama.cpp, vốn quản trạng thái bằng class), và bootstrap gọi nó ở capture phase cho mọi click ngoài menu → dropdown đo 0×0 vĩnh viễn dù class đã gỡ.
-- `src/renderer/styles/shell.css`: bỏ `.topbar` sticky và `.ai-status-bar{top:72px}`; chỉ còn `.app-shell>.sidebar` sticky. `setup-wizard.css`: bỏ rule ẩn `.topbar, .ai-status-bar` (đã có `.app-shell{visibility:hidden}`). `game-treasure.css`: rule tối #97 đổi tiền tố `.topbar` → `.sidebar`.
-- `src/renderer/styles/navigation.css`: `.sidebar-status` (xếp dọc, gap 8), `.sidebar-status-actions` (hàng 3 nút), `.sidebar .notification-popover{position:fixed;left:12px;top:120px;width:min(320px,calc(100vw - 24px))}` để sidebar `overflow-x:hidden` không cắt popover; cập nhật chú thích ngân sách chiều cao.
-- `src/renderer/styles/components.css`: `.editor-page-head` thôi sticky; `.editor-save-bar` `top:68px` → `top:0`. `src/renderer/pages/settings.ts`: aside "Lưu" `sticky top-20` → `sticky top-5`.
-- Tests: `ui-chrome-icons-check` (+2 check: brand/topbar/breadcrumb biến mất; trạng thái + chuông + toàn màn hình + trợ giúp nằm trong `.sidebar`), `ui-ai-status-bar-check` (dựng lại `[data-sidebar-status]`, thêm `visible` đo rect thật 209×161, thêm check mở lại sau click ngoài), `ui-card-menu-check` (đếm menu thẻ theo `[data-game-menu-root]`), `ui-fullscreen-check` (thay topbar bằng `#aiStatusBar` + z-index sidebar), `ui-setup-fullscreen-check` (bỏ `topbarVisible`), `smoke75` (T8 đo sidebar sticky + `barInSidebar`, đóng setup onboarding trước khi đo).
-- Docs: `docs/DECISIONS.md` (#162), `docs/STATUS.md`, `docs/PROJECT_MAP.md`, `docs/handoff/status/2026-11-01.md` (chuyển bàn giao #159 vào lưu trữ).
-- Không đổi: schema/IPC, engine trò chơi, `.egame`, SQLite, ai-status.ts, phần nối thông báo, bố cục trang.
-
-**Behavior.** Cửa sổ chỉ còn sidebar + vùng trang, không còn dải ngang nào. Đầu sidebar là khối trạng thái: thanh llama.cpp (bấm mở menu tùy chọn, mở đúng 209×161 tại chỗ), chip "AI đang phân tích" khi có tiến trình, một hàng chuông thông báo (popover 320px mở sang phải, không bị cắt) + toàn màn hình + trợ giúp. Sidebar vẫn sticky toàn chiều cao và cuộn trong chính nó khi cửa sổ thấp. Ở 1366×768 toàn bộ sidebar nằm trong 768px (đáy `.profile` 750) nên không có hộp cuộn nào giấu nội dung; 1920×1080 cũng vậy. Menu thẻ ••• vẫn đóng đúng như cũ, và dropdown llama.cpp không còn bị nó làm hỏng.
-
-**Commands run.** `npm run check` 0 · `npm run check:renderer-globals` 0 undefined (55/56 script, 770 hàm, 6.387 call site) · `npm run build:icons:check` **128 icon in sync** · `npm run build` 0 · `npm run verify:css` **24/24** · `node tests/run-unit.js` **68/68**. Electron thật (profile sạch, cổng 9385; riêng check wizard dùng cổng 9333): `ui-chrome-icons-check` **17/17**, `ui-ai-status-bar-check` **14/14**, `ui-card-menu-check` **12/12**, `ui-item-assets-editor-check` **29/29**, `ui-fullscreen-check` **20/20**, `ui-settings-sections-check` pass, `ui-dark-theme-check` pass, `ui-play-surface-check` **156/156**, `ui-setup-fullscreen-check` **10/10**, `smoke75` **17/17**.
-
-**Chưa xác minh.** Sidebar cuộn khi cửa sổ thấp hơn ~687px (máy này mở thật ở 1266×635) — hành vi có từ trước #161, không phải hồi quy #162; chưa có bản gọn riêng cho cửa sổ thấp ngoài hai mức `max-height` sẵn có. Rail hẹp <700px ẩn cả khối trạng thái. Chưa review bằng mắt từng trang trong theme tối (rule tối đã đổi tiền tố và `ui-dark-theme-check` pass, nhưng chỉ đo tương phản chữ). Chưa chạy installer đóng gói.
-
-**Next task.** Nếu cần: một mức `@media (max-height: 700px)` siết nav để footer không phải cuộn trên laptop thấp; còn lại Roadmap `Packaged check` vẫn cần máy sạch.
 
 
 

@@ -66,7 +66,7 @@ function renderWizardInput() {
       ` : `
         <div class="flex items-center justify-between gap-4 flex-wrap">
           <div class="flex items-center gap-3.5">
-            <div class="w-11 h-11 rounded-xl bg-[#eef2ff] text-[#6366f1] dark:bg-[#262c55] dark:text-[#818cf8] grid place-items-center text-[22px] shrink-0">
+            <div class="w-11 h-11 rounded-xl bg-[#eef2ff] text-[#4f46e5] dark:bg-[#262c55] dark:text-[#a5b4fc] grid place-items-center text-[22px] shrink-0">
               <span data-icon="folder-open" data-icon-size="22"></span>
             </div>
             <div>

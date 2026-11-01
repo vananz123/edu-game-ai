@@ -142,28 +142,28 @@ function renderCreate() {
         <div class="text-[11px] text-[#64748b] dark:text-[#94a3b8] mb-4">Tự soạn nội dung, không cần AI.</div>
         <div class="flex flex-col gap-3">
           <div class="flex items-start gap-3">
-            <div class="w-7 h-7 rounded-lg bg-[#eef2ff] dark:bg-[#262c55] text-[#6366f1] dark:text-[#818cf8] grid place-items-center text-[12px] font-bold shrink-0">1</div>
+            <div class="w-7 h-7 rounded-lg bg-[#eef2ff] dark:bg-[#262c55] text-[#4f46e5] dark:text-[#a5b4fc] grid place-items-center text-[12px] font-bold shrink-0">1</div>
             <div class="min-w-0">
               <strong class="text-[12px] text-[#1e293b] dark:text-[#f1f5f9] block">Chọn thể loại</strong>
               <p class="text-[11px] text-[#64748b] dark:text-[#94a3b8] m-0 leading-snug">Chọn 1 trong 5 mẫu phù hợp với mục tiêu tiết học.</p>
             </div>
           </div>
           <div class="flex items-start gap-3">
-            <div class="w-7 h-7 rounded-lg bg-[#eef2ff] dark:bg-[#262c55] text-[#6366f1] dark:text-[#818cf8] grid place-items-center text-[12px] font-bold shrink-0">2</div>
+            <div class="w-7 h-7 rounded-lg bg-[#eef2ff] dark:bg-[#262c55] text-[#4f46e5] dark:text-[#a5b4fc] grid place-items-center text-[12px] font-bold shrink-0">2</div>
             <div class="min-w-0">
               <strong class="text-[12px] text-[#1e293b] dark:text-[#f1f5f9] block">Thiết lập luật chơi</strong>
               <p class="text-[11px] text-[#64748b] dark:text-[#94a3b8] m-0 leading-snug">Điểm số, độ khó, thời lượng, số người chơi và thi đấu.</p>
             </div>
           </div>
           <div class="flex items-start gap-3">
-            <div class="w-7 h-7 rounded-lg bg-[#eef2ff] dark:bg-[#262c55] text-[#6366f1] dark:text-[#818cf8] grid place-items-center text-[12px] font-bold shrink-0">3</div>
+            <div class="w-7 h-7 rounded-lg bg-[#eef2ff] dark:bg-[#262c55] text-[#4f46e5] dark:text-[#a5b4fc] grid place-items-center text-[12px] font-bold shrink-0">3</div>
             <div class="min-w-0">
               <strong class="text-[12px] text-[#1e293b] dark:text-[#f1f5f9] block">Tự nhập câu hỏi</strong>
               <p class="text-[11px] text-[#64748b] dark:text-[#94a3b8] m-0 leading-snug">Mở trình chỉnh sửa và điền câu hỏi, phương án, đáp án đúng, giải thích.</p>
             </div>
           </div>
           <div class="flex items-start gap-3">
-            <div class="w-7 h-7 rounded-lg bg-[#eef2ff] dark:bg-[#262c55] text-[#6366f1] dark:text-[#818cf8] grid place-items-center text-[12px] font-bold shrink-0">4</div>
+            <div class="w-7 h-7 rounded-lg bg-[#eef2ff] dark:bg-[#262c55] text-[#4f46e5] dark:text-[#a5b4fc] grid place-items-center text-[12px] font-bold shrink-0">4</div>
             <div class="min-w-0">
               <strong class="text-[12px] text-[#1e293b] dark:text-[#f1f5f9] block">Chơi và lưu kết quả</strong>
               <p class="text-[11px] text-[#64748b] dark:text-[#94a3b8] m-0 leading-snug">Game đã lưu không cần mạng, có thể xuất qua USB.</p>

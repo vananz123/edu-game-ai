@@ -15,8 +15,12 @@
  *   - the variant must fire when the app asks for dark, and must stay off in light;
  *   - no element carrying a `dark:` class may sit on a near-white card in dark mode
  *     (that was `.form-panel`: a component class the utility table never reached);
- *   - no text carrying a `dark:` class may drop below 3:1, and the sub-4.5:1 population
- *     may not grow past the handful of decorative step badges left knowingly.
+ *   - no text carrying a `dark:` class may drop below 3:1, and since DECISIONS #165 none may
+ *     drop below 4.5:1 at all — the last five sub-4.5:1 elements were the numbered step
+ *     chips, fixed by moving them onto the indigo ink pair the wizard already used;
+ *   - the light half of the same sweep is measured too and pinned to a ceiling: light has
+ *     its own sub-4.5:1 set (status pills on tinted plates) that is deliberately not
+ *     asserted clean, because closing it means re-choosing the semantic pill palette.
  *
  * DECISIONS #164 added the four batch-selection bars (lessons #122, results #123, library
  * #154, projects #163). They carry no `dark:` class at all, so the walk above cannot see
@@ -147,6 +151,7 @@ const SCENARIO = String.raw`(async () => {
         own: cs.backgroundColor,
         edge: cs.borderTopColor,
         color: cs.color,
+        bg: 'rgb(' + [bg.r, bg.g, bg.b].join(', ') + ')',
         ratio: Math.round(ratio(ink, bg) * 100) / 100,
         onWhite: nearWhite(bg)
       });
@@ -285,12 +290,32 @@ const SCENARIO = String.raw`(async () => {
   check('no dark:-classed text drops below 3:1', invisible.length === 0,
     invisible.slice(0, 5).map(r => `${r.ratio} ${r.page} ${r.sig}`).join(' | '));
 
-  const weak = dark.filter(r => r.ratio < 4.5);
-  check('the sub-4.5:1 population stays a known handful of step badges', weak.length <= 8,
-    `${weak.length} of ${dark.length} (worst ${Math.min(...dark.map(r => r.ratio))})`);
-
   const median = () => { const s = dark.map(r => r.ratio).sort((a, b) => a - b); return s[Math.floor(s.length / 2)]; };
+
+  const weak = dark.filter(r => r.ratio < 4.5);
+  check('no dark-mode text carrying a dark: class sits below 4.5:1', weak.length === 0,
+    weak.length ? weak.slice(0, 6).map(r => `${r.page} ${r.ratio}:1 ${r.color} on ${r.bg} "${r.sig}"`).join(' | ')
+      : `0 of ${dark.length} (worst ${Math.min(...dark.map(r => r.ratio))}, median ${median()})`);
+
   check('the typical dark-mode text is comfortably legible', median() >= 8, `median ${median()} over ${dark.length} elements`);
+
+  // #165: the walk always collected the light half too but nothing ever read it. Two things
+  // came out of looking: the step chips failed in light as well (below), and light has its own
+  // sub-4.5:1 set that has nothing to do with dark mode (status pills on tinted plates).
+  // The chips are pinned exactly; the light set is only pinned to a ceiling, because shrinking
+  // it means re-choosing the semantic pill palette — a decision, not a fix.
+  const chip = r => r.dark.includes('dark:bg-[#262c55]');
+  const chipsDark = dark.filter(chip);
+  const chipsLight = light.filter(chip);
+  const worst = rows => rows.length ? Math.min(...rows.map(r => r.ratio)) : 0;
+  check('every step chip clears 4.5:1 in BOTH themes',
+    chipsDark.length >= 5 && chipsLight.length >= 5 && worst(chipsDark) >= 4.5 && worst(chipsLight) >= 4.5,
+    `dark ${chipsDark.length} chips worst ${worst(chipsDark)} | light ${chipsLight.length} chips worst ${worst(chipsLight)}`);
+
+  const weakLight = light.filter(r => r.ratio < 4.5);
+  check('light mode keeps its known sub-4.5:1 set from growing', weakLight.length <= 32,
+    `${weakLight.length} of ${light.length} (worst ${worst(weakLight)}) — ` +
+    [...new Set(weakLight.map(r => `${r.color} on ${r.bg}`))].slice(0, 3).join(' | '));
 
   // The hint ink is the one pair #160 swapped: it must read as the muted slate of each
   // theme, not as one value for both.
