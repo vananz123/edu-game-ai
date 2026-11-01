@@ -18,6 +18,13 @@
  *   - no text carrying a `dark:` class may drop below 3:1, and the sub-4.5:1 population
  *     may not grow past the handful of decorative step badges left knowingly.
  *
+ * DECISIONS #164 added the four batch-selection bars (lessons #122, results #123, library
+ * #154, projects #163). They carry no `dark:` class at all, so the walk above cannot see
+ * them: their dark treatment comes only from the shell.css table. The check now seeds one
+ * synthetic row per store (a bar only renders where there is something to tick), measures
+ * each strip's four text controls, its own surface against the card behind it, and the
+ * `bg-white/[90%]` pick chip, then deletes what it seeded.
+ *
  * Usage: launch with --remote-debugging-port=PORT, then
  * `node tests/ui/ui-dark-theme-check.js [port]`.
  */
@@ -36,9 +43,56 @@ const SCENARIO = String.raw`(async () => {
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   // A fresh profile opens the setup onboarding into #modalRoot a moment after load, which
   // would replace the pages this walk measures. Canonical guard.
-  for (let i = 0; i < 40; i++) { if (document.querySelector('#modalRoot .setup-fullscreen')) break; await sleep(100); }
+  // Wall-clock deadline instead of 40 fixed polls: with the window occluded Chromium
+  // throttles setTimeout to ~1s, and 40 of those cost 40 seconds on a profile that has
+  // already been onboarded (the modal never appears, so the loop can only end by exhaustion).
+  const guardDeadline = Date.now() + 4000;
+  while (Date.now() < guardDeadline && !document.querySelector('#modalRoot .setup-fullscreen')) await sleep(100);
   if (typeof closeSetupWizard === 'function') closeSetupWizard('close');
   await sleep(250);
+
+  // #164: a bar only renders on a page that has something to pick, so on a fresh
+  // profile the four selection strips — the exact markup this sweep now measures —
+  // would not exist. Seed one synthetic row per store and delete it again at the end.
+  const SEED_PREFIX = 'dark-probe-';
+  const runTag = Date.now().toString(36);
+  const seeded = { games: [], docs: [], projects: [], sessions: [] };
+  const projectId = SEED_PREFIX + runTag;
+  await window.eduGame.saveProjectDraft({
+    id: projectId, title: SEED_PREFIX + ' dự án thử giao diện tối', description: 'Dữ liệu tổng hợp.',
+    status: 'draft', step: 'edit', schemaVersion: 1, sourceName: 'ui-check', createdAt: new Date().toISOString()
+  });
+  seeded.projects.push(projectId);
+  const gameId = SEED_PREFIX + runTag;
+  await window.eduGame.saveGame({
+    id: gameId, title: SEED_PREFIX + ' trò chơi thử giao diện tối', subject: 'Kỹ năng sống', grade: '6',
+    template: 'quiz', description: 'Dữ liệu tổng hợp.', tags: [], sourceName: 'ui-check',
+    createdAt: new Date().toISOString(), gameSetup: { scoringMode: 'cơ bản' },
+    questions: [{
+      id: 'q1', type: 'multiple-choice', prompt: 'Câu hỏi thử?',
+      options: [{ id: 'a', text: 'A' }, { id: 'b', text: 'B' }, { id: 'c', text: 'C' }, { id: 'd', text: 'D' }],
+      correctOptionId: 'a', correctAnswer: '', explanation: 'Giải thích.', points: 100
+    }]
+  });
+  seeded.games.push(gameId);
+  const doc = await window.eduGame.saveLessonDocument({
+    name: SEED_PREFIX + runTag + '.txt', ext: 'txt',
+    text: 'Nội dung thử giao diện tối. ' + 'x'.repeat(120), characters: 145, sizeBytes: 145
+  });
+  // The store returns the saved document, but an older shape answers without an id;
+  // reading it back by name keeps the cleanup honest either way.
+  const docId = (doc && doc.id)
+    || ((await window.eduGame.listLessonLibrary() || []).find(d => d.name === SEED_PREFIX + runTag + '.txt') || {}).id;
+  if (docId) seeded.docs.push(docId);
+  const sessionId = SEED_PREFIX + runTag;
+  await window.eduGame.saveSession({
+    id: sessionId, gameId, gameTitle: SEED_PREFIX + ' trò chơi thử giao diện tối', template: 'quiz',
+    playerName: SEED_PREFIX + ' người chơi', durationSeconds: 60, points: 100, percent: 50,
+    createdAt: new Date().toISOString()
+  });
+  seeded.sessions.push(sessionId);
+  state.db = await window.eduGame.getLibrary();
+  state.projects = await window.eduGame.listProjects();
 
   const parse = rgb => {
     const m = String(rgb).match(/rgba?\(([^)]+)\)/);
@@ -62,6 +116,22 @@ const SCENARIO = String.raw`(async () => {
   };
   const nearWhite = c => c.r > 235 && c.g > 235 && c.b > 235;
 
+  /**
+   * Rasterise any computed colour through a 1x1 canvas. Needed because Chromium
+   * serialises modern colours as oklab(...) and neither the regex above nor
+   * ctx.fillStyle turns those back into sRGB numbers — but a filled pixel does.
+   */
+  const swatch = document.createElement('canvas');
+  swatch.width = swatch.height = 1;
+  const swatchCtx = swatch.getContext('2d', { willReadFrequently: true });
+  const pixelOf = str => {
+    swatchCtx.clearRect(0, 0, 1, 1);
+    swatchCtx.fillStyle = str;
+    swatchCtx.fillRect(0, 0, 1, 1);
+    const d = swatchCtx.getImageData(0, 0, 1, 1).data;
+    return { r: d[0], g: d[1], b: d[2], a: d[3] / 255 };
+  };
+
   const walk = () => {
     const rows = [];
     for (const el of (document.getElementById('pageContent') || document.body).querySelectorAll('*')) {
@@ -84,26 +154,105 @@ const SCENARIO = String.raw`(async () => {
     return rows;
   };
 
+  /**
+   * #164: the four batch-selection bars (#122 lessons, #123 results, #154 library,
+   * #163 projects) carry no dark: class, so walk() above never looks at them —
+   * their whole dark treatment comes from the hand-written shell.css table. Measure
+   * the strip, its four text controls and the pick chip directly.
+   */
+  const BAR_SELECTOR = '[data-lesson-selection-bar],[data-library-selection-bar],[data-project-selection-bar],[data-session-selection-bar]';
+  const measureBars = page => {
+    const bar = document.querySelector(BAR_SELECTOR);
+    if (!bar) return null;
+    const text = el => {
+      if (!el) return null;
+      const cs = getComputedStyle(el);
+      const ink = parse(cs.color);
+      if (!ink) return null;
+      const bg = backdrop(el);
+      return { color: cs.color, bg: 'rgb(' + [bg.r, bg.g, bg.b].join(', ') + ')', ratio: Math.round(ratio(ink, bg) * 100) / 100 };
+    };
+    // The strip has to read as a band on the card, not melt into it — so compare against
+    // the colour actually painted behind it, not against a section token that may itself
+    // be transparent.
+    const behind = backdrop(bar.parentElement || bar);
+    const chipWrap = (() => {
+      const box = document.querySelector('#pageContent [data-action="project-select"], #pageContent [data-action="library-select"]');
+      return box ? box.closest('label') : null;
+    })();
+    return {
+      page,
+      barBg: getComputedStyle(bar).backgroundColor,
+      cardBg: 'rgb(' + [behind.r, behind.g, behind.b].join(', ') + ')',
+      barBorder: getComputedStyle(bar).borderTopColor,
+      label: text(bar.querySelector('label')),
+      count: text(bar.querySelector('[data-lesson-selected-count],[data-library-selected-count],[data-project-selected-count],[data-session-selected-count]')),
+      del: text(bar.querySelector('button[id$="DeleteSelectedBtn"]')),
+      clear: text(bar.querySelector('button[id$="ClearSelectionBtn"]')),
+      chipBg: chipWrap ? getComputedStyle(chipWrap).backgroundColor : 'none',
+      chipBorder: chipWrap ? getComputedStyle(chipWrap).borderTopColor : 'none',
+      // The chip is painted bg-white/[90%] — a token the .bg-white row of the
+      // translation table does not match, so it survives dark mode as a white square.
+      // Composite its own paint over the card behind it: that is the colour the eye gets.
+      chipPlate: (() => {
+        if (!chipWrap) return null;
+        const paint = pixelOf(getComputedStyle(chipWrap).backgroundColor);
+        const under = backdrop(chipWrap.parentElement || chipWrap);
+        const mix = k => Math.round(paint.a * paint[k] + (1 - paint.a) * under[k]);
+        return { r: mix('r'), g: mix('g'), b: mix('b') };
+      })()
+    };
+  };
+
   const savedTheme = (state.settings.preferences || {}).theme || 'light';
   const sweep = async theme => {
     applyTheme(theme);
     await sleep(350);
     const rows = [];
+    const bars = [];
     const visited = [];
     for (const page of PAGES_PLACEHOLDER) {
       navigate(page);
       await sleep(900);
       visited.push(page);
       for (const r of walk()) rows.push({ ...r, page });
+      const bar = measureBars(page);
+      if (bar) bars.push({ ...bar, theme });
     }
-    return { rows, visited };
+    return { rows, bars, visited };
   };
 
   const darkSweep = await sweep('dark');
   const lightSweep = await sweep('light');
   applyTheme(savedTheme);
   await sleep(200);
-  return JSON.stringify({ dark: darkSweep.rows, light: lightSweep.rows, visited: darkSweep.visited });
+  for (const id of seeded.projects) await window.eduGame.deleteProjects([id]);
+  for (const id of seeded.games) await window.eduGame.deleteGames([id]);
+  for (const id of seeded.sessions) await window.eduGame.deleteSessions([id]);
+  for (const id of seeded.docs) await window.eduGame.deleteLessonDocument(id);
+  // Read the stores back AFTER the deletes: a snapshot taken before them would always
+  // report the probe rows as still present.
+  const after = await window.eduGame.getLibrary();
+  const projects = await window.eduGame.listProjects();
+  const docs = await window.eduGame.listLessonLibrary();
+  state.db = after;
+  state.projects = await window.eduGame.listProjects();
+  state.lessonLibrary = null;
+  render();
+  await sleep(300);
+  return JSON.stringify({
+    dark: darkSweep.rows,
+    light: lightSweep.rows,
+    bars: [...darkSweep.bars, ...lightSweep.bars],
+    visited: darkSweep.visited,
+    cleanup: {
+      gamesLeft: (after.games || []).filter(g => String(g.title || '').startsWith(SEED_PREFIX)).length,
+      sessionsLeft: (after.sessions || []).filter(s => String(s.playerName || '').startsWith(SEED_PREFIX)).length,
+      projectsLeft: (projects || []).filter(p => String(p.title || '').startsWith(SEED_PREFIX)).length,
+      docsLeft: (Array.isArray(docs) ? docs : []).filter(d => String(d.name || '').startsWith(SEED_PREFIX)).length,
+      seeded: Object.keys(seeded).reduce((n, k) => n + seeded[k].length, 0)
+    }
+  });
 })()`;
 
 (async () => {
@@ -151,6 +300,53 @@ const SCENARIO = String.raw`(async () => {
     Boolean(hintDark) && hintDark.color === 'rgb(148, 163, 184)'
       && Boolean(hintLight) && hintLight.color === 'rgb(100, 116, 139)',
     `dark ${hintDark && hintDark.color} / light ${hintLight && hintLight.color}`);
+
+  // #164: the four batch-selection bars. `page` is the page that drew them, so a bar that
+  // never rendered (empty store) shows up here as a missing page, not as a pass.
+  const bars = out.bars;
+  const darkBars = bars.filter(b => b.theme === 'dark');
+  const lightBars = bars.filter(b => b.theme === 'light');
+  const controls = bar => [bar.label, bar.count, bar.del, bar.clear].filter(Boolean);
+
+  check('all four selection bars were measured, in both themes',
+    ['library', 'lesson-plans', 'my-projects', 'sessions'].every(p => darkBars.some(b => b.page === p) && lightBars.some(b => b.page === p)),
+    `${darkBars.length} dark / ${lightBars.length} light — ${[...new Set(bars.map(b => b.page))].join(',')}`);
+
+  const darkWeak = darkBars.flatMap(bar => controls(bar).filter(c => c.ratio < 4.5).map(c => `${bar.page} ${c.color} ${c.ratio}:1`));
+  check('every control in a dark selection bar clears 4.5:1', darkWeak.length === 0,
+    darkWeak.length ? darkWeak.slice(0, 6).join(' | ') : darkBars.map(bar => `${bar.page} ${controls(bar).map(c => c.ratio).join('/')}`).join(' | '));
+
+  const darkFlat = darkBars.filter(bar => bar.barBg === bar.cardBg).map(bar => `${bar.page} ${bar.barBg}`);
+  check('the dark strip keeps a surface of its own instead of melting into the card', darkFlat.length === 0,
+    darkFlat.length ? darkFlat.join(' | ') : darkBars.map(bar => `${bar.page} ${bar.barBg}`).join(' | '));
+
+  // chipPlate is the composite the eye actually gets, so a translucent veil passes and an
+  // opaque white square does not. The detail always prints it: a resolver that quietly
+  // returned black would read as a suspicious rgb(0, 0, 0), not as a pass.
+  // A number the harness cannot read is worse than a failing number: NaN > 200 is false, so
+  // an unresolved plate would silently "pass" the white-square check. Only library and
+  // projects have a chip, so two is the expected count.
+  const chipsMeasured = darkBars.filter(bar => bar.chipPlate);
+  const unresolved = chipsMeasured.filter(bar => !['r', 'g', 'b'].every(k => Number.isInteger(bar.chipPlate[k])));
+  check('the chip paint resolved to real pixels', chipsMeasured.length === 2 && unresolved.length === 0,
+    `${chipsMeasured.length} chip(s) measured, ${unresolved.length} unresolved`);
+
+  const brightChips = darkBars.filter(bar => bar.chipPlate && bar.chipPlate.r > 200 && bar.chipPlate.g > 200 && bar.chipPlate.b > 200)
+    .map(bar => `${bar.page} rgb(${bar.chipPlate.r}, ${bar.chipPlate.g}, ${bar.chipPlate.b})`);
+  check('no pick chip stays a white square on a dark card', brightChips.length === 0,
+    brightChips.length ? brightChips.join(' | ')
+      : darkBars.filter(bar => bar.chipPlate).map(bar => `${bar.page} ${bar.chipBg} → rgb(${bar.chipPlate.r}, ${bar.chipPlate.g}, ${bar.chipPlate.b})`).join(' | ') || 'no chip on these pages');
+
+  const LIGHT_BAR = 'rgb(248, 247, 255)';
+  const lightOff = lightBars.filter(bar => bar.barBg !== LIGHT_BAR || controls(bar).some(c => c.ratio < 4.5))
+    .map(bar => `${bar.page} ${bar.barBg} ${controls(bar).map(c => c.ratio).join('/')}`);
+  const lightWorst = Math.min(...lightBars.flatMap(controls).map(c => c.ratio));
+  check('light mode is untouched: same strip colour, every control still 4.5:1', lightOff.length === 0,
+    lightOff.length ? lightOff.slice(0, 4).join(' | ') : `${lightBars.length} bars on ${LIGHT_BAR}, worst control ${lightWorst}:1`);
+
+  check('the probe rows it seeded were all deleted again',
+    out.cleanup.seeded === 4 && out.cleanup.gamesLeft === 0 && out.cleanup.projectsLeft === 0
+      && out.cleanup.sessionsLeft === 0 && out.cleanup.docsLeft === 0, JSON.stringify(out.cleanup));
 
   console.log(failures ? `\n${failures} dark-theme check(s) failed` : '\nAll dark-theme checks passed');
   process.exit(failures ? 1 : 0);

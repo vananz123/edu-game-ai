@@ -8,6 +8,7 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 ## Mục lục bàn giao
 
 ### 2026-11-01 — [docs/handoff/status/2026-11-01.md](handoff/status/2026-11-01.md)
+- Dark mode cho bốn thanh chọn hàng loạt — sửa bằng bảng dịch màu, gate dark 9 → 16 check (#164)
 - "Xoá đã chọn" cho trang Dự án của tôi — IPC `project:delete-many` + thanh chọn (#163)
 - Bỏ brand + navbar; trạng thái llama.cpp, thông báo, toàn màn hình/trợ giúp vào sidebar (#162)
 - Icon Lucide cho toàn bộ chrome, xoá trang Tổng quan, sidebar có khối "Lối tắt" (#161)
@@ -200,6 +201,24 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - Lịch sử trước 2026-10-19
 ## Bàn giao gần nhất
 
+## Handoff - Dark mode cho bốn thanh chọn hàng loạt, sửa bằng bảng dịch màu (2026-11-01, DECISIONS #164)
+
+**Files changed.**
+- `src/renderer/styles/shell.css`: ba mục mới trong bảng dịch `[data-theme="dark"]` (`#4c4680` → `var(--text)`, `#5b5680` và `#6b6690` → `var(--muted)`), một rule mặt strip `#2a324b !important` khoá theo bốn mốc `[data-lesson|library|project|session]-selection-bar`, một rule `bg-white/[90%]` → `rgba(255, 255, 255, .08)` cho hộp tick trên thẻ. Hai rule cuối nằm **SAU** các dòng `bg-[#f8f7ff]` / `.bg-white` vì cùng `(0,2,0)` + `!important` — thứ tự nguồn quyết định.
+- `tests/ui/ui-dark-theme-check.js` (**mở rộng**, 9 → 16 check): `measureBars()` đo thẳng bốn thanh (chúng không mang class `dark:` nào nên `walk()` cũ mù), seeding một dòng tổng hợp mỗi store vì bar chỉ render khi có gì để tick rồi tự xoá, `pixelOf()` raster qua canvas 1×1 (Chromium serialize `bg-white/[90%]` thành `oklab(...)`, regex `rgb()` đọc ra `null` → phép đo "ô trắng" trước đó pass rỗng), guard setup onboarding đổi 40 vòng poll thành deadline 4s.
+- `tests/manual/verify-css.js`: 24 → **28** expectation (mặt strip, lớp mờ hộp tick, hai danh sách mực).
+- Không đổi: markup bốn thanh (bốn file `pages/*` giữ nguyên byte), IPC `project:delete-many` / `library:delete-*`, schema SQLite, `.egame`, biến thể `dark:` của #160, mọi rule tối khác.
+
+**Behavior.** Ở theme tối, bốn thanh chọn hàng loạt (giáo án #122, lượt chơi #123, trò chơi #154, dự án #163) đã đọc được và vẫn là một dải riêng: nhãn "Chọn tất cả…" 10,56:1 (trước 2,02), count và "Bỏ chọn" 5,28:1 (trước 2,50 / 3,19), nút đỏ "Xoá đã chọn" giữ 5,19:1, strip `rgb(42, 50, 75)` tách khỏi thẻ `rgb(23, 27, 46)` thay vì cùng màu, hộp tick trộn ra `rgb(34, 37, 49)` / `rgb(41, 45, 62)` thay vì một ô trắng 25×25. Light mode không đổi: 4 bar vẫn `rgb(248, 247, 255)`, control yếu nhất 5,02:1 — đo lại mới biết phỏng đoán "`#6b6690` hụt AA bên sáng (4,49)" là sai, nên không có giá trị sáng nào bị sửa.
+
+**Commands run.** `npm run check` 0 · `npm run check:renderer-globals` 0 undefined (55/56 script, 774 hàm, 6.434 call site) · `npm run build` 0 · `npm run verify:css` **28/28** · `node tests/run-unit.js` **68/68** (26,9s). Electron thật (profile sạch, cổng 9349): `ui-dark-theme-check` **16/16** — số "trước khi sửa" lấy ở lần chạy đầu trên cùng build chưa CSS: `2,02 / 2,50 / 3,19`, strip `rgb(23, 27, 46)` bằng đúng thẻ ở 3/4 trang, chip `[255, 255, 255, 230]`; không hồi quy ở bốn trang anh em chạy lần lượt trên cùng instance: `ui-project-selection-check`, `ui-library-paging-check`, `ui-lessons-paging-check`, `ui-results-paging-check`, `ui-card-menu-check` — tất cả pass.
+
+**Chưa xác minh.** Không có ảnh chụp và chưa review bằng mắt: cửa sổ app bị che nên `Page.captureScreenshot` (kể cả `fromSurface`) không trả lời — mới có tương phản và mặt nền, chưa có phán đoán thẩm mỹ. Checkbox native vẫn vẽ sáng trong toàn app vì app chưa khai báo `color-scheme` (kể cả `.wizard-tree-node`) — không phải do #164, để nguyên vì phạm vi rộng. Ring chọn thẻ `#6258e8` mới tính tay ~3,3:1, chưa có gate. Năm badge bước 4,47:1 của #160 vẫn còn. Chưa chạy installer đóng gói.
+
+**Next task.** (1) Đặt `color-scheme` theo `[data-theme]` để control native (checkbox, `select`, scrollbar) không còn sáng trong theme tối — cần chạy lại các check form vì nó đổi cách vẽ ở nhiều trang. (2) Gate luôn ring chọn thẻ nếu muốn đóng nốt nhóm màu của bốn trang này. (3) Roadmap `Packaged check` vẫn cần máy sạch.
+
+---
+
 ## Handoff - "Xoá đã chọn" trong trang Dự án của tôi (2026-11-01, DECISIONS #163)
 
 **Files changed.**
@@ -246,30 +265,6 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 **Chưa xác minh.** Sidebar cuộn khi cửa sổ thấp hơn ~687px (máy này mở thật ở 1266×635) — hành vi có từ trước #161, không phải hồi quy #162; chưa có bản gọn riêng cho cửa sổ thấp ngoài hai mức `max-height` sẵn có. Rail hẹp <700px ẩn cả khối trạng thái. Chưa review bằng mắt từng trang trong theme tối (rule tối đã đổi tiền tố và `ui-dark-theme-check` pass, nhưng chỉ đo tương phản chữ). Chưa chạy installer đóng gói.
 
 **Next task.** Nếu cần: một mức `@media (max-height: 700px)` siết nav để footer không phải cuộn trên laptop thấp; còn lại Roadmap `Packaged check` vẫn cần máy sạch.
-
----
-
-## Handoff - Icon Lucide đồng bộ toàn chrome, xoá trang Tổng quan, sidebar có khối "Lối tắt" (2026-11-01, DECISIONS #161)
-
-**Files changed.**
-- `src/renderer/features/ui-icons.ts` (**mới**): `uiIcon(name, className, size)` trả `<svg>` Lucide đồng bộ (18px mặc định, `''` với id lạ) cho markup chèn sau render; `paintUiIcons(root)` điền các hook `<span data-icon>` trong markup do `render()` sinh ra và trong shell tĩnh, idempotent, trả về số hook không vẽ được.
-- `src/renderer/features/sidebar-shortcuts.ts` (**mới**): khối "Lối tắt" — tối đa 3 trò gần đây (bấm để chơi lại) + hai nút nhanh `Tạo từ giáo án` / `Dự án của tôi`; chỉ khai báo hàm, `core/render.ts` gọi lại mỗi render.
-- `src/renderer/pages/home.ts` (**xoá**); `src/renderer/core/render.ts` (bỏ `home` khỏi `renderers`, fallback `renderLibrary`, gọi `paintUiIcons(document)` sau khi gán `#pageContent`, gọi `renderSidebarShortcuts()`), `src/renderer/shared.ts` (`state.page = 'library'`, `pageNames` bỏ `Home`, xoá `totalQuestions()`, menu thẻ + empty state + meta thẻ dùng icon), `src/renderer/core/bootstrap.ts`, `src/renderer/core/controller.ts` (ba nút xoá nhiều chuyển `textContent` → `innerHTML` + `uiIcon`, nếu không hook `trash` tĩnh bị xoá sau lần bấm đầu), `src/renderer/features/game-generation.ts`.
-- `src/index.html`: sidebar 7 mục không còn `home`, mọi nav dùng hook `data-icon`, `<div data-sidebar-shortcuts>`, brand `✦` → `graduation-cap`, bỏ `LEARNING GAME BUILDER` + `KHÔNG GIAN LÀM VIỆC`, topbar (thông báo / toàn màn hình / trợ giúp / menu AI local) dùng Lucide, nạp `icon-data.js` → `ui-icons.js` → `sidebar-shortcuts.js` ngay trước `core/render.js`.
-- Icon chrome trong các trang: `pages/{library,my-projects,sessions,lesson-plans,settings,create,create-wizard}.ts`, `features/{editor/*,wizard/step-*,wizard/state/providers,local-ai,setup-wizard}.ts`, `src/renderer/features/icon-data.ts` (sinh lại).
-- `scripts/build-icon-registry.js`: nhóm `chrome` (+68 id → **128**), danh sách tải suy ra từ `ICON_GROUPS`, dừng khi một tên nằm ở hai nhóm.
-- `src/renderer/styles/{components,navigation}.css`: hook `span[data-icon]` là flex box + svg block; khối `.sidebar-shortcuts` (kèm rule tối viết tay) và hai mức `@media (max-height: 950px/860px)`.
-- Tests: `tests/ui/ui-chrome-icons-check.js` (**mới**, 15 check) + script `check:chrome-icons-ui`; `tests/unit/{asset-registry,renderer-load-order,setup-wizard-ui}.test.ts`; `tests/ui/{ui-settings-sections,nav-hint,ui-card-menu,ui-dark-theme,ui-fullscreen}-check.js`; `tests/manual/{verify-css,geom-ab,modal-ab}.js`; các smoke gõ `data-page="home"`.
-- Docs: `docs/DECISIONS.md` (#161), `docs/STATUS.md`, `docs/PROJECT_MAP.md`.
-- Không đổi: schema/IPC, engine trò chơi, `.egame`, SQLite, emoji nội dung trò chơi, tỉ lệ bán kính/đổ bóng toàn cục.
-
-**Behavior.** Chrome dùng một bộ Lucide 24×24 nét 2, thừa hưởng `currentColor` nên theme tối đổi màu được (emoji thì không). Trang đích là **Thư viện trò chơi**; trang Tổng quan (hero gradient, bốn thẻ số liệu, ba thẻ gần đây/hoạt động/lối tắt) không còn, và hai việc nó làm thật — chơi lại game vừa mở, bắt đầu game mới — chuyển vào khối **"Lối tắt"** dưới sidebar, hiện ở mọi trang và tự cập nhật sau khi lưu game (không cần reload). "Đơn giản giao diện" = bỏ nhãn eyebrow IN HOA (10 chỗ), badge `CÀI ĐẶT`, dòng phụ thương hiệu, uppercase ở header dropdown, siết padding brand và bỏ đổ bóng/bo góc nặng ở thẻ offline; bố cục và luồng không đổi. Ở 1366×768 sidebar vẫn vừa: hàng lối tắt bỏ dòng phụ dưới 950px, ẩn hai nút lặp nav + thẻ offline dưới 860px (903px → 834px → ~726px so với 768px).
-
-**Commands run.** `npm run check` 0 · `npm run build:icons:check` **128 icon in sync** · `npm run check:renderer-globals` 0 undefined (55/56 script, 770 hàm, 6.387 call site) · `npm run verify:css` **24/24** · `node tests/run-unit.js` **68/68** · `npm run build` 0. Electron thật, mỗi check một profile sạch (cổng 9380): `ui-chrome-icons-check` **15/15**, `ui-settings-sections-check` **26/26**, `ui-item-assets-editor-check` **29/29**, `ui-wizard-structure-check` **14/14**, `ui-house-building-check` **85/85**, `ui-game-worlds-check` **52/52**, `ui-play-surface-check` **156/156**, `ui-stage-illustration-check` **169/169**, `ui-presentation-check` **60/60**, `ui-input-routing-check` **52/52**, `ui-dark-theme-check` **9/9**, `ui-nav-hint-check` **15/15**, `ui-card-menu-check`, `ui-library-paging-check`, `ui-lessons-paging-check`, `ui-results-paging-check`, `ui-play-mode-card-check`, `ui-race-editor-check`, `ui-editor-art-check`, `ui-art-upload-flow-check`, `ui-ai-provider-settings-check`, `ui-ai-status-bar-check`, `ui-wizard-cancel-genre-check` **8/8** — tất cả pass.
-
-**Chưa xác minh.** Emoji nội dung trò chơi (`games/*`, `result-screen`, marker/đội/HUD trong editor, nhãn thể loại) cố ý giữ nguyên theo phạm vi đã chốt — chưa đồng bộ. Tỉ lệ bán kính/đổ bóng toàn cục chưa đụng. Đỏ môi trường/có sẵn, **không do #161** (đã probe): `ui-fullscreen-check` 3 check trên profile sạch vì wizard cài đặt đang mở và `html[data-setup-fullscreen]` ẩn `.app-shell` (probe: `setupOpen:true, shellVisibility:'hidden'`); `ui-setup-fullscreen-check` 2/9 (đã ghi từ #160); `ui-draft-guard-check` 7/8 (không có nhà cung cấp AI); `ui-ai-tasks-paging-check` 6/8 (cần ≥11 mục lịch sử); `ui-classifier-outline-check` 14/15 (không có model local); `ui-house-building-check` từng lệch ~18px nhưng **84/84** trên HEAD chưa sửa. `src/renderer/features/wizard/state/providers.ts` hiện diff cả file 232/232 vì Git xếp nó vào loại binary — thay đổi thật chỉ là ba dòng `🟢/🟡/⚠` → hook. Chưa chạy installer đóng gói.
-
-**Next task.** (1) Sửa `ui-setup-fullscreen-check` theo markup thật của wizard (chọn action theo màn `detecting`, đợi `renderSetupWizard()` thay vì sleep) — nhỏ, tách bạch, đã ghi từ #160. (2) Nếu muốn đồng bộ nốt emoji nội dung trò chơi thì cần một đợt riêng cho engine + marker/HUD. (3) Roadmap `Packaged check` vẫn cần máy sạch.
 
 
 

@@ -61,6 +61,7 @@
 [data-theme="dark"] .text-\[\#3b3a63\],
 [data-theme="dark"] .text-\[\#4389e5\],
 [data-theme="dark"] .text-\[\#4565c9\],
+[data-theme="dark"] .text-\[\#4c4680\],
 [data-theme="dark"] .text-\[\#5145d6\],
 [data-theme="dark"] .text-\[\#515c72\],
 [data-theme="dark"] .text-\[\#596175\],
@@ -88,6 +89,8 @@
 [data-theme="dark"] .text-\[\#e5e2ff\],
 [data-theme="dark"] .text-\[\#e9932d\],
 [data-theme="dark"] .text-\[\#ffd77c\] { color: var(--text) !important; }
+[data-theme="dark"] .text-\[\#5b5680\],
+[data-theme="dark"] .text-\[\#6b6690\],
 [data-theme="dark"] .text-\[\#6f7890\],
 [data-theme="dark"] .text-\[\#6f7a8d\],
 [data-theme="dark"] .text-\[\#707a90\],
@@ -128,6 +131,24 @@
    là cả hai cùng hết: khoảng trắng biến mất và các class `dark:` của wizard trở
    lại đúng bảng màu tối mà #1e2544/#2a324b/#f1f5f9 trong markup đã nhắm tới. */
 [data-theme="dark"] .form-panel { background: var(--panel); border-color: var(--line); color: var(--text); }
+
+/* Bốn thanh chọn hàng loạt: giáo án (#122), lượt chơi (#123), trò chơi (#154), dự án (#163).
+   Markup của chúng không mang class `dark:` nào, nên toàn bộ phần tối của chúng đến từ bảng
+   dịch màu ở trên — và bảng đó chỉ làm chúng *tối đi*, không *đọc được*:
+     - nền #f8f7ff được dịch thành var(--panel), đúng bằng màu thẻ chứa nó, nên dải strip tan
+       vào thẻ (đo trên máy: library là ngoại lệ vì nằm thẳng trên nền trang);
+     - hộp tick của thẻ dùng bg-white/[90%], chuỗi class KHÔNG khớp dòng .bg-white phía trên,
+       nên nó vẫn là một ô trắng 25×25 nằm giữa thẻ tối.
+   Dòng strip phải nằm SAU dòng bg-[#f8f7ff] ở trên: hai quy tắc cùng (0,2,0) và cùng
+   !important nên thứ tự nguồn quyết định. Dòng hộp tick chỉ cần !important (utility gốc
+   là (0,1,0) không !important). Màu mặt strip lấy #2a324b trong bộ ba tối của #160 — đủ
+   tách khỏi var(--panel) (1,3:1) mà không thành mảng sáng; ô tick chỉ còn lớp mờ 8% trắng.
+   Ba mực tím của thanh (#4c4680/#5b5680/#6b6690) được dịch ở hai danh sách màu chữ phía trên. */
+[data-theme="dark"] [data-lesson-selection-bar],
+[data-theme="dark"] [data-library-selection-bar],
+[data-theme="dark"] [data-project-selection-bar],
+[data-theme="dark"] [data-session-selection-bar] { background-color: #2a324b !important; }
+[data-theme="dark"] .bg-white\/\[90\%\] { background-color: rgba(255, 255, 255, 0.08) !important; }
 
 /* Fullscreen play: reuse the existing play modal and let it fill the viewport. */
 html[data-fullscreen="1"] .modal-backdrop { padding: 0; }

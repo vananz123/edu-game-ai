@@ -58,7 +58,14 @@ const expectations = [
   // every icon in a button, chip or meta row rides a few pixels off the label next to it.
   // Tailwind reorders declarations, so match `display:inline-flex` anywhere in the block.
   ['chrome icon hooks are flex boxes', /span\[data-icon\]\{[^}]*display:inline-flex/],
-  ['chrome icon svgs render as blocks', /span\[data-icon\] svg\{display:block\}/]
+  ['chrome icon svgs render as blocks', /span\[data-icon\] svg\{display:block\}/],
+  // #164: the four batch-selection bars. These four assertions only prove the rules survived
+  // minification — which of two equal-specificity `!important` rules wins is decided by source
+  // order, and that is what tests/ui/ui-dark-theme-check.js measures on the live page.
+  ['dark batch bar gets a surface of its own', /\[data-theme=("?)dark\1\] \[data-lesson-selection-bar\][^{]*\{[^}]*#2a324b/],
+  ['the pick chip is no longer an opaque white plate', /\[data-theme=("?)dark\1\] \.bg-white\\\/\\\[90\\%\\\]\{background-color:#ffffff14/],
+  ['bar label ink is mapped for dark', /\.text-\\\[\\#4c4680\\\][^{]*\{[^}]*color:var\(--text\)/],
+  ['bar count and "Bỏ chọn" inks land in the muted list', /\.text-\\\[\\#5b5680\\\],[^{]*\\#6b6690\\\][^{]*\{[^}]*color:var\(--muted\)/]
 ];
 
 let failed = 0;
