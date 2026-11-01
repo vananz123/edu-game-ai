@@ -184,14 +184,9 @@ function renderSettings() {
   const sectionTabs = SETTINGS_TABS.map(tab => ({ ...tab, chip: sectionTabChips[tab.id] || '' }));
 
   return `<!-- Header -->
-  <div class="flex items-center justify-between gap-4 mb-6 flex-wrap pb-4 border-b border-[#f1f5f9] dark:border-[#2a324b]">
+  <div class="flex items-center justify-between gap-4 mb-[16px] flex-wrap pb-[8px] border-b border-[#f1f5f9] dark:border-[#2a324b]">
     <div>
-      <div class="flex items-center gap-2 mb-1">
-        <h1 class="text-[22px] tracking-[-0.5px] m-0 font-extrabold text-[#1e293b] dark:text-[#f1f5f9]">Cài đặt ứng dụng</h1>
-      </div>
-      <p class="mt-1 text-[12px] text-[#64748b] dark:text-[#94a3b8] leading-relaxed m-0">
-        Mỗi mục là một tab; tab nào cũng hiện sẵn tình trạng của mình nên không cần mở ra mới biết. Mục <b>Nhà cung cấp AI</b> chia hai tab con: <b>AI local</b> chạy trên máy và <b>AI cloud</b> qua API key. Mọi thay đổi chỉ được lưu khi bạn bấm “Lưu cài đặt”, kể cả ở tab đang ẩn.
-      </p>
+      <h1 class="text-[22px] tracking-[-0.9px] m-0 font-[700]">Cài đặt ứng dụng</h1>
     </div>
   </div>
 

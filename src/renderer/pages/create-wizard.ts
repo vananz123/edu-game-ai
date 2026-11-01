@@ -87,9 +87,8 @@ function renderWizardProjects() {
 
 function renderCreateWizard() {
   return `<div id="wizardRoot">
-    <div class="flex justify-between items-start gap-[20px] mb-[22px]"><div>
-      <h1 class="text-[27px] tracking-[-0.9px] m-0 font-[780]">Tạo trò chơi từ giáo án</h1>
-      <p class="mt-[9px] text-[#788196] text-[13px] leading-[1.6]">Nhập giáo án → AI local phân tích → chọn và cấu hình trò chơi → giáo viên duyệt và lưu. Dữ liệu giáo án chỉ nằm trên máy.</p>
+    <div class="flex justify-between items-start gap-[20px] mb-[25px]"><div>
+      <h1 class="text-[22px] tracking-[-0.9px] m-0 font-[700]">Tạo trò chơi từ giáo án</h1>
     </div>
     <button class="border-0 rounded-[9px] px-[15px] py-[11px] inline-flex items-center justify-center gap-[7px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-white border border-[#e7eaf2] text-[#515c72]" data-wizard-action="new"><span data-icon="circle-plus" data-icon-size="14"></span> Dự án mới</button></div>
     ${renderWizardStepper()}

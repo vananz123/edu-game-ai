@@ -24,15 +24,12 @@ function renderCreate() {
     race: 'Cách chơi: Mỗi đội chọn nhân vật hoặc phương tiện đại diện; trả lời đúng để tiến thêm số ô tương ứng, có ô tăng tốc, câu hỏi bonus hoặc thử thách phụ. Đội về đích trước hoặc đạt mục tiêu sau số lượt quy định sẽ thắng. Thời lượng gợi ý: 10–15 phút.'
   };
 
-  return `<div class="flex items-center justify-between gap-4 mb-6 flex-wrap pb-4 border-b border-[#f1f5f9] dark:border-[#2a324b]">
+  return `<div class="flex items-center justify-between gap-4 mb-[16px] flex-wrap pb-[8px] border-b border-[#f1f5f9] dark:border-[#2a324b]">
     <div>
-      <div class="flex items-center gap-2 mb-1">
+      <div class="flex items-center gap-2">
         <span class="d-badge d-badge-secondary d-badge-sm font-bold">THỦ CÔNG</span>
-        <h1 class="text-[22px] tracking-[-0.5px] m-0 font-extrabold text-[#1e293b] dark:text-[#f1f5f9]">Tạo trò chơi mới</h1>
+        <h1 class="text-[22px] tracking-[-0.9px] m-0 font-[700]">Tạo trò chơi mới</h1>
       </div>
-      <p class="mt-1 text-[12px] text-[#64748b] dark:text-[#94a3b8] leading-relaxed m-0">
-        Chọn thể loại · Thiết lập luật chơi · Tự nhập câu hỏi · Xem trước và lưu. Trang này không dùng AI.
-      </p>
     </div>
     <div class="flex items-center gap-2">
       <button class="btn btn-secondary btn-small" data-page="library"><span data-icon="arrow-left" data-icon-size="14"></span> Thư viện</button>
