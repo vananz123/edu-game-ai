@@ -2042,6 +2042,33 @@ function registerIpc() {
     if (id) await removeProjectImages(id);
     return { ok: requireLessonStore().deleteProject(id) };
   });
+  /**
+   * #163: the batch "Xoá đã chọn" on the "Dự án của tôi" page, mirroring
+   * `library:delete-games`. Each id goes through the same path as the single delete,
+   * so a draft still takes its own pictures with it (#127).
+   *
+   * Existence is checked BEFORE the cleanup: `removeProjectImages` deletes the row
+   * itself when the draft carries pictures, and asking `deleteProject` afterwards
+   * would then report a project that was really deleted as "missing".
+   */
+  ipcMain.handle('project:delete-many', async (_e, projectIds) => {
+    const ids = Array.isArray(projectIds)
+      ? [...new Set(projectIds.filter(value => typeof value === 'string' && value))]
+      : [];
+    if (!ids.length) throw new Error('Chưa chọn dự án nào để xoá.');
+    // A teacher cannot realistically tick thousands; the cap also keeps one request
+    // from holding the store's single connection for an unbounded time (#122 precedent).
+    if (ids.length > 200) throw new Error('Mỗi lần chỉ xoá tối đa 200 dự án.');
+    const store = requireLessonStore();
+    let deleted = 0;
+    for (const id of ids) {
+      if (!store.getProject(id)) continue;
+      await removeProjectImages(id);
+      store.deleteProject(id);
+      deleted += 1;
+    }
+    return { ok: deleted > 0, deleted, missing: ids.length - deleted };
+  });
   ipcMain.handle('lesson:analyze', async (event, payload) => {
     const documentId = String(payload?.documentId || '');
     const requestId = String(payload?.requestId || '');

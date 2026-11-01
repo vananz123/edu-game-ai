@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld('eduGame', Object.freeze({
   getProject: projectId => ipcRenderer.invoke('project:get', projectId),
   listProjects: () => ipcRenderer.invoke('project:list'),
   deleteProject: projectId => ipcRenderer.invoke('project:delete', projectId),
+  deleteProjects: projectIds => ipcRenderer.invoke('project:delete-many', projectIds),
   importDocument: () => ipcRenderer.invoke('files:import-document'),
   importDocumentFromPath: filePath => ipcRenderer.invoke('files:import-document-from-path', filePath),
   setFullscreen: enabled => ipcRenderer.invoke('window:set-fullscreen', enabled),

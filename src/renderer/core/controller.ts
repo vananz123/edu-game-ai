@@ -108,6 +108,33 @@ function updateLibrarySelectionUi() {
 }
 
 /**
+ * #163: updates the project selection bar without re-rendering the grid, so the
+ * checkbox just clicked keeps focus (same approach as #154 on the library page).
+ */
+function updateProjectSelectionUi() {
+  const selected = state.projectSelection instanceof Set ? state.projectSelection : new Set();
+  document.querySelectorAll('#pageContent [data-project-item]').forEach(card => {
+    const isSelected = selected.has(card.dataset.projectItem);
+    card.classList.toggle('ring-2', isSelected);
+    card.classList.toggle('ring-[#6258e8]', isSelected);
+    if (isSelected) card.setAttribute('data-selected', 'true');
+    else card.removeAttribute('data-selected');
+  });
+  const count = document.querySelector('[data-project-selected-count]');
+  if (count) count.textContent = selected.size ? `Đã chọn ${selected.size} dự án` : 'Hoặc tick từng dự án để xoá nhiều cùng lúc';
+  const remove = document.querySelector('#projectDeleteSelectedBtn');
+  if (remove) {
+    remove.disabled = selected.size === 0;
+    remove.innerHTML = uiIcon('trash', '', 13) + ' Xoá đã chọn' + (selected.size ? ` (${selected.size})` : '');
+  }
+  const clear = document.querySelector('#projectClearSelectionBtn');
+  if (clear) clear.disabled = selected.size === 0;
+  const boxes = [...document.querySelectorAll('#pageContent [data-action="project-select"]')];
+  const all = document.querySelector('#projectSelectAll');
+  if (all) all.checked = boxes.length > 0 && boxes.every(box => box.checked);
+}
+
+/**
  * #123: updates the results selection bar without re-rendering the table, so the
  * checkbox just clicked keeps focus (same approach as #122 on the lesson page).
  */
@@ -183,6 +210,22 @@ function wirePage() {
         else state.librarySelection.delete(gameId);
       });
       updateLibrarySelectionUi();
+    });
+  }
+  // #163: "Chọn tất cả danh sách này" for the projects page. Not paged, so the box
+  // covers every card currently rendered — which is every project matching the search.
+  const projectSelectAll = $('#projectSelectAll');
+  if (projectSelectAll) {
+    projectSelectAll.addEventListener('change', () => {
+      if (!(state.projectSelection instanceof Set)) state.projectSelection = new Set();
+      document.querySelectorAll('#pageContent [data-action="project-select"]').forEach(box => {
+        const projectId = box.dataset.id;
+        if (!projectId) return;
+        box.checked = projectSelectAll.checked;
+        if (projectSelectAll.checked) state.projectSelection.add(projectId);
+        else state.projectSelection.delete(projectId);
+      });
+      updateProjectSelectionUi();
     });
   }
   // #123: "Chọn tất cả trang này" for the results table — only the rendered rows.
@@ -359,6 +402,44 @@ async function handleAction(action, id, element) { try {
         await refreshProjectsPage();
         toast('Đã xoá dự án.');
       }
+    }
+    // #163: batch delete on "Dự án của tôi", mirroring #154 on the game library.
+    // Selection lives in `state.projectSelection` (a Set of project ids) and is
+    // pruned to the ids that still exist on every render.
+    if (action === 'project-select') {
+      if (!(state.projectSelection instanceof Set)) state.projectSelection = new Set();
+      if (element && element.checked) state.projectSelection.add(id);
+      else state.projectSelection.delete(id);
+      // Only the bar and the card outlines change: a full render would rebuild the
+      // checkbox the teacher just clicked and lose keyboard focus.
+      updateProjectSelectionUi();
+      return;
+    }
+    if (action === 'project-clear-selection') {
+      state.projectSelection = new Set();
+      render();
+      return;
+    }
+    if (action === 'project-delete-selected') {
+      const ids = state.projectSelection instanceof Set ? [...state.projectSelection] : [];
+      if (!ids.length) return;
+      const projects = Array.isArray(state.projects) ? state.projects : [];
+      const names = ids.map(projectId => (projects.find(project => project.id === projectId) || {}).title || 'dự án');
+      const preview = names.slice(0, 5).map(name => `• ${name}`).join('\n') + (names.length > 5 ? `\n• … và ${names.length - 5} dự án khác` : '');
+      // A draft is the only thing this removes, and that is exactly what a teacher
+      // worries about: the saved game lives in the library and must stay.
+      if (!confirm(`Xoá ${ids.length} dự án đã chọn?\n${preview}\nChỉ xoá bản nháp tiến trình — trò chơi đã lưu trong Thư viện trò chơi vẫn được giữ lại.`)) return;
+      try {
+        const result = await window.eduGame.deleteProjects(ids);
+        state.projectSelection = new Set();
+        await refreshProjectsPage();
+        const parts = [`Đã xoá ${result.deleted} dự án`];
+        if (result.missing) parts.push(`${result.missing} không còn tồn tại`);
+        toast(`${parts.join(', ')}.`);
+      } catch (error) {
+        toast(`Không xoá được dự án: ${(error && error.message) || 'lỗi không xác định'}`);
+      }
+      return;
     }
     // #154: game library — paging and batch delete, mirroring #122 (lessons) and
     // #123 (results). Selection lives in `state.librarySelection` (a Set of game

@@ -22,6 +22,54 @@ function projectGameSaved(project) {
   return state.db.games.some(game => game.id === project.gameId);
 }
 
+/** Ids ticked for batch delete (#163). Drops ids that no longer exist. */
+function projectSelectedIds(projects) {
+  const selected = state.projectSelection instanceof Set ? state.projectSelection : new Set();
+  state.projectSelection = selected;
+  // `state.projects` is null while the list is loading, and every refresh renders
+  // that state first: pruning then would quietly drop a selection the teacher made.
+  if (!Array.isArray(projects)) return selected;
+  const existing = new Set(projects.map(project => project.id));
+  for (const id of [...selected]) if (!existing.has(id)) selected.delete(id);
+  return selected;
+}
+
+/**
+ * The batch bar above the grid (#163), same shape as the library's (#154).
+ * "Chọn tất cả" covers the whole list rather than a page because this page is not
+ * paged — every project it shows is a project the teacher can tick.
+ */
+function projectSelectionBarHtml(projects, selected) {
+  if (!projects.length) return '';
+  const allOnList = projects.every(project => selected.has(project.id));
+  return `<div class="flex items-center justify-between gap-[12px] mb-[12px] flex-wrap bg-[#f8f7ff] border border-[#e4e0ff] rounded-[10px] px-[12px] py-[9px]" data-project-selection-bar>
+    <label class="inline-flex items-center gap-[8px] text-[12px] font-semibold text-[#4c4680] cursor-pointer">
+      <input type="checkbox" id="projectSelectAll" class="lesson-check"${allOnList ? ' checked' : ''} aria-label="Chọn tất cả dự án đang hiển thị">
+      Chọn tất cả danh sách này
+    </label>
+    <div class="flex items-center gap-[10px] flex-wrap">
+      <span class="text-[12px] text-[#5b5680]" data-project-selected-count>${selected.size ? `Đã chọn ${selected.size} dự án` : 'Hoặc tick từng dự án để xoá nhiều cùng lúc'}</span>
+      <button type="button" class="border-0 rounded-[8px] px-[11px] py-[7px] inline-flex items-center gap-[6px] font-bold text-[11px] bg-[#c33b4b] text-white hover:bg-[#a92f3e] disabled:opacity-50" id="projectDeleteSelectedBtn" data-action="project-delete-selected"${selected.size ? '' : ' disabled'}><span data-icon="trash" data-icon-size="13"></span> Xoá đã chọn${selected.size ? ` (${selected.size})` : ''}</button>
+      <button type="button" class="border-0 rounded-[8px] px-[10px] py-[7px] font-semibold text-[11px] bg-transparent text-[#6b6690] hover:underline disabled:opacity-50" id="projectClearSelectionBtn" data-action="project-clear-selection"${selected.size ? '' : ' disabled'}>Bỏ chọn</button>
+    </div>
+  </div>`;
+}
+
+/**
+ * A project card plus its pick box (#163). The checkbox sits OUTSIDE `projectCard()`
+ * in a wrapper, so only this page grows the selection affordance — the same split as
+ * `libraryCardHtml()` (#154).
+ */
+function projectCardHtml(project, index, selected) {
+  const id = escapeHtml(project.id);
+  return `<div class="relative min-w-0 rounded-[14px]${selected ? ' ring-2 ring-[#6258e8]' : ''}" data-project-item="${id}"${selected ? ' data-selected="true"' : ''}>
+    <label class="absolute top-[10px] right-[10px] z-[3] inline-flex items-center justify-center w-[25px] h-[25px] rounded-[7px] bg-white/[90%] border border-[#e7eaf2] cursor-pointer" title="Chọn dự án này">
+      <input type="checkbox" class="lesson-check" data-action="project-select" data-id="${id}"${selected ? ' checked' : ''} aria-label="Chọn ${escapeHtml(project.title || 'dự án')}">
+    </label>
+    ${projectCard(project, index)}
+  </div>`;
+}
+
 function renderMyProjects() {
   const query = String(state.search || '').trim().toLowerCase();
   const projects = Array.isArray(state.projects) ? state.projects : null;
@@ -36,13 +84,14 @@ function renderMyProjects() {
       projectStepLabel(project)
     ].filter(Boolean).join(' ').toLowerCase().includes(query);
   });
+  const selected = projectSelectedIds(projects);
   return `<div class="flex justify-between items-start gap-[20px] mb-[25px]"><div><h1 class="text-[27px] tracking-[-0.9px] m-0 font-[780]">Dự án của tôi</h1><p class="mt-[9px] text-[#788196] text-[13px] leading-[1.6]">Nơi lưu <strong>tiến trình tạo trò chơi</strong>: giáo án nguồn, kết quả phân tích, thể loại, cấu hình và bản nháp đang làm. Trò chơi đã lưu để chơi nằm trong <strong>Thư viện trò chơi</strong>.</p></div><button class="border-0 rounded-[9px] px-[15px] py-[11px] inline-flex items-center justify-center gap-[7px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-[#6258e8] text-white shadow-[0_6px_14px_#6258e82b]" data-page="create-wizard"><span data-icon="circle-plus" data-icon-size="14"></span> Tạo dự án mới</button></div>
     <div class="flex gap-[10px] items-center mb-[20px] flex-wrap"><div class="relative flex-1 min-w-[200px]"><input id="librarySearch" placeholder="Tìm theo tên dự án, giáo án, thể loại..." value="${escapeHtml(state.search || '')}" class="w-full px-[13px] py-[11px] pl-[37px] border border-line rounded-[9px] bg-white outline-0 text-[12px]"></div><span class="px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#788196] text-[9px]">${projects === null ? 'Đang tải…' : `${filtered.length} dự án`}</span></div>
     <section class="bg-white border border-line rounded-[14px] p-[20px]">
       ${projects === null
         ? `<div class="p-[30px] text-center text-[#929bad] text-[12px]">Đang tải danh sách dự án…</div>`
         : filtered.length
-          ? `<div class="grid grid-cols-[repeat(3,minmax(0,1fr))] gap-[16px]">${filtered.map((project, index) => projectCard(project, index)).join('')}</div>`
+          ? `${projectSelectionBarHtml(filtered, selected)}<div class="grid grid-cols-[repeat(3,minmax(0,1fr))] gap-[16px]">${filtered.map((project, index) => projectCardHtml(project, index, selected.has(project.id))).join('')}</div>`
           : `<div class="bg-white border border-dashed border-[#dfe2ed] rounded-[14px] p-[40px] text-center text-[#929bad] flex flex-col items-center justify-center"><div class="mb-[12px] text-[#aab1c3]"><span data-icon="folder-open" data-icon-size="36"></span></div><h3 class="text-[#394256] mb-[8px] mt-0">${query ? 'Không tìm thấy dự án phù hợp' : 'Chưa có dự án nào'}</h3><p class="max-w-[460px] mx-auto mb-[17px] leading-[1.7] text-[12px]">${query ? 'Thử từ khóa khác hoặc xoá bộ lọc.' : 'Một dự án lưu tiến trình từ giáo án đến bản nháp. Trò chơi đã lưu vào thư viện vẫn còn ở đó nếu bạn xoá dự án.'}</p><button class="border-0 rounded-[9px] px-[15px] py-[11px] inline-flex items-center justify-center gap-[8px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-[#6258e8] text-white shadow-[0_6px_14px_#6258e82b]" data-page="create-wizard">Tạo dự án từ giáo án</button></div>`}
     </section>`;
 }

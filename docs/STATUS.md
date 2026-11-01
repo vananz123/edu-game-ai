@@ -8,6 +8,7 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 ## Mục lục bàn giao
 
 ### 2026-11-01 — [docs/handoff/status/2026-11-01.md](handoff/status/2026-11-01.md)
+- "Xoá đã chọn" cho trang Dự án của tôi — IPC `project:delete-many` + thanh chọn (#163)
 - Bỏ brand + navbar; trạng thái llama.cpp, thông báo, toàn màn hình/trợ giúp vào sidebar (#162)
 - Icon Lucide cho toàn bộ chrome, xoá trang Tổng quan, sidebar có khối "Lối tắt" (#161)
 - Biến thể `dark:` nối vào `[data-theme]` — dark mode 149/223 → 5/223 chữ dưới ngưỡng AA (#160, G6)
@@ -199,6 +200,30 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - Lịch sử trước 2026-10-19
 ## Bàn giao gần nhất
 
+## Handoff - "Xoá đã chọn" trong trang Dự án của tôi (2026-11-01, DECISIONS #163)
+
+**Files changed.**
+- `src/main.ts`: IPC **mới** `project:delete-many` (ngay sau `project:delete`) — khử trùng và lọc id không hợp lệ, ném lỗi khi batch rỗng, trần 200 id, mỗi id đi qua đúng đường xoá đơn (`removeProjectImages()` rồi `store.deleteProject()`), trả `{ ok, deleted, missing }` giống `library:delete-games`. `project:delete` đơn lẻ giữ nguyên.
+- `src/preload.ts`: `deleteProjects: projectIds => ipcRenderer.invoke('project:delete-many', projectIds)`.
+- `src/renderer/pages/my-projects.ts`: ba hàm mới `projectSelectedIds(projects)` (Set id đã tick, tỉa id không còn tồn tại), `projectSelectionBarHtml(projects, selected)` (bar `[data-project-selection-bar]`, `#projectSelectAll` "Chọn tất cả danh sách này", `[data-project-selected-count]`, `#projectDeleteSelectedBtn`, `#projectClearSelectionBtn`) và `projectCardHtml(project, index, selected)` (wrapper `[data-project-item]` + checkbox `data-action="project-select"` **ngoài** `projectCard()`). `renderMyProjects()` gọi `projectSelectedIds(projects)` và nối bar + wrapper vào nhánh lưới. `projectCard()` không đổi một byte nào.
+- `src/renderer/core/controller.ts`: `updateProjectSelectionUi()` (sửa bar tại chỗ, không `render()`), nối `#projectSelectAll` trong `wirePage()`, và ba action `project-select` / `project-clear-selection` / `project-delete-selected` (confirm liệt kê 5 tên đầu, toast "Đã xoá N dự án, M không còn tồn tại").
+- `package.json`: script `check:project-selection-ui`.
+- `tests/ui/ui-project-selection-check.js` (**mới**, 17 assertion) và script gate tương ứng; `tests/run-unit.js` không phải sửa (check mới là UI check, không phải unit).
+- Docs: `docs/DECISIONS.md` (#163), `docs/STATUS.md`, `docs/handoff/status/2026-11-01.md` (chuyển bàn giao #160 vào lưu trữ).
+- Không đổi: schema `game_projects`, `validateProjectForWrite()`, phân tách dự án ↔ thư viện, engine trò chơi, các trang thư viện/giáo án/kết quả.
+
+**Behavior.** Trang "Dự án của tôi" có bar xoá hàng loạt ngay trên lưới thẻ: tick từng thẻ (viền `ring-2` tím + `[data-selected="true"]`), hoặc "Chọn tất cả danh sách này" cho toàn bộ thẻ **đang hiển thị** (trang không phân trang nên phạm vi này là toàn bộ kết quả tìm kiếm), "Bỏ chọn" để làm sạch, nút "Xoá đã chọn (N)" tắt khi chưa chọn gì. `confirm()` nêu rõ chỉ xoá bản nháp tiến trình; trò chơi đã lưu trong Thư viện vẫn còn (check đo bằng `getLibrary()` trước/sau). Bar cập nhật tại chỗ nên checkbox vừa bấm vẫn là node cũ — không mất focus. Batch rỗng bị IPC từ chối thay vì lặng lẽ trả "0 đã xoá"; id không tồn tại bị báo `missing` chứ không tính là đã xoá.
+
+**Lỗi thật tìm ra khi viết check.** `projectSelectedIds()` tỉa theo danh sách hiện có, nhưng `state.projects === null` ở mỗi lần render "đang tải" — tỉa vô điều kiện sẽ âm thầm xoá sạch lựa chọn giáo viên vừa tick khi `refreshProjectsPage()` chạy. Đã chặn bằng `if (!Array.isArray(projects)) return selected;` và chốt bằng check "a refresh keeps the ticks it already has".
+
+**Commands run.** `npm run check` 0 · `npm run check:renderer-globals` 0 undefined (55/56 script, 774 hàm, 6.434 call site) · `npm run verify:css` **24/24** · `node tests/run-unit.js` **68/68** (26.4s) · `npx tsc -p tsconfig.json` 0 (cập nhật `dist/` để test trên app đang chạy) · `node tests/ui/ui-project-selection-check.js 9338` **17/17** trên Electron thật, profile sạch (bar đo thật 912×48, hộp tick 13×13 trong viewport) · không hồi quy ở các trang anh em, cùng instance: `ui-library-paging-check`, `ui-lessons-paging-check`, `ui-results-paging-check`, `ui-card-menu-check`, `ui-chrome-icons-check` đều "All … checks passed".
+
+**Chưa xác minh.** Không có ảnh chụp và chưa review bằng mắt ở 1366×768 / 1920×1080: cửa sổ app bị che nên `Page.captureScreenshot` (kể cả `fromSurface`) không trả lời — mới chỉ có số đo hình học trong check. Bar mới dùng đúng bộ màu sáng của bar thư viện (#154), nên chưa có biến thể `dark:` riêng cho nó; `ui-dark-theme-check` chạy lại trên instance dùng chung các check khác nên **không tính là bằng chứng cho #163**. Chưa bấm luồng giáo viên thật với draft có ảnh đính kèm (`removeProjectImages()` dọn ảnh theo draft — hành vi kế thừa từ #127, chỉ được kiểm chứng gián tiếp qua `missing`). Trang vẫn chưa phân trang. Chưa chạy installer đóng gói.
+
+**Next task.** (1) Nếu danh sách dự án dài thật sự, tách riêng một đợt phân trang cho trang này theo #154 (bar sẽ đổi nhãn thành "trang này"). (2) Nợ `dark:` cho hai bar chọn (thư viện + dự án) nên xử lý một lần. (3) Roadmap `Packaged check` vẫn cần máy sạch.
+
+---
+
 ## Handoff - Bỏ brand + navbar, trạng thái llama.cpp và thông báo vào sidebar (2026-11-01, DECISIONS #162)
 
 **Files changed.**
@@ -246,26 +271,6 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 **Next task.** (1) Sửa `ui-setup-fullscreen-check` theo markup thật của wizard (chọn action theo màn `detecting`, đợi `renderSetupWizard()` thay vì sleep) — nhỏ, tách bạch, đã ghi từ #160. (2) Nếu muốn đồng bộ nốt emoji nội dung trò chơi thì cần một đợt riêng cho engine + marker/HUD. (3) Roadmap `Packaged check` vẫn cần máy sạch.
 
----
 
-## Handoff - Biến thể `dark:` nối vào `[data-theme]`: dark mode từ 149/223 chữ dưới ngưỡng AA còn 5/223 (2026-11-01, DECISIONS #160, ROADMAP G6)
-
-**Files changed.**
-- `src/renderer/styles/app.css`: `@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));` ngay sau `@import "tailwindcss";` + comment ghi lại bằng chứng đo được (1.16:1 trên `#settingStyleTone`, 297 lượt dùng toàn bộ là màu, `:where()` đặc tính 0 nên bảng dịch `!important` trong `shell.css` vẫn thắng).
-- `src/renderer/styles/shell.css`: `[data-theme="dark"] .form-panel { background: var(--panel); border-color: var(--line); color: var(--text); }` — thẻ wizard là class component nên bảng dịch class utility chưa bao giờ với tới, nó vẫn trắng trong dark mode.
-- `src/renderer/pages/settings.ts` (`hintCls`) và `src/renderer/pages/create.ts` (4 vị trí): đảo cặp `text-[#94a3b8] dark:text-[#64748b]` → `text-[#64748b] dark:text-[#94a3b8]`; JSDoc `settingsPanelHeader()` bỏ câu "utility `dark:` không chạy ở app này".
-- `src/renderer/features/wizard/step-input.ts:23`: tab đang chọn thêm `dark:text-[#a5b4fc]` (`#6366f1` trên `#1e2544` chỉ 3.81:1).
-- `src/renderer/styles/components.css`: comment P159 sửa lại cho đúng sự thật mới.
-- `tests/manual/verify-css.js` 20 → **22** expectation; `tests/ui/ui-dark-theme-check.js` (**mới**, 9 check) + script `check:dark-theme-ui` trong `package.json`.
-- Docs: `docs/DECISIONS.md` (#160), `docs/STATUS.md`, `docs/ROADMAP.md` (G6 → xong), `docs/handoff/status/2026-10-31.md` (chuyển bàn giao #157 vào lưu trữ).
-- Không đổi: schema `settings`, hợp đồng IPC, `saveSettings()`, `readAiProviderPatches()`, `wireSettingsTabStrip()`, engine trò chơi, hành vi light mode ngoài 5 chỗ đảo cặp màu.
-
-**Behavior.** Chọn "Tối"/"Sáng" trong Cài đặt → Giao diện giờ đổi **toàn bộ** màu, không chỉ phần do rule viết tay: 297 utility `dark:` trong 5 file renderer bắt đầu có hiệu lực. Trước: 149/223 phần tử mang `dark:` dưới 4.5:1 (69 dưới 2:1, median 2.45) — chữ đậm `#1e293b` nằm trên nền `#0f1220`. Sau: 5/223 (0 dưới 3:1, median 11.47), 136 phần tử vượt ngưỡng đi lên, **0 tụt hạng**. Không có đảo trắng còn sót: không phần tử `dark:` nào ngồi trên thẻ trắng nữa. Light mode chỉ đổi 5 chỗ chữ gợi ý (2.8 → 4.6:1 trên nền trắng, đi lên); phần còn lại được bảo vệ bằng cấu trúc vì `[data-theme="dark"]` không khớp khi app sáng.
-
-**Commands run.** `npm run check` 0 · `node tests/run-unit.js` **68/68** · `npm run build` 0 · `npm run check:renderer-globals` 0 undefined (54/55 script, 766 hàm, 6.295 call site) · `npm run verify:css` **22/22**. Electron thật, mỗi check một profile sạch: `ui-dark-theme-check` **9/9** (dark `rgb(51,65,85)` / light `rgb(203,213,225)` trên cùng phần tử; hint `rgb(148,163,184)` dark, `rgb(100,116,139)` light; 5/253 dưới 4.5:1, worst 4.47), `ui-settings-sections-check` **24/24**, `ui-wizard-structure-check`, `ui-ai-provider-settings-check`, `ui-ai-provider-key-check`, `ui-ai-provider-wizard-check`, `ui-ai-status-bar-check` pass, `tests/legacy/smoke2.js` **4/4**. Ảnh 1366×768 cả hai theme cho Cài đặt / Tạo giáo án / wizard bước 1.
-
-**Chưa xác minh.** Chưa review bằng mắt từng trang ngoài ba trang có ảnh (đã chứng minh bằng kiểm kê là chỉ có utility màu, không có hình học, nên quyết định tin số đo). 5 badge bước vẫn 4.47:1 — class component, nằm ngoài 297 utility. **Hai đỏ có sẵn, không do #160** (đã probe để tách bạch): `npm run test:ui` (`ui-setup-fullscreen-check`) fail 2/9 check vì wizard trên profile sạch dừng ở màn `detecting`, markup chỉ có `data-setup-action="close"`, còn check tìm `"start"`/`"skip-ai"` — selector của check đã cũ; và `tests/legacy/smoke-ui.js` **không parse được từ HEAD** (`node --check`: `missing ) after argument list` dòng 248), nên dòng "smoke-ui 27/27" ở bàn giao #159 là sai, đã đính chính trong DECISIONS #160. `tests/legacy/smoke60.js` 33/43 trên profile sạch vì không có nhà cung cấp AI. Chưa chạy installer đóng gói.
-
-**Next task.** Sửa `ui-setup-fullscreen-check` theo markup thật của wizard (chọn action theo màn `detecting`, và đợi `renderSetupWizard()` thay vì sleep 200ms) — việc nhỏ, tách bạch; Roadmap `Packaged check` (cần máy sạch).
 
 
