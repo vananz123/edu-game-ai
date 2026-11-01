@@ -254,7 +254,7 @@ async function findTarget() {
       error: wizardState.error ? wizardState.error.message : ''
     };
   })()`);
-  check('T3 generation produced a draft and the content state has "← Cấu hình"', t3.content && t3.backPresent && !t3.error, JSON.stringify(t3));
+  check('T3 generation produced a draft and the content state has a back-to-configuration button', t3.content && t3.backPresent && !t3.error, JSON.stringify(t3));
   check('T3 saving progress shows a visible toast', t3.toastShown && /Đã lưu tiến trình dự án/.test(t3.toastText), JSON.stringify({ toast: t3.toastText, shown: t3.toastShown }));
   check('T3 the back button returns to configuration', t3.stepAfterBack === 'configure', t3.stepAfterBack);
 

@@ -77,7 +77,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     delete window.confirm;
     const left = state.db.games.find(g => g.title === 'SMOKE DELETE ME');
     if (left) { await window.eduGame.deleteGame(left.id); await refreshDb(); }
-    navigate('home');
+    navigate('library');
     return true;
   })()`);
 

@@ -76,10 +76,10 @@ function renderWizardAnalysis() {
       ${wizardProviderPickerHtml()}
       ${wizardLocalAiNoticeHtml()}
       <div class="publish-actions">
-        <button class="btn btn-primary" id="wizardAnalyzeBtn" data-wizard-action="analyze" data-provider-id="local"${analyzing ? ' disabled' : ''}>${analyzing ? 'AI đang phân tích…' : `✦ Phân tích bằng AI local`}</button>
+        <button class="btn btn-primary" id="wizardAnalyzeBtn" data-wizard-action="analyze" data-provider-id="local"${analyzing ? ' disabled' : ''}>${analyzing ? 'AI đang phân tích…' : `<span data-icon="wand-sparkles" data-icon-size="13"></span> Phân tích bằng AI local`}</button>
         ${wizardCloudAnalyzeButtonHtml()}
         ${analyzing ? '<button class="btn btn-secondary" data-wizard-action="cancel">Huỷ</button>' : ''}
-        <button class="btn btn-secondary" data-wizard-action="back">← Quay lại</button>
+        <button class="btn btn-secondary" data-wizard-action="back"><span data-icon="arrow-left" data-icon-size="13"></span> Quay lại</button>
       </div>
       ${wizardCloudAnalyzeHintHtml()}
       ${analyzing ? '<div class="field-hint" data-wizard-loading="analyze">Đang đọc giáo án. Quá trình có thể mất vài chục giây tuỳ nhà cung cấp.</div>' : ''}
@@ -106,7 +106,7 @@ function renderWizardAnalysis() {
       ${analysis.objectives.map((objective, index) => `<div class="flex gap-[8px] items-center" data-wizard-objective-row="${index}">
         <input class="flex-1" data-wizard-objective="${index}" data-field="description" placeholder="Mô tả mục tiêu" value="${escapeHtml(objective.description || '')}">
         <select data-wizard-objective="${index}" data-field="cognitiveLevel">${WIZARD_COGNITIVE_LEVELS.map(level => `<option value="${level.value}"${objective.cognitiveLevel === level.value ? ' selected' : ''}>${level.label}</option>`).join('')}</select>
-        <button class="btn btn-secondary btn-small" data-wizard-action="remove-objective" data-index="${index}" title="Xoá mục tiêu"${analysis.objectives.length <= 1 ? ' disabled' : ''}>✕</button>
+        <button class="btn btn-secondary btn-small" data-wizard-action="remove-objective" data-index="${index}" title="Xoá mục tiêu"${analysis.objectives.length <= 1 ? ' disabled' : ''}><span data-icon="x" data-icon-size="13"></span></button>
       </div>`).join('')}
     </div>
 
@@ -115,7 +115,7 @@ function renderWizardAnalysis() {
       ${analysis.keyConcepts.map((concept, index) => `<div class="flex gap-[8px] items-center" data-wizard-concept-row="${index}">
         <input class="w-[200px]" data-wizard-concept="${index}" data-field="term" placeholder="Thuật ngữ" value="${escapeHtml(concept.term || '')}">
         <input class="flex-1" data-wizard-concept="${index}" data-field="explanation" placeholder="Giải thích ngắn" value="${escapeHtml(concept.explanation || '')}">
-        <button class="btn btn-secondary btn-small" data-wizard-action="remove-concept" data-index="${index}" title="Xoá khái niệm">✕</button>
+        <button class="btn btn-secondary btn-small" data-wizard-action="remove-concept" data-index="${index}" title="Xoá khái niệm"><span data-icon="x" data-icon-size="13"></span></button>
       </div>`).join('')}
     </div>
 
@@ -123,15 +123,15 @@ function renderWizardAnalysis() {
     <div class="grid gap-[8px]" id="wizardUncertainties">
       ${analysis.uncertainties.length ? analysis.uncertainties.map((note, index) => `<div class="flex gap-[8px] items-center">
         <input class="flex-1" data-wizard-uncertainty="${index}" value="${escapeHtml(note)}">
-        <button class="btn btn-secondary btn-small" data-wizard-action="remove-uncertainty" data-index="${index}" title="Xoá ghi chú">✕</button>
+        <button class="btn btn-secondary btn-small" data-wizard-action="remove-uncertainty" data-index="${index}" title="Xoá ghi chú"><span data-icon="x" data-icon-size="13"></span></button>
       </div>`).join('') : '<div class="field-hint" data-wizard-empty="uncertainties">Không có điểm chưa chắc chắn nào được ghi nhận.</div>'}
     </div>
 
     <div class="publish-actions">
-      <button class="btn btn-secondary" data-wizard-action="rerun"${analyzing ? ' disabled' : ''}>↻ Phân tích lại</button>
-      <button class="btn btn-secondary" data-wizard-action="back">← Nhập giáo án</button>
-      ${s.quick ? '' : `<button class="btn btn-primary" data-wizard-action="quick-generate"${s.busy ? ' disabled' : ''}>⚡ AI gợi ý &amp; tạo ngay</button>`}
-      <button class="btn ${s.quick ? 'btn-primary' : 'btn-secondary'}" id="wizardNextBtn" data-wizard-action="next"${s.busy === 'prepare' ? ' disabled' : ''}>Tiếp tục · Chọn trò chơi →</button>
+      <button class="btn btn-secondary" data-wizard-action="rerun"${analyzing ? ' disabled' : ''}><span data-icon="refresh-cw" data-icon-size="13"></span> Phân tích lại</button>
+      <button class="btn btn-secondary" data-wizard-action="back"><span data-icon="arrow-left" data-icon-size="13"></span> Nhập giáo án</button>
+      ${s.quick ? '' : `<button class="btn btn-primary" data-wizard-action="quick-generate"${s.busy ? ' disabled' : ''}><span data-icon="zap" data-icon-size="13"></span> AI gợi ý &amp; tạo ngay</button>`}
+      <button class="btn ${s.quick ? 'btn-primary' : 'btn-secondary'}" id="wizardNextBtn" data-wizard-action="next"${s.busy === 'prepare' ? ' disabled' : ''}>Tiếp tục · Chọn trò chơi <span data-icon="arrow-right" data-icon-size="13"></span></button>
     </div>
     ${renderWizardQuickPanel()}
     <div class="field-hint">“Phân tích lại” sẽ thay thế nội dung đang sửa bằng kết quả mới từ ${escapeHtml(wizardProviderLabel())}. “AI gợi ý &amp; tạo ngay” tự chọn thể loại và số lượng phù hợp — bạn xác nhận trước khi AI chạy.</div>
@@ -189,7 +189,7 @@ function wizardCloudAnalyzeButtonHtml() {
   // request that really failed, so a working cloud provider never looks broken.
   const failed = wizardState.cloudAnalysisFailed === cloud.id;
   const tone = failed ? ' style="color:#dc2626;border-color:#fca5a5"' : '';
-  return `<button class="btn btn-secondary" data-wizard-action="analyze-cloud" data-provider-id="${escapeHtml(cloud.id)}"${tone} title="${escapeHtml(cloud.label)} đã kiểm tra kết nối. Giáo án sẽ được gửi qua Internet.">☁ Phân tích bằng AI (${escapeHtml(wizardCloudShortName(cloud))})</button>`;
+  return `<button class="btn btn-secondary" data-wizard-action="analyze-cloud" data-provider-id="${escapeHtml(cloud.id)}"${tone} title="${escapeHtml(cloud.label)} đã kiểm tra kết nối. Giáo án sẽ được gửi qua Internet."><span data-icon="cloud" data-icon-size="13"></span> Phân tích bằng AI (${escapeHtml(wizardCloudShortName(cloud))})</button>`;
 }
 
 /** "Gemini" / "ChatGPT" in the button text; the full label stays in the tooltip. */
@@ -366,7 +366,7 @@ function renderWizardQuickPanel() {
   const s = wizardState;
   if (s.busy === 'prepare') {
     return `<div class="field mt-[12px] rounded-[10px] border border-[#c9c4ff] bg-[#f7f6ff] p-[12px]" data-wizard-quick="prepare" role="status">
-      <strong class="text-[13px]">⚡ Đang chọn thể loại và số lượng phù hợp…</strong>
+      <strong class="text-[13px] inline-flex items-center gap-[6px]"><span data-icon="loader" data-icon-size="14" data-icon-class="animate-spin"></span> Đang chọn thể loại và số lượng phù hợp…</strong>
       <div class="field-hint mt-[4px]">Không gọi AI — hệ thống chỉ đọc kết quả phân tích, độ dài tài liệu và model đang dùng.</div>
     </div>`;
   }
@@ -376,14 +376,14 @@ function renderWizardQuickPanel() {
   const unit = wizardItemUnit(quick.gameType);
   const mode = quick.mode === 'deep' ? 'Thinking (kỹ)' : 'Fast (nhanh)';
   const replaces = quick.replaces
-    ? `<div class="field-hint mt-[4px] text-[#8a6d00]">⚠ Nội dung ${quick.replacesSaved ? 'của dự án' : 'nháp chưa lưu vào Thư viện'} sẽ bị thay thế khi tạo.</div>`
+    ? `<div class="field-hint mt-[4px] text-[#8a6d00] inline-flex items-center gap-[5px]"><span data-icon="triangle-alert" data-icon-size="12"></span> Nội dung ${quick.replacesSaved ? 'của dự án' : 'nháp chưa lưu vào Thư viện'} sẽ bị thay thế khi tạo.</div>`
     : '';
   return `<div class="field mt-[12px] rounded-[10px] border border-[#6258e8] bg-[#f7f6ff] p-[12px]" data-wizard-quick="ready" role="status">
-    <strong class="text-[13px]">⚡ Sẵn sàng tạo: ${meta.icon} ${escapeHtml(meta.label)} · ${quick.count} ${escapeHtml(unit)} · ${mode}</strong>
+    <strong class="text-[13px] inline-flex items-center gap-[6px]"><span data-icon="zap" data-icon-size="14"></span> Sẵn sàng tạo: ${meta.icon} ${escapeHtml(meta.label)} · ${quick.count} ${escapeHtml(unit)} · ${mode}</strong>
     ${quick.reason ? `<div class="field-hint mt-[4px]">${escapeHtml(quick.reason)}</div>` : ''}
     ${replaces}
     <div class="publish-actions mt-[8px]">
-      <button class="btn btn-primary" data-wizard-action="quick-confirm"${s.busy ? ' disabled' : ''}>✦ Bắt đầu tạo</button>
+      <button class="btn btn-primary" data-wizard-action="quick-confirm"${s.busy ? ' disabled' : ''}><span data-icon="sparkles" data-icon-size="13"></span> Bắt đầu tạo</button>
       <button class="btn btn-secondary" data-wizard-action="quick-cancel"${s.busy ? ' disabled' : ''}>Huỷ</button>
     </div>
     <div class="field-hint mt-[4px]">Có thể quay lại bước 3–4 để đổi thể loại hoặc cấu hình sau khi xem bản nháp.</div>

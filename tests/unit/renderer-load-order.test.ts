@@ -331,4 +331,16 @@ assert.ok(
   `scene categories should be a subset of the 25 labelled categories, got ${sceneCategories}`
 );
 
+// DECISIONS #161: the chrome icon helper must be reachable from the shared vm
+// context by the time the pages run, and must resolve ids against the generated
+// icon data — an icon that silently renders nothing is worse than a missing file.
+assert.equal(evalInContext('typeof uiIcon'), 'function', 'uiIcon is called by every page module');
+assert.equal(evalInContext('typeof paintUiIcons'), 'function', 'render() calls paintUiIcons');
+assert.ok(
+  evalInContext("uiIcon('library', '', 18)").includes('<svg') &&
+    evalInContext("uiIcon('wand-sparkles')").includes('lucide-wand-sparkles'),
+  'uiIcon should emit a Lucide svg for a real chrome id'
+);
+assert.equal(evalInContext("uiIcon('no-such-icon')"), '', 'an unknown id must paint nothing, not a broken tag');
+
 console.log(`renderer-load-order: ${loaded.length} scripts loaded, step 5 renders (${sceneCategories} scene categories)`);

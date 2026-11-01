@@ -236,7 +236,7 @@ async function findTarget() {
 
   // T4 - external .egame import is hidden on every page; project deletion keeps library game.
   const importEntries = await must(`(async () => {
-    navigate('home'); await new Promise(r => setTimeout(r, 100)); const home = document.querySelectorAll('[data-action="import-game"]').length;
+    navigate('library'); await new Promise(r => setTimeout(r, 100)); const home = document.querySelectorAll('[data-action="import-game"]').length;
     navigate('library'); await new Promise(r => setTimeout(r, 100)); const library = document.querySelectorAll('[data-action="import-game"]').length;
     navigate('settings'); await new Promise(r => setTimeout(r, 100)); const settings = document.querySelectorAll('[data-action="import-game"]').length;
     return { home, library, settings };

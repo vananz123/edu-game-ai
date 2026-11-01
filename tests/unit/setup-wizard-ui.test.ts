@@ -191,7 +191,11 @@ function runFile(name: string) {
   vm.runInContext(fs.readFileSync(file, 'utf8'), context, { filename: file });
 }
 
-// Load order must match `index.html`: the model first, then the DOM layer.
+// Load order must match `index.html`: the icon data and its painter first (the
+// wizard's close button asks uiIcon() for an <svg>), then the model, then the
+// DOM layer.
+runFile('features/icon-data.js');
+runFile('features/ui-icons.js');
 runFile('setup-wizard-model.js');
 runFile('features/setup-wizard.js');
 

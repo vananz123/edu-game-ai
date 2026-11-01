@@ -293,8 +293,8 @@ async function findTarget() {
     }
     await refreshDb();
     push('smoke games deleted', !state.db.games.some(g => g.title === ${JSON.stringify(HUNT_TITLE)} || g.id === 'smoke68-invalid'), '');
-    navigate('home');
-    push('home page after tests', state.page === 'home', state.page);
+    navigate('library');
+    push('library page after tests', state.page === 'library', state.page);
     return out;
   })()`);
   t4.forEach(r => check('T4-cleanup ' + r[0], r[1], r[2]));

@@ -6,13 +6,13 @@ function treasurePairRow(pair, index) {
     <input data-pair-left value="${escapeHtml(pair.left || '')}" placeholder="Vế trái ${index + 1}">
     <span class="pair-arrow">↔</span>
     <input data-pair-right value="${escapeHtml(pair.right || '')}" placeholder="Vế phải ${index + 1}">
-    <button type="button" class="text-link danger-text" data-pair-remove>✕</button>
+    <button type="button" class="text-link danger-text" data-pair-remove>${uiIcon('x', '', 14)}</button>
   </div>`;
 }
 function treasureClassGroupRow(group, index) {
   return `<div class="treasure-class-group-row" data-class-group-row data-group-id="${escapeHtml(group.id || newPanelId('group'))}">
     <input data-group-name value="${escapeHtml(group.name || '')}" placeholder="Tên nhóm ${index + 1}">
-    <button type="button" class="text-link danger-text" data-group-remove>✕</button>
+    <button type="button" class="text-link danger-text" data-group-remove>${uiIcon('x', '', 14)}</button>
   </div>`;
 }
 function treasureClassItemRow(item, index, groups) {
@@ -20,7 +20,7 @@ function treasureClassItemRow(item, index, groups) {
   return `<div class="treasure-class-item-row" data-class-item-row data-item-id="${escapeHtml(item.id || newPanelId('item'))}">
     <input data-item-text value="${escapeHtml(item.text || '')}" placeholder="Nội dung mục ${index + 1}">
     <select data-item-group>${groups.map(group => `<option value="${escapeHtml(group.id)}" ${group.id === selected ? 'selected' : ''}>${escapeHtml(group.name || 'Nhóm chưa đặt tên')}</option>`).join('')}</select>
-    <button type="button" class="text-link danger-text" data-item-remove>✕</button>
+    <button type="button" class="text-link danger-text" data-item-remove>${uiIcon('x', '', 14)}</button>
   </div>`;
 }
 function treasureMissionPanel(stage) {
@@ -40,12 +40,12 @@ function treasureMissionPanel(stage) {
     : [{ id: newPanelId('item'), text: '', groupId: groups[0].id }, { id: newPanelId('item'), text: '', groupId: groups[1].id }];
   return `
     <div class="treasure-mission-panel ${choices ? '' : 'hidden'}" data-mission-panel="choice">
-      <div class="treasure-options" data-stage-options>${options.map((o, j) => treasureOptionRow(o, stage.id, correctId, j)).join('')}<button type="button" class="btn btn-secondary btn-small" data-stage-add-option>＋ Thêm đáp án</button></div>
+      <div class="treasure-options" data-stage-options>${options.map((o, j) => treasureOptionRow(o, stage.id, correctId, j)).join('')}<button type="button" class="btn btn-secondary btn-small" data-stage-add-option>${uiIcon('plus', '', 13)} Thêm đáp án</button></div>
     </div>
     <div class="treasure-mission-panel ${type === 'matching' ? '' : 'hidden'}" data-mission-panel="matching">
       <label>CÁC CẶP GHÉP</label>
       <div class="treasure-mission-rows" data-match-pairs>${pairs.map((pair, i) => treasurePairRow(pair, i)).join('')}</div>
-      <button type="button" class="btn btn-secondary btn-small" data-add-pair>＋ Thêm cặp</button>
+      <button type="button" class="btn btn-secondary btn-small" data-add-pair>${uiIcon('plus', '', 13)} Thêm cặp</button>
     </div>
     <div class="treasure-mission-panel ${type === 'decode' ? '' : 'hidden'}" data-mission-panel="decode">
       <div class="field-row"><div class="field"><label>ĐÁP ÁN CẦN GIẢI MÃ</label><input data-decode-answer value="${escapeHtml(mission.answer || '')}" placeholder="Ví dụ: quang hợp"></div><div class="field"><label>MẬT MÃ HIỂN THỊ (ĐỂ TRỐNG = TỰ XÁO)</label><input data-decode-cipher value="${escapeHtml(mission.cipher || '')}" placeholder="Ví dụ: hợp quang"></div></div>
@@ -53,10 +53,10 @@ function treasureMissionPanel(stage) {
     <div class="treasure-mission-panel ${type === 'classification' ? '' : 'hidden'}" data-mission-panel="classification">
       <label>NHÓM PHÂN LOẠI</label>
       <div class="treasure-mission-rows" data-class-groups>${groups.map((group, i) => treasureClassGroupRow(group, i)).join('')}</div>
-      <button type="button" class="btn btn-secondary btn-small" data-add-group>＋ Thêm nhóm</button>
+      <button type="button" class="btn btn-secondary btn-small" data-add-group>${uiIcon('plus', '', 13)} Thêm nhóm</button>
       <label>CÁC MỤC CẦN PHÂN LOẠI</label>
       <div class="treasure-mission-rows" data-class-items>${items.map((item, i) => treasureClassItemRow(item, i, groups)).join('')}</div>
-      <button type="button" class="btn btn-secondary btn-small" data-add-item>＋ Thêm mục</button>
+      <button type="button" class="btn btn-secondary btn-small" data-add-item>${uiIcon('plus', '', 13)} Thêm mục</button>
     </div>`;
 }
 
@@ -89,7 +89,7 @@ function treasureOptionRow(option, stageId, correctId, index) {
   return `<div class="treasure-option-row" data-opt-id="${escapeHtml(option.id || `o${index + 1}`)}">
     <input data-opt-text value="${escapeHtml(option.text || '')}" placeholder="Đáp án ${index + 1}">
     <label class="opt-correct"><input type="radio" name="treasure-correct-${escapeHtml(stageId)}" data-opt-correct ${option.id === correctId ? 'checked' : ''}> Đúng</label>
-    <button type="button" class="text-link danger-text" data-opt-remove>✕</button>
+    <button type="button" class="text-link danger-text" data-opt-remove>${uiIcon('x', '', 14)}</button>
   </div>`;
 }
 function treasureStageHtml(stage, index) {
@@ -101,10 +101,10 @@ function treasureStageHtml(stage, index) {
       <span class="tag ${stage.nextStageId ? 'hidden' : ''}" data-ending-tag>KẾT THÚC</span>
       ${editorAiButton(stage.id, !aiAllowed)}
       <button type="button" class="text-link" data-stage-toggle>Ẩn/hiện</button>
-      <button type="button" class="text-link" data-stage-copy>⧉ Nhân bản</button>
-      <button type="button" class="text-link" data-stage-up>↑</button>
-      <button type="button" class="text-link" data-stage-down>↓</button>
-      <button type="button" class="text-link danger-text" data-stage-remove>✕</button>
+      <button type="button" class="text-link inline-flex items-center gap-[5px]" data-stage-copy>${uiIcon('copy', '', 13)} Nhân bản</button>
+      <button type="button" class="text-link" data-stage-up>${uiIcon('arrow-up', '', 14)}</button>
+      <button type="button" class="text-link" data-stage-down>${uiIcon('arrow-down', '', 14)}</button>
+      <button type="button" class="text-link danger-text" data-stage-remove>${uiIcon('x', '', 14)}</button>
     </div>
     <div class="treasure-stage-body">
       <label>CỐT TRUYỆN / LỜI DẪN</label><textarea data-stage-story rows="2" placeholder="Bối cảnh, lời dẫn của nhân vật">${escapeHtml(stage.story || '')}</textarea>
@@ -123,7 +123,7 @@ function treasureStageHtml(stage, index) {
 function treasureEditorHtml(hunt) {
   const h = hunt || defaultTreasureHunt();
   return `<div id="treasureEditor" class="hidden">
-    <div class="section-head"><h3>Hành trình khám phá <span class="tag" id="treasureStageCount">${h.stages.length}</span></h3><div><button type="button" class="btn btn-secondary btn-small" id="addTreasureStageBtn">＋ Thêm chặng</button></div></div>
+    <div class="section-head"><h3>Hành trình khám phá <span class="tag" id="treasureStageCount">${h.stages.length}</span></h3><div><button type="button" class="btn btn-secondary btn-small" id="addTreasureStageBtn">${uiIcon('plus', '', 13)} Thêm chặng</button></div></div>
     <div class="field-row"><div class="field"><label>NHÂN VẬT CỦA HỌC SINH</label><input id="treasureCharacter" value="${escapeHtml(h.character || '')}" placeholder="Nhà thám hiểm / Nhà khoa học…"></div><div class="field"><label>THƯỞNG HOÀN THÀNH HÀNH TRÌNH</label><input id="treasureJourneyBonus" type="number" min="0" max="10000" value="${Number(h.journeyBonus) || 300}"></div></div>
     <div class="field-row"><div class="field"><label>HÌNH NỀN HÀNH TRÌNH</label><select id="treasureBackground">${Object.entries(TREASURE_BACKGROUNDS).map(([id, meta]) => `<option value="${id}" ${treasureBackgroundId(h.backgroundId) === id ? 'selected' : ''}>${escapeHtml(meta.label)}</option>`).join('')}</select></div><div class="field"><label>NHÂN VẬT MINH HỌA</label><select id="treasureCharacterStyle">${Object.entries(TREASURE_CHARACTERS).map(([id, meta]) => `<option value="${id}" ${treasureCharacterId(h.characterId) === id ? 'selected' : ''}>${escapeHtml(meta.label)}</option>`).join('')}</select></div></div>
     <div data-treasure-preview-slot>${treasureThemePreviewHtml(h.backgroundId, h.characterId)}</div>

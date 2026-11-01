@@ -11,6 +11,6 @@ async function generateGame() {
   } catch (error) {
     toast(error.message || 'Không mở được trình chỉnh sửa.');
   } finally {
-    if ($('#generateBtn')) { $('#generateBtn').disabled = false; $('#generateBtn').textContent = '✦ Mở trình chỉnh sửa câu hỏi'; }
+    if ($('#generateBtn')) { $('#generateBtn').disabled = false; $('#generateBtn').innerHTML = uiIcon('pencil', '', 15) + ' Mở trình chỉnh sửa câu hỏi'; }
   }
 }

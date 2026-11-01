@@ -198,8 +198,8 @@ async function findTarget() {
     const g = state.db.games.find(g => g.title === ${JSON.stringify(GAME_TITLE)});
     if (g) { await window.eduGame.deleteGame(g.id); await refreshDb(); }
     push('smoke game deleted', !state.db.games.find(g => g.title === ${JSON.stringify(GAME_TITLE)}), '');
-    navigate('home');
-    push('home page after tests', state.page === 'home', state.page);
+    navigate('library');
+    push('library page after tests', state.page === 'library', state.page);
     return out;
   })()`);
   t4.forEach(r => check('T4-cleanup ' + r[0], r[1], r[2]));

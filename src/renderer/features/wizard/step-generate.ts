@@ -102,7 +102,7 @@ function wizardShortfallNotice(report, busy, manual) {
   return `<div class="field mt-[10px] rounded-[10px] border border-[#e0b13a] bg-[#fff8e1] p-[12px]" data-wizard-shortfall="${counts.found}/${counts.requested}" role="alert">
     <strong class="text-[13px] text-[#7a5a00]">AI mới tạo ${counts.found}/${counts.requested} ${escapeHtml(counts.unit)} — còn thiếu ${missing}.</strong>
     <div class="field-hint mt-[4px]">${escapeHtml(explanation)}</div>
-    <button class="btn btn-secondary btn-small mt-[8px]" data-wizard-action="regenerate"${busy ? ' disabled' : ''}>🔄 Tạo lại cho đủ ${counts.requested} ${escapeHtml(counts.unit)}</button>
+    <button class="btn btn-secondary btn-small mt-[8px]" data-wizard-action="regenerate"${busy ? ' disabled' : ''}><span data-icon="refresh-cw" data-icon-size="13"></span> Tạo lại cho đủ ${counts.requested} ${escapeHtml(counts.unit)}</button>
   </div>`;
 }
 
@@ -252,17 +252,17 @@ function wizardItemCard(s, gameType, item, position, index) {
       </div>
     </div>
     <div class="wizard-item-actions">
-      <button class="btn btn-secondary btn-small" data-wizard-action="upload-art" data-item-index="${position}"${disabled} title="Chọn một ảnh PNG/JPG/WEBP/GIF từ máy">📷 Tải ảnh lên</button>
-      <button class="btn btn-secondary btn-small" data-wizard-action="toggle-art" data-item-index="${position}"${disabled}>${open ? 'Đóng' : '🖼 Đổi hình có sẵn'}</button>
+      <button class="btn btn-secondary btn-small" data-wizard-action="upload-art" data-item-index="${position}"${disabled} title="Chọn một ảnh PNG/JPG/WEBP/GIF từ máy"><span data-icon="camera" data-icon-size="13"></span> Tải ảnh lên</button>
+      <button class="btn btn-secondary btn-small" data-wizard-action="toggle-art" data-item-index="${position}"${disabled}>${open ? 'Đóng' : '<span data-icon="image" data-icon-size="13"></span> Đổi hình có sẵn'}</button>
       ${isCustom || asset || category ? `<button class="btn btn-secondary btn-small" data-wizard-action="reset-art" data-item-index="${position}"${disabled}>Tự động</button>` : ''}
-      <button class="btn btn-secondary btn-small ml-auto" data-wizard-action="regenerate-item" data-item-index="${position}"${s.busy ? ' disabled' : ''} title="Viết lại nội dung câu này, giữ nguyên các câu còn lại">🔄 Tạo lại câu</button>
+      <button class="btn btn-secondary btn-small ml-auto" data-wizard-action="regenerate-item" data-item-index="${position}"${s.busy ? ' disabled' : ''} title="Viết lại nội dung câu này, giữ nguyên các câu còn lại"><span data-icon="refresh-cw" data-icon-size="13"></span> Tạo lại câu</button>
     </div>
     ${open ? `<div class="wizard-art-pick">
       <label>HÌNH MINH HOẠ CÓ SẴN</label>
       <select data-wizard-art-asset data-item-index="${position}"${disabled}>${assetOptions}</select>
       <label>CHỦ ĐỀ NỘI DUNG</label>
       <select data-wizard-art-category data-item-index="${position}"${disabled}>${categoryOptions}</select>
-      <div class="wizard-art-hint">Hoặc tải ảnh từ máy bằng “📷 Tải ảnh lên”. Chọn xong là lưu ngay, không gọi AI và không đổi nội dung câu hỏi.</div>
+      <div class="wizard-art-hint">Hoặc tải ảnh từ máy bằng “Tải ảnh lên”. Chọn xong là lưu ngay, không gọi AI và không đổi nội dung câu hỏi.</div>
     </div>` : ''}
   </article>`;
 }
@@ -540,7 +540,7 @@ function wizardImportIllustration() {
 }
 
 /**
- * #124: "📷 Tải ảnh lên" — the teacher's own picture for one question.
+ * #124: the button labelled "Tải ảnh lên" (a camera icon) — the teacher's own picture for one question.
  *
  * The file is chosen first (the native dialog), then the id is written through the same
  * whitelisted patch as a built-in illustration. Choosing before touching the project
@@ -639,7 +639,7 @@ function wizardArtCard(gameType, item, position, index) {
     ${wizardArtThumb(gameType, item, game, asset)}
     <div class="wizard-art-meta"><strong>${escapeHtml(wizardDraftItemLabel(gameType, index + 1))}</strong>${escapeHtml(badge)}</div>
     <div class="wizard-art-actions">
-      <button class="btn btn-secondary btn-small" data-wizard-action="toggle-art" data-item-index="${position}"${disabled}>${open ? 'Đóng' : '🖼 Đổi'}</button>
+      <button class="btn btn-secondary btn-small" data-wizard-action="toggle-art" data-item-index="${position}"${disabled}>${open ? 'Đóng' : '<span data-icon="image" data-icon-size="13"></span> Đổi'}</button>
       ${asset || category ? `<button class="btn btn-secondary btn-small" data-wizard-action="reset-art" data-item-index="${position}"${disabled}>Tự động</button>` : ''}
     </div>
     ${open ? `<div class="wizard-art-pick">
@@ -770,9 +770,9 @@ function renderWizardGenerate() {
     ${wizardSummaryGrid(wizardGeneratedSummaryRows(s.gameSnapshot))}
     ${wizardItemCardsPanel(s)}
     <div class="publish-actions">
-      <button class="btn btn-secondary" data-wizard-action="back"${s.busy ? ' disabled' : ''}>← Cấu hình</button>
-      <button class="btn btn-primary" id="wizardNextBtn" data-wizard-action="save-game"${s.busy ? ' disabled' : ''}>${s.busy === 'save-game' ? 'Đang lưu…' : '💾 Lưu vào thư viện'}</button>
-      <button class="btn btn-secondary" data-wizard-action="open-editor"${s.busy ? ' disabled' : ''}>✎ Mở trình chỉnh sửa</button>
+      <button class="btn btn-secondary" data-wizard-action="back"${s.busy ? ' disabled' : ''}><span data-icon="arrow-left" data-icon-size="13"></span> Cấu hình</button>
+      <button class="btn btn-primary" id="wizardNextBtn" data-wizard-action="save-game"${s.busy ? ' disabled' : ''}>${s.busy === 'save-game' ? 'Đang lưu…' : '<span data-icon="save" data-icon-size="13"></span> Lưu vào thư viện'}</button>
+      <button class="btn btn-secondary" data-wizard-action="open-editor"${s.busy ? ' disabled' : ''}><span data-icon="pencil" data-icon-size="13"></span> Mở trình chỉnh sửa</button>
       <button class="btn btn-secondary" data-wizard-action="save-project"${s.busy ? ' disabled' : ''}>Lưu tiến trình</button>
     </div>
   </section>`;
@@ -786,16 +786,16 @@ function renderWizardGenerate() {
         ${wizardQualityPanel(s.quality)}
         ${wizardItemCardsPanel(s)}
         ${wizardContextHint(s.context)}
-        ${wizardGenerationTotalText() ? `<div class="field-hint" data-wizard-generate-total-line>⏱ ${escapeHtml(wizardGenerationTotalText())}</div>` : ''}
+        ${wizardGenerationTotalText() ? `<div class="field-hint inline-flex items-center gap-[5px]" data-wizard-generate-total-line><span data-icon="timer" data-icon-size="12"></span> ${escapeHtml(wizardGenerationTotalText())}</div>` : ''}
         <div class="publish-actions">
-          <button class="btn btn-secondary" data-wizard-action="back"${s.busy ? ' disabled' : ''}>← Cấu hình</button>
-          <button class="btn btn-primary" data-wizard-action="save-game"${s.busy ? ' disabled' : ''}>${s.busy === 'save-game' ? 'Đang lưu…' : '💾 Lưu vào Thư viện trò chơi'}</button>
-          <button class="btn btn-secondary" data-wizard-action="open-editor"${s.busy ? ' disabled' : ''}>✎ Mở trình chỉnh sửa</button>
-          <button class="btn btn-secondary" data-wizard-action="regenerate"${s.busy ? ' disabled' : ''}>🔄 Tạo lại nội dung</button>
+          <button class="btn btn-secondary" data-wizard-action="back"${s.busy ? ' disabled' : ''}><span data-icon="arrow-left" data-icon-size="13"></span> Cấu hình</button>
+          <button class="btn btn-primary" data-wizard-action="save-game"${s.busy ? ' disabled' : ''}>${s.busy === 'save-game' ? 'Đang lưu…' : '<span data-icon="save" data-icon-size="13"></span> Lưu vào Thư viện trò chơi'}</button>
+          <button class="btn btn-secondary" data-wizard-action="open-editor"${s.busy ? ' disabled' : ''}><span data-icon="pencil" data-icon-size="13"></span> Mở trình chỉnh sửa</button>
+          <button class="btn btn-secondary" data-wizard-action="regenerate"${s.busy ? ' disabled' : ''}><span data-icon="refresh-cw" data-icon-size="13"></span> Tạo lại nội dung</button>
           ${s.busy === 'generate' ? '<button class="btn btn-secondary" data-wizard-action="cancel">Huỷ</button>' : ''}
-          <button class="btn btn-secondary" data-wizard-action="another-game"${s.busy ? ' disabled' : ''}>＋ Trò chơi khác từ giáo án này</button>
+          <button class="btn btn-secondary" data-wizard-action="another-game"${s.busy ? ' disabled' : ''}><span data-icon="circle-plus" data-icon-size="13"></span> Trò chơi khác từ giáo án này</button>
           <button class="btn btn-secondary" data-wizard-action="save-project"${s.busy ? ' disabled' : ''}>Lưu tiến trình</button>
-          <button class="btn btn-secondary" data-wizard-action="go-library"${s.busy ? ' disabled' : ''}>📚 Vào thư viện để chơi</button>
+          <button class="btn btn-secondary" data-wizard-action="go-library"${s.busy ? ' disabled' : ''}><span data-icon="library" data-icon-size="13"></span> Vào thư viện để chơi</button>
         </div>
         <div class="field-hint">“Trò chơi khác” mở một dự án mới nhưng dùng lại phân tích đã lưu — không gọi AI phân tích lại. Bạn chỉ cần chọn thể loại và cấu hình mới.</div>`
       : `<div class="panel-sub">${escapeHtml(wizardProviderLabel())} sẽ soạn câu hỏi/tình huống theo đúng cấu hình bên dưới, sau đó bạn duyệt và chỉnh sửa trong trình soạn thảo. Cấu hình và phân tích đã được lưu nên có thể mở lại bất cứ lúc nào — không cần chạy lại AI.</div>
@@ -803,9 +803,9 @@ function renderWizardGenerate() {
         ${wizardProviderPickerHtml()}
         ${wizardSummaryGrid(wizardConfigSummaryRows(config))}
         <div class="publish-actions">
-          <button class="btn btn-secondary" data-wizard-action="back">← Cấu hình</button>
+          <button class="btn btn-secondary" data-wizard-action="back"><span data-icon="arrow-left" data-icon-size="13"></span> Cấu hình</button>
           <button class="btn btn-secondary" data-wizard-action="save-project"${s.busy ? ' disabled' : ''}>Lưu tiến trình</button>
-          <button class="btn btn-primary" id="wizardGenerateBtn" data-wizard-action="generate"${s.busy ? ' disabled' : ''}>✦ Tạo nội dung${wizardProviderSuffix()}</button>
+          <button class="btn btn-primary" id="wizardGenerateBtn" data-wizard-action="generate"${s.busy ? ' disabled' : ''}><span data-icon="wand-sparkles" data-icon-size="13"></span> Tạo nội dung${wizardProviderSuffix()}</button>
           ${s.busy === 'generate' ? '<button class="btn btn-secondary" data-wizard-action="cancel">Huỷ</button>' : ''}
         </div>`}
     ${s.projectId ? `<div class="field-hint">Dự án đã lưu: <code>${escapeHtml(s.projectId)}</code>. Nội dung AI tạo ra chỉ nằm trên máy này.</div>` : ''}

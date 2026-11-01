@@ -20,7 +20,8 @@ function renderWizardInput() {
   // The panes are layout-only visibility (`display`), never `aria-hidden`:
   // keeping both panes in the accessibility tree means a screen reader, the
   // DOM checks and `wizardSyncStructureCheckboxes()` always find the tree.
-  const tabButton = (id, label, badge) => `<button type="button" role="tab" aria-selected="${activeTab === id ? 'true' : 'false'}" aria-controls="wizardTabPane-${id}" id="wizardTab-${id}" class="wizard-tab-btn flex items-center gap-2 py-2.5 px-4 font-bold text-[13px] border-b-2 rounded-t-lg transition-colors ${activeTab === id ? 'border-[#6366f1] text-[#6366f1] dark:text-[#a5b4fc] bg-[#f8f7ff] dark:bg-[#1e2544]' : 'border-transparent text-[#64748b] dark:text-[#94a3b8] hover:text-[#1e293b]'}" data-wizard-input-tab="${id}">
+  const tabButton = (id, label, badge, icon) => `<button type="button" role="tab" aria-selected="${activeTab === id ? 'true' : 'false'}" aria-controls="wizardTabPane-${id}" id="wizardTab-${id}" class="wizard-tab-btn flex items-center gap-2 py-2.5 px-4 font-bold text-[13px] border-b-2 rounded-t-lg transition-colors ${activeTab === id ? 'border-[#6366f1] text-[#6366f1] dark:text-[#a5b4fc] bg-[#f8f7ff] dark:bg-[#1e2544]' : 'border-transparent text-[#64748b] dark:text-[#94a3b8] hover:text-[#1e293b]'}" data-wizard-input-tab="${id}">
+        ${icon ? `<span data-icon="${icon}" data-icon-size="14"></span>` : ''}
         <span>${label}</span>
         ${badge}
       </button>`;
@@ -37,7 +38,7 @@ function renderWizardInput() {
         </p>
       </div>
       <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#effaf5] border border-[#ddf4e8] text-[#16a34a] text-[11px] font-semibold dark:bg-[#132d24] dark:border-[#1e4a3b] dark:text-[#4ade80]">
-        🔒 Bảo mật cục bộ · 100% Offline
+        <span data-icon="lock" data-icon-size="12"></span> Bảo mật cục bộ · 100% Offline
       </span>
     </div>
 
@@ -46,7 +47,7 @@ function renderWizardInput() {
       ${meta || s.documentName ? `
         <div class="flex items-center justify-between gap-3 flex-wrap">
           <div class="flex items-center gap-3 min-w-0">
-            <div class="w-10 h-10 rounded-lg bg-[#e0e7ff] text-[#4f46e5] dark:bg-[#283060] dark:text-[#a5b4fc] grid place-items-center text-[20px] shrink-0">📄</div>
+            <div class="w-10 h-10 rounded-lg bg-[#e0e7ff] text-[#4f46e5] dark:bg-[#283060] dark:text-[#a5b4fc] grid place-items-center shrink-0"><span data-icon="file-text" data-icon-size="20"></span></div>
             <div class="min-w-0">
               <div class="font-bold text-[13px] text-[#1e293b] dark:text-[#f8fafc] truncate" title="${escapeHtml(s.documentName)}">${escapeHtml(s.documentName)}</div>
               <div class="text-[11px] text-[#64748b] dark:text-[#94a3b8] flex items-center gap-2 mt-0.5">
@@ -59,14 +60,14 @@ function renderWizardInput() {
             </div>
           </div>
           <button type="button" class="btn btn-secondary btn-small" data-wizard-action="import-file"${s.busy ? ' disabled' : ''}>
-            ↻ Đổi tệp khác
+            <span data-icon="refresh-cw" data-icon-size="13"></span> Đổi tệp khác
           </button>
         </div>
       ` : `
         <div class="flex items-center justify-between gap-4 flex-wrap">
           <div class="flex items-center gap-3.5">
             <div class="w-11 h-11 rounded-xl bg-[#eef2ff] text-[#6366f1] dark:bg-[#262c55] dark:text-[#818cf8] grid place-items-center text-[22px] shrink-0">
-              📂
+              <span data-icon="folder-open" data-icon-size="22"></span>
             </div>
             <div>
               <strong class="block text-[13px] text-[#1e293b] dark:text-[#f1f5f9]">Tải lên tệp tài liệu giáo án</strong>
@@ -80,7 +81,7 @@ function renderWizardInput() {
             </div>
           </div>
           <button type="button" class="btn btn-primary" data-wizard-action="import-file"${s.busy ? ' disabled' : ''}>
-            ⇧ Chọn tệp giáo án
+            <span data-icon="upload" data-icon-size="13"></span> Chọn tệp giáo án
           </button>
         </div>
       `}
@@ -94,8 +95,8 @@ function renderWizardInput() {
 
     <!-- Thanh Tabs: Cấu trúc tài liệu & Nội dung giáo án -->
     <div class="wizard-tab-header flex items-center border-b border-[#e2e8f0] dark:border-[#2a324b] mb-4 gap-2" role="tablist">
-      ${tabButton('structure', '📑 Cấu trúc tài liệu', hasStructure ? `<span data-wizard-tab-count class="px-1.5 py-0.5 rounded-full text-[10px] bg-[#eef2ff] text-[#4f46e5] dark:bg-[#283060] dark:text-[#a5b4fc]">${treeCount} mục</span>` : '')}
-      ${tabButton('content', '📝 Nội dung giáo án', `<span data-wizard-tab-count class="px-1.5 py-0.5 rounded-full text-[10px] bg-[#f1f5f9] text-[#475569] dark:bg-[#1e2544] dark:text-[#cbd5e1]">${characters.toLocaleString('vi-VN')} ký tự</span>`)}
+      ${tabButton('structure', 'Cấu trúc tài liệu', hasStructure ? `<span data-wizard-tab-count class="px-1.5 py-0.5 rounded-full text-[10px] bg-[#eef2ff] text-[#4f46e5] dark:bg-[#283060] dark:text-[#a5b4fc]">${treeCount} mục</span>` : '', 'list')}
+      ${tabButton('content', 'Nội dung giáo án', `<span data-wizard-tab-count class="px-1.5 py-0.5 rounded-full text-[10px] bg-[#f1f5f9] text-[#475569] dark:bg-[#1e2544] dark:text-[#cbd5e1]">${characters.toLocaleString('vi-VN')} ký tự</span>`, 'file-text')}
     </div>
 
     <!-- Tab 1 Pane: Cấu trúc tài liệu -->
@@ -108,7 +109,7 @@ function renderWizardInput() {
       <div class="field mb-4">
         <div class="flex items-center justify-between mb-1.5">
           <label class="text-[11px] font-bold text-[#475569] dark:text-[#cbd5e1]">NỘI DUNG VĂN BẢN ĐẦY ĐỦ *</label>
-          <button type="button" class="text-[11px] text-[#6366f1] hover:underline bg-transparent border-0 cursor-pointer" data-wizard-action="insert-sample"${s.busy ? ' disabled' : ''}>✨ Thử giáo án mẫu</button>
+          <button type="button" class="text-[11px] text-[#6366f1] hover:underline bg-transparent border-0 cursor-pointer inline-flex items-center gap-[5px]" data-wizard-action="insert-sample"${s.busy ? ' disabled' : ''}><span data-icon="sparkles" data-icon-size="12"></span> Thử giáo án mẫu</button>
         </div>
         <textarea id="wizardDocText" rows="13" class="w-full p-3 border border-[#cbd5e1] dark:border-[#334155] rounded-xl bg-white dark:bg-[#1e2544] text-[#1e293b] dark:text-[#f8fafc] text-[13px] leading-relaxed focus:outline-none focus:border-[#6366f1] transition font-sans" placeholder="Dán nội dung bài học, mục tiêu cần đạt, kiến thức trọng tâm, câu hỏi hoặc ví dụ thực tế..."${s.busy ? ' disabled' : ''}>${escapeHtml(s.text || '')}</textarea>
         <div class="flex items-center justify-between mt-1.5 flex-wrap gap-2 text-[11px]">
@@ -273,13 +274,13 @@ function renderWizardStructureTabContent() {
   const characters = String(wizardState.text || '').trim().length;
   if (characters < WIZARD_MIN_CHARACTERS) {
     return `<div class="p-8 text-center border-2 border-dashed border-[#e2e8f0] dark:border-[#2a324b] rounded-xl bg-[#f8fafc] dark:bg-[#151a30] my-2">
-      <span class="text-[32px] block mb-2">📑</span>
+      <span class="mb-2 block text-[#aab1c3]"><span data-icon="list" data-icon-size="32"></span></span>
       <strong class="block text-[14px] text-[#1e293b] dark:text-[#f8fafc] mb-1">Chưa có cấu trúc tài liệu</strong>
       <p class="text-[12px] text-[#64748b] dark:text-[#94a3b8] max-w-[440px] mx-auto mb-4 leading-relaxed">
         Hãy tải lên tệp giáo án hoặc dán nội dung văn bản ở tab "Nội dung giáo án". Hệ thống sẽ tự động bóc tách các chương, mục để bạn lựa chọn trọng tâm bài giảng.
       </p>
       <button type="button" class="btn btn-secondary btn-small" data-wizard-input-tab="content">
-        Chuyển sang tab Nội dung giáo án ➔
+        Chuyển sang tab Nội dung giáo án <span data-icon="arrow-right" data-icon-size="13"></span>
       </button>
     </div>`;
   }
@@ -344,7 +345,7 @@ Xảy ra tại chất nền (stroma) của lục lạp. Sử dụng CO2 cùng AT
  * because a button label is not the place to teach two different flows.
  */
 function wizardInputNextLabel() {
-  return 'Tiếp tục ➔';
+  return 'Tiếp tục <span data-icon="arrow-right" data-icon-size="13"></span>';
 }
 
 /** Said under the button, not inside it: which path "Tiếp tục" will take. */
@@ -372,7 +373,7 @@ function wizardAiReadinessHint() {
       ? 'Model đã tải. Hãy mở cửa sổ AI local và nhấn “Bắt đầu chạy”.'
       : 'Chưa có model. Hãy mở cửa sổ AI local để tải model Qwen trước khi phân tích.';
   return `<div class="flex gap-[12px] items-center border rounded-xl p-3 mb-4 ${tone}" id="wizardAiStatus" data-ai-running="${running ? 'true' : 'false'}">
-    <span class="text-[20px] shrink-0">${running ? '🟢' : '🟡'}</span>
+    <span class="shrink-0" data-icon="${running ? 'circle-check' : 'circle-alert'}" data-icon-size="18"></span>
     <div class="min-w-0 flex-1">
       <strong class="text-[12px] block text-[#1e293b] dark:text-[#f8fafc]">${escapeHtml(title)}</strong>
       <small class="block text-[11px] text-[#64748b] dark:text-[#94a3b8] mt-0.5 leading-snug">${detail}</small>

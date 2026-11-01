@@ -172,7 +172,7 @@ function renderWizardConfigure() {
     return `<section class="form-panel" data-wizard-step-body="configure">
       <div class="section-head"><h3>Bước 4 · Cấu hình trò chơi</h3></div>
       <div class="field-hint">Chưa chọn thể loại trò chơi. Hãy quay lại bước chọn trò chơi.</div>
-      <div class="publish-actions"><button class="btn btn-secondary" data-wizard-action="back">← Chọn trò chơi</button></div>
+      <div class="publish-actions"><button class="btn btn-secondary" data-wizard-action="back"><span data-icon="arrow-left" data-icon-size="13"></span> Chọn trò chơi</button></div>
     </section>`;
   }
   const meta = wizardGameMeta(config.gameType);
@@ -213,11 +213,11 @@ function renderWizardConfigure() {
     <div class="grid gap-[6px]">${objectives.map(objective => `<label class="switch-row"><span class="switch-copy"><strong class="text-[11px]">${escapeHtml(objective.description)}</strong></span><input type="checkbox" data-wizard-focus="${escapeHtml(objective.id)}"${(config.focusObjectiveIds || []).includes(objective.id) ? ' checked' : ''}></label>`).join('')}</div>` : ''}
 
     <div class="publish-actions">
-      <button class="btn btn-secondary" data-wizard-action="back">← Chọn trò chơi</button>
+      <button class="btn btn-secondary" data-wizard-action="back"><span data-icon="arrow-left" data-icon-size="13"></span> Chọn trò chơi</button>
       <button class="btn btn-secondary" data-wizard-action="save"${s.busy ? ' disabled' : ''}>${s.busy === 'save' ? 'Đang lưu…' : 'Lưu dự án'}</button>
       ${wizardIsBankRun()
-        ? `<button class="btn btn-primary" id="wizardNextBtn" data-wizard-action="next"${s.busy ? ' disabled' : ''}>Xong · ${s.gameSnapshot ? 'Mở bước lưu' : 'Lưu vào thư viện'} →</button>`
-        : `<button class="btn btn-primary" id="wizardNextBtn" data-wizard-action="next"${s.busy ? ' disabled' : ''}>Tiếp tục · Tạo nội dung →</button>`}
+        ? `<button class="btn btn-primary" id="wizardNextBtn" data-wizard-action="next"${s.busy ? ' disabled' : ''}>Xong · ${s.gameSnapshot ? 'Mở bước lưu' : 'Lưu vào thư viện'} <span data-icon="arrow-right" data-icon-size="13"></span></button>`
+        : `<button class="btn btn-primary" id="wizardNextBtn" data-wizard-action="next"${s.busy ? ' disabled' : ''}>Tiếp tục · Tạo nội dung <span data-icon="arrow-right" data-icon-size="13"></span></button>`}
     </div>
   </section>`;
 }

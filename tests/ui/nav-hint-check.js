@@ -14,7 +14,7 @@ const COMPACT = process.env.NAV_COMPACT === '1';
   // ---- sidebar / nav ----
   const nav = await evaluate(`(async () => {
     const rect = el => { const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height, right: r.right, bottom: r.bottom }; };
-    document.querySelector('.nav-item[data-page="home"]')?.click();
+    document.querySelector('.nav-item[data-page="library"]')?.click();
     await new Promise(r => setTimeout(r, 400));
     const items = Array.from(document.querySelectorAll('.nav-item'));
     const sidebar = document.querySelector('.sidebar');

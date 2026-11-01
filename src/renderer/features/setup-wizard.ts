@@ -197,7 +197,7 @@ function renderSetupWizard() {
   // ✕ that hides the only progress indicator is a trap: the teacher loses the
   // window and finds a half-installed AI later. "Hủy cài đặt" is the exit there.
   const closeBtn = view.canSkip && !setupWizardState.busy
-    ? '<button class="modal-close" data-setup-action="close" aria-label="Đóng">✕</button>'
+    ? '<button class="modal-close" data-setup-action="close" aria-label="Đóng">' + uiIcon('x', '', 16) + '</button>'
     : '';
 
   // Rendered as a screen-sized page, not a floating dialog: the app shell is

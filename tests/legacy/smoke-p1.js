@@ -66,7 +66,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     push('P1 first question persisted as multiple-choice', last === 'multiple-choice', last);
 
     const id = await evalv('state.db.games[state.db.games.length - 1].id');
-    await evalv(`(async()=>{await window.eduGame.deleteGame('${id}');await refreshDb();navigate('home');})()`);
+    await evalv(`(async()=>{await window.eduGame.deleteGame('${id}');await refreshDb();navigate('library');})()`);
   } finally { ws.close(); }
   const failed = results.filter(r => !r[1]).length;
   results.forEach(([l, p, e]) => console.log((p ? 'PASS' : 'FAIL') + ' | ' + l + (e ? ' -> ' + e : '')));

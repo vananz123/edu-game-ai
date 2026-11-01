@@ -21,16 +21,16 @@ function matchingPairRow(pair, index) {
     <input data-pair-right value="${escapeHtml(pair.right || '')}" placeholder="Định nghĩa / nội dung cột B">
     ${editorAssetFieldsHtml(pair, { compact: true })}
     ${editorAiButton(pair.id)}
-    <button type="button" class="text-link" data-pair-up title="Lên">↑</button>
-    <button type="button" class="text-link" data-pair-down title="Xuống">↓</button>
-    <button type="button" class="text-link danger-text" data-pair-remove>✕</button>
+    <button type="button" class="text-link" data-pair-up title="Lên">${uiIcon('arrow-up', '', 14)}</button>
+    <button type="button" class="text-link" data-pair-down title="Xuống">${uiIcon('arrow-down', '', 14)}</button>
+    <button type="button" class="text-link danger-text" data-pair-remove>${uiIcon('x', '', 14)}</button>
   </div>`;
 }
 function matchingEditorHtml(matching) {
   const m = matching || defaultMatchingGame();
   return `<div id="matchingEditor" class="hidden">
-    <div class="section-head"><h3>Cặp ghép kiến thức <span class="tag" id="matchingPairCount">${m.pairs.length}</span></h3><div><button type="button" class="btn btn-secondary btn-small" id="addMatchingPairBtn">＋ Thêm cặp</button></div></div>
-    <p class="field-hint">Mỗi dòng gồm nội dung cột A và nội dung tương ứng ở cột B. Kéo biểu tượng ⠿ để sắp xếp lại thứ tự cặp (hoặc dùng ↑/↓). Ghép đúng: cộng điểm từng cặp; hoàn thành tất cả: cộng thưởng; sai: chỉ trừ điểm khi giáo viên đặt “Phạt mỗi lần sai” lớn hơn 0.</p>
+    <div class="section-head"><h3>Cặp ghép kiến thức <span class="tag" id="matchingPairCount">${m.pairs.length}</span></h3><div><button type="button" class="btn btn-secondary btn-small" id="addMatchingPairBtn">${uiIcon('plus', '', 13)} Thêm cặp</button></div></div>
+    <p class="field-hint">Mỗi dòng gồm nội dung cột A và nội dung tương ứng ở cột B. Kéo biểu tượng ⠿ để sắp xếp lại thứ tự cặp (hoặc dùng nút mũi tên). Ghép đúng: cộng điểm từng cặp; hoàn thành tất cả: cộng thưởng; sai: chỉ trừ điểm khi giáo viên đặt “Phạt mỗi lần sai” lớn hơn 0.</p>
     <div id="matchingPairs">${m.pairs.map((pair, i) => matchingPairRow(pair, i)).join('')}</div>
     <div class="field-row mt-[12px]">
       <div class="field"><label>CÁCH CHƠI</label><select id="matchingMode">

@@ -131,7 +131,7 @@ async function findTarget() {
 
   // --- the nav must not be the topmost element on top of the game ----------
   const navHit = await evaluate(`(() => {
-    const nav = document.querySelector('.nav-item[data-page="home"]');
+    const nav = document.querySelector('.nav-item[data-page="library"]');
     if (!nav) return { found: false };
     const r = nav.getBoundingClientRect();
     const hit = document.elementFromPoint(Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2));

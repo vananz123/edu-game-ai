@@ -7,8 +7,11 @@ function render() {
   $('#pageCrumb').textContent = pageNames[state.page] || 'EduGame Studio';
   $$('.nav-item[data-page]').forEach(el => el.classList.toggle('active', el.dataset.page === state.page));
   $('#navGameCount').textContent = state.db.games.length;
+  // DECISIONS #161: the sidebar block is chrome, not page content, so it refreshes
+  // here — a game saved from the editor must appear in "Gần đây" without a reload.
+  if (typeof renderSidebarShortcuts === 'function') renderSidebarShortcuts();
   // #129: the game editor is a page of the shell, not a modal over the library.
-  const renderers = { home: renderHome, library: renderLibrary, 'create-wizard': renderCreateWizard, create: renderCreate, editor: renderEditorPage, 'lesson-plans': renderLessonPlans, 'my-projects': renderMyProjects, sessions: renderSessions, settings: renderSettings };
+  const renderers = { library: renderLibrary, 'create-wizard': renderCreateWizard, create: renderCreate, editor: renderEditorPage, 'lesson-plans': renderLessonPlans, 'my-projects': renderMyProjects, sessions: renderSessions, settings: renderSettings };
   const renderedPage = state.page;
   // The call must finish before the assignment: a renderer may open another page as a
   // side effect (`create` → editor), and writing its (old) markup afterwards replaced
@@ -16,7 +19,7 @@ function render() {
   // content, because the assignment string was computed before the switch. (#130)
   let html = '';
   try {
-    html = (renderers[renderedPage] || renderHome)();
+    html = (renderers[renderedPage] || renderLibrary)();
   } catch (error) {
     // The page could not be drawn; keep the shell usable and say so.
     try { console.error('[page] render failed on ' + renderedPage + ':', error && error.message ? error.message : error); } catch (e) {}
@@ -25,6 +28,10 @@ function render() {
   }
   if (state.page !== renderedPage) { render(); return; }
   $('#pageContent').innerHTML = html;
+  // DECISIONS #161: markup injected through `innerHTML` cannot call uiIcon(), so the
+  // `data-icon` hooks it carries are filled here. Idempotent, and cheap: it only
+  // touches elements that do not already hold the icon they ask for.
+  if (typeof paintUiIcons === 'function') paintUiIcons(document);
   // The editor's pinned save bar sits flush under the top bar; other pages keep their
   // top padding.
   $('#pageContent').classList.toggle('editor-active', state.page === 'editor');

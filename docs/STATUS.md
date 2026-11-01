@@ -8,6 +8,7 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 ## Mục lục bàn giao
 
 ### 2026-11-01 — inline (chưa có file lưu trữ)
+- Icon Lucide cho toàn bộ chrome, xoá trang Tổng quan, sidebar có khối "Lối tắt" (#161)
 - Biến thể `dark:` nối vào `[data-theme]` — dark mode 149/223 → 5/223 chữ dưới ngưỡng AA (#160, G6)
 - Năm mục Cài đặt thành năm tab; mọi utility `dark:` trong app đều chết (#159)
 
@@ -197,6 +198,30 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - Lịch sử trước 2026-10-19
 ## Bàn giao gần nhất
 
+## Handoff - Icon Lucide đồng bộ toàn chrome, xoá trang Tổng quan, sidebar có khối "Lối tắt" (2026-11-01, DECISIONS #161)
+
+**Files changed.**
+- `src/renderer/features/ui-icons.ts` (**mới**): `uiIcon(name, className, size)` trả `<svg>` Lucide đồng bộ (18px mặc định, `''` với id lạ) cho markup chèn sau render; `paintUiIcons(root)` điền các hook `<span data-icon>` trong markup do `render()` sinh ra và trong shell tĩnh, idempotent, trả về số hook không vẽ được.
+- `src/renderer/features/sidebar-shortcuts.ts` (**mới**): khối "Lối tắt" — tối đa 3 trò gần đây (bấm để chơi lại) + hai nút nhanh `Tạo từ giáo án` / `Dự án của tôi`; chỉ khai báo hàm, `core/render.ts` gọi lại mỗi render.
+- `src/renderer/pages/home.ts` (**xoá**); `src/renderer/core/render.ts` (bỏ `home` khỏi `renderers`, fallback `renderLibrary`, gọi `paintUiIcons(document)` sau khi gán `#pageContent`, gọi `renderSidebarShortcuts()`), `src/renderer/shared.ts` (`state.page = 'library'`, `pageNames` bỏ `Home`, xoá `totalQuestions()`, menu thẻ + empty state + meta thẻ dùng icon), `src/renderer/core/bootstrap.ts`, `src/renderer/core/controller.ts` (ba nút xoá nhiều chuyển `textContent` → `innerHTML` + `uiIcon`, nếu không hook `trash` tĩnh bị xoá sau lần bấm đầu), `src/renderer/features/game-generation.ts`.
+- `src/index.html`: sidebar 7 mục không còn `home`, mọi nav dùng hook `data-icon`, `<div data-sidebar-shortcuts>`, brand `✦` → `graduation-cap`, bỏ `LEARNING GAME BUILDER` + `KHÔNG GIAN LÀM VIỆC`, topbar (thông báo / toàn màn hình / trợ giúp / menu AI local) dùng Lucide, nạp `icon-data.js` → `ui-icons.js` → `sidebar-shortcuts.js` ngay trước `core/render.js`.
+- Icon chrome trong các trang: `pages/{library,my-projects,sessions,lesson-plans,settings,create,create-wizard}.ts`, `features/{editor/*,wizard/step-*,wizard/state/providers,local-ai,setup-wizard}.ts`, `src/renderer/features/icon-data.ts` (sinh lại).
+- `scripts/build-icon-registry.js`: nhóm `chrome` (+68 id → **128**), danh sách tải suy ra từ `ICON_GROUPS`, dừng khi một tên nằm ở hai nhóm.
+- `src/renderer/styles/{components,navigation}.css`: hook `span[data-icon]` là flex box + svg block; khối `.sidebar-shortcuts` (kèm rule tối viết tay) và hai mức `@media (max-height: 950px/860px)`.
+- Tests: `tests/ui/ui-chrome-icons-check.js` (**mới**, 15 check) + script `check:chrome-icons-ui`; `tests/unit/{asset-registry,renderer-load-order,setup-wizard-ui}.test.ts`; `tests/ui/{ui-settings-sections,nav-hint,ui-card-menu,ui-dark-theme,ui-fullscreen}-check.js`; `tests/manual/{verify-css,geom-ab,modal-ab}.js`; các smoke gõ `data-page="home"`.
+- Docs: `docs/DECISIONS.md` (#161), `docs/STATUS.md`, `docs/PROJECT_MAP.md`.
+- Không đổi: schema/IPC, engine trò chơi, `.egame`, SQLite, emoji nội dung trò chơi, tỉ lệ bán kính/đổ bóng toàn cục.
+
+**Behavior.** Chrome dùng một bộ Lucide 24×24 nét 2, thừa hưởng `currentColor` nên theme tối đổi màu được (emoji thì không). Trang đích là **Thư viện trò chơi**; trang Tổng quan (hero gradient, bốn thẻ số liệu, ba thẻ gần đây/hoạt động/lối tắt) không còn, và hai việc nó làm thật — chơi lại game vừa mở, bắt đầu game mới — chuyển vào khối **"Lối tắt"** dưới sidebar, hiện ở mọi trang và tự cập nhật sau khi lưu game (không cần reload). "Đơn giản giao diện" = bỏ nhãn eyebrow IN HOA (10 chỗ), badge `CÀI ĐẶT`, dòng phụ thương hiệu, uppercase ở header dropdown, siết padding brand và bỏ đổ bóng/bo góc nặng ở thẻ offline; bố cục và luồng không đổi. Ở 1366×768 sidebar vẫn vừa: hàng lối tắt bỏ dòng phụ dưới 950px, ẩn hai nút lặp nav + thẻ offline dưới 860px (903px → 834px → ~726px so với 768px).
+
+**Commands run.** `npm run check` 0 · `npm run build:icons:check` **128 icon in sync** · `npm run check:renderer-globals` 0 undefined (55/56 script, 770 hàm, 6.387 call site) · `npm run verify:css` **24/24** · `node tests/run-unit.js` **68/68** · `npm run build` 0. Electron thật, mỗi check một profile sạch (cổng 9380): `ui-chrome-icons-check` **15/15**, `ui-settings-sections-check` **26/26**, `ui-item-assets-editor-check` **29/29**, `ui-wizard-structure-check` **14/14**, `ui-house-building-check` **85/85**, `ui-game-worlds-check` **52/52**, `ui-play-surface-check` **156/156**, `ui-stage-illustration-check` **169/169**, `ui-presentation-check` **60/60**, `ui-input-routing-check` **52/52**, `ui-dark-theme-check` **9/9**, `ui-nav-hint-check` **15/15**, `ui-card-menu-check`, `ui-library-paging-check`, `ui-lessons-paging-check`, `ui-results-paging-check`, `ui-play-mode-card-check`, `ui-race-editor-check`, `ui-editor-art-check`, `ui-art-upload-flow-check`, `ui-ai-provider-settings-check`, `ui-ai-status-bar-check`, `ui-wizard-cancel-genre-check` **8/8** — tất cả pass.
+
+**Chưa xác minh.** Emoji nội dung trò chơi (`games/*`, `result-screen`, marker/đội/HUD trong editor, nhãn thể loại) cố ý giữ nguyên theo phạm vi đã chốt — chưa đồng bộ. Tỉ lệ bán kính/đổ bóng toàn cục chưa đụng. Đỏ môi trường/có sẵn, **không do #161** (đã probe): `ui-fullscreen-check` 3 check trên profile sạch vì wizard cài đặt đang mở và `html[data-setup-fullscreen]` ẩn `.app-shell` (probe: `setupOpen:true, shellVisibility:'hidden'`); `ui-setup-fullscreen-check` 2/9 (đã ghi từ #160); `ui-draft-guard-check` 7/8 (không có nhà cung cấp AI); `ui-ai-tasks-paging-check` 6/8 (cần ≥11 mục lịch sử); `ui-classifier-outline-check` 14/15 (không có model local); `ui-house-building-check` từng lệch ~18px nhưng **84/84** trên HEAD chưa sửa. `src/renderer/features/wizard/state/providers.ts` hiện diff cả file 232/232 vì Git xếp nó vào loại binary — thay đổi thật chỉ là ba dòng `🟢/🟡/⚠` → hook. Chưa chạy installer đóng gói.
+
+**Next task.** (1) Sửa `ui-setup-fullscreen-check` theo markup thật của wizard (chọn action theo màn `detecting`, đợi `renderSetupWizard()` thay vì sleep) — nhỏ, tách bạch, đã ghi từ #160. (2) Nếu muốn đồng bộ nốt emoji nội dung trò chơi thì cần một đợt riêng cho engine + marker/HUD. (3) Roadmap `Packaged check` vẫn cần máy sạch.
+
+---
+
 ## Handoff - Biến thể `dark:` nối vào `[data-theme]`: dark mode từ 149/223 chữ dưới ngưỡng AA còn 5/223 (2026-11-01, DECISIONS #160, ROADMAP G6)
 
 **Files changed.**
@@ -237,27 +262,6 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 **Chưa xác minh.** Chưa bấm tay luồng giáo viên thật (không API key, không model local) để xem cảm nhận khi đổi tab; chưa đo lại toàn bộ các trang khác trong theme tối — nợ `dark:` có thể còn chỗ khác chưa lộ. Chưa chạy installer đóng gói.
 
 **Next task.** Chốt hướng xử lý nợ `dark:` (một dòng `@custom-variant` + review mọi trang, hay gỡ hết class `dark:`); Roadmap `Packaged check` (cần máy sạch).
-
----
-
-## Handoff - Mục AI duy nhất với hai tab "AI local" / "AI cloud" (2026-10-31, DECISIONS #158)
-
-**Files changed.**
-- `src/renderer/pages/settings.ts`: `SETTINGS_SECTION_IDS` còn năm mục (`ai, teaching, interface, tasks, diagnostics`); hai section AI nhập thành `data-settings-card="ai"` tên **Nhà cung cấp AI**, mang `id="settingAiProviders"` + `data-ai-providers`. Thêm `SETTINGS_AI_TABS` + `settingsAiTabsHtml()` (`role="tablist"`/`role="tab"`/`div[data-ai-tabpanel][role="tabpanel"]`); header mang hai chip, một cho mỗi tab; tab cloud chỉ render `providers.filter(p => p.id !== 'local')`; câu dẫn đầu trang và hint của tab cloud nói rõ model tải ở tab local không có khoá API.
-- `src/renderer/shared.ts`: `state.settingsAiTab = 'local'`.
-- `src/renderer/features/settings.ts`: `wireSettingsAiTabs()` — đổi `aria-selected`/`tabIndex`/`hidden` tại chỗ, không re-render; ArrowLeft/ArrowRight đổi cả lựa chọn lẫn focus; `wireSettingsSections()` gọi ở cuối.
-- `src/renderer/styles/components.css`: `.settings-ai-tab` + gạch dưới theo `[aria-selected="true"]` (có bản `html[data-theme="dark"]`).
-- `tests/ui/ui-settings-sections-check.js` viết lại (22 check); `tests/ui/ui-ai-provider-settings-check.js` đổi assertion "every provider has a card" → "every key-based provider" (4 thẻ, không `local`); `tests/manual/verify-css.js` thêm expectation cho gạch dưới tab.
-- Docs: `docs/DECISIONS.md` (#158), `docs/STATUS.md`, `docs/handoff/status/2026-10-31.md` (chuyển bàn giao #155 vào lưu trữ).
-- Không đổi: schema `settings`, hợp đồng IPC, `readAiProviderPatches()`, registry 5 provider trong `src/services/ai/ai-providers.ts`.
-
-**Behavior.** Trang Cài đặt còn năm mục; mục đầu "Nhà cung cấp AI" gộp toàn bộ phần AI vào một thẻ, bên trong là hai tab: **AI local** (chọn model, trạng thái runtime, tùy chọn GPU, cấu hình máy) và **AI cloud** (Base URL / tên model / API key của các nhà cung cấp cần khoá). Thẻ "AI local (llama.cpp)" không còn nằm trong tab cloud vì đúng ra nó thuộc tab kia. Chuyển tab không làm mất chữ đang gõ chưa lưu, mục vẫn mở khi chuyển tab, tab vẫn chọn khi chuyển mục hoặc sau khi bấm "Lưu cài đặt". Bàn phím: chỉ tab đang chọn nằm trong tab order, phím mũi tên chuyển tab.
-
-**Commands run.** `npm run check` 0 · `node tests/run-unit.js` **68/68** · `npm run build` 0 · `npm run check:renderer-globals` 0 undefined (54/55 script, 766 hàm, 6.286 call site) · `npm run verify:css` **18/18** · Electron thật, mỗi check một profile sạch: `ui-settings-sections-check` **22/22**, `ui-ai-provider-settings-check` pass, `ui-ai-provider-key-check` pass, `ui-ai-provider-wizard-check` pass, `ui-ai-tasks-paging-check` vẫn đúng 6/8 như trước · ảnh 1366×768 ba trạng thái (tab local, tab cloud, năm mục gập).
-
-**Chưa xác minh.** Chưa có animation khi đổi tab; chưa nhớ tab đã chọn giữa các lần khởi động (chỉ trong một phiên). Chưa chạy installer đóng gói.
-
-**Next task.** Roadmap `Packaged check` (cần máy sạch); nếu tiếp tục tinh chỉnh trang Cài đặt thì cân nhắc chuyển cả năm mục sang tab thay vì accordion.
 
 
 

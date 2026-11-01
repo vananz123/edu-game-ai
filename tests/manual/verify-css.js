@@ -52,7 +52,13 @@ const expectations = [
   // The wizard's card is a component class, so the utility translation table in shell.css
   // never reached it: without this rule the wizard stays a white card in dark mode and the
   // `dark:text-[#f1f5f9]` markup inside it becomes white-on-white.
-  ['wizard form panel goes dark with the theme', /\[data-theme=("?)dark\1\] \.form-panel\{[^}]*background:var\(--panel\)/]
+  ['wizard form panel goes dark with the theme', /\[data-theme=("?)dark\1\] \.form-panel\{[^}]*background:var\(--panel\)/],
+  // #161: a chrome icon is a <span data-icon> hook filled with an <svg>. Inline-level boxes
+  // sit on the text baseline, so the hook has to be a flex box and its svg a block; dropped,
+  // every icon in a button, chip or meta row rides a few pixels off the label next to it.
+  // Tailwind reorders declarations, so match `display:inline-flex` anywhere in the block.
+  ['chrome icon hooks are flex boxes', /span\[data-icon\]\{[^}]*display:inline-flex/],
+  ['chrome icon svgs render as blocks', /span\[data-icon\] svg\{display:block\}/]
 ];
 
 let failed = 0;

@@ -71,7 +71,7 @@ function check(label, ok, detail = '') {
     toggles[1].click();
     out.oneAtATime = document.querySelectorAll('[role="menu"]:not([hidden])').length === 1;
 
-    navigate('home');
+    navigate('library');
     out.closedOnNavigate = document.querySelectorAll('[role="menu"]:not([hidden])').length === 0;
 
     await window.eduGame.deleteGame(first.id);

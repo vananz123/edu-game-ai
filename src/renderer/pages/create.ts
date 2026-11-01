@@ -35,8 +35,8 @@ function renderCreate() {
       </p>
     </div>
     <div class="flex items-center gap-2">
-      <button class="btn btn-secondary btn-small" data-page="library">← Thư viện</button>
-      <button class="btn btn-primary btn-small" data-page="create-wizard">🪄 Tạo từ giáo án</button>
+      <button class="btn btn-secondary btn-small" data-page="library"><span data-icon="arrow-left" data-icon-size="14"></span> Thư viện</button>
+      <button class="btn btn-primary btn-small" data-page="create-wizard"><span data-icon="wand-sparkles" data-icon-size="14"></span> Tạo từ giáo án</button>
     </div>
   </div>
 
@@ -47,7 +47,7 @@ function renderCreate() {
       <section class="bg-white dark:bg-[#171c32] border border-[#e2e8f0] dark:border-[#2a324b] rounded-2xl p-5">
         <div class="flex justify-between items-center mb-4">
           <div class="flex items-center gap-2">
-            <span class="text-[18px]">🎮</span>
+            <span class="text-[#6366f1] dark:text-[#818cf8]" data-icon="shapes" data-icon-size="17"></span>
             <h3 class="text-[15px] font-bold text-[#1e293b] dark:text-[#f1f5f9] m-0">Chọn loại trò chơi</h3>
           </div>
           <span class="px-2 py-1 bg-[#f1f5f9] dark:bg-[#1e2544] rounded-lg text-[#64748b] dark:text-[#94a3b8] text-[10px] font-semibold">5 mẫu có sẵn</span>
@@ -71,7 +71,7 @@ function renderCreate() {
       <!-- Thiết lập trò chơi -->
       <section class="bg-white dark:bg-[#171c32] border border-[#e2e8f0] dark:border-[#2a324b] rounded-2xl p-5">
         <div class="flex items-center gap-2 mb-4">
-          <span class="text-[18px]">⚙️</span>
+          <span class="text-[#6366f1] dark:text-[#818cf8]" data-icon="settings" data-icon-size="17"></span>
           <h3 class="text-[15px] font-bold text-[#1e293b] dark:text-[#f1f5f9] m-0">Thiết lập trò chơi</h3>
         </div>
 
@@ -115,20 +115,20 @@ function renderCreate() {
       <!-- Mở trình chỉnh sửa -->
       <section class="bg-white dark:bg-[#171c32] border border-[#e2e8f0] dark:border-[#2a324b] rounded-2xl p-5">
         <div class="flex items-center gap-2 mb-3">
-          <span class="text-[18px]">✏️</span>
+          <span class="text-[#6366f1] dark:text-[#818cf8]" data-icon="pencil" data-icon-size="17"></span>
           <h3 class="text-[15px] font-bold text-[#1e293b] dark:text-[#f1f5f9] m-0">Soạn nội dung & Mở trình chỉnh sửa</h3>
           <span class="ml-auto px-2 py-0.5 bg-[#f1f5f9] dark:bg-[#1e2544] rounded text-[10px] font-semibold text-[#64748b] dark:text-[#94a3b8]">Không dùng AI</span>
         </div>
         <div class="flex gap-3 items-start bg-[#f8f7ff] dark:bg-[#1a1f3a] border border-dashed border-[#c7c4ff] dark:border-[#4f46e5] rounded-xl p-4 mb-4">
-          <span class="text-[22px] shrink-0">✏</span>
+          <span class="shrink-0 text-[#8b93b8]" data-icon="info" data-icon-size="20"></span>
           <div class="min-w-0">
             <strong class="text-[13px] text-[#1e293b] dark:text-[#f1f5f9] block mb-1">Bạn tự nhập câu hỏi, phương án và đáp án đúng</strong>
             <small class="text-[11px] text-[#64748b] dark:text-[#94a3b8] leading-relaxed block">Nhấn "Mở trình chỉnh sửa câu hỏi" để mở trình chỉnh sửa trống theo thể loại đã chọn. Không cần AI, không cần Internet.</small>
           </div>
         </div>
         <div class="flex items-center gap-3 flex-wrap">
-          <button class="btn btn-primary !py-2.5 !px-5 !text-[13px] !font-bold" id="generateBtn">✦ Mở trình chỉnh sửa câu hỏi</button>
-          <button class="btn btn-secondary" id="previewManualBtn">👁 Xem trước mẫu trống</button>
+          <button class="btn btn-primary !py-2.5 !px-5 !text-[13px] !font-bold" id="generateBtn"><span data-icon="pencil" data-icon-size="15"></span> Mở trình chỉnh sửa câu hỏi</button>
+          <button class="btn btn-secondary" id="previewManualBtn"><span data-icon="eye" data-icon-size="14"></span> Xem trước mẫu trống</button>
         </div>
         <div class="text-[10px] text-[#64748b] dark:text-[#94a3b8] mt-3 leading-relaxed">Trình chỉnh sửa mở đúng thể loại đã chọn để bạn tự nhập câu hỏi, đáp án và điểm số. Sau khi lưu, vào "Dự án của tôi" để chạy thử như học sinh, tiếp tục chỉnh sửa và xuất gói .egame chạy ngoại tuyến.</div>
       </section>
@@ -175,7 +175,7 @@ function renderCreate() {
       <section class="bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] rounded-2xl p-5 text-white">
         <h3 class="text-[14px] font-bold m-0 mb-1">Muốn dùng AI?</h3>
         <div class="text-[11px] text-[#e0e7ff] mb-3 leading-relaxed">AI phân tích giáo án và gợi ý trò chơi, chạy trên máy bằng llama.cpp.</div>
-        <button class="bg-white text-[#6366f1] border-0 rounded-lg px-4 py-2.5 font-bold text-[12px] cursor-pointer w-full hover:bg-[#f8f7ff] transition" data-page="create-wizard">🪄 Tạo trò chơi từ giáo án</button>
+        <button class="bg-white text-[#6366f1] border-0 rounded-lg px-4 py-2.5 font-bold text-[12px] cursor-pointer w-full inline-flex items-center justify-center gap-[7px] hover:bg-[#f8f7ff] transition" data-page="create-wizard"><span data-icon="wand-sparkles" data-icon-size="14"></span> Tạo trò chơi từ giáo án</button>
       </section>
 
       <section class="bg-white dark:bg-[#171c32] border border-[#e2e8f0] dark:border-[#2a324b] rounded-2xl p-5">
@@ -183,7 +183,7 @@ function renderCreate() {
         <div class="flex flex-col gap-2">
           <div class="flex items-center justify-between py-1.5">
             <div class="flex items-center gap-2">
-              <span class="text-[14px]">💾</span>
+              <span class="text-[#8b93b8]" data-icon="save" data-icon-size="15"></span>
               <div>
                 <strong class="text-[11px] text-[#1e293b] dark:text-[#f1f5f9] block">Thư viện cục bộ</strong>
                 <small class="text-[10px] text-[#94a3b8]">Đang lưu trên máy này</small>
@@ -193,7 +193,7 @@ function renderCreate() {
           </div>
           <div class="flex items-center justify-between py-1.5">
             <div class="flex items-center gap-2">
-              <span class="text-[14px]">🎮</span>
+              <span class="text-[#8b93b8]" data-icon="play" data-icon-size="15"></span>
               <div>
                 <strong class="text-[11px] text-[#1e293b] dark:text-[#f1f5f9] block">Game runtime</strong>
                 <small class="text-[10px] text-[#94a3b8]">5 mẫu giao diện</small>

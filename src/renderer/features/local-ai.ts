@@ -29,14 +29,14 @@ function openLocalAiModal() {
   const running = machine.runtimeState === 'READY';
   const starting = machine.runtimeState === 'STARTING';
   const cards = models.map(model => localModalCard(model, machine)).join('');
-  $('#modalRoot').innerHTML = `<div class="modal-backdrop"><div class="modal"><div class="modal-head"><div><h2>Cửa sổ AI local · llama.cpp</h2><div class="small muted mt-[5px]">Chọn bản Nhanh / Linh hoạt / Gemma 4, tải đầy đủ rồi nhấn “Bắt đầu chạy”. Runtime chỉ chạy khi bạn yêu cầu.</div></div><button class="modal-close" data-close>✕</button></div>`
+  $('#modalRoot').innerHTML = `<div class="modal-backdrop"><div class="modal"><div class="modal-head"><div><h2>Cửa sổ AI local · llama.cpp</h2><div class="small muted mt-[5px]">Chọn bản Nhanh / Linh hoạt / Gemma 4, tải đầy đủ rồi nhấn “Bắt đầu chạy”. Runtime chỉ chạy khi bạn yêu cầu.</div></div><button class="modal-close" data-close aria-label="Đóng">${uiIcon('x', '', 16)}</button></div>`
     + `<div class="modal-body">`
     + `${machine.runtimeSupported === false ? '<div class="info-box"><strong>Chưa hỗ trợ cấu hình này</strong><p>Runtime AI local tích hợp hiện chỉ hỗ trợ Windows x64.</p></div>' : ''}`
     + `<div class="field"><label>MODEL SẼ CHẠY</label><select id="localModalSelect">${models.map(model => `<option value="${escapeHtml(model.id)}" ${model.id === selectedId ? 'selected' : ''}>${escapeHtml(model.friendlyName || model.displayName)}${model.installed ? ' · Đã tải' : ''}</option>`).join('')}</select><div class="field-hint">Model được chọn ở đây sẽ dùng chung cho màn hình Tạo trò chơi.</div></div>`
     + `<p><strong>Trạng thái chạy:</strong> ${escapeHtml(localRuntimeStateLabel(machine))}</p>`
     + `${cards || '<p>Đang nạp danh sách model…</p>'}`
     + `<div id="localModalProgress" class="field-hint"></div>`
-    + `</div><div class="modal-foot"><button class="btn btn-secondary" data-close>Đóng</button>${running ? '<button class="btn btn-secondary" id="stopLocalRuntimeBtn">Dừng llama.cpp</button>' : ''}<button class="btn btn-primary" id="startLocalRuntimeBtn" ${starting || machine.runtimeSupported === false ? 'disabled' : ''}>▶ Bắt đầu chạy</button></div></div></div>`;
+    + `</div><div class="modal-foot"><button class="btn btn-secondary" data-close>Đóng</button>${running ? '<button class="btn btn-secondary" id="stopLocalRuntimeBtn">Dừng llama.cpp</button>' : ''}<button class="btn btn-primary" id="startLocalRuntimeBtn" ${starting || machine.runtimeSupported === false ? 'disabled' : ''}>${uiIcon('play', '', 13)} Bắt đầu chạy</button></div></div></div>`;
   const root = $('#modalRoot');
   root.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', () => { root.innerHTML = ''; }));
   root.querySelectorAll('[data-local-download]').forEach(btn => btn.addEventListener('click', () => installLocalModel(btn.dataset.localDownload)));
@@ -146,7 +146,7 @@ async function startLocalRuntimeFromModal() {
       progress.style.whiteSpace = 'pre-wrap';
     }
     toast(shown, 8000);
-    if (startBtn?.isConnected) { startBtn.disabled = false; startBtn.textContent = '▶ Bắt đầu chạy'; }
+    if (startBtn?.isConnected) { startBtn.disabled = false; startBtn.innerHTML = uiIcon('play', '', 13) + ' Bắt đầu chạy'; }
   }
 }
 async function stopLocalRuntimeFromModal() {

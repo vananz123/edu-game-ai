@@ -5,8 +5,10 @@ const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 // "all collapsed" state and no longer exists). #158: `settingsAiTab` is the tab shown
 // inside the AI panel. Both are UI state only and never saved; the first visit opens the
 // AI tab on its local sub-tab.
-const state = { db: { games: [], sessions: [] }, page: 'home', search: '', filter: 'all', projects: null, lessonLibrary: null, settings: {}, localAiModels: [], localAiMachine: {}, draft: null, importedDoc: null, selectedTemplate: 'scenario', currentGame: null, gameIndex: 0, gameAnswers: [], gameStart: 0, playStartedAt: 0, resultSession: null, answerLocked: false, lastSummary: null, matchingPlay: null, memoryCards: null, treasurePlay: null, racePlay: null, teamPlay: null, pendingTeams: null, settingsSection: 'ai', settingsAiTab: 'local' };
-const pageNames = { home: 'Tổng quan', library: 'Thư viện trò chơi', 'create-wizard': 'Tạo từ giáo án', create: 'Tạo trò chơi', 'lesson-plans': 'Giáo án', 'my-projects': 'Dự án của tôi', sessions: 'Lịch sử kết quả', settings: 'Cài đặt' };
+const state = { db: { games: [], sessions: [] }, page: 'library', search: '', filter: 'all', projects: null, lessonLibrary: null, settings: {}, localAiModels: [], localAiMachine: {}, draft: null, importedDoc: null, selectedTemplate: 'scenario', currentGame: null, gameIndex: 0, gameAnswers: [], gameStart: 0, playStartedAt: 0, resultSession: null, answerLocked: false, lastSummary: null, matchingPlay: null, memoryCards: null, treasurePlay: null, racePlay: null, teamPlay: null, pendingTeams: null, settingsSection: 'ai', settingsAiTab: 'local' };
+// DECISIONS #161: "Tổng quan" is gone — the library is what a teacher lands on, and the
+// two things the overview page was for (replay, start) moved to the sidebar block.
+const pageNames = { library: 'Thư viện trò chơi', 'create-wizard': 'Tạo từ giáo án', create: 'Tạo trò chơi', 'lesson-plans': 'Giáo án', 'my-projects': 'Dự án của tôi', sessions: 'Lịch sử kết quả', settings: 'Cài đặt' };
 const icons = { quiz: '🧠', scenario: '🚦', matching: '🧩', 'treasure-hunt': '🗺️', race: '🏁' };
 const treasureMissionMeta = {
   'multiple-choice': { label: 'Trắc nghiệm', icon: '❓', short: 'Chọn đáp án đúng' },
@@ -125,12 +127,11 @@ function toast(message, duration = 3000) {
 function fmtDate(value) { try { return new Date(value).toLocaleDateString('vi-VN', { day:'2-digit', month:'2-digit', year:'numeric' }); } catch { return '—'; } }
 function fmtDateTime(value) { try { return new Date(value).toLocaleString('vi-VN', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }); } catch { return '—'; } }
 function formatBytes(bytes) { return `${(bytes / 1024 ** 3).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} GB`; }
-function totalQuestions() { return state.db.games.reduce((n, g) => n + (g.questions?.length || 0), 0); }
 /**
  * A game card in the library (DECISIONS #119/#120).
  *
  * Outside the menu the teacher sees exactly two actions — "Chơi ngay" and "Chơi toàn
- * màn hình" — plus the "•••" menu, which holds Chơi LAN, Chỉnh sửa, Xoá and Xuất game.
+ * màn hình" — plus the menu, which holds Chơi LAN, Chỉnh sửa, Xoá and Xuất game.
  * The menu is a real `role="menu"`, toggled by `wireGameMenus()` and closed by
  * `bootstrap.ts` on anything else (outside click, Escape, scroll, resize, page change).
  */
@@ -139,7 +140,7 @@ function gameCard(game, index = 0, deletable = false) {
   const coverGrad = ['bg-[linear-gradient(135deg,#e9e7ff,#d6d1ff)]','bg-[linear-gradient(135deg,#ddf8ed,#bdeedb)]','bg-[linear-gradient(135deg,#fff0dc,#ffd8a7)]','bg-[linear-gradient(135deg,#e0efff,#c9e1ff)]','bg-[linear-gradient(135deg,#ffe4ed,#ffc9d9)]'][index % 5];
   const id = escapeHtml(game.id);
   const menuId = 'gameMenu-' + String(index + 1);
-  const item = (action, label, extra = '') => `<button type="button" role="menuitem" class="w-full border-0 bg-transparent text-left px-[12px] py-[9px] text-[12px] font-semibold text-[#515c72] hover:bg-[#f5f6fa] focus:bg-[#f5f6fa] outline-0 ${extra}" data-action="${action}" data-id="${id}">${label}</button>`;
+  const item = (action, label, extra = '') => `<button type="button" role="menuitem" class="w-full flex items-center gap-[9px] border-0 bg-transparent text-left px-[12px] py-[9px] text-[12px] font-semibold text-[#515c72] hover:bg-[#f5f6fa] focus:bg-[#f5f6fa] outline-0 ${extra}" data-action="${action}" data-id="${id}">${label}</button>`;
   // #155: the way the quiz is played belongs on the card — a teacher deciding what to
   // open at class time must see "Xây nhà" without opening the editor. Only quiz has a
   // play mode; absent `gameplayMode` is classic (editorGameplayMode).
@@ -161,23 +162,23 @@ function gameCard(game, index = 0, deletable = false) {
         <div class="text-[13px] font-semibold leading-[1.4]">${escapeHtml(game.title)}</div>
         <!-- The document-level "click outside" guard keys on this wrapper (bootstrap.ts). -->
         <div class="relative shrink-0" data-game-menu-root>
-          <button type="button" class="border-0 bg-transparent text-[#a1a8b7] tracking-[2px] px-[4px] rounded-[6px] hover:bg-[#f5f6fa]"
-            data-menu-toggle="${menuId}" aria-haspopup="menu" aria-expanded="false" aria-controls="${menuId}" title="Thêm lựa chọn">•••</button>
+          <button type="button" class="border-0 bg-transparent text-[#a1a8b7] inline-flex items-center justify-center w-[24px] h-[24px] rounded-[6px] hover:bg-[#f5f6fa]"
+            data-menu-toggle="${menuId}" aria-haspopup="menu" aria-expanded="false" aria-controls="${menuId}" title="Thêm lựa chọn"><span data-icon="ellipsis-vertical" data-icon-size="15"></span></button>
           <div id="${menuId}" role="menu" aria-label="Lựa chọn cho ${escapeHtml(game.title)}" hidden
             class="absolute right-0 top-[24px] z-[20] min-w-[168px] py-[4px] bg-white border border-[#e7eaf2] rounded-[10px] shadow-[0_10px_24px_#1e293b1f]">
-            ${item('lan', '📱 Chơi LAN')}
-            ${item('edit', '✎ Chỉnh sửa')}
-            ${item('export-game', '⇩ Xuất game')}
-            ${deletable ? item('delete', '🗑 Xoá', 'text-[#d84b5a] hover:bg-[#fff1f2] focus:bg-[#fff1f2]') : ''}
+            ${item('lan', '<span data-icon="smartphone" data-icon-size="14"></span> Chơi LAN')}
+            ${item('edit', '<span data-icon="pencil" data-icon-size="14"></span> Chỉnh sửa')}
+            ${item('export-game', '<span data-icon="download" data-icon-size="14"></span> Xuất game')}
+            ${deletable ? item('delete', '<span data-icon="trash" data-icon-size="14"></span> Xoá', 'text-[#d84b5a] hover:bg-[#fff1f2] focus:bg-[#fff1f2]') : ''}
           </div>
         </div>
       </div>
       <p class="text-[11px] text-[#8b94a6] leading-[1.6] mt-[8px] mb-[13px] min-h-[35px]">${escapeHtml(game.description || 'Trò chơi học tập tương tác, có thể chơi ngoại tuyến.')}</p>
       <div class="flex gap-[5px] flex-wrap">${playModeChip}<span class="px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#788196] text-[9px]">${escapeHtml(game.subject || 'Chưa phân môn')}</span><span class="px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#788196] text-[9px]">${game.grade ? 'Lớp ' + escapeHtml(game.grade) : 'Mọi lớp'}</span><span class="px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#788196] text-[9px]">${game.questions?.length || 0} câu</span></div>
-      <div class="flex items-center justify-between border-t border-[#f0f1f6] pt-[12px] text-[#8b94a6] text-[10px]"><span>▣ ${escapeHtml(game.topic || 'Bài học')}</span><span>↻ ${fmtDate(game.updatedAt || game.createdAt)}</span></div>
+      <div class="flex items-center justify-between border-t border-[#f0f1f6] pt-[12px] text-[#8b94a6] text-[10px]"><span class="inline-flex items-center gap-[5px]"><span data-icon="book-open" data-icon-size="12"></span> ${escapeHtml(game.topic || 'Bài học')}</span><span class="inline-flex items-center gap-[5px]"><span data-icon="clock" data-icon-size="12"></span> ${fmtDate(game.updatedAt || game.createdAt)}</span></div>
       <div class="flex gap-[8px] mt-[13px]">
-        <button class="border-0 rounded-[9px] px-[11px] py-[8px] inline-flex items-center justify-center gap-[8px] font-bold text-[11px] transition-transform duration-120 hover:-translate-y-[1px] bg-[#6258e8] text-white shadow-[0_6px_14px_#6258e82b]" data-action="play" data-id="${id}">▶ Chơi ngay</button>
-        <button class="border-0 rounded-[9px] px-[11px] py-[8px] inline-flex items-center justify-center gap-[8px] font-bold text-[11px] transition-transform duration-120 hover:-translate-y-[1px] bg-[#2563eb] text-white shadow-[0_6px_14px_#2563eb2b]" data-action="play-fullscreen" data-id="${id}">⛶ Toàn màn hình</button>
+        <button class="border-0 rounded-[9px] px-[11px] py-[8px] inline-flex items-center justify-center gap-[7px] font-bold text-[11px] transition-transform duration-120 hover:-translate-y-[1px] bg-[#6258e8] text-white shadow-[0_6px_14px_#6258e82b]" data-action="play" data-id="${id}"><span data-icon="play" data-icon-size="13"></span> Chơi ngay</button>
+        <button class="border-0 rounded-[9px] px-[11px] py-[8px] inline-flex items-center justify-center gap-[7px] font-bold text-[11px] transition-transform duration-120 hover:-translate-y-[1px] bg-[#2563eb] text-white shadow-[0_6px_14px_#2563eb2b]" data-action="play-fullscreen" data-id="${id}"><span data-icon="maximize" data-icon-size="13"></span> Toàn màn hình</button>
       </div>
     </div>
   </article>`;
@@ -193,4 +194,4 @@ function scoringModeHint(mode) {
   })[mode] || 'Chọn một trong 5 chế độ tính điểm theo mục 2.3 yêu cầu sản phẩm.';
 }
 
-function emptyState(title, desc, button, page) { return `<div class="bg-white border border-dashed border-[#dfe2ed] rounded-[14px] p-[50px_20px] text-center text-[#929bad] flex flex-col items-center justify-center"><div class="text-[42px] mb-[12px]">🎮</div><h3 class="text-[#394256] mb-[8px] mt-0">${escapeHtml(title)}</h3><p class="max-w-[420px] mx-auto mb-[17px] leading-[1.7] text-[12px]">${escapeHtml(desc)}</p><button class="border-0 rounded-[9px] px-[15px] py-[11px] inline-flex items-center justify-center gap-[8px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-[#6258e8] text-white shadow-[0_6px_14px_#6258e82b]" data-page="${page}">${escapeHtml(button)}</button></div>`; }
+function emptyState(title, desc, button, page) { return `<div class="bg-white border border-dashed border-[#dfe2ed] rounded-[14px] p-[50px_20px] text-center text-[#929bad] flex flex-col items-center justify-center"><div class="mb-[12px] text-[#c3c9d8]"><span data-icon="library" data-icon-size="40"></span></div><h3 class="text-[#394256] mb-[8px] mt-0">${escapeHtml(title)}</h3><p class="max-w-[420px] mx-auto mb-[17px] leading-[1.7] text-[12px]">${escapeHtml(desc)}</p><button class="border-0 rounded-[9px] px-[15px] py-[11px] inline-flex items-center justify-center gap-[8px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-[#6258e8] text-white shadow-[0_6px_14px_#6258e82b]" data-page="${page}">${escapeHtml(button)}</button></div>`; }

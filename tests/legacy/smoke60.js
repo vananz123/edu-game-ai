@@ -332,8 +332,8 @@ async function findTarget() {
       state.settings = await window.eduGame.getSettings();
       push('settings restored', state.settings.ai?.mode === (orig.ai?.mode || 'offline') && state.settings.ai?.baseUrl === (orig.ai?.baseUrl || ''), (state.settings.ai?.mode || '') + '/' + (state.settings.ai?.baseUrl || ''));
     }
-    navigate('home');
-    push('home page', state.page === 'home', state.page);
+    navigate('library');
+    push('library page', state.page === 'library', state.page);
     return out;
   })()`);
   t8.forEach(r => check('T8 cleanup ' + r[0], r[1], r[2]));

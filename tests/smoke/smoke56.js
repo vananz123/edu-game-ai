@@ -313,8 +313,8 @@ async function findTarget() {
       if (g) { await window.eduGame.deleteGame(g.id); await refreshDb(); }
     }
     push('smoke games deleted', !state.db.games.find(g => g.title === ${JSON.stringify(HUNT_TITLE)} || g.title === ${JSON.stringify(RACE_TITLE)}), '');
-    navigate('home');
-    push('home page after tests', state.page === 'home', state.page);
+    navigate('library');
+    push('library page after tests', state.page === 'library', state.page);
     return out;
   })()`);
   t7.forEach(r => check('T7-cleanup ' + r[0], r[1], r[2]));

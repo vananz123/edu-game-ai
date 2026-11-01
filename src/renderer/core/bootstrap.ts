@@ -36,7 +36,7 @@ async function refreshLessonLibraryPage() {
   if (state.page === 'lesson-plans') render();
 }
 async function showHelp() {
-  $('#modalRoot').innerHTML = `<div class="modal-backdrop"><div class="modal"><div class="modal-head"><h2>Bắt đầu với EduGame Studio</h2><button class="modal-close" data-close>✕</button></div><div class="modal-body"><div class="help-list"><div class="help-item"><div class="help-number">1</div><div><strong>Tạo trò chơi</strong><p>Vào Tạo trò chơi, dán nội dung hoặc nạp giáo án DOCX/PDF/PPTX/TXT. Chọn thể loại và tạo bản nháp.</p></div></div><div class="help-item"><div class="help-number">2</div><div><strong>Duyệt đáp án</strong><p>Chế độ offline tạo bản nháp theo quy tắc, không phải AI. Hãy kiểm tra kỹ từng câu trước khi lưu.</p></div></div><div class="help-item"><div class="help-number">3</div><div><strong>Chơi trong lớp</strong><p>Mở game, chọn đáp án, đọc phần giải thích rồi lưu điểm theo tên học sinh hoặc đội.</p></div></div><div class="help-item"><div class="help-number">4</div><div><strong>Dùng AI</strong><p>Vào Cài đặt để cấu hình API tương thích OpenAI hoặc endpoint local. API online có thể gửi nội dung tài liệu tới nhà cung cấp.</p></div></div></div><div class="info-box mt-[18px]">Mẹo: xuất gói .egame để sao chép trò chơi sang máy khác. Sau khi nhập vào thư viện, game có thể chạy không cần Internet.</div></div></div></div>`;
+  $('#modalRoot').innerHTML = `<div class="modal-backdrop"><div class="modal"><div class="modal-head"><h2>Bắt đầu với EduGame Studio</h2><button class="modal-close" data-close aria-label="Đóng">${uiIcon('x', '', 16)}</button></div><div class="modal-body"><div class="help-list"><div class="help-item"><div class="help-number">1</div><div><strong>Tạo trò chơi</strong><p>Vào Tạo trò chơi, dán nội dung hoặc nạp giáo án DOCX/PDF/PPTX/TXT. Chọn thể loại và tạo bản nháp.</p></div></div><div class="help-item"><div class="help-number">2</div><div><strong>Duyệt đáp án</strong><p>Chế độ offline tạo bản nháp theo quy tắc, không phải AI. Hãy kiểm tra kỹ từng câu trước khi lưu.</p></div></div><div class="help-item"><div class="help-number">3</div><div><strong>Chơi trong lớp</strong><p>Mở game, chọn đáp án, đọc phần giải thích rồi lưu điểm theo tên học sinh hoặc đội.</p></div></div><div class="help-item"><div class="help-number">4</div><div><strong>Dùng AI</strong><p>Vào Cài đặt để cấu hình API tương thích OpenAI hoặc endpoint local. API online có thể gửi nội dung tài liệu tới nhà cung cấp.</p></div></div></div><div class="info-box mt-[18px]">Mẹo: xuất gói .egame để sao chép trò chơi sang máy khác. Sau khi nhập vào thư viện, game có thể chạy không cần Internet.</div></div></div></div>`;
   $('#modalRoot').querySelector('[data-close]').onclick = () => $('#modalRoot').innerHTML = '';
 }
 /**
@@ -72,6 +72,19 @@ document.addEventListener('click', e => {
   }
   const nav = e.target.closest('.nav-item[data-page]');
   if (nav) navigate(nav.dataset.page);
+});
+// DECISIONS #161: the sidebar "Lối tắt" block lives outside #pageContent, so the
+// per-page wiring in controller.ts never reaches its buttons. It reuses the two hooks
+// the pages already have (`data-page` navigates, `data-action` goes to handleAction),
+// delegated on the sidebar itself. `.nav-item[data-page]` is skipped — the document
+// handler above owns the nav items, and navigating twice per click would render twice.
+$('.sidebar')?.addEventListener('click', event => {
+  const target = event.target;
+  if (!target || !target.closest) return;
+  const el = target.closest('[data-page], [data-action]');
+  if (!el || el.closest('.nav-item[data-page]')) return;
+  if (el.dataset.page) { navigate(el.dataset.page); return; }
+  handleAction(el.dataset.action, el.dataset.id, el);
 });
 $('#helpBtn').addEventListener('click', showHelp);
 
@@ -144,6 +157,10 @@ window.addEventListener('resize', () => {
     state.db = await window.eduGame.getLibrary();
     state.settings = await window.eduGame.getSettings();
     applyTheme(state.settings && state.settings.preferences && state.settings.preferences.theme);
+    // DECISIONS #161: the static shell (sidebar, topbar) carries `data-icon` hooks
+    // instead of emoji, because index.html cannot call uiIcon(). Painted before the
+    // first render() so no chrome ever flashes an unpainted placeholder.
+    if (typeof paintUiIcons === 'function') paintUiIcons(document);
     // Chơi LAN: subscribes to `lan:state` so a room opened before a reload (or on a
     // second window) is drawn again. Never throws when the bridge is absent.
     if (typeof lanInit === 'function') lanInit();
@@ -160,5 +177,5 @@ window.addEventListener('resize', () => {
     if (typeof window.openSetupWizard === 'function') {
       window.openSetupWizard({ probe: true }).catch(() => {});
     }
-  } catch(e) { $('#pageContent').innerHTML = `<div class="empty-state"><div class="big">⚠️</div><h3>Không thể khởi tạo ứng dụng</h3><p>${escapeHtml(e.message)}</p></div>`; }
+  } catch(e) { $('#pageContent').innerHTML = `<div class="empty-state"><div class="big">${uiIcon('triangle-alert', '', 32)}</div><h3>Không thể khởi tạo ứng dụng</h3><p>${escapeHtml(e.message)}</p></div>`; }
 })();

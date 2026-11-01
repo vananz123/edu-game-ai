@@ -1,4 +1,4 @@
-/* components.css — Component dùng chung port từ 5 stylesheet cũ: nút, thẻ, form, editor, scrollbar, trang chủ, stepper wizard. — tách từ app.css, giữ nguyên thứ tự (DECISIONS #149). */
+/* components.css — Component dùng chung port từ 5 stylesheet cũ: nút, thẻ, form, editor, scrollbar, stepper wizard. — tách từ app.css, giữ nguyên thứ tự (DECISIONS #149). */
 /* === Ported legacy rules (G5 thay 5 file stylesheets Ä‘Ã£ xÃ³a) === */
 @layer components {
 /* === from components.css === */
@@ -576,4 +576,17 @@ html[data-theme="dark"] .settings-tablist{border-bottom-color:#2a324b}
 html[data-theme="dark"] .settings-tab{color:#64748b}
 html[data-theme="dark"] .settings-tab:hover{color:#a5b4fc;background:#1e2544}
 html[data-theme="dark"] .settings-tab[aria-selected="true"]{color:#a5b4fc;border-bottom-color:#818cf8}
+}
+
+/* === P161 - Icon chrome Lucide trong markup động (2026-11-01)
+   `data-icon` là cái hộp rỗng mà paintUiIcons() nhét <svg> vào (features/ui-icons.ts).
+   Span mặc định là inline, còn svg có chiều cao cố định nên đường baseline của phông
+   chữ cộng thêm vài px dưới chân icon — hàng nào trộn icon với chữ (nút, chip, meta thẻ)
+   cũng bị lệch. Biến hộp thành flex thì icon nằm giữa đúng chiều cao dòng, và flex:none
+   giữ nguyên kích thước khi hàng co lại. */
+@layer components {
+/* vertical-align chỉ có tác dụng khi hook nằm giữa một câu (chip trạng thái, dòng
+   cảnh báo); trong flex row thuộc tính này bị bỏ qua nên không làm lệch hàng nút. */
+span[data-icon]{display:inline-flex;align-items:center;flex:0 0 auto;vertical-align:middle}
+span[data-icon] svg{display:block}
 }

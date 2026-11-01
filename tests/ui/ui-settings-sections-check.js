@@ -97,6 +97,13 @@ const SCENARIO = String.raw`(async () => {
   out.interfaceTabText = tab('interface').textContent;
   out.teachingTabText = tab('teaching').textContent;
   out.panelHeaderChips = (panel('ai').querySelector('h3').parentElement.textContent || '').replace(/\s+/g, ' ').trim();
+  // #161: chrome icons are Lucide nodes painted into [data-icon] hooks. The hooks carry
+  // no text any more, so a tab label is only "complete" once every hook under it holds an
+  // <svg> — an unknown icon id would leave a blank chip that the old emoji never did.
+  out.iconHooks = [...document.querySelectorAll('[data-icon]')].length;
+  out.unpaintedIcons = [...document.querySelectorAll('[data-icon]')]
+    .filter(node => !node.querySelector('svg.lucide')).map(node => node.dataset.icon).join(',');
+  out.aiTabIcons = [...tab('ai').querySelectorAll('[data-icon]')].map(node => node.dataset.icon).join(',');
 
   // ── the AI panel: two nested tabs, one visible at a time, both present in the DOM ──
   out.aiTabIds = [...document.querySelectorAll('[data-ai-tab]')].map(node => node.dataset.aiTab);
@@ -202,7 +209,7 @@ const SCENARIO = String.raw`(async () => {
   out.reclickKeeps = { visible: visiblePanels(), state: state.settingsSection };
 
   // Leaving the page and coming back keeps the teacher on the same tab.
-  navigate('home');
+  navigate('library');
   await sleep(180);
   navigate('settings');
   await sleep(700);
@@ -248,8 +255,10 @@ const SCENARIO = String.raw`(async () => {
   check('every panel body stays in the DOM while hidden',
     Object.values(out.controlsPresent).every(Boolean), JSON.stringify(out.controlsPresent));
   check('the AI tab carries one compact chip per sub-tab and the panel header spells them out',
-    /🤖/.test(out.aiTabText) && /☁️/.test(out.aiTabText) && /Sẵn sàng|API key/.test(out.panelHeaderChips),
-    `${out.aiTabText.replace(/\s+/g, ' ').trim().slice(0, 60)} // ${out.panelHeaderChips.slice(0, 80)}`);
+    /monitor/.test(out.aiTabIcons) && /cloud/.test(out.aiTabIcons) && /Sẵn sàng|API key/.test(out.panelHeaderChips),
+    `${out.aiTabIcons} // ${out.panelHeaderChips.slice(0, 80)}`);
+  check('every chrome icon hook on the settings page is painted with a Lucide svg',
+    out.iconHooks > 0 && out.unpaintedIcons === '', `${out.iconHooks} hooks / blank: ${out.unpaintedIcons}`);
   check('a hidden tab still shows its own state in the label',
     out.interfaceTabText.includes(out.themeLabel) && out.teachingTabText.includes(out.tone),
     `theme ${out.themeLabel} / tone ${out.tone}`);

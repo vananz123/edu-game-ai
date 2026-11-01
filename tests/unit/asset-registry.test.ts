@@ -11,6 +11,7 @@ import {
   normalizeContentCategory
 } from '../../src/shared/content-categories';
 import {
+  ICON_GROUPS,
   ICON_NAMES,
   getIconNode,
   isIconName,
@@ -101,9 +102,21 @@ for (const id of CONTENT_CATEGORY_IDS) {
 
 // --- icon registry --------------------------------------------------------
 
-const ICON_COUNT = 60;
+// The registry is generated, so this number is a drift guard rather than a spec:
+// changing ICON_GROUPS means changing it in the same commit. #161 added the
+// `chrome` group (68 icons) that the sidebar, topbar and page headers now use.
+const ICON_COUNT = 128;
 assert.equal(ICON_NAMES.length, ICON_COUNT, `expected exactly ${ICON_COUNT} icons, got ${ICON_NAMES.length}`);
 assert.equal(new Set(ICON_NAMES).size, ICON_COUNT, 'no duplicate icon ids');
+// A name in two groups would be written into ICON_NODES twice, and `tsc` rejects
+// the duplicate key — so the generator dedupes silently only if this holds.
+assert.equal(
+  Object.values(ICON_GROUPS).flat().length, ICON_COUNT,
+  'every icon must belong to exactly one group (categories + interface + extra + chrome)'
+);
+for (const id of ['graduation-cap', 'wand-sparkles', 'circle-fading-arrow-up', 'circle-question-mark', 'bell']) {
+  assert.ok(isIconName(id), `the shell markup asks for ${id}`);
+}
 assert.equal(ICON_NAMES.includes('paw-print'), true);
 assert.equal(ICON_NAMES.includes('Music'), false, 'names are kebab-case ids');
 

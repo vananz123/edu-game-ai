@@ -70,16 +70,16 @@ function wizardBusyText(kind) {
 function renderWizardProjects() {
   const projects = (wizardState.projects || []).slice(0, 6);
   return `<section class="form-panel">
-    <div class="section-head"><h3>Dự án đang làm</h3><button class="btn btn-secondary btn-small" data-wizard-action="new">+ Dự án mới</button></div>
+    <div class="section-head"><h3>Dự án đang làm</h3><button class="btn btn-secondary btn-small" data-wizard-action="new"><span data-icon="circle-plus" data-icon-size="13"></span> Dự án mới</button></div>
     <div class="panel-sub">Mở lại bản nháp đã lưu — không cần chạy lại AI.</div>
     ${projects.length ? `<div class="grid gap-[8px]" id="wizardProjectList">${projects.map(project => {
       const stepIndex = wizardStepIndex(project.step);
       const label = (wizardSteps[stepIndex] || wizardSteps[0]).short;
       const active = project.id === wizardState.projectId;
       return `<button class="quick-action${active ? ' active' : ''}" data-wizard-open="${escapeHtml(project.id)}">
-        <span class="quick-icon">📁</span>
+        <span class="quick-icon" data-icon="folder-open" data-icon-size="16"></span>
         <span class="quick-copy"><strong class="block truncate">${escapeHtml(project.title || 'Dự án')}</strong><small class="block text-[10px] text-[#98a0b0]">Bước: ${escapeHtml(label)} · ${fmtDate(project.updatedAt)}</small></span>
-        <span class="quick-arrow">→</span>
+        <span class="quick-arrow" data-icon="chevron-right" data-icon-size="14"></span>
       </button>`;
     }).join('')}</div>` : '<div class="field-hint">Chưa có dự án nào. Nhập giáo án để bắt đầu.</div>'}
   </section>`;
@@ -88,11 +88,10 @@ function renderWizardProjects() {
 function renderCreateWizard() {
   return `<div id="wizardRoot">
     <div class="flex justify-between items-start gap-[20px] mb-[22px]"><div>
-      <div class="text-[10px] text-[#6258e8] font-extrabold tracking-[1.3px] uppercase mb-[8px]">LESSON → GAME · AI TRÊN MÁY</div>
       <h1 class="text-[27px] tracking-[-0.9px] m-0 font-[780]">Tạo trò chơi từ giáo án</h1>
       <p class="mt-[9px] text-[#788196] text-[13px] leading-[1.6]">Nhập giáo án → AI local phân tích → chọn và cấu hình trò chơi → giáo viên duyệt và lưu. Dữ liệu giáo án chỉ nằm trên máy.</p>
     </div>
-    <button class="border-0 rounded-[9px] px-[15px] py-[11px] inline-flex items-center justify-center gap-[8px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-white border border-[#e7eaf2] text-[#515c72]" data-wizard-action="new">✳ Dự án mới</button></div>
+    <button class="border-0 rounded-[9px] px-[15px] py-[11px] inline-flex items-center justify-center gap-[7px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-white border border-[#e7eaf2] text-[#515c72]" data-wizard-action="new"><span data-icon="circle-plus" data-icon-size="14"></span> Dự án mới</button></div>
     ${renderWizardStepper()}
     ${renderWizardStatus()}
     <div class="grid grid-cols-[minmax(0,1.7fr)_minmax(280px,.8fr)] gap-[18px] items-start">

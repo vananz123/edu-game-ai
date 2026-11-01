@@ -24,7 +24,7 @@
 process.argv[2] = process.argv[2] || process.env.CDP_PORT || '9349';
 const { connect } = require('../manual/lib/ui-check-lib');
 
-const PAGES = ['home', 'library', 'settings', 'create', 'create-wizard', 'lesson-plans', 'my-projects', 'sessions'];
+const PAGES = ['library', 'settings', 'create', 'create-wizard', 'lesson-plans', 'my-projects', 'sessions'];
 
 let failures = 0;
 function check(label, ok, detail = '') {
@@ -114,7 +114,7 @@ const SCENARIO = String.raw`(async () => {
   const light = out.light;
   const find = (rows, needle) => rows.find(r => r.dark.includes(needle));
 
-  check('the walk visited every page', out.visited.length === PAGES.length && out.visited[0] === 'home', out.visited.join(','));
+  check('the walk visited every page', out.visited.length === PAGES.length && out.visited[0] === 'library', out.visited.join(','));
   check('the three pages that carry dark: markup were among them',
     ['settings', 'create', 'create-wizard'].every(p => dark.some(r => r.page === p)),
     [...new Set(dark.map(r => r.page))].join(','));

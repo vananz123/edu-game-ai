@@ -65,7 +65,9 @@ function updateLessonSelectionUi() {
   const remove = document.querySelector('#lessonDeleteSelectedBtn');
   if (remove) {
     remove.disabled = selected.size === 0;
-    remove.textContent = selected.size ? `🗑 Xoá đã chọn (${selected.size})` : '🗑 Xoá đã chọn';
+    // #161: the statically rendered button carries a `data-icon` hook; writing
+    // textContent here erased it, so the icon comes back as markup.
+    remove.innerHTML = uiIcon('trash', '', 13) + ' Xoá đã chọn' + (selected.size ? ` (${selected.size})` : '');
   }
   const clear = document.querySelector('#lessonClearSelectionBtn');
   if (clear) clear.disabled = selected.size === 0;
@@ -92,7 +94,7 @@ function updateLibrarySelectionUi() {
   const remove = document.querySelector('#libraryDeleteSelectedBtn');
   if (remove) {
     remove.disabled = selected.size === 0;
-    remove.textContent = selected.size ? `🗑 Xoá đã chọn (${selected.size})` : '🗑 Xoá đã chọn';
+    remove.innerHTML = uiIcon('trash', '', 13) + ' Xoá đã chọn' + (selected.size ? ` (${selected.size})` : '');
   }
   const clear = document.querySelector('#libraryClearSelectionBtn');
   if (clear) clear.disabled = selected.size === 0;
@@ -118,7 +120,7 @@ function updateSessionSelectionUi() {
   const remove = document.querySelector('#sessionDeleteSelectedBtn');
   if (remove) {
     remove.disabled = selected.size === 0;
-    remove.textContent = selected.size ? `🗑 Xoá đã chọn (${selected.size})` : '🗑 Xoá đã chọn';
+    remove.innerHTML = uiIcon('trash', '', 13) + ' Xoá đã chọn' + (selected.size ? ` (${selected.size})` : '');
   }
   const clear = document.querySelector('#sessionClearSelectionBtn');
   if (clear) clear.disabled = selected.size === 0;

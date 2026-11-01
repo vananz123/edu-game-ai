@@ -78,7 +78,7 @@ function editorAiButton(itemId, hidden = false) {
   if (!editorAiContext) return '';
   const position = editorAiContext.itemIds.indexOf(String(itemId || ''));
   if (position < 0) return '';
-  return `<button class="text-link ${hidden ? 'hidden' : ''}" data-ai-regenerate="${position + 1}" title="AI viết lại riêng mục này từ giáo án; các mục khác và chỉnh sửa chưa lưu vẫn giữ nguyên.">🔄 Tạo lại</button>`;
+  return `<button class="text-link inline-flex items-center gap-[5px] ${hidden ? 'hidden' : ''}" data-ai-regenerate="${position + 1}" title="AI viết lại riêng mục này từ giáo án; các mục khác và chỉnh sửa chưa lưu vẫn giữ nguyên.">${uiIcon('refresh-cw', '', 13)} Tạo lại</button>`;
 }
 
 function editorAiErrorText(error) {
@@ -111,13 +111,13 @@ function editorSetBusyUi(root, activeButton, busy) {
     if (!busy) {
       btn.disabled = false;
       btn.removeAttribute('data-ai-cancel');
-      btn.textContent = '🔄 Tạo lại';
+      btn.innerHTML = uiIcon('refresh-cw', '', 13) + ' Tạo lại';
       return;
     }
     if (btn === activeButton) {
       btn.disabled = false;
       btn.dataset.aiCancel = '1';
-      btn.textContent = '✕ Huỷ';
+      btn.innerHTML = uiIcon('x', '', 13) + ' Huỷ';
     } else {
       btn.disabled = true;
     }

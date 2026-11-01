@@ -39,6 +39,24 @@ const ICON_GROUPS = {
   ],
   extra: [
     'shield-alert', 'mountain', 'fish', 'bird', 'bug', 'utility-pole'
+  ],
+  // Chrome (DECISIONS #161): the icons that decorate controls and structure —
+  // sidebar nav, topbar buttons, page headers, tabs, empty states, toasts, status
+  // chips. Emoji that ARE game content (item icons, treasure markers, race HUD)
+  // are deliberately not in here; they stay emoji.
+  // Names must not repeat across groups: the generated ICON_NODES object literal
+  // would carry duplicate keys and `npm run check` fails on them (TS1117).
+  chrome: [
+    'graduation-cap', 'wand-sparkles', 'shapes', 'file-text', 'folder', 'folder-open',
+    'circle-fading-arrow-up', 'panel-left', 'ellipsis-vertical', 'bell', 'circle-question-mark',
+    'loader', 'loader-circle', 'hourglass', 'square', 'refresh-cw', 'rotate-cw',
+    'arrow-up', 'arrow-down', 'arrow-up-right', 'chevron-right', 'chevron-down', 'chevron-up', 'chevron-left',
+    'circle-plus', 'minus', 'save', 'copy', 'external-link', 'circle-check', 'circle-x',
+    'circle-alert', 'triangle-alert', 'info', 'circle-dot', 'circle', 'ban', 'wifi-off',
+    'bot', 'cloud', 'image', 'camera', 'link', 'lock', 'message-square', 'type', 'user',
+    'monitor', 'smartphone', 'keyboard', 'layers', 'list', 'list-checks', 'list-filter',
+    'pin', 'flag', 'gauge', 'activity', 'timer', 'mouse-pointer-click', 'eye', 'eye-off',
+    'chart-column', 'notebook', 'bookmark', 'archive', 'hard-hat', 'mouse'
   ]
 };
 
@@ -69,8 +87,17 @@ async function main() {
   if (!res.ok) throw new Error(`Cannot download Lucide ${LUCIDE_VERSION}: HTTP ${res.status}`);
   const source = await res.text();
 
-  const all = [...ICON_GROUPS.categories, ...ICON_GROUPS.interface, ...ICON_GROUPS.extra];
+  // Derived from ICON_GROUPS, so adding a group cannot silently drop its icons
+  // from the fetch list (which used to be a hardcoded triple).
+  const all = Object.values(ICON_GROUPS).flat();
   const unique = [...new Set(all)];
+  const duplicates = all.filter((n, i) => all.indexOf(n) !== i);
+  if (duplicates.length) {
+    // ICON_NODES would be written with the same key twice and `tsc` rejects it.
+    console.error(`ERROR: icon name appears in more than one group: ${[...new Set(duplicates)].join(', ')}`);
+    console.error('Keep each Lucide id in exactly one group.');
+    process.exit(1);
+  }
 
   const found = [];
   const missing = [];

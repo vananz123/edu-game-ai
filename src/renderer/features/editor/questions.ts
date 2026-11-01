@@ -19,10 +19,10 @@ function questionEditor(q, i, allQuestions = []) {
         <option value="short-answer" ${type==='short-answer'?'selected':''}>Trả lời ngắn</option>
       </select>
       ${editorAiButton(q.id)}
-      <button class="text-link danger-text" data-remove-question>✕ Xóa câu</button>
-      <button class="text-link" data-copy-question>📋 Sao chép</button>
-      <button class="text-link q-move" data-move-question-up>↑</button>
-      <button class="text-link q-move" data-move-question-down>↓</button>
+      <button class="text-link danger-text inline-flex items-center gap-[5px]" data-remove-question>${uiIcon('trash', '', 13)} Xóa câu</button>
+      <button class="text-link inline-flex items-center gap-[5px]" data-copy-question>${uiIcon('copy', '', 13)} Sao chép</button>
+      <button class="text-link q-move" data-move-question-up>${uiIcon('arrow-up', '', 14)}</button>
+      <button class="text-link q-move" data-move-question-down>${uiIcon('arrow-down', '', 14)}</button>
     </div>
     <textarea data-field="prompt" rows="2" placeholder="Nội dung câu hỏi">${escapeHtml(q.prompt||'')}</textarea>
     <div class="scenario-question-fields ${isScenario?'':'hidden'}">
@@ -32,7 +32,7 @@ function questionEditor(q, i, allQuestions = []) {
     </div>
     <div class="editor-options ${isMC?'':'hidden'}">
       ${options.map((o,j)=>editorOption(o,j,isScenario,q,allQuestions)).join('')}
-      <button class="btn btn-secondary btn-small add-option" data-question-index="${i}">＋ Thêm phương án</button>
+      <button class="btn btn-secondary btn-small add-option" data-question-index="${i}">${uiIcon('plus', '', 13)} Thêm phương án</button>
     </div>
     <div class="text-answer-fields ${isText?'':'hidden'}">
       <label>ĐÁP ÁN ĐÚNG (VĂN BẢN)</label>
@@ -81,8 +81,8 @@ function editorAssetFieldsHtml(item, options) {
   const iconName = EDITOR_ICON_NAMES.has(rawIcon) ? rawIcon : '';
   const illustration = typeof source.illustrationAssetId === 'string' ? source.illustrationAssetId.trim() : '';
   const chips = compact ? '' : `<span class="editor-asset-chip" title="Lĩnh vực nội dung của mục này">${escapeHtml(EDITOR_CATEGORY_LABEL[category] || category)}</span>
-    ${illustration === 'none' ? `<span class="editor-asset-chip" title="Câu hỏi này không dùng ảnh minh hoạ">🚫 Không ảnh</span>` : ''}
-    ${illustration && illustration !== 'none' ? `<span class="editor-asset-chip" title="Minh họa đã gán">🖼 ${escapeHtml(illustration)}</span>` : ''}`;
+    ${illustration === 'none' ? `<span class="editor-asset-chip" title="Câu hỏi này không dùng ảnh minh hoạ">${uiIcon('ban', '', 11)} Không ảnh</span>` : ''}
+    ${illustration && illustration !== 'none' ? `<span class="editor-asset-chip" title="Minh họa đã gán">${uiIcon('image', '', 11)} ${escapeHtml(illustration)}</span>` : ''}`;
   return `<div class="editor-item-assets${compact ? ' is-compact' : ''}">
     ${chips}
     <input type="hidden" data-field="contentCategory" value="${escapeHtml(category === 'general' ? '' : category)}">
@@ -100,7 +100,7 @@ let editorPageState = null;
  *
  * The manual path only carried `illustrationAssetId` in hidden inputs, so a game created
  * here could neither get a picture nor change one. This control is the one step 5 uses
- * (#124): thumb, source badge, "📷 Tải ảnh lên", the built-in choices and "Tự động". It
+ * (#124): thumb, source badge, "Tải ảnh lên", the built-in choices and "Tự động". It
  * writes into the same hidden input the save path already reads, so saving is unchanged.
  */
 function editorItemArtHtml(item) {
@@ -139,12 +139,12 @@ function editorItemArtHtml(item) {
     <div class="editor-art-controls">
       <div class="editor-art-badge" data-editor-art-badge>${escapeHtml(badge)}</div>
       <div class="editor-art-buttons">
-        <button type="button" class="btn btn-secondary btn-small" data-editor-art-upload title="Chọn ảnh PNG/JPG/WEBP/GIF từ máy">📷 Tải ảnh lên</button>
+        <button type="button" class="btn btn-secondary btn-small" data-editor-art-upload title="Chọn ảnh PNG/JPG/WEBP/GIF từ máy">${uiIcon('camera', '', 13)} Tải ảnh lên</button>
         <select data-editor-art-pick data-art-picker title="Chọn hình minh hoạ có sẵn">${options}</select>
-        <button type="button" class="btn btn-secondary btn-small" data-editor-art-reset>↺ Tự động</button>
-        <button type="button" class="btn btn-secondary btn-small" data-editor-art-remove title="Bỏ hẳn ảnh minh hoạ của riêng câu hỏi này"${isNone ? ' disabled' : ''}>✕ Bỏ ảnh</button>
+        <button type="button" class="btn btn-secondary btn-small" data-editor-art-reset>${uiIcon('rotate-ccw', '', 13)} Tự động</button>
+        <button type="button" class="btn btn-secondary btn-small" data-editor-art-remove title="Bỏ hẳn ảnh minh hoạ của riêng câu hỏi này"${isNone ? ' disabled' : ''}>${uiIcon('ban', '', 13)} Bỏ ảnh</button>
       </div>
-      <div class="editor-art-hint">Minh hoạ đi kèm câu hỏi này. Ảnh tải lên được lưu trên máy và chơi được khi không có mạng. “✕ Bỏ ảnh” tắt hình riêng câu hỏi này; “↺ Tự động” trả lại hình theo chủ đề.</div>
+      <div class="editor-art-hint">Minh hoạ đi kèm câu hỏi này. Ảnh tải lên được lưu trên máy và chơi được khi không có mạng. “Bỏ ảnh” tắt hình riêng câu hỏi này; “Tự động” trả lại hình theo chủ đề.</div>
     </div>
   </div>`;
 }
@@ -320,7 +320,7 @@ function editorOption(option, index, isScenario, question, allQuestions) {
   const score = option.scenarioScore || {};
   return `<div class="editor-option">
     <input data-option-id="${escapeHtml(option.id)}" value="${escapeHtml(option.text||'')}" placeholder="Hành động ${index+1}">
-    <button class="text-link danger-text" data-remove-option>✕</button>
+    <button class="text-link danger-text" data-remove-option>${uiIcon('x', '', 14)}</button>
     ${isScenario ? `<div class="scenario-option-fields">
       <input data-option-feedback value="${escapeHtml(option.feedback||'')}" placeholder="Phản hồi và hậu quả của lựa chọn">
       <label>Nhánh</label><select data-option-next><option value="__next__" ${nextValue==='__next__'?'selected':''}>Tiếp tục theo thứ tự</option>${targets}<option value="__end__" ${nextValue==='__end__'?'selected':''}>Kết thúc nhánh</option></select>

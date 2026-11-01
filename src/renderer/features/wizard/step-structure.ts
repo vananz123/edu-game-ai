@@ -419,7 +419,7 @@ function wizardStructureTreeRow(node, states, collapsed, depth, rootId) {
   const isCollapsed = collapsed.has(node.id);
   const isRoot = node.id === rootId;
   const caret = children.length
-    ? `<button type="button" class="wizard-tree-caret" data-wizard-action="toggle-section" data-section-id="${escapeHtml(node.id)}" aria-expanded="${isCollapsed ? 'false' : 'true'}" aria-label="${isCollapsed ? 'Mở rộng' : 'Thu gọn'}">${isCollapsed ? '▸' : '▾'}</button>`
+    ? `<button type="button" class="wizard-tree-caret" data-wizard-action="toggle-section" data-section-id="${escapeHtml(node.id)}" aria-expanded="${isCollapsed ? 'false' : 'true'}" aria-label="${isCollapsed ? 'Mở rộng' : 'Thu gọn'}"><span data-icon="${isCollapsed ? 'chevron-right' : 'chevron-down'}" data-icon-size="12"></span></button>`
     : '<span class="wizard-tree-caret is-leaf" aria-hidden="true">·</span>';
   // The root row is the document itself: it is not selectable (`selectable` is
   // forced off for `tree.root.id` in `wizardStructureNodeStates`), so it must
@@ -459,11 +459,11 @@ function wizardStructurePreviewPanel() {
   const kept = preview.preserved || {};
   const warnings = (preview.warnings || []).map(text => `<li>${escapeHtml(text)}</li>`).join('');
   const heading = preview.truncated
-    ? '⚠ Phần nội dung sẽ gửi cho AI (đã phải lược bớt)'
-    : '✓ Phần nội dung sẽ gửi cho AI';
+    ? '<span data-icon="triangle-alert" data-icon-size="13"></span> Phần nội dung sẽ gửi cho AI (đã phải lược bớt)'
+    : '<span data-icon="circle-check" data-icon-size="13"></span> Phần nội dung sẽ gửi cho AI';
   return `<div class="wizard-tree-preview" data-structure-preview data-structure-truncated="${preview.truncated ? 'true' : 'false'}">
     <div class="wizard-tree-preview-head">
-      <strong>${heading}</strong>
+      <strong class="inline-flex items-center gap-[6px]">${heading}</strong>
       <span class="wizard-tree-figures">${Number(preview.chars || 0).toLocaleString('vi-VN')} ký tự · ~${Number(preview.estimatedTokens || 0).toLocaleString('vi-VN')} token (ước tính) · ${selectedCount.toLocaleString('vi-VN')} phần đã chọn${contextCount ? ` · ${contextCount} tiêu đề ngữ cảnh` : ''}</span>
     </div>
     <div class="wizard-tree-figures mb-[8px]">Giữ nguyên: ${Number(kept.tables || 0)} dòng bảng · ${Number(kept.questions || 0)} câu hỏi · ${Number(kept.answers || 0)} đáp án · ${Number(kept.examples || 0)} ví dụ · ${Number(kept.formulas || 0)} công thức</div>

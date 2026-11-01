@@ -504,6 +504,418 @@ export const ICON_NODES: Readonly<Record<string, IconNode>> = {
   ["path", { d: "M17 3v2" }],
   ["path", { d: "M21 3v2" }],
   ["path", { d: "m19 5-7 7-7-7" }]
+],  // chrome
+  "graduation-cap": [
+  [
+    "path",
+    {
+      d: "M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z"
+    }
+  ],
+  ["path", { d: "M22 10v6" }],
+  ["path", { d: "M6 12.5V16a6 3 0 0 0 12 0v-3.5" }]
+],
+  "wand-sparkles": [
+  [
+    "path",
+    {
+      d: "m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72"
+    }
+  ],
+  ["path", { d: "m14 7 3 3" }],
+  ["path", { d: "M5 6v4" }],
+  ["path", { d: "M19 14v4" }],
+  ["path", { d: "M10 2v2" }],
+  ["path", { d: "M7 8H3" }],
+  ["path", { d: "M21 16h-4" }],
+  ["path", { d: "M11 3H9" }]
+],
+  "shapes": [
+  [
+    "path",
+    {
+      d: "M8.3 10a.7.7 0 0 1-.626-1.079L11.4 3a.7.7 0 0 1 1.198-.043L16.3 8.9a.7.7 0 0 1-.572 1.1Z"
+    }
+  ],
+  ["rect", { x: "3", y: "14", width: "7", height: "7", rx: "1" }],
+  ["circle", { cx: "17.5", cy: "17.5", r: "3.5" }]
+],
+  "file-text": [
+  [
+    "path",
+    {
+      d: "M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"
+    }
+  ],
+  ["path", { d: "M14 2v5a1 1 0 0 0 1 1h5" }],
+  ["path", { d: "M10 9H8" }],
+  ["path", { d: "M16 13H8" }],
+  ["path", { d: "M16 17H8" }]
+],
+  "folder": [
+  [
+    "path",
+    {
+      d: "M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"
+    }
+  ]
+],
+  "folder-open": [
+  [
+    "path",
+    {
+      d: "m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"
+    }
+  ]
+],
+  "circle-fading-arrow-up": [
+  ["path", { d: "M12 2a10 10 0 0 1 7.38 16.75" }],
+  ["path", { d: "m16 12-4-4-4 4" }],
+  ["path", { d: "M12 16V8" }],
+  ["path", { d: "M2.5 8.875a10 10 0 0 0-.5 3" }],
+  ["path", { d: "M2.83 16a10 10 0 0 0 2.43 3.4" }],
+  ["path", { d: "M4.636 5.235a10 10 0 0 1 .891-.857" }],
+  ["path", { d: "M8.644 21.42a10 10 0 0 0 7.631-.38" }]
+],
+  "panel-left": [
+  ["rect", { width: "18", height: "18", x: "3", y: "3", rx: "2" }],
+  ["path", { d: "M9 3v18" }]
+],
+  "ellipsis-vertical": [
+  ["circle", { cx: "12", cy: "12", r: "1" }],
+  ["circle", { cx: "12", cy: "5", r: "1" }],
+  ["circle", { cx: "12", cy: "19", r: "1" }]
+],
+  "bell": [
+  ["path", { d: "M10.268 21a2 2 0 0 0 3.464 0" }],
+  [
+    "path",
+    {
+      d: "M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"
+    }
+  ]
+],
+  "circle-question-mark": [
+  ["circle", { cx: "12", cy: "12", r: "10" }],
+  ["path", { d: "M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" }],
+  ["path", { d: "M12 17h.01" }]
+],
+  "loader": [
+  ["path", { d: "M12 2v4" }],
+  ["path", { d: "m16.2 7.8 2.9-2.9" }],
+  ["path", { d: "M18 12h4" }],
+  ["path", { d: "m16.2 16.2 2.9 2.9" }],
+  ["path", { d: "M12 18v4" }],
+  ["path", { d: "m4.9 19.1 2.9-2.9" }],
+  ["path", { d: "M2 12h4" }],
+  ["path", { d: "m4.9 4.9 2.9 2.9" }]
+],
+  "loader-circle": [["path", { d: "M21 12a9 9 0 1 1-6.219-8.56" }]],
+  "hourglass": [
+  ["path", { d: "M5 22h14" }],
+  ["path", { d: "M5 2h14" }],
+  ["path", { d: "M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22" }],
+  ["path", { d: "M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2" }]
+],
+  "square": [["rect", { width: "18", height: "18", x: "3", y: "3", rx: "2" }]],
+  "refresh-cw": [
+  ["path", { d: "M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" }],
+  ["path", { d: "M21 3v5h-5" }],
+  ["path", { d: "M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" }],
+  ["path", { d: "M8 16H3v5" }]
+],
+  "rotate-cw": [
+  ["path", { d: "M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" }],
+  ["path", { d: "M21 3v5h-5" }]
+],
+  "arrow-up": [
+  ["path", { d: "m5 12 7-7 7 7" }],
+  ["path", { d: "M12 19V5" }]
+],
+  "arrow-down": [
+  ["path", { d: "M12 5v14" }],
+  ["path", { d: "m19 12-7 7-7-7" }]
+],
+  "arrow-up-right": [
+  ["path", { d: "M7 7h10v10" }],
+  ["path", { d: "M7 17 17 7" }]
+],
+  "chevron-right": [["path", { d: "m9 18 6-6-6-6" }]],
+  "chevron-down": [["path", { d: "m6 9 6 6 6-6" }]],
+  "chevron-up": [["path", { d: "m18 15-6-6-6 6" }]],
+  "chevron-left": [["path", { d: "m15 18-6-6 6-6" }]],
+  "circle-plus": [
+  ["circle", { cx: "12", cy: "12", r: "10" }],
+  ["path", { d: "M8 12h8" }],
+  ["path", { d: "M12 8v8" }]
+],
+  "minus": [["path", { d: "M5 12h14" }]],
+  "save": [
+  [
+    "path",
+    {
+      d: "M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"
+    }
+  ],
+  ["path", { d: "M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7" }],
+  ["path", { d: "M7 3v4a1 1 0 0 0 1 1h7" }]
+],
+  "copy": [
+  ["rect", { width: "14", height: "14", x: "8", y: "8", rx: "2", ry: "2" }],
+  ["path", { d: "M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" }]
+],
+  "external-link": [
+  ["path", { d: "M15 3h6v6" }],
+  ["path", { d: "M10 14 21 3" }],
+  ["path", { d: "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" }]
+],
+  "circle-check": [
+  ["circle", { cx: "12", cy: "12", r: "10" }],
+  ["path", { d: "m16 9-5.5 5.5L8 12" }]
+],
+  "circle-x": [
+  ["circle", { cx: "12", cy: "12", r: "10" }],
+  ["path", { d: "m15 9-6 6" }],
+  ["path", { d: "m9 9 6 6" }]
+],
+  "circle-alert": [
+  ["circle", { cx: "12", cy: "12", r: "10" }],
+  ["line", { x1: "12", x2: "12", y1: "8", y2: "12" }],
+  ["line", { x1: "12", x2: "12.01", y1: "16", y2: "16" }]
+],
+  "triangle-alert": [
+  ["path", { d: "m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" }],
+  ["path", { d: "M12 9v4" }],
+  ["path", { d: "M12 17h.01" }]
+],
+  "info": [
+  ["circle", { cx: "12", cy: "12", r: "10" }],
+  ["path", { d: "M12 16v-4" }],
+  ["path", { d: "M12 8h.01" }]
+],
+  "circle-dot": [
+  ["circle", { cx: "12", cy: "12", r: "1" }],
+  ["circle", { cx: "12", cy: "12", r: "10" }]
+],
+  "circle": [["circle", { cx: "12", cy: "12", r: "10" }]],
+  "ban": [
+  ["circle", { cx: "12", cy: "12", r: "10" }],
+  ["path", { d: "M4.929 4.929 19.07 19.071" }]
+],
+  "wifi-off": [
+  ["path", { d: "M12 20h.01" }],
+  ["path", { d: "M8.5 16.429a5 5 0 0 1 7 0" }],
+  ["path", { d: "M5 12.859a10 10 0 0 1 5.17-2.69" }],
+  ["path", { d: "M19 12.859a10 10 0 0 0-2.007-1.523" }],
+  ["path", { d: "M2 8.82a15 15 0 0 1 4.177-2.643" }],
+  ["path", { d: "M22 8.82a15 15 0 0 0-11.288-3.764" }],
+  ["path", { d: "m2 2 20 20" }]
+],
+  "bot": [
+  ["path", { d: "M12 8V4H8" }],
+  ["rect", { width: "16", height: "12", x: "4", y: "8", rx: "2" }],
+  ["path", { d: "M2 14h2" }],
+  ["path", { d: "M20 14h2" }],
+  ["path", { d: "M15 13v2" }],
+  ["path", { d: "M9 13v2" }]
+],
+  "cloud": [["path", { d: "M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" }]],
+  "image": [
+  ["rect", { width: "18", height: "18", x: "3", y: "3", rx: "2", ry: "2" }],
+  ["circle", { cx: "9", cy: "9", r: "2" }],
+  ["path", { d: "m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" }]
+],
+  "camera": [
+  [
+    "path",
+    {
+      d: "M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z"
+    }
+  ],
+  ["circle", { cx: "12", cy: "13", r: "3" }]
+],
+  "link": [
+  ["path", { d: "M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" }],
+  ["path", { d: "M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" }]
+],
+  "lock": [
+  ["rect", { width: "18", height: "11", x: "3", y: "11", rx: "2", ry: "2" }],
+  ["path", { d: "M7 11V7a5 5 0 0 1 10 0v4" }]
+],
+  "message-square": [
+  [
+    "path",
+    {
+      d: "M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"
+    }
+  ]
+],
+  "type": [
+  ["path", { d: "M12 4v16" }],
+  ["path", { d: "M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2" }],
+  ["path", { d: "M9 20h6" }]
+],
+  "user": [
+  ["path", { d: "M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" }],
+  ["circle", { cx: "12", cy: "7", r: "4" }]
+],
+  "monitor": [
+  ["rect", { width: "20", height: "14", x: "2", y: "3", rx: "2" }],
+  ["line", { x1: "8", x2: "16", y1: "21", y2: "21" }],
+  ["line", { x1: "12", x2: "12", y1: "17", y2: "21" }]
+],
+  "smartphone": [
+  ["rect", { width: "14", height: "20", x: "5", y: "2", rx: "2", ry: "2" }],
+  ["path", { d: "M12 18h.01" }]
+],
+  "keyboard": [
+  ["path", { d: "M10 8h.01" }],
+  ["path", { d: "M12 12h.01" }],
+  ["path", { d: "M14 8h.01" }],
+  ["path", { d: "M16 12h.01" }],
+  ["path", { d: "M18 8h.01" }],
+  ["path", { d: "M6 8h.01" }],
+  ["path", { d: "M7 16h10" }],
+  ["path", { d: "M8 12h.01" }],
+  ["rect", { width: "20", height: "16", x: "2", y: "4", rx: "2" }]
+],
+  "layers": [
+  [
+    "path",
+    {
+      d: "M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"
+    }
+  ],
+  ["path", { d: "M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12" }],
+  ["path", { d: "M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17" }]
+],
+  "list": [
+  ["path", { d: "M3 5h.01" }],
+  ["path", { d: "M3 12h.01" }],
+  ["path", { d: "M3 19h.01" }],
+  ["path", { d: "M8 5h13" }],
+  ["path", { d: "M8 12h13" }],
+  ["path", { d: "M8 19h13" }]
+],
+  "list-checks": [
+  ["path", { d: "M13 5h8" }],
+  ["path", { d: "M13 12h8" }],
+  ["path", { d: "M13 19h8" }],
+  ["path", { d: "m3 17 2 2 4-4" }],
+  ["path", { d: "m3 7 2 2 4-4" }]
+],
+  "list-filter": [
+  ["path", { d: "M2 5h20" }],
+  ["path", { d: "M6 12h12" }],
+  ["path", { d: "M9 19h6" }]
+],
+  "pin": [
+  ["path", { d: "M12 17v5" }],
+  [
+    "path",
+    {
+      d: "M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"
+    }
+  ]
+],
+  "flag": [
+  [
+    "path",
+    {
+      d: "M4 22V4a1 1 0 0 1 .4-.8A6 6 0 0 1 8 2c3 0 5 2 7.333 2q2 0 3.067-.8A1 1 0 0 1 20 4v10a1 1 0 0 1-.4.8A6 6 0 0 1 16 16c-3 0-5-2-8-2a6 6 0 0 0-4 1.528"
+    }
+  ]
+],
+  "gauge": [
+  ["path", { d: "m12 14 4-4" }],
+  ["path", { d: "M3.34 19a10 10 0 1 1 17.32 0" }]
+],
+  "activity": [
+  [
+    "path",
+    {
+      d: "M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"
+    }
+  ]
+],
+  "timer": [
+  ["line", { x1: "10", x2: "14", y1: "2", y2: "2" }],
+  ["line", { x1: "12", x2: "15", y1: "14", y2: "11" }],
+  ["circle", { cx: "12", cy: "14", r: "8" }]
+],
+  "mouse-pointer-click": [
+  ["path", { d: "M14 4.1 12 6" }],
+  ["path", { d: "m5.1 8-2.9-.8" }],
+  ["path", { d: "m6 12-1.9 2" }],
+  ["path", { d: "M7.2 2.2 8 5.1" }],
+  [
+    "path",
+    {
+      d: "M9.037 9.69a.498.498 0 0 1 .653-.653l11 4.5a.5.5 0 0 1-.074.949l-4.349 1.041a1 1 0 0 0-.74.739l-1.04 4.35a.5.5 0 0 1-.95.074z"
+    }
+  ]
+],
+  "eye": [
+  [
+    "path",
+    {
+      d: "M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"
+    }
+  ],
+  ["circle", { cx: "12", cy: "12", r: "3" }]
+],
+  "eye-off": [
+  [
+    "path",
+    {
+      d: "M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"
+    }
+  ],
+  ["path", { d: "M14.084 14.158a3 3 0 0 1-4.242-4.242" }],
+  [
+    "path",
+    {
+      d: "M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"
+    }
+  ],
+  ["path", { d: "m2 2 20 20" }]
+],
+  "chart-column": [
+  ["path", { d: "M3 3v16a2 2 0 0 0 2 2h16" }],
+  ["path", { d: "M18 17V9" }],
+  ["path", { d: "M13 17V5" }],
+  ["path", { d: "M8 17v-3" }]
+],
+  "notebook": [
+  ["path", { d: "M2 6h4" }],
+  ["path", { d: "M2 10h4" }],
+  ["path", { d: "M2 14h4" }],
+  ["path", { d: "M2 18h4" }],
+  ["rect", { width: "16", height: "20", x: "4", y: "2", rx: "2" }],
+  ["path", { d: "M16 2v20" }]
+],
+  "bookmark": [
+  [
+    "path",
+    {
+      d: "M17 3a2 2 0 0 1 2 2v15a1 1 0 0 1-1.496.868l-4.512-2.578a2 2 0 0 0-1.984 0l-4.512 2.578A1 1 0 0 1 5 20V5a2 2 0 0 1 2-2z"
+    }
+  ]
+],
+  "archive": [
+  ["rect", { width: "20", height: "5", x: "2", y: "3", rx: "1" }],
+  ["path", { d: "M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" }],
+  ["path", { d: "M10 12h4" }]
+],
+  "hard-hat": [
+  ["path", { d: "M10 10V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v5" }],
+  ["path", { d: "M14 6a6 6 0 0 1 6 6v3" }],
+  ["path", { d: "M4 15v-3a6 6 0 0 1 6-6" }],
+  ["rect", { x: "2", y: "15", width: "20", height: "4", rx: "1" }]
+],
+  "mouse": [
+  ["rect", { x: "5", y: "2", width: "14", height: "20", rx: "7" }],
+  ["path", { d: "M12 6v4" }]
 ],
 };
 
@@ -513,6 +925,7 @@ export const ICON_GROUPS: Readonly<Record<string, readonly string[]>> = Object.f
   categories: Object.freeze(["paw-print","leaf","rocket","heart-pulse","car","shield-check","recycle","landmark","map","briefcase","trophy","file-music","palette","calculator","languages","flask-conical","cpu","stethoscope","users","house","cloud-sun","apple","box","waves-horizontal"]),
   interface: Object.freeze(["layout-grid","book-open","lightbulb","star","check","x","arrow-right","arrow-left","play","pause","rotate-ccw","skip-forward","volume-2","volume-x","maximize","minimize","search","settings","library","pencil","trash","plus","download","upload","clock","target","brain","zap","sparkles","gift"]),
   extra: Object.freeze(["shield-alert","mountain","fish","bird","bug","utility-pole"]),
+  chrome: Object.freeze(["graduation-cap","wand-sparkles","shapes","file-text","folder","folder-open","circle-fading-arrow-up","panel-left","ellipsis-vertical","bell","circle-question-mark","loader","loader-circle","hourglass","square","refresh-cw","rotate-cw","arrow-up","arrow-down","arrow-up-right","chevron-right","chevron-down","chevron-up","chevron-left","circle-plus","minus","save","copy","external-link","circle-check","circle-x","circle-alert","triangle-alert","info","circle-dot","circle","ban","wifi-off","bot","cloud","image","camera","link","lock","message-square","type","user","monitor","smartphone","keyboard","layers","list","list-checks","list-filter","pin","flag","gauge","activity","timer","mouse-pointer-click","eye","eye-off","chart-column","notebook","bookmark","archive","hard-hat","mouse"]),
 });
 
 /** Returns the node array for an icon id, or null for anything unknown. Never throws. */

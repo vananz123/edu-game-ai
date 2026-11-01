@@ -270,7 +270,7 @@ async function findTarget() {
     const disk = await window.eduGame.getSettings();
     push('teachingStyle persisted via settings:get', disk.preferences?.teachingStyle?.tone === 'dí dỏm' && disk.preferences?.teachingStyle?.notes === 'SMOKE-NOTES-2026', JSON.stringify(disk.preferences?.teachingStyle));
     push('preferences kept other keys', (before.teachingStyle ? true : Object.keys(state.settings.preferences || {}).length >= 1), Object.keys(state.settings.preferences || {}).join(','));
-    navigate('home'); navigate('settings');
+    navigate('library'); navigate('settings');
     await new Promise(r => setTimeout(r, 250));
     push('fields refilled after re-render', document.getElementById('settingStyleNotes').value === 'SMOKE-NOTES-2026' && document.getElementById('settingStyleTone').value === 'dí dỏm', '');
     if (state.settings.ai && state.settings.ai.mode === 'offline') {
@@ -285,7 +285,7 @@ async function findTarget() {
     await window.eduGame.saveSettings({ ...state.settings, preferences: before });
     state.settings = await window.eduGame.getSettings();
     push('settings fully restored', JSON.stringify(state.settings.preferences) === JSON.stringify(before), '');
-    navigate('home'); navigate('settings');
+    navigate('library'); navigate('settings');
     await new Promise(r => setTimeout(r, 250));
     push('form refilled with restored values (no smoke leftovers)',
       document.getElementById('settingStyleNotes').value === ((before.teachingStyle && before.teachingStyle.notes) || '') &&
@@ -302,8 +302,8 @@ async function findTarget() {
     const g = state.db.games.find(g => g.title === ${JSON.stringify(TITLE)});
     if (g) { await window.eduGame.deleteGame(g.id); await refreshDb(); }
     push('smoke game deleted', !state.db.games.find(g => g.title === ${JSON.stringify(TITLE)}), '');
-    navigate('home');
-    push('home page after tests', state.page === 'home', state.page);
+    navigate('library');
+    push('library page after tests', state.page === 'library', state.page);
     return out;
   })()`);
   t7.forEach(r => check('T7-cleanup ' + r[0], r[1], r[2]));

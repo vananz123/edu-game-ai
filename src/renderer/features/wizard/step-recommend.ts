@@ -53,8 +53,8 @@ function renderWizardRecommendFromBank() {
     ${blockedNote}
     ${s.selectedGameType ? `<div class="field-hint mt-[10px]" data-wizard-selected-type="1">Đang chọn: <strong>${escapeHtml(wizardGameMeta(s.selectedGameType).label)}</strong>. Bấm “Tạo trò chơi” để hoàn tất — câu hỏi của bạn được dùng nguyên vẹn, không qua AI.</div>` : ''}
     <div class="publish-actions">
-      <button class="btn btn-secondary" data-wizard-action="back">← Nhập giáo án</button>
-      <button class="btn btn-primary" id="wizardNextBtn" data-wizard-action="next"${s.selectedGameType ? '' : ' disabled'}${s.busy ? ' disabled' : ''}>${s.busy === 'save' ? '⏳ Đang tạo trò chơi…' : '✦ Tạo trò chơi →'}</button>
+      <button class="btn btn-secondary" data-wizard-action="back"><span data-icon="arrow-left" data-icon-size="13"></span> Nhập giáo án</button>
+      <button class="btn btn-primary" id="wizardNextBtn" data-wizard-action="next"${s.selectedGameType ? '' : ' disabled'}${s.busy ? ' disabled' : ''}>${s.busy === 'save' ? '<span data-icon="loader-circle" data-icon-size="13" data-icon-class="animate-spin"></span> Đang tạo trò chơi…' : '<span data-icon="wand-sparkles" data-icon-size="13"></span> Tạo trò chơi <span data-icon="arrow-right" data-icon-size="13"></span>'}</button>
     </div>
   </section>`;
 }
@@ -123,7 +123,7 @@ function renderWizardRecommend() {
   if (!analysis) {
     return `<section class="form-panel" data-wizard-step-body="recommend">${header}
       <div class="field-hint">Chưa có phân tích. Hãy quay lại bước phân tích giáo án.</div>
-      <div class="publish-actions"><button class="btn btn-secondary" data-wizard-action="back">← Phân tích giáo án</button></div>
+      <div class="publish-actions"><button class="btn btn-secondary" data-wizard-action="back"><span data-icon="arrow-left" data-icon-size="13"></span> Phân tích giáo án</button></div>
     </section>`;
   }
 
@@ -132,9 +132,9 @@ function renderWizardRecommend() {
       <div class="field"><strong class="text-[12px] block mb-[6px]">Chủ đề: ${escapeHtml(analysis.topic || '—')}</strong>
         <small class="block text-[11px] text-[#788196]">${analysis.objectives.length} mục tiêu · ${analysis.keyConcepts.length} kiến thức trọng tâm</small></div>
       <div class="publish-actions">
-        <button class="btn btn-primary" id="wizardRecommendBtn" data-wizard-action="recommend"${loading ? ' disabled' : ''}>${loading ? 'Đang chọn thể loại…' : '✦ Gợi ý thể loại phù hợp'}</button>
+        <button class="btn btn-primary" id="wizardRecommendBtn" data-wizard-action="recommend"${loading ? ' disabled' : ''}>${loading ? 'Đang chọn thể loại…' : '<span data-icon="wand-sparkles" data-icon-size="13"></span> Gợi ý thể loại phù hợp'}</button>
         ${loading ? '<button class="btn btn-secondary" data-wizard-action="cancel">Huỷ</button>' : ''}
-        <button class="btn btn-secondary" data-wizard-action="back">← Xem lại phân tích</button>
+        <button class="btn btn-secondary" data-wizard-action="back"><span data-icon="arrow-left" data-icon-size="13"></span> Xem lại phân tích</button>
       </div>
       ${loading ? '<div class="field-hint" data-wizard-loading="recommend">Đang đối chiếu mục tiêu, kiến thức trọng tâm với 5 thể loại…</div>' : ''}
     </section>`;
@@ -168,9 +168,9 @@ function renderWizardRecommend() {
     })()}
     ${s.selectedGameType ? `<div class="field-hint mt-[10px]" data-wizard-selected-type="1">Đang chọn: <strong>${escapeHtml(wizardGameMeta(s.selectedGameType).label)}</strong>. Bấm “Tiếp tục” để chỉnh cấu hình.</div>` : ''}
     <div class="publish-actions">
-      <button class="btn btn-secondary" data-wizard-action="rerun-recommend"${loading ? ' disabled' : ''}>↻ Gợi ý lại</button>
-      <button class="btn btn-secondary" data-wizard-action="back">← Xem lại phân tích</button>
-      <button class="btn btn-primary" id="wizardNextBtn" data-wizard-action="next"${s.selectedGameType ? '' : ' disabled'}>Tiếp tục · Cấu hình →</button>
+      <button class="btn btn-secondary" data-wizard-action="rerun-recommend"${loading ? ' disabled' : ''}><span data-icon="refresh-cw" data-icon-size="13"></span> Gợi ý lại</button>
+      <button class="btn btn-secondary" data-wizard-action="back"><span data-icon="arrow-left" data-icon-size="13"></span> Xem lại phân tích</button>
+      <button class="btn btn-primary" id="wizardNextBtn" data-wizard-action="next"${s.selectedGameType ? '' : ' disabled'}>Tiếp tục · Cấu hình <span data-icon="arrow-right" data-icon-size="13"></span></button>
     </div>
   </section>`;
 }

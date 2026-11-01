@@ -162,7 +162,7 @@ async function findTarget() {
       const theme = modal && modal.getAttribute('data-player-theme');
       const fs = getComputedStyle(document.querySelector('#playBody .stage-question')).fontSize;
       document.getElementById('modalRoot').innerHTML = '';
-      state.page = 'home'; render();
+      state.page = 'library'; render();
       return { theme, fs, saved: state.settings.preferences.audience };
     })()`);
     check('restored audience=teen', s4.saved === 'teen', s4.saved);

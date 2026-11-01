@@ -41,8 +41,13 @@ src/
     mobile/            Trang điện thoại (HTML/CSS/JS thuần, copyfiles chép vào dist)
   renderer/            Toàn bộ UI chạy trong cửa sổ (script toàn cục, KHÔNG module)
     core/              render() + điều hướng trang + wirePage
-    pages/             Một file cho mỗi trang (home, library, create, settings…)
+    pages/             Một file cho mỗi trang (library, create, create-wizard,
+                       settings…). Trang "Tổng quan" đã xoá ở #161 — thư viện là
+                       trang đích, hai việc nó làm thay nằm trong sidebar.
     features/          Tính năng dùng nhiều trang
+      ui-icons.ts      Icon Lucide cho chrome: uiIcon() + paintUiIcons() (#161)
+      icon-data.ts     do scripts/build-icon-data.js sinh từ shared/icon-registry.ts
+      sidebar-shortcuts.ts  Khối "Lối tắt" dưới sidebar: games gần đây + 2 nút nhanh
     features/games/    Bề mặt chơi, tách theo trách nhiệm (#147): shell (vào/ra,
                        toàn màn hình), three-stage (3D), house, result-screen
                        (kết quả + trình chiếu + modal), quiz, matching, treasure, race
@@ -68,7 +73,10 @@ src/
       game-house.css     chế độ Xây nhà (#142)
   game-engine/         Runtime chạy game đã lưu (offline)
 server/                Cloud AI Gateway (Express + Supabase + Gemini) — không chạy khi chơi
-scripts/               Script build (icon, kiểm tra global renderer)
+scripts/               Script build (icon, kiểm tra global renderer):
+                       build-icon-registry.js tải bộ Lucide về `shared/icon-registry.ts`,
+                       build-icon-data.js sinh `renderer/features/icon-data.ts` từ registry
+                       (`--check` là cổng phát hiện file sinh bị cũ)
 tests/
   run-unit.js          Runner cho `npm test` (tự tìm tests/unit/*.test.ts)
   unit/                Test logic thuần + IPC (node:assert)
@@ -89,7 +97,7 @@ vendor/                DLL VC++ đóng gói kèm
 | Muốn sửa | Mở |
 | --- | --- |
 | Tra bàn giao cũ / quyết định cũ | `docs/STATUS.md` (mục lục) → `docs/handoff/status/<ngày>.md`; `docs/DECISIONS.md` (mục lục) → `docs/handoff/decisions/` |
-| Một trang (dashboard, thư viện, cài đặt…) | `src/renderer/pages/<ten>.ts` |
+| Một trang (thư viện, tạo game, cài đặt…) | `src/renderer/pages/<ten>.ts` |
 | Điều hướng / render trang | `src/renderer/core/render.ts`, `core/controller.ts` |
 | Luồng tạo game từ giáo án | `src/renderer/pages/create-wizard.ts` + `features/wizard/step-*.ts` + `features/wizard/state/*.ts` |
 | Phân luồng đầu vào (giáo án / câu hỏi / dàn ý) | `src/services/input/input-classifier.ts` (quy tắc), `input/input-classifier-semantic.ts` (lớp xác nhận MiniLM), IPC `lesson:classify-input`, UI trong `features/wizard/step-input.ts` |
@@ -99,6 +107,7 @@ vendor/                DLL VC++ đóng gói kèm
 | Làm sạch ký hiệu/emoji khi tài liệu giống ngân hàng câu hỏi (#116) | `src/services/input/question-text.ts` (`cleanQuestionLine`, `cleanQuestionText`, `looksLikeQuestionBankText`), `splitInlineQuestion` trong `input/question-import.ts` |
 | Bóc tách cấu trúc tài liệu | `src/services/lesson/lesson-structure.ts` (+ `features/wizard/step-structure.ts`) |
 | Năm trò chơi (quiz, tình huống, ghép cặp, kho báu, đường đua) | `src/renderer/features/games/quiz.ts`, `matching.ts`, `treasure.ts`, `race.ts`; vào/ra và toàn màn hình ở `games/shell.ts` |
+| Icon Lucide trong chrome (sidebar, nút, tab, empty state) | `shared/icon-registry.ts` (tên + nét, do `scripts/build-icon-registry.js` tải), `features/icon-data.ts` (do `build-icon-data.js` sinh), `features/ui-icons.ts` (`uiIcon()` / `paintUiIcons()`); markup dùng `<span data-icon="tên">` |
 | Hình minh họa trò chơi | `features/game-illustration.ts`, `features/treasure-art.ts`, `shared/illustration-*` |
 | Âm thanh | `features/game-audio.ts` |
 | Trình chiếu màn hình 2 | `features/presentation.ts` + `src/presentation/*` + IPC trong `main.ts` |

@@ -52,7 +52,7 @@ function wizardLocalAiLaunchState() {
 function wizardLocalAiNoticeHtml() {
   const launch = wizardLocalAiLaunchState();
   if (launch.ready) return '';
-  return `<div class="field-hint" data-wizard-local-notice="1" role="status" style="color:#dc2626">⚠ ${escapeHtml(launch.message)}</div>`;
+  return `<div class="field-hint" data-wizard-local-notice="1" role="status" style="color:#dc2626"><span data-icon="triangle-alert" data-icon-size="13"></span> ${escapeHtml(launch.message)}</div>`;
 }
 // #132 D16: a page opened before a provider was verified keeps its old view. The wizard
 // refreshes it on the step that shows the provider buttons, once at a time.
@@ -142,7 +142,7 @@ function wizardProviderCard() {
       ? (cloud ? 'AI local chạy trên máy này là mặc định; muốn dùng AI ngoài thì bấm nút thứ hai.' : 'AI local đang chạy trên máy này.')
       : 'Đã kiểm tra kết nối thành công.';
     return `<div class="flex gap-[12px] items-center border rounded-xl p-3 mb-4 ${tone}" data-wizard-provider="${escapeHtml(active ? active.id : '')}">
-      <span class="text-[20px] shrink-0">🟢</span>
+      <span class="shrink-0" data-icon="circle-check" data-icon-size="18"></span>
       <div class="min-w-0 flex-1">
         <strong class="text-[12px] block text-[#1e293b] dark:text-[#f8fafc]">Dùng ${escapeHtml(wizardProviderLabel())}</strong>
         <small class="block text-[11px] text-[#64748b] dark:text-[#94a3b8] mt-0.5 leading-snug">${escapeHtml(detail)}</small>
@@ -152,7 +152,7 @@ function wizardProviderCard() {
   }
   const activeReason = active ? active.reason : 'Chưa có nhà cung cấp AI nào được cấu hình.';
   return `<div class="flex gap-[12px] items-center border rounded-xl p-3 mb-4 border-[#f2e3c8] bg-[#fdf7ec] dark:bg-[#2d2413] dark:border-[#4a3b1e]" data-wizard-provider="none" data-wizard-provider-empty="1">
-    <span class="text-[20px] shrink-0">🟡</span>
+    <span class="shrink-0" data-icon="circle-alert" data-icon-size="18"></span>
     <div class="min-w-0 flex-1">
       <strong class="text-[12px] block text-[#1e293b] dark:text-[#f8fafc]">Chưa có nhà cung cấp AI sẵn sàng</strong>
       <small class="block text-[11px] text-[#64748b] dark:text-[#94a3b8] mt-0.5 leading-snug">${escapeHtml(activeReason)} Cấu hình khoá và kiểm tra kết nối một lần trong Cài đặt AI — không cần làm ở đây.</small>
@@ -229,4 +229,4 @@ const wizardStyleOptions = [
   { value: 'competition', label: 'Thi đua' },
   { value: 'realistic', label: 'Thực tế' },
   { value: 'minimal', label: 'Tối giản' }
-];
+];

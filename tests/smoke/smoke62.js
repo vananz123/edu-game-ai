@@ -41,7 +41,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   // --- T2: home recent cards must NOT have delete buttons ---
   const t2 = await evalv(`(async () => {
-    navigate('home');
+    navigate('library');
     await new Promise(r => setTimeout(r, 250));
     const count = document.querySelectorAll('[data-action="delete"]').length;
     navigate('library');

@@ -73,7 +73,7 @@ const DUMP_EXPR = (rootSel) => `
 })()`;
 
 const SECTIONS = [
-  { name: 'bootstrap-modal', root: '#modalRoot', setup: `state.page='home'; render(); document.getElementById('helpBtn').click(); void 0;` },
+  { name: 'bootstrap-modal', root: '#modalRoot', setup: `state.page='library'; render(); document.getElementById('helpBtn').click(); void 0;` },
   { name: 'local-ai-modal', root: '#modalRoot', setup: `document.getElementById('modalRoot').innerHTML=''; openLocalAiModal(); void 0;` },
   { name: 'play-quiz', root: '#modalRoot', setup: `document.getElementById('modalRoot').innerHTML='';
     state.currentGame = { id: 'g5probe', title: 'G5 probe', template: 'quiz',
@@ -150,7 +150,7 @@ const SECTIONS = [
     out[sec.name] = JSON.parse(res.result.value);
     console.log(`dumped ${sec.name}: ${out[sec.name].count} elements`);
   }
-  await send('Runtime.evaluate', { expression: `document.getElementById('modalRoot').innerHTML=''; const t=document.getElementById('toast'); t.textContent=''; t.classList.remove('show'); state.page='home'; render(); void 0;` });
+  await send('Runtime.evaluate', { expression: `document.getElementById('modalRoot').innerHTML=''; const t=document.getElementById('toast'); t.textContent=''; t.classList.remove('show'); state.page='library'; render(); void 0;` });
   close();
   fs.writeFileSync(arg1, JSON.stringify(out));
   console.log('written ' + arg1);
