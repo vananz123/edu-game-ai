@@ -52,7 +52,18 @@ const expectations = [
   // The wizard's card is a component class, so the utility translation table in shell.css
   // never reached it: without this rule the wizard stays a white card in dark mode and the
   // `dark:text-[#f1f5f9]` markup inside it becomes white-on-white.
-  ['wizard form panel goes dark with the theme', /\[data-theme=("?)dark\1\] \.form-panel\{[^}]*background:var\(--panel\)/],
+  // Both component-class rules below are matched with `[,{]` after the selector: the two blocks
+  // are identical, so the minifier merges them into one selector list
+  // (`[data-theme=dark] .form-panel,[data-theme=dark] .select{…}`) and a literal `\{` reads red.
+  ['wizard form panel goes dark with the theme', /\[data-theme=("?)dark\1\] \.form-panel[,{][^}]*background:var\(--panel\)/],
+  // #166: `.select` is a component class, so it fell through the utility table exactly like `.form-panel`
+  // did — and its ink is what <option> inherits, because no stylesheet colours <option> and the popup
+  // background is UA-painted from color-scheme. With `color-scheme: dark` that turned into dark ink on a
+  // dark popup. components.css pins a colour on seven more select chains that live on pages the gate does
+  // not sweep (editor, wizard art pickers, treasure/race/team rows, `.correct-select`), so the rule covers
+  // the whole family in one block. These two lines only prove the block survived minification.
+  ['the .select component class goes dark with the theme', /\[data-theme=("?)dark\1\] \.select[,{][^}]*background:var\(--panel\)/],
+  ['the whole pinned-colour select family goes dark', /\[data-theme=("?)dark\1\] \.field select[,{][^}]*color:var\(--text\)/],
   // #161: a chrome icon is a <span data-icon> hook filled with an <svg>. Inline-level boxes
   // sit on the text baseline, so the hook has to be a flex box and its svg a block; dropped,
   // every icon in a button, chip or meta row rides a few pixels off the label next to it.
@@ -65,7 +76,13 @@ const expectations = [
   ['dark batch bar gets a surface of its own', /\[data-theme=("?)dark\1\] \[data-lesson-selection-bar\][^{]*\{[^}]*#2a324b/],
   ['the pick chip is no longer an opaque white plate', /\[data-theme=("?)dark\1\] \.bg-white\\\/\\\[90\\%\\\]\{background-color:#ffffff14/],
   ['bar label ink is mapped for dark', /\.text-\\\[\\#4c4680\\\][^{]*\{[^}]*color:var\(--text\)/],
-  ['bar count and "Bỏ chọn" inks land in the muted list', /\.text-\\\[\\#5b5680\\\],[^{]*\\#6b6690\\\][^{]*\{[^}]*color:var\(--muted\)/]
+  ['bar count and "Bỏ chọn" inks land in the muted list', /\.text-\\\[\\#5b5680\\\],[^{]*\\#6b6690\\\][^{]*\{[^}]*color:var\(--muted\)/],
+  // #166: daisyUI pins `color-scheme: light` on `:where(:root)` (specificity 0), which is why
+  // native checkboxes stayed light in dark mode. These two rules are what override it — this
+  // file can only prove they survived minification; that the dark one actually wins on a live
+  // page is measured by tests/ui/ui-dark-theme-check.js.
+  ['light theme declares color-scheme on :root', /:root\{[^}]*color-scheme:light/],
+  ['dark theme repaints native controls', /:root\[data-theme=("?)dark\1\]\{[^}]*color-scheme:dark/]
 ];
 
 let failed = 0;

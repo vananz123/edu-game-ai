@@ -131,6 +131,35 @@
    là cả hai cùng hết: khoảng trắng biến mất và các class `dark:` của wizard trở
    lại đúng bảng màu tối mà #1e2544/#2a324b/#f1f5f9 trong markup đã nhắm tới. */
 [data-theme="dark"] .form-panel { background: var(--panel); border-color: var(--line); color: var(--text); }
+/* Toàn bộ họ `<select>` mà `components.css` ghim màu tường minh đều lọt qua bảng utility ở
+   trên y hệt `.form-panel`, và #166 làm chúng thành lỗi *đọc được*, không chỉ lỗi đẹp:
+   `color-scheme: dark` vẽ popup `<select>` bằng bảng màu tối, còn `<option>` không được
+   stylesheet nào đặt màu nên mực nó kế thừa từ select. Select nào ghim mực tối thì dark giờ
+   mở ra **chữ tối trên nền tối**. Đo từng chuỗi class (probe cổng 9357, node tổng hợp đặt
+   trong `#pageContent` — các selector này là global nên ở trang nào cũng cho cùng số đo):
+     .field                 box rgb(255,255,255)  ink rgb(38,48,71)   luminance 0,030  ← editor + wizard
+     .editor-art-buttons / .wizard-art-pick       ink rgb(81,92,114)  0,106
+     .select (#templateFilter)                    ink rgb(93,102,121) 0,132
+     .correct-select                              ink rgb(101,112,134) 0,161, và cả *ô* của nó
+                                                  là nền UA (rgba(0,0,0,0)) — tức control
+                                                  UA-vẽ mang mực tối, đúng cặp mà check 21 cấm
+   `.treasure-stage-body`, `.race-team-row`, `.team-turn-bar` không ghim mực nhưng ghim
+   `background:#fff`, nên trong dark chúng vẫn là những ô trắng nằm giữa thẻ tối.
+   Một rule cho cả họ: nền thẻ + mực đọc được. **Viền để markup quyết định**, không ghim ở đây:
+   `[data-theme="dark"] .field select` mang specificity (0,2,1) nên thắng mọi utility `dark:border-*`
+   (biến thể bọc trong `:where()` = (0,1,0)), và đã thật sự làm check của #160 im lặng —
+   `#localModelSelect` mang `dark:border-[#334155]` mà vẫn compute ra viền của rule này. Light không
+   đổi vì mọi selector đều khoá `[data-theme="dark"]`. Đây là phần mà kiểm kê control của #166 không
+   tự thấy (popup của select nằm ngoài trang đang quét), nên gate giờ đo nó bằng node tổng hợp:
+   xem `walkPopupInk()` trong `tests/ui/ui-dark-theme-check.js`. */
+[data-theme="dark"] .select,
+[data-theme="dark"] .field select,
+[data-theme="dark"] .editor-art-buttons select,
+[data-theme="dark"] .wizard-art-pick select,
+[data-theme="dark"] .treasure-stage-body select,
+[data-theme="dark"] .race-team-row select,
+[data-theme="dark"] .team-turn-bar select,
+[data-theme="dark"] .correct-select select { background: var(--panel); color: var(--text); }
 
 /* Bốn thanh chọn hàng loạt: giáo án (#122), lượt chơi (#123), trò chơi (#154), dự án (#163).
    Markup của chúng không mang class `dark:` nào, nên toàn bộ phần tối của chúng đến từ bảng

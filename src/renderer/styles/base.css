@@ -16,6 +16,16 @@
     --shadow: var(--shadow-card);
   }
 
+  /* color-scheme khoá theo theme. daisyUI đã đặt `color-scheme: light` qua
+     `:where(:root)` — cũng nằm trong @layer base này, specificity 0 — nên phần
+     Chromium tự vẽ (checkbox, popup của <select>) vẫn sáng khi app ở dark
+     (#164 đo root vẫn ra "light"). `:root[data-theme=…]` = specificity 0,2,0 nên
+     thắng trong cùng layer: không cần !important, không đụng shell.css.
+     Scrollbar không liên quan rule này — nó đã bị ::-webkit-scrollbar ở
+     components.css:154-168 vẽ hẳn, kèm bản dark riêng. */
+  :root { color-scheme: light; }
+  :root[data-theme="dark"] { color-scheme: dark; }
+
   body {
     font-size: 14px;
     -webkit-font-smoothing: antialiased;

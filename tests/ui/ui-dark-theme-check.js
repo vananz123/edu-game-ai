@@ -29,6 +29,20 @@
  * each strip's four text controls, its own surface against the card behind it, and the
  * `bg-white/[90%]` pick chip, then deletes what it seeded.
  *
+ * DECISIONS #166 added the `color-scheme` half. Text contrast is only part of a dark theme:
+ * Chromium paints form controls and every other UA detail from `color-scheme`, and daisyUI pins
+ * that to `light`. The check now reads the document's own `color-scheme` in each theme and
+ * censuses the native controls, so the value has to flip and no UA-painted field may be left
+ * holding an ink that would turn dark-on-dark. `color-scheme` is inherited, which is why the
+ * census also walks `<option>` — the popup a `<select>` opens is entirely UA-painted and has no
+ * geometry while closed. Two of those surfaces are outside the swept pages (the editor page and
+ * the play surface), so the census builds one throwaway host per sweep from the class chains
+ * components.css pins colours on and measures them too; it exists only inside a synchronous
+ * block, so the text-contrast walk never sees it and its counts stay comparable to #164/#165. `color-scheme` is inherited, which is why the
+ * census also walks `<option>`: that popup is a UA-painted surface a control opens, it takes
+ * the scheme from `:root`, and it has zero geometry while closed, so the control census alone
+ * cannot see it.
+ *
  * Usage: launch with --remote-debugging-port=PORT, then
  * `node tests/ui/ui-dark-theme-check.js [port]`.
  */
@@ -210,21 +224,136 @@ const SCENARIO = String.raw`(async () => {
   };
 
   const savedTheme = (state.settings.preferences || {}).theme || 'light';
+
+  /**
+   * #166: "color-scheme" is what tells Chromium to paint form controls and scrollbars for a
+   * dark page. daisyUI pins it to "light" on :where(:root), so native widgets stayed light
+   * even with data-theme="dark". Only controls the app leaves to the UA (transparent
+   * background) change paint at all — an explicit background outranks color-scheme — so the
+   * census below counts those and flags any that carry a dark ink, which would become
+   * dark-on-dark once the UA field goes dark.
+   */
+  const CONTROL_SELECTOR = 'select, input[type="checkbox"], input[type="number"], input[type="text"], textarea, input[type="color"]';
+  const walkControls = () => {
+    const rows = [];
+    for (const el of (document.getElementById('pageContent') || document.body).querySelectorAll(CONTROL_SELECTOR)) {
+      const box = el.getBoundingClientRect();
+      if (!box.width || !box.height) continue;
+      const cs = getComputedStyle(el);
+      const bg = parse(cs.backgroundColor);
+      const label = el.labels && el.labels[0] ? el.labels[0].textContent.trim().slice(0, 24) : '';
+      rows.push({
+        kind: el.tagName.toLowerCase() === 'select' ? 'select' : (el.getAttribute('type') || el.tagName.toLowerCase()),
+        sig: el.id ? '#' + el.id : el.tagName.toLowerCase() + '::' + label,
+        bg: cs.backgroundColor,
+        color: cs.color,
+        uaPainted: !bg || bg.a < 0.01,
+        inkLum: Math.round(lum(pixelOf(cs.color)) * 1000) / 1000
+      });
+    }
+    return rows;
+  };
+
+  /**
+   * #166 follow-up: an <option> is the surface a <select> opens, Chromium paints the whole
+   * popup from "color-scheme" (no stylesheet in this repo gives <option> a colour), and it is
+   * invisible to the census above — a closed select lays its options out at zero size, so the
+   * geometry filter drops them. That blind spot is what let the pre-fix measurement conclude
+   * "0 risky pairs" while the dark popup was really light ink on a light background. Each
+   * option therefore reports its OWN computed color-scheme plus ink, and the popup has to keep
+   * the two on opposite sides of the luminance split.
+   */
+  /*
+   * #166 follow-up 2 — the census cannot reach every <select> that exists. components.css pins a
+   * colour on selects that live on the editor page and the play surface, and neither is in PAGES,
+   * so a page sweep reports "no popup is unreadable" while .field select still opens a dark popup
+   * holding rgb(38, 48, 71). Those selectors are global class chains, so a host built from them
+   * computes exactly what the real markup does; it is created, measured and removed inside one
+   * synchronous block, which means walk() never sees it and the contrast census is unaffected.
+   *
+   * Follow-up 3 — the host has to render the markup the app really produces, not merely a class
+   * name a CSS selector mentions. ".race-team-row" bare is the forced-dark island of the play
+   * surface (components.css: background #1b2140, colour #e8ebf7, and no color-scheme of its own),
+   * but every real row is written with an attribute — features/editor/race.ts:33 emits
+   * [data-team-id] and :45 emits [data-cell-row], both of which re-paint the row as a white card
+   * with rgb(57, 66, 86) ink. Measuring the island therefore failed check 22 in the *light* half
+   * (light ink on a light scheme) for a combination no teacher ever sees, so it is recorded as the
+   * island debt it is and the two real variants are what the gate reads.
+   */
+  const PROBE_OPTION = '<select><option>probe</option></select>';
+  const COMPONENT_SELECT_HOSTS = [
+    ['.field select', '<div class="field">' + PROBE_OPTION + '</div>'],
+    ['.editor-art-buttons select', '<div class="editor-art-buttons">' + PROBE_OPTION + '</div>'],
+    ['.wizard-art-pick select', '<div class="wizard-art-pick">' + PROBE_OPTION + '</div>'],
+    ['.treasure-stage-body select', '<div class="treasure-stage-body">' + PROBE_OPTION + '</div>'],
+    ['.race-team-row[data-team-id] select', '<div class="race-team-row" data-team-id="probe">' + PROBE_OPTION + '</div>'],
+    ['.race-team-row[data-cell-row] select', '<div class="race-team-row" data-cell-row>' + PROBE_OPTION + '</div>'],
+    ['.team-turn-bar select', '<div class="team-turn-bar">' + PROBE_OPTION + '</div>'],
+    ['.correct-select select', '<div class="correct-select">' + PROBE_OPTION + '</div>'],
+    ['.select', '<select class="select"><option>probe</option></select>']
+  ];
+
+  const popupRowsOf = (sel, sig, synthetic) => {
+    const rows = [];
+    const selCs = getComputedStyle(sel);
+    for (const opt of sel.options) {
+      const cs = getComputedStyle(opt);
+      const bg = parse(cs.backgroundColor);
+      rows.push({
+        sig: sig + ' > ' + (opt.textContent || '').trim().slice(0, 18),
+        scheme: selCs.colorScheme,
+        bg: cs.backgroundColor,
+        color: cs.color,
+        selColor: selCs.color,
+        boxBg: selCs.backgroundColor,
+        boxLum: Math.round(lum(pixelOf(selCs.backgroundColor)) * 1000) / 1000,
+        uaPainted: !bg || bg.a < 0.01,
+        inkLum: Math.round(lum(pixelOf(cs.color)) * 1000) / 1000,
+        ...(synthetic ? { page: 'components' } : {})
+      });
+    }
+    return rows;
+  };
+
+  const walkPopupInk = () => {
+    const root = document.getElementById('pageContent') || document.body;
+    const rows = [];
+    for (const sel of root.querySelectorAll('select')) {
+      const box = sel.getBoundingClientRect();
+      if (!box.width || !box.height) continue;
+      for (const row of popupRowsOf(sel, sel.id ? '#' + sel.id : 'select')) rows.push(row);
+    }
+    const host = document.createElement('div');
+    host.innerHTML = COMPONENT_SELECT_HOSTS.map(h => h[1]).join('');
+    root.appendChild(host);
+    COMPONENT_SELECT_HOSTS.forEach((entry, i) => {
+      const node = host.children[i];
+      const sel = node.tagName === 'SELECT' ? node : node.querySelector('select');
+      for (const row of popupRowsOf(sel, entry[0], true)) rows.push(row);
+    });
+    host.remove();
+    return rows;
+  };
+
   const sweep = async theme => {
     applyTheme(theme);
     await sleep(350);
     const rows = [];
     const bars = [];
     const visited = [];
+    const controls = [];
+    const popups = [];
     for (const page of PAGES_PLACEHOLDER) {
       navigate(page);
       await sleep(900);
       visited.push(page);
       for (const r of walk()) rows.push({ ...r, page });
+      for (const c of walkControls()) controls.push({ ...c, page });
+      for (const o of walkPopupInk()) popups.push({ page, ...o });
       const bar = measureBars(page);
       if (bar) bars.push({ ...bar, theme });
     }
-    return { rows, bars, visited };
+    return { rows, bars, visited, controls, popups, scheme: getComputedStyle(document.documentElement).colorScheme };
   };
 
   const darkSweep = await sweep('dark');
@@ -250,6 +379,9 @@ const SCENARIO = String.raw`(async () => {
     light: lightSweep.rows,
     bars: [...darkSweep.bars, ...lightSweep.bars],
     visited: darkSweep.visited,
+    scheme: { light: lightSweep.scheme, dark: darkSweep.scheme },
+    controls: { light: lightSweep.controls, dark: darkSweep.controls },
+    popups: { light: lightSweep.popups, dark: darkSweep.popups },
     cleanup: {
       gamesLeft: (after.games || []).filter(g => String(g.title || '').startsWith(SEED_PREFIX)).length,
       sessionsLeft: (after.sessions || []).filter(s => String(s.playerName || '').startsWith(SEED_PREFIX)).length,
@@ -368,6 +500,56 @@ const SCENARIO = String.raw`(async () => {
   const lightWorst = Math.min(...lightBars.flatMap(controls).map(c => c.ratio));
   check('light mode is untouched: same strip colour, every control still 4.5:1', lightOff.length === 0,
     lightOff.length ? lightOff.slice(0, 4).join(' | ') : `${lightBars.length} bars on ${LIGHT_BAR}, worst control ${lightWorst}:1`);
+
+  // #166: before the fix both themes reported "light" here even after applyTheme('dark'),
+  // because daisyUI's `:where(:root)` pin has specificity 0 and outranked nothing — the app
+  // simply had no rule of its own.
+  check('color-scheme follows the theme so native controls repaint',
+    out.scheme.light === 'light' && out.scheme.dark === 'dark',
+    `light → ${out.scheme.light} / dark → ${out.scheme.dark}`);
+
+  const uaDark = out.controls.dark.filter(c => c.uaPainted);
+  check('the census found the controls color-scheme actually repaints',
+    out.controls.light.length >= 10 && out.controls.dark.length >= 10 && uaDark.length >= 1,
+    `${out.controls.light.length} light / ${out.controls.dark.length} dark controls, ` +
+    `${uaDark.length} UA-painted (${[...new Set(uaDark.map(c => c.kind))].join(',')})`);
+
+  const risky = out.controls.dark.filter(c => c.uaPainted && c.inkLum < 0.22);
+  check('no UA-painted control is left with dark ink in dark mode', risky.length === 0,
+    risky.length ? risky.slice(0, 6).map(c => `${c.page} ${c.sig} ${c.color} on ${c.bg}`).join(' | ')
+      : `worst ink on a UA field ${uaDark.length ? Math.min(...uaDark.map(c => c.inkLum)).toFixed(3) : 'n/a'}`);
+
+  // #166: the popup <select> opens is 100% UA-painted, so its readable ink is fixed by
+  // color-scheme alone — light scheme needs dark ink, dark scheme needs light ink. Measured
+  // before the fix: dark theme served rgb(248, 250, 252) on a scheme-"light" popup.
+  const popLight = out.popups.light;
+  const popDark = out.popups.dark;
+  const popBad = [...popLight.filter(o => o.uaPainted && o.inkLum >= 0.6),
+    ...popDark.filter(o => o.uaPainted && o.inkLum < 0.22)];
+  check('every <option> popup keeps its ink on the opposite side of its colour scheme',
+    popLight.length >= 10 && popDark.length >= 10 && popBad.length === 0,
+    popBad.length ? popBad.slice(0, 6).map(o => `${o.page} ${o.sig} ${o.color} on scheme "${o.scheme}"`).join(' | ')
+      : `${popLight.length} light / ${popDark.length} dark options, all UA-painted ` +
+        `(${[...new Set(popDark.map(o => o.bg))].join(',')}), ink ${
+          Math.max(...popLight.map(o => o.inkLum)).toFixed(3)} dark-side / ${
+          Math.min(...popDark.map(o => o.inkLum)).toFixed(3)} light-side`);
+
+  // The chains above are page-independent, so this reads the selects components.css pins a colour on
+  // (editor + wizard + play surface) even though none of those pages is swept: nine host rows — the
+  // eight chains, with `.race-team-row` split into the two variants the editor really renders —
+  // measured once per swept page. Before the shell.css rule these computed background
+  // rgb(255, 255, 255) in dark mode, an opaque white plate inside a dark card, and they were the
+  // source of the dark ink check 22 flags in their popups.
+  const compLight = popLight.filter(o => o.page === 'components');
+  const compDark = popDark.filter(o => o.page === 'components');
+  const compSigs = [...new Set(compDark.map(o => o.sig))];
+  const whitePlates = compDark.filter(o => o.boxLum > 0.6);
+  check('no component-chain select keeps a white plate in dark mode',
+    compSigs.length === 9 && compLight.length === compDark.length && whitePlates.length === 0,
+    whitePlates.length ? whitePlates.slice(0, 8).map(o => `${o.sig} ${o.boxBg}`).join(' | ')
+      : compSigs.length !== 9 ? `only ${compSigs.length} of 9 chains measured: ${compSigs.join(', ')}`
+      : `${compDark.length} synthetic selects measured in both themes, worst dark plate ${
+          Math.max(...compDark.map(o => o.boxLum)).toFixed(3)} (panel is 0.012, UA paint reads 0)`);
 
   check('the probe rows it seeded were all deleted again',
     out.cleanup.seeded === 4 && out.cleanup.gamesLeft === 0 && out.cleanup.projectsLeft === 0
