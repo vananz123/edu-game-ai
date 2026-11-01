@@ -139,7 +139,7 @@ async function findTarget() {
   check('T4 no timer while generation is idle', !idle.timer, JSON.stringify(idle));
 
   // T5/T6 — simulate a running generation: elapsed clock + honest estimate, and
-  // the top-bar chip follows the same run (label + seconds).
+  // the sidebar chip (#162; formerly in the topbar) follows the same run (label + seconds).
   const running = await must(`(async () => {
     wizardState.step = 'generate';
     wizardState.busy = 'generate';
@@ -184,21 +184,24 @@ async function findTarget() {
   })()`);
   check('T7 stopping the run clears the timer and the chip', !stopped.timer && stopped.chipHidden, JSON.stringify(stopped));
 
-  // T8 — the header + AI status bar stay pinned while the page scrolls.
+  // T8 — the sidebar (which holds the AI status bar since #162) stays pinned
+  // while the page scrolls.
   const sticky = await must(`(async () => {
+    // A fresh profile still shows the setup onboarding, which owns the window
+    // (html[data-setup-fullscreen]) and clips the document, so the page cannot
+    // scroll at all. Dismiss it first: this test is about the app shell.
+    if (document.querySelector('#modalRoot .setup-fullscreen') && typeof closeSetupWizard === 'function') closeSetupWizard('close');
+    await new Promise(r => setTimeout(r, 300));
     document.querySelector('#pageContent').style.minHeight = '2600px';
     window.scrollTo(0, 700);
     await new Promise(r => setTimeout(r, 250));
-    const topbar = document.querySelector('.topbar');
     const bar = document.getElementById('aiStatusBar');
     const sidebar = document.querySelector('.sidebar');
     const rect = el => { const r = el.getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom), height: Math.round(r.height) }; };
     const out = {
       scrollY: Math.round(window.scrollY),
-      topbarPosition: getComputedStyle(topbar).position,
-      barPosition: getComputedStyle(bar).position,
+      barInSidebar: Boolean(bar && sidebar && sidebar.contains(bar)),
       sidebarPosition: getComputedStyle(sidebar).position,
-      topbar: rect(topbar),
       bar: rect(bar),
       sidebar: rect(sidebar)
     };
@@ -207,9 +210,8 @@ async function findTarget() {
     return out;
   })()`);
   check('T8 page really scrolled', sticky.scrollY > 100, 'scrollY=' + sticky.scrollY);
-  check('T8 top bar is sticky at the top', sticky.topbarPosition === 'sticky' && sticky.topbar.top === 0, JSON.stringify(sticky.topbar));
-  check('T8 AI status bar stays pinned under the header', sticky.barPosition === 'sticky' && sticky.bar.top === 72 && sticky.bar.bottom > 72, JSON.stringify(sticky.bar));
-  check('T8 sidebar stays pinned too', sticky.sidebarPosition === 'sticky' && sticky.sidebar.top === 0, JSON.stringify(sticky.sidebar));
+  check('T8 sidebar stays pinned', sticky.sidebarPosition === 'sticky' && sticky.sidebar.top === 0, JSON.stringify(sticky.sidebar));
+  check('T8 AI status bar moves with the pinned sidebar', sticky.barInSidebar === true && sticky.bar.top >= 0 && sticky.bar.bottom <= sticky.sidebar.height, JSON.stringify(sticky.bar));
 
   check('T9 no uncaught renderer exceptions', uncaught.length === 0, uncaught.slice(0, 2).join(' | '));
   check('T10 no console errors', consoleErrs.length === 0, consoleErrs.slice(0, 2).join(' | '));

@@ -46,6 +46,7 @@ src/
                        trang đích, hai việc nó làm thay nằm trong sidebar.
     features/          Tính năng dùng nhiều trang
       ui-icons.ts      Icon Lucide cho chrome: uiIcon() + paintUiIcons() (#161)
+      ai-status.ts     Thanh trạng thái llama.cpp + menu, khối thông báo trong sidebar (#162)
       icon-data.ts     do scripts/build-icon-data.js sinh từ shared/icon-registry.ts
       sidebar-shortcuts.ts  Khối "Lối tắt" dưới sidebar: games gần đây + 2 nút nhanh
     features/games/    Bề mặt chơi, tách theo trách nhiệm (#147): shell (vào/ra,
@@ -60,10 +61,10 @@ src/
     styles/app.css     Entry Tailwind + daisyUI: @import các file khu vực theo thứ tự
       base.css           token alias (:root), layer base, biến cỡ chữ/animation
       components.css     component dùng chung port từ 5 stylesheet cũ (nút, thẻ, form…)
-      shell.css          topbar/sidebar cố định, dark theme, override toàn màn hình
+      shell.css          sidebar cố định, dark theme, override toàn màn hình (#162 bỏ topbar)
       fullscreen.css     bố cục toàn màn hình/máy chiếu + mật độ chỗ trình chiếu
       gameplay.css       play surface: stage, đáp án, màn kết quả
-      navigation.css     icon navbar
+      navigation.css     icon navbar + khối trạng thái AI/thông báo đầu sidebar (#162)
       game-race.css      bảng Đường đua
       game-animations.css chuyển động 5 trò (thanh lượt, thẻ, phân loại, cuộn stage)
       setup-wizard.css   wizard cài AI lần đầu
@@ -107,6 +108,7 @@ vendor/                DLL VC++ đóng gói kèm
 | Làm sạch ký hiệu/emoji khi tài liệu giống ngân hàng câu hỏi (#116) | `src/services/input/question-text.ts` (`cleanQuestionLine`, `cleanQuestionText`, `looksLikeQuestionBankText`), `splitInlineQuestion` trong `input/question-import.ts` |
 | Bóc tách cấu trúc tài liệu | `src/services/lesson/lesson-structure.ts` (+ `features/wizard/step-structure.ts`) |
 | Năm trò chơi (quiz, tình huống, ghép cặp, kho báu, đường đua) | `src/renderer/features/games/quiz.ts`, `matching.ts`, `treasure.ts`, `race.ts`; vào/ra và toàn màn hình ở `games/shell.ts` |
+| Khung cửa sổ: sidebar, trạng thái llama.cpp, chuông thông báo (không còn topbar) | `src/index.html` (`.sidebar` + `[data-sidebar-status]`), `styles/navigation.css` (`.sidebar-status`, popover fixed), `features/ai-status.ts`, `core/bootstrap.ts` (uỷ nhiệm click của sidebar bỏ qua khối này) |
 | Icon Lucide trong chrome (sidebar, nút, tab, empty state) | `shared/icon-registry.ts` (tên + nét, do `scripts/build-icon-registry.js` tải), `features/icon-data.ts` (do `build-icon-data.js` sinh), `features/ui-icons.ts` (`uiIcon()` / `paintUiIcons()`); markup dùng `<span data-icon="tên">` |
 | Hình minh họa trò chơi | `features/game-illustration.ts`, `features/treasure-art.ts`, `shared/illustration-*` |
 | Âm thanh | `features/game-audio.ts` |

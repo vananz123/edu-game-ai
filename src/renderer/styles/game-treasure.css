@@ -681,16 +681,9 @@ html[data-fullscreen="1"] .modal[data-player-theme] .race-turn .stage-illustrati
   transition: border-color 0.3s ease, box-shadow 0.3s ease, opacity 0.3s ease !important;
 }
 
-/* --- Tối ưu thanh Navbar & Đưa thanh trạng thái AI/llama.cpp, thông báo lên Navbar (DECISIONS #97) --- */
-.topbar {
-  position: sticky !important;
-  top: 0 !important;
-  z-index: 30 !important;
-  background: #ffffff !important;
-  border-bottom: 1px solid var(--line) !important;
-}
-
-.topbar .ai-status-bar {
+/* --- Thanh trạng thái AI/llama.cpp và thông báo (DECISIONS #97). #162 moved
+   them from the deleted topbar into the sidebar; the dark rules below follow. --- */
+.sidebar .ai-status-bar {
   position: relative !important;
   top: auto !important;
   z-index: 1 !important;
@@ -701,34 +694,29 @@ html[data-fullscreen="1"] .modal[data-player-theme] .race-turn .stage-illustrati
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
 }
 
-[data-theme="dark"] .topbar {
-  background: #111528 !important;
-  border-bottom-color: #262c45 !important;
-}
-
-[data-theme="dark"] .topbar .ai-status-bar {
+[data-theme="dark"] .sidebar .ai-status-bar {
   background: #171c32 !important;
   border-color: #2b3352 !important;
 }
 
-[data-theme="dark"] .topbar .ai-status-bar:hover {
+[data-theme="dark"] .sidebar .ai-status-bar:hover {
   background: #1d233e !important;
   border-color: #3b456e !important;
 }
 
-[data-theme="dark"] .topbar #aiStatusRuntime {
+[data-theme="dark"] .sidebar #aiStatusRuntime {
   color: #f1f5f9 !important;
 }
 
-[data-theme="dark"] .topbar #aiStatusTask {
+[data-theme="dark"] .sidebar #aiStatusTask {
   color: #94a3b8 !important;
 }
 
-[data-theme="dark"] .topbar .ai-status-menu-btn {
+[data-theme="dark"] .sidebar .ai-status-menu-btn {
   color: #94a3b8 !important;
 }
 
-[data-theme="dark"] .topbar .ai-status-menu-btn:hover {
+[data-theme="dark"] .sidebar .ai-status-menu-btn:hover {
   background: #283060 !important;
   color: #f8fafc !important;
 }

@@ -18,10 +18,8 @@
 html[data-setup-fullscreen="1"],
 html[data-setup-fullscreen="1"] body{height:100%;overflow:hidden}
 html[data-setup-fullscreen="1"] .app-shell{visibility:hidden}
-/* The backdrop and the topbar are siblings of `#modalRoot`, so hiding the
-   shell is not enough: the 72px topbar sits above it at z-index 30. */
-html[data-setup-fullscreen="1"] .topbar,
-html[data-setup-fullscreen="1"] .ai-status-bar{visibility:hidden}
+/* #162: the topbar is gone and the AI status bar lives inside the sidebar,
+   which `.app-shell` above already hides. */
 
 /* One viewport, two rows: a fixed head and a scrolling body, so the action
    buttons can never be pushed below the fold on a 1366x768 classroom laptop. */

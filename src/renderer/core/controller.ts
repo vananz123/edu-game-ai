@@ -14,7 +14,11 @@ function navigate(page) {
  * never throws when the page has been re-rendered (the nodes are simply gone).
  */
 function closeGameMenus() {
-  document.querySelectorAll('[role="menu"]:not([hidden])').forEach(menu => menu.setAttribute('hidden', ''));
+  // Scoped to card menus: the sidebar's llama.cpp dropdown is also a `role="menu"` but
+  // ai-status.ts owns it with the `hidden` CLASS. Hiding it with the attribute here
+  // (this runs on every outside click) left a menu that could never reopen, because
+  // openDropdown() only removes the class.
+  document.querySelectorAll('[data-game-menu-root] [role="menu"]:not([hidden])').forEach(menu => menu.setAttribute('hidden', ''));
   document.querySelectorAll('[data-menu-toggle][aria-expanded="true"]').forEach(toggle => toggle.setAttribute('aria-expanded', 'false'));
 }
 

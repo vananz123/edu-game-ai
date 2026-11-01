@@ -110,6 +110,18 @@ const SCENARIO = String.raw`(async () => {
 
   navigate('library');
   await sleep(700);
+  // DECISIONS #162: the brand and the topbar are gone; the llama.cpp status bar,
+  // notification bell and the fullscreen/help buttons now sit in the sidebar.
+  out.shell = {
+    topbar: Boolean(document.querySelector('.topbar')),
+    brand: Boolean(document.querySelector('.brand, .brand-mark')),
+    crumb: Boolean(document.getElementById('pageCrumb')),
+    status: Boolean(document.querySelector('.sidebar [data-sidebar-status] #aiStatusBar')),
+    runtime: Boolean(document.querySelector('.sidebar #aiStatusRuntime')),
+    notifications: Boolean(document.querySelector('.sidebar #topbarNotificationBtn')),
+    fullscreen: Boolean(document.querySelector('.sidebar #topbarFullscreenBtn')),
+    help: Boolean(document.querySelector('.sidebar #helpBtn'))
+  };
   const block = document.querySelector('.sidebar-shortcuts');
   const items = Array.from((block || document.body).querySelectorAll('.shortcut-item'));
   out.shortcuts = {
@@ -148,6 +160,13 @@ const SCENARIO = String.raw`(async () => {
   check('the app lands on the library', out.startPage === 'library', out.startPage);
   check('the decorative eyebrows removed with the overview page stay removed',
     out.pages.every(p => !p.eyebrow), out.pages.filter(p => p.eyebrow).map(p => p.label).join(','));
+  check('the brand and the topbar are gone',
+    out.shell.topbar === false && out.shell.brand === false && out.shell.crumb === false,
+    JSON.stringify(out.shell));
+  check('the llama.cpp status and the notifications live in the sidebar',
+    out.shell.status && out.shell.runtime && out.shell.notifications
+      && out.shell.fullscreen && out.shell.help,
+    JSON.stringify(out.shell));
 
   check('the shortcut block renders under the nav', out.shortcuts.present && /Lối tắt/.test(out.shortcuts.head),
     JSON.stringify({ present: out.shortcuts.present, head: out.shortcuts.head }));

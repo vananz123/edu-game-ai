@@ -4,7 +4,6 @@ function render() {
   // and debounced preview; keep the structure tree's scroll offsets so it does
   // not jump back to its first row.
   if (state.page === 'create-wizard' && typeof wizardStructureCaptureView === 'function') wizardStructureCaptureView();
-  $('#pageCrumb').textContent = pageNames[state.page] || 'EduGame Studio';
   $$('.nav-item[data-page]').forEach(el => el.classList.toggle('active', el.dataset.page === state.page));
   $('#navGameCount').textContent = state.db.games.length;
   // DECISIONS #161: the sidebar block is chrome, not page content, so it refreshes

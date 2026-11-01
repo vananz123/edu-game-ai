@@ -420,7 +420,7 @@ function renderSettings() {
     </div>
 
     <!-- ═══ SIDEBAR: Nút lưu sticky + tóm tắt ═══ -->
-    <aside class="flex flex-col gap-4 sticky top-20">
+    <aside class="flex flex-col gap-4 sticky top-5">
       <!-- Nút Lưu cài đặt — sticky -->
       <section class="bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] rounded-2xl p-5 text-white">
         <h3 class="text-[14px] font-bold m-0 mb-2">Lưu thay đổi</h3>

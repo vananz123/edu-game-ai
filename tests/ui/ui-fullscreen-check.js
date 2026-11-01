@@ -100,7 +100,7 @@ async function findTarget() {
     const backdrop = document.querySelector('.modal-backdrop');
     const cs = el => el ? getComputedStyle(el) : null;
     const b = backdrop.getBoundingClientRect();
-    const topbar = document.querySelector('.topbar');
+    const statusBar = document.getElementById('aiStatusBar');
     const sidebar = document.querySelector('.sidebar');
     const shell = document.querySelector('.app-shell');
     return {
@@ -108,9 +108,9 @@ async function findTarget() {
       backdrop: { x: b.x, y: b.y, w: b.width, h: b.height },
       viewport: { w: innerWidth, h: innerHeight },
       shellVisibility: shell ? cs(shell).visibility : null,
-      topbarVisibility: topbar ? cs(topbar).visibility : null,
+      statusVisibility: statusBar ? cs(statusBar).visibility : null,
       sidebarVisibility: sidebar ? cs(sidebar).visibility : null,
-      topbarZ: topbar ? Number(cs(topbar).zIndex) : 0,
+      sidebarZ: sidebar ? (Number(cs(sidebar).zIndex) || 0) : 0,
       backdropZ: Number(cs(backdrop).zIndex)
     };
   })()`);
@@ -124,10 +124,10 @@ async function findTarget() {
   check('backdrop covers full viewport height',
     Math.abs(fs.backdrop.h - fs.viewport.h) < 2, `${fs.backdrop.h} vs ${fs.viewport.h}`);
   check('sidebar is hidden during play', fs.sidebarVisibility === 'hidden', fs.sidebarVisibility);
-  check('topbar is hidden during play', fs.topbarVisibility === 'hidden', fs.topbarVisibility);
+  check('llama.cpp status bar is hidden during play', fs.statusVisibility === 'hidden', fs.statusVisibility);
   check('app shell is hidden during play', fs.shellVisibility === 'hidden', fs.shellVisibility);
-  check('backdrop z-index is above the topbar', fs.backdropZ > fs.topbarZ,
-    `${fs.backdropZ} > ${fs.topbarZ}`);
+  check('backdrop z-index is above the sidebar layer', fs.backdropZ > fs.sidebarZ,
+    `${fs.backdropZ} > ${fs.sidebarZ}`);
 
   // --- the nav must not be the topmost element on top of the game ----------
   const navHit = await evaluate(`(() => {
@@ -166,18 +166,18 @@ async function findTarget() {
     await new Promise(r => setTimeout(r, 250));
     const cs = el => el ? getComputedStyle(el) : null;
     const shell = document.querySelector('.app-shell');
-    const topbar = document.querySelector('.topbar');
+    const statusBar = document.getElementById('aiStatusBar');
     const backdrop = document.querySelector('.modal-backdrop');
     return {
       flag: document.documentElement.dataset.fullscreen,
       shellVisibility: shell ? cs(shell).visibility : null,
-      topbarVisibility: topbar ? cs(topbar).visibility : null,
+      statusVisibility: statusBar ? cs(statusBar).visibility : null,
       backdropZ: backdrop ? Number(cs(backdrop).zIndex) : null
     };
   })()`);
   check('leaving fullscreen clears the flag', restored.flag === '0', restored.flag);
   check('shell is visible again after exit', restored.shellVisibility === 'visible', restored.shellVisibility);
-  check('topbar is visible again after exit', restored.topbarVisibility === 'visible', restored.topbarVisibility);
+  check('llama.cpp status bar is visible again after exit', restored.statusVisibility === 'visible', restored.statusVisibility);
   check('backdrop z-index returns to the normal modal layer', restored.backdropZ === 20, restored.backdropZ);
 
   // The classroom shortcut must enter fullscreen without relying on a mouse.

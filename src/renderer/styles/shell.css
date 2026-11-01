@@ -1,9 +1,9 @@
-/* shell.css — Khung ứng dụng: topbar/sidebar cố định, dark theme và override toàn màn hình. — tách từ app.css, giữ nguyên thứ tự (DECISIONS #149). */
+/* shell.css — Khung ứng dụng: sidebar cố định, dark theme và override toàn màn hình. — tách từ app.css, giữ nguyên thứ tự (DECISIONS #149). */
 
-/* === Shell: keep the header + AI status bar (and nav) in view while scrolling === */
+/* === Shell: the sidebar stays in view while the page scrolls. #162 removed the
+   topbar; the llama.cpp bar now lives inside the sidebar, so it no longer needs
+   its own sticky offset. === */
 @layer components {
-.topbar{position:sticky;top:0;z-index:30}
-.ai-status-bar{position:sticky;top:72px;z-index:20}
 .app-shell>.sidebar{position:sticky;top:0;height:100vh;overflow-y:auto;overflow-x:hidden}
 }
 
@@ -148,9 +148,8 @@ html[data-fullscreen="1"] .modal-body { flex: 1; min-height: 0; overflow: auto; 
 /* In fullscreen the play panel scrolls internally. A light background here
    showed through as a white flash above/below the dark stage while scrolling. */
 html[data-fullscreen="1"] .modal { background: #0b0e1a; }
-/* The game takes over the whole window: the app shell (sidebar + topbar)
-   must not show through. .modal-backdrop defaults to z-index 20, which is
-   below .topbar's 30, so the nav stayed visible on top of the game.
+/* The game takes over the whole window: the app shell (sidebar, including the
+   llama.cpp status block and notification bell) must not show through.
    visibility (not display) keeps the game panel measurable while hiding the
    shell, and the backdrop is made visible again for its subtree. */
 html[data-fullscreen="1"] body { overflow: hidden; }
@@ -161,8 +160,6 @@ html[data-fullscreen="1"] body { overflow: hidden; }
 html[data-fullscreen="1"],
 html[data-fullscreen="1"] body { height: 100%; overflow: hidden; }
 html[data-fullscreen="1"] .app-shell { visibility: hidden; }
-html[data-fullscreen="1"] .topbar,
-html[data-fullscreen="1"] .ai-status-bar { visibility: hidden; }
 /* `visibility: hidden` still lays out: the shell keeps its full height (measured
    at 1436px for a 768px viewport), so the document's scroll height grows and
    `#modalRoot` -- a normal in-flow block that follows it -- is pushed down to

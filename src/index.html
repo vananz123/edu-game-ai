@@ -18,9 +18,64 @@
        quy tắc style cũ của chúng trong layout.css/responsive.css đã bị xóa. -->
   <div class="app-shell flex min-h-screen">
     <aside class="sidebar w-[252px] max-wide:w-[220px] max-tab:w-[190px] max-compact:w-16 shrink-0 flex flex-col bg-white border-r border-line pt-[26px] px-4 pb-[18px] max-tab:px-2.5 max-compact:p-[20px_7px]">
-      <div class="brand flex items-center gap-[11px] px-[9px] pb-[26px] max-compact:px-1.5 max-compact:pb-7">
-        <div class="brand-mark w-[38px] h-[38px] rounded-xl bg-[linear-gradient(145deg,#786dff,#5145d6)] grid place-items-center text-white shadow-[0_6px_15px_#6258e83b] max-compact:shrink-0"><span data-icon="graduation-cap" data-icon-size="19"></span></div>
-        <div class="max-compact:hidden"><div class="brand-name text-[17px] max-tab:text-[14px] [font-weight:750] tracking-[-0.5px]">EduGame <b class="text-brand">Studio</b></div></div>
+      <!-- DECISIONS #162: brand và topbar đã bỏ. Trạng thái llama.cpp, thông báo và
+           hai nút toàn màn hình/hướng dẫn chuyển vào sidebar. Mọi #id giữ nguyên,
+           nên ai-status.ts và phần nối thông báo trong bootstrap.ts không phải sửa;
+           dropdown mở xuống dưới thanh, popover thông báo dùng position:fixed để
+           không bị overflow của sidebar cắt (navigation.css). -->
+      <div class="sidebar-status max-compact:hidden" data-sidebar-status>
+        <div class="relative min-w-0" id="aiStatusContainer">
+          <div id="aiStatusBar" class="ai-status-bar flex flex-col gap-0.5 px-2.5 py-2 bg-[#f8fafc] border border-[#e2e8f0] rounded-xl text-[12px] shadow-sm cursor-pointer select-none transition hover:border-[#cbd5e1] hover:bg-[#f1f5f9]" data-ai-status-bar data-ai-status="bar" role="status" aria-live="polite" title="Bấm để mở menu tùy chọn llama.cpp">
+            <div class="flex items-center gap-1.5 min-w-0">
+              <span id="aiStatusRuntimeDot" class="ai-status-runtime-dot inline-block w-2 h-2 rounded-full bg-[#b3261e] shrink-0" data-ai-status-dot data-ai-status="dot" aria-hidden="true" hidden></span>
+              <span id="aiStatusRuntime" class="ai-status-runtime font-semibold text-[#1e293b] truncate text-[11px] flex-1 min-w-0" data-ai-status="runtime">llama.cpp chưa chạy</span>
+              <button type="button" id="aiStatusMenuBtn" class="ai-status-menu-btn w-5 h-5 rounded-md flex items-center justify-center text-[#64748b] hover:text-[#1e293b] hover:bg-[#e2e8f0] transition shrink-0" title="Tùy chọn chức năng llama.cpp" aria-label="Tùy chọn llama.cpp">
+                <span data-icon="ellipsis-vertical" data-icon-size="14"></span>
+              </button>
+            </div>
+            <span id="aiStatusTask" class="ai-status-task text-[#64748b] text-[10px] truncate hidden" data-ai-status="task">Không có tác vụ AI đang chạy</span>
+          </div>
+          <div id="aiStatusDropdown" class="ai-status-dropdown hidden absolute left-0 top-full mt-1 w-full bg-white border border-[#e2e8f0] rounded-xl shadow-xl z-50 p-1.5 flex flex-col gap-0.5 text-[11px]" role="menu">
+            <div class="px-2 py-1 text-[10px] font-bold text-[#94a3b8] border-b border-[#f1f5f9] mb-1">
+              Chức năng AI local
+            </div>
+            <button type="button" id="aiStatusStart" class="ai-status-start w-full text-left flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-semibold text-[#16a34a] hover:bg-[#effaf5] transition disabled:opacity-40 disabled:pointer-events-none" data-ai-status-start data-action="ai-status-start">
+              <span data-icon="play" data-icon-size="12"></span> <span>Khởi động AI local</span>
+            </button>
+            <button type="button" id="aiStatusStop" class="ai-status-stop w-full text-left flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-semibold text-[#dc2626] hover:bg-[#fef2f2] transition disabled:opacity-40 disabled:pointer-events-none" data-ai-status-stop data-action="ai-status-stop" hidden disabled>
+              <span data-icon="square" data-icon-size="12"></span> <span>Dừng llama.cpp</span>
+            </button>
+            <button type="button" id="aiStatusCancel" class="ai-status-cancel w-full text-left flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-semibold text-[#d97706] hover:bg-[#fffbeb] transition disabled:opacity-40 disabled:pointer-events-none" data-ai-status-cancel data-action="ai-status-cancel" hidden disabled>
+              <span data-icon="x" data-icon-size="12"></span> <span>Huỷ tác vụ AI</span>
+            </button>
+            <button type="button" id="aiStatusToggle" class="ai-status-toggle w-full text-left flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-medium text-[#475569] hover:bg-[#f1f5f9] transition" data-ai-status-toggle data-action="ai-status-toggle" title="Hiện chỉ báo đỏ khi llama.cpp chưa chạy">Hiện khi rảnh</button>
+            <div class="border-t border-[#f1f5f9] my-0.5"></div>
+            <button type="button" id="aiStatusOpenModalBtn" class="w-full text-left flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-medium text-[#6366f1] hover:bg-[#f8f7ff] transition">
+              <span data-icon="settings" data-icon-size="12"></span> <span>Cài đặt AI local…</span>
+            </button>
+          </div>
+        </div>
+        <button type="button" id="globalAiActivity" data-global-ai-activity hidden class="w-full inline-flex items-center gap-[6px] text-[11px] font-semibold text-[#6b5600] bg-[#fff8e1] border border-[#f2e3c8] py-1.5 px-[9px] rounded-lg shadow-sm" title="Mở tiến trình AI đang chạy">
+          <span data-icon="loader-circle" data-icon-size="13" data-icon-class="animate-spin"></span><span data-global-ai-label class="truncate">AI đang phân tích</span><span data-global-ai-elapsed class="tabular-nums font-mono ml-auto">0:00</span>
+        </button>
+        <div class="sidebar-status-actions">
+          <div class="relative" id="topbarNotificationContainer">
+            <button type="button" class="icon-button relative w-[34px] h-[34px] border border-line rounded-[10px] bg-white text-muted transition hover:bg-[#f6f6ff] hover:text-brand" id="topbarNotificationBtn" title="Thông báo hệ thống">
+              <span data-icon="bell" data-icon-size="16"></span>
+              <span id="topbarNotificationBadge" class="absolute -top-1 -right-1 w-2.5 h-2.5 bg-[#ef4444] rounded-full border-2 border-white hidden"></span>
+            </button>
+            <div id="topbarNotificationPopover" class="notification-popover hidden w-[320px] bg-white border border-[#e2e8f0] rounded-xl shadow-lg z-50 p-3" role="dialog" aria-label="Thông báo">
+              <div class="flex items-center justify-between pb-2 border-b border-[#f1f5f9] mb-2">
+                <strong class="text-[12px] text-[#1e293b]">Thông báo hệ thống</strong>
+                <button type="button" id="clearNotificationsBtn" class="text-[10px] text-brand hover:underline">Xoá tất cả</button>
+              </div>
+              <div id="topbarNotificationList" class="flex flex-col gap-2 max-h-[240px] overflow-y-auto text-[11px]">
+              </div>
+            </div>
+          </div>
+          <button class="icon-button w-[34px] h-[34px] border border-line rounded-[10px] bg-white text-muted transition hover:bg-[#f6f6ff] hover:text-brand" id="topbarFullscreenBtn" title="Toàn màn hình (F11)"><span data-icon="maximize" data-icon-size="16"></span></button>
+          <button class="icon-button w-[34px] h-[34px] border border-line rounded-[10px] bg-white text-muted transition hover:bg-[#f6f6ff] hover:text-brand" id="helpBtn" title="Hướng dẫn"><span data-icon="circle-question-mark" data-icon-size="16"></span></button>
+        </div>
       </div>
       <!-- DECISIONS #161: chrome icon là <span data-icon> do paintUiIcons() vẽ, không
            còn emoji gõ tay; nhãn trang trí IN HOA ("KHÔNG GIAN LÀM VIỆC",
@@ -42,72 +97,6 @@
       </div>
     </aside>
     <main class="main min-w-0 flex-1">
-      <header class="topbar h-[68px] bg-white border-b border-line flex items-center justify-between px-[24px] max-wide:px-4 max-compact:px-[12px] gap-3">
-        <div class="topbar-left flex items-center gap-2.5 min-w-0 shrink-0">
-          <div class="breadcrumb flex gap-2 items-center text-[#9299aa] text-[12px]">
-            <span class="max-wide:hidden">EduGame Studio</span>
-            <span class="crumb-sep text-[#d3d6e0] max-wide:hidden">/</span>
-            <strong id="pageCrumb" class="text-[#30384b] [font-weight:650]">Thư viện trò chơi</strong>
-          </div>
-        </div>
-
-        <div class="relative flex items-center justify-center min-w-0" id="aiStatusContainer">
-          <div id="aiStatusBar" class="ai-status-bar flex items-center gap-2 h-[34px] px-3 bg-[#f8fafc] border border-[#e2e8f0] rounded-xl text-[12px] shadow-sm cursor-pointer select-none transition hover:border-[#cbd5e1] hover:bg-[#f1f5f9]" data-ai-status-bar data-ai-status="bar" role="status" aria-live="polite" title="Bấm để mở menu tùy chọn llama.cpp">
-            <div class="flex items-center gap-1.5 min-w-0">
-              <span id="aiStatusRuntimeDot" class="ai-status-runtime-dot inline-block w-2 h-2 rounded-full bg-[#b3261e] shrink-0" data-ai-status-dot data-ai-status="dot" aria-hidden="true" hidden></span>
-              <span id="aiStatusRuntime" class="ai-status-runtime font-semibold text-[#1e293b] whitespace-nowrap text-[11px]" data-ai-status="runtime">llama.cpp chưa chạy</span>
-            </div>
-            <span id="aiStatusTask" class="ai-status-task text-[#64748b] text-[11px] truncate max-w-[140px] hidden" data-ai-status="task">Không có tác vụ AI đang chạy</span>
-            <button type="button" id="aiStatusMenuBtn" class="ai-status-menu-btn w-5 h-5 rounded-md flex items-center justify-center text-[#64748b] hover:text-[#1e293b] hover:bg-[#e2e8f0] transition shrink-0 ml-0.5" title="Tùy chọn chức năng llama.cpp" aria-label="Tùy chọn llama.cpp">
-              <span data-icon="ellipsis-vertical" data-icon-size="14"></span>
-            </button>
-          </div>
-
-          <div id="aiStatusDropdown" class="ai-status-dropdown hidden absolute left-1/2 -translate-x-1/2 top-[40px] w-[210px] bg-white border border-[#e2e8f0] rounded-xl shadow-xl z-50 p-1.5 flex flex-col gap-0.5 text-[11px]" role="menu">
-            <div class="px-2 py-1 text-[10px] font-bold text-[#94a3b8] border-b border-[#f1f5f9] mb-1">
-              Chức năng AI local
-            </div>
-            <button type="button" id="aiStatusStart" class="ai-status-start w-full text-left flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-semibold text-[#16a34a] hover:bg-[#effaf5] transition disabled:opacity-40 disabled:pointer-events-none" data-ai-status-start data-action="ai-status-start">
-              <span data-icon="play" data-icon-size="12"></span> <span>Khởi động AI local</span>
-            </button>
-            <button type="button" id="aiStatusStop" class="ai-status-stop w-full text-left flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-semibold text-[#dc2626] hover:bg-[#fef2f2] transition disabled:opacity-40 disabled:pointer-events-none" data-ai-status-stop data-action="ai-status-stop" hidden disabled>
-              <span data-icon="square" data-icon-size="12"></span> <span>Dừng llama.cpp</span>
-            </button>
-            <button type="button" id="aiStatusCancel" class="ai-status-cancel w-full text-left flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-semibold text-[#d97706] hover:bg-[#fffbeb] transition disabled:opacity-40 disabled:pointer-events-none" data-ai-status-cancel data-action="ai-status-cancel" hidden disabled>
-              <span data-icon="x" data-icon-size="12"></span> <span>Huỷ tác vụ AI</span>
-            </button>
-            <button type="button" id="aiStatusToggle" class="ai-status-toggle w-full text-left flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-medium text-[#475569] hover:bg-[#f1f5f9] transition" data-ai-status-toggle data-action="ai-status-toggle" title="Hiện chỉ báo đỏ khi llama.cpp chưa chạy">Hiện khi rảnh</button>
-            <div class="border-t border-[#f1f5f9] my-0.5"></div>
-            <button type="button" id="aiStatusOpenModalBtn" class="w-full text-left flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-medium text-[#6366f1] hover:bg-[#f8f7ff] transition">
-              <span data-icon="settings" data-icon-size="12"></span> <span>Cài đặt AI local…</span>
-            </button>
-          </div>
-        </div>
-
-        <div class="top-actions flex items-center gap-[10px] shrink-0">
-          <button type="button" id="globalAiActivity" data-global-ai-activity hidden class="inline-flex items-center gap-[6px] text-[11px] font-semibold text-[#6b5600] bg-[#fff8e1] border border-[#f2e3c8] py-1.5 px-[9px] rounded-lg shadow-sm" title="Mở tiến trình AI đang chạy">
-            <span data-icon="loader-circle" data-icon-size="13" data-icon-class="animate-spin"></span><span data-global-ai-label>AI đang phân tích</span><span data-global-ai-elapsed class="tabular-nums font-mono">0:00</span>
-          </button>
-          <div class="relative" id="topbarNotificationContainer">
-            <button type="button" class="icon-button relative w-[34px] h-[34px] border border-line rounded-[10px] bg-white text-muted transition hover:bg-[#f6f6ff] hover:text-brand" id="topbarNotificationBtn" title="Thông báo hệ thống">
-              <span data-icon="bell" data-icon-size="16"></span>
-              <span id="topbarNotificationBadge" class="absolute -top-1 -right-1 w-2.5 h-2.5 bg-[#ef4444] rounded-full border-2 border-white hidden"></span>
-            </button>
-            <div id="topbarNotificationPopover" class="notification-popover hidden absolute right-0 top-[42px] w-[320px] bg-white border border-[#e2e8f0] rounded-xl shadow-lg z-50 p-3" role="dialog" aria-label="Thông báo">
-              <div class="flex items-center justify-between pb-2 border-b border-[#f1f5f9] mb-2">
-                <strong class="text-[12px] text-[#1e293b]">Thông báo hệ thống</strong>
-                <button type="button" id="clearNotificationsBtn" class="text-[10px] text-brand hover:underline">Xoá tất cả</button>
-              </div>
-              <div id="topbarNotificationList" class="flex flex-col gap-2 max-h-[240px] overflow-y-auto text-[11px]">
-              </div>
-            </div>
-          </div>
-          <span class="local-pill text-[11px] text-[#6f7a8d] bg-[#f7f8fb] border border-[#e9ecf3] py-1.5 px-[9px] rounded-lg max-tab:hidden" title="Dữ liệu lưu an toàn trên máy"><i class="inline-block w-1.5 h-1.5 bg-[#18ae7b] rounded-full mr-1"></i> Lưu trên thiết bị</span>
-          <button class="icon-button w-[34px] h-[34px] border border-line rounded-[10px] bg-white text-muted transition hover:bg-[#f6f6ff] hover:text-brand" id="topbarFullscreenBtn" title="Toàn màn hình (F11)"><span data-icon="maximize" data-icon-size="16"></span></button>
-          <button class="icon-button w-[34px] h-[34px] border border-line rounded-[10px] bg-white text-muted transition hover:bg-[#f6f6ff] hover:text-brand" id="helpBtn" title="Hướng dẫn"><span data-icon="circle-question-mark" data-icon-size="16"></span></button>
-          <div class="top-avatar w-[34px] h-[34px] rounded-[10px] bg-[#e8e6ff] text-brand font-extrabold grid place-items-center text-[11px] shadow-sm" title="Giáo viên">GV</div>
-        </div>
-      </header>
       <div id="pageContent" class="page-content max-w-[1500px] mx-auto pt-[30px] px-[34px] pb-12 max-wide:p-[25px_24px] max-compact:p-5 max-compact:px-[14px]"></div>
       <div id="toast" class="toast" role="status"></div>
     </main>

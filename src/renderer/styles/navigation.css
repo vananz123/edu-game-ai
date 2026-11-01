@@ -54,6 +54,24 @@
 }
 
 /* ============================================================
+   Khối trạng thái ở đầu sidebar (DECISIONS #162).
+
+   Topbar đã xóa; thanh llama.cpp, nút thông báo và hai nút toàn màn
+   hình/hướng dẫn chuyển vào đây. Sidebar có `overflow-y:auto`, nên popover
+   thông báo (rộng hơn cột 220px) dùng `position:fixed` để không bị cắt;
+   dropdown của llama.cpp vừa đúng bề rộng cột nên mở tại chỗ.
+   ============================================================ */
+.sidebar-status { display: flex; flex-direction: column; gap: 8px; margin: 0 2px 14px; }
+.sidebar-status-actions { display: flex; align-items: center; gap: 6px; }
+.sidebar .notification-popover {
+  position: fixed;
+  left: 12px;
+  right: auto;
+  top: 120px;
+  width: min(320px, calc(100vw - 24px));
+}
+
+/* ============================================================
    Block "Lối tắt" ở sidebar (DECISIONS #161).
 
    Trang Tổng quan bị xóa, nhưng hai việc nó vẫn làm — chơi lại một game
@@ -139,16 +157,17 @@ html[data-theme="dark"] .shortcut-icon { background: #1d2340; border-color: #313
 html[data-theme="dark"] .shortcut-text small,
 html[data-theme="dark"] .shortcut-empty { color: #939bb1; }
 
-/* Sidebar budget: brand 64 + nav 349 + block 220 + footer 210 + padding 44 = 903px.
-   A 1366x768 classroom laptop only has 768, so the rail would scroll and bury the
-   footer (#161 regression caught by ui-item-assets-editor-check). Two tiers keep the
-   block instead of dropping it from the smallest screen it matters on:
-   - under 950px the rows lose their second line and tighten (block 220 → 151px,
-     page total 834px);
+/* Sidebar budget (#162): status 90 + nav 349 + block 220 + footer 210 + padding
+   44 ≈ 913px. A 1366x768 classroom laptop only has 768, so the rail would scroll
+   and bury the footer (#161 regression caught by ui-item-assets-editor-check).
+   Two tiers keep the block instead of dropping it from the smallest screen it
+   matters on:
+   - under 950px the rows lose their second line and tighten (block 220 → 151px);
    - under 860px the two shortcuts that only repeat a nav entry ("Tạo từ giáo án",
-     "Dự án của tôi") and the redundant offline card go too — the topbar already
-     says "Lưu trên thiết bị" on every page — leaving ~726px with three recent games. */
+     "Dự án của tôi") and the offline card go too, leaving three recent games and
+     the footer inside 768px. */
 @media (max-height: 950px) {
+  .sidebar-status { gap: 6px; margin-bottom: 8px; }
   .sidebar-shortcuts { margin-top: 8px; padding: 8px 9px 9px; }
   .shortcut-head { margin-bottom: 6px; }
   .shortcut-label { margin-bottom: 2px; }

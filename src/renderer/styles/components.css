@@ -110,20 +110,23 @@
    scrolls under it. `#pageContent` is the scrolling document, so `position: sticky` with
    `inset-block-start` does the job without a nested scroll container. */
 .editor-page{display:flex;flex-direction:column;min-height:100%;max-width:1180px;margin:0 auto}
-.editor-page-head{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:12px 22px;background:#ffffff;border-bottom:1px solid var(--line);box-shadow:0 6px 18px #1f29370d}
+/* #162: the topbar is gone, so only the save bar is sticky (at the very top of
+   the scrollport); the head scrolls away instead of stacking two sticky offsets
+   whose second value had to guess the first one's height. */
+.editor-page-head{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:12px 22px;background:#ffffff;border-bottom:1px solid var(--line);box-shadow:0 6px 18px #1f29370d}
 /* Anchor for `position: sticky`: the sticky bars cannot leave the flow of their
    containing block, so the block must cover the whole scrollable height (the page, not a
    short wrapper). */
 .page-content.editor-active{padding-top:0}
 /* The save actions are always on screen — the same contract as "Lưu cài đặt" in Cài
-   đặt. They sit directly under the 68px top bar and stay there while the question list
-   scrolls, with the hint saying whether anything still needs saving. */
-.editor-save-bar{position:sticky;top:68px;z-index:29;display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:space-between;padding:10px 22px;background:#ffffff;border-bottom:1px solid var(--line);box-shadow:0 8px 18px #1f29370f}
+   đặt. They stay at the top while the question list scrolls, with the hint saying
+   whether anything still needs saving. */
+.editor-save-bar{position:sticky;top:0;z-index:29;display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:space-between;padding:10px 22px;background:#ffffff;border-bottom:1px solid var(--line);box-shadow:0 8px 18px #1f29370f}
 .editor-save-hint{font-size:11px;color:#788196}
 .editor-save-bar[data-dirty="1"] .editor-save-hint{color:#b45309;font-weight:700}
 .editor-save-actions{display:flex;gap:8px;flex-wrap:wrap}
 @media (max-width:760px){
-  .editor-save-bar{top:68px;justify-content:flex-end}
+  .editor-save-bar{top:0;justify-content:flex-end}
   .editor-save-hint{order:2;width:100%}
 }
 .editor-page-title{flex:1;min-width:200px}

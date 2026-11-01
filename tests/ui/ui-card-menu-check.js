@@ -69,10 +69,10 @@ function check(label, ok, detail = '') {
     const toggles = [...document.querySelectorAll('[data-menu-toggle]')];
     toggles[0].click();
     toggles[1].click();
-    out.oneAtATime = document.querySelectorAll('[role="menu"]:not([hidden])').length === 1;
+    out.oneAtATime = document.querySelectorAll('[data-game-menu-root] [role="menu"]:not([hidden])').length === 1;
 
     navigate('library');
-    out.closedOnNavigate = document.querySelectorAll('[role="menu"]:not([hidden])').length === 0;
+    out.closedOnNavigate = document.querySelectorAll('[data-game-menu-root] [role="menu"]:not([hidden])').length === 0;
 
     await window.eduGame.deleteGame(first.id);
     await window.eduGame.deleteGame(second.id);

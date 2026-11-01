@@ -81,12 +81,16 @@ document.addEventListener('click', e => {
 $('.sidebar')?.addEventListener('click', event => {
   const target = event.target;
   if (!target || !target.closest) return;
+  // #162: the llama.cpp menu moved into the sidebar and its items carry their own
+  // `data-action` names (`ai-status-*`), wired by ai-status.ts. They are not
+  // handleAction actions, so the shortcut delegation must stay out of that block.
+  if (target.closest('[data-sidebar-status]')) return;
   const el = target.closest('[data-page], [data-action]');
   if (!el || el.closest('.nav-item[data-page]')) return;
   if (el.dataset.page) { navigate(el.dataset.page); return; }
   handleAction(el.dataset.action, el.dataset.id, el);
 });
-$('#helpBtn').addEventListener('click', showHelp);
+$('#helpBtn')?.addEventListener('click', showHelp);
 
 const notifBtn = $('#topbarNotificationBtn');
 const notifPopover = $('#topbarNotificationPopover');
@@ -157,9 +161,9 @@ window.addEventListener('resize', () => {
     state.db = await window.eduGame.getLibrary();
     state.settings = await window.eduGame.getSettings();
     applyTheme(state.settings && state.settings.preferences && state.settings.preferences.theme);
-    // DECISIONS #161: the static shell (sidebar, topbar) carries `data-icon` hooks
-    // instead of emoji, because index.html cannot call uiIcon(). Painted before the
-    // first render() so no chrome ever flashes an unpainted placeholder.
+    // DECISIONS #161: the static shell (sidebar) carries `data-icon` hooks instead
+    // of emoji, because index.html cannot call uiIcon(). Painted before the first
+    // render() so no chrome ever flashes an unpainted placeholder.
     if (typeof paintUiIcons === 'function') paintUiIcons(document);
     // Chơi LAN: subscribes to `lan:state` so a room opened before a reload (or on a
     // second window) is drawn again. Never throws when the bridge is absent.

@@ -1,7 +1,7 @@
 // Chrome icons (docs/DECISIONS.md #161).
 //
 // One place for the Lucide icons that decorate controls and structure — sidebar,
-// topbar, page headers, tabs, empty states, toasts. The chrome used to be
+// page headers, tabs, empty states, toasts. The chrome used to be
 // hand-typed emoji, which render at whatever size and baseline the system font
 // picks, so the same "gear" differed between the sidebar, a button and a toast.
 // Everything here goes through the same generated node data as the game content

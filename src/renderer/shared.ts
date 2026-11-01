@@ -6,9 +6,6 @@ const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 // inside the AI panel. Both are UI state only and never saved; the first visit opens the
 // AI tab on its local sub-tab.
 const state = { db: { games: [], sessions: [] }, page: 'library', search: '', filter: 'all', projects: null, lessonLibrary: null, settings: {}, localAiModels: [], localAiMachine: {}, draft: null, importedDoc: null, selectedTemplate: 'scenario', currentGame: null, gameIndex: 0, gameAnswers: [], gameStart: 0, playStartedAt: 0, resultSession: null, answerLocked: false, lastSummary: null, matchingPlay: null, memoryCards: null, treasurePlay: null, racePlay: null, teamPlay: null, pendingTeams: null, settingsSection: 'ai', settingsAiTab: 'local' };
-// DECISIONS #161: "Tổng quan" is gone — the library is what a teacher lands on, and the
-// two things the overview page was for (replay, start) moved to the sidebar block.
-const pageNames = { library: 'Thư viện trò chơi', 'create-wizard': 'Tạo từ giáo án', create: 'Tạo trò chơi', 'lesson-plans': 'Giáo án', 'my-projects': 'Dự án của tôi', sessions: 'Lịch sử kết quả', settings: 'Cài đặt' };
 const icons = { quiz: '🧠', scenario: '🚦', matching: '🧩', 'treasure-hunt': '🗺️', race: '🏁' };
 const treasureMissionMeta = {
   'multiple-choice': { label: 'Trắc nghiệm', icon: '❓', short: 'Chọn đáp án đúng' },

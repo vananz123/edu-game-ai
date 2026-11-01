@@ -7,7 +7,8 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
-### 2026-11-01 — inline (chưa có file lưu trữ)
+### 2026-11-01 — [docs/handoff/status/2026-11-01.md](handoff/status/2026-11-01.md)
+- Bỏ brand + navbar; trạng thái llama.cpp, thông báo, toàn màn hình/trợ giúp vào sidebar (#162)
 - Icon Lucide cho toàn bộ chrome, xoá trang Tổng quan, sidebar có khối "Lối tắt" (#161)
 - Biến thể `dark:` nối vào `[data-theme]` — dark mode 149/223 → 5/223 chữ dưới ngưỡng AA (#160, G6)
 - Năm mục Cài đặt thành năm tab; mọi utility `dark:` trong app đều chết (#159)
@@ -198,6 +199,31 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - Lịch sử trước 2026-10-19
 ## Bàn giao gần nhất
 
+## Handoff - Bỏ brand + navbar, trạng thái llama.cpp và thông báo vào sidebar (2026-11-01, DECISIONS #162)
+
+**Files changed.**
+- `src/index.html`: xoá khối `.brand` và toàn bộ `<header class="topbar">` (breadcrumb `#pageCrumb`, `.local-pill`, `.top-avatar`); `<aside class="sidebar">` mở đầu bằng `<div class="sidebar-status" data-sidebar-status>` chứa thanh llama.cpp (nguyên `#aiStatusBar`, dropdown `#aiStatusDropdown`), chip `#globalAiActivity`, chuông `#topbarNotificationBtn` + popover `#topbarNotificationPopover`, `#topbarFullscreenBtn`, `#helpBtn`; khối ẩn ở rail hẹp (`max-compact:hidden`). Mọi `#id` và id `topbarNotification*` giữ nguyên để không phải sửa `ai-status.ts`/`shared.ts`/`bootstrap.ts`.
+- `src/renderer/core/render.ts`: bỏ dòng ghi `#pageCrumb` (phần tử đã xoá; giữ lại sẽ ném lỗi mỗi lần render).
+- `src/renderer/shared.ts`: xoá `pageNames` (chỉ breadcrumb dùng).
+- `src/renderer/core/bootstrap.ts`: handler uỷ nhiệm click của `.sidebar` bỏ qua `[data-sidebar-status]` (nếu không, nút menu AI mang `data-action="ai-status-*"` bị `handleAction()` xử lý lần nữa); `$('#helpBtn')?.addEventListener`.
+- `src/renderer/core/controller.ts`: **sửa lỗi thật** — `closeGameMenus()` chỉ đóng `[data-game-menu-root] [role="menu"]:not([hidden])`. Trước đó nó gắn thuộc tính `hidden` cho **mọi** `role="menu"` (kể cả dropdown llama.cpp, vốn quản trạng thái bằng class), và bootstrap gọi nó ở capture phase cho mọi click ngoài menu → dropdown đo 0×0 vĩnh viễn dù class đã gỡ.
+- `src/renderer/styles/shell.css`: bỏ `.topbar` sticky và `.ai-status-bar{top:72px}`; chỉ còn `.app-shell>.sidebar` sticky. `setup-wizard.css`: bỏ rule ẩn `.topbar, .ai-status-bar` (đã có `.app-shell{visibility:hidden}`). `game-treasure.css`: rule tối #97 đổi tiền tố `.topbar` → `.sidebar`.
+- `src/renderer/styles/navigation.css`: `.sidebar-status` (xếp dọc, gap 8), `.sidebar-status-actions` (hàng 3 nút), `.sidebar .notification-popover{position:fixed;left:12px;top:120px;width:min(320px,calc(100vw - 24px))}` để sidebar `overflow-x:hidden` không cắt popover; cập nhật chú thích ngân sách chiều cao.
+- `src/renderer/styles/components.css`: `.editor-page-head` thôi sticky; `.editor-save-bar` `top:68px` → `top:0`. `src/renderer/pages/settings.ts`: aside "Lưu" `sticky top-20` → `sticky top-5`.
+- Tests: `ui-chrome-icons-check` (+2 check: brand/topbar/breadcrumb biến mất; trạng thái + chuông + toàn màn hình + trợ giúp nằm trong `.sidebar`), `ui-ai-status-bar-check` (dựng lại `[data-sidebar-status]`, thêm `visible` đo rect thật 209×161, thêm check mở lại sau click ngoài), `ui-card-menu-check` (đếm menu thẻ theo `[data-game-menu-root]`), `ui-fullscreen-check` (thay topbar bằng `#aiStatusBar` + z-index sidebar), `ui-setup-fullscreen-check` (bỏ `topbarVisible`), `smoke75` (T8 đo sidebar sticky + `barInSidebar`, đóng setup onboarding trước khi đo).
+- Docs: `docs/DECISIONS.md` (#162), `docs/STATUS.md`, `docs/PROJECT_MAP.md`, `docs/handoff/status/2026-11-01.md` (chuyển bàn giao #159 vào lưu trữ).
+- Không đổi: schema/IPC, engine trò chơi, `.egame`, SQLite, ai-status.ts, phần nối thông báo, bố cục trang.
+
+**Behavior.** Cửa sổ chỉ còn sidebar + vùng trang, không còn dải ngang nào. Đầu sidebar là khối trạng thái: thanh llama.cpp (bấm mở menu tùy chọn, mở đúng 209×161 tại chỗ), chip "AI đang phân tích" khi có tiến trình, một hàng chuông thông báo (popover 320px mở sang phải, không bị cắt) + toàn màn hình + trợ giúp. Sidebar vẫn sticky toàn chiều cao và cuộn trong chính nó khi cửa sổ thấp. Ở 1366×768 toàn bộ sidebar nằm trong 768px (đáy `.profile` 750) nên không có hộp cuộn nào giấu nội dung; 1920×1080 cũng vậy. Menu thẻ ••• vẫn đóng đúng như cũ, và dropdown llama.cpp không còn bị nó làm hỏng.
+
+**Commands run.** `npm run check` 0 · `npm run check:renderer-globals` 0 undefined (55/56 script, 770 hàm, 6.387 call site) · `npm run build:icons:check` **128 icon in sync** · `npm run build` 0 · `npm run verify:css` **24/24** · `node tests/run-unit.js` **68/68**. Electron thật (profile sạch, cổng 9385; riêng check wizard dùng cổng 9333): `ui-chrome-icons-check` **17/17**, `ui-ai-status-bar-check` **14/14**, `ui-card-menu-check` **12/12**, `ui-item-assets-editor-check` **29/29**, `ui-fullscreen-check` **20/20**, `ui-settings-sections-check` pass, `ui-dark-theme-check` pass, `ui-play-surface-check` **156/156**, `ui-setup-fullscreen-check` **10/10**, `smoke75` **17/17**.
+
+**Chưa xác minh.** Sidebar cuộn khi cửa sổ thấp hơn ~687px (máy này mở thật ở 1266×635) — hành vi có từ trước #161, không phải hồi quy #162; chưa có bản gọn riêng cho cửa sổ thấp ngoài hai mức `max-height` sẵn có. Rail hẹp <700px ẩn cả khối trạng thái. Chưa review bằng mắt từng trang trong theme tối (rule tối đã đổi tiền tố và `ui-dark-theme-check` pass, nhưng chỉ đo tương phản chữ). Chưa chạy installer đóng gói.
+
+**Next task.** Nếu cần: một mức `@media (max-height: 700px)` siết nav để footer không phải cuộn trên laptop thấp; còn lại Roadmap `Packaged check` vẫn cần máy sạch.
+
+---
+
 ## Handoff - Icon Lucide đồng bộ toàn chrome, xoá trang Tổng quan, sidebar có khối "Lối tắt" (2026-11-01, DECISIONS #161)
 
 **Files changed.**
@@ -241,30 +267,5 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 **Chưa xác minh.** Chưa review bằng mắt từng trang ngoài ba trang có ảnh (đã chứng minh bằng kiểm kê là chỉ có utility màu, không có hình học, nên quyết định tin số đo). 5 badge bước vẫn 4.47:1 — class component, nằm ngoài 297 utility. **Hai đỏ có sẵn, không do #160** (đã probe để tách bạch): `npm run test:ui` (`ui-setup-fullscreen-check`) fail 2/9 check vì wizard trên profile sạch dừng ở màn `detecting`, markup chỉ có `data-setup-action="close"`, còn check tìm `"start"`/`"skip-ai"` — selector của check đã cũ; và `tests/legacy/smoke-ui.js` **không parse được từ HEAD** (`node --check`: `missing ) after argument list` dòng 248), nên dòng "smoke-ui 27/27" ở bàn giao #159 là sai, đã đính chính trong DECISIONS #160. `tests/legacy/smoke60.js` 33/43 trên profile sạch vì không có nhà cung cấp AI. Chưa chạy installer đóng gói.
 
 **Next task.** Sửa `ui-setup-fullscreen-check` theo markup thật của wizard (chọn action theo màn `detecting`, và đợi `renderSetupWizard()` thay vì sleep 200ms) — việc nhỏ, tách bạch; Roadmap `Packaged check` (cần máy sạch).
-
----
-
-## Handoff - Năm mục Cài đặt thành năm tab (2026-11-01, DECISIONS #159)
-
-**Files changed.**
-- `src/renderer/pages/settings.ts`: `SETTINGS_SECTION_IDS` → `SETTINGS_TABS` (mỗi mục có `tab` ngắn cho dải tab và `title` đầy đủ cho heading trong panel); một builder `settingsTabStripHtml(cfg)` dựng cả dải năm mục lẫn dải "AI local"/"AI cloud" lồng trong thẻ AI; xoá `settingsSectionHeader()` + `settingsAiTabsHtml()`; mỗi section giờ **là** `role="tabpanel"` (`data-settings-panel`, id `settingsPanel-<id>`, `aria-labelledby`) nên wrapper `mt-4` bị bỏ; chip trạng thái (🤖 ✓/○, ☁️ n/4, giọng điệu, chủ đề) chuyển lên nhãn tab; không còn state gập hết (`openSection` fallback về tab đầu).
-- `src/renderer/features/settings.ts`: `wireSettingsAiTabs()` và phần accordion của `wireSettingsSections()` nhập thành một helper `wireSettingsTabStrip(tabSelector, panelSelector, key, onSelect)` dùng cho cả hai cấp; panel chỉ tìm qua `aria-controls` → id; vẫn toggle class `hidden` tại chỗ, **không re-render**; ArrowLeft/ArrowRight đổi cả lựa chọn lẫn focus.
-- `src/renderer/styles/components.css`: `.settings-ai-tab` → `.settings-tab` + thêm `.settings-tablist` (đường kẻ có bản `html[data-theme="dark"]`); padding `8px 13px` → `8px 10px`, gap 6→5px sau khi đo dải 5 tab tràn 2 hàng ở 1366×768.
-- `src/renderer/shared.ts`, `src/renderer/core/controller.ts`: chỉ cập nhật chú thích theo #159 (state và chỗ gọi wiring giữ nguyên).
-- `tests/manual/verify-css.js` 18 → **20** expectation; `tests/ui/ui-settings-sections-check.js` viết lại thành **24** check.
-- Docs: `docs/DECISIONS.md` (#159), `docs/STATUS.md`, `docs/handoff/status/2026-10-31.md` (chuyển bàn giao #156 vào lưu trữ), `docs/ROADMAP.md` (ghi nợ `dark:`).
-- Không đổi: schema `settings`, hợp đồng IPC, `saveSettings()`, `readAiProviderPatches()`, registry 5 provider, `tests/legacy/smoke-ui.js`.
-
-**Behavior.** Trang Cài đặt là một dải năm tab — Nhà cung cấp AI / Phong cách / Giao diện / Tác vụ / Chẩn đoán — mỗi tab mở một thẻ, bên trong thẻ AI vẫn là hai tab con AI local / AI cloud. Nhãn tab ngắn + chip nên tab đang ẩn vẫn tự nói tình trạng của mình (đây là mục đích chip header của #157, nay chuyển lên trên). Không tab nào "đóng hết" được nữa; bấm lại tab đang mở chỉ giữ nguyên. Toàn bộ điều khiển vẫn nằm trong DOM khi ẩn nên "Lưu cài đặt" lấy được giá trị ở tab đang ẩn, đang gõ base URL/API key chưa lưu rồi đổi tab (kể cả đổi tab con) vẫn còn nguyên, tab + tab con sống sót sau khi lưu, và *Tác vụ*/*Chẩn đoán* refresh đúng khi mở. Phát hiện ngoài ý muốn: **mọi class `dark:*` trong renderer đều inert** (Tailwind v4 biên dịch biến thể `dark` theo `prefers-color-scheme` trong khi `applyTheme()` đặt `data-theme`), đo bằng probe buộc theme tối; một dòng `@custom-variant dark` sửa được tận gốc nhưng **cố ý không áp dụng** vì nó bật lại hàng trăm utility đang ngủ trên mọi trang — đã ghi thành nợ trong ROADMAP để quyết định riêng. Phần #159 thêm mới không dùng `dark:` nữa: heading panel thừa hưởng mực của thẻ, đường kẻ dải tab viết tay theo `html[data-theme="dark"]`.
-
-**Commands run.** `npm run check` 0 · `node tests/run-unit.js` **68/68** · `npm run build` 0 · `npm run check:renderer-globals` 0 undefined (54/55 script, 766 hàm, 6.295 call site) · `npm run verify:css` **20/20**. Electron thật, mỗi check một profile sạch qua `run-ui-153.sh`: `ui-settings-sections-check` **24/24** (probe tối: heading `rgb(232,234,242)` = mực thẻ, kẻ `rgb(42,50,75)`, tab `rgb(100,116,139)`), `ui-ai-provider-settings-check` / `ui-ai-provider-key-check` / `ui-ai-provider-wizard-check` / `ui-ai-status-bar-check` pass, `node tests/legacy/smoke-ui.js` **27/27**; `ui-ai-tasks-paging-check` vẫn 6/8 như trước. Ảnh: 1366×768 sáu trạng thái tab, 1920×1080, 1120 (dải tab tự ngắt 2 hàng), 1366 bản tối + bản sáng.
-
-**Chưa xác minh.** Chưa bấm tay luồng giáo viên thật (không API key, không model local) để xem cảm nhận khi đổi tab; chưa đo lại toàn bộ các trang khác trong theme tối — nợ `dark:` có thể còn chỗ khác chưa lộ. Chưa chạy installer đóng gói.
-
-**Next task.** Chốt hướng xử lý nợ `dark:` (một dòng `@custom-variant` + review mọi trang, hay gỡ hết class `dark:`); Roadmap `Packaged check` (cần máy sạch).
-
-
-
-
 
 

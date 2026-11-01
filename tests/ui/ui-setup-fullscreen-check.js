@@ -7,7 +7,7 @@
 // to use the app underneath it. This measures, on the real renderer, that:
 //   * `html[data-setup-fullscreen]` is set while an unfinished setup is shown;
 //   * the setup surface covers the whole viewport;
-//   * the app shell, topbar and AI status bar are visually hidden;
+//   * the app shell and the AI status bar inside it are visually hidden;
 //   * the action buttons are inside the viewport (not pushed below the fold);
 //   * finishing or closing the wizard gives the window back.
 (async () => {
@@ -45,7 +45,6 @@
     out.screen = (document.querySelector('#modalRoot [data-setup-screen]') || {}).dataset?.setupScreen;
     out.surface = rect('#modalRoot .setup-fullscreen');
     out.shellVisible = visible('.app-shell');
-    out.topbarVisible = visible('.topbar');
     out.statusBarVisible = visible('.ai-status-bar');
     out.primaryButton = rect('#modalRoot [data-setup-action="start"]') || rect('#modalRoot [data-setup-action="skip-ai"]');
     out.modalBackdropPresent = !!document.querySelector('#modalRoot .modal-backdrop');
@@ -79,7 +78,6 @@
     !!run.surface && run.surface.w === run.viewport.w && run.surface.h === run.viewport.h,
     { surface: run.surface, viewport: run.viewport });
   check('app shell is hidden', run.shellVisible === false, run.shellVisible);
-  check('topbar is hidden', run.topbarVisible === false, run.topbarVisible);
   check('AI status bar is hidden', run.statusBarVisible === false, run.statusBarVisible);
   check('action buttons are inside the viewport',
     !!run.primaryButton && run.primaryButton.y >= 0
