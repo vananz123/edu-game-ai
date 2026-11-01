@@ -1,4 +1,4 @@
-# Bản đồ dự án (đọc trước khi sửa)
+﻿# Bản đồ dự án (đọc trước khi sửa)
 
 Tài liệu này trả lời "file nào làm gì, sửa một tính năng thì mở file nào". Các
 tài liệu khác vẫn cần đọc nhưng trả lời câu hỏi khác:
@@ -72,6 +72,7 @@ src/
       game-treasure.css  kho báu: tương tác nâng cao + bản đồ hành trình
       game-worlds.css    5 thế giới trò chơi + bố cục kho báu toàn màn hình
       game-house.css     chế độ Xây nhà (#142)
+      game-connection.css chế độ Kết nối vật thể cho ghép cặp (#168)
   game-engine/         Runtime chạy game đã lưu (offline)
 server/                Cloud AI Gateway (Express + Supabase + Gemini) — không chạy khi chơi
 scripts/               Script build (icon, kiểm tra global renderer):
@@ -123,6 +124,7 @@ vendor/                DLL VC++ đóng gói kèm
 | Màn hình kết quả, trình chiếu, thi đấu đội | `features/games/result-screen.ts` |
 | Lớp 3D dùng chung và thế giới theo trò | `features/three-game-interaction.ts` (API), `features/games/three-stage.ts` (mount/world/reactThree) |
 | House Building Mode (kinh tế nhà, mẫu nhà) | `src/game-engine/house-build.ts` (kinh tế), `features/games/house.ts` (UI/3D) |
+| Kết nối vật thể (cách chơi thứ tư của ghép cặp, bề mặt 3D #169) | `src/shared/connection-templates.ts` (7 mẫu), `connection-progress.ts` (tiến độ thuần), `features/games/connection.ts` (khung 3D + SVG dự phòng + gallery), `makeNodeGraph`/`makeGlow`/`dolly` trong `features/three-game-interaction.ts`, nhánh trong `features/games/matching.ts` + `three-stage.ts`; bản global cho renderer ở `src/renderer/connection-core.ts` + `renderer/shared/connection-*.ts` |
 | Gói cài đặt | `package.json` → `build`, `build/installer.nsh`, `vendor/` |
 
 ## `main.ts` (2.814 dòng)
@@ -145,7 +147,7 @@ sửa, đi theo thứ tự này:
 `src/renderer/styles/app.css` là entry Tailwind: `@import "tailwindcss"` + daisyUI
 `@plugin`/`@theme`/`@source`, rồi `@import` 13 file khu vực (base → components →
 shell → fullscreen → gameplay → navigation → game-race → game-animations →
-setup-wizard → wizard → game-treasure → game-worlds → game-house). Tailwind inline
+setup-wizard → wizard → game-treasure → game-worlds → game-house → game-connection). Tailwind inline
 từng `@import` đúng tại chỗ, nên **thứ tự import là thứ tự cascade**: không đổi
 thứ tự, không import muộn hơn vị trí cũ của một khối. Sau khi biên dịch, Tailwind
 rút gọn selector (`.modal[data-player-theme]` → `[data-player-theme]`) nên **một

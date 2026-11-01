@@ -160,6 +160,14 @@
        loaded before games/house.js which drives the 3D house from it. -->
   <script src="game-engine/house-build.js"></script>
 
+  <!-- Object Connection (DECISIONS #168): constants, template data and the pure
+       progression. All three declare globals only, and they are loaded before
+       every page/feature that renders a template (wizard step 4, editor, play
+       surface), so the gallery can be built during the first render. -->
+  <script src="renderer/shared/connection-constants.js"></script>
+  <script src="renderer/shared/connection-data.js"></script>
+  <script src="renderer/connection-core.js"></script>
+
   <script src="renderer/features/game-illustration.js"></script>
 
   <!-- Three.js (DECISIONS #137): bundled by scripts/build-three.js into a single
@@ -177,6 +185,8 @@
   <script src="renderer/features/games/shell.js"></script>
   <script src="renderer/features/games/three-stage.js"></script>
   <script src="renderer/features/games/house.js"></script>
+  <!-- #168: the SVG panel + gallery; quiz.js and three-stage.js call into it. -->
+  <script src="renderer/features/games/connection.js"></script>
   <script src="renderer/features/games/result-screen.js"></script>
   <script src="renderer/features/games/quiz.js"></script>
   <script src="renderer/features/games/matching.js"></script>

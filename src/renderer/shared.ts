@@ -1,11 +1,11 @@
-// @ts-nocheck -- migrated legacy UI logic; new contracts are typed in src/shared/types.ts.
+﻿// @ts-nocheck -- migrated legacy UI logic; new contracts are typed in src/shared/types.ts.
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 // #159: `settingsSection` is the Settings tab shown on the page (`''` was the accordion's
 // "all collapsed" state and no longer exists). #158: `settingsAiTab` is the tab shown
 // inside the AI panel. Both are UI state only and never saved; the first visit opens the
 // AI tab on its local sub-tab.
-const state = { db: { games: [], sessions: [] }, page: 'library', search: '', filter: 'all', projects: null, lessonLibrary: null, settings: {}, localAiModels: [], localAiMachine: {}, draft: null, importedDoc: null, selectedTemplate: 'scenario', currentGame: null, gameIndex: 0, gameAnswers: [], gameStart: 0, playStartedAt: 0, resultSession: null, answerLocked: false, lastSummary: null, matchingPlay: null, memoryCards: null, treasurePlay: null, racePlay: null, teamPlay: null, pendingTeams: null, settingsSection: 'ai', settingsAiTab: 'local' };
+const state = { db: { games: [], sessions: [] }, page: 'library', search: '', filter: 'all', projects: null, lessonLibrary: null, settings: {}, localAiModels: [], localAiMachine: {}, draft: null, importedDoc: null, selectedTemplate: 'scenario', currentGame: null, gameIndex: 0, gameAnswers: [], gameStart: 0, playStartedAt: 0, resultSession: null, answerLocked: false, lastSummary: null, matchingPlay: null, memoryCards: null, treasurePlay: null, racePlay: null, teamPlay: null, pendingTeams: null, settingsSection: 'ai', settingsAiTab: 'local', connectionProgress: null };
 const icons = { quiz: '🧠', scenario: '🚦', matching: '🧩', 'treasure-hunt': '🗺️', race: '🏁' };
 const treasureMissionMeta = {
   'multiple-choice': { label: 'Trắc nghiệm', icon: '❓', short: 'Chọn đáp án đúng' },
@@ -147,6 +147,15 @@ function gameCard(game, index = 0, deletable = false) {
     : playMode === 'classic'
       ? '<span class="px-[4px] py-[7px] bg-[#edf2ff] text-[#4565c9] rounded-[5px] text-[9px] font-semibold" data-play-mode="classic" title="Cách chơi: Cổ điển — trả lời câu hỏi nhận điểm">🎯 Cách chơi: Cổ điển</span>'
       : '';
+  // #168: Object Connection is a MATCHING style, so its chip sits beside the
+  // matching label. Mac Din by absence: a board saved before it existed is not
+  // a connection board, and an unknown mode stays silent instead of lying.
+  const connectionBoard = template === 'matching' && game.matchingGame && game.matchingGame.mode === 'connection';
+  // #170: the card says BETA too, so a game built during the trial is recognisable
+  // in the library months later without opening it.
+  const connectionChip = connectionBoard
+    ? `<span class="px-[4px] py-[7px] bg-[#e8f5ef] text-[#1c7a58] rounded-[5px] text-[9px] font-bold" data-play-mode="connection" data-beta-badge title="Cách chơi: Kết nối vật thể (${CONNECTION_BETA_LABEL}) — mỗi cặp ghép đúng nối thêm một chặng của hình">🔗 Cách chơi: Kết nối vật thể · ${CONNECTION_BETA_LABEL}</span>`
+    : '';
   return `<article class="bg-white border border-line rounded-[14px] overflow-hidden min-w-0 transition-all duration-180 hover:-translate-y-[3px] hover:shadow-card hover:border-[#d8d5ff]" data-game-card="${id}">
     <div class="${coverGrad} h-[130px] relative flex items-center justify-center overflow-hidden">
       <div class="absolute [border:1px_solid_#ffffffaa] w-[130px] h-[130px] rounded-full -left-[15px] top-[40px]"></div>
@@ -171,7 +180,7 @@ function gameCard(game, index = 0, deletable = false) {
         </div>
       </div>
       <p class="text-[11px] text-[#8b94a6] leading-[1.6] mt-[8px] mb-[13px] min-h-[35px]">${escapeHtml(game.description || 'Trò chơi học tập tương tác, có thể chơi ngoại tuyến.')}</p>
-      <div class="flex gap-[5px] flex-wrap">${playModeChip}<span class="px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#788196] text-[9px]">${escapeHtml(game.subject || 'Chưa phân môn')}</span><span class="px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#788196] text-[9px]">${game.grade ? 'Lớp ' + escapeHtml(game.grade) : 'Mọi lớp'}</span><span class="px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#788196] text-[9px]">${game.questions?.length || 0} câu</span></div>
+      <div class="flex gap-[5px] flex-wrap">${playModeChip}${connectionChip}<span class="px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#788196] text-[9px]">${escapeHtml(game.subject || 'Chưa phân môn')}</span><span class="px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#788196] text-[9px]">${game.grade ? 'Lớp ' + escapeHtml(game.grade) : 'Mọi lớp'}</span><span class="px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#788196] text-[9px]">${game.questions?.length || 0} câu</span></div>
       <div class="flex items-center justify-between border-t border-[#f0f1f6] pt-[12px] text-[#8b94a6] text-[10px]"><span class="inline-flex items-center gap-[5px]"><span data-icon="book-open" data-icon-size="12"></span> ${escapeHtml(game.topic || 'Bài học')}</span><span class="inline-flex items-center gap-[5px]"><span data-icon="clock" data-icon-size="12"></span> ${fmtDate(game.updatedAt || game.createdAt)}</span></div>
       <div class="flex gap-[8px] mt-[13px]">
         <button class="border-0 rounded-[9px] px-[11px] py-[8px] inline-flex items-center justify-center gap-[7px] font-bold text-[11px] transition-transform duration-120 hover:-translate-y-[1px] bg-[#6258e8] text-white shadow-[0_6px_14px_#6258e82b]" data-action="play" data-id="${id}"><span data-icon="play" data-icon-size="13"></span> Chơi ngay</button>

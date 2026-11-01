@@ -23,6 +23,9 @@ function playGame(game, options = {}) {
         state.gameAnswers = [];
         state.matchingPlay = null;
         state.memoryCards = [];
+        // #168: Object Connection (a matching play style) starts from an empty
+        // picture on every playing; the template stays on the game itself.
+        state.connectionProgress = isConnectionBoard(game) ? connectionCreate(game) : null;
         enterFullscreen();
         openMatchingPlay();
         return true;

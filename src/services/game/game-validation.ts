@@ -81,7 +81,10 @@ interface MatchingTemplateGame {
   matchingGame?: MatchingGameLike;
 }
 
-const MATCHING_MODES = ['columns', 'memory', 'categorize'];
+// 'connection' is Object Connection (DECISIONS #168): same pairs, a picture
+// instead of the card board. Listed here so validation accepts it by name
+// rather than falling through to "invalid play mode".
+const MATCHING_MODES = ['columns', 'memory', 'categorize', 'connection'];
 const MATCHING_NUMBER_LIMITS: Array<[keyof MatchingGameLike, number]> = [
   ['pointsPerPair', 1000],
   ['completionBonus', 10000],

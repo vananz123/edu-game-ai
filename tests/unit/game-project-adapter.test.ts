@@ -15,7 +15,9 @@ import type {
   ArenaConfig,
   GameConfig,
   GameDraft,
-  GameProject
+  GameProject,
+  MatchingConfig,
+  MatchingDraft
 } from '../../src/shared/lesson-types';
 
 const ISO = '2026-01-01T00:00:00.000Z';
@@ -471,6 +473,60 @@ const legacyUnknownProject = fromEducationalGame({
   gameSetup: { ...houseArenaGame.gameSetup, houseStyle: 'khong-co' as never }
 });
 assert.equal(legacyUnknownProject.config?.gameType === 'arena' ? legacyUnknownProject.config.houseStyle : 'x', undefined);
+
+// Object Connection (#168) is a MATCHING play style: `matchingGame.mode` becomes
+// 'connection' and the template rides on the board. It survives the round trip,
+// a non-connection board never carries a stale template, and an unknown template
+// id is dropped (the renderer then falls back to the default).
+const connectionDraft: GameDraft = {
+  ...matchingDraft,
+  mode: 'connection',
+  connectionTemplate: 'solar-system'
+};
+const connectionConfig: MatchingConfig = {
+  ...(configFor(connectionDraft) as MatchingConfig),
+  matchingMode: 'connection',
+  connectionTemplate: 'solar-system'
+};
+const connectionGame = toEducationalGame(projectFor(connectionDraft, { config: connectionConfig }));
+assert.equal(connectionGame.template, 'matching');
+assert.equal(connectionGame.matchingGame?.mode, 'connection');
+assert.equal(connectionGame.matchingGame?.connectionTemplate, 'solar-system');
+const connectionProject = fromEducationalGame(connectionGame);
+assert.equal(connectionProject.config?.gameType, 'matching');
+assert.equal(connectionProject.config?.gameType === 'matching' ? connectionProject.config.matchingMode : 'x', 'connection');
+assert.equal(connectionProject.config?.gameType === 'matching' ? connectionProject.config.connectionTemplate : 'x', 'solar-system');
+assert.equal(connectionProject.draft?.gameType === 'matching' ? connectionProject.draft.connectionTemplate : 'x', 'solar-system');
+const connectionRoundTrip = toEducationalGame(connectionProject);
+assert.equal(connectionRoundTrip.matchingGame?.mode, 'connection');
+assert.equal(connectionRoundTrip.matchingGame?.connectionTemplate, 'solar-system');
+
+// The draft wins over the config because the editor writes the draft last.
+const draftWins = toEducationalGame(projectFor(connectionDraft, {
+  config: { ...connectionConfig, connectionTemplate: 'bridge' }
+}));
+assert.equal(draftWins.matchingGame?.connectionTemplate, 'solar-system');
+
+// A non-connection board drops a stale template instead of storing it.
+const columnsWithTemplate: GameDraft = { ...matchingDraft, mode: 'columns' };
+const staleTemplate = toEducationalGame(projectFor(columnsWithTemplate, {
+  config: { ...(configFor(columnsWithTemplate) as MatchingConfig), matchingMode: 'columns', connectionTemplate: 'bridge' }
+}));
+assert.equal(staleTemplate.matchingGame?.connectionTemplate, undefined, 'a template never leaks onto columns');
+
+// An unknown template id is not persisted anywhere.
+const unknownDraft: GameDraft = { ...matchingDraft, mode: 'connection', connectionTemplate: 'khong-co' };
+const unknownTemplate = toEducationalGame(projectFor(unknownDraft, {
+  config: { ...(configFor(unknownDraft) as MatchingConfig), matchingMode: 'connection', connectionTemplate: 'khong-co' }
+}));
+assert.equal(unknownTemplate.matchingGame?.mode, 'connection');
+assert.equal(unknownTemplate.matchingGame?.connectionTemplate, undefined, 'an unknown template id is dropped, not stored');
+const unknownBack = fromEducationalGame({
+  ...connectionGame,
+  matchingGame: { ...connectionGame.matchingGame, connectionTemplate: 'khong-co' as never }
+});
+assert.equal(unknownBack.config?.gameType === 'matching' ? unknownBack.config.connectionTemplate : 'stored', undefined);
+assert.equal(unknownBack.draft?.gameType === 'matching' ? unknownBack.draft.connectionTemplate : 'stored', undefined);
 
 const roundTripScenario = toEducationalGame(fromEducationalGame(scenarioGameOld));
 assert.equal(roundTripScenario.template, 'scenario');

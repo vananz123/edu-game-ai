@@ -24,6 +24,7 @@ import type {
   TreasureStageMission,
   TreasureStageQuestion
 } from '../../shared/types';
+import { isConnectionTemplateId } from '../../shared/connection-templates';
 import type {
   ArenaDraft,
   ArenaQuestion,
@@ -138,7 +139,10 @@ export function toEducationalGame(project: GameProject): EducationalGame {
         ...common,
         template: 'matching',
         questions: [],
-        matchingGame: matchingData(draft)
+        // Object Connection (#168): the template rides on the matching board, and
+        // only for the board mode that reads it — a columns/memory/categorize
+        // game never carries a stale picture choice.
+        matchingGame: matchingData(draft, config.gameType === 'matching' ? config.connectionTemplate : undefined)
       };
       break;
     case 'treasure':
@@ -378,8 +382,8 @@ function scenarioScoreValue(option: ScenarioOption): number {
   return option.score.safety + option.score.reasoning + option.score.harmReduction;
 }
 
-function matchingData(draft: MatchingDraft): MatchingGameData {
-  return {
+function matchingData(draft: MatchingDraft, configTemplate?: string): MatchingGameData {
+  const data: MatchingGameData = {
     mode: draft.mode,
     pairs: draft.pairs.map(pair => ({ id: pair.id, left: pair.left, right: pair.right, ...itemAssetsFromDraft(pair) })),
     pointsPerPair: draft.pointsPerPair,
@@ -389,6 +393,14 @@ function matchingData(draft: MatchingDraft): MatchingGameData {
     bonusUnderSeconds: draft.bonusUnderSeconds,
     practiceMode: draft.practiceMode
   };
+  // Written last so it can only exist on a connection board (#168). Either the
+  // draft or the config may carry it; the draft wins because it is what the
+  // editor wrote last.
+  if (data.mode === 'connection') {
+    const template = draft.connectionTemplate || configTemplate;
+    if (isConnectionTemplateId(template)) data.connectionTemplate = template;
+  }
+  return data;
 }
 
 function treasureStages(draft: TreasureDraft): TreasureStage[] {
@@ -598,7 +610,7 @@ function matchingDraftFromGame(game: EducationalGame): MatchingDraft {
   if (!matching) {
     throw new GameAdapterError('ADAPTER_LEGACY_DATA_UNSUPPORTED', 'Trò chơi ghép cặp thiếu dữ liệu ghép cặp.');
   }
-  return {
+  const draft: MatchingDraft = {
     gameType: 'matching',
     schemaVersion: LESSON_SCHEMA_VERSION,
     mode: matching.mode,
@@ -610,6 +622,12 @@ function matchingDraftFromGame(game: EducationalGame): MatchingDraft {
     bonusUnderSeconds: safeInt(matching.bonusUnderSeconds, 0),
     practiceMode: Boolean(matching.practiceMode)
   };
+  // #168: an unknown id is dropped so the editor shows the default instead of a
+  // phantom choice; the board itself still falls back when rendering.
+  if (draft.mode === 'connection' && isConnectionTemplateId(matching.connectionTemplate)) {
+    draft.connectionTemplate = matching.connectionTemplate;
+  }
+  return draft;
 }
 
 function treasureDraftFromGame(game: EducationalGame): TreasureDraft {
@@ -778,7 +796,10 @@ function configFromGame(game: EducationalGame, gameType: GameDraft['gameType']):
         gameType: 'matching',
         pairCount: clamp(matching?.pairs.length || 2, 2, 30),
         matchingMode: matching?.mode || 'columns',
-        wrongPenalty: clamp(safeInt(matching?.wrongPenalty, 0), 0, 1000)
+        wrongPenalty: clamp(safeInt(matching?.wrongPenalty, 0), 0, 1000),
+        ...(matching?.mode === 'connection' && isConnectionTemplateId(matching.connectionTemplate)
+          ? { connectionTemplate: matching.connectionTemplate as string }
+          : {})
       };
     }
     case 'treasure': {

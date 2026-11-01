@@ -184,6 +184,13 @@ function wizardHandleInput(event) {
     wizardState.documentName = target.value.trim();
     return;
   }
+  // #168: choosing a matching style on step 4 shows/hides the template gallery.
+  // Only the class toggles — a full re-render would drop the select's focus.
+  if (target.dataset && target.dataset.wizardConfig === 'matchingMode') {
+    const field = document.querySelector('[data-connection-field]');
+    if (field) field.classList.toggle('hidden', target.value !== 'connection');
+    return;
+  }
   const analysisField = target.dataset.wizardAnalysis;
   if (analysisField && wizardState.analysis) {
     const value = target.value;
@@ -261,6 +268,21 @@ function wizardHandleChange(event) {
   const categorySelect = target.closest('[data-wizard-art-category]');
   if (categorySelect) {
     return wizardPatchItemAssets(Number(categorySelect.dataset.itemIndex), { contentCategory: categorySelect.value || '' });
+  }
+  // #168: the Object Connection template gallery is a radio group; the chosen
+  // card highlights immediately and the preview redraws, while the value itself
+  // is read on save by `wizardSyncConfigFromDom`.
+  const connectionCard = target.closest('[data-connection-template]');
+  if (connectionCard && target.type === 'radio') {
+    const gallery = connectionCard.closest('[data-connection-gallery]');
+    if (gallery) {
+      gallery.querySelectorAll('[data-connection-template]').forEach(card => {
+        card.classList.toggle('is-selected', card === connectionCard);
+      });
+      const preview = gallery.parentElement && gallery.parentElement.querySelector('[data-connection-preview]');
+      if (preview) preview.outerHTML = connectionPreviewHtml(target.value);
+    }
+    return undefined;
   }
   return undefined;
 }

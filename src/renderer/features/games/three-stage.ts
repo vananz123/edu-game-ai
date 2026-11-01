@@ -5,6 +5,9 @@
 // and a particle burst on answer. Machines without WebGL keep the 2D surface.
 let threeStageHandle = null;
 let threeWorld = null;
+// World accent of the stage, captured at mount so the pattern factories (which
+// may run in a test with no document) still tint their props consistently.
+let stageAccent = '#6d7cf0';
 // Race fully re-renders its board on every answer (answerRace → renderRaceBoard),
 // so a burst fired on the pre-render handle would be unmounted before it shows.
 // This flag carries the colour across the re-render so the fresh handle bursts.
@@ -13,8 +16,29 @@ let raceAnswerBurst = null;
 // answer repaints the board, so the confetti must fire on the fresh handle.
 let raceAnswerCelebrate = false;
 function unmountThreeStage() {
-    if (threeStageHandle && window.threeGame)
+    // The connection board listens for resizes to reframe itself; the listener
+    // dies with the world, otherwise a closed game keeps a reference and every
+    // later resize would measure a frame that no longer exists.
+    if (threeWorld && threeWorld.onResize) {
+        window.removeEventListener('resize', threeWorld.onResize);
+        threeWorld.onResize = null;
+    }
+    if (threeWorld && threeWorld.frameRaf) {
+        cancelAnimationFrame(threeWorld.frameRaf);
+        threeWorld.frameRaf = 0;
+    }
+    // Deferred glow/dolly steps must not run against a disposed world.
+    if (threeWorld) {
+        (threeWorld.timers || []).forEach(id => window.clearTimeout(id));
+        threeWorld.timers = [];
+    }
+    if (threeStageHandle && window.threeGame) {
+        // The connection board may still hold a pending glow/dolly timer. Those
+        // callbacks all check `threeStageHandle`, so clearing it below is enough
+        // — and the node graph disposes its own geometry through unmount().
+        threeStageHandle.onStep = null;
         window.threeGame.unmount(threeStageHandle);
+    }
     threeStageHandle = null;
     threeWorld = null;
 }
@@ -30,8 +54,13 @@ function mountThreeStage(stage, opts = {}) {
     }
     catch (err) { /* keep the default accent */ }
     // The house owns the stage centre in house mode; the spinning emblem would
-    // only fight it (DECISIONS #142).
-    threeStageHandle = window.threeGame.mount(stage, { accent, emblem: !isHouseMode(state.currentGame) });
+    // only fight it (DECISIONS #142). The connection board also parks it — its
+    // own 3D picture is the subject (DECISIONS #169).
+    const boardMode = isConnectionBoard(state.currentGame);
+    threeStageHandle = window.threeGame.mount(stage, { accent, emblem: !isHouseMode(state.currentGame) && !boardMode });
+    // Kept for the factories that cannot read CSS themselves (they are also used
+    // in unit tests with no document): the connection graph tints its nodes.
+    stageAccent = accent;
     const template = state.currentGame && state.currentGame.template;
     if (opts.world !== false && isHouseMode(state.currentGame))
         buildHouseWorld();
@@ -47,6 +76,10 @@ function mountThreeStage(stage, opts = {}) {
 function burstThreeStage(color) {
     if (threeStageHandle && window.threeGame)
         window.threeGame.burst(threeStageHandle, { color });
+}
+/** The stage's world accent, captured at mount (CSS custom property). */
+function readWorldAccent() {
+    return stageAccent || '#6d7cf0';
 }
 // Place a prop at a screen FRACTION of the stage (0..1, origin top-left) rather
 // than a fixed world coordinate. The stage aspect flips between the compact
@@ -85,6 +118,12 @@ function buildThreeWorld() {
 function buildMatchingWorld() {
     if (!threeStageHandle || !window.threeGame)
         return;
+    // #168: a connection board already shows the picture as SVG; this world adds
+    // only the spark at the node that just joined. See buildConnectionWorld().
+    if (isConnectionBoard(state.currentGame)) {
+        buildConnectionWorld();
+        return;
+    }
     const world = {};
     // The board is centred, so the outer right margin is empty in BOTH layouts;
     // the left margin is taken by the emblem, and the bottom by feedback+answers.
@@ -98,6 +137,12 @@ function buildMatchingWorld() {
 }
 function reactMatching(event, detail) {
     const world = threeWorld;
+    // #168: on a connection board the picture is the star; 3D only adds a spark
+    // at the node that just joined, so the card rewards are skipped.
+    if (isConnectionBoard(state.currentGame)) {
+        reactConnectionBoard(event, detail);
+        return;
+    }
     if (event === 'match:correct') {
         burstThreeStage('#34d399');
     }
@@ -111,6 +156,222 @@ function reactMatching(event, detail) {
     else if (event === 'game:completed') {
         if (world && world.unlockable)
             world.unlockable.open(threeStageHandle);
+        if (window.threeGame.celebrate)
+            window.threeGame.celebrate(threeStageHandle);
+    }
+}
+/*
+ * Object Connection on a matching board (DECISIONS #168, rebuilt as a 3D surface
+ * in #169).
+ *
+ * The picture IS the game surface now: `makeNodeGraph` turns the template into
+ * real 3D nodes and beams, the camera leans in when a link lands, and the two
+ * pick rows stay DOM below it (3D renders and animates, the DOM carries the
+ * information). No geometry carries a caption — the template's labels are
+ * authored Vietnamese text and canvas text would be unreadable on a projector at
+ * the sizes this board takes, so the DOM keeps every word.
+ *
+ * Only when the shared layer has no WebGL does `connection.ts` fall back to the
+ * SVG. Both surfaces are fed by the same `state.connectionProgress`, so a class
+ * that loses the GPU mid-lesson keeps playing without losing a connection.
+ */
+
+// Board geometry: a template is authored on a 1000×620 grid, so the world box
+// keeps that aspect in units (10 × 6.2). The board is then scaled to FIT the
+// frame, which is what decides how large the picture reads — the unit size only
+// has to keep the numbers readable. The frame is wide and short (7.5:1 at
+// 1366×768), so the fit is usually height-bound; the margin is deliberately
+// small (0.94) because every point of it is picture that a back-row student
+// cannot see. At the tightest classroom size this still yields plates of ~54 px
+// and leaves room for a bowed link.
+const CONNECTION_WORLD = { width: 10, height: 6.2 };
+const CONNECTION_CAMERA_Z = 13;
+
+function connectionWorldPosition(node) {
+    return {
+        x: (node.x / CONNECTION_VIEWBOX.width - 0.5) * CONNECTION_WORLD.width,
+        y: (0.5 - node.y / CONNECTION_VIEWBOX.height) * CONNECTION_WORLD.height
+    };
+}
+
+/**
+ * Frame the board inside the DOM box that was reserved for it.
+ *
+ * The shared canvas covers the WHOLE stage (the illustration column is hidden in
+ * this mode), so drawing at the world origin would put the picture in the middle
+ * of the page, outside the `.connection-stage` frame the CSS sized for it. The
+ * camera is therefore lifted so the world origin projects onto the frame's
+ * centre, and the picture is scaled to the frame's smaller dimension. Both are
+ * recomputed on every mount, so fullscreen and a window resize reframe it, and
+ * nothing here is measured from a frozen projection.
+ */
+function frameConnectionBoard() {
+    const frame = document.querySelector('[data-connection-stage]');
+    const gameStage = document.querySelector('.game-stage');
+    const graph = threeWorld && threeWorld.graph;
+    if (!frame || !gameStage || !graph || !threeStageHandle) return;
+    const frameRect = frame.getBoundingClientRect();
+    const stageRect = gameStage.getBoundingClientRect();
+    if (!frameRect.width || !stageRect.width || !stageRect.height) return;
+    const handle = threeStageHandle;
+    // Visible world height at the camera's distance, from its own fov — the same
+    // projection `stagePoint()` uses, so the two cannot disagree.
+    const visibleHeight = 2 * Math.tan((handle.camera.fov * Math.PI) / 360) * handle.camera.position.z;
+    const visibleWidth = visibleHeight * (stageRect.width / stageRect.height);
+    // Put the world origin on the frame's centre. The camera looks down -z, so a
+    // frame ABOVE the stage centre needs a camera BELOW the origin: the sign is
+    // `frameOffset` straight, not negated. Getting this wrong lands the whole
+    // picture one frame-height too low, which is exactly what v1 of this function
+    // did (measured, not guessed).
+    const frameOffset = (frameRect.top + frameRect.height / 2) - (stageRect.top + stageRect.height / 2);
+    handle.camera.position.y = frameOffset * (visibleHeight / stageRect.height);
+    // The camera is NOT a child of the scene, so three.js only refreshes its
+    // matrixWorld inside render(). Anything that projects before the next painted
+    // frame — `stagePoint()`, the anchored props, and this function's own callers —
+    // would otherwise use the PREVIOUS camera position. Measured live: without
+    // this line every node projected ~60 000 px off-screen until a frame ran, and
+    // in a throttled window that frame may never come.
+    handle.camera.updateMatrixWorld(true);
+    // Fit the board into the frame with a margin: a bowed link reaches past the
+    // node extents, and the eye reads a picture better with air around it.
+    const frameWorldWidth = (frameRect.width / stageRect.width) * visibleWidth;
+    const frameWorldHeight = (frameRect.height / stageRect.height) * visibleHeight;
+    const scale = Math.max(0.3, Math.min(frameWorldWidth / CONNECTION_WORLD.width, frameWorldHeight / CONNECTION_WORLD.height) * 0.94);
+    graph.group.scale.setScalar(scale);
+}
+
+function buildConnectionWorld() {
+    if (!threeStageHandle || !window.threeGame)
+        return;
+    const template = connectionTemplateFor(state.currentGame);
+    const nodes = template.nodes.map(node => {
+        const p = connectionWorldPosition(node);
+        // A slight z jitter gives the board parallax without letting far nodes
+        // drift into the near ones: ±0.28 units against a 13-unit camera.
+        return { id: node.id, x: p.x, y: p.y, z: ((node.x * 7 + node.y * 13) % 5) * 0.07 - 0.14, kind: node.kind };
+    });
+    const links = template.edges.map(edge => ({ id: edge.id, from: edge.from, to: edge.to, bend: Number(edge.bend) * CONNECTION_WORLD.width / CONNECTION_VIEWBOX.width || 0 }));
+    const graph = window.threeGame.makeNodeGraph({ nodes, links, accent: readWorldAccent() });
+    window.threeGame.addObject(threeStageHandle, graph.group, 0, 0, 0);
+
+    // The dome and the emblem belong to the decorative backdrop; a board that is
+    // meant to be read is better without a rotating knot behind it.
+    if (threeStageHandle.emblem) threeStageHandle.emblem.visible = false;
+
+    threeWorld = { kind: 'connection', graph, template, burstOn: null };
+    // The idle float runs on the shared render loop (one rAF for every game), so
+    // an earned node breathes and a ghost does not — the picture is alive without
+    // a second timer, and `prefers-reduced-motion` freezes it inside the layer.
+    threeStageHandle.onStep = (dt, reduced) => graph.tick(dt, reduced);
+    // Hover is the only pointer input on the board, and it reuses the layer's own
+    // implementation (raycast + easing in `step()`), so there is no second input
+    // path. It is registered on the node bodies only: the ghost outline must never
+    // look interactive, because it cannot be clicked.
+    for (const id of Object.keys(graph.nodes)) {
+        const entry = graph.nodes[id];
+        if (entry) window.threeGame.addHoverEffect(threeStageHandle, entry.mesh, { scale: 1.16 });
+    }
+    applyConnectionWorld(true);
+    // Frame NOW, not on the next animation frame: Chromium throttles rAF to
+    // ~200 ms in a background window, and the board must be correct even then (a
+    // teacher can start a game while the projector has focus). Measured that
+    // failure live: with the deferred pass only, the camera was still at its rest
+    // height and every node projected outside the frame.
+    frameConnectionBoard();
+    // The stage can also finish laying out one frame later (the modal reaches its
+    // final height after the HTML is inserted). A short timer catches that pass
+    // WITHOUT depending on rAF at all, so a throttled window still converges; it
+    // replaces the previous rAF pass, which never ran while throttled.
+    connectionLater(() => frameConnectionBoard(), 120);
+    // Fullscreen and the modal resize after the first render; reframe without
+    // rebuilding the graph (the geometry is scale-independent).
+    if (!threeWorld.onResize) {
+        threeWorld.onResize = () => {
+            if (threeWorld && threeWorld.kind === 'connection') frameConnectionBoard();
+        };
+        window.addEventListener('resize', threeWorld.onResize);
+    }
+}
+
+/**
+ * `setTimeout` that dies with the board.
+ *
+ * Every deferred step of the connection board — glow disposal, camera reset, the
+ * staggered completion sweep — goes through here, and `unmountThreeStage()` clears
+ * the whole list. Without that, closing the board, replaying, or the 800 ms
+ * `showMatchingComplete` re-render leaves timers that fire against a disposed
+ * handle and a disposed glow (up to 8 of them on a finished board).
+ */
+function connectionLater(fn, delay) {
+    const world = threeWorld;
+    if (!world) return null;
+    if (!world.timers) world.timers = [];
+    const id = window.setTimeout(() => {
+        const list = world.timers || [];
+        const at = list.indexOf(id);
+        if (at !== -1) list.splice(at, 1);
+        fn();
+    }, delay);
+    world.timers.push(id);
+    return id;
+}
+
+/** Push `state.connectionProgress` into the 3D board. */
+function applyConnectionWorld(animate) {
+    const world = threeWorld;
+    if (!world || world.kind !== 'connection' || !world.graph || !threeStageHandle) return;
+    const parts = connectionEarnedParts(state.currentGame);
+    world.graph.setEarned(threeStageHandle, parts.nodeIds, parts.linkIds, { animate: animate !== false });
+}
+
+function reactConnectionBoard(event, detail) {
+    const world = threeWorld;
+    if (!world || world.kind !== 'connection') return;
+    if (event === 'match:correct') {
+        applyConnectionWorld(true);
+        burstThreeStage('#34d399');
+        // A landed stage that opens a node gets a halo exactly on that node; a
+        // stage that only closes a link (bridge-4, eco-5 …) gets the burst alone.
+        const stageId = detail && detail.connection ? detail.connection.stageId : null;
+        const stage = stageId ? world.template.stages.find(entry => entry.id === stageId) : null;
+        const firstId = stage && stage.nodeIds.length ? stage.nodeIds[0] : null;
+        const entry = firstId ? world.graph.nodes[firstId] : null;
+        if (entry && window.threeGame.makeGlow) {
+            const glow = window.threeGame.makeGlow({ color: '#34d399', size: 0.5 });
+            glow.group.position.copy(entry.root.position);
+            window.threeGame.addObject(threeStageHandle, glow.group);
+            glow.pulse(threeStageHandle);
+            connectionLater(() => glow.dispose(), 900);
+        }
+        // Push in for the landing, then settle back — the whole board reads as a
+        // camera move rather than a flat redraw.
+        if (window.threeGame.dolly) {
+            window.threeGame.dolly(threeStageHandle, 1.1, 0.28);
+            connectionLater(() => window.threeGame.resetDolly(threeStageHandle), 420);
+        }
+    }
+    else if (event === 'match:incorrect') {
+        burstThreeStage('#f87171');
+        if (window.threeGame.dolly) {
+            window.threeGame.dolly(threeStageHandle, -0.6, 0.2);
+            connectionLater(() => window.threeGame.resetDolly(threeStageHandle), 320);
+        }
+    }
+    else if (event === 'game:completed') {
+        // One sweep of colour over the finished board, then the shared burst.
+        const nodes = Object.keys(world.graph.nodes || {});
+        nodes.forEach((id, index) => {
+            const entry = world.graph.nodes[id];
+            if (!entry || !entry.earned) return;
+            connectionLater(() => {
+                if (!threeStageHandle || !window.threeGame || !window.threeGame.makeGlow) return;
+                const glow = window.threeGame.makeGlow({ color: '#f2b24a', size: 0.42 });
+                glow.group.position.copy(entry.root.position);
+                window.threeGame.addObject(threeStageHandle, glow.group);
+                glow.pulse(threeStageHandle);
+                connectionLater(() => glow.dispose(), 900);
+            }, index * 70);
+        });
         if (window.threeGame.celebrate)
             window.threeGame.celebrate(threeStageHandle);
     }

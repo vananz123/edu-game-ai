@@ -222,6 +222,25 @@ function renderWizardConfigure() {
   </section>`;
 }
 
+/**
+ * Object Connection picker (DECISIONS #168), for the MATCHING game only: the
+ * style is `matchingMode: 'connection'`, so the gallery shows once that style is
+ * chosen. The radios stay in the DOM either way and `wizardSyncConfigFromDom`
+ * keeps the chosen id, so switching styles back and forth never loses the pick.
+ */
+function wizardConnectionFields(config) {
+  if (!config || config.gameType !== 'matching') return '';
+  const mode = config.matchingMode || 'columns';
+  const picked = connectionResolveTemplate(config.connectionTemplate).id;
+  return `<div class="field connection-field${mode === 'connection' ? '' : ' hidden'}" data-connection-field>
+    <label>MẪU HÌNH KẾT NỐI <span class="connection-beta" data-beta-badge>BETA</span></label>
+    ${connectionPreviewHtml(picked)}
+    ${connectionGalleryHtml(picked, 'connectionTemplate')}
+    <p class="field-hint">Mỗi cặp ghép đúng nối thêm một chặng của hình. Số chặng tự chia theo số cặp, nên bộ cặp ngắn hay dài đều ghép được hình; ghép sai không gỡ chặng đã nối.</p>
+    <p class="field-hint connection-beta-note">${CONNECTION_BETA_NOTE}</p>
+  </div>`;
+}
+
 function wizardConfigTypeFields(config) {
   switch (config.gameType) {
     case 'arena':
@@ -248,9 +267,14 @@ function wizardConfigTypeFields(config) {
     case 'matching':
       return wizardConfigCount('pairCount', 'SỐ CẶP GHÉP', config.pairCount, 2, 30)
         + wizardConfigSelect('matchingMode', 'KIỂU GHÉP', config.matchingMode, [
-          { value: 'columns', label: 'Hai cột' }, { value: 'memory', label: 'Lật thẻ' }, { value: 'categorize', label: 'Phân loại' }
+          { value: 'columns', label: 'Hai cột' }, { value: 'memory', label: 'Lật thẻ' },
+          { value: 'categorize', label: 'Phân loại' },
+          // Beta: the 3D board is still being evaluated in class, so the label says
+          // so before a teacher commits a lesson to it (DECISIONS #170).
+          { value: 'connection', label: 'Kết nối vật thể (ghép hình theo cặp) — BETA' }
         ])
-        + wizardConfigNumber('wrongPenalty', 'TRỪ ĐIỂM SAI', config.wrongPenalty, 0, 1000, 10);
+        + wizardConfigNumber('wrongPenalty', 'TRỪ ĐIỂM SAI', config.wrongPenalty, 0, 1000, 10)
+        + wizardConnectionFields(config);
     case 'treasure':
       return wizardConfigCount('stageCount', 'SỐ CHẶNG', config.stageCount, 2, 30)
         + wizardConfigNumber('attemptsPerStage', 'LƯỢT THỬ MỖI CHẶNG', config.attemptsPerStage, 0, 99)
@@ -292,6 +316,13 @@ function wizardSyncConfigFromDom() {
     config.focusObjectiveIds = [...document.querySelectorAll('[data-wizard-focus]')]
       .filter(el => el.checked)
       .map(el => el.dataset.wizardFocus);
+  }
+  // Object Connection (#168): the gallery is a radio group, not a form field, so
+  // it is read here. The pick is kept even while another matching style is
+  // selected, so switching to Hai cột and back does not lose it.
+  if (config.gameType === 'matching') {
+    const picked = readConnectionGallery(document, 'connectionTemplate');
+    if (picked) config.connectionTemplate = picked;
   }
 }
 

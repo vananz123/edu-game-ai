@@ -2,8 +2,9 @@
 function openMatchingPlay() {
     const root = $('#modalRoot');
     const game = state.currentGame;
-    const modeLabel = ({ columns: 'GHÉP HAI CỘT', memory: 'LẬT THẺ GHI NHỚ', categorize: 'PHÂN LOẠI KIẾN THỨC' })[game.matchingGame.mode] || 'GHÉP CẶP KIẾN THỨC';
-    root.innerHTML = playModalHtml('matching', 'w-[min(980px,96vw)]', game.title, `${modeLabel} · NGOẠI TUYẾN`);
+    const modeLabel = ({ columns: 'GHÉP HAI CỘT', memory: 'LẬT THẺ GHI NHỚ', categorize: 'PHÂN LOẠI KIẾN THỨC', connection: 'KẾT NỐI VẬT THỂ' })[game.matchingGame.mode] || 'GHÉP CẶP KIẾN THỨC';
+    const width = game.matchingGame.mode === 'connection' ? 'w-[min(1180px,97vw)]' : 'w-[min(980px,96vw)]';
+    root.innerHTML = playModalHtml('matching', width, game.title, `${modeLabel} · NGOẠI TUYẾN`);
     bindPlayHeader(root);
     resetMatchingPlay();
 }
@@ -47,12 +48,14 @@ function renderMatchingBoard() {
     // (`showMatchingResults`) hoặc khi `showMatchingComplete` chạy sau cú ghép cuối.
     if (state.matchingPlay.matched >= m.pairs.length)
         return showMatchingComplete();
-    const mode = ['columns', 'memory', 'categorize'].includes(m.mode) ? m.mode : 'columns';
+    const mode = ['columns', 'memory', 'categorize', 'connection'].includes(m.mode) ? m.mode : 'columns';
     const root = $('#playBody');
     if (mode === 'memory')
         renderMemoryBoard(root, m);
     else if (mode === 'categorize')
         renderCategorizeBoard(root, m);
+    else if (mode === 'connection')
+        renderConnectionBoard(root, m);
     else
         renderColumnsBoard(root, m);
 }
@@ -218,6 +221,29 @@ function addMatchingConnection(board, leftEl, rightEl, matchIndex) {
         checkBadgeEl: checkBadge
     });
 }
+/**
+ * Object Connection board (DECISIONS #168).
+ *
+ * The two card columns stay as the INPUT (a left half and its right half must be
+ * picked), but what the class watches is the picture above them: every correct
+ * pair connects one stage, a wrong pair connects nothing, and a connected
+ * picture is finished before the board is. Scoring is unchanged — the same
+ * `MatchingGameData` fields feed `calculateMatchingSummary`.
+ *
+ * Each card carries the index of its pair in `m.pairs`, because the right column
+ * is shuffled: the picture is keyed by pair id, never by where a card sits.
+ */
+function renderConnectionBoard(root, m) {
+    const template = connectionTemplateFor(state.currentGame);
+    const rights = shuffled(m.pairs);
+    const pairIndex = id => m.pairs.findIndex(pair => pair.id === id);
+    root.innerHTML = `<div class="game-stage" data-game="matching" data-game-world="matching" data-match-mode="connection">${gameWorldLabel('matching')}${matchingHeader()}<div class="stage-center is-connection"><div class="stage-col is-main"><div class="stage-kicker d-badge d-badge-neutral">KẾT NỐI VẬT THỂ · ${connectionEsc(template.name)}</div>${connectionPanelHtml(state.currentGame)}<div class="connection-pick">${m.pairs.map((p, index) => `<button type="button" class="match-card" data-match-side="left" data-pair="${escapeHtml(p.id)}" data-pair-index="${index}">${escapeHtml(p.left)}</button>`).join('')}</div><div class="connection-pick">${rights.map(p => `<button type="button" class="match-card" data-match-side="right" data-pair="${escapeHtml(p.id)}" data-pair-index="${pairIndex(p.id)}">${escapeHtml(p.right)}</button>`).join('')}</div><div id="matchFeedback"></div></div></div>${matchingFooter(m)}</div>`;
+    paintProgress(root);
+    $$('.match-card', root).forEach(btn => btn.addEventListener('click', () => onColumnCardClick(btn)));
+    mountThreeStage($('.game-stage', root));
+    sendPresentationState();
+}
+
 function renderColumnsBoard(root, m) {
     const rights = shuffled(m.pairs);
     const illusMatchHtml = matchingIllustrationHtml(state.currentGame);
@@ -256,17 +282,25 @@ function evaluateColumnMatch() {
         left.classList.remove('selected');
         right.classList.remove('selected');
         mp.matched += 1;
+        // #168: on the connection board the picture takes the place of the card
+        // connectors; the columns board keeps its beam. Progress is derived from
+        // the pair, not from where the card sits.
+        const connection = isConnectionBoard(state.currentGame)
+            ? connectionApplyAnswer(state.currentGame, Number(left.dataset.pairIndex), left.dataset.pair, true)
+            : null;
         const board = left.closest('.matching-board');
         if (board) {
             addMatchingConnection(board, left, right, mp.matched - 1);
         }
         GameAudio.play('match');
-        reactThree('match:correct', { matched: mp.matched });
+        reactThree('match:correct', { matched: mp.matched, connection });
         mp.selectedLeft = mp.selectedRight = null;
         const pair = state.currentGame.matchingGame.pairs.find(item => item.id === left.dataset.pair);
         matchingFeedback('good', pair
             ? `✓ Ghép chính xác! Hãy giải thích mối quan hệ giữa “${escapeHtml(pair.left)}” và “${escapeHtml(pair.right)}”.`
             : '✓ Ghép chính xác! Hãy giải thích vì sao hai nội dung này đi với nhau.');
+        if (connection && connection.stageId)
+            refreshConnectionPanel($('#playBody'));
         updateMatchingHeader();
         if (mp.matched >= state.currentGame.matchingGame.pairs.length) {
             GameAudio.play('correct');
@@ -275,7 +309,12 @@ function evaluateColumnMatch() {
     }
     else {
         mp.wrong += 1;
-        reactThree('match:incorrect', { wrong: mp.wrong });
+        // #168: a wrong pair is recorded but connects nothing, and it never
+        // removes a stage the class already earned.
+        const connection = isConnectionBoard(state.currentGame)
+            ? connectionApplyAnswer(state.currentGame, Number(left.dataset.pairIndex), `${left.dataset.pair}~${right.dataset.pair}~${mp.wrong}`, false)
+            : null;
+        reactThree('match:incorrect', { wrong: mp.wrong, connection });
         mp.lock = true;
         left.classList.add('wrong');
         right.classList.add('wrong');
@@ -451,9 +490,22 @@ async function renderMatchingResults() {
         { icon: '⏱', value: formatClock(elapsed), label: 'Thời gian' },
         { icon: '🎯', value: `${percent}%`, label: 'Điểm tối đa' }
     ]);
-    $('#playBody').innerHTML = `<div class="game-stage" data-game="matching" data-game-world="matching">${gameWorldLabel('matching')}<div class="result-screen"><div class="result-medal">${percent >= 80 ? '🏆' : percent >= 50 ? '🎖️' : '🌱'}</div><div class="stage-kicker">GHÉP CẶP HOÀN THÀNH</div><h2>${percent >= 80 ? 'Xuất sắc!' : percent >= 50 ? 'Ghép tốt lắm!' : 'Tiếp tục cố gắng!'}</h2><p>${escapeHtml(game.title)}</p><div class="result-score">${points.toLocaleString('vi-VN')} / ${max.toLocaleString('vi-VN')} điểm</div><p>Hoàn thành ${m.pairs.length} cặp · sai ${mp.wrong} lần · ${Math.round(elapsed)} giây · ${percent}% điểm tối đa</p>${stats}<p id="resultSaveStatus" class="result-save-status">Đang tự lưu kết quả…</p><div class="result-actions"><button class="btn btn-secondary" id="closeResultBtn">Đóng</button><button class="btn btn-secondary" id="replayBtn">↻ Chơi lại</button><button class="btn btn-primary" id="saveResultBtn">Đang lưu…</button></div></div></div>`;
+    // #168: a connection board ends on the picture the class actually completed —
+    // the same `state.connectionProgress` the panel drew, never a rebuilt one.
+    const connection = isConnectionBoard(game) ? connectionSummary(state.connectionProgress, connectionTemplateFor(game)) : null;
+    const connectionHeroHtml = connection
+        ? `<div class="result-connection-hero"><div class="result-connection-art">${connectionSvg(connectionTemplateFor(game), state.connectionProgress)}</div><div class="result-connection">🔗 Kết nối: <b>${connection.connected}/${connection.total}</b> chặng${connection.completed ? ' · Đã hoàn thiện 🎉' : ' · Còn dang dở'}<span class="result-connection-style">Mẫu: ${escapeHtml(connectionTemplateFor(game).name)}</span></div></div>`
+        : '';
+    $('#playBody').innerHTML = `<div class="game-stage" data-game="matching" data-game-world="matching">${gameWorldLabel('matching')}<div class="result-screen${connection ? ' is-connection-result' : ''}">${connection ? connectionHeroHtml + '<div class="result-summary">' : ''}<div class="result-medal">${percent >= 80 ? '🏆' : percent >= 50 ? '🎖️' : '🌱'}</div><div class="stage-kicker">GHÉP CẶP HOÀN THÀNH</div><h2>${percent >= 80 ? 'Xuất sắc!' : percent >= 50 ? 'Ghép tốt lắm!' : 'Tiếp tục cố gắng!'}</h2><p>${escapeHtml(game.title)}</p><div class="result-score">${points.toLocaleString('vi-VN')} / ${max.toLocaleString('vi-VN')} điểm</div><p>Hoàn thành ${m.pairs.length} cặp · sai ${mp.wrong} lần · ${Math.round(elapsed)} giây · ${percent}% điểm tối đa</p>${stats}<p id="resultSaveStatus" class="result-save-status">Đang tự lưu kết quả…</p><div class="result-actions"><button class="btn btn-secondary" id="closeResultBtn">Đóng</button><button class="btn btn-secondary" id="replayBtn">↻ Chơi lại</button><button class="btn btn-primary" id="saveResultBtn">Đang lưu…</button></div>${connection ? '</div>' : ''}</div></div>`;
     $('#closeResultBtn').onclick = () => closePlaySurface();
-    $('#replayBtn').onclick = () => { state.playStartedAt = Date.now(); state.resultSession = null; resetMatchingPlay(); };
+    $('#replayBtn').onclick = () => {
+        state.playStartedAt = Date.now();
+        state.resultSession = null;
+        // #168: "Chơi lại" resets the picture; the play style and template stay on
+        // the game, so a class can watch the same object assemble again.
+        if (isConnectionBoard(game)) state.connectionProgress = connectionCreate(game);
+        resetMatchingPlay();
+    };
     wireResultSession(game, state.lastSummary, {
         answers: [],
         matching: { matched: mp.matched, wrongAttempts: mp.wrong, elapsedSeconds: Math.round(elapsed) }

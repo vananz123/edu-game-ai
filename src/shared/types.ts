@@ -55,7 +55,16 @@ export interface GameQuestion extends ItemAssetFields {
   context?: string;
 }
 
-export type MatchingMode = 'columns' | 'memory' | 'categorize';
+/**
+ * How the matching game is played (DECISIONS #168).
+ *
+ * `connection` (Kết nối vật thể) is the third play style: instead of two
+ * columns of cards, the player sees a template being assembled — every correct
+ * pair connects one stage of the picture. It reuses `pairs` unchanged, so a
+ * teacher switches play style without retyping content, and a board saved
+ * before it existed keeps playing its stored mode.
+ */
+export type MatchingMode = 'columns' | 'memory' | 'categorize' | 'connection';
 
 export interface MatchingPair extends ItemAssetFields {
   id: string;
@@ -72,6 +81,12 @@ export interface MatchingGameData {
   timeBonus: number;
   bonusUnderSeconds: number;
   practiceMode: boolean;
+  /**
+   * Object Connection template (DECISIONS #168), read only when `mode` is
+   * `'connection'`. Absent/unknown resolves to the default template, so a game
+   * saved by a newer build still opens here.
+   */
+  connectionTemplate?: string;
 }
 
 /** §5 tasknight.docx — journey/treasure-hunt stage data. */

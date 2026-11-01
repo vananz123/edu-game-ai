@@ -163,6 +163,57 @@ function renderRaceView(view) {
   </section>`;
 }
 
+/**
+ * Object Connection (#168): the assembled picture, drawn as SVG from the view's
+ * own node/edge data. The presentation window loads no Three.js and no renderer
+ * scripts, so this function must not call `connectionSvg` — it is a small,
+ * self-contained drawer over ~5 nodes and ~6 edges.
+ */
+function renderConnectionView(view) {
+    const nodes = {};
+    (view.nodes || []).forEach(node => { nodes[node.id] = node; });
+    const edgeSvg = (view.edges || []).map(edge => {
+        const from = nodes[edge.from];
+        const to = nodes[edge.to];
+        if (!from || !to) return '';
+        const bend = Number(edge.bend) || 0;
+        const dx = to.x - from.x;
+        const dy = to.y - from.y;
+        const length = Math.sqrt(dx * dx + dy * dy) || 1;
+        const cx = (from.x + to.x) / 2 + (-dy / length) * bend;
+        const cy = (from.y + to.y) / 2 + (dx / length) * bend;
+        const d = bend ? `M ${from.x} ${from.y} Q ${cx} ${cy} ${to.x} ${to.y}` : `M ${from.x} ${from.y} L ${to.x} ${to.y}`;
+        return edge.connected
+            ? `<path class="conn-edge" d="${d}" />`
+            : `<path class="conn-slot" d="${d}" />`;
+    }).join('');
+    const nodeSvg = (view.nodes || []).map(node => {
+        if (!node.visible) return '';
+        const shape = node.kind === 'plate'
+            ? `<rect x="${node.x - 62}" y="${node.y - 22}" width="124" height="44" rx="12" />`
+            : node.kind === 'ring'
+                ? `<circle cx="${node.x}" cy="${node.y}" r="20" />`
+                : `<circle cx="${node.x}" cy="${node.y}" r="12" />`;
+        // Same rule as the teacher window (`connectionSvg`): a dot keeps its
+        // caption only once it is earned, a plate/ring always. Must not diverge —
+        // the projector is the surface the class actually reads.
+        const caption = node.kind !== 'dot' || node.visible
+            ? `<text x="${node.x}" y="${node.y + (node.kind === 'plate' ? 5 : 34)}">${esc(node.label)}</text>`
+            : '';
+        return `<g class="conn-node">${shape}${caption}</g>`;
+    }).join('');
+    const box = view.viewBox || { width: 1000, height: 620 };
+    return `<section class="panel connection-panel-presentation">
+    <div class="meta-row">
+      <span class="badge badge-template">🔗 ${view.connected}/${view.total} kết nối</span>
+      <span class="badge">${esc(view.templateName || '')}</span>
+      ${view.completed ? '<span class="badge badge-success">Đã hoàn thiện</span>' : ''}
+    </div>
+    <svg class="conn-svg" viewBox="0 0 ${box.width} ${box.height}" role="img" aria-label="${esc(view.templateName || '')}" preserveAspectRatio="xMidYMid meet">${edgeSvg}${nodeSvg}</svg>
+    ${(view.doneLabels || []).length ? `<p class="context conn-done">Đã nối: ${esc(view.doneLabels.join(' · '))}</p>` : ''}
+  </section>`;
+}
+
 function renderResultsView(view) {
   const rows = (view.rows || []).map(row => `<div class="result-row ${row.highlight ? 'is-highlight' : ''}"><span>${esc(row.label)}</span><strong>${esc(row.value)}</strong></div>`).join('');
   return `<section class="panel results-panel">
@@ -188,6 +239,7 @@ function renderPresentation(state) {
   const view = state.view;
   let body = '';
   if (view && view.kind === 'quiz') body = renderQuizView(view);
+  else if (view && view.kind === 'connection') body = renderConnectionView(view);
   else if (view && view.kind === 'matching') body = renderMatchingView(view);
   else if (view && view.kind === 'treasure') body = renderTreasureView(view);
   else if (view && view.kind === 'race') body = renderRaceView(view);
@@ -290,6 +342,14 @@ function renderPresentation(state) {
       .result-medal { font-size: clamp(52px, 7vw, 96px); line-height: 1.25; overflow: visible; padding: 0.1em 0; }
       .result-title { font-size: clamp(30px, 3.2vw, 50px); line-height: 1.3; margin: 12px 0 8px; color: #f8fafc; }
       .result-score { font-size: clamp(26px, 3vw, 44px); font-weight: 800; color: #22c55e; margin: 12px 0 20px; }
+      .badge-success { background: #052e1b; border-color: #22c55e; color: #bbf7d0; }
+      .connection-panel-presentation { text-align: center; }
+      .conn-svg { width: 100%; max-height: 58vh; display: block; margin: 0 auto; }
+      .conn-edge { fill: none; stroke: #60a5fa; stroke-width: 9; stroke-linecap: round; }
+      .conn-slot { fill: none; stroke: #334155; stroke-width: 5; stroke-dasharray: 4 16; stroke-linecap: round; }
+      .conn-node rect, .conn-node circle { fill: #0f172a; stroke: #60a5fa; stroke-width: 5; }
+      .conn-node text { fill: #f8fafc; font-family: inherit; font-size: 24px; font-weight: 700; text-anchor: middle; dominant-baseline: middle; }
+      .conn-done { margin-top: 10px; }
       .result-rows { display: flex; flex-direction: column; gap: 8px; max-width: 800px; margin: 0 auto 18px; text-align: left; }
       .result-row { display: flex; justify-content: space-between; gap: 18px; padding: 11px 14px; border-radius: 10px; background: #111c2f; border: 1px solid #263247; font-size: clamp(20px, 1.3vw, 24px); }
       .result-row.is-highlight { border-color: #22c55e; color: #bbf7d0; }

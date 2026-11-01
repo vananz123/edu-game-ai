@@ -37,6 +37,7 @@ function matchingEditorHtml(matching) {
         <option value="columns" ${m.mode === 'columns' ? 'selected' : ''}>Ghép hai cột</option>
         <option value="memory" ${m.mode === 'memory' ? 'selected' : ''}>Lật thẻ ghi nhớ</option>
         <option value="categorize" ${m.mode === 'categorize' ? 'selected' : ''}>Phân loại kiến thức</option>
+        <option value="connection" ${m.mode === 'connection' ? 'selected' : ''}>Kết nối vật thể — cặp đúng nối thêm một chặng (BETA)</option>
       </select></div>
       <div class="field"><label>ĐIỂM MỖI CẶP</label><input id="matchingPointsPerPair" type="number" min="0" max="1000" value="${Number(m.pointsPerPair) || 100}"></div>
     </div>
@@ -49,6 +50,12 @@ function matchingEditorHtml(matching) {
       <div class="field"><label>HOÀN THÀNH TRONG (GIÂY)</label><input id="matchingBonusUnderSeconds" type="number" min="0" max="86400" value="${Number(m.bonusUnderSeconds) || 0}"></div>
     </div>
     <div class="correct-select"><label><input type="checkbox" id="matchingPracticeMode" ${m.practiceMode ? 'checked' : ''}> Chế độ luyện tập — hiển thị gợi ý, không trừ điểm</label></div>
+    <div class="field connection-field${m.mode === 'connection' ? '' : ' hidden'}" data-connection-field>
+      <label>MẪU HÌNH KẾT NỐI <span class="connection-beta" data-beta-badge>${CONNECTION_BETA_LABEL}</span></label>
+      ${connectionPreviewHtml(connectionResolveTemplate(m.connectionTemplate).id)}
+      ${connectionGalleryHtml(connectionResolveTemplate(m.connectionTemplate).id, 'matchingConnectionTemplate')}
+      <p class="field-hint">Chỉ dùng ở cách chơi Kết nối vật thể. Mỗi cặp ghép đúng nối thêm một chặng; số chặng tự chia theo số cặp, ghép sai không gỡ chặng đã nối.</p>
+    </div>
     <p class="field-hint" id="matchingModeHint"></p>
   </div>`;
 }
@@ -56,7 +63,10 @@ function matchingModeHint(mode) {
   return ({
     columns: 'Ghép hai cột: chọn một mục ở cột A rồi chọn mục tương ứng ở cột B. Phù hợp bài học nhiều khái niệm.',
     memory: 'Lật thẻ ghi nhớ: lật từng thẻ để tìm hai nội dung tương ứng. Phù hợp ghi nhớ từ vựng và thuật ngữ.',
-    categorize: 'Phân loại kiến thức: nội dung cột A là nhóm, nội dung cột B là các thẻ cần đưa vào đúng nhóm.'
+    categorize: 'Phân loại kiến thức: nội dung cột A là nhóm, nội dung cột B là các thẻ cần đưa vào đúng nhóm.',
+    // Beta: the hint carries the disclaimer so it appears right where a teacher
+    // picks the mode, not only in the wizard (DECISIONS #170).
+    connection: `Kết nối vật thể: bảng thẻ giữ nguyên để chọn cặp, còn màn chơi dựng một hình — mỗi cặp ghép đúng nối thêm một chặng. Phù hợp hệ thống hoá kiến thức. (${CONNECTION_BETA_LABEL}) ${CONNECTION_BETA_NOTE}`
   })[mode] || '';
 }
 function bindMatchingEditor(root) {
@@ -67,8 +77,13 @@ function bindMatchingEditor(root) {
     if (tag) tag.textContent = String(count);
   };
   const syncHints = () => {
+    const value = $('#matchingMode', root).value;
     const hint = $('#matchingModeHint', root);
-    if (hint) hint.textContent = matchingModeHint($('#matchingMode', root).value);
+    if (hint) hint.textContent = matchingModeHint(value);
+    // #168: the template gallery belongs to the connection style only; the
+    // radios stay in the DOM so switching styles never loses the pick.
+    const field = $('[data-connection-field]', root);
+    if (field) field.classList.toggle('hidden', value !== 'connection');
   };
   $('#addMatchingPairBtn', root).addEventListener('click', () => {
     list.insertAdjacentHTML('beforeend', matchingPairRow({ id: `p-${Date.now()}-${Math.random().toString(36).slice(2, 7)}` }, $$('.matching-pair-row', list).length));
@@ -85,6 +100,15 @@ function bindMatchingEditor(root) {
     if (b.matches('[data-pair-down]') && row.nextElementSibling) list.insertBefore(row.nextElementSibling, row);
   });
   $('#matchingMode', root).addEventListener('change', syncHints);
+  // #168: picking a template redraws the preview and the selected card in place.
+  root.querySelector('[data-connection-field]')?.addEventListener('change', event => {
+    const card = event.target.closest('[data-connection-template]');
+    if (!card) return;
+    card.closest('[data-connection-gallery]')?.querySelectorAll('[data-connection-template]')
+      .forEach(node => node.classList.toggle('is-selected', node === card));
+    const preview = $('[data-connection-field] [data-connection-preview]', root);
+    if (preview) preview.outerHTML = connectionPreviewHtml(event.target.value);
+  });
   bindDragList(list, '.matching-pair-row');
   syncHints();
 }
@@ -95,8 +119,13 @@ function readMatchingEditor(root) {
     right: row.querySelector('[data-pair-right]').value.trim(),
     ...readEditorItemAssets(row)
   }));
+  const mode = $('#matchingMode', root).value;
   return {
-    mode: $('#matchingMode', root).value,
+    mode,
+    // #168: the template rides on the board and only with the style that reads
+    // it, mirroring the adapter: columns/memory/categorize never carry a stale
+    // picture choice.
+    ...(mode === 'connection' ? { connectionTemplate: readConnectionGallery(root, 'matchingConnectionTemplate') } : {}),
     pairs,
     pointsPerPair: Math.max(0, Number($('#matchingPointsPerPair', root).value) || 100),
     completionBonus: Math.max(0, Number($('#matchingCompletionBonus', root).value) || 0),

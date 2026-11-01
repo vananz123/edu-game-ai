@@ -109,6 +109,9 @@ function buildMatchingView() {
         name: box.dataset.group || '',
         items: $$('.group-chip', box).map(chip => chip.textContent || ''),
     }));
+    // #168: a connection board projects its picture instead of the card grid.
+    if (matching.mode === 'connection')
+        return buildConnectionView();
     return {
         kind: 'matching',
         mode: ['columns', 'memory', 'categorize'].includes(matching.mode) ? matching.mode : 'columns',
@@ -220,6 +223,34 @@ function buildRaceView() {
         lastEvent: String(play.lastEvent || ''),
         winnerName: play.winnerId ? String(play.teams.find(team => team.id === play.winnerId)?.name || '') : '',
         completed: Boolean(play.over),
+    };
+}
+/**
+ * Object Connection on the projector (#168): the picture and the counter, as
+ * plain data. The presentation window draws it with SVG from these fields, so
+ * no Three.js and no renderer script is needed on the second screen.
+ */
+function buildConnectionView() {
+    const game = state.currentGame;
+    if (!game)
+        return null;
+    const template = connectionTemplateFor(game);
+    const progress = state.connectionProgress || resetConnectionProgress(template);
+    const summary = connectionSummary(progress, template);
+    const earned = new Set(progress.connectedStageIds);
+    const nodeVisible = id => template.stages.some(stage => earned.has(stage.id) && stage.nodeIds.indexOf(id) !== -1);
+    const edgeConnected = id => template.stages.some(stage => earned.has(stage.id) && stage.edgeIds.indexOf(id) !== -1);
+    return {
+        kind: 'connection',
+        templateId: template.id,
+        templateName: template.name,
+        viewBox: { width: CONNECTION_VIEWBOX.width, height: CONNECTION_VIEWBOX.height },
+        nodes: template.nodes.map(node => ({ id: node.id, x: node.x, y: node.y, label: node.label, kind: node.kind, visible: nodeVisible(node.id) })),
+        edges: template.edges.map(edge => ({ id: edge.id, from: edge.from, to: edge.to, bend: Number(edge.bend) || 0, connected: edgeConnected(edge.id) })),
+        connected: summary.connected,
+        total: summary.total,
+        completed: summary.completed,
+        doneLabels: template.stages.filter(stage => earned.has(stage.id)).map(stage => stage.label),
     };
 }
 function buildPresentationView(extra = {}) {

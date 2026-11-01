@@ -1,0 +1,324 @@
+/* game-connection.css — chế độ Kết nối vật thể (DECISIONS #168). Nạp CUỐI app.css
+   như game-house.css: rule ở đây chỉ đụng class mới `.connection-*`, nên nó không
+   cần thắng cascade với khối nào có sẵn.
+
+   Kích thước theo `vh` chứ không theo `%`: panel nằm trong flex column của
+   `.game-stage`, và một `height: %` ở đó tính quanh chiều cao câu hỏi (bài học
+   của `.house-question-art` ở game-house.css). */
+
+/* ---------- Bảng kết nối trên màn chơi ----------
+   No card chrome: the 3D board IS the surface, so a white framed box around it
+   would put a picture inside a box inside the modal. The panel is only a layout
+   column — the dark 3D frame, the counter and the pick rows carry the structure.
+   (Asked for directly: "bỏ khung màu trắng kia".) */
+.connection-panel {
+  flex: 0 0 auto;
+  margin: 4px 0 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.connection-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text, #172033);
+  flex-wrap: wrap;
+}
+.connection-counter {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #1c4fd8;
+}
+.connection-counter b {
+  font-size: 14px;
+}
+.connection-template-name {
+  font-weight: 600;
+  color: var(--muted, #788196);
+}
+/* #169: the 3D board is the picture, so it takes the room the SVG used to take
+   plus the height the (now hidden) illustration column frees up. The height is
+   in vh, not %, because the panel sits in a flex column whose percentage base is
+   the question block (the lesson from `.house-question-art`). */
+.connection-stage {
+  width: 100%;
+  height: clamp(150px, 24vh, 260px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+}
+.connection-panel.is-3d .connection-stage {
+  height: clamp(260px, 44vh, 520px);
+  background: radial-gradient(120% 90% at 50% 0%, rgba(109, 124, 240, 0.16), rgba(109, 124, 240, 0) 70%), #0e1424;
+}
+html[data-fullscreen="1"] .connection-panel.is-3d .connection-stage {
+  height: clamp(320px, 50vh, 620px);
+}
+/* The fallback SVG only exists to be shown when there is no 3D surface. With 3D
+   live it stays in the DOM (the panel keeps working if the context is lost) but
+   must not paint over the canvas. */
+.connection-panel.is-3d .connection-stage > .connection-svg {
+  visibility: hidden;
+}
+.connection-panel.is-svg .connection-stage {
+  background: var(--panel, #ffffff);
+}
+
+/* ---------- Bảng chọn cặp dưới hình (matching) ---------- */
+/* Hình là nhân vật chính; hai cặp cột chọn bài vẫn giữ nguyên markup .match-card
+   để luật matching có sẵn (selected / matched / wrong) tiếp tục chạy. */
+.stage-center.is-connection {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+.connection-pick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+.connection-pick .match-card {
+  flex: 1 1 150px;
+  max-width: 260px;
+  font-size: 13px;
+  padding: 8px 12px;
+}
+.connection-hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--muted, #788196);
+  text-align: center;
+}
+.connection-hint b {
+  color: #1c4fd8;
+}
+
+/* ---------- Nhãn BETA (DECISIONS #170) ---------- */
+.connection-beta {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #d97706;
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  vertical-align: middle;
+}
+.connection-beta-note {
+  color: #b45309;
+  font-weight: 600;
+}
+
+/* ---------- Hình vẽ ---------- */
+.connection-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+.connection-edge {
+  fill: none;
+  stroke: var(--world-accent, #6d7cf0);
+  stroke-width: 9;
+  stroke-linecap: round;
+  opacity: 0.9;
+}
+.connection-edge.is-new {
+  animation: connection-draw 420ms ease-out both;
+}
+.connection-edge-slot {
+  fill: none;
+  stroke: var(--line, #e7eaf2);
+  stroke-width: 5;
+  stroke-dasharray: 4 16;
+  stroke-linecap: round;
+  opacity: 0.55;
+}
+.connection-node rect,
+.connection-node circle {
+  fill: var(--panel, #ffffff);
+  stroke: var(--world-accent, #6d7cf0);
+  stroke-width: 5;
+}
+.connection-node text {
+  fill: var(--text, #172033);
+  font-family: inherit;
+  font-size: 24px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: middle;
+}
+.connection-node.is-hidden {
+  opacity: 0;
+}
+.connection-node {
+  transition: opacity 260ms ease-out;
+}
+
+/* `stroke-dashoffset` không biết độ dài path; 1000 vượt mọi cạnh trong
+   viewBox 1000x620 nên hình vẽ luôn "chạy" hết nét. */
+@keyframes connection-draw {
+  from { stroke-dasharray: 1000; stroke-dashoffset: 1000; }
+  to { stroke-dasharray: 1000; stroke-dashoffset: 0; }
+}
+
+/* ---------- Màn kết quả ---------- */
+.result-screen.is-connection-result {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: clamp(12px, 2vw, 28px);
+  align-items: center;
+}
+.result-connection-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.result-connection-art {
+  width: 100%;
+  height: clamp(180px, 34vh, 360px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.result-connection {
+  text-align: center;
+  font-size: 14px;
+  color: var(--text, #172033);
+}
+.result-connection .result-connection-style {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--muted, #788196);
+}
+
+/* ---------- Thư viện mẫu (wizard bước 4 + trình soạn thảo) ---------- */
+.connection-field {
+  margin-top: 4px;
+}
+.connection-preview {
+  display: grid;
+  grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  margin: 6px 0 10px;
+  border: 1px solid var(--line, #e7eaf2);
+  border-radius: 12px;
+  background: #f8f9ff;
+}
+.connection-preview-art {
+  width: 100%;
+  height: 150px;
+}
+.connection-preview-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted, #788196);
+  min-width: 0;
+}
+.connection-preview-copy strong {
+  font-size: 14px;
+  color: var(--text, #172033);
+}
+.connection-preview-steps {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--world-accent, #6258e8);
+}
+.connection-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px;
+  margin: 4px 0 6px;
+}
+.connection-card {
+  display: flex;
+  flex-direction: column;
+  border: 2px solid var(--line, #e7eaf2);
+  border-radius: 12px;
+  padding: 8px;
+  cursor: pointer;
+  background: var(--panel, #ffffff);
+  transition: border-color 140ms ease-out, box-shadow 140ms ease-out;
+  min-width: 0;
+}
+.connection-card:hover {
+  border-color: #c9cdf7;
+}
+.connection-card.is-selected {
+  border-color: var(--world-accent, #6258e8);
+  box-shadow: 0 0 0 3px rgba(98, 88, 232, 0.14);
+}
+.connection-card input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.connection-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--muted, #788196);
+  min-width: 0;
+}
+.connection-card-body strong {
+  font-size: 13px;
+  color: var(--text, #172033);
+}
+.connection-card-desc {
+  line-height: 1.4;
+}
+.connection-card-meta {
+  font-weight: 700;
+  color: var(--world-accent, #6258e8);
+}
+.connection-thumb {
+  width: 100%;
+  height: 96px;
+  border-radius: 8px;
+  background: #f4f6fb;
+  overflow: hidden;
+}
+.connection-thumb .connection-svg {
+  padding: 4px;
+}
+.connection-thumb .connection-node text {
+  display: none;
+}
+
+/* Gọn ở cửa sổ thấp (1366x768, máy chiếu): hình nhỏ lại, danh sách mẫu xuống
+   dưới dạng lưới rộng hơn, để câu hỏi và đáp án không bị đẩy ra ngoài. */
+@media (max-height: 820px) {
+  .connection-stage { height: clamp(130px, 19vh, 200px); }
+  /* 1366×768 is the tightest classroom projector: the 3D board still gets the
+     bigger half of the stage, because reading the picture matters more than the
+     pick rows below it (they wrap into two short lines). */
+  .connection-panel.is-3d .connection-stage { height: clamp(230px, 36vh, 320px); }
+  .connection-card-desc { display: none; }
+  .connection-pick .match-card { font-size: 12px; padding: 6px 10px; }
+  .result-connection-art { height: clamp(150px, 26vh, 240px); }
+}

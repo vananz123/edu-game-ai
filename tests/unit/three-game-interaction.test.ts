@@ -1,4 +1,4 @@
-import assert from 'node:assert/strict';
+﻿import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
@@ -83,8 +83,9 @@ assert.equal(run('typeof threeGame'), 'object', 'threeGame must be exposed on th
 for (const method of [
   'isAvailable', 'mount', 'unmount', 'setPaused', 'burst', 'addHoverEffect', 'addClickableObject', 'addObject',
   'stagePoint', 'anchor', 'tween', 'effect',
-  'makeDestructible', 'makeUnlockable', 'makeConstruction', 'makeReactive', 'celebrate',
-  'on', 'emit'
+  'makeDestructible', 'makeUnlockable', 'makeConstruction', 'makeReactive',
+  'makeNodeGraph', 'makeGlow', 'dolly', 'resetDolly',
+  'celebrate', 'on', 'emit'
 ]) {
   assert.equal(run(`typeof threeGame.${method}`), 'function', `threeGame.${method} must exist`);
 }
@@ -110,6 +111,76 @@ assert.equal(
   'ok',
   'null/undefined handles must be ignored, never throw'
 );
+
+// ---- Object Connection 3D board (DECISIONS #169) --------------------------
+// makeNodeGraph turns a template into real geometry: one root per node, one
+// group of segments per link, and a `setEarned` that only reveals what was
+// earned. It runs with no WebGL because a mounted handle is not needed to build
+// the graph — the caller adds it to a handle.
+const graph = run(`(() => {
+  const g = threeGame.makeNodeGraph({
+    nodes: [
+      { id: 'a', x: 0, y: 0, z: 0, kind: 'plate' },
+      { id: 'b', x: 4, y: 2, z: 0, kind: 'ring' },
+      { id: 'c', x: -3, y: -2, z: 0, kind: 'dot' }
+    ],
+    links: [
+      { id: 'ab', from: 'a', to: 'b', bend: 0 },
+      { id: 'bc', from: 'b', to: 'c', bend: 1.2 }
+    ]
+  });
+  return {
+    nodes: Object.keys(g.nodes).length,
+    links: g.links.length,
+    plateChildren: g.nodes.a.root.children.length,
+    ringChildren: g.nodes.b.root.children.length,
+    bentSegments: g.links.find(l => l.id === 'bc').segments.length,
+    straightSegments: g.links.find(l => l.id === 'ab').segments.length,
+    groupChildren: g.group.children.length,
+    bPosition: { x: g.nodes.b.root.position.x, y: g.nodes.b.root.position.y },
+    disposeType: typeof g.dispose
+  };
+})()`);
+assert.equal(graph.nodes, 3, 'makeNodeGraph builds one root per node');
+assert.equal(graph.links, 2, 'makeNodeGraph builds one group per link');
+assert.equal(graph.plateChildren, 2, 'a plate is a body plus a ghost outline');
+assert.equal(graph.ringChildren, 2, 'a ring is a body plus a ghost outline');
+assert.equal(graph.straightSegments, 1, 'a straight link is one segment');
+assert.equal(graph.bentSegments, 12, 'a bowed link is segmented so it can curve');
+assert.equal(graph.groupChildren, 5, 'the group holds every node and every link');
+// The values come from the vm realm, so they are compared as JSON rather than
+// through deepEqual's prototype check.
+assert.equal(JSON.stringify(graph.bPosition), JSON.stringify({ x: 4, y: 2 }),
+  'a node keeps the x/y it was given (y already flipped by the caller)');
+assert.equal(graph.disposeType, 'function', 'the graph is disposable');
+
+// Provisional visibility: nothing earned → every link segment is a ghost and
+// every node keeps its ghost outline on. `setEarned(null, …)` must no-op (no
+// handle), so this asserts the initial state only.
+assert.equal(
+  run(`(() => {
+    const g = threeGame.makeNodeGraph({ nodes: [{ id: 'a', x: 0, y: 0, kind: 'dot' }, { id: 'b', x: 1, y: 1, kind: 'dot' }], links: [{ id: 'l', from: 'a', to: 'b' }] });
+    g.setEarned(null, ['a'], ['l'], { animate: false });
+    return 'safe';
+  })()`),
+  'safe',
+  'setEarned without a handle must not throw'
+);
+
+// makeGlow is a hidden halo until pulsed, and pulsing without a handle is inert.
+const glow = run(`(() => {
+  const g = threeGame.makeGlow({ color: '#f87171', size: 0.5 });
+  const before = g.mesh.visible;
+  g.pulse(null);
+  return { before, after: g.mesh.visible, disposeType: typeof g.dispose };
+})()`);
+assert.equal(glow.before, false, 'a glow starts hidden');
+assert.equal(glow.after, false, 'pulse() without a handle leaves it hidden');
+assert.equal(glow.disposeType, 'function', 'the glow is disposable');
+
+// dolly/resetDolly are safe without a handle and must not touch a camera.
+assert.equal(run(`(() => { threeGame.dolly(null, 1); threeGame.resetDolly(undefined); return 'ok'; })()`), 'ok',
+  'dolly helpers ignore a missing handle');
 
 // The pattern factories build real procedural geometry (THREE is available in
 // this sandbox even though WebGL is not) — construction stacks one block per

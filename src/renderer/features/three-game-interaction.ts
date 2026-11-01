@@ -1,4 +1,4 @@
-// @ts-nocheck -- plain global renderer script; THREE is provided by three.global.js.
+﻿// @ts-nocheck -- plain global renderer script; THREE is provided by three.global.js.
 
 /**
  * window.threeGame — a minimal, reusable Three.js presentation layer for the five
@@ -36,6 +36,18 @@
       return new THREE.Color(value);
     } catch (err) {
       return new THREE.Color(fallbackHex);
+    }
+  }
+
+  /**
+   * The teacher's motion preference, read once per step. Available in this
+   * sandbox too (unit tests run without a window), so this never throws.
+   */
+  function reducedMotion() {
+    try {
+      return Boolean(typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    } catch (err) {
+      return false;
     }
   }
 
@@ -102,6 +114,10 @@
       to,
       easeName,
       t: 0,
+      // `delay` lets a staggered effect (a wire drawn segment by segment) live in
+      // one tween list instead of a chain of callbacks. Defaults to 0, so every
+      // existing call behaves exactly as before.
+      delay: Math.max(0, Number(opts.delay) || 0),
       duration,
       onComplete: typeof opts.onComplete === 'function' ? opts.onComplete : null
     });
@@ -346,6 +362,15 @@
       handle.emblem.rotation.x += dt * 0.25;
       handle.emblem.rotation.y += dt * 0.4;
     }
+    // Worlds that animate themselves (the Object Connection board's idle float)
+    // hook in here, so they run on the ONE shared loop and stop with it.
+    if (typeof handle.onStep === 'function') {
+      try {
+        handle.onStep(dt, reducedMotion());
+      } catch (err) {
+        console.warn('threeGame step hook failed:', err && err.message ? err.message : err);
+      }
+    }
     // hover / click targets
     if (handle.pointerOn && (handle.hoverables.length || handle.clickables.length)) {
       handle.raycaster.setFromCamera(handle.pointer, handle.camera);
@@ -383,6 +408,13 @@
     // tweens
     for (let i = handle.tweens.length - 1; i >= 0; i--) {
       const tw = handle.tweens[i];
+      // A delayed tween holds its starting value until the delay is spent; it is
+      // not written at all before that, so nothing flickers to an intermediate
+      // state (a wire segment stays collapsed instead of half-drawn).
+      if (tw.delay > 0) {
+        tw.delay -= dt;
+        if (tw.delay > 0) continue;
+      }
       tw.t += dt;
       const k = ease(tw.easeName, Math.min(tw.t / tw.duration, 1));
       let value;
@@ -738,6 +770,272 @@
     return { group, mesh, flash, dispose: () => disposeObject(group) };
   }
 
+  // (F) Node graph — the Object Connection picture as real 3D (DECISIONS #169).
+  //
+  // A template is a list of nodes on a 2D grid plus links between them. This
+  // factory turns that into a shallow 3D board: every node gets a shape (a plate
+  // for a named idea, a ring for a milestone, a small sphere for a leaf), every
+  // link gets a beam that is drawn from A to B when its stage is earned. The
+  // whole thing is ONE object, so the caller places it with `anchor()` exactly
+  // like the other props and a resize cannot drift it.
+  //
+  // Unearned parts are not invisible: they are faint "ghosts", so a class can
+  // see how much picture is left without being told (update_game.txt §4).
+  function makeNodeGraph(opts = {}) {
+    const nodes = Array.isArray(opts.nodes) ? opts.nodes : [];
+    const links = Array.isArray(opts.links) ? opts.links : [];
+    const accent = color(opts.accent, 0x6d7cf0);
+    const width = opts.width !== undefined ? opts.width : 8;
+    // Depth compression: a real perspective camera would tilt far nodes away and
+    // make the far half of the picture bleed into the near half at 16:9. 0.16
+    // gives just enough parallax to read as 3D without breaking the layout.
+    const depth = opts.depth !== undefined ? opts.depth : 0.16;
+
+    const group = new THREE.Group();
+    const byId = Object.create(null);
+    const nodeSprites = [];
+    const linkObjects = [];
+
+    const plateMaterial = new THREE.MeshStandardMaterial({ color: 0xf6f7ff, roughness: 0.55, metalness: 0.05, transparent: true, opacity: 1 });
+    const ringMaterial = new THREE.MeshStandardMaterial({ color: accent, roughness: 0.35, metalness: 0.25, transparent: true, opacity: 1, emissive: accent, emissiveIntensity: 0.18 });
+    const dotMaterial = new THREE.MeshStandardMaterial({ color: accent, roughness: 0.4, metalness: 0.2, transparent: true, opacity: 1 });
+    const slotMaterial = new THREE.MeshBasicMaterial({ color: 0x9aa4c2, transparent: true, opacity: 0.22, depthWrite: false });
+    const beamMaterial = new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.95 });
+    const ghostMaterial = new THREE.MeshBasicMaterial({ color: 0x9aa4c2, transparent: true, opacity: 0.16, depthWrite: false });
+
+    for (const node of nodes) {
+      const root = new THREE.Group();
+      const z = (Number(node.z) || 0) * depth;
+      root.position.set(Number(node.x) || 0, Number(node.y) || 0, z);
+      let material;
+      let geometry;
+      if (node.kind === 'plate') {
+        material = plateMaterial;
+        geometry = new THREE.BoxGeometry(1.7, 0.62, 0.16);
+      } else if (node.kind === 'ring') {
+        material = ringMaterial;
+        geometry = new THREE.TorusGeometry(0.24, 0.075, 8, 20);
+      } else {
+        material = dotMaterial;
+        geometry = new THREE.SphereGeometry(0.17, 14, 10);
+      }
+      const mesh = new THREE.Mesh(geometry, material);
+      const ghost = new THREE.Mesh(
+        node.kind === 'plate' ? new THREE.BoxGeometry(1.9, 0.82, 0.06) : new THREE.SphereGeometry(node.kind === 'ring' ? 0.3 : 0.21, 10, 8),
+        ghostMaterial
+      );
+      ghost.position.z = -0.05 - z * 0.5;
+      root.add(mesh);
+      root.add(ghost);
+      group.add(root);
+      // `homeY`/`phase` drive the idle float; they are per node so the board
+      // never pulses in lockstep, which reads as one rigid object.
+      byId[node.id] = {
+        root, mesh, ghost, kind: node.kind || 'dot', earned: false, base: root.scale.x,
+        homeY: root.position.y,
+        phase: (Object.keys(byId).length * 1.7) % (Math.PI * 2)
+      };
+      nodeSprites.push(mesh);
+    }
+
+    for (const link of links) {
+      const a = byId[link.from];
+      const b = byId[link.to];
+      if (!a || !b) continue;
+      const beam = new THREE.Group();
+      // Same bowed shape the SVG uses, so the 2D fallback and the 3D board are
+      // the same picture: the midpoint is pushed along the perpendicular.
+      const ax = a.root.position.x;
+      const ay = a.root.position.y;
+      const bx = b.root.position.x;
+      const by = b.root.position.y;
+      const bend = Number(link.bend) || 0;
+      const dx = bx - ax;
+      const dy = by - ay;
+      const len = Math.sqrt(dx * dx + dy * dy) || 1;
+      const segments = bend ? 12 : 1;
+      const points = [];
+      for (let i = 0; i <= segments; i++) {
+        const t = i / segments;
+        // Quadratic Bezier through the bowed midpoint.
+        const mx = (ax + bx) / 2 + (-dy / len) * bend;
+        const my = (ay + by) / 2 + (dx / len) * bend;
+        const x = (1 - t) * (1 - t) * ax + 2 * (1 - t) * t * mx + t * t * bx;
+        const y = (1 - t) * (1 - t) * ay + 2 * (1 - t) * t * my + t * t * by;
+        const z = a.root.position.z + (b.root.position.z - a.root.position.z) * t + 0.02;
+        points.push(new THREE.Vector3(x, y, z));
+      }
+      const meshes = [];
+      for (let i = 1; i < points.length; i++) {
+        const from = points[i - 1];
+        const to = points[i];
+        const segLen = from.distanceTo(to);
+        const seg = new THREE.Mesh(new THREE.BoxGeometry(segLen, 0.07, 0.07), beamMaterial);
+        seg.position.copy(from).add(to).multiplyScalar(0.5);
+        seg.rotation.z = Math.atan2(to.y - from.y, to.x - from.x);
+        seg.visible = false;
+        beam.add(seg);
+        meshes.push(seg);
+      }
+      group.add(beam);
+      linkObjects.push({ id: link.id, group: beam, segments: meshes, drawn: false });
+    }
+
+    let stageIds = [];
+    /**
+     * Show exactly the earned part of the picture.
+     *
+     * `nodeIds` and `linkIds` are the flattened stage lists the caller already
+     * computed from `state.connectionProgress` — this factory deliberately takes
+     * ids rather than stages so it can never disagree with the SVG renderer
+     * about which node a stage opens.
+     */
+    function setEarned(handle, nodeIds, linkIds, o = {}) {
+      stageIds = Array.isArray(linkIds) ? linkIds.slice() : [];
+      const earned = new Set(stageIds);
+      const animate = o.animate !== false;
+      const nodesOn = new Set(Array.isArray(nodeIds) ? nodeIds : []);
+      // A link is drawn when its owning stage is earned; a node is shown when its
+      // own stage is earned. This mirrors `connectionSvg()`'s rule so both
+      // surfaces describe the same picture.
+      const nodeEarned = id => nodesOn.has(id);
+      for (const node of nodes) {
+        const entry = byId[node.id];
+        if (!entry) continue;
+        const isOn = nodeEarned(node.id);
+        entry.earned = isOn;
+        entry.mesh.visible = true;
+        entry.ghost.visible = !isOn;
+        const targetOpacity = isOn ? 1 : 0.25;
+        const targetScale = isOn ? 1 : 0.7;
+        if (!animate) {
+          entry.root.scale.setScalar(targetScale);
+          if (entry.mesh.material) entry.mesh.material.opacity = targetOpacity;
+        } else if (isOn) {
+          entry.root.scale.setScalar(0.7);
+          if (entry.mesh.material) entry.mesh.material.opacity = 0.25;
+          if (handle && handles.has(handle.id)) tween(handle, { target: entry.root, from: 0.7, to: 1, duration: 0.34, ease: 'easeOutBack', apply: v => entry.root.scale.setScalar(v) });
+          if (handle && handles.has(handle.id) && entry.mesh.material) tween(handle, { target: entry.mesh.material, from: 0.25, to: 1, duration: 0.28, ease: 'easeOutCubic', apply: v => { entry.mesh.material.opacity = v; } });
+        }
+      }
+      for (const link of links) {
+        const entry = linkObjects.find(item => item.id === link.id);
+        if (!entry) continue;
+        const a = byId[link.from];
+        const b = byId[link.to];
+        const isOn = Boolean(a && b) && (nodeEarned(a.id) || nodeEarned(b.id));
+        const wasDrawn = entry.drawn;
+        entry.drawn = isOn;
+        entry.group.visible = true;
+        for (const seg of entry.segments) seg.material = isOn ? beamMaterial : ghostMaterial;
+        if (!isOn) {
+          for (const seg of entry.segments) seg.scale.x = 1;
+          continue;
+        }
+        // "Draw the wire": the segments scale along their own length, one after
+        // another, so the beam visibly runs from A to B (update_game.txt §4.3).
+        if (animate && !wasDrawn && handle && handles.has(handle.id)) {
+          entry.segments.forEach((seg, index) => {
+            seg.scale.x = 0.001;
+            tween(handle, {
+              target: seg,
+              from: 0.001,
+              to: 1,
+              duration: 0.26,
+              delay: index * 0.035,
+              ease: 'easeOutCubic',
+              apply: v => { seg.scale.x = v; }
+            });
+          });
+        } else {
+          for (const seg of entry.segments) seg.scale.x = 1;
+        }
+      }
+    }
+
+    function reset() {
+      setEarned(null, [], [], { animate: false });
+    }
+
+    /**
+     * A slow float + a gentle facing turn on earned nodes. This is what makes the
+     * board read as a 3D world instead of a flat picture with depth: earned parts
+     * breathe, ghosts stay still so the difference between "done" and "still to do"
+     * is motion, not only colour. Runs from the shared render loop, not a timer.
+     */
+    let elapsed = 0;
+    function tick(dt, reduced) {
+      if (reduced) return;
+      elapsed += dt;
+      for (const node of nodes) {
+        const entry = byId[node.id];
+        if (!entry || !entry.earned) continue;
+        entry.root.position.y = entry.homeY + Math.sin(elapsed * 1.3 + entry.phase) * 0.045;
+        entry.root.rotation.y = Math.sin(elapsed * 0.7 + entry.phase) * 0.12;
+      }
+    }
+
+    function dispose() {
+      disposeObject(group);
+    }
+
+    return { group, nodes: byId, links: linkObjects, sprites: nodeSprites, setEarned, reset, tick, dispose, width };
+  }
+
+
+  // (H) Glow — a halo that swells once at a point. `glowAt` is the one-shot form
+  // for a landed node; the returned object is reusable (race orb, link tip).
+  function makeGlow(opts = {}) {
+    const colorValue = color(opts.color, 0x34d399);
+    const material = new THREE.MeshBasicMaterial({ color: colorValue, transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending });
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(opts.size !== undefined ? opts.size : 0.42, 12, 10), material);
+    mesh.visible = false;
+    const group = new THREE.Group();
+    group.add(mesh);
+    function pulse(handle, onDone) {
+      if (!handle || !handles.has(handle.id)) return;
+      mesh.visible = true;
+      mesh.scale.setScalar(0.6);
+      material.opacity = 0.5;
+      effect(handle, (dt, ratio) => {
+        mesh.scale.setScalar(0.6 + (1 - ratio) * 1.1);
+        material.opacity = 0.5 * ratio;
+      }, opts.duration !== undefined ? opts.duration : 0.55, () => {
+        mesh.visible = false;
+        if (typeof onDone === 'function') onDone();
+      });
+    }
+    return { group, mesh, pulse, dispose: () => disposeObject(group) };
+  }
+
+  // (I) Dolly — push the shared camera in/out around its rest distance. Used when
+  // the 3D picture IS the game surface (Object Connection): the camera leans in
+  // on a landed link and settles back, so the whole board reads as 3D motion.
+  const CAMERA_REST_Z = 13;
+  function dolly(handle, distance, duration) {
+    if (!handle || !handles.has(handle.id)) return;
+    const to = Math.max(4, Math.min(22, CAMERA_REST_Z - (Number(distance) || 0)));
+    tween(handle, {
+      target: handle.camera.position,
+      from: handle.camera.position.z,
+      to,
+      duration: duration !== undefined ? duration : 0.5,
+      ease: 'easeInOut',
+      // The camera is not in the scene graph, so its matrix is refreshed only by
+      // render(); moving it without this makes stagePoint() and every anchored
+      // prop project against the previous position for a frame.
+      apply: v => {
+        handle.camera.position.z = v;
+        handle.camera.updateMatrixWorld(true);
+      }
+    });
+  }
+  function resetDolly(handle) {
+    if (!handle || !handles.has(handle.id)) return;
+    handle.camera.position.z = CAMERA_REST_Z;
+    handle.camera.updateMatrixWorld(true);
+  }
+
   // (E) Celebration — staggered multicolour bursts + an emblem pop.
   function celebrate(handle, opts = {}) {
     if (!handle || !handles.has(handle.id)) return;
@@ -806,6 +1104,10 @@
     makeUnlockable,
     makeConstruction,
     makeReactive,
+    makeNodeGraph,
+    makeGlow,
+    dolly,
+    resetDolly,
     celebrate,
     on,
     emit

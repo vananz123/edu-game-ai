@@ -142,6 +142,25 @@ export type PresentationView =
       completed?: boolean;
     }
   | {
+      /**
+       * Object Connection (DECISIONS #168). The projector gets the SAME kind of
+       * picture the teacher's window shows, as plain SVG markup — Three.js is
+       * not loaded in the presentation window (it never was, not even for House
+       * Building), and this view must not change that.
+       */
+      kind: 'connection';
+      templateName: string;
+      templateId: string;
+      viewBox: { width: number; height: number };
+      nodes: Array<{ id: string; x: number; y: number; label: string; kind: 'dot' | 'ring' | 'plate'; visible: boolean }>;
+      edges: Array<{ id: string; from: string; to: string; bend: number; connected: boolean }>;
+      connected: number;
+      total: number;
+      completed: boolean;
+      /** The stage labels already earned, in template order. */
+      doneLabels: string[];
+    }
+  | {
       kind: 'results';
       title: string;
       subtitle?: string;

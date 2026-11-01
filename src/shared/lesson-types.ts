@@ -153,6 +153,8 @@ export interface MatchingConfig extends GameConfigBase {
   pairCount: number;
   matchingMode: MatchingMode;
   wrongPenalty: number;
+  /** Object Connection template (DECISIONS #168); only read when `matchingMode` is 'connection'. */
+  connectionTemplate?: string;
 }
 
 export interface TreasureConfig extends GameConfigBase {
@@ -254,6 +256,8 @@ export interface MatchingDraft {
   gameType: 'matching';
   schemaVersion: typeof LESSON_SCHEMA_VERSION;
   mode: MatchingMode;
+  /** Object Connection template (DECISIONS #168); only carried by `mode: 'connection'`. */
+  connectionTemplate?: string;
   pairs: MatchingPairDraft[];
   pointsPerPair: number;
   completionBonus: number;
