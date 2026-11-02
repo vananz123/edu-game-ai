@@ -1,16 +1,19 @@
 // ui-constellation-check.js — regression guard for "Chòm sao tri thức"
-// (DECISIONS #171, recomposed in #172).
+// (DECISIONS #171, recomposed in #172, label geometry re-cut in #174).
 //
 // WHAT IT PROVES, against a built app started with --remote-debugging-port:
 //   • the layout: ONE tray of answer cards, a large scene, no second answer list;
 //   • correct / wrong drops through the real drag path, and tap/keyboard placement;
 //   • the constellation edges stay hidden until a match, then reveal one by one;
-//   • a long question moves to the readable row outside the scene with ONE
-//     pointer line, and that line is not a constellation edge;
-//   • five pairs, the completion flow, the results sky and the projector view;
+//   • a term-sized side HANGS on its own star (centred, clear of the star's body,
+//     stem and dot landing on it) and a long one moves to the readable row under
+//     the scene with ONE pointer line — placed in its star's grid column and
+//     numbered on the star, so the pairing survives a crowded sky (#174);
+//   • five pairs, the completion flow, the 3D RESULT sky (framed inside the result
+//     hero, disposed by both exits — DECISIONS #175) and the projector view;
 //   • an old saved picture id still opens and still plays;
-//   • the 16:9 classroom size: the scene keeps its share of the play area and the
-//     labels sit on their stars.
+//   • the 16:9 classroom size: the scene keeps its share of the play area, the
+//     labels stay on their stars, and no label covers one.
 //
 // DETERMINISM: the window is a BACKGROUND window, so requestAnimationFrame is
 // frozen. Nothing here waits on an animation: frames are advanced through
@@ -27,6 +30,14 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
 // Synthetic content only — no real student data (AGENTS.md).
 const ORION = ['alnilam', 'alnitak', 'mintaka', 'betelgeuse', 'bellatrix', 'saiph', 'rigel', 'meissa', 'thabit', 'tabit'];
 const LONG_LABEL = 'Một định nghĩa rất dài để buộc thẻ câu phải nằm ngoài cảnh ba chiều và vẫn đọc được';
+const LONG_LABELS = [
+  LONG_LABEL,
+  'Hô hấp tế bào giải phóng năng lượng từ glucose cho mọi hoạt động sống của cây',
+  'Trao đổi khí qua khí khổng diễn ra cả ban ngày lẫn ban đêm theo nồng độ'
+];
+// 22 characters: a TERM under the readability floor (`CONSTELLATION_SHORT_LABEL_MAX`
+// = 24) and over the ~16 characters the pre-#174 estimate allowed beside a star.
+const MID_LABEL = 'diệp lục và carotenoit';
 
 function matchingGame(id, pairCount, mode, options) {
   const opts = options || {};
@@ -37,6 +48,7 @@ function matchingGame(id, pairCount, mode, options) {
     const pairId = opts.starIds ? opts.starIds[n] : 'p' + (n + 1);
     const left = 'Khái niệm ' + (n + 1);
     const right = 'Định nghĩa ' + (n + 1);
+    if (opts.midFirst && n === 0) return longOnRight ? { id: pairId, left, right: MID_LABEL } : { id: pairId, left: MID_LABEL, right };
     if (!opts.longFirst || n !== 0) return { id: pairId, left, right };
     return longOnRight ? { id: pairId, left, right: LONG_LABEL } : { id: pairId, left: LONG_LABEL, right };
   });
@@ -253,11 +265,45 @@ const snapshot = () => `JSON.stringify({
     opening.pointers === 1, `pointers=${opening.pointers}`);
   check('no pointer is drawn for a card that sits on the scene',
     opening.pointers === opening.questionCards.length, `pointers=${opening.pointers} moved=${opening.questionCards.length}`);
-  check('every star label sits on its own star',
-    (await evaluate(`[...document.querySelectorAll('[data-star-card]')].every(el => {
+  // DECISIONS #174: a label HANGS on its star — a 15 px stem ending in a dot ON the
+  // star — and never covers it. The assertion this replaces ("the label's own
+  // centre hits the star") was the bug: it proved the card sat over the star and
+  // hid it, which is how the class lost the pairing.
+  const hangGeometry = `(() => {
+    const points = updateConnectionStarPoints();
+    const read = (el, key) => {
       const r = el.getBoundingClientRect();
-      return starAtPoint(r.left + r.width / 2, r.top + r.height / 2) === el.dataset.starCard;
-    })`)) === true, 'labels and stars agree');
+      const p = points[el.dataset[key]];
+      if (!p) return { id: el.dataset[key], missing: true };
+      const below = el.dataset.side === 'below';
+      const foot = below ? r.top - 15 : r.bottom + 15;
+      return { id: el.dataset[key], dx: Math.round(r.left + r.width / 2 - p.x),
+        gap: Math.round(Math.abs(foot - p.y)),
+        covers: p.x >= r.left && p.x <= r.right && p.y >= r.top && p.y <= r.bottom,
+        side: el.dataset.side };
+    };
+    return JSON.stringify({
+      labels: [...document.querySelectorAll('[data-star-card]')].map(el => read(el, 'starCard')),
+      marks: [...document.querySelectorAll('[data-star-mark]')].map(el => read(el, 'starMark'))
+    });
+  })()`;
+  const hung = JSON.parse(await evaluate(hangGeometry));
+  check('every label hangs centred on its own star',
+    hung.labels.length === 4 && hung.labels.every(l => l.dx === 0),
+    JSON.stringify(hung.labels.map(l => [l.id, l.dx])));
+  check("the label's stem lands on the star it names",
+    hung.labels.every(l => l.gap <= 3), JSON.stringify(hung.labels.map(l => [l.id, l.gap])));
+  check('no label covers its star',
+    hung.labels.concat(hung.marks).every(l => l.covers === false),
+    JSON.stringify(hung.labels.concat(hung.marks).filter(l => l.covers !== false).map(l => l.id)));
+  check('a star whose question moved down wears the number its card starts with',
+    hung.marks.length === 1 && hung.marks[0].id === 'alnilam' && hung.marks[0].dx === 0 && hung.marks[0].gap <= 3
+      && (await evaluate(`(() => {
+        const mark = document.querySelector('[data-star-mark]');
+        const index = document.querySelector('[data-question-card] .constellation-card-index');
+        return Boolean(mark && index && mark.textContent.trim() === index.textContent.trim());
+      })()`)) === true,
+    JSON.stringify({ marks: hung.marks.map(m => [m.id, m.dx, m.gap]) }));
   check('the labels stay inside the scene', (await evaluate(`(() => {
     const frame = document.querySelector('[data-constellation-scene]').getBoundingClientRect();
     return [...document.querySelectorAll('[data-star-card]')].every(el => {
@@ -265,6 +311,26 @@ const snapshot = () => `JSON.stringify({
       return r.left >= frame.left - 2 && r.right <= frame.right + 2 && r.top >= frame.top - 2 && r.bottom <= frame.bottom + 2;
     });
   })()`)) === true, 'every label is inside the picture');
+  // DECISIONS #176, and the guard this whole file was blind to. Every check above
+  // compares a DOM box with `updateConnectionStarPoints()`, and the DOM boxes are
+  // PLACED from that same function — so a projection that is wrong in a way that
+  // moves the labels and the points together passes them all. A raycast is the
+  // only opinion here that comes from the rendered pixels: it maps the client
+  // point through the canvas, exactly as WebGL composites it. Measured before the
+  // fix at 1366x768: the affine used the frame rect, and it missed all three belt
+  // stars by 34–56 px while `dx` stayed 0.
+  const raycastTruth = JSON.parse(await evaluate(`(() => {
+    const points = updateConnectionStarPoints();
+    const bodies = Object.keys(threeWorld.graph.nodes).map(id => threeWorld.graph.nodes[id].mesh).filter(Boolean);
+    const misses = Object.keys(points).map(id => {
+      const hit = window.threeGame.pick(threeStageHandle, points[id].x, points[id].y, { targets: bodies });
+      return { id, hit: hit && hit.id };
+    }).filter(entry => entry.hit !== entry.id);
+    return JSON.stringify({ stars: Object.keys(points).length, misses });
+  })()`));
+  check('a ray at each projected star hits THAT star (pixels, not self-consistency)',
+    raycastTruth.stars === 5 && raycastTruth.misses.length === 0,
+    JSON.stringify(raycastTruth.misses));
 
   // -------------------------------------------------- a correct drop ------
   console.log('\n=== a correct drop reveals the edge ===');
@@ -382,16 +448,99 @@ const snapshot = () => `JSON.stringify({
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     document.getElementById('matchingResultsBtn')?.click();
     for (let i = 0; i < 60; i++) { if (document.querySelector('.result-screen')) break; await sleep(100); }
-    await sleep(200);
+    // The result's links draw themselves in, exactly as on the board. rAF is
+    // throttled in a background window, so this waits on the STATE the reveal
+    // leaves behind (every link marked drawn), not on a frame count.
+    for (let i = 0; i < 60; i++) {
+      const done = threeWorld && threeWorld.kind === 'connection' && threeWorld.graph
+        && threeWorld.graph.links.every(link => link.drawn);
+      if (done) break;
+      await sleep(100);
+    }
+    const frame = document.querySelector('.result-connection-art[data-connection-stage]');
+    const rect = frame ? frame.getBoundingClientRect() : null;
+    const points = rect ? updateConnectionStarPoints() : {};
+    const inside = Object.keys(points).map(id => {
+      const p = points[id];
+      return p.x >= rect.left - 2 && p.x <= rect.right + 2 && p.y >= rect.top - 2 && p.y <= rect.bottom + 2;
+    });
+    const world = threeWorld && threeWorld.kind === 'connection' ? threeWorld.graph : null;
     return JSON.stringify({
       onResults: Boolean(document.querySelector('.result-screen')),
-      stars: document.querySelectorAll('.result-connection-art .constellation-star').length,
+      three: Boolean(window.threeGame && window.threeGame.isAvailable && window.threeGame.isAvailable()),
+      live: Boolean(world),
+      stars: world ? Object.keys(world.nodes).length : document.querySelectorAll('.result-connection-art .constellation-star').length,
+      earned: world ? Object.keys(world.nodes).filter(id => world.nodes[id].earned).length : 0,
+      drawn: world ? world.links.filter(link => link.drawn).length : 0,
+      canvases: document.querySelectorAll('.game-stage > canvas').length,
+      frame: rect ? [Math.round(rect.width), Math.round(rect.height)] : null,
+      projected: Object.keys(points).length,
+      allInside: inside.length > 0 && inside.every(Boolean),
+      svgStars: document.querySelectorAll('.result-connection-art .constellation-star').length,
       text: (document.querySelector('.result-connection') || {}).textContent || ''
     });
   })()`));
-  check('the results screen shows the sky the class lit',
-    resultsScreen.onResults === true && resultsScreen.stars === 5, `stars=${resultsScreen.stars}`);
+  // #175: the complaint was "phần xem kết quả nên cho xem phần kết quả 3D". The
+  // result is the sky the class lit, drawn by the same WebGL world the board used
+  // — not a picture redrawn from the template.
+  if (resultsScreen.three) {
+    check('the results screen plays the 3D sky, not the static picture',
+      resultsScreen.onResults === true && resultsScreen.live === true && resultsScreen.canvases === 1,
+      `live=${resultsScreen.live} canvas=${resultsScreen.canvases}`);
+    check('the results sky has the stars and edges the class earned',
+      resultsScreen.stars === 5 && resultsScreen.earned === 5 && resultsScreen.drawn === 4,
+      JSON.stringify({ stars: resultsScreen.stars, earned: resultsScreen.earned, drawn: resultsScreen.drawn }));
+    check('the picture is framed INSIDE the result hero, not the old play frame',
+      resultsScreen.allInside === true && resultsScreen.projected === 5 && resultsScreen.frame[0] > 100 && resultsScreen.frame[1] > 100,
+      `frame=${JSON.stringify(resultsScreen.frame)} inside=${resultsScreen.allInside}`);
+    check('no static picture is painted under the live sky', resultsScreen.svgStars === 0, `svgStars=${resultsScreen.svgStars}`);
+  } else {
+    check('without WebGL the results screen keeps the static sky',
+      resultsScreen.onResults === true && resultsScreen.stars === 5, `stars=${resultsScreen.stars}`);
+  }
   check('the results text counts the stars', resultsScreen.text.includes('5/5 sao sáng'), resultsScreen.text);
+
+  // --------------------------------------------- leaving the results ------
+  // The result mounts its own world, so both exits have to take it down again: a
+  // stage left mounted keeps a renderer, a rAF loop and a resize listener alive on
+  // a screen nobody is looking at.
+  console.log('\n=== leaving the 3D result ===');
+  const leaveResults = JSON.parse(await evaluate(`(async () => {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    document.getElementById('replayBtn').click();
+    for (let i = 0; i < 60; i++) { if (document.querySelector('[data-constellation-scene]')) break; await sleep(100); }
+    await sleep(300);
+    const replay = {
+      board: Boolean(document.querySelector('[data-constellation-scene]')),
+      result: Boolean(document.querySelector('.result-screen')),
+      live: threeWorld && threeWorld.kind === 'connection',
+      earned: threeWorld && threeWorld.graph ? Object.keys(threeWorld.graph.nodes).filter(id => threeWorld.graph.nodes[id].earned).length : -1,
+      canvases: document.querySelectorAll('.game-stage > canvas').length
+    };
+    placeOnStar('alnilam', 'alnilam');
+    await sleep(700);
+    const litAfterReplay = state.connectionProgress.connectedStageIds.length;
+    document.querySelector('[data-play-close]').click();
+    await sleep(400);
+    return JSON.stringify({
+      replay,
+      litAfterReplay,
+      closed: {
+        handle: threeStageHandle === null,
+        world: threeWorld === null,
+        canvases: document.querySelectorAll('#playBody canvas').length,
+        fly: document.querySelectorAll('.constellation-fly').length
+      }
+    });
+  })()`));
+  check('“Chơi lại” puts the playable board back with an unlit sky',
+    leaveResults.replay.board === true && leaveResults.replay.result === false
+      && leaveResults.replay.live === true && leaveResults.replay.earned === 0 && leaveResults.replay.canvases === 1,
+    JSON.stringify(leaveResults.replay));
+  check('the replayed board still plays', leaveResults.litAfterReplay === 1, `connected=${leaveResults.litAfterReplay}`);
+  check('closing the game disposes the result world',
+    leaveResults.closed.handle === true && leaveResults.closed.world === true && leaveResults.closed.canvases === 0,
+    JSON.stringify(leaveResults.closed));
 
   // ------------------------------------------------ a long question ------
   console.log('\n=== a long question: readable card, one pointer ===');
@@ -429,6 +578,78 @@ const snapshot = () => `JSON.stringify({
     longLayout.answers.length === 5 && longLayout.answers.every(text => text.length > 0),
     JSON.stringify(longLayout.answers.map(text => text.length)));
 
+  // ---------------------------------------- a term stays on its star ------
+  // The complaint #174 answers: "khi chữ khá dài thì phần chữ này bị cách xa ngôi
+  // sao". A 22-character Vietnamese term is a term, and the pre-#174 estimate
+  // (card ≤ 150 px) exiled it to the row under the picture.
+  console.log('\n=== a mid-length term stays on its star ===');
+  const midGame = matchingGame('ui-const-mid', 5, 'connection', { template: 'orion', starIds: ORION.slice(0, 5), midFirst: true });
+  await evaluate(OPEN(midGame));
+  await evaluate('new Promise(r => setTimeout(r, 300))');
+  const mid = JSON.parse(await evaluate(`(() => {
+    const label = document.querySelector('[data-star-card="alnilam"]');
+    const r = label ? label.getBoundingClientRect() : null;
+    const p = updateConnectionStarPoints().alnilam;
+    return JSON.stringify({
+      sceneCards: [...document.querySelectorAll('[data-star-card]')].map(el => el.dataset.starCard),
+      rowCards: [...document.querySelectorAll('[data-question-card]')].map(el => el.dataset.questionCard),
+      marks: document.querySelectorAll('[data-star-mark]').length,
+      text: label ? label.textContent.trim() : '',
+      fontSize: label ? parseFloat(getComputedStyle(label).fontSize) : 0,
+      dx: (r && p) ? Math.round(r.left + r.width / 2 - p.x) : null
+    });
+  })()`));
+  check('a 22-character term hangs on its star instead of being exiled to the row',
+    mid.text === MID_LABEL && mid.sceneCards.indexOf('alnilam') !== -1 && mid.rowCards.length === 0 && mid.marks === 0,
+    JSON.stringify({ text: mid.text, scene: mid.sceneCards, row: mid.rowCards, marks: mid.marks }));
+  check('the term is centred on its star and keeps the 13 px reading floor',
+    mid.dx === 0 && mid.fontSize >= 13, `dx=${mid.dx} font=${mid.fontSize}px`);
+
+  // --------------------------------- three long questions in one band ------
+  // The geometry that no placement can win: three 370 px sentences cannot all
+  // centre on stars that sit 4 % apart, so the band gives up centring and the
+  // NUMBER carries the pairing instead.
+  console.log('\n=== three long questions: the band keeps the sky in order ===');
+  const threeLong = JSON.parse(matchingGame('ui-const-3long', 5, 'connection', { template: 'orion', starIds: ORION.slice(0, 5) }));
+  threeLong.matchingGame.pairs.slice(0, 3).forEach((pair, n) => { pair.left = LONG_LABELS[n]; });
+  await evaluate(OPEN(JSON.stringify(threeLong)));
+  await evaluate('new Promise(r => setTimeout(r, 300))');
+  const band = JSON.parse(await evaluate(`(() => {
+    const row = document.querySelector('[data-constellation-question-row]').getBoundingClientRect();
+    const points = updateConnectionStarPoints();
+    const cards = [...document.querySelectorAll('[data-question-card]')].map(el => {
+      const r = el.getBoundingClientRect();
+      const p = points[el.dataset.questionCard];
+      return { id: el.dataset.questionCard, start: parseInt(el.style.gridColumn, 10), gridRow: parseInt(el.style.gridRow, 10),
+        dx: p ? Math.round(r.left + r.width / 2 - p.x) : null,
+        rect: [Math.round(r.left), Math.round(r.top), Math.round(r.right), Math.round(r.bottom)],
+        no: (el.querySelector('.constellation-card-index') || {}).textContent };
+    });
+    let overlap = false;
+    for (let i = 0; i < cards.length; i++) for (let j = i + 1; j < cards.length; j++) {
+      const a = cards[i].rect, b = cards[j].rect;
+      if (a[2] > b[0] + 1 && b[2] > a[0] + 1 && a[3] > b[1] + 1 && b[3] > a[1] + 1) overlap = true;
+    }
+    const paired = cards.map(c => {
+      const mark = document.querySelector('[data-star-mark="' + c.id + '"]');
+      return Boolean(mark && c.no && mark.textContent.trim() === String(c.no).trim());
+    });
+    return JSON.stringify({ column: row.width / 12, cards, overlap, paired,
+      marks: [...document.querySelectorAll('[data-star-mark]')].map(el => el.dataset.starMark),
+      rowH: Math.round(row.height) });
+  })()`));
+  check('three long questions give three row cards and three star numbers',
+    band.cards.length === 3 && band.marks.length === 3, JSON.stringify({ cards: band.cards.length, marks: band.marks }));
+  check('every long card carries the number its own star wears',
+    band.paired.every(Boolean), JSON.stringify(band.cards.map(c => [c.id, c.no])));
+  check('the band reads left to right, the way the stars do',
+    band.cards.every((c, i) => Number.isFinite(c.start) && (i === 0 || band.cards[i - 1].start <= c.start)),
+    JSON.stringify(band.cards.map(c => [c.id, c.start, c.gridRow])));
+  check('no two long cards sit on top of each other', band.overlap === false, JSON.stringify(band.cards.map(c => c.rect)));
+  check('the leftmost long card still centres on its star',
+    Math.abs(band.cards[0].dx) <= band.column + 12,
+    `dx=${band.cards[0].dx} column=${Math.round(band.column)}`);
+
   // ------------------------------------------------ classroom sizes ------
   console.log('\n=== classroom projection ===');
   for (const [width, height] of [[1920, 1080], [1280, 720]]) {
@@ -443,18 +664,30 @@ const snapshot = () => `JSON.stringify({
       const stage = document.querySelector('.game-stage').getBoundingClientRect();
       const scene = document.querySelector('[data-constellation-scene]').getBoundingClientRect();
       const tray = document.querySelector('[data-constellation-tray]').getBoundingClientRect();
+      const points = updateConnectionStarPoints();
       const labels = [...document.querySelectorAll('[data-star-card]')].map(el => {
         const r = el.getBoundingClientRect();
-        return { id: el.dataset.starCard, hit: starAtPoint(r.left + r.width / 2, r.top + r.height / 2), inside: r.left >= scene.left - 2 && r.right <= scene.right + 2 };
+        const p = points[el.dataset.starCard];
+        const foot = (el.dataset.side === 'below' ? r.top - 15 : r.bottom + 15);
+        return { id: el.dataset.starCard, dx: p ? Math.round(r.left + r.width / 2 - p.x) : null,
+          gap: p ? Math.round(Math.abs(foot - p.y)) : null,
+          covers: p ? (p.x >= r.left && p.x <= r.right && p.y >= r.top && p.y <= r.bottom) : null,
+          inside: r.left >= scene.left - 2 && r.right <= scene.right + 2 };
       });
       return JSON.stringify({ sceneShare: scene.height / stage.height, trayBelow: tray.top >= scene.bottom - 1, labels, wide: scene.width / scene.height });
     })()`));
     check(`the scene keeps its share at ${width}x${height}`, sized.sceneShare >= 0.45,
       `${Math.round(sized.sceneShare * 100)}% (scene aspect ${sized.wide.toFixed(2)})`);
     check(`the tray stays under the scene at ${width}x${height}`, sized.trayBelow === true);
-    check(`the labels stay on their stars at ${width}x${height}`,
-      sized.labels.every(label => label.hit === label.id && label.inside),
-      JSON.stringify(sized.labels.filter(label => label.hit !== label.id || !label.inside)));
+    // The re-frame pass (#174) is what this proves at a second window size: the
+    // anchors are percentages of the scene's own box, so a label that was laid
+    // out before the question row took its height drifts by tens of pixels.
+    check(`the labels hang centred on their stars at ${width}x${height}`,
+      sized.labels.every(label => Math.abs(label.dx) <= 2 && label.gap <= 4 && label.inside),
+      JSON.stringify(sized.labels.filter(label => Math.abs(label.dx) > 2 || label.gap > 4 || !label.inside)));
+    check(`no label covers its star at ${width}x${height}`,
+      sized.labels.every(label => label.covers === false),
+      JSON.stringify(sized.labels.filter(label => label.covers !== false).map(label => label.id)));
   }
   await send('Emulation.setDeviceMetricsOverride', { width: 1366, height: 768, deviceScaleFactor: 1, mobile: false }).catch(() => {});
 

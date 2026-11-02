@@ -910,3 +910,63 @@ Yêu cầu của người dùng, nguyên văn: *"chế độ chơi chòm sao tri
 **Kiểm chứng.** `npm run check` 0 · `npm run build` 0 · unit **74/74** · `check:renderer-globals` 0 undefined (876 hàm / 7.193 call site) · `verify:css` **32/32** · `ui-constellation-check` **52/52** (thêm 7 đo "the room": `backgroundImage:none`, `border-width 0`, `radius 0`, `box-shadow none` trên `.game-stage`, `::before display:none`, cảnh trong suốt, `.modal` `rgb(3,5,13)`, `.modal-body` padding `0 0 0 0`, cosmos có >500 sao với `sky.renderOrder < stars.renderOrder < 0`, 3 mây, bụi + emblem đã ẩn) · `ui-connection-mode-check` **7/7** · `ui-matching-finish-check` **22/22** · `ui-three-game-check-4games` **41/41**.
 
 **Chưa xử lý.** Chưa có ảnh chụp (CDP `Page.captureScreenshot` trả về không có dữ liệu trên phiên này — hành vi đã ghi ở các bàn giao trước); mọi kết luận về "không còn khung" dựa trên computed style, không phải pixels. Chưa đo FPS với 620 sao + 3 shader trên GPU tích hợp yếu. Cửa sổ trình chiếu (`presentation.html`) vẫn SVG và **không** có cosmos, đúng quyết định #168 mục 4. `.play-head` vẫn là dải `rgba(3,5,13,.86)` đè lên trời — chọn vì chữ điều khiển phải đọc được, nhưng chưa hỏi ý giáo viên thật.
+
+## #174 — Nhãn dài treo đúng trên sao; hàng dưới là **lưới**, không phải dòng chảy
+
+Yêu cầu gốc, nguyên văn: *"khi chữ khá dài thì phần chữ này bị cách xa ngôi sao làm người chơi khó nhận biết được đó là ngôi sao nào. khi chữ vượt quá và nằm ở phía dưới nó sẽ làm những chữ của những ngôi sao còn lại bị lệch và xa nhau."* Hai câu là hai lỗi khác nhau, và cả hai đều là **hình học**, không phải dữ liệu: không đổi `matchingGame`, không đổi chấm điểm, không đổi `placeOnStar()`.
+
+**Đo trước khi sửa.** (1) Ngưỡng "đủ ngắn để treo trên sao" ước theo **số ký tự** (thẻ ≤ 150 px), nên một thuật ngữ 22 ký tự tiếng Việt — rõ ràng là một thuật ngữ — bị đày xuống dải dưới, cách sao của nó cả một vùng trời. (2) Dải dưới là flex **chảy tự do**: hai thẻ 370 px không thể cùng căn vào hai sao chỉ cách nhau 4 % bề rộng, thẻ bị đẩy lệch tới **279 px**, và mỗi thẻ dài kéo cả hàng các thẻ còn lại lệch theo.
+
+**Ngắn hay dài: đo chữ, đừng đoán theo ký tự.** `constellationLabelWidthPx(text)` đo bề rộng thật của nhãn (canvas measure, font theo CSS), trần là `CONSTELLATION_LABEL_MAX_PX = 190`, cộng `CONSTELLATION_LABEL_LANE = 12` px hành lang an toàn. `constellationCardFits(anchor, text)` quyết định treo hay xuống hàng bằng **số đo đó**, nên "diệp lục và carotenoit" (22 ký tự) ở lại trên sao.
+
+**Nhãn treo thì phải trông như đang treo.** Một họ hình học dùng chung `.constellation-card--hang` (CSS) với `data-side` do `constellationLabelSide(anchor)` chọn theo chỗ trống phía trên/dưới sao: cuống 15 px và một chấm tròn **kết thúc trên thân sao**, nhãn không bao giờ che sao. Nhãn và badge số dùng chung công thức này, nên hai cái không bao giờ lệch nhau.
+
+**Hàng dưới là lưới 12 cột.** `CONSTELLATION_ROW_COLUMNS = 12`, `CONSTELLATION_ROW_SPAN = 4`, `constellationRowSlots(rowCards)` chia cột theo **thứ tự trái→phải của các sao** (không theo thứ tự cặp trong bài), mỗi thẻ chiếm tối đa 4 cột. Một thẻ dài vì thế không còn đẩy thẻ bên cạnh: nó chỉ ăn cột của chính nó. `slotStyle()` ghi `grid-column`.
+
+**Khi hình học không cho phép căn giữa thì SỐ là cầu nối.** Hai thẻ 370 px không cùng căn vào hai sao cách nhau 4 % được — đó là hình học không có lời giải. Nên sao mang badge `--mark` (đường kính 22 px, `--constellation-gold`) đúng bằng số đầu thẻ của nó (`.constellation-card-index`), và `constellationMarkHotspot()` biến badge thành điểm thả. Cặp vẫn đọc được dù thẻ lệch vài cột.
+
+**Bố cục phải được chiếu LẠI sau khi hàng xuất hiện.** `constellationReframeIfNeeded(scope, heightBefore, options)`: hàng câu hỏi lấy bớt chiều cao của cảnh **sau** khi anchor đã tính, mà anchor là % của khung cảnh, nên nếu không chiếu lại thì mọi nhãn lệch hàng chục px. Đo được chính xác lỗi này khi viết check ở hai cỡ cửa sổ.
+
+**Một bản sao bị che, xoá.** `connection.ts` khai `constellationIsShortLabel` trong khi `constellation.ts` đã khai hàm cùng tên; trong chuỗi script toàn cục, bản nạp sau thắng và bản kia chết im lặng — hai định nghĩa một ngưỡng là cách bug tương lai sinh ra. Xoá bản ở `connection.ts` (−4 dòng).
+
+**Kiểm chứng.** `ui-constellation-check` mở rộng (nhãn ngắn treo / thuật ngữ 22 ký tự treo / vế dài xuống hàng với **một** đường trỏ / ba vế dài trong cùng một dải: đúng số, không chồng, đọc trái→phải) · chạy trên app thật ở 1366×768, 1920×1080, 1280×720 · unit **74/74** · `verify:css` **32/32**.
+
+**Chưa xử lý.** Ngưỡng 190 px và hành lang 12 px là số đo trên ba cỡ cửa sổ giả lập, chưa chụp lại bằng mắt người trên máy chiếu thật. Board 10 sao (dài nhất) mới chỉ được kiểm bằng hình học, chưa bằng ảnh.
+
+## #175 — Màn kết quả của chòm sao **là** bầu trời 3D, không phải ảnh tĩnh
+
+Yêu cầu, nguyên văn: *"phần xem kết quá nên cho xem phần kết quả 3D"*. Trước đó màn kết quả vẽ lại chòm sao bằng `constellationSvg()` — đúng số sao, nhưng là một **bức ảnh** của thứ vừa chơi, trong khi cả lớp vừa bỏ ra bốn phút nhìn bầu trời thật.
+
+**Hero là CÁI KHUNG thứ hai, không phải một bản sao của ảnh.** `renderMatchingResults()` thêm `skyOnResults = isConnectionBoard(game) && connection3dActive()`; khi đúng thì **không** gọi `unmountThreeStage()` sớm, khối hero mang `data-connection-stage data-constellation-stage` (hai thuộc tính khung mà cảnh chơi cũng mang), và sau khi `innerHTML` xong thì `mountThreeStage($('#playBody .game-stage'))`. Toàn bộ máy dựng hình (`buildConnectionWorld` → `applyConnectionWorld(true)` → `frameConnectionBoard`) được dùng nguyên vẹn, **chỉ** ăn `state.connectionProgress` — nguồn sự thật duy nhất — nên kết quả có đúng số sao đã thắp, đúng cạnh đã nối, và cạnh vẫn **vẽ dần** như trên bàn chơi. Không có ngành "vẽ ảnh kết quả" thứ hai nào để lệch. SVG chỉ đứng thay khi không có WebGL (`is-svg`).
+
+**Khoang vũ trụ #173 được mượn, padding được trả lại.** Stage kết quả nhận `constellation-game-stage` (cùng khoang đêm, không nỉ, không viền) và `constellation-result-stage` làm móc riêng để `.modal-body` lấy lại đệm chữ: `22px 23px`, toàn màn hình `10px 16px 14px` — ghi ở `game-constellation.css` với **đúng** selector (0,3,0) và (0,4,1) mà #173 đã zeroes, và tệp này được import cuối nên thắng theo thứ tự. Bàn chơi thì chơi sát mép; màn kết quả là **chữ**, chữ cần lề.
+
+**Hai lỗi thật, bắt được nhờ ẢNH CHỤP chứ không phải computed style.** (1) Ảnh 3D vẽ giữa stage và **đè lên cột điểm**, vì `frameConnectionBoard()` chỉ nâng camera theo **Y**: khi hộp duy nhất từng được đóng khung là cảnh chơi (trải hết bề rộng stage), trục X không cần chỉnh. Hero kết quả là **cột trái** của lưới hai cột. Đo ở 1366: khung hero trải x 57–685 trong khi các sao chiếu ra x 530–830. Sửa bằng cùng một công thức trên X, và dấu thì **ngược** với Y (khung nằm phải tâm ⇒ camera phải nằm trái gốc). An toàn vì `dolly`/`resetDolly` của lớp chỉ đụng `camera.position.z`. (2) Caption `.result-connection` kế thừa `var(--text)` = `rgb(23,32,51)` — mực đêm trên trời đêm, không đọc được. Nay `--constellation-ink` / `--constellation-muted` (đo lại: `rgb(232,236,251)`).
+
+**Vòng đời là một phần của tính năng.** `mountThreeStage()` tự unmount thế giới chơi trước khi dựng thế giới kết quả, `unmount()` của lớp **gỡ canvas khỏi DOM**, nên `#playBody canvas` là một bằng chứng đo được: kết quả = 1, sau khi Đóng = 0. `closeResultBtn` → `closePlaySurface()` (shell gỡ handle), `replayBtn` → `openMatchingPlay()` (dựng lại bàn chơi, sky chưa thắp). Cả ba đường đều có check.
+
+**Cả hai theme đều là trời đêm.** Đo trên app thật với `data-theme=light` và `dark`: cùng một bộ màu (caption 0,841 độ chói tương đối trên nền trời ~0,01 ⇒ tương phản ~15:1; `h2` trắng; số liệu `rgb(244,247,238)`). Đây là ý đồ của #173 (khoang vũ trụ không theo theme) được áp dụng nhất quán cho màn kết quả, không phải một ngoại lệ.
+
+**Kiểm chứng.** `ui-constellation-check` **71/71** trên app thật (nhánh 3D: `live=true canvas=1`, `stars=5 earned=5 drawn=4`, `frame=[628,292] inside=true`, `svgStars=0`; nhánh ra: "Chơi lại" trả lại bàn chơi chưa thắp, Đóng giải toả world + 0 canvas) · unit **74/74** · `verify:css` **32/32** · `check:renderer-globals` 0 undefined · `ui-connection-mode-check` **7/7** · `ui-matching-finish-check` **22/22** · `ui-three-game-check-4games` **41/41** · `ui-presentation-check` **60/60** · ảnh chụp 1920 và 1366, cả hai theme.
+
+**Chưa xử lý.** Cửa sổ trình chiếu (`presentation.html`) vẫn là khung tĩnh — theo #168 mục 4, máy chiếu không chạy WebGL. Chưa đo FPS khi thế giới kết quả dựng lại ngay sau thế giới chơi (một canvas, một world, nên chi phí là một lần dựng lại). Ảnh chụp là bằng chứng ở 1366/1920 giả lập, chưa phải máy chiếu thật.
+
+## #176 — Neo DOM phải chiếu theo **canvas**: nhãn treo lệch sao thật 34–56 px mà gate vẫn xanh
+
+Đây là phần còn lại của câu than phiền *"chữ khá dài thì bị cách xa ngôi sao"* mà #174 chưa giải phóng hết, và nó là **lỗi phương pháp** đáng ghi hơn cả lỗi điểm ảnh.
+
+**Nguyên nhân.** #172 hợp nhất anchor và raycast về cùng một hộp để chúng không còn cãi nhau — và chọn hộp **frame** (`.constellation-scene`). Nhưng ảnh WebGL được composite trên **canvas**, mà canvas phủ toàn `.game-stage` (1366×768: canvas 1365×684, frame 1305×432). `Vector3.project(camera)` trả toạ độ phối cảnh **của canvas**; đổi NDC sang pixel bằng rect của frame là một affine khác — nó **co** mọi sao về phía góc trên–trái của frame. Sai số không phải hằng số: nó tỉ lệ với khoảng cách tới tâm, nên 0 px ở một chỗ và 56 px ở chỗ khác.
+
+**Đo, và vì sao gate cũ không thấy.** Trên bàn chơi 1366×768, sai số `canvas ↔ điểm chiếu` theo từng sao là **11, 11, 34, 56, 56 px**; bắn một tia tại điểm chiếu **trượt 3/5 sao**. Gate vẫn xanh vì mọi assert đều so hộp DOM với `updateConnectionStarPoints()` — mà DOM lại được **đặt** từ chính hàm đó: một phép chiếu sai theo cách làm cả nhãn lẫn điểm cùng dịch thì qua hết (common-mode).
+
+**Sửa.** `connectionPixelBox()` (canvas của handle, dự phòng `.game-stage`) là hộp affine cho bước NDC→px; `updateStarAnchors()` vẫn **biểu diễn** kết quả bằng % của frame (nhãn đặt bằng % để CSS tự chạy khi đổi cỡ cửa sổ — đó là lý do #172 chọn %), còn `updateConnectionStarPoints()` trả đúng pixel client. Sau sửa: sai số **0 px cả hai màn**, tia tại điểm chiếu trả lại **đúng sao đó** với cả 5 sao.
+
+**Hệ quả tốt ngoài dự kiến.** Với anchor đúng, ba nhãn ngắn trước đây bị "đày" xuống hàng (các sao bị co lại gần nhau nên nhãn chồng nhau) nay **treo đủ trên cả năm sao**; dải dưới chỉ còn việc thật của nó: vế dài. Cột `left` của hàng và thứ tự số cũng theo đó mà đúng hơn.
+
+**Hai điểm nhỏ gom vào cùng sửa.** (1) % làm tròn 1 chữ số = 1,3 px trên frame 1305 px, nên nhãn căn theo anchor làm tròn đo lại với điểm chưa làm tròn ra `dx = ±1`; nâng lên 3 chữ số. (2) `@media (max-height: 820px)` hạ `.constellation-card--star` xuống 12 px, trong khi check của #174 đòi **sàn đọc 13 px** cho nhãn treo — CSS đã không giữ lời hứa mà check nêu; bỏ đúng bước hạ cỡ đó (nhãn treo thì ngắn, không chật hàng). (3) Xoá một `host.innerHTML` bị ghi đè hai lần (sót của #174).
+
+**Check mới, và đó mới là bài học.** `a ray at each projected star hits THAT star (pixels, not self-consistency)`: raycast là **ý kiến duy nhất trong tệp đến từ ảnh đã vẽ**, vì `pick()` đổi điểm client→NDC đúng như WebGL composite. Mọi lần sau này chiếu hình 3D ra DOM đều phải có một assert loại đó.
+
+**Kiểm chứng.** `ui-constellation-check` **71/71** (gồm check mới, `dx = 0` cho cả bốn nhãn, `font=13px` ở 1366×768) · unit **74/74** · `verify:css` **32/32** · `check:renderer-globals` 882 hàm / 7.228 call site, 0 undefined · các check anh em như #175 · ảnh chụp bàn chơi 1366×768: năm nhãn treo sát năm sao, không nhãn nào che sao.
+
+**Chưa xử lý.** `fitConnectionGraph` vẫn đóng khung theo **gốc world**, không theo hộp bao của hình, nên chòm sao lệch tâm (Orion) nằm cao hơn tâm khung ~35–64 px — đẹp trên bàn chơi, nhưng chưa hỏi ý giáo viên. Phép chiếu đúng chỉ được chứng minh bằng tia trên **tâm sao**; chưa đo cạnh ngoài cùng của quầng sáng.

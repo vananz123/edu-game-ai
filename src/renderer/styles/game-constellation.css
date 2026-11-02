@@ -83,6 +83,45 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-game-stag
   box-shadow: inset 0 0 0 2px rgba(242, 196, 107, 0.5);
 }
 
+/* ---------- màn kết quả cũng là một khoang vũ trụ (DECISIONS #175) ----------
+   Kết quả của chòm sao dựng lại thế giới 3D lên chính màn này, nên nó phải dùng
+   lại khối "không khung" ở trên: canvas vẽ trời của riêng nó, còn sân khấu Ghép
+   cặp thì trải nỉ + viền + hoa văn (`--world-stage-*`, `::before`) — ba lớp đó
+   đứng sau canvas nên chỉ còn thấy ở phần canvas không phủ, tức là một khung chữ
+   nhật xám bao quanh kết quả.
+   `.modal-body` thì khác: màn chơi được cố tình đẩy sát mép cửa sổ, còn màn kết
+   quả là CHỮ, sát mép thì không đọc được. Hai quy tắc dưới trả lại đúng khoảng
+   đệm mà các tệp khác đã đặt cho nó (components.css: `22px 23px`, fullscreen.css:
+   `10px 16px 14px`) — cùng độ ưu tiên, khai sau nên thắng. */
+.modal[data-player-theme]:has(.constellation-result-stage) .modal-body {
+  padding: 22px 23px;
+}
+html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-stage) .modal-body {
+  padding: 10px 16px 14px;
+}
+/* Khung giữ chỗ cho bầu trời: ô này KHÔNG tự vẽ gì, nó chỉ là hộp mà camera nhắm
+   vào (`frameConnectionBoard()` nâng camera để tâm thế giới rơi đúng giữa ô).
+   Cao hơn khối kết quả cũ một chút vì ở đây hình là phần thưởng, không phải minh
+   hoạ phụ. */
+.result-connection-art.is-3d {
+  height: clamp(220px, 40vh, 460px);
+  min-width: 0;
+}
+/* Chữ chú thích nằm NGAY DƯỚI bầu trời, trên nền trời đêm. `--text` của app là
+   mực cho nền SÁNG (đo được `rgb(23, 32, 51)` đè lên `#03050d` — gần như không
+   đọc được), nên màn này dùng chung mực của bảng chòm sao. */
+.result-connection {
+  color: var(--constellation-ink);
+}
+.result-connection .result-connection-style {
+  color: var(--constellation-muted);
+}
+@media (max-height: 820px) {
+  .result-connection-art.is-3d {
+    height: clamp(210px, 38vh, 300px);
+  }
+}
+
 /* HUD: một dòng, không khối trang trí nào khác. */
 .constellation-chrome {
   display: flex;
@@ -183,18 +222,61 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-game-stag
 }
 .constellation-panel.is-svg .constellation-scene > .constellation-svg { opacity: 1; }
 
-/* ---------- thẻ câu NGẮN nằm cạnh sao ---------- */
+/* ---------- nhãn treo trên sao ---------- */
 .constellation-cards {
   position: absolute;
   inset: 0;
   z-index: 2;
   pointer-events: none;
 }
-.constellation-card--star {
+/* #174: MỌI nhãn — chữ hay số — đều DỰNG trên chính ngôi sao của nó, cách thân sao
+   một khoảng nhỏ, nối bằng cuống 15 px kết thúc ở chấm vàng đúng trên sao. Hình
+   học nằm ở `--hang`, còn `--star` và `--mark` chỉ lo màu mè, để hai loại nhãn
+   không thể lệch nhau về cách neo.
+   Trước đó thẻ căn giữa đè lên sao (đo: `covers:true`, dx/dy ≈ 0) — sao biến mất
+   dưới tấm thẻ và học sinh không biết chữ nào thuộc sao nào. */
+.constellation-card--hang {
   position: absolute;
-  /* Centred on its star's projection: the card is the star's label, and the
-     star is under its middle. */
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, calc(-100% - 15px));
+  pointer-events: auto;
+}
+/* Một sao sát mép trên của cảnh không còn chỗ để treo nhãn phía trên: nhãn treo
+   XUỐNG dưới sao, và cuống + chấm neo đổi hướng theo `data-side="below"`. */
+.constellation-card--hang[data-side="below"] {
+  transform: translate(-50%, 15px);
+}
+/* Cuống: nét này là thứ nói "chữ này là của sao này", kể cả khi học sinh không
+   nhìn thấy sao sau quầng sáng. */
+.constellation-card--hang::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 1px;
+  height: 15px;
+  background: linear-gradient(rgba(146, 162, 214, 0.85), rgba(146, 162, 214, 0.1));
+}
+.constellation-card--hang[data-side="below"]::after {
+  top: -15px;
+  background: linear-gradient(rgba(146, 162, 214, 0.1), rgba(146, 162, 214, 0.85));
+}
+/* Chấm neo nằm TRÊN thân sao, nên ngôi sao luôn còn nhìn thấy được. */
+.constellation-card--hang::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 13px);
+  width: 6px;
+  height: 6px;
+  margin-left: -3px;
+  border-radius: 50%;
+  background: var(--constellation-gold);
+  box-shadow: 0 0 10px rgba(242, 196, 107, 0.85);
+}
+.constellation-card--hang[data-side="below"]::before {
+  top: -19px;
+}
+.constellation-card--star {
   max-width: min(44%, 190px);
   padding: 5px 10px;
   border-radius: 9px;
@@ -207,16 +289,40 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-game-stag
   text-align: center;
   white-space: normal;
   overflow-wrap: anywhere;
-  pointer-events: auto;
   cursor: pointer;
   box-shadow: 0 4px 14px rgba(2, 6, 18, 0.55);
   transition: transform 140ms ease-out, border-color 140ms ease-out, background 140ms ease-out, box-shadow 140ms ease-out;
 }
+/* Nhãn SỐ: sao có câu dài xuống hàng mang đúng số mà thẻ dưới cảnh bắt đầu. Hai
+   thẻ dài 370 px không thể cùng căn vào hai sao cách nhau 4 % bề rộng (đo: thẻ bị
+   đẩy lệch tới 279 px), nên số là cây cầu nối vẫn còn đọc được. */
+.constellation-card--mark {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid rgba(242, 196, 107, 0.6);
+  background: rgba(9, 14, 26, 0.9);
+  color: var(--constellation-gold);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  pointer-events: none;
+}
+.constellation-card--mark.is-hot {
+  background: rgba(46, 34, 8, 0.95);
+  box-shadow: 0 0 0 3px rgba(242, 196, 107, 0.35), 0 0 18px rgba(242, 196, 107, 0.5);
+}
 .constellation-card--star:hover,
 .constellation-card--star:focus-visible {
   border-color: rgba(242, 196, 107, 0.8);
-  transform: translate(-50%, -50%) scale(1.04);
+  transform: translate(-50%, calc(-100% - 15px)) scale(1.04);
   outline: none;
+}
+.constellation-card--star[data-side="below"]:hover,
+.constellation-card--star[data-side="below"]:focus-visible {
+  transform: translate(-50%, 15px) scale(1.04);
 }
 /* While a card is selected, every star is a possible target: a soft ring, no
    movement, so the picture stays still while the hand decides. */
@@ -227,7 +333,10 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-game-stag
   border-color: var(--constellation-gold);
   background: rgba(46, 34, 8, 0.92);
   box-shadow: 0 0 0 3px rgba(242, 196, 107, 0.35), 0 0 22px rgba(242, 196, 107, 0.45);
-  transform: translate(-50%, -50%) scale(1.06);
+  transform: translate(-50%, calc(-100% - 15px)) scale(1.06);
+}
+.constellation-card--star[data-side="below"].is-hot {
+  transform: translate(-50%, 15px) scale(1.06);
 }
 .constellation-card--star.is-lit {
   border-color: rgba(242, 196, 107, 0.7);
@@ -236,15 +345,30 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-game-stag
 }
 
 /* ---------- hàng câu DÀI dưới cảnh ---------- */
+/* #174: thẻ dài vào **lưới 12 cột** và cột của nó do hoành độ của sao quyết định
+   (`constellationRowSlots`). Trước đó đây là flex `1 1 210px`: đo trên app thật ở
+   1280, ba thẻ dài trải đều mép-này-mép-kia và tâm thẻ lệch khỏi sao của nó tới
+   −163 / +21 / +206 px — một đường chỉ mảnh không đủ để học sinh cuối lớp biết
+   chữ nào thuộc sao nào. */
 .constellation-question-row {
-  display: flex;
-  align-items: flex-start;
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 8px;
+  align-items: start;
+  padding: 15px 2px 0;
+}
+/* Bản không có WebGL chẳng có hình chiếu nào để canh, nên hàng vẫn là một dải
+   đọc theo thứ tự bài. */
+.constellation-question-row.is-flow {
+  display: flex;
   flex-wrap: wrap;
-  padding: 0 2px;
+  align-items: flex-start;
 }
 .constellation-row-label {
-  align-self: center;
+  position: absolute;
+  top: 0;
+  left: 2px;
   padding: 3px 8px;
   border-radius: 6px;
   background: rgba(120, 136, 190, 0.16);
@@ -255,8 +379,7 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-game-stag
 }
 .constellation-question-card {
   position: relative;
-  flex: 1 1 210px;
-  max-width: 360px;
+  grid-column: span 4;
   min-height: 34px;
   padding: 7px 11px;
   border-radius: 10px;
@@ -269,6 +392,38 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-game-stag
   text-align: left;
   overflow-wrap: anywhere;
   cursor: pointer;
+}
+/* Số đầu thẻ: đúng hình chiếc nhãn treo trên sao, nên lớp dưới lớp đọc được
+   "3 ở dưới là 3 ở trên" mà không cần lần theo đường chỉ. */
+.constellation-card-index {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: rgba(242, 196, 107, 0.18);
+  color: var(--constellation-gold);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  vertical-align: middle;
+}
+/* Trong dải flex dự phòng, thẻ chia nhau bề rộng như cũ. */
+.constellation-question-row.is-flow .constellation-question-card {
+  flex: 1 1 210px;
+  max-width: 360px;
+}
+/* Mỗi thẻ dài đều có ô neo trùng với chấm trên sao: khi rê thẻ, ô sáng lên để
+   lớp dưới thấy chữ này đứng ở đâu. `is-target` là vòng mờ khi đã bấm chọn một
+   thẻ đáp án — sao ở hàng dưới cũng là ô đích, không riêng sao trong cảnh. */
+.constellation-question-card.is-hot {
+  border-color: var(--constellation-gold);
+  background: rgba(46, 34, 8, 0.92);
+  box-shadow: 0 0 0 3px rgba(242, 196, 107, 0.3);
+}
+.constellation-question-card.is-target {
+  border-color: rgba(242, 196, 107, 0.5);
 }
 .constellation-question-card:hover,
 .constellation-question-card:focus-visible {
@@ -499,11 +654,13 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-game-stag
 }
 
 /* 1366×768 là máy chiếu chật nhất: chữ nhỏ hơn một bậc, cảnh giữ nguyên phần lớn
-   chiều cao. Không cắt bớt khối nào. */
+   chiều cao. Không cắt bớt khối nào.
+   Riêng thẻ nhãn treo trên sao giữ 13 px (#174): đó là đáp án cả lớp phải đọc từ
+   cuối phòng, và nó ngắn nên không chật hàng. */
 @media (max-height: 820px) {
   .constellation-hud { font-size: 11px; padding: 3px 10px; }
   .constellation-hud-sides { display: none; }
-  .constellation-card--star { font-size: 12px; padding: 4px 8px; max-width: min(40%, 160px); }
+  .constellation-card--star { padding: 4px 8px; max-width: min(40%, 160px); }
   .constellation-question-card { font-size: 12px; padding: 6px 9px; }
   .constellation-tray-card { font-size: 13px; min-height: 42px; padding: 7px 12px; }
   .constellation-status { font-size: 11px; }

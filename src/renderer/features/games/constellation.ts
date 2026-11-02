@@ -8,12 +8,15 @@
 //      and no geometry carries lesson text.
 //
 //   2. THE QUESTION LAYER (HTML on top of the scene). One label per star, the
-//      side of the pair the star stands for. A short side is a compact card beside
-//      its star; a long side moves into the question row UNDER the scene, where it
-//      fits at readable size, with ONE short pointer line to its star. That
-//      pointer is the only line this layer draws, it is drawn only for a moved
-//      card, and it is styled as a pointer (thin, dashed, muted) — never like a
-//      constellation edge.
+//      side of the pair the star stands for. A term-sized side hangs on its own
+//      star: centred on it, clear of the star's body, joined to it by a 15 px stem
+//      that ends in a gold dot ON the star (DECISIONS #174 — the label used to be
+//      dropped over the star, which hid it). Anything longer moves into the
+//      question row UNDER the scene, where it fits at readable size, into the grid
+//      column of its own star, with ONE short pointer line to it. That pointer is
+//      the only line this layer draws, it is drawn only for a moved card, and it
+//      is styled as a pointer (thin, dashed, muted) — never like a constellation
+//      edge.
 //
 //   3. THE TRAY (HTML below the play area). ONE horizontal row of draggable answer
 //      cards, each showing its real text. There is no second answer list anywhere:
@@ -28,22 +31,47 @@ const CONSTELLATION_DRAG_TYPE = 'application/x-edugame-constellation';
 
 
 /**
- * How many question cards the scene can hold beside their stars.
+ * Can this star's label be hung on the star itself?
  *
- * Each card is ~110 px wide and sits on the side of the frame with more room, so
- * a star needs `REACH` percent of the width on ONE side. This is a layout
- * estimate, not a measurement: the real check runs after paint
- * (`refitConstellationCards`), which moves a card out of the scene if it still
- * does not fit beside its star. The estimate only decides the FIRST choice, and
- * an estimate that is too generous is corrected by the measurement.
+ * DECISIONS #174 changed the geometry: a label is centred ON its star and hangs
+ * just clear of it (a 15 px stem and a gold dot do the connecting), so the room
+ * it needs is HALF its own width on each side of the star, plus one label-height
+ * of free lane on the side it hangs. Before that, the test asked for 30 % of the
+ * width on ONE side and a card no wider than 150 px — which capped a scene label
+ * at ~16 characters and exiled every normal two-word term to the row under the
+ * picture, where the class could not tell which star it belonged to.
+ *
+ * Still a layout estimate, not a measurement: `constellationRefitCards` measures
+ * after paint and moves a card out of the scene if it truly does not fit.
  */
-const CONSTELLATION_SCENE_REACH = 30;
+const CONSTELLATION_LABEL_LANE = 12;
+const CONSTELLATION_LABEL_MAX_PX = 190;
+const CONSTELLATION_FRAME_FALLBACK_PX = 1000;
+
+/** The label's own width, in px, from the same estimate the old fit test used. */
+function constellationLabelWidthPx(text) {
+    return Math.min(CONSTELLATION_LABEL_MAX_PX, String(text || '').trim().length * 7.2 + 22);
+}
+
+/** Which side of its star a scene label hangs on. */
+function constellationLabelSide(anchor) {
+    if (!anchor) return 'above';
+    // Above by default: the question row and its pointer threads already live at
+    // the bottom edge, so labels hanging below too would crowd one band. A star
+    // with no lane above it (close to the top of the frame) gets the label below.
+    return anchor.top >= CONSTELLATION_LABEL_LANE ? 'above' : 'below';
+}
 
 function constellationCardFits(anchor, text) {
     if (!anchor) return false;
-    const room = Math.max(anchor.left, 100 - anchor.left);
-    const estimate = String(text || '').length * 7.2 + 34;
-    return room >= CONSTELLATION_SCENE_REACH && estimate <= 150;
+    const side = constellationLabelSide(anchor);
+    const lane = side === 'below' ? 100 - anchor.top : anchor.top;
+    if (lane < CONSTELLATION_LABEL_LANE) return false;
+    const scene = document.querySelector('[data-constellation-scene]');
+    const width = scene ? scene.getBoundingClientRect().width : 0;
+    const frame = width > 200 ? width : CONSTELLATION_FRAME_FALLBACK_PX;
+    const halfNeeded = constellationLabelWidthPx(text) / 2 / frame * 100;
+    return Math.min(anchor.left, 100 - anchor.left) >= halfNeeded;
 }
 
 /**
@@ -104,17 +132,17 @@ function constellationStatusHtml(game) {
 }
 
 /**
- * Is this star's side short enough to sit BESIDE the star?
+ * Is this star's side a TERM, i.e. short enough to hang on the star itself?
  *
- * A card beside a star is read from the back row, so it stays small: two or
- * three words, ~110 px. Anything longer is a sentence, and a sentence belongs in
- * the question row, where it has the width to be read.
+ * The floor is the shared readability constant (`CONSTELLATION_SHORT_LABEL_MAX`,
+ * 24 characters, unit-guarded) — not a second number this file keeps by itself.
+ * A label that hangs on a star is read from the back row, so it stays small: two
+ * or three words, wrapped into at most two lines of the card's own width.
+ * Anything longer is a sentence, and a sentence belongs in the question row,
+ * where it has the width to be read.
  */
-const CONSTELLATION_SCENE_CARD_MAX = 26;
-
-/** True when a side is short enough to be drawn on the scene itself. */
 function constellationIsShortLabel(text) {
-    return String(text === undefined || text === null ? '' : text).trim().length <= CONSTELLATION_SCENE_CARD_MAX;
+    return String(text === undefined || text === null ? '' : text).trim().length <= CONSTELLATION_SHORT_LABEL_MAX;
 }
 
 const constellationCARDS = '[data-constellation-cards]';
@@ -160,8 +188,14 @@ function paintConstellationSurface(root, options = {}) {
     const progress = state.connectionProgress || resetConnectionProgress(template);
     const live3d = constellation3dLive();
     const anchors = live3d ? (connectionStarAnchors() || {}) : {};
+    // The height the anchors are percentages OF. `updateStarAnchors()` ran just
+    // before this paint, and this paint can change that box (a question row that
+    // appears or wraps takes its height out of the scene), so the value is
+    // captured first and compared at the end.
+    const sceneBox = scope.querySelector('[data-constellation-scene]');
+    const heightBefore = sceneBox ? sceneBox.getBoundingClientRect().height : 0;
 
-    // ---- question cards: one per star, in the scene or in the row ----
+    // ---- question cards: one per star, on the star or in the row ----
     const host = scope.querySelector(constellationCARDS);
     const row = scope.querySelector(constellationQuestionRow);
     if (host && row) {
@@ -175,24 +209,47 @@ function paintConstellationSurface(root, options = {}) {
             const text = constellationPairSides(pair, direction).starText;
             const anchor = anchors[starId];
             if (live3d && constellationIsShortLabel(text) && constellationCardFits(anchor, text) && !stage.constellationMoved) {
-                sceneCards.push({ starId, text, lit, anchor });
+                sceneCards.push({ starId, text, lit, anchor, side: constellationLabelSide(anchor) });
             } else {
-                rowCards.push({ starId, text, lit });
+                rowCards.push({ starId, text, lit, left: anchor ? anchor.left : NaN });
             }
         });
-        host.innerHTML = sceneCards.map(card => `<div class="constellation-card constellation-card--star${card.lit ? ' is-lit' : ''}"
+        // A row card belongs to the star above it, so it is read in the star's
+        // order — left to right across the sky, not in the order the pairs were
+        // generated. Without a projection there is nothing to align to, and the
+        // band keeps the lesson order.
+        const place = live3d && rowCards.some(card => Number.isFinite(card.left));
+        const ordered = place ? rowCards.slice().sort((a, b) => (Number.isFinite(a.left) ? a.left : 50) - (Number.isFinite(b.left) ? b.left : 50)) : rowCards;
+        const slots = place ? constellationRowSlots(ordered) : [];
+        // A long card can be pushed a column or two away from its star (two 370 px
+        // sentences cannot both centre on stars 4 % apart), so the pairing is
+        // numbered as well as positioned: the star wears the same number the card
+        // starts with. Measured on the real board: dx 0–42 px for a spread belt,
+        // up to 279 px for two crowded stars — the number is what survives that.
+        const markHtml = place ? ordered.map((card, index) => {
+            const anchor = anchors[card.starId];
+            if (!anchor) return '';
+            return `<div class="constellation-card constellation-card--hang constellation-card--mark"
+                data-star-mark="${connectionEsc(card.starId)}" data-question-mark="${connectionEsc(card.starId)}"
+                data-side="${constellationLabelSide(anchor)}" aria-hidden="true"
+                style="left:${anchor.left}%;top:${anchor.top}%">${index + 1}</div>`;
+        }).join('') : '';
+        host.innerHTML = sceneCards.map(card => `<div class="constellation-card constellation-card--hang constellation-card--star${card.lit ? ' is-lit' : ''}"
             data-star-card="${connectionEsc(card.starId)}"
+            data-side="${card.side}"
             tabindex="0" role="button"
             aria-label="Sao đích: ${connectionEsc(card.text)}"
-            style="left:${card.anchor.left}%;top:${card.anchor.top}%">${connectionEsc(card.text)}</div>`).join('');
+            style="left:${card.anchor.left}%;top:${card.anchor.top}%">${connectionEsc(card.text)}</div>`).join('') + markHtml;
         row.hidden = rowCards.length === 0;
-        row.innerHTML = rowCards.length
-            ? `<span class="constellation-row-label" aria-hidden="true">SAO ĐÍCH</span>` + rowCards.map(card => `<button type="button"
+        row.classList.toggle('is-flow', !place);
+        row.innerHTML = ordered.length
+            ? `<span class="constellation-row-label" aria-hidden="true">SAO ĐÍCH</span>` + ordered.map((card, index) => `<button type="button"
                 class="constellation-question-card${card.lit ? ' is-lit' : ''}"
                 data-question-card="${connectionEsc(card.starId)}"
                 data-question-row="1"
-                aria-label="Sao đích: ${connectionEsc(card.text)}"
-                ${card.lit ? 'disabled' : ''}>${connectionEsc(card.text)}</button>`).join('')
+                aria-label="Sao đích ${index + 1}: ${connectionEsc(card.text)}"
+                ${slotStyle(slots[index])}${card.lit ? ' disabled' : ''}>${place
+                    ? `<span class="constellation-card-index" aria-hidden="true">${index + 1}</span>` : ''}${connectionEsc(card.text)}</button>`).join('')
             : '';
     }
 
@@ -239,16 +296,82 @@ function paintConstellationSurface(root, options = {}) {
 
     constellationDrawPointers(scope);
     if (options.restructure) constellationRefitCards(scope);
+    constellationReframeIfNeeded(scope, heightBefore, options);
     sendPresentationState();
+}
+
+/**
+ * The 12-column band each row card is dropped into.
+ *
+ * A card spans 4 columns, so its block is a third of the row wide and its centre
+ * is 2 columns in. The wanted start is therefore the column that puts the card's
+ * centre on the star's horizontal percentage — and a card only ever moves RIGHT
+ * to clear the one before it, in star order, so two cards can never overlap and
+ * the row still reads the way the sky reads. A card with no room left in the band
+ * starts a second grid row.
+ */
+const CONSTELLATION_ROW_COLUMNS = 12;
+const CONSTELLATION_ROW_SPAN = 4;
+
+function constellationRowSlots(rowCards) {
+    const last = CONSTELLATION_ROW_COLUMNS - CONSTELLATION_ROW_SPAN;
+    let gridRow = 1;
+    let cursor = 0;
+    return rowCards.map((card) => {
+        const wanted = Number.isFinite(card.left)
+            ? Math.round((card.left / 100) * CONSTELLATION_ROW_COLUMNS - CONSTELLATION_ROW_SPAN / 2)
+            : cursor;
+        let start = Math.max(0, Math.min(last, wanted));
+        // A card that would land on its neighbour slides right instead: never
+        // left, never overlapping, so the row keeps the sky's order.
+        if (start < cursor) start = cursor;
+        if (start > last) {
+            gridRow += 1;
+            cursor = 0;
+            start = Math.max(0, Math.min(last, wanted));
+        }
+        cursor = start + CONSTELLATION_ROW_SPAN;
+        return { start, span: CONSTELLATION_ROW_SPAN, gridRow };
+    });
+}
+
+/** One slot, as the attribute the card needs. */
+function slotStyle(slot) {
+    if (!slot) return '';
+    return `style="grid-column:${slot.start + 1} / span ${slot.span};grid-row:${slot.gridRow}"`;
+}
+
+/**
+ * Re-frame once when this paint changed the scene's own height.
+ *
+ * The question row takes its height out of the scene's box, and the labels are
+ * placed with percentages OF that box (measured on the real board: 485 px with no
+ * row, 433 px once a three-card row appeared). So the first paint that adds or
+ * wraps a row is laying labels with stale numbers — the star has moved under
+ * them, which is exactly the "which star is this?" complaint. One pass with the
+ * final height, and the two agree.
+ *
+ * Only one pass, and only on the 3D board: `afterReframe` stops the recursion,
+ * and the no-WebGL board has no projection to keep in step.
+ */
+function constellationReframeIfNeeded(scope, heightBefore, options) {
+    if (options.afterReframe || !constellation3dLive()) return;
+    const scene = scope.querySelector('[data-constellation-scene]');
+    if (!scene || !heightBefore) return;
+    const after = scene.getBoundingClientRect().height;
+    if (Math.abs(after - heightBefore) <= 2) return;
+    refreshConstellationBoard({ restructure: true, afterReframe: true });
 }
 
 /**
  * Move a card out of the scene when the real layout says it does not fit.
  *
  * The estimate above decides the first choice; this pass measures. A card that
- * overlaps another card, leaves the frame, or covers the scene's own centre
- * (where the stars are read) is moved once to the question row — and stays there
- * until the board is rebuilt, so a resize cannot flip it back and forth.
+ * overlaps another card, leaves the frame, or covers a star that is NOT its own
+ * is moved once to the question row — and stays there until the board is
+ * rebuilt, so a resize cannot flip it back and forth. The last case is the one
+ * that matters for reading the board: a label that hides somebody else's star
+ * teaches the class a wrong pairing.
  */
 function constellationRefitCards(scope) {
     const game = state.currentGame;
@@ -261,6 +384,7 @@ function constellationRefitCards(scope) {
     const cards = [...host.querySelectorAll('[data-star-card]')];
     if (!cards.length) return;
     const template = connectionTemplateFor(game);
+    const points = updateConnectionStarPoints();
     const keep = [];
     let moved = false;
     cards.forEach(card => {
@@ -269,11 +393,17 @@ function constellationRefitCards(scope) {
             && r.top >= sceneRect.top - 2 && r.bottom <= sceneRect.bottom + 2;
         const clear = keep.every(other => r.right <= other.left - 4 || r.left >= other.right + 4
             || r.bottom <= other.top - 4 || r.top >= other.bottom + 4);
-        if (inside && clear) {
+        const ownStar = card.dataset.starCard;
+        const coversOther = Object.keys(points).some(starId => {
+            if (starId === ownStar) return false;
+            const p = points[starId];
+            return p.x >= r.left - 2 && p.x <= r.right + 2 && p.y >= r.top - 2 && p.y <= r.bottom + 2;
+        });
+        if (inside && clear && !coversOther) {
             keep.push(r);
             return;
         }
-        const stage = template.stages.find(entry => entry.nodeIds[0] === card.dataset.starCard);
+        const stage = template.stages.find(entry => entry.nodeIds[0] === ownStar);
         if (stage) stage.constellationMoved = true;
         moved = true;
     });
@@ -418,7 +548,7 @@ function bindConstellationSurface(root) {
         if (card) card.classList.add('is-selected');
         state.constellationSelected = card ? card.dataset.answerCard : null;
         scene.classList.toggle('is-armed', Boolean(state.constellationSelected));
-        scope.querySelectorAll('[data-star-card]').forEach(el => el.classList.toggle('is-target', Boolean(state.constellationSelected)));
+        scope.querySelectorAll('[data-star-card],[data-question-card]').forEach(el => el.classList.toggle('is-target', Boolean(state.constellationSelected)));
     };
     // A selection belongs to one board, not to the tray element that was in it.
     state.constellationSelected = null;
@@ -510,7 +640,7 @@ function endConstellationDrag() {
             drag.card.classList.remove('is-dragging');
         }
         scene.classList.remove('is-armed');
-        scope.querySelectorAll('[data-star-card].is-target').forEach(el => el.classList.remove('is-target'));
+        scope.querySelectorAll('[data-star-card].is-target, [data-question-card].is-target').forEach(el => el.classList.remove('is-target'));
         state.drag = null;
         state.constellationDragging = null;
         window.requestAnimationFrame(() => constellationClearHotspot());
@@ -553,14 +683,23 @@ function endConstellationDrag() {
 
 /** The star currently under a dragged card, marked on the scene and in 3D. */
 function constellationMarkHotspot(starId) {
-    document.querySelectorAll('[data-star-card].is-hot').forEach(el => el.classList.remove('is-hot'));
+    document.querySelectorAll('[data-star-card].is-hot, [data-question-card].is-hot, [data-question-mark].is-hot')
+        .forEach(el => el.classList.remove('is-hot'));
     const world = threeWorld;
     if (world && world.kind === 'connection' && world.graph && window.threeGame && threeStageHandle) {
         if (typeof world.graph.setHot === 'function') world.graph.setHot(threeStageHandle, starId);
     }
     if (!starId) return;
-    const card = document.querySelector(`[data-star-card="${cssEscapeAttr(starId)}"]`);
+    const escaped = cssEscapeAttr(starId);
+    // Either half of the question layer: a long side is a ROW card, and the class
+    // needs to see which one the hand is aiming at, not only which star lit up.
+    // The star's own number lights with it, so the eye can travel from the sky to
+    // the band and back.
+    const card = document.querySelector(`[data-star-card="${escaped}"]`)
+        || document.querySelector(`[data-question-card="${escaped}"]`);
     if (card) card.classList.add('is-hot');
+    const mark = document.querySelector(`[data-question-mark="${escaped}"]`);
+    if (mark) mark.classList.add('is-hot');
 }
 function constellationClearHotspot() {
     constellationMarkHotspot('');

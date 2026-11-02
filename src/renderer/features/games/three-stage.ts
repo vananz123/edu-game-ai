@@ -229,6 +229,14 @@ function frameConnectionBoard() {
     // did (measured, not guessed).
     const frameOffset = (frameRect.top + frameRect.height / 2) - (stageRect.top + stageRect.height / 2);
     handle.camera.position.y = frameOffset * (visibleHeight / stageRect.height);
+    // The same lift on X. It was not needed while the only framed box was the play
+    // scene, which spans the stage's width; the result hero is the LEFT column of
+    // a two-column grid, and without this the figure stayed at the stage's centre
+    // and hung out over the score (measured at 1366: the box spans x 57–685, the
+    // stars projected at 530–830). A frame right of centre needs a camera LEFT of
+    // the origin, so this sign IS negated — the opposite of the y case.
+    const frameOffsetX = (frameRect.left + frameRect.width / 2) - (stageRect.left + stageRect.width / 2);
+    handle.camera.position.x = -frameOffsetX * (visibleWidth / stageRect.width);
     // The picture is framed for the WHOLE CANVAS, because that is where the
     // fitted span is computed from. Tell the layer, so its render loop does not
     // put the camera back to the frame ratio on its next resize pass.
@@ -495,6 +503,24 @@ function connectionStarAnchors() {
 }
 
 /**
+ * The box the rendered picture is actually composited into.
+ *
+ * `camera.project()` answers in normalised device coordinates of the CANVAS, and
+ * the canvas spans the whole stage while the DOM labels live in the smaller
+ * picture frame. Doing the affine with the frame's own size compresses every
+ * star toward that frame's top-left corner: measured at 1366x768 the three belt
+ * stars landed 34–56 px below where their labels hung, and a raycast at the
+ * projected point missed all three. The frame is still the right box to EXPRESS
+ * the anchor in (the labels are positioned by percentages of it); only the
+ * conversion from NDC has to be the canvas'.
+ */
+function connectionPixelBox() {
+    const box = (threeStageHandle && threeStageHandle.canvas) || document.querySelector('.game-stage');
+    const rect = box && box.getBoundingClientRect();
+    return rect && rect.width && rect.height ? rect : null;
+}
+
+/**
  * Project every star onto the picture frame (percentages), plus its depth.
  *
  * Done with the same camera and the same projection `stagePoint()` uses, AFTER
@@ -514,11 +540,8 @@ function updateStarAnchors() {
         constellationAnchors = {};
         return {};
     }
-    // The FRAME is the reference box, and only that: the percentages below are
-    // read back against the frame (by the labels and by `starAtPoint`). The
-    // shared canvas is taller than the frame, so measuring it here shifted every
-    // anchor up by (canvas.top - frame.top) px and a drop missed its star.
-    const box = rect;
+    // Pixels come from the canvas, percentages are handed back in the frame.
+    const box = connectionPixelBox() || rect;
     const handle = threeStageHandle;
     handle.camera.updateMatrixWorld(true);
     // The frame has to be fitted BEFORE projecting, or the anchors are measured
@@ -533,9 +556,15 @@ function updateStarAnchors() {
         // screen shows (group scale, offset and the camera lift included).
         const local = entry.root.getWorldPosition(new THREE.Vector3());
         const v = local.clone().project(handle.camera);
+        const x = box.left + (v.x * 0.5 + 0.5) * box.width;
+        const y = box.top + (-v.y * 0.5 + 0.5) * box.height;
         out[id] = {
-            left: Math.round(((v.x * 0.5 + 0.5) * box.width + (box.left - rect.left)) / rect.width * 1000) / 10,
-            top: Math.round(((-v.y * 0.5 + 0.5) * box.height + (box.top - rect.top)) / rect.height * 1000) / 10,
+            // Three decimals of a percent. One decimal is 1.3 px on a 1305 px
+            // frame, and a label placed from a rounded anchor then measured against
+            // the unrounded projection read `dx = ±1` — the centring check needs the
+            // two to be the same number, not merely close.
+            left: Math.round((x - rect.left) / rect.width * 100000) / 1000,
+            top: Math.round((y - rect.top) / rect.height * 100000) / 1000,
             // 0 = furthest behind, 1 = nearest: a label drawn here is nudged so a
             // near star's label never sits on a far star's body.
             depth: Math.round(((Number(entry.depth) || 0) + 0.4) / 0.8 * 100) / 100
@@ -555,13 +584,14 @@ function updateConnectionStarPoints() {
     const handle = threeStageHandle;
     handle.camera.updateMatrixWorld(true);
     fitConnectionGraph();
-    const rect = frame.getBoundingClientRect();
+    // Client pixels, so the canvas affine — see `connectionPixelBox`.
+    const box = connectionPixelBox() || frame.getBoundingClientRect();
     const out = {};
     for (const id of Object.keys(world.graph.nodes)) {
         const entry = world.graph.nodes[id];
         if (!entry) continue;
         const v = entry.root.getWorldPosition(new THREE.Vector3()).project(handle.camera);
-        out[id] = { x: rect.left + (v.x * 0.5 + 0.5) * rect.width, y: rect.top + (-v.y * 0.5 + 0.5) * rect.height };
+        out[id] = { x: box.left + (v.x * 0.5 + 0.5) * box.width, y: box.top + (-v.y * 0.5 + 0.5) * box.height };
     }
     return out;
 }

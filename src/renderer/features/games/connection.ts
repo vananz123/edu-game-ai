@@ -100,10 +100,6 @@ function constellationPairSides(pair, direction) {
     };
 }
 
-/** True when a destination side is short enough to be drawn on the star itself. */
-function constellationIsShortLabel(text) {
-    return String(text === undefined || text === null ? '' : text).trim().length <= CONSTELLATION_SHORT_LABEL_MAX;
-}
 /**
  * The pair → stage plan for this playing. The matching board knows its pair
  * count, so the plan is built from that — no placeholder ids and no dependency

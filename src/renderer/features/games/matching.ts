@@ -529,7 +529,14 @@ function showMatchingComplete() {
 async function renderMatchingResults() {
     const game = state.currentGame, m = game.matchingGame, mp = state.matchingPlay;
     lanFinishRoom();
-    unmountThreeStage();
+    // #175: on a constellation board the result IS the sky, so its 3D world is not
+    // torn down here — it is rebuilt below onto this stage from the same
+    // `state.connectionProgress`. `mountThreeStage()` unmounts the play world
+    // itself, so nothing is left rendering a detached canvas. Every other board
+    // keeps the old teardown: its result is text, with no world behind it.
+    const skyOnResults = isConnectionBoard(game) && connection3dActive();
+    if (!skyOnResults)
+        unmountThreeStage();
     const elapsed = (Date.now() - state.gameStart) / 1000;
     const summary = calculateMatchingSummary(m.pairs.length, mp.matched, mp.wrong, elapsed, m);
     state.lastSummary = summary;
@@ -543,10 +550,27 @@ async function renderMatchingResults() {
     // #168/#171: a constellation board ends on the SKY the class actually lit —
     // the same `state.connectionProgress` the panel drew, never a rebuilt one.
     const connection = isConnectionBoard(game) ? connectionSummary(state.connectionProgress, connectionTemplateFor(game)) : null;
+    // The hero is the picture's FRAME, not a copy of it: the shared canvas covers
+    // the stage and `frameConnectionBoard()` lifts the camera so the figure lands
+    // inside this box. It carries BOTH frame attributes, like the play scene does,
+    // so the projection helpers (`updateConnectionStarPoints()` and its own frame)
+    // resolve against the result box instead of returning nothing.
+    // Only with no WebGL does the static SVG stand in.
     const connectionHeroHtml = connection
-        ? `<div class="result-connection-hero"><div class="result-connection-art constellation-result-art">${constellationSvg(connectionTemplateFor(game), connectionTemplateFor(game).nodes.length, state.connectionProgress)}</div><div class="result-connection">🌌 ${escapeHtml(CONSTELLATION_GAME_NAME)}: <b>${connection.connected}/${connection.total}</b> sao sáng${connection.completed ? ' · Đã hoàn thiện 🎉' : ' · Còn dang dở'}<span class="result-connection-style">Chòm sao: ${escapeHtml(connectionTemplateFor(game).name)}</span></div></div>`
+        ? `<div class="result-connection-hero"><div class="result-connection-art constellation-result-art${skyOnResults ? ' is-3d' : ' is-svg'}"${skyOnResults ? ' data-connection-stage data-constellation-stage' : ''} role="img" aria-label="Chòm sao ${connectionEsc(connectionTemplateFor(game).name)}: ${connection.connected}/${connection.total} sao sáng">${skyOnResults ? '' : constellationSvg(connectionTemplateFor(game), connectionTemplateFor(game).nodes.length, state.connectionProgress)}</div><div class="result-connection">🌌 ${escapeHtml(CONSTELLATION_GAME_NAME)}: <b>${connection.connected}/${connection.total}</b> sao sáng${connection.completed ? ' · Đã hoàn thiện 🎉' : ' · Còn dang dở'}<span class="result-connection-style">Chòm sao: ${escapeHtml(connectionTemplateFor(game).name)}</span></div></div>`
         : '';
-    $('#playBody').innerHTML = `<div class="game-stage" data-game="matching" data-game-world="matching">${gameWorldLabel('matching')}<div class="result-screen${connection ? ' is-connection-result' : ''}">${connection ? connectionHeroHtml + '<div class="result-summary">' : ''}<div class="result-medal">${percent >= 80 ? '🏆' : percent >= 50 ? '🎖️' : '🌱'}</div><div class="stage-kicker">GHÉP CẶP HOÀN THÀNH</div><h2>${percent >= 80 ? 'Xuất sắc!' : percent >= 50 ? 'Ghép tốt lắm!' : 'Tiếp tục cố gắng!'}</h2><p>${escapeHtml(game.title)}</p><div class="result-score">${points.toLocaleString('vi-VN')} / ${max.toLocaleString('vi-VN')} điểm</div><p>Hoàn thành ${m.pairs.length} cặp · sai ${mp.wrong} lần · ${Math.round(elapsed)} giây · ${percent}% điểm tối đa</p>${stats}<p id="resultSaveStatus" class="result-save-status">Đang tự lưu kết quả…</p><div class="result-actions"><button class="btn btn-secondary" id="closeResultBtn">Đóng</button><button class="btn btn-secondary" id="replayBtn">↻ Chơi lại</button><button class="btn btn-primary" id="saveResultBtn">Đang lưu…</button></div>${connection ? '</div>' : ''}</div></div>`;
+    // `constellation-game-stage` puts the results screen in the same space cavity as
+    // the board (DECISIONS #173: no felt panel, no frame, no texture), because a
+    // canvas that draws its own sky cannot sit on top of a CSS room;
+    // `constellation-result-stage` is the hook that gives `.modal-body` its padding
+    // back — the board plays edge to edge, a result screen is text.
+    $('#playBody').innerHTML = `<div class="game-stage${connection ? ' constellation-game-stage constellation-result-stage' : ''}" data-game="matching" data-game-world="matching">${gameWorldLabel('matching')}<div class="result-screen${connection ? ' is-connection-result' : ''}">${connection ? connectionHeroHtml + '<div class="result-summary">' : ''}<div class="result-medal">${percent >= 80 ? '🏆' : percent >= 50 ? '🎖️' : '🌱'}</div><div class="stage-kicker">GHÉP CẶP HOÀN THÀNH</div><h2>${percent >= 80 ? 'Xuất sắc!' : percent >= 50 ? 'Ghép tốt lắm!' : 'Tiếp tục cố gắng!'}</h2><p>${escapeHtml(game.title)}</p><div class="result-score">${points.toLocaleString('vi-VN')} / ${max.toLocaleString('vi-VN')} điểm</div><p>Hoàn thành ${m.pairs.length} cặp · sai ${mp.wrong} lần · ${Math.round(elapsed)} giây · ${percent}% điểm tối đa</p>${stats}<p id="resultSaveStatus" class="result-save-status">Đang tự lưu kết quả…</p><div class="result-actions"><button class="btn btn-secondary" id="closeResultBtn">Đóng</button><button class="btn btn-secondary" id="replayBtn">↻ Chơi lại</button><button class="btn btn-primary" id="saveResultBtn">Đang lưu…</button></div>${connection ? '</div>' : ''}</div></div>`;
+    if (skyOnResults) {
+        // Same camera, same fit, same earned set as the board the class just
+        // played; `animate` draws the links in, so the result is a reveal rather
+        // than a picture that was already there.
+        mountThreeStage($('#playBody .game-stage'));
+    }
     $('#closeResultBtn').onclick = () => closePlaySurface();
     $('#replayBtn').onclick = () => {
         state.playStartedAt = Date.now();
