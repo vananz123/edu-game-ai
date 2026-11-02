@@ -84,7 +84,7 @@ for (const method of [
   'isAvailable', 'mount', 'unmount', 'setPaused', 'burst', 'addHoverEffect', 'addClickableObject', 'addObject',
   'stagePoint', 'anchor', 'tween', 'effect',
   'makeDestructible', 'makeUnlockable', 'makeConstruction', 'makeReactive',
-  'makeNodeGraph', 'makeGlow', 'dolly', 'resetDolly',
+  'makeNodeGraph', 'makeGlow', 'makeCosmos', 'dolly', 'resetDolly',
   // #171: the constellation board's whole input contract.
   'enableDrag', 'onDropStar', 'pick', 'refreshAnchors',
   'celebrate', 'on', 'emit'
@@ -313,6 +313,91 @@ assert.equal(
   })()`),
   'ok',
   'on/emit delivers detail and a throwing handler does not break emit'
+);
+
+// ---- cosmos (DECISIONS #173) ------------------------------------------------
+// The room a constellation floats in: one gradient sky, ONE point cloud of
+// distant stars, a few lobes of gas. It must build under the stub document (its
+// canvas has no `getContext`), which is exactly why the stars and the clouds are
+// shaders rather than textures — a projector laptop pays three extra draw calls
+// and no per-frame geometry work.
+const cosmos = run(`(() => {
+  const c = threeGame.makeCosmos({ count: 40, pixelScale: 2, accent: '#6d7cf0' });
+  return {
+    group: c.group instanceof THREE.Group,
+    fieldInside: c.group.children.indexOf(c.field) !== -1,
+    skyInside: c.group.children.indexOf(c.sky) !== -1,
+    starsInField: c.field.children.indexOf(c.stars) !== -1,
+    stars: c.stars instanceof THREE.Points,
+    starCount: c.stars.geometry.attributes.position.count,
+    sized: Boolean(c.stars.geometry.attributes.aSize) && c.stars.geometry.attributes.aSize.count === 40,
+    phased: Boolean(c.stars.geometry.attributes.aPhase) && c.stars.geometry.attributes.aPhase.count === 40,
+    pointScale: c.uniforms.stars.uScale.value,
+    clouds: c.clouds.length,
+    cloudUniforms: c.clouds.every(x => x.mesh.material.uniforms.uTime !== undefined),
+    skyBackSide: c.sky.material.side === THREE.BackSide,
+    skyOpaque: c.sky.material.transparent === false,
+    additiveStars: c.stars.material.blending === THREE.AdditiveBlending,
+    starsNoDepthWrite: c.stars.material.depthWrite === false
+  };
+})()`);
+// The object comes from the vm realm, so it is compared as JSON (same reason as
+// `graph.bPosition` above): deepEqual would fail on the prototype, not the value.
+assert.equal(
+  JSON.stringify(cosmos),
+  JSON.stringify({
+    group: true,
+    fieldInside: true,
+    skyInside: true,
+    starsInField: true,
+    stars: true,
+    starCount: 40,
+    sized: true,
+    phased: true,
+    pointScale: 2,
+    clouds: 3,
+    cloudUniforms: true,
+    skyBackSide: true,
+    skyOpaque: true,
+    additiveStars: true,
+    starsNoDepthWrite: true
+  }),
+  'makeCosmos builds one sky + one star cloud + three gas lobes without touching the DOM'
+);
+
+// Time: the twinkle is a uniform, not a per-frame attribute rewrite. A caught-up
+// dt (a tab that came back, a hidden window) must advance one frame's worth, and
+// `prefers-reduced-motion` must freeze the field without switching it off.
+const cosmosTime = run(`(() => {
+  const c = threeGame.makeCosmos({ count: 8 });
+  c.tick(0.016, false);
+  const one = c.uniforms.stars.uTime.value;
+  c.tick(5, false);
+  const caught = c.uniforms.stars.uTime.value;
+  const caughtSpin = c.field.rotation.y;
+  c.tick(5, true);
+  return { one, spun: c.field.rotation.y, caught, caughtSpin, afterReduced: c.uniforms.stars.uTime.value, spunAfterReduced: c.field.rotation.y };
+})()`);
+assert.ok(cosmosTime.one > 0, 'tick advances the star twinkle');
+assert.ok(cosmosTime.spun > 0, 'tick turns the field');
+assert.equal(cosmosTime.caught, cosmosTime.one + 0.1, 'a long dt is clamped, never replayed as a jump');
+assert.equal(cosmosTime.afterReduced, cosmosTime.caught, 'reduced motion freezes the twinkle');
+assert.equal(cosmosTime.spunAfterReduced, cosmosTime.caughtSpin, 'reduced motion freezes the drift');
+
+// An empty field and a bare call must build, tick and dispose without throwing:
+// the board creates the cosmos on every mount and only unmount disposes it.
+assert.equal(
+  run(`(() => {
+    const empty = threeGame.makeCosmos({ count: 0 });
+    empty.tick(0.016, false);
+    empty.dispose();
+    const bare = threeGame.makeCosmos();
+    bare.tick(0.016, true);
+    bare.dispose();
+    return 'ok';
+  })()`),
+  'ok',
+  'makeCosmos tolerates count 0, no options, and dispose'
 );
 
 console.log('three-game-interaction: API surface + WebGL-off fallback + patterns verified');

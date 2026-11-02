@@ -341,20 +341,32 @@ function buildConnectionWorld() {
     // The dome and the emblem belong to the decorative backdrop; a board that is
     // meant to be read is better without a rotating knot behind it.
     if (threeStageHandle.emblem) threeStageHandle.emblem.visible = false;
-    // The dust is the room, and the room is dark here: dimmer and further back,
-    // so it reads as space without competing with the constellation.
-    const dust = threeStageHandle.particles;
-    if (dust && dust.material) {
-        dust.material.opacity = 0.3;
-        dust.material.size = 0.07;
-        dust.position.z = -3;
-    }
+    // #173: the generic dust is replaced by a cosmos of its own. The drifting
+    // field was tuned for a lit room — in space it competes with the board's
+    // stars, which are the one thing a class has to aim at.
+    if (threeStageHandle.particles) threeStageHandle.particles.visible = false;
+    // The room itself, drawn by Three.js instead of a CSS panel: a gradient sky,
+    // a far field of stars, two dim clouds. `gl_PointSize` is in physical pixels,
+    // so the star size is scaled by the renderer's own pixel ratio — the same
+    // point must be 1.4 px on a projector and crisp on a Retina laptop.
+    const pixelRatio = threeStageHandle.renderer && typeof threeStageHandle.renderer.getPixelRatio === 'function'
+        ? threeStageHandle.renderer.getPixelRatio()
+        : 1;
+    const cosmos = window.threeGame.makeCosmos({
+        accent: readWorldAccent(),
+        pixelScale: pixelRatio * 0.9,
+        count: 620
+    });
+    window.threeGame.addObject(threeStageHandle, cosmos.group, 0, 0, 0);
 
-    threeWorld = { kind: 'connection', graph, template, burstOn: null, drag: null, syncer: null };
+    threeWorld = { kind: 'connection', graph, cosmos, template, burstOn: null, drag: null, syncer: null };
     // The idle motion runs on the shared render loop (one rAF for every game):
     // stars twinkle, earned ones float, the eye drifts; `prefers-reduced-motion`
     // freezes all of it inside the graph.
-    threeStageHandle.onStep = (dt, reduced) => graph.tick(dt, reduced);
+    threeStageHandle.onStep = (dt, reduced) => {
+        cosmos.tick(dt, reduced);
+        graph.tick(dt, reduced);
+    };
     // Hover is the only pointer input on the board, and it reuses the layer's own
     // implementation (raycast + easing in `step()`), so there is no second input
     // path. It is registered on the star bodies only.

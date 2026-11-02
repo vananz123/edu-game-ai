@@ -1225,6 +1225,200 @@
     };
   }
 
+  /**
+   * (J) Cosmos — the room a constellation floats in (DECISIONS #173).
+   *
+   * Three pieces, all procedural and all DOM-free (the unit tests build this with
+   * a stub document that has no canvas context): a gradient sky painted on an
+   * inverted sphere, ONE Points cloud of distant stars that twinkle from their own
+   * phase, and a few additive nebula planes far behind. Nothing here is a drop
+   * target and nothing here carries lesson content — the board's own stars come
+   * from `makeNodeGraph`, and the cosmos is only depth.
+   *
+   * Cost is the reason for the shape: one sky mesh, one draw call for every
+   * distant star, one draw call per cloud. A projector laptop pays ~5 extra draws
+   * and no per-frame geometry work — the twinkle and the drift live in the
+   * shaders, driven by a single `uTime`.
+   */
+  function makeCosmos(opts = {}) {
+    const accent = color(opts.accent, 0x6d7cf0);
+    const count = Math.max(0, opts.count === undefined ? 640 : Number(opts.count) || 0);
+    // A star is a handful of physical pixels, so its size must be scaled by the
+    // device pixel ratio the caller passes in (CSS pixels would halve on a Retina
+    // laptop and double on a 1080p projector).
+    const pixelScale = Math.max(0.5, Number(opts.pixelScale) || 1);
+
+    const group = new THREE.Group();
+    // The field, not the sky, is what parallax turns: a sky that moves with the
+    // pointer reads as a spinning ball, a star field that moves reads as depth.
+    const field = new THREE.Group();
+    group.add(field);
+
+    const skyMaterial = new THREE.ShaderMaterial({
+      side: THREE.BackSide,
+      depthWrite: false,
+      uniforms: {
+        uTop: { value: color(opts.top, 0x0a1030) },
+        uBottom: { value: color(opts.bottom, 0x03050d) },
+        uGlow: { value: accent.clone() }
+      },
+      vertexShader: [
+        'varying vec3 vDir;',
+        'void main() {',
+        '  vDir = normalize(position);',
+        '  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);',
+        '}'
+      ].join('\n'),
+      fragmentShader: [
+        'uniform vec3 uTop; uniform vec3 uBottom; uniform vec3 uGlow;',
+        'varying vec3 vDir;',
+        'void main() {',
+        '  float h = clamp(vDir.y * 0.5 + 0.5, 0.0, 1.0);',
+        '  vec3 c = mix(uBottom, uTop, pow(h, 1.3));',
+        // one wide, dim band of accent light low in the sky: the room has a floor
+        '  float band = smoothstep(0.72, 0.0, abs(vDir.y + 0.2));',
+        '  gl_FragColor = vec4(c + uGlow * band * 0.16, 1.0);',
+        '}'
+      ].join('\n')
+    });
+    const sky = new THREE.Mesh(new THREE.SphereGeometry(70, 24, 16), skyMaterial);
+    sky.renderOrder = -20;
+    group.add(sky);
+
+    const positions = new Float32Array(count * 3);
+    const sizes = new Float32Array(count);
+    const phases = new Float32Array(count);
+    for (let i = 0; i < count; i += 1) {
+      // A shell between 24 and 58 units, so no distant star sits on the board's
+      // plane and competes with a real target.
+      const r = 24 + Math.random() * 34;
+      const theta = Math.random() * Math.PI * 2;
+      const y = Math.random() * 2 - 1;
+      const spread = Math.sqrt(Math.max(0, 1 - y * y));
+      positions[i * 3] = r * spread * Math.cos(theta);
+      positions[i * 3 + 1] = r * y * 0.62;
+      positions[i * 3 + 2] = r * spread * Math.sin(theta);
+      // most stars small, a few bright: a flat size range reads as static noise.
+      sizes[i] = 0.8 + Math.pow(Math.random(), 3) * 2.4;
+      phases[i] = Math.random() * Math.PI * 2;
+    }
+    const starGeometry = new THREE.BufferGeometry();
+    starGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    starGeometry.setAttribute('aSize', new THREE.BufferAttribute(sizes, 1));
+    starGeometry.setAttribute('aPhase', new THREE.BufferAttribute(phases, 1));
+    const starMaterial = new THREE.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      uniforms: {
+        uTime: { value: 0 },
+        uScale: { value: pixelScale },
+        uTint: { value: color(opts.starTint, 0xdfe6ff) }
+      },
+      vertexShader: [
+        'attribute float aSize; attribute float aPhase;',
+        'uniform float uTime; uniform float uScale;',
+        'varying float vAlpha;',
+        'void main() {',
+        '  vec4 mv = modelViewMatrix * vec4(position, 1.0);',
+        '  gl_Position = projectionMatrix * mv;',
+        // two frequencies so a field never blinks in lockstep
+        '  vAlpha = 0.55 + 0.45 * sin(uTime * 0.8 + aPhase) * 0.5 + 0.225 * sin(uTime * 2.3 + aPhase * 1.7);',
+        '  gl_PointSize = aSize * uScale;',
+        '}'
+      ].join('\n'),
+      fragmentShader: [
+        'uniform vec3 uTint;',
+        'varying float vAlpha;',
+        'void main() {',
+        '  float d = length(gl_PointCoord - vec2(0.5));',
+        '  float a = smoothstep(0.5, 0.08, d) * clamp(vAlpha, 0.15, 1.0);',
+        '  if (a <= 0.01) discard;',
+        '  gl_FragColor = vec4(uTint, a);',
+        '}'
+      ].join('\n')
+    });
+    const stars = new THREE.Points(starGeometry, starMaterial);
+    stars.renderOrder = -12;
+    field.add(stars);
+
+    // A cloud is a quad whose alpha falls off from its own centre — a texture
+    // would need a canvas, and this layer must build with no DOM at all.
+    const cloudSpecs = Array.isArray(opts.clouds) && opts.clouds.length
+      ? opts.clouds
+      : [
+        { x: -19, y: 8, z: -46, size: 44, color: 0x3b3f8f, opacity: 0.2, spin: 0.01 },
+        { x: 22, y: -10, z: -52, size: 52, color: 0x1f5f74, opacity: 0.15, spin: -0.008 },
+        { x: 5, y: 15, z: -58, size: 62, color: 0x5a3a86, opacity: 0.11, spin: 0.006 }
+      ];
+    const clouds = cloudSpecs.map((spec, index) => {
+      const material = new THREE.ShaderMaterial({
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        uniforms: {
+          uColor: { value: color(spec.color, 0x3b3f8f) },
+          uOpacity: { value: Number(spec.opacity) || 0.14 },
+          uTime: { value: 0 }
+        },
+        vertexShader: [
+          'varying vec2 vUv;',
+          'void main() {',
+          '  vUv = uv;',
+          '  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);',
+          '}'
+        ].join('\n'),
+        fragmentShader: [
+          'uniform vec3 uColor; uniform float uOpacity; uniform float uTime;',
+          'varying vec2 vUv;',
+          'void main() {',
+          '  vec2 p = vUv - 0.5;',
+          // two soft lobes, slowly sliding: a flat disc looks like a lamp, not a cloud
+          '  float d1 = length(p - vec2(0.1 * sin(uTime * 0.05), 0.06));',
+          '  float d2 = length(p + vec2(0.12, 0.05 * cos(uTime * 0.04)));',
+          '  float a = pow(clamp(1.0 - d1 * 2.0, 0.0, 1.0), 2.4) + pow(clamp(1.0 - d2 * 2.2, 0.0, 1.0), 2.8) * 0.7;',
+          '  a *= smoothstep(0.5, 0.34, max(abs(p.x), abs(p.y)));',
+          '  gl_FragColor = vec4(uColor, clamp(a, 0.0, 1.0) * uOpacity);',
+          '}'
+        ].join('\n')
+      });
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), material);
+      const side = Number(spec.size) || 44;
+      mesh.scale.set(side, side * 0.72, 1);
+      mesh.position.set(Number(spec.x) || 0, Number(spec.y) || 0, Number(spec.z) || -46);
+      mesh.renderOrder = -14 + index;
+      field.add(mesh);
+      return { mesh, spin: Number(spec.spin) || 0.008 };
+    });
+
+    let elapsed = 0;
+
+    /** Advance the field. `reduced` freezes every motion, never the stars. */
+    function tick(dt, reduced) {
+      const step = reduced ? 0 : Math.min(Number(dt) || 0, 0.1);
+      if (step <= 0) return;
+      elapsed += step;
+      starMaterial.uniforms.uTime.value = elapsed;
+      for (const cloud of clouds) {
+        cloud.mesh.material.uniforms.uTime.value = elapsed;
+        cloud.mesh.rotation.z += cloud.spin * step;
+      }
+      // The whole field turns a hair: distant stars sliding past the board is what
+      // makes the depth read, and it is one matrix write per frame.
+      field.rotation.y += step * 0.006;
+    }
+
+    function dispose() {
+      disposeObject(group);
+    }
+
+    return {
+      group, field, sky, stars, clouds, tick, dispose,
+      count,
+      uniforms: { sky: skyMaterial.uniforms, stars: starMaterial.uniforms }
+    };
+  }
+
 
   // (H) Glow — a halo that swells once at a point. `glowAt` is the one-shot form
   // for a landed node; the returned object is reusable (race orb, link tip).
@@ -1348,6 +1542,7 @@
     makeReactive,
     makeNodeGraph,
     makeGlow,
+    makeCosmos,
     dolly,
     resetDolly,
     celebrate,

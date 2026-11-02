@@ -185,6 +185,62 @@ const snapshot = () => `JSON.stringify({
     (await evaluate(`threeWorld.graph.links.map(l => (l.tube ? (l.tube.visible ? 'v' : 'h') : 'none')).join('')`)) === 'hhhh',
     'every edge starts hidden');
 
+  console.log('\n=== the room: no frame, real space ===');
+  // --------------------------------------------------- the room: no frame --
+  // DECISIONS #173: the grey felt frame is gone and the board sits in real
+  // space. Measured on the COMPUTED style, because the felt comes from three
+  // different files (world tokens, gameplay.css, fullscreen.css) and a rule
+  // that lost the specificity fight would still show as a declaration in the
+  // source but not in the box the class sees.
+  const room = JSON.parse(await evaluate(`(() => {
+    const cs = sel => { const el = document.querySelector(sel); return el ? getComputedStyle(el) : null; };
+    const stage = cs('.game-stage');
+    const scene = cs('[data-constellation-scene]');
+    const modal = cs('.modal[data-player-theme]');
+    const body = cs('.modal[data-player-theme] .modal-body');
+    const before = document.querySelector('.game-stage') ? getComputedStyle(document.querySelector('.game-stage'), '::before') : null;
+    const handle = threeStageHandle;
+    const cosmos = threeWorld && threeWorld.cosmos;
+    return JSON.stringify({
+      stageBg: stage && stage.backgroundImage,
+      stageBgColor: stage && stage.backgroundColor,
+      stageBorder: stage && stage.borderTopWidth,
+      stageRadius: stage && stage.borderTopLeftRadius,
+      stageShadow: stage && stage.boxShadow,
+      beforeDisplay: before && before.display,
+      sceneBg: scene && scene.backgroundImage,
+      sceneShadow: scene && scene.boxShadow,
+      sceneRadius: scene && scene.borderTopLeftRadius,
+      modalBg: modal && modal.backgroundColor,
+      bodyPad: body && [body.paddingTop, body.paddingRight, body.paddingBottom, body.paddingLeft].join(' '),
+      hasCosmos: Boolean(cosmos),
+      starCount: cosmos ? cosmos.stars.geometry.attributes.position.count : -1,
+      skyOrder: cosmos ? cosmos.sky.renderOrder : 0,
+      starsOrder: cosmos ? cosmos.stars.renderOrder : 0,
+      cloudCount: cosmos ? cosmos.clouds.length : -1,
+      dustHidden: handle ? (handle.particles ? handle.particles.visible === false : true) : null,
+      emblemHidden: handle ? (handle.emblem ? handle.emblem.visible === false : true) : null,
+      pointScaleNumber: cosmos ? typeof cosmos.uniforms.stars.uScale.value === 'number' : false
+    });
+  })()`));
+  check('the stage draws no felt: no gradient, no border, no radius, no shadow',
+    room.stageBg === 'none' && room.stageBorder === '0px' && room.stageRadius === '0px' && room.stageShadow === 'none',
+    JSON.stringify({ bg: room.stageBg, border: room.stageBorder, radius: room.stageRadius, shadow: room.stageShadow }));
+  check('the world texture overlay is switched off', room.beforeDisplay === 'none', `::before display=${room.beforeDisplay}`);
+  check('the scene box is transparent so the canvas is the picture',
+    room.sceneBg === 'none' && room.sceneShadow === 'none' && room.sceneRadius === '0px',
+    JSON.stringify({ bg: room.sceneBg, shadow: room.sceneShadow, radius: room.sceneRadius }));
+  check('the modal is space-coloured and the body wastes no padding',
+    room.modalBg === 'rgb(3, 5, 13)' && room.bodyPad === '0px 0px 0px 0px',
+    JSON.stringify({ modalBg: room.modalBg, bodyPad: room.bodyPad }));
+  check('a cosmos field is built: stars behind the graph, sky behind everything',
+    room.hasCosmos === true && room.starCount > 500 && room.skyOrder < room.starsOrder && room.skyOrder < 0 && room.cloudCount === 3,
+    JSON.stringify({ stars: room.starCount, skyOrder: room.skyOrder, starsOrder: room.starsOrder, clouds: room.cloudCount }));
+  check('the rotating emblem and the old dust are off — the cosmos replaces them',
+    room.dustHidden === true && room.emblemHidden === true,
+    JSON.stringify({ dustHidden: room.dustHidden, emblemHidden: room.emblemHidden }));
+  check('star points are sized in device pixels, not world units', room.pointScaleNumber === true, `uScale is number=${room.pointScaleNumber}`);
+
   // ------------------------------------------------ answers and labels ----
   const opening = JSON.parse(await evaluate(snapshot()));
   check('five pairs give five answer cards with their real text',
