@@ -2,8 +2,10 @@
 function openMatchingPlay() {
     const root = $('#modalRoot');
     const game = state.currentGame;
-    const modeLabel = ({ columns: 'GHÉP HAI CỘT', memory: 'LẬT THẺ GHI NHỚ', categorize: 'PHÂN LOẠI KIẾN THỨC', connection: 'KẾT NỐI VẬT THỂ' })[game.matchingGame.mode] || 'GHÉP CẶP KIẾN THỨC';
-    const width = game.matchingGame.mode === 'connection' ? 'w-[min(1180px,97vw)]' : 'w-[min(980px,96vw)]';
+    const modeLabel = ({ columns: 'GHÉP HAI CỘT', memory: 'LẬT THẺ GHI NHỚ', categorize: 'PHÂN LOẠI KIẾN THỨC', connection: 'CHÒM SAO TRI THỨC' })[game.matchingGame.mode] || 'GHÉP CẶP KIẾN THỨC';
+    // #171: the constellation board needs room for the scene AND the card
+    // column beside it, so it is wider than the two-column board.
+    const width = game.matchingGame.mode === 'connection' ? 'w-[min(1320px,98vw)]' : 'w-[min(980px,96vw)]';
     root.innerHTML = playModalHtml('matching', width, game.title, `${modeLabel} · NGOẠI TUYẾN`);
     bindPlayHeader(root);
     resetMatchingPlay();
@@ -42,6 +44,8 @@ function updateMatchingHeader() {
     sendPresentationState();
 }
 function renderMatchingBoard() {
+    // #171: the LIVE game is the only source of truth for the style while
+    // playing, so every board below is dispatched from it, never from a stale copy.
     const m = state.currentGame.matchingGame;
     // Ghép xong KHÔNG tự nhảy sang bảng điểm (yêu cầu giáo viên): giữ nguyên bàn ghép
     // và chỉ hiện thanh "Đã ghép đủ" + nút "Xem kết quả". Điểm chỉ hiện khi bấm nút
@@ -234,13 +238,31 @@ function addMatchingConnection(board, leftEl, rightEl, matchIndex) {
  * is shuffled: the picture is keyed by pair id, never by where a card sits.
  */
 function renderConnectionBoard(root, m) {
-    const template = connectionTemplateFor(state.currentGame);
-    const rights = shuffled(m.pairs);
-    const pairIndex = id => m.pairs.findIndex(pair => pair.id === id);
-    root.innerHTML = `<div class="game-stage" data-game="matching" data-game-world="matching" data-match-mode="connection">${gameWorldLabel('matching')}${matchingHeader()}<div class="stage-center is-connection"><div class="stage-col is-main"><div class="stage-kicker d-badge d-badge-neutral">KẾT NỐI VẬT THỂ · ${connectionEsc(template.name)}</div>${connectionPanelHtml(state.currentGame)}<div class="connection-pick">${m.pairs.map((p, index) => `<button type="button" class="match-card" data-match-side="left" data-pair="${escapeHtml(p.id)}" data-pair-index="${index}">${escapeHtml(p.left)}</button>`).join('')}</div><div class="connection-pick">${rights.map(p => `<button type="button" class="match-card" data-match-side="right" data-pair="${escapeHtml(p.id)}" data-pair-index="${pairIndex(p.id)}">${escapeHtml(p.right)}</button>`).join('')}</div><div id="matchFeedback"></div></div></div>${matchingFooter(m)}</div>`;
+    // ONE board, three blocks: the HUD line, the scene with its question layer,
+    // and the tray. No second answer list, no kicker, no footer: the picture is
+    // the lesson and every pixel that is not the picture is a pixel the class is
+    // not looking at (DECISIONS #172).
+    root.innerHTML = `<div class="game-stage constellation-game-stage" data-game="matching" data-game-world="matching" data-match-mode="connection">
+      <div class="constellation-chrome">${matchingHeader()}<div class="constellation-hud" data-constellation-hud>${constellationHudHtml(state.currentGame)}</div></div>
+      <div class="stage-center is-constellation"><div class="stage-col is-main">
+        ${constellationPanelHtml(state.currentGame)}
+        <p class="constellation-status" data-constellation-status>${constellationStatusHtml(state.currentGame)}</p>
+        <div id="matchFeedback"></div>
+      </div></div>
+    </div>`;
     paintProgress(root);
-    $$('.match-card', root).forEach(btn => btn.addEventListener('click', () => onColumnCardClick(btn)));
+    paintConstellationSurface(root);
+    // The 3D world must exist before anchors can be measured: paint first, then
+    // mount, then lay the question cards out against the real projection.
     mountThreeStage($('.game-stage', root));
+    bindConstellationSurface(root);
+    refreshConstellationBoard({ restructure: true });
+    watchConstellationResize();
+    if (threeWorld && threeWorld.kind === 'connection') {
+        // The modal reaches its final height one frame later; a short timer
+        // catches that pass without depending on rAF (a hidden window freezes it).
+        connectionLater(() => refreshConstellationBoard({ restructure: true }), 140);
+    }
     sendPresentationState();
 }
 
@@ -274,8 +296,23 @@ function onColumnCardClick(btn) {
         evaluateColumnMatch();
 }
 function evaluateColumnMatch() {
+    evaluateColumnMatchWith(state.matchingPlay.selectedLeft, state.matchingPlay.selectedRight);
+}
+/**
+ * Evaluate one attempt.
+ *
+ * The two-column board selects a card on each side and calls this with no
+ * arguments. The constellation board (#171/#172) calls it with an explicit pair
+ * of "cards" — the dragged answer card and the star it was dropped on — plus
+ * `attempt`, which names the same thing again in plain terms
+ * (`{ answerId, starId }`). BOTH surfaces run through this one function: one
+ * scoring path, one feedback path, one completion path. The elements are always
+ * stand-ins off the DOM, so the board's own nodes are never restamped.
+ */
+function evaluateColumnMatchWith(left, right, attempt) {
     const mp = state.matchingPlay;
-    const left = mp.selectedLeft, right = mp.selectedRight;
+    if (!left || !right) return;
+    const constellationBoard = isConnectionBoard(state.currentGame);
     if (left.dataset.pair === right.dataset.pair) {
         left.classList.add('matched');
         right.classList.add('matched');
@@ -293,14 +330,23 @@ function evaluateColumnMatch() {
             addMatchingConnection(board, left, right, mp.matched - 1);
         }
         GameAudio.play('match');
-        reactThree('match:correct', { matched: mp.matched, connection });
+        reactThree('match:correct', { matched: mp.matched, connection, starId: right.dataset.star || left.dataset.pair });
         mp.selectedLeft = mp.selectedRight = null;
         const pair = state.currentGame.matchingGame.pairs.find(item => item.id === left.dataset.pair);
-        matchingFeedback('good', pair
+        matchingFeedback('good', constellationBoard ? '✓ Ghép chính xác!' : (pair
             ? `✓ Ghép chính xác! Hãy giải thích mối quan hệ giữa “${escapeHtml(pair.left)}” và “${escapeHtml(pair.right)}”.`
-            : '✓ Ghép chính xác! Hãy giải thích vì sao hai nội dung này đi với nhau.');
+            : '✓ Ghép chính xác! Hãy giải thích vì sao hai nội dung này đi với nhau.'));
         if (connection && connection.stageId)
             refreshConnectionPanel($('#playBody'));
+        // #172: the tray and the question layer follow the progression. On the
+        // constellation board the repaint waits for the landing (below), so the
+        // card that is flying is not swapped out from under the hand.
+        if (constellationBoard) {
+            // A card is flying to its star (`constellationFlyAndResolve`), so
+            // this attempt repaints the picture and the HUD but not the blocks
+            // in flight.
+            paintConstellationSurface($('#playBody'), { repaint: false });
+        }
         updateMatchingHeader();
         if (mp.matched >= state.currentGame.matchingGame.pairs.length) {
             GameAudio.play('correct');
@@ -314,7 +360,7 @@ function evaluateColumnMatch() {
         const connection = isConnectionBoard(state.currentGame)
             ? connectionApplyAnswer(state.currentGame, Number(left.dataset.pairIndex), `${left.dataset.pair}~${right.dataset.pair}~${mp.wrong}`, false)
             : null;
-        reactThree('match:incorrect', { wrong: mp.wrong, connection });
+        reactThree('match:incorrect', { wrong: mp.wrong, connection, starId: right.dataset.star || '' });
         mp.lock = true;
         left.classList.add('wrong');
         right.classList.add('wrong');
@@ -324,6 +370,10 @@ function evaluateColumnMatch() {
             right.classList.remove('selected', 'wrong');
             mp.selectedLeft = mp.selectedRight = null;
             mp.lock = false;
+            // #172: the card is back in its tray slot (its DOM node never left
+            // the tray), and the star it missed keeps no mark and no star is
+            // removed.
+            if (isConnectionBoard(state.currentGame)) paintConstellationSurface($('#playBody'));
             updateMatchingHeader();
         }, 550);
     }
@@ -490,21 +540,30 @@ async function renderMatchingResults() {
         { icon: '⏱', value: formatClock(elapsed), label: 'Thời gian' },
         { icon: '🎯', value: `${percent}%`, label: 'Điểm tối đa' }
     ]);
-    // #168: a connection board ends on the picture the class actually completed —
+    // #168/#171: a constellation board ends on the SKY the class actually lit —
     // the same `state.connectionProgress` the panel drew, never a rebuilt one.
     const connection = isConnectionBoard(game) ? connectionSummary(state.connectionProgress, connectionTemplateFor(game)) : null;
     const connectionHeroHtml = connection
-        ? `<div class="result-connection-hero"><div class="result-connection-art">${connectionSvg(connectionTemplateFor(game), state.connectionProgress)}</div><div class="result-connection">🔗 Kết nối: <b>${connection.connected}/${connection.total}</b> chặng${connection.completed ? ' · Đã hoàn thiện 🎉' : ' · Còn dang dở'}<span class="result-connection-style">Mẫu: ${escapeHtml(connectionTemplateFor(game).name)}</span></div></div>`
+        ? `<div class="result-connection-hero"><div class="result-connection-art constellation-result-art">${constellationSvg(connectionTemplateFor(game), connectionTemplateFor(game).nodes.length, state.connectionProgress)}</div><div class="result-connection">🌌 ${escapeHtml(CONSTELLATION_GAME_NAME)}: <b>${connection.connected}/${connection.total}</b> sao sáng${connection.completed ? ' · Đã hoàn thiện 🎉' : ' · Còn dang dở'}<span class="result-connection-style">Chòm sao: ${escapeHtml(connectionTemplateFor(game).name)}</span></div></div>`
         : '';
     $('#playBody').innerHTML = `<div class="game-stage" data-game="matching" data-game-world="matching">${gameWorldLabel('matching')}<div class="result-screen${connection ? ' is-connection-result' : ''}">${connection ? connectionHeroHtml + '<div class="result-summary">' : ''}<div class="result-medal">${percent >= 80 ? '🏆' : percent >= 50 ? '🎖️' : '🌱'}</div><div class="stage-kicker">GHÉP CẶP HOÀN THÀNH</div><h2>${percent >= 80 ? 'Xuất sắc!' : percent >= 50 ? 'Ghép tốt lắm!' : 'Tiếp tục cố gắng!'}</h2><p>${escapeHtml(game.title)}</p><div class="result-score">${points.toLocaleString('vi-VN')} / ${max.toLocaleString('vi-VN')} điểm</div><p>Hoàn thành ${m.pairs.length} cặp · sai ${mp.wrong} lần · ${Math.round(elapsed)} giây · ${percent}% điểm tối đa</p>${stats}<p id="resultSaveStatus" class="result-save-status">Đang tự lưu kết quả…</p><div class="result-actions"><button class="btn btn-secondary" id="closeResultBtn">Đóng</button><button class="btn btn-secondary" id="replayBtn">↻ Chơi lại</button><button class="btn btn-primary" id="saveResultBtn">Đang lưu…</button></div>${connection ? '</div>' : ''}</div></div>`;
     $('#closeResultBtn').onclick = () => closePlaySurface();
     $('#replayBtn').onclick = () => {
         state.playStartedAt = Date.now();
         state.resultSession = null;
-        // #168: "Chơi lại" resets the picture; the play style and template stay on
-        // the game, so a class can watch the same object assemble again.
-        if (isConnectionBoard(game)) state.connectionProgress = connectionCreate(game);
-        resetMatchingPlay();
+        // #168/#171: "Chơi lại" resets the sky; the play style, the constellation
+        // and the drag direction stay on the game, so a class can light the same
+        // figure again.
+        if (isConnectionBoard(game)) {
+            state.connectionProgress = connectionCreate(game);
+            state.constellationSelected = null;
+            state.constellationDragging = null;
+        }
+        // #171: the results screen replaced the whole play modal (its header and
+        // the 3D stage belong to `openMatchingPlay`). Rebuilding only `#playBody`
+        // left the results screen in place and printed the board INSIDE it; the
+        // play surface has to be opened again, which also remounts the stage.
+        openMatchingPlay();
     };
     wireResultSession(game, state.lastSummary, {
         answers: [],

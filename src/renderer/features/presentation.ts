@@ -164,10 +164,15 @@ function renderRaceView(view) {
 }
 
 /**
- * Object Connection (#168): the assembled picture, drawn as SVG from the view's
- * own node/edge data. The presentation window loads no Three.js and no renderer
- * scripts, so this function must not call `connectionSvg` — it is a small,
- * self-contained drawer over ~5 nodes and ~6 edges.
+ * Constellation board (DECISIONS #168, renamed in #171): the static sky, drawn
+ * as SVG from the view's own star/link data.
+ *
+ * The presentation window loads no Three.js and no renderer scripts, so this
+ * function must not call `constellationSvg` — it is a small, self-contained
+ * drawer over at most ten stars. It shows the SAME two facts the teacher window
+ * shows: which stars are lit, and which destination side each star carries (the
+ * second screen is what the class reads, so it never prints a stage caption
+ * instead of the lesson text).
  */
 function renderConnectionView(view) {
     const nodes = {};
@@ -188,29 +193,30 @@ function renderConnectionView(view) {
             : `<path class="conn-slot" d="${d}" />`;
     }).join('');
     const nodeSvg = (view.nodes || []).map(node => {
-        if (!node.visible) return '';
-        const shape = node.kind === 'plate'
-            ? `<rect x="${node.x - 62}" y="${node.y - 22}" width="124" height="44" rx="12" />`
-            : node.kind === 'ring'
-                ? `<circle cx="${node.x}" cy="${node.y}" r="20" />`
-                : `<circle cx="${node.x}" cy="${node.y}" r="12" />`;
-        // Same rule as the teacher window (`connectionSvg`): a dot keeps its
-        // caption only once it is earned, a plate/ring always. Must not diverge —
-        // the projector is the surface the class actually reads.
-        const caption = node.kind !== 'dot' || node.visible
-            ? `<text x="${node.x}" y="${node.y + (node.kind === 'plate' ? 5 : 34)}">${esc(node.label)}</text>`
-            : '';
-        return `<g class="conn-node">${shape}${caption}</g>`;
+        // Every star of the board is drawn: a light sky is not an empty sky. A
+        // lit star is bright and captioned; a star still to come is faint, which
+        // is the same cue the 3D board gives.
+        const lit = node.visible;
+        const group = lit ? 'conn-node is-lit' : 'conn-node is-dim';
+        const label = String(node.label || '');
+        // Long lesson text is clamped here so it can never push the picture off
+        // the shared screen; the teacher window carries the full text.
+        const caption = label.length > 60 ? `${label.slice(0, 57)}…` : label;
+        return `<g class="${group}">
+          <circle class="conn-star-halo" cx="${node.x}" cy="${node.y}" r="${lit ? 26 : 18}" />
+          <circle class="conn-star" cx="${node.x}" cy="${node.y}" r="${lit ? 13 : 9}" />
+          ${caption ? `<text x="${node.x}" y="${node.y + 34}">${esc(caption)}</text>` : ''}
+        </g>`;
     }).join('');
     const box = view.viewBox || { width: 1000, height: 620 };
     return `<section class="panel connection-panel-presentation">
     <div class="meta-row">
-      <span class="badge badge-template">🔗 ${view.connected}/${view.total} kết nối</span>
+      <span class="badge badge-template">🌌 ${view.connected}/${view.total} sao sáng</span>
       <span class="badge">${esc(view.templateName || '')}</span>
       ${view.completed ? '<span class="badge badge-success">Đã hoàn thiện</span>' : ''}
     </div>
     <svg class="conn-svg" viewBox="0 0 ${box.width} ${box.height}" role="img" aria-label="${esc(view.templateName || '')}" preserveAspectRatio="xMidYMid meet">${edgeSvg}${nodeSvg}</svg>
-    ${(view.doneLabels || []).length ? `<p class="context conn-done">Đã nối: ${esc(view.doneLabels.join(' · '))}</p>` : ''}
+    ${(view.doneLabels || []).length ? `<p class="context conn-done">Đã ghép: ${esc(view.doneLabels.join(' · '))}</p>` : ''}
   </section>`;
 }
 
@@ -239,7 +245,7 @@ function renderPresentation(state) {
   const view = state.view;
   let body = '';
   if (view && view.kind === 'quiz') body = renderQuizView(view);
-  else if (view && view.kind === 'connection') body = renderConnectionView(view);
+  else if (view && (view.kind === 'constellation' || view.kind === 'connection')) body = renderConnectionView(view);
   else if (view && view.kind === 'matching') body = renderMatchingView(view);
   else if (view && view.kind === 'treasure') body = renderTreasureView(view);
   else if (view && view.kind === 'race') body = renderRaceView(view);
@@ -348,7 +354,15 @@ function renderPresentation(state) {
       .conn-edge { fill: none; stroke: #60a5fa; stroke-width: 9; stroke-linecap: round; }
       .conn-slot { fill: none; stroke: #334155; stroke-width: 5; stroke-dasharray: 4 16; stroke-linecap: round; }
       .conn-node rect, .conn-node circle { fill: #0f172a; stroke: #60a5fa; stroke-width: 5; }
-      .conn-node text { fill: #f8fafc; font-family: inherit; font-size: 24px; font-weight: 700; text-anchor: middle; dominant-baseline: middle; }
+      /* #171: a lit star is warm and bright; a star still to come is faint. The
+         class reads the second screen from the back of the room, so the caption
+         is deliberately large. */
+      .conn-node .conn-star { fill: #ffd977; stroke: #fff3c4; stroke-width: 3; }
+      .conn-node.is-lit .conn-star-halo { fill: rgba(255, 217, 119, 0.22); }
+      .conn-node.is-dim .conn-star { fill: #334155; stroke: #64748b; stroke-width: 2; }
+      .conn-node.is-dim .conn-star-halo { fill: rgba(100, 116, 139, 0.10); }
+      .conn-node.is-dim text { fill: #94a3b8; }
+      .conn-node text { fill: #f8fafc; font-family: inherit; font-size: 26px; font-weight: 700; text-anchor: middle; dominant-baseline: middle; }
       .conn-done { margin-top: 10px; }
       .result-rows { display: flex; flex-direction: column; gap: 8px; max-width: 800px; margin: 0 auto 18px; text-align: left; }
       .result-row { display: flex; justify-content: space-between; gap: 18px; padding: 11px 14px; border-radius: 10px; background: #111c2f; border: 1px solid #263247; font-size: clamp(20px, 1.3vw, 24px); }

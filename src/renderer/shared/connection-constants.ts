@@ -22,16 +22,16 @@ const CONNECTION_TEMPLATE_IDS = [
 const DEFAULT_CONNECTION_TEMPLATE = 'knowledge-network';
 
 /*
- * Object Connection ships as BETA (DECISIONS #170).
+ * BETA label (DECISIONS #170, retired in #171).
  *
- * The mode works and is tested, but its 3D surface is still being evaluated in
- * real classrooms, so a teacher must be told before committing a lesson to it.
- * These live HERE, in the script that loads first, because every surface reads
- * them — the library card (`shared.js`, line ~105), the wizard and the editor.
- * Graduating the feature means changing this flag and the literal labels; nothing
- * else should hard-code the word "BETA".
+ * The mode shipped as BETA while its 3D surface was evaluated in real
+ * classrooms. #171 replaced that surface with the constellation board and
+ * graduated the mode, so the label is now EMPTY: every surface keeps rendering
+ * the same two constants and simply paints nothing. Do not delete the constants
+ * (a cached build still reads them), and do not hard-code the word "BETA"
+ * anywhere else — a `grep BETA src/renderer` must only find this note.
  */
-const CONNECTION_BETA = true;
+const CONNECTION_BETA = false;
 const CONNECTION_BETA_LABEL = CONNECTION_BETA ? 'BETA' : '';
 const CONNECTION_BETA_NOTE = CONNECTION_BETA
   ? 'Tính năng đang ở giai đoạn thử nghiệm (beta): cách chơi và hình kết nối có thể còn thay đổi.'

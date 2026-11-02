@@ -1,0 +1,456 @@
+/* game-constellation.css — chế độ Chòm sao tri thức (DECISIONS #171, bố cục lại
+   theo #172). Nạp CUỐI app.css: mọi selector ở đây là class MỚI
+   `.constellation-*`, nên không phải thắng cascade với khối có sẵn.
+
+   BỐ CỤC — một cột, ba khối, không khối nào lặp lại việc của khối khác:
+     1. `.constellation-chrome`  một dòng HUD gọn (đếm cặp, sao, luật chơi)
+     2. `.constellation-scene`   cảnh 3D, chiếm phần lớn chiều cao còn lại
+     3. `.constellation-tray`    MỘT hàng thẻ đáp án nằm ngang ở đáy
+   Thẻ câu ngắn nằm cạnh sao (trên cảnh); câu dài nằm ở hàng `.constellation-question-row`
+   ngay dưới cảnh, có MỘT đường chỉ dẫn ngắn tới sao của nó.
+
+   Tỉ lệ 16:9 là mục tiêu: ở 1366×768 cảnh chiếm ~55–60 % chiều cao vùng chơi và
+   ~85 % chiều ngang, đủ để sao không chồng lên nhau mà thẻ vẫn đọc được từ cuối lớp. */
+
+/* ---------- khung chung ---------- */
+.constellation-game-stage {
+  --constellation-ink: #e8ecfb;
+  --constellation-muted: #9aa6c8;
+  --constellation-gold: #f2c46b;
+  --constellation-gold-soft: rgba(242, 196, 107, 0.35);
+  --world-accent: #6d7cf0;
+  gap: 8px;
+}
+
+/* HUD: một dòng, không khối trang trí nào khác. */
+.constellation-chrome {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.constellation-chrome .stage-top {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* The shared progress bar is a 22 px-block in most games; on this board the HUD
+   is one line, so it shrinks to a hairline under the counters. Its shared
+   `margin: 14px 0 22px` is sized for a question that has room under it; here
+   those 36 px are pixels the picture loses, so the margin goes. The compound
+   with `[data-player-theme]` is needed because the shared sheet styles the bar
+   through that attribute and this file loads last. */
+.constellation-chrome .stage-progress,
+[data-player-theme] .constellation-chrome .stage-progress {
+  margin: 0;
+  flex: 0 0 120px;
+  height: 4px;
+}
+.constellation-hud {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(12, 18, 34, 0.72);
+  color: var(--constellation-ink);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.constellation-hud-name { color: #c9d2f5; }
+.constellation-hud-stars { letter-spacing: 2px; font-size: 13px; }
+.constellation-lit { color: var(--constellation-gold); }
+.constellation-unlit { color: #4b5675; }
+.constellation-hud-count b { color: #fff; font-size: 13px; }
+.constellation-hud-sides {
+  color: var(--constellation-muted);
+  font-weight: 600;
+  border-left: 1px solid rgba(148, 163, 184, 0.25);
+  padding-left: 10px;
+}
+
+/* ---------- cảnh ---------- */
+.constellation-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  width: 100%;
+}
+
+.constellation-scene {
+  position: relative;
+  isolation: isolate;
+  flex: 1 1 auto;
+  min-height: 260px;
+  width: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  /* The cosmic room: a deep base, one cool wash from the top and a faint warm
+     haze near the floor, so the scene has depth before a single star is drawn. */
+  background:
+    radial-gradient(120% 80% at 50% -10%, rgba(88, 104, 220, 0.22), rgba(88, 104, 220, 0) 62%),
+    radial-gradient(70% 55% at 85% 100%, rgba(242, 196, 107, 0.09), rgba(242, 196, 107, 0) 70%),
+    radial-gradient(90% 70% at 10% 90%, rgba(64, 196, 190, 0.06), rgba(64, 196, 190, 0) 65%),
+    #05070f;
+  box-shadow: inset 0 0 0 1px rgba(120, 136, 190, 0.16), 0 18px 40px rgba(2, 5, 14, 0.45);
+  transition: box-shadow 180ms ease-out;
+}
+/* A dragged card makes the whole scene a drop surface: the ring says so once,
+   without moving anything or flashing every target. */
+.constellation-scene.is-armed {
+  box-shadow: inset 0 0 0 1px rgba(242, 196, 107, 0.55), 0 18px 40px rgba(2, 5, 14, 0.45);
+}
+.constellation-scene > canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+/* The static picture (no WebGL) sits under everything and is the board itself. */
+.constellation-scene > .constellation-svg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 200ms ease-out;
+}
+.constellation-panel.is-svg .constellation-scene > .constellation-svg { opacity: 1; }
+
+/* ---------- thẻ câu NGẮN nằm cạnh sao ---------- */
+.constellation-cards {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+.constellation-card--star {
+  position: absolute;
+  /* Centred on its star's projection: the card is the star's label, and the
+     star is under its middle. */
+  transform: translate(-50%, -50%);
+  max-width: min(44%, 190px);
+  padding: 5px 10px;
+  border-radius: 9px;
+  border: 1px solid rgba(146, 162, 214, 0.42);
+  background: rgba(9, 14, 26, 0.82);
+  color: var(--constellation-ink);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.3;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  pointer-events: auto;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(2, 6, 18, 0.55);
+  transition: transform 140ms ease-out, border-color 140ms ease-out, background 140ms ease-out, box-shadow 140ms ease-out;
+}
+.constellation-card--star:hover,
+.constellation-card--star:focus-visible {
+  border-color: rgba(242, 196, 107, 0.8);
+  transform: translate(-50%, -50%) scale(1.04);
+  outline: none;
+}
+/* While a card is selected, every star is a possible target: a soft ring, no
+   movement, so the picture stays still while the hand decides. */
+.constellation-scene.is-armed .constellation-card--star.is-target {
+  border-color: rgba(242, 196, 107, 0.55);
+}
+.constellation-card--star.is-hot {
+  border-color: var(--constellation-gold);
+  background: rgba(46, 34, 8, 0.92);
+  box-shadow: 0 0 0 3px rgba(242, 196, 107, 0.35), 0 0 22px rgba(242, 196, 107, 0.45);
+  transform: translate(-50%, -50%) scale(1.06);
+}
+.constellation-card--star.is-lit {
+  border-color: rgba(242, 196, 107, 0.7);
+  background: rgba(44, 33, 9, 0.9);
+  color: #fff6dd;
+}
+
+/* ---------- hàng câu DÀI dưới cảnh ---------- */
+.constellation-question-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 0 2px;
+}
+.constellation-row-label {
+  align-self: center;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(120, 136, 190, 0.16);
+  color: var(--constellation-muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+}
+.constellation-question-card {
+  position: relative;
+  flex: 1 1 210px;
+  max-width: 360px;
+  min-height: 34px;
+  padding: 7px 11px;
+  border-radius: 10px;
+  border: 1px solid rgba(146, 162, 214, 0.4);
+  background: rgba(9, 14, 26, 0.86);
+  color: var(--constellation-ink);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.constellation-question-card:hover,
+.constellation-question-card:focus-visible {
+  border-color: rgba(242, 196, 107, 0.8);
+  outline: none;
+}
+.constellation-question-card.is-lit {
+  border-color: rgba(242, 196, 107, 0.65);
+  background: rgba(44, 33, 9, 0.88);
+  color: #fff6dd;
+  cursor: default;
+}
+
+/* The ONLY line this layer draws, and only for a card that sits outside the
+   scene. Dashed and cool so it can never pass for a constellation edge (which is
+   solid, warm, and only appears after a match). */
+.constellation-pointers {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 1;
+}
+.constellation-pointer {
+  fill: none;
+  stroke: rgba(146, 162, 214, 0.55);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 5;
+  stroke-linecap: round;
+}
+.constellation-pointer.is-lit {
+  stroke: rgba(242, 196, 107, 0.75);
+}
+/* The touch point: a dot ON the star, so the thread is visibly attached to it. */
+.constellation-pointer-tip { fill: rgba(146, 162, 214, 0.75); }
+.constellation-pointer-tip.is-lit { fill: #f2c46b; }
+
+/* ---------- khay thẻ đáp án (duy nhất) ---------- */
+.constellation-tray {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  min-height: 0;
+  padding: 8px 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(146, 162, 214, 0.22);
+  background: rgba(10, 15, 28, 0.7);
+}
+.constellation-tray-label {
+  flex: 0 0 auto;
+  color: var(--constellation-muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.4px;
+  writing-mode: horizontal-tb;
+}
+.constellation-tray-cards {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  padding-bottom: 2px;
+}
+.constellation-tray-card {
+  flex: 0 0 auto;
+  max-width: 260px;
+  min-height: 46px;
+  padding: 8px 14px;
+  border-radius: 11px;
+  border: 1px solid #c9d3ea;
+  background: linear-gradient(#fbfcff, #eef1f9);
+  color: #16203a;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.3;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  cursor: grab;
+  touch-action: none;
+  box-shadow: 0 4px 12px rgba(2, 6, 18, 0.45);
+  transition: transform 120ms ease-out, box-shadow 120ms ease-out, border-color 120ms ease-out;
+}
+.constellation-tray-card:hover { border-color: #818cf8; transform: translateY(-1px); }
+.constellation-tray-card:focus-visible {
+  outline: 3px solid #a5b4fc;
+  outline-offset: 2px;
+}
+.constellation-tray-card.is-selected {
+  border-color: var(--constellation-gold);
+  box-shadow: 0 0 0 3px rgba(242, 196, 107, 0.4), 0 6px 16px rgba(2, 6, 18, 0.5);
+}
+.constellation-tray-card.is-dragging { opacity: 0.35; cursor: grabbing; }
+.constellation-tray-card.is-flying {
+  position: fixed;
+  z-index: 60;
+  pointer-events: none;
+  margin: 0;
+  transform-origin: center;
+}
+.constellation-tray-done {
+  color: var(--constellation-muted);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 4px;
+}
+
+/* ---------- dòng trạng thái ---------- */
+.constellation-status {
+  margin: 2px 2px 0;
+  min-height: 18px;
+  color: var(--constellation-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.constellation-status b { color: #e2e8f0; }
+
+/* ---------- màn "không có WebGL" ---------- */
+.constellation-no3d {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px;
+  background: rgba(5, 7, 15, 0.8);
+}
+.constellation-no3d-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: 460px;
+  text-align: center;
+  color: var(--constellation-ink);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.constellation-no3d-inner strong { font-size: 14px; color: var(--constellation-gold); }
+
+/* ---------- SVG tĩnh: máy không WebGL, thumbnail, màn kết quả ---------- */
+.constellation-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+.constellation-link {
+  stroke: #f2c46b;
+  stroke-width: 3;
+  fill: none;
+  stroke-linecap: round;
+  opacity: 0.85;
+}
+.constellation-link-slot {
+  stroke: rgba(146, 162, 214, 0.25);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 9;
+  fill: none;
+}
+.constellation-star .constellation-core {
+  fill: #2b3552;
+  stroke: #7f8bb3;
+  stroke-width: 2;
+}
+.constellation-star .constellation-halo { fill: transparent; }
+.constellation-star.is-lit .constellation-core {
+  fill: #ffe9a8;
+  stroke: #fff6dd;
+  stroke-width: 3;
+}
+.constellation-star.is-lit .constellation-halo { fill: rgba(255, 217, 119, 0.18); }
+.constellation-star text {
+  fill: #cbd5e1;
+  font-family: inherit;
+  font-size: 20px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: middle;
+}
+.constellation-star.is-lit text { fill: #fdfaf1; }
+.connection-thumb .constellation-star text { display: none; }
+
+/* ---------- thẻ bay từ khay tới sao ---------- */
+.constellation-fly {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 70;
+  background: radial-gradient(circle, #fff8e1 0%, #f2c46b 45%, rgba(242, 196, 107, 0) 72%);
+  box-shadow: 0 0 18px rgba(242, 196, 107, 0.8);
+  will-change: transform, opacity;
+}
+
+/* ---------- bố cục sân chơi ---------- */
+.stage-center.is-constellation {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-width: none;
+  width: 100%;
+  align-self: stretch;
+  gap: 8px;
+}
+.stage-center.is-constellation > .stage-col.is-main {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+}
+
+/* 1366×768 là máy chiếu chật nhất: chữ nhỏ hơn một bậc, cảnh giữ nguyên phần lớn
+   chiều cao. Không cắt bớt khối nào. */
+@media (max-height: 820px) {
+  .constellation-hud { font-size: 11px; padding: 3px 10px; }
+  .constellation-hud-sides { display: none; }
+  .constellation-card--star { font-size: 12px; padding: 4px 8px; max-width: min(40%, 160px); }
+  .constellation-question-card { font-size: 12px; padding: 6px 9px; }
+  .constellation-tray-card { font-size: 13px; min-height: 42px; padding: 7px 12px; }
+  .constellation-status { font-size: 11px; }
+}
+
+/* Window narrower than a projector: the scene keeps its height and the tray
+   scrolls sideways, which is the one thing that must not reflow. */
+@media (max-width: 979px) {
+  .constellation-tray { flex-direction: column; align-items: stretch; }
+  .constellation-tray-label { display: none; }
+}

@@ -1,4 +1,4 @@
-// @ts-nocheck -- 3D stage: mount/unmount, anchors, per-template worlds and reactThree (split from features/gameplay.ts, DECISIONS #147).
+﻿// @ts-nocheck -- 3D stage: mount/unmount, anchors, per-template worlds and reactThree (split from features/gameplay.ts, DECISIONS #147).
 // ---------- Three.js presentation (DECISIONS #137) ----------
 // Decorative only: the 3D layer never scores and never changes answers. The DOM
 // answer buttons stay the single input path; this adds a world-tinted backdrop
@@ -23,10 +23,13 @@ function unmountThreeStage() {
         window.removeEventListener('resize', threeWorld.onResize);
         threeWorld.onResize = null;
     }
+    // A scene animation still in flight (a card flying to its star) must not
+    // keep a frame loop of its own alive after the board is gone.
     if (threeWorld && threeWorld.frameRaf) {
         cancelAnimationFrame(threeWorld.frameRaf);
         threeWorld.frameRaf = 0;
     }
+    document.querySelectorAll('.constellation-fly').forEach(node => node.remove());
     // Deferred glow/dolly steps must not run against a disposed world.
     if (threeWorld) {
         (threeWorld.timers || []).forEach(id => window.clearTimeout(id));
@@ -206,17 +209,18 @@ function connectionWorldPosition(node) {
  * nothing here is measured from a frozen projection.
  */
 function frameConnectionBoard() {
-    const frame = document.querySelector('[data-connection-stage]');
+    const handle = threeStageHandle;
     const gameStage = document.querySelector('.game-stage');
-    const graph = threeWorld && threeWorld.graph;
-    if (!frame || !gameStage || !graph || !threeStageHandle) return;
+    const frame = document.querySelector('[data-connection-stage]') || gameStage;
+    if (!handle || !gameStage) return;
     const frameRect = frame.getBoundingClientRect();
     const stageRect = gameStage.getBoundingClientRect();
     if (!frameRect.width || !stageRect.width || !stageRect.height) return;
-    const handle = threeStageHandle;
-    // Visible world height at the camera's distance, from its own fov — the same
-    // projection `stagePoint()` uses, so the two cannot disagree.
-    const visibleHeight = 2 * Math.tan((handle.camera.fov * Math.PI) / 360) * handle.camera.position.z;
+    // Visible world height at the camera's REST distance, from its own fov — the
+    // same projection `stagePoint()` uses, so the two cannot disagree. The rest
+    // distance is used, not the live one: a landing push or a replay dolly must
+    // move the eye, never resize the picture.
+    const visibleHeight = 2 * Math.tan((handle.camera.fov * Math.PI) / 360) * CONNECTION_CAMERA_Z;
     const visibleWidth = visibleHeight * (stageRect.width / stageRect.height);
     // Put the world origin on the frame's centre. The camera looks down -z, so a
     // frame ABOVE the stage centre needs a camera BELOW the origin: the sign is
@@ -225,6 +229,10 @@ function frameConnectionBoard() {
     // did (measured, not guessed).
     const frameOffset = (frameRect.top + frameRect.height / 2) - (stageRect.top + stageRect.height / 2);
     handle.camera.position.y = frameOffset * (visibleHeight / stageRect.height);
+    // The picture is framed for the WHOLE CANVAS, because that is where the
+    // fitted span is computed from. Tell the layer, so its render loop does not
+    // put the camera back to the frame ratio on its next resize pass.
+    if (window.threeGame.fixAspect) window.threeGame.fixAspect(handle, stageRect.width / stageRect.height);
     // The camera is NOT a child of the scene, so three.js only refreshes its
     // matrixWorld inside render(). Anything that projects before the next painted
     // frame — `stagePoint()`, the anchored props, and this function's own callers —
@@ -232,45 +240,129 @@ function frameConnectionBoard() {
     // this line every node projected ~60 000 px off-screen until a frame ran, and
     // in a throttled window that frame may never come.
     handle.camera.updateMatrixWorld(true);
-    // Fit the board into the frame with a margin: a bowed link reaches past the
-    // node extents, and the eye reads a picture better with air around it.
-    const frameWorldWidth = (frameRect.width / stageRect.width) * visibleWidth;
-    const frameWorldHeight = (frameRect.height / stageRect.height) * visibleHeight;
-    const scale = Math.max(0.3, Math.min(frameWorldWidth / CONNECTION_WORLD.width, frameWorldHeight / CONNECTION_WORLD.height) * 0.94);
-    graph.group.scale.setScalar(scale);
+    fitConnectionGraph();
 }
 
+/**
+ * Scale the picture into its frame, and centre it on that frame.
+ *
+ * Split out of `frameConnectionBoard` so the ANCHOR pass can guarantee the fit
+ * even when it runs before any framing timer (a hidden window does not fire the
+ * deferred pass promptly). The group is a child of the scene at z = 0, so its
+ * own position is the lever that moves the picture inside the stage.
+ */
+function fitConnectionGraph() {
+    const handle = threeStageHandle;
+    const graph = threeWorld && threeWorld.graph;
+    const boardFrame = document.querySelector('[data-connection-stage]');
+    const gameStage = document.querySelector('.game-stage');
+    if (!handle || !graph || !gameStage || !boardFrame) return;
+    const frameRect = boardFrame.getBoundingClientRect();
+    const stageRect = gameStage.getBoundingClientRect();
+    if (!frameRect.width || !stageRect.width || !stageRect.height) return;
+    const visibleHeight = 2 * Math.tan((handle.camera.fov * Math.PI) / 360) * CONNECTION_CAMERA_Z;
+    const visibleWidth = visibleHeight * (stageRect.width / stageRect.height);
+    // Fit the picture into the frame with a margin: the glow reaches past the
+    // star centres, and the eye reads a picture better with air around it.
+    const frameWorldWidth = (frameRect.width / stageRect.width) * visibleWidth;
+    const frameWorldHeight = (frameRect.height / stageRect.height) * visibleHeight;
+    const scale = Math.max(0.3, Math.min(frameWorldWidth / CONNECTION_WORLD.width, frameWorldHeight / CONNECTION_WORLD.height) * 0.9);
+    graph.setFitScale(scale);
+    // The picture is centred on the WORLD ORIGIN, and `frameConnectionBoard` puts
+    // that origin on the frame's centre through the camera. Offsetting the group
+    // by the frame as well moved the picture twice (measured: the stars hung
+    // ~10 % of the stage below the frame, and every drop target was off).
+    graph.group.position.set(0, 0, 0);
+}
+
+/**
+ * The constellation scene (DECISIONS #172).
+ *
+ * Depth is what makes this read as a scene rather than a flat diagram, and it is
+ * DERIVED, never authored: a star's z comes from its distance to the nearest
+ * other star, so the outline of the figure stands forward and the interior sits
+ * back. A star that is far behind is drawn larger in world units so that, after
+ * perspective division, every star still has the same on-screen size — the
+ * parallax reads, the figure stays legible and every drop target stays equal.
+ */
 function buildConnectionWorld() {
     if (!threeStageHandle || !window.threeGame)
         return;
+    // #171: the board is a constellation. Its stars and links come from the SAME
+    // selection the play surface uses, so the 3D scene, the SVG fallback and the
+    // stage ids can never disagree about which star a pair lights.
     const template = connectionTemplateFor(state.currentGame);
+    const depthOf = constellationDepths(template.nodes);
     const nodes = template.nodes.map(node => {
         const p = connectionWorldPosition(node);
-        // A slight z jitter gives the board parallax without letting far nodes
-        // drift into the near ones: ±0.28 units against a 13-unit camera.
-        return { id: node.id, x: p.x, y: p.y, z: ((node.x * 7 + node.y * 13) % 5) * 0.07 - 0.14, kind: node.kind };
+        return {
+            id: node.id,
+            x: p.x,
+            y: p.y,
+            z: depthOf[node.id] || 0,
+            brightness: node.brightness,
+            kind: 'star'
+        };
     });
-    const links = template.edges.map(edge => ({ id: edge.id, from: edge.from, to: edge.to, bend: Number(edge.bend) * CONNECTION_WORLD.width / CONNECTION_VIEWBOX.width || 0 }));
-    const graph = window.threeGame.makeNodeGraph({ nodes, links, accent: readWorldAccent() });
+    // Edges bow away from the centre of the picture, so two links that leave the
+    // same star never lie on one line and the figure reads as a net rather than a
+    // chain of comets. The bow is proportional to the edge length, so it never
+    // overshoots a short link.
+    const cx = nodes.reduce((sum, node) => sum + node.x, 0) / (nodes.length || 1);
+    const cy = nodes.reduce((sum, node) => sum + node.y, 0) / (nodes.length || 1);
+    const links = template.edges.map(edge => {
+        const a = nodes.find(node => node.id === edge.from);
+        const b = nodes.find(node => node.id === edge.to);
+        if (!a || !b) return { id: edge.id, from: edge.from, to: edge.to, bend: 0 };
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const len = Math.hypot(dx, dy) || 1;
+        const outX = (a.x + b.x) / 2 - cx;
+        const outY = (a.y + b.y) / 2 - cy;
+        const outLen = Math.hypot(outX, outY) || 1;
+        // Signed bulge: positive when the outward normal points the same way as
+        // the edge normal, so every link bows away from the middle of the figure.
+        const side = Math.sign((-dy / len) * (outX / outLen) + (dx / len) * (outY / outLen)) || 1;
+        return { id: edge.id, from: edge.from, to: edge.to, bend: side * len * 0.07 };
+    });
+    const graph = window.threeGame.makeNodeGraph({
+        nodes,
+        links,
+        accent: readWorldAccent(),
+        // `depth` scales the authored z; the authored z is already in world
+        // units, so the factor is 1.
+        depth: 1,
+        // A star is the drop target: it has to look the same whether it is in
+        // front of or behind the others.
+        depthCompensated: true
+    });
     window.threeGame.addObject(threeStageHandle, graph.group, 0, 0, 0);
 
     // The dome and the emblem belong to the decorative backdrop; a board that is
     // meant to be read is better without a rotating knot behind it.
     if (threeStageHandle.emblem) threeStageHandle.emblem.visible = false;
+    // The dust is the room, and the room is dark here: dimmer and further back,
+    // so it reads as space without competing with the constellation.
+    const dust = threeStageHandle.particles;
+    if (dust && dust.material) {
+        dust.material.opacity = 0.3;
+        dust.material.size = 0.07;
+        dust.position.z = -3;
+    }
 
-    threeWorld = { kind: 'connection', graph, template, burstOn: null };
-    // The idle float runs on the shared render loop (one rAF for every game), so
-    // an earned node breathes and a ghost does not — the picture is alive without
-    // a second timer, and `prefers-reduced-motion` freezes it inside the layer.
+    threeWorld = { kind: 'connection', graph, template, burstOn: null, drag: null, syncer: null };
+    // The idle motion runs on the shared render loop (one rAF for every game):
+    // stars twinkle, earned ones float, the eye drifts; `prefers-reduced-motion`
+    // freezes all of it inside the graph.
     threeStageHandle.onStep = (dt, reduced) => graph.tick(dt, reduced);
     // Hover is the only pointer input on the board, and it reuses the layer's own
     // implementation (raycast + easing in `step()`), so there is no second input
-    // path. It is registered on the node bodies only: the ghost outline must never
-    // look interactive, because it cannot be clicked.
+    // path. It is registered on the star bodies only.
     for (const id of Object.keys(graph.nodes)) {
         const entry = graph.nodes[id];
-        if (entry) window.threeGame.addHoverEffect(threeStageHandle, entry.mesh, { scale: 1.16 });
+        if (entry) window.threeGame.addHoverEffect(threeStageHandle, entry.mesh, { scale: 1.18 });
     }
+    if (window.threeGame.enableDrag) window.threeGame.enableDrag(threeStageHandle);
     applyConnectionWorld(true);
     // Frame NOW, not on the next animation frame: Chromium throttles rAF to
     // ~200 ms in a background window, and the board must be correct even then (a
@@ -280,8 +372,7 @@ function buildConnectionWorld() {
     frameConnectionBoard();
     // The stage can also finish laying out one frame later (the modal reaches its
     // final height after the HTML is inserted). A short timer catches that pass
-    // WITHOUT depending on rAF at all, so a throttled window still converges; it
-    // replaces the previous rAF pass, which never ran while throttled.
+    // WITHOUT depending on rAF at all, so a throttled window still converges.
     connectionLater(() => frameConnectionBoard(), 120);
     // Fullscreen and the modal resize after the first render; reframe without
     // rebuilding the graph (the geometry is scale-independent).
@@ -291,6 +382,37 @@ function buildConnectionWorld() {
         };
         window.addEventListener('resize', threeWorld.onResize);
     }
+}
+
+/**
+ * Give every star of a figure a depth, from where it sits in the figure.
+ *
+ * The nearest neighbour decides: outline stars (far from every other star) come
+ * forward, interior stars sit back, and the range stays inside ±0.4 world units,
+ * which is a few percent of the camera distance — enough parallax to read as
+ * depth, never enough to distort the figure. Pure data in, data out: the unit
+ * test for the scene calls it without a DOM.
+ */
+function constellationDepths(nodes) {
+    const list = Array.isArray(nodes) ? nodes : [];
+    const raw = {};
+    list.forEach((node, index) => {
+        let nearest = Infinity;
+        list.forEach((other, otherIndex) => {
+            if (otherIndex === index) return;
+            nearest = Math.min(nearest, Math.hypot(other.x - node.x, other.y - node.y));
+        });
+        raw[node.id] = Number.isFinite(nearest) ? nearest : 0;
+    });
+    const values = list.map(node => raw[node.id]);
+    const min = Math.min.apply(null, values.concat([0]));
+    const max = Math.max.apply(null, values.concat([1]));
+    const span = max - min || 1;
+    const out = {};
+    list.forEach(node => {
+        out[node.id] = 0.8 * ((raw[node.id] - min) / span) - 0.4;
+    });
+    return out;
 }
 
 /**
@@ -316,6 +438,30 @@ function connectionLater(fn, delay) {
     return id;
 }
 
+/**
+ * `requestAnimationFrame` that dies with the board.
+ *
+ * A scene animation still moving when the board closes must not keep a frame
+ * loop alive: `unmountThreeStage()` cancels the pending handle, so a closed game
+ * leaves no timer and no frame behind.
+ */
+function connectionFrame(fn) {
+    const world = threeWorld;
+    if (!world) return;
+    world.frameRaf = window.requestAnimationFrame((stamp) => {
+        if (!threeWorld || threeWorld !== world) return;
+        world.frameRaf = 0;
+        fn(stamp);
+    });
+}
+function connectionCancelFrame() {
+    const world = threeWorld;
+    if (world && world.frameRaf) {
+        window.cancelAnimationFrame(world.frameRaf);
+        world.frameRaf = 0;
+    }
+}
+
 /** Push `state.connectionProgress` into the 3D board. */
 function applyConnectionWorld(animate) {
     const world = threeWorld;
@@ -324,58 +470,329 @@ function applyConnectionWorld(animate) {
     world.graph.setEarned(threeStageHandle, parts.nodeIds, parts.linkIds, { animate: animate !== false });
 }
 
+// ---------- Constellation drop surface (DECISIONS #171) ----------
+// The anchor of a star, in percentages of the PICTURE FRAME, captured once the
+// board has been framed. The DOM labels sit on these percentages, so a label is
+// at its star even when the class resizes the window: CSS re-lays out
+// percentages for free, while a projected pixel would have to be recomputed
+// every frame (and the shared rAF loop is throttled in a background window).
+let constellationAnchors = {};
+
+function connectionStarAnchors() {
+    return constellationAnchors;
+}
+
+/**
+ * Project every star onto the picture frame (percentages), plus its depth.
+ *
+ * Done with the same camera and the same projection `stagePoint()` uses, AFTER
+ * `camera.updateMatrixWorld(true)` — the camera is not a child of the scene, so
+ * without that refresh this reads the previous position (the trap documented in
+ * `frameConnectionBoard`).
+ */
+function updateStarAnchors() {
+    const world = threeWorld;
+    const frame = document.querySelector('[data-constellation-stage]');
+    if (!world || world.kind !== 'connection' || !world.graph || !threeStageHandle || !frame) {
+        constellationAnchors = {};
+        return {};
+    }
+    const rect = frame.getBoundingClientRect();
+    if (!rect.width || !rect.height) {
+        constellationAnchors = {};
+        return {};
+    }
+    // The FRAME is the reference box, and only that: the percentages below are
+    // read back against the frame (by the labels and by `starAtPoint`). The
+    // shared canvas is taller than the frame, so measuring it here shifted every
+    // anchor up by (canvas.top - frame.top) px and a drop missed its star.
+    const box = rect;
+    const handle = threeStageHandle;
+    handle.camera.updateMatrixWorld(true);
+    // The frame has to be fitted BEFORE projecting, or the anchors are measured
+    // against a graph that is still at its default scale.
+    fitConnectionGraph();
+    const graph = world.graph;
+    const out = {};
+    for (const id of Object.keys(graph.nodes)) {
+        const entry = graph.nodes[id];
+        if (!entry) continue;
+        // The star sits under the graph group, so its WORLD position is what the
+        // screen shows (group scale, offset and the camera lift included).
+        const local = entry.root.getWorldPosition(new THREE.Vector3());
+        const v = local.clone().project(handle.camera);
+        out[id] = {
+            left: Math.round(((v.x * 0.5 + 0.5) * box.width + (box.left - rect.left)) / rect.width * 1000) / 10,
+            top: Math.round(((-v.y * 0.5 + 0.5) * box.height + (box.top - rect.top)) / rect.height * 1000) / 10,
+            // 0 = furthest behind, 1 = nearest: a label drawn here is nudged so a
+            // near star's label never sits on a far star's body.
+            depth: Math.round(((Number(entry.depth) || 0) + 0.4) / 0.8 * 100) / 100
+        };
+    }
+    constellationAnchors = out;
+    return out;
+}
+
+/** Screen (client) coordinates of every star, for the DOM connectors. */
+function updateConnectionStarPoints() {
+    const world = threeWorld;
+    const frame = document.querySelector('[data-constellation-stage]');
+    if (!world || world.kind !== 'connection' || !world.graph || !threeStageHandle || !frame) {
+        return {};
+    }
+    const handle = threeStageHandle;
+    handle.camera.updateMatrixWorld(true);
+    fitConnectionGraph();
+    const rect = frame.getBoundingClientRect();
+    const out = {};
+    for (const id of Object.keys(world.graph.nodes)) {
+        const entry = world.graph.nodes[id];
+        if (!entry) continue;
+        const v = entry.root.getWorldPosition(new THREE.Vector3()).project(handle.camera);
+        out[id] = { x: rect.left + (v.x * 0.5 + 0.5) * rect.width, y: rect.top + (-v.y * 0.5 + 0.5) * rect.height };
+    }
+    return out;
+}
+
+/** The star whose LABEL (chip) contains a DOM point ('' when none does). */
+function connectionChipAtPoint(clientX, clientY) {
+    let found = '';
+    document.querySelectorAll('[data-star-chip]').forEach(el => {
+        if (found) return;
+        const r = el.getBoundingClientRect();
+        if (clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom) found = el.dataset.starChip || '';
+    });
+    return found;
+}
+
+/**
+ * The star the pointer is aiming at, or '' (also with no 3D surface on screen).
+ *
+ * A drop is resolved in three steps, and the first one that answers wins:
+ *
+ *   1. the RAYCAST against the star bodies — exact, and it is what makes an aim
+ *      at a star feel like a hit rather than a guess;
+ *   2. the nearest star whose screen position is within a small hand radius
+ *      (~26 px, never more than 3 % of the frame) — a finger is not a ray;
+ *   3. nothing.
+ *
+ * The radius stays small on purpose: a generous one silently hands back the
+ * neighbouring star, which is how a wrong answer used to look right.
+ */
+function starAtPoint(clientX, clientY) {
+    // Resolve against the LIVE layout: the anchors and the camera are refreshed
+    // here, because a drag can begin while a layout pass is still settling and a
+    // hit test against the previous frame answers for a picture that has moved.
+    updateStarAnchors();
+    const world = threeWorld;
+    if (!world || world.kind !== 'connection' || !window.threeGame || !world.graph) return '';
+    if (typeof window.threeGame.pick === 'function') {
+        // The BODIES, straight from the graph: `sprites` is a convenience list
+        // that also exists for other games' factories, and a mesh can end up in it
+        // twice (measured: a raycaster answered `null` for a star it had just hit).
+        // One entry per star here, and `entry.id` is the id the layer reads.
+        const bodies = [];
+        Object.keys(world.graph.nodes).forEach(id => {
+            const entry = world.graph.nodes[id];
+            if (entry && entry.mesh) bodies.push(entry.mesh);
+        });
+        const hit = window.threeGame.pick(threeStageHandle, clientX, clientY, { targets: bodies });
+        if (hit && hit.id) return hit.id;
+    }
+    const frame = document.querySelector('[data-constellation-stage]');
+    if (!frame) return '';
+    const rect = frame.getBoundingClientRect();
+    if (!rect.width || !rect.height) return '';
+    const radius = Math.max(12, Math.min(26, Math.min(rect.width, rect.height) * 0.03));
+    const anchors = constellationAnchors || {};
+    let best = '';
+    let bestDistance = Infinity;
+    Object.keys(anchors).forEach(id => {
+        const x = rect.left + (anchors[id].left / 100) * rect.width;
+        const y = rect.top + (anchors[id].top / 100) * rect.height;
+        const d = Math.hypot(clientX - x, clientY - y);
+        if (d <= radius && d < bestDistance) {
+            best = id;
+            bestDistance = d;
+        }
+    });
+    return best;
+}
+
+/** The stars this board has already lit, in stage order. */
+function constellationStarsEarned(game) {
+    const template = connectionTemplateFor(game || state.currentGame);
+    const progress = state.connectionProgress || resetConnectionProgress(template);
+    const earned = new Set(progress.connectedStageIds);
+    return template.stages
+        .filter(stage => earned.has(stage.id))
+        .map(stage => stage.nodeIds[0])
+        .filter(Boolean);
+}
+
+/**
+ * A glowing star travelling from a card to its target star (DECISIONS #172).
+ *
+ * The card leaves the tray and becomes a small comet: it starts where the
+ * student let go, accelerates toward the star and shrinks as it lands, then
+ * hands over to `reactConnectionBoard`'s burst. Driven by the board's own frame
+ * (`connectionFrame`), so a closed board cancels it with everything else.
+ */
+function flyConnectorToStar(fromRect, starId, onArrive) {
+    const world = threeWorld;
+    const points = updateConnectionStarPoints();
+    const target = points[starId];
+    if (!world || !target) {
+        if (typeof onArrive === 'function') onArrive();
+        return;
+    }
+    const source = fromRect || { left: target.x, top: target.y, width: 0, height: 0 };
+    const orb = document.createElement('div');
+    orb.className = 'constellation-fly';
+    orb.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(orb);
+    const startX = source.left + source.width / 2;
+    const startY = source.top + source.height / 2;
+    const lift = Math.min(140, Math.abs(target.y - startY) * 0.5 + 40);
+    const duration = 460;
+    const t0 = performance.now();
+    const step = (now) => {
+        if (!threeWorld || threeWorld !== world) {
+            orb.remove();
+            return;
+        }
+        const t = Math.min(1, (now - t0) / duration);
+        // Ease-in: the comet gathers speed as it nears its target, which reads as
+        // being drawn in rather than sliding across.
+        const ease = t * t;
+        const x = startX + (target.x - startX) * ease;
+        const y = startY + (target.y - startY) * ease - Math.sin(t * Math.PI) * lift * 0.35;
+        orb.style.transform = 'translate3d(' + Math.round(x) + 'px, ' + Math.round(y) + 'px, 0) scale(' + (1 - 0.45 * t).toFixed(3) + ')';
+        orb.style.opacity = String(t < 0.85 ? 1 : 1 - (t - 0.85) / 0.15);
+        if (t < 1) {
+            connectionFrame(step);
+            return;
+        }
+        orb.remove();
+        if (typeof onArrive === 'function') onArrive();
+    };
+    connectionFrame(step);
+}
+
 function reactConnectionBoard(event, detail) {
     const world = threeWorld;
     if (!world || world.kind !== 'connection') return;
     if (event === 'match:correct') {
+        // The card has already been resolved; this is the PICTURE catching up.
+        // The edge reveals itself inside `setEarned` (a draw-on along each
+        // segment), so the only job here is the landing beat on the star.
         applyConnectionWorld(true);
-        burstThreeStage('#34d399');
-        // A landed stage that opens a node gets a halo exactly on that node; a
-        // stage that only closes a link (bridge-4, eco-5 …) gets the burst alone.
         const stageId = detail && detail.connection ? detail.connection.stageId : null;
         const stage = stageId ? world.template.stages.find(entry => entry.id === stageId) : null;
-        const firstId = stage && stage.nodeIds.length ? stage.nodeIds[0] : null;
-        const entry = firstId ? world.graph.nodes[firstId] : null;
-        if (entry && window.threeGame.makeGlow) {
-            const glow = window.threeGame.makeGlow({ color: '#34d399', size: 0.5 });
-            glow.group.position.copy(entry.root.position);
-            window.threeGame.addObject(threeStageHandle, glow.group);
-            glow.pulse(threeStageHandle);
-            connectionLater(() => glow.dispose(), 900);
+        const starId = (detail && detail.starId) || (stage && stage.nodeIds.length ? stage.nodeIds[0] : null);
+        const entry = starId ? world.graph.nodes[starId] : null;
+        if (entry) {
+            // A strong but cheap flash: two additive spheres that expand and fade.
+            if (window.threeGame.makeGlow && threeStageHandle) {
+                const core = window.threeGame.makeGlow({ color: '#ffe9a8', size: 0.34, duration: 0.42 });
+                core.group.position.copy(entry.root.position);
+                window.threeGame.addObject(threeStageHandle, core.group);
+                core.pulse(threeStageHandle);
+                connectionLater(() => core.dispose(), 700);
+                const ring = window.threeGame.makeGlow({ color: '#f2b24a', size: 0.52, duration: 0.62 });
+                ring.group.position.copy(entry.root.position);
+                window.threeGame.addObject(threeStageHandle, ring.group);
+                ring.pulse(threeStageHandle);
+                connectionLater(() => ring.dispose(), 900);
+            }
+            // The star snaps into place: a quick overshoot, then rest. The
+            // landing is the one moment motion is allowed to be loud.
+            if (window.threeGame.tween && threeStageHandle) {
+                window.threeGame.tween(threeStageHandle, {
+                    target: entry.root.scale,
+                    from: 1,
+                    to: 1.28,
+                    duration: 0.16,
+                    ease: 'easeOutBack',
+                    apply: value => entry.root.scale.setScalar(value)
+                });
+                connectionLater(() => {
+                    if (!threeStageHandle || !window.threeGame.tween) return;
+                    window.threeGame.tween(threeStageHandle, {
+                        target: entry.root.scale,
+                        from: 1.28,
+                        to: 1,
+                        duration: 0.3,
+                        ease: 'easeOutCubic',
+                        apply: value => entry.root.scale.setScalar(value)
+                    });
+                }, 200);
+            }
         }
-        // Push in for the landing, then settle back — the whole board reads as a
-        // camera move rather than a flat redraw.
+        burstThreeStage('#34d399');
+        // Re-project AFTER the change: the newly lit star moved the picture the
+        // labels sit on, and a stale anchor puts a label beside the old star.
+        updateStarAnchors();
         if (window.threeGame.dolly) {
-            window.threeGame.dolly(threeStageHandle, 1.1, 0.28);
-            connectionLater(() => window.threeGame.resetDolly(threeStageHandle), 420);
+            window.threeGame.dolly(threeStageHandle, 0.9, 0.26);
+            connectionLater(() => window.threeGame.resetDolly(threeStageHandle), 460);
         }
     }
     else if (event === 'match:incorrect') {
+        // Quiet on purpose: a short red breath on the whole frame and one shake
+        // on the star that was missed. Nothing is removed (the rules of #168
+        // hold), and the tray card never left its slot.
         burstThreeStage('#f87171');
-        if (window.threeGame.dolly) {
-            window.threeGame.dolly(threeStageHandle, -0.6, 0.2);
-            connectionLater(() => window.threeGame.resetDolly(threeStageHandle), 320);
+        const missedId = detail && detail.starId ? detail.starId : null;
+        const missed = missedId ? world.graph.nodes[missedId] : null;
+        if (missed && window.threeGame.tween && threeStageHandle) {
+            const homeX = missed.root.position.x;
+            window.threeGame.tween(threeStageHandle, {
+                target: missed.root.position,
+                path: 'x',
+                from: homeX,
+                to: homeX + 0.1,
+                duration: 0.08,
+                ease: 'easeInOut',
+                onComplete: () => {
+                    if (!threeStageHandle || !window.threeGame.tween) return;
+                    window.threeGame.tween(threeStageHandle, {
+                        target: missed.root.position,
+                        path: 'x',
+                        from: homeX + 0.1,
+                        to: homeX,
+                        duration: 0.12,
+                        ease: 'easeInOut'
+                    });
+                }
+            });
         }
     }
     else if (event === 'game:completed') {
-        // One sweep of colour over the finished board, then the shared burst.
-        const nodes = Object.keys(world.graph.nodes || {});
-        nodes.forEach((id, index) => {
-            const entry = world.graph.nodes[id];
-            if (!entry || !entry.earned) return;
+        // The figure is whole: one sweep of light from the first star to the
+        // last, a slow push in, then the shared celebration burst.
+        const earned = Object.keys(world.graph.nodes || {})
+            .map(id => world.graph.nodes[id])
+            .filter(entry => entry && entry.earned)
+            .sort((a, b) => (a.root.position.y - b.root.position.y) || (a.root.position.x - b.root.position.x));
+        earned.forEach((entry, index) => {
             connectionLater(() => {
                 if (!threeStageHandle || !window.threeGame || !window.threeGame.makeGlow) return;
-                const glow = window.threeGame.makeGlow({ color: '#f2b24a', size: 0.42 });
+                const glow = window.threeGame.makeGlow({ color: '#f2b24a', size: 0.4, duration: 0.6 });
                 glow.group.position.copy(entry.root.position);
                 window.threeGame.addObject(threeStageHandle, glow.group);
                 glow.pulse(threeStageHandle);
                 connectionLater(() => glow.dispose(), 900);
-            }, index * 70);
+            }, index * 90);
         });
-        if (window.threeGame.celebrate)
-            window.threeGame.celebrate(threeStageHandle);
+        if (window.threeGame.dolly) {
+            window.threeGame.dolly(threeStageHandle, 1.6, 0.9);
+            connectionLater(() => window.threeGame.resetDolly(threeStageHandle), 2200);
+        }
+        if (window.threeGame.celebrate) window.threeGame.celebrate(threeStageHandle);
     }
 }
+
 // Treasure (DECISIONS #145): every stage gets a sealed chest; a correct answer
 // opens it, a wrong one only bursts red so the stage can still be retried. Each
 // stage render remounts the world, so the chest starts closed again.

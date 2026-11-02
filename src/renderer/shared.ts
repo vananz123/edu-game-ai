@@ -5,7 +5,10 @@ const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 // "all collapsed" state and no longer exists). #158: `settingsAiTab` is the tab shown
 // inside the AI panel. Both are UI state only and never saved; the first visit opens the
 // AI tab on its local sub-tab.
-const state = { db: { games: [], sessions: [] }, page: 'library', search: '', filter: 'all', projects: null, lessonLibrary: null, settings: {}, localAiModels: [], localAiMachine: {}, draft: null, importedDoc: null, selectedTemplate: 'scenario', currentGame: null, gameIndex: 0, gameAnswers: [], gameStart: 0, playStartedAt: 0, resultSession: null, answerLocked: false, lastSummary: null, matchingPlay: null, memoryCards: null, treasurePlay: null, racePlay: null, teamPlay: null, pendingTeams: null, settingsSection: 'ai', settingsAiTab: 'local', connectionProgress: null };
+const state = { db: { games: [], sessions: [] }, page: 'library', search: '', filter: 'all', projects: null, lessonLibrary: null, settings: {}, localAiModels: [], localAiMachine: {}, draft: null, importedDoc: null, selectedTemplate: 'scenario', currentGame: null, gameIndex: 0, gameAnswers: [], gameStart: 0, playStartedAt: 0, resultSession: null, answerLocked: false, lastSummary: null, matchingPlay: null, memoryCards: null, treasurePlay: null, racePlay: null, teamPlay: null, pendingTeams: null, settingsSection: 'ai', settingsAiTab: 'local', connectionProgress: null,
+  // #171: the constellation board's input state only — the card a tap selected
+  // and the card a drag is carrying. Never saved, never scored.
+  constellationSelected: null, constellationDragging: null };
 const icons = { quiz: '🧠', scenario: '🚦', matching: '🧩', 'treasure-hunt': '🗺️', race: '🏁' };
 const treasureMissionMeta = {
   'multiple-choice': { label: 'Trắc nghiệm', icon: '❓', short: 'Chọn đáp án đúng' },
@@ -147,14 +150,13 @@ function gameCard(game, index = 0, deletable = false) {
     : playMode === 'classic'
       ? '<span class="px-[4px] py-[7px] bg-[#edf2ff] text-[#4565c9] rounded-[5px] text-[9px] font-semibold" data-play-mode="classic" title="Cách chơi: Cổ điển — trả lời câu hỏi nhận điểm">🎯 Cách chơi: Cổ điển</span>'
       : '';
-  // #168: Object Connection is a MATCHING style, so its chip sits beside the
-  // matching label. Mac Din by absence: a board saved before it existed is not
-  // a connection board, and an unknown mode stays silent instead of lying.
+  // #168/#171: the constellation board is a MATCHING style, so its chip sits
+  // beside the matching label. Mặc định by absence: a board saved before it
+  // existed is not a constellation board, and an unknown mode stays silent
+  // instead of lying. The BETA badge is gone (#171): the name is the whole label.
   const connectionBoard = template === 'matching' && game.matchingGame && game.matchingGame.mode === 'connection';
-  // #170: the card says BETA too, so a game built during the trial is recognisable
-  // in the library months later without opening it.
   const connectionChip = connectionBoard
-    ? `<span class="px-[4px] py-[7px] bg-[#e8f5ef] text-[#1c7a58] rounded-[5px] text-[9px] font-bold" data-play-mode="connection" data-beta-badge title="Cách chơi: Kết nối vật thể (${CONNECTION_BETA_LABEL}) — mỗi cặp ghép đúng nối thêm một chặng của hình">🔗 Cách chơi: Kết nối vật thể · ${CONNECTION_BETA_LABEL}</span>`
+    ? `<span class="px-[4px] py-[7px] bg-[#e8f5ef] text-[#1c7a58] rounded-[5px] text-[9px] font-bold" data-play-mode="connection" title="Cách chơi: ${CONSTELLATION_GAME_NAME} — mỗi cặp ghép đúng thắp sáng thêm một ngôi sao của chòm sao">🌌 Cách chơi: ${CONSTELLATION_GAME_NAME}</span>`
     : '';
   return `<article class="bg-white border border-line rounded-[14px] overflow-hidden min-w-0 transition-all duration-180 hover:-translate-y-[3px] hover:shadow-card hover:border-[#d8d5ff]" data-game-card="${id}">
     <div class="${coverGrad} h-[130px] relative flex items-center justify-center overflow-hidden">

@@ -65,7 +65,20 @@ export interface ConnectionItem {
   id: string;
 }
 
+/**
+ * A template object is used AS IS when it carries `stages`; only a bare id (or a
+ * missing one) is looked up in the shipped connection templates.
+ *
+ * Resolving an object by its id alone silently threw away every template that is
+ * not one of the seven shipped ones — measured on a constellation board, whose
+ * shape has the same id as the old `solar-system` game but its own stage ids, and
+ * which came back planned against the OLD picture. Renderers build templates as
+ * plain objects (DECISIONS #171), so the object must win.
+ */
 function resolveTemplate(template: ConnectionTemplate | string | null | undefined): ConnectionTemplate {
+  if (template && typeof template === 'object' && Array.isArray((template as ConnectionTemplate).stages)) {
+    return template as ConnectionTemplate;
+  }
   return typeof template === 'string' ? connectionTemplate(template) : connectionTemplate(template && template.id);
 }
 

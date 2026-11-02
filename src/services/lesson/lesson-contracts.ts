@@ -378,12 +378,14 @@ export const matchingPairSchema = z.object({
 const matchingDraftBase = z.object({
   gameType: z.literal('matching'),
   schemaVersion: z.literal(1),
-    // 'connection' is Object Connection (DECISIONS #168). A template id is a bare
-    // string rather than an enum so a template added by a newer build still
-    // parses here and falls back to the default when rendered.
-    mode: z.enum(['columns', 'memory', 'categorize', 'connection']),
-    connectionTemplate: z.string().trim().max(60).optional(),
-    pairs: z.array(matchingPairSchema).min(2).max(30),
+  // 'connection' is the constellation board (DECISIONS #168/#171). A template id
+  // is a bare string rather than an enum so a template added by a newer build
+  // still parses here and falls back to the default when rendered.
+  mode: z.enum(['columns', 'memory', 'categorize', 'connection']),
+  connectionTemplate: z.string().trim().max(60).optional(),
+  // Which pair half sits on a star (DECISIONS #171); absent = left-to-right.
+  dragDirection: z.enum(['left-to-right', 'right-to-left']).optional(),
+  pairs: z.array(matchingPairSchema).min(2).max(30),
   pointsPerPair: z.number().int().min(0).max(1000),
   completionBonus: z.number().int().min(0).max(10000),
   wrongPenalty: z.number().int().min(0).max(1000),
@@ -680,8 +682,9 @@ export const gameConfigSchema = z.discriminatedUnion('gameType', [
     gameType: z.literal('matching'),
     pairCount: z.number().int().min(2).max(30),
     matchingMode: z.enum(['columns', 'memory', 'categorize', 'connection']),
-    // Object Connection template (DECISIONS #168); only read for 'connection'.
+    // Constellation template (DECISIONS #168/#171); only read for 'connection'.
     connectionTemplate: z.string().trim().max(60).optional(),
+    dragDirection: z.enum(['left-to-right', 'right-to-left']).optional(),
     wrongPenalty: z.number().int().min(0).max(1000)
   }),
   configBase.extend({

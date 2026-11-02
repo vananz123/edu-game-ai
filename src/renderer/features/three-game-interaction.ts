@@ -18,6 +18,10 @@
 
   const handles = new Map();
   let nextId = 1;
+  // Camera rest distance: the one place the projection's perspective factor is
+  // defined. A node graph uses it to keep a far star and a near star the same
+  // SIZE on screen — depth that reads as parallax, not as unequal targets.
+  const CAMERA_REST_Z = 13;
 
   function isAvailable() {
     if (typeof THREE === 'undefined') return false;
@@ -202,6 +206,150 @@
     };
   }
 
+  /**
+   * COORDINATES TO A STAR (DECISIONS #171).
+   *
+   * From `getBoundingClientRect()` in CSS pixels — NOT the backing store — so the
+   * device pixel ratio cannot skew the result: the renderer caps DPR at 2 and the
+   * rect is already the space of the pointer. The camera matrix is refreshed first
+   * because it is not a child of the scene (see `dolly()`).
+   */
+  function pick(handle, clientX, clientY, opts = {}) {
+    const empty = opts.empty || null;
+    if (!handle || !handles.has(handle.id)) return empty;
+    const targets = Array.isArray(opts.targets) ? opts.targets.filter(Boolean) : handle.clickables.concat(handle.hoverables || []);
+    if (!targets.length) return empty;
+    const rect = handle.canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return empty;
+    handle.camera.updateMatrixWorld(true);
+    const raycaster = handle.raycaster || new THREE.Raycaster();
+    const ndc = new THREE.Vector2(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1
+    );
+    raycaster.setFromCamera(ndc, handle.camera);
+    const hits = raycaster.intersectObjects(targets, false);
+    if (!hits.length) return empty;
+    const object = hits[0].object;
+    return { object, id: object.userData.starId || object.userData.nodeId || null, distance: hits[0].distance };
+  }
+
+  /**
+   * Let a board own its camera aspect.
+   *
+   * The layer normally keeps `camera.aspect` equal to the canvas, because every
+   * other game draws on the whole canvas. A board that fits its own picture inside
+   * one frame of that canvas sets this instead, and the layer stops touching it
+   * (measured: resetting it shrank the constellation ~30 % and moved every star
+   * off its label).
+   */
+  function fixAspect(handle, aspect) {
+    if (!handle || !handles.has(handle.id)) return;
+    handle.fixedAspect = true;
+    if (aspect > 0) {
+      handle.camera.aspect = aspect;
+      handle.camera.updateProjectionMatrix();
+    }
+  }
+
+  /**
+   * Re-project after anything that moves the camera.
+   *
+   * Anchors are applied inside `step()`, but a caller that measures immediately
+   * after a resize (a mount, a fullscreen switch) would read the previous frame.
+   * This runs ONE projection pass and one draw synchronously, never a loop.
+   */
+  function refreshAnchors(handle) {
+    if (!handle || !handles.has(handle.id)) return;
+    const w = handle.container.clientWidth || 1;
+    const h = handle.container.clientHeight || 1;
+    const pw = handle.renderer.domElement.width / handle.renderer.getPixelRatio();
+    const ph = handle.renderer.domElement.height / handle.renderer.getPixelRatio();
+    if (w !== pw || h !== ph) {
+      handle.renderer.setSize(w, h, false);
+      if (!handle.fixedAspect) {
+        handle.camera.aspect = w / h;
+        handle.camera.updateProjectionMatrix();
+      }
+    }
+    handle.camera.updateMatrixWorld(true);
+    for (const a of handle.anchors) applyAnchor(handle, a);
+    handle.renderer.render(handle.scene, handle.camera);
+  }
+
+  /**
+   * Accept DROPS over the canvas (DECISIONS #171).
+   *
+   * The shared canvas stays pointer-transparent, because the DOM carries every
+   * control, and it stays that way: the listeners live on `window` and only answer
+   * while a drag is in flight (the caller marks the phase with dragStart/dragEnd).
+   */
+  function enableDrag(handle) {
+    if (!handle || !handles.has(handle.id) || handle.dragOn) return;
+    handle.dragActive = false;
+    const inCanvas = (event) => {
+      const rect = handle.canvas.getBoundingClientRect();
+      return event.clientX >= rect.left && event.clientX <= rect.right
+        && event.clientY >= rect.top && event.clientY <= rect.bottom;
+    };
+    const allow = (event) => {
+      if (!handle.dragActive || !inCanvas(event)) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    };
+    const drop = (event) => {
+      if (!handle.dragActive || !inCanvas(event)) return;
+      event.preventDefault();
+      const data = event.dataTransfer ? event.dataTransfer.getData('text/plain') : '';
+      handle.dragActive = false;
+      if (typeof handle.onDropStar === 'function') handle.onDropStar(data, event);
+    };
+    window.addEventListener('dragover', allow, true);
+    window.addEventListener('drop', drop, true);
+    handle.dragOn = true;
+    const prevCleanup = handle._pointerCleanup;
+    handle._pointerCleanup = () => {
+      window.removeEventListener('dragover', allow, true);
+      window.removeEventListener('drop', drop, true);
+      handle.dragOn = false;
+      handle.dragActive = false;
+      if (typeof prevCleanup === 'function') prevCleanup();
+    };
+  }
+
+  function dragStart(handle) {
+    if (!handle || !handles.has(handle.id)) return;
+    handle.dragActive = true;
+  }
+
+  function dragEnd(handle) {
+    if (!handle || !handles.has(handle.id)) return;
+    handle.dragActive = false;
+  }
+
+  /** The DOM hook the constellation board registers to receive drops. */
+  function onDropStar(handle, handler) {
+    if (!handle || !handles.has(handle.id)) return;
+    handle.onDropStar = typeof handler === 'function' ? handler : null;
+  }
+
+  /**
+   * Let a board own its camera aspect.
+   *
+   * The layer keeps `camera.aspect` equal to the canvas for every other game. A
+   * board that fits its own picture inside one frame of that canvas sets this
+   * instead, and the layer stops touching it (measured: resetting it shrank the
+   * constellation and moved every star off its label).
+   */
+  function fixAspect(handle, aspect) {
+    if (!handle || !handles.has(handle.id)) return;
+    handle.fixedAspect = true;
+    if (aspect > 0) {
+      handle.camera.aspect = aspect;
+      handle.camera.updateProjectionMatrix();
+    }
+  }
+
   function mount(container, opts = {}) {
     if (!container || !isAvailable()) return null;
     try {
@@ -339,8 +487,11 @@
     const ph = handle.renderer.domElement.height / handle.renderer.getPixelRatio();
     if (w !== pw || h !== ph) {
       handle.renderer.setSize(w, h, false);
-      handle.camera.aspect = w / h;
-      handle.camera.updateProjectionMatrix();
+      // A board that frames its own picture inside the canvas keeps its aspect.
+      if (!handle.fixedAspect) {
+        handle.camera.aspect = w / h;
+        handle.camera.updateProjectionMatrix();
+      }
     }
     // Screen-fraction anchors are re-projected every frame, so a prop keeps its
     // place on screen when the stage resizes (native fullscreen arrives after
@@ -790,8 +941,14 @@
     // make the far half of the picture bleed into the near half at 16:9. 0.16
     // gives just enough parallax to read as 3D without breaking the layout.
     const depth = opts.depth !== undefined ? opts.depth : 0.16;
+    // A star behind the board must LOOK the same size as one in front of it, or a
+    // perspective camera turns the figure into a puzzle of unequal targets. With
+    // this on, `z` is already in world units and the radius is scaled by the
+    // perspective factor.
+    const depthCompensated = opts.depthCompensated === true;
 
     const group = new THREE.Group();
+    let fitScale = 1;
     const byId = Object.create(null);
     const nodeSprites = [];
     const linkObjects = [];
@@ -802,6 +959,12 @@
     const slotMaterial = new THREE.MeshBasicMaterial({ color: 0x9aa4c2, transparent: true, opacity: 0.22, depthWrite: false });
     const beamMaterial = new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.95 });
     const ghostMaterial = new THREE.MeshBasicMaterial({ color: 0x9aa4c2, transparent: true, opacity: 0.16, depthWrite: false });
+    // A star: a warm emissive core that reads against the dark frame.
+    const starMaterial = new THREE.MeshStandardMaterial({ color: 0xfff3c4, roughness: 0.3, metalness: 0, transparent: true, opacity: 1, emissive: 0xffd977, emissiveIntensity: 0.9 });
+    const haloMaterial = new THREE.MeshBasicMaterial({ color: 0xffd977, transparent: true, opacity: 0.22, depthWrite: false, blending: THREE.AdditiveBlending });
+    // The outer bloom: a bigger additive shell with no depth write, so it glows
+    // through the board without hiding the star behind it.
+    const bloomMaterial = new THREE.MeshBasicMaterial({ color: 0xffe9a8, transparent: true, opacity: 0.16, depthWrite: false, blending: THREE.AdditiveBlending });
 
     for (const node of nodes) {
       const root = new THREE.Group();
@@ -809,32 +972,63 @@
       root.position.set(Number(node.x) || 0, Number(node.y) || 0, z);
       let material;
       let geometry;
+      let radius = 0.17;
       if (node.kind === 'plate') {
         material = plateMaterial;
         geometry = new THREE.BoxGeometry(1.7, 0.62, 0.16);
       } else if (node.kind === 'ring') {
         material = ringMaterial;
         geometry = new THREE.TorusGeometry(0.24, 0.075, 8, 20);
+      } else if (node.kind === 'star') {
+        material = starMaterial;
+        // A star is a DROP TARGET a hand can aim at: generous on screen while the
+        // halo and the bloom do the "look, a star" work.
+        radius = 0.26 * (0.75 + 0.5 * (node.brightness === undefined ? 0.7 : Number(node.brightness)));
+        if (depthCompensated) radius *= (CAMERA_REST_Z - z) / CAMERA_REST_Z;
+        geometry = new THREE.SphereGeometry(radius, 16, 12);
       } else {
         material = dotMaterial;
         geometry = new THREE.SphereGeometry(0.17, 14, 10);
       }
       const mesh = new THREE.Mesh(geometry, material);
       const ghost = new THREE.Mesh(
-        node.kind === 'plate' ? new THREE.BoxGeometry(1.9, 0.82, 0.06) : new THREE.SphereGeometry(node.kind === 'ring' ? 0.3 : 0.21, 10, 8),
+        node.kind === 'plate' ? new THREE.BoxGeometry(1.9, 0.82, 0.06) : new THREE.SphereGeometry(node.kind === 'ring' ? 0.3 : radius * 1.3, 10, 8),
         ghostMaterial
       );
       ghost.position.z = -0.05 - z * 0.5;
       root.add(mesh);
       root.add(ghost);
+      const halo = node.kind === 'star'
+        ? new THREE.Mesh(new THREE.SphereGeometry(radius * 2.1, 14, 10), haloMaterial.clone())
+        : null;
+      if (halo) {
+        halo.position.z = -0.02;
+        root.add(halo);
+      }
+      const bloom = node.kind === 'star'
+        ? new THREE.Mesh(new THREE.SphereGeometry(radius * 3.4, 14, 10), bloomMaterial.clone())
+        : null;
+      if (bloom) {
+        bloom.position.z = -0.04;
+        root.add(bloom);
+      }
       group.add(root);
       // `homeY`/`phase` drive the idle float; they are per node so the board
       // never pulses in lockstep, which reads as one rigid object.
       byId[node.id] = {
-        root, mesh, ghost, kind: node.kind || 'dot', earned: false, base: root.scale.x,
+        // Its OWN id: the link loop reads `entry.id`, and a graph without it drew
+        // no edge at all (measured: `nodeEarned(undefined)` was false for every
+        // link, so a match lit its star and no line).
+        id: node.id,
+        root, mesh, ghost, halo, bloom, kind: node.kind || 'dot', earned: false, base: root.scale.x,
+        depth: z,
         homeY: root.position.y,
         phase: (Object.keys(byId).length * 1.7) % (Math.PI * 2)
       };
+      // The hit-test (`pick`) answers with `userData.starId`, so the star's body
+      // (and its halo, which is part of the target) carries its own id.
+      mesh.userData.starId = node.kind === 'star' ? node.id : null;
+      if (halo) halo.userData.starId = node.id;
       nodeSprites.push(mesh);
     }
 
@@ -865,20 +1059,23 @@
         const z = a.root.position.z + (b.root.position.z - a.root.position.z) * t + 0.02;
         points.push(new THREE.Vector3(x, y, z));
       }
-      const meshes = [];
-      for (let i = 1; i < points.length; i++) {
-        const from = points[i - 1];
-        const to = points[i];
-        const segLen = from.distanceTo(to);
-        const seg = new THREE.Mesh(new THREE.BoxGeometry(segLen, 0.07, 0.07), beamMaterial);
-        seg.position.copy(from).add(to).multiplyScalar(0.5);
-        seg.rotation.z = Math.atan2(to.y - from.y, to.x - from.x);
-        seg.visible = false;
-        beam.add(seg);
-        meshes.push(seg);
-      }
+      // A constellation edge is ONE mesh whose shader clips along its length, so
+      // revealing it is one uniform write per frame — cheap on a projector laptop,
+      // and exact (a chain of boxes shows its joints while it draws).
+      const revealMaterial = new THREE.ShaderMaterial({
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        uniforms: { uColor: { value: new THREE.Color(0xf2c46b) }, uReveal: { value: 0 }, uProgress: { value: 0 } },
+        vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+        fragmentShader: 'uniform vec3 uColor; uniform float uReveal; uniform float uProgress; varying vec2 vUv; void main() { if (vUv.x > uReveal) discard; float spark = smoothstep(0.8, 1.0, vUv.x) * (1.0 - smoothstep(uReveal - 0.08, uReveal, vUv.x)); gl_FragColor = vec4(uColor * (1.0 + spark * 2.0), 0.92); }'
+      });
+      const curve = new THREE.CatmullRomCurve3(points, false, 'catmullrom', 0.0);
+      const line = new THREE.Mesh(new THREE.TubeGeometry(curve, Math.max(24, points.length * 6), 0.035, 4, false), revealMaterial);
+      line.visible = false;
+      beam.add(line);
       group.add(beam);
-      linkObjects.push({ id: link.id, group: beam, segments: meshes, drawn: false });
+      linkObjects.push({ id: link.id, group: beam, segments: [], tube: line, reveal: 0, drawn: false });
     }
 
     let stageIds = [];
@@ -906,8 +1103,13 @@
         entry.earned = isOn;
         entry.mesh.visible = true;
         entry.ghost.visible = !isOn;
-        const targetOpacity = isOn ? 1 : 0.25;
-        const targetScale = isOn ? 1 : 0.7;
+        // A star stays BRIGHT when it is lit and dims (never disappears) when it
+        // is not: the figure reads as "these stars are still to come", not as
+        // empty space. A dot keeps the old, dimmer rule.
+        const targetOpacity = isOn ? 1 : (entry.kind === 'star' ? 0.4 : 0.25);
+        const targetScale = isOn ? 1 : (entry.kind === 'star' ? 0.86 : 0.7);
+        if (entry.halo) entry.halo.material.opacity = isOn ? 0.3 : 0;
+        if (entry.bloom) entry.bloom.material.opacity = isOn ? 0.2 : 0.1;
         if (!animate) {
           entry.root.scale.setScalar(targetScale);
           if (entry.mesh.material) entry.mesh.material.opacity = targetOpacity;
@@ -927,29 +1129,14 @@
         const wasDrawn = entry.drawn;
         entry.drawn = isOn;
         entry.group.visible = true;
-        for (const seg of entry.segments) seg.material = isOn ? beamMaterial : ghostMaterial;
-        if (!isOn) {
-          for (const seg of entry.segments) seg.scale.x = 1;
-          continue;
-        }
-        // "Draw the wire": the segments scale along their own length, one after
-        // another, so the beam visibly runs from A to B (update_game.txt §4.3).
-        if (animate && !wasDrawn && handle && handles.has(handle.id)) {
-          entry.segments.forEach((seg, index) => {
-            seg.scale.x = 0.001;
-            tween(handle, {
-              target: seg,
-              from: 0.001,
-              to: 1,
-              duration: 0.26,
-              delay: index * 0.035,
-              ease: 'easeOutCubic',
-              apply: v => { seg.scale.x = v; }
-            });
-          });
-        } else {
-          for (const seg of entry.segments) seg.scale.x = 1;
-        }
+        entry.tube.visible = isOn;
+        // Draw-on (DECISIONS #172): the reveal runs 0 → 1 over ~0.55 s, advanced by
+        // the shared loop (`tick`), so the line visibly takes shape from its first
+        // star to its second. A redraw starts from zero; a reset hides it at once.
+        if (!animate) entry.reveal = isOn ? 1 : 0;
+        else if (isOn && !wasDrawn) entry.reveal = 0;
+        else if (!isOn) entry.reveal = 0;
+        if (entry.tube.material) entry.tube.material.uniforms.uReveal.value = entry.reveal >= 1 ? 1 : 0;
       }
     }
 
@@ -967,19 +1154,75 @@
     function tick(dt, reduced) {
       if (reduced) return;
       elapsed += dt;
+      // The edge reveal is time-based, so a caught-up `dt` (a tab that came back)
+      // finishes the line instead of leaving it half drawn.
+      for (const link of linkObjects) {
+        if (link.reveal >= 1) continue;
+        link.reveal = Math.min(1, link.reveal + dt / 0.55);
+        if (link.tube && link.tube.material) {
+          link.tube.material.uniforms.uReveal.value = 1 - Math.pow(1 - link.reveal, 3);
+          link.tube.material.uniforms.uProgress.value = elapsed;
+        }
+      }
       for (const node of nodes) {
         const entry = byId[node.id];
-        if (!entry || !entry.earned) continue;
+        if (!entry) continue;
+        // Every star breathes a little; an earned one also floats and turns, so
+        // "done" and "still to do" differ by motion as well as by light.
+        const twinkle = 0.5 + 0.5 * Math.sin(elapsed * (entry.earned ? 1.6 : 0.9) + entry.phase);
+        if (entry.bloom) entry.bloom.material.opacity = (entry.earned ? 0.2 : 0.1) + twinkle * (entry.earned ? 0.12 : 0.05);
+        if (!entry.earned) continue;
         entry.root.position.y = entry.homeY + Math.sin(elapsed * 1.3 + entry.phase) * 0.045;
         entry.root.rotation.y = Math.sin(elapsed * 0.7 + entry.phase) * 0.12;
       }
+    }
+
+    let hotId = null;
+    /**
+     * Mark the star a dragged card is over.
+     *
+     * The scene answers BEFORE the drop: the ring says "this one", and clearing it
+     * is the same call with `''`. Only the graph's own materials are touched, so
+     * nothing is created or disposed per pointer move.
+     */
+    function setHot(handle, starId) {
+      hotId = starId || null;
+      for (const node of nodes) {
+        const entry = byId[node.id];
+        if (!entry) continue;
+        const hot = node.id === hotId;
+        if (entry.halo) entry.halo.material.opacity = hot ? 0.55 : (entry.earned ? 0.3 : 0);
+        if (entry.bloom) entry.bloom.material.opacity = hot ? 0.42 : (entry.earned ? 0.2 : 0.1);
+        if (entry.earned) continue;
+        entry.root.scale.setScalar(hot ? 1.18 : 0.86);
+      }
+    }
+
+    /** Scale the whole picture (and remember it) without fighting the caller. */
+    function setFitScale(value) {
+      fitScale = Math.max(0.1, Number(value) || 1);
+      group.scale.setScalar(fitScale);
+      return fitScale;
     }
 
     function dispose() {
       disposeObject(group);
     }
 
-    return { group, nodes: byId, links: linkObjects, sprites: nodeSprites, setEarned, reset, tick, dispose, width };
+    return {
+      group,
+      nodes: byId,
+      links: linkObjects,
+      sprites: nodeSprites,
+      setEarned,
+      reset,
+      tick,
+      dispose,
+      width,
+      setHot,
+      setFitScale,
+      getFitScale: () => fitScale
+    };
   }
 
 
@@ -1011,7 +1254,6 @@
   // (I) Dolly — push the shared camera in/out around its rest distance. Used when
   // the 3D picture IS the game surface (Object Connection): the camera leans in
   // on a landed link and settles back, so the whole board reads as 3D motion.
-  const CAMERA_REST_Z = 13;
   function dolly(handle, distance, duration) {
     if (!handle || !handles.has(handle.id)) return;
     const to = Math.max(4, Math.min(22, CAMERA_REST_Z - (Number(distance) || 0)));
@@ -1109,6 +1351,16 @@
     dolly,
     resetDolly,
     celebrate,
+    // #171: the constellation board is a drop surface; these are the whole input
+    // contract (a DOM point → a star, a drop → a handler, a fixed aspect).
+    pick,
+    refreshAnchors,
+    fixAspect,
+    enableDrag,
+    dragStart,
+    dragEnd,
+    onDropStar,
+    fixAspect,
     on,
     emit
   };

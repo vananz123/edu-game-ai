@@ -24,7 +24,7 @@ import type {
   TreasureStageMission,
   TreasureStageQuestion
 } from '../../shared/types';
-import { isConnectionTemplateId } from '../../shared/connection-templates';
+import { isConstellationTemplateId } from '../../shared/constellation-templates';
 import type {
   ArenaDraft,
   ArenaQuestion,
@@ -142,7 +142,9 @@ export function toEducationalGame(project: GameProject): EducationalGame {
         // Object Connection (#168): the template rides on the matching board, and
         // only for the board mode that reads it — a columns/memory/categorize
         // game never carries a stale picture choice.
-        matchingGame: matchingData(draft, config.gameType === 'matching' ? config.connectionTemplate : undefined)
+        matchingGame: matchingData(draft, config.gameType === 'matching'
+          ? { template: config.connectionTemplate, dragDirection: config.dragDirection }
+          : undefined)
       };
       break;
     case 'treasure':
@@ -382,7 +384,10 @@ function scenarioScoreValue(option: ScenarioOption): number {
   return option.score.safety + option.score.reasoning + option.score.harmReduction;
 }
 
-function matchingData(draft: MatchingDraft, configTemplate?: string): MatchingGameData {
+function matchingData(
+  draft: MatchingDraft,
+  config?: { template?: string; dragDirection?: 'left-to-right' | 'right-to-left' }
+): MatchingGameData {
   const data: MatchingGameData = {
     mode: draft.mode,
     pairs: draft.pairs.map(pair => ({ id: pair.id, left: pair.left, right: pair.right, ...itemAssetsFromDraft(pair) })),
@@ -393,12 +398,19 @@ function matchingData(draft: MatchingDraft, configTemplate?: string): MatchingGa
     bonusUnderSeconds: draft.bonusUnderSeconds,
     practiceMode: draft.practiceMode
   };
-  // Written last so it can only exist on a connection board (#168). Either the
-  // draft or the config may carry it; the draft wins because it is what the
-  // editor wrote last.
+  // Written last so it can only exist on a constellation board (#168/#171).
+  // Either the draft or the config may carry them; the draft wins because it is
+  // what the editor wrote last.
   if (data.mode === 'connection') {
-    const template = draft.connectionTemplate || configTemplate;
-    if (isConnectionTemplateId(template)) data.connectionTemplate = template;
+    const template = draft.connectionTemplate || (config && config.template);
+    // A constellation id is stored as is; an OLD picture id is stored unchanged
+    // too — #171 maps it at render time so a file saved by the previous build is
+    // never rewritten behind the teacher's back.
+    if (isConstellationTemplateId(template)) data.connectionTemplate = template;
+    const direction = draft.dragDirection || (config && config.dragDirection);
+    // Absent is the default, so a `left-to-right` game carries no field at all:
+    // one representation on disk, one meaning.
+    if (direction === 'right-to-left') data.dragDirection = direction;
   }
   return data;
 }
@@ -622,10 +634,13 @@ function matchingDraftFromGame(game: EducationalGame): MatchingDraft {
     bonusUnderSeconds: safeInt(matching.bonusUnderSeconds, 0),
     practiceMode: Boolean(matching.practiceMode)
   };
-  // #168: an unknown id is dropped so the editor shows the default instead of a
-  // phantom choice; the board itself still falls back when rendering.
-  if (draft.mode === 'connection' && isConnectionTemplateId(matching.connectionTemplate)) {
+  // #168/#171: an unknown id is dropped so the editor shows the default instead
+  // of a phantom choice; the board itself still falls back when rendering. An
+  // OLD picture id is kept — it is mapped to a constellation at render time, and
+  // keeping it means saving an untouched game does not rewrite it.
+  if (draft.mode === 'connection' && isConstellationTemplateId(matching.connectionTemplate)) {
     draft.connectionTemplate = matching.connectionTemplate;
+    if (matching.dragDirection === 'right-to-left') draft.dragDirection = 'right-to-left';
   }
   return draft;
 }
@@ -797,8 +812,11 @@ function configFromGame(game: EducationalGame, gameType: GameDraft['gameType']):
         pairCount: clamp(matching?.pairs.length || 2, 2, 30),
         matchingMode: matching?.mode || 'columns',
         wrongPenalty: clamp(safeInt(matching?.wrongPenalty, 0), 0, 1000),
-        ...(matching?.mode === 'connection' && isConnectionTemplateId(matching.connectionTemplate)
+        ...(matching?.mode === 'connection' && isConstellationTemplateId(matching.connectionTemplate)
           ? { connectionTemplate: matching.connectionTemplate as string }
+          : {}),
+        ...(matching?.mode === 'connection' && matching.dragDirection === 'right-to-left'
+          ? { dragDirection: 'right-to-left' as const }
           : {})
       };
     }

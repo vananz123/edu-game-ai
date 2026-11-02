@@ -102,6 +102,10 @@
     </main>
   </div>
   <div id="modalRoot"></div>
+  <!-- Constellation constants (DECISIONS #171). `shared.js` reads the game name
+       and the retired BETA label while it paints a library card, so these names
+       must exist BEFORE line 105 — the trap #168 documented. -->
+  <script src="renderer/shared/constellation-constants.js"></script>
   <script src="renderer/shared.js"></script>
   <script src="renderer/features/treasure-art.js"></script>
   <script src="renderer/features/game-audio.js"></script>
@@ -167,6 +171,11 @@
   <script src="renderer/shared/connection-constants.js"></script>
   <script src="renderer/shared/connection-data.js"></script>
   <script src="renderer/connection-core.js"></script>
+  <!-- Constellation (DECISIONS #171): the seven figures, the legacy id map and
+       the pure star selection. Loaded after `connection-core.js` because the star
+       template is handed to that file's planner unchanged. -->
+  <script src="renderer/shared/constellation-data.js"></script>
+  <script src="renderer/constellation-core.js"></script>
 
   <script src="renderer/features/game-illustration.js"></script>
 
@@ -187,6 +196,10 @@
   <script src="renderer/features/games/house.js"></script>
   <!-- #168: the SVG panel + gallery; quiz.js and three-stage.js call into it. -->
   <script src="renderer/features/games/connection.js"></script>
+  <!-- #171: the constellation play surface (cards, chips, drops, lines). Loaded
+       after connection.js because it calls its template/side helpers, and before
+       matching.js which renders the board and calls into it. -->
+  <script src="renderer/features/games/constellation.js"></script>
   <script src="renderer/features/games/result-screen.js"></script>
   <script src="renderer/features/games/quiz.js"></script>
   <script src="renderer/features/games/matching.js"></script>

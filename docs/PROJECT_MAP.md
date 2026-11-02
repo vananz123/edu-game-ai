@@ -51,7 +51,10 @@ src/
       sidebar-shortcuts.ts  Khối "Lối tắt" dưới sidebar: games gần đây + 2 nút nhanh
     features/games/    Bề mặt chơi, tách theo trách nhiệm (#147): shell (vào/ra,
                        toàn màn hình), three-stage (3D), house, result-screen
-                       (kết quả + trình chiếu + modal), quiz, matching, treasure, race
+                       (kết quả + trình chiếu + modal), quiz, matching, treasure, race;
+                       connection (gallery/preview chòm sao, khung template) +
+                       constellation (bảng chòm sao kéo thả: khay duy nhất, câu
+                       dài ngoài cảnh, đường trỏ tới sao, #171/#172)
     features/wizard/   Luồng "Tạo từ giáo án" (bước 1→5)
     features/wizard/state/  State + hành động dùng chung, tách theo khu vực (#150):
                        core (state, đồng hồ/ETA), providers, config, draft, actions
@@ -72,7 +75,9 @@ src/
       game-treasure.css  kho báu: tương tác nâng cao + bản đồ hành trình
       game-worlds.css    5 thế giới trò chơi + bố cục kho báu toàn màn hình
       game-house.css     chế độ Xây nhà (#142)
-      game-connection.css chế độ Kết nối vật thể cho ghép cặp (#168)
+      game-connection.css khung chung + gallery/preview của chòm sao (#168)
+      game-constellation.css bảng chòm sao: HUD một dòng, cảnh lớn, hàng câu dài,
+                          MỘT khay thẻ đáp án, đường trỏ, dự phòng (#171, bố cục lại #172)
   game-engine/         Runtime chạy game đã lưu (offline)
 server/                Cloud AI Gateway (Express + Supabase + Gemini) — không chạy khi chơi
 scripts/               Script build (icon, kiểm tra global renderer):
@@ -124,7 +129,9 @@ vendor/                DLL VC++ đóng gói kèm
 | Màn hình kết quả, trình chiếu, thi đấu đội | `features/games/result-screen.ts` |
 | Lớp 3D dùng chung và thế giới theo trò | `features/three-game-interaction.ts` (API), `features/games/three-stage.ts` (mount/world/reactThree) |
 | House Building Mode (kinh tế nhà, mẫu nhà) | `src/game-engine/house-build.ts` (kinh tế), `features/games/house.ts` (UI/3D) |
-| Kết nối vật thể (cách chơi thứ tư của ghép cặp, bề mặt 3D #169) | `src/shared/connection-templates.ts` (7 mẫu), `connection-progress.ts` (tiến độ thuần), `features/games/connection.ts` (khung 3D + SVG dự phòng + gallery), `makeNodeGraph`/`makeGlow`/`dolly` trong `features/three-game-interaction.ts`, nhánh trong `features/games/matching.ts` + `three-stage.ts`; bản global cho renderer ở `src/renderer/connection-core.ts` + `renderer/shared/connection-*.ts` |
+| Chòm sao tri thức — tên mới của "Kết nối vật thể", bảng sao 3D kéo thả (#171) | `src/shared/constellation-templates.ts` (7 chòm sao × 10 sao, chọn sao, ánh xạ id cũ, `constellationTemplateShape` → dạng `{stages}` cho bộ tiến độ cũ), `features/games/constellation.ts` (chip, thẻ, kéo thả, dải câu dài, dự phòng không WebGL), `constellationPairSides`/`constellationPairForStar` trong `features/games/connection.ts`; bản global cho renderer ở `src/renderer/constellation-core.ts` + `renderer/shared/constellation-{constants,data}.ts`; bố cục toàn màn hình ở `styles/game-constellation.css` |
+| Tiến độ, quy tắc "ghép đủ và không sai mới lấp chặng" (dùng chung cho mọi hình) | `src/shared/connection-progress.ts` (typed) ↔ `src/renderer/connection-core.ts` (global, chạy song song, `tests/unit/connection-parity.test.ts` đối chiếu) |
+| Chiều kéo (vế nào nằm trên sao) | `MatchingGameData.dragDirection` trong `src/shared/types.ts` + `lesson-types.ts`, zod ở `services/lesson/lesson-contracts.ts`, adapter `services/game/game-project-adapter.ts`, UI ở `features/wizard/step-configure.ts` + `features/editor/matching.ts` |
 | Gói cài đặt | `package.json` → `build`, `build/installer.nsh`, `vendor/` |
 
 ## `main.ts` (2.814 dòng)

@@ -528,6 +528,46 @@ const unknownBack = fromEducationalGame({
 assert.equal(unknownBack.config?.gameType === 'matching' ? unknownBack.config.connectionTemplate : 'stored', undefined);
 assert.equal(unknownBack.draft?.gameType === 'matching' ? unknownBack.draft.connectionTemplate : 'stored', undefined);
 
+// Constellation board (DECISIONS #171): a constellation id is a valid template,
+// and an OLD connection id is kept as is (mapped at render time, never rewritten
+// behind the teacher's back).
+const constellationDraft: GameDraft = { ...matchingDraft, mode: 'connection', connectionTemplate: 'orion' };
+const constellationGame = toEducationalGame(projectFor(constellationDraft, {
+  config: { ...(configFor(constellationDraft) as MatchingConfig), matchingMode: 'connection', connectionTemplate: 'orion' }
+}));
+assert.equal(constellationGame.matchingGame?.connectionTemplate, 'orion', 'a constellation id is stored');
+const legacyDraft: GameDraft = { ...matchingDraft, mode: 'connection', connectionTemplate: 'solar-system' };
+const legacyGame = toEducationalGame(projectFor(legacyDraft, {
+  config: { ...(configFor(legacyDraft) as MatchingConfig), matchingMode: 'connection', connectionTemplate: 'solar-system' }
+}));
+assert.equal(legacyGame.matchingGame?.connectionTemplate, 'solar-system', 'an old picture id survives untouched');
+
+// Drag direction (#171): `right-to-left` is stored; the default is stored as
+// ABSENT so the disk has one representation per meaning.
+const reversedDraft: GameDraft = { ...matchingDraft, mode: 'connection', connectionTemplate: 'orion', dragDirection: 'right-to-left' };
+const reversedConfig: MatchingConfig = {
+  ...(configFor(reversedDraft) as MatchingConfig),
+  matchingMode: 'connection',
+  connectionTemplate: 'orion',
+  dragDirection: 'right-to-left'
+};
+const reversedGame = toEducationalGame(projectFor(reversedDraft, { config: reversedConfig }));
+assert.equal(reversedGame.matchingGame?.dragDirection, 'right-to-left', 'the reversed direction is stored');
+const reversedProject = fromEducationalGame(reversedGame);
+assert.equal(reversedProject.config?.gameType === 'matching' ? reversedProject.config.dragDirection : 'x', 'right-to-left');
+assert.equal(reversedProject.draft?.gameType === 'matching' ? reversedProject.draft.dragDirection : 'x', 'right-to-left');
+assert.equal(toEducationalGame(reversedProject).matchingGame?.dragDirection, 'right-to-left', 'the direction round-trips');
+const defaultDirection = toEducationalGame(projectFor(constellationDraft, {
+  config: { ...(configFor(constellationDraft) as MatchingConfig), matchingMode: 'connection', connectionTemplate: 'orion', dragDirection: 'left-to-right' }
+}));
+assert.equal(defaultDirection.matchingGame?.dragDirection, undefined, 'the default direction is absent, not spelled out');
+const plainProject = fromEducationalGame(constellationGame);
+assert.equal(plainProject.draft?.gameType === 'matching' ? plainProject.draft.dragDirection : 'x', undefined, 'absent reads back as absent');
+const columnsWithDirection = toEducationalGame(projectFor({ ...matchingDraft, mode: 'columns' }, {
+  config: { ...(configFor(matchingDraft) as MatchingConfig), matchingMode: 'columns', dragDirection: 'right-to-left' }
+}));
+assert.equal(columnsWithDirection.matchingGame?.dragDirection, undefined, 'a direction never leaks onto columns');
+
 const roundTripScenario = toEducationalGame(fromEducationalGame(scenarioGameOld));
 assert.equal(roundTripScenario.template, 'scenario');
 assert.equal(roundTripScenario.questions.length, 2);

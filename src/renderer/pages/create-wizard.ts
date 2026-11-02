@@ -269,9 +269,9 @@ function wizardHandleChange(event) {
   if (categorySelect) {
     return wizardPatchItemAssets(Number(categorySelect.dataset.itemIndex), { contentCategory: categorySelect.value || '' });
   }
-  // #168: the Object Connection template gallery is a radio group; the chosen
-  // card highlights immediately and the preview redraws, while the value itself
-  // is read on save by `wizardSyncConfigFromDom`.
+  // #168/#171: the constellation gallery is a radio group; the chosen card
+  // highlights immediately and the preview redraws, while the value itself is
+  // read on save by `wizardSyncConfigFromDom`.
   const connectionCard = target.closest('[data-connection-template]');
   if (connectionCard && target.type === 'radio') {
     const gallery = connectionCard.closest('[data-connection-gallery]');
@@ -280,7 +280,7 @@ function wizardHandleChange(event) {
         card.classList.toggle('is-selected', card === connectionCard);
       });
       const preview = gallery.parentElement && gallery.parentElement.querySelector('[data-connection-preview]');
-      if (preview) preview.outerHTML = connectionPreviewHtml(target.value);
+      if (preview) preview.outerHTML = constellationPreviewHtml(target.value);
     }
     return undefined;
   }

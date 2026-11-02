@@ -37,7 +37,7 @@ function matchingEditorHtml(matching) {
         <option value="columns" ${m.mode === 'columns' ? 'selected' : ''}>Ghép hai cột</option>
         <option value="memory" ${m.mode === 'memory' ? 'selected' : ''}>Lật thẻ ghi nhớ</option>
         <option value="categorize" ${m.mode === 'categorize' ? 'selected' : ''}>Phân loại kiến thức</option>
-        <option value="connection" ${m.mode === 'connection' ? 'selected' : ''}>Kết nối vật thể — cặp đúng nối thêm một chặng (BETA)</option>
+        <option value="connection" ${m.mode === 'connection' ? 'selected' : ''}>${CONSTELLATION_GAME_NAME} — kéo thẻ vào đúng ngôi sao</option>
       </select></div>
       <div class="field"><label>ĐIỂM MỖI CẶP</label><input id="matchingPointsPerPair" type="number" min="0" max="1000" value="${Number(m.pointsPerPair) || 100}"></div>
     </div>
@@ -51,10 +51,16 @@ function matchingEditorHtml(matching) {
     </div>
     <div class="correct-select"><label><input type="checkbox" id="matchingPracticeMode" ${m.practiceMode ? 'checked' : ''}> Chế độ luyện tập — hiển thị gợi ý, không trừ điểm</label></div>
     <div class="field connection-field${m.mode === 'connection' ? '' : ' hidden'}" data-connection-field>
-      <label>MẪU HÌNH KẾT NỐI <span class="connection-beta" data-beta-badge>${CONNECTION_BETA_LABEL}</span></label>
-      ${connectionPreviewHtml(connectionResolveTemplate(m.connectionTemplate).id)}
-      ${connectionGalleryHtml(connectionResolveTemplate(m.connectionTemplate).id, 'matchingConnectionTemplate')}
-      <p class="field-hint">Chỉ dùng ở cách chơi Kết nối vật thể. Mỗi cặp ghép đúng nối thêm một chặng; số chặng tự chia theo số cặp, ghép sai không gỡ chặng đã nối.</p>
+      <label>CHÒM SAO</label>
+      ${constellationPreviewHtml(constellationResolve(m.connectionTemplate).id)}
+      ${constellationGalleryHtml(constellationResolve(m.connectionTemplate).id, 'matchingConnectionTemplate')}
+      <div class="field connection-direction">
+        <label>CHIỀU KÉO</label>
+        <select id="matchingDragDirection">
+          ${CONSTELLATION_DRAG_DIRECTIONS.map(value => `<option value="${value}"${value === constellationResolveDragDirection(m.dragDirection) ? ' selected' : ''}>${escapeHtml(CONSTELLATION_DRAG_LABELS[value])}</option>`).join('')}
+        </select>
+      </div>
+      <p class="field-hint">Chỉ dùng ở cách chơi ${CONSTELLATION_GAME_NAME}. Sao đích mang một vế của cặp, thẻ kéo mang vế còn lại; ghép đúng thắp sáng thêm một sao, ghép sai không gỡ sao đã sáng.</p>
     </div>
     <p class="field-hint" id="matchingModeHint"></p>
   </div>`;
@@ -64,9 +70,8 @@ function matchingModeHint(mode) {
     columns: 'Ghép hai cột: chọn một mục ở cột A rồi chọn mục tương ứng ở cột B. Phù hợp bài học nhiều khái niệm.',
     memory: 'Lật thẻ ghi nhớ: lật từng thẻ để tìm hai nội dung tương ứng. Phù hợp ghi nhớ từ vựng và thuật ngữ.',
     categorize: 'Phân loại kiến thức: nội dung cột A là nhóm, nội dung cột B là các thẻ cần đưa vào đúng nhóm.',
-    // Beta: the hint carries the disclaimer so it appears right where a teacher
-    // picks the mode, not only in the wizard (DECISIONS #170).
-    connection: `Kết nối vật thể: bảng thẻ giữ nguyên để chọn cặp, còn màn chơi dựng một hình — mỗi cặp ghép đúng nối thêm một chặng. Phù hợp hệ thống hoá kiến thức. (${CONNECTION_BETA_LABEL}) ${CONNECTION_BETA_NOTE}`
+    // #171: no BETA disclaimer any more — the hint explains the interaction.
+    connection: `${CONSTELLATION_GAME_NAME}: bảng thẻ được giữ nguyên làm nội dung, còn màn chơi dựng một chòm sao 3D — kéo thẻ vào đúng sao để thắp sáng từng ngôi sao và nối các đường sao. Phù hợp hệ thống hoá kiến thức.`
   })[mode] || '';
 }
 function bindMatchingEditor(root) {
@@ -107,7 +112,7 @@ function bindMatchingEditor(root) {
     card.closest('[data-connection-gallery]')?.querySelectorAll('[data-connection-template]')
       .forEach(node => node.classList.toggle('is-selected', node === card));
     const preview = $('[data-connection-field] [data-connection-preview]', root);
-    if (preview) preview.outerHTML = connectionPreviewHtml(event.target.value);
+    if (preview) preview.outerHTML = constellationPreviewHtml(event.target.value);
   });
   bindDragList(list, '.matching-pair-row');
   syncHints();
@@ -122,10 +127,13 @@ function readMatchingEditor(root) {
   const mode = $('#matchingMode', root).value;
   return {
     mode,
-    // #168: the template rides on the board and only with the style that reads
-    // it, mirroring the adapter: columns/memory/categorize never carry a stale
-    // picture choice.
-    ...(mode === 'connection' ? { connectionTemplate: readConnectionGallery(root, 'matchingConnectionTemplate') } : {}),
+    // #168/#171: the constellation and the drag direction ride on the board and
+    // only with the style that reads them, mirroring the adapter:
+    // columns/memory/categorize never carry a stale choice.
+    ...(mode === 'connection' ? {
+      connectionTemplate: readConstellationGallery(root, 'matchingConnectionTemplate'),
+      dragDirection: constellationResolveDragDirection($('#matchingDragDirection', root)?.value)
+    } : {}),
     pairs,
     pointsPerPair: Math.max(0, Number($('#matchingPointsPerPair', root).value) || 100),
     completionBonus: Math.max(0, Number($('#matchingCompletionBonus', root).value) || 0),

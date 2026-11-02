@@ -143,22 +143,24 @@ export type PresentationView =
     }
   | {
       /**
-       * Object Connection (DECISIONS #168). The projector gets the SAME kind of
-       * picture the teacher's window shows, as plain SVG markup — Three.js is
-       * not loaded in the presentation window (it never was, not even for House
-       * Building), and this view must not change that.
+       * Constellation board (DECISIONS #168, renamed in #171). The projector gets
+       * the same STATIC sky the teacher's window shows, as plain data — Three.js
+       * is not loaded in the presentation window (it never was, not even for
+       * House Building), and this view must not change that. `label` is the
+       * destination side a star carries, already resolved for `dragDirection`.
        */
-      kind: 'connection';
+      kind: 'constellation';
       templateName: string;
       templateId: string;
       viewBox: { width: number; height: number };
-      nodes: Array<{ id: string; x: number; y: number; label: string; kind: 'dot' | 'ring' | 'plate'; visible: boolean }>;
+      nodes: Array<{ id: string; x: number; y: number; label: string; kind: 'dot' | 'ring' | 'plate' | 'star'; visible: boolean }>;
       edges: Array<{ id: string; from: string; to: string; bend: number; connected: boolean }>;
       connected: number;
       total: number;
       completed: boolean;
-      /** The stage labels already earned, in template order. */
+      /** The destination sides already placed, in board order. */
       doneLabels: string[];
+      dragDirection?: 'left-to-right' | 'right-to-left';
     }
   | {
       kind: 'results';

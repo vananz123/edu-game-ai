@@ -85,6 +85,8 @@ for (const method of [
   'stagePoint', 'anchor', 'tween', 'effect',
   'makeDestructible', 'makeUnlockable', 'makeConstruction', 'makeReactive',
   'makeNodeGraph', 'makeGlow', 'dolly', 'resetDolly',
+  // #171: the constellation board's whole input contract.
+  'enableDrag', 'onDropStar', 'pick', 'refreshAnchors',
   'celebrate', 'on', 'emit'
 ]) {
   assert.equal(run(`typeof threeGame.${method}`), 'function', `threeGame.${method} must exist`);
@@ -106,6 +108,11 @@ assert.equal(
     threeGame.addObject(null, null);
     threeGame.stagePoint(null, 0.5, 0.5);
     threeGame.anchor(null, null, 0.5, 0.5);
+    // #171: the drop surface must no-op without a handle instead of throwing.
+    threeGame.enableDrag(null);
+    threeGame.onDropStar(null, () => {});
+    threeGame.pick(null, 10, 10);
+    threeGame.refreshAnchors(null);
     return 'ok';
   })()`),
   'ok',
@@ -134,8 +141,11 @@ const graph = run(`(() => {
     links: g.links.length,
     plateChildren: g.nodes.a.root.children.length,
     ringChildren: g.nodes.b.root.children.length,
-    bentSegments: g.links.find(l => l.id === 'bc').segments.length,
-    straightSegments: g.links.find(l => l.id === 'ab').segments.length,
+    // #172: an edge is ONE mesh (a UV-clipped tube that draws itself on), not a
+    // stitched row of boxes — cheaper to build and cheaper to animate.
+    linkChildren: g.links.find(l => l.id === 'bc').group.children.length,
+    hasReveal: Boolean(g.links.find(l => l.id === 'bc').tube),
+    revealAtStart: g.links.find(l => l.id === 'bc').reveal,
     groupChildren: g.group.children.length,
     bPosition: { x: g.nodes.b.root.position.x, y: g.nodes.b.root.position.y },
     disposeType: typeof g.dispose
@@ -145,8 +155,9 @@ assert.equal(graph.nodes, 3, 'makeNodeGraph builds one root per node');
 assert.equal(graph.links, 2, 'makeNodeGraph builds one group per link');
 assert.equal(graph.plateChildren, 2, 'a plate is a body plus a ghost outline');
 assert.equal(graph.ringChildren, 2, 'a ring is a body plus a ghost outline');
-assert.equal(graph.straightSegments, 1, 'a straight link is one segment');
-assert.equal(graph.bentSegments, 12, 'a bowed link is segmented so it can curve');
+assert.equal(graph.linkChildren, 1, 'a link is ONE reveal line (DECISIONS #172)');
+assert.equal(graph.hasReveal, true, 'the link owns the mesh that draws it on');
+assert.equal(graph.revealAtStart, 0, 'nothing is drawn before a match');
 assert.equal(graph.groupChildren, 5, 'the group holds every node and every link');
 // The values come from the vm realm, so they are compared as JSON rather than
 // through deepEqual's prototype check.
@@ -166,6 +177,38 @@ assert.equal(
   'safe',
   'setEarned without a handle must not throw'
 );
+
+// A star (DECISIONS #171) is a different shape from the old plate/dot: a
+// generous drop-target body, a ghost for "not yet", and a halo that only shows
+// when lit. Its body carries `starId`, which is what the hit-test returns.
+const star = run(`(() => {
+  const g = threeGame.makeNodeGraph({
+    nodes: [
+      { id: 's1', x: 0, y: 0, z: 0, kind: 'star', brightness: 1 },
+      { id: 's2', x: 3, y: 0, z: 0, kind: 'star', brightness: 0.4 }
+    ],
+    links: [{ id: 'l', from: 's1', to: 's2' }]
+  });
+  const entry = g.nodes.s1;
+  const dim = g.nodes.s2;
+  return {
+    children: entry.root.children.length,
+    hasHalo: Boolean(entry.halo),
+    starId: entry.mesh.userData.starId,
+    haloId: entry.halo.userData.starId,
+    brighter: Number(entry.mesh.geometry.parameters.radius),
+    dimmer: Number(dim.mesh.geometry.parameters.radius),
+    dimGhostScale: Number(dim.root.scale.x),
+    hasBloom: Boolean(entry.bloom),
+    sprites: g.sprites.length
+  };
+})()`);
+assert.equal(star.children, 4, 'a star is body + ghost + halo + bloom');
+assert.equal(star.hasHalo, true, 'a star owns its halo');
+assert.equal(star.hasBloom, true, 'a star owns the outer bloom that twinkles');
+assert.equal(star.starId, 's1', 'the hit-test body answers with its star id');
+assert.equal(star.haloId, 's1', 'the halo answers for the same star (it is part of the target)');
+assert.ok(star.brighter > star.dimmer, `a brighter star is bigger (${star.brighter} vs ${star.dimmer})`);
 
 // makeGlow is a hidden halo until pulsed, and pulsing without a handle is inert.
 const glow = run(`(() => {

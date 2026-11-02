@@ -82,11 +82,20 @@ export interface MatchingGameData {
   bonusUnderSeconds: number;
   practiceMode: boolean;
   /**
-   * Object Connection template (DECISIONS #168), read only when `mode` is
-   * `'connection'`. Absent/unknown resolves to the default template, so a game
-   * saved by a newer build still opens here.
+   * Constellation template (DECISIONS #168/#171), read only when `mode` is
+   * `'connection'`. Holds a constellation id (`orion`) or, for a game saved
+   * before #171, one of the seven old picture ids, which is MAPPED to the
+   * constellation it resembles — never rewritten on disk. Absent/unknown
+   * resolves to the default, so a game saved by a newer build still opens.
    */
   connectionTemplate?: string;
+  /**
+   * Which side of the pair sits on a star (DECISIONS #171). Absent means
+   * `'left-to-right'`: the star carries `pair.left` and the draggable card
+   * carries `pair.right`. The producer of the pairs is unchanged either way —
+   * this only decides which half a student sees where.
+   */
+  dragDirection?: 'left-to-right' | 'right-to-left';
 }
 
 /** §5 tasknight.docx — journey/treasure-hunt stage data. */

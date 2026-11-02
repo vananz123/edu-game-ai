@@ -10,7 +10,7 @@ import {
   parseRecommendationsContent,
   recommendationsContentSchema
 } from '../../src/services/lesson/lesson-contracts';
-import type { ArenaConfig, ArenaDraft, GameConfig, MatchingDraft, RaceDraft, ScenarioDraft, TreasureDraft } from '../../src/shared/lesson-types';
+import type { ArenaConfig, ArenaDraft, GameConfig, MatchingConfig, MatchingDraft, RaceDraft, ScenarioDraft, TreasureDraft } from '../../src/shared/lesson-types';
 
 const arenaDraft: ArenaDraft = {
   gameType: 'arena',
@@ -301,6 +301,22 @@ try {
 } catch (error) {
   typedIssue(error, 'DRAFT_INVALID');
 }
+// Constellation board (DECISIONS #171): the draft carries the star side and the
+// constellation id, and rejects a direction the surface does not implement.
+const constellationParsed = parseGameDraft({
+  ...matchingDraft,
+  mode: 'connection',
+  connectionTemplate: 'orion',
+  dragDirection: 'right-to-left'
+});
+assert.equal(constellationParsed.gameType === 'matching' ? constellationParsed.connectionTemplate : 'x', 'orion');
+assert.equal(constellationParsed.gameType === 'matching' ? constellationParsed.dragDirection : 'x', 'right-to-left');
+try {
+  parseGameDraft({ ...matchingDraft, mode: 'connection', dragDirection: 'sideways' as never });
+  assert.fail('an unknown drag direction should fail');
+} catch (error) {
+  typedIssue(error, 'DRAFT_INVALID');
+}
 try {
   parseGameDraft({
     ...treasureDraft,
@@ -392,6 +408,21 @@ try {
   typedIssue(error, 'CONFIG_INVALID');
 }
 assert.equal(gameConfigSchema.safeParse(validConfigs[2]).success, true);
+
+// Constellation board (DECISIONS #171): the config may say which pair half sits
+// on a star, and only the two documented values parse.
+const matchingBase = validConfigs[2] as MatchingConfig;
+assert.equal(matchingBase.gameType, 'matching');
+const reversedConfig = parseGameConfig({ ...matchingBase, matchingMode: 'connection', dragDirection: 'right-to-left' });
+assert.equal(reversedConfig.gameType === 'matching' ? reversedConfig.dragDirection : 'x', 'right-to-left');
+const plainConfig = parseGameConfig({ ...matchingBase, matchingMode: 'connection' });
+assert.equal(plainConfig.gameType === 'matching' ? plainConfig.dragDirection : 'x', undefined, 'absent stays absent');
+try {
+  parseGameConfig({ ...matchingBase, dragDirection: 'sideways' as never });
+  assert.fail('an unknown drag direction should fail');
+} catch (error) {
+  typedIssue(error, 'CONFIG_INVALID');
+}
 
 // --- Lesson analysis + recommendations -------------------------------------
 const analysisContent = {

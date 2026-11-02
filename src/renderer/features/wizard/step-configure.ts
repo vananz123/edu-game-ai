@@ -223,21 +223,28 @@ function renderWizardConfigure() {
 }
 
 /**
- * Object Connection picker (DECISIONS #168), for the MATCHING game only: the
- * style is `matchingMode: 'connection'`, so the gallery shows once that style is
- * chosen. The radios stay in the DOM either way and `wizardSyncConfigFromDom`
- * keeps the chosen id, so switching styles back and forth never loses the pick.
+ * Constellation picker (DECISIONS #168/#171), for the MATCHING game only: the
+ * style is `matchingMode: 'connection'`, so the gallery and the drag direction
+ * show once that style is chosen. The radios stay in the DOM either way and
+ * `wizardSyncConfigFromDom` keeps the chosen id, so switching styles back and
+ * forth never loses the pick.
  */
 function wizardConnectionFields(config) {
   if (!config || config.gameType !== 'matching') return '';
   const mode = config.matchingMode || 'columns';
-  const picked = connectionResolveTemplate(config.connectionTemplate).id;
+  const picked = constellationResolve(config.connectionTemplate).id;
+  const direction = constellationResolveDragDirection(config.dragDirection);
   return `<div class="field connection-field${mode === 'connection' ? '' : ' hidden'}" data-connection-field>
-    <label>MẪU HÌNH KẾT NỐI <span class="connection-beta" data-beta-badge>BETA</span></label>
-    ${connectionPreviewHtml(picked)}
-    ${connectionGalleryHtml(picked, 'connectionTemplate')}
-    <p class="field-hint">Mỗi cặp ghép đúng nối thêm một chặng của hình. Số chặng tự chia theo số cặp, nên bộ cặp ngắn hay dài đều ghép được hình; ghép sai không gỡ chặng đã nối.</p>
-    <p class="field-hint connection-beta-note">${CONNECTION_BETA_NOTE}</p>
+    <label>CHÒM SAO</label>
+    ${constellationPreviewHtml(picked)}
+    ${constellationGalleryHtml(picked, 'connectionTemplate')}
+    <div class="field connection-direction">
+      <label>CHIỀU KÉO</label>
+      <select data-wizard-config="dragDirection">
+        ${CONSTELLATION_DRAG_DIRECTIONS.map(value => `<option value="${value}"${value === direction ? ' selected' : ''}>${escapeHtml(CONSTELLATION_DRAG_LABELS[value])}</option>`).join('')}
+      </select>
+    </div>
+    <p class="field-hint">Mỗi sao đích mang một vế của cặp; kéo thẻ chứa vế còn lại vào đúng sao. Cặp ghép đúng thắp sáng thêm một sao và nối thêm một đường; ghép sai không gỡ sao đã sáng.</p>
   </div>`;
 }
 
@@ -269,9 +276,9 @@ function wizardConfigTypeFields(config) {
         + wizardConfigSelect('matchingMode', 'KIỂU GHÉP', config.matchingMode, [
           { value: 'columns', label: 'Hai cột' }, { value: 'memory', label: 'Lật thẻ' },
           { value: 'categorize', label: 'Phân loại' },
-          // Beta: the 3D board is still being evaluated in class, so the label says
-          // so before a teacher commits a lesson to it (DECISIONS #170).
-          { value: 'connection', label: 'Kết nối vật thể (ghép hình theo cặp) — BETA' }
+          // #171 graduates the mode: no BETA label, and the name says what the
+          // class actually does.
+          { value: 'connection', label: `${CONSTELLATION_GAME_NAME} (kéo thẻ vào sao)` }
         ])
         + wizardConfigNumber('wrongPenalty', 'TRỪ ĐIỂM SAI', config.wrongPenalty, 0, 1000, 10)
         + wizardConnectionFields(config);
@@ -317,12 +324,16 @@ function wizardSyncConfigFromDom() {
       .filter(el => el.checked)
       .map(el => el.dataset.wizardFocus);
   }
-  // Object Connection (#168): the gallery is a radio group, not a form field, so
-  // it is read here. The pick is kept even while another matching style is
-  // selected, so switching to Hai cột and back does not lose it.
+  // Constellation (#168/#171): the gallery is a radio group, not a form field,
+  // so it is read here. The pick is kept even while another matching style is
+  // selected, so switching to Hai cột and back does not lose it. The drag
+  // direction is an ordinary `data-wizard-config` select and was read above.
   if (config.gameType === 'matching') {
-    const picked = readConnectionGallery(document, 'connectionTemplate');
+    const picked = readConstellationGallery(document, 'connectionTemplate');
     if (picked) config.connectionTemplate = picked;
+    config.dragDirection = constellationResolveDragDirection(
+      document.querySelector('[data-wizard-config="dragDirection"]')?.value || config.dragDirection
+    );
   }
 }
 

@@ -237,20 +237,41 @@ function buildConnectionView() {
     const template = connectionTemplateFor(game);
     const progress = state.connectionProgress || resetConnectionProgress(template);
     const summary = connectionSummary(progress, template);
+    const direction = constellationDirectionFor(game);
     const earned = new Set(progress.connectedStageIds);
-    const nodeVisible = id => template.stages.some(stage => earned.has(stage.id) && stage.nodeIds.indexOf(id) !== -1);
+    const starVisible = id => template.stages.some(stage => earned.has(stage.id) && stage.nodeIds.indexOf(id) !== -1);
     const edgeConnected = id => template.stages.some(stage => earned.has(stage.id) && stage.edgeIds.indexOf(id) !== -1);
+    // #171: the projector draws a CONSTELLATION, so the destination side a star
+    // carries comes from the pair and the drag direction — the same rule the
+    // teacher window uses, computed once here and never re-derived on screen.
+    const pairsById = {};
+    (game.matchingGame && Array.isArray(game.matchingGame.pairs) ? game.matchingGame.pairs : []).forEach(pair => { pairsById[pair.id] = pair; });
     return {
-        kind: 'connection',
+        kind: 'constellation',
         templateId: template.id,
         templateName: template.name,
-        viewBox: { width: CONNECTION_VIEWBOX.width, height: CONNECTION_VIEWBOX.height },
-        nodes: template.nodes.map(node => ({ id: node.id, x: node.x, y: node.y, label: node.label, kind: node.kind, visible: nodeVisible(node.id) })),
-        edges: template.edges.map(edge => ({ id: edge.id, from: edge.from, to: edge.to, bend: Number(edge.bend) || 0, connected: edgeConnected(edge.id) })),
+        viewBox: { width: CONSTELLATION_VIEWBOX.width, height: CONSTELLATION_VIEWBOX.height },
+        nodes: template.nodes.map(node => {
+            const pair = pairsById[node.id];
+            const sides = pair ? constellationPairSides(pair, direction) : null;
+            return {
+                id: node.id,
+                x: node.x,
+                y: node.y,
+                label: sides ? sides.starText : node.label,
+                kind: 'star',
+                visible: starVisible(node.id)
+            };
+        }),
+        edges: template.edges.map(edge => ({ id: edge.id, from: edge.from, to: edge.to, bend: 0, connected: edgeConnected(edge.id) })),
         connected: summary.connected,
         total: summary.total,
         completed: summary.completed,
-        doneLabels: template.stages.filter(stage => earned.has(stage.id)).map(stage => stage.label),
+        doneLabels: template.stages.filter(stage => earned.has(stage.id)).map(stage => {
+            const pair = pairsById[stage.nodeIds[0]];
+            return pair ? constellationPairSides(pair, direction).starText : stage.label;
+        }),
+        dragDirection: direction,
     };
 }
 function buildPresentationView(extra = {}) {

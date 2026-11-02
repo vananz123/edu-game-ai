@@ -153,8 +153,10 @@ export interface MatchingConfig extends GameConfigBase {
   pairCount: number;
   matchingMode: MatchingMode;
   wrongPenalty: number;
-  /** Object Connection template (DECISIONS #168); only read when `matchingMode` is 'connection'. */
+  /** Constellation template (DECISIONS #168/#171); only read when `matchingMode` is 'connection'. */
   connectionTemplate?: string;
+  /** Which pair half sits on a star (DECISIONS #171); absent = 'left-to-right'. */
+  dragDirection?: 'left-to-right' | 'right-to-left';
 }
 
 export interface TreasureConfig extends GameConfigBase {
@@ -256,8 +258,10 @@ export interface MatchingDraft {
   gameType: 'matching';
   schemaVersion: typeof LESSON_SCHEMA_VERSION;
   mode: MatchingMode;
-  /** Object Connection template (DECISIONS #168); only carried by `mode: 'connection'`. */
+  /** Constellation template (DECISIONS #168/#171); only carried by `mode: 'connection'`. */
   connectionTemplate?: string;
+  /** Which pair half sits on a star (DECISIONS #171); absent = 'left-to-right'. */
+  dragDirection?: 'left-to-right' | 'right-to-left';
   pairs: MatchingPairDraft[];
   pointsPerPair: number;
   completionBonus: number;

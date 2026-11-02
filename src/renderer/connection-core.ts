@@ -17,6 +17,11 @@
  * picture and an unfinished run keeps exactly what it earned.
  */
 function connectionResolveTemplate(id) {
+  // A template OBJECT with its own `stages` is used as is; only a bare id is
+  // looked up in the shipped templates. Same rule (and same reason) as
+  // `resolveTemplate` in connection-progress.ts: the constellation board builds
+  // its own template and keeps no stage ids in common with the seven.
+  if (id && typeof id === 'object' && Array.isArray(id.stages)) return id;
   var key = typeof id === 'string' ? id.trim() : (id && typeof id.id === 'string' ? id.id : '');
   for (var i = 0; i < CONNECTION_TEMPLATES.length; i += 1) {
     if (CONNECTION_TEMPLATES[i].id === key) return CONNECTION_TEMPLATES[i];
