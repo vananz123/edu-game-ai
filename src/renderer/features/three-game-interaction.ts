@@ -432,7 +432,9 @@
    * z = depth. The canvas covers the whole container, so projecting a DOM
    * element's own centre is the only reliable way to line 3D content up with
    * it. `pxPerUnit` lets callers size an object in pixels (fill a slot).
-   * Requires a rendered frame: the camera aspect only settles after step().
+   * Pixels here are LAYOUT pixels (`container.clientHeight`): a DOM
+   * `getBoundingClientRect()` of the same box is in *transformed* pixels and has
+   * to be converted before the two are compared (#179).
    */
   function stagePoint(handle, fx, fy, z = 0) {
     if (!handle) return { x: 0, y: 0, z: 0, pxPerUnit: 0, halfWidth: 0, halfHeight: 0 };
@@ -450,6 +452,27 @@
       pxPerUnit: height / (halfHeight * 2),
       halfWidth,
       halfHeight
+    };
+  }
+
+  /**
+   * The exact inverse of stagePoint(): world point → screen fraction, derived
+   * from the camera parameters instead of `camera.matrixWorldInverse`. That
+   * matrix is refreshed only by render(), so projecting through it before the
+   * first frame of a stage reads an identity matrix — and a point on the z = 0
+   * plane then divides by w ≈ 0, which turns a sane placement into 1e7-sized
+   * nonsense (measured on a hidden test window, where rAF never fires:
+   * houseTarget() returned scale 7e-10). The same assumption stagePoint already
+   * makes: the shared camera sits on the z axis looking down -z, no yaw or roll.
+   */
+  function stageProject(handle, x, y, z = 0) {
+    if (!handle) return { fx: 0.5, fy: 0.5 };
+    const distance = Math.max(0.1, handle.camera.position.z - (Number(z) || 0));
+    const halfHeight = Math.tan((handle.camera.fov * Math.PI) / 360) * distance;
+    const halfWidth = halfHeight * handle.camera.aspect;
+    return {
+      fx: ((Number(x) || 0) / halfWidth + 1) / 2,
+      fy: (1 - (Number(y) || 0) / halfHeight) / 2
     };
   }
 
@@ -1533,6 +1556,7 @@
     addClickableObject,
     addObject,
     stagePoint,
+    stageProject,
     anchor,
     tween,
     effect,

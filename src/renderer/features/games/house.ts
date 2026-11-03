@@ -284,32 +284,86 @@ function houseVisualStages(parts, target) {
     const p = Math.max(0, Math.min(t, Math.round(Number(parts) || 0)));
     return Math.ceil(max * p / t);
 }
-// Measured envelope of each model (width × height in world units). Placement sizes
-// the house from the pixel box it has to fill, so the envelope must follow the
-// style: the tower is narrow and tall, the cottage is low and wide (#144).
-const HOUSE_BOUNDS = {
-    'nha-mai-do': { w: 4.3, h: 3.2 },
-    'nha-vuon': { w: 4.1, h: 2.7 },
-    'thap-canh': { w: 3.5, h: 3.2 },
-    'nha-go': { w: 4.4, h: 3.2 }
-};
-const HOUSE_SLOT_FILL = 0.92;
-function houseBounds(style) {
-    return HOUSE_BOUNDS[style] || HOUSE_BOUNDS['nha-mai-do'];
+// Envelope of the FINISHED model, walked from its own part specs. #179 dropped the
+// hand-recorded width × height table (#144): sizing needs DEPTH too, because the
+// silhouette a perspective camera draws of a deep model is wider than its footprint
+// (measured: the garden's 4,08-unit yard projects 456 px in a 423 px hero slot).
+// All 73 part specs are axis-aligned boxes, so min/max of (x ± w/2) is exact.
+function houseEnvelope(style) {
+    const env = {
+        minX: Infinity, maxX: -Infinity,
+        minY: Infinity, maxY: -Infinity,
+        minZ: Infinity, maxZ: -Infinity
+    };
+    for (const stage of houseParts(style)) {
+        for (const spec of stage) {
+            const halfW = (spec.w || 0) / 2;
+            const halfH = (spec.h || 0) / 2;
+            const halfD = (spec.d || 0) / 2;
+            const x = spec.x || 0;
+            const y = spec.y || 0;
+            const z = spec.z || 0;
+            env.minX = Math.min(env.minX, x - halfW);
+            env.maxX = Math.max(env.maxX, x + halfW);
+            env.minY = Math.min(env.minY, y - halfH);
+            env.maxY = Math.max(env.maxY, y + halfH);
+            env.minZ = Math.min(env.minZ, z - halfD);
+            env.maxZ = Math.max(env.maxZ, z + halfD);
+        }
+    }
+    return env;
 }
-// The house is ~2.3 units deep and the camera is close, so its near corners
-// project well outside the plane the target is centred on. Filling the whole
-// band made the roof reach the HUD and the base slide under the banner
-// (measured 1600x1000); 0.78 keeps ~10px of air on both sides.
-const HOUSE_SHOWCASE_FILL = 0.78;
-// The result hero has a caption directly under its slot, and garden props make the
-// measured box asymmetric, so the house needs more air there than the invisible
-// answer-phase slot does (#144).
-const HOUSE_RESULT_FILL = 0.8;
+function houseBounds(style) {
+    const env = houseEnvelope(style);
+    return { w: env.maxX - env.minX, h: env.maxY - env.minY, front: env.maxZ };
+}
+const HOUSE_SLOT_FILL = 0.92;
+// The house has real depth and the camera is close, so its projected box is bigger
+// than the z = 0 slice it used to be sized from: measured at the showcase scale,
+// the near face is 1,34× taller than the mid-plane (#142 hid that behind a fill
+// constant tuned for one particular build stage). Sizing on footprint × pxPerUnit
+// still lost the DEPTH, which is what spreads the silhouette sideways: the garden
+// model overflowed its own hero slot by 33 px of width at 1366x768 and 116 px at
+// 1920x1080 (#179). `fill` can only mean "fraction of the slot" if the fit reads
+// the silhouette itself, so it now measures the eight projected corners and
+// corrects once more — the same box a student sees, not a proxy for it.
+const HOUSE_SHOWCASE_FILL = 0.86;
+// The result hero has a caption directly under its slot, so the house keeps a
+// little more air there than in the answer band (#144).
+const HOUSE_RESULT_FILL = 0.92;
+// Silhouette of the placed envelope in LAYOUT pixels of the canvas (origin =
+// stage top-left). Measured with threeGame.stageProject(), the analytic inverse
+// of the stagePoint() that produced the placement, so the fit needs no rendered
+// frame (#179).
+function houseHullPx(view, env, x, y, scale) {
+    let top = Infinity;
+    let bottom = -Infinity;
+    let left = Infinity;
+    let right = -Infinity;
+    for (const cx of [env.minX, env.maxX])
+        for (const cy of [env.minY, env.maxY])
+            for (const cz of [env.minZ, env.maxZ]) {
+                const f = window.threeGame.stageProject(threeStageHandle, x + cx * scale, y + cy * scale, cz * scale);
+                const px = f.fx * view.width;
+                const py = f.fy * view.height;
+                if (px < left)
+                    left = px;
+                if (px > right)
+                    right = px;
+                if (py < top)
+                    top = py;
+                if (py > bottom)
+                    bottom = py;
+            }
+    return { left, right, top, bottom, width: right - left, height: bottom - top };
+}
 // Screen-space target for the 3D house. The WebGL canvas covers the whole
-// stage, so the only reliable way to line the house up with the DOM is to
-// project the reserved slot (answer phase) or the stage centre (showcase)
-// through the camera. DECISIONS #142.
+// stage, so the only reliable way to line the house up with the DOM is to map the
+// reserved slot through the camera. DECISIONS #142, one slot for both phases since
+// #179: `.house-stage-slot` is the answer-phase placeholder band AND the showcase's
+// left column, so CSS owns the rectangle the house must fit and this function only
+// measures it — in layout pixels, and with the analytic projection that needs no
+// rendered frame (#179).
 function houseTarget() {
     if (!threeStageHandle || !window.threeGame || !window.threeGame.stagePoint)
         return null;
@@ -317,55 +371,90 @@ function houseTarget() {
     if (!stage.width || !stage.height)
         return null;
     const showcase = Boolean($('.game-stage.is-house-showcase'));
-    let fx, fy, widthPx, heightPx, fill;
-    if (showcase) {
-        // Fit the house into the band the stage actually leaves free: below the
-        // score/progress HUD and above the feedback card. A long explanation
-        // raises the card, and the house shrinks instead of hiding under it.
-        // Measured after `.is-house-showcase` lands, so the card is already
-        // anchored to the bottom.
-        const hud = $('.house-progress') || $('.stage-progress') || $('.stage-top');
-        const hudBox = hud ? hud.getBoundingClientRect() : null;
-        const feedback = $('#answerFeedback');
-        const feedbackBox = feedback ? feedback.getBoundingClientRect() : null;
-        const top = hudBox && hudBox.height ? hudBox.bottom + 4 : stage.top + stage.height * 0.16;
-        const bottom = feedbackBox && feedbackBox.height ? feedbackBox.top - 4 : stage.top + stage.height * 0.9;
-        const bandTop = (top - stage.top) / stage.height;
-        const bandBottom = (bottom - stage.top) / stage.height;
-        // Never trade the measured band for a prettier guess: on short windows
-        // that put the house behind the HUD or the banner. A degenerate band
-        // means the card has not laid out yet; leave the house in its slot.
-        if (!(bandBottom - bandTop > 0.02))
-            return null;
-        fx = 0.5;
-        fy = (bandTop + bandBottom) / 2;
-        widthPx = stage.width * 0.9;
-        heightPx = (bandBottom - bandTop) * stage.height;
-        fill = HOUSE_SHOWCASE_FILL;
-    }
-    else {
-        const slot = $('.game-stage .house-stage-slot');
-        if (!slot)
-            return null;
-        const box = slot.getBoundingClientRect();
-        if (!box.width || !box.height)
-            return null;
-        fx = (box.left + box.width / 2 - stage.left) / stage.width;
-        fy = (box.top + box.height / 2 - stage.top) / stage.height;
-        widthPx = box.width;
-        heightPx = box.height;
-        fill = $('.result-house-hero') ? HOUSE_RESULT_FILL : HOUSE_SLOT_FILL;
-    }
+    const slot = $('.game-stage .house-stage-slot');
+    if (!slot)
+        return null;
+    const rect = slot.getBoundingClientRect();
+    // Never place the house from a guess: a slot that has not been laid out yet
+    // (the showcase flips classes on the same beat the stage height is pinned)
+    // would park the house at the wrong size for the rest of the question.
+    if (!rect.width || !rect.height)
+        return null;
+    // Two pixel grids are in play. `getBoundingClientRect()` answers in TRANSFORMED
+    // pixels — a `.modal` whose pop-in never ran sits at scale 0,92 (measured on a
+    // hidden test window: stage rect 1041 px over a canvas 1130 px wide) — while
+    // stagePoint().pxPerUnit counts LAYOUT pixels. Mixing them sized the house to
+    // 0,92² of its slot and left its centre 41 px off, so everything below works in
+    // layout pixels and the fit holds whatever transform the modal is mid-way through.
+    const view = {
+        width: threeStageHandle.container.clientWidth || stage.width,
+        height: threeStageHandle.container.clientHeight || stage.height
+    };
+    const k = view.width / stage.width;
+    const box = {
+        left: (rect.left - stage.left) * k,
+        top: (rect.top - stage.top) * k,
+        width: rect.width * k,
+        height: rect.height * k
+    };
+    const env = (threeWorld && threeWorld.envelope) || houseEnvelope(houseStyleForCurrentGame());
+    const fx = (box.left + box.width / 2) / view.width;
+    const fy = (box.top + box.height / 2) / view.height;
     const point = window.threeGame.stagePoint(threeStageHandle, fx, fy, 0);
     if (!point.pxPerUnit)
         return null;
-    const bounds = (threeWorld && threeWorld.bounds) || houseBounds('nha-mai-do');
-    const scale = Math.min(heightPx * fill / (bounds.h * point.pxPerUnit), widthPx * 0.92 / (bounds.w * point.pxPerUnit));
-    // Part coordinates start at the ground (the foundation slab), so the group
-    // origin is the house's base, not its centre. Drop the base half a house so
-    // the box straddles the target instead of growing up into the stage header.
-    point.y -= bounds.h / 2 * scale;
-    return { point, scale };
+    const fill = showcase ? HOUSE_SHOWCASE_FILL : ($('.result-house-hero') ? HOUSE_RESULT_FILL : HOUSE_SLOT_FILL);
+    const nearZ = Math.max(0, env.maxZ);
+    // First guess on the plane the near face sits on: it covers the most pixels per
+    // unit, so it never overshoots. The loop below only ever tightens it.
+    const ppu = (nearZ ? window.threeGame.stagePoint(threeStageHandle, fx, fy, nearZ).pxPerUnit : 0) || point.pxPerUnit;
+    let scale = Math.min(box.height * fill / ((env.maxY - env.minY) * ppu), box.width * fill / ((env.maxX - env.minX) * ppu));
+    // Part coordinates start at the ground, so the group origin is the house's base.
+    // Lift the envelope's own centre onto the slot's centre instead of dropping half
+    // a hand-recorded height, so a model whose props sit above the ground line still
+    // lands where the slot is.
+    let x = point.x;
+    let y = point.y - (env.minY + env.maxY) / 2 * scale;
+    const midZ = (env.minZ + env.maxZ) / 2;
+    const shift = window.threeGame.stagePoint(threeStageHandle, fx, fy, midZ).pxPerUnit || point.pxPerUnit;
+    const slotCx = box.left + box.width / 2;
+    const slotCy = box.top + box.height / 2;
+    // Resize and re-centre from a fresh measurement every pass: the two feed each
+    // other (shrinking pulls the silhouette toward the camera axis, which moves its
+    // centre), so the loop has to end on a pass that already saw the new scale.
+    for (let i = 0; i < 6; i++) {
+        const hull = houseHullPx(view, env, x, y, scale);
+        if (!(hull.width > 0) || !(hull.height > 0) || !Number.isFinite(hull.width) || !Number.isFinite(hull.height))
+            break;
+        const ratio = Math.min(box.height * fill / hull.height, box.width * fill / hull.width);
+        // A deep box off the camera axis is NOT centred on its anchor: the near face
+        // spreads wider than the far one, so the silhouette leans toward whichever
+        // side of the stage the house stands on (measured 31–132 px past the slot).
+        const dx = (slotCx - (hull.left + hull.right) / 2) / shift;
+        // Screen y grows DOWN while world y grows UP: the pixel and world deltas
+        // have opposite signs (measured: same formula as x parked the house 55 px
+        // below its slot).
+        const dy = ((hull.top + hull.bottom) / 2 - slotCy) / shift;
+        // Clamped so one bad pass cannot cascade: an enormous hull would crush the
+        // scale to ~0, and the next pass divides by a hull of ~0 px and blows the
+        // position up to 1e7 — the house leaves the screen and never comes back.
+        scale *= Math.min(4, Math.max(0.25, ratio));
+        x += dx;
+        y += dy;
+        if (Math.abs(ratio - 1) < 0.002 && Math.abs(dx) < 0.005 && Math.abs(dy) < 0.005)
+            break;
+    }
+    // The loop's last move centred a hull measured at the PREVIOUS scale, which
+    // leaves up to that tolerance of lean uncorrected (measured fill 0,921 against
+    // a target of 0,92). Centre once more at the scale the house is drawn with.
+    const fin = houseHullPx(view, env, x, y, scale);
+    if (fin.width > 0 && fin.height > 0 && Number.isFinite(fin.width) && Number.isFinite(fin.height)) {
+        x += (slotCx - (fin.left + fin.right) / 2) / shift;
+        y += ((fin.top + fin.bottom) / 2 - slotCy) / shift;
+    }
+    if (!Number.isFinite(scale) || scale <= 0 || !Number.isFinite(x) || !Number.isFinite(y))
+        return null;
+    return { point: { x, y, z: 0 }, scale };
 }
 function placeHouse(animate) {
     const world = threeWorld;
@@ -411,7 +500,7 @@ function buildHouseWorld() {
     construction.setStage(threeStageHandle, 1 + houseVisualStages(parts, target), { animate: intro });
     world.construction = construction;
     world.style = style;
-    world.bounds = houseBounds(style);
+    world.envelope = houseEnvelope(style);
     threeWorld = world;
     // The canvas is still 1x1 until step() runs, so the camera aspect is not
     // final this tick; place on the next two frames instead.
@@ -431,17 +520,18 @@ function buildHouseWorld() {
         });
     }
 }
-// Height the play surface actually shows from the top of the stage to the
-// bottom of the modal/window. Hiding the question collapses a content-sized
-// stage and the feedback card then stretches it past the viewport (measured
-// 957px stage vs 950px modal bottom at 1600x1000), so the showcase freezes the
-// stage to the visible area instead of to its current content.
+// Height the showcase stage keeps: the rectangle it already had while the question
+// was on screen. Hiding the question collapses a content-sized stage and the
+// feedback card then stretches it past the viewport (measured 957px stage vs
+// 950px modal bottom at 1600x1000), so the showcase freezes it instead.
+//
+// It must NOT be derived from `.modal`'s own bottom (#179): the modal is
+// content-sized, so a taller stage makes a taller modal, which the next pin reads
+// back as more room — measured +25 px, then +56 px per answer, and the window
+// creeps down until it hits its cap. A pure freeze has no feedback path, and the
+// play surface stops moving on every answer.
 function showcaseStageHeight(stage) {
-    const box = stage.getBoundingClientRect();
-    const modal = $('.modal');
-    const modalBox = modal ? modal.getBoundingClientRect() : null;
-    const bottom = Math.min(window.innerHeight, modalBox && modalBox.bottom ? modalBox.bottom : window.innerHeight);
-    return Math.max(320, Math.round(bottom - box.top));
+    return Math.max(320, Math.round(stage.getBoundingClientRect().height));
 }
 function pinShowcaseStage() {
     const stage = $('.game-stage');

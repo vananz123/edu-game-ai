@@ -1,6 +1,6 @@
 // ui-house-building-check.js — regression guard for House Building Mode
 // (Knowledge Arena quiz, DECISIONS #140, revised #141/#143, showcase #142,
-// house models + result hero #144).
+// house models + result hero #144, side HUD column #179).
 //
 // The house is a stack of cubes: an always-present foundation (stage 0) plus eight
 // buildable stages (3 cube rings, a big front door, 2 windows, a blocky roof,
@@ -19,15 +19,25 @@
 //   • the target follows the question count: 5 questions → 5/5, 8 questions → 8/8,
 //     all correct finishes the house on the last answer;
 //   • after every answer the house is pulled to the front (`.is-house-showcase`):
-//     question + answers leave the stage, the house grows, the feedback banner
-//     stays readable, and the house sits between the HUD and that banner without
-//     pushing the stage past the visible play surface (#142);
+//     question + answers leave the stage, the house grows without sliding sideways,
+//     and the stage stays inside the visible play surface (#142);
+//   • since #179 the stage is TWO columns in both phases: the house (and, while
+//     reading, the question) on the left, the "Đã xây n/m phần" HUD and the
+//     explanation card in `.house-side-col` on the right — asserted against the
+//     projected 3D box, so the house can never overlap the text it shares the
+//     stage with;
 //   • the result screen reports the house in its ACTUAL state (no auto-complete);
 //   • since #144 every house model (classic/vườn/tháp/gỗ) has the same 9 stages and
 //     its own measured bounds, the auto pick is stable per game id, and an explicit
 //     houseStyle survives into the 3D world;
 //   • the result screen shows the actual house as a 3D hero (projected into the
 //     same `.house-stage-slot` the answer phase uses) with its model name;
+//   • since #179 every model's PROJECTED silhouette fits the slot it was sized for,
+//     at four models × two viewport sizes (the old footprint math let a deep model
+//     draw past its card);
+//   • since #179 html[data-fullscreen="1"] keeps BOTH columns: the projector rule
+//     that hides side columns without an illustration must not swallow the house
+//     HUD and the explanation card, and the text column widens instead of vanishing;
 //   • classic mode renders no house UI and keeps house state null (unchanged).
 //
 // Run:
@@ -70,18 +80,73 @@ function quizGame(id, questionCount, gameplayMode, houseStyle) {
 // Open `gameJson` and step through `answers` (one option id per question),
 // snapshotting the part count, the 3D stage and the DOM at every transition.
 // Returns an ordered array of snapshots (one per label).
-function RUN(gameJson, answers) {
+// `opts.fullscreen` puts html[data-fullscreen="1"] on the document between the
+// close click and the open, so the run plays out under the projector CSS.
+//
+// WARNING: the body of RUN is ONE template literal. A backtick typed inside it —
+// even in a comment — silently closes the string, and the check then dies in Node
+// with an error naming nothing near it (#179: "ReferenceError: body is not defined"
+// from a comment about .modal-body). No backticks, no ${...} that Node must not see.
+function RUN(gameJson, answers, opts) {
   const answersJson = JSON.stringify(answers);
   return `(async () => {
     const answers = ${answersJson};
+    const wantFullscreen = ${Boolean(opts && opts.fullscreen)};
     const sleep = ms => new Promise(r => setTimeout(r, ms));
+    // #179: the layout assertions compare DOM rectangles with the projected 3D
+    // house box, so every region the house must stay clear of is measured.
+    const rect = (sel) => {
+      const el = document.querySelector(sel);
+      if (!el)
+        return null;
+      const b = el.getBoundingClientRect();
+      return {
+        top: Math.round(b.top), bottom: Math.round(b.bottom),
+        left: Math.round(b.left), right: Math.round(b.right),
+        width: Math.round(b.width), height: Math.round(b.height)
+      };
+    };
+    // The app window is usually NOT the foreground window while a check runs, and
+    // Chromium then suspends rAF: the house tween never applies (scale frozen at 1)
+    // and the camera matrices go stale, so every projected rect turns to garbage
+    // (measured: house box top -57114 px). Push one real frame before reading
+    // geometry — the assertions then measure WHERE the house is placed, not whether
+    // this machine happened to be painting.
+    const frame = () => {
+      const h = threeStageHandle;
+      if (!h || !h.renderer || !h.camera || !h.container)
+        return;
+      const cw = h.container.clientWidth, ch = h.container.clientHeight;
+      if (!cw || !ch)
+        return;
+      h.renderer.setSize(cw, ch, false);
+      h.camera.aspect = cw / ch;
+      h.camera.updateProjectionMatrix();
+      // Place BEFORE the render: render() is what recomputes matrixWorld, so a
+      // house placed after it is still measured through the previous frame's matrix
+      // (measured: a 1×1 px "hull" that satisfies every containment assert vacuously).
+      if (threeWorld && threeWorld.construction)
+        placeHouse(false);
+      h.renderer.render(h.scene, h.camera);
+    };
     document.querySelector('[data-play-close]')?.click();
     document.getElementById('modalRoot').innerHTML = '';
     await sleep(200);
+    // #179: the projector flag is set HERE, after the close click, not before it.
+    // That click runs the [data-play-close] handler in shell.ts → setPlayFullscreen
+    // (false) → the main process replies with onFullscreenChanged(false) and wipes a
+    // flag set earlier (measured: flex-basis back to the windowed 232 px). The check
+    // cannot stub the call away either — window.eduGame is a contextBridge object,
+    // so assigning to it is silently ignored. CSS stays the thing under test.
+    if (wantFullscreen) {
+      document.documentElement.setAttribute('data-fullscreen', '1');
+      await sleep(250);
+    }
     playGame(${gameJson});
     await sleep(700);
     const snap = [];
     const take = (label) => {
+      frame();
       const hb = state.houseBuild || houseCreate();
       const sum = houseSummary(hb, houseTargetParts(state.currentGame));
       const count = document.querySelector('.house-count');
@@ -146,10 +211,19 @@ function RUN(gameJson, answers) {
         houseY: group ? group.position.y : null,
         emblemVisible: threeStageHandle ? threeStageHandle.emblem.visible : null,
         stageHeight: stageEl ? Math.round(stageEl.getBoundingClientRect().height) : null,
-        // The showcase must stay inside the visible play surface (#142).
+        // The showcase must stay inside the visible play surface (#142). The
+        // bottom edge of that surface is the CONTENT box of .modal-body — the
+        // modal's border box sits 18 px lower, inside its own padding (#179).
         stageBottom: stageEl ? Math.round(stageEl.getBoundingClientRect().bottom) : null,
         stageTop: stageEl ? Math.round(stageEl.getBoundingClientRect().top) : null,
         stageMinHeight: stageEl ? stageEl.style.minHeight : null,
+        surfaceBottom: (() => {
+          const playBody = document.querySelector('.modal-body');
+          if (!playBody)
+            return null;
+          const pb = playBody.getBoundingClientRect();
+          return Math.round(pb.bottom - (parseFloat(getComputedStyle(playBody).paddingBottom) || 0));
+        })(),
         modalTop: (() => {
           const modal = document.querySelector('.modal');
           return modal ? Math.round(modal.getBoundingClientRect().top) : null;
@@ -159,26 +233,19 @@ function RUN(gameJson, answers) {
           return modal ? Math.round(modal.getBoundingClientRect().bottom) : null;
         })(),
         viewportH: innerHeight,
+        // The fullscreen section must know the flag was REALLY there when it
+        // measured; otherwise a game open that resets it turns the section into a
+        // silent re-run of the windowed layout (#179).
+        fsFlag: document.documentElement.dataset.fullscreen || null,
         stagePointCenter: sp ? { x: sp.x, y: sp.y } : null,
-        hudBottom: (() => {
-          const hud = document.querySelector('.house-progress');
-          return hud ? Math.round(hud.getBoundingClientRect().bottom) : null;
-        })(),
-        // #153: HUD dịch xuống (+Y) khỏi thanh tiến độ câu hỏi; ảnh câu hỏi chỉ
-        // hiện khi giáo viên chọn, không phải tranh "tự động".
-        hudTop: (() => {
-          const hud = document.querySelector('.house-progress');
-          return hud ? Math.round(hud.getBoundingClientRect().top) : null;
-        })(),
-        progressBarBottom: (() => {
-          const bar = document.querySelector('.stage-progress');
-          return bar ? Math.round(bar.getBoundingClientRect().bottom) : null;
-        })(),
+        // #179: HUD và lời giải thích sang cột phải, nhà ở cột trái. Bốn hình chữ
+        // nhật này là toàn bộ căn cứ của các assert bố cục bên dưới.
+        hudBox: rect('.house-progress'),
+        railBox: rect('.game-stage .house-side-col'),
+        mainBox: rect('.game-stage .stage-col.is-main'),
+        slotBox: rect('.game-stage .house-stage-slot'),
         houseArt: Boolean(document.querySelector('.house-question-art .stage-illustration')),
-        feedbackTop: (() => {
-          const fb = document.querySelector('#answerFeedback');
-          return fb ? Math.round(fb.getBoundingClientRect().top) : null;
-        })(),
+        feedbackBox: rect('#answerFeedback'),
         // Project the real 3D bounds to pixels so the showcase can be checked
         // against the DOM furniture it must not cover (#142).
         houseBox: (() => {
@@ -226,6 +293,22 @@ function RUN(gameJson, answers) {
 }
 
 const byLabel = (snaps, label) => snaps.find(s => s.label === label) || {};
+
+// A projected hull that collapsed to a point (a stale `matrixWorld`, a world that
+// never painted) sits inside ANY rectangle, so every containment assert below would
+// pass while measuring nothing. Demand a box that actually spans pixels (#179).
+const hull = (b) => Boolean(b) && b.right - b.left >= 60 && b.bottom - b.top >= 60;
+
+// The silhouette the camera draws must stay inside the rectangle it was fitted to
+// (#179). Tolerance is 2 px: the fit aims at `fill` of the slot and converges to
+// under a pixel, so anything past 2 px is a model drawing outside its column.
+// `minSpan` is the anti-vacuity floor: a finished house is called at 60 px, but a
+// one-part house on a 768-px-tall projector legitimately draws 52 px inside a 123 px
+// slot, so that phase passes its own (still 50× larger than a collapsed) floor.
+const fits = (b, r, minSpan = 60) => Boolean(b) && Boolean(r) &&
+  b.right - b.left >= minSpan && b.bottom - b.top >= minSpan &&
+  b.left >= r.left - 2 && b.right <= r.right + 2 &&
+  b.top >= r.top - 2 && b.bottom <= r.bottom + 2;
 
 (async () => {
   const ctx = await connect();
@@ -330,6 +413,12 @@ const byLabel = (snaps, label) => snaps.find(s => s.label === label) || {};
     styles.bounds.find(b => b.id === 'thap-canh').w < styles.bounds.find(b => b.id === 'nha-go').w &&
     styles.bounds.find(b => b.id === 'nha-vuon').h < styles.bounds.find(b => b.id === 'nha-mai-do').h,
     JSON.stringify(styles.bounds));
+  // The showcase sizes the house on the plane the camera actually sees (front of the
+  // model), so a missing or absurd `front` silently shrinks every house (#179).
+  check('every model reports the near face its placement is sized from (#179)',
+    styles.bounds.every(b => b.front >= 0.5 && b.front <= 2.5) &&
+      new Set(styles.bounds.map(b => b.front)).size >= 2,
+    JSON.stringify(styles.bounds.map(b => [b.id, b.front])));
   check('an explicit model always wins over the auto pick',
     styles.explicit === 'thap-canh', styles.explicit);
   check('the auto pick is stable for the same game and varies across games',
@@ -348,9 +437,15 @@ const byLabel = (snaps, label) => snaps.find(s => s.label === label) || {};
 
   const open6 = byLabel(g6, 'open');
   check('house mode renders the parts progress panel', open6.progressPanel === true);
-  check('the house HUD is pushed below the question progress bar (#153)',
-    open6.hudTop != null && open6.progressBarBottom != null && open6.hudTop - open6.progressBarBottom >= 12,
-    `hud=${open6.hudTop} progress=${open6.progressBarBottom}`);
+  check('the house HUD has its own column on the right of the question (#179)',
+    Boolean(open6.hudBox && open6.railBox && open6.mainBox) &&
+      open6.railBox.left >= open6.mainBox.right - 1 &&
+      open6.hudBox.left >= open6.railBox.left - 1 && open6.hudBox.right <= open6.railBox.right + 1 &&
+      open6.hudBox.width >= 150,
+    JSON.stringify({ hud: open6.hudBox, rail: open6.railBox, main: open6.mainBox }));
+  check('the HUD column leaves the house slot its own row',
+    Boolean(open6.hudBox && open6.slotBox) && open6.hudBox.left >= open6.slotBox.right - 1,
+    JSON.stringify({ hud: open6.hudBox, slot: open6.slotBox }));
   check('a 3D house world mounts behind the stage', open6.canvas === true);
   check('the game opens with only the foundation (parts 0/6)',
     open6.parts === 0 && open6.maxParts === 6 && (open6.count || '').includes('0/6'),
@@ -384,12 +479,23 @@ const byLabel = (snaps, label) => snaps.find(s => s.label === label) || {};
     a1.questionVisible === false && a1.answersVisible === false,
     `question=${a1.questionVisible} answers=${a1.answersVisible}`);
   check('the showcase fills the visible play surface',
-    Math.abs((a1.stageBottom || 0) - (a1.modalBottom || 0)) <= 2 && a1.modalBottom <= a1.viewportH + 1,
-    `stage=${a1.stageTop}..${a1.stageBottom} (${a1.stageHeight}) minH=${a1.stageMinHeight} modal=${a1.modalTop}..${a1.modalBottom} viewport=${a1.viewportH}`);
-  check('the showcase house sits between the progress panel and the feedback card',
-    Boolean(a1.houseBox) && a1.hudBottom != null && a1.feedbackTop != null &&
-      a1.houseBox.top >= a1.hudBottom - 2 && a1.houseBox.bottom <= a1.feedbackTop + 2,
-    JSON.stringify({ house: a1.houseBox, hud: a1.hudBottom, feedback: a1.feedbackTop }));
+    Math.abs((a1.stageBottom || 0) - (a1.surfaceBottom || 0)) <= 2 && (a1.surfaceBottom || 0) <= a1.viewportH + 1,
+    `stage=${a1.stageTop}..${a1.stageBottom} (${a1.stageHeight}) surface=${a1.surfaceBottom} modal=${a1.modalTop}..${a1.modalBottom} viewport=${a1.viewportH}`);
+  check('the showcase keeps the house clear of the explanation column (#179)',
+    hull(a1.houseBox) && hull(a1.feedbackBox) && a1.feedbackBox.left >= a1.houseBox.right - 2,
+    JSON.stringify({ house: a1.houseBox, feedback: a1.feedbackBox }));
+  check('the showcase house is pinned inside its slot',
+    hull(a1.houseBox) && Boolean(a1.slotBox) &&
+      a1.houseBox.top >= a1.slotBox.top - 4 && a1.houseBox.bottom <= a1.slotBox.bottom + 4 &&
+      a1.houseBox.left >= a1.slotBox.left - 4 && a1.houseBox.right <= a1.slotBox.right + 4,
+    JSON.stringify({ house: a1.houseBox, slot: a1.slotBox }));
+  check('the HUD keeps its side when the showcase opens',
+    Boolean(a1.hudBox && open6.hudBox) && Math.abs(a1.hudBox.left - open6.hudBox.left) <= 2 &&
+      a1.hudBox.width >= 150,
+    JSON.stringify({ before: open6.hudBox, after: a1.hudBox }));
+  check('the explanation card is a readable column, not a full-width banner',
+    Boolean(a1.feedbackBox) && a1.feedbackBox.width >= 150 && a1.feedbackBox.height >= 40,
+    JSON.stringify(a1.feedbackBox));
   check('the showcase banner names the correct answer',
     (a1.feedbackText || '').includes('Đáp án đúng') && (a1.feedbackText || '').includes('Chủ động chào hỏi'),
     JSON.stringify(a1.feedbackText));
@@ -427,6 +533,19 @@ const byLabel = (snaps, label) => snaps.find(s => s.label === label) || {};
   check('the visual stages follow the part count (4 parts → 6 of 8 stages)',
     a4.stage === 4 && a5.stage === 5 && a6.stage === 7,
     `stages=${a4.stage},${a5.stage},${a6.stage}`);
+  // #179: the showcase pins the stage to the rectangle it already had. Reading that
+  // rectangle back from `.modal`'s own bottom made the pin feed itself — the modal
+  // grew, the next pin saw more room, and the window crept (+25 px, then +56 px per
+  // answer). A stable height from the second answer on is what proves the loop is
+  // gone; the first answer may still settle (the feedback card joins the layout).
+  check('the showcase stage height stops creeping between answers (#179)',
+    [a2, a3, a4, a5, a6].every(s => Math.abs((s.stageHeight || 0) - (a2.stageHeight || 0)) <= 2),
+    [a1, a2, a3, a4, a5, a6].map(s => s.stageHeight).join(','));
+  check('every showcase stays inside the visible surface (#179)',
+    [a1, a2, a3, a4, a5, a6].every(s => s.surfaceBottom != null
+      && Math.abs((s.stageBottom || 0) - s.surfaceBottom) <= 2
+      && s.surfaceBottom <= s.viewportH + 1),
+    [a1, a2, a3, a4, a5, a6].map(s => `${s.stageBottom}/${s.surfaceBottom}`).join(' '));
 
   const res6 = byLabel(g6, 'results');
   check('the result screen shows the house in its ACTUAL state', (res6.resultHouse || '').includes('4/6 phần'),
@@ -453,7 +572,7 @@ const byLabel = (snaps, label) => snaps.find(s => s.label === label) || {};
     res6.resultStyle === 'Mẫu: ' + res6.worldStyleLabel && Boolean(res6.worldStyleLabel),
     JSON.stringify({ caption: res6.resultStyle, style: res6.worldStyle, label: res6.worldStyleLabel }));
   check('the result house is pinned inside its hero slot',
-    Boolean(res6.houseBox) && Boolean(res6.resultSlotBox) &&
+    hull(res6.houseBox) && Boolean(res6.resultSlotBox) &&
       res6.houseBox.top >= res6.resultSlotBox.top - 4 &&
       res6.houseBox.bottom <= res6.resultSlotBox.bottom + 4 &&
       res6.houseBox.left >= res6.resultSlotBox.left - 4 &&
@@ -598,6 +717,94 @@ const byLabel = (snaps, label) => snaps.find(s => s.label === label) || {};
     classic.res.resultHero === false && classic.res.houseLayout === false,
     JSON.stringify(classic.res));
 
+  // ---------------- Fullscreen / projector keeps both columns (#179) ----------------
+  // wizard.css:409 collapses every .stage-center side column that has no
+  // .stage-illustration once html[data-fullscreen="1"] is set. The house side
+  // column NEVER has an illustration (question art lives in the left column), so
+  // on a projector the parts HUD and the explanation card both went to 0x0 and the
+  // house took the full width. The app sets that attribute from the main process,
+  // so the check sets it directly — the CSS is what is under test.
+  console.log('\n=== fullscreen keeps HUD + explanation (#179) ===');
+  await send('Emulation.setDeviceMetricsOverride', {
+    width: 1366, height: 768, deviceScaleFactor: 1, mobile: false
+  });
+  await new Promise(r => setTimeout(r, 700));
+  // RUN's third argument turns the projector flag on *inside* the run, after the
+  // close click that would otherwise wipe it (see RUN). Every snapshot then carries
+  // the flag it was measured with, and the first check below proves this section
+  // really measured fullscreen: an earlier version of it set the attribute from the
+  // outside and silently re-ran the WINDOWED layout at 232 px while reporting green.
+  const fsRun = await evaluate(RUN(quizGame('ui-house-fs', 5, 'house', 'nha-mai-do'), ['a', 'a', 'a', 'a', 'a'], { fullscreen: true }));
+  await evaluate(`(() => { document.documentElement.removeAttribute('data-fullscreen'); return true; })()`);
+  const fsOpen = byLabel(fsRun, 'open');
+  const fsAnswer = byLabel(fsRun, 'after-answer-1');
+  const fsQuestion = byLabel(fsRun, 'question-2');
+  check('the fullscreen flag stayed set for every measurement',
+    fsRun.length > 0 && fsRun.every(s => s.fsFlag === '1'),
+    JSON.stringify({ snapshots: fsRun.length, flags: fsRun.map(s => s.fsFlag) }));
+  check('fullscreen keeps the house side column on screen',
+    fsOpen.railBox && fsOpen.railBox.width > 0 && fsOpen.railBox.height > 0,
+    JSON.stringify(fsOpen.railBox));
+  check('fullscreen keeps the parts HUD visible',
+    fsOpen.hudBox && fsOpen.hudBox.width > 0 && fsOpen.hudBox.height > 0,
+    JSON.stringify(fsOpen.hudBox));
+  check('fullscreen keeps the explanation card visible',
+    fsAnswer.feedbackBox && fsAnswer.feedbackBox.width > 0 && fsAnswer.feedbackBox.height > 0,
+    JSON.stringify(fsAnswer.feedbackBox));
+  check('fullscreen puts the HUD to the right of the house slot',
+    fsOpen.hudBox && fsOpen.slotBox && fsOpen.hudBox.left >= fsOpen.slotBox.right,
+    JSON.stringify({ hud: fsOpen.hudBox, slot: fsOpen.slotBox }));
+  check('fullscreen showcase house clears the text column',
+    fsAnswer.houseBox && fsAnswer.railBox && fsAnswer.houseBox.right <= fsAnswer.railBox.left,
+    JSON.stringify({ house: fsAnswer.houseBox, rail: fsAnswer.railBox }));
+  check('fullscreen showcase hull stays inside its slot',
+    fits(fsAnswer.houseBox, fsAnswer.slotBox),
+    JSON.stringify({ house: fsAnswer.houseBox, slot: fsAnswer.slotBox }));
+  check('fullscreen question hull stays inside its slot',
+    fits(fsQuestion.houseBox, fsQuestion.slotBox, 40),
+    JSON.stringify({ house: fsQuestion.houseBox, slot: fsQuestion.slotBox }));
+  check('fullscreen showcase stays inside the visible surface',
+    fsAnswer.stageBottom !== null && fsAnswer.surfaceBottom !== null &&
+    fsAnswer.stageBottom <= fsAnswer.surfaceBottom + 2,
+    `${fsAnswer.stageBottom}/${fsAnswer.surfaceBottom}`);
+  check('fullscreen widens the text column instead of hiding it',
+    fsOpen.railBox.width >= 240 && fsOpen.railBox.width <= 330 &&
+    byLabel(g6, 'open').railBox && byLabel(g6, 'open').railBox.width >= 190 &&
+    byLabel(g6, 'open').railBox.width <= 260,
+    JSON.stringify({ projector: fsOpen.railBox.width, windowed: byLabel(g6, 'open').railBox.width }));
+
+  await evaluate(`(async () => {
+    document.querySelector('[data-play-close]')?.click();
+    document.getElementById('modalRoot').innerHTML = '';
+    return true;
+  })()`);
+  // Sizing on footprint × pxPerUnit let a DEEP model draw wider than the rectangle
+  // it was fitted to: the garden's 4,08-unit yard projected 456 px into a 423 px hero
+  // slot at 1366x768 and 532 px into a 426 px slot at 1920x1080, so the house poked
+  // out of its own card. The fit now measures the eight projected corners of the
+  // envelope, so the assert has to measure them too — and on the three models the
+  // sections above never place (they all ran the auto pick at 1600x1000).
+  console.log('\n=== every model fits its slot, two sizes (#179) ===');
+  for (const size of [[1366, 768], [1920, 1080]]) {
+    await send('Emulation.setDeviceMetricsOverride', {
+      width: size[0], height: size[1], deviceScaleFactor: 1, mobile: false
+    });
+    await new Promise(r => setTimeout(r, 700));
+    for (const id of ['nha-mai-do', 'nha-vuon', 'thap-canh', 'nha-go']) {
+      const fitted = await evaluate(RUN(
+        quizGame('ui-house-fit-' + id + '-' + size[0], 5, 'house', id),
+        ['a', 'a', 'a', 'a', 'a']));
+      const last = byLabel(fitted, 'after-answer-5');
+      const res = byLabel(fitted, 'results');
+      check(`${id} showcase hull stays inside its column @${size[0]}x${size[1]}`,
+        last.worldStyle === id && fits(last.houseBox, last.slotBox),
+        JSON.stringify({ house: last.houseBox, slot: last.slotBox, style: last.worldStyle }));
+      check(`${id} result hull stays inside its hero slot @${size[0]}x${size[1]}`,
+        fits(res.houseBox, res.resultSlotBox),
+        JSON.stringify({ house: res.houseBox, slot: res.resultSlotBox }));
+    }
+  }
+
   await evaluate(`(async () => {
     document.querySelector('[data-play-close]')?.click();
     document.getElementById('modalRoot').innerHTML = '';
@@ -608,5 +815,8 @@ const byLabel = (snaps, label) => snaps.find(s => s.label === label) || {};
   console.log(`\nui-house-building-check: ${results.length - failed.length}/${results.length} checks passed`);
   await send('Emulation.clearDeviceMetricsOverride').catch(() => { });
   ctx.ws.close();
-  process.exit(failed.length ? 1 : 0);
-})().catch(e => { console.error('ERROR: ' + e.message); process.exit(1); });
+  // `process.exit()` drops buffered stdout when the output is a redirected file,
+  // which truncates the report right after the last section header. Setting the
+  // code lets Node drain the writes on its own (the socket above is already closed).
+  process.exitCode = failed.length ? 1 : 0;
+})().catch(e => { console.error('ERROR: ' + e.message + '\n' + e.stack); process.exitCode = 1; });
