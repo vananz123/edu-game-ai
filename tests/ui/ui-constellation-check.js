@@ -12,6 +12,8 @@
 //   • five pairs, the completion flow, the 3D RESULT sky (framed inside the result
 //     hero, disposed by both exits — DECISIONS #175) and the projector view;
 //   • an old saved picture id still opens and still plays;
+//   • the fitted FIGURE is centred in its frame, fills it, and is capped so a
+//     two-star fragment does not become two enormous circles (#177);
 //   • the 16:9 classroom size: the scene keeps its share of the play area, the
 //     labels stay on their stars, and no label covers one.
 //
@@ -465,6 +467,16 @@ const snapshot = () => `JSON.stringify({
       return p.x >= rect.left - 2 && p.x <= rect.right + 2 && p.y >= rect.top - 2 && p.y <= rect.bottom + 2;
     });
     const world = threeWorld && threeWorld.kind === 'connection' ? threeWorld.graph : null;
+    const xs = Object.values(points).map(p => p.x);
+    const ys = Object.values(points).map(p => p.y);
+    const centre = rect && xs.length ? [
+      Math.round((Math.max(...xs) + Math.min(...xs)) / 2 - (rect.left + rect.width / 2)),
+      Math.round((Math.max(...ys) + Math.min(...ys)) / 2 - (rect.top + rect.height / 2))
+    ] : null;
+    const clear = xs.length && rect ? [
+      Math.round(Math.min(...xs) - rect.left), Math.round(rect.right - Math.max(...xs)),
+      Math.round(Math.min(...ys) - rect.top), Math.round(rect.bottom - Math.max(...ys))
+    ] : null;
     return JSON.stringify({
       onResults: Boolean(document.querySelector('.result-screen')),
       three: Boolean(window.threeGame && window.threeGame.isAvailable && window.threeGame.isAvailable()),
@@ -476,6 +488,7 @@ const snapshot = () => `JSON.stringify({
       frame: rect ? [Math.round(rect.width), Math.round(rect.height)] : null,
       projected: Object.keys(points).length,
       allInside: inside.length > 0 && inside.every(Boolean),
+      centre, clear,
       svgStars: document.querySelectorAll('.result-connection-art .constellation-star').length,
       text: (document.querySelector('.result-connection') || {}).textContent || ''
     });
@@ -493,6 +506,10 @@ const snapshot = () => `JSON.stringify({
     check('the picture is framed INSIDE the result hero, not the old play frame',
       resultsScreen.allInside === true && resultsScreen.projected === 5 && resultsScreen.frame[0] > 100 && resultsScreen.frame[1] > 100,
       `frame=${JSON.stringify(resultsScreen.frame)} inside=${resultsScreen.allInside}`);
+    check('the sky sits in the middle of the hero too (#177)',
+      Math.abs(resultsScreen.centre[0]) <= 14 && Math.abs(resultsScreen.centre[1]) <= 14
+        && resultsScreen.clear.every(n => n >= 24),
+      `off=${JSON.stringify(resultsScreen.centre)} clear=${JSON.stringify(resultsScreen.clear)}`);
     check('no static picture is painted under the live sky', resultsScreen.svgStars === 0, `svgStars=${resultsScreen.svgStars}`);
   } else {
     check('without WebGL the results screen keeps the static sky',
@@ -690,6 +707,66 @@ const snapshot = () => `JSON.stringify({
       JSON.stringify(sized.labels.filter(label => label.covers !== false).map(label => label.id)));
   }
   await send('Emulation.setDeviceMetricsOverride', { width: 1366, height: 768, deviceScaleFactor: 1, mobile: false }).catch(() => {});
+
+  // ------------------------------------------------ the framing of #177 ----
+  console.log('\n=== the figure is centred in its frame, not the viewbox ===');
+  // `fitConnectionGraph` used to fit and centre the VIEWBOX the template is drawn
+  // into, so every board carried its template's own margins: the ten stars of the
+  // Great Bear fill 900×430 of a 1000×620 box and sit 55 units above its centre.
+  // Measured before the change (1366×768): Orion −14 px, the Great Bear −43, a
+  // five-star Orion −59, and a two-star Lyra 164 px right and 113 px up.
+  const FRAMING = `(() => {
+    const frame = document.querySelector('[data-constellation-stage]').getBoundingClientRect();
+    const stage = document.querySelector('.game-stage').getBoundingClientRect();
+    const handle = threeStageHandle;
+    const visibleHeight = 2 * Math.tan(handle.camera.fov * Math.PI / 360) * CONNECTION_CAMERA_Z;
+    const visibleWidth = visibleHeight * (stage.width / stage.height);
+    const boxFit = Math.min((frame.width / stage.width) * visibleWidth / CONNECTION_WORLD.width,
+      (frame.height / stage.height) * visibleHeight / CONNECTION_WORLD.height);
+    const points = updateConnectionStarPoints();
+    const xs = Object.values(points).map(p => p.x);
+    const ys = Object.values(points).map(p => p.y);
+    const fit = threeWorld.graph.getFitScale();
+    return JSON.stringify({
+      stars: Object.keys(points).length,
+      off: [Math.round((Math.max(...xs) + Math.min(...xs)) / 2 - (frame.left + frame.width / 2)),
+        Math.round((Math.max(...ys) + Math.min(...ys)) / 2 - (frame.top + frame.height / 2))],
+      fill: Math.round(Math.max((Math.max(...xs) - Math.min(...xs)) / frame.width,
+        (Math.max(...ys) - Math.min(...ys)) / frame.height) * 100) / 100,
+      clear: [Math.round(Math.min(...xs) - frame.left), Math.round(frame.right - Math.max(...xs)),
+        Math.round(Math.min(...ys) - frame.top), Math.round(frame.bottom - Math.max(...ys))],
+      enlarge: Math.round(fit / boxFit * 100) / 100,
+      hang: document.querySelectorAll('[data-star-card]').length
+    });
+  })()`;
+  await evaluate(OPEN(matchingGame('ui-frame-10', 10, 'connection', { starIds: ORION })));
+  const ten = JSON.parse(await evaluate(FRAMING));
+  check('a full board is centred in its frame (±14 px, was −14 to −113)',
+    ten.stars === 10 && Math.abs(ten.off[0]) <= 14 && Math.abs(ten.off[1]) <= 14, JSON.stringify(ten.off));
+  check('the centred picture still fills its frame', ten.fill >= 0.75, JSON.stringify({ fill: ten.fill }));
+  check('no star is pushed against an edge, so its label keeps a lane',
+    ten.clear.every(n => n >= 20), JSON.stringify(ten.clear));
+  check('every star of a full board still wears its own label',
+    ten.hang === 10, `hang=${ten.hang} of ${ten.stars}`);
+
+  // A five-star board is the common classroom case and was the worst off-centre
+  // fragment: Orion's first five stars sit 80 viewbox units above the box centre.
+  await evaluate(OPEN(matchingGame('ui-frame-5', 5, 'connection', { starIds: ORION.slice(0, 5) })));
+  const five = JSON.parse(await evaluate(FRAMING));
+  check('a five-star fragment is centred too (was −59 px)',
+    Math.abs(five.off[0]) <= 14 && Math.abs(five.off[1]) <= 14, JSON.stringify(five.off));
+  check('the fragment is drawn bigger, up to the cap', five.enlarge > 1.05 && five.enlarge <= 1.41,
+    `enlarge=${five.enlarge}x the box fit`);
+
+  // The cap is what protects the smallest board: two stars of Lyra are 327 px apart
+  // in a 1200 px frame, and fitting THAT box would fill the room with two circles.
+  const LYRA = ['vega', 'sulafat', 'sheliak', 'delta2', 'zeta1', 'aladfar', 'eta', 'epsilon', 'theta', 'kappa'];
+  await evaluate(OPEN(matchingGame('ui-frame-2', 2, 'connection', { template: 'lyra', starIds: LYRA.slice(0, 2) })));
+  const two = JSON.parse(await evaluate(FRAMING));
+  check('a two-star board is centred (was 164 px right, 113 px up)',
+    Math.abs(two.off[0]) <= 14 && Math.abs(two.off[1]) <= 14, JSON.stringify(two.off));
+  check('a two-star board is never blown up past the cap', two.enlarge <= 1.41,
+    `enlarge=${two.enlarge}x the box fit`);
 
   // ------------------------------------------------ compatibility -------
   console.log('\n=== an old picture id still plays ===');

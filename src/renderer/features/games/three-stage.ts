@@ -189,6 +189,15 @@ function reactMatching(event, detail) {
 // and leaves room for a bowed link.
 const CONNECTION_WORLD = { width: 10, height: 6.2 };
 const CONNECTION_CAMERA_Z = 13;
+/**
+ * How much bigger than the viewbox fit a figure may be drawn (DECISIONS #177).
+ *
+ * Fitting the figure instead of the box lets a board grow, but a two-pair board is
+ * a FRAGMENT of the pattern: two stars at 3× the size read as two circles, not as
+ * Orion. The cap keeps the growth for the shapes that need it (ten stars of the
+ * Great Bear fill 900×430 of a 1000×620 box) and refuses it for the fragments.
+ */
+const CONSTELLATION_FIT_MAX_ENLARGE = 1.4;
 
 function connectionWorldPosition(node) {
     return {
@@ -252,6 +261,38 @@ function frameConnectionBoard() {
 }
 
 /**
+ * The box the picture itself occupies, in the graph's own units.
+ *
+ * `CONNECTION_WORLD` is the box a template is DRAWN INTO, not the figure: the Great
+ * Bear's ten stars span 900 × 430 of a 1000 × 620 viewbox and sit 55 units above
+ * its centre, and a five-star board is worse (Orion's first five stars are 80 units
+ * off centre). Fitting and centring on the box therefore handed every board the
+ * template's own margins — a 35–64 px vertical bias inside the play frame, measured
+ * in #176. Star bodies count, not only their centres, so an edge star is not cut.
+ */
+function connectionFigureBox(graph) {
+    let x0 = Infinity;
+    let y0 = Infinity;
+    let x1 = -Infinity;
+    let y1 = -Infinity;
+    for (const id of Object.keys(graph.nodes)) {
+        const entry = graph.nodes[id];
+        if (!entry || !entry.root) continue;
+        const params = (entry.mesh && entry.mesh.geometry && entry.mesh.geometry.parameters) || {};
+        const radius = Number(params.radius) || 0;
+        const half = radius ? radius + (Number(params.tube) || 0) : 0;
+        const halfX = half || (Number(params.width) || 0.34) / 2;
+        const halfY = half || (Number(params.height) || 0.34) / 2;
+        x0 = Math.min(x0, entry.root.position.x - halfX);
+        y0 = Math.min(y0, entry.root.position.y - halfY);
+        x1 = Math.max(x1, entry.root.position.x + halfX);
+        y1 = Math.max(y1, entry.root.position.y + halfY);
+    }
+    if (!Number.isFinite(x0) || !Number.isFinite(x1)) return null;
+    return { width: x1 - x0, height: y1 - y0, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2 };
+}
+
+/**
  * Scale the picture into its frame, and centre it on that frame.
  *
  * Split out of `frameConnectionBoard` so the ANCHOR pass can guarantee the fit
@@ -274,13 +315,22 @@ function fitConnectionGraph() {
     // star centres, and the eye reads a picture better with air around it.
     const frameWorldWidth = (frameRect.width / stageRect.width) * visibleWidth;
     const frameWorldHeight = (frameRect.height / stageRect.height) * visibleHeight;
-    const scale = Math.max(0.3, Math.min(frameWorldWidth / CONNECTION_WORLD.width, frameWorldHeight / CONNECTION_WORLD.height) * 0.9);
+    const boxFit = Math.min(frameWorldWidth / CONNECTION_WORLD.width, frameWorldHeight / CONNECTION_WORLD.height);
+    const figure = connectionFigureBox(graph);
+    // The FIGURE is what should fill the frame, capped so a fragment of a pattern
+    // does not turn into two enormous circles.
+    const tightFit = figure
+        ? Math.min(frameWorldWidth / figure.width, frameWorldHeight / figure.height)
+        : boxFit;
+    const scale = Math.max(0.3, Math.min(tightFit, boxFit * CONSTELLATION_FIT_MAX_ENLARGE) * 0.9);
     graph.setFitScale(scale);
-    // The picture is centred on the WORLD ORIGIN, and `frameConnectionBoard` puts
-    // that origin on the frame's centre through the camera. Offsetting the group
-    // by the frame as well moved the picture twice (measured: the stars hung
-    // ~10 % of the stage below the frame, and every drop target was off).
-    graph.group.position.set(0, 0, 0);
+    // Two levers, and they do different jobs, so they do not double-count:
+    // `frameConnectionBoard` lands the WORLD ORIGIN on the frame's centre (it knows
+    // the frame's rect, which the graph cannot), and this moves the picture's own
+    // centre onto that origin. Offsetting the group by the FRAME rect as well was
+    // the bug that put the stars ~10 % of the stage below the frame — the rect was
+    // already paid for by the camera.
+    graph.group.position.set(figure ? -scale * figure.cx : 0, figure ? -scale * figure.cy : 0, 0);
 }
 
 /**

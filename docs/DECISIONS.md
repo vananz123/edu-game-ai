@@ -970,3 +970,34 @@ Yêu cầu, nguyên văn: *"phần xem kết quá nên cho xem phần kết qu�
 **Kiểm chứng.** `ui-constellation-check` **71/71** (gồm check mới, `dx = 0` cho cả bốn nhãn, `font=13px` ở 1366×768) · unit **74/74** · `verify:css` **32/32** · `check:renderer-globals` 882 hàm / 7.228 call site, 0 undefined · các check anh em như #175 · ảnh chụp bàn chơi 1366×768: năm nhãn treo sát năm sao, không nhãn nào che sao.
 
 **Chưa xử lý.** `fitConnectionGraph` vẫn đóng khung theo **gốc world**, không theo hộp bao của hình, nên chòm sao lệch tâm (Orion) nằm cao hơn tâm khung ~35–64 px — đẹp trên bàn chơi, nhưng chưa hỏi ý giáo viên. Phép chiếu đúng chỉ được chứng minh bằng tia trên **tâm sao**; chưa đo cạnh ngoài cùng của quầng sáng.
+
+## #177 — Đóng khung theo **hộp bao của hình**: chòm sao nằm giữa khung, và có trần phóng to
+
+Yêu cầu, nguyên văn: *"sửa fitConnectionGraph cho chòm nằm giữa khung"*. Đó chính là món nợ #176 tự ghi lại: khoảng trống không đều quanh hình, và nó to hơn con số 35–64 px đã đo.
+
+**Nguyên nhân là một cái hộp bị dùng làm hai việc.** `CONNECTION_WORLD` (10 × 6,2) là hộp mà một template được **vẽ vào**, không phải hình. Gấu Lớn trải 900 × 430 trong hộp 1000 × 620 và tâm của mười sao nằm **55 đơn vị phía trên** tâm hộp; năm sao đầu của Orion lệch tâm tới **80 đơn vị**. `fitConnectionGraph()` trước đây take fit theo hộp vẽ đó, còn gốc world thì được `frameConnectionBoard()` đặt đúng giữa khung — nên mọi board đều **thừa hưởng lề của template**: hình chìm xuống/dịch sang một cách hệ thống, nặng nhất ở board ít sao (lyra hai sao lệch **164 px ngang, 113 px dọc**).
+
+**Hộp bao của hình, và hộp bao đó tính cả **thân sao**.** `connectionFigureBox(graph)` quét `graph.nodes`, lấy `root.position.x/y ±` bán kính hình học (`radius + tube` cho sao/vòng, `width/height` dự phòng 0,34), trả `{ width, height, cx, cy }` hoặc `null` khi rỗng. Chỉ đo **tâm** thì một sao ngay biên bị cắt một nửa thân — đúng cái giáo viên nhìn thấy cuối phòng.
+
+**Hai cần, hai việc khác nhau nên không cộng dồn.** `frameConnectionBoard()` vẫn hạ **gốc world** vào tâm khung (chỉ nó có rect của frame); `fitConnectionGraph()` Nay dời **tâm của chính hình** về gốc đó: `graph.group.position.set(-scale * cx, -scale * cy, 0)`. Dấu nhân `scale` là bắt buộc và dễ sai: `setFitScale()` scale các **con**, còn `group.position` là offset world **chưa scale** — quên nhân thì hình về tâm ở một cỡ cửa sổ và lệch ở cỡ khác. Bài học cũ của #172 (lấy cả rect frame cộng vào group → sao nằm dưới khung 10 %) chính là bẫy "trả tiền hai lần cho một cái lệch", nên ở đây mỗi cần chỉ trả một việc.
+
+**Phóng to thì phải có trần.** Fit theo hình cho phép board to lên — nhưng hai cặp mới chỉ là một **mảnh** của chòm: hai sao vẽ to 3× không còn là Orion, nó là hai vòng tròn. `CONSTELLATION_FIT_MAX_ENLARGE = 1.4` kẹp phần được lớn bằng 1,4 × cỡ của fit-theo-hộp, đủ cho Gấu Lớn (10 sao trải 900 × 430 của hộp 1000 × 620) mà vẫn từ chối mảnh. Đo thật: board 5 sao và board 2 sao đều dừng ở **1,26×**.
+
+**Đo được trước/sau, trên cùng một board, cùng một cửa sổ** (1366×768, độ lệch tâm so với tâm khung, px):
+
+| board | trước | sau | bề rộng hình trước → sau |
+|---|---|---|---|
+| orion 10 sao | (0, −14) | (−8, −2) | 502 → 593 |
+| orion 5 sao | (0, −59) | (0, −1) | — |
+| orion 2 sao | (−112, −12) | (0, −2) | — |
+| ursa 10 sao | (7, −43) | (0, −5) | — |
+| cygnus 10 sao | (0, −5) | (0, 1) | — |
+| lyra 2 sao | (164, −113) | (0, −2) | — |
+
+**Hệ quả tốt ngoài dự kiến, và nó là phép thử thật của thay đổi.** Hình to + giữa khung làm **hành lang nhãn** thay đổi theo, nên check nhãn của #174/#176 là chỗ nó phải chứng minh mình không hỏng. Kết quả là ngược lại với lo ngại: board orion 10 sao ở 1366×768 từng treo **9/10** nhãn (một nhãn bị đày xuống dải) nay treo **10/10**, ở 1920×1080 từ 8/2 lên 9/1; khung cảnh cao 436 → **489 px** vì hàng câu hỏi biến mất khi không còn vế nào phải rời cảnh. Một thay đổi hình học chỉ được gọi là an toàn khi nó cải thiện cả cái mà nó có nguy cơ làm hỏng.
+
+**Một báo động giả đáng ghi hơn một lỗi nhỏ.** Trong lúc đo, probe báo **tia trượt cả năm sao** ở màn kết quả. Nguyên nhân không phải #177: instance đó đã tích ** bảy handle** qua nhiều lần mount/đổi cỡ, và `mesh.matrixWorld` của các sao **không được cập nhật** (only `render()` / `scene.updateMatrixWorld()` làm việc đó) nên nó nằm `[0,0,0]` — `pick()` raycast vào một thân sao không tồn tại. Trên instance sạch, raycast trả **đúng sao** cả trước và sau khi ép `updateMatrixWorld(true)`. Bài học: **đừng đọc một số chẩn đoán nào trên instance đã chạy nhiều vòng**, và `pick()` chỉ đáng tin sau một lần làm mới matrix của scene.
+
+**Kiểm chứng.** `npm run check` 0 · `npm run build` 0 · `node tests/run-unit.js` **74/74** (26,8 s) · `check:renderer-globals` 0 undefined (**883** hàm / 7.237 call site) · `verify:css` **32/32** · `ui-constellation-check` **80/80** (71 → 80: thêm đo `FRAMING` ở ba cỡ board — tâm ≤ ±14 px, `fill` ≥ 0,75, lề mỗi cạnh ≥ 20 px, `hang = 10/10`, trần phóng to ≤ 1,41 — và một check cho màn kết quả: "the sky sits in the middle of the hero too", off (−6, −1), lề [78, 90, 77, 78]), chạy **hai lần trên cùng một instance sạch** (cổng 9390, guard stylesheet `{rules: 2355, body: rgb(244,246,251)}`) · anh em: `ui-connection-mode-check` **7/7**, `ui-matching-finish-check` **22/22**, `ui-three-game-check-4games` **41/41**, `ui-presentation-check` **60/60**.
+
+**Chưa xử lý.** Lần này **không có ảnh chụp**: `Page.captureScreenshot` hết timeout 4 lần (45 s) rồi 1 lần (18 s), trả "NO IMAGE (window not composited)" — nên mọi kết luận của #177 là **số đo hình học**, không phải pixel. Cửa sổ thật 1366×768 trên máy chiếu, và cảm quan "giữa khung" của giáo viên, vẫn chưa ai nhìn. FPS khi thế giới kết quả dựng lại ngay sau thế giới chơi vẫn chưa đo. Lề ≥ 20 px mới chỉ chứng minh ở **thân sao**, chưa tính quầng sáng bloom vẽ xa hơn thân.
