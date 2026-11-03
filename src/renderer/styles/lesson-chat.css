@@ -1,0 +1,478 @@
+/* ============================================================
+   Trang Giáo án, hai cột (#182): khung chatbot cố định bên trái, danh sách
+   giáo án bên phải.
+
+   Tách thành file khu vực riêng theo DECISIONS #149 (app.css chỉ là entry,
+   @import các file khu vực theo thứ tự cascade). Toàn bộ màu lấy từ token
+   --panel / --bg / --line / --text / --muted / --purple, không hex cứng:
+   shell.css dịch màu bằng bảng hex, nên một class component tự đặt hex
+   sẽ đứng nguyên màu sáng khi sang chủ đề tối (đúng lỗ hổng #165 đã sửa cho
+   .form-panel và .select). Dùng token thì cả hai chủ đề đúng từ đầu.
+
+   Cỡ chữ nhỏ nhất ở đây là 12px — cổng #181 (check:typography-ui) bắt ≥ 11px
+   và ≥ 4,5:1 trên cả hai chủ đề, đo trực tiếp trên trang lesson-plans.
+   ============================================================ */
+
+.lesson-two-col {
+  display: grid;
+  grid-template-columns: minmax(360px, 400px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+/* Cột chat bám đỉnh khi danh sách dài. Trang này cuộn theo body nên sticky là
+   đủ; không đặt `overflow` trên cột, vì nó sẽ cắt popover chọn giáo án. */
+.lesson-chat-col {
+  position: sticky;
+  top: 14px;
+  min-width: 0;
+  z-index: 3;
+}
+
+.lesson-chat-frame {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  height: calc(100vh - 96px);
+  min-height: 520px;
+}
+
+.lesson-chat-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 13px 15px;
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+
+.lesson-chat-avatar {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--purple2);
+  color: var(--purple);
+}
+
+.lesson-chat-title {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.lesson-chat-title strong {
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.lesson-chat-title small {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.lesson-chat-head-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+/* Giá đỡ "giáo án đang đọc" + nút tải lên. */
+.lesson-chat-sources {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 10px 15px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+}
+
+.lesson-chat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 4px 5px 4px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.lesson-chat-chip > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 190px;
+}
+
+.lesson-chat-empty-sources {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+/* Danh sách tin nhắn. */
+.lesson-chat-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.lesson-chat-row {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  max-width: 100%;
+}
+
+.lesson-chat-row.is-user {
+  flex-direction: row-reverse;
+  justify-content: flex-start;
+}
+
+.lesson-chat-bubble {
+  min-width: 0;
+  max-width: 88%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.lesson-chat-row.is-user .lesson-chat-bubble {
+  background: var(--purple2);
+  border-color: transparent;
+}
+
+.lesson-chat-bubble.is-error {
+  background: #fdf3f4;
+  border-color: #f3d6da;
+  color: #b42318;
+}
+
+[data-theme="dark"] .lesson-chat-bubble.is-error {
+  background: #2d1b21;
+  border-color: #4a2a33;
+  color: var(--danger-ink);
+}
+
+.lesson-chat-note {
+  margin-top: 7px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.lesson-chat-evidence {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.lesson-chat-evidence summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--purple);
+}
+
+.lesson-chat-evidence ol {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 5px;
+  line-height: 1.55;
+}
+
+.lesson-chat-evidence li::marker {
+  font-weight: 700;
+}
+
+/* Bộ câu hỏi AI trả ra ở định dạng sẵn (`ArenaDraft`). */
+.lesson-chat-set {
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.lesson-chat-set-item {
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  display: grid;
+  gap: 5px;
+}
+
+.lesson-chat-set-q {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.lesson-chat-set-opt {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+  padding-left: 8px;
+}
+
+.lesson-chat-set-opt.is-correct {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.lesson-chat-set-meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.lesson-chat-set-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 2px;
+}
+
+/* Composer. */
+.lesson-chat-composer {
+  display: grid;
+  gap: 8px;
+  padding: 11px 15px 13px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.lesson-chat-modes {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.lesson-chat-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.lesson-chat-mode.is-active {
+  border-color: var(--purple);
+  background: var(--purple2);
+  color: var(--text);
+}
+
+.lesson-chat-input {
+  width: 100%;
+  resize: vertical;
+  min-height: 62px;
+  max-height: 190px;
+  padding: 10px 11px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.55;
+  outline: 0;
+}
+
+.lesson-chat-input:focus {
+  border-color: var(--purple);
+  box-shadow: 0 0 0 3px var(--purple2);
+}
+
+.lesson-chat-input:disabled {
+  background: var(--bg);
+  cursor: not-allowed;
+}
+
+.lesson-chat-foot {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.lesson-chat-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.lesson-chat-count input {
+  width: 54px;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.lesson-chat-provider {
+  min-width: 150px;
+  flex: 1 1 150px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.lesson-chat-status {
+  font-size: 12px;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* Popover chọn giáo án hiện có + lịch sử cuộc trò chuyện. */
+.lesson-chat-pop {
+  margin: 0 15px 12px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--bg);
+  display: grid;
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.lesson-chat-pop h4 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .3px;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.lesson-chat-pick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.lesson-chat-pick input {
+  flex: 0 0 auto;
+}
+
+.lesson-chat-pick > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lesson-chat-history-item {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.lesson-chat-history-item button {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.lesson-chat-history-item button:hover {
+  border-color: var(--purple);
+}
+
+.lesson-chat-history-item small {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.lesson-chat-empty {
+  margin: auto;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+  padding: 20px 10px;
+}
+
+.lesson-chat-empty strong {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+/* 1366×768 (máy chiếu phổ thông) vẫn đủ chỗ cho danh sách: cột chat thu về
+   340px; dưới 1100px thì xếp chồng, khung chat thôi bám để không che danh sách. */
+@media (max-width: 1240px) {
+  .lesson-two-col {
+    grid-template-columns: minmax(340px, 360px) minmax(0, 1fr);
+    gap: 14px;
+  }
+}
+
+@media (max-width: 1100px) {
+  .lesson-two-col {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .lesson-chat-col {
+    position: static;
+  }
+  .lesson-chat-frame {
+    height: auto;
+    min-height: 0;
+  }
+  .lesson-chat-scroll {
+    max-height: 52vh;
+  }
+}

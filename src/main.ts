@@ -70,6 +70,8 @@ const {
   toPublicProviderView
 } = require('./services/ai/ai-providers');
 const { analyzeLesson, generateGameDraft, regenerateGameItem } = require('./services/lesson/lesson-workflow');
+// #182: the lesson chat (multi-document Q&A + a question set in the arena format).
+const { runLessonChatTurn } = require('./services/lesson/lesson-chat');
 // O6d: per-mode excerpt budget for the analysis preprocessor.
 // #180: the budget is a property of the *provider* (a local context window), not of
 // a lesson, so every analyze/preview path asks `preprocessBudgetForProvider`.
@@ -2363,7 +2365,13 @@ function registerIpc() {
     // The no-AI path is only for drafts the teacher authored in step 1. A null
     // `analysisId` alone is not proof: an AI draft whose analysis was lost would
     // otherwise be saved as a finished game with no model run and no analysis.
-    if (!project.analysisId && sourceDraft && project.draftSource === 'imported-questions') {
+    // #182 adds the second accepted provenance: a question set the teacher accepted in
+    // the lesson chat. It was validated by `normalizeDraft` before it was stored, so
+    // this run is "convert + validate + save" exactly like a pasted bank.
+    const noModelDraft = sourceDraft && (project.draftSource === 'imported-questions' || project.draftSource === 'chat-questions');
+    if (!project.analysisId && noModelDraft) {
+      const fromChat = project.draftSource === 'chat-questions';
+      const runLabel = fromChat ? 'bộ câu hỏi từ chat' : 'câu hỏi có sẵn';
       const pathAStartedAt = Date.now();
       const task = aiTasks.start({
         taskId: newAiTaskId('generate'),
@@ -2371,23 +2379,26 @@ function registerIpc() {
         kind: 'generate',
         projectId,
         documentId: project.lesson ? project.lesson.documentId : null,
-        label: 'dùng câu hỏi có sẵn'
+        label: `dùng ${runLabel}`
       });
       recordAiTask(task);
       sendLessonProgress(event.sender, requestId, 'validate');
+      const invalidCopy = fromChat
+        ? 'Bộ câu hỏi AI vừa soạn chưa hợp lệ cho thể loại này.'
+        : 'Câu hỏi soạn sẵn chưa hợp lệ cho thể loại này.';
       let game;
       try {
         // The adapter is still the only place that builds `EducationalGame` and it
         // runs the per-template validators, so imported questions get the same check.
         game = toEducationalGame({ ...project, draft: sourceDraft });
       } catch (error) {
-        recordAiTask(aiTasks.fail(task.taskId, 'GENERATION_INVALID', 'Câu hỏi soạn sẵn chưa hợp lệ cho thể loại này.'));
-        throw new Error(`[GENERATION_INVALID] ${error && error.message ? error.message : 'Câu hỏi soạn sẵn chưa hợp lệ cho thể loại này.'}`);
+        recordAiTask(aiTasks.fail(task.taskId, 'GENERATION_INVALID', invalidCopy));
+        throw new Error(`[GENERATION_INVALID] ${error && error.message ? error.message : invalidCopy}`);
       }
       const saved = store.saveProject(applyDraft(project, { draft: sourceDraft, game, now: new Date().toISOString() }));
       const quality = checkDraftQuality({ draft: sourceDraft, config: project.config, analysis: null });
       sendLessonProgress(event.sender, requestId, 'ready');
-      recordAiTask(aiTasks.complete(task.taskId, 'câu hỏi có sẵn, không gọi AI'));
+      recordAiTask(aiTasks.complete(task.taskId, `${runLabel}, không gọi AI`));
       aiLogWrite('info', 'generate.from-questions', {
         projectId,
         gameType: project.config.gameType,
@@ -2395,7 +2406,7 @@ function registerIpc() {
         // Path A does no model work; the number shows what the AI path would have cost.
         durationMs: Date.now() - pathAStartedAt
       });
-      return { project: saved, game, mode: 'fast', quality, context: null, cached: true, source: 'imported-questions' };
+      return { project: saved, game, mode: 'fast', quality, context: null, cached: true, source: fromChat ? 'chat-questions' : 'imported-questions' };
     }
 
     // #117: the wizard asked for the *local* build only (a recognised question bank is
@@ -2784,41 +2795,107 @@ function registerIpc() {
       throw error;
     }
   });
-  ipcMain.handle('lesson:answer-question', async (_e, payload) => {
-    const documentId = String(payload?.documentId || '');
-    const question = String(payload?.question || '').trim();
-    if (!documentId) throw new Error('Thiếu mã tài liệu để hỏi đáp.');
-    if (question.length < 3) throw new Error('Câu hỏi quá ngắn.');
+  /**
+   * #182: one turn of the lesson chat, replacing the single-document BETA panel.
+   * The teacher picks any number of saved lessons (or uploads one from the chat),
+   * asks in plain Vietnamese, and gets either an answer grounded in those lessons
+   * or a question set in the arena format — which the UI can hand to the wizard
+   * without a second model call.
+   *
+   * The turn is always stored, a failed one included: the history is what the
+   * teacher asked and what the app actually produced, not only the successes.
+   */
+  ipcMain.handle('lesson:chat-send', async (event, payload) => {
     const store = requireLessonStore();
-    const document = await store.getDocumentWithText(documentId);
-    if (!document) throw new Error('Không tìm thấy giáo án đã lưu. Hãy nhập lại tài liệu.');
-    const { selectRelevantEvidence } = require('./ai-core/document-assist');
-    const citations = selectRelevantEvidence(document.text, question, 4);
-    let answer = '';
+    const question = String(payload?.question || '').trim();
+    const documentIds = [...new Set((Array.isArray(payload?.documentIds) ? payload.documentIds : [])
+      .map(id => String(id || '').trim())
+      .filter(Boolean))];
+    if (!documentIds.length) throw new Error('Chọn ít nhất một giáo án để hỏi.');
+    if (question.length < 3) throw new Error('Câu hỏi quá ngắn.');
+    const requestId = String(payload?.requestId || `chat-${Date.now()}`);
+    const requestedChatId = String(payload?.chatId || '');
+    const documents = [];
+    for (const documentId of documentIds) {
+      const document = await store.getDocumentWithText(documentId);
+      if (document) documents.push({ id: document.id, name: document.name, text: document.text });
+    }
+    if (!documents.length) throw new Error('Không đọc được giáo án nào trong số đã chọn. Hãy nhập lại tài liệu.');
+    const history = requestedChatId ? (store.getLessonChat(requestedChatId) || {}).messages || [] : [];
+    // Resolved before the lock so "no provider configured" is a config answer and
+    // not a busy runtime (#132 D5).
+    const client = await createChatClientForProvider(payload?.providerId);
+    const task = aiTasks.start({
+      taskId: newAiTaskId('chat'),
+      requestId,
+      kind: 'chat',
+      projectId: null,
+      documentId: documents[0].id,
+      label: `Hỏi giáo án (${documents.length} tài liệu)`
+    });
+    recordAiTask(task);
+    aiLogWrite('info', 'chat.provider', { requestId, provider: client.providerId, documents: documents.length });
     try {
-      // #132: Q&A with the lesson follows the same provider choice as the steps.
-      const client = await createChatClientForProvider(payload?.providerId);
-      const result = await client.chatJson({
-        messages: [
-          { role: 'system', content: 'Bạn là trợ lý giáo dục. Chỉ trả lời dựa trên các đoạn trích dẫn được cung cấp. Nếu không đủ thông tin, nói rõ không đủ dữ liệu. Trả lời ngắn gọn bằng tiếng Việt.' },
-          { role: 'user', content: `Câu hỏi: ${question}\n\nĐoạn trích:\n${citations.map((c, i) => `[${i + 1}] ${c}`).join('\n\n')}\n\nTrả về JSON: {"answer":"..."}` }
-        ],
-        maxTokens: 512,
-        responseSchema: { type: 'object', properties: { answer: { type: 'string' } }, required: ['answer'] }
+      const turn = await aiSingleFlight.run(
+        `chat:${sha256Hex(question).slice(0, 16)}:${client.providerId}`,
+        'trả lời câu hỏi về giáo án',
+        async () => {
+          recordAiTask(aiTasks.progress(task.taskId, 'retrieve'));
+          sendLessonProgress(event.sender, requestId, 'retrieve');
+          return runLessonChatTurn({
+            client,
+            registry: aiRequests,
+            requestId,
+            documents,
+            question,
+            history,
+            mode: payload?.mode,
+            questionCount: payload?.questionCount,
+            onStage: stage => sendLessonProgress(event.sender, requestId, stage)
+          });
+        }
+      );
+      const chat = store.appendChatTurn({
+        chatId: requestedChatId,
+        documentIds,
+        question,
+        answer: turn.answer,
+        intent: turn.intent,
+        citations: turn.citations,
+        questionSet: turn.questionSet,
+        providerId: turn.providerId,
+        errorCode: turn.errorCode
       });
-      answer = String(result && result.answer ? result.answer : '').trim();
+      sendLessonProgress(event.sender, requestId, 'ready');
+      if (turn.errorCode) {
+        recordAiTask(aiTasks.fail(task.taskId, turn.errorCode, turn.answer.slice(0, 200)));
+      } else {
+        const summary = turn.intent === 'question_set'
+          ? `${((turn.questionSet || {}).questions || []).length} câu hỏi`
+          : 'trả lời';
+        recordAiTask(aiTasks.complete(task.taskId, `${summary} · ${turn.evidenceCharacters} ký tự giáo án`));
+      }
+      aiLogWrite('info', 'chat.turn', {
+        requestId,
+        intent: turn.intent,
+        evidenceCharacters: turn.evidenceCharacters,
+        citations: turn.citations.length,
+        errorCode: turn.errorCode || ''
+      });
+      return { ...turn, chat };
     } catch (error) {
-      answer = citations.length
-        ? 'AI local chưa sẵn sàng. Các đoạn liên quan được trích dẫn bên dưới.'
-        : 'Không tìm thấy đoạn liên quan trong giáo án.';
+      const code = (error && error.code)
+        ? String(error.code)
+        : (/\[([A-Z_]+)\]/.exec(String(error && error.message ? error.message : '')) || [])[1] || 'AI_OUTPUT_INVALID';
+      recordAiTask(isCancelReason(error)
+        ? aiTasks.cancel(task.taskId)
+        : aiTasks.fail(task.taskId, code, String(error && error.message ? error.message : error)));
+      throw error;
     }
-    if (!answer) {
-      answer = citations.length
-        ? 'Không có câu trả lời tự động; xem các trích dẫn bên dưới.'
-        : 'Không tìm thấy đoạn liên quan trong giáo án.';
-    }
-    return { answer, citations };
   });
+  ipcMain.handle('lesson:chats', () => requireLessonStore().listLessonChats());
+  ipcMain.handle('lesson:chat-get', (_e, chatId) => requireLessonStore().getLessonChat(String(chatId || '')));
+  ipcMain.handle('lesson:chat-delete', (_e, chatIds) => requireLessonStore().deleteLessonChats(Array.isArray(chatIds) ? chatIds : [chatIds]));
   ipcMain.handle('files:import-document', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       title: 'Chọn giáo án hoặc tài liệu',

@@ -552,6 +552,130 @@ async function run(): Promise<void> {
   assert.equal(store.getDocument(batchB.id), null);
   assert.deepEqual(await store.deleteDocuments([], { voidIO: true }), { deleted: 0, missing: 0, failed: 0 }, 'no ids is a no-op');
 
+  // --- #182: lesson chat ----------------------------------------------------
+  // Schema SQL is exported so main can create the tables even without the store.
+  assert.equal(LESSON_STORE_SCHEMA_SQL.includes('CREATE TABLE IF NOT EXISTS lesson_chats'), true);
+  assert.equal(LESSON_STORE_SCHEMA_SQL.includes('CREATE TABLE IF NOT EXISTS lesson_chat_messages'), true);
+  assert.deepEqual(store.listLessonChats(), []);
+  assert.equal(store.getLessonChat('chat-missing'), null);
+  assert.equal(store.getLessonChat(''), null, 'an empty id is a miss, not a throw');
+
+  const chatDocA = await store.saveDocument({ name: 'chat-a.txt', ext: 'txt', text: 'Quang hợp cần ánh sáng.' });
+  const chatDocB = await store.saveDocument({ name: 'chat-b.txt', ext: 'txt', text: 'Hô hấp phân giải chất hữu cơ.' });
+
+  const firstTurn = store.appendChatTurn({
+    documentIds: [chatDocA.id, chatDocB.id],
+    question: 'Quang hợp cần gì?',
+    answer: 'Cần ánh sáng.',
+    intent: 'answer',
+    citations: [{ documentId: chatDocA.id, documentName: 'chat-a.txt', quote: 'Quang hợp cần ánh sáng.' }, { documentId: 'ghost', documentName: 'ghost.txt', quote: '  ' }],
+    questionSet: null,
+    providerId: 'openai',
+    errorCode: ''
+  });
+  assert.equal(firstTurn.id.startsWith('chat_'), true);
+  assert.equal(firstTurn.title, 'Quang hợp cần gì?', 'the first question names the conversation');
+  assert.deepEqual(firstTurn.documentIds, [chatDocA.id, chatDocB.id]);
+  assert.equal(firstTurn.messageCount, 2);
+  assert.equal(firstTurn.lastIntent, 'answer');
+  assert.equal(firstTurn.messages.length, 2);
+  assert.deepEqual(firstTurn.messages.map(message => message.role), ['user', 'assistant']);
+  assert.equal(firstTurn.messages[0].text, 'Quang hợp cần gì?');
+  assert.equal(firstTurn.messages[0].providerId, '', 'only the answer records which provider ran');
+  assert.equal(firstTurn.messages[1].providerId, 'openai');
+  assert.deepEqual(
+    firstTurn.messages[1].citations,
+    [{ documentId: chatDocA.id, documentName: 'chat-a.txt', quote: 'Quang hợp cần ánh sáng.' }],
+    'a citation without a quote is dropped, not stored half-built'
+  );
+
+  const chatId = firstTurn.id;
+  const secondTurn = store.appendChatTurn({
+    chatId,
+    documentIds: [chatDocB.id],
+    question: `Hãy tạo bộ ${arenaDraft.questions.length} câu hỏi`,
+    answer: 'Bộ câu hỏi đã sẵn sàng.',
+    intent: 'question_set',
+    citations: [],
+    questionSet: arenaDraft,
+    providerId: 'local',
+    errorCode: ''
+  });
+  assert.equal(secondTurn.id, chatId, 'a known chatId continues the same conversation');
+  assert.equal(secondTurn.title, firstTurn.title, 'the title is set once, by the first question');
+  assert.equal(secondTurn.messageCount, 4);
+  assert.equal(secondTurn.lastIntent, 'question_set');
+  assert.deepEqual(secondTurn.documentIds, [chatDocB.id], 'the newest turn says what the chat reads now');
+  assert.deepEqual(secondTurn.messages.map(message => message.role), ['user', 'assistant', 'user', 'assistant']);
+  assert.deepEqual(
+    (db.prepare('SELECT position FROM lesson_chat_messages WHERE chat_id = ? ORDER BY position').all(chatId) as { position: number }[]).map(row => row.position),
+    [0, 1, 2, 3],
+    'turns keep a gap-free position, so the transcript reloads in the order it was read'
+  );
+  const setTurn = secondTurn.messages[3];
+  assert.equal(setTurn.intent, 'question_set');
+  assert.equal(setTurn.questionSet?.gameType, 'arena');
+  assert.deepEqual(setTurn.questionSet?.questions.map(question => question.id), ['q1', 'q2', 'q3'], 'the draft survives the JSON round-trip');
+
+  // A failed run is stored like any other turn: the history shows what really happened.
+  const failedTurn = store.appendChatTurn({
+    chatId,
+    documentIds: [chatDocA.id],
+    question: 'Còn hô hấp thì sao?',
+    answer: 'Máy chưa trả lời được.',
+    intent: 'answer',
+    citations: [],
+    questionSet: null,
+    providerId: 'gemini',
+    errorCode: 'AI_TIMEOUT'
+  });
+  assert.equal(failedTurn.messageCount, 6);
+  assert.equal(failedTurn.messages[5].errorCode, 'AI_TIMEOUT');
+  assert.equal(failedTurn.messages[5].questionSet, null);
+
+  // Validation: a turn is only worth storing when both halves and a lesson are there.
+  expectStoreError('STORE_INVALID_CHAT', () => store.appendChatTurn({ chatId, documentIds: [chatDocA.id], question: '', answer: 'x', intent: 'answer', citations: [], questionSet: null, providerId: '', errorCode: '' }));
+  expectStoreError('STORE_INVALID_CHAT', () => store.appendChatTurn({ chatId, documentIds: [chatDocA.id], question: '?', answer: '', intent: 'answer', citations: [], questionSet: null, providerId: '', errorCode: '' }));
+  expectStoreError('STORE_INVALID_CHAT', () => store.appendChatTurn({ documentIds: [], question: 'Không có giáo án?', answer: 'x', intent: 'answer', citations: [], questionSet: null, providerId: '', errorCode: '' }));
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM lesson_chat_messages').get() as { n: number }).n, 6, 'a rejected turn writes nothing');
+
+  // A question-set turn with no draft keeps its text but stores no phantom game.
+  const emptySetTurn = store.appendChatTurn({
+    documentIds: [chatDocA.id],
+    question: 'Tạo bộ câu hỏi về hô hấp',
+    answer: 'Chưa đủ dữ liệu để tạo bộ câu hỏi.',
+    intent: 'question_set',
+    citations: [],
+    questionSet: null,
+    providerId: 'openai',
+    errorCode: 'AI_OUTPUT_INVALID'
+  });
+  assert.equal(emptySetTurn.messages[1].questionSet, null);
+  assert.equal(emptySetTurn.messages[1].intent, 'question_set');
+
+  // Listing is newest-touched first and carries no message text.
+  const chatList = store.listLessonChats();
+  assert.deepEqual(chatList.map(chat => chat.id).sort(), [chatId, emptySetTurn.id].sort());
+  assert.equal(chatList.find(chat => chat.id === chatId)?.messageCount, 6);
+  assert.equal(chatList.find(chat => chat.id === chatId)?.lastIntent, 'answer');
+  assert.equal((chatList.find(chat => chat.id === chatId) as { messages?: unknown }).messages, undefined, 'the list is navigation, not the transcript');
+  db.prepare('UPDATE lesson_chats SET updated_at = ? WHERE id = ?').run('2000-01-01T00:00:00.000Z', emptySetTurn.id);
+  assert.equal(store.listLessonChats()[0].id, chatId, 'ordering follows the last touch');
+
+  // Deleting the lesson a chat read must not delete the teacher's conversation.
+  await store.deleteDocuments([chatDocB.id], { voidIO: true });
+  assert.equal(store.getLessonChat(chatId)?.messages.length, 6, 'a chat outlives the documents behind it');
+  assert.equal(store.getLessonChat(chatId)?.messages[1].citations.length, 1, 'and its citations stay readable');
+
+  assert.equal(store.deleteLessonChat(chatId), true);
+  assert.equal(store.getLessonChat(chatId), null);
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM lesson_chat_messages WHERE chat_id = ?').get(chatId) as { n: number }).n, 0, 'children go with the chat');
+  assert.equal(store.deleteLessonChat(chatId), false, 'a second delete is a miss');
+  const chatBatch = store.deleteLessonChats([emptySetTurn.id, 'chat-missing', emptySetTurn.id]);
+  assert.deepEqual(chatBatch, { deleted: 1, missing: 1, failed: 0 });
+  assert.deepEqual(store.deleteLessonChats([]), { deleted: 0, missing: 0, failed: 0 });
+  assert.deepEqual(store.listLessonChats(), []);
+
   // --- .egame JSON round-trip of a stored snapshot ------------------------
   const stored = store.getProject('project-1');
   assert.equal(stored?.gameSnapshot, null);

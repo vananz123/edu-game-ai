@@ -113,6 +113,10 @@
   <script src="renderer/pages/create.js"></script>
   <script src="renderer/pages/sessions.js"></script>
   <script src="renderer/pages/settings.js"></script>
+  <!-- #182: khung chatbot của trang Giáo án. Nạp TRƯỚC pages/lesson-plans.js vì
+       renderLessonPlans() gọi lessonChatPanelHtml(); tsc chạy renderer với
+       @ts-nocheck nên thứ tự này chỉ được kiểm bởi tests/unit/renderer-load-order. -->
+  <script src="renderer/features/lesson-chat.js"></script>
   <script src="renderer/pages/lesson-plans.js"></script>
   <script src="renderer/pages/my-projects.js"></script>
   <!-- State dùng chung của wizard, tách theo khu vực (DECISIONS #150). Nạp đúng

@@ -105,20 +105,26 @@ function wizardConfigToggle(key, label, checked) {
  * #117: true when this run started from the teacher's question bank. Such a run has no
  * model step at all, so the Fast/Thinking buttons and the "Tạo nội dung" button would
  * be controls that do nothing — they are replaced by a short explanation instead.
+ * #182: a set the teacher accepted from the lesson chat is the same situation for step
+ * 3 (this run calls no model either), so it joins the list — the wording below still
+ * tells the two sources apart.
  */
 function wizardIsBankRun() {
-  return wizardState.draftOrigin === 'source' && wizardState.draftSource === 'imported-questions';
+  return wizardState.draftOrigin === 'source' && wizardNoModelDraftSources.includes(wizardState.draftSource);
 }
 
 /** Explains why there is no Fast/Thinking choice on a question-bank run. */
 function wizardBankConfigureNote() {
-  return `<div class="wizard-mode-block" data-wizard-bank-no-ai="1">
+  const fromChat = wizardState.draftSource === 'chat-questions';
+  return `<div class="wizard-mode-block" data-wizard-bank-no-ai="1" data-wizard-run-source="${escapeHtml(wizardState.draftSource || '')}">
     <div class="wizard-mode-head">
       <div>
-        <div class="wizard-mode-title">KHÔNG DÙNG AI</div>
-        <div class="wizard-mode-sub">Trò chơi dùng đúng câu hỏi và đáp án giáo viên đã cung cấp, nên không có chế độ Fast/Thinking. Chỉ cần chỉnh thông tin trò chơi rồi bấm “Xong”.</div>
+        <div class="wizard-mode-title">${fromChat ? 'KHÔNG GỌI AI LẦN NỮA' : 'KHÔNG DÙNG AI'}</div>
+        <div class="wizard-mode-sub">${fromChat
+          ? 'Bộ câu hỏi AI vừa soạn trong khung chat đã qua kiểm tra cấu trúc, nên bước này không cần chọn Fast/Thinking. Chỉ chỉnh thông tin trò chơi rồi bấm “Xong”.'
+          : 'Trò chơi dùng đúng câu hỏi và đáp án giáo viên đã cung cấp, nên không có chế độ Fast/Thinking. Chỉ cần chỉnh thông tin trò chơi rồi bấm “Xong”.'}</div>
       </div>
-      <span class="tag">Từ câu hỏi có sẵn</span>
+      <span class="tag">${escapeHtml(wizardNoModelRunLabel(wizardState.draftSource))}</span>
     </div>
   </div>`;
 }

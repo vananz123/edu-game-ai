@@ -118,6 +118,19 @@ const wizardGameTypeOrder = ['arena', 'scenario', 'matching', 'treasure', 'race'
  */
 const wizardCompatGameOrder = ['arena', 'race', 'treasure', 'matching', 'scenario'];
 
+/**
+ * #182: the two provenances where the draft IS the game, so this run calls no model
+ * (`wizardIsBankRun`). `'imported-questions'` = the teacher pasted a bank (#117);
+ * `'chat-questions'` = the lesson chat produced the set and the teacher accepted it.
+ * `lesson:generate` path A accepts exactly these two.
+ */
+const wizardNoModelDraftSources = ['imported-questions', 'chat-questions'];
+
+/** Honest label for a no-model run, keyed by provenance — never "teacher provided" for AI output. */
+function wizardNoModelRunLabel(draftSource) {
+  return draftSource === 'chat-questions' ? 'Bộ câu hỏi từ chat' : 'Từ câu hỏi có sẵn';
+}
+
 function wizardGameMeta(gameType) {
   return wizardGameMetaMap[gameType] || { icon: '🎮', label: 'Trò chơi', hint: '' };
 }

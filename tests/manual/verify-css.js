@@ -82,7 +82,22 @@ const expectations = [
   // file can only prove they survived minification; that the dark one actually wins on a live
   // page is measured by tests/ui/ui-dark-theme-check.js.
   ['light theme declares color-scheme on :root', /:root\{[^}]*color-scheme:light/],
-  ['dark theme repaints native controls', /:root\[data-theme=("?)dark\1\]\{[^}]*color-scheme:dark/]
+  ['dark theme repaints native controls', /:root\[data-theme=("?)dark\1\]\{[^}]*color-scheme:dark/],
+  // #182: the two-column "Giáo án" page. These prove the rules survived minification;
+  // which column really stays put, and whether the frame keeps its height, is measured
+  // on the live page by tests/ui/ui-lesson-chat-check.js.
+  ['lesson page is a two-column grid', /\.lesson-two-col\{[^}]*grid-template-columns:minmax\(360px,400px\) minmax\(0,1fr\)/],
+  ['chat column sticks while the list scrolls', /\.lesson-chat-col\{[^}]*position:sticky/],
+  // The chat frame is a component class, so the hex translation table in shell.css never
+  // reaches it (#165). Painting from --panel/--line/--shadow is what makes the dark theme
+  // correct without a second rule.
+  ['chat frame paints from theme tokens', /\.lesson-chat-frame\{[^}]*background:var\(--panel\)/],
+  ['transcript scrolls inside the fixed frame', /\.lesson-chat-scroll\{[^}]*overflow-y:auto/],
+  ['chat error bubble keeps a dark ink', /\[data-theme=("?)dark\1\] \.lesson-chat-bubble\.is-error\{[^}]*color:var\(--danger-ink\)/],
+  // Below 1100px the frame would crush the list into an unreadable sliver, so the page
+  // stacks and the frame stops being fixed — a `position:sticky` left over would pin a
+  // 100vh column above the lessons.
+  ['narrow screens stack the two columns', /@media \(max-width:1100px\)\{\.lesson-two-col\{grid-template-columns:minmax\(0,1fr\)\}\.lesson-chat-col\{position:static\}/]
 ];
 
 let failed = 0;

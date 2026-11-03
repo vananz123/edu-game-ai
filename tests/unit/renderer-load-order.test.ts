@@ -343,4 +343,30 @@ assert.ok(
 );
 assert.equal(evalInContext("uiIcon('no-such-icon')"), '', 'an unknown id must paint nothing, not a broken tag');
 
+// DECISIONS #182: the lesson-plans page renders as two columns, and the chat column
+// is built by `features/lesson-chat.js`. `renderLessonPlans()` calls
+// `lessonChatPanelHtml()` on every paint, so a script-order mistake here would kill
+// the whole page — the same failure mode step 1 had.
+assert.equal(evalInContext('typeof lessonChatPanelHtml'), 'function', 'lessonChatPanelHtml is called by renderLessonPlans');
+const lessonPageHtml = evalInContext(`
+  state.settings = { ai: { provider: 'local', providers: [
+    { id: 'local', label: 'AI local', wizardEligible: true, usable: true, model: '' },
+    { id: 'gemini', label: 'AI đám mây', wizardEligible: true, usable: false, model: 'gemini-2.5-flash' }
+  ] } };
+  state.lessonLibrary = [
+    { id: 'les_a', name: 'Toan 4 - Bai 1', ext: 'docx', characters: 900, createdAt: '2026-01-01T00:00:00.000Z', analyses: [] },
+    { id: 'les_b', name: 'Toan 4 - Bai 2', ext: 'pdf', characters: 1200, createdAt: '2026-01-02T00:00:00.000Z', analyses: [] }
+  ];
+  state.search = '';
+  renderLessonPlans()
+`);
+assert.equal(typeof lessonPageHtml, 'string', 'the lesson-plans page should render');
+assert.ok(lessonPageHtml.includes('class="lesson-two-col"'), 'the page should be the two-column layout');
+assert.ok(lessonPageHtml.includes('id="lessonChatCol"'), 'the fixed chat column should render first');
+assert.ok(lessonPageHtml.indexOf('lesson-chat-frame') < lessonPageHtml.indexOf('lesson-list-col'), 'chat on the left, list on the right');
+assert.ok(lessonPageHtml.includes('data-action="lesson-chat-import"'), 'the chat should offer uploading a new lesson');
+assert.ok(lessonPageHtml.includes('id="lessonChatProvider"') || lessonPageHtml.includes('Nhà cung cấp:'), 'the chat should show the AI provider choice');
+assert.ok(!lessonPageHtml.includes('BETA'), 'the BETA panel is gone, not renamed');
+assert.ok(!lessonPageHtml.includes('qaDocSelect'), 'the old single-document question channel is deleted');
+
 console.log(`renderer-load-order: ${loaded.length} scripts loaded, step 5 renders (${sceneCategories} scene categories)`);

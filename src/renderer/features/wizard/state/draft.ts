@@ -18,9 +18,14 @@ function wizardImportedSourceDraft(usable) {
  *
  * `gameType` defaults to the game the scores recommend (#115); the teacher's pick in
  * step 3 is passed explicitly and recalculated there, never regenerated.
+ *
+ * #182: `provenance` tells the two no-model runs apart — a pasted bank versus a set
+ * the lesson chat produced. The pipeline is identical (the model is not called either
+ * way) but the notice must not credit the wrong source.
  */
-async function wizardUseImportedQuestions(gameType) {
+async function wizardUseImportedQuestions(gameType, provenance) {
   if (wizardState.busy) return;
+  const runSource = provenance === 'chat-questions' ? 'chat-questions' : 'imported-questions';
   if (!wizardState.importedQuestions.length) await wizardClassifyInput();
   const target = gameType || wizardRecommendedGame() || 'arena';
   // Only questions that are ready AND playable by the target; without this the
@@ -81,7 +86,7 @@ async function wizardUseImportedQuestions(gameType) {
     }
     wizardState.config = wizardClampImportedConfig(draft, config);
     wizardState.draft = draft;
-    wizardState.draftSource = 'imported-questions';
+    wizardState.draftSource = runSource;
     wizardState.draftOrigin = 'source';
     // The genre is now part of the saved project, so step 3 (if the teacher goes back
     // there) shows it as chosen and the counts of that genre.
@@ -111,12 +116,85 @@ async function wizardUseImportedQuestions(gameType) {
     const skipped = (wizardState.parsedQuestions || []).length - usable.length;
     // #117: the game is built, so the wizard is already at the finishing step; the
     // teacher can save it right away or adjust the game information first.
-    wizardSetNotice(`Đã tạo trò chơi từ ${usable.length} câu${skipped > 0 ? `, bỏ qua ${skipped} câu không tương thích hoặc đang xem lại` : ''} — không dùng AI. Kiểm tra thông tin rồi bấm “Lưu vào thư viện”.`);
+    // #182: a chat set WAS written by the AI, so "không dùng AI" would be false — the
+    // honest claim is that this step only validated the structure it was given.
+    wizardSetNotice(runSource === 'chat-questions'
+      ? `Đã dựng trò chơi từ ${usable.length} câu AI vừa soạn trong khung chat — bước này chỉ kiểm tra cấu trúc, không gọi AI lần nữa. Kiểm tra thông tin rồi bấm “Lưu vào thư viện”.`
+      : `Đã tạo trò chơi từ ${usable.length} câu${skipped > 0 ? `, bỏ qua ${skipped} câu không tương thích hoặc đang xem lại` : ''} — không dùng AI. Kiểm tra thông tin rồi bấm “Lưu vào thư viện”.`);
   } catch (error) {
     wizardSetError(error);
   }
   wizardState.busy = '';
   render();
+}
+
+/**
+ * #182: "Tạo trò chơi" in the lesson chat.
+ *
+ * The set arrives as a draft main already validated with `normalizeDraft`, so it goes
+ * through the same no-model pipeline as a pasted bank instead of a second one: the
+ * questions become `importedQuestions` rows, `parsedQuestions` stays empty (the parser
+ * has nothing to re-parse — see the fallback in `wizardUsableParsed`), and provenance
+ * is recorded as `'chat-questions'` so step 4 names the real source.
+ *
+ * Returns false when nothing was created; the chat keeps its own transcript either way.
+ */
+async function wizardAdoptQuestionSet(questionSet, meta) {
+  const information = meta || {};
+  const questions = Array.isArray(questionSet && questionSet.questions)
+    ? questionSet.questions.filter(Boolean)
+    : [];
+  if (wizardState.busy) return false;
+  if (!questions.length) {
+    wizardSetError(new Error('Bộ câu hỏi này chưa có câu nào, nên không dựng được trò chơi. Hãy hỏi lại trong khung chat.'));
+    render();
+    return false;
+  }
+  // The chat set replaces whatever the wizard holds, and an unsaved draft cannot be
+  // rebuilt for free — so ask before destroying it, like the close-window guard does.
+  if (wizardHasUnsavedDraft() && !confirm(
+    'Dự án hiện tại có nội dung chưa lưu vào thư viện. Tạo trò chơi từ bộ câu hỏi này sẽ thay thế nội dung đó. Bạn muốn tiếp tục?'
+  )) return false;
+  // The handoff crosses pages: the teacher pressed the button in the lesson chat, so
+  // the wizard must become the visible page before the first `render()` of the run.
+  navigate('create-wizard');
+  // A fresh project: the chat is a different source than whatever the wizard holds,
+  // and the old draft must not leak into the new provenance.
+  wizardDiscardGeneratedContent();
+  const s = wizardState;
+  s.projectId = wizardNewProjectId();
+  s.createdAt = wizardNow();
+  s.step = 'generate';
+  s.text = '';
+  s.documentId = (information.documentIds || [])[0] || null;
+  s.documentName = wizardChatProjectTitle(questionSet, information);
+  s.documentMeta = null;
+  s.analysis = null;
+  s.analysisId = null;
+  s.analysisOriginal = null;
+  s.recommendations = [];
+  s.selectedRecommendationId = null;
+  s.selectedGameType = 'arena';
+  s.importedQuestions = questions;
+  s.parsedQuestions = [];
+  s.importIssues = [];
+  s.questionCompatibility = [];
+  s.importedMode = true;
+  s.draftOrigin = 'source';
+  s.draftSource = 'chat-questions';
+  await wizardUseImportedQuestions('arena', 'chat-questions');
+  return true;
+}
+
+/** Default title for a game built from the chat: the lesson it was asked about. */
+function wizardChatProjectTitle(questionSet, information) {
+  const names = Array.isArray(information.documentNames) ? information.documentNames.filter(Boolean) : [];
+  const chatTitle = String(information.chatTitle || '').trim();
+  if (names.length === 1) return names[0];
+  if (names.length > 1) return `${names[0]} + ${names.length - 1} giáo án`;
+  if (chatTitle) return chatTitle;
+  const count = Array.isArray(questionSet && questionSet.questions) ? questionSet.questions.length : 0;
+  return count ? `Bộ câu hỏi từ chat (${count} câu)` : 'Bộ câu hỏi từ chat';
 }
 
 /**
@@ -384,4 +462,4 @@ async function wizardEnsureCapacity() {
  */
 function wizardHasUnsavedDraft() {
   return Boolean(wizardState.draft) && !wizardGameSavedToLibrary();
-}
+}

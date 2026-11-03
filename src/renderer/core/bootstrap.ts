@@ -33,6 +33,10 @@ async function refreshLessonLibraryPage() {
     state.lessonLibrary = [];
     toast(`Không tải được kho giáo án: ${(error && error.message) || 'lỗi không xác định'}`);
   }
+  // #182: the chat column shares this page's data. Its attached ids must never point
+  // at a lesson that is no longer in the library (deleted on another page, or by the
+  // batch bar on this one).
+  if (typeof lessonChatSyncWithLibrary === 'function') await lessonChatSyncWithLibrary();
   if (state.page === 'lesson-plans') render();
 }
 async function showHelp() {

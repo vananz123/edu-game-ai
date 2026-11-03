@@ -365,11 +365,13 @@ export interface GameProject {
   /**
    * Where `draft` came from (update_quy_trinh_2 review). `'imported-questions'` means
    * the teacher pasted a question bank and the analysis step was skipped on purpose,
-   * so generating must not call the model. Absent means "AI-produced", which still
+   * so generating must not call the model. `'chat-questions'` is the same
+   * no-model situation for a set the teacher accepted from the lesson chat.
+   * Absent means "AI-produced", which still
    * requires an analysis — a draft is never treated as teacher-authored just because
    * `analysisId` happens to be null.
    */
-  draftSource?: 'imported-questions';
+  draftSource?: 'imported-questions' | 'chat-questions';
   /** Adapter output used to open the existing editor without calling AI again. */
   gameSnapshot: EducationalGame | null;
   /** Preserves the exact legacy setup when a saved game is opened in the wizard. */
@@ -377,4 +379,96 @@ export interface GameProject {
   gameId: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// Lesson chat (#182) — the two-column "Giáo án" page
+// ---------------------------------------------------------------------------
+
+export type LessonChatRole = 'user' | 'assistant';
+
+/**
+ * What the teacher asked for in a turn. Decided locally (never by a second model
+ * call): `'answer'` quotes the lesson, `'question_set'` produces the predefined
+ * arena shape so the set can hand straight over to the game wizard.
+ */
+export type LessonChatIntent = 'answer' | 'question_set';
+
+/** One passage the answer is grounded in, tagged so merged documents stay readable. */
+export interface LessonChatCitation {
+  documentId: string;
+  documentName: string;
+  quote: string;
+}
+
+export interface LessonChatMessage {
+  id: string;
+  chatId: string;
+  role: LessonChatRole;
+  text: string;
+  intent: LessonChatIntent;
+  citations: LessonChatCitation[];
+  /** Validated arena draft, present only on an assistant turn with `intent === 'question_set'`. */
+  questionSet: ArenaDraft | null;
+  /** Provider that produced this turn (`''` for a user turn or a failed run). */
+  providerId: string;
+  /** `LessonWorkflowError` code when the model failed; empty when it did not. */
+  errorCode: string;
+  createdAt: string;
+}
+
+/** A conversation without its messages — what the history list shows. */
+export interface LessonChatSummary {
+  id: string;
+  schemaVersion: typeof LESSON_SCHEMA_VERSION;
+  title: string;
+  documentIds: string[];
+  messageCount: number;
+  lastIntent: LessonChatIntent | '';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LessonChat extends LessonChatSummary {
+  messages: LessonChatMessage[];
+}
+
+/** One saved document plus the text the chat actually read (never sent back to the renderer). */
+/**
+ * The composer's mode switch. `'auto'` lets `classifyLessonChatIntent` decide;
+ * the other two are the teacher overriding the heuristic, and they always win.
+ */
+export type LessonChatComposerMode = 'auto' | 'answer' | 'question_set';
+
+export interface LessonChatSendInput {
+  /** Absent or unknown id starts a new conversation. */
+  chatId?: string;
+  /** Every lesson the turn may read; the teacher may pick several (#182 "kết hợp nhiều giáo án"). */
+  documentIds: string[];
+  question: string;
+  providerId?: string;
+  requestId: string;
+  mode?: LessonChatComposerMode;
+  /** Overrides the count parsed from the question (the composer's number field). */
+  questionCount?: number;
+}
+
+/** Result of one turn: the persisted conversation plus what the UI must paint. */
+export interface LessonChatTurnResponse {
+  chat: LessonChat;
+  intent: LessonChatIntent;
+  answer: string;
+  citations: LessonChatCitation[];
+  questionSet: ArenaDraft | null;
+  providerId: string;
+  /** Non-empty when the model failed; `answer` is then the honest fallback text. */
+  errorCode: string;
+  /** Characters of lesson text that went into the prompt (the "#180 tell-what-was-read" rule). */
+  evidenceCharacters: number;
+  /** True when nothing matched and the opening of each lesson was sent instead. */
+  evidenceFallback: boolean;
+  /** Attached lessons that contributed no quote at all. */
+  namesWithoutEvidence: string[];
+  /** How many questions the set was asked for (0 for an answer turn). */
+  requestedCount: number;
 }

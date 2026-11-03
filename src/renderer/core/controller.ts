@@ -166,6 +166,8 @@ function wirePage() {
   // here, after insertion (same contract as every other page).
   if (state.page === 'editor' && typeof wireEditorPage === 'function') wireEditorPage($('#pageContent'));
   wireGameMenus();
+  // #182: the chat frame lives inside this page; its fields are bound after insertion.
+  if (state.page === 'lesson-plans' && typeof wireLessonChat === 'function') wireLessonChat();
   $('#pageContent').querySelectorAll('[data-page]').forEach(el => el.addEventListener('click', () => navigate(el.dataset.page)));
   $('#pageContent').querySelectorAll('[data-action]').forEach(el => el.addEventListener('click', () => {
     // #120: picking a feature from a card menu closes it first, so the action (play,
@@ -335,6 +337,11 @@ async function handleLessonDrop(event) {
 window.handleLessonDrop = handleLessonDrop;
 
 async function handleAction(action, id, element) { try {
+    // #182: the lesson chat owns every `lesson-chat-*` action; it re-renders the
+    // page itself, so nothing below runs for those clicks.
+    if (typeof action === 'string' && action.startsWith('lesson-chat-') && typeof lessonChatHandle === 'function') {
+      if (await lessonChatHandle(action, element)) return;
+    }
     if (action === 'play') playGame(findGame(id));
     if (action === 'play-fullscreen') await playGameFullscreen(findGame(id));
     // 📱 Chơi LAN from a library card: open the game the normal way, then host a
@@ -619,19 +626,6 @@ async function handleAction(action, id, element) { try {
     if (action === 'delete') {
       const target = findGame(id);
       if (confirm('Xóa vĩnh viễn “' + (target?.title || 'trò chơi này') + '” khỏi máy?\nKhông thể hoàn tác — hãy xuất gói .egame trước nếu muốn giữ bản sao.')) { await window.eduGame.deleteGame(id); await refreshDb(); render(); toast('Đã xóa “' + (target?.title || 'trò chơi') + '”.'); }
-    }
-    if (action === 'qa-ask') {
-      const docId = $('#qaDocSelect')?.value;
-      const question = String($('#qaQuestion')?.value || '').trim();
-      const answerBox = $('#qaAnswer');
-      if (!docId) { toast('Chọn giáo án để hỏi.'); return; }
-      if (!question) { toast('Nhập câu hỏi.'); return; }
-      if (answerBox) { answerBox.classList.remove('hidden'); answerBox.textContent = 'Đang trả lời...'; }
-      try {
-        const result = await window.eduGame.answerLessonQuestion({ documentId: docId, question });
-        if (answerBox) answerBox.innerHTML = `<div class="font-semibold mb-[6px]">${escapeHtml(result?.answer || '')}</div>` + (Array.isArray(result?.citations) ? result.citations : []).map((c, i) => `<div class="mt-[8px] text-[12px] text-[#4f5a6e]"><strong>[${i + 1}]</strong> ${escapeHtml(c)}</div>`).join('');
-      } catch (e) { if (answerBox) answerBox.textContent = (e && e.message) || 'Lỗi hỏi đáp.'; }
-      return;
     }
     if (action === 'export-results') exportResults();
   } catch (e) { toast(e.message || 'Đã xảy ra lỗi.'); }

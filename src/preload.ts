@@ -69,7 +69,11 @@ contextBridge.exposeInMainWorld('eduGame', Object.freeze({
   // local; neither touches a model or the network.
   inspectLessonStructure: payload => ipcRenderer.invoke('lesson:get-structure', payload),
   previewLessonSelection: payload => ipcRenderer.invoke('lesson:preview-selection', payload),
-  answerLessonQuestion: payload => ipcRenderer.invoke('lesson:answer-question', payload),
+  // #182: the lesson chat replaces the single-document BETA question channel.
+  sendLessonChat: payload => ipcRenderer.invoke('lesson:chat-send', payload),
+  listLessonChats: () => ipcRenderer.invoke('lesson:chats'),
+  getLessonChat: chatId => ipcRenderer.invoke('lesson:chat-get', chatId),
+  deleteLessonChats: chatIds => ipcRenderer.invoke('lesson:chat-delete', chatIds),
   recommendGames: payload => ipcRenderer.invoke('lesson:recommend', payload),
   estimateLessonCapacity: payload => ipcRenderer.invoke('lesson:capacity', payload),
   getLessonAnalysis: analysisId => ipcRenderer.invoke('lesson:get-analysis', analysisId),

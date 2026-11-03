@@ -8,16 +8,27 @@
  *
  * O3 adds a fifth sidecar table, `lesson_chunks`, caching the chunked lesson so
  * generation can retrieve a relevant slice instead of re-chunking on every run.
+ *
+ * #182 adds `lesson_chats` / `lesson_chat_messages`: the multi-document question
+ * chat on the "Giáo án" page. Like the other sidecars, every write is a targeted
+ * upsert inside a transaction and nothing here touches `games`/`sessions`.
  */
 import { createHash, randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { EducationalGame } from '../../shared/types';
 import type {
+  ArenaDraft,
   GameConfig,
   GameDraft,
   GameProject,
   LessonAnalysis,
+  LessonChat,
+  LessonChatCitation,
+  LessonChatIntent,
+  LessonChatMessage,
+  LessonChatRole,
+  LessonChatSummary,
   LessonDocument,
   GameRecommendation
 } from '../../shared/lesson-types';
@@ -125,6 +136,36 @@ export const LESSON_STORE_SCHEMA_SQL = `
   );
   CREATE INDEX IF NOT EXISTS idx_ai_tasks_request ON ai_tasks(request_id);
   CREATE INDEX IF NOT EXISTS idx_ai_tasks_started ON ai_tasks(started_at DESC);
+  -- #182: the lesson chat. document_ids is JSON on purpose — a chat outlives the
+  -- documents it read (deleting a lesson must not delete the teacher's conversation),
+  -- so there is deliberately no foreign key to lesson_documents.
+  CREATE TABLE IF NOT EXISTS lesson_chats (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    document_ids TEXT NOT NULL,
+    message_count INTEGER NOT NULL DEFAULT 0,
+    last_intent TEXT NOT NULL DEFAULT '',
+    schema_version INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS lesson_chat_messages (
+    id TEXT PRIMARY KEY,
+    chat_id TEXT NOT NULL,
+    position INTEGER NOT NULL,
+    role TEXT NOT NULL,
+    text TEXT NOT NULL,
+    intent TEXT NOT NULL,
+    citations TEXT NOT NULL,
+    question_set TEXT,
+    provider_id TEXT NOT NULL DEFAULT '',
+    error_code TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    UNIQUE (chat_id, position),
+    FOREIGN KEY (chat_id) REFERENCES lesson_chats(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_lesson_chat_messages_chat ON lesson_chat_messages(chat_id, position);
+  CREATE INDEX IF NOT EXISTS idx_lesson_chats_updated ON lesson_chats(updated_at DESC);
 `;
 
 export type LessonStoreErrorCode =
@@ -133,6 +174,7 @@ export type LessonStoreErrorCode =
   | 'STORE_INVALID_ANALYSIS'
   | 'STORE_INVALID_RECOMMENDATION'
   | 'STORE_INVALID_DOCUMENT'
+  | 'STORE_INVALID_CHAT'
   | 'STORE_CORRUPT_JSON'
   | 'STORE_DOCUMENT_MISSING'
   | 'STORE_DOCUMENT_FILE_MISSING'
@@ -272,6 +314,44 @@ interface AiTaskRow {
   result_summary: string | null;
   started_at: string;
   finished_at: string | null;
+}
+
+/** #182: one turn written by `appendChatTurn`; the store owns ids and ordering. */
+export interface SaveLessonChatTurnInput {
+  chatId?: string;
+  documentIds: string[];
+  question: string;
+  answer: string;
+  intent: LessonChatIntent;
+  citations: LessonChatCitation[];
+  questionSet?: ArenaDraft | null;
+  providerId?: string;
+  errorCode?: string;
+}
+
+interface ChatRow {
+  id: string;
+  title: string;
+  document_ids: string;
+  message_count: number;
+  last_intent: string;
+  schema_version: number;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ChatMessageRow {
+  id: string;
+  chat_id: string;
+  position: number;
+  role: string;
+  text: string;
+  intent: string;
+  citations: string;
+  question_set: string | null;
+  provider_id: string;
+  error_code: string;
+  created_at: string;
 }
 
 interface ChunkRow {
@@ -875,6 +955,142 @@ export class LessonStore {
   }
 
   // -------------------------------------------------------------------------
+  // Lesson chat (#182)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Newest-touched first, without message text: the history list is a navigation
+   * surface, so a row whose `document_ids` is unreadable degrades to "no attached
+   * lessons" instead of failing the whole list.
+   */
+  listLessonChats(): LessonChatSummary[] {
+    const rows = this.db.prepare('SELECT * FROM lesson_chats ORDER BY updated_at DESC').all() as ChatRow[];
+    return rows.map(row => chatFromRow(row, false));
+  }
+
+  getLessonChat(chatId: string): LessonChat | null {
+    const id = String(chatId || '');
+    if (!id) return null;
+    const row = this.db.prepare('SELECT * FROM lesson_chats WHERE id = ?').get(id) as ChatRow | undefined;
+    if (!row) return null;
+    const messageRows = this.db
+      .prepare('SELECT * FROM lesson_chat_messages WHERE chat_id = ? ORDER BY position ASC')
+      .all(id) as ChatMessageRow[];
+    return { ...chatFromRow(row, true), messages: messageRows.map(chatMessageFromRow) };
+  }
+
+  /**
+   * Appends one turn — the teacher's question and the answer — and returns the
+   * conversation it belongs to.
+   *
+   * Both rows land in one transaction so a crash can never leave a question with
+   * no answer, and a failed AI run is stored like any other turn (with
+   * `errorCode`): the teacher must be able to re-read what actually happened.
+   * `document_ids` is replaced by the newest turn because it describes what the
+   * chat reads *now*; older turns keep their own citations, so nothing is lost.
+   */
+  appendChatTurn(input: SaveLessonChatTurnInput): LessonChat {
+    const question = String(input?.question ?? '').trim();
+    const answer = String(input?.answer ?? '').trim();
+    if (!question) throw new LessonStoreError('STORE_INVALID_CHAT', 'Chưa có câu hỏi để lưu vào cuộc trò chuyện.');
+    if (!answer) throw new LessonStoreError('STORE_INVALID_CHAT', 'Chưa có câu trả lời để lưu vào cuộc trò chuyện.');
+    const documentIds = uniqueStrings(input?.documentIds);
+    if (!documentIds.length) {
+      throw new LessonStoreError('STORE_INVALID_CHAT', 'Cuộc trò chuyện cần ít nhất một giáo án để đọc.');
+    }
+    const intent: LessonChatIntent = input.intent === 'question_set' ? 'question_set' : 'answer';
+    const citations = Array.isArray(input.citations) ? input.citations.filter(isCitation) : [];
+    const questionSet = intent === 'question_set' && input.questionSet ? input.questionSet : null;
+    const now = new Date().toISOString();
+    const existing = this.getChatRow(String(input?.chatId || ''));
+    const chatId = existing ? existing.id : newId('chat');
+    const base = Number(existing?.message_count) || 0;
+
+    const run = this.db.transaction(() => {
+      this.db.prepare(`
+        INSERT INTO lesson_chats (id,title,document_ids,message_count,last_intent,schema_version,created_at,updated_at)
+        VALUES (@id,@title,@document_ids,@message_count,@last_intent,@schema_version,@created_at,@updated_at)
+        ON CONFLICT(id) DO UPDATE SET
+          document_ids=excluded.document_ids, message_count=excluded.message_count,
+          last_intent=excluded.last_intent, updated_at=excluded.updated_at
+      `).run({
+        id: chatId,
+        title: existing ? existing.title : chatTitle(question),
+        document_ids: JSON.stringify(documentIds),
+        message_count: base + 2,
+        last_intent: intent,
+        schema_version: LESSON_SCHEMA_VERSION,
+        created_at: existing?.created_at || now,
+        updated_at: now
+      });
+      insertChatMessage(this.db, {
+        id: newId('msg'),
+        chatId,
+        position: base,
+        role: 'user',
+        text: question,
+        intent,
+        citations: [],
+        questionSet: null,
+        providerId: '',
+        errorCode: '',
+        createdAt: now
+      });
+      insertChatMessage(this.db, {
+        id: newId('msg'),
+        chatId,
+        position: base + 1,
+        role: 'assistant',
+        text: answer,
+        intent,
+        citations,
+        questionSet,
+        providerId: String(input?.providerId || ''),
+        errorCode: String(input?.errorCode || ''),
+        createdAt: now
+      });
+    });
+    run();
+
+    const chat = this.getLessonChat(chatId);
+    if (!chat) throw new LessonStoreError('STORE_INVALID_CHAT', `Không đọc lại được cuộc trò chuyện ${chatId}.`);
+    return chat;
+  }
+
+  deleteLessonChats(chatIds: string[]): { deleted: number; missing: number; failed: number } {
+    const ids = uniqueStrings(chatIds);
+    let deleted = 0;
+    let missing = 0;
+    let failed = 0;
+    for (const id of ids) {
+      try {
+        if (this.deleteLessonChat(id)) deleted += 1;
+        else missing += 1;
+      } catch {
+        failed += 1;
+      }
+    }
+    return { deleted, missing, failed };
+  }
+
+  /** Messages go with the chat: the child table is cleared explicitly, as elsewhere. */
+  deleteLessonChat(chatId: string): boolean {
+    const id = String(chatId || '');
+    if (!id) return false;
+    const run = this.db.transaction((chat: string) => {
+      this.db.prepare('DELETE FROM lesson_chat_messages WHERE chat_id = ?').run(chat);
+      const deleted = this.db.prepare('DELETE FROM lesson_chats WHERE id = ?').run(chat) as { changes?: number };
+      return Number(deleted && deleted.changes) || 0;
+    });
+    return run(id) > 0;
+  }
+
+  private getChatRow(chatId: string): ChatRow | undefined {
+    if (!chatId) return undefined;
+    return this.db.prepare('SELECT * FROM lesson_chats WHERE id = ?').get(chatId) as ChatRow | undefined;
+  }
+
+  // -------------------------------------------------------------------------
   // Projects
   // -------------------------------------------------------------------------
 
@@ -1106,6 +1322,111 @@ function parseJsonObject(dataJson: string, id: string): Record<string, unknown> 
   } catch {
     throw new LessonStoreError('STORE_CORRUPT_JSON', `Dữ liệu của ${id} bị hỏng và không thể đọc lại.`);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Lesson chat rows (#182)
+// ---------------------------------------------------------------------------
+
+/**
+ * `strict` decides how a broken `document_ids` is treated: reading one chat
+ * (`true`) must fail loudly, listing every chat must not.
+ */
+function chatFromRow(row: ChatRow, strict: boolean): LessonChatSummary {
+  let documentIds: string[] = [];
+  try {
+    const parsed = JSON.parse(row.document_ids);
+    documentIds = Array.isArray(parsed) ? parsed.map(id => String(id)) : [];
+  } catch {
+    if (strict) {
+      throw new LessonStoreError('STORE_CORRUPT_JSON', `Danh sách giáo án của ${row.id} bị hỏng và không thể đọc lại.`);
+    }
+  }
+  const lastIntent = row.last_intent === 'question_set' ? 'question_set' : row.last_intent === 'answer' ? 'answer' : '';
+  return {
+    id: row.id,
+    schemaVersion: LESSON_SCHEMA_VERSION,
+    title: row.title,
+    documentIds,
+    messageCount: Number(row.message_count) || 0,
+    lastIntent,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function chatMessageFromRow(row: ChatMessageRow): LessonChatMessage {
+  const parsedCitations = JSON.parse(String(row.citations || '[]'));
+  if (!Array.isArray(parsedCitations)) {
+    throw new LessonStoreError('STORE_CORRUPT_JSON', `Trích dẫn của ${row.id} bị hỏng và không thể đọc lại.`);
+  }
+  return {
+    id: row.id,
+    chatId: row.chat_id,
+    role: row.role === 'user' ? 'user' : 'assistant',
+    text: row.text,
+    intent: row.intent === 'question_set' ? 'question_set' : 'answer',
+    citations: parsedCitations.filter(isCitation),
+    questionSet: row.question_set ? (parseJsonObject(row.question_set, row.id) as unknown as ArenaDraft) : null,
+    providerId: row.provider_id || '',
+    errorCode: row.error_code || '',
+    createdAt: row.created_at
+  };
+}
+
+function insertChatMessage(
+  db: LessonStoreDatabase,
+  message: {
+    id: string;
+    chatId: string;
+    position: number;
+    role: LessonChatRole;
+    text: string;
+    intent: LessonChatIntent;
+    citations: LessonChatCitation[];
+    questionSet: ArenaDraft | null;
+    providerId: string;
+    errorCode: string;
+    createdAt: string;
+  }
+): void {
+  db.prepare(`
+    INSERT INTO lesson_chat_messages
+      (id,chat_id,position,role,text,intent,citations,question_set,provider_id,error_code,created_at)
+    VALUES (@id,@chat_id,@position,@role,@text,@intent,@citations,@question_set,@provider_id,@error_code,@created_at)
+  `).run({
+    id: message.id,
+    chat_id: message.chatId,
+    position: message.position,
+    role: message.role,
+    text: message.text,
+    intent: message.intent,
+    citations: JSON.stringify(message.citations),
+    question_set: message.questionSet ? JSON.stringify(message.questionSet) : null,
+    provider_id: message.providerId,
+    error_code: message.errorCode,
+    created_at: message.createdAt
+  });
+}
+
+/** The conversation titles itself from the first question — the teacher never names it. */
+function chatTitle(question: string): string {
+  const flat = String(question || '').replace(/\s+/g, ' ').trim();
+  return flat.length <= 60 ? flat : `${flat.slice(0, 59)}…`;
+}
+
+function uniqueStrings(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map(item => String(item ?? '').trim()).filter(Boolean))];
+}
+
+function isCitation(value: unknown): value is LessonChatCitation {
+  const citation = value as LessonChatCitation | null;
+  return Boolean(citation)
+    && typeof citation!.documentId === 'string'
+    && typeof citation!.documentName === 'string'
+    && typeof citation!.quote === 'string'
+    && citation!.quote.trim() !== '';
 }
 
 // ---------------------------------------------------------------------------

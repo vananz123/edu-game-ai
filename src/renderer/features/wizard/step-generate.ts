@@ -759,14 +759,19 @@ function renderWizardGenerate() {
   const hasContent = Boolean(s.gameSnapshot);
   // #117: a run that started from the teacher's question bank never uses the model, so
   // it has no Fast/Thinking choice and its forward action is saving to the library.
-  const bankRun = s.draftOrigin === 'source' && s.draftSource === 'imported-questions';
+  // #182: a set accepted from the lesson chat takes the same finish screen; only the
+  // wording changes, because there the AI *did* write the questions.
+  const bankRun = wizardIsBankRun();
+  const fromChat = s.draftSource === 'chat-questions';
   const tag = bankRun
-    ? 'Từ câu hỏi có sẵn'
+    ? wizardNoModelRunLabel(s.draftSource)
     : (hasContent ? 'Đã tạo bản nháp' : (config && config.generationMode === 'deep' ? 'Chế độ Thinking' : 'Chế độ Fast'));
   if (bankRun && hasContent) {
-    return `<section class="form-panel" data-wizard-step-body="generate" data-wizard-bank-finish="1">
+    return `<section class="form-panel" data-wizard-step-body="generate" data-wizard-bank-finish="1" data-wizard-run-source="${escapeHtml(s.draftSource || '')}">
     <div class="section-head"><h3>Bước 4 · Hoàn tất trò chơi</h3><span class="tag">${tag}</span></div>
-    <div class="panel-sub">Trò chơi đã được tạo từ đúng câu hỏi giáo viên cung cấp và đã qua kiểm tra cấu trúc. Không dùng AI ở bước này — bấm “Lưu vào thư viện” để có thể chơi ngay, hoặc mở trình chỉnh sửa nếu muốn sửa.</div>
+    <div class="panel-sub">${fromChat
+      ? 'Trò chơi được dựng từ đúng bộ câu hỏi AI vừa soạn trong khung chat và đã qua kiểm tra cấu trúc. Bước này không gọi AI — bấm “Lưu vào thư viện” để có thể chơi ngay, hoặc mở trình chỉnh sửa nếu muốn sửa.'
+      : 'Trò chơi đã được tạo từ đúng câu hỏi giáo viên cung cấp và đã qua kiểm tra cấu trúc. Không dùng AI ở bước này — bấm “Lưu vào thư viện” để có thể chơi ngay, hoặc mở trình chỉnh sửa nếu muốn sửa.'}</div>
     ${wizardSummaryGrid(wizardGeneratedSummaryRows(s.gameSnapshot))}
     ${wizardItemCardsPanel(s)}
     <div class="publish-actions">

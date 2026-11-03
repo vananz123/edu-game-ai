@@ -28,6 +28,7 @@
     "check:settings-sections-ui": "node tests/ui/ui-settings-sections-check.js",
     "check:dark-theme-ui": "node tests/ui/ui-dark-theme-check.js",
     "check:typography-ui": "node tests/ui/ui-typography-readability-check.js",
+    "check:lesson-chat-ui": "node tests/ui/ui-lesson-chat-check.js",
     "check:chrome-icons-ui": "node tests/ui/ui-chrome-icons-check.js",
     "check:project-selection-ui": "node tests/ui/ui-project-selection-check.js",
     "test:ui": "node tests/ui/ui-setup-fullscreen-check.js",
