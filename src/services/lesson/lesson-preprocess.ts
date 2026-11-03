@@ -47,6 +47,27 @@ export const LESSON_PREPROCESS_RANKING_ENABLED = false;
 export const LESSON_PREPROCESS_BUDGET_FAST = 12_000;
 export const LESSON_PREPROCESS_BUDGET_DEEP = 18_000;
 
+/**
+ * #180: a cloud provider is sent the whole cleaned lesson. The budgets above are
+ * NOT a property of a lesson — they are the bundled llama.cpp context window, and
+ * the reason a teacher's 40-page giáo án was cut in half. A cloud endpoint owns
+ * its own context, so the app must not pre-trim the document for it; `Infinity`
+ * makes that a fact the code can state instead of a big number that can be
+ * outgrown. Ranking is skipped too: with nothing to drop, ranking only rewrites
+ * the text and reports a saving that does not exist.
+ */
+export const LESSON_PREPROCESS_NO_CUT = Number.POSITIVE_INFINITY;
+
+/**
+ * The analyze budget for the provider that is about to run (DECISIONS #180).
+ * `providerId` is the one the request will actually use — the same value the
+ * analysis cache key is named after, so a cached cloud analysis can never be
+ * reused for a local run or the other way round.
+ */
+export function preprocessBudgetForProvider(mode: string | undefined, providerId: string | undefined): number {
+  return providerId && providerId !== 'local' ? LESSON_PREPROCESS_NO_CUT : preprocessBudgetForMode(mode);
+}
+
 /** A repeated line is only removed when it is short enough to be a header. */
 const MAX_REPEATED_LINE_LENGTH = 80;
 /** ... and only when it occurs at least this many times in the document. */
@@ -88,8 +109,12 @@ const NUMERIC_UNIT = /\d+\s*(%|°|cm|mm|km|kg|mg|ml|lít|m²|km²|giây|phút|gi
 export interface PreprocessOptions {
   /**
    * Excerpt budget in characters. Defaults to the fast-mode budget. Always pass
-   * a number (`preprocessBudgetForMode(mode)`); `PreprocessOptions` has no
-   * `mode` field on purpose — see the note on `preprocessLessonSource`.
+   * a number (`preprocessBudgetForMode(mode)`, or `preprocessBudgetForProvider`
+   * when the provider is known); `PreprocessOptions` has no `mode` field on
+   * purpose — see the note on `preprocessLessonSource`.
+   *
+   * `LESSON_PREPROCESS_NO_CUT` (#180) keeps the cleaned document whole: nothing
+   * is dropped, so nothing is ranked away either.
    */
   maxChars?: number;
   /**
@@ -613,9 +638,16 @@ export function preprocessLessonSource(raw: string, options: PreprocessOptions =
   const startedAt = Date.now();
   const source = String(raw ?? '');
   const requestedBudget = Number(options.maxChars);
-  const maxChars = Number.isFinite(requestedBudget)
-    ? Math.max(200, Math.round(requestedBudget))
-    : LESSON_PREPROCESS_BUDGET_FAST;
+  // #180: `LESSON_PREPROCESS_NO_CUT` must be read BEFORE the fallback below.
+  // `Number.isFinite(Infinity)` is false, so without this line a cloud run — whose
+  // whole point is that nothing is trimmed — would still be cut at the fast budget
+  // by the branch meant for a missing option.
+  const noCut = requestedBudget === Number.POSITIVE_INFINITY;
+  const maxChars = noCut
+    ? LESSON_PREPROCESS_NO_CUT
+    : Number.isFinite(requestedBudget)
+      ? Math.max(200, Math.round(requestedBudget))
+      : LESSON_PREPROCESS_BUDGET_FAST;
   const query = String(options.query ?? '').trim();
   const rankingExplicit = options.ranking === undefined ? null : Boolean(options.ranking);
   // An explicit `ranking: false` always wins; an explicit `true` keeps the gate
@@ -634,9 +666,12 @@ export function preprocessLessonSource(raw: string, options: PreprocessOptions =
 
     // L3 is measured even while disabled, so real savings can be reported
     // before the gate opens. The query path is measured with the same query.
-    const byQuery = ranking === 'query' ? rankBlocksForQuery(cleaned, maxChars, query) : null;
-    const ranked = byQuery ?? rankBlocksForExcerpt(cleaned, maxChars);
-    const rankingSavingsChars = Math.max(0, cleaned.length - ranked.length);
+    // #180: under `noCut` there is nothing to drop, and running the ranker would
+    // both re-join every block (rewriting the teacher's own blank lines for no
+    // reason) and report a saving that is never applied.
+    const byQuery = !noCut && ranking === 'query' ? rankBlocksForQuery(cleaned, maxChars, query) : null;
+    const ranked = noCut ? cleaned : byQuery ?? rankBlocksForExcerpt(cleaned, maxChars);
+    const rankingSavingsChars = noCut ? 0 : Math.max(0, cleaned.length - ranked.length);
 
     let text = cleaned;
     let excerptReason: ExcerptReason = 'fits';

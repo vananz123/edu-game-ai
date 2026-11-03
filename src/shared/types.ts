@@ -488,7 +488,22 @@ export interface EduGameBridge {
     requestId: string;
     /** #132: a provider the teacher picked; absent = the automatic policy. */
     providerId?: string;
-  }): Promise<{ analysis: import('./lesson-types').LessonAnalysis; project: GameProject }>;
+  }): Promise<{
+    analysis: import('./lesson-types').LessonAnalysis;
+    project: GameProject;
+    /** #180: what the model actually read; `budgetChars` null = nothing was cut. */
+    sent?: {
+      provider: string;
+      providerLabel: string;
+      documentChars: number;
+      sentChars: number;
+      pickedChars: number;
+      truncated: boolean;
+      scoped: boolean;
+      omittedSections: number;
+      budgetChars: number | null;
+    };
+  }>;
   recommendGames(payload: {
     analysisId: string;
     projectId?: string;

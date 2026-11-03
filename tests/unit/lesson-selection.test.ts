@@ -123,7 +123,8 @@ async function run(): Promise<void> {
 
   // --- Budget + omission reporting (§6) -----------------------------------
   const huge = `${'Nội dung rất dài của bài học. '.repeat(1_200)}`;
-  const hugeStructure = buildLessonStructure(`I. KHỐI LỚN\n${huge}`);
+  const hugeDoc = `I. KHỐI LỚN\n${huge}`;
+  const hugeStructure = buildLessonStructure(hugeDoc);
   const hugeSection = hugeStructure.nodes.find(node => node.title === 'I. KHỐI LỚN')!;
   const squeezed = prepareSelectedLessonText(huge, hugeStructure, [hugeSection.id], { maxChars: 2_000 });
   assert.ok(squeezed.chars <= 2_000, `budget exceeded: ${squeezed.chars}`);
@@ -140,6 +141,31 @@ async function run(): Promise<void> {
   assert.equal(prepareWholeLessonText('Ngắn thôi', { maxChars: 3_000 }).truncated, false);
   // Non-selected analysis keeps today's budget for each mode.
   assert.equal(prepareWholeLessonText('x'.repeat(30_000), { mode: 'deep' }).chars <= LESSON_PREPROCESS_BUDGET_DEEP, true);
+
+  // #180: an unbounded budget — what a cloud provider gets — never cuts, so the
+  // teacher is not warned about an omission that did not happen. The fingerprint
+  // still separates it from the same pick under a local budget (#132 R3).
+  // The raw text here is the *same document* the tree was built from: a stale
+  // structure adds its own warning (as in `squeezed` above) and would mask the
+  // claim "nothing dropped means nothing reported".
+  const cloudScope = prepareSelectedLessonText(hugeDoc, hugeStructure, [hugeSection.id], { maxChars: Number.POSITIVE_INFINITY });
+  assert.equal(cloudScope.truncated, false, 'a cloud scope is never cut');
+  assert.equal(cloudScope.omitted.length, 0);
+  assert.equal(cloudScope.warnings.length, 0, 'nothing dropped means nothing reported');
+  assert.ok(cloudScope.chars > squeezed.chars, 'the cloud scope holds strictly more than the local one');
+  const cloudWhole = prepareWholeLessonText(huge, { maxChars: Number.POSITIVE_INFINITY });
+  assert.equal(cloudWhole.truncated, false);
+  // Counting the blocks is the only assertion that tells "not cut" apart from a
+  // head–tail excerpt: both keep the last sentence, only the whole read keeps all
+  // 1 200 of them.
+  const cloudBlocks = cloudWhole.text.split('Nội dung rất dài của bài học.').length - 1;
+  assert.equal(cloudBlocks, 1_200, 'every block of the lesson reaches a cloud request');
+  assert.ok(cloudWhole.chars > LESSON_PREPROCESS_BUDGET_DEEP, `a cloud read is not a local window (${cloudWhole.chars})`);
+  assert.notEqual(
+    selectionFingerprint(hugeStructure, [hugeSection.id], { maxChars: Number.POSITIVE_INFINITY }),
+    selectionFingerprint(hugeStructure, [hugeSection.id], { maxChars: 2_000 }),
+    'the read budget must stay part of the cache key'
+  );
 
   // --- Cache separation (decision A) --------------------------------------
   // No selection must produce no fingerprint, so the key is byte-identical to

@@ -24,6 +24,16 @@ function wizardPickedProviderId() {
 }
 
 /**
+ * #180: the provider step 2 would call if it ran now — the teacher's pick, else the
+ * default main's view names. Read-budget lines and the step-1 preview ask this
+ * instead of guessing, because how much of the lesson is sent depends on it.
+ */
+function wizardAnalyzeProviderId() {
+  const ai = state.settings.ai || {};
+  return wizardPickedProviderId() || ai.provider || 'local';
+}
+
+/**
  * The cloud provider the second button offers (DECISIONS #132 §D13): the provider the
  * teacher picked, or the first verified cloud provider. Only a provider that passed
  * its connection test can be offered — the step never advertises an untested key.
@@ -91,8 +101,8 @@ function wizardCloudActionProvider() {
 /** A one-line privacy note that is true for the provider in use. */
 function wizardProviderPrivacyText() {
   const active = typeof aiActiveProvider === 'function' ? aiActiveProvider() : null;
-  if (!active || active.id === 'local') return 'AI local chạy trên máy này; giáo án không được gửi đi đâu. Có thể huỷ giữa chừng.';
-  return `Giáo án và phần trả lời được gửi tới ${active.label} qua Internet. Không gửi dữ liệu học sinh; có thể huỷ giữa chừng.`;
+  if (!active || active.id === 'local') return 'Giáo án không rời khỏi máy này. Có thể huỷ giữa chừng.';
+  return `Giáo án được gửi tới ${active.label} qua Internet; không gửi dữ liệu học sinh. Có thể huỷ giữa chừng.`;
 }
 
 /**
@@ -121,7 +131,7 @@ function wizardProviderPickerHtml() {
     <select id="wizardProviderSelect" data-wizard-provider-select>${picker.options.map(option =>
       `<option value="${escapeHtml(option.id)}"${option.id === selected ? ' selected' : ''}>${escapeHtml(option.label)}${option.model ? ` · ${escapeHtml(option.model)}` : ''}</option>`
     ).join('')}</select>
-    <div class="field-hint">Dùng đúng nhà cung cấp này cho bước này; nếu lỗi, đổi ở đây hoặc mở Cài đặt AI. Ứng dụng không tự chuyển sang nhà cung cấp khác.</div>
+    <div class="field-hint">Bước này chỉ dùng nhà cung cấp đã chọn; không tự đổi khi lỗi.</div>
   </div>`;
 }
 
@@ -139,8 +149,8 @@ function wizardProviderCard() {
     // verified, say that the second button exists rather than hiding the choice.
     const cloud = typeof wizardCloudActionProvider === 'function' ? wizardCloudActionProvider() : null;
     const detail = active && active.id === 'local'
-      ? (cloud ? 'AI local chạy trên máy này là mặc định; muốn dùng AI ngoài thì bấm nút thứ hai.' : 'AI local đang chạy trên máy này.')
-      : 'Đã kiểm tra kết nối thành công.';
+      ? (cloud ? 'AI local là mặc định; muốn dùng AI ngoài thì bấm nút thứ hai.' : 'Đang chạy trên máy này.')
+      : 'Đã kiểm tra kết nối.';
     return `<div class="flex gap-[12px] items-center border rounded-xl p-3 mb-4 ${tone}" data-wizard-provider="${escapeHtml(active ? active.id : '')}">
       <span class="shrink-0" data-icon="circle-check" data-icon-size="18"></span>
       <div class="min-w-0 flex-1">
@@ -167,6 +177,11 @@ function wizardSelectProvider(providerId) {
   // The select itself is the authority: it only exists while the picker is shown, so
   // a value coming from it is one of the offered providers.
   wizardState.selectedProviderId = wanted;
+  // #180: how much of the lesson gets read is a property of the provider, so the
+  // step-1 scope preview is measured again for the new pick (no tree = no-op).
+  if (typeof wizardStructurePreview === 'function') {
+    wizardStructurePreview().then(render, () => {});
+  }
   render();
 }
 const wizardErrorMessages = {

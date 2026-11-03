@@ -72,6 +72,8 @@ const wizardState = {
   analysisStartedAt: 0, // timestamp of the running analysis; drives the elapsed indicator
   generationStartedAt: 0, // timestamp of the running generation; drives the elapsed indicator
   analysisFinishedMs: 0, // #75: frozen total of the last finished analysis (0 = none to show)
+  // #180: the scope of the last finished analysis (`sent` from `lesson:analyze`).
+  analysisSent: null,
   generationFinishedMs: 0, // #75: frozen total of the last finished generation
   error: null, // { code, message }
   notice: null,
@@ -498,6 +500,8 @@ function wizardReset() {
     analysis: null,
     analysisId: null,
     analysisOriginal: null,
+    // #180: no finished run to describe yet.
+    analysisSent: null,
     recommendations: [],
     selectedGameType: null,
     selectedRecommendationId: null,

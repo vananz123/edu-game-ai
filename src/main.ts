@@ -71,7 +71,9 @@ const {
 } = require('./services/ai/ai-providers');
 const { analyzeLesson, generateGameDraft, regenerateGameItem } = require('./services/lesson/lesson-workflow');
 // O6d: per-mode excerpt budget for the analysis preprocessor.
-const { preprocessBudgetForMode } = require('./services/lesson/lesson-preprocess');
+// #180: the budget is a property of the *provider* (a local context window), not of
+// a lesson, so every analyze/preview path asks `preprocessBudgetForProvider`.
+const { preprocessBudgetForProvider } = require('./services/lesson/lesson-preprocess');
 // #76: offline document structure + teacher selection (spec update_AI_plan_7).
 const { normalizeLessonSource } = require('./services/lesson/lesson-chunker');
 const { buildLessonStructure } = require('./services/lesson/lesson-structure');
@@ -1688,20 +1690,51 @@ async function semanticClassification(text, rule) {
  * shows, so an unknown/stale/empty selection is a message, never a silent
  * fallback to "analyse the whole document" (§10.12).
  *
- * `mode` only selects the budget (`fast` 12k / `deep` 18k, unchanged).
+ * #180: `providerId` decides the budget, and it is the provider the request will
+ * really run — the same value the cache key is named after — so a cloud scope is
+ * never cut to the local context window, and a cached local analysis can not be
+ * reused for a cloud run of a different text.
  */
-function prepareSelectionForAnalyze(text, selectedIds, mode) {
+function prepareSelectionForAnalyze(text, selectedIds, mode, providerId) {
   const source = normalizeLessonSource(text ?? '');
   const structure = buildLessonStructure(source);
-  const prepared = prepareSelectedLessonText(source, structure, selectedIds, { mode });
-  const fingerprint = selectionFingerprint(structure, selectedIds, { maxChars: preprocessBudgetForMode(mode) });
+  const maxChars = preprocessBudgetForProvider(mode, providerId);
+  const prepared = prepareSelectedLessonText(source, structure, selectedIds, { maxChars });
+  const fingerprint = selectionFingerprint(structure, selectedIds, { maxChars });
   return {
     text: prepared.text,
     truncated: prepared.truncated,
     fingerprint: fingerprint || '',
     sectionCount: prepared.ranges.filter(range => range.selected).length,
     chars: prepared.chars,
+    pickedChars: prepared.textBeforeBudget,
+    omittedCount: prepared.omitted.length,
     warnings: prepared.warnings
+  };
+}
+
+/**
+ * #180: what the analysis is about to read, measured by the same functions that
+ * build the request, so the sentence the teacher sees cannot drift from the
+ * bytes that go out. Runs on cache hits too — a reused analysis still has to be
+ * explained.
+ *
+ * `budgetChars` is `null` when nothing is cut (a cloud provider owns its own
+ * context), which is a fact the UI can state instead of inventing a big number.
+ */
+function describeAnalyzeInput(text, mode, providerId, selection) {
+  const maxChars = preprocessBudgetForProvider(mode, providerId);
+  const whole = selection ? null : prepareWholeLessonText(text, { maxChars });
+  return {
+    provider: providerId || 'local',
+    providerLabel: (getProviderDefinition(providerId) || { label: 'AI local' }).label,
+    documentChars: normalizeLessonSource(String(text ?? '')).length,
+    sentChars: selection ? selection.chars : whole.chars,
+    pickedChars: selection ? selection.pickedChars : whole.textBeforeBudget,
+    truncated: selection ? Boolean(selection.truncated) : Boolean(whole.truncated),
+    scoped: Boolean(selection),
+    omittedSections: selection ? selection.omittedCount : 0,
+    budgetChars: Number.isFinite(maxChars) ? maxChars : null
   };
 }
 
@@ -1881,15 +1914,18 @@ function registerIpc() {
     const text = String(payload?.text ?? '');
     if (!text.trim()) throw new Error('Thiếu nội dung tài liệu để dựng bản xem trước.');
     const mode = payload?.mode === 'deep' ? 'deep' : 'fast';
+    // #180: the same provider-aware budget as `lesson:analyze`, otherwise step 1
+    // warns about a cut that a cloud analysis never makes.
+    const maxChars = preprocessBudgetForProvider(mode, String(payload?.providerId || '') || 'local');
     const structure = payload?.structure && typeof payload.structure === 'object'
       ? payload.structure
       : buildLessonStructure(text);
     const selectedIds = Array.isArray(payload?.selectedIds) ? payload.selectedIds.map(id => String(id || '')) : null;
     if (!selectedIds || !selectedIds.length) {
       // No selection = whole document: exactly what `lesson:analyze` sends today.
-      return prepareWholeLessonText(text, { mode });
+      return prepareWholeLessonText(text, { maxChars });
     }
-    return prepareSelectedLessonText(text, structure, selectedIds, { mode });
+    return prepareSelectedLessonText(text, structure, selectedIds, { maxChars });
   });
   ipcMain.handle('lesson:get-document', async (_e, documentId) => requireLessonStore().getDocumentWithText(String(documentId || '')));
   // update_quy_trinh §2/§5 + update_quy_trinh_2 §2: decide the input path with the
@@ -2079,12 +2115,19 @@ function registerIpc() {
     const mode = payload?.mode === 'deep' ? 'deep' : 'fast';
     // O10: the diagnostic log records timing and counts, never the lesson text.
     const analyzeStartedAt = Date.now();
+    // #132: the key names the provider that will actually run the analysis, not the
+    // one Settings happens to highlight: the auto policy can skip a stopped local
+    // runtime, and a pick in the wizard overrides the default.
+    // #180: resolved *before* the teacher's scope is prepared, because the provider
+    // decides the budget there — the same value both the cache key and the request use.
+    const analysisAi = await readAiSettings();
+    const analysisProvider = analysisCacheProvider(analysisAi, payload?.providerId, payload?.localPreferred === true);
     // #76: the teacher's section scope from step 1, validated against the stored
     // text *before* anything is hashed or sent. No `selectedIds` = whole document,
     // which is the previous behaviour and the previous cache key.
     let selection = null;
     if (Array.isArray(payload?.selectedIds)) {
-      selection = prepareSelectionForAnalyze(document.text, payload.selectedIds, mode);
+      selection = prepareSelectionForAnalyze(document.text, payload.selectedIds, mode, analysisProvider);
     }
     // O5 (docs/archive/specs/update-AI-local.txt §4): never analyze the same text twice when the
     // document hash, model, mode and prompt version are unchanged. `force` is the
@@ -2095,11 +2138,6 @@ function registerIpc() {
     // and `provider ?? 'local'` keeps every old key byte-identical (still a hit);
     // two providers sharing one model id can no longer reuse each other's analysis.
     // A different provider therefore costs one analysis, not a wrong one.
-    // #132: the key names the provider that will actually run the analysis, not the
-    // one Settings happens to highlight: the auto policy can skip a stopped local
-    // runtime, and a pick in the wizard overrides the default.
-    const analysisAi = await readAiSettings();
-    const analysisProvider = analysisCacheProvider(analysisAi, payload?.providerId, payload?.localPreferred === true);
     const cacheKey = buildAnalysisCacheKey({
       documentSha256: sha256Hex(document.text),
       modelId: await currentChatModelId(),
@@ -2147,9 +2185,10 @@ function registerIpc() {
               sourceName: document.name,
               analysisId: payload?.analysisId ? String(payload.analysisId) : undefined,
               now: new Date().toISOString(),
-              // O6d: structure-aware excerpt with a per-mode budget; block ranking
-              // stays off until the O6 quality gate passes.
-              maxChars: preprocessBudgetForMode(mode),
+              // O6d: structure-aware excerpt; block ranking stays off until the O6
+              // quality gate passes. #180: a cloud provider gets the whole cleaned
+              // document — the per-mode budgets are the local context window.
+              maxChars: preprocessBudgetForProvider(mode, analysisProvider),
               // #76: with a scope, the model reads exactly the prepared selection;
               // without one, `analyzeLesson` uses the whole-document excerpt.
               ...(selection ? { preparedSelection: { text: selection.text, truncated: selection.truncated } } : {}),
@@ -2231,6 +2270,20 @@ function registerIpc() {
     }
     const identity = { documentId: document.id, name: document.name, characters: document.characters };
     const now = new Date().toISOString();
+    // #180: the teacher is told what the model actually read. Measured with the same
+    // functions that built the request, so a cache hit reports the same truth as a
+    // fresh run — the sentence cannot claim text the model never saw.
+    const sent = describeAnalyzeInput(document.text, mode, analysisProvider, selection);
+    aiLogWrite('info', 'analyze.input', {
+      documentId,
+      mode,
+      provider: sent.provider,
+      scoped: sent.scoped,
+      documentChars: sent.documentChars,
+      sentChars: sent.sentChars,
+      truncated: sent.truncated,
+      ...(sent.budgetChars === null ? {} : { budgetChars: sent.budgetChars })
+    });
     let project;
     if (payload?.projectId) {
       const existing = store.getProject(String(payload.projectId));
@@ -2239,7 +2292,7 @@ function registerIpc() {
     } else {
       project = store.saveProject(createProjectFromAnalysis({ projectId: id('project'), document: identity, analysis, now }));
     }
-    return { analysis, project, cached };
+    return { analysis, project, cached, sent };
   });
   ipcMain.handle('lesson:recommend', async (_e, payload) => {
     const analysisId = String(payload?.analysisId || '');
@@ -3504,6 +3557,9 @@ function publicSettingsView(settings) {
   const activeId = activeId0;
   const active = resolved.find(provider => provider.id === activeId) || resolved[0];
   const picker = resolved.filter(provider => provider.definition.wizardEligible && provider.usable);
+  // #180: step 2 quotes the number it will really be held to, so the renderer never
+  // hard-codes a local budget. `null` = the provider reads the whole document.
+  const analyzeBudget = preprocessBudgetForProvider('fast', activeId);
   const view = {
     ...settings,
     ai: {
@@ -3520,7 +3576,9 @@ function publicSettingsView(settings) {
         show: picker.length > 1,
         options: picker.map(provider => ({ id: provider.id, label: provider.definition.label, model: provider.model })),
         activeId
-      }
+      },
+      /** #180: what step 2 may send; `null` = the whole lesson, nothing is cut. */
+      lessonAnalyzeBudget: Number.isFinite(analyzeBudget) ? analyzeBudget : null
     }
   };
   delete view.ai.apiKey;

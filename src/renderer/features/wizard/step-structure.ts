@@ -317,7 +317,10 @@ async function wizardStructurePreview() {
       text: String(wizardState.text || ''),
       structure: tree,
       selectedIds: s.customized ? s.selected : undefined,
-      mode: 'fast'
+      mode: 'fast',
+      // #180: the budget the analysis will actually use, so step 1 cannot warn
+      // about a cut a cloud run never makes.
+      providerId: wizardAnalyzeProviderId()
     });
     s.warnings = (s.preview && s.preview.warnings) || [];
     s.error = null;

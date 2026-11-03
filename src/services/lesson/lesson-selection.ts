@@ -292,6 +292,10 @@ function countPreserved(lines: string[]): PreparedSelection['preserved'] {
 
 function budgetFrom(options: PrepareSelectionOptions): number {
   const explicit = Number(options.maxChars);
+  // #180: the cloud "no cut" sentinel is `Infinity`, which `Number.isFinite` rejects.
+  // Checking it first keeps a cloud run from falling through to the local budget —
+  // the exact bug this decision exists to remove.
+  if (explicit === Number.POSITIVE_INFINITY) return Number.POSITIVE_INFINITY;
   if (Number.isFinite(explicit) && explicit > 0) return Math.floor(explicit);
   return options.mode ? preprocessBudgetForMode(options.mode) : SELECTION_BUDGET_CEILING_CHARS;
 }

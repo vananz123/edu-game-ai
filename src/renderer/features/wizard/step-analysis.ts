@@ -52,10 +52,49 @@ function renderWizardAnalysisProgress() {
     <ol class="space-y-[2px] pl-[2px]" role="list">${rows}</ol>
     <div class="mt-[5px] flex flex-wrap gap-x-[10px] gap-y-[2px]">
       <span data-wizard-analysis-elapsed>${escapeHtml(wizardAnalysisElapsedText())}</span>
-      <span>Bạn có thể chuyển sang trang khác — AI vẫn chạy nền và kết quả sẽ được giữ.</span>
+      <span>Có thể chuyển trang — AI vẫn chạy nền.</span>
     </div>
     <span>${wizardProviderPrivacyText()}</span>
   </div>`;
+}
+
+/**
+ * #180: says before the run how much of the lesson the model is going to read,
+ * because that number is a property of the provider, not of the document. Main
+ * ships it in `settings.ai.lessonAnalyzeBudget`; `null` means the provider owns
+ * its own context and the whole lesson is sent. A short lesson under a local
+ * budget gets no line — there is nothing the teacher could act on.
+ */
+function wizardAnalyzeBudgetHintHtml() {
+  const ai = state.settings.ai || {};
+  const chars = String(wizardState.text || '').length;
+  if (!chars) return '';
+  if (wizardAnalyzeProviderId() !== 'local') {
+    return `<div class="field-hint" data-wizard-analyze-budget="full"><span data-icon="circle-check" data-icon-size="12"></span> AI đám mây đọc toàn bộ giáo án — không cắt bớt.</div>`;
+  }
+  const budget = Number(ai.lessonAnalyzeBudget);
+  if (!Number.isFinite(budget) || chars <= budget) return '';
+  return `<div class="field-hint" data-wizard-analyze-budget="local"><span data-icon="triangle-alert" data-icon-size="12"></span> AI local chỉ đọc ${budget.toLocaleString('vi-VN')} ký tự. Hãy chọn mục ở bước 1 để đúng đoạn cần.</div>`;
+}
+
+/**
+ * #180: the one sentence that states what the model really read. Every number
+ * comes from `lesson:analyze`, measured by the functions that built the request,
+ * so it cannot claim text the model never saw.
+ */
+function wizardAnalysisSentText(sent) {
+  if (!sent) return '';
+  const read = Number(sent.sentChars) || 0;
+  const total = Number(sent.scoped ? sent.pickedChars : sent.documentChars) || 0;
+  const scope = sent.scoped ? 'phần đã chọn' : 'giáo án';
+  const vi = value => Number(value || 0).toLocaleString('vi-VN');
+  if (!sent.truncated) {
+    return `AI đã đọc toàn bộ ${vi(read)} ký tự của ${scope}${sent.budgetChars === null ? ' — không cắt' : ''}.`;
+  }
+  const dropped = sent.scoped && sent.omittedSections
+    ? ` ${vi(sent.omittedSections)} mục không vừa hạn mức.`
+    : ' Hãy chọn phần hẹp hơn hoặc dùng AI đám mây.';
+  return `AI chỉ đọc ${vi(read)}/${vi(total)} ký tự của ${scope}.${dropped}`;
 }
 
 function renderWizardAnalysis() {
@@ -70,7 +109,7 @@ function renderWizardAnalysis() {
   if (!s.analysis) {
     return `<section class="form-panel" data-wizard-step-body="analyze">
       <div class="section-head"><h3>Bước 2 · Phân tích giáo án</h3><span class="tag">${escapeHtml(wizardProviderLabel())}</span></div>
-      <div class="panel-sub">${escapeHtml(wizardProviderLabel())} sẽ đọc giáo án và rút ra mục tiêu, kiến thức trọng tâm và những điểm chưa chắc chắn. Bạn xem lại và chỉnh sửa trước khi chọn trò chơi.</div>
+      <div class="panel-sub">Rút ra mục tiêu, kiến thức trọng tâm và điểm chưa chắc chắn. Bạn xem lại trước khi chọn trò chơi.</div>
       ${wizardProviderCard()}
       ${wizardAiReadinessHint()}
       ${wizardProviderPickerHtml()}
@@ -82,16 +121,19 @@ function renderWizardAnalysis() {
         <button class="btn btn-secondary" data-wizard-action="back"><span data-icon="arrow-left" data-icon-size="13"></span> Quay lại</button>
       </div>
       ${wizardCloudAnalyzeHintHtml()}
-      ${analyzing ? '<div class="field-hint" data-wizard-loading="analyze">Đang đọc giáo án. Quá trình có thể mất vài chục giây tuỳ nhà cung cấp.</div>' : ''}
+      ${analyzing ? '' : wizardAnalyzeBudgetHintHtml()}
     </section>`;
   }
   const analysis = s.analysis;
   // #75: the frozen total from the run that produced this analysis, if any.
   const analysisTotal = wizardAnalysisTotalText();
+  // #180: stays under the heading so the scope survives the fading notice.
+  const sentText = wizardAnalysisSentText(s.analysisSent);
   return `<section class="form-panel" data-wizard-step-body="analyze">
     <div class="section-head"><h3>Bước 2 · Xem lại phân tích</h3><span class="tag">Giáo viên duyệt</span></div>
     ${analysisTotal ? `<div class="field-hint" data-wizard-analysis-total-line>⏱ ${escapeHtml(analysisTotal)}</div>` : ''}
-    <div class="panel-sub">Đây là kết quả do ${escapeHtml(wizardProviderLabel())} tạo. Hãy sửa cho chính xác — mọi chỉnh sửa được dùng cho bước chọn và cấu hình trò chơi.</div>
+    ${sentText ? `<div class="field-hint" data-wizard-analysis-sent>${escapeHtml(sentText)}</div>` : ''}
+    <div class="panel-sub">Kết quả do ${escapeHtml(wizardProviderLabel())} tạo — hãy sửa cho chính xác. Bước sau dùng đúng nội dung bạn duyệt.</div>
     <div class="field-row">
       <div class="field"><label>CHỦ ĐỀ</label><input id="wizardTopic" data-wizard-analysis="topic" value="${escapeHtml(analysis.topic || '')}"></div>
       <div class="field"><label>MÔN HỌC</label><input id="wizardSubject" data-wizard-analysis="subject" value="${escapeHtml(analysis.subject || '')}"></div>
@@ -134,7 +176,7 @@ function renderWizardAnalysis() {
       <button class="btn ${s.quick ? 'btn-primary' : 'btn-secondary'}" id="wizardNextBtn" data-wizard-action="next"${s.busy === 'prepare' ? ' disabled' : ''}>Tiếp tục · Chọn trò chơi <span data-icon="arrow-right" data-icon-size="13"></span></button>
     </div>
     ${renderWizardQuickPanel()}
-    <div class="field-hint">“Phân tích lại” sẽ thay thế nội dung đang sửa bằng kết quả mới từ ${escapeHtml(wizardProviderLabel())}. “AI gợi ý &amp; tạo ngay” tự chọn thể loại và số lượng phù hợp — bạn xác nhận trước khi AI chạy.</div>
+    <div class="field-hint">“Phân tích lại” thay kết quả đang sửa bằng kết quả mới; “AI gợi ý &amp; tạo ngay” tự chọn thể loại và số lượng, bạn xác nhận trước.</div>
   </section>`;
 }
 
@@ -223,7 +265,9 @@ function wizardCloudAnalyzeHintHtml() {
       : `<div class="field-hint" data-wizard-cloud-hint="stale">AI ngoài đã nhập khoá nhưng bước này chưa nhận được trạng thái mới. Hãy mở lại bước 2 hoặc mở ${retest} để kiểm tra lại.</div>`;
   }
   // Informational only (D14): a verified provider is never shown as a problem.
-  return `<div class="field-hint" data-wizard-cloud-hint="ready">Nút AI ngoài gửi giáo án tới ${escapeHtml(cloud.label)} qua Internet. AI local vẫn là mặc định.</div>`;
+  // #180: the same line carries the fact a local run cannot state — a cloud
+  // endpoint owns its context, so the lesson is sent whole.
+  return `<div class="field-hint" data-wizard-cloud-hint="ready">Nút AI ngoài gửi toàn bộ giáo án tới ${escapeHtml(cloud.label)} qua Internet — không cắt.</div>`;
 }
 
 async function wizardAnalyzeRun(force, providerId) {
@@ -254,6 +298,8 @@ async function wizardAnalyzeRun(force, providerId) {
   wizardClearMessages();
   // #75: a new run invalidates the previous run's frozen total right away.
   wizardState.analysisFinishedMs = 0;
+  // #180: and its "what was read" line — the old numbers describe the old request.
+  wizardState.analysisSent = null;
   const requestId = wizardNewRequestId('analyze');
   wizardState.activeRequestId = requestId;
   render();
@@ -281,6 +327,9 @@ async function wizardAnalyzeRun(force, providerId) {
     wizardState.analysis = result.analysis;
     wizardState.analysisOriginal = JSON.parse(JSON.stringify(result.analysis));
     wizardState.analysisId = result.analysis.id;
+    // #180: what this run really read, kept so the panel can still say it after
+    // the notice faded. A view of an old analysis has none, and says nothing.
+    wizardState.analysisSent = result.sent || null;
     if (result.project) {
       wizardState.projectId = result.project.id;
       wizardState.createdAt = result.project.createdAt || wizardState.createdAt;
@@ -292,9 +341,12 @@ async function wizardAnalyzeRun(force, providerId) {
     wizardState.quick = null;
     wizardState.capacity = null;
     await wizardRefreshProjects();
+    // #180: the notice names the scope of what was read, so "phân tích xong" is
+    // never the whole story when part of the lesson was left out.
+    const sentText = wizardAnalysisSentText(result.sent);
     wizardSetNotice(result.cached
       ? 'Giáo án không đổi nên đã dùng lại kết quả phân tích trước đó (không gọi AI).'
-      : `${wizardProviderLabel()} đã phân tích xong. Hãy xem lại và chỉnh sửa nếu cần.`);
+      : `${wizardProviderLabel()} đã phân tích xong.${sentText ? ` ${sentText}` : ' Hãy xem lại và chỉnh sửa nếu cần.'}`);
   } catch (error) {
     failure = error;
     // DECISIONS #132 D14: the only case that turns the cloud button red is a cloud

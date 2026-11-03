@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import {
   LESSON_PREPROCESS_BUDGET_DEEP,
   LESSON_PREPROCESS_BUDGET_FAST,
+  LESSON_PREPROCESS_NO_CUT,
   LESSON_PREPROCESS_RANKING_ENABLED,
   LESSON_PREPROCESS_VERSION,
   blockValue,
@@ -16,6 +17,7 @@ import {
   cutAtBoundary,
   isProtectedLine,
   preprocessBudgetForMode,
+  preprocessBudgetForProvider,
   preprocessLessonSource,
   rankBlocksForExcerpt
 } from '../../src/services/lesson/lesson-preprocess';
@@ -305,6 +307,38 @@ function run(): void {
   const promptUnprepared = buildLessonAnalysisPrompt({ text: withMiddle, maxChars: middleBudget });
   assert.ok(promptUnprepared.includes('đã được rút gọn'), 'a budget-only prompt announces truncation too');
   assert.ok(promptUnprepared.length < promptText.length + 2_000, 'both paths stay near the budget');
+
+  // #180: the per-mode budgets are the bundled llama.cpp context window, so the
+  // provider — not the lesson — decides whether anything is cut.
+  assert.equal(preprocessBudgetForProvider('fast', 'local'), LESSON_PREPROCESS_BUDGET_FAST);
+  assert.equal(preprocessBudgetForProvider('deep', 'local'), LESSON_PREPROCESS_BUDGET_DEEP);
+  assert.equal(preprocessBudgetForProvider(undefined, undefined), LESSON_PREPROCESS_BUDGET_FAST,
+    'no provider named is the local default, unchanged');
+  assert.equal(preprocessBudgetForProvider('fast', ''), LESSON_PREPROCESS_BUDGET_FAST);
+  assert.equal(preprocessBudgetForProvider('deep', 'gemini'), LESSON_PREPROCESS_NO_CUT);
+  assert.equal(preprocessBudgetForProvider('fast', 'openai'), LESSON_PREPROCESS_NO_CUT);
+
+  const longLesson = Array.from(
+    { length: 700 },
+    (_, index) => `Đoạn ${index + 1}: học sinh mô tả thí nghiệm ${index + 1} rồi giải thích kết quả thu được.`
+  ).join('\n\n');
+  assert.ok(longLesson.length > 40_000, `fixture must outgrow every budget (${longLesson.length})`);
+
+  const longLocally = preprocessLessonSource(longLesson, { maxChars: LESSON_PREPROCESS_BUDGET_FAST });
+  assert.equal(longLocally.metrics.truncated, true, 'the local budget still cuts a long lesson');
+  assert.equal(longLocally.metrics.excerptReason, 'head-tail');
+
+  const longInCloud = preprocessLessonSource(longLesson, { maxChars: LESSON_PREPROCESS_NO_CUT });
+  assert.equal(longInCloud.metrics.truncated, false, 'a cloud run never cuts');
+  assert.equal(longInCloud.metrics.excerptReason, 'fits');
+  assert.equal(longInCloud.text.length, longInCloud.cleaned.length, 'the whole cleaned document is sent');
+  assert.ok(longInCloud.text.includes('Đoạn 700:'), 'the last block reaches the model');
+  assert.equal(longInCloud.metrics.rankingSavingsChars, 0,
+    'with nothing to drop, ranking may not report a saving that was never applied');
+  assert.ok(buildLessonAnalysisPrompt({ text: longLesson, maxChars: LESSON_PREPROCESS_NO_CUT }).includes('Đoạn 700:'),
+    'the cloud prompt carries the end of the document');
+  assert.ok(!buildLessonAnalysisPrompt({ text: longLesson, maxChars: LESSON_PREPROCESS_NO_CUT }).includes('đã được rút gọn'),
+    'a document that was not trimmed is not announced as trimmed');
 
   process.stdout.write('lesson-preprocess: ok\n');
 }

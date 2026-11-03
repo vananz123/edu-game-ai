@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 /**
  * DECISIONS #132 — Step 2 and Step 5 use the provider configured in Settings.
+ * DECISIONS #180 — step 2 also states how much of the lesson that provider reads
+ * (a cloud endpoint gets the whole document; the local runtime has a budget).
  *
  * The page is given a provider view through a temporary `ai:providers` override
  * (`window.eduGame` is frozen, and the checks must not depend on the network), and
@@ -38,6 +40,9 @@ function providerView({ localRunning = true, gemini = null, openai = null } = {}
   const providers = [local, gem, oai, opencode, custom];
   const usable = providers.filter(p => p.usable);
   const activeId = usable.length ? usable[0].id : 'local';
+  // #180: main ships the read budget with the provider view; `null` = the whole
+  // lesson is sent, which is what every cloud endpoint gets.
+  const lessonAnalyzeBudget = activeId === 'local' ? 12000 : null;
   return {
     id: 'override',
     ai: {
@@ -47,6 +52,7 @@ function providerView({ localRunning = true, gemini = null, openai = null } = {}
       providers,
       hasKey: false,
       keyMasked: '',
+      lessonAnalyzeBudget,
       picker: {
         show: usable.length > 1,
         options: usable.map(p => ({ id: p.id, label: p.label, model: p.model })),
@@ -280,6 +286,59 @@ function installHarness(view, analyzeBehaviour = 'ok') {
   check('the error banner links to AI Settings', blocked.openSettings === true);
   check('the error banner does not send the teacher to the local model window', blocked.openLocal === false, blocked.actions);
   check('the provider error does not fall back to a "no lesson section" message', !/cấu trúc tài liệu/.test(blocked.text), blocked.text.slice(0, 80));
+
+  // 5. #180: how much of the lesson gets read is a property of the provider, and
+  // the step says it — before the run (a budget line or none) and after it (what
+  // the model really read). Pure render state here; no model is called.
+  await cdp.evaluate(installHarness(providerView({ gemini: true })));
+  await cdp.evaluate(KEEP_PROVIDER_VIEW);
+  const readScope = await cdp.evaluate(`(async () => {
+    if (typeof wizardReset === 'function') wizardReset();
+    state.settings = JSON.parse(JSON.stringify(window.__providerView));
+    navigate('create-wizard');
+    wizardState.text = 'Nội dung bài học. '.repeat(1200);
+    wizardState.documentId = 'doc-provider-check';
+    wizardState.step = 'analyze';
+    wizardState.analysis = null;
+    wizardState.selectedProviderId = '';
+    render();
+    await new Promise(r => setTimeout(r, 150));
+    const line = () => document.querySelector('[data-wizard-analyze-budget]');
+    const localLine = line();
+    const local = { kind: localLine ? localLine.dataset.wizardAnalyzeBudget : '', text: localLine ? localLine.textContent : '' };
+    wizardState.selectedProviderId = 'gemini';
+    render();
+    await new Promise(r => setTimeout(r, 150));
+    const fullLine = line();
+    const cloud = { kind: fullLine ? fullLine.dataset.wizardAnalyzeBudget : '', text: fullLine ? fullLine.textContent : '' };
+    // A lesson the local runtime can read whole gets no warning at all.
+    wizardState.selectedProviderId = '';
+    wizardState.text = 'Bài 1: Quang hợp ở thực vật.';
+    render();
+    await new Promise(r => setTimeout(r, 150));
+    const nagged = Boolean(line());
+    // Post-run: the sentence is built from what main measured, not from the UI's guess.
+    wizardState.analysis = { id: 'a1', topic: 'Quang hợp', subject: 'Sinh học', grade: 8, objectives: [{ id: 'o1', description: 'Mô tả quang hợp', cognitiveLevel: 'understand' }], keyConcepts: [], uncertainties: [] };
+    const readText = () => (document.querySelector('[data-wizard-analysis-sent]') || {}).textContent || '';
+    wizardState.analysisSent = { provider: 'gemini', providerLabel: 'Gemini (Google)', documentChars: 43180, sentChars: 43180, pickedChars: 0, truncated: false, scoped: false, omittedSections: 0, budgetChars: null };
+    render();
+    await new Promise(r => setTimeout(r, 150));
+    const cloudRead = readText();
+    wizardState.analysisSent = { provider: 'local', providerLabel: 'AI local (llama.cpp)', documentChars: 43180, sentChars: 12000, pickedChars: 0, truncated: true, scoped: false, omittedSections: 0, budgetChars: 12000 };
+    render();
+    await new Promise(r => setTimeout(r, 150));
+    const localRead = readText();
+    wizardState.analysisSent = { provider: 'local', providerLabel: 'AI local (llama.cpp)', documentChars: 43180, sentChars: 4200, pickedChars: 5100, truncated: true, scoped: true, omittedSections: 3, budgetChars: 12000 };
+    render();
+    await new Promise(r => setTimeout(r, 150));
+    return { local, cloud, nagged, cloudRead, localRead, scopedRead: readText() };
+  })()`);
+  check('#180: a local run states the budget it will cut to', readScope.local.kind === 'local' && /12\.000/.test(readScope.local.text), readScope.local.text.slice(0, 90));
+  check('#180: a cloud run states that nothing is cut', readScope.cloud.kind === 'full' && /không cắt/i.test(readScope.cloud.text), readScope.cloud.text.slice(0, 90));
+  check('#180: a lesson the local runtime can read whole is not warned about', readScope.nagged === false);
+  check('#180: the reviewed panel reports the whole document a cloud model read', /toàn bộ 43\.180 ký tự/.test(readScope.cloudRead) && /không cắt/.test(readScope.cloudRead), readScope.cloudRead.slice(0, 120));
+  check('#180: the reviewed panel reports what a local model could not read', /12\.000\/43\.180/.test(readScope.localRead), readScope.localRead.slice(0, 120));
+  check('#180: a scoped run names the sections that did not fit', /3 mục không vừa hạn mức/.test(readScope.scopedRead), readScope.scopedRead.slice(0, 120));
 
   cdp.ws.close();
   console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');
