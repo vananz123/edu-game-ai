@@ -20,7 +20,7 @@ function renderWizardInput() {
   // The panes are layout-only visibility (`display`), never `aria-hidden`:
   // keeping both panes in the accessibility tree means a screen reader, the
   // DOM checks and `wizardSyncStructureCheckboxes()` always find the tree.
-  const tabButton = (id, label, badge, icon) => `<button type="button" role="tab" aria-selected="${activeTab === id ? 'true' : 'false'}" aria-controls="wizardTabPane-${id}" id="wizardTab-${id}" class="wizard-tab-btn flex items-center gap-2 py-2.5 px-4 font-bold text-[13px] border-b-2 rounded-t-lg transition-colors ${activeTab === id ? 'border-[#6366f1] text-[#6366f1] dark:text-[#a5b4fc] bg-[#f8f7ff] dark:bg-[#1e2544]' : 'border-transparent text-[#64748b] dark:text-[#94a3b8] hover:text-[#1e293b]'}" data-wizard-input-tab="${id}">
+  const tabButton = (id, label, badge, icon) => `<button type="button" role="tab" aria-selected="${activeTab === id ? 'true' : 'false'}" aria-controls="wizardTabPane-${id}" id="wizardTab-${id}" class="wizard-tab-btn flex items-center gap-2 py-2.5 px-4 font-bold text-[13px] border-b-2 rounded-t-lg transition-colors ${activeTab === id ? 'border-[#6366f1] text-[#4f46e5] dark:text-[#a5b4fc] bg-[#f8f7ff] dark:bg-[#1e2544]' : 'border-transparent text-[#4f5a6e] dark:text-[#94a3b8] hover:text-[#1e293b]'}" data-wizard-input-tab="${id}">
         ${icon ? `<span data-icon="${icon}" data-icon-size="14"></span>` : ''}
         <span>${label}</span>
         ${badge}
@@ -33,11 +33,11 @@ function renderWizardInput() {
           <span class="d-badge d-badge-primary d-badge-sm font-bold">BƯỚC 1 / 5</span>
           <h3 class="text-[17px] font-bold text-[#1e293b] dark:text-[#f1f5f9] m-0">Nhập nội dung bài học & giáo án</h3>
         </div>
-        <p class="text-[12px] text-[#64748b] dark:text-[#94a3b8] m-0 leading-relaxed">
+        <p class="text-[12px] text-[#4f5a6e] dark:text-[#94a3b8] m-0 leading-relaxed">
           Tải tệp giáo án từ máy tính hoặc dán nội dung văn bản. Dữ liệu chỉ lưu trên máy, AI local xử lý ngoại tuyến an toàn.
         </p>
       </div>
-      <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#effaf5] border border-[#ddf4e8] text-[#16a34a] text-[11px] font-semibold dark:bg-[#132d24] dark:border-[#1e4a3b] dark:text-[#4ade80]">
+      <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#effaf5] border border-[#ddf4e8] text-[#0f7b5c] text-[12px] font-semibold dark:bg-[#132d24] dark:border-[#1e4a3b] dark:text-[#4ade80]">
         <span data-icon="lock" data-icon-size="12"></span> Bảo mật cục bộ · 100% Offline
       </span>
     </div>
@@ -50,8 +50,8 @@ function renderWizardInput() {
             <div class="w-10 h-10 rounded-lg bg-[#e0e7ff] text-[#4f46e5] dark:bg-[#283060] dark:text-[#a5b4fc] grid place-items-center shrink-0"><span data-icon="file-text" data-icon-size="20"></span></div>
             <div class="min-w-0">
               <div class="font-bold text-[13px] text-[#1e293b] dark:text-[#f8fafc] truncate" title="${escapeHtml(s.documentName)}">${escapeHtml(s.documentName)}</div>
-              <div class="text-[11px] text-[#64748b] dark:text-[#94a3b8] flex items-center gap-2 mt-0.5">
-                <span class="font-semibold text-[#16a34a]">✓ Đã nạp thành công</span>
+              <div class="text-[12px] text-[#4f5a6e] dark:text-[#94a3b8] flex items-center gap-2 mt-0.5">
+                <span class="font-semibold text-[#0f7b5c]">✓ Đã nạp thành công</span>
                 <span>·</span>
                 <span>${Number(meta?.characters || characters).toLocaleString('vi-VN')} ký tự</span>
                 <span>·</span>
@@ -71,7 +71,7 @@ function renderWizardInput() {
             </div>
             <div>
               <strong class="block text-[13px] text-[#1e293b] dark:text-[#f1f5f9]">Tải lên tệp tài liệu giáo án</strong>
-              <div class="flex items-center gap-1.5 mt-1 text-[10px] text-[#64748b] dark:text-[#94a3b8] flex-wrap">
+              <div class="flex items-center gap-1.5 mt-1 text-[12px] text-[#4f5a6e] dark:text-[#94a3b8] flex-wrap">
                 <span>Hỗ trợ định dạng:</span>
                 <span class="px-1.5 py-0.5 rounded bg-white dark:bg-[#1e2544] border border-[#e2e8f0] dark:border-[#334155] font-mono font-semibold text-[#475569] dark:text-[#cbd5e1]">DOCX</span>
                 <span class="px-1.5 py-0.5 rounded bg-white dark:bg-[#1e2544] border border-[#e2e8f0] dark:border-[#334155] font-mono font-semibold text-[#475569] dark:text-[#cbd5e1]">PDF</span>
@@ -89,14 +89,14 @@ function renderWizardInput() {
 
     <!-- Tên tài liệu -->
     <div class="field mb-4">
-      <label class="text-[11px] font-bold text-[#475569] dark:text-[#cbd5e1] mb-1 block">TÊN BÀI HỌC / TÀI LIỆU</label>
+      <label class="text-[12px] font-bold text-[#475569] dark:text-[#cbd5e1] mb-1 block">TÊN BÀI HỌC / TÀI LIỆU</label>
       <input id="wizardDocName" class="w-full px-3 py-2 border border-[#cbd5e1] dark:border-[#334155] rounded-lg bg-white dark:bg-[#1e2544] text-[#1e293b] dark:text-[#f8fafc] text-[13px] focus:outline-none focus:border-[#6366f1]" placeholder="Ví dụ: Bài 10 - Quang hợp ở thực vật" value="${escapeHtml(s.documentName || '')}"${s.busy ? ' disabled' : ''}>
     </div>
 
     <!-- Thanh Tabs: Cấu trúc tài liệu & Nội dung giáo án -->
     <div class="wizard-tab-header flex items-center border-b border-[#e2e8f0] dark:border-[#2a324b] mb-4 gap-2" role="tablist">
-      ${tabButton('structure', 'Cấu trúc tài liệu', hasStructure ? `<span data-wizard-tab-count class="px-1.5 py-0.5 rounded-full text-[10px] bg-[#eef2ff] text-[#4f46e5] dark:bg-[#283060] dark:text-[#a5b4fc]">${treeCount} mục</span>` : '', 'list')}
-      ${tabButton('content', 'Nội dung giáo án', `<span data-wizard-tab-count class="px-1.5 py-0.5 rounded-full text-[10px] bg-[#f1f5f9] text-[#475569] dark:bg-[#1e2544] dark:text-[#cbd5e1]">${characters.toLocaleString('vi-VN')} ký tự</span>`, 'file-text')}
+      ${tabButton('structure', 'Cấu trúc tài liệu', hasStructure ? `<span data-wizard-tab-count class="px-1.5 py-0.5 rounded-full text-[12px] bg-[#eef2ff] text-[#4f46e5] dark:bg-[#283060] dark:text-[#a5b4fc]">${treeCount} mục</span>` : '', 'list')}
+      ${tabButton('content', 'Nội dung giáo án', `<span data-wizard-tab-count class="px-1.5 py-0.5 rounded-full text-[12px] bg-[#f1f5f9] text-[#475569] dark:bg-[#1e2544] dark:text-[#cbd5e1]">${characters.toLocaleString('vi-VN')} ký tự</span>`, 'file-text')}
     </div>
 
     <!-- Tab 1 Pane: Cấu trúc tài liệu -->
@@ -108,15 +108,15 @@ function renderWizardInput() {
     <div class="wizard-tab-pane ${activeTab === 'content' ? '' : 'hidden'}" data-tab-pane="content" role="tabpanel" aria-labelledby="wizardTab-content" id="wizardTabPane-content" data-active-pane="${activeTab === 'content' ? 'true' : 'false'}">
       <div class="field mb-4">
         <div class="flex items-center justify-between mb-1.5">
-          <label class="text-[11px] font-bold text-[#475569] dark:text-[#cbd5e1]">NỘI DUNG VĂN BẢN ĐẦY ĐỦ *</label>
-          <button type="button" class="text-[11px] text-[#6366f1] hover:underline bg-transparent border-0 cursor-pointer inline-flex items-center gap-[5px]" data-wizard-action="insert-sample"${s.busy ? ' disabled' : ''}><span data-icon="sparkles" data-icon-size="12"></span> Thử giáo án mẫu</button>
+          <label class="text-[12px] font-bold text-[#475569] dark:text-[#cbd5e1]">NỘI DUNG VĂN BẢN ĐẦY ĐỦ *</label>
+          <button type="button" class="text-[12px] text-[#4f46e5] hover:underline bg-transparent border-0 cursor-pointer inline-flex items-center gap-[5px]" data-wizard-action="insert-sample"${s.busy ? ' disabled' : ''}><span data-icon="sparkles" data-icon-size="12"></span> Thử giáo án mẫu</button>
         </div>
         <textarea id="wizardDocText" rows="13" class="w-full p-3 border border-[#cbd5e1] dark:border-[#334155] rounded-xl bg-white dark:bg-[#1e2544] text-[#1e293b] dark:text-[#f8fafc] text-[13px] leading-relaxed focus:outline-none focus:border-[#6366f1] transition font-sans" placeholder="Dán nội dung bài học, mục tiêu cần đạt, kiến thức trọng tâm, câu hỏi hoặc ví dụ thực tế..."${s.busy ? ' disabled' : ''}>${escapeHtml(s.text || '')}</textarea>
-        <div class="flex items-center justify-between mt-1.5 flex-wrap gap-2 text-[11px]">
-          <div class="field-hint text-[#64748b] dark:text-[#94a3b8]" id="wizardDocHint">
+        <div class="flex items-center justify-between mt-1.5 flex-wrap gap-2 text-[12px]">
+          <div class="field-hint text-[#4f5a6e] dark:text-[#94a3b8]" id="wizardDocHint">
             ${ready ? `✓ Đã có ${characters.toLocaleString('vi-VN')} ký tự. Đủ điều kiện phân tích bằng AI.` : `Cần tối thiểu ${WIZARD_MIN_CHARACTERS} ký tự (${characters}/${WIZARD_MIN_CHARACTERS}).`}
           </div>
-          <div class="text-[11px] font-semibold ${ready ? 'text-[#16a34a]' : 'text-[#f59e0b]'}">
+          <div class="text-[12px] font-semibold ${ready ? 'text-[#0f7b5c]' : 'text-[#9c4808]'}">
             ${ready ? '● Sẵn sàng phân tích' : '○ Chưa đủ độ dài'}
           </div>
         </div>
@@ -167,22 +167,22 @@ function wizardInputKindPickerHtml(s) {
   const issueCount = (s.importIssues || []).length;
   const option = (value, label, hint) => `<button type="button" role="radio" aria-checked="${choice === value ? 'true' : 'false'}" class="flex-1 min-w-[150px] text-left px-3 py-2 rounded-xl border transition ${choice === value ? 'border-[#6366f1] bg-[#f5f3ff] dark:bg-[#262c55] text-[#4338ca] dark:text-[#c7d2fe]' : 'border-[#e2e8f0] dark:border-[#334155] bg-white dark:bg-[#1e2544] text-[#475569] dark:text-[#cbd5e1] hover:border-[#a5b4fc]'}" data-wizard-input-kind="${value}"${s.busy ? ' disabled' : ''}>
       <div class="font-bold text-[12px]">${label}</div>
-      <div class="text-[11px] opacity-80 mt-0.5 leading-snug">${hint}</div>
+      <div class="text-[12px] opacity-80 mt-0.5 leading-snug">${hint}</div>
     </button>`;
   const verdict = !detected
     ? ''
-    : `<div class="mt-2 text-[11px] leading-relaxed flex items-start gap-1.5 flex-wrap">
-        <span class="font-semibold text-[#64748b] dark:text-[#94a3b8]">Hệ thống nhận diện:</span>
+    : `<div class="mt-2 text-[12px] leading-relaxed flex items-start gap-1.5 flex-wrap">
+        <span class="font-semibold text-[#4f5a6e] dark:text-[#94a3b8]">Hệ thống nhận diện:</span>
         <span class="px-1.5 py-0.5 rounded bg-[#eef2ff] dark:bg-[#262c55] font-bold text-[#4f46e5] dark:text-[#a5b4fc]">${escapeHtml(wizardInputKindLabel(shownKind))}</span>
-        ${choice === 'auto' ? '<span class="text-[#94a3b8]">(đang dùng kết quả này)</span>' : '<span class="text-[#f59e0b] font-semibold">(bạn đã chọn khác — đang dùng lựa chọn của bạn)</span>'}
-        ${detected.reasons && detected.reasons.length ? `<span class="text-[#64748b] dark:text-[#94a3b8]">· ${escapeHtml(detected.reasons.slice(0, 3).join(' · '))}</span>` : ''}
+        ${choice === 'auto' ? '<span class="text-[#5a6478]">(đang dùng kết quả này)</span>' : '<span class="text-[#9c4808] font-semibold">(bạn đã chọn khác — đang dùng lựa chọn của bạn)</span>'}
+        ${detected.reasons && detected.reasons.length ? `<span class="text-[#4f5a6e] dark:text-[#94a3b8]">· ${escapeHtml(detected.reasons.slice(0, 3).join(' · '))}</span>` : ''}
         ${wizardSemanticNote(s)}
       </div>`;
   // update_quy_trinh_2 §7: an outline is usable but thin, so say so instead of
   // silently treating it as a finished lesson.
   const outlineNote = shownKind !== 'outline'
     ? ''
-    : `<div class="mt-2 text-[11px] px-2.5 py-2 rounded-lg bg-[#fff8e6] border border-[#f6e3b4] text-[#7a5b00] dark:bg-[#2d2614] dark:border-[#4a3d1a] dark:text-[#fbbf24] leading-relaxed">
+    : `<div class="mt-2 text-[12px] px-2.5 py-2 rounded-lg bg-[#fff8e6] border border-[#f6e3b4] text-[#7a5b00] dark:bg-[#2d2614] dark:border-[#4a3d1a] dark:text-[#fbbf24] leading-relaxed">
         Tài liệu là <b>dàn ý</b>, chưa đủ chi tiết. Có thể dùng nội dung hiện có hoặc để AI phát triển thêm khi tạo trò chơi.
       </div>`;
   // #116: also shown when the parser recognized questions but the classifier settled
@@ -192,8 +192,8 @@ function wizardInputKindPickerHtml(s) {
   const questionsNote = recognized ? wizardQuestionBankNote(s, questionCount, issueCount) : '';
   return `<div class="mb-4 rounded-xl border border-[#e2e8f0] dark:border-[#334155] p-3" data-wizard-input-kind-picker>
     <div class="flex items-center gap-2 mb-2 flex-wrap">
-      <span class="text-[11px] font-bold text-[#475569] dark:text-[#cbd5e1]">LOẠI NỘI DUNG</span>
-      <span class="text-[10px] text-[#94a3b8]">quy tắc trước, bộ đọc hiểu chỉ xác nhận</span>
+      <span class="text-[12px] font-bold text-[#475569] dark:text-[#cbd5e1]">LOẠI NỘI DUNG</span>
+      <span class="text-[12px] text-[#5a6478]">quy tắc trước, bộ đọc hiểu chỉ xác nhận</span>
     </div>
     <div class="flex gap-2 flex-wrap" role="radiogroup" aria-label="Loại nội dung đầu vào">
       ${option('auto', 'Tự phát hiện', 'Hệ thống đoán theo cấu trúc văn bản; bạn đổi được bất cứ lúc nào.')}
@@ -225,7 +225,7 @@ function wizardQuestionBankNote(s, questionCount, issueCount) {
   if (needsReview) counts.push(`${needsReview} cần xem lại`);
   if (incompatible) counts.push(`${incompatible} không tương thích`);
   const busy = s.busy ? ' disabled' : '';
-  return `<div class="mt-2 text-[11px] px-2.5 py-2 rounded-lg bg-[#effaf5] border border-[#ddf4e8] text-[#166534] dark:bg-[#132d24] dark:border-[#1e4a3b] dark:text-[#86efac] leading-relaxed" data-question-bank-summary>
+  return `<div class="mt-2 text-[12px] px-2.5 py-2 rounded-lg bg-[#effaf5] border border-[#ddf4e8] text-[#166534] dark:bg-[#132d24] dark:border-[#1e4a3b] dark:text-[#86efac] leading-relaxed" data-question-bank-summary>
         Tài liệu có vẻ là <b>ngân hàng câu hỏi</b> (${counts.join(' · ')}).${recommendedLabel ? ` Đề xuất: <b>${escapeHtml(recommendedLabel)}</b>.` : ''}
         ${issueCount ? `<br><span class="text-[#b45309] dark:text-[#fbbf24]">Còn ${issueCount} dòng cần bổ sung — giáo viên sửa được sau.</span>` : ''}
         <br>Câu hỏi, đáp án và lời giải được giữ nguyên, chỉ chuẩn hóa định dạng. <b>Không cần phân tích giáo án.</b>
@@ -249,7 +249,7 @@ function wizardSemanticNote(s) {
   const note = s.inputSemanticNote;
   if (!semantic || semantic === 'skipped') return '';
   if (semantic === 'unavailable') {
-    return '<span class="text-[#94a3b8]">(phân loại bằng quy tắc — chưa có bộ đọc hiểu trên máy)</span>';
+    return '<span class="text-[#5a6478]">(phân loại bằng quy tắc — chưa có bộ đọc hiểu trên máy)</span>';
   }
   if (!note) return '';
   return `<span class="text-[#0f766e] dark:text-[#5eead4]">${escapeHtml(note)}</span>`;
@@ -274,9 +274,9 @@ function renderWizardStructureTabContent() {
   const characters = String(wizardState.text || '').trim().length;
   if (characters < WIZARD_MIN_CHARACTERS) {
     return `<div class="p-8 text-center border-2 border-dashed border-[#e2e8f0] dark:border-[#2a324b] rounded-xl bg-[#f8fafc] dark:bg-[#151a30] my-2">
-      <span class="mb-2 block text-[#aab1c3]"><span data-icon="list" data-icon-size="32"></span></span>
+      <span class="mb-2 block text-[#5f6a7d]"><span data-icon="list" data-icon-size="32"></span></span>
       <strong class="block text-[14px] text-[#1e293b] dark:text-[#f8fafc] mb-1">Chưa có cấu trúc tài liệu</strong>
-      <p class="text-[12px] text-[#64748b] dark:text-[#94a3b8] max-w-[440px] mx-auto mb-4 leading-relaxed">
+      <p class="text-[12px] text-[#4f5a6e] dark:text-[#94a3b8] max-w-[440px] mx-auto mb-4 leading-relaxed">
         Hãy tải lên tệp giáo án hoặc dán nội dung văn bản ở tab "Nội dung giáo án". Hệ thống sẽ tự động bóc tách các chương, mục để bạn lựa chọn trọng tâm bài giảng.
       </p>
       <button type="button" class="btn btn-secondary btn-small" data-wizard-input-tab="content">
@@ -293,7 +293,7 @@ function renderWizardStructureTabContent() {
     wizardStructureSchedule(0);
     return `<div class="p-6 text-center border border-[#e2e8f0] dark:border-[#2a324b] rounded-xl bg-[#f8fafc] dark:bg-[#151a30] my-2">
       <strong class="block text-[13px] text-[#1e293b] dark:text-[#f8fafc] mb-1">Đang đọc cấu trúc tài liệu…</strong>
-      <p class="text-[11px] text-[#64748b] dark:text-[#94a3b8] m-0">Tách chương/mục bằng quy tắc cục bộ — không gọi AI.</p>
+      <p class="text-[12px] text-[#4f5a6e] dark:text-[#94a3b8] m-0">Tách chương/mục bằng quy tắc cục bộ — không gọi AI.</p>
     </div>`;
   }
   return typeof renderWizardStructureTree === 'function' ? renderWizardStructureTree() : '';
@@ -376,7 +376,7 @@ function wizardAiReadinessHint() {
     <span class="shrink-0" data-icon="${running ? 'circle-check' : 'circle-alert'}" data-icon-size="18"></span>
     <div class="min-w-0 flex-1">
       <strong class="text-[12px] block text-[#1e293b] dark:text-[#f8fafc]">${escapeHtml(title)}</strong>
-      <small class="block text-[11px] text-[#64748b] dark:text-[#94a3b8] mt-0.5 leading-snug">${detail}</small>
+      <small class="block text-[12px] text-[#4f5a6e] dark:text-[#94a3b8] mt-0.5 leading-snug">${detail}</small>
     </div>
     <button type="button" class="btn btn-secondary btn-small shrink-0" data-wizard-action="open-ai">Mở AI local</button>
   </div>`;

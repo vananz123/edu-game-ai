@@ -55,7 +55,7 @@ function wizardGeneratedMaxPoints(game) {
 
 function wizardSummaryGrid(rows) {
   if (!rows.length) return '';
-  return `<div class="grid gap-[6px] bg-[#f8f9fc] border border-line rounded-[10px] p-[14px]">${rows.map(([label, value]) => `<div class="flex justify-between gap-[12px] text-[12px]"><span class="text-[#788196]">${escapeHtml(label)}</span><strong class="text-right">${escapeHtml(String(value))}</strong></div>`).join('')}</div>`;
+  return `<div class="grid gap-[6px] bg-[#f8f9fc] border border-line rounded-[10px] p-[14px]">${rows.map(([label, value]) => `<div class="flex justify-between gap-[12px] text-[12px]"><span class="text-[#5f6a7d]">${escapeHtml(label)}</span><strong class="text-right">${escapeHtml(String(value))}</strong></div>`).join('')}</div>`;
 }
 
 /**
@@ -72,7 +72,7 @@ function wizardQualityPanel(report) {
   }
   const errors = issues.filter(issue => issue.severity === 'error');
   const warnings = issues.filter(issue => issue.severity === 'warning');
-  const list = (items, color) => `<ul class="list-disc pl-[18px] text-[12px] space-y-[3px]">${items.slice(0, 6).map(issue => `<li class="${color}">${escapeHtml(issue.message)}</li>`).join('')}${items.length > 6 ? `<li class="text-[#788196]">… và ${items.length - 6} mục khác</li>` : ''}</ul>`;
+  const list = (items, color) => `<ul class="list-disc pl-[18px] text-[12px] space-y-[3px]">${items.slice(0, 6).map(issue => `<li class="${color}">${escapeHtml(issue.message)}</li>`).join('')}${items.length > 6 ? `<li class="text-[#5f6a7d]">… và ${items.length - 6} mục khác</li>` : ''}</ul>`;
   return `<div class="field mt-[10px]" data-wizard-quality="${errors.length ? 'errors' : 'warnings'}">
     <div class="flex items-center gap-[8px] mb-[6px] flex-wrap">
       <strong class="text-[12px]">Kiểm tra chất lượng nội dung</strong>
@@ -723,7 +723,7 @@ function renderWizardGenerationProgress() {
       label = `${label} · không cần`;
     }
     const prefix = status === 'active' ? WIZARD_GENERATION_SPINNER : `${mark} `;
-    return `<li data-stage="${id}" data-status="${status}" class="text-[12px] ${status === 'active' ? 'font-bold text-[#3b3a63]' : status === 'skipped' ? 'text-[#98a0b0]' : 'text-[#5a6478]'}">${prefix}${escapeHtml(label)}</li>`;
+    return `<li data-stage="${id}" data-status="${status}" class="text-[12px] ${status === 'active' ? 'font-bold text-[#3b3a63]' : status === 'skipped' ? 'text-[#5f6a7d]' : 'text-[#5a6478]'}">${prefix}${escapeHtml(label)}</li>`;
   }).join('');
   const fraction = wizardGenerationProgressFraction(s.lessonStage);
   const percent = Math.round(fraction * 100);

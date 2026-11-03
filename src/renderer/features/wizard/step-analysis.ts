@@ -42,7 +42,7 @@ function renderWizardAnalysisProgress() {
     // #75: same spinner as step 5 (one declaration, `step-generate.ts`), so a
     // running stage moves here too instead of sitting on a still "⏳" glyph.
     const prefix = status === 'active' ? WIZARD_GENERATION_SPINNER : `${mark} `;
-    return `<li data-stage="${id}" data-status="${status}" class="text-[12px] ${status === 'active' ? 'font-bold text-[#3b3a63]' : status === 'skipped' ? 'text-[#98a0b0]' : 'text-[#5a6478]'}">${prefix}${escapeHtml(label)}</li>`;
+    return `<li data-stage="${id}" data-status="${status}" class="text-[12px] ${status === 'active' ? 'font-bold text-[#3b3a63]' : status === 'skipped' ? 'text-[#5f6a7d]' : 'text-[#5a6478]'}">${prefix}${escapeHtml(label)}</li>`;
   }).join('');
   const fraction = wizardAnalysisProgressFraction(s.lessonStage);
   const percent = Math.round(fraction * 100);
@@ -230,8 +230,10 @@ function wizardCloudAnalyzeButtonHtml() {
   // DECISIONS #132 D14: a verified provider is a normal button. Red is reserved for a
   // request that really failed, so a working cloud provider never looks broken.
   const failed = wizardState.cloudAnalysisFailed === cloud.id;
-  const tone = failed ? ' style="color:#dc2626;border-color:#fca5a5"' : '';
-  return `<button class="btn btn-secondary" data-wizard-action="analyze-cloud" data-provider-id="${escapeHtml(cloud.id)}"${tone} title="${escapeHtml(cloud.label)} đã kiểm tra kết nối. Giáo án sẽ được gửi qua Internet."><span data-icon="cloud" data-icon-size="13"></span> Phân tích bằng AI (${escapeHtml(wizardCloudShortName(cloud))})</button>`;
+  // #181: the red used to be an inline `style="color:#dc2626"`, which the dark translation
+  // table in shell.css cannot reach — in dark mode that was #dc2626 on var(--panel), 3.53:1.
+  const tone = failed ? ' is-alert' : '';
+  return `<button class="btn btn-secondary${tone}" data-wizard-action="analyze-cloud" data-provider-id="${escapeHtml(cloud.id)}" title="${escapeHtml(cloud.label)} đã kiểm tra kết nối. Giáo án sẽ được gửi qua Internet."><span data-icon="cloud" data-icon-size="13"></span> Phân tích bằng AI (${escapeHtml(wizardCloudShortName(cloud))})</button>`;
 }
 
 /** "Gemini" / "ChatGPT" in the button text; the full label stays in the tooltip. */

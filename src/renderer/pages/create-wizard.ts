@@ -78,7 +78,7 @@ function renderWizardProjects() {
       const active = project.id === wizardState.projectId;
       return `<button class="quick-action${active ? ' active' : ''}" data-wizard-open="${escapeHtml(project.id)}">
         <span class="quick-icon" data-icon="folder-open" data-icon-size="16"></span>
-        <span class="quick-copy"><strong class="block truncate">${escapeHtml(project.title || 'Dự án')}</strong><small class="block text-[10px] text-[#98a0b0]">Bước: ${escapeHtml(label)} · ${fmtDate(project.updatedAt)}</small></span>
+        <span class="quick-copy"><strong class="block truncate">${escapeHtml(project.title || 'Dự án')}</strong><small class="block text-[12px] text-[#5f6a7d]">Bước: ${escapeHtml(label)} · ${fmtDate(project.updatedAt)}</small></span>
         <span class="quick-arrow" data-icon="chevron-right" data-icon-size="14"></span>
       </button>`;
     }).join('')}</div>` : '<div class="field-hint">Chưa có dự án nào. Nhập giáo án để bắt đầu.</div>'}

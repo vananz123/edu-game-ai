@@ -563,7 +563,7 @@ function renderWizardStructurePanel(s, tree, view) {
     <div class="wizard-tree-actions">
       <button type="button" class="btn btn-secondary btn-small" data-wizard-action="structure-select-all"${view.everything ? ' disabled' : ''}>Chọn tất cả</button>
       <button type="button" class="btn btn-secondary btn-small" data-wizard-action="structure-clear-all"${emptyScope ? ' disabled' : ''}>Bỏ chọn tất cả</button>
-      <small class="text-[11px] text-[#788196]">cấu trúc v${Number(tree.version || 0)} · ${Number(tree.textLength || 0).toLocaleString('vi-VN')} ký tự</small>
+      <small class="text-[12px] text-[#5f6a7d]">cấu trúc v${Number(tree.version || 0)} · ${Number(tree.textLength || 0).toLocaleString('vi-VN')} ký tự</small>
     </div>
     <ul class="wizard-tree" data-structure-tree>${view.rows}</ul>
     ${wizardStructurePreviewPanel()}

@@ -14,6 +14,12 @@
     --orange: var(--color-warn);
     --red: var(--color-bad);
     --shadow: var(--shadow-card);
+    /* #181: mực cho chữ BÁO LỖI. `--red`/`--color-bad` (#e65b68) chỉ hợp làm viền và
+       chấm trạng thái — làm mực thì đo 3,46:1 trên trắng. #b42318 là 6,57:1.
+       `--danger-ink` là mực, nên
+       shell.css đổi nó sang biến thể sáng trong dark, và các "hòn đảo sáng" (`.modal`
+       của dark, `.setup-fullscreen`) ghim lại đúng giá trị này. */
+    --danger-ink: #b42318;
   }
 
   /* color-scheme khoá theo theme. daisyUI đã đặt `color-scheme: light` qua

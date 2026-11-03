@@ -21,6 +21,19 @@ html[data-setup-fullscreen="1"] .app-shell{visibility:hidden}
 /* #162: the topbar is gone and the AI status bar lives inside the sidebar,
    which `.app-shell` above already hides. */
 
+/* #181: "light-only" has to mean the aliases too. `shell.css` rebinds --text,
+   --muted, --panel… on [data-theme="dark"], so a teacher who had switched the
+   theme before running setup got #a0a7bc ink on the white cards of this overlay
+   (2.2:1). Re-pinning the aliases here keeps every inherited rule — `.field-hint`,
+   `.muted`, `.btn`, `.info-box` — readable in both themes. `--color-*` tokens are
+   not rebound by shell.css, which is why component CSS inside a light-only surface
+   uses `var(--color-brand)`/literals instead of `var(--purple)`/`var(--muted)`. */
+.setup-fullscreen{
+  --bg:var(--color-canvas);--panel:var(--color-panel);--text:var(--color-ink);
+  --muted:var(--color-muted);--line:var(--color-line);--purple:var(--color-brand);
+  --purple2:var(--color-brand-soft);--green:var(--color-ok);--orange:var(--color-warn);
+  --red:var(--color-bad);--shadow:var(--shadow-card);--danger-ink:#b42318;
+}
 /* One viewport, two rows: a fixed head and a scrolling body, so the action
    buttons can never be pushed below the fold on a 1366x768 classroom laptop. */
 .setup-fullscreen{
@@ -39,7 +52,7 @@ html[data-setup-fullscreen="1"] .app-shell{visibility:hidden}
 }
 .setup-fullscreen-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:22px}
 .setup-fullscreen-head h2{font-size:22px;margin:0;letter-spacing:-.4px;color:#30384b}
-.setup-fullscreen-head .setup-eyebrow{margin-bottom:5px;color:var(--purple)}
+.setup-fullscreen-head .setup-eyebrow{margin-bottom:5px;color:var(--color-brand)}
 .setup-fullscreen-foot{
   margin-top:auto;
   display:flex;justify-content:flex-end;gap:9px;
@@ -51,9 +64,13 @@ html[data-setup-fullscreen="1"] .app-shell{visibility:hidden}
 }
 .setup-headline{padding:15px 16px;border-radius:11px;background:#f8f8fc;border:1px solid var(--line);margin-bottom:16px}
 
-.setup-eyebrow{font-size:9px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:#9199aa;margin-bottom:6px}
-.setup-title{font-size:16px;margin:0 0 7px;letter-spacing:-.2px;color:#394256}
-.setup-message{font-size:11.5px;line-height:1.65;color:#717b90;margin:0}
+/* #181: cỡ chữ tối thiểu cho màn cài AI. Overlay này light-only (xem đầu file),
+   nên mọi mực ở đây là literal chứ không dùng var(--muted)/var(--purple): hai biến
+   ấy đảo sang giá trị dark trong khi nền vẫn trắng, và #8f88e8 trên trắng chỉ 3.06:1.
+   --color-brand không đảo (shell.css chỉ alias), nên nó an toàn cho cả hai theme. */
+.setup-eyebrow{font-size:11px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:#5b6478;margin-bottom:6px}
+.setup-title{font-size:17px;margin:0 0 7px;letter-spacing:-.2px;color:#2b3345}
+.setup-message{font-size:13px;line-height:1.65;color:#464f62;margin:0}
 /* Tone is a left rule, not a full background: red text on a red panel is
    harder to read than dark text beside a red accent, and the wizard is often
    the first screen a teacher sees. */
@@ -74,22 +91,22 @@ html[data-setup-fullscreen="1"] .app-shell{visibility:hidden}
   0%{transform:translateX(-100%)}
   100%{transform:translateX(300%)}
 }
-.setup-progress-meta{display:flex;justify-content:space-between;gap:10px;font-size:10.5px;color:#717b90;margin-bottom:14px}
-.setup-progress-meta strong{color:var(--purple);font-variant-numeric:tabular-nums}
+.setup-progress-meta{display:flex;justify-content:space-between;gap:10px;font-size:12px;color:#5f6a7d;margin-bottom:14px}
+.setup-progress-meta strong{color:var(--color-brand);font-variant-numeric:tabular-nums}
 
 .setup-req-row{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;align-items:baseline}
-.setup-req-label{font-size:10px;font-weight:750;color:#9199aa;text-transform:uppercase;letter-spacing:.4px}
-.setup-req-row strong{font-size:11.5px;color:#394256;font-weight:700}
+.setup-req-label{font-size:11px;font-weight:750;color:#5b6478;text-transform:uppercase;letter-spacing:.4px}
+.setup-req-row strong{font-size:12.5px;color:#2b3345;font-weight:700}
 .setup-req-row[data-ok="0"] strong{color:#a8303d}
 .setup-req-row .field-hint{grid-column:2;margin-top:-2px}
 
 .setup-checklist{list-style:none;margin:0;padding:0;display:grid;gap:6px}
-.setup-checklist-item{display:flex;align-items:center;gap:8px;font-size:11px;color:#9aa1af}
-.setup-checklist-mark{display:grid;place-items:center;width:16px;height:16px;border-radius:50%;border:1px solid #dfe2eb;font-size:9px;font-weight:800;flex-shrink:0}
-.setup-checklist-item[data-state="done"]{color:#4a5366}
+.setup-checklist-item{display:flex;align-items:center;gap:8px;font-size:12px;color:#5f6a7d}
+.setup-checklist-mark{display:grid;place-items:center;width:17px;height:17px;border-radius:50%;border:1px solid #dfe2eb;font-size:11px;font-weight:800;flex-shrink:0}
+.setup-checklist-item[data-state="done"]{color:#424b5c}
 .setup-checklist-item[data-state="done"] .setup-checklist-mark{background:#eaf7f1;border-color:#bfe6d4;color:#1f7a55}
-.setup-checklist-item[data-state="current"]{color:#394256;font-weight:700}
-.setup-checklist-item[data-state="current"] .setup-checklist-mark{background:#efedff;border-color:#c8c3ff;color:var(--purple)}
+.setup-checklist-item[data-state="current"]{color:#2b3345;font-weight:700}
+.setup-checklist-item[data-state="current"] .setup-checklist-mark{background:#efedff;border-color:#c8c3ff;color:var(--color-brand)}
 .setup-checklist-item[data-state="failed"]{color:#a8303d;font-weight:700}
 .setup-checklist-item[data-state="failed"] .setup-checklist-mark{background:#fff1f2;border-color:#f3c4ca;color:#d84b5a}
 

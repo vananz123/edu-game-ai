@@ -29,8 +29,8 @@ function renderWizardRecommendFromBank() {
     const selected = s.selectedGameType === gameType;
     const suggested = recommended === gameType;
     return `<article class="border rounded-[12px] p-[15px] bg-white min-w-0 flex flex-col gap-[8px] ${selected ? 'border-[#6258e8] shadow-[0_0_0_2px_#6258e826]' : 'border-line'}" data-wizard-recommendation="" data-game-type="${escapeHtml(gameType)}" data-selected="${selected ? 'true' : 'false'}" data-compat-compatible="${result.compatible}" data-compat-needs-review="${result.needsReview}" data-compat-incompatible="${result.incompatible}">
-      <div class="flex items-center gap-[9px]"><span class="text-[24px]">${meta.icon}</span><div class="min-w-0"><strong class="text-[13px] block">${escapeHtml(meta.label)}${suggested ? ' <span class="px-1.5 py-0.5 rounded bg-[#eef2ff] text-[#4f46e5] text-[10px] font-bold" data-compat-recommended="true">Được đề xuất</span>' : ''}</strong><small class="text-[11px] text-[#788196]">Dùng được ${result.compatible}/${stats.total} câu · cần xem lại ${result.needsReview} · không tương thích ${result.incompatible}</small></div></div>
-      <p class="text-[11px] text-[#5b6478] leading-[1.6] m-0">${escapeHtml(result.reason || meta.hint)}</p>
+      <div class="flex items-center gap-[9px]"><span class="text-[24px]">${meta.icon}</span><div class="min-w-0"><strong class="text-[13px] block">${escapeHtml(meta.label)}${suggested ? ' <span class="px-1.5 py-0.5 rounded bg-[#eef2ff] text-[#4f46e5] text-[12px] font-bold" data-compat-recommended="true">Được đề xuất</span>' : ''}</strong><small class="text-[12px] text-[#5f6a7d]">Dùng được ${result.compatible}/${stats.total} câu · cần xem lại ${result.needsReview} · không tương thích ${result.incompatible}</small></div></div>
+      <p class="text-[12px] text-[#5b6478] leading-[1.6] m-0">${escapeHtml(result.reason || meta.hint)}</p>
       <button class="btn ${selected ? 'btn-primary' : 'btn-secondary'} btn-small mt-auto" data-wizard-action="select-type" data-game-type="${escapeHtml(gameType)}" aria-pressed="${selected ? 'true' : 'false'}">${selected ? '✓ Đã chọn' : 'Chọn thể loại này'}</button>
     </article>`;
   }).join('');
@@ -39,7 +39,7 @@ function renderWizardRecommendFromBank() {
   // what the teacher can do about it. Nothing is dropped unless they pick that action.
   const blockedNote = !blocked.length
     ? ''
-    : `<div class="mt-[10px] text-[11px] px-2.5 py-2 rounded-lg bg-[#fff8e6] border border-[#f6e3b4] text-[#7a5b00] dark:bg-[#2d2614] dark:border-[#4a3d1a] dark:text-[#fbbf24] leading-relaxed" data-compat-blocked-note>
+    : `<div class="mt-[10px] text-[12px] px-2.5 py-2 rounded-lg bg-[#fff8e6] border border-[#f6e3b4] text-[#7a5b00] dark:bg-[#2d2614] dark:border-[#4a3d1a] dark:text-[#fbbf24] leading-relaxed" data-compat-blocked-note>
         ${escapeHtml(wizardGameMeta(s.selectedGameType).label)} không dùng được ${blocked.length} câu: ${escapeHtml(wizardBlockedKindSummary(blocked))}.
         <div class="mt-1.5 flex flex-wrap gap-1.5">
           <span class="font-semibold">Chọn:</span>
@@ -130,7 +130,7 @@ function renderWizardRecommend() {
   if (!s.recommendations.length) {
     return `<section class="form-panel" data-wizard-step-body="recommend">${header}
       <div class="field"><strong class="text-[12px] block mb-[6px]">Chủ đề: ${escapeHtml(analysis.topic || '—')}</strong>
-        <small class="block text-[11px] text-[#788196]">${analysis.objectives.length} mục tiêu · ${analysis.keyConcepts.length} kiến thức trọng tâm</small></div>
+        <small class="block text-[12px] text-[#5f6a7d]">${analysis.objectives.length} mục tiêu · ${analysis.keyConcepts.length} kiến thức trọng tâm</small></div>
       <div class="publish-actions">
         <button class="btn btn-primary" id="wizardRecommendBtn" data-wizard-action="recommend"${loading ? ' disabled' : ''}>${loading ? 'Đang chọn thể loại…' : '<span data-icon="wand-sparkles" data-icon-size="13"></span> Gợi ý thể loại phù hợp'}</button>
         ${loading ? '<button class="btn btn-secondary" data-wizard-action="cancel">Huỷ</button>' : ''}
@@ -148,9 +148,9 @@ function renderWizardRecommend() {
         // has no recommendation id, but it is still the active choice.
         const selected = recommendation.gameType === s.selectedGameType;
         return `<article class="border rounded-[12px] p-[15px] bg-white min-w-0 flex flex-col gap-[8px] ${selected ? 'border-[#6258e8] shadow-[0_0_0_2px_#6258e826]' : 'border-line'}" data-wizard-recommendation="${escapeHtml(recommendation.id)}" data-game-type="${recommendation.gameType}" data-selected="${selected ? 'true' : 'false'}">
-          <div class="flex items-center gap-[9px]"><span class="text-[24px]">${meta.icon}</span><div class="min-w-0"><strong class="text-[13px] block">${escapeHtml(recommendation.title || meta.label)}</strong><small class="text-[11px] text-[#788196]">${escapeHtml(meta.label)} · gợi ý ${Number(recommendation.suggestedDurationMinutes) || 10} phút</small></div></div>
-          <p class="text-[11px] text-[#5b6478] leading-[1.6] m-0">${escapeHtml(recommendation.reason || recommendation.description || meta.hint)}</p>
-          ${recommendation.learningObjectiveIds && recommendation.learningObjectiveIds.length ? `<ul class="m-0 pl-[16px] text-[11px] text-[#6d7688]">${recommendation.learningObjectiveIds.map(id => `<li>${escapeHtml(wizardObjectiveTitle(id))}</li>`).join('')}</ul>` : ''}
+          <div class="flex items-center gap-[9px]"><span class="text-[24px]">${meta.icon}</span><div class="min-w-0"><strong class="text-[13px] block">${escapeHtml(recommendation.title || meta.label)}</strong><small class="text-[12px] text-[#5f6a7d]">${escapeHtml(meta.label)} · gợi ý ${Number(recommendation.suggestedDurationMinutes) || 10} phút</small></div></div>
+          <p class="text-[12px] text-[#5b6478] leading-[1.6] m-0">${escapeHtml(recommendation.reason || recommendation.description || meta.hint)}</p>
+          ${recommendation.learningObjectiveIds && recommendation.learningObjectiveIds.length ? `<ul class="m-0 pl-[16px] text-[12px] text-[#4f5a6e]">${recommendation.learningObjectiveIds.map(id => `<li>${escapeHtml(wizardObjectiveTitle(id))}</li>`).join('')}</ul>` : ''}
           <button class="btn ${selected ? 'btn-primary' : 'btn-secondary'} btn-small mt-auto" data-wizard-action="select" data-id="${escapeHtml(recommendation.id)}" data-game-type="${recommendation.gameType}" aria-pressed="${selected ? 'true' : 'false'}">${selected ? '✓ Đã chọn' : 'Chọn thể loại này'}</button>
         </article>`;
       }).join('')}
@@ -159,7 +159,7 @@ function renderWizardRecommend() {
       const shown = new Set(s.recommendations.map(item => item.gameType));
       const others = wizardGameTypeOrder.filter(gameType => !shown.has(gameType));
       if (!others.length) return '';
-      return `<div class="field mt-[10px]"><small class="block text-[11px] text-[#788196] mb-[6px]">Hoặc chọn thể loại khác:</small>
+      return `<div class="field mt-[10px]"><small class="block text-[12px] text-[#5f6a7d] mb-[6px]">Hoặc chọn thể loại khác:</small>
         <div class="flex flex-wrap gap-[6px]">${others.map(gameType => {
           const meta = wizardGameMeta(gameType);
           const selected = gameType === s.selectedGameType;

@@ -28,53 +28,53 @@
           <div id="aiStatusBar" class="ai-status-bar flex flex-col gap-0.5 px-2.5 py-2 bg-[#f8fafc] border border-[#e2e8f0] rounded-xl text-[12px] shadow-sm cursor-pointer select-none transition hover:border-[#cbd5e1] hover:bg-[#f1f5f9]" data-ai-status-bar data-ai-status="bar" role="status" aria-live="polite" title="Bấm để mở menu tùy chọn llama.cpp">
             <div class="flex items-center gap-1.5 min-w-0">
               <span id="aiStatusRuntimeDot" class="ai-status-runtime-dot inline-block w-2 h-2 rounded-full bg-[#b3261e] shrink-0" data-ai-status-dot data-ai-status="dot" aria-hidden="true" hidden></span>
-              <span id="aiStatusRuntime" class="ai-status-runtime font-semibold text-[#1e293b] truncate text-[11px] flex-1 min-w-0" data-ai-status="runtime">llama.cpp chưa chạy</span>
-              <button type="button" id="aiStatusMenuBtn" class="ai-status-menu-btn w-5 h-5 rounded-md flex items-center justify-center text-[#64748b] hover:text-[#1e293b] hover:bg-[#e2e8f0] transition shrink-0" title="Tùy chọn chức năng llama.cpp" aria-label="Tùy chọn llama.cpp">
+              <span id="aiStatusRuntime" class="ai-status-runtime font-semibold text-[#1e293b] truncate text-[12px] flex-1 min-w-0" data-ai-status="runtime">llama.cpp chưa chạy</span>
+              <button type="button" id="aiStatusMenuBtn" class="ai-status-menu-btn w-5 h-5 rounded-md flex items-center justify-center text-[#4f5a6e] hover:text-[#1e293b] hover:bg-[#e2e8f0] transition shrink-0" title="Tùy chọn chức năng llama.cpp" aria-label="Tùy chọn llama.cpp">
                 <span data-icon="ellipsis-vertical" data-icon-size="14"></span>
               </button>
             </div>
-            <span id="aiStatusTask" class="ai-status-task text-[#64748b] text-[10px] truncate hidden" data-ai-status="task">Không có tác vụ AI đang chạy</span>
+            <span id="aiStatusTask" class="ai-status-task text-[#4f5a6e] text-[12px] truncate hidden" data-ai-status="task">Không có tác vụ AI đang chạy</span>
           </div>
-          <div id="aiStatusDropdown" class="ai-status-dropdown hidden absolute left-0 top-full mt-1 w-full bg-white border border-[#e2e8f0] rounded-xl shadow-xl z-50 p-1.5 flex flex-col gap-0.5 text-[11px]" role="menu">
-            <div class="px-2 py-1 text-[10px] font-bold text-[#94a3b8] border-b border-[#f1f5f9] mb-1">
+          <div id="aiStatusDropdown" class="ai-status-dropdown hidden absolute left-0 top-full mt-1 w-full bg-white border border-[#e2e8f0] rounded-xl shadow-xl z-50 p-1.5 flex flex-col gap-0.5 text-[12px]" role="menu">
+            <div class="px-2 py-1 text-[12px] font-bold text-[#5a6478] border-b border-[#f1f5f9] mb-1">
               Chức năng AI local
             </div>
-            <button type="button" id="aiStatusStart" class="ai-status-start w-full text-left flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-semibold text-[#16a34a] hover:bg-[#effaf5] transition disabled:opacity-40 disabled:pointer-events-none" data-ai-status-start data-action="ai-status-start">
+            <button type="button" id="aiStatusStart" class="ai-status-start w-full text-left flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-semibold text-[#0f7b5c] hover:bg-[#effaf5] transition disabled:opacity-40 disabled:pointer-events-none" data-ai-status-start data-action="ai-status-start">
               <span data-icon="play" data-icon-size="12"></span> <span>Khởi động AI local</span>
             </button>
             <button type="button" id="aiStatusStop" class="ai-status-stop w-full text-left flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-semibold text-[#dc2626] hover:bg-[#fef2f2] transition disabled:opacity-40 disabled:pointer-events-none" data-ai-status-stop data-action="ai-status-stop" hidden disabled>
               <span data-icon="square" data-icon-size="12"></span> <span>Dừng llama.cpp</span>
             </button>
-            <button type="button" id="aiStatusCancel" class="ai-status-cancel w-full text-left flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-semibold text-[#d97706] hover:bg-[#fffbeb] transition disabled:opacity-40 disabled:pointer-events-none" data-ai-status-cancel data-action="ai-status-cancel" hidden disabled>
+            <button type="button" id="aiStatusCancel" class="ai-status-cancel w-full text-left flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-semibold text-[#9c4808] hover:bg-[#fffbeb] transition disabled:opacity-40 disabled:pointer-events-none" data-ai-status-cancel data-action="ai-status-cancel" hidden disabled>
               <span data-icon="x" data-icon-size="12"></span> <span>Huỷ tác vụ AI</span>
             </button>
             <button type="button" id="aiStatusToggle" class="ai-status-toggle w-full text-left flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-medium text-[#475569] hover:bg-[#f1f5f9] transition" data-ai-status-toggle data-action="ai-status-toggle" title="Hiện chỉ báo đỏ khi llama.cpp chưa chạy">Hiện khi rảnh</button>
             <div class="border-t border-[#f1f5f9] my-0.5"></div>
-            <button type="button" id="aiStatusOpenModalBtn" class="w-full text-left flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-medium text-[#6366f1] hover:bg-[#f8f7ff] transition">
+            <button type="button" id="aiStatusOpenModalBtn" class="w-full text-left flex items-center gap-2 px-2.5 py-1.5 rounded-lg font-medium text-[#4f46e5] hover:bg-[#f8f7ff] transition">
               <span data-icon="settings" data-icon-size="12"></span> <span>Cài đặt AI local…</span>
             </button>
           </div>
         </div>
-        <button type="button" id="globalAiActivity" data-global-ai-activity hidden class="w-full inline-flex items-center gap-[6px] text-[11px] font-semibold text-[#6b5600] bg-[#fff8e1] border border-[#f2e3c8] py-1.5 px-[9px] rounded-lg shadow-sm" title="Mở tiến trình AI đang chạy">
+        <button type="button" id="globalAiActivity" data-global-ai-activity hidden class="w-full inline-flex items-center gap-[6px] text-[12px] font-semibold text-[#6b5600] bg-[#fff8e1] border border-[#f2e3c8] py-1.5 px-[9px] rounded-lg shadow-sm" title="Mở tiến trình AI đang chạy">
           <span data-icon="loader-circle" data-icon-size="13" data-icon-class="animate-spin"></span><span data-global-ai-label class="truncate">AI đang phân tích</span><span data-global-ai-elapsed class="tabular-nums font-mono ml-auto">0:00</span>
         </button>
         <div class="sidebar-status-actions">
           <div class="relative" id="topbarNotificationContainer">
-            <button type="button" class="icon-button relative w-[34px] h-[34px] border border-line rounded-[10px] bg-white text-muted transition hover:bg-[#f6f6ff] hover:text-brand" id="topbarNotificationBtn" title="Thông báo hệ thống">
+            <button type="button" class="icon-button relative w-[34px] h-[34px] border border-line rounded-[10px] bg-white text-muted transition hover:bg-[#f6f6ff] hover:text-[#4f46e5]" id="topbarNotificationBtn" title="Thông báo hệ thống">
               <span data-icon="bell" data-icon-size="16"></span>
               <span id="topbarNotificationBadge" class="absolute -top-1 -right-1 w-2.5 h-2.5 bg-[#ef4444] rounded-full border-2 border-white hidden"></span>
             </button>
             <div id="topbarNotificationPopover" class="notification-popover hidden w-[320px] bg-white border border-[#e2e8f0] rounded-xl shadow-lg z-50 p-3" role="dialog" aria-label="Thông báo">
               <div class="flex items-center justify-between pb-2 border-b border-[#f1f5f9] mb-2">
                 <strong class="text-[12px] text-[#1e293b]">Thông báo hệ thống</strong>
-                <button type="button" id="clearNotificationsBtn" class="text-[10px] text-brand hover:underline">Xoá tất cả</button>
+                <button type="button" id="clearNotificationsBtn" class="text-[12px] text-[#4f46e5] hover:underline">Xoá tất cả</button>
               </div>
-              <div id="topbarNotificationList" class="flex flex-col gap-2 max-h-[240px] overflow-y-auto text-[11px]">
+              <div id="topbarNotificationList" class="flex flex-col gap-2 max-h-[240px] overflow-y-auto text-[12px]">
               </div>
             </div>
           </div>
-          <button class="icon-button w-[34px] h-[34px] border border-line rounded-[10px] bg-white text-muted transition hover:bg-[#f6f6ff] hover:text-brand" id="topbarFullscreenBtn" title="Toàn màn hình (F11)"><span data-icon="maximize" data-icon-size="16"></span></button>
-          <button class="icon-button w-[34px] h-[34px] border border-line rounded-[10px] bg-white text-muted transition hover:bg-[#f6f6ff] hover:text-brand" id="helpBtn" title="Hướng dẫn"><span data-icon="circle-question-mark" data-icon-size="16"></span></button>
+          <button class="icon-button w-[34px] h-[34px] border border-line rounded-[10px] bg-white text-muted transition hover:bg-[#f6f6ff] hover:text-[#4f46e5]" id="topbarFullscreenBtn" title="Toàn màn hình (F11)"><span data-icon="maximize" data-icon-size="16"></span></button>
+          <button class="icon-button w-[34px] h-[34px] border border-line rounded-[10px] bg-white text-muted transition hover:bg-[#f6f6ff] hover:text-[#4f46e5]" id="helpBtn" title="Hướng dẫn"><span data-icon="circle-question-mark" data-icon-size="16"></span></button>
         </div>
       </div>
       <!-- DECISIONS #161: chrome icon là <span data-icon> do paintUiIcons() vẽ, không
@@ -82,18 +82,18 @@
            "LEARNING GAME BUILDER") đã bỏ. ".nav-icon" chỉ còn một class: hộp 30px,
            màu mực và nền chip do navigation.css quy định, svg thừa hưởng currentColor. -->
       <nav class="nav grid gap-[5px]">
-        <button class="nav-item active flex items-center gap-[13px] py-3 px-[13px] rounded-[10px] text-left font-semibold bg-transparent text-[#717b90] transition duration-150 hover:bg-[#f6f6ff] hover:text-brand [&.active]:bg-brand-soft [&.active]:text-brand max-compact:justify-center max-compact:px-0" data-page="library"><span class="nav-icon" data-icon="library" data-icon-size="16"></span><span class="max-compact:hidden">Thư viện trò chơi</span><span class="nav-count ml-auto bg-white border border-[#e3e3fb] rounded-md px-[7px] py-[2px] text-[11px] max-compact:hidden" id="navGameCount">1</span></button>
-        <button class="nav-item flex items-center gap-[13px] py-3 px-[13px] rounded-[10px] text-left font-semibold bg-transparent text-[#717b90] transition duration-150 hover:bg-[#f6f6ff] hover:text-brand [&.active]:bg-brand-soft [&.active]:text-brand max-compact:justify-center max-compact:px-0" data-page="create-wizard" title="Nhập giáo án để AI local phân tích và gợi ý trò chơi"><span class="nav-icon" data-icon="wand-sparkles" data-icon-size="16"></span><span class="max-compact:hidden">Tạo từ giáo án</span></button>
-        <button class="nav-item flex items-center gap-[13px] py-3 px-[13px] rounded-[10px] text-left font-semibold bg-transparent text-[#717b90] transition duration-150 hover:bg-[#f6f6ff] hover:text-brand [&.active]:bg-brand-soft [&.active]:text-brand max-compact:justify-center max-compact:px-0" data-page="create" title="Tôi đã biết muốn tạo trò chơi nào"><span class="nav-icon" data-icon="shapes" data-icon-size="16"></span><span class="max-compact:hidden">Tạo trò chơi</span></button>
-        <button class="nav-item flex items-center gap-[13px] py-3 px-[13px] rounded-[10px] text-left font-semibold bg-transparent text-[#717b90] transition duration-150 hover:bg-[#f6f6ff] hover:text-brand [&.active]:bg-brand-soft [&.active]:text-brand max-compact:justify-center max-compact:px-0" data-page="lesson-plans"><span class="nav-icon" data-icon="file-text" data-icon-size="16"></span><span class="max-compact:hidden">Giáo án</span></button>
-        <button class="nav-item flex items-center gap-[13px] py-3 px-[13px] rounded-[10px] text-left font-semibold bg-transparent text-[#717b90] transition duration-150 hover:bg-[#f6f6ff] hover:text-brand [&.active]:bg-brand-soft [&.active]:text-brand max-compact:justify-center max-compact:px-0" data-page="my-projects"><span class="nav-icon" data-icon="folder-open" data-icon-size="16"></span><span class="max-compact:hidden">Dự án của tôi</span></button>
-        <button class="nav-item flex items-center gap-[13px] py-3 px-[13px] rounded-[10px] text-left font-semibold bg-transparent text-[#717b90] transition duration-150 hover:bg-[#f6f6ff] hover:text-brand [&.active]:bg-brand-soft [&.active]:text-brand max-compact:justify-center max-compact:px-0" data-page="sessions"><span class="nav-icon" data-icon="circle-fading-arrow-up" data-icon-size="16"></span><span class="max-compact:hidden">Lịch sử kết quả</span></button>
+        <button class="nav-item active flex items-center gap-[13px] py-3 px-[13px] rounded-[10px] text-left font-semibold bg-transparent text-[#4b5566] transition duration-150 hover:bg-[#f6f6ff] hover:text-[#4f46e5] [&.active]:bg-brand-soft [&.active]:text-[#4f46e5] max-compact:justify-center max-compact:px-0" data-page="library"><span class="nav-icon" data-icon="library" data-icon-size="16"></span><span class="max-compact:hidden">Thư viện trò chơi</span><span class="nav-count ml-auto bg-white border border-[#e3e3fb] rounded-md px-[7px] py-[2px] text-[12px] max-compact:hidden" id="navGameCount">1</span></button>
+        <button class="nav-item flex items-center gap-[13px] py-3 px-[13px] rounded-[10px] text-left font-semibold bg-transparent text-[#4b5566] transition duration-150 hover:bg-[#f6f6ff] hover:text-[#4f46e5] [&.active]:bg-brand-soft [&.active]:text-[#4f46e5] max-compact:justify-center max-compact:px-0" data-page="create-wizard" title="Nhập giáo án để AI local phân tích và gợi ý trò chơi"><span class="nav-icon" data-icon="wand-sparkles" data-icon-size="16"></span><span class="max-compact:hidden">Tạo từ giáo án</span></button>
+        <button class="nav-item flex items-center gap-[13px] py-3 px-[13px] rounded-[10px] text-left font-semibold bg-transparent text-[#4b5566] transition duration-150 hover:bg-[#f6f6ff] hover:text-[#4f46e5] [&.active]:bg-brand-soft [&.active]:text-[#4f46e5] max-compact:justify-center max-compact:px-0" data-page="create" title="Tôi đã biết muốn tạo trò chơi nào"><span class="nav-icon" data-icon="shapes" data-icon-size="16"></span><span class="max-compact:hidden">Tạo trò chơi</span></button>
+        <button class="nav-item flex items-center gap-[13px] py-3 px-[13px] rounded-[10px] text-left font-semibold bg-transparent text-[#4b5566] transition duration-150 hover:bg-[#f6f6ff] hover:text-[#4f46e5] [&.active]:bg-brand-soft [&.active]:text-[#4f46e5] max-compact:justify-center max-compact:px-0" data-page="lesson-plans"><span class="nav-icon" data-icon="file-text" data-icon-size="16"></span><span class="max-compact:hidden">Giáo án</span></button>
+        <button class="nav-item flex items-center gap-[13px] py-3 px-[13px] rounded-[10px] text-left font-semibold bg-transparent text-[#4b5566] transition duration-150 hover:bg-[#f6f6ff] hover:text-[#4f46e5] [&.active]:bg-brand-soft [&.active]:text-[#4f46e5] max-compact:justify-center max-compact:px-0" data-page="my-projects"><span class="nav-icon" data-icon="folder-open" data-icon-size="16"></span><span class="max-compact:hidden">Dự án của tôi</span></button>
+        <button class="nav-item flex items-center gap-[13px] py-3 px-[13px] rounded-[10px] text-left font-semibold bg-transparent text-[#4b5566] transition duration-150 hover:bg-[#f6f6ff] hover:text-[#4f46e5] [&.active]:bg-brand-soft [&.active]:text-[#4f46e5] max-compact:justify-center max-compact:px-0" data-page="sessions"><span class="nav-icon" data-icon="circle-fading-arrow-up" data-icon-size="16"></span><span class="max-compact:hidden">Lịch sử kết quả</span></button>
       </nav>
       <div class="sidebar-shortcuts max-compact:hidden" data-sidebar-shortcuts></div>
       <div class="sidebar-bottom mt-auto">
-        <div class="offline-card flex gap-2.5 items-start py-[13px] px-3 bg-[#effaf5] border border-[#ddf4e8] rounded-[10px] mt-[14px] mx-[2px] mb-[15px] max-compact:hidden"><div class="offline-dot w-2 h-2 bg-[#1ab47f] rounded-full mt-[5px]"></div><div><strong class="block text-[11px]">Sẵn sàng ngoại tuyến</strong><small class="block text-[10px] text-[#879183] mt-1">Game đã lưu vẫn chơi được</small></div></div>
-        <button class="nav-item flex items-center gap-[13px] py-3 px-[13px] rounded-[10px] text-left font-semibold bg-transparent text-[#717b90] transition duration-150 hover:bg-[#f6f6ff] hover:text-brand [&.active]:bg-brand-soft [&.active]:text-brand max-compact:justify-center max-compact:px-0" data-page="settings"><span class="nav-icon" data-icon="settings" data-icon-size="16"></span><span class="max-compact:hidden">Cài đặt</span></button>
-        <div class="profile border-t border-line mt-4 pt-[17px] px-[5px] pb-0 flex items-center gap-[9px] max-compact:justify-center"><div class="avatar w-[34px] h-[34px] rounded-[11px] bg-[#e8e6ff] text-brand font-extrabold grid place-items-center text-[11px]">GV</div><div class="max-compact:hidden"><strong class="block text-[11px]">Không gian giáo viên</strong><small class="block text-[10px] text-[#879183] mt-1">Máy tính này</small></div><span class="profile-more ml-auto text-[#a0a6b5] max-compact:hidden" data-icon="ellipsis-vertical" data-icon-size="15"></span></div>
+        <div class="offline-card flex gap-2.5 items-start py-[13px] px-3 bg-[#effaf5] border border-[#ddf4e8] rounded-[10px] mt-[14px] mx-[2px] mb-[15px] max-compact:hidden"><div class="offline-dot w-2 h-2 bg-[#1ab47f] rounded-full mt-[5px]"></div><div><strong class="block text-[12px]">Sẵn sàng ngoại tuyến</strong><small class="block text-[12px] text-[#5f6a7d] mt-1">Game đã lưu vẫn chơi được</small></div></div>
+        <button class="nav-item flex items-center gap-[13px] py-3 px-[13px] rounded-[10px] text-left font-semibold bg-transparent text-[#4b5566] transition duration-150 hover:bg-[#f6f6ff] hover:text-[#4f46e5] [&.active]:bg-brand-soft [&.active]:text-[#4f46e5] max-compact:justify-center max-compact:px-0" data-page="settings"><span class="nav-icon" data-icon="settings" data-icon-size="16"></span><span class="max-compact:hidden">Cài đặt</span></button>
+        <div class="profile border-t border-line mt-4 pt-[17px] px-[5px] pb-0 flex items-center gap-[9px] max-compact:justify-center"><div class="avatar w-[34px] h-[34px] rounded-[11px] bg-[#e8e6ff] text-[#4f46e5] font-extrabold grid place-items-center text-[12px]">GV</div><div class="max-compact:hidden"><strong class="block text-[12px]">Không gian giáo viên</strong><small class="block text-[12px] text-[#5f6a7d] mt-1">Máy tính này</small></div><span class="profile-more ml-auto text-[#5f6a7d] max-compact:hidden" data-icon="ellipsis-vertical" data-icon-size="15"></span></div>
       </div>
     </aside>
     <main class="main min-w-0 flex-1">

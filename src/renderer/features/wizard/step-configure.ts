@@ -209,8 +209,8 @@ function renderWizardConfigure() {
       ${wizardConfigTypeFields(config)}
     </div>
 
-    ${objectives.length ? `<div class="section-head mt-[14px]"><h4>Mục tiêu trọng tâm</h4><small class="text-[11px] text-[#788196]">Bỏ chọn mục tiêu không muốn đưa vào trò chơi.</small></div>
-    <div class="grid gap-[6px]">${objectives.map(objective => `<label class="switch-row"><span class="switch-copy"><strong class="text-[11px]">${escapeHtml(objective.description)}</strong></span><input type="checkbox" data-wizard-focus="${escapeHtml(objective.id)}"${(config.focusObjectiveIds || []).includes(objective.id) ? ' checked' : ''}></label>`).join('')}</div>` : ''}
+    ${objectives.length ? `<div class="section-head mt-[14px]"><h4>Mục tiêu trọng tâm</h4><small class="text-[12px] text-[#5f6a7d]">Bỏ chọn mục tiêu không muốn đưa vào trò chơi.</small></div>
+    <div class="grid gap-[6px]">${objectives.map(objective => `<label class="switch-row"><span class="switch-copy"><strong class="text-[12px]">${escapeHtml(objective.description)}</strong></span><input type="checkbox" data-wizard-focus="${escapeHtml(objective.id)}"${(config.focusObjectiveIds || []).includes(objective.id) ? ' checked' : ''}></label>`).join('')}</div>` : ''}
 
     <div class="publish-actions">
       <button class="btn btn-secondary" data-wizard-action="back"><span data-icon="arrow-left" data-icon-size="13"></span> Chọn trò chơi</button>

@@ -629,7 +629,7 @@ async function handleAction(action, id, element) { try {
       if (answerBox) { answerBox.classList.remove('hidden'); answerBox.textContent = 'Đang trả lời...'; }
       try {
         const result = await window.eduGame.answerLessonQuestion({ documentId: docId, question });
-        if (answerBox) answerBox.innerHTML = `<div class="font-semibold mb-[6px]">${escapeHtml(result?.answer || '')}</div>` + (Array.isArray(result?.citations) ? result.citations : []).map((c, i) => `<div class="mt-[8px] text-[11px] text-[#6f7890]"><strong>[${i + 1}]</strong> ${escapeHtml(c)}</div>`).join('');
+        if (answerBox) answerBox.innerHTML = `<div class="font-semibold mb-[6px]">${escapeHtml(result?.answer || '')}</div>` + (Array.isArray(result?.citations) ? result.citations : []).map((c, i) => `<div class="mt-[8px] text-[12px] text-[#4f5a6e]"><strong>[${i + 1}]</strong> ${escapeHtml(c)}</div>`).join('');
       } catch (e) { if (answerBox) answerBox.textContent = (e && e.message) || 'Lỗi hỏi đáp.'; }
       return;
     }

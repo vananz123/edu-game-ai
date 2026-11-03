@@ -103,13 +103,13 @@ function updateNotificationUI() {
   }
   if (list) {
     if (!systemNotifications.length) {
-      list.innerHTML = '<div class="text-center py-4 text-[#94a3b8] text-[11px]">Không có thông báo mới</div>';
+      list.innerHTML = '<div class="text-center py-4 text-[#5a6478] text-[12px]">Không có thông báo mới</div>';
       return;
     }
     list.innerHTML = systemNotifications.map(n => `
       <div class="p-2 rounded-lg bg-[#f8fafc] border border-[#f1f5f9] flex flex-col gap-0.5 text-left">
         <span class="text-[#334155] font-medium leading-snug">${escapeHtml(n.text)}</span>
-        <span class="text-[9px] text-[#94a3b8]">${fmtDateTime(n.time)}</span>
+        <span class="text-[11px] text-[#5a6478]">${fmtDateTime(n.time)}</span>
       </div>
     `).join('');
   }
@@ -146,9 +146,9 @@ function gameCard(game, index = 0, deletable = false) {
   // play mode; absent `gameplayMode` is classic (editorGameplayMode).
   const playMode = template === 'quiz' ? ((game.gameSetup && game.gameSetup.gameplayMode === 'house') ? 'house' : 'classic') : '';
   const playModeChip = playMode === 'house'
-    ? '<span class="px-[4px] py-[7px] bg-[#fff4e9] text-[#c9792b] rounded-[5px] text-[9px] font-bold" data-play-mode="house" title="Cách chơi: Xây nhà — mỗi câu đúng dựng thêm một phần của ngôi nhà 3D">🏗 Cách chơi: Xây nhà</span>'
+    ? '<span class="px-[4px] py-[7px] bg-[#fff4e9] text-[#9c4808] rounded-[5px] text-[11px] font-bold" data-play-mode="house" title="Cách chơi: Xây nhà — mỗi câu đúng dựng thêm một phần của ngôi nhà 3D">🏗 Cách chơi: Xây nhà</span>'
     : playMode === 'classic'
-      ? '<span class="px-[4px] py-[7px] bg-[#edf2ff] text-[#4565c9] rounded-[5px] text-[9px] font-semibold" data-play-mode="classic" title="Cách chơi: Cổ điển — trả lời câu hỏi nhận điểm">🎯 Cách chơi: Cổ điển</span>'
+      ? '<span class="px-[4px] py-[7px] bg-[#edf2ff] text-[#4565c9] rounded-[5px] text-[11px] font-semibold" data-play-mode="classic" title="Cách chơi: Cổ điển — trả lời câu hỏi nhận điểm">🎯 Cách chơi: Cổ điển</span>'
       : '';
   // #168/#171: the constellation board is a MATCHING style, so its chip sits
   // beside the matching label. Mặc định by absence: a board saved before it
@@ -156,13 +156,13 @@ function gameCard(game, index = 0, deletable = false) {
   // instead of lying. The BETA badge is gone (#171): the name is the whole label.
   const connectionBoard = template === 'matching' && game.matchingGame && game.matchingGame.mode === 'connection';
   const connectionChip = connectionBoard
-    ? `<span class="px-[4px] py-[7px] bg-[#e8f5ef] text-[#1c7a58] rounded-[5px] text-[9px] font-bold" data-play-mode="connection" title="Cách chơi: ${CONSTELLATION_GAME_NAME} — mỗi cặp ghép đúng thắp sáng thêm một ngôi sao của chòm sao">🌌 Cách chơi: ${CONSTELLATION_GAME_NAME}</span>`
+    ? `<span class="px-[4px] py-[7px] bg-[#e8f5ef] text-[#1c7a58] rounded-[5px] text-[11px] font-bold" data-play-mode="connection" title="Cách chơi: ${CONSTELLATION_GAME_NAME} — mỗi cặp ghép đúng thắp sáng thêm một ngôi sao của chòm sao">🌌 Cách chơi: ${CONSTELLATION_GAME_NAME}</span>`
     : '';
   return `<article class="bg-white border border-line rounded-[14px] overflow-hidden min-w-0 transition-all duration-180 hover:-translate-y-[3px] hover:shadow-card hover:border-[#d8d5ff]" data-game-card="${id}">
     <div class="${coverGrad} h-[130px] relative flex items-center justify-center overflow-hidden">
       <div class="absolute [border:1px_solid_#ffffffaa] w-[130px] h-[130px] rounded-full -left-[15px] top-[40px]"></div>
       <div class="absolute [border:1px_solid_#ffffffaa] w-[95px] h-[95px] rounded-full right-[-5px] top-[-22px]"></div>
-      <span class="absolute top-[12px] left-[12px] bg-white/[85%] text-[#5f58b8] text-[9px] font-extrabold px-[6px] py-[8px] rounded-[6px] z-[2]">${escapeHtml(templateLabel(template))}</span>
+      <span class="absolute top-[12px] left-[12px] bg-white/[85%] text-[#4338ca] text-[11px] font-extrabold px-[6px] py-[8px] rounded-[6px] z-[2]">${escapeHtml(templateLabel(template))}</span>
       <div class="text-[51px] [filter:drop-shadow(0_7px_5px_#4c50701c)] relative z-[1]">${icons[template] || '🎮'}</div>
     </div>
     <div class="p-[15px]">
@@ -170,23 +170,23 @@ function gameCard(game, index = 0, deletable = false) {
         <div class="text-[13px] font-semibold leading-[1.4]">${escapeHtml(game.title)}</div>
         <!-- The document-level "click outside" guard keys on this wrapper (bootstrap.ts). -->
         <div class="relative shrink-0" data-game-menu-root>
-          <button type="button" class="border-0 bg-transparent text-[#a1a8b7] inline-flex items-center justify-center w-[24px] h-[24px] rounded-[6px] hover:bg-[#f5f6fa]"
+          <button type="button" class="border-0 bg-transparent text-[#5f6a7d] inline-flex items-center justify-center w-[24px] h-[24px] rounded-[6px] hover:bg-[#f5f6fa]"
             data-menu-toggle="${menuId}" aria-haspopup="menu" aria-expanded="false" aria-controls="${menuId}" title="Thêm lựa chọn"><span data-icon="ellipsis-vertical" data-icon-size="15"></span></button>
           <div id="${menuId}" role="menu" aria-label="Lựa chọn cho ${escapeHtml(game.title)}" hidden
             class="absolute right-0 top-[24px] z-[20] min-w-[168px] py-[4px] bg-white border border-[#e7eaf2] rounded-[10px] shadow-[0_10px_24px_#1e293b1f]">
             ${item('lan', '<span data-icon="smartphone" data-icon-size="14"></span> Chơi LAN')}
             ${item('edit', '<span data-icon="pencil" data-icon-size="14"></span> Chỉnh sửa')}
             ${item('export-game', '<span data-icon="download" data-icon-size="14"></span> Xuất game')}
-            ${deletable ? item('delete', '<span data-icon="trash" data-icon-size="14"></span> Xoá', 'text-[#d84b5a] hover:bg-[#fff1f2] focus:bg-[#fff1f2]') : ''}
+            ${deletable ? item('delete', '<span data-icon="trash" data-icon-size="14"></span> Xoá', 'text-[#b42318] hover:bg-[#fff1f2] focus:bg-[#fff1f2]') : ''}
           </div>
         </div>
       </div>
-      <p class="text-[11px] text-[#8b94a6] leading-[1.6] mt-[8px] mb-[13px] min-h-[35px]">${escapeHtml(game.description || 'Trò chơi học tập tương tác, có thể chơi ngoại tuyến.')}</p>
-      <div class="flex gap-[5px] flex-wrap">${playModeChip}${connectionChip}<span class="px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#788196] text-[9px]">${escapeHtml(game.subject || 'Chưa phân môn')}</span><span class="px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#788196] text-[9px]">${game.grade ? 'Lớp ' + escapeHtml(game.grade) : 'Mọi lớp'}</span><span class="px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#788196] text-[9px]">${game.questions?.length || 0} câu</span></div>
-      <div class="flex items-center justify-between border-t border-[#f0f1f6] pt-[12px] text-[#8b94a6] text-[10px]"><span class="inline-flex items-center gap-[5px]"><span data-icon="book-open" data-icon-size="12"></span> ${escapeHtml(game.topic || 'Bài học')}</span><span class="inline-flex items-center gap-[5px]"><span data-icon="clock" data-icon-size="12"></span> ${fmtDate(game.updatedAt || game.createdAt)}</span></div>
+      <p class="text-[12px] text-[#5f6a7d] leading-[1.6] mt-[8px] mb-[13px] min-h-[35px]">${escapeHtml(game.description || 'Trò chơi học tập tương tác, có thể chơi ngoại tuyến.')}</p>
+      <div class="flex gap-[5px] flex-wrap">${playModeChip}${connectionChip}<span class="px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#5f6a7d] text-[11px]">${escapeHtml(game.subject || 'Chưa phân môn')}</span><span class="px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#5f6a7d] text-[11px]">${game.grade ? 'Lớp ' + escapeHtml(game.grade) : 'Mọi lớp'}</span><span class="px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#5f6a7d] text-[11px]">${game.questions?.length || 0} câu</span></div>
+      <div class="flex items-center justify-between border-t border-[#f0f1f6] pt-[12px] text-[#5f6a7d] text-[12px]"><span class="inline-flex items-center gap-[5px]"><span data-icon="book-open" data-icon-size="12"></span> ${escapeHtml(game.topic || 'Bài học')}</span><span class="inline-flex items-center gap-[5px]"><span data-icon="clock" data-icon-size="12"></span> ${fmtDate(game.updatedAt || game.createdAt)}</span></div>
       <div class="flex gap-[8px] mt-[13px]">
-        <button class="border-0 rounded-[9px] px-[11px] py-[8px] inline-flex items-center justify-center gap-[7px] font-bold text-[11px] transition-transform duration-120 hover:-translate-y-[1px] bg-[#6258e8] text-white shadow-[0_6px_14px_#6258e82b]" data-action="play" data-id="${id}"><span data-icon="play" data-icon-size="13"></span> Chơi ngay</button>
-        <button class="border-0 rounded-[9px] px-[11px] py-[8px] inline-flex items-center justify-center gap-[7px] font-bold text-[11px] transition-transform duration-120 hover:-translate-y-[1px] bg-[#2563eb] text-white shadow-[0_6px_14px_#2563eb2b]" data-action="play-fullscreen" data-id="${id}"><span data-icon="maximize" data-icon-size="13"></span> Toàn màn hình</button>
+        <button class="border-0 rounded-[9px] px-[11px] py-[8px] inline-flex items-center justify-center gap-[7px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-[#6258e8] text-white shadow-[0_6px_14px_#6258e82b]" data-action="play" data-id="${id}"><span data-icon="play" data-icon-size="13"></span> Chơi ngay</button>
+        <button class="border-0 rounded-[9px] px-[11px] py-[8px] inline-flex items-center justify-center gap-[7px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-[#2563eb] text-white shadow-[0_6px_14px_#2563eb2b]" data-action="play-fullscreen" data-id="${id}"><span data-icon="maximize" data-icon-size="13"></span> Toàn màn hình</button>
       </div>
     </div>
   </article>`;
@@ -202,4 +202,4 @@ function scoringModeHint(mode) {
   })[mode] || 'Chọn một trong 5 chế độ tính điểm theo mục 2.3 yêu cầu sản phẩm.';
 }
 
-function emptyState(title, desc, button, page) { return `<div class="bg-white border border-dashed border-[#dfe2ed] rounded-[14px] p-[50px_20px] text-center text-[#929bad] flex flex-col items-center justify-center"><div class="mb-[12px] text-[#c3c9d8]"><span data-icon="library" data-icon-size="40"></span></div><h3 class="text-[#394256] mb-[8px] mt-0">${escapeHtml(title)}</h3><p class="max-w-[420px] mx-auto mb-[17px] leading-[1.7] text-[12px]">${escapeHtml(desc)}</p><button class="border-0 rounded-[9px] px-[15px] py-[11px] inline-flex items-center justify-center gap-[8px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-[#6258e8] text-white shadow-[0_6px_14px_#6258e82b]" data-page="${page}">${escapeHtml(button)}</button></div>`; }
+function emptyState(title, desc, button, page) { return `<div class="bg-white border border-dashed border-[#dfe2ed] rounded-[14px] p-[50px_20px] text-center text-[#5f6a7d] flex flex-col items-center justify-center"><div class="mb-[12px] text-[#5f6a7d]"><span data-icon="library" data-icon-size="40"></span></div><h3 class="text-[#394256] mb-[8px] mt-0">${escapeHtml(title)}</h3><p class="max-w-[420px] mx-auto mb-[17px] leading-[1.7] text-[12px]">${escapeHtml(desc)}</p><button class="border-0 rounded-[9px] px-[15px] py-[11px] inline-flex items-center justify-center gap-[8px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-[#6258e8] text-white shadow-[0_6px_14px_#6258e82b]" data-page="${page}">${escapeHtml(button)}</button></div>`; }

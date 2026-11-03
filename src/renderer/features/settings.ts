@@ -179,11 +179,11 @@ const AI_TASK_STATE_LABELS = {
 };
 
 const AI_TASK_STATE_CLASSES = {
-  queued: 'bg-[#f5f6fa] text-[#788196]',
+  queued: 'bg-[#f5f6fa] text-[#5f6a7d]',
   running: 'bg-[#fff8e1] text-[#6b5600]',
   completed: 'bg-[#e8f8f2] text-[#0f7b5c]',
   failed: 'bg-[#fdecea] text-[#b3261e]',
-  cancelled: 'bg-[#f5f6fa] text-[#788196]'
+  cancelled: 'bg-[#f5f6fa] text-[#5f6a7d]'
 };
 
 const AI_TASK_KIND_LABELS = {
@@ -206,18 +206,18 @@ function aiTaskRowHtml(task) {
   const state = String(task.state || '');
   const kind = AI_TASK_KIND_LABELS[task.kind] || task.kind || 'Tác vụ AI';
   const label = escapeHtml(String(task.label || kind));
-  const badge = `<span class="inline-block px-[7px] py-[3px] rounded-[6px] text-[10px] font-bold whitespace-nowrap ${AI_TASK_STATE_CLASSES[state] || 'bg-[#f5f6fa] text-[#788196]'}">${AI_TASK_STATE_LABELS[state] || state}</span>`;
-  const restored = task.restored ? '<span class="text-[10px] text-[#9199aa]">· lịch sử</span>' : '';
-  const progress = task.progress && task.progress !== 'running' ? `<span class="text-[10px] text-[#9199aa]">· ${escapeHtml(String(task.progress))}</span>` : '';
-  const summary = task.resultSummary ? `<div class="text-[11px] text-[#515c72] mt-[3px]">Kết quả: ${escapeHtml(String(task.resultSummary))}</div>` : '';
+  const badge = `<span class="inline-block px-[7px] py-[3px] rounded-[6px] text-[12px] font-bold whitespace-nowrap ${AI_TASK_STATE_CLASSES[state] || 'bg-[#f5f6fa] text-[#5f6a7d]'}">${AI_TASK_STATE_LABELS[state] || state}</span>`;
+  const restored = task.restored ? '<span class="text-[12px] text-[#5f6a7d]">· lịch sử</span>' : '';
+  const progress = task.progress && task.progress !== 'running' ? `<span class="text-[12px] text-[#5f6a7d]">· ${escapeHtml(String(task.progress))}</span>` : '';
+  const summary = task.resultSummary ? `<div class="text-[12px] text-[#515c72] mt-[3px]">Kết quả: ${escapeHtml(String(task.resultSummary))}</div>` : '';
   const error = task.errorCode || task.errorMessage
-    ? `<div class="text-[11px] text-[#b3261e] mt-[3px]">${task.errorCode ? escapeHtml(String(task.errorCode)) + ': ' : ''}${escapeHtml(String(task.errorMessage || ''))}</div>`
+    ? `<div class="text-[12px] text-[#b3261e] mt-[3px]">${task.errorCode ? escapeHtml(String(task.errorCode)) + ': ' : ''}${escapeHtml(String(task.errorMessage || ''))}</div>`
     : '';
   return `<div class="bg-[#f8f9fc] border border-line rounded-[10px] p-[12px]">
     <div class="flex justify-between items-start gap-[10px]">
       <div class="min-w-0">
-        <div class="text-[12px] font-bold">${label} <span class="text-[10px] text-[#9199aa] font-normal">${escapeHtml(kind)}</span></div>
-        <div class="text-[10px] text-[#9199aa] mt-[2px]">${aiTaskWhen(task.startedAt)}${task.finishedAt ? ` → ${aiTaskWhen(task.finishedAt)}` : ''} ${restored} ${progress}</div>
+        <div class="text-[12px] font-bold">${label} <span class="text-[12px] text-[#5f6a7d] font-normal">${escapeHtml(kind)}</span></div>
+        <div class="text-[12px] text-[#5f6a7d] mt-[2px]">${aiTaskWhen(task.startedAt)}${task.finishedAt ? ` → ${aiTaskWhen(task.finishedAt)}` : ''} ${restored} ${progress}</div>
         ${summary}${error}
       </div>
       ${badge}
@@ -243,9 +243,9 @@ function aiTaskPageCount(total) {
 /** Previous / next / "Trang 2/3 · 30 tác vụ gần nhất" under the list. */
 function aiTaskPagerHtml(page, pages, total) {
   const button = (label, target, disabled, id) =>
-    `<button type="button" class="px-[10px] py-[6px] rounded-[7px] border border-[#e7eaf2] bg-white text-[11px] font-semibold text-[#515c72] disabled:opacity-50 disabled:cursor-not-allowed" id="${id}" data-ai-task-page="${target}"${disabled ? ' disabled' : ''}>${label}</button>`;
+    `<button type="button" class="px-[10px] py-[6px] rounded-[7px] border border-[#e7eaf2] bg-white text-[12px] font-semibold text-[#515c72] disabled:opacity-50 disabled:cursor-not-allowed" id="${id}" data-ai-task-page="${target}"${disabled ? ' disabled' : ''}>${label}</button>`;
   return `<div class="flex items-center justify-between gap-[10px] mt-[8px] flex-wrap" data-ai-task-pager>
-    <span class="text-[11px] text-[#9199aa]">Trang <b>${page + 1}</b>/${pages} · ${total} tác vụ gần nhất${total >= AI_TASK_PAGE_SIZE * AI_TASK_PAGES_MAX ? ' (cũ hơn tự động xoá)' : ''}</span>
+    <span class="text-[12px] text-[#5f6a7d]">Trang <b>${page + 1}</b>/${pages} · ${total} tác vụ gần nhất${total >= AI_TASK_PAGE_SIZE * AI_TASK_PAGES_MAX ? ' (cũ hơn tự động xoá)' : ''}</span>
     <div class="flex gap-[6px]">${button('← Trước', Math.max(0, page - 1), page <= 0, 'aiTasksPrevBtn')}${button('Sau →', Math.min(pages - 1, page + 1), page >= pages - 1, 'aiTasksNextBtn')}</div>
   </div>`;
 }
@@ -280,7 +280,7 @@ async function refreshAiTaskList() {
     const rows = tasks.slice(0, AI_TASK_PAGE_SIZE);
     container.innerHTML = (rows.length
       ? rows.map(aiTaskRowHtml).join('')
-      : '<div class="text-[11px] text-[#9199aa]">Chưa có tác vụ AI nào. Các tác vụ phân tích/sinh nội dung sẽ xuất hiện ở đây.</div>')
+      : '<div class="text-[12px] text-[#5f6a7d]">Chưa có tác vụ AI nào. Các tác vụ phân tích/sinh nội dung sẽ xuất hiện ở đây.</div>')
       + aiTaskPagerHtml(aiTaskPage, pages, total);
     container.querySelectorAll('[data-ai-task-page]').forEach(button => {
       button.addEventListener('click', () => {
@@ -292,7 +292,7 @@ async function refreshAiTaskList() {
     });
   } catch (error) {
     if (token !== aiTaskRefreshToken) return;
-    container.innerHTML = `<div class="text-[11px] text-[#b3261e]">Không đọc được danh sách tác vụ: ${escapeHtml(String(error && error.message ? error.message : error))}</div>`;
+    container.innerHTML = `<div class="text-[12px] text-[#b3261e]">Không đọc được danh sách tác vụ: ${escapeHtml(String(error && error.message ? error.message : error))}</div>`;
   }
 }
 

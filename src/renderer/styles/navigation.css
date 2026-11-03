@@ -94,14 +94,17 @@
   align-items: center;
   gap: 7px;
   margin-bottom: 9px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.2px;
-  color: #5b6478;
+  color: #4b5566;
 }
 .shortcut-head .lucide { color: var(--purple); }
 .shortcut-group + .shortcut-group { margin-top: 10px; }
-.shortcut-label { margin: 0 0 4px 2px; font-size: 9px; font-weight: 700; color: #9aa1b2; }
+/* #181: nhãn nhóm + dòng phụ của lối tắt là chữ thật, không phải-decoration.
+   Bản cũ 9–10px màu #9aa1b2 đo được 2.5:1 trên nền #fbfbfe — dưới cả ngưỡng
+   3:1 cho đồ họa. 11/12px với mực #4f5a6e / #5f6a7d đạt 5.4:1 trở lên. */
+.shortcut-label { margin: 0 0 4px 2px; font-size: 11px; font-weight: 700; color: #4f5a6e; }
 .shortcut-item {
   display: flex;
   align-items: center;
@@ -131,7 +134,7 @@
 .shortcut-text { display: block; min-width: 0; }
 .shortcut-text strong {
   display: block;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 650;
   white-space: nowrap;
   overflow: hidden;
@@ -140,22 +143,23 @@
 .shortcut-text small {
   display: block;
   margin-top: 2px;
-  font-size: 9.5px;
-  color: #98a0b0;
+  font-size: 12px;
+  color: #5f6a7d;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.shortcut-go { margin-left: auto; display: grid; place-items: center; color: #b3b9c7; }
-.shortcut-empty { margin: 2px 0 0 2px; font-size: 10px; line-height: 1.6; color: #929bad; }
+.shortcut-go { margin-left: auto; display: grid; place-items: center; color: #7c8598; }
+.shortcut-empty { margin: 2px 0 0 2px; font-size: 12px; line-height: 1.6; color: #5f6a7d; }
 
 html[data-theme="dark"] .sidebar-shortcuts { background: #141830; border-color: var(--line); }
 html[data-theme="dark"] .shortcut-head { color: #ccd2e1; }
-html[data-theme="dark"] .shortcut-label { color: #949cb2; }
+html[data-theme="dark"] .shortcut-label { color: #aeb6ca; }
 html[data-theme="dark"] .shortcut-item:hover { background: #232a45; color: #ded9ff; }
 html[data-theme="dark"] .shortcut-icon { background: #1d2340; border-color: #313957; color: #b0b8cc; }
 html[data-theme="dark"] .shortcut-text small,
-html[data-theme="dark"] .shortcut-empty { color: #939bb1; }
+html[data-theme="dark"] .shortcut-empty { color: #a8b0c4; }
+html[data-theme="dark"] .shortcut-go { color: #8b94ad; }
 
 /* Sidebar budget (#162): status 90 + nav 349 + block 220 + footer 210 + padding
    44 ≈ 913px. A 1366x768 classroom laptop only has 768, so the rail would scroll

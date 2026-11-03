@@ -63,6 +63,13 @@ const SCENARIO = String.raw`(async () => {
   // the Node-side constant below.
   const IDS = ['ai', 'teaching', 'interface', 'tasks', 'diagnostics'];
 
+  // One assertion ends on the diagnostics tab and the open tab is remembered in state for
+  // the life of the page, so a second run on the same instance would start where the last one
+  // stopped and "the first visit" would no longer be the default. Put it back first.
+  state.settingsSection = 'ai';
+  state.settingsAiTab = 'local';
+  render();
+
   navigate('settings');
   await sleep(800);
 
@@ -318,8 +325,10 @@ const SCENARIO = String.raw`(async () => {
   check('the panel heading stays legible in dark mode — it inherits the card ink',
     out.darkProbe.heading === out.darkProbe.cardInk && out.darkProbe.heading !== 'rgb(30, 41, 59)',
     JSON.stringify(out.darkProbe));
+  // #181 moved the unselected tab ink from #64748b (3,51:1 trên thẻ tối — không đạt sàn) lên
+  // #9aa3bb (6,63:1), nên con số cũ ở đây không còn là mực của dark nữa.
   check('the strip rule and an unselected tab are re-coloured by [data-theme=dark]',
-    out.darkProbe.stripRule === 'rgb(42, 50, 75)' && out.darkProbe.tabInk === 'rgb(100, 116, 139)',
+    out.darkProbe.stripRule === 'rgb(42, 50, 75)' && out.darkProbe.tabInk === 'rgb(154, 163, 187)',
     JSON.stringify(out.darkProbe));
 
   console.log(failures ? `\n${failures} check(s) failed` : '\nAll settings tab checks passed');

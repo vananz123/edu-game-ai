@@ -451,11 +451,18 @@ const SCENARIO = String.raw`(async () => {
 
   // The hint ink is the one pair #160 swapped: it must read as the muted slate of each
   // theme, not as one value for both.
+  // #181 re-pinned both ends of that pair, so the two numbers below are its, not #160's.
+  // Light went #64748b -> #4f5a6e (4,76:1 -> 6,95:1 on white): the small grey hint line was
+  // the main thing the readability pass had to fix. Dark no longer resolves to the utility's
+  // own #94a3b8 (6,64:1) because shell.css maps text-[#4f5a6e] to var(--muted) with
+  // !important, which scores (0,2,0) against the dark: variant's (0,1,0). The table therefore
+  // owns this ink and hands back #a0a7bc = 7,10:1 on the card, i.e. better than the markup
+  // asked for. Kept as a sentinel anyway: it is the pair that moves if either side is re-coloured.
   const hintDark = dark.find(r => r.page === 'settings' && r.dark.includes('dark:text-[#94a3b8]'));
   const hintLight = light.find(r => r.page === 'settings' && r.dark.includes('dark:text-[#94a3b8]'));
   check('hint text uses the light slate on dark cards and the dark slate on white',
-    Boolean(hintDark) && hintDark.color === 'rgb(148, 163, 184)'
-      && Boolean(hintLight) && hintLight.color === 'rgb(100, 116, 139)',
+    Boolean(hintDark) && hintDark.color === 'rgb(160, 167, 188)'
+      && Boolean(hintLight) && hintLight.color === 'rgb(79, 90, 110)',
     `dark ${hintDark && hintDark.color} / light ${hintLight && hintLight.color}`);
 
   // #164: the four batch-selection bars. `page` is the page that drew them, so a bar that

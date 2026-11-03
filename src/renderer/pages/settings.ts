@@ -1,19 +1,21 @@
 // @ts-nocheck -- migrated legacy UI logic; new contracts are typed in src/shared/types.ts.
 function settingsProviderCard(provider, inputCls, labelCls, hintCls, btnSecondaryCls) {
+  // #181: chip "lỗi" ghim nền #fef2f2, nên mực cũ #dc2626 chỉ đạt 4,41:1 trên chính nền của
+  // nó. #b42318 là 6,01:1 và vẫn flip sang #fca5a5 trong dark qua bảng dịch ở shell.css.
   const chip = provider.status === 'ready'
-    ? 'bg-[#effaf5] dark:bg-[#132d24] text-[#16a34a] dark:text-[#4ade80]'
+    ? 'bg-[#effaf5] dark:bg-[#132d24] text-[#0f7b5c] dark:text-[#4ade80]'
     : provider.status === 'configured'
       ? 'bg-[#eef2ff] dark:bg-[#1e1b4b] text-[#4f46e5] dark:text-[#a5b4fc]'
       : provider.status === 'failing'
-        ? 'bg-[#fef2f2] dark:bg-[#2d1313] text-[#dc2626] dark:text-[#fca5a5]'
-        : 'bg-[#f5f6fa] dark:bg-[#1e2544] text-[#788196] dark:text-[#94a3b8]';
+        ? 'bg-[#fef2f2] dark:bg-[#2d1313] text-[#b42318] dark:text-[#fca5a5]'
+        : 'bg-[#f5f6fa] dark:bg-[#1e2544] text-[#5f6a7d] dark:text-[#94a3b8]';
   // #132 D17: "verified" and "used by the lesson workflow" are different facts; a
   // provider that passed its test but is kept out of the flow must not read as merely
   // configured, or the teacher tests it again and again.
   const chipLabel = provider.status === 'ready' ? '✓ Sẵn sàng'
     : provider.status === 'configured' ? '● Đã cấu hình'
       : provider.status === 'failing' ? '<span data-icon="triangle-alert" data-icon-size="10"></span> Đang lỗi' : '○ Chưa cấu hình';
-  const note = provider.note ? '<div class=\'mt-1 text-[10px] text-[#94a3b8]\'>' + escapeHtml(provider.note) + '</div>' : '';
+  const note = provider.note ? '<div class=\'mt-1 text-[12px] text-[#5a6478]\'>' + escapeHtml(provider.note) + '</div>' : '';
   const fields = provider.id === 'local' ? '' : [
     '<div class="grid grid-cols-2 gap-2 mt-2">',
     '  <div class="field"><label class="' + labelCls + '">API BASE URL</label>',
@@ -37,10 +39,10 @@ function settingsProviderCard(provider, inputCls, labelCls, hintCls, btnSecondar
     '<div class="' + hintCls + '">Kiểm tra chạy một câu hỏi ngắn trên model local đang chạy.</div>',
     '</div>'
   ].join('') : '';
-  const badge = provider.wizardEligible ? '' : '<span class="ml-1.5 px-1.5 py-0.5 rounded bg-[#f5f6fa] dark:bg-[#1e2544] text-[10px] font-semibold text-[#788196] dark:text-[#94a3b8]">Chưa dùng cho luồng tạo trò chơi</span>';
+  const badge = provider.wizardEligible ? '' : '<span class="ml-1.5 px-1.5 py-0.5 rounded bg-[#f5f6fa] dark:bg-[#1e2544] text-[12px] font-semibold text-[#5f6a7d] dark:text-[#94a3b8]">Chưa dùng cho luồng tạo trò chơi</span>';
   return '<div class="p-3 rounded-xl border border-[#e2e8f0] dark:border-[#2a324b]" data-ai-provider="' + escapeHtml(provider.id) + '" data-ai-provider-status="' + escapeHtml(provider.status) + '">'
     + '<div class="flex items-center justify-between gap-2 flex-wrap"><div class="min-w-0"><strong class="text-[13px] text-[#1e293b] dark:text-[#f1f5f9]">' + escapeHtml(provider.label) + '</strong>' + badge + '</div>'
-    + '<span class="px-2 py-0.5 rounded text-[10px] font-semibold ' + chip + '" data-ai-provider-chip>' + chipLabel + '</span></div>'
+    + '<span class="px-2 py-0.5 rounded text-[12px] font-semibold ' + chip + '" data-ai-provider-chip>' + chipLabel + '</span></div>'
     + '<div class="' + hintCls + ' mt-1" data-ai-provider-reason>' + escapeHtml(provider.reason || '') + '</div>'
     + note + fields + localActions + '</div>';
 }
@@ -84,7 +86,7 @@ const SETTINGS_AI_TABS = [
 function settingsTabStripHtml(cfg) {
   return `<div class="${cfg.cls} settings-tablist flex items-center gap-1 flex-wrap" role="tablist" aria-label="${escapeHtml(cfg.ariaLabel)}">`
     + cfg.tabs.map(tab => `<button type="button" role="tab" id="${cfg.idPrefix}-${tab.id}" class="settings-tab" data-${cfg.attr}="${tab.id}" aria-selected="${cfg.selected === tab.id ? 'true' : 'false'}" aria-controls="${cfg.panelPrefix}-${tab.id}" tabindex="${cfg.selected === tab.id ? '0' : '-1'}">`
-      + `<span>${tab.icon ? `<span class="mr-1 text-[#8f97ad]" data-icon="${tab.icon}" data-icon-size="14"></span>` : ''}${escapeHtml(tab.tab)}</span>${tab.chip || ''}</button>`).join('')
+      + `<span>${tab.icon ? `<span class="mr-1 text-[#5f6a7d]" data-icon="${tab.icon}" data-icon-size="14"></span>` : ''}${escapeHtml(tab.tab)}</span>${tab.chip || ''}</button>`).join('')
     + '</div>';
 }
 
@@ -145,9 +147,9 @@ function renderSettings() {
     : 'Đang nạp danh sách model AI local…';
 
   const inputCls = 'w-full px-3 py-2 border border-[#cbd5e1] dark:border-[#334155] rounded-lg bg-white dark:bg-[#1e2544] text-[#1e293b] dark:text-[#f8fafc] text-[13px] focus:outline-none focus:border-[#6366f1]';
-  const labelCls = 'text-[10px] font-bold text-[#475569] dark:text-[#cbd5e1] mb-1 block';
+  const labelCls = 'text-[12px] font-bold text-[#475569] dark:text-[#cbd5e1] mb-1 block';
   const sectionCls = 'bg-white dark:bg-[#171c32] border border-[#e2e8f0] dark:border-[#2a324b] rounded-2xl p-5';
-  const hintCls = 'text-[11px] text-[#64748b] dark:text-[#94a3b8] leading-relaxed';
+  const hintCls = 'text-[12px] text-[#4f5a6e] dark:text-[#94a3b8] leading-relaxed';
   const btnSecondaryCls = 'btn btn-secondary btn-small';
 
   // #159: a tab is always open, so `''` (the old "everything collapsed" accordion state)
@@ -158,9 +160,9 @@ function renderSettings() {
   const aiTab = SETTINGS_AI_TABS.some(tab => tab.id === state.settingsAiTab) ? state.settingsAiTab : 'local';
   const localReady = Boolean(selectedLocalModel?.installed && machine.runtimeInstalled);
   const chipTone = ok => ok
-    ? 'bg-[#effaf5] dark:bg-[#132d24] text-[#16a34a] dark:text-[#4ade80]'
-    : 'bg-[#fef3c7] dark:bg-[#2d2413] text-[#d97706] dark:text-[#fbbf24]';
-  const chipCls = ok => `px-2 py-0.5 rounded text-[10px] font-semibold ${chipTone(ok)}`;
+    ? 'bg-[#effaf5] dark:bg-[#132d24] text-[#0f7b5c] dark:text-[#4ade80]'
+    : 'bg-[#fef3c7] dark:bg-[#2d2413] text-[#9c4808] dark:text-[#fbbf24]';
+  const chipCls = ok => `px-2 py-0.5 rounded text-[12px] font-semibold ${chipTone(ok)}`;
   // #158: the cloud tab lists only the providers that actually need a key — the local
   // runtime has its own tab, and "AI local (llama.cpp)" sitting under "AI cloud" reads
   // as a bug. The policy strip still names every eligible provider, local included.
@@ -168,7 +170,7 @@ function renderSettings() {
   const readyCloud = cloudProviders.filter(provider => provider.status === 'ready').length;
   // Full wording in the panel header, minimal wording in the tab label: five tabs have to
   // share one row on a 1366px screen, so the chip there is `monitor ✓` / `cloud 0/4`, not a sentence.
-  const tabChip = (text, ok, title, icon) => `<span class="px-1 py-0.5 rounded text-[9px] font-semibold shrink-0 inline-flex items-center gap-[4px] ${chipTone(ok)}" title="${escapeHtml(title || text)}">${icon ? `<span data-icon="${icon}" data-icon-size="10"></span>` : ''}${escapeHtml(text)}</span>`;
+  const tabChip = (text, ok, title, icon) => `<span class="px-1 py-0.5 rounded text-[11px] font-semibold shrink-0 inline-flex items-center gap-[4px] ${chipTone(ok)}" title="${escapeHtml(title || text)}">${icon ? `<span data-icon="${icon}" data-icon-size="10"></span>` : ''}${escapeHtml(text)}</span>`;
   const aiChips = `<span class="${chipCls(localReady)} inline-flex items-center gap-[5px]"><span data-icon="monitor" data-icon-size="12"></span> ${localReady ? '✓ Sẵn sàng' : '○ Chưa cài đầy đủ'}</span>`
     + `<span class="${chipCls(readyCloud > 0)} inline-flex items-center gap-[5px]"><span data-icon="cloud" data-icon-size="12"></span> ${readyCloud ? `✓ ${readyCloud}/${cloudProviders.length} sẵn sàng` : 'Chưa có API key'}</span>`;
   const themeLabel = state.settings.preferences?.theme==='dark' ? 'Tối' : state.settings.preferences?.theme==='system' ? 'Hệ thống' : 'Sáng';
@@ -215,18 +217,18 @@ function renderSettings() {
             ${selectedLocalModel ? `
               <div class="p-3 bg-[#f8fafc] dark:bg-[#151a30] rounded-xl border border-[#f1f5f9] dark:border-[#2a324b]">
                 <strong class="text-[13px] text-[#1e293b] dark:text-[#f1f5f9] block mb-2">${escapeHtml(selectedLocalModel.displayName)}</strong>
-                <div class="grid gap-1.5 text-[11px] text-[#64748b] dark:text-[#94a3b8]">
+                <div class="grid gap-1.5 text-[12px] text-[#4f5a6e] dark:text-[#94a3b8]">
                   <span>${modelStatus}</span>
                   <span>Đánh giá máy: ${escapeHtml(selectedLocalModel.recommendationReason)}</span>
                   <span>RAM ${formatBytes(machine.totalRamBytes || 0)} · cần tối thiểu ${formatBytes(selectedLocalModel.minimumRamBytes)}, khuyến nghị ${formatBytes(selectedLocalModel.recommendedRamBytes)}</span>
-                  <span class="${selectedLocalModel.memoryStatus==='insufficient' ? 'text-[#dc2626]' : selectedLocalModel.memoryStatus==='below-recommended' ? 'text-[#d97706]' : 'text-[#16a34a]'}">${selectedLocalModel.memoryStatus==='insufficient'?'<span data-icon="triangle-alert" data-icon-size="11"></span> RAM thấp hơn mức tối thiểu; model có thể không chạy ổn định.':selectedLocalModel.memoryStatus==='below-recommended'?'<span data-icon="triangle-alert" data-icon-size="11"></span> RAM thấp hơn mức khuyến nghị.':'✓ RAM đạt mức khuyến nghị.'}</span>
+                  <span class="${selectedLocalModel.memoryStatus==='insufficient' ? 'text-[#dc2626]' : selectedLocalModel.memoryStatus==='below-recommended' ? 'text-[#9c4808]' : 'text-[#0f7b5c]'}">${selectedLocalModel.memoryStatus==='insufficient'?'<span data-icon="triangle-alert" data-icon-size="11"></span> RAM thấp hơn mức tối thiểu; model có thể không chạy ổn định.':selectedLocalModel.memoryStatus==='below-recommended'?'<span data-icon="triangle-alert" data-icon-size="11"></span> RAM thấp hơn mức khuyến nghị.':'✓ RAM đạt mức khuyến nghị.'}</span>
                 </div>
               </div>
             ` : ''}
 
             <details class="group" ${selectedRuntimeBackend==='vulkan'?'open':''}>
-              <summary class="cursor-pointer text-[12px] font-semibold text-[#6366f1] dark:text-[#818cf8] hover:underline list-none flex items-center gap-1.5">
-                <span class="text-[10px] transition-transform group-open:rotate-90" data-icon="chevron-right" data-icon-size="12"></span>
+              <summary class="cursor-pointer text-[12px] font-semibold text-[#4f46e5] dark:text-[#818cf8] hover:underline list-none flex items-center gap-1.5">
+                <span class="text-[12px] transition-transform group-open:rotate-90" data-icon="chevron-right" data-icon-size="12"></span>
                 Tùy chọn nâng cao: dùng GPU tích hợp
               </summary>
               <div class="mt-3 p-3 bg-[#f8fafc] dark:bg-[#151a30] rounded-lg border border-[#f1f5f9] dark:border-[#2a324b]">
@@ -251,7 +253,7 @@ function renderSettings() {
 
             <div class="p-3 bg-[#f8fafc] dark:bg-[#151a30] rounded-xl border border-[#f1f5f9] dark:border-[#2a324b]">
               <strong class="text-[12px] text-[#1e293b] dark:text-[#f1f5f9] block mb-2">Cấu hình máy</strong>
-              <div class="grid gap-1 text-[11px] text-[#64748b] dark:text-[#94a3b8]">
+              <div class="grid gap-1 text-[12px] text-[#4f5a6e] dark:text-[#94a3b8]">
                 <span><b class="text-[#475569] dark:text-[#cbd5e1]">CPU:</b> ${escapeHtml(machine.cpuModel || 'Không nhận diện được')} · ${machine.logicalCpuCount || 0} luồng logic</span>
                 <span><b class="text-[#475569] dark:text-[#cbd5e1]">RAM:</b> ${formatBytes(machine.totalRamBytes || 0)}</span>
                 <span><b class="text-[#475569] dark:text-[#cbd5e1]">GPU:</b> ${escapeHtml(gpuDescription)}</span>
@@ -270,7 +272,7 @@ function renderSettings() {
           <div class="p-3 mb-3 bg-[#f8fafc] dark:bg-[#151a30] rounded-xl border border-[#f1f5f9] dark:border-[#2a324b]" data-ai-policy>
             <strong class="text-[12px] text-[#1e293b] dark:text-[#f1f5f9] block">Cho trò chơi mới: tự chọn nhà cung cấp sẵn sàng</strong>
             <div class="${hintCls} mt-1">Không tự đổi nhà cung cấp khi đang lỗi. Thứ tự tự động: AI local → Gemini → ChatGPT. Bước 2 và bước 5 luôn hiện nhà cung cấp đang dùng và cho chọn nếu có từ hai nhà cung cấp sẵn sàng.</div>
-            <div class="flex flex-wrap gap-1.5 mt-2">${providers.filter(p => p.wizardEligible).map(p => `<span class="px-2 py-0.5 rounded text-[10px] font-semibold ${p.usable ? 'bg-[#effaf5] text-[#16a34a]' : 'bg-[#f5f6fa] text-[#788196]'}">${escapeHtml(p.label)}</span>`).join('')}</div>
+            <div class="flex flex-wrap gap-1.5 mt-2">${providers.filter(p => p.wizardEligible).map(p => `<span class="px-2 py-0.5 rounded text-[12px] font-semibold ${p.usable ? 'bg-[#effaf5] text-[#0f7b5c]' : 'bg-[#f5f6fa] text-[#5f6a7d]'}">${escapeHtml(p.label)}</span>`).join('')}</div>
           </div>
           <div class="grid gap-3">${cloudProviders.map(provider => settingsProviderCard(provider, inputCls, labelCls, hintCls, btnSecondaryCls)).join('')}</div>
         ` : `<p class="${hintCls}">Đang nạp danh sách nhà cung cấp AI…</p>`}
@@ -348,14 +350,14 @@ function renderSettings() {
             <div class="flex flex-col gap-3 pt-5">
               <div class="flex items-center justify-between">
                 <div class="flex items-center gap-2">
-                  <span class="text-[#64748b] dark:text-[#94a3b8]" data-icon="type" data-icon-size="15"></span>
+                  <span class="text-[#4f5a6e] dark:text-[#94a3b8]" data-icon="type" data-icon-size="15"></span>
                   <span class="text-[12px] font-semibold text-[#1e293b] dark:text-[#f1f5f9]">Chữ lớn khi chơi</span>
                 </div>
                 <input type="checkbox" class="switch" id="settingLargeText" ${state.settings.preferences?.largeText!==false?'checked':''}>
               </div>
               <div class="flex items-center justify-between">
                 <div class="flex items-center gap-2">
-                  <span class="text-[#64748b] dark:text-[#94a3b8]" data-icon="volume-2" data-icon-size="15"></span>
+                  <span class="text-[#4f5a6e] dark:text-[#94a3b8]" data-icon="volume-2" data-icon-size="15"></span>
                   <span class="text-[12px] font-semibold text-[#1e293b] dark:text-[#f1f5f9]">Âm thanh</span>
                 </div>
                 <input type="checkbox" class="switch" id="settingSound" ${state.settings.preferences?.sound!==false?'checked':''}>
@@ -371,7 +373,7 @@ function renderSettings() {
             </div>
             <div class="p-3 bg-[#f8fafc] dark:bg-[#151a30] rounded-lg border border-[#f1f5f9] dark:border-[#2a324b]">
               <strong class="text-[12px] text-[#1e293b] dark:text-[#f1f5f9] flex items-center gap-[6px] mb-1"><span data-icon="archive" data-icon-size="13"></span> Định dạng gói</strong>
-              <p class="${hintCls} m-0"><code class="text-[#6366f1] dark:text-[#818cf8]">.egame</code> là JSON có phiên bản schema. Chỉ nhập gói từ nguồn tin cậy; nội dung không được phép thực thi mã.</p>
+              <p class="${hintCls} m-0"><code class="text-[#4f46e5] dark:text-[#818cf8]">.egame</code> là JSON có phiên bản schema. Chỉ nhập gói từ nguồn tin cậy; nội dung không được phép thực thi mã.</p>
               <div class="flex gap-2 mt-2 flex-wrap">
                 <button class="${btnSecondaryCls}" data-action="export-first"><span data-icon="download" data-icon-size="13"></span> Xuất trò chơi</button>
                 <button class="${btnSecondaryCls}" data-action="import-game"><span data-icon="upload" data-icon-size="13"></span> Nhập gói .egame</button>
@@ -405,7 +407,9 @@ function renderSettings() {
           <div class="flex gap-2 shrink-0 flex-wrap">
             <button class="${btnSecondaryCls}" id="exportDiagnosticsBtn">Xuất gói chẩn đoán</button>
             <button class="${btnSecondaryCls}" id="openLogFolderBtn">Mở thư mục log</button>
-            <button class="btn btn-small border border-[#e2e8f0] dark:border-[#2a324b] text-[#dc2626] dark:text-[#fca5a5] bg-white dark:bg-[#171c32] hover:bg-[#fef2f2] text-[11px] font-semibold px-3 py-1.5 rounded-lg" id="clearDiagnosticsBtn">Xóa log</button>
+            <!-- #181: mực đỏ cũ #dc2626 đo trên chính vệt hover #fef2f2 của nó chỉ 4,41:1;
+                 cùng họ đỏ báo lỗi với chip bên trên nên đổi sang #b42318 (6,01:1). -->
+            <button class="btn btn-small border border-[#e2e8f0] dark:border-[#2a324b] text-[#b42318] dark:text-[#fca5a5] bg-white dark:bg-[#171c32] hover:bg-[#fef2f2] text-[12px] font-semibold px-3 py-1.5 rounded-lg" id="clearDiagnosticsBtn">Xóa log</button>
           </div>
         </div>
         <div id="diagnosticsInfo" class="${hintCls} mb-3">Đang đọc thư mục log…</div>
@@ -417,10 +421,10 @@ function renderSettings() {
     <!-- ═══ SIDEBAR: Nút lưu sticky + tóm tắt ═══ -->
     <aside class="flex flex-col gap-4 sticky top-5">
       <!-- Nút Lưu cài đặt — sticky -->
-      <section class="bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] rounded-2xl p-5 text-white">
+      <section class="bg-gradient-to-br from-[#4f46e5] to-[#6d28d9] rounded-2xl p-5 text-white">
         <h3 class="text-[14px] font-bold m-0 mb-2">Lưu thay đổi</h3>
-        <p class="text-[11px] text-[#e0e7ff] mb-3 leading-relaxed m-0">Lưu toàn bộ cài đặt trên trang này — kể cả các tab đang ẩn.</p>
-        <button class="bg-white text-[#6366f1] border-0 rounded-lg px-4 py-2.5 font-bold text-[13px] cursor-pointer w-full inline-flex items-center justify-center gap-[7px] hover:bg-[#f8f7ff] transition shadow-[0_4px_12px_rgba(0,0,0,0.1)]" id="saveSettingsBtn"><span data-icon="save" data-icon-size="14"></span> Lưu cài đặt</button>
+        <p class="text-[12px] text-[#e0e7ff] mb-3 leading-relaxed m-0">Lưu toàn bộ cài đặt trên trang này — kể cả các tab đang ẩn.</p>
+        <button class="bg-white text-[#4f46e5] border-0 rounded-lg px-4 py-2.5 font-bold text-[13px] cursor-pointer w-full inline-flex items-center justify-center gap-[7px] hover:bg-[#f8f7ff] transition shadow-[0_4px_12px_rgba(0,0,0,0.1)]" id="saveSettingsBtn"><span data-icon="save" data-icon-size="14"></span> Lưu cài đặt</button>
       </section>
 
       <!-- Tóm tắt cấu hình -->
@@ -429,38 +433,38 @@ function renderSettings() {
         <div class="flex flex-col gap-2.5">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
-              <span class="text-[#64748b] dark:text-[#94a3b8]" data-icon="bot" data-icon-size="14"></span>
-              <span class="text-[11px] text-[#475569] dark:text-[#cbd5e1]">Nhà cung cấp AI</span>
+              <span class="text-[#4f5a6e] dark:text-[#94a3b8]" data-icon="bot" data-icon-size="14"></span>
+              <span class="text-[12px] text-[#475569] dark:text-[#cbd5e1]">Nhà cung cấp AI</span>
             </div>
-            <span class="text-[10px] font-semibold text-[#6366f1] dark:text-[#818cf8]" data-ai-active-label>${escapeHtml((aiProviderView(ai.provider) || {}).label || 'AI local')}</span>
+            <span class="text-[12px] font-semibold text-[#4f46e5] dark:text-[#818cf8]" data-ai-active-label>${escapeHtml((aiProviderView(ai.provider) || {}).label || 'AI local')}</span>
           </div>
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
-              <span class="text-[#64748b] dark:text-[#94a3b8]" data-icon="palette" data-icon-size="14"></span>
-              <span class="text-[11px] text-[#475569] dark:text-[#cbd5e1]">Giọng điệu</span>
+              <span class="text-[#4f5a6e] dark:text-[#94a3b8]" data-icon="palette" data-icon-size="14"></span>
+              <span class="text-[12px] text-[#475569] dark:text-[#cbd5e1]">Giọng điệu</span>
             </div>
-            <span class="text-[10px] font-semibold text-[#475569] dark:text-[#cbd5e1]">${escapeHtml(tone)}</span>
+            <span class="text-[12px] font-semibold text-[#475569] dark:text-[#cbd5e1]">${escapeHtml(tone)}</span>
           </div>
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
-              <span class="text-[#64748b] dark:text-[#94a3b8]" data-icon="monitor" data-icon-size="14"></span>
-              <span class="text-[11px] text-[#475569] dark:text-[#cbd5e1]">Giao diện</span>
+              <span class="text-[#4f5a6e] dark:text-[#94a3b8]" data-icon="monitor" data-icon-size="14"></span>
+              <span class="text-[12px] text-[#475569] dark:text-[#cbd5e1]">Giao diện</span>
             </div>
-            <span class="text-[10px] font-semibold text-[#475569] dark:text-[#cbd5e1]">${state.settings.preferences?.theme==='dark' ? 'Tối' : state.settings.preferences?.theme==='system' ? 'Hệ thống' : 'Sáng'}</span>
+            <span class="text-[12px] font-semibold text-[#475569] dark:text-[#cbd5e1]">${state.settings.preferences?.theme==='dark' ? 'Tối' : state.settings.preferences?.theme==='system' ? 'Hệ thống' : 'Sáng'}</span>
           </div>
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
-              <span class="text-[#64748b] dark:text-[#94a3b8]" data-icon="users" data-icon-size="14"></span>
-              <span class="text-[11px] text-[#475569] dark:text-[#cbd5e1]">Đối tượng</span>
+              <span class="text-[#4f5a6e] dark:text-[#94a3b8]" data-icon="users" data-icon-size="14"></span>
+              <span class="text-[12px] text-[#475569] dark:text-[#cbd5e1]">Đối tượng</span>
             </div>
-            <span class="text-[10px] font-semibold text-[#475569] dark:text-[#cbd5e1]">${audience==='child' ? 'Trẻ em' : audience==='adult' ? 'Người lớn' : 'Học sinh'}</span>
+            <span class="text-[12px] font-semibold text-[#475569] dark:text-[#cbd5e1]">${audience==='child' ? 'Trẻ em' : audience==='adult' ? 'Người lớn' : 'Học sinh'}</span>
           </div>
           ${selectedLocalModel ? `<div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
-              <span class="text-[#64748b] dark:text-[#94a3b8]" data-icon="box" data-icon-size="14"></span>
-              <span class="text-[11px] text-[#475569] dark:text-[#cbd5e1]">Model AI</span>
+              <span class="text-[#4f5a6e] dark:text-[#94a3b8]" data-icon="box" data-icon-size="14"></span>
+              <span class="text-[12px] text-[#475569] dark:text-[#cbd5e1]">Model AI</span>
             </div>
-            <span class="text-[10px] font-semibold ${selectedLocalModel.installed ? 'text-[#16a34a]' : 'text-[#d97706]'}">${selectedLocalModel.installed ? '✓ Đã cài' : '○ Chưa cài'}</span>
+            <span class="text-[12px] font-semibold ${selectedLocalModel.installed ? 'text-[#0f7b5c]' : 'text-[#9c4808]'}">${selectedLocalModel.installed ? '✓ Đã cài' : '○ Chưa cài'}</span>
           </div>` : ''}
         </div>
       </section>
@@ -469,9 +473,9 @@ function renderSettings() {
       <section class="bg-white dark:bg-[#171c32] border border-[#e2e8f0] dark:border-[#2a324b] rounded-2xl p-5">
         <h3 class="text-[13px] font-bold text-[#1e293b] dark:text-[#f1f5f9] m-0 mb-3">Liên kết nhanh</h3>
         <div class="flex flex-col gap-2">
-          <button class="text-left text-[12px] text-[#6366f1] dark:text-[#818cf8] hover:underline bg-transparent border-0 cursor-pointer p-0 inline-flex items-center gap-[7px]" data-page="create-wizard"><span data-icon="wand-sparkles" data-icon-size="14"></span> Tạo trò chơi từ giáo án</button>
-          <button class="text-left text-[12px] text-[#6366f1] dark:text-[#818cf8] hover:underline bg-transparent border-0 cursor-pointer p-0 inline-flex items-center gap-[7px]" data-page="library"><span data-icon="library" data-icon-size="14"></span> Thư viện trò chơi</button>
-          <button class="text-left text-[12px] text-[#6366f1] dark:text-[#818cf8] hover:underline bg-transparent border-0 cursor-pointer p-0 inline-flex items-center gap-[7px]" data-page="my-projects"><span data-icon="folder-open" data-icon-size="14"></span> Dự án của tôi</button>
+          <button class="text-left text-[12px] text-[#4f46e5] dark:text-[#818cf8] hover:underline bg-transparent border-0 cursor-pointer p-0 inline-flex items-center gap-[7px]" data-page="create-wizard"><span data-icon="wand-sparkles" data-icon-size="14"></span> Tạo trò chơi từ giáo án</button>
+          <button class="text-left text-[12px] text-[#4f46e5] dark:text-[#818cf8] hover:underline bg-transparent border-0 cursor-pointer p-0 inline-flex items-center gap-[7px]" data-page="library"><span data-icon="library" data-icon-size="14"></span> Thư viện trò chơi</button>
+          <button class="text-left text-[12px] text-[#4f46e5] dark:text-[#818cf8] hover:underline bg-transparent border-0 cursor-pointer p-0 inline-flex items-center gap-[7px]" data-page="my-projects"><span data-icon="folder-open" data-icon-size="14"></span> Dự án của tôi</button>
         </div>
       </section>
     </aside>

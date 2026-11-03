@@ -77,10 +77,33 @@ const KEEP_PROVIDER_VIEW = `(() => {
   if (window.__keepProviderView) return;
   window.__keepProviderView = true;
   const original = window.render;
+  // Keep the untouched render reachable: the scenarios below replace state.settings with a
+  // mock, and a sibling CDP check on this same page instance would read that mock through
+  // this wrapper forever. TEARDOWN reverses exactly what is installed here.
+  window.__realRender = original;
   window.render = function () {
     if (window.__providerView && window.__providerView.ai) state.settings.ai = JSON.parse(JSON.stringify(window.__providerView.ai));
     return original.apply(this, arguments);
   };
+})()`;
+
+const TEARDOWN = `(async () => {
+  if (window.__realRender) window.render = window.__realRender;
+  delete window.__realRender;
+  delete window.__providerView;
+  delete window.__providerFake;
+  delete window.__providerCalls;
+  delete window.__realBridge;
+  delete window.eduGameAiProviders;
+  delete window.eduGameAnalyzeOverride;
+  delete window.eduGameGenerateOverride;
+  delete window.eduGameRegenerateOverride;
+  window.__keepProviderView = false;
+  state.settings = await window.eduGame.getSettings();
+  navigate('home');
+  render();
+  await new Promise(r => setTimeout(r, 250));
+  return { wrapperGone: window.__providerView === undefined, provider: state.settings.ai.provider };
 })()`;
 
 function installHarness(view, analyzeBehaviour = 'ok') {
@@ -161,7 +184,7 @@ function installHarness(view, analyzeBehaviour = 'ok') {
       cloudProviderId: (document.querySelector('[data-wizard-action="analyze-cloud"]') || { dataset: {} }).dataset.providerId,
       cloudHint: (document.querySelector('[data-wizard-cloud-hint]') || {}).textContent || '',
       localNotice: (document.querySelector('[data-wizard-local-notice]') || {}).textContent || '',
-      cloudTone: (() => { const b = document.querySelector('[data-wizard-action="analyze-cloud"]'); return b ? (b.getAttribute('style') || '') : ''; })()
+      cloudTone: (() => { const b = document.querySelector('[data-wizard-action="analyze-cloud"]'); return b ? (b.getAttribute('class') || '') : ''; })()
     };
   })()`);
   check('the step-2 action names the provider ("Phân tích…")', /Phân tích/.test(step2.button), step2.button);
@@ -177,7 +200,9 @@ function installHarness(view, analyzeBehaviour = 'ok') {
   check('a verified cloud provider adds a second analysis button', /Phân tích/.test(String(step2.cloudButton)) && step2.cloudProviderId === 'gemini', String(step2.cloudButton));
   check('the cloud button names its provider', /Gemini/.test(String(step2.cloudButton)), String(step2.cloudButton));
   // D14: red only after a real cloud failure, never because the provider exists.
-  check('a verified cloud button is not red by default', !/dc2626/.test(String(step2.cloudTone)), String(step2.cloudTone));
+  // #181: the red moved from an inline `style="color:#dc2626"` to the `.is-alert` class
+  // (an inline style is invisible to the dark translation table), so the probe reads `class`.
+  check('a verified cloud button is not red by default', !/is-alert/.test(String(step2.cloudTone)), String(step2.cloudTone));
   check('the step says the cloud button leaves the machine', /Internet/.test(step2.cloudHint), step2.cloudHint.slice(0, 80));
 
   const step5 = await cdp.evaluate(`(async () => {
@@ -239,7 +264,7 @@ function installHarness(view, analyzeBehaviour = 'ok') {
       cloudButton: (() => { const b = document.querySelector('[data-wizard-action="analyze-cloud"]'); return b ? b.textContent : null; })(),
       cloudHint: (document.querySelector('[data-wizard-cloud-hint]') || {}).textContent || '',
       localNotice: (document.querySelector('[data-wizard-local-notice]') || {}).textContent || '',
-      cloudTone: (() => { const b = document.querySelector('[data-wizard-action="analyze-cloud"]'); return b ? (b.getAttribute('style') || '') : ''; })()
+      cloudTone: (() => { const b = document.querySelector('[data-wizard-action="analyze-cloud"]'); return b ? (b.getAttribute('class') || '') : ''; })()
     };
   })()`);
   check('one ready provider hides the picker', singleStep.select === false && single.picker.show === false);
@@ -339,6 +364,13 @@ function installHarness(view, analyzeBehaviour = 'ok') {
   check('#180: the reviewed panel reports the whole document a cloud model read', /toàn bộ 43\.180 ký tự/.test(readScope.cloudRead) && /không cắt/.test(readScope.cloudRead), readScope.cloudRead.slice(0, 120));
   check('#180: the reviewed panel reports what a local model could not read', /12\.000\/43\.180/.test(readScope.localRead), readScope.localRead.slice(0, 120));
   check('#180: a scoped run names the sections that did not fit', /3 mục không vừa hạn mức/.test(readScope.scopedRead), readScope.scopedRead.slice(0, 120));
+
+  // Leave the page as it was found: the settings AI header reads state.settings.ai, so a
+  // mock kept here makes ui-settings-sections-check fail on the next run against this
+  // instance even though nothing in the app changed.
+  const torn = await cdp.evaluate(TEARDOWN).catch(e => ({ error: String(e) }));
+  check('the harness gives the page back its real settings', torn.wrapperGone === true && !torn.error,
+    torn.error ? torn.error : JSON.stringify(torn));
 
   cdp.ws.close();
   console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');

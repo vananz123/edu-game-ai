@@ -62,7 +62,7 @@ function wizardLocalAiLaunchState() {
 function wizardLocalAiNoticeHtml() {
   const launch = wizardLocalAiLaunchState();
   if (launch.ready) return '';
-  return `<div class="field-hint" data-wizard-local-notice="1" role="status" style="color:#dc2626"><span data-icon="triangle-alert" data-icon-size="13"></span> ${escapeHtml(launch.message)}</div>`;
+  return `<div class="field-hint is-alert" data-wizard-local-notice="1" role="status"><span data-icon="triangle-alert" data-icon-size="13"></span> ${escapeHtml(launch.message)}</div>`;
 }
 // #132 D16: a page opened before a provider was verified keeps its old view. The wizard
 // refreshes it on the step that shows the provider buttons, once at a time.
@@ -155,7 +155,7 @@ function wizardProviderCard() {
       <span class="shrink-0" data-icon="circle-check" data-icon-size="18"></span>
       <div class="min-w-0 flex-1">
         <strong class="text-[12px] block text-[#1e293b] dark:text-[#f8fafc]">Dùng ${escapeHtml(wizardProviderLabel())}</strong>
-        <small class="block text-[11px] text-[#64748b] dark:text-[#94a3b8] mt-0.5 leading-snug">${escapeHtml(detail)}</small>
+        <small class="block text-[12px] text-[#4f5a6e] dark:text-[#94a3b8] mt-0.5 leading-snug">${escapeHtml(detail)}</small>
       </div>
       <button type="button" class="btn btn-secondary btn-small shrink-0" data-wizard-action="open-ai-settings">Cài đặt AI</button>
     </div>`;
@@ -165,7 +165,7 @@ function wizardProviderCard() {
     <span class="shrink-0" data-icon="circle-alert" data-icon-size="18"></span>
     <div class="min-w-0 flex-1">
       <strong class="text-[12px] block text-[#1e293b] dark:text-[#f8fafc]">Chưa có nhà cung cấp AI sẵn sàng</strong>
-      <small class="block text-[11px] text-[#64748b] dark:text-[#94a3b8] mt-0.5 leading-snug">${escapeHtml(activeReason)} Cấu hình khoá và kiểm tra kết nối một lần trong Cài đặt AI — không cần làm ở đây.</small>
+      <small class="block text-[12px] text-[#4f5a6e] dark:text-[#94a3b8] mt-0.5 leading-snug">${escapeHtml(activeReason)} Cấu hình khoá và kiểm tra kết nối một lần trong Cài đặt AI — không cần làm ở đây.</small>
     </div>
     <button type="button" class="btn btn-secondary btn-small shrink-0" data-wizard-action="open-ai-settings">Mở Cài đặt AI</button>
   </div>`;

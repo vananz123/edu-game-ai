@@ -18,6 +18,7 @@
   --green: #34d399;
   --orange: #fbbf24;
   --red: #f87171;
+  --danger-ink: #fca5a5;
   --shadow: 0 10px 35px rgba(0, 0, 0, 0.35);
 }
 
@@ -54,6 +55,7 @@
 [data-theme="dark"] .text-\[\#0f7b5c\],
 [data-theme="dark"] .text-\[\#16976d\],
 [data-theme="dark"] .text-\[\#169c70\],
+[data-theme="dark"] .text-\[\#1e293b\],
 [data-theme="dark"] .text-\[\#21845c\],
 [data-theme="dark"] .text-\[\#2f8b57\],
 [data-theme="dark"] .text-\[\#30384b\],
@@ -106,6 +108,28 @@
 [data-theme="dark"] .text-\[\#a0a6b5\],
 [data-theme="dark"] .text-\[\#a0a7b5\],
 [data-theme="dark"] .text-\[\#a1a8b7\] { color: var(--muted) !important; }
+/* #181: bảng chữ được tô đậm ở light mode (`text-[#788196]` → `text-[#5f6a7d]`…). Bảng dịch
+   chỉ khớp đúng chuỗi hex, nên mỗi màu MỚI đưa vào markup phải có mặt ở đây: thiếu một dòng
+   là chế độ tối lấy lại đúng màu chữ nhạt vừa bị bỏ, trên nền đã lật sang var(--panel).
+   Ba màu xám về var(--muted) (#a0a7bc trên panel = 7,1:1); tím thương hiệu về #a5b4fc
+   (8,55:1 trên panel, đo bởi census #181) thay vì var(--text) để giữ sắc tím của liên kết/nhãn;
+   hổ phách và đỏ giữ hue bằng
+   biến thể sáng của chính chúng. `#4338ca` CỐ Ý không có ở đây: nó là mực của badge trên dải
+   ảnh bìa, dải đó giữ nền sáng ở cả hai theme nên lật mực sẽ thành chữ trắng trên trắng. */
+[data-theme="dark"] .text-\[\#4b5566\],
+[data-theme="dark"] .text-\[\#4f5a6e\],
+[data-theme="dark"] .text-\[\#5f6a7d\] { color: var(--muted) !important; }
+[data-theme="dark"] .text-\[\#4f46e5\] { color: #a5b4fc !important; }
+[data-theme="dark"] .text-\[\#9c4808\] { color: #fbbf24 !important; }
+[data-theme="dark"] .text-\[\#dc2626\] { color: #fca5a5 !important; }
+/* `--danger-ink` chứ không phải một hex cố định: trên nền trang thì lật sang đỏ sáng,
+   còn trong hòn đảo sáng (`.modal` của dark) thì vẫn là đỏ sẫm — đúng chỗ nó nằm.
+   `#c33b4b` nhập họ cùng hai màu đỏ báo lỗi (lesson-plans.ts:156 dùng nó làm mực cho nút
+   Xoá trên `bg-white`): thẻ đã lật sang var(--panel) mà mực vẫn là đỏ sẫm thì đo được
+   3,28:1 — dưới sàn 4,5:1 của #181. Lưu ý `bg-[#c33b4b]` ở 4 nút "Xoá đã chọn" là NỀN
+   đặc với chữ trắng (5,19:1) nên không đụng tới; chỉ dòng `text-` này mới là mực. */
+[data-theme="dark"] .text-\[\#b42318\],
+[data-theme="dark"] .text-\[\#c33b4b\] { color: var(--danger-ink) !important; }
 [data-theme="dark"] .border-\[\#b9b3ff\],
 [data-theme="dark"] .border-\[\#c8c3ff\],
 [data-theme="dark"] .border-\[\#c9c5ff\],
@@ -131,6 +155,51 @@
    là cả hai cùng hết: khoảng trắng biến mất và các class `dark:` của wizard trở
    lại đúng bảng màu tối mà #1e2544/#2a324b/#f1f5f9 trong markup đã nhắm tới. */
 [data-theme="dark"] .form-panel { background: var(--panel); border-color: var(--line); color: var(--text); }
+/* #181: `.modal` là hốc mù lớn nhất của census — census chỉ quét màn hình trang, còn hộp thoại
+   mở trên `#modalRoot`. `.modal{background:#fff}` (components.css:119) là component class nên bảng
+   dịch hex ở trên không với tới: nền vẫn TRẮNG trong khi alias bên trong đã lật sang chữ sáng.
+   Đo trên máy (probe 9343, mở Help và Cửa sổ AI local): 13/14 dòng của Help và 19/28 dòng của
+   AI local ra 1,2:1 (`#e8eaf2` trên `#ffffff`) hoặc 2,4:1 (`#a0a7bc` trên `#ffffff`).
+   Không lật nền: bên trong nó, `.modal-head`, `.field input`, `.btn-secondary`… đều ghim trắng,
+   lật nền là biến cả hộp thoại thành một mảng tối loang lổ. Thay vào đó dựng lại y hệt
+   `.setup-fullscreen` (setup-wizard.css:31): một hòn đảo sáng, kèm `color:` tường minh vì
+   `[data-theme="dark"] body{color:var(--text)}` đã tính xong ở body — kế thừa là kế thừa *giá trị
+   đã tính*, không kế thừa biến. Ngoài phạm vi trình chiếu/toàn màn hình: ở đó shell.css:223 đổi
+   nền thành #0b0e1a nên để nguyên alias tối. */
+html[data-theme="dark"]:not([data-fullscreen="1"]) .modal {
+  --bg:var(--color-canvas);--panel:var(--color-panel);--text:var(--color-ink);
+  --muted:var(--color-muted);--line:var(--color-line);--purple:var(--color-brand);
+  --purple2:var(--color-brand-soft);--green:var(--color-ok);--orange:var(--color-warn);
+  --red:var(--color-bad);--shadow:var(--shadow-card);--danger-ink:#b42318;
+  background:#fff; color:var(--color-ink);
+}
+/* #181: `.quick-action` (danh sách "Dự án đang làm") dính đúng bệnh của `.modal` ở trên:
+   `background:#fff` là component class nên bảng dịch hex không với tới, tấm vẫn TRẮNG trong
+   dark, còn chữ bên trong thì lật sang alias sáng. Đo trên máy ở dark/create-wizard: nhãn dự
+   án `#e8eaf2` trên `#ffffff` = 1,2:1 và dòng "Bước: …" `#a0a7bc` trên `#ffffff` = 2,4:1.
+   Hai nguồn mực khác nhau nên phải trị cả hai: `<strong>` không có rule màu nào, nó kế thừa
+   *giá trị đã tính* ở body (alias tối) — thành thử cần `color:` tường minh; `<small>` mang
+   utility `text-[#5f6a7d]` mà bảng dịch ép `color:var(--muted)!important` — ghim `--muted`
+   ngay trên tấm thì utility đó resolve lại về mực tối đúng chỗ nó nằm.
+   Chọn hòn đảo sáng thay vì lật nền: markup của nó (create-wizard.ts:79) không mang class
+   `dark:` nào cả, và nó thuộc họ tấm sáng đã chấp nhận (.empty-state, .wizard-tree,
+   .ai-chat-panel) — khác `.form-panel`, cái mà markup wizard có chủ đích vẽ tối. */
+[data-theme="dark"] .quick-action {
+  --muted:var(--color-muted);--line:var(--color-line);
+  color:var(--color-ink);
+}
+/* #181: `.wizard-tree` (cây cấu trúc giáo án, step-structure.ts:437) là tấm sáng thứ ba của
+   họ: `background:#fff` ghim ở wizard.css:453, còn `.wizard-tree-title` lại lấy
+   `color:var(--text)` — nên trong dark mỗi dòng của cây là #e8eaf2 trên #ffffff, 1,2:1.
+   Các mực còn lại của cây (`#4b5566`, `#767f91`, `#5f6a7d`, `#4f5a6e`, `#3f3654`) đã là mực
+   tối nên chính nó đã đọc được ở cả hai theme; chỉ ba biến mà cây thật sự dùng đến cần ghim
+   lại: `--text` cho nhãn, `--line` cho viền tấm, `--purple` cho caret khi rê (chip `#efedff`
+   của nó cũng ghim sáng) và dấu tick `accent-color` của ô chọn.
+   Không lật nền: phần còn lại của khối (`.wizard-tree-badge`, `.wizard-tree-warning`,
+   `.wizard-tree-text`) toàn ghim nền sáng, lật tấm là ra một mảng loang lổ. */
+[data-theme="dark"] .wizard-tree {
+  --text:var(--color-ink);--line:var(--color-line);--purple:var(--color-brand);
+}
 /* Toàn bộ họ `<select>` mà `components.css` ghim màu tường minh đều lọt qua bảng utility ở
    trên y hệt `.form-panel`, và #166 làm chúng thành lỗi *đọc được*, không chỉ lỗi đẹp:
    `color-scheme: dark` vẽ popup `<select>` bằng bảng màu tối, còn `<option>` không được
@@ -178,6 +247,32 @@
 [data-theme="dark"] [data-project-selection-bar],
 [data-theme="dark"] [data-session-selection-bar] { background-color: #2a324b !important; }
 [data-theme="dark"] .bg-white\/\[90\%\] { background-color: rgba(255, 255, 255, 0.08) !important; }
+/* #181: ô điều hướng đang bật. `bg-brand-soft`/`text-brand` là token `--color-*` nên bảng dịch
+   hex phía trên không nhân ra nó, còn alias `--muted` thì bảng lại áp cho nhãn ✗ kết quả đo
+   được: mực #a0a7bc trên nền #eeeefe — 2,09:1, tức trang nào cũng có một nút không đọc được.
+   Viết thẳng hai màu cho ô đang bật; selector (0,3,0) thắng utility (0,2,0) kể cả !important. */
+[data-theme="dark"] .nav-item.active { background-color: #241f45 !important; color: #d9d6ff !important; }
+/* Cùng một lý do cho trạng thái rê chuột: `hover:bg-[#f6f6ff]` là utility hex nhưng bảng dịch
+   chỉ áp cho nền KHÔNG có variant, nên khi rê vào một mục điều hướng ở chế độ tối, học viên
+   thấy nhãn #a0a7bc trên một vệt gần như trắng. */
+[data-theme="dark"] .nav-item:hover:not(.active) { background-color: #1d2340 !important; color: #dfe3f2 !important; }
+/* #181: cùng bệnh với vệt rê ở trên nhưng nhân ra cả giao diện, vì bảng dịch chỉ khớp tên
+   class KHÔNG có variant: `hover:bg-[#f5f6fa]` là một class khác (`hover\:bg-\[\#f5f6fa\]`)
+   nên nó lọt qua, và utility màu chữ của phần tử thì ĐÃ bị dịch. Đo trên máy khi ép `:hover`
+   (CDP `CSS.forcePseudoState`, giờ là một check của cổng typography): nhãn menu thẻ trò chơi
+   #e8eaf2 trên vệt #f5f6fa = 1,23:1, nút "Tạo từ giáo án" #a5b4fc trên #f8f7ff = 1,97:1,
+   nút Xoá trong hàng giáo án #fca5a5 trên #fff1f2 = 1,13:1 — chữ biến mất đúng lúc con trỏ
+   (hoặc phím Tab, với `focus:bg-`) dừng trên nó. Ghim lại đúng tông tối mà #160 đã chọn cho
+   nav-item: xám → #1d2340, tím → #241f45, đỏ → #2a1420. Selector mang `[data-theme]` +
+   class + pseudo (0,3,0) cùng !important nên thắng cả utility gốc lẫn `dark:bg-[#171c32]`
+   của settings.ts:408. */
+[data-theme="dark"] .hover\:bg-\[\#f5f6fa\]:hover,
+[data-theme="dark"] .focus\:bg-\[\#f5f6fa\]:focus { background-color: #1d2340 !important; }
+[data-theme="dark"] .hover\:bg-\[\#f8f7ff\]:hover,
+[data-theme="dark"] .hover\:bg-\[\#eeeefe\]:hover { background-color: #241f45 !important; }
+[data-theme="dark"] .hover\:bg-\[\#fff1f2\]:hover,
+[data-theme="dark"] .focus\:bg-\[\#fff1f2\]:focus,
+[data-theme="dark"] .hover\:bg-\[\#fef2f2\]:hover { background-color: #2a1420 !important; }
 
 /* Fullscreen play: reuse the existing play modal and let it fill the viewport. */
 html[data-fullscreen="1"] .modal-backdrop { padding: 0; }
