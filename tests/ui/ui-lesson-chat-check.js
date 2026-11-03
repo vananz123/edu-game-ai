@@ -1,13 +1,19 @@
 #!/usr/bin/env node
 /**
- * DECISIONS #182 — the lesson-plans chat, cloud flow, end to end.
+ * DECISIONS #182 + #183 — the lesson-plans chat, cloud flow, end to end.
  *
  * What this proves, with a real HTTP round trip and no paid key:
  *   Settings form → `custom` provider (loopback endpoint) → connection test →
  *   two synthetic lessons combined in one conversation → an answer with quotes
  *   from BOTH lessons → a question set in the arena format → "Tạo trò chơi" hands
  *   that set to the wizard WITHOUT a second model call → the transcript survives a
- *   reload because it lives in SQLite.
+ *   reload because it lives in SQLite → and (#183) a question with NO lesson
+ *   attached still gets an answer, labelled as a general suggestion and stored with
+ *   an empty `document_ids`.
+ *
+ * #183 also measures the frame: the chat column has to be the wide one, and the
+ * lesson list must keep enough room beside it for "bigger" not to mean "the other
+ * column lost".
  *
  * The endpoint is `http://127.0.0.1:<port>/v1`, which main accepts for HTTP only
  * because it is loopback ("trong môi trường thử nghiệm"), so the whole cloud path
@@ -57,6 +63,9 @@ const DOC_B_TEXT = [
 const QUESTION_TEXT = 'Hai giáo án nói gì về vai trò của ánh sáng đối với thực vật?';
 const ANSWER_TEXT = 'Cả hai giáo án đều nêu ánh sáng là điều kiện để thực vật quang hợp; giáo án hô hấp nói rõ ánh sáng không trực tiếp tham gia hô hấp mà tạo nguyên liệu cho quá trình đó.';
 const SET_QUESTION = 'Hãy soạn bộ câu hỏi về hai bài này để học sinh ôn tập.';
+// #183: a turn with no lesson attached must not be answered with lesson words.
+const UNGROUNDED_QUESTION = 'Gợi ý cách kiểm tra bài cũ trong 3 phút ở lớp 10?';
+const UNGROUNDED_ANSWER_TEXT = 'Gợi ý chung: giáo viên nêu 2 câu hỏi nhanh về bài trước, cho học sinh trả lời theo cặp trong 3 phút rồi chữa chung. Đây là gợi ý từ kiến thức sư phạm chung, không trích từ giáo án nào.';
 
 const QUESTION_TEMPLATES = [
   {
@@ -103,12 +112,16 @@ function mockContentFor(body) {
     return 'OK';
   }
   const isSet = /soạn câu hỏi/.test(system);
+  // #183: an ungrounded turn asks a different question of the model, so it gets a
+  // different canned answer. Reusing ANSWER_TEXT would let the check pass while the
+  // reply still talked about "hai giáo án" that the teacher never attached.
+  const ungrounded = /Không có giáo án nào được gắn kèm lượt này|Không có đoạn trích giáo án nào kèm theo/.test(lastUser);
   const requestedCount = Number((/Hãy soạn đúng (\d+) câu hỏi/.exec(lastUser) || [])[1] || 0);
   const questions = [];
   for (let index = 0; index < (isSet ? Math.max(1, requestedCount || 1) : 0); index += 1) {
     questions.push(QUESTION_TEMPLATES[index % QUESTION_TEMPLATES.length]);
   }
-  const payload = isSet ? { gameType: 'arena', questions } : { answer: ANSWER_TEXT };
+  const payload = isSet ? { gameType: 'arena', questions } : { answer: ungrounded ? UNGROUNDED_ANSWER_TEXT : ANSWER_TEXT };
   mockRequests.push({
     kind: isSet ? 'question_set' : 'answer',
     model: body.model,
@@ -117,6 +130,7 @@ function mockContentFor(body) {
     userText: lastUser,
     systemText: system,
     maxTokens: body.max_tokens,
+    ungrounded,
     requestedCount: isSet ? requestedCount : 0
   });
   return JSON.stringify(payload);
@@ -227,22 +241,37 @@ const SEED_AND_LAYOUT = `(async () => {
   const frame = document.querySelector('.lesson-chat-frame');
   const scroll = document.getElementById('lessonChatScroll');
   const select = document.getElementById('lessonChatProvider');
+  const composer = document.getElementById('lessonChatInput');
   const pageText = (document.getElementById('pageContent') || {}).textContent || '';
   const chatRect = chatCol ? chatCol.getBoundingClientRect() : null;
   const listRect = listCol ? listCol.getBoundingClientRect() : null;
   const frameRect = frame ? frame.getBoundingClientRect() : null;
+  // Widening the chat takes room away from the list, so the list is measured for real
+  // spill instead of being assumed fine: anything whose right edge passes the column.
+  const spill = listCol && listRect
+    ? [...listCol.querySelectorAll('*')]
+      .filter(node => {
+        const rect = node.getBoundingClientRect();
+        return rect.width > 0 && rect.right > listRect.right + 1;
+      })
+      .slice(0, 3)
+      .map(node => String(node.className || node.tagName))
+    : [];
   return {
     docIds: [a.id, b.id],
+    spill,
     twoCol: Boolean(twoCol),
     chatFirst: Boolean(twoCol && twoCol.firstElementChild === chatCol),
     chatLeft: chatRect ? Math.round(chatRect.left) : -1,
     chatRight: chatRect ? Math.round(chatRect.right) : -1,
     chatWidth: chatRect ? Math.round(chatRect.width) : -1,
     listLeft: listRect ? Math.round(listRect.left) : -1,
+    listWidth: listRect ? Math.round(listRect.width) : -1,
     frameHeight: frameRect ? Math.round(frameRect.height) : -1,
     frameBottom: frameRect ? Math.round(frameRect.bottom) : -1,
     sticky: chatCol ? getComputedStyle(chatCol).position : '',
     scrollOverflow: scroll ? getComputedStyle(scroll).overflowY : '',
+    composerFont: composer ? Number(getComputedStyle(composer).fontSize.replace('px', '')) : -1,
     providerOptions: select ? [...select.options].map(option => option.value) : [],
     hasImport: Boolean(document.querySelector('[data-action="lesson-chat-import"]')),
     chips: document.querySelectorAll('.lesson-chat-chip').length,
@@ -454,11 +483,65 @@ const LOCAL_PICK = `(async () => {
   };
 })()`;
 
+const UNGROUNDED_TURN = `(async () => {
+  navigate('lesson-plans');
+  await new Promise(r => setTimeout(r, 600));
+  const provider = document.getElementById('lessonChatProvider');
+  provider.value = 'custom';
+  provider.dispatchEvent(new Event('change', { bubbles: true }));
+  await new Promise(r => setTimeout(r, 250));
+  document.querySelector('[data-action="lesson-chat-mode"][data-id="answer"]').click();
+  await new Promise(r => setTimeout(r, 200));
+  document.querySelector('[data-action="lesson-chat-new"]').click();
+  await new Promise(r => setTimeout(r, 250));
+  // Detach every lesson through the real picker, the way a teacher would.
+  document.querySelector('[data-action="lesson-chat-picker"]').click();
+  await new Promise(r => setTimeout(r, 250));
+  document.querySelector('[data-action="lesson-chat-pick-all"][data-id="none"]').click();
+  await new Promise(r => setTimeout(r, 250));
+  document.querySelector('[data-action="lesson-chat-picker-close"]').click();
+  await new Promise(r => setTimeout(r, 250));
+  const chips = document.querySelectorAll('.lesson-chat-chip').length;
+  const subtitle = (document.querySelector('[data-lesson-chat-subtitle]') || {}).textContent || '';
+  const sourcesNote = (document.querySelector('.lesson-chat-empty-sources') || {}).textContent || '';
+  const hint = (document.querySelector('[data-lesson-chat-hint]') || {}).textContent || '';
+  const emptyState = Boolean(document.querySelector('[data-lesson-chat-empty]'));
+  const input = document.getElementById('lessonChatInput');
+  input.value = __UNGROUNDED_QUESTION__;
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  await new Promise(r => setTimeout(r, 200));
+  const send = document.querySelector('[data-lesson-chat-send]');
+  const sendDisabled = send.disabled;
+  send.click();
+  const deadline = Date.now() + 60000;
+  while (Date.now() < deadline) {
+    if (document.querySelector('[data-lesson-chat-error="1"]')) break;
+    const settled = !document.querySelector('[data-lesson-chat-working]')
+      && document.querySelectorAll('.lesson-chat-row:not(.is-user)').length >= 1;
+    if (settled) break;
+    await new Promise(r => setTimeout(r, 200));
+  }
+  await new Promise(r => setTimeout(r, 400));
+  const bubbles = [...document.querySelectorAll('.lesson-chat-bubble')];
+  const last = bubbles[bubbles.length - 1] || null;
+  const chatId = lessonChatUi.chatId;
+  const stored = await window.eduGame.getLessonChat(chatId);
+  return {
+    chips, subtitle, sourcesNote, hint, emptyState, sendDisabled, chatId,
+    error: (document.querySelector('[data-lesson-chat-error="1"]') || {}).textContent || '',
+    lastBubble: last ? (last.textContent || '') : '',
+    evidenceBlocks: document.querySelectorAll('.lesson-chat-evidence').length,
+    storedDocumentIds: (stored || {}).documentIds || [],
+    storedCitations: ((stored || {}).messages || []).filter(m => m.role === 'assistant').map(m => (m.citations || []).length)
+  };
+})()`;
+
 const CLEANUP = `(async () => {
   const removed = { chats: 0, documents: 0, games: 0, projects: 0 };
-  if (lessonChatUi.chatId) {
-    await window.eduGame.deleteLessonChats([lessonChatUi.chatId]);
-    removed.chats = 1;
+  const chatIds = __CHAT_IDS__.filter(Boolean);
+  if (chatIds.length) {
+    const result = await window.eduGame.deleteLessonChats(chatIds);
+    removed.chats = Number(result && result.deleted) || 0;
   }
   if (wizardState.gameId) { await window.eduGame.deleteGame(wizardState.gameId); removed.games = 1; }
   if (wizardState.projectId) { await window.eduGame.deleteProject(wizardState.projectId); removed.projects = 1; }
@@ -535,8 +618,14 @@ function fill(script, values) {
     const docIds = layout.docIds;
     check('two synthetic lessons are stored', docIds.length === 2 && layout.twoCol === true);
     check('the page is two columns with the chat first', layout.chatFirst === true && layout.listLeft > layout.chatRight - 1, `chat ${layout.chatLeft}-${layout.chatRight}, list ${layout.listLeft} (w=${layout.w})`);
-    check('the chat column is a fixed, sticky width', layout.sticky === 'sticky' && layout.chatWidth >= 340 && layout.chatWidth <= 420, `${layout.sticky} ${layout.chatWidth}px`);
-    check('the chat frame fits the visible height', layout.frameHeight >= 500 && layout.frameBottom <= layout.h + 2, `h=${layout.frameHeight} bottom=${layout.frameBottom} viewport=${layout.h}`);
+    // #183: the frame is the wider column now (clamp floor 520px, ceiling 640px), so
+    // the band is where the clamp lands at this window size — and the list keeps a
+    // floor of its own, which is the other half of "bigger" (it must not be the price).
+    check('the chat column is a wide, sticky column', layout.sticky === 'sticky' && layout.chatWidth >= 500 && layout.chatWidth <= 660, `${layout.sticky} ${layout.chatWidth}px`);
+    check('the lesson list still has room beside it', layout.listWidth >= 400, `list ${layout.listWidth}px at w=${layout.w}`);
+    check('widening the chat spills nothing out of the list', layout.spill.length === 0, layout.spill.join(' | ') || 'clean');
+    check('the chat frame fits the visible height', layout.frameHeight >= 560 && layout.frameBottom <= layout.h + 2, `h=${layout.frameHeight} bottom=${layout.frameBottom} viewport=${layout.h}`);
+    check('the composer types at a readable size', layout.composerFont >= 13, `${layout.composerFont}px`);
     check('the transcript scrolls inside the frame', layout.scrollOverflow === 'auto', layout.scrollOverflow);
     check('the BETA panel is gone, not renamed', layout.beta === false && layout.oldPanel === false);
     check('the chat offers both providers to choose from', layout.providerOptions.includes('local') && layout.providerOptions.includes('custom'), layout.providerOptions.join(','));
@@ -576,6 +665,8 @@ function fill(script, values) {
 
     // 6. Transcript in SQLite: survives a reload and reopens from history.
     const stored = await cdp.evaluate(PERSISTENCE);
+    // Chats created here, so cleanup can delete exactly what the check made.
+    const chatIds = [stored.chatId];
     check('the conversation is stored with both lessons', stored.found === true && stored.documentIds.length === 2, JSON.stringify(stored.documentIds));
     check('both turns are stored', stored.roles.length === 4 && stored.roles.includes('assistant+set'), stored.roles.join(','));
     check('the stored turn keeps its provider and quotes', stored.providerOfTurn === 'custom' && stored.citations.every(count => count >= 2), `${stored.providerOfTurn}/${JSON.stringify(stored.citations)}`);
@@ -616,11 +707,33 @@ function fill(script, values) {
       local.error === '' || (!/Error invoking remote method|AiTransportError|Error:/.test(local.error) && /AI local/.test(local.error)),
       local.error.slice(0, 70));
 
-    // 9. Leave the profile as it was found.
-    const cleanup = await cdp.evaluate(fill(CLEANUP, { ...values, DOC_IDS: JSON.stringify(docIds) }));
+    // 9. Chatting with no lesson attached (#183) — the request was "có thể chat mà
+    // không cần tải hoặc chọn tài liệu", so this has to prove the whole turn, not
+    // just that a button stopped being disabled.
+    const requestsBeforeFree = mockRequests.length;
+    const free = await cdp.evaluate(fill(UNGROUNDED_TURN, { ...values, UNGROUNDED_QUESTION: JSON.stringify(UNGROUNDED_QUESTION) }));
+    const freeCall = mockRequests.filter(request => request.kind === 'answer').pop() || {};
+    chatIds.push(free.chatId);
+    check('dropping every lesson leaves no chip', free.chips === 0 && free.emptyState === true, `${free.chips} chips · empty=${free.emptyState}`);
+    check('the header says the turn is not grounded', /Không gắn giáo án/.test(free.subtitle) && /kiến thức chung/.test(free.subtitle), free.subtitle.slice(0, 80));
+    check('the composer invites a question with no lesson', /không cần chọn hay tải giáo án/.test(free.hint), free.hint.slice(0, 70));
+    check('a question with no lesson can be sent', free.sendDisabled === false && free.error === '', free.error.slice(0, 80) || 'enabled');
+    check('the turn really reached the endpoint', mockRequests.length === requestsBeforeFree + 1, `${requestsBeforeFree} -> ${mockRequests.length}`);
+    check('the ungrounded prompt drops the quote requirement', /không gắn giáo án nào/.test(String(freeCall.systemText || '')) && !/Chỉ được trả lời dựa trên các đoạn trích dẫn/.test(String(freeCall.systemText || '')), String(freeCall.systemText || '').slice(0, 70));
+    check('the ungrounded prompt carries no lesson quotes', freeCall.ungrounded === true && !/\[\d\] \(/.test(String(freeCall.userText || '')), String(freeCall.userText || '').slice(0, 60));
+    check('the answer appears in the chat', /gợi ý từ kiến thức sư phạm chung/i.test(free.lastBubble), free.lastBubble.slice(0, 70));
+    check('no source strip is faked for a lesson-free turn', free.evidenceBlocks === 0, String(free.evidenceBlocks));
+    check('the lesson-free turn is stored with no documents',
+      Boolean(free.chatId) && free.storedDocumentIds.length === 0 && free.storedCitations.every(count => count === 0),
+      `${JSON.stringify(free.storedDocumentIds)}/${JSON.stringify(free.storedCitations)}`);
+    const groundedAgain = await cdp.evaluate(`(async () => ((await window.eduGame.getLessonChat(${JSON.stringify(stored.chatId)})) || {}).documentIds || [])()`);
+    check('the earlier grounded conversation kept its two lessons', groundedAgain.length === 2, JSON.stringify(groundedAgain));
+
+    // 10. Leave the profile as it was found.
+    const cleanup = await cdp.evaluate(fill(CLEANUP, { ...values, DOC_IDS: JSON.stringify(docIds), CHAT_IDS: JSON.stringify(chatIds.filter(Boolean)) }));
     cleanupRan = true;
     check('the conversations, lessons and game created here are gone',
-      cleanup.removed.chats === 1 && cleanup.removed.documents === 2 && cleanup.removed.games === 1 && cleanup.removed.projects === 1,
+      cleanup.removed.chats === chatIds.filter(Boolean).length && cleanup.removed.documents === 2 && cleanup.removed.games === 1 && cleanup.removed.projects === 1,
       JSON.stringify(cleanup.removed));
     check('the custom provider is back to not configured', cleanup.hasKeyAfter === false && cleanup.baseUrlAfter === '' && cleanup.statusAfter === 'not-configured', `${cleanup.statusAfter}/${cleanup.baseUrlAfter}`);
   } catch (error) {

@@ -8,9 +8,11 @@
  * prompt-and-repair pipeline.
  *
  * Two rules shape the design:
- *  - **Only the lesson is evidence.** The answer is grounded in quotes taken from
- *    the documents the teacher attached (`buildChatEvidence`), and the model is
- *    told to say it does not know rather than invent.
+ *  - **Quotes come from the attached lessons, when there are any.** `buildChatEvidence`
+ *    pulls them from the documents the teacher attached and the model is told to say
+ *    it does not know rather than invent. Attaching **nothing** is a supported turn
+ *    (#183): the prompt then says so explicitly and the answer is labelled a general
+ *    pedagogical suggestion instead of pretending to be grounded.
  *  - **A question set is already a game draft.** The "predefined format" is the
  *    existing arena contract (`gameDraftJsonSchemas.arena` + `normalizeDraft`), so
  *    a set the teacher accepts goes straight into the wizard with no converter and
@@ -55,6 +57,18 @@ const CHAT_ANSWER_SYSTEM_PROMPT =
 
 const QUESTION_SET_SYSTEM_PROMPT =
   'Bạn là trợ lý soạn câu hỏi trắc nghiệm tiếng Việt cho giáo viên. Chỉ được dùng nội dung giáo án trong các đoạn trích dẫn; mỗi câu phải có một đáp án đúng duy nhất, giải thích 1 câu và độ khó. Chỉ trả về DUY NHẤT một đối tượng JSON hợp lệ, không kèm markdown.';
+
+/**
+ * #183: a turn with **no** lesson attached is legal, so it needs its own system
+ * prompt. The difference is not cosmetic — telling the model "chỉ được trả lời dựa
+ * trên các đoạn trích dẫn" when there are no quotes invites either a refusal or a
+ * fabrication about a document it never saw.
+ */
+const UNGROUNDED_ANSWER_SYSTEM_PROMPT =
+  'Bạn là trợ lý sư phạm tiếng Việt của giáo viên. Lượt này giáo viên không gắn giáo án nào, nên hãy trả lời bằng kiến thức sư phạm chung và nói rõ đó là gợi ý chung chứ không trích từ giáo án của họ; không được bịa rằng mình đang đọc một tài liệu cụ thể. Trả lời ngắn gọn, xuống dòng theo ý, tối đa 6 câu. Chỉ trả về DUY NHẤT một đối tượng JSON hợp lệ có dạng {"answer":"..."}, không kèm markdown.';
+
+const UNGROUNDED_QUESTION_SET_SYSTEM_PROMPT =
+  'Bạn là trợ lý soạn câu hỏi trắc nghiệm tiếng Việt cho giáo viên. Lượt này không có giáo án kèm theo, nên hãy soạn theo đúng yêu cầu của giáo viên bằng kiến thức của bậc học được nêu; mỗi câu phải có một đáp án đúng duy nhất, giải thích 1 câu và độ khó. Chỉ trả về DUY NHẤT một đối tượng JSON hợp lệ, không kèm markdown.';
 
 /** The schema the model must answer into for an in-chat reply. */
 export const lessonChatAnswerJsonSchema = {
@@ -127,6 +141,8 @@ export interface LessonChatTurnResult {
   providerId: string;
   evidenceCharacters: number;
   evidenceFallback: boolean;
+  /** False when the teacher attached **no** lesson (#183) — the turn is a general suggestion. */
+  grounded: boolean;
   namesWithoutEvidence: string[];
   requestedCount: number;
 }
@@ -229,7 +245,10 @@ export function buildChatEvidence(input: ChatEvidenceInput): ChatEvidence {
         .map(document => document.name || document.id)
       : documents.map(document => document.name || document.id)
   );
-  const fallback = citations.length === 0;
+  // "fallback" means *nothing matched, so the opening slice was sent*. With zero
+  // attached lessons nothing was sent at all, and calling that a fallback would
+  // tell the teacher their lesson was skimped when they attached none (#183).
+  const fallback = citations.length === 0 && documents.length > 0;
   if (fallback) {
     for (const document of documents) {
       const text = String(document.text ?? '').trim();
@@ -265,7 +284,14 @@ export function buildChatHistoryMessages(messages: LessonChatMessage[]): ChatMes
   }));
 }
 
-export function buildChatAnswerPrompt(input: { question: string; evidence: ChatEvidence }): string {
+export function buildChatAnswerPrompt(input: { question: string; evidence: ChatEvidence; grounded?: boolean }): string {
+  if (input.grounded === false) {
+    return `Câu hỏi của giáo viên: ${input.question}
+
+Không có giáo án nào được gắn kèm lượt này, nên đây là gợi ý từ kiến thức sư phạm chung.
+
+Trả về JSON: {"answer":"..."} và nhắc rõ trong "answer" rằng gợi ý này không trích từ giáo án của giáo viên.`;
+  }
   return `Câu hỏi của giáo viên: ${input.question}
 
 Đoạn trích dẫn từ giáo án:
@@ -278,16 +304,10 @@ export function buildQuestionSetPrompt(input: {
   question: string;
   evidence: ChatEvidence;
   count: number;
+  grounded?: boolean;
 }): string {
   const types = '"multiple-choice" | "true-false" | "fill-in-blank" | "short-answer"';
-  return `Yêu cầu của giáo viên: ${input.question}
-
-Hãy soạn đúng ${input.count} câu hỏi từ giáo án, tiếng Việt, bám sát đoạn trích dẫn bên dưới.
-
-Đoạn trích dẫn từ giáo án:
-${input.evidence.text || '(không có đoạn nào)'}
-
-Định dạng trả về (DUY NHẤT một đối tượng JSON, không markdown):
+  const format = `Định dạng trả về (DUY NHẤT một đối tượng JSON, không markdown):
 {
   "gameType": "arena",
   "questions": [
@@ -307,7 +327,23 @@ Quy tắc:
 - Với "multiple-choice": 2 đến 6 phương án, id là "a", "b", "c"… theo thứ tự; "correctOptionId" là id của phương án đúng.
 - Với "true-false": đúng hai phương án "Đúng" và "Sai".
 - Với "fill-in-blank" hoặc "short-answer": bỏ "options"/"correctOptionId", thay bằng "correctAnswer" (kèm "alternateAnswers" nếu có cách trả lời khác).
-- "difficulty": "dễ" | "trung bình" | "khó". "points": số điểm, ví dụ 100.
+- "difficulty": "dễ" | "trung bình" | "khó". "points": số điểm, ví dụ 100.`;
+  if (input.grounded === false) {
+    return `Yêu cầu của giáo viên: ${input.question}
+
+Hãy soạn đúng ${input.count} câu hỏi tiếng Việt cho yêu cầu trên. Không có đoạn trích giáo án nào kèm theo, nên hãy bám sát đúng chủ đề và bậc học giáo viên nêu.
+
+${format}
+- Không được để trống "explanation". Đừng dẫn chiếu tới một giáo án cụ thể nào.`;
+  }
+  return `Yêu cầu của giáo viên: ${input.question}
+
+Hãy soạn đúng ${input.count} câu hỏi từ giáo án, tiếng Việt, bám sát đoạn trích dẫn bên dưới.
+
+Đoạn trích dẫn từ giáo án:
+${input.evidence.text || '(không có đoạn nào)'}
+
+${format}
 - Không được để trống "explanation" và không bịa nội dung ngoài giáo án.`;
 }
 
@@ -320,28 +356,34 @@ Quy tắc:
  * the wizard keeps a failed generation visible in the project.
  */
 export async function runLessonChatTurn(input: LessonChatTurnInput): Promise<LessonChatTurnResult> {
-  const evidence = buildChatEvidence({ documents: input.documents, question: input.question });
+  const documents = Array.isArray(input.documents) ? input.documents : [];
+  const evidence = buildChatEvidence({ documents, question: input.question });
   const intent = classifyLessonChatIntent(input.question, input.mode || 'auto');
   const count = clampQuestionCount(Number(input.questionCount) || requestedQuestionCount(input.question));
   const history = buildChatHistoryMessages(input.history);
+  // `documents.length`, not `citations.length`: a lesson that exists but matched no
+  // quote still took part in the turn (the fallback slice is sent), whereas zero
+  // attached lessons is the state the prompt has to describe honestly.
+  const grounded = documents.length > 0;
   const base: Omit<LessonChatTurnResult, 'answer' | 'intent' | 'questionSet' | 'errorCode'> = {
     citations: evidence.citations,
     providerId: (input.client as { providerId?: string }).providerId || '',
     evidenceCharacters: evidence.characters,
     evidenceFallback: evidence.fallback,
+    grounded,
     namesWithoutEvidence: evidence.namesWithoutEvidence,
     requestedCount: intent === 'question_set' ? count : 0
   };
   const messages: ChatMessage[] = intent === 'question_set'
     ? [
-      { role: 'system', content: QUESTION_SET_SYSTEM_PROMPT },
+      { role: 'system', content: grounded ? QUESTION_SET_SYSTEM_PROMPT : UNGROUNDED_QUESTION_SET_SYSTEM_PROMPT },
       ...history,
-      { role: 'user', content: buildQuestionSetPrompt({ question: input.question, evidence, count }) }
+      { role: 'user', content: buildQuestionSetPrompt({ question: input.question, evidence, count, grounded }) }
     ]
     : [
-      { role: 'system', content: CHAT_ANSWER_SYSTEM_PROMPT },
+      { role: 'system', content: grounded ? CHAT_ANSWER_SYSTEM_PROMPT : UNGROUNDED_ANSWER_SYSTEM_PROMPT },
       ...history,
-      { role: 'user', content: buildChatAnswerPrompt({ question: input.question, evidence }) }
+      { role: 'user', content: buildChatAnswerPrompt({ question: input.question, evidence, grounded }) }
     ];
 
   try {
@@ -381,7 +423,7 @@ export async function runLessonChatTurn(input: LessonChatTurnInput): Promise<Les
       return {
         ...base,
         intent,
-        answer: questionSetReply(draft, count),
+        answer: questionSetReply(draft, count, grounded),
         questionSet: draft,
         errorCode: ''
       };
@@ -416,19 +458,22 @@ export async function runLessonChatTurn(input: LessonChatTurnInput): Promise<Les
     return {
       ...base,
       intent,
-      answer: fallbackAnswer(code, intent, evidence),
+      answer: fallbackAnswer(code, intent, evidence, grounded),
       questionSet: null,
       errorCode: code
     };
   }
 }
 
-function questionSetReply(draft: ArenaDraft, requested: number): string {
+function questionSetReply(draft: ArenaDraft, requested: number, grounded = true): string {
   const found = (draft.questions || []).length;
   const list = (draft.questions || [])
     .map((question, index) => `${index + 1}. ${question.prompt}`)
     .join('\n');
-  return `Bộ câu hỏi đã sẵn sàng (${found}/${requested} câu). Xem danh sách dưới đây rồi bấm “Tạo trò chơi” nếu muốn đưa vào trò chơi.\n\n${list}`;
+  const note = grounded
+    ? ''
+    : '\n\nBộ câu hỏi này soạn khi không có giáo án kèm theo, nên hãy đối chiếu với bài trước khi cho học sinh chơi.';
+  return `Bộ câu hỏi đã sẵn sàng (${found}/${requested} câu). Xem danh sách dưới đây rồi bấm “Tạo trò chơi” nếu muốn đưa vào trò chơi.${note}\n\n${list}`;
 }
 
 /**
@@ -437,7 +482,7 @@ function questionSetReply(draft: ArenaDraft, requested: number): string {
  * that quietly returns "AI không trả lời được" while hiding the evidence is worse
  * than no chat at all.
  */
-function fallbackAnswer(code: string, intent: LessonChatIntent, evidence: ChatEvidence): string {
+function fallbackAnswer(code: string, intent: LessonChatIntent, evidence: ChatEvidence, grounded = true): string {
   const reason = code === 'AI_NOT_RUNNING'
     ? 'AI local chưa chạy. Mở Cài đặt AI · AI local, chọn model đã tải rồi nhấn “Bắt đầu chạy”, hoặc chọn AI đám mây.'
     : code === 'AI_CONFIG'
@@ -449,6 +494,8 @@ function fallbackAnswer(code: string, intent: LessonChatIntent, evidence: ChatEv
           : 'Nhà cung cấp AI trả về lỗi nên lượt này chưa có câu trả lời.';
   const quotes = evidence.citations.length
     ? `\n\nĐoạn liên quan trong giáo án vẫn được trích ra ở dưới (${evidence.citations.length} đoạn).`
-    : '\n\nKhông tìm thấy đoạn nào liên quan trong các giáo án đã chọn.';
+    : grounded
+      ? '\n\nKhông tìm thấy đoạn nào liên quan trong các giáo án đã chọn.'
+      : '\n\nLượt này không gắn giáo án nào, nên lẽ ra chỉ cần nhà cung cấp trả lời là có kết quả.';
   return `${reason}${intent === 'question_set' ? ' Vì vậy chưa tạo được bộ câu hỏi.' : ''}${quotes}`;
 }

@@ -995,9 +995,8 @@ export class LessonStore {
     if (!question) throw new LessonStoreError('STORE_INVALID_CHAT', 'Chưa có câu hỏi để lưu vào cuộc trò chuyện.');
     if (!answer) throw new LessonStoreError('STORE_INVALID_CHAT', 'Chưa có câu trả lời để lưu vào cuộc trò chuyện.');
     const documentIds = uniqueStrings(input?.documentIds);
-    if (!documentIds.length) {
-      throw new LessonStoreError('STORE_INVALID_CHAT', 'Cuộc trò chuyện cần ít nhất một giáo án để đọc.');
-    }
+    // #183: a conversation may read **no** lesson, so an empty list is stored as `[]`
+    // rather than rejected. `document_ids` keeps its JSON shape either way.
     const intent: LessonChatIntent = input.intent === 'question_set' ? 'question_set' : 'answer';
     const citations = Array.isArray(input.citations) ? input.citations.filter(isCitation) : [];
     const questionSet = intent === 'question_set' && input.questionSet ? input.questionSet : null;

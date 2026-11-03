@@ -13,9 +13,13 @@
    và ≥ 4,5:1 trên cả hai chủ đề, đo trực tiếp trên trang lesson-plans.
    ============================================================ */
 
+/* Cột chat rộng đủ để đọc một câu trả lời dài mà không phải kéo: 46% bề rộng
+   trang, kẹp trong [520px, 640px] (#183 — #182 để 400px, giáo viên hỏi "khung
+   chat quá nhỏ"). 46% chứ không phải px cứng vì ở 1920 một cột 640px vẫn còn
+   chỗ cho danh sách, còn ở 1280 nó cho ~560px. */
 .lesson-two-col {
   display: grid;
-  grid-template-columns: minmax(360px, 400px) minmax(0, 1fr);
+  grid-template-columns: clamp(520px, 46%, 640px) minmax(0, 1fr);
   gap: 18px;
   align-items: start;
 }
@@ -39,7 +43,7 @@
   box-shadow: var(--shadow);
   overflow: hidden;
   height: calc(100vh - 96px);
-  min-height: 520px;
+  min-height: 560px;
 }
 
 .lesson-chat-head {
@@ -116,7 +120,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 190px;
+  max-width: 260px;
 }
 
 .lesson-chat-empty-sources {
@@ -150,13 +154,13 @@
 
 .lesson-chat-bubble {
   min-width: 0;
-  max-width: 88%;
-  padding: 10px 12px;
+  max-width: 92%;
+  padding: 11px 13px;
   border-radius: 12px;
   background: var(--bg);
   border: 1px solid var(--line);
   color: var(--text);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.65;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -226,7 +230,7 @@
 }
 
 .lesson-chat-set-q {
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--text);
   line-height: 1.5;
@@ -296,14 +300,14 @@
 .lesson-chat-input {
   width: 100%;
   resize: vertical;
-  min-height: 62px;
-  max-height: 190px;
+  min-height: 78px;
+  max-height: 240px;
   padding: 10px 11px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--panel);
   color: var(--text);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.55;
   outline: 0;
 }
@@ -373,7 +377,7 @@
   background: var(--bg);
   display: grid;
   gap: 8px;
-  max-height: 260px;
+  max-height: 320px;
   overflow-y: auto;
 }
 
@@ -453,10 +457,11 @@
 }
 
 /* 1366×768 (máy chiếu phổ thông) vẫn đủ chỗ cho danh sách: cột chat thu về
-   340px; dưới 1100px thì xếp chồng, khung chat thôi bám để không che danh sách. */
+   khoảng 440–520px; dưới 1100px thì xếp chồng, khung chat thôi bám để không che
+   danh sách. */
 @media (max-width: 1240px) {
   .lesson-two-col {
-    grid-template-columns: minmax(340px, 360px) minmax(0, 1fr);
+    grid-template-columns: clamp(440px, 42%, 520px) minmax(0, 1fr);
     gap: 14px;
   }
 }

@@ -2,9 +2,10 @@
 //
 // Khung chatbot của trang Giáo án (#182).
 //
-// Một cuộc trò chuyện luôn đọc từ 1..n giáo án đã lưu, trả lời kèm trích dẫn, và
-// khi giáo viên hỏi kiểu "tạo bộ câu hỏi" thì trả ra ĐÚNG định dạng draft của trò
-// chơi (ArenaDraft) — cùng cấu trúc mà bước "duyệt nội dung" của trình tạo vẫn đọc.
+// Một cuộc trò chuyện đọc từ 0..n giáo án đã lưu: có giáo án thì trả lời kèm trích
+// dẫn, không có giáo án nào thì trả lời bằng kiến thức chung và nói rõ điều đó
+// (#183). Khi giáo viên hỏi kiểu "tạo bộ câu hỏi" thì kết quả là ĐÚNG định dạng draft
+// của trò chơi (ArenaDraft) — cùng cấu trúc mà bước "duyệt nội dung" vẫn đọc.
 // Vì vậy bộ câu hỏi không cần một hợp đồng mới: nó đi thẳng vào con đường
 // `draftSource` đã có (không gọi model lần nữa).
 //
@@ -53,6 +54,7 @@ const LESSON_CHAT_STAGE_LABELS = {
 };
 
 function lessonChatStageLabel(stage) {
+  if (stage === 'retrieve' && !lessonChatIsGrounded()) return 'Đang chuẩn bị câu hỏi…';
   return LESSON_CHAT_STAGE_LABELS[String(stage || '')] || 'Đang trả lời…';
 }
 
@@ -116,10 +118,26 @@ function lessonChatProviderStatusText(selected, options) {
   return `Nhà cung cấp: ${provider.label}${provider.usable ? '' : ' (chưa sẵn sàng)'}`;
 }
 
+/**
+ * #183: a turn with no lesson attached is a real request, not a half-filled form,
+ * so nothing here requires `docIds`. The frame only needs something to ask.
+ */
 function lessonChatCanSend() {
   return !lessonChatUi.sending
-    && lessonChatUi.docIds.length > 0
     && String(lessonChatUi.draft || '').trim().length >= 3;
+}
+
+function lessonChatIsGrounded() {
+  return lessonChatUi.docIds.length > 0;
+}
+
+/** Dòng nhỏ dưới tiêu đề: cuộc trò chuyện đang đọc gì, bằng nhà cung cấp nào. */
+function lessonChatScopeText() {
+  const provider = escapeHtml(lessonChatProviderLabel(lessonChatProviderSelection()));
+  const scope = lessonChatIsGrounded()
+    ? `Hỏi ${lessonChatUi.docIds.length} giáo án`
+    : 'Không gắn giáo án · trả lời bằng kiến thức chung';
+  return `${scope} · bằng ${provider}`;
 }
 
 function lessonChatRequestId() {
@@ -156,7 +174,7 @@ function lessonChatHeadHtml() {
     <span class="lesson-chat-avatar"><span data-icon="bot" data-icon-size="17"></span></span>
     <div class="lesson-chat-title">
       <strong>${escapeHtml(title)}</strong>
-      <small data-lesson-chat-subtitle>Hỏi ${lessonChatUi.docIds.length} giáo án · bằng ${escapeHtml(lessonChatProviderLabel(lessonChatProviderSelection()))}</small>
+      <small data-lesson-chat-subtitle>${lessonChatScopeText()}</small>
     </div>
     <div class="lesson-chat-head-actions">
       <button type="button" class="lesson-chat-mode" data-action="lesson-chat-history" aria-pressed="${lessonChatUi.showHistory ? 'true' : 'false'}" title="Cuộc trò chuyện trước (${chats})"><span data-icon="list" data-icon-size="13"></span> ${chats}</button>
@@ -171,7 +189,7 @@ function lessonChatSourcesHtml() {
     `<span class="lesson-chat-chip"><span title="${escapeHtml(document.name || '')}">${escapeHtml(document.name || 'Giáo án')}</span><button type="button" class="lesson-chat-mode" data-action="lesson-chat-remove-doc" data-id="${escapeHtml(document.id)}" aria-label="Bỏ ${escapeHtml(document.name || 'giáo án')} khỏi cuộc trò chuyện"><span data-icon="x" data-icon-size="12"></span></button></span>`
   ).join('');
   return `<div class="lesson-chat-sources" data-lesson-chat-sources>
-    ${docs.length ? chips : '<span class="lesson-chat-empty-sources">Chưa chọn giáo án nào để hỏi.</span>'}
+    ${docs.length ? chips : '<span class="lesson-chat-empty-sources">Không gắn giáo án — AI trả lời bằng kiến thức chung. Chọn giáo án để có trích dẫn.</span>'}
     <button type="button" class="lesson-chat-mode" data-action="lesson-chat-picker" aria-pressed="${lessonChatUi.showPicker ? 'true' : 'false'}"><span data-icon="circle-plus" data-icon-size="13"></span> Chọn giáo án</button>
     <button type="button" class="lesson-chat-mode" data-action="lesson-chat-import"><span data-icon="upload" data-icon-size="13"></span> Tải giáo án mới</button>
   </div>`;
@@ -262,7 +280,7 @@ function lessonChatPendingHtml() {
     ? `<div class="lesson-chat-row"><div class="lesson-chat-bubble" data-lesson-chat-working><span data-icon="loader" data-icon-size="13" data-icon-class="animate-spin"></span> ${escapeHtml(lessonChatStageLabel(lessonChatUi.stage))}</div></div>`
     : '';
   const error = !lessonChatUi.sending && lessonChatUi.error
-    ? `<div class="lesson-chat-row"><div class="lesson-chat-bubble is-error" data-lesson-chat-error="1">${escapeHtml(lessonChatUi.error)}<div class="lesson-chat-note">Giáo án vẫn còn nguyên; hãy thử lại hoặc đổi nhà cung cấp.</div></div></div>`
+    ? `<div class="lesson-chat-row"><div class="lesson-chat-bubble is-error" data-lesson-chat-error="1">${escapeHtml(lessonChatUi.error)}<div class="lesson-chat-note">${lessonChatIsGrounded() ? 'Giáo án vẫn còn nguyên; hãy thử lại hoặc đổi nhà cung cấp.' : 'Hãy thử lại hoặc đổi nhà cung cấp.'}</div></div></div>`
     : '';
   return pending + working + error;
 }
@@ -273,10 +291,10 @@ function lessonChatTranscriptHtml() {
     : [];
   if (!messages.length && !lessonChatUi.sending && !lessonChatUi.error) {
     return `<div class="lesson-chat-empty" data-lesson-chat-empty>
-      <strong>Hỏi là tóm tắt cả giáo án</strong>
-      Chọn một hay nhiều giáo án ở trên rồi đặt câu hỏi. Muốn có bộ câu hỏi, cứ hỏi thẳng
-      "tạo 8 câu hỏi về bài này" — câu trả lời sẽ hiện theo đúng định dạng của trò chơi,
-      kèm nút <b>Tạo trò chơi</b>.
+      <strong>Cứ hỏi, không cần mở giáo án</strong>
+      Hỏi thẳng một câu là AI trả lời. Chọn một hay nhiều giáo án ở trên nếu muốn câu trả
+      lời kèm trích dẫn đúng bài. Muốn có bộ câu hỏi, cứ hỏi "tạo 8 câu hỏi về bài này" —
+      kết quả hiện theo đúng định dạng của trò chơi, kèm nút <b>Tạo trò chơi</b>.
     </div>`;
   }
   return `${messages.map(message => lessonChatMessageHtml(message)).join('')}${lessonChatPendingHtml()}`;
@@ -306,7 +324,7 @@ function lessonChatComposerHtml() {
         ? `<button type="button" class="btn btn-secondary btn-small" data-action="lesson-chat-stop"><span data-icon="square" data-icon-size="13"></span> Dừng</button>`
         : `<button type="button" class="btn btn-primary btn-small" data-action="lesson-chat-send" data-lesson-chat-send${lessonChatCanSend() ? '' : ' disabled'}>Gửi</button>`}
     </div>
-    <small class="lesson-chat-status" data-lesson-chat-hint>${lessonChatUi.docIds.length ? '' : 'Chọn giáo án trước khi hỏi.'}</small>
+    <small class="lesson-chat-status" data-lesson-chat-hint>${lessonChatUi.docIds.length ? '' : 'Cứ hỏi thẳng — không cần chọn hay tải giáo án nào cả.'}</small>
   </div>`;
 }
 
@@ -553,11 +571,8 @@ async function lessonChatImportDocument() {
 async function lessonChatSend() {
   if (lessonChatUi.sending) return;
   const question = String(lessonChatUi.draft || '').trim();
-  if (!lessonChatUi.docIds.length) {
-    lessonChatUi.error = 'Chọn ít nhất một giáo án để hỏi.';
-    render();
-    return;
-  }
+  // #183: không còn chốt "phải chọn giáo án" ở đây — một câu hỏi trơn cũng là một
+  // lượt hợp lệ, main sẽ soạn prompt "không có giáo án kèm theo".
   if (question.length < 3) {
     lessonChatUi.error = 'Câu hỏi quá ngắn.';
     render();

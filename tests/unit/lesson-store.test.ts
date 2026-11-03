@@ -633,11 +633,33 @@ async function run(): Promise<void> {
   assert.equal(failedTurn.messages[5].errorCode, 'AI_TIMEOUT');
   assert.equal(failedTurn.messages[5].questionSet, null);
 
-  // Validation: a turn is only worth storing when both halves and a lesson are there.
+  // Validation: a turn is only worth storing when both halves of the exchange are there.
   expectStoreError('STORE_INVALID_CHAT', () => store.appendChatTurn({ chatId, documentIds: [chatDocA.id], question: '', answer: 'x', intent: 'answer', citations: [], questionSet: null, providerId: '', errorCode: '' }));
   expectStoreError('STORE_INVALID_CHAT', () => store.appendChatTurn({ chatId, documentIds: [chatDocA.id], question: '?', answer: '', intent: 'answer', citations: [], questionSet: null, providerId: '', errorCode: '' }));
-  expectStoreError('STORE_INVALID_CHAT', () => store.appendChatTurn({ documentIds: [], question: 'Không có giáo án?', answer: 'x', intent: 'answer', citations: [], questionSet: null, providerId: '', errorCode: '' }));
   assert.equal((db.prepare('SELECT COUNT(*) AS n FROM lesson_chat_messages').get() as { n: number }).n, 6, 'a rejected turn writes nothing');
+
+  // #183: a conversation with NO lesson attached is storable — the teacher may ask
+  // the assistant directly. The empty list survives the JSON round-trip as `[]`.
+  const ungroundedChat = store.appendChatTurn({
+    documentIds: [],
+    question: 'Gợi ý cách kiểm tra bài cũ trong 5 phút',
+    answer: 'Có thể dùng một câu hỏi nhanh...',
+    intent: 'answer',
+    citations: [],
+    questionSet: null,
+    providerId: 'gemini',
+    errorCode: ''
+  });
+  assert.deepEqual(ungroundedChat.documentIds, [], 'the chat records that it reads no lesson');
+  assert.equal(ungroundedChat.messageCount, 2);
+  assert.equal(ungroundedChat.title, 'Gợi ý cách kiểm tra bài cũ trong 5 phút', 'a no-lesson chat is still titled from the question');
+  assert.equal(ungroundedChat.messages[0].role, 'user');
+  assert.equal(ungroundedChat.messages[1].citations.length, 0);
+  assert.equal(
+    store.listLessonChats().filter(chat => chat.id === ungroundedChat.id).length,
+    1,
+    'an ungrounded chat appears in the history list like any other'
+  );
 
   // A question-set turn with no draft keeps its text but stores no phantom game.
   const emptySetTurn = store.appendChatTurn({
@@ -655,11 +677,12 @@ async function run(): Promise<void> {
 
   // Listing is newest-touched first and carries no message text.
   const chatList = store.listLessonChats();
-  assert.deepEqual(chatList.map(chat => chat.id).sort(), [chatId, emptySetTurn.id].sort());
+  assert.deepEqual(chatList.map(chat => chat.id).sort(), [chatId, ungroundedChat.id, emptySetTurn.id].sort());
   assert.equal(chatList.find(chat => chat.id === chatId)?.messageCount, 6);
   assert.equal(chatList.find(chat => chat.id === chatId)?.lastIntent, 'answer');
   assert.equal((chatList.find(chat => chat.id === chatId) as { messages?: unknown }).messages, undefined, 'the list is navigation, not the transcript');
   db.prepare('UPDATE lesson_chats SET updated_at = ? WHERE id = ?').run('2000-01-01T00:00:00.000Z', emptySetTurn.id);
+  db.prepare('UPDATE lesson_chats SET updated_at = ? WHERE id = ?').run('2000-01-01T00:00:00.000Z', ungroundedChat.id);
   assert.equal(store.listLessonChats()[0].id, chatId, 'ordering follows the last touch');
 
   // Deleting the lesson a chat read must not delete the teacher's conversation.
@@ -671,6 +694,9 @@ async function run(): Promise<void> {
   assert.equal(store.getLessonChat(chatId), null);
   assert.equal((db.prepare('SELECT COUNT(*) AS n FROM lesson_chat_messages WHERE chat_id = ?').get(chatId) as { n: number }).n, 0, 'children go with the chat');
   assert.equal(store.deleteLessonChat(chatId), false, 'a second delete is a miss');
+  // #183: nothing links a lesson-free chat to a document, so the same delete path has to work for it.
+  assert.equal(store.deleteLessonChat(ungroundedChat.id), true, 'a no-lesson chat deletes like any other');
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM lesson_chat_messages WHERE chat_id = ?').get(ungroundedChat.id) as { n: number }).n, 0);
   const chatBatch = store.deleteLessonChats([emptySetTurn.id, 'chat-missing', emptySetTurn.id]);
   assert.deepEqual(chatBatch, { deleted: 1, missing: 1, failed: 0 });
   assert.deepEqual(store.deleteLessonChats([]), { deleted: 0, missing: 0, failed: 0 });

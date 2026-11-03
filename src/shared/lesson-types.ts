@@ -443,7 +443,11 @@ export type LessonChatComposerMode = 'auto' | 'answer' | 'question_set';
 export interface LessonChatSendInput {
   /** Absent or unknown id starts a new conversation. */
   chatId?: string;
-  /** Every lesson the turn may read; the teacher may pick several (#182 "kết hợp nhiều giáo án"). */
+  /**
+   * Every lesson the turn may read; the teacher may pick several (#182 "kết hợp nhiều
+   * giáo án") and may pick none at all (#183), which makes the turn a general
+   * pedagogical suggestion instead of a grounded answer.
+   */
   documentIds: string[];
   question: string;
   providerId?: string;
@@ -467,6 +471,8 @@ export interface LessonChatTurnResponse {
   evidenceCharacters: number;
   /** True when nothing matched and the opening of each lesson was sent instead. */
   evidenceFallback: boolean;
+  /** False when the teacher attached no lesson at all (#183). */
+  grounded: boolean;
   /** Attached lessons that contributed no quote at all. */
   namesWithoutEvidence: string[];
   /** How many questions the set was asked for (0 for an answer turn). */

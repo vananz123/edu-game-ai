@@ -86,8 +86,14 @@ const expectations = [
   // #182: the two-column "Giáo án" page. These prove the rules survived minification;
   // which column really stays put, and whether the frame keeps its height, is measured
   // on the live page by tests/ui/ui-lesson-chat-check.js.
-  ['lesson page is a two-column grid', /\.lesson-two-col\{[^}]*grid-template-columns:minmax\(360px,400px\) minmax\(0,1fr\)/],
+  // #183: the chat column grew. `clamp(520px, 46%, 640px)` is the whole answer to
+  // "khung chat quá nhỏ": a floor so a narrow window never squeezes it back to 400px,
+  // and a ceiling so the list column keeps readable room on a wide one.
+  ['lesson page is a two-column grid', /\.lesson-two-col\{[^}]*grid-template-columns:clamp\(520px,46%,640px\) minmax\(0,1fr\)/],
   ['chat column sticks while the list scrolls', /\.lesson-chat-col\{[^}]*position:sticky/],
+  // Bubbles and the composer are read by a teacher standing at a desk, not inspected in
+  // devtools, so 13px is the floor here (the #181 typography census found the same).
+  ['chat bubble ink is teacher-readable size', /\.lesson-chat-bubble\{[^}]*font-size:13px/],
   // The chat frame is a component class, so the hex translation table in shell.css never
   // reaches it (#165). Painting from --panel/--line/--shadow is what makes the dark theme
   // correct without a second rule.

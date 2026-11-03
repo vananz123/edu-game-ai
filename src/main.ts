@@ -2811,7 +2811,8 @@ function registerIpc() {
     const documentIds = [...new Set((Array.isArray(payload?.documentIds) ? payload.documentIds : [])
       .map(id => String(id || '').trim())
       .filter(Boolean))];
-    if (!documentIds.length) throw new Error('Chọn ít nhất một giáo án để hỏi.');
+    // #183: an empty `documentIds` is a legal turn — the teacher asks the assistant
+    // directly — so this is no longer the "Chọn ít nhất một giáo án" error it was.
     if (question.length < 3) throw new Error('Câu hỏi quá ngắn.');
     const requestId = String(payload?.requestId || `chat-${Date.now()}`);
     const requestedChatId = String(payload?.chatId || '');
@@ -2820,7 +2821,11 @@ function registerIpc() {
       const document = await store.getDocumentWithText(documentId);
       if (document) documents.push({ id: document.id, name: document.name, text: document.text });
     }
-    if (!documents.length) throw new Error('Không đọc được giáo án nào trong số đã chọn. Hãy nhập lại tài liệu.');
+    // A name that no longer resolves is still a mistake worth naming, but only when
+    // the teacher *did* pick something.
+    if (documentIds.length && !documents.length) {
+      throw new Error('Không đọc được giáo án nào trong số đã chọn. Hãy nhập lại tài liệu.');
+    }
     const history = requestedChatId ? (store.getLessonChat(requestedChatId) || {}).messages || [] : [];
     // Resolved before the lock so "no provider configured" is a config answer and
     // not a busy runtime (#132 D5).
@@ -2830,8 +2835,10 @@ function registerIpc() {
       requestId,
       kind: 'chat',
       projectId: null,
-      documentId: documents[0].id,
-      label: `Hỏi giáo án (${documents.length} tài liệu)`
+      documentId: documents.length ? documents[0].id : null,
+      label: documents.length
+        ? `Hỏi giáo án (${documents.length} tài liệu)`
+        : 'Hỏi không gắn giáo án'
     });
     recordAiTask(task);
     aiLogWrite('info', 'chat.provider', { requestId, provider: client.providerId, documents: documents.length });
@@ -2873,7 +2880,9 @@ function registerIpc() {
         const summary = turn.intent === 'question_set'
           ? `${((turn.questionSet || {}).questions || []).length} câu hỏi`
           : 'trả lời';
-        recordAiTask(aiTasks.complete(task.taskId, `${summary} · ${turn.evidenceCharacters} ký tự giáo án`));
+        recordAiTask(aiTasks.complete(task.taskId, turn.grounded
+          ? `${summary} · ${turn.evidenceCharacters} ký tự giáo án`
+          : `${summary} · không gắn giáo án`));
       }
       aiLogWrite('info', 'chat.turn', {
         requestId,
