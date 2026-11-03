@@ -176,6 +176,9 @@ function renderRaceView(view) {
  */
 function renderConnectionView(view) {
     const nodes = {};
+    // Declared before the nodes are drawn: a caption needs to know where the
+    // bottom of the picture is, or the second line of a pair is cropped.
+    const box = view.viewBox || { width: 1000, height: 620 };
     (view.nodes || []).forEach(node => { nodes[node.id] = node; });
     const edgeSvg = (view.edges || []).map(edge => {
         const from = nodes[edge.from];
@@ -202,13 +205,25 @@ function renderConnectionView(view) {
         // Long lesson text is clamped here so it can never push the picture off
         // the shared screen; the teacher window carries the full text.
         const caption = label.length > 60 ? `${label.slice(0, 57)}…` : label;
+        // #178: the half the class dropped, on its own line — the projector has no
+        // HTML card either. Two lines need two lanes, so a star close to the edge
+        // of the picture puts them ABOVE itself instead of losing one to the crop.
+        // The lanes sit 32 px apart because the caption is 26 px tall; anything
+        // tighter and the two halves overlap into unreadable ink.
+        const answer = lit ? String(node.answerText || '') : '';
+        const answerCaption = answer.length > 60 ? `${answer.slice(0, 57)}…` : answer;
+        const laneGap = 32;
+        const reach = 34 + (answerCaption ? laneGap + 12 : 0);
+        const below = node.y + reach < box.height - 10;
+        const lineOne = below ? node.y + 34 : node.y - 30;
+        const lineTwo = below ? node.y + 34 + laneGap : node.y - 30 - laneGap;
         return `<g class="${group}">
           <circle class="conn-star-halo" cx="${node.x}" cy="${node.y}" r="${lit ? 26 : 18}" />
           <circle class="conn-star" cx="${node.x}" cy="${node.y}" r="${lit ? 13 : 9}" />
-          ${caption ? `<text x="${node.x}" y="${node.y + 34}">${esc(caption)}</text>` : ''}
+          ${caption ? `<text x="${node.x}" y="${lineOne}">${esc(caption)}</text>` : ''}
+          ${answerCaption ? `<text class="conn-answer" x="${node.x}" y="${lineTwo}">${esc(answerCaption)}</text>` : ''}
         </g>`;
     }).join('');
-    const box = view.viewBox || { width: 1000, height: 620 };
     return `<section class="panel connection-panel-presentation">
     <div class="meta-row">
       <span class="badge badge-template">🌌 ${view.connected}/${view.total} sao sáng</span>
@@ -363,6 +378,11 @@ function renderPresentation(state) {
       .conn-node.is-dim .conn-star-halo { fill: rgba(100, 116, 139, 0.10); }
       .conn-node.is-dim text { fill: #94a3b8; }
       .conn-node text { fill: #f8fafc; font-family: inherit; font-size: 26px; font-weight: 700; text-anchor: middle; dominant-baseline: middle; }
+      /* #178: dòng thứ hai của một cặp đã ghép (vế B học sinh vừa kéo vào). Cùng
+         trọng lượng với vế A vì cả hai là nội dung bài học, khác màu vàng để đọc
+         là "đích → đáp án" thay vì hai dòng rời. 22px vẫn trên sàn 20px của máy
+         chiếu, và thấp hơn 26px để hàng đôi không chen chúc nhau. */
+      .conn-node text.conn-answer { fill: #ffd977; font-size: 22px; font-weight: 650; }
       .conn-done { margin-top: 10px; }
       .result-rows { display: flex; flex-direction: column; gap: 8px; max-width: 800px; margin: 0 auto 18px; text-align: left; }
       .result-row { display: flex; justify-content: space-between; gap: 18px; padding: 11px 14px; border-radius: 10px; background: #111c2f; border: 1px solid #263247; font-size: clamp(20px, 1.3vw, 24px); }

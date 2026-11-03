@@ -47,10 +47,33 @@ const CONSTELLATION_DRAG_TYPE = 'application/x-edugame-constellation';
 const CONSTELLATION_LABEL_LANE = 12;
 const CONSTELLATION_LABEL_MAX_PX = 190;
 const CONSTELLATION_FRAME_FALLBACK_PX = 1000;
+const CONSTELLATION_FRAME_FALLBACK_H_PX = 620;
+/** Approximate advance of one character at the label's 13 px font. */
+const CONSTELLATION_LABEL_CHAR_PX = 7.2;
+/** One wrapped line of a label: 13 px at `line-height: 1.3`. */
+const CONSTELLATION_LABEL_LINE_PX = 17;
+/** Vertical padding of `.constellation-card--star` (5 px + 5 px). */
+const CONSTELLATION_LABEL_PAD_PX = 10;
+/** The stem that ties a hanging label to its star. */
+const CONSTELLATION_LABEL_STEM_PX = 15;
+/** The card's own `max-width: min(44%, 190px)`, as a fraction of the frame. */
+const CONSTELLATION_LABEL_MAX_W_FRACTION = 0.44;
 
 /** The label's own width, in px, from the same estimate the old fit test used. */
 function constellationLabelWidthPx(text) {
-    return Math.min(CONSTELLATION_LABEL_MAX_PX, String(text || '').trim().length * 7.2 + 22);
+    return Math.min(CONSTELLATION_LABEL_MAX_PX, String(text || '').trim().length * CONSTELLATION_LABEL_CHAR_PX + 22);
+}
+
+/**
+ * How many wrapped lines this text needs inside the card's own max width.
+ *
+ * The card wraps (`white-space: normal`), so long text costs HEIGHT. That is what
+ * decides whether there is still a lane for it between its star and the edge of
+ * the frame.
+ */
+function constellationLabelLines(text, capPx) {
+    const raw = String(text === undefined || text === null ? '' : text).trim().length * CONSTELLATION_LABEL_CHAR_PX + 22;
+    return Math.max(1, Math.ceil(raw / Math.max(48, capPx)));
 }
 
 /** Which side of its star a scene label hangs on. */
@@ -62,16 +85,48 @@ function constellationLabelSide(anchor) {
     return anchor.top >= CONSTELLATION_LABEL_LANE ? 'above' : 'below';
 }
 
-function constellationCardFits(anchor, text) {
+/**
+ * Can this card hang on its star?
+ *
+ * #178 asks the question of the WHOLE PAIR. A lit star also shows the half the
+ * student dropped, so a card measured on the term alone would fit before the drop
+ * and overflow after it — and the sky would restructure itself at the one moment
+ * the whole class is looking at that star. The height is the pair's wrapped line
+ * count plus padding and the stem; the width is the wider of the two halves.
+ */
+function constellationCardFits(anchor, text, answerText) {
     if (!anchor) return false;
+    const scene = document.querySelector('[data-constellation-scene]');
+    const rect = scene ? scene.getBoundingClientRect() : null;
+    const frameW = rect && rect.width > 200 ? rect.width : CONSTELLATION_FRAME_FALLBACK_PX;
+    const frameH = rect && rect.height > 120 ? rect.height : CONSTELLATION_FRAME_FALLBACK_H_PX;
+    const cap = Math.min(CONSTELLATION_LABEL_MAX_PX, frameW * CONSTELLATION_LABEL_MAX_W_FRACTION);
+    const lines = constellationLabelLines(text, cap)
+        + (answerText ? constellationLabelLines(answerText, cap) : 0);
+    const reachPx = CONSTELLATION_LABEL_PAD_PX + CONSTELLATION_LABEL_LINE_PX * lines + CONSTELLATION_LABEL_STEM_PX;
     const side = constellationLabelSide(anchor);
     const lane = side === 'below' ? 100 - anchor.top : anchor.top;
-    if (lane < CONSTELLATION_LABEL_LANE) return false;
-    const scene = document.querySelector('[data-constellation-scene]');
-    const width = scene ? scene.getBoundingClientRect().width : 0;
-    const frame = width > 200 ? width : CONSTELLATION_FRAME_FALLBACK_PX;
-    const halfNeeded = constellationLabelWidthPx(text) / 2 / frame * 100;
-    return Math.min(anchor.left, 100 - anchor.left) >= halfNeeded;
+    if (lane < Math.max(CONSTELLATION_LABEL_LANE, reachPx / frameH * 100)) return false;
+    const widest = Math.max(constellationLabelWidthPx(text), constellationLabelWidthPx(answerText));
+    return Math.min(anchor.left, 100 - anchor.left) >= widest / 2 / frameW * 100;
+}
+
+/**
+ * The answer half of a joined pair, drawn as its own line inside the card.
+ *
+ * DECISIONS #178 answers the teacher's "khi kéo phần A và phần B thì chữ phần B
+ * bị mất thay vào đó là chữ phần A": the card that left the tray was the only
+ * place its half of the pair was written, so a lit star said "Quang hợp" and the
+ * class could not see WHAT it had been joined to.
+ */
+function constellationAnswerLine(text) {
+    return text ? `<span class="constellation-card-answer">${connectionEsc(text)}</span>` : '';
+}
+
+/** One label for both halves, so a screen reader reads the pair, not a term. */
+function constellationCardAria(card, number) {
+    const head = number ? `Sao đích ${number}: ` : 'Sao đích: ';
+    return `${head}${connectionEsc(card.text)}${card.answer ? ` — đã ghép: ${connectionEsc(card.answer)}` : ''}`;
 }
 
 /**
@@ -187,7 +242,13 @@ function paintConstellationSurface(root, options = {}) {
     const direction = constellationDirectionFor(game);
     const progress = state.connectionProgress || resetConnectionProgress(template);
     const live3d = constellation3dLive();
-    const anchors = live3d ? (connectionStarAnchors() || {}) : {};
+    // The anchors are MEASURED here, not read from the last layout pass. `updateStarAnchors()`
+    // is cheap (one projection per star) and it is the only way this paint can lay a label on
+    // the star the class is looking at NOW: the answer line is written before this call
+    // (`matchingFeedback` → `paintConstellationSurface`), so a pass that trusts the cached
+    // numbers places every label against a sky that has already been re-fitted under it
+    // (measured: dx −43…−55 px after the first correct answer, #178).
+    const anchors = live3d ? (updateStarAnchors() || {}) : {};
     // The height the anchors are percentages OF. `updateStarAnchors()` ran just
     // before this paint, and this paint can change that box (a question row that
     // appears or wraps takes its height out of the scene), so the value is
@@ -206,12 +267,17 @@ function paintConstellationSurface(root, options = {}) {
             const pair = constellationPairForStar(game, template, starId);
             if (!pair) return;
             const lit = constellationStarIsLit(progress, template, starId);
-            const text = constellationPairSides(pair, direction).starText;
+            const sides = constellationPairSides(pair, direction);
+            const text = sides.starText;
+            // #178: the answer half is only REVEALED once the pair is joined — until
+            // then it is the thing the student has to find — but the fit below is
+            // asked of the WHOLE PAIR, so the card does not move at the moment it
+            // lights up.
             const anchor = anchors[starId];
-            if (live3d && constellationIsShortLabel(text) && constellationCardFits(anchor, text) && !stage.constellationMoved) {
-                sceneCards.push({ starId, text, lit, anchor, side: constellationLabelSide(anchor) });
+            if (live3d && constellationIsShortLabel(text) && constellationCardFits(anchor, text, sides.cardText) && !stage.constellationMoved) {
+                sceneCards.push({ starId, text, answer: lit ? sides.cardText : '', lit, anchor, side: constellationLabelSide(anchor) });
             } else {
-                rowCards.push({ starId, text, lit, left: anchor ? anchor.left : NaN });
+                rowCards.push({ starId, text, answer: lit ? sides.cardText : '', lit, left: anchor ? anchor.left : NaN });
             }
         });
         // A row card belongs to the star above it, so it is read in the star's
@@ -238,8 +304,8 @@ function paintConstellationSurface(root, options = {}) {
             data-star-card="${connectionEsc(card.starId)}"
             data-side="${card.side}"
             tabindex="0" role="button"
-            aria-label="Sao đích: ${connectionEsc(card.text)}"
-            style="left:${card.anchor.left}%;top:${card.anchor.top}%">${connectionEsc(card.text)}</div>`).join('') + markHtml;
+            aria-label="${constellationCardAria(card)}"
+            style="left:${card.anchor.left}%;top:${card.anchor.top}%">${connectionEsc(card.text)}${constellationAnswerLine(card.answer)}</div>`).join('') + markHtml;
         row.hidden = rowCards.length === 0;
         row.classList.toggle('is-flow', !place);
         row.innerHTML = ordered.length
@@ -247,9 +313,9 @@ function paintConstellationSurface(root, options = {}) {
                 class="constellation-question-card${card.lit ? ' is-lit' : ''}"
                 data-question-card="${connectionEsc(card.starId)}"
                 data-question-row="1"
-                aria-label="Sao đích ${index + 1}: ${connectionEsc(card.text)}"
+                aria-label="${constellationCardAria(card, index + 1)}"
                 ${slotStyle(slots[index])}${card.lit ? ' disabled' : ''}>${place
-                    ? `<span class="constellation-card-index" aria-hidden="true">${index + 1}</span>` : ''}${connectionEsc(card.text)}</button>`).join('')
+                    ? `<span class="constellation-card-index" aria-hidden="true">${index + 1}</span>` : ''}${connectionEsc(card.text)}${constellationAnswerLine(card.answer)}</button>`).join('')
             : '';
     }
 
@@ -287,10 +353,8 @@ function paintConstellationSurface(root, options = {}) {
     if (!live3d) {
         const holder = scope.querySelector('.constellation-svg');
         if (holder) holder.outerHTML = constellationSvg(template, template.nodes.length, progress, {
-            pairText: starId => {
-                const pair = constellationPairForStar(game, template, starId);
-                return pair ? constellationPairSides(pair, direction).starText : '';
-            }
+            pairText: starId => constellationStarCaptions(game, template, starId, progress).label,
+            pairAnswerText: starId => constellationStarCaptions(game, template, starId, progress).answer
         });
     }
 

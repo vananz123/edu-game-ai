@@ -343,6 +343,25 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
   background: rgba(44, 33, 9, 0.9);
   color: #fff6dd;
 }
+/* #178: vế B hiện thành DÒNG THỨ HAI của chính thẻ vế A ngay khi cặp được ghép,
+   không phải biến mất sau cú kéo. Trước đây sao chỉ giữ vế A (đo: after drop,
+   `vế B` không còn ở đâu trong DOM), nên học sinh không thấy chữ mình vừa kéo
+   vào thuộc về đâu. Cùng 13 px với vế A — #176 đã hứa nhãn trên sao là đáp án cả
+   lớp đọc từ cuối phòng nên không được nhỏ hơn cỡ đó — phân cấp bằng màu vàng +
+   mũi tên + vạch ngăn, không bằng cỡ chữ. */
+.constellation-card-answer {
+  display: block;
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(242, 196, 107, 0.3);
+  color: var(--constellation-gold);
+  font-weight: 650;
+}
+.constellation-card-answer::before {
+  content: '→ ';
+  font-weight: 800;
+  color: rgba(242, 196, 107, 0.75);
+}
 
 /* ---------- hàng câu DÀI dưới cảnh ---------- */
 /* #174: thẻ dài vào **lưới 12 cột** và cột của nó do hoành độ của sao quyết định
@@ -613,6 +632,14 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
   dominant-baseline: middle;
 }
 .constellation-star.is-lit text { fill: #fdfaf1; }
+/* #178: bản không có WebGL không có thẻ HTML nào để chứa vế B, nên nó là dòng
+   thứ hai của chính SVG. Cùng 20 px với dòng trên (hai dòng chữ bài học đều phải
+   đọc được từ cuối lớp), khác màu vàng để cặp đọc thành "đích → đáp án". */
+.constellation-star text.constellation-svg-answer {
+  fill: var(--constellation-gold);
+  font-size: 20px;
+  font-weight: 600;
+}
 .connection-thumb .constellation-star text { display: none; }
 
 /* ---------- thẻ bay từ khay tới sao ---------- */
@@ -651,6 +678,27 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
+}
+
+/* #178: dòng phản hồi ("Chính xác! +100 điểm") là hàng CUỐI của cột chứa cảnh 3D,
+   và cảnh co giãn theo cột (`flex: 1 1 auto`). Trước đây ô này rỗng cho tới cú ghép
+   đầu tiên, rồi bật ra 45 px + 17 px lề ngay lúc cả lớp đang nhìn lên trời:
+   `fitConnectionGraph` đo lại khung, phóng nhỏ cả hình 11 % (đo: fit 2,136 → 1,897)
+   và các sao trượt khỏi nhãn của chúng (đo: dx −36…−45 px sau câu đúng đầu tiên).
+   Nhãn treo đúng sao là hợp đồng #174, nên Ô NÀY CÓ CHỖ NGAY TỪ ĐẦU: `border-box` để
+   padding của `.feedback` nằm TRONG chiều cao đã chừa, không cộng thêm.
+   `!important` là bắt buộc: nhà chung `.modal[data-player-theme] #matchFeedback:empty`
+   ẩn ô rỗng bằng `display: none !important`, nên nếu chỉ khai báo thường thì chỗ đã chừa
+   biến mất tới tận cú ghép đầu tiên — đúng lúc cần nó không đổi. Selector thứ hai đặc
+   hiệu hơn một bậc nên thắng quy tắc đó, cả ở trạng thái rỗng lẫn trạng thái có chữ. */
+.stage-center.is-constellation #matchFeedback,
+.modal[data-player-theme] .stage-center.is-constellation #matchFeedback {
+  box-sizing: border-box;
+  height: clamp(48px, 7.2vh, 84px) !important;
+  margin: 17px 0 0 !important;
+  display: flex !important;
+  align-items: center;
+  overflow: hidden;
 }
 
 /* 1366×768 là máy chiếu chật nhất: chữ nhỏ hơn một bậc, cảnh giữ nguyên phần lớn

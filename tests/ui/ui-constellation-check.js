@@ -1,5 +1,6 @@
 // ui-constellation-check.js — regression guard for "Chòm sao tri thức"
-// (DECISIONS #171, recomposed in #172, label geometry re-cut in #174).
+// (DECISIONS #171, recomposed in #172, label geometry re-cut in #174,
+// both halves of a joined pair shown in #178).
 //
 // WHAT IT PROVES, against a built app started with --remote-debugging-port:
 //   • the layout: ONE tray of answer cards, a large scene, no second answer list;
@@ -12,6 +13,10 @@
 //   • five pairs, the completion flow, the 3D RESULT sky (framed inside the result
 //     hero, disposed by both exits — DECISIONS #175) and the projector view;
 //   • an old saved picture id still opens and still plays;
+//   • a JOINED pair shows BOTH halves — the star's own term and the answer that
+//     was dropped on it, as a second line of the same card, on the board, in the
+//     no-WebGL SVG and in the projector view — and answering never rescales the
+//     sky, so a two-line card stays centred on its star (#178);
 //   • the fitted FIGURE is centred in its frame, fills it, and is capped so a
 //     two-star fragment does not become two enormous circles (#177);
 //   • the 16:9 classroom size: the scene keeps its share of the play area, the
@@ -666,6 +671,105 @@ const snapshot = () => `JSON.stringify({
   check('the leftmost long card still centres on its star',
     Math.abs(band.cards[0].dx) <= band.column + 12,
     `dx=${band.cards[0].dx} column=${Math.round(band.column)}`);
+
+  // ------------------------------ a joined pair keeps BOTH halves ---------
+  // The complaint #178 answers: "khi kéo phần A và phần B thì chữ phần B bị mất,
+  // thay vào đó là chữ phần A". Measured before the change: after a correct drop
+  // the whole DOM held no trace of the dragged half (`vế B anywhere after:
+  // false`) — the star carried only its destination side and the tray card was
+  // gone, so the class could not read what it had just matched. The answer is now
+  // the SECOND LINE of the same card, and it appears only once the pair is joined
+  // (a board that printed both halves would hand out its answers).
+  console.log('\n=== a joined pair shows both halves ===');
+  const HALF_A = 'Khái niệm 1';
+  const HALF_B = 'Định nghĩa 1';
+  await evaluate(OPEN(matchingGame('ui-const-pair', 5, 'connection', { template: 'orion', starIds: ORION.slice(0, 5) })));
+  const pairJoin = JSON.parse(await evaluate(`(async () => {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const card = document.querySelector('[data-star-card="alnilam"]');
+    const before = { text: card.textContent.trim(), aria: card.getAttribute('aria-label') };
+    const fitBefore = threeWorld.graph.getFitScale();
+    const frameBefore = document.querySelector('[data-constellation-scene]').getBoundingClientRect().height;
+    // The board locks for a moment after every attempt, so the placement retries
+    // until the progression really takes it (the same guard the finish section uses).
+    for (let tries = 0; tries < 20; tries += 1) {
+      const n = state.connectionProgress.connectedStageIds.length;
+      placeOnStar('alnilam', 'alnilam');
+      await sleep(250);
+      if (state.connectionProgress.connectedStageIds.length > n) break;
+    }
+    await sleep(500);
+    const after = document.querySelector('[data-star-card="alnilam"]');
+    const line = after.querySelector('.constellation-card-answer');
+    const style = line ? getComputedStyle(line) : null;
+    const rect = after.getBoundingClientRect();
+    const p = updateConnectionStarPoints().alnilam;
+    const view = buildConnectionView();
+    const lit = view.nodes.find(node => node.id === 'alnilam');
+    const dim = view.nodes.find(node => node.id === 'alnitak');
+    return JSON.stringify({
+      before,
+      fit: [Math.round(fitBefore * 1000) / 1000, Math.round(threeWorld.graph.getFitScale() * 1000) / 1000],
+      scene: [Math.round(frameBefore), Math.round(document.querySelector('[data-constellation-scene]').getBoundingClientRect().height)],
+      text: after.textContent.trim(),
+      aria: after.getAttribute('aria-label'),
+      litClass: after.classList.contains('is-lit'),
+      lineText: line ? line.textContent.trim() : '',
+      lineDisplay: style ? style.display : '',
+      lineFont: style ? parseFloat(style.fontSize) : 0,
+      dx: p ? Math.round(rect.left + rect.width / 2 - p.x) : null,
+      inside: Boolean(document.querySelector('[data-constellation-scene]').contains(after)),
+      tray: [...document.querySelectorAll('[data-answer-card]')].map(el => el.textContent.trim()),
+      litAnswer: lit.answerText, litLabel: lit.label, litVisible: lit.visible,
+      dimAnswer: dim.answerText, dimVisible: dim.visible,
+      doneLabels: view.doneLabels,
+      svg: constellationSvg(connectionTemplateFor(state.currentGame), 5, state.connectionProgress, {
+        pairText: id => constellationStarCaptions(state.currentGame, connectionTemplateFor(state.currentGame), id, state.connectionProgress).label,
+        pairAnswerText: id => constellationStarCaptions(state.currentGame, connectionTemplateFor(state.currentGame), id, state.connectionProgress).answer
+      })
+    });
+  })()`));
+  check('an unjoined star does not give the answer away',
+    pairJoin.before.text.includes(HALF_A) && !pairJoin.before.text.includes(HALF_B)
+      && !pairJoin.before.aria.includes(HALF_B),
+    JSON.stringify(pairJoin.before));
+  check('the joined star shows BOTH halves in its own card',
+    pairJoin.litClass === true && pairJoin.text.includes(HALF_A) && pairJoin.text.includes(HALF_B),
+    JSON.stringify({ text: pairJoin.text }));
+  check('the answer half is a line of its own and keeps the 13 px reading floor',
+    pairJoin.lineText === HALF_B && pairJoin.lineDisplay === 'block' && pairJoin.lineFont >= 13,
+    `display=${pairJoin.lineDisplay} font=${pairJoin.lineFont}px line="${pairJoin.lineText}"`);
+  check('the two-line card is still centred on its star',
+    pairJoin.dx === 0 && pairJoin.inside === true, `dx=${pairJoin.dx}`);
+  // The scale is what the centring above depends on. Answering used to resize the
+  // sky: the feedback line appeared in the same flex column as the scene, took
+  // 55 px out of it, and `fitConnectionGraph` re-fit the whole picture 11 %
+  // smaller — every star slid out from under its label (measured dx −36…−45 px).
+  check('answering does not resize the sky', pairJoin.fit[0] === pairJoin.fit[1]
+    && pairJoin.scene[0] === pairJoin.scene[1],
+    `fit ${pairJoin.fit[0]} → ${pairJoin.fit[1]}, scene ${pairJoin.scene[0]} → ${pairJoin.scene[1]} px`);
+  check('the card that was dragged is gone from the tray',
+    pairJoin.tray.includes(HALF_B) === false, JSON.stringify(pairJoin.tray));
+  check('a screen reader gets the whole pair, not one half',
+    pairJoin.aria.includes(HALF_A) && pairJoin.aria.includes(HALF_B)
+      && pairJoin.aria.includes('đã ghép'),
+    pairJoin.aria);
+  // The projector draws its own SVG from this data (features/presentation.ts) and
+  // has no HTML card, so both halves have to travel in the view — and only for a
+  // star the class actually lit.
+  check('the projector view carries both halves of the pair',
+    pairJoin.litLabel === HALF_A && pairJoin.litAnswer === HALF_B && pairJoin.litVisible === true,
+    JSON.stringify({ label: pairJoin.litLabel, answer: pairJoin.litAnswer, visible: pairJoin.litVisible }));
+  check('the projector\'s "Đã ghép" line reads destination → answer',
+    pairJoin.doneLabels.length === 1 && pairJoin.doneLabels[0] === `${HALF_A} → ${HALF_B}`,
+    JSON.stringify(pairJoin.doneLabels));
+  check('the static sky draws the joined pair as two lines, answered stars only',
+    (pairJoin.svg.match(/constellation-svg-answer/g) || []).length === 1
+      && pairJoin.svg.includes(`>${HALF_B}<`) && pairJoin.svg.includes(`>${HALF_A}<`),
+    JSON.stringify({ lines: (pairJoin.svg.match(/constellation-svg-answer/g) || []).length }));
+  check('a star nobody has answered yet keeps one line on the static sky',
+    pairJoin.dimVisible === false && pairJoin.svg.includes('>Định nghĩa 2<') === false,
+    JSON.stringify({ dimVisible: pairJoin.dimVisible }));
 
   // ------------------------------------------------ classroom sizes ------
   console.log('\n=== classroom projection ===');

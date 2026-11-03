@@ -259,6 +259,9 @@ function buildConnectionView() {
                 x: node.x,
                 y: node.y,
                 label: sides ? sides.starText : node.label,
+                // #178: the projector has no HTML card either, so the answer half
+                // travels in the view and is only DRAWN for a star the class lit.
+                answerText: sides ? sides.cardText : '',
                 kind: 'star',
                 visible: starVisible(node.id)
             };
@@ -269,7 +272,9 @@ function buildConnectionView() {
         completed: summary.completed,
         doneLabels: template.stages.filter(stage => earned.has(stage.id)).map(stage => {
             const pair = pairsById[stage.nodeIds[0]];
-            return pair ? constellationPairSides(pair, direction).starText : stage.label;
+            if (!pair) return stage.label;
+            const sides = constellationPairSides(pair, direction);
+            return `${sides.starText} → ${sides.cardText}`;
         }),
         dragDirection: direction,
     };

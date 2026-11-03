@@ -101,6 +101,22 @@ function constellationPairSides(pair, direction) {
 }
 
 /**
+ * The TWO captions one star draws on a text-only surface (DECISIONS #178).
+ *
+ * `pairText` was one caption, which is why the half of the pair that left the tray
+ * existed nowhere else on a surface that has no HTML card — the no-WebGL fallback
+ * and the projector. The answer line follows the board's rule: it appears only
+ * once the pair is joined, because before that it is the thing to be found.
+ */
+function constellationStarCaptions(game, template, starId, progress) {
+    const pair = constellationPairForStar(game, template, starId);
+    if (!pair) return { label: '', answer: '' };
+    const sides = constellationPairSides(pair, constellationDirectionFor(game));
+    const lit = constellationStarIsLit(progress, template, starId);
+    return { label: sides.starText, answer: lit ? sides.cardText : '' };
+}
+
+/**
  * The pair → stage plan for this playing. The matching board knows its pair
  * count, so the plan is built from that — no placeholder ids and no dependency
  * on pair order (the right column is shuffled on every board).
@@ -167,10 +183,8 @@ function refreshConnectionPanel(root) {
         // the pair it stands for, because without the scene there is no HTML chip.
         const svg = constellationSvg(template, template.nodes.length, progress, {
             animate: true,
-            pairText: starId => {
-                const pair = constellationPairForStar(state.currentGame, template, starId);
-                return pair ? constellationPairSides(pair, constellationDirectionFor(state.currentGame)).starText : '';
-            }
+            pairText: starId => constellationStarCaptions(state.currentGame, template, starId, progress).label,
+            pairAnswerText: starId => constellationStarCaptions(state.currentGame, template, starId, progress).answer
         });
         const holder = host.querySelector('.constellation-svg');
         if (holder) holder.outerHTML = svg;
@@ -264,7 +278,14 @@ function constellationSvg(template, pairCount, progress, options = {}) {
         const bright = on(star.id);
         const r = 6 + 6 * (Number(star.brightness) || 0.5);
         const lessonText = typeof options.pairText === 'function' ? options.pairText(star.id) : '';
-        const label = options.labels === false ? '' : `<text x="${star.x}" y="${star.y + r + 16}">${connectionEsc(lessonText || constellationStarCaption(star, index))}</text>`;
+        // #178: a JOINED star also carries the half the class dropped. On this
+        // surface there is no HTML card to hold it — the SVG is the whole board —
+        // so the answer is a second line, flipped above the star when the star sits
+        // near the bottom edge and the line would leave the picture. The lane is
+        // 26 px because both lines are drawn at 20 px; a tighter lane overlaps.
+        const answer = bright && typeof options.pairAnswerText === 'function' ? options.pairAnswerText(star.id) : '';
+        const answerY = star.y + r + 42 > CONSTELLATION_VIEWBOX.height - 8 ? star.y - r - 16 : star.y + r + 42;
+        const label = options.labels === false ? '' : `<text x="${star.x}" y="${star.y + r + 16}">${connectionEsc(lessonText || constellationStarCaption(star, index))}</text>${answer ? `<text class="constellation-svg-answer" x="${star.x}" y="${answerY}">${connectionEsc(answer)}</text>` : ''}`;
         return `<g class="constellation-star${bright ? ' is-lit' : ''}" data-star="${connectionEsc(star.id)}">
           <circle class="constellation-halo" cx="${star.x}" cy="${star.y}" r="${r + 8}" />
           <circle class="constellation-core" cx="${star.x}" cy="${star.y}" r="${r}" />

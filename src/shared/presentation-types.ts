@@ -147,18 +147,20 @@ export type PresentationView =
        * the same STATIC sky the teacher's window shows, as plain data — Three.js
        * is not loaded in the presentation window (it never was, not even for
        * House Building), and this view must not change that. `label` is the
-       * destination side a star carries, already resolved for `dragDirection`.
+       * destination side a star carries, already resolved for `dragDirection`;
+       * `answerText` (#178) is the other half of the same pair, drawn only for a
+       * star the class has lit — the projector has no HTML card to hold it.
        */
       kind: 'constellation';
       templateName: string;
       templateId: string;
       viewBox: { width: number; height: number };
-      nodes: Array<{ id: string; x: number; y: number; label: string; kind: 'dot' | 'ring' | 'plate' | 'star'; visible: boolean }>;
+      nodes: Array<{ id: string; x: number; y: number; label: string; answerText?: string; kind: 'dot' | 'ring' | 'plate' | 'star'; visible: boolean }>;
       edges: Array<{ id: string; from: string; to: string; bend: number; connected: boolean }>;
       connected: number;
       total: number;
       completed: boolean;
-      /** The destination sides already placed, in board order. */
+      /** The joined pairs, in board order, as "destination → answer" (#178). */
       doneLabels: string[];
       dragDirection?: 'left-to-right' | 'right-to-left';
     }
