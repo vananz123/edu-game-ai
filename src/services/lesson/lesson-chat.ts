@@ -8,17 +8,21 @@
  * prompt-and-repair pipeline.
  *
  * Two rules shape the design:
- *  - **Quotes come from the attached lessons, when there are any.** `buildChatEvidence`
- *    pulls them from the documents the teacher attached and the model is told to say
- *    it does not know rather than invent. Attaching **nothing** is a supported turn
- *    (#183): the prompt then says so explicitly and the answer is labelled a general
- *    pedagogical suggestion instead of pretending to be grounded.
+ *  - **The teacher's own words are the ceiling on what gets read.** A turn only
+ *    answers from what it was given, so #186 made the giving explicit: an API
+ *    provider and a GPU-backed local model get the complete lesson, a CPU-only
+ *    laptop gets the matching passages, and every turn states under the answer how
+ *    much of the attached text the model actually saw (`buildChatEvidence` → `meta`).
+ *    Attaching **nothing** is still a supported turn (#183): the prompt says so
+ *    explicitly and the answer is labelled a general pedagogical suggestion instead
+ *    of pretending to be grounded.
  *  - **A question set is already a game draft.** The "predefined format" is the
  *    existing arena contract (`gameDraftJsonSchemas.arena` + `normalizeDraft`), so
  *    a set the teacher accepts goes straight into the wizard with no converter and
  *    no second model call.
  */
-import { isQuestionSetRequest, selectRelevantEvidence } from '../../ai-core/document-assist';
+import { isQuestionSetRequest, LOCAL_DOCUMENT_ANALYSIS_MAX_CHARS, selectRelevantEvidence } from '../../ai-core/document-assist';
+import { LESSON_PREPROCESS_NO_CUT } from './lesson-preprocess';
 import { gameDraftJsonSchemas } from './lesson-contracts';
 import { normalizeDraft } from './lesson-normalize';
 import {
@@ -34,14 +38,23 @@ import type {
   ArenaDraft,
   LessonChatCitation,
   LessonChatComposerMode,
+  LessonChatEvidenceMeta,
   LessonChatIntent,
   LessonChatMessage
 } from '../../shared/lesson-types';
 
-/** How many quotes one lesson contributes before the global budget is applied. */
-export const CHAT_QUOTES_PER_DOCUMENT = 3;
-/** Total characters of lesson text the chat will put in front of the model. */
-export const CHAT_EVIDENCE_MAX_CHARS = 3200;
+/**
+ * Passages taken from one lesson in retrieval mode. #182 sent 3, which on a real
+ * 2.145-character giáo án meant ~200 characters of context and answers that could
+ * not possibly mean anything (#186).
+ */
+export const CHAT_RETRIEVAL_QUOTES_PER_DOCUMENT = 12;
+/**
+ * What a local run may read, GPU or CPU: the same ceiling the analysis path has
+ * used since #180, which is the one the shipped llama.cpp model is known to
+ * handle inside its 8.192-token context.
+ */
+export const CHAT_LOCAL_MAX_CHARS = LOCAL_DOCUMENT_ANALYSIS_MAX_CHARS;
 /** Fallback slice per lesson when nothing matched the question's words. */
 export const CHAT_FALLBACK_CHARS_PER_DOCUMENT = 500;
 /** Previous turns replayed so "ngắn hơn nữa" works (#182 is a chat, not a form). */
@@ -51,6 +64,32 @@ export const CHAT_HISTORY_MAX_CHARS_PER_MESSAGE = 700;
 export const CHAT_DEFAULT_QUESTION_COUNT = 5;
 /** The arena contract caps a draft at 30 items. */
 export const CHAT_MAX_QUESTION_COUNT = 30;
+
+/** How much of the attached lessons a turn may read, decided per provider (#186). */
+export interface ChatEvidencePolicy {
+  /** Send each lesson complete instead of only the passages that match the question. */
+  wholeDocument: boolean;
+  quotesPerDocument: number;
+  /** Ceiling for the whole prompt's lesson text; `Infinity` means "no ceiling". */
+  maxChars: number;
+}
+
+/**
+ * Cloud reads the lesson whole — the teacher attached the file, so withholding
+ * nine tenths of it is the bug being fixed. A local runtime depends on the
+ * hardware: a GPU offload can hold the article, a CPU-only laptop cannot afford
+ * the tokens, so it keeps the keyword retrieval. The caller passes the GPU fact
+ * from the runtime manager rather than guessing from settings, because a Vulkan
+ * request that fell back to CPU is a CPU machine.
+ */
+export function chatEvidencePolicyFor(input: { providerId?: string; localOnGpu?: boolean }): ChatEvidencePolicy {
+  if (input.providerId === 'local') {
+    return input.localOnGpu
+      ? { wholeDocument: true, quotesPerDocument: CHAT_RETRIEVAL_QUOTES_PER_DOCUMENT, maxChars: CHAT_LOCAL_MAX_CHARS }
+      : { wholeDocument: false, quotesPerDocument: CHAT_RETRIEVAL_QUOTES_PER_DOCUMENT, maxChars: CHAT_LOCAL_MAX_CHARS };
+  }
+  return { wholeDocument: true, quotesPerDocument: CHAT_RETRIEVAL_QUOTES_PER_DOCUMENT, maxChars: LESSON_PREPROCESS_NO_CUT };
+}
 
 const CHAT_ANSWER_SYSTEM_PROMPT =
   'Bạn là trợ lý sư phạm tiếng Việt của giáo viên. Chỉ được trả lời dựa trên các đoạn trích dẫn của giáo án được cung cấp; nếu đoạn trích không đủ căn cứ, hãy nói rõ là giáo án không nêu điều đó và không bịa thêm. Trả lời ngắn gọn, xuống dòng theo ý, tối đa 6 câu. Chỉ trả về DUY NHẤT một đối tượng JSON hợp lệ có dạng {"answer":"..."}, không kèm markdown.';
@@ -103,6 +142,7 @@ export interface ChatEvidenceInput {
   question: string;
   quotesPerDocument?: number;
   maxChars?: number;
+  wholeDocument?: boolean;
 }
 
 export interface ChatEvidence {
@@ -114,6 +154,8 @@ export interface ChatEvidence {
   fallback: boolean;
   /** Lessons that contributed nothing — unreadable, empty, or out of budget. */
   namesWithoutEvidence: string[];
+  /** What the teacher is told under the answer: read / attached / how / cut (#186). */
+  meta: LessonChatEvidenceMeta;
 }
 
 export interface LessonChatTurnInput {
@@ -128,6 +170,8 @@ export interface LessonChatTurnInput {
   mode?: LessonChatComposerMode;
   /** Overrides the count parsed from the question (the composer's stepper). */
   questionCount?: number;
+  /** True when the local runtime is offloading layers to a GPU (#186). Ignored for cloud. */
+  localOnGpu?: boolean;
   onStage?: (stage: 'retrieve' | 'generate' | 'validate') => void;
 }
 
@@ -139,8 +183,7 @@ export interface LessonChatTurnResult {
   /** Set when the model failed: the answer is the honest fallback, not a reply. */
   errorCode: string;
   providerId: string;
-  evidenceCharacters: number;
-  evidenceFallback: boolean;
+  evidence: LessonChatEvidenceMeta;
   /** False when the teacher attached **no** lesson (#183) — the turn is a general suggestion. */
   grounded: boolean;
   namesWithoutEvidence: string[];
@@ -211,25 +254,37 @@ function clampQuestionCount(value: number): number {
 /**
  * Merges retrieval across every lesson the teacher attached.
  *
- * Quotes stay tagged with their document so a merged answer can still be checked
- * against the right lesson, and the numbering the prompt uses matches the
- * `[n]` markers the UI shows. When nothing matches — a broad request like
+ * Two modes (#186). **Whole-document** sends each lesson complete, which is what
+ * an API provider or a GPU-backed local model gets — the teacher attached the file
+ * precisely so the answer would be about the whole of it. **Retrieval** keeps the
+ * keyword-matched passages for a CPU-only laptop, which cannot afford the tokens.
+ * Either way the numbered block the prompt uses matches the `[n]` markers the UI
+ * shows, and `meta` says exactly how much was read so the teacher is never left
+ * guessing. When nothing matches in retrieval mode — a broad request like
  * "tóm tắt cả hai giáo án" — the opening of each lesson is sent instead and the
- * turn is marked `fallback` so the UI can say so.
+ * turn is marked `fallback`.
  */
 export function buildChatEvidence(input: ChatEvidenceInput): ChatEvidence {
-  const quotesPerDocument = Math.max(1, Number(input.quotesPerDocument) || CHAT_QUOTES_PER_DOCUMENT);
-  const maxChars = Math.max(200, Number(input.maxChars) || CHAT_EVIDENCE_MAX_CHARS);
+  const wholeDocument = input.wholeDocument === true;
+  const quotesPerDocument = Math.max(1, Number(input.quotesPerDocument) || CHAT_RETRIEVAL_QUOTES_PER_DOCUMENT);
+  const maxChars = toEvidenceBudget(input.maxChars);
   const documents = Array.isArray(input.documents) ? input.documents.filter(document => document && document.id) : [];
+  const totalCharacters = documents.reduce((total, document) => total + String(document.text ?? '').trim().length, 0);
+  const readable = documents.filter(document => String(document.text ?? '').trim());
+  // Lessons attached together share one ceiling, so a long first article must not
+  // starve the second: each gets an equal share, and whatever it does not use
+  // stays available to the next.
+  const share = wholeDocument && Number.isFinite(maxChars)
+    ? Math.floor(maxChars / Math.max(1, readable.length))
+    : maxChars;
 
   const citations: LessonChatCitation[] = [];
   let characters = 0;
-  for (const document of documents) {
+  for (const document of readable) {
     const text = String(document.text ?? '').trim();
-    if (!text) continue;
-    const quotes = selectRelevantEvidence(text, input.question, quotesPerDocument) as string[];
+    const quotes = wholeDocument ? [text] : selectRelevantEvidence(text, input.question, quotesPerDocument) as string[];
     for (const quote of quotes) {
-      const remaining = maxChars - characters;
+      const remaining = Math.min(share, maxChars - characters);
       if (remaining <= 0) break;
       const kept = quote.slice(0, Math.min(quote.length, remaining));
       if (!kept.trim()) continue;
@@ -248,7 +303,7 @@ export function buildChatEvidence(input: ChatEvidenceInput): ChatEvidence {
   // "fallback" means *nothing matched, so the opening slice was sent*. With zero
   // attached lessons nothing was sent at all, and calling that a fallback would
   // tell the teacher their lesson was skimped when they attached none (#183).
-  const fallback = citations.length === 0 && documents.length > 0;
+  const fallback = !wholeDocument && citations.length === 0 && documents.length > 0;
   if (fallback) {
     for (const document of documents) {
       const text = String(document.text ?? '').trim();
@@ -265,8 +320,22 @@ export function buildChatEvidence(input: ChatEvidenceInput): ChatEvidence {
     text: citations.map((citation, index) => `[${index + 1}] (${citation.documentName}) ${citation.quote}`).join('\n\n'),
     characters,
     fallback,
-    namesWithoutEvidence: Array.from(namesWithoutEvidence)
+    namesWithoutEvidence: Array.from(namesWithoutEvidence),
+    meta: {
+      characters,
+      totalCharacters,
+      quotes: citations.length,
+      mode: wholeDocument ? 'whole' : 'retrieval',
+      trimmed: characters < totalCharacters,
+      fallback
+    }
   };
+}
+
+/** `Infinity` is a real budget here (cloud sends everything), so it must survive parsing. */
+function toEvidenceBudget(value: number | undefined): number {
+  const parsed = Number(value);
+  return Number.isNaN(parsed) ? CHAT_LOCAL_MAX_CHARS : Math.max(200, parsed);
 }
 
 /**
@@ -294,7 +363,7 @@ Trả về JSON: {"answer":"..."} và nhắc rõ trong "answer" rằng gợi ý 
   }
   return `Câu hỏi của giáo viên: ${input.question}
 
-Đoạn trích dẫn từ giáo án:
+${evidenceHeading(input.evidence)}
 ${input.evidence.text || '(không có đoạn nào)'}
 
 Trả về JSON: {"answer":"..."}. Nếu đoạn trích không đủ để trả lời, hãy nói rõ điều đó trong "answer".`;
@@ -338,13 +407,24 @@ ${format}
   }
   return `Yêu cầu của giáo viên: ${input.question}
 
-Hãy soạn đúng ${input.count} câu hỏi từ giáo án, tiếng Việt, bám sát đoạn trích dẫn bên dưới.
+Hãy soạn đúng ${input.count} câu hỏi từ giáo án, tiếng Việt, bám sát nội dung giáo án bên dưới.
 
-Đoạn trích dẫn từ giáo án:
+${evidenceHeading(input.evidence)}
 ${input.evidence.text || '(không có đoạn nào)'}
 
 ${format}
 - Không được để trống "explanation" và không bịa nội dung ngoài giáo án.`;
+}
+
+/**
+ * The block heading changes with the mode (#186): telling the model "đoạn trích
+ * dẫn" when it is holding the complete lesson invites it to treat the rest of the
+ * article as unknown and answer as though it had only seen a snippet.
+ */
+function evidenceHeading(evidence: ChatEvidence): string {
+  return evidence.meta.mode === 'whole'
+    ? 'Toàn bộ nội dung giáo án giáo viên đã gắn (mỗi tài liệu đánh số [n]):'
+    : 'Đoạn trích dẫn từ giáo án:';
 }
 
 /**
@@ -357,7 +437,9 @@ ${format}
  */
 export async function runLessonChatTurn(input: LessonChatTurnInput): Promise<LessonChatTurnResult> {
   const documents = Array.isArray(input.documents) ? input.documents : [];
-  const evidence = buildChatEvidence({ documents, question: input.question });
+  const providerId = (input.client as { providerId?: string }).providerId || '';
+  const policy = chatEvidencePolicyFor({ providerId, localOnGpu: input.localOnGpu === true });
+  const evidence = buildChatEvidence({ documents, question: input.question, ...policy });
   const intent = classifyLessonChatIntent(input.question, input.mode || 'auto');
   const count = clampQuestionCount(Number(input.questionCount) || requestedQuestionCount(input.question));
   const history = buildChatHistoryMessages(input.history);
@@ -367,9 +449,8 @@ export async function runLessonChatTurn(input: LessonChatTurnInput): Promise<Les
   const grounded = documents.length > 0;
   const base: Omit<LessonChatTurnResult, 'answer' | 'intent' | 'questionSet' | 'errorCode'> = {
     citations: evidence.citations,
-    providerId: (input.client as { providerId?: string }).providerId || '',
-    evidenceCharacters: evidence.characters,
-    evidenceFallback: evidence.fallback,
+    providerId,
+    evidence: evidence.meta,
     grounded,
     namesWithoutEvidence: evidence.namesWithoutEvidence,
     requestedCount: intent === 'question_set' ? count : 0

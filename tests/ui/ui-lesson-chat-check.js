@@ -413,6 +413,8 @@ const sendTurn = (mode, question, waitSelector) => `(async () => {
   const evidence = [...document.querySelectorAll('.lesson-chat-evidence li')];
   const items = [...document.querySelectorAll('.lesson-chat-set-item .lesson-chat-set-q')];
   const game = document.querySelector('[data-lesson-chat-game]');
+  // #186: the teacher sees how much of the lesson the model actually read.
+  const reads = last ? last.querySelector('[data-lesson-chat-reads]') : null;
   return {
     hadCountField,
     sendDisabled,
@@ -421,6 +423,10 @@ const sendTurn = (mode, question, waitSelector) => `(async () => {
     chatId: lessonChatUi.chatId,
     lastBubble: last ? (last.textContent || '') : '',
     assistantRows: document.querySelectorAll('.lesson-chat-row:not(.is-user)').length,
+    readsText: reads ? (reads.textContent || '').trim() : '',
+    readsPercent: reads ? String(reads.dataset.lessonChatReads || '') : '',
+    readsTrimmed: reads ? String(reads.dataset.lessonChatTrimmed || '') : '',
+    readsIcon: Boolean(reads && reads.querySelector('svg')),
     evidenceRows: evidence.map(row => (row.textContent || '')),
     setItems: items.map(row => (row.textContent || '').trim()),
     correctMarks: document.querySelectorAll('.lesson-chat-set-opt.is-correct').length,
@@ -440,6 +446,7 @@ const PERSISTENCE = `(async () => {
     documentIds: (stored || {}).documentIds || [],
     roles: ((stored || {}).messages || []).map(message => message.role + (message.questionSet ? '+set' : '')),
     citations: ((stored || {}).messages || []).filter(message => message.role === 'assistant').map(message => (message.citations || []).length),
+    reads: ((stored || {}).messages || []).filter(message => message.role === 'assistant').map(message => message.evidence || null),
     listed: chats.filter(chat => chat.id === chatId).length,
     providerOfTurn: (((stored || {}).messages || []).filter(message => message.role === 'assistant').pop() || {}).providerId || ''
   };
@@ -465,6 +472,7 @@ const REOPEN_AFTER_RELOAD = `(async () => {
     reopened: lessonChatUi.chatId,
     docChips: document.querySelectorAll('.lesson-chat-chip').length,
     bubbleText: bubbles.length ? (bubbles[bubbles.length - 1].textContent || '') : '',
+    readsLines: [...document.querySelectorAll('[data-lesson-chat-reads]')].map(row => (row.textContent || '').trim()),
     evidenceRows: [...document.querySelectorAll('.lesson-chat-evidence li')].map(row => row.textContent || ''),
     restoredSet: Boolean(document.querySelector('[data-lesson-chat-set]'))
   };
@@ -603,10 +611,14 @@ const UNGROUNDED_TURN = `(async () => {
   const last = bubbles[bubbles.length - 1] || null;
   const chatId = lessonChatUi.chatId;
   const stored = await window.eduGame.getLessonChat(chatId);
+  // #186: a turn that read no lesson must not print a reading score.
+  const readsNode = last ? last.querySelector('[data-lesson-chat-reads]') : null;
   return {
     chips, attachTitle, attachInComposer, hint, emptyState, sendDisabled, chatId,
     error: (document.querySelector('[data-lesson-chat-error="1"]') || {}).textContent || '',
     lastBubble: last ? (last.textContent || '') : '',
+    readsText: readsNode ? (readsNode.textContent || '').trim() : '',
+    storedReads: ((stored || {}).messages || []).filter(m => m.role === 'assistant').map(m => m.evidence || null),
     evidenceBlocks: document.querySelectorAll('.lesson-chat-evidence').length,
     storedDocumentIds: (stored || {}).documentIds || [],
     storedCitations: ((stored || {}).messages || []).filter(m => m.role === 'assistant').map(m => (m.citations || []).length)
@@ -889,6 +901,22 @@ function fill(script, values) {
     check('the answer names its sources', answer.evidenceRows.length >= 2 && answer.evidenceRows.some(row => row.includes(DOC_A_NAME)) && answer.evidenceRows.some(row => row.includes(DOC_B_NAME)), String(answer.evidenceRows.length));
     check('the composer was enabled by the typed question', answer.sendDisabled === false);
 
+    // 4b. #186 — on the cloud the whole lesson is sent, and the teacher is told.
+    const lessonChars = DOC_A_TEXT.trim().length + DOC_B_TEXT.trim().length;
+    const fullA = String(answerCall.userText || '').includes(DOC_A_TEXT.trim());
+    const fullB = String(answerCall.userText || '').includes(DOC_B_TEXT.trim());
+    check('#186 the cloud request carries both lessons in full', fullA && fullB, `A=${fullA} B=${fullB}`);
+    check('#186 the prompt says the whole lesson travelled, not a quote slice',
+      /Toàn bộ nội dung giáo án/.test(String(answerCall.userText || '')) && !/Đoạn trích dẫn từ giáo án/.test(String(answerCall.userText || '')));
+    const readsNumbers = String(answer.readsText).match(/AI đã đọc ([\d.]+) \/ ([\d.]+) ký tự \((\d+) %\)/) || [];
+    const viNumber = (value) => Number(String(value || '').replace(/\./g, ''));
+    check('#186 the chat discloses exactly what was read',
+      readsNumbers.length === 4 && viNumber(readsNumbers[1]) === lessonChars && viNumber(readsNumbers[2]) === lessonChars && readsNumbers[3] === '100',
+      answer.readsText || '(no reading line)');
+    check('#186 a full read is not flagged as a cut',
+      answer.readsPercent === '100' && answer.readsTrimmed === '0' && /toàn bộ giáo án, không cắt bớt/.test(answer.readsText), answer.readsText);
+    check('#186 the reading line carries its icon', answer.readsIcon === true);
+
     // 5. A question set in the predefined (arena) format.
     const setTurn = await cdp.evaluate(sendTurn('question_set', SET_QUESTION, '[data-lesson-chat-set]'));
     const setCall = mockRequests.filter(request => request.kind === 'question_set').pop() || {};
@@ -907,6 +935,9 @@ function fill(script, values) {
     check('both turns are stored', stored.roles.length === 4 && stored.roles.includes('assistant+set'), stored.roles.join(','));
     check('the stored turn keeps its provider and quotes', stored.providerOfTurn === 'custom' && stored.citations.every(count => count >= 2), `${stored.providerOfTurn}/${JSON.stringify(stored.citations)}`);
     check('the conversation is listed in history', stored.listed === 1 && Boolean(stored.title), stored.title);
+    check('#186 the stored turns keep the disclosure',
+      stored.reads.length === 2 && stored.reads.every(meta => meta && meta.mode === 'whole' && meta.trimmed === false && meta.characters === lessonChars && meta.totalCharacters === lessonChars),
+      JSON.stringify(stored.reads).slice(0, 160));
 
     await cdp.evaluate(`location.reload()`);
     await sleep(2600);
@@ -916,6 +947,9 @@ function fill(script, values) {
     check('the history reopens the stored conversation', reopened.docChips === 2 && Boolean(reopened.reopened), `${reopened.docChips} chips / ${reopened.reopened}`);
     check('the restored transcript still shows the quotes', reopened.evidenceRows.length >= 2 && /ánh sáng/.test(reopened.bubbleText), `${reopened.evidenceRows.length}`);
     check('the restored transcript still shows the question set', reopened.restoredSet === true);
+    check('#186 the disclosure survives the reload',
+      reopened.readsLines.length === 2 && reopened.readsLines.every(text => /\(100 %\) · toàn bộ giáo án, không cắt bớt/.test(text)),
+      reopened.readsLines.join(' | ').slice(0, 160));
 
     // 7. The handoff: the set becomes a game with no second model call.
     const requestsBeforeAdopt = mockRequests.length;
@@ -961,6 +995,9 @@ function fill(script, values) {
     check('the ungrounded prompt carries no lesson quotes', freeCall.ungrounded === true && !/\[\d\] \(/.test(String(freeCall.userText || '')), String(freeCall.userText || '').slice(0, 60));
     check('the answer appears in the chat', /gợi ý từ kiến thức sư phạm chung/i.test(free.lastBubble), free.lastBubble.slice(0, 70));
     check('no source strip is faked for a lesson-free turn', free.evidenceBlocks === 0, String(free.evidenceBlocks));
+    check('#186 a lesson-free turn prints no reading score',
+      free.readsText === '' && free.storedReads.every(meta => !meta || Number(meta.totalCharacters) === 0),
+      `${free.readsText || '(none)'} · ${JSON.stringify(free.storedReads).slice(0, 90)}`);
     check('the lesson-free turn is stored with no documents',
       Boolean(free.chatId) && free.storedDocumentIds.length === 0 && free.storedCitations.every(count => count === 0),
       `${JSON.stringify(free.storedDocumentIds)}/${JSON.stringify(free.storedCitations)}`);

@@ -2,11 +2,13 @@ import assert from 'node:assert/strict';
 import { AiRequestRegistry, AiTransportError } from '../../src/services/ai/ai-transport';
 import {
   CHAT_DEFAULT_QUESTION_COUNT,
-  CHAT_EVIDENCE_MAX_CHARS,
+  CHAT_LOCAL_MAX_CHARS,
+  CHAT_RETRIEVAL_QUOTES_PER_DOCUMENT,
   buildChatAnswerPrompt,
   buildChatEvidence,
   buildChatHistoryMessages,
   buildQuestionSetPrompt,
+  chatEvidencePolicyFor,
   classifyLessonChatIntent,
   foldChatText,
   requestedQuestionCount,
@@ -39,6 +41,14 @@ const DOC_B: LessonChatDocument = {
 };
 const QUESTION = 'Hai bài nói gì về vai trò của ánh sáng?';
 
+/**
+ * A lesson long enough that #182's 3.200-character budget cut it to pieces — the
+ * measurement behind the teacher's "câu trả lời không có ý nghĩa" (#186).
+ */
+const LONG_TEXT = Array.from({ length: 60 }, (unused, index) =>
+  `Hoạt động ${index + 1}: học sinh tìm hiểu quang hợp và vai trò của ánh sáng đối với quang hợp.`).join('\n');
+const DOC_LONG: LessonChatDocument = { id: 'doc_long', name: 'Giao an dai.txt', text: LONG_TEXT };
+
 /** The arena shape the wizard contract already accepts (#182). */
 function arenaQuestions(count: number) {
   const labels = ['Lá', 'Rễ', 'Hoa', 'Thân', 'Quả'];
@@ -56,7 +66,11 @@ function arenaQuestions(count: number) {
 class RecordingClient implements LessonChatClient {
   readonly requests: LessonChatRequest[] = [];
 
-  constructor(private readonly reply: (request: LessonChatRequest) => unknown) {}
+  /** `providerId` is what the #186 evidence policy reads, so the test can set it. */
+  constructor(
+    private readonly reply: (request: LessonChatRequest) => unknown,
+    readonly providerId = ''
+  ) {}
 
   async chatJson(request: LessonChatRequest): Promise<unknown> {
     this.requests.push(request);
@@ -67,13 +81,13 @@ class RecordingClient implements LessonChatClient {
 }
 
 /** Answers like the cloud gate's mock: a set request gets a set, everything else an answer. */
-function answeringClient(setCount = 0): RecordingClient {
+function answeringClient(setCount = 0, providerId = 'gemini'): RecordingClient {
   return new RecordingClient(request => {
     const system = request.messages.filter(message => message.role === 'system').map(message => message.content).join(' ');
     return /soạn câu hỏi/.test(system)
       ? { gameType: 'arena', questions: arenaQuestions(setCount || 2) }
       : { answer: 'Gợi ý: kiểm tra bài cũ bằng hai câu hỏi nhanh trong 3 phút.' };
-  });
+  }, providerId);
 }
 
 function textOf(request: LessonChatRequest, role: 'system' | 'user'): string {
@@ -98,7 +112,7 @@ async function main(): Promise<void> {
 
   const merged = buildChatEvidence({ documents: [DOC_A, DOC_B], question: QUESTION });
   assert.ok(merged.citations.length >= 2, `expected quotes from both lessons, got ${merged.citations.length}`);
-  assert.ok(merged.characters <= CHAT_EVIDENCE_MAX_CHARS, 'the global budget must hold');
+  assert.ok(merged.characters <= CHAT_LOCAL_MAX_CHARS, 'the global budget must hold');
   assert.ok(merged.text.startsWith('[1] ('), merged.text.slice(0, 40));
   assert.ok(/\[2\] \(/.test(merged.text), 'numbering continues across lessons, it restarts per lesson');
   assert.ok(merged.text.includes('(Giao an A'), merged.text.slice(0, 60));
@@ -126,11 +140,63 @@ async function main(): Promise<void> {
   assert.ok(offTopic.citations[0].quote.startsWith('Học sinh chuẩn bị'), offTopic.citations[0].quote.slice(0, 40));
   assert.equal(offTopic.namesWithoutEvidence.length, 0, 'a fallback still covered the lesson');
 
+  // --- who gets the whole lesson (#186) -------------------------------------
+
+  const cloud = chatEvidencePolicyFor({ providerId: 'gemini' });
+  assert.equal(cloud.wholeDocument, true);
+  assert.equal(Number.isFinite(cloud.maxChars), false, 'a cloud turn is not cut at all — the #180 rule, now for chat');
+  const localGpu = chatEvidencePolicyFor({ providerId: 'local', localOnGpu: true });
+  assert.equal(localGpu.wholeDocument, true, 'a GPU laptop can hold the article');
+  assert.equal(localGpu.maxChars, CHAT_LOCAL_MAX_CHARS, 'and is still bounded by the 8.192-token local context');
+  const localCpu = chatEvidencePolicyFor({ providerId: 'local', localOnGpu: false });
+  assert.equal(localCpu.wholeDocument, false, 'a CPU laptop keeps the cut');
+  assert.equal(localCpu.quotesPerDocument, CHAT_RETRIEVAL_QUOTES_PER_DOCUMENT, 'but reads four times more of it than #182 did');
+  assert.equal(chatEvidencePolicyFor({ providerId: 'local' }).wholeDocument, false, 'no GPU fact means CPU, never an optimistic whole document');
+
+  const wholeLong = buildChatEvidence({ documents: [DOC_LONG], question: QUESTION, ...cloud });
+  assert.ok(LONG_TEXT.length > 3200, 'the fixture must be longer than the budget #182 cut at');
+  assert.equal(wholeLong.characters, LONG_TEXT.trim().length, 'the cloud turn gets every character');
+  assert.equal(wholeLong.citations.length, 1, 'one passage per lesson keeps [n] aligned with the UI');
+  assert.equal(wholeLong.meta.mode, 'whole');
+  assert.equal(wholeLong.meta.trimmed, false);
+  assert.equal(wholeLong.meta.totalCharacters, LONG_TEXT.trim().length);
+  assert.equal(wholeLong.meta.characters, wholeLong.meta.totalCharacters, 'the disclosure adds up to 100 %');
+
+  const cpuLong = buildChatEvidence({ documents: [DOC_LONG], question: QUESTION, ...localCpu });
+  assert.ok(cpuLong.characters < LONG_TEXT.trim().length, 'the CPU turn still trims');
+  assert.ok(cpuLong.meta.quotes > 3, `#182 sent 3 passages, #186 sends ${cpuLong.meta.quotes}`);
+  assert.equal(cpuLong.meta.mode, 'retrieval');
+  assert.equal(cpuLong.meta.trimmed, true, 'and says so');
+  assert.equal(cpuLong.meta.totalCharacters, LONG_TEXT.trim().length, 'the denominator is the lesson, not the quote');
+
+  // Local GPU with an article the context cannot hold: cut, but honestly.
+  const tooBig = { id: 'doc_huge', name: 'Giao an qua dai.txt', text: LONG_TEXT.repeat(3) };
+  const gpuHuge = buildChatEvidence({ documents: [tooBig], question: QUESTION, ...localGpu });
+  assert.equal(gpuHuge.meta.characters, CHAT_LOCAL_MAX_CHARS);
+  assert.equal(gpuHuge.meta.trimmed, true, 'a whole-document mode that had to cut must not claim 100 %');
+
+  // Two lessons on one budget: neither may be starved by the other.
+  const gpuPair = buildChatEvidence({ documents: [DOC_LONG, tooBig], question: QUESTION, ...localGpu });
+  assert.deepEqual(gpuPair.citations.map(citation => citation.documentId), ['doc_long', 'doc_huge'], 'both lessons are represented');
+  assert.ok(gpuPair.citations[1].quote.length > 0 && gpuPair.characters <= CHAT_LOCAL_MAX_CHARS);
+  const cloudPair = buildChatEvidence({ documents: [DOC_LONG, DOC_B], question: QUESTION, ...cloud });
+  assert.equal(cloudPair.meta.characters, cloudPair.meta.totalCharacters, 'cloud sends both lessons complete');
+
+  // --- the teacher is told (#186) -------------------------------------------
+
+  const freeEvidence = buildChatEvidence({ documents: [], question: QUESTION });
+  assert.equal(freeEvidence.meta.totalCharacters, 0);
+  assert.equal(freeEvidence.meta.trimmed, false, 'nothing attached means nothing was withheld');
+  assert.equal(none.meta.mode, 'retrieval');
+
   // --- prompts --------------------------------------------------------------
 
   const groundedAnswer = buildChatAnswerPrompt({ question: QUESTION, evidence: merged });
   assert.ok(groundedAnswer.includes('Đoạn trích dẫn từ giáo án:'), 'undefined means grounded: old callers keep the quotes');
   assert.ok(groundedAnswer.includes('[1] ('));
+  const wholeAnswer = buildChatAnswerPrompt({ question: QUESTION, evidence: wholeLong });
+  assert.ok(wholeAnswer.includes('Toàn bộ nội dung giáo án'), 'the model is told it is holding the whole article (#186)');
+  assert.ok(!wholeAnswer.includes('Đoạn trích dẫn từ giáo án:'), 'or it will answer as though it had seen a snippet');
   const ungroundedAnswer = buildChatAnswerPrompt({ question: QUESTION, evidence: none, grounded: false });
   assert.ok(ungroundedAnswer.includes('Không có giáo án nào được gắn kèm lượt này'), ungroundedAnswer.slice(0, 80));
   assert.ok(!ungroundedAnswer.includes('Đoạn trích dẫn từ giáo án:'), 'no quote block may be promised');
@@ -179,6 +245,7 @@ async function main(): Promise<void> {
     questionSet: null,
     providerId: index % 2 === 0 ? '' : 'gemini',
     errorCode: index === 3 ? 'AI_TIMEOUT' : '',
+    evidence: null,
     createdAt: '2026-01-01T00:00:00.000Z'
   }));
   const history = buildChatHistoryMessages(historyMessages);
@@ -199,8 +266,9 @@ async function main(): Promise<void> {
     mode: 'answer'
   });
   assert.equal(free.grounded, false);
-  assert.equal(free.evidenceCharacters, 0);
-  assert.equal(free.evidenceFallback, false);
+  assert.equal(free.evidence.characters, 0);
+  assert.equal(free.evidence.fallback, false);
+  assert.equal(free.evidence.totalCharacters, 0);
   assert.equal(free.citations.length, 0);
   assert.equal(free.errorCode, '');
   assert.equal(freeClient.requests.length, 1);
@@ -219,7 +287,50 @@ async function main(): Promise<void> {
   });
   assert.equal(grounded.grounded, true);
   assert.ok(grounded.citations.length >= 2);
-  assert.equal(grounded.evidenceFallback, false);
+  assert.equal(grounded.evidence.fallback, false);
+
+  // --- the policy reaches the model through the client (#186) ----------------
+
+  const cloudLongClient = answeringClient(0, 'gemini');
+  const cloudLong = await runLessonChatTurn({
+    client: cloudLongClient,
+    registry,
+    requestId: 'req-cloud-long',
+    documents: [DOC_LONG],
+    question: QUESTION,
+    history: [],
+    mode: 'answer'
+  });
+  assert.equal(cloudLong.evidence.mode, 'whole');
+  assert.equal(cloudLong.evidence.characters, LONG_TEXT.trim().length, 'the API provider reads the whole lesson');
+  assert.ok(textOf(cloudLongClient.requests[0], 'user').includes('Toàn bộ nội dung giáo án'), 'and the prompt says so');
+
+  const cpuTurn = await runLessonChatTurn({
+    client: answeringClient(0, 'local'),
+    registry,
+    requestId: 'req-cpu-long',
+    documents: [DOC_LONG],
+    question: QUESTION,
+    history: [],
+    mode: 'answer',
+    localOnGpu: false
+  });
+  assert.equal(cpuTurn.evidence.mode, 'retrieval', 'a CPU laptop keeps the cut');
+  assert.ok(cpuTurn.evidence.characters < LONG_TEXT.trim().length);
+  assert.equal(cpuTurn.evidence.trimmed, true);
+
+  const gpuTurn = await runLessonChatTurn({
+    client: answeringClient(0, 'local'),
+    registry,
+    requestId: 'req-gpu-long',
+    documents: [DOC_LONG],
+    question: QUESTION,
+    history: [],
+    mode: 'answer',
+    localOnGpu: true
+  });
+  assert.equal(gpuTurn.evidence.mode, 'whole', 'the same machine on a GPU gets the whole lesson');
+  assert.equal(gpuTurn.evidence.trimmed, false, 'and it fits the local context, so nothing was cut');
 
   // The same turn asked for a question set: still the arena contract, still labelled.
   const freeSet = await runLessonChatTurn({

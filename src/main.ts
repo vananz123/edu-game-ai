@@ -2861,6 +2861,7 @@ function registerIpc() {
             history,
             mode: payload?.mode,
             questionCount: payload?.questionCount,
+            localOnGpu: localRuntimeFacts().localOnGpu,
             onStage: stage => sendLessonProgress(event.sender, requestId, stage)
           });
         }
@@ -2874,7 +2875,8 @@ function registerIpc() {
         citations: turn.citations,
         questionSet: turn.questionSet,
         providerId: turn.providerId,
-        errorCode: turn.errorCode
+        errorCode: turn.errorCode,
+        evidence: turn.evidence
       });
       sendLessonProgress(event.sender, requestId, 'ready');
       if (turn.errorCode) {
@@ -2884,13 +2886,15 @@ function registerIpc() {
           ? `${((turn.questionSet || {}).questions || []).length} câu hỏi`
           : 'trả lời';
         recordAiTask(aiTasks.complete(task.taskId, turn.grounded
-          ? `${summary} · ${turn.evidenceCharacters} ký tự giáo án`
+          ? `${summary} · ${turn.evidence.characters}/${turn.evidence.totalCharacters} ký tự giáo án`
           : `${summary} · không gắn giáo án`));
       }
       aiLogWrite('info', 'chat.turn', {
         requestId,
         intent: turn.intent,
-        evidenceCharacters: turn.evidenceCharacters,
+        evidenceCharacters: turn.evidence.characters,
+        evidenceMode: turn.evidence.mode,
+        evidenceTrimmed: turn.evidence.trimmed,
         citations: turn.citations.length,
         errorCode: turn.errorCode || ''
       });
@@ -3540,7 +3544,8 @@ let lastPromptTokens: number | null = null;
 
 /**
  * Everything the registry needs to judge the local provider, read from the runtime
- * manager once (main only — the renderer passes what it polls).
+ * manager once (main only — the renderer passes what it polls). `localOnGpu` is
+ * what lets the lesson chat send a whole giáo án or fall back to retrieval (#186).
  */
 function localRuntimeFacts() {
   const running = Boolean(localAiManager && localAiManager.getStatus().state === 'READY');
@@ -3551,7 +3556,16 @@ function localRuntimeFacts() {
   } catch {
     localModelReady = false;
   }
-  return { localRunning: running, localModelReady };
+  // Layers actually offloaded, not the backend the teacher asked for: llama.cpp
+  // can start on CPU after a failed Vulkan attempt and the chat must not then
+  // promise a whole giáo án the runtime cannot hold (#186).
+  let localOnGpu = false;
+  try {
+    localOnGpu = running && localAiManager!.getRuntimeFacts().gpuLayers > 0;
+  } catch {
+    localOnGpu = false;
+  }
+  return { localRunning: running, localModelReady, localOnGpu };
 }
 
 /**

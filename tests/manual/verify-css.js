@@ -94,6 +94,12 @@ const expectations = [
   // Bubbles and the composer are read by a teacher standing at a desk, not inspected in
   // devtools, so 13px is the floor here (the #181 typography census found the same).
   ['chat bubble ink is teacher-readable size', /\.lesson-chat-bubble\{[^}]*font-size:13px/],
+  // #186: the "AI đã đọc X / Y ký tự" line sits under every answer, so it is the most
+  // read sentence in the chat. 12px is the floor the #181 census set for helper text,
+  // and a cut read is marked with weight — a new colour here would break the contrast
+  // gates that both themes already pass.
+  ['the reading score keeps the helper-text floor', /\.lesson-chat-reads\{[^}]*font-size:12px/],
+  ['a trimmed read is bolded, not recoloured', /\.lesson-chat-reads\.is-cut\{[^}]*font-weight:700/],
   // #184: "Chọn giáo án" and "Tải giáo án mới" moved from a strip under the title into the
   // composer, so the row that decides what a turn reads is built as a wrapping flex row
   // there. The 96px typing box is the same request — a chat you can read a paragraph in.

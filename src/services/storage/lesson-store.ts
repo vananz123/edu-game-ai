@@ -25,6 +25,7 @@ import type {
   LessonAnalysis,
   LessonChat,
   LessonChatCitation,
+  LessonChatEvidenceMeta,
   LessonChatIntent,
   LessonChatMessage,
   LessonChatRole,
@@ -160,6 +161,10 @@ export const LESSON_STORE_SCHEMA_SQL = `
     question_set TEXT,
     provider_id TEXT NOT NULL DEFAULT '',
     error_code TEXT NOT NULL DEFAULT '',
+    -- #186: JSON {characters,totalCharacters,quotes,mode,trimmed,fallback} — how
+    -- much of the attached lessons the model actually read. Nullable because turns
+    -- stored before this column exist and nothing honest can be said about them.
+    evidence_meta TEXT,
     created_at TEXT NOT NULL,
     UNIQUE (chat_id, position),
     FOREIGN KEY (chat_id) REFERENCES lesson_chats(id) ON DELETE CASCADE
@@ -327,6 +332,8 @@ export interface SaveLessonChatTurnInput {
   questionSet?: ArenaDraft | null;
   providerId?: string;
   errorCode?: string;
+  /** What the model read of the attached lessons; null on a turn that read nothing. */
+  evidence?: LessonChatEvidenceMeta | null;
 }
 
 interface ChatRow {
@@ -351,6 +358,7 @@ interface ChatMessageRow {
   question_set: string | null;
   provider_id: string;
   error_code: string;
+  evidence_meta: string | null;
   created_at: string;
 }
 
@@ -450,6 +458,13 @@ export class LessonStore {
       this.db.exec('ALTER TABLE lesson_analyses ADD COLUMN cache_key TEXT');
     }
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_lesson_analyses_cache ON lesson_analyses(document_id, cache_key)');
+    // #186: the same problem one table later. A chat written before this release
+    // has no `evidence_meta`, and `CREATE TABLE IF NOT EXISTS` will never add it,
+    // so the disclosure would silently be missing from every old conversation.
+    const chatColumns = this.db.prepare('PRAGMA table_info(lesson_chat_messages)').all() as Array<{ name?: string }>;
+    if (!chatColumns.some(column => column && column.name === 'evidence_meta')) {
+      this.db.exec('ALTER TABLE lesson_chat_messages ADD COLUMN evidence_meta TEXT');
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -1033,6 +1048,7 @@ export class LessonStore {
         questionSet: null,
         providerId: '',
         errorCode: '',
+        evidence: null,
         createdAt: now
       });
       insertChatMessage(this.db, {
@@ -1046,6 +1062,7 @@ export class LessonStore {
         questionSet,
         providerId: String(input?.providerId || ''),
         errorCode: String(input?.errorCode || ''),
+        evidence: input?.evidence || null,
         createdAt: now
       });
     });
@@ -1369,8 +1386,56 @@ function chatMessageFromRow(row: ChatMessageRow): LessonChatMessage {
     questionSet: row.question_set ? (parseJsonObject(row.question_set, row.id) as unknown as ArenaDraft) : null,
     providerId: row.provider_id || '',
     errorCode: row.error_code || '',
+    evidence: evidenceMetaFromRow(row.evidence_meta),
     createdAt: row.created_at
   };
+}
+
+/**
+ * Writes the #186 disclosure. The numbers come from `buildChatEvidence`, but they
+ * are still clamped here: the UI renders a percentage out of these two fields, and
+ * a `characters > totalCharacters` slip would print "AI đã đọc 206 / 100 ký tự".
+ */
+function evidenceMetaToJson(value: LessonChatEvidenceMeta | null | undefined): string | null {
+  if (!value || typeof value !== 'object') return null;
+  const characters = nonNegative(value.characters);
+  const totalCharacters = Math.max(characters, nonNegative(value.totalCharacters));
+  return JSON.stringify({
+    characters,
+    totalCharacters,
+    quotes: nonNegative(value.quotes),
+    mode: value.mode === 'whole' ? 'whole' : 'retrieval',
+    trimmed: value.trimmed === true || characters < totalCharacters,
+    fallback: value.fallback === true
+  });
+}
+
+/** Corrupt or absent JSON is "nothing to tell", not a broken conversation. */
+function evidenceMetaFromRow(value: string | null | undefined): LessonChatEvidenceMeta | null {
+  if (!value) return null;
+  let parsed: Record<string, unknown> | null = null;
+  try {
+    const raw = JSON.parse(value);
+    parsed = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : null;
+  } catch {
+    parsed = null;
+  }
+  if (!parsed) return null;
+  const characters = nonNegative(parsed.characters);
+  const totalCharacters = Math.max(characters, nonNegative(parsed.totalCharacters));
+  return {
+    characters,
+    totalCharacters,
+    quotes: nonNegative(parsed.quotes),
+    mode: parsed.mode === 'whole' ? 'whole' : 'retrieval',
+    trimmed: parsed.trimmed === true || characters < totalCharacters,
+    fallback: parsed.fallback === true
+  };
+}
+
+function nonNegative(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : 0;
 }
 
 function insertChatMessage(
@@ -1386,13 +1451,14 @@ function insertChatMessage(
     questionSet: ArenaDraft | null;
     providerId: string;
     errorCode: string;
+    evidence: LessonChatEvidenceMeta | null;
     createdAt: string;
   }
 ): void {
   db.prepare(`
     INSERT INTO lesson_chat_messages
-      (id,chat_id,position,role,text,intent,citations,question_set,provider_id,error_code,created_at)
-    VALUES (@id,@chat_id,@position,@role,@text,@intent,@citations,@question_set,@provider_id,@error_code,@created_at)
+      (id,chat_id,position,role,text,intent,citations,question_set,provider_id,error_code,evidence_meta,created_at)
+    VALUES (@id,@chat_id,@position,@role,@text,@intent,@citations,@question_set,@provider_id,@error_code,@evidence_meta,@created_at)
   `).run({
     id: message.id,
     chat_id: message.chatId,
@@ -1404,6 +1470,7 @@ function insertChatMessage(
     question_set: message.questionSet ? JSON.stringify(message.questionSet) : null,
     provider_id: message.providerId,
     error_code: message.errorCode,
+    evidence_meta: evidenceMetaToJson(message.evidence),
     created_at: message.createdAt
   });
 }

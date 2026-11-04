@@ -429,11 +429,25 @@ async function run(): Promise<void> {
       id TEXT PRIMARY KEY, document_id TEXT NOT NULL, data_json TEXT NOT NULL,
       schema_version INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
     );
+    CREATE TABLE lesson_chats (
+      id TEXT PRIMARY KEY, title TEXT NOT NULL, document_ids TEXT NOT NULL,
+      message_count INTEGER NOT NULL DEFAULT 0, last_intent TEXT NOT NULL DEFAULT '',
+      schema_version INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+    );
+    CREATE TABLE lesson_chat_messages (
+      id TEXT PRIMARY KEY, chat_id TEXT NOT NULL, position INTEGER NOT NULL, role TEXT NOT NULL,
+      text TEXT NOT NULL, intent TEXT NOT NULL, citations TEXT NOT NULL, question_set TEXT,
+      provider_id TEXT NOT NULL DEFAULT '', error_code TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL
+    );
   `);
   const legacyStore = new LessonStore({ db: legacyDb as unknown as LessonStoreDatabase, lessonsDir });
   legacyStore.ensureSchema();
   const analysisColumns = (legacyDb.prepare('PRAGMA table_info(lesson_analyses)').all() as Array<{ name: string }>).map(column => column.name);
   assert.ok(analysisColumns.includes('cache_key'), 'O5 migration adds lesson_analyses.cache_key');
+  // #186: a chat written before the disclosure existed gains the column, so old
+  // transcripts still load instead of throwing on a missing field.
+  const chatMessageColumns = (legacyDb.prepare('PRAGMA table_info(lesson_chat_messages)').all() as Array<{ name: string }>).map(column => column.name);
+  assert.ok(chatMessageColumns.includes('evidence_meta'), '#186 migration adds lesson_chat_messages.evidence_meta');
   legacyStore.ensureSchema(); // idempotent
   legacyDb.close();
 
@@ -571,7 +585,8 @@ async function run(): Promise<void> {
     citations: [{ documentId: chatDocA.id, documentName: 'chat-a.txt', quote: 'Quang hợp cần ánh sáng.' }, { documentId: 'ghost', documentName: 'ghost.txt', quote: '  ' }],
     questionSet: null,
     providerId: 'openai',
-    errorCode: ''
+    errorCode: '',
+    evidence: { characters: 2145, totalCharacters: 2145, quotes: 1, mode: 'whole', trimmed: false, fallback: false }
   });
   assert.equal(firstTurn.id.startsWith('chat_'), true);
   assert.equal(firstTurn.title, 'Quang hợp cần gì?', 'the first question names the conversation');
@@ -588,6 +603,14 @@ async function run(): Promise<void> {
     [{ documentId: chatDocA.id, documentName: 'chat-a.txt', quote: 'Quang hợp cần ánh sáng.' }],
     'a citation without a quote is dropped, not stored half-built'
   );
+
+  // #186: "AI đã đọc bao nhiêu của giáo án" is part of the stored turn, so the
+  // disclosure survives a restart instead of only living in the AI task log.
+  assert.deepEqual(
+    firstTurn.messages[1].evidence,
+    { characters: 2145, totalCharacters: 2145, quotes: 1, mode: 'whole', trimmed: false, fallback: false }
+  );
+  assert.equal(firstTurn.messages[0].evidence, null, 'a user turn read nothing, so it says nothing');
 
   const chatId = firstTurn.id;
   const secondTurn = store.appendChatTurn({
@@ -632,11 +655,34 @@ async function run(): Promise<void> {
   assert.equal(failedTurn.messageCount, 6);
   assert.equal(failedTurn.messages[5].errorCode, 'AI_TIMEOUT');
   assert.equal(failedTurn.messages[5].questionSet, null);
+  assert.equal(failedTurn.messages[5].evidence, null, 'a turn that never reported its evidence says nothing, not "100 %"');
 
   // Validation: a turn is only worth storing when both halves of the exchange are there.
   expectStoreError('STORE_INVALID_CHAT', () => store.appendChatTurn({ chatId, documentIds: [chatDocA.id], question: '', answer: 'x', intent: 'answer', citations: [], questionSet: null, providerId: '', errorCode: '' }));
   expectStoreError('STORE_INVALID_CHAT', () => store.appendChatTurn({ chatId, documentIds: [chatDocA.id], question: '?', answer: '', intent: 'answer', citations: [], questionSet: null, providerId: '', errorCode: '' }));
   assert.equal((db.prepare('SELECT COUNT(*) AS n FROM lesson_chat_messages').get() as { n: number }).n, 6, 'a rejected turn writes nothing');
+
+  // Numbers come from the service, but the UI renders a percentage from them, so a
+  // slip that would print "AI đã đọc 5.000 / 100 ký tự" is clamped on the way in.
+  const sloppyChat = store.appendChatTurn({
+    documentIds: [chatDocA.id],
+    question: 'Còn ánh sáng thì sao?',
+    answer: 'Ánh sáng cần cho quang hợp.',
+    intent: 'answer',
+    citations: [],
+    questionSet: null,
+    providerId: 'local',
+    errorCode: '',
+    evidence: { characters: 5000, totalCharacters: 100, quotes: -3, mode: 'everything', trimmed: false, fallback: 'yes' } as never
+  });
+  assert.deepEqual(sloppyChat.messages[1].evidence, {
+    characters: 5000,
+    totalCharacters: 5000,
+    quotes: 0,
+    mode: 'retrieval',
+    trimmed: false,
+    fallback: false
+  }, 'a bad percentage cannot be stored, and an unknown mode is not claimed as whole');
 
   // #183: a conversation with NO lesson attached is storable — the teacher may ask
   // the assistant directly. The empty list survives the JSON round-trip as `[]`.
@@ -677,12 +723,13 @@ async function run(): Promise<void> {
 
   // Listing is newest-touched first and carries no message text.
   const chatList = store.listLessonChats();
-  assert.deepEqual(chatList.map(chat => chat.id).sort(), [chatId, ungroundedChat.id, emptySetTurn.id].sort());
+  assert.deepEqual(chatList.map(chat => chat.id).sort(), [chatId, sloppyChat.id, ungroundedChat.id, emptySetTurn.id].sort());
   assert.equal(chatList.find(chat => chat.id === chatId)?.messageCount, 6);
   assert.equal(chatList.find(chat => chat.id === chatId)?.lastIntent, 'answer');
   assert.equal((chatList.find(chat => chat.id === chatId) as { messages?: unknown }).messages, undefined, 'the list is navigation, not the transcript');
   db.prepare('UPDATE lesson_chats SET updated_at = ? WHERE id = ?').run('2000-01-01T00:00:00.000Z', emptySetTurn.id);
   db.prepare('UPDATE lesson_chats SET updated_at = ? WHERE id = ?').run('2000-01-01T00:00:00.000Z', ungroundedChat.id);
+  db.prepare('UPDATE lesson_chats SET updated_at = ? WHERE id = ?').run('2000-01-01T00:00:00.000Z', sloppyChat.id);
   assert.equal(store.listLessonChats()[0].id, chatId, 'ordering follows the last touch');
 
   // Deleting the lesson a chat read must not delete the teacher's conversation.
@@ -697,6 +744,7 @@ async function run(): Promise<void> {
   // #183: nothing links a lesson-free chat to a document, so the same delete path has to work for it.
   assert.equal(store.deleteLessonChat(ungroundedChat.id), true, 'a no-lesson chat deletes like any other');
   assert.equal((db.prepare('SELECT COUNT(*) AS n FROM lesson_chat_messages WHERE chat_id = ?').get(ungroundedChat.id) as { n: number }).n, 0);
+  assert.equal(store.deleteLessonChat(sloppyChat.id), true, 'the clamped-turn chat deletes like any other');
   const chatBatch = store.deleteLessonChats([emptySetTurn.id, 'chat-missing', emptySetTurn.id]);
   assert.deepEqual(chatBatch, { deleted: 1, missing: 1, failed: 0 });
   assert.deepEqual(store.deleteLessonChats([]), { deleted: 0, missing: 0, failed: 0 });

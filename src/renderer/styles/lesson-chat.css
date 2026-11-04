@@ -186,6 +186,21 @@
   color: var(--muted);
 }
 
+/* #186: "AI đã đọc bao nhiêu của giáo án" is stated under every answer. Same ink
+   as the other notes — a disclosure must not look like an error. */
+.lesson-chat-reads {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.lesson-chat-reads.is-cut {
+  font-weight: 700;
+}
+
 .lesson-chat-evidence {
   margin-top: 8px;
   font-size: 12px;

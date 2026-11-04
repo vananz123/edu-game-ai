@@ -127,6 +127,20 @@ export class AIManager {
     return `http://${LOOPBACK_HOST}:${this.port}`;
   }
 
+  /**
+   * Hardware the running process actually got. `getStatus()` deliberately stays
+   * small because the renderer polls it over IPC, but the lesson chat has to know
+   * whether the layers really landed on the GPU before it sends a whole giáo án:
+   * a Vulkan request that fell back to CPU is a CPU machine (#186).
+   */
+  getRuntimeFacts(): { backend: string; gpuLayers: number; contextSize: number } {
+    return {
+      backend: this.options.backend || (this.options.gpuLayers > 0 ? 'vulkan' : 'cpu'),
+      gpuLayers: this.options.gpuLayers,
+      contextSize: this.options.contextSize
+    };
+  }
+
   start(): Promise<AiRuntimeStatus> {
     if (this.state === 'READY') return Promise.resolve(this.getStatus());
     if (this.startPromise) return this.startPromise;

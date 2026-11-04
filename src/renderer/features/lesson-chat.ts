@@ -250,12 +250,33 @@ function lessonChatCitationsHtml(citations) {
     .join('')}</ol></details>`;
 }
 
+/**
+ * #186: the teacher must never have to guess whether the AI actually read the
+ * lesson. One line under every assistant turn that knows what it read, with the
+ * numbers kept exactly as stored so a complaint can be checked against the log.
+ * Turns saved before this column exists show nothing — inventing "100 %" for a
+ * turn whose budget is unknown would be a lie.
+ */
+function lessonChatReadsHtml(message) {
+  const meta = message && message.evidence;
+  if (!meta || !(Number(meta.totalCharacters) > 0)) return '';
+  const read = Number(meta.characters) || 0;
+  const total = Number(meta.totalCharacters) || 0;
+  const percent = Math.min(100, Math.round((read / total) * 100));
+  const vi = value => Number(value || 0).toLocaleString('vi-VN');
+  const scope = meta.mode === 'whole'
+    ? (meta.trimmed ? 'toàn bộ giáo án, cắt bớt vì quá dài' : 'toàn bộ giáo án, không cắt bớt')
+    : `${vi(meta.quotes)} đoạn liên quan${meta.trimmed ? ', có cắt bớt' : ''}`;
+  const cut = meta.fallback ? ' · không tìm thấy đoạn khớp câu hỏi nên lấy phần đầu bài' : '';
+  return `<div class="lesson-chat-reads${meta.trimmed ? ' is-cut' : ''}" data-lesson-chat-reads="${percent}" data-lesson-chat-trimmed="${meta.trimmed ? '1' : '0'}"><span data-icon="book-open" data-icon-size="12"></span> AI đã đọc ${vi(read)} / ${vi(total)} ký tự (${percent} %) · ${scope}${cut}</div>`;
+}
+
 function lessonChatMessageHtml(message) {
   const isUser = message.role === 'user';
   return `<div class="lesson-chat-row${isUser ? ' is-user' : ''}" data-lesson-chat-message="${escapeHtml(message.id || '')}">
     <div class="lesson-chat-bubble${message.errorCode ? ' is-error' : ''}"${message.errorCode ? ' data-lesson-chat-error="1"' : ''}>${escapeHtml(message.text || '')}${
       isUser ? ''
-        : `${lessonChatCitationsHtml(message.citations)}${lessonChatQuestionSetHtml(message.questionSet)}`
+        : `${lessonChatReadsHtml(message)}${lessonChatCitationsHtml(message.citations)}${lessonChatQuestionSetHtml(message.questionSet)}`
     }</div>
   </div>`;
 }

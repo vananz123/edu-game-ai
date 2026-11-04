@@ -401,6 +401,26 @@ export interface LessonChatCitation {
   quote: string;
 }
 
+/**
+ * How much of the attached lessons the model actually read (#186). The teacher is
+ * always shown this under the answer, because a reply that quietly used 200 of
+ * 2.145 characters reads as nonsense and looks like a broken assistant.
+ */
+export interface LessonChatEvidenceMeta {
+  /** Characters that went into the prompt. */
+  characters: number;
+  /** Characters in everything attached — the denominator the percentage is taken from. */
+  totalCharacters: number;
+  /** Passages sent; one per lesson when the whole document went in. */
+  quotes: number;
+  /** `'whole'` = the complete lessons; `'retrieval'` = only the matching passages. */
+  mode: 'whole' | 'retrieval';
+  /** True when the app sent less than what the teacher attached. */
+  trimmed: boolean;
+  /** True when no passage matched the question and openings were sent instead (#182). */
+  fallback: boolean;
+}
+
 export interface LessonChatMessage {
   id: string;
   chatId: string;
@@ -414,6 +434,8 @@ export interface LessonChatMessage {
   providerId: string;
   /** `LessonWorkflowError` code when the model failed; empty when it did not. */
   errorCode: string;
+  /** Null for turns stored before #186 — nothing honest can be said about those. */
+  evidence: LessonChatEvidenceMeta | null;
   createdAt: string;
 }
 
@@ -467,10 +489,8 @@ export interface LessonChatTurnResponse {
   providerId: string;
   /** Non-empty when the model failed; `answer` is then the honest fallback text. */
   errorCode: string;
-  /** Characters of lesson text that went into the prompt (the "#180 tell-what-was-read" rule). */
-  evidenceCharacters: number;
-  /** True when nothing matched and the opening of each lesson was sent instead. */
-  evidenceFallback: boolean;
+  /** What was read of the attached lessons, shown under the answer (#186). */
+  evidence: LessonChatEvidenceMeta;
   /** False when the teacher attached no lesson at all (#183). */
   grounded: boolean;
   /** Attached lessons that contributed no quote at all. */
