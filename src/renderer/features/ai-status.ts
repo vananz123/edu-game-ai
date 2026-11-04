@@ -5,6 +5,9 @@
   // preference survives, then only the single IDLE_KEY is used.
   const LEGACY_IDLE_KEYS = ['ai-status-idle-visible', 'aiStatusIdleVisible', 'ai-status-bar-idle-visible', 'aiStatusBarIdleVisible'];
   const POLL_MS = 2000;
+  // Idle cadence: two IPC round trips per second was the whole cost of a bar that
+  // has nothing to show. `POLL_MS` is kept whenever something is actually moving.
+  const POLL_IDLE_MS = 10000;
   // AiTaskManager states that still need the cancel button.
   const ACTIVE_TASK_STATES = ['queued', 'running'];
   // Stage ids sent by main (`aiTasks.progress`) → text a teacher understands.
@@ -26,6 +29,7 @@
   }
 
   let timer = null;
+  let timerMs = 0;
   let initialized = false;
   let wiredBar = null;
   let wiredNodes = [];
@@ -67,6 +71,21 @@
     try { if (typeof toast === 'function') toast(message, duration); } catch (e) {}
   }
   function isTaskActive() { return Boolean(activeTask); }
+
+  function targetPollMs() {
+    const busy = isTaskActive() || runtime.state === 'STARTING' || menuIsOpen();
+    return busy ? POLL_MS : POLL_IDLE_MS;
+  }
+
+  /** Hidden window: no poll at all. Otherwise: fast only while something moves. */
+  function reschedulePoll() {
+    const next = document.visibilityState === 'hidden' ? 0 : targetPollMs();
+    if (next === timerMs) return;
+    if (timer) clearInterval(timer);
+    timer = null;
+    timerMs = next;
+    if (next) timer = setInterval(function () { refresh().catch(function () {}); }, next);
+  }
 
   async function refreshRuntime(forceModels) {
     try {
@@ -191,10 +210,16 @@
   }
 
   async function refresh() {
-    if (document.visibilityState === 'hidden') return;
+    // Re-derive the cadence on every pass, from every caller: a task started from
+    // the wizard, a menu opened, a window unhidden — each of them knows first here.
+    if (document.visibilityState === 'hidden') {
+      reschedulePoll();
+      return;
+    }
     await refreshRuntime(false);
     await refreshTasks();
     render();
+    reschedulePoll();
   }
 
   function startRuntime() {
@@ -313,6 +338,8 @@
     const dropdown = $('aiStatusDropdown');
     if (dropdown) dropdown.classList.remove('hidden');
     syncAria();
+    // The menu shows live state, so it must not wait for the idle tick to speed up.
+    reschedulePoll();
   }
   function closeDropdown() {
     const dropdown = $('aiStatusDropdown');
@@ -423,10 +450,10 @@
     wire();
     wiredBar = currentBar();
     render();
-    if (timer) clearInterval(timer);
-    timer = setInterval(function () { refresh().catch(function () {}); }, POLL_MS);
+    reschedulePoll();
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState === 'visible') refresh().catch(function () {});
+      else reschedulePoll();
     });
     refresh().catch(function () {});
   }
