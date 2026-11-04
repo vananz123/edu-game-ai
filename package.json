@@ -10,7 +10,7 @@
   "license": "MIT",
   "scripts": {
     "clean": "node -e \"try{require('node:fs').rmSync('dist',{recursive:true,force:true})}catch(e){console.warn('clean warning:',e.message)}\"",
-    "build": "npm run clean && node scripts/build-icon-data.js --bootstrap && tsc -p tsconfig.json && npm run build:icons && tsc -p tsconfig.json && npm run build:icons:check && copyfiles -u 1 \"src/index.html\" \"src/renderer/styles/*.css\" \"src/presentation/presentation.html\" \"src/presentation/presentation-preload.js\" \"src/lan/mobile/*\" \"src/renderer/assets/*\" dist/src && npm run build:css && npm run build:three",
+    "build": "npm run clean && node scripts/build-icon-data.js --bootstrap && tsc -p tsconfig.json && npm run build:icons && tsc -p tsconfig.json && npm run build:icons:check && copyfiles -u 1 \"src/index.html\" \"src/renderer/styles/*.css\" \"src/presentation/presentation.html\" \"src/presentation/presentation-preload.js\" \"src/about/about.html\" \"src/about/about-preload.js\" \"src/lan/mobile/*\" \"src/renderer/assets/*\" dist/src && npm run build:css && npm run build:three",
     "build:css": "tailwindcss -i src/renderer/styles/app.css -o dist/src/renderer/styles/app.css --minify",
     "build:three": "node scripts/build-three.js",
     "start": "npm run build && electron .",
@@ -29,6 +29,7 @@
     "check:dark-theme-ui": "node tests/ui/ui-dark-theme-check.js",
     "check:typography-ui": "node tests/ui/ui-typography-readability-check.js",
     "check:lesson-chat-ui": "node tests/ui/ui-lesson-chat-check.js",
+    "check:about-ui": "node tests/ui/ui-about-check.js",
     "check:chrome-icons-ui": "node tests/ui/ui-chrome-icons-check.js",
     "check:project-selection-ui": "node tests/ui/ui-project-selection-check.js",
     "test:ui": "node tests/ui/ui-setup-fullscreen-check.js",
@@ -44,6 +45,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.57.0",
     "better-sqlite3": "^11.7.0",
+    "electron-updater": "^6.8.11",
     "express": "^5.1.0",
     "express-rate-limit": "^8.1.0",
     "jszip": "^3.10.1",
@@ -73,6 +75,14 @@
     "appId": "vn.edugame.studio",
     "productName": "EduGame Studio",
     "asar": true,
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "vananz123",
+        "repo": "edu-game-ai",
+        "releaseType": "release"
+      }
+    ],
     "files": [
       "dist/**/*",
       "package.json",

@@ -31,6 +31,7 @@ const lessonChatUi = {
   error: '',
   showPicker: false,
   showHistory: false,
+  chatsError: '',
   pendingQuestion: '',
   requestId: '',
   scrollTop: null,
@@ -213,9 +214,14 @@ function lessonChatHistoryHtml() {
       <button type="button" class="lesson-chat-mode" data-action="lesson-chat-delete" data-id="${escapeHtml(chat.id)}" aria-label="Xoá cuộc trò chuyện ${escapeHtml(chat.title || '')}"><span data-icon="trash" data-icon-size="12"></span></button>
     </div>`
   ).join('');
+  // #187: an unreadable list is NOT "no conversations". Silently emptying it made a
+  // store fault look like the delete had destroyed everything the teacher had.
+  const empty = lessonChatUi.chatsError
+    ? `Không đọc được danh sách cuộc trò chuyện: ${escapeHtml(lessonChatUi.chatsError)}`
+    : 'Chưa có cuộc trò chuyện nào được lưu.';
   return `<div class="lesson-chat-pop" data-lesson-chat-history>
     <h4>Cuộc trò chuyện trước</h4>
-    ${rows || '<div class="lesson-chat-empty-sources">Chưa có cuộc trò chuyện nào được lưu.</div>'}
+    ${rows || `<div class="lesson-chat-empty-sources">${empty}</div>`}
   </div>`;
 }
 
@@ -317,6 +323,11 @@ function lessonChatComposerHtml() {
   const countField = lessonChatUi.mode === 'question_set'
     ? `<label class="lesson-chat-count">Số câu hỏi<input type="number" id="lessonChatCount" min="1" max="30" step="1" value="${clampQuestionCountUi(lessonChatUi.questionCount)}"${lessonChatUi.sending ? ' disabled' : ''}></label>`
     : '';
+  // #187: a turn in flight never locks the box itself. On a CPU-only laptop an answer
+  // takes minutes, and a textarea that stops taking keystrokes for no visible reason
+  // is exactly what "xoá xong không nhập chat được nữa" felt like. The teacher reads
+  // the answer forming above and types the next question; Enter and the footer stay
+  // locked until it lands (`lessonChatCanSend`).
   return `<div class="lesson-chat-composer">
     ${lessonChatAttachHtml()}
     ${lessonChatPickerHtml()}
@@ -325,7 +336,7 @@ function lessonChatComposerHtml() {
         `<button type="button" class="lesson-chat-mode${lessonChatUi.mode === mode.id ? ' is-active' : ''}" data-action="lesson-chat-mode" data-id="${mode.id}" aria-pressed="${lessonChatUi.mode === mode.id ? 'true' : 'false'}"><span data-icon="${mode.icon}" data-icon-size="12"></span> ${mode.label}</button>`
       ).join('')}
     </div>
-    <textarea id="lessonChatInput" class="lesson-chat-input" placeholder="${lessonChatUi.mode === 'question_set' ? 'Ví dụ: tạo 8 câu hỏi trắc nghiệm về quang hợp' : 'Ví dụ: Mục tiêu của bài này là gì?'}" ${lessonChatUi.sending ? 'disabled' : ''}>${escapeHtml(lessonChatUi.draft)}</textarea>
+    <textarea id="lessonChatInput" class="lesson-chat-input" placeholder="${lessonChatUi.mode === 'question_set' ? 'Ví dụ: tạo 8 câu hỏi trắc nghiệm về quang hợp' : 'Ví dụ: Mục tiêu của bài này là gì?'}">${escapeHtml(lessonChatUi.draft)}</textarea>
     <div class="lesson-chat-foot">
       ${options.length > 1
         ? `<select id="lessonChatProvider" class="lesson-chat-provider" aria-label="Nhà cung cấp AI">${options.map(provider =>
@@ -508,8 +519,15 @@ async function lessonChatHandle(action, element) {
 async function lessonChatRefreshChats() {
   try {
     lessonChatUi.chats = await window.eduGame.listLessonChats() || [];
+    lessonChatUi.chatsError = '';
   } catch (error) {
     lessonChatUi.chats = [];
+    // Same two steps `lessonChatSend` uses: the teacher does not need the IPC wrapper
+    // or the error class name in front of the reason.
+    lessonChatUi.chatsError = String((error && error.message) || error || '')
+      .replace(/^Error invoking remote method '[^']*':\s*/, '')
+      .replace(/^[A-Za-z]*Error:\s*/, '')
+      .trim() || 'lỗi không xác định';
   }
 }
 
@@ -537,7 +555,11 @@ async function lessonChatOpen(chatId) {
 
 async function lessonChatDelete(chatId) {
   if (!chatId) return;
-  if (!confirm('Xoá cuộc trò chuyện này? Các giáo án và trò chơi đã lưu không bị xoá theo.')) return;
+  const confirmed = confirm('Xoá cuộc trò chuyện này? Các giáo án và trò chơi đã lưu không bị xoá theo.');
+  if (!confirmed) {
+    closeHistoryAndRefocusComposer();
+    return;
+  }
   try {
     const result = await window.eduGame.deleteLessonChats([chatId]);
     if (lessonChatUi.chatId === chatId) {
@@ -545,11 +567,25 @@ async function lessonChatDelete(chatId) {
       lessonChatUi.chat = null;
     }
     await lessonChatRefreshChats();
-    render();
+    closeHistoryAndRefocusComposer();
     toast(result && result.deleted ? 'Đã xoá cuộc trò chuyện.' : 'Không tìm thấy cuộc trò chuyện để xoá.');
   } catch (error) {
+    closeHistoryAndRefocusComposer();
     toast(`Không xoá được cuộc trò chuyện: ${(error && error.message) || 'lỗi không xác định'}`);
   }
+}
+
+/**
+ * #187: the delete redraws the composer, and the element that held the caret — the
+ * trash button inside the history popover — is gone with the old markup. Left alone,
+ * the page comes back with `<body>` focused and the popover still hanging over the
+ * frame, which reads as "the chat box stopped taking input". "Mới" and a finished
+ * turn already hand the caret back; the delete must do the same, in every branch.
+ */
+function closeHistoryAndRefocusComposer() {
+  lessonChatUi.showHistory = false;
+  lessonChatUi.focusComposer = true;
+  render();
 }
 
 /**
@@ -609,7 +645,9 @@ async function lessonChatSend() {
     });
     lessonChatUi.chat = turn && turn.chat ? turn.chat : lessonChatUi.chat;
     lessonChatUi.chatId = (lessonChatUi.chat || {}).id || lessonChatUi.chatId;
-    lessonChatUi.draft = '';
+    // Only the question that was actually sent leaves the box: the box stays open
+    // during a turn (#187), so anything else in it is the teacher's next question.
+    if (String(lessonChatUi.draft || '').trim() === question) lessonChatUi.draft = '';
     lessonChatUi.lastTurn = turn || null;
     if (turn && turn.intent === 'question_set') lessonChatUi.mode = 'question_set';
     await lessonChatRefreshChats();

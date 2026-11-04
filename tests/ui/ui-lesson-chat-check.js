@@ -75,6 +75,13 @@ const UNGROUNDED_ANSWER_TEXT = 'Gợi ý chung: giáo viên nêu 2 câu hỏi nh
 // #184: a card only grows a "Xem chi tiết" once it has an analysis, so the card check
 // stores one. Synthetic, and it goes with the document (`ON DELETE CASCADE`).
 const ANALYSIS_ID = 'ui-lesson-chat-184-analysis';
+// #187: the teacher reported that after deleting a conversation the box would not take
+// a new question. The check types this sentence right after the delete.
+const AFTER_DELETE_QUESTION = 'Sau khi xoá cuộc trò chuyện, câu hỏi này có gửi được không?';
+// #187 also proves the box never locks while an answer is being written: a question is
+// typed mid-turn and must still be there when the answer lands.
+const FLIGHT_QUESTION = 'Khi AI đang viết trả lời thì khung gõ còn dùng được không?';
+const QUEUED_TEXT = 'Câu hỏi giáo viên gõ trong lúc chờ câu trả lời trước.';
 
 const QUESTION_TEMPLATES = [
   {
@@ -753,6 +760,124 @@ const CARD_CLOSED_AGAIN = `(async () => {
   };
 })()`;
 
+const DELETE_AND_RETYPE = `(async () => {
+  const openId = lessonChatUi.chatId;
+  navigate('lesson-plans');
+  await new Promise(r => setTimeout(r, 700));
+  // render() swallows a throwing page wiring (core/render.ts) and only logs it once
+  // per page, so the harness has to look at the log, not at the button alone.
+  window.__lastPageWireError = '';
+  window.__errs = [];
+  const realError = console.error;
+  console.error = (...args) => { window.__errs.push(args.map(String).join(' ')); realError(...args); };
+  document.querySelector('[data-action="lesson-chat-history"]').click();
+  await new Promise(r => setTimeout(r, 400));
+  const rowsBefore = document.querySelectorAll('[data-action="lesson-chat-open"]').length;
+  const trash = [...document.querySelectorAll('[data-action="lesson-chat-delete"]')]
+    .find(button => button.dataset.id === openId);
+  const realConfirm = window.confirm;
+  window.confirm = () => true;
+  let clickThrew = '';
+  try {
+    if (trash) trash.click();
+    else clickThrew = 'no delete button for the open conversation';
+  } catch (error) {
+    clickThrew = String((error && error.message) || error);
+  }
+  await new Promise(r => setTimeout(r, 1200));
+  window.confirm = realConfirm;
+  console.error = realError;
+  const errs = window.__errs.slice(0, 4);
+  const stored = openId ? await window.eduGame.getLessonChat(openId) : null;
+  const input = document.getElementById('lessonChatInput');
+  // Where the page itself left the caret, before this check touches anything: the
+  // delete redraws the composer and the trash button that held focus is gone with it.
+  const caretAfterDelete = document.activeElement ? (document.activeElement.id || document.activeElement.tagName) : '';
+  const popoverAfterDelete = Boolean(document.querySelector('[data-lesson-chat-history]'));
+  let typed = '';
+  let sendDisabled = null;
+  if (input) {
+    input.focus();
+    input.value = __AFTER_DELETE_QUESTION__;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise(r => setTimeout(r, 250));
+    typed = String(lessonChatUi.draft || '');
+    const send = document.querySelector('[data-lesson-chat-send]');
+    sendDisabled = send ? send.disabled === true : null;
+  }
+  const frame = document.querySelector('[data-lesson-chat-frame]');
+  const frameRect = frame ? frame.getBoundingClientRect() : null;
+  const inputRect = input ? input.getBoundingClientRect() : null;
+  return {
+    openId,
+    rowsBefore,
+    clickThrew,
+    errs,
+    deletedOnDisk: !stored,
+    chatIdAfter: lessonChatUi.chatId,
+    chatsLeft: (lessonChatUi.chats || []).map(chat => chat.id),
+    pageBroken: /Không hiển thị được trang này/.test((document.getElementById('pageContent') || {}).textContent || ''),
+    hasComposer: Boolean(document.querySelector('.lesson-chat-composer')),
+    hasInput: Boolean(input),
+    inputDisabled: input ? input.disabled === true : null,
+    typed,
+    sendDisabled,
+    historyStillOpen: Boolean(document.querySelector('[data-lesson-chat-history]')),
+    caretAfterDelete,
+    popoverAfterDelete,
+    wireErrorPage: window.__lastPageWireError || '',
+    headTitle: ((document.querySelector('.lesson-chat-title strong') || {}).textContent || '').trim(),
+    chatError: lessonChatUi.error || '',
+    focused: document.activeElement ? (document.activeElement.id || document.activeElement.tagName) : '',
+    // The composer must still be where the teacher can see and reach it.
+    composerInsideFrame: Boolean(inputRect && frameRect && inputRect.bottom <= frameRect.bottom + 1),
+    frameBottom: frameRect ? Math.round(frameRect.bottom) : -1,
+    inputTop: inputRect ? Math.round(inputRect.top) : -1,
+    viewportH: window.innerHeight
+  };
+})()`;
+
+// #187: an answer can take minutes on a CPU-only laptop, and the teacher who types
+// during that time must find the question still there when the answer lands. The
+// sample is taken synchronously after the click, while the turn is still in flight.
+const INFLIGHT = `(async () => {
+  navigate('lesson-plans');
+  await new Promise(r => setTimeout(r, 500));
+  const box = document.getElementById('lessonChatInput');
+  box.focus();
+  box.value = __FLIGHT_QUESTION__;
+  box.dispatchEvent(new Event('input', { bubbles: true }));
+  await new Promise(r => setTimeout(r, 150));
+  document.querySelector('[data-lesson-chat-send]').click();
+  const during = (() => {
+    const b = document.getElementById('lessonChatInput');
+    return {
+      sending: lessonChatUi.sending === true,
+      disabled: b.disabled === true,
+      readOnly: b.readOnly === true,
+      stopButton: Boolean(document.querySelector('[data-action="lesson-chat-stop"]')),
+      sendButton: Boolean(document.querySelector('[data-lesson-chat-send]'))
+    };
+  })();
+  // The next question, typed while the answer is still coming.
+  box.value = __QUEUED_TEXT__;
+  box.dispatchEvent(new Event('input', { bubbles: true }));
+  const typedDuring = String(lessonChatUi.draft || '');
+  const deadline = Date.now() + 60000;
+  while (Date.now() < deadline && lessonChatUi.sending) await new Promise(r => setTimeout(r, 150));
+  await new Promise(r => setTimeout(r, 500));
+  const after = document.getElementById('lessonChatInput');
+  return {
+    during,
+    typedDuring,
+    draftAfter: String(lessonChatUi.draft || ''),
+    inputValueAfter: after ? String(after.value) : '',
+    stillSending: lessonChatUi.sending === true,
+    bubbles: document.querySelectorAll('.lesson-chat-bubble').length,
+    error: lessonChatUi.error || ''
+  };
+})()`;
+
 const CLEANUP = `(async () => {
   const removed = { chats: 0, documents: 0, games: 0, projects: 0 };
   const chatIds = __CHAT_IDS__.filter(Boolean);
@@ -1032,7 +1157,61 @@ function fill(script, values) {
         && cardClosed.labelShown === true && cardClosed.textLen > 20 && cardClosed.spill.length === 0,
       `${cardClosed.height}px (was ${card.closedHeight}) · label=${cardClosed.labelShown} content=${cardClosed.contentHidden} · ${cardClosed.spill.join(' | ') || 'clean'}`);
 
-    // 11. Leave the profile as it was found.
+    // 11. #187 — deleting the conversation that is open must not cost the teacher the
+    // composer. Reported as "xoá 1 cuộc trò chuyện thì không nhập chat được nữa", so the
+    // check types a new question right after the delete and then really sends it.
+    const del = await cdp.evaluate(fill(DELETE_AND_RETYPE, { ...values, AFTER_DELETE_QUESTION: JSON.stringify(AFTER_DELETE_QUESTION) }));
+    check('#187 the page still draws the chat frame after a delete',
+      del.pageBroken === false && del.hasComposer === true && del.hasInput === true,
+      `composer=${del.hasComposer} input=${del.hasInput} disabled=${del.inputDisabled} ${del.clickThrew}`);
+    check('#187 the delete reached the store and the list',
+      del.deletedOnDisk === true && del.rowsBefore >= 2 && !del.chatsLeft.includes(del.openId),
+      `${del.rowsBefore} rows · gone=${del.deletedOnDisk} · left ${del.chatsLeft.length}`);
+    check('#187 the open conversation is released, not left dangling',
+      del.chatIdAfter === '' && /Cuộc trò chuyện mới/.test(del.headTitle), `${del.chatIdAfter || '(empty)'} · ${del.headTitle}`);
+    check('#187 no swallowed wiring error behind the dead box', del.errs.length === 0 && del.wireErrorPage === '', `${del.errs.join(' | ') || 'clean'} page=${del.wireErrorPage}`);
+    check('#187 typing after the delete reaches the draft', del.typed === AFTER_DELETE_QUESTION, `${del.typed.length}/${AFTER_DELETE_QUESTION.length} ký tự`);
+    check('#187 the send button wakes up again after a delete', del.sendDisabled === false, `disabled=${del.sendDisabled} error=${del.chatError.slice(0, 60)}`);
+    // The two things a teacher actually feels: the caret is where they were typing, and
+    // the list they clicked in has stepped back out of the way.
+    check('#187 the delete hands the caret back to the box', del.caretAfterDelete === 'lessonChatInput', `active=${del.caretAfterDelete}`);
+    check('#187 the history popover steps back after the delete', del.popoverAfterDelete === false, `open=${del.popoverAfterDelete}`);
+    check('#187 the composer stays inside the frame after a delete',
+      del.composerInsideFrame === true && del.frameBottom <= del.viewportH + 2,
+      `input@${del.inputTop} frame bottom=${del.frameBottom} viewport=${del.viewportH}`);
+    // The other conversation is still there, and the deleted one is gone from the list.
+    check('#187 the other conversations survive', del.chatsLeft.length === del.rowsBefore - 1, `${del.rowsBefore} -> ${del.chatsLeft.length}`);
+
+    const requestsBeforeReopen = mockRequests.length;
+    const again = await cdp.evaluate(fill(sendTurn('answer', AFTER_DELETE_QUESTION, '[data-lesson-chat-reads]'), values));
+    check('#187 a question typed after the delete really reaches the endpoint',
+      mockRequests.length === requestsBeforeReopen + 1 && again.error === '',
+      `${requestsBeforeReopen} -> ${mockRequests.length} ${again.error.slice(0, 60)}`);
+    check('#187 the answer lands in a brand-new conversation',
+      Boolean(again.chatId) && again.chatId !== del.openId && /giáo án/.test(again.lastBubble), `${again.chatId.slice(0, 12)} · ${again.lastBubble.slice(0, 40)}`);
+    // The deleted id is gone, the new one has to be cleaned up.
+    const dropped = chatIds.indexOf(del.openId);
+    if (dropped >= 0) chatIds.splice(dropped, 1);
+    chatIds.push(again.chatId);
+
+    // 11b. #187: a turn in flight must not lock the box, and what the teacher types
+    // while the AI is writing must survive the answer landing in the same chat.
+    const flight = await cdp.evaluate(fill(INFLIGHT, {
+      ...values,
+      FLIGHT_QUESTION: JSON.stringify(FLIGHT_QUESTION),
+      QUEUED_TEXT: JSON.stringify(QUEUED_TEXT)
+    }));
+    check('#187 the box is not locked while the AI is writing',
+      flight.during.sending === true && flight.during.disabled === false
+      && flight.during.readOnly === false && flight.during.stopButton === true,
+      `sending=${flight.during.sending} disabled=${flight.during.disabled} readonly=${flight.during.readOnly} stop=${flight.during.stopButton}`);
+    check('#187 typing during the turn reaches the draft', flight.typedDuring === QUEUED_TEXT, `${flight.typedDuring.length}/${QUEUED_TEXT.length} ký tự`);
+    check('#187 the answer keeps the question typed after it was sent',
+      flight.stillSending === false && flight.error === ''
+      && flight.draftAfter === QUEUED_TEXT && flight.inputValueAfter === QUEUED_TEXT && flight.bubbles >= 2,
+      `draft="${flight.draftAfter.slice(0, 24)}" value="${flight.inputValueAfter.slice(0, 24)}" bubbles=${flight.bubbles} ${flight.error.slice(0, 40)}`);
+
+    // 12. Leave the profile as it was found.
     const cleanup = await cdp.evaluate(fill(CLEANUP, { ...values, DOC_IDS: JSON.stringify(docIds), CHAT_IDS: JSON.stringify(chatIds.filter(Boolean)) }));
     cleanupRan = true;
     check('the conversations, lessons and game created here are gone',

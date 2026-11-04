@@ -342,6 +342,11 @@ async function handleAction(action, id, element) { try {
     if (typeof action === 'string' && action.startsWith('lesson-chat-') && typeof lessonChatHandle === 'function') {
       if (await lessonChatHandle(action, element)) return;
     }
+    // #188: "Giới thiệu" trong sidebar mở cửa sổ riêng (src/about/). Main tự kiểm tra
+    // bản cập nhật sau khi mở, nên trang này không cần render lại gì cả.
+    if (action === 'about-open') {
+      await window.eduGame.openAbout(document.documentElement.getAttribute('data-theme'));
+    }
     if (action === 'play') playGame(findGame(id));
     if (action === 'play-fullscreen') await playGameFullscreen(findGame(id));
     // 📱 Chơi LAN from a library card: open the game the normal way, then host a

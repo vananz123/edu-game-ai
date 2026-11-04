@@ -123,6 +123,8 @@ const { getEmbeddingModel, embeddingTextForChunk } = require('./ai-core/embeddin
 const { createEmbeddingRuntime, chunkTextsForEmbedding } = require('./ai-core/embedding-manager');
 // Presentation Mode
 const { registerPresentationIpc, unregisterPresentationIpc } = require('./presentation/presentation-ipc');
+// DECISIONS #188: cửa sổ Giới thiệu + bộ cập nhật tự động (electron-updater).
+const { registerAboutIpc, unregisterAboutIpc } = require('./about/about-ipc');
 // LAN Classroom Mode (teacher PC hosts, pupils answer on phones)
 const { registerLanIpc, unregisterLanIpc, shutdownLanForQuit } = require('./lan/lan-ipc');
 const { lanServerIsRunning } = require('./lan/lan-server');
@@ -795,6 +797,7 @@ app.whenReady().then(async () => {
   registerIpc();
   registerSetup();
   registerPresentationIpc();
+  registerAboutIpc({ log: aiLogWrite });
   registerLanIpc();
   createWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
@@ -802,6 +805,7 @@ app.whenReady().then(async () => {
 app.on('before-quit', async event => {
   aiRequests.cancelAll();
   unregisterPresentationIpc();
+  unregisterAboutIpc();
   unregisterLanIpc();
   if (quittingAfterAiShutdown) return;
 

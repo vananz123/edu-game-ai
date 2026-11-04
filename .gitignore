@@ -162,6 +162,11 @@ tests/ui/shots/
 # Throwaway Electron profile used by tests/ui/ui-race-treasure-check.js
 tests/.ui-check-profile/
 
+# Feed giả cho tests/ui/ui-about-check.js (#188): file này trỏ bộ cập nhật về một
+# server vòng lặp trong máy, chỉ có tác dụng khi chạy từ mã nguồn. Không được lạc
+# vào repo — máy nào có nó sẽ đi tìm bản cập nhật ở http://127.0.0.1.
+dev-app-update.yml
+
 # Output of tests/manual/* (bench tables, scene previews, A/B dumps). Regenerated
 # on every run; the scripts themselves are tracked.
 tests/manual/out/

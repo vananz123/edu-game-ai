@@ -329,11 +329,6 @@
   box-shadow: 0 0 0 3px var(--purple2);
 }
 
-.lesson-chat-input:disabled {
-  background: var(--bg);
-  cursor: not-allowed;
-}
-
 .lesson-chat-foot {
   display: flex;
   gap: 8px;

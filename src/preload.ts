@@ -116,6 +116,10 @@ contextBridge.exposeInMainWorld('eduGame', Object.freeze({
   requestPresentationState: () => ipcRenderer.send('presentation:request-state'),
   sendPresentationState: state => ipcRenderer.send('presentation:state-update', state),
 
+  // Trang Giới thiệu (#188): cửa sổ này chỉ cần mở được; bên trong nó dùng
+  // window.aboutAPI từ src/about/about-preload.js, không dùng eduGame.
+  openAbout: theme => ipcRenderer.invoke('about:open', theme === 'dark' ? 'dark' : 'light'),
+
   // LAN Classroom Mode API. Channels mirror LAN_CHANNELS in src/shared/lan-types.ts;
   // this file runs sandboxed and cannot import it, so the literals are repeated.
   lanStart: payload => ipcRenderer.invoke('lan:start', payload),

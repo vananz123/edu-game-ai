@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
+<title>EduGame Studio — Giới thiệu</title>
+<style>
+  /* Trang độc lập, không nạp app.css: cửa sổ này phải mở được kể cả khi ứng dụng
+     chính đang bận, nên CSS nằm gọn ở đây. Bảng màu theo đúng token của app
+     (#f5f7fb / trắng / #4f46e5) và có bộ tối theo `?theme=dark` — giáo viên dùng
+     chủ đề tối cho máy chiếu thì không bị một cửa sổ trắng chói bật lên (#188).
+     Cỡ chữ tối thiểu 13px, chữ phụ 14px: cùng sàn dễ đọc như #181 đã chốt. */
+  :root {
+    --bg: #f5f7fb;
+    --panel: #ffffff;
+    --text: #1f2430;
+    --muted: #55606f;
+    --line: #e3e7ef;
+    --brand: #4f46e5;
+    --brand-soft: #eeedfd;
+    /* #15803d trên nền #e7f6ec chỉ đạt 4,49:1 — lệch một chút là dưới sàn AA,
+       nên badge "sẵn sàng" dùng xanh đậm hơn (6,37:1). */
+    --ok: #166534;
+    --ok-soft: #e7f6ec;
+    --warn: #b45309;
+    --warn-soft: #fdf3e2;
+    --err: #b3261e;
+    --err-soft: #fdeceb;
+    --track: #e8eaf2;
+    color-scheme: light;
+  }
+  html[data-theme='dark'] {
+    --bg: #131722;
+    --panel: #1c2231;
+    --text: #e9ecf3;
+    --muted: #a8b2c4;
+    --line: #2b3346;
+    --brand: #a5a0ff;
+    --brand-soft: #262a45;
+    --ok: #6ee7a8;
+    --ok-soft: #17301f;
+    --warn: #fbbf7a;
+    --warn-soft: #33230d;
+    --err: #ff9d94;
+    --err-soft: #351a18;
+    --track: #2b3346;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.55;
+  }
+  .about-shell { max-width: 720px; margin: 0 auto; padding: 28px 26px 34px; }
+  .about-head { display: flex; gap: 16px; align-items: flex-start; }
+  .about-logo {
+    width: 60px; height: 60px; border-radius: 14px; flex: 0 0 auto;
+    object-fit: cover; background: var(--brand-soft); border: 1px solid var(--line);
+  }
+  .about-title { font-size: 22px; font-weight: 700; margin: 0; letter-spacing: -0.2px; }
+  .about-tagline { margin: 2px 0 0; color: var(--muted); font-size: 14px; }
+  .about-meta { margin: 8px 0 0; color: var(--muted); font-size: 13px; }
+  .about-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+  .about-version {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--brand-soft); color: var(--brand);
+    border-radius: 999px; padding: 4px 12px; font-size: 14px; font-weight: 700;
+  }
+
+  .about-card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    padding: 18px 20px; margin-top: 18px;
+  }
+  .about-status { display: flex; align-items: center; gap: 12px; justify-content: space-between; flex-wrap: wrap; }
+  .about-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    border-radius: 999px; padding: 6px 14px; font-size: 14px; font-weight: 700;
+    background: var(--track); color: var(--muted);
+  }
+  .about-badge[data-tone='checking'] { background: var(--brand-soft); color: var(--brand); }
+  .about-badge[data-tone='ok'] { background: var(--ok-soft); color: var(--ok); }
+  .about-badge[data-tone='new'] { background: var(--warn-soft); color: var(--warn); }
+  .about-badge[data-tone='error'] { background: var(--err-soft); color: var(--err); }
+  .about-badge svg { flex: 0 0 auto; }
+  .about-note { margin: 0; color: var(--muted); font-size: 14px; }
+  .about-spin { animation: about-rotate 1s linear infinite; transform-origin: center; }
+  @keyframes about-rotate { to { transform: rotate(360deg); } }
+
+  .about-heading { font-size: 16px; font-weight: 700; margin: 0 0 4px; }
+  .about-card p { margin: 0 0 10px; }
+  .about-diff { font-size: 14px; color: var(--muted); }
+  .about-diff b { color: var(--text); font-weight: 700; }
+
+  .about-progress-track {
+    height: 10px; border-radius: 999px; background: var(--track); overflow: hidden; margin: 12px 0 8px;
+  }
+  .about-progress-fill {
+    height: 100%; width: 0%; border-radius: 999px; background: var(--brand);
+    transition: width 250ms ease-out;
+  }
+  .about-progress-text { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  .about-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+  button.about-btn {
+    font: inherit; font-size: 14px; font-weight: 600; border-radius: 10px;
+    padding: 9px 16px; cursor: pointer; border: 1px solid var(--brand);
+    background: var(--brand); color: #ffffff;
+  }
+  html[data-theme='dark'] button.about-btn { color: #17182a; }
+  button.about-btn[data-variant='secondary'] {
+    background: transparent; color: var(--brand);
+  }
+  button.about-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.about-btn:focus-visible, a.about-link:focus-visible {
+    outline: 3px solid var(--brand); outline-offset: 2px;
+  }
+  a.about-link { color: var(--brand); font-size: 14px; font-weight: 600; text-decoration: none; }
+  a.about-link:hover { text-decoration: underline; }
+
+  .about-error { border-color: var(--err); }
+  .about-error .about-heading { color: var(--err); }
+  .about-error-detail { font-size: 13px; color: var(--muted); word-break: break-word; }
+
+  dl.about-facts { margin: 0; display: grid; grid-template-columns: 190px 1fr; gap: 6px 14px; }
+  dl.about-facts dt { color: var(--muted); font-size: 14px; }
+  dl.about-facts dd { margin: 0; font-size: 14px; word-break: break-all; }
+  .about-hidden { display: none !important; }
+  .about-foot { margin-top: 16px; color: var(--muted); font-size: 13px; }
+  .about-foot ol { margin: 6px 0 0; padding-left: 20px; }
+  .about-foot li { margin-bottom: 4px; }
+</style>
+</head>
+<body>
+<main class="about-shell">
+  <header class="about-head">
+    <img class="about-logo" id="aboutAppIcon" src="../renderer/assets/app-icon.png" alt="" />
+    <div>
+      <h1 class="about-title" id="aboutAppName">EduGame Studio</h1>
+      <p class="about-tagline" id="aboutDescription">Ứng dụng Windows tạo và chơi game giáo dục.</p>
+      <div class="about-row">
+        <span class="about-version" id="aboutVersion">Phiên bản —</span>
+        <span class="about-meta" id="aboutAuthor"></span>
+      </div>
+    </div>
+  </header>
+
+  <section class="about-card" aria-label="Trạng thái cập nhật">
+    <div class="about-status">
+      <span class="about-badge" id="aboutStatusBadge" data-tone="idle" aria-live="polite">
+        <span id="aboutStatusText">Đang tải thông tin…</span>
+      </span>
+      <button type="button" class="about-btn" data-variant="secondary" id="aboutCheckBtn">
+        <span id="aboutCheckLabel">Kiểm tra cập nhật</span>
+      </button>
+    </div>
+    <p class="about-note" id="aboutStatusNote" style="margin-top:12px">
+      Đang chuẩn bị kiểm tra bản cập nhật…
+    </p>
+  </section>
+
+  <section class="about-card about-hidden" id="aboutUpdateCard" aria-live="polite">
+    <h2 class="about-heading" id="aboutUpdateTitle">Có bản cập nhật mới</h2>
+    <p class="about-diff" id="aboutUpdateDiff"></p>
+    <div class="about-progress-track about-hidden" id="aboutProgressTrack">
+      <div class="about-progress-fill" id="aboutProgressFill"
+           role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
+    </div>
+    <p class="about-progress-text about-hidden" id="aboutProgressText"></p>
+    <div class="about-actions">
+      <button type="button" class="about-btn" id="aboutDownloadBtn">Tải về và cập nhật</button>
+      <button type="button" class="about-btn about-hidden" id="aboutInstallBtn">Khởi động lại để cài</button>
+    </div>
+  </section>
+
+  <section class="about-card about-error about-hidden" id="aboutErrorCard" aria-live="polite">
+    <h2 class="about-heading" id="aboutErrorTitle">Không kiểm tra được bản cập nhật</h2>
+    <p id="aboutErrorText"></p>
+    <p class="about-error-detail about-hidden" id="aboutErrorDetail"></p>
+    <div class="about-actions">
+      <button type="button" class="about-btn" id="aboutRetryBtn">Thử lại</button>
+      <a class="about-link" href="#" id="aboutErrorReleasesLink">Tải bộ cài từ trang phát hành</a>
+    </div>
+  </section>
+
+  <section class="about-card" aria-label="Thông tin hệ thống">
+    <h2 class="about-heading">Thông tin chi tiết</h2>
+    <dl class="about-facts">
+      <dt>Phiên bản đang chạy</dt><dd id="factVersion">—</dd>
+      <dt>Chạy từ</dt><dd id="factPackaged">—</dd>
+      <dt>Electron</dt><dd id="factElectron">—</dd>
+      <dt>Chrome nhân</dt><dd id="factChrome">—</dd>
+      <dt>Node</dt><dd id="factNode">—</dd>
+      <dt>Hệ điều hành</dt><dd id="factPlatform">—</dd>
+      <dt>Giấy phép</dt><dd id="factLicense">—</dd>
+      <dt>Nơi lưu giáo án và trò chơi</dt><dd id="factUserData">—</dd>
+    </dl>
+    <p class="about-foot" id="aboutFoot">
+      Bản cập nhật chỉ tải về khi bạn bấm nút, và chỉ cài khi bạn bấm
+      “Khởi động lại để cài”. Giáo án, trò chơi đã lưu và lịch sử chơi không bị xoá
+      khi cập nhật; các trò chơi đã lưu vẫn chơi được offline.
+    </p>
+  </section>
+</main>
+
+<script>
+  (function () {
+    'use strict';
+
+    // Main nói chủ đề đang dùng bằng `?theme=dark` (xem about-manager.ts).
+    if (/[?&]theme=dark(&|$)/.test(location.search)) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+
+    // Trạng thái do main giữ (src/services/update/update-policy.ts). Trang này KHÔNG
+    // suy diễn gì thêm: nó chỉ đổi bản trạng thái nhận được thành DOM, nên nút nào
+    // disabled ở main cũng disabled ở đây — không có cảnh "bấm được mà không thấy gì".
+    var api = window.aboutAPI || {};
+    // Bấm "Khởi động lại để cài" là một lần duy nhất: ứng dụng sắp đóng, và một bản
+    // đẩy trạng thái tới sau đó không được phép làm nút bấm được trở lại (main cũng
+    // có cờ chặn, nhưng giao diện không được để giáo viên bấm cái đã bấm rồi).
+    var installRequested = false;
+    var current = {
+      phase: 'idle', currentVersion: '', newVersion: '', progressPercent: 0,
+      transferredBytes: 0, totalBytes: 0, bytesPerSecond: 0,
+      errorKind: '', errorMessage: '', lastCheckedAt: 0, downloadStartedAt: 0
+    };
+
+    function $(id) { return document.getElementById(id); }
+    function show(id, visible) { $(id).classList[visible ? 'remove' : 'add']('about-hidden'); }
+
+    function bytes(value) {
+      var size = Number(value) || 0;
+      if (size <= 0) return '0 KB';
+      var units = ['B', 'KB', 'MB', 'GB'];
+      var i = 0;
+      while (size >= 1024 && i < units.length - 1) { size /= 1024; i += 1; }
+      var digits = (size >= 100 || i === 0) ? 0 : 1;
+      return size.toFixed(digits).replace('.', ',') + ' ' + units[i];
+    }
+
+    function eta(state) {
+      if (state.phase !== 'downloading' || !(state.bytesPerSecond > 0)) return '';
+      var left = state.totalBytes - state.transferredBytes;
+      if (!(left > 0)) return '';
+      var seconds = Math.round(left / state.bytesPerSecond);
+      if (seconds < 20) return ' · vài giây nữa';
+      if (seconds < 120) return ' · ~' + seconds + ' giây nữa';
+      var minutes = Math.round(seconds / 60);
+      if (minutes < 60) return ' · ~' + minutes + ' phút nữa';
+      return ' · ~' + Math.round(minutes / 60) + ' giờ nữa';
+    }
+
+    function clock(timestamp) {
+      if (!timestamp) return '';
+      var date = new Date(timestamp);
+      var hh = ('0' + date.getHours()).slice(-2);
+      var mm = ('0' + date.getMinutes()).slice(-2);
+      return ' · kiểm tra lúc ' + hh + ':' + mm;
+    }
+
+    // Cùng luật với canCheck/canDownload/canInstall trong máy trạng thái ở main.
+    function canCheck(state) { return state.phase !== 'checking' && state.phase !== 'downloading'; }
+    function canDownload(state) {
+      return (state.phase === 'available' || (state.phase === 'error' && !!state.newVersion)) && !!state.newVersion;
+    }
+    function canInstall(state) { return state.phase === 'downloaded' && !!state.newVersion; }
+
+    var BADGES = {
+      idle: { text: 'Chưa kiểm tra cập nhật', tone: 'idle' },
+      checking: { text: 'Đang kiểm tra…', tone: 'checking' },
+      'up-to-date': { text: 'Ứng dụng đã mới nhất', tone: 'ok' },
+      available: { text: 'Có bản mới', tone: 'new' },
+      downloading: { text: 'Đang tải bản cập nhật…', tone: 'checking' },
+      downloaded: { text: 'Cập nhật sẵn sàng!', tone: 'ok' },
+      error: { text: 'Không kiểm tra được', tone: 'error' }
+    };
+
+    var ERRORS = {
+      'dev-mode': 'Bản bạn đang chạy không phải bộ cài đặt (nó chạy từ mã nguồn), nên không thể tự cập nhật. Hãy tải bộ cài .exe từ trang phát hành và cài bình thường.',
+      offline: 'Không kết nối được internet, nên chưa kiểm tra được bản mới. Mọi trò chơi đã lưu vẫn chơi bình thường — chỉ việc tìm bản cập nhật là cần mạng.',
+      feed: 'Chưa tìm thấy bản phát hành nào trên GitHub. Có thể ứng dụng chưa đăng bản nào, hoặc máy đang chặn kết nối tới github.com.',
+      signature: 'Bộ cài tải về không vượt qua kiểm tra chữ ký số nên không được cài. Đây là cơ chế bảo vệ: hãy tải bộ cài từ trang phát hành.',
+      cancelled: 'Bạn đã dừng việc tải về. Có thể bấm “Tải về và cập nhật” để tải lại từ đầu.',
+      install: 'Không mở được bộ cài vừa tải. Thường do thiếu quyền quản trị — hãy tải bộ cài từ trang phát hành và chạy nó bằng quyền Admin.',
+      unknown: 'Có lỗi khi kiểm tra bản cập nhật. Bạn vẫn dùng app bình thường; thử lại sau, hoặc tải bộ cài từ trang phát hành.'
+    };
+
+    function paint(state) {
+      current = state || current;
+      var badge = BADGES[current.phase] || BADGES.error;
+
+      // Badge: thêm số bản mới ngay trong badge khi đã biết.
+      var label = badge.text;
+      if (current.newVersion) {
+        if (current.phase === 'available') label = 'Có bản mới ' + current.newVersion;
+        else if (current.phase === 'downloading') label = 'Đang tải ' + current.newVersion + '…';
+        else if (current.phase === 'downloaded') label = 'Cập nhật ' + current.newVersion + ' sẵn sàng!';
+      }
+      $('aboutStatusText').textContent = label;
+      $('aboutStatusBadge').setAttribute('data-tone', badge.tone);
+      // Vòng quay chỉ vẽ khi thực sự đang chờ — không có animation giả.
+      $('aboutStatusBadge').classList[current.phase === 'checking' || current.phase === 'downloading'
+        ? 'add' : 'remove']('about-spin');
+
+      var note = '';
+      if (current.phase === 'up-to-date') note = 'Bản ' + current.currentVersion + ' là bản mới nhất đã công bố' + clock(current.lastCheckedAt) + '.';
+      else if (current.phase === 'available') note = 'Sẽ tải về khi bạn bấm nút — ứng dụng không tự tải' + clock(current.lastCheckedAt) + '.';
+      else if (current.phase === 'downloaded') note = 'Bộ cài đã nằm trên máy bạn. Cài lúc nào tùy bạn' + clock(current.lastCheckedAt) + '.';
+      else if (current.phase === 'idle') note = 'Bấm “Kiểm tra cập nhật” để tìm bản mới.';
+      $('aboutStatusNote').textContent = note;
+
+      var busy = current.phase === 'checking' || current.phase === 'downloading';
+      $('aboutCheckBtn').disabled = !canCheck(current);
+      $('aboutCheckLabel').textContent = current.phase === 'checking' ? 'Đang kiểm tra…' : 'Kiểm tra cập nhật';
+      if (busy) $('aboutCheckBtn').setAttribute('aria-busy', 'true');
+      else $('aboutCheckBtn').removeAttribute('aria-busy');
+
+      // Thẻ cập nhật: hiện từ lúc có bản mới cho tới lúc tải xong.
+      var updateVisible = current.phase === 'available' || current.phase === 'downloading' || current.phase === 'downloaded';
+      show('aboutUpdateCard', updateVisible);
+      if (updateVisible) {
+        $('aboutUpdateTitle').textContent = current.phase === 'downloaded'
+          ? 'Cập nhật sẵn sàng!'
+          : (current.phase === 'downloading' ? 'Đang tải bản cập nhật' : 'Có bản cập nhật mới');
+        $('aboutUpdateDiff').innerHTML = 'EduGame Studio <b>' + escapeText(current.newVersion)
+          + '</b> · bản đang dùng <b>' + escapeText(current.currentVersion) + '</b>';
+        var percent = Math.max(0, Math.min(100, Math.round(Number(current.progressPercent) || 0)));
+        var barVisible = current.phase === 'downloading' || current.phase === 'downloaded';
+        show('aboutProgressTrack', barVisible);
+        show('aboutProgressText', barVisible);
+        if (barVisible) {
+          var fill = $('aboutProgressFill');
+          fill.style.width = percent + '%';
+          fill.setAttribute('aria-valuenow', String(percent));
+          $('aboutProgressText').textContent = current.phase === 'downloaded'
+            ? '100% · ' + bytes(current.totalBytes) + ' · đã tải xong'
+            : percent + '% · ' + bytes(current.transferredBytes) + ' / ' + bytes(current.totalBytes) + eta(current);
+        }
+      }
+      var downloadBtn = $('aboutDownloadBtn');
+      downloadBtn.disabled = !canDownload(current);
+      downloadBtn.textContent = current.phase === 'downloading' ? 'Đang tải…' : 'Tải về và cập nhật';
+      show('aboutInstallBtn', current.phase === 'downloaded');
+      $('aboutInstallBtn').disabled = installRequested || !canInstall(current);
+      $('aboutInstallBtn').textContent = installRequested ? 'Đang khởi động bộ cài…' : 'Khởi động lại để cài';
+
+      // Thẻ lỗi.
+      var errorVisible = current.phase === 'error';
+      show('aboutErrorCard', errorVisible);
+      if (errorVisible) {
+        var kind = ERRORS[current.errorKind] ? current.errorKind : 'unknown';
+        $('aboutErrorText').textContent = ERRORS[kind];
+        $('aboutErrorTitle').textContent = kind === 'install'
+          ? 'Không cài được bản cập nhật'
+          : (kind === 'signature' ? 'Bản cập nhật không hợp lệ' : 'Không kiểm tra được bản cập nhật');
+        // Chi tiết kỹ thuật chỉ để đối chiếu khi giáo viên gửi ảnh báo lỗi.
+        var detail = String(current.errorMessage || '').slice(0, 240);
+        show('aboutErrorDetail', !!detail);
+        if (detail) $('aboutErrorDetail').textContent = 'Chi tiết: ' + detail;
+        $('aboutRetryBtn').disabled = !canCheck(current);
+      }
+
+      // Nút "tải thủ công" luôn có sẵn khi lỗi, kể cả lỗi dev-mode.
+      var releases = current.phase === 'error'
+        ? ($('aboutErrorReleasesLink'))
+        : null;
+      if (releases) releases.href = (window.__aboutReleasePage || '#');
+    }
+
+    function escapeText(value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function paintInfo(info) {
+      if (!info) return;
+      window.__aboutReleasePage = info.releasePageUrl || '';
+      $('aboutAppName').textContent = info.name || 'EduGame Studio';
+      $('aboutDescription').textContent = info.description || '';
+      $('aboutVersion').textContent = 'Phiên bản ' + (info.version || '—');
+      $('aboutAuthor').textContent = info.author ? '· ' + info.author : '';
+      document.title = (info.name || 'EduGame Studio') + ' — Giới thiệu';
+      $('factVersion').textContent = info.version || '—';
+      $('factPackaged').textContent = info.packaged
+        ? 'Bộ cài trên máy (tự cập nhật được)'
+        : 'Mã nguồn đang phát triển (không tự cập nhật được)';
+      $('factElectron').textContent = info.electron || '—';
+      $('factChrome').textContent = info.chrome || '—';
+      $('factNode').textContent = info.node || '—';
+      $('factPlatform').textContent = (info.platform || '?') + ' / ' + (info.arch || '?');
+      $('factLicense').textContent = info.license || '—';
+      $('factUserData').textContent = info.userDataPath || '—';
+      // Ảnh logo nằm trong resources của app; thiếu thì ẩn đi chứ không để vỡ ảnh.
+      var icon = $('aboutAppIcon');
+      icon.addEventListener('error', function () { icon.style.display = 'none'; });
+    }
+
+    function bridgeFailure(message) {
+      // Luật 6 của máy trạng thái ở main: đã tải xong thì một lỗi đến sau không lấy
+      // đi quyền cài, nên ở đây cũng không được xoá mất nút "Khởi động lại để cài".
+      if (current.phase === 'downloaded') return;
+      paint(Object.assign({}, current, { phase: 'error', errorKind: 'unknown', errorMessage: message }));
+    }
+
+    function call(name) {
+      var fn = api[name];
+      if (typeof fn !== 'function') {
+        bridgeFailure('the update bridge is not available in this window');
+        return Promise.resolve({ ok: false, error: 'Bộ cập nhật không khả dụng trong cửa sổ này.' });
+      }
+      return Promise.resolve(fn()).then(function (result) {
+        if (result && result.state) paint(result.state);
+        return result;
+      }, function (error) {
+        // invoke() từ chối khi handler phía main ném lỗi: phải hiện lời, không được
+        // để giáo viên bấm nút rồi màn hình đứng nguyên chỗ cũ.
+        var message = String((error && error.message) || error || 'the update request failed');
+        bridgeFailure(message);
+        return { ok: false, error: message };
+      });
+    }
+
+    $('aboutCheckBtn').addEventListener('click', function () { call('checkForUpdates'); });
+    $('aboutRetryBtn').addEventListener('click', function () { call('checkForUpdates'); });
+    $('aboutDownloadBtn').addEventListener('click', function () { call('startDownload'); });
+    $('aboutInstallBtn').addEventListener('click', function () {
+      installRequested = true;
+      paint(current);
+      call('installAndRestart');
+    });
+    $('aboutErrorReleasesLink').addEventListener('click', function (event) {
+      event.preventDefault();
+      if (typeof api.openReleases === 'function') api.openReleases(window.__aboutReleasePage);
+    });
+
+    // Vẽ ngay bản trạng thái đang có, rồi nghe đẩy. `onUpdateState` là kênh chính;
+    // bốn kênh theo tên trong spec không cần dùng tới ở đây vì chúng là tập con.
+    function boot() {
+      var info = typeof api.getAppInfo === 'function' ? api.getAppInfo() : Promise.resolve(null);
+      var state = typeof api.getState === 'function' ? api.getState() : Promise.resolve(null);
+      Promise.all([info, state]).then(function (results) {
+        paintInfo(results[0]);
+        if (results[1]) paint(results[1]);
+      }).catch(function () { /* trang vẫn hiển thị được phần tĩnh */ });
+      if (typeof api.onUpdateState === 'function') api.onUpdateState(paint);
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', boot);
+    } else {
+      boot();
+    }
+
+    // Cho test (jsdom + CDP): nạp trạng thái/nạp thông tin từ ngoài vào.
+    window.__aboutTest = { paint: paint, paintInfo: paintInfo, boot: boot };
+  }());
+</script>
+</body>
+</html>
