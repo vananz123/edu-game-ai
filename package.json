@@ -1,6 +1,6 @@
 {
   "name": "edugame-studio",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "EduGame Studio - Ã¡Â»Â©ng dÃ¡Â»Â¥ng Windows tÃ¡ÂºÂ¡o, quÃ¡ÂºÂ£n lÃƒÂ½ vÃƒÂ  chÃ†Â¡i game giÃƒÂ¡o dÃ¡Â»Â¥c offline, TypeScript",
   "main": "dist/src/main.js",
   "engines": {
@@ -10,7 +10,7 @@
   "license": "MIT",
   "scripts": {
     "clean": "node -e \"try{require('node:fs').rmSync('dist',{recursive:true,force:true})}catch(e){console.warn('clean warning:',e.message)}\"",
-    "build": "npm run clean && node scripts/build-icon-data.js --bootstrap && tsc -p tsconfig.json && npm run build:icons && tsc -p tsconfig.json && npm run build:icons:check && copyfiles -u 1 \"src/index.html\" \"src/renderer/styles/*.css\" \"src/presentation/presentation.html\" \"src/presentation/presentation-preload.js\" \"src/lan/mobile/*\" dist/src && npm run build:css && npm run build:three",
+    "build": "npm run clean && node scripts/build-icon-data.js --bootstrap && tsc -p tsconfig.json && npm run build:icons && tsc -p tsconfig.json && npm run build:icons:check && copyfiles -u 1 \"src/index.html\" \"src/renderer/styles/*.css\" \"src/presentation/presentation.html\" \"src/presentation/presentation-preload.js\" \"src/lan/mobile/*\" \"src/renderer/assets/*\" dist/src && npm run build:css && npm run build:three",
     "build:css": "tailwindcss -i src/renderer/styles/app.css -o dist/src/renderer/styles/app.css --minify",
     "build:three": "node scripts/build-three.js",
     "start": "npm run build && electron .",
@@ -96,6 +96,7 @@
     },
     "npmRebuild": true,
     "win": {
+      "icon": "build/icon.png",
       "target": [
         "nsis"
       ],

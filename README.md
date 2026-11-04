@@ -1,4 +1,4 @@
-# EduGame Studio v0.3 — TypeScript
+# EduGame Studio v0.4 — TypeScript
 
 Ứng dụng desktop Windows cho giáo viên tạo, chỉnh sửa, lưu, chia sẻ và chơi trò chơi giáo dục. v0.3 giữ lại các tính năng của v0.2, chuyển mã nguồn ứng dụng sang TypeScript, thay thư viện JSON cục bộ bằng SQLite và bổ sung khung AI Gateway cloud. Đã tích hợp thử nghiệm AI local llama.cpp cho Windows x64 CPU, gồm hỏi đáp/tóm tắt tài liệu và tạo game từ nội dung đã phân tích.
 

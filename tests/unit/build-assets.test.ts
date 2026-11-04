@@ -46,7 +46,11 @@ const COPIED_ASSETS = [
   // 404 while the desktop happily shows "Đã mở phòng".
   'src/lan/mobile/index.html',
   'src/lan/mobile/mobile.css',
-  'src/lan/mobile/mobile.js'
+  'src/lan/mobile/mobile.js',
+  // DECISIONS #185: `src/main.ts` sets the window/taskbar icon to this file at
+  // runtime. `tsc` never emits it and a missing asset is not an error, so an
+  // icon that is not copied simply falls back to the Electron logo.
+  'src/renderer/assets/app-icon.png'
 ];
 
 // 1. Each source asset exists in the repository at all.

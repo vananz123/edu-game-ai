@@ -685,6 +685,9 @@ function createWindow() {
     width: 1440, height: 920, minWidth: 1100, minHeight: 720,
     backgroundColor: '#f5f7fb',
     title: 'EduGame Studio',
+    // DECISIONS #185: the packaged exe carries build/icon.png, but the window and
+    // taskbar icon in `npm start` came from Electron itself until this was set.
+    icon: path.join(__dirname, 'renderer', 'assets', 'app-icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
