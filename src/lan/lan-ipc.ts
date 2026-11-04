@@ -15,7 +15,20 @@ import { ipcMain, BrowserWindow } from 'electron';
 import { LAN_CHANNELS, LAN_START_CHANNEL_RESULT, type LanStartResult, type LanSnapshot } from '../shared/lan-types';
 import type { EducationalGame } from '../shared/types';
 import { lanProfileFor } from './lan-adapters';
-import { startLanServer, lanServerIsRunning, type LanServerHandle } from './lan-server';
+import type { LanServerHandle } from './lan-server';
+
+/*
+ * P0 đo khởi động: `lan-server` kéo theo `express` + `express-rate-limit` + `socket.io`
+ * và ăn ~190 ms `require` (~12 % thời gian mở app). Một phòng LAN chỉ tồn tại khi giáo
+ * viên bấm "Mở phòng", nên module này nạp ở lần START đầu tiên thay vì lúc đăng ký IPC.
+ * `registerLanIpc()` do đó không còn tham chiếu tĩnh vào `./lan-server`.
+ */
+type LanServerModule = typeof import('./lan-server');
+let lanServerModule: LanServerModule | null = null;
+function lanServer(): LanServerModule {
+  if (!lanServerModule) lanServerModule = require('./lan-server') as LanServerModule;
+  return lanServerModule;
+}
 
 let active: LanServerHandle | null = null;
 let lastSnapshot: LanSnapshot | null = null;
@@ -52,12 +65,12 @@ export function registerLanIpc(): void {
       return { ok: false, status: LAN_START_CHANNEL_RESULT.UNSUPPORTED, message: profile.reason || 'Trò chơi này chưa hỗ trợ chơi LAN.' };
     }
     if (!game) return { ok: false, status: LAN_START_CHANNEL_RESULT.NO_GAME, message: 'Chưa có trò chơi để mở LAN.' };
-    if (lanServerIsRunning()) {
+    if (lanServer().lanServerIsRunning()) {
       // A second room would need a second port and a second projector (plan §10.5).
       return { ok: false, status: LAN_START_CHANNEL_RESULT.ALREADY_RUNNING, message: 'Một phòng LAN đang chạy. Hãy đóng phòng cũ trước khi mở phòng mới.' };
     }
     try {
-      active = await startLanServer(game, {
+      active = await lanServer().startLanServer(game, {
         // Port 0: let the OS pick a free port, so a previous room (or another app)
         // holding the old port never blocks the new lesson.
         port: 0,
@@ -136,6 +149,14 @@ export function unregisterLanIpc(): void {
   // which `before-quit` awaits and which checks `lanServerIsRunning()` *before*
   // tearing down. Firing an un-awaited close here raced that check and could make
   // quit skip the awaited teardown (or run two closes at once).
+}
+
+/**
+ * Kiểm tra lúc thoát app mà không bắt `main.ts` nạp `lan-server`: chưa từng mở phòng
+ * thì module chưa tồn tại, nên chắc chắn không có socket nào cần giải phóng.
+ */
+export function lanSessionActive(): boolean {
+  return Boolean(lanServerModule && lanServerModule.lanServerIsRunning());
 }
 
 /**

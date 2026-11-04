@@ -16,18 +16,39 @@ import {
   type AboutAppInfo
 } from '../shared/about-types';
 import { closeAboutWindow, openAboutWindow } from './about-manager';
-import {
-  getUpdateState,
-  initUpdater,
-  onUpdateState,
-  readAppInfo,
-  requestUpdateCheck,
-  requestUpdateDownload,
-  requestUpdateInstall
-} from '../services/update/update-electron-adapter';
+
+/*
+ * P0 đo khởi động: `electron-updater` (kèm `app-builder-bin`, `js-yaml`, zipfile…) tốn
+ * ~123 ms `require` — chiếm ~8 % thời gian mở app — trong khi giáo viên chỉ mở trang
+ * Giới thiệu vài lần mỗi tuần. Module adapter vì vậy nạp ở lần *dùng đầu tiên* chứ không
+ * phải lúc đăng ký IPC; `registerAboutIpc()` chỉ còn gán handler.
+ */
+type UpdaterAdapter = typeof import('../services/update/update-electron-adapter');
 
 /** Hủy đăng ký đẩy trạng thái khi ứng dụng thoát. */
 let detachStateBridge: (() => void) | null = null;
+/** Tùy chọn `initUpdater` do main.ts truyền xuống, giữ lại để dùng khi adapter nạp. */
+let initOptions: { log?: (level: 'info' | 'warn' | 'error', event: string, data?: Record<string, unknown>) => void } | null = null;
+let adapter: UpdaterAdapter | null = null;
+
+/** Nạp `update-electron-adapter` (một lần) và khởi động updater ngay lúc đó. */
+function updater(): UpdaterAdapter {
+  if (adapter) return adapter;
+  adapter = require('../services/update/update-electron-adapter') as UpdaterAdapter;
+  const sink = initOptions && initOptions.log;
+  adapter.initUpdater({
+    releasePageUrl: EDUGAME_RELEASE_PAGE_URL,
+    log: (level, message) => {
+      if (!sink) return;
+      const normalized = level === 'error' ? 'error' : level === 'warn' ? 'warn' : 'info';
+      sink(normalized, 'updater.event', { message: String(message).slice(0, 400) });
+    }
+  });
+  // Cầu nối đẩy trạng thái chỉ có ý nghĩa khi updater đã sống; gắn ở đây nghĩa là
+  // sự kiện đầu tiên (update-available/error) không bị rơi trước khi trang kịp nghe.
+  if (!detachStateBridge) detachStateBridge = adapter.onUpdateState(broadcastToWindows);
+  return adapter;
+}
 
 /**
  * `https://github.com/<chủ sở hữu>/<repo>/releases` — không hơn. Trang chỉ được
@@ -54,33 +75,26 @@ function broadcastToWindows(state: AboutActionResult['state']): void {
 export function registerAboutIpc(options?: {
   log?: (level: 'info' | 'warn' | 'error', event: string, data?: Record<string, unknown>) => void;
 }): void {
-  initUpdater({
-    releasePageUrl: EDUGAME_RELEASE_PAGE_URL,
-    log: (level, message) => {
-      const sink = options && options.log;
-      if (!sink) return;
-      const normalized = level === 'error' ? 'error' : level === 'warn' ? 'warn' : 'info';
-      sink(normalized, 'updater.event', { message: String(message).slice(0, 400) });
-    }
-  });
+  initOptions = options || null;
 
   // Trang Giới thiệu mở ra là kiểm tra luôn: giáo viên vào trang này chính vì
   // muốn biết "đã có bản mới chưa", và chờ thêm một cái bấm nữa chỉ tạo cảm giác
   // trang đứng. Ngược lại, không kiểm tra khi khởi động — giờ vào lớp phải offline.
   ipcMain.handle(ABOUT_CHANNELS.OPEN, (_event, theme?: string) => {
     openAboutWindow({ theme: theme === 'dark' ? 'dark' : 'light' });
+    const adapter = updater();
     // Không `await` ở đây: một nguồn cập nhật chậm (timeout mạng hàng chục giây) mà
     // chặn lời gọi này thì nút "Giới thiệu" trong sidebar có vẻ không ăn — đúng kiểu
     // "bấm không thấy gì" mà giáo viên vừa báo ở khung chat (#187).
-    void requestUpdateCheck();
-    return { ok: true, state: getUpdateState() };
+    void adapter.requestUpdateCheck();
+    return { ok: true, state: adapter.getUpdateState() };
   });
 
-  ipcMain.handle(ABOUT_CHANNELS.INFO, (): AboutAppInfo => readAppInfo());
-  ipcMain.handle(ABOUT_CHANNELS.STATE, () => getUpdateState());
-  ipcMain.handle(ABOUT_CHANNELS.CHECK, () => requestUpdateCheck());
-  ipcMain.handle(ABOUT_CHANNELS.DOWNLOAD, () => requestUpdateDownload());
-  ipcMain.handle(ABOUT_CHANNELS.INSTALL, () => requestUpdateInstall());
+  ipcMain.handle(ABOUT_CHANNELS.INFO, (): AboutAppInfo => updater().readAppInfo());
+  ipcMain.handle(ABOUT_CHANNELS.STATE, () => updater().getUpdateState());
+  ipcMain.handle(ABOUT_CHANNELS.CHECK, () => updater().requestUpdateCheck());
+  ipcMain.handle(ABOUT_CHANNELS.DOWNLOAD, () => updater().requestUpdateDownload());
+  ipcMain.handle(ABOUT_CHANNELS.INSTALL, () => updater().requestUpdateInstall());
   ipcMain.handle(ABOUT_CHANNELS.OPEN_RELEASES, async (_event, url?: string) => {
     const target = String(url || EDUGAME_RELEASE_PAGE_URL);
     if (!isAllowedReleasePage(target)) return { ok: false, error: 'Địa chỉ trang phát hành không hợp lệ.' };
@@ -91,8 +105,6 @@ export function registerAboutIpc(options?: {
       return { ok: false, error: String((error && (error as Error).message) || error) };
     }
   });
-
-  if (!detachStateBridge) detachStateBridge = onUpdateState(broadcastToWindows);
 }
 
 export function unregisterAboutIpc(): void {

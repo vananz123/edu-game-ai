@@ -2,6 +2,53 @@
   const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, Menu, protocol } = require('electron');
 const path = require('node:path');
 const crypto = require('node:crypto');
+// P0 of the perf plan: split "app opened" into the parts we can actually measure.
+// `performance.now()` counts from the process time origin, so the first mark already
+// covers Electron's own startup plus every `require` below it. The marks are emitted as
+// ONE log line only after the document has loaded — a sync log write inside the measured
+// region would be part of what it measures.
+const { performance } = require('node:perf_hooks');
+const bootMarks = [];
+function markBoot(name) { bootMarks.push({ name, at: Math.round(performance.now()) }); }
+let bootPhasesLogged = false;
+function logBootPhases() {
+  if (bootPhasesLogged || !aiLog) return;
+  bootPhasesLogged = true;
+  const phases = {};
+  let previous = 0;
+  for (const mark of bootMarks) {
+    phases[mark.name] = mark.at - previous;
+    previous = mark.at;
+  }
+  aiLog.info('app.boot.phases', { totalMs: previous, phases, ...topBootRequires() });
+}
+// `EDUGAME_BOOT_TRACE=1` attributes the require cost per module and folds the twelve
+// biggest into the same log line. Off by default so a teacher's run pays for nothing;
+// the timings are inclusive, so a parent module covers the subtree it pulls in.
+const bootRequires = [];
+function topBootRequires() {
+  if (!bootRequires.length) return {};
+  return { topRequires: bootRequires.slice().sort((a, b) => b.ms - a.ms).slice(0, 12) };
+}
+if (process.env.EDUGAME_BOOT_TRACE) {
+  const Module = require('node:module');
+  const originalLoad = Module._load;
+  Module._load = function (request, parent) {
+    const started = performance.now();
+    try {
+      return originalLoad.apply(this, arguments);
+    } finally {
+      // Mọi module của chính app, cộng với package npm mà `main.ts` nạp trực tiếp
+      // (mammoth, zod, better-sqlite3…) — đó là những khoản có thể hoãn được.
+      const ownCode = typeof request === 'string' && request.startsWith('.');
+      const directVendorOfMain = parent && parent.filename === __filename;
+      if (ownCode || directVendorOfMain) {
+        bootRequires.push({ request, ms: Math.round(performance.now() - started) });
+      }
+    }
+  };
+}
+markBoot('processToMainModule');
 // #124: a custom scheme for teacher-uploaded illustrations. It must be registered as
 // privileged *before* `app.whenReady()`, and it only ever serves files from the app's
 // own image folder (below), so nothing else on disk becomes readable from a page.
@@ -17,11 +64,11 @@ if (process.env.EDUGAME_USER_DATA) {
 const os = require('node:os');
 const fs = require('node:fs/promises');
 const fsSync = require('node:fs');
-const mammoth = require('mammoth');
 const pdfParse = require('pdf-parse');
 const JSZip = require('jszip');
 const Database = require('better-sqlite3');
 const { z } = require('zod');
+markBoot('vendors');
 const { AIManager } = require('./ai-core/ai-manager');
 const { resolveCpuThreads } = require('./ai-core/runtime-threads');
 const { unloadMayProceed } = require('./ai-core/unload-guard');
@@ -126,8 +173,7 @@ const { registerPresentationIpc, unregisterPresentationIpc } = require('./presen
 // DECISIONS #188: cửa sổ Giới thiệu + bộ cập nhật tự động (electron-updater).
 const { registerAboutIpc, unregisterAboutIpc } = require('./about/about-ipc');
 // LAN Classroom Mode (teacher PC hosts, pupils answer on phones)
-const { registerLanIpc, unregisterLanIpc, shutdownLanForQuit } = require('./lan/lan-ipc');
-const { lanServerIsRunning } = require('./lan/lan-server');
+const { registerLanIpc, unregisterLanIpc, shutdownLanForQuit, lanSessionActive } = require('./lan/lan-ipc');
 const {
   createProjectFromAnalysis,
   applyAnalysis,
@@ -150,6 +196,16 @@ const {
   recommendLocalModelId,
   resolveBackendAttempts
 } = require('./ai-core/model-catalog');
+markBoot('localRequires');
+
+// P0 đo khởi động: `mammoth` (đọc văn bản từ file .docx) tốn ~118 ms `require` — gần
+// 8 % thời gian mở app — mà chỉ hai đường nhập tài liệu bên dưới dùng tới. Giáo viên mở
+// app để chơi game hoặc sửa bài thì không phải trả khoản này, nên module nạp chậm.
+let mammothModule = null;
+function loadMammoth() {
+  if (!mammothModule) mammothModule = require('mammoth');
+  return mammothModule;
+}
 
 const gameDraftSchema = z.object({
   title: z.string().trim().min(3).max(200),
@@ -741,9 +797,12 @@ function createWindow() {
     // backwards here.
     if (unloadMayProceed(choice === 1 ? 'discard' : 'stay')) event.preventDefault();
   });
+  mainWindow.webContents.once('did-finish-load', () => { markBoot('documentLoaded'); logBootPhases(); });
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
 }
+markBoot('moduleEvaluated');
 app.whenReady().then(async () => {
+  markBoot('whenReady');
   // #124: serve teacher images. The URL is `edugame-file://img/<id>`; only `<id>` that
   // this module produced is accepted, and the path is checked to stay inside the folder.
   protocol.handle('edugame-file', async request => {
@@ -765,9 +824,11 @@ app.whenReady().then(async () => {
     }
   });
   await ensureData();
+  markBoot('ensureData');
   // O10: start the diagnostic log as early as possible so runtime/analyze/generate
   // events on a teacher's machine can be sent back as one file.
   aiLog = createAiLogWriter({ directory: LOG_DIR(), retentionDays: AI_LOG_RETENTION_DAYS });
+  markBoot('logWriter');
   try {
     const aiSettings = (await readJson(SETTINGS_FILE(), {})).ai || {};
     const cpus = os.cpus();
@@ -775,6 +836,7 @@ app.whenReady().then(async () => {
     // The first report of "I chose Vulkan but the CPU is still busy" could not be
     // diagnosed from a log that only said `runtimeInstalled: true`.
     const installedBackend = await createRuntimeInstaller().getInstalledBackend().catch(() => undefined);
+    markBoot('startLogSettingsAndProbe1');
     aiLog.info('app.start', {
       version: app.getVersion(),
       platform: process.platform,
@@ -794,12 +856,15 @@ app.whenReady().then(async () => {
   } catch (error) {
     aiLog.warn('app.start.failed', errorFacts(error));
   }
+  markBoot('startLogProbe2AndWrite');
   registerIpc();
   registerSetup();
   registerPresentationIpc();
   registerAboutIpc({ log: aiLogWrite });
   registerLanIpc();
+  markBoot('ipcRegistered');
   createWindow();
+  markBoot('windowCreated');
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 app.on('before-quit', async event => {
@@ -811,7 +876,7 @@ app.on('before-quit', async event => {
 
   // LAN must release its listening socket before the process exits, otherwise
   // Windows keeps the port in TIME_WAIT and the next launch trips Firewall again.
-  const lanRunning = lanServerIsRunning();
+  const lanRunning = lanSessionActive();
   if (!localAiManager && !lanRunning) return;
 
   event.preventDefault();
@@ -2932,7 +2997,7 @@ function registerIpc() {
     let text = '';
     if (ext === '.txt' || ext === '.md') text = buffer.toString('utf8');
     else if (ext === '.docx') {
-      const parsed = await mammoth.extractRawText({ buffer });
+      const parsed = await loadMammoth().extractRawText({ buffer });
       text = parsed.value || '';
     } else if (ext === '.pdf') {
       const parsed = await pdfParse(buffer);
@@ -2961,7 +3026,7 @@ function registerIpc() {
     let text = '';
     if (ext === '.txt' || ext === '.md') text = buffer.toString('utf8');
     else if (ext === '.docx') {
-      const parsed = await mammoth.extractRawText({ buffer });
+      const parsed = await loadMammoth().extractRawText({ buffer });
       text = parsed.value || '';
     } else if (ext === '.pdf') {
       const parsed = await pdfParse(buffer);
