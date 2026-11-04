@@ -86,24 +86,39 @@ const expectations = [
   // #182: the two-column "Giáo án" page. These prove the rules survived minification;
   // which column really stays put, and whether the frame keeps its height, is measured
   // on the live page by tests/ui/ui-lesson-chat-check.js.
-  // #183: the chat column grew. `clamp(520px, 46%, 640px)` is the whole answer to
-  // "khung chat quá nhỏ": a floor so a narrow window never squeezes it back to 400px,
-  // and a ceiling so the list column keeps readable room on a wide one.
-  ['lesson page is a two-column grid', /\.lesson-two-col\{[^}]*grid-template-columns:clamp\(520px,46%,640px\) minmax\(0,1fr\)/],
+  // #183: the chat column grew. #184 grew it again — `clamp(600px, 63%, 900px)` is the
+  // current answer to "tăng khung chatbot thêm nữa": a floor so a narrow window never
+  // squeezes it back, and a ceiling so the list column keeps readable room on a wide one.
+  ['lesson page is a two-column grid', /\.lesson-two-col\{[^}]*grid-template-columns:clamp\(600px,63%,900px\) minmax\(0,1fr\)/],
   ['chat column sticks while the list scrolls', /\.lesson-chat-col\{[^}]*position:sticky/],
   // Bubbles and the composer are read by a teacher standing at a desk, not inspected in
   // devtools, so 13px is the floor here (the #181 typography census found the same).
   ['chat bubble ink is teacher-readable size', /\.lesson-chat-bubble\{[^}]*font-size:13px/],
+  // #184: "Chọn giáo án" and "Tải giáo án mới" moved from a strip under the title into the
+  // composer, so the row that decides what a turn reads is built as a wrapping flex row
+  // there. The 96px typing box is the same request — a chat you can read a paragraph in.
+  ['attach row lives in the composer as a wrapping row', /\.lesson-chat-attach\{[^}]*display:flex/],
+  ['the typing box is a box, not a line', /\.lesson-chat-input\{[^}]*min-height:96px/],
+  // The picker popover used to be free to grow under the title. Inside a frame with
+  // `overflow:hidden` it has to be capped, or a long library list pushes the send button
+  // out of the frame — the cap is what makes the transcript (not the frame) absorb it.
+  ['an open picker is capped inside the composer', /\.lesson-chat-composer \.lesson-chat-pop\{[^}]*max-height:230px/],
   // The chat frame is a component class, so the hex translation table in shell.css never
   // reaches it (#165). Painting from --panel/--line/--shadow is what makes the dark theme
   // correct without a second rule.
   ['chat frame paints from theme tokens', /\.lesson-chat-frame\{[^}]*background:var\(--panel\)/],
   ['transcript scrolls inside the fixed frame', /\.lesson-chat-scroll\{[^}]*overflow-y:auto/],
   ['chat error bubble keeps a dark ink', /\[data-theme=("?)dark\1\] \.lesson-chat-bubble\.is-error\{[^}]*color:var\(--danger-ink\)/],
-  // Below 1100px the frame would crush the list into an unreadable sliver, so the page
+  // #184: a "Xem chi tiết" block on a list card. The UA marker has to go (a second
+  // triangle next to a caret icon reads as a bug) and the caret has to turn with the
+  // state, or the label says nothing about which way the block will go.
+  ['the details marker is replaced by one caret', /\.lesson-card-more>summary\{[^}]*list-style:none/],
+  ['the caret turns with the open state', /\.lesson-card-more\[open\] \.lesson-card-more-caret\{transform:rotate\(180deg\)/],
+  // Below 1180px the frame would crush the list into an unreadable sliver, so the page
   // stacks and the frame stops being fixed — a `position:sticky` left over would pin a
-  // 100vh column above the lessons.
-  ['narrow screens stack the two columns', /@media \(max-width:1100px\)\{\.lesson-two-col\{grid-template-columns:minmax\(0,1fr\)\}\.lesson-chat-col\{position:static\}/]
+  // 100vh column above the lessons. #184 raised the threshold with the wider column
+  // (measured: 1181px still two columns, 1179px stacked).
+  ['narrow screens stack the two columns', /@media \(max-width:1180px\)\{\.lesson-two-col\{grid-template-columns:minmax\(0,1fr\)\}\.lesson-chat-col\{position:static\}/]
 ];
 
 let failed = 0;

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * DECISIONS #182 + #183 — the lesson-plans chat, cloud flow, end to end.
+ * DECISIONS #182 + #183 + #184 — the lesson-plans chat, cloud flow, end to end.
  *
  * What this proves, with a real HTTP round trip and no paid key:
  *   Settings form → `custom` provider (loopback endpoint) → connection test →
@@ -14,6 +14,12 @@
  * #183 also measures the frame: the chat column has to be the wide one, and the
  * lesson list must keep enough room beside it for "bigger" not to mean "the other
  * column lost".
+ *
+ * #184 moves things around inside that frame, so it is measured, not asserted:
+ * the head line the user asked to delete is gone (node AND words), the row that
+ * decides what a turn reads sits inside the composer, the picker that opens there
+ * shrinks the transcript instead of the frame, and the compacted list card expands
+ * into — and back out of — a "Xem chi tiết" block that never leaves its column.
  *
  * The endpoint is `http://127.0.0.1:<port>/v1`, which main accepts for HTTP only
  * because it is loopback ("trong môi trường thử nghiệm"), so the whole cloud path
@@ -66,6 +72,9 @@ const SET_QUESTION = 'Hãy soạn bộ câu hỏi về hai bài này để học
 // #183: a turn with no lesson attached must not be answered with lesson words.
 const UNGROUNDED_QUESTION = 'Gợi ý cách kiểm tra bài cũ trong 3 phút ở lớp 10?';
 const UNGROUNDED_ANSWER_TEXT = 'Gợi ý chung: giáo viên nêu 2 câu hỏi nhanh về bài trước, cho học sinh trả lời theo cặp trong 3 phút rồi chữa chung. Đây là gợi ý từ kiến thức sư phạm chung, không trích từ giáo án nào.';
+// #184: a card only grows a "Xem chi tiết" once it has an analysis, so the card check
+// stores one. Synthetic, and it goes with the document (`ON DELETE CASCADE`).
+const ANALYSIS_ID = 'ui-lesson-chat-184-analysis';
 
 const QUESTION_TEMPLATES = [
   {
@@ -242,10 +251,17 @@ const SEED_AND_LAYOUT = `(async () => {
   const scroll = document.getElementById('lessonChatScroll');
   const select = document.getElementById('lessonChatProvider');
   const composer = document.getElementById('lessonChatInput');
+  const composerBox = document.querySelector('.lesson-chat-composer');
+  const attach = document.querySelector('[data-lesson-chat-sources]');
+  const head = document.querySelector('.lesson-chat-head');
   const pageText = (document.getElementById('pageContent') || {}).textContent || '';
   const chatRect = chatCol ? chatCol.getBoundingClientRect() : null;
   const listRect = listCol ? listCol.getBoundingClientRect() : null;
   const frameRect = frame ? frame.getBoundingClientRect() : null;
+  const headRect = head ? head.getBoundingClientRect() : null;
+  const composerRect = composerBox ? composerBox.getBoundingClientRect() : null;
+  const inputRect = composer ? composer.getBoundingClientRect() : null;
+  const scrollRect = scroll ? scroll.getBoundingClientRect() : null;
   // Widening the chat takes room away from the list, so the list is measured for real
   // spill instead of being assumed fine: anything whose right edge passes the column.
   const spill = listCol && listRect
@@ -269,6 +285,16 @@ const SEED_AND_LAYOUT = `(async () => {
     listWidth: listRect ? Math.round(listRect.width) : -1,
     frameHeight: frameRect ? Math.round(frameRect.height) : -1,
     frameBottom: frameRect ? Math.round(frameRect.bottom) : -1,
+    headHeight: headRect ? Math.round(headRect.height) : -1,
+    headText: (head || {}).textContent || '',
+    cardCount: document.querySelectorAll('.lesson-list-col [data-lesson-id]').length,
+    cardHeight: (() => {
+      const card = document.querySelector('.lesson-list-col [data-lesson-id]');
+      return card ? Math.round(card.getBoundingClientRect().height) : -1;
+    })(),
+    composerHeight: composerRect ? Math.round(composerRect.height) : -1,
+    inputHeight: inputRect ? Math.round(inputRect.height) : -1,
+    scrollHeight: scrollRect ? Math.round(scrollRect.height) : -1,
     sticky: chatCol ? getComputedStyle(chatCol).position : '',
     scrollOverflow: scroll ? getComputedStyle(scroll).overflowY : '',
     composerFont: composer ? Number(getComputedStyle(composer).fontSize.replace('px', '')) : -1,
@@ -277,6 +303,18 @@ const SEED_AND_LAYOUT = `(async () => {
     chips: document.querySelectorAll('.lesson-chat-chip').length,
     beta: /BETA/.test(pageText),
     oldPanel: Boolean(document.getElementById('qaDocSelect')),
+    // #184 vế 1: the line the user asked to delete ("Hỏi 1 giáo án · bằng API tương
+    // thích OpenAI (tự cấu hình)") has two ways to come back — the node itself, or the
+    // same words living in a renamed node. Both are measured, so a rename fails too.
+    subtitleGone: !document.querySelector('[data-lesson-chat-subtitle]')
+      && !document.querySelector('.lesson-chat-title small'),
+    subtitleWordsGone: !/Hỏi \d giáo án|tương thích OpenAI/.test((head || {}).textContent || ''),
+    // #184 vế 3: one row decides what a turn reads, so it belongs beside the place the
+    // question is typed. "contains" is the whole question, measured on the real nodes.
+    attachInComposer: Boolean(attach && composerBox && composerBox.contains(attach)),
+    // A frame that grew a popover in its footer must keep exactly these three blocks;
+    // a fourth one here is where an overflow bug would hide.
+    frameKids: frame ? [...frame.children].map(kid => kid.className) : [],
     w: window.innerWidth,
     h: window.innerHeight
   };
@@ -285,11 +323,40 @@ const SEED_AND_LAYOUT = `(async () => {
 const COMBINE_LESSONS = `(async () => {
   document.querySelector('[data-action="lesson-chat-picker"]').click();
   await new Promise(r => setTimeout(r, 250));
+  // The picker used to be a strip under the title; #184 moved it into the composer,
+  // so "does a full list of lessons fit without pushing the frame off screen" is now a
+  // question about this popover. Measured while it is really open, at both ends.
+  const frame = document.querySelector('.lesson-chat-frame');
+  const scroll = document.getElementById('lessonChatScroll');
+  const composerBox = document.querySelector('.lesson-chat-composer');
+  const pop = document.querySelector('[data-lesson-chat-picker]');
+  const frameRect = frame ? frame.getBoundingClientRect() : null;
+  const popRect = pop ? pop.getBoundingClientRect() : null;
+  const scrollRect = scroll ? scroll.getBoundingClientRect() : null;
+  const composerRect = composerBox ? composerBox.getBoundingClientRect() : null;
+  // Everything about the popover is flattened here, before the first click below:
+  // each change dispatches a render() that replaces it, and a rect read off a node
+  // that has left the document is a rect of nothing.
+  const popOpen = {
+    inComposer: Boolean(pop && composerBox && composerBox.contains(pop)),
+    insideFrame: Boolean(popRect && frameRect
+      && popRect.left >= frameRect.left - 1
+      && popRect.right <= frameRect.right + 1
+      && popRect.top >= frameRect.top - 1
+      && popRect.bottom <= frameRect.bottom + 1),
+    height: popRect ? Math.round(popRect.height) : -1,
+    width: popRect ? Math.round(popRect.width) : -1,
+    maxHeight: pop ? getComputedStyle(pop).maxHeight : '',
+    frameHeight: frameRect ? Math.round(frameRect.height) : -1,
+    frameBottom: frameRect ? Math.round(frameRect.bottom) : -1,
+    scrollHeight: scrollRect ? Math.round(scrollRect.height) : -1,
+    composerHeight: composerRect ? Math.round(composerRect.height) : -1
+  };
   const rows = [...document.querySelectorAll('[data-lesson-chat-pick]')].map(box => box.dataset.id);
   document.querySelector('[data-action="lesson-chat-pick-all"][data-id="all"]').click();
   await new Promise(r => setTimeout(r, 250));
   const bothChips = document.querySelectorAll('.lesson-chat-chip').length;
-  const bothSubtitle = (document.querySelector('[data-lesson-chat-subtitle]') || {}).textContent || '';
+  const chipsInComposer = document.querySelectorAll('.lesson-chat-composer .lesson-chat-attach .lesson-chat-chip').length;
   const removed = document.querySelector('[data-action="lesson-chat-remove-doc"]');
   if (removed) removed.click();
   await new Promise(r => setTimeout(r, 250));
@@ -307,11 +374,12 @@ const COMBINE_LESSONS = `(async () => {
   return {
     rows,
     bothChips,
-    bothSubtitle,
+    chipsInComposer,
     afterRemove,
     docIds: lessonChatUi.docIds.slice(),
     chips: document.querySelectorAll('.lesson-chat-chip').length,
-    popoverGone: !document.querySelector('[data-lesson-chat-picker]')
+    popoverGone: !document.querySelector('[data-lesson-chat-picker]'),
+    popOpen
   };
 })()`;
 
@@ -459,7 +527,12 @@ const LOCAL_PICK = `(async () => {
   select.value = 'local';
   select.dispatchEvent(new Event('change', { bubbles: true }));
   await new Promise(r => setTimeout(r, 300));
-  const subtitle = (document.querySelector('[data-lesson-chat-subtitle]') || {}).textContent || '';
+  // The head line is gone (#184), so "which provider will run this turn" is now said by
+  // the select itself — read the option the re-rendered control resolved to, not a label.
+  const selectAgain = document.getElementById('lessonChatProvider');
+  const providerText = selectAgain && selectAgain.selectedOptions.length
+    ? String(selectAgain.selectedOptions[0].textContent || '')
+    : '';
   const input = document.getElementById('lessonChatInput');
   input.value = 'Nhà cung cấp local trả lời thế nào?';
   input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -476,7 +549,7 @@ const LOCAL_PICK = `(async () => {
   return {
     hasSelect: true,
     options,
-    subtitle,
+    providerText,
     picked: lessonChatUi.providerId,
     error: bubble ? (bubble.textContent || '') : '',
     answered: !bubble && document.querySelectorAll('.lesson-chat-row:not(.is-user)').length >= 3
@@ -502,8 +575,12 @@ const UNGROUNDED_TURN = `(async () => {
   document.querySelector('[data-action="lesson-chat-picker-close"]').click();
   await new Promise(r => setTimeout(r, 250));
   const chips = document.querySelectorAll('.lesson-chat-chip').length;
-  const subtitle = (document.querySelector('[data-lesson-chat-subtitle]') || {}).textContent || '';
-  const sourcesNote = (document.querySelector('.lesson-chat-empty-sources') || {}).textContent || '';
+  // With the subtitle gone, the ungrounded warning sits on the button that would fix it:
+  // hover text a teacher reaches while pointing at "Chọn giáo án".
+  const attach = document.querySelector('[data-lesson-chat-sources]');
+  const pickerButton = document.querySelector('[data-action="lesson-chat-picker"]');
+  const attachTitle = pickerButton ? String(pickerButton.getAttribute('title') || '') : '';
+  const attachInComposer = Boolean(attach && (attach.closest('.lesson-chat-composer') !== null));
   const hint = (document.querySelector('[data-lesson-chat-hint]') || {}).textContent || '';
   const emptyState = Boolean(document.querySelector('[data-lesson-chat-empty]'));
   const input = document.getElementById('lessonChatInput');
@@ -527,12 +604,140 @@ const UNGROUNDED_TURN = `(async () => {
   const chatId = lessonChatUi.chatId;
   const stored = await window.eduGame.getLessonChat(chatId);
   return {
-    chips, subtitle, sourcesNote, hint, emptyState, sendDisabled, chatId,
+    chips, attachTitle, attachInComposer, hint, emptyState, sendDisabled, chatId,
     error: (document.querySelector('[data-lesson-chat-error="1"]') || {}).textContent || '',
     lastBubble: last ? (last.textContent || '') : '',
     evidenceBlocks: document.querySelectorAll('.lesson-chat-evidence').length,
     storedDocumentIds: (stored || {}).documentIds || [],
     storedCitations: ((stored || {}).messages || []).filter(m => m.role === 'assistant').map(m => (m.citations || []).length)
+  };
+})()`;
+
+// #184 vế 4: "làm gọn thông tin + thêm nút xem chi tiết" ở cột danh sách. A card with
+// no analysis has nothing to expand, so one is stored for real first (the same shape
+// step-structure saves) — otherwise every assert below would pass on an empty card.
+const LESSON_CARD = `(async () => {
+  await window.eduGame.saveLessonAnalysis({
+    id: __ANALYSIS_ID__, schemaVersion: 1, documentId: __DOC_A__,
+    subject: 'Sinh học', grade: 6, topic: 'Quang hợp và hô hấp',
+    objectives: [
+      { id: 'o1', description: 'Phân biệt quang hợp và hô hấp.' },
+      { id: 'o2', description: 'Nêu được nguyên liệu và sản phẩm của quang hợp.' },
+      { id: 'o3', description: 'Giải thích vì sao lá cây có màu xanh.' }
+    ],
+    keyConcepts: [
+      { id: 'k1', term: 'Quang hợp', explanation: 'Tổng hợp chất hữu cơ nhờ ánh sáng.' },
+      { id: 'k2', term: 'Hô hấp', explanation: 'Phân giải chất hữu cơ, giải phóng năng lượng.' }
+    ],
+    uncertainties: [], sourceDocumentIds: [__DOC_A__], createdAt: new Date().toISOString()
+  });
+  await refreshLessonLibraryPage();
+  navigate('lesson-plans');
+  await new Promise(r => setTimeout(r, 700));
+  // Re-queried on every pass: navigate()/render() replace #pageContent, and a rect read
+  // off a node that has left the document is a rect of nothing.
+  const cardOf = () => [...document.querySelectorAll('.lesson-list-col [data-lesson-id]')]
+    .find(node => node.dataset.lessonId === __DOC_A__);
+  const spillOf = () => {
+    const col = document.querySelector('.lesson-list-col');
+    if (!col) return ['no-list-col'];
+    const colRect = col.getBoundingClientRect();
+    return [...col.querySelectorAll('*')]
+      .filter(node => {
+        const rect = node.getBoundingClientRect();
+        return rect.width > 0 && rect.right > colRect.right + 1;
+      })
+      .slice(0, 3)
+      .map(node => String(node.className || node.tagName));
+  };
+  const closed = cardOf();
+  const closedRect = closed ? closed.getBoundingClientRect() : null;
+  const closedText = closed ? String(closed.innerText || '') : '';
+  const summary = closed ? closed.querySelector('details.lesson-card-more > summary') : null;
+  if (summary) summary.click();
+  await new Promise(r => setTimeout(r, 250));
+  const openCard = cardOf();
+  const openDetails = openCard ? openCard.querySelector('details.lesson-card-more') : null;
+  const openRect = openCard ? openCard.getBoundingClientRect() : null;
+  const openText = openCard ? String(openCard.innerText || '') : '';
+  const caret = openDetails ? openDetails.querySelector('.lesson-card-more-caret') : null;
+  // The rotation is a .12s transition, and an animation tick does not advance while the
+  // window is in the background — read plainly, this returns the frozen t=0 identity and
+  // looks like a rule that never applied. Killing the transition asks the same question
+  // the settled frame would answer: which transform does the open state resolve to.
+  const caretRead = caret ? (() => {
+    caret.style.transition = 'none';
+    const value = getComputedStyle(caret).transform;
+    caret.style.transition = '';
+    return { value, matchesOpen: caret.matches('.lesson-card-more[open] .lesson-card-more-caret') };
+  })() : { value: 'no-caret', matchesOpen: false };
+  const summaryStyle = openDetails ? (() => {
+    const node = openDetails.querySelector('summary');
+    const style = getComputedStyle(node);
+    return { display: style.display, listStyle: style.listStyleType };
+  })() : { display: '', listStyle: '' };
+  const measured = {
+    cardId: closed ? __DOC_A__ : '',
+    closedHeight: closedRect ? Math.round(closedRect.height) : -1,
+    closedWidth: closedRect ? Math.round(closedRect.width) : -1,
+    closedSpill: spillOf(),
+    // A details element keeps its content out of the flow and out of innerText while it
+    // is closed — that is what makes "gọn" measurable instead of eyeballed.
+    compactWhenClosed: !/KẾT QUẢ PHÂN TÍCH|Quang hợp và hô hấp/.test(closedText),
+    metaLine: /ký tự/.test(closedText) && /mục tiêu · .* khái niệm/.test(closedText),
+    hasDetails: Boolean(summary),
+    summaryLabel: /Xem chi tiết/.test(closedText)
+  };
+  // Everything live is snapshotted HERE, before the close click below: reading
+  // openDetails.open or a computed transform after that click would measure the
+  // closed card and call it the open one.
+  const open = {
+    isOpen: Boolean(openDetails && openDetails.open),
+    openHeight: openRect ? Math.round(openRect.height) : -1,
+    openSpill: spillOf(),
+    detailTextShown: /KẾT QUẢ PHÂN TÍCH/.test(openText),
+    // Three objectives + two concepts, and every older analysis stays reachable.
+    detailItems: openCard ? openCard.querySelectorAll('.lesson-card-more li').length : 0,
+    reopenButtons: openCard ? openCard.querySelectorAll('.lesson-card-more [data-action="open-lesson"]').length : 0,
+    caretFlipped: caretRead.value,
+    caretMatchesOpen: caretRead.matchesOpen,
+    summaryDisplay: summaryStyle.display,
+    summaryListStyle: summaryStyle.listStyle,
+    // A hidden app shell reports an empty innerText for everything, which would let every
+    // "these words are / are not there" assert pass by accident. Say how much was read.
+    closedTextLen: closedText.length,
+    openTextLen: openText.length
+  };
+  if (openDetails) openDetails.querySelector('summary').click();
+  await new Promise(r => setTimeout(r, 200));
+  return { ...measured, ...open };
+})()`;
+
+const CARD_CLOSED_AGAIN = `(async () => {
+  const card = [...document.querySelectorAll('.lesson-list-col [data-lesson-id]')]
+    .find(node => node.dataset.lessonId === __DOC_A__);
+  const details = card ? card.querySelector('details.lesson-card-more') : null;
+  const rect = card ? card.getBoundingClientRect() : null;
+  const cardText = String((card || {}).innerText || '');
+  return {
+    found: Boolean(card),
+    stillOpen: Boolean(details && details.open),
+    height: rect ? Math.round(rect.height) : -1,
+    // The summary label stays (it is the way back in); the analysis content goes.
+    labelShown: /Xem chi tiết/.test(cardText),
+    contentHidden: !/KẾT QUẢ PHÂN TÍCH/.test(cardText),
+    textLen: cardText.length,
+    spill: (() => {
+      const col = document.querySelector('.lesson-list-col');
+      const colRect = col.getBoundingClientRect();
+      return [...col.querySelectorAll('*')]
+        .filter(node => {
+          const r = node.getBoundingClientRect();
+          return r.width > 0 && r.right > colRect.right + 1;
+        })
+        .map(node => String(node.className || node.tagName))
+        .slice(0, 3);
+    })()
   };
 })()`;
 
@@ -621,23 +826,54 @@ function fill(script, values) {
     // #183: the frame is the wider column now (clamp floor 520px, ceiling 640px), so
     // the band is where the clamp lands at this window size — and the list keeps a
     // floor of its own, which is the other half of "bigger" (it must not be the price).
-    check('the chat column is a wide, sticky column', layout.sticky === 'sticky' && layout.chatWidth >= 500 && layout.chatWidth <= 660, `${layout.sticky} ${layout.chatWidth}px`);
-    check('the lesson list still has room beside it', layout.listWidth >= 400, `list ${layout.listWidth}px at w=${layout.w}`);
+    // #184: the clamp grew again — 400px (#182) → 520–640 (#183) → 600–900 here, i.e.
+    // 63% of the content column. The band is where that clamp really lands at 1280×800
+    // (measured 601px), not where the CSS says it should be.
+    check('the chat column is a wide, sticky column', layout.sticky === 'sticky' && layout.chatWidth >= 595 && layout.chatWidth <= 640, `${layout.sticky} ${layout.chatWidth}px`);
+    // The list column pays for the wider chat (335px against 400px in #183) and that is
+    // the deliberate half of the trade: the card was compacted in the same change, so it
+    // still fits — the two checks below are what make the price acceptable rather than
+    // asserted away.
+    check('the lesson list still has room beside it', layout.listWidth >= 330, `list ${layout.listWidth}px at w=${layout.w}`);
+    check('the compacted list card still fits its narrower column', layout.cardCount >= 1 && layout.cardHeight >= 120 && layout.cardHeight <= 260, `${layout.cardCount} cards, ${layout.cardHeight}px tall in ${layout.listWidth}px`);
     check('widening the chat spills nothing out of the list', layout.spill.length === 0, layout.spill.join(' | ') || 'clean');
     check('the chat frame fits the visible height', layout.frameHeight >= 560 && layout.frameBottom <= layout.h + 2, `h=${layout.frameHeight} bottom=${layout.frameBottom} viewport=${layout.h}`);
     check('the composer types at a readable size', layout.composerFont >= 13, `${layout.composerFont}px`);
+    check('the typing area is a real box, not one line', layout.inputHeight >= 90 && layout.inputHeight <= 320, `${layout.inputHeight}px`);
     check('the transcript scrolls inside the frame', layout.scrollOverflow === 'auto', layout.scrollOverflow);
     check('the BETA panel is gone, not renamed', layout.beta === false && layout.oldPanel === false);
     check('the chat offers both providers to choose from', layout.providerOptions.includes('local') && layout.providerOptions.includes('custom'), layout.providerOptions.join(','));
     check('the chat offers uploading a new lesson', layout.hasImport === true);
     check('the first lesson attaches automatically', layout.chips >= 1, String(layout.chips));
+    // Four vế of #184, each proved by a measurement rather than by the string being
+    // absent from a file: the deleted line, the row that moved, the frame that grew.
+    check('the head no longer carries the subtitle the user asked to delete',
+      layout.subtitleGone === true && layout.subtitleWordsGone === true && layout.headHeight <= 70,
+      `head ${layout.headHeight}px · ${layout.headText.slice(0, 60)}`);
+    check('what a turn reads is decided next to where the question is typed',
+      layout.attachInComposer === true, `attach inside composer = ${layout.attachInComposer}`);
+    check('the frame is still the three blocks it manages', layout.frameKids.join(',') === 'lesson-chat-head,lesson-chat-scroll,lesson-chat-composer', layout.frameKids.join(','));
 
     // 3. Combining lessons.
     const combine = await cdp.evaluate(COMBINE_LESSONS);
     check('the picker lists both stored lessons', combine.rows.length === 2, combine.rows.join(','));
-    check('two lessons can be attached at once', combine.bothChips === 2 && /Hỏi 2 giáo án/.test(combine.bothSubtitle), `${combine.bothChips} · ${combine.bothSubtitle}`);
+    // What used to prove "two lessons at once" was the head line naming the count — the
+    // line #184 deleted. The chips themselves are the proof now, in the row they moved to.
+    check('two lessons can be attached at once', combine.bothChips === 2 && combine.chipsInComposer === 2, `${combine.bothChips} chips · ${combine.chipsInComposer} in the composer`);
     check('a lesson can be dropped again', combine.afterRemove.length === 1);
     check('a checkbox re-attaches the lesson', combine.docIds.length === 2 && combine.chips === 2 && combine.popoverGone === true, JSON.stringify(combine).slice(0, 120));
+    // Moving the picker into the footer put a variable-height list inside a frame with
+    // `overflow:hidden`. It is a flow block, so the transcript is what has to give.
+    check('the picker opens inside the composer and stays inside the frame',
+      combine.popOpen.inComposer === true && combine.popOpen.insideFrame === true,
+      `${combine.popOpen.inComposer}/${combine.popOpen.insideFrame} · pop ${combine.popOpen.width}x${combine.popOpen.height} of frame`);
+    check('an open picker shrinks the transcript, never the frame',
+      combine.popOpen.frameHeight === layout.frameHeight && combine.popOpen.frameBottom <= layout.h + 2
+        && combine.popOpen.scrollHeight < layout.scrollHeight
+        && combine.popOpen.composerHeight > layout.composerHeight,
+      `frame ${combine.popOpen.frameHeight} (was ${layout.frameHeight}) · scroll ${combine.popOpen.scrollHeight} (was ${layout.scrollHeight}) · composer ${combine.popOpen.composerHeight} (was ${layout.composerHeight})`);
+    check('a long picker list scrolls instead of pushing the composer out',
+      combine.popOpen.maxHeight === '230px', combine.popOpen.maxHeight);
 
     // 4. An answer built from BOTH lessons (real HTTP round trip).
     const answer = await cdp.evaluate(sendTurn('answer', QUESTION_TEXT, '.lesson-chat-evidence'));
@@ -699,7 +935,7 @@ function fill(script, values) {
     const requestsBeforeLocal = mockRequests.length;
     const local = await cdp.evaluate(LOCAL_PICK);
     check('the composer keeps the local provider', local.hasSelect === true && local.options.includes('local') && local.picked === 'local', local.options.join(','));
-    check('the header states which provider will run', /AI local/.test(local.subtitle), local.subtitle.slice(0, 60));
+    check('the composer says which provider will run', /AI local/i.test(local.providerText), local.providerText.slice(0, 60));
     check('an unavailable local provider never reaches the cloud endpoint', mockRequests.length === requestsBeforeLocal, `${requestsBeforeLocal} -> ${mockRequests.length}`);
     check('the local failure is reported, not swallowed', /AI local/.test(local.error) || local.answered === true, local.error.slice(0, 70) || 'answered');
     // Cùng bóng thoại đó phải là chữ giáo viên đọc được, không phải vỏ IPC của Electron.
@@ -715,7 +951,9 @@ function fill(script, values) {
     const freeCall = mockRequests.filter(request => request.kind === 'answer').pop() || {};
     chatIds.push(free.chatId);
     check('dropping every lesson leaves no chip', free.chips === 0 && free.emptyState === true, `${free.chips} chips · empty=${free.emptyState}`);
-    check('the header says the turn is not grounded', /Không gắn giáo án/.test(free.subtitle) && /kiến thức chung/.test(free.subtitle), free.subtitle.slice(0, 80));
+    check('the attach row says the turn is not grounded',
+      /Chưa gắn giáo án nào/.test(free.attachTitle) && /kiến thức chung/.test(free.attachTitle) && free.attachInComposer === true,
+      `${free.attachTitle.slice(0, 70) || 'no title'} · in composer=${free.attachInComposer}`);
     check('the composer invites a question with no lesson', /không cần chọn hay tải giáo án/.test(free.hint), free.hint.slice(0, 70));
     check('a question with no lesson can be sent', free.sendDisabled === false && free.error === '', free.error.slice(0, 80) || 'enabled');
     check('the turn really reached the endpoint', mockRequests.length === requestsBeforeFree + 1, `${requestsBeforeFree} -> ${mockRequests.length}`);
@@ -729,7 +967,35 @@ function fill(script, values) {
     const groundedAgain = await cdp.evaluate(`(async () => ((await window.eduGame.getLessonChat(${JSON.stringify(stored.chatId)})) || {}).documentIds || [])()`);
     check('the earlier grounded conversation kept its two lessons', groundedAgain.length === 2, JSON.stringify(groundedAgain));
 
-    // 10. Leave the profile as it was found.
+    // 10. The compacted lesson card and its "Xem chi tiết" (#184 vế 4) — the other half
+    // of the trade that paid for the wider chat column, so it is measured at the same
+    // 1280×800 the layout checks use.
+    const cardValues = { ...values, ANALYSIS_ID: JSON.stringify(ANALYSIS_ID), DOC_A: JSON.stringify(docIds[0]) };
+    const card = await cdp.evaluate(fill(LESSON_CARD, cardValues));
+    check('the analysed card was read, not skipped', card.closedTextLen > 20 && card.openTextLen > 20, `${card.closedTextLen}/${card.openTextLen} characters read`);
+    check('an analysed card offers exactly one expandable block',
+      card.hasDetails === true && card.summaryLabel === true && card.summaryDisplay === 'block' && card.summaryListStyle === 'none',
+      `${card.hasDetails} · ${card.summaryLabel} · ${card.summaryDisplay}/${card.summaryListStyle}`);
+    check('a closed card is the scanning row it is meant to be',
+      card.compactWhenClosed === true && card.metaLine === true && card.closedHeight <= 260,
+      `${card.closedWidth}x${card.closedHeight}px · ${card.metaLine}`);
+    check('opening reads the analysis without leaving the column',
+      card.isOpen === true && card.detailTextShown === true && card.detailItems === 5 && card.reopenButtons === 1,
+      `${card.detailItems} dòng · ${card.reopenButtons} nút mở · ${card.closedHeight}→${card.openHeight}px`);
+    check('the caret turns with the open state',
+      card.caretMatchesOpen === true && /matrix\(-1/.test(card.caretFlipped),
+      `${card.caretFlipped} · selector matches = ${card.caretMatchesOpen}`);
+    check('neither state of the card overflows the narrower list',
+      card.closedSpill.length === 0 && card.openSpill.length === 0,
+      `${card.closedSpill.join(' | ') || 'clean'}/${card.openSpill.join(' | ') || 'clean'}`);
+    const cardClosed = await cdp.evaluate(fill(CARD_CLOSED_AGAIN, cardValues));
+    check('the block closes again and gives the room back',
+      cardClosed.found === true && cardClosed.stillOpen === false
+        && cardClosed.height === card.closedHeight && cardClosed.contentHidden === true
+        && cardClosed.labelShown === true && cardClosed.textLen > 20 && cardClosed.spill.length === 0,
+      `${cardClosed.height}px (was ${card.closedHeight}) · label=${cardClosed.labelShown} content=${cardClosed.contentHidden} · ${cardClosed.spill.join(' | ') || 'clean'}`);
+
+    // 11. Leave the profile as it was found.
     const cleanup = await cdp.evaluate(fill(CLEANUP, { ...values, DOC_IDS: JSON.stringify(docIds), CHAT_IDS: JSON.stringify(chatIds.filter(Boolean)) }));
     cleanupRan = true;
     check('the conversations, lessons and game created here are gone',

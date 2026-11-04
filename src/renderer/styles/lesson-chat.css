@@ -1,6 +1,8 @@
 /* ============================================================
    Trang Giáo án, hai cột (#182): khung chatbot cố định bên trái, danh sách
-   giáo án bên phải.
+   giáo án bên phải. File này phủ CẢ HAI cột — phần `.lesson-card-*` cuối file
+   là thẻ của cột danh sách (pages/lesson-plans.ts), vì bố cục hai cột là một
+   khu vực thiết kế duy nhất và số đo của chúng đánh đổi nhau (#184).
 
    Tách thành file khu vực riêng theo DECISIONS #149 (app.css chỉ là entry,
    @import các file khu vực theo thứ tự cascade). Toàn bộ màu lấy từ token
@@ -13,13 +15,16 @@
    và ≥ 4,5:1 trên cả hai chủ đề, đo trực tiếp trên trang lesson-plans.
    ============================================================ */
 
-/* Cột chat rộng đủ để đọc một câu trả lời dài mà không phải kéo: 46% bề rộng
-   trang, kẹp trong [520px, 640px] (#183 — #182 để 400px, giáo viên hỏi "khung
-   chat quá nhỏ"). 46% chứ không phải px cứng vì ở 1920 một cột 640px vẫn còn
-   chỗ cho danh sách, còn ở 1280 nó cho ~560px. */
+/* Cột chat rộng đủ để đọc một câu trả lời dài mà không phải kéo: 63% bề rộng
+   khung, kẹp trong [600px, 900px]. Chuỗi số: #182 để 400px (giáo viên hỏi "khung
+   chat quá nhỏ") → #183 [520px, 46%, 640px] → #184 thêm nữa vì hai việc dồn lại:
+   hàng gắn giáo án chuyển vào khung gõ nên composer cao hơn, và danh sách bên
+   phải đã được gói gọn (#184) nên nhịn được một cột hẹp hơn. 63% chứ không phải
+   px cứng: ở 1280 nó chạm sàn 600px, ở 1920 nó cho ~900px mà danh sách vẫn còn
+   ~800px. */
 .lesson-two-col {
   display: grid;
-  grid-template-columns: clamp(520px, 46%, 640px) minmax(0, 1fr);
+  grid-template-columns: clamp(600px, 63%, 900px) minmax(0, 1fr);
   gap: 18px;
   align-items: start;
 }
@@ -79,11 +84,6 @@
   overflow-wrap: anywhere;
 }
 
-.lesson-chat-title small {
-  font-size: 12px;
-  color: var(--muted);
-}
-
 .lesson-chat-head-actions {
   margin-left: auto;
   display: flex;
@@ -91,15 +91,12 @@
   align-items: center;
 }
 
-/* Giá đỡ "giáo án đang đọc" + nút tải lên. */
-.lesson-chat-sources {
+/* Giáo án đang đọc + hai nút thêm, nằm trong khung gõ (#184). */
+.lesson-chat-attach {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
   align-items: center;
-  padding: 10px 15px;
-  border-bottom: 1px solid var(--line);
-  background: var(--bg);
 }
 
 .lesson-chat-chip {
@@ -300,8 +297,8 @@
 .lesson-chat-input {
   width: 100%;
   resize: vertical;
-  min-height: 78px;
-  max-height: 240px;
+  min-height: 96px;
+  max-height: 300px;
   padding: 10px 11px;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -390,6 +387,15 @@
   text-transform: uppercase;
 }
 
+/* Pop chọn giáo án mở ra dưới hàng gắn giáo án NGAY TRONG khung gõ (#184).
+   Composer đã có padding riêng nên margin về 0; chiều cao tự kẹp vì khung chat
+   cao cố định — phần transcript (flex 1 1 auto, min-height 0) là chỗ duy nhất
+   được co lại, không ai bị cắt. */
+.lesson-chat-composer .lesson-chat-pop {
+  margin: 0;
+  max-height: 230px;
+}
+
 .lesson-chat-pick {
   display: flex;
   align-items: center;
@@ -456,17 +462,47 @@
   color: var(--text);
 }
 
-/* 1366×768 (máy chiếu phổ thông) vẫn đủ chỗ cho danh sách: cột chat thu về
-   khoảng 440–520px; dưới 1100px thì xếp chồng, khung chat thôi bám để không che
-   danh sách. */
+/* Thẻ giáo án ở cột phải (#184): kết quả phân tích không còn thường trực — nó
+   dồn vào một dòng "Xem chi tiết" để thẻ chỉ còn tên + một dòng meta, vì cột
+   danh sách hẹp hơn hẳn từ khi cột chat được nới.
+   `<summary>` mặc định là `display:list-item` nên UA vẽ marker tam giác của riêng
+   nó, song song với caret trong markup → thành hai dấu. Tắt bằng `display:block`
+   + `::-webkit-details-marker`: không có utility Tailwind nào với tới pseudo này. */
+.lesson-card-more {
+  margin-top: 9px;
+}
+
+.lesson-card-more > summary {
+  display: block;
+  list-style: none;
+  width: max-content;
+}
+
+.lesson-card-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.lesson-card-more-caret {
+  vertical-align: -2px;
+  transition: transform .12s ease;
+}
+
+.lesson-card-more[open] .lesson-card-more-caret {
+  transform: rotate(180deg);
+}
+
+/* 1366×768 (máy chiếu phổ thông) vẫn dùng hai cột; dưới 1180px thì xếp chồng,
+   khung chat thôi bám để không che danh sách. Ngưỡng xếp chồng nâng từ 1100 lên
+   1180 vì cột chat sàn mới là 600px: ở 1100 viewport, khung nội dung chỉ còn
+   ~773px, trừ đi 600 thì danh sách ~155px — không dùng được nữa. */
 @media (max-width: 1240px) {
   .lesson-two-col {
-    grid-template-columns: clamp(440px, 42%, 520px) minmax(0, 1fr);
+    grid-template-columns: clamp(540px, 58%, 700px) minmax(0, 1fr);
     gap: 14px;
   }
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 1180px) {
   .lesson-two-col {
     grid-template-columns: minmax(0, 1fr);
   }

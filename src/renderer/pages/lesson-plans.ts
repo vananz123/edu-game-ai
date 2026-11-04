@@ -111,17 +111,16 @@ function renderLessonPlans() {
     </div>`;
 }
 
-function lessonAnalysisDetails(analysis) {
+/** Phần thân "Xem chi tiết": hai danh sách mục tiêu & khái niệm, không còn vỏ
+ *  <details> riêng — từ #184 chúng nằm trong khối chi tiết của thẻ. */
+function lessonAnalysisLists(analysis) {
   const objectives = Array.isArray(analysis && analysis.objectives) ? analysis.objectives : [];
   const concepts = Array.isArray(analysis && analysis.keyConcepts) ? analysis.keyConcepts : [];
   if (!objectives.length && !concepts.length) return '';
-  return `<details class="mt-[8px] text-[12px] text-[#4f5a6e]">
-    <summary class="cursor-pointer select-none text-[#4f46e5] font-semibold">Xem mục tiêu &amp; kiến thức trọng tâm</summary>
-    <div class="mt-[7px] grid gap-[8px]">
-      ${objectives.length ? `<div><div class="font-bold text-[#596175] mb-[3px]">Mục tiêu</div><ul class="m-0 pl-[17px] leading-[1.65]">${objectives.slice(0, 8).map(item => `<li>${escapeHtml(item.description || '')}</li>`).join('')}</ul></div>` : ''}
-      ${concepts.length ? `<div><div class="font-bold text-[#596175] mb-[3px]">Kiến thức trọng tâm</div><ul class="m-0 pl-[17px] leading-[1.65]">${concepts.slice(0, 10).map(item => `<li><strong>${escapeHtml(item.term || '')}</strong>${item.explanation ? ` — ${escapeHtml(item.explanation)}` : ''}</li>`).join('')}</ul></div>` : ''}
-    </div>
-  </details>`;
+  return `<div class="grid gap-[8px]">
+    ${objectives.length ? `<div><div class="font-bold text-[#596175] mb-[3px]">Mục tiêu</div><ul class="m-0 pl-[17px] leading-[1.65]">${objectives.slice(0, 8).map(item => `<li>${escapeHtml(item.description || '')}</li>`).join('')}</ul></div>` : ''}
+    ${concepts.length ? `<div><div class="font-bold text-[#596175] mb-[3px]">Kiến thức trọng tâm</div><ul class="m-0 pl-[17px] leading-[1.65]">${concepts.slice(0, 10).map(item => `<li><strong>${escapeHtml(item.term || '')}</strong>${item.explanation ? ` — ${escapeHtml(item.explanation)}` : ''}</li>`).join('')}</ul></div>` : ''}
+  </div>`;
 }
 
 function lessonLibraryCard(document, selected = false) {
@@ -130,29 +129,48 @@ function lessonLibraryCard(document, selected = false) {
   const available = document.sourceAvailable !== false;
   const objectiveCount = latest && Array.isArray(latest.objectives) ? latest.objectives.length : 0;
   const conceptCount = latest && Array.isArray(latest.keyConcepts) ? latest.keyConcepts.length : 0;
-  const meta = [
-    lessonExtLabel(document.ext),
+  // #184: thẻ gọn lại một dòng thường trực. Danh sách là chỗ để QUÉT nhanh (tệp nào,
+  // bao lâu nay, còn nguồn không, đã phân tích chưa); chủ đề, các lần phân tích và
+  // mục tiêu/khái niệm là chỗ để ĐỌC KỸ nên dồn hết vào "Xem chi tiết".
+  // Cột danh sách hẹp hơn trước vì cột chat được nới (#184), nên mỗi thẻ thêm một
+  // dòng chữ là một lần danh sách tràn ngang.
+  // Hàng nút nằm DƯỚI tên, không đứng cạnh: đo trên máy với tên tệp dài, hàng nút
+  // 147px + `min-w-0 flex-1` của khối tên ép khối đó xuống 29px — thẻ cao 338px vì
+  // mỗi chữ một dòng. Xếp chồng thì tên luôn nhận hết 186px khả dụng và nút tự quấn
+  // trong hàng của nó (thẻ đo lại: 234px, không tràn).
+  const line = [
     `${Number(document.characters || 0).toLocaleString('vi-VN')} ký tự`,
     fmtDate(document.createdAt)
-  ];
-  // The checkbox sits outside the card's content flow so a tick never re-flows the
-  // text; the card itself stays the click target for "Mở lại".
-  return `<article class="border rounded-[12px] p-[15px] flex gap-[12px] items-start ${selected ? 'border-[#c8c3ff] bg-[#faf9ff]' : 'border-line'}" data-lesson-id="${escapeHtml(document.id)}"${selected ? ' data-selected="true"' : ''}>
+  ].join(' · ');
+  return `<article class="border rounded-[12px] p-[13px] flex gap-[11px] items-start ${selected ? 'border-[#c8c3ff] bg-[#faf9ff]' : 'border-line'}" data-lesson-id="${escapeHtml(document.id)}"${selected ? ' data-selected="true"' : ''}>
     <label class="lesson-select shrink-0 pt-[4px] cursor-pointer" title="Chọn giáo án này">${lessonSelectBoxHtml(document, selected)}</label>
-    <div class="w-[46px] h-[46px] rounded-[11px] grid place-items-center text-[12px] font-extrabold shrink-0 ${lessonExtTone(document.ext)}">${escapeHtml(lessonExtLabel(document.ext))}</div>
+    <div class="w-[38px] h-[38px] rounded-[10px] grid place-items-center text-[11px] font-extrabold shrink-0 ${lessonExtTone(document.ext)}">${escapeHtml(lessonExtLabel(document.ext))}</div>
     <div class="min-w-0 flex-1">
-      <div class="flex items-start justify-between gap-[12px] flex-wrap">
-        <div class="min-w-0"><h3 class="text-[13px] m-0 tracking-[-0.1px] break-words">${escapeHtml(document.name || 'Giáo án chưa đặt tên')}</h3><div class="flex gap-[5px] flex-wrap mt-[7px]">${meta.map(value => `<span class="px-[4px] py-[6px] bg-[#f5f6fa] rounded-[5px] text-[#5f6a7d] text-[11px]">${escapeHtml(value)}</span>`).join('')}${available ? '<span class="px-[4px] py-[6px] bg-[#edf9f2] text-[#0f7b5c] rounded-[5px] text-[11px] font-bold">Sẵn sàng</span>' : '<span class="px-[4px] py-[6px] bg-[#fff1f2] text-[#b42318] rounded-[5px] text-[11px] font-bold">Thiếu tệp nguồn</span>'}</div></div>
-        <div class="flex gap-[7px] flex-wrap">
-          ${latest && available ? `<button class="border-0 rounded-[9px] px-[11px] py-[8px] inline-flex items-center justify-center gap-[7px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-[#6258e8] text-white shadow-[0_6px_14px_#6258e82b]" data-action="create-from-lesson" data-id="${escapeHtml(document.id)}" data-analysis="${escapeHtml(latest.id)}"><span data-icon="wand-sparkles" data-icon-size="13"></span> Tạo trò chơi</button>` : ''}
-          ${available ? `<button class="border-0 rounded-[9px] px-[11px] py-[8px] inline-flex items-center justify-center gap-[7px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-white border border-[#e7eaf2] text-[#515c72]" data-action="open-lesson" data-id="${escapeHtml(document.id)}"${latest ? ` data-analysis="${escapeHtml(latest.id)}"` : ''}><span data-icon="circle-fading-arrow-up" data-icon-size="13"></span> Mở lại</button>` : ''}
-          <button class="border-0 rounded-[9px] px-[11px] py-[8px] inline-flex items-center justify-center gap-[7px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-white border border-[#f3d6da] text-[#c33b4b] hover:bg-[#fff1f2]" data-action="delete-lesson" data-id="${escapeHtml(document.id)}" title="Xoá tài liệu khỏi kho giáo án"><span data-icon="trash" data-icon-size="13"></span> Xoá</button>
-        </div>
+      <h3 class="text-[13px] m-0 tracking-[-0.1px] break-words">${escapeHtml(document.name || 'Giáo án chưa đặt tên')}</h3>
+      <div class="flex gap-[6px] items-center flex-wrap mt-[6px] text-[12px] text-[#5f6a7d]">
+        <span>${escapeHtml(line)}</span>
+        ${available ? '<span class="px-[4px] py-[5px] bg-[#edf9f2] text-[#0f7b5c] rounded-[5px] text-[11px] font-bold">Sẵn sàng</span>' : '<span class="px-[4px] py-[5px] bg-[#fff1f2] text-[#b42318] rounded-[5px] text-[11px] font-bold">Thiếu tệp nguồn</span>'}
+        <span>${latest ? `${objectiveCount} mục tiêu · ${conceptCount} khái niệm` : 'Chưa phân tích'}</span>
       </div>
-      ${latest
-        ? `<div class="mt-[11px] pt-[11px] border-t border-[#f0f1f6]"><div class="text-[11px] font-extrabold tracking-[1.1px] text-[#5f6a7d] mb-[5px]">KẾT QUẢ PHÂN TÍCH</div><div class="text-[12px] text-[#596175] leading-[1.6]"><strong class="text-[#394256]">${escapeHtml(latest.topic || 'Chưa có chủ đề')}</strong>${latest.subject ? ` · ${escapeHtml(latest.subject)}` : ''}${latest.grade ? ` · Lớp ${escapeHtml(String(latest.grade))}` : ''} · ${objectiveCount} mục tiêu · ${conceptCount} khái niệm</div><div class="flex gap-[5px] flex-wrap mt-[7px]">${analyses.slice(0, 4).map((analysis, index) => `<button class="border border-[#e8e9f2] bg-white rounded-[5px] px-[7px] py-[5px] text-[11px] text-[#5f6a7d] hover:border-[#c8c3ff] hover:text-[#6258e8]" ${available ? `data-action="open-lesson" data-id="${escapeHtml(document.id)}" data-analysis="${escapeHtml(analysis.id)}"` : 'disabled'} title="Mở phân tích ${escapeHtml(fmtDateTime(analysis.createdAt))}">${index === 0 ? 'Mới nhất' : fmtDate(analysis.createdAt)}</button>`).join('')}${analyses.length > 4 ? `<span class="text-[11px] text-[#5f6a7d] px-[4px] py-[5px]">+${analyses.length - 4}</span>` : ''}</div></div>`
-        : `<div class="mt-[11px] pt-[11px] border-t border-[#f0f1f6] text-[12px] text-[#5f6a7d]">Chưa phân tích. Mở giáo án trong trình tạo để phân tích bằng AI local.</div>`}
-      ${latest ? lessonAnalysisDetails(latest) : ''}
+      <div class="flex gap-[6px] flex-wrap items-center justify-end mt-[9px]">
+        ${latest && available ? `<button class="border-0 rounded-[9px] px-[11px] py-[8px] inline-flex items-center justify-center gap-[7px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-[#6258e8] text-white shadow-[0_6px_14px_#6258e82b]" data-action="create-from-lesson" data-id="${escapeHtml(document.id)}" data-analysis="${escapeHtml(latest.id)}"><span data-icon="wand-sparkles" data-icon-size="13"></span> Tạo trò chơi</button>` : ''}
+        ${available ? `<button class="border-0 rounded-[9px] px-[11px] py-[8px] inline-flex items-center justify-center gap-[7px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-white border border-[#e7eaf2] text-[#515c72]" data-action="open-lesson" data-id="${escapeHtml(document.id)}"${latest ? ` data-analysis="${escapeHtml(latest.id)}"` : ''}><span data-icon="circle-fading-arrow-up" data-icon-size="13"></span> Mở lại</button>` : ''}
+        <button class="border-0 rounded-[9px] px-[11px] py-[8px] inline-flex items-center justify-center gap-[7px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-white border border-[#f3d6da] text-[#c33b4b] hover:bg-[#fff1f2]" data-action="delete-lesson" data-id="${escapeHtml(document.id)}" title="Xoá tài liệu khỏi kho giáo án"><span data-icon="trash" data-icon-size="13"></span> Xoá</button>
+      </div>
+      ${latest ? `<details class="lesson-card-more">
+        <summary class="lesson-card-more-summary cursor-pointer select-none text-[12px] font-bold text-[#4f46e5]"><span data-icon="chevron-down" data-icon-size="12" data-icon-class="lesson-card-more-caret"></span> Xem chi tiết</summary>
+        <div class="mt-[9px] pt-[9px] border-t border-[#f0f1f6] grid gap-[9px]">
+          <div>
+            <div class="text-[11px] font-extrabold tracking-[1.1px] text-[#5f6a7d] mb-[5px]">KẾT QUẢ PHÂN TÍCH</div>
+            <div class="text-[12px] text-[#596175] leading-[1.6] break-words"><strong class="text-[#394256]">${escapeHtml(latest.topic || 'Chưa có chủ đề')}</strong>${latest.subject ? ` · ${escapeHtml(latest.subject)}` : ''}${latest.grade ? ` · Lớp ${escapeHtml(String(latest.grade))}` : ''}</div>
+          </div>
+          <div class="flex gap-[5px] flex-wrap">
+            ${analyses.slice(0, 4).map((analysis, index) => `<button class="border border-[#e8e9f2] bg-white rounded-[5px] px-[7px] py-[5px] text-[11px] text-[#5f6a7d] hover:border-[#c8c3ff] hover:text-[#6258e8]" ${available ? `data-action="open-lesson" data-id="${escapeHtml(document.id)}" data-analysis="${escapeHtml(analysis.id)}"` : 'disabled'} title="Mở phân tích ${escapeHtml(fmtDateTime(analysis.createdAt))}">${index === 0 ? 'Mới nhất' : fmtDate(analysis.createdAt)}</button>`).join('')}
+            ${analyses.length > 4 ? `<span class="text-[11px] text-[#5f6a7d] px-[4px] py-[5px]">+${analyses.length - 4} lần phân tích cũ hơn</span>` : ''}
+          </div>
+          ${lessonAnalysisLists(latest)}
+        </div>
+      </details>` : ''}
     </div>
   </article>`;
 }
