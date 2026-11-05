@@ -275,8 +275,8 @@ function lessonChatReadsHtml(message) {
     : `${vi(meta.quotes)} đoạn liên quan${meta.trimmed ? ', có cắt bớt' : ''}`;
   const cut = meta.fallback ? ' · không tìm thấy đoạn khớp câu hỏi nên lấy phần đầu bài' : '';
   const badge = percent === 100
-    ? '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#effaf5] dark:bg-[#132d24] text-[#0f7b5c] dark:text-[#4ade80] mr-1.5">Đầy đủ 100%</span>'
-    : '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#fff8e6] dark:bg-[#2d2410] text-[#b45309] dark:text-[#fbbf24] mr-1.5">Trích đoạn</span>';
+    ? '<span class="px-1.5 py-0.5 rounded text-[11px] font-bold bg-[#effaf5] dark:bg-[#132d24] text-[#0f7b5c] dark:text-[#4ade80] mr-1.5">Đầy đủ 100%</span>'
+    : '<span class="px-1.5 py-0.5 rounded text-[11px] font-bold bg-[#fff8e6] dark:bg-[#2d2410] text-[#b45309] dark:text-[#fbbf24] mr-1.5">Trích đoạn</span>';
   return `<div class="lesson-chat-reads${meta.trimmed ? ' is-cut' : ''}" data-lesson-chat-reads="${percent}" data-lesson-chat-trimmed="${meta.trimmed ? '1' : '0'}">${badge}<span data-icon="book-open" data-icon-size="12"></span> AI đã đọc ${vi(read)} / ${vi(total)} ký tự (${percent} %) · ${scope}${cut}</div>`;
 }
 

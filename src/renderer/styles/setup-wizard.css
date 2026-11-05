@@ -33,6 +33,7 @@ html[data-setup-fullscreen="1"] .app-shell{visibility:hidden}
   --muted:var(--color-muted);--line:var(--color-line);--purple:var(--color-brand);
   --purple2:var(--color-brand-soft);--green:var(--color-ok);--orange:var(--color-warn);
   --red:var(--color-bad);--shadow:var(--shadow-card);--danger-ink:#b42318;
+  --surface-0:#ffffff;--surface-1:#f5f7fc;--surface-2:#eef1f8;--surface-3:#e6eaf4;
 }
 /* One viewport, two rows: a fixed head and a scrolling body, so the action
    buttons can never be pushed below the fold on a 1366x768 classroom laptop. */

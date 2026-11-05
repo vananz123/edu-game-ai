@@ -917,6 +917,17 @@ export const ICON_NODES: Readonly<Record<string, IconNode>> = {
   ["rect", { x: "5", y: "2", width: "14", height: "20", rx: "7" }],
   ["path", { d: "M12 6v4" }]
 ],
+  "sliders-horizontal": [
+  ["path", { d: "M10 5H3" }],
+  ["path", { d: "M12 19H3" }],
+  ["path", { d: "M14 3v4" }],
+  ["path", { d: "M16 17v4" }],
+  ["path", { d: "M21 12h-9" }],
+  ["path", { d: "M21 19h-5" }],
+  ["path", { d: "M21 5h-7" }],
+  ["path", { d: "M8 10v4" }],
+  ["path", { d: "M8 12H3" }]
+],
 };
 
 export const ICON_NAMES: readonly string[] = Object.freeze(Object.keys(ICON_NODES));
@@ -925,7 +936,7 @@ export const ICON_GROUPS: Readonly<Record<string, readonly string[]>> = Object.f
   categories: Object.freeze(["paw-print","leaf","rocket","heart-pulse","car","shield-check","recycle","landmark","map","briefcase","trophy","file-music","palette","calculator","languages","flask-conical","cpu","stethoscope","users","house","cloud-sun","apple","box","waves-horizontal"]),
   interface: Object.freeze(["layout-grid","book-open","lightbulb","star","check","x","arrow-right","arrow-left","play","pause","rotate-ccw","skip-forward","volume-2","volume-x","maximize","minimize","search","settings","library","pencil","trash","plus","download","upload","clock","target","brain","zap","sparkles","gift"]),
   extra: Object.freeze(["shield-alert","mountain","fish","bird","bug","utility-pole"]),
-  chrome: Object.freeze(["graduation-cap","wand-sparkles","shapes","file-text","folder","folder-open","circle-fading-arrow-up","panel-left","ellipsis-vertical","bell","circle-question-mark","loader","loader-circle","hourglass","square","refresh-cw","rotate-cw","arrow-up","arrow-down","arrow-up-right","chevron-right","chevron-down","chevron-up","chevron-left","circle-plus","minus","save","copy","external-link","circle-check","circle-x","circle-alert","triangle-alert","info","circle-dot","circle","ban","wifi-off","bot","cloud","image","camera","link","lock","message-square","type","user","monitor","smartphone","keyboard","layers","list","list-checks","list-filter","pin","flag","gauge","activity","timer","mouse-pointer-click","eye","eye-off","chart-column","notebook","bookmark","archive","hard-hat","mouse"]),
+  chrome: Object.freeze(["graduation-cap","wand-sparkles","shapes","file-text","folder","folder-open","circle-fading-arrow-up","panel-left","ellipsis-vertical","bell","circle-question-mark","loader","loader-circle","hourglass","square","refresh-cw","rotate-cw","arrow-up","arrow-down","arrow-up-right","chevron-right","chevron-down","chevron-up","chevron-left","circle-plus","minus","save","copy","external-link","circle-check","circle-x","circle-alert","triangle-alert","info","circle-dot","circle","ban","wifi-off","bot","cloud","image","camera","link","lock","message-square","type","user","monitor","smartphone","keyboard","layers","list","list-checks","list-filter","pin","flag","gauge","activity","timer","mouse-pointer-click","eye","eye-off","chart-column","notebook","bookmark","archive","hard-hat","mouse","sliders-horizontal"]),
 });
 
 /** Returns the node array for an icon id, or null for anything unknown. Never throws. */
