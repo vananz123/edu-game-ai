@@ -208,10 +208,11 @@ export function createAiLogWriter(options: AiLogWriterOptions): AiLogWriter {
   let backgroundPrunePromise: Promise<void> | undefined;
 
   /**
-   * Chạy nền có chủ đích: bản đồng bộ đo được 6,52–6,54 ms chặn main process mỗi lần mở
-   * app khi có 14 tệp quá hạn trên đĩa (quét 1,92–2,25 ms, còn lại là `unlinkSync` —
-   * Windows). Log là best-effort nên không có gì phải chờ, và một lời hứa reject ở đây
-   * không được phép làm hỏng ứng dụng đang được chẩn đoán.
+   * Chạy nền có chủ đích: bản đồng bộ chặn main process 2,7–6,5 ms mỗi lần mở app khi có 14
+   * tệp quá hạn trên đĩa (quét ~2,1 ms + 14 lần `unlinkSync`, Windows; dải số rộng vì tải
+   * đĩa/anti-virus đổi kết quả — đo lại bằng `scripts/bench-ai-log-io.js`). Log là
+   * best-effort nên không có gì phải chờ, và một lời hứa reject ở đây không được phép làm
+   * hỏng ứng dụng đang được chẩn đoán.
    */
   function startBackgroundPrune(): void {
     const pending = prune().finally(() => {
