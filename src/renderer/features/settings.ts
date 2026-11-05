@@ -487,6 +487,9 @@ function wireSettingsSections() {
     // A tab that loaded while hidden still gets its data the moment it opens.
     if (sectionId === 'tasks') refreshAiTaskList();
     if (sectionId === 'diagnostics') refreshDiagnosticsInfo();
+    // #204: opening "Giới thiệu" is the only moment main is allowed to ask the release
+    // feed on its own (vào lớp phải offline). aboutKickCheck tự khoá "một lần mỗi phiên".
+    if (sectionId === 'about' && typeof aboutKickCheck === 'function') aboutKickCheck();
   });
   wireSettingsTabStrip('[data-ai-tab]', '[data-ai-tabpanel]', 'aiTab', tabId => {
     state.settingsAiTab = tabId;

@@ -10,6 +10,13 @@
 // = false` + cùng version 0.4.0 phải cho ra "đã mới nhất", chứ không phải
 // `errorKind: 'feed'` như trước khi #200 phát hành.
 //
+// #204 đổi chỗ ngồi, không đổi nội dung đo: trang Giới thiệu không còn là cửa sổ thứ
+// hai (`src/about/about.html`) mà là tab thứ sáu của Cài đặt, vẽ trong chính
+// `index.html`. Nên cổng nối thẳng vào target `index.html`, bấm mục sidebar thật rồi
+// chờ `#settingsPanel-about` hiện — và chứng minh thêm rằng cả lượt không từng sinh
+// target `about.html` nào. Mọi lời gọi bridge đi `window.eduGame.*`, không còn
+// `window.aboutAPI`.
+//
 // Ba chế độ, cùng một tệp, chọn bằng đối số thứ hai (hoặc `EDUGAME_FEED_EXPECT`):
 //   up-to-date  bản đóng gói == bản mới nhất của feed -> phải lên "đã mới nhất".
 //   available   bản đóng gói CŨ HƠN feed (0.4.0 chống feed đã có 0.4.1 — nốt nợ (a)
@@ -120,23 +127,28 @@ async function connectTo(matcher) {
 
 const READ = `(async () => {
   const g = id => document.getElementById(id);
-  const hidden = id => !g(id) || g(id).classList.contains('about-hidden');
-  const state = await window.aboutAPI.getState();
+  // #204: tab "Giới thiệu" nằm trong trang Cài đặt nên phần tử "biến mất" là phần tử
+  // bị gắn class hidden của Tailwind hoặc bị che bởi một tab khác — không còn
+  // lớp about-hidden riêng của cửa sổ cũ.
+  const shown = el => Boolean(el) && !el.classList.contains('hidden') && el.getClientRects().length > 0;
+  const panel = g('settingsPanel-about');
+  const state = await window.eduGame.aboutState();
   return {
+    panelOpen: shown(panel),
     badge: g('aboutStatusText') ? g('aboutStatusText').textContent.trim() : '',
     tone: g('aboutStatusBadge') ? g('aboutStatusBadge').getAttribute('data-tone') : '',
-    spinning: g('aboutStatusBadge') ? g('aboutStatusBadge').classList.contains('about-spin') : null,
+    spinning: shown(g('aboutStatusSpinner')),
     note: g('aboutStatusNote') ? g('aboutStatusNote').textContent.trim() : '',
     checkDisabled: g('aboutCheckBtn') ? g('aboutCheckBtn').disabled : null,
-    updateVisible: !hidden('aboutUpdateCard'),
+    updateVisible: shown(g('aboutUpdateCard')),
     updateTitle: g('aboutUpdateTitle') ? g('aboutUpdateTitle').textContent.trim() : '',
     updateDiff: g('aboutUpdateDiff') ? g('aboutUpdateDiff').textContent.trim() : '',
-    barVisible: !hidden('aboutProgressTrack'),
+    barVisible: shown(g('aboutProgressTrack')),
     progressText: g('aboutProgressText') ? g('aboutProgressText').textContent.trim() : '',
     downloadDisabled: g('aboutDownloadBtn') ? g('aboutDownloadBtn').disabled : null,
     downloadLabel: g('aboutDownloadBtn') ? g('aboutDownloadBtn').textContent.trim() : '',
-    installVisible: !hidden('aboutInstallBtn'),
-    errorVisible: !hidden('aboutErrorCard'),
+    installVisible: shown(g('aboutInstallBtn')),
+    errorVisible: shown(g('aboutErrorCard')),
     errorTitle: g('aboutErrorTitle') ? g('aboutErrorTitle').textContent.trim() : '',
     errorText: g('aboutErrorText') ? g('aboutErrorText').textContent.trim() : '',
     errorKindShown: g('aboutErrorDetail') ? g('aboutErrorDetail').textContent.trim() : '',
@@ -204,17 +216,37 @@ function report() {
   check('the instance under test is the packaged build (file:// + asar)',
     isPackagedApp === 'file:', isPackagedApp);
 
+  // Trang Cài đặt của bản đóng gói cũng bị trang setup của hồ sơ mới che mất một nhịp —
+  // cùng cảnh báo mà `ui-about-check.js` và các gate Settings đã xử lý.
+  await main.evaluate(`(async () => {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    for (let i = 0; i < 40 && !document.querySelector('#modalRoot .setup-fullscreen'); i += 1) await sleep(100);
+    if (typeof closeSetupWizard === 'function') closeSetupWizard('close');
+    await sleep(250);
+  })()`);
+
+  // #204: một cú bấm thật vào mục sidebar, và mọi đo đạc sau đó diễn ra trong CÙNG cửa
+  // sổ — không còn target `about.html` nào để chờ.
+  const targetsBefore = (await listTargets(PORT)).length;
   await main.evaluate(`document.querySelector('[data-action="about-open"]').click()`);
   let opened = null;
-  for (let attempt = 0; attempt < 80 && !opened; attempt += 1) {
-    opened = (await listTargets(PORT)).find(entry => /about\.html/.test(entry.url));
+  for (let attempt = 0; attempt < 40 && !opened; attempt += 1) {
+    const settled = await main.evaluate(`(() => {
+      const panel = document.getElementById('settingsPanel-about');
+      // state là binding lexical toàn cục của renderer (const ở đầu shared.js) — không
+      // phải window.state, và không được đặt tên biến local là state trong biểu thức này.
+      return { open: Boolean(panel) && !panel.classList.contains('hidden'), section: state.settingsSection };
+    })()`);
+    if (settled.open && settled.section === 'about') opened = settled;
     if (!opened) await wait(250);
   }
-  check('clicking the sidebar opens the About window', Boolean(opened), opened ? 'target found' : 'no about.html target');
+  check('clicking the sidebar opens the About tab in the same window',
+    Boolean(opened) && (await listTargets(PORT)).length === targetsBefore,
+    JSON.stringify({ opened, targetsBefore, targetsAfter: (await listTargets(PORT)).length }));
   if (!opened) report();
 
-  const about = await connectTo(/about\.html/);
-  const info = await about.evaluate(`(async () => await window.aboutAPI.getAppInfo())()`);
+  const about = main;
+  const info = await about.evaluate(`(async () => await window.eduGame.aboutInfo())()`);
 
   // 1. Đúng binary đã phát hành, không phải bản dev đội lốt.
   check('the app reports itself packaged', info.packaged === true, JSON.stringify({ packaged: info.packaged }));
@@ -348,10 +380,20 @@ function report() {
   check('no mojibake in the sentences the teacher reads',
     !/[ÂÃ][»¡º£¥]/u.test(`${dom.badge} ${dom.note} ${dom.version} ${dom.packaged}`),
     JSON.stringify({ badge: dom.badge, note: dom.note.slice(0, 60) }));
-  await about.evaluate(`window.close()`).catch(() => { });
-  await wait(800);
-  const remaining = (await listTargets(PORT)).filter(entry => /about\.html/.test(entry.url)).length;
-  check('the About window closes cleanly', remaining === 0, String(remaining));
+  // #204: không còn cửa sổ thứ hai để đóng, nên hai điều phải chứng minh thay thế là
+  // "cả lượt chạy chưa từng có target `about.html`" và "rời Cài đặt thì tab ẩn lại"
+  // (trạng thái cập nhật vẫn sống trong main, chỉ painting là tắt theo tab ẩn).
+  const stray = (await listTargets(PORT)).filter(entry => /about\.html/.test(entry.url));
+  check('no second window appeared at any point in the run', stray.length === 0,
+    JSON.stringify(stray.map(entry => entry.url)));
+  await main.evaluate(`(() => { if (typeof navigate === 'function') navigate('library'); })()`);
+  await wait(600);
+  const afterLeave = await main.evaluate(`(() => {
+    const panel = document.getElementById('settingsPanel-about');
+    return { page: state.page, hidden: !panel || panel.classList.contains('hidden') };
+  })()`);
+  check('leaving Settings hides the About tab again',
+    afterLeave.page === 'library' && afterLeave.hidden === true, JSON.stringify(afterLeave));
 
   report();
 })().catch(error => {

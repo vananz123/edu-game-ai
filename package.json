@@ -10,7 +10,7 @@
   "license": "MIT",
   "scripts": {
     "clean": "node -e \"try{require('node:fs').rmSync('dist',{recursive:true,force:true})}catch(e){console.warn('clean warning:',e.message)}\"",
-    "build": "npm run clean && node scripts/build-icon-data.js --bootstrap && tsc -p tsconfig.json && npm run build:icons && tsc -p tsconfig.json && npm run build:icons:check && copyfiles -u 1 \"src/index.html\" \"src/renderer/styles/*.css\" \"src/presentation/presentation.html\" \"src/presentation/presentation-preload.js\" \"src/about/about.html\" \"src/about/about-preload.js\" \"src/lan/mobile/*\" \"src/renderer/assets/*\" dist/src && npm run build:css && npm run build:three && npm run build:confetti",
+    "build": "npm run clean && node scripts/build-icon-data.js --bootstrap && tsc -p tsconfig.json && npm run build:icons && tsc -p tsconfig.json && npm run build:icons:check && copyfiles -u 1 \"src/index.html\" \"src/renderer/styles/*.css\" \"src/presentation/presentation.html\" \"src/presentation/presentation-preload.js\" \"src/lan/mobile/*\" \"src/renderer/assets/*\" dist/src && npm run build:css && npm run build:three && npm run build:confetti",
     "build:css": "tailwindcss -i src/renderer/styles/app.css -o dist/src/renderer/styles/app.css --minify",
     "build:three": "node scripts/build-three.js",
     "build:confetti": "node scripts/build-confetti.js",

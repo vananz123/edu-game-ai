@@ -170,7 +170,8 @@ const { getEmbeddingModel, embeddingTextForChunk } = require('./ai-core/embeddin
 const { createEmbeddingRuntime, chunkTextsForEmbedding } = require('./ai-core/embedding-manager');
 // Presentation Mode
 const { registerPresentationIpc, unregisterPresentationIpc } = require('./presentation/presentation-ipc');
-// DECISIONS #188: cửa sổ Giới thiệu + bộ cập nhật tự động (electron-updater).
+// DECISIONS #188: bộ cập nhật tự động (electron-updater). #204: cầu nối IPC này phục vụ
+// tab "Giới thiệu" của trang Cài đặt — không còn cửa sổ thứ hai, không còn preload riêng.
 const { registerAboutIpc, unregisterAboutIpc } = require('./about/about-ipc');
 // LAN Classroom Mode (teacher PC hosts, pupils answer on phones)
 const { registerLanIpc, unregisterLanIpc, shutdownLanForQuit, lanSessionActive } = require('./lan/lan-ipc');

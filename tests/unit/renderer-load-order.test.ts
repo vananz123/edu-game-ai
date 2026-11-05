@@ -369,4 +369,36 @@ assert.ok(lessonPageHtml.includes('id="lessonChatProvider"') || lessonPageHtml.i
 assert.ok(!lessonPageHtml.includes('BETA'), 'the BETA panel is gone, not renamed');
 assert.ok(!lessonPageHtml.includes('qaDocSelect'), 'the old single-document question channel is deleted');
 
+// DECISIONS #204: the About page is the sixth settings tab, so `pages/settings.js` now
+// calls four helpers that live in `features/about-panel.js`. Same failure mode as #182:
+// a script-order mistake here is a ReferenceError that kills the whole Settings page,
+// and `tsc` cannot see it.
+for (const name of ['aboutPanelHtml', 'wireAboutPanel', 'paintAboutPanel', 'aboutTabChipHtml', 'aboutPaintTabChip', 'aboutKickCheck']) {
+  assert.equal(evalInContext(`typeof ${name}`), 'function', `${name} is called from the Settings page`);
+}
+const settingsPageHtml = evalInContext(`
+  state.settings = {
+    ai: { provider: 'local', providers: [
+      { id: 'local', label: 'AI local', wizardEligible: true, usable: true, model: '' },
+      { id: 'gemini', label: 'AI đám mây', wizardEligible: true, usable: false, model: 'gemini-2.5-flash' }
+    ] },
+    preferences: { theme: 'light', audience: 'teen', teachingStyle: { tone: 'thân thiện', humor: 'vừa phải', visualStyle: 'hiện đại sinh động' } }
+  };
+  state.localAiModels = [];
+  state.localAiMachine = {};
+  state.settingsSection = 'about';
+  state.settingsAiTab = 'local';
+  renderSettings()
+`);
+assert.equal(typeof settingsPageHtml, 'string', 'the settings page should render');
+assert.ok(settingsPageHtml.includes('id="settingsPanel-about"'), 'the About panel is markup of this page');
+assert.ok(settingsPageHtml.includes('aria-controls="settingsPanel-about"'), 'the sixth tab points at that panel');
+assert.ok(settingsPageHtml.includes('data-about-tab-chip'), 'the tab label carries the chip slot the panel paints');
+assert.ok(settingsPageHtml.includes('id="aboutCheckBtn"'), 'the update controls render with the page');
+assert.ok(
+  /data-icon="info"[^>]*><\/span>Giới thiệu và cập nhật/.test(settingsPageHtml),
+  'the About heading goes through the icon hook instead of printing the Lucide id'
+);
+assert.ok(!settingsPageHtml.includes('aboutAPI'), 'no leftover of the retired second-window preload bridge');
+
 console.log(`renderer-load-order: ${loaded.length} scripts loaded, step 5 renders (${sceneCategories} scene categories)`);

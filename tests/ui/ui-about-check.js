@@ -1,30 +1,38 @@
-// ui-about-check.js — cửa sổ "Giới thiệu" + bộ cập nhật tự động (#188) chạy trên
-// Electron THẬT, với một nguồn cập nhật giả trên vòng lặp trong nước.
+// ui-about-check.js — tab "Giới thiệu" TRONG trang Cài đặt + bộ cập nhật tự động
+// (#188, #204 dời vào cửa sổ chính) chạy trên Electron THẬT, với một nguồn cập nhật
+// giả trên vòng lặp trong nước.
 //
-// Vì sao phải đo thật: hai suite unit (`update-policy`, `about-page`) chứng minh
-// máy trạng thái và trang vẽ đúng, nhưng không chứng minh được ba thứ chỉ có ở
-// Electron: (1) cửa sổ thứ hai mở ra thật, sandbox + preload riêng; (2)
-// `electron-updater` đọc `dev-app-update.yml`, bắn `update-available` →
-// `download-progress` → `update-downloaded` — đúng chuỗi kiện mà máy trạng thái
-// được thiết kế quanh nó; (3) `autoDownload = false` không tải gì trước khi giáo
-// viên bấm. Trang này không có DOM nào khác để mượn nên nó tự nạp.
+// Vì sao phải đo thật: hai suite unit (`update-policy`, `about-page`) chứng minh máy
+// trạng thái và panel vẽ đúng, nhưng không chứng minh được năm thứ chỉ có ở ứng dụng
+// đang chạy: (1) mục sidebar "Giới thiệu" đưa giáo viên đến ĐÚNG TAB của ĐÚNG cửa sổ
+// đang mở — không còn cửa sổ thứ hai nào (#204 đã xoá `about.html`, `about-preload.js`,
+// `about-manager.ts`); (2) `electron-updater` đọc `dev-app-update.yml` và bắn
+// `update-available` → `download-progress` → `update-downloaded`, đúng chuỗi kiện mà máy
+// trạng thái được thiết kế quanh nó; (3) `autoDownload = false` không tải byte nào trước
+// khi giáo viên bấm; (4) một lần mở tab chỉ hỏi feed MỘT lần — luật mới của #204, đo bằng
+// số request thực nhận chứ không bằng lời gọi IPC; (5) panel chỉ vẽ những gì main đã
+// quyết, nên trạng thái IPC và trạng thái panel đang giữ phải khớp nhau sau mỗi push.
 //
-// Cơ chế: ghi `dev-app-update.yml` (đã .gitignore) với `provider: generic` trỏ về
-// một HTTP server nội bộ phục vụ `latest.yml` phiên bản 9.9.9 + bộ cài giả 3,2 MB
-// (sha512 thật, ghi chậm theo phần để tiến trình kịp bắn nhiều lần). Bản dev có
-// file đó thì `forceDevUpdateConfig` bật lên, nên đi hết chu trình mà không phải
-// phát hành thật.
+// Cơ chế: ghi `dev-app-update.yml` (đã .gitignore) với `provider: generic` trỏ về một
+// HTTP server nội bộ phục vụ `latest.yml` phiên bản 9.9.9 + bộ cài giả 3,2 MB (sha512
+// thật, ghi chậm theo phần để tiến trình kịp bắn nhiều lần). Bản dev có file đó thì
+// `forceDevUpdateConfig` bật lên, nên đi hết chu trình mà không phải phát hành thật.
 //
-// Bẫy đã học ở lượt chạy trước: `AppUpdater` cache `configOnDisk` và
-// `clientPromise` trong cả đời process, nên đổi URL trong `dev-app-update.yml`
-// giữa chừng là đổi không — mọi lần kiểm tra sau vẫn dùng URL đầu tiên. Vì vậy
-// gate giữ MỘT URL cố định và đổi hành vi PHÍA SERVER: tắt listener là nhánh
-// `offline` (ERR_CONNECTION_REFUSED), trả 404 là nhánh `feed`, trả `latest.yml`
-// là nhánh thành công.
+// Bẫy đã học ở lượt chạy trước: `AppUpdater` cache `configOnDisk` và `clientPromise`
+// trong cả đời process, nên đổi URL trong `dev-app-update.yml` giữa chừng là đổi không —
+// mọi lần kiểm tra sau vẫn dùng URL đầu tiên. Vì vậy gate giữ MỘT URL cố định và đổi
+// hành vi PHÍA SERVER: tắt listener là nhánh `offline` (ERR_CONNECTION_REFUSED), trả 404
+// là nhánh `feed`, trả `latest.yml` là nhánh thành công. Riêng nhánh `dev-mode` thì xoá
+// chính sự tồn tại của file: `isUpdaterActive()` đọc cờ đó ở MỖI lần kiểm tra, không cache,
+// nên cất file đi giữa lượt chạy vẫn ra `dev-mode` đúng như lúc mới bật app.
+//
+// Instance phải mới: khoá "một lần mỗi phiên" nằm trong module renderer, nên chạy gate
+// hai lần trên cùng một process thì lần sau không còn cú Kick nào để đo và các con số
+// request sẽ đỏ. Bật lại app với hồ sơ sạch trước khi nghi ngờ mã.
 //
 // KHÔNG bấm "Khởi động lại để cài": `quitAndInstall` spawn bộ cài và đóng ứng dụng.
-// Chu trình đo tới mức "nút sáng, trang sáng, main nhận yêu cầu"; việc wizard chạy
-// thật chỉ kiểm chứng được bằng bộ cài thật (nêu rõ khi bàn giao).
+// Chu trình đo tới mức "nút sáng, panel sáng, main nhận yêu cầu"; việc wizard chạy thật
+// chỉ kiểm chứng được bằng bộ cài thật (nêu rõ khi bàn giao).
 //
 // Chạy:
 //   npm run build
@@ -45,6 +53,7 @@ const DEV_FEED = path.join(REPO, 'dev-app-update.yml');
 const NEW_VERSION = '9.9.9';
 const INSTALLER_NAME = 'EduGameStudio-9.9.9-setup.exe';
 const CACHE_DIR_NAME = 'edugame-studio-about-gate';
+const RELEASE_PAGE = 'https://github.com/vananz123/edu-game-ai/releases';
 
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -108,7 +117,13 @@ const CHUNK_DELAY_MS = 250;
 
 const payload = makePayload();
 const sha512 = crypto.createHash('sha512').update(payload).digest('base64');
-const feed = { mode: 'ok' };
+/**
+ * Bộ đếm đặt ở phía nhận. "Mở tab chỉ hỏi feed một lần" là luật của #204 mà một lời gọi
+ * IPC không chứng minh được (main có thể gộp request, renderer có thể gọi hai lần mà màn
+ * hình không hiện gì), nên đếm ngay tại server: `latest` là số lượt `latest.yml` được hỏi,
+ * `installer` là số lần bộ cài được xin, `bytes` là số byte đã phát ra.
+ */
+const feed = { mode: 'ok', counts: { latest: 0, installer: 0, bytes: 0 } };
 
 function latestYml() {
   return [
@@ -128,12 +143,14 @@ function latestYml() {
 const server = http.createServer((request, response) => {
   const url = String(request.url || '/');
   if (url.startsWith('/latest.yml')) {
+    feed.counts.latest += 1;
     if (feed.mode === '404') { response.writeHead(404, { 'content-type': 'text/plain' }); response.end('gone'); return; }
     response.writeHead(200, { 'content-type': 'text/yaml', 'cache-control': 'no-store' });
     response.end(latestYml());
     return;
   }
   if (url.includes(INSTALLER_NAME)) {
+    feed.counts.installer += 1;
     response.writeHead(200, {
       'content-type': 'application/octet-stream',
       'content-length': String(payload.length),
@@ -144,6 +161,7 @@ const server = http.createServer((request, response) => {
       if (offset >= payload.length) { response.end(); return; }
       const part = payload.subarray(offset, Math.min(offset + CHUNK_BYTES, payload.length));
       offset += CHUNK_BYTES;
+      feed.counts.bytes += part.length;
       response.write(part);
       setTimeout(pump, CHUNK_DELAY_MS);
     };
@@ -231,34 +249,50 @@ function isDirectory(candidate) {
   try { return fs.statSync(candidate).isDirectory(); } catch { return false; }
 }
 
-// --- đọc trang Giới thiệu ------------------------------------------------
+// --- đọc tab Giới thiệu ---------------------------------------------------
 
-/** DOM đang vẽ + bản trạng thái mới nhất của main, lấy trong cùng một lượt. */
+/**
+ * DOM đang vẽ + trạng thái của main + trạng thái panel đang giữ, lấy trong cùng một
+ * lượt. Hai bản trạng thái phải khớp nhau: panel chỉ vẽ điều main đã quyết, nên `state`
+ * (IPC) lệch `view.state` nghĩa là một `about:state-push` đã rơi.
+ *
+ * Trong phạm vi biểu thức này không được đặt tên biến là `state`: đó là binding lexical
+ * toàn cục của renderer (const ở đầu shared.js), nên nó là `state` chứ KHÔNG phải
+ * `window.state`, và ghi đè nó thì cả ứng dụng hỏng ngay giữa lượt đo.
+ */
 const READ = `(async () => {
   const g = id => document.getElementById(id);
-  const hidden = id => !g(id) || g(id).classList.contains('about-hidden');
+  const shown = el => Boolean(el) && !el.classList.contains('hidden') && el.getClientRects().length > 0;
+  const app = state;
   const bar = g('aboutProgressFill');
-  const state = await window.aboutAPI.getState();
+  const update = await window.eduGame.aboutState();
+  const view = window.aboutPanelSnapshot();
+  const chipSlot = document.querySelector('[data-about-tab-chip]');
   return {
+    page: app.page,
+    section: app.settingsSection,
+    panelOpen: shown(g('settingsPanel-about')),
+    tabSelected: g('settingsTabBtn-about') ? g('settingsTabBtn-about').getAttribute('aria-selected') : '',
+    chip: chipSlot ? chipSlot.textContent.replace(/\\s+/g, ' ').trim() : '',
     badge: g('aboutStatusText') && g('aboutStatusText').textContent.trim(),
     tone: g('aboutStatusBadge') && g('aboutStatusBadge').getAttribute('data-tone'),
-    spinning: g('aboutStatusBadge') && g('aboutStatusBadge').classList.contains('about-spin'),
+    spinning: shown(g('aboutStatusSpinner')),
     note: g('aboutStatusNote') && g('aboutStatusNote').textContent.trim(),
     checkDisabled: g('aboutCheckBtn') && g('aboutCheckBtn').disabled,
     checkLabel: g('aboutCheckLabel') && g('aboutCheckLabel').textContent.trim(),
-    updateVisible: !hidden('aboutUpdateCard'),
+    updateVisible: shown(g('aboutUpdateCard')),
     updateTitle: g('aboutUpdateTitle') && g('aboutUpdateTitle').textContent.trim(),
     updateDiff: g('aboutUpdateDiff') && g('aboutUpdateDiff').textContent.trim(),
-    barVisible: !hidden('aboutProgressTrack'),
+    barVisible: shown(g('aboutProgressTrack')),
     width: bar ? bar.style.width : '',
     aria: bar ? bar.getAttribute('aria-valuenow') : '',
     progressText: g('aboutProgressText') && g('aboutProgressText').textContent.trim(),
     downloadDisabled: g('aboutDownloadBtn') && g('aboutDownloadBtn').disabled,
     downloadLabel: g('aboutDownloadBtn') && g('aboutDownloadBtn').textContent.trim(),
-    installVisible: !hidden('aboutInstallBtn'),
+    installVisible: shown(g('aboutInstallBtn')),
     installDisabled: g('aboutInstallBtn') && g('aboutInstallBtn').disabled,
     installLabel: g('aboutInstallBtn') && g('aboutInstallBtn').textContent.trim(),
-    errorVisible: !hidden('aboutErrorCard'),
+    errorVisible: shown(g('aboutErrorCard')),
     errorTitle: g('aboutErrorTitle') && g('aboutErrorTitle').textContent.trim(),
     errorText: g('aboutErrorText') && g('aboutErrorText').textContent.trim(),
     errorDetail: g('aboutErrorDetail') && g('aboutErrorDetail').textContent.trim(),
@@ -266,10 +300,9 @@ const READ = `(async () => {
     version: g('aboutVersion') && g('aboutVersion').textContent.trim(),
     description: g('aboutDescription') && g('aboutDescription').textContent.trim(),
     packaged: g('factPackaged') && g('factPackaged').textContent.trim(),
-    theme: document.documentElement.getAttribute('data-theme'),
-    bodyBg: getComputedStyle(document.body).backgroundColor,
-    bodyColor: getComputedStyle(document.body).color,
-    state
+    foot: g('aboutFoot') && g('aboutFoot').textContent.replace(/\\s+/g, ' ').trim(),
+    state: update,
+    view
   };
 })()`;
 
@@ -283,13 +316,13 @@ const phaseOf = dom => (dom && dom.state && dom.state.phase) || '';
 async function settleBeforeClick(page, timeoutMs = 60000) {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
-    const state = await page.evaluate(`(async () => await window.aboutAPI.getState())()`);
-    if (state.phase !== 'checking' || Date.now() > deadline) return state;
+    const update = await page.evaluate(`(async () => await window.eduGame.aboutState())()`);
+    if (update.phase !== 'checking' || Date.now() > deadline) return update;
     await wait(200);
   }
 }
 
-/** Chờ trang đạt một trạng thái nào đó, trả về bản đọc cuối cùng trước hạn. */
+/** Chờ panel đạt một trạng thái nào đó, trả về bản đọc cuối cùng trước hạn. */
 async function waitFor(page, predicate, label, timeoutMs = 30000) {
   const deadline = Date.now() + timeoutMs;
   let last = null;
@@ -302,6 +335,81 @@ async function waitFor(page, predicate, label, timeoutMs = 30000) {
   error.last = last;
   throw error;
 }
+
+/** Bấm thật một mục của trang Cài đặt — không đi tắt bằng `render()`. */
+async function clickSettingsTab(page, sectionId) {
+  await page.evaluate(`(() => {
+    const tab = document.querySelector('[data-settings-section="${sectionId}"]');
+    if (tab) tab.click();
+  })()`);
+  await wait(250);
+}
+
+/** Bấm thật nút "Kiểm tra cập nhật" của panel. */
+async function clickCheck(page) {
+  await page.evaluate(`document.getElementById('aboutCheckBtn').click()`);
+}
+
+/**
+ * Đếm từng run chữ của panel: cỡ thật và tương phản thật, nền lấy từ cả chuỗi tổ tiên
+ * (nền thẻ Cài đặt != nền badge). Canvas 1x1 là bắt buộc: Chromium tuần tự hoá màu hiện
+ * đại thành `oklab(...)`, regex không đọc lại được (#160, #181).
+ */
+const MEASURE = `(() => {
+  const root = document.getElementById('settingsPanel-about');
+  if (!root) return { runs: [], tones: {}, missing: true };
+  const swatch = document.createElement('canvas');
+  swatch.width = swatch.height = 1;
+  const ctx = swatch.getContext('2d', { willReadFrequently: true });
+  const pixelOf = value => {
+    ctx.clearRect(0, 0, 1, 1);
+    ctx.fillStyle = value;
+    ctx.fillRect(0, 0, 1, 1);
+    const d = ctx.getImageData(0, 0, 1, 1).data;
+    return { r: d[0], g: d[1], b: d[2], a: d[3] / 255 };
+  };
+  const lum = c => {
+    const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+    return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b);
+  };
+  const ratio = (a, b) => Math.round(((Math.max(lum(a), lum(b)) + 0.05) / (Math.min(lum(a), lum(b)) + 0.05)) * 100) / 100;
+  const backOf = el => {
+    for (let node = el; node; node = node.parentElement) {
+      const c = pixelOf(getComputedStyle(node).backgroundColor);
+      if (c.a > 0.95) return c;
+    }
+    return { r: 255, g: 255, b: 255, a: 1 };
+  };
+  const runs = [];
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const text = (node.textContent || '').trim();
+    if (!text || !/[\\p{L}\\p{N}]/u.test(text)) continue;
+    const el = node.parentElement;
+    if (!el || el.closest('style, script') || !el.getClientRects().length) continue;
+    const cs = getComputedStyle(el);
+    runs.push({
+      px: Math.round(parseFloat(cs.fontSize) * 10) / 10,
+      contrast: ratio(pixelOf(cs.color), backOf(el)),
+      button: Boolean(el.closest('.btn')),
+      // Trường text bị cắt còn 28 ký tự để in ra không tràn dòng, nên nó KHÔNG dùng để
+      // nhận diện thẻ nào đang nói — câu dev-mode dài hơn 28 ký tự trước cụm cần tìm.
+      // err lấy theo cây DOM, chính xác hơn một regex trên đoạn chữ cụt.
+      err: Boolean(el.closest('#aboutErrorCard')),
+      text: text.slice(0, 28),
+      tag: el.tagName + '.' + (typeof el.className === 'string' ? el.className : '').slice(0, 44)
+    });
+  }
+  const badge = document.getElementById('aboutStatusBadge');
+  const tones = {};
+  for (const tone of ['idle', 'checking', 'ok', 'new', 'error']) {
+    window.aboutBadgeTone(badge, tone);
+    const cs = getComputedStyle(badge);
+    tones[tone] = ratio(pixelOf(cs.color), pixelOf(cs.backgroundColor));
+  }
+  window.paintAboutPanel();
+  return { runs, tones, theme: document.documentElement.getAttribute('data-theme') };
+})()`;
 
 function report() {
   const failed = results.filter(entry => !entry.ok);
@@ -318,171 +426,212 @@ function report() {
 
   const main = await connectTo(/index\.html/);
 
-  // 1. Mục sidebar mở được cửa sổ thứ hai — bằng một cú bấm thật, vì bug #187 chính
-  //    là "chuyện gì xảy ra sau khi bấm", chứ không phải "API có tồn tại không".
-  const sidebar = await main.evaluate(`(() => {
-    const items = [...document.querySelectorAll('[data-action="about-open"]')];
+  // 0. Hồ sơ mới mở trang setup vào `#modalRoot` một nhịp sau khi cửa sổ nạp; nó sẽ che
+  //    mất trang Cài đặt mà gate này điều khiển. Cùng cảnh báo các gate Settings đã gặp.
+  const guard = await main.evaluate(`(async () => {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    for (let i = 0; i < 40 && !document.querySelector('#modalRoot .setup-fullscreen'); i += 1) await sleep(100);
+    if (typeof closeSetupWizard === 'function') closeSetupWizard('close');
+    await sleep(250);
+    return { wizard: Boolean(document.querySelector('#modalRoot .setup-fullscreen')) };
+  })()`);
+  check('the first-run wizard is out of the way', guard.wizard === false, JSON.stringify(guard));
+
+  // 1. Cửa sổ thứ hai đã chết thật: không file trong src, không asset trong dist,
+  //    không `window.aboutAPI` trong cửa sổ đang mở.
+  const retired = {
+    source: ['src/about/about.html', 'src/about/about-preload.js', 'src/about/about-manager.ts']
+      .filter(rel => fs.existsSync(path.join(REPO, rel))),
+    built: ['dist/src/about/about.html', 'dist/src/about/about-preload.js']
+      .filter(rel => fs.existsSync(path.join(REPO, rel)))
+  };
+  check('the standalone About files are deleted from src', retired.source.length === 0, retired.source.join(', '));
+  check('the build emits no About window assets', retired.built.length === 0, retired.built.join(', '));
+
+  const bridge = await main.evaluate(`(() => {
+    const api = window.eduGame || {};
     return {
-      count: items.length,
-      label: items[0] ? items[0].textContent.trim() : '',
-      icon: items[0] && items[0].querySelector('.nav-icon[data-icon="info"]') ? 'info' : 'missing'
+      aboutAPI: typeof window.aboutAPI,
+      names: ['openAbout', 'aboutInfo', 'aboutState', 'aboutCheck', 'aboutDownload', 'aboutInstall',
+        'aboutOpenReleases', 'onAboutState'].filter(name => typeof api[name] === 'function'),
+      panel: typeof window.aboutPanelHtml,
+      snapshot: typeof window.aboutPanelSnapshot
     };
   })()`);
-  check('sidebar has exactly one Gioi thieu entry', sidebar.count === 1, JSON.stringify(sidebar));
-  check('the entry is labelled in Vietnamese', /Giới thiệu/u.test(sidebar.label), sidebar.label);
-  check('the entry carries the info icon', sidebar.icon === 'info', sidebar.icon);
+  check('the About bridge now lives on window.eduGame', bridge.names.length === 8, JSON.stringify(bridge.names));
+  check('the retired second-window preload is not loaded anywhere',
+    bridge.aboutAPI === 'undefined', String(bridge.aboutAPI));
+  check('the panel module is reachable as a renderer global',
+    bridge.panel === 'function' && bridge.snapshot === 'function',
+    JSON.stringify({ panel: bridge.panel, snapshot: bridge.snapshot }));
 
+  // 2. Trước khi tab hiện ra thì chưa được hỏi feed — "vào lớp phải offline" đo tại
+  //    phía nhận, không suy từ log.
+  const before = await main.evaluate(READ);
+  check('nothing has asked the loopback feed before the tab opens', feed.counts.latest === 0,
+    JSON.stringify(feed.counts));
+  check('the updater is idle until the tab is opened', before.state.phase === 'idle',
+    JSON.stringify({ phase: before.state.phase, kicked: before.view.kicked, section: before.section }));
+
+  // 3. Mục sidebar mở tab trong CÙNG cửa sổ, bằng một cú bấm thật: bug #187 là "chuyện
+  //    gì xảy ra sau khi bấm", còn #204 là "sau khi bấm thì cửa sổ nào hiện ra".
+  writeFeed(baseUrl);
+  const targetsBefore = (await listTargets(PORT)).length;
   await main.evaluate(`document.querySelector('[data-action="about-open"]').click()`);
-  let opened = null;
-  for (let attempt = 0; attempt < 60 && !opened; attempt += 1) {
-    opened = (await listTargets(PORT)).find(t => /about\.html/.test(t.url));
-    if (!opened) await wait(250);
+  await wait(600);
+  const targetsAfter = (await listTargets(PORT)).length;
+  const sidebar = await main.evaluate(`(() => {
+    const items = [...document.querySelectorAll('[data-action="about-open"]')];
+    const hook = items[0] ? items[0].querySelector('[data-icon="info"]') : null;
+    return {
+      count: items.length,
+      label: items[0] ? items[0].textContent.replace(/\\s+/g, ' ').trim() : '',
+      icon: hook && hook.querySelector('svg.lucide') ? 'info' : 'missing'
+    };
+  })()`);
+  const opened = await main.evaluate(READ);
+  check('the sidebar keeps exactly one Giới thiệu entry, in Vietnamese, with the info icon',
+    sidebar.count === 1 && /Giới thiệu/u.test(sidebar.label) && sidebar.icon === 'info',
+    JSON.stringify(sidebar));
+  check('clicking it lands on the Settings page with the about tab open',
+    opened.page === 'settings' && opened.section === 'about' && opened.panelOpen === true && opened.tabSelected === 'true',
+    JSON.stringify({ page: opened.page, section: opened.section, panelOpen: opened.panelOpen, tabSelected: opened.tabSelected }));
+  check('and it opens no second window',
+    targetsAfter === targetsBefore && (await listTargets(PORT)).filter(t => /about\.html/.test(t.url)).length === 0,
+    JSON.stringify({ targetsBefore, targetsAfter }));
+  check('the about tab is the sixth tab and its icon is painted',
+    await main.evaluate(`[...document.querySelectorAll('[data-settings-section]')].map(node => node.dataset.settingsSection).join(',')`)
+      === 'ai,teaching,interface,tasks,diagnostics,about'
+    && await main.evaluate(`(() => {
+      const hook = document.querySelector('[data-settings-section="about"] [data-icon="info"]');
+      return Boolean(hook) && Boolean(hook.querySelector('svg.lucide'));
+    })()`) === true,
+    await main.evaluate(`[...document.querySelectorAll('[data-settings-section]')].map(node => node.dataset.settingsSection).join(',')`));
+  check('the panel heading is Vietnamese and never prints a raw icon id',
+    await main.evaluate(`(() => {
+      const h3 = document.querySelector('#settingsPanel-about h3');
+      const text = h3 ? h3.textContent.replace(/\\s+/g, ' ').trim() : '';
+      return /Giới thiệu và cập nhật/u.test(text) && !/\\b(info|bot|palette|settings|list-checks|stethoscope|monitor|cloud)\\b/.test(text);
+    })()`) === true,
+    await main.evaluate(`(document.querySelector('#settingsPanel-about h3') || {}).textContent || ''`));
+
+  // 4. Mở tab là kiểm tra, và CHỈ một lần.
+  let afterKick;
+  try {
+    afterKick = await waitFor(main, entry => phaseOf(entry) === 'available', 'the kick to reach the feed', 45000);
+  } catch (error) {
+    check('opening the tab asks the feed once and answers', false, error.message);
+    afterKick = error.last || await main.evaluate(READ);
   }
-  check('clicking the sidebar opens the About window', Boolean(opened), opened ? 'target found' : 'no about.html target');
-  if (!opened) report();
+  check('the first tab open produced exactly one feed request', feed.counts.latest === 1,
+    JSON.stringify({ latest: feed.counts.latest, note: 'instance phải mới — xem đầu tệp' }));
+  check('the kick lands on the mock version', afterKick.badge === `Có bản mới ${NEW_VERSION}`, afterKick.badge);
+  check('the kick is recorded in the panel, not only in main',
+    afterKick.view.kicked === true && afterKick.state.phase === afterKick.view.state.phase,
+    JSON.stringify({ kicked: afterKick.view.kicked, ipc: afterKick.state.phase, panel: afterKick.view.state.phase }));
 
-  let about = await connectTo(/about\.html/);
+  await clickSettingsTab(main, 'ai');
+  await clickSettingsTab(main, 'about');
+  await clickSettingsTab(main, 'interface');
+  await clickSettingsTab(main, 'about');
+  await wait(1200);
+  const afterReopen = await main.evaluate(READ);
+  check('reopening the tab four more times asks the feed zero extra times',
+    feed.counts.latest === 1 && afterReopen.view.kicked === true,
+    JSON.stringify({ latest: feed.counts.latest, kicked: afterReopen.view.kicked }));
+  check('a hidden-then-reopened panel repaints the live state, not a stale one',
+    afterReopen.panelOpen === true && afterReopen.state.phase === afterReopen.view.state.phase,
+    JSON.stringify({ ipc: afterReopen.state.phase, panel: afterReopen.view.state.phase }));
 
-  // 2. An ninh của cửa sổ thứ hai.
-  const security = await about.evaluate(`(() => ({
-    api: window.aboutAPI ? Object.keys(window.aboutAPI) : null,
-    frozen: (() => { try { window.aboutAPI.checkForUpdates = 1; return window.aboutAPI.checkForUpdates !== 1; } catch { return true; } })(),
-    require: typeof window.require,
-    process: typeof window.process,
-    module: typeof window.module,
-    eduGame: typeof window.eduGame,
-    csp: (document.querySelector('meta[http-equiv="Content-Security-Policy"]') || {}).content || '',
-    scripts: [...document.querySelectorAll('script[src]')].map(el => el.getAttribute('src')),
-    links: [...document.querySelectorAll('link[href], img[src]')].map(el => el.getAttribute('href') || el.getAttribute('src'))
-  }))()`);
-  const EXPECTED_API = ['getAppInfo', 'getState', 'checkForUpdates', 'startDownload', 'installAndRestart',
-    'openReleases', 'onUpdateState', 'onUpdateAvailable', 'onDownloadProgress', 'onUpdateDownloaded', 'onUpdateError'];
-  check('aboutAPI exposes the whole bridge', Array.isArray(security.api)
-    && EXPECTED_API.every(name => security.api.includes(name)), JSON.stringify(security.api));
-  check('aboutAPI cannot be overwritten from the page', security.frozen === true, String(security.frozen));
-  check('no Node in the About renderer (sandbox + contextIsolation)',
-    security.require === 'undefined' && security.process === 'undefined' && security.module === 'undefined',
-    JSON.stringify({ require: security.require, process: security.process, module: security.module }));
-  check('the About window does not get the main window bridge', security.eduGame === 'undefined', String(security.eduGame));
-  check('the About page pins its own CSP', /default-src 'self'/u.test(security.csp), security.csp.slice(0, 80));
-  check('the About page loads no external script', security.scripts.length === 0, JSON.stringify(security.scripts));
-  check('the About page loads only its own assets',
-    security.links.every(src => /^(\.\.\/|file:|data:)/u.test(src)), JSON.stringify(security.links));
+  const beforeManual = feed.counts.latest;
+  await settleBeforeClick(main);
+  await clickCheck(main);
+  await wait(3000);
+  const manual = await main.evaluate(READ);
+  check('the button still re-checks on demand — the once-per-session lock is only for the kick',
+    feed.counts.latest === beforeManual + 1 && phaseOf(manual) === 'available',
+    JSON.stringify({ before: beforeManual, after: feed.counts.latest, phase: manual.state.phase }));
 
-  // 3. Thông tin ứng dụng.
-  const info = await about.evaluate(`(async () => await window.aboutAPI.getAppInfo())()`);
+  // 5. Thông tin ứng dụng qua `about:info` — cùng hộ chiếu dữ liệu như cửa sổ cũ.
+  const info = await main.evaluate(`(async () => await window.eduGame.aboutInfo())()`);
   const ALLOWLIST = ['name', 'version', 'description', 'author', 'license', 'packaged', 'electron', 'chrome',
     'node', 'platform', 'arch', 'userDataPath', 'releasePageUrl'];
   check('about:info carries nothing beyond the allowlist',
     Object.keys(info).every(key => ALLOWLIST.includes(key)), JSON.stringify(Object.keys(info)));
   check('info reports the running version', /^\d+\.\d+\.\d+/u.test(info.version), info.version);
-  check('dev build is reported as not packaged', info.packaged === false, String(info.packaged));
-  check('release page is the public releases URL',
-    info.releasePageUrl === 'https://github.com/vananz123/edu-game-ai/releases', info.releasePageUrl);
-
-  // 4. Mở trang là kiểm tra; bản dev không có feed phải nói thẳng thay vì quay mãi.
-  let dom;
-  try {
-    dom = await waitFor(about, entry => phaseOf(entry) === 'error' && entry.state.errorKind === 'dev-mode', 'the dev-mode answer');
-  } catch (error) {
-    check('opening the page answers with the dev-mode message', false, error.message);
-    dom = error.last || await about.evaluate(READ);
-  }
-  check('the badge reads "Không kiểm tra được"', dom.badge === 'Không kiểm tra được', dom.badge);
-  check('the dev-mode card says this is not an installed build', /bộ cài đặt/u.test(dom.errorText), dom.errorText.slice(0, 80));
-  check('the dev-mode card links to the release page', dom.releasesHref === info.releasePageUrl, String(dom.releasesHref));
-  check('the page is not stuck on "đang kiểm tra"', dom.spinning === false && dom.checkDisabled === false,
-    JSON.stringify({ spinning: dom.spinning, checkDisabled: dom.checkDisabled }));
-  check('the static info block is filled', dom.version.startsWith('Phiên bản ') && dom.packaged.length > 10,
-    JSON.stringify({ version: dom.version, packaged: dom.packaged }));
-  check('no mojibake reaches the About page', !/[ÂÃ][»¡º£¥]/u.test(`${dom.description} ${dom.badge} ${dom.note}`), dom.description);
-  const leaked = /GEMINI|service_role|Bearer |eyJ[A-Za-z0-9_-]{8}/u.test(JSON.stringify(dom));
+  check('a source build reports itself as source, not as an installer',
+    info.packaged === false && /Mã nguồn đang phát triển/u.test(manual.packaged),
+    JSON.stringify({ packaged: info.packaged, shown: manual.packaged }));
+  check('release page is the public releases URL', info.releasePageUrl === RELEASE_PAGE, info.releasePageUrl);
+  check('the static info block is filled', manual.version.startsWith('Phiên bản '), manual.version);
+  check('the fine print still promises the two things teachers worry about',
+    /chỉ tải về khi bạn bấm nút/u.test(manual.foot) && /offline/u.test(manual.foot), manual.foot.slice(0, 120));
+  check('no mojibake reaches the panel', !/[ÂÃ][»¡º£¥]/u.test(`${manual.description} ${manual.badge} ${manual.note}`), manual.description);
+  const leaked = /GEMINI|service_role|Bearer |eyJ[A-Za-z0-9_-]{8}/u.test(JSON.stringify(manual));
   check('no secret-shaped text on the page', !leaked, leaked ? 'found a token-shaped string' : '');
 
-  // 5. Chữ và màu: trang này không nạp app.css nên không gate nào khác đo nó.
-  const reading = await about.evaluate(`(() => {
-    const sizes = [];
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      const text = (node.textContent || '').trim();
-      if (!text) continue;
-      const el = node.parentElement;
-      if (!el || el.closest('style, script')) continue;
-      const rect = el.getBoundingClientRect();
-      if (!rect.width || !rect.height) continue;
-      sizes.push({ px: parseFloat(getComputedStyle(el).fontSize), tag: el.tagName + '#' + (el.id || el.className) });
-    }
-    const channels = value => (String(value).match(/\\d+(?:\\.\\d+)?/g) || []).slice(0, 3).map(Number);
-    const luminance = ([r, g, b]) => {
-      const f = v => (v <= 0.03928 ? v / 255 / 12.92 : Math.pow((v / 255 + 0.055) / 1.055, 2.4));
-      return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
-    };
-    const ratio = (fg, bg) => {
-      const a = luminance(channels(fg)), b = luminance(channels(bg));
-      const hi = Math.max(a, b), lo = Math.min(a, b);
-      return Number(((hi + 0.05) / (lo + 0.05)).toFixed(2));
-    };
-    const badge = document.getElementById('aboutStatusBadge');
-    const restore = { tone: badge.getAttribute('data-tone'), html: badge.innerHTML };
-    const toneRatios = {};
-    for (const tone of ['idle', 'checking', 'ok', 'new', 'error']) {
-      badge.setAttribute('data-tone', tone);
-      badge.innerHTML = '<span id="aboutStatusText">mẫu đo</span>';
-      const cs = getComputedStyle(badge);
-      toneRatios[tone] = ratio(cs.color, cs.backgroundColor);
-    }
-    badge.setAttribute('data-tone', restore.tone);
-    badge.innerHTML = restore.html;
-    const body = getComputedStyle(document.body);
-    const muted = getComputedStyle(document.querySelector('.about-note')).color;
-    return {
-      min: sizes.length ? Number(Math.min(...sizes.map(entry => entry.px)).toFixed(1)) : 0,
-      smallest: sizes.sort((a, b) => a.px - b.px)[0] || null,
-      bodyRatio: ratio(body.color, body.backgroundColor),
-      mutedRatio: ratio(muted, body.backgroundColor),
-      toneRatios
-    };
-  })()`);
-  check('smallest painted text is at least 13px', reading.min >= 13,
-    `${reading.min}px${reading.smallest ? ` (${reading.smallest.tag})` : ''}`);
-  check('body text contrast >= 4.5', reading.bodyRatio >= 4.5, String(reading.bodyRatio));
-  check('muted text contrast >= 4.5', reading.mutedRatio >= 4.5, String(reading.mutedRatio));
-  for (const [tone, ratio] of Object.entries(reading.toneRatios)) {
-    check(`badge tone "${tone}" contrast >= 4.5`, ratio >= 4.5, String(ratio));
+  // 6. Chữ và màu. Panel nằm trong thẻ Cài đặt nên không còn bảng màu riêng — nhưng năm
+  //    sắc độ badge chỉ hiện ra theo từng pha của một bộ cập nhật thật, mà cổng
+  //    typography (#181) không đi tới được. Quét qua `window.aboutBadgeTone` để không
+  //    phải chép bảng màu vào gate (chép tay là cách một màu lệch AA lọt qua).
+  const savedTheme = await main.evaluate(`((state.settings || {}).preferences || {}).theme || 'light'`);
+  const light = await main.evaluate(MEASURE);
+  const lightText = light.runs.filter(run => !run.button);
+  check('the panel paints a real crowd of text runs', light.runs.length >= 20, `${light.runs.length} runs`);
+  check('light: read text is at least 13px', lightText.length > 0 && Math.min(...lightText.map(run => run.px)) >= 13,
+    JSON.stringify(lightText.slice().sort((a, b) => a.px - b.px)[0] || null));
+  check('light: shared .btn labels keep the app-wide 12px floor',
+    light.runs.filter(run => run.button).every(run => run.px >= 12),
+    JSON.stringify(light.runs.filter(run => run.button).map(run => run.px)));
+  check('light: every run in the panel reaches 4.5:1',
+    light.runs.every(run => run.contrast >= 4.5),
+    JSON.stringify(light.runs.filter(run => run.contrast < 4.5).slice(0, 4)));
+  for (const [tone, ratio] of Object.entries(light.tones)) {
+    check(`light: badge tone "${tone}" contrast >= 4.5`, ratio >= 4.5, String(ratio));
   }
-  const stillPainted = await about.evaluate(`document.getElementById('aboutStatusText').textContent.trim()`);
-  check('measuring tones did not damage the badge', stillPainted === dom.badge, stillPainted);
+  const badgeAfterSweep = await main.evaluate(`document.getElementById('aboutStatusText').textContent.trim()`);
+  check('measuring tones did not damage the badge', badgeAfterSweep === manual.badge, badgeAfterSweep);
 
-  // 6. Chủ đề tối đi theo ứng dụng, kể cả khi cửa sổ đã mở sẵn.
-  await main.evaluate(`window.eduGame.openAbout('dark')`);
-  await wait(1500);
-  about = await connectTo(/about\.html/);
-  const dark = await about.evaluate(READ);
-  check('an already-open window follows the dark theme', dark.theme === 'dark', String(dark.theme));
-  check('the dark theme really repaints the page', dark.bodyBg !== 'rgb(245, 247, 251)', `${dark.bodyBg} / ${dark.bodyColor}`);
-  const darkReading = await about.evaluate(`(() => {
-    const channels = value => (String(value).match(/\\d+(?:\\.\\d+)?/g) || []).slice(0, 3).map(Number);
-    const luminance = ([r, g, b]) => {
-      const f = v => (v <= 0.03928 ? v / 255 / 12.92 : Math.pow((v / 255 + 0.055) / 1.055, 2.4));
-      return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
-    };
-    const cs = getComputedStyle(document.body);
-    const muted = getComputedStyle(document.querySelector('.about-note')).color;
-    const a = luminance(channels(cs.color)), b = luminance(channels(cs.backgroundColor));
-    const m = luminance(channels(muted));
-    const ratio = (x, y) => Number(((Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05)).toFixed(2));
-    return { body: ratio(a, b), muted: ratio(m, b) };
-  })()`);
-  check('dark body text contrast >= 4.5', darkReading.body >= 4.5, String(darkReading.body));
-  check('dark muted text contrast >= 4.5', darkReading.muted >= 4.5, String(darkReading.muted));
-  const windowCount = (await listTargets(PORT)).filter(t => /about\.html/.test(t.url)).length;
-  check('re-opening focuses the existing window instead of stacking', windowCount === 1, String(windowCount));
-  await main.evaluate(`window.eduGame.openAbout('light')`);
-  await wait(1500);
-  about = await connectTo(/about\.html/);
+  await main.evaluate(`applyTheme('dark')`);
+  await wait(400);
+  const dark = await main.evaluate(MEASURE);
+  check('the panel follows the app theme', dark.theme === 'dark', String(dark.theme));
+  check('dark: every run in the panel reaches 4.5:1',
+    dark.runs.length >= 20 && dark.runs.every(run => run.contrast >= 4.5),
+    JSON.stringify(dark.runs.filter(run => run.contrast < 4.5).slice(0, 4)));
+  for (const [tone, ratio] of Object.entries(dark.tones)) {
+    check(`dark: badge tone "${tone}" contrast >= 4.5`, ratio >= 4.5, String(ratio));
+  }
+  await main.evaluate(`applyTheme(${JSON.stringify(savedTheme)})`);
+  await wait(300);
 
-  // 7. Hai nhánh lỗi đo trước, khi chưa có bộ cài nào trên đĩa. URL giữ nguyên,
-  //    chỉ server đổi: tắt listener -> `offline`, trả 404 -> `feed`.
+  // 7. Nhánh dev-mode: cất `dev-app-update.yml` đi thì bản chạy từ mã nguồn phải nói
+  //    thẳng, không để vòng "đang kiểm tra…" quay mãi.
+  removeFeed();
+  await settleBeforeClick(main);
+  await clickCheck(main);
+  let devMode;
+  try {
+    devMode = await waitFor(main, entry => entry.state.errorKind === 'dev-mode', 'the dev-mode answer', 40000);
+  } catch (error) {
+    check('checking without a dev feed answers with the dev-mode message', false, error.message);
+    devMode = error.last || await main.evaluate(READ);
+  }
+  check('the badge reads "Không kiểm tra được"', devMode.badge === 'Không kiểm tra được', devMode.badge);
+  check('the dev-mode card says this is not an installed build', /bộ cài đặt/u.test(devMode.errorText), devMode.errorText.slice(0, 80));
+  check('the dev-mode card links to the release page', devMode.releasesHref === RELEASE_PAGE, String(devMode.releasesHref));
+  check('the panel is not stuck on "đang kiểm tra"', devMode.spinning === false && devMode.checkDisabled === false,
+    JSON.stringify({ spinning: devMode.spinning, checkDisabled: devMode.checkDisabled }));
+  check('the tab chip stays quiet on an error', devMode.chip === '', devMode.chip);
+  const errorRuns = await main.evaluate(MEASURE);
+  check('the error card is measured too — its runs reach 4.5:1',
+    errorRuns.runs.some(run => run.err)
+    && errorRuns.runs.every(run => run.contrast >= 4.5),
+    `${errorRuns.runs.filter(run => run.err).length} runs inside #aboutErrorCard / low: `
+    + JSON.stringify(errorRuns.runs.filter(run => run.contrast < 4.5).slice(0, 3)));
+
+  // 8. Hai nhánh lỗi mạng, đo trước khi có bộ cài nào trên đĩa. URL giữ nguyên (đã
+  //    cache), chỉ server đổi: tắt listener -> `offline`, trả 404 -> `feed`.
   const errorScenarios = [
     { name: 'offline', serve: false, mode: 'ok', hint: /internet/u },
     { name: 'feed', serve: true, mode: '404', hint: /chưa tìm thấy|phát hành/u }
@@ -491,12 +640,11 @@ function report() {
   for (const scenario of errorScenarios) {
     feed.mode = scenario.mode;
     if (scenario.serve) await startFeed(feedPort); else await stopFeed();
-    await settleBeforeClick(about);
-    await about.evaluate(`document.getElementById('aboutCheckBtn').click()`);
+    await settleBeforeClick(main);
+    await clickCheck(main);
     let answer;
     try {
-      answer = await waitFor(about,
-        entry => entry.state.errorKind === scenario.name, `${scenario.name} classification`, 40000);
+      answer = await waitFor(main, entry => entry.state.errorKind === scenario.name, `${scenario.name} classification`, 40000);
     } catch (error) {
       check(`${scenario.name}: main classifies the failure`, false, error.message);
       continue;
@@ -510,14 +658,14 @@ function report() {
       JSON.stringify({ percent: answer.state.progressPercent, barVisible: answer.barVisible }));
   }
 
-  // 8. Có nguồn -> bản mới, và KHÔNG tự tải.
+  // 9. Có nguồn -> bản mới, và KHÔNG tự tải.
   feed.mode = 'ok';
   await startFeed(feedPort);
-  await settleBeforeClick(about);
-  await about.evaluate(`document.getElementById('aboutCheckBtn').click()`);
+  await settleBeforeClick(main);
+  await clickCheck(main);
   let available;
   try {
-    available = await waitFor(about, entry => phaseOf(entry) === 'available', 'update-available', 45000);
+    available = await waitFor(main, entry => phaseOf(entry) === 'available', 'update-available', 45000);
   } catch (error) {
     check('the mock feed produces update-available', false, error.message);
     removeFeed();
@@ -530,19 +678,21 @@ function report() {
     available.updateDiff.includes(NEW_VERSION) && available.updateDiff.includes(available.state.currentVersion), available.updateDiff);
   check('the download button waits for the teacher', available.downloadDisabled === false && available.barVisible === false,
     JSON.stringify({ downloadDisabled: available.downloadDisabled, barVisible: available.barVisible }));
+  check('the tab chip advertises the new version', available.chip === `↑ ${NEW_VERSION}`, available.chip);
   await wait(2500);
-  const untouched = await about.evaluate(READ);
+  const untouched = await main.evaluate(READ);
   check('autoDownload=false really downloads nothing on its own',
-    untouched.barVisible === false && untouched.state.progressPercent === 0 && untouched.state.phase === 'available',
-    JSON.stringify({ phase: untouched.state.phase, percent: untouched.state.progressPercent }));
+    untouched.barVisible === false && untouched.state.progressPercent === 0 && untouched.state.phase === 'available'
+    && feed.counts.installer === 0,
+    JSON.stringify({ phase: untouched.state.phase, percent: untouched.state.progressPercent, installer: feed.counts.installer }));
 
-  // 9. Bấm tải: tiến trình thật, phần trăm tăng một chiều, rồi sẵn sàng cài.
+  // 10. Bấm tải: tiến trình thật, phần trăm tăng một chiều, rồi sẵn sàng cài.
   const samples = [];
-  await about.evaluate(`document.getElementById('aboutDownloadBtn').click()`);
+  await main.evaluate(`document.getElementById('aboutDownloadBtn').click()`);
   let downloaded = null;
   const deadline = Date.now() + 90000;
   while (Date.now() < deadline) {
-    const sample = await about.evaluate(READ);
+    const sample = await main.evaluate(READ);
     samples.push(sample);
     if (phaseOf(sample) === 'downloaded') { downloaded = sample; break; }
     if (phaseOf(sample) === 'error') break;
@@ -566,12 +716,14 @@ function report() {
     check('the check button is locked while bytes move', mid.checkDisabled === true, String(mid.checkDisabled));
     check('the download button reads "Đang tải…"', /Đang tải/u.test(mid.downloadLabel), mid.downloadLabel);
     check('the badge names the version being downloaded', mid.badge === `Đang tải ${NEW_VERSION}…`, mid.badge);
+    check('the spinner runs while bytes move', mid.spinning === true, String(mid.spinning));
   } else {
     check('the bar and its number agree', false, 'no mid-flight sample to measure');
     check('the progress line shows bytes and an estimate', false, 'no mid-flight sample');
     check('the check button is locked while bytes move', false, 'no mid-flight sample');
     check('the download button reads "Đang tải…"', false, 'no mid-flight sample');
     check('the badge names the version being downloaded', false, 'no mid-flight sample');
+    check('the spinner runs while bytes move', false, 'no mid-flight sample');
   }
   if (downloaded) {
     check('the badge announces the ready update', downloaded.badge === `Cập nhật ${NEW_VERSION} sẵn sàng!`, downloaded.badge);
@@ -584,6 +736,10 @@ function report() {
     check('the install button invites a restart, not a download', /Khởi động lại để cài/u.test(downloaded.installLabel), downloaded.installLabel);
     check('re-downloading is off once the file is on disk', downloaded.downloadDisabled === true, String(downloaded.downloadDisabled));
     check('the note says the installer is on this machine', /đã nằm trên máy/u.test(downloaded.note), downloaded.note);
+    check('the tab chip switches to "Cài được"', downloaded.chip === '✓ Cài được', downloaded.chip);
+    check('the bytes the server sent match what main reported',
+      feed.counts.bytes >= payload.length && downloaded.state.transferredBytes > 0,
+      JSON.stringify({ served: feed.counts.bytes, transferred: downloaded.state.transferredBytes, expected: payload.length }));
     const cacheDir = findCacheDir();
     const pending = cacheDir ? pendingDirOf(cacheDir) : null;
     const installer = pending ? fs.readdirSync(pending).find(name => name.includes('EduGameStudio')) : null;
@@ -593,26 +749,49 @@ function report() {
       JSON.stringify({ cacheDir, installer, installerBytes, expected: payload.length }));
   }
 
-  // 10. Luật 6 đo tận nơi: lỗi của lần kiểm tra sau không lấy đi quyền cài.
+  // 11. Chip nhãn tab phải theo được một push khi panel đang bị giấu — nghĩa là không có
+  //     `render()` nào giúp nó. Đổi tab bằng click thật: wiring của tab chỉ lật class.
+  await clickSettingsTab(main, 'ai');
+  const chipWhileHidden = await main.evaluate(`(() => {
+    const slot = document.querySelector('[data-about-tab-chip]');
+    const view = window.aboutPanelSnapshot();
+    return {
+      chip: slot ? slot.textContent.trim() : '',
+      panelHidden: document.getElementById('settingsPanel-about').classList.contains('hidden'),
+      phase: view.state.phase
+    };
+  })()`);
+  check('the tab chip keeps talking while the panel is hidden',
+    chipWhileHidden.panelHidden === true && chipWhileHidden.chip === '✓ Cài được' && chipWhileHidden.phase === 'downloaded',
+    JSON.stringify(chipWhileHidden));
+  await clickSettingsTab(main, 'about');
+
+  // 12. Luật 6 đo tận nơi: lỗi của lần kiểm tra sau không lấy đi quyền cài.
   await stopFeed();
-  await settleBeforeClick(about);
-  await about.evaluate(`document.getElementById('aboutCheckBtn').click()`);
+  await settleBeforeClick(main);
+  await clickCheck(main);
   await wait(6000);
-  const afterLateError = await about.evaluate(READ);
+  const afterLateError = await main.evaluate(READ);
   check('a failed later check cannot revoke the ready installer',
     phaseOf(afterLateError) === 'downloaded' && afterLateError.installDisabled === false,
     JSON.stringify({ phase: afterLateError.state.phase, installDisabled: afterLateError.installDisabled }));
-  check('and the page shows no error card for it', afterLateError.errorVisible === false, afterLateError.errorTitle);
+  check('and the panel shows no error card for it', afterLateError.errorVisible === false, afterLateError.errorTitle);
+  check('the panel still mirrors main after the late failure',
+    afterLateError.state.phase === afterLateError.view.state.phase && afterLateError.view.bridgeBroken === false,
+    JSON.stringify({ ipc: afterLateError.state.phase, panel: afterLateError.view.state.phase, bridgeBroken: afterLateError.view.bridgeBroken }));
 
-  // Dọn dẹp: đóng cửa sổ, bỏ feed, xoá bộ nhớ đệm của gate, tắt server.
+  // Dọn dẹp: bỏ feed, trả trang, xoá bộ nhớ đệm của gate, tắt server.
   removeFeed();
-  await about.evaluate(`window.close()`).catch(() => { });
-  await wait(1000);
-  const remaining = (await listTargets(PORT)).filter(t => /about\.html/.test(t.url)).length;
-  check('the About window closes cleanly', remaining === 0, String(remaining));
+  const cleanup = await main.evaluate(`(() => {
+    navigate('library');
+    return { page: state.page };
+  })()`);
+  check('the app leaves the Settings page cleanly', cleanup.page === 'library', JSON.stringify(cleanup));
   const cacheDir = findCacheDir();
   if (cacheDir) { try { fs.rmSync(cacheDir, { recursive: true, force: true }); } catch { } }
   await stopFeed();
+  console.log(`  feed served ${feed.counts.latest} latest.yml reads, ${feed.counts.installer} installer GETs, `
+    + `${feed.counts.bytes} bytes`);
   report();
 })().catch(error => {
   removeFeed();

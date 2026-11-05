@@ -116,9 +116,22 @@ contextBridge.exposeInMainWorld('eduGame', Object.freeze({
   requestPresentationState: () => ipcRenderer.send('presentation:request-state'),
   sendPresentationState: state => ipcRenderer.send('presentation:state-update', state),
 
-  // Trang Giới thiệu (#188): cửa sổ này chỉ cần mở được; bên trong nó dùng
-  // window.aboutAPI từ src/about/about-preload.js, không dùng eduGame.
-  openAbout: theme => ipcRenderer.invoke('about:open', theme === 'dark' ? 'dark' : 'light'),
+  // #204: tab "Giới thiệu" của trang Cài đặt — không còn cửa sổ thứ hai, không còn
+  // preload riêng. Tên kênh lặp lại ABOUT_CHANNELS trong src/shared/about-types.ts vì
+  // tệp này chạy sandbox và không import được module nội bộ (như khối LAN bên dưới).
+  // Khoá API không đi qua đây: about:info chỉ trả về bản thông tin cho giáo viên đọc.
+  openAbout: () => ipcRenderer.invoke('about:open'),
+  aboutInfo: () => ipcRenderer.invoke('about:info'),
+  aboutState: () => ipcRenderer.invoke('about:state'),
+  aboutCheck: () => ipcRenderer.invoke('about:check'),
+  aboutDownload: () => ipcRenderer.invoke('about:download'),
+  aboutInstall: () => ipcRenderer.invoke('about:install'),
+  aboutOpenReleases: url => ipcRenderer.invoke('about:open-releases', url),
+  onAboutState: callback => {
+    const listener = (_event, state) => callback(state);
+    ipcRenderer.on('about:state-push', listener);
+    return () => ipcRenderer.removeListener('about:state-push', listener);
+  },
 
   // LAN Classroom Mode API. Channels mirror LAN_CHANNELS in src/shared/lan-types.ts;
   // this file runs sandboxed and cannot import it, so the literals are repeated.

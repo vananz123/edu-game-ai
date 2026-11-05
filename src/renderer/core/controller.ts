@@ -302,6 +302,9 @@ function wirePage() {
   // #159: the Settings tabs switch in place, never by re-rendering (a re-render would drop
   // whatever the teacher typed but has not saved yet).
   if (state.page === 'settings' && typeof wireSettingsSections === 'function') wireSettingsSections();
+  // #204: the "Giới thiệu" panel lives in this page now. It re-attaches its buttons after
+  // every re-render and asks main for info + state from its module cache.
+  if (state.page === 'settings' && typeof wireAboutPanel === 'function') wireAboutPanel();
 }
 async function handleLessonDrop(event) {
   try {
@@ -342,10 +345,12 @@ async function handleAction(action, id, element) { try {
     if (typeof action === 'string' && action.startsWith('lesson-chat-') && typeof lessonChatHandle === 'function') {
       if (await lessonChatHandle(action, element)) return;
     }
-    // #188: "Giới thiệu" trong sidebar mở cửa sổ riêng (src/about/). Main tự kiểm tra
-    // bản cập nhật sau khi mở, nên trang này không cần render lại gì cả.
+    // #204 (was #188): "Giới thiệu" is a tab of Cài đặt, not a second window. The sidebar
+    // shortcut stays, but it only deep-links into that tab — main still owns the update
+    // machine and starts the check when the panel sends `about:open`.
     if (action === 'about-open') {
-      await window.eduGame.openAbout(document.documentElement.getAttribute('data-theme'));
+      state.settingsSection = 'about';
+      navigate('settings');
     }
     if (action === 'play') playGame(findGame(id));
     if (action === 'play-fullscreen') await playGameFullscreen(findGame(id));

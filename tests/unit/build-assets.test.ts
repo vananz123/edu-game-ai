@@ -41,12 +41,10 @@ const COPIED_ASSETS = [
   'src/renderer/styles/app.css',
   'src/presentation/presentation.html',
   'src/presentation/presentation-preload.js',
-  // DECISIONS #188: cửa sổ Giới thiệu. `about-manager.ts` mở
-  // `path.join(__dirname, 'about.html')` và preload `about-preload.js`; thiếu một
-  // trong hai file thì cửa sổ mở ra trắng hoặc `window.aboutAPI` không tồn tại,
-  // và không suite nào phía TypeScript biết được.
-  'src/about/about.html',
-  'src/about/about-preload.js',
+  // DECISIONS #204 removed `src/about/about.html` + `about-preload.js`: the "Giới thiệu"
+  // panel is built by `renderer/features/about-panel.js`, which index.html lists below and
+  // section 3 of this test resolves like every other script tag. Keeping a second HTML page
+  // in the installer was the thing that needed its own CSP and its own colour palette.
   // LAN Classroom Mode: the phone page is served from dist/src/lan/mobile by
   // `startLanServer()`. If it is missing from the installer, every phone gets a
   // 404 while the desktop happily shows "Đã mở phòng".

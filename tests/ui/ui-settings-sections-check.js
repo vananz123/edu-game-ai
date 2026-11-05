@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 /**
- * DECISIONS #157 → #159 — Settings is one tab strip with five tabs, and the AI tab holds
+ * DECISIONS #157 → #159, #204 — Settings is one tab strip with six tabs, and the AI tab holds
  * two nested tabs.
  *
  * The page used to be six long blocks stacked on top of each other, then an accordion
  * (#157), then a tab page (#159): Nhà cung cấp AI, Phong cách, Giao diện, Tác vụ and
  * Chẩn đoán, and the AI panel splits into "AI local" (model on this machine) and
- * "AI cloud" (API providers). This check pins the behaviour the rest of the app depends on:
+ * "AI cloud" (API providers). #204 appended the sixth tab, Giới thiệu — the update page
+ * used to be a second BrowserWindow with its own preload and CSP, and it is now markup
+ * rendered inside this page, so it is a panel like any other and this gate owns its
+ * tab wiring. This check pins the behaviour the rest of the app depends on:
  *   - exactly one tab open at a time, AI first, local sub-tab first; there is no
  *     "all collapsed" state any more;
  *   - every panel stays in the DOM while hidden, because `saveSettings` reads
@@ -18,6 +21,10 @@
  *   - the task list and diagnostics info still load while their tab is hidden;
  *   - the open tab and the selected sub-tab survive a save and a page change;
  *   - the new tab markup is legible in dark mode, where `dark:` utilities do not fire.
+ *
+ * What is NOT measured here: the update state machine, the feed request policy and the
+ * panel's own painting — that is `tests/ui/ui-about-check.js`, which drives the sidebar
+ * deep link and a fake loopback feed.
  *
  * Usage: launch with --remote-debugging-port=PORT, then
  * `node tests/ui/ui-settings-sections-check.js [port]`.
@@ -31,9 +38,9 @@ function check(label, ok, detail = '') {
   if (!ok) failures += 1;
 }
 
-const SECTIONS = ['ai', 'teaching', 'interface', 'tasks', 'diagnostics'];
-const TAB_LABELS = ['Nhà cung cấp AI', 'Phong cách', 'Giao diện', 'Tác vụ', 'Chẩn đoán'];
-const PANEL_TITLES = ['Nhà cung cấp AI', 'Phong cách giảng dạy', 'Giao diện', 'Tác vụ dùng AI', 'Chẩn đoán trực trặc (log)'];
+const SECTIONS = ['ai', 'teaching', 'interface', 'tasks', 'diagnostics', 'about'];
+const TAB_LABELS = ['Nhà cung cấp AI', 'Phong cách', 'Giao diện', 'Tác vụ', 'Chẩn đoán', 'Giới thiệu'];
+const PANEL_TITLES = ['Nhà cung cấp AI', 'Phong cách giảng dạy', 'Giao diện', 'Tác vụ dùng AI', 'Chẩn đoán trực trặc (log)', 'Giới thiệu và cập nhật'];
 const SCENARIO = String.raw`(async () => {
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   // A fresh profile opens the setup onboarding into #modalRoot a moment after the
@@ -61,9 +68,9 @@ const SCENARIO = String.raw`(async () => {
     .map(node => node.dataset.aiTabpanel);
   // Page-side copy of the tab order: the scenario runs in the renderer, so it cannot read
   // the Node-side constant below.
-  const IDS = ['ai', 'teaching', 'interface', 'tasks', 'diagnostics'];
+  const IDS = ['ai', 'teaching', 'interface', 'tasks', 'diagnostics', 'about'];
 
-  // One assertion ends on the diagnostics tab and the open tab is remembered in state for
+  // One assertion ends on the Giới thiệu tab and the open tab is remembered in state for
   // the life of the page, so a second run on the same instance would start where the last one
   // stopped and "the first visit" would no longer be the default. Put it back first.
   state.settingsSection = 'ai';
@@ -95,7 +102,12 @@ const SCENARIO = String.raw`(async () => {
     sound: Boolean(document.querySelector('#settingSound')),
     runtimeBackend: Boolean(document.querySelector('#localRuntimeBackendSelect')),
     aiTaskList: Boolean(document.querySelector('#aiTaskList')),
-    diagnosticsInfo: Boolean(document.querySelector('#diagnosticsInfo'))
+    diagnosticsInfo: Boolean(document.querySelector('#diagnosticsInfo')),
+    // #204: the About markup is built with the page, not on first open — paintAboutPanel
+    // pushes state into these nodes at any moment, so they must exist while hidden.
+    aboutCheckBtn: Boolean(document.querySelector('#aboutCheckBtn')),
+    aboutStatusBadge: Boolean(document.querySelector('#aboutStatusBadge')),
+    aboutChipSlot: Boolean(document.querySelector('[data-about-tab-chip]'))
   };
   const prefs = state.settings.preferences || {};
   out.themeLabel = prefs.theme === 'dark' ? 'Tối' : prefs.theme === 'system' ? 'Hệ thống' : 'Sáng';
@@ -240,6 +252,35 @@ const SCENARIO = String.raw`(async () => {
   applyTheme(savedTheme);
   await sleep(200);
 
+  // #204: the sixth tab is the retired second window. This gate only owns the tab wiring —
+  // clicking it must open exactly one panel, its heading must go through the icon hook, and
+  // its chip slot must live inside the tab label so a state push can repaint the tab without
+  // a re-render. The update state machine itself is measured by tests/ui/ui-about-check.js.
+  tab('about').click();
+  await sleep(900);
+  const chipSlot = document.querySelector('[data-about-tab-chip]');
+  out.aboutTab = {
+    visible: visiblePanels(),
+    selected: selectedTabs(),
+    state: state.settingsSection,
+    panelShown: panelShown('about'),
+    chipSlotInTabLabel: Boolean(chipSlot && chipSlot.closest('[data-settings-section="about"]')),
+    iconPainted: Boolean(tab('about').querySelector('[data-icon="info"] svg.lucide')),
+    heading: (panel('about').querySelector('h3') || {}).textContent || '',
+    badgeText: ((document.getElementById('aboutStatusText') || {}).textContent || '').trim(),
+    checkBtn: Boolean(document.getElementById('aboutCheckBtn'))
+  };
+
+  // Hiding must never mean removing: the panel keeps its painted nodes after the teacher
+  // leaves the tab, so a state push while off-screen still finds something to paint.
+  tab('diagnostics').click();
+  await sleep(250);
+  out.aboutLeftBehind = {
+    visible: visiblePanels(),
+    aboutNodes: document.querySelectorAll('#settingsPanel-about [id^="about"]').length,
+    badgeText: ((document.getElementById('aboutStatusText') || {}).textContent || '').trim()
+  };
+
   return out;
 })()`;
 
@@ -247,9 +288,9 @@ const SCENARIO = String.raw`(async () => {
   const cdp = await connect();
   const out = await cdp.evaluate(SCENARIO);
 
-  check('five tabs in the asked-for order', out.ids.join(',') === SECTIONS.join(','), out.ids.join(','));
+  check('six tabs in the asked-for order', out.ids.join(',') === SECTIONS.join(','), out.ids.join(','));
   check('each tab is a role=tab wired to a real panel',
-    out.tabRoles === 'tab,tab,tab,tab,tab' && out.controlsResolve === true && out.labelsResolve === true,
+    out.tabRoles === 'tab,tab,tab,tab,tab,tab' && out.controlsResolve === true && out.labelsResolve === true,
     `${out.tabRoles} / controls ${out.controlsResolve} / labels ${out.labelsResolve}`);
   check('the tab labels stay short and the panel headings carry the full titles',
     TAB_LABELS.every((label, index) => String(out.tabTexts[index] || '').includes(label))
@@ -257,7 +298,7 @@ const SCENARIO = String.raw`(async () => {
     `${out.tabTexts.join(' | ')} // ${out.panelTitles.join(' | ')}`);
   check('one tab is open on the first visit and it is the AI tab',
     out.defaultVisible.join(',') === 'ai' && out.defaultSelected.join(',') === 'ai'
-      && out.panelCount === 5 && out.tabpanelCount === 7,
+      && out.panelCount === 6 && out.tabpanelCount === 8,
     `${out.defaultVisible.join(',')} / ${out.defaultSelected.join(',')} / panels ${out.panelCount} / tabpanels ${out.tabpanelCount}`);
   check('every panel body stays in the DOM while hidden',
     Object.values(out.controlsPresent).every(Boolean), JSON.stringify(out.controlsPresent));
@@ -330,6 +371,26 @@ const SCENARIO = String.raw`(async () => {
   check('the strip rule and an unselected tab are re-coloured by [data-theme=dark]',
     out.darkProbe.stripRule === 'rgb(42, 50, 75)' && out.darkProbe.tabInk === 'rgb(154, 163, 187)',
     JSON.stringify(out.darkProbe));
+
+  // #204 — Giới thiệu is a panel of this page now, not a window of its own.
+  const aboutHeading = String(out.aboutTab.heading || '').replace(/\s+/g, ' ').trim();
+  check('clicking the sixth tab opens only the About panel',
+    out.aboutTab.visible.join(',') === 'about' && out.aboutTab.selected.join(',') === 'about'
+      && out.aboutTab.state === 'about' && out.aboutTab.panelShown === true,
+    JSON.stringify(out.aboutTab));
+  check('the About heading is a title, not a leaked Lucide id',
+    /Giới thiệu và cập nhật/u.test(aboutHeading) && !/\b(info|bot|palette|list-checks|stethoscope)\b/u.test(aboutHeading),
+    aboutHeading);
+  check('the About tab paints its icon and carries the chip slot in its label',
+    out.aboutTab.iconPainted === true && out.aboutTab.chipSlotInTabLabel === true,
+    JSON.stringify({ icon: out.aboutTab.iconPainted, slot: out.aboutTab.chipSlotInTabLabel }));
+  check('the About panel is painted, not left empty',
+    out.aboutTab.checkBtn === true && out.aboutTab.badgeText.length > 0 && !/[ÂÃ][»¡º£¥]/u.test(out.aboutTab.badgeText),
+    JSON.stringify({ checkBtn: out.aboutTab.checkBtn, badge: out.aboutTab.badgeText }));
+  check('leaving the About tab hides it without destroying its nodes',
+    out.aboutLeftBehind.visible.join(',') === 'diagnostics' && out.aboutLeftBehind.aboutNodes > 15
+      && out.aboutLeftBehind.badgeText.length > 0,
+    JSON.stringify(out.aboutLeftBehind));
 
   console.log(failures ? `\n${failures} check(s) failed` : '\nAll settings tab checks passed');
   cdp.ws.close();

@@ -1,11 +1,12 @@
 /*
- * IPC của cửa sổ Giới thiệu + bộ cập nhật (#188). Theo khuôn
+ * IPC của tab "Giới thiệu" + bộ cập nhật (#188, #204). Theo khuôn
  * src/presentation/presentation-ipc.ts: main.ts chỉ gọi register/unregister, còn
  * toàn bộ kênh nằm ở đây.
  *
- * Trang Giới thiệu là cửa sổ sandbox, chỉ có `window.aboutAPI` (about-preload.js).
+ * Từ #204 tab này vẽ ngay trong cửa sổ chính (src/renderer/features/about-panel.ts),
+ * nên bridge đi qua `window.eduGame` (src/preload.ts) thay vì một preload riêng.
  * Vì vậy mọi quyết định "được bấm gì lúc này" đều đã nằm trong máy trạng thái ở
- * main; trang chỉ vẽ lại.
+ * main; panel chỉ vẽ lại.
  */
 
 import { BrowserWindow, ipcMain, shell } from 'electron';
@@ -15,7 +16,6 @@ import {
   type AboutActionResult,
   type AboutAppInfo
 } from '../shared/about-types';
-import { closeAboutWindow, openAboutWindow } from './about-manager';
 
 /*
  * P0 đo khởi động: `electron-updater` (kèm `app-builder-bin`, `js-yaml`, zipfile…) tốn
@@ -64,7 +64,7 @@ function isAllowedReleasePage(url: string): boolean {
   }
 }
 
-/** Đẩy trạng thái mới nhất vào cửa sổ Giới thiệu và cửa sổ chính. */
+/** Đẩy trạng thái mới nhất vào mọi cửa sổ (cửa sổ chính là nơi tab Giới thiệu sống). */
 function broadcastToWindows(state: AboutActionResult['state']): void {
   for (const win of BrowserWindow.getAllWindows()) {
     if (win.isDestroyed() || win.webContents.isDestroyed()) continue;
@@ -77,15 +77,16 @@ export function registerAboutIpc(options?: {
 }): void {
   initOptions = options || null;
 
-  // Trang Giới thiệu mở ra là kiểm tra luôn: giáo viên vào trang này chính vì
-  // muốn biết "đã có bản mới chưa", và chờ thêm một cái bấm nữa chỉ tạo cảm giác
-  // trang đứng. Ngược lại, không kiểm tra khi khởi động — giờ vào lớp phải offline.
-  ipcMain.handle(ABOUT_CHANNELS.OPEN, (_event, theme?: string) => {
-    openAboutWindow({ theme: theme === 'dark' ? 'dark' : 'light' });
+  // Tab Giới thiệu hiện ra là kiểm tra luôn: giáo viên vào tab này chính vì muốn biết
+  // "đã có bản mới chưa", và chờ thêm một cái bấm nữa chỉ tạo cảm giác trang đứng.
+  // Ngược lại, không kiểm tra khi khởi động — giờ vào lớp phải offline. Panel phía
+  // renderer gọi kênh này tối đa một lần mỗi phiên, nên bấm qua bấm lại tab không
+  // phát sinh thêm request.
+  ipcMain.handle(ABOUT_CHANNELS.OPEN, () => {
     const adapter = updater();
     // Không `await` ở đây: một nguồn cập nhật chậm (timeout mạng hàng chục giây) mà
-    // chặn lời gọi này thì nút "Giới thiệu" trong sidebar có vẻ không ăn — đúng kiểu
-    // "bấm không thấy gì" mà giáo viên vừa báo ở khung chat (#187).
+    // chặn lời gọi này thì tab "Giới thiệu" có vẻ không ăn — đúng kiểu "bấm không thấy
+    // gì" mà giáo viên vừa báo ở khung chat (#187).
     void adapter.requestUpdateCheck();
     return { ok: true, state: adapter.getUpdateState() };
   });
@@ -116,5 +117,4 @@ export function unregisterAboutIpc(): void {
     detachStateBridge();
     detachStateBridge = null;
   }
-  closeAboutWindow();
 }

@@ -57,15 +57,22 @@ function settingsProviderCard(provider, inputCls, labelCls, hintCls, btnSecondar
  * A panel is hidden, never removed: `saveSettings` reads `#settingLargeText`/
  * `#settingSound` without guards and `readAiProviderPatches` walks every
  * `[data-ai-provider]`, so a value typed on a tab nobody is looking at must still save.
- * `tab` is the strip label — short enough that all five fit one row in the ~739px content
- * column of a 1366px window — and `title` is the heading inside the panel.
+ * `tab` is the strip label — short enough that the strip stays readable in the ~739px
+ * content column of a 1366px window — and `title` is the heading inside the panel.
+ *
+ * #204 appends "Giới thiệu" as the sixth tab. It used to be a second BrowserWindow
+ * (`src/about/about.html`), which needed its own preload, its own CSP and its own copy of
+ * the colour tokens — and teachers still had to find it from the sidebar. The strip is
+ * `flex-wrap`, so six labels may fall onto two rows on a narrow window; that is the cheaper
+ * failure than a separate window or an abbreviated label.
  */
 const SETTINGS_TABS = [
   { id: 'ai', icon: 'bot', tab: 'Nhà cung cấp AI', title: 'Nhà cung cấp AI' },
   { id: 'teaching', icon: 'palette', tab: 'Phong cách', title: 'Phong cách giảng dạy' },
   { id: 'interface', icon: 'settings', tab: 'Giao diện', title: 'Giao diện' },
   { id: 'tasks', icon: 'list-checks', tab: 'Tác vụ', title: 'Tác vụ dùng AI' },
-  { id: 'diagnostics', icon: 'stethoscope', tab: 'Chẩn đoán', title: 'Chẩn đoán trực trặc (log)' }
+  { id: 'diagnostics', icon: 'stethoscope', tab: 'Chẩn đoán', title: 'Chẩn đoán trực trặc (log)' },
+  { id: 'about', icon: 'info', tab: 'Giới thiệu', title: 'Giới thiệu và cập nhật' }
 ];
 
 const SETTINGS_SECTION_IDS = SETTINGS_TABS.map(tab => tab.id);
@@ -97,10 +104,15 @@ function settingsTabStripHtml(cfg) {
  * (`#172033` light / `#e8eaf2` dark), so naming one here only creates a second thing to
  * keep in step. When #159 was written there was a stronger reason: `dark:text-…` did not
  * fire at all in this app, which #160 fixed by keying the variant on `[data-theme="dark"]`.
+ *
+ * `tab.icon` is a Lucide *id*, not a glyph: #159 converted the field from an emoji and left
+ * `${tab.icon}` in the heading, so every panel printed the id as a word in English ("bot Nhà
+ * cung cấp AI", "stethoscope Chẩn đoán…"). It goes through the same `[data-icon]` hook as the
+ * strip (#161), which is what `paintUiIcons` fills and the settings gate counts.
  */
 function settingsPanelHeader(tab, chipHtml) {
   return `<div class="flex items-center justify-between gap-3 flex-wrap mb-3">
-    <h3 class="m-0 text-[15px] font-bold">${tab.icon} ${escapeHtml(tab.title)}</h3>
+    <h3 class="m-0 text-[15px] font-bold flex items-center gap-[7px]">${tab.icon ? `<span data-icon="${tab.icon}" data-icon-size="15"></span>` : ''}${escapeHtml(tab.title)}</h3>
     ${chipHtml ? `<div class="flex items-center gap-1.5 flex-wrap">${chipHtml}</div>` : ''}
   </div>`;
 }
@@ -181,7 +193,11 @@ function renderSettings() {
     ai: tabChip(localReady ? '✓' : '○', localReady, `AI local: ${localReady ? 'sẵn sàng' : 'chưa cài đủ model và runtime'}`, 'monitor')
       + tabChip(`${readyCloud}/${cloudProviders.length}`, readyCloud > 0, `${readyCloud}/${cloudProviders.length} nhà cung cấp cloud đã có khoá và sẵn sàng`, 'cloud'),
     teaching: tabChip(tone, true, `Giọng điệu: ${tone}`),
-    interface: tabChip(themeLabel, true, `Chủ đề giao diện: ${themeLabel}`)
+    interface: tabChip(themeLabel, true, `Chủ đề giao diện: ${themeLabel}`),
+    // #204: the update state lives in `features/about-panel.ts` and arrives from main at
+    // any moment, so this one is an empty slot that panel paints (`aboutPaintTabChip`)
+    // rather than a string computed here — a push then updates the tab without a re-render.
+    about: '<span data-about-tab-chip class="shrink-0"></span>'
   };
   const sectionTabs = SETTINGS_TABS.map(tab => ({ ...tab, chip: sectionTabChips[tab.id] || '' }));
 
@@ -414,6 +430,15 @@ function renderSettings() {
         </div>
         <div id="diagnosticsInfo" class="${hintCls} mb-3">Đang đọc thư mục log…</div>
         <div id="diagnosticsResult" class="hidden bg-[#f8fafc] dark:bg-[#151a30] border border-[#e2e8f0] dark:border-[#2a324b] rounded-lg p-3 text-[12px] break-all"></div>
+      </section>
+
+      <!-- ═══ 6. GIỚI THIỆU & CẬP NHẬT (#204 — trước đây là cửa sổ riêng, #188) ═══ -->
+      <!-- Whole panel comes from features/about-panel.ts: the update machine lives in main,
+           this page only mounts the DOM ids that module paints into. Hidden ≠ removed, same
+           rule as the five panels above — a download in progress must survive a tab switch. -->
+      <section class="${sectionCls} ${openSection === 'about' ? '' : 'hidden'}" role="tabpanel" aria-labelledby="settingsTabBtn-about" data-settings-card="about" data-settings-panel="about" id="settingsPanel-about">
+        ${settingsPanelHeader(SETTINGS_TABS[5])}
+        ${aboutPanelHtml()}
       </section>
 
     </div>

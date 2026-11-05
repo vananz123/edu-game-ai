@@ -1,12 +1,15 @@
-/* Trang Giới thiệu (#188): kênh IPC + kiểu dùng chung giữa main, about-preload.js và about.html. */
+/* Kênh IPC + kiểu dùng chung giữa main và tab "Giới thiệu" của trang Cài đặt (#188, #204). */
 
-/** Kênh IPC của cửa sổ Giới thiệu và bộ cập nhật tự động. */
+/** Kênh IPC của tab Giới thiệu trong Cài đặt và bộ cập nhật tự động. */
 export const ABOUT_CHANNELS = {
-  /** Renderer (cửa sổ chính) xin mở cửa sổ Giới thiệu. */
+  /**
+   * Tab Giới thiệu vừa hiện ra trước mắt giáo viên (#204: cùng cửa sổ, không còn
+   * cửa sổ thứ hai). Main coi đây là "trang đã mở" để nạp adapter và kiểm tra một lượt.
+   */
   OPEN: 'about:open',
-  /** Trang Giới thiệu xin thông tin ứng dụng (tên, phiên bản, tác giả…). */
+  /** Panel xin thông tin ứng dụng (tên, phiên bản, tác giả…). */
   INFO: 'about:info',
-  /** Trang Giới thiệu xin bản chụp máy trạng thái hiện tại. */
+  /** Panel xin bản chụp máy trạng thái hiện tại. */
   STATE: 'about:state',
   /** Main đẩy mỗi khi máy trạng thái đổi. */
   STATE_PUSH: 'about:state-push',

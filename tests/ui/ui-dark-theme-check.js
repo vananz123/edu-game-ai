@@ -22,6 +22,13 @@
  *     its own sub-4.5:1 set (status pills on tinted plates) that is deliberately not
  *     asserted clean, because closing it means re-choosing the semantic pill palette.
  *
+ * DECISIONS #204 moved the About panel into the Settings page, which put text-less painted
+ * blocks — the progress fill above all — in front of a sweep that had only ever seen the SPA.
+ * It failed as "text at 1.66:1" for a bar that carries no glyphs, so the two contrast rules
+ * and the median now read only the rows that paint text (a form control counts: it paints its
+ * own value). The white-plate rule keeps every row, including the bars, because that one is
+ * about paint rather than ink.
+ *
  * DECISIONS #164 added the four batch-selection bars (lessons #122, results #123, library
  * #154, projects #163). They carry no `dark:` class at all, so the walk above cannot see
  * them: their dark treatment comes only from the shell.css table. The check now seeds one
@@ -152,6 +159,16 @@ const SCENARIO = String.raw`(async () => {
 
   const walk = () => {
     const rows = [];
+    // The two ink rules are about text. An element that paints no glyphs has no ink to
+    // compare, so the dark bg #a5b4fc on the About progress fill (a role=progressbar div,
+    // first moved into the SPA by DECISIONS #204) read as a 1.66:1 "text" failure where no
+    // teacher ever sees text. It stays in the census — glyphs:false only excuses it from
+    // the contrast rules, not from the white-plate rule below, which is about paint.
+    // Controls count as text because they paint their own value.
+    const paintsText = el => {
+      if (/^(input|select|textarea|button|option|output)$/.test(el.tagName.toLowerCase())) return true;
+      return Boolean((el.textContent || '').trim());
+    };
     for (const el of (document.getElementById('pageContent') || document.body).querySelectorAll('*')) {
       const attr = el.getAttribute('class') || '';
       if (!/\bdark:/.test(attr)) continue;
@@ -161,6 +178,7 @@ const SCENARIO = String.raw`(async () => {
       const bg = backdrop(el);
       rows.push({
         sig: el.id ? '#' + el.id : el.tagName.toLowerCase() + '::' + (el.textContent || '').trim().slice(0, 24),
+        glyphs: paintsText(el),
         dark: attr.split(/\s+/).filter(c => c.startsWith('dark:')).join(' '),
         own: cs.backgroundColor,
         edge: cs.borderTopColor,
@@ -418,18 +436,19 @@ const SCENARIO = String.raw`(async () => {
   check('no dark:-classed element sits on a white card in dark mode', islands.length === 0,
     islands.slice(0, 5).map(r => `${r.page} ${r.sig} on ${r.own}`).join(' | '));
 
-  const invisible = dark.filter(r => r.ratio < 3);
+  const textDark = dark.filter(r => r.glyphs);
+  const invisible = textDark.filter(r => r.ratio < 3);
   check('no dark:-classed text drops below 3:1', invisible.length === 0,
     invisible.slice(0, 5).map(r => `${r.ratio} ${r.page} ${r.sig}`).join(' | '));
 
-  const median = () => { const s = dark.map(r => r.ratio).sort((a, b) => a - b); return s[Math.floor(s.length / 2)]; };
+  const median = () => { const s = textDark.map(r => r.ratio).sort((a, b) => a - b); return s[Math.floor(s.length / 2)]; };
 
-  const weak = dark.filter(r => r.ratio < 4.5);
+  const weak = textDark.filter(r => r.ratio < 4.5);
   check('no dark-mode text carrying a dark: class sits below 4.5:1', weak.length === 0,
     weak.length ? weak.slice(0, 6).map(r => `${r.page} ${r.ratio}:1 ${r.color} on ${r.bg} "${r.sig}"`).join(' | ')
-      : `0 of ${dark.length} (worst ${Math.min(...dark.map(r => r.ratio))}, median ${median()})`);
+      : `0 of ${textDark.length} (worst ${Math.min(...textDark.map(r => r.ratio))}, median ${median()})`);
 
-  check('the typical dark-mode text is comfortably legible', median() >= 8, `median ${median()} over ${dark.length} elements`);
+  check('the typical dark-mode text is comfortably legible', median() >= 8, `median ${median()} over ${textDark.length} elements`);
 
   // #165: the walk always collected the light half too but nothing ever read it. Two things
   // came out of looking: the step chips failed in light as well (below), and light has its own
@@ -444,9 +463,10 @@ const SCENARIO = String.raw`(async () => {
     chipsDark.length >= 5 && chipsLight.length >= 5 && worst(chipsDark) >= 4.5 && worst(chipsLight) >= 4.5,
     `dark ${chipsDark.length} chips worst ${worst(chipsDark)} | light ${chipsLight.length} chips worst ${worst(chipsLight)}`);
 
-  const weakLight = light.filter(r => r.ratio < 4.5);
+  const textLight = light.filter(r => r.glyphs);
+  const weakLight = textLight.filter(r => r.ratio < 4.5);
   check('light mode keeps its known sub-4.5:1 set from growing', weakLight.length <= 32,
-    `${weakLight.length} of ${light.length} (worst ${worst(weakLight)}) — ` +
+    `${weakLight.length} of ${textLight.length} (worst ${worst(weakLight)}) — ` +
     [...new Set(weakLight.map(r => `${r.color} on ${r.bg}`))].slice(0, 3).join(' | '));
 
   // The hint ink is the one pair #160 swapped: it must read as the muted slate of each
