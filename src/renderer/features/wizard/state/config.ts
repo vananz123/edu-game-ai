@@ -34,7 +34,10 @@ function wizardDefaultConfig(recommendation, analysis) {
     return { ...base, stageCount: wizardClamp(suggestedCount, 2, 30), attemptsPerStage: 3, journeyBonus: 300, hiddenItemBonus: 100, answerMode: 'competitive' };
   }
   if (gameType === 'race') {
-    return { ...base, trackLength: 20, maxRounds: wizardClamp(suggestedCount, 4, 7), teamCount: 2, stepByDifficulty: true, luckEnabled: true, answerMode: 'competitive' };
+    // #209 task 6: a NEW road race advances a fixed number of steps per correct answer, so the
+    // variable-step flag starts off (`false` is what the play surface already does for a game
+    // running one of the three answer modes — the default must not promise the old law).
+    return { ...base, trackLength: 20, maxRounds: wizardClamp(suggestedCount, 4, 7), teamCount: 2, stepByDifficulty: false, luckEnabled: true, answerMode: 'competitive' };
   }
   return base;
 }
@@ -169,7 +172,7 @@ function wizardConfigForImportedQuestions(gameType) {
   if (gameType === 'arena') return { ...base, questionCount: count, scoringMode: 'basic', answerMode: 'competitive', pointsPerCorrect: 100, timeBonus: 20, pointsEasy: 100, pointsMedium: 200, pointsHard: 300 };
   if (gameType === 'matching') return { ...base, pairCount: wizardClamp(count, 2, 30), matchingMode: 'columns', wrongPenalty: 0 };
   if (gameType === 'treasure') return { ...base, stageCount: wizardClamp(count, 2, 30), attemptsPerStage: 3, journeyBonus: 300, hiddenItemBonus: 100, answerMode: 'competitive' };
-  if (gameType === 'race') return { ...base, trackLength: 20, maxRounds: wizardClamp(count, 4, 7), teamCount: 2, stepByDifficulty: true, luckEnabled: true, answerMode: 'competitive' };
+  if (gameType === 'race') return { ...base, trackLength: 20, maxRounds: wizardClamp(count, 4, 7), teamCount: 2, stepByDifficulty: false, luckEnabled: true, answerMode: 'competitive' };
   return { ...base, situationCount: wizardClamp(count, 1, 30), scoringMode: 'quality', answerMode: 'competitive' };
 }
 

@@ -212,7 +212,9 @@ function toRace(choices: CommonChoice[], config: GameConfig): RaceDraft {
     schemaVersion: LESSON_SCHEMA_VERSION,
     trackLength: raceConfig ? raceConfig.trackLength : 20,
     maxRounds: raceConfig ? raceConfig.maxRounds : 10,
-    stepByDifficulty: raceConfig ? raceConfig.stepByDifficulty : true,
+    // #209 task 6: without a teacher config there is nothing to inherit, and a NEW race uses a
+    // fixed number of steps per correct answer — so the invented default is `false`, not the old `true`.
+    stepByDifficulty: raceConfig ? raceConfig.stepByDifficulty : false,
     luckEnabled: raceConfig ? raceConfig.luckEnabled : false,
     // Teams are game furniture, not teacher content: two defaults keep the race playable.
     teams: [{ id: 't1', name: 'Đội 1' }, { id: 't2', name: 'Đội 2' }],

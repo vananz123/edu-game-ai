@@ -277,17 +277,28 @@ assert.equal(challengeWon.revealCorrect, true);
 assert.equal(challengeWon.explanationAvailable, true);
 assert.equal(challengeWon.points, 100);
 
-// --- endAnswerTurn: phía trò khép vòng (hết giờ, bỏ lượt) ---
+// --- endAnswerTurn: phía trò khép vòng (bỏ cuộc, MC bấm sang câu) ---
 const timedOut = turnFor(CHALLENGE);
 endAnswerTurn(timedOut);
 assert.equal(timedOut.finished, true);
 assert.equal(timedOut.locked, true);
 assert.equal(timedOut.points, 0);
-assert.equal(timedOut.revealCorrect, false, 'nobody answered, so nothing was earned');
+assert.equal(timedOut.revealCorrect, false, 'the challenge law keeps the answer, answered or not');
 const skipped = turnFor(COMPETITIVE);
 endAnswerTurn(skipped, { skipped: true });
 assert.equal(skipped.skipped, true);
 assert.equal(skipped.attempts, 0, 'a skipped turn is not an attempt');
+// "Đội không trả lời được" của Đường đua mở đáp án sau khi vòng khép. Đây là hành vi của
+// TRÒ CHƠI CŨ (legacy) lẫn Thi đấu từ trước #209, nên `endAnswerTurn` phải tra hàng luật
+// chứ không được im lặng chỉ vì chưa có cú bấm nào.
+assert.equal(skipped.revealCorrect, true, 'a law that reveals on a miss reveals on a give-up');
+const practiceGiveUp = turnFor(PRACTICE);
+endAnswerTurn(practiceGiveUp, { skipped: true });
+assert.equal(practiceGiveUp.revealCorrect, false, 'practice keeps the answer hidden when the MC gives up');
+const legacyGiveUp = turnFor(LEGACY);
+endAnswerTurn(legacyGiveUp, { skipped: true });
+assert.equal(legacyGiveUp.revealCorrect, true, 'a saved pre-#209 game gives up exactly as it did');
+assert.equal(legacyGiveUp.attempts, 0, 'and still does not count the give-up as an attempt');
 const alreadyWon = turnFor(PRACTICE);
 registerAnswer(alreadyWon, { correct: true, points: 100 });
 endAnswerTurn(alreadyWon);

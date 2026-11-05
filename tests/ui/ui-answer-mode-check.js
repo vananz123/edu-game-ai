@@ -45,6 +45,12 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
 
   const PAGE = `(async () => {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
+    // KHÔNG được viết dấu CHÉO nào trong payload này: nó đi qua một template literal của
+    // Node nên escape bị nấu mất trước khi tới trang, và một lớp khoảng trắng thành
+    // chữ 's' — helper dưới sẽ ăn chữ 's' của mọi chuỗi đọc từ DOM. Dựng lớp khoảng
+    // trắng bằng mã ký tự nên nó đứng nguyên sau khi nấu.
+    const wsRun = new RegExp('[' + String.fromCharCode(9, 10, 11, 12, 13, 32, 160) + ']+', 'g');
+    const text = el => el ? String(el.textContent).replace(wsRun, ' ').trim() : '';
     // Đóng màn chơi đang mở. Hai mục chơi thật (I và J) đều cần, và mỗi mục phải tự
     // đóng trước khi mở bản kế tiếp — playGame đè state.currentGame chứ không dọn.
     const closePlay = async () => {
@@ -468,12 +474,6 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
             characterId: 'explorer', stages
           }
         });
-        // KHÔNG được viết dấu CHÉO nào trong khối này: nó đi qua một template literal của
-        // Node nên escape bị nấu mất trước khi tới trang, và một lớp khoảng trắng thành
-        // chữ 's' — helper dưới sẽ ăn chữ 's' của mọi chuỗi đọc từ DOM. Dựng lớp khoảng
-        // trắng bằng mã ký tự nên nó đứng nguyên sau khi nấu.
-        const wsRun = new RegExp('[' + String.fromCharCode(9, 10, 11, 12, 13, 32, 160) + ']+', 'g');
-        const text = el => el ? String(el.textContent).replace(wsRun, ' ').trim() : '';
         const tsnap = () => {
           const tp = state.treasurePlay;
           const turn = tp ? tp.answerTurn : null;
@@ -642,6 +642,252 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
         }
       }
 
+      /* K. ĐƯỜNG ĐUA + HỘP CHIA ĐỘI. Task 6 bỏ hẳn phần thưởng tốc độ: khi trò chạy một
+         trong ba "Cách trả lời", MỘT câu đúng luôn tiến một số ô CỐ ĐỊNH — kể cả khi dữ
+         liệu còn bật "Tiến theo độ khó". Game chưa từng đổi cách trả lời vẫn đi theo độ
+         khó y như hôm qua, và ô đặc biệt trên bàn cờ là DỮ LIỆU chặng nên đứng ngoài quy
+         tắc này. K2 bấm THẬT vào hộp chia đội của một game mang token: con đường đó đi
+         qua trường 'players', không qua 'scoringMode', nên sau #209 nó phải còn sống —
+         bằng chứng trước đây chỉ là đọc code. */
+      try {
+        const TOKEN_COMPETITIVE = 'tra-loi:thi-dau';
+        const rq = (id, difficulty) => Object.assign(question(id), { difficulty });
+        // mode === null nghĩa là game CŨ: scoringMode Việt, không token nào.
+        const raceGame = (key, mode, overrides) => ({
+          id: 'am-' + RUN + '-' + key, title: title(key), subject: 'Tự nhiên', grade: '3',
+          template: 'race', description: '', tags: [], sourceName: 'ui-check',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          gameSetup: mode === null ? { scoringMode: 'thi đấu đội' } : { scoringMode: mode },
+          questions: [],
+          race: Object.assign({
+            trackLength: 12, maxRounds: 4, stepByDifficulty: false, luckEnabled: false,
+            teams: [{ id: 't1', name: 'Đội đỏ', icon: 'A' }, { id: 't2', name: 'Đội xanh', icon: 'B' }],
+            cells: [], questions: [rq('rq1', 'trung bình')]
+          }, overrides || {})
+        });
+        const rsnap = () => {
+          const rp = state.racePlay;
+          const turn = rp ? rp.answerTurn : null;
+          const options = Array.prototype.slice.call(document.querySelectorAll('.answer-option'));
+          const strip = s => Array.prototype.slice.call(s).map(text).join(' | ');
+          return {
+            mode: turn ? turn.mode : null,
+            retry: turn ? turn.retryAllowed : null,
+            reveal: turn ? Boolean(turn.revealCorrect) : null,
+            explain: turn ? Boolean(turn.explanationAvailable) : null,
+            wrongs: turn ? Number(turn.wrongAttempts) : null,
+            turns: turn ? Number(turn.attempts) : null,
+            turnPts: turn ? Number(turn.points) : null,
+            ceiling: turn ? Number(turn.maxPoints) : null,
+            qid: turn ? String(turn.questionId) : null,
+            answered: rp ? Boolean(rp.answered) : null,
+            over: rp ? Boolean(rp.over) : null,
+            round: rp ? Number(rp.round) : null,
+            turnIndex: rp ? Number(rp.turn) : null,
+            used: rp ? rp.usedQ.length : null,
+            correctCount: rp ? Number(rp.correctCount) : null,
+            progress: rp ? rp.teams.map(t => Number(t.progress)) : null,
+            points: rp ? rp.teams.map(t => Number(t.points)) : null,
+            optClick: options.filter(b => !b.disabled).length,
+            optMarked: options.filter(b => b.classList.contains('wrong')).map(b => b.dataset.raceAnswer),
+            optRevealed: options.filter(b => b.classList.contains('correct')).map(b => b.dataset.raceAnswer),
+            pill: text(document.querySelector('.race-rule-pill')),
+            kicker: text(document.querySelector('.race-turn .stage-kicker')),
+            /* #answerFeedback của Đường đua in rp.lastEvent — câu chữ mà cả lớp nghe
+               MC đọc to, nên nó là nơi "tiến mấy ô" phải ĐÚNG, không chỉ là số trong state. */
+            feedback: text(document.querySelector('#answerFeedback')),
+            drawn: strip(document.querySelectorAll('#raceSideFeedback .feedback')),
+            drawShown: Boolean(document.querySelector('#drawQuestionBtn')),
+            giveUpShown: Boolean(document.querySelector('#raceNoAnswerBtn')),
+            continueShown: Boolean(document.querySelector('#raceContinueBtn')),
+            continueLabel: text(document.querySelector('#raceContinueBtn')),
+            result: text(document.querySelector('[data-game="race"] .result-screen')),
+            /* Máy chiếu của Đường đua chỉ có thể lộ đáp án nếu buildRaceView() THÊM CỜ
+               đánh dấu đáp án nào đúng. Danh sách khoá + hình dạng một option là bằng
+               chứng trực tiếp, không suy từ DOM màn chính. */
+            projection: typeof buildRaceView === 'function' ? (function () {
+              const view = buildRaceView();
+              if (!view) return null;
+              const keys = Object.keys(view);
+              return {
+                flags: keys.filter(k => k.indexOf('correct') !== -1 || k.indexOf('reveal') !== -1
+                  || k.indexOf('explanation') !== -1),
+                optionShape: (keys.indexOf('options') !== -1 && view.options.length)
+                  ? Object.keys(view.options[0]).sort().join('+') : 'none',
+                event: String(view.lastEvent || '')
+              };
+            })() : 'no buildRaceView'
+          };
+        };
+        const playRace = async game => {
+          await closePlay();
+          const copy = JSON.parse(JSON.stringify(game));
+          copy.id = 'am-' + RUN + '-play-' + (++out.playSeq);
+          playGame(copy);
+          await sleep(650);
+          return rsnap();
+        };
+        const tapRace = async selector => {
+          const btn = document.querySelector(selector);
+          if (!btn) return { error: 'no element ' + selector };
+          btn.click();
+          await sleep(300);
+          return rsnap();
+        };
+        const drawQ = () => tapRace('#drawQuestionBtn');
+        const tapOpt = optionId => tapRace('.answer-option[data-race-answer="' + optionId + '"]');
+        const giveUp = () => tapRace('#raceNoAnswerBtn');
+        const nextTurn = () => tapRace('#raceContinueBtn');
+        out.race = {};
+
+        // 1. GAME CŨ + "Tiến theo độ khó": dễ +1, trung bình +2, khó +3 — không đổi gì.
+        out.race.legacyEasyOpen = await playRace(
+          raceGame('legacy-easy', null, { stepByDifficulty: true, questions: [rq('rq1', 'dễ')] }));
+        out.race.legacyEasyDraw = await drawQ();
+        out.race.legacyEasy = await tapOpt('a');
+        await playRace(raceGame('legacy-mid', null, { stepByDifficulty: true, questions: [rq('rq1', 'trung bình')] }));
+        await drawQ();
+        out.race.legacyMid = await tapOpt('a');
+        await playRace(raceGame('legacy-hard', null, { stepByDifficulty: true, questions: [rq('rq1', 'khó')] }));
+        await drawQ();
+        out.race.legacyHard = await tapOpt('a');
+        // 1b. một cú nhấp thừa sau khi vòng đã khép không được cộng thêm ô nào.
+        out.race.legacyDouble = await tapOpt('a');
+
+        // 2. THI ĐẤU trên dữ liệu còn bật "Tiến theo độ khó": luật mới thắng, MỘT ô.
+        await playRace(raceGame('competitive-hard', TOKEN_COMPETITIVE,
+          { stepByDifficulty: true, questions: [rq('rq1', 'khó')] }));
+        out.race.competitiveDraw = await drawQ();
+        out.race.competitiveHard = await tapOpt('a');
+        // 3. Sai ở Thi đấu: khép câu, MỞ đáp án như hôm qua, không tiến ô.
+        await playRace(raceGame('competitive-miss', TOKEN_COMPETITIVE,
+          { stepByDifficulty: true, questions: [rq('rq1', 'khó')] }));
+        await drawQ();
+        out.race.competitiveMiss = await tapOpt('b');
+        out.race.competitiveDouble = await tapOpt('b');
+        // 4. THỬ THÁCH: sai thì giữ kín cả đáp án lẫn lời giải, nhưng vẫn cho sang lượt.
+        await playRace(raceGame('challenge-miss', TOKEN_CHALLENGE, { questions: [rq('rq1', 'trung bình')] }));
+        await drawQ();
+        out.race.challengeMiss = await tapOpt('b');
+
+        // 5. LUYỆN TẬP: cú sai không tiến, không điểm, chưa rút câu khỏi ngân hàng; câu
+        //    đúng sau đó chỉ còn 90 và vẫn đi MỘT ô dù độ khó là "khó".
+        await playRace(raceGame('practice-hard', TOKEN_PRACTICE,
+          { stepByDifficulty: true, questions: [rq('rq1', 'khó')] }));
+        out.race.practiceDraw = await drawQ();
+        out.race.practiceMiss = await tapOpt('b');
+        out.race.practiceHit = await tapOpt('a');
+
+        // 6. "Đội không trả lời được" = lối thoát của Luyện tập, không phải một cú sai.
+        await playRace(raceGame('practice-giveup', TOKEN_PRACTICE, { questions: [rq('rq1', 'trung bình')] }));
+        await drawQ();
+        out.race.practiceGiveUp = await giveUp();
+        // 7. Cùng nút đó trên game CŨ: trước #209 nó đã mở đáp án — phải còn nguyên.
+        await playRace(raceGame('legacy-giveup', null, { questions: [rq('rq1', 'trung bình')] }));
+        await drawQ();
+        out.race.legacyGiveUp = await giveUp();
+
+        // 8. Ô TĂNG TỐC là dữ liệu bàn cờ: vẫn +1 ngoài quy tắc số bước cố định. Dữ liệu
+        //    VẪN bật "Tiến theo độ khó" để dải luật giữa hai lượt (chưa có vòng nào để
+        //    hỏi) phải chứng minh nó nói theo LUẬT ĐANG CHẠY, không in lại cái toggle.
+        await playRace(raceGame('boost', TOKEN_COMPETITIVE, {
+          stepByDifficulty: true,
+          cells: [{ cell: 2, type: 'boost', label: 'Tăng tốc' }], questions: [rq('rq1', 'trung bình')]
+        }));
+        await drawQ();
+        out.race.boost = await tapOpt('a');
+        // 8b. Nhịp giữa hai lượt: chưa có vòng nào nhưng dải luật đã in ra rồi.
+        out.race.betweenTurns = await nextTurn();
+        out.race.team2Draw = await drawQ();
+        out.race.team2 = await tapOpt('a');
+
+        // 9. Về đích: một câu đúng trên đường đua 2 ô là đủ kết thúc, màn kết quả hiện.
+        await playRace(raceGame('finish', TOKEN_COMPETITIVE, {
+          trackLength: 2, questions: [rq('rq1', 'trung bình')]
+        }));
+        await drawQ();
+        out.race.finishAnswer = await tapOpt('a');
+        out.race.finishResult = await nextTurn();
+
+        // 10. MÁY CHIẾU ở lượt đang giữ kín (Thử thách) — phải mù như màn chính.
+        await playRace(raceGame('challenge-projector', TOKEN_CHALLENGE, { questions: [rq('rq1', 'trung bình')] }));
+        await drawQ();
+        out.race.challengeProjector = await tapOpt('b');
+
+        // ===== K2. HỘP CHIA ĐỘI của một game mang token (quiz, Luyện tập) =====
+        const teamSnap = () => {
+          const names = Array.prototype.slice.call(document.querySelectorAll('[data-team-name]'));
+          const tp = state.teamPlay;
+          const turn = state.answerTurn;
+          return {
+            setupShown: names.length,
+            pending: state.pendingTeams ? state.pendingTeams.map(t => String(t.name)) : null,
+            teams: tp ? tp.teams.map(t => String(t.name)) : null,
+            points: tp ? tp.teams.map(t => Number(t.points)) : null,
+            turnIndex: tp ? Number(tp.turn) : null,
+            mode: turn ? turn.mode : null,
+            rows: state.gameAnswers.length,
+            lastPts: state.gameAnswers.length ? Number(state.gameAnswers[state.gameAnswers.length - 1].points) : null,
+            token: String((state.currentGame && state.currentGame.gameSetup ? state.currentGame.gameSetup.scoringMode : '') || ''),
+            chip: text(document.querySelector('.team-score-list')),
+            feedback: text(document.querySelector('#answerFeedback'))
+          };
+        };
+        const openRoster = async game => {
+          await closePlay();
+          const copy = JSON.parse(JSON.stringify(game));
+          copy.id = 'am-' + RUN + '-play-' + (++out.playSeq);
+          playGame(copy);
+          await sleep(650);
+          return teamSnap();
+        };
+        const tapById = async id => {
+          const btn = document.getElementById(id);
+          if (!btn) return { error: 'no element ' + id };
+          btn.click();
+          await sleep(320);
+          return teamSnap();
+        };
+        const typeTeam = async (index, value) => {
+          const box = document.querySelectorAll('[data-team-name]')[index];
+          if (!box) return { error: 'no team name input ' + index };
+          box.value = value;
+          box.dispatchEvent(new Event('input', { bubbles: true }));
+          await sleep(120);
+          return teamSnap();
+        };
+        const tapQuizOption = async optionId => {
+          const btn = Array.prototype.slice.call(document.querySelectorAll('.answer-option'))
+            .find(item => item.dataset.answer === optionId);
+          if (!btn) return { error: 'no option button ' + optionId };
+          btn.click();
+          await sleep(320);
+          return teamSnap();
+        };
+        out.roster = {};
+        const rosterGame = makeGame('roster-practice', 'quiz', {
+          scoringMode: TOKEN_PRACTICE, players: 'đội nhóm', pointsPerCorrect: '100', duration: '20'
+        });
+        out.roster.setupOpen = await openRoster(rosterGame);
+        out.roster.afterAdd = await tapById('addTeamBtn');
+        out.roster.afterRename = await typeTeam(0, 'Đội Sao Hoả');
+        out.roster.afterStart = await tapById('startTeamGameBtn');
+        out.roster.afterMiss = await tapQuizOption('b');
+        out.roster.afterHit = await tapQuizOption('a');
+        /* Bảng điểm trên đầu màn CHỈ vẽ lại khi câu kế tiếp được dựng (teamTurnBarHtml
+           nằm trong renderQuestion), nên cú nhấp này là lúc cả lớp thực sự nhìn thấy
+           điểm — đo nó thay vì đo DOM ngay sau cú trả lời. */
+        out.roster.afterNext = await tapById('nextQuestionBtn');
+        await closePlay();
+      } catch (error) {
+        out.race = { error: String(error && error.message || error) };
+        try {
+          await closePlay();
+        } catch (ignored) {
+          out.race.cleanupFailed = true;
+        }
+      }
+
       document.getElementById('modalRoot').innerHTML = '';
       if (typeof closeEditorPage === 'function') closeEditorPage();
 
@@ -674,6 +920,12 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
     PAGE.split(BS).length - 1 + ' escape(s) cooked away before the page saw them');
 
   const report = await evaluate(PAGE);
+  /* Chẩn đoán: AM209_DUMP=<đường dẫn> ghi toàn bộ báo cáo thô ra tệp. Một check đỏ chỉ
+     in những trường mà helper rv() chọn ra, nên khi chính helper chọn sai tên trường thì
+     log KHÔNG bao giờ giải thích được vì sao điều kiện đỏ — đã xảy ra ở task 6 với 15
+     check Đường đua có bằng chứng in ra trông đều đúng. */
+  if (process.env.AM209_DUMP)
+    require('fs').writeFileSync(process.env.AM209_DUMP, JSON.stringify(report, null, 1));
   const MODE_TOKENS = ['tra-loi:thi-dau', 'tra-loi:luyen-tap', 'tra-loi:thu-thach'];
   const isToken = value => typeof value === 'string' && value.indexOf('tra-loi:') === 0;
   // Một bản ghi lưu gồm cả object game; chỉ in phần chữ ký để log đọc được.
@@ -1064,6 +1316,197 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
     treasure.decodeCompetitiveMiss?.rows === 1 && treasure.decodeCompetitiveMiss?.reveal === true
     && hasT(treasure.decodeCompetitiveMiss, 'Den Bien'),
     tview(treasure.decodeCompetitiveMiss) + ' | ' + saidT(treasure.decodeCompetitiveMiss));
+
+  /* K. ĐƯỜNG ĐUA. rv in toàn bộ.snapshot THÔ, đúng tên khoá mà các điều kiện đọc: một
+     helper đổi tên trường để log ngắn hơn đã làm 15 check đỏ mà không tự giải thích được
+     vì sao — điều kiện đọc 'correctCount' trong khi log in 'cc'. */
+  const race = report.race || {};
+  const rv = s => !s ? String(s) : s.error ? JSON.stringify(s) : JSON.stringify(
+    Object.assign({}, s, { result: String(s.result || '').slice(0, 60) }));
+  const saidR = s => String(s && s.feedback || '').slice(0, 190);
+  const hasR = (s, word) => String(s && s.feedback || '').indexOf(word) !== -1;
+  const onCard = (s, word) => String(s && s.drawn || '').indexOf(word) !== -1;
+  const step = s => String(s && s.kicker || '').indexOf('+1 Ô') !== -1;
+
+  check('the race play probes ran to completion', Boolean(race.challengeProjector) && !race.error,
+    String(race.error || 'ok'));
+
+  // 1. GAME CŨ: độ khó vẫn đổi số ô, không có gì bị #209 chạm tới.
+  check('a legacy race with the difficulty toggle on starts with no turn open',
+    race.legacyEasyOpen?.mode === null && race.legacyEasyOpen?.drawShown === true
+    && race.legacyEasyOpen?.answered === false && race.legacyEasyOpen?.optClick === 0
+    && race.legacyEasyOpen?.continueShown === false
+    && race.legacyEasyOpen?.pill.indexOf('⚡ Tiến theo độ khó') === 0, rv(race.legacyEasyOpen));
+  check('the drawn legacy card opens its one turn and promises the difficulty steps',
+    race.legacyEasyDraw?.mode === 'legacy' && race.legacyEasyDraw?.retry === false
+    && race.legacyEasyDraw?.ceiling === 100 && race.legacyEasyDraw?.optClick === 2
+    && race.legacyEasyDraw?.giveUpShown === true && race.legacyEasyDraw?.continueShown === false,
+    rv(race.legacyEasyDraw));
+  check('a legacy easy question still moves 1 square',
+    race.legacyEasy?.progress?.[0] === 2 && race.legacyEasy?.points?.[0] === 100
+    && race.legacyEasy?.correctCount === 1 && hasR(race.legacyEasy, 'trả lời đúng → +1 ô')
+    && step(race.legacyEasy), rv(race.legacyEasy) + ' | ' + saidR(race.legacyEasy));
+  check('a legacy medium question still moves 2 squares',
+    race.legacyMid?.progress?.[0] === 3 && hasR(race.legacyMid, '→ +2 ô')
+    && String(race.legacyMid?.kicker || '').indexOf('+2 Ô') !== -1, rv(race.legacyMid));
+  check('a legacy hard question still moves 3 squares',
+    race.legacyHard?.progress?.[0] === 4 && hasR(race.legacyHard, '→ +3 ô')
+    && String(race.legacyHard?.kicker || '').indexOf('+3 Ô') !== -1, rv(race.legacyHard));
+  check('a second click on a closed race turn moves nobody and pays nothing more',
+    race.legacyDouble?.progress?.[0] === 4 && race.legacyDouble?.points?.[0] === 100
+    && race.legacyDouble?.correctCount === 1, rv(race.legacyDouble));
+
+  // 2+3. THI ĐẤU: MỘT số ô cố định, kể cả khi dữ liệu vẫn còn bật "Tiến theo độ khó".
+  check('Thi đấu opens the drawn question with its own law on the strip',
+    race.competitiveDraw?.mode === 'competitive' && race.competitiveDraw?.retry === false
+    && race.competitiveDraw?.ceiling === 100 && race.competitiveDraw?.optClick === 2
+    && race.competitiveDraw?.giveUpShown === true && race.competitiveDraw?.continueShown === false
+    // Dải luật mở đầu bằng một biểu tượng, nên tìm chuỗi luật chứ không so vị trí 0.
+    && race.competitiveDraw?.pill.indexOf('Tiến 1 ô/câu đúng · Trả lời một lần') !== -1,
+    rv(race.competitiveDraw));
+  check('Thi đấu ignores the stored difficulty toggle and advances one square',
+    race.competitiveHard?.mode === 'competitive' && race.competitiveHard?.progress?.[0] === 2
+    && race.competitiveHard?.points?.[0] === 100 && step(race.competitiveHard)
+    && String(race.competitiveHard?.kicker || '').indexOf('+3') === -1
+    && hasR(race.competitiveHard, 'trả lời đúng → +1 ô'), rv(race.competitiveHard));
+  check('a Thi đấu miss closes the turn, reveals the key and moves nobody',
+    race.competitiveMiss?.reveal === true && race.competitiveMiss?.explain === true
+    && JSON.stringify(race.competitiveMiss?.optRevealed) === JSON.stringify(['a'])
+    && JSON.stringify(race.competitiveMiss?.optMarked) === JSON.stringify(['b'])
+    && race.competitiveMiss?.optClick === 0 && race.competitiveMiss?.turnPts === 0
+    && race.competitiveMiss?.used === 1 && race.competitiveMiss?.progress?.[0] === 1
+    && race.competitiveMiss?.points?.[0] === 0 && race.competitiveMiss?.continueShown === true
+    && onCard(race.competitiveMiss, 'Đáp án đúng'), rv(race.competitiveMiss));
+  check('a stale second click cannot pay a closed Thi đấu turn twice',
+    race.competitiveDouble?.progress?.[0] === 1 && race.competitiveDouble?.points?.[0] === 0
+    && race.competitiveDouble?.turns === 1 && race.competitiveDouble?.correctCount === 0,
+    rv(race.competitiveDouble));
+
+  // 4. THỬ THÁCH: sai thì im lặng tuyệt đối, nhưng vẫn phải cho sang lượt.
+  check('Thử thách closes the turn without showing the key or the explanation',
+    race.challengeMiss?.mode === 'challenge' && race.challengeMiss?.reveal === false
+    && race.challengeMiss?.explain === false && race.challengeMiss?.turnPts === 0
+    && JSON.stringify(race.challengeMiss?.optRevealed) === '[]'
+    && JSON.stringify(race.challengeMiss?.optMarked) === JSON.stringify(['b'])
+    && race.challengeMiss?.optClick === 0 && race.challengeMiss?.progress?.[0] === 1
+    && race.challengeMiss?.continueShown === true && !onCard(race.challengeMiss, 'Đáp án đúng')
+    && !onCard(race.challengeMiss, 'Bằng hai'), rv(race.challengeMiss) + ' | ' + race.challengeMiss?.drawn);
+
+  // 5. LUYỆN TẬP: cú sai không tiến, không rút câu, không điểm — và trần phạt là 100.
+  check('Luyện tập declares its law and its ceiling the moment the card is drawn',
+    race.practiceDraw?.mode === 'practice' && race.practiceDraw?.retry === true
+    && race.practiceDraw?.ceiling === 100 && race.practiceDraw?.turnPts === 0
+    && race.practiceDraw?.pill.indexOf('Tiến 1 ô') !== -1
+    && race.practiceDraw?.pill.indexOf('10%') !== -1, rv(race.practiceDraw));
+  check('a Luyện tập miss pays nothing, moves nothing and keeps the card in play',
+    race.practiceMiss?.retry === true && race.practiceMiss?.reveal === false
+    && race.practiceMiss?.answered === false
+    && race.practiceMiss?.wrongs === 1 && race.practiceMiss?.turnPts === 0
+    && race.practiceMiss?.progress?.[0] === 1 && race.practiceMiss?.points?.[0] === 0
+    && race.practiceMiss?.used === 0 && race.practiceMiss?.optClick === 2
+    && race.practiceMiss?.continueShown === false && race.practiceMiss?.giveUpShown === true
+    && onCard(race.practiceMiss, 'CÒN ĐƯỢC THỬ LẠI') && !onCard(race.practiceMiss, 'Đáp án đúng'),
+    rv(race.practiceMiss));
+  check('the retry banner names the score that is actually left',
+    hasR(race.practiceMiss, 'còn được thử lại') && hasR(race.practiceMiss, '90'),
+    saidR(race.practiceMiss));
+  check('the answer after a miss pays 90 and still advances ONE square',
+    race.practiceHit?.mode === 'practice' && race.practiceHit?.turnPts === 90
+    && race.practiceHit?.points?.[0] === 90 && race.practiceHit?.progress?.[0] === 2
+    && race.practiceHit?.used === 1 && race.practiceHit?.wrongs === 1
+    && race.practiceHit?.reveal === true && step(race.practiceHit)
+    && hasR(race.practiceHit, 'nhận 90/100 điểm') && hasR(race.practiceHit, 'bớt 10'),
+    rv(race.practiceHit) + ' | ' + saidR(race.practiceHit));
+
+  // 6+7. "Đội không trả lời được": khép vòng TỪ PHÍA TRÒ — không phạt, không tính lượt,
+  //      và có lộ đáp án hay không là DO HÀNG LUẬT trả lời (fix của task 6).
+  check('giving up in Luyện tập writes no attempt and still keeps the answer hidden',
+    race.practiceGiveUp?.reveal === false && race.practiceGiveUp?.turns === 0
+    && race.practiceGiveUp?.wrongs === 0 && race.practiceGiveUp?.turnPts === 0
+    && race.practiceGiveUp?.answered === true && race.practiceGiveUp?.progress?.[0] === 1
+    && race.practiceGiveUp?.points?.[0] === 0 && race.practiceGiveUp?.giveUpShown === false
+    && race.practiceGiveUp?.continueShown === true && JSON.stringify(race.practiceGiveUp?.optRevealed) === '[]'
+    && !onCard(race.practiceGiveUp, 'Đáp án đúng') && hasR(race.practiceGiveUp, 'không trả lời được'),
+    rv(race.practiceGiveUp));
+  check('giving up on a legacy race still opens the key, exactly as before #209',
+    race.legacyGiveUp?.mode === 'legacy' && race.legacyGiveUp?.reveal === true
+    && race.legacyGiveUp?.turns === 0 && race.legacyGiveUp?.turnPts === 0
+    && race.legacyGiveUp?.progress?.[0] === 1 && race.legacyGiveUp?.points?.[0] === 0
+    && JSON.stringify(race.legacyGiveUp?.optRevealed) === JSON.stringify(['a'])
+    && JSON.stringify(race.legacyGiveUp?.optMarked) === '[]'
+    && onCard(race.legacyGiveUp, 'Đáp án đúng') && hasR(race.legacyGiveUp, 'không trả lời được'),
+    rv(race.legacyGiveUp) + ' | ' + race.legacyGiveUp?.drawn);
+
+  // 8. Ô đặc biệt là DỮ LIỆU bàn cờ, đứng ngoài quy tắc số bước cố định.
+  check('a boost square still adds its own step on top of the fixed answer step',
+    race.boost?.progress?.[0] === 3 && race.boost?.points?.[0] === 100
+    && hasR(race.boost, 'ô 2 +1') && hasR(race.boost, '→ +1 ô'), rv(race.boost));
+  check('the rule strip between two turns states the running law, not the stored toggle',
+    race.betweenTurns?.mode === null && race.betweenTurns?.drawShown === true
+    && race.betweenTurns?.continueShown === false && race.betweenTurns?.turnIndex === 1
+    && race.betweenTurns?.pill.indexOf('Tiến 1 ô/câu đúng') !== -1
+    && race.betweenTurns?.pill.indexOf('Tiến theo độ khó') === -1,
+    rv(race.betweenTurns));
+  // Đội 2 cũng đáp đúng MỘT câu nên cũng đi MỘT ô — và ô 2 của bàn cờ này là ô TĂNG
+  // TỐC: luật của nó gắn với Ô chứ không gắn với lượt, nên đội thứ hai cũng bị nó đẩy
+  // thêm 1 ô (1 → 2 → 3). Đó chính là điều mục 8 chốt: ô đặc biệt đứng ngoài luật bước cố định.
+  check('the next team draws its own turn and its own square, boost cell included',
+    race.team2Draw?.mode === 'competitive' && race.team2Draw?.turnIndex === 1
+    && race.team2Draw?.progress?.[1] === 1 && race.team2?.progress?.[1] === 3
+    && race.team2?.points?.[1] === 100 && race.team2?.correctCount === 2,
+    rv(race.team2Draw) + ' | ' + rv(race.team2));
+
+  // 9. Về đích sau MỘT câu đúng trên đường đua 2 ô — màn kết quả phải hiện.
+  check('one correct answer on a two-square track wins the race',
+    race.finishAnswer?.progress?.[0] === 2 && race.finishAnswer?.points?.[0] === 100
+    && race.finishAnswer?.continueShown === true && String(race.finishAnswer?.continueLabel || '').indexOf('Xem kết quả') !== -1,
+    rv(race.finishAnswer));
+  check('the finish button opens the race result screen',
+    race.finishResult?.over === true
+    && String(race.finishResult?.result || '').indexOf('KẾT QUẢ ĐƯỜNG ĐUA') !== -1
+    && String(race.finishResult?.result || '').indexOf('Đội đỏ chiến thắng') !== -1,
+    String(race.finishResult?.result || '').slice(0, 120));
+
+  // 10. MÁY CHIẾU: bảng chiếu của Đường đua không có trường nào chỉ ra đáp án đúng.
+  check('the race projector view carries no answer key at all',
+    JSON.stringify(race.challengeProjector?.projection?.flags) === '[]'
+    && race.challengeProjector?.projection?.optionShape === 'id+text',
+    JSON.stringify(race.challengeProjector?.projection));
+
+  /* K2. HỘP CHIA ĐỘI của một game mang token (#209 đổi chỗ cất chế độ, nên con đường
+     đội nhóm phải được ĐO lại bằng cú nhấp thật, không suy từ code). */
+  const roster = report.roster || {};
+  // In snapshot thô, đúng tên khoá mà điều kiện đọc (xem ghi chú ở rv phía trên).
+  const rviewR = s => !s ? String(s) : s.error ? JSON.stringify(s) : JSON.stringify(s);
+
+  check('the team roster opens for a token game that says "đội nhóm"',
+    roster.setupOpen?.token === MODE_TOKENS[1] && roster.setupOpen?.setupShown === 2
+    && JSON.stringify(roster.setupOpen?.pending) === JSON.stringify(['Đội A', 'Đội B'])
+    && roster.setupOpen?.teams === null, rviewR(roster.setupOpen));
+  check('the add-team button really adds a third row',
+    roster.afterAdd?.setupShown === 3
+    && JSON.stringify(roster.afterAdd?.pending) === JSON.stringify(['Đội A', 'Đội B', 'Đội C']),
+    rviewR(roster.afterAdd));
+  check('typing a team name reaches the pending roster',
+    roster.afterRename?.pending?.[0] === 'Đội Sao Hoả', rviewR(roster.afterRename));
+  check('starting the game carries the edited roster into the team play',
+    JSON.stringify(roster.afterStart?.teams) === JSON.stringify(['Đội Sao Hoả', 'Đội B', 'Đội C'])
+    && roster.afterStart?.setupShown === 0 && roster.afterStart?.mode === 'practice'
+    && JSON.stringify(roster.afterStart?.points) === JSON.stringify([0, 0, 0]), rviewR(roster.afterStart));
+  check('a Luyện tập miss leaves the team scoreboard at zero and writes no row',
+    roster.afterMiss?.rows === 0 && JSON.stringify(roster.afterMiss?.points) === JSON.stringify([0, 0, 0])
+    && roster.afterMiss?.turnIndex === 0, rviewR(roster.afterMiss));
+  // Điều điều kiện này phải nói là ĐIỂM XUỐNG BẢNG, không phải chữ trên chip: thanh bảng
+  // điểm chỉ dựng lại ở câu kế tiếp (check ngay bên dưới), còn chỗ MC đọc là dòng phản hồi.
+  check('the penalised score is what the team at the wheel actually receives',
+    roster.afterHit?.rows === 1 && roster.afterHit?.lastPts === 90
+    && roster.afterHit?.points?.[0] === 90 && roster.afterHit?.turnIndex === 1
+    && String(roster.afterHit?.feedback || '').indexOf('Đội Sao Hoả') !== -1
+    && String(roster.afterHit?.feedback || '').indexOf('90') !== -1, rviewR(roster.afterHit));
+  check('the scoreboard the class sees carries the penalised 90 to the next question',
+    String(roster.afterNext?.chip || '').indexOf('Đội Sao Hoả 90') !== -1
+    && roster.afterNext?.turnIndex === 1
+    && String(roster.afterNext?.chip || '').indexOf('Đội B') !== -1, rviewR(roster.afterNext));
 
   check('the fixtures are removed from the library again', report.cleanup?.left === 0, JSON.stringify(report.cleanup));
 

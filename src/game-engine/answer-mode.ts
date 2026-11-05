@@ -31,7 +31,7 @@ const ANSWER_MODE_HINTS = {
   competitive: 'Trả lời một lần. Sai thì mở đáp án đúng và kết thúc câu.',
   practice: 'Sai được thử lại. Mỗi lần sai bớt 10% điểm của câu đó, không dưới 0.',
   challenge: 'Trả lời một lần. Sai thì KHÔNG mở đáp án, phải tự sang câu.',
-  legacy: 'Game tạo trước #209: giữ đúng cách chấm, cách lộ đáp án và giải thích như đang chơi.'
+  legacy: 'Trò chơi tạo trước bản cập nhật này: giữ đúng cách chấm, cách lộ đáp án và giải thích như đang chơi.'
 };
 const PRACTICE_PENALTY_RATE = 0.1;
 
@@ -103,7 +103,7 @@ function practiceAward(maxPoints, wrongAttempts) {
 }
 
 /* 'finished' = câu/lượt đã kết thúc theo luật riêng của trò (hết lượt ở Kho báu,
-   hết giờ ở Đường đua). Thử thách không bao giờ mở lời giải sau câu sai. */
+   hết một lượt trả lời ở Đường đua). Thử thách không bao giờ mở lời giải sau câu sai. */
 function explanationAllowed(mode, situation) {
   const state = situation || {};
   if (mode === 'practice') return Boolean(state.correct || state.finished);

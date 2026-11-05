@@ -137,7 +137,9 @@ function run(): void {
   assert.equal(raceDefaults!.maxRounds, 6);
   assert.equal(raceDefaults!.teams.length, 2);
   assert.deepEqual(raceDefaults!.cells, []);
-  assert.equal(raceDefaults!.stepByDifficulty, true);
+  // #209 task 6: a race with no design of its own advances a FIXED number of steps, so the
+  // invented default is off. `true` is only ever the value a pre-#209 game already stored.
+  assert.equal(raceDefaults!.stepByDifficulty, false);
   assert.equal(raceDefaults!.luckEnabled, false);
   validateRaceGame({ template: 'race', race: raceDefaults! });
 

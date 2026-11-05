@@ -9,7 +9,11 @@ function defaultRaceData() {
   return {
     trackLength: 12,
     maxRounds: 6,
-    stepByDifficulty: true,
+    // #209 task 6: a race created from scratch advances a FIXED number of steps per correct
+    // answer (the owner removed the difficulty bonus from this game). The flag stays in the
+    // data model because a game saved before #209 still plays by it — see `raceStepsForTurn()`
+    // in features/games/race.ts, which only reads it while the game runs its old scoring law.
+    stepByDifficulty: false,
     luckEnabled: false,
     teams: [
       { id: 't1', name: 'Đội A', icon: '🏎️' },
@@ -84,6 +88,7 @@ function raceEditorHtml(race) {
       <label><input type="checkbox" id="raceStepByDifficulty" ${r.stepByDifficulty ? 'checked' : ''}> Tiến theo độ khó (dễ +1 · trung bình +2 · khó +3 ô)</label>
       <label><input type="checkbox" id="raceLuckEnabled" ${r.luckEnabled ? 'checked' : ''}> Bật ô may mắn</label>
     </div>
+    <p class="field-hint">Ô “Tiến theo độ khó” chỉ còn tác dụng với trò đang giữ cách tính điểm cũ. Khi chọn một trong ba cách trả lời — Thi đấu, Luyện tập, Thử thách — mỗi câu đúng luôn cho đội tiến một số ô cố định.</p>
     <div class="section-head mt-[12px]"><h3>Đội chơi <span class="tag" id="raceTeamCount">${r.teams.length}</span></h3><div><button type="button" class="btn btn-secondary btn-small" id="addRaceTeamBtn">${uiIcon('plus', '', 13)} Thêm đội</button></div></div>
     <div id="raceTeams">${r.teams.map((t, i) => raceTeamRow(t, i)).join('')}</div>
     <div class="section-head mt-[12px]"><h3>Ô đặc biệt <span class="tag" id="raceCellCount">${r.cells.length}</span></h3><div><button type="button" class="btn btn-secondary btn-small" id="addRaceCellBtn">${uiIcon('plus', '', 13)} Thêm ô đặc biệt</button></div></div>
@@ -92,7 +97,7 @@ function raceEditorHtml(race) {
     <div class="section-head mt-[12px]"><h3>Xem trước đường đua</h3><div><button type="button" class="btn btn-secondary btn-small" id="racePreviewTheme">${uiIcon('eye', '', 13)} Xem như lúc chơi</button></div></div>
     <div id="raceTrackPreview" class="editor-race-preview" data-preview-theme="editor"></div>
     <div class="section-head mt-[12px]"><h3>Ngân hàng câu hỏi <span class="tag" id="raceQuestionCount">${r.questions.length}</span></h3><div><button type="button" class="btn btn-secondary btn-small" id="addRaceQuestionBtn">${uiIcon('plus', '', 13)} Thêm câu hỏi</button></div></div>
-    <p class="field-hint">Câu hỏi được bốc ngẫu nhiên theo lượt; độ khó quyết định số ô tiến (khi bật “Tiến theo độ khó”). Kéo biểu tượng ⠿ để sắp xếp thứ tự câu.</p>
+    <p class="field-hint">Câu hỏi được bốc ngẫu nhiên theo lượt; độ khó chỉ đổi số ô tiến ở trò đang giữ cách tính điểm cũ. Kéo biểu tượng ⠿ để sắp xếp thứ tự câu.</p>
     <div id="raceQuestions">${r.questions.map((q, i) => raceQuestionCard(q, i)).join('')}</div>
   </div>`;
 }

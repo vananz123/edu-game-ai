@@ -340,11 +340,16 @@ function wizardConfigAdvancedTypeFields(config) {
         + wizardConfigNumber('journeyBonus', 'Thưởng hành trình', config.journeyBonus, 0, 10000, 50)
         + wizardConfigNumber('hiddenItemBonus', 'Thưởng vật phẩm ẩn', config.hiddenItemBonus, 0, 1000, 50);
     case 'race':
+      // #209 task 6: "Bước tiến theo độ khó" is no longer offered. The owner closed Đường đua
+      // with a FIXED number of steps per correct answer, and the runtime ignores the old flag
+      // for every game running one of the three answer modes — a toggle here would be a
+      // control that changes nothing. It stays in the data model (and in the editor) because
+      // a game saved before #209 still plays by it.
       return wizardAnswerModeSelect(config)
         + wizardConfigNumber('trackLength', 'Độ dài đường đua', config.trackLength, 3, 100)
         + wizardConfigNumber('teamCount', 'Số đội', config.teamCount, 2, 6)
-        + wizardConfigToggle('stepByDifficulty', 'Bước tiến theo độ khó', config.stepByDifficulty)
-        + wizardConfigToggle('luckEnabled', 'Bật ô may mắn', config.luckEnabled);
+        + wizardConfigToggle('luckEnabled', 'Bật ô may mắn', config.luckEnabled)
+        + '<p class="field-hint">Mỗi câu đúng đưa đội tiến một số ô cố định; độ khó của câu không đổi số bước. Ô đặc biệt trên đường đua (tăng tốc, chướng ngại, may mắn, thử thách) vẫn giữ luật riêng của nó.</p>';
     default:
       return '';
   }

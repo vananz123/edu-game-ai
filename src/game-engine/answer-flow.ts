@@ -145,9 +145,9 @@ function registerAnswer(turn, result, context) {
 }
 
 /**
- * Kết thúc vòng từ PHÍA TRÒ: hết giờ ở Đường đua, MC bấm sang câu, hoặc hết lượt ở
- * một trò không dùng giới hạn lượt. Không xoá điểm của một vòng đã trả lời đúng,
- * và không phạt thêm — phạt chỉ đến từ registerAnswer.
+ * Kết thúc vòng từ PHÍA TRÒ: một đội bỏ cuộc, MC bấm "Bỏ qua câu này", hoặc chặng hết
+ * lượt. Không xoá điểm của một vòng đã trả lời đúng, và không phạt thêm — phạt chỉ đến
+ * từ registerAnswer.
  */
 function endAnswerTurn(turn, context) {
   if (!turn || typeof turn !== 'object') return turn;
@@ -155,7 +155,12 @@ function endAnswerTurn(turn, context) {
   if (!turn.correct) {
     turn.finished = true;
     turn.locked = true;
-    if (turn.answered) turn.revealCorrect = Boolean(turn.rules.revealOnWrong);
+    /* Luật chứ không phải lịch sử: khép vòng từ phía trò vẫn hỏi HÀNG LUẬT, vì "Đội
+       không trả lời được" của Đường đua lộ đáp án từ TRƯỚC #209 ở chế độ cũ — một vòng
+       chưa từng `answered` mà im lặng là đổi hành vi của game đã lưu. Luyện tập và Thử
+       thách có `revealOnWrong` false nên không đổi gì; Kho báu gọi đây SAU một cú sai
+       nên cũng chỉ ghi lại đúng giá trị registerAnswer đã tra. */
+    turn.revealCorrect = Boolean(turn.rules.revealOnWrong);
   }
   if (options.skipped === true) turn.skipped = true;
   return refreshTurn(turn, 0);

@@ -131,7 +131,9 @@ export function buildRaceData(questions: GameQuestion[], design: unknown): RaceD
   return {
     trackLength,
     maxRounds,
-    stepByDifficulty: typeof meta.stepByDifficulty === 'boolean' ? meta.stepByDifficulty : true,
+    // #209 task 6: a race built from a lesson advances a fixed number of steps, so a design that
+    // does not say otherwise gets `false`. `true` remains the stored value of a pre-#209 game.
+    stepByDifficulty: typeof meta.stepByDifficulty === 'boolean' ? meta.stepByDifficulty : false,
     luckEnabled: typeof meta.luckEnabled === 'boolean' ? meta.luckEnabled : false,
     teams: buildTeams(meta),
     cells: buildCells(meta, trackLength),
