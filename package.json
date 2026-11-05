@@ -1,7 +1,7 @@
 {
   "name": "edugame-studio",
-  "version": "0.4.0",
-  "description": "EduGame Studio - Ã¡Â»Â©ng dÃ¡Â»Â¥ng Windows tÃ¡ÂºÂ¡o, quÃ¡ÂºÂ£n lÃƒÂ½ vÃƒÂ  chÃ†Â¡i game giÃƒÂ¡o dÃ¡Â»Â¥c offline, TypeScript",
+  "version": "0.4.1",
+  "description": "EduGame Studio - ứng dụng Windows tạo, quản lý và chơi game giáo dục offline, TypeScript",
   "main": "dist/src/main.js",
   "engines": {
     "node": ">=22.13.0"
@@ -10,9 +10,10 @@
   "license": "MIT",
   "scripts": {
     "clean": "node -e \"try{require('node:fs').rmSync('dist',{recursive:true,force:true})}catch(e){console.warn('clean warning:',e.message)}\"",
-    "build": "npm run clean && node scripts/build-icon-data.js --bootstrap && tsc -p tsconfig.json && npm run build:icons && tsc -p tsconfig.json && npm run build:icons:check && copyfiles -u 1 \"src/index.html\" \"src/renderer/styles/*.css\" \"src/presentation/presentation.html\" \"src/presentation/presentation-preload.js\" \"src/about/about.html\" \"src/about/about-preload.js\" \"src/lan/mobile/*\" \"src/renderer/assets/*\" dist/src && npm run build:css && npm run build:three",
+    "build": "npm run clean && node scripts/build-icon-data.js --bootstrap && tsc -p tsconfig.json && npm run build:icons && tsc -p tsconfig.json && npm run build:icons:check && copyfiles -u 1 \"src/index.html\" \"src/renderer/styles/*.css\" \"src/presentation/presentation.html\" \"src/presentation/presentation-preload.js\" \"src/about/about.html\" \"src/about/about-preload.js\" \"src/lan/mobile/*\" \"src/renderer/assets/*\" dist/src && npm run build:css && npm run build:three && npm run build:confetti",
     "build:css": "tailwindcss -i src/renderer/styles/app.css -o dist/src/renderer/styles/app.css --minify",
     "build:three": "node scripts/build-three.js",
+    "build:confetti": "node scripts/build-confetti.js",
     "start": "npm run build && electron .",
     "check": "tsc --noEmit -p tsconfig.json",
     "test": "npm run build && node tests/run-unit.js",
@@ -44,7 +45,9 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.0",
+    "@types/canvas-confetti": "^1.9.0",
     "better-sqlite3": "^11.7.0",
+    "canvas-confetti": "^1.9.4",
     "electron-updater": "^6.8.11",
     "express": "^5.1.0",
     "express-rate-limit": "^8.1.0",

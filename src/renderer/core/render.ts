@@ -26,7 +26,16 @@ function render() {
       + '<div class="panel-sub">Đã xảy ra lỗi khi vẽ trang. Hãy mở lại trang hoặc khởi động lại ứng dụng. Trang khác vẫn dùng được.</div></section>';
   }
   if (state.page !== renderedPage) { render(); return; }
-  $('#pageContent').innerHTML = html;
+  const pageContainer = $('#pageContent');
+  if (pageContainer) {
+    pageContainer.innerHTML = html;
+    if (window.__lastRenderedPage !== renderedPage) {
+      window.__lastRenderedPage = renderedPage;
+      pageContainer.classList.remove('page-fade-enter');
+      void pageContainer.offsetWidth;
+      pageContainer.classList.add('page-fade-enter');
+    }
+  }
   // DECISIONS #161: markup injected through `innerHTML` cannot call uiIcon(), so the
   // `data-icon` hooks it carries are filled here. Idempotent, and cheap: it only
   // touches elements that do not already hold the icon they ask for.

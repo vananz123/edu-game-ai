@@ -189,6 +189,9 @@
        classic <script> global `THREE`; the renderer is not ES-module and CSP is
        script-src 'self', so this must be a local IIFE, never a CDN. -->
   <script src="renderer/vendor/three.global.js"></script>
+  <!-- Canvas Confetti (DECISIONS #194): bundled by scripts/build-confetti.js into a single
+       classic <script> global `confetti`; local IIFE, offline celebration animations. -->
+  <script src="renderer/vendor/confetti.global.js"></script>
 
   <!-- window.threeGame: the shared, scoring-agnostic 3D presentation layer
        (DECISIONS #137). Loaded after THREE, before games/three-stage.js which calls it. -->

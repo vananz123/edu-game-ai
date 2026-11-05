@@ -139,16 +139,19 @@ function wizardModeChoice(config) {
   return `<div class="wizard-mode-block" data-wizard-mode-block="1">
     <div class="wizard-mode-head">
       <div>
-        <div class="wizard-mode-title" id="wizardModeLabel">CHẾ ĐỘ TẠO</div>
-        <div class="wizard-mode-sub">Chọn cách AI đọc giáo án — khác biệt thật nằm ở lượng ngữ cảnh và giới hạn độ dài câu trả lời.</div>
+        <div class="wizard-mode-title" id="wizardModeLabel">Chế độ tạo</div>
+        <div class="wizard-mode-sub">Chọn tốc độ và mức độ chi tiết khi AI tạo câu hỏi.</div>
       </div>
       <span class="tag" data-wizard-mode-badge>${value === 'deep' ? 'Thinking' : 'Fast'}</span>
     </div>
     <div class="wizard-mode-choice" role="radiogroup" aria-labelledby="wizardModeLabel">
-      ${card('fast', '⚡', 'Fast', 'Nhanh (mặc định)', 'Ít ngữ cảnh hơn, phản hồi nhanh. Phù hợp giáo án ngắn hoặc khi cần tạo nhanh trong lớp.')}
-      ${card('deep', '🧠', 'Thinking', 'Kỹ, nhiều ngữ cảnh', 'Gửi nhiều đoạn giáo án hơn và cho phép câu trả lời dài hơn. Phù hợp giáo án dài, cần nội dung chi tiết.')}
+      ${card('fast', '⚡', 'Fast', 'Nhanh', 'Phản hồi nhanh. Phù hợp giáo án ngắn hoặc cần tạo nhanh trong lớp.')}
+      ${card('deep', '🧠', 'Thinking', 'Kỹ lưỡng', 'Phân tích sâu hơn, câu hỏi chi tiết. Phù hợp giáo án dài hoặc nội dung nâng cao.')}
     </div>
-    <div class="field-hint">Model Qwen 3.5 trên CPU chưa trả nội dung suy luận dùng được — ứng dụng không giả lập suy luận. Fast/Thinking chỉ đổi ngữ cảnh và trần token, không đổi model.</div>
+    <div class="field-hint flex items-center gap-1.5 mt-2">
+      <span>Mẹo: Chế độ Nhanh phù hợp cho hầu hết bài học; chọn Kỹ lưỡng khi giáo án dài nhiều phần.</span>
+      <span class="inline-flex items-center text-[#64748b] dark:text-[#94a3b8] cursor-help" title="Model Qwen 3.5 trên CPU chưa trả nội dung suy luận dùng được — ứng dụng không giả lập suy luận. Fast/Thinking chỉ đổi ngữ cảnh và trần token, không đổi model." data-icon="info" data-icon-size="13"></span>
+    </div>
   </div>`;
 }
 
@@ -198,29 +201,48 @@ function renderWizardConfigure() {
     ${wizardIsBankRun() ? wizardBankConfigureNote() : wizardModeChoice(config)}
 
     <div class="field-row">
-      <div class="field"><label>TÊN TRÒ CHƠI *</label><input data-wizard-config="title" value="${escapeHtml(config.title || '')}"></div>
-      <div class="field"><label>CHỦ ĐỀ</label><input data-wizard-config="topic" value="${escapeHtml(config.topic || '')}"></div>
+      <div class="field"><label>Tên trò chơi *</label><input data-wizard-config="title" value="${escapeHtml(config.title || '')}"></div>
+      <div class="field"><label>Chủ đề</label><input data-wizard-config="topic" value="${escapeHtml(config.topic || '')}"></div>
     </div>
     <div class="field-row">
-      <div class="field"><label>MÔN HỌC</label><input data-wizard-config="subject" value="${escapeHtml(config.subject || '')}"></div>
-      <div class="field"><label>LỚP</label><input data-wizard-config="grade" value="${escapeHtml(config.grade || '')}"></div>
+      <div class="field"><label>Môn học</label><input data-wizard-config="subject" value="${escapeHtml(config.subject || '')}"></div>
+      <div class="field"><label>Lớp</label><input data-wizard-config="grade" value="${escapeHtml(config.grade || '')}"></div>
     </div>
 
-    <div class="setup-grid">
-      ${wizardConfigSelect('audience', 'ĐỐI TƯỢNG', config.audience, wizardAudienceOptions)}
-      ${wizardConfigSelect('difficulty', 'ĐỘ KHÓ', config.difficulty, wizardDifficultyOptions.map(value => ({ value, label: value.charAt(0).toUpperCase() + value.slice(1) })))}
-      ${wizardConfigNumber('durationMinutes', 'THỜI LƯỢNG (PHÚT)', config.durationMinutes, 1, 120)}
-      ${wizardConfigSelect('playMode', 'HÌNH THỨC', config.playMode, [{ value: 'individual', label: 'Cá nhân' }, { value: 'team', label: 'Đội nhóm' }])}
-      ${wizardConfigSelect('style', 'PHONG CÁCH', config.style, wizardStyleOptions)}
-      ${wizardConfigTypeFields(config)}
+    <!-- Cấu hình chính -->
+    <div class="setup-grid mb-3">
+      ${wizardConfigCoreTypeFields(config)}
+      ${wizardConfigSelect('difficulty', 'Độ khó', config.difficulty, wizardDifficultyOptions.map(value => ({ value, label: value.charAt(0).toUpperCase() + value.slice(1) })))}
+      ${wizardConfigNumber('durationMinutes', 'Thời lượng (phút)', config.durationMinutes, 1, 120)}
     </div>
+
+    <!-- Tuỳ chọn nâng cao (Progressive Disclosure) -->
+    <details class="create-advanced-options border border-[#e2e8f0] dark:border-[#2a324b] rounded-xl bg-[#f8fafc] dark:bg-[#151a30] p-3 text-[#1e293b] dark:text-[#f1f5f9] transition-all mb-4">
+      <summary class="cursor-pointer text-[12px] font-bold text-[#4f46e5] dark:text-[#818cf8] flex items-center justify-between select-none list-none">
+        <span class="flex items-center gap-2">
+          <span data-icon="sliders-horizontal" data-icon-size="14"></span>
+          Tuỳ chọn nâng cao (Luật chơi, tính điểm, thi đấu)
+        </span>
+        <span class="text-[11px] text-[#5f6a7d] dark:text-[#94a3b8] font-normal">Mở rộng / thu gọn ▾</span>
+      </summary>
+      <div class="mt-3 pt-3 border-t border-[#e2e8f0] dark:border-[#2a324b] flex flex-col gap-3">
+        <div class="setup-grid">
+          ${wizardConfigSelect('audience', 'Đối tượng', config.audience, wizardAudienceOptions)}
+          ${wizardConfigSelect('playMode', 'Hình thức', config.playMode, [{ value: 'individual', label: 'Cá nhân' }, { value: 'team', label: 'Đội nhóm' }])}
+          ${wizardConfigSelect('style', 'Phong cách', config.style, wizardStyleOptions)}
+          ${wizardConfigAdvancedTypeFields(config)}
+        </div>
+      </div>
+    </details>
 
     ${objectives.length ? `<div class="section-head mt-[14px]"><h4>Mục tiêu trọng tâm</h4><small class="text-[12px] text-[#5f6a7d]">Bỏ chọn mục tiêu không muốn đưa vào trò chơi.</small></div>
     <div class="grid gap-[6px]">${objectives.map(objective => `<label class="switch-row"><span class="switch-copy"><strong class="text-[12px]">${escapeHtml(objective.description)}</strong></span><input type="checkbox" data-wizard-focus="${escapeHtml(objective.id)}"${(config.focusObjectiveIds || []).includes(objective.id) ? ' checked' : ''}></label>`).join('')}</div>` : ''}
 
-    <div class="publish-actions">
-      <button class="btn btn-secondary" data-wizard-action="back"><span data-icon="arrow-left" data-icon-size="13"></span> Chọn trò chơi</button>
-      <button class="btn btn-secondary" data-wizard-action="save"${s.busy ? ' disabled' : ''}>${s.busy === 'save' ? 'Đang lưu…' : 'Lưu dự án'}</button>
+    <div class="publish-actions flex items-center justify-between gap-2 flex-wrap">
+      <div class="flex items-center gap-2">
+        <button class="btn btn-secondary" data-wizard-action="back"><span data-icon="arrow-left" data-icon-size="13"></span> Chọn trò chơi</button>
+        <button class="btn btn-secondary" data-wizard-action="save"${s.busy ? ' disabled' : ''}>${s.busy === 'save' ? 'Đang lưu…' : 'Lưu dự án'}</button>
+      </div>
       ${wizardIsBankRun()
         ? `<button class="btn btn-primary" id="wizardNextBtn" data-wizard-action="next"${s.busy ? ' disabled' : ''}>Xong · ${s.gameSnapshot ? 'Mở bước lưu' : 'Lưu vào thư viện'} <span data-icon="arrow-right" data-icon-size="13"></span></button>`
         : `<button class="btn btn-primary" id="wizardNextBtn" data-wizard-action="next"${s.busy ? ' disabled' : ''}>Tiếp tục · Tạo nội dung <span data-icon="arrow-right" data-icon-size="13"></span></button>`}
@@ -241,11 +263,11 @@ function wizardConnectionFields(config) {
   const picked = constellationResolve(config.connectionTemplate).id;
   const direction = constellationResolveDragDirection(config.dragDirection);
   return `<div class="field connection-field${mode === 'connection' ? '' : ' hidden'}" data-connection-field>
-    <label>CHÒM SAO</label>
+    <label>Chòm sao</label>
     ${constellationPreviewHtml(picked)}
     ${constellationGalleryHtml(picked, 'connectionTemplate')}
     <div class="field connection-direction">
-      <label>CHIỀU KÉO</label>
+      <label>Chiều kéo</label>
       <select data-wizard-config="dragDirection">
         ${CONSTELLATION_DRAG_DIRECTIONS.map(value => `<option value="${value}"${value === direction ? ' selected' : ''}>${escapeHtml(CONSTELLATION_DRAG_LABELS[value])}</option>`).join('')}
       </select>
@@ -254,54 +276,68 @@ function wizardConnectionFields(config) {
   </div>`;
 }
 
-function wizardConfigTypeFields(config) {
+function wizardConfigCoreTypeFields(config) {
   switch (config.gameType) {
     case 'arena':
-      return wizardConfigCount('questionCount', 'SỐ CÂU HỎI', config.questionCount, 1, 30)
-        + wizardConfigSelect('scoringMode', 'TÍNH ĐIỂM', config.scoringMode, [
+      return wizardConfigCount('questionCount', 'Số câu hỏi', config.questionCount, 1, 30);
+    case 'scenario':
+      return wizardConfigCount('situationCount', 'Số tình huống', config.situationCount, 1, 30);
+    case 'matching':
+      return wizardConfigCount('pairCount', 'Số cặp ghép', config.pairCount, 2, 30);
+    case 'treasure':
+      return wizardConfigCount('stageCount', 'Số chặng', config.stageCount, 2, 30);
+    case 'race':
+      return wizardConfigCount('maxRounds', 'Số lượt tối đa', config.maxRounds, 1, 50);
+    default:
+      return '';
+  }
+}
+
+function wizardConfigAdvancedTypeFields(config) {
+  switch (config.gameType) {
+    case 'arena':
+      return wizardConfigSelect('scoringMode', 'Tính điểm', config.scoringMode, [
           { value: 'basic', label: 'Cơ bản' }, { value: 'speed', label: 'Tốc độ' },
           { value: 'difficulty', label: 'Theo độ khó' }, { value: 'team', label: 'Thi đấu đội' },
           { value: 'practice', label: 'Luyện tập' }
         ])
-        + wizardConfigSelect('gameplayMode', 'CÁCH CHƠI', config.gameplayMode || 'classic', [
+        + wizardConfigSelect('gameplayMode', 'Cách chơi', config.gameplayMode || 'classic', [
           { value: 'classic', label: 'Cổ điển' }, { value: 'house', label: 'Xây nhà 3D (theo số câu)' }
         ])
-        + wizardConfigSelect('houseStyle', 'MẪU NHÀ 3D (XÂY NHÀ)', config.houseStyle || 'auto', [
+        + wizardConfigSelect('houseStyle', 'Mẫu nhà 3D', config.houseStyle || 'auto', [
           { value: 'auto', label: 'Tự động theo trò chơi' },
           ...houseStyleOptions().map(option => ({ value: option.id, label: option.label }))
         ])
-        + wizardConfigNumber('pointsPerCorrect', 'ĐIỂM / CÂU', config.pointsPerCorrect, 10, 1000, 10)
-        + wizardConfigNumber('timeBonus', 'THƯỞNG NHANH', config.timeBonus, 0, 50, 5);
+        + wizardConfigNumber('pointsPerCorrect', 'Điểm / câu', config.pointsPerCorrect, 10, 1000, 10)
+        + wizardConfigNumber('timeBonus', 'Thưởng nhanh', config.timeBonus, 0, 50, 5);
     case 'scenario':
-      return wizardConfigCount('situationCount', 'SỐ TÌNH HUỐNG', config.situationCount, 1, 30)
-        + wizardConfigSelect('scoringMode', 'TÍNH ĐIỂM', config.scoringMode, [
-          { value: 'quality', label: 'Theo chất lượng quyết định' }, { value: 'simple', label: 'Đơn giản' }
-        ]);
+      return wizardConfigSelect('scoringMode', 'Tính điểm', config.scoringMode, [
+        { value: 'quality', label: 'Theo chất lượng quyết định' }, { value: 'simple', label: 'Đơn giản' }
+      ]);
     case 'matching':
-      return wizardConfigCount('pairCount', 'SỐ CẶP GHÉP', config.pairCount, 2, 30)
-        + wizardConfigSelect('matchingMode', 'KIỂU GHÉP', config.matchingMode, [
+      return wizardConfigSelect('matchingMode', 'Kiểu ghép', config.matchingMode, [
           { value: 'columns', label: 'Hai cột' }, { value: 'memory', label: 'Lật thẻ' },
           { value: 'categorize', label: 'Phân loại' },
-          // #171 graduates the mode: no BETA label, and the name says what the
-          // class actually does.
           { value: 'connection', label: `${CONSTELLATION_GAME_NAME} (kéo thẻ vào sao)` }
         ])
-        + wizardConfigNumber('wrongPenalty', 'TRỪ ĐIỂM SAI', config.wrongPenalty, 0, 1000, 10)
+        + wizardConfigNumber('wrongPenalty', 'Trừ điểm sai', config.wrongPenalty, 0, 1000, 10)
         + wizardConnectionFields(config);
     case 'treasure':
-      return wizardConfigCount('stageCount', 'SỐ CHẶNG', config.stageCount, 2, 30)
-        + wizardConfigNumber('attemptsPerStage', 'LƯỢT THỬ MỖI CHẶNG', config.attemptsPerStage, 0, 99)
-        + wizardConfigNumber('journeyBonus', 'THƯỞNG HÀNH TRÌNH', config.journeyBonus, 0, 10000, 50)
-        + wizardConfigNumber('hiddenItemBonus', 'THƯỞNG VẬT PHẨM ẨN', config.hiddenItemBonus, 0, 1000, 50);
+      return wizardConfigNumber('attemptsPerStage', 'Lượt thử mỗi chặng', config.attemptsPerStage, 0, 99)
+        + wizardConfigNumber('journeyBonus', 'Thưởng hành trình', config.journeyBonus, 0, 10000, 50)
+        + wizardConfigNumber('hiddenItemBonus', 'Thưởng vật phẩm ẩn', config.hiddenItemBonus, 0, 1000, 50);
     case 'race':
-      return wizardConfigNumber('trackLength', 'ĐỘ DÀI ĐƯỜNG ĐUA', config.trackLength, 3, 100)
-        + wizardConfigCount('maxRounds', 'SỐ LƯỢT TỐI ĐA', config.maxRounds, 1, 50)
-        + wizardConfigNumber('teamCount', 'SỐ ĐỘI', config.teamCount, 2, 6)
+      return wizardConfigNumber('trackLength', 'Độ dài đường đua', config.trackLength, 3, 100)
+        + wizardConfigNumber('teamCount', 'Số đội', config.teamCount, 2, 6)
         + wizardConfigToggle('stepByDifficulty', 'Bước tiến theo độ khó', config.stepByDifficulty)
         + wizardConfigToggle('luckEnabled', 'Bật ô may mắn', config.luckEnabled);
     default:
       return '';
   }
+}
+
+function wizardConfigTypeFields(config) {
+  return wizardConfigCoreTypeFields(config) + wizardConfigAdvancedTypeFields(config);
 }
 
 function wizardNumberInput(el, fallback, min, max) {

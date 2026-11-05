@@ -274,7 +274,10 @@ function lessonChatReadsHtml(message) {
     ? (meta.trimmed ? 'toàn bộ giáo án, cắt bớt vì quá dài' : 'toàn bộ giáo án, không cắt bớt')
     : `${vi(meta.quotes)} đoạn liên quan${meta.trimmed ? ', có cắt bớt' : ''}`;
   const cut = meta.fallback ? ' · không tìm thấy đoạn khớp câu hỏi nên lấy phần đầu bài' : '';
-  return `<div class="lesson-chat-reads${meta.trimmed ? ' is-cut' : ''}" data-lesson-chat-reads="${percent}" data-lesson-chat-trimmed="${meta.trimmed ? '1' : '0'}"><span data-icon="book-open" data-icon-size="12"></span> AI đã đọc ${vi(read)} / ${vi(total)} ký tự (${percent} %) · ${scope}${cut}</div>`;
+  const badge = percent === 100
+    ? '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#effaf5] dark:bg-[#132d24] text-[#0f7b5c] dark:text-[#4ade80] mr-1.5">Đầy đủ 100%</span>'
+    : '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#fff8e6] dark:bg-[#2d2410] text-[#b45309] dark:text-[#fbbf24] mr-1.5">Trích đoạn</span>';
+  return `<div class="lesson-chat-reads${meta.trimmed ? ' is-cut' : ''}" data-lesson-chat-reads="${percent}" data-lesson-chat-trimmed="${meta.trimmed ? '1' : '0'}">${badge}<span data-icon="book-open" data-icon-size="12"></span> AI đã đọc ${vi(read)} / ${vi(total)} ký tự (${percent} %) · ${scope}${cut}</div>`;
 }
 
 function lessonChatMessageHtml(message) {
@@ -348,7 +351,7 @@ function lessonChatComposerHtml() {
         ? `<button type="button" class="btn btn-secondary btn-small" data-action="lesson-chat-stop"><span data-icon="square" data-icon-size="13"></span> Dừng</button>`
         : `<button type="button" class="btn btn-primary btn-small" data-action="lesson-chat-send" data-lesson-chat-send${lessonChatCanSend() ? '' : ' disabled'}>Gửi</button>`}
     </div>
-    <small class="lesson-chat-status" data-lesson-chat-hint>${lessonChatUi.docIds.length ? '' : 'Cứ hỏi thẳng — không cần chọn hay tải giáo án nào cả.'}</small>
+    <small class="lesson-chat-status" data-lesson-chat-hint>${lessonChatUi.docIds.length ? `Đã chọn ${lessonChatUi.docIds.length} giáo án — AI sẽ đối chiếu và trả lời bám sát nội dung.` : 'Cứ hỏi thẳng — không cần chọn hay tải giáo án nào cả.'}</small>
   </div>`;
 }
 

@@ -21,7 +21,7 @@ function renderWizardRecommendFromBank() {
   const recommended = typeof wizardRecommendedGame === 'function' ? wizardRecommendedGame() : null;
   const stats = wizardQuestionBankStats();
   const header = `<div class="section-head"><h3>Bước 3 · Chọn trò chơi</h3><span class="tag">Ngân hàng câu hỏi</span></div>
-    <div class="panel-sub">Chấm điểm theo đúng câu hỏi đã nhận diện (${stats.total} câu · ${stats.needsReview} cần xem lại · ${stats.incompatible} không tương thích). Bạn đổi được sang bất kỳ thể loại nào — số liệu tính lại ngay, không gọi AI.</div>`;
+    <div class="panel-sub">Đánh giá theo ${stats.total} câu hỏi đã nhận diện (${stats.needsReview ? `${stats.needsReview} cần xem lại, ` : ''}${stats.incompatible ? `${stats.incompatible} không tương thích` : 'tương thích tốt'}). Có thể đổi sang thể loại bất kỳ.</div>`;
   const cards = wizardCompatGameOrder.map(gameType => {
     const meta = wizardGameMeta(gameType);
     const result = results.find(item => item.gameType === gameType);
@@ -118,7 +118,7 @@ function renderWizardRecommend() {
     return renderWizardRecommendFromBank();
   }
   const header = `<div class="section-head"><h3>Bước 3 · Chọn trò chơi</h3><span class="tag">2–3 gợi ý</span></div>
-    <div class="panel-sub">Hệ thống gợi ý thể loại phù hợp với mục tiêu của giáo án. Bạn chọn một gợi ý để cấu hình — vẫn có thể đổi sang thể loại khác.</div>`;
+    <div class="panel-sub">Gợi ý thể loại trò chơi phù hợp với giáo án. Bạn có thể chọn gợi ý hoặc chọn thể loại khác bên dưới.</div>`;
 
   if (!analysis) {
     return `<section class="form-panel" data-wizard-step-body="recommend">${header}
@@ -159,17 +159,19 @@ function renderWizardRecommend() {
       const shown = new Set(s.recommendations.map(item => item.gameType));
       const others = wizardGameTypeOrder.filter(gameType => !shown.has(gameType));
       if (!others.length) return '';
-      return `<div class="field mt-[10px]"><small class="block text-[12px] text-[#5f6a7d] mb-[6px]">Hoặc chọn thể loại khác:</small>
+      return `<div class="field mt-[10px]"><small class="block text-[12px] text-[#5f6a7d] mb-[6px]">Thể loại khác:</small>
         <div class="flex flex-wrap gap-[6px]">${others.map(gameType => {
           const meta = wizardGameMeta(gameType);
           const selected = gameType === s.selectedGameType;
           return `<button class="btn ${selected ? 'btn-primary' : 'btn-secondary'} btn-small" data-wizard-action="select-type" data-game-type="${escapeHtml(gameType)}" aria-pressed="${selected ? 'true' : 'false'}">${selected ? '✓ ' : ''}${meta.icon} ${escapeHtml(meta.label)}</button>`;
         }).join('')}</div></div>`;
     })()}
-    ${s.selectedGameType ? `<div class="field-hint mt-[10px]" data-wizard-selected-type="1">Đang chọn: <strong>${escapeHtml(wizardGameMeta(s.selectedGameType).label)}</strong>. Bấm “Tiếp tục” để chỉnh cấu hình.</div>` : ''}
-    <div class="publish-actions">
-      <button class="btn btn-secondary" data-wizard-action="rerun-recommend"${loading ? ' disabled' : ''}><span data-icon="refresh-cw" data-icon-size="13"></span> Gợi ý lại</button>
-      <button class="btn btn-secondary" data-wizard-action="back"><span data-icon="arrow-left" data-icon-size="13"></span> Xem lại phân tích</button>
+    ${s.selectedGameType ? `<div class="field-hint mt-[10px]" data-wizard-selected-type="1">✓ Đã chọn <strong>${escapeHtml(wizardGameMeta(s.selectedGameType).label)}</strong>. Bấm “Tiếp tục” để tuỳ chỉnh cấu hình.</div>` : ''}
+    <div class="publish-actions flex items-center justify-between gap-2 flex-wrap">
+      <div class="flex items-center gap-2">
+        <button class="btn btn-secondary" data-wizard-action="back"><span data-icon="arrow-left" data-icon-size="13"></span> Xem lại phân tích</button>
+        <button class="btn btn-secondary" data-wizard-action="rerun-recommend"${loading ? ' disabled' : ''}><span data-icon="refresh-cw" data-icon-size="13"></span> Gợi ý lại</button>
+      </div>
       <button class="btn btn-primary" id="wizardNextBtn" data-wizard-action="next"${s.selectedGameType ? '' : ' disabled'}>Tiếp tục · Cấu hình <span data-icon="arrow-right" data-icon-size="13"></span></button>
     </div>
   </section>`;

@@ -101,3 +101,24 @@
   .modal[data-player-theme] .btn { transition-duration: calc(160ms * var(--motion-scale)); }
 }
 
+/* Page transition — fade-in nhe khi doi trang (Sprint 2 UI/UX) */
+@keyframes page-fade-in {
+  from {
+    opacity: 0.88;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.page-fade-enter {
+  animation: page-fade-in 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .page-fade-enter {
+    animation: none !important;
+  }
+
+}
+

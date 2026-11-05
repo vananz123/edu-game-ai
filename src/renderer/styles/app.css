@@ -177,6 +177,14 @@
   --font-sans: 'Segoe UI', 'Be Vietnam Pro', Inter, -apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif;
   --shadow-card: 0 10px 35px rgba(28, 37, 75, 0.06);
 
+  /* Sprint 3 (#191): Layered elevation shadow tokens.
+     sm = resting (inputs, chips) · md = card default · lg = elevated (modal, popover).
+     Each level uses multi-layer box-shadow for natural depth perception. */
+  --shadow-sm: 0 1px 2px rgba(28, 37, 75, 0.06), 0 1px 3px rgba(28, 37, 75, 0.04);
+  --shadow-md: 0 4px 12px rgba(28, 37, 75, 0.07), 0 1px 3px rgba(28, 37, 75, 0.05);
+  --shadow-lg: 0 12px 40px rgba(28, 37, 75, 0.10), 0 4px 12px rgba(28, 37, 75, 0.06);
+  --shadow-hover: 0 8px 28px rgba(28, 37, 75, 0.12), 0 2px 6px rgba(28, 37, 75, 0.06);
+
   /* Breakpoint khá»›p 6 media query hiá»‡n cÃ³ (responsive.css 1200/900/700) */
   --breakpoint-wide: 1200px;
   --breakpoint-tab: 900px;

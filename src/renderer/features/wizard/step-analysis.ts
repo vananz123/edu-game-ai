@@ -109,7 +109,7 @@ function renderWizardAnalysis() {
   if (!s.analysis) {
     return `<section class="form-panel" data-wizard-step-body="analyze">
       <div class="section-head"><h3>Bước 2 · Phân tích giáo án</h3><span class="tag">${escapeHtml(wizardProviderLabel())}</span></div>
-      <div class="panel-sub">Rút ra mục tiêu, kiến thức trọng tâm và điểm chưa chắc chắn. Bạn xem lại trước khi chọn trò chơi.</div>
+      <div class="panel-sub">AI phân tích mục tiêu và kiến thức trọng tâm. Bạn có thể kiểm tra và chỉnh sửa trước khi chọn trò chơi.</div>
       ${wizardProviderCard()}
       ${wizardAiReadinessHint()}
       ${wizardProviderPickerHtml()}
@@ -130,17 +130,17 @@ function renderWizardAnalysis() {
   // #180: stays under the heading so the scope survives the fading notice.
   const sentText = wizardAnalysisSentText(s.analysisSent);
   return `<section class="form-panel" data-wizard-step-body="analyze">
-    <div class="section-head"><h3>Bước 2 · Xem lại phân tích</h3><span class="tag">Giáo viên duyệt</span></div>
+    <div class="section-head"><h3>Bước 2 · Kiểm tra phân tích</h3><span class="tag">Giáo viên duyệt</span></div>
     ${analysisTotal ? `<div class="field-hint" data-wizard-analysis-total-line>⏱ ${escapeHtml(analysisTotal)}</div>` : ''}
     ${sentText ? `<div class="field-hint" data-wizard-analysis-sent>${escapeHtml(sentText)}</div>` : ''}
-    <div class="panel-sub">Kết quả do ${escapeHtml(wizardProviderLabel())} tạo — hãy sửa cho chính xác. Bước sau dùng đúng nội dung bạn duyệt.</div>
+    <div class="panel-sub">Kết quả do ${escapeHtml(wizardProviderLabel())} tạo. Hãy kiểm tra và chỉnh sửa nếu cần trước khi tiếp tục.</div>
     <div class="field-row">
-      <div class="field"><label>CHỦ ĐỀ</label><input id="wizardTopic" data-wizard-analysis="topic" value="${escapeHtml(analysis.topic || '')}"></div>
-      <div class="field"><label>MÔN HỌC</label><input id="wizardSubject" data-wizard-analysis="subject" value="${escapeHtml(analysis.subject || '')}"></div>
+      <div class="field"><label>Chủ đề</label><input id="wizardTopic" data-wizard-analysis="topic" value="${escapeHtml(analysis.topic || '')}"></div>
+      <div class="field"><label>Môn học</label><input id="wizardSubject" data-wizard-analysis="subject" value="${escapeHtml(analysis.subject || '')}"></div>
     </div>
     <div class="field-row">
-      <div class="field"><label>LỚP</label><input id="wizardGrade" type="number" min="1" max="12" data-wizard-analysis="grade" value="${analysis.grade ? escapeHtml(String(analysis.grade)) : ''}"></div>
-      <div class="field"><label>SỐ MỤC TIÊU</label><input value="${analysis.objectives.length}" disabled></div>
+      <div class="field"><label>Lớp</label><input id="wizardGrade" type="number" min="1" max="12" data-wizard-analysis="grade" value="${analysis.grade ? escapeHtml(String(analysis.grade)) : ''}"></div>
+      <div class="field"><label>Số mục tiêu</label><input value="${analysis.objectives.length}" disabled></div>
     </div>
 
     <div class="section-head mt-[8px]"><h4>Mục tiêu học tập</h4><button class="btn btn-secondary btn-small" data-wizard-action="add-objective">+ Thêm mục tiêu</button></div>
@@ -161,22 +161,26 @@ function renderWizardAnalysis() {
       </div>`).join('')}
     </div>
 
-    <div class="section-head mt-[16px]"><h4>Điểm chưa chắc chắn</h4><button class="btn btn-secondary btn-small" data-wizard-action="add-uncertainty">+ Thêm ghi chú</button></div>
+    <div class="section-head mt-[16px]"><h4>Lưu ý &amp; điểm cần xem lại</h4><button class="btn btn-secondary btn-small" data-wizard-action="add-uncertainty">+ Thêm lưu ý</button></div>
     <div class="grid gap-[8px]" id="wizardUncertainties">
       ${analysis.uncertainties.length ? analysis.uncertainties.map((note, index) => `<div class="flex gap-[8px] items-center">
         <input class="flex-1" data-wizard-uncertainty="${index}" value="${escapeHtml(note)}">
-        <button class="btn btn-secondary btn-small" data-wizard-action="remove-uncertainty" data-index="${index}" title="Xoá ghi chú"><span data-icon="x" data-icon-size="13"></span></button>
-      </div>`).join('') : '<div class="field-hint" data-wizard-empty="uncertainties">Không có điểm chưa chắc chắn nào được ghi nhận.</div>'}
+        <button class="btn btn-secondary btn-small" data-wizard-action="remove-uncertainty" data-index="${index}" title="Xoá lưu ý"><span data-icon="x" data-icon-size="13"></span></button>
+      </div>`).join('') : '<div class="field-hint" data-wizard-empty="uncertainties">Không có lưu ý đặc biệt nào.</div>'}
     </div>
 
-    <div class="publish-actions">
-      <button class="btn btn-secondary" data-wizard-action="rerun"${analyzing ? ' disabled' : ''}><span data-icon="refresh-cw" data-icon-size="13"></span> Phân tích lại</button>
-      <button class="btn btn-secondary" data-wizard-action="back"><span data-icon="arrow-left" data-icon-size="13"></span> Nhập giáo án</button>
-      ${s.quick ? '' : `<button class="btn btn-primary" data-wizard-action="quick-generate"${s.busy ? ' disabled' : ''}><span data-icon="zap" data-icon-size="13"></span> AI gợi ý &amp; tạo ngay</button>`}
-      <button class="btn ${s.quick ? 'btn-primary' : 'btn-secondary'}" id="wizardNextBtn" data-wizard-action="next"${s.busy === 'prepare' ? ' disabled' : ''}>Tiếp tục · Chọn trò chơi <span data-icon="arrow-right" data-icon-size="13"></span></button>
+    <div class="publish-actions flex items-center justify-between gap-2 flex-wrap">
+      <div class="flex items-center gap-2">
+        <button class="btn btn-secondary" data-wizard-action="back"><span data-icon="arrow-left" data-icon-size="13"></span> Quay lại</button>
+        <button class="btn btn-secondary" data-wizard-action="rerun"${analyzing ? ' disabled' : ''}><span data-icon="refresh-cw" data-icon-size="13"></span> Phân tích lại</button>
+      </div>
+      <div class="flex items-center gap-2">
+        ${s.quick ? '' : `<button class="btn btn-secondary" data-wizard-action="quick-generate"${s.busy ? ' disabled' : ''} title="Tự động chọn thể loại phù hợp nhất và tạo trò chơi ngay"><span data-icon="zap" data-icon-size="13"></span> Tạo nhanh</button>`}
+        <button class="btn btn-primary" id="wizardNextBtn" data-wizard-action="next"${s.busy === 'prepare' ? ' disabled' : ''}>Tiếp tục <span data-icon="arrow-right" data-icon-size="13"></span></button>
+      </div>
     </div>
     ${renderWizardQuickPanel()}
-    <div class="field-hint">“Phân tích lại” thay kết quả đang sửa bằng kết quả mới; “AI gợi ý &amp; tạo ngay” tự chọn thể loại và số lượng, bạn xác nhận trước.</div>
+    <div class="field-hint">Bạn có thể chỉnh sửa trực tiếp nội dung trên hoặc bấm “Phân tích lại” nếu muốn AI quét lại.</div>
   </section>`;
 }
 

@@ -1,4 +1,4 @@
-﻿// @ts-nocheck -- migrated legacy UI logic; new contracts are typed in src/shared/types.ts.
+// @ts-nocheck -- migrated legacy UI logic; new contracts are typed in src/shared/types.ts.
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 // #159: `settingsSection` is the Settings tab shown on the page (`''` was the accordion's
@@ -137,7 +137,13 @@ function formatBytes(bytes) { return `${(bytes / 1024 ** 3).toLocaleString('vi-V
  */
 function gameCard(game, index = 0, deletable = false) {
   const template = game.template || 'quiz';
-  const coverGrad = ['bg-[linear-gradient(135deg,#e9e7ff,#d6d1ff)]','bg-[linear-gradient(135deg,#ddf8ed,#bdeedb)]','bg-[linear-gradient(135deg,#fff0dc,#ffd8a7)]','bg-[linear-gradient(135deg,#e0efff,#c9e1ff)]','bg-[linear-gradient(135deg,#ffe4ed,#ffc9d9)]'][index % 5];
+  const templateThemes = {
+    quiz: { cover: 'bg-[linear-gradient(135deg,#fef3c7,#fde68a)] dark:bg-[linear-gradient(135deg,#382806,#261a03)]', badge: 'bg-white/[90%] text-[#b45309] dark:bg-[#261a03]/[90%] dark:text-[#fde68a]', border: 'border-l-[4px] border-l-[#f59e0b]' },
+    scenario: { cover: 'bg-[linear-gradient(135deg,#d1fae5,#a7f3d0)] dark:bg-[linear-gradient(135deg,#063324,#032117)]', badge: 'bg-white/[90%] text-[#047857] dark:bg-[#032117]/[90%] dark:text-[#a7f3d0]', border: 'border-l-[4px] border-l-[#10b981]' },
+    matching: { cover: 'bg-[linear-gradient(135deg,#ede9fe,#ddd6fe)] dark:bg-[linear-gradient(135deg,#251945,#170e30)]', badge: 'bg-white/[90%] text-[#6d28d9] dark:bg-[#170e30]/[90%] dark:text-[#ddd6fe]', border: 'border-l-[4px] border-l-[#8b5cf6]' },
+    'treasure-hunt': { cover: 'bg-[linear-gradient(135deg,#ffe4e6,#fecdd3)] dark:bg-[linear-gradient(135deg,#3d0e19,#28080f)]', badge: 'bg-white/[90%] text-[#be123c] dark:bg-[#28080f]/[90%] dark:text-[#fecdd3]', border: 'border-l-[4px] border-l-[#f43f5e]' },
+    race: { cover: 'bg-[linear-gradient(135deg,#dbeafe,#bfdbfe)] dark:bg-[linear-gradient(135deg,#0c234a,#08162f)]', badge: 'bg-white/[90%] text-[#1d4ed8] dark:bg-[#08162f]/[90%] dark:text-[#bfdbfe]', border: 'border-l-[4px] border-l-[#3b82f6]' }
+  };
   const id = escapeHtml(game.id);
   const menuId = 'gameMenu-' + String(index + 1);
   const item = (action, label, extra = '') => `<button type="button" role="menuitem" class="w-full flex items-center gap-[9px] border-0 bg-transparent text-left px-[12px] py-[9px] text-[12px] font-semibold text-[#515c72] hover:bg-[#f5f6fa] focus:bg-[#f5f6fa] outline-0 ${extra}" data-action="${action}" data-id="${id}">${label}</button>`;
@@ -158,11 +164,12 @@ function gameCard(game, index = 0, deletable = false) {
   const connectionChip = connectionBoard
     ? `<span class="px-[4px] py-[7px] bg-[#e8f5ef] text-[#1c7a58] rounded-[5px] text-[11px] font-bold" data-play-mode="connection" title="Cách chơi: ${CONSTELLATION_GAME_NAME} — mỗi cặp ghép đúng thắp sáng thêm một ngôi sao của chòm sao">🌌 Cách chơi: ${CONSTELLATION_GAME_NAME}</span>`
     : '';
-  return `<article class="bg-white border border-line rounded-[14px] overflow-hidden min-w-0 transition-all duration-180 hover:-translate-y-[3px] hover:shadow-card hover:border-[#d8d5ff]" data-game-card="${id}">
-    <div class="${coverGrad} h-[130px] relative flex items-center justify-center overflow-hidden">
+  const cardTheme = connectionBoard ? { cover: 'bg-[linear-gradient(135deg,#cffafe,#a5f3fc)] dark:bg-[linear-gradient(135deg,#082f38,#041e24)]', badge: 'bg-white/[90%] text-[#0e7490] dark:bg-[#041e24]/[90%] dark:text-[#a5f3fc]', border: 'border-l-[4px] border-l-[#06b6d4]' } : (templateThemes[template] || templateThemes.quiz);
+  return `<article class="game-card bg-white dark:bg-[#171c32] border border-line ${cardTheme.border} rounded-[14px] overflow-hidden min-w-0 transition-all duration-180 hover:-translate-y-[3px] hover:shadow-card hover:border-[#d8d5ff] dark:hover:border-[#384266]" data-game-card="${id}" data-template="${escapeHtml(template)}">
+    <div class="${cardTheme.cover} h-[130px] relative flex items-center justify-center overflow-hidden">
       <div class="absolute [border:1px_solid_#ffffffaa] w-[130px] h-[130px] rounded-full -left-[15px] top-[40px]"></div>
       <div class="absolute [border:1px_solid_#ffffffaa] w-[95px] h-[95px] rounded-full right-[-5px] top-[-22px]"></div>
-      <span class="absolute top-[12px] left-[12px] bg-white/[85%] text-[#4338ca] text-[11px] font-extrabold px-[6px] py-[8px] rounded-[6px] z-[2]">${escapeHtml(templateLabel(template))}</span>
+      <span class="absolute top-[12px] left-[12px] ${cardTheme.badge} text-[11px] font-extrabold px-[8px] py-[4px] rounded-[6px] z-[2] shadow-sm">${escapeHtml(templateLabel(template))}</span>
       <div class="text-[51px] [filter:drop-shadow(0_7px_5px_#4c50701c)] relative z-[1]">${icons[template] || '🎮'}</div>
     </div>
     <div class="p-[15px]">
@@ -191,7 +198,7 @@ function gameCard(game, index = 0, deletable = false) {
     </div>
   </article>`;
 }
-function templateLabel(template) { return ({ quiz: 'ĐẤU TRƯỜNG KIẾN THỨC', scenario: 'THỬ THÁCH TÌNH HUỐNG', matching: 'GHÉP CẶP KIẾN THỨC', 'treasure-hunt': 'GIẢI MÃ KHO BÁU', race: 'ĐƯỜNG ĐUA CHINH PHỤC' })[template] || 'TRÒ CHƠI HỌC TẬP'; }
+function templateLabel(template) { return ({ quiz: 'Đấu trường kiến thức', scenario: 'Thử thách tình huống', matching: 'Ghép cặp kiến thức', 'treasure-hunt': 'Giải mã kho báu', race: 'Đường đua chinh phục' })[template] || 'Trò chơi học tập'; }
 function scoringModeHint(mode) {
   return ({
     'cơ bản': 'Cơ bản: đúng nhận điểm cố định, sai không có điểm.',
@@ -202,4 +209,11 @@ function scoringModeHint(mode) {
   })[mode] || 'Chọn một trong 5 chế độ tính điểm theo mục 2.3 yêu cầu sản phẩm.';
 }
 
-function emptyState(title, desc, button, page) { return `<div class="bg-white border border-dashed border-[#dfe2ed] rounded-[14px] p-[50px_20px] text-center text-[#5f6a7d] flex flex-col items-center justify-center"><div class="mb-[12px] text-[#5f6a7d]"><span data-icon="library" data-icon-size="40"></span></div><h3 class="text-[#394256] mb-[8px] mt-0">${escapeHtml(title)}</h3><p class="max-w-[420px] mx-auto mb-[17px] leading-[1.7] text-[12px]">${escapeHtml(desc)}</p><button class="border-0 rounded-[9px] px-[15px] py-[11px] inline-flex items-center justify-center gap-[8px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-[#6258e8] text-white shadow-[0_6px_14px_#6258e82b]" data-page="${page}">${escapeHtml(button)}</button></div>`; }
+function emptyStateIllustrationSvg() {
+  return `<svg width="100" height="88" viewBox="0 0 100 88" fill="none" class="mb-[14px]" aria-hidden="true"><ellipse cx="50" cy="80" rx="36" ry="6" fill="#e2e8f0" class="opacity-70 dark:fill-[#252c48]" /><path d="M22 74 C35 70, 48 72, 50 76 C52 72, 65 70, 78 74 L75 80 C63 76, 52 78, 50 82 C48 78, 37 76, 25 80 Z" fill="#6258e8" opacity="0.85" /><path d="M24 71 C36 67, 48 69, 50 73 C52 69, 64 67, 76 71 L74 74 C63 70, 52 72, 50 76 C48 72, 37 70, 26 74 Z" fill="#ffffff" class="dark:fill-[#e2e8f0]" /><ellipse cx="50" cy="48" rx="22" ry="24" fill="#6258e8" /><ellipse cx="50" cy="52" rx="15" ry="17" fill="#ede9fe" class="dark:fill-[#3b357d]" /><path d="M46 48 Q50 51 54 48 M44 54 Q50 57 56 54 M46 60 Q50 63 54 60" stroke="#8b5cf6" stroke-width="1.5" stroke-linecap="round" fill="none" /><circle cx="42" cy="40" r="7" fill="#ffffff" /><circle cx="58" cy="40" r="7" fill="#ffffff" /><circle cx="42" cy="40" r="8" stroke="#f59e0b" stroke-width="1.8" fill="none" /><circle cx="58" cy="40" r="8" stroke="#f59e0b" stroke-width="1.8" fill="none" /><circle cx="43" cy="40" r="3.5" fill="#1e1b4b" /><circle cx="57" cy="40" r="3.5" fill="#1e1b4b" /><circle cx="44.5" cy="38.5" r="1.2" fill="#ffffff" /><circle cx="58.5" cy="38.5" r="1.2" fill="#ffffff" /><polygon points="50,44 47,49 53,49" fill="#f59e0b" /><polygon points="50,18 28,26 50,32 72,26" fill="#1e1b4b" class="dark:fill-[#0f172a]" /><polygon points="50,19 32,26 50,31 68,26" fill="#312e81" class="dark:fill-[#1e293b]" /><rect x="42" y="30" width="16" height="5" rx="2" fill="#1e1b4b" class="dark:fill-[#0f172a]" /><path d="M50 25 L65 29 L65 37" stroke="#f59e0b" stroke-width="1.5" stroke-linecap="round" fill="none" /><circle cx="65" cy="38" r="1.5" fill="#f59e0b" /><path d="M28 44 C26 52, 30 62, 35 66 C32 60, 31 52, 32 46 Z" fill="#4f46e5" /><path d="M72 44 C74 52, 70 62, 65 66 C68 60, 69 52, 68 46 Z" fill="#4f46e5" /><path d="M18 30 L20 25 L22 30 L27 32 L22 34 L20 39 L18 34 L13 32 Z" fill="#fbbf24" opacity="0.85" /><path d="M80 34 L81.5 30 L83 34 L87 35.5 L83 37 L81.5 41 L80 37 L76 35.5 Z" fill="#fbbf24" opacity="0.85" /></svg>`;
+}
+
+function emptyState(title, desc, button, page) {
+  const buttonHtml = button && page ? `<button class="border-0 rounded-[9px] px-[16px] py-[10px] inline-flex items-center justify-center gap-[8px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-[#6258e8] text-white shadow-[0_6px_14px_#6258e82b]" data-page="${page}"><span data-icon="circle-plus" data-icon-size="14"></span> ${escapeHtml(button)}</button>` : '';
+  return `<div class="empty-state bg-white dark:bg-[#171c32] border border-dashed border-[#dfe2ed] dark:border-[#2a324b] rounded-[16px] p-[44px_20px] text-center text-[#5f6a7d] flex flex-col items-center justify-center">${emptyStateIllustrationSvg()}<h3 class="text-[#1e293b] dark:text-[#f1f5f9] text-[15px] font-bold mb-[6px] mt-0">${escapeHtml(title)}</h3><p class="max-w-[420px] mx-auto mb-[18px] leading-[1.65] text-[12.5px] text-[#5f6a7d] dark:text-[#94a3b8]">${escapeHtml(desc)}</p>${buttonHtml}</div>`;
+}
