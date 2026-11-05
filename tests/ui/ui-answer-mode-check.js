@@ -6,13 +6,16 @@
 // bị xoá âm thầm ở lần lưu đầu tiên — đúng loại lỗi unit test không nhìn thấy
 // (xem docs/DECISIONS.md #65 cho cùng cơ chế ở ảnh minh hoạ).
 //
-// Ba điều bài này chốt:
+// Bốn điều bài này chốt:
 //  1. trang Tạo và trình soạn thảo hiện ĐÚNG ba cách trả lời (Thi đấu/Luyện tập/Thử thách);
 //  2. game cũ vẫn mang luật cũ: mở ra là "Giữ hành vi hiện tại", lưu đi không đổi gì;
 //  3. chọn một chế độ rồi mở lại thì lựa chọn còn nguyên, giá trị cũ được cất trong
 //     `legacyScoringMode` và "Giữ hành vi hiện tại" hoàn nguyên ĐÚNG giá trị đó.
 //  4. (task 3) máy trạng thái trả lời dùng chung `game-engine/answer-flow.js` được TRANG
 //     thật nạp — unit test chỉ chứng minh tệp chạy được bằng `require` ở Node.
+//  5. (task 4) MÀN CHƠI THẬT HÀNH ĐỘNG theo vòng trả lời: mục I bấm nút thật trên trang
+//     chơi và đo DOM — lưới có tắt không, đáp án có hiện không, điểm nào xuống bảng,
+//     máy chiếu có giữ kín như màn chính không, và rubric Tình huống còn nguyên không.
 //
 // Hai cơ chế của TRANG THẬT quyết định cấu trúc bài này:
 //  • `saveEditedGame` đóng trang soạn thảo khi lưu thành công (editorPageState = null +
@@ -41,7 +44,7 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const TOKEN_PRACTICE = 'tra-loi:luyen-tap';
     const TOKEN_CHALLENGE = 'tra-loi:thu-thach';
-    const out = { editor: {}, saved: {}, create: {} };
+    const out = { editor: {}, saved: {}, create: {}, playSeq: 0 };
     // Mỗi lần chạy một bộ tiêu đề riêng để không đọc phải bản ghi của lần trước.
     const RUN = 'AM209 ' + Date.now();
     const PREFIX = 'AM209 ';
@@ -231,6 +234,197 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
         out.flow = { error: String(error && error.message || error), missing: ['threw'] };
       }
 
+      /* ---- I. CHƠI THẬT: màn chơi có hành động ĐÚNG theo vòng hay không (task 4) ----
+         Mục H gọi máy trạng thái trực tiếp, nên nó không trả lời được điều task 4
+         thực sự đổi: DOM của trang chơi. Bốn thứ chỉ nhìn thấy ở đây — nút có tắt
+         sau câu cuối, đáp án có hiện hay KHÔNG hiện, điểm nào xuống bảng, và một câu
+         có đúng MỘT dòng. Một global thiếu cũng hiện ra ngay thành ReferenceError. */
+      try {
+        const TOKEN_COMPETITIVE = 'tra-loi:thi-dau';
+        const snap = () => {
+          const grid = Array.prototype.slice.call(document.querySelectorAll('.answer-option'));
+          const fb = document.querySelector('#answerFeedback');
+          const next = document.querySelector('#nextQuestionBtn');
+          const turn = state.answerTurn;
+          return {
+            mode: turn ? turn.mode : null,
+            open: turn ? !turn.finished : null,
+            retry: turn ? turn.retryAllowed : null,
+            locked: Boolean(state.answerLocked),
+            rows: state.gameAnswers.length,
+            points: state.gameAnswers.reduce((sum, row) => sum + (Number(row.points) || 0), 0),
+            last: state.gameAnswers.length ? state.gameAnswers[state.gameAnswers.length - 1] : null,
+            lastPts: state.gameAnswers.length ? Number(state.gameAnswers[state.gameAnswers.length - 1].points) : null,
+            // Một dòng cho MỘT câu: bao nhiêu dòng đã TRÙNG questionId. Set đo bằng
+            // size chứ không phải length — viết sai thì ra NaN, JSON hoá thành null.
+            dupes: state.gameAnswers.length
+              - new Set(state.gameAnswers.map(row => String(row.questionId))).size,
+            reveal: grid.filter(btn => btn.classList.contains('correct')).map(btn => btn.dataset.answer),
+            marked: grid.filter(btn => btn.classList.contains('wrong')).map(btn => btn.dataset.answer),
+            clickable: grid.filter(btn => !btn.disabled).length,
+            feedback: fb ? String(fb.textContent).trim() : '',
+            nextShown: Boolean(next) && !next.classList.contains('hidden'),
+            nextLabel: next ? String(next.textContent).trim() : '',
+            tip: document.querySelector('.stage-tip') ? String(document.querySelector('.stage-tip').textContent).trim() : '',
+            index: state.gameIndex,
+            house: state.houseBuild ? state.houseBuild.parts + '/' + state.houseBuild.correct + '/' + state.houseBuild.wrong : null,
+            steps: state.scenarioSteps,
+            /* Máy chiếu đọc buildQuizView() (result-screen.js) — cùng nguồn dữ liệu
+               mà cửa sổ trình chiếu render. Nếu bảng chiếu tô đáp án khi Thử thách
+               đòi giữ kín thì giáo viên lộ đáp án trước cả lớp, nên đo thẳng cái
+               mà màn chiếu sẽ hiển thị chứ không suy từ DOM màn chính. */
+            projection: typeof buildQuizView === 'function' ? (function () {
+              const view = buildQuizView();
+              return view ? {
+                revealed: view.revealed,
+                right: view.correctOptionId === undefined ? 'none' : view.correctOptionId,
+                why: String(view.explanation || '')
+              } : null;
+            })() : 'no buildQuizView'
+          };
+        };
+        const stopPlay = async () => {
+          const closeBtn = document.querySelector('[data-play-close]');
+          if (closeBtn) closeBtn.click();
+          await sleep(220);
+          document.getElementById('modalRoot').innerHTML = '';
+        };
+        // Mỗi lần chơi một bản sao MỚI: playGame đọc trực tiếp object nên không được
+        // để hai màn chơi cùng chia một mảng questions (state.currentGame giữ nguyên nó).
+        const play = async game => {
+          await stopPlay();
+          const copy = JSON.parse(JSON.stringify(game));
+          copy.id = 'am-' + RUN + '-play-' + (++out.playSeq);
+          playGame(copy);
+          await sleep(700);
+          return snap();
+        };
+        const click = async optionId => {
+          const btn = Array.prototype.slice.call(document.querySelectorAll('.answer-option'))
+            .find(item => item.dataset.answer === optionId);
+          if (!btn) return { error: 'no option button ' + optionId };
+          btn.click();
+          await sleep(260);
+          return snap();
+        };
+        const pressNext = async () => {
+          const next = document.querySelector('#nextQuestionBtn');
+          if (!next || next.classList.contains('hidden')) return { error: 'the next button is not on screen' };
+          next.click();
+          await sleep(560);
+          return snap();
+        };
+        out.play = {};
+        // Đấu trường: một quiz 'tốc độ' (game cũ) và ba bản chỉ khác nhau ở token.
+        const quizBase = FIX.quiz();
+        const quizWith = key => {
+          const g = JSON.parse(JSON.stringify(quizBase));
+          g.title = title(key);
+          if (key.indexOf('legacy') === -1) {
+            g.gameSetup.scoringMode = key.indexOf('competitive') === 0 ? TOKEN_COMPETITIVE
+              : key.indexOf('practice') === 0 ? TOKEN_PRACTICE : TOKEN_CHALLENGE;
+          }
+          return g;
+        };
+        const houseWith = key => {
+          const g = quizWith(key);
+          g.gameSetup.gameplayMode = 'house';
+          return g;
+        };
+
+        // 1. game CŨ: +5 điểm nhanh còn NGUYÊN, sai vẫn mở đáp án, một dòng.
+        await play(quizWith('legacy-a'));
+        out.play.legacyCorrect = await click('a');
+        await play(quizWith('legacy-b'));
+        out.play.legacyWrong = await click('b');
+
+        // 2. Thi đấu: phần thưởng nhanh biến mất (luật mới không kèm bonus), còn lại
+        //    giống hệt game cũ — đúng điều chủ dự án chốt cho chế độ mặc định.
+        await play(quizWith('competitive-wrong'));
+        out.play.competitiveWrong = await click('b');
+
+        // 3. Luyện tập: sai KHÔNG mở đáp án, được bấm tiếp, chưa có dòng điểm; đúng
+        //    thì nhận 90 = 100 trừ 10% trần của CHÍNH câu đó, và chỉ MỘT dòng.
+        await play(quizWith('practice-retry'));
+        out.play.practiceMiss = await click('b');
+        out.play.practiceHit = await click('a');
+        // 3b. Lối thoát cho cả lớp: đang thử lại mà bấm "Bỏ qua" thì câu khép lại,
+        //     0 điểm, và màn chơi đi tiếp thay vì kẹt mãi ở một câu quá khó.
+        await play(quizWith('practice-skip'));
+        out.play.practiceSkipMiss = await click('b');
+        out.play.practiceSkip = await pressNext();
+
+        // 4. Thử thách: sai thì GIỮ KÍN đáp án và lời giải; đúng thì cả hai mở.
+        await play(quizWith('challenge-wrong'));
+        out.play.challengeWrong = await click('b');
+        await play(quizWith('challenge-correct'));
+        out.play.challengeCorrect = await click('a');
+
+        // 5. Xây nhà: một câu chỉ ĐỔI MỘT phần nhà. Cú sai của Luyện tập chưa khép
+        //    vòng nên chưa được xây (hay trừ) gì; Thử thách thì câu sai trừ 1 như cũ.
+        await play(houseWith('practice-house'));
+        out.play.houseMiss = await click('b');
+        out.play.houseHit = await click('a');
+        await play(houseWith('challenge-house'));
+        out.play.houseChallenge = await click('b');
+
+        // 6. Tình huống: rubric KHÔNG đổi (quyết định chưa tối ưu vẫn 45/100), không
+        //    bao giờ tô "quyết định đúng", và lời giải là thứ duy nhất ba mode sai khác.
+        const scenarioBase = {
+          id: 'am-scenario-base', title: title('scenario-play'), subject: 'Tự nhiên', grade: '3',
+          template: 'scenario', description: '', tags: [], sourceName: 'ui-check',
+          createdAt: '2026-01-01T00:00:00.000Z', gameSetup: { scoringMode: 'cơ bản' },
+          questions: [
+            {
+              id: 'sc1', type: 'scenario', points: 100, correctOptionId: 'safe',
+              prompt: 'Dây phích cắm sạc hở điện ngay giữa lớp. Em làm gì?',
+              context: 'Giờ ra chơi, cả lớp đang ở lại.',
+              correctAnswer: '', explanation: 'Báo thầy cô rồi mới rút phích.',
+              discussionPrompt: 'Vì sao không tự rút khi dây còn ướt?',
+              options: [
+                { id: 'safe', text: 'Báo thầy cô trước khi động vào', feedback: 'An toàn nhất.', scenarioScore: { safety: 60, reasoning: 25, harmReduction: 15 } },
+                { id: 'risk', text: 'Tự rút phích cắm cho nhanh', feedback: 'Còn rủi ro.', scenarioScore: { safety: 30, reasoning: 10, harmReduction: 5 } }
+              ]
+            },
+            { id: 'sc2', type: 'scenario', points: 100, correctOptionId: 'safe', prompt: 'Bạn em chạm vào quạt đang chạy. Em làm gì?',
+              context: '', correctAnswer: '', explanation: 'Tắt cầu giao trước.',
+              options: [
+                { id: 'safe', text: 'Nhắc bạn tránh ra và báo cô', feedback: 'Đúng.', scenarioScore: { safety: 60, reasoning: 25, harmReduction: 15 } },
+                { id: 'risk', text: 'Kéo quạt ra khỏi bàn', feedback: 'Chưa hẳn an toàn.', scenarioScore: { safety: 40, reasoning: 10, harmReduction: 5 } }
+              ] }
+          ]
+        };
+        const scenarioWith = key => {
+          const g = JSON.parse(JSON.stringify(scenarioBase));
+          g.title = title(key);
+          if (key.indexOf('legacy') !== 0) {
+            g.gameSetup.scoringMode = key.indexOf('competitive') === 0 ? TOKEN_COMPETITIVE
+              : key.indexOf('practice') === 0 ? TOKEN_PRACTICE : TOKEN_CHALLENGE;
+          }
+          return g;
+        };
+        await play(scenarioWith('legacy-scenario'));
+        out.play.scenarioLegacyMiss = await click('risk');
+        await play(scenarioWith('challenge-scenario'));
+        out.play.scenarioChallengeMiss = await click('risk');
+        await play(scenarioWith('practice-scenario'));
+        out.play.scenarioPracticeMiss = await click('risk');
+        out.play.scenarioPracticeHit = await click('safe');
+        // Sang câu bằng nút phải đi qua đúng một lần: một dòng cho một tình huống.
+        await play(scenarioWith('legacy-scenario-next'));
+        out.play.scenarioBefore = await click('risk');
+        out.play.scenarioAdvance = await pressNext();
+        await stopPlay();
+      } catch (error) {
+        // Màn chơi lỗi giữa chừng cũng phải hiện ra trong báo cáo, không cắt phần sau.
+        out.play = { error: String(error && error.message || error) };
+        try {
+          await stopPlay();
+        } catch (ignored) {
+          out.play.cleanupFailed = true;
+        }
+      }
+
       document.getElementById('modalRoot').innerHTML = '';
       if (typeof closeEditorPage === 'function') closeEditorPage();
 
@@ -364,6 +558,117 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
   check('one question writes one score row in the page too',
     report.flow?.once?.rows === 1 && report.flow?.once?.again === false
     && report.flow?.once?.points === 90, JSON.stringify(report.flow?.once));
+
+  /* I. MÀN CHƠI THẬT. Từ đây về sau là những gì task 4 đổi: màn chơi phải HÀNH ĐỘNG
+     theo vòng trả lời, không chỉ tính đúng. Mỗi snapshot là DOM + state sau một cú
+     nhấp thật, nên một lớp sai (nút không tắt, đáp án hiện sai chỗ, điểm nhân đôi)
+     hiện ra ở đây chứ không ở mục H. */
+  const play = report.play || {};
+  const view = s => !s ? String(s) : s.error ? JSON.stringify(s) : JSON.stringify({
+    mode: s.mode, open: s.open, rows: s.rows, pts: s.points, lastPts: s.lastPts,
+    reveal: s.reveal, marked: s.marked, click: s.clickable, next: s.nextLabel,
+    idx: s.index, house: s.house, dupes: s.dupes
+  });
+  const said = s => String(s && s.feedback || '').replace(/\s+/g, ' ').slice(0, 170);
+  const has = (s, text) => String(s && s.feedback || '').indexOf(text) !== -1;
+
+  check('the play screen probes ran to completion', Boolean(play.scenarioAdvance) && !play.error,
+    String(play.error || 'ok'));
+
+  // 1+2. game CŨ đi qua máy mà không đổi hành vi: +5 nhanh, sai vẫn mở, một dòng.
+  check('a legacy quiz still pays its speed bonus through the machine',
+    play.legacyCorrect?.mode === 'legacy' && play.legacyCorrect?.points === 105
+    && play.legacyCorrect?.lastPts === 105 && play.legacyCorrect?.rows === 1, view(play.legacyCorrect));
+  check('a legacy wrong answer still reveals the right option',
+    JSON.stringify(play.legacyWrong?.reveal) === JSON.stringify(['a'])
+    && JSON.stringify(play.legacyWrong?.marked) === JSON.stringify(['b'])
+    && play.legacyWrong?.clickable === 0 && play.legacyWrong?.rows === 1, view(play.legacyWrong));
+  check('the legacy strip still promises the bonus it actually pays',
+    String(play.legacyCorrect?.tip || '').indexOf('điểm thưởng') !== -1, String(play.legacyCorrect?.tip || ''));
+
+  // 3. Thi đấu = hành vi cũ, bỏ phần thưởng nhanh (chủ dự án: "gần với hành vi hiện tại").
+  check('Thi đấu locks the grid and reveals on a wrong answer, like the old law',
+    play.competitiveWrong?.mode === 'competitive' && play.competitiveWrong?.rows === 1
+    && play.competitiveWrong?.points === 0 && JSON.stringify(play.competitiveWrong?.reveal) === JSON.stringify(['a'])
+    && play.competitiveWrong?.clickable === 0, view(play.competitiveWrong));
+  check('the strip of a token game names the answer mode instead of the old scoring law',
+    String(play.competitiveWrong?.tip || '').indexOf('Trả lời một lần') === 0,
+    String(play.competitiveWrong?.tip || ''));
+
+  // 4. Luyện tập: sai không lộ, được bấm lại, CHƯA có dòng điểm, còn nút bỏ qua.
+  check('Luyện tập keeps the question open and writes no row on a miss',
+    play.practiceMiss?.rows === 0 && play.practiceMiss?.open === true
+    && play.practiceMiss?.retry === true && play.practiceMiss?.clickable === 2
+    && play.practiceMiss?.locked === false, view(play.practiceMiss));
+  check('a miss in Luyện tập exposes nothing — not even on the projector',
+    JSON.stringify(play.practiceMiss?.reveal) === '[]' && play.practiceMiss?.projection?.revealed === false
+    && play.practiceMiss?.projection?.right === 'none', JSON.stringify(play.practiceMiss?.projection));
+  check('the retry banner promises a retry and the score that is left',
+    has(play.practiceMiss, 'thử lại') && has(play.practiceMiss, '90'), said(play.practiceMiss));
+  check('a retrying student still gets a way out of the question',
+    play.practiceMiss?.nextShown === true && play.practiceMiss?.nextLabel === 'Bỏ qua câu này →',
+    String(play.practiceMiss?.nextLabel));
+  check('the answer that lands after a miss pays 90 and closes the question',
+    play.practiceHit?.rows === 1 && play.practiceHit?.points === 90 && play.practiceHit?.lastPts === 90
+    && play.practiceHit?.open === false && play.practiceHit?.clickable === 0
+    && play.practiceHit?.dupes === 0, view(play.practiceHit));
+  check('the penalty is explained to the class, not just charged',
+    has(play.practiceHit, '10%'), said(play.practiceHit));
+  check('skipping a retrying question writes one zero row and moves on',
+    play.practiceSkip?.rows === 1 && play.practiceSkip?.points === 0 && play.practiceSkip?.index === 1
+    && play.practiceSkip?.dupes === 0 && play.practiceSkipMiss?.rows === 0, view(play.practiceSkip));
+
+  // 5. Thử thách: sai thì giữ kín cả đáp án lẫn lời giải; đúng thì cả hai mở.
+  check('Thử thách pays nothing and shows nothing on a wrong answer',
+    play.challengeWrong?.mode === 'challenge' && play.challengeWrong?.rows === 1
+    && play.challengeWrong?.points === 0 && JSON.stringify(play.challengeWrong?.reveal) === '[]'
+    && JSON.stringify(play.challengeWrong?.marked) === JSON.stringify(['b']), view(play.challengeWrong));
+  check('the projector is just as blind as the main screen in Thử thách',
+    play.challengeWrong?.projection?.revealed === false
+    && play.challengeWrong?.projection?.right === 'none'
+    && play.challengeWrong?.projection?.why === '', JSON.stringify(play.challengeWrong?.projection));
+  check('a wrong Thử thách answer keeps the explanation off the banner',
+    !has(play.challengeWrong, 'Bằng hai') && has(play.challengeWrong, 'không mở đáp án'), said(play.challengeWrong));
+  check('a correct Thử thách answer reveals the option and earns the explanation',
+    play.challengeCorrect?.points === 100 && JSON.stringify(play.challengeCorrect?.reveal) === JSON.stringify(['a'])
+    && has(play.challengeCorrect, 'Bằng hai'), view(play.challengeCorrect));
+
+  // 6. Xây nhà: một câu đổi ĐÚNG MỘT phần nhà; cú sai còn mở vòng thì chưa đổi gì.
+  check('a Luyện tập miss does not build (or undo) a house part',
+    play.houseMiss?.house === '0/0/0' && play.houseMiss?.rows === 0, String(play.houseMiss?.house));
+  check('the right answer after that miss builds exactly one part and pays 90',
+    play.houseHit?.house === '1/1/0' && play.houseHit?.rows === 1 && play.houseHit?.points === 90,
+    String(play.houseHit?.house));
+  check('Thử thách charges the house once for the wrong answer it locked',
+    play.houseChallenge?.house === '0/0/1' && play.houseChallenge?.rows === 1,
+    String(play.houseChallenge?.house));
+
+  // 7. Tình huống: rubric đứng nguyên, không bao giờ tô "quyết định đúng".
+  check('a suboptimal decision still earns its rubric score through the machine',
+    play.scenarioLegacyMiss?.rows === 1 && play.scenarioLegacyMiss?.points === 45
+    && play.scenarioLegacyMiss?.lastPts === 45 && has(play.scenarioLegacyMiss, 'Điểm quyết định: 45/100'),
+    view(play.scenarioLegacyMiss));
+  check('the rubric breakdown reaches the score row unchanged',
+    play.scenarioLegacyMiss?.last?.scoringBreakdown?.safety === 30
+    && play.scenarioLegacyMiss?.last?.scoringBreakdown?.reasoning === 10
+    && play.scenarioLegacyMiss?.last?.scoringBreakdown?.harmReduction === 5,
+    JSON.stringify(play.scenarioLegacyMiss?.last?.scoringBreakdown || null));
+  check('a decision is never painted as "the correct one"',
+    JSON.stringify(play.scenarioLegacyMiss?.reveal) === '[]'
+    && JSON.stringify(play.scenarioLegacyMiss?.marked) === '[]', view(play.scenarioLegacyMiss));
+  check('a legacy decision still reads its own feedback',
+    has(play.scenarioLegacyMiss, 'Còn rủi ro'), said(play.scenarioLegacyMiss));
+  check('Thử thách keeps a decision feedback to itself but pays the same rubric',
+    play.scenarioChallengeMiss?.points === 45 && !has(play.scenarioChallengeMiss, 'Còn rủi ro'),
+    said(play.scenarioChallengeMiss));
+  check('Luyện tập lets a decision be re-made and taxes the rubric once',
+    play.scenarioPracticeMiss?.rows === 0 && play.scenarioPracticeMiss?.retry === true
+    && play.scenarioPracticeHit?.rows === 1 && play.scenarioPracticeHit?.points === 90
+    && play.scenarioPracticeHit?.dupes === 0, view(play.scenarioPracticeHit));
+  check('the next button walks one situation at a time, one row per situation',
+    play.scenarioAdvance?.index === 1 && play.scenarioAdvance?.rows === 1
+    && play.scenarioAdvance?.dupes === 0 && play.scenarioAdvance?.steps === 1
+    && play.scenarioBefore?.nextLabel === 'Tình huống tiếp theo →', view(play.scenarioAdvance));
 
   check('the fixtures are removed from the library again', report.cleanup?.left === 0, JSON.stringify(report.cleanup));
 

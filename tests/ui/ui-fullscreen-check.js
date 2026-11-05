@@ -77,6 +77,23 @@ async function findTarget() {
     return true;
   })()`);
 
+  /* Profile mới mở onboarding cài AI vào #modalRoot ngay sau khi trang loaded, và
+     overlay đó chiếm cửa sổ: `html[data-setup-fullscreen="1"]` (setup-wizard.css:20)
+     ẩn `.app-shell` y hệt cách `data-fullscreen` làm. Ba check bên dưới đo
+     `visibility` của shell sau khi thoát toàn màn hình nên đọc "hidden" dù máy chủ
+     đã xoá `data-fullscreen` đúng — và một check khác từng xoá DOM của wizard bằng
+     `modalRoot.innerHTML = ''` để lại cờ đó nguyên suốt đời instance. Cùng cách
+     phòng vệ mà ui-game-worlds-check và 9 gate khác đã dùng: chờ wizard xuất hiện
+     rồi đóng bằng chính đường thoát của app (`closeSetupWizard` gọi
+     `setSetupWizardFullscreen(false)`), không tự gỡ thuộc tính. */
+  await evaluate(`(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    for (let i = 0; i < 40; i++) { if (document.querySelector('#modalRoot .setup-fullscreen')) break; await wait(100); }
+    if (typeof closeSetupWizard === 'function') closeSetupWizard('close');
+    await wait(250);
+    return true;
+  })()`);
+
   const opened = await evaluate(`(async () => {
     const nav = Array.from(document.querySelectorAll('.nav-item'));
     nav.find(b => b.dataset.page === 'library')?.click();

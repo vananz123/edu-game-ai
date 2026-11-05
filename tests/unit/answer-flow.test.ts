@@ -145,6 +145,50 @@ assert.equal(answerTurnAward(preview, 100), 90, 'the UI can show the live penalt
 assert.equal(preview.attempts, 1);
 assert.equal(answerTurnAward(turnFor(LEGACY_SPEED), 120), 120, 'no mode, no tax');
 
+/* --- điều Task 4 (Đấu trường + Tình huống) thực sự dựa vào ---
+   `registerAnswer` đặt `turn.points = 0` sau một đáp án sai. Ở Tình huống một quyết
+   định KHÔNG tối ưu vẫn ra điểm (rubric 60/25/15 của scoreScenarioDecision), nên
+   trò ghi dòng điểm bằng CHÍNH điểm nó chấm, qua answerTurnAward + extra của
+   commitAnswerRecord. Bốn kiểm tra dưới đây chốt rằng làm thế không phá luật nào. */
+const rubricTurn = turnFor(LEGACY_SPEED);
+registerAnswer(rubricTurn, { correct: false, points: 40 });
+assert.equal(rubricTurn.points, 0, 'một vòng sai thì máy không tự thưởng điểm');
+assert.equal(answerTurnAward(rubricTurn, 40), 40,
+  'nhưng phần thưởng do rubric chấm vẫn được trả đủ: legacy không có phạt');
+assert.equal(rubricTurn.revealCorrect, true, 'game cũ vẫn mở đáp án sau câu sai');
+const rubricPractice = turnFor(PRACTICE);
+registerAnswer(rubricPractice, { correct: false, points: 0 });
+assert.equal(answerTurnAward(rubricPractice, 40), 30,
+  'Luyện tập phạt điểm của rubric ĐÚNG bằng luật 10% trần điểm câu');
+const wonCompetitive = turnFor(COMPETITIVE);
+registerAnswer(wonCompetitive, { correct: true, points: 100 });
+assert.equal(answerTurnAward(wonCompetitive, 100), wonCompetitive.points,
+  'đáp án đúng: con số UI báo trước và con số máy đã tính là MỘT, không trừ hai lần');
+const rubricRows = [];
+const rubricCommit = commitAnswerRecord(rubricRows, rubricTurn, { points: 40, selectedOptionId: 'b' });
+assert.equal(rubricCommit.committed, true);
+assert.equal(rubricRows.length, 1);
+assert.equal(rubricRows[0].points, 40, 'điểm của extra THẮNG điểm của vòng: dòng bảng điểm là điểm rubric');
+assert.equal(rubricRows[0].correct, false);
+assert.equal(rubricRows[0].mode, 'legacy');
+assert.equal(rubricRows[0].wrongAttempts, 1, 'số lần sai vẫn xuống bảng điểm dù vòng ghi điểm của trò');
+// "Bỏ qua câu này" ở Luyện tập: MC thoát khỏi một câu đang chờ thử lại, vòng khép lại.
+const giveUpRows = [];
+const giveUp = turnFor(PRACTICE);
+registerAnswer(giveUp, { correct: false, points: 0 });
+assert.equal(giveUp.retryAllowed, true);
+const giveUpPoints = answerTurnAward(giveUp, 0);
+endAnswerTurn(giveUp, { skipped: true });
+assert.equal(commitAnswerRecord(giveUpRows, giveUp, { points: giveUpPoints }).committed, true);
+assert.equal(giveUpRows[0].points, 0, 'một vòng bỏ giữa chừng không kiếm được điểm nào');
+assert.equal(giveUpRows[0].correct, false);
+assert.equal(giveUpRows[0].skipped, undefined, '`skipped` sống trên vòng, không phải trên dòng điểm');
+// Phần rubric ĐÃ kiếm được trước đó thì một cú "bỏ qua" không claw back được.
+const partialGiveUp = turnFor(PRACTICE, { maxPoints: 100 });
+registerAnswer(partialGiveUp, { correct: false, points: 0 });
+endAnswerTurn(partialGiveUp, { skipped: true });
+assert.equal(answerTurnAward(partialGiveUp, 40), 30, 'phạt vẫn là 10% trần, dù vòng đã khép');
+
 // Hết lượt (Kho báu): the game's own attempt limit closes the turn.
 const out = turnFor(PRACTICE);
 registerAnswer(out, { correct: false, points: 0 }, { attemptsLeft: 2 });

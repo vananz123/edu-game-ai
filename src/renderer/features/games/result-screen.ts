@@ -71,6 +71,13 @@ function buildQuizView() {
     const answers = state.gameAnswers || [];
     const last = answers[answers.length - 1];
     const answered = Boolean(last && last.questionId === q.id);
+    /* #209 task 4: máy chiếu phải giữ ĐÚNG LUẬT màn chính, nên "có lộ đáp án không"
+       lấy từ vòng trả lời đang mở chứ không từ "đã có dòng điểm". Trước đây chỉ cần
+       một dòng điểm là bảng chiếu tô đáp án — Thử thách sẽ bị lộ ngay trước cả lớp.
+       Một vòng chưa khép (Luyện tập đang thử lại) cũng chưa có dòng điểm nào, nên
+       bảng chiếu còn nguyên câu hỏi chưa trả lời. */
+    const turn = state.answerTurn;
+    const reveal = answered && (!turn || turn.revealCorrect);
     const team = state.teamPlay ? state.teamPlay.teams[state.teamPlay.turn] : null;
     return {
         kind: 'quiz',
@@ -79,11 +86,11 @@ function buildQuizView() {
         type: String(q.type || 'quiz'),
         options: presentationOptions(q.options),
         selectedOptionId: answered ? last.selectedOptionId ?? null : null,
-        correctOptionId: answered ? q.correctOptionId : undefined,
+        correctOptionId: reveal ? q.correctOptionId : undefined,
         answerText: answered ? String(last.answerText ?? '') : '',
-        correctAnswer: answered ? String(q.correctAnswer ?? '') : '',
-        revealed: answered,
-        explanation: answered ? String(q.explanation || '') : '',
+        correctAnswer: reveal ? String(q.correctAnswer ?? '') : '',
+        revealed: reveal,
+        explanation: answered && (!turn || turn.explanationAvailable) ? String(q.explanation || '') : '',
         teamTurn: team ? `${team.icon || ''} ${team.name || ''}`.trim() : '',
         progressLabel: `Câu ${Math.min((state.gameIndex || 0) + 1, questions.length)} / ${questions.length}`,
     };

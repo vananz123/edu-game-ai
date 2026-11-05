@@ -5,7 +5,9 @@ const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 // "all collapsed" state and no longer exists). #158: `settingsAiTab` is the tab shown
 // inside the AI panel. Both are UI state only and never saved; the first visit opens the
 // AI tab on its local sub-tab.
-const state = { db: { games: [], sessions: [] }, page: 'library', search: '', filter: 'all', projects: null, lessonLibrary: null, settings: {}, localAiModels: [], localAiMachine: {}, draft: null, importedDoc: null, selectedTemplate: 'scenario', currentGame: null, gameIndex: 0, gameAnswers: [], gameStart: 0, playStartedAt: 0, resultSession: null, answerLocked: false, lastSummary: null, matchingPlay: null, memoryCards: null, treasurePlay: null, racePlay: null, teamPlay: null, pendingTeams: null, settingsSection: 'ai', settingsAiTab: 'local', connectionProgress: null,
+// #209 task 4: `answerTurn` is the ONE answer turn currently open on the play screen
+// (the machine in game-engine/answer-flow.js). UI state only — never saved, never scored.
+const state = { db: { games: [], sessions: [] }, page: 'library', search: '', filter: 'all', projects: null, lessonLibrary: null, settings: {}, localAiModels: [], localAiMachine: {}, draft: null, importedDoc: null, selectedTemplate: 'scenario', currentGame: null, gameIndex: 0, gameAnswers: [], gameStart: 0, playStartedAt: 0, resultSession: null, answerLocked: false, answerTurn: null, lastSummary: null, matchingPlay: null, memoryCards: null, treasurePlay: null, racePlay: null, teamPlay: null, pendingTeams: null, settingsSection: 'ai', settingsAiTab: 'local', connectionProgress: null,
   // #171: the constellation board's input state only — the card a tap selected
   // and the card a drag is carrying. Never saved, never scored.
   constellationSelected: null, constellationDragging: null };

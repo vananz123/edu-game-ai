@@ -2,14 +2,27 @@
 function renderQuestion() {
     const game = state.currentGame, q = game.questions[state.gameIndex], root = $('#playBody');
     if (!q) {
+        // Không có câu nào đang mở: màn chiếu đọc `state.answerTurn` để quyết định có
+        // lộ đáp án hay không, nên phải tắt nó trước khi sang màn kết quả.
+        state.answerTurn = null;
         unmountThreeStage();
         return renderResults();
     }
     unmountThreeStage();
     state.answerLocked = false;
+    /* #209 task 4: MỘT câu = MỘT vòng trả lời, mở ngay khi câu hiện ra. Đây là chỗ
+       đầu tiên `beginAnswerTurn` được gọi từ một vòng chơi thật (trước đây máy chỉ
+       sống trong unit test và mục H của cổng). `template` bắt buộc phải truyền:
+       answerModeForGame là cửa duy nhất để một bàn Ghép cặp không bao giờ nhận
+       cách trả lời mới. */
+    state.answerTurn = beginAnswerTurn(q, game.gameSetup, { template: game.template });
     const progress = Math.round(state.gameAnswers.length / game.questions.length * 100);
     const scoring = resolveScoring(game.gameSetup);
-    const scoringTip = ({ 'cơ bản': '✓ Đúng nhận điểm cố định, sai không bị trừ điểm', 'tốc độ': `⚡ Đúng nhanh trong 8 giây: +${scoring.timeBonus} điểm thưởng`, 'theo độ khó': `⛰️ Điểm theo độ khó: dễ ${scoring.table['dễ']} · trung bình ${scoring.table['trung bình']} · khó ${scoring.table['khó']}`, 'thi đấu đội': '👥 Điểm cộng cho đội — có thể luân phiên người trả lời', 'luyện tập': '📖 Luyện tập: không áp lực thời gian — xem kỹ giải thích' })[scoring.mode] || '';
+    /* Dải tip phải nói LUẬT ĐANG CHẠY. Với game mang token, runtime.js:11 map
+       'tra-loi:…' -> 'cơ bản' (lưới an toàn), nên câu "sai không bị trừ điểm" mà giữ
+       nguyên thì sẽ là một lời nói dối ngay trước mặt học sinh ở chế độ Luyện tập. */
+    const scoringTip = state.answerTurn.mode !== 'legacy' ? answerModeHint(state.answerTurn.mode)
+        : ({ 'cơ bản': '✓ Đúng nhận điểm cố định, sai không bị trừ điểm', 'tốc độ': `⚡ Đúng nhanh trong 8 giây: +${scoring.timeBonus} điểm thưởng`, 'theo độ khó': `⛰️ Điểm theo độ khó: dễ ${scoring.table['dễ']} · trung bình ${scoring.table['trung bình']} · khó ${scoring.table['khó']}`, 'thi đấu đội': '👥 Điểm cộng cho đội — có thể luân phiên người trả lời', 'luyện tập': '📖 Luyện tập: không áp lực thời gian — xem kỹ giải thích' })[scoring.mode] || '';
     const textQ = isTextQuestion(q);
     // #153: trắc nghiệm thường không còn pill thể loại — tên thế giới đã nằm ở
     // badge đầu màn chơi ("ĐẤU TRƯỜNG TRI THỨC") và dải băng sân khấu, nên nhãn
@@ -145,7 +158,11 @@ function renderQuestion() {
 function chooseAnswer(question, optionId, answerText) {
     if (state.answerLocked)
         return;
-    state.answerLocked = true;
+    /* #209 task 4: vòng trả lời của câu đang hiển thị đã mở ở renderQuestion; phép
+       || dưới đây là lối dự phòng cho một màn chơi cũ chưa có vòng (một trang chưa
+       gọi renderQuestion, hoặc `state.answerTurn` bị xoá giữa chừng). */
+    const turn = state.answerTurn || beginAnswerTurn(question, state.currentGame?.gameSetup, { template: state.currentGame?.template });
+    state.answerTurn = turn;
     const elapsed = (Date.now() - state.gameStart) / 1000;
     const textQ = isTextQuestion(question);
     const selectedOption = textQ ? undefined : question.options.find(option => option.id === optionId);
@@ -160,50 +177,87 @@ function chooseAnswer(question, optionId, answerText) {
             : scenario
                 ? { correct: question.correctOptionId === optionId, points: question.correctOptionId === optionId ? Number(question.points) || 100 : 0, speedBonus: 0 }
                 : scoreAnswer(question, optionId, elapsed, state.currentGame?.gameSetup);
-    const { correct, points, speedBonus } = scored;
-    state.scenarioSteps = (state.scenarioSteps || 0) + (scenario ? 1 : 0);
-    state.gameAnswers.push({
-        questionId: question.id, selectedOptionId: textQ ? null : optionId, ...(textQ ? { answerText: String(answerText ?? '') } : {}), correct, points, elapsedSeconds: elapsed,
-        ...(scenarioScore ? { scoringBreakdown: scenarioScore.breakdown } : {})
-    });
-    if (isHouseMode(state.currentGame)) {
-        const house = houseApplyAnswer(houseState(), houseTargetParts(state.currentGame), correct);
-        state.houseBuild = house.state;
-        reactThree(correct ? 'answer:correct' : 'answer:incorrect', { correct, points, house });
-    } else {
-        reactThree(correct ? 'answer:correct' : 'answer:incorrect', { correct, points });
-    }
+    /* Trò vẫn tự tính { correct, points }; máy chỉ THÊM khoá + phạt + khép vòng.
+       `turn.rejected` là cú nhấp thứ hai sau khi vòng đã khép (nút đã tắt nhưng sự
+       kiện vẫn bắn tới): phải im lặng — không trừ thêm phạt, không lật câu đã sai
+       thành đúng, không cộng thêm điểm cho một lượt không tồn tại. */
+    registerAnswer(turn, { correct: scored.correct, points: scored.points });
+    if (turn.rejected)
+        return;
+    const { correct, speedBonus } = scored;
+    /* ĐIỂM ghi vào bảng là `answerTurnAward(chính trò đã trả)`, KHÔNG phải
+       `turn.points`: một quyết định Tình huống SAI vẫn nhận điểm rubric của nó
+       (0..100) trong khi `turn.points` luôn bằng 0 khi sai — chủ dự án chốt
+       "không đụng rubric". Với một đáp án đúng hai giá trị này trùng nhau
+       (tests/unit/answer-flow.test.ts chốt cả hai chiều). */
+    const points = answerTurnAward(turn, scored.points);
+    /* Tình huống không bao giờ tô "quyết định đúng": hôm nay nó cũng không tô, và mỗi
+       lựa chọn có feedback + điểm rubric riêng. Với ba mode kia, `revealCorrect` là
+       khác biệt duy nhất giữa Thi đấu (lộ đáp án) và Thử thách (không lộ). */
+    const revealAnswer = turn.revealCorrect && !scenario;
+    // Luyện tập trả lại quyền bấm để thử lại; mọi mode khác khoá đến hết câu.
+    state.answerLocked = !turn.retryAllowed;
+    const basePoints = questionPoints(question, resolveScoring(state.currentGame.gameSetup));
     let teamNote = '';
-    if (state.teamPlay) {
+    const settle = () => {
+        const result = commitAnswerRecord(state.gameAnswers, turn, {
+            selectedOptionId: textQ ? null : optionId,
+            ...(textQ ? { answerText: String(answerText ?? '') } : {}),
+            points,
+            elapsedSeconds: elapsed,
+            ...(scenarioScore ? { scoringBreakdown: scenarioScore.breakdown } : {})
+        });
+        if (!result.committed)
+            return;
+        // Nhà + đội đổi ĐÚNG MỘT lần cho một câu: một cú nhấp sai ở Luyện tập chưa
+        // khép vòng thì không được xây thêm (hay trừ) phần nhà, không được quay lượt đội.
+        if (isHouseMode(state.currentGame)) {
+            const house = houseApplyAnswer(houseState(), houseTargetParts(state.currentGame), turn.correct);
+            state.houseBuild = house.state;
+            reactThree(turn.correct ? 'answer:correct' : 'answer:incorrect', { correct: turn.correct, points, house });
+        } else {
+            reactThree(turn.correct ? 'answer:correct' : 'answer:incorrect', { correct: turn.correct, points });
+        }
+        if (scenario)
+            state.scenarioSteps = (state.scenarioSteps || 0) + 1;
+        if (!state.teamPlay)
+            return;
         const tp = state.teamPlay;
         const team = tp.teams[tp.turn];
         team.points += points;
-        if (correct)
+        if (turn.correct)
             team.correct += 1;
         team.answered += 1;
         const nextTeam = tp.teams[(tp.turn + 1) % tp.teams.length];
         teamNote = `<br><strong>👥 ${escapeHtml(team.name)}</strong> được cộng ${points} điểm.${tp.teams.length > 1 ? ` Lượt sau: ${escapeHtml(nextTeam.name)}.` : ''}`;
         tp.turn = (tp.turn + 1) % tp.teams.length;
+    };
+    if (turn.finished) {
+        settle();
+    } else {
+        // Sai mà còn được thử lại: phản hồi ngay cho em biết, nhưng chưa có dòng điểm,
+        // chưa đổi nhà/đội và chưa được nhìn thấy đáp án.
+        reactThree('answer:incorrect', { correct: false, points: 0 });
     }
     if (textQ) {
         const input = document.getElementById('textAnswerInput');
         const submitBtn = document.getElementById('textAnswerBtn');
         if (input) {
-            input.disabled = true;
+            input.disabled = !turn.retryAllowed;
         }
         if (submitBtn)
-            submitBtn.disabled = true;
+            submitBtn.disabled = !turn.retryAllowed;
         const hintBtn = document.querySelector('[data-answer-hint]');
         if (hintBtn)
-            hintBtn.disabled = true;
+            hintBtn.disabled = !turn.retryAllowed;
     }
     $$('.answer-option').forEach(btn => {
-        btn.disabled = true;
+        btn.disabled = !turn.retryAllowed;
         if (scenario) {
             if (btn.dataset.answer === optionId)
                 btn.classList.add('selected');
         }
-        else if (btn.dataset.answer === question.correctOptionId)
+        else if (revealAnswer && btn.dataset.answer === question.correctOptionId)
             btn.classList.add('correct');
         else if (btn.dataset.answer === optionId)
             btn.classList.add('wrong');
@@ -211,14 +265,59 @@ function chooseAnswer(question, optionId, answerText) {
     const feedback = $('#answerFeedback');
     if (!feedback)
         return;
+    const resolveNextIndex = () => {
+        const next = scenario
+            ? resolveScenarioTransition(selectedOption, state.gameIndex, state.currentGame.questions)
+            : state.gameIndex + 1;
+        return next === undefined || scenario && state.scenarioSteps >= 100
+            ? state.currentGame.questions.length
+            : next;
+    };
+    const goToNext = () => {
+        if (!turn.finished) {
+            /* Luyện tập mà bấm "Bỏ qua" = khép vòng từ phía trò (endAnswerTurn đúng
+               việc đó): không lộ đáp án và VẪN ghi một dòng — điểm là phần trò đã kiếm
+               được tới lúc đó (0 với một đáp án sai trắng, điểm rubric với một quyết định
+               Tình huống nhận điểm). Thiếu lối này thì một câu quá khó chặn cả lớp mãi. */
+            endAnswerTurn(turn, { skipped: true });
+            settle();
+        }
+        state.nextQuestionIndex = resolveNextIndex();
+        state.gameIndex = state.nextQuestionIndex;
+        state.gameStart = Date.now();
+        lanAdvanceRound();
+        renderQuestion();
+    };
+    const wireNextButton = () => {
+        state.nextQuestionIndex = resolveNextIndex();
+        const next = $('#nextQuestionBtn');
+        next.classList.remove('hidden');
+        /* Nhãn: vòng còn mở = một lối bỏ qua, không phải "đi tiếp" (học sinh đang
+           được thử lại). "Tình huống tiếp theo" chỉ đúng với Tình huống — trước #209
+           Đấu trường cũng mang nhãn đó. */
+        next.textContent = !turn.finished ? 'Bỏ qua câu này →'
+            : state.nextQuestionIndex >= state.currentGame.questions.length ? 'Xem kết quả →'
+                : state.currentGame.template === 'scenario' ? 'Tình huống tiếp theo →' : 'Câu tiếp theo →';
+        next.onclick = goToNext;
+    };
+    if (!turn.finished) {
+        // Bảng "thử lại" của Luyện tập: nói rõ đã sai mấy lần và câu còn lại bao nhiêu
+        // điểm — chính xác cái mà answerTurnAward vừa tính, không phải một lời hứa.
+        // Luật đầy đủ đã có ở dải tip dưới màn (scoringTip), nên ở đây không lặp lại.
+        feedback.className = 'feedback bad';
+        feedback.innerHTML = `<strong>✕ Chưa đúng.</strong> ${textQ ? `Câu trả lời của bạn: “${escapeHtml(String(answerText ?? '').trim())}”.` : 'Đáp án vừa chọn chưa đúng.'}<br>Em được <strong>thử lại</strong>${turn.wrongAttempts > 1 ? ` (đã sai ${turn.wrongAttempts} lần)` : ''} — câu này còn <b>${answerTurnAward(turn, basePoints)}</b> điểm.${teamNote}`;
+        wireNextButton();
+        sendPresentationState();
+        return;
+    }
     feedback.className = `feedback ${correct ? 'good' : 'bad'}`;
     const rubric = scenarioScore
-        ? `<br>Điểm quyết định: ${points}/100 (an toàn ${scenarioScore.breakdown.safety}/60 · giải thích ${scenarioScore.breakdown.reasoning}/25 · giảm hậu quả ${scenarioScore.breakdown.harmReduction}/15).`
+        ? `<br>Điểm quyết định: ${scenarioScore.points}/100 (an toàn ${scenarioScore.breakdown.safety}/60 · giải thích ${scenarioScore.breakdown.reasoning}/25 · giảm hậu quả ${scenarioScore.breakdown.harmReduction}/15).`
         : '';
     // In house mode the showcase hides the answer grid, so the feedback must
     // name the correct option itself (DECISIONS #142).
     const correctOption = textQ ? null : question.options.find(option => option.id === question.correctOptionId);
-    const answerReveal = textQ
+    const answerReveal = !revealAnswer ? '' : textQ
         ? `<br><strong>Đáp án đúng:</strong> ${escapeHtml(question.correctAnswer || '')}${question.alternateAnswers?.length ? ` (hoặc: ${question.alternateAnswers.map(a => escapeHtml(a)).join(', ')})` : ''}${question.hint && !correct ? `<br><strong>💡 Gợi ý:</strong> ${escapeHtml(question.hint)}` : ''}`
         : isHouseMode(state.currentGame) && correctOption
             ? `<br><strong>Đáp án đúng:</strong> ${escapeHtml(correctOption.text)}`
@@ -229,16 +328,14 @@ function chooseAnswer(question, optionId, answerText) {
     const discussion = scenario && question.discussionPrompt
         ? `<br><strong>Thảo luận:</strong> ${escapeHtml(question.discussionPrompt)}`
         : '';
-    feedback.innerHTML = `<strong>${scenario ? 'Đã ghi nhận quyết định.' : correct ? '✓ Chính xác!' : '✕ Chưa chính xác.'}</strong> ${scenario ? `Bạn nhận ${points} điểm.` : correct ? `Bạn nhận ${points} điểm${speedBonus ? ` (gồm +${speedBonus} điểm nhanh)` : ''}.` : `${textQ ? `Câu trả lời của bạn: “${escapeHtml(String(answerText ?? '').trim())}”.` : 'Đáp án đúng đã được đánh dấu.'}`}${answerReveal}${rubric}<br>${escapeHtml(teacherFeedback)}${discussion}${teamNote}`;
-    const next = scenario
-        ? resolveScenarioTransition(selectedOption, state.gameIndex, state.currentGame.questions)
-        : state.gameIndex + 1;
-    state.nextQuestionIndex = next === undefined || scenario && state.scenarioSteps >= 100
-        ? state.currentGame.questions.length
-        : next;
-    $('#nextQuestionBtn').classList.remove('hidden');
-    $('#nextQuestionBtn').textContent = state.nextQuestionIndex >= state.currentGame.questions.length ? 'Xem kết quả →' : 'Tình huống tiếp theo →';
-    $('#nextQuestionBtn').onclick = () => { state.gameIndex = state.nextQuestionIndex; state.gameStart = Date.now(); lanAdvanceRound(); renderQuestion(); };
+    /* Lời giải chỉ hiện khi LUẬT cho phép (explanationAllowed): Thử thách giữ kín sau
+       câu sai, Luyện tập chỉ mở khi vòng đã khép. Task 7 thay dòng tự hiện này bằng
+       nút "Giải thích", nên ở đây chỉ cần cái cổng đúng. */
+    const explanationLine = turn.explanationAvailable ? `<br>${escapeHtml(teacherFeedback)}` : '';
+    const penaltyLine = turn.mode === 'practice' && correct && turn.wrongAttempts > 0
+        ? ` (em đã sai ${turn.wrongAttempts} lần, mỗi lần bớt 10% điểm của câu này).` : '';
+    feedback.innerHTML = `<strong>${scenario ? 'Đã ghi nhận quyết định.' : correct ? '✓ Chính xác!' : '✕ Chưa chính xác.'}</strong> ${scenario ? `Bạn nhận ${points} điểm.` : correct ? `Bạn nhận ${points} điểm${speedBonus ? ` (gồm +${speedBonus} điểm nhanh)` : ''}.${penaltyLine}` : `${textQ ? `Câu trả lời của bạn: “${escapeHtml(String(answerText ?? '').trim())}”.` : revealAnswer ? 'Đáp án đúng đã được đánh dấu.' : 'Cách trả lời này không mở đáp án.'}`}${answerReveal}${rubric}${explanationLine}${discussion}${teamNote}`;
+    wireNextButton();
     // The showcase fits the house into the space the feedback card leaves, so
     // it runs after the banner and the "next" button are laid out (#142).
     if (isHouseMode(state.currentGame))
