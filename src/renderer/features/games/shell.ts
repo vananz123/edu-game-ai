@@ -67,7 +67,10 @@ function playGame(game, options = {}) {
     if (isHouseMode(game))
         state.houseBuild = houseCreate();
     enterFullscreen();
-    if (game.gameSetup?.scoringMode === 'thi đấu đội') {
+    // #209 moved the answer law into `scoringMode`, so the team roster now follows
+    // "Số người chơi: Đội nhóm". 'thi đấu đội' stays for games made with the old select.
+    const playSetup = game.gameSetup || {};
+    if (playSetup.scoringMode === 'thi đấu đội' || String(playSetup.players || '').toLowerCase().includes('đội')) {
         openTeamSetup();
     }
     else {

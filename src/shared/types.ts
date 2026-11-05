@@ -222,7 +222,14 @@ export interface RaceData {
 
 /** Teacher-facing game setup captured on the create page (Zone D), §2.3 of tasknight.docx. */
 export interface GameSetup {
+  /**
+   * One key holds either a legacy scoring mode ('cơ bản' … 'luyện tập') or, since
+   * docs/DECISIONS.md #209, a 'tra-loi:' answer mode. Absent/legacy = the rules the
+   * game shipped with. See src/game-engine/answer-mode.ts.
+   */
   scoringMode?: string;
+  /** The legacy `scoringMode` value saved when a teacher switches to an answer mode (#209). */
+  legacyScoringMode?: string;
   difficulty?: string;
   duration?: string;
   pointsPerCorrect?: string;

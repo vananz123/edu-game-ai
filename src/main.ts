@@ -93,6 +93,10 @@ const { LessonStore } = require('./services/storage/lesson-store');
 const { AiTaskManager, newAiTaskId } = require('./services/ai/ai-tasks');
 const { buildTreasureHunt: buildTreasureHuntService, buildRaceData: buildRaceDataService } = require('./services/game/ai-game-design');
 const { validateScenarioGame, validateMatchingGame, validateTreasureHuntGame, validateRaceGame } = require('./services/game/game-validation');
+// Answer modes (DECISIONS #209) live in gameSetup.scoringMode as a 'tra-loi:' token. The prompt
+// builder needs the same reading rule as the renderer, so it requires the pure module rather
+// than keeping a second table that can drift.
+const { answerModeKey, answerModeLabel, answerModeHint } = require('./game-engine/answer-mode');
 const { isZenBaseUrl, postZenChatCompletions, readLocalOpencodeApiKey } = require('./services/ai/opencode-zen');
 const {
   AiRequestRegistry,
@@ -4044,7 +4048,14 @@ function getAnalyzedSource(payload) {
 function buildPrompt(payload) {
   const sourceContent = getAnalyzedSource(payload);
   const setup = payload.gameSetup && typeof payload.gameSetup === 'object' ? payload.gameSetup : {};
-  const mode = String(setup.scoringMode || '');
+  // #209: a 'tra-loi:' token in scoringMode is the ANSWER law, not a scoring mode. The scoring
+  // sentence keeps describing the points rule the game falls back to, and the answer law gets
+  // its own line so the model never sees a raw token.
+  const answerMode = answerModeKey(setup);
+  const mode = answerMode === 'legacy'
+    ? String(setup.scoringMode || '')
+    : String(setup.legacyScoringMode || 'cơ bản');
+  const answerLine = answerMode === 'legacy' ? '' : `\nCách trả lời giáo viên chọn: ${answerModeLabel(answerMode)} — ${answerModeHint(answerMode)} Học sinh chỉ đọc giải thích khi bấm nút “Giải thích”, nên MỌI câu hỏi phải có trường "explanation" đầy đủ, ngắn và đúng nội dung nguồn.`;
   const pointsPer = Number(setup.pointsPerCorrect) || 100;
   const timeBonus = Math.min(50, Math.max(0, Number(setup.timeBonus) || 20));
   const pointsEasy = Number(setup.pointsEasy) || 100;
@@ -4068,7 +4079,7 @@ function buildPrompt(payload) {
 Trả về JSON có cấu trúc:
 ${structure.json}
 Yêu cầu: tạo ${questionCount} câu; ${structure.rules} prompt của mỗi câu PHẢI là câu hỏi hoặc tình huống cụ thể (kết thúc bằng ? hoặc mô tả tình huống), tuyệt đối KHÔNG dùng nhãn như "TOM TAT", "Y CHINH", "GOI Y"; một đáp án đúng; giải thích ngắn, rõ; tránh câu mơ hồ; không tự bịa mức phạt hoặc điều luật. Lớp: ${payload.grade || 'chưa xác định'}. Môn học: ${payload.subject || 'chưa xác định'}.
-${scoringLine}${styleLine}Tên tài liệu: ${payload.sourceName || 'Không có'}.
+${scoringLine}${answerLine}${styleLine}Tên tài liệu: ${payload.sourceName || 'Không có'}.
 ${payload.analysis ? 'Chỉ sử dụng bản tổng hợp, ý chính, câu hỏi gợi ý và phần trao đổi dưới đây làm nguồn nội dung cho trò chơi. Không tham chiếu văn bản tài liệu gốc ngoài phần đã tổng hợp. Dùng câu hỏi và câu trả lời của giáo viên để định hướng nội dung; mọi đáp án vẫn phải được căn cứ vào ý chính và bản tổng hợp.' : 'Dùng nội dung tài liệu gốc bên dưới làm nguồn.'}
 ${payload.useSuggestedQuestions ? 'Ưu tiên chuyển bộ câu hỏi gợi ý trong bản tổng hợp thành câu hỏi của trò chơi; giữ đúng trọng tâm và tạo đáp án dựa trên nội dung nguồn.' : ''}
 Nội dung nguồn:

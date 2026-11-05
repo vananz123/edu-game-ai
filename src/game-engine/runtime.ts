@@ -2,7 +2,14 @@
 const SCORING_MODES = ['cơ bản', 'tốc độ', 'theo độ khó', 'thi đấu đội', 'luyện tập'];
 function resolveScoring(gameSetup) {
   const setup = gameSetup && typeof gameSetup === 'object' ? gameSetup : {};
-  const mode = SCORING_MODES.includes(String(setup.scoringMode)) ? String(setup.scoringMode) : 'tốc độ';
+  const stored = String(setup.scoringMode);
+  // #209: a "cách trả lời" value carries no scoring law of its own, so such a game
+  // scores on base points. Without this the fallback below would hand it a speed
+  // bonus nobody chose, because the answer-mode tokens are not in SCORING_MODES.
+  // The prefix is spelled inline: answer-mode.js owns ANSWER_MODE_PREFIX and loads after
+  // this file, and runtime.js must stay require-able on its own.
+  const mode = stored.indexOf('tra-loi:') === 0 ? 'cơ bản'
+    : SCORING_MODES.includes(stored) ? stored : 'tốc độ';
   const bonusRaw = Number(setup.timeBonus);
   const timeBonus = Number.isFinite(bonusRaw) ? Math.min(50, Math.max(0, bonusRaw)) : 20;
   const table = {

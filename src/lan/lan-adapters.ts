@@ -113,12 +113,18 @@ function teamNamesFromSetup(competition: string | undefined): LanTeam[] {
 /**
  * Default teams when the game has none: "Thi đấu đội" gets A/B (the same defaults
  * `openTeamSetup()` offers), everything else stays individual (empty list).
+ *
+ * #209 moved the answer law into `scoringMode`, so a game created with an answer mode
+ * declares teams through `players` instead — the same signal the play surface reads.
+ * LAN's own scoring rules are untouched by that change.
  */
 export function lanDefaultTeams(game: EducationalGame): LanTeam[] {
   const raceTeams = lanTeamsOf(game && game.race && game.race.teams);
   if (raceTeams.length >= 2) return raceTeams;
   const setup = (game && game.gameSetup) || {};
-  if (setup.scoringMode !== 'thi đấu đội') return [];
+  const wantsTeams = setup.scoringMode === 'thi đấu đội'
+    || String(setup.players || '').toLowerCase().includes('đội');
+  if (!wantsTeams) return [];
   const custom = teamNamesFromSetup(setup.competition);
   if (custom.length >= 2) return custom;
   return [

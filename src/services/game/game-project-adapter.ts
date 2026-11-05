@@ -29,6 +29,7 @@ import type {
   ArenaDraft,
   ArenaQuestion,
   ArenaScoringMode,
+  AnswerModeSetting,
   GameConfig,
   GameDraft,
   GameProject,
@@ -728,6 +729,34 @@ const HOUSE_STYLE_IDS: readonly HouseStyle[] = ['nha-mai-do', 'nha-vuon', 'thap-
 const isHouseStyle = (value: unknown): value is HouseStyle =>
   typeof value === 'string' && (HOUSE_STYLE_IDS as readonly string[]).includes(value);
 
+/* Answer modes (DECISIONS #209) share the ONE stored key with the legacy scoring modes:
+   `gameSetup.scoringMode` holds a diacritic-free 'tra-loi:' token. Duplicated here because
+   src/game-engine/answer-mode.ts is a renderer global script — same arrangement as
+   HOUSE_STYLE_IDS above. 'keep' means the game stays on the scoring mode it was made with. */
+const ANSWER_MODE_TOKENS: Record<Exclude<AnswerModeSetting, 'keep'>, string> = {
+  competitive: 'tra-loi:thi-dau',
+  practice: 'tra-loi:luyen-tap',
+  challenge: 'tra-loi:thu-thach'
+};
+
+const isAnswerModeToken = (value: unknown): value is string =>
+  typeof value === 'string' && Object.keys(ANSWER_MODE_TOKENS).some(key => ANSWER_MODE_TOKENS[key] === value);
+
+/** The token a draft's pick writes, or `undefined` when the pick is "Giữ hành vi hiện tại". */
+function answerModeTokenFor(config: GameConfig): string | undefined {
+  const pick = (config as { answerMode?: AnswerModeSetting }).answerMode;
+  return pick && pick !== 'keep' ? ANSWER_MODE_TOKENS[pick as Exclude<AnswerModeSetting, 'keep'>] : undefined;
+}
+
+/** Read side of the same rule: which select is selected, and the legacy value to fall back on. */
+function answerModeFromSetup(setup: GameSetup): { answerMode: AnswerModeSetting; legacyScoringMode: string } {
+  const stored = String(setup.scoringMode || '');
+  if (!isAnswerModeToken(stored)) return { answerMode: 'keep', legacyScoringMode: stored };
+  const key = (Object.keys(ANSWER_MODE_TOKENS) as (keyof typeof ANSWER_MODE_TOKENS)[])
+    .find(entry => ANSWER_MODE_TOKENS[entry] === stored);
+  return { answerMode: key as AnswerModeSetting, legacyScoringMode: String(setup.legacyScoringMode || '') };
+}
+
 function gameSetupFor(config: GameConfig, legacy?: GameSetup): GameSetup {
   const derived: GameSetup = {
     difficulty: config.difficulty,
@@ -737,8 +766,14 @@ function gameSetupFor(config: GameConfig, legacy?: GameSetup): GameSetup {
   };
 
   switch (config.gameType) {
-    case 'arena':
-      derived.scoringMode = arenaScoringLabel(config.scoringMode);
+    case 'arena': {
+      const token = answerModeTokenFor(config);
+      if (token) {
+        derived.legacyScoringMode = arenaScoringLabel(config.scoringMode);
+        derived.scoringMode = token;
+      } else {
+        derived.scoringMode = arenaScoringLabel(config.scoringMode);
+      }
       derived.pointsPerCorrect = String(config.pointsPerCorrect);
       derived.timeBonus = String(config.timeBonus);
       if (config.gameplayMode === 'house') derived.gameplayMode = 'house';
@@ -747,23 +782,51 @@ function gameSetupFor(config: GameConfig, legacy?: GameSetup): GameSetup {
       if (config.pointsMedium !== undefined) derived.pointsMedium = String(config.pointsMedium);
       if (config.pointsHard !== undefined) derived.pointsHard = String(config.pointsHard);
       break;
-    case 'scenario':
-      derived.scoringMode = 'cơ bản';
+    }
+    case 'scenario': {
+      const token = answerModeTokenFor(config);
+      derived.scoringMode = token || 'cơ bản';
+      if (token) derived.legacyScoringMode = 'cơ bản';
       break;
+    }
     case 'matching':
       derived.scoringMode = 'cơ bản';
       break;
-    case 'treasure':
+    case 'treasure': {
+      // Treasure games never stored a scoring mode, so "keep" means "leave it absent"
+      // and the old attempt/reveal rules read exactly as before. The empty stash is still
+      // written: it is the marker that keeps "Giữ hành vi hiện tại" selectable after the
+      // teacher picks a mode (the editor tests the key's presence, not its value).
+      const token = answerModeTokenFor(config);
+      if (token) {
+        derived.scoringMode = token;
+        derived.legacyScoringMode = '';
+      }
       break;
-    case 'race':
-      derived.scoringMode = 'thi đấu đội';
+    }
+    case 'race': {
+      const token = answerModeTokenFor(config);
+      derived.scoringMode = token || 'thi đấu đội';
+      if (token) derived.legacyScoringMode = 'thi đấu đội';
       derived.competition = 'đội';
       break;
+    }
     default:
       break;
   }
 
-  return { ...(legacy || {}), ...derived };
+  const merged: GameSetup = { ...(legacy || {}), ...derived };
+  /* One representation per meaning (#209): `legacyScoringMode` only has a job while
+     `scoringMode` holds a token, so writing a legacy mode drops the stash. Treasure had no
+     scoring mode at all before #209, so "Giữ hành vi hiện tại" must erase the token the
+     project still carries instead of leaving it standing. */
+  if (config.gameType === 'treasure' && !answerModeTokenFor(config)) {
+    delete merged.scoringMode;
+    delete merged.legacyScoringMode;
+  } else if (!isAnswerModeToken(merged.scoringMode)) {
+    delete merged.legacyScoringMode;
+  }
+  return merged;
 }
 
 function configFromGame(game: EducationalGame, gameType: GameDraft['gameType']): GameConfig {
@@ -782,13 +845,18 @@ function configFromGame(game: EducationalGame, gameType: GameDraft['gameType']):
     generationMode: 'fast' as const
   };
 
+  // A game made before #209 has no token, so the select reads "Giữ hành vi hiện tại" and
+  // the old scoring mode round-trips untouched.
+  const answer = answerModeFromSetup(setup);
+
   switch (gameType) {
     case 'arena':
       return {
         ...base,
         gameType: 'arena',
         questionCount: clamp(game.questions.length, 1, 30),
-        scoringMode: arenaScoringFromLabel(setup.scoringMode),
+        scoringMode: arenaScoringFromLabel(answer.legacyScoringMode),
+        answerMode: answer.answerMode,
         pointsPerCorrect: clamp(safeInt(setup.pointsPerCorrect, 100), 0, 1000),
         timeBonus: clamp(safeInt(setup.timeBonus, 0), 0, 50),
         ...(setup.gameplayMode === 'house' ? { gameplayMode: 'house' as const } : {}),
@@ -802,7 +870,8 @@ function configFromGame(game: EducationalGame, gameType: GameDraft['gameType']):
         ...base,
         gameType: 'scenario',
         situationCount: clamp(game.questions.filter(question => question.type === 'scenario').length, 1, 30),
-        scoringMode: 'quality'
+        scoringMode: 'quality',
+        answerMode: answer.answerMode
       };
     case 'matching': {
       const matching = game.matchingGame;
@@ -828,7 +897,8 @@ function configFromGame(game: EducationalGame, gameType: GameDraft['gameType']):
         stageCount: clamp(treasure?.stages.length || 2, 2, 30),
         attemptsPerStage: clamp(safeInt(treasure?.stages[0]?.attempts, 0), 0, 99),
         journeyBonus: clamp(safeInt(treasure?.journeyBonus, 0), 0, 10000),
-        hiddenItemBonus: clamp(safeInt(treasure?.hiddenItemBonus, 0), 0, 1000)
+        hiddenItemBonus: clamp(safeInt(treasure?.hiddenItemBonus, 0), 0, 1000),
+        answerMode: answer.answerMode
       };
     }
     case 'race': {
@@ -840,7 +910,8 @@ function configFromGame(game: EducationalGame, gameType: GameDraft['gameType']):
         maxRounds: clamp(safeInt(race?.maxRounds, 10), 1, 50),
         teamCount: clamp(race?.teams.length || 2, 2, 6),
         stepByDifficulty: Boolean(race?.stepByDifficulty),
-        luckEnabled: Boolean(race?.luckEnabled)
+        luckEnabled: Boolean(race?.luckEnabled),
+        answerMode: answer.answerMode
       };
     }
     default:

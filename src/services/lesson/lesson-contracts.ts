@@ -644,6 +644,11 @@ export const gameDraftSchema = z.discriminatedUnion('gameType', [
   raceDraftSchema
 ]);
 
+/* "Cách trả lời" (DECISIONS #209). Declared per gameType branch below because zod's
+   discriminated union strips any key a branch doesn't know, which would silently drop the
+   teacher's pick. Matching has no branch entry: it keeps its own pairing law. */
+const answerModeSchema = z.enum(['keep', 'competitive', 'practice', 'challenge']);
+
 const configBase = z.object({
   title: nonEmpty(200),
   subject: z.string().trim().max(120),
@@ -663,6 +668,7 @@ export const gameConfigSchema = z.discriminatedUnion('gameType', [
     gameType: z.literal('arena'),
     questionCount: z.number().int().min(1).max(30),
     scoringMode: z.enum(['basic', 'speed', 'difficulty', 'team', 'practice']),
+    answerMode: answerModeSchema.optional(),
     pointsPerCorrect: z.number().int().min(10).max(1000),
     timeBonus: z.number().int().min(0).max(50),
     pointsEasy: z.number().int().min(0).max(1000).optional(),
@@ -676,7 +682,8 @@ export const gameConfigSchema = z.discriminatedUnion('gameType', [
   configBase.extend({
     gameType: z.literal('scenario'),
     situationCount: z.number().int().min(1).max(30),
-    scoringMode: z.enum(['quality', 'simple'])
+    scoringMode: z.enum(['quality', 'simple']),
+    answerMode: answerModeSchema.optional()
   }),
   configBase.extend({
     gameType: z.literal('matching'),
@@ -692,7 +699,8 @@ export const gameConfigSchema = z.discriminatedUnion('gameType', [
     stageCount: z.number().int().min(2).max(30),
     attemptsPerStage: z.number().int().min(0).max(99),
     journeyBonus: z.number().int().min(0).max(10000),
-    hiddenItemBonus: z.number().int().min(0).max(1000)
+    hiddenItemBonus: z.number().int().min(0).max(1000),
+    answerMode: answerModeSchema.optional()
   }),
   configBase.extend({
     gameType: z.literal('race'),
@@ -700,7 +708,8 @@ export const gameConfigSchema = z.discriminatedUnion('gameType', [
     maxRounds: z.number().int().min(1).max(50),
     teamCount: z.number().int().min(2).max(6),
     stepByDifficulty: z.boolean(),
-    luckEnabled: z.boolean()
+    luckEnabled: z.boolean(),
+    answerMode: answerModeSchema.optional()
   })
 ]);
 

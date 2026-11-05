@@ -124,6 +124,13 @@ export interface GameConfigBase {
 
 export type ArenaScoringMode = 'basic' | 'speed' | 'difficulty' | 'team' | 'practice';
 
+/**
+ * "Cách trả lời" (docs/DECISIONS.md #209). `keep` = the game stays on the rules it already
+ * played by; the three answer modes replace the old scoring-mode pick on the four templates
+ * that answer questions. Stored as a 'tra-loi:' token inside `gameSetup.scoringMode`.
+ */
+export type AnswerModeSetting = 'keep' | 'competitive' | 'practice' | 'challenge';
+
 /** House model used by the quiz's House Building Mode (DECISIONS #144). */
 export type HouseStyle = 'nha-mai-do' | 'nha-vuon' | 'thap-canh' | 'nha-go';
 
@@ -131,6 +138,8 @@ export interface ArenaConfig extends GameConfigBase {
   gameType: 'arena';
   questionCount: number;
   scoringMode: ArenaScoringMode;
+  /** Answer law (#209); absent or 'keep' = `scoringMode` stays in charge. */
+  answerMode?: AnswerModeSetting;
   pointsPerCorrect: number;
   timeBonus: number;
   pointsEasy?: number;
@@ -146,6 +155,8 @@ export interface ScenarioConfig extends GameConfigBase {
   gameType: 'scenario';
   situationCount: number;
   scoringMode: 'quality' | 'simple';
+  /** Answer law (#209); 'quality'/'simple' keeps deciding how the rubric scores. */
+  answerMode?: AnswerModeSetting;
 }
 
 export interface MatchingConfig extends GameConfigBase {
@@ -165,6 +176,8 @@ export interface TreasureConfig extends GameConfigBase {
   attemptsPerStage: number;
   journeyBonus: number;
   hiddenItemBonus: number;
+  /** Answer law (#209); `attemptsPerStage` stays the Kho báu attempt limit. */
+  answerMode?: AnswerModeSetting;
 }
 
 export interface RaceConfig extends GameConfigBase {
@@ -174,6 +187,8 @@ export interface RaceConfig extends GameConfigBase {
   teamCount: number;
   stepByDifficulty: boolean;
   luckEnabled: boolean;
+  /** Answer law (#209). */
+  answerMode?: AnswerModeSetting;
 }
 
 export type GameConfig = ArenaConfig | ScenarioConfig | MatchingConfig | TreasureConfig | RaceConfig;

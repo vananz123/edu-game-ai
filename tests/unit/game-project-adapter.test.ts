@@ -17,7 +17,10 @@ import type {
   GameDraft,
   GameProject,
   MatchingConfig,
-  MatchingDraft
+  MatchingDraft,
+  RaceConfig,
+  ScenarioConfig,
+  TreasureConfig
 } from '../../src/shared/lesson-types';
 
 const ISO = '2026-01-01T00:00:00.000Z';
@@ -610,6 +613,124 @@ expectAdapterError('ADAPTER_UNKNOWN_TYPE', () => fromEducationalGame({
 }));
 
 // ---------------------------------------------------------------------------
+// Answer modes (DECISIONS #209): the wizard pick shares the ONE stored key with
+// the legacy scoring mode. `gameSetup.scoringMode` holds either a 'tra-loi:'
+// token or the Vietnamese mode the game was made with, and the value a token
+// replaces is kept so "Giữ hành vi hiện tại" gives it back exactly.
+// ---------------------------------------------------------------------------
+
+const TOKEN = {
+  competitive: 'tra-loi:thi-dau',
+  practice: 'tra-loi:luyen-tap',
+  challenge: 'tra-loi:thu-thach'
+};
+
+// --- Đấu trường ----------------------------------------------------------
+const arenaPracticeConfig: ArenaConfig = { ...(configFor(arenaDraft) as ArenaConfig), answerMode: 'practice' };
+const arenaPracticeGame = toEducationalGame(projectFor(arenaDraft, { config: arenaPracticeConfig }));
+assert.equal(arenaPracticeGame.gameSetup?.scoringMode, TOKEN.practice, 'a wizard pick is stored as a token');
+assert.equal(arenaPracticeGame.gameSetup?.legacyScoringMode, 'cơ bản', 'the mode being replaced is stashed, not dropped');
+assert.equal(arenaPracticeGame.gameSetup?.pointsPerCorrect, '100', 'the per-question points still ride on the same setup');
+const arenaPracticeProject = fromEducationalGame(arenaPracticeGame);
+assert.equal(arenaPracticeProject.config?.gameType === 'arena' ? arenaPracticeProject.config.answerMode : 'x', 'practice');
+assert.equal(arenaPracticeProject.config?.gameType === 'arena' ? arenaPracticeProject.config.scoringMode : 'x', 'basic', 'the scoring select reads the stash, never the token');
+assert.equal(toEducationalGame(arenaPracticeProject).gameSetup?.scoringMode, TOKEN.practice, 'save/reopen keeps the pick');
+
+// 'tốc độ' pays a bonus, so switching away and back has to be lossless.
+const speedGame: EducationalGame = {
+  ...quizGame,
+  gameSetup: { ...quizGame.gameSetup, scoringMode: 'tốc độ' }
+};
+const speedProject = fromEducationalGame(speedGame);
+const speedArenaConfig = speedProject.config as ArenaConfig;
+assert.equal(speedArenaConfig.answerMode, 'keep', 'a game made before #209 reads as "Giữ hành vi hiện tại"');
+assert.equal(speedArenaConfig.scoringMode, 'speed');
+assert.equal(arenaPracticeGame.gameSetup?.timeBonus, '10');
+const speedToChallengeConfig: ArenaConfig = { ...speedArenaConfig, answerMode: 'challenge' };
+const speedChallengeGame = toEducationalGame(projectFor(arenaDraft, { config: speedToChallengeConfig }));
+assert.equal(speedChallengeGame.gameSetup?.scoringMode, TOKEN.challenge);
+assert.equal(speedChallengeGame.gameSetup?.legacyScoringMode, 'tốc độ', 'the exact mode the teacher left is what comes back');
+const speedBackConfig: ArenaConfig = { ...speedArenaConfig, answerMode: 'keep' };
+const speedBack = toEducationalGame({
+  ...speedProject,
+  gameSetup: speedChallengeGame.gameSetup,
+  config: speedBackConfig
+});
+assert.equal(speedBack.gameSetup?.scoringMode, 'tốc độ', 'switching back restores the speed law, not a silent "cơ bản"');
+assert.equal(speedBack.gameSetup?.timeBonus, speedGame.gameSetup?.timeBonus, 'and the bonus it pays');
+assert.equal(speedBack.gameSetup?.legacyScoringMode, undefined, 'a stash under a legacy value is dropped, not left as noise');
+
+// A legacy game never gains a token on its own, whichever mode it shipped with.
+for (const legacyMode of ['cơ bản', 'tốc độ', 'theo độ khó', 'thi đấu đội', 'luyện tập']) {
+  const legacyRoundTrip = toEducationalGame(fromEducationalGame({
+    ...quizGame,
+    gameSetup: { ...quizGame.gameSetup, scoringMode: legacyMode }
+  }));
+  assert.equal(legacyRoundTrip.gameSetup?.scoringMode, legacyMode, `${legacyMode} round-trips untouched`);
+  assert.equal(legacyRoundTrip.gameSetup?.legacyScoringMode, undefined, `${legacyMode} stores no stash`);
+}
+
+// --- Tình huống: only the reveal/lock law moves, the rubric select does not ----
+const scenarioChallengeConfig: ScenarioConfig = { ...(configFor(scenarioDraft) as ScenarioConfig), answerMode: 'challenge' };
+const scenarioChallengeGame = toEducationalGame(projectFor(scenarioDraft, { config: scenarioChallengeConfig }));
+assert.equal(scenarioChallengeGame.gameSetup?.scoringMode, TOKEN.challenge);
+assert.equal(scenarioChallengeGame.gameSetup?.legacyScoringMode, 'cơ bản');
+validateScenarioGame(scenarioChallengeGame);
+const scenarioProject = fromEducationalGame(scenarioChallengeGame);
+assert.equal(scenarioProject.config?.gameType === 'scenario' ? scenarioProject.config.answerMode : 'x', 'challenge');
+assert.equal(scenarioProject.config?.gameType === 'scenario' ? scenarioProject.config.scoringMode : 'x', 'quality', 'the score rubric select is untouched by the answer mode');
+const scenarioKeepGame = toEducationalGame(projectFor(scenarioDraft, { gameSetup: scenarioChallengeGame.gameSetup }));
+assert.equal(scenarioKeepGame.gameSetup?.scoringMode, 'cơ bản', '"keep" puts a scenario back on today\'s label');
+assert.equal(scenarioKeepGame.gameSetup?.legacyScoringMode, undefined);
+
+// --- Kho báu: no mode was ever stored, so "keep" means absent ----------------
+const treasureFreshGame = toEducationalGame(projectFor(treasureDraft));
+assert.equal(treasureFreshGame.gameSetup?.scoringMode, undefined, 'a treasure game with no pick stores no mode');
+assert.equal(fromEducationalGame(treasureFreshGame).config?.gameType === 'treasure' ? (fromEducationalGame(treasureFreshGame).config as TreasureConfig).answerMode : 'x', 'keep');
+const treasureCompetitiveConfig: TreasureConfig = { ...(configFor(treasureDraft) as TreasureConfig), answerMode: 'competitive' };
+const treasureCompetitiveGame = toEducationalGame(projectFor(treasureDraft, { config: treasureCompetitiveConfig }));
+assert.equal(treasureCompetitiveGame.gameSetup?.scoringMode, TOKEN.competitive);
+assert.equal(treasureCompetitiveGame.gameSetup?.legacyScoringMode, '', 'Kho báu had no mode to park, so it parks the empty string');
+assert.equal(Object.prototype.hasOwnProperty.call(treasureCompetitiveGame.gameSetup, 'legacyScoringMode'), true, 'the KEY is the marker that keeps "Giữ hành vi hiện tại" selectable');
+assert.equal(toEducationalGame({
+  ...fromEducationalGame(treasureCompetitiveGame),
+  gameSetup: treasureCompetitiveGame.gameSetup,
+  config: { ...treasureCompetitiveConfig, answerMode: 'keep' } as TreasureConfig
+}).gameSetup?.scoringMode, undefined, 'switching back erases the token: the old attempt rules read as before');
+
+// --- Đường đua: teams stay, the mode rides on the same key ------------------
+const racePracticeConfig: RaceConfig = { ...(configFor(raceDraft) as RaceConfig), answerMode: 'practice' };
+const racePracticeGame = toEducationalGame(projectFor(raceDraft, { config: racePracticeConfig }));
+assert.equal(racePracticeGame.gameSetup?.scoringMode, TOKEN.practice);
+assert.equal(racePracticeGame.gameSetup?.legacyScoringMode, 'thi đấu đội');
+assert.equal(racePracticeGame.gameSetup?.competition, 'đội', 'team play is not lost by the new key');
+assert.equal(racePracticeGame.gameSetup?.players, 'cá nhân', 'the "Số người chơi" select stays the team gate');
+validateRaceGame(racePracticeGame);
+const raceProject = fromEducationalGame(racePracticeGame);
+assert.equal(raceProject.config?.gameType === 'race' ? raceProject.config.answerMode : 'x', 'practice');
+assert.equal(toEducationalGame({
+  ...raceProject,
+  gameSetup: racePracticeGame.gameSetup,
+  config: { ...racePracticeConfig, answerMode: 'keep' } as RaceConfig
+}).gameSetup?.scoringMode, 'thi đấu đội');
+
+// --- Ghép cặp is out of scope: it keeps its own pairing penalty law ----------
+const matchingForcedGame = toEducationalGame(projectFor(matchingDraft, {
+  config: { ...configFor(matchingDraft), answerMode: 'practice' } as unknown as MatchingConfig
+}));
+assert.equal(matchingForcedGame.gameSetup?.scoringMode, 'cơ bản', 'a pick never lands on a matching game');
+assert.equal(matchingForcedGame.gameSetup?.legacyScoringMode, undefined);
+assert.deepEqual(matchingForcedGame.matchingGame, toEducationalGame(projectFor(matchingDraft)).matchingGame, 'the pairing law is byte-for-byte unchanged');
+const matchingProject = fromEducationalGame(matchingGameOld);
+assert.equal((matchingProject.config as { answerMode?: unknown }).answerMode, undefined, 'matching configs carry no answer mode');
+assert.equal(matchingProject.draft?.gameType === 'matching' ? (matchingProject.draft as { answerMode?: unknown }).answerMode : 'x', undefined);
+
+// A hand-edited or half-saved token without a stash must not crash the editor read.
+const bareTokenProject = fromEducationalGame({ ...arenaPracticeGame, gameSetup: { scoringMode: TOKEN.challenge } });
+assert.equal(bareTokenProject.config?.gameType === 'arena' ? bareTokenProject.config.answerMode : 'x', 'challenge');
+assert.equal(bareTokenProject.config?.gameType === 'arena' ? bareTokenProject.config.scoringMode : 'x', 'basic', 'no stash falls back to base points');
+
+// ---------------------------------------------------------------------------
 // .egame package compatibility (JSON must survive save/import unchanged)
 // ---------------------------------------------------------------------------
 
@@ -619,5 +740,16 @@ assert.equal(packageJson.packageFormat, 'edugame');
 assert.equal(packageJson.packageVersion, 1);
 assert.deepEqual(packageJson.game, packageGame, '.egame JSON round-trip must not change the adapted game');
 validateRaceGame(packageJson.game);
+
+// The mode a teacher picked must survive export/import as plain text: the token and the
+// mode it replaced both ride in `gameSetup`, which the package copies verbatim.
+const packagePractice = toEducationalGame(projectFor(raceDraft, { config: racePracticeConfig }));
+const packagePracticeJson = JSON.parse(JSON.stringify({ packageFormat: 'edugame', packageVersion: 1, game: packagePractice }));
+assert.deepEqual(packagePracticeJson.game, packagePractice, 'a token game survives the package round-trip unchanged');
+assert.equal(packagePracticeJson.game.gameSetup.scoringMode, TOKEN.practice, 'the pick survives .egame export');
+assert.equal(packagePracticeJson.game.gameSetup.legacyScoringMode, 'thi đấu đội', 'and so does the mode to go back to');
+validateRaceGame(packagePracticeJson.game);
+const importedPracticeProject = fromEducationalGame(packagePracticeJson.game);
+assert.equal(importedPracticeProject.config?.gameType === 'race' ? importedPracticeProject.config.answerMode : 'x', 'practice', 'an imported game reopens on the same pick');
 
 console.log('Game project adapter tests passed');

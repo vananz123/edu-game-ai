@@ -638,7 +638,7 @@ async function handleAction(action, id, element) { try {
 }
 function findGame(id) { return state.db.games.find(g => g.id === id); }
 function updateScoringVisibility() {
-  const mode = $('#setupScoringMode')?.value || 'tốc độ';
+  const mode = $('#setupScoringMode')?.value || ANSWER_MODE_COMPETITIVE;
   const timeBonusField = $('#timeBonusField');
   if (timeBonusField) timeBonusField.classList.toggle('hidden', mode !== 'tốc độ');
   ['pointsEasyField', 'pointsMediumField', 'pointsHardField'].forEach(id => {
@@ -650,7 +650,12 @@ function updateScoringVisibility() {
   const difficultyGrid = document.getElementById('pointsDifficultyGrid');
   if (difficultyGrid) difficultyGrid.classList.toggle('hidden', mode !== 'theo độ khó');
   const hint = $('#scoringModeHint');
-  if (hint) hint.textContent = scoringModeHint(mode);
+  // #209: this select now holds an answer mode OR a legacy scoring mode, and the
+  // hint has to describe the one actually picked — otherwise a teacher choosing
+  // "Thử thách" still reads about speed bonuses.
+  if (hint) hint.textContent = isAnswerModeValue(mode)
+    ? answerModeHint(answerModeKeyForValue(mode))
+    : scoringModeHint(mode);
 }
 function collectDraft() {
   const bonusRaw = Number($('#setupTimeBonus')?.value ?? state.draft?.gameSetup?.timeBonus ?? 20);
@@ -671,7 +676,10 @@ function collectDraft() {
     sourceName: state.importedDoc?.name || state.draft?.sourceName || '',
     contentSource: state.draft?.contentSource || ($('#sourceText') ? 'ai' : 'manual'),
     gameSetup: {
-      scoringMode: $('#setupScoringMode')?.value || state.draft?.gameSetup?.scoringMode || 'tốc độ',
+      // #209: one key carries the answer law. New games pick "Thi đấu" because it
+      // is today's behaviour; 'tốc độ' stays only as the legacy fallback inside
+      // resolveScoring for games that never had this select.
+      scoringMode: $('#setupScoringMode')?.value || state.draft?.gameSetup?.scoringMode || ANSWER_MODE_COMPETITIVE,
       difficulty: $('#setupDifficulty')?.value || state.draft?.gameSetup?.difficulty || 'trung bình',
       duration: $('#setupDuration')?.value || state.draft?.gameSetup?.duration || '10',
       pointsPerCorrect: $('#setupPoints')?.value || state.draft?.gameSetup?.pointsPerCorrect || '100',

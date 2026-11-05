@@ -310,6 +310,45 @@ function withEditorHouseStyle(game, root) {
   else delete setup.houseStyle;
   return { ...game, gameSetup: setup };
 }
+/* "Cách trả lời" (DECISIONS #209) writes into the SAME key the old scoring modes used:
+   picking a mode stores `scoringMode = 'tra-loi:…'` and parks the previous value in
+   `legacyScoringMode`, so choosing "Giữ hành vi hiện tại" gives it back exactly instead of
+   silently dropping the game to 'cơ bản'. Templates that don't answer questions (Ghép cặp)
+   never keep a token. */
+function editorAnswerMode(game) {
+  return answerModeKey(game && game.gameSetup);
+}
+function withEditorAnswerMode(game, root) {
+  const field = $('#editAnswerMode', root);
+  if (!field) return game;
+  const template = $('#editTemplate', root)?.value || game.template;
+  const value = String(field.value || '');
+  const setup = { ...(game.gameSetup || {}) };
+  if (answerModeSupportsTemplate(template) && isAnswerModeValue(value)) {
+    if (!isAnswerModeValue(setup.scoringMode)) setup.legacyScoringMode = String(setup.scoringMode || '');
+    setup.scoringMode = value;
+    return { ...game, gameSetup: setup };
+  }
+  if (!isAnswerModeValue(setup.scoringMode)) return game;
+  const previous = String(setup.legacyScoringMode || '');
+  if (previous) setup.scoringMode = previous;
+  else delete setup.scoringMode;
+  delete setup.legacyScoringMode;
+  return { ...game, gameSetup: setup };
+}
+/** "Giữ hành vi hiện tại" is only offered while there IS an old rule to go back to: a game
+   still on a legacy scoring mode, or one that parked its old value when the teacher switched.
+   The park is tested by KEY, not by value: Kho báu had no scoring mode at all, so its parked
+   value is the empty string, and a truthiness test would strand that game on the new mode. */
+function editorAnswerModeOptionMarkup(game) {
+  const key = editorAnswerMode(game);
+  const setup = (game && game.gameSetup) || {};
+  const includeLegacy = key === 'legacy' || Object.prototype.hasOwnProperty.call(setup, 'legacyScoringMode');
+  const currentValue = key === 'legacy' ? '' : ANSWER_MODE_VALUES[key];
+  return answerModeOptions(includeLegacy)
+    .map(option => `<option value="${option.value}" ${option.value === currentValue ? 'selected' : ''}>${escapeHtml(option.label)}</option>`)
+    .join('');
+}
 function editorOption(option, index, isScenario, question, allQuestions) {
   const nextValue = option.endsScenario === true || option.nextQuestionId === null
     ? '__end__'

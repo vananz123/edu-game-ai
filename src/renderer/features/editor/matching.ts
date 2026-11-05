@@ -151,6 +151,7 @@ function toggleEditorSections(root) {
   set('#raceEditor', t === 'race');
   set('#gameplayModeField', t === 'quiz');
   set('#houseStyleField', t === 'quiz');
+  set('#answerModeField', answerModeSupportsTemplate(t));
   const usesQuestions = t === 'quiz' || t === 'scenario';
   const sectionHead = $('#importQuestionsBtn', root)?.closest('.section-head');
   if (sectionHead) sectionHead.classList.toggle('hidden', !usesQuestions);

@@ -110,6 +110,18 @@ async function run(): Promise<void> {
   assert.equal(roundTrip.questions[0].correctOptionId, quiz.questions[0].correctOptionId);
   assert.equal(roundTrip.questions[0].explanation, quiz.questions[0].explanation);
 
+  // --- #209: the answer mode has to survive the file, not just the database ---
+  // `scoringMode` now carries either a Vietnamese scoring mode or a 'tra-loi:' token, plus
+  // the value the token replaced. `normalizeGame` copies gameSetup generically, so this is
+  // the check that proves it does not whitelist the old vocabulary and drop the new one.
+  const modeGame = {
+    ...JSON.parse(JSON.stringify(quiz)),
+    gameSetup: { scoringMode: 'tra-loi:luyen-tap', legacyScoringMode: 'tốc độ', pointsPerCorrect: '100' }
+  };
+  const modeRoundTrip = readGamePackage(pack(modeGame), newId);
+  assert.equal(modeRoundTrip.gameSetup?.scoringMode, 'tra-loi:luyen-tap', 'the token survives export/import');
+  assert.equal(modeRoundTrip.gameSetup?.legacyScoringMode, 'tốc độ', 'and so does the value it parked');
+
   console.log('Game package tests passed');
 }
 

@@ -20,19 +20,21 @@ function wizardDefaultConfig(recommendation, analysis) {
     generationMode: 'fast'
   };
   if (gameType === 'arena') {
-    return { ...base, questionCount: wizardClamp(suggestedCount, 1, 30), scoringMode: 'speed', pointsPerCorrect: 100, timeBonus: 20, pointsEasy: 100, pointsMedium: 200, pointsHard: 300 };
+    // #209: new games default to "Thi đấu" (one answer per question) and to 'basic' points, so a
+    // wizard game never receives the old 'speed' bonus nobody chose any more.
+    return { ...base, questionCount: wizardClamp(suggestedCount, 1, 30), scoringMode: 'basic', answerMode: 'competitive', pointsPerCorrect: 100, timeBonus: 20, pointsEasy: 100, pointsMedium: 200, pointsHard: 300 };
   }
   if (gameType === 'scenario') {
-    return { ...base, situationCount: wizardClamp(suggestedCount, 1, 30), scoringMode: 'quality' };
+    return { ...base, situationCount: wizardClamp(suggestedCount, 1, 30), scoringMode: 'quality', answerMode: 'competitive' };
   }
   if (gameType === 'matching') {
     return { ...base, pairCount: wizardClamp(suggestedCount, 2, 30), matchingMode: 'columns', wrongPenalty: 0 };
   }
   if (gameType === 'treasure') {
-    return { ...base, stageCount: wizardClamp(suggestedCount, 2, 30), attemptsPerStage: 3, journeyBonus: 300, hiddenItemBonus: 100 };
+    return { ...base, stageCount: wizardClamp(suggestedCount, 2, 30), attemptsPerStage: 3, journeyBonus: 300, hiddenItemBonus: 100, answerMode: 'competitive' };
   }
   if (gameType === 'race') {
-    return { ...base, trackLength: 20, maxRounds: wizardClamp(suggestedCount, 4, 7), teamCount: 2, stepByDifficulty: true, luckEnabled: true };
+    return { ...base, trackLength: 20, maxRounds: wizardClamp(suggestedCount, 4, 7), teamCount: 2, stepByDifficulty: true, luckEnabled: true, answerMode: 'competitive' };
   }
   return base;
 }
@@ -164,11 +166,11 @@ function wizardConfigForImportedQuestions(gameType) {
     focusObjectiveIds: [],
     generationMode: 'fast'
   };
-  if (gameType === 'arena') return { ...base, questionCount: count, scoringMode: 'basic', pointsPerCorrect: 100, timeBonus: 20, pointsEasy: 100, pointsMedium: 200, pointsHard: 300 };
+  if (gameType === 'arena') return { ...base, questionCount: count, scoringMode: 'basic', answerMode: 'competitive', pointsPerCorrect: 100, timeBonus: 20, pointsEasy: 100, pointsMedium: 200, pointsHard: 300 };
   if (gameType === 'matching') return { ...base, pairCount: wizardClamp(count, 2, 30), matchingMode: 'columns', wrongPenalty: 0 };
-  if (gameType === 'treasure') return { ...base, stageCount: wizardClamp(count, 2, 30), attemptsPerStage: 3, journeyBonus: 300, hiddenItemBonus: 100 };
-  if (gameType === 'race') return { ...base, trackLength: 20, maxRounds: wizardClamp(count, 4, 7), teamCount: 2, stepByDifficulty: true, luckEnabled: true };
-  return { ...base, situationCount: wizardClamp(count, 1, 30), scoringMode: 'quality' };
+  if (gameType === 'treasure') return { ...base, stageCount: wizardClamp(count, 2, 30), attemptsPerStage: 3, journeyBonus: 300, hiddenItemBonus: 100, answerMode: 'competitive' };
+  if (gameType === 'race') return { ...base, trackLength: 20, maxRounds: wizardClamp(count, 4, 7), teamCount: 2, stepByDifficulty: true, luckEnabled: true, answerMode: 'competitive' };
+  return { ...base, situationCount: wizardClamp(count, 1, 30), scoringMode: 'quality', answerMode: 'competitive' };
 }
 
 /** The game the scores point at, or `null` when no game can play one question. */
@@ -236,4 +238,4 @@ function wizardQuestionBankStats() {
     needsReview: parsed.filter(item => item.status === 'needs-review').length,
     incompatible: parsed.filter(item => item.status === 'incompatible').length
   };
-}
+}

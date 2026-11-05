@@ -227,6 +227,17 @@ export function buildDraftPrompt(input: {
       default: return '';
     }
   })();
+  /* #209: what the teacher picked for "Cách trả lời", in words the model can act on. `keep`
+     (or no pick) means the game still runs on its pre-#209 rules, so nothing extra is said. */
+  const ANSWER_MODE_PROMPT_LINES: Record<string, string> = {
+    competitive: 'Thi đấu — mỗi câu trả lời một lần, sai thì hiện đáp án đúng',
+    practice: 'Luyện tập — sai được thử lại, mỗi lần sai bớt 10% điểm của câu đó',
+    challenge: 'Thử thách — sai KHÔNG hiện đáp án; học sinh chỉ đọc giải thích khi bấm nút'
+  };
+  const answerPick = (config as { answerMode?: string }).answerMode;
+  const answerLine = !answerPick || answerPick === 'keep' || !ANSWER_MODE_PROMPT_LINES[answerPick]
+    ? ''
+    : `\n- Cách trả lời: ${ANSWER_MODE_PROMPT_LINES[answerPick]}. Mọi câu hỏi đều cần "explanation" ngắn đủ ý, vì học sinh xem giải thích qua nút “Giải thích”.`;
   const source = input.sourceExcerpt
     ? `Trích tài liệu:\n${input.sourceExcerpt}`
     : `Tóm tắt giáo án:\n${analysis.topic}`;
@@ -240,7 +251,7 @@ Thiết lập của giáo viên:
 - Môn: ${config.subject || analysis.subject || 'chưa xác định'} — Lớp: ${config.grade || (analysis.grade ? `Lớp ${analysis.grade}` : 'chưa xác định')}
 - Chủ đề: ${config.topic}
 - Độ khó: ${config.difficulty}; đối tượng: ${config.audience}; phong cách: ${config.style}
-- ${countLine}
+- ${countLine}${answerLine}
 - Ưu tiên các mục tiêu sau:
 ${focusObjectives || '- (không chỉ định; dùng toàn bộ mục tiêu)'}
 Khái niệm cần bám sát:

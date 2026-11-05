@@ -293,14 +293,26 @@ function wizardConfigCoreTypeFields(config) {
   }
 }
 
+/* "Cách trả lời" (DECISIONS #209) replaces the old "Tính điểm" pick on the four templates that
+   answer questions. `keep` = "Giữ hành vi hiện tại" and only appears for a project that really is
+   still running on a pre-#209 rule (opened from the library), because a brand-new game has nothing
+   to keep. The pick is stored as a 'tra-loi:' token in gameSetup.scoringMode by the adapter. */
+function wizardAnswerModeSelect(config) {
+  const current = config.answerMode || 'competitive';
+  const options = [
+    { value: 'competitive', label: 'Thi đấu — trả lời một lần, sai thì hiện đáp án đúng' },
+    { value: 'practice', label: 'Luyện tập — sai được thử lại, mỗi lần sai bớt 10% điểm của câu' },
+    { value: 'challenge', label: 'Thử thách — sai thì KHÔNG hiện đáp án, phải tự sang câu' }
+  ];
+  if (current === 'keep') options.unshift({ value: 'keep', label: 'Giữ hành vi hiện tại — theo cách chấm của trò này' });
+  return wizardConfigSelect('answerMode', 'Cách trả lời', current, options)
+    + `<p class="field-hint">${escapeHtml(answerModeHint(current === 'keep' ? 'legacy' : current))}</p>`;
+}
+
 function wizardConfigAdvancedTypeFields(config) {
   switch (config.gameType) {
     case 'arena':
-      return wizardConfigSelect('scoringMode', 'Tính điểm', config.scoringMode, [
-          { value: 'basic', label: 'Cơ bản' }, { value: 'speed', label: 'Tốc độ' },
-          { value: 'difficulty', label: 'Theo độ khó' }, { value: 'team', label: 'Thi đấu đội' },
-          { value: 'practice', label: 'Luyện tập' }
-        ])
+      return wizardAnswerModeSelect(config)
         + wizardConfigSelect('gameplayMode', 'Cách chơi', config.gameplayMode || 'classic', [
           { value: 'classic', label: 'Cổ điển' }, { value: 'house', label: 'Xây nhà 3D (theo số câu)' }
         ])
@@ -308,12 +320,12 @@ function wizardConfigAdvancedTypeFields(config) {
           { value: 'auto', label: 'Tự động theo trò chơi' },
           ...houseStyleOptions().map(option => ({ value: option.id, label: option.label }))
         ])
-        + wizardConfigNumber('pointsPerCorrect', 'Điểm / câu', config.pointsPerCorrect, 10, 1000, 10)
-        + wizardConfigNumber('timeBonus', 'Thưởng nhanh', config.timeBonus, 0, 50, 5);
+        + wizardConfigNumber('pointsPerCorrect', 'Điểm / câu', config.pointsPerCorrect, 10, 1000, 10);
     case 'scenario':
-      return wizardConfigSelect('scoringMode', 'Tính điểm', config.scoringMode, [
-        { value: 'quality', label: 'Theo chất lượng quyết định' }, { value: 'simple', label: 'Đơn giản' }
-      ]);
+      return wizardAnswerModeSelect(config)
+        + wizardConfigSelect('scoringMode', 'Tính điểm', config.scoringMode, [
+          { value: 'quality', label: 'Theo chất lượng quyết định' }, { value: 'simple', label: 'Đơn giản' }
+        ]);
     case 'matching':
       return wizardConfigSelect('matchingMode', 'Kiểu ghép', config.matchingMode, [
           { value: 'columns', label: 'Hai cột' }, { value: 'memory', label: 'Lật thẻ' },
@@ -323,11 +335,13 @@ function wizardConfigAdvancedTypeFields(config) {
         + wizardConfigNumber('wrongPenalty', 'Trừ điểm sai', config.wrongPenalty, 0, 1000, 10)
         + wizardConnectionFields(config);
     case 'treasure':
-      return wizardConfigNumber('attemptsPerStage', 'Lượt thử mỗi chặng', config.attemptsPerStage, 0, 99)
+      return wizardAnswerModeSelect(config)
+        + wizardConfigNumber('attemptsPerStage', 'Lượt thử mỗi chặng', config.attemptsPerStage, 0, 99)
         + wizardConfigNumber('journeyBonus', 'Thưởng hành trình', config.journeyBonus, 0, 10000, 50)
         + wizardConfigNumber('hiddenItemBonus', 'Thưởng vật phẩm ẩn', config.hiddenItemBonus, 0, 1000, 50);
     case 'race':
-      return wizardConfigNumber('trackLength', 'Độ dài đường đua', config.trackLength, 3, 100)
+      return wizardAnswerModeSelect(config)
+        + wizardConfigNumber('trackLength', 'Độ dài đường đua', config.trackLength, 3, 100)
         + wizardConfigNumber('teamCount', 'Số đội', config.teamCount, 2, 6)
         + wizardConfigToggle('stepByDifficulty', 'Bước tiến theo độ khó', config.stepByDifficulty)
         + wizardConfigToggle('luckEnabled', 'Bật ô may mắn', config.luckEnabled);
