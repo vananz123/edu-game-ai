@@ -181,7 +181,13 @@ function buildTreasureView() {
     const stage = play.stageId ? treasureStageById(play.stageId) : null;
     const missionType = stage ? treasureMissionTypeOf(stage) : '';
     const result = (play.results || []).find(entry => entry.stageId === play.stageId);
-    const revealed = Boolean(result) || Boolean(play.answered);
+    /* Màn chiếu đi đường RIÊNG (bài học #209 task 4, áp lại cho Kho báu): chỉ cần chặng
+       có dòng điểm là bản cũ sơn đáp án và in lời giải, nên một lớp chọn Thử thách sẽ bị
+       lộ đáp án ngay trước cả lớp. Một chặng chưa khép (Luyện tập đang thử lại) thì chưa
+       có dòng điểm nào, nên máy chiếu còn nguyên câu hỏi chưa trả lời. */
+    const settled = Boolean(result) || Boolean(play.answered);
+    const turn = play.answerTurn;
+    const revealed = settled && (!turn || turn.revealCorrect);
     return {
         kind: 'treasure',
         character: String(hunt.character || ''),
@@ -197,7 +203,7 @@ function buildTreasureView() {
         selectedOptionId: play.lastSelectedOptionId || null,
         correctOptionId: revealed ? stage?.question?.correctOptionId : undefined,
         revealed,
-        explanation: revealed ? String(stage?.question?.explanation || '') : '',
+        explanation: settled && (!turn || turn.explanationAvailable) ? String(stage?.question?.explanation || '') : '',
         earned: Number(play.earned) || 0,
         itemsFound: Object.keys(play.itemsFound || {}).length,
         totalStages: (hunt.stages || []).length,

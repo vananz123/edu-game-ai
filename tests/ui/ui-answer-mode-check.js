@@ -16,6 +16,9 @@
 //  5. (task 4) MÀN CHƠI THẬT HÀNH ĐỘNG theo vòng trả lời: mục I bấm nút thật trên trang
 //     chơi và đo DOM — lưới có tắt không, đáp án có hiện không, điểm nào xuống bảng,
 //     máy chiếu có giữ kín như màn chính không, và rubric Tình huống còn nguyên không.
+//  6. (task 5) mục J làm đúng việc đó cho KHO BÁU: bốn loại tương tác thật của chặng
+//     (trắc nghiệm, ghép cặp, phân loại, giải mã) nhân ba chế độ CỘNG một game cũ, đo cả
+//     ngân sách lượt của chặng, điểm thực nhận sau phạt, và ba khoản thưởng không bị phạt.
 //
 // Hai cơ chế của TRANG THẬT quyết định cấu trúc bài này:
 //  • `saveEditedGame` đóng trang soạn thảo khi lưu thành công (editorPageState = null +
@@ -40,8 +43,16 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
   const ctx = await connect();
   const { evaluate } = ctx;
 
-  const report = await evaluate(`(async () => {
+  const PAGE = `(async () => {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
+    // Đóng màn chơi đang mở. Hai mục chơi thật (I và J) đều cần, và mỗi mục phải tự
+    // đóng trước khi mở bản kế tiếp — playGame đè state.currentGame chứ không dọn.
+    const closePlay = async () => {
+      const closer = document.querySelector('[data-play-close]');
+      if (closer) closer.click();
+      await sleep(220);
+      document.getElementById('modalRoot').innerHTML = '';
+    };
     const TOKEN_PRACTICE = 'tra-loi:luyen-tap';
     const TOKEN_CHALLENGE = 'tra-loi:thu-thach';
     const out = { editor: {}, saved: {}, create: {}, playSeq: 0 };
@@ -425,6 +436,212 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
         }
       }
 
+      /* ---- J. KHO BÁU chơi thật (nhiệm vụ 5) ----------------------------------
+         Bốn thứ chỉ nhìn thấy ở đây, không thấy ở unit test:
+          • thẻ ghép / mục phân loại có bị sơn "đúng" khi Thử thách đòi giữ kín không;
+          • ô Giải mã có IN đáp án đúng ra bảng khi chế độ không mở đáp án hay không;
+          • dòng điểm xuống bảng là số THỰC NHẬN (sau phạt) hay số trong dữ liệu chặng;
+          • thưởng hoàn thành chặng và vật phẩm ẩn có bị Luyện tập trừ oan hay không.
+         Một chặng = MỘT dòng: rows/dupes đo trực tiếp trên state.treasurePlay.results,
+         tức đúng mảng mà bản đồ hành trình và màn kết quả đọc. */
+      try {
+        const TOKEN_COMPETITIVE = 'tra-loi:thi-dau';
+        const stage = (index, overrides) => Object.assign({
+          id: 't' + index, name: 'Chặng ' + index,
+          story: 'Chuyện tổng hợp.', taskDescription: 'Nhiệm vụ tổng hợp.',
+          question: {
+            prompt: 'Một cộng một bằng mấy?',
+            options: [{ id: 'a', text: 'Hai' }, { id: 'b', text: 'Ba' }],
+            correctOptionId: 'a', explanation: 'Bằng hai.', hint: 'Đếm trên ngón tay.'
+          },
+          attempts: 2, points: 100, completionBonus: 50, hasHiddenItem: false
+        }, overrides || {});
+        const treasureGame = (key, mode, stages) => ({
+          id: 'am-treasure-base', title: title(key), subject: 'Tự nhiên', grade: '3',
+          template: 'treasure-hunt', description: '', tags: [], sourceName: 'ui-check',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          gameSetup: mode === null ? {} : { scoringMode: mode },
+          questions: [],
+          treasureHunt: {
+            character: 'Nhà thám hiểm An', intro: 'Hành trình tổng hợp.',
+            journeyBonus: 100, hiddenItemBonus: 20, backgroundId: 'temple',
+            characterId: 'explorer', stages
+          }
+        });
+        // KHÔNG được viết dấu CHÉO nào trong khối này: nó đi qua một template literal của
+        // Node nên escape bị nấu mất trước khi tới trang, và một lớp khoảng trắng thành
+        // chữ 's' — helper dưới sẽ ăn chữ 's' của mọi chuỗi đọc từ DOM. Dựng lớp khoảng
+        // trắng bằng mã ký tự nên nó đứng nguyên sau khi nấu.
+        const wsRun = new RegExp('[' + String.fromCharCode(9, 10, 11, 12, 13, 32, 160) + ']+', 'g');
+        const text = el => el ? String(el.textContent).replace(wsRun, ' ').trim() : '';
+        const tsnap = () => {
+          const tp = state.treasurePlay;
+          const turn = tp ? tp.answerTurn : null;
+          const rows = tp && tp.results ? tp.results : [];
+          const options = Array.prototype.slice.call(document.querySelectorAll('.answer-option'));
+          const left = Array.prototype.slice.call(document.querySelectorAll('[data-match-left]'));
+          const right = Array.prototype.slice.call(document.querySelectorAll('[data-match-right]'));
+          const items = Array.prototype.slice.call(document.querySelectorAll('[data-class-item]'));
+          const input = document.querySelector('#treasureDecodeInput');
+          return {
+            mode: turn ? turn.mode : null,
+            retry: turn ? turn.retryAllowed : null,
+            reveal: turn ? Boolean(turn.revealCorrect) : null,
+            explain: turn ? Boolean(turn.explanationAvailable) : null,
+            stageId: tp ? tp.stageId : null,
+            answered: tp ? Boolean(tp.answered) : null,
+            earned: tp ? Number(tp.earned) : null,
+            tries: tp ? Number(tp.attemptsLeft) : null,
+            rows: rows.length,
+            lastPts: rows.length ? Number(rows[rows.length - 1].points) : null,
+            lastCorrect: rows.length ? Boolean(rows[rows.length - 1].correct) : null,
+            dupes: rows.length - new Set(rows.map(row => String(row.stageId))).size,
+            optClick: options.filter(b => !b.disabled).length,
+            optMarked: options.filter(b => b.classList.contains('wrong')).map(b => b.dataset.answer),
+            optRevealed: options.filter(b => b.classList.contains('correct')).map(b => b.dataset.answer),
+            matchDone: left.filter(b => b.classList.contains('matched')).length,
+            matchShown: left.filter(b => b.classList.contains('revealed')).length,
+            matchClick: left.concat(right).filter(b => !b.disabled).length,
+            classPlaced: items.filter(b => b.classList.contains('placed')).length,
+            classShown: items.filter(b => b.classList.contains('revealed')).length,
+            classClick: items.filter(b => !b.disabled).length,
+            decodeOpen: input ? !input.disabled : null,
+            strip: text(document.querySelector('#treasureAttemptsHint')),
+            status: text(document.querySelector('#missionStatus')),
+            feedback: text(document.querySelector('#answerFeedback')),
+            /* Máy chiếu đọc buildTreasureView() — nguồn dữ liệu của cửa sổ trình chiếu.
+               Một màn chiếu vẽ đáp án khi Thử thách đòi giữ kín thì cả lớp thấy đáp án,
+               nên đo thẳng cái màn chiếu SẼ hiện chứ không suy từ DOM màn chính. */
+            projection: typeof buildTreasureView === 'function' ? (function () {
+              const view = buildTreasureView();
+              return view ? {
+                revealed: view.revealed,
+                right: view.correctOptionId === undefined ? 'none' : view.correctOptionId,
+                why: String(view.explanation || ''),
+                missionType: view.missionType,
+                earned: view.earned
+              } : null;
+            })() : 'no buildTreasureView'
+          };
+        };
+        const playTreasure = async game => {
+          await closePlay();
+          const copy = JSON.parse(JSON.stringify(game));
+          copy.id = 'am-' + RUN + '-play-' + (++out.playSeq);
+          playGame(copy);
+          await sleep(700);
+          return tsnap();
+        };
+        const wait = async ms => { await sleep(ms); return tsnap(); };
+        const tap = async selector => {
+          const btn = document.querySelector(selector);
+          if (!btn) return { error: 'no element ' + selector };
+          btn.click();
+          return wait(280);
+        };
+        const pick = optionId => tap('.answer-option[data-answer="' + optionId + '"]');
+        const pair = async (leftId, rightId) => {
+          await tap('[data-match-left="' + leftId + '"]');
+          return tap('[data-match-right="' + rightId + '"]');
+        };
+        const place = async (itemId, groupId) => {
+          await tap('[data-class-item="' + itemId + '"]');
+          return tap('[data-class-group="' + groupId + '"]');
+        };
+        const decode = async value => {
+          const input = document.querySelector('#treasureDecodeInput');
+          if (!input) return { error: 'no decode input' };
+          input.value = value;
+          return tap('#treasureDecodeSubmit');
+        };
+        const mc = (key, mode, overrides) => treasureGame(key, mode, [stage(1, overrides)]);
+        out.treasure = {};
+
+        // 1. KHO BÁU GAME CŨ (không token): thử tới hết attempts, cạn lượt thì MỞ đáp án.
+        out.treasure.legacyOpen = await playTreasure(mc('legacy-open', null, { hasHiddenItem: true }));
+        out.treasure.legacyMiss = await pick('b');
+        out.treasure.legacyOut = await pick('b');
+        // 2. attempts = 1: ngân sách MỘT lượt thì game cũ vẫn một lượt như Đấu trường.
+        await playTreasure(mc('legacy-one', null, { attempts: 1 }));
+        out.treasure.legacyOneTry = await pick('b');
+        // 3. CÚ NHẤP ĐÚP sau khi chặng đã khép: không thêm dòng, không thêm điểm.
+        out.treasure.legacyDouble = await pick('b');
+        // 4. Thi đấu: chặng đặt 3 lượt nhưng chế độ chỉ cho MỘT lượt, và vẫn mở đáp án.
+        await playTreasure(mc('competitive', TOKEN_COMPETITIVE, { attempts: 3 }));
+        out.treasure.competitiveMiss = await pick('b');
+        // 5. Luyện tập: sai không lộ, được thử lại, số điểm còn lại nói trước ĐÚNG số thực nhận.
+        await playTreasure(mc('practice', TOKEN_PRACTICE, { attempts: 2, hasHiddenItem: true }));
+        out.treasure.practiceOpen = await tsnap();
+        out.treasure.practiceMiss = await pick('b');
+        out.treasure.practiceHit = await pick('a');
+        // 5b. vật phẩm ẩn KHÔNG nằm trong cơ số phạt: +20 đi nguyên vào tổng.
+        out.treasure.practiceItem = await tap('#findItemBtn');
+        // 5c. chặng 0 ĐIỂM NỘI DUNG: cơ số 0 hợp lệ nên thưởng không bị trừ gì.
+        await playTreasure(mc('practice-zero', TOKEN_PRACTICE, { attempts: 2, points: 0 }));
+        out.treasure.zeroMiss = await pick('b');
+        out.treasure.zeroHit = await pick('a');
+        // 6. Thử thách: MỘT lượt, sai thì giữ kín cả đáp án lẫn lời giải.
+        await playTreasure(mc('challenge', TOKEN_CHALLENGE, { attempts: 3 }));
+        out.treasure.challengeMiss = await pick('b');
+        await playTreasure(mc('challenge-right', TOKEN_CHALLENGE, { attempts: 3 }));
+        out.treasure.challengeHit = await pick('a');
+
+        // 7. NHIỆM VỤ GHÉP CẶP đi qua cùng một máy.
+        const MATCH = overrides => stage(1, Object.assign({
+          mission: {
+            type: 'matching', pairs: [
+              { id: 'p1', left: 'Mặt Trời', right: 'Ban ngày' },
+              { id: 'p2', left: 'Mặt Trăng', right: 'Ban đêm' }
+            ]
+          }
+        }, overrides || {}));
+        await playTreasure(treasureGame('match-practice', TOKEN_PRACTICE, [MATCH({ attempts: 3 })]));
+        out.treasure.matchPracticeMiss = await pair('p1', 'p2');
+        await pair('p1', 'p1');
+        out.treasure.matchPracticeHit = await pair('p2', 'p2');
+        await playTreasure(treasureGame('match-challenge', TOKEN_CHALLENGE, [MATCH({ attempts: 3 })]));
+        out.treasure.matchChallengeMiss = await pair('p1', 'p2');
+        await playTreasure(treasureGame('match-legacy', null, [MATCH({ attempts: 1 })]));
+        out.treasure.matchLegacyOut = await pair('p1', 'p2');
+
+        // 8. NHIỆM VỤ PHÂN LOẠI.
+        const CLASS = overrides => stage(1, Object.assign({
+          mission: {
+            type: 'classification',
+            groups: [{ id: 'g1', name: 'Biết bơi' }, { id: 'g2', name: 'Biết bay' }],
+            items: [{ id: 'i1', text: 'Cá', groupId: 'g1' }, { id: 'i2', text: 'Gà', groupId: 'g2' }]
+          }
+        }, overrides || {}));
+        await playTreasure(treasureGame('class-legacy', null, [CLASS({ attempts: 1 })]));
+        out.treasure.classLegacyOut = await place('i1', 'g2');
+        await playTreasure(treasureGame('class-practice', TOKEN_PRACTICE, [CLASS({ attempts: 2 })]));
+        out.treasure.classPracticeMiss = await place('i1', 'g2');
+        await place('i1', 'g1');
+        out.treasure.classPracticeHit = await place('i2', 'g2');
+        await playTreasure(treasureGame('class-challenge', TOKEN_CHALLENGE, [CLASS({ attempts: 2 })]));
+        out.treasure.classChallengeMiss = await place('i1', 'g2');
+
+        // 9. NHIỆM VỤ GIẢI MÃ: ô trả lời bằng text, dễ lộ đáp án nhất.
+        const DECODE = overrides => stage(1, Object.assign({
+          mission: { type: 'decode', cipher: 'BEN DEN', answer: 'Den Bien' }
+        }, overrides || {}));
+        await playTreasure(treasureGame('decode-legacy', null, [DECODE({ attempts: 2 })]));
+        out.treasure.decodeLegacyMiss = await decode('abc');
+        out.treasure.decodeLegacyHit = await decode('Den Bien');
+        await playTreasure(treasureGame('decode-challenge', TOKEN_CHALLENGE, [DECODE({ attempts: 2 })]));
+        out.treasure.decodeChallengeMiss = await decode('abc');
+        await playTreasure(treasureGame('decode-competitive', TOKEN_COMPETITIVE, [DECODE({ attempts: 3 })]));
+        out.treasure.decodeCompetitiveMiss = await decode('abc');
+        await closePlay();
+      } catch (error) {
+        out.treasure = { error: String(error && error.message || error) };
+        try {
+          await closePlay();
+        } catch (ignored) {
+          out.treasure.cleanupFailed = true;
+        }
+      }
+
       document.getElementById('modalRoot').innerHTML = '';
       if (typeof closeEditorPage === 'function') closeEditorPage();
 
@@ -447,8 +664,16 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
       out.fatalStack = String(error && error.stack || '').slice(0, 400);
     }
     return out;
-  })()`);
+  })()`;
 
+  // Chốt thêm: payload là một template literal, nên MỌI dấu CHÉO trong nó bị nấu mất trước
+  // tới trang ("\s" chỉ còn "s"). Hậu quả thật đã xảy ra ở task 5: helper gấp khoảng trắng
+  // ăn chữ 's' của mọi chuỗi đọc từ DOM, và một check đỏ mà không nói vì sao.
+  const BS = String.fromCharCode(92);
+  check('the in-page payload ships without a single backslash', PAGE.indexOf(BS) === -1,
+    PAGE.split(BS).length - 1 + ' escape(s) cooked away before the page saw them');
+
+  const report = await evaluate(PAGE);
   const MODE_TOKENS = ['tra-loi:thi-dau', 'tra-loi:luyen-tap', 'tra-loi:thu-thach'];
   const isToken = value => typeof value === 'string' && value.indexOf('tra-loi:') === 0;
   // Một bản ghi lưu gồm cả object game; chỉ in phần chữ ký để log đọc được.
@@ -669,6 +894,176 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
     play.scenarioAdvance?.index === 1 && play.scenarioAdvance?.rows === 1
     && play.scenarioAdvance?.dupes === 0 && play.scenarioAdvance?.steps === 1
     && play.scenarioBefore?.nextLabel === 'Tình huống tiếp theo →', view(play.scenarioAdvance));
+
+  /* J. KHO BÁU. Một chặng đi qua máy trạng thái trả lời thì DOM của màn chặng phải
+     đổi theo, không chỉ con số trong Node. tview in đúng những gì một lần đỏ cần nói:
+     luật nào đang chạy, bao nhiêu dòng điểm, bao nhiêu điểm, và bàn/ ô trả lời còn
+     bấm được hay đã sơn gì. */
+  const treasure = report.treasure || {};
+  const tview = s => !s ? String(s) : s.error ? JSON.stringify(s) : JSON.stringify({
+    mode: s.mode, rows: s.rows, pts: s.earned, lastPts: s.lastPts, dupes: s.dupes,
+    retry: s.retry, reveal: s.reveal, why: s.explain, tries: s.tries,
+    opt: s.optClick, shown: s.optRevealed, marked: s.optMarked,
+    done: s.matchDone, shown2: s.matchShown, click2: s.matchClick,
+    placed: s.classPlaced, shown3: s.classShown, open: s.decodeOpen
+  });
+  const saidT = s => String(s && s.feedback || '').slice(0, 190);
+  const hasT = (s, text) => String(s && s.feedback || '').indexOf(text) !== -1;
+
+  check('the treasure play probes ran to completion', Boolean(treasure.decodeCompetitiveMiss) && !treasure.error,
+    String(treasure.error || 'ok'));
+
+  // 1+2+3. GAME CŨ: còn nguyên "thử tới hết lượt, cạn lượt thì mở đáp án", và một
+  //        cú nhấp thừa không tạo thêm dòng điểm nào.
+  check('a legacy stage opens with its own attempt budget and the old promise',
+    treasure.legacyOpen?.mode === 'legacy' && treasure.legacyOpen?.rows === 0
+    && treasure.legacyOpen?.tries === 2 && treasure.legacyOpen?.retry === true
+    && treasure.legacyOpen?.strip.indexOf('Còn 2 lượt thử') === 0
+    && treasure.legacyOpen?.strip.indexOf('sai không bị trừ điểm') !== -1,
+    tview(treasure.legacyOpen) + ' | ' + treasure.legacyOpen?.strip);
+  check('a legacy miss spends one try, writes no row and reveals nothing yet',
+    treasure.legacyMiss?.rows === 0 && treasure.legacyMiss?.tries === 1
+    && treasure.legacyMiss?.retry === true && JSON.stringify(treasure.legacyMiss?.optRevealed) === '[]'
+    && treasure.legacyMiss?.optClick === 2 && hasT(treasure.legacyMiss, 'Còn 1 lượt thử'),
+    tview(treasure.legacyMiss) + ' | ' + saidT(treasure.legacyMiss));
+  check('running out of the old budget closes the stage AND shows the key, like today',
+    treasure.legacyOut?.rows === 1 && treasure.legacyOut?.lastPts === 0
+    && treasure.legacyOut?.reveal === true && treasure.legacyOut?.explain === true
+    && JSON.stringify(treasure.legacyOut?.optRevealed) === JSON.stringify(['a'])
+    && JSON.stringify(treasure.legacyOut?.optMarked) === JSON.stringify(['b'])
+    && treasure.legacyOut?.optClick === 0 && hasT(treasure.legacyOut, 'Hết lượt thử'),
+    tview(treasure.legacyOut) + ' | ' + saidT(treasure.legacyOut));
+  check('one click too many on a closed stage adds neither a row nor a point',
+    treasure.legacyDouble?.rows === 1 && treasure.legacyDouble?.dupes === 0
+    && treasure.legacyDouble?.earned === 0, tview(treasure.legacyDouble));
+  check('a legacy stage with attempts 1 still gets exactly one try',
+    treasure.legacyOneTry?.rows === 1 && treasure.legacyOneTry?.reveal === true
+    && JSON.stringify(treasure.legacyOneTry?.optRevealed) === JSON.stringify(['a'])
+    && treasure.legacyOneTry?.strip.indexOf('Hết lượt thử') === 0,
+    tview(treasure.legacyOneTry) + ' | ' + treasure.legacyOneTry?.strip);
+
+  // 4. Thi đấu: ngân sách 3 lượt của chặng KHÔNG được mở rộng thành 3 lần trả lời.
+  check('Thi đấu keeps its single answer even when the stage data allows 3 tries',
+    treasure.competitiveMiss?.mode === 'competitive' && treasure.competitiveMiss?.rows === 1
+    && treasure.competitiveMiss?.retry === false && treasure.competitiveMiss?.earned === 0
+    && treasure.competitiveMiss?.optClick === 0
+    && JSON.stringify(treasure.competitiveMiss?.optRevealed) === JSON.stringify(['a']),
+    tview(treasure.competitiveMiss));
+  check('the stage strip of a token game states the answer law, not the old promise',
+    treasure.competitiveMiss?.strip.indexOf('Trả lời một lần') === 0
+    && treasure.competitiveMiss?.strip.indexOf('sai không bị trừ điểm') === -1,
+    String(treasure.competitiveMiss?.strip));
+
+  // 5. Luyện tập: phạt trên ĐIỂM NỘI DUNG, thưởng đi nguyên, và một chặng vẫn một dòng.
+  check('Luyện tập opens with the practice law and the stage budget',
+    treasure.practiceOpen?.mode === 'practice' && treasure.practiceOpen?.retry === true
+    && treasure.practiceOpen?.strip.indexOf('Sai được thử lại') === 0
+    && treasure.practiceOpen?.strip.indexOf('còn 2 lượt thử') !== -1,
+    tview(treasure.practiceOpen) + ' | ' + treasure.practiceOpen?.strip);
+  check('a miss in Luyện tập writes no row, reveals no option and names the score left',
+    treasure.practiceMiss?.rows === 0 && treasure.practiceMiss?.optClick === 2
+    && JSON.stringify(treasure.practiceMiss?.optRevealed) === '[]'
+    && treasure.practiceMiss?.explain === false && hasT(treasure.practiceMiss, 'còn 140 điểm'),
+    tview(treasure.practiceMiss) + ' | ' + saidT(treasure.practiceMiss));
+  check('the answer after the miss pays 140: 150 minus 10% of the CONTENT points only',
+    treasure.practiceHit?.rows === 1 && treasure.practiceHit?.dupes === 0
+    && treasure.practiceHit?.lastPts === 140 && treasure.practiceHit?.earned === 140
+    && treasure.practiceHit?.reveal === true && treasure.practiceHit?.explain === true
+    && hasT(treasure.practiceHit, 'bị bớt 10') && hasT(treasure.practiceHit, 'thưởng hoàn thành +50 giữ nguyên'),
+    tview(treasure.practiceHit) + ' | ' + saidT(treasure.practiceHit));
+  check('the hidden item bonus is added whole, never taxed by the practice penalty',
+    treasure.practiceItem?.earned === 160 && treasure.practiceItem?.lastPts === 140,
+    tview(treasure.practiceItem));
+
+  // 5c. 0 điểm nội dung là một cơ số HỢP LỆ: không có gì để phạt.
+  check('a stage with 0 content points keeps its completion bonus untouched',
+    treasure.zeroHit?.rows === 1 && treasure.zeroHit?.lastPts === 50
+    && treasure.zeroMiss?.rows === 0 && hasT(treasure.zeroMiss, 'còn 50 điểm')
+    && !hasT(treasure.zeroHit, 'bị bớt'), tview(treasure.zeroHit) + ' | ' + saidT(treasure.zeroHit));
+
+  // 6. Thử thách: sai thì giữ kín trên CẢ hai màn.
+  check('Thử thách closes the stage on one miss and paints nothing',
+    treasure.challengeMiss?.mode === 'challenge' && treasure.challengeMiss?.rows === 1
+    && treasure.challengeMiss?.earned === 0 && treasure.challengeMiss?.reveal === false
+    && treasure.challengeMiss?.explain === false
+    && JSON.stringify(treasure.challengeMiss?.optRevealed) === '[]'
+    && JSON.stringify(treasure.challengeMiss?.optMarked) === JSON.stringify(['b'])
+    && treasure.challengeMiss?.optClick === 0 && hasT(treasure.challengeMiss, 'không mở đáp án'),
+    tview(treasure.challengeMiss) + ' | ' + saidT(treasure.challengeMiss));
+  check('the projector is as blind as the main screen in Kho báu Thử thách',
+    treasure.challengeMiss?.projection?.revealed === false
+    && treasure.challengeMiss?.projection?.right === 'none'
+    && treasure.challengeMiss?.projection?.why === '', JSON.stringify(treasure.challengeMiss?.projection));
+  check('a correct Thử thách answer pays the full content plus bonus and earns the explanation',
+    treasure.challengeHit?.rows === 1 && treasure.challengeHit?.lastPts === 150
+    && treasure.challengeHit?.reveal === true && treasure.challengeHit?.explain === true
+    && hasT(treasure.challengeHit, 'Bằng hai') && treasure.challengeHit?.projection?.why === 'Bằng hai.',
+    tview(treasure.challengeHit) + ' | ' + saidT(treasure.challengeHit));
+
+  // 7. GHÉP CẶP: cùng một luật, trên bàn ghép thật.
+  check('a wrong pair in Luyện tập costs a try, not the stage',
+    treasure.matchPracticeMiss?.rows === 0 && treasure.matchPracticeMiss?.retry === true
+    && treasure.matchPracticeMiss?.matchDone === 0 && treasure.matchPracticeMiss?.matchShown === 0
+    && treasure.matchPracticeMiss?.matchClick === 4 && hasT(treasure.matchPracticeMiss, 'còn 140 điểm'),
+    tview(treasure.matchPracticeMiss) + ' | ' + saidT(treasure.matchPracticeMiss));
+  check('finishing the board after a miss pays 140 and closes the stage once',
+    treasure.matchPracticeHit?.rows === 1 && treasure.matchPracticeHit?.dupes === 0
+    && treasure.matchPracticeHit?.lastPts === 140 && treasure.matchPracticeHit?.matchDone === 2
+    && treasure.matchPracticeHit?.matchClick === 0, tview(treasure.matchPracticeHit));
+  check('Thử thách never paints a pair as matched when it must stay silent',
+    treasure.matchChallengeMiss?.rows === 1 && treasure.matchChallengeMiss?.lastPts === 0
+    && treasure.matchChallengeMiss?.matchShown === 0 && treasure.matchChallengeMiss?.matchDone === 0
+    && treasure.matchChallengeMiss?.matchClick === 0
+    && treasure.matchChallengeMiss?.status === 'Chặng đã khép — đáp án không được mở.'
+    && treasure.matchChallengeMiss?.projection?.revealed === false,
+    tview(treasure.matchChallengeMiss) + ' | ' + treasure.matchChallengeMiss?.status);
+  check('a legacy board out of tries still opens every pair, as it does today',
+    treasure.matchLegacyOut?.rows === 1 && treasure.matchLegacyOut?.reveal === true
+    && treasure.matchLegacyOut?.matchShown === 2 && treasure.matchLegacyOut?.matchDone === 2
+    && treasure.matchLegacyOut?.status === 'Đáp án đúng đã được mở.',
+    tview(treasure.matchLegacyOut) + ' | ' + treasure.matchLegacyOut?.status);
+
+  // 8. PHÂN LOẠI.
+  check('a legacy classification opens the whole board when the tries run out',
+    treasure.classLegacyOut?.rows === 1 && treasure.classLegacyOut?.lastPts === 0
+    && treasure.classLegacyOut?.classShown === 2 && treasure.classLegacyOut?.classPlaced === 2
+    && treasure.classLegacyOut?.classClick === 0
+    && treasure.classLegacyOut?.status === 'Đáp án đúng đã được mở.',
+    tview(treasure.classLegacyOut) + ' | ' + treasure.classLegacyOut?.status);
+  check('a wrong group in Luyện tập keeps the board playable and names the score left',
+    treasure.classPracticeMiss?.rows === 0 && treasure.classPracticeMiss?.retry === true
+    && treasure.classPracticeMiss?.classPlaced === 0 && hasT(treasure.classPracticeMiss, 'còn 140 điểm'),
+    tview(treasure.classPracticeMiss) + ' | ' + saidT(treasure.classPracticeMiss));
+  check('sorting the rest after a miss pays 140 in one row',
+    treasure.classPracticeHit?.rows === 1 && treasure.classPracticeHit?.dupes === 0
+    && treasure.classPracticeHit?.lastPts === 140 && treasure.classPracticeHit?.classPlaced === 2
+    && treasure.classPracticeHit?.classShown === 0, tview(treasure.classPracticeHit));
+  check('Thử thách leaves unsorted items unplaced instead of moving them to the right group',
+    treasure.classChallengeMiss?.rows === 1 && treasure.classChallengeMiss?.classShown === 0
+    && treasure.classChallengeMiss?.classPlaced === 0
+    && treasure.classChallengeMiss?.status === 'Chặng đã khép — đáp án không được mở.',
+    tview(treasure.classChallengeMiss) + ' | ' + treasure.classChallengeMiss?.status);
+
+  // 9. GIẢI MÃ: ô text là nơi dễ lộ đáp án nhất, nên phải đo chuỗi IN RA.
+  check('a legacy decode keeps its retry budget and prints nothing on a miss',
+    treasure.decodeLegacyMiss?.rows === 0 && treasure.decodeLegacyMiss?.retry === true
+    && treasure.decodeLegacyMiss?.decodeOpen === true && hasT(treasure.decodeLegacyMiss, 'Còn 1 lượt thử'),
+    tview(treasure.decodeLegacyMiss) + ' | ' + saidT(treasure.decodeLegacyMiss));
+  check('the right decoded word pays content plus bonus in full for a legacy game',
+    treasure.decodeLegacyHit?.rows === 1 && treasure.decodeLegacyHit?.lastPts === 150
+    && treasure.decodeLegacyHit?.decodeOpen === false
+    && hasT(treasure.decodeLegacyHit, 'Đã giải mã chính xác'),
+    tview(treasure.decodeLegacyHit) + ' | ' + saidT(treasure.decodeLegacyHit));
+  check('Thử thách never prints the plain answer into the decode feedback',
+    treasure.decodeChallengeMiss?.rows === 1 && treasure.decodeChallengeMiss?.lastPts === 0
+    && treasure.decodeChallengeMiss?.decodeOpen === false
+    && !hasT(treasure.decodeChallengeMiss, 'Den Bien')
+    && treasure.decodeChallengeMiss?.status === 'Chặng đã khép — đáp án không được mở.',
+    tview(treasure.decodeChallengeMiss) + ' | ' + saidT(treasure.decodeChallengeMiss));
+  check('Thi đấu does print the answer it just locked',
+    treasure.decodeCompetitiveMiss?.rows === 1 && treasure.decodeCompetitiveMiss?.reveal === true
+    && hasT(treasure.decodeCompetitiveMiss, 'Den Bien'),
+    tview(treasure.decodeCompetitiveMiss) + ' | ' + saidT(treasure.decodeCompetitiveMiss));
 
   check('the fixtures are removed from the library again', report.cleanup?.left === 0, JSON.stringify(report.cleanup));
 

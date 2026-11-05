@@ -35,8 +35,19 @@ assert.equal(turnFor({}).mode, 'legacy', 'a game with no token plays by the old 
 assert.equal(turnFor(LEGACY_SPEED).mode, 'legacy');
 assert.equal(turnFor(PRACTICE, { maxPoints: 250 }).maxPoints, 250,
   'Kho báu passes the CONTENT points of the stage, never stage.points + completionBonus');
-assert.equal(turnFor(PRACTICE, { maxPoints: 0 }).maxPoints, 100, 'an override of 0 is not a ceiling');
+/* #209 task 5 đảo assertion cũ ở đây: `maxPoints: 0` LÀ một cơ số hợp lệ, không phải
+   "không truyền gì". Điểm nội dung của một chặng Kho báu được phép là 0
+   (`intIn(stage.points, 0, 1000, 100)`), và nếu 0 bị hiểu là thiếu thì máy tự chế ra
+   trần 100 của câu hỏi và bắt đầu trừ tiền thưởng hoàn thành chặng — phạt một khoản
+   mà chính kế hoạch cấm phạt. */
+assert.equal(turnFor(PRACTICE, { maxPoints: 0 }).maxPoints, 0, 'an explicit 0 is the ceiling the game declared');
+assert.equal(turnFor(PRACTICE).maxPoints, 100, 'omitting the override still falls back to the question');
 assert.equal(turnFor(PRACTICE, { maxPoints: -5 }).maxPoints, 100);
+// Một chặng 0 điểm nội dung + thưởng hoàn thành: Luyện tập không được động vào khoản thưởng.
+const freeStage = beginAnswerTurn({ id: 's0', points: 0 }, PRACTICE, { maxPoints: 0 });
+registerAnswer(freeStage, { correct: false, points: 0 });
+registerAnswer(freeStage, { correct: true, points: 50 });
+assert.equal(freeStage.points, 50, 'cơ số 0 nghĩa là không có gì để phạt, thưởng đi nguyên');
 // Ghép cặp keeps its own penalty law, so a turn opened for it must not inherit a mode.
 assert.equal(beginAnswerTurn(QUESTION, PRACTICE, { template: 'matching' }).mode, 'legacy');
 assert.equal(beginAnswerTurn(QUESTION, PRACTICE, { template: 'quiz' }).mode, 'practice');
@@ -204,6 +215,52 @@ assert.equal(out.revealCorrect, false, 'out of attempts does not expose the key 
 assert.equal(out.explanationAvailable, true, 'but the stage is over, so the explanation may be offered');
 assert.equal(registerAnswer(out, { correct: true, points: 100 }).rejected, true,
   'a click that arrives after the last attempt is refused, so no attempt is ever double counted');
+
+/* --- #209 task 5: 'legacy' nghĩa là "đúng như trò này vẫn làm", không phải "một lượt" ---
+   Đấu trường game cũ trả lời MỘT lần rồi mở đáp án; Kho báu game cũ cho thử tới hết
+   `stage.attempts` rồi mới mở đáp án. Máy không tự biết ngân sách của chặng, nên trò khai
+   qua `attemptsLeft` NGAY KHI MỞ vòng. Ba kiểm tra dưới đây chốt rằng ngân sách đó bật
+   "thử lại" cho Kho báu cũ mà KHÔNG đổi một chữ nào ở Đấu trường cũ. */
+const LEGACY = {};
+const oldQuiz = beginAnswerTurn(QUESTION, LEGACY_SPEED, { template: 'quiz' });
+assert.equal(oldQuiz.mode, 'legacy');
+assert.equal(oldQuiz.retryAllowed, false, 'a 0.4.0 game with no attempt budget still gets one try');
+registerAnswer(oldQuiz, { correct: false, points: 0 });
+assert.equal(oldQuiz.finished, true);
+assert.equal(oldQuiz.revealCorrect, true, 'and it still shows the key, exactly as today');
+assert.equal(oldQuiz.points, 0);
+const oldTreasure = beginAnswerTurn({ id: 's1', points: 100 }, LEGACY, { attemptsLeft: 3 });
+assert.equal(oldTreasure.retryAllowed, true, 'a legacy stage with 3 tries may be retried');
+registerAnswer(oldTreasure, { correct: false, points: 0 }, { attemptsLeft: 2 });
+assert.equal(oldTreasure.finished, false, 'the second of three tries keeps the stage open');
+assert.equal(oldTreasure.retryAllowed, true);
+assert.equal(oldTreasure.revealCorrect, false, 'a mid-budget miss reveals nothing yet');
+registerAnswer(oldTreasure, { correct: false, points: 0 }, { attemptsLeft: 1 });
+assert.equal(oldTreasure.finished, false);
+registerAnswer(oldTreasure, { correct: false, points: 0 }, { attemptsLeft: 0 });
+assert.equal(oldTreasure.finished, true, 'running out of the budget the data declared closes the stage');
+assert.equal(oldTreasure.locked, true);
+assert.equal(oldTreasure.retryAllowed, false);
+assert.equal(oldTreasure.revealCorrect, true,
+  'game cũ MỞ đáp án khi cạn lượt — luật của legacy, không phải của Luyện tập');
+assert.equal(oldTreasure.points, 0, 'and legacy is never penalised, whatever the ceiling says');
+// Ngân sách đúng MỘT lượt thì legacy trở lại đúng hành vi một-câu-một-lượt.
+const oldSingle = beginAnswerTurn({ id: 's2', points: 100 }, LEGACY, { attemptsLeft: 1 });
+assert.equal(oldSingle.retryAllowed, false, 'attempts: 1 is not "unlimited"');
+registerAnswer(oldSingle, { correct: false, points: 0 }, { attemptsLeft: 0 });
+assert.equal(oldSingle.finished, true);
+assert.equal(oldSingle.revealCorrect, true);
+// Không giới hạn (`stage.attempts === 0` → Infinity) thì thử mãi cũng không tự khép vòng.
+const oldOpen = beginAnswerTurn({ id: 's3', points: 100 }, LEGACY, { attemptsLeft: Infinity });
+for (let i = 0; i < 5; i++) registerAnswer(oldOpen, { correct: false, points: 0 }, { attemptsLeft: Infinity });
+assert.equal(oldOpen.finished, false, 'unlimited legacy stages stay open until the student gets it');
+assert.equal(oldOpen.wrongAttempts, 5);
+registerAnswer(oldOpen, { correct: true, points: 100 }, { attemptsLeft: Infinity });
+assert.equal(oldOpen.points, 100, 'a legacy stage pays the full content + bonus the game folded in');
+// Hàng luật của một vòng là BẢN SAO: trò không được quyền đổi luật của cả ván.
+assert.equal(answerRules('legacy').retryOnWrong, false,
+  'the shared table still says legacy = one try, so the next stage opens with the right law');
+assert.equal(beginAnswerTurn(QUESTION, LEGACY).rules.retryOnWrong, false);
 
 // --- THỬ THÁCH: một lượt, sai thì KHÔNG mở đáp án, phải tự sang câu ---
 const challenge = turnFor(CHALLENGE);

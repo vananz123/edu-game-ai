@@ -6,7 +6,7 @@ function openTreasurePlay() {
     root.innerHTML = playModalHtml('treasure', 'w-[min(980px,96vw)]', game.title, 'HÀNH TRÌNH KHÁM PHÁ · NGOẠI TUYẾN');
     bindPlayHeader(root);
     const hunt = game.treasureHunt;
-    state.treasurePlay = { stageId: hunt.stages[0].id, earned: 0, results: [], itemsFound: {}, attemptsLeft: 0, steps: 0, answered: false, done: false, lastSelectedOptionId: null, storySeen: false };
+    state.treasurePlay = { stageId: hunt.stages[0].id, earned: 0, results: [], itemsFound: {}, attemptsLeft: 0, steps: 0, answered: false, done: false, answerTurn: null, lastSelectedOptionId: null, storySeen: false };
     GameAudio.play('open');
     renderTreasureStage();
 }
@@ -107,9 +107,16 @@ function treasureRecordStage(stage, correct) {
     if (tp.answered)
         return 0;
     tp.answered = true;
-    const gained = correct ? (Number(stage.points) || 0) + (Number(stage.completionBonus) || 0) : 0;
+    /* MỘT chặng = MỘT dòng điểm, và con số ghi vào là `turn.points` chứ không phải số
+       trong dữ liệu chặng: đó chính là "điểm chặng + thưởng hoàn thành, sau khi Luyện
+       tập trừ 10% ĐIỂM CHẶNG cho mỗi lần sai" (thưởng không nằm trong cơ số phạt — điều
+       chủ dự án chốt ở #209). `commitAnswerRecord` chặn trùng theo vòng VÀ theo
+       `stage.id` (máy giữ nó ở khóa `questionId`), nên một chặng không bao giờ xuất hiện
+       hai lần trên bảng điểm kể cả khi học sinh nhấp đúp. */
+    const turn = tp.answerTurn;
+    const gained = Math.max(0, Number(turn && turn.points) || 0);
     tp.earned += gained;
-    tp.results.push({ stageId: stage.id, correct, points: gained });
+    commitAnswerRecord(tp.results, turn, { stageId: stage.id, name: String(stage.name || '') });
     return gained;
 }
 function markTreasureMapNode(stage, correct) {
@@ -129,12 +136,106 @@ function treasureUseAttempt(stage) {
         tp.attemptsLeft -= 1;
     const out = stage.attempts > 0 && tp.attemptsLeft === 0;
     const hint = $('#treasureAttemptsHint', $('#playBody'));
-    if (hint && stage.attempts > 0) {
-        hint.textContent = out
-            ? 'Hết lượt thử — xem gợi ý và đáp án'
-            : `Còn ${tp.attemptsLeft} lượt thử · sai không bị trừ điểm`;
-    }
+    // Trước #209 dải này chỉ được viết khi chặng CÓ giới hạn lượt; từ giờ nó luôn nói
+    // lại LUẬT ĐANG CHẠY, nên một chặng không giới hạn cũng cần vẽ lại (chữ "sai không
+    // bị trừ điểm" mà để nguyên thì sai ở chế độ Luyện tập).
+    if (hint)
+        hint.textContent = treasureAttemptsText(stage);
     return out;
+}
+/** Số lượt chặng này còn được trả lời, TÍNH SAU cú thử mà `treasureUseAttempt` vừa đếm. */
+function treasureTriesLeft(stage) {
+    // `stage.attempts === 0` trong dữ liệu nghĩa là KHÔNG giới hạn, nên truyền Infinity
+    // chứ không truyền thiếu: chính ngân sách này là thứ bật chế độ "thử lại" của một
+    // game cũ (xem `beginAnswerTurn`), và ở Luyện tập nó là thứ khép vòng khi cạn lượt.
+    return stage.attempts > 0 ? state.treasurePlay.attemptsLeft : Infinity;
+}
+/* MỘT lần thử ở một chặng: trò tính đúng/sai và số điểm chặng sẽ trả, máy trả lời ba câu
+   hỏi còn lại — vòng đã khép chưa, còn được thử nữa không, có được mở đáp án không. Cạn
+   lượt là trò tự khép vòng phía mình (`endAnswerTurn`) vì giới hạn đó thuộc về dữ liệu
+   chặng chứ không thuộc về chế độ; và cũng chính `endAnswerTurn` áp luật lộ đáp án. */
+function treasureTry(stage, correct) {
+    const turn = state.treasurePlay.answerTurn;
+    const paid = (Number(stage.points) || 0) + (Number(stage.completionBonus) || 0);
+    const out = correct ? false : treasureUseAttempt(stage);
+    registerAnswer(turn, { correct, points: correct ? paid : 0 }, { attemptsLeft: treasureTriesLeft(stage) });
+    if (out)
+        endAnswerTurn(turn);
+    return turn;
+}
+/* Dải dưới màn chặng. Trước #209 nó hứa "sai không bị trừ điểm" với MỌI chặng — ở chế
+   độ Luyện tập đó là lời nói dối, còn ở Thi đấu/Thử thách thì chữ "Còn N lượt thử" cũng
+   nói sai luôn, vì hai chế độ đó chỉ có MỘT lượt trả lời. */
+function treasureAttemptsText(stage) {
+    const tp = state.treasurePlay;
+    const turn = tp.answerTurn;
+    if (!turn || turn.mode === 'legacy') {
+        const left = stage.attempts > 0
+            ? (tp.attemptsLeft > 0 ? `Còn ${tp.attemptsLeft} lượt thử` : 'Hết lượt thử')
+            : 'Không giới hạn lượt thử';
+        return `${left} · sai không bị trừ điểm`;
+    }
+    const law = answerModeHint(turn.mode);
+    if (turn.retryAllowed) {
+        const left = stage.attempts > 0 ? `còn ${tp.attemptsLeft} lượt thử` : 'số lượt thử không giới hạn';
+        return `${law} · ${left}`;
+    }
+    return turn.mode === 'practice' ? `${law} · chặng này đã cạn lượt thử` : `${law} · chặng này chỉ có một lượt trả lời`;
+}
+/* "Lượt thử" trong hộp Bối cảnh & Nhiệm vụ cũng là một lời hứa về cách chơi, nên nó phải
+   là LUẬT ĐANG CHẠY: Thi đấu và Thử thách chỉ có MỘT lượt trả lời dù chặng đặt
+   `attempts` bao nhiêu, còn Luyện tập giữ đúng ngân sách lượt của chặng. */
+function treasureTryLawHtml(stage, tp) {
+    const turn = tp.answerTurn;
+    const plain = stage.attempts > 0 ? `${stage.attempts} lượt` : 'Không giới hạn';
+    if (!turn || turn.mode === 'legacy' || turn.rules.retryOnWrong)
+        return `<span class="spec-chip">🎯 Lượt thử: <b>${plain}</b></span>`;
+    return `<span class="spec-chip">🎯 Lượt thử: <b>1 lượt · ${answerModeLabel(turn.mode)}</b></span>`;
+}
+/* Dòng "+X điểm" phải là SỐ THỰC NHẬN. Với game cũ nó trùng đúng số hôm qua đang in; chỉ
+   khi Luyện tập trừ phạt mới hiện thêm vì sao ít hơn và vì sao thưởng vẫn còn nguyên. */
+function treasurePointsLine(stage, gained) {
+    const content = Number(stage.points) || 0;
+    const bonus = Number(stage.completionBonus) || 0;
+    if (gained === content + bonus)
+        return bonus ? `+${content} điểm câu đố · +${bonus} điểm hoàn thành chặng.` : `+${gained} điểm.`;
+    const lost = content - Math.max(0, gained - bonus);
+    return `+${gained} điểm (điểm chặng ${content} bị bớt ${lost} vì ${state.treasurePlay.answerTurn.wrongAttempts} lần sai — thưởng hoàn thành +${bonus} giữ nguyên).`;
+}
+/* "Đáp án đúng đã được mở" là một LỜI HỨA, và ba chế độ hứa ba điều khác nhau, nên nó
+   không thể là một chuỗi cứng viết sẵn trong từng handler như trước #209. Nhánh lộ đáp
+   án giữ đúng chữ của game cũ ("Hết lượt thử." + những gì chặng đó vẫn mở); hai nhánh
+   còn lại là chữ MỚI, vì với Luyện tập cạn lượt và với Thử thách thì câu đó sai sự thật. */
+function treasureFailureHead(stage, answerText) {
+    const turn = state.treasurePlay.answerTurn;
+    const hint = stage.question && stage.question.hint ? `💡 Gợi ý: ${escapeHtml(stage.question.hint)}<br>` : '';
+    if (turn.revealCorrect)
+        return `<strong>✕ Hết lượt thử.</strong> ${hint}${answerText}`;
+    if (turn.mode === 'challenge')
+        return `<strong>✕ Chưa đúng.</strong> ${hint}Chế độ Thử thách không mở đáp án — hãy sang chặng tiếp theo.`;
+    return `<strong>✕ Chưa đúng.</strong> ${hint}Em đã dùng hết lượt thử của chặng này.`;
+}
+/* Dòng "thử lại" khi vòng CHƯA khép. Luyện tập phải nói SỐ ĐIỂM CÒN LẠI — đúng cái
+   `answerTurnAward` vừa tính, không phải một lời hứa — vì ở Kho báu một lần sai không
+   chỉ mất lượt mà còn mất 10% điểm chặng. */
+function treasureRetryNote(stage, retry, alone) {
+    const tp = state.treasurePlay;
+    const turn = tp.answerTurn;
+    if (!turn || turn.mode === 'legacy')
+        return stage.attempts > 0 ? `Còn ${tp.attemptsLeft} lượt thử — ${retry}` : alone;
+    const paid = (Number(stage.points) || 0) + (Number(stage.completionBonus) || 0);
+    const tries = stage.attempts > 0 ? ` · còn ${tp.attemptsLeft} lượt thử` : '';
+    return `Chặng này còn ${answerTurnAward(turn, paid)} điểm${tries} — ${retry}`;
+}
+/* Giải thích đi qua MỘT cửa. Trước đây cả năm lời nhắn đều tự nối `explanation` vào đuôi,
+   nên Thử thách sau câu sai vẫn đọc được lời giải trước cả lớp. Luật thật là
+   `turn.explanationAvailable` (answer-mode.js: sau câu sai ở Thử thách là `false`). */
+function treasureExplanationLine(stage) {
+    const turn = state.treasurePlay.answerTurn;
+    const text = String((stage.question && stage.question.explanation) || '');
+    if (!text || !turn || !turn.explanationAvailable)
+        return '';
+    return `<br>${escapeHtml(text)}`;
 }
 function treasureCompleteMission(stage, correct, message) {
     const gained = treasureRecordStage(stage, correct);
@@ -144,7 +245,7 @@ function treasureCompleteMission(stage, correct, message) {
     const fb = $('#answerFeedback', $('#playBody'));
     if (fb) {
         fb.className = `feedback ${correct ? 'good' : 'bad'}`;
-        fb.innerHTML = message;
+        fb.innerHTML = message + treasureExplanationLine(stage);
     }
     markTreasureMapNode(stage, correct);
     showTreasureChoices(stage, correct);
@@ -242,9 +343,11 @@ function bindTreasureMatching(stage) {
                     status.textContent = `✓ Đã ghép ${matched}/${stage.mission.pairs.length} cặp.`;
                 sendPresentationState();
                 if (matched >= stage.mission.pairs.length) {
-                    const gained = (Number(stage.points) || 0) + (Number(stage.completionBonus) || 0);
+                    // `treasureTry` đã tính số điểm chặng này THỰC NHẬN (sau phạt) vào
+                    // `turn.points`; vẽ từ con số đó chứ không vẽ từ dữ liệu chặng.
+                    const turn = treasureTry(stage, true);
                     GameAudio.play('correct');
-                    treasureCompleteMission(stage, true, `<strong>✓ Đã ghép đủ ${stage.mission.pairs.length} cặp!</strong> +${gained} điểm.<br>${escapeHtml(stage.question.explanation || '')}`);
+                    treasureCompleteMission(stage, true, `<strong>✓ Đã ghép đủ ${stage.mission.pairs.length} cặp!</strong> ${treasurePointsLine(stage, turn.points)}`);
                 }
             }
             else {
@@ -252,18 +355,29 @@ function bindTreasureMatching(stage) {
                 button.classList.add('wrong');
                 GameAudio.play('wrong');
                 setTimeout(() => { leftButton.classList.remove('wrong'); button.classList.remove('wrong'); }, 500);
-                const out = treasureUseAttempt(stage);
+                const turn = treasureTry(stage, false);
                 const fb = $('#answerFeedback', root);
-                if (out) {
-                    leftButtons.forEach(entry => { entry.classList.add('matched', 'revealed'); entry.disabled = true; });
-                    rightButtons.forEach(entry => { entry.classList.add('matched', 'revealed'); entry.disabled = true; });
-                    if (status)
-                        status.textContent = 'Đáp án đúng đã được mở.';
-                    treasureCompleteMission(stage, false, `<strong>✕ Hết lượt thử.</strong> ${stage.question.hint ? `💡 Gợi ý: ${escapeHtml(stage.question.hint)}<br>` : ''}Đáp án đúng đã được mở.<br>${escapeHtml(stage.question.explanation || '')}`);
+                if (!turn.retryAllowed) {
+                    if (turn.revealCorrect) {
+                        leftButtons.forEach(entry => { entry.classList.add('matched', 'revealed'); entry.disabled = true; });
+                        rightButtons.forEach(entry => { entry.classList.add('matched', 'revealed'); entry.disabled = true; });
+                        if (status)
+                            status.textContent = 'Đáp án đúng đã được mở.';
+                    }
+                    else {
+                        /* Luyện tập cạn lượt và Thử thách: KHÔNG một thẻ nào được sơn
+                           "đã ghép". Vòng đã khoá nên chỉ cần tắt buttons là hết đườngclick,
+                           nhưng học sinh phải biết vì sao màn hình đứng lại. */
+                        leftButtons.forEach(entry => { entry.disabled = true; entry.classList.remove('selected'); });
+                        rightButtons.forEach(entry => { entry.disabled = true; });
+                        if (status)
+                            status.textContent = 'Chặng đã khép — đáp án không được mở.';
+                    }
+                    treasureCompleteMission(stage, false, treasureFailureHead(stage, 'Đáp án đúng đã được mở.'));
                 }
                 else if (fb) {
                     fb.className = 'feedback bad';
-                    fb.innerHTML = `<strong>✕ Chưa khớp.</strong> ${stage.attempts > 0 ? `Còn ${tp.attemptsLeft} lượt thử — hãy thử vế khác.` : 'Hãy thử ghép lại.'}`;
+                    fb.innerHTML = `<strong>✕ Chưa khớp.</strong> ${treasureRetryNote(stage, 'hãy thử vế khác.', 'Hãy thử ghép lại.')}`;
                 }
             }
         };
@@ -314,35 +428,48 @@ function bindTreasureClassification(stage) {
                     status.textContent = `✓ Đã xếp ${placed}/${itemButtons.length} mục.`;
                 sendPresentationState();
                 if (placed >= itemButtons.length) {
-                    const gained = (Number(stage.points) || 0) + (Number(stage.completionBonus) || 0);
+                    const turn = treasureTry(stage, true);
                     GameAudio.play('correct');
-                    treasureCompleteMission(stage, true, `<strong>✓ Đã xếp đúng tất cả ${itemButtons.length} mục!</strong> +${gained} điểm.<br>${escapeHtml(stage.question.explanation || '')}`);
+                    treasureCompleteMission(stage, true, `<strong>✓ Đã xếp đúng tất cả ${itemButtons.length} mục!</strong> ${treasurePointsLine(stage, turn.points)}`);
                 }
             }
             else {
                 group.classList.add('wrong');
                 GameAudio.play('wrong');
                 setTimeout(() => group.classList.remove('wrong'), 500);
-                const out = treasureUseAttempt(stage);
+                const turn = treasureTry(stage, false);
                 const fb = $('#answerFeedback', root);
-                if (out) {
-                    itemButtons.forEach(entry => {
-                        if (entry.classList.contains('placed'))
-                            return;
-                        const item = stage.mission.items.find(entryItem => entryItem.id === entry.dataset.classItem);
-                        const target = groupButtons.find(entryGroup => entryGroup.dataset.classGroup === item?.groupId);
-                        if (target)
-                            target.querySelector('[data-class-slots]').appendChild(entry);
-                        entry.classList.add('placed', 'revealed');
-                        entry.disabled = true;
-                    });
-                    if (status)
-                        status.textContent = 'Đáp án đúng đã được mở.';
-                    treasureCompleteMission(stage, false, `<strong>✕ Hết lượt thử.</strong> ${stage.question.hint ? `💡 Gợi ý: ${escapeHtml(stage.question.hint)}<br>` : ''}Đáp án đúng đã được mở.<br>${escapeHtml(stage.question.explanation || '')}`);
+                if (!turn.retryAllowed) {
+                    if (turn.revealCorrect) {
+                        itemButtons.forEach(entry => {
+                            if (entry.classList.contains('placed'))
+                                return;
+                            const item = stage.mission.items.find(entryItem => entryItem.id === entry.dataset.classItem);
+                            const target = groupButtons.find(entryGroup => entryGroup.dataset.classGroup === item?.groupId);
+                            if (target)
+                                target.querySelector('[data-class-slots]').appendChild(entry);
+                            entry.classList.add('placed', 'revealed');
+                            entry.disabled = true;
+                        });
+                        if (status)
+                            status.textContent = 'Đáp án đúng đã được mở.';
+                    }
+                    else {
+                        itemButtons.forEach(entry => {
+                            if (entry.classList.contains('placed'))
+                                return;
+                            entry.disabled = true;
+                            entry.classList.remove('selected');
+                        });
+                        groupButtons.forEach(entry => { entry.disabled = true; });
+                        if (status)
+                            status.textContent = 'Chặng đã khép — đáp án không được mở.';
+                    }
+                    treasureCompleteMission(stage, false, treasureFailureHead(stage, 'Đáp án đúng đã được mở.'));
                 }
                 else if (fb) {
                     fb.className = 'feedback bad';
-                    fb.innerHTML = `<strong>✕ Chưa đúng nhóm.</strong> ${stage.attempts > 0 ? `Còn ${tp.attemptsLeft} lượt thử — hãy thử nhóm khác.` : 'Hãy thử lại.'}`;
+                    fb.innerHTML = `<strong>✕ Chưa đúng nhóm.</strong> ${treasureRetryNote(stage, 'hãy thử nhóm khác.', 'Hãy thử lại.')}`;
                 }
             }
         };
@@ -366,27 +493,29 @@ function bindTreasureDecode(stage) {
             return;
         }
         if (treasureNormalizeAnswer(value) === treasureNormalizeAnswer(stage.mission.answer)) {
+            const turn = treasureTry(stage, true);
             input.disabled = true;
             submit.disabled = true;
-            const gained = (Number(stage.points) || 0) + (Number(stage.completionBonus) || 0);
             GameAudio.play('correct');
-            treasureCompleteMission(stage, true, `<strong>✓ Đã giải mã chính xác!</strong> +${gained} điểm.<br>${escapeHtml(stage.question.explanation || '')}`);
+            treasureCompleteMission(stage, true, `<strong>✓ Đã giải mã chính xác!</strong> ${treasurePointsLine(stage, turn.points)}`);
             return;
         }
         GameAudio.play('wrong');
-        const out = treasureUseAttempt(stage);
+        const turn = treasureTry(stage, false);
         const fb = $('#answerFeedback', root);
-        if (out) {
+        if (!turn.retryAllowed) {
             input.disabled = true;
             submit.disabled = true;
+            // Dòng "Đáp án đúng: X" chỉ được phép in khi CHẾ ĐỘ cho phép lộ; với Thử
+            // thách thì cả câu đó lẫn ô mật mã đều đứng nguyên.
             if (status)
-                status.textContent = 'Đáp án đúng đã được mở.';
-            treasureCompleteMission(stage, false, `<strong>✕ Hết lượt thử.</strong> ${stage.question.hint ? `💡 Gợi ý: ${escapeHtml(stage.question.hint)}<br>` : ''}Đáp án đúng: <strong>${escapeHtml(stage.mission.answer)}</strong>.<br>${escapeHtml(stage.question.explanation || '')}`);
+                status.textContent = turn.revealCorrect ? 'Đáp án đúng đã được mở.' : 'Chặng đã khép — đáp án không được mở.';
+            treasureCompleteMission(stage, false, treasureFailureHead(stage, `Đáp án đúng: <strong>${escapeHtml(stage.mission.answer)}</strong>.`));
             return;
         }
         if (fb) {
             fb.className = 'feedback bad';
-            fb.innerHTML = `<strong>✕ Chưa đúng.</strong> ${stage.attempts > 0 ? `Còn ${tp.attemptsLeft} lượt thử — hãy thử lại.` : 'Hãy thử lại.'}`;
+            fb.innerHTML = `<strong>✕ Chưa đúng.</strong> ${treasureRetryNote(stage, 'hãy thử lại.', 'Hãy thử lại.')}`;
         }
         if (status)
             status.textContent = 'Mật mã chưa đúng. Đọc lại gợi ý của chặng.';
@@ -437,9 +566,10 @@ function openTreasureStoryModal(stage, hunt, tp) {
         <div class="mission-lead"><strong>${mission.icon} ${escapeHtml(mission.label)}:</strong> ${escapeHtml(mission.short)}</div>
         ${stage.taskDescription ? `<p class="story-block-text text-[#ffe6a8] font-medium">${escapeHtml(stage.taskDescription).replace(/\n/g, '<br>')}</p>` : ''}
         <div class="mission-specs">
-          <span class="spec-chip">🎯 Lượt thử: <b>${stage.attempts > 0 ? `${stage.attempts} lượt` : 'Không giới hạn'}</b></span>
+          ${treasureTryLawHtml(stage, tp)}
           <span class="spec-chip">🏆 Điểm câu đố: <b>+${Number(stage.points) || 100}</b></span>
           ${stage.completionBonus ? `<span class="spec-chip">✨ Thưởng chặng: <b>+${stage.completionBonus}</b></span>` : ''}
+          ${tp.answerTurn && tp.answerTurn.mode === 'practice' ? '<span class="spec-chip">📉 Luyện tập: mỗi lần sai bớt 10% <b>điểm câu đố</b>, thưởng chặng giữ nguyên</span>' : ''}
         </div>
       </div>
     </div>
@@ -472,6 +602,21 @@ function renderTreasureStage() {
     tp.steps += 1;
     tp.attemptsLeft = stage.attempts || 0;
     tp.answered = false;
+    /* #209 task 5: MỘT chặng = MỘT vòng trả lời, mở ở ĐÚNG một chỗ này — cùng khuôn với
+       `renderQuestion` của Đấu trường (task 4). Ba chi tiết không được đọc nhầm:
+       - `question` ở đây là CHẶNG, không phải `stage.question`: khóa `questionId` phải
+         là `stage.id` vì bảng điểm của Kho báu keyed theo chặng (`treasureNodeState`).
+       - `maxPoints` = ĐIỂM NỘI DUNG của chặng. Thưởng hoàn thành chặng, thưởng hành
+         trình và vật phẩm ẩn không được nằm trong cơ số phạt (chủ dự án: "phạt chỉ trên
+         điểm nội dung"), và 0 là một cơ số hợp lệ chứ không phải "không truyền".
+       - `attemptsLeft` khai ngân sách lượt của chặng. Với ba chế độ mới nó chỉ SIẾT luật
+         (cạn lượt thì khép vòng); với game cũ nó CHÍNH LÀ luật thử lại của Kho báu. */
+    tp.answerTurn = beginAnswerTurn({ id: stage.id, points: Number(stage.points) || 0 },
+        state.currentGame.gameSetup, {
+            template: state.currentGame.template,
+            maxPoints: Number(stage.points) || 0,
+            attemptsLeft: stage.attempts > 0 ? stage.attempts : Infinity
+        });
     const stageIndex = hunt.stages.findIndex(entry => entry.id === stage.id);
     const stageNo = stageIndex >= 0 ? stageIndex + 1 : tp.results.length + 1;
     const missionType = treasureMissionTypeOf(stage);
@@ -509,7 +654,7 @@ function renderTreasureStage() {
       <div id="treasureActions"></div>
       </div>
     </div>
-    <div class="stage-bottom"><span id="treasureAttemptsHint">${stage.attempts > 0 ? (tp.attemptsLeft > 0 ? `Còn ${tp.attemptsLeft} lượt thử` : 'Hết lượt thử') : 'Không giới hạn lượt thử'} · sai không bị trừ điểm</span></div>
+    <div class="stage-bottom"><span id="treasureAttemptsHint">${treasureAttemptsText(stage)}</span></div>
     ${stage.question.hint ? `<button type="button" class="treasure-hint-fab" id="treasureHintBtn" title="Dùng gợi ý" aria-label="Dùng gợi ý"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2Z"/></svg></button>` : ''}
   </div>`;
     paintProgress(root);
@@ -739,6 +884,11 @@ function chooseTreasureAnswer(optionId) {
     const tp = state.treasurePlay;
     if (tp.answered)
         return;
+    const turn = tp.answerTurn;
+    /* Một cú nhấp sau khi vòng đã khép không được lật câu đã sai thành câu đúng và
+       không được trả thêm điểm (`registerAnswer` cũng tự chối, đây là chốt phía UI). */
+    if (!turn || turn.locked || turn.finished)
+        return;
     tp.lastSelectedOptionId = optionId;
     const stage = treasureStageById(tp.stageId);
     if (!stage)
@@ -750,31 +900,34 @@ function chooseTreasureAnswer(optionId) {
     reactThree(correct ? 'answer:correct' : 'answer:incorrect', { correct });
     if (correct && !treasureNextStage(stage) && !treasureBranchStage(stage))
         reactThree('game:completed', { stageId: stage.id });
+    treasureTry(stage, correct);
     if (correct) {
         const gained = treasureRecordStage(stage, true);
         $$('.answer-option', root).forEach(btn => { btn.disabled = true; if (btn.dataset.answer === stage.question.correctOptionId)
             btn.classList.add('correct'); });
         if (fb) {
             fb.className = 'feedback good';
-            fb.innerHTML = `<strong>✓ Tìm được chìa khóa!</strong> +${stage.points} điểm câu đố · +${stage.completionBonus} điểm hoàn thành chặng.<br>${escapeHtml(stage.question.explanation || '')}`;
+            fb.innerHTML = `<strong>✓ Tìm được chìa khóa!</strong> ${treasurePointsLine(stage, gained)}${treasureExplanationLine(stage)}`;
         }
         markTreasureMapNode(stage, true);
         showTreasureChoices(stage, true);
+        sendPresentationState();
         return;
     }
-    const out = treasureUseAttempt(stage);
-    if (out) {
+    if (!turn.retryAllowed) {
+        // Chặng khép lại mà không đúng: chỉ SƠN đáp án khi chế độ cho phép lộ. Trước
+        // #209 nhánh này luôn sơn, nên Thử thách sẽ tô đáp án đúng ngay trước lớp.
         treasureRecordStage(stage, false);
         $$('.answer-option', root).forEach(btn => {
             btn.disabled = true;
-            if (btn.dataset.answer === stage.question.correctOptionId)
-                btn.classList.add('correct');
-            else if (btn.dataset.answer === optionId)
+            if (btn.dataset.answer === optionId)
                 btn.classList.add('wrong');
+            else if (turn.revealCorrect && btn.dataset.answer === stage.question.correctOptionId)
+                btn.classList.add('correct');
         });
         if (fb) {
             fb.className = 'feedback bad';
-            fb.innerHTML = `<strong>✕ Hết lượt thử.</strong> ${stage.question.hint ? `💡 Gợi ý: ${escapeHtml(stage.question.hint)}<br>` : ''}Đáp án đúng đã được đánh dấu.<br>${escapeHtml(stage.question.explanation || '')}`;
+            fb.innerHTML = treasureFailureHead(stage, 'Đáp án đúng đã được đánh dấu.') + treasureExplanationLine(stage);
         }
         markTreasureMapNode(stage, false);
         showTreasureChoices(stage, false);
@@ -784,7 +937,7 @@ function chooseTreasureAnswer(optionId) {
             btn.classList.add('wrong'); });
         if (fb) {
             fb.className = 'feedback bad';
-            fb.innerHTML = `<strong>✕ Chưa đúng.</strong> ${stage.attempts > 0 ? `Còn ${tp.attemptsLeft} lượt thử — hãy suy nghĩ kỹ.` : 'Thử lại với đáp án khác.'}`;
+            fb.innerHTML = `<strong>✕ Chưa đúng.</strong> ${treasureRetryNote(stage, 'hãy suy nghĩ kỹ.', 'Thử lại với đáp án khác.')}`;
         }
     }
     sendPresentationState();

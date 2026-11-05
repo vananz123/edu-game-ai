@@ -304,9 +304,14 @@ it('question rounds skip questions with no options instead of showing a dead but
 it('the play surface still awards treasure points + completionBonus verbatim', () => {
   assert.match(
     GAMEPLAY,
-    /const gained = correct \? \(Number\(stage\.points\) \|\| 0\) \+ \(Number\(stage\.completionBonus\) \|\| 0\) : 0;/,
-    'treasureRecordStage() changed: update lan-adapters.ts treasure scoring to match'
+    /const paid = \(Number\(stage\.points\) \|\| 0\) \+ \(Number\(stage\.completionBonus\) \|\| 0\);/,
+    'treasureTry() changed: update lan-adapters.ts treasure scoring to match'
   );
+  /* #209: trên máy bàn, con số đó giờ đi qua máy trạng thái trả lời và bị Luyện tập
+     trừ 10%/lần sai. LAN KHÔNG có ba chế độ (ngoài phạm vi, giữ luật hiện hành), nên
+     nó vẫn trả đúng `paid` — hai bên chỉ khớp nhau ở game không phạt. */
+  assert.match(GAMEPLAY, /registerAnswer\(turn, \{ correct, points: correct \? paid : 0 \}/,
+    'the desktop award now flows through the answer-turn machine');
 });
 
 it('the play surface still uses the 100/200/300/50 defaults for the treasure maximum', () => {

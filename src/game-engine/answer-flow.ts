@@ -16,9 +16,11 @@
  * Mở một vòng trả lời.
  * @param question câu hỏi (dùng `points` làm trần phạt qua questionMaxPoints)
  * @param gameSetup thiết lập trò chơi — chứa token 'tra-loi:…' hoặc mode Việt cũ
- * @param context { maxPoints?, template? } — `maxPoints` là cơ số phạt trò muốn dùng
- *                 (Kho báu phải truyền ĐIỂM NỘI DUNG của chặng, không truyền thưởng
- *                 hoàn thành hành trình/vật phẩm ẩn); thiếu thì lấy trần của câu.
+ * @param context { maxPoints?, template?, attemptsLeft? } — `maxPoints` là cơ số phạt
+ *                 trò muốn truyền (Kho báu phải truyền ĐIỂM NỘI DUNG của chặng, không
+ *                 truyền thưởng hoàn thành hành trình/vật phẩm ẩn); thiếu thì lấy trần
+ *                 của câu. `attemptsLeft` khi MỞ vòng là ngân sách lượt của chính trò
+ *                 (xem dưới), khi GHI lượt là số lượt còn lại sau lượt vừa rồi.
  */
 function beginAnswerTurn(question, gameSetup, context) {
   const options = context || {};
@@ -27,9 +29,22 @@ function beginAnswerTurn(question, gameSetup, context) {
   const mode = options.template
     ? answerModeForGame({ template: options.template, gameSetup })
     : answerModeKey(gameSetup);
-  const rules = answerRules(mode);
+  /* Bản SAO của bảng luật, không phải chính hàng trong bảng: `turn.rules` mà trỏ thẳng
+     vào object dùng chung thì một trò chỉnh `retryOnWrong` là đổi luật của MỌI vòng mở
+     sau đó trong cùng một ván. */
+  const rules = Object.assign({}, answerRules(mode));
+  /* 'legacy' KHÔNG có nghĩa là "một lần trả lời" — nó nghĩa là "đúng như trò này vẫn
+     làm". Đấu trường trước #209 trả lời một lần, còn Kho báu cho thử tới hết
+     `stage.attempts` (0 trong dữ liệu = không giới hạn) rồi mới mở đáp án. Máy không tự
+     biết ngân sách lượt của một chặng, nên trò khai nó qua `context.attemptsLeft` ngay
+     khi mở vòng: game cũ + ngân sách trên một lượt = vòng được thử lại. Với ba chế độ
+     mới, `attemptsLeft` chỉ SIẾT luật (hết lượt thì khép vòng), không bao giờ mở rộng nó. */
+  if (mode === 'legacy') rules.retryOnWrong = Number(options.attemptsLeft) > 1;
   const given = Number(options.maxPoints);
-  const maxPoints = Number.isFinite(given) && given > 0
+  /* 0 là một cơ số HỢP LỆ chứ không phải "không truyền gì": một chặng Kho báu có
+     `points: 0` thì phần bị phạt bằng 0 và thưởng hoàn thành đi nguyên. Thiếu số hoặc
+     NaN mới rơi về trần của câu hỏi. */
+  const maxPoints = Number.isFinite(given) && given >= 0
     ? given
     : questionMaxPoints(question, gameSetup);
   return {
@@ -112,10 +127,13 @@ function registerAnswer(turn, result, context) {
     const outOfAttempts = options.attemptsLeft !== undefined && options.attemptsLeft !== null
       && Number(options.attemptsLeft) <= 0;
     if (outOfAttempts) {
-      // Hết lượt mà vẫn sai: vòng khép lại, điểm 0, và KHÔNG mở đáp án —
-      // Luyện tập không lộ đáp án sau câu sai (answer-mode.js: revealOnWrong false).
+      // Hết lượt mà vẫn sai: vòng khép lại và điểm 0. Có lộ đáp án hay không vẫn do
+      // HÀNG LUẬT trả lời, không do branches này: Luyện tập giữ đáp án (`revealOnWrong`
+      // false), còn Kho báu game cũ mở đáp án sau khi cạn `stage.attempts` (legacy:
+      // true) — đó chính là hành vi #209 phải giữ nguyên cho game đã lưu.
       turn.finished = true;
       turn.locked = true;
+      turn.revealCorrect = Boolean(turn.rules.revealOnWrong);
     }
     return refreshTurn(turn, outOfAttempts ? 0 : options.attemptsLeft);
   }
