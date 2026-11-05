@@ -14,8 +14,15 @@
 //   npm run build
 //   npx electron . --remote-debugging-port=9341
 //   node tests/ui/ui-play-surface-check.js 9341
+// Argument 3 filters sections while iterating (`... 9341 quiz`, `... 9341 quiz,race`);
+// default runs every section.
 const { check, connect, results } = require('../manual/lib/ui-check-lib');
 const { PROJECTOR_SIZES, measureAt, setViewport, setViewportAndWait, capture } = require('./lib/screenshot-capture');
+
+/** `node tests/ui/ui-play-surface-check.js 9341 quiz` → chỉ chạy phần đó. */
+const ONLY = (process.argv[3] || '').trim().split(',').map(s => s.trim()).filter(Boolean);
+const want = name => ONLY.length === 0 || ONLY.includes(name);
+const sizesFor = name => (want(name) ? PROJECTOR_SIZES : []);
 
 // Synthetic content only — no real student data (AGENTS.md). Long Vietnamese
 // with stacked diacritics on purpose: "ế/ộ/ữ" are what clip when line-height is
@@ -190,6 +197,350 @@ const RACE = JSON.stringify({
 });
 
 
+
+/**
+ * Ngưỡng hình học của "Đấu trường tri thức" (nhiệm vụ 1, phạm vi bố cục đã chốt).
+ *
+ * Toàn bộ lấy nguyên văn từ yêu cầu, không tự đặt thêm số:
+ *   · cỡ chữ tối thiểu: câu hỏi 32px, đáp án 20px — và KHÔNG được giảm chữ
+ *     dưới ngưỡng chỉ để lọt màn (vì vậy cỡ chữ đo riêng, song song với điều
+ *     kiện "không cuộn ngang / không khuất đáp án");
+ *   · Xây nhà CÓ ảnh: ảnh <= 28% và lưới >= 60% chiều ngang vùng nội dung,
+ *     khe ảnh <-> đáp án <= 24 CSS px;
+ *   · "lưới đáp án dùng toàn bộ vùng nội dung được bố trí cho nó, không cột
+ *     rỗng" -> các màn trải ngang phải đạt >= 95% bề rộng .stage-center và bám
+ *     tới mép phải của nó.
+ */
+const QUIZ = {
+  questionPx: 32,
+  optionPx: 20,
+  houseArtMaxPct: 0.28,
+  houseGridMinPct: 0.60,
+  houseArtGridGapPx: 24,
+  fullGridMinPct: 0.95,
+  edgePx: 4
+};
+
+const SHORT_PROMPT = 'Khi gặp bạn mới trong lớp, em nên làm gì đầu tiên?';
+const SHORT_OPTIONS = [
+  { id: 'a', text: 'Chào hỏi bạn' },
+  { id: 'b', text: 'Đi chỗ khác' },
+  { id: 'c', text: 'Chờ bạn nói' },
+  { id: 'd', text: 'Nhờ cô giáo' }
+];
+const LONG_OPTIONS = [
+  { id: 'a', text: 'Chủ động chào hỏi, hỏi thăm bạn một cách tự nhiên và lắng nghe' },
+  { id: 'b', text: 'Đứng quan sát từ xa cho đến khi bạn ấy nói trước' },
+  { id: 'c', text: 'Kể ngay một câu chuyện cười thật dài để gây chú ý' },
+  { id: 'd', text: 'Chờ giáo viên giới thiệu rồi mới dám lên tiếng' }
+];
+
+/**
+ * Fixture "Đấu trường tri thức" cho bốn tổ hợp bố cục đã chốt.
+ *
+ * · `play`  -> `gameSetup.gameplayMode` ('classic' | 'house'); chỉ template
+ *   'quiz' mới có chế độ Xây nhà (isHouseMode() trong games/house.ts).
+ * · `art`   -> 'auto' + `illustrationAssetId: 'animals-scene'`. Bắt buộc phải là
+ *   ảnh CHỈ ĐỊNH: ở chế độ Xây nhà, quiz.ts chỉ vẽ ảnh khi `houseArt.explicit`
+ *   (#153), tranh "tự động" không được tính là "câu hỏi có ảnh".
+ * · `len`   -> nội dung ngắn/dài, cả hai đều fixture tiếng Việt tổng hợp
+ *   (AGENTS.md: không dùng dữ liệu học sinh thật).
+ *
+ * Ba câu hỏi: `houseTargetParts()` lấy số câu (chặn ở 8) nên HUD "Đã xây n/3
+ * phần" có ý nghĩa thật, và màn chơi không kết thúc ngay câu đầu.
+ */
+function quizGame(opts) {
+  const play = opts.play === 'house' ? 'house' : 'classic';
+  const long = opts.len !== 'short';
+  const id = `ui-play-surface-quiz-${play}-${opts.art ? 'art' : 'noart'}-${long ? 'long' : 'short'}`;
+  const questions = [1, 2, 3].map(n => ({
+    id: 'q' + n,
+    type: 'multiple-choice',
+    prompt: long ? LONG + ' (câu ' + n + ')' : SHORT_PROMPT,
+    contentCategory: 'animals',
+    iconName: 'paw-print',
+    illustrationAssetId: opts.art ? 'animals-scene' : '',
+    options: long ? LONG_OPTIONS : SHORT_OPTIONS,
+    correctOptionId: 'a',
+    correctAnswer: '',
+    explanation: 'Chào hỏi chủ động là bước đầu tiên của một tình bạn mới.',
+    hint: 'Gợi ý cho câu ' + n,
+    points: 100
+  }));
+  return JSON.stringify({
+    id, title: 'Đấu trường tri thức', subject: 'Đạo đức', grade: '4',
+    template: 'quiz', description: '', tags: [], sourceName: 'ui-check',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    gameSetup: {
+      scoringMode: 'cơ bản',
+      gameplayMode: play,
+      illustrationMode: opts.art ? 'auto' : 'off',
+      houseStyle: 'auto'
+    },
+    questions
+  });
+}
+
+/**
+ * Hình học màn đọc câu hỏi của "Đấu trường tri thức" (nhiệm vụ 1).
+ *
+ * Probe phải đo HAI MÉP và trạng thái nhìn thấy được, không đo "bề rộng hàng":
+ * bài học #207 là một track 751px chứa ảnh 360px báo cùng một bề rộng hàng với
+ * track ôm sát ảnh, còn chỗ chết 391px thì vô hình. Ở đây mỗi khối (câu hỏi,
+ * ảnh, lưới, từng đáp án, HUD) trả về hộp px thật của nó.
+ *
+ * "Bốn đáp án thấy được ngay khi câu hỏi mở" là điều kiện về HÌNH HỌC chứ không
+ * phải về DOM: một đáp án tồn tại trong DOM nhưng nằm dưới đáy viewport, hoặc bị
+ * một lớp khác che, đều coi như khuất. Vì vậy mỗi ô được hit-test bằng
+ * elementFromPoint tại tâm của nó.
+ */
+const QUIZ_GEOM = `(() => {
+  const px = v => parseFloat(v) || 0;
+  const boxOf = el => {
+    const r = el.getBoundingClientRect();
+    const cs = getComputedStyle(el);
+    return { left: Math.round(r.left), right: Math.round(r.right), top: Math.round(r.top),
+      bottom: Math.round(r.bottom), w: Math.round(r.width), h: Math.round(r.height),
+      display: cs.display, font: px(cs.fontSize),
+      clipY: Math.round(el.scrollHeight - el.clientHeight),
+      clipX: Math.round(el.scrollWidth - el.clientWidth) };
+  };
+  const box = sel => { const el = document.querySelector(sel); return el ? boxOf(el) : null; };
+  const find = sel => document.querySelector(sel);
+  const stageEl = find('.game-stage');
+  const centerEl = find('.stage-center');
+  const qEl = find('.stage-question');
+  const gridEl = find('.answer-grid');
+  const optEls = [...document.querySelectorAll('.answer-grid .answer-option')];
+  if (!stageEl || !centerEl || !qEl || !gridEl || optEls.length !== 4) return { missing: true };
+  const vOverlap = (a, b) => Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+  const sameRow = (a, b) => a && b && vOverlap(a, b) > 0.5 * Math.min(a.h, b.h);
+  const stage = boxOf(stageEl);
+  const center = boxOf(centerEl);
+  const question = boxOf(qEl);
+  const grid = boxOf(gridEl);
+  const artEl = find('.stage-illustration');
+  const art = artEl ? boxOf(artEl) : null;
+  const hudEl = find('.house-progress');
+  const hud = hudEl ? boxOf(hudEl) : null;
+  // Met that an answer is painted where the class can see it and nothing is on
+  // top of it: viewport box + elementFromPoint at the option centre.
+  const options = optEls.map((el, i) => {
+    const b = boxOf(el);
+    const r = el.getBoundingClientRect();
+    const top = document.elementFromPoint(Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2));
+    const hittable = Boolean(top) && (top === el || el.contains(top) || top.contains(el));
+    return { i, ...b, hittable,
+      coveredBy: hittable ? null : (top ? (top.className || top.tagName).toString().slice(0, 34) : 'nothing'),
+      inside: b.left >= -2 && b.top >= -2 && b.right <= innerWidth + 2 && b.bottom <= innerHeight + 2 };
+  });
+  return {
+    viewport: { w: innerWidth, h: innerHeight },
+    houseMode: stageEl.classList.contains('is-house-mode'),
+    showcase: stageEl.classList.contains('is-house-showcase'),
+    stage, center, question, grid, art, hud, options,
+    // Chu vi của hàng nội dung: cột ảnh (Cổ điển), hàng ảnh + ô nhà + dải HUD
+    // (Xây nhà #208). Đọc cả display để phân biệt "bị ẩn" với "còn node mà 0px".
+    sideCol: box('.stage-side-col'),
+    hudStrip: box('.house-hud-strip'),
+    houseAnswerRow: box('.house-answer-row'),
+    houseArtCol: box('.house-question-art'),
+    houseSlot: box('.house-stage-slot'),
+    mainCol: box('.stage-col.is-main'),
+    stageScroll: {
+      overflowX: Math.round(stageEl.scrollWidth - stageEl.clientWidth),
+      overflowY: Math.round(stageEl.scrollHeight - stageEl.clientHeight)
+    },
+    centerScroll: {
+      overflowX: Math.round(centerEl.scrollWidth - centerEl.clientWidth),
+      overflowY: Math.round(centerEl.scrollHeight - centerEl.clientHeight)
+    },
+    gridTracks: getComputedStyle(gridEl).gridTemplateColumns,
+    centerGap: Math.round(px(getComputedStyle(centerEl).columnGap) || px(getComputedStyle(centerEl).gap) || 0),
+    questionWeight: getComputedStyle(qEl).fontWeight,
+    sameRowArtGrid: sameRow(art, grid),
+    sameRowQuestionArt: sameRow(question, art),
+    artGridGap: art && sameRow(art, grid) ? grid.left - art.right : null,
+    questionArtGap: question && sameRow(question, art) ? art.left - question.right : null,
+    artPct: art ? art.w / center.w : null,
+    gridPct: grid.w / center.w,
+    hudAboveQuestion: hud ? hud.bottom <= question.top + 2 : null,
+    docHeight: document.documentElement.scrollHeight
+  };
+})()`;
+
+/**
+ * Bảng chữ nhật cần cho nhiệm vụ 1: "ghi nhận cỡ chữ, tràn và phần nội dung
+ * nhìn thấy" của TỪNG tổ hợp, in ra stdout để bàn giao kèm số.
+ */
+function quizRow(g, tag) {
+  if (!g || g.missing) return `  ${tag}  MISSING GEOMETRY`;
+  const pct = v => v === null || v === undefined ? 'n/a' : Math.round(v * 100) + '%';
+  const pxv = v => v === null || v === undefined ? 'n/a' : v + 'px';
+  const hidden = g.options.filter(o => !o.inside).length;
+  const covered = g.options.filter(o => o.inside && !o.hittable).length;
+  return `  ${tag.padEnd(34)} q ${pxv(g.question.font)} w${g.questionWeight} ${g.question.w}x${g.question.h}  `
+    + `art ${g.art ? g.art.w + 'x' + g.art.h + ' @' + g.art.left : 'none'} (${pct(g.artPct)})  `
+    + `grid ${g.grid.w}/${g.center.w} (${pct(g.gridPct)}) gap ${pxv(g.artGridGap)}  `
+    + `hud ${g.hud ? '@' + g.hud.top + ' w' + g.hud.w : 'none'} above=${g.hudAboveQuestion === null ? 'n/a' : g.hudAboveQuestion}  `
+    + `hidden ${hidden}/4 covered ${covered}  ovX ${g.stageScroll.overflowX}/${g.centerScroll.overflowX} `
+    + `ovY ${g.stageScroll.overflowY}  doc ${g.docHeight}/${g.viewport.h}`;
+}
+
+/**
+ * Các điều kiện đã chốt, áp cho một tổ hợp.
+ *
+ * `spec = { play, art }`. Mọi check đều là assertion hình học hoặc nhìn thấy
+ * được; không có check dạng "phần tử có tồn tại" hay "cuộn tới được" — đó chính
+ * là điều nhiệm vụ 1 cấm.
+ */
+function assertQuizLayout(g, tag, spec) {
+  if (!g || g.missing) {
+    check(`[${tag}] quiz geometry measurable`, false, 'stage/question/grid/answers missing');
+    return;
+  }
+  const vw = g.viewport.w, vh = g.viewport.h;
+  // Điều kiện tiên quyết của TỔ CHỨC: fixture phải vẽ đúng thứ bố cục nói tới.
+  // Không có nó, một fixture hỏng (không vẽ ảnh) sẽ biến check "ảnh <= 28%" thành
+  // xanh rỗng, và ngược lại một ảnh còn sót ở tổ hợp "không ảnh" sẽ không bị ai
+  // nhìn thấy.
+  if (spec.art) {
+    check(`[${tag}] the fixture really drew an illustration`, Boolean(g.art),
+      JSON.stringify({ art: g.art, artCol: g.houseArtCol, sideCol: g.sideCol, gridTracks: g.gridTracks }));
+    if (!g.art) return;
+  } else {
+    check(`[${tag}] the fixture really drew no illustration`, !g.art,
+      g.art ? `art ${g.art.w}x${g.art.h}px at ${g.art.left},${g.art.top}` : 'no .stage-illustration');
+  }
+  // ---- Bốn đáp án thấy được ngay khi câu hỏi mở (mọi tổ hợp) ----
+  const hidden = g.options.filter(o => !o.inside)
+    .map(o => `#${o.i + 1} ${o.top}..${o.bottom}` + (o.bottom > vh + 2 ? ` (+${o.bottom - vh}px dưới đáy)` : '')
+      + (o.right > vw + 2 ? ` (+${o.right - vw}px phải)` : ''));
+  check(`[${tag}] all four answers visible the moment the question opens`, hidden.length === 0,
+    hidden.join(' | ') || `last answer bottom ${g.options[3].bottom} of ${vh}`);
+  const covered = g.options.filter(o => o.inside && !o.hittable)
+    .map(o => `#${o.i + 1} covered by ${o.coveredBy}`);
+  check(`[${tag}] no answer is covered by another layer`, covered.length === 0,
+    covered.join(' | ') || 'every answer hit-tests to itself');
+  const clipped = g.options.filter(o => o.clipY > 2 || o.clipX > 2)
+    .map(o => `#${o.i + 1} ${o.clipY}/${o.clipX}`);
+  check(`[${tag}] no answer is clipped inside its own box`, clipped.length === 0,
+    clipped.join(' | '));
+  check(`[${tag}] answers do not overlap each other`, (() => {
+    const o = g.options;
+    for (let i = 0; i < o.length; i++) {
+      for (let j = i + 1; j < o.length; j++) {
+        if (o[i].left < o[j].right - 2 && o[j].left < o[i].right - 2
+          && o[i].top < o[j].bottom - 2 && o[j].top < o[i].bottom - 2) return false;
+      }
+    }
+    return true;
+  })(), JSON.stringify(g.options.map(o => [o.left, o.top, o.right, o.bottom])));
+  // ---- Ngưỡng cỡ chữ (đo riêng, không đánh đổi lấy việc lọt màn) ----
+  check(`[${tag}] question font >= ${QUIZ.questionPx}px`, g.question.font >= QUIZ.questionPx,
+    `${g.question.font}px`);
+  const smallOpts = g.options.filter(o => o.font < QUIZ.optionPx).map(o => `#${o.i + 1} ${o.font}px`);
+  check(`[${tag}] answer font >= ${QUIZ.optionPx}px`, smallOpts.length === 0, smallOpts.join(' | ') || `${g.options[0].font}px`);
+  // ---- Không cuộn ngang, không "biến mất" khi nội dung dài ----
+  check(`[${tag}] nothing scrolls horizontally`, g.stageScroll.overflowX <= 2 && g.centerScroll.overflowX <= 2,
+    `stage ${g.stageScroll.overflowX}px, center ${g.centerScroll.overflowX}px`);
+  check(`[${tag}] page never double-scrolls`, g.docHeight <= vh + 2, `${g.docHeight} vs ${vh}`);
+  check(`[${tag}] question text is never cut`, g.question.clipY <= 2 && g.question.clipX <= 2,
+    `clip ${g.question.clipY}/${g.question.clipX}`);
+  // ---- Lưới đáp án dùng trọn vùng nội dung được bố trí cho nó ----
+  const fullWidth = g.gridPct >= QUIZ.fullGridMinPct;
+  if (spec.play === 'house' && spec.art) {
+    // Tổ hợp này KHÔNG đòi lưới trọn vùng: ảnh chiếm bên trái. Nó đòi đúng bộ ba
+    // đã chốt: ảnh <= 28%, lưới >= 60%, khe <= 24px, và lưới bám mép phải nên
+    // cột HUD không được ăn ngang.
+    check(`[${tag}] illustration <= ${Math.round(QUIZ.houseArtMaxPct * 100)}% of the content area`,
+      g.artPct !== null && g.artPct <= QUIZ.houseArtMaxPct,
+      g.art ? `${g.art.w}px of ${g.center.w}px (${Math.round(g.artPct * 100)}%)` : 'no illustration drawn');
+    check(`[${tag}] answer grid >= ${Math.round(QUIZ.houseGridMinPct * 100)}% of the content area`,
+      g.gridPct >= QUIZ.houseGridMinPct, `${g.grid.w}px of ${g.center.w}px (${Math.round(g.gridPct * 100)}%)`);
+    check(`[${tag}] illustration and answers share one row`, g.sameRowArtGrid === true,
+      g.art ? `art ${g.art.top}..${g.art.bottom}, grid ${g.grid.top}..${g.grid.bottom}` : 'no illustration');
+    check(`[${tag}] illustration sits LEFT of the answer grid`,
+      Boolean(g.art) && g.art.left <= g.grid.left + QUIZ.edgePx,
+      g.art ? `art.left ${g.art.left}, grid.left ${g.grid.left}` : 'no illustration');
+    check(`[${tag}] art -> answer gap <= ${QUIZ.houseArtGridGapPx}px`,
+      g.artGridGap !== null && g.artGridGap >= 0 && g.artGridGap <= QUIZ.houseArtGridGapPx,
+      g.artGridGap === null ? 'not on the same row' : `${g.artGridGap}px`);
+    check(`[${tag}] question is ABOVE the illustration/answer row`,
+      g.question.bottom <= Math.min(g.art ? g.art.top : Infinity, g.grid.top) + QUIZ.edgePx,
+      `question.bottom ${g.question.bottom}, row.top ${Math.min(g.art ? g.art.top : Infinity, g.grid.top)}`);
+    check(`[${tag}] answer grid reaches the right edge of the content area`,
+      g.grid.right >= g.center.right - QUIZ.edgePx,
+      `grid.right ${g.grid.right} vs center.right ${g.center.right} (HUD strip ${g.hudStrip ? g.hudStrip.w + 'px/' + g.hudStrip.display : 'none'})`);
+  } else if (spec.play === 'classic' && spec.art) {
+    check(`[${tag}] question is LEFT of the illustration`,
+      g.question.right <= g.art.left + QUIZ.edgePx,
+      `question ${g.question.left}..${g.question.right}, art ${g.art ? g.art.left : 'none'}`);
+    check(`[${tag}] question and illustration share one row`, g.sameRowQuestionArt === true,
+      `question ${g.question.top}..${g.question.bottom}, art ${g.art ? g.art.top + '..' + g.art.bottom : 'none'}`);
+    check(`[${tag}] question -> illustration seam has no dead column`,
+      g.questionArtGap !== null && g.questionArtGap >= 0 && g.questionArtGap <= QUIZ.houseArtGridGapPx,
+      g.questionArtGap === null ? 'not on the same row' : `${g.questionArtGap}px`);
+    check(`[${tag}] illustration reaches the right edge of the content area`,
+      g.art.right >= g.center.right - QUIZ.edgePx,
+      `art.right ${g.art ? g.art.right : 'none'} vs center.right ${g.center.right}`);
+    check(`[${tag}] all four answers sit BELOW the question/illustration row`,
+      g.grid.top >= Math.max(g.question.bottom, g.art ? g.art.bottom : 0) - QUIZ.edgePx,
+      `grid.top ${g.grid.top}, row.bottom ${Math.max(g.question.bottom, g.art ? g.art.bottom : 0)}`);
+    check(`[${tag}] answers span the whole content width`, fullWidth,
+      `${g.grid.w}px of ${g.center.w}px (${Math.round(g.gridPct * 100)}%)`);
+    check(`[${tag}] answer row starts at the left edge of the content area`,
+      g.grid.left <= g.center.left + QUIZ.edgePx, `grid.left ${g.grid.left} vs center.left ${g.center.left}`);
+  } else {
+    // Hai tổ hợp KHÔNG có ảnh: nội dung phải trải ngang, không cột rỗng.
+    check(`[${tag}] answers span the whole content width`, fullWidth,
+      `${g.grid.w}px of ${g.center.w}px (${Math.round(g.gridPct * 100)}%) `
+      + `(main col ${g.mainCol ? g.mainCol.w : 'n/a'}px, HUD strip ${g.hudStrip ? g.hudStrip.w + 'px/' + g.hudStrip.display : 'none'})`);
+    check(`[${tag}] answer row starts at the left edge of the content area`,
+      g.grid.left <= g.center.left + QUIZ.edgePx, `grid.left ${g.grid.left} vs center.left ${g.center.left}`);
+    check(`[${tag}] answer row reaches the right edge of the content area`,
+      g.grid.right >= g.center.right - QUIZ.edgePx, `grid.right ${g.grid.right} vs center.right ${g.center.right}`);
+    check(`[${tag}] no empty illustration column is kept`,
+      !g.sideCol || (g.sideCol.w === 0 || g.sideCol.display === 'none'),
+      g.sideCol ? `side col ${g.sideCol.w}px, display ${g.sideCol.display}` : 'no side column');
+    if (spec.play === 'house') {
+      check(`[${tag}] no empty art placeholder is kept`,
+        !g.houseArtCol || g.houseArtCol.w === 0 || g.houseArtCol.display === 'none',
+        g.houseArtCol ? `art col ${g.houseArtCol.w}px` : 'no art column');
+    }
+  }
+  // ---- HUD của chế độ Xây nhà nằm ở dải trên câu hỏi, không chiếm cột ----
+  if (spec.play === 'house') {
+    check(`[${tag}] HUD renders`, Boolean(g.hud), g.hud ? `${g.hud.w}x${g.hud.h}px at ${g.hud.left},${g.hud.top}` : 'no .house-progress');
+    if (g.hud) {
+      // MỘT assertion cho cả ba tính chất của "dải phía trên câu hỏi": nằm trên,
+      // bám mép trái, và rộng gần trọn vùng nội dung. Tách "nằm trên" thành check
+      // riêng từng xanh nhầm ở bố cục cũ: HUD cột phải cao 90px nên ĐÚNG là kết
+      // thúc trước câu hỏi, dù nó không phải một dải.
+      const strip = g.hudAboveQuestion === true
+        && g.hud.left <= g.center.left + QUIZ.edgePx
+        && g.hud.w >= QUIZ.fullGridMinPct * g.center.w
+        && Boolean(g.hudStrip) && g.hudStrip.w >= QUIZ.fullGridMinPct * g.center.w;
+      check(`[${tag}] HUD is a full-width strip above the question`, strip,
+        `hud ${g.hud.left}..${g.hud.right} x ${g.hud.top}..${g.hud.bottom} (${g.hud.w}px of ${g.center.w}px) vs question.top ${g.question.top}, center.left ${g.center.left}`
+        + (g.hudStrip ? ` [strip ${g.hudStrip.w}x${g.hudStrip.h}px/${g.hudStrip.display}]` : ' [no .house-hud-strip node]'));
+      check(`[${tag}] HUD does not narrow the question`,
+        g.question.w >= QUIZ.fullGridMinPct * g.center.w,
+        `question ${g.question.w}px of ${g.center.w}px`);
+    }
+    // Ngôi nhà 3D vẫn phải còn chỗ: ô giữ chỗ là hình chữ nhật mà houseTarget()
+    // đo (#179), mất nó là mất nhà chứ không phải chỉ mất ô trang trí.
+    check(`[${tag}] the house keeps a real slot`, Boolean(g.houseSlot) && g.houseSlot.w > 60 && g.houseSlot.h > 60,
+      g.houseSlot ? `slot ${g.houseSlot.w}x${g.houseSlot.h}px at ${g.houseSlot.left},${g.houseSlot.top}` : 'no .house-stage-slot');
+  } else {
+    check(`[${tag}] classic draws no house HUD`, !g.hud, g.hud ? `unexpected .house-progress ${g.hud.w}x${g.hud.h}` : 'no HUD');
+  }
+  // Ảnh thật phải là ảnh, không phải khung rỗng: #207 từng "đo" một hộp 1x1px.
+  if (g.art) {
+    check(`[${tag}] the illustration is a real picture (>= 150x90)`,
+      g.art.w >= 150 && g.art.h >= 90, `${g.art.w}x${g.art.h}px`);
+  }
+}
 
 /** Read the play-surface geometry that the teacher-facing assertions need. */
 const READ = `(() => {
@@ -497,7 +848,7 @@ function assertNav(nav, tag) {
   const ctx = await connect();
   const { evaluate } = ctx;
 
-  for (const size of PROJECTOR_SIZES) {
+  for (const size of sizesFor('play')) {
     const tag = size.label;
     console.log(`\n=== play surface @ ${tag} ===`);
 
@@ -563,7 +914,7 @@ function assertNav(nav, tag) {
   // it used a minimal fixture (one short story, no taskDescription, no hint) and
   // therefore never exercised the height the real content costs. The numbers
   // below come from this check's fixture, which is why it lives in the check.
-  for (const size of PROJECTOR_SIZES) {
+  for (const size of sizesFor('treasure')) {
     for (const [label, fixture] of [['6-stage', TREASURE_6], ['12-stage', TREASURE_12]]) {
       const tag = `${size.label} ${label}`;
       console.log(`\n=== treasure-hunt ${label} @ ${size.label} ===`);
@@ -754,7 +1105,7 @@ function assertNav(nav, tag) {
   // of the viewport. Unlike treasure, its left column is a track and its right
   // column is the question, so a 40-cell track + 4 long answers must still fit a
   // 768px board (#84 and #85 both left this unmeasured).
-  for (const size of PROJECTOR_SIZES) {
+  for (const size of sizesFor('race')) {
     const tag = `${size.label} race`;
     console.log(`\n=== race @ ${size.label} ===`);
     await setViewportAndWait(ctx, size);
@@ -819,6 +1170,93 @@ function assertNav(nav, tag) {
     }
   }
 
+
+
+
+
+  // ------------------------------------------------- đấu trường tri thức ----
+  // Bước đo của "Đấu trường tri thức": bốn tổ hợp bố cục đã chốt (Cổ điển /
+  // Xây nhà × có ảnh / không ảnh) ở hai kích thước máy chiếu, mỗi tổ hợp chạy
+  // cả fixture NGẮN lẫn DÀI ⇒ 16 lượt đo và 8 ảnh bắt buộc cho tổ hợp ngắn.
+  //
+  // Vì sao phải đo từng tổ hợp chứ không đo một lần: yêu cầu đã chốt rằng chính
+  // CÁCH CHIA BỐ CỤC đổi theo (a) chế độ chơi và (b) việc câu hỏi có ảnh. Một
+  // gate chỉ đo "câu hỏi + lưới đáp án" sẽ xanh dù Xây nhà vẫn bị cột HUD ăn
+  // mất 240–320px, và sẽ xanh dù Cổ điển đặt ảnh bên TRÁI trong khi giáo viên
+  // chốt ảnh bên PHẢI.
+  const QUIZ_COMBOS = [];
+  for (const play of ['classic', 'house'])
+    for (const art of [true, false])
+      for (const len of ['short', 'long'])
+        QUIZ_COMBOS.push({ play, art, len });
+
+  /** Một dòng mỗi tổ hợp để bàn giao kèm bảng số đo hiện trạng. */
+  const quizTable = [];
+  for (const size of sizesFor('quiz')) {
+    for (const spec of QUIZ_COMBOS) {
+      const combo = `${spec.play}-${spec.art ? 'art' : 'noart'}-${spec.len}`;
+      const tag = `${size.label} ${combo}`;
+      console.log(`\n=== quiz ${combo} @ ${size.label} ===`);
+      await setViewportAndWait(ctx, size);
+      const opened = await evaluate(OPEN(quizGame(spec)));
+      check(`[${tag}] quiz stage opened`,
+        Boolean(opened && opened.stage && opened.question && opened.option),
+        opened ? JSON.stringify(opened) : 'no result');
+      if (!opened || !opened.option) continue;
+
+      // Chế độ chơi phải đúng như giáo viên mở: `is-house-mode` là do
+      // renderQuestion gắn theo isHouseMode(game), không phải do probe đặt.
+      const g = await evaluate(QUIZ_GEOM);
+      check(`[${tag}] the stage is in the requested gameplay mode`,
+        g && !g.missing && g.houseMode === (spec.play === 'house'),
+        g && !g.missing ? `is-house-mode=${g.houseMode}, expected ${spec.play === 'house'}` : 'no geometry');
+
+      const { m } = await measureAt(ctx, size, `play-surface-quiz-${combo}-${size.label}`, {
+        check, fontFloor: 10, questionAnswerOverlap: 'assert', innerScrollAreas: 0,
+        // `requireScreenshot` chỉ bắt buộc ở tám tổ hợp ngắn: ảnh của nội dung
+        // dài vẫn được ghi nếu compositor trả lời, nhưng một lần chụp thất bại
+        // vì môi trường (lỗi đã ghi ở docs/STATUS) không được phép làm đỏ một
+        // bố cục đúng.
+        requireScreenshot: spec.len === 'short'
+      });
+      assertQuizLayout(g, tag, spec);
+      console.log(quizRow(g, tag));
+      if (g && !g.missing) {
+        quizTable.push({
+          tag,
+          qFont: g.question.font, optFont: g.options[0].font,
+          artW: g.art ? g.art.w : 0, artPct: g.artPct, gridPct: g.gridPct,
+          gap: g.artGridGap, hudAbove: g.hudAboveQuestion,
+          hidden: g.options.filter(o => !o.inside).length,
+          covered: g.options.filter(o => o.inside && !o.hittable).length,
+          ovX: g.stageScroll.overflowX, ovY: g.stageScroll.overflowY,
+          doc: g.docHeight, vh: g.viewport.h
+        });
+      }
+      if (spec.len === 'long') {
+        const ls = await capture(ctx.send, `play-surface-quiz-${combo}-${size.label}`);
+        console.log(`  long fixture image: ${ls.file || '(no image: ' + ls.error + ')'}`);
+      }
+      if (m && m.outsideCount) {
+        console.log(`  painted outside viewport: ${m.outsideCount} -> ${JSON.stringify(m.outside[0])}`);
+      }
+    }
+  }
+
+  console.log('\n=== bảng số đo hiện trạng "Đấu trường tri thức" ===');
+  console.log('  tổ hợp                                qPX    oPX  artPX art%  grid%  khe  HUDtrên  ẩn che  ovX ovY  doc/viewport');
+  for (const r of quizTable) {
+    console.log('  ' + r.tag.padEnd(34)
+      + String(r.qFont).padStart(7) + String(r.optFont).padStart(6)
+      + String(r.artW).padStart(7)
+      + (r.artPct === null ? ' n/a' : ' ' + Math.round(r.artPct * 100) + '%').padStart(6)
+      + (Math.round(r.gridPct * 100) + '%').padStart(7)
+      + String(r.gap === null ? 'n/a' : r.gap).padStart(5)
+      + String(r.hudAbove === null ? 'n/a' : (r.hudAbove ? 'có' : 'KHÔNG')).padStart(9)
+      + String(r.hidden).padStart(4) + String(r.covered).padStart(4)
+      + String(r.ovX).padStart(5) + String(r.ovY).padStart(5)
+      + `  ${r.doc}/${r.vh}`);
+  }
 
 
 

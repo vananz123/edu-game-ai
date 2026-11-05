@@ -1,6 +1,7 @@
 // ui-house-building-check.js — regression guard for House Building Mode
 // (Knowledge Arena quiz, DECISIONS #140, revised #141/#143, showcase #142,
-// house models + result hero #144, side HUD column #179).
+// house models + result hero #144, side HUD column #179, one-column stage + HUD
+// strip #208).
 //
 // The house is a stack of cubes: an always-present foundation (stage 0) plus eight
 // buildable stages (3 cube rings, a big front door, 2 windows, a blocky roof,
@@ -21,11 +22,12 @@
 //   • after every answer the house is pulled to the front (`.is-house-showcase`):
 //     question + answers leave the stage, the house grows without sliding sideways,
 //     and the stage stays inside the visible play surface (#142);
-//   • since #179 the stage is TWO columns in both phases: the house (and, while
-//     reading, the question) on the left, the "Đã xây n/m phần" HUD and the
-//     explanation card in `.house-side-col` on the right — asserted against the
-//     projected 3D box, so the house can never overlap the text it shares the
-//     stage with;
+//   • since #208 the stage is ONE column in both phases: a thin "Đã xây n/m phần"
+//     HUD STRIP across the top, then the question, then the house slot and the
+//     explanation card in the same column — asserted against the projected 3D box,
+//     so the house can never overlap the text it shares the stage with, and the
+//     HUD can never take a column away from the answers (#179's right column cost
+//     273–320 px of width while width is not what ran out);
 //   • the result screen reports the house in its ACTUAL state (no auto-complete);
 //   • since #144 every house model (classic/vườn/tháp/gỗ) has the same 9 stages and
 //     its own measured bounds, the auto pick is stable per game id, and an explicit
@@ -35,9 +37,11 @@
 //   • since #179 every model's PROJECTED silhouette fits the slot it was sized for,
 //     at four models × two viewport sizes (the old footprint math let a deep model
 //     draw past its card);
-//   • since #179 html[data-fullscreen="1"] keeps BOTH columns: the projector rule
-//     that hides side columns without an illustration must not swallow the house
-//     HUD and the explanation card, and the text column widens instead of vanishing;
+//   • since #208 html[data-fullscreen="1"] keeps the HUD strip AND the explanation
+//     card visible and full-width in the main column: the projector rule that hides
+//     side columns without an illustration can no longer swallow them (they moved
+//     out of the side column), and the strip must not re-introduce a column beside
+//     the answers;
 //   • classic mode renders no house UI and keeps house state null (unchanged).
 //
 // Run:
@@ -238,10 +242,12 @@ function RUN(gameJson, answers, opts) {
         // silent re-run of the windowed layout (#179).
         fsFlag: document.documentElement.dataset.fullscreen || null,
         stagePointCenter: sp ? { x: sp.x, y: sp.y } : null,
-        // #179: HUD và lời giải thích sang cột phải, nhà ở cột trái. Bốn hình chữ
-        // nhật này là toàn bộ căn cứ của các assert bố cục bên dưới.
+        // #208: HUD là một DẢI ngang phía trên câu hỏi, không còn cột phải. Bốn
+        // hình chữ nhật này là toàn bộ căn cứ của các assert bố cục bên dưới.
         hudBox: rect('.house-progress'),
-        railBox: rect('.game-stage .house-side-col'),
+        stripBox: rect('.game-stage .house-hud-strip'),
+        questionBox: rect('.game-stage .stage-question'),
+        centerBox: rect('.game-stage .stage-center'),
         mainBox: rect('.game-stage .stage-col.is-main'),
         slotBox: rect('.game-stage .house-stage-slot'),
         houseArt: Boolean(document.querySelector('.house-question-art .stage-illustration')),
@@ -437,15 +443,17 @@ const fits = (b, r, minSpan = 60) => Boolean(b) && Boolean(r) &&
 
   const open6 = byLabel(g6, 'open');
   check('house mode renders the parts progress panel', open6.progressPanel === true);
-  check('the house HUD has its own column on the right of the question (#179)',
-    Boolean(open6.hudBox && open6.railBox && open6.mainBox) &&
-      open6.railBox.left >= open6.mainBox.right - 1 &&
-      open6.hudBox.left >= open6.railBox.left - 1 && open6.hudBox.right <= open6.railBox.right + 1 &&
-      open6.hudBox.width >= 150,
-    JSON.stringify({ hud: open6.hudBox, rail: open6.railBox, main: open6.mainBox }));
-  check('the HUD column leaves the house slot its own row',
-    Boolean(open6.hudBox && open6.slotBox) && open6.hudBox.left >= open6.slotBox.right - 1,
-    JSON.stringify({ hud: open6.hudBox, slot: open6.slotBox }));
+  check('the house HUD is a full-width strip above the question (#208)',
+    Boolean(open6.stripBox && open6.hudBox && open6.questionBox && open6.mainBox) &&
+      open6.hudBox.left >= open6.stripBox.left - 1 && open6.hudBox.right <= open6.stripBox.right + 1 &&
+      open6.stripBox.width >= open6.mainBox.width - 4 &&
+      open6.stripBox.bottom <= open6.questionBox.top + 2 && open6.hudBox.width >= 200,
+    JSON.stringify({ hud: open6.hudBox, strip: open6.stripBox, question: open6.questionBox, main: open6.mainBox }));
+  check('the HUD strip takes no column away from the house slot (#208)',
+    Boolean(open6.hudBox && open6.slotBox && open6.mainBox) &&
+      open6.hudBox.bottom <= open6.slotBox.top + 1 &&
+      open6.slotBox.width >= open6.mainBox.width - 4,
+    JSON.stringify({ hud: open6.hudBox, slot: open6.slotBox, main: open6.mainBox }));
   check('a 3D house world mounts behind the stage', open6.canvas === true);
   check('the game opens with only the foundation (parts 0/6)',
     open6.parts === 0 && open6.maxParts === 6 && (open6.count || '').includes('0/6'),
@@ -481,21 +489,26 @@ const fits = (b, r, minSpan = 60) => Boolean(b) && Boolean(r) &&
   check('the showcase fills the visible play surface',
     Math.abs((a1.stageBottom || 0) - (a1.surfaceBottom || 0)) <= 2 && (a1.surfaceBottom || 0) <= a1.viewportH + 1,
     `stage=${a1.stageTop}..${a1.stageBottom} (${a1.stageHeight}) surface=${a1.surfaceBottom} modal=${a1.modalTop}..${a1.modalBottom} viewport=${a1.viewportH}`);
-  check('the showcase keeps the house clear of the explanation column (#179)',
-    hull(a1.houseBox) && hull(a1.feedbackBox) && a1.feedbackBox.left >= a1.houseBox.right - 2,
+  check('the showcase keeps the house clear of the explanation card (#208)',
+    hull(a1.houseBox) && Boolean(a1.feedbackBox) && a1.feedbackBox.top >= a1.houseBox.bottom - 2,
     JSON.stringify({ house: a1.houseBox, feedback: a1.feedbackBox }));
   check('the showcase house is pinned inside its slot',
     hull(a1.houseBox) && Boolean(a1.slotBox) &&
       a1.houseBox.top >= a1.slotBox.top - 4 && a1.houseBox.bottom <= a1.slotBox.bottom + 4 &&
       a1.houseBox.left >= a1.slotBox.left - 4 && a1.houseBox.right <= a1.slotBox.right + 4,
     JSON.stringify({ house: a1.houseBox, slot: a1.slotBox }));
-  check('the HUD keeps its side when the showcase opens',
+  check('the HUD keeps its strip position when the showcase opens',
     Boolean(a1.hudBox && open6.hudBox) && Math.abs(a1.hudBox.left - open6.hudBox.left) <= 2 &&
-      a1.hudBox.width >= 150,
+      a1.hudBox.width >= 200,
     JSON.stringify({ before: open6.hudBox, after: a1.hudBox }));
-  check('the explanation card is a readable column, not a full-width banner',
-    Boolean(a1.feedbackBox) && a1.feedbackBox.width >= 150 && a1.feedbackBox.height >= 40,
-    JSON.stringify(a1.feedbackBox));
+  // Thẻ lời giải thích bị `max-width: 1040px` của bố cục toàn màn hình khoá lại, nên
+  // nó KHÔNG bao giờ trải trọn cột (1053px ở cửa sổ thường, 1271px ở máy chiếu). Điều
+  // #179 thật sự cần chặn là thẻ co về một DẢI MỎNG bên cạnh nhà (cột phải 232px), vì
+  // vậy ngưỡng ở đây là "còn là một dải rộng", không phải "trọn bề rộng cột".
+  check('the explanation card is a wide readable band, not a side rail (#208)',
+    Boolean(a1.feedbackBox && a1.mainBox) && a1.feedbackBox.width >= 0.6 * a1.mainBox.width &&
+      a1.feedbackBox.height >= 40,
+    JSON.stringify({ feedback: a1.feedbackBox, main: a1.mainBox }));
   check('the showcase banner names the correct answer',
     (a1.feedbackText || '').includes('Đáp án đúng') && (a1.feedbackText || '').includes('Chủ động chào hỏi'),
     JSON.stringify(a1.feedbackText));
@@ -717,14 +730,16 @@ const fits = (b, r, minSpan = 60) => Boolean(b) && Boolean(r) &&
     classic.res.resultHero === false && classic.res.houseLayout === false,
     JSON.stringify(classic.res));
 
-  // ---------------- Fullscreen / projector keeps both columns (#179) ----------------
-  // wizard.css:409 collapses every .stage-center side column that has no
-  // .stage-illustration once html[data-fullscreen="1"] is set. The house side
-  // column NEVER has an illustration (question art lives in the left column), so
-  // on a projector the parts HUD and the explanation card both went to 0x0 and the
-  // house took the full width. The app sets that attribute from the main process,
-  // so the check sets it directly — the CSS is what is under test.
-  console.log('\n=== fullscreen keeps HUD + explanation (#179) ===');
+  // -------- Fullscreen / projector keeps the HUD strip + explanation (#208) --------
+  // wizard.css:468 hides every .stage-col side column that has no
+  // .stage-illustration once html[data-fullscreen="1"] is set. Under #179 the parts
+  // HUD and the explanation card BOTH lived in the house side column, so on a
+  // projector they went to 0x0. #208 moves them into the main column, which flips
+  // the risk: the projector rules must now keep the strip and the card visible and
+  // full-width, and must not re-introduce a column that steals width from the
+  // answers. The app sets that attribute from the main process, so the check sets it
+  // directly — the CSS is what is under test.
+  console.log('\n=== fullscreen keeps HUD strip + explanation (#208) ===');
   await send('Emulation.setDeviceMetricsOverride', {
     width: 1366, height: 768, deviceScaleFactor: 1, mobile: false
   });
@@ -742,21 +757,22 @@ const fits = (b, r, minSpan = 60) => Boolean(b) && Boolean(r) &&
   check('the fullscreen flag stayed set for every measurement',
     fsRun.length > 0 && fsRun.every(s => s.fsFlag === '1'),
     JSON.stringify({ snapshots: fsRun.length, flags: fsRun.map(s => s.fsFlag) }));
-  check('fullscreen keeps the house side column on screen',
-    fsOpen.railBox && fsOpen.railBox.width > 0 && fsOpen.railBox.height > 0,
-    JSON.stringify(fsOpen.railBox));
+  check('fullscreen keeps the house HUD strip on screen',
+    fsOpen.stripBox && fsOpen.stripBox.width > 0 && fsOpen.stripBox.height > 0,
+    JSON.stringify(fsOpen.stripBox));
   check('fullscreen keeps the parts HUD visible',
     fsOpen.hudBox && fsOpen.hudBox.width > 0 && fsOpen.hudBox.height > 0,
     JSON.stringify(fsOpen.hudBox));
   check('fullscreen keeps the explanation card visible',
     fsAnswer.feedbackBox && fsAnswer.feedbackBox.width > 0 && fsAnswer.feedbackBox.height > 0,
     JSON.stringify(fsAnswer.feedbackBox));
-  check('fullscreen puts the HUD to the right of the house slot',
-    fsOpen.hudBox && fsOpen.slotBox && fsOpen.hudBox.left >= fsOpen.slotBox.right,
+  check('fullscreen puts the HUD strip above the house slot',
+    fsOpen.hudBox && fsOpen.slotBox && fsOpen.hudBox.bottom <= fsOpen.slotBox.top + 1,
     JSON.stringify({ hud: fsOpen.hudBox, slot: fsOpen.slotBox }));
-  check('fullscreen showcase house clears the text column',
-    fsAnswer.houseBox && fsAnswer.railBox && fsAnswer.houseBox.right <= fsAnswer.railBox.left,
-    JSON.stringify({ house: fsAnswer.houseBox, rail: fsAnswer.railBox }));
+  check('fullscreen showcase house clears the explanation card',
+    hull(fsAnswer.houseBox) && Boolean(fsAnswer.feedbackBox) &&
+      fsAnswer.feedbackBox.top >= fsAnswer.houseBox.bottom - 2,
+    JSON.stringify({ house: fsAnswer.houseBox, feedback: fsAnswer.feedbackBox }));
   check('fullscreen showcase hull stays inside its slot',
     fits(fsAnswer.houseBox, fsAnswer.slotBox),
     JSON.stringify({ house: fsAnswer.houseBox, slot: fsAnswer.slotBox }));
@@ -767,11 +783,12 @@ const fits = (b, r, minSpan = 60) => Boolean(b) && Boolean(r) &&
     fsAnswer.stageBottom !== null && fsAnswer.surfaceBottom !== null &&
     fsAnswer.stageBottom <= fsAnswer.surfaceBottom + 2,
     `${fsAnswer.stageBottom}/${fsAnswer.surfaceBottom}`);
-  check('fullscreen widens the text column instead of hiding it',
-    fsOpen.railBox.width >= 240 && fsOpen.railBox.width <= 330 &&
-    byLabel(g6, 'open').railBox && byLabel(g6, 'open').railBox.width >= 190 &&
-    byLabel(g6, 'open').railBox.width <= 260,
-    JSON.stringify({ projector: fsOpen.railBox.width, windowed: byLabel(g6, 'open').railBox.width }));
+  check('fullscreen keeps the strip full-width and the card a wide band',
+    fsOpen.mainBox && fsAnswer.mainBox &&
+      fsOpen.hudBox.width >= fsOpen.mainBox.width - 8 &&
+      fsAnswer.feedbackBox.width >= 0.6 * fsAnswer.mainBox.width &&
+      fsOpen.hudBox.width > byLabel(g6, 'open').hudBox.width,
+    JSON.stringify({ projectorHud: fsOpen.hudBox.width, projectorMain: fsOpen.mainBox.width, projectorFeedback: fsAnswer.feedbackBox.width, windowedHud: byLabel(g6, 'open').hudBox.width }));
 
   await evaluate(`(async () => {
     document.querySelector('[data-play-close]')?.click();

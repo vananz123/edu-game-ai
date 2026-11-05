@@ -381,6 +381,60 @@ html[data-fullscreen="1"] .modal[data-player-theme] .race-turn .stage-illustrati
   html[data-fullscreen="1"] .modal[data-player-theme] .stage-col.is-main > .stage-kicker {
     text-align: left;
   }
+
+  /* === Hàng "câu hỏi | ảnh" của Cổ điển CÓ ảnh (DECISIONS #208, nhiệm vụ 2) ===
+     Bố cục giáo viên chốt: câu hỏi bên trái, ảnh bên phải CÙNG MỘT HÀNG, bốn
+     đáp án ở dưới và TRẢI NGANG vùng chơi. Khối lưới nằm trong `.is-main` như
+     cũ nên mọi rule chiều cao của nó (`flex: 1 1 auto`, `grid-auto-rows:
+     minmax(min-content, 1fr)`, `margin-top`, trạng thái đã-trả-lời `:has()`)
+     tiếp tục khớp nguyên — chỉ hàng phía trên là chia đôi bề rộng.
+
+     Selector KHÔNG khoá `html[data-fullscreen]`: cửa sổ app thật (1266px) cũng
+     ≥1180px, và ảnh nằm trong cột 300–440px mà không có rule `width: 100%` thì
+     `.stage-illustration` gốc (`min(320px, 46%)`) letterbox thành vệt mảnh
+     đúng như lỗi #70. */
+  .modal[data-player-theme] .stage-center > .stage-col.is-main > .stage-lead-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    align-content: flex-start;
+    column-gap: clamp(12px, 1.2vw, 20px);
+    row-gap: clamp(8px, 1.1vh, 14px);
+    width: 100%;
+  }
+  /* Cột chữ co giãn được, cột ảnh bề rộng px cố định (không dùng % — cùng lý
+     do đã ghi ở khối 2 cột phía trên). 28vw: 383px @1366, 440px @1920. */
+  .modal[data-player-theme] .stage-lead-row > .stage-lead-text {
+    flex: 1 1 340px;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .modal[data-player-theme] .stage-lead-row > .stage-side-col {
+    flex: 0 0 auto;
+    width: clamp(300px, 28vw, 440px);
+  }
+  .modal[data-player-theme] .stage-lead-row > .stage-side-col > .stage-illustration {
+    width: 100%;
+    max-width: 100%;
+    max-height: none;
+    margin: 0;
+  }
+  /* Câu hỏi không còn là con ruột của `.is-main`, nên các rule
+     `.stage-col.is-main > .stage-question` (max-width 100%, margin 0, canh trái)
+     KHÔNG khớp nó nữa. Không khai lại thì nó giữ `margin: 14px auto 30px` +
+     `max-width: min(100%, 68ch)` của bản toàn màn hình: hộp chữ thụt vào giữa
+     cột và khoảng chết giữa câu hỏi với ảnh đúng bằng phần bề rộng còn thừa —
+     chính là "cột chết" mà điều kiện khe ≤24px cấm. */
+  .modal[data-player-theme] .stage-lead-row .stage-lead-text > .stage-question {
+    max-width: 100%;
+    margin: 0;
+    text-align: left;
+  }
+  .modal[data-player-theme] .stage-lead-row .stage-lead-text > .stage-kicker-row {
+    text-align: left;
+  }
   /* Race: ảnh + câu hỏi nằm trong `.race-turn`, không có `.stage-center`. */
   html[data-fullscreen="1"] .modal[data-player-theme] .race-turn > .race-turn-row {
     display: flex;

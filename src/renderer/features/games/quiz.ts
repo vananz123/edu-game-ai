@@ -39,28 +39,63 @@ function renderQuestion() {
     // Xây nhà đều mọc thêm một cảnh mặc định. Đặt ngang thay vì xếp trên để không
     // ăn chiều cao: đo ở 1920x1080, ảnh xếp trên đẩy 6 phần tử đáp án ra ngoài màn.
     const houseArt = houseMode ? resolveStageIllustration(q, game) : null;
+    const houseArtOn = Boolean(houseArt && houseArt.explicit);
     const houseSlotHtml = houseMode ? '<div class="house-stage-slot" aria-hidden="true"></div>' : '';
-    const houseBlock = houseArt && houseArt.explicit
-        ? `<div class="house-art-row"><div class="house-question-art">${stageIllustrationHtml(q, game, 'is-stage is-house-art')}</div>${houseSlotHtml}</div>`
-        : houseSlotHtml;
-    // #179: ở chế độ Xây nhà, HUD "Đã xây n/m phần" và banner phản hồi KHÔNG nằm
-    // ngang đầu sân khấu nữa mà thành CỘT PHẢI, để cột trái dành cho ngôi nhà 3D.
-    // Cùng một cột dùng cho cả hai màn (đọc câu hỏi và trình diễn), nên HUD không
-    // nhảy chỗ khi trả lời.
-    const houseSideColHtml = houseMode
-        ? `<div class="stage-col house-side-col">${houseProgressHtml()}<div id="answerFeedback"></div></div>`
+    const houseArtHtml = houseArtOn
+        ? `<div class="house-question-art">${stageIllustrationHtml(q, game, 'is-stage is-house-art')}</div>`
         : '';
-    const sideColHtml = houseMode
+    /* DECISIONS #208 (nhiệm vụ 4–5): HUD "Đã xây n/m phần" rời CỘT PHẢI (#179)
+       thành DẢI NGANG ở đầu .stage-center, và banner phản hồi về lại cột chữ như
+       mọi màn khác. Lý do bằng số, không phải thẩm mỹ: cột phải của #179 rộng
+       273–320px nên nó ăn ngang, còn dải mỏng ~34px chỉ ăn chiều dọc — mà chiều
+       dọc mới là thứ hết chỗ ở fixture dài (đo: .stage-center 534px @1366x768,
+       câu hỏi dài một mình đã chiếm 254px). Cột phải đồng thời bóp câu hỏi xuống
+       978/1455px, trái với "câu hỏi ở phía trên" của giáo viên.
+       Dải này là con TRỰC TIẾP của .stage-center và đứng trước cột chữ, nên
+       .houseTarget() không đổi và HUD đứng yên giữa hai màn (nhà lớn lên tại chỗ
+       chứ không trượt ngang — giữ nguyên ý #179). */
+    const houseHudHtml = houseMode ? `<div class="house-hud-strip">${houseProgressHtml()}</div>` : '';
+    /* DECISIONS #208 (nhiệm vụ 2): ở Cổ điển CÓ ảnh, ảnh rời khỏi CỘT TRÁI của
+       sân khấu để đứng CÙNG HÀNG với câu hỏi (hỏi trái / ảnh phải), còn lưới đáp
+       án xuống hàng riêng và trải trọn bề rộng vùng chơi. Điều kiện
+       `stageGame === 'quiz'` là hữu ý: "Quyết định" (scenario) đi qua cùng render
+       function nhưng nằm ngoài phạm vi bố cục đã chốt, nên giữ nguyên cột trái cũ.
+       `#answerFeedback` vì thế về nằm dưới lưới (như màn không có ảnh) thay vì
+       dưới ảnh. */
+    const classicLeadRow = stageGame === 'quiz' && !houseMode && hasIllus;
+    const sideColHtml = houseMode || classicLeadRow
         ? ''
         : `<div class="stage-col stage-side-col">${illusHtml}${hasIllus ? '<div id="answerFeedback" class="feedback-under-illustration"></div>' : ''}</div>`;
     const hintButton = q.hint && !textQ ? `<button type="button" class="btn btn-secondary btn-small quiz-hint-btn" id="quizHintBtn">💡 Gợi ý</button>` : '';
     const kickerRow = kicker || hintButton
         ? `<div class="stage-kicker-row flex items-center justify-between gap-2 mb-2 flex-wrap">${kicker ? `<div class="stage-kicker d-badge d-badge-neutral">${kicker}</div>` : ''}${hintButton}</div>`
         : '';
+    const contextHtml = q.context ? `<p class="scenario-context">${escapeHtml(q.context).replace(/\n/g, '<br>')}</p>` : '';
+    const questionHtml = `<div class="stage-question">${escapeHtml(q.prompt).replace(/\n/g, '<br>')}</div>`;
     const answerArea = textQ
         ? `<div class="text-answer-box"><input id="textAnswerInput" placeholder="${shortAnswerPlaceholder}" autocomplete="off"><button class="btn btn-primary" id="textAnswerBtn">Trả lời</button>${q.hint ? `<button class="btn btn-secondary text-answer-hint" type="button" data-answer-hint>💡 Gợi ý</button>` : ''}</div>${q.hint ? `<div class="text-answer-hint-text hidden" id="textAnswerHint">💡 <strong>Gợi ý:</strong> ${escapeHtml(q.hint)}</div>` : ''}`
         : `<div class="answer-grid${trueFalse ? ' true-false-grid' : ''}">${q.options.map((o, i) => `<button class="answer-option" data-answer="${escapeHtml(o.id)}"><span class="letter">${optionMark(o, i)}</span><span>${escapeHtml(o.text)}</span></button>`).join('')}</div>`;
-    root.innerHTML = `<div class="game-stage${houseMode ? ' is-house-mode' : ''}" data-game="${stageGame}" data-game-world="quiz">${gameWorldLabel(stageGame)}<div class="stage-top"><span class="stage-meta">${escapeHtml(game.subject || 'TRÒ CHƠI HỌC TẬP')} · ${game.grade ? 'LỚP ' + escapeHtml(game.grade) : 'MỌI LỚP'}</span><span class="stage-meta stage-meta-right"><span class="stage-chip">${game.template === 'scenario' ? 'QUYẾT ĐỊNH' : 'CÂU'} <b>${state.gameAnswers.length + 1}</b>/${game.questions.length}</span><span class="stage-chip stage-chip-score">🏆 <b>${state.gameAnswers.reduce((s, a) => s + a.points, 0)}</b> điểm</span></span></div><div class="stage-progress"><div data-progress="${progress}"></div></div>${state.teamPlay ? teamTurnBarHtml() : ''}<div class="stage-center">${sideColHtml}<div class="stage-col is-main">${kickerRow}${houseBlock}${q.context ? `<p class="scenario-context">${escapeHtml(q.context).replace(/\n/g, '<br>')}</p>` : ''}<div class="stage-question">${escapeHtml(q.prompt).replace(/\n/g, '<br>')}</div>${answerArea}${!hasIllus && !houseMode ? '<div id="answerFeedback"></div>' : ''}<div class="stage-bottom"><span class="stage-tip">${scoringTip}</span><button class="btn hidden" id="nextQuestionBtn">Tiếp tục →</button></div></div>${houseSideColHtml}</div></div>`;
+    /* DECISIONS #208 (nhiệm vụ 4): Xây nhà CÓ ảnh = "câu hỏi ở trên, ảnh bên trái
+       cùng HÀNG với lưới đáp án bên phải", nên lưới không còn là con trực tiếp của
+       .is-main nữa. Màn KHÔNG ảnh giữ DOM phẳng đúng như Cổ điển (lưới vẫn là
+       `> .answer-grid`) vì giáo viên chốt "bốn đáp án trải ngang vùng chơi" — ở
+       đó mọi rule chiều cao sẵn có tiếp tục khớp mà không phải khai lại.
+       Cột trái chứa ảnh ở TRÊN và ô nhà `.house-stage-slot` ở DƯỚI: ô nhà bắt
+       buộc còn (houseTarget() đo đúng hình chữ nhật đó, #142) nhưng không được
+       thành một dải riêng tốn thêm 170–238px chiều dọc, vì fixture dài đã ngốn
+       hết .stage-center. */
+    const houseAnswerRow = houseArtOn
+        ? `<div class="house-answer-row"><div class="house-lead-col">${houseArtHtml}${houseSlotHtml}</div><div class="house-answer-col">${answerArea}</div></div>`
+        : '';
+    // Câu hỏi luôn là khối chữ cuối trước hàng đáp án; ở màn không ảnh thì ô nhà
+    // đứng ngay dưới kicker (như #179) và lưới ở dưới câu hỏi.
+    const centerLeadHtml = classicLeadRow
+        ? `<div class="stage-lead-row"><div class="stage-lead-text">${kickerRow}${contextHtml}${questionHtml}</div><div class="stage-col stage-side-col">${illusHtml}</div></div>`
+        : `${kickerRow}${houseMode && !houseArtOn ? houseSlotHtml : ''}${contextHtml}${questionHtml}`;
+    // Bảng giải thích về lại CỘT CHỮ ở mọi màn (kể cả Xây nhà có ảnh): cột phải
+    // của #179 đã bị dải HUD thay thế.
+    const mainFeedbackHtml = hasIllus && !classicLeadRow ? '' : '<div id="answerFeedback"></div>';
+    root.innerHTML = `<div class="game-stage${houseMode ? ' is-house-mode' : ''}" data-game="${stageGame}" data-game-world="quiz">${gameWorldLabel(stageGame)}<div class="stage-top"><span class="stage-meta">${escapeHtml(game.subject || 'TRÒ CHƠI HỌC TẬP')} · ${game.grade ? 'LỚP ' + escapeHtml(game.grade) : 'MỌI LỚP'}</span><span class="stage-meta stage-meta-right"><span class="stage-chip">${game.template === 'scenario' ? 'QUYẾT ĐỊNH' : 'CÂU'} <b>${state.gameAnswers.length + 1}</b>/${game.questions.length}</span><span class="stage-chip stage-chip-score">🏆 <b>${state.gameAnswers.reduce((s, a) => s + a.points, 0)}</b> điểm</span></span></div><div class="stage-progress"><div data-progress="${progress}"></div></div>${state.teamPlay ? teamTurnBarHtml() : ''}<div class="stage-center">${houseHudHtml}${sideColHtml}<div class="stage-col is-main">${centerLeadHtml}${houseAnswerRow || answerArea}${mainFeedbackHtml}<div class="stage-bottom"><span class="stage-tip">${scoringTip}</span><button class="btn hidden" id="nextQuestionBtn">Tiếp tục →</button></div></div></div></div>`;
     paintProgress(root);
     $$('.answer-option', root).forEach(btn => btn.addEventListener('click', () => chooseAnswer(q, btn.dataset.answer)));
     const qHintBtn = $('#quizHintBtn', root);

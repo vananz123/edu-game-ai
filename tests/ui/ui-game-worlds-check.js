@@ -276,14 +276,27 @@ const GAMES = [
     out.pickedHeight = picked ? Math.round(picked.getBoundingClientRect().height) : 0;
     out.pickedWidth = picked ? Math.round(picked.getBoundingClientRect().width) : 0;
     out.pickedSlot = Boolean(document.querySelector('.house-stage-slot'));
-    // #153: the picture shares one row with the house slot instead of stacking above
-    // it. Stacked, a usable-size picture pushed the answer grid off the projector
-    // (measured: 6 elements past 1080px, and 0px of answers at 768px).
-    out.pickedBesideSlot = (() => {
+    /* #153 asked for the picture to stand LEFT OF the house slot in one row.
+       DECISIONS #208 re-drew that row: the picture and the slot now share one
+       column (art on top, the slot under it) and the ANSWER GRID is what sits
+       beside them. So the two properties #153 was really protecting are measured
+       separately now — the slot keeps a real rectangle under the picture
+       (houseTarget() needs it, #142), and the picture still shares a row with
+       the answers instead of pushing them off the projector (measured at
+       1366x768: art 270x169 over slot 270x69 in a 270px column, grid 771x128
+       starting 17px to its right). */
+    out.pickedSharesSlotColumn = (() => {
       const slot = document.querySelector('.house-stage-slot');
       if (!picked || !slot) return false;
       const a = picked.getBoundingClientRect(), s = slot.getBoundingClientRect();
-      return a.right <= s.left + 2 && a.top < s.bottom && a.bottom > s.top;
+      const shared = Math.min(a.right, s.right) - Math.max(a.left, s.left);
+      return shared >= Math.min(a.width, s.width) * 0.9 && s.top >= a.bottom - 2;
+    })();
+    out.pickedRowWithAnswers = (() => {
+      const grid = document.querySelector('.answer-grid');
+      if (!picked || !grid) return false;
+      const a = picked.getBoundingClientRect(), g = grid.getBoundingClientRect();
+      return g.left >= a.right - 2 && g.top < a.bottom && g.bottom > a.top;
     })();
     document.querySelector('.answer-option')?.click();
     await sleep(900);
@@ -304,8 +317,9 @@ const GAMES = [
   check('the grey genre pill is gone from a plain quiz question', art.classicPills.length === 0, JSON.stringify(art.classicPills));
   check('a picked picture takes the pill place in house mode',
     art.pickedArt === true && art.pickedWidth >= 140 && art.pickedHeight >= 85 &&
-      art.pickedSlot === true && art.pickedBesideSlot === true,
-    JSON.stringify({ art: art.pickedArt, w: art.pickedWidth, h: art.pickedHeight, slot: art.pickedSlot, beside: art.pickedBesideSlot }));
+      art.pickedSlot === true && art.pickedSharesSlotColumn === true && art.pickedRowWithAnswers === true,
+    JSON.stringify({ art: art.pickedArt, w: art.pickedWidth, h: art.pickedHeight, slot: art.pickedSlot,
+      column: art.pickedSharesSlotColumn, answersRow: art.pickedRowWithAnswers }));
   check('the house showcase hides the question picture', art.showcase === true && art.showcaseArtHidden === true,
     JSON.stringify({ showcase: art.showcase, hidden: art.showcaseArtHidden }));
   check('"Bỏ ảnh" leaves no picture on the play surface', art.noneArt === false, JSON.stringify(art.noneArt));

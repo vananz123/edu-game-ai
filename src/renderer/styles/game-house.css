@@ -1,28 +1,42 @@
 /* game-house.css — Chế độ Xây nhà — ngôi nhà 3D là nhân vật chính (DECISIONS #142). — tách từ app.css, giữ nguyên thứ tự (DECISIONS #149). */
 /* ============================================================
-   CHẾ ĐỘ XÂY NHÀ — ngôi nhà là nhân vật chính (DECISIONS #142),
-   HUD + lời giải thích ở cột phải (DECISIONS #179)
+   CHẾ ĐỘ XÂY NHÀ — MỘT CỘT DỌC (DECISIONS #208), thay cho hai cột của #179.
 
    Ngôi nhà là WebGL: canvas phủ toàn `.game-stage` và nằm DƯỚI nội dung DOM
    (`.game-stage[data-game-world] > * { z-index: 1 }`). Vì vậy muốn "đưa nhà ra
    trước" thì phải dọn nội dung DOM khỏi vùng nhà chiếm chứ không thể tăng
    z-index cho canvas.
 
-   · HAI CỘT, dùng cho cả hai màn (#179): cột trái = ô nhà `.house-stage-slot`
-     + câu hỏi + đáp án; cột phải `.house-side-col` = HUD "Đã xây n/m phần" và
-     banner giải thích. HUD đứng yên khi học sinh trả lời, nhà chỉ lớn lên tại
-     chỗ thay vì trượt ngang.
-   · house.ts chiếu TÂM và BỀ RỘNG của ô nhà qua camera để đặt nhà 3D, nên muốn
-     đổi vùng nhà chiếm là đổi CSS của ô đó — không phải sửa số trong TS.
-   · Sau khi trả lời: `.is-house-showcase` ẩn câu hỏi/đáp án và giãn ô nhà ra hết
-     cột trái. Chiều cao stage được GIỮ NGUYÊN bằng inline `min-height` đúng bằng
-     ô nó đang chiếm trước khi bật class — nếu không, stage co từ ~843px xuống
-     ~283px và canvas đổi tỉ lệ giữa animation. Không lấy số đo từ đáy `.modal`:
-     modal tự co giãn theo nội dung, đọc đáy của nó rồi ghi chiều cao cho stage là
-     vòng lặp phản hồi, mỗi câu trả lời lại to thêm (#179).
+   · house.ts chiếu TÂM và BỀ RỘNG của `.house-stage-slot` qua camera để đặt nhà
+     3D, nên muốn đổi vùng nhà chiếm là đổi CSS của ô đó — không phải sửa số
+     trong TS. Ô luôn phải còn là một hình chữ nhật THẬT: `houseTarget()`
+     (house.ts:367) đo `getBoundingClientRect()` của nó và trả `null` khi rộng
+     hoặc cao = 0, mất ô là mất chỗ neo của nhà.
+   · #179 đặt HUD + lời giải thích ở CỘT PHẢI 273–320px. Đo trên play surface
+     thật (fixture câu hỏi dài, 1366×768 và 1920×1080) cho thấy cột đó là nguồn
+     tràn: nó ăn NGANG trong khi thứ hết chỗ lại là DỌC — `.stage-center` cao
+     534px @1366×768 mà riêng câu hỏi dài đã 254px, hàng đáp án bị bóp còn 73px
+     và hai ô cuối nằm dưới đáy màn hình. #208 chuyển HUD thành DẢI NGANG ~34px
+     ở đầu cột, trả lại 273–320px bề ngang cho câu hỏi và lưới.
+   · HAI BIẾN THỂ đúng phạm vi giáo viên chốt:
+       - CÓ ảnh:    HUD dải trên / câu hỏi / [ảnh + ô nhà | lưới đáp án] cùng hàng.
+       - KHÔNG ảnh: HUD dải trên / ô nhà / câu hỏi / lưới trải ngang.
+       Màn KHÔNG ảnh giữ DOM PHẲNG (lưới vẫn là `> .stage-col.is-main > .answer-grid`)
+       nên mọi rule chiều cao sẵn có của quiz tiếp tục khớp nguyên. Màn CÓ ảnh
+       bọc lưới trong `.house-answer-col`, do đó bốn rule lưới (flex, grid-auto-rows,
+       min-height ô, margin-top) phải được KHAI LẠI dưới đây — khai thiếu là lưới
+       mất phần dư chiều dọc và ô đáp án bị nén thành dải.
+   · Sau khi trả lời: `.is-house-showcase` ẩn câu hỏi/đáp án/ảnh và giãn ô nhà ra
+     hết chỗ. Chiều cao stage được GIỮ NGUYÊN bằng inline `min-height`
+     (`pinShowcaseStage`) đúng bằng ô nó đang chiếm trước khi bật class. Không lấy
+     số đo từ đáy `.modal`: modal tự co giãn theo nội dung, đọc đáy của nó rồi ghi
+     chiều cao cho stage là vòng lặp phản hồi, mỗi câu trả lời lại to thêm (#179).
    ============================================================ */
 
-/* Vùng giữ chỗ cho ngôi nhà trong lúc học sinh đọc câu hỏi. */
+/* Vùng giữ chỗ cho ngôi nhà trong lúc học sinh đọc câu hỏi.
+   Hai rule này là BẢN GỐC dùng chung cho màn kết quả (`.result-house-hero
+   .house-stage-slot` có khai báo riêng trong gameplay.css) — chế độ chơi ghi đè
+   ở khối 3 dưới đây, không sửa hai dòng này. */
 .house-stage-slot {
   width: 100%;
   height: clamp(110px, 16vh, 160px);
@@ -34,69 +48,32 @@ html[data-fullscreen="1"] .house-stage-slot {
   height: clamp(170px, 22vh, 260px);
 }
 
-/* #153: ảnh minh hoạ giáo viên chọn cho câu hỏi, thay chỗ nhãn thể loại xám vừa
-   bỏ. Đặt NGANG HÀNG với ô giữ chỗ của nhà, không xếp chồng lên trên: đo ở
-   1920x1080, một ảnh 320x200 xếp trên đẩy 6 phần tử đáp án ra ngoài màn hình và ở
-   1366x768 làm lưới đáp án co về 0. Hàng ngang dùng khoảng trống bên trái của ô
-   nhà (ô nhà rộng 1784px nhưng ngôi nhà chỉ chiếm ~340px giữa), nên nó không ăn
-   thêm chiều cao nào.
-   Kích thước theo `vh` chứ không theo `%`: ảnh nằm trong flex item co theo nội
-   dung, nên `%` sẽ tính quanh chính nó (đo được 34% của 300px = 102px — quá nhỏ). */
-.house-art-row {
-  display: flex;
-  align-items: center;
-  gap: clamp(12px, 2vw, 32px);
-  width: 100%;
-}
-.house-art-row .house-stage-slot {
-  flex: 1 1 auto;
-  width: auto;
-  min-width: 0;
-}
-.house-question-art {
-  display: flex;
-  justify-content: center;
-  flex: 0 0 auto;
-  margin: 0;
-}
-.house-question-art .stage-illustration.is-house-art {
-  width: clamp(150px, 22vh, 280px);
-  max-width: clamp(150px, 22vh, 280px);
-  margin: 0;
-}
-html[data-fullscreen="1"] .house-question-art .stage-illustration.is-house-art {
-  width: clamp(180px, 30vh, 360px);
-  max-width: clamp(180px, 30vh, 360px);
-}
-
-/* #179: HUD "Đã xây n/m phần" rời dải ngang đầu sân khấu, thành CỘT PHẢI cùng với
-   lời giải thích. Một bố cục dùng cho cả hai màn nên HUD không đổi chỗ khi học
-   sinh trả lời.
-   Ba rule phải thắng, chọn theo độ đặc hiệu chứ không trông vào thứ tự nạp file:
-     · `html[data-fullscreen="1"] .modal[data-player-theme] .stage-center`
-       (gameplay.css:245, 0,5,0) khoá flex-direction: column;
-     · `.modal[data-player-theme] .stage-center` (gameplay.css:212) trần 1120px —
-       đó chính là khoảng trống hai bên ở 1920x1080, phải bỏ cho Xây nhà;
-     · `html[data-fullscreen] ... .stage-center > .stage-col:not(.is-main)`
-       (wizard.css:246) khoá cột phụ 300–440px — cột HUD rộng có chủ đích hơn.
-   Riêng game-treasure.css:348 ép display/flex-direction/align-items của cột phụ
-   bằng `!important`: đúng ý ở đây nên không cần cãi lại. */
+/* --- 1. Khung: một cột dọc, không còn cột phải --------------------------------
+   `flex-direction: column` ở đây là ĐẢO quyết định của #179 (cột phải) nên selector
+   phải thắng cả ba khối đang khoá `.stage-center`:
+     · gameplay.css:245 `html[data-fullscreen] .modal[data-player-theme] .stage-center`
+       (0,4,1) — bản này chỉ định nghĩa cột, không định nghĩa hàng;
+     · wizard.css:165 `.stage-center > .stage-col { display: contents }` (0,2,0) —
+       `contents` làm cột biến mất khỏi bố cục, dải HUD, hàng ảnh và lưới thành con
+       giả của `.stage-center`, nên Xây nhà cần cột THẬT;
+     · wizard.css:476 `.stage-center:not(:has(...)) > .stage-col.is-main` (0,7,1) —
+       khoá `flex: 1 1 100%` + `width: 100%` khi không có ảnh.
+   `align-items: stretch` (khác bản gốc `flex-start` ở hàng 2 cột): dải HUD và hàng
+   đáp án phải bám mép trái–phải của vùng nội dung, đó chính là điều kiện "không cột
+   rỗng" mà phép đo #208 kiểm tra.
+   `gap` nhỏ hơn bản gốc `clamp(10px,2.6vh,34px)`: mỗi khe dọc ở 1366×768 đều ăn vào
+   phần mà lưới đáp án đáng được nhận. */
 .game-stage.is-house-mode .stage-center,
 html[data-fullscreen="1"] .modal[data-player-theme] .game-stage.is-house-mode .stage-center {
   display: flex;
-  flex-direction: row;
-  /* KHÔNG cho xuống hàng. `.stage-center` kế thừa `flex-wrap: wrap` từ bản mặc
-     định, mà thuật toán flex **chia hàng TRƯỚC khi co**: item có base size
-     (flex-basis `auto` = max-content) lớn hơn hàng được đặt một mình sang hàng
-     kế, và `flex-shrink` không bao giờ được gọi. Trên máy chiếu 1366×768 cột
-     chữ ở màn đọc câu hỏi có base 1255 px = đúng bề rộng hàng ⇒ cột HUD rơi
-     xuống DƯỚI sân khấu (đo: rail `538..811 × 758..838`, trong khi cột phải
-     đáng lẽ ở `966..1239`). `nowrap` buộc phép co chạy; `.stage-col` đã có
-     `min-width: 0` ở dưới nên cột chữ co được mà không tràn. */
+  flex-direction: column;
+  /* KHÔNG cho xuống hàng: thuật toán flex chia hàng TRƯỚC khi co, nên item có base
+     size lớn hơn hàng bị đặt một mình sang hàng kế và `flex-shrink` không bao giờ
+     chạy (#179 từng rơi đúng bẫy này ở 1366×768). */
   flex-wrap: nowrap;
   align-items: stretch;
-  justify-content: center;
-  gap: clamp(12px, 1.5vw, 26px);
+  justify-content: flex-start;
+  gap: clamp(6px, 1.1vh, 14px);
   max-width: none;
   min-width: 0;
   width: 100%;
@@ -107,75 +84,222 @@ html[data-fullscreen="1"] .modal[data-player-theme] .game-stage.is-house-mode .s
   align-items: stretch;
   min-width: 0;
 }
+/* Cột chữ nhận hết chiều cao `.stage-center` ở CẢ HAI chế độ cửa sổ. gameplay.css:186
+   cho `.game-stage` là flex column với `height:100%` và gameplay.css:212/245 cho
+   `.stage-center` `flex:1`, nên cột chỉ nhận phần dư khi chính nó là flex-item
+   `1 1 auto`. Thiếu dòng này thì ở cửa sổ thường (không toàn màn hình) cột co về
+   đúng nội dung: `pinShowcaseStage()` có khoá chiều cao stage đi nữa, ô nhà vẫn
+   0px vì không có phần dư nào để chia — đo được `slot 1053×0` và nhà không lớn
+   lên chút nào sau khi trả lời. */
 .game-stage.is-house-mode .stage-center > .stage-col.is-main {
   flex: 1 1 auto;
-  justify-content: center;
+  min-height: 0;
+  justify-content: flex-start;
 }
-/* Bề rộng px cố định, không dùng % (bài học #89: % trong cột hẹp bóp nội dung).
-   Cửa sổ app tối thiểu 1100px (src/main.ts:681) nên cột trái còn ~810px cho lưới
-   đáp án 2 cột — không có trường hợp phải xếp chồng. */
-.modal[data-player-theme] .game-stage.is-house-mode .stage-center > .stage-col.house-side-col {
-  flex: 0 0 clamp(200px, 17vw, 250px);
-}
-
-/* Toàn màn hình (máy chiếu): cột HUD + lời giải thích PHẢI còn.
-   `wizard.css:409` đóng mọi cột phụ của `.stage-center` về 0 khi cửa sổ ở chế độ
-   toàn màn hình và cột đó **không có ảnh minh hoạ** — ý nó là "cột ảnh thừa thì
-   ẩn đi, mở nội dung chính ra hết". Cột Xây nhà không bao giờ có ảnh (ảnh câu hỏi
-   nằm ở cột trái, `.house-question-art`), nên rule đó xoá sạch cả HUD lẫn banner
-   "✓ Chính xác!" trên máy chiếu: đo được `display:none`, `.house-progress` và
-   `#answerFeedback` về 0×0, cột trái chiếm 1255/1255 px. Học sinh trên bảng chỉ
-   còn ngôi nhà, không còn biết mình đang xây được mấy phần và đáp án đúng là gì.
-   Hai override dưới thắng bằng **độ đặc hiệu** (0,9,1 và 0,10,1 so với 0,7,1 và
-   0,8,1 của rule gốc, cả hai vế đều `!important`) và tái khẳng định điều rule gốc
-   giả định sai: điều kiện của nó là `:not(:has(.stage-illustration))`, nên kèm
-   đúng điều kiện đó vào selector của ta — ta chỉ nói "ở Xây nhà, điều kiện ấy
-   không được ẩn gì cả". Ở máy chiếu cột chữ rộng hơn (240–320px) vì lời giải
-   thích là nội dung cả lớp cùng đọc; kéo theo cột trái `flex: 1 1 auto` để
-   `houseTarget()` đo ô nhà theo đúng chiều rộng thật của nó. */
-html[data-fullscreen="1"] .modal[data-player-theme] .game-stage.is-house-mode .stage-center > .stage-col.house-side-col:not(:has(.stage-illustration)) {
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: stretch !important;
-  justify-content: flex-start !important;
-  flex: 0 0 clamp(240px, 20vw, 320px) !important;
-  width: auto !important;
-  min-width: 240px !important;
-  margin: 0 !important;
-  padding: 0 !important;
-}
-/* Cột chữ ở Xây nhà luôn là `1 1 auto` — không phải `flex: 1 1 100%` mà rule toàn
-   màn hình dành cho "chế độ không có ảnh". Điều kiện `:not(:has(.stage-illustration))`
-   của rule gốc KHÔNG được chép vào đây: Xây nhà không có cột ảnh, nên điều kiện đó
-   chỉ tổ làm override mất tác dụng đúng vào câu hỏi CÓ ảnh (`.house-question-art`). */
+/* Cột chữ nhận đúng phần còn lại của `.stage-center`. `height: auto` +
+   `max-height: none` gỡ `height:100%`/`max-height:100%` của wizard.css:354: ở bố
+   cục 1 cột giá trị đó vô hại, nhưng cùng `max-height:100%` lại chặn cột cao hơn
+   stage khi fixture dài — phần tràn bị nhốt inside cột thay vì nằm ở
+   `.game-stage` (`overflow:auto` của stage), và `.is-main` có `min-height:0` để
+   thực sự co được khi nội dung vượt. */
 html[data-fullscreen="1"] .modal[data-player-theme] .game-stage.is-house-mode .stage-center > .stage-col.is-main {
-  flex: 1 1 auto !important;
-  width: auto !important;
-  max-width: none !important;
+  flex: 1 1 auto;
+  width: 100%;
+  height: auto;
+  max-height: none;
+  min-height: 0;
+  align-self: stretch;
+  justify-content: flex-start;
 }
 
-/* Màn trình diễn: vẫn hai cột. Câu hỏi/đáp án rời sân khấu, ô nhà giãn ra hết
-   chiều cao cột trái (nhà lớn lên tại chỗ, không trượt ngang), nút "Tiếp tục"
-   nằm đáy cột trái, lời giải thích vào cột phải ngay dưới HUD. */
-.modal[data-player-theme] .game-stage.is-house-showcase .stage-center > .stage-col.is-main {
-  align-items: center;
-  justify-content: flex-end;
+/* --- 2. Dải HUD "Đã xây n/m phần" --------------------------------------------
+   gameplay.css:383 cho `.house-progress` là khối ĐỨNG ba hàng (đầu / thanh / vật
+   liệu) với `max-width: 680px; margin: 2px auto 20px`. Ở dải ngang ba hàng đó
+   thành ba CỘT trên một dòng cao ~34px: phần dư bề ngang đổ hết vào `.house-bar`,
+   còn "Đã xây n/m phần" và dòng vật liệu giữ nguyên chữ — không ẩn nội dung nào,
+   chỉ đổi hướng xếp. `box-sizing: border-box` để `width: 100%` cộng nổi padding
+   (phép đo HUD lấy chính `.house-progress`, thiếu nó là mép phải tràn 12px). */
+.game-stage.is-house-mode .house-hud-strip {
+  flex: 0 0 auto;
+  width: 100%;
 }
-/* `.house-stage-slot` CHÍNH LÀ hình chữ nhật mà houseTarget() đo. Ở màn trình
-   diễn nó phải còn đó và căng ra — ẩn nó như #142 từng làm là mất luôn chỗ đặt
-   nhà (ô nằm trong `.house-art-row` khi câu hỏi có ảnh, nên hàng đó cũng vậy). */
-.game-stage.is-house-showcase .house-stage-slot,
-.game-stage.is-house-showcase .house-art-row {
+.modal[data-player-theme] .game-stage.is-house-mode .house-progress {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: clamp(8px, 1.2vw, 16px);
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 5px 12px;
+}
+.game-stage.is-house-mode .house-progress-head {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+.game-stage.is-house-mode .house-bar {
+  flex: 1 1 90px;
+  min-width: 70px;
+  margin: 0;
+}
+.game-stage.is-house-mode .house-materials {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* --- 3. Ô nhà lúc đọc câu hỏi -------------------------------------------------
+   Bản #179 khoá ô cao CỐ ĐỊNH 170–260px. Với fixture dài con số đó là thứ đẩy lưới
+   đáp án ra khỏi màn hình, nên ô chuyển sang `flex: 1 1 auto` có SÀN: nhận mọi phần
+   dư khi màn còn trống (nhà to nhất có thể), co về sàn 64–120px khi câu hỏi dài
+   chiếm chỗ. Sàn vẫn đủ cao để `houseTarget()` còn hình chữ nhật thật và để học
+   sinh thấy nhà lớn lên rõ ràng ở màn trình diễn. */
+.game-stage.is-house-mode .house-stage-slot {
   flex: 1 1 auto;
   height: auto;
+  min-height: clamp(64px, 9vh, 120px);
+  max-height: clamp(150px, 22vh, 260px);
+  margin: 0;
+}
+
+/* --- 4. Hàng "ảnh + ô nhà | lưới đáp án" (Xây nhà CÓ ảnh) ---------------------
+   `align-items: stretch` (không phải `flex-start` như hàng Cổ điển): cột trái dài
+   đúng bằng lưới, nhờ đó ảnh và ô nhà đứng cùng HÀNG với bốn đáp án thay vì trôi
+   lên trên. Khe dùng `clamp(...,24px)` vì điều kiện đã chốt là "khe ảnh ↔ đáp án
+   ≤ 24 CSS px" — lấy 24 làm trần để không bao giờ vượt, đồng thời vẫn đủ thoáng ở
+   máy chiếu. */
+.game-stage.is-house-mode .house-answer-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: clamp(10px, 1.3vw, 24px);
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+}
+/* Cột trái RỘNG THEO ẢNH, không theo %. Bề rộng ảnh = cao ảnh × 16/10 (`aspect-ratio`
+   của `.stage-illustration`), nên trần chiều cao là thứ quyết định bề rộng: ảnh
+   169px cao → 270px ngang @1366, 238px → 380px @1920. Dùng % cho cột (26–28%) rồi
+   để ảnh `width: 100%` sẽ letterbox thành vệt mảnh đúng như lỗi #70/#89, còn dùng
+   `min(28%, cao×1.6)` thì ảnh đầy khít cột mà lưới vẫn ăn 77–78% bề rộng (trần 28%
+   giữ cam kết "ảnh ≤ 28% vùng nội dung").
+   Trần 22vh (không phải 17vh): #89 đã kết luận ảnh 219–300px "ngang một tấm thẻ,
+   không phải một bức tranh" — 17vh cho đúng cái thẻ đó ở 1366×768. */
+.game-stage.is-house-mode .house-answer-row > .house-lead-col {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: clamp(6px, 1vh, 12px);
+  flex: 0 1 auto;
+  width: min(28%, calc(clamp(130px, 22vh, 240px) * 1.6));
+  min-width: 0;
   min-height: 0;
 }
-.game-stage.is-house-showcase .house-art-row {
+.game-stage.is-house-mode .house-answer-row > .house-answer-col {
   display: flex;
+  flex-direction: column;
   align-items: stretch;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+}
+.game-stage.is-house-mode .house-question-art {
+  display: flex;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-height: 0;
+  margin: 0;
+}
+.game-stage.is-house-mode .house-question-art .stage-illustration.is-house-art {
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  max-height: clamp(130px, 22vh, 240px);
+  margin: 0;
+}
+/* Ở biến thể này lưới đáp án KHÔNG còn là con ruột của `.is-main`, nên bốn rule
+   điều khiển chiều cao của nó (wizard.css:286/307, gameplay.css:311 và trạng thái
+   đã-trả-lời wizard.css:358/370) đều trôi mất vì dùng `>`. Khai lại đúng giá trị cũ
+   — không đổi chính sách, chỉ đổi đường đi của selector. */
+html[data-fullscreen="1"] .modal[data-player-theme] .game-stage.is-house-mode .house-answer-col > .answer-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  align-content: stretch;
+  grid-auto-rows: minmax(min-content, 1fr);
+  margin-top: clamp(10px, 1.8vh, 22px);
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .game-stage.is-house-mode .house-answer-col > .answer-grid > .answer-option {
+  min-height: min-content;
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .game-stage.is-house-mode .stage-col.is-main:has(> #answerFeedback:not(:empty)) .house-answer-col > .answer-grid {
+  flex: 0 1 auto;
+  grid-auto-rows: min-content;
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .game-stage.is-house-mode .stage-col.is-main:has(> #answerFeedback:not(:empty)) .house-answer-col > .answer-grid > .answer-option {
+  min-height: 0;
+}
+/* Text/đúng-sai cũng đi theo hàng này: cột phải co được nếu không hộp trả lời sẽ
+   thành khối cứng cao theo nội dung và đẩy `.stage-bottom` ra khỏi màn. */
+.game-stage.is-house-mode .house-answer-col > .text-answer-box,
+.game-stage.is-house-mode .house-answer-col > .answer-grid.true-false-grid {
+  flex: 0 0 auto;
+}
+
+/* --- 5. Trần cỡ chữ câu hỏi ở máy chiếu --------------------------------------
+   Ngưỡng đã chốt là 32px và KHÔNG được hạ dưới để lọt màn, nên trần đặt đúng sàn
+   ở cửa sổ thấp: 32px @1366×768, 45px @1920×1080. So với bản toàn màn hình đang
+   thắng (fullscreen.css:89 `clamp(28px,4.5vh+1vw,60px)` và bản `max-height:800px`
+   `clamp(34px,3.7vh+0.7vw,46px)` = 38px/60px) thì fixture dài giảm từ 254px/402px
+   xuống ~214px/302px — đó là toàn bộ chỗ phải lấy cho lưới đáp án. `line-height`
+   1.3 giữ nguyên quy tắc tiếng Việt "dấu hai tầng không bị cắt ngọn".
+   Chỉ khoá `html[data-fullscreen="1"]`: cửa sổ thường trong app còn dư chỗ, không
+   lý do gì thu chữ của giáo viên. */
+html[data-fullscreen="1"] .modal[data-player-theme] .game-stage.is-house-mode .stage-question {
+  font-size: clamp(32px, 3.1vh + 0.6vw, 45px);
+  line-height: 1.3;
+  max-width: 100%;
+  margin: 0;
+}
+
+/* --- 6. Màn trình diễn --------------------------------------------------------
+   Vẫn MỘT CỘT. Câu hỏi/đáp án/ảnh rời sân khấu, ô nhà giãn ra hết chỗ (nhà lớn lên
+   tại chỗ, không trượt ngang — giữ nguyên ý #179), lời giải thích thành thẻ dưới nhà,
+   nút "Tiếp tục" ở đáy. */
+.modal[data-player-theme] .game-stage.is-house-showcase .stage-center > .stage-col.is-main {
+  align-items: stretch;
+  justify-content: flex-start;
+}
+/* `.house-stage-slot` CHÍNH LÀ hình chữ nhật mà houseTarget() đo. Ở màn trình diễn
+   nó phải còn đó và căng ra — ẩn nó như #142 từng làm là mất luôn chỗ đặt nhà.
+   `max-height: none` bỏ trần 260px của lúc đọc câu hỏi: đây là lúc nhà được phép
+   chiếm toàn bộ phần dư. */
+.game-stage.is-house-showcase .house-stage-slot {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: clamp(120px, 16vh, 220px);
+  max-height: none;
+}
+/* Hàng ảnh+lưới quay về cột dọc: ảnh và lưới đã ẩn, cột trái thành dải duy nhất
+   và chiếm trọn bề ngang, nhờ đó nhà to bằng đúng phần màn hình vừa được giải phóng. */
+.game-stage.is-house-showcase .house-answer-row {
+  flex-direction: column;
+  gap: 0;
+  margin-top: 0;
+}
+.game-stage.is-house-showcase .house-answer-row > .house-lead-col {
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: none;
+  min-height: 0;
 }
 .game-stage.is-house-showcase .stage-kicker-row,
 .game-stage.is-house-showcase .house-question-art,
+.game-stage.is-house-showcase .house-answer-col,
 .game-stage.is-house-showcase .scenario-context,
 .game-stage.is-house-showcase .stage-question,
 .game-stage.is-house-showcase .answer-grid,
@@ -185,40 +309,29 @@ html[data-fullscreen="1"] .modal[data-player-theme] .game-stage.is-house-mode .s
   display: none;
 }
 
-/* HUD trong cột phải: đầy đủ "Đã xây n/m phần" + thanh tiến độ + dòng "Còn n phần
-   nữa" (bản cũ ở màn trình diễn phải giấu dòng này vì nó ăn chiều cao của nhà;
-   sang cột riêng thì không còn đánh đổi nào). */
-.modal[data-player-theme] .game-stage.is-house-mode .house-progress {
-  box-sizing: border-box;
-  width: 100%;
-  max-width: none;
-  margin: 0;
-  padding: 10px 12px;
-}
-.game-stage.is-house-mode .house-progress-head {
-  flex-wrap: wrap;
-  gap: 3px 10px;
-}
+/* Dải HUD đứng yên giữa hai màn (nhà lớn lên tại chỗ nên HUD không được nhảy): ở
+   màn trình diễn nó chỉ mỏng hơn 1px. */
 .game-stage.is-house-showcase .house-progress {
-  padding: 8px 12px;
-}
-.game-stage.is-house-showcase .house-bar {
-  margin: 7px 0 0;
+  padding: 4px 12px;
 }
 
-/* Thẻ giải thích ở cột phải. game-treasure.css:366 đã chốt width/box-sizing/
-   margin-top/flex/max-height clamp(150px, 28vh, 280px)/overflow-y + thanh cuộn
-   riêng bằng `!important` cho mọi cháu `#answerFeedback` của
-   `.stage-col:not(.is-main)` — đúng ý một cột chữ cuộn độc lập nên chỉ việc thêm
-   màu và cỡ chữ. */
+/* Thẻ giải thích nằm dưới nhà. Không còn cột phải (#179) nên thẻ rộng trọn cột chữ
+   và bị GIỚI HẠN CAO + cuộn riêng: đo ở 1366×768 với fixture dài, thẻ giải thích 3
+   dòng cao ~110px là đủ chỗ, nhưng lời giải thích dài hơn mà không có trần sẽ ăn
+   chiều cao của chính ô nhà — thứ mà #142 coi là nhân vật chính.
+   `flex: 0 1 auto` để thẻ nhường phần dư cho nhà nhưng vẫn co được khi màn thấp. */
 .modal[data-player-theme] .game-stage.is-house-showcase #answerFeedback {
+  box-sizing: border-box;
+  flex: 0 1 auto;
+  max-height: clamp(84px, 15vh, 180px);
+  overflow-y: auto;
   padding: 12px 14px;
   border-radius: 16px;
   background: linear-gradient(180deg, #143f38, #12302c);
   border: 1px solid #35b68e;
   box-shadow: 0 14px 32px #0009;
   color: #e7fff8;
-  font-size: clamp(12px, 1.5vh, 15px);
+  font-size: clamp(13px, 1.5vh, 16px);
   text-align: left;
 }
 .modal[data-player-theme] .game-stage.is-house-showcase #answerFeedback.bad {
@@ -236,6 +349,7 @@ html[data-fullscreen="1"] .modal[data-player-theme] .game-stage.is-house-mode .s
   justify-content: center;
   width: 100%;
   margin-top: 0;
+  flex: 0 0 auto;
 }
 .modal[data-player-theme] .game-stage.is-house-showcase #nextQuestionBtn {
   padding: 10px 28px;

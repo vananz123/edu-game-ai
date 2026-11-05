@@ -62,6 +62,11 @@ const OPEN = `(async () => {
   document.querySelector('[data-play-close]')?.click();
   document.getElementById('modalRoot').innerHTML = '';
   await sleep(200);
+  // Count only THIS game. Checks share one renderer, and the close above
+  // unmounts whatever a sibling check left mounted — counted, that one
+  // defensive unmount offsets every number below by exactly one.
+  window.__threeSpy.mounts = 0;
+  window.__threeSpy.unmounts = 0;
   playGame(${GAME});
   await sleep(900);
   const canvas = document.querySelector('.game-stage canvas');

@@ -138,18 +138,23 @@ const probe = (game, opener) => `
     drawn: Boolean(el),
     assetId: el ? el.getAttribute('data-illustration') : null,
     iconClass: el ? (el.querySelector('.stage-illustration-icon')?.getAttribute('class') || '') : '',
-    // The illustration must be the element immediately BEFORE the question's
-    // block, so the reading order is "picture, then question". Since the
-    // 2-column layout (DECISIONS #84) the picture lives in its own
-    // .stage-col wrapper, so the direct nextElementSibling === q test no longer
-    // holds: the comparison is against the container that holds the question.
-    isSiblingOfQuestion: Boolean(el && q && (() => {
-      const qBlock = q.parentElement;
+    // The illustration must share ONE ROW with the question, as sibling blocks.
+    // Since the 2-column layout (DECISIONS #84) the picture lives in its own
+    // .stage-col wrapper, so a direct nextElementSibling === q test no longer
+    // holds. #208 went further: for quiz the owner pinned "câu hỏi bên trái, ảnh
+    // bên phải, cùng một hàng", so the question is wrapped one level deeper in
+    // .stage-lead-text and the picture is the item AFTER it. Order therefore
+    // differs per template (art left in treasure #207, art right in quiz #208)
+    // and is not asserted here — ui-play-surface-check.js pins the direction
+    // geometrically. What must not regress is adjacency: an illustration that
+    // merely sits somewhere inside .stage-center would pass an ancestor test
+    // while leaving a dead column beside the text.
+    isBesideQuestion: Boolean(el && q && (() => {
       const illBlock = el.closest('.stage-col') || el;
-      if (illBlock.parentElement === qBlock) return illBlock.nextElementSibling === q;
-      // 2-column: both are .stage-col children of the same row.
-      return illBlock.parentElement === qBlock.parentElement
-        && illBlock.nextElementSibling === qBlock;
+      const row = illBlock.parentElement;
+      let qBlock = q;
+      while (qBlock && qBlock.parentElement !== row) qBlock = qBlock.parentElement;
+      return Boolean(row) && Boolean(qBlock) && qBlock !== illBlock && qBlock !== row;
     })()),
     size: svg ? rect(svg) : null,
     questionPresent: Boolean(q),
@@ -189,8 +194,8 @@ const probe = (game, opener) => `
     check(`${tpl.key}: the illustration sits inside the game stage`,
       auto.inStage === true, String(auto.inStage));
     if (auto.questionPresent) {
-      check(`${tpl.key}: the illustration is a sibling of .stage-question`,
-        auto.isSiblingOfQuestion === true, String(auto.isSiblingOfQuestion));
+      check(`${tpl.key}: the illustration shares one row with .stage-question`,
+        auto.isBesideQuestion === true, String(auto.isBesideQuestion));
     }
     check(`${tpl.key}: the illustration has a real size (not a collapsed box)`,
       // Was `h <= 220` while the scene was capped at 320px wide. DECISIONS #89
