@@ -11,6 +11,8 @@
 //  2. game cũ vẫn mang luật cũ: mở ra là "Giữ hành vi hiện tại", lưu đi không đổi gì;
 //  3. chọn một chế độ rồi mở lại thì lựa chọn còn nguyên, giá trị cũ được cất trong
 //     `legacyScoringMode` và "Giữ hành vi hiện tại" hoàn nguyên ĐÚNG giá trị đó.
+//  4. (task 3) máy trạng thái trả lời dùng chung `game-engine/answer-flow.js` được TRANG
+//     thật nạp — unit test chỉ chứng minh tệp chạy được bằng `require` ở Node.
 //
 // Hai cơ chế của TRANG THẬT quyết định cấu trúc bài này:
 //  • `saveEditedGame` đóng trang soạn thảo khi lưu thành công (editorPageState = null +
@@ -201,6 +203,34 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
       // ---- G. Ghép cặp: không bao giờ nhận token, dù select bị set bằng JS ------
       out.saved.matching = await save('match-token', TOKEN_PRACTICE, { fixture: FIX.matching() });
 
+      // ---- H. máy trạng thái dùng chung (task 3) phải sống NGAY TRONG TRANG -----
+      // Unit test nạp dist bằng require, nên nó KHÔNG chứng minh được điều task 4-6
+      // cần: index.html có thật sự nạp tệp đó trước mọi trò chơi hay không. Một global
+      // thiếu ở đây là ReferenceError khi học sinh bấm câu đầu tiên.
+      // (Không được viết dấu back-tick trong các comment nằm trong chuỗi evaluate.)
+      try {
+        const rows = [];
+        const practice = beginAnswerTurn({ id: 'h1', points: 100 }, { scoringMode: TOKEN_PRACTICE }, { template: 'quiz' });
+        registerAnswer(practice, { correct: false, points: 0 });
+        registerAnswer(practice, { correct: true, points: 100 });
+        const challenge = beginAnswerTurn({ id: 'h2', points: 100 }, { scoringMode: TOKEN_CHALLENGE }, { template: 'quiz' });
+        registerAnswer(challenge, { correct: false, points: 0 });
+        const legacy = beginAnswerTurn({ id: 'h3', points: 100 }, { scoringMode: 'tốc độ' }, { template: 'quiz' });
+        registerAnswer(legacy, { correct: true, points: 120 });
+        commitAnswerRecord(rows, practice);
+        out.flow = {
+          missing: ['beginAnswerTurn', 'registerAnswer', 'endAnswerTurn', 'answerTurnRecord',
+            'commitAnswerRecord', 'answerTurnAward'].filter(name => typeof window[name] !== 'function'),
+          practice: { mode: practice.mode, points: practice.points, attempts: practice.attempts, done: practice.finished, reveal: practice.revealCorrect },
+          challenge: { reveal: challenge.revealCorrect, explanation: challenge.explanationAvailable, locked: challenge.locked },
+          legacy: { mode: legacy.mode, points: legacy.points },
+          once: { rows: rows.length, again: commitAnswerRecord(rows, practice).committed, points: rows[0] && rows[0].points }
+        };
+      } catch (error) {
+        // Một trang thiếu global phải hiện ra trong báo cáo chứ không cắt mất phần sau.
+        out.flow = { error: String(error && error.message || error), missing: ['threw'] };
+      }
+
       document.getElementById('modalRoot').innerHTML = '';
       if (typeof closeEditorPage === 'function') closeEditorPage();
 
@@ -316,11 +346,30 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
     (matching?.game?.matchingGame?.pairs || []).length >= 2,
     String((matching?.game?.matchingGame?.pairs || []).length));
 
+  // H. máy trạng thái trả lời dùng chung — tồn tại và đúng NGAY TRONG TRANG chơi
+  check('the answer-turn machine is loaded as page globals',
+    JSON.stringify(report.flow?.missing) === '[]', JSON.stringify(report.flow || null));
+  check('Luyện tập in the page charges 10% of the question, once',
+    report.flow?.practice?.mode === 'practice' && report.flow?.practice?.points === 90
+    && report.flow?.practice?.attempts === 2, JSON.stringify(report.flow?.practice));
+  check('a retry closes the question as soon as it is right',
+    report.flow?.practice?.done === true && report.flow?.practice?.reveal === true,
+    JSON.stringify(report.flow?.practice));
+  check('Thử thách in the page reveals nothing and earns no explanation',
+    report.flow?.challenge?.reveal === false && report.flow?.challenge?.explanation === false
+    && report.flow?.challenge?.locked === true, JSON.stringify(report.flow?.challenge));
+  check('a legacy game pays its own score untouched by the machine',
+    report.flow?.legacy?.mode === 'legacy' && report.flow?.legacy?.points === 120,
+    JSON.stringify(report.flow?.legacy));
+  check('one question writes one score row in the page too',
+    report.flow?.once?.rows === 1 && report.flow?.once?.again === false
+    && report.flow?.once?.points === 90, JSON.stringify(report.flow?.once));
+
   check('the fixtures are removed from the library again', report.cleanup?.left === 0, JSON.stringify(report.cleanup));
 
   const failed = results.filter(r => !r.ok).length;
   console.log('\n' + (results.length - failed) + '/' + results.length + ' checks passed');
-  // Đóng socket代替 process.exit(): exit cắt mất phần đuôi đã buffer khi log được
+  // Đóng socket thay vì process.exit(): exit cắt mất phần đuôi đã buffer khi log được
   // redirect, còn socket mở thì tiến trình treo sau khi in xong (rc=124 đã đo).
   try { ctx.ws.close(); } catch (error) { /* đã đóng */ }
   process.exitCode = failed ? 1 : 0;
