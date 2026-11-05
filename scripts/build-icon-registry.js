@@ -56,7 +56,8 @@ const ICON_GROUPS = {
     'bot', 'cloud', 'image', 'camera', 'link', 'lock', 'message-square', 'type', 'user',
     'monitor', 'smartphone', 'keyboard', 'layers', 'list', 'list-checks', 'list-filter',
     'pin', 'flag', 'gauge', 'activity', 'timer', 'mouse-pointer-click', 'eye', 'eye-off',
-    'chart-column', 'notebook', 'bookmark', 'archive', 'hard-hat', 'mouse'
+    'chart-column', 'notebook', 'bookmark', 'archive', 'hard-hat', 'mouse',
+    'sliders-horizontal'
   ]
 };
 

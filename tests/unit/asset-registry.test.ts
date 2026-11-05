@@ -105,7 +105,7 @@ for (const id of CONTENT_CATEGORY_IDS) {
 // The registry is generated, so this number is a drift guard rather than a spec:
 // changing ICON_GROUPS means changing it in the same commit. #161 added the
 // `chrome` group (68 icons) that the sidebar and page headers now use.
-const ICON_COUNT = 128;
+const ICON_COUNT = 129;
 assert.equal(ICON_NAMES.length, ICON_COUNT, `expected exactly ${ICON_COUNT} icons, got ${ICON_NAMES.length}`);
 assert.equal(new Set(ICON_NAMES).size, ICON_COUNT, 'no duplicate icon ids');
 // A name in two groups would be written into ICON_NODES twice, and `tsc` rejects

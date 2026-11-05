@@ -55,7 +55,7 @@ function renderCreate() {
             <span class="flex flex-col gap-1 min-w-0">
               <div class="flex items-center justify-between gap-1 flex-wrap">
                 <strong class="text-[13px] text-[#1e293b] dark:text-[#f1f5f9]">${title}</strong>
-                <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#eef2ff] dark:bg-[#252c4a] text-[#4f46e5] dark:text-[#a5b4fc]">${purpose}</span>
+                <span class="px-1.5 py-0.5 rounded text-[11px] font-bold bg-[#eef2ff] dark:bg-[#252c4a] text-[#4f46e5] dark:text-[#a5b4fc]">${purpose}</span>
               </div>
               <small class="text-[12px] text-[#4f46e5] font-semibold">${short}</small>
               <small class="text-[12px] text-[#4f5a6e] dark:text-[#94a3b8] leading-snug">${desc}</small>

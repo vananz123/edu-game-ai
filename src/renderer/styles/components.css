@@ -206,7 +206,7 @@ html[data-theme="dark"] .ai-chat-messages { scrollbar-color: #3c4363 transparent
 html[data-theme="dark"] .form-panel { box-shadow: var(--shadow-sm); }
 html[data-theme="dark"] .quick-action { box-shadow: var(--shadow-sm); }
 html[data-theme="dark"] .modal { box-shadow: var(--shadow-lg); }
-html[data-theme="dark"] .ai-chat-panel { box-shadow: var(--shadow-md); }
+html[data-theme="dark"] .ai-chat-panel { box-shadow: var(--shadow-md); /* tấm sáng (components.css:463) → thang surface cũng phải sáng theo, xem ghi chú ở .info-box */ --surface-0:#ffffff;--surface-1:#f5f7fc;--surface-2:#eef1f8;--surface-3:#e6eaf4; }
 html[data-theme="dark"] .sidebar-shortcuts { background: var(--surface-1); }
 html[data-theme="dark"] .editor-page-head { background: var(--surface-1); border-bottom-color: var(--line); }
 html[data-theme="dark"] .editor-save-bar { background: var(--surface-1); border-bottom-color: var(--line); }
@@ -216,7 +216,17 @@ html[data-theme="dark"] .modal-body { background: var(--surface-0); }
 html[data-theme="dark"] .notification-popover { background: var(--surface-2); box-shadow: var(--shadow-lg); }
 html[data-theme="dark"] .wizard-mode-block { box-shadow: var(--shadow-sm); }
 html[data-theme="dark"] .ai-chat-composer { background: var(--surface-1); }
-html[data-theme="dark"] .info-box { background: var(--surface-1); }
+html[data-theme="dark"] .info-box { background: var(--surface-1); color: var(--muted); }
+/* #191 lật NỀN hai tấm này sang biến surface mà quên lật MỰC: `.info-box` ghim
+   `color:#5f6a7d` (components.css:486) và `.ai-chat-composer > small` ghim đúng mực
+   đó, textarea ghim `#263047` — trên `#171b2e` thành 3,12:1, đo trên binary đóng gói
+   ở hộp "Cần Internet ở lần cài đặt này". Dùng alias thay vì hex: trong hòn đảo
+   sáng của `.modal` (shell.css:180) `--muted`/`--text` đã được khai báo lại theo bảng
+   sáng nên vẫn ra `#5f6a7d`/`#172033` như trước, còn trên nền tối thật thì chúng là
+   `#a0a7bc`/`#e8eaf2`. */
+html[data-theme="dark"] .info-box strong { color: var(--text); }
+html[data-theme="dark"] .ai-chat-composer > small { color: var(--muted); }
+html[data-theme="dark"] .ai-chat-composer textarea { color: var(--text); }
 .modal-foot{display:flex;justify-content:flex-end;gap:9px;padding:16px 23px;border-top:1px solid var(--line);position:sticky;bottom:0;background:#fff}
 .toast{position:fixed;bottom:22px;right:24px;background:#20263b;color:#fff;padding:12px 16px;border-radius:10px;font-size:12px;box-shadow:var(--shadow);opacity:0;transform:translateY(8px);transition:.2s;pointer-events:none;z-index:50;max-width:440px}
 .toast.show{opacity:1;transform:translateY(0)}
