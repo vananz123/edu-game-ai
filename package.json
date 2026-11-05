@@ -39,6 +39,9 @@
     "check:stage-illustration-ui": "node tests/ui/ui-stage-illustration-check.js",
     "check:play-surface-ui": "node tests/ui/ui-play-surface-check.js",
     "check:offline-packaged": "node tests/ui/offline-packaged-check.js",
+    "check:packaged-feed": "node tests/ui/packaged-feed-check.js",
+    "check:packaged-feed-available": "node tests/ui/packaged-feed-check.js 9371 available",
+    "check:packaged-feed-vacuum": "node tests/ui/packaged-feed-check.js 9371 error",
     "check:presentation-ui": "node tests/ui/ui-presentation-check.js",
     "launch:ui": "powershell -ExecutionPolicy Bypass -File tests/ui/launch-app.ps1",
     "test:native": "node tests/run-unit.js lesson-store"

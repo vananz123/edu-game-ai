@@ -10,6 +10,17 @@
 // = false` + cùng version 0.4.0 phải cho ra "đã mới nhất", chứ không phải
 // `errorKind: 'feed'` như trước khi #200 phát hành.
 //
+// Ba chế độ, cùng một tệp, chọn bằng đối số thứ hai (hoặc `EDUGAME_FEED_EXPECT`):
+//   up-to-date  bản đóng gói == bản mới nhất của feed -> phải lên "đã mới nhất".
+//   available   bản đóng gói CŨ HƠN feed (0.4.0 chống feed đã có 0.4.1 — nốt nợ (a)
+//               của #200, đo ở #166) -> phải MỜI cập nhật: badge "Có bản mới X", thẻ
+//               cập nhật hiện, nút "Tải về và cập nhật" Bật nhưng tuyệt đối không bấm,
+//               thanh tiến trình vẫn ẩn và 0 %.
+//   error       đã cất `resources/app-update.yml` đi -> là chân không.
+// Không hard-code phiên bản nào cho nhánh đúng: `up-to-date` và `available` suy ra từ
+// chính `releases/latest` đọc vô danh trên máy này, nên cổng sống qua lần phát hành
+// sau. `EDUGAME_APP_VERSION` chỉ tuỳ chọn khoá tên binary đang đo.
+//
 // CHÂN KHÔNG tiêu cực (proof rằng câu trả lời đến từ tệp feed, không phải từ
 // `app.getVersion()`): chạy cổng này HAI LẦN trên hai process khác nhau. Lần một
 // để nguyên `resources/app-update.yml` -> phải lên `up-to-date`. Lần hai đổi tên
@@ -22,25 +33,54 @@
 // cho chạy bộ cài trên máy này). Cổng chỉ đọc, và đo thêm một điều: sau lượt
 // kiểm tra xanh thì phần trăm vẫn 0 và thanh tải vẫn ẩn.
 //
-// Chạy (hai lượt, mỗi lượt một hồ sơ Temp riêng):
+// Chạy (mỗi lượt một hồ sơ Temp riêng, một process riêng — cổng KHÔNG tự bật app):
 //   npm run build && npx electron-builder --win nsis      # trong worktree sạch tại HEAD
 //   $env:EDUGAME_USER_DATA="$env:TEMP\eg-feed-041"
 //   "release\win-unpacked\EduGame Studio.exe" --remote-debugging-port=9371
-//   node tests/ui/packaged-feed-check.js 9371
-//   # lượt chân không:
-//   $env:EDUGAME_FEED_EXPECT="error";  rename app-update.yml -> app-update.yml.off ; bật lại app
-//   node tests/ui/packaged-feed-check.js 9371
+//   node tests/ui/packaged-feed-check.js 9371                # up-to-date
+//   node tests/ui/packaged-feed-check.js 9371 available      # 0.4.0 chống feed có 0.4.1 (#166)
+//   # lượt chân không: cất app-update.yml đi rồi mới bật app
+//   node tests/ui/packaged-feed-check.js 9371 error
+//   # khoá tên binary nếu muốn (tuỳ chọn): $env:EDUGAME_APP_VERSION="0.4.0"
 const { check, results } = require('../manual/lib/ui-check-lib');
 const { findTarget, listTargets } = require('./lib/screenshot-capture');
 
 const PORT = Number(process.argv[2] || process.env.CDP_PORT || 9371);
-/** `up-to-date` = bản đóng gói với feed thật. `error` = chân không (đã cất app-update.yml). */
-const EXPECT = process.env.EDUGAME_FEED_EXPECT === 'error' ? 'error' : 'up-to-date';
-/** Bản đã phát hành (#200) — đọc thẳng từ `latest.yml` của repo, không hard-code. */
+/**
+ * Nhánh kỳ vọng: `up-to-date` | `available` | `error` (chân không — đã cất
+ * app-update.yml). Chọn bằng đối số thứ hai (để `npm run` chạy được trên Windows,
+ * nơi `VAR=x node …` trong script không có hiệu lực) hoặc bằng biến môi trường.
+ */
+const MODES = ['up-to-date', 'available', 'error'];
+const EXPECT = MODES.includes(process.argv[3]) ? process.argv[3]
+  : (MODES.includes(process.env.EDUGAME_FEED_EXPECT) ? process.env.EDUGAME_FEED_EXPECT : 'up-to-date');
+/** Tuỳ chọn khoá tên binary đang đo, ví dụ `EDUGAME_APP_VERSION=0.4.0`. */
+const APP_VERSION = String(process.env.EDUGAME_APP_VERSION || '');
+/** Repo công bố feed — `app-update.yml` của bản đóng gói trỏ đúng vào đây. */
 const RELEASE_OWNER = 'vananz123';
 const RELEASE_REPO = 'edu-game-ai';
 
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+const escRe = text => String(text == null ? '' : text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * So sánh ĐỘC LẬP với ứng dụng: chỉ số học trên ba nhóm số, không gọi
+ * `compareVersions` của `update-policy.ts` (so bằng chính hàm bị nghi thì cổng
+ * không bao giờ đỏ được), và không cần thư viện semver.
+ */
+function cmpVersions(candidate, current) {
+  const parse = value => {
+    const match = /^v?(\d+)\.(\d+)(?:\.(\d+))?/.exec(String(value == null ? '' : value).trim());
+    return match ? [Number(match[1]), Number(match[2]), Number(match[3] || 0)] : null;
+  };
+  const a = parse(candidate);
+  const b = parse(current);
+  if (!a || !b) return null;
+  for (let index = 0; index < 3; index += 1) {
+    if (a[index] !== b[index]) return a[index] > b[index] ? 1 : -1;
+  }
+  return 0;
+}
 
 /** Nối CDP vào một target theo URL (thư viện dùng chung chỉ biết index.html). */
 async function connectTo(matcher) {
@@ -90,8 +130,11 @@ const READ = `(async () => {
     checkDisabled: g('aboutCheckBtn') ? g('aboutCheckBtn').disabled : null,
     updateVisible: !hidden('aboutUpdateCard'),
     updateTitle: g('aboutUpdateTitle') ? g('aboutUpdateTitle').textContent.trim() : '',
+    updateDiff: g('aboutUpdateDiff') ? g('aboutUpdateDiff').textContent.trim() : '',
     barVisible: !hidden('aboutProgressTrack'),
+    progressText: g('aboutProgressText') ? g('aboutProgressText').textContent.trim() : '',
     downloadDisabled: g('aboutDownloadBtn') ? g('aboutDownloadBtn').disabled : null,
+    downloadLabel: g('aboutDownloadBtn') ? g('aboutDownloadBtn').textContent.trim() : '',
     installVisible: !hidden('aboutInstallBtn'),
     errorVisible: !hidden('aboutErrorCard'),
     errorTitle: g('aboutErrorTitle') ? g('aboutErrorTitle').textContent.trim() : '',
@@ -175,7 +218,9 @@ function report() {
 
   // 1. Đúng binary đã phát hành, không phải bản dev đội lốt.
   check('the app reports itself packaged', info.packaged === true, JSON.stringify({ packaged: info.packaged }));
-  check('the running version is the released one', info.version === '0.4.0', info.version);
+  check('the running version is the binary this mode is about',
+    APP_VERSION ? info.version === APP_VERSION : /^\d+\.\d+\.\d+$/u.test(String(info.version)),
+    JSON.stringify({ version: info.version, pinned: APP_VERSION, mode: EXPECT }));
   check('the release page points at this repo',
     info.releasePageUrl === `https://github.com/${RELEASE_OWNER}/${RELEASE_REPO}/releases`, info.releasePageUrl);
 
@@ -194,15 +239,25 @@ function report() {
   console.log(`  answer: phase=${state.phase} kind="${state.errorKind}" in ${elapsedMs} ms`
     + ` | current=${state.currentVersion} new="${state.newVersion}"`);
 
+  // 3. Hai nguồn phải nói cùng một điều — cả ba chế độ đều đọc feed thật trên máy này.
+  check('the GitHub feed is reachable from this machine for an anonymous read',
+    feedTruth.status === 200, JSON.stringify({ status: feedTruth.status, error: feedTruth.error }));
+  check('the feed names a plain release version', /^\d+\.\d+\.\d+$/u.test(feedVersion),
+    JSON.stringify({ feedTag, feedVersion }));
+
   if (EXPECT === 'up-to-date') {
-    // 3. Nhánh xanh: đúng những gì giáo viên thấy khi #200 đã phát hành 0.4.0.
+    // 4a. Nhánh xanh: đúng những gì giáo viên thấy khi máy đã cài bản mới nhất.
     check('the real feed answers up-to-date (not errorKind "feed")',
       state.phase === 'up-to-date' && state.errorKind === '',
       JSON.stringify({ phase: state.phase, kind: state.errorKind, message: String(state.errorMessage).slice(0, 90) }));
+    check('the app agrees with an independent read of releases/latest',
+      feedVersion === state.currentVersion && cmpVersions(feedVersion, state.currentVersion) === 0,
+      JSON.stringify({ feedTag, feedVersion, currentVersion: state.currentVersion, phase: state.phase }));
     check('the badge reads "Ứng dụng đã mới nhất"', answer.badge === 'Ứng dụng đã mới nhất', answer.badge);
     check('the badge is the ok tone, not spinning', answer.tone === 'ok' && answer.spinning === false,
       JSON.stringify({ tone: answer.tone, spinning: answer.spinning }));
-    check('the note names the running version', /Bản 0\.4\.0 là bản mới nhất/u.test(answer.note), answer.note);
+    check('the note names the running version',
+      new RegExp('Bản ' + escRe(state.currentVersion) + ' là bản mới nhất', 'u').test(answer.note), answer.note);
     check('no error card is painted', answer.errorVisible === false, answer.errorTitle);
     check('the retry button is usable', answer.checkDisabled === false, String(answer.checkDisabled));
     check('the check really happened', state.lastCheckedAt > 0, String(state.lastCheckedAt));
@@ -212,27 +267,44 @@ function report() {
       && answer.updateVisible === false && answer.installVisible === false,
       JSON.stringify({ percent: state.progressPercent, barVisible: answer.barVisible,
         updateVisible: answer.updateVisible, installVisible: answer.installVisible }));
-
-    // 4. Hai nguồn phải nói cùng một điều.
-    check('the GitHub feed is reachable from this machine for an anonymous read',
-      feedTruth.status === 200, JSON.stringify({ status: feedTruth.status, error: feedTruth.error }));
-    check('the app agrees with an independent read of releases/latest',
-      feedVersion === state.currentVersion,
-      JSON.stringify({ feedTag, feedVersion, currentVersion: state.currentVersion, phase: state.phase }));
-
-    // 5. Bấm thật, lần thứ hai — nhánh xanh phải lặp lại được, không phải ăn may.
-    await about.evaluate(`document.getElementById('aboutCheckBtn').click()`);
-    const again = await waitForAnswer(about);
-    check('a manual re-check answers up-to-date again',
-      phaseOf(again.dom) === 'up-to-date' && again.dom.state.errorKind === '',
-      JSON.stringify({ phase: phaseOf(again.dom), kind: again.dom.state.errorKind,
-        message: String(again.dom.state.errorMessage).slice(0, 90) }));
-    check('the second check is recorded later than the first',
-      again.dom.state.lastCheckedAt > state.lastCheckedAt,
-      JSON.stringify({ first: state.lastCheckedAt, second: again.dom.state.lastCheckedAt }));
-    check('the second answer took network time too', again.elapsedMs > 20, `${again.elapsedMs} ms`);
+  } else if (EXPECT === 'available') {
+    // 4b. Nhánh "có bản mới": binary cũ chống feed đã phát hành bản mới hơn (#166).
+    check('the real feed answers available (not up-to-date, not errorKind "feed")',
+      state.phase === 'available' && state.errorKind === '',
+      JSON.stringify({ phase: state.phase, kind: state.errorKind, message: String(state.errorMessage).slice(0, 90) }));
+    check('the running binary really is older than the feed',
+      cmpVersions(feedVersion, state.currentVersion) === 1,
+      JSON.stringify({ feedVersion, currentVersion: state.currentVersion }));
+    check('the app names exactly the feed version as the new one',
+      state.newVersion === feedVersion,
+      JSON.stringify({ newVersion: state.newVersion, feedVersion, feedTag }));
+    check('the badge reads "Có bản mới <version>"',
+      answer.badge === `Có bản mới ${state.newVersion}`, answer.badge);
+    check('the badge is the "new" tone, not spinning', answer.tone === 'new' && answer.spinning === false,
+      JSON.stringify({ tone: answer.tone, spinning: answer.spinning }));
+    check('the note promises no silent download', /Sẽ tải về khi bạn bấm nút/u.test(answer.note), answer.note);
+    check('the update card is painted', answer.updateVisible === true, answer.updateTitle);
+    check('the update card titles itself as a new update',
+      answer.updateTitle === 'Có bản cập nhật mới', answer.updateTitle);
+    check('the update card names both versions',
+      new RegExp(escRe(state.newVersion) + '.*' + escRe(state.currentVersion), 'u').test(answer.updateDiff),
+      answer.updateDiff);
+    check('the download button is offered, never pressed by the gate',
+      answer.downloadDisabled === false && answer.downloadLabel === 'Tải về và cập nhật',
+      JSON.stringify({ disabled: answer.downloadDisabled, label: answer.downloadLabel }));
+    check('no error card is painted', answer.errorVisible === false, answer.errorTitle);
+    check('the retry button is usable', answer.checkDisabled === false, String(answer.checkDisabled));
+    check('the check really happened', state.lastCheckedAt > 0, String(state.lastCheckedAt));
+    // autoDownload = false: được MỜI tải, nhưng không một byte nào đã chuyển.
+    check('nothing downloaded before the teacher clicked',
+      state.progressPercent === 0 && state.transferredBytes === 0 && state.totalBytes === 0
+      && answer.barVisible === false,
+      JSON.stringify({ percent: state.progressPercent, transferred: state.transferredBytes,
+        total: state.totalBytes, barVisible: answer.barVisible, progressText: answer.progressText }));
+    check('install stays hidden until a download finishes', answer.installVisible === false,
+      String(answer.installVisible));
   } else {
-    // 6. Chân không: cất `resources/app-update.yml` đi thì KHÔNG được nói "đã mới nhất".
+    // 4c. Chân không: cất `resources/app-update.yml` đi thì KHÔNG được nói "đã mới nhất".
     check('without app-update.yml the page refuses instead of claiming up-to-date',
       state.phase === 'error' && state.errorKind !== '',
       JSON.stringify({ phase: state.phase, kind: state.errorKind, message: String(state.errorMessage).slice(0, 90) }));
@@ -245,7 +317,31 @@ function report() {
       JSON.stringify({ percent: state.progressPercent, barVisible: answer.barVisible }));
   }
 
-  // 7. Hai nhánh dùng chung: không có gì nhạy cảm rò ra trang, chữ không broken.
+  // 5. Bấm thật, lần thứ hai — hai nhánh xanh phải lặp lại được, không phải ăn may.
+  //    Chỉ bấm "Kiểm tra cập nhật"; "Tải về và cập nhật" tuyệt đối không được chạm.
+  if (EXPECT !== 'error') {
+    await about.evaluate(`document.getElementById('aboutCheckBtn').click()`);
+    const again = await waitForAnswer(about);
+    check(`a manual re-check answers ${EXPECT} again`,
+      phaseOf(again.dom) === EXPECT && again.dom.state.errorKind === '',
+      JSON.stringify({ phase: phaseOf(again.dom), kind: again.dom.state.errorKind,
+        message: String(again.dom.state.errorMessage).slice(0, 90) }));
+    check('the second check is recorded later than the first',
+      again.dom.state.lastCheckedAt > state.lastCheckedAt,
+      JSON.stringify({ first: state.lastCheckedAt, second: again.dom.state.lastCheckedAt }));
+    check('the second answer took network time too', again.elapsedMs > 20, `${again.elapsedMs} ms`);
+    if (EXPECT === 'available') {
+      check('the re-check names the same new version', again.dom.state.newVersion === state.newVersion,
+        JSON.stringify({ first: state.newVersion, second: again.dom.state.newVersion }));
+      check('the re-check did not quietly start a download',
+        again.dom.state.phase !== 'downloading' && again.dom.state.progressPercent === 0
+        && again.dom.barVisible === false,
+        JSON.stringify({ phase: again.dom.state.phase, percent: again.dom.state.progressPercent,
+          barVisible: again.dom.barVisible }));
+    }
+  }
+
+  // 7. Ba chế độ dùng chung: không có gì nhạy cảm rò ra trang, chữ không broken.
   const dom = answer;
   const leaked = /GEMINI|service_role|Bearer |eyJ[A-Za-z0-9_-]{8}|gh[pousr]_[A-Za-z0-9]{8}/u.test(JSON.stringify(dom));
   check('no secret-shaped text on the page', !leaked, leaked ? 'found a token-shaped string' : '');
