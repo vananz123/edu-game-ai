@@ -4,9 +4,10 @@
 //
 // Vì sao phải đo thật: hai suite unit (`update-policy`, `about-page`) chứng minh máy
 // trạng thái và panel vẽ đúng, nhưng không chứng minh được năm thứ chỉ có ở ứng dụng
-// đang chạy: (1) mục sidebar "Giới thiệu" đưa giáo viên đến ĐÚNG TAB của ĐÚNG cửa sổ
-// đang mở — không còn cửa sổ thứ hai nào (#204 đã xoá `about.html`, `about-preload.js`,
-// `about-manager.ts`); (2) `electron-updater` đọc `dev-app-update.yml` và bắn
+// đang chạy: (1) đường Cài đặt -> tab thứ sáu đưa giáo viên đến ĐÚNG TAB của ĐÚNG cửa sổ
+// đang mở — #204 xoá `about.html`, `about-preload.js`, `about-manager.ts` (không còn cửa sổ
+// thứ hai), #205 xoá luôn mục "Giới thiệu" ở sidebar vì nó là đường thứ hai tới cùng một chỗ;
+// (2) `electron-updater` đọc `dev-app-update.yml` và bắn
 // `update-available` → `download-progress` → `update-downloaded`, đúng chuỗi kiện mà máy
 // trạng thái được thiết kế quanh nó; (3) `autoDownload = false` không tải byte nào trước
 // khi giáo viên bấm; (4) một lần mở tab chỉ hỏi feed MỘT lần — luật mới của #204, đo bằng
@@ -473,27 +474,37 @@ function report() {
   check('the updater is idle until the tab is opened', before.state.phase === 'idle',
     JSON.stringify({ phase: before.state.phase, kicked: before.view.kicked, section: before.section }));
 
-  // 3. Mục sidebar mở tab trong CÙNG cửa sổ, bằng một cú bấm thật: bug #187 là "chuyện
-  //    gì xảy ra sau khi bấm", còn #204 là "sau khi bấm thì cửa sổ nào hiện ra".
+  // 3. Tab hiện ra bằng những cú bấm THẬT, trong CÙNG cửa sổ: bug #187 là "chuyện gì xảy
+  //    ra sau khi bấm", #204 là "sau khi bấm thì cửa sổ nào hiện ra". #205 bỏ mục
+  //    "Giới thiệu" khỏi sidebar, nên đường đi thật của giáo viên là Cài đặt -> tab, và
+  //    cổng phải đi đúng đường đó thay vì bấm một nút không còn tồn tại.
   writeFeed(baseUrl);
   const targetsBefore = (await listTargets(PORT)).length;
-  await main.evaluate(`document.querySelector('[data-action="about-open"]').click()`);
-  await wait(600);
+  await main.evaluate(`document.querySelector('[data-page="settings"]').click()`);
+  await wait(400);
+  await clickSettingsTab(main, 'about');
+  await wait(400);
   const targetsAfter = (await listTargets(PORT)).length;
-  const sidebar = await main.evaluate(`(() => {
-    const items = [...document.querySelectorAll('[data-action="about-open"]')];
-    const hook = items[0] ? items[0].querySelector('[data-icon="info"]') : null;
+  const chrome = await main.evaluate(`(() => {
+    const ghosts = [...document.querySelectorAll('[data-action="about-open"]')];
+    const nav = [...document.querySelectorAll('.sidebar .nav-item')];
+    const tab = document.querySelector('[data-settings-section="about"]');
+    const hook = tab ? tab.querySelector('[data-icon="info"]') : null;
     return {
-      count: items.length,
-      label: items[0] ? items[0].textContent.replace(/\\s+/g, ' ').trim() : '',
+      ghosts: ghosts.length,
+      navLabels: nav.map(node => node.textContent.replace(/\\s+/g, ' ').trim()),
+      tabLabel: tab ? tab.textContent.replace(/\\s+/g, ' ').trim() : '',
       icon: hook && hook.querySelector('svg.lucide') ? 'info' : 'missing'
     };
   })()`);
   const opened = await main.evaluate(READ);
-  check('the sidebar keeps exactly one Giới thiệu entry, in Vietnamese, with the info icon',
-    sidebar.count === 1 && /Giới thiệu/u.test(sidebar.label) && sidebar.icon === 'info',
-    JSON.stringify(sidebar));
-  check('clicking it lands on the Settings page with the about tab open',
+  check('#205: the sidebar no longer carries a second route to Giới thiệu',
+    chrome.ghosts === 0 && chrome.navLabels.every(label => !/Giới thiệu/u.test(label))
+    && chrome.navLabels.some(label => /Cài đặt/u.test(label)),
+    JSON.stringify({ ghosts: chrome.ghosts, navLabels: chrome.navLabels }));
+  check('the tab strip is that one route: Vietnamese label, painted info icon',
+    /Giới thiệu/u.test(chrome.tabLabel) && chrome.icon === 'info', JSON.stringify(chrome));
+  check('Cài đặt rồi bấm tab lands on the open about panel',
     opened.page === 'settings' && opened.section === 'about' && opened.panelOpen === true && opened.tabSelected === 'true',
     JSON.stringify({ page: opened.page, section: opened.section, panelOpen: opened.panelOpen, tabSelected: opened.tabSelected }));
   check('and it opens no second window',

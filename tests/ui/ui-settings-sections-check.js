@@ -23,8 +23,9 @@
  *   - the new tab markup is legible in dark mode, where `dark:` utilities do not fire.
  *
  * What is NOT measured here: the update state machine, the feed request policy and the
- * panel's own painting — that is `tests/ui/ui-about-check.js`, which drives the sidebar
- * deep link and a fake loopback feed.
+ * panel's own painting — that is `tests/ui/ui-about-check.js`, which opens the tab the way
+ * a teacher does (Cài đặt, then the sixth tab) against a fake loopback feed. Since #205 the
+ * sidebar shortcut is gone, so this gate and that one share the only remaining route.
  *
  * Usage: launch with --remote-debugging-port=PORT, then
  * `node tests/ui/ui-settings-sections-check.js [port]`.
@@ -243,6 +244,14 @@ const SCENARIO = String.raw`(async () => {
   const probePanel = document.querySelector('[data-settings-panel="diagnostics"]');
   applyTheme('dark');
   await sleep(300);
+  // The tab strip declares "transition:color .15s". While this window is not the selected
+  // one Chromium throttles its timeline, so the transition can sit parked at the *light*
+  // start value no matter how long we sleep — a false red, not a cascade bug (re-measured
+  // with the tab in the foreground, the same element reads #9aa3bb). Finishing the
+  // animation jumps each transition to its end value, which is what the cascade says.
+  document.querySelectorAll('.settings-tab, .settings-tablist').forEach(node =>
+    node.getAnimations().forEach(animation => { try { animation.finish(); } catch (error) {} }));
+  await sleep(120);
   out.darkProbe = {
     heading: getComputedStyle(probePanel.querySelector('h3')).color,
     cardInk: getComputedStyle(probePanel).color,

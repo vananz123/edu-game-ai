@@ -93,9 +93,9 @@
       <div class="sidebar-bottom mt-auto">
         <div class="offline-card flex gap-2.5 items-start py-[13px] px-3 bg-[#effaf5] border border-[#ddf4e8] rounded-[10px] mt-[14px] mx-[2px] mb-[15px] max-compact:hidden"><div class="offline-dot w-2 h-2 bg-[#1ab47f] rounded-full mt-[5px]"></div><div><strong class="block text-[12px]">Sẵn sàng ngoại tuyến</strong><small class="block text-[12px] text-[#5f6a7d] mt-1">Game đã lưu vẫn chơi được</small></div></div>
         <button class="nav-item flex items-center gap-[13px] py-3 px-[13px] rounded-[10px] text-left font-semibold bg-transparent text-[#4b5566] transition duration-150 hover:bg-[#f6f6ff] hover:text-[#4f46e5] [&.active]:bg-brand-soft [&.active]:text-[#4f46e5] max-compact:justify-center max-compact:px-0" data-page="settings"><span class="nav-icon" data-icon="settings" data-icon-size="16"></span><span class="max-compact:hidden">Cài đặt</span></button>
-        <!-- #204: không còn mở cửa sổ riêng (#188). Nút này đưa thẳng vào tab "Giới thiệu"
-             của trang Cài đặt, nên giáo viên vẫn tới được thông tin bản bằng một click. -->
-        <button class="nav-item flex items-center gap-[13px] py-3 px-[13px] rounded-[10px] text-left font-semibold bg-transparent text-[#4b5566] transition duration-150 hover:bg-[#f6f6ff] hover:text-[#4f46e5] max-compact:justify-center max-compact:px-0" data-action="about-open" title="Giới thiệu và cập nhật, trong trang Cài đặt"><span class="nav-icon" data-icon="info" data-icon-size="16"></span><span class="max-compact:hidden">Giới thiệu</span></button>
+        <!-- #205: mục "Giới thiệu" bỏ khỏi sidebar. #204 đã chuyển trang thành tab thứ sáu
+             của Cài đặt, nên nút này chỉ là đường thứ hai tới cùng một chỗ và chiếm đáy
+             sidebar; "Cài đặt" ở trên là lối duy nhất. -->
         <div class="profile border-t border-line mt-4 pt-[17px] px-[5px] pb-0 flex items-center gap-[9px] max-compact:justify-center"><div class="avatar w-[34px] h-[34px] rounded-[11px] bg-[#e8e6ff] text-[#4f46e5] font-extrabold grid place-items-center text-[12px]">GV</div><div class="max-compact:hidden"><strong class="block text-[12px]">Không gian giáo viên</strong><small class="block text-[12px] text-[#5f6a7d] mt-1">Máy tính này</small></div><span class="profile-more ml-auto text-[#5f6a7d] max-compact:hidden" data-icon="ellipsis-vertical" data-icon-size="15"></span></div>
       </div>
     </aside>

@@ -345,13 +345,9 @@ async function handleAction(action, id, element) { try {
     if (typeof action === 'string' && action.startsWith('lesson-chat-') && typeof lessonChatHandle === 'function') {
       if (await lessonChatHandle(action, element)) return;
     }
-    // #204 (was #188): "Giới thiệu" is a tab of Cài đặt, not a second window. The sidebar
-    // shortcut stays, but it only deep-links into that tab — main still owns the update
-    // machine and starts the check when the panel sends `about:open`.
-    if (action === 'about-open') {
-      state.settingsSection = 'about';
-      navigate('settings');
-    }
+    // #205: the sidebar shortcut to "Giới thiệu" is gone. The tab is reached from Cài đặt,
+    // and `about:open` (the "panel just appeared" signal main uses to start the check) is
+    // sent by aboutKickCheck() in the panel itself — no renderer action owns it any more.
     if (action === 'play') playGame(findGame(id));
     if (action === 'play-fullscreen') await playGameFullscreen(findGame(id));
     // 📱 Chơi LAN from a library card: open the game the normal way, then host a

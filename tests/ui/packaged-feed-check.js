@@ -12,8 +12,9 @@
 //
 // #204 đổi chỗ ngồi, không đổi nội dung đo: trang Giới thiệu không còn là cửa sổ thứ
 // hai (`src/about/about.html`) mà là tab thứ sáu của Cài đặt, vẽ trong chính
-// `index.html`. Nên cổng nối thẳng vào target `index.html`, bấm mục sidebar thật rồi
-// chờ `#settingsPanel-about` hiện — và chứng minh thêm rằng cả lượt không từng sinh
+// `index.html`. Nên cổng nối thẳng vào target `index.html`, bấm Cài đặt rồi bấm tab Giới
+// thiệu thật — từ #205 đó là đường duy nhất, mục sidebar riêng đã bị bỏ — và
+// chờ `#settingsPanel-about` hiện, đồng thời chứng minh cả lượt không từng sinh
 // target `about.html` nào. Mọi lời gọi bridge đi `window.eduGame.*`, không còn
 // `window.aboutAPI`.
 //
@@ -225,10 +226,16 @@ function report() {
     await sleep(250);
   })()`);
 
-  // #204: một cú bấm thật vào mục sidebar, và mọi đo đạc sau đó diễn ra trong CÙNG cửa
-  // sổ — không còn target `about.html` nào để chờ.
+  // #205: mục "Giới thiệu" ở sidebar đã bị bỏ, nên đường đi của giáo viên là Cài đặt -> tab
+  // thứ sáu. Cổng bấm thật hai lần đó, và mọi đo đạc sau diễn ra trong CÙNG cửa sổ — không
+  // còn target `about.html` nào để chờ.
   const targetsBefore = (await listTargets(PORT)).length;
-  await main.evaluate(`document.querySelector('[data-action="about-open"]').click()`);
+  await main.evaluate(`document.querySelector('[data-page="settings"]').click()`);
+  await wait(400);
+  await main.evaluate(`(() => {
+    const tab = document.querySelector('[data-settings-section="about"]');
+    if (tab) tab.click();
+  })()`);
   let opened = null;
   for (let attempt = 0; attempt < 40 && !opened; attempt += 1) {
     const settled = await main.evaluate(`(() => {
@@ -240,7 +247,7 @@ function report() {
     if (settled.open && settled.section === 'about') opened = settled;
     if (!opened) await wait(250);
   }
-  check('clicking the sidebar opens the About tab in the same window',
+  check('Cài đặt rồi tab Giới thiệu opens the panel in the same window (#205 route)',
     Boolean(opened) && (await listTargets(PORT)).length === targetsBefore,
     JSON.stringify({ opened, targetsBefore, targetsAfter: (await listTargets(PORT)).length }));
   if (!opened) report();
