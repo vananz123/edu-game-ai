@@ -15,7 +15,7 @@
 //   npx electron . --remote-debugging-port=9341
 //   node tests/ui/ui-play-surface-check.js 9341
 const { check, connect, results } = require('../manual/lib/ui-check-lib');
-const { PROJECTOR_SIZES, measureAt, setViewport, setViewportAndWait } = require('./lib/screenshot-capture');
+const { PROJECTOR_SIZES, measureAt, setViewport, setViewportAndWait, capture } = require('./lib/screenshot-capture');
 
 // Synthetic content only — no real student data (AGENTS.md). Long Vietnamese
 // with stacked diacritics on purpose: "ế/ộ/ữ" are what clip when line-height is
@@ -83,7 +83,7 @@ const OPEN = game => `(async () => {
  * options go through `#treasureMission > .answer-grid`, the grandchild selector
  * #85 documents as a trap.
  */
-function treasureGame(stageCount, id) {
+function treasureGame(stageCount, id, illustrationMode) {
   const stages = Array.from({ length: stageCount }, (_, i) => {
     const n = i + 1;
     return {
@@ -118,7 +118,7 @@ function treasureGame(stageCount, id) {
     template: 'treasure-hunt', description: '', tags: [], sourceName: 'ui-check',
     createdAt: '2026-01-01T00:00:00.000Z',
     questions: [],
-    gameSetup: { scoringMode: 'cơ bản', illustrationMode: 'auto' },
+    gameSetup: { scoringMode: 'cơ bản', illustrationMode: illustrationMode || 'auto' },
     treasureHunt: {
       character: 'Nhà thám hiểm An',
       intro: 'Hành trình dài bắt đầu từ ngôi đền cổ. ',
@@ -133,6 +133,16 @@ function treasureGame(stageCount, id) {
 
 const TREASURE_6 = treasureGame(6, 'ui-play-surface-treasure-6');
 const TREASURE_12 = treasureGame(12, 'ui-play-surface-treasure-12');
+
+/**
+ * Bề rộng ảnh minh hoạ KHÔNG được tụt dưới mức này (px), đo trên bố cục trước
+ * khi tối ưu: 301px @1366x768, 360px @1920x1080.
+ *
+ * Vì sao cần một sàn: con đường dễ nhất để "khoảng cách ≤64px" là thu nhỏ ảnh
+ * cho tới khi hai khối sát nhau, và số đo thì đẹp mà bức tranh thì mất. Ảnh phải
+ * giữ nguyên hoặc lớn lên.
+ */
+const ART_FLOOR = { 1366: 300, 1920: 360 };
 
 /**
  * "Đường đua ôn tập" fixture — the fourth play template, and the only one #84/#85
@@ -224,6 +234,159 @@ const READ = `(() => {
     stageBackground: getComputedStyle(stage).backgroundImage !== 'none',
     docHeight: document.documentElement.scrollHeight
   };
+})()`;
+
+/**
+ * Treasure two-column geometry (docs/ROADMAP.md #207, Task 1).
+ *
+ * The number a teacher actually sees is the void between the right edge of the
+ * illustration and the left edge of the question. Measuring the *row* (the old
+ * `stageCenterWidth`) cannot see it: a grid track 751px wide holding a 360px art
+ * box reports the same row width as a track that hugs the art, while the first
+ * one wastes 390px of projector real estate. So this probe reads the two edges
+ * directly.
+ *
+ * `mapOpen` is part of the contract, not incidental context: the drawer is a
+ * sibling of the grid, and opening it re-ran the track sizing (527.5px ->
+ * 522.7px at 1366x768), so the gap has to be recorded per state.
+ */
+const TREASURE_GEOM = `(() => {
+  const box = sel => {
+    const el = document.querySelector(sel);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: Math.round(r.x), left: Math.round(r.left), right: Math.round(r.right),
+      y: Math.round(r.y), top: Math.round(r.top), bottom: Math.round(r.bottom),
+      w: Math.round(r.width), h: Math.round(r.height) };
+  };
+  const stage = document.querySelector('.game-stage');
+  const grid = document.querySelector('.treasure-stage-grid');
+  const drawer = document.querySelector('#treasureMapDrawer');
+  const map = document.querySelector('.treasure-map');
+  const ill = box('.stage-illustration.is-treasure');
+  const q = box('.stage-question');
+  const opts = [...document.querySelectorAll('#treasureMission .answer-option')]
+    .map(el => { const r = el.getBoundingClientRect(); return {
+      left: Math.round(r.left), right: Math.round(r.right),
+      top: Math.round(r.top), bottom: Math.round(r.bottom),
+      w: Math.round(r.width), h: Math.round(r.height) }; });
+  return {
+    viewport: { w: innerWidth, h: innerHeight },
+    ill, question: q, badge: box('.treasure-chapter-now'), mainCol: box('.treasure-stage-grid > .stage-col.is-main'),
+    // Cột trái, kể cả khi KHÔNG có ảnh: "gap" ở trên vô dụng lúc đó (ill = null),
+    // nên phép đo phải đọc cả display để thấy cột có thật sự bị bỏ khỏi lưới hay
+    // chỉ co về 0px.
+    sideCol: (() => {
+      const el = document.querySelector('.treasure-illustration-col');
+      if (!el) return null;
+      const b = box('.treasure-illustration-col');
+      b.display = getComputedStyle(el).display;
+      return b;
+    })(),
+    hasArt: Boolean(ill),
+    artTrack: grid ? Math.round(parseFloat(getComputedStyle(grid).gridTemplateColumns.split(' ')[0]) || 0) : null,
+    tracks: grid ? getComputedStyle(grid).gridTemplateColumns : null,
+    columnGap: grid ? Math.round(parseFloat(getComputedStyle(grid).columnGap) || 0) : null,
+    gap: ill && q ? q.left - ill.right : null,
+    optionCount: opts.length, options: opts,
+    firstOption: opts[0] || null, lastOption: opts[opts.length - 1] || null,
+    attemptsHint: box('#treasureAttemptsHint'), hintBtn: box('.treasure-hint-fab'), storyBtn: box('#treasureStoryBtn'),
+    // A block the class can see is useless if the click lands on something else:
+    // hit-test the three controls the teacher uses on this surface.
+    controls: [['#treasureMapToggleBtn', 'map toggle'], ['.treasure-hint-fab', 'hint'], ['#treasureStoryBtn', 'story']]
+      .map(([sel, name]) => {
+        const el = document.querySelector(sel);
+        if (!el) return { name, present: false };
+        const r = el.getBoundingClientRect();
+        const top = document.elementFromPoint(Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2));
+        return { name, present: true, w: Math.round(r.width), h: Math.round(r.height),
+          insideViewport: r.left >= -2 && r.right <= innerWidth + 2 && r.top >= -2 && r.bottom <= innerHeight + 2,
+          hittable: Boolean(top) && (top === el || el.contains(top) || top.contains(el)) };
+      }),
+    mapOpen: drawer ? getComputedStyle(drawer).display !== 'none' : null,
+    map: map ? (() => { const r = map.getBoundingClientRect(); return {
+      w: Math.round(r.width), right: Math.round(r.right), h: Math.round(r.height),
+      scrollW: Math.round(map.scrollWidth), clientW: Math.round(map.clientWidth) }; })() : null,
+    stageScroll: stage ? {
+      overflowY: Math.round(stage.scrollHeight - stage.clientHeight),
+      overflowX: Math.round(stage.scrollWidth - stage.clientWidth)
+    } : null,
+    docHeight: document.documentElement.scrollHeight
+  };
+})()`;
+
+/**
+ * The gap contract. `artFloor` is the illustration width the layout may not drop
+ * below: closing the void by shrinking the picture would be cheating the number,
+ * which is exactly what the acceptance criteria forbid.
+ */
+function assertTreasureGap(g, tag, artFloor) {
+  if (!g || g.gap === null) {
+    check(`[${tag}] treasure geometry measurable`, false, 'illustration or question missing');
+    return;
+  }
+  check(`[${tag}] illustration -> question gap <= 64px`, g.gap <= 64,
+    `${g.gap}px at ${g.viewport.w}x${g.viewport.h} (art ${g.ill.w}px in a ${g.artTrack}px track, column-gap ${g.columnGap}px)`);
+  check(`[${tag}] gap is real separation, not overlap`, g.gap >= 0, `${g.gap}px`);
+  check(`[${tag}] illustration not shrunk to win the number (>= ${artFloor}px)`,
+    g.ill.w >= artFloor, `${g.ill.w}px wide, ${g.ill.h}px tall`);
+  check(`[${tag}] answers still all rendered`, g.optionCount === 4, `${g.optionCount} options`);
+  // Everything that must be readable from the back of the room sits in one
+  // horizontal band: no sideways escape and no overlap between the two columns.
+  const vw = g.viewport.w;
+  const edges = [['illustration', g.ill], ['chapter badge', g.badge], ['question', g.question],
+    ['first answer', g.firstOption], ['last answer', g.lastOption]];
+  const outside = edges.filter(([, b]) => b && (b.left < -2 || b.right > vw + 2)).map(([n, b]) => `${n} ${b.left}..${b.right}`);
+  check(`[${tag}] no key block escapes the viewport sideways`, outside.length === 0, outside.join(' | '));
+  const collides = g.ill && g.mainCol && g.mainCol.left < g.ill.right - 0.5;
+  check(`[${tag}] text column starts right of the picture`, !collides,
+    collides ? `main.col.left=${g.mainCol.left} < ill.right=${g.ill.right}` : `ill.right=${g.ill.right} main.col.left=${g.mainCol.left}`);
+  check(`[${tag}] page never double-scrolls`, g.docHeight <= g.viewport.h + 2,
+    `${g.docHeight} vs ${g.viewport.h}`);
+  // The map may scroll inside itself, but must not drag the whole stage sideways.
+  check(`[${tag}] stage never scrolls horizontally`, g.stageScroll.overflowX <= 2,
+    `stage overflowX ${g.stageScroll.overflowX}px, map ${g.map ? g.map.scrollW + '/' + g.map.clientW : 'n/a'}`);
+  const blocked = (g.controls || []).filter(c => c.present && (!c.insideViewport || !c.hittable));
+  check(`[${tag}] map/hint/story controls stay visible and clickable`, blocked.length === 0,
+    blocked.map(c => `${c.name}: ${c.insideViewport ? 'covered' : 'off-screen'}`).join(' | ')
+      || (g.controls || []).filter(c => c.present).map(c => c.name).join(', '));
+}
+
+/**
+ * Opening/closing the drawer may not move the blocks the class is looking at.
+ *
+ * `axes: 'x'` is for the OPEN comparison: the drawer sits above the grid, so
+ * opening it legitimately pushes the whole block DOWN — that is not a jump. What
+ * must not change is the horizontal seam between the picture and the question.
+ * The re-closed comparison uses 'xy' and demands the original position back.
+ */
+function assertTreasureStability(before, after, tag, axes = 'xy') {
+  if (!before || !after || !before.ill || !after.ill) return;
+  const moved = [];
+  for (const key of ['ill', 'question', 'badge', 'mainCol']) {
+    const a = before[key], b = after[key];
+    if (!a || !b) { moved.push(`${key} disappeared`); continue; }
+    const dx = Math.abs(a.left - b.left);
+    const dy = axes === 'xy' ? Math.abs(a.top - b.top) : 0;
+    if (dx > 2 || dy > 2) moved.push(`${key} ${a.left},${a.top} -> ${b.left},${b.top}`);
+  }
+  const what = axes === 'xy'
+    ? 'closed -> open -> closed leaves the blocks in place'
+    : 'opening the map does not shift the columns sideways';
+  check(`[${tag}] ${what}`, moved.length === 0,
+    moved.join(' | ') || `gap ${before.gap}px -> ${after.gap}px`);
+  check(`[${tag}] gap survives the map toggle`, Math.abs(before.gap - after.gap) <= 4,
+    `${before.gap}px vs ${after.gap}px`);
+}
+
+/** Open or close the journey drawer the way a teacher does: the header button. */
+const TOGGLE_MAP = `(async () => {
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  document.querySelector('#treasureMapToggleBtn')?.click();
+  await sleep(400);
+  const btn = document.querySelector('#treasureMapToggleBtn');
+  return { label: btn ? btn.textContent.trim() : null,
+    expanded: btn ? btn.getAttribute('aria-expanded') : null };
 })()`;
 
 /** Answer the first question and read the feedback state. */
@@ -410,11 +573,30 @@ function assertNav(nav, tag) {
         Boolean(opened && opened.stage && opened.question && opened.option),
         opened ? JSON.stringify(opened) : 'no result');
       if (!opened || !opened.option) continue;
+
+      // Ba trạng thái đo RIÊNG (nhiệm vụ 1 + 3): bản đồ ĐÓNG — trạng thái giáo
+      // viên đang trả lời (#91/#104) — rồi MỞ, rồi ĐÓNG LẠI. Khoảng cách
+      // ảnh–câu hỏi phải đạt ở cả ba, vì mở drawer từng đổi cả việc tính track
+      // (527.5px -> 522.7px ở 1366x768).
+      const mapClosed = await evaluate(TREASURE_GEOM);
+      assertTreasureGap(mapClosed, `${tag} map closed`, ART_FLOOR[size.width]);
+      const shotClosed = await capture(ctx.send, `play-surface-treasure-${label}-${size.label}-map-closed`);
+      check(`[${tag}] map-closed screenshot captured`, Boolean(shotClosed.file),
+        shotClosed.file || shotClosed.error);
+
       // DECISIONS #91/#104: the journey map is a collapsed drawer while the
       // teacher is answering, so this fixture opens it through the stage control
       // before its height is measured (the same step a teacher takes).
-      await evaluate("(document.querySelector('#treasureMapToggleBtn') || { click() {} }).click()");
-      await new Promise(r => setTimeout(r, 150));
+      const toggleOn = await evaluate(TOGGLE_MAP);
+      check(`[${tag}] the stage button reports the map open`, toggleOn.expanded === 'true',
+        JSON.stringify(toggleOn));
+      const mapOpen = await evaluate(TREASURE_GEOM);
+      assertTreasureGap(mapOpen, `${tag} map open`, ART_FLOOR[size.width]);
+      // 12 chặng được phép cuộn TRONG bản đồ, không được dồn sân khấu cuộn.
+      check(`[${tag}] journey map fits its own box or owns its scroll`,
+        !mapOpen.map || mapOpen.map.scrollW <= mapOpen.map.clientW + 2
+          || mapOpen.stageScroll.overflowX <= 2,
+        mapOpen.map ? `map ${mapOpen.map.scrollW}/${mapOpen.map.clientW}, stage X ${mapOpen.stageScroll.overflowX}px` : 'no map');
 
       // Photograph it for humans. `assertLayout: false` because the universal
       // "nothing outside the viewport" rule is the wrong contract for a template
@@ -515,8 +697,56 @@ function assertNav(nav, tag) {
         t.mapShrink === '0', `flex-shrink ${t.mapShrink}`);
       check(`[${tag}] whole journey is rendered`,
         t.nodes === (label === '6-stage' ? 6 : 12), `${t.nodes} nodes`);
-      console.log(`  ${label.padEnd(9)} overflow ${String(t.overflow).padStart(4)}px  `
-        + `nodes ${t.nodes}  answers ${t.answers}  docH ${t.docHeight}/${t.viewport.h}  -> ${shot.file || '(no image)'}`);
+
+      // Trạng thái thứ ba: đóng lại. Scroll về đầu trước để so với bản đo lúc
+      // chưa mở (cùng scrollTop thì toạ độ mới so sánh được).
+      await evaluate(`(async () => {
+        const stage = document.querySelector('.game-stage');
+        if (stage) stage.scrollTop = 0;
+        await new Promise(r => setTimeout(r, 200));
+      })()`);
+      const toggleOff = await evaluate(TOGGLE_MAP);
+      check(`[${tag}] the stage button reports the map closed again`, toggleOff.expanded === 'false',
+        JSON.stringify(toggleOff));
+      const reClosed = await evaluate(TREASURE_GEOM);
+      assertTreasureGap(reClosed, `${tag} map re-closed`, ART_FLOOR[size.width]);
+      assertTreasureStability(mapClosed, reClosed, `${tag} map toggle`);
+      // Mở drawer có làm khối nội dung dịch không? (nhiệm vụ 3: bản đồ không được
+      // đổi khoảng cách ảnh–câu hỏi.)
+      assertTreasureStability(mapClosed, mapOpen, `${tag} map open`, 'x');
+
+      // Nhiệm vụ 2, điều kiện "bố cục vẫn hợp lý khi KHÔNG có ảnh": mở lại
+      // đúng màn hình đó (illustrationMode 'off') rồi đo. Không được chỉ ẩn node
+      // — `:has(.stage-illustration)` vẫn khớp khi node còn trong DOM.
+      const noArtOpen = await evaluate(OPEN(treasureGame(
+        label === '6-stage' ? 6 : 12, 'ui-play-surface-treasure-noart-' + label, 'off')));
+      check(`[${tag}] no-illustration stage opened`,
+        Boolean(noArtOpen && noArtOpen.stage && noArtOpen.question && noArtOpen.option),
+        noArtOpen ? JSON.stringify(noArtOpen) : 'no result');
+      const na = await evaluate(TREASURE_GEOM);
+      check(`[${tag}] the fixture really drew no illustration`,
+        Boolean(na) && na.hasArt === false, JSON.stringify(na && { hasArt: na.hasArt, art: na.ill }));
+      // wizard.css:414 ẩn cột ảnh khi không có ảnh; lưới PHẢI bỏ luôn track của
+      // nó, nếu không cột chữ tự động rơi vào track thứ nhất và bị bóp đúng bề
+      // rộng cột ảnh (đo được 220px trước khi sửa).
+      check(`[${tag}] no-illustration leaves the empty art column no track`,
+        Boolean(na) && na.sideCol && na.sideCol.w === 0,
+        na && na.sideCol ? `col ${na.sideCol.w}px wide, display ${na.sideCol.display}` : JSON.stringify(na));
+      check(`[${tag}] no-illustration gives the text column the full stage width`,
+        Boolean(na) && na.mainCol && na.mainCol.w >= 0.85 * na.viewport.w,
+        na ? `main ${na.mainCol && na.mainCol.w}px of ${na.viewport.w}px viewport ` +
+          `(tracks ${na.tracks})` : 'no result');
+      check(`[${tag}] no-illustration still renders all four answers`,
+        Boolean(na) && na.optionCount === 4, JSON.stringify(na && { options: na.optionCount }));
+      const naShot = await capture(ctx.send, `play-surface-treasure-${label}-${size.label}-no-art`);
+      check(`[${tag}] no-illustration screenshot captured`, Boolean(naShot && naShot.file),
+        JSON.stringify(naShot || {}));
+
+      console.log(`  ${label.padEnd(9)} gap closed ${mapClosed.gap}px / open ${mapOpen.gap}px / re-closed ${reClosed.gap}px  `
+        + `art ${mapClosed.ill.w}px in ${mapClosed.artTrack}px track  `
+        + `no-art main ${na?.mainCol?.w}/${na?.viewport?.w}px  `
+        + `overflow ${String(t.overflow).padStart(4)}px  nodes ${t.nodes}  answers ${t.answers}  `
+        + `docH ${t.docHeight}/${t.viewport.h}  -> ${shot.file || '(no image)'}`);
     }
   }
   // ---------------------------------------------------------------- race ----

@@ -509,9 +509,16 @@ html[data-fullscreen="1"] .modal[data-player-theme] .treasure-head-row {
 .modal[data-player-theme] .treasure-hint-fab:active { transform: translateY(0) scale(0.97); }
 
 /* ---------- Toàn màn hình: hình trái — chữ phải ---------- */
+/* Bề rộng cột ảnh là con số DUY NHẤT ở đây, và nó nằm trong track.
+   Trước #207 track là `0.85fr` (751px @1920, 528px @1366) trong khi cột ảnh bị
+   wizard.css clamp xuống 360/301px: phần track thừa thành dải rỗng đúng giữa bố
+   cục — mép phải ảnh cách mép trái câu hỏi 424px @1920 và 257px @1366. Track
+   khớp kích thước ảnh thì khoảng cách chỉ còn bằng `column-gap` (34/30px), và vì
+   track là px tuyệt đối, thanh cuộn dọc xuất hiện khi mở bản đồ (1366x768) chỉ
+   ăn vào cột chữ — khoảng cách không đổi giữa hai trạng thái. */
 html[data-fullscreen="1"] .modal[data-player-theme] .stage-center.treasure-stage-grid {
   display: grid;
-  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  grid-template-columns: clamp(300px, 24vw, 400px) minmax(0, 1fr);
   align-content: start;
   align-items: start;
   justify-content: stretch;
@@ -542,6 +549,15 @@ html[data-fullscreen="1"] .modal[data-player-theme] .treasure-stage-grid > .trea
   max-width: 100% !important;
   margin: 0 !important;
   aspect-ratio: 16 / 10 !important;
+}
+/* Không có ảnh minh hoạ — giáo viên chọn "Tắt", bấm "✕ Bỏ ảnh" cho đúng câu
+   (#153), hoặc để chế độ "Tự chọn" mà chưa bức nào (#334 resolveStageIllustration
+   trả null). wizard.css:414 đã ẩn cột trái trong trường hợp đó, nhưng lưới vẫn
+   còn HAI track: cột chữ tự động rơi vào track thứ nhất và bị bóp đúng bề rộng
+   của cột ảnh (đo thật: 220px). Một track là bố cục đúng — cột chữ nhận toàn bộ
+   bề ngang, đúng ý của rule 422 "flex: 1 1 100%". */
+html[data-fullscreen="1"] .modal[data-player-theme] .stage-center.treasure-stage-grid:not(:has(.stage-illustration)) {
+  grid-template-columns: minmax(0, 1fr);
 }
 /* Cột chữ: bối cảnh → badge → câu hỏi → điều khiển, đủ chỗ cho câu hỏi dài. */
 html[data-fullscreen="1"] .modal[data-player-theme] .treasure-stage-grid > .stage-col.is-main {

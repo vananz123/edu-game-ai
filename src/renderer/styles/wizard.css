@@ -256,9 +256,14 @@ html[data-fullscreen="1"] .modal[data-player-theme] .race-turn .stage-illustrati
   /* Treasure đã tốn chiều dọc cho bản đồ + cốt truyện phía trên, nên ảnh của
      nó nhỏ hơn để nhường chỗ cho ĐÁP ÁN.
      #89: 240px @1920 / 178px @1366 được nâng lên nhưng VẪN nhỏ hơn khung
-     thường, vì đây là cột duy nhất phải nhường chiều cao cho bản đồ. */
+     thường, vì đây là cột duy nhất phải nhường chiều cao cho bản đồ.
+     #207: cột KHÔNG tự đặt bề rộng nữa. Ở toàn màn hình, kho báu render bằng
+     lưới (`.treasure-stage-grid`, game-worlds.css) và chính track trái mới là
+     chỗ định nghĩa bề rộng ảnh; để cột tự clamp như cũ thì cột 360px nằm trong
+     track 751px → 391px chết giữa ảnh và câu hỏi (đo thật: khe 424px @1920,
+     257px @1366). `width: 100%` buộc cột bám đúng track. */
   html[data-fullscreen="1"] .modal[data-player-theme] .stage-col:has(> .stage-illustration.is-treasure) {
-    width: clamp(240px, 22vw, 360px) !important;
+    width: 100% !important;
   }
   /* Cột văn bản: chiếm phần còn lại, co giãn được. `min-width: 0` để nội dung
      dài (chuỗi không khoảng trắng) không đẩy cột ra ngoài khung. */
