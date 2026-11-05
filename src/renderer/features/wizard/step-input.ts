@@ -34,7 +34,7 @@ function renderWizardInput() {
           <h3 class="text-[17px] font-bold text-[#1e293b] dark:text-[#f1f5f9] m-0">Nhập nội dung bài học & giáo án</h3>
         </div>
         <p class="text-[12px] text-[#4f5a6e] dark:text-[#94a3b8] m-0 leading-relaxed">
-          Tải tệp giáo án từ máy tính hoặc dán nội dung văn bản. Dữ liệu chỉ lưu trên máy, AI local xử lý ngoại tuyến an toàn.
+          Tải tệp hoặc dán nội dung giáo án để bắt đầu.
         </p>
       </div>
       <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#effaf5] border border-[#ddf4e8] text-[#0f7b5c] text-[12px] font-semibold dark:bg-[#132d24] dark:border-[#1e4a3b] dark:text-[#4ade80]">
@@ -70,7 +70,7 @@ function renderWizardInput() {
               <span data-icon="folder-open" data-icon-size="22"></span>
             </div>
             <div>
-              <strong class="block text-[13px] text-[#1e293b] dark:text-[#f1f5f9]">Tải lên tệp tài liệu giáo án</strong>
+              <strong class="block text-[13px] text-[#1e293b] dark:text-[#f1f5f9]">Tải lên tệp giáo án</strong>
               <div class="flex items-center gap-1.5 mt-1 text-[12px] text-[#4f5a6e] dark:text-[#94a3b8] flex-wrap">
                 <span>Hỗ trợ định dạng:</span>
                 <span class="px-1.5 py-0.5 rounded bg-white dark:bg-[#1e2544] border border-[#e2e8f0] dark:border-[#334155] font-mono font-semibold text-[#475569] dark:text-[#cbd5e1]">DOCX</span>
@@ -89,7 +89,7 @@ function renderWizardInput() {
 
     <!-- Tên tài liệu -->
     <div class="field mb-4">
-      <label class="text-[12px] font-bold text-[#475569] dark:text-[#cbd5e1] mb-1 block">TÊN BÀI HỌC / TÀI LIỆU</label>
+      <label class="text-[12px] font-bold text-[#475569] dark:text-[#cbd5e1] mb-1 block">Tên bài học / tài liệu</label>
       <input id="wizardDocName" class="w-full px-3 py-2 border border-[#cbd5e1] dark:border-[#334155] rounded-lg bg-white dark:bg-[#1e2544] text-[#1e293b] dark:text-[#f8fafc] text-[13px] focus:outline-none focus:border-[#6366f1]" placeholder="Ví dụ: Bài 10 - Quang hợp ở thực vật" value="${escapeHtml(s.documentName || '')}"${s.busy ? ' disabled' : ''}>
     </div>
 
@@ -108,13 +108,13 @@ function renderWizardInput() {
     <div class="wizard-tab-pane ${activeTab === 'content' ? '' : 'hidden'}" data-tab-pane="content" role="tabpanel" aria-labelledby="wizardTab-content" id="wizardTabPane-content" data-active-pane="${activeTab === 'content' ? 'true' : 'false'}">
       <div class="field mb-4">
         <div class="flex items-center justify-between mb-1.5">
-          <label class="text-[12px] font-bold text-[#475569] dark:text-[#cbd5e1]">NỘI DUNG VĂN BẢN ĐẦY ĐỦ *</label>
+          <label class="text-[12px] font-bold text-[#475569] dark:text-[#cbd5e1]">Nội dung giáo án *</label>
           <button type="button" class="text-[12px] text-[#4f46e5] hover:underline bg-transparent border-0 cursor-pointer inline-flex items-center gap-[5px]" data-wizard-action="insert-sample"${s.busy ? ' disabled' : ''}><span data-icon="sparkles" data-icon-size="12"></span> Thử giáo án mẫu</button>
         </div>
         <textarea id="wizardDocText" rows="13" class="w-full p-3 border border-[#cbd5e1] dark:border-[#334155] rounded-xl bg-white dark:bg-[#1e2544] text-[#1e293b] dark:text-[#f8fafc] text-[13px] leading-relaxed focus:outline-none focus:border-[#6366f1] transition font-sans" placeholder="Dán nội dung bài học, mục tiêu cần đạt, kiến thức trọng tâm, câu hỏi hoặc ví dụ thực tế..."${s.busy ? ' disabled' : ''}>${escapeHtml(s.text || '')}</textarea>
         <div class="flex items-center justify-between mt-1.5 flex-wrap gap-2 text-[12px]">
           <div class="field-hint text-[#4f5a6e] dark:text-[#94a3b8]" id="wizardDocHint">
-            ${ready ? `✓ Đã có ${characters.toLocaleString('vi-VN')} ký tự. Đủ điều kiện phân tích bằng AI.` : `Cần tối thiểu ${WIZARD_MIN_CHARACTERS} ký tự (${characters}/${WIZARD_MIN_CHARACTERS}).`}
+            ${ready ? `✓ ${characters.toLocaleString('vi-VN')} ký tự · Đủ điều kiện phân tích` : `Cần tối thiểu ${WIZARD_MIN_CHARACTERS} ký tự (${characters}/${WIZARD_MIN_CHARACTERS})`}
           </div>
           <div class="text-[12px] font-semibold ${ready ? 'text-[#0f7b5c]' : 'text-[#9c4808]'}">
             ${ready ? '● Sẵn sàng phân tích' : '○ Chưa đủ độ dài'}
@@ -127,8 +127,7 @@ function renderWizardInput() {
     ${wizardInputKindPickerHtml(s)}
 
     <!-- Actions Row -->
-    <div class="publish-actions flex items-center justify-between pt-3 border-t border-[#f1f5f9] dark:border-[#2a324b] gap-3 flex-wrap mt-4">
-      <button class="btn btn-secondary" data-page="create">Tôi đã biết muốn tạo trò chơi nào</button>
+    <div class="publish-actions flex items-center justify-end pt-3 border-t border-[#f1f5f9] dark:border-[#2a324b] gap-3 flex-wrap mt-4">
       <button class="btn btn-primary btn-large !py-2.5 !px-5 !text-[13px] !font-bold" id="wizardNextBtn" data-wizard-action="next"${ready && !s.busy && !wizardStructureScopeError() ? '' : ' disabled'}>
         ${s.busy === 'save' ? '⏳ Đang lưu giáo án…' : wizardInputNextLabel()}
       </button>
@@ -171,10 +170,10 @@ function wizardInputKindPickerHtml(s) {
     </button>`;
   const verdict = !detected
     ? ''
-    : `<div class="mt-2 text-[12px] leading-relaxed flex items-start gap-1.5 flex-wrap">
-        <span class="font-semibold text-[#4f5a6e] dark:text-[#94a3b8]">Hệ thống nhận diện:</span>
+    : `<div class="mt-2 text-[12px] leading-relaxed flex items-center gap-1.5 flex-wrap">
+        <span class="font-semibold text-[#4f5a6e] dark:text-[#94a3b8]">Tự động nhận diện:</span>
         <span class="px-1.5 py-0.5 rounded bg-[#eef2ff] dark:bg-[#262c55] font-bold text-[#4f46e5] dark:text-[#a5b4fc]">${escapeHtml(wizardInputKindLabel(shownKind))}</span>
-        ${choice === 'auto' ? '<span class="text-[#5a6478]">(đang dùng kết quả này)</span>' : '<span class="text-[#9c4808] font-semibold">(bạn đã chọn khác — đang dùng lựa chọn của bạn)</span>'}
+        ${choice === 'auto' ? '' : '<span class="text-[#9c4808] font-semibold">(Đang dùng lựa chọn của bạn)</span>'}
         ${detected.reasons && detected.reasons.length ? `<span class="text-[#4f5a6e] dark:text-[#94a3b8]">· ${escapeHtml(detected.reasons.slice(0, 3).join(' · '))}</span>` : ''}
         ${wizardSemanticNote(s)}
       </div>`;
@@ -192,8 +191,7 @@ function wizardInputKindPickerHtml(s) {
   const questionsNote = recognized ? wizardQuestionBankNote(s, questionCount, issueCount) : '';
   return `<div class="mb-4 rounded-xl border border-[#e2e8f0] dark:border-[#334155] p-3" data-wizard-input-kind-picker>
     <div class="flex items-center gap-2 mb-2 flex-wrap">
-      <span class="text-[12px] font-bold text-[#475569] dark:text-[#cbd5e1]">LOẠI NỘI DUNG</span>
-      <span class="text-[12px] text-[#5a6478]">quy tắc trước, bộ đọc hiểu chỉ xác nhận</span>
+      <span class="text-[12px] font-bold text-[#475569] dark:text-[#cbd5e1]">Loại nội dung</span>
     </div>
     <div class="flex gap-2 flex-wrap" role="radiogroup" aria-label="Loại nội dung đầu vào">
       ${option('auto', 'Tự phát hiện', 'Hệ thống đoán theo cấu trúc văn bản; bạn đổi được bất cứ lúc nào.')}

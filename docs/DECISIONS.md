@@ -1,4 +1,4 @@
-﻿# Architecture Decisions
+# Architecture Decisions
 
 ## Accepted decisions
 
@@ -1305,3 +1305,669 @@ Bảy điều trong một đoạn, và điều khó nhất không phải giao di
 
 **Next recommended task.** (1) **Tạo một release 0.4.0 thật** (Setup.exe + `latest.yml`) rồi bật máy bản gói bấm "Kiểm tra cập nhật": đó là lần đầu tiên con đường xanh được đi hết bằng nguồn thật thay vì loopback — và trả luôn nợ (2). (2) Xin ý kiến chủ dự án về **chứng thực Authenticode** (chi phí, và vì sao `sha512` không đủ). (3) Sửa một dòng `description` trong `package.json` cho đúng tiếng Việt. (4) Xoá dòng `GH_TOKEN` vừa xuất hiện trong bản làm việc của `.env.example` (một chuỗi dạng `ghp_…`, **không** nằm trong `HEAD`, không được commit) và đổi key đó nếu nó từng là key thật.
 
+## #189 — Bản sắc thương hiệu UI/UX: chuẩn hoá nhãn theo Title Case, màu thẻ phân biệt theo 5 thể loại game (+ Chòm sao), và mascot cú tốt nghiệp SVG cho trạng thái trống (empty state)
+
+**Yêu cầu, nguyên văn.** *"kiểm tra phần giao diện , đánh giá và cho hướng phát triển tránh phát triển UI/UX quá giống AI ... bắt đầu làm"* — thực hiện Sprint 1 theo kế hoạch tái thiết kế UI/UX để ứng dụng mang bản sắc giáo dục chuyên nghiệp, ấm áp, thoát khỏi giao diện khuôn mẫu AI cứng nhắc.
+
+**Ba cải tiến giao diện cốt lõi.**
+1. **Xoá bỏ hoàn toàn nhãn biểu mẫu IN HOA (ALL CAPS):**
+   - Trước đây: `TÊN TRÒ CHƠI`, `MÔN HỌC`, `LỚP`, `SỐ CÂU HỎI`, `CHẾ ĐỘ TÍNH ĐIỂM`, `ĐỘ KHÓ`, `THỜI LƯỢNG (PHÚT)`, `ĐIỂM / CÂU ĐÚNG`, `PHONG CÁCH`, `SỐ NGƯỜI CHƠI`, `CHẾ ĐỘ THI ĐẤU`, `ĐIỂM THƯỞNG NHANH`, `ĐIỂM · DỄ/TRUNG BÌNH/KHÓ`, `THỦ CÔNG` badge tại `src/renderer/pages/create.ts` và `src/renderer/features/editor/page.ts`. Kiểu chữ này tạo cảm giác la hét, thô ráp, giống các khuôn mẫu scaffolding sinh vội của AI.
+   - Nay: Chuẩn hoá toàn bộ sang Sentence/Title Case mực thước sư phạm (`Tên trò chơi`, `Môn học`, `Lớp`, `Số câu hỏi`, v.v.). `templateLabel` trong `src/renderer/shared.ts` trả về Title Case thống nhất cho 5 thể loại.
+2. **Bảng màu thẻ thư viện nhận diện theo thể loại (Genre Theme Identity):**
+   - Trước đây: `gameCard()` trong `shared.ts` gán màu thẻ bằng `index % 5` quay vòng ngẫu nhiên trong carousel/grid. Kết quả là cùng một thể loại Quiz có lúc màu xanh lá, lúc màu vàng, lúc màu hồng; người dùng không thể nhận diện thể loại bằng trực giác màu sắc.
+   - Nay: Mỗi thể loại game sở hữu một bảng màu và viền điểm nhấn (left border accent + gradient + badge) riêng biệt:
+     - `quiz`: Gold/Amber accent (`border-l-[#f59e0b]`, nền gradient `#fef3c7`/`#fde68a`, badge `#b45309`).
+     - `scenario`: Emerald accent (`border-l-[#10b981]`, gradient `#d1fae5`/`#a7f3d0`, badge `#047857`).
+     - `matching` thông thường: Purple accent (`border-l-[#8b5cf6]`, gradient `#ede9fe`/`#ddd6fe`, badge `#6d28d9`).
+     - `matching` dạng Chòm sao (`connectionBoard`): Cyan accent (`border-l-[#06b6d4]`, gradient `#cffafe`/`#a5f3fc`, badge `#0e7490`).
+     - `treasure-hunt`: Rose accent (`border-l-[#f43f5e]`, gradient `#ffe4e6`/`#fecdd3`, badge `#be123c`).
+     - `race`: Blue accent (`border-l-[#3b82f6]`, gradient `#dbeafe`/`#bfdbfe`, badge `#1d4ed8`).
+     Thẻ mang thuộc tính `data-template`, hiệu ứng hover nhấc nhẹ (`translateY(-2px)`) với cubic-bezier mượt mà.
+3. **Mascot Cú tốt nghiệp SVG cho Empty State:**
+   - Trước đây: `emptyState()` render một khung viền nét đứt (dashed border) xám xịt, giống placeholder kỹ thuật thô sơ.
+   - Nay: Thay thế bằng hình minh hoạ vector inline SVG chú cú giáo dục thân thiện đeo kính, đội mũ cử nhân đứng trên trang sách mở (`emptyStateIllustrationSvg`), hỗ trợ hiển thị đẹp mắt, sắc nét và tương phản tốt trên cả hai theme Light & Dark (đạt chuẩn WCAG AA).
+
+**Bảo mật:**
+- Đã gỡ dòng cấu hình rò rỉ `GH_TOKEN` khỏi `.env.example` đúng theo khuyến nghị bảo mật #188 và luật AGENTS.md.
+
+**Kiểm chứng:**
+- Mới: `tests/unit/ui-identity.test.ts` (4 test suite, 5 assertions) tự động xác nhận form labels không còn ALL CAPS, `templateLabel` trả về Title Case và cấu hình bảng màu thẻ đầy đủ.
+- `node tests/run-unit.js ui-identity` 5/5 assertions PASS.
+- `npm run check:renderer-globals`: 0 undefined globals qua 64 scripts (931 hàm).
+- `npm run verify:css`: 46/46 CSS checks PASS.
+- `npm run check`: TypeScript `--noEmit` 0 lỗi.
+- `npm run build`: Exit code 0 sạch sẽ.
+
+## #190 — Animation Tier 1: Vi tương tác mượt mà bằng CSS thuần (chúc mừng đáp án, chuyển trang fade-in, indicator menu sidebar và pop hoàn thành bước wizard)
+
+**Yêu cầu, nguyên văn.** *"chưa code , phần hiệu ứng , animation thì sao ... lên kết hoạch chi tiết phát triển UI/UX ... bắt đầu làm"* — thực hiện Sprint 2 (Animation Tier 1 - CSS-only Micro-interactions) theo kế hoạch UI/UX đã duyệt.
+
+**Bốn vi tương tác chuyển động bằng CSS thuần.**
+1. **Nâng cấp hoạt ảnh chúc mừng chọn đúng (`answer-celebrate`):**
+   - Trước đây: `scale(0.98) -> scale(1.025) -> scale(1)` phẳng lặng, thiếu năng lượng phản hồi tích cực cho học sinh khi trả lời đúng.
+   - Nay: Nâng cấp chuyển động nảy kết hợp xoay nhẹ và chớp sáng highlight:
+     - `0%`: `scale(0.96) filter: brightness(1)`
+     - `35%`: `scale(1.15) rotate(-2.5deg) filter: brightness(1.22) drop-shadow(0 0 12px rgba(34, 197, 94, 0.55))`
+     - `70%`: `scale(1.03) rotate(1.5deg) filter: brightness(1.1) drop-shadow(0 0 6px rgba(34, 197, 94, 0.3))`
+     - `100%`: `scale(1) rotate(0deg) filter: brightness(1) drop-shadow(none)`
+     - Thời lượng: 0.45s với timing function `cubic-bezier(0.16, 1, 0.3, 1)`.
+2. **Hiệu ứng chuyển trang mượt mà (Page Transition):**
+   - Trước đây: Chuyển trang trong SPA thay thế nội dung tức thì gây giật mắt hoặc nháy layout.
+   - Nay: Thêm keyframes `page-fade-in` (`opacity: 0.88; translateY(4px) -> opacity: 1; translateY(0)`) thời lượng 180ms tại `src/renderer/styles/base.css`.
+   - `src/renderer/core/render.ts` kích hoạt class `.page-fade-enter` khi điều hướng sang trang mới (`renderedPage !== window.__lastRenderedPage`), không gây chớp nháy khi chỉ re-render nội bộ trong trang.
+3. **Thanh chỉ báo tab điều hướng tích cực (Active Navigation Indicator):**
+   - Trước đây: `.nav-item` chỉ đổi màu nền và màu chữ cơ bản.
+   - Nay: Thêm pseudo-element `.nav-item::before` làm thanh chỉ báo dạng viên thuốc (3.5px × 20px) trượt mở theo chiều dọc (`scaleY(0) -> scaleY(1)`), nhấc nhẹ icon `scale(1.05)`, hiệu ứng bấm nút `active` nén nhẹ `scale(0.98)` tại `src/renderer/styles/navigation.css`. Hỗ trợ đổi màu tím sáng trong dark theme.
+4. **Hiệu ứng nảy ăn mừng hoàn thành bước (Step Completion Pop):**
+   - Trước đây: Bước trong wizard stepper đổi màu tức thì không có điểm nhấn.
+   - Nay: Thêm `@keyframes step-pop` (`scale(0.82) -> scale(1.18) -> scale(1)`) cho vòng tròn số thứ tự bước `.wizard-step-index` khi ở trạng thái `active` hoặc `done` trong `src/renderer/styles/components.css`.
+
+**Khả năng tiếp cận (Accessibility):**
+- Toàn bộ các hoạt ảnh và chuyển động đều được bảo vệ bởi `@media (prefers-reduced-motion: reduce)`, tự động triệt tiêu animation đối với người dùng bật chế độ giảm chuyển động trong hệ điều hành.
+
+**Kiểm chứng:**
+- Mới: `tests/unit/ui-animations.test.ts` (5 subtests, 6 assertions) kiểm tra đầy đủ 4 hạng mục chuyển động và điều kiện reduced-motion.
+- `node tests/run-unit.js ui-animations`: 5/5 subtests PASS.
+- `verify:css`: Bổ sung 3 assertions kiểm tra `answer-celebrate`, `step-pop` và `page-fade-in` trong CSS biên dịch: tăng từ **46 lên 49/49 checks PASS**.
+- `npm run check:renderer-globals`: 0 undefined globals qua 64 scripts (931 hàm).
+- `npm run check`: TypeScript `--noEmit` 0 lỗi.
+- `npm run build`: Exit code 0 sạch sẽ, tailwind v4 minified thành công.
+
+## #191 — Visual Polish & Theme Consistency: Hệ thống đổ bóng đa tầng (Layered elevation shadows), thanh cuộn custom mượt mà và phân tầng bề mặt Dark Mode (Surface layering)
+
+**Yêu cầu, nguyên văn.** *"tiếp tục sprint 3"* — thực hiện Sprint 3 (Visual Polish & Theme Consistency) theo kế hoạch UI/UX đã duyệt.
+
+**Ba cải tiến thị giác trọng tâm.**
+1. **Nâng cấp thanh cuộn custom (Custom Scrollbars) toàn diện:**
+   - Trước đây: Thanh cuộn chỉ đổi màu cứng đơ, thiếu hiệu ứng chuyển đổi mượt mà khi di chuột và chưa đồng bộ thuộc tính `scrollbar-color` cho các khung cuộn độc lập (modal, popover, chat).
+   - Nay:
+     - Thêm `transition: background 0.2s ease` trên `::-webkit-scrollbar-thumb` giúp chuyển màu êm ái khi hover/active.
+     - Khai báo chuẩn `scrollbar-width: thin` và `scrollbar-color` đồng bộ cho cả Firefox/Chromium.
+     - Thêm trạng thái `:active` rõ nét cho thanh cuộn trong Dark mode (`#5d6590`).
+     - Khung cuộn độc lập (`.modal`, `.notification-popover`, `.ai-chat-messages`) được ghép cặp `scrollbar-color` ăn khớp với bề mặt nền panel thay vì nền trang.
+2. **Hệ thống đổ bóng đa tầng (Layered Elevation Shadows):**
+   - Trước đây: App chỉ có một token `--shadow-card` đơn tầng phẳng (`0 10px 35px rgba(28, 37, 75, 0.06)`), nhiều thành phần phải ghim inline box-shadow cứng.
+   - Nay: Xây dựng hệ thống token đổ bóng đa lớp (multi-layer elevation) trong cả Light theme (`app.css`) và Dark theme (`shell.css`):
+     - `--shadow-sm`: Dành cho các thành phần tĩnh phẳng/chìm nhẹ (`.form-panel`, `.quick-action`, inputs).
+     - `--shadow-md`: Dành cho các thẻ nội dung tiêu chuẩn (`.game-card`, `.ai-chat-panel`).
+     - `--shadow-lg`: Dành cho các bề mặt nổi cao trên trang (`.modal`, `.notification-popover`).
+     - `--shadow-hover`: Đổ bóng sâu mở rộng kết hợp chuyển động nâng nổi khi người dùng tương tác rê chuột (`.game-card:hover`).
+     - Dark theme: Các tầng bóng tối sâu hơn (`rgba(0,0,0,0.20)` đến `0.40`), bảo đảm phân tách thị giác rõ ràng trên nền tối mà không tạo quầng sáng ảo.
+3. **Phân lớp bề mặt trực quan ở chế độ tối (Dark Mode Surface Layering):**
+   - Trước đây: Dark theme sử dụng chung màu `--panel` cho hầu hết mọi khối khiến giao diện thiếu chiều sâu (depth hierarchy).
+   - Nay: Thiết lập hệ thống token bề mặt theo tầng:
+     - `--surface-0` (`#0f1220`): Nền sâu nhất (canvas / body / modal-body).
+     - `--surface-1` (`#171b2e`): Thẻ, bảng điều khiển chính, thanh điều hướng phụ (`.sidebar-shortcuts`, `.editor-page-head`, `.modal-head`, `.modal-foot`).
+     - `--surface-2` (`#1d2340`): Thành phần nổi cao hơn (icon nút bấm, ô select, `.notification-popover`).
+     - `--surface-3` (`#242a48`): Trạng thái tương tác, hover của các mục menu/lối tắt.
+
+**Kiểm chứng:**
+- Mới: `tests/unit/ui-visual-polish.test.ts` (4 subtests, 23 assertions) kiểm tra đầy đủ scrollbar transitions, shadow tokens, component shadow integration, và surface layering.
+- `node tests/run-unit.js ui-visual-polish`: 5/5 test PASS.
+- `verify:css`: Bổ sung 4 assertions kiểm tra scrollbar transition, shadow tokens, surface tokens và component shadows: tăng từ **49 lên 53/53 checks PASS**.
+- `npm run check:renderer-globals`: 0 undefined globals qua 64 scripts (931 hàm, 7540 call sites).
+- `npm run check`: TypeScript `--noEmit` 0 lỗi.
+- `npm run build`: Exit code 0 sạch sẽ, tailwind v4 minified thành công.
+
+## #192 — Ngôn ngữ & UX Sư phạm: Progressive Disclosure biểu mẫu tạo game, nhãn mục đích sư phạm theo thể loại và huy hiệu độ đầy đủ tài liệu
+
+**Yêu cầu, nguyên văn.** *"Tiếp tục Sprint 4"* — thực hiện Sprint 4 (Teacher-friendly Language & Progressive Disclosure) theo kế hoạch UI/UX đã duyệt.
+
+**Ba cải tiến trải nghiệm sư phạm trọng tâm.**
+1. **Thu gọn phân cấp hiển thị (Progressive Disclosure) cho Form Tạo trò chơi (`create.ts`):**
+   - Trước đây: Toàn bộ 15 trường cấu hình (luật chơi, thời lượng, điểm số, phong cách, số người chơi, thi đua, điểm theo từng độ khó...) nằm trải dài trực diện khiến giáo viên dễ ngợp khi muốn tạo nhanh một trò chơi đơn giản.
+   - Nay: Phân tách thành 2 tầng nhận thức:
+     - Tầng thiết yếu luôn hiển thị: Tên trò chơi, Môn học, Lớp, Số câu hỏi.
+     - Tầng nâng cao: Đưa toàn bộ các thiết lập chuyên sâu vào khối thu gọn `<details class="create-advanced-options">` với nhãn summary rõ ràng "Tùy chọn nâng cao (Luật chơi, tính điểm, thi đấu)", có giá trị mặc định chuẩn mực sư phạm.
+     - Giữ nguyên toàn bộ ID và cấu trúc sự kiện để `controller.ts` (`collectDraft()`, `updateScoringVisibility()`) hoạt động ổn định 100%.
+2. **Nhãn mục đích sư phạm (Pedagogical Purpose Badges) cho 5 thể loại game (`create.ts`):**
+   - Trước đây: Các thể loại game chỉ hiển thị tên gọi trừu tượng và thông số kỹ thuật (thời lượng, số câu).
+   - Nay: Bổ sung huy hiệu định hướng sư phạm rõ nét trên từng thẻ thể loại:
+     - Đấu trường kiến thức: `Khởi động & Ôn tập`
+     - Thử thách tình huống: `Kỹ năng thực tế`
+     - Ghép cặp kiến thức: `Thuật ngữ & Ghi nhớ`
+     - Giải mã kho báu: `Khám phá chủ đề`
+     - Đường đua chinh phục: `Thi đấu đồng đội`
+   - Giúp giáo viên nhanh chóng chọn thể loại phù hợp nhất với ý đồ bài giảng trong giáo án.
+3. **Cải tiến ngôn ngữ & gợi ý sư phạm trong Khung chat Giáo án (`lesson-chat.ts`):**
+   - Bổ sung huy hiệu độ đầy đủ sư phạm trực quan (`Đầy đủ 100%` / `Trích đoạn`) phía trước dòng disclosure, giúp giáo viên nhận diện ngay tình trạng tiếp nhận bài học mà vẫn bảo đảm hợp đồng kiểm thử của #186.
+   - Cung cấp gợi ý động (dynamic hint) khi giáo viên đã gắn giáo án: `Đã chọn n giáo án — AI sẽ đối chiếu và trả lời bám sát nội dung.` thay vì để trống.
+   - Hướng dẫn thân thiện và ấm áp hơn.
+
+**Kiểm chứng:**
+- Mới: `tests/unit/ui-teacher-ux.test.ts` (4 subtests, 22 assertions) kiểm tra đầy đủ progressive disclosure, các ID form được bảo toàn, pedagogical badges, và chat completeness badge/hint.
+- `node tests/run-unit.js ui`: **7/7 suites PASS** (bao gồm cả 4 suites UI mới: `ui-identity`, `ui-animations`, `ui-visual-polish`, `ui-teacher-ux`).
+- `verify:css`: Bổ sung 1 assertion kiểm tra `.create-advanced-options summary` trong CSS biên dịch: tăng từ **53 lên 54/54 checks PASS**.
+- `npm run check:renderer-globals`: 0 undefined globals qua 64 scripts (931 hàm, 7540 call sites).
+- `npm run check`: TypeScript `--noEmit` 0 lỗi.
+- `npm run build`: Exit code 0 sạch sẽ, tailwind v4 minified thành công.
+
+## #193 — Micro-Interactions & Polish: Hiệu ứng trượt menu sidebar, trạng thái xoay loading nút bấm và tinh chỉnh nâng nổi thẻ game
+
+**Yêu cầu, nguyên văn.** *"Tiến hành Sprint 5"* — thực hiện Sprint 5 (Quality of Life & Micro-interactions) theo kế hoạch UI/UX đã duyệt.
+
+**Ba vi tương tác tinh chỉnh.**
+1. **Vi tương tác di chuột và nhấn giữ trên thanh điều hướng Sidebar (`navigation.css`):**
+   - Trước đây: `.nav-item` chỉ đổi màu nền và màu chữ khi hover/active.
+   - Nay:
+     - Khi hover: `.nav-item:hover` trượt nhẹ về phía trước 2px (`transform: translateX(2px)`), tạo cảm giác đón nhận cử chỉ trỏ chuột của người dùng.
+     - Khi nhấn giữ: `.nav-item:active` nén nhẹ xuống kết hợp tiến 1px (`transform: translateX(1px) scale(0.98)`), mang lại phản hồi xúc giác (tactile feedback) tức thì.
+     - Tự động triệt tiêu toàn bộ chuyển động khi bật `prefers-reduced-motion: reduce`.
+2. **Trạng thái quay chờ xử lý cho nút bấm (`.btn-loading` trong `components.css`):**
+   - Trước đây: Các nút bấm khi đang thực hiện tác vụ chạy ngầm thường chỉ bị `disabled` hoặc đổi chữ, dễ gây cảm giác đơ/treo ứng dụng.
+   - Nay: Xây dựng class `.btn-loading` với spinner xoay tròn (`@keyframes btn-spin 0.6s linear infinite`), ẩn chữ nút (`color: transparent !important`) và khoá click (`pointer-events: none`).
+   - Tự động tương thích với cả nút chính (`.btn-primary`) và nút phụ (`.btn-secondary`), đồng thời bổ sung phản hồi nhấn tactile press `.btn:active { transform: translateY(0) scale(0.98); }`.
+3. **Tinh chỉnh hiệu ứng nâng nổi thẻ game (`.game-card` trong `components.css`):**
+   - Trước đây: `.game-card:hover` chỉ nâng -3px cơ bản.
+   - Nay: Nâng cao độ nhấc và phóng nhẹ: `transform: translateY(-4px) scale(1.01); box-shadow: var(--shadow-hover);`, tạo chiều sâu thị giác mượt mà kết hợp cùng hệ thống shadow tokens đa tầng của Sprint 3.
+
+**Kiểm chứng:**
+- Mới: `tests/unit/ui-polish.test.ts` (4 subtests, 22 assertions) kiểm tra đầy đủ nav hover slide/active press, button loading/active feedback, card lift & scale, và điều kiện accessibility `prefers-reduced-motion`.
+- `node tests/run-unit.js ui`: **8/8 suites PASS** (bao gồm cả 5 suites UI mới: `ui-identity`, `ui-animations`, `ui-visual-polish`, `ui-teacher-ux`, `ui-polish`).
+- `verify:css`: Bổ sung 1 assertion kiểm tra `@keyframes btn-spin` trong CSS biên dịch: tăng từ **54 lên 55/55 checks PASS**.
+- `npm run check:renderer-globals`: 0 undefined globals qua 64 scripts (931 hàm, 7540 call sites).
+- `npm run check`: TypeScript `--noEmit` 0 lỗi.
+- `npm run build`: Exit code 0 sạch sẽ, tailwind v4 minified thành công.
+## #194 — Animation Tier 2: Pháo hoa chúc mừng canvas-confetti offline, hiệu ứng chuyển câu hỏi trượt ngang và bộ đếm điểm số tăng dần
+
+**Yêu cầu, nguyên văn.** *"Tiến hành hạng mục còn lại trong kế hoạch — Animation Tier 2"* — hoàn thành các tính năng ăn mừng và chuyển động trò chơi thuộc Tier 2 trong Kế hoạch phát triển UI/UX.
+
+**Ba tính năng trọng tâm.**
+1. **Tích hợp canvas-confetti ngoại tuyến (Offline & zero-CDN):**
+   - Đóng gói thư viện `canvas-confetti` vào tệp IIFE tự thân `dist/src/renderer/vendor/confetti.global.js` (10.4 KB) qua script `scripts/build-confetti.js` và lệnh `npm run build:confetti`.
+   - Nạp như một classic script toàn cục trong `src/index.html` và nạp vào test runner `tests/unit/renderer-load-order.test.ts`.
+   - Hoàn toàn tuân thủ CSP `script-src 'self'`, không gọi mạng, hoạt động 100% offline trên máy giáo viên.
+2. **Hiệu ứng pháo hoa chúc mừng hoàn thành game (`celebrateGameResults`):**
+   - Kích hoạt tự động qua `wireResultSession()` tại `src/renderer/features/results.ts` khi người chơi đạt điểm cao từ 70% trở lên.
+   - Bắn pháo hoa trung tâm sinh động cho điểm khá giỏi ($\ge 70\%$) và bắn pháo hoa đôi hai bên góc màn hình cho điểm tuyệt đối ($100\%$).
+   - Tuyệt đối tôn trọng quyền tiếp cận: tự động tắt hoàn toàn khi hệ thống kích hoạt `prefers-reduced-motion: reduce`.
+3. **Hiệu ứng trượt câu hỏi (`question-slide-in`) & Bộ đếm điểm số tăng dần (`animateResultScore`):**
+   - Hiệu ứng trượt ngang nhẹ nhàng 20px kết hợp mờ dần sang rõ (`@keyframes question-slide-in`) khi hiển thị câu hỏi và đáp án trong các màn chơi (quiz, treasure, race, scenario) tại `src/renderer/styles/game-animations.css`.
+   - Bộ đếm điểm số pure JavaScript tăng dần từ 0 lên số điểm thật trong 800ms với thuật toán giảm tốc mượt mà cubic ease-out, áp dụng trên màn hình kết quả (`.result-score`).
+   - Tự động bỏ qua hoạt ảnh và hiển thị ngay kết quả nếu bật `prefers-reduced-motion`.
+
+**Kiểm chứng:**
+- Mới: `scripts/build-confetti.js` biên dịch bundle vendor 10.4 KB.
+- Mới: `tests/unit/ui-celebration.test.ts` (7 assertions) kiểm tra vendor script, cấu hình build, keyframes slide, logic celebration và animated score counter.
+- `verify:css`: Bổ sung 1 assertion kiểm tra `@keyframes question-slide-in`: tăng từ **55 lên 56/56 checks PASS**.
+- `npm run check:renderer-globals`: 0 undefined globals qua 64 scripts (934 hàm, 7565 call sites).
+- `npm run check`: TypeScript `--noEmit` 0 lỗi.
+- `npm run build`: Exit code 0 sạch sẽ, cả `three.global.js` (732 KB) và `confetti.global.js` (10.4 KB) được sinh đầy đủ.
+- `node tests/run-unit.js`: **84/84 unit suites PASS** (32.7s), bao gồm `ui-celebration` và `renderer-load-order` (65 scripts).
+
+## #195 — Tinh chỉnh UI/UX Wizard Tạo từ giáo án: Tối giản văn bản, loại bỏ ALLCAPS và áp dụng Progressive Disclosure
+
+**Yêu cầu, nguyên văn.** *"kiểm tra giao diện trang Tạo từ giáo án , tối tinh giản bớt chữ , quy trình dễ sử dụng hơn và lên kế hoạch tinh chỉnh"* và *"go"* — hoàn thành tinh chỉnh toàn diện 5 bước của quy trình Tạo trò chơi từ giáo án theo kế hoạch đã lập.
+
+**Ba nhóm cải tiến trọng tâm.**
+1. **Chuẩn hoá nhãn trường và loại bỏ ALLCAPS, tối giản văn bản dư thừa:**
+   - Chuyển đổi toàn bộ nhãn trường ALLCAPS thô ráp (`TÊN BÀI HỌC / TÀI LIỆU`, `NỘI DUNG VĂN BẢN ĐẦY ĐỦ *`, `CHỦ ĐỀ`, `MÔN HỌC`, `LỚP`, `TÊN TRÒ CHƠI *`, `CHÒM SAO`...) sang Sentence/Title case thân thiện, tự nhiên cho giáo viên.
+   - Lược bỏ các phần text kỹ thuật gây phân tâm: gỡ phụ đề "quy tắc trước, bộ đọc hiểu chỉ xác nhận" ở bộ chọn loại nội dung; gỡ bỏ ghi chú CPU model Qwen 3.5 thay bằng mẹo ngắn gọn.
+   - Tinh gọn mô tả header bước 1 (badge bảo mật đã thể hiện riêng), làm gọn câu nhận diện tự động và trạng thái đếm ký tự.
+   - Đổi tên khu vực dễ gây hoang mang "Điểm chưa chắc chắn" thành "Lưu ý & điểm cần xem lại".
+2. **Sắp xếp luồng thao tác và phân cấp nút bấm trực quan:**
+   - Rút gọn nút điều hướng dài ở Bước 1 (`Tôi đã biết muốn tạo trò chơi nào`) thành nút hành động ngắn gọn `Chọn mẫu tạo sẵn` kèm icon `sparkles`.
+   - Phân cấp rõ rệt hàng nút hành động (`publish-actions`) ở Bước 2 và Bước 3: nhóm các nút quay lại/làm lại sang lề trái, đẩy các nút tiếp tục và `Tạo nhanh` sang lề phải với độ tương phản nút bấm cao hơn.
+3. **Phân tầng thông tin (Progressive Disclosure) ở Bước 4 (Cấu hình trò chơi):**
+   - Giữ các trường cốt lõi hiển thị trực diện: Tên trò chơi, môn, lớp, số lượng câu hỏi/cặp ghép/chặng chính, độ khó, thời lượng và chế độ tạo (Nhanh / Kỹ lưỡng).
+   - Đưa các trường tham số phụ (điểm thưởng nhanh, phạt sai, kiểu ghép, mẫu nhà 3D...) vào khung gập/mở `<details class="create-advanced-options">` có thể mở rộng khi cần.
+   - Tách bạch hàm cấu trúc `wizardConfigCoreTypeFields` và `wizardConfigAdvancedTypeFields`, đồng thời bảo toàn hàm `wizardConfigTypeFields` cho tương thích ngược tuyệt đối.
+
+**Kiểm chứng:**
+- Mới: `tests/unit/ui-wizard-refinement.test.ts` (4 subtests, 18 assertions) xác nhận chuẩn hoá nhãn trường, loại bỏ thuật ngữ kỹ thuật, cấu trúc nút bấm mới và cơ chế progressive disclosure.
+- `node tests/run-unit.js ui-wizard-refinement`: 1/1 suite PASS (4/4 subtests).
+- `node tests/run-unit.js`: **85/85 unit suites PASS** (33.5s).
+- `npm run check:renderer-globals`: 0 undefined globals qua 64 scripts (936 hàm, 7571 call sites).
+- `npm run check`: TypeScript `--noEmit` 0 lỗi.
+- `npm run verify:css`: **56/56 checks PASS**.
+
+## #196 — Tối ưu khởi động: đo thật trước khi sửa, P0 là `require` nạp sớm (không phải `defer` script)
+
+**Yêu cầu, nguyên văn.** *"đây là kế hoạch tối ưu hiệu năng"* (đính kèm `docs/archive/specs/perf-optimization-plan.md`), rồi *"vậy có nghĩa là mọi thứ trong kế hoạch đều sai và không thể tối ưu hiệu năng được nữa ?"*, rồi *"tiếp tục tiến trình"*.
+
+**Vì sao phải đo trước.** Kế hoạch đưa số dự đoán ("+300–600 ms", "400–800 ms") cho mọi sprint nhưng không có cách nào
+đo được những con số đó trong ứng dụng này: trang nạp bằng `file://`, nên **không có Resource Timing** — `performance
+.getEntriesByType('resource')` trả rỗng. Mọi cải thiện phía renderer chỉ nhìn thấy qua dấu vết do chính `main.ts` ghi.
+Vì vậy bước đầu tiên là dụng cụ đo, không phải tối ưu: `scripts/measure-boot.js` khởi động Electron thật (xoá
+`ELECTRON_RUN_AS_NODE` mà shell của agent đặt, hồ sơ riêng ở `%TEMP%/edugame-boot-measure`, `taskkill /F /T`), đọc lại
+**một dòng** log `app.boot.phases` in ra từ các mark trong `src/main.ts`, và đưa median. Một dòng duy nhất, ghi **sau**
+khi document xong, để phép đo không tự thêm sync I/O vào đoạn nó đo.
+
+**Kết quả đo và điều nó bác bỏ.** Đo trước: warm boot 1.540–1.593 ms. Giả thuyết của chính tôi — rằng `ensureData()`
+và hai lần `await createRuntimeInstaller()` probe chiếm ~1,03 s trước khi document tồn tại — **sai**: `ensureData` ≈ 52 ms,
+hai probe ≈ 4 + 3 ms. Ba cái ăn thật là `localRequires` ≈ 446 ms và ba module bị `require` ngay lúc nạp dù
+không ai dùng lúc mở app: **`mammoth` ≈ 118 ms** (chỉ dùng khi import `.docx`), **`express` + `express-rate-limit` +
+`socket.io` ≈ 190 ms** (kéo theo qua `import` giá trị ở `lan-ipc.ts`, chỉ dùng khi mở phòng LAN), **`electron-updater`
+≈ 123 ms** (kéo theo qua `about-ipc.ts`, chỉ dùng khi giáo viên bấm Kiểm tra cập nhật). Tổng ≈ 431 ms, khớp với mức
+giảm thực tế.
+
+**Sửa.** Khuôn đã có sẵn trong repo (`game-package.ts:21` `require('./game-service') as {…}`), nên giữ nguyên kiểu:
+mỗi chỗ đổi thành `let module: T | null = null` + hàm nạp trơ, kiểu lấy bằng `typeof import('./đường/dẫn')`.
+- `src/main.ts`: bỏ `require('mammoth')` đầu file; `loadMammoth()` gọi trong hai handler import tài liệu.
+- `src/lan/lan-ipc.ts`: `import { startLanServer, lanServerIsRunning }` → `import type` + `lanServer()` nạp trơ. Vì
+  `main.ts` hỏi "phòng có đang mở không" lúc `before-quit` mà **không được** kéo `lan-server` về, thêm
+  `lanSessionActive()` đọc cờ "module đã nạp chưa" — đây là lý do hàm đó tồn tại, không phải tiện ích.
+- `src/about/about-ipc.ts`: `registerAboutIpc()` chỉ còn lưu tuỳ chọn + đăng ký handler; `updater()` nạp adapter và
+  chạy `initUpdater`/`onUpdateState` **một lần** ở lần bấm thật. `OPEN` vẫn không `await` kiểm tra cập nhật (#188 giữ nguyên).
+
+**Cổng giữ.** `tests/unit/boot-lazy-requires.test.ts` (11 check, `@ts-nocheck`), chạy trên bản `dist` sau `npm run build`:
+- 6 check đọc **nguồn**: `main.ts` không được có `require('mammoth')` ở dòng cấp cao nhất (mà phải nằm trong
+  `loadMammoth()`), không được `require('./lan/lan-server')` trực tiếp; `lan-ipc.ts` chỉ được `import type` từ
+  `./lan-server` (một `import` giá trị là đủ làm express + socket.io chạy lúc mở app); `about-ipc.ts` không được
+  `import` adapter ở đầu file, và `registerAboutIpc()` không được gọi `initUpdater(`.
+- 4 check chạy **hành vi** với `electron` giả + `Module._load` chặn năm module nặng: `registerLanIpc()` phải nạp
+  **không** module nào; mở một phòng LAN **thật** qua handler START bắt được thì `express`/`socket.io` mới được nạp,
+  `lanSessionActive()` phải báo `true` lúc mở và `false` sau khi đóng; `registerAboutIpc()` không được nạp
+  `electron-updater` nhưng handler STATE phải nạp được adapter ở lần dùng đầu tiên.
+- 1 check giữ dấu vết đo: `app.boot.phases`, `markBoot('documentLoaded')`, `EDUGAME_BOOT_TRACE` phải còn trong `main.ts`.
+
+Check cuối trong nhóm hành vi là chiều ngược lại của lazy-require — *hoãn không làm tính năng chết*.
+
+**Số sau khi sửa.** `node scripts/measure-boot.js 5` (hồ sơ ấm, **không** bật trace, cùng máy i5-10210U/8 logical CPU/17 GB):
+1.186 / 1.188 / 1.195 / 1.208 ms (lần đầu sau `--fresh` là 3.452 ms — đĩa lạnh) → **median 1.195 ms**, baseline trước
+sửa 1.540–1.593 ms ⇒ **−345 tới −398 ms ≈ −22 %**. Bật `EDUGAME_BOOT_TRACE=1` thì đắt hơn một chút có hệ thống
+(1.226–1.312, median 1.240) — bản thân phép trace cũng là chi phí, nên số chính thức là số không trace.
+`documentLoaded` không đổi (500–512 ms): đúng, vì P0 chỉ chạm pha main process.
+
+**Kết luận cho kế hoạch.** P1 (`defer` cho 66 `<script>`) **bỏ**: `renderer-load-order.test.ts:26` và
+`check-renderer-undefined-globals.js:342` đọc thẻ script bằng regex khít `<script src="…"></script>`, thêm `defer` là
+66 khớp → 0 khớp, hai cổng biến thành test rỗng mà vẫn "PASS" — và `file://` khiến lợi ích nó hứa không đo được.
+P2 (lazy three.js) là mục phía renderer duy nhất còn cơ sở: `three.global.js` 749.583 B / 2.539.901 B JS renderer =
+29,5 %, nhưng trần tiết kiệm là *một phần* của 500–512 ms chứ không phải 400–800 ms. P3 giữ, cỡ nhỏ. P4 cần
+micro-benchmark trước khi đụng 69 site `.prepare(` (48 `lesson-store.ts` + 21 `main.ts`, kế hoạch ghi ~55). P5 thu hẹp
+còn đọc + luân chuyển log (`appendFileSync:171` mỗi dòng vẫn giữ đồng bộ). P6 kế hoạch tự bỏ là đúng. P7 phần lớn đã
+có `check:offline-packaged`. Toàn bộ verdict nằm ngay đầu `docs/archive/specs/perf-optimization-plan.md`.
+
+**Kiểm chứng.** `npm run build` 0 · `npm run check` (`tsc --noEmit`) 0 · `npm run check:renderer-globals` 0 undefined
+(64/66 scripts, 936 hàm / 7.571 call site) · `npm run verify:css` **56/56** · `node tests/run-unit.js` **86/86** (85 +
+gate mới) · `boot-lazy-requires` **11/11** · trên Electron thật (CDP 9412, hồ sơ sạch): `ui-about-check` **69/69** (gồm
+cả vòng đời updater: kiểm tra → tải 3,2 MB → installer trên đĩa), `ui-lan-wiring-check` **7/7**, `ui-lan-card-start-check`
+**12/12** · probe `.docx` thật qua đường lazy: `import-document-from-path` trả đúng 58 ký tự nội dung.
+
+**Chưa xác minh.** (1) `EDUGAME_BOOT_TRACE` chỉ bật khi đo; số topRequires ở trên là của một lần chạy, không phải trung
+vị. (2) Chưa đo trên máy yếu thật của giáo viên và chưa đo bản đóng gói `.exe` (NSIS) — hai chỗ con số sẽ khác. (3)
+Không chạy đường AI local (llama.cpp) theo luật dự án. (4) `quitAndInstall()` và installer trên máy sạch vẫn thuộc về
+máy pilot, không phải máy này.
+
+## #197 — P3: thanh trạng thái AI ngừng poll cố định 2 giây, chuyển sang nhịp theo việc thật
+
+**Yêu cầu, nguyên văn.** *"tiếp tục tiến trình"* — chạy tiếp mục P3 của `docs/archive/specs/perf-optimization-plan.md`
+theo thứ tự đã chốt ở #196 (P3 trước P2, vì P3 không đụng `src/index.html` nên không bị luồng #190–#195 chặn).
+
+**Hiện trạng đo được, không suy đoán.** Bản đã commit (`HEAD:src/renderer/features/ai-status.ts:427`) đặt
+`setInterval(refresh, POLL_MS)` với `POLL_MS = 2000` **duy nhất và cứng**: một lần `refresh()` là hai vòng IPC
+(`ai:getStatus` qua `getLocalRuntimeStatus` + `aiTasks:list` qua `listAiTasks`) rồi render lại, tức 60 vòng IPC mỗi
+phút kể cả khi giáo viên đang chiếu trò chơi và chẳng có tác vụ AI nào. Kế hoạch đoán "giảm 80 % IPC call khi nhàn
+rỗi"; con số đó lần này kiểm chứng được vì nó nằm ở phía **hẹn giờ**, không phía `file://`.
+
+**Sửa.** Nhịp giờ phụ thuộc vào việc có gì đang chuyển động không:
+- `targetPollMs()` — nhanh (`POLL_MS` 2000) khi có tác vụ `queued`/`running`, khi llama.cpp `STARTING`, hoặc khi menu
+  của thanh đang mở (menu hiển thị trạng thái sống); chậm (`POLL_IDLE_MS` 10000) còn lại.
+- `reschedulePoll()` — chỗ **duy nhất** đặt hẹn giờ; cửa sổ ẩn thì nhịp đặt 0, nghĩa là tắt hẳn. Nó chỉ đặt lại khi
+  nhịp thực sự đổi (`if (next === timerMs) return`), nên một nhịp đang chạy ổn định không bị huỷ và tạo lại mỗi lần refresh.
+- Gọi lại nhịp từ: cuối `refresh()` (mọi đường vào — tick, `core/render.ts:59`, `create-wizard.ts:154`,
+  `setup-wizard.ts:448`, `lesson-chat.ts:437`, `stopRuntime`, `cancelAi` — đều tự suy lại nhịp), `openDropdown()`
+  (nhấn menu phải nhanh ngay, không chờ tick), `init()`, và nhánh *ẩn* của `visibilitychange`.
+- Hệ quả thật sự, nói thẳng: giáo viên chuyển sang ứng dụng khác thì thanh **dừng cập nhật** (window bị che là
+  `visibilityState: 'hidden'`). Không mất tính năng nào: tác vụ AI được await bởi chính wizard/chat, thanh chỉ để xem.
+
+**Cổng giữ.** `tests/unit/ai-status-poll.test.ts` (10 check, `@ts-nocheck`) nạp **module thật**
+`dist/src/renderer/features/ai-status.js` vào một realm `vm` cô lập với DOM tối giản (`getElementById` trả `null` để
+`render()` tự câm), hẹn giờ giả (ghi lại `ms` và số lần fire, không tự chạy) và IPC giả theo kịch bản, rồi đọc thẳng
+nhịp đang được đặt: khởi động nhàn rỗi = 10000; `running` = 2000; hết tác vụ về 10000; `queued` cũng tính là đang
+chạy; `STARTING` = 2000; ẩn cửa sổ = không còn hẹn giờ nào; hiện lại = nối đúng nhịp của trạng thái; và **chính tick
+tự chạy** cũng đổi nhịp (tác vụ xuất hiện giữa hai nhịp vẫn được nhận ra ở tick kế). Hai check tĩnh cuối giữ thiết kế:
+đúng một chỗ `setInterval(` và không còn `setInterval(…, POLL_MS)`.
+
+**Số sau khi sửa.** `node scripts/measure-idle-poll.js` trên Electron thật — tiêm shim `setInterval` **trước** script
+của trang qua `Page.addScriptToEvaluateOnNewDocument` rồi `Page.reload`, cửa sổ đo 30 s nhàn rỗi, hồ sơ ấm
+`%TEMP%/edugame-boot-measure`, các cờ `--disable-*-backgrounding` để Chromium không throttling hẹn giờ:
+**một** hẹn giờ được đặt ở `10000 ms`, **3** lượt refresh trong 30 s = 0.100 Hz. Nhịp cũ 2000 ms cho 15 lượt
+⇒ **−80 %** IPC lúc nhàn rỗi, đúng như kế hoạch hứa (lần này là số đo, không phải số đoán).
+
+**Kiểm chứng.** `npm run build` 0 · `npm run check` 0 · `npm run check:renderer-globals` 0 undefined (64/66 scripts,
+938 hàm / 7.583 call site) · `npm run verify:css` 56/56 · `node tests/run-unit.js` **87/87** (86 + gate mới) ·
+`ai-status-poll` 10/10 · trên Electron thật (CDP 9431): `ui-ai-status-bar-check` **14/14**, trong đó có
+*"the menu stays open while the status bar polls"* — nhịp mới không làm hỏng menu.
+
+**Chưa xác minh.** (1) Không chạy llama.cpp thật theo luật dự án: nhánh `STARTING` và nhịp 2 giây **dưới tải AI thật**
+chỉ được chứng minh bằng vm test với IPC giả. (2) Chưa đo `%` CPU thật (không bật profiler), mới đo **số lần** IPC —
+mức giảm CPU tỉ lệ theo nhưng không phải số đo. (3) Chưa đo bản `.exe` đóng gói. (4) Một tác vụ khởi động từ trang
+không poke thanh sẽ được nhận ra trong ≤10 s thay vì ≤2 s; bốn chỗ bắt đầu việc hiện tại đều poke ngay nên thực tế
+là tức thì, nhưng trang mới sau này phải nhớ poke.
+
+## #198 — P4: đo `db.prepare()` trên chính các đường đọc của app, số ra là BỎ cache prepared statements
+
+**Yêu cầu, nguyên văn.** *"tiếp tục tiến trình"* — chạy tiếp mục P4 sau P3, theo thứ tự đã chốt ở #196. ROADMAP bắt
+P4 phải có micro-benchmark **trước** khi đụng 69 chỗ gọi `.prepare(`, và "chỉ sửa khi số có ý nghĩa". Đây là lần thứ
+hai trong chuỗi tối ưu này một mục của kế hoạch tự chết vì số đo (P1 chết vì cổng regex, P4 chết vì µs).
+
+**Hiện trạng đo được, không suy đoán.** Dụng cụ: `scripts/bench-db-prepare.js` (chạy bằng ABI Electron:
+`node tests/manual/run-electron-node.js scripts/bench-db-prepare.js`). Script **không sửa source**: nó dựng
+`Database` thật với schema thật của `LessonStore` + hai bảng legacy `games`/`sessions` mà `src/main.ts` vẫn dùng,
+seed dữ liệu tổng hợp (12 giáo án × 40 đoạn, 6 cuộc trò chuyện × 10 lượt, 60 tác vụ AI, 12 dự án), rồi đo **cùng một
+đường đọc** ở hai chế độ:
+- `raw` — mỗi lần đọc gọi `db.prepare(sql)` như code hiện tại;
+- `cached` — `db.prepare(sql)` memo theo đúng chuỗi SQL. Năm dòng memo đó **chính là** cải tiến P4, nên hiệu số là
+  hiệu số của thao tác thật, không phải của một vòng lặp vô nghĩa.
+Bố cục A/B/A (raw – cached – raw, lấy batch nhanh nhất) để trôi nhiệt của máy không bị ghi thành "lợi thế" của chế
+độ chạy sau. `prepare()` được bọc bằng `process.hrtime.bigint()` nên bảng dưới có cả **phần thuần** của nó.
+
+Số trên máy dev (i5-10210U), đơn vị µs:
+
+| đường đọc | raw | cached | prepare/lượt | phần trong prepare | tiết kiệm |
+|---|---|---|---|---|---|
+| nhịp 10 s của thanh trạng thái (`listAiTasks` + `countAiTasks`) | 258,4 | 230,5 | 2 | 28,8 (11,2 %) | **27,9** |
+| mở trang Giáo án (`listDocumentLibrary`) | 1.082,6 | 996,5 | 2 | 54,1 (5,0 %) | **86,1** |
+| mở trang Dự án (`listProjects`) | 421,6 | 386,0 | 1 | 22,7 (5,4 %) | **35,6** |
+| mở một dự án (`getProject`) | 54,0 | 33,0 | 1 | 15,8 | 21,0 |
+| mở một giáo án (`listAnalyses`) | 28,1 | 7,9 | 1 | 17,1 | 20,2 |
+| bước đề xuất (`listRecommendations`) | 33,3 | 15,0 | 1 | 14,9 | 18,3 |
+| sidebar chat (`listLessonChats`) | 34,7 | 17,1 | 1 | 14,9 | 17,6 |
+| mở một cuộc trò chuyện (`getLessonChat`) | 140,7 | 98,6 | 2 | 40,8 | 42,1 |
+| retrieval lúc chat (`countChunks` + `listChunks`) | 115,6 | 81,8 | 2 | 29,0 | 33,8 |
+| wizard tái sử dụng (`getGenerationCache`) | 13,9 | 0,7 | 1 | 11,9 | 13,1 |
+| **xoá giáo án** (cascade, `deleteDocument`) | 2.565,7 | 2.489,3 | 18 | 485,3 (18,9 %) | **76,4** |
+
+Chi phí tự thân của một lần biên dịch: **22,5–23,5 µs** cho `SELECT` (có và không `ORDER BY … LIMIT`), **5,9 µs** cho
+`INSERT` nhiều cột tham số named. Vòng lặp `for (const analysisId of analyses)` ở `lesson-store.ts:1198` là chỗ
+**duy nhất** trong app prepare ngay bên trong vòng lặp (kiểm bằng scan mọi dòng `.prepare(` có vòng lặp trong 4 dòng
+trước, cả `lesson-store.ts` lẫn `main.ts`); nó đã được đo riêng và vẫn chỉ tiết kiệm 76 µs trên một lượt xoá 2.566 µs
+vì lượt xoá phải ghi và xoá tệp giáo án nữa.
+
+**Sửa.** Không sửa gì. `lesson-store.ts` đã tự áp dụng đúng khuôn của P4 ở những vòng lặp dài: `replaceChunks`,
+`saveChunkEmbeddings`, `insertGame`/`insertSession` trong `main.ts:585–590` đều prepare **một lần rồi** chạy `.run()`
+nhiều lần — phần còn lại là các đường đọc một-shot, chỗ mà 20 µs không tồn tại trước mắt giáo viên.
+
+**Vì sao con số nói BỎ.** Ngưỡng đặt **trước khi đo**: một thao tác tương tác phải tiết kiệm ≥ 2.000 µs, hoặc một
+nhịp của thanh trạng thái ≥ 200 µs, hoặc **cả một phiên làm việc** ≥ 50.000 µs. Số đo: thao tác tốt nhất 86 µs, nhịp
+thanh trạng thái 28 µs, và cả phiên (mở app → Giáo án → Dự án → mở 3 dự án → sidebar chat → 60 nhịp 10 s) là
+**127 lần `prepare()`, 1,87 ms nằm trong prepare, tiết kiệm 1,88 ms**. Muốn có mức tiết kiệm mà giáo viên cảm nhận
+(≈50 ms/phiên) thì phải nhân số `.prepare(` lên ~26 lần, tức sửa source để lấy một khoản vẫn nhỏ hơn một cú nhấp chuột.
+Đổi lại là 69 chỗ đọc thẳng `this.db.prepare(…)` — vốn là phần dễ theo dõi nhất của kho dữ liệu — thành trạng thái
+đối tượng sống, kèm hai bẫy thật: statement cache phải sống thọ hơn `migrateSchema()` (ALTER TABLE làm statement cũ
+hết hiệu lực) và phải được xoá khi `db.close()`.
+
+**Kiểm chứng.** `npm run build` 0 (benchmark nạp từ `dist/`) · `node tests/manual/run-electron-node.js
+scripts/bench-db-prepare.js` **hai lần độc lập**, cả hai in đủ bảng trên và kết luận "Không đáng … BỎ P4" ·
+`node tests/run-unit.js` **87/87** (không suite nào đổi) · `npm run check` (`tsc --noEmit`) 0 — `scripts/*.js` không
+nằm trong `tsconfig include` nên không bị type-check.
+
+**Độ trôi giữa hai lần chạy** (cùng máy, cùng seed, A/B/A + min-of-7-batch): các đường đọc một-shot tiết kiệm
+13,1–86,1 µs lần 1 và 13,6–96,4 µs lần 2 (mở trang Giáo án 86,1 → 96,4; nhịp thanh trạng thái 27,9 → 37,2;
+`getGenerationCache` 13,1 → 13,6). Riêng lượt **xoá giáo án** nhảy 76,4 → 505,9 µs trên tổng 2.565,7 → 2.647,6 µs:
+thao tác này ghi và xoá tệp giáo án nên nhiễu đĩa chiếm phần lớn — và dù ở mức cao vẫn **dưới ngưỡng 2.000 µs**.
+Chi phí tự thân một lần biên dịch: `SELECT` 22,5–26,4 µs, `INSERT` named params 5,9–6,9 µs; 2.000 statement chưa GC
+tạm thời đội RSS thêm 4,9–19,0 MB. Cả phiên: 127 lần `prepare()`, 1,87 ms rồi 1,83 ms nằm trong prepare, tiết kiệm
+1,88 ms rồi 2,45 ms — hai lần đều cách ngưỡng 50 ms của một phiên ~20 lần.
+
+**Chưa xác minh.** (1) Số của **một** máy, DB `:memory:`; máy giáo viên yếu hơn có thể đắt gấp ~2 lần nhưng vẫn là
+µs. (2) Seed 12 giáo án/60 tác vụ nhỏ hơn kho thật của giáo viên dùng lâu năm; đường đọc theo `ORDER BY` trên bảng
+lớn hơn sẽ chậm thêm nhưng phần prepare **không đổi** (chi phí là biên dịch, không phải quét dòng) — nên tỷ lệ
+prepare/thao tác còn **giảm** khi DB to ra, tức là BỎ càng chắc. (3) Chưa đo trên bản `.exe` đóng gói.
+
+## #199 — P5: đo I/O của log chẩn đoán; chỉ `prune()` trên đường mở app đáng async hoá, `write()` giữ đồng bộ
+
+**Yêu cầu, nguyên văn.** *"tiếp tục tiến trình"* — sau #198, kế hoạch hiệu năng chỉ còn P2 (bị luồng #189–#195 giữ
+`src/index.html`) và P5. Đây là mục **cuối cùng** của kế hoạch được xử lý bằng số đo thay vì bị bỏ.
+
+**Hiện trạng đo được, không suy đoán.** Dụng cụ: `scripts/bench-ai-log-io.js` (chạy qua
+`node tests/manual/run-electron-node.js scripts/bench-ai-log-io.js`). Harness dựng **thư mục log thật** — 14 tệp,
+11,1 MB, tệp hôm nay đầy ở trần `maxFileBytes` = 2 MB — và các tệp quá hạn được seed **từ đầu rồi để yên**, lùi
+mtime bằng `utimesSync` vì `prune()` so **mtime chứ không so tên tệp** (sai một trong hai thứ là phép đo thành rỗng
+mà vẫn in ra số). Lý do để yên: unlink một tệp vừa ghi không giống unlink tệp đã nằm im — anti-virus và flush đội
+chi phí lên con số của app (lần đo đầu tiên của harness in ra 24,2 ms chỉ vì vừa ghi xong).
+
+Số trên máy dev (i5-10210U), µs, hai lần chạy bản **đồng bộ**:
+
+| thao tác | lần 1 | lần 2 | chỗ gọi |
+|---|---|---|---|
+| `readRecent(200)` (đọc trọn 2 MB để lấy 200 dòng cuối) | 5.141,0 | 3.647,8 | một cú nhấp "Gói chẩn đoán" (`main.ts:1178`) |
+| `readFileSync` đúng 2 MB đó (tham chiếu tách giá thành) | 4.053,5 | 2.709,5 | — |
+| `prune()` ấm, không có tệp quá hạn (readdir + 14 stat) | 922,4 | 674,4 | mỗi lần mở app |
+| `writeDiagnosticBundle()` 38 KB | 1.303,6 | 1.042,3 | cùng cú nhấp, ghi ra Desktop |
+| **dựng writer + `prune()` với 14 tệp quá hạn** | **6.519,2** | **6.539,6** | **đường mở app, `main.ts:830`** |
+| └ chỉ quét (readdirSync + statSync, không xoá) | 2.004,6 | 2.136,0 | phần còn lại là 14 lần `unlinkSync` |
+
+**Bẫy đo thứ ba — và vì sao các số dưới đây là median.** Dòng cuối của bảng trên chỉ có **một mẫu** mỗi lần chạy, vì
+dựng writer là sự kiện diễn ra một lần trong đời app. Mẫu đơn đó nói dối theo cả hai hướng: bản đồng bộ từng in 24,2 ms
+khi vừa seed xong, và bản async — cửa sổ đo chỉ còn `mkdirSync` — có lần in **17,0 ms**, có lần in **24,2 ms**. Lý do:
+cửa sổ là `hrtime` quanh một tick đồng bộ, nên GC và anti-virus rơi đúng vào đó chứ không phải code. Sửa **trong harness
+(không sửa source)**: seed `2N` thư mục stale, nghỉ `EDUGAME_BENCH_SETTLE_MS` (mặc định 3 giây) cho đĩa yên, rồi đo
+**ghép cặp** từng vòng i — dựng writer trên `stale-new-i` (bản đang nạp) và đo **đường cũ** (`mkdirSync` + `readdirSync`
++ 14× `statSync`/`unlinkSync`, đúng thân `prune()` ở HEAD, chỉ thiếu `.sort()` của `files()`) trên `stale-old-i`. Hai số
+cùng chịu điều kiện môi trường tại cùng thời điểm, nên không thể đổ nhiễu cho một phía.
+
+| bản | median **ba** lần chạy ghép cặp (µs) | dải min–max quan sát được | chặn ở đâu |
+|---|---|---|---|
+| **đường cũ** — prune đồng bộ ngay trong construction | **3.073,3 / 2.719,6 / 3.402,2** | 2.634,3 … 7.293,7 | mỗi lần mở app có log quá hạn |
+| **bản mới** — prune chạy nền | **265,3 / 223,2 / 271,5** | 208,5 … 788,2 | cũng chỗ đó, chỉ còn `mkdirSync` + dựng lời hứa |
+
+⇒ tiết kiệm **2,50–3,13 ms median ≈ −91 %**; so với hai mẫu đơn 6.519,2/6.539,6 của bảng BEFORE (lấy lúc đĩa bận hơn)
+thì là **−5,82…−6,27 ms**. Đĩa còn **0/252** tệp quá hạn sau khi `await` lượt dọn ở cả ba lần chạy. `readRecent`
+3,68–4,39 ms và bundle 0,83–1,18 ms trên cả ba lần: vẫn **dưới ngưỡng 15.000 µs**, giữ đồng bộ.
+
+**Vì sao chỉ `prune()`.** Ngưỡng đặt **trước khi đo**: `readRecent` ≥ 15.000 µs, `prune` lúc mở app ≥ 5.000 µs, bundle ≥ 15.000 µs.
+Phải nói thẳng: **ngưỡng chỉ bị vượt khi đĩa bận** — hai mẫu đơn BEFORE (6,52–6,54 ms) và max của đường cũ trong từng
+lần chạy ghép cặp (5.635,6 / 7.293,7 µs) vượt 5.000 µs, còn **median** của đường cũ trong cửa sổ đã yên (2,72–3,40 ms)
+thì **không**. Quyết định async hoá `prune()` vì vậy không dựa vào "vượt ngưỡng không tranh cãi" mà vào **cấu trúc của
+khoản tiết kiệm**: 2,5–6,5 ms I/O *không cần thiết* nằm trên đường mở app, bỏ được bằng một thay đổi chạm đúng hai chỗ
+(một lời gọi nội bộ lúc construction + một handler IPC), đổi lại `readRecent`/bundle là I/O *có chủ đích* của **một cú
+nhấp** mà giáo viên tự gây ra và tự chờ — đổi chúng mới thật sự là cái giá #198 vừa từ chối cho 1,88 ms/phiên.
+
+**Sửa.** `prune()` dùng `fs/promises`: một lần `readdir`, rồi `stat` + `unlink` **song song** cho các tệp khớp
+`LOG_FILE`, mỗi tệp một `try/catch` (một tệp bị Explorer giữ không được làm hỏng cả lượt). `createAiLogWriter` không
+gọi nó nữa mà gọi `startBackgroundPrune()`: bắn chạy nền, giữ lời hứa trong `backgroundPrunePromise`, tự set lại
+`undefined` khi settle, và `.catch(() => {})` — log là best-effort, một lời hứa reject không được phép làm hỏng ứng
+dụng đang được chẩn đoán. **`write()` giữ nguyên 100 % đồng bộ, kể cả nhánh luân chuyển** (`existsSync` + `statSync` +
+`renameSync`): nó chạy mỗi dòng log, đổi sang async là đổi thứ tự ghi đúng lúc app chết — tức mất dòng cuối khi debug,
+điều kế hoạch đã nêu và phép đo không ủng hộ (nó là µs, không phải ms). `files()`, `readRecent()`,
+`writeDiagnosticBundle()`, `clearAiLogs()` giữ đồng bộ theo ngưỡng.
+
+**Sau khi sửa.** Main process lúc dựng writer (bảng ghép cặp ở trên): median **223,2–271,5 µs** trên ba lần chạy, min
+**208,5 µs** — một `mkdirSync` lạnh + dựng lời hứa, không còn `stat`/`unlink` nào nằm trong đường chặn; max 444–788 µs.
+So với đường cũ **cùng máy, cùng phiên** (median 2,72–3,40 ms) là **−91 %**; con số tuyệt đối giáo viên nhận được dao
+động 2,5–6,3 ms tuỳ đĩa đang bận hay nhàn. Phần quét (2,0–2,4 ms) và phần xoá vẫn chạy, chỉ là chạy ở nền, và harness
+assert đĩa **0/252** tệp quá hạn sau khi `await` lượt dọn. Trước bước đó, sáu mẫu dựng writer đơn lẻ in 553,9–699,8 µs
+— cùng bản chất phép đo, lấy ở lúc đĩa bận hơn; nay con số chính thức là median ghép cặp.
+`node scripts/measure-boot.js 5` trên bản cuối: `logWriter` **2 ms** ở cả năm lần, median tổng **1.172 ms** (min 1.155, max 3.304 = lần
+đầu đĩa lạnh) so với 1.195 ms ở #196 — **không tuyên bố cải thiện**, vì hồ sơ đo không có tệp quá hạn nên phép đo này
+không thấy khoản tiết kiệm; số thật chỉ hiện trên máy giáo viên đã dùng hơn 14 ngày.
+
+**Thứ tự đua, xử lý bằng code rồi mới bằng test.** Câu hỏi thật của prune chạy nền là nó giao tiếp với ba đường khác
+trong vài ms đầu sau khi mở app:
+- `clearAiLogs` (nút "Xoá log"): không còn phải đoán. `AiLogWriter` expose `backgroundPrune()` — **chính** lời hứa của
+  lượt dọn lúc khởi tạo, tự thành `undefined` khi settle — và `main.ts:3309` `await writer.backgroundPrune()` **trước**
+  `clearAiLogs`, nên hai lượt không unlink chồng nhau và con số "đã xoá N" giáo viên nhìn thấy là số của một thư mục
+  đã yên. (Trên lịch chạy, `await ensureData()` ở `main.ts:826–831` còn happens-before trước `createAiLogWriter`, và
+  nút đó nằm sau một cú nhấp — hàng trăm ms tới vài giây — nhưng không có lý do gì để dựa vào khoảng cách đó.)
+- `readRecent`: đọc `files()` sắp xếp theo **tên**, mà tên chứa ngày; prune xoá các tệp **cũ nhất** (theo mtime) nên
+  phần bị xoá luôn ở đầu mảng, các dòng trả về không thể là một tiền tố khập khiễng.
+- `write()`: giữ nguyên 100 % đồng bộ và ghi vào tên tệp **hôm nay**, thứ mà prune không bao giờ xoá — không có cửa
+  tranh chấp nào ở đường ghi mỗi dòng.
+Tệ nhất nếu mọi giả định trên sụp: một tệp quá hạn còn sót lại cho tới lần mở app sau (mỗi thao tác đều `try/catch`),
+không phải mất dữ liệu hay app lỗi. Test khoá cả ba: `ok prune races readRecent, files and clearAiLogs`.
+
+**Kiểm chứng.** `npm run build` 0 · `npm run check` (`tsc --noEmit`) 0 · `node tests/run-unit.js` **87/87** (33,9 s) ·
+`npm run test:native` **1/1** (`lesson-store.test.js` không nằm trong 87 vì cần ABI Electron) ·
+`node tests/run-unit.js ai-log` 1/1 · `npm run check:renderer-globals` 0 undefined (64/66 scripts, 938 hàm / 7.583
+call site) · `npm run verify:css` **56/56** · `node tests/manual/run-electron-node.js scripts/bench-ai-log-io.js`
+**mười ba lần**: hai lần bản đồng bộ (bảng BEFORE), bảy lần bản async chưa ghép cặp (sáu mẫu 553,9–699,8 µs rồi một mẫu
+16.995,2 µs — chính là mồi cho bẫy đo thứ ba), một lần N-mẫu chưa có tham chiếu (median 463,8 µs nhưng max 24.191,6 µs)
+và ba lần ghép cặp (bảng median). Harness tự nhận diện bản đang nạp và in dòng kết luận theo ngưỡng.
+`tests/unit/ai-log.test.ts`: nhánh prune thành async IIFE, **await `writer.backgroundPrune()` rồi mới assert** — trước
+đây assert chạy ngay sau `createAiLogWriter` và chỉ đúng *tình cờ* vì prune đồng bộ; chờ đúng lời hứa của lượt dọn lúc
+khởi tạo (kèm assert nó tồn tại rồi tự xoá về `undefined` khi settle) chứ không phải một lượt `prune()` do test tự gọi; thêm assert `prune()` không chạm tệp
+không khớp `LOG_FILE`; thêm khối đua ở trên và **đường SKIP** khi `dist/` còn là bản đồng bộ (`backgroundPrune` không
+tồn tại) — được chứng minh bằng cách vá `dist/src/services/ai/ai-log.js` cho mất thành phần đó: suite in `SKIP prune
+race…` và vẫn exit 0, rồi `npm run build` khôi phục; dòng "passed" chỉ in sau khi nhánh bất định kết thúc (tiêu chí
+thật của `run-unit.js` vẫn là exit code).
+
+**Chưa xác minh.** (1) `clearAiLogs` giờ **chờ** lượt dọn nền (`await writer.backgroundPrune()`) nên đường đó không
+còn race; `readRecent` và `write()` được bảo vệ bởi **cấu trúc** (tên tệp chứa ngày, prune chỉ xoá tệp cũ hơn hạn, tệp
+hôm nay không bao giờ bị xoá) chứ chưa có test nào cố tình dựng đúng thứ tự xấu trong app thật — bằng chứng thực địa
+vẫn là log của một lần mở app thật có tệp quá hạn. (2) Số của **một** máy Windows có anti-virus, và **khoản tiết kiệm
+tuyệt phụ thuộc tải đĩa**: đường cũ đo ghép cặp là 2,72–3,40 ms median nhưng 5,6–7,3 ms ở các mẫu xấu, còn hai mẫu
+BEFORE lấy lúc đĩa bận thì 6,52–6,54 ms — nghĩa là ngưỡng 5.000 µs **không** bị vượt ở cửa sổ đã yên; tỉ lệ −91 % thì
+ổn định ở cả ba lần chạy. Trên máy không AV, phần unlink rẻ hơn nên khoản tiết kiệm nhỏ hơn. (3) `logWriter` trên hồ sơ ấm vẫn 1–2 ms vì `mkdirSync` đồng bộ còn lại — không đổi vì nó
+bảo đảm thư mục đã tồn tại cho `appendFileSync` đầu tiên. (4) Chưa đo bản `.exe` đóng gói. (5) Theo luật dự án, không
+chạy đường AI local: các dòng log do nhánh đó ghi ra chưa được tạo thật. (6) Nợ cũ #182–#188 giữ nguyên.
+
+## #200 — GitHub Release 0.4.0 đầu tiên: dựng lại từ HEAD trong worktree tách biệt, không đăng bộ cài đang nằm sẵn trên đĩa
+
+**Yêu cầu, nguyên văn.** *"tạo bản Github release đi"* — việc bị xếp ngoài kế hoạch hiệu năng từ lâu vì nó chặn thẳng
+người dùng thật: repo chưa có release nào nên trang Giới thiệu của bản gói luôn báo `errorKind: 'feed'`
+(*"Chưa tìm thấy bản phát hành nào trên GitHub…"*, `src/about/about.html:286`).
+
+**Vì sao không đăng luôn tệp đang có.** `release/EduGame-Studio-Setup-0.4.0.exe` (92.544.117 B, `latest.yml`
+`releaseDate 2026-11-04T09:40:28.751Z` = **16:40 giờ máy**) là ứng viên hiển nhiên: #136 đã kiểm chứng nó và sha512
+của manifest khớp từng byte. Nhưng đối chiếu mốc commit thì nó **không chứa thứ mà tag sẽ tuyên bố** — #187/#188
+(trang Giới thiệu + `electron-updater`) commit 17:52, #196 lúc 21:45, #197 lúc 22:12 **cùng ngày**, #198/#199 sáng
+05/11. Bản 16:40 đứng trước toàn bộ con đường cập nhật mà chính release này phục vụ, và trước cả bốn mục vừa đo.
+Một tag `v0.4.0` trỏ vào binary dựng từ mã khác tag thì ghi chú phát hành sẽ nói sai về tệp nó phát hành.
+
+**Vì sao không build tại chỗ.** Worktree chung đang có **20 tệp `src/` + `package.json` modified** của luồng
+#189–#195 (`src/index.html`, CSS, renderer, script `build:confetti`). `npm run dist:win` trong thư mục đó sẽ đóng
+băng công việc chưa commit — chưa qua cổng nào của riêng nó — vào một binary công khai không rút lại được. Nên dựng
+trong `git worktree` tách biệt, detached tại `5b87dfa`, `git status` 0 dòng.
+
+**Cơ chế dựng.** `node_modules` nối bằng **junction** để khỏi `npm ci` (Electron 33.4.11 và NSIS đã có cache nên không
+tải gì); `mklink /J` gọi qua Git Bash chết vì quoting nên tạo bằng `fs.symlinkSync(…, 'junction')` trong Node.
+Junction **phải gỡ bằng `fs.rmdirSync` trước khi xoá worktree**: `rm -rf` một junction trên Windows đi xuyên vào thư
+mục thật và sẽ xoá `node_modules` của repo chính. Sau khi gỡ, kiểm lại: 447 mục, nguyên vẹn.
+
+**Release.** tag annotated `v0.4.0` → `5b87dfa6bb633de1e10c3bc1fe825f5728aa4d64`, đã push; release id **434658977**,
+không draft, không prerelease; ba asset `latest.yml` **356 B** · `EduGame-Studio-Setup-0.4.0.exe` **92.490.714 B** ·
+`.exe.blockmap` **96.020 B**; sha512 manifest `mm3xrrIvr9…` = hex `9a6df1aeb2…3db4a4` (khác bản 04/11: `748b3136…`).
+
+**Bốn tầng kiểm chứng, mỗi tầng trả lời một câu hỏi khác nhau.**
+(1) *Commit này tự dựng được không*: worktree sạch tại HEAD → `npm run build` 0 lỗi, `node tests/run-unit.js`
+**80/80 (32,2 s)** — đúng bằng 87 trừ 7 suite `ui-*` của luồng kia chưa commit, nên HEAD không đỏ vì thiếu việc của
+người khác. (2) *Binary có đúng mã đã commit không*: mở `app.asar` bằng `@electron/asar` và tìm marker —
+`EDUGAME_BOOT_TRACE` + `app.boot.phases` + `lanSessionActive` (#196), `targetPollMs` (#197), `node:fs/promises` +
+`backgroundPrune` trong `ai-log.js` **và** trong `main.js` (#199); `app-update.yml` = `provider: github`,
+`owner: vananz123`, `repo: edu-game-ai`, `releaseType: release`. (3) *Tệp phát hành còn nguyên vẹn không*: tải lại từ
+URL công khai → 92.490.714 B, SHA-512 **giống từng byte**. (4) *Máy giáo viên vô danh đọc được feed không*:
+`GET /repos/.../releases?per_page=1` **không token** → 200 với ba asset `state=uploaded`; `GET` asset `latest.yml` →
+302 rồi 200, thân tệp đúng là manifest đã tải lên. `electron-updater` đi đúng hai lời gọi đó (`disableWebInstaller =
+true`), nên máy sạch không cần credential nào.
+
+**Hệ quả cần nói trước.** Máy **đã cài** 0.4.0 sẽ nhận "đang dùng bản mới nhất", không bị đẩy cập nhật
+(`allowDowngrade = false` và cùng version) — release đầu tiên mở đường chứ không đổi phần mềm của ai. Người cài thủ
+công sẽ gặp SmartScreen vì build **chưa ký Authenticode** (nợ #188 (c)).
+
+**An toàn bí mật.** Repo không có `gh` CLI nên mọi việc qua REST + curl; credential lấy từ Git Credential Manager bằng
+`git credential fill`, chỉ đọc độ dài (40 ký tự), không in giá trị, không ghi vào tệp nào của repo. Quét ngược **toàn
+bộ lịch sử** (`git grep -E 'ghp_[A-Za-z0-9]{25,}|github_pat_[A-Za-z0-9_]{25,}'` trên `git rev-list --all`, 99 commit):
+**0 kết quả**. `.env.example` hiện tại chỉ còn 5 dòng placeholder (`your_supabase…_key`…), không có dòng `GH_TOKEN`
+nào — ghi chú (h) "#188: `.env.example` có một dòng `GH_TOKEN` dạng `ghp_…`" là **sai với hiện tại**, đã sửa lại ở
+`ROADMAP.md`; token đó vẫn nên coi là từng lộ và rotate nếu nó từng là key thật.
+
+**Dọn dẹp.** worktree + junction đã gỡ. `.exe` cũ của #136 **không bị xoá**: đổi tên thành
+`*.pre-perf-2026-11-04` ngay trong `release/` (thư mục gitignored) rồi mới chép ba tệp mới vào, để `release/` mô tả
+đúng bản đã phát hành mà vẫn giữ được bản đã kiểm chứng #136.
+
+**Chưa xác minh.** (1) Chưa **cài** bản `.exe` này lên máy nào, kể cả máy dev (chủ dự án không cho chạy bộ cài ở máy
+này) — P7 vẫn cần một máy sạch ngắt mạng. (2) `quitAndInstall()` vẫn chưa lần nào được gọi (nợ #188 (a) giữ nguyên).
+(3) Chưa chạy `checkForUpdates()` của **bản đóng gói** chống feed thật — mới chứng minh bằng đúng hai lời gọi HTTP vô
+danh ở tầng (4), chưa phải một lần bấm nút trên máy thật. (4) Chưa đo `%` CPU lúc nhàn rỗi, chưa chạy nhịp poll nhanh
+dưới tải llama.cpp thật (#197). (5) Mới dựng trên **một** máy, nên chưa loại được khả năng build không tái lập.
+→ **cả (3) và (5) đã có số đo ở #201.**
+
+## #201 — Bấm "Kiểm tra cập nhật" trên binary đã phát hành, chống feed GitHub thật; build đóng gói **không** tái lập từng byte
+
+**Yêu cầu, nguyên văn.** *"go"* — làm tiếp việc được đề xuất cuối #200, tức đóng đúng hai dòng "chưa xác minh" của nó:
+**(3)** "Chưa chạy `checkForUpdates()` của **bản đóng gói** chống feed thật" và **(5)** "Mới dựng trên **một** máy, nên
+chưa loại được khả năng build không tái lập". Không sửa một dòng source app nào: việc này chỉ **đo**.
+
+**Vì sao phải đo ở giao điểm này.** #188 đã đi hết chu trình bằng nguồn giả trên loopback, #200 đã chứng minh hai lời gọi HTTP
+vô danh xanh — nhưng **không có một process nào** từng là "electron-updater + `app-update.yml` do electron-builder sinh
++ binary mang mã đã phát hành + api.github.com thật". Ba kiểu hỏng chỉ sống ở giao điểm đó: cấu hình sinh ra không khớp
+repo thật; `provider: github` vô danh bị phân trang/chặn; và `allowPrerelease = false` với đúng version 0.4.0 phải cho
+ra "đã mới nhất" chứ không phải `errorKind: 'feed'` như trước #200.
+
+**Phát hiện (a) — bản `--dir` KHÔNG sinh `resources/app-update.yml`.** `npx electron-builder --dir` tạo `win-unpacked`
+đầy đủ nhưng **thiếu đúng tệp mà `electron-updater` cần**; chỉ target cài đặt (nsis) mới ghi nó. Hệ quả thực địa: đo
+cập nhật trên bản đóng gói bắt buộc chạy `electron-builder --win nsis` rồi **chạy `win-unpacked\EduGame Studio.exe`**,
+tuyệt đối không chạy tệp `.exe` cài đặt (chủ dự án không cho cài trên máy này). `app-update.yml` đo được 117 B, nội dung
+`owner vananz123 · repo edu-game-ai · provider github · releaseType release · updaterCacheDirName edugame-studio-updater`
+— khớp những gì #188/#200 đọc từ bộ cài đã phát hành.
+
+**Phát hiện (b) — bẫy `ELECTRON_RUN_AS_NODE` tái diễn đúng như đã ghi ở #188.** Shell ở đây kế thừa biến đó, nên
+`EduGame Studio.exe --remote-debugging-port=9372` **thoát mã 9** với `bad option: --remote-debugging-port=9372` (exe
+chạy như Node và từ chối tham số Chromium). Cách chạy đúng: `Remove-Item Env:\ELECTRON_RUN_AS_NODE` rồi mới khởi động.
+Nó trông hệt "bản đóng gói bị hỏng" — ghi lại để người sau không sửa cái không hỏng.
+
+**Cơ chế — cổng mới `tests/ui/packaged-feed-check.js` (không đổi cổng nào khác).** Nối CDP vào một target theo URL
+(copy cách của `ui-about-check.js`, vì thư viện dùng chung chỉ biết `index.html`), bấm thật `[data-action="about-open"]`
+ở sidebar, chờ target `about.html`, rồi đọc DOM + `aboutAPI.getState()` trong cùng một lượt. Hai chế độ qua biến môi
+trường `EDUGAME_FEED_EXPECT`: `up-to-date` (22 check) và `error` (13 check). cổng **không** bấm "Tải về và cập nhật",
+**không** bấm "Khởi động lại để cài"; nó còn đo thêm một điều phòng thủ: sau lượt kiểm tra xanh thì `progressPercent`
+vẫn 0, thanh tải vẫn ẩn, thẻ cập nhật và nút cài vẫn ẩn (`autoDownload = false` phải thể hiện ra số, không chỉ trong code).
+Cổng tự lấy **nguồn tham chiếu độc lập**: chính Node trên máy đó đọc `GET /repos/…/releases/latest` vô danh, rồi bắt
+app và phép đọc đó **phải nói cùng một version** — nếu app trả "đã mới nhất" từ `app.getVersion()` chứ không từ mạng thì
+hai bên không thể khớp nhau một cách có nghĩa.
+
+**Chân không điều khiển (đây là phần làm bằng chứng có giá).** `AppUpdater` cache `configOnDisk` cả đời process (bài
+học ghi ngay đầu `ui-about-check.js`), nên không thể đổi tệp giữa chừng — cổng buộc phải chạy trên **hai process**:
+lượt một để nguyên `app-update.yml`, lượt hai đổi tên tệp đó thành `.off`. Kết quả: lượt một `phase=up-to-date` sau
+**1.657 ms** (lần bấm tay thứ hai **329 ms** — vẫn ra mạng, TLS tái sử dụng); lượt hai `phase=error`
+`errorKind=dev-mode` sau **3 ms**, `ENOENT … app-update.yml`. Cặp số 1.657 ms / 3 ms là bằng chứng câu trả lời xanh đến
+từ network chứ không phải từ logic nội bộ. *Một điểm chữ đáng nói:* bản đóng gói **thiếu** tệp cấu hình bị báo bằng câu
+"Bản bạn đang chạy không phải bộ cài đặt (nó chạy từ mã nguồn)" — phân loại `dev-mode` là đúng cơ chế của
+electron-updater nhưng hơi lạc cảnh với giáo viên; bản phát hành thật luôn có tệp này nên chưa sửa.
+
+**Số đo lượt xanh (instance 9372, binary `win-unpacked` dựng từ HEAD `affde34` = cùng mã với tag `v0.4.0`).**
+`packaged-feed-check (up-to-date): 22/22 passed` — `location.protocol = file:`; `info.packaged = true`;
+`info.version = 0.4.0`; `releasePageUrl` đúng repo; `phase=up-to-date`, `errorKind=""`; badge **"Ứng dụng đã mới nhất"**
+tone `ok`, không quay; note **"Bản 0.4.0 là bản mới nhất đã công bố · kiểm tra lúc 08:55."**; không thẻ lỗi; nút bấm lại
+dùng được; `lastCheckedAt` 1793843746058 → 1793843746319 (lượt bấm tay được ghi nhận sau lượt tự động); `newVersion=""`;
+`percent=0`, `barVisible=false`, `updateVisible=false`, `installVisible=false`; phép đọc vô danh từ Node → **HTTP 200**,
+`tag_name = v0.4.0` khớp `currentVersion`. `packaged-feed-check (error): 13/13 passed`.
+
+**Binary đang đo đúng là mã đã phát hành.** `app.asar` 50.738.287 B, mở bằng `@electron/asar`: `dist/src/main.js`
+(228.406 B) có `EDUGAME_BOOT_TRACE`, `app.boot.phases`, `lanSessionActive`, `backgroundPrune`, `node:fs/promises`;
+`dist/src/renderer/features/ai-status.js` (20.827 B) có `targetPollMs`, `POLL_IDLE_MS` (#197);
+`dist/src/services/ai/ai-log.js` (11.063 B) có `backgroundPrune` + `node:fs/promises` và vẫn giữ `appendFileSync` (#199).
+
+**`check:offline-packaged` chạy lại trên chính binary đó: 11/11, 0 request** (5 trò chơi, minh hoạ inline SVG, điều
+khiển dương "wrapper observes an outbound fetch"). Đây là lần đầu luật offline được đo trên bản **mang mã #196/#197/#199**,
+trước đây số 11/11 của #185 gắn với bản 04/11 chưa có các cải thiện đó.
+
+**Build không tái lập từng byte — có số, trả lời thẳng nợ (5) của #200.** Dựng lại **cùng commit trên cùng máy**, cách
+bản đã phát hành 25 phút: `EduGame-Studio-Setup-0.4.0.exe` **92.490.696 B** (bản phát hành: **92.490.714 B**, lệch
+**−18 B**) và sha512 `e8b16923e3db9f7c…4b977a65` (bản phát hành `9a6df1aeb22fafdd…33db4a4`). **Không khớp.** Không phải
+lỗi cần sửa: `latest.yml` đã phát hành ghim **size + sha512 của đúng từng byte** bản trên GitHub, nên một bản dựng lại
+không thể được thế chỗ một cách lặng lẽ; điều cần ghi là **đừng mong** tái dựng ra binary giống hệt (NSIS nhốt mốc thời
+gian vào nhị phân). Kèm theo: **không** sao chép bản dựng lại này vào `release/` — `release/` phải mô tả đúng bản đã phát hành.
+
+**Baseline `.exe` đóng gói đầu tiên cho #196 (đóng nợ (c) của #196).** Đọc `app.boot.phases` do chính main.ts ghi trong
+`<userData>/edugame-data/logs/ai-2026-11-05.jsonl` của các hồ sơ Temp dùng để đo: **4 lượt = 1.137 · 1.138 · 1.016 · 1.034 ms**
+(hai lượt đầu không bật trace nên 1.137/1.138 không kèm `topRequires`; ba lượt trace: 1.138 · 1.016 · 1.034 → **median
+1.034 ms**). Pha lượt cuối: `processToMainModule 171`, `vendors 133`, `localRequires 142`, `whenReady 52`, `ensureData 50`,
+`logWriter 2`, `ipcRegistered 4`, `windowCreated 103`, `documentLoaded 368`. `topRequires` trên bản gói: `zod 73` ·
+`objy v4/classic/external.cjs 67` · `objy core/index.cjs 56` · `lesson-prompts 55` · `services/lesson/lesson-cache 55` ·
+`shared/content-categories 52` · `jszip 46` · `object 40` · `locales/index.cjs 37` · `services/storage/lesson-store 34` ·
+`lesson-contracts 32` · `utf8 17` (ms). **Không tuyên bố cải thiện** so với 1.195 ms (#196) và 1.172 ms (#199) của bản dev:
+đó là hai đường dựng khác nhau trên cùng một máy, chỉ có thể nói "bản gói mở app trong ~1,0–1,1 s ở máy dev này".
+Số hữu ích nhất cho việc còn lại: **`documentLoaded` 368–436 ms trên bản gói** — đây là mốc trước (before) để P2 (lazy
+`three.global.js`, 749.583 B = 29,5 % JS renderer) so đo khi hết blocked.
+
+**Kiểm chứng tĩnh.** `npm run build` 0 · `node --check tests/ui/packaged-feed-check.js` OK · `file` xác nhận UTF-8
+(không mojibake trong source) · `git worktree list` sau dọn chỉ còn `main` + worktree `.kilo` của luồng khác. Không đổi
+source app nên không chạy lại unit/`verify:css`: các cổng đó đo mã của luồng #189–#195 đang modified trong worktree chung,
+kết quả sẽ không mô tả bản phát hành.
+
+**An toàn.** Không chạy bộ cài, không bấm tải (feed chỉ được đọc, không asset nào được kéo về), không gọi API có token —
+mọi lời gọi tới GitHub là **đọc vô danh** (vài request, nằm trong hạn mức 60/giờ cho IP chưa đăng nhập). Không secret nào
+đi qua cổng; cổng còn soi DOM theo luật "không secret trong Electron/renderer/bộ cài" (`no secret-shaped text on the page`
+= PASS) và soi mojibake trong câu giáo viên đọc. Hồ sơ Temp + worktree + junction đã gỡ; `node_modules` repo chính còn
+nguyên 447 mục sau khi gỡ junction.
+
+**Chưa xác minh.** (0) **Đừng nhầm binary:** `release/win-unpacked` trong repo vẫn là của lượt build #136 (04/11, `app.asar` 52.307.270 B, `EduGame Studio.exe` ghi lúc 09:39 UTC 04/11) — binary mà #201 đo nằm trong worktree tạm (`app.asar` 50.738.287 B) và đã bị xoá cùng worktree, nên muốn đo lại phải dựng lại từ `5b87dfa`. (1) Vẫn **chưa cài** bản `.exe` này lên máy nào: `quitAndInstall()` chưa lần nào được gọi (nợ #188 (a)
+giữ nguyên), và cửa sổ đăng ký/uninstall cùng đường SmartScreen của một bản cài thật vẫn chưa có bằng chứng. (2) Chưa thấy
+nhánh **"có bản mới"** chống feed thật: repo chỉ có đúng 0.4.0 và app đang chạy 0.4.0, nên `update-available` với nguồn
+thật chỉ đo được sau khi phát hành 0.4.1 — loopback của #188 vẫn là bằng chứng duy nhất cho nhánh đó. (3) Số của **một**
+máy, **một** trạng thái mạng; chưa chạy lại ở mạng chậm/đứt giữa chừng (nhánh `offline` đã có bằng chứng ở #188, nhưng
+trên loopback). (4) Bản `win-unpacked` chạy trực tiếp không giống hệt bản đã cài (không qua wizard, không perMachine,
+không elevate). (5) `docs/DECISIONS.md` + `docs/STATUS.md` vẫn chưa commit vì chứa cả text của luồng #189–#195.

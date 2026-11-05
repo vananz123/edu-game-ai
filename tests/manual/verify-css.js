@@ -124,7 +124,22 @@ const expectations = [
   // stacks and the frame stops being fixed — a `position:sticky` left over would pin a
   // 100vh column above the lessons. #184 raised the threshold with the wider column
   // (measured: 1181px still two columns, 1179px stacked).
-  ['narrow screens stack the two columns', /@media \(max-width:1180px\)\{\.lesson-two-col\{grid-template-columns:minmax\(0,1fr\)\}\.lesson-chat-col\{position:static\}/]
+  ['narrow screens stack the two columns', /@media \(max-width:1180px\)\{\.lesson-two-col\{grid-template-columns:minmax\(0,1fr\)\}\.lesson-chat-col\{position:static\}/],
+  // Sprint 2 (Tier 1 Animations & Micro-interactions): answer celebrate, wizard pop, page fade
+  ['answer-celebrate has flash and scale', /@keyframes answer-celebrate\{[^}]*filter:brightness/],
+  ['wizard step completion pop keyframes', /@keyframes step-pop\{[^}]*scale\(\.82\)/],
+  ['page transition fade-in keyframes', /@keyframes page-fade-in\{[^}]*opacity:\.88/],
+  // Sprint 3 (Visual Polish & Theme Consistency): scrollbars, shadows, dark surfaces
+  ['app-wide scrollbar has transition', /::-webkit-scrollbar-thumb\{[^}]*transition:background/],
+  ['layered elevation shadow tokens defined', /--shadow-md:0 4px 12px/],
+  ['dark mode surface layer tokens defined', /--surface-1:#171b2e/],
+  ['cards and panels use elevation shadows', /\.game-card\{[^}]*box-shadow:var\(--shadow-md\)/],
+  // Sprint 4 (Teacher UX & Progressive Disclosure): collapsible advanced options
+  ['progressive disclosure summary marker hidden', /\.create-advanced-options summary\{[^}]*list-style:none/],
+  // Sprint 5 (Micro-Interactions & Polish): button loading spinner keyframes
+  ['button loading spinner keyframes defined', /@keyframes btn-spin\{[^}]*rotate\(360deg\)/],
+  // Animation Tier 2 (Celebration & Transitions): question slide-in keyframes
+  ['question slide-in keyframes defined', /@keyframes question-slide-in\{[^}]*translate(X)?\(20px\)/]
 ];
 
 let failed = 0;

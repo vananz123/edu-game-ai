@@ -68,7 +68,7 @@ const VENDOR_PREFIX = 'renderer/vendor/';
  */
 const PLATFORM_ALLOWLIST = new Set([
   // globals
-  'eval', 'parseInt', 'parseFloat', 'isNaN', 'isFinite', 'encodeURIComponent',
+  'confetti', 'eval', 'parseInt', 'parseFloat', 'isNaN', 'isFinite', 'encodeURIComponent',
   'decodeURIComponent', 'encodeURI', 'decodeURI', 'structuredClone', 'fetch',
   'atob', 'btoa', 'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval',
   'queueMicrotask', 'requestAnimationFrame', 'cancelAnimationFrame',

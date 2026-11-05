@@ -68,7 +68,7 @@ function wizardQualityPanel(report) {
   if (!report) return '';
   const issues = report.issues || [];
   if (!issues.length) {
-    return `<div class="field-hint" data-wizard-quality="ok">✓ Đã kiểm tra chất lượng: không thấy câu trùng, đáp án thiếu hay liên kết hỏng.</div>`;
+    return `<div class="field-hint" data-wizard-quality="ok">✓ Đã kiểm tra: Nội dung hoàn chỉnh, không phát hiện lỗi.</div>`;
   }
   const errors = issues.filter(issue => issue.severity === 'error');
   const warnings = issues.filter(issue => issue.severity === 'warning');
@@ -207,7 +207,7 @@ function wizardItemCardsPanel(s) {
       ? 'Chế độ “Chọn thủ công” chỉ hiện ảnh bạn chọn — mục chưa chọn sẽ không có hình khi chơi.'
       : 'Chế độ “Tự động”: mục chưa chọn hình sẽ dùng hình theo chủ đề nội dung.';
   return `<div class="field mt-[12px]" data-wizard-item-cards="1">
-    <div class="flex items-center gap-[8px] mb-[8px] flex-wrap"><strong class="text-[12px]">Câu hỏi và ảnh minh hoạ</strong><span class="tag">${items.length} mục</span>${missing ? `<span class="tag">${missing} mục chưa có hình</span>` : ''}</div>
+    <div class="flex items-center gap-[8px] mb-[8px] flex-wrap"><strong class="text-[12px]">Nội dung &amp; hình minh họa</strong><span class="tag">${items.length} mục</span>${missing ? `<span class="tag">${missing} mục dùng ảnh mặc định</span>` : ''}</div>
     <div class="wizard-item-list">${items.map((item, index) => wizardItemCard(s, gameType, item, index + 1, index)).join('')}</div>
     <div class="field-hint">${escapeHtml(modeHint)} Ảnh lưu trên máy này; trò chơi vẫn chơi được khi không có mạng.</div>
   </div>`;

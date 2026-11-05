@@ -85,7 +85,91 @@ async function saveResultSession(game, summary, details, playerName, options) {
  * stays synchronous; the save runs in the background and updates the status
  * element only while the result screen is still mounted.
  */
+/**
+ * Triggers celebratory confetti when the player achieves 70% or more (DECISIONS #194).
+ * Fully offline, checks prefers-reduced-motion to respect accessibility settings.
+ */
+function celebrateGameResults(summary) {
+  if (!summary) return;
+  const percent = Number(summary.percent) || 0;
+  if (percent < 70) return;
+  if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    return;
+  }
+  const confettiFn = typeof window !== 'undefined' ? window.confetti : null;
+  if (typeof confettiFn !== 'function') return;
+
+  try {
+    if (percent === 100) {
+      confettiFn({
+        particleCount: 75,
+        angle: 60,
+        spread: 55,
+        origin: { x: 0.1, y: 0.7 }
+      });
+      confettiFn({
+        particleCount: 75,
+        angle: 120,
+        spread: 55,
+        origin: { x: 0.9, y: 0.7 }
+      });
+    } else {
+      confettiFn({
+        particleCount: 80,
+        spread: 70,
+        origin: { y: 0.6 }
+      });
+    }
+  } catch (err) {
+    console.warn('Celebration confetti failed:', err);
+  }
+}
+
+/**
+ * Smoothly animates the score counter on the result screen from 0 to target points (DECISIONS #194).
+ * Pure JavaScript using requestAnimationFrame over 800ms. Respects prefers-reduced-motion.
+ */
+function animateResultScore(summary) {
+  if (!summary) return;
+  const targetPoints = Number(summary.points) || 0;
+  const maxPoints = Number(summary.max) || 0;
+  const scoreEl = document.querySelector('#playBody .result-score');
+  if (!scoreEl) return;
+
+  const reducedMotion = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reducedMotion || targetPoints <= 0) {
+    return;
+  }
+
+  const durationMs = 800;
+  const startTime = Date.now();
+  const hasMax = maxPoints > 0;
+  const reqAnimFrame = (typeof window !== 'undefined' && window.requestAnimationFrame) || (typeof requestAnimationFrame === 'function' ? requestAnimationFrame : null);
+  if (!reqAnimFrame) return;
+
+  function update() {
+    const elapsed = Date.now() - startTime;
+    const progress = Math.min(1, elapsed / durationMs);
+    const easeProgress = 1 - Math.pow(1 - progress, 3);
+    const currentVal = Math.round(easeProgress * targetPoints);
+
+    if (hasMax) {
+      scoreEl.textContent = currentVal.toLocaleString('vi-VN') + ' / ' + maxPoints.toLocaleString('vi-VN') + ' điểm';
+    } else {
+      scoreEl.textContent = currentVal.toLocaleString('vi-VN') + ' điểm';
+    }
+
+    if (progress < 1) {
+      reqAnimFrame(update);
+    }
+  }
+
+  reqAnimFrame(update);
+}
+
 function wireResultSession(game, summary, details, defaultName) {
+  celebrateGameResults(summary);
+  animateResultScore(summary);
   const button = document.getElementById('saveResultBtn');
   const status = document.getElementById('resultSaveStatus');
   const session = ensureResultSession(game);

@@ -29,9 +29,53 @@
   background: linear-gradient(145deg, #786dff, #5145d6);
   color: #fff;
   box-shadow: 0 4px 10px #6258e84d;
+  transform: scale(1.05);
 }
 
-/* Keep the collapsed rail tidy: hide the tile background there so the
+/* Active navigation pill indicator & micro-interactions (Sprint 2 & 5 UI/UX) */
+.nav-item {
+  position: relative;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.nav-item:hover {
+  transform: translateX(2px);
+}
+.nav-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%) scaleY(0);
+  width: 3.5px;
+  height: 20px;
+  border-radius: 0 4px 4px 0;
+  background: var(--purple, #4f46e5);
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.18s ease;
+  opacity: 0;
+}
+.nav-item.active::before {
+  transform: translateY(-50%) scaleY(1);
+  opacity: 1;
+}
+.nav-item:active {
+  transform: translateX(1px) scale(0.98);
+}
+html[data-theme="dark"] .nav-item::before {
+  background: #8b82ff;
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-item,
+  .nav-item:hover,
+  .nav-item:active,
+  .nav-item::before {
+    transition: none !important;
+    transform: none !important;
+  }
+}
+/* nav-indicator-end */ /*
+}
+
+*/ /* Keep the collapsed rail tidy: hide the tile background there so the
    icons stay centred in the 64px sidebar. */
 @media (max-width: 1100px) {
   .nav-icon { width: 32px; height: 32px; min-width: 32px; font-size: 18px !important; }
@@ -152,14 +196,15 @@
 .shortcut-go { margin-left: auto; display: grid; place-items: center; color: #7c8598; }
 .shortcut-empty { margin: 2px 0 0 2px; font-size: 12px; line-height: 1.6; color: #5f6a7d; }
 
-html[data-theme="dark"] .sidebar-shortcuts { background: #141830; border-color: var(--line); }
+html[data-theme="dark"] .sidebar-shortcuts { background: var(--surface-1); border-color: var(--line); }
 html[data-theme="dark"] .shortcut-head { color: #ccd2e1; }
 html[data-theme="dark"] .shortcut-label { color: #aeb6ca; }
-html[data-theme="dark"] .shortcut-item:hover { background: #232a45; color: #ded9ff; }
-html[data-theme="dark"] .shortcut-icon { background: #1d2340; border-color: #313957; color: #b0b8cc; }
+html[data-theme="dark"] .shortcut-item:hover { background: var(--surface-3); color: #ded9ff; }
+html[data-theme="dark"] .shortcut-icon { background: var(--surface-2); border-color: #313957; color: #b0b8cc; }
 html[data-theme="dark"] .shortcut-text small,
 html[data-theme="dark"] .shortcut-empty { color: #a8b0c4; }
 html[data-theme="dark"] .shortcut-go { color: #8b94ad; }
+html[data-theme="dark"] .nav-icon { background: var(--surface-2); color: #a0a8c0; }
 
 /* Sidebar budget (#162): status 90 + nav 349 + block 220 + footer 210 + padding
    44 ≈ 913px. A 1366x768 classroom laptop only has 768, so the rail would scroll
