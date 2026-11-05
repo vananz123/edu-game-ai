@@ -28,6 +28,7 @@ import {
   unlinkSync,
   writeFileSync
 } from 'node:fs';
+import fsp from 'node:fs/promises';
 import path from 'node:path';
 
 export type AiLogLevel = 'info' | 'warn' | 'error';
@@ -102,7 +103,14 @@ export interface AiLogWriter {
   readRecent(limit: number): string[];
   /** Log files currently on disk (oldest first). */
   files(): string[];
-  prune(): void;
+  /** Xoá các tệp log quá hạn dùng. Chạy nền, không chặn đường mở app. */
+  prune(): Promise<void>;
+  /**
+   * Lượt dọn mà `createAiLogWriter` tự bắn lúc khởi tạo, hoặc `undefined` khi lượt đó
+   * đã xong. Tồn tại để caller (nút "Xoá log", test) chờ đúng việc dọn đang chạy thay
+   * vì đoán thời điểm đĩa sạch — bản đồng bộ cũ không có khái niệm này.
+   */
+  backgroundPrune(): Promise<void> | undefined;
 }
 
 function pad(value: number): string {
@@ -145,15 +153,22 @@ export function createAiLogWriter(options: AiLogWriterOptions): AiLogWriter {
     }
   }
 
-  function prune(): void {
+  async function prune(): Promise<void> {
     const cutoff = now().getTime() - retentionDays * DAY_MS;
-    for (const file of files()) {
+    let names: string[];
+    try {
+      names = await fsp.readdir(directory);
+    } catch {
+      return;
+    }
+    await Promise.all(names.filter(name => LOG_FILE.test(name)).map(async name => {
+      const file = path.join(directory, name);
       try {
-        if (statSync(file).mtimeMs < cutoff) unlinkSync(file);
+        if ((await fsp.stat(file)).mtimeMs < cutoff) await fsp.unlink(file);
       } catch {
         // Ignore: another process may have removed it already.
       }
-    }
+    }));
   }
 
   function currentFile(date: Date): string {
@@ -190,7 +205,23 @@ export function createAiLogWriter(options: AiLogWriterOptions): AiLogWriter {
     return collected.slice(-wanted);
   }
 
-  prune();
+  let backgroundPrunePromise: Promise<void> | undefined;
+
+  /**
+   * Chạy nền có chủ đích: bản đồng bộ đo được 6,52–6,54 ms chặn main process mỗi lần mở
+   * app khi có 14 tệp quá hạn trên đĩa (quét 1,92–2,25 ms, còn lại là `unlinkSync` —
+   * Windows). Log là best-effort nên không có gì phải chờ, và một lời hứa reject ở đây
+   * không được phép làm hỏng ứng dụng đang được chẩn đoán.
+   */
+  function startBackgroundPrune(): void {
+    const pending = prune().finally(() => {
+      if (backgroundPrunePromise === pending) backgroundPrunePromise = undefined;
+    });
+    backgroundPrunePromise = pending;
+    void pending.catch(() => {});
+  }
+
+  startBackgroundPrune();
 
   return {
     directory,
@@ -200,7 +231,8 @@ export function createAiLogWriter(options: AiLogWriterOptions): AiLogWriter {
     error: (event, data) => write('error', event, data),
     readRecent,
     files,
-    prune
+    prune,
+    backgroundPrune: () => backgroundPrunePromise
   };
 }
 

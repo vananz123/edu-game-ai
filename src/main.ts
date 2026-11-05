@@ -3308,6 +3308,9 @@ function registerIpc() {
   ipcMain.handle('diagnostics:info', async () => diagnosticsSummary());
   ipcMain.handle('diagnostics:clear', async () => {
     const writer = aiLog || createAiLogWriter({ directory: LOG_DIR(), retentionDays: AI_LOG_RETENTION_DAYS });
+    // prune() của lúc mở app chạy nền (#199): đợi nó xong để hai lượt không unlink chồng
+    // lên nhau và số "đã xoá N" giáo viên nhìn thấy là số của một thư mục đã yên.
+    await writer.backgroundPrune();
     const result = clearAiLogs(writer.directory);
     // Leave one fresh line so the next export shows that the clear happened.
     writer.info('diagnostics.clear', { removed: result.removed, bytes: result.bytes });

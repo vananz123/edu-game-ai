@@ -120,20 +120,68 @@ const dayName = (date: Date) => `${date.getFullYear()}-${pad(date.getMonth() + 1
 }
 
 // --- retention prune ------------------------------------------------------
-{
-  const dir = tempDir('prune');
+// prune() là async và createAiLogWriter chỉ bắn nó chạy nền, nên không được đoán thời
+// điểm đĩa đã sạch: phải await chính lời hứa mà writer trả về.
+function seedPruneDir(name: string): { dir: string; stale: string; fresh: string } {
+  const dir = tempDir(name);
   const stale = path.join(dir, 'ai-2020-01-01.jsonl');
   writeFileSync(stale, '{"time":"2020-01-01T00:00:00.000Z","level":"info","event":"old"}\n', 'utf8');
   const old = new Date('2020-01-01T00:00:00.000Z');
   utimesSync(stale, old, old);
   const fresh = path.join(dir, 'ai-2026-10-21.jsonl');
   writeFileSync(fresh, '{"time":"2026-10-21T00:00:00.000Z","level":"info","event":"new"}\n', 'utf8');
-  const writer = createAiLogWriter({ directory: dir, retentionDays: 14, now: fixedNow });
-  assert.equal(existsSync(stale), false, 'file older than retention is removed');
-  assert.equal(existsSync(fresh), true);
-  writer.prune();
-  console.log('ok prune');
+  return { dir, stale, fresh };
 }
+
+const prunePending = (async () => {
+  const first = seedPruneDir('prune');
+  const writer = createAiLogWriter({ directory: first.dir, retentionDays: 14, now: fixedNow });
+  // await **chính** lượt dọn mà khởi tạo đã bắn (bản đồng bộ cũ trả về undefined nên
+  // dòng này vẫn đúng nếu `dist/` chưa build) — không phải một lượt test tự gọi.
+  await writer.backgroundPrune();
+  assert.equal(existsSync(first.stale), false, 'file older than retention is removed');
+  assert.equal(existsSync(first.fresh), true, 'a log inside retention survives');
+  // prune() chỉ được chạm tệp khớp LOG_FILE.
+  const stranger = path.join(first.dir, 'not-a-log.jsonl');
+  writeFileSync(stranger, '{}\n', 'utf8');
+  await writer.prune();
+  assert.equal(existsSync(stranger), true);
+  console.log('ok prune');
+
+  // --- prune chạy nền đua với ba đường còn lại ----------------------------
+  // Bản đồng bộ chặn hết trong lúc dựng writer nên không có cửa đua; bản async thì đúng
+  // vài ms đầu sau khi mở app là lúc readRecent / files() / clearAiLogs chạm cùng thư
+  // mục. Đó là những thứ tự mà main.ts đang dựa vào (`await ensureData()` trước khi dựng
+  // writer; nút "Xoá log" sau một cú nhấp) — chúng được khoá ở đây thay vì để suy đoán.
+  const race = seedPruneDir('prune-race');
+  // `dist/` có thể còn là bản đồng bộ (run-unit.js không build): khi đó không có gì để
+  // đo, và báo SKIP thật hơn là đỏ vì một build chưa chạy.
+  const racer = createAiLogWriter({ directory: race.dir, retentionDays: 14, now: fixedNow });
+  if (typeof racer.backgroundPrune !== 'function') {
+    console.log('SKIP prune race: dist còn là bản prune() đồng bộ — chạy `npm run build` rồi đo lại');
+    return;
+  }
+  const started = racer.backgroundPrune();
+  assert.ok(started, 'construction leaves a background prune for callers to wait for');
+  await started;
+  assert.equal(racer.backgroundPrune(), undefined, 'the background prune cleared its own promise once settled');
+  assert.ok(!existsSync(race.stale), 'the background prune did delete the stale file');
+  assert.deepEqual(racer.files().map(name => path.basename(name)), ['ai-2026-10-21.jsonl']);
+  // readRecent sau khi dọn: vẫn là dòng của tệp được giữ, không phải dòng của tệp đã xoá.
+  const recent = racer.readRecent(200);
+  assert.equal(recent.length, 1);
+  assert.ok(recent[0].includes('"event":"new"'), 'the surviving line is from the retained file');
+  // write() sau khi dọn ghi vào tệp hôm nay — prune không bao giờ chạm tên tệp hôm nay.
+  racer.info('app.start', { version: '0.3.0' });
+  assert.equal(racer.readRecent(200).length, 2);
+  // clearAiLogs (nút "Xoá log") chạy sau khi lượt dọn settle, đúng như guard ở main.ts,
+  // thì xoá sạch và không còn tệp nào cho một lượt dọn sau đó tìm thấy.
+  const cleared = clearAiLogs(race.dir);
+  assert.equal(cleared.removed, 1, 'clear after a settled prune removes the remaining log');
+  await racer.prune();
+  assert.deepEqual(racer.files(), []);
+  console.log('ok prune races readRecent, files and clearAiLogs');
+})();
 
 // --- bundle + write -------------------------------------------------------
 {
@@ -195,4 +243,11 @@ const dayName = (date: Date) => `${date.getFullYear()}-${pad(date.getMonth() + 1
   console.log('ok clearAiLogs');
 }
 
-console.log('ai-log.test.ts passed');
+// Dòng kết chỉ in sau khi nhánh bất định ở trên settling: exit code vẫn là thứ
+// run-unit.js tin, nhưng in "passed" trước khi prune xong sẽ là lời dối trá.
+prunePending.then(() => {
+  console.log('ai-log.test.ts passed');
+}, (error) => {
+  console.error(error);
+  process.exitCode = 1;
+});
