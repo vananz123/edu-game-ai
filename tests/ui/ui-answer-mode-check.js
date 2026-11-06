@@ -1303,6 +1303,149 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
             out.matrix.push(cell);
           }
         }
+        /* ===== O. CÂU HỎI DẠNG CHỮ nhân bốn cách trả lời =====
+           Nợ ghi ở cuối bàn giao task 4: mã nguồn đã khoá ô gõ, nút gửi và nút gợi ý theo
+           điều kiện NOT turn.retryAllowed (quiz.ts:242-253), nhưng MỌI mục trước chỉ đi
+           qua LƯỚI ĐÁP ÁN, nên "Luyện tập cho gõ lại" mới có bằng chứng code chứ chưa có
+           bằng chứng DOM. Mỗi ô ở đây là một câu chữ THẬT trên màn Đấu trường thật: gõ vào
+           #textAnswerInput, bấm #textAnswerBtn, rồi đo đúng những thứ mục M đã đo —
+           vòng còn mở không, ba control còn bật không, bao nhiêu dòng điểm, chữ nào xuống
+           bảng, đáp án có bị lộ không, máy chiếu nói gì. Hai loại câu (Điền từ / Trả lời
+           ngắn) vì chúng đi qua cùng một nhánh textQ nhưng khác nhãn và khác placeholder.
+           Nhịp một ô:
+            • S1: ván MỚI, gõ SAI rồi bấm nút, snapshot; gõ ĐÚNG rồi bấm nút, snapshot; cửa
+              lời giải; đóng. Với ô đã khoá, txask KHÔNG ghi đè chữ — một học sinh thật
+              không gõ nổi vào input đã tắt — nên cú thứ hai phải là một vòng lặp KHÔNG có
+              hậu quả, và typed vẫn là chữ sai ban đầu.
+            • S2: ván MỚI, gõ ĐÚNG rồi bấm ENTER (quiz.ts:132 là đường thứ hai tới cùng một
+              hàm submit, chưa từng được đo trên DOM), cửa lời giải, đóng. */
+        out.text = [];
+        const TXKINDS = ['fill-in-blank', 'short-answer'];
+        const TXRIGHT = { 'fill-in-blank': 'Hai', 'short-answer': 'Cá' };
+        const TXWRONG = { 'fill-in-blank': 'Ba', 'short-answer': 'Chó' };
+        const TXWHY = { 'fill-in-blank': 'Bằng hai.', 'short-answer': 'Cá thở bằng mang nên sống dưới nước.' };
+        const TXHINT = { 'fill-in-blank': 'Số đứng ngay sau 1.', 'short-answer': 'Loài có vây.' };
+        const TXPROMPT = {
+          'fill-in-blank': 'Một cộng một bằng ___?',
+          'short-answer': 'Loài vật nào dưới đây thở bằng mang?'
+        };
+        const txquestion = kind => ({
+          id: 'tx1', type: kind, prompt: TXPROMPT[kind], options: [], correctOptionId: '',
+          correctAnswer: TXRIGHT[kind], alternateAnswers: [], explanation: TXWHY[kind],
+          hint: TXHINT[kind], points: 100
+        });
+        const TXMODES = [['legacy', 'tốc độ'], ['competitive', 'tra-loi:thi-dau'],
+          ['practice', TOKEN_PRACTICE], ['challenge', TOKEN_CHALLENGE]];
+        const txgame = (key, kind, name, token) => Object.assign(
+          makeGame(key, 'quiz', name === 'legacy'
+            ? { scoringMode: token, timeBonus: '5', pointsPerCorrect: '100', duration: '20' }
+            : { scoringMode: token, pointsPerCorrect: '100', duration: '20' }),
+          { questions: [txquestion(kind)] });
+        const txsnap = () => {
+          const s = msnap();
+          const input = document.getElementById('textAnswerInput');
+          const btn = document.getElementById('textAnswerBtn');
+          const hint = document.querySelector('[data-answer-hint]');
+          const hintBox = document.getElementById('textAnswerHint');
+          const rows = state.gameAnswers || [];
+          const last = rows.length ? rows[rows.length - 1] : null;
+          let view = null;
+          try {
+            view = typeof buildQuizView === 'function' ? buildQuizView() : null;
+          } catch (ignored) {
+            view = null;
+          }
+          const bannerText = text(document.getElementById('answerFeedback'));
+          // Máy chiếu của một câu chữ KHÔNG có phương án để sơn: đúng hai trường
+          // correctAnswer và answerText mới là chỗ đáp án có thể rò.
+          s.hasBox = Boolean(input);
+          s.inputOff = input ? Boolean(input.disabled) : null;
+          s.btnOff = btn ? Boolean(btn.disabled) : null;
+          s.hintOff = hint ? Boolean(hint.disabled) : null;
+          s.hintShown = hintBox ? !hintBox.classList.contains('hidden') : null;
+          s.typed = input ? String(input.value) : null;
+          s.rowText = last ? String(last.answerText === undefined ? 'undef' : last.answerText) : null;
+          s.rowSel = last ? String(last.selectedOptionId === undefined ? 'undef' : last.selectedOptionId) : null;
+          s.rowElapsed = last ? Number(last.elapsedSeconds) : null;
+          s.rowWrong = last ? Number(last.wrongAttempts) : null;
+          s.rowMode = last ? String(last.mode) : null;
+          s.rowCeil = last ? Number(last.maxPoints) : null;
+          s.namesRight = bannerText.indexOf('Đáp án đúng:') !== -1;
+          s.youSaid = bannerText.indexOf('Câu trả lời của bạn:') !== -1;
+          s.notOpen = bannerText.indexOf('không mở đáp án') !== -1;
+          s.retryWords = bannerText.indexOf('thử lại') !== -1;
+          s.award90 = bannerText.indexOf('còn 90 điểm') !== -1;
+          s.caught = bannerText.indexOf('điểm nhanh') !== -1;
+          s.projCa = view ? String(view.correctAnswer === undefined ? 'undef' : view.correctAnswer) : 'noview';
+          s.projAt = view ? String(view.answerText === undefined ? 'undef' : view.answerText) : 'noview';
+          s.projRev = view ? String(view.revealed) : 'noview';
+          s.projType = view ? String(view.type) : 'noview';
+          s.projWhy = view ? String(view.explanation === undefined ? 'undef' : view.explanation) : 'noview';
+          return s;
+        };
+        const txask = async (value, via) => {
+          const input = document.getElementById('textAnswerInput');
+          const btn = document.getElementById('textAnswerBtn');
+          if (!input || !btn) return { error: 'no text answer box' };
+          if (!input.disabled) input.value = value;
+          if (via === 'enter') {
+            input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+          } else {
+            btn.click();
+          }
+          await sleep(300);
+          const s = txsnap();
+          s.via = via || 'button';
+          return s;
+        };
+        /* Ba helper cuối chỉ là bản txsnap của mplay/mopen/mclose: msnap không biết gì về
+           ô gõ, nên snapshot mở màn và snapshot cửa lấy từ msnap thiếu TẤT CẢ field chữ
+           (hasBox, inputOff, projWhy...). Lần chạy đầu của mục này đỏ đúng bốn ô vì lý do
+           đó — và đỏ kiểu này nguy hiểm hơn bình thường, vì field thiếu là undefined chứ
+           không phải giá trị sai, nên một check viết ẩu sẽ "xanh" trên hư không. */
+        const txplay = async game => {
+          await mplay(game);
+          return txsnap();
+        };
+        const txdoor = async () => {
+          const b = document.querySelector('[data-answer-explain]');
+          if (!b) {
+            const s = txsnap();
+            s.didClick = false;
+            return s;
+          }
+          b.click();
+          await sleep(300);
+          const s = txsnap();
+          s.didClick = true;
+          return s;
+        };
+        const txclosed = async () => {
+          const b = document.getElementById('answerExplainOkBtn');
+          if (!b) return null;
+          b.click();
+          await sleep(240);
+          return txsnap();
+        };
+        for (let k = 0; k < TXKINDS.length; k++) {
+          const kind = TXKINDS[k];
+          mwhy = TXWHY[kind];
+          for (let m = 0; m < TXMODES.length; m++) {
+            const cell = { type: kind, mode: TXMODES[m][0] };
+            cell.right = TXRIGHT[kind];
+            cell.wrong = TXWRONG[kind];
+            cell.open = await txplay(txgame(kind + '-' + cell.mode + '-miss', kind, cell.mode, TXMODES[m][1]));
+            cell.miss = await txask(cell.wrong);
+            cell.retryTap = await txask(cell.right);
+            cell.missDoor = await txdoor();
+            cell.missClosed = await txclosed();
+            cell.fresh = await txplay(txgame(kind + '-' + cell.mode + '-hit', kind, cell.mode, TXMODES[m][1]));
+            cell.hit = await txask(cell.right, 'enter');
+            cell.hitDoor = await txdoor();
+            cell.hitClosed = await txclosed();
+            out.text.push(cell);
+          }
+        }
         /* Ô ÂM TÍNH — Ghép cặp. Nó KHÔNG nằm trong ANSWER_MODE_TEMPLATES, nên một token
            nhét vào gameSetup.scoringMode của một game ghép cặp phải bị CHÍNH TẦNG LUẬT
            từ chối: không vòng trả lời, không nút Giải thích, cách chấm theo cặp còn
@@ -2250,12 +2393,15 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
     none(MCELLS.filter(c => !String((mbefore(c) || {}).law || '').includes(MHINT[c.mode]))),
     'bad: ' + bad(MCELLS.filter(c => !String((mbefore(c) || {}).law || '').includes(MHINT[c.mode]))));
 
-  // 8. Cửa lời giải (nhiệm vụ 7) đo trên CẢ NĂM bề mặt, không chỉ Đấu trường.
+  /* 8. Cửa lời giải (nhiệm vụ 7) đo trên CẢ NĂM bề mặt, không chỉ Đấu trường.
+     `inlineWhy` là TÊN THẬT của field trong msnap; mục này từng đọc `c.hit.inline`, một
+     field không tồn tại, nên vế "thay vì in chữ" xanh suốt mà không đo gì. Đổi lại tên
+     thật ở cả hai mục để vế đó có răng. */
   check('a correct answer offers the button instead of the text, on all fifteen cells',
     none(MCELLS.filter(c => !String(c.hit.explain || '').includes('Giải thích')
-      || c.hit.inline === true || !c.hitDoor.didClick || c.hitDoor.dialog !== MWHY(c))),
+      || c.hit.inlineWhy === true || !c.hitDoor.didClick || c.hitDoor.dialog !== MWHY(c))),
     'bad: ' + bad(MCELLS.filter(c => !String(c.hit.explain || '').includes('Giải thích')
-      || c.hit.inline === true || !c.hitDoor.didClick || c.hitDoor.dialog !== MWHY(c))));
+      || c.hit.inlineWhy === true || !c.hitDoor.didClick || c.hitDoor.dialog !== MWHY(c))));
   /* Bốn bề mặt CÓ ngăn lời giải trên máy chiếu (Đấu trường, Xây nhà, Tình huống, Kho
      báu): một cú nhấp là đủ đưa chữ sang. Đường đua thì khác — buildRaceView() chỉ trả
      về đội, ô, câu hỏi và lastEvent, KHÔNG có explanation/revealed/correctOptionId, nên
@@ -2292,10 +2438,12 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
     'bad: ' + bad(MCELLS.filter(mcompetitiveDoor)) + ' | ' + MCELLS.filter(c => c.mode === 'competitive')
       .map(c => c.surface + '="' + String(c.missDoor.dialog) + '"').join(' '));
   check('no cell of the matrix prints its explanation unasked',
-    none(MCELLS.filter(c => c.miss.inline === true || c.hit.inline === true
-      || c.retryTap.inline === true || (c.missClosed && c.missClosed.dialog !== ''))),
-    'bad: ' + bad(MCELLS.filter(c => c.miss.inline === true || c.hit.inline === true
-      || c.retryTap.inline === true || (c.missClosed && c.missClosed.dialog !== ''))));
+    none(MCELLS.filter(c => c.miss.inlineWhy === true || c.hit.inlineWhy === true
+      || c.retryTap.inlineWhy === true || (c.missClosed && c.missClosed.dialog !== ''))),
+    'bad: ' + bad(MCELLS.filter(c => c.miss.inlineWhy === true || c.hit.inlineWhy === true
+      || c.retryTap.inlineWhy === true || (c.missClosed && c.missClosed.dialog !== '')))
+    + ' | ' + MCELLS.map(c => c.surface + '/' + c.mode + '=[' + [c.miss && c.miss.inlineWhy,
+      c.hit && c.hit.inlineWhy, c.retryTap && c.retryTap.inlineWhy].join(',') + ']').join(' '));
 
   // 9. Ô ÂM TÍNH: Ghép cặp mang token phải bị tầng luật từ chối. Cách chấm theo cặp
   //    là việc của ui-matching-finish-check; ở đây chỉ hỏi #209 đã lọt vào chưa.
@@ -2314,6 +2462,206 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
       .every(k => c[k] && !c[k].error)),
     bad(MCELLS.filter(c => ['open', 'miss', 'retryTap', 'missDoor', 'fresh', 'hit', 'hitDoor', 'hitClosed']
       .some(k => !c[k] || c[k].error))));
+
+  /* O. CÂU HỎI DẠNG CHỮ nhân BỐN CÁCH TRẢ LỜI — chỗ trống thật duy nhất còn lại của #209.
+     Nợ ghi ở bàn giao task 4: quiz.ts:242-253 khoá ô gõ + nút gửi + chip gợi ý theo
+     NOT turn.retryAllowed, nhưng mọi mục trước chỉ bấm LƯỚI ĐÁP ÁN nên hành vi đó mới có
+     bằng chứng code. Kì vọng dưới đây viết tay theo kế hoạch (MỘT lượt ở legacy/Thi đấu/
+     Thử thách, nhiều lượt ở Luyện tập; trần phạt 100 = points của câu; không phương án nào
+     được sơn vì lưới không tồn tại; máy chiếu phải kín đúng như màn chính), KHÔNG đọc lại
+     bảng answerRules của ứng dụng — hai bên cùng sai một lỗi thì cổng vẫn xanh. */
+  const tx = Array.isArray(report.text) ? report.text : null;
+  const TXCELLS = tx || [];
+  const TXLOCKED = TXCELLS.filter(c => c.mode !== 'practice');
+  const TXNEW = TXCELLS.filter(c => c.mode !== 'legacy');
+  const TXKEYS = ['open', 'miss', 'retryTap', 'missDoor', 'fresh', 'hit', 'hitDoor'];
+  const TXV = s => !s ? String(s) : s.error ? 'ERR:' + s.error : JSON.stringify({
+    m: s.mode, open: s.open, retry: s.retry, wrongs: s.wrongs, ceil: s.ceiling,
+    off: [s.inputOff, s.btnOff, s.hintOff], typed: s.typed, rows: s.rows, last: s.lastPts,
+    pts: s.boardPts, txt: s.rowText, sel: s.rowSel, el: s.rowElapsed, reveal: s.namesRight,
+    notOpen: s.notOpen, award: s.award90, caught: s.caught, exp: s.explain, dlg: s.dialog,
+    inline: s.inlineWhy, why: s.whyLaw, you: s.youSaid, law: s.law, click: s.clickable,
+    hint: s.hintShown,
+    proj: [s.projRev, 'ca=' + s.projCa, 'at=' + s.projAt, 'why=' + String(s.projWhy).slice(0, 24)]
+  });
+  const badtx = list => list.map(c => c.type + '/' + c.mode).join(' ') || 'none';
+  const txwhy = c => c.type === 'fill-in-blank' ? 'Bằng hai.' : 'Cá thở bằng mang nên sống dưới nước.';
+
+  check('the text matrix ran all eight kind x mode cells', Boolean(tx) && TXCELLS.length === 8,
+    tx ? TXCELLS.length + ' cells | bad: ' + badtx(TXCELLS.filter(c => !c.right || !c.wrong)) : JSON.stringify(report.text));
+  // Ô chữ phải là Ô CHỮ: có input, có nút gửi, KHÔNG có lưới phương án nào để sơn, và
+  // máy chiếu vẫn mang ĐÚNG loại câu (một màn chiếu mất `type` là mất cả nhãn).
+  check('every text cell really draws a typed-answer box and no option grid',
+    none(TXCELLS.filter(c => !c.open || c.open.error || c.open.hasBox !== true
+      || c.open.clickable !== 0 || c.open.rows !== 0 || c.open.projType !== c.type)),
+    badtx(TXCELLS.filter(c => !c.open || c.open.error || c.open.hasBox !== true
+      || c.open.clickable !== 0 || c.open.rows !== 0 || c.open.projType !== c.type))
+    + ' | ' + TXCELLS.map(c => JSON.stringify([c.type, c.open && c.open.projType,
+      c.open && c.open.clickable, c.open && c.open.hasBox])).join(' ~~ '));
+  check('a text cell opens a turn reporting the mode its token claims and a ceiling of 100',
+    none(TXCELLS.filter(c => !c.open || c.open.error || c.open.mode !== c.mode
+      || c.open.ceiling !== 100 || c.open.open !== true)),
+    TXCELLS.map(c => TXV(c.open)).join(' ~~ '));
+  // Trước cú trả lời đầu tiên, cả ba control còn bật — kể cả chip gợi ý (đỏ giả đã đo:
+  // một helper đọc nhầm phần tử sẽ làm cả mục này vô nghĩa nên hintShown được đòi ở đây).
+  check('before the first answer the box, the send button and the hint chip are all live',
+    none(TXCELLS.filter(c => !c.open || c.open.inputOff !== false || c.open.btnOff !== false
+      || c.open.hintOff !== false || c.open.hintShown !== false)),
+    badtx(TXCELLS.filter(c => !c.open || c.open.inputOff !== false || c.open.btnOff !== false
+      || c.open.hintOff !== false || c.open.hintShown !== false)));
+
+  // Một câu SAI. Ba luật khoá ghi ĐÚNG MỘT dòng 0 điểm rồi tắt sạch ba control;
+  // Luyện tập thì KHÔNG ghi dòng nào và để nguyên mọi control cho lần gõ sau.
+  check('a wrong typing closes the turn with exactly one zero row on the three locking laws',
+    none(TXLOCKED.filter(c => !c.miss || c.miss.rows !== 1 || c.miss.lastPts !== 0
+      || c.miss.wrongs !== 1 || c.miss.open !== false || c.miss.retry !== false)),
+    badtx(TXLOCKED.filter(c => !c.miss || c.miss.rows !== 1 || c.miss.lastPts !== 0
+      || c.miss.wrongs !== 1 || c.miss.open !== false || c.miss.retry !== false))
+    + ' | ' + TXLOCKED.map(c => TXV(c.miss)).join(' ~~ '));
+  check('a locked law switches the box, the send button and the hint chip off together',
+    none(TXLOCKED.filter(c => !c.miss || c.miss.inputOff !== true || c.miss.btnOff !== true
+      || c.miss.hintOff !== true || c.miss.hintShown !== false)),
+    badtx(TXLOCKED.filter(c => !c.miss || c.miss.inputOff !== true || c.miss.btnOff !== true
+      || c.miss.hintOff !== true || c.miss.hintShown !== false))
+    + ' | ' + TXLOCKED.map(c => JSON.stringify([c.mode, [c.miss && c.miss.inputOff,
+      c.miss && c.miss.btnOff, c.miss && c.miss.hintOff], c.miss && c.miss.hintShown])).join(' ~~ '));
+  check('practice writes NO row for a wrong typing and keeps every control live for the next one',
+    none(TXCELLS.filter(c => c.mode === 'practice' && (!c.miss || c.miss.rows !== 0
+      || c.miss.wrongs !== 1 || c.miss.open !== true || c.miss.retry !== true
+      || c.miss.inputOff !== false || c.miss.btnOff !== false || c.miss.hintOff !== false))),
+    TXCELLS.filter(c => c.mode === 'practice').map(c => TXV(c.miss)).join(' ~~ '));
+  // Chữ "còn 90 điểm" là answerTurnAward nói TRƯỚC điểm sẽ nhận, không phải một lời hứa.
+  check('practice names the 90 points the question is still worth after one wrong typing',
+    none(TXCELLS.filter(c => c.mode === 'practice' && (!c.miss || c.miss.award90 !== true
+      || c.miss.retryWords !== true))),
+    TXCELLS.filter(c => c.mode === 'practice').map(c => TXV(c.miss) + ' banner=' + String(c.miss && c.miss.banner)).join(' ~~ '));
+  check('practice pays 90 of 100 in ONE row when the second typing is right',
+    none(TXCELLS.filter(c => c.mode === 'practice' && (!c.retryTap || c.retryTap.rows !== 1
+      || c.retryTap.lastPts !== 90 || c.retryTap.boardPts !== 90 || c.retryTap.wrongs !== 1
+      || c.retryTap.open !== false || c.retryTap.rowText !== c.right
+      || c.retryTap.rowSel !== 'null' || c.retryTap.inputOff !== true))),
+    TXCELLS.filter(c => c.mode === 'practice').map(c => TXV(c.retryTap)).join(' ~~ '));
+  // Cú bấm thứ hai trên một ô đã khoá phải là KHÔNG CÓ HẬU QUẢ (nút tắt nên txask cũng
+  // không ghi đè chữ): không dòng mới, không điểm mới, không lộ thêm, ô vẫn mang chữ sai.
+  check('the second tap on a locked law changes nothing at all, not even the typed words',
+    none(TXLOCKED.filter(c => !c.retryTap || c.retryTap.rows !== c.miss.rows
+      || c.retryTap.lastPts !== c.miss.lastPts || c.retryTap.boardPts !== c.miss.boardPts
+      || c.retryTap.wrongs !== c.miss.wrongs || c.retryTap.namesRight !== c.miss.namesRight
+      || c.retryTap.typed !== c.miss.typed || c.retryTap.projCa !== c.miss.projCa)),
+    badtx(TXLOCKED.filter(c => !c.retryTap || c.retryTap.rows !== c.miss.rows
+      || c.retryTap.lastPts !== c.miss.lastPts || c.retryTap.boardPts !== c.miss.boardPts
+      || c.retryTap.wrongs !== c.miss.wrongs || c.retryTap.namesRight !== c.miss.namesRight
+      || c.retryTap.typed !== c.miss.typed || c.retryTap.projCa !== c.miss.projCa))
+    + ' | ' + TXLOCKED.map(c => TXV(c.retryTap)).join(' ~~ '));
+
+  // LỘ ĐÁP ÁN SAU CÂU SAI: game cũ + Thi đấu nói ra; Thử thách im lặng ở CẢ hai bề mặt.
+  check('a wrong typing names the written key on legacy and competitive only',
+    none(TXCELLS.filter(c => !c.miss || c.miss.namesRight
+      !== (c.mode === 'legacy' || c.mode === 'competitive'))),
+    badtx(TXCELLS.filter(c => !c.miss || c.miss.namesRight
+      !== (c.mode === 'legacy' || c.mode === 'competitive')))
+    + ' | ' + TXCELLS.map(c => TXV(c.miss)).join(' ~~ '));
+  check('the projector carries the key exactly where the board carried it, and nowhere else',
+    none(TXCELLS.filter(c => !c.miss || c.miss.projCa
+      !== ((c.mode === 'legacy' || c.mode === 'competitive') ? c.right : ''))),
+    badtx(TXCELLS.filter(c => !c.miss || c.miss.projCa
+      !== ((c.mode === 'legacy' || c.mode === 'competitive') ? c.right : '')))
+    + ' | ' + TXCELLS.map(c => JSON.stringify([c.mode, c.miss && c.miss.proj])).join(' ~~ '));
+  /* Câu SAI ở Thử thách: không chữ nào của đáp án xuất hiện trên HAI bề mặt và không có
+     lời giải. Ghi chú trung thực: với một câu chữ, banner lặp lại CHỮ CỦA HỌC SINH chứ
+     không nói câu 'Cách trả lời này không mở đáp án.' (quiz.ts:344 để nhánh textQ thắng
+     nhánh đó) — lời của chế độ vẫn còn ở dải tip, nên đây là chữ khác nhau giữa hai loại
+     câu, không phải đáp án bị lộ. Check này đo đúng điều app thật hứa. */
+  /* Ba mục dưới đây chỉ đo MỘT chế độ, nên bộ lọc phải là `mode === x && hỏng`, không
+     phải `mode !== x || hỏng` — dạng thứ hai khai mọi ô khác chế độ đó là vi phạm, và
+     một ô chữ thật thì luôn có ít nhất một điều chưa hứa, nên check đỏ trên hư không.
+     (Đỏ giả lần 1 chính là ba predicate này.) */
+  check('challenge reveals neither the key nor the words of the law it hides',
+    none(TXCELLS.filter(c => c.mode === 'challenge' && (!c.miss || c.miss.namesRight !== false
+      || c.miss.whyLaw !== false || c.miss.youSaid !== true || c.miss.explain !== ''
+      || c.miss.inlineWhy === true))),
+    TXCELLS.filter(c => c.mode === 'challenge').map(c => TXV(c.miss)).join(' ~~ '));
+
+  // S2: ĐÚNG + ENTER. Enter là đường thứ hai tới cùng một submit (quiz.ts:132) và chưa
+  // từng được đo trên DOM; từ đây mọi luật phải trả đủ điểm và lộ chữ đúng trên CẢ hai
+  // bề mặt, vì không có gì để giấu khi học sinh đã làm đúng.
+  check('every correct typing was submitted with the ENTER key, not with the button',
+    none(TXCELLS.filter(c => !c.hit || c.hit.via !== 'enter' || c.hit.rows !== 1
+      || c.hit.inputOff !== true)),
+    badtx(TXCELLS.filter(c => !c.hit || c.hit.via !== 'enter' || c.hit.rows !== 1
+      || c.hit.inputOff !== true)));
+  check('the record carries the typed words and NO option id, in every law and both kinds',
+    none(TXCELLS.filter(c => !c.hit || c.hit.rowText !== c.right || c.hit.rowSel !== 'null'
+      || c.hit.rowMode !== c.mode || c.hit.rows !== 1)),
+    badtx(TXCELLS.filter(c => !c.hit || c.hit.rowText !== c.right || c.hit.rowSel !== 'null'
+      || c.hit.rowMode !== c.mode || c.hit.rows !== 1))
+    + ' | ' + TXCELLS.map(c => JSON.stringify([c.mode, c.hit && c.hit.rowText,
+      c.hit && c.hit.rowSel, c.hit && c.hit.rowMode, c.hit && c.hit.rowCeil])).join(' ~~ '));
+  // Legacy vẫn mang thưởng nhanh (đúng hành vi cũ), ba chế độ mới thì không: token bị
+  // runtime.ts:11 map về 'cơ bản'. elapsed do CHÍNH dòng điểm trả về nên không đua đồng hồ.
+  check('the old game keeps its speed bonus for a typed answer and the three new laws pay flat',
+    none(TXCELLS.filter(c => {
+      if (!c.hit) return true;
+      if (c.mode === 'legacy') {
+        const due = Number(c.hit.rowElapsed) <= 8 ? 105 : 100;
+        return c.hit.lastPts !== due || c.hit.caught !== (due > 100);
+      }
+      return c.hit.lastPts !== 100 || c.hit.caught !== false;
+    })),
+    TXCELLS.map(c => JSON.stringify([c.mode, c.hit && c.hit.lastPts, c.hit && c.hit.rowElapsed,
+      c.hit && c.hit.caught, c.hit && c.hit.boardPts])).join(' ~~ '));
+  check('a correct typing reveals the key on both surfaces, even in challenge',
+    none(TXCELLS.filter(c => !c.hit || c.hit.namesRight !== true
+      || c.hit.projCa !== c.right || c.hit.projAt !== c.right || c.hit.projRev !== 'true')),
+    badtx(TXCELLS.filter(c => !c.hit || c.hit.namesRight !== true
+      || c.hit.projCa !== c.right || c.hit.projAt !== c.right || c.hit.projRev !== 'true'))
+    + ' | ' + TXCELLS.map(c => TXV(c.hit)).join(' ~~ '));
+
+  // LỜI GIẢI: game cũ in thẳng (hành vi đã lưu), ba chế độ mới chỉ có sau một cú nhấp.
+  // Luyện tập đang mở vòng thì CHƯA có cánh cửa: lời giải của một câu chưa khép là một
+  // lời đáp án đi sớm.
+  check('the old game prints its explanation inline and grows no door',
+    none(TXCELLS.filter(c => c.mode === 'legacy' && (!c.hit || c.hit.inlineWhy !== true
+      || String(c.hit.explain || '').indexOf('Giải thích') !== -1
+      || c.hit.whyLaw !== true || String(c.hit.projWhy || '').indexOf(txwhy(c)) === -1))),
+    TXCELLS.filter(c => c.mode === 'legacy').map(c => TXV(c.hit)).join(' ~~ '));
+  check('the three new laws keep the words behind a door on a text screen too',
+    none(TXNEW.filter(c => !c.hit || c.hit.inlineWhy === true
+      || String(c.hit.explain || '').indexOf('Giải thích') === -1
+      || String(c.hit.projWhy || '') !== '')),
+    badtx(TXNEW.filter(c => !c.hit || c.hit.inlineWhy === true
+      || String(c.hit.explain || '').indexOf('Giải thích') === -1
+      || String(c.hit.projWhy || '') !== ''))
+    + ' | ' + TXNEW.map(c => TXV(c.hit)).join(' ~~ '));
+  check('practice offers no door while the question is still open for another try',
+    none(TXCELLS.filter(c => c.mode === 'practice' && (!c.miss
+      || String(c.miss.explain || '').indexOf('Giải thích') !== -1 || c.miss.whyLaw !== false))),
+    TXCELLS.filter(c => c.mode === 'practice').map(c => TXV(c.miss)).join(' ~~ '));
+  check('opening the door shows the words, closing it hides them again on both surfaces',
+    none(TXNEW.filter(c => {
+      const d = c.hitDoor;
+      const z = c.hitClosed;
+      if (!d || d.didClick !== true) return true;
+      if (String(d.dialog || '').indexOf(txwhy(c)) === -1) return true;
+      if (String(d.projWhy || '').indexOf(txwhy(c)) === -1) return true;
+      return !z || String(z.dialog || '').indexOf(txwhy(c)) !== -1
+        || String(z.projWhy || '').indexOf(txwhy(c)) !== -1;
+    })),
+    TXNEW.map(c => JSON.stringify([c.mode, c.hitDoor && c.hitDoor.didClick,
+      c.hitDoor && c.hitDoor.dialog, c.hitDoor && c.hitDoor.projWhy,
+      c.hitClosed && c.hitClosed.dialog, c.hitClosed && c.hitClosed.projWhy,
+      c.hitDoor && c.hitDoor.dialogTitle])).join(' ~~ '));
+  // Dải chữ nói LUẬT. Với ô chữ đây là chỗ duy nhất học sinh biết mình còn được gõ lại
+  // hay không, nên nó không được rơi về chữ 'cơ bản' mà runtime.ts:11 map ngầm.
+  check('the law strip above a text screen speaks the law of the mode, not the runtime fallback',
+    none(TXCELLS.filter(c => !c.open || !String(c.open.law || '').includes(MHINT[c.mode]
+      || '8 giây'))),
+    badtx(TXCELLS.filter(c => !c.open || !String(c.open.law || '').includes(MHINT[c.mode]
+      || '8 giây'))) + ' | ' + TXCELLS.map(c => JSON.stringify([c.mode, c.open && c.open.law])).join(' ~~ '));
+  // Một lỗi DOM ở ô 3 không được phép cắt mất 5 ô sau mà báo cáo vẫn xanh.
+  check('no text cell lost a snapshot on the way',
+    TXCELLS.every(c => TXKEYS.every(k => c[k] && !c[k].error)),
+    badtx(TXCELLS.filter(c => TXKEYS.some(k => !c[k] || c[k].error))));
 
   /* N. TỆP .egame THẬT → SQLite THẬT → MÀN CHƠI THẬT (nhiệm vụ 8).
      Kế hoạch #209 bắt chế độ phải sống sót qua "lưu · đóng/mở lại · xuất/nhập .egame".
