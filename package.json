@@ -43,6 +43,12 @@
     "check:packaged-feed": "node tests/ui/packaged-feed-check.js",
     "check:packaged-feed-available": "node tests/ui/packaged-feed-check.js 9371 available",
     "check:packaged-feed-vacuum": "node tests/ui/packaged-feed-check.js 9371 error",
+    "check:packaged-install": "node tests/ui/packaged-install-check.js 9399",
+    "check:packaged-install-direct": "node tests/ui/packaged-install-check.js 9399 direct",
+    "check:packaged-install-elevate": "node tests/ui/packaged-install-check.js 9399 elevate",
+    "check:packaged-install-no-elevate": "node tests/ui/packaged-install-check.js 9399 no-elevate",
+    "check:packaged-install-badhash": "node tests/ui/packaged-install-check.js 9399 badhash",
+    "measure:p7": "powershell -ExecutionPolicy Bypass -File tests/packaging/p7-offline-install.ps1",
     "check:presentation-ui": "node tests/ui/ui-presentation-check.js",
     "launch:ui": "powershell -ExecutionPolicy Bypass -File tests/ui/launch-app.ps1",
     "test:native": "node tests/run-unit.js lesson-store"

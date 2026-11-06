@@ -13,6 +13,7 @@ lesson documents or a real machine profile.
 | `smoke/` | End-to-end flows driven through CDP against the running app. | Manual — need a running app |
 | `manual/` | One-off scripts: benchmarks, A/B geometry dumps, real-model probes, the Electron-Node runner, CSS verifier. | Manual, one at a time |
 | `manual/lib/` | Shared CDP client (`ui-check-lib.js`) required by `ui/ui-play-surface-check.js` and `ui/ui-race-treasure-check.js`. | — |
+| `packaging/` | The P7 clean-machine measurement pack: PowerShell script + one-page checklist for installing the real `.exe` on an offline machine. | `npm run measure:p7` (PowerShell 5.1, no repo/Node needed) |
 | `fixtures/` | Synthetic lesson / AI-output fixtures used by `smoke/`. | — |
 | `legacy/` | Superseded smokes kept for reference only. Not maintained. | Do not run |
 
@@ -109,6 +110,64 @@ Two traps, both measured the hard way on 2026-10-24:
 
 The run fails loudly if the control does not fire, so a `0 attempts` result can
 never be trusted on its own.
+
+### Install path: `quitAndInstall()` on the packaged binary (#212)
+
+`ui/packaged-install-check.js` is the only gate that lets the app actually **install**
+something. It never runs a real product installer: it compiles a harmless NSIS dummy with
+the cached `makensis.exe` (`RequestExecutionLevel user`, `SilentInstall silent`, an
+`InstallDir` baked into `%TEMP%\eg-install\target\<scenario>`, and a Section that writes its
+own `$CMDLINE`), serves it from a loopback `generic` feed with a correct `sha512`/`size`, and
+drives the real `release/210/win-unpacked` binary through four scenarios.
+
+```powershell
+npm run build
+npm run check:packaged-install            # all four scenarios, 61/61
+npm run check:packaged-install-direct     # or one at a time (same port 9399)
+```
+
+| scenario | feed says | `resources/elevate.exe` | what gets measured |
+|---|---|---|---|
+| `direct` | no admin flag | absent | the branch the **published** feed actually takes: `<pending\…9.9.9.exe> --updated --force-run`, app quits by itself |
+| `elevate` | `isAdminRightsRequired: true` in the `files` entry | **fake** | `elevate.exe <installer> --updated --force-run`, exactly one `Executing:`, and no installer log ⇒ the fake did not forward |
+| `no-elevate` | admin flag | **absent** | `ENOENT`, nothing installs, the app still quits, and there is no `shell.openPath` fallback |
+| `badhash` | wrong `sha512` | absent | full download, then refusal — never `downloaded`, install button stays hidden |
+
+Three traps, all paid for:
+
+1. **`isAdminRightsRequired` belongs inside the `files` entry, not at top level.**
+   `DownloadedUpdateHelper.js` reads `fileInfo.info.isAdminRightsRequired` and `Provider.js`
+   sets `info` to exactly one element of `files`, so a top-level flag is skipped **silently**
+   and the elevate branch never runs. Write fake manifests against the library's read path.
+2. **Never derive the updater cache dir from `dirname(spawned)`.** In the elevate branch the
+   first token is `resources\elevate.exe`, so that path is the app's own `resources` — and the
+   cleanup step would then delete `app.asar` from the measured binary. Read the
+   `updater cache dir:` line from the updater's own log and only accept a directory named
+   `eg-install-probe`.
+3. **`ELECTRON_RUN_AS_NODE` inherited from the shell turns the `.exe` into plain Node** — it
+   exits 0 immediately and the measurement silently means nothing. The gate and the P7 script
+   both clear it.
+
+The gate also asserts the invariant that a run must not change `git status` at all (snapshot
+taken before, diffed after — so uncommitted work from the current task is not a false red),
+that `resources/` returns to `--dir` state, and that no `Setup-9.9.9` copy is left in the tree.
+
+### P7: measuring a clean machine that installs the real `.exe` (#212)
+
+The other half of P7 cannot be measured on a dev box, so it is measured by whoever sits at the
+pilot machine: `packaging/P7-OFFLINE-INSTALL.md` is the one-page checklist and
+`packaging/p7-offline-install.ps1` is the self-logging script (`npm run measure:p7`).
+It records M1…M12 — machine, disk/RAM, elevation state, antivirus, installer bytes +
+SHA-256 + `Get-AuthenticodeSignature`, `Zone.Identifier`, install duration **plus distinct
+`consent.exe` PIDs** (a count of UAC prompts, not an opinion), install dir contents,
+time-to-first-window, **one TCP sample per second** counting only non-loopback/non-RFC1918
+endpoints while a saved game is played, shutdown — and writes `%TEMP%\eg-p7\p7-log.txt` plus
+`p7-results.md`. It never clicks inside the wizard, and it needs no repo, no Node, no admin.
+
+The `.ps1` is **pure ASCII including comments**: Windows PowerShell 5.1 decodes BOM-less
+`.ps1` files using the machine ANSI page, so Vietnamese diacritics become garbage inside the
+log it is supposed to keep trustworthy. The Vietnamese version of the steps lives in the `.md`.
+**P7 stays open** until real numbers from an air-gapped machine exist.
 
 ## Adding a test
 
