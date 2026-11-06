@@ -30,6 +30,12 @@ const SCENARIO = String.raw`(async () => {
   // Ids are unique per run, so a row left over from an earlier attempt (which used the
   // same probe-session-N ids) can never be counted as "not deleted" by this run.
   const runTag = Date.now().toString(36);
+  // What this run created is counted by its OWN id, never by the "probe-result-" name.
+  // The list is newest-first and these fixtures carry the oldest dates on the profile,
+  // so on a profile that already holds results, page 1 is entirely someone else's rows
+  // and "select all" ticks those, not the fixtures — which is what made an earlier
+  // version of this check report a working delete as a failure.
+  const isRunRow = id => String(id || '').startsWith('probe-session-' + runTag + '-');
   for (let index = 0; index < 20; index += 1) {
     const session = {
       id: 'probe-session-' + runTag + '-' + index,
@@ -46,13 +52,14 @@ const SCENARIO = String.raw`(async () => {
     created.push(session);
   }
   state.db = await window.eduGame.getLibrary();
+  const sessionsBeforeDelete = (state.db.sessions || []).length;
   state.sessionPage = 0;
   state.sessionSelection = new Set();
   const link = [...document.querySelectorAll('[data-page]')].find(node => node.dataset.page === 'sessions');
   if (link) link.click();
   await new Promise(r => setTimeout(r, 900));
 
-  const out = { created: created.length, gamesBefore };
+  const out = { created: created.length, gamesBefore, sessionsBeforeDelete };
   const rows = () => [...document.querySelectorAll('[data-session-id]')];
   const pagerText = () => {
     const pager = document.querySelector('[data-session-pager] span');
@@ -82,6 +89,7 @@ const SCENARIO = String.raw`(async () => {
   out.countAfterExtra = document.querySelector('[data-session-selected-count]').textContent.trim();
   const selectedIds = [...(state.sessionSelection instanceof Set ? state.sessionSelection : [])];
   out.selectedIds = selectedIds.length;
+  out.selectedRunRows = selectedIds.filter(isRunRow).length;
 
   const realConfirm = window.confirm;
   window.confirm = () => true;
@@ -92,17 +100,20 @@ const SCENARIO = String.raw`(async () => {
   window.confirm = realConfirm;
 
   const after = await window.eduGame.getLibrary();
-  const leftProbe = (after.sessions || []).filter(s => String(s.playerName || '').startsWith('probe-result-')).length;
+  const leftProbe = (after.sessions || []).filter(s => isRunRow(s.id)).length;
   out.toast = typeof window.toastLast === 'string' ? window.toastLast : '';
   out.selectionNow = state.sessionSelection instanceof Set ? state.sessionSelection.size : -1;
   out.leftProbe = leftProbe;
-  out.expectedLeft = 20 - selectedIds.length;
+  out.expectedLeft = created.length - out.selectedRunRows;
+  out.sessionsAfterDelete = (after.sessions || []).length;
+  out.expectedSessionsLeft = out.sessionsBeforeDelete - out.selectedIds;
   out.gamesAfter = (after.games || []).length;
   out.stillOnPage = rows().some(row => selectedIds.includes(row.dataset.sessionId));
   const countNode = document.querySelector('[data-session-selected-count]');
   out.countReset = countNode ? countNode.textContent.trim() : '';
 
-  const leftovers = (after.sessions || []).filter(s => String(s.playerName || '').startsWith('probe-result-'));
+  const leftovers = (after.sessions || [])
+    .filter(s => isRunRow(s.id) || String(s.playerName || '').startsWith('probe-result-'));
   if (leftovers.length) await window.eduGame.deleteSessions(leftovers.map(s => s.id));
   state.db = await window.eduGame.getLibrary();
   state.sessionSelection = new Set();
@@ -131,13 +142,15 @@ const SCENARIO = String.raw`(async () => {
     `${result.page2ProbeRows} probe rows of ${result.page2Rows} · ${result.page2Pager}`);
   check('a new page starts unticked', result.page2Checked === 0, String(result.page2Checked));
   check('selection survives paging', /Đã chọn 16 lượt chơi/.test(result.countAfterExtra), result.countAfterExtra);
-  // Only the probe rows deleted by this run are outside the race with the teacher's
-  // own results; the UI side is proven by the count reset and the rows leaving the page.
-  // The check counts only what it can observe: 20 fixtures + the teacher's own results,
-  // and the batch delete is proven by the *change* in the fixture count.
+  // The fixtures are the oldest rows on the profile, so which page "select all" lands
+  // on depends on how many results the profile already holds. The check therefore asks
+  // only the question that has one answer anywhere: did exactly the selected rows go?
   check('the selection deleted its rows and left the rest',
     result.leftProbe === result.expectedLeft && result.stillOnPage === false && result.gamesAfter === result.gamesBefore,
-    `${result.leftProbe} probe left, expected ${result.expectedLeft}; selected ${result.selectedIds}; button ${result.deleteButtonState}`);
+    `${result.leftProbe} of ${result.created} fixtures left, ${result.selectedRunRows} of ${result.selectedIds} selected rows were fixtures; button ${result.deleteButtonState}`);
+  check('exactly the selected rows disappeared, no more',
+    result.sessionsAfterDelete === result.expectedSessionsLeft,
+    `${result.sessionsBeforeDelete} - ${result.selectedIds} selected = ${result.expectedSessionsLeft}, got ${result.sessionsAfterDelete}`);
   check('games are untouched by deleting results', result.gamesAfter === result.gamesBefore, `${result.gamesAfter} vs ${result.gamesBefore}`);
   check('the deleted rows are gone from the page', result.stillOnPage === false);
   check('the selection is cleared after deleting', /Hoặc tick/.test(result.countReset), result.countReset);

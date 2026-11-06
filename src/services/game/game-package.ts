@@ -62,6 +62,17 @@ export class GamePackageError extends Error {
 }
 
 /**
+ * The exact text `files:export-game` writes into a `.egame`.
+ *
+ * Reading was production code from #118 but writing stayed a string literal inside the
+ * IPC handler, so a round-trip test would have to retype the envelope and would keep
+ * passing if the envelope changed. One serializer, used by the handler and the tests.
+ */
+export function writeGamePackage(game: EducationalGame): string {
+  return JSON.stringify({ packageFormat: 'edugame', packageVersion: 1, game }, null, 2);
+}
+
+/**
  * Parses the text of a `.egame`/`.json` package into a game ready to save.
  *
  * `newId` is injected so the result is deterministic in tests. `createdAt`/`updatedAt`

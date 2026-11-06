@@ -6,10 +6,15 @@
  * import (never overwrite) and no external resource URL (offline, classroom-safe).
  */
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import type { EducationalGame } from '../../src/shared/types';
 import {
   GamePackageError,
   readGamePackage,
-  stripImportedAssetUrls
+  stripImportedAssetUrls,
+  writeGamePackage
 } from '../../src/services/game/game-package';
 
 let counter = 0;
@@ -41,7 +46,10 @@ const quiz = {
   ]
 };
 
-const pack = (game: unknown) => JSON.stringify({ packageFormat: 'edugame', packageVersion: 1, game });
+// #209 task 8: chữ của tệp do CHÍNH `writeGamePackage` sinh ra — đúng thứ
+// `files:export-game` ghi xuống đĩa. Test tự viết lại envelope thì vẫn xanh mãi kể cả
+// khi người ta đổi serializer, tức không chứng minh được điều gì.
+const pack = (game: unknown) => writeGamePackage(game as EducationalGame);
 
 async function run(): Promise<void> {
   // --- accepted shapes ---------------------------------------------------------
@@ -121,6 +129,58 @@ async function run(): Promise<void> {
   const modeRoundTrip = readGamePackage(pack(modeGame), newId);
   assert.equal(modeRoundTrip.gameSetup?.scoringMode, 'tra-loi:luyen-tap', 'the token survives export/import');
   assert.equal(modeRoundTrip.gameSetup?.legacyScoringMode, 'tốc độ', 'and so does the value it parked');
+
+  // --- #209 task 8: cùng đường đó nhưng qua TỆP THẬT trên đĩa -----------------
+  // Học trò mang bài sang máy khác bằng một tệp `.egame`, nên bằng chứng phải là byte
+  // thật: serializer của main ghi xuống đĩa, rồi đúng reader của main đọc lên.
+  const file = path.join(os.tmpdir(), `egame-roundtrip-${process.pid}.egame`);
+  try {
+    const bytes = writeGamePackage(modeGame as EducationalGame);
+    fs.writeFileSync(file, bytes, 'utf8');
+    const raw = fs.readFileSync(file, 'utf8');
+    // Tìm trong CHỮ THÔ, không tìm trong object đã parse: di sản của #209 nằm ở đúng
+    // ký tự giáo viên nhìn thấy khi mở tệp bằng Notepad.
+    assert.match(raw, /"packageFormat":\s*"edugame"/u, 'the file declares the package format');
+    assert.match(raw, /"packageVersion":\s*1/u, 'and a version');
+    assert.ok(raw.indexOf('tra-loi:luyen-tap') !== -1, 'the token is on disk, not only in the row');
+    assert.ok(raw.indexOf('tốc độ') !== -1, 'and the parked Vietnamese value survives the encoding');
+    const fromDisk = readGamePackage(raw, newId);
+    assert.equal(fromDisk.gameSetup?.scoringMode, 'tra-loi:luyen-tap');
+    assert.equal(fromDisk.gameSetup?.legacyScoringMode, 'tốc độ');
+    assert.equal(fromDisk.questions[0].explanation, quiz.questions[0].explanation, 'the explanation the button will open survives too');
+
+    // Kho báu cất CHUỖI RỖNG cho "chưa từng có mode nào"; marker của #209 xét SỰ CÓ MẶT
+    // của khóa nên giá trị rỗng phải đi qua tệp mà không bị biến mất.
+    const emptySetup = { ...JSON.parse(JSON.stringify(quiz)), gameSetup: { scoringMode: '', legacyScoringMode: '', duration: '20' } };
+    const emptyRound = readGamePackage(pack(emptySetup), newId);
+    assert.ok('scoringMode' in (emptyRound.gameSetup || {}), 'an empty stored mode keeps its key');
+    assert.equal(emptyRound.gameSetup?.scoringMode, '');
+
+    // Một giá trị parked `null` thì `normalizeGame` bỏ (nó chỉ giữ string/number/boolean).
+    // Không mất gì: key đó chỉ có tác dụng hoàn nguyên một giá trị từng tồn tại, và null
+    // thì không có gì để hoàn nguyên. Ghim lại để hành vi này không đổi âm thầm.
+    const nullParked = { ...JSON.parse(JSON.stringify(quiz)), gameSetup: { scoringMode: 'tra-loi:thu-thach', legacyScoringMode: null } };
+    const nullRound = readGamePackage(pack(nullParked), newId);
+    assert.equal(nullRound.gameSetup?.scoringMode, 'tra-loi:thu-thach');
+    assert.equal('legacyScoringMode' in (nullRound.gameSetup || {}), false, 'a parked null carries nothing to restore and is dropped');
+
+    // Một game ĐƯỜNG ĐUA có token: thể loại thứ hai mà `scoringMode` không còn là bảng
+    // điểm cũ, và cả ngân hàng câu riêng (`race.questions`) phải đi qua nguyên vẹn.
+    const raceMode = {
+      title: 'Đường đua', template: 'race', questions: [],
+      gameSetup: { scoringMode: 'tra-loi:thi-dau' },
+      race: {
+        trackLength: 8, teamCount: 2, maxRounds: 3, stepByDifficulty: false, luckEnabled: false,
+        teams: [{ id: 't1', name: 'Đội 1', color: '#111111' }, { id: 't2', name: 'Đội 2', color: '#222222' }],
+        questions: [{ id: 'r1', difficulty: 'dễ', prompt: 'Mấy?', options: [{ id: 'a', text: 'A' }, { id: 'b', text: 'B' }], correctOptionId: 'a', explanation: 'A.' }]
+      }
+    };
+    const raceRound = readGamePackage(pack(raceMode), newId);
+    assert.equal(raceRound.gameSetup?.scoringMode, 'tra-loi:thi-dau', 'a race keeps its answer mode through the file');
+    assert.equal(raceRound.race?.questions?.[0]?.explanation, 'A.', 'and its own question bank');
+  } finally {
+    fs.rmSync(file, { force: true });
+  }
 
   console.log('Game package tests passed');
 }

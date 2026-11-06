@@ -78,7 +78,7 @@ const { LlamaRuntimeInstaller } = require('./ai-core/runtime-installer');
 const { importQuestionsFromFile, parseQuestionsFromText } = require('./services/input/question-import');
 const { classifyInput, resolveInputKind } = require('./services/input/input-classifier');
 const { evaluateCompatibility } = require('./services/input/question-compatibility');
-const { readGamePackage, IMPORT_GAME_MAX_BYTES } = require('./services/game/game-package');
+const { readGamePackage, writeGamePackage, IMPORT_GAME_MAX_BYTES } = require('./services/game/game-package');
 const customIllustration = require('./services/storage/custom-illustration');
 const { cleanQuestionText } = require('./services/input/question-text');
 const {
@@ -3106,7 +3106,7 @@ function registerIpc() {
       filters: [{ name: 'EduGame package', extensions: ['egame', 'json'] }]
     });
     if (result.canceled || !result.filePath) return { canceled: true };
-    await fs.writeFile(result.filePath, JSON.stringify({ packageFormat: 'edugame', packageVersion: 1, game }, null, 2), 'utf8');
+    await fs.writeFile(result.filePath, writeGamePackage(game), 'utf8');
     return { ok: true, path: result.filePath };
   });
   // The ⛶ button in gameplay must work on any page, before any game has been

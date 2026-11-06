@@ -77,7 +77,14 @@ function buildQuizView() {
        Một vòng chưa khép (Luyện tập đang thử lại) cũng chưa có dòng điểm nào, nên
        bảng chiếu còn nguyên câu hỏi chưa trả lời. */
     const turn = state.answerTurn;
-    const reveal = answered && (!turn || turn.revealCorrect);
+    /* Quyết định #6 của #209, áp cho cả máy chiếu: màn chính KHÔNG bao giờ sơn lựa chọn
+       nào là "đáp án đúng" của một quyết định tình huống (quiz.ts: `revealAnswer =
+       turn.revealCorrect && !scenario`), vì rubric cho điểm TỪNG lựa chọn chứ không có
+       một lựa chọn đúng duy nhất. Bảng chiếu trước đây tự tính lại từ `answered` +
+       `revealCorrect` nên Thi đấu vẫn tô "quyết định đúng" trước cả lớp dù màn giáo
+       viên đã cố ý để trống — hai bề mặt của cùng một câu phải cùng một luật. */
+    const scenarioQuestion = game.template === 'scenario' && String(q.type || '') === 'scenario';
+    const reveal = answered && (!turn || turn.revealCorrect) && !scenarioQuestion;
     const team = state.teamPlay ? state.teamPlay.teams[state.teamPlay.turn] : null;
     return {
         kind: 'quiz',

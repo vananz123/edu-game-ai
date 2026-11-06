@@ -46,7 +46,22 @@
     out.surface = rect('#modalRoot .setup-fullscreen');
     out.shellVisible = visible('.app-shell');
     out.statusBarVisible = visible('.ai-status-bar');
-    out.primaryButton = rect('#modalRoot [data-setup-action="start"]') || rect('#modalRoot [data-setup-action="skip-ai"]');
+    // The wizard can still be on a busy screen ("detecting") at this point, and a busy
+    // screen draws no action button by design. Reading the rect once therefore measured
+    // "has the local AI check finished yet" instead of the geometry it claims to check —
+    // on a cold profile that round-trip is longer than the 300ms settle above. Poll for
+    // the button, and report which screen it appeared on.
+    out.buttonScreen = (document.querySelector('#modalRoot [data-setup-screen]') || {}).dataset?.setupScreen;
+    const buttonWaitStarted = Date.now();
+    out.primaryButton = null;
+    for (let i = 0; i < 200 && !out.primaryButton; i += 1) {
+      out.primaryButton = rect('#modalRoot [data-setup-action="start"]') || rect('#modalRoot [data-setup-action="skip-ai"]');
+      if (!out.primaryButton) {
+        await sleep(50);
+        out.buttonScreen = (document.querySelector('#modalRoot [data-setup-screen]') || {}).dataset?.setupScreen;
+      }
+    }
+    out.buttonWaitMs = Date.now() - buttonWaitStarted;
     out.modalBackdropPresent = !!document.querySelector('#modalRoot .modal-backdrop');
 
     // Finishing the wizard must give the dashboard back.
@@ -82,7 +97,7 @@
   check('action buttons are inside the viewport',
     !!run.primaryButton && run.primaryButton.y >= 0
       && run.primaryButton.y + run.primaryButton.h <= run.viewport.h + 1,
-    run.primaryButton);
+    { button: run.primaryButton, screen: run.buttonScreen, waitedMs: run.buttonWaitMs });
   check('finishing setup gives the shell back',
     run.flagAfterComplete === null && run.shellVisibleAfterComplete === true,
     { flag: run.flagAfterComplete, shellVisible: run.shellVisibleAfterComplete });

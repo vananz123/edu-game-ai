@@ -129,6 +129,25 @@ it('other scoring modes pass through to the shared helpers untouched', () => {
   assert.equal(buildLanPlan(quiz({ gameSetup: {} })).scoringMode, 'cơ bản');
 });
 
+it('a "tra-loi:" token is not a LAN scoring mode: base points, no bonus, no teams', () => {
+  // #209 moved the answer law INTO `scoringMode` and left LAN out of scope on purpose,
+  // so the three tokens must be invisible to LAN's own rules — the same base score
+  // 'cơ bản' gives, no speed bonus from the parked `timeBonus`, and no teams just
+  // because the token spells 'thi-dau'. Teams for an answer-mode game are declared
+  // through `players`, the same signal the play surface reads.
+  for (const token of ['tra-loi:thi-dau', 'tra-loi:luyen-tap', 'tra-loi:thu-thach']) {
+    const game = quiz({ gameSetup: { scoringMode: token, timeBonus: '30', pointsPerCorrect: '100' } });
+    const plan = buildLanPlan(game);
+    assert.equal(plan.scoringMode, 'cơ bản', token);
+    assert.equal(plan.scoringNote, '', token);
+    assert.equal(plan.rounds[0].score('a', '').points, 100, token);
+    assert.equal(plan.rounds[0].score('a', '').speedBonus, 0, token);
+    assert.deepEqual(lanDefaultTeams(game), [], token);
+  }
+  const teamToken = quiz({ gameSetup: { scoringMode: 'tra-loi:thi-dau', players: 'theo đội' } });
+  assert.equal(lanDefaultTeams(teamToken).length, 2, 'the players field still reaches LAN');
+});
+
 it('"theo độ khó" uses the configured table', () => {
   const game = quiz({ gameSetup: { scoringMode: 'theo độ khó', pointsEasy: '90', pointsMedium: '180', pointsHard: '270' } });
   assert.equal(buildLanPlan(game).rounds[0].score('a', '').points, 90);

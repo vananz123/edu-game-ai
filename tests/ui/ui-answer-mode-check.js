@@ -1086,6 +1086,263 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
         }
       }
 
+      /* ---- M. MA TRẬN 4 TRÒ × 3 CHẾ ĐỘ (nhiệm vụ 8) --------------------------
+         Bảy mục trước chứng minh TỪNG trò đúng luật. Mục này chứng minh CHÍNH LUẬT
+         điều khiển chứ không phải thói quen của từng trò: năm bề mặt (Đấu trường Cổ
+         điển, Đấu trường Xây nhà, Tình huống, Kho báu, Đường đua) nhân ba chế độ,
+         cùng MỘT phép đo và MỘT nhịp bấm. Mỗi ô hai nhịp:
+          • S1: ván MỚI → bấm SAI → snapshot → bấm ĐÚNG ngay tại màn hình đó. Ô đã
+            khoá thì cú thứ hai KHÔNG được đổi gì (điểm, đáp án hiện, số dòng); ô
+            Luyện tập thì cú thứ hai phải được nhận và trừ 10%.
+          • S2: ván MỚI → bấm ĐÚNG → snapshot → bấm nút Giải thích NẾU CÓ → snapshot.
+         Đơn vị điểm khác nhau giữa năm trò (Ô trên đường đua, PHẦN của ngôi nhà,
+         ĐIỂM rubric của quyết định, thưởng chặng của Kho báu), nên msnap() trả về
+         TẤT CẢ các trường và phần Node chọn đúng trường cho bề mặt nó đang xét —
+         một helper riêng cho từng trò sẽ âm thầm bỏ sót cột của trò khác. */
+      try {
+        let mwhy = '';
+        const turnOf = () => state.answerTurn
+          || (state.treasurePlay && state.treasurePlay.answerTurn)
+          || (state.racePlay && state.racePlay.answerTurn);
+        const optId = b => b.dataset.answer || b.dataset.raceAnswer || '';
+        // Máy chiếu của ba trò đều là hàm toàn cục; vòng lặp gọi CẢ BA để một cột
+        // không bao giờ được phép im lặng khi bề mặt thật của nó tồn tại. try/catch vì
+        // buildRaceView() đọc state.racePlay: gọi nó trên màn Kho báu là ném lỗi, và
+        // một lỗi như thế không được phép xoá cả ô của ma trận.
+        const projText = () => {
+          const names = ['buildQuizView', 'buildTreasureView', 'buildRaceView'];
+          const parts = [];
+          for (let i = 0; i < names.length; i++) {
+            const fn = window[names[i]];
+            if (typeof fn !== 'function') continue;
+            let v = null;
+            try {
+              v = fn();
+            } catch (error) {
+              parts.push(names[i].slice(5, 9) + ' threw');
+              continue;
+            }
+            if (!v) continue;
+            parts.push(names[i].slice(5, 9)
+              + ' why=' + String(v.explanation === undefined ? 'undef' : v.explanation).slice(0, 22)
+              + ' rev=' + String(v.revealed) + ' right=' + String(v.correctOptionId));
+          }
+          return parts.join(' | ');
+        };
+        const msnap = () => {
+          const grid = Array.prototype.slice.call(document.querySelectorAll('.answer-option'));
+          const turn = turnOf();
+          const btn = document.querySelector('[data-answer-explain]');
+          const dlg = document.querySelector('#answerExplanationModal');
+          const body = document.querySelector('#playBody');
+          const tp = state.treasurePlay;
+          const rp = state.racePlay;
+          const rows = tp ? (tp.results || []) : (state.gameAnswers || []);
+          const last = rows.length ? rows[rows.length - 1] : null;
+          return {
+            mode: turn ? turn.mode : null,
+            open: turn ? !turn.finished : null,
+            retry: turn ? turn.retryAllowed : null,
+            wrongs: turn ? Number(turn.wrongAttempts) : null,
+            turnPts: turn ? Number(turn.points) : null,
+            ceiling: turn ? Number(turn.maxPoints) : null,
+            revealLaw: turn ? Boolean(turn.revealCorrect) : null,
+            whyLaw: turn ? Boolean(turn.explanationAvailable) : null,
+            clickable: grid.filter(b => !b.disabled).length,
+            revealed: grid.filter(b => b.classList.contains('correct')).map(optId).join(''),
+            marked: grid.filter(b => b.classList.contains('wrong')).map(optId).join(''),
+            explain: btn ? text(btn) : '',
+            dialog: dlg ? text(dlg.querySelector('.answer-explain-text')) : '',
+            dialogTitle: dlg ? text(dlg.querySelector('.answer-explain-title')) : '',
+            inlineWhy: body ? text(body).indexOf(mwhy) !== -1 : null,
+            banner: text(document.querySelector('#answerFeedback')).slice(0, 96),
+            law: [document.querySelector('.race-rule-pill'), document.querySelector('.stage-tip'),
+              document.querySelector('.scoring-tip'), document.querySelector('.spec-chip'),
+              document.querySelector('#treasureAttemptsHint')]
+              .filter(Boolean).map(text).join(' | ').slice(0, 104),
+            next: text(document.querySelector('#nextQuestionBtn')) + '/'
+              + text(document.querySelector('#raceContinueBtn')) + '/'
+              + text(document.querySelector('#raceNoAnswerBtn')),
+            rows: rows.length,
+            lastPts: last ? Number(last.points) : null,
+            boardPts: (state.gameAnswers || []).reduce((s, r) => s + (Number(r.points) || 0), 0),
+            house: state.houseBuild ? state.houseBuild.parts + '/' + state.houseBuild.correct + '/' + state.houseBuild.wrong : null,
+            steps: state.scenarioSteps === undefined ? null : state.scenarioSteps,
+            earned: tp ? Number(tp.earned) : null,
+            tries: tp ? Number(tp.attemptsLeft) : null,
+            progress: rp ? rp.teams.map(t => Number(t.progress)).join(',') : null,
+            racePts: rp ? rp.teams.map(t => Number(t.points)).join(',') : null,
+            over: rp ? Boolean(rp.over) : null,
+            proj: projText()
+          };
+        };
+        const mplay = async game => {
+          await closePlay();
+          const copy = JSON.parse(JSON.stringify(game));
+          copy.id = 'am-' + RUN + '-play-' + (++out.playSeq);
+          /* Một ô chỉ được đọc VÒNG và BẢNG ĐIỂM của CHÍNH ván nó vừa mở. Ba bề mặt cất
+             vòng ở ba chỗ khác nhau (state.answerTurn / treasurePlay / racePlay) và
+             không cái nào bị playGame của trò khác xoá đi, nên nếu để lại thì ô Kho báu
+             đọc phải vòng Thử thách của ô Tình huống ngay trước — mode sai, "câu còn
+             mở" sai, và điểm của trò khác lẫn vào cột điểm của trò này. Lần chạy đầu
+             của chính mục M đã cho ra đúng kiểu đỏ đó. */
+          state.answerTurn = null;
+          state.treasurePlay = null;
+          state.racePlay = null;
+          state.answerExplanationShown = null;
+          playGame(copy);
+          await sleep(700);
+          return msnap();
+        };
+        const mtap = async selector => {
+          const btn = document.querySelector(selector);
+          if (!btn) return { error: 'no element ' + selector };
+          btn.click();
+          await sleep(300);
+          return msnap();
+        };
+        // Bốn bề mặt dùng data-answer, riêng Đường đua dùng data-race-answer.
+        const mopt = id => mtap('.answer-option[data-answer="' + id + '"], .answer-option[data-race-answer="' + id + '"]');
+        const mopen = async () => {
+          const b = document.querySelector('[data-answer-explain]');
+          if (!b) {
+            const s = msnap();
+            s.didClick = false;
+            return s;
+          }
+          b.click();
+          await sleep(300);
+          const s2 = msnap();
+          s2.didClick = true;
+          return s2;
+        };
+        const mclose = async () => {
+          const b = document.getElementById('answerExplainOkBtn');
+          if (!b) return null;
+          b.click();
+          await sleep(240);
+          return msnap();
+        };
+        const MODES = [['competitive', 'tra-loi:thi-dau'], ['practice', TOKEN_PRACTICE], ['challenge', TOKEN_CHALLENGE]];
+        const quizM = (key, mode) => makeGame(key, 'quiz', { scoringMode: mode, pointsPerCorrect: '100', duration: '20' });
+        const houseM = (key, mode) => {
+          const g = quizM(key, mode);
+          g.gameSetup.gameplayMode = 'house';
+          return g;
+        };
+        const scenarioM = (key, mode) => {
+          const g = makeGame(key, 'scenario', { scoringMode: mode });
+          g.questions = [{
+            id: 'sc1', type: 'scenario', points: 100, correctOptionId: 'safe',
+            prompt: 'Dây phích cắm sạc hở điện ngay giữa lớp. Em làm gì?',
+            context: 'Giờ ra chơi, cả lớp đang ở lại.', correctAnswer: '',
+            explanation: 'Báo thầy cô rồi mới rút phích.',
+            options: [
+              { id: 'safe', text: 'Báo thầy cô trước khi động vào', feedback: 'An toàn nhất.', scenarioScore: { safety: 60, reasoning: 25, harmReduction: 15 } },
+              { id: 'risk', text: 'Tự rút phích cắm cho nhanh', feedback: 'Còn rủi ro.', scenarioScore: { safety: 30, reasoning: 10, harmReduction: 5 } }
+            ]
+          }];
+          return g;
+        };
+        const stageM = () => ({
+          id: 't1', name: 'Chặng 1', story: 'Chuyện tổng hợp.', taskDescription: 'Nhiệm vụ tổng hợp.',
+          question: question('tq1'), attempts: 2, points: 100, completionBonus: 50, hasHiddenItem: false
+        });
+        const treasureM = (key, mode) => ({
+          id: 'am-' + RUN + '-' + key, title: title(key), subject: 'Tự nhiên', grade: '3',
+          template: 'treasure-hunt', description: '', tags: [], sourceName: 'ui-check',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          gameSetup: { scoringMode: mode }, questions: [],
+          treasureHunt: {
+            character: 'Nhà thám hiểm An', intro: 'Hành trình tổng hợp.',
+            journeyBonus: 100, hiddenItemBonus: 20, backgroundId: 'temple',
+            characterId: 'explorer', stages: [stageM()]
+          }
+        });
+        const raceM = (key, mode) => ({
+          id: 'am-' + RUN + '-' + key, title: title(key), subject: 'Tự nhiên', grade: '3',
+          template: 'race', description: '', tags: [], sourceName: 'ui-check',
+          createdAt: '2026-01-01T00:00:00.000Z', gameSetup: { scoringMode: mode },
+          questions: [],
+          race: {
+            trackLength: 12, maxRounds: 2, stepByDifficulty: true, luckEnabled: false,
+            teams: [{ id: 't1', name: 'Đội đỏ', icon: 'A' }, { id: 't2', name: 'Đội xanh', icon: 'B' }],
+            cells: [], questions: [Object.assign(question('rq1'), { difficulty: 'khó' })]
+          }
+        });
+        const SURFACES = [
+          { key: 'classic', right: 'a', wrong: 'b', why: 'Bằng hai.', game: quizM },
+          { key: 'house', right: 'a', wrong: 'b', why: 'Bằng hai.', game: houseM },
+          { key: 'scenario', right: 'safe', wrong: 'risk', why: 'An toàn nhất.', game: scenarioM },
+          { key: 'treasure', right: 'a', wrong: 'b', why: 'Bằng hai.', game: treasureM },
+          // Đường đua phải BỐC câu hỏi trước; dữ liệu cố tình vẫn bật "Tiến theo độ
+          // khó" và câu là loại KHÓ — ba ô là con số của game cũ, một ô là luật mới.
+          { key: 'race', right: 'a', wrong: 'b', why: 'Bằng hai.', game: raceM, draw: true }
+        ];
+        out.matrix = [];
+        for (let s = 0; s < SURFACES.length; s++) {
+          const surface = SURFACES[s];
+          mwhy = surface.why;
+          for (let m = 0; m < MODES.length; m++) {
+            const cell = { surface: surface.key, mode: MODES[m][0] };
+            cell.right = surface.right;
+            cell.wrong = surface.wrong;
+            // S1 — câu SAI rồi bấm ĐÚNG ngay trên cùng màn hình.
+            cell.open = await mplay(surface.game(surface.key + '-' + MODES[m][0] + '-miss', MODES[m][1]));
+            if (surface.draw) cell.draw = await mtap('#drawQuestionBtn');
+            cell.miss = await mopt(surface.wrong);
+            cell.retryTap = await mopt(surface.right);
+            cell.missDoor = await mopen();
+            cell.missClosed = await mclose();
+            // S2 — ván MỚI, câu ĐÚNG, rồi cửa lời giải.
+            cell.fresh = await mplay(surface.game(surface.key + '-' + MODES[m][0] + '-hit', MODES[m][1]));
+            if (surface.draw) cell.freshDraw = await mtap('#drawQuestionBtn');
+            cell.hit = await mopt(surface.right);
+            cell.hitDoor = await mopen();
+            cell.hitClosed = await mclose();
+            out.matrix.push(cell);
+          }
+        }
+        /* Ô ÂM TÍNH — Ghép cặp. Nó KHÔNG nằm trong ANSWER_MODE_TEMPLATES, nên một token
+           nhét vào gameSetup.scoringMode của một game ghép cặp phải bị CHÍNH TẦNG LUẬT
+           từ chối: không vòng trả lời, không nút Giải thích, cách chấm theo cặp còn
+           nguyên. Unit test đã chốt danh sách template; đây là bằng chứng trên màn hình
+           thật, nơi một renderer quên hỏi danh sách mới là lỗi thật. */
+        out.matching = {};
+        const matchToken = {
+          id: 'am-' + RUN + '-matching-token', title: title('matching-token'), subject: 'Tự nhiên',
+          grade: '3', template: 'matching', description: '', tags: [], sourceName: 'ui-check',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          gameSetup: { scoringMode: TOKEN_CHALLENGE, pointsPerCorrect: '100' },
+          questions: [],
+          matchingGame: typeof defaultMatchingGame === 'function' ? defaultMatchingGame() : null
+        };
+        // Xoá sạch vòng của bề mặt TRƯỚC: playGame của Ghép cặp không mở vòng nào cả,
+        // nên nếu state.answerTurn còn hiện ra sau khi chơi là nó của trò khác — và một
+        // ô âm tính đọc phải vòng của ô trước thì ô đó không chứng minh được gì.
+        state.answerTurn = null;
+        state.treasurePlay = null;
+        state.racePlay = null;
+        mwhy = 'Định nghĩa A';
+        out.matching.open = await mplay(matchToken);
+        out.matching.cards = Array.prototype.slice.call(document.querySelectorAll('.match-card'))
+          .map(c => c.getAttribute('data-match-side') + ':' + c.getAttribute('data-pair')).join(' ');
+        out.matching.afterPair = await mtap('[data-match-side="left"][data-pair="p1"], [data-pair="p1"]');
+        out.matching.afterPair2 = await mtap('[data-match-side="right"][data-pair="p1"]');
+        out.matching.explainButtons = document.querySelectorAll('[data-answer-explain]').length;
+        out.matching.rows = (state.gameAnswers || []).length;
+        out.matching.matched = document.querySelectorAll('.match-card.matched, [data-match-side].matched').length;
+        out.matching.footer = text(document.querySelector('#matchFeedback')).slice(0, 90);
+        await closePlay();
+      } catch (error) {
+        out.matrix = { error: String(error && error.message || error) };
+        try {
+          await closePlay();
+        } catch (ignored) {
+          out.matrix.cleanupFailed = true;
+        }
+      }
+
       document.getElementById('modalRoot').innerHTML = '';
       if (typeof closeEditorPage === 'function') closeEditorPage();
 
@@ -1813,6 +2070,412 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
   check('closing the play surface clears the projector flag with the game',
     ex.afterClose?.playing === false && ex.afterClose?.shown === null
     && ex.afterClose?.quizWhy === '', exv(ex.afterClose));
+
+  /* M. MA TRẬN 4 TRÒ × 3 CHẾ ĐỘ (nhiệm vụ 8). Bảy mục trước đo TỪNG trò; mục này đo
+     MỘT LUẬT trên năm bề mặt, nên mọi điều kiện đều chạy trên CẢ NHÓM ô và failure
+     in ra ô nào sai. Kì vọng ở đây do KẾ HOẠCH #209 viết tay (một lần trả lời / trừ
+     10% trên điểm nội dung / một ô cho Đường đua / không lộ khi Thử thách), KHÔNG
+     đọc lại bảng answerRules của ứng dụng — nếu không, hai bên cùng sai một lỗi thì
+     cổng vẫn xanh. Các con số tuyệt đối đã có mục I/J/K chốt hộ. */
+  const mx = Array.isArray(report.matrix) ? report.matrix : null;
+  const mcell = (surface, mode) => (mx || []).find(c => c.surface === surface && c.mode === mode) || null;
+  const MMV = s => !s ? String(s) : s.error ? 'ERR:' + s.error : JSON.stringify({
+    m: s.mode, open: s.open, retry: s.retry, click: s.clickable, rev: s.revealed, mark: s.marked,
+    rows: s.rows, last: s.lastPts, pts: s.boardPts, house: s.house, earned: s.earned,
+    prog: s.progress, rpts: s.racePts, exp: s.explain, dlg: s.dialog, why: s.whyLaw,
+    law: s.law, proj: s.proj
+  });
+  /* `bad()` là CHI TIẾT in ra (một chuỗi), còn ĐIỀU KIỆN của mục là "danh sách ô lệch
+     rỗng". Viết `bad(X).length === 0` thì điều kiện sai với MỌI ô, kể cả khi không có
+     ô nào lệch — chính xác 11 mục đỏ của lần chạy đầu tiên. Hai việc tách làm hai helper. */
+  const none = list => list.length === 0;
+  const bad = list => list.map(c => c.surface + '/' + c.mode).join(' ') || 'none';
+  const MCELLS = mx || [];
+  const MLOCKED = MCELLS.filter(c => c.mode !== 'practice');
+  const MSILENT = MCELLS.filter(c => c.surface === 'race');
+  const MEXPLAIN = MCELLS.filter(c => c.surface !== 'race');
+  const mfirst = s => Number(String(s && s.progress || '0').split(',')[0]);
+  // "Điểm" của một ô là đơn vị của CHÍNH bề mặt đó: Ô trên đường đua, điểm chặng đã
+  // nhận ở Kho báu, tổng trên bảng điểm của ba trò còn lại.
+  const mscoreOf = (c, s) => !s ? null : c.surface === 'race' ? mfirst(s)
+    : c.surface === 'treasure' ? Number(s.earned) : Number(s.boardPts);
+  const projHas = (s, why) => String(s && s.proj || '').indexOf('why=' + why) !== -1;
+  // Bảng chiếu "sơn" một phương án: đúng cái trường mà màn chiếu dùng để tô đáp án.
+  const projPaints = (s, id) => String(s && s.proj || '').indexOf('right=' + id) !== -1;
+  // Mọi snapshot của một ô, kể cả các bước trung gian — một luật viết trên màn hình
+  // thì phải giữ ở TẤT CẢ các bước, không chỉ bước vừa bấm.
+  const msnaps = c => ['open', 'draw', 'fresh', 'freshDraw', 'miss', 'retryTap', 'missDoor',
+    'missClosed', 'hit', 'hitDoor', 'hitClosed'].map(k => c[k]).filter(Boolean);
+  // "Trước" = snapshot cuối cùng TRƯỚC cú bấm sai: Đường đua phải qua bốc câu hỏi,
+  // bốn bề mặt kia là màn vừa mở.
+  const mbefore = c => c.surface === 'race' ? c.draw : c.open;
+  const MWHY = c => c.surface === 'scenario' ? 'An toàn nhất.' : 'Bằng hai.';
+  const MWRONGWHY = c => c.surface === 'scenario' ? 'Còn rủi ro.' : 'Bằng hai.';
+  const MHINT = { competitive: 'Trả lời một lần', practice: 'Sai được thử lại', challenge: 'KHÔNG mở đáp án' };
+
+  check('the matrix ran all fifteen surface x mode cells', Boolean(mx) && mx.length === 15,
+    mx ? mx.length + ' cells' : JSON.stringify(report.matrix));
+  check('every surface opens a turn that reports the mode its token claims',
+    none(MCELLS.filter(c => {
+      const b = mbefore(c);
+      return !b || b.error || b.mode !== c.mode;
+    })), MCELLS.length + ' cells | bad: ' + bad(MCELLS.filter(c => {
+      const b = mbefore(c);
+      return !b || b.error || b.mode !== c.mode;
+    })));
+
+  // 1. Khoá: sau một cú đã khép vòng, cú bấm thứ hai KHÔNG được đổi gì — điểm, số
+  //    dòng, đáp án hiện hay lưới. Bốn bề mặt, hai chế độ, tám ô.
+  check('a locked cell changes nothing between the wrong tap and the right tap',
+    none(MLOCKED.filter(c => {
+      const a = c.miss, b = c.retryTap;
+      if (!a || !b || a.error || b.error) return true;
+      return a.rows !== b.rows || a.lastPts !== b.lastPts || a.boardPts !== b.boardPts
+        || a.earned !== b.earned || a.progress !== b.progress || a.racePts !== b.racePts
+        || a.revealed !== b.revealed || a.clickable !== b.clickable;
+    })), 'bad: ' + bad(MLOCKED.filter(c => {
+      const a = c.miss, b = c.retryTap;
+      if (!a || !b || a.error || b.error) return true;
+      return a.rows !== b.rows || a.lastPts !== b.lastPts || a.boardPts !== b.boardPts
+        || a.earned !== b.earned || a.progress !== b.progress || a.racePts !== b.racePts
+        || a.revealed !== b.revealed || a.clickable !== b.clickable;
+    })));
+  check('a second tap on a locked cell still writes no extra score row',
+    none(MLOCKED.filter(c => !c.retryTap || c.retryTap.rows !== c.miss.rows)),
+    'bad: ' + bad(MLOCKED.filter(c => !c.retryTap || c.retryTap.rows !== c.miss.rows)));
+
+  // 2. Lộ / giữ kín đáp án — khác biệt thật giữa Thi đấu và Thử thách. Hai bề mặt của
+  //    cùng một câu phải cùng một luật, nên Thi đấu còn phải được TÔ trên máy chiếu,
+  //    và không bước nào của Tình huống được tô "quyết định đúng" (quyết định #6).
+  check('Thi đấu paints the right option on the board and on the projector',
+    none(MCELLS.filter(c => {
+      if (c.mode !== 'competitive' || c.surface === 'scenario') return false;
+      const grid = String((c.miss || {}).revealed || '').indexOf(c.right) !== -1;
+      // Đường đua không có trường "correctOptionId" trên bảng chiếu: màn chiếu của nó
+      // chỉ vẽ đội, ô và câu hỏi — nên ở đó chỉ lưới của màn chính chứng minh được.
+      const proj = c.surface === 'race' ? true : projPaints(c.miss, c.right);
+      return !(grid && proj);
+    })), 'bad: ' + bad(MCELLS.filter(c => {
+      if (c.mode !== 'competitive' || c.surface === 'scenario') return false;
+      const grid = String((c.miss || {}).revealed || '').indexOf(c.right) !== -1;
+      const proj = c.surface === 'race' ? true : projPaints(c.miss, c.right);
+      return !(grid && proj);
+    })));
+  check('Thử thách paints nothing and only marks the choice that was made',
+    none(MCELLS.filter(c => c.mode === 'challenge' && c.surface !== 'scenario'
+      && (String(c.miss.revealed || '') !== '' || String(c.miss.marked || '').indexOf(c.wrong) === -1))),
+    'bad: ' + bad(MCELLS.filter(c => c.mode === 'challenge' && c.surface !== 'scenario'
+      && (String(c.miss.revealed || '') !== '' || String(c.miss.marked || '').indexOf(c.wrong) === -1))));
+  check('no mode ever paints a situation decision as "the correct one"',
+    none(MCELLS.filter(c => c.surface === 'scenario' && msnaps(c).some(s =>
+      String(s.revealed || '').indexOf(c.right) !== -1 || projPaints(s, c.right)))),
+    'bad: ' + bad(MCELLS.filter(c => c.surface === 'scenario' && msnaps(c).some(s =>
+      String(s.revealed || '').indexOf(c.right) !== -1 || projPaints(s, c.right)))));
+  check('the projector is as silent as the board in Thử thách',
+    none(MCELLS.filter(c => c.mode === 'challenge'
+      && (projHas(c.miss, MWHY(c)) || projHas(c.retryTap, MWHY(c))))),
+    'bad: ' + bad(MCELLS.filter(c => c.mode === 'challenge'
+      && (projHas(c.miss, MWHY(c)) || projHas(c.retryTap, MWHY(c))))));
+
+  // 3. Luyện tập: câu còn mở, chưa có dòng điểm nào, lưới còn bấm.
+  check('Luyện tập leaves every surface open after a miss',
+    none(MCELLS.filter(c => c.mode === 'practice'
+      && (!c.miss.open || c.miss.retry !== true || !(c.miss.clickable > 0)))),
+    'bad: ' + bad(MCELLS.filter(c => c.mode === 'practice'
+      && (!c.miss.open || c.miss.retry !== true || !(c.miss.clickable > 0)))));
+  /* Một cú sai ở Luyện tập KHÔNG được để lại điểm. Đơn vị là Ô (Đường đua), điểm chặng
+     (Kho báu) hay tổng bảng điểm (ba trò còn lại), và phải so với snapshot NGAY TRƯỚC
+     của chính ô đó chứ không so với 0: playGame chỉ dựng lại bảng trả lời cho dòng
+     Đấu trường (shell.ts:59), còn Đường đua và Kho báu chấm vào trạng thái riêng nên
+     mảng dùng chung của chúng có thể còn dòng của ván đi trước — chữ đó không màn hình
+     nào đọc lại (result-screen.ts:312 chọn bảng chiếu theo template), nên bắt nó bằng 0
+     chỉ là đỏ vì harness. */
+  const mpracticeSilent = c => {
+    if (c.mode !== 'practice') return false;
+    const before = mbefore(c);
+    if (mscoreOf(c, c.miss) !== mscoreOf(c, before)) return true;
+    if (c.surface === 'race') return String(c.miss.racePts) !== String(before.racePts);
+    return c.miss.rows !== before.rows || c.retryTap.rows !== before.rows + 1;
+  };
+  check('a Luyện tập miss scores nothing yet on all five surfaces',
+    none(MCELLS.filter(mpracticeSilent)), 'bad: ' + bad(MCELLS.filter(mpracticeSilent)));
+
+  // 4. Phạt 10% trên ĐIỂM NỘI DUNG của chính câu — cơ số mà kế hoạch #209 chốt.
+  check('the answer after a Luyện tập miss pays 90 of 100 on the three point surfaces',
+    none(['classic', 'house', 'scenario'].map(k => mcell(k, 'practice')).filter(c => !c
+      || c.retryTap.lastPts !== 90 || c.retryTap.boardPts !== 90)),
+    'bad: ' + bad(['classic', 'house', 'scenario'].map(k => mcell(k, 'practice')).filter(c => !c
+      || c.retryTap.lastPts !== 90 || c.retryTap.boardPts !== 90)));
+  check('Kho báu taxes only the stage content: 100 minus 10 plus the whole 50 bonus',
+    (() => {
+      const c = mcell('treasure', 'practice');
+      return Boolean(c) && c.retryTap.lastPts === 140 && c.retryTap.earned === 140;
+    })(), MMV(mcell('treasure', 'practice') && mcell('treasure', 'practice').retryTap));
+  check('Đường đua taxes its own content points but never the step it earned',
+    (() => {
+      const c = mcell('race', 'practice');
+      return Boolean(c) && Number(String(c.retryTap.racePts || '0').split(',')[0]) === 90
+        && mfirst(c.retryTap) - mfirst(c.draw) === 1;
+    })(), MMV(mcell('race', 'practice') && mcell('race', 'practice').retryTap));
+
+  // 5. Đúng ngay thì không có gì để trừ: trần điểm đầy đủ trên cả năm bề mặt.
+  check('a first-time correct answer pays the whole ceiling on every surface',
+    none(MCELLS.filter(c => {
+      if (c.surface === 'race') return Number(String(c.hit.racePts || '0').split(',')[0]) !== 100;
+      if (c.surface === 'treasure') return c.hit.earned !== 150 || c.hit.lastPts !== 150;
+      return c.hit.lastPts !== 100;
+    })),
+    'bad: ' + bad(MCELLS.filter(c => {
+      if (c.surface === 'race') return Number(String(c.hit.racePts || '0').split(',')[0]) !== 100;
+      if (c.surface === 'treasure') return c.hit.earned !== 150 || c.hit.lastPts !== 150;
+      return c.hit.lastPts !== 100;
+    })));
+
+  // 6. Đường đua: dữ liệu vẫn bật "Tiến theo độ khó" và câu là loại KHÓ — ba ô vẫn
+  //    phải đi ĐÚNG MỘT ô. Đây là quyết định "bỏ hẳn phần thưởng tốc độ" của chủ dự án.
+  check('Đường đua advances one cell per correct answer whatever the data says',
+    none(MCELLS.filter(c => c.surface === 'race' && mfirst(c.hit) - mfirst(c.draw) !== 1)),
+    'bad: ' + bad(MCELLS.filter(c => c.surface === 'race' && mfirst(c.hit) - mfirst(c.draw) !== 1)));
+  check('the race strip promises one cell, not the difficulty table it ignored',
+    ['competitive', 'practice', 'challenge'].every(k => {
+      const c = mcell('race', k);
+      return Boolean(c) && String(c.draw.law || '').indexOf('Tiến 1 ô/câu đúng') !== -1;
+    }), ['competitive', 'practice', 'challenge'].map(k => {
+      const c = mcell('race', k);
+      return k + ': ' + String(c && c.draw && c.draw.law);
+    }).join(' | '));
+
+  // 7. Chữ của luật trên màn: mỗi bề mặt phải TỰ nói luật nào đang chạy.
+  check('every surface prints the hint of the mode it is running',
+    none(MCELLS.filter(c => !String((mbefore(c) || {}).law || '').includes(MHINT[c.mode]))),
+    'bad: ' + bad(MCELLS.filter(c => !String((mbefore(c) || {}).law || '').includes(MHINT[c.mode]))));
+
+  // 8. Cửa lời giải (nhiệm vụ 7) đo trên CẢ NĂM bề mặt, không chỉ Đấu trường.
+  check('a correct answer offers the button instead of the text, on all fifteen cells',
+    none(MCELLS.filter(c => !String(c.hit.explain || '').includes('Giải thích')
+      || c.hit.inline === true || !c.hitDoor.didClick || c.hitDoor.dialog !== MWHY(c))),
+    'bad: ' + bad(MCELLS.filter(c => !String(c.hit.explain || '').includes('Giải thích')
+      || c.hit.inline === true || !c.hitDoor.didClick || c.hitDoor.dialog !== MWHY(c))));
+  /* Bốn bề mặt CÓ ngăn lời giải trên máy chiếu (Đấu trường, Xây nhà, Tình huống, Kho
+     báu): một cú nhấp là đủ đưa chữ sang. Đường đua thì khác — buildRaceView() chỉ trả
+     về đội, ô, câu hỏi và lastEvent, KHÔNG có explanation/revealed/correctOptionId, nên
+     nó không có cửa nào để mở và cũng không có chữ nào để lộ. Mục dưới đứng ở đó để
+     một lần thêm ngăn lời giải cho Đường đua mà quên luật sẽ bị đỏ ngay. */
+  check('one click per surface is enough to put the text on the projector too',
+    none(MEXPLAIN.filter(c => projHas(c.hit, MWHY(c)) || !projHas(c.hitDoor, MWHY(c)))),
+    'bad: ' + bad(MEXPLAIN.filter(c => projHas(c.hit, MWHY(c)) || !projHas(c.hitDoor, MWHY(c)))));
+  check('Đường đua has no projector explanation slot, so nothing can leak onto it',
+    MSILENT.length === 3 && MSILENT.every(c => msnaps(c).length >= 8
+      && msnaps(c).every(s => String(s.proj || '').indexOf('why=') !== -1
+        && !projHas(s, MWHY(c)))), MSILENT.map(c => c.mode + ': ' + String(c.hitDoor.proj)).join(' | '));
+  check('closing the dialog puts the projector back to silence on every surface',
+    none(MCELLS.filter(c => !c.hitClosed || c.hitClosed.dialog !== '' || projHas(c.hitClosed, MWHY(c)))),
+    'bad: ' + bad(MCELLS.filter(c => !c.hitClosed || c.hitClosed.dialog !== '' || projHas(c.hitClosed, MWHY(c)))));
+  /* Cửa lời giải của MỘT CÚ SAI, đo trên nút của snapshot NGAY SAU cú sai đó: chỉ Thi
+     đấu được mở (kế hoạch #209 — sai ở Thử thách thì kín; sai ở Luyện tập thì câu còn
+     mở, học sinh còn được thử lại nên chưa có gì để giải thích). Không được dùng cú
+     nhấp sau đó: ở Luyện tập cú thứ hai là một câu trả lời ĐÚNG hợp lệ và nút của nó
+     xuất hiện là đúng luật, nên ô nào cũng phải lấy `miss`, không lấy `missDoor`. */
+  const mmissDoor = c => String(c.miss.explain || '').includes('Giải thích') !== (c.mode === 'competitive');
+  check('a miss offers the Giải thích button only in Thi đấu',
+    none(MCELLS.filter(mmissDoor)),
+    'bad: ' + bad(MCELLS.filter(mmissDoor)) + ' | ' + MCELLS.filter(c => c.mode !== 'competitive')
+      .map(c => c.surface + '/' + c.mode + '="' + String(c.miss.explain) + '"').join(' '));
+  /* Và khi Thi đấu mở cửa bằng một cú nhấp thật, chữ sau cửa là chữ CỦA LỰA CHỌN SAI.
+     Chỉ năm ô Thi đấu có cửa này — vì thế vị từ phải LÀM NGAY với 10 ô còn lại, chứ
+     không trả về "đạt" cho chúng: `c.mode !== 'competitive' || ...` đánh dấu đúng 10 ô
+     đó là lỗi, tức cả ma trận đỏ dù năm cửa thật đều in đúng chữ. */
+  const mcompetitiveDoor = c => c.mode === 'competitive'
+    && (!c.missDoor || !c.missDoor.didClick || c.missDoor.dialog !== MWRONGWHY(c));
+  check('the Thi đấu door of a miss names the choice the class just made',
+    none(MCELLS.filter(mcompetitiveDoor)),
+    'bad: ' + bad(MCELLS.filter(mcompetitiveDoor)) + ' | ' + MCELLS.filter(c => c.mode === 'competitive')
+      .map(c => c.surface + '="' + String(c.missDoor.dialog) + '"').join(' '));
+  check('no cell of the matrix prints its explanation unasked',
+    none(MCELLS.filter(c => c.miss.inline === true || c.hit.inline === true
+      || c.retryTap.inline === true || (c.missClosed && c.missClosed.dialog !== ''))),
+    'bad: ' + bad(MCELLS.filter(c => c.miss.inline === true || c.hit.inline === true
+      || c.retryTap.inline === true || (c.missClosed && c.missClosed.dialog !== ''))));
+
+  // 9. Ô ÂM TÍNH: Ghép cặp mang token phải bị tầng luật từ chối. Cách chấm theo cặp
+  //    là việc của ui-matching-finish-check; ở đây chỉ hỏi #209 đã lọt vào chưa.
+  const mt = report.matching || {};
+  check('a matching game carrying a token opens no answer turn at all',
+    Boolean(mx) && mt.open && !mt.open.error && mt.open.mode === null
+    && mt.open.retry !== true && mt.open.rows === 0, MMV(mt.open));
+  check('the matching board still renders its own pairs and never grows a Giải thích button',
+    String(mt.cards || '').indexOf('left:p1') !== -1 && mt.explainButtons === 0
+    && mt.matched >= 1, JSON.stringify({ cards: mt.cards, btns: mt.explainButtons, matched: mt.matched, footer: mt.footer }));
+
+  // Không có ô nào của ma trận được phép chết giữa đường: một lỗi DOM ở ô 7 sẽ cắt
+  // mất 8 ô sau đó mà báo cáo vẫn "xanh" nếu chỉ đếm số ô.
+  check('no cell of the matrix lost a snapshot on the way',
+    MCELLS.every(c => ['open', 'miss', 'retryTap', 'missDoor', 'fresh', 'hit', 'hitDoor', 'hitClosed']
+      .every(k => c[k] && !c[k].error)),
+    bad(MCELLS.filter(c => ['open', 'miss', 'retryTap', 'missDoor', 'fresh', 'hit', 'hitDoor', 'hitClosed']
+      .some(k => !c[k] || c[k].error))));
+
+  /* N. TỆP .egame THẬT → SQLite THẬT → MÀN CHƠI THẬT (nhiệm vụ 8).
+     Kế hoạch #209 bắt chế độ phải sống sót qua "lưu · đóng/mở lại · xuất/nhập .egame".
+     Tầng JSON đã có unit test (tests/unit/game-package.test.ts); tầng ĐĨA thì không,
+     vì files:import-game mở hộp thoại Windows thật — không cổng nào bấm hộ được.
+     Chuỗi dưới đây đi qua TẤT CẢ code sản xuất còn lại, và chỉ bỏ đúng một bước:
+       writeGamePackage()  = chính chữ mà files:export-game ghi ra tệp
+       fs viết/đọc một tệp .egame THẬT ở thư mục tạm
+       readGamePackage()   = chính hàm mà files:import-game gọi (src/main.ts:3130)
+       window.eduGame.saveGame = IPC library:save-game, xuống SQLite
+       editor + màn chơi THẬT đọc lại bản ghi đó.
+     Chưa đo: hộp thoại chọn tệp thật (native dialog) — nó chỉ chọn đường dẫn, mọi
+     xử lý sau đó đã ở đây rồi. */
+  const { readGamePackage, writeGamePackage } = require('../../dist/src/services/game/game-package');
+  const nfile = require('path').join(require('os').tmpdir(), 'am209-' + Date.now() + '.egame');
+  const NTITLE = 'AM209 ' + Date.now() + ' egame';
+  const NFIXTURE = {
+    id: 'am209-source-' + Date.now(), title: NTITLE, subject: 'Tự nhiên', grade: '3',
+    topic: 'Toán', template: 'quiz', description: 'Một cộng một.', sourceName: 'ui-check',
+    createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-02T00:00:00.000Z',
+    gameSetup: { scoringMode: 'tra-loi:luyen-tap', legacyScoringMode: 'tốc độ', timeBonus: '5', pointsPerCorrect: '100', duration: '20' },
+    questions: [
+      {
+        id: 'nq1', type: 'multiple-choice', prompt: 'Một cộng một bằng mấy?',
+        explanation: 'Bằng hai.', points: 100, correctAnswer: '',
+        options: [{ id: 'a', text: 'Hai' }, { id: 'b', text: 'Ba' }], correctOptionId: 'a'
+      },
+      {
+        id: 'nq2', type: 'multiple-choice', prompt: 'Hai cộng hai bằng mấy?',
+        explanation: 'Bằng bốn.', points: 100, correctAnswer: '',
+        options: [{ id: 'a', text: 'Bốn' }, { id: 'b', text: 'Năm' }], correctOptionId: 'a'
+      }
+    ]
+  };
+  let ndisk = null;
+  let nimported = null;
+  try {
+    require('fs').writeFileSync(nfile, writeGamePackage(NFIXTURE), 'utf8');
+    ndisk = require('fs').readFileSync(nfile, 'utf8');
+    nimported = readGamePackage(ndisk, () => 'am209-imported-' + Date.now());
+  } catch (error) {
+    nimported = null;
+    check('the real .egame file was written and read back', false, String(error && error.message || error));
+  }
+  check('the package on disk is the envelope the app writes',
+    Boolean(ndisk) && ndisk.indexOf('"packageFormat"') !== -1
+    && ndisk.indexOf('tra-loi:luyen-tap') !== -1 && ndisk.indexOf('tốc độ') !== -1,
+    ndisk ? 'bytes ' + ndisk.length : 'no file');
+  check('readGamePackage kept the token and the value it parked',
+    Boolean(nimported) && nimported.gameSetup.scoringMode === 'tra-loi:luyen-tap'
+    && nimported.gameSetup.legacyScoringMode === 'tốc độ'
+    && nimported.id !== NFIXTURE.id, JSON.stringify(nimported && nimported.gameSetup));
+
+  const NBODY = nimported ? `(async () => {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const wsRun = new RegExp('[' + String.fromCharCode(9, 10, 11, 12, 13, 32, 160) + ']+', 'g');
+    const text = el => el ? String(el.textContent).replace(wsRun, ' ').trim() : '';
+    const out = {};
+    const GAME = ${JSON.stringify(nimported)};
+    const closePlay = async () => {
+      const closer = document.querySelector('[data-play-close]');
+      if (closer) closer.click();
+      await sleep(220);
+      document.getElementById('modalRoot').innerHTML = '';
+    };
+    const tap = async sel => {
+      const btn = document.querySelector(sel);
+      if (!btn) return { error: 'no element ' + sel };
+      btn.click();
+      await sleep(320);
+      const turn = state.answerTurn;
+      return {
+        mode: turn ? turn.mode : null, open: turn ? !turn.finished : null,
+        retry: turn ? turn.retryAllowed : null, rows: (state.gameAnswers || []).length,
+        last: (state.gameAnswers || []).length ? Number(state.gameAnswers[state.gameAnswers.length - 1].points) : null,
+        board: text(document.querySelector('#playBody')).indexOf('Bằng hai.') !== -1,
+        explain: document.querySelector('[data-answer-explain]') ? text(document.querySelector('[data-answer-explain]')) : '',
+        dialog: document.querySelector('#answerExplanationModal') ? text(document.querySelector('.answer-explain-text')) : '',
+        tip: text(document.querySelector('.stage-tip'))
+      };
+    };
+    try {
+      await closePlay();
+      if (typeof closeEditorPage === 'function') closeEditorPage();
+      // 1. Lưu THẬT: cùng IPC mà files:import-game gọi sau khi đọc tệp xong.
+      out.saved = await window.eduGame.saveGame(JSON.parse(JSON.stringify(GAME)));
+      const lib = await window.eduGame.getLibrary();
+      const row = (lib.games || []).find(g => g.title === GAME.title);
+      out.row = row && row.gameSetup ? {
+        mode: row.gameSetup.scoringMode, park: row.gameSetup.legacyScoringMode,
+        timeBonus: row.gameSetup.timeBonus, id: row.id
+      } : null;
+      // 2. Editor của bản vừa nhập: select phải chỉ đúng ô Luyện tập, không phải ô
+      //    'tốc độ' mà token đã cất đi.
+      if (row) {
+        openEditor(JSON.parse(JSON.stringify(row)), false, 'test');
+        await sleep(360);
+        const select = document.getElementById('editAnswerMode');
+        out.editor = { value: select ? select.value : null, found: Boolean(select) };
+        document.getElementById('modalRoot').innerHTML = '';
+        if (typeof closeEditorPage === 'function') closeEditorPage();
+      }
+      // 3. Chơi THẬT bản vừa nhập: sai trước, đúng sau. 90 điểm là phép đo duy nhất
+      //    vừa chứng minh luật Luyện tập chạy theo TỆP, vừa chứng minh 'tốc độ'
+      //    (+5 nhanh) đã bị token che mất — 105 mới là số của luật cũ.
+      playGame(JSON.parse(JSON.stringify(row || GAME)));
+      await sleep(700);
+      out.miss = await tap('.answer-option[data-answer="b"]');
+      out.hit = await tap('.answer-option[data-answer="a"]');
+      out.doorOpen = await (async () => {
+        const b = document.querySelector('[data-answer-explain]');
+        if (!b) return { error: 'no explanation button after the imported file' };
+        b.click();
+        await sleep(300);
+        const d = document.querySelector('#answerExplanationModal');
+        return {
+          open: Boolean(d), text: d ? text(d.querySelector('.answer-explain-text')) : '',
+          law: d ? text(d.querySelector('.answer-explain-law')) : ''
+        };
+      })();
+      out.door = await tap('#answerExplainOkBtn');
+      await closePlay();
+      // 4. Dọn kho của giáo viên.
+      if (row) await window.eduGame.deleteGames([row.id]);
+      const after = await window.eduGame.getLibrary();
+      out.left = (after.games || []).filter(g => String(g.title || '').indexOf('AM209 ') === 0).length;
+    } catch (error) {
+      out.error = String(error && error.message || error);
+      out.stack = String(error && error.stack || '').slice(0, 200);
+    }
+    return out;
+  })()` : null;
+
+  if (NBODY) {
+    check('the imported-game payload still ships without a backslash', NBODY.indexOf(BS) === -1,
+      NBODY.indexOf(BS));
+    const nrep = await evaluate(NBODY);
+    const nv = s => JSON.stringify(s);
+    check('the imported package reached SQLite with its token intact',
+      Boolean(nrep) && !nrep.error && nrep.row && nrep.row.mode === 'tra-loi:luyen-tap'
+      && nrep.row.park === 'tốc độ', nv(nrep && nrep.row) + ' ' + nv(nrep && nrep.error));
+    check('the editor of an imported game selects the mode from the file, not the parked value',
+      nrep && nrep.editor && nrep.editor.found === true
+      && nrep.editor.value === 'tra-loi:luyen-tap', nv(nrep && nrep.editor));
+    check('an imported game plays by the law in its file: retry, then 90 of 100',
+      nrep && nrep.miss && nrep.miss.mode === 'practice' && nrep.miss.open === true
+      && nrep.miss.rows === 0 && nrep.hit.rows === 1 && nrep.hit.last === 90,
+      nv(nrep && nrep.miss) + ' | ' + nv(nrep && nrep.hit));
+    check('the imported game keeps its explanation behind the same button',
+      nrep && String(nrep.hit.explain || '').indexOf('Giải thích') !== -1
+      && nrep.hit.board === false && nrep.doorOpen && nrep.doorOpen.open === true
+      && nrep.doorOpen.text === 'Bằng hai.'
+      && String(nrep.doorOpen.law || '').indexOf('Luyện tập') !== -1,
+      nv(nrep && nrep.hit) + ' | ' + nv(nrep && nrep.doorOpen));
+    check('Đã hiểu closes the dialog of the imported game without touching the board',
+      nrep && nrep.door && nrep.door.error === undefined && nrep.door.dialog === ''
+      && nrep.door.rows === 1, nv(nrep && nrep.door));
+    check('the imported fixture left the library again', nrep && nrep.left === 0, nv(nrep && nrep.left));
+    try {
+      require('fs').rmSync(nfile, { force: true });
+    } catch (error) { /* tệp tạm còn thì không phải lỗi của người dùng */ }
+  }
 
   check('the fixtures are removed from the library again', report.cleanup?.left === 0, JSON.stringify(report.cleanup));
 

@@ -61,6 +61,13 @@ const GAMES = [
   check('every card offers "Chơi LAN" from its menu', Boolean(cards.matching && cards.matching.lan) && /Chơi LAN/.test(cards.matching.label), cards.matching && cards.matching.label);
 
   // 2. The real card button on the real library page opens a room.
+  //
+  // Panel là lớp vỏ dựng ngay khi bấm, còn mã phòng chỉ xuất hiện sau khi main tạo
+  // xong phòng. Đo trên instance lạnh: lần mở phòng ĐẦU TIÊN của một hồ sơ sạch mất
+  // ~1,1 s (phòng thứ hai ~0,3 s), nên một cái chờ cố định 1,2 s là đồng xu — nó từng
+  // làm chính kiểm tra này chết với "Cannot read properties of null (reading
+  // 'textContent')" đúng một dòng sau ba PASS. Vì thế: hỏi cho tới khi mã phòng có,
+  // rồi mới đọc, và đọc qua null-safe.
   const room = await cdp.evaluate(`(async () => {
     if (typeof state !== 'object' || !state) return { error: 'app not booted' };
     state.db = state.db || {};
@@ -71,16 +78,25 @@ const GAMES = [
     const button = buttons.find(entry => entry.dataset.id === 't-quiz');
     if (!button) return { error: 'no LAN button on the rendered library card' };
     button.click();
-    await new Promise(resolve => setTimeout(resolve, 1200));
-    const panel = document.querySelector('[data-lan-panel]');
-    const start = panel && panel.querySelector('[data-lan-begin]');
-    return {
-      hasPanel: Boolean(panel),
-      hasStart: Boolean(start),
-      startDisabled: Boolean(start && start.disabled),
-      code: panel ? panel.querySelector('.lan-roomcode strong').textContent : '',
-      url: panel ? panel.querySelector('.lan-url b').textContent : ''
+    const read = () => {
+      const panel = document.querySelector('[data-lan-panel]');
+      const start = panel && panel.querySelector('[data-lan-begin]');
+      const code = panel && panel.querySelector('.lan-roomcode strong');
+      const url = panel && panel.querySelector('.lan-url b');
+      return {
+        hasPanel: Boolean(panel),
+        hasStart: Boolean(start),
+        startDisabled: Boolean(start && start.disabled),
+        code: code ? code.textContent : '',
+        url: url ? url.textContent : ''
+      };
     };
+    let snapshot = read();
+    for (let wait = 0; wait < 40 && !snapshot.code; wait += 1) {
+      await new Promise(resolve => setTimeout(resolve, 200));
+      snapshot = read();
+    }
+    return snapshot;
   })()`);
   check('the library card opens a LAN room', room.hasPanel, room.error || room.code);
   check('the room shows a "Bắt đầu câu 1" button', room.hasStart);
