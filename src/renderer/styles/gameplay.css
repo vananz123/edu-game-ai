@@ -642,4 +642,132 @@ html[data-fullscreen="1"] .modal[data-player-theme] .answer-grid.true-false-grid
 .stage-tip { color: #9aa2bd; }
 .modal[data-player-theme] #nextQuestionBtn { font-size: 14px; padding: 13px 26px; }
 
+/* ============================================================
+   Nút "Giải thích" + hộp lời giải (DECISIONS #209, task 7)
+
+   Bốn trò + máy chiếu cùng đi qua một cửa (`answer-explanation.js`), nên CSS
+   cũng chỉ có MỘT bộ rule. Nút chỉ xuất hiện ở ba cách trả lời mới; game cũ
+   in chữ inline nên không có phần tử này — vì vậy nó không được giả định chỗ
+   đứng: nằm trong `.feedback`, ngay sau dòng điểm.
+
+   z-index 110: cao hơn `.treasure-story-backdrop` (100) để một hộp lời giải mở
+   lúc popup bối cảnh còn trên màn không bị chìm, và thấp hơn các hộp xác nhận
+   của chrome. Palette lấy từ dialog Kho báu — cùng một thế giới đêm, không tạo
+   hòn đảo sáng thứ hai (#160/#202).
+   ============================================================ */
+.answer-explain-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+  padding: 8px 15px;
+  border-radius: 999px;
+  border: 1px solid #4a5480;
+  background: #232a45;
+  color: #e8e9ff;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+.answer-explain-btn:hover { background: #2c3457; border-color: #8b82ff; transform: translateY(-1px); }
+.answer-explain-btn:focus-visible { outline: 2px solid #8b82ff; outline-offset: 2px; }
+.modal[data-player-theme] .answer-explain-btn { font-size: clamp(13px, 1.05vw, 16px); }
+
+.answer-explain-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(10, 13, 26, 0.82);
+  animation: fade-in 0.18s ease-out;
+}
+.answer-explain-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(660px, 94vw);
+  max-height: min(82vh, 720px);
+  border-radius: 18px;
+  border: 1px solid #3c4672;
+  background: linear-gradient(180deg, #181d38 0%, #11152a 100%);
+  box-shadow: 0 24px 60px rgba(4, 6, 16, 0.55);
+  color: #f4f6ff;
+  animation: pop-in 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  overflow: hidden;
+}
+.answer-explain-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #2f375e;
+  background: #171c34;
+}
+.answer-explain-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  color: #ffffff;
+}
+/* Dòng luật: modal tự nói cách trả lời ĐANG chạy thay vì để giáo viên giải thích
+   vì sao câu này có nút mà câu kia không. */
+.answer-explain-law {
+  margin-top: 4px;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: #b9c0dd;
+}
+.answer-explain-close {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid #3c4672;
+  background: #1d2340;
+  color: #cdd3ee;
+  font-size: 14px;
+  cursor: pointer;
+}
+.answer-explain-close:hover { background: #364170; color: #fff; }
+.answer-explain-body {
+  padding: 18px 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.answer-explain-prompt {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: #98a2c8;
+  border-left: 3px solid #3c4672;
+  padding-left: 12px;
+}
+.answer-explain-text {
+  margin: 0;
+  font-size: clamp(15px, 1.25vw, 18px);
+  line-height: 1.6;
+  color: #eef1ff;
+  white-space: pre-line;
+}
+.answer-explain-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid #2f375e;
+  background: #141830;
+}
+
+
 

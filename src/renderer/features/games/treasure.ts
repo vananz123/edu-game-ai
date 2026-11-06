@@ -229,13 +229,18 @@ function treasureRetryNote(stage, retry, alone) {
 }
 /* Giải thích đi qua MỘT cửa. Trước đây cả năm lời nhắn đều tự nối `explanation` vào đuôi,
    nên Thử thách sau câu sai vẫn đọc được lời giải trước cả lớp. Luật thật là
-   `turn.explanationAvailable` (answer-mode.js: sau câu sai ở Thử thách là `false`). */
+   `turn.explanationAvailable` (answer-mode.js: sau câu sai ở Thử thách là `false`).
+   Task 7 (#209): cửa đó giờ là `answerExplanationMarkup` — ba chế độ mới nhận một cái
+   nút, game cũ nhận lại đúng dòng `<br>` của hôm qua. */
 function treasureExplanationLine(stage) {
     const turn = state.treasurePlay.answerTurn;
     const text = String((stage.question && stage.question.explanation) || '');
-    if (!text || !turn || !turn.explanationAvailable)
-        return '';
-    return `<br>${escapeHtml(text)}`;
+    return answerExplanationMarkup(turn, {
+        text,
+        inline: text ? `<br>${escapeHtml(text)}` : '',
+        title: 'Giải thích',
+        prompt: String((stage.question && stage.question.prompt) || stage.name || '')
+    });
 }
 function treasureCompleteMission(stage, correct, message) {
     const gained = treasureRecordStage(stage, correct);

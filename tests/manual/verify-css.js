@@ -139,7 +139,15 @@ const expectations = [
   // Sprint 5 (Micro-Interactions & Polish): button loading spinner keyframes
   ['button loading spinner keyframes defined', /@keyframes btn-spin\{[^}]*rotate\(360deg\)/],
   // Animation Tier 2 (Celebration & Transitions): question slide-in keyframes
-  ['question slide-in keyframes defined', /@keyframes question-slide-in\{[^}]*translate(X)?\(20px\)/]
+  ['question slide-in keyframes defined', /@keyframes question-slide-in\{[^}]*translate(X)?\(20px\)/],
+  // #209 task 7: "Giải thích" là một cái nút + một hộp lời giải trên màn chơi. Nếu
+  // Tailwind bỏ các rule này thì nút vẫn mở được modal nhưng modal nằm trần trên nền
+  // sáng của `#modalRoot` — đúng lỗi "hòn đảo sáng" đã hai lần sửa (#160, #202).
+  ['the explanation button keeps its dark pill', /\.answer-explain-btn\{[^}]*background:#232a45/],
+  ['the explanation box covers the play surface', /\.answer-explain-backdrop\{[^}]*position:fixed/],
+  ['the explanation box sits above the stage popup', /\.answer-explain-backdrop\{[^}]*z-index:110/],
+  ['the explanation dialog is dark', /\.answer-explain-dialog\{[^}]*linear-gradient/],
+  ['the explanation text is sized for the room', /\.answer-explain-text\{[^}]*line-height:1\.6/]
 ];
 
 let failed = 0;

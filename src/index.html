@@ -213,6 +213,9 @@
        global scripts, so the files only declare; nothing reads another file's
        binding while loading. Order: entry → 3D → house → results → games. -->
   <script src="renderer/features/games/shell.js"></script>
+  <!-- #209 task 7: MỘT cửa cho chữ "Giải thích" của bốn trò + máy chiếu. Trước
+       result-screen.js vì buildQuizView/buildTreasureView gọi nó. -->
+  <script src="renderer/features/games/answer-explanation.js"></script>
   <script src="renderer/features/games/three-stage.js"></script>
   <script src="renderer/features/games/house.js"></script>
   <!-- #168: the SVG panel + gallery; quiz.js and three-stage.js call into it. -->

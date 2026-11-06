@@ -888,6 +888,204 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
         }
       }
 
+      /* ---- L. NÚT "GIẢI THÍCH" + hộp lời giải (nhiệm vụ 7) -----------------------
+         Task 7 đổi CHỖ chữ xuất hiện chứ không đổi chữ, nên chỉ DOM thật trả lời được
+         năm câu:
+          • sau cú trả lời, lời giải có còn tự in ra màn chơi không (phải KHÔNG);
+          • một cú nhấp có dựng được hộp lời giải, và hộp có nằm trong #modalRoot — host
+            sống độc lập với #playBody, nơi mỗi câu vẽ lại bằng innerHTML;
+          • Escape có đóng RIÊNG hộp không: shell.js buộc phím này vào "thoát màn chơi",
+            nên một modal quên capture sẽ tắt luôn ván của giáo viên;
+          • máy chiếu — đường thứ hai tới đáp án — có in lời giải TRƯỚC cú nhấp không;
+          • câu kế tiếp có để hộp cũ phủ lên câu mới không (chủ của hộp là cái nút đã mở
+            nó, mất nút là mất hộp).
+         Game CŨ vẫn in inline: đó là hành vi của bản đã lưu (#209), không phải chỗ chưa làm. */
+      try {
+        const TOKEN_COMPETITIVE = 'tra-loi:thi-dau';
+        const WHY = 'Bằng hai.';
+        const explainBtn = () => document.querySelector('[data-answer-explain]');
+        const dlg = () => document.querySelector('#answerExplanationModal');
+        const lsnap = () => {
+          const d = dlg();
+          const b = explainBtn();
+          const body = document.querySelector('#playBody');
+          return {
+            btn: b ? text(b) : '',
+            btnKey: b ? String(b.getAttribute('data-answer-explain') || '') : '',
+            banner: text(document.querySelector('#answerFeedback')),
+            boardWhy: text(body).indexOf(WHY) !== -1,
+            open: Boolean(d),
+            inRoot: Boolean(d && d.parentNode && d.parentNode.id === 'modalRoot'),
+            dTitle: d ? text(d.querySelector('.answer-explain-title')) : '',
+            dText: d ? text(d.querySelector('.answer-explain-text')) : '',
+            dPrompt: d ? text(d.querySelector('.answer-explain-prompt')) : '',
+            dLaw: d ? text(d.querySelector('.answer-explain-law')) : '',
+            dOk: d ? text(d.querySelector('#answerExplainOkBtn')) : '',
+            shown: state.answerExplanationShown ? String(state.answerExplanationShown.text) : null,
+            playing: Boolean(body),
+            quizWhy: typeof buildQuizView === 'function'
+              ? String((buildQuizView() || {}).explanation || '') : 'no buildQuizView',
+            treasureWhy: typeof buildTreasureView === 'function'
+              ? String((buildTreasureView() || {}).explanation || '') : 'no buildTreasureView'
+          };
+        };
+        const lplay = async game => {
+          await closePlay();
+          const copy = JSON.parse(JSON.stringify(game));
+          copy.id = 'am-' + RUN + '-play-' + (++out.playSeq);
+          playGame(copy);
+          await sleep(700);
+          return lsnap();
+        };
+        // quiz + scenario dùng data-answer, Đường đua dùng data-race-answer, Kho báu
+        // trắc nghiệm dùng data-answer: một helper phải bấm được cả bốn bề mặt.
+        const lopt = async optionId => {
+          const btn = Array.prototype.slice.call(document.querySelectorAll('.answer-option'))
+            .find(item => (item.dataset.answer || item.dataset.raceAnswer) === optionId);
+          if (!btn) return { error: 'no option button ' + optionId };
+          btn.click();
+          await sleep(300);
+          return lsnap();
+        };
+        const lnext = async () => {
+          const btn = document.querySelector('#nextQuestionBtn');
+          if (!btn || btn.classList.contains('hidden')) return { error: 'no next button on screen' };
+          btn.click();
+          await sleep(560);
+          return lsnap();
+        };
+        const ldraw = async () => {
+          const btn = document.querySelector('#drawQuestionBtn');
+          if (!btn) return { error: 'no draw button on screen' };
+          btn.click();
+          await sleep(320);
+          return lsnap();
+        };
+        const openExplain = async () => {
+          const b = explainBtn();
+          if (!b) return { error: 'no answer-explain button on screen' };
+          b.click();
+          await sleep(300);
+          return lsnap();
+        };
+        const pressEscape = async () => {
+          const d = dlg();
+          if (!d) return { error: 'no explanation dialog is open' };
+          d.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+          await sleep(260);
+          return lsnap();
+        };
+        const tapDialog = async id => {
+          const btn = document.getElementById(id);
+          if (!btn) return { error: 'no ' + id + ' in the dialog' };
+          btn.click();
+          await sleep(260);
+          return lsnap();
+        };
+        const quizL = (key, mode) => makeGame(key, 'quiz', {
+          scoringMode: mode === null ? 'cơ bản' : mode, pointsPerCorrect: '100', duration: '20'
+        });
+        const stageL = () => ({
+          id: 't1', name: 'Chặng 1', story: 'Chuyện tổng hợp.', taskDescription: 'Nhiệm vụ tổng hợp.',
+          question: question('tq1'), attempts: 2, points: 100, completionBonus: 50, hasHiddenItem: false
+        });
+        const treasureL = (key, mode) => ({
+          id: 'am-' + RUN + '-' + key, title: title(key), subject: 'Tự nhiên', grade: '3',
+          template: 'treasure-hunt', description: '', tags: [], sourceName: 'ui-check',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          gameSetup: mode === null ? {} : { scoringMode: mode },
+          questions: [],
+          treasureHunt: {
+            character: 'Nhà thám hiểm An', intro: 'Hành trình tổng hợp.',
+            journeyBonus: 100, hiddenItemBonus: 20, backgroundId: 'temple',
+            characterId: 'explorer', stages: [stageL()]
+          }
+        });
+        const raceL = (key, mode) => ({
+          id: 'am-' + RUN + '-' + key, title: title(key), subject: 'Tự nhiên', grade: '3',
+          template: 'race', description: '', tags: [], sourceName: 'ui-check',
+          createdAt: '2026-01-01T00:00:00.000Z', gameSetup: { scoringMode: mode },
+          questions: [],
+          race: {
+            trackLength: 12, maxRounds: 2, stepByDifficulty: false, luckEnabled: false,
+            teams: [{ id: 't1', name: 'Đội đỏ', icon: 'A' }, { id: 't2', name: 'Đội xanh', icon: 'B' }],
+            cells: [], questions: [Object.assign(question('rq1'), { difficulty: 'trung bình' })]
+          }
+        });
+        const scenarioL = (key, mode) => {
+          const g = makeGame(key, 'scenario', { scoringMode: mode });
+          g.questions = [{
+            id: 'sc1', type: 'scenario', points: 100, correctOptionId: 'safe',
+            prompt: 'Dây phích cắm sạc hở điện ngay giữa lớp. Em làm gì?',
+            context: 'Giờ ra chơi, cả lớp đang ở lại.', correctAnswer: '',
+            explanation: 'Báo thầy cô rồi mới rút phích.',
+            options: [
+              { id: 'safe', text: 'Báo thầy cô trước khi động vào', feedback: 'An toàn nhất.', scenarioScore: { safety: 60, reasoning: 25, harmReduction: 15 } },
+              { id: 'risk', text: 'Tự rút phích cắm cho nhanh', feedback: 'Còn rủi ro.', scenarioScore: { safety: 30, reasoning: 10, harmReduction: 5 } }
+            ]
+          }];
+          return g;
+        };
+        out.explain = {};
+
+        // 1. Luyện tập, đúng ngay: chữ rời khỏi màn chơi, cái nút thế chỗ. Một cú nhấp
+        //    mới dựng hộp; máy chiếu chỉ in khi hộp đã mở.
+        await lplay(quizL('explain-practice-hit', TOKEN_PRACTICE));
+        out.explain.practiceHit = await lopt('a');
+        out.explain.practiceOpen = await openExplain();
+        out.explain.practiceOk = await tapDialog('answerExplainOkBtn');
+        // 2. Luyện tập đang thử lại: vòng còn mở thì KHÔNG có cửa nào tới lời giải.
+        await lplay(quizL('explain-practice-retry', TOKEN_PRACTICE));
+        out.explain.practiceMiss = await lopt('b');
+        out.explain.practiceMissOpen = await openExplain();
+        // 3. Thử thách: câu sai không có nút và không có chữ; câu đúng thì có nút.
+        await lplay(quizL('explain-challenge-miss', TOKEN_CHALLENGE));
+        out.explain.challengeMiss = await lopt('b');
+        await lplay(quizL('explain-challenge-hit', TOKEN_CHALLENGE));
+        out.explain.challengeHit = await lopt('a');
+        // 3b. Escape: hộp đóng, VÁN CÒN NGUYÊN.
+        out.explain.escapeOpen = await openExplain();
+        out.explain.escape = await pressEscape();
+        // 3c. Dấu ✕ là lối ra thứ hai và cũng phải trả máy chiếu về trạng thái mù.
+        out.explain.crossOpen = await openExplain();
+        out.explain.cross = await tapDialog('closeAnswerExplainBtn');
+        // 4. Thi đấu trên câu SAI: luật của nó mở đáp án nên cũng mở lời giải — nhưng
+        //    qua cái nút, không qua banner.
+        await lplay(quizL('explain-competitive-miss', TOKEN_COMPETITIVE));
+        out.explain.competitiveMiss = await lopt('b');
+        // 5. GAME CŨ: vẫn in inline, không có nút, máy chiếu vẫn in như hôm qua.
+        await lplay(quizL('explain-legacy', null));
+        out.explain.legacyHit = await lopt('a');
+        // 6. Câu kế tiếp không được để hộp cũ phủ lên câu mới.
+        await lplay(quizL('explain-stale', TOKEN_COMPETITIVE));
+        out.explain.staleAnswer = await lopt('a');
+        out.explain.staleOpen = await openExplain();
+        out.explain.staleNext = await lnext();
+        // 7. Kho báu và Đường đua đi qua CÙNG một cửa.
+        await lplay(treasureL('explain-treasure', TOKEN_COMPETITIVE));
+        out.explain.treasureHit = await lopt('a');
+        out.explain.treasureOpen = await openExplain();
+        out.explain.treasureOk = await tapDialog('answerExplainOkBtn');
+        await lplay(raceL('explain-race', TOKEN_COMPETITIVE));
+        out.explain.raceDraw = await ldraw();
+        out.explain.raceHit = await lopt('a');
+        out.explain.raceOpen = await openExplain();
+        // 8. Tình huống: lời giải là feedback CỦA QUYẾT ĐỊNH, và tiêu đề hộp đổi tên.
+        await lplay(scenarioL('explain-scenario', TOKEN_COMPETITIVE));
+        out.explain.scenarioHit = await lopt('safe');
+        out.explain.scenarioOpen = await openExplain();
+        // 9. Đóng màn chơi: cờ mà máy chiếu đọc phải chết theo ván.
+        await closePlay();
+        out.explain.afterClose = lsnap();
+      } catch (error) {
+        out.explain = { error: String(error && error.message || error) };
+        try {
+          await closePlay();
+        } catch (ignored) {
+          out.explain.cleanupFailed = true;
+        }
+      }
+
       document.getElementById('modalRoot').innerHTML = '';
       if (typeof closeEditorPage === 'function') closeEditorPage();
 
@@ -1108,7 +1306,10 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
     !has(play.challengeWrong, 'Bằng hai') && has(play.challengeWrong, 'không mở đáp án'), said(play.challengeWrong));
   check('a correct Thử thách answer reveals the option and earns the explanation',
     play.challengeCorrect?.points === 100 && JSON.stringify(play.challengeCorrect?.reveal) === JSON.stringify(['a'])
-    && has(play.challengeCorrect, 'Bằng hai'), view(play.challengeCorrect));
+    /* Task 7 (#209): "earn" nghĩa là ĐƯỢC QUYỀN MỞ, không phải được đọc. Chữ vẫn cấm
+       trên banner; cái nút thế chỗ nó — mục L đo tiếp rằng một cú nhấp mới dựng hộp. */
+    && !has(play.challengeCorrect, 'Bằng hai') && has(play.challengeCorrect, 'Giải thích'),
+    view(play.challengeCorrect) + ' | ' + said(play.challengeCorrect));
 
   // 6. Xây nhà: một câu đổi ĐÚNG MỘT phần nhà; cú sai còn mở vòng thì chưa đổi gì.
   check('a Luyện tập miss does not build (or undo) a house part',
@@ -1249,7 +1450,10 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
   check('a correct Thử thách answer pays the full content plus bonus and earns the explanation',
     treasure.challengeHit?.rows === 1 && treasure.challengeHit?.lastPts === 150
     && treasure.challengeHit?.reveal === true && treasure.challengeHit?.explain === true
-    && hasT(treasure.challengeHit, 'Bằng hai') && treasure.challengeHit?.projection?.why === 'Bằng hai.',
+    /* Task 7 (#209): `explain === true` là QUYỀN MỞ, không phải chữ đã in. Cả màn chơi
+       lẫn bảng chiếu phải im cho tới một cú nhấp — mục L đo cú nhấp đó. */
+    && !hasT(treasure.challengeHit, 'Bằng hai') && hasT(treasure.challengeHit, 'Giải thích')
+    && treasure.challengeHit?.projection?.why === '',
     tview(treasure.challengeHit) + ' | ' + saidT(treasure.challengeHit));
 
   // 7. GHÉP CẶP: cùng một luật, trên bàn ghép thật.
@@ -1507,6 +1711,108 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
     String(roster.afterNext?.chip || '').indexOf('Đội Sao Hoả 90') !== -1
     && roster.afterNext?.turnIndex === 1
     && String(roster.afterNext?.chip || '').indexOf('Đội B') !== -1, rviewR(roster.afterNext));
+
+  /* L. NÚT "GIẢI THÍCH" (nhiệm vụ 7). Lời giải không còn là thứ ĐƯỢC IN mà là thứ
+     ĐƯỢC MỞ, nên mỗi điều phải đo là sự VẮNG mặt của nó trên màn chơi trước một cú
+     nhấp và sự hiện diện của nó TRONG hộp sau cú nhấp đó. Máy chiếu được đo riêng vì
+     nó là đường thứ hai tới đáp án: màn chính im mà bảng chiếu nói thì cả lớp vẫn nghe.
+     Game cũ ĐƯỢC phép in inline — đó là hành vi của bản đã lưu, không phải chỗ chưa làm. */
+  const ex = report.explain || {};
+  const exv = s => !s ? String(s) : s.error ? JSON.stringify(s) : JSON.stringify({
+    btn: s.btn, open: s.open, dText: s.dText, dTitle: s.dTitle, dLaw: s.dLaw,
+    boardWhy: s.boardWhy, quizWhy: s.quizWhy, treasureWhy: s.treasureWhy, playing: s.playing
+  });
+  const btnOn = s => String(s && s.btn || '').indexOf('Giải thích') !== -1;
+  const btnOff = s => String(s && s.btn || '') === '';
+
+  check('the explanation probes ran to completion', Boolean(ex.afterClose) && !ex.error,
+    String(ex.error || 'ok'));
+
+  // 1. Không tự hiện: banner chỉ còn cái nút.
+  check('a correct answer in a token mode offers a button instead of printing the explanation',
+    btnOn(ex.practiceHit) && ex.practiceHit?.boardWhy === false
+    && ex.practiceHit?.open === false && ex.practiceHit?.quizWhy === '', exv(ex.practiceHit));
+  check('one click really builds the dialog, inside #modalRoot where the board cannot wipe it',
+    ex.practiceOpen?.open === true && ex.practiceOpen?.inRoot === true
+    && ex.practiceOpen?.dText === 'Bằng hai.' && ex.practiceOpen?.boardWhy === false, exv(ex.practiceOpen));
+  check('the dialog names the answer law it is running under and the question it answers',
+    String(ex.practiceOpen?.dLaw || '').indexOf('Luyện tập') !== -1
+    && String(ex.practiceOpen?.dLaw || '').indexOf('thử lại') !== -1
+    && ex.practiceOpen?.dPrompt === 'Một cộng một bằng mấy?'
+    && ex.practiceOpen?.dOk === 'Đã hiểu', exv(ex.practiceOpen));
+  // 2. Máy chiếu: chỉ in sau cú nhấp của giáo viên, và ngừng in khi hộp đóng.
+  check('the projector prints the explanation only after the teacher opened it',
+    ex.practiceHit?.quizWhy === '' && ex.practiceOpen?.quizWhy === 'Bằng hai.'
+    && ex.practiceOk?.quizWhy === '' && ex.practiceOk?.shown === null,
+    exv(ex.practiceOpen) + ' | ' + exv(ex.practiceOk));
+  check('the Đã hiểu button closes the dialog and leaves the game running',
+    ex.practiceOk?.open === false && ex.practiceOk?.playing === true
+    && btnOn(ex.practiceOk), exv(ex.practiceOk));
+
+  // 3. Luyện tập đang thử lại: vòng còn mở thì không có cửa nào tới lời giải.
+  check('a miss that leaves the question open offers no explanation door at all',
+    btnOff(ex.practiceMiss) && ex.practiceMiss?.boardWhy === false
+    && ex.practiceMiss?.open === false && ex.practiceMissOpen?.error !== undefined,
+    exv(ex.practiceMiss) + ' | ' + JSON.stringify(ex.practiceMissOpen));
+
+  // 4. Thử thách: câu sai thì lời giải cũng bị giữ kín; câu đúng thì được mở.
+  check('a wrong Thử thách answer earns neither the text nor the button',
+    btnOff(ex.challengeMiss) && ex.challengeMiss?.boardWhy === false
+    && ex.challengeMiss?.quizWhy === '', exv(ex.challengeMiss));
+  check('a correct Thử thách answer earns the button',
+    btnOn(ex.challengeHit) && ex.challengeHit?.boardWhy === false
+    && ex.challengeHit?.quizWhy === '', exv(ex.challengeHit));
+
+  // 5. Escape là chỗ nguy hiểm nhất: shell.js buộc nó vào "thoát màn chơi".
+  check('Escape closes the dialog but keeps the game open',
+    ex.escapeOpen?.open === true && ex.escape?.open === false
+    && ex.escape?.playing === true && btnOn(ex.escape)
+    && ex.escape?.quizWhy === '' && ex.escape?.shown === null, exv(ex.escape));
+  check('the cross closes the dialog just as quietly',
+    ex.cross?.open === false && ex.cross?.playing === true
+    && ex.cross?.quizWhy === '', exv(ex.cross));
+
+  // 6. Thi đấu trên câu sai: luật mở đáp án thì cũng mở lời giải — qua cái nút.
+  check('Thi đấu on a wrong answer reveals the explanation through the button',
+    btnOn(ex.competitiveMiss) && ex.competitiveMiss?.boardWhy === false
+    && ex.competitiveMiss?.open === false, exv(ex.competitiveMiss));
+
+  // 7. Game CŨ: hành vi của bản đã lưu phải còn nguyên, kể cả trên máy chiếu.
+  check('a legacy game still prints the explanation inline and shows no button',
+    btnOff(ex.legacyHit) && ex.legacyHit?.boardWhy === true
+    && String(ex.legacyHit?.banner || '').indexOf('Bằng hai.') !== -1
+    && ex.legacyHit?.quizWhy === 'Bằng hai.', exv(ex.legacyHit));
+
+  // 8. Hộp mở mà câu đã đổi là lỗi thật: nó phủ lên câu mới trước cả lớp.
+  check('the next question retires an open dialog together with its button',
+    ex.staleOpen?.open === true && ex.staleNext?.open === false
+    && ex.staleNext?.playing === true && btnOff(ex.staleNext)
+    && ex.staleNext?.shown === null, exv(ex.staleNext));
+
+  // 9. Kho báu và Đường đua dùng CÙNG một cửa — không trò nào tự in lời giải nữa.
+  check('Kho báu routes its stage explanation through the same button',
+    btnOn(ex.treasureHit) && ex.treasureHit?.boardWhy === false
+    && ex.treasureHit?.treasureWhy === '' && ex.treasureOpen?.open === true
+    && ex.treasureOpen?.dText === 'Bằng hai.'
+    && ex.treasureOpen?.treasureWhy === 'Bằng hai.'
+    && ex.treasureOk?.open === false && ex.treasureOk?.treasureWhy === '',
+    exv(ex.treasureHit) + ' | ' + exv(ex.treasureOpen) + ' | ' + exv(ex.treasureOk));
+  check('Đường đua puts its explanation behind the same button too',
+    btnOn(ex.raceHit) && ex.raceHit?.boardWhy === false
+    && ex.raceOpen?.open === true && ex.raceOpen?.dText === 'Bằng hai.'
+    && String(ex.raceOpen?.dLaw || '').indexOf('Thi đấu') !== -1, exv(ex.raceOpen));
+
+  // 10. Tình huống: lời giải là feedback CỦA QUYẾT ĐỊNH, nên hộp phải đổi tên.
+  check('a decision explains itself through the button, titled for the decision',
+    btnOn(ex.scenarioHit) && String(ex.scenarioHit?.banner || '').indexOf('An toàn nhất.') === -1
+    && ex.scenarioOpen?.open === true
+    && String(ex.scenarioOpen?.dTitle || '').indexOf('Giải thích quyết định') !== -1
+    && ex.scenarioOpen?.dText === 'An toàn nhất.', exv(ex.scenarioOpen));
+
+  // 11. Ván đóng thì cờ máy chiếu đóng theo (shell.closePlaySurface).
+  check('closing the play surface clears the projector flag with the game',
+    ex.afterClose?.playing === false && ex.afterClose?.shown === null
+    && ex.afterClose?.quizWhy === '', exv(ex.afterClose));
 
   check('the fixtures are removed from the library again', report.cleanup?.left === 0, JSON.stringify(report.cleanup));
 

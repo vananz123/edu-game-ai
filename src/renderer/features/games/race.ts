@@ -162,7 +162,17 @@ function raceTurnPanelHtml() {
        explanationAllowed). Trước #209 khối sai luôn in "Đáp án đúng: X" + giải thích;
        Thử thách cấm cả hai, Thi đấu giữ nguyên như hôm qua. */
     const reveal = Boolean(turn && turn.revealCorrect);
-    const explain = Boolean(turn && turn.explanationAvailable);
+    /* Task 7 (#209): chữ giải thích của Đường đua từng in thẳng trong hai khối
+       đúng/sai. Từ task 7 nó đi qua cùng MỘT cửa với ba trò kia — `answerExplanationMarkup`
+       trả về cái nút cho ba chế độ mới và trả lại ĐÚNG div cũ cho game chưa đổi cách trả
+       lời, nên hai nhánh dưới đây chỉ khác nhau ở màu viền của phần inline. */
+    const explainText = String(q.explanation || '');
+    const explainInfo = edge => ({
+        text: explainText,
+        inline: explainText ? `<div class="mt-2 text-[13px] text-[#a3b8cc] border-t ${edge} pt-1.5">${escapeHtml(explainText)}</div>` : '',
+        title: 'Giải thích',
+        prompt: String(q.prompt || '')
+    });
     const lastTeam = rp.turn + 1 >= rp.teams.length;
     const nextTurn = (rp.turn + 1) % rp.teams.length;
     const nextTeam = rp.teams[nextTurn];
@@ -179,7 +189,7 @@ function raceTurnPanelHtml() {
           <b class="text-emerald-300">${team.icon} ${escapeHtml(team.name)}</b>
         </div>
         <p class="text-[14px] text-emerald-100 font-semibold mb-1">${escapeHtml(rp.lastEvent)}</p>
-        ${explain && q.explanation ? `<div class="mt-2 text-[13px] text-[#a3b8cc] border-t border-[#2d4a3e] pt-1.5">${escapeHtml(q.explanation)}</div>` : ''}
+        ${answerExplanationMarkup(turn, explainInfo('border-[#2d4a3e]'))}
       </div>`;
     }
     else if (closed) {
@@ -191,7 +201,7 @@ function raceTurnPanelHtml() {
         </div>
         <p class="text-[14px] text-rose-100 font-semibold mb-1">${escapeHtml(rp.lastEvent)}</p>
         ${correctOpt ? `<p class="text-[13px] text-amber-200 mt-1"><strong>Đáp án đúng:</strong> ${escapeHtml(correctOpt.text)}</p>` : ''}
-        ${explain && q.explanation ? `<div class="mt-2 text-[13px] text-[#a3b8cc] border-t border-[#4a2630] pt-1.5">${escapeHtml(q.explanation)}</div>` : ''}
+        ${answerExplanationMarkup(turn, explainInfo('border-[#4a2630]'))}
       </div>`;
     }
     else if (retrying) {

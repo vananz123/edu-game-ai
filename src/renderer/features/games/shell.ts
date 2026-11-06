@@ -145,6 +145,12 @@ function closePlaySurface() {
         setPlayFullscreen(false);
     stopPresentationMode();
     unmountThreeStage();
+    // #209 task 7: `#modalRoot` được xoá sạch nên hộp "Giải thích" biến mất, nhưng cờ
+    // mà máy chiếu đọc thì sống ở `state` — quên nó là để lại lời giải của câu cũ trên
+    // màn chiếu của ván kế tiếp. Người giữ hộp (MutationObserver trên `#playBody`) cũng
+    // phải nghỉ theo, nếu không nó canh chừng một màn chơi đã không còn tồn tại.
+    answerExplanationStopGuard();
+    state.answerExplanationShown = null;
     $('#modalRoot').innerHTML = '';
 }
 document.addEventListener('click', (e) => {

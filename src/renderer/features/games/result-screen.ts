@@ -90,7 +90,10 @@ function buildQuizView() {
         answerText: answered ? String(last.answerText ?? '') : '',
         correctAnswer: reveal ? String(q.correctAnswer ?? '') : '',
         revealed: reveal,
-        explanation: answered && (!turn || turn.explanationAvailable) ? String(q.explanation || '') : '',
+        /* Task 7 (#209): máy chiếu là ĐƯỜNG THỨ HAI tới lời giải. Ba chế độ mới chỉ được
+           in chữ này sau cú nhấp "Giải thích" ở màn giáo viên (`state.answerExplanationShown`),
+           còn game cũ và đường LAN (không có vòng) vẫn in như hôm qua. */
+        explanation: answerExplanationProjectorText(turn, answered && (!turn || turn.explanationAvailable), String(q.explanation || '')),
         teamTurn: team ? `${team.icon || ''} ${team.name || ''}`.trim() : '',
         progressLabel: `Câu ${Math.min((state.gameIndex || 0) + 1, questions.length)} / ${questions.length}`,
     };
@@ -203,7 +206,9 @@ function buildTreasureView() {
         selectedOptionId: play.lastSelectedOptionId || null,
         correctOptionId: revealed ? stage?.question?.correctOptionId : undefined,
         revealed,
-        explanation: settled && (!turn || turn.explanationAvailable) ? String(stage?.question?.explanation || '') : '',
+        // Kho báu dùng cùng cửa với Đấu trường: chặng cũ (legacy) in inline, ba chế độ
+        // mới chỉ in sau khi giáo viên bấm "Giải thích".
+        explanation: answerExplanationProjectorText(turn, settled && (!turn || turn.explanationAvailable), String(stage?.question?.explanation || '')),
         earned: Number(play.earned) || 0,
         itemsFound: Object.keys(play.itemsFound || {}).length,
         totalStages: (hunt.stages || []).length,

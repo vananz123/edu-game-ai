@@ -328,13 +328,20 @@ function chooseAnswer(question, optionId, answerText) {
     const discussion = scenario && question.discussionPrompt
         ? `<br><strong>Thảo luận:</strong> ${escapeHtml(question.discussionPrompt)}`
         : '';
-    /* Lời giải chỉ hiện khi LUẬT cho phép (explanationAllowed): Thử thách giữ kín sau
-       câu sai, Luyện tập chỉ mở khi vòng đã khép. Task 7 thay dòng tự hiện này bằng
-       nút "Giải thích", nên ở đây chỉ cần cái cổng đúng. */
-    const explanationLine = turn.explanationAvailable ? `<br>${escapeHtml(teacherFeedback)}` : '';
+    /* Task 7 (#209): lời giải KHÔNG tự hiện nữa — học sinh phải bấm "Giải thích" rồi đọc
+       trong modal. Một cửa `answerExplanationMarkup` quyết định ba nhánh: không chữ nào
+       (luật cấm — sai ở Thử thách, hoặc Luyện tập đang thử lại), nút (ba chế độ mới),
+       hoặc inline NGUYÊN VĂN như hôm qua (game cũ, nơi "hiện luôn cùng đáp án" là hành vi
+       đã lưu). Vì thế phần tử này vẫn là `teacherFeedback` cũ, chỉ khác chỗ nó xuất hiện. */
+    const explanationHtml = answerExplanationMarkup(turn, {
+        text: teacherFeedback,
+        inline: `<br>${escapeHtml(teacherFeedback)}`,
+        title: scenario ? 'Giải thích quyết định' : 'Giải thích',
+        prompt: String(question.prompt || '')
+    });
     const penaltyLine = turn.mode === 'practice' && correct && turn.wrongAttempts > 0
         ? ` (em đã sai ${turn.wrongAttempts} lần, mỗi lần bớt 10% điểm của câu này).` : '';
-    feedback.innerHTML = `<strong>${scenario ? 'Đã ghi nhận quyết định.' : correct ? '✓ Chính xác!' : '✕ Chưa chính xác.'}</strong> ${scenario ? `Bạn nhận ${points} điểm.` : correct ? `Bạn nhận ${points} điểm${speedBonus ? ` (gồm +${speedBonus} điểm nhanh)` : ''}.${penaltyLine}` : `${textQ ? `Câu trả lời của bạn: “${escapeHtml(String(answerText ?? '').trim())}”.` : revealAnswer ? 'Đáp án đúng đã được đánh dấu.' : 'Cách trả lời này không mở đáp án.'}`}${answerReveal}${rubric}${explanationLine}${discussion}${teamNote}`;
+    feedback.innerHTML = `<strong>${scenario ? 'Đã ghi nhận quyết định.' : correct ? '✓ Chính xác!' : '✕ Chưa chính xác.'}</strong> ${scenario ? `Bạn nhận ${points} điểm.` : correct ? `Bạn nhận ${points} điểm${speedBonus ? ` (gồm +${speedBonus} điểm nhanh)` : ''}.${penaltyLine}` : `${textQ ? `Câu trả lời của bạn: “${escapeHtml(String(answerText ?? '').trim())}”.` : revealAnswer ? 'Đáp án đúng đã được đánh dấu.' : 'Cách trả lời này không mở đáp án.'}`}${answerReveal}${rubric}${explanationHtml}${discussion}${teamNote}`;
     wireNextButton();
     // The showcase fits the house into the space the feedback card leaves, so
     // it runs after the banner and the "next" button are laid out (#142).
