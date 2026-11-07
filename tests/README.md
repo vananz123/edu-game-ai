@@ -131,7 +131,7 @@ npm run check:packaged-install-direct     # or one at a time (same port 9399)
 | `direct` | no admin flag | absent | the branch the **published** feed actually takes: `<pending\…9.9.9.exe> --updated --force-run`, app quits by itself |
 | `elevate` | `isAdminRightsRequired: true` in the `files` entry | **fake** | `elevate.exe <installer> --updated --force-run`, exactly one `Executing:`, and no installer log ⇒ the fake did not forward |
 | `no-elevate` | admin flag | **absent** | `ENOENT`, nothing installs, the app still quits, and there is no `shell.openPath` fallback |
-| `badhash` | wrong `sha512` | absent | full download, then refusal — never `downloaded`, install button stays hidden |
+| `badhash` | wrong `sha512` | absent | full download, then refusal — never `downloaded`, install button stays hidden, and the error is classified `checksum` with its own Vietnamese card (#218 closed debt #212) |
 
 Three traps, all paid for:
 

@@ -70,6 +70,7 @@ const ABOUT_ERRORS = {
   'dev-mode': 'Bản bạn đang chạy không phải bộ cài đặt (nó chạy từ mã nguồn), nên không thể tự cập nhật. Hãy tải bộ cài .exe từ trang phát hành và cài bình thường.',
   offline: 'Không kết nối được internet, nên chưa kiểm tra được bản mới. Mọi trò chơi đã lưu vẫn chơi bình thường — chỉ việc tìm bản cập nhật là cần mạng.',
   feed: 'Chưa tìm thấy bản phát hành nào trên GitHub. Có thể ứng dụng chưa đăng bản nào, hoặc máy đang chặn kết nối tới github.com.',
+  checksum: 'Tệp cập nhật tải về không toàn vẹn (hỏng hoặc không khớp bản công bố) nên bị chặn trước khi cài. Hãy bấm “Tải về và cập nhật” để tải lại; nếu vẫn lỗi, tải bộ cài .exe từ trang phát hành.',
   signature: 'Bộ cài tải về không vượt qua kiểm tra chữ ký số nên không được cài. Đây là cơ chế bảo vệ: hãy tải bộ cài từ trang phát hành.',
   cancelled: 'Bạn đã dừng việc tải về. Có thể bấm “Tải về và cập nhật” để tải lại từ đầu.',
   install: 'Không mở được bộ cài vừa tải. Thường do thiếu quyền quản trị — hãy tải bộ cài từ trang phát hành và chạy nó bằng quyền Admin.',
@@ -226,7 +227,7 @@ function paintAboutPanel() {
     aboutEl('aboutErrorText').textContent = ABOUT_ERRORS[kind];
     aboutEl('aboutErrorTitle').textContent = kind === 'install'
       ? 'Không cài được bản cập nhật'
-      : (kind === 'signature' ? 'Bản cập nhật không hợp lệ' : 'Không kiểm tra được bản cập nhật');
+      : (kind === 'signature' || kind === 'checksum' ? 'Bản cập nhật không hợp lệ' : 'Không kiểm tra được bản cập nhật');
     // Chi tiết kỹ thuật chỉ để đối chiếu khi giáo viên gửi ảnh báo lỗi.
     const detail = String(current.errorMessage || '').slice(0, 240);
     aboutShow('aboutErrorDetail', !!detail);

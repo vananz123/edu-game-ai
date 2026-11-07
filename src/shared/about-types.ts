@@ -36,13 +36,15 @@ export type UpdatePhase =
 /**
  * Loại lỗi, quyết định câu tiếng Việt hiện ra cho giáo viên. `dev-mode` nghĩa là
  * bản đang chạy không phải bản cài đặt nên tự cập nhật không phải lỗi mà là
- * điều không thể; `feed` = không tìm thấy bản phát hành nào trên GitHub.
+ * điều không thể; `feed` = không tìm thấy bản phát hành nào trên GitHub;
+ * `checksum` = tệp tải về không khớp dấu vết toàn vẹn nên bị chặn trước khi cài.
  */
 export type UpdateErrorKind =
   | ''
   | 'dev-mode'
   | 'offline'
   | 'feed'
+  | 'checksum'
   | 'signature'
   | 'cancelled'
   | 'install'

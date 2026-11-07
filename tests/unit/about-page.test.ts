@@ -326,10 +326,11 @@ async function it(name, fn) {
   // --- từng loại lỗi một câu tiếng Việt riêng ---------------------------
   const errorTitles = {
     signature: 'Bản cập nhật không hợp lệ',
+    checksum: 'Bản cập nhật không hợp lệ',
     install: 'Không cài được bản cập nhật'
   };
   await it('every error kind has its own Vietnamese sentence', async () => {
-    const kinds = ['dev-mode', 'offline', 'feed', 'signature', 'cancelled', 'install', 'unknown'];
+    const kinds = ['dev-mode', 'offline', 'feed', 'checksum', 'signature', 'cancelled', 'install', 'unknown'];
     const seen = new Set();
     for (const kind of kinds) {
       const page = boot({ visible: true, state: updateState({ phase: 'error', errorKind: kind, errorMessage: 'synthetic detail' }) });
@@ -344,7 +345,7 @@ async function it(name, fn) {
       assert.equal(page.id('aboutCheckBtn').disabled, false);
       if (errorTitles[kind]) assert.equal(page.id('aboutErrorTitle').textContent, errorTitles[kind]);
     }
-    assert.equal(seen.size, kinds.length, 'all seven kinds differ');
+    assert.equal(seen.size, kinds.length, 'all eight kinds differ');
   });
 
   await it('an unclassified error still says something useful', async () => {

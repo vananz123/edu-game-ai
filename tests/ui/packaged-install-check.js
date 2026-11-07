@@ -38,8 +38,8 @@
 //              báo lỗi nào tới mắt giáo viên.
 //   badhash    sha512 trong latest.yml SAI có chủ đích -> chân không tích cực cho điều
 //              kiện "downloaded nghĩa là đã xác minh": vẫn bấm Tải về, vẫn tải đủ byte,
-//              nhưng không bao giờ tới downloaded và không mọc nút cài. Kịch bản này còn
-//              đo được một NỢ: lỗi checksum bị gán `errorKind: 'feed'` (xem checkBadhash).
+//              nhưng không bao giờ tới downloaded và không mọc nút cài. Từ #218 kịch bản
+//              này còn đo lỗi checksum mang kind riêng `checksum` (nợ #212 đã đóng).
 //
 // Chạy (gate TỰ bật và TỰ tắt app — khác các gate UI khác, vì mỗi kịch bản cần một
 // process mới và app chết là một phần của phép đo):
@@ -705,14 +705,16 @@ function checkBadhash(facts) {
     JSON.stringify({ installState: facts.installState, installClicked: facts.installClicked }));
   check('badhash: thẻ lỗi được vẽ cho giáo viên thấy',
     facts.download.errorVisible === true, JSON.stringify({ title: facts.download.errorTitle, text: String(facts.download.errorText).slice(0, 90) }));
-  // NỢ ĐO ĐƯỢC, chưa sửa (#212): download hỏng bị gán nhầm `errorKind: 'feed'` vì điều
-  // kiện feed trong classifyUpdateError (src/services/update/update-policy.ts:98) có
-  // `5\d\d` — nó khớp với ba chữ số trong chính dòng chữ "sha512". Giáo viên tải gặp
-  // file hỏng vì vậy đọc "Chưa tìm thấy bản phát hành nào trên GitHub". Check này ghi
-  // lại NGUYÊN trạng hiện tại để lần sửa sau không thể nhân là đã đo từ trước.
-  check('badhash: [NỢ #212] errorKind hiện tại là "feed" chứ không phải checksum — message có "sha512" là cái khớp mẫu 5\\d\\d',
-    facts.download.state.errorKind === 'feed' && /sha512/i.test(String(facts.download.state.errorMessage)),
+  // #218 đóng nợ #212: "sha512 checksum mismatch" nay là kind `checksum` riêng, đứng
+  // trước nhánh feed (mẫu 5\d\d của feed từng khớp chữ "512" trong "sha512", khiến
+  // giáo viên đọc "Chưa tìm thấy bản phát hành nào trên GitHub" cho một tệp hỏng).
+  // Check này đo cả phân loại lẫn câu tiếng Việt + tiêu đề thẻ lỗi trên binary.
+  check('badhash: errorKind là "checksum", không còn nhận nhầm là "feed" (#218 đóng nợ #212)',
+    facts.download.state.errorKind === 'checksum' && /sha512/i.test(String(facts.download.state.errorMessage)),
     JSON.stringify({ kind: facts.download.state.errorKind, message: String(facts.download.state.errorMessage).slice(0, 70) }));
+  check('badhash: thẻ lỗi nói đúng sự thật — tệp không toàn vẹn, không phải "không tìm thấy bản phát hành"',
+    /không toàn vẹn/u.test(String(facts.download.errorText)) && facts.download.errorTitle === 'Bản cập nhật không hợp lệ',
+    JSON.stringify({ title: facts.download.errorTitle, text: String(facts.download.errorText).slice(0, 90) }));
   check('badhash: không một tiến trình cài đặt nào được spawn',
     facts.cmdline === '' && facts.quitWithinMs === -1,
     JSON.stringify({ cmdline: facts.cmdline, quitMs: facts.quitWithinMs }));

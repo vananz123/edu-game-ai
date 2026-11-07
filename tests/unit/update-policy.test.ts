@@ -72,6 +72,9 @@ const cases: Array<[string, string]> = [
   ['net::ERR_NAME_NOT_RESOLVED at https://github.com', 'offline'],
   ['connect ECONNREFUSED 127.0.0.1', 'offline'],
   ['getaddrinfo ENOTFOUND api.github.com', 'offline'],
+  ['sha512 checksum mismatch, expected abcdef, got 012345', 'checksum'],
+  ['ERR_CHECKSUM_MISMATCH while verifying the downloaded file', 'checksum'],
+  ['checksum mismatch: expected aa but got bb (X-Checksum-Sha2 header)', 'checksum'],
   ['Cannot find latest.yml in the latest release assets (404)', 'feed'],
   ['Unexpected HTTP response status code 451', 'feed'],
   ['Something inexplicable happened', 'unknown'],
@@ -84,6 +87,9 @@ for (const [message, expected] of cases) {
 // vì giáo viên đã bấm "Khởi động lại để cài" chứ không phải đang kiểm tra.
 assert.equal(classifyUpdateError('installer failed after ERR_CONNECTION'), 'install', 'install beats offline');
 assert.equal(classifyUpdateError('canceled: not packed app'), 'cancelled', 'cancelled beats dev-mode');
+// Nợ #212 đóng ở #218: chữ "512" trong "sha512" từng khớp mẫu 5\d\d của nhánh feed,
+// nên một message mang cả "checksum mismatch" lẫn số HTTP 5xx phải là checksum.
+assert.equal(classifyUpdateError('sha512 checksum mismatch after status code 503'), 'checksum', 'checksum beats feed');
 
 // --- clampPercent ---------------------------------------------------------
 

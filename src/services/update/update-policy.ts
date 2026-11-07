@@ -95,6 +95,8 @@ export function classifyUpdateError(message: unknown): UpdateErrorKind {
   if (/no update filepath|can't quit and install|ERR_UPDATER_NO_FILE|installer|elevate|nsis|EBUSY|EPERM|EACCES/i.test(text)) return 'install';
   if (/not packed|forceDevUpdateConfig|app-update\.yml|dev mode|dev-app-update/i.test(text)) return 'dev-mode';
   if (/ERR_INTERNET_DISCONNECTED|ERR_NAME_NOT_RESOLVED|ERR_CONNECTION|ERR_NETWORK_CHANGED|ENOTFOUND|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|getaddrinfo|offline|network|socket hang up/i.test(text)) return 'offline';
+  // Phải đứng trước nhánh feed: mẫu 5\d\d ở đó khớp cả chữ "512" trong "sha512" (nợ #212).
+  if (/checksum mismatch|ERR_CHECKSUM_MISMATCH/i.test(text)) return 'checksum';
   if (/404|not found|latest\.yml|Cannot find|no published|status code 4|5\d\d|Unexpected HTTP|ERR_HTTP/i.test(text)) return 'feed';
   return 'unknown';
 }
