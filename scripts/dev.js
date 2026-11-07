@@ -19,7 +19,11 @@ function bin(name) {
 }
 
 function run(command, args, options = {}) {
-  const child = spawn(command, args, { cwd: ROOT, stdio: 'inherit', shell: IS_WIN, ...options });
+  // .cmd shims need cmd.exe; going through it explicitly (instead of
+  // shell: true) keeps Node from warning about unescaped shell arguments.
+  const child = IS_WIN
+    ? spawn('cmd.exe', ['/d', '/s', '/c', command, ...args], { cwd: ROOT, stdio: 'inherit', windowsHide: true, ...options })
+    : spawn(command, args, { cwd: ROOT, stdio: 'inherit', ...options });
   children.push(child);
   child.on('error', error => {
     console.error(`[dev] ${command}: ${error.message}`);
