@@ -2337,3 +2337,21 @@ không elevate). (5) `docs/DECISIONS.md` + `docs/STATUS.md` vẫn chưa commit v
 **Không chứng minh.** Bộ cài **thật** chưa lần nào chạy trên máy này: đường spawn đo bằng installer **giả mang đúng tên và đúng argv**, còn wizard NSIS thật, đăng ký, shortcut, uninstall và SmartScreen của bản 92 MB **thuộc về P7, không phải thuộc về lượt này**; các con số M1…M12 **chưa có** vì chưa ngồi ở máy sạch; không Authenticode; mọi số là **một** máy, **một** hồ sơ, **một** trạng thái mạng; nhánh AI local không đo theo chỉ đạo.
 
 **Việc kế tiếp.** (1) Chạy `npm run measure:p7` theo checklist trên **máy sạch ngắt mạng** (chủ dự án), điền bảng A + B, rồi P7 mới đóng được. (2) Sửa `classifyUpdateError`: tách "checksum mismatch" thành `kind` riêng **trước** điều kiện feed, kèm unit test — một dòng regex, không đổi UI (nợ #212). (3) Muốn đóng thành phát hành: bump `0.4.2` → publish → đo `check:packaged-feed` (phải ra `up-to-date`). (4) Authenticode — quyết định trả phí của chủ dự án.
+
+## #214 — Bỏ dock phản hồi khỏi Đấu trường Cổ điển để trả lại chiều cao cho đáp án (2026-11-07)
+
+Yêu cầu của chủ dự án: bỏ khung HUD/dock phản hồi đang chiếm một dải cố định ở đáy màn chơi và đưa các ô đáp án về cỡ lớn như trước. **Thay đổi #213 được thay thế riêng cho Đấu trường Cổ điển**: phản hồi, nút giải thích, dòng luật và nút tiếp tục trở lại luồng của cột câu hỏi; không dành chỗ cố định trước khi học sinh trả lời. Trước khi trả lời, lưới đáp án nhận lại phần chiều cao đó. Sau khi có phản hồi, lưới được phép co theo rule toàn màn hình đã có để vừa nội dung và nút tiếp tục. Xây nhà, Tình huống và các trò khác không đổi cấu trúc.
+
+Không thêm một panel hoặc HUD thay thế. Giữ cập nhật điểm trên chip hiện có; bỏ hiệu ứng điểm nổi để tránh lớp phủ lên đáp án. Kiểm tra hồi quy phải chứng minh dock không được render và chiều cao đáp án ban đầu đạt sàn CSS toàn màn hình ở cả 1920×1080 lẫn 1366×768.
+
+## #215 — Thay dải HUD trả lời bằng điểm nổi và nút giải thích góc trái dưới (2026-11-07)
+
+Yêu cầu tiếp nối #214, theo ảnh dải phản hồi đang hiển thị câu đúng/điểm/nút Giải thích: bỏ phần dải có khung khỏi Đấu trường; điểm thay đổi hiện tạm thời trên màn hình rồi tự ẩn; nút Giải thích đặt cố định ở góc dưới bên trái và vẫn mở dialog sẵn có. Không đổi cơ chế chấm, lưu điểm, đáp án đúng/sai hay luật tiết lộ lời giải.
+
+Trong Luyện tập, lần sai làm giảm **điểm có thể nhận của câu** thì hiệu ứng ghi rõ `−N điểm câu này`; đây không phải trừ điểm đã tích lũy. Khi câu kết thúc, hiệu ứng hiển thị số điểm thực sự được ghi, ví dụ `+90 điểm`; chip tổng điểm vẫn cập nhật theo bản ghi. `#answerFeedback` chỉ còn là live region ẩn trực quan để hỗ trợ đọc màn hình. Đấu trường dùng nút popup ở mọi lượt được phép giải thích, kể cả game legacy; thay đổi này chỉ đổi cách mở lời giải, không đổi luật trả lời. Các game legacy khác giữ cách dựng hiện có; Kho báu/Đường đua không đổi vị trí nút.
+
+## #216 — Popup tiếp tục ở góc dưới phải, giữ nguyên cỡ bốn đáp án sau khi chọn (2026-11-07)
+
+Trong Đấu trường Cổ điển và Xây nhà, nút `Câu tiếp theo` / `Bỏ qua câu này` không còn chiếm chỗ trong chân câu hỏi: nó chỉ xuất hiện sau một lần trả lời và nổi cố định góc dưới bên phải. Nút trong Tình huống cùng các game khác giữ cách bố trí cũ.
+
+Bốn đáp án giữ nguyên vị trí và kích thước khi người chơi chọn; trạng thái chỉ đổi màu. Vì vậy riêng Đấu trường không chạy hoạt ảnh phóng to đáp án đúng hoặc rung đáp án sai, và CSS co lưới theo `#answerFeedback` tiếp tục chỉ áp dụng cho các bề mặt phản hồi trực quan khác. Xây nhà vẫn chuyển sang showcase sau khi chốt đáp án; thẻ phản hồi của showcase được phục hồi khỏi kiểu live-region ẩn để không bị popup chồng lên. Kết quả được kiểm tra trên Cổ điển ở 1920×1080 và 1366×768, cùng Xây nhà trong kiểm thử showcase/toàn màn hình.

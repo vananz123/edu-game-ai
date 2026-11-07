@@ -35,7 +35,7 @@ const GAME = JSON.stringify({
   id: 'ui-play-surface', title: 'Làm quen bạn mới', subject: 'Đạo đức', grade: '4',
   template: 'quiz', description: '', tags: [], sourceName: 'ui-check',
   createdAt: '2026-01-01T00:00:00.000Z',
-  gameSetup: { scoringMode: 'cơ bản', illustrationMode: 'auto' },
+  gameSetup: { scoringMode: 'tra-loi:luyen-tap', illustrationMode: 'auto' },
   questions: [{
     id: 'q1', type: 'multiple-choice', prompt: LONG,
     contentCategory: 'animals', iconName: 'paw-print',
@@ -71,7 +71,8 @@ const OPEN = game => `(async () => {
   return {
     stage: Boolean(document.querySelector('.game-stage')),
     question: Boolean(document.querySelector('.stage-question')),
-    option: Boolean(document.querySelector('.answer-option'))
+    option: Boolean(document.querySelector('.answer-option')),
+    nextInitiallyHidden: document.querySelector('#nextQuestionBtn')?.classList.contains('hidden') === true
   };
 })()`;
 
@@ -337,6 +338,7 @@ const QUIZ_GEOM = `(() => {
   return {
     viewport: { w: innerWidth, h: innerHeight },
     houseMode: stageEl.classList.contains('is-house-mode'),
+    answerDock: Boolean(stageEl.querySelector('.answer-dock')),
     showcase: stageEl.classList.contains('is-house-showcase'),
     stage, center, question, grid, art, hud, options,
     // Chu vi của hàng nội dung: cột ảnh (Cổ điển), hàng ảnh + ô nhà + dải HUD
@@ -418,6 +420,15 @@ function assertQuizLayout(g, tag, spec) {
       + (o.right > vw + 2 ? ` (+${o.right - vw}px phải)` : ''));
   check(`[${tag}] all four answers visible the moment the question opens`, hidden.length === 0,
     hidden.join(' | ') || `last answer bottom ${g.options[3].bottom} of ${vh}`);
+  if (spec.play === 'classic') {
+    const minTileHeight = vh <= 800
+      ? Math.min(96, Math.max(56, vh * 0.09))
+      : Math.min(150, Math.max(72, vh * 0.16));
+    check(`[${tag}] classic quiz answers retain the full-height tile baseline`,
+      g.options.every(option => option.h >= minTileHeight - 1),
+      `${g.options.map(option => option.h).join('/')}px; expected at least ${Math.round(minTileHeight)}px`);
+    check(`[${tag}] classic quiz has no reserved feedback dock`, g.answerDock === false);
+  }
   const covered = g.options.filter(o => o.inside && !o.hittable)
     .map(o => `#${o.i + 1} covered by ${o.coveredBy}`);
   check(`[${tag}] no answer is covered by another layer`, covered.length === 0,
@@ -557,6 +568,9 @@ const READ = `(() => {
   if (!q || !opt || !grid || !stage || !present) return { missing: true };
   return {
     viewport: { w: innerWidth, h: innerHeight },
+    game: stage.dataset.game,
+    houseMode: stage.classList.contains('is-house-mode'),
+    answerDock: Boolean(stage.querySelector('.answer-dock')),
     questionFont: px(getComputedStyle(q).fontSize),
     questionWeight: getComputedStyle(q).fontWeight,
     optionFont: px(getComputedStyle(opt).fontSize),
@@ -740,11 +754,25 @@ const TOGGLE_MAP = `(async () => {
     expanded: btn ? btn.getAttribute('aria-expanded') : null };
 })()`;
 
-/** Answer the first question and read the feedback state. */
+/** Answer the first question and read the feedback state.
+ *
+ * The answer dock is intentionally absent; the initial answer size is asserted
+ * from the question snapshot, before feedback and navigation need space.
+ */
 const ANSWER = `(async () => {
   const sleep = ms => new Promise(r => setTimeout(r, ms));
-  document.querySelector('.answer-option').click();
-  await sleep(900);
+  const answerBoxes = () => Array.from(document.querySelectorAll('.answer-option')).map(option => {
+    const r = option.getBoundingClientRect();
+    return { x: r.x, y: r.y, w: r.width, h: r.height };
+  });
+  const answerBoxesBefore = answerBoxes();
+  document.querySelector('.answer-option[data-answer="b"]').click();
+  await sleep(250);
+  const penaltyFloat = document.querySelector('.quiz-score-float')?.textContent.trim() || null;
+  const answerBoxesAfterWrong = answerBoxes();
+  const nextAfterWrong = document.querySelector('#nextQuestionBtn');
+  document.querySelector('.answer-option[data-answer="a"]').click();
+  await sleep(220);
   document.querySelectorAll('.modal, .modal-backdrop').forEach(el =>
     el.getAnimations().forEach(a => { try { a.finish(); } catch {} }));
   await sleep(150);
@@ -752,18 +780,47 @@ const ANSWER = `(async () => {
   const fb = document.querySelector('#answerFeedback');
   const next = document.querySelector('#nextQuestionBtn');
   const body = document.querySelector('.modal-body');
-  if (!fb || !next || !body) return { missing: true };
+  const dock = document.querySelector('.answer-dock');
+  const explain = document.querySelector('#answerExplanationDock [data-answer-explain]');
+  const scoreFloat = document.querySelector('.quiz-score-float');
+  const nextDock = document.querySelector('#quizNextDock');
+  if (!fb || !next || !body || !nextDock) return { missing: true };
   const r = next.getBoundingClientRect();
+  const nr = nextDock.getBoundingClientRect();
+  const answerBoxesAfter = answerBoxes();
+  const fbr = fb.getBoundingClientRect();
+  const er = explain ? explain.getBoundingClientRect() : null;
   return {
     feedbackFont: px(getComputedStyle(fb).fontSize),
     feedbackText: fb.textContent.trim().length,
     feedbackBorder: getComputedStyle(fb).borderTopWidth,
+    feedbackRect: { w: fbr.width, h: fbr.height },
+    explain: explain ? {
+      text: explain.textContent.trim(),
+      x: er.left,
+      bottom: innerHeight - er.bottom,
+      position: getComputedStyle(document.querySelector('#answerExplanationDock')).position
+    } : null,
+    penaltyFloat,
+    scoreFloat: scoreFloat ? scoreFloat.textContent.trim() : null,
+    scoreFloatOpacity: scoreFloat ? Number(getComputedStyle(scoreFloat).opacity) : 0,
+    scoreFloatAnimation: scoreFloat ? getComputedStyle(scoreFloat).animationName : '',
     nextVisible: !next.classList.contains('hidden'),
     nextHeight: r.height,
+    nextAfterWrongVisible: Boolean(nextAfterWrong && !nextAfterWrong.classList.contains('hidden')),
+    nextDock: {
+      position: getComputedStyle(nextDock).position,
+      right: document.documentElement.clientWidth - nr.right,
+      bottom: innerHeight - nr.bottom
+    },
+    answerBoxesBefore,
+    answerBoxesAfterWrong,
+    answerBoxesAfter,
     marked: document.querySelectorAll('.answer-option.selected, .answer-option.correct, .answer-option.wrong').length,
     bodyScrolls: body.scrollHeight > body.clientHeight + 1,
     docHeight: document.documentElement.scrollHeight,
-    viewportH: innerHeight
+    viewportH: innerHeight,
+    answerDock: Boolean(dock)
   };
 })()`;
 
@@ -798,6 +855,15 @@ function assertPlaySurface(m, tag) {
   check(`[${tag}] question weight bold (>=700)`, Number(m.questionWeight) >= 700, m.questionWeight);
   check(`[${tag}] answer font >= 16px`, m.optionFont >= 15.9, `${m.optionFont}px @ ${vw}px`);
   check(`[${tag}] answer option height >= 56px`, m.optionHeight >= 56, `${Math.round(m.optionHeight)}px`);
+  if (m.game === 'quiz' && !m.houseMode) {
+    const minTileHeight = m.viewport.h <= 800
+      ? Math.min(96, Math.max(56, m.viewport.h * 0.09))
+      : Math.min(150, Math.max(72, m.viewport.h * 0.16));
+    check(`[${tag}] classic quiz answers retain the full-height tile baseline`,
+      m.optionHeight >= minTileHeight - 1,
+      `${Math.round(m.optionHeight)}px; expected at least ${Math.round(minTileHeight)}px`);
+    check(`[${tag}] classic quiz has no reserved feedback dock`, m.answerDock === false);
+  }
   check(`[${tag}] answers stay 2 columns`, m.optionCols === 2, `${m.optionCols} cols`);
   // Đo khối nội dung TỔNG (ảnh + chữ), không chỉ riêng câu hỏi: với bố cục
   // 2 cột, câu hỏi hẹp hơn một cách cố ý vì ảnh đã chiếm cột trái.
@@ -827,13 +893,39 @@ function assertPlaySurface(m, tag) {
 
 function assertAnswered(a, tag, viewportH) {
   check(`[${tag}] answer produces feedback text`, a.feedbackText > 20, `${a.feedbackText} chars`);
-  check(`[${tag}] feedback font >= 13px`, a.feedbackFont >= 13, `${a.feedbackFont}px`);
-  check(`[${tag}] feedback panel has a colour border`, a.feedbackBorder !== '0px', a.feedbackBorder);
+  check(`[${tag}] feedback remains accessible without a visible panel`,
+    Boolean(a.feedbackRect) && a.feedbackRect.w <= 1 && a.feedbackRect.h <= 1,
+    JSON.stringify(a.feedbackRect));
+  check(`[${tag}] explanation button floats in the bottom-left corner`,
+    Boolean(a.explain) && a.explain.position === 'fixed' && a.explain.x >= 0
+      && a.explain.x <= 24 && a.explain.bottom >= 0 && a.explain.bottom <= 24,
+    a.explain ? `${a.explain.text} at ${Math.round(a.explain.x)}, bottom ${Math.round(a.explain.bottom)}` : 'no button');
+  check(`[${tag}] points appear as a temporary positive score`,
+    a.scoreFloat === '+90 điểm', String(a.scoreFloat));
+  check(`[${tag}] score is visibly animated without intercepting answers`,
+    a.scoreFloatOpacity >= 0.6 && a.scoreFloatAnimation === 'quiz-score-rise',
+    `opacity ${a.scoreFloatOpacity}, animation ${a.scoreFloatAnimation}`);
+  check(`[${tag}] practice penalty appears as a temporary negative score`,
+    a.penaltyFloat === '−10 điểm câu này', String(a.penaltyFloat));
   check(`[${tag}] chosen answer is visibly marked`, a.marked >= 1, `${a.marked} marked`);
   check(`[${tag}] next button is shown and clickable`, a.nextVisible === true && a.nextHeight >= 34,
     `${Math.round(a.nextHeight)}px tall`);
+  check(`[${tag}] continue/skip first appears after an answer in the bottom-right popup`,
+    a.nextAfterWrongVisible === true && a.nextDock?.position === 'fixed'
+      && a.nextDock.right >= 0 && a.nextDock.right <= 24
+      && a.nextDock.bottom >= 0 && a.nextDock.bottom <= 24,
+    JSON.stringify({ visibleAfterWrong: a.nextAfterWrongVisible, dock: a.nextDock }));
+  const sameBoxes = (before, after) => Array.isArray(before) && before.length === 4
+    && Array.isArray(after) && after.length === 4
+    && before.every((box, i) => ['x', 'y', 'w', 'h'].every(key => Math.abs(box[key] - after[i][key]) <= 1));
+  check(`[${tag}] all four answer tiles keep their dimensions and positions after selection`,
+    sameBoxes(a.answerBoxesBefore, a.answerBoxesAfterWrong)
+      && sameBoxes(a.answerBoxesBefore, a.answerBoxesAfter),
+    JSON.stringify({ before: a.answerBoxesBefore, afterWrong: a.answerBoxesAfterWrong, after: a.answerBoxesAfter }));
   check(`[${tag}] document still does not scroll after answering`,
     a.docHeight <= viewportH + 2, `${a.docHeight} vs ${viewportH}`);
+
+  check(`[${tag}] no fixed feedback dock is rendered`, a.answerDock === false);
 }
 
 function assertNav(nav, tag) {
@@ -859,6 +951,9 @@ function assertNav(nav, tag) {
 
     check(`[${tag}] play surface opened`, Boolean(opened && opened.stage && opened.question && opened.option),
       opened ? JSON.stringify(opened) : 'no result');
+    check(`[${tag}] continue/skip stays hidden until the first answer`,
+      opened && opened.nextInitiallyHidden === true,
+      String(opened && opened.nextInitiallyHidden));
 
     // Question state, measured and photographed.
     // fontFloor 10: the smallest text painted on the play surface is the
@@ -1274,4 +1369,3 @@ function assertNav(nav, tag) {
   ctx.ws.close();
   process.exit(failed.length ? 1 : 0);
 })().catch(e => { console.error('ERROR: ' + e.message); process.exit(1); });
-

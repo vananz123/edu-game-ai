@@ -642,19 +642,55 @@ html[data-fullscreen="1"] .modal[data-player-theme] .answer-grid.true-false-grid
 .stage-tip { color: #9aa2bd; }
 .modal[data-player-theme] #nextQuestionBtn { font-size: 14px; padding: 13px 26px; }
 
-/* ============================================================
-   Nút "Giải thích" + hộp lời giải (DECISIONS #209, task 7)
+/* Arena feedback is announced accessibly, but never reserves a visible banner. */
+.quiz-answer-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
 
-   Bốn trò + máy chiếu cùng đi qua một cửa (`answer-explanation.js`), nên CSS
-   cũng chỉ có MỘT bộ rule. Nút chỉ xuất hiện ở ba cách trả lời mới; game cũ
-   in chữ inline nên không có phần tử này — vì vậy nó không được giả định chỗ
-   đứng: nằm trong `.feedback`, ngay sau dòng điểm.
+.quiz-next-dock {
+  position: fixed;
+  z-index: 40;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(16px, env(safe-area-inset-bottom));
+  pointer-events: none;
+}
+.quiz-next-dock #nextQuestionBtn {
+  margin: 0;
+  padding: 10px 18px;
+  border: 1px solid #8b82ff;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #7165e8, #5147c6);
+  color: #fff;
+  box-shadow: 0 8px 24px rgba(4, 6, 16, 0.42);
+  font-size: clamp(14px, 1.05vw, 17px);
+  font-weight: 750;
+  white-space: nowrap;
+  pointer-events: auto;
+}
+.quiz-next-dock #nextQuestionBtn:hover {
+  background: linear-gradient(135deg, #8277f3, #6258d9);
+}
+.quiz-next-dock #nextQuestionBtn:focus-visible {
+  outline: 2px solid #c5c0ff;
+  outline-offset: 3px;
+}
 
-   z-index 110: cao hơn `.treasure-story-backdrop` (100) để một hộp lời giải mở
-   lúc popup bối cảnh còn trên màn không bị chìm, và thấp hơn các hộp xác nhận
-   của chrome. Palette lấy từ dialog Kho báu — cùng một thế giới đêm, không tạo
-   hòn đảo sáng thứ hai (#160/#202).
-   ============================================================ */
+.answer-explain-dock {
+  position: fixed;
+  z-index: 40;
+  left: max(16px, env(safe-area-inset-left));
+  bottom: max(16px, env(safe-area-inset-bottom));
+  pointer-events: none;
+}
 .answer-explain-btn {
   display: inline-flex;
   align-items: center;
@@ -674,6 +710,55 @@ html[data-fullscreen="1"] .modal[data-player-theme] .answer-grid.true-false-grid
 .answer-explain-btn:hover { background: #2c3457; border-color: #8b82ff; transform: translateY(-1px); }
 .answer-explain-btn:focus-visible { outline: 2px solid #8b82ff; outline-offset: 2px; }
 .modal[data-player-theme] .answer-explain-btn { font-size: clamp(13px, 1.05vw, 16px); }
+.answer-explain-dock .answer-explain-btn {
+  margin: 0;
+  padding: 10px 16px;
+  background: rgba(31, 39, 68, 0.96);
+  box-shadow: 0 8px 24px rgba(4, 6, 16, 0.38);
+  pointer-events: auto;
+}
+
+/* A short score burst replaces the persistent answer banner. */
+.quiz-score-float {
+  position: fixed;
+  z-index: 90;
+  top: clamp(98px, 12vh, 130px);
+  right: clamp(185px, 14vw, 280px);
+  max-width: min(90vw, 520px);
+  padding: 9px 18px;
+  border: 1px solid #52d6a0;
+  border-radius: 999px;
+  background: rgba(12, 45, 37, 0.96);
+  color: #caffea;
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.35), 0 0 24px rgba(62, 207, 142, 0.25);
+  font-size: clamp(18px, 2.2vw, 28px);
+  font-weight: 850;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: quiz-score-rise 1.8s cubic-bezier(0.18, 0.72, 0.24, 1) forwards;
+}
+.quiz-score-float.is-loss {
+  border-color: #e9878e;
+  background: rgba(67, 25, 39, 0.96);
+  color: #ffd5d8;
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.35), 0 0 24px rgba(233, 95, 116, 0.22);
+}
+.quiz-score-float.is-neutral {
+  border-color: #71809e;
+  background: rgba(31, 39, 68, 0.96);
+  color: #eef1ff;
+}
+@keyframes quiz-score-rise {
+  0% { opacity: 0; transform: translateY(20px) scale(0.92); }
+  12% { opacity: 1; transform: translateY(0) scale(1.04); }
+  62% { opacity: 1; transform: translateY(-4px) scale(1); }
+  100% { opacity: 0; transform: translateY(-46px) scale(0.98); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .quiz-score-float { animation-duration: 0.01ms; }
+}
 
 .answer-explain-backdrop {
   position: fixed;
@@ -768,6 +853,3 @@ html[data-fullscreen="1"] .modal[data-player-theme] .answer-grid.true-false-grid
   border-top: 1px solid #2f375e;
   background: #141830;
 }
-
-
-

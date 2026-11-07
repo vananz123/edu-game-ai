@@ -16,7 +16,9 @@ function renderWizardInput() {
   const tree = structureState ? structureState.tree : null;
   const treeCount = tree && tree.headingsFound ? Number(tree.headingsFound) : 0;
   const hasStructure = Boolean(tree && !tree.empty);
-  const activeTab = s.inputTab || (ready ? 'structure' : 'content');
+  const activeTab = s.inputTab === 'structure' || s.inputTab === 'content'
+    ? s.inputTab
+    : (ready ? 'structure' : 'content');
   // The panes are layout-only visibility (`display`), never `aria-hidden`:
   // keeping both panes in the accessibility tree means a screen reader, the
   // DOM checks and `wizardSyncStructureCheckboxes()` always find the tree.
@@ -38,8 +40,7 @@ function renderWizardInput() {
         </p>
       </div>
       <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#effaf5] border border-[#ddf4e8] text-[#0f7b5c] text-[12px] font-semibold dark:bg-[#132d24] dark:border-[#1e4a3b] dark:text-[#4ade80]">
-        <span data-icon="lock" data-icon-size="12"></span> Bảo mật cục bộ · 100% Offline
-      </span>
+        <span data-icon="lock" data-icon-size="12"></span> Bảo mật</span>
     </div>
 
     <!-- Khối 1: Tải lên tệp tài liệu -->
@@ -93,7 +94,7 @@ function renderWizardInput() {
       <input id="wizardDocName" class="w-full px-3 py-2 border border-[#cbd5e1] dark:border-[#334155] rounded-lg bg-white dark:bg-[#1e2544] text-[#1e293b] dark:text-[#f8fafc] text-[13px] focus:outline-none focus:border-[#6366f1]" placeholder="Ví dụ: Bài 10 - Quang hợp ở thực vật" value="${escapeHtml(s.documentName || '')}"${s.busy ? ' disabled' : ''}>
     </div>
 
-    <!-- Thanh Tabs: Cấu trúc tài liệu & Nội dung giáo án -->
+    <!-- Tab chọn giữa cấu trúc tài liệu và nội dung giáo án. -->
     <div class="wizard-tab-header flex items-center border-b border-[#e2e8f0] dark:border-[#2a324b] mb-4 gap-2" role="tablist">
       ${tabButton('structure', 'Cấu trúc tài liệu', hasStructure ? `<span data-wizard-tab-count class="px-1.5 py-0.5 rounded-full text-[12px] bg-[#eef2ff] text-[#4f46e5] dark:bg-[#283060] dark:text-[#a5b4fc]">${treeCount} mục</span>` : '', 'list')}
       ${tabButton('content', 'Nội dung giáo án', `<span data-wizard-tab-count class="px-1.5 py-0.5 rounded-full text-[12px] bg-[#f1f5f9] text-[#475569] dark:bg-[#1e2544] dark:text-[#cbd5e1]">${characters.toLocaleString('vi-VN')} ký tự</span>`, 'file-text')}
@@ -123,16 +124,21 @@ function renderWizardInput() {
       </div>
     </div>
 
+    <!-- Nội dung gửi AI luôn nằm ngoài và bên dưới vùng tab. -->
+    <div class="mt-4" data-wizard-ai-payload>
+      ${wizardStructurePreviewPanel()}
+    </div>
+
     <!-- Loại đầu vào (update_quy_trinh §2): chọn tay hoặc để hệ thống nhận diện bằng quy tắc. -->
     ${wizardInputKindPickerHtml(s)}
 
     <!-- Actions Row -->
-    <div class="publish-actions flex items-center justify-end pt-3 border-t border-[#f1f5f9] dark:border-[#2a324b] gap-3 flex-wrap mt-4">
+    <div class="publish-actions justify-between items-center w-full pt-3 border-t border-[#f1f5f9] dark:border-[#2a324b] gap-3 flex-wrap mt-4">
+      <div class="field-hint" data-wizard-next-hint>${escapeHtml(wizardInputNextHint())}</div>
       <button class="btn btn-primary btn-large !py-2.5 !px-5 !text-[13px] !font-bold" id="wizardNextBtn" data-wizard-action="next"${ready && !s.busy && !wizardStructureScopeError() ? '' : ' disabled'}>
         ${s.busy === 'save' ? '⏳ Đang lưu giáo án…' : wizardInputNextLabel()}
       </button>
     </div>
-    <div class="field-hint" data-wizard-next-hint>${escapeHtml(wizardInputNextHint())}</div>
   </section>`;
 }
 
@@ -348,8 +354,8 @@ function wizardInputNextLabel() {
 
 /** Said under the button, not inside it: which path "Tiếp tục" will take. */
 function wizardInputNextHint() {
-  if (wizardResolveInputKind() === 'questions') return 'Tiếp tục sẽ dùng các câu hỏi có sẵn — không cần chạy AI.';
-  return 'Tiếp tục sẽ mở bước 2 để phân tích giáo án bằng AI.';
+  if (wizardResolveInputKind() === 'questions') return 'Dùng các câu hỏi có sẵn — không chạy AI.';
+  return 'Tiếp tục để phân tích giáo án bằng AI.';
 }
 function wizardAiReadinessHint() {
   // #132: this strip is about the local runtime only. A teacher using a cloud

@@ -13,12 +13,12 @@
 // (`data-page` navigates, `data-action="play"` starts a game), so no new wiring
 // and no new IPC path. core/render.js repaints this block on every render, so the
 // module only declares functions; it loads just before that file in index.html.
-const SIDEBAR_RECENT_GAME_COUNT = 3;
+const SIDEBAR_RECENT_GAME_COUNT = 5;
 
-const SIDEBAR_QUICK_ACTIONS = [
-  { page: 'create-wizard', icon: 'wand-sparkles', title: 'Tạo từ giáo án', hint: 'AI local phân tích rồi gợi ý trò chơi' },
-  { page: 'my-projects', icon: 'folder-open', title: 'Mở dự án đang làm', hint: 'Tiếp tục từ giáo án và bản nháp đã lưu' }
-];
+  // const SIDEBAR_QUICK_ACTIONS = [
+  //   { page: 'create-wizard', icon: 'wand-sparkles', title: 'Tạo từ giáo án', hint: 'AI local phân tích rồi gợi ý trò chơi' },
+  //   { page: 'my-projects', icon: 'folder-open', title: 'Mở dự án đang làm', hint: 'Tiếp tục từ giáo án và bản nháp đã lưu' }
+  // ];
 
 /** Most recently saved games — the same order the library list uses. */
 function sidebarRecentGames() {
@@ -38,21 +38,12 @@ function sidebarShortcutsHtml() {
         </button>`;
       }).join('')
     : '<p class="shortcut-empty">Chưa có trò chơi nào. Tạo một trò chơi để nó xuất hiện ở đây.</p>';
-  const actions = SIDEBAR_QUICK_ACTIONS.map(action =>
-    `<button type="button" class="shortcut-item" data-page="${action.page}">
-      <span class="shortcut-icon" data-icon="${action.icon}" data-icon-size="14"></span>
-      <span class="shortcut-text"><strong>${escapeHtml(action.title)}</strong><small>${escapeHtml(action.hint)}</small></span>
-      <span class="shortcut-go" data-icon="chevron-right" data-icon-size="14"></span>
-    </button>`).join('');
   return `<div class="shortcut-head"><span data-icon="zap" data-icon-size="13"></span><span>Lối tắt</span></div>
     <div class="shortcut-group">
       <div class="shortcut-label">Gần đây</div>
       ${rows}
     </div>
-    <div class="shortcut-group shortcut-group-actions">
-      <div class="shortcut-label">Thao tác nhanh</div>
-      ${actions}
-    </div>`;
+    `;
 }
 
 /** Fills the sidebar block. Returns false when the shell has no host to fill. */

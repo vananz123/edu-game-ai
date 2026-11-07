@@ -222,10 +222,9 @@ html[data-fullscreen="1"] .modal[data-player-theme] .game-stage.is-house-mode .s
   max-height: clamp(130px, 22vh, 240px);
   margin: 0;
 }
-/* Ở biến thể này lưới đáp án KHÔNG còn là con ruột của `.is-main`, nên bốn rule
-   điều khiển chiều cao của nó (wizard.css:286/307, gameplay.css:311 và trạng thái
-   đã-trả-lời wizard.css:358/370) đều trôi mất vì dùng `>`. Khai lại đúng giá trị cũ
-   — không đổi chính sách, chỉ đổi đường đi của selector. */
+/* Ở biến thể này lưới đáp án KHÔNG còn là con ruột của `.is-main`, nên các rule
+   điều khiển chiều cao của nó được khai lại đúng như lưới Cổ điển. Giữ nguyên
+   kích thước đáp án sau khi chọn; màn showcase vẫn ẩn lưới theo thiết kế Xây nhà. */
 html[data-fullscreen="1"] .modal[data-player-theme] .game-stage.is-house-mode .house-answer-col > .answer-grid {
   flex: 1 1 auto;
   min-height: 0;
@@ -236,15 +235,8 @@ html[data-fullscreen="1"] .modal[data-player-theme] .game-stage.is-house-mode .h
 html[data-fullscreen="1"] .modal[data-player-theme] .game-stage.is-house-mode .house-answer-col > .answer-grid > .answer-option {
   min-height: min-content;
 }
-html[data-fullscreen="1"] .modal[data-player-theme] .game-stage.is-house-mode .stage-col.is-main:has(> #answerFeedback:not(:empty)) .house-answer-col > .answer-grid {
-  flex: 0 1 auto;
-  grid-auto-rows: min-content;
-}
-html[data-fullscreen="1"] .modal[data-player-theme] .game-stage.is-house-mode .stage-col.is-main:has(> #answerFeedback:not(:empty)) .house-answer-col > .answer-grid > .answer-option {
-  min-height: 0;
-}
 /* Text/đúng-sai cũng đi theo hàng này: cột phải co được nếu không hộp trả lời sẽ
-   thành khối cứng cao theo nội dung và đẩy `.stage-bottom` ra khỏi màn. */
+   thành khối cứng cao theo nội dung và đẩy phần chân stage ra khỏi màn. */
 .game-stage.is-house-mode .house-answer-col > .text-answer-box,
 .game-stage.is-house-mode .house-answer-col > .answer-grid.true-false-grid {
   flex: 0 0 auto;
@@ -318,9 +310,18 @@ html[data-fullscreen="1"] .modal[data-player-theme] .game-stage.is-house-mode .s
 /* Thẻ giải thích nằm dưới nhà. Không còn cột phải (#179) nên thẻ rộng trọn cột chữ
    và bị GIỚI HẠN CAO + cuộn riêng: đo ở 1366×768 với fixture dài, thẻ giải thích 3
    dòng cao ~110px là đủ chỗ, nhưng lời giải thích dài hơn mà không có trần sẽ ăn
-   chiều cao của chính ô nhà — thứ mà #142 coi là nhân vật chính.
+   chiều cao của chính ô nhà — thứ mà #142 coi là nhân vật chính. Chừa 190px bên
+   phải cho nút tiếp tục cố định để nút không đè lên thẻ.
    `flex: 0 1 auto` để thẻ nhường phần dư cho nhà nhưng vẫn co được khi màn thấp. */
 .modal[data-player-theme] .game-stage.is-house-showcase #answerFeedback {
+  position: relative;
+  width: auto;
+  height: auto;
+  margin: 0 190px 0 0;
+  overflow: auto;
+  clip: auto;
+  clip-path: none;
+  white-space: normal;
   box-sizing: border-box;
   flex: 0 1 auto;
   max-height: clamp(84px, 15vh, 180px);
@@ -344,15 +345,4 @@ html[data-fullscreen="1"] .modal[data-player-theme] .game-stage.is-house-mode .s
   margin-bottom: 4px;
   font-size: 1.45em;
   letter-spacing: 0.4px;
-}
-.modal[data-player-theme] .game-stage.is-house-showcase .stage-bottom {
-  justify-content: center;
-  width: 100%;
-  margin-top: 0;
-  flex: 0 0 auto;
-}
-.modal[data-player-theme] .game-stage.is-house-showcase #nextQuestionBtn {
-  padding: 10px 28px;
-  font-size: clamp(13px, 1.6vh, 16px);
-  box-shadow: 0 12px 28px #0007;
 }

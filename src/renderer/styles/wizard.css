@@ -355,19 +355,16 @@ html[data-fullscreen="1"] .modal[data-player-theme] .race-turn .stage-illustrati
     height: 100%;
     max-height: 100%;
   }
-  html[data-fullscreen="1"] .modal[data-player-theme] .stage-col.is-main:has(> #answerFeedback:not(:empty)) > .answer-grid {
+  /* Những bề mặt có phản hồi trực quan cần nhường chiều cao cho nội dung sau khi
+     trả lời. Đấu trường dùng live region ẩn và nút nổi ngoài luồng, nên giữ nguyên
+     kích thước đáp án trước và sau khi chọn. */
+  html[data-fullscreen="1"] .modal[data-player-theme] .game-stage:not(.is-arena-quiz) .stage-col.is-main:has(> #answerFeedback:not(:empty)) > .answer-grid {
     flex: 0 1 auto;
     grid-auto-rows: min-content;
   }
-  /* Trong cùng trạng thái đó, sàn `min-height: 12vh` của ô đáp án phải nhường.
-     Đo được: giữ sàn thì cột chữ cao 774px (tràn 21px, stage 662px); bỏ sàn thì
-     hàng co về 168px, ô 78px, **không cắt chữ** (`scrollHeight 74` < `clientHeight
-     74`) và tràn về 0 — đáp án vẫn đọc được, chỉ bớt khoảng thở dọc sau khi
-     giáo viên đã chốt đáp án. Trước khi trả lời, sàn giữ nguyên: đó là lúc ô
-     đáp án là thứ duy nhất trên màn và cần to.
-     `#answerFeedback` là nơi DUY NHẤT chứa phản hồi, nên `:has()` ở đây chỉ
-     khớp đúng trạng thái đã-trả-lời. */
-  html[data-fullscreen="1"] .modal[data-player-theme] .stage-col.is-main:has(> #answerFeedback:not(:empty)) > .answer-grid > .answer-option {
+  /* Các bề mặt phản hồi trực quan vẫn được phép bỏ sàn chiều cao để tránh tràn;
+     lưới Đấu trường được loại trừ để bốn đáp án không đổi kích thước sau lựa chọn. */
+  html[data-fullscreen="1"] .modal[data-player-theme] .game-stage:not(.is-arena-quiz) .stage-col.is-main:has(> #answerFeedback:not(:empty)) > .answer-grid > .answer-option {
     min-height: 0;
   }
   /* Câu hỏi trong cột hẹp không cần khung 68ch của bản 1 cột. */
@@ -557,7 +554,4 @@ ul.wizard-tree-warning li+li{margin-top:3px}
   .wizard-tree-node{transition:none}
   .wizard-tree-caret{transition:none}
 }
-
-
-
 

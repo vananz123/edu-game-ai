@@ -181,6 +181,8 @@ assert.equal(typeof step1Html, 'string', 'step 1 should render');
 assert.ok(step1Html.includes('data-wizard-step-body="input"'), 'step 1 should render its panel');
 assert.ok(step1Html.includes('data-wizard-action="import-file"'), 'step 1 should offer the import button');
 assert.ok(step1Html.includes('id="wizardNextBtn"'), 'step 1 should render the continue button');
+assert.equal((step1Html.match(/role="tab"/g) || []).length, 2, 'step 1 should keep only the structure and lesson-content tabs');
+assert.ok(step1Html.includes('data-wizard-ai-payload'), 'step 1 should render the AI payload below the tabs');
 assert.equal(
   evalInContext("typeof wizardStructureScopeError"),
   'function',
@@ -237,6 +239,46 @@ assert.notEqual(rootRowHtml, 'NO ROOT ROW', 'the tree should render a root row')
 assert.ok(
   !rootRowHtml.includes('type="checkbox"'),
   'the root document row is not selectable and must not render a checkbox — it used to toggle every section at once'
+);
+
+const separatedPreview = evalInContext(`
+  (function () {
+    wizardState.inputTab = 'structure';
+    wizardState.structure = Object.assign(wizardStructureState(), {
+      tree: __wizardTree,
+      selected: [],
+      customized: false,
+      preview: {
+        ranges: [{ selected: true }],
+        preserved: { tables: 1, questions: 2, answers: 3, examples: 4, formulas: 5 },
+        chars: 42,
+        estimatedTokens: 12,
+        warnings: [],
+        truncated: false,
+        text: 'Nội dung xem trước cho AI'
+      }
+    });
+    const html = renderWizardInput();
+    const structureStart = html.indexOf('data-tab-pane="structure"');
+    const structureEnd = html.indexOf('<!-- Tab 2 Pane', structureStart);
+    const contentStart = html.indexOf('data-tab-pane="content"');
+    const contentEnd = html.indexOf('data-wizard-ai-payload', contentStart);
+    const payloadStart = html.indexOf('data-wizard-ai-payload');
+    const payloadEnd = html.indexOf('<!-- Loại đầu vào', payloadStart);
+    const tabCount = (html.match(/role="tab"/g) || []).length;
+    return {
+      structureHasPreview: html.slice(structureStart, structureEnd).includes('data-structure-preview'),
+      contentTabHasPreview: html.slice(contentStart, contentEnd).includes('data-structure-preview'),
+      previewOutsideTabs: payloadStart === contentEnd && !html.slice(payloadStart, payloadEnd).includes('role="tabpanel"'),
+      previewText: html.slice(payloadStart, payloadEnd).includes('Nội dung xem trước cho AI'),
+      tabCount
+    };
+  })()
+`);
+assert.deepEqual(
+  JSON.parse(JSON.stringify(separatedPreview)),
+  { structureHasPreview: false, contentTabHasPreview: false, previewOutsideTabs: true, previewText: true, tabCount: 2 },
+  'the AI payload preview must remain below both tabs, outside either tab panel'
 );
 
 // Nothing ticked yet means "the whole document", so every selectable box paints ticked.

@@ -16,6 +16,8 @@ function renderQuestion() {
        answerModeForGame là cửa duy nhất để một bàn Ghép cặp không bao giờ nhận
        cách trả lời mới. */
     state.answerTurn = beginAnswerTurn(q, game.gameSetup, { template: game.template });
+    if (game.template === 'quiz' && q.type !== 'scenario')
+        state.answerTurn.explanationButton = true;
     const progress = Math.round(state.gameAnswers.length / game.questions.length * 100);
     const scoring = resolveScoring(game.gameSetup);
     /* Dải tip phải nói LUẬT ĐANG CHẠY. Với game mang token, runtime.js:11 map
@@ -41,9 +43,7 @@ function renderQuestion() {
     const shortAnswerPlaceholder = q.type === 'fill-in-blank' ? 'Nhập từ hoặc cụm từ còn thiếu…' : 'Nhập câu trả lời ngắn (tối đa 5 từ)…';
     const houseMode = isHouseMode(game);
     // House mode puts the 3D house where the placeholder picture used to be,
-    // so the illustration is dropped and a slot reserves its screen area. With
-    // no illustration the feedback renders in the main column, which the
-    // showcase needs to keep it below the house (DECISIONS #142).
+    // so the illustration is dropped and a slot reserves its screen area.
     const illusHtml = houseMode ? '' : stageIllustrationHtml(q, game, 'is-stage');
     const hasIllus = Boolean(illusHtml);
     // #153: nhà 3D chiếm ô giữ chỗ, nhưng ảnh giáo viên CHỌN cho câu hỏi vẫn được
@@ -105,10 +105,13 @@ function renderQuestion() {
     const centerLeadHtml = classicLeadRow
         ? `<div class="stage-lead-row"><div class="stage-lead-text">${kickerRow}${contextHtml}${questionHtml}</div><div class="stage-col stage-side-col">${illusHtml}</div></div>`
         : `${kickerRow}${houseMode && !houseArtOn ? houseSlotHtml : ''}${contextHtml}${questionHtml}`;
-    // Bảng giải thích về lại CỘT CHỮ ở mọi màn (kể cả Xây nhà có ảnh): cột phải
-    // của #179 đã bị dải HUD thay thế.
-    const mainFeedbackHtml = hasIllus && !classicLeadRow ? '' : '<div id="answerFeedback"></div>';
-    root.innerHTML = `<div class="game-stage${houseMode ? ' is-house-mode' : ''}" data-game="${stageGame}" data-game-world="quiz">${gameWorldLabel(stageGame)}<div class="stage-top"><span class="stage-meta">${escapeHtml(game.subject || 'TRÒ CHƠI HỌC TẬP')} · ${game.grade ? 'LỚP ' + escapeHtml(game.grade) : 'MỌI LỚP'}</span><span class="stage-meta stage-meta-right"><span class="stage-chip">${game.template === 'scenario' ? 'QUYẾT ĐỊNH' : 'CÂU'} <b>${state.gameAnswers.length + 1}</b>/${game.questions.length}</span><span class="stage-chip stage-chip-score">🏆 <b>${state.gameAnswers.reduce((s, a) => s + a.points, 0)}</b> điểm</span></span></div><div class="stage-progress"><div data-progress="${progress}"></div></div>${state.teamPlay ? teamTurnBarHtml() : ''}<div class="stage-center">${houseHudHtml}${sideColHtml}<div class="stage-col is-main">${centerLeadHtml}${houseAnswerRow || answerArea}${mainFeedbackHtml}<div class="stage-bottom"><span class="stage-tip">${scoringTip}</span><button class="btn hidden" id="nextQuestionBtn">Tiếp tục →</button></div></div></div></div>`;
+    // Keep answer announcements accessible without painting a feedback banner.
+    const mainFeedbackHtml = '<div id="answerFeedback" class="quiz-answer-live" role="status" aria-live="polite" aria-atomic="true"></div>';
+    const nextBtnHtml = '<button class="btn hidden" id="nextQuestionBtn">Tiếp tục →</button>';
+    const nextInStage = game.template === 'quiz' ? '' : nextBtnHtml;
+    const nextDock = game.template === 'quiz' ? `<div id="quizNextDock" class="quiz-next-dock">${nextBtnHtml}</div>` : '';
+    const stageBottomHtml = `<div class="stage-bottom"><span class="stage-tip">${scoringTip}</span>${nextInStage}</div>`;
+    root.innerHTML = `<div class="game-stage${houseMode ? ' is-house-mode' : ''}${game.template === 'quiz' ? ' is-arena-quiz' : ''}" data-game="${stageGame}" data-game-world="quiz">${gameWorldLabel(stageGame)}<div class="stage-top"><span class="stage-meta">${escapeHtml(game.subject || 'TRÒ CHƠI HỌC TẬP')} · ${game.grade ? 'LỚP ' + escapeHtml(game.grade) : 'MỌI LỚP'}</span><span class="stage-meta stage-meta-right"><span class="stage-chip">${game.template === 'scenario' ? 'QUYẾT ĐỊNH' : 'CÂU'} <b>${state.gameAnswers.length + 1}</b>/${game.questions.length}</span><span class="stage-chip stage-chip-score">🏆 <b>${state.gameAnswers.reduce((s, a) => s + a.points, 0)}</b> điểm</span></span></div><div class="stage-progress"><div data-progress="${progress}"></div></div>${state.teamPlay ? teamTurnBarHtml() : ''}<div class="stage-center">${houseHudHtml}${sideColHtml}<div class="stage-col is-main">${centerLeadHtml}${houseAnswerRow || answerArea}${mainFeedbackHtml}${stageBottomHtml}</div></div>${nextDock}<div id="answerExplanationDock" class="answer-explain-dock"></div></div>`;
     paintProgress(root);
     $$('.answer-option', root).forEach(btn => btn.addEventListener('click', () => chooseAnswer(q, btn.dataset.answer)));
     const qHintBtn = $('#quizHintBtn', root);
@@ -116,10 +119,10 @@ function renderQuestion() {
         qHintBtn.onclick = () => {
             const fb = $('#answerFeedback', root);
             if (fb) {
-                fb.className = 'feedback good is-hint';
-                fb.innerHTML = `<strong>💡 Gợi ý:</strong> ${escapeHtml(q.hint)}`;
-                GameAudio.play('hint');
+                fb.textContent = `Gợi ý: ${q.hint}`;
             }
+            toast(`💡 Gợi ý: ${q.hint}`, 5000);
+            GameAudio.play('hint');
             qHintBtn.disabled = true;
             qHintBtn.textContent = '💡 Đã mở gợi ý';
         };
@@ -135,11 +138,10 @@ function renderQuestion() {
         if (hintBtn)
             hintBtn.addEventListener('click', () => {
                 const fb = $('#answerFeedback', root);
-                if (fb) {
-                    fb.className = 'feedback good is-hint';
-                    fb.innerHTML = `<strong>💡 Gợi ý:</strong> ${escapeHtml(q.hint)}`;
-                    GameAudio.play('hint');
-                }
+                if (fb)
+                    fb.textContent = `Gợi ý: ${q.hint}`;
+                toast(`💡 Gợi ý: ${q.hint}`, 5000);
+                GameAudio.play('hint');
                 const hint = $('#textAnswerHint', root);
                 if (hint)
                     hint.classList.remove('hidden');
@@ -177,6 +179,8 @@ function chooseAnswer(question, optionId, answerText) {
             : scenario
                 ? { correct: question.correctOptionId === optionId, points: question.correctOptionId === optionId ? Number(question.points) || 100 : 0, speedBonus: 0 }
                 : scoreAnswer(question, optionId, elapsed, state.currentGame?.gameSetup);
+    const basePoints = questionPoints(question, resolveScoring(state.currentGame.gameSetup));
+    const availablePointsBefore = answerTurnAward(turn, basePoints);
     /* Trò vẫn tự tính { correct, points }; máy chỉ THÊM khoá + phạt + khép vòng.
        `turn.rejected` là cú nhấp thứ hai sau khi vòng đã khép (nút đã tắt nhưng sự
        kiện vẫn bắn tới): phải im lặng — không trừ thêm phạt, không lật câu đã sai
@@ -197,7 +201,6 @@ function chooseAnswer(question, optionId, answerText) {
     const revealAnswer = turn.revealCorrect && !scenario;
     // Luyện tập trả lại quyền bấm để thử lại; mọi mode khác khoá đến hết câu.
     state.answerLocked = !turn.retryAllowed;
-    const basePoints = questionPoints(question, resolveScoring(state.currentGame.gameSetup));
     let teamNote = '';
     const settle = () => {
         const result = commitAnswerRecord(state.gameAnswers, turn, {
@@ -234,10 +237,16 @@ function chooseAnswer(question, optionId, answerText) {
     };
     if (turn.finished) {
         settle();
+        // Update the score immediately; the next question has not rendered yet.
+        syncScoreChip();
+        showQuizScoreChange(points);
     } else {
         // Sai mà còn được thử lại: phản hồi ngay cho em biết, nhưng chưa có dòng điểm,
         // chưa đổi nhà/đội và chưa được nhìn thấy đáp án.
         reactThree('answer:incorrect', { correct: false, points: 0 });
+        const penalty = answerTurnAward(turn, basePoints) - availablePointsBefore;
+        if (penalty < 0)
+            showQuizScoreChange(penalty, 'điểm câu này');
     }
     if (textQ) {
         const input = document.getElementById('textAnswerInput');
@@ -301,16 +310,15 @@ function chooseAnswer(question, optionId, answerText) {
         next.onclick = goToNext;
     };
     if (!turn.finished) {
-        // Bảng "thử lại" của Luyện tập: nói rõ đã sai mấy lần và câu còn lại bao nhiêu
-        // điểm — chính xác cái mà answerTurnAward vừa tính, không phải một lời hứa.
-        // Luật đầy đủ đã có ở dải tip dưới màn (scoringTip), nên ở đây không lặp lại.
-        feedback.className = 'feedback bad';
-        feedback.innerHTML = `<strong>✕ Chưa đúng.</strong> ${textQ ? `Câu trả lời của bạn: “${escapeHtml(String(answerText ?? '').trim())}”.` : 'Đáp án vừa chọn chưa đúng.'}<br>Em được <strong>thử lại</strong>${turn.wrongAttempts > 1 ? ` (đã sai ${turn.wrongAttempts} lần)` : ''} — câu này còn <b>${answerTurnAward(turn, basePoints)}</b> điểm.${teamNote}`;
+        // Keep the full response available to assistive technology; the visual
+        // surface uses answer coloring, the score animation and the next control.
+        feedback.textContent = '';
+        feedback.innerHTML =
+            `<strong>✕ Chưa đúng.</strong> ${textQ ? `Câu trả lời của bạn: “${escapeHtml(String(answerText ?? '').trim())}”.` : 'Đáp án vừa chọn chưa đúng.'}<br>Em được <strong>thử lại</strong>${turn.wrongAttempts > 1 ? ` (đã sai ${turn.wrongAttempts} lần)` : ''} — câu này còn <b>${answerTurnAward(turn, basePoints)}</b> điểm.${teamNote}`;
         wireNextButton();
         sendPresentationState();
         return;
     }
-    feedback.className = `feedback ${correct ? 'good' : 'bad'}`;
     const rubric = scenarioScore
         ? `<br>Điểm quyết định: ${scenarioScore.points}/100 (an toàn ${scenarioScore.breakdown.safety}/60 · giải thích ${scenarioScore.breakdown.reasoning}/25 · giảm hậu quả ${scenarioScore.breakdown.harmReduction}/15).`
         : '';
@@ -328,11 +336,7 @@ function chooseAnswer(question, optionId, answerText) {
     const discussion = scenario && question.discussionPrompt
         ? `<br><strong>Thảo luận:</strong> ${escapeHtml(question.discussionPrompt)}`
         : '';
-    /* Task 7 (#209): lời giải KHÔNG tự hiện nữa — học sinh phải bấm "Giải thích" rồi đọc
-       trong modal. Một cửa `answerExplanationMarkup` quyết định ba nhánh: không chữ nào
-       (luật cấm — sai ở Thử thách, hoặc Luyện tập đang thử lại), nút (ba chế độ mới),
-       hoặc inline NGUYÊN VĂN như hôm qua (game cũ, nơi "hiện luôn cùng đáp án" là hành vi
-       đã lưu). Vì thế phần tử này vẫn là `teacherFeedback` cũ, chỉ khác chỗ nó xuất hiện. */
+    /* Giải thích của Đấu trường luôn mở từ nút nổi, gồm cả game legacy. */
     const explanationHtml = answerExplanationMarkup(turn, {
         text: teacherFeedback,
         inline: `<br>${escapeHtml(teacherFeedback)}`,
@@ -341,13 +345,38 @@ function chooseAnswer(question, optionId, answerText) {
     });
     const penaltyLine = turn.mode === 'practice' && correct && turn.wrongAttempts > 0
         ? ` (em đã sai ${turn.wrongAttempts} lần, mỗi lần bớt 10% điểm của câu này).` : '';
-    feedback.innerHTML = `<strong>${scenario ? 'Đã ghi nhận quyết định.' : correct ? '✓ Chính xác!' : '✕ Chưa chính xác.'}</strong> ${scenario ? `Bạn nhận ${points} điểm.` : correct ? `Bạn nhận ${points} điểm${speedBonus ? ` (gồm +${speedBonus} điểm nhanh)` : ''}.${penaltyLine}` : `${textQ ? `Câu trả lời của bạn: “${escapeHtml(String(answerText ?? '').trim())}”.` : revealAnswer ? 'Đáp án đúng đã được đánh dấu.' : 'Cách trả lời này không mở đáp án.'}`}${answerReveal}${rubric}${explanationHtml}${discussion}${teamNote}`;
+    const explainDock = $('#answerExplanationDock');
+    if (explainDock)
+        explainDock.innerHTML = explanationHtml.startsWith('<button') ? explanationHtml : '';
+    const legacyExplanation = turn.mode === 'legacy' && !turn.explanationButton ? explanationHtml : '';
+    feedback.classList.toggle('good', correct);
+    feedback.classList.toggle('bad', !correct);
+    feedback.innerHTML = `<strong>${scenario ? 'Đã ghi nhận quyết định.' : correct ? '✓ Chính xác!' : '✕ Chưa chính xác.'}</strong> ${scenario ? `Bạn nhận ${points} điểm.` : correct ? `Bạn nhận ${points} điểm${speedBonus ? ` (gồm +${speedBonus} điểm nhanh)` : ''}.${penaltyLine}` : `${textQ ? `Câu trả lời của bạn: “${escapeHtml(String(answerText ?? '').trim())}”.` : revealAnswer ? 'Đáp án đúng đã được đánh dấu.' : 'Cách trả lời này không mở đáp án.'}`}${answerReveal}${rubric}${legacyExplanation}${discussion}${teamNote}`;
     wireNextButton();
-    // The showcase fits the house into the space the feedback card leaves, so
-    // it runs after the banner and the "next" button are laid out (#142).
+    // The showcase fits the house after the next control is laid out (#142).
     if (isHouseMode(state.currentGame))
         showcaseHouse();
     sendPresentationState();
+}
+function showQuizScoreChange(points, detail = 'điểm') {
+    const stage = $('.game-stage');
+    if (!stage)
+        return;
+    document.querySelectorAll('.quiz-score-float').forEach(notice => notice.remove());
+    const value = Math.round(Number(points) || 0);
+    const notice = document.createElement('div');
+    notice.className = `quiz-score-float${value < 0 ? ' is-loss' : value === 0 ? ' is-neutral' : ''}`;
+    notice.setAttribute('role', 'status');
+    notice.setAttribute('aria-live', 'polite');
+    notice.textContent = value > 0 ? `+${value} ${detail}` : value < 0 ? `−${Math.abs(value)} ${detail}` : '0 điểm';
+    stage.appendChild(notice);
+    setTimeout(() => notice.remove(), 1800);
+}
+/** Tổng điểm trên thanh stage bằng đúng tổng đã ghi, thay vì trễ một câu (#213). */
+function syncScoreChip() {
+    const chip = document.querySelector('.stage-chip-score b');
+    if (chip)
+        chip.textContent = String(state.gameAnswers.reduce((s, a) => s + a.points, 0));
 }
 /** mm:ss for the result stat cards (language-neutral, compact on the projector). */
 function formatClock(totalSeconds) {

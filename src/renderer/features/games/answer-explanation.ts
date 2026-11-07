@@ -5,9 +5,8 @@
    ĐƯỜNG THỨ HAI tới chân lý qua `buildQuizView`/`buildTreasureView`. Sửa từng chỗ thì
    "giải thích không tự hiện" chỉ đúng ở màn vừa sửa, còn máy chiếu vẫn in chữ đó lên
    trước cả lớp.
-   Game CŨ (`mode === 'legacy'`) vẫn in inline NGUYÊN VĂN: #209 chốt "trò chơi đã lưu vẫn
-   chơi theo luật cũ cho tới khi giáo viên chủ động đổi", mà luật cũ của lời giải là "hiện
-   luôn cùng đáp án". Đổi một hàng chữ thành một cú nhấp là đổi hành vi của bản đã lưu.
+   Game CŨ (`mode === 'legacy'`) mặc định vẫn in inline NGUYÊN VĂN. Đấu trường có thể đặt
+   `explanationButton` để giữ lời giải sau nút mà không đổi luật trả lời hay các game cũ khác.
    `answerExplanationMarkup` nhận sẵn phần inline của từng bề mặt (`info.inline`) nên
    không có một khuôn mới nào áp lên chữ cũ. */
 
@@ -18,9 +17,9 @@ let answerExplanationPending = null;
 let answerExplanationWired = false;
 let answerExplanationGuard = null;
 
-/** Ba cách trả lời mới dùng nút; 'legacy' in inline như trò chơi đó vẫn làm. */
+/** Các chế độ mới dùng nút; Đấu trường cũng dùng nút cho game legacy. */
 function answerExplanationUsesButton(turn) {
-    return Boolean(turn) && String(turn.mode || 'legacy') !== 'legacy';
+    return Boolean(turn) && (turn.explanationButton === true || String(turn.mode || 'legacy') !== 'legacy');
 }
 /** Khoá của một lời giải: câu nào đang được giải thích, theo chế độ nào. */
 function answerExplanationKey(turn) {
@@ -56,7 +55,7 @@ function answerExplanationButtonHtml(key) {
  *  - chưa có vòng trả lời nào: '' (cả bốn trò đều mở vòng trước khi vẽ feedback);
  *  - hàng luật không cho (`explanationAllowed` false — sai ở Thử thách, hoặc Luyện tập
  *    đang thử lại): '', tức KHÔNG có nút và KHÔNG có chữ;
- *  - game cũ: `info.inline` trả lại NGUYÊN VĂN chữ của hôm qua;
+ *  - game legacy không bật nút: `info.inline` trả lại NGUYÊN VĂN chữ hiện có;
  *  - ba chế độ mới: một cái nút, và chữ chỉ tồn tại sau một cú nhấp.
  */
 function answerExplanationMarkup(turn, info) {

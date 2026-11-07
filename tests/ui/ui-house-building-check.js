@@ -211,6 +211,22 @@ function RUN(gameJson, answers, opts) {
         feedbackText: fbEl ? fbEl.innerText.replace(/\\s+/g, ' ').trim() : null,
         feedbackBad: fbEl ? fbEl.classList.contains('bad') : null,
         nextVisible: nextEl ? !hidden(nextEl) : null,
+        nextDock: (() => {
+          const dock = document.querySelector('#quizNextDock');
+          if (!dock)
+            return null;
+          const r = dock.getBoundingClientRect();
+          const button = nextEl ? nextEl.getBoundingClientRect() : null;
+          const feedback = fbEl ? fbEl.getBoundingClientRect() : null;
+          return {
+            position: getComputedStyle(dock).position,
+            right: Math.round(document.documentElement.clientWidth - r.right),
+            bottom: Math.round(innerHeight - r.bottom),
+            buttonHeight: button ? Math.round(button.height) : 0,
+            overlapsFeedback: Boolean(button && feedback && button.right > feedback.left
+              && button.left < feedback.right && button.bottom > feedback.top && button.top < feedback.bottom)
+          };
+        })(),
         houseScale: group ? group.scale.x : null,
         houseY: group ? group.position.y : null,
         emblemVisible: threeStageHandle ? threeStageHandle.emblem.visible : null,
@@ -442,6 +458,8 @@ const fits = (b, r, minSpan = 60) => Boolean(b) && Boolean(r) &&
   const g6 = await evaluate(RUN(quizGame('ui-house-6', 6, 'house'), ['a', 'a', 'b', 'a', 'a', 'a']));
 
   const open6 = byLabel(g6, 'open');
+  check('the Xây nhà continue/skip popup stays hidden before the first answer',
+    open6.nextVisible === false, String(open6.nextVisible));
   check('house mode renders the parts progress panel', open6.progressPanel === true);
   check('the house HUD is a full-width strip above the question (#208)',
     Boolean(open6.stripBox && open6.hudBox && open6.questionBox && open6.mainBox) &&
@@ -513,6 +531,11 @@ const fits = (b, r, minSpan = 60) => Boolean(b) && Boolean(r) &&
     (a1.feedbackText || '').includes('Đáp án đúng') && (a1.feedbackText || '').includes('Chủ động chào hỏi'),
     JSON.stringify(a1.feedbackText));
   check('the "next" button is visible on the showcase', a1.nextVisible === true);
+  check('the Xây nhà continue/skip action floats in the bottom-right corner',
+    a1.nextDock?.position === 'fixed' && a1.nextDock.right >= 0 && a1.nextDock.right <= 24
+      && a1.nextDock.bottom >= 0 && a1.nextDock.bottom <= 24
+      && a1.nextDock.buttonHeight >= 34 && a1.nextDock.overlapsFeedback === false,
+    JSON.stringify(a1.nextDock));
 
   const q2 = byLabel(g6, 'question-2');
   check('the new part carries into the next question', q2.parts === 1 && (q2.count || '').includes('1/6'),
@@ -766,6 +789,12 @@ const fits = (b, r, minSpan = 60) => Boolean(b) && Boolean(r) &&
   check('fullscreen keeps the explanation card visible',
     fsAnswer.feedbackBox && fsAnswer.feedbackBox.width > 0 && fsAnswer.feedbackBox.height > 0,
     JSON.stringify(fsAnswer.feedbackBox));
+  check('fullscreen Xây nhà keeps continue/skip in the bottom-right popup',
+    fsAnswer.nextDock?.position === 'fixed' && fsAnswer.nextDock.right >= 0
+      && fsAnswer.nextDock.right <= 24 && fsAnswer.nextDock.bottom >= 0
+      && fsAnswer.nextDock.bottom <= 24 && fsAnswer.nextDock.buttonHeight >= 34
+      && fsAnswer.nextDock.overlapsFeedback === false,
+    JSON.stringify(fsAnswer.nextDock));
   check('fullscreen puts the HUD strip above the house slot',
     fsOpen.hudBox && fsOpen.slotBox && fsOpen.hudBox.bottom <= fsOpen.slotBox.top + 1,
     JSON.stringify({ hud: fsOpen.hudBox, slot: fsOpen.slotBox }));

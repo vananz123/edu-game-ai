@@ -5,7 +5,7 @@
 // of the suite. ELECTRON_RUN_AS_NODE makes the Electron binary behave as Node.
 const { spawnSync } = require('node:child_process');
 const path = require('node:path');
-const electronPath = require('electron');
+const electronPath = process.execPath;
 
 const target = process.argv[2];
 if (!target) {

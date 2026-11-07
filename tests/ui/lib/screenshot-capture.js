@@ -119,6 +119,7 @@ const MEASURE_LAYOUT = `
     // presentation window had at 12px).
     const textEls = [...doc.querySelectorAll('body *')].filter(el => {
       if (!painted(el)) return false;
+      if (el.closest('.quiz-answer-live')) return false;
       if (textScope && !textScope.contains(el)) return false;
       const own = [...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim());
       return own && el.offsetWidth > 0 && el.offsetHeight > 0;

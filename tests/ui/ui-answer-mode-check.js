@@ -280,6 +280,12 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
             marked: grid.filter(btn => btn.classList.contains('wrong')).map(btn => btn.dataset.answer),
             clickable: grid.filter(btn => !btn.disabled).length,
             feedback: fb ? String(fb.textContent).trim() : '',
+            /* #213: từ phương án C, nút "Giải thích" của Đấu trường KHÔNG còn nằm
+               trong bảng phản hồi — nó đứng ở khe trái của dock. Vì vậy bằng chứng
+               "được quyền mở lời giải" phải đo trên CHÍNH cái nút, không đo trên chữ
+               của bảng phản hồi nữa (đọc text banner mà nút đã dời đi thì luôn
+               ra false, tức là một lỗi giả). */
+            explainBtn: Boolean(document.querySelector('#playBody [data-answer-explain]')),
             nextShown: Boolean(next) && !next.classList.contains('hidden'),
             nextLabel: next ? String(next.textContent).trim() : '',
             tip: document.querySelector('.stage-tip') ? String(document.querySelector('.stage-tip').textContent).trim() : '',
@@ -899,7 +905,8 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
           • máy chiếu — đường thứ hai tới đáp án — có in lời giải TRƯỚC cú nhấp không;
           • câu kế tiếp có để hộp cũ phủ lên câu mới không (chủ của hộp là cái nút đã mở
             nó, mất nút là mất hộp).
-         Game CŨ vẫn in inline: đó là hành vi của bản đã lưu (#209), không phải chỗ chưa làm. */
+         Game legacy của Đấu trường cũng phải mở lời giải bằng nút; game legacy khác giữ
+         hành vi cũ và được kiểm tra riêng ở các bề mặt tương ứng. */
       try {
         const TOKEN_COMPETITIVE = 'tra-loi:thi-dau';
         const WHY = 'Bằng hai.';
@@ -1053,7 +1060,7 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
         //    qua cái nút, không qua banner.
         await lplay(quizL('explain-competitive-miss', TOKEN_COMPETITIVE));
         out.explain.competitiveMiss = await lopt('b');
-        // 5. GAME CŨ: vẫn in inline, không có nút, máy chiếu vẫn in như hôm qua.
+        // 5. Đấu trường dùng nút Giải thích cả khi game được lưu theo luật legacy.
         await lplay(quizL('explain-legacy', null));
         out.explain.legacyHit = await lopt('a');
         // 6. Câu kế tiếp không được để hộp cũ phủ lên câu mới.
@@ -1642,7 +1649,7 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
   const view = s => !s ? String(s) : s.error ? JSON.stringify(s) : JSON.stringify({
     mode: s.mode, open: s.open, rows: s.rows, pts: s.points, lastPts: s.lastPts,
     reveal: s.reveal, marked: s.marked, click: s.clickable, next: s.nextLabel,
-    idx: s.index, house: s.house, dupes: s.dupes
+    idx: s.index, house: s.house, dupes: s.dupes, exp: s.explainBtn
   });
   const said = s => String(s && s.feedback || '').replace(/\s+/g, ' ').slice(0, 170);
   const has = (s, text) => String(s && s.feedback || '').indexOf(text) !== -1;
@@ -1707,8 +1714,11 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
   check('a correct Thử thách answer reveals the option and earns the explanation',
     play.challengeCorrect?.points === 100 && JSON.stringify(play.challengeCorrect?.reveal) === JSON.stringify(['a'])
     /* Task 7 (#209): "earn" nghĩa là ĐƯỢC QUYỀN MỞ, không phải được đọc. Chữ vẫn cấm
-       trên banner; cái nút thế chỗ nó — mục L đo tiếp rằng một cú nhấp mới dựng hộp. */
-    && !has(play.challengeCorrect, 'Bằng hai') && has(play.challengeCorrect, 'Giải thích'),
+       trên banner; cái nút thế chỗ nó — mục L đo tiếp rằng một cú nhấp mới dựng hộp.
+       #213 đổi CHỖ của nút (banner → khe trái của dock), nên bằng chứng chuyển từ
+       đọc chữ `#answerFeedback` sang đếm chính phần tử `[data-answer-explain]`:
+       luật không đổi, chỉ vị trí đo đổi. */
+    && !has(play.challengeCorrect, 'Bằng hai') && play.challengeCorrect?.explainBtn === true,
     view(play.challengeCorrect) + ' | ' + said(play.challengeCorrect));
 
   // 6. Xây nhà: một câu đổi ĐÚNG MỘT phần nhà; cú sai còn mở vòng thì chưa đổi gì.
@@ -2116,7 +2126,7 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
      ĐƯỢC MỞ, nên mỗi điều phải đo là sự VẮNG mặt của nó trên màn chơi trước một cú
      nhấp và sự hiện diện của nó TRONG hộp sau cú nhấp đó. Máy chiếu được đo riêng vì
      nó là đường thứ hai tới đáp án: màn chính im mà bảng chiếu nói thì cả lớp vẫn nghe.
-     Game cũ ĐƯỢC phép in inline — đó là hành vi của bản đã lưu, không phải chỗ chưa làm. */
+     Game legacy của Đấu trường cũng mở lời giải bằng nút; các game legacy khác giữ luật cũ. */
   const ex = report.explain || {};
   const exv = s => !s ? String(s) : s.error ? JSON.stringify(s) : JSON.stringify({
     btn: s.btn, open: s.open, dText: s.dText, dTitle: s.dTitle, dLaw: s.dLaw,
@@ -2177,11 +2187,11 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
     btnOn(ex.competitiveMiss) && ex.competitiveMiss?.boardWhy === false
     && ex.competitiveMiss?.open === false, exv(ex.competitiveMiss));
 
-  // 7. Game CŨ: hành vi của bản đã lưu phải còn nguyên, kể cả trên máy chiếu.
-  check('a legacy game still prints the explanation inline and shows no button',
-    btnOff(ex.legacyHit) && ex.legacyHit?.boardWhy === true
-    && String(ex.legacyHit?.banner || '').indexOf('Bằng hai.') !== -1
-    && ex.legacyHit?.quizWhy === 'Bằng hai.', exv(ex.legacyHit));
+  // 7. Đấu trường legacy chỉ đổi cách mở lời giải; vẫn giữ nguyên luật trả lời.
+  check('a legacy Arena game puts its explanation behind a button',
+    btnOn(ex.legacyHit) && ex.legacyHit?.boardWhy === false
+    && String(ex.legacyHit?.banner || '').indexOf('Bằng hai.') === -1
+    && ex.legacyHit?.quizWhy === '', exv(ex.legacyHit));
 
   // 8. Hộp mở mà câu đã đổi là lỗi thật: nó phủ lên câu mới trước cả lớp.
   check('the next question retires an open dialog together with its button',
@@ -2617,13 +2627,13 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
       || c.hit.projCa !== c.right || c.hit.projAt !== c.right || c.hit.projRev !== 'true'))
     + ' | ' + TXCELLS.map(c => TXV(c.hit)).join(' ~~ '));
 
-  // LỜI GIẢI: game cũ in thẳng (hành vi đã lưu), ba chế độ mới chỉ có sau một cú nhấp.
+  // LỜI GIẢI: Đấu trường dùng nút cả trong game legacy; chữ chỉ hiện sau cú nhấp.
   // Luyện tập đang mở vòng thì CHƯA có cánh cửa: lời giải của một câu chưa khép là một
   // lời đáp án đi sớm.
-  check('the old game prints its explanation inline and grows no door',
-    none(TXCELLS.filter(c => c.mode === 'legacy' && (!c.hit || c.hit.inlineWhy !== true
-      || String(c.hit.explain || '').indexOf('Giải thích') !== -1
-      || c.hit.whyLaw !== true || String(c.hit.projWhy || '').indexOf(txwhy(c)) === -1))),
+  check('a legacy Arena quiz keeps its explanation behind a button',
+    none(TXCELLS.filter(c => c.mode === 'legacy' && (!c.hit || c.hit.inlineWhy === true
+      || String(c.hit.explain || '').indexOf('Giải thích') === -1
+      || c.hit.whyLaw !== true || String(c.hit.projWhy || '') !== ''))),
     TXCELLS.filter(c => c.mode === 'legacy').map(c => TXV(c.hit)).join(' ~~ '));
   check('the three new laws keep the words behind a door on a text screen too',
     none(TXNEW.filter(c => !c.hit || c.hit.inlineWhy === true

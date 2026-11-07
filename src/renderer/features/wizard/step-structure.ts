@@ -171,8 +171,8 @@ function wizardStructureToggleCollapse(id) {
 
 /**
  * Carries the step-1 tree state across the `innerHTML` re-render: the scroll
- * offset of the tree and the preview text, `aria-checked` on the partial rows,
- * and the section the teacher just ticked.
+ * offsets of the independent tree and preview panes, `aria-checked` on the
+ * partial rows, and the section the teacher just ticked.
  *
  * Re-rendering used to reset the tree to its top and gave the browser nothing
  * to keep the caret/label steady, which read as a jump on every click.
@@ -182,10 +182,8 @@ function wizardStructureRestoreView(focusSectionId) {
   const tree = wizardStructureState().tree;
   if (!tree) return;
   // Always write the remembered offset. Leaving it at 0 simply scrolls to the
-  // top; skipping the write is NOT the same thing, because the preview block
-  // below the tree changes height when the debounced preview lands, and the
-  // browser re-anchors the scroll position to keep its old first visible node —
-  // which showed up as "the tree jumps to a neighbour row after a tick".
+  // top; skipping the write is NOT the same thing, because a render may replace
+  // either pane while the teacher is reviewing its scroll position.
   const treeTarget = Number(wizardStructureRestoreView.treeScroll || 0);
   if (treeList) treeList.scrollTop = treeTarget;
   const previewTarget = Number(wizardStructureRestoreView.previewScroll || 0);
@@ -219,8 +217,8 @@ function wizardStructureRestoreView(focusSectionId) {
  */
 function wizardStructureCaptureView() {
   const treeList = document.querySelector('[data-structure-tree]');
-  // A hidden pane (the content tab) reports 0 for `scrollTop`; keeping the last
-  // real offset is what lets the teacher come back to the same row.
+  // Hidden panes report 0 for `scrollTop`; keeping the last real offset is what
+  // lets the teacher return to the same tree row or preview text.
   if (treeList && treeList.scrollTop > 0) wizardStructureRestoreView.treeScroll = treeList.scrollTop;
   const preview = document.querySelector('[data-structure-preview-text]');
   if (preview && preview.scrollTop > 0) wizardStructureRestoreView.previewScroll = preview.scrollTop;
@@ -566,8 +564,5 @@ function renderWizardStructurePanel(s, tree, view) {
       <small class="text-[12px] text-[#5f6a7d]">cấu trúc v${Number(tree.version || 0)} · ${Number(tree.textLength || 0).toLocaleString('vi-VN')} ký tự</small>
     </div>
     <ul class="wizard-tree" data-structure-tree>${view.rows}</ul>
-    ${wizardStructurePreviewPanel()}
   </div>`;
 }
-
-

@@ -201,7 +201,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   );
 
   // Switching tabs must not leave the structure pane blank while the debounced
-  // analyzer catches up, and the content pane must still exist for the sync.
+  // analyzer catches up; the AI payload preview stays below the tabs either way.
   const tab = await evaluate(`(async () => {
     const waitFor = async (fn, ms) => { const started = Date.now(); while (Date.now() - started < (ms || 20000)) { if (fn()) return true; await new Promise(r => setTimeout(r, 100)); } return false; };
     wizardState.structure = null;
@@ -216,15 +216,45 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     const pane = document.querySelector('[data-tab-pane="structure"]');
     const initial = { text: pane ? pane.textContent.trim().slice(0, 40) : '', panes: document.querySelectorAll('[data-tab-pane]').length };
     const ready = await waitFor(() => document.querySelector('[data-structure-tree]'), 20000);
-    const bothVisibleMarkup = document.querySelectorAll('[data-tab-pane]').length === 2;
-    const selected = document.querySelector('[data-wizard-input-tab="structure"]');
-    return { ready, initial, bothVisibleMarkup, ariaSelected: selected.getAttribute('aria-selected') };
+    const previewReady = await waitFor(() => document.querySelector('[data-structure-preview]'), 20000);
+    const activeStructureTab = document.querySelector('[data-wizard-input-tab="structure"]');
+    const structureTabAriaSelected = activeStructureTab.getAttribute('aria-selected');
+    const payload = document.querySelector('[data-wizard-ai-payload]');
+    const structurePane = document.querySelector('[data-tab-pane="structure"]');
+    const allPanesRemainInDom = document.querySelectorAll('[data-tab-pane]').length === 2;
+    const payloadOutsideTabs = Boolean(payload && !payload.closest('[role="tabpanel"]'));
+    const payloadBelowTabs = Boolean(payload && structurePane && structurePane.compareDocumentPosition(payload) & Node.DOCUMENT_POSITION_FOLLOWING);
+    const previewInStructure = Boolean(structurePane && structurePane.querySelector('[data-structure-preview]'));
+    const contentTabAfterPreview = document.querySelector('[data-wizard-input-tab="content"]');
+    contentTabAfterPreview.click();
+    const contentPane = document.querySelector('[data-tab-pane="content"]');
+    const payloadAfterTabSwitch = document.querySelector('[data-wizard-ai-payload]');
+    const contentTabSelected = document.querySelector('[data-wizard-input-tab="content"]').getAttribute('aria-selected');
+    return {
+      ready,
+      previewReady,
+      initial,
+      allPanesRemainInDom,
+      previewInStructure,
+      payloadOutsideTabs,
+      payloadBelowTabs,
+      previewInPayload: Boolean(payload && payload.querySelector('[data-structure-preview]')),
+      payloadRemainsAfterTabSwitch: Boolean(payloadAfterTabSwitch && payloadAfterTabSwitch.querySelector('[data-structure-preview]')),
+      payloadBelowContentTab: Boolean(contentPane && payloadAfterTabSwitch && contentPane.compareDocumentPosition(payloadAfterTabSwitch) & Node.DOCUMENT_POSITION_FOLLOWING),
+      ariaSelected: structureTabAriaSelected,
+      contentTabSelected
+    };
   })()`);
 
   check('switching to the structure tab shows a state instead of an empty pane', Boolean(tab.initial.text), JSON.stringify(tab.initial));
   check('the structure tab fills in once the local analyzer finishes', tab.ready === true, JSON.stringify(tab));
-  check('both tab panes stay in the DOM', tab.bothVisibleMarkup === true, JSON.stringify(tab));
+  check('the AI payload preview becomes available after local analysis', tab.previewReady === true, JSON.stringify(tab));
+  check('only the two intended tab panes stay in the DOM', tab.allPanesRemainInDom === true, JSON.stringify(tab));
+  check('the structure tab does not contain the AI payload preview', tab.previewInStructure === false, JSON.stringify(tab));
+  check('the AI payload preview is outside and below the tabs', tab.payloadOutsideTabs && tab.payloadBelowTabs && tab.previewInPayload, JSON.stringify(tab));
+  check('the AI payload preview stays below the tabs after switching tabs', tab.payloadRemainsAfterTabSwitch && tab.payloadBelowContentTab, JSON.stringify(tab));
   check('the active tab reports aria-selected', tab.ariaSelected === 'true', String(tab.ariaSelected));
+  check('the content tab reports aria-selected when opened', tab.contentTabSelected === 'true', String(tab.contentTabSelected));
 
   const failed = results.filter(r => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
@@ -235,4 +265,3 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   console.error('ui-wizard-structure-check crashed:', error.message);
   process.exitCode = 1;
 });
-

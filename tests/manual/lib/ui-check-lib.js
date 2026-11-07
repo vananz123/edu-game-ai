@@ -82,6 +82,8 @@ async function connect() {
     await new Promise(resolve => setTimeout(resolve, 150));
   }
   await send('Runtime.enable');
+  await send('Page.setWebLifecycleState', { state: 'active' });
+  await send('Emulation.setFocusEmulationEnabled', { enabled: true });
   // Đo trên cửa sổ đã hoàn tất animation ở MỌI lần chạy. Khi app không phải cửa
   // sổ đang được chọn, Chromium tạm dừng timeline nên `.modal` còn ở khung đầu
   // của animation pop-in (scale 0.92) và mọi px đo được nhỏ hơn thật ~8%.

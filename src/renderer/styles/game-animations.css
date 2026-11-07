@@ -40,6 +40,10 @@
 .modal[data-player-theme] .answer-option.wrong {
   animation: answer-shake 0.4s ease-in-out;
 }
+.modal[data-player-theme] .game-stage.is-arena-quiz .answer-option.correct,
+.modal[data-player-theme] .game-stage.is-arena-quiz .answer-option.wrong {
+  animation: none;
+}
 .modal[data-player-theme] .feedback {
   animation: feedback-pop 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }

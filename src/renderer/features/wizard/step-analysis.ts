@@ -16,9 +16,9 @@ function wizardCognitiveLabel(level) {
 // Real boundaries from `lesson:analyze`: cache check → model attempt →
 // repair-if-needed → stored. There is no token stream, so no fake percentage.
 const WIZARD_ANALYSIS_STAGES = [
-  ['prepare', 'Đọc giáo án và kiểm tra cache'],
+  ['prepare', 'Đọc giáo án và kiểm tra'],
   ['generate', 'AI phân tích mục tiêu và kiến thức'],
-  ['repair', 'Sửa phần chưa đạt (nếu cần)'],
+  ['repair', 'Sửa phần chưa đạt'],
   ['ready', 'Lưu kết quả phân tích']
 ];
 
