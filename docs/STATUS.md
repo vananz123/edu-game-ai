@@ -8,9 +8,10 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 ## Mục lục bàn giao
 
 ### 2026-11-07 — Phát hành v0.4.2, #216 và #215
+- **Chế độ dev `npm run dev` (2026-11-07) — sửa renderer tự reload cửa sổ, không cần mở lại app; main process vẫn phải chạy lại.** Chi tiết ở đầu handoff mới nhất bên dưới.
 - **EduGame Studio v0.4.2 đã commit/push và phát hành trên GitHub Releases**, kèm bộ cài Windows và feed cập nhật đã kiểm tra. Chi tiết ở đầu handoff mới nhất bên dưới; quyết định #217 trong `docs/DECISIONS.md`.
 - **#216 (2026-11-07) — Nút tiếp tục nổi góc dưới phải, đáp án giữ nguyên cỡ.** Chi tiết và kiểm chứng ở đầu handoff mới nhất bên dưới; quyết định #216 trong `docs/DECISIONS.md`.
-- **#215 (2026-11-07) — Bỏ dải HUD phản hồi, điểm hiện dạng nổi rồi tự ẩn, nút Giải thích neo góc dưới trái.** Chi tiết và kiểm chứng ở đầu handoff mới nhất bên dưới; quyết định #215 trong `docs/DECISIONS.md`.
+- **#215 (2026-11-07) — Bỏ dải HUD phản hồi, điểm hiện dạng nổi rồi tự ẩn, nút Giải thích neo góc dưới trái.** Bản lưu trữ: [docs/handoff/status/2026-11-07.md](handoff/status/2026-11-07.md); quyết định #215 trong `docs/DECISIONS.md`.
 - **#214 và bố trí “Nội dung gửi AI” dưới cụm tab.** Bản lưu trữ: [docs/handoff/status/2026-11-07.md](handoff/status/2026-11-07.md); quyết định #214 trong `docs/DECISIONS.md`.
 
 ### 2026-11-06 — #209 task 1+2, task 3, task 4, task 5, task 6 và task 7 đã lưu ở [docs/handoff/status/2026-11-06.md](handoff/status/2026-11-06.md)
@@ -262,6 +263,18 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - Lịch sử trước 2026-10-19
 ## Bàn giao gần nhất
 
+### Chế độ dev `npm run dev` — sửa renderer thấy ngay, không cần mở lại app (2026-11-07)
+
+**Files changed.** `scripts/dev.js` (mới), `package.json` (+1 script `dev`), `src/main.ts` (+23 dòng: khối auto-reload gated sau `EDUGAME_DEV_RELOAD`), `docs/STATUS.md`.
+
+**Behavior.** `npm run dev` chạy build một lần rồi bật ba watcher: `tsc --watch`, `tailwindcss --watch`, và watch/copy file tĩnh (`index.html`, `renderer/styles/*.css`, `presentation/*`, `lan/mobile/*`, `renderer/assets/*` — đúng danh sách copyfiles của `npm run build`), sau đó khởi động Electron với `EDUGAME_DEV_RELOAD=1`. Main process canh `dist/src` (debounce 300 ms) và `reloadIgnoringCache()` mọi cửa sổ khi có file `.js/.html/.css` đổi. Sửa renderer (TS/HTML/CSS/asset) áp dụng sau ~1–2 giây không cần mở lại app; sửa main process (`src/main.ts`, services) vẫn phải Ctrl+C và chạy lại — Electron không hot-swap được main. Watcher chỉ bật khi `EDUGAME_DEV_RELOAD=1` và `!app.isPackaged`, nên `npm start` và bản đóng gói không đổi hành vi. Tham số CLI được chuyển tiếp tới Electron (`npm run dev -- --remote-debugging-port=9222`). Đóng cửa sổ app thì dev.js thoát và kill cả cây tiến trình con (taskkill /T trên Windows). Lưu ý: reload mất trạng thái in-memory chưa lưu (ván chơi đang dở, wizard chưa lưu) — đúng bản chất reload.
+
+**Commands and results.** `npm run check` — passed; `npm run check:renderer-globals` — 68/70 scripts, 1.014 hàm / 8.108 điểm gọi, 0 undefined; `npm run dev -- --remote-debugging-port=9222` — build 0 lỗi, tsc watch "Found 0 errors", app mở. Đo thật qua CDP: (1) đổi `<title>` trong `src/index.html` → log `[dev] copied src/index.html` và title của CDP target đổi theo, Electron không restart; (2) đặt marker `window.__devReloadProbe` qua CDP → thêm một dòng comment vào `src/renderer/core/bootstrap.ts` → tsc incremental compile 0 errors → marker biến mất (cửa sổ đã reload). Cả hai thay đổi thử đã hoàn tác, probe scratch đã xoá. Đóng cửa sổ app → dev.js exit 0, không còn tiến trình electron/watcher mồ côi.
+
+**Not verified.** Nhánh Tailwind watch chưa đo riêng (cùng cơ chế reload như tsc: ghi vào `dist`); độ ổn định dài hạn của `fs.watch` recursive trên Windows; hành vi trên macOS/Linux (nhánh kill dùng SIGTERM, chưa chạy thử); chưa chạy lại full unit suite (không đổi logic thuần, `main.ts` là `@ts-nocheck`).
+
+**Next recommended task.** Dùng `npm run dev` cho việc sửa UI; nếu cần main process tự restart khi sửa thì cân nhắc `electronmon` (thêm dependency — cần duyệt).
+
 ### Phát hành EduGame Studio v0.4.2 (2026-11-07)
 
 **Files changed.** Toàn bộ 26 tệp đã duyệt trong worktree, gồm gameplay Arena, wizard, test hồi quy, docs và bump phiên bản desktop/backend lên `0.4.2`. Release source commit: `2740fc2f89ed9c122382f4310ebd425b9c78d105`; annotated tag `v0.4.2` trỏ đúng commit này.
@@ -287,18 +300,6 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 **Not verified.** Chưa thử trên máy chiếu/màn hình vật lý; chưa kiểm tra bản đóng gói. Popup và kích thước đáp án được xác minh trên Electron dev ở hai độ phân giải trình chiếu.
 
 **Next recommended task.** Thử Đấu trường trên máy chiếu thật để xác nhận khả năng đọc và vị trí hai nút nổi; sau đó tiếp tục các mục phát hành/P7 còn mở.
-
-### Bổ sung #215 — HUD phản hồi thành hiệu ứng điểm và nút giải thích nổi (2026-11-07)
-
-**Files changed.** `src/renderer/features/games/quiz.ts`, `src/renderer/features/games/answer-explanation.ts`, `src/renderer/styles/gameplay.css`, `tests/ui/lib/screenshot-capture.js`, `tests/ui/ui-play-surface-check.js`, `tests/ui/ui-answer-mode-check.js`, `docs/DECISIONS.md`, `docs/STATUS.md`. `#answerFeedback` giữ vai trò live region ẩn trực quan; không còn panel phản hồi chiếm chỗ. Nút Giải thích được đặt fixed góc dưới trái và mở modal sẵn có ở mọi lượt Đấu trường được phép giải thích, kể cả game legacy; luật trả lời vẫn giữ nguyên. Các trò Đường đua/Kho báu không đổi vị trí nút.
-
-**Behavior.** Khi câu kết thúc, hiệu ứng nổi báo đúng số điểm đã ghi (`+90 điểm`) rồi tự biến mất; trong Luyện tập, mỗi sai hiển thị mức giảm điểm còn có thể nhận của câu (`−10 điểm câu này`), không giả làm số điểm tích lũy đã bị trừ. Tổng điểm trên chip vẫn cập nhật theo bản ghi. Thông báo đọc màn hình được giữ; vùng đó được loại khỏi phép đo chữ hiển thị/clipping của ảnh chụp UI.
-
-**Commands and results.** `npm run check` — passed; `npm run build` — passed (cảnh báo môi trường EPERM khi dọn `dist/server/index.js`); `node tests/run-unit.js` — 89/89; `npm run verify:css` — 61/61; `$env:CDP_PORT='9341'; npm run check:answer-mode-ui` — 218/218, gồm kiểm tra nút popup cho game Đấu trường legacy và câu trả lời dạng chữ; `node --check tests/ui/ui-answer-mode-check.js` và `git diff --check` — passed. Lượt UI đầu tiên không kết nối được vì app Electron chưa chạy; sau khi khởi động app, toàn bộ 218 kiểm tra đạt.
-
-**Not verified.** Chưa thử trên máy chiếu/màn hình vật lý; đã kiểm tra UI Electron ở hai độ phân giải máy chiếu. Chưa kiểm tra bản đóng gói.
-
-**Next recommended task.** Xác nhận vị trí nút popup trên thiết bị trình chiếu thật; nếu ổn, tiếp tục các mục phát hành/P7 còn mở.
 
 ## Handoff — **Khoảng trống ảnh→câu hỏi ở kho báu toàn màn hình: 424px → 34px, gate 320/320** (2026-11-05, DECISIONS #207)
 

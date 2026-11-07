@@ -15,6 +15,7 @@
     "build:three": "node scripts/build-three.js",
     "build:confetti": "node scripts/build-confetti.js",
     "start": "npm run build && electron .",
+    "dev": "node scripts/dev.js",
     "check": "tsc --noEmit -p tsconfig.json",
     "test": "npm run build && node tests/run-unit.js",
     "dist:win": "npm run build && electron-builder --win nsis",

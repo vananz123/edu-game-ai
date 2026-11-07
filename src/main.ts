@@ -870,6 +870,29 @@ app.whenReady().then(async () => {
   markBoot('ipcRegistered');
   createWindow();
   markBoot('windowCreated');
+  // Dev-only live reload (scripts/dev.js sets EDUGAME_DEV_RELOAD=1). Watch the
+  // compiled output, not src: tsc/Tailwind/copyfiles write at different times,
+  // so the debounce coalesces one save into a single reload. Main-process
+  // edits still need an app restart; only the renderer is reloaded here.
+  if (process.env.EDUGAME_DEV_RELOAD === '1' && !app.isPackaged) {
+    let reloadTimer;
+    try {
+      fsSync.watch(__dirname, { recursive: true }, (eventType, filename) => {
+        const name = filename ? filename.toString() : '';
+        if (!/\.(js|html|css)$/u.test(name) || name.endsWith('.map')) return;
+        clearTimeout(reloadTimer);
+        reloadTimer = setTimeout(() => {
+          for (const win of BrowserWindow.getAllWindows()) {
+            if (win.isDestroyed() || win.webContents.isLoading()) continue;
+            win.webContents.reloadIgnoringCache();
+          }
+        }, 300);
+      });
+      console.log('[dev] watching dist for changes — renderer will auto-reload');
+    } catch (error) {
+      console.warn('[dev] could not watch dist for live reload:', error && error.message);
+    }
+  }
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 app.on('before-quit', async event => {
