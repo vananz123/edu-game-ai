@@ -7,11 +7,11 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
-### 2026-11-07 — Đưa Nội dung gửi AI xuống dưới cụm tab, #216, #215 và #214
-- **Nội dung gửi AI là vùng riêng bên dưới hai tab Cấu trúc tài liệu / Nội dung giáo án, không phải một tab.** Chi tiết và kiểm chứng ở đầu handoff mới nhất bên dưới.
+### 2026-11-07 — Phát hành v0.4.2, #216 và #215
+- **EduGame Studio v0.4.2 đã commit/push và phát hành trên GitHub Releases**, kèm bộ cài Windows và feed cập nhật đã kiểm tra. Chi tiết ở đầu handoff mới nhất bên dưới; quyết định #217 trong `docs/DECISIONS.md`.
 - **#216 (2026-11-07) — Nút tiếp tục nổi góc dưới phải, đáp án giữ nguyên cỡ.** Chi tiết và kiểm chứng ở đầu handoff mới nhất bên dưới; quyết định #216 trong `docs/DECISIONS.md`.
 - **#215 (2026-11-07) — Bỏ dải HUD phản hồi, điểm hiện dạng nổi rồi tự ẩn, nút Giải thích neo góc dưới trái.** Chi tiết và kiểm chứng ở đầu handoff mới nhất bên dưới; quyết định #215 trong `docs/DECISIONS.md`.
-- **#214 (2026-11-07) — Gỡ dock phản hồi khỏi Đấu trường Cổ điển, trả lại chiều cao cho đáp án.** Bản lưu trữ: [docs/handoff/status/2026-11-07.md](handoff/status/2026-11-07.md); quyết định #214 trong `docs/DECISIONS.md`.
+- **#214 và bố trí “Nội dung gửi AI” dưới cụm tab.** Bản lưu trữ: [docs/handoff/status/2026-11-07.md](handoff/status/2026-11-07.md); quyết định #214 trong `docs/DECISIONS.md`.
 
 ### 2026-11-06 — #209 task 1+2, task 3, task 4, task 5, task 6 và task 7 đã lưu ở [docs/handoff/status/2026-11-06.md](handoff/status/2026-11-06.md)
 - **#212 (2026-11-06) — `quitAndInstall()` lần đầu được gọi thật trên binary đóng gói; P7 vẫn mở.** Bản lưu trữ: [docs/handoff/status/2026-11-06.md](handoff/status/2026-11-06.md).
@@ -262,17 +262,19 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - Lịch sử trước 2026-10-19
 ## Bàn giao gần nhất
 
-### Bố trí “Nội dung gửi AI” bên dưới cụm tab (2026-11-07)
+### Phát hành EduGame Studio v0.4.2 (2026-11-07)
 
-**Files changed.** `src/renderer/features/wizard/step-input.ts`, `src/renderer/features/wizard/step-structure.ts`, `tests/unit/renderer-load-order.test.ts`, `tests/ui/ui-wizard-structure-check.js`.
+**Files changed.** Toàn bộ 26 tệp đã duyệt trong worktree, gồm gameplay Arena, wizard, test hồi quy, docs và bump phiên bản desktop/backend lên `0.4.2`. Release source commit: `2740fc2f89ed9c122382f4310ebd425b9c78d105`; annotated tag `v0.4.2` trỏ đúng commit này.
 
-**Behavior.** Bước nhập liệu giữ hai tab “Cấu trúc tài liệu” và “Nội dung giáo án”. Phần “Nội dung gửi AI” không còn là tab hay tab pane; nó luôn nằm phía dưới hai tab/pane và vẫn hiện khi chuyển qua lại. Giá trị tab cũ/không hợp lệ cũng được thay bằng tab hợp lệ mặc định.
+**Behavior.** Đấu trường Cổ điển/Xây nhà có bố cục câu hỏi và đáp án tối ưu hơn, nút tiếp tục/giải thích nổi và phản hồi điểm tạm thời. Wizard giữ hai tab Cấu trúc/Nội dung giáo án; phần xem trước “Nội dung gửi AI” nằm bên dưới và không đổi khi chuyển tab. Sửa runner kiểm thử native để dùng đúng Electron executable.
 
-**Commands and results.** `npm run build` — passed (cảnh báo môi trường EPERM khi dọn `dist/server/index.js`); `npx tsc -p tsconfig.json` — passed; `node tests/run-unit.js renderer-load-order` — 1/1; `npm run check` — passed; `npm run check:renderer-globals` — passed, không có global chưa khai báo; `node tests/ui/ui-wizard-structure-check.js 9362` — 19/19 trên Electron sau khi build lại; `node --check tests/ui/ui-wizard-structure-check.js` và `git diff --check` trên các tệp liên quan — passed.
+**Release.** [GitHub Release v0.4.2](https://github.com/vananz123/edu-game-ai/releases/tag/v0.4.2) (release ID `437444119`) đã public với 3 assets: `EduGame-Studio-Setup-0.4.2.exe` **92,597,265 B**, `.blockmap` **96,501 B**, `latest.yml` **356 B**. SHA-256 installer: `80131d173c66d10ae7375381794494a88b36b79112541a13c3d9fdcacd4121e5`; SHA-512 khớp feed: `zW0jnYtjgE8jlxeb1AOo5c+z49DnJ/Y19irFhqYN1GAVZMl503BE5qnowptqe/yX0KfIAOd1fu73pQNkIXb6Lw==`. `latest.yml` tải công khai khớp từng byte với feed được build. Installer **chưa ký Authenticode**.
 
-**Not verified.** Chưa chạy toàn bộ unit suite, native test hoặc UI test trên bản đóng gói.
+**Commands and results.** `npm test` — build thành công (cảnh báo `EPERM` khi dọn `dist/server/index.js`) và **89/89** unit suites; `npm run test:native` — **1/1**; `npm run check` — passed; `npm run verify:css` — **61/61**; `npm run check:renderer-globals` — không có global chưa khai báo. UI Electron: play surface **436/436**, answer mode **218/218**, house building **121/121**, wizard **19/19**. Bản đóng gói: offline gameplay **11/11**; sau khi public, feed GitHub thật `up-to-date` **24/24**. `npx electron-builder --win nsis --config.directories.output=release/0.4.2` — succeeded; installer và `latest.yml` khớp size/SHA-512; `git diff --check` — passed.
 
-**Next recommended task.** Chạy toàn bộ unit suite và native test; nếu đạt, tiếp tục kiểm tra quy trình wizard trên bản đóng gói.
+**Not verified.** Chưa chạy chính installer NSIS để cài/gỡ trên máy sạch, chưa ký Authenticode, chưa thử trên máy chiếu hoặc máy pilot; phép đo cập nhật chỉ xác nhận trạng thái `up-to-date`, không tải/cài bản mới.
+
+**Next recommended task.** Thử installer trên máy Windows sạch và hoàn tất P7 trên máy pilot (cài, kiểm tra cập nhật, ngắt mạng rồi chơi game đã lưu).
 
 ### Bổ sung #216 — Nút tiếp tục nổi góc dưới phải, đáp án giữ nguyên cỡ (2026-11-07)
 
@@ -292,7 +294,7 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 **Behavior.** Khi câu kết thúc, hiệu ứng nổi báo đúng số điểm đã ghi (`+90 điểm`) rồi tự biến mất; trong Luyện tập, mỗi sai hiển thị mức giảm điểm còn có thể nhận của câu (`−10 điểm câu này`), không giả làm số điểm tích lũy đã bị trừ. Tổng điểm trên chip vẫn cập nhật theo bản ghi. Thông báo đọc màn hình được giữ; vùng đó được loại khỏi phép đo chữ hiển thị/clipping của ảnh chụp UI.
 
-**Commands and results.** `npm run check` — passed; `npm run build` — passed (cảnh báo môi trường EPERM khi dọn `dist/server/index.js`); `node tests/run-unit.js` — passed; `$env:CDP_PORT='9341'; npm run check:answer-mode-ui` — 218/218, gồm kiểm tra nút popup cho game Đấu trường legacy và câu trả lời dạng chữ; `node --check tests/ui/ui-answer-mode-check.js` và `git diff --check` — passed. Lượt UI đầu tiên không kết nối được vì app Electron chưa chạy; sau khi khởi động app, toàn bộ 218 kiểm tra đạt.
+**Commands and results.** `npm run check` — passed; `npm run build` — passed (cảnh báo môi trường EPERM khi dọn `dist/server/index.js`); `node tests/run-unit.js` — 89/89; `npm run verify:css` — 61/61; `$env:CDP_PORT='9341'; npm run check:answer-mode-ui` — 218/218, gồm kiểm tra nút popup cho game Đấu trường legacy và câu trả lời dạng chữ; `node --check tests/ui/ui-answer-mode-check.js` và `git diff --check` — passed. Lượt UI đầu tiên không kết nối được vì app Electron chưa chạy; sau khi khởi động app, toàn bộ 218 kiểm tra đạt.
 
 **Not verified.** Chưa thử trên máy chiếu/màn hình vật lý; đã kiểm tra UI Electron ở hai độ phân giải máy chiếu. Chưa kiểm tra bản đóng gói.
 

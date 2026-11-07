@@ -2355,3 +2355,9 @@ Trong Luyện tập, lần sai làm giảm **điểm có thể nhận của câu
 Trong Đấu trường Cổ điển và Xây nhà, nút `Câu tiếp theo` / `Bỏ qua câu này` không còn chiếm chỗ trong chân câu hỏi: nó chỉ xuất hiện sau một lần trả lời và nổi cố định góc dưới bên phải. Nút trong Tình huống cùng các game khác giữ cách bố trí cũ.
 
 Bốn đáp án giữ nguyên vị trí và kích thước khi người chơi chọn; trạng thái chỉ đổi màu. Vì vậy riêng Đấu trường không chạy hoạt ảnh phóng to đáp án đúng hoặc rung đáp án sai, và CSS co lưới theo `#answerFeedback` tiếp tục chỉ áp dụng cho các bề mặt phản hồi trực quan khác. Xây nhà vẫn chuyển sang showcase sau khi chốt đáp án; thẻ phản hồi của showcase được phục hồi khỏi kiểu live-region ẩn để không bị popup chồng lên. Kết quả được kiểm tra trên Cổ điển ở 1920×1080 và 1366×768, cùng Xây nhà trong kiểm thử showcase/toàn màn hình.
+
+## #217 — Phát hành EduGame Studio v0.4.2 (2026-11-07)
+
+Đóng gói các thay đổi đã duyệt trong worktree vào commit `2740fc2f89ed9c122382f4310ebd425b9c78d105`, push nhánh `main` và tag annotated `v0.4.2`, sau đó công bố [GitHub Release v0.4.2](https://github.com/vananz123/edu-game-ai/releases/tag/v0.4.2) với installer NSIS, `.blockmap` và `latest.yml`. Upload assets khi release còn draft, xác minh tên/kích thước và feed trước khi publish. Feed công khai trả về `up-to-date` trong kiểm tra bản đóng gói.
+
+Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, SHA-256 `80131d173c66d10ae7375381794494a88b36b79112541a13c3d9fdcacd4121e5`; `latest.yml` công khai khớp từng byte với tệp build. Installer chưa được ký Authenticode và chưa được cài/chạy trên máy Windows sạch; đây là các bước xác minh còn mở, không được xem là đã hoàn tất chỉ từ kiểm tra feed hoặc bản `win-unpacked`.
