@@ -294,9 +294,8 @@ function wizardConfigCoreTypeFields(config) {
 }
 
 /* "Cách trả lời" (DECISIONS #209) replaces the old "Tính điểm" pick on the four templates that
-   answer questions. `keep` = "Giữ hành vi hiện tại" and only appears for a project that really is
-   still running on a pre-#209 rule (opened from the library), because a brand-new game has nothing
-   to keep. The pick is stored as a 'tra-loi:' token in gameSetup.scoringMode by the adapter. */
+   answer questions. #223 removed the "keep" entry: a project opened from the library that
+   still runs a pre-#209 rule shows "Thi đấu" — that same law — and is saved as its token. */
 function wizardAnswerModeSelect(config) {
   const current = config.answerMode || 'competitive';
   const options = [
@@ -304,9 +303,8 @@ function wizardAnswerModeSelect(config) {
     { value: 'practice', label: 'Luyện tập — sai được thử lại, mỗi lần sai bớt 10% điểm của câu' },
     { value: 'challenge', label: 'Thử thách — sai thì KHÔNG hiện đáp án, phải tự sang câu' }
   ];
-  if (current === 'keep') options.unshift({ value: 'keep', label: 'Giữ hành vi hiện tại — theo cách chấm của trò này' });
   return wizardConfigSelect('answerMode', 'Cách trả lời', current, options)
-    + `<p class="field-hint">${escapeHtml(answerModeHint(current === 'keep' ? 'legacy' : current))}</p>`;
+    + `<p class="field-hint">${escapeHtml(answerModeHint(current))}</p>`;
 }
 
 function wizardConfigAdvancedTypeFields(config) {

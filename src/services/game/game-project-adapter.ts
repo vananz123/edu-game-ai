@@ -732,8 +732,9 @@ const isHouseStyle = (value: unknown): value is HouseStyle =>
 /* Answer modes (DECISIONS #209) share the ONE stored key with the legacy scoring modes:
    `gameSetup.scoringMode` holds a diacritic-free 'tra-loi:' token. Duplicated here because
    src/game-engine/answer-mode.ts is a renderer global script — same arrangement as
-   HOUSE_STYLE_IDS above. 'keep' means the game stays on the scoring mode it was made with. */
-const ANSWER_MODE_TOKENS: Record<Exclude<AnswerModeSetting, 'keep'>, string> = {
+   HOUSE_STYLE_IDS above. A game with no token (made before #209) is read as 'competitive'
+   and written back as that token (#223): the pick no longer offers "keep". */
+const ANSWER_MODE_TOKENS: Record<AnswerModeSetting, string> = {
   competitive: 'tra-loi:thi-dau',
   practice: 'tra-loi:luyen-tap',
   challenge: 'tra-loi:thu-thach'
@@ -742,16 +743,16 @@ const ANSWER_MODE_TOKENS: Record<Exclude<AnswerModeSetting, 'keep'>, string> = {
 const isAnswerModeToken = (value: unknown): value is string =>
   typeof value === 'string' && Object.keys(ANSWER_MODE_TOKENS).some(key => ANSWER_MODE_TOKENS[key] === value);
 
-/** The token a draft's pick writes, or `undefined` when the pick is "Giữ hành vi hiện tại". */
-function answerModeTokenFor(config: GameConfig): string | undefined {
+/** The token a draft's pick writes. */
+function answerModeTokenFor(config: GameConfig): string {
   const pick = (config as { answerMode?: AnswerModeSetting }).answerMode;
-  return pick && pick !== 'keep' ? ANSWER_MODE_TOKENS[pick as Exclude<AnswerModeSetting, 'keep'>] : undefined;
+  return ANSWER_MODE_TOKENS[pick || 'competitive'] || ANSWER_MODE_TOKENS.competitive;
 }
 
-/** Read side of the same rule: which select is selected, and the legacy value to fall back on. */
+/** Read side of the same rule: a game without a token reads as 'competitive'. */
 function answerModeFromSetup(setup: GameSetup): { answerMode: AnswerModeSetting; legacyScoringMode: string } {
   const stored = String(setup.scoringMode || '');
-  if (!isAnswerModeToken(stored)) return { answerMode: 'keep', legacyScoringMode: stored };
+  if (!isAnswerModeToken(stored)) return { answerMode: 'competitive', legacyScoringMode: stored };
   const key = (Object.keys(ANSWER_MODE_TOKENS) as (keyof typeof ANSWER_MODE_TOKENS)[])
     .find(entry => ANSWER_MODE_TOKENS[entry] === stored);
   return { answerMode: key as AnswerModeSetting, legacyScoringMode: String(setup.legacyScoringMode || '') };
@@ -767,13 +768,7 @@ function gameSetupFor(config: GameConfig, legacy?: GameSetup): GameSetup {
 
   switch (config.gameType) {
     case 'arena': {
-      const token = answerModeTokenFor(config);
-      if (token) {
-        derived.legacyScoringMode = arenaScoringLabel(config.scoringMode);
-        derived.scoringMode = token;
-      } else {
-        derived.scoringMode = arenaScoringLabel(config.scoringMode);
-      }
+      derived.scoringMode = answerModeTokenFor(config);
       derived.pointsPerCorrect = String(config.pointsPerCorrect);
       derived.timeBonus = String(config.timeBonus);
       if (config.gameplayMode === 'house') derived.gameplayMode = 'house';
@@ -784,30 +779,20 @@ function gameSetupFor(config: GameConfig, legacy?: GameSetup): GameSetup {
       break;
     }
     case 'scenario': {
-      const token = answerModeTokenFor(config);
-      derived.scoringMode = token || 'cơ bản';
-      if (token) derived.legacyScoringMode = 'cơ bản';
+      derived.scoringMode = answerModeTokenFor(config);
       break;
     }
     case 'matching':
       derived.scoringMode = 'cơ bản';
       break;
     case 'treasure': {
-      // Treasure games never stored a scoring mode, so "keep" means "leave it absent"
-      // and the old attempt/reveal rules read exactly as before. The empty stash is still
-      // written: it is the marker that keeps "Giữ hành vi hiện tại" selectable after the
-      // teacher picks a mode (the editor tests the key's presence, not its value).
-      const token = answerModeTokenFor(config);
-      if (token) {
-        derived.scoringMode = token;
-        derived.legacyScoringMode = '';
-      }
+      // Kho báu used to have no scoring mode at all; the answer token is now what it
+      // stores, so its attempt-and-reveal rules always come from a named mode (#223).
+      derived.scoringMode = answerModeTokenFor(config);
       break;
     }
     case 'race': {
-      const token = answerModeTokenFor(config);
-      derived.scoringMode = token || 'thi đấu đội';
-      if (token) derived.legacyScoringMode = 'thi đấu đội';
+      derived.scoringMode = answerModeTokenFor(config);
       derived.competition = 'đội';
       break;
     }
@@ -816,16 +801,9 @@ function gameSetupFor(config: GameConfig, legacy?: GameSetup): GameSetup {
   }
 
   const merged: GameSetup = { ...(legacy || {}), ...derived };
-  /* One representation per meaning (#209): `legacyScoringMode` only has a job while
-     `scoringMode` holds a token, so writing a legacy mode drops the stash. Treasure had no
-     scoring mode at all before #209, so "Giữ hành vi hiện tại" must erase the token the
-     project still carries instead of leaving it standing. */
-  if (config.gameType === 'treasure' && !answerModeTokenFor(config)) {
-    delete merged.scoringMode;
-    delete merged.legacyScoringMode;
-  } else if (!isAnswerModeToken(merged.scoringMode)) {
-    delete merged.legacyScoringMode;
-  }
+  /* The parked legacy value (#209) has no pick that could restore it now, so it is never
+     written again and any copy a saved game still carries is dropped on save (#223). */
+  delete merged.legacyScoringMode;
   return merged;
 }
 
@@ -845,8 +823,9 @@ function configFromGame(game: EducationalGame, gameType: GameDraft['gameType']):
     generationMode: 'fast' as const
   };
 
-  // A game made before #209 has no token, so the select reads "Giữ hành vi hiện tại" and
-  // the old scoring mode round-trips untouched.
+  // A game made before #209 has no token and opens on "Thi đấu" (#223). Its old scoring
+  // mode is still read, so a saved game keeps its own speed/team/difficulty points until
+  // the teacher saves it again.
   const answer = answerModeFromSetup(setup);
 
   switch (gameType) {
@@ -937,17 +916,6 @@ function styleFromLabel(value: string | undefined): GameConfig['style'] {
   if (label.includes('thực')) return 'realistic';
   if (label.includes('tối giản')) return 'minimal';
   return 'fun';
-}
-
-function arenaScoringLabel(mode: ArenaScoringMode): string {
-  switch (mode) {
-    case 'speed': return 'tốc độ';
-    case 'difficulty': return 'theo độ khó';
-    case 'team': return 'thi đấu đội';
-    case 'practice': return 'luyện tập';
-    case 'basic': return 'cơ bản';
-    default: return 'cơ bản';
-  }
 }
 
 function arenaScoringFromLabel(value: string | undefined): ArenaScoringMode {

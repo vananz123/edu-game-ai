@@ -125,11 +125,12 @@ export interface GameConfigBase {
 export type ArenaScoringMode = 'basic' | 'speed' | 'difficulty' | 'team' | 'practice';
 
 /**
- * "Cách trả lời" (docs/DECISIONS.md #209). `keep` = the game stays on the rules it already
- * played by; the three answer modes replace the old scoring-mode pick on the four templates
- * that answer questions. Stored as a 'tra-loi:' token inside `gameSetup.scoringMode`.
+ * "Cách trả lời" (docs/DECISIONS.md #209). The three answer modes replace the old scoring-mode
+ * pick on the four templates that answer questions. Stored as a 'tra-loi:' token inside
+ * `gameSetup.scoringMode`. `keep` was dropped in #223: a game made before #209 opens on
+ * 'competitive' and is saved that way.
  */
-export type AnswerModeSetting = 'keep' | 'competitive' | 'practice' | 'challenge';
+export type AnswerModeSetting = 'competitive' | 'practice' | 'challenge';
 
 /** House model used by the quiz's House Building Mode (DECISIONS #144). */
 export type HouseStyle = 'nha-mai-do' | 'nha-vuon' | 'thap-canh' | 'nha-go';
@@ -138,7 +139,7 @@ export interface ArenaConfig extends GameConfigBase {
   gameType: 'arena';
   questionCount: number;
   scoringMode: ArenaScoringMode;
-  /** Answer law (#209); absent or 'keep' = `scoringMode` stays in charge. */
+  /** Answer law (#209). */
   answerMode?: AnswerModeSetting;
   pointsPerCorrect: number;
   timeBonus: number;

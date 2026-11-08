@@ -2456,3 +2456,23 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 
 **Việc kế tiếp.** Duyệt cảm quan độ mờ của ghost trên 1366×768 và máy chiếu; nếu cần, chỉ chỉnh `opacity` 0,55 và bán kính 0,017 trong một chỗ. Gộp vào 0.4.3.
 
+## #223 — Bỏ lựa chọn "Giữ hành vi hiện tại": game cũ mở ra là Thi đấu và được lưu bằng token (2026-11-08)
+
+**Yêu cầu, nguyên văn:** *"tiếp theo là loại bỏ cách trả lời "giữ hành vi hiện tại" ở cái trò chơi có phần này"*. Chủ dự án chọn hướng xử lý cho game đã lưu trước #209: **"Đổi sang "Thi đấu""** — bảng chọn chỉ còn ba cách, game cũ mở ra với Thi đấu chọn sẵn và lần lưu kế tiếp ghi token `tra-loi:thi-dau` (chấp nhận mất chế độ điểm cũ trên bản ghi).
+
+**Bối cảnh.** #209 thêm ba cách trả lời nhưng để một ô thứ tư "Giữ hành vi hiện tại" (`answerMode: 'keep'`, lưu `''`) cho game tạo trước #209: khi chọn ô này, adapter giữ nguyên `scoringMode` cũ và **cất** nó vào `legacyScoringMode` để hoàn nguyên được. Hệ quả là mỗi game có bốn lựa chọn, trong đó một lựa chọn không phải là "cách trả lời" mà là "đừng đổi gì" — một mục quản trị trạng thái lọt vào bảng chọn của giáo viên, cộng thêm một cặp khoá `scoringMode`/`legacyScoringMode` phải giữ đồng bộ ở cả ba bề mặt (Tạo, trình soạn thảo, wizard).
+
+**Quyết định 1 — bảng chọn còn đúng ba mục.** `answerModeOptions()` (không còn tham số "có ô legacy hay không") trả Thi đấu · Luyện tập · Thử thách; `AnswerModeSetting` bỏ `'keep'`. Ba bề mặt dùng chung danh sách đó, nên không nơi nào có thể tự thêm lại ô thứ tư.
+
+**Quyết định 2 — game cũ đọc là Thi đấu, không phải "không đổi".** `answerModeFromSetup` trả `'competitive'` khi `scoringMode` không phải token; luật chơi vẫn lấy từ giá trị cũ đang nằm trong `gameSetup` (một game `'tốc độ'` **vẫn** trả thưởng tốc độ cho tới lần lưu kế tiếp — `timeBonus` của nó không bị đụng). Nhưng lần lưu đó ghi `tra-loi:thi-dau` và **xoá** `legacyScoringMode`: sau khi lưu, game chơi theo luật Thi đấu và chế độ điểm cũ (`tốc độ`, `theo độ khó`, `thi đấu đội`, `luyện tập`) **không còn đường quay lại**. Đây là cái giá đã được chủ dự án chấp nhận, và lý do nó chấp nhận được: ba chế độ mới đã bao trùm ba trục mà năm chế độ cũ cố diễn đạt (một lần/được thử lại/không mở đáp án), còn điểm mỗi câu vẫn là "Điểm / câu" của từng câu hỏi.
+
+**Quyết định 3 — khoá `legacyScoringMode` thành chỉ đọc, không xoá khỏi schema.** Trường vẫn khai trong `GameSetup` (`src/shared/types.ts`, ghi rõ "chỉ đọc từ #223") vì hai lý do: `.egame` đã xuất trong cửa sổ #209 mang khoá này và `readGamePackage` phải đọc được tệp đó; và máy đang giữ bản ghi kiểu cũ vẫn cần đọc lại đúng. Nhưng `gameSetupFor` `delete merged.legacyScoringMode` ở **mọi** nhánh, `withEditorAnswerMode` cũng xoá khi lưu, và không hàm nào ghi giá trị mới vào khoá này. Vì vậy cặp khoá dần tự biến mất khỏi dữ liệu, mà không phải viết migration.
+
+**Quyết định 4 — Kho báu và Đường đua cũng chỉ còn token.** Trước #223 Kho báu **không** lưu chế độ nào (ô "Giữ hành vi hiện tại" của nó nghĩa là "để trống"), còn Đường đua để trống thì mặc định `'thi đấu đội'`. Giờ cả hai ghi token như hai trò kia; một game Kho báu/Đường đua chưa có token đọc là Thi đấu và được lưu token ở lần lưu kế tiếp. Ghép cặp vẫn ngoài phạm vi (`answerModeSupportsTemplate` loại nó), giữ luật trừ điểm ghép cặp riêng.
+
+**Điều đã đi kiểm.** `npx tsc --noEmit` rc 0 · `node tests/run-unit.js` **89/89** · `npm run build` rc 0 · `check:renderer-globals` 68/70 script, **1.018** hàm / **8.135** điểm gọi, 0 undefined · `verify:css` **61/61** · `check:answer-mode-ui` trên instance riêng (CDP 9405, `--user-data-dir` TEMP, build mới): **215/215**, trong đó Tạo/soạn thảo hiện **đúng ba** mục, editor của game cũ chọn sẵn `tra-loi:thi-dau`, lưu một game `'tốc độ'` ghi token **và giữ nguyên `timeBonus`**, không bề mặt nào còn khoá `legacyScoringMode`, ghép cặp vẫn ẩn field. Unit thêm vòng lặp: cả năm chế độ điểm cũ đều lưu thành `tra-loi:thi-dau` và không cất gì; `.egame` của game chọn Luyện tập đi trọn đĩa → SQLite → ván chơi và **không** mang khoá cất.
+
+**Không chứng minh.** Chưa đo bản đóng gói, máy chiếu, máy pilot; nhánh AI local không đo theo chỉ đạo. Điểm mất được chấp nhận nhưng **chưa có thông báo nào cho giáo viên** khi lưu game cũ làm mất chế độ `'tốc độ'`/`'theo độ khó'`/`'thi đấu đội'`/`'luyện tập'` — nếu chủ dự án muốn, đó là một hộp xác nhận một dòng ở nút Lưu của trình soạn thảo.
+
+**Việc kế tiếp.** (Tuỳ chọn) thêm lời nhắc lúc lưu game cũ; gộp vào 0.4.3 cùng các nợ đo của #221/#222.
+

@@ -8,9 +8,9 @@
 //
 // Bốn điều bài này chốt:
 //  1. trang Tạo và trình soạn thảo hiện ĐÚNG ba cách trả lời (Thi đấu/Luyện tập/Thử thách);
-//  2. game cũ vẫn mang luật cũ: mở ra là "Giữ hành vi hiện tại", lưu đi không đổi gì;
-//  3. chọn một chế độ rồi mở lại thì lựa chọn còn nguyên, giá trị cũ được cất trong
-//     `legacyScoringMode` và "Giữ hành vi hiện tại" hoàn nguyên ĐÚNG giá trị đó.
+//  2. game cũ KHÔNG còn mục "Giữ hành vi hiện tại": mở ra là "Thi đấu" — đúng luật nó đã
+//     chơi — và lần lưu đầu tiên ghi token Thi đấu, không cất giá trị chấm điểm cũ (#223);
+//  3. chọn một chế độ rồi mở lại thì lựa chọn còn nguyên, và mọi lần lưu chỉ ghi token.
 //  4. (task 3) máy trạng thái trả lời dùng chung `game-engine/answer-flow.js` được TRANG
 //     thật nạp — unit test chỉ chứng minh tệp chạy được bằng `require` ở Node.
 //  5. (task 4) MÀN CHƠI THẬT HÀNH ĐỘNG theo vòng trả lời: mục I bấm nút thật trên trang
@@ -59,6 +59,7 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
       await sleep(220);
       document.getElementById('modalRoot').innerHTML = '';
     };
+    const TOKEN_COMPETITIVE = 'tra-loi:thi-dau';
     const TOKEN_PRACTICE = 'tra-loi:luyen-tap';
     const TOKEN_CHALLENGE = 'tra-loi:thu-thach';
     const out = { editor: {}, saved: {}, create: {}, playSeq: 0 };
@@ -205,20 +206,19 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
         out.editor[key] = await open(FIX[key]());
       }
 
-      // ---- C. game cũ: mở ra là "Giữ hành vi hiện tại", lưu đi không đổi gì ----
+      // ---- C. game cũ: mở ra là "Thi đấu", lưu đi ghi token, không cất gì -------
       out.saved.legacyUntouched = await save('quiz-legacy', null, { fixture: FIX.quiz() });
 
-      // ---- D. chọn Luyện tập: token xuống đĩa, giá trị cũ được cất, đọc lại ----
+      // ---- D. chọn Luyện tập: token xuống đĩa, không cất giá trị cũ, đọc lại ----
       out.saved.practicePick = await save('quiz-practice', TOKEN_PRACTICE, { fixture: FIX.quiz() });
       out.editor.reopenedPractice = await reopen('quiz-practice');
 
-      // ---- E. "Giữ hành vi hiện tại" hoàn nguyên ĐÚNG 'tốc độ' ------------------
-      out.saved.keepRestored = await save('quiz-restored', '', { storedKey: 'quiz-practice' });
+      // ---- E. một game cũ khác (tốc độ) lưu lại: token Thi đấu, thưởng nhanh còn ----
+      out.saved.speedKept = await save('quiz-speed-kept', TOKEN_COMPETITIVE, { fixture: FIX.quiz() });
 
-      // ---- F. game chưa từng cất chế độ nào (kiểu Kho báu): cất = dấu '' --------
-      out.saved.blankPark = await save('quiz-blank-parked', TOKEN_CHALLENGE, { fixture: FIX.blank() });
-      out.editor.blankParkField = await reopen('quiz-blank-parked');
-      out.saved.blankKeep = await save('quiz-blank-kept', '', { storedKey: 'quiz-blank-parked' });
+      // ---- F. game chưa từng cất chế độ nào (kiểu Kho báu): vẫn ghi token ---------
+      out.saved.blankPick = await save('quiz-blank-parked', TOKEN_CHALLENGE, { fixture: FIX.blank() });
+      out.editor.blankPickField = await reopen('quiz-blank-parked');
 
       // ---- G. Ghép cặp: không bao giờ nhận token, dù select bị set bằng JS ------
       out.saved.matching = await save('match-token', TOKEN_PRACTICE, { fixture: FIX.matching() });
@@ -1561,10 +1561,11 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
     check(template + ' editor page really opened',
       Boolean(field?.editorOpen && field?.hasSaveBtn && field?.hasField), JSON.stringify(field));
     check(template + ' editor shows the "Cách trả lời" field', Boolean(field?.shown), JSON.stringify(field));
-    check(template + ' editor lists a legacy entry first for an old game',
-      Boolean(field?.values?.length === 4 && field.values[0] === ''), JSON.stringify(field?.values));
-    check(template + ' editor selects "Giữ hành vi hiện tại" on a legacy game',
-      field?.selected === '', JSON.stringify(field?.selected));
+    // #223: ba mục, không còn hàng "Giữ hành vi hiện tại".
+    check(template + ' editor lists exactly the three answer modes',
+      JSON.stringify(field?.values) === JSON.stringify(MODE_TOKENS), JSON.stringify(field?.values));
+    check(template + ' editor selects Thi đấu on a legacy game',
+      field?.selected === MODE_TOKENS[0], JSON.stringify(field?.selected));
     check(template + ' editor hint names the points source',
       Boolean(field?.hint && field.hint.indexOf('Điểm mỗi câu') !== -1), String(field?.hint).slice(0, 90));
   }
@@ -1573,45 +1574,40 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
     Boolean(matchField?.editorOpen && matchField?.hasSaveBtn && matchField?.hasField), JSON.stringify(matchField));
   check('matching keeps the field hidden (its own pairing law)',
     Boolean(matchField?.hasField) && matchField.shown === false, JSON.stringify(matchField));
-  // Một select ẩn vẫn phải liệt kê ĐỦ ba cách trả lời (không bắt buộc đúng ba: Ghép cặp
-  // không có chế độ nào để hoàn nguyên nên hàng "Giữ hành vi" được phép đứng đó).
   check('the hidden matching field still lists the three modes',
-    MODE_TOKENS.every(token => (matchField?.values || []).includes(token)), JSON.stringify(matchField?.values));
+    JSON.stringify(matchField?.values) === JSON.stringify(MODE_TOKENS), JSON.stringify(matchField?.values));
 
-  // C. game cũ đi qua lần lưu đầu tiên mà không đổi gì
+  // C. game cũ mở ra là "Thi đấu" và lần lưu đầu tiên ghi đúng token đó
   const legacy = saved(report.saved?.legacyUntouched);
   check('legacy game is found after saving', Boolean(legacy), brief(report.saved?.legacyUntouched));
-  check('legacy game keeps its ' + "'tốc độ'" + ' scoring mode', legacy?.scoringMode === 'tốc độ', String(legacy?.scoringMode));
-  check('legacy game gains no answer-mode token', isToken(legacy?.scoringMode) === false, String(legacy?.scoringMode));
-  check('legacy game gains no parked key', legacy?.hasPark === false, JSON.stringify(legacy?.park));
+  check('legacy game is saved as Thi đấu', legacy?.scoringMode === MODE_TOKENS[0], String(legacy?.scoringMode));
+  check('legacy save keeps the speed bonus it pays', Boolean(legacy?.game?.gameSetup) && legacy.game.gameSetup.timeBonus === '5',
+    String(legacy?.game?.gameSetup?.timeBonus));
+  check('legacy save parks nothing', legacy?.hasPark === false, JSON.stringify(legacy?.park));
 
-  // D. chọn một chế độ: token xuống đĩa, giá trị cũ được cất
+  // D. chọn một chế độ: token xuống đĩa, không cất gì
   const practice = saved(report.saved?.practicePick);
   check('picking Luyện tập stores the token', practice?.scoringMode === MODE_TOKENS[1], brief(report.saved?.practicePick));
-  check('picking Luyện tập parks the mode it replaced', practice?.park === 'tốc độ', String(practice?.park));
+  check('picking Luyện tập parks nothing', practice?.hasPark === false, JSON.stringify(practice?.park));
   check('the reopened editor reads the pick back', report.editor?.reopenedPractice?.selected === MODE_TOKENS[1],
     JSON.stringify(report.editor?.reopenedPractice?.selected));
-  check('the reopened editor still offers "Giữ hành vi hiện tại"',
-    report.editor?.reopenedPractice?.values?.[0] === '' && report.editor?.reopenedPractice?.values?.length === 4,
+  check('the reopened editor still lists exactly the three modes',
+    JSON.stringify(report.editor?.reopenedPractice?.values) === JSON.stringify(MODE_TOKENS),
     JSON.stringify(report.editor?.reopenedPractice?.values));
 
-  // E. hoàn nguyên
-  const restored = saved(report.saved?.keepRestored);
-  check('"Giữ hành vi hiện tại" gives ' + "'tốc độ'" + ' back exactly', restored?.scoringMode === 'tốc độ', brief(report.saved?.keepRestored));
-  check('restoring drops the parked value instead of leaving it as noise', restored?.hasPark === false, brief(report.saved?.keepRestored));
+  // E. một game cũ khác lưu lại: token Thi đấu, thưởng nhanh không bị xoá
+  const speedKept = saved(report.saved?.speedKept);
+  check('re-saving an old speed game writes the Thi đấu token', speedKept?.scoringMode === MODE_TOKENS[0],
+    brief(report.saved?.speedKept));
+  check('the speed bonus survives that save', Boolean(speedKept?.game?.gameSetup) && speedKept.game.gameSetup.timeBonus === '5',
+    String(speedKept?.game?.gameSetup?.timeBonus));
 
   // F. game chưa từng cất chế độ nào (đường của Kho báu)
-  const parked = saved(report.saved?.blankPark);
-  check('a game with no stored mode still parks a marker', parked?.hasPark === true, brief(report.saved?.blankPark));
-  check('the marker is the empty value, not an invented mode', parked?.park === '', JSON.stringify(parked?.park));
-  check('the legacy entry stays selectable after that pick',
-    report.editor?.blankParkField?.values?.[0] === '' && report.editor?.blankParkField?.values?.length === 4,
-    JSON.stringify(report.editor?.blankParkField?.values));
-  const blankKeep = saved(report.saved?.blankKeep);
-  check('the save that switches back reaches the library', Boolean(blankKeep), brief(report.saved?.blankKeep));
-  check('switching it back stores no mode at all', Boolean(blankKeep) && blankKeep.scoringMode === undefined,
-    brief(report.saved?.blankKeep));
-  check('switching it back drops the parked marker too', blankKeep?.hasPark === false, brief(report.saved?.blankKeep));
+  const blankPick = saved(report.saved?.blankPick);
+  check('a game with no stored mode accepts a pick', blankPick?.scoringMode === MODE_TOKENS[2], brief(report.saved?.blankPick));
+  check('that pick parks nothing', blankPick?.hasPark === false, JSON.stringify(blankPick?.park));
+  check('the reopened editor shows the pick it just saved',
+    report.editor?.blankPickField?.selected === MODE_TOKENS[2], JSON.stringify(report.editor?.blankPickField?.selected));
 
   // G. Ghép cặp không nhận token, bàn ghép vẫn còn
   const matching = saved(report.saved?.matching);

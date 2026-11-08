@@ -501,3 +501,13 @@ Yêu cầu của chủ dự án: *"tôi cần đưa phần 3D three.js của ch�
 - [x] **Bước 4 — cổng + hồi quy:** `ui-game-background-check` phân nhánh chòm sao (nền ≤ 0,12, cosmos có, **phải vẽ** khi im) và giữ nguyên luật cũ cho năm thế giới sáng → **42/42**; `ui-constellation-check` **104/104** · `ui-three-game-check` **19/19** · `ui-game-worlds-check` **52/52** · `ui-fullscreen-check` **20/20** · `ui-house-building-check` **121/121**; unit **89/89**, `verify:css` **61/61**, globals **68/70 · 1.018 hàm · 8.144 điểm gọi**, `npx tsc --noEmit` rc 0.
 - [ ] **Nợ của #221.** (a) **Không so ảnh trước/sau bằng mắt** — "giống như trước" chỉ có số đo (cosmos có, thứ tự lớp, độ chói, số khung). (b) Chưa đo máy chiếu thật, màn hình < 720p, bản đóng gói. (c) Một lần `ui-house-building-check` đỏ 1 check bề rộng dải projector rồi xanh ngay lần chạy lại — đỏ-giả đã biết từ #220. (d) Nhánh AI local không đo theo chỉ đạo.
 - [ ] **Việc kế tiếp.** Soát board chòm sao bằng mắt ở 1366×768; ổn thì gộp vào 0.4.3 cùng `check:packaged-install` + `check:packaged-feed`.
+
+## Bỏ "Giữ hành vi hiện tại" khỏi cách trả lời (#223, 2026-11-08, DECISIONS #223)
+
+Yêu cầu của chủ dự án: *"tiếp theo là loại bỏ cách trả lời "giữ hành vi hiện tại" ở cái trò chơi có phần này"*, chọn hướng *"Đổi sang "Thi đấu""* cho game đã lưu.
+
+- [x] **Bước 1 — luật + adapter:** `AnswerModeSetting` bỏ `'keep'`; `answerModeOptions()` không còn tham số và trả đúng ba mục; `answerModeFromSetup` đọc game không token là `competitive`; `gameSetupFor` ghi token ở cả bốn trò và `delete merged.legacyScoringMode` ở mọi nhánh; bỏ `arenaScoringLabel`.
+- [x] **Bước 2 — ba bề mặt:** Tạo (`#setupScoringMode`), trình soạn thảo (`#editAnswerMode`, lưu cũng xoá khoá cất), wizard (`wizardAnswerModeSelect`) chỉ còn Thi đấu · Luyện tập · Thử thách, kèm dòng lời nhắc theo luật đang chọn.
+- [x] **Bước 3 — test + cổng:** `answer-mode.test.ts` (chỉ ba mục, `legacy` mang nhãn Thi đấu), `game-project-adapter.test.ts` (năm chế độ cũ đều lưu `tra-loi:thi-dau`, không cất, `timeBonus` giữ nguyên, `.egame` không mang khoá cất), `ui-answer-mode-check.js` viết lại mục C–F → **215/215**; `tsc` 0 · unit **89/89** · globals 68/70 · `verify:css` **61/61**.
+- [ ] **Nợ của #223.** (a) Không đo bản đóng gói / máy chiếu / máy pilot. (b) Lưu một game cũ **âm thầm** làm mất chế độ điểm `tốc độ` / `theo độ khó` / `thi đấu đội` / `luyện tập` — chưa có lời nhắc cho giáo viên. (c) Nhánh AI local không đo theo chỉ đạo.
+- [ ] **Việc kế tiếp.** (Tuỳ chọn) hộp xác nhận một dòng ở nút Lưu của trình soạn thảo khi game cũ sắp đổi sang Thi đấu; gộp #223 vào 0.4.3 cùng nợ đo của #221/#222.

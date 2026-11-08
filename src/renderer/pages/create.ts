@@ -6,19 +6,13 @@ function renderCreate() {
   const d = state.draft || {};
   const gameSetup = d.gameSetup || {};
   const setupVal = (key, fallback) => escapeHtml(String(gameSetup[key] ?? fallback));
-  // #209: this page now picks the ANSWER law, not the scoring law. A draft saved
-  // before the change keeps showing its legacy scoring value so re-opening a game
-  // never silently re-rules it.
+  // #209: this page now picks the ANSWER law, not the scoring law. #223 dropped the
+  // "Giữ hành vi hiện tại" entry, so a draft saved before it always opens on "Thi đấu" —
+  // the law it already played by — and is saved as that token.
   const storedScoring = String(gameSetup.scoringMode ?? '');
   const answerMode = answerModeKey(gameSetup);
-  // "Legacy" chỉ có nghĩa khi draft THẬT SỰ mang một giá trị chấm điểm cũ. Draft mới
-  // tinh thì rỗng, và #209 chốt: game mới mở lên với đúng ba cách trả lời, Thi đấu
-  // được chọn sẵn — chứ không phải một hàng "Giữ hành vi hiện tại" bịa ra.
-  const isLegacyDraft = Boolean(storedScoring) && answerMode === 'legacy';
-  const scoringMode = isLegacyDraft ? storedScoring : (storedScoring || ANSWER_MODE_COMPETITIVE);
-  const answerModeChoices = isLegacyDraft
-    ? [{ value: scoringMode, label: answerModeLabel('legacy'), hint: answerModeHint('legacy') }, ...answerModeOptions(false)]
-    : answerModeOptions(false);
+  const scoringMode = answerMode === 'legacy' ? ANSWER_MODE_COMPETITIVE : ANSWER_MODE_VALUES[answerMode];
+  const answerModeChoices = answerModeOptions();
   const answerModeSelected = scoringMode;
   const showSpeedBonus = scoringMode === 'tốc độ';
   const showDifficultyPoints = scoringMode === 'theo độ khó';
@@ -130,8 +124,8 @@ function renderCreate() {
               <div class="field" id="pointsHardField"><label class="text-[12px] font-bold text-[#475569] dark:text-[#cbd5e1] mb-1 block">Điểm · Khó</label><input id="setupPointsHard" class="w-full px-3 py-2 border border-[#cbd5e1] dark:border-[#334155] rounded-lg bg-white dark:bg-[#1e2544] text-[#1e293b] dark:text-[#f8fafc] text-[13px] focus:outline-none focus:border-[#6366f1]" type="number" min="0" max="1000" step="10" value="${setupVal('pointsHard','300')}"></div>
             </div>
 
-            <div class="text-[12px] text-[#4f5a6e] dark:text-[#94a3b8] leading-relaxed p-3 bg-white dark:bg-[#1a1f3a] rounded-lg border border-[#f1f5f9] dark:border-[#2a324b]" id="scoringModeHint">${isLegacyDraft ? scoringModeHint(scoringMode) : answerModeHint(answerMode)}</div>
-            <div class="text-[12px] text-[#4f5a6e] dark:text-[#94a3b8] leading-relaxed">"Cách trả lời" thay cho "Chế độ tính điểm" cũ và dùng chung một trường lưu. Điểm mỗi câu vẫn lấy từ "Điểm / câu đúng" (hoặc điểm riêng của câu). Giải thích không tự hiện sau mỗi câu nữa — khi câu đã kết thúc sẽ có nút Giải thích. Game tạo trước đây giữ nguyên luật chơi cho tới khi giáo viên chủ động chọn một cách trả lời mới.</div>
+            <div class="text-[12px] text-[#4f5a6e] dark:text-[#94a3b8] leading-relaxed p-3 bg-white dark:bg-[#1a1f3a] rounded-lg border border-[#f1f5f9] dark:border-[#2a324b]" id="scoringModeHint">${answerModeHint(answerMode)}</div>
+            <div class="text-[12px] text-[#4f5a6e] dark:text-[#94a3b8] leading-relaxed">"Cách trả lời" thay cho "Chế độ tính điểm" cũ và dùng chung một trường lưu. Điểm mỗi câu vẫn lấy từ "Điểm / câu đúng" (hoặc điểm riêng của câu). Giải thích không tự hiện sau mỗi câu nữa — khi câu đã kết thúc sẽ có nút Giải thích. Game tạo trước đây mở ra với "Thi đấu" — đúng luật nó đã chơi — và lưu lại theo cách trả lời đó.</div>
           </div>
         </details>
       </section>

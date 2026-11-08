@@ -24,14 +24,12 @@ const ANSWER_MODE_VALUES = {
 const ANSWER_MODE_LABELS = {
   competitive: 'Thi đấu',
   practice: 'Luyện tập',
-  challenge: 'Thử thách',
-  legacy: 'Giữ hành vi hiện tại'
+  challenge: 'Thử thách'
 };
 const ANSWER_MODE_HINTS = {
   competitive: 'Trả lời một lần. Sai thì mở đáp án đúng và kết thúc câu.',
   practice: 'Sai được thử lại. Mỗi lần sai bớt 10% điểm của câu đó, không dưới 0.',
-  challenge: 'Trả lời một lần. Sai thì KHÔNG mở đáp án, phải tự sang câu.',
-  legacy: 'Trò chơi tạo trước bản cập nhật này: giữ đúng cách chấm, cách lộ đáp án và giải thích như đang chơi.'
+  challenge: 'Trả lời một lần. Sai thì KHÔNG mở đáp án, phải tự sang câu.'
 };
 const PRACTICE_PENALTY_RATE = 0.1;
 
@@ -39,7 +37,7 @@ function isAnswerModeValue(value) {
   return Object.prototype.hasOwnProperty.call(ANSWER_MODE_KEYS, String(value || ''));
 }
 
-/** 'legacy' khi game chưa có chế độ mới — mọi caller phải đối xử như hành vi cũ. */
+/** 'legacy' khi game chưa có chế độ mới — mọi caller phải đối xử như luật Thi đấu. */
 function answerModeKeyForValue(value) {
   return ANSWER_MODE_KEYS[String(value || '')] || 'legacy';
 }
@@ -64,8 +62,8 @@ function answerModeForGame(game) {
 }
 
 /* Giá trị scoringMode "của luật cũ": chính nó khi chưa đổi sang cách trả lời, ngược lại
-   là phần đã cất ở `legacyScoringMode`. Nhờ vậy "Giữ hành vi hiện tại" hoàn nguyên đúng
-   (kể cả 'tốc độ' với điểm thưởng nhanh) thay vì âm thầm về 'cơ bản'. */
+   là phần đã cất ở `legacyScoringMode` — cách đọc cho game đã lưu; bảng chọn không còn
+   mục nào để quay lại giá trị đó (#223). */
 function legacyScoringModeOf(setup) {
   if (!setup || typeof setup !== 'object') return '';
   const value = String(setup.scoringMode || '');
@@ -111,23 +109,21 @@ function explanationAllowed(mode, situation) {
   return Boolean(state.finished);
 }
 
-/** value = token lưu trong gameSetup.scoringMode; '' = "giữ hành vi hiện tại". */
-function answerModeOptions(includeLegacy) {
-  const list = ['competitive', 'practice', 'challenge'].map(key => ({
+/** value = token lưu trong gameSetup.scoringMode. */
+function answerModeOptions() {
+  return ['competitive', 'practice', 'challenge'].map(key => ({
     value: ANSWER_MODE_VALUES[key],
     label: ANSWER_MODE_LABELS[key],
     hint: ANSWER_MODE_HINTS[key]
   }));
-  if (!includeLegacy) return list;
-  return [{ value: '', label: ANSWER_MODE_LABELS.legacy, hint: ANSWER_MODE_HINTS.legacy }].concat(list);
 }
 
 function answerModeLabel(mode) {
-  return ANSWER_MODE_LABELS[mode] || ANSWER_MODE_LABELS.legacy;
+  return ANSWER_MODE_LABELS[mode] || ANSWER_MODE_LABELS.competitive;
 }
 
 function answerModeHint(mode) {
-  return ANSWER_MODE_HINTS[mode] || ANSWER_MODE_HINTS.legacy;
+  return ANSWER_MODE_HINTS[mode] || ANSWER_MODE_HINTS.competitive;
 }
 
 if (typeof module !== 'undefined') module.exports = {

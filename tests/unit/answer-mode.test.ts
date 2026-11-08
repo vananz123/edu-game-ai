@@ -64,8 +64,9 @@ assert.equal(answerModeSupportsTemplate('gibberish'), false);
 // A template outside the list is legacy even when a token was somehow stored on it.
 assert.equal(answerModeForGame({ template: 'matching', gameSetup: { scoringMode: ANSWER_MODE_COMPETITIVE } }), 'legacy');
 
-// "Giữ hành vi hiện tại" has to restore the EXACT mode the game was made with, including
-// the one that pays a speed bonus, so the value being replaced is kept beside the token.
+// "Giữ hành vi hiện tại" is gone (#223), so a saved game's own scoring mode is only ever
+// READ: the stash keeps letting callers see the rule a game was made with, even though no
+// pick can restore it any more.
 assert.equal(legacyScoringModeOf({ scoringMode: 'tốc độ' }), 'tốc độ', 'a legacy game returns its own value');
 assert.equal(legacyScoringModeOf({ scoringMode: 'thi đấu đội' }), 'thi đấu đội');
 assert.equal(legacyScoringModeOf({}), '', 'a game that never stored a mode stays without one');
@@ -131,22 +132,23 @@ assert.equal(explanationAllowed('legacy', { correct: false, finished: true }), t
 assert.equal(explanationAllowed(undefined, {}), false);
 assert.equal(explanationAllowed('challenge', undefined), false);
 
-// The pickers: three new modes, and the legacy entry only where an old game is shown.
-const fresh = answerModeOptions(false);
-assert.deepEqual(fresh.map(option => option.value), [ANSWER_MODE_COMPETITIVE, ANSWER_MODE_PRACTICE, ANSWER_MODE_CHALLENGE]);
-assert.deepEqual(fresh.map(option => option.label), ['Thi đấu', 'Luyện tập', 'Thử thách']);
-const withLegacy = answerModeOptions(true);
-assert.equal(withLegacy.length, 4);
-assert.equal(withLegacy[0].value, '', 'the legacy entry stores nothing new');
-assert.equal(withLegacy[0].label, 'Giữ hành vi hiện tại');
-for (const option of withLegacy) {
+// The pickers: three modes, and nothing else (#223 dropped "Giữ hành vi hiện tại").
+const choices = answerModeOptions();
+assert.deepEqual(choices.map(option => option.value), [ANSWER_MODE_COMPETITIVE, ANSWER_MODE_PRACTICE, ANSWER_MODE_CHALLENGE]);
+assert.deepEqual(choices.map(option => option.label), ['Thi đấu', 'Luyện tập', 'Thử thách']);
+for (const option of choices) {
   assert.ok(option.label, `${option.value} has a label`);
   assert.ok(option.hint, `${option.value} tells the teacher what changes`);
 }
+assert.equal(answerModeOptions(undefined).length, 3, 'no argument offers nothing extra');
+assert.ok(!choices.some(option => option.value === ''), 'an empty value must never be pickable again');
 assert.equal(answerModeLabel('practice'), 'Luyện tập');
-assert.equal(answerModeLabel('legacy'), 'Giữ hành vi hiện tại');
-assert.equal(answerModeLabel('khong-biet'), 'Giữ hành vi hiện tại');
+// A legacy key has no label of its own any more: it is read as Thi đấu, which is the
+// law it already played by (#223).
+assert.equal(answerModeLabel('legacy'), 'Thi đấu');
+assert.equal(answerModeLabel('khong-biet'), 'Thi đấu');
+assert.equal(answerModeHint('legacy'), answerModeHint('competitive'), 'a legacy game is described as Thi đấu');
 assert.ok(answerModeHint('challenge').includes('KHÔNG'), 'the challenge hint says the answer stays hidden');
 assert.ok(answerModeHint('practice').includes('10%'), 'the practice hint states the penalty the teacher is buying');
 
-console.log('answer-mode: one key holds either a legacy scoring mode or one of three answer modes, with the practice penalty and explanation gates verified');
+console.log('answer-mode: one key holds either a legacy scoring mode or one of three answer modes (no "keep" pick), with the practice penalty and explanation gates verified');

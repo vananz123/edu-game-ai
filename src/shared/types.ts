@@ -224,11 +224,15 @@ export interface RaceData {
 export interface GameSetup {
   /**
    * One key holds either a legacy scoring mode ('cơ bản' … 'luyện tập') or, since
-   * docs/DECISIONS.md #209, a 'tra-loi:' answer mode. Absent/legacy = the rules the
-   * game shipped with. See src/game-engine/answer-mode.ts.
+   * docs/DECISIONS.md #209, a 'tra-loi:' answer mode. A legacy value only ever comes
+   * from a game saved before #209; it is read as Thi đấu and replaced on the next save.
+   * See src/game-engine/answer-mode.ts.
    */
   scoringMode?: string;
-  /** The legacy `scoringMode` value saved when a teacher switches to an answer mode (#209). */
+  /**
+   * Read-only since #223: a game saved during the #209 window may still carry the scoring
+   * mode it replaced. Nothing writes it, and saving drops it.
+   */
   legacyScoringMode?: string;
   difficulty?: string;
   duration?: string;

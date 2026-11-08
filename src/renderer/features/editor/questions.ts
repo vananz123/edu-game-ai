@@ -311,10 +311,10 @@ function withEditorHouseStyle(game, root) {
   return { ...game, gameSetup: setup };
 }
 /* "Cách trả lời" (DECISIONS #209) writes into the SAME key the old scoring modes used:
-   picking a mode stores `scoringMode = 'tra-loi:…'` and parks the previous value in
-   `legacyScoringMode`, so choosing "Giữ hành vi hiện tại" gives it back exactly instead of
-   silently dropping the game to 'cơ bản'. Templates that don't answer questions (Ghép cặp)
-   never keep a token. */
+   `scoringMode` holds a 'tra-loi:' token. #223 dropped the "Giữ hành vi hiện tại" entry, so
+   saving always writes one of the three modes; a saved game's old scoring mode is still
+   read (see configFromGame) but never stored as a stash. Templates that don't answer
+   questions (Ghép cặp) never keep a token. */
 function editorAnswerMode(game) {
   return answerModeKey(game && game.gameSetup);
 }
@@ -324,28 +324,17 @@ function withEditorAnswerMode(game, root) {
   const template = $('#editTemplate', root)?.value || game.template;
   const value = String(field.value || '');
   const setup = { ...(game.gameSetup || {}) };
-  if (answerModeSupportsTemplate(template) && isAnswerModeValue(value)) {
-    if (!isAnswerModeValue(setup.scoringMode)) setup.legacyScoringMode = String(setup.scoringMode || '');
-    setup.scoringMode = value;
-    return { ...game, gameSetup: setup };
-  }
-  if (!isAnswerModeValue(setup.scoringMode)) return game;
-  const previous = String(setup.legacyScoringMode || '');
-  if (previous) setup.scoringMode = previous;
+  if (answerModeSupportsTemplate(template) && isAnswerModeValue(value)) setup.scoringMode = value;
   else delete setup.scoringMode;
   delete setup.legacyScoringMode;
   return { ...game, gameSetup: setup };
 }
-/** "Giữ hành vi hiện tại" is only offered while there IS an old rule to go back to: a game
-   still on a legacy scoring mode, or one that parked its old value when the teacher switched.
-   The park is tested by KEY, not by value: Kho báu had no scoring mode at all, so its parked
-   value is the empty string, and a truthiness test would strand that game on the new mode. */
+/* A legacy game (#209 and older) has no token, so it opens with "Thi đấu" selected — the
+   law it already played by — and is saved as that token (#223). */
 function editorAnswerModeOptionMarkup(game) {
   const key = editorAnswerMode(game);
-  const setup = (game && game.gameSetup) || {};
-  const includeLegacy = key === 'legacy' || Object.prototype.hasOwnProperty.call(setup, 'legacyScoringMode');
-  const currentValue = key === 'legacy' ? '' : ANSWER_MODE_VALUES[key];
-  return answerModeOptions(includeLegacy)
+  const currentValue = ANSWER_MODE_VALUES[key] || ANSWER_MODE_VALUES.competitive;
+  return answerModeOptions()
     .map(option => `<option value="${option.value}" ${option.value === currentValue ? 'selected' : ''}>${escapeHtml(option.label)}</option>`)
     .join('');
 }
