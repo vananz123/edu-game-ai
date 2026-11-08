@@ -1,4 +1,4 @@
-﻿# Trạng thái dự án
+﻿﻿# Trạng thái dự án
 
 Bàn giao mới nhất nằm ngay trong file này (3 mục gần nhất). Các bàn giao cũ được lưu ở
 `docs/handoff/status/` — mỗi ngày một file, nối thêm vào cuối file của ngày đó khi cần.
@@ -8,6 +8,7 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 ## Mục lục bàn giao
 
 ### 2026-11-08 — Bộ xử lý AI local: lựa chọn GPU tới được tiến trình đang chạy (#227), Phát hành 0.5.0 (#226), khối thảo luận mở ở màn không ảnh (#225), mực câu hỏi cho dòng thảo luận (#224), bỏ "Giữ hành vi hiện tại" (#223), nền sáng (#220), trả bầu trời đêm 3D về Chòm sao (#221), đường nối mờ trước khi ghép (#222), đóng nợ #212, #219 (Chòm sao tri thức)
+- **#228 (2026-11-09) — Thay bản CPU→Vulkan không còn bị khóa thư mục: retry 6 lần + dừng máy chủ embedding khi `onReplaceLocked`, đường "Cài model" cài đúng bản đã chọn, lỗi thay bản hiện tên hai bản; quyết định dùng lại runtime đọc thêm bản trên đĩa (`installedBackend`) nên di chứng thay bản hỏng không bị "an phận" trên CPU.** Test thật `EBUSY` (`runtime-backend-swap`), `run-unit` 92/92, `check:renderer-globals` 0 undefined. Bản 0.5.0 đã phát hành chưa có sửa này. Quyết định #228 trong `docs/DECISIONS.md`; chi tiết ở bàn giao mới nhất bên dưới.
 - **#227 (2026-11-08) — Mục 1 của đợt kiểm tra: đã chọn GPU nhưng tác vụ AI local vẫn chạy full CPU. Sửa cả ba lỗi: runtime backend là một phần danh tính của tiến trình (`runtime-restart.ts`, restart khi lệch backend, có log `runtime.restart`); renderer luôn gửi `runtimeBackend` (`'auto'` thay `undefined`) ở cả ba đường lưu nên "Kiểm tra kết nối" không xoá được lựa chọn; Cài đặt có dòng "Đang chạy" + lý do GPU tự chuyển CPU.** Test mới `runtime-restart` (12 nhánh) và `settings-runtime-backend` (jsdom, 5 bài, đã kiểm ngược là đỏ trên code cũ); `run-unit` 91/91, `check:renderer-globals` 0 undefined, `ui-settings-sections-check` 28/28, đo IPC thật: `vulkan` sống sót qua lần lưu "kiểm tra kết nối". Nhánh AI local **chưa chạy** (theo chỉ đạo). Quyết định #227 trong `docs/DECISIONS.md`; chi tiết ở bàn giao mới nhất bên dưới.
 - **#226 (2026-11-08) — Phát hành EduGame Studio 0.5.0 lên GitHub Releases: bump ba chỗ, bộ cài 92.667.619 B (SHA-256 `e65322d0…dcb4`), binary báo đúng 0.5.0, offline 11/11 với 0 request ra ngoài, `latest.yml` công khai ở 0.5.0, `check:packaged-feed` 24/24 `up-to-date`.** Chi tiết ở đầu handoff mới nhất bên dưới; quyết định #226 trong `docs/DECISIONS.md`.
 - **#225 (2026-11-08) — Màn Tình huống tắt ảnh minh hoạ mở khối "Thảo luận" thành ô đọc được (`:has(.feedback-discussion)`), có trần chiều cao và tự cuộn; màn không có câu thảo luận vẫn giữ ô 1×1 ẩn.** Bản lưu trữ: [docs/handoff/status/2026-11-08.md](handoff/status/2026-11-08.md); quyết định #225 trong `docs/DECISIONS.md`.
@@ -274,6 +275,20 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - Editor kéo-thả (matching + race) + xem trước đường đua
 - Lịch sử trước 2026-10-19
 ## Bàn giao gần nhất
+
+### #228 — CPU → Vulkan: lần thay bản không bị khóa thư mục nữa, và bỏ trạng thái "cài GPU vẫn chạy CPU" (2026-11-09)
+
+**Bối cảnh.** Gói chẩn đoán 0.5.0 ngày 2026-11-08 (`runtime.backend-swap-failed {wanted:"vulkan",installed:"cpu"}` ×3, `runtime.gpu-fallback`, `runtime.restart` ×2) cho thấy lựa chọn GPU đã tới được `startLocalRuntimeUnlocked` nhưng lần thay bản **vẫn trả về đường CPU**.
+
+**Files changed.** `src/ai-core/runtime-installer.ts` (`onReplaceLocked`, `replaceInstalledBuild` có retry, `delay`/`isLockedError`), `src/main.ts` (`stopEmbeddingRuntimeForRuntimeSwap`, installer theo entry đã chọn ở cả `ai:install-local-model` lẫn đường thay bản, lỗi thay bản hiện tên hai bản), `src/ai-core/runtime-restart.ts` (đầu vào `installedBackend`, kiểm mâu thuẫn trước khi so backend); test `tests/unit/runtime-backend-swap.test.ts` (mới), `runtime-installer.test.ts`, `runtime-restart.test.ts`.
+
+**Behavior.** (1) Xoá thư mục runtime để thay bản giờ thử lại 6 lần trong ~6,75 s thay vì bỏ ngay; khi còn khóa, app **dừng máy chủ embedding** (tiến trình `llama-server.exe` thứ hai chạy từ chính thư mục đó) rồi thử lại. (2) Đường "Cài model" trong Cài đặt cài **đúng bản resolver chọn** thay vì mặc định zip CPU — trước đây nó có thể ghi đè bản Vulkan vừa cài. (3) Thay bản hỏng giờ báo lỗi nêu tên bản cũ/mới thay vì lặng lẽ chạy tiếp CPU. (4) Quyết định dùng lại runtime đọc thêm **bản đang có trên đĩa**: tiến trình Vulkan mà đĩa là CPU (di chứng thay bản hỏng) → restart; tiến trình CPU mà yêu cầu Vulkan → vẫn restart (không "an phận" trên CPU nữa). Bản đĩa `unknown`/không đọc được không bao giờ tự restart.
+
+**Commands and results.** `npx tsc -p tsconfig.json` rc 0 · `node tests/run-unit.js` **92/92** · `npm run check:renderer-globals` 68/70 script, 1.018 hàm / 8.140 điểm gọi, 0 undefined · `tests/unit/runtime-backend-swap.test.ts` giữ thư mục **thật** bằng tiến trình con (`cwd`) để tái hiện `EBUSY` trên Windows: không nhả → lỗi `EBUSY/EPERM/EACCES` không còn `.installing`; có `onReplaceLocked` nhả khóa → đổi được sang `vulkan`.
+
+**Chưa xác minh.** Nhánh AI local không chạy (theo chỉ đạo): chưa thấy trên máy thật một lần `cpu → vulkan` hoàn tất, chưa đo thời gian retry khi embedding đang bận. Bản 0.5.0 đã phát hành **không có** các sửa này; cần bản 0.5.1 (hoặc chạy dev) mới tới được máy người dùng.
+
+**Việc kế tiếp.** Phát hành 0.5.1 với #227 + #228; sau đó mục 4 (hỏi đáp AI local bị cắt quá nhiều).
 
 ### #226 — Phát hành EduGame Studio 0.5.0 lên GitHub Releases (2026-11-08)
 

@@ -27,6 +27,12 @@ export interface RuntimeInstallerOptions {
   runtimeArtifact?: RuntimeArtifact;
   platform?: NodeJS.Platform;
   arch?: string;
+  /**
+   * Called when the last step of a backend swap — deleting the old build so the
+   * new one can take its place — fails. Lets the app stop processes that still
+   * hold the folder (the embedding server) and say why on screen.
+   */
+  onReplaceLocked?: (error: unknown) => Promise<void>;
 }
 
 export interface RuntimeArtifact {
@@ -251,16 +257,55 @@ export class LlamaRuntimeInstaller {
       }
       if (!foundServer) throw new Error('Trong gói llama.cpp không tìm thấy llama-server.exe.');
       await this.copySupportFiles(temporaryDirectory);
-      await rm(this.options.runtimeDirectory, { recursive: true, force: true });
-      await rename(temporaryDirectory, this.options.runtimeDirectory);
+      await this.replaceInstalledBuild();
       return path.join(this.options.runtimeDirectory, 'llama-server.exe');
     } catch (error) {
       await rm(temporaryDirectory, { recursive: true, force: true });
       throw error;
     } finally {
+      // The extracted build is either in place (renamed) or useless: a leftover
+      // `.installing` folder only makes the next retry clean up after itself.
+      await rm(temporaryDirectory, { recursive: true, force: true }).catch(() => undefined);
       await rm(archivePath, { force: true });
     }
   }
+
+  /**
+   * Swaps the freshly extracted build in.
+   *
+   * Windows refuses to delete a folder while a process still runs one of its
+   * DLLs. The chat runtime is stopped before a swap is attempted, but the
+   * embedding server is a separate process that can be busy at that moment;
+   * without a retry the install died on `EBUSY` *after* the ~32 MB download and
+   * left the old CPU build in place — exactly "I chose GPU and still got CPU".
+   * Every locked attempt reports it, so the app can stop the holder and name it
+   * instead of leaving a bare `EBUSY` in the log.
+   */
+  private async replaceInstalledBuild(): Promise<void> {
+    const delays = [0, 250, 500, 1_000, 2_000, 3_000];
+    for (let attempt = 0; attempt < delays.length; attempt += 1) {
+      if (delays[attempt]) await delay(delays[attempt]);
+      try {
+        await rm(this.options.runtimeDirectory, { recursive: true, force: true });
+        await rename(`${this.options.runtimeDirectory}.installing`, this.options.runtimeDirectory);
+        return;
+      } catch (error) {
+        if (!isLockedError(error)) throw error;
+        try { await this.options.onReplaceLocked?.(error); } catch { /* the next attempt decides */ }
+        if (attempt === delays.length - 1) throw error;
+      }
+    }
+  }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/** `EBUSY`/`EPERM`/`EACCES` on Windows all mean "a process still holds this file". */
+function isLockedError(error: unknown): boolean {
+  const code = typeof error === 'object' && error !== null && 'code' in error ? (error as { code: unknown }).code : undefined;
+  return code === 'EBUSY' || code === 'EPERM' || code === 'EACCES';
 }
 
 function isMissingFile(error: unknown): boolean {

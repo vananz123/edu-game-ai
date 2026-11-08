@@ -2550,3 +2550,27 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 **Không chứng minh.** Nhánh AI local không chạy (theo chỉ đạo): chưa thấy llama.cpp thật khởi động lại `cpu → vulkan`, chưa thấy `runtime.restart`/`runtime.gpu-fallback` trong `ai-*.jsonl` thật, chưa đo thời gian restart trên máy có GPU hỏng. Chưa kiểm nhánh `vulkan → cpu` trên tiến trình thật. Dòng "Đang chạy" mới đo ở trạng thái "Chưa chạy".
 
 **Việc kế tiếp.** Mục 4 (hỏi đáp AI local bị cắt quá nhiều), rồi mục 3 (ô nhập không tự xoá) và mục 2 (xoá cuộc trò chuyện xong không gõ được — chưa tái hiện được trên 0.5.0, cần phép đo trình duyệt trước khi sửa).
+
+## #228 — AI local trên GPU: lần thay bản CPU→Vulkan bị khoá thư mục, và trạng thái "di chứng" không được dùng lại (2026-11-09)
+
+**Yêu cầu, nguyên văn:** gói chẩn đoán AI ngày 2026-11-08 (0.5.0, win32 x64, i5-10210U, 16 GB, GPU Intel UHD) kèm *"vẫn không thể load AI lên GPU"*. Log ghi ba lần `runtime.backend-swap-failed {wanted:"vulkan",installed:"cpu"}`, `runtime.gpu-fallback` với `invalid device: Vulkan0`, hai lần `runtime.restart`. Kết luận từ log: **#227 đã chạy đúng** (lựa chọn GPU tới được `startLocalRuntimeUnlocked`, có `runtime.restart cpu --> vulkan`), nhưng lần **thay gói CPU bằng gói Vulkan lại thất bại và lặng lẽ quay về CPU** — nên mỗi câu hỏi lại restart, rồi lại CPU.
+
+**Nguyên nhân 1 — thư mục runtime còn bị một tiến trình khác giữ.** `LlamaRuntimeInstaller.install()` kết thúc bằng `rm(runtimeDirectory)` + `rename(.installing)`. Windows từ chối xoá cả cây khi *bất kỳ* tiến trình nào còn giữ một tệp (hoặc chính thư mục làm cwd) trong đó → `EBUSY`. Máy chủ **embedding** (`localEmbeddingRuntime`) là `llama-server.exe` **thứ hai chạy từ cùng thư mục**; đường thay bản chỉ dừng runtime chat. Lần download ~32 MB thứ hai trong log kết thúc sau ~0,3 s tức `install()` đã trả về trước khi tải xong → bước thay thư mục bị bỏ/quay về CPU. Đã kiểm trên máy: một `cmd.exe` đặt `cwd` vào thư mục là `fs.rmSync` ném `EBUSY`.
+
+**Nguyên nhân 2 — đường "Cài model" có thể ghi đè bản Vulkan bằng CPU.** `createRuntimeInstaller()` không có entry thì dùng `LLAMA_CPP_RUNTIME` (zip CPU, không có `backend`), và `ai:install-local-model` gọi đúng như vậy.
+
+**Nguyên nhân 3 — quyết định dùng lại runtime chỉ nhìn bộ nhớ, không nhìn đĩa.** Tiến trình `READY` backend `cpu` + file CPU trên đĩa + lựa chọn Vulkan từng cho kết quả `reuse`, biến "di chứng thay bản hỏng" thành trạng thái vĩnh viễn.
+
+**Quyết định 1 — thay thư mục có retry + một hook để nhả khoá.** `replaceInstalledBuild()` thử `rm`+`rename` 6 lần trong ~6,75 s. Vẫn khoá thì gọi `onReplaceLocked(error)`; `main.ts` truyền `stopEmbeddingRuntimeForRuntimeSwap()` (chờ lượt start embedding đang dở, dừng nó, ghi log `runtime.swap-stopped-embedding`) rồi thử lại. Hết lượt mà vẫn khoá thì ném lỗi có tên thư mục — không bao giờ coi là "đã thay xong".
+
+**Quyết định 2 — đường "Cài model" cài đúng bản resolver chọn.** `ai:install-local-model` lấy `resolution.entry` (CPU_X64_RUNTIME chỉ khi resolver không chọn được), và khi bản trên đĩa đã khớp backend thì chỉ `ensureSupportFiles()` — không tải zip CPU vô ích lên máy đang dùng Vulkan.
+
+**Quyết định 3 — lỗi thay bản hiện ra màn hình với tên hai bản.** `startLocalRuntimeUnlocked` bọc lỗi thành *"Không thay được bản AI local {cũ} bằng bản {mới}: …"*. Trước đây `runtime.backend-swap-failed` chỉ là một dòng `warn` nên người dùng chỉ thấy "vẫn CPU".
+
+**Quyết định 4 — dùng lại runtime xét thêm bản trên đĩa, và chỉ restart khi mâu thuẫn.** `decideLocalRuntimeReuse` nhận `installedBackend`; cả hai chỗ gọi truyền `getInstalledBackend() || 'unknown'`. Thứ tự: không chạy → `start`; chưa `READY` → `start`; khác model → `restart`; **tiến trình khác CPU mà đĩa là bản khác** (di chứng) → `restart`; khác backend → `restart`; còn lại `reuse`. Tiến trình CPU + đĩa CPU + muốn Vulkan → `restart` (không "an phận" trên CPU, đúng yêu cầu "đã chọn GPU thì phải là GPU"); `unknown`/không đọc được không bao giờ tự restart.
+
+**Điều đã đi kiểm.** `npx tsc -p tsconfig.json` rc 0 · `node tests/run-unit.js` **92/92** · `npm run check:renderer-globals` 68/70 script, 1.018 hàm / 8.140 điểm gọi, 0 undefined · test mới `runtime-backend-swap.test.ts` giữ thư mục bằng tiến trình con thật để tái hiện `EBUSY`: không nhả → ném `EBUSY/EPERM/EACCES`, không còn `.installing`; có `onReplaceLocked` nhả → `getInstalledBackend()` thành `vulkan` và nội dung `llama-server.exe` là bản mới · `runtime-installer.test.ts` thêm khối thay bản không vướng khoá · `runtime-restart.test.ts` thêm bốn nhánh `installedBackend` (đã sửa hai kỳ vọng cũ: "CPU + đĩa CPU + muốn Vulkan ⇒ reuse" đảo thành `restart`; "đĩa `unknown`/không đọc được + tiến trình Vulkan ⇒ reuse").
+
+**Không chứng minh.** Nhánh AI local không chạy (theo chỉ đạo): chưa thấy trên máy thật một lần `cpu → vulkan` hoàn tất, chưa đo thời gian retry khi embedding đang bận thật. Bản 0.5.0 đã công bố **không chứa** #227 lẫn #228 — cần 0.5.1 mới tới được máy người dùng.
+
+**Việc kế tiếp.** Phát hành 0.5.1 (bump + đóng gói + release theo #226), rồi mục 4 của đợt kiểm tra.

@@ -193,7 +193,7 @@ const { SetupOrchestrator } = require('./ai-core/setup-orchestrator');
 const { registerSetupIpc } = require('./ai-core/setup-ipc');
 const { SetupStateStore, parseSetupState, createInitialSetupState, SETUP_STATE_SCHEMA_VERSION, needsSetup } = require('./ai-core/setup-state');
 const { detectHardware, diskFreeBytes } = require('./ai-core/hardware-detector');
-const { RUNTIME_MANIFEST } = require('./ai-core/runtime-manifest');
+const { RUNTIME_MANIFEST, CPU_X64_RUNTIME } = require('./ai-core/runtime-manifest');
 const { detectInstalledBackend } = require('./ai-core/runtime-manifest');
 const { resolveRuntime } = require('./ai-core/runtime-resolver');
 const {
@@ -1024,11 +1024,12 @@ async function readRuntimeBackendPreference() {
  * matters: the downloader must fetch the same build the resolver promised, or a
  * setup wizard that announced "Vulkan" would install the CPU zip.
  */
-function createRuntimeInstaller(entry) {
+function createRuntimeInstaller(entry, options = {}) {
   return new LlamaRuntimeInstaller({
     runtimeDirectory: RUNTIME_DIR(),
     supportFilesDirectory: vcRuntimeDirectory(),
-    ...(entry ? { runtimeArtifact: entry } : {})
+    ...(entry ? { runtimeArtifact: entry } : {}),
+    ...(options.onReplaceLocked ? { onReplaceLocked: options.onReplaceLocked } : {})
   });
 }
 /**
@@ -1351,12 +1352,15 @@ async function startLocalRuntimeUnlocked(modelId) {
   // said "GPU" while every token was computed on the CPU. Decide with the real
   // state, before anything is stopped.
   const resolved = await resolveRuntimeForThisMachine();
+  // What is on disk, not just in memory: a swap that failed last time left the
+  // CPU files behind, and reusing the READY process would hide that for good.
   const verdict = decideLocalRuntimeReuse({
     state: localAiManager ? localAiManager.getStatus().state : undefined,
     runningModelId: localAiManager ? localAiModelId : undefined,
     modelId: model.id,
     runningBackend: localAiManager ? localAiManager.getRuntimeFacts().backend : undefined,
-    wantedBackend: resolved.resolution.status === 'ok' ? resolved.resolution.entry.backend : null
+    wantedBackend: resolved.resolution.status === 'ok' ? resolved.resolution.entry.backend : null,
+    installedBackend: (await runtimeInstaller.getInstalledBackend()) || 'unknown'
   });
   if (verdict.action === 'reuse') return localAiManager.getBaseUrl();
   if (verdict.action === 'restart') {
@@ -1400,7 +1404,22 @@ async function startLocalRuntimeUnlocked(modelId) {
       const sendProgress = progress => {
         if (setupProgressSink) setupProgressSink(progress);
       };
-      await runtimeInstaller.install(model.id, sendProgress);
+      // The embedding server is a second llama-server started from the same
+      // folder; it has to go before the folder can be replaced. Say why if even
+      // that is not enough — a failed swap must never look like a CPU choice.
+      const swapInstaller = createRuntimeInstaller(wanted, {
+        onReplaceLocked: async () => {
+          await stopEmbeddingRuntimeForRuntimeSwap();
+        }
+      });
+      try {
+        await swapInstaller.install(model.id, sendProgress);
+      } catch (error) {
+        throw new Error(
+          `Không thay được bản AI local ${installed || 'cũ'} bằng bản ${wanted.backend}: `
+          + `${error && error.message ? error.message : String(error)}`
+        );
+      }
       const now = await runtimeInstaller.getInstalledBackend();
       if (now !== wanted.backend) {
         // Not fatal any more. A backend mismatch used to throw here, which left
@@ -1484,23 +1503,32 @@ async function startLocalRuntimeUnlocked(modelId) {
   throw new Error(`Không khởi chạy được model ${model.displayName}: ${lastError && lastError.message ? lastError.message : lastError}`);
 }
 
-async function stopLocalAiRuntime() {
-  if (localRuntimeStart) {
-    try { await localRuntimeStart.promise; } catch { /* start failure is reported to its caller */ }
-  }
+/**
+ * Releases the runtime folder before a backend swap. The chat runtime is already
+ * stopped at that point; the embedding server runs the same `llama-server.exe`
+ * from the same folder and keeps it undeletable, and it restarts on demand.
+ */
+async function stopEmbeddingRuntimeForRuntimeSwap() {
   if (localEmbeddingStart) {
     try { await localEmbeddingStart.promise; } catch { /* optional retrieval runtime */ }
   }
   const embedding = localEmbeddingRuntime;
   localEmbeddingRuntime = undefined;
   localEmbeddingModelId = undefined;
-  if (embedding) {
-    try {
-      await embedding.stop();
-    } catch (error) {
-      console.error('Không dừng được máy chủ embedding:', error);
-    }
+  if (!embedding) return;
+  try {
+    await embedding.stop();
+    aiLogWrite('info', 'runtime.swap-stopped-embedding', {});
+  } catch (error) {
+    aiLogWrite('warn', 'runtime.swap-stop-embedding-failed', errorFacts(error));
   }
+}
+
+async function stopLocalAiRuntime() {
+  if (localRuntimeStart) {
+    try { await localRuntimeStart.promise; } catch { /* start failure is reported to its caller */ }
+  }
+  await stopEmbeddingRuntimeForRuntimeSwap();
   const manager = localAiManager;
   if (!manager) return;
   await manager.stop();
@@ -3264,8 +3292,15 @@ function registerIpc() {
       // installer's default artifact is the CPU zip, which would silently
       // defeat GPU offload on an iGPU machine.
       const { resolution } = await resolveRuntimeForThisMachine();
-      const entry = resolution.status === 'ok' ? resolution.entry : undefined;
-      const runtimeInstaller = createRuntimeInstaller(entry);
+      // `createRuntimeInstaller()` without an entry would install the CPU zip,
+      // overwriting a Vulkan install on a machine whose resolver said no. The
+      // chosen entry is used when there is one, CPU only as the measured default.
+      const entry = resolution.status === 'ok' ? resolution.entry : CPU_X64_RUNTIME;
+      const runtimeInstaller = createRuntimeInstaller(entry, {
+        onReplaceLocked: async () => {
+          await stopEmbeddingRuntimeForRuntimeSwap();
+        }
+      });
       // Compare the *build*, not just the presence of the file: a teacher who
       // switched to Vulkan already has a CPU `llama-server.exe` on disk.
       const backendWanted = entry ? entry.backend : 'cpu';
@@ -3325,7 +3360,8 @@ function registerIpc() {
         runningModelId: localAiModelId,
         modelId: model.id,
         runningBackend: localAiManager.getRuntimeFacts().backend,
-        wantedBackend: resolution.status === 'ok' ? resolution.entry.backend : null
+        wantedBackend: resolution.status === 'ok' ? resolution.entry.backend : null,
+        installedBackend: (await createRuntimeInstaller().getInstalledBackend()) || 'unknown'
       });
       if (verdict.action === 'reuse') {
         const { settings } = await loadAiSettingsWithMigration(await readJson(SETTINGS_FILE(), {}));

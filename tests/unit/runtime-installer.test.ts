@@ -81,6 +81,34 @@ async function run(): Promise<void> {
     });
     await assert.rejects(badInstaller.install('qwen-test'), /SHA-256/);
     await assert.rejects(stat(path.join(root, 'bad-runtime', 'llama-server.exe')), { code: 'ENOENT' });
+
+    // Swapping the installed build (CPU -> Vulkan) replaces the old files. The
+    // real report was a swap that died on EBUSY *after* the download and left
+    // the CPU build in place; that path lives in `runtime-backend-swap.test.ts`,
+    // which can hold the folder for real. Here: a plain swap must not report a
+    // lock, and no `.installing` leftovers may survive it.
+    {
+      const swapDirectory = path.join(root, 'swap-runtime');
+      await mkdir(swapDirectory, { recursive: true });
+      await writeFile(path.join(swapDirectory, 'llama-server.exe'), 'old cpu server');
+      await writeFile(path.join(swapDirectory, 'ggml-cpu.dll'), 'old cpu library');
+      let lockedSignals = 0;
+      // The test archive carries no backend marker, so it reads as "unknown",
+      // which is exactly the case that must be replaced rather than reused.
+      const swapInstaller = new LlamaRuntimeInstaller({
+        runtimeDirectory: swapDirectory,
+        runtimeArtifact: { ...artifact, backend: 'vulkan' },
+        platform: 'win32',
+        arch: 'x64',
+        onReplaceLocked: async () => { lockedSignals += 1; }
+      });
+      await swapInstaller.install('qwen-test');
+      assert.equal((await readFile(path.join(swapDirectory, 'llama-server.exe'))).toString(), 'fake llama server',
+        'the new build must be in place after the swap');
+      assert.equal(lockedSignals, 0, 'an unlocked swap must not report a lock');
+      await assert.rejects(stat(`${swapDirectory}.installing`), { code: 'ENOENT' },
+        'the swap must remove the temporary extraction folder');
+    }
     console.log('Runtime installer tests passed');
   } finally {
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));

@@ -49,6 +49,33 @@ function run() {
   });
   assert.equal(retryGpu.action, 'reuse');
 
+  // --- The files on disk are the wrong build: redo the swap --------------
+  // A GPU process that is running while the CPU build sits on disk cannot be
+  // real; it is the fossil of a swap that failed. Reuse would make that state
+  // permanent — after every fail-fast GPU start the CPU process answers, the
+  // disk still says CPU, and the next start reuses it.
+  const staleChoose = decideLocalRuntimeReuse({
+    ...base, runningBackend: 'vulkan', wantedBackend: 'vulkan', installedBackend: 'cpu'
+  });
+  assert.equal(staleChoose.action, 'restart', 'a CPU build on disk must not be reused as Vulkan');
+  assert.match(staleChoose.reason, /installed cpu/);
+
+  // A CPU process while the choice says Vulkan and the CPU build is on disk is
+  // the state right after a failed GPU start. It must retry: settling here is
+  // what kept "I chose GPU" on CPU for the whole session. The retry is bounded
+  // by the install path (a failed swap now throws instead of silently reusing).
+  const fellBack = decideLocalRuntimeReuse({ ...base, wantedBackend: 'vulkan', installedBackend: 'cpu' });
+  assert.equal(fellBack.action, 'restart', 'a CPU fallback must retry the GPU, not settle');
+
+  // A matching build, or no authoritative reading at all, never restarts a
+  // working runtime on its own.
+  assert.equal(decideLocalRuntimeReuse({ ...base, installedBackend: 'cpu' }).action, 'reuse');
+  assert.equal(decideLocalRuntimeReuse({ ...base, wantedBackend: 'vulkan', runningBackend: 'vulkan', installedBackend: 'vulkan' }).action, 'reuse');
+  for (const installedBackend of ['unknown', undefined]) {
+    const gpuRunning = decideLocalRuntimeReuse({ ...base, wantedBackend: 'vulkan', runningBackend: 'vulkan', installedBackend });
+    assert.equal(gpuRunning.action, 'reuse', `installed ${installedBackend} with a Vulkan process must not restart`);
+  }
+
   // --- A different model always restarts ---------------------------------
   const otherModel = decideLocalRuntimeReuse({ ...base, modelId: 'qwen3.5-4b-q4_k_m' });
   assert.equal(otherModel.action, 'restart');
