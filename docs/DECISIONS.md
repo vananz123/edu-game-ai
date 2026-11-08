@@ -2573,4 +2573,24 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 
 **Không chứng minh.** Nhánh AI local không chạy (theo chỉ đạo): chưa thấy trên máy thật một lần `cpu → vulkan` hoàn tất, chưa đo thời gian retry khi embedding đang bận thật. Bản 0.5.0 đã công bố **không chứa** #227 lẫn #228 — cần 0.5.1 mới tới được máy người dùng.
 
-**Việc kế tiếp.** Phát hành 0.5.1 (bump + đóng gói + release theo #226), rồi mục 4 của đợt kiểm tra.
+**Việc kế tiếp.** Mục 4 của đợt kiểm tra đã xong ở #229; phát hành 0.5.1 (bump + đóng gói + release theo #226) khi chủ dự án cho phép.
+
+## #229 — Hỏi đáp AI local bị cắt quá nhiều: ngân sách theo cửa sổ ngữ cảnh thật, lược giữa thay vì cắt đuôi, và trần trả lời rộng hơn (2026-11-09)
+
+**Bối cảnh.** Mục 4 của đợt kiểm tra 2026-11-08: trên máy không GPU, câu trả lời hỏi đáp giáo án "không có ý nghĩa" vì bốn lần cắt cộng dồn — (1) tài liệu bị cắt ở 12.000 ký tự (`LOCAL_DOCUMENT_ANALYSIS_MAX_CHARS`), trong khi runtime được spawn `--ctx-size 8192` (~20.000 ký tự tiếng Việt) nên hơn 11.000 ký tự chỗ trống không dùng; (2) CPU chỉ đưa đoạn khớp từ khoá; (3) trần đầu ra 512 token + "tối đa 6 câu" trong system prompt; (4) lịch sử 6 lượt × 700 ký tự không được trừ vào ngân sách.
+
+**Quyết định 1 — ngân sách tính từ cửa sổ ngữ cảnh của runtime, không từ hằng số.** `localChatBudget(contextTokens)` = `tok × 2,5 − 4.000`, sàn là 16.480 ký tự (mức cũ không bị giảm với `--ctx-size 4096`). `localRuntimeFacts()` trả thêm `localContextTokens` từ `getRuntimeFacts().contextSize`; `main.ts` truyền `contextTokens` cùng `localOnGpu` vào `runLessonChatTurn`.
+
+**Quyết định 2 — trừ phần chi phí của prompt trước khi chia tài liệu.** `chatPromptOverhead()` = prompt hệ thống dài nhất + các lượt phát lại + câu hỏi ×3 + 1.000 + `maxTokens × 2,5`. Ngân sách tài liệu = `localChatBudget − overhead`, nên một hội thoại dài không đẩy câu trả lời ra khỏi cửa sổ.
+
+**Quyết định 3 — trần trả lời 1.024 token, 1.536 khi giáo viên hỏi chi tiết.** `chatAnswerMaxTokens(question)` nhận diện ý "giải thích/chi tiết/tóm tắt/so sánh/vì sao…"; câu trả lời thường nhận hint "tối đa 6 câu" *trong prompt* (bỏ khỏi system prompt gốc), câu hỏi chi tiết nhận hint cho phép dài hơn. Trần được truyền vào `runStructuredStep`; câu hỏi ôn tập giữ `CHAT_QUESTION_SET_MAX_TOKENS = 2.048` như cũ.
+
+**Quyết định 4 — lược phần giữa thay vì cắt đuôi.** `elideLesson(text, limit, spreadEnds)` giữ đầu 30 % / đuôi 40 % (một tài liệu) hoặc chỉ đầu (nhiều tài liệu chia chung ngân sách) và chèn `[… đã lược bớt phần giữa giáo án …]`. Lý do: phần cuối giáo án (dặn dò, đánh giá) quan trọng ngang phần mở đầu, và một văn bản dừng giữa câu trông như đã trọn. Nhánh retrieval/fallback của CPU **không** dùng marker — đoạn ngắn cắt đuôi là đúng ý ở đó.
+
+**Quyết định 5 — dòng "AI đã đọc" nói đúng thao tác.** Toàn văn mà phải cắt: "lược bớt phần giữa vì dài hơn cửa sổ ngữ cảnh" (trước là "cắt bớt vì quá dài").
+
+**Điều đã đi kiểm.** `npx tsc -p tsconfig.json` rc 0 · `node tests/run-unit.js` **92/92** · `npm run check:renderer-globals` 68/70 script, 1.018 hàm / 8.140 điểm gọi, 0 undefined · `lesson-chat.test.ts` thêm: ngân sách theo `contextTokens` (16.384 → 36.960, 4.096 → không thấp hơn sàn), marker lược giữa + đầu/đuôi còn nguyên + đuôi > 50 %, `chatAnswerMaxTokens` với bốn câu hỏi chi tiết, `chatPromptOverhead` tăng theo lịch sử và trần trả lời, trần thật tới `maxTokens` của request (`1.536` cho câu chi tiết, `2.048` cho bộ câu hỏi).
+
+**Không chứng minh.** Nhánh AI local không chạy (theo chỉ đạo): chưa đo trên llama.cpp một câu trả lời dài thật sự trọn với 1.024/1.536 token, chưa xem dòng "AI đã đọc" mới trong app. Máy GPU chưa đo `contextTokens` thật khác 8.192.
+
+**Việc kế tiếp.** Phát hành 0.5.1 với #227 + #228 + #229; sau đó mục 3 (ô nhập không tự xoá) và mục 2 (xoá cuộc trò chuyện xong không gõ được).

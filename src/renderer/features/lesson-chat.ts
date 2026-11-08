@@ -271,7 +271,7 @@ function lessonChatReadsHtml(message) {
   const percent = Math.min(100, Math.round((read / total) * 100));
   const vi = value => Number(value || 0).toLocaleString('vi-VN');
   const scope = meta.mode === 'whole'
-    ? (meta.trimmed ? 'toàn bộ giáo án, cắt bớt vì quá dài' : 'toàn bộ giáo án, không cắt bớt')
+    ? (meta.trimmed ? 'toàn bộ giáo án, lược bớt phần giữa vì dài hơn cửa sổ ngữ cảnh' : 'toàn bộ giáo án, không cắt bớt')
     : `${vi(meta.quotes)} đoạn liên quan${meta.trimmed ? ', có cắt bớt' : ''}`;
   const cut = meta.fallback ? ' · không tìm thấy đoạn khớp câu hỏi nên lấy phần đầu bài' : '';
   const badge = percent === 100

@@ -1,16 +1,24 @@
 import assert from 'node:assert/strict';
 import { AiRequestRegistry, AiTransportError } from '../../src/services/ai/ai-transport';
 import {
+  CHAT_ANSWER_DETAIL_MAX_TOKENS,
+  CHAT_ANSWER_MAX_TOKENS,
   CHAT_DEFAULT_QUESTION_COUNT,
+  CHAT_ELISION_MARKER,
   CHAT_LOCAL_MAX_CHARS,
+  CHAT_QUESTION_SET_MAX_TOKENS,
   CHAT_RETRIEVAL_QUOTES_PER_DOCUMENT,
   buildChatAnswerPrompt,
   buildChatEvidence,
   buildChatHistoryMessages,
   buildQuestionSetPrompt,
+  chatAnswerMaxTokens,
   chatEvidencePolicyFor,
+  chatPromptOverhead,
   classifyLessonChatIntent,
+  elideLesson,
   foldChatText,
+  localChatBudget,
   requestedQuestionCount,
   runLessonChatTurn,
   type LessonChatDocument
@@ -48,6 +56,8 @@ const QUESTION = 'Hai bài nói gì về vai trò của ánh sáng?';
 const LONG_TEXT = Array.from({ length: 60 }, (unused, index) =>
   `Hoạt động ${index + 1}: học sinh tìm hiểu quang hợp và vai trò của ánh sáng đối với quang hợp.`).join('\n');
 const DOC_LONG: LessonChatDocument = { id: 'doc_long', name: 'Giao an dai.txt', text: LONG_TEXT };
+/** Longer than any chat budget, so the whole-document path has to elide it. */
+const DOC_HUGE: LessonChatDocument = { id: 'doc_huge', name: 'Giao an qua dai.txt', text: LONG_TEXT.repeat(6) };
 
 /** The arena shape the wizard contract already accepts (#182). */
 function arenaQuestions(count: number) {
@@ -148,6 +158,10 @@ async function main(): Promise<void> {
   const localGpu = chatEvidencePolicyFor({ providerId: 'local', localOnGpu: true });
   assert.equal(localGpu.wholeDocument, true, 'a GPU laptop can hold the article');
   assert.equal(localGpu.maxChars, CHAT_LOCAL_MAX_CHARS, 'and is still bounded by the 8.192-token local context');
+  assert.equal(localChatBudget(16_384), Math.floor((16_384 * 2.5) - 4_000), 'a bigger context buys a bigger lesson (#229)');
+  assert.equal(localChatBudget(4_096), CHAT_LOCAL_MAX_CHARS, 'a smaller one never reads less than the old ceiling');
+  assert.equal(localChatBudget(undefined), CHAT_LOCAL_MAX_CHARS, 'a caller that knows nothing keeps the default');
+  assert.equal(chatEvidencePolicyFor({ providerId: 'local', localOnGpu: true, contextTokens: 16_384 }).maxChars, localChatBudget(16_384));
   const localCpu = chatEvidencePolicyFor({ providerId: 'local', localOnGpu: false });
   assert.equal(localCpu.wholeDocument, false, 'a CPU laptop keeps the cut');
   assert.equal(localCpu.quotesPerDocument, CHAT_RETRIEVAL_QUOTES_PER_DOCUMENT, 'but reads four times more of it than #182 did');
@@ -170,10 +184,24 @@ async function main(): Promise<void> {
   assert.equal(cpuLong.meta.totalCharacters, LONG_TEXT.trim().length, 'the denominator is the lesson, not the quote');
 
   // Local GPU with an article the context cannot hold: cut, but honestly.
-  const tooBig = { id: 'doc_huge', name: 'Giao an qua dai.txt', text: LONG_TEXT.repeat(3) };
+  const tooBig = DOC_HUGE;
   const gpuHuge = buildChatEvidence({ documents: [tooBig], question: QUESTION, ...localGpu });
   assert.equal(gpuHuge.meta.characters, CHAT_LOCAL_MAX_CHARS);
   assert.equal(gpuHuge.meta.trimmed, true, 'a whole-document mode that had to cut must not claim 100 %');
+  // #229: the cut removes the middle — the lesson's ending (homework, assessment)
+  // is as important as its opening, and a silent tail cut reads as a complete text.
+  const hugeQuote = gpuHuge.citations[0].quote;
+  assert.ok(hugeQuote.includes(CHAT_ELISION_MARKER), 'the elided middle is marked, not silent');
+  assert.ok(hugeQuote.startsWith('Hoạt động 1:'), 'the opening survives');
+  assert.ok(hugeQuote.endsWith('quang hợp.'), 'and so does the ending');
+  const hugeTail = hugeQuote.slice(hugeQuote.indexOf(CHAT_ELISION_MARKER));
+  assert.ok(hugeTail.trim().endsWith('quang hợp.'), 'the tail runs to the very last line of the lesson');
+  assert.ok(hugeTail.length > hugeQuote.length * 0.5, 'and the tail is the bigger half — the ending is worth more than the header');
+  assert.ok(hugeQuote.length - hugeTail.length - CHAT_ELISION_MARKER.length < hugeQuote.length * 0.4, 'the head is the smaller share');
+
+  assert.equal(elideLesson('ngắn', 100), 'ngắn', 'a lesson under budget is returned untouched');
+  assert.ok(elideLesson(LONG_TEXT, 1_000, true).length <= 1_000);
+  assert.equal(elideLesson(LONG_TEXT.repeat(3), 60).length, 60, 'a budget smaller than the marker still yields a hard cut');
 
   // Two lessons on one budget: neither may be starved by the other.
   const gpuPair = buildChatEvidence({ documents: [DOC_LONG, tooBig], question: QUESTION, ...localGpu });
@@ -217,6 +245,16 @@ async function main(): Promise<void> {
     assert.ok(prompt.includes('correctOptionId'));
     assert.ok(prompt.includes('Không được để trống "explanation"'));
   }
+
+  // --- the answer budget (#229) ---------------------------------------------
+
+  assert.equal(chatAnswerMaxTokens(QUESTION), CHAT_ANSWER_MAX_TOKENS, 'a lookup gets the plain ceiling');
+  for (const wording of ['Giải thích chi tiết mục tiêu', 'Tóm tắt toàn bộ bài', 'So sánh vai trò ánh sáng và nhiệt độ', 'Vì sao lá phải xanh?']) {
+    assert.equal(chatAnswerMaxTokens(wording), CHAT_ANSWER_DETAIL_MAX_TOKENS, `"${wording}" asks for the whole thing`);
+  }
+  assert.ok(chatPromptOverhead({ history: [], question: QUESTION, answerMaxTokens: CHAT_ANSWER_DETAIL_MAX_TOKENS })
+    > chatPromptOverhead({ history: [], question: QUESTION }), 'a longer answer reserves more of the window');
+  assert.ok(chatPromptOverhead({ history: [{ role: 'user', content: 'x'.repeat(700) }] }) > chatPromptOverhead({ history: [] }), 'and the replayed turns are counted, not ignored');
 
   // --- intent and count -----------------------------------------------------
 
@@ -274,6 +312,7 @@ async function main(): Promise<void> {
   assert.equal(freeClient.requests.length, 1);
   assert.ok(/không gắn giáo án nào/.test(textOf(freeClient.requests[0], 'system')), freeClient.requests[0].messages[0].content.slice(0, 60));
   assert.ok(!/Chỉ được trả lời dựa trên các đoạn trích dẫn/.test(textOf(freeClient.requests[0], 'system')));
+  assert.ok(/tối đa 6 câu/.test(textOf(freeClient.requests[0], 'system')), 'a plain lookup still says the answer stays short');
   assert.ok(!/\[\d\] \(/.test(textOf(freeClient.requests[0], 'user')));
 
   const grounded = await runLessonChatTurn({
@@ -332,6 +371,52 @@ async function main(): Promise<void> {
   assert.equal(gpuTurn.evidence.mode, 'whole', 'the same machine on a GPU gets the whole lesson');
   assert.equal(gpuTurn.evidence.trimmed, false, 'and it fits the local context, so nothing was cut');
 
+  // #229: a desk without a GPU still runs retrieval (small prompts are what a CPU
+  // can afford), but each budget is the runtime's own context, not a constant.
+  const cpuBudget = localChatBudget(8_192) - chatPromptOverhead({ history: [], question: QUESTION });
+  assert.ok(cpuTurn.evidence.characters <= cpuBudget, `${cpuTurn.evidence.characters} > ${cpuBudget}`);
+  assert.ok(cpuTurn.evidence.characters < 12_000, 'retrieval stays leaner than the whole-document path');
+
+  const roomyTurn = await runLessonChatTurn({
+    client: answeringClient(0, 'local'),
+    registry,
+    requestId: 'req-gpu-16k',
+    documents: [DOC_LONG],
+    question: QUESTION,
+    history: [],
+    mode: 'answer',
+    localOnGpu: true,
+    contextTokens: 16_384
+  });
+  assert.equal(roomyTurn.evidence.trimmed, false, 'a 16k context still fits the 60-activity lesson');
+  const tinyTurn = await runLessonChatTurn({
+    client: answeringClient(0, 'local'),
+    registry,
+    requestId: 'req-gpu-4k',
+    documents: [{ id: 'doc_4k', name: 'Giao an 4k.txt', text: LONG_TEXT.repeat(6) }],
+    question: QUESTION,
+    history: [],
+    mode: 'answer',
+    localOnGpu: true,
+    contextTokens: 4_096
+  });
+  assert.equal(tinyTurn.evidence.trimmed, true, 'a smaller context cuts more, it does not pretend to fit');
+
+  const detailClient = answeringClient(0, 'local');
+  await runLessonChatTurn({
+    client: detailClient,
+    registry,
+    requestId: 'req-detail',
+    documents: [DOC_A],
+    question: 'Giải thích chi tiết mục tiêu của bài',
+    history: [],
+    mode: 'answer'
+  });
+  const detailRequest = detailClient.requests[0] as LessonChatRequest & { maxTokens?: number };
+  assert.equal(detailRequest.maxTokens, CHAT_ANSWER_DETAIL_MAX_TOKENS, 'the ceiling reaches the transport, not just the prompt');
+  assert.ok(/gạch đầu dòng/.test(textOf(detailRequest, 'system')), 'and the model is told it may go long');
+  assert.ok(!/tối đa 6 câu/.test(textOf(detailRequest, 'system')));
+
   // The same turn asked for a question set: still the arena contract, still labelled.
   const freeSet = await runLessonChatTurn({
     client: answeringClient(2),
@@ -361,6 +446,18 @@ async function main(): Promise<void> {
   });
   assert.equal(groundedSetTurn.grounded, true);
   assert.ok(!/không có giáo án kèm theo/.test(groundedSetTurn.answer), 'a grounded set is not labelled as a guess');
+  const setRequest = answeringClient(2, 'gemini');
+  await runLessonChatTurn({
+    client: setRequest,
+    registry,
+    requestId: 'req-set-ceiling',
+    documents: [DOC_A],
+    question: 'Soạn 2 câu hỏi ôn tập',
+    history: [],
+    mode: 'question_set',
+    questionCount: 2
+  });
+  assert.equal((setRequest.requests[0] as LessonChatRequest & { maxTokens?: number }).maxTokens, CHAT_QUESTION_SET_MAX_TOKENS, 'a set keeps its own ceiling, unchanged');
 
   // A provider failure on a lesson-free turn must not claim the lesson was at fault.
   const failing = new RecordingClient(() => new AiTransportError('AI_TIMEOUT', 'AI quá thời gian chờ.'));

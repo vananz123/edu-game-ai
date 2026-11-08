@@ -3010,6 +3010,7 @@ function registerIpc() {
         async () => {
           recordAiTask(aiTasks.progress(task.taskId, 'retrieve'));
           sendLessonProgress(event.sender, requestId, 'retrieve');
+          const facts = localRuntimeFacts();
           return runLessonChatTurn({
             client,
             registry: aiRequests,
@@ -3019,7 +3020,8 @@ function registerIpc() {
             history,
             mode: payload?.mode,
             questionCount: payload?.questionCount,
-            localOnGpu: localRuntimeFacts().localOnGpu,
+            localOnGpu: facts.localOnGpu,
+            contextTokens: facts.localContextTokens,
             onStage: stage => sendLessonProgress(event.sender, requestId, stage)
           });
         }
@@ -3746,17 +3748,20 @@ function localRuntimeFacts() {
   let localOnGpu = false;
   let localBackend = '';
   let localGpuLayers = 0;
+  let localContextTokens = 0;
   try {
     if (running) {
       const facts = localAiManager!.getRuntimeFacts();
       localBackend = String(facts.backend || '');
       localGpuLayers = Number(facts.gpuLayers) || 0;
+      localContextTokens = Number(facts.contextSize) || 0;
       localOnGpu = localGpuLayers > 0;
     }
   } catch {
     localOnGpu = false;
     localBackend = '';
     localGpuLayers = 0;
+    localContextTokens = 0;
   }
   // Set by the start path when a Vulkan attempt failed and CPU took over, so
   // Settings can say why instead of leaving the request and reality apart.
@@ -3768,6 +3773,7 @@ function localRuntimeFacts() {
     localOnGpu,
     localBackend,
     localGpuLayers,
+    localContextTokens,
     localGpuFallbackReason: lastBackendFallbackReason
   };
 }

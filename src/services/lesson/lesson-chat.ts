@@ -50,11 +50,34 @@ import type {
  */
 export const CHAT_RETRIEVAL_QUOTES_PER_DOCUMENT = 12;
 /**
- * What a local run may read, GPU or CPU: the same ceiling the analysis path has
- * used since #180, which is the one the shipped llama.cpp model is known to
- * handle inside its 8.192-token context.
+ * The ceiling a local turn is held to, expressed in the runtime's own units:
+ * characters are a poor proxy for tokens, and Vietnamese runs ~2.5–3 characters
+ * per token, so a 12.000-character cap filled only about half of the 8.192-token
+ * context the runtime is spawned with — the "AI đọc 12.000/15.000" line while
+ * eleven thousand characters of headroom sat unused (#229).
  */
-export const CHAT_LOCAL_MAX_CHARS = LOCAL_DOCUMENT_ANALYSIS_MAX_CHARS;
+export const CHAT_LOCAL_CONTEXT_TOKENS = 8_192;
+/** Vietnamese measures ~2.6 characters per token; 2.5 keeps the estimate honest. */
+const CHARS_PER_TOKEN = 2.5;
+/** Room kept for the system prompt, the question, the replayed turns and the answer. */
+const CHAT_PROMPT_OVERHEAD_CHARS = 4_000;
+/**
+ * What a local run may read when the caller knows nothing about the context. It
+ * replaces `LOCAL_DOCUMENT_ANALYSIS_MAX_CHARS` (12.000) as the chat budget: the
+ * analysis path still caps there because its prompts are longer, but the chat was
+ * never limited by the model — only by a number chosen before the context grew.
+ */
+export const CHAT_LOCAL_MAX_CHARS = Math.floor((CHAT_LOCAL_CONTEXT_TOKENS * CHARS_PER_TOKEN) - CHAT_PROMPT_OVERHEAD_CHARS);
+/**
+ * The marker inserted where a long lesson is cut in whole-document mode: `head X
+ * y tail` (X + y ≈ 0.7 of the text), so a summary can still tell the beginning
+ * from the end. Elision instead of truncation is the point — a silent tail cut
+ * leaves the model believing the lesson ended mid-sentence.
+ */
+export const CHAT_ELISION_MARKER = '\n[… đã lược bớt phần giữa giáo án …]\n';
+/** How the lesson is cut when it exceeds the budget: the middle goes, both ends stay. */
+const CHAT_ELISION_HEAD_SHARE = 0.3;
+const CHAT_ELISION_TAIL_SHARE = 0.4;
 /** Fallback slice per lesson when nothing matched the question's words. */
 export const CHAT_FALLBACK_CHARS_PER_DOCUMENT = 500;
 /** Previous turns replayed so "ngắn hơn nữa" works (#182 is a chat, not a form). */
@@ -76,23 +99,73 @@ export interface ChatEvidencePolicy {
 
 /**
  * Cloud reads the lesson whole — the teacher attached the file, so withholding
- * nine tenths of it is the bug being fixed. A local runtime depends on the
- * hardware: a GPU offload can hold the article, a CPU-only laptop cannot afford
- * the tokens, so it keeps the keyword retrieval. The caller passes the GPU fact
- * from the runtime manager rather than guessing from settings, because a Vulkan
- * request that fell back to CPU is a CPU machine.
+ * nine tenths of it is the bug being fixed. A local runtime is bounded by the
+ * context it was actually spawned with (`contextTokens`, from the runtime facts),
+ * so the budget follows the runtime instead of a constant: a Vulkan laptop and a
+ * CPU laptop get the same headroom, which is correct — CPU is slower, not blind
+ * (#229). The caller passes the GPU fact from the runtime manager rather than
+ * guessing from settings, because a Vulkan request that fell back to CPU is a
+ * CPU machine.
  */
-export function chatEvidencePolicyFor(input: { providerId?: string; localOnGpu?: boolean }): ChatEvidencePolicy {
+export function chatEvidencePolicyFor(input: { providerId?: string; localOnGpu?: boolean; contextTokens?: number }): ChatEvidencePolicy {
   if (input.providerId === 'local') {
     return input.localOnGpu
-      ? { wholeDocument: true, quotesPerDocument: CHAT_RETRIEVAL_QUOTES_PER_DOCUMENT, maxChars: CHAT_LOCAL_MAX_CHARS }
-      : { wholeDocument: false, quotesPerDocument: CHAT_RETRIEVAL_QUOTES_PER_DOCUMENT, maxChars: CHAT_LOCAL_MAX_CHARS };
+      ? { wholeDocument: true, quotesPerDocument: CHAT_RETRIEVAL_QUOTES_PER_DOCUMENT, maxChars: localChatBudget(input.contextTokens) }
+      : { wholeDocument: false, quotesPerDocument: CHAT_RETRIEVAL_QUOTES_PER_DOCUMENT, maxChars: localChatBudget(input.contextTokens) };
   }
   return { wholeDocument: true, quotesPerDocument: CHAT_RETRIEVAL_QUOTES_PER_DOCUMENT, maxChars: LESSON_PREPROCESS_NO_CUT };
 }
 
+/** Characters a local turn may spend on lesson text for a runtime with this context. */
+export function localChatBudget(contextTokens: number | undefined): number {
+  const tokens = Number(contextTokens);
+  if (!Number.isFinite(tokens) || tokens <= 0) return CHAT_LOCAL_MAX_CHARS;
+  // Never below the old ceiling: a smaller context (a model spawned with --ctx-size
+  // 4.096) must not make the chat read less than it did before this change.
+  return Math.max(CHAT_LOCAL_MAX_CHARS, Math.floor((tokens * CHARS_PER_TOKEN) - CHAT_PROMPT_OVERHEAD_CHARS));
+}
+
 const CHAT_ANSWER_SYSTEM_PROMPT =
-  'Bạn là trợ lý sư phạm tiếng Việt của giáo viên. Chỉ được trả lời dựa trên các đoạn trích dẫn của giáo án được cung cấp; nếu đoạn trích không đủ căn cứ, hãy nói rõ là giáo án không nêu điều đó và không bịa thêm. Trả lời ngắn gọn, xuống dòng theo ý, tối đa 6 câu. Chỉ trả về DUY NHẤT một đối tượng JSON hợp lệ có dạng {"answer":"..."}, không kèm markdown.';
+  'Bạn là trợ lý sư phạm tiếng Việt của giáo viên. Chỉ được trả lời dựa trên các đoạn trích dẫn của giáo án được cung cấp; nếu đoạn trích không đủ căn cứ, hãy nói rõ là giáo án không nêu điều đó và không bịa thêm. Trả lời ngắn gọn, xuống dòng theo ý. Chỉ trả về DUY NHẤT một đối tượng JSON hợp lệ có dạng {"answer":"..."}, không kèm markdown.';
+
+/** The detail-short answer: the ceiling moves into the prompt so it is obeyable (#229). */
+const CHAT_ANSWER_LENGTH_HINT = 'Giữ câu trả lời trong tối đa 6 câu.';
+const CHAT_ANSWER_DETAIL_HINT = 'Giáo viên đang hỏi chi tiết, nên hãy trả lời đủ ý bằng các gạch đầu dòng ngắn; có thể dài hơn 6 câu nếu giáo án có nhiều nội dung liên quan, nhưng không lan man.';
+/** Words that mean "give me the whole thing", not a one-line lookup (#229). */
+const DETAIL_REQUEST = /giải thích|chi tiết|đầy đủ|toàn bộ|cụ thể|liệt kê|so sánh|phân tích|tóm tắt|trình bày|làm rõ|vì sao|tại sao/i;
+/** Rough size of a Vietnamese question/answer pair — about 300 tokens (#229). */
+const CHAT_PROMPT_PAIR_CHARS = 1_000;
+
+/** The answer ceiling: 512 tokens cut a full "giải thích" answer off mid-sentence. */
+export const CHAT_ANSWER_MAX_TOKENS = 1_024;
+export const CHAT_ANSWER_DETAIL_MAX_TOKENS = 1_536;
+
+/** How long the model may make a plain answer: detail requests get the longer budget. */
+export function chatAnswerMaxTokens(question: string): number {
+  return DETAIL_REQUEST.test(String(question || '')) ? CHAT_ANSWER_DETAIL_MAX_TOKENS : CHAT_ANSWER_MAX_TOKENS;
+}
+
+/**
+ * Everything the prompt spends before the lesson text: the system prompt, the
+ * replayed turns, the question and the room the answer needs. The lesson budget
+ * is the context minus this, so a long conversation cannot push the answer out
+ * of the window (#229).
+ */
+export function chatPromptOverhead(input: {
+  history?: ChatMessage[];
+  question?: string;
+  answerMaxTokens?: number;
+}): number {
+  const system = Math.max(
+    CHAT_ANSWER_SYSTEM_PROMPT.length, QUESTION_SET_SYSTEM_PROMPT.length,
+    UNGROUNDED_ANSWER_SYSTEM_PROMPT.length, UNGROUNDED_QUESTION_SET_SYSTEM_PROMPT.length
+  );
+  const history = (Array.isArray(input.history) ? input.history : [])
+    .reduce((total, message) => total + String(message?.content || '').length, 0);
+  const question = String(input.question || '').length * 3 + CHAT_PROMPT_PAIR_CHARS;
+  const answer = (Number(input.answerMaxTokens) || CHAT_ANSWER_MAX_TOKENS) * CHARS_PER_TOKEN;
+  return Math.ceil(system + history + question + answer);
+}
 
 const QUESTION_SET_SYSTEM_PROMPT =
   'Bạn là trợ lý soạn câu hỏi trắc nghiệm tiếng Việt cho giáo viên. Chỉ được dùng nội dung giáo án trong các đoạn trích dẫn; mỗi câu phải có một đáp án đúng duy nhất, giải thích 1 câu và độ khó. Chỉ trả về DUY NHẤT một đối tượng JSON hợp lệ, không kèm markdown.';
@@ -104,10 +177,20 @@ const QUESTION_SET_SYSTEM_PROMPT =
  * fabrication about a document it never saw.
  */
 const UNGROUNDED_ANSWER_SYSTEM_PROMPT =
-  'Bạn là trợ lý sư phạm tiếng Việt của giáo viên. Lượt này giáo viên không gắn giáo án nào, nên hãy trả lời bằng kiến thức sư phạm chung và nói rõ đó là gợi ý chung chứ không trích từ giáo án của họ; không được bịa rằng mình đang đọc một tài liệu cụ thể. Trả lời ngắn gọn, xuống dòng theo ý, tối đa 6 câu. Chỉ trả về DUY NHẤT một đối tượng JSON hợp lệ có dạng {"answer":"..."}, không kèm markdown.';
+  'Bạn là trợ lý sư phạm tiếng Việt của giáo viên. Lượt này giáo viên không gắn giáo án nào, nên hãy trả lời bằng kiến thức sư phạm chung và nói rõ đó là gợi ý chung chứ không trích từ giáo án của họ; không được bịa rằng mình đang đọc một tài liệu cụ thể. Trả lời ngắn gọn, xuống dòng theo ý. Chỉ trả về DUY NHẤT một đối tượng JSON hợp lệ có dạng {"answer":"..."}, không kèm markdown.';
 
 const UNGROUNDED_QUESTION_SET_SYSTEM_PROMPT =
   'Bạn là trợ lý soạn câu hỏi trắc nghiệm tiếng Việt cho giáo viên. Lượt này không có giáo án kèm theo, nên hãy soạn theo đúng yêu cầu của giáo viên bằng kiến thức của bậc học được nêu; mỗi câu phải có một đáp án đúng duy nhất, giải thích 1 câu và độ khó. Chỉ trả về DUY NHẤT một đối tượng JSON hợp lệ, không kèm markdown.';
+
+/** The arena draft is bigger than an answer, but it was never the cut (#229). */
+export const CHAT_QUESTION_SET_MAX_TOKENS = 2_048;
+
+/** The answer prompt carries its own ceiling so the model can obey it (#229). */
+export function answerSystemPrompt(grounded: boolean, question: string): string {
+  const base = grounded ? CHAT_ANSWER_SYSTEM_PROMPT : UNGROUNDED_ANSWER_SYSTEM_PROMPT;
+  const hint = chatAnswerMaxTokens(question) === CHAT_ANSWER_DETAIL_MAX_TOKENS ? CHAT_ANSWER_DETAIL_HINT : CHAT_ANSWER_LENGTH_HINT;
+  return `${base} ${hint}`;
+}
 
 /** The schema the model must answer into for an in-chat reply. */
 export const lessonChatAnswerJsonSchema = {
@@ -172,6 +255,8 @@ export interface LessonChatTurnInput {
   questionCount?: number;
   /** True when the local runtime is offloading layers to a GPU (#186). Ignored for cloud. */
   localOnGpu?: boolean;
+  /** The context window the local runtime was actually spawned with (#229). Ignored for cloud. */
+  contextTokens?: number;
   onStage?: (stage: 'retrieve' | 'generate' | 'validate') => void;
 }
 
@@ -286,7 +371,9 @@ export function buildChatEvidence(input: ChatEvidenceInput): ChatEvidence {
     for (const quote of quotes) {
       const remaining = Math.min(share, maxChars - characters);
       if (remaining <= 0) break;
-      const kept = quote.slice(0, Math.min(quote.length, remaining));
+      const kept = wholeDocument && quote.length > remaining
+        ? elideLesson(quote, remaining, documents.length === 1)
+        : quote.slice(0, Math.min(quote.length, remaining));
       if (!kept.trim()) continue;
       characters += kept.length;
       citations.push({ documentId: document.id, documentName: document.name || document.id, quote: kept });
@@ -308,7 +395,7 @@ export function buildChatEvidence(input: ChatEvidenceInput): ChatEvidence {
     for (const document of documents) {
       const text = String(document.text ?? '').trim();
       if (!text || characters >= maxChars) continue;
-      const kept = text.slice(0, Math.min(CHAT_FALLBACK_CHARS_PER_DOCUMENT, maxChars - characters));
+      const kept = elideLesson(text, Math.min(CHAT_FALLBACK_CHARS_PER_DOCUMENT, maxChars - characters), documents.length === 1 && wholeDocument);
       characters += kept.length;
       citations.push({ documentId: document.id, documentName: document.name || document.id, quote: kept });
     }
@@ -336,6 +423,25 @@ export function buildChatEvidence(input: ChatEvidenceInput): ChatEvidence {
 function toEvidenceBudget(value: number | undefined): number {
   const parsed = Number(value);
   return Number.isNaN(parsed) ? CHAT_LOCAL_MAX_CHARS : Math.max(200, parsed);
+}
+
+/**
+ * Cuts a lesson that does not fit by removing its **middle** and saying so, so the
+ * model sees both the opening (objectives, warm-up) and the ending (homework,
+ * assessment) instead of a text that stops mid-sentence and looks complete (#229).
+ */
+export function elideLesson(text: string, limit: number, spreadEnds = false): string {
+  const source = String(text || '');
+  if (source.length <= limit) return source;
+  const marker = CHAT_ELISION_MARKER;
+  const room = Math.max(0, limit - marker.length);
+  if (room === 0) return source.slice(0, limit);
+  // One lesson keeps its head and tail; a lesson sharing a budget with others keeps
+  // its head only, so two lessons at the same budget stay distinct instead of
+  // ending with the same generic footer.
+  const head = Math.floor(room * (spreadEnds ? CHAT_ELISION_HEAD_SHARE : 1 - CHAT_ELISION_TAIL_SHARE));
+  const tail = room - head;
+  return `${source.slice(0, head)}${marker}${source.slice(source.length - tail)}`;
 }
 
 /**
@@ -438,11 +544,19 @@ function evidenceHeading(evidence: ChatEvidence): string {
 export async function runLessonChatTurn(input: LessonChatTurnInput): Promise<LessonChatTurnResult> {
   const documents = Array.isArray(input.documents) ? input.documents : [];
   const providerId = (input.client as { providerId?: string }).providerId || '';
-  const policy = chatEvidencePolicyFor({ providerId, localOnGpu: input.localOnGpu === true });
-  const evidence = buildChatEvidence({ documents, question: input.question, ...policy });
   const intent = classifyLessonChatIntent(input.question, input.mode || 'auto');
   const count = clampQuestionCount(Number(input.questionCount) || requestedQuestionCount(input.question));
   const history = buildChatHistoryMessages(input.history);
+  const answerMaxTokens = intent === 'question_set' ? CHAT_QUESTION_SET_MAX_TOKENS : chatAnswerMaxTokens(input.question);
+  // A local turn shares one context between the lesson, the replayed turns, the
+  // question and the answer. The lesson gets what is left after measuring the
+  // rest, so a long conversation cannot squeeze the answer out of the window —
+  // and the runtime's real context is used, not a constant (#229).
+  const policy = chatEvidencePolicyFor({ providerId, localOnGpu: input.localOnGpu === true, contextTokens: input.contextTokens });
+  const maxChars = providerId === 'local' && Number.isFinite(policy.maxChars)
+    ? policy.maxChars - chatPromptOverhead({ history, question: input.question, answerMaxTokens })
+    : policy.maxChars;
+  const evidence = buildChatEvidence({ documents, question: input.question, ...policy, maxChars });
   // `documents.length`, not `citations.length`: a lesson that exists but matched no
   // quote still took part in the turn (the fallback slice is sent), whereas zero
   // attached lessons is the state the prompt has to describe honestly.
@@ -462,7 +576,7 @@ export async function runLessonChatTurn(input: LessonChatTurnInput): Promise<Les
       { role: 'user', content: buildQuestionSetPrompt({ question: input.question, evidence, count, grounded }) }
     ]
     : [
-      { role: 'system', content: grounded ? CHAT_ANSWER_SYSTEM_PROMPT : UNGROUNDED_ANSWER_SYSTEM_PROMPT },
+      { role: 'system', content: answerSystemPrompt(grounded, input.question) },
       ...history,
       { role: 'user', content: buildChatAnswerPrompt({ question: input.question, evidence, grounded }) }
     ];
@@ -474,7 +588,7 @@ export async function runLessonChatTurn(input: LessonChatTurnInput): Promise<Les
         client: input.client,
         registry: input.registry,
         requestId: input.requestId,
-        maxTokens: 2048,
+        maxTokens: CHAT_QUESTION_SET_MAX_TOKENS,
         responseSchema: lessonQuestionSetSchemaRef(),
         messages,
         validate: value => {
@@ -515,7 +629,7 @@ export async function runLessonChatTurn(input: LessonChatTurnInput): Promise<Les
       client: input.client,
       registry: input.registry,
       requestId: input.requestId,
-      maxTokens: 512,
+      maxTokens: answerMaxTokens,
       responseSchema: lessonChatAnswerJsonSchema,
       messages,
       validate: value => {
