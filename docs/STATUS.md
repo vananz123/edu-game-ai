@@ -7,12 +7,13 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
-### 2026-11-08 — Đóng nợ #212 (checksum)
+### 2026-11-08 — Đóng nợ #212 (checksum), #219 (Chòm sao tri thức)
+- **#219 (2026-11-08) — Board Chòm sao tri thức: cỡ chữ nâng lên, phản hồi đúng/sai kể đúng tên vế–sao, dấu sai đỏ.** Chi tiết ở đầu handoff mới nhất bên dưới; quyết định #219 trong `docs/DECISIONS.md`.
 - **#218 (2026-11-08) — Lỗi checksum có `kind` riêng + lời tiếng Việt đúng sự thật, đo 62/62 trên binary đóng gói `release/218`.** Chi tiết ở đầu handoff mới nhất bên dưới; quyết định #218 trong `docs/DECISIONS.md`.
 
 ### 2026-11-07 — Phát hành v0.4.2, #216 và #215
+- **Phát hành EduGame Studio v0.4.2** — bản lưu trữ: [docs/handoff/status/2026-11-07.md](handoff/status/2026-11-07.md); quyết định #217 trong `docs/DECISIONS.md`.
 - **Chế độ dev `npm run dev` (2026-11-07) — sửa renderer tự reload cửa sổ, không cần mở lại app; main process vẫn phải chạy lại.** Chi tiết ở đầu handoff mới nhất bên dưới.
-- **EduGame Studio v0.4.2 đã commit/push và phát hành trên GitHub Releases**, kèm bộ cài Windows và feed cập nhật đã kiểm tra. Chi tiết ở đầu handoff mới nhất bên dưới; quyết định #217 trong `docs/DECISIONS.md`.
 - **#216 (2026-11-07) — Nút tiếp tục nổi góc dưới phải, đáp án giữ nguyên cỡ.** Bản lưu trữ: [docs/handoff/status/2026-11-07.md](handoff/status/2026-11-07.md); quyết định #216 trong `docs/DECISIONS.md`.
 - **#215 (2026-11-07) — Bỏ dải HUD phản hồi, điểm hiện dạng nổi rồi tự ẩn, nút Giải thích neo góc dưới trái.** Bản lưu trữ: [docs/handoff/status/2026-11-07.md](handoff/status/2026-11-07.md); quyết định #215 trong `docs/DECISIONS.md`.
 - **#214 và bố trí “Nội dung gửi AI” dưới cụm tab.** Bản lưu trữ: [docs/handoff/status/2026-11-07.md](handoff/status/2026-11-07.md); quyết định #214 trong `docs/DECISIONS.md`.
@@ -266,6 +267,18 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - Lịch sử trước 2026-10-19
 ## Bàn giao gần nhất
 
+### #219 — Chòm sao tri thức: chữ to hơn, phản hồi đúng/sai rõ ràng (2026-11-08)
+
+**Files changed.** 4 tệp mã/test (+391/−77): `src/renderer/styles/game-constellation.css` (+150/−…; cỡ chữ HUD 13px, nhãn sao 11px, thẻ nhãn/câu hỏi 15px, thẻ đáp án 16px, dòng phản hồi `clamp(15px,1.3vw,18px)`; dòng trạng thái thành viên thuốc `position:absolute` nằm trên chân cảnh; dải phản hồi có nền riêng + `z-index:3`), `src/renderer/features/games/constellation.ts` (+109/−…; hằng số kích thước thẻ dùng chung cho `constellationCardFits`/`constellationRowSlots` khớp cỡ chữ mới, phản hồi có tên vế–sao, dấu sai đỏ trên cả thẻ và sao), `tests/ui/ui-constellation-check.js` (+202/−…, 104 check), `tests/ui/ui-connection-mode-check.js` (`placeOnStar` trả object). Docs: `docs/DECISIONS.md` #219, `docs/STATUS.md` (block v0.4.2 dời vào `docs/handoff/status/2026-11-07.md`).
+
+**Behavior.** Chữ trên board Chòm sao tri thức trước đây nhỏ (nhãn 9–10px, HUD 11px) và phản hồi chỉ là "✓ Ghép chính xác!" / "✕ Chưa đúng" chung chung. Nay: (1) mọi cỡ chữ nâng lên như trên, cỡ nhỏ nhất còn lại trên board là 11px và chỉ dùng cho chấm số thứ tự gắn sao; (2) chữ to không lấy đất của bầu trời — dòng trạng thái chuyển vào khoảng trống sẵn có của dải phản hồi, đo lại cảnh 10 sao vẫn giữ nguyên chiều cao và số nhãn treo trên sao tăng từ 5 lên 6 (1366×768); (3) trả lời sai nói đúng cái gì sai với cái gì: *"✕ Chưa đúng: “Định nghĩa 5” không thuộc sao “Khái niệm 3” · không trừ điểm"* (hoặc `−N điểm` khi phạt), đồng thời thẻ trong khay và nhãn sao bị đóng dấu đỏ trong suốt 550 ms khoá, chấm số thứ tự của hàng câu hỏi tạm ẩn để không chỉ nhầm sao; (4) trả lời đúng nói rõ hai vế vừa nối: *"✓ Ghép chính xác! “Khái niệm 5” → “Định nghĩa 5”"*. Cả ba đường nhập liệu (bấm thẻ + bấm sao, Enter/Space, kéo thả) đi qua cùng `placeOnStar` nên nói cùng một câu.
+
+**Commands and results.** `npx tsc --noEmit -p tsconfig.json` — rc 0; `npm run build` + `npm run build:css` — rc 0, rule mới có trong `dist/src/renderer/styles/app.css`; `npm run verify:css` — 61/61; `npm run check:renderer-globals` — 68/70 scripts, 1.017 hàm / 8.144 điểm gọi, 0 undefined; `node tests/run-unit.js` — 89/89 (39,8 s); `node tests/ui/ui-constellation-check.js 9391` chạy **hai lần liền** (Electron khởi động lại để nạp CSS mới) — **104/104 cả hai lần**, exit 0, gồm các check mới: nhãn treo lệch ≤2 px ở 1920×1080 và 1280×720, mọi sao của board 10 sao có đúng một nhãn (treo hoặc trong hàng đánh số, `hang=6 row=4 marks=4`), phản hồi sai kể đúng tên vế và tên sao trên đường bấm, phản hồi đúng kể đúng hai vế, `edges` chỉ tăng sau cú bấm đúng (`1010 → 1011`) và không mất cạnh. Anh em: `node tests/ui/ui-connection-mode-check.js 9391` — 7/7; `node tests/ui/ui-matching-finish-check.js 9391` — 22/22. Census cỡ chữ đo trong app thật (1366×768, board 5 sao): HUD 13px, trạng thái 13px (`position: absolute`), phản hồi 15px, thẻ nhãn 15px, thẻ đáp án 16px, nhỏ nhất toàn board 11px. Ảnh xác nhận: `before-*/after-{1366,1920}-{start,wrong,correct}.png` (chụp qua CDP, lưu ở thư mục scratch tạm, không commit).
+
+**Not verified.** Ảnh chụp chưa được xem bằng mắt trong lượt này (máy không có mô hình thị giác) — hình học được xác minh bằng số đo CDP và 104 check. Chưa đo trên máy chiếu thật hay màn hình < 720p; chưa chạy lại `check:packaged-*` trên binary đóng gói (bản phát hành kế tiếp sẽ chạm). Nhánh AI local không đo theo chỉ đạo.
+
+**Next recommended task.** Mở board 10 sao ở 1366×768 trên máy thật để soát bằng mắt độ dễ đọc (cỡ chữ) và độ dễ hiểu của câu phản hồi sai; nếu ổn thì gộp vào lần phát hành 0.4.3 tiếp theo chạy lại `check:packaged-install` + `check:packaged-feed`.
+
 ### Đóng nợ #212 — lỗi checksum có kind riêng, đo 62/62 trên binary đóng gói (2026-11-08)
 
 **Files changed.** 7 tệp mã/test (+28/−14): `src/services/update/update-policy.ts` (nhánh `checksum` đứng trước feed), `src/shared/about-types.ts` (`UpdateErrorKind` thêm `'checksum'`), `src/renderer/features/about-panel.ts` (câu tiếng Việt + tiêu đề "Bản cập nhật không hợp lệ"), `tests/unit/update-policy.test.ts` (3 message thật của thư viện + assert ưu tiên), `tests/unit/about-page.test.ts` (vòng lặp lời lỗi lên 8 kind), `tests/ui/packaged-install-check.js` (check `[NỢ #212]` đảo thành 2 check hành vi đúng, 61 → 62 check), `tests/README.md`. Docs: `docs/DECISIONS.md` #218, `docs/ROADMAP.md`, `docs/STATUS.md` (block #216 dời vào `docs/handoff/status/2026-11-07.md`).
@@ -289,17 +302,3 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 **Not verified.** Nhánh Tailwind watch chưa đo riêng (cùng cơ chế reload như tsc: ghi vào `dist`); độ ổn định dài hạn của `fs.watch` recursive trên Windows; hành vi trên macOS/Linux (nhánh kill dùng SIGTERM, chưa chạy thử); chưa chạy lại full unit suite (không đổi logic thuần, `main.ts` là `@ts-nocheck`).
 
 **Next recommended task.** Dùng `npm run dev` cho việc sửa UI; nếu cần main process tự restart khi sửa thì cân nhắc `electronmon` (thêm dependency — cần duyệt).
-
-### Phát hành EduGame Studio v0.4.2 (2026-11-07)
-
-**Files changed.** Toàn bộ 26 tệp đã duyệt trong worktree, gồm gameplay Arena, wizard, test hồi quy, docs và bump phiên bản desktop/backend lên `0.4.2`. Release source commit: `2740fc2f89ed9c122382f4310ebd425b9c78d105`; annotated tag `v0.4.2` trỏ đúng commit này.
-
-**Behavior.** Đấu trường Cổ điển/Xây nhà có bố cục câu hỏi và đáp án tối ưu hơn, nút tiếp tục/giải thích nổi và phản hồi điểm tạm thời. Wizard giữ hai tab Cấu trúc/Nội dung giáo án; phần xem trước “Nội dung gửi AI” nằm bên dưới và không đổi khi chuyển tab. Sửa runner kiểm thử native để dùng đúng Electron executable.
-
-**Release.** [GitHub Release v0.4.2](https://github.com/vananz123/edu-game-ai/releases/tag/v0.4.2) (release ID `437444119`) đã public với 3 assets: `EduGame-Studio-Setup-0.4.2.exe` **92,597,265 B**, `.blockmap` **96,501 B**, `latest.yml` **356 B**. SHA-256 installer: `80131d173c66d10ae7375381794494a88b36b79112541a13c3d9fdcacd4121e5`; SHA-512 khớp feed: `zW0jnYtjgE8jlxeb1AOo5c+z49DnJ/Y19irFhqYN1GAVZMl503BE5qnowptqe/yX0KfIAOd1fu73pQNkIXb6Lw==`. `latest.yml` tải công khai khớp từng byte với feed được build. Installer **chưa ký Authenticode**.
-
-**Commands and results.** `npm test` — build thành công (cảnh báo `EPERM` khi dọn `dist/server/index.js`) và **89/89** unit suites; `npm run test:native` — **1/1**; `npm run check` — passed; `npm run verify:css` — **61/61**; `npm run check:renderer-globals` — không có global chưa khai báo. UI Electron: play surface **436/436**, answer mode **218/218**, house building **121/121**, wizard **19/19**. Bản đóng gói: offline gameplay **11/11**; sau khi public, feed GitHub thật `up-to-date` **24/24**. `npx electron-builder --win nsis --config.directories.output=release/0.4.2` — succeeded; installer và `latest.yml` khớp size/SHA-512; `git diff --check` — passed.
-
-**Not verified.** Chưa chạy chính installer NSIS để cài/gỡ trên máy sạch, chưa ký Authenticode, chưa thử trên máy chiếu hoặc máy pilot; phép đo cập nhật chỉ xác nhận trạng thái `up-to-date`, không tải/cài bản mới.
-
-**Next recommended task.** Thử installer trên máy Windows sạch và hoàn tất P7 trên máy pilot (cài, kiểm tra cập nhật, ngắt mạng rồi chơi game đã lưu).

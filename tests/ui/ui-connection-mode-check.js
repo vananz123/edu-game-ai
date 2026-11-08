@@ -115,19 +115,20 @@ const OPEN = gameJson => `(async () => {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const stars = Object.keys(connectionStarAnchors());
     const first = constellationPairForStar(state.currentGame, connectionTemplateFor(state.currentGame), stars[0]);
-    const ok = placeOnStar(first.id, first.id);
+    // #219: placeOnStar reports the attempt as an object, not a boolean.
+    const attempt = placeOnStar(first.id, first.id);
     await sleep(500);
     return JSON.stringify({
       star: stars[0],
       pair: first.id,
-      ok,
+      ok: Boolean(attempt) && attempt.outcome === 'correct',
       connected: state.connectionProgress.connectedStageIds.slice(),
       matched: state.matchingPlay.matched,
       cards: document.querySelectorAll('[data-answer-card]').length
     });
   })()`));
   check('an old game scores through the new board',
-    played.connected.length === 1 && played.matched === 1 && played.cards === 3,
+    played.ok === true && played.connected.length === 1 && played.matched === 1 && played.cards === 3,
     JSON.stringify(played));
 
   // -------------------------------------------- the other styles open ----

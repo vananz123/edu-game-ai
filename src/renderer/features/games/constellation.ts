@@ -45,18 +45,18 @@ const CONSTELLATION_DRAG_TYPE = 'application/x-edugame-constellation';
  * after paint and moves a card out of the scene if it truly does not fit.
  */
 const CONSTELLATION_LABEL_LANE = 12;
-const CONSTELLATION_LABEL_MAX_PX = 190;
+const CONSTELLATION_LABEL_MAX_PX = 210;
 const CONSTELLATION_FRAME_FALLBACK_PX = 1000;
 const CONSTELLATION_FRAME_FALLBACK_H_PX = 620;
-/** Approximate advance of one character at the label's 13 px font. */
-const CONSTELLATION_LABEL_CHAR_PX = 7.2;
-/** One wrapped line of a label: 13 px at `line-height: 1.3`. */
-const CONSTELLATION_LABEL_LINE_PX = 17;
-/** Vertical padding of `.constellation-card--star` (5 px + 5 px). */
-const CONSTELLATION_LABEL_PAD_PX = 10;
+/** Approximate advance of one character at the label's 15 px font (#219). */
+const CONSTELLATION_LABEL_CHAR_PX = 8.3;
+/** One wrapped line of a label: 15 px at `line-height: 1.3`. */
+const CONSTELLATION_LABEL_LINE_PX = 20;
+/** Vertical padding of `.constellation-card--star` (6 px + 6 px). */
+const CONSTELLATION_LABEL_PAD_PX = 12;
 /** The stem that ties a hanging label to its star. */
 const CONSTELLATION_LABEL_STEM_PX = 15;
-/** The card's own `max-width: min(44%, 190px)`, as a fraction of the frame. */
+/** The card's own `max-width: min(44%, 210px)`, as a fraction of the frame. */
 const CONSTELLATION_LABEL_MAX_W_FRACTION = 0.44;
 
 /** The label's own width, in px, from the same estimate the old fit test used. */
@@ -571,7 +571,83 @@ function placeOnStar(answerId, starId) {
     right.dataset.star = star;
     right.dataset.starPair = starPairId;
     evaluateColumnMatchWith(left, right, { answerId, starId: star, correct });
-    return correct ? 'correct' : 'wrong';
+    return { outcome: correct ? 'correct' : 'wrong', answerId, starId: star, starPairId };
+}
+
+/**
+ * Run `fn` after the matching board's feedback lock, then repaint the board.
+ *
+ * A wrong attempt locks the board for 550 ms (`evaluateColumnMatchWith`) and the
+ * board repaints when it releases. Anything this file wants the class to SEE
+ * before that repaint has to be drawn now and removed by that repaint — a repaint
+ * issued immediately would erase it in the same frame it appeared (#219: measured
+ * `visibleWrongMarks: 0` on the old board).
+ */
+function constellationAfterLock(fn) {
+    const release = () => {
+        fn();
+        paintConstellationSurface(document);
+    };
+    if (!(state.matchingPlay && state.matchingPlay.lock)) {
+        release();
+        return;
+    }
+    window.setTimeout(() => {
+        if (state.matchingPlay && state.matchingPlay.lock) {
+            constellationAfterLock(fn);
+            return;
+        }
+        release();
+    }, 560);
+}
+
+/**
+ * Paint the wrong attempt on the real nodes: the card in the tray and the star's
+ * own label (or its row card) turn red until the board repaints at the end of the
+ * lock. The 3D star itself is shaken by `reactConnectionBoard`.
+ */
+function constellationStampWrong(answerId, starId) {
+    const answer = document.querySelector(`[data-answer-card="${cssEscapeAttr(answerId)}"]`);
+    if (answer) answer.classList.add('is-wrong');
+    const star = document.querySelector(`[data-star-card="${cssEscapeAttr(starId)}"]`)
+        || document.querySelector(`[data-question-card="${cssEscapeAttr(starId)}"]`);
+    if (star) star.classList.add('is-wrong');
+    const mark = document.querySelector(`[data-question-mark="${cssEscapeAttr(starId)}"]`);
+    if (mark) mark.classList.add('is-wrong');
+}
+
+/**
+ * Show ONE attempt's result on the board, for every input path.
+ *
+ * The feedback line is the matching board's (one scoring path), but it says only
+ * "✕ Chưa đúng — thử lại." — it never names the pair, so the class cannot tell
+ * what was wrong from the back row. Here the line is rewritten with the two texts
+ * the student just put together, and a wrong drop paints the STAMPED card and the
+ * star it missed red for the 550 ms the board is locked (#219).
+ */
+function constellationAnnounceAttempt(answerId, starId, attempt) {
+    const { outcome } = attempt;
+    const game = state.currentGame;
+    if (!game || !isConnectionBoard(game)) return;
+    const template = connectionTemplateFor(game);
+    const direction = constellationDirectionFor(game);
+    const pair = game.matchingGame.pairs.find(item => item.id === answerId);
+    const sides = pair ? constellationPairSides(pair, direction) : { starText: '', cardText: '' };
+    const starPair = constellationPairForStar(game, template, starId);
+    const starSides = starPair ? constellationPairSides(starPair, direction) : { starText: '', cardText: '' };
+    if (outcome === 'correct') {
+        matchingFeedback('good', `✓ Ghép chính xác! “${connectionEsc(starSides.starText)}” → “${connectionEsc(sides.cardText)}”`);
+        return;
+    }
+    if (outcome !== 'wrong') return;
+    const m = game.matchingGame;
+    const penalty = m.practiceMode ? ' · luyện tập: không trừ điểm'
+        : (Number(m.wrongPenalty) > 0 ? ` · −${Number(m.wrongPenalty)} điểm` : ' · không trừ điểm');
+    matchingFeedback('bad', `✕ Chưa đúng: “${connectionEsc(sides.cardText)}” không thuộc sao “${connectionEsc(starSides.starText)}”${penalty}`);
+    constellationStampWrong(answerId, starId);
+    // Tap and keyboard have no flight to wait for; the stamp still has to live
+    // through the lock before the board repaints it away.
+    constellationAfterLock(() => {});
 }
 
 /**
@@ -639,7 +715,7 @@ function bindConstellationSurface(root) {
         if (star && state.constellationSelected) {
             const answerId = state.constellationSelected;
             selectCard(null);
-            placeOnStar(answerId, star);
+            constellationAnnounceAttempt(answerId, star, placeOnStar(answerId, star));
         }
     });
 
@@ -651,7 +727,7 @@ function bindConstellationSurface(root) {
         event.preventDefault();
         const answerId = state.constellationSelected;
         selectCard(null);
-        placeOnStar(answerId, star);
+        constellationAnnounceAttempt(answerId, star, placeOnStar(answerId, star));
     });
 
     // --- drag: only the tray cards are draggable ---
@@ -790,14 +866,11 @@ function constellationFlyAndResolve(drag, starId) {
             card.style.removeProperty('opacity');
         }
         const outcome = placeOnStar(answerId, starId);
-        if (outcome === 'wrong') {
-            // Back to the tray, with the board's own "not this one" feedback.
-            if (state.drag === drag) state.drag = null;
-            paintConstellationSurface(document);
-            return;
-        }
         if (state.drag === drag) state.drag = null;
-        if (typeof outcome === 'string') sendPresentationState();
+        // `constellationAnnounceAttempt` ends a wrong attempt with the repaint
+        // that returns the card to its slot, once the lock is over.
+        constellationAnnounceAttempt(answerId, starId, outcome);
+        if (outcome.outcome === 'correct') sendPresentationState();
     };
     if (!target || !start || !card.isConnected || typeof card.animate !== 'function') {
         finish();

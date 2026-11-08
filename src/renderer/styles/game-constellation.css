@@ -154,15 +154,15 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
   border: 1px solid rgba(148, 163, 184, 0.28);
   background: rgba(12, 18, 34, 0.72);
   color: var(--constellation-ink);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   white-space: nowrap;
 }
 .constellation-hud-name { color: #c9d2f5; }
-.constellation-hud-stars { letter-spacing: 2px; font-size: 13px; }
+.constellation-hud-stars { letter-spacing: 2px; font-size: 14px; }
 .constellation-lit { color: var(--constellation-gold); }
 .constellation-unlit { color: #4b5675; }
-.constellation-hud-count b { color: #fff; font-size: 13px; }
+.constellation-hud-count b { color: #fff; font-size: 14px; }
 .constellation-hud-sides {
   color: var(--constellation-muted);
   font-weight: 600;
@@ -277,13 +277,13 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
   top: -19px;
 }
 .constellation-card--star {
-  max-width: min(44%, 190px);
-  padding: 5px 10px;
+  max-width: min(44%, 210px);
+  padding: 6px 12px;
   border-radius: 9px;
   border: 1px solid rgba(146, 162, 214, 0.42);
   background: rgba(9, 14, 26, 0.82);
   color: var(--constellation-ink);
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 650;
   line-height: 1.3;
   text-align: center;
@@ -297,15 +297,15 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
    thẻ dài 370 px không thể cùng căn vào hai sao cách nhau 4 % bề rộng (đo: thẻ bị
    đẩy lệch tới 279 px), nên số là cây cầu nối vẫn còn đọc được. */
 .constellation-card--mark {
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   display: grid;
   place-items: center;
   border-radius: 50%;
   border: 1px solid rgba(242, 196, 107, 0.6);
   background: rgba(9, 14, 26, 0.9);
   color: var(--constellation-gold);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 800;
   line-height: 1;
   pointer-events: none;
@@ -390,22 +390,22 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
   left: 2px;
   padding: 3px 8px;
   border-radius: 6px;
-  background: rgba(120, 136, 190, 0.16);
-  color: var(--constellation-muted);
-  font-size: 10px;
+  background: rgba(120, 136, 190, 0.22);
+  color: #b6c1de;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 1.2px;
 }
 .constellation-question-card {
   position: relative;
   grid-column: span 4;
-  min-height: 34px;
-  padding: 7px 11px;
+  min-height: 38px;
+  padding: 8px 12px;
   border-radius: 10px;
   border: 1px solid rgba(146, 162, 214, 0.4);
   background: rgba(9, 14, 26, 0.86);
   color: var(--constellation-ink);
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
   line-height: 1.35;
   text-align: left;
@@ -417,13 +417,13 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
 .constellation-card-index {
   display: inline-grid;
   place-items: center;
-  width: 18px;
-  height: 18px;
+  width: 21px;
+  height: 21px;
   margin-right: 7px;
   border-radius: 50%;
-  background: rgba(242, 196, 107, 0.18);
-  color: var(--constellation-gold);
-  font-size: 11px;
+  background: rgba(242, 196, 107, 0.28);
+  color: #ffe3a3;
+  font-size: 13px;
   font-weight: 800;
   line-height: 1;
   vertical-align: middle;
@@ -496,8 +496,8 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
 }
 .constellation-tray-label {
   flex: 0 0 auto;
-  color: var(--constellation-muted);
-  font-size: 10px;
+  color: #b6c1de;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 1.4px;
   writing-mode: horizontal-tb;
@@ -515,14 +515,14 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
 }
 .constellation-tray-card {
   flex: 0 0 auto;
-  max-width: 260px;
-  min-height: 46px;
-  padding: 8px 14px;
+  max-width: 280px;
+  min-height: 52px;
+  padding: 9px 15px;
   border-radius: 11px;
   border: 1px solid #c9d3ea;
   background: linear-gradient(#fbfcff, #eef1f9);
   color: #16203a;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 650;
   line-height: 1.3;
   text-align: left;
@@ -541,6 +541,15 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
 .constellation-tray-card.is-selected {
   border-color: var(--constellation-gold);
   box-shadow: 0 0 0 3px rgba(242, 196, 107, 0.4), 0 6px 16px rgba(2, 6, 18, 0.5);
+}
+/* #219: cú kéo sai để lại DẤU ĐỎ trên chính thẻ và trên sao đích trong đúng
+   550 ms khoá của lượt trả lời. Trước đó class `.wrong` chỉ đóng lên phần tử
+   proxy NGOÀI DOM (`constellationProxyElement`), nên đo được 0 dấu hiệu đỏ
+   trên board: học sinh cuối lớp chỉ thấy dòng chữ nhỏ dưới khay đổi màu. */
+.constellation-tray-card.is-wrong {
+  border-color: #dc5f6e;
+  box-shadow: 0 0 0 3px rgba(220, 95, 110, 0.45), 0 6px 16px rgba(2, 6, 18, 0.5);
+  animation: constellation-wrong-shake 0.42s ease-in-out;
 }
 .constellation-tray-card.is-dragging { opacity: 0.35; cursor: grabbing; }
 .constellation-tray-card.is-flying {
@@ -561,8 +570,8 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
 .constellation-status {
   margin: 2px 2px 0;
   min-height: 18px;
-  color: var(--constellation-muted);
-  font-size: 12px;
+  color: #b6c1de;
+  font-size: 13px;
   font-weight: 600;
 }
 .constellation-status b { color: #e2e8f0; }
@@ -680,6 +689,25 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
   width: 100%;
 }
 
+/* #219: dòng trạng thái ("Kéo thẻ lên một ngôi sao …") và dòng phản hồi nằm CÙNG
+   một dải dưới cảnh. Trước đây chúng là hai hàng cộng thêm, và ở 1366×768 dải khay
+   cao 52 px làm cảnh chỉ còn 239 px — nhãn cao 31 px ở cỡ 15 px không còn làn để
+   treo, nên 5/10 sao phải đẩy xuống hàng câu hỏi. Khe này vốn đã được chừa đúng
+   chiều cao thẻ phản hồi, nên trạng thái dùng phần còn lại trên nền cảnh: không
+   thêm một pixel chiều cao nào, cảnh nhận lại 30 px, và câu phản hồi che trạng
+   thái trong đúng 550 ms của cú sai — cái lớp đang cần đọc là câu phản hồi. */
+.stage-center.is-constellation .constellation-status {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 100%;
+  margin: 0 0 6px;
+  min-height: 0;
+  padding: 5px 12px;
+  border-radius: 9px;
+  background: rgba(6, 10, 22, 0.72);
+  pointer-events: none;
+}
 /* #178: dòng phản hồi ("Chính xác! +100 điểm") là hàng CUỐI của cột chứa cảnh 3D,
    và cảnh co giãn theo cột (`flex: 1 1 auto`). Trước đây ô này rỗng cho tới cú ghép
    đầu tiên, rồi bật ra 45 px + 17 px lề ngay lúc cả lớp đang nhìn lên trời:
@@ -694,24 +722,70 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
 .stage-center.is-constellation #matchFeedback,
 .modal[data-player-theme] .stage-center.is-constellation #matchFeedback {
   box-sizing: border-box;
-  height: clamp(48px, 7.2vh, 84px) !important;
+  height: clamp(52px, 7.6vh, 92px) !important;
   margin: 17px 0 0 !important;
   display: flex !important;
   align-items: center;
+  /* #219: `.feedback` có padding riêng (navigation.css), nhưng preflight của
+     Tailwind đặt `div { padding: 0 }` và đó là con số đo được (padding 0px) —
+     chữ dán sát viền ô. Ô này tự khai đệm, và tăng cỡ chữ lên một bậc để câu
+     phản hồi đọc được từ cuối lớp. */
+  padding: 10px 16px;
+  font-size: clamp(15px, 1.3vw, 18px);
+  line-height: 1.4;
   overflow: hidden;
+  /* #219: dải này đứng trên chân cảnh, nên nền của nó phải tự che chữ phía sau:
+     khay và trạng thái đều sáng màu hơn ở đó. */
+  position: relative;
+  z-index: 3;
+  background: rgba(6, 10, 22, 0.9);
+  border-radius: 10px;
 }
 
-/* 1366×768 là máy chiếu chật nhất: chữ nhỏ hơn một bậc, cảnh giữ nguyên phần lớn
-   chiều cao. Không cắt bớt khối nào.
-   Riêng thẻ nhãn treo trên sao giữ 13 px (#174): đó là đáp án cả lớp phải đọc từ
-   cuối phòng, và nó ngắn nên không chật hàng. */
+/* #219: cú thả sai để lại dấu đỏ trên chính ngôi sao bị thả trúng (vòng + rung),
+   không chỉ trên thẻ trong khay. `transform` của nhãn treo nằm ở `.constellation-card--hang`,
+   nên animation rung khai trên biến thể này để không giành transform của nó. */
+.constellation-card--star.is-wrong {
+  border-color: #dc5f6e !important;
+  background: rgba(58, 16, 26, 0.92);
+  box-shadow: 0 0 0 3px rgba(220, 95, 110, 0.4), 0 0 22px rgba(220, 95, 110, 0.45);
+}
+/* A long side's target is the ROW card and the number its star wears, so the same
+   red has to reach both — otherwise a board of sentences shows nothing but the
+   tray card turning red. */
+.constellation-question-card.is-wrong {
+  border-color: #dc5f6e;
+  background: rgba(58, 16, 26, 0.92);
+  box-shadow: 0 0 0 3px rgba(220, 95, 110, 0.4);
+  animation: constellation-wrong-shake 0.42s ease-in-out;
+}
+.constellation-card--mark.is-wrong {
+  border-color: #dc5f6e;
+  background: #7c2534;
+  color: #ffe6ea;
+  box-shadow: 0 0 0 3px rgba(220, 95, 110, 0.45);
+}
+@keyframes constellation-wrong-shake {
+  0%, 100% { translate: 0 0; }
+  20% { translate: -5px 0; }
+  45% { translate: 5px 0; }
+  70% { translate: -3px 0; }
+  100% { translate: 0 0; }
+}
+
+/* 1366×768 là máy chiếu chật nhất: chỉ bớt đệm, KHÔNG hạ cỡ chữ dưới bậc đọc được
+   (#219: trước đây khối này hạ thẻ hàng xuống 12 px, khay 13 px, HUD/status 11 px). */
 @media (max-height: 820px) {
-  .constellation-hud { font-size: 11px; padding: 3px 10px; }
+  .constellation-hud { padding: 3px 10px; }
   .constellation-hud-sides { display: none; }
-  .constellation-card--star { padding: 4px 8px; max-width: min(40%, 160px); }
-  .constellation-question-card { font-size: 12px; padding: 6px 9px; }
-  .constellation-tray-card { font-size: 13px; min-height: 42px; padding: 7px 12px; }
-  .constellation-status { font-size: 11px; }
+  .constellation-card--star { padding: 5px 9px; max-width: min(42%, 180px); }
+  .constellation-question-card { padding: 7px 10px; }
+  .constellation-tray-card { min-height: 48px; padding: 8px 13px; }
+  .stage-center.is-constellation #matchFeedback,
+  .modal[data-player-theme] .stage-center.is-constellation #matchFeedback {
+    padding: 8px 14px;
+    font-size: 15px;
+  }
 }
 
 /* Window narrower than a projector: the scene keeps its height and the tray

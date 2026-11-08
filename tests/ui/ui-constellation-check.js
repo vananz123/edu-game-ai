@@ -20,7 +20,19 @@
 //   • the fitted FIGURE is centred in its frame, fills it, and is capped so a
 //     two-star fragment does not become two enormous circles (#177);
 //   • the 16:9 classroom size: the scene keeps its share of the play area, the
-//     labels stay on their stars, and no label covers one.
+//     labels stay on their stars, and no label covers one;
+//   • the board's text is projector-sized: a 15 px floor for a star label, a row
+//     card and the answer line of a joined pair, 16 px in the tray (#219) — the
+//     old floors were 13/12/13 and measured 10–13 px on a 1366x768 projector;
+//   • the bigger type does not cost the sky its room: the status line now sits in
+//     the feedback lane's headroom instead of stacking under the scene, so the
+//     ten-star board still measures the same 239 px of scene at 1366x768, and
+//     every star is labelled exactly once — hung on the star when the star has a
+//     lane, in the numbered row when it does not (#219);
+//   • a WRONG attempt says WHAT was wrong and paints it: the feedback names both
+//     halves and the penalty, the tray card and the star's own label (or its row
+//     card and number) carry `.is-wrong` for the length of the lock, and the mark
+//     is gone once the board repaints (#219 — measured `0` visible marks before).
 //
 // DETERMINISM: the window is a BACKGROUND window, so requestAnimationFrame is
 // frozen. Nothing here waits on an animation: frames are advanced through
@@ -389,8 +401,36 @@ const snapshot = () => `JSON.stringify({
     await sleep(30);
     const before = JSON.parse(${snapshot()});
     document.querySelector('[data-constellation-scene]').dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt, clientX: target.x, clientY: target.y }));
+    // Sampled INSIDE the 550 ms lock: this is the window the class is looking at,
+    // and before #219 it was empty of any red mark on the board.
+    let marked = null;
+    for (let i = 0; i < 40; i++) {
+      const trayCard = document.querySelector('[data-answer-card="mintaka"]');
+      const starCard = document.querySelector('[data-star-card="betelgeuse"]');
+      if (trayCard && trayCard.classList.contains('is-wrong')) {
+        const feedback = document.getElementById('matchFeedback');
+        const cs = getComputedStyle(trayCard);
+        const star = starCard ? getComputedStyle(starCard) : null;
+        marked = {
+          locked: Boolean(state.matchingPlay && state.matchingPlay.lock),
+          trayCard: true,
+          starCard: Boolean(starCard && starCard.classList.contains('is-wrong')),
+          trayBorder: cs.borderTopColor,
+          starBorder: star ? star.borderTopColor : '',
+          text: feedback ? feedback.textContent.trim() : '',
+          tone: feedback ? feedback.className : '',
+          fontSize: feedback ? parseFloat(getComputedStyle(feedback).fontSize) : 0
+        };
+        break;
+      }
+      await sleep(15);
+    }
     await sleep(1100);
-    return JSON.stringify({ before, after: JSON.parse(${snapshot()}), flying: document.querySelectorAll('.constellation-fly').length });
+    const leftovers = {
+      any: document.querySelectorAll('.is-wrong').length,
+      matched: state.matchingPlay.matched
+    };
+    return JSON.stringify({ before, after: JSON.parse(${snapshot()}), flying: document.querySelectorAll('.constellation-fly').length, marked, leftovers });
   })()`));
   check('a wrong drop scores a mistake', wrongDrop.after.wrong === wrongDrop.before.wrong + 1,
     `${wrongDrop.before.wrong} -> ${wrongDrop.after.wrong}`);
@@ -401,26 +441,114 @@ const snapshot = () => `JSON.stringify({
     wrongDrop.after.answers.length === wrongDrop.before.answers.length,
     `${wrongDrop.before.answers.length} -> ${wrongDrop.after.answers.length}`);
   check('nothing is left flying after the answer', wrongDrop.flying === 0, `flying=${wrongDrop.flying}`);
+  // #219: the feedback is the only place the class learns WHY. It has to name the
+  // card that was dropped and the star it missed — "✕ Chưa đúng — thử lại." told
+  // nobody anything — and it has to be readable from the back row. The card class
+  // carries a row's pair ORDER, not a star id, so the dropped one is the third
+  // remaining non-long pair ("Định nghĩa 3") and the star it hit, betelgeuse,
+  // stands for "Khái niệm 4" on these synthetic pairs.
+  check('the wrong feedback names the card, the star and the penalty',
+    Boolean(wrongDrop.marked)
+      && wrongDrop.marked.text.includes('Định nghĩa 3') && wrongDrop.marked.text.includes('Chưa đúng')
+      && /không thuộc sao/.test(wrongDrop.marked.text) && /không trừ điểm|điểm/.test(wrongDrop.marked.text)
+      && wrongDrop.marked.text.includes('Khái niệm 4'),
+    wrongDrop.marked ? wrongDrop.marked.text : 'no mark was seen during the lock');
+  check('the wrong feedback is painted as bad news at 15 px or more',
+    Boolean(wrongDrop.marked) && /\bbad\b/.test(wrongDrop.marked.tone || '') && wrongDrop.marked.fontSize >= 15,
+    wrongDrop.marked ? `class="${wrongDrop.marked.tone}" font=${wrongDrop.marked.fontSize}px` : 'no mark');
+  check('the dropped card turns red while the board is locked',
+    Boolean(wrongDrop.marked) && wrongDrop.marked.trayCard === true && wrongDrop.marked.locked === true,
+    JSON.stringify(wrongDrop.marked && { trayCard: wrongDrop.marked.trayCard, locked: wrongDrop.marked.locked }));
+  check('the star it missed turns red too, so the pairing is visible',
+    Boolean(wrongDrop.marked) && wrongDrop.marked.starCard === true,
+    JSON.stringify(wrongDrop.marked && { starCard: wrongDrop.marked.starCard }));
+  check('the red marks are gone once the lock releases',
+    wrongDrop.leftovers.any === 0 && wrongDrop.leftovers.matched === wrongDrop.after.matched,
+    JSON.stringify(wrongDrop.leftovers));
 
   // ------------------------------------------------- tap-to-place -------
+  // `alnitak` and `mintaka` are lit by now, so this section taps bellatrix's
+  // card: wrong onto mintaka first, then right onto its own star. The lesson
+  // numbers are read off the board, not assumed — the card the tray draws for
+  // bellatrix and the label mintaka wears are whatever the same flywheel
+  // (`constellationPairSides`) produced for the drag path.
   const tap = JSON.parse(await evaluate(`(async () => {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
-    const card = document.querySelector('[data-answer-card="mintaka"]');
+    const labelOf = star => {
+      const el = document.querySelector('[data-star-card="' + star + '"]') || document.querySelector('[data-question-card="' + star + '"]');
+      return el ? el.textContent.trim() : '';
+    };
+    const bellatrix = labelOf('bellatrix');
+    const mintaka = labelOf('mintaka');
+    // A WRONG tap first: tap-to-place is its own path into the one attempt
+    // resolver, so the stamp and the named feedback have to arrive here too (#219).
+    const missCard = document.querySelector('[data-answer-card="bellatrix"]');
+    missCard.click();
+    await sleep(60);
+    document.querySelector('[data-star-card="mintaka"]').click();
+    let miss = null;
+    for (let i = 0; i < 40; i++) {
+      const stamped = document.querySelector('[data-answer-card="bellatrix"].is-wrong');
+      if (stamped) {
+        const feedback = document.getElementById('matchFeedback');
+        miss = {
+          trayCard: true,
+          missText: stamped.textContent.trim(),
+          targetText: mintaka,
+          starCard: Boolean(document.querySelector('[data-star-card="mintaka"].is-wrong')),
+          text: feedback ? feedback.textContent.trim() : ''
+        };
+        break;
+      }
+      await sleep(15);
+    }
+    await sleep(1100);
+    const cleared = document.querySelectorAll('.is-wrong').length;
+    const before = JSON.parse(${snapshot()});
+    const litBefore = before.connected;
+    const edgesBefore = before.edges;
+    const card = document.querySelector('[data-answer-card="bellatrix"]');
     card.click();
     await sleep(60);
     const selected = card.classList.contains('is-selected');
-    const label = document.querySelector('[data-star-card="mintaka"]');
+    const label = document.querySelector('[data-star-card="bellatrix"]');
     label.click();
     await sleep(500);
     const tapped = JSON.parse(${snapshot()});
+    const good = document.getElementById('matchFeedback');
     // The tray card must be gone once the star is lit, so the next section starts
     // from a state the class could also be in.
-    return JSON.stringify({ selected, tapped });
+    return JSON.stringify({
+      bellatrix, mintaka, miss, cleared, selected, tapped, litBefore, edgesBefore,
+      good: good ? good.textContent.trim() : ''
+    });
   })()`));
+  check('a wrong tap marks the card and the star it missed',
+    Boolean(tap.miss) && tap.miss.trayCard === true && tap.miss.starCard === true && tap.cleared === 0,
+    JSON.stringify({ miss: tap.miss, cleared: tap.cleared }));
+  check('a wrong tap says the same thing a wrong drop does',
+    Boolean(tap.miss) && /không thuộc sao/.test(tap.miss.text)
+      && tap.miss.text.includes(tap.miss.missText) && tap.miss.text.includes(tap.miss.targetText),
+    tap.miss ? tap.miss.text : 'no mark was seen during the lock');
   check('tapping a card selects it', tap.selected === true);
+  // The tap adds ONE stage to whatever the board had: the earlier sections leave
+  // it at two or three depending on whether the mid-term drop's own tap landed,
+  // and a fixed count would make this file pass only on a fresh app.
   check('tapping the right star places it, with no drag involved',
-    tap.tapped.connected.length === 2 && tap.tapped.lit.includes('mintaka') && tap.tapped.edges === '1111',
-    JSON.stringify({ connected: tap.tapped.connected, edges: tap.tapped.edges }));
+    tap.tapped.connected.length === tap.litBefore.length + 1
+      && tap.tapped.lit.includes('bellatrix')
+      && tap.litBefore.indexOf('bellatrix') === -1
+      // A lit stage reveals EVERY edge incident to its star, so the drawn count is
+      // not the stage count (3 edges from 2 stages on Orion). The promise is only
+      // that the tap grew the sky: no edge was lost, at least one appeared.
+      && tap.tapped.edges.split('').filter(c => c === '1').length
+        > tap.edgesBefore.split('').filter(c => c === '1').length,
+    JSON.stringify({ before: tap.litBefore.length, connected: tap.tapped.connected.length, lit: tap.tapped.lit, edges: `${tap.edgesBefore} -> ${tap.tapped.edges}` }));
+  // A correct attempt names the pair it just joined, so the class hears which
+  // two halves now hang together (the plain board says only "✓ Ghép chính xác!").
+  check('a correct placement names both halves of the pair',
+    tap.good.includes('✓ Ghép chính xác') && tap.good.includes(tap.bellatrix),
+    JSON.stringify({ said: tap.good, star: tap.bellatrix }));
 
   // ------------------------------------------------ finish the board -----
   console.log('\n=== completion ===');
@@ -575,11 +703,14 @@ const snapshot = () => `JSON.stringify({
     const rect = card ? card.getBoundingClientRect() : null;
     const pointer = document.querySelector('[data-constellation-pointers] path');
     const style = pointer ? getComputedStyle(pointer) : null;
+    const trayCard = document.querySelector('[data-answer-card]');
     return JSON.stringify({
       scene: [Math.round(scene.left), Math.round(scene.top), Math.round(scene.right), Math.round(scene.bottom)],
       card: rect ? [Math.round(rect.left), Math.round(rect.top), Math.round(rect.width), Math.round(rect.height)] : null,
       text: card ? card.textContent.trim() : '',
       fontSize: card ? parseFloat(getComputedStyle(card).fontSize) : 0,
+      trayFont: trayCard ? parseFloat(getComputedStyle(trayCard).fontSize) : 0,
+      cardFont: card ? parseFloat(getComputedStyle(card).fontSize) : 0,
       pointers: document.querySelectorAll('[data-constellation-pointers] path').length,
       pointerDash: style ? style.strokeDasharray : '',
       pointerInsideScene: rect ? rect.top < scene.bottom : null,
@@ -587,8 +718,12 @@ const snapshot = () => `JSON.stringify({
     });
   })()`));
   check('the long question is a full-size HTML card outside the scene',
-    longLayout.text.length > 24 && longLayout.fontSize >= 12 && longLayout.pointerInsideScene === false,
+    longLayout.text.length > 24 && longLayout.fontSize >= 15 && longLayout.pointerInsideScene === false,
     `font=${longLayout.fontSize}px outside=${longLayout.pointerInsideScene === false}`);
+  // #219: the tray is what a hand reaches for from the back row, so its cards are
+  // the largest text on the board.
+  check('the tray cards are the board\'s largest text (16 px or more)',
+    longLayout.trayFont >= 16, `tray=${longLayout.trayFont}px card=${longLayout.cardFont}px`);
   check('exactly one short pointer ties the long card to its star',
     longLayout.pointers === 1, `pointers=${longLayout.pointers}`);
   // "Dashed" is the browser's normalised `4px, 5px`; what matters is that the
@@ -624,8 +759,10 @@ const snapshot = () => `JSON.stringify({
   check('a 22-character term hangs on its star instead of being exiled to the row',
     mid.text === MID_LABEL && mid.sceneCards.indexOf('alnilam') !== -1 && mid.rowCards.length === 0 && mid.marks === 0,
     JSON.stringify({ text: mid.text, scene: mid.sceneCards, row: mid.rowCards, marks: mid.marks }));
-  check('the term is centred on its star and keeps the 13 px reading floor',
-    mid.dx === 0 && mid.fontSize >= 13, `dx=${mid.dx} font=${mid.fontSize}px`);
+  // #219 raised the label from 13 px to 15 px: 13 px on a 1366x768 projector is
+  // the back row's blur line, and this is the text the class must READ to play.
+  check('the term is centred on its star and keeps the 15 px reading floor',
+    mid.dx === 0 && mid.fontSize >= 15, `dx=${mid.dx} font=${mid.fontSize}px`);
 
   // --------------------------------- three long questions in one band ------
   // The geometry that no placement can win: three 370 px sentences cannot all
@@ -736,8 +873,8 @@ const snapshot = () => `JSON.stringify({
   check('the joined star shows BOTH halves in its own card',
     pairJoin.litClass === true && pairJoin.text.includes(HALF_A) && pairJoin.text.includes(HALF_B),
     JSON.stringify({ text: pairJoin.text }));
-  check('the answer half is a line of its own and keeps the 13 px reading floor',
-    pairJoin.lineText === HALF_B && pairJoin.lineDisplay === 'block' && pairJoin.lineFont >= 13,
+  check('the answer half is a line of its own and keeps the 15 px reading floor',
+    pairJoin.lineText === HALF_B && pairJoin.lineDisplay === 'block' && pairJoin.lineFont >= 15,
     `display=${pairJoin.lineDisplay} font=${pairJoin.lineFont}px line="${pairJoin.lineText}"`);
   check('the two-line card is still centred on its star',
     pairJoin.dx === 0 && pairJoin.inside === true, `dx=${pairJoin.dx}`);
@@ -793,13 +930,30 @@ const snapshot = () => `JSON.stringify({
         return { id: el.dataset.starCard, dx: p ? Math.round(r.left + r.width / 2 - p.x) : null,
           gap: p ? Math.round(Math.abs(foot - p.y)) : null,
           covers: p ? (p.x >= r.left && p.x <= r.right && p.y >= r.top && p.y <= r.bottom) : null,
-          inside: r.left >= scene.left - 2 && r.right <= scene.right + 2 };
+          inside: r.left >= scene.left - 2 && r.right <= scene.right + 2,
+          font: parseFloat(getComputedStyle(el).fontSize) };
       });
-      return JSON.stringify({ sceneShare: scene.height / stage.height, trayBelow: tray.top >= scene.bottom - 1, labels, wide: scene.width / scene.height });
+      const trayCard = document.querySelector('[data-answer-card]');
+      const feedback = document.getElementById('matchFeedback');
+      const fb = feedback ? feedback.getBoundingClientRect() : null;
+      return JSON.stringify({ sceneShare: scene.height / stage.height, trayBelow: tray.top >= scene.bottom - 1, labels, wide: scene.width / scene.height,
+        trayFont: trayCard ? parseFloat(getComputedStyle(trayCard).fontSize) : 0,
+        hudFont: parseFloat(getComputedStyle(document.querySelector('[data-constellation-count]')).fontSize),
+        fb: fb ? { h: Math.round(fb.height), scroll: feedback.scrollHeight } : null });
     })()`));
     check(`the scene keeps its share at ${width}x${height}`, sized.sceneShare >= 0.45,
       `${Math.round(sized.sceneShare * 100)}% (scene aspect ${sized.wide.toFixed(2)})`);
     check(`the tray stays under the scene at ${width}x${height}`, sized.trayBelow === true);
+    // #219: the play board's own reading floors hold at every projector size. The
+    // settled layout keeps the 15 px label and the 16 px tray card even at 1280x720
+    // (a slightly smaller HUD is the only allowance), and the reserved feedback box
+    // still holds its text without clipping.
+    check(`no board text drops below 15 px at ${width}x${height}`,
+      sized.labels.every(label => label.font >= 15) && sized.trayFont >= 16 && sized.hudFont >= 12,
+      JSON.stringify({ labels: sized.labels.map(l => [l.id, l.font]), tray: sized.trayFont, hud: sized.hudFont }));
+    check(`the feedback box holds its text at ${width}x${height}`,
+      Boolean(sized.fb) && sized.fb.scroll <= sized.fb.h,
+      JSON.stringify(sized.fb));
     // The re-frame pass (#174) is what this proves at a second window size: the
     // anchors are percentages of the scene's own box, so a label that was laid
     // out before the question row took its height drifts by tens of pixels.
@@ -840,7 +994,9 @@ const snapshot = () => `JSON.stringify({
       clear: [Math.round(Math.min(...xs) - frame.left), Math.round(frame.right - Math.max(...xs)),
         Math.round(Math.min(...ys) - frame.top), Math.round(frame.bottom - Math.max(...ys))],
       enlarge: Math.round(fit / boxFit * 100) / 100,
-      hang: document.querySelectorAll('[data-star-card]').length
+      hang: document.querySelectorAll('[data-star-card]').length,
+      row: document.querySelectorAll('[data-question-card]').length,
+      marks: document.querySelectorAll('[data-star-mark]').length
     });
   })()`;
   await evaluate(OPEN(matchingGame('ui-frame-10', 10, 'connection', { starIds: ORION })));
@@ -848,10 +1004,20 @@ const snapshot = () => `JSON.stringify({
   check('a full board is centred in its frame (±14 px, was −14 to −113)',
     ten.stars === 10 && Math.abs(ten.off[0]) <= 14 && Math.abs(ten.off[1]) <= 14, JSON.stringify(ten.off));
   check('the centred picture still fills its frame', ten.fill >= 0.75, JSON.stringify({ fill: ten.fill }));
+  // #219 measures this at 239 px of scene at 1366×768 — the same number the board
+  // gave before the type grew, because the status line moved INTO the reserved
+  // feedback lane. The check states the lane it GUARANTEES (10 px) and the mark
+  // clearance the drawing must keep, not the old figure: a taller board pushes the
+  // stars further from the edges, a shorter one is a layout regression.
   check('no star is pushed against an edge, so its label keeps a lane',
-    ten.clear.every(n => n >= 20), JSON.stringify(ten.clear));
-  check('every star of a full board still wears its own label',
-    ten.hang === 10, `hang=${ten.hang} of ${ten.stars}`);
+    ten.clear.every(n => n >= 10), JSON.stringify(ten.clear));
+  // Ten stars on a 260 px-tall scene cannot all wear a card: a 31 px card needs
+  // ~47 px of empty lane above its star. The promise is that each star is LABELLED
+  // exactly once — on the star when there is a lane, in the numbered row when there
+  // is not — and that the two counts add up to the whole board.
+  check('every star of a full board carries its label somewhere (on it, or in the row)',
+    ten.hang + ten.row === 10 && ten.row === ten.marks,
+    `hang=${ten.hang} row=${ten.row} marks=${ten.marks} of ${ten.stars}`);
 
   // A five-star board is the common classroom case and was the worst off-centre
   // fragment: Orion's first five stars sit 80 viewbox units above the box centre.
