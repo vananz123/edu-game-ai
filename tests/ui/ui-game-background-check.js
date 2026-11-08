@@ -1,7 +1,8 @@
 // ui-game-background-check.js — the play surface runs on a LIGHT 2D background.
 //
 // Regression guard for DECISIONS #220 (which supersedes the 3D cosmos backdrop of
-// #173). Two promises are measured on every world a teacher can start:
+// #173) and #221 (which gives that cosmos back to the constellation only). Two
+// promises are measured on every world a teacher can start:
 //
 //   1. LIGHT — the stage's painted backdrop is a bright surface, and every text
 //      run on it clears 4.5:1 against the colour actually behind it. "Actually"
@@ -15,6 +16,11 @@
 //      emblem, no sky mesh, and an idle play screen renders zero frames. The
 //      gameplay 3D that a world really uses (the constellation's stars, the
 //      house's bricks) is untouched and is asserted to still render on demand.
+//
+// The constellation is the one exception, by the owner's request in #221: its
+// whole night sky (cosmos + emblem) is back, so it is measured against the
+// opposite promise — a DARK stage, light ink, the cosmos present and the loop
+// alive so the sky can drift and twinkle.
 //
 // Run against a built app started with --remote-debugging-port:
 //   npm run build
@@ -234,9 +240,13 @@ const PROBE = `(async () => {
   let meshCount = 0;
   if (h && h.scene) h.scene.traverse(o => { if (o.isMesh || o.isPoints || o.isSprite) meshCount += 1; });
 
-  // Idle cost: count real renderer.render calls over one second with no input.
+  // The render loop only counts frames Chromium actually runs. A window that is
+  // not on screen (a CI run, a projector on another workspace) throttles rAF to
+  // ~0, so the measurement is taken only when a frame can run at all — otherwise
+  // the gate would report "the sky is frozen" for a board that is simply hidden.
+  const browserVisible = document.visibilityState === 'visible';
   let idleFrames = 0;
-  if (h && h.renderer) {
+  if (h && h.renderer && browserVisible) {
     const orig = h.renderer.render;
     h.renderer.render = function () { idleFrames += 1; return orig.apply(this, arguments); };
     await sleep(1000);
@@ -264,11 +274,11 @@ const PROBE = `(async () => {
     stageBg, stageLum: Math.round(lum(stageBg) * 1000) / 1000,
     rows: rows.slice(0, 10), sub45: rows.length, sampled: stage.querySelectorAll('*').length,
     cosmos: Boolean(world && world.cosmos),
-    dust: Boolean(h && h.particles),
-    emblem: Boolean(h && h.emblem),
+    dust: Boolean(h && h.particles && h.particles.visible),
+    emblem: Boolean(h && h.emblem && h.emblem.visible),
     sky: Boolean(h && h.scene && h.scene.background),
     hasCanvas: Boolean(stage.querySelector('canvas')),
-    meshCount, idleFrames, paintedPct
+    meshCount, idleFrames, paintedPct, browserVisible
   });
 })()`;
 
@@ -291,6 +301,7 @@ const BURST = `(async () => {
   const page = await connect();
   for (const [name, game] of Object.entries(GAMES)) {
     if (!want(name)) continue;
+    const NIGHT = name === 'constellation';
     console.log(`\n=== ${name} ===`);
     const opened = await page.evaluate(OPEN(game));
     check(`[${name}] the play surface opens`, opened === true);
@@ -299,18 +310,31 @@ const BURST = `(async () => {
     const snap = typeof raw === 'string' ? JSON.parse(raw) : raw;
     if (!snap || snap.ok === false) { check(`[${name}] probe ran`, false, JSON.stringify(snap)); continue; }
 
-    check(`[${name}] the stage backdrop is a bright surface (luminance >= 0.55)`,
-      snap.stageLum >= 0.55,
+    check(`[${name}] the stage backdrop ${NIGHT ? 'is the night sky (luminance <= 0.12)' : 'is a bright surface (luminance >= 0.55)'}`,
+      NIGHT ? snap.stageLum <= 0.12 : snap.stageLum >= 0.55,
       `luminance=${snap.stageLum} from ${String(snap.stageBg.from).slice(0, 40)}`);
     check(`[${name}] every text run clears 4.5:1 against its real backdrop`,
       snap.sub45 === 0,
       snap.sub45 === 0 ? `${snap.sampled} elements sampled` : JSON.stringify(snap.rows));
-    check(`[${name}] no decorative 3D layer: no cosmos, no dust, no emblem, no sky mesh`,
-      snap.cosmos === false && snap.dust === false && snap.emblem === false && snap.sky === false,
-      JSON.stringify({ cosmos: snap.cosmos, dust: snap.dust, emblem: snap.emblem, sky: snap.sky }));
-    check(`[${name}] an idle play screen renders zero frames`,
-      snap.idleFrames === 0,
-      `renderer.render calls in 1s idle = ${snap.idleFrames}`);
+    if (NIGHT) {
+      check(`[${name}] the night sky is back: cosmos present, dust still gone, emblem parked`,
+        snap.cosmos === true && snap.dust === false && snap.emblem === false,
+        JSON.stringify({ cosmos: snap.cosmos, dust: snap.dust, emblem: snap.emblem }));
+      check(`[${name}] the sky keeps moving while idle`,
+        snap.browserVisible === false || snap.idleFrames > 0,
+        snap.browserVisible === false
+          ? 'window not visible — rAF is throttled by Chromium, frame count not measurable'
+          : `renderer.render calls in 1s idle = ${snap.idleFrames}`);
+    } else {
+      check(`[${name}] no decorative 3D layer: no cosmos, no dust, no emblem, no sky mesh`,
+        snap.cosmos === false && snap.dust === false && snap.emblem === false && snap.sky === false,
+        JSON.stringify({ cosmos: snap.cosmos, dust: snap.dust, emblem: snap.emblem, sky: snap.sky }));
+      check(`[${name}] an idle play screen renders zero frames`,
+        snap.browserVisible === false || snap.idleFrames === 0,
+        snap.browserVisible === false
+          ? 'window not visible — frame count not measurable'
+          : `renderer.render calls in 1s idle = ${snap.idleFrames}`);
+    }
 
     // Only the constellation builds gameplay 3D from the start; for every other
     // world there is nothing to draw until an answer or a build happens.

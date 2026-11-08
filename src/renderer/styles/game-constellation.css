@@ -12,18 +12,28 @@
    Tỉ lệ 16:9 là mục tiêu: ở 1366×768 cảnh chiếm ~55–60 % chiều cao vùng chơi và
    ~85 % chiều ngang, đủ để sao không chồng lên nhau mà thẻ vẫn đọc được từ cuối lớp. */
 
-/* ---------- bảng: không còn khung (DECISIONS #173), bầu trời SÁNG (#220) ----------
-   #173 bỏ ba lớp khung và để canvas 3D tự vẽ bầu trời đêm. #220 bỏ luôn lớp canvas
-   trang trí (vũ trụ đang chạy 60 fps cho một hình nền) và lật cả bảng sang bầu trời
-   SAO MAI: nền sáng, sao vàng đặc, thẻ giấy trắng, mực navy. Bảng 3D (`is-3d`) vẫn
-   là canvas của chòm sao — nhưng nó chỉ vẽ sao và đường nối, chứ không vẽ nền. */
+/* ---------- bảng: không còn khung (DECISIONS #173), bầu trời đêm trở lại (#221) ----------
+   #173 bỏ ba lớp khung và để canvas 3D tự vẽ bầu trời đêm. #220 đã thử lật cả bảng
+   sang bầu trời SAO MAI, nhưng bảng này mất hẳn không gian vũ trụ của mình, nên #221
+   trả lại: canvas vẽ cả bầu trời (sao + quầng + tinh vân) và khung biểu tượng xoay,
+   chữ sáng trên nền tối. Năm thế giới còn lại vẫn giữ nền sáng của #220. */
 .constellation-game-stage {
-  --constellation-ink: #17203a;
-  --constellation-muted: #46527a;
-  --constellation-gold: #a8690b;
-  --constellation-gold-soft: rgba(168, 105, 11, 0.2);
+  --constellation-ink: #e8ecfb;
+  --constellation-muted: #9aa6c8;
+  --constellation-gold: #f2c46b;
+  --constellation-gold-soft: rgba(242, 196, 107, 0.35);
   --world-accent: #6d7cf0;
   gap: 8px;
+}
+/* The board is `data-game="matching"`, so the matching world's paper-ink tokens land
+   on this stage too; on the night sky the HUD line ("Đạo đức · LỚP 4", "ĐÃ GHÉP
+   0/5 …") is drawn straight on the dark modal, where #3f5a4f reads 2.7:1. Repin
+   them to the sky's own ink (#221). The world block carries `[data-player-theme]`
+   (0,3,0), so a plain class + attribute tie would lose on source order; the modal
+   ancestor here makes this (0,4,0) and wins outright. */
+.modal[data-player-theme] .game-stage.constellation-game-stage[data-game] {
+  --world-meta: var(--constellation-muted);
+  --world-ink: var(--constellation-ink);
 }
 
 /* Board của chòm sao là MỘT khoảng không, không phải một tấm thẻ đặt trên bàn.
@@ -35,15 +45,15 @@
      3. `.constellation-scene` tự vẽ phòng của riêng nó bằng CSS (gradient + vòng
         `inset 0 0 0 1px rgba(120,136,190,.16)` + bo 16px) — một khung chữ nhật
         nằm BÊN TRONG khung chữ nhật to hơn.
-   #173 bỏ cả ba, để canvas vẽ bầu trời. #220 bỏ luôn lớp canvas đó (một hình nền
-   chạy 60 fps là thứ đắt nhất trên màn chơi), nên bầu trời là CSS: mặt sáng tự
-   vẽ gradient riêng, và canvas chỉ còn vẽ sao + đường nối. `:has()` khoá đúng màn
-   chòm sao — Ghép hai cột / Học thuộc vẫn giữ nền giấy của thế giới.
+   #173 bỏ cả ba, để canvas vẽ bầu trời. #221 giữ nguyên: cảnh 3D tự vẽ bầu trời đêm
+   (`threeGame.makeCosmos`), nên mọi lớp nền do CSS vẽ ở ba khối đó bỏ — khoảng không
+   đi sát mép cửa sổ, không còn dải nào ngăn cách. `:has()` khoá đúng màn chòm sao —
+   Ghép hai cột / Học thuộc vẫn giữ nền giấy sáng của thế giới.
 
    Selector lặp lại đúng độ ưu tiên của tệp thế giới (`.modal[data-player-theme]
    .game-stage[…]`) và tệp này nạp CUỐI app.css, nên không cần `!important`. */
 .modal[data-player-theme]:has(.constellation-game-stage) {
-  background: #f4f7fd;
+  background: #03050d;
   border-color: transparent;
 }
 .modal[data-player-theme]:has(.constellation-game-stage) .modal-body {
@@ -54,11 +64,11 @@
 html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-game-stage) .modal-body {
   padding: 0;
 }
-/* Dải điều khiển (tên bài · điểm · Đóng) là thanh tiêu đề của thẻ giấy, cùng
-   thứ bậc với các trò khác: nền trắng, viền dưới mảnh. */
+/* Dải điều khiển (tên bài · điểm · Đóng) vẫn phải đọc được khi đè lên bầu trời,
+   nên nó giữ một nền đêm mờ thay vì đường viền accent của thế giới Ghép cặp. */
 .modal[data-player-theme]:has(.constellation-game-stage) .play-head {
-  background: #ffffff;
-  border-bottom: 1px solid #dbe3f5;
+  background: rgba(3, 5, 13, 0.86);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
 }
 .modal[data-player-theme] .game-stage.constellation-game-stage {
   --world-stage-bg: none;
@@ -73,17 +83,23 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-game-stag
 .modal[data-player-theme] .game-stage.constellation-game-stage::before {
   display: none;
 }
-/* Cảnh tự vẽ bầu trời SAO MAI của nó (xem `.constellation-scene`), nên cả ở chế
-   độ 3D lẫn chế độ SVG nó đều có nền — canvas chỉ phủ sao và đường nối trong suốt.
-   Vòng khi kéo thẻ là tín hiệu "thả vào đây", không phải khung: chỉ vàng, và chỉ
+/* Khi 3D chạy, nền của cảnh là canvas — nếu CSS vẫn vẽ gradient riêng thì học
+   sinh thấy một ô chữ nhật nổi trên trời sao. Máy không có WebGL (`is-svg`) vẫn
+   cần nền tối của riêng nó, nên quy tắc khoá `.is-3d`, không khoá `.constellation-scene`. */
+.constellation-panel.is-3d .constellation-scene {
+  background: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+/* Vòng khi kéo thẻ là tín hiệu "thả vào đây", không phải khung: chỉ vàng, và chỉ
    trong lúc tay đang cầm thẻ. */
 .constellation-panel.is-3d .constellation-scene.is-armed {
-  box-shadow: inset 0 0 0 2px rgba(201, 138, 28, 0.55);
+  box-shadow: inset 0 0 0 2px rgba(242, 196, 107, 0.5);
 }
 
-/* ---------- màn kết quả cũng là một khoang bầu trời (DECISIONS #175) ----------
-   Kết quả của chòm sao dựng lại hình lên chính màn này, nên nó phải dùng
-   lại khối "không khung" ở trên: canvas vẽ sao, còn sân khấu Ghép
+/* ---------- màn kết quả cũng là một khoang vũ trụ (DECISIONS #175) ----------
+   Kết quả của chòm sao dựng lại thế giới 3D lên chính màn này, nên nó phải dùng
+   lại khối "không khung" ở trên: canvas vẽ trời của riêng nó, còn sân khấu Ghép
    cặp thì trải nỉ + viền + hoa văn (`--world-stage-*`, `::before`) — ba lớp đó
    đứng sau canvas nên chỉ còn thấy ở phần canvas không phủ, tức là một khung chữ
    nhật xám bao quanh kết quả.
@@ -104,10 +120,10 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
 .result-connection-art.is-3d {
   height: clamp(220px, 40vh, 460px);
   min-width: 0;
-  border-radius: 14px;
-  background: var(--constellation-sky, #eef3fd);
 }
-/* Chữ chú thích nằm NGAY DƯỚI bầu trời, trên nền sáng của màn kết quả. */
+/* Chữ chú thích nằm NGAY DƯỚI bầu trời, trên nền trời đêm. `--text` của app là
+   mực cho nền SÁNG (đo được `rgb(23, 32, 51)` đè lên `#03050d` — gần như không
+   đọc được), nên màn này dùng chung mực của bảng chòm sao. */
 .result-connection {
   color: var(--constellation-ink);
 }
@@ -149,26 +165,25 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
   gap: 10px;
   padding: 4px 12px;
   border-radius: 999px;
-  border: 1px solid #d3dcf2;
-  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(12, 18, 34, 0.72);
   color: var(--constellation-ink);
   font-size: 13px;
   font-weight: 700;
   white-space: nowrap;
-  box-shadow: 0 2px 8px rgba(23, 32, 51, 0.08);
 }
-.constellation-hud-name { color: var(--constellation-ink); }
+.constellation-hud-name { color: #c9d2f5; }
 .constellation-hud-stars { letter-spacing: 2px; font-size: 14px; }
-.constellation-lit { color: #a8690b; }
-/* Ngôi sao chưa nối: trên trời đêm cũ nó là một ☆ xám nhạt. Trên bầu trời sáng
-   của #220, #7b859f đo 3.43:1 — dưới ngưỡng chữ. #46527a giữ đúng vai "chưa
-   sáng" mà vẫn đọc được (7.1:1 trên nền cảnh). */
-.constellation-unlit { color: #46527a; }
-.constellation-hud-count b { color: var(--constellation-ink); font-size: 14px; }
+.constellation-lit { color: var(--constellation-gold); }
+/* #221: the star that is still out is a progress mark, not a caption, and it sits
+   on the dark HUD pill — the night value the board had before #220. The bright
+   board's near-black #4b5675 reads 2.8:1 on this pill. */
+.constellation-unlit { color: var(--constellation-muted); }
+.constellation-hud-count b { color: #fff; font-size: 14px; }
 .constellation-hud-sides {
   color: var(--constellation-muted);
   font-weight: 600;
-  border-left: 1px solid #d3dcf2;
+  border-left: 1px solid rgba(148, 163, 184, 0.25);
   padding-left: 10px;
 }
 
@@ -191,22 +206,20 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
   width: 100%;
   border-radius: 16px;
   overflow: hidden;
-  /* Bầu trời SAO MAI: một mặt sáng lạnh ở đỉnh, ửng vàng nhạt ở chân, nền gần
-     trắng — đây là nền của cả canvas 3D lẫn SVG, nên nó tự nói "ban ngày" mà
-     không cần một lớp vẽ nào khác. */
-  --constellation-sky:
-    radial-gradient(120% 85% at 50% -10%, #dbe6ff 0%, rgba(219, 230, 255, 0) 62%),
-    radial-gradient(70% 60% at 88% 102%, rgba(242, 196, 107, 0.22), rgba(242, 196, 107, 0) 72%),
-    radial-gradient(80% 65% at 6% 96%, rgba(124, 196, 162, 0.16), rgba(124, 196, 162, 0) 68%),
-    linear-gradient(180deg, #f7f9ff 0%, #eef3fd 100%);
-  background: var(--constellation-sky);
-  box-shadow: inset 0 0 0 1px #dbe3f5, 0 10px 26px rgba(23, 32, 51, 0.1);
+  /* The cosmic room: a deep base, one cool wash from the top and a faint warm
+     haze near the floor, so the scene has depth before a single star is drawn. */
+  background:
+    radial-gradient(120% 80% at 50% -10%, rgba(88, 104, 220, 0.22), rgba(88, 104, 220, 0) 62%),
+    radial-gradient(70% 55% at 85% 100%, rgba(242, 196, 107, 0.09), rgba(242, 196, 107, 0) 70%),
+    radial-gradient(90% 70% at 10% 90%, rgba(64, 196, 190, 0.06), rgba(64, 196, 190, 0) 65%),
+    #05070f;
+  box-shadow: inset 0 0 0 1px rgba(120, 136, 190, 0.16), 0 18px 40px rgba(2, 5, 14, 0.45);
   transition: box-shadow 180ms ease-out;
 }
 /* A dragged card makes the whole scene a drop surface: the ring says so once,
    without moving anything or flashing every target. */
 .constellation-scene.is-armed {
-  box-shadow: inset 0 0 0 2px rgba(201, 138, 28, 0.55), 0 10px 26px rgba(23, 32, 51, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(242, 196, 107, 0.55), 0 18px 40px rgba(2, 5, 14, 0.45);
 }
 .constellation-scene > canvas {
   position: absolute;
@@ -258,11 +271,11 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
   top: 100%;
   width: 1px;
   height: 15px;
-  background: linear-gradient(rgba(122, 138, 178, 0.85), rgba(122, 138, 178, 0.1));
+  background: linear-gradient(rgba(146, 162, 214, 0.85), rgba(146, 162, 214, 0.1));
 }
 .constellation-card--hang[data-side="below"]::after {
   top: -15px;
-  background: linear-gradient(rgba(122, 138, 178, 0.1), rgba(122, 138, 178, 0.85));
+  background: linear-gradient(rgba(146, 162, 214, 0.1), rgba(146, 162, 214, 0.85));
 }
 /* Chấm neo nằm TRÊN thân sao, nên ngôi sao luôn còn nhìn thấy được. */
 .constellation-card--hang::before {
@@ -274,8 +287,8 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
   height: 6px;
   margin-left: -3px;
   border-radius: 50%;
-  background: #c98a1c;
-  box-shadow: 0 0 8px rgba(201, 138, 28, 0.55);
+  background: var(--constellation-gold);
+  box-shadow: 0 0 10px rgba(242, 196, 107, 0.85);
 }
 .constellation-card--hang[data-side="below"]::before {
   top: -19px;
@@ -284,8 +297,8 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
   max-width: min(44%, 210px);
   padding: 6px 12px;
   border-radius: 9px;
-  border: 1px solid #cfd9ef;
-  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(146, 162, 214, 0.42);
+  background: rgba(9, 14, 26, 0.82);
   color: var(--constellation-ink);
   font-size: 15px;
   font-weight: 650;
@@ -294,7 +307,7 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
   white-space: normal;
   overflow-wrap: anywhere;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(23, 32, 51, 0.16);
+  box-shadow: 0 4px 14px rgba(2, 6, 18, 0.55);
   transition: transform 140ms ease-out, border-color 140ms ease-out, background 140ms ease-out, box-shadow 140ms ease-out;
 }
 /* Nhãn SỐ: sao có câu dài xuống hàng mang đúng số mà thẻ dưới cảnh bắt đầu. Hai
@@ -306,8 +319,8 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
   display: grid;
   place-items: center;
   border-radius: 50%;
-  border: 1px solid #c98a1c;
-  background: #fffdf6;
+  border: 1px solid rgba(242, 196, 107, 0.6);
+  background: rgba(9, 14, 26, 0.9);
   color: var(--constellation-gold);
   font-size: 13px;
   font-weight: 800;
@@ -315,12 +328,12 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
   pointer-events: none;
 }
 .constellation-card--mark.is-hot {
-  background: #fdf1d4;
-  box-shadow: 0 0 0 3px rgba(201, 138, 28, 0.3), 0 4px 12px rgba(23, 32, 51, 0.16);
+  background: rgba(46, 34, 8, 0.95);
+  box-shadow: 0 0 0 3px rgba(242, 196, 107, 0.35), 0 0 18px rgba(242, 196, 107, 0.5);
 }
 .constellation-card--star:hover,
 .constellation-card--star:focus-visible {
-  border-color: #c98a1c;
+  border-color: rgba(242, 196, 107, 0.8);
   transform: translate(-50%, calc(-100% - 15px)) scale(1.04);
   outline: none;
 }
@@ -331,21 +344,21 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
 /* While a card is selected, every star is a possible target: a soft ring, no
    movement, so the picture stays still while the hand decides. */
 .constellation-scene.is-armed .constellation-card--star.is-target {
-  border-color: rgba(201, 138, 28, 0.6);
+  border-color: rgba(242, 196, 107, 0.55);
 }
 .constellation-card--star.is-hot {
-  border-color: #c98a1c;
-  background: #fdf1d4;
-  box-shadow: 0 0 0 3px rgba(201, 138, 28, 0.3), 0 6px 16px rgba(201, 138, 28, 0.24);
+  border-color: var(--constellation-gold);
+  background: rgba(46, 34, 8, 0.92);
+  box-shadow: 0 0 0 3px rgba(242, 196, 107, 0.35), 0 0 22px rgba(242, 196, 107, 0.45);
   transform: translate(-50%, calc(-100% - 15px)) scale(1.06);
 }
 .constellation-card--star[data-side="below"].is-hot {
   transform: translate(-50%, 15px) scale(1.06);
 }
 .constellation-card--star.is-lit {
-  border-color: #c98a1c;
-  background: #fef6e2;
-  color: var(--constellation-ink);
+  border-color: rgba(242, 196, 107, 0.7);
+  background: rgba(44, 33, 9, 0.9);
+  color: #fff6dd;
 }
 /* #178: vế B hiện thành DÒNG THỨ HAI của chính thẻ vế A ngay khi cặp được ghép,
    không phải biến mất sau cú kéo. Trước đây sao chỉ giữ vế A (đo: after drop,
@@ -357,14 +370,14 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
   display: block;
   margin-top: 4px;
   padding-top: 4px;
-  border-top: 1px solid rgba(201, 138, 28, 0.35);
+  border-top: 1px solid rgba(242, 196, 107, 0.3);
   color: var(--constellation-gold);
   font-weight: 650;
 }
 .constellation-card-answer::before {
   content: '→ ';
   font-weight: 800;
-  color: #a8690b;
+  color: rgba(242, 196, 107, 0.75);
 }
 
 /* ---------- hàng câu DÀI dưới cảnh ---------- */
@@ -394,8 +407,8 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
   left: 2px;
   padding: 3px 8px;
   border-radius: 6px;
-  background: #e4eaf8;
-  color: var(--constellation-muted);
+  background: rgba(120, 136, 190, 0.22);
+  color: #b6c1de;
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 1.2px;
@@ -406,8 +419,8 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
   min-height: 38px;
   padding: 8px 12px;
   border-radius: 10px;
-  border: 1px solid #cfd9ef;
-  background: #ffffff;
+  border: 1px solid rgba(146, 162, 214, 0.4);
+  background: rgba(9, 14, 26, 0.86);
   color: var(--constellation-ink);
   font-size: 15px;
   font-weight: 600;
@@ -415,7 +428,6 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
   text-align: left;
   overflow-wrap: anywhere;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(23, 32, 51, 0.08);
 }
 /* Số đầu thẻ: đúng hình chiếc nhãn treo trên sao, nên lớp dưới lớp đọc được
    "3 ở dưới là 3 ở trên" mà không cần lần theo đường chỉ. */
@@ -426,9 +438,8 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
   height: 21px;
   margin-right: 7px;
   border-radius: 50%;
-  background: #fdf1d4;
-  border: 1px solid #e9c98a;
-  color: var(--constellation-gold);
+  background: rgba(242, 196, 107, 0.28);
+  color: #ffe3a3;
   font-size: 13px;
   font-weight: 800;
   line-height: 1;
@@ -443,22 +454,22 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
    lớp dưới thấy chữ này đứng ở đâu. `is-target` là vòng mờ khi đã bấm chọn một
    thẻ đáp án — sao ở hàng dưới cũng là ô đích, không riêng sao trong cảnh. */
 .constellation-question-card.is-hot {
-  border-color: #c98a1c;
-  background: #fdf1d4;
-  box-shadow: 0 0 0 3px rgba(201, 138, 28, 0.28);
+  border-color: var(--constellation-gold);
+  background: rgba(46, 34, 8, 0.92);
+  box-shadow: 0 0 0 3px rgba(242, 196, 107, 0.3);
 }
 .constellation-question-card.is-target {
-  border-color: rgba(201, 138, 28, 0.5);
+  border-color: rgba(242, 196, 107, 0.5);
 }
 .constellation-question-card:hover,
 .constellation-question-card:focus-visible {
-  border-color: #c98a1c;
+  border-color: rgba(242, 196, 107, 0.8);
   outline: none;
 }
 .constellation-question-card.is-lit {
-  border-color: #c98a1c;
-  background: #fef6e2;
-  color: var(--constellation-ink);
+  border-color: rgba(242, 196, 107, 0.65);
+  background: rgba(44, 33, 9, 0.88);
+  color: #fff6dd;
   cursor: default;
 }
 
@@ -476,17 +487,17 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
 }
 .constellation-pointer {
   fill: none;
-  stroke: rgba(122, 138, 178, 0.7);
+  stroke: rgba(146, 162, 214, 0.55);
   stroke-width: 1.5;
   stroke-dasharray: 4 5;
   stroke-linecap: round;
 }
 .constellation-pointer.is-lit {
-  stroke: rgba(201, 138, 28, 0.85);
+  stroke: rgba(242, 196, 107, 0.75);
 }
 /* The touch point: a dot ON the star, so the thread is visibly attached to it. */
-.constellation-pointer-tip { fill: rgba(122, 138, 178, 0.85); }
-.constellation-pointer-tip.is-lit { fill: #c98a1c; }
+.constellation-pointer-tip { fill: rgba(146, 162, 214, 0.75); }
+.constellation-pointer-tip.is-lit { fill: #f2c46b; }
 
 /* ---------- khay thẻ đáp án (duy nhất) ---------- */
 .constellation-tray {
@@ -497,12 +508,12 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
   min-height: 0;
   padding: 8px 10px;
   border-radius: 14px;
-  border: 1px solid #dbe3f5;
-  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(146, 162, 214, 0.22);
+  background: rgba(10, 15, 28, 0.7);
 }
 .constellation-tray-label {
   flex: 0 0 auto;
-  color: var(--constellation-muted);
+  color: #b6c1de;
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 1.4px;
@@ -536,25 +547,25 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
   overflow-wrap: anywhere;
   cursor: grab;
   touch-action: none;
-  box-shadow: 0 3px 10px rgba(23, 32, 51, 0.16);
+  box-shadow: 0 4px 12px rgba(2, 6, 18, 0.45);
   transition: transform 120ms ease-out, box-shadow 120ms ease-out, border-color 120ms ease-out;
 }
-.constellation-tray-card:hover { border-color: #6d7cf0; transform: translateY(-1px); }
+.constellation-tray-card:hover { border-color: #818cf8; transform: translateY(-1px); }
 .constellation-tray-card:focus-visible {
-  outline: 3px solid #8b97f5;
+  outline: 3px solid #a5b4fc;
   outline-offset: 2px;
 }
 .constellation-tray-card.is-selected {
-  border-color: #c98a1c;
-  box-shadow: 0 0 0 3px rgba(201, 138, 28, 0.35), 0 6px 16px rgba(23, 32, 51, 0.2);
+  border-color: var(--constellation-gold);
+  box-shadow: 0 0 0 3px rgba(242, 196, 107, 0.4), 0 6px 16px rgba(2, 6, 18, 0.5);
 }
 /* #219: cú kéo sai để lại DẤU ĐỎ trên chính thẻ và trên sao đích trong đúng
    550 ms khoá của lượt trả lời. Trước đó class `.wrong` chỉ đóng lên phần tử
    proxy NGOÀI DOM (`constellationProxyElement`), nên đo được 0 dấu hiệu đỏ
    trên board: học sinh cuối lớp chỉ thấy dòng chữ nhỏ dưới khay đổi màu. */
 .constellation-tray-card.is-wrong {
-  border-color: #c22542;
-  box-shadow: 0 0 0 3px rgba(194, 37, 66, 0.35), 0 6px 16px rgba(23, 32, 51, 0.2);
+  border-color: #dc5f6e;
+  box-shadow: 0 0 0 3px rgba(220, 95, 110, 0.45), 0 6px 16px rgba(2, 6, 18, 0.5);
   animation: constellation-wrong-shake 0.42s ease-in-out;
 }
 .constellation-tray-card.is-dragging { opacity: 0.35; cursor: grabbing; }
@@ -591,7 +602,7 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
   align-items: center;
   justify-content: center;
   padding: 14px;
-  background: rgba(247, 249, 255, 0.92);
+  background: rgba(5, 7, 15, 0.8);
 }
 .constellation-no3d-inner {
   display: flex;
@@ -614,47 +625,47 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
   overflow: visible;
 }
 /* Bảng SVG dùng chung cho máy không WebGL, ảnh thu nhỏ và màn kết quả. Nó đứng
-   trên bầu trời sáng (#220), nên sao là vàng đặc viền nâu, chưa nối là xám xanh
-   đậm — cặp tương phản với nền giống cặp vàng-than của bản 3D. */
+   trên bầu trời đêm lại (#221), nên sao là than viền xám xanh, đã nối là vàng
+   sáng — cùng cặp vàng-than với bản 3D. */
 .constellation-link {
-  stroke: #b8791a;
+  stroke: #f2c46b;
   stroke-width: 3;
   fill: none;
   stroke-linecap: round;
-  opacity: 0.95;
+  opacity: 0.85;
 }
 .constellation-link-slot {
-  stroke: rgba(122, 138, 178, 0.45);
+  stroke: rgba(146, 162, 214, 0.25);
   stroke-width: 1.5;
   stroke-dasharray: 4 9;
   fill: none;
 }
 .constellation-star .constellation-core {
-  fill: #fdf3dd;
-  stroke: #a8690b;
+  fill: #2b3552;
+  stroke: #7f8bb3;
   stroke-width: 2;
 }
-.constellation-star .constellation-halo { fill: rgba(242, 196, 107, 0.35); }
+.constellation-star .constellation-halo { fill: transparent; }
 .constellation-star.is-lit .constellation-core {
-  fill: #f2c46b;
-  stroke: #8a5206;
+  fill: #ffe9a8;
+  stroke: #fff6dd;
   stroke-width: 3;
 }
-.constellation-star.is-lit .constellation-halo { fill: rgba(242, 196, 107, 0.45); }
+.constellation-star.is-lit .constellation-halo { fill: rgba(255, 217, 119, 0.18); }
 .constellation-star text {
-  fill: var(--constellation-ink);
+  fill: #cbd5e1;
   font-family: inherit;
   font-size: 20px;
   font-weight: 700;
   text-anchor: middle;
   dominant-baseline: middle;
 }
-.constellation-star.is-lit text { fill: #17203a; }
+.constellation-star.is-lit text { fill: #fdfaf1; }
 /* #178: bản không có WebGL không có thẻ HTML nào để chứa vế B, nên nó là dòng
    thứ hai của chính SVG. Cùng 20 px với dòng trên (hai dòng chữ bài học đều phải
    đọc được từ cuối lớp), khác màu vàng để cặp đọc thành "đích → đáp án". */
 .constellation-star text.constellation-svg-answer {
-  fill: #8a5206;
+  fill: var(--constellation-gold);
   font-size: 20px;
   font-weight: 600;
 }
@@ -671,8 +682,8 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
   border-radius: 50%;
   pointer-events: none;
   z-index: 70;
-  background: radial-gradient(circle, #fff8e1 0%, #e0a02c 45%, rgba(224, 160, 44, 0) 72%);
-  box-shadow: 0 0 14px rgba(201, 138, 28, 0.65);
+  background: radial-gradient(circle, #fff8e1 0%, #f2c46b 45%, rgba(242, 196, 107, 0) 72%);
+  box-shadow: 0 0 18px rgba(242, 196, 107, 0.8);
   will-change: transform, opacity;
 }
 
@@ -714,8 +725,7 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
   min-height: 0;
   padding: 5px 12px;
   border-radius: 9px;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 2px 8px rgba(23, 32, 51, 0.12);
+  background: rgba(6, 10, 22, 0.72);
   pointer-events: none;
 }
 /* #178: dòng phản hồi ("Chính xác! +100 điểm") là hàng CUỐI của cột chứa cảnh 3D,
@@ -745,11 +755,10 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
   line-height: 1.4;
   overflow: hidden;
   /* #219: dải này đứng trên chân cảnh, nên nền của nó phải tự che chữ phía sau:
-     khay và trạng thái đều sáng màu hơn ở đó. Màu nền là nền của chính `.feedback`
-     ngay dưới (navigation.css), để khay và ô phản hồi không còn là hai sắc khác
-     nhau trên cùng một dải. */
+     khay và trạng thái đều sáng màu hơn ở đó. */
   position: relative;
   z-index: 3;
+  background: rgba(6, 10, 22, 0.9);
   border-radius: 10px;
 }
 
@@ -757,25 +766,24 @@ html[data-fullscreen="1"] .modal[data-player-theme]:has(.constellation-result-st
    không chỉ trên thẻ trong khay. `transform` của nhãn treo nằm ở `.constellation-card--hang`,
    nên animation rung khai trên biến thể này để không giành transform của nó. */
 .constellation-card--star.is-wrong {
-  border-color: #c22542 !important;
-  background: #fbe4e9 !important;
-  color: #17203a !important;
-  box-shadow: 0 0 0 3px rgba(194, 37, 66, 0.3), 0 6px 16px rgba(194, 37, 66, 0.24);
+  border-color: #dc5f6e !important;
+  background: rgba(58, 16, 26, 0.92);
+  box-shadow: 0 0 0 3px rgba(220, 95, 110, 0.4), 0 0 22px rgba(220, 95, 110, 0.45);
 }
 /* A long side's target is the ROW card and the number its star wears, so the same
    red has to reach both — otherwise a board of sentences shows nothing but the
    tray card turning red. */
 .constellation-question-card.is-wrong {
-  border-color: #c22542;
-  background: #fbe4e9;
-  box-shadow: 0 0 0 3px rgba(194, 37, 66, 0.3);
+  border-color: #dc5f6e;
+  background: rgba(58, 16, 26, 0.92);
+  box-shadow: 0 0 0 3px rgba(220, 95, 110, 0.4);
   animation: constellation-wrong-shake 0.42s ease-in-out;
 }
 .constellation-card--mark.is-wrong {
-  border-color: #c22542;
-  background: #c22542;
-  color: #ffffff;
-  box-shadow: 0 0 0 3px rgba(194, 37, 66, 0.35);
+  border-color: #dc5f6e;
+  background: #7c2534;
+  color: #ffe6ea;
+  box-shadow: 0 0 0 3px rgba(220, 95, 110, 0.45);
 }
 @keyframes constellation-wrong-shake {
   0%, 100% { translate: 0 0; }

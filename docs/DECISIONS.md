@@ -2419,3 +2419,21 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 **Không chứng minh.** Không đo **mức tiết kiệm pin/CPU** bằng profiler — chỉ đo được *số lệnh vẽ* (0 thay vì 60/s); 0,19–1 % điểm ảnh có nghĩa là một game nhẹ, không có nghĩa là "nhẹ hơn X %". Ảnh chụp không xem được bằng mắt ở phiên này. Chưa đo máy chiếu thật, màn hình < 720p, bản đóng gói: `ui-fullscreen-check` chưa chạy lại (nó cần Electron/CDP target riêng, không dùng chung instance 9392). Nhánh AI local không đo theo chỉ đạo.
 
 **Việc kế tiếp.** Soát bằng mắt sáu màn chơi ở cả hai theme (nền sáng có "phẳng" quá không, vàng trên giấy có đủ nổi không); chạy `ui-fullscreen-check` trên instance riêng; gộp vào bản 0.4.3 rồi chạy lại `check:packaged-install` + `check:packaged-feed`.
+
+## #221 — Trả toàn bộ bầu trời đêm 3D về Chòm sao tri thức; năm thế giới còn lại giữ nền sáng (2026-11-08)
+
+**Yêu cầu, nguyên văn:** *"tôi cần đưa phần 3D three.js của chòm sao tri thức quay về như trước ngay lập tức. bạn đã làm hư phần nhừ"*, làm rõ bằng lựa chọn *"Cả bầu trời đêm 3D như cũ (toàn bộ)"*. **Quyết định này chỉ thay phần chòm sao của #220**; #220 vẫn đúng cho quiz, scenario, ghép cặp, kho báu và đường đua (nền giấy sáng, 0 khung hình khi im, không cosmos/bụi/emblem).
+
+**Quyết định 1 — bầu trời là của riêng board chòm sao, không phải của lớp dùng chung.** `makeCosmos` và `buildEmblem` sống lại trong `three-game-interaction.ts`, nhưng `mount()` chỉ gắn emblem khi được truyền `emblem: true`, và `mountThreeStage` chỉ truyền cờ đó khi `isConnectionBoard(state.currentGame)`. Cosmos 620 sao + tinh vân được `buildConnectionWorld` thêm làm lớp sau cùng, bụi và emblem dùng chung của board bị ẩn, `onStep` tick cosmos rồi tới `graph.tick`. Hệ quả đã được chấp nhận: **chỉ board này** vẽ lại khi im (đo 23 khung/s), vì trời phải trôi và sao phải nhấp nháy.
+
+**Quyết định 2 — mực phải đi theo nền, và specificity là chỗ dễ sai.** Board chòm sao mang `data-game="matching"`, nên khối token của thế giới ghép cặp (0,3,0) phủ mực giấy `#3f5a4f` lên HUD đêm (2,7:1). Hai lần sửa đầu — trong `.constellation-game-stage` và `.game-stage.constellation-game-stage[data-game]` — đều thua (0,1,0 và hoà 0,3,0 nhưng đứng sau nguồn); chỉ `.modal[data-player-theme] .game-stage.constellation-game-stage[data-game]` (0,4,0) mới thắng. Dấu `☆` của sao chưa ghép đổi từ `#4b5675` (2,8:1) sang `var(--constellation-muted)`.
+
+**Quyết định 3 — cổng đo phải phân nhánh, không nới ngưỡng.** `ui-game-background-check` giữ nguyên hai lời hứa cho năm thế giới sáng và đảo chiều cho chòm sao: nền **≤ 0,12** độ chói, text vẫn **0 dòng dưới 4,5:1**, và *phải có* cosmos + *phải vẽ* khi im. `ui-constellation-check` mục "the room" trở về bản đêm (#173) đã cắt: sân khấu không khung, hộp cảnh trong suốt, modal tối, cosmos có thật và nằm sau các sao. Nhờ vậy bản #220 đỏ đúng ở cả hai gate, bản này xanh.
+
+**Quyết định 4 — lỗi hồi quy nằm trong chính bước khôi phục, và cách nó lộ ra.** Khối gắn emblem được viết **trước** dòng `const handle = {...}`: `handle` đang ở TDZ nên ném `ReferenceError`, rơi vào `catch` của `mount()` và **mọi** thế giới nhận `null`. Triệu chứng không phải "chòm sao thiếu trời" mà là cả năm thế giới sáng **mất 3D chơi** — cổng báo "no 3D handle" và `paintedPct: null`, trong khi `typeof threeStageHandle` vẫn là `object` (giá trị `null`). Bài học: khi cổng đỏ ở một thế giới không liên quan tới thay đổi, đọc `Object.keys(handle)`/`handle.renderer` trước khi ngờ phép đo.
+
+**Số (log tươi, instance 9393).** `npm run build` rc 0 · `node tests/run-unit.js` **89/89** · `check:renderer-globals` 68/70, **1.018** hàm / **8.144** điểm gọi, 0 undefined · `verify:css` **61/61** · `npx tsc --noEmit` rc 0. `ui-game-background-check` **42/42** (chòm sao: 0,002 độ chói, 69 dòng text, cosmos có / bụi và emblem tắt, 23 khung khi im, canvas **100 %**, burst 43 khung) · `ui-constellation-check` **104/104** · `ui-three-game-check` **19/19** · `ui-game-worlds-check` **52/52** · `ui-fullscreen-check` **20/20** · `ui-house-building-check` **121/121**.
+
+**Không chứng minh.** Không so ảnh trước/sau bằng mắt (phiên này không có mô hình thị giác); "giống như trước" được chứng minh bằng số đo. Chưa đo máy chiếu thật, màn hình < 720p, bản đóng gói.
+
+**Việc kế tiếp.** Soát board chòm sao bằng mắt ở 1366×768; gộp vào 0.4.3 và chạy lại `check:packaged-install` + `check:packaged-feed`.

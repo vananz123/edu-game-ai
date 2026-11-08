@@ -315,14 +315,14 @@ assert.equal(
   'on/emit delivers detail and a throwing handler does not break emit'
 );
 
-// ---- no decorative backdrop (DECISIONS #220) --------------------------------
-// The sky behind the board is CSS now. The layer must not carry a second, always
-// spinning scene of its own: every factory removed with the backdrop stays
-// removed, otherwise the idle gate below would be defeated by a world that
-// animates whether or not anyone is looking at it.
-for (const gone of ['makeCosmos', 'buildParticles', 'buildEmblem']) {
-  assert.equal(run(`typeof threeGame.${gone}`), 'undefined', `threeGame.${gone} must be gone (#220)`);
-}
+// ---- the constellation sky is back (DECISIONS #221) ------------------------
+// #220 removed the decorative backdrop everywhere; #221 restores it for the one
+// board the owner asked for — the constellation — so `makeCosmos` returns, while
+// the generic dust field stays gone. `buildEmblem` stays internal: it is reached
+// through `mount({ emblem: true })`, not as a public factory.
+assert.equal(run(`typeof threeGame.makeCosmos`), 'function', 'threeGame.makeCosmos is exported again (#221)');
+assert.equal(run(`typeof threeGame.buildParticles`), 'undefined', 'threeGame.buildParticles stays removed (#220)');
+assert.equal(run(`typeof threeGame.buildEmblem`), 'undefined', 'threeGame.buildEmblem is not a public factory');
 assert.equal(
   run(`(() => {
     const canvas = document.createElement('canvas');

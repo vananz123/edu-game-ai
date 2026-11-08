@@ -56,7 +56,13 @@ function mountThreeStage(stage, opts = {}) {
             accent = css.trim();
     }
     catch (err) { /* keep the default accent */ }
-    threeStageHandle = window.threeGame.mount(stage, { accent });
+    // The house owns the stage centre in house mode; the spinning emblem would
+    // only fight it (DECISIONS #142). The constellation board parks it too — its
+    // own 3D picture is the subject (DECISIONS #169) — and the five lit worlds
+    // never draw it: their backdrop is 2D paper (#220), so only the night sky
+    // that #221 restored mounts it.
+    const boardMode = isConnectionBoard(state.currentGame);
+    threeStageHandle = window.threeGame.mount(stage, { accent, emblem: boardMode });
     // Kept for the factories that cannot read CSS themselves (they are also used
     // in unit tests with no document): the connection graph tints its nodes.
     stageAccent = accent;
@@ -388,19 +394,41 @@ function buildConnectionWorld() {
         depth: 1,
         // A star is the drop target: it has to look the same whether it is in
         // front of or behind the others.
-        depthCompensated: true,
-        // The board now stands on a white CSS sky (DECISIONS #220), so a star is
-        // gold on that sky instead of a white glow on the dark.
-        light: true
+        depthCompensated: true
     });
     window.threeGame.addObject(threeStageHandle, graph.group, 0, 0, 0);
 
-    threeWorld = { kind: 'connection', graph, template, burstOn: null, drag: null, syncer: null };
-    // The sky behind the board is CSS now (DECISIONS #220): the canvas carries
-    // the stars, their links and the eye, nothing else. The hook reports whether
-    // the picture actually moved, which lets the layer skip frames — and skip
-    // rendering entirely — when `prefers-reduced-motion` freezes the twinkle.
-    threeStageHandle.onStep = (dt, reduced) => graph.tick(dt, reduced) === true;
+    // The dome and the emblem belong to the decorative backdrop; a board that is
+    // meant to be read is better without a rotating knot behind it.
+    if (threeStageHandle.emblem) threeStageHandle.emblem.visible = false;
+    // The generic dust is replaced by a cosmos of its own: the drifting field was
+    // tuned for a lit room — in space it competes with the board's stars, which
+    // are the one thing a class has to aim at.
+    if (threeStageHandle.particles) threeStageHandle.particles.visible = false;
+    // The room itself, drawn by Three.js instead of a CSS panel (DECISIONS #173,
+    // restored in #221 at the owner's request): a gradient sky, a far field of
+    // stars, three dim clouds. `gl_PointSize` is in physical pixels, so the star
+    // size is scaled by the renderer's own pixel ratio — the same point must be
+    // 1.4 px on a projector and crisp on a Retina laptop.
+    const pixelRatio = threeStageHandle.renderer && typeof threeStageHandle.renderer.getPixelRatio === 'function'
+        ? threeStageHandle.renderer.getPixelRatio()
+        : 1;
+    const cosmos = window.threeGame.makeCosmos({
+        accent: readWorldAccent(),
+        pixelScale: pixelRatio * 0.9,
+        count: 620
+    });
+    window.threeGame.addObject(threeStageHandle, cosmos.group, 0, 0, 0);
+
+    threeWorld = { kind: 'connection', graph, cosmos, template, burstOn: null, drag: null, syncer: null };
+    // The idle motion runs on the shared render loop (one rAF for every game):
+    // stars twinkle, the far field turns, the clouds drift; `prefers-reduced-motion`
+    // freezes all of it inside both factories. The hook reports whether the
+    // picture actually moved, so the #220 on-demand gate still applies.
+    threeStageHandle.onStep = (dt, reduced) => {
+        cosmos.tick(dt, reduced);
+        return graph.tick(dt, reduced) === true || !reduced;
+    };
     // Hover is the only pointer input on the board, and it reuses the layer's own
     // implementation (raycast + easing in `step()`), so there is no second input
     // path. It is registered on the star bodies only.

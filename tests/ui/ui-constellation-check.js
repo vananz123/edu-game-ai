@@ -1,8 +1,11 @@
 // ui-constellation-check.js — regression guard for "Chòm sao tri thức"
 // (DECISIONS #171, recomposed in #172, label geometry re-cut in #174,
-// both halves of a joined pair shown in #178).
+// both halves of a joined pair shown in #178; the night sky restored in #221).
 //
 // WHAT IT PROVES, against a built app started with --remote-debugging-port:
+//   • the room: no felt frame, a transparent scene box over a dark modal, and the
+//     cosmos field (620 stars, 3 clouds) built behind the graph — the whole night
+//     sky #220 had replaced with a day board and #221 brings back;
 //   • the layout: ONE tray of answer cards, a large scene, no second answer list;
 //   • correct / wrong drops through the real drag path, and tap/keyboard placement;
 //   • the constellation edges stay hidden until a match, then reveal one by one;
@@ -216,14 +219,16 @@ const snapshot = () => `JSON.stringify({
     (await evaluate(`threeWorld.graph.links.map(l => (l.tube ? (l.tube.visible ? 'v' : 'h') : 'none')).join('')`)) === 'hhhh',
     'every edge starts hidden');
 
-  console.log('\n=== the room: a lit board, no 3D backdrop ===');
+  console.log('\n=== the room: no frame, real space (#221) ===');
   // --------------------------------------------------- the room: no frame --
-  // DECISIONS #173 removed the grey felt frame; #220 replaced the 3D cosmos
-  // backdrop (#173) with a CSS day-sky board and dropped the 60 fps decorative
-  // canvas, so the page runs lighter. Measured on the COMPUTED style, because the
-  // felt came from three different files (world tokens, gameplay.css,
-  // fullscreen.css) and a rule that lost the specificity fight would still show
-  // as a declaration in the source but not in the box the class sees.
+  // DECISIONS #173 removed the grey felt frame and let the canvas paint the night
+  // sky. #220 briefly replaced that sky with a CSS day board; #221 gives the
+  // constellation its own space back (dark modal, transparent scene box, a cosmos
+  // field behind the graph, dark ink), so this section measures the night values.
+  // Measured on the COMPUTED style, because the felt came from three different
+  // files (world tokens, gameplay.css, fullscreen.css) and a rule that lost the
+  // specificity fight would still show as a declaration in the source but not in
+  // the box the class sees.
   const room = JSON.parse(await evaluate(`(() => {
     const cs = sel => { const el = document.querySelector(sel); return el ? getComputedStyle(el) : null; };
     const stage = cs('.game-stage');
@@ -232,11 +237,11 @@ const snapshot = () => `JSON.stringify({
     const body = cs('.modal[data-player-theme] .modal-body');
     const before = document.querySelector('.game-stage') ? getComputedStyle(document.querySelector('.game-stage'), '::before') : null;
     const handle = threeStageHandle;
+    const cosmos = threeWorld && threeWorld.cosmos;
     const parse = s => { const m = String(s).match(/rgba?\\(([^)]+)\\)/); if (!m) return null;
       const p = m[1].split(/[,\\/ ]+/).filter(Boolean).map(Number); return { r: p[0], g: p[1], b: p[2] }; };
     const lum = c => (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b) / 255;
     const modalC = modal ? parse(modal.backgroundColor) : null;
-    const stageC = stage ? parse(stage.backgroundColor) : null;
     return JSON.stringify({
       stageBg: stage && stage.backgroundImage,
       stageBgColor: stage && stage.backgroundColor,
@@ -249,33 +254,34 @@ const snapshot = () => `JSON.stringify({
       sceneRadius: scene && scene.borderTopLeftRadius,
       modalBg: modal && modal.backgroundColor,
       modalLum: modalC ? lum(modalC) : -1,
-      stageLum: stageC ? lum(stageC) : -1,
       bodyPad: body && [body.paddingTop, body.paddingRight, body.paddingBottom, body.paddingLeft].join(' '),
-      hasCosmos: Boolean(threeWorld && threeWorld.cosmos),
-      hasDust: handle ? Boolean(handle.particles) : null,
-      hasEmblem: handle ? Boolean(handle.emblem) : null,
-      hasSky: Boolean(handle && handle.scene && handle.scene.background),
-      skyIsNull: Boolean(handle && handle.scene && !handle.scene.background)
+      hasCosmos: Boolean(cosmos),
+      starCount: cosmos ? cosmos.stars.geometry.attributes.position.count : -1,
+      skyOrder: cosmos ? cosmos.sky.renderOrder : 0,
+      starsOrder: cosmos ? cosmos.stars.renderOrder : 0,
+      cloudCount: cosmos ? cosmos.clouds.length : -1,
+      dustHidden: handle ? (handle.particles ? handle.particles.visible === false : true) : null,
+      emblemHidden: handle ? (handle.emblem ? handle.emblem.visible === false : true) : null,
+      pointScaleNumber: cosmos ? typeof cosmos.uniforms.stars.uScale.value === 'number' : false
     });
   })()`));
   check('the stage draws no felt: no gradient, no border, no radius, no shadow',
     room.stageBg === 'none' && room.stageBorder === '0px' && room.stageRadius === '0px' && room.stageShadow === 'none',
     JSON.stringify({ bg: room.stageBg, border: room.stageBorder, radius: room.stageRadius, shadow: room.stageShadow }));
   check('the world texture overlay is switched off', room.beforeDisplay === 'none', `::before display=${room.beforeDisplay}`);
-  // #220: the scene paints the day sky in CSS; the canvas only draws stars and
-  // edges on top of it, so the scene MUST have a background and no frame echo.
-  check('the scene paints the day sky and keeps its own rounded card',
-    room.sceneBg !== 'none' && room.sceneRadius !== '0px',
-    JSON.stringify({ bg: room.sceneBg.slice(0, 60), radius: room.sceneRadius }));
-  check('the modal is a light surface and the body wastes no padding',
-    room.modalLum >= 0.85 && room.bodyPad === '0px 0px 0px 0px',
+  check('the scene box is transparent so the canvas is the picture',
+    room.sceneBg === 'none' && room.sceneShadow === 'none' && room.sceneRadius === '0px',
+    JSON.stringify({ bg: room.sceneBg, shadow: room.sceneShadow, radius: room.sceneRadius }));
+  check('the modal is space-coloured and the body wastes no padding',
+    room.modalLum <= 0.05 && room.bodyPad === '0px 0px 0px 0px',
     JSON.stringify({ modalBg: room.modalBg, modalLum: Number(room.modalLum.toFixed(3)), bodyPad: room.bodyPad }));
-  check('no decorative 3D backdrop is built: no cosmos, no dust, no emblem',
-    room.hasCosmos === false && room.hasDust === false && room.hasEmblem === false,
-    JSON.stringify({ cosmos: room.hasCosmos, dust: room.hasDust, emblem: room.hasEmblem }));
-  check('the 3D scene has no sky mesh — the canvas is transparent over the CSS sky',
-    room.skyIsNull === true,
-    JSON.stringify({ hasSky: room.hasSky, skyIsNull: room.skyIsNull }));
+  check('a cosmos field is built: stars behind the graph, sky behind everything',
+    room.hasCosmos === true && room.starCount > 500 && room.skyOrder < room.starsOrder && room.skyOrder < 0 && room.cloudCount === 3,
+    JSON.stringify({ stars: room.starCount, skyOrder: room.skyOrder, starsOrder: room.starsOrder, clouds: room.cloudCount }));
+  check('the rotating emblem and the old dust are off — the cosmos replaces them',
+    room.dustHidden === true && room.emblemHidden === true,
+    JSON.stringify({ dustHidden: room.dustHidden, emblemHidden: room.emblemHidden }));
+  check('star points are sized in device pixels, not world units', room.pointScaleNumber === true, `uScale is number=${room.pointScaleNumber}`);
 
   // ------------------------------------------------ answers and labels ----
   const opening = JSON.parse(await evaluate(snapshot()));
