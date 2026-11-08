@@ -7,9 +7,11 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
-### 2026-11-08 — Bỏ "Giữ hành vi hiện tại" (#223), nền sáng (#220), trả bầu trời đêm 3D về Chòm sao (#221), đường nối mờ trước khi ghép (#222), đóng nợ #212, #219 (Chòm sao tri thức)
+### 2026-11-08 — Khối thảo luận mở ở màn không ảnh (#225), mực câu hỏi cho dòng thảo luận (#224), bỏ "Giữ hành vi hiện tại" (#223), nền sáng (#220), trả bầu trời đêm 3D về Chòm sao (#221), đường nối mờ trước khi ghép (#222), đóng nợ #212, #219 (Chòm sao tri thức)
+- **#225 (2026-11-08) — Màn Tình huống tắt ảnh minh hoạ mở khối "Thảo luận" thành ô đọc được (`:has(.feedback-discussion)`), có trần chiều cao và tự cuộn; màn không có câu thảo luận vẫn giữ ô 1×1 ẩn.** Chi tiết ở đầu handoff mới nhất bên dưới; quyết định #225 trong `docs/DECISIONS.md`.
+- **#224 (2026-11-08) — Dòng "Thảo luận" của Tình huống thành khối riêng mang mực câu hỏi; khối phản hồi dưới ảnh hết chữ trắng trên nền sáng.** Bản lưu trữ: [docs/handoff/status/2026-11-08.md](handoff/status/2026-11-08.md); quyết định #224 trong `docs/DECISIONS.md`.
 - **#223 (2026-11-08) — Ba bề mặt cấu hình chỉ còn Thi đấu · Luyện tập · Thử thách; game tạo trước #209 mở ra là Thi đấu và lần lưu kế tiếp ghi `tra-loi:thi-dau`, xoá chế độ điểm cũ.** Chi tiết ở đầu handoff mới nhất bên dưới; quyết định #223 trong `docs/DECISIONS.md`.
-- **#222 (2026-11-08) — Chòm sao tri thức: đường nối giữa các sao hiện lại TRƯỚC khi ghép (nét mờ xám), ghép đúng thì nét vàng vẽ dần đè lên.** Chi tiết ở đầu handoff mới nhất bên dưới; quyết định #222 trong `docs/DECISIONS.md`.
+- **#222 (2026-11-08) — Chòm sao tri thức: đường nối giữa các sao hiện lại TRƯỚC khi ghép (nét mờ xám), ghép đúng thì nét vàng vẽ dần đè lên.** Bản lưu trữ: [docs/handoff/status/2026-11-08.md](handoff/status/2026-11-08.md); quyết định #222 trong `docs/DECISIONS.md`.
 - **#221 (2026-11-08) — Trả toàn bộ bầu trời đêm 3D (cosmos 620 sao + emblem, vòng vẽ sống) lại cho Chòm sao tri thức theo yêu cầu chủ dự án; năm thế giới còn lại giữ nền sáng #220.** Bản lưu trữ: [docs/handoff/status/2026-11-08.md](handoff/status/2026-11-08.md); quyết định #221 trong `docs/DECISIONS.md` (chỉ thay phần chòm sao của #220).
 - **#220 (2026-11-08) — Bỏ lớp 3D ở NỀN trò chơi (giữ nguyên 3D chơi), nền sáng chữ đậm, vòng vẽ chỉ chạy khi có việc.** Bản lưu trữ: [docs/handoff/status/2026-11-08.md](handoff/status/2026-11-08.md); quyết định #220 trong `docs/DECISIONS.md` (thay #173).
 - **#219 (2026-11-08) — Board Chòm sao tri thức: cỡ chữ nâng lên, phản hồi đúng/sai kể đúng tên vế–sao, dấu sai đỏ.** Bản lưu trữ: [docs/handoff/status/2026-11-08.md](handoff/status/2026-11-08.md); quyết định #219 trong `docs/DECISIONS.md`.
@@ -271,35 +273,25 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - Lịch sử trước 2026-10-19
 ## Bàn giao gần nhất
 
+### #225 — Màn Tình huống không ảnh minh hoạ mở khối "Thảo luận" thành ô đọc được (2026-11-08)
+
+**Files changed.** `src/renderer/styles/gameplay.css` (luật mới `.quiz-answer-live:has(.feedback-discussion)`); `tests/ui/ui-answer-mode-check.js` (trường snapshot `fbFrame` đo hình học `#answerFeedback`; `scenarioWith` tắt ảnh khi khoá chứa `no-art`/`quiet`; ván chơi mới `scenarioNoArt`/`scenarioNoArtMiss` và `scenarioQuiet`/`scenarioQuietMiss`; hai check mới). Docs: `docs/DECISIONS.md` #225, `docs/STATUS.md`, `docs/handoff/status/2026-11-08.md`.
+
+**Behavior.** Ở câu Tình huống **tắt ảnh minh hoạ** (`gameSetup.illustrationMode = 'off'`), `#answerFeedback` từng là ô 1×1 dành cho trình đọc màn hình, nên lời mời "Thảo luận: …" không hiện ra màn hình. Giờ khung **mở ra thành khối thật** dưới lưới đáp án khi bên trong có khối thảo luận: rộng ~970px, cao 109–116px, `position: static`, `clip-path: none`, mực `--world-ink` theo #224. Màn **không** có câu thảo luận vẫn giữ ô 1×1 ẩn, nên phản hồi của Kho báu / Đường đua / câu Tình huống không thảo luận không mọc thêm banner. Khối có trần `max-height: clamp(96px, 18vh, 190px)` và tự cuộn: đo được 138,24 / 129,6 / 190px ở 1366×768 / 1280×720 / 1920×1080; stress bằng nội dung dài thì dừng ở 129,6px, `scrolls: true`, không chồng nút Tiếp tục.
+
+**Commands and results.** `npx tsc --noEmit` rc 0 · `node tests/run-unit.js` **89/89** · `check:renderer-globals` 68/70 script, 1.018 hàm / 8.135 điểm gọi, 0 undefined · `verify:css` **61/61**. Trên instance riêng (CDP 9406, `--user-data-dir` TEMP): `ui-answer-mode-check` **219/219** — check (a) tắt ảnh + có thảo luận: `static`/`clip-path: none`/rộng > 400px/cao > 40px/chứa trọn câu/mực `--world-ink`; check (b) tắt ảnh + không thảo luận: vẫn 1×1, `absolute`, còn clip. Gate anh em: `ui-game-worlds` **52/52**, `ui-game-background` **42/42**, `ui-three-game` **19/19**, `ui-house-building` **121/121**.
+
+**Chưa xác minh.** Không xem ảnh bằng mắt trong phiên này — hình học và mực chứng minh bằng `getBoundingClientRect` + `getComputedStyle`. Chưa đo máy chiếu, màn < 720p, bản đóng gói. Nhánh AI local không đo theo chỉ đạo.
+
+**Việc kế tiếp.** Gộp #224/#225 vào 0.4.3 cùng nợ đo máy chiếu của #221/#222; chạy lại `check:packaged-install` + `check:packaged-feed` khi dựng bản.
+
 ### #224 — Dòng "Thảo luận" của Tình huống mang mực câu hỏi; khối phản hồi dưới ảnh hết chữ trắng (2026-11-08)
 
-**Files changed.** `src/renderer/features/games/quiz.ts` (câu thảo luận tách khỏi chuỗi `feedback.innerHTML` thành `<div class="feedback-discussion"><strong>Thảo luận:</strong> …</div>`), `src/renderer/styles/navigation.css` (khối thảo luận: dải trắng mờ, viền trái 3px `--world-accent`, mực `--world-ink`; selector dùng `:is(.feedback, .feedback-under-illustration)` nên không trượt màn dưới ảnh), `src/renderer/styles/game-treasure.css` (tô `var(--world-ink)` cho cả nhóm khối phản hồi dưới ảnh: `#answerFeedback`, `#matchFeedback`, `#raceSideFeedback`), `tests/ui/ui-answer-mode-check.js` (snapshot `discussion` + hai check mới). Docs: `docs/DECISIONS.md` #224, `docs/STATUS.md`.
-
-**Behavior.** Trong Tình huống, dòng "Thảo luận: …" giờ là một khối riêng và mang **đúng mực của câu hỏi** (`rgb(27,36,56)`), không còn bị luật `.feedback strong` / `.feedback.bad strong` nhuộm xanh `#0f3d2c` hay đỏ `#7c1a30`. Sửa thêm một lỗi có trước: khối phản hồi nằm dưới ảnh không mang class `.feedback`, nên không nhận luật mực thế giới và thừa hưởng `#fff` của `.game-stage` — **mọi** chữ trong đó (dòng xác nhận, rubric "Điểm quyết định", lời giải, câu thảo luận) đang trắng trên nền sáng. Giờ cả khối dùng `--world-ink`, áp cho cả Kho báu, Đường đua và Ghép cặp.
-
-**Commands and results.** `npm run build` rc 0 · `npx tsc --noEmit` rc 0 · `node tests/run-unit.js` **89/89** · `check:renderer-globals` 68/70 script, 1.018 hàm / 8.135 điểm gọi, 0 undefined · `verify:css` **61/61**. Trên instance riêng (CDP 9405, `--user-data-dir` TEMP, nạp build mới): `ui-answer-mode-check` **217/217** — đo `#answerFeedback .feedback-discussion`: `display:block`, chứa trọn câu, `color = strongColor = worldInk = .stage-question`; trước khi sửa cả bốn đều là `rgb(255,255,255)`. Gate anh em: `ui-game-worlds` **52/52**, `ui-game-background` **42/42**, `ui-three-game` **19/19**, `ui-house-building` **121/121**.
-
-**Chưa xác minh.** Màu chứng minh bằng `getComputedStyle`, chưa so ảnh trước/sau bằng mắt; chưa đo máy chiếu, màn < 720p, bản đóng gói. **Nợ mở:** màn Tình huống **không có ảnh** dùng `#answerFeedback.quiz-answer-live` (ẩn bằng clip) nên dòng thảo luận không hiện — cần cân nhắc `:has(.feedback-discussion)` để hiện khối thật.
+Bản lưu trữ: [docs/handoff/status/2026-11-08.md](handoff/status/2026-11-08.md); quyết định #224 trong `docs/DECISIONS.md`.
 
 ### #223 — Bỏ "Giữ hành vi hiện tại": game cũ mở ra là Thi đấu, lưu bằng token (2026-11-08)
 
-**Files changed.** `src/game-engine/answer-mode.ts` (bảng chọn còn ba mục; `answerModeOptions()` bỏ tham số "có ô legacy"; nhãn/lời nhắc của `legacy` trỏ về Thi đấu), `src/shared/lesson-types.ts` (`AnswerModeSetting` bỏ `'keep'`), `src/services/game/game-project-adapter.ts` (`answerModeTokenFor` luôn trả token, `answerModeFromSetup` đọc game không token là `competitive`, `gameSetupFor` ghi token ở cả bốn trò và `delete merged.legacyScoringMode`, xoá `arenaScoringLabel`), `src/shared/types.ts` (chú thích `scoringMode`/`legacyScoringMode` theo #223), `src/renderer/pages/create.ts`, `src/renderer/features/editor/questions.ts` + `page.ts`, `src/renderer/features/wizard/step-configure.ts` (ba bề mặt chỉ còn Thi đấu · Luyện tập · Thử thách; lưu trình soạn thảo cũng xoá khoá cất). Tests: `tests/unit/answer-mode.test.ts`, `tests/unit/game-project-adapter.test.ts`, `tests/ui/ui-answer-mode-check.js`. Docs: `docs/DECISIONS.md` #223, `docs/STATUS.md`.
-
-**Behavior.** Trang Tạo, trình soạn thảo và wizard chỉ còn **ba** cách trả lời; không bề mặt nào còn ô "Giữ hành vi hiện tại". Một game tạo trước #209 (hoặc trước #223) mở ra với **Thi đấu** chọn sẵn và chơi theo luật cũ của chính nó cho tới lần lưu kế tiếp — lần đó ghi `tra-loi:thi-dau` và xoá `legacyScoringMode`, nên các chế độ điểm `tốc độ` / `theo độ khó` / `thi đấu đội` / `luyện tập` **không còn đường quay lại** (chủ dự án đã chọn và chấp nhận). Kho báu và Đường đua giờ cũng lưu token như Đấu trường và Tình huống; `timeBonus`/điểm câu hỏi vẫn nguyên. Ghép cặp ngoài phạm vi, giữ nguyên.
-
-**Commands and results.** `npx tsc --noEmit` rc 0 · `npm run build` rc 0 · `node tests/run-unit.js` **89/89** · `check:renderer-globals` 68/70 script, 1.018 hàm / 8.135 điểm gọi, 0 undefined · `verify:css` **61/61** · `check:answer-mode-ui` trên instance riêng (CDP 9405, `--user-data-dir` TEMP) **215/215**, gồm: đúng ba mục trên cả ba bề mặt, editor game cũ chọn `tra-loi:thi-dau`, lưu game `'tốc độ'` ghi token mà **giữ `timeBonus`**, không nơi nào còn khoá `legacyScoringMode`, `.egame` của game Luyện tập đi trọn đĩa → SQLite → ván chơi.
-
-**Chưa xác minh.** Không đo bản đóng gói, máy chiếu, máy pilot; nhánh AI local không đo theo chỉ đạo. Chưa có lời nhắc nào cho giáo viên khi lưu game cũ làm mất chế độ điểm cũ. **Kế tiếp:** (tuỳ chọn) thêm hộp xác nhận một dòng ở nút Lưu của trình soạn thảo; gộp vào 0.4.3 cùng nợ đo của #221/#222.
-
-### #222 — Trả lại đường nối mờ giữa các sao trước khi ghép (2026-11-08)
-
-**Files changed.** `src/renderer/features/three-game-interaction.ts` (+30/−3; mỗi cạnh trong `makeNodeGraph` dựng thêm một **ghost tube** mảnh xám từ curve riêng, cùng các điểm cong `bend`; `setEarned` bật/tắt ghost theo `reveal`, `tick` tắt ghost khi cạnh vàng vẽ xong), `tests/unit/three-game-interaction.test.ts` (4 assertion mới cho ghost + quy tắc "một curve — một TubeGeometry"), `tests/ui/ui-constellation-check.js` (2 assertion cũ "không có đường nào trước khi ghép" thay bằng "ghost hiện / ống vàng chưa vẽ"; thêm assertion "ghost biến mất khi ống vàng vẽ xong"). Docs: `docs/DECISIONS.md` #222, `docs/STATUS.md`.
-
-**Behavior.** Trước khi ghép, board chòm sao lại có **toàn bộ đường nối** giữa các sao, dạng nét mờ xám bám đúng cung cong của thẳng/vòng cung 3D — hình chòm sao đọc được ngay từ khung đầu, học sinh thấy mình đang ghép gì. Ghép đúng thì ống vàng **vẽ dần** đè lên ghost và ghost chỉ tắt khi ống vàng vẽ xong, nên không có đoạn nào bị "hổng" giữa chừng. Sửa gốc là #172: khi gộp cạnh thành một ống có shader cắt dần, cạnh chưa mở bị `visible = false` hoàn toàn, còn đường đứt nét cũ nằm trong SVG fallback mà canvas `is-3d` che mất. Lỗi kỹ thuật đáng ghi: bản ghost đầu dựng từ **cùng** đối tượng `CatmullRomCurve3` đã bị ống vàng lấy mẫu trước, nên `TubeGeometry` thứ hai suy biến, vẽ **0 pixel** dù buffer đỉnh giống hệt; phải cấp cho mỗi ống một curve riêng.
-
-**Commands and results.** `npx tsc --noEmit` — rc 0; `node tests/run-unit.js` — **89/89**; `npm run check:renderer-globals` — 68/70 scripts, 1.018 hàm / 8.144 điểm gọi, 0 undefined; `npm run verify:css` — **61/61**. Trên instance riêng (CDP 9403, `--user-data-dir` TEMP, khởi động lại để nạp build mới): `ui-constellation-check` **105/105**; `ui-three-game-check` **19/19**; `ui-game-background-check` **42/42**; `ui-game-worlds-check` **52/52**. Đo pixel: trên ảnh đen (ẩn cosmos/sao/ống vàng) ghost bật → **10 786** pixel (trung bình 49/255), tắt → **0**; dọc cung belt-1 trên cảnh thật, độ sáng trung bình đi từ ~15–36 (nền) lên ~68–216; ống vàng đã ghép ~27 900 pixel / trung bình 123.
-
-**Chưa xác minh.** Chưa xem ảnh trước/sau bằng mắt (không có mô hình thị giác trong phiên này) — độ "vừa đủ mờ" cần chủ dự án duyệt cảm quan; chưa đo máy chiếu thật / màn hình < 720p / bản đóng gói. **Kế tiếp:** duyệt cảm quan trên 1366×768, chỉnh `opacity` (0,55) và bán kính (0,017) nếu cần, rồi gộp vào 0.4.3.
+Bản lưu trữ: [docs/handoff/status/2026-11-08.md](handoff/status/2026-11-08.md); quyết định #223 trong `docs/DECISIONS.md`.
 
 ### #219 — Chòm sao tri thức: chữ to hơn, phản hồi đúng/sai rõ ràng (2026-11-08)
 

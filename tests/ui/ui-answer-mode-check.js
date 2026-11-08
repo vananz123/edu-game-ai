@@ -303,6 +303,23 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
                 block: getComputedStyle(box).display
               };
             })(),
+            /* #225: màn KHÔNG ảnh minh hoạ chỉ có MỘT #answerFeedback và nó mang
+               .quiz-answer-live (bị cắt còn 1px để máy đọc). Luật
+               :has(.feedback-discussion) mở nó ra thành khối thật — phải đo hình
+               học của khung, vì "display: block" một mình vẫn đúng với ô 1px. Đo ở
+               cấp ngoài chứ không nằm trong danh sách thảo luận: màn KHÔNG có câu thảo
+               vẫn phải chứng minh khung đã thu về 1×1. */
+            fbFrame: fb ? (function () {
+              const rect = fb.getBoundingClientRect();
+              const style = getComputedStyle(fb);
+              return {
+                w: Math.round(rect.width),
+                h: Math.round(rect.height),
+                position: style.position,
+                clipPath: style.clipPath,
+                scrolls: fb.scrollHeight > fb.clientHeight + 2
+              };
+            })() : null,
             /* #213: từ phương án C, nút "Giải thích" của Đấu trường KHÔNG còn nằm
                trong bảng phản hồi — nó đứng ở khe trái của dock. Vì vậy bằng chứng
                "được quyền mở lời giải" phải đo trên CHÍNH cái nút, không đo trên chữ
@@ -447,6 +464,8 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
             g.gameSetup.scoringMode = key.indexOf('competitive') === 0 ? TOKEN_COMPETITIVE
               : key.indexOf('practice') === 0 ? TOKEN_PRACTICE : TOKEN_CHALLENGE;
           }
+          if (key.indexOf('no-art') !== -1 || key.indexOf('quiet') !== -1)
+            g.gameSetup.illustrationMode = 'off';
           return g;
         };
         await play(scenarioWith('legacy-scenario'));
@@ -460,6 +479,17 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
         await play(scenarioWith('legacy-scenario-next'));
         out.play.scenarioBefore = await click('risk');
         out.play.scenarioAdvance = await pressNext();
+        /* 6b (#225): cùng câu Tình huống nhưng TẮT ảnh minh hoạ. Ở chế độ auto, mọi
+           câu Tình huống đều mọc một cảnh mặc định nên hasIllus luôn đúng và khối
+           phản hồi nằm ở cột phụ; chỉ khi illustrationMode = 'off' thì
+           #answerFeedback là bản .quiz-answer-live DUY NHẤT — đúng màn mà dòng thảo
+           luận từng bị cắt mất. */
+        out.play.scenarioNoArt = await play(scenarioWith('legacy-scenario-no-art'));
+        out.play.scenarioNoArtMiss = await click('risk');
+        const noArtBase = JSON.parse(JSON.stringify(scenarioWith('legacy-scenario-quiet')));
+        delete noArtBase.questions[0].discussionPrompt;
+        out.play.scenarioQuiet = await play(noArtBase);
+        out.play.scenarioQuietMiss = await click('risk');
         await stopPlay();
       } catch (error) {
         // Màn chơi lỗi giữa chừng cũng phải hiện ra trong báo cáo, không cắt phần sau.
@@ -1779,6 +1809,26 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
     Boolean(disc) && disc.color === disc.worldInk && disc.strongColor === disc.worldInk
     && disc.color === disc.questionColor && disc.color !== 'rgb(124, 26, 48)',
     JSON.stringify(disc));
+  /* #225: màn KHÔNG ảnh minh hoạ. Khối thảo luận phải MỞ RA thật (khung rộng, cao,
+     không còn clip) — nếu luật :has(...) mất thì khối quay về ô 1×1 và câu thảo luận
+     biến mất khỏi màn của cả lớp. Còn màn không có câu thảo luận thì #answerFeedback
+     phải giữ nguyên dạng 1×1 ẩn, tức màn chơi không mọc thêm banner. */
+  const noArtDisc = play.scenarioNoArtMiss?.discussion;
+  const noArtFrame = play.scenarioNoArtMiss?.fbFrame;
+  check('with the illustration off, the discussion block opens as a real, readable box',
+    Boolean(noArtDisc) && noArtDisc.block === 'block' && Boolean(noArtFrame)
+    && noArtFrame.position === 'static' && noArtFrame.clipPath === 'none'
+    && noArtFrame.w > 400 && noArtFrame.h > 40
+    && noArtDisc.color === noArtDisc.worldInk && noArtDisc.text === 'Thảo luận: Vì sao không tự rút khi dây còn ướt?',
+    JSON.stringify({ discussion: noArtDisc, frame: noArtFrame }));
+  /* Màn không có câu thảo luận: #answerFeedback phải quay lại dạng 1×1 ẩn. Không có
+     phép đo này thì một luật quá tay (mở mọi #answerFeedback) vẫn xanh. */
+  const quiet = play.scenarioQuietMiss;
+  check('a decision without a discussion prompt keeps the hidden live region at 1x1',
+    Boolean(quiet) && quiet.discussion === null && Boolean(quiet.fbFrame)
+    && quiet.fbFrame.w <= 2 && quiet.fbFrame.h <= 2 && quiet.fbFrame.position === 'absolute'
+    && quiet.fbFrame.clipPath !== 'none',
+    JSON.stringify(quiet ? quiet.fbFrame : quiet));
   check('Thử thách keeps a decision feedback to itself but pays the same rubric',
     play.scenarioChallengeMiss?.points === 45 && !has(play.scenarioChallengeMiss, 'Còn rủi ro'),
     said(play.scenarioChallengeMiss));

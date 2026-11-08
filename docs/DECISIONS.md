@@ -2493,3 +2493,21 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 **Không chứng minh.** Ảnh chụp không xem bằng mắt trong phiên này — màu được chứng minh bằng `getComputedStyle` (trước khi sửa: `rgb(255,255,255)`; sau: `rgb(27,36,56)`), không bằng so ảnh. Chưa đo máy chiếu, màn hình < 720p, bản đóng gói. Màn Tình huống **không có ảnh minh hoạ** vẫn dùng `#answerFeedback.quiz-answer-live` (ẩn bằng clip) nên dòng thảo luận không hiện ở đó — nợ mở, chưa sửa trong #224 vì nằm ngoài yêu cầu.
 
 **Việc kế tiếp.** (Nợ mở) cân nhắc cho `#answerFeedback:has(.feedback-discussion)` hiện thành khối thật ở màn không có ảnh, để câu thảo luận không phụ thuộc vào việc câu hỏi có ảnh hay không.
+
+## #225 — Đóng nợ #224: màn Tình huống KHÔNG có ảnh mở khối thảo luận thành ô đọc được (2026-11-08)
+
+**Yêu cầu, nguyên văn:** *"Bật luật `:has(.feedback-discussion)` để dòng thảo luận hiện ở màn không có ảnh minh hoạ"* — đây chính là nợ #224 tự ghi ở mục "Việc kế tiếp": #224 làm dòng thảo luận đúng mực, nhưng trên màn tắt ảnh minh hoạ nó vẫn nằm trong `#answerFeedback.quiz-answer-live` bị cắt còn 1×1.
+
+**Bối cảnh.** Ở chế độ ảnh `auto`, mọi câu Tình huống đều mọc một cảnh mặc định (`stageIllustrationMode`), nên `#answerFeedback` nằm ở cột phụ dưới ảnh và đọc được. Chỉ khi `gameSetup.illustrationMode = 'off'` thì `#answerFeedback` là bản `.quiz-answer-live` **duy nhất** — ô 1×1 dành cho trình đọc màn hình — và câu thảo luận — lời mời cả lớp nói — biến mất khỏi màn hình dù máy vẫn đọc.
+
+**Quyết định 1 — mở khung bằng `:has`, không thêm class thứ hai.** `.quiz-answer-live:has(.feedback-discussion)` trong `gameplay.css`. Điều kiện mở là *bên trong có khối thảo luận*, đúng thứ cần hiện; phản hồi thường (Kho báu, Đường đua, câu không có `discussionPrompt`) vẫn ẩn 1×1 nên màn chơi không mọc thêm banner ở mọi trò. Không sửa `quiz.ts`, không thêm cờ trạng thái: DOM đã nói đủ.
+
+**Quyết định 2 — `position: static` là bắt buộc.** Chỉ gỡ `clip`/`clip-path` mà giữ `position: absolute` thì khối nổi lên mép trên thay vì chen vào dòng chữ dưới lưới đáp án. `overflow: hidden auto` thắng `overflow: hidden` của luật gốc.
+
+**Quyết định 3 — trần `max-height: clamp(96px, 18vh, 190px)` + cuộn riêng.** Đo ở ba cỡ: khối mở làm `.game-stage` cao thêm **148–155px** (1366×768: 965×115; 1280×720: 970×109; 1920×1080: 970×116), và sân khấu ở các cỡ đó **vốn đã** vượt mép dưới màn. Trần theo vh (đo được 138,24 / 129,6 / 190px ở ba cỡ) giữ dòng "Gợi ý" và nút Tiếp tục trong tầm một màn; lời giải thích dài thì cuộn trong chính khối. Stress bằng khối chèn dài: cao độ dừng ở 129,6px, `scrolls: true`, **không** chồng nút Tiếp tục.
+
+**Điều đã đi kiểm.** `npm run build` rc 0 · `npx tsc --noEmit` rc 0 · `node tests/run-unit.js` **89/89** · `check:renderer-globals` 68/70 script, 1.018 hàm / 8.135 điểm gọi, 0 undefined · `verify:css` **61/61**. Trên instance riêng (CDP 9406, `--user-data-dir` TEMP): `ui-answer-mode-check` **219/219** với hai check mới — (a) tắt ảnh + có câu thảo luận: khung `position: static`, `clip-path: none`, rộng > 400px, cao > 40px, chứa trọn câu, mực `--world-ink`; (b) tắt ảnh + **không** có câu thảo luận: khung vẫn 1×1, `position: absolute`, `clip-path` khác `none`. Phép đo khung đặt ở cấp ngoài snapshot (`fbFrame`) vì màn (b) không có khối `.feedback-discussion` để bám vào. Gate anh em: `ui-game-worlds` **52/52**, `ui-game-background` **42/42**, `ui-three-game` **19/19**, `ui-house-building` **121/121**.
+
+**Không chứng minh.** Chưa so ảnh bằng mắt trong phiên này; ảnh/màu chứng minh bằng `getBoundingClientRect` + `getComputedStyle`. Chưa đo máy chiếu, màn < 720p, bản đóng gói. Không động vào nhánh AI local.
+
+**Việc kế tiếp.** Gộp #224/#225 vào 0.4.3 cùng nợ đo máy chiếu của #221/#222.
