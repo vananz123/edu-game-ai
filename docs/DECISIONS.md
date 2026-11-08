@@ -2476,3 +2476,20 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 
 **Việc kế tiếp.** (Tuỳ chọn) thêm lời nhắc lúc lưu game cũ; gộp vào 0.4.3 cùng các nợ đo của #221/#222.
 
+## #224 — Câu "Thảo luận" của Tình huống mang đúng mực câu hỏi, và khối phản hồi dưới ảnh hết chữ trắng trên nền sáng (2026-11-08)
+
+**Yêu cầu, nguyên văn:** *"Thảo luận: Vì sao giữ bí mật là nền tảng của sự tin cậy trong tình bạn? tôi cần phần này trong xử lý tình huống chữ màu đen đồng bộ màu với câu hỏi"* — dòng thảo luận trong phản hồi Tình huống phải cùng mực với câu hỏi (mực thế giới `--world-ink`), không mang màu của phần chấm điểm.
+
+**Bối cảnh — hai lỗi chồng lên nhau, không phải một.** Câu thảo luận được ghép vào chuỗi `feedback.innerHTML` dưới dạng `<br><strong>Thảo luận:</strong> …`, nên (1) nhãn `<strong>` rơi vào luật `.feedback strong { color:#0f3d2c }` / `.feedback.bad strong { color:#7c1a30 }` — xanh hoặc đỏ của kết luận đúng/sai; và (2) khi đo trên app thật, cả khối `#answerFeedback` mang `rgb(255,255,255)`: khối phản hồi dưới ảnh có class `feedback-under-illustration` **chứ không có** class `feedback`, nên toàn bộ họ luật `.modal[data-player-theme] .feedback { color: var(--world-ink) }` (navigation.css) trượt nó; nó thừa hưởng `color:#fff` của `.game-stage` và hiện **chữ trắng trên giấy sáng**. Lỗi thứ hai đã có trước yêu cầu này và ảnh hưởng mọi thế giới dùng khối "phản hồi dưới ảnh" (Tình huống, Kho báu, Đường đua, Ghép cặp), không riêng dòng thảo luận.
+
+**Quyết định 1 — câu thảo luận thành khối riêng, không phải một câu trong chuỗi.** `quiz.ts` dựng `<div class="feedback-discussion"><strong>Thảo luận:</strong> …</div>`. Một khối riêng cho phép ghim mực mà không phải giằng co độ đặc hiệu với luật của banner.
+
+**Quyết định 2 — mực đặt ở gốc, không đặt riêng cho dòng thảo luận.** `game-treasure.css` tô `var(--world-ink)` cho cả nhóm `.feedback-under-illustration` / `.stage-col:not(.is-main) > #answerFeedback` / `#matchFeedback` / `#raceSideFeedback`. Mọi chữ trong khối (dòng "Đã ghi nhận quyết định", rubric "Điểm quyết định: 6/100 (…)", lời giải, câu thảo luận) đi theo một nguồn. Sửa riêng dòng thảo luận thì ba dòng kia vẫn trắng.
+
+**Quyết định 3 — selector của khối thảo luận không đi qua `.feedback`.** `.modal[data-player-theme] :is(.feedback, .feedback-under-illustration) .feedback-discussion` — chính cái màn cần sửa là màn **không** mang `.feedback`, nên một selector gắn chặt vào `.feedback` sẽ xanh ở chỗ khác và đỏ ở đây. Dải nền trắng mờ + viền trái 3px theo `--world-accent` giữ câu thảo luận đọc như một lời mời cả lớp nói, tách khỏi phần chấm điểm, mà không dùng lại màu đúng/sai.
+
+**Điều đã đi kiểm.** `npm run build` rc 0 · `npx tsc --noEmit` rc 0 · `node tests/run-unit.js` **89/89** · `check:renderer-globals` 68/70 script, **1.018** hàm / **8.135** điểm gọi, 0 undefined · `verify:css` **61/61**. Trên instance riêng (CDP 9405, `--user-data-dir` TEMP, nạp build mới): `ui-answer-mode-check` **217/217** — hai check mới đo `#answerFeedback .feedback-discussion`: là `display:block` chứa trọn câu, và `color` = `strongColor` = `worldInk` = màu của `.stage-question` (`rgb(27,36,56)`), khác hẳn `#7c1a30`. Gate anh em: `ui-game-worlds` **52/52**, `ui-game-background` **42/42**, `ui-three-game` **19/19**, `ui-house-building` **121/121**.
+
+**Không chứng minh.** Ảnh chụp không xem bằng mắt trong phiên này — màu được chứng minh bằng `getComputedStyle` (trước khi sửa: `rgb(255,255,255)`; sau: `rgb(27,36,56)`), không bằng so ảnh. Chưa đo máy chiếu, màn hình < 720p, bản đóng gói. Màn Tình huống **không có ảnh minh hoạ** vẫn dùng `#answerFeedback.quiz-answer-live` (ẩn bằng clip) nên dòng thảo luận không hiện ở đó — nợ mở, chưa sửa trong #224 vì nằm ngoài yêu cầu.
+
+**Việc kế tiếp.** (Nợ mở) cân nhắc cho `#answerFeedback:has(.feedback-discussion)` hiện thành khối thật ở màn không có ảnh, để câu thảo luận không phụ thuộc vào việc câu hỏi có ảnh hay không.

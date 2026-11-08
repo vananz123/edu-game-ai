@@ -333,8 +333,10 @@ function chooseAnswer(question, optionId, answerText) {
     const teacherFeedback = scenario && selectedOption?.feedback
         ? selectedOption.feedback
         : question.explanation || 'Hãy ôn lại nội dung bài học.';
+    /* Khối riêng, không phải một câu trong chuỗi phản hồi: chữ phải mang đúng mực
+       của thế giới (--world-ink) chứ không bị luật `.feedback strong` nhuộm đỏ/xanh. */
     const discussion = scenario && question.discussionPrompt
-        ? `<br><strong>Thảo luận:</strong> ${escapeHtml(question.discussionPrompt)}`
+        ? `<div class="feedback-discussion"><strong>Thảo luận:</strong> ${escapeHtml(question.discussionPrompt)}</div>`
         : '';
     /* Giải thích của Đấu trường luôn mở từ nút nổi, gồm cả game legacy. */
     const explanationHtml = answerExplanationMarkup(turn, {

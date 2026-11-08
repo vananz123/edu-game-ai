@@ -280,6 +280,29 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
             marked: grid.filter(btn => btn.classList.contains('wrong')).map(btn => btn.dataset.answer),
             clickable: grid.filter(btn => !btn.disabled).length,
             feedback: fb ? String(fb.textContent).trim() : '',
+            /* Câu thảo luận của Tình huống nằm trong khối riêng (.feedback-discussion)
+               và phải mang ĐÚNG mực của câu hỏi --world-ink, không bị luật
+               .feedback strong / .feedback.bad strong nhuộm xanh hay đỏ. */
+            discussion: (function () {
+              const box = document.querySelector('#answerFeedback .feedback-discussion');
+              if (!box) return null;
+              const stage = document.querySelector('.game-stage');
+              const probe = document.createElement('span');
+              probe.style.color = 'var(--world-ink, #1b2438)';
+              stage.appendChild(probe);
+              const worldInk = getComputedStyle(probe).color;
+              probe.remove();
+              const strong = box.querySelector('strong');
+              const question = document.querySelector('.stage-question');
+              return {
+                text: String(box.textContent).trim(),
+                color: getComputedStyle(box).color,
+                strongColor: strong ? getComputedStyle(strong).color : '',
+                questionColor: question ? getComputedStyle(question).color : '',
+                worldInk,
+                block: getComputedStyle(box).display
+              };
+            })(),
             /* #213: từ phương án C, nút "Giải thích" của Đấu trường KHÔNG còn nằm
                trong bảng phản hồi — nó đứng ở khe trái của dock. Vì vậy bằng chứng
                "được quyền mở lời giải" phải đo trên CHÍNH cái nút, không đo trên chữ
@@ -1742,6 +1765,20 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
     && JSON.stringify(play.scenarioLegacyMiss?.marked) === '[]', view(play.scenarioLegacyMiss));
   check('a legacy decision still reads its own feedback',
     has(play.scenarioLegacyMiss, 'Còn rủi ro'), said(play.scenarioLegacyMiss));
+  /* Dòng "Thảo luận" phải là một khối RIÊNG, chạy hết câu thảo luận, và mang đúng
+     mực --world-ink của thế giới — kể cả nhãn in đậm, thứ mà `.feedback strong`
+     và `.feedback.bad strong` trước đây nhuộm xanh/đỏ. */
+  const disc = play.scenarioLegacyMiss?.discussion;
+  check('the discussion prompt stands as its own block with the whole sentence',
+    Boolean(disc) && disc.block === 'block' && disc.text === 'Thảo luận: Vì sao không tự rút khi dây còn ướt?',
+    JSON.stringify(disc));
+  /* Yêu cầu của chủ dự án: "chữ màu đen đồng bộ màu với câu hỏi". Nên phép đo
+     đối chiếu với CHÍNH câu hỏi (.stage-question), không với nhãn kết luận — nhãn
+     đó nằm trong banner và cũng có thể đã là mực thế giới. */
+  check('the discussion prompt is painted in the world ink, not the red of a wrong decision',
+    Boolean(disc) && disc.color === disc.worldInk && disc.strongColor === disc.worldInk
+    && disc.color === disc.questionColor && disc.color !== 'rgb(124, 26, 48)',
+    JSON.stringify(disc));
   check('Thử thách keeps a decision feedback to itself but pays the same rubric',
     play.scenarioChallengeMiss?.points === 45 && !has(play.scenarioChallengeMiss, 'Còn rủi ro'),
     said(play.scenarioChallengeMiss));

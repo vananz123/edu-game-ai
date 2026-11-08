@@ -260,6 +260,27 @@ html[data-theme="dark"] .nav-icon { background: var(--surface-2); color: #a0a8c0
 }
 .modal[data-player-theme] .feedback.bad strong { color: #7c1a30; }
 
+/* Câu thảo luận của Tình huống: mực theo thế giới, trên một dải trắng mờ để nó
+   đọc như một lời mời cả lớp nói, không phải một dòng phụ của phần chấm điểm.
+   Selector KHÔNG qua `.feedback`: khối phản hồi nằm dưới ảnh mang class
+   `.feedback-under-illustration` chứ không mang `.feedback`, nên một selector
+   gắn chặt vào `.feedback` sẽ trượt đúng cái màn cần sửa. */
+.modal[data-player-theme] :is(.feedback, .feedback-under-illustration) .feedback-discussion {
+  display: block;
+  margin-top: 10px;
+  padding: 9px 12px;
+  border-left: 3px solid var(--world-accent, #8a6d1f);
+  border-radius: 0 9px 9px 0;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--world-ink, #1b2438);
+  font-size: 1em;
+  line-height: 1.6;
+}
+.modal[data-player-theme] :is(.feedback, .feedback-under-illustration) .feedback-discussion strong {
+  color: var(--world-ink, #1b2438);
+  font-weight: 800;
+}
+
 /* The play modal scrolls on short windows; a default scrollbar on a tinted
    surface is distracting on a projector, so it gets an even thinner bar with
    muted slate colours that match the world surfaces. */

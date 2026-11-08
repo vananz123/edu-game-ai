@@ -392,6 +392,18 @@
   border-radius: 4px;
 }
 
+/* Mực của khối phản hồi dưới ảnh. Khối này KHÔNG mang class `.feedback`, nên
+   `.modal[data-player-theme] .feedback { color: var(--world-ink) }` (navigation.css)
+   không chạm tới nó: nó thừa hưởng `color: #fff` của `.game-stage` và chữ trắng
+   trên nền sáng là chữ vô hình. Đặt mực ở đây là đặt đúng gốc — mọi dòng chữ
+   bên trong (rubric, lời giải, câu thảo luận) đi theo một nguồn. */
+.modal[data-player-theme] .feedback-under-illustration,
+.modal[data-player-theme] .stage-col:not(.is-main) > #answerFeedback,
+.modal[data-player-theme] .stage-col:not(.is-main) > #matchFeedback,
+.modal[data-player-theme] .stage-col:not(.is-main) > #raceSideFeedback {
+  color: var(--world-ink, #1b2438);
+}
+
 /* Ẩn hoàn toàn khi không có nội dung */
 .modal[data-player-theme] #answerFeedback:empty,
 .modal[data-player-theme] #matchFeedback:empty,
