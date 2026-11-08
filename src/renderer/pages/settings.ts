@@ -139,6 +139,16 @@ function renderSettings() {
   // available, but only behind an explicit "advanced" choice, and the hint says
   // what it costs instead of promising speed-up.
   const gpuDetected = Array.isArray(machine.gpuNames) && machine.gpuNames.length > 0;
+  // The saved choice is a request; this is what the running process got. Saying only
+  // "đang chọn GPU" while every token was computed on the CPU is what made a saved
+  // GPU choice look broken with nothing on screen to explain it.
+  const runningBackend = machine.runtimeBackend === 'vulkan' || machine.runtimeBackend === 'cpu' ? machine.runtimeBackend : '';
+  const runtimeBackendMismatch = Boolean(runningBackend) && runningBackend !== (selectedRuntimeBackend === 'auto' ? 'cpu' : selectedRuntimeBackend);
+  const runningBackendLine = runningBackend === 'vulkan'
+    ? `GPU tích hợp (Vulkan) · ${machine.runtimeGpuLayers || 0} lớp`
+    : runningBackend === 'cpu'
+      ? 'Chỉ CPU'
+      : 'Chưa chạy';
   const runtimeBackendHint = selectedRuntimeBackend === 'vulkan'
     ? 'Tùy chọn nâng cao: AI local sẽ tải bản GPU (Vulkan) và đẩy phần đọc tài liệu sang GPU tích hợp. '
       + 'Đo trên máy phổ thông cho thấy bước đọc tài liệu dài chậm hơn CPU; hãy thử và so sánh. '
@@ -147,6 +157,9 @@ function renderSettings() {
       ? 'AI local chỉ chạy trên CPU, không dùng GPU (nhanh nhất theo đo đạc hiện tại và ổn định nhất).'
       : 'Mặc định: CPU — nhanh nhất theo đo đạc hiện tại, không cần GPU. '
         + (gpuDetected ? 'Máy có GPU tích hợp: mở "Tùy chọn nâng cao" nếu muốn thử bản Vulkan.' : '');
+  const runtimeBackendTakesEffect = (selectedRuntimeBackend === 'vulkan' && runtimeBackendMismatch)
+    ? ' Lưu xong, bấm “Tải / xác minh model và runtime” hoặc dùng lại AI local để khởi động lại runtime — AI local đang chạy giữ nguyên bộ xử lý cũ cho tới lúc đó.'
+    : '';
   // update_plan_3 §4: CPU-first release — GPU offload is never advertised as the
   // normal path, only as an advanced experiment.
   const gpuDescription = savedRuntimeBackend === 'vulkan'
@@ -256,7 +269,7 @@ function renderSettings() {
                     <option value="cpu" ${selectedRuntimeBackend==='cpu'?'selected':''}>Chỉ CPU — ổn định nhất</option>
                     <option value="vulkan" ${selectedRuntimeBackend==='vulkan'?'selected':''}>GPU tích hợp (Vulkan) — thử nghiệm, thường chậm hơn CPU</option>
                   </select>
-                  <div class="${hintCls} mt-1">${escapeHtml(runtimeBackendHint)}</div>
+                  <div class="${hintCls} mt-1">${escapeHtml(runtimeBackendHint + runtimeBackendTakesEffect)}</div>
                 </div>
               </div>
             </details>
@@ -274,6 +287,8 @@ function renderSettings() {
                 <span><b class="text-[#475569] dark:text-[#cbd5e1]">RAM:</b> ${formatBytes(machine.totalRamBytes || 0)}</span>
                 <span><b class="text-[#475569] dark:text-[#cbd5e1]">GPU:</b> ${escapeHtml(gpuDescription)}</span>
                 <span><b class="text-[#475569] dark:text-[#cbd5e1]">Bộ xử lý AI đang chọn:</b> ${escapeHtml(selectedRuntimeBackend==='vulkan'?'GPU tích hợp (Vulkan) — thử nghiệm':selectedRuntimeBackend==='cpu'?'Chỉ CPU':'CPU (mặc định)')}</span>
+                <span data-runtime-backend-running="${escapeHtml(runningBackend)}"><b class="text-[#475569] dark:text-[#cbd5e1]">Đang chạy:</b> ${escapeHtml(runningBackendLine)}${runningBackend && runningBackend !== 'vulkan' && selectedRuntimeBackend === 'vulkan' ? ' — lựa chọn GPU chưa áp dụng; sẽ đổi sau khi AI local khởi động lại' : ''}</span>
+                ${machine.runtimeFallbackReason ? `<span class="text-[#9c4808]" data-runtime-fallback-reason>GPU không khởi động được nên đã tự chuyển sang CPU: ${escapeHtml(String(machine.runtimeFallbackReason))}</span>` : ''}
                 <span><b class="text-[#475569] dark:text-[#cbd5e1]">Model đề xuất:</b> ${escapeHtml(recommendedLocalModel?.displayName || 'Chưa có đề xuất')}</span>
               </div>
               <small class="${hintCls} block mt-2">Model AI có thể tạo nội dung chưa chính xác, hãy kiểm tra trước khi sử dụng trong lớp.</small>

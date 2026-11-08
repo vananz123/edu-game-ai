@@ -71,6 +71,9 @@ const { z } = require('zod');
 markBoot('vendors');
 const { AIManager } = require('./ai-core/ai-manager');
 const { resolveCpuThreads } = require('./ai-core/runtime-threads');
+// A running runtime carries its backend in its command line, so "same model" is
+// not enough to reuse it: one pure decision, unit-tested without Electron.
+const { decideLocalRuntimeReuse } = require('./ai-core/runtime-restart');
 const { unloadMayProceed } = require('./ai-core/unload-guard');
 const { ModelInstaller, summarizeModelSelection, verifyModelFile } = require('./ai-core/model-installer');
 const { buildGenerationOptions } = require('./ai-core/generation-options');
@@ -421,6 +424,12 @@ let localEmbeddingRuntime;
 let localEmbeddingModelId;
 /** Shared start promises so two IPC calls cannot create two llama-server processes. */
 let localRuntimeStart = null;
+/**
+ * Why the running runtime is on CPU although a GPU build was asked for. Set by
+ * the start path, read once by `getLocalAiModels()` so Settings can show the
+ * reason; cleared on read so it does not outlive the start it describes.
+ */
+let localRuntimeBackendFallbackReason = null;
 let localEmbeddingStart = null;
 let localModelInstallInProgress = false;
 let quittingAfterAiShutdown = false;
@@ -1141,6 +1150,10 @@ async function getLocalAiModels() {
     ...(detectedGpu.gpu ? { gpu: detectedGpu.gpu } : {})
   };
   const recommendedModelId = recommendLocalModelId(capabilities);
+  // What the running process really got, next to the saved request: Settings
+  // showed only the choice, so "I picked Vulkan" and "it runs on CPU" could
+  // never be told apart (#186 is the same fact, read by the lesson chat).
+  const runningFacts = localRuntimeFacts();
   return {
     models: await Promise.all(QWEN_LOCAL_MODELS.map(async model => {
       let installed = false;
@@ -1186,7 +1199,12 @@ async function getLocalAiModels() {
       runtimeInstalled,
       runtimeSupported: process.platform === 'win32' && process.arch === 'x64',
       runtimeState: localAiManager ? localAiManager.getStatus().state : 'STOPPED',
-      ...(localAiModelId ? { runtimeModelId: localAiModelId } : {})
+      ...(localAiModelId ? { runtimeModelId: localAiModelId } : {}),
+      // `runtimeBackend` is only present while a runtime is READY, and is the
+      // backend that process was launched with — not the saved preference.
+      runtimeBackend: runningFacts.localRunning ? runningFacts.localBackend : null,
+      runtimeGpuLayers: runningFacts.localRunning ? runningFacts.localGpuLayers : 0,
+      ...(runningFacts.localGpuFallbackReason ? { runtimeFallbackReason: runningFacts.localGpuFallbackReason } : {})
     }
   };
 }
@@ -1313,10 +1331,6 @@ async function ensureLocalRuntime(modelId) {
 
 async function startLocalRuntimeUnlocked(modelId) {
   const model = getLocalModel(modelId);
-  if (localAiManager && localAiModelId === model.id &&
-      localAiManager.getStatus().state === 'READY') {
-    return localAiManager.getBaseUrl();
-  }
   const modelPath = localModelFilePath(model);
   assertModelFitsMachine(model);
   const runtimeInstaller = createRuntimeInstaller();
@@ -1332,6 +1346,22 @@ async function startLocalRuntimeUnlocked(modelId) {
     }
     throw new Error(`Không xác minh được model ${model.displayName}: ${error.message}. Hãy cài lại model.`);
   }
+  // The backend is part of a running runtime's identity: a Vulkan request that
+  // reused a READY CPU process never passed `--n-gpu-layers 99`, so Settings
+  // said "GPU" while every token was computed on the CPU. Decide with the real
+  // state, before anything is stopped.
+  const resolved = await resolveRuntimeForThisMachine();
+  const verdict = decideLocalRuntimeReuse({
+    state: localAiManager ? localAiManager.getStatus().state : undefined,
+    runningModelId: localAiManager ? localAiModelId : undefined,
+    modelId: model.id,
+    runningBackend: localAiManager ? localAiManager.getRuntimeFacts().backend : undefined,
+    wantedBackend: resolved.resolution.status === 'ok' ? resolved.resolution.entry.backend : null
+  });
+  if (verdict.action === 'reuse') return localAiManager.getBaseUrl();
+  if (verdict.action === 'restart') {
+    aiLogWrite('info', 'runtime.restart', { modelId: model.id, reason: verdict.reason });
+  }
   if (localAiManager) {
     const previous = localAiManager;
     localAiManager = undefined;
@@ -1344,7 +1374,7 @@ async function startLocalRuntimeUnlocked(modelId) {
   await runtimeInstaller.ensureSupportFiles();
 
   const totalThreads = Math.max(1, os.cpus().length);
-  const { resolution } = await resolveRuntimeForThisMachine();
+  const { resolution } = resolved;
   // 'auto' resolves to CPU on today's measured evidence, but the request is
   // honoured if a caller/config ever selects Vulkan: the entry is real and was
   // verified to run. Keep the CPU retry for that case, because a GPU that
@@ -1439,7 +1469,10 @@ async function startLocalRuntimeUnlocked(modelId) {
         // alone is invisible in the packaged app.
         const reason = lastError && lastError.message ? lastError.message : String(lastError);
         console.warn('GPU (Vulkan) không khởi động được; đã tự chuyển sang CPU.', reason);
+        localRuntimeBackendFallbackReason = String(reason).slice(0, 500);
         aiLog.warn('runtime.gpu-fallback', { modelId: model.id, reason: String(reason).slice(0, 500) });
+      } else {
+        localRuntimeBackendFallbackReason = null;
       }
       return manager.getBaseUrl();
     }
@@ -3283,12 +3316,27 @@ function registerIpc() {
     }
     if (localAiManager && localAiModelId === model.id &&
         localAiManager.getStatus().state === 'READY') {
-      const { settings } = await loadAiSettingsWithMigration(await readJson(SETTINGS_FILE(), {}));
-      // #132: the active provider is the local one whenever a teacher runs it.
-      settings.ai = { ...settings.ai, mode: 'local', localModelId: model.id, provider: 'local' };
-      await writeJson(SETTINGS_FILE(), settings);
-      aiLogWrite('info', 'runtime.reuse', { modelId: model.id, state: localAiManager.getStatus().state });
-      return { ok: true, baseUrl: localAiManager.getBaseUrl(), models: await getLocalAiModels() };
+      // The fast path above skips the resolver, so it must also skip a runtime
+      // whose backend no longer matches Settings: "Bắt đầu chạy" after switching
+      // to Vulkan has to spawn the GPU build, not hand back the CPU one.
+      const { resolution } = await resolveRuntimeForThisMachine();
+      const verdict = decideLocalRuntimeReuse({
+        state: localAiManager.getStatus().state,
+        runningModelId: localAiModelId,
+        modelId: model.id,
+        runningBackend: localAiManager.getRuntimeFacts().backend,
+        wantedBackend: resolution.status === 'ok' ? resolution.entry.backend : null
+      });
+      if (verdict.action === 'reuse') {
+        const { settings } = await loadAiSettingsWithMigration(await readJson(SETTINGS_FILE(), {}));
+        // #132: the active provider is the local one whenever a teacher runs it.
+        settings.ai = { ...settings.ai, mode: 'local', localModelId: model.id, provider: 'local' };
+        await writeJson(SETTINGS_FILE(), settings);
+        aiLogWrite('info', 'runtime.reuse', { modelId: model.id, state: localAiManager.getStatus().state, backend: verdict.backend });
+        return { ok: true, baseUrl: localAiManager.getBaseUrl(), models: await getLocalAiModels() };
+      }
+      // Falls through to `ensureLocalRuntime`, whose own verdict restarts it.
+      aiLogWrite('info', 'runtime.restart', { modelId: model.id, reason: verdict.reason, source: 'start-local-runtime' });
     }
     if (event.sender && !event.sender.isDestroyed()) {
       event.sender.send('ai:local-progress', { stage: 'starting', modelId: model.id, receivedBytes: 0, totalBytes: 1, bytesPerSecond: 0 });
@@ -3660,12 +3708,32 @@ function localRuntimeFacts() {
   // can start on CPU after a failed Vulkan attempt and the chat must not then
   // promise a whole giáo án the runtime cannot hold (#186).
   let localOnGpu = false;
+  let localBackend = '';
+  let localGpuLayers = 0;
   try {
-    localOnGpu = running && localAiManager!.getRuntimeFacts().gpuLayers > 0;
+    if (running) {
+      const facts = localAiManager!.getRuntimeFacts();
+      localBackend = String(facts.backend || '');
+      localGpuLayers = Number(facts.gpuLayers) || 0;
+      localOnGpu = localGpuLayers > 0;
+    }
   } catch {
     localOnGpu = false;
+    localBackend = '';
+    localGpuLayers = 0;
   }
-  return { localRunning: running, localModelReady, localOnGpu };
+  // Set by the start path when a Vulkan attempt failed and CPU took over, so
+  // Settings can say why instead of leaving the request and reality apart.
+  const lastBackendFallbackReason = localRuntimeBackendFallbackReason;
+  localRuntimeBackendFallbackReason = null;
+  return {
+    localRunning: running,
+    localModelReady,
+    localOnGpu,
+    localBackend,
+    localGpuLayers,
+    localGpuFallbackReason: lastBackendFallbackReason
+  };
 }
 
 /**

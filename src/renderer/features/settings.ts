@@ -1,21 +1,20 @@
 // @ts-nocheck -- migrated legacy UI logic; new contracts are typed in src/shared/types.ts.
 /**
- * The backend the teacher picked in Settings.
+ * The backend the teacher picked in Settings: always `'auto'|'cpu'|'vulkan'`.
  *
- * Returns `'cpu'`/`'vulkan'` for an explicit choice, and `undefined` for
- * "Tự động" (or when the select is not rendered). Returning `undefined` on
- * purpose rather than `'auto'` matters twice over: the key disappears from the
- * saved file (the main process round-trips settings through
- * `JSON.parse(JSON.stringify(...))`, which drops `undefined` values), so
- * switching back from Vulkan really clears the preference instead of leaving the
- * old value in place; and "no preference" stays defined in exactly one place,
- * the resolver.
+ * It never returns `undefined`. Main merges `ai` deeply, but the whole settings
+ * file round-trips through `JSON.stringify`, which drops `undefined` keys — so a
+ * save that sent `undefined` for a select that is not on screen (or reads
+ * "Tự động") silently ERASED a saved Vulkan choice, and the next local task ran
+ * on CPU. `testAiProvider` below made it worse: "Kiểm tra kết nối" saved the
+ * form without this field at all. Sending the value on every save keeps the
+ * stored choice and the select in step; "no preference" is then `'auto'`,
+ * resolved in exactly one place, the resolver.
  */
 function readRuntimeBackendSelection() {
   const select = $('#localRuntimeBackendSelect');
-  if (!select) return undefined;
-  const value = select.value;
-  return value === 'cpu' || value === 'vulkan' ? value : undefined;
+  const value = select ? select.value : '';
+  return value === 'cpu' || value === 'vulkan' ? value : 'auto';
 }
 /**
  * #132: the settings form sends only what changed, and never a stored key.
@@ -105,8 +104,9 @@ async function testAiProvider(providerId) {
   if (button) { button.disabled = true; button.textContent = 'Đang kiểm tra…'; }
   try {
     // Save what the form shows first: a test must check the values the teacher sees,
-    // not the previous saved state.
-    await window.eduGame.saveSettings({ ai: { ...state.settings.ai, providers: readAiProviderPatches() }, preferences: state.settings.preferences });
+    // not the previous saved state. `runtimeBackend` travels with it: this save used
+    // to omit the key, which dropped a saved GPU choice from the file.
+    await window.eduGame.saveSettings({ ai: { ...state.settings.ai, runtimeBackend: readRuntimeBackendSelection(), providers: readAiProviderPatches() }, preferences: state.settings.preferences });
     const result = await window.eduGame.testAiProvider({ providerId: id });
     state.settings = (result && result.settings) || await window.eduGame.getSettings();
     toast(`Kết nối ${(aiProviderView(id) || {}).label || id} thành công (${result.durationMs} ms).`);
@@ -129,7 +129,7 @@ async function saveAiProviderKey(providerId) {
   try {
     // The key save sends the form as it stands: a base URL or model typed just
     // before the key must not be lost when the page re-renders afterwards.
-    const request = window.eduGame.saveSettings({ ai: { ...state.settings.ai, providers: { ...readAiProviderPatches(), [providerId]: { ...(readAiProviderPatches()[providerId] || {}), apiKey: input.value.trim() } } }, preferences: state.settings.preferences });
+    const request = window.eduGame.saveSettings({ ai: { ...state.settings.ai, runtimeBackend: readRuntimeBackendSelection(), providers: { ...readAiProviderPatches(), [providerId]: { ...(readAiProviderPatches()[providerId] || {}), apiKey: input.value.trim() } } }, preferences: state.settings.preferences });
     aiKeySaveInFlight = request;
     const result = await request;
     state.settings = (result && result.settings) || await window.eduGame.getSettings();

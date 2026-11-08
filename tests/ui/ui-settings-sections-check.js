@@ -102,6 +102,9 @@ const SCENARIO = String.raw`(async () => {
     largeText: Boolean(document.querySelector('#settingLargeText')),
     sound: Boolean(document.querySelector('#settingSound')),
     runtimeBackend: Boolean(document.querySelector('#localRuntimeBackendSelect')),
+    // The saved backend is a request; the running one is a fact. Both must be on
+    // screen, or "I chose GPU but it still runs CPU" has nothing to point at.
+    runtimeBackendRunning: Boolean(document.querySelector('[data-runtime-backend-running]')),
     aiTaskList: Boolean(document.querySelector('#aiTaskList')),
     diagnosticsInfo: Boolean(document.querySelector('#diagnosticsInfo')),
     // #204: the About markup is built with the page, not on first open — paintAboutPanel
