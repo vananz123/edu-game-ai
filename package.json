@@ -38,6 +38,7 @@
     "test:ui": "node tests/ui/ui-setup-fullscreen-check.js",
     "build:icons": "node scripts/build-icon-data.js",
     "build:icons:check": "node scripts/build-icon-data.js --check",
+    "check:game-background-ui": "node tests/ui/ui-game-background-check.js",
     "check:stage-illustration-ui": "node tests/ui/ui-stage-illustration-check.js",
     "check:play-surface-ui": "node tests/ui/ui-play-surface-check.js",
     "check:offline-packaged": "node tests/ui/offline-packaged-check.js",

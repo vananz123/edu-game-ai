@@ -34,9 +34,9 @@
 /* Mọi sân khấu có thế giới đều nhận nền theo biến. */
 .modal[data-player-theme][data-game-world],
 .modal[data-player-theme] .game-stage[data-game-world] {
-  --world-stage-bg: radial-gradient(1100px 520px at 50% -12%, #2b2a63 0%, transparent 62%),
-    radial-gradient(760px 420px at 100% 108%, #1d2a52 0%, transparent 60%),
-    linear-gradient(180deg, #141a35 0%, #0f1428 100%);
+  --world-stage-bg: radial-gradient(1100px 520px at 50% -12%, #dfe6ff 0%, transparent 62%),
+    radial-gradient(760px 420px at 100% 108%, #e7ecff 0%, transparent 60%),
+    linear-gradient(180deg, #f7f9ff 0%, #eef2fd 100%);
 }
 
 /* Thẻ thế giới: dải băng nhỏ ở đầu sân khấu, đổi chữ và màu theo trò chơi. */
@@ -48,9 +48,9 @@
   margin: 0 0 10px;
   padding: 3px 11px 3px 9px;
   border-radius: 999px;
-  border: 1px solid var(--world-tag-border, rgba(255, 255, 255, 0.14));
-  background: var(--world-tag-bg, rgba(255, 255, 255, 0.06));
-  color: var(--world-accent, #b3adff);
+  border: 1px solid var(--world-tag-border, rgba(23, 32, 51, 0.16));
+  background: var(--world-tag-bg, rgba(23, 32, 51, 0.05));
+  color: var(--world-accent-ink, #8a4b06);
   font-family: var(--font-play-board);
   font-size: 10px;
   font-weight: 800;
@@ -65,14 +65,14 @@
   width: 18px;
   height: 18px;
   border-radius: 999px;
-  background: var(--world-accent-soft, rgba(179, 173, 255, 0.16));
+  background: var(--world-accent-soft, rgba(23, 32, 51, 0.08));
   font-size: 11px;
   letter-spacing: 0;
 }
 .stage-world-sub {
   padding-left: 9px;
-  border-left: 1px solid var(--world-tag-border, rgba(255, 255, 255, 0.14));
-  color: var(--world-meta, #a9b1cd);
+  border-left: 1px solid var(--world-tag-border, rgba(23, 32, 51, 0.16));
+  color: var(--world-meta, #4b5675);
   font-family: var(--world-font, inherit);
   font-weight: 650;
   letter-spacing: 0.4px;
@@ -87,8 +87,8 @@ html[data-fullscreen="1"] .stage-world-sub { display: none; }
   margin-bottom: 5px;
   padding: 2px 9px;
   border-radius: 999px;
-  background: var(--world-accent-soft, rgba(179, 173, 255, 0.16));
-  color: var(--world-accent, #b3adff);
+  background: var(--world-accent-soft, rgba(23, 32, 51, 0.08));
+  color: var(--world-accent-ink, #8a4b06);
   /* 10px is the floor the play-surface check enforces for painted text. */
   font-size: 10px;
   font-weight: 800;
@@ -119,62 +119,70 @@ html[data-fullscreen="1"] .stage-world-sub { display: none; }
 
 /* Thanh tiêu đề của thẻ chơi: cùng accent với thế giới. */
 .modal[data-player-theme][data-game-world] .play-head {
-  border-bottom: 2px solid var(--world-accent, #3a4266);
-  background: var(--world-head-bg, #11152b);
+  border-bottom: 2px solid var(--world-head-border, var(--world-accent, #8a6d1f));
+  background: var(--world-head-bg, #ffffff);
+  color: var(--world-ink, #1b2438);
 }
+.modal[data-player-theme][data-game-world] .play-head-sub { color: var(--world-meta, #46527a); }
 
 /* ---------- 1. Quiz — phòng thi giấy kẻ ô, mực navy, nhấn hổ phách ----------
    Scenario dùng CHUNG thế giới nền/chữ với quiz (cùng engine trắc nghiệm, chỉ
    khác cách trình bày); điểm nhận diện của scenario nằm ở màu khung tình huống
    và chữ nghiêng bên dưới, không phải một bảng biến riêng. Nhờ vậy stage chỉ cần
    `data-game-world="quiz"` là đủ, kể cả khi câu scenario nằm lẫn trong game quiz
-   (data-game và data-game-world không còn phải trùng nhau). */
+   (data-game và data-game-world không còn phải trùng nhau).
+
+   Nền SÁNG từ #220: chữ là mực đậm trên giấy kem, còn `--world-accent` là màu
+   NHẤN dùng cho viền/thanh tiến trình — chữ accent phải dùng
+   `--world-accent-ink` (đậm hơn hẳn) mới đạt 4.5:1. */
 .modal[data-player-theme] .game-stage[data-game="quiz"],
 .modal[data-player-theme] .game-stage[data-game="scenario"] {
-  --world-ink: #f1ead9;
+  --world-ink: #1b2438;
   --world-accent: #f2b24a;
-  --world-accent-soft: rgba(242, 178, 74, 0.16);
-  --world-meta: #c3b9a3;
-  --world-focus: #ffd48a;
-  --world-focus-soft: rgba(242, 178, 74, 0.42);
+  --world-accent-ink: #8a4b06;
+  --world-accent-soft: rgba(242, 178, 74, 0.2);
+  --world-meta: #4b5675;
+  --world-focus: #b8791a;
+  --world-focus-soft: rgba(242, 178, 74, 0.45);
   --world-display: 'Segoe UI', 'Be Vietnam Pro', Georgia, sans-serif;
   --world-display-weight: 700;
   --world-display-tracking: 0px;
   --world-font: 'Segoe UI', 'Be Vietnam Pro', Calibri, Tahoma, sans-serif;
-  --world-stage-border: #3c3524;
+  --world-stage-border: #e2d6b8;
   --world-stage-bg:
-    radial-gradient(900px 460px at 12% -10%, rgba(242, 178, 74, 0.16), transparent 60%),
-    radial-gradient(780px 420px at 100% 105%, rgba(58, 96, 128, 0.28), transparent 62%),
-    linear-gradient(180deg, #1a2230 0%, #131a26 100%);
-  --world-texture: repeating-linear-gradient(0deg, transparent 0 27px, rgba(255, 255, 255, 0.055) 27px 28px);
-  --world-texture-opacity: 0.9;
-  --world-texture-blend: screen;
-  --world-chip-bg: #222b3b;
-  --world-chip-border: #3f4a5e;
-  --world-chip-ink: #e6dcc8;
-  --world-track-bg: #263042;
-  --world-progress: linear-gradient(90deg, #f2b24a, #ffe2a1);
-  --world-progress-glow: 0 0 14px rgba(242, 178, 74, 0.42);
-  --world-option-bg: linear-gradient(180deg, #232c3c 0%, #1b2330 100%);
-  --world-option-border: #3b4759;
+    radial-gradient(900px 460px at 12% -10%, rgba(242, 178, 74, 0.22), transparent 60%),
+    radial-gradient(780px 420px at 100% 105%, rgba(58, 96, 128, 0.12), transparent 62%),
+    linear-gradient(180deg, #fdfaf2 0%, #f7f2e6 100%);
+  --world-texture: repeating-linear-gradient(0deg, transparent 0 27px, rgba(58, 72, 100, 0.09) 27px 28px);
+  --world-texture-opacity: 1;
+  --world-texture-blend: multiply;
+  --world-chip-bg: #ffffff;
+  --world-chip-border: #d8cfb8;
+  --world-chip-ink: #2b3550;
+  --world-track-bg: #e7e0cf;
+  --world-progress: linear-gradient(90deg, #c98a1c, #f2b24a);
+  --world-progress-glow: 0 0 10px rgba(201, 138, 28, 0.28);
+  --world-option-bg: linear-gradient(180deg, #ffffff 0%, #fbf8f0 100%);
+  --world-option-border: #d7ceb6;
   --world-option-border-w: 1px 1px 1px 4px;
-  --world-option-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  --world-option-hover-border: #f2b24a;
-  --world-option-hover-bg: linear-gradient(180deg, #2b3546 0%, #212a39 100%);
-  --world-option-hover-shadow: 0 10px 24px rgba(242, 178, 74, 0.22);
-  --world-soft-bg: rgba(242, 178, 74, 0.1);
-  --world-card-hover-border: #f2b24a;
-  --world-card-hover-bg: linear-gradient(180deg, #2b3546 0%, #212a39 100%);
-  --world-card-selected-border: #f2b24a;
-  --world-card-selected-bg: linear-gradient(180deg, #3a3427 0%, #2a261c 100%);
-  --world-tag-bg: rgba(242, 178, 74, 0.12);
-  --world-tag-border: rgba(242, 178, 74, 0.35);
-  --world-head-bg: linear-gradient(180deg, #151d29, #111824);
-  --world-scroll: #131a26;
+  --world-option-shadow: 0 1px 2px rgba(46, 38, 20, 0.08);
+  --world-option-hover-border: #c98a1c;
+  --world-option-hover-bg: linear-gradient(180deg, #fffdf7 0%, #fbf2dd 100%);
+  --world-option-hover-shadow: 0 8px 20px rgba(201, 138, 28, 0.18);
+  --world-soft-bg: rgba(242, 178, 74, 0.16);
+  --world-card-hover-border: #c98a1c;
+  --world-card-hover-bg: linear-gradient(180deg, #fffdf7 0%, #fbf2dd 100%);
+  --world-card-selected-border: #c98a1c;
+  --world-card-selected-bg: linear-gradient(180deg, #fdf1d4 0%, #f8e6bc 100%);
+  --world-tag-bg: rgba(242, 178, 74, 0.18);
+  --world-tag-border: rgba(160, 104, 16, 0.34);
+  --world-head-bg: linear-gradient(180deg, #ffffff, #fbf7ee);
+  --world-head-border: #e2d6b8;
+  --world-scroll: #f7f2e6;
 }
 .modal[data-player-theme] .game-stage[data-game-world] .stage-question {
   padding-left: 18px;
-  border-left: 3px solid rgba(242, 178, 74, 0.55);
+  border-left: 3px solid rgba(201, 138, 28, 0.55);
   text-align: left;
 }
 /* Scenario: khung tình huống là "trang sổ tay" — nghiêng, viền trái phẳng. */
@@ -187,178 +195,187 @@ html[data-fullscreen="1"] .stage-world-sub { display: none; }
   border-left-color: transparent;
 }
 
-/* ---------- 3. Matching — bảng nỉ xanh, thẻ giấy trắng, nhấn vàng phấn ---------- */
+/* ---------- 3. Matching — bảng giấy xanh, thẻ giấy trắng, nhấn xanh rêu ----------
+   #220 đổi bảng nỉ ĐẬM thành mặt giấy SÁNG: thẻ ghép vốn đã là giấy trắng nên
+   thẻ không phải đổi, chỉ có nền, mực và chữ nhấn là đổi theo. */
 .modal[data-player-theme] .game-stage[data-game="matching"] {
-  --world-ink: #f4f7ee;
-  --world-accent: #ffd86b;
-  --world-accent-soft: rgba(255, 216, 107, 0.18);
-  --world-meta: #b8cdbf;
-  --world-focus: #ffe9a8;
-  --world-focus-soft: rgba(255, 216, 107, 0.42);
+  --world-ink: #17251f;
+  --world-accent: #7cc4a2;
+  --world-accent-ink: #1b5c45;
+  --world-accent-soft: rgba(44, 122, 92, 0.16);
+  --world-meta: #3f5a4f;
+  --world-focus: #1b5c45;
+  --world-focus-soft: rgba(44, 122, 92, 0.42);
   --world-display: 'Segoe UI', 'Be Vietnam Pro', Calibri, sans-serif;
   --world-display-weight: 700;
   --world-display-tracking: 0px;
   --world-font: 'Segoe UI', 'Be Vietnam Pro', Calibri, Tahoma, sans-serif;
-  --world-stage-border: #23463a;
+  --world-stage-border: #c9dccf;
   --world-stage-bg:
-    radial-gradient(900px 500px at 50% -14%, rgba(94, 176, 138, 0.22), transparent 64%),
-    radial-gradient(700px 420px at 105% 108%, rgba(17, 60, 47, 0.6), transparent 60%),
-    linear-gradient(180deg, #17453a 0%, #0f3329 100%);
+    radial-gradient(900px 500px at 50% -14%, rgba(124, 196, 162, 0.34), transparent 64%),
+    radial-gradient(700px 420px at 105% 108%, rgba(27, 92, 69, 0.12), transparent 60%),
+    linear-gradient(180deg, #f2faf5 0%, #e6f3ea 100%);
   --world-texture:
-    radial-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, transparent 49.5%, rgba(0, 0, 0, 0.18) 49.5% 50.5%, transparent 50.5%);
+    radial-gradient(rgba(27, 92, 69, 0.09) 1px, transparent 1px),
+    linear-gradient(90deg, transparent 49.5%, rgba(27, 92, 69, 0.06) 49.5% 50.5%, transparent 50.5%);
   --world-texture-size: 5px 5px, 240px auto;
-  --world-texture-opacity: 0.75;
-  --world-chip-bg: #1d4d40;
-  --world-chip-border: #3d6f5d;
-  --world-chip-ink: #e3f2e8;
-  --world-track-bg: #1b493c;
-  --world-progress: linear-gradient(90deg, #ffd86b, #fff1bf);
-  --world-progress-glow: 0 0 14px rgba(255, 216, 107, 0.4);
-  --world-option-bg: linear-gradient(180deg, #2a6a56 0%, #215545 100%);
-  --world-option-border: rgba(255, 255, 255, 0.16);
+  --world-texture-opacity: 0.85;
+  --world-chip-bg: #ffffff;
+  --world-chip-border: #c3d9cb;
+  --world-chip-ink: #21402f;
+  --world-track-bg: #d9e8de;
+  --world-progress: linear-gradient(90deg, #1b5c45, #4fae86);
+  --world-progress-glow: 0 0 10px rgba(27, 92, 69, 0.22);
+  --world-option-bg: linear-gradient(180deg, #ffffff 0%, #f4fbf7 100%);
+  --world-option-border: #c8dcd0;
   --world-option-border-w: 1px;
-  --world-option-shadow: 0 3px 0 rgba(0, 0, 0, 0.24);
-  --world-option-hover-border: #ffd86b;
-  --world-option-hover-bg: linear-gradient(180deg, #337a63 0%, #276250 100%);
-  --world-option-hover-shadow: 0 6px 0 rgba(0, 0, 0, 0.22);
-  --world-soft-bg: rgba(255, 255, 255, 0.07);
-  --world-card-hover-border: #ffd86b;
-  --world-card-hover-bg: linear-gradient(180deg, #2f8a6f 0%, #27705b 100%);
-  --world-card-selected-border: #ffd86b;
-  --world-card-selected-bg: linear-gradient(180deg, #3a3b26 0%, #2d2f1e 100%);
-  --world-tag-bg: rgba(255, 216, 107, 0.14);
-  --world-tag-border: rgba(255, 216, 107, 0.34);
-  --world-head-bg: linear-gradient(180deg, #174537, #123a2f);
-  --world-scroll: #0f3329;
+  --world-option-shadow: 0 2px 0 rgba(27, 92, 69, 0.12);
+  --world-option-hover-border: #2c7a5c;
+  --world-option-hover-bg: linear-gradient(180deg, #ffffff 0%, #e7f6ee 100%);
+  --world-option-hover-shadow: 0 6px 0 rgba(27, 92, 69, 0.14);
+  --world-soft-bg: rgba(27, 92, 69, 0.07);
+  --world-card-hover-border: #2c7a5c;
+  --world-card-hover-bg: linear-gradient(180deg, #ffffff 0%, #e7f6ee 100%);
+  --world-card-selected-border: #b8860b;
+  --world-card-selected-bg: linear-gradient(180deg, #fff8da 0%, #f9edb8 100%);
+  --world-tag-bg: rgba(44, 122, 92, 0.12);
+  --world-tag-border: rgba(27, 92, 69, 0.28);
+  --world-head-bg: linear-gradient(180deg, #ffffff, #f2faf5);
+  --world-head-border: #c9dccf;
+  --world-scroll: #e6f3ea;
 }
-/* Thẻ ghép giống miếng giấy ghim lên nỉ: góc trắng, đổ bóng ngắn. */
+/* Thẻ ghép giống miếng giấy ghim lên bảng: góc trắng, đổ bóng ngắn. */
 .modal[data-player-theme] .game-stage[data-game="matching"] .match-card {
   background: linear-gradient(180deg, #fdfbf2 0%, #f1ecda 100%);
-  color: #22322c;
-  border-color: #dcd2b8;
-  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.22), 0 8px 16px rgba(0, 0, 0, 0.14);
+  color: #1b2a24;
+  border-color: #d3cfb9;
+  box-shadow: 0 2px 0 rgba(27, 92, 69, 0.16), 0 6px 14px rgba(24, 48, 36, 0.1);
 }
 .modal[data-player-theme] .game-stage[data-game="matching"] .match-card:hover:not(:disabled) {
-  border-color: #ffd86b;
+  border-color: #2c7a5c;
   background: linear-gradient(180deg, #ffffff 0%, #f6f1de 100%);
 }
 .modal[data-player-theme] .game-stage[data-game="matching"] .match-card.selected {
-  border-color: #e2a800;
+  border-color: #b8860b;
   background: linear-gradient(180deg, #fff4c9 0%, #f7e6a2 100%);
-  box-shadow: 0 0 0 3px rgba(255, 216, 107, 0.55), 0 6px 0 rgba(0, 0, 0, 0.2);
+  box-shadow: 0 0 0 3px rgba(184, 134, 11, 0.4), 0 4px 0 rgba(27, 92, 69, 0.14);
 }
-/* Lật thẻ ghi nhớ: ô úp là nỉ đậm in dấu ?, ô ngửa là giấy trắng. */
+/* Lật thẻ ghi nhớ: ô úp là mặt xanh đậm in dấu ?, ô ngửa là giấy trắng. */
 .modal[data-player-theme] .game-stage[data-game="matching"] .memory-card {
-  background: linear-gradient(135deg, #1f5a4a 0%, #174538 100%);
-  border-color: rgba(255, 216, 107, 0.35);
+  background: linear-gradient(135deg, #2c7a5c 0%, #1f5f47 100%);
+  border-color: rgba(27, 92, 69, 0.4);
+  color: #f2fff8;
 }
 .modal[data-player-theme] .game-stage[data-game="matching"] .memory-card.flipped {
   background: linear-gradient(180deg, #fdfbf2 0%, #efe9d6 100%);
-  color: #22322c;
-  border-color: #e2a800;
+  color: #1b2a24;
+  border-color: #b8860b;
 }
 .modal[data-player-theme] .game-stage[data-game="matching"] .group-box {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.72);
+  border-color: rgba(27, 92, 69, 0.3);
 }
-.modal[data-player-theme] .game-stage[data-game="matching"] .group-box strong { color: #ffd86b; }
+.modal[data-player-theme] .game-stage[data-game="matching"] .group-box strong { color: #1b5c45; }
 
-/* ---------- 4. Treasure — bản đồ giấy da, mực nâu, nhấn vàng kim ---------- */
+/* ---------- 4. Treasure — giấy da sáng, mực nâu, nhấn vàng kim ---------- */
 .modal[data-player-theme] .game-stage[data-game="treasure"] {
-  --world-ink: #f6ecd6;
+  --world-ink: #2a2117;
   --world-accent: #e9b95b;
-  --world-accent-soft: rgba(233, 185, 91, 0.18);
-  --world-meta: #cbb894;
-  --world-focus: #ffe0a0;
-  --world-focus-soft: rgba(233, 185, 91, 0.42);
+  --world-accent-ink: #7c4a0c;
+  --world-accent-soft: rgba(233, 185, 91, 0.22);
+  --world-meta: #5b4a33;
+  --world-focus: #8a5a12;
+  --world-focus-soft: rgba(233, 185, 91, 0.45);
   --world-display: Georgia, 'Times New Roman', 'Segoe UI', serif;
   --world-display-weight: 700;
   --world-display-tracking: 0px;
   --world-font: 'Segoe UI', 'Be Vietnam Pro', Calibri, Tahoma, sans-serif;
-  --world-stage-border: #4a3a22;
+  --world-stage-border: #e0d2b0;
   --world-stage-bg:
-    radial-gradient(940px 520px at 16% -12%, rgba(233, 185, 91, 0.2), transparent 62%),
-    radial-gradient(820px 460px at 104% 106%, rgba(89, 54, 26, 0.55), transparent 60%),
-    linear-gradient(180deg, #2b2117 0%, #1d160f 100%);
+    radial-gradient(940px 520px at 16% -12%, rgba(233, 185, 91, 0.32), transparent 62%),
+    radial-gradient(820px 460px at 104% 106%, rgba(139, 96, 48, 0.14), transparent 60%),
+    linear-gradient(180deg, #fdf8ec 0%, #f5ecd8 100%);
   --world-texture:
-    repeating-linear-gradient(92deg, rgba(255, 236, 200, 0.04) 0 2px, transparent 2px 7px),
-    radial-gradient(rgba(0, 0, 0, 0.18) 1px, transparent 1.6px);
+    repeating-linear-gradient(92deg, rgba(124, 74, 12, 0.045) 0 2px, transparent 2px 7px),
+    radial-gradient(rgba(124, 74, 12, 0.12) 1px, transparent 1.6px);
   --world-texture-size: auto, 6px 6px;
   --world-texture-opacity: 1;
-  --world-chip-bg: #35291b;
-  --world-chip-border: #5c4729;
-  --world-chip-ink: #f2e2c4;
-  --world-track-bg: #3a2d1d;
-  --world-progress: linear-gradient(90deg, #c98f33, #f7d995);
-  --world-progress-glow: 0 0 16px rgba(233, 185, 91, 0.5);
-  --world-option-bg: linear-gradient(180deg, #3a2d1d 0%, #2e2416 100%);
-  --world-option-border: #5d4a2c;
-  --world-option-shadow: inset 0 1px 0 rgba(255, 236, 200, 0.07);
-  --world-option-hover-border: #e9b95b;
-  --world-option-hover-bg: linear-gradient(180deg, #473724 0%, #372b1b 100%);
-  --world-option-hover-shadow: 0 10px 24px rgba(233, 185, 91, 0.22);
-  --world-soft-bg: rgba(233, 185, 91, 0.1);
-  --world-card-hover-border: #e9b95b;
-  --world-card-hover-bg: linear-gradient(180deg, #473724 0%, #372b1b 100%);
-  --world-card-selected-border: #e9b95b;
-  --world-card-selected-bg: linear-gradient(180deg, #56442a 0%, #42331f 100%);
-  --world-tag-bg: rgba(233, 185, 91, 0.14);
-  --world-tag-border: rgba(233, 185, 91, 0.36);
-  --world-head-bg: linear-gradient(180deg, #2a2016, #241c13);
-  --world-scroll: #1d160f;
+  --world-chip-bg: #ffffff;
+  --world-chip-border: #ddcaa4;
+  --world-chip-ink: #3d2f1d;
+  --world-track-bg: #e8dcc4;
+  --world-progress: linear-gradient(90deg, #a8701c, #e9b95b);
+  --world-progress-glow: 0 0 10px rgba(168, 112, 28, 0.26);
+  --world-option-bg: linear-gradient(180deg, #ffffff 0%, #fdf8ec 100%);
+  --world-option-border: #ddcaa4;
+  --world-option-shadow: 0 1px 2px rgba(74, 54, 24, 0.1);
+  --world-option-hover-border: #a8701c;
+  --world-option-hover-bg: linear-gradient(180deg, #fffdf7 0%, #fbf0d6 100%);
+  --world-option-hover-shadow: 0 8px 20px rgba(168, 112, 28, 0.18);
+  --world-soft-bg: rgba(233, 185, 91, 0.18);
+  --world-card-hover-border: #a8701c;
+  --world-card-hover-bg: linear-gradient(180deg, #fffdf7 0%, #fbf0d6 100%);
+  --world-card-selected-border: #a8701c;
+  --world-card-selected-bg: linear-gradient(180deg, #fdf0cf 0%, #f6e2b3 100%);
+  --world-tag-bg: rgba(233, 185, 91, 0.2);
+  --world-tag-border: rgba(124, 74, 12, 0.3);
+  --world-head-bg: linear-gradient(180deg, #ffffff, #fdf8ec);
+  --world-head-border: #e0d2b0;
+  --world-scroll: #f5ecd8;
 }
 
-/* ---------- 5. Race — chặng đua đêm, cờ kẻ sọc, nhấn cam đua ---------- */
+/* ---------- 5. Race — đường đua ban ngày, cờ kẻ sọc, nhấn cam đua ---------- */
 .modal[data-player-theme] .game-stage[data-game="race"] {
-  --world-ink: #eef4ff;
+  --world-ink: #17203a;
   --world-accent: #ff8a3d;
-  --world-accent-soft: rgba(255, 138, 61, 0.18);
-  --world-meta: #a9b6cf;
-  --world-focus: #ffc59b;
+  --world-accent-ink: #9a3d05;
+  --world-accent-soft: rgba(255, 138, 61, 0.2);
+  --world-meta: #46527a;
+  --world-focus: #b64a0a;
   --world-focus-soft: rgba(255, 138, 61, 0.42);
   --world-display: 'Segoe UI', 'Be Vietnam Pro', Arial, sans-serif;
   --world-display-weight: 700;
   --world-display-tracking: 0px;
   --world-font: 'Segoe UI', 'Be Vietnam Pro', Calibri, Tahoma, sans-serif;
-  --world-stage-border: #283047;
+  --world-stage-border: #d5dcf0;
   --world-stage-bg:
-    radial-gradient(1000px 520px at 50% -16%, rgba(255, 138, 61, 0.16), transparent 62%),
-    radial-gradient(720px 400px at 102% 104%, rgba(66, 220, 255, 0.14), transparent 60%),
-    linear-gradient(180deg, #141a2c 0%, #0d1120 100%);
+    radial-gradient(1000px 520px at 50% -16%, rgba(255, 138, 61, 0.22), transparent 62%),
+    radial-gradient(720px 400px at 102% 104%, rgba(38, 150, 186, 0.14), transparent 60%),
+    linear-gradient(180deg, #f5f8ff 0%, #e9eefb 100%);
   --world-texture:
-    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.035) 0 18px, transparent 18px 36px);
-  --world-texture-opacity: 0.55;
-  --world-chip-bg: #1f2740;
-  --world-chip-border: #38446180;
-  --world-chip-ink: #dbe4f7;
-  --world-track-bg: #1c2439;
-  --world-progress: linear-gradient(90deg, #ff8a3d, #42dcff);
-  --world-progress-glow: 0 0 16px rgba(255, 138, 61, 0.5);
-  --world-option-bg: linear-gradient(180deg, #252e46 0%, #1c2336 100%);
-  --world-option-border: #3a4560;
-  --world-option-shadow: none;
-  --world-option-hover-border: #ff8a3d;
-  --world-option-hover-bg: linear-gradient(180deg, #2f3a56 0%, #232c43 100%);
-  --world-option-hover-shadow: 0 10px 24px rgba(255, 138, 61, 0.26);
-  --world-soft-bg: rgba(255, 138, 61, 0.1);
-  --world-card-hover-border: #ff8a3d;
-  --world-card-hover-bg: linear-gradient(180deg, #2f3a56 0%, #232c43 100%);
-  --world-card-selected-border: #ff8a3d;
-  --world-card-selected-bg: linear-gradient(180deg, #3a3040 0%, #2a2433 100%);
-  --world-tag-bg: rgba(255, 138, 61, 0.14);
-  --world-tag-border: rgba(255, 138, 61, 0.36);
-  --world-head-bg: linear-gradient(180deg, #131a2b, #101627);
-  --world-scroll: #0d1120;
+    repeating-linear-gradient(135deg, rgba(23, 32, 58, 0.045) 0 18px, transparent 18px 36px);
+  --world-texture-opacity: 0.7;
+  --world-chip-bg: #ffffff;
+  --world-chip-border: #ccd5ea;
+  --world-chip-ink: #1e2844;
+  --world-track-bg: #dde4f3;
+  --world-progress: linear-gradient(90deg, #e06a1c, #1d93b8);
+  --world-progress-glow: 0 0 10px rgba(224, 106, 28, 0.24);
+  --world-option-bg: linear-gradient(180deg, #ffffff 0%, #f5f8ff 100%);
+  --world-option-border: #ccd5ea;
+  --world-option-shadow: 0 1px 2px rgba(23, 32, 58, 0.1);
+  --world-option-hover-border: #e06a1c;
+  --world-option-hover-bg: linear-gradient(180deg, #ffffff 0%, #fff0e6 100%);
+  --world-option-hover-shadow: 0 8px 20px rgba(224, 106, 28, 0.18);
+  --world-soft-bg: rgba(255, 138, 61, 0.14);
+  --world-card-hover-border: #e06a1c;
+  --world-card-hover-bg: linear-gradient(180deg, #ffffff 0%, #fff0e6 100%);
+  --world-card-selected-border: #e06a1c;
+  --world-card-selected-bg: linear-gradient(180deg, #ffe9d9 0%, #fbd8bf 100%);
+  --world-tag-bg: rgba(255, 138, 61, 0.16);
+  --world-tag-border: rgba(154, 61, 5, 0.28);
+  --world-head-bg: linear-gradient(180deg, #ffffff, #f5f8ff);
+  --world-head-border: #d5dcf0;
+  --world-scroll: #e9eefb;
 }
 /* Ô đường đua là vạch xuất phát: vạch kẻ sọc đen-trắng ở ô 1 và ô đích. */
 .modal[data-player-theme] .game-stage[data-game="race"] .race-round-badge {
   background: var(--world-accent);
   color: #1a1208;
-  border-color: #ffb37e;
+  border-color: #d4661f;
 }
 .modal[data-player-theme] .game-stage[data-game="race"] .race-active-name strong {
-  color: #ffd2b0;
+  color: #9a3d05;
 }
 
 /* Thẻ kết quả: `.game-stage` là flex column, nên khối kết quả phải canh giữa
@@ -420,7 +437,7 @@ html[data-fullscreen="1"] .stage-world-sub { display: none; }
   font-weight: 800;
   letter-spacing: 2px;
   text-transform: uppercase;
-  color: var(--world-accent, #e9b95b);
+  color: var(--world-accent-ink, #7c4a0c);
 }
 .treasure-chapter-value {
   font-family: var(--world-display, inherit);
@@ -620,3 +637,24 @@ html[data-fullscreen="1"] .modal[data-player-theme] .game-stage[data-game="treas
   .modal[data-player-theme] .treasure-hint-fab { transition: none; }
 }
 
+
+/* ---------- Cửa sổ người chơi luôn SÁNG (#220) ----------
+   `.modal-head` / `.modal-body` mang nền theo `--surface-*` cho cả hai theme
+   (components.css:213-215); trên thẻ chơi bảng sáng này đúng nhưng LUÔN đúng —
+   thế giới của trò chơi là giấy sáng, không còn thế giới đêm nào cần nền tối.
+   Khai báo thang surface sáng ngay trên `.modal-head`/`.modal-body` của thẻ chơi
+   thì cả dark mode lẫn hòn đảo sáng (shell.css:180) đều ra cùng một tấm giấy, và
+   mực kế thừa theo bảng sáng mà #167 đã ghim cho `[data-player-theme]`. */
+html[data-theme="dark"] .modal[data-player-theme] .modal-head,
+html[data-theme="dark"] .modal[data-player-theme] .modal-body,
+html[data-theme="dark"] .modal[data-player-theme] .modal-foot,
+html[data-theme="dark"] .modal[data-player-theme] {
+  --surface-0: #f4f6fd;
+  --surface-1: #ffffff;
+  color: var(--color-ink);
+}
+/* Ô nhập và thanh cuộn trong thẻ chơi do Chromium tự vẽ theo `color-scheme` của
+   :root (base.css:32-33), nên ở dark chúng vẫn ra tối trên tấm giấy sáng. */
+html[data-theme="dark"] .modal[data-player-theme] {
+  color-scheme: light;
+}

@@ -69,15 +69,18 @@ const RACE_GAME = base('ui-race', 'Đường đua tri thức', 'Toán', '5', 'ra
 
 /** Install mount/unmount/burst counters once; they persist for the whole run. */
 const SPY = `(() => {
-  if (!window.__threeSpy) {
+  if (!window.__counter) {
     const origMount = window.threeGame.mount;
     const origUnmount = window.threeGame.unmount;
     const origBurst = window.threeGame.burst;
+    // Installed on THREE closures, never on the shared scene: a counter kept inside
+    // one mounted scene reaches the page only if that handle is still alive when the
+    // probe returns, and the open/answer/close probes straddle handle swaps.
     const c = { mounts: 0, unmounts: 0, bursts: 0 };
-    window.threeGame.mount = (...a) => { c.mounts += 1; return origMount(...a); };
-    window.threeGame.unmount = (...a) => { c.unmounts += 1; return origUnmount(...a); };
-    window.threeGame.burst = (...a) => { c.bursts += 1; return origBurst(...a); };
-    window.__threeSpy = c;
+    window.threeGame.mount = function (...a) { c.mounts += 1; return origMount.apply(this, a); };
+    window.threeGame.unmount = function (...a) { c.unmounts += 1; return origUnmount.apply(this, a); };
+    window.threeGame.burst = function (...a) { c.bursts += 1; return origBurst.apply(this, a); };
+    window.__counter = c;
   }
   return true;
 })()`;
@@ -102,20 +105,20 @@ const MATCH_OPEN = `(async () => {
     pointerEvents: cs ? cs.pointerEvents : null,
     zIndex: cs ? cs.zIndex : null,
     position: cs ? cs.position : null,
-    spy: window.__threeSpy
+    spy: window.__counter
   };
 })()`;
 
 const MATCH_CORRECT = `(async () => {
   const sleep = ms => new Promise(r => setTimeout(r, ms));
-  const burstsBefore = window.__threeSpy.bursts;
+  const burstsBefore = window.__counter.bursts;
   document.querySelector('.match-card[data-match-side="left"][data-pair="p1"]').click();
   document.querySelector('.match-card[data-match-side="right"][data-pair="p1"]').click();
   await sleep(700);
   return {
     matched: state.matchingPlay.matched,
     wrong: state.matchingPlay.wrong,
-    bursts: window.__threeSpy.bursts - burstsBefore,
+    bursts: window.__counter.bursts - burstsBefore,
     leftMatched: document.querySelector('.match-card[data-match-side="left"][data-pair="p1"]').classList.contains('matched'),
     canvas: Boolean(document.querySelector('.game-stage canvas'))
   };
@@ -138,19 +141,19 @@ const TREASURE_OPEN = `(async () => {
     pointerEvents: cs ? cs.pointerEvents : null,
     zIndex: cs ? cs.zIndex : null,
     position: cs ? cs.position : null,
-    spy: window.__threeSpy
+    spy: window.__counter
   };
 })()`;
 
 const TREASURE_CORRECT = `(async () => {
   const sleep = ms => new Promise(r => setTimeout(r, ms));
-  const burstsBefore = window.__threeSpy.bursts;
+  const burstsBefore = window.__counter.bursts;
   document.querySelector('.answer-option[data-answer="a"]').click();
   await sleep(700);
   return {
     answered: state.treasurePlay.answered,
     earned: state.treasurePlay.earned,
-    bursts: window.__threeSpy.bursts - burstsBefore,
+    bursts: window.__counter.bursts - burstsBefore,
     correctMarked: document.querySelector('.answer-option[data-answer="a"]').classList.contains('correct'),
     canvas: Boolean(document.querySelector('.game-stage canvas'))
   };
@@ -173,7 +176,7 @@ const RACE_OPEN = `(async () => {
     pointerEvents: cs ? cs.pointerEvents : null,
     zIndex: cs ? cs.zIndex : null,
     position: cs ? cs.position : null,
-    spy: window.__threeSpy
+    spy: window.__counter
   };
 })()`;
 
@@ -184,20 +187,20 @@ const RACE_DRAW = `(async () => {
   return {
     answerOptions: document.querySelectorAll('[data-race-answer]').length,
     canvases: document.querySelectorAll('.game-stage canvas').length,
-    spy: window.__threeSpy
+    spy: window.__counter
   };
 })()`;
 
 const RACE_ANSWER = `(async () => {
   const sleep = ms => new Promise(r => setTimeout(r, ms));
-  const burstsBefore = window.__threeSpy.bursts;
+  const burstsBefore = window.__counter.bursts;
   document.querySelector('[data-race-answer="b"]').click();
   await sleep(700);
   return {
     progress: state.racePlay.teams[0].progress,
     points: state.racePlay.teams[0].points,
     answered: state.racePlay.answered,
-    bursts: window.__threeSpy.bursts - burstsBefore,
+    bursts: window.__counter.bursts - burstsBefore,
     canvases: document.querySelectorAll('.game-stage canvas').length
   };
 })()`;
@@ -209,7 +212,7 @@ const CLOSE = `(async () => {
   return {
     canvas: Boolean(document.querySelector('.game-stage canvas')),
     modal: Boolean(document.querySelector('.modal-backdrop')),
-    spy: window.__threeSpy
+    spy: window.__counter
   };
 })()`;
 

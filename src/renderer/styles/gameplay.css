@@ -18,7 +18,7 @@
   white-space: nowrap;
 }
 .play-head-title .small { font-size: 10px; letter-spacing: 0.9px; font-weight: 700; }
-.play-shortcut { color: #8f98b6; font-size: 11px; font-weight: 650; letter-spacing: .01em; white-space: nowrap; }
+.play-shortcut { color: var(--world-meta, #46527a); font-size: 11px; font-weight: 650; letter-spacing: .01em; white-space: nowrap; }
 .play-head-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 
 /* Tool buttons. The old markup reused .modal-close (a fixed 30x30 square),
@@ -32,10 +32,10 @@
   min-width: 38px;
   height: 38px;
   padding: 0 10px;
-  border: 1px solid #3a4266;
+  border: 1px solid var(--world-option-border, #d7ceb6);
   border-radius: 10px;
-  background: #232a45;
-  color: #dfe3f5;
+  background: #ffffff;
+  color: var(--world-ink, #1b2438);
   font-size: 12px;
   font-weight: 750;
   line-height: 1;
@@ -43,37 +43,38 @@
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s, transform 0.12s, box-shadow 0.15s;
 }
-.play-tool:hover { background: #2d3556; border-color: #5a5f9a; transform: translateY(-1px); }
+.play-tool:hover { background: #fbf7ee; border-color: var(--world-accent-ink, #8a4b06); transform: translateY(-1px); }
 .play-tool:active { transform: translateY(0); }
-.play-tool:focus-visible { outline: 2px solid #8b82ff; outline-offset: 2px; }
+.play-tool:focus-visible { outline: 2px solid var(--world-accent-ink, #8a4b06); outline-offset: 2px; }
 .play-tool-icon { font-size: 15px; line-height: 1; }
 
 /* Primary action: the projector button is the one that matters, so it gets
    the strongest colour and a subtle glow. */
 .play-tool-present {
-  background: linear-gradient(135deg, #7b6cf6, #5b4fd8);
-  border-color: #8b82ff;
+  background: linear-gradient(135deg, #6a5ae0, #4b3fc0);
+  border-color: #4b3fc0;
   color: #fff;
   padding: 0 15px;
-  box-shadow: 0 4px 14px #6258e84d;
+  box-shadow: 0 4px 14px rgba(75, 63, 192, 0.3);
 }
 .play-tool-present:hover {
-  background: linear-gradient(135deg, #8a7cf8, #6a5df0);
-  border-color: #a9a3ff;
-  box-shadow: 0 6px 18px #6258e86b;
+  background: linear-gradient(135deg, #7b6cf6, #5548d6);
+  border-color: #4b3fc0;
+  color: #fff;
+  box-shadow: 0 6px 18px rgba(75, 63, 192, 0.4);
 }
-.play-tool-danger:hover { background: #4a2338; border-color: #ef6d89; color: #ffd9e2; }
+.play-tool-danger:hover { background: #fbe2e7; border-color: #b8324f; color: #8f1f39; }
 
 /* Chơi LAN: secondary to "Trình chiếu" (the projector is still the main action),
    but coloured so a teacher can find it at a glance. Green = the room is open. */
 .play-tool-lan {
-  background: #1f3b34;
-  border-color: #2f6b58;
-  color: #c9f5e3;
+  background: #e6f6ef;
+  border-color: #1f8f63;
+  color: #0f5f42;
   padding: 0 13px;
 }
-.play-tool-lan:hover { background: #265045; border-color: #3f8f74; }
-.play-tool-lan.is-open { background: #17493a; border-color: #3ecf8e; color: #e2fff3; }
+.play-tool-lan:hover { background: #d3efe3; border-color: #0f5f42; color: #0f5f42; }
+.play-tool-lan.is-open { background: #cdeee0; border-color: #0f5f42; color: #0b4a33; }
 
 /* LAN room panel: reuses .modal so it matches every other modal, but is wide
    enough for the QR + the class list side by side on a projector. */
@@ -312,13 +313,13 @@ html[data-fullscreen="1"] .modal[data-player-theme] .stage-center > .answer-grid
   min-height: min-content;
 }
 
-.modal[data-player-theme] .modal[data-player-theme] .game-stage .stage-question {
+.modal[data-player-theme] .game-stage .stage-question {
   font-size: clamp(26px, 3.1vw, 42px);
   line-height: 1.34;
   max-width: 1100px;
   margin: 14px auto 30px;
   text-wrap: balance;
-  color: var(--world-ink, #f4f6ff);
+  color: var(--world-ink, #1b2438);
 }
 /* Chữ câu hỏi theo thế giới: tách khỏi quy tắc trên để phần CHỮ không bị bản
    toàn màn hình (khai báo sau, và bị minify rút thành [data-player-theme]) đè
@@ -339,12 +340,51 @@ html[data-fullscreen="1"] .modal[data-player-theme] .stage-center > .answer-grid
      the compiled sheet is minified, which shortens .modal[data-player-theme] to
      [data-player-theme] and would let the base rule win. One extra compound
      keeps this block's order authoritative. */
-  color: var(--world-accent, #b3adff);
+  color: var(--world-accent-ink, #8a4b06);
+}
+
+/* #220: the kicker also wears `.d-badge d-badge-neutral`, and daisyUI paints that
+   family with a solid plate (`--color-neutral` #5f6a7d, its own ink, plus a noise
+   layer). On a light board that plate is an opaque band the size of the label and
+   the label measured 1.24:1 (scenario) / 1.44:1 (matching) against it. The plate
+   goes; the ink stays the world's accent ink. Below, the result screens' coloured
+   badges are repainted on their own light plates instead of inheriting daisyUI's. */
+.modal[data-player-theme] .game-stage .d-badge {
+  background-image: none;
+  background-color: transparent;
+  border-color: transparent;
+}
+.modal[data-player-theme] .game-stage .d-badge-neutral { color: var(--world-accent-ink, #7c4a0c); }
+
+/* The coloured families (result screens, race verdicts, treasure stage labels) keep
+   a plate, because there the plate is what carries the meaning — but it is a 14%
+   tint of the family ink, not daisyUI's solid `--color-*` fill with its own light
+   ink. Measured ink-on-plate: primary 7.70:1, success 5.23:1, error 5.69:1,
+   warning 6.65:1, secondary 7.86:1. */
+.modal[data-player-theme] .game-stage .d-badge-primary {
+  color: #3d2f9e;
+  background-color: rgba(61, 47, 158, 0.14);
+}
+.modal[data-player-theme] .game-stage .d-badge-success {
+  color: #1f6b3a;
+  background-color: rgba(31, 107, 58, 0.14);
+}
+.modal[data-player-theme] .game-stage .d-badge-error {
+  color: #a3262f;
+  background-color: rgba(163, 38, 47, 0.14);
+}
+.modal[data-player-theme] .game-stage .d-badge-warning {
+  color: #6d4405;
+  background-color: rgba(109, 68, 5, 0.14);
+}
+.modal[data-player-theme] .game-stage .d-badge-secondary {
+  color: #3d3a78;
+  background-color: rgba(61, 58, 120, 0.14);
 }
 
 .modal[data-player-theme] .stage-top { font-size: 12px; }
 .stage-meta-right { display: flex; align-items: center; gap: 8px; }
-.stage-meta { color: var(--world-meta, #a9b1cd); font-weight: 650; }
+.stage-meta { color: var(--world-meta, #46527a); font-weight: 650; }
 
 /* Pill chips for question counter + score. */
 .stage-chip {
@@ -353,26 +393,26 @@ html[data-fullscreen="1"] .modal[data-player-theme] .stage-center > .answer-grid
   gap: 5px;
   padding: 5px 11px;
   border-radius: 999px;
-  background: var(--world-chip-bg, #232a45);
-  border: 1px solid var(--world-chip-border, #3a4266);
-  color: var(--world-chip-ink, #c9cfe6);
+  background: var(--world-chip-bg, #ffffff);
+  border: 1px solid var(--world-chip-border, #d8cfb8);
+  color: var(--world-chip-ink, #2b3550);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.4px;
   white-space: nowrap;
 }
-.stage-chip b { color: #fff; font-size: 12px; }
+.stage-chip b { color: var(--world-ink, #1b2438); font-size: 12px; }
 .stage-chip-score {
-  background: linear-gradient(135deg, #3a2f10, #4a3a12);
-  border-color: #8a6d1f;
-  color: #ffd977;
+  background: var(--world-chip-bg, #ffffff);
+  border-color: var(--world-accent-ink, #8a4b06);
+  color: var(--world-accent-ink, #8a4b06);
 }
-.stage-chip-score b { color: #ffe9a8; }
+.stage-chip-score b { color: var(--world-accent-ink, #8a4b06); }
 
 .modal[data-player-theme] .stage-progress {
   height: 7px;
   margin: 14px 0 22px;
-  background: var(--world-track-bg, #262d48);
+  background: var(--world-track-bg, #e7e0cf);
 }
 .modal[data-player-theme] .stage-progress div {
   background: var(--world-progress, linear-gradient(90deg, #8b82ff, #5ad1c8));
@@ -384,8 +424,8 @@ html[data-fullscreen="1"] .modal[data-player-theme] .stage-center > .answer-grid
   max-width: 680px;
   margin: 2px auto 20px;
   padding: 12px 14px;
-  border: 1px solid #363d5c;
-  background: #202641;
+  border: 1px solid var(--world-option-border, #d7ceb6);
+  background: rgba(255, 255, 255, 0.82);
   border-radius: 12px;
   text-align: left;
 }
@@ -396,25 +436,25 @@ html[data-fullscreen="1"] .modal[data-player-theme] .stage-center > .answer-grid
   gap: 10px;
 }
 .house-progress-title {
-  color: #a9a3ff;
+  color: var(--world-accent-ink, #8a4b06);
   font-size: 10px;
   letter-spacing: 1.5px;
   text-transform: uppercase;
   font-weight: 800;
 }
 .house-count {
-  color: #c9cfe6;
+  color: var(--world-meta, #46527a);
   font-size: 11px;
   font-weight: 700;
   white-space: nowrap;
 }
 .house-count b {
-  color: #ffd977;
+  color: var(--world-accent-ink, #8a4b06);
   font-size: 13px;
 }
 .house-bar {
   height: 8px;
-  background: #303651;
+  background: var(--world-track-bg, #e7e0cf);
   border-radius: 999px;
   overflow: hidden;
   margin: 11px 0 8px;
@@ -427,24 +467,24 @@ html[data-fullscreen="1"] .modal[data-player-theme] .stage-center > .answer-grid
   transition: width 0.25s;
 }
 .house-materials {
-  color: #b9bfd6;
+  color: var(--world-meta, #46527a);
   font-size: 11px;
 }
 .house-materials b {
-  color: #fff;
+  color: var(--world-ink, #1b2438);
   font-size: 12px;
 }
 .result-house {
   display: inline-block;
   margin: 10px auto 2px;
   padding: 10px 14px;
-  border: 1px solid #363d5c;
-  background: #202641;
+  border: 1px solid var(--world-option-border, #d7ceb6);
+  background: rgba(255, 255, 255, 0.85);
   border-radius: 11px;
-  color: #d7dced;
+  color: var(--world-ink, #1b2438);
   font-size: 12px;
 }
-.result-house b { color: #fff; }
+.result-house b { color: var(--world-ink, #1b2438); }
 /* Màn kết quả + ngôi nhà 3D (DECISIONS #144): cột trái là mô hình nhà đã xây
    (canvas nằm dưới slot trong suốt), cột phải giữ nguyên khối kết quả cũ. Chỉ
    house mode mới có hero — kết quả Classic và 4 trò khác giữ đúng bố cục cũ. */
@@ -474,7 +514,7 @@ html[data-fullscreen="1"] .result-house-hero .house-stage-slot {
 .result-house-style {
   display: block;
   margin-top: 4px;
-  color: #9aa2bd;
+  color: var(--world-meta, #46527a);
   font-size: 11px;
 }
 @media (max-width: 980px) {
@@ -522,10 +562,10 @@ html[data-fullscreen="1"] .modal[data-player-theme] .answer-option .letter {
   font-weight: 600;
   line-height: 1.4;
   border-width: var(--world-option-border-w, 2px);
-  border-color: var(--world-option-border, #39406080);
+  border-color: var(--world-option-border, #d7ceb6);
   border-style: solid;
-  background: var(--world-option-bg, linear-gradient(180deg, #232a48 0%, #1d233c 100%));
-  color: var(--world-ink, #f4f6ff);
+  background: var(--world-option-bg, linear-gradient(180deg, #ffffff 0%, #fbf8f0 100%));
+  color: var(--world-ink, #1b2438);
   box-shadow: var(--world-option-shadow, none);
   cursor: pointer;
   transition: transform 0.12s, background 0.15s, border-color 0.15s, box-shadow 0.15s;
@@ -536,46 +576,51 @@ html[data-fullscreen="1"] .modal[data-player-theme] .answer-option .letter {
    (DECISIONS #88); bản đè cũ ở đây đã gộp. */
 .modal[data-player-theme] .answer-option:hover:not(:disabled) {
   transform: translateY(-2px);
-  border-color: var(--world-option-hover-border, #8c84ff);
-  background: var(--world-option-hover-bg, linear-gradient(180deg, #2c3459 0%, #232a48 100%));
-  box-shadow: var(--world-option-hover-shadow, 0 8px 22px #6d63ff3d);
+  border-color: var(--world-option-hover-border, #c98a1c);
+  background: var(--world-option-hover-bg, linear-gradient(180deg, #fffdf7 0%, #fbf2dd 100%));
+  box-shadow: var(--world-option-hover-shadow, 0 8px 20px rgba(201, 138, 28, 0.18));
 }
-.modal[data-player-theme] .answer-option:focus-visible { outline: 2px solid var(--world-focus, #a9a3ff); outline-offset: 2px; }
+.modal[data-player-theme] .answer-option:focus-visible { outline: 2px solid var(--world-focus, #b8791a); outline-offset: 2px; }
 
 /* Key badge: one accent colour per position so options are easy to tell
-   apart from the back of the classroom. */
+   apart from the back of the classroom.
+   Mỗi ô là một HÌNH nhận diện, không phải một cỡ chữ: màu nền đủ đậm để chữ
+   trắng đạt 4.5:1 (cặp hổ phách/hồng cũ chỉ 3.2–4.0:1). */
 .modal[data-player-theme] .answer-option .letter {
   width: clamp(30px, 2.6vw, 40px);
   height: clamp(30px, 2.6vw, 40px);
   border-radius: 10px;
   font-size: clamp(14px, 1.25vw, 18px);
   color: #fff;
-  box-shadow: 0 2px 8px #00000040;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 2px 6px rgba(23, 32, 51, 0.28);
 }
-.modal[data-player-theme] .answer-option:nth-child(4n + 1) .letter { background: linear-gradient(145deg, #7b6cf6, #5b4fd8); }
-.modal[data-player-theme] .answer-option:nth-child(4n + 2) .letter { background: linear-gradient(145deg, #2fb8a4, #1c8f7e); }
-.modal[data-player-theme] .answer-option:nth-child(4n + 3) .letter { background: linear-gradient(145deg, #e8a33d, #c97f16); }
-.modal[data-player-theme] .answer-option:nth-child(4n + 4) .letter { background: linear-gradient(145deg, #e2688a, #c44a6d); }
+.modal[data-player-theme] .answer-option:nth-child(4n + 1) .letter { background: linear-gradient(145deg, #6a5ae0, #4b3fc0); }
+.modal[data-player-theme] .answer-option:nth-child(4n + 2) .letter { background: linear-gradient(145deg, #1d7f6e, #12604f); }
+.modal[data-player-theme] .answer-option:nth-child(4n + 3) .letter { background: linear-gradient(145deg, #a8690b, #8a4b06); }
+.modal[data-player-theme] .answer-option:nth-child(4n + 4) .letter { background: linear-gradient(145deg, #b23f63, #8f2b4b); }
 
 /* Result states must stay unmistakable for colour-blind users: colour plus a
    distinct border, and the letter keeps its own accent on hover. */
 .modal[data-player-theme] .answer-option.correct {
-  background: linear-gradient(180deg, #12463c 0%, #0f3b33 100%);
-  border-color: #35d39f;
-  box-shadow: 0 0 0 2px #35d39f38, 0 8px 24px #0d5c4433;
+  background: linear-gradient(180deg, #dff5ea 0%, #c8ebdb 100%);
+  border-color: #1f8f63;
+  color: var(--world-ink, #1b2438);
+  box-shadow: 0 0 0 2px rgba(31, 143, 99, 0.18), 0 8px 20px rgba(13, 92, 68, 0.16);
 }
-.modal[data-player-theme] .answer-option.correct .letter { background: linear-gradient(145deg, #35d39f, #1fa87c); }
+.modal[data-player-theme] .answer-option.correct .letter { background: linear-gradient(145deg, #1f8f63, #14704c); }
 .modal[data-player-theme] .answer-option.wrong {
-  background: linear-gradient(180deg, #4b2637 0%, #3d1f2d 100%);
-  border-color: #f0738d;
-  box-shadow: 0 0 0 2px #f0738d33;
+  background: linear-gradient(180deg, #fbe2e7 0%, #f6ccd5 100%);
+  border-color: #b8324f;
+  color: var(--world-ink, #1b2438);
+  box-shadow: 0 0 0 2px rgba(184, 50, 79, 0.16);
 }
-.modal[data-player-theme] .answer-option.wrong .letter { background: linear-gradient(145deg, #f0738d, #cd4a68); }
+.modal[data-player-theme] .answer-option.wrong .letter { background: linear-gradient(145deg, #b8324f, #8f1f39); }
 /* Scenario "đã chọn quyết định": theo thế giới thay vì tím cứng (DECISIONS #104). */
 .modal[data-player-theme] .answer-option.selected {
-  border-color: var(--world-card-selected-border, #a9a3ff);
-  background: var(--world-card-selected-bg, linear-gradient(180deg, #2f3560 0%, #272c50 100%));
-  box-shadow: 0 0 0 2px var(--world-accent-soft, rgba(169, 163, 255, 0.22));
+  border-color: var(--world-card-selected-border, #c98a1c);
+  background: var(--world-card-selected-bg, linear-gradient(180deg, #fdf1d4 0%, #f8e6bc 100%));
+  box-shadow: 0 0 0 2px var(--world-accent-soft, rgba(242, 178, 74, 0.3));
 }
 .modal[data-player-theme] .answer-option:disabled { cursor: default; transform: none; }
 
@@ -601,9 +646,9 @@ html[data-fullscreen="1"] .modal[data-player-theme] .answer-grid.true-false-grid
   font-size: clamp(15px, 1.3vw, 19px);
   padding: 14px 20px;
   border-left-width: 4px;
-  border-left-color: var(--world-accent, #8b82ff);
-  background: var(--world-soft-bg, #202641);
-  color: var(--world-ink, #f4f6ff);
+  border-left-color: var(--world-accent, #f2b24a);
+  background: var(--world-soft-bg, rgba(242, 178, 74, 0.16));
+  color: var(--world-ink, #1b2438);
 }
 
 /* Text-answer row. */
@@ -617,21 +662,21 @@ html[data-fullscreen="1"] .modal[data-player-theme] .answer-grid.true-false-grid
 
 /* Hint: on demand only, so a teacher can let the class try first. */
 .modal[data-player-theme] .text-answer-hint {
-  background: #232a45;
-  border: 1px solid #3a4266;
-  color: #d9d6ff;
+  background: var(--world-chip-bg, #ffffff);
+  border: 1px solid var(--world-option-border, #d7ceb6);
+  color: var(--world-accent-ink, #8a4b06);
   white-space: nowrap;
 }
-.modal[data-player-theme] .text-answer-hint:hover:not(:disabled) { background: #2c3457; border-color: #8b82ff; }
+.modal[data-player-theme] .text-answer-hint:hover:not(:disabled) { background: #ffffff; border-color: var(--world-accent-ink, #8a4b06); }
 .modal[data-player-theme] .text-answer-hint:disabled { opacity: 0.6; cursor: default; }
 .modal[data-player-theme] .text-answer-hint-text {
   max-width: 820px;
   margin: 10px auto 0;
   padding: 10px 16px;
-  border-left: 3px solid #ffd977;
+  border-left: 3px solid var(--world-accent-ink, #8a4b06);
   border-radius: 8px;
-  background: #232a45;
-  color: #ffe6a8;
+  background: var(--world-soft-bg, rgba(242, 178, 74, 0.16));
+  color: var(--world-ink, #1b2438);
   font-size: clamp(13px, 1.15vw, 16px);
   text-align: left;
 }
@@ -639,7 +684,7 @@ html[data-fullscreen="1"] .modal[data-player-theme] .answer-grid.true-false-grid
 
 /* Footer tip + next button. */
 .modal[data-player-theme] .stage-bottom { margin-top: 20px; font-size: 12px; }
-.stage-tip { color: #9aa2bd; }
+.stage-tip { color: var(--world-meta, #46527a); }
 .modal[data-player-theme] #nextQuestionBtn { font-size: 14px; padding: 13px 26px; }
 
 /* Arena feedback is announced accessibly, but never reserves a visible banner. */
@@ -698,23 +743,23 @@ html[data-fullscreen="1"] .modal[data-player-theme] .answer-grid.true-false-grid
   margin-top: 10px;
   padding: 8px 15px;
   border-radius: 999px;
-  border: 1px solid #4a5480;
-  background: #232a45;
-  color: #e8e9ff;
+  border: 1px solid var(--world-accent-ink, #8a4b06);
+  background: #ffffff;
+  color: var(--world-accent-ink, #8a4b06);
   font-size: 13px;
   font-weight: 700;
   line-height: 1.2;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
 }
-.answer-explain-btn:hover { background: #2c3457; border-color: #8b82ff; transform: translateY(-1px); }
-.answer-explain-btn:focus-visible { outline: 2px solid #8b82ff; outline-offset: 2px; }
+.answer-explain-btn:hover { background: #ffffff; border-color: var(--world-accent-ink, #8a4b06); transform: translateY(-1px); }
+.answer-explain-btn:focus-visible { outline: 2px solid var(--world-accent-ink, #8a4b06); outline-offset: 2px; }
 .modal[data-player-theme] .answer-explain-btn { font-size: clamp(13px, 1.05vw, 16px); }
 .answer-explain-dock .answer-explain-btn {
   margin: 0;
   padding: 10px 16px;
-  background: rgba(31, 39, 68, 0.96);
-  box-shadow: 0 8px 24px rgba(4, 6, 16, 0.38);
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 8px 24px rgba(23, 32, 51, 0.24);
   pointer-events: auto;
 }
 
@@ -777,10 +822,10 @@ html[data-fullscreen="1"] .modal[data-player-theme] .answer-grid.true-false-grid
   width: min(660px, 94vw);
   max-height: min(82vh, 720px);
   border-radius: 18px;
-  border: 1px solid #3c4672;
-  background: linear-gradient(180deg, #181d38 0%, #11152a 100%);
-  box-shadow: 0 24px 60px rgba(4, 6, 16, 0.55);
-  color: #f4f6ff;
+  border: 1px solid #d7ceb6;
+  background: linear-gradient(180deg, #ffffff 0%, #fdfaf2 100%);
+  box-shadow: 0 24px 60px rgba(23, 32, 51, 0.45);
+  color: #1b2438;
   animation: pop-in 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
   overflow: hidden;
 }
@@ -790,15 +835,15 @@ html[data-fullscreen="1"] .modal[data-player-theme] .answer-grid.true-false-grid
   justify-content: space-between;
   gap: 12px;
   padding: 16px 20px;
-  border-bottom: 1px solid #2f375e;
-  background: #171c34;
+  border-bottom: 1px solid #e2d6b8;
+  background: #fbf7ee;
 }
 .answer-explain-title {
   margin: 0;
   font-size: 18px;
   font-weight: 800;
   letter-spacing: 0.2px;
-  color: #ffffff;
+  color: #1b2438;
 }
 /* Dòng luật: modal tự nói cách trả lời ĐANG chạy thay vì để giáo viên giải thích
    vì sao câu này có nút mà câu kia không. */
@@ -806,7 +851,7 @@ html[data-fullscreen="1"] .modal[data-player-theme] .answer-grid.true-false-grid
   margin-top: 4px;
   font-size: 12.5px;
   font-weight: 650;
-  color: #b9c0dd;
+  color: #46527a;
 }
 .answer-explain-close {
   flex: 0 0 auto;
@@ -816,13 +861,13 @@ html[data-fullscreen="1"] .modal[data-player-theme] .answer-grid.true-false-grid
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  border: 1px solid #3c4672;
-  background: #1d2340;
-  color: #cdd3ee;
+  border: 1px solid #d7ceb6;
+  background: #ffffff;
+  color: #2b3550;
   font-size: 14px;
   cursor: pointer;
 }
-.answer-explain-close:hover { background: #364170; color: #fff; }
+.answer-explain-close:hover { background: #f7f2e6; color: #1b2438; }
 .answer-explain-body {
   padding: 18px 20px;
   overflow-y: auto;
@@ -834,15 +879,15 @@ html[data-fullscreen="1"] .modal[data-player-theme] .answer-grid.true-false-grid
   margin: 0;
   font-size: 13.5px;
   font-weight: 650;
-  color: #98a2c8;
-  border-left: 3px solid #3c4672;
+  color: #46527a;
+  border-left: 3px solid #c98a1c;
   padding-left: 12px;
 }
 .answer-explain-text {
   margin: 0;
   font-size: clamp(15px, 1.25vw, 18px);
   line-height: 1.6;
-  color: #eef1ff;
+  color: #1b2438;
   white-space: pre-line;
 }
 .answer-explain-foot {
@@ -850,6 +895,6 @@ html[data-fullscreen="1"] .modal[data-player-theme] .answer-grid.true-false-grid
   justify-content: flex-end;
   gap: 10px;
   padding: 14px 20px;
-  border-top: 1px solid #2f375e;
-  background: #141830;
+  border-top: 1px solid #e2d6b8;
+  background: #fbf7ee;
 }

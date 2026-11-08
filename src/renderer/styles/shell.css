@@ -308,9 +308,10 @@ html[data-fullscreen="1"] .modal {
   flex-direction: column;
 }
 html[data-fullscreen="1"] .modal-body { flex: 1; min-height: 0; overflow: auto; }
-/* In fullscreen the play panel scrolls internally. A light background here
-   showed through as a white flash above/below the dark stage while scrolling. */
-html[data-fullscreen="1"] .modal { background: #0b0e1a; }
+/* In fullscreen the play panel scrolls internally. The surface behind it has
+   to match the stage (light since DECISIONS #220), otherwise a dark strip shows
+   above/below the light stage while scrolling. */
+html[data-fullscreen="1"] .modal { background: #f4f6fd; }
 /* The game takes over the whole window: the app shell (sidebar, including the
    llama.cpp status block and notification bell) must not show through.
    visibility (not display) keeps the game panel measurable while hiding the

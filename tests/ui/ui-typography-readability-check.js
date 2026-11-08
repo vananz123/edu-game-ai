@@ -320,6 +320,9 @@ const CLEANUP = seeded => String.raw`(async () => {
   for (const id of seeded.games) await window.eduGame.deleteGames([id]);
   for (const id of seeded.sessions) await window.eduGame.deleteSessions([id]);
   for (const id of seeded.docs) await window.eduGame.deleteLessonDocument(id);
+  // The hover sweep ends on the dark pass; without this the page stays dark for
+  // whatever gate runs next and a light-surface check reads dark-mode inks.
+  applyTheme((state.settings.preferences || {}).theme || 'light');
   const lib = await window.eduGame.getLibrary();
   const projects = await window.eduGame.listProjects();
   const docs = await window.eduGame.listLessonLibrary() || [];

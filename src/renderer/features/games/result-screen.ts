@@ -481,7 +481,7 @@ function gameWorldLabel(world) {
  * panel so the header, the body and the stage share one palette.
  */
 function playModalHtml(world, widthClass, title, subtitle, tagWorld = world) {
-    return `<div class="modal-backdrop"><div class="modal ${widthClass} bg-[#11152b] border border-[#303651]" data-player-theme="${playerTheme()}" data-game-world="${world}">${playHeaderHtml(title, subtitle, tagWorld)}<div class="modal-body p-[18px]" id="playBody"></div></div></div>`;
+    return `<div class="modal-backdrop"><div class="modal ${widthClass}" data-player-theme="${playerTheme()}" data-game-world="${world}">${playHeaderHtml(title, subtitle, tagWorld)}<div class="modal-body p-[18px]" id="playBody"></div></div></div>`;
 }
 // Template chỉ ghi data-progress; giá trị % động gán qua style.width lúc render.
 function paintProgress(scope) {
@@ -571,7 +571,7 @@ function playHeaderHtml(title, subtitle, world) {
     // Chơi LAN (features/lan.js): quiz/scenario/treasure only, and hidden entirely
     // when the bridge is missing, so an older build shows no dead button.
     const lanButton = typeof lanButtonHtml === 'function' ? lanButtonHtml(state.currentGame) : '';
-    return `<div class="modal-head play-head bg-[#11152b] border-[#303651] text-white"><div class="play-head-title">${tag}<h2>${escapeHtml(title)}</h2><div class="small text-[#aeb5ce] mt-1">${subtitle}</div></div><div class="play-head-actions"><span class="play-shortcut" aria-hidden="true">F11 toàn màn hình · Esc quay lại</span>${lanButton}<button class="play-tool" data-play-fullscreen title="Bật hoặc tắt toàn màn hình (F11)" aria-label="Bật hoặc tắt toàn màn hình"><span class="play-tool-icon">⛶</span></button><button class="play-tool play-tool-present" data-play-present title="Trình chiếu lên máy chiếu" aria-label="Trình chiếu lên máy chiếu"><span class="play-tool-icon">📽</span><span class="play-tool-label">Trình chiếu</span></button><button class="play-tool play-tool-danger" data-play-close title="Đóng trò chơi (Esc)" aria-label="Đóng trò chơi"><span class="play-tool-icon">✕</span></button></div></div>`;
+    return `<div class="modal-head play-head"><div class="play-head-title">${tag}<h2>${escapeHtml(title)}</h2><div class="small play-head-sub mt-1">${subtitle}</div></div><div class="play-head-actions"><span class="play-shortcut" aria-hidden="true">F11 toàn màn hình · Esc quay lại</span>${lanButton}<button class="play-tool" data-play-fullscreen title="Bật hoặc tắt toàn màn hình (F11)" aria-label="Bật hoặc tắt toàn màn hình"><span class="play-tool-icon">⛶</span></button><button class="play-tool play-tool-present" data-play-present title="Trình chiếu lên máy chiếu" aria-label="Trình chiếu lên máy chiếu"><span class="play-tool-icon">📽</span><span class="play-tool-label">Trình chiếu</span></button><button class="play-tool play-tool-danger" data-play-close title="Đóng trò chơi (Esc)" aria-label="Đóng trò chơi"><span class="play-tool-icon">✕</span></button></div></div>`;
 }
 function openPlayModal() {
     const root = $('#modalRoot');

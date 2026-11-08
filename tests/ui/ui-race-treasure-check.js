@@ -3,8 +3,10 @@
 //   1. "Đường đua" (race): the team rows and turn panel were light panels
 //      (#fff / #fbfbfe) nested inside the dark .game-stage and relied on the
 //      stage's inherited white text, so the prompt and standings rendered
-//      white-on-white on a white background. Asserts the panels are dark and
-//      that no text sits on a background of similar luminance.
+//      white-on-white on a white background. DECISIONS #220 turned the whole
+//      stage light, so the assertion is now the defect itself rather than the
+//      old fix: every panel is an opaque surface and no text sits on a
+//      background of similar luminance.
 //   2. "Tìm kho báu" (treasure hunt) in fullscreen: the stage clipped its
 //      overflow and body{overflow:hidden} killed the page scroll, so a tall
 //      mission could not be scrolled at all. Asserts the stage reports real
@@ -168,21 +170,22 @@ function treasureGame() {
     const stage = document.querySelector('.game-stage');
     const cs = el => el ? getComputedStyle(el) : null;
     const opaque = c => { const a = parse(c); return a.length < 4 || a[3] > 0.6; };
-    // "Dark surface" = low luminance, which is what makes white text legible.
-    const dark = c => { const a = parse(c); return a.length >= 3 && lum(a) < 0.12; };
+    // #220: the stage is light paper, so the panel colour itself may be a tint.
+    // Resolve the surface text actually lands on before judging legibility.
+    const surfaceContrast = el => (el ? contrast(cs(el).color, bgOf(el)) : 0);
 
     return {
       viewport: { w: innerWidth, h: innerHeight },
       turnBg: cs(turn)?.backgroundColor,
-      turnOpaque: opaque(cs(turn)?.backgroundColor || ''),
-      turnDark: dark(cs(turn)?.backgroundColor || ''),
+      turnSurface: turn ? bgOf(turn) : '',
+      turnLight: turn ? lum(parse(bgOf(turn))) > 0.5 : false,
       rowBg: cs(row)?.backgroundColor,
-      rowOpaque: opaque(cs(row)?.backgroundColor || ''),
-      rowDark: dark(cs(row)?.backgroundColor || ''),
+      rowSurface: row ? bgOf(row) : '',
+      rowLight: row ? lum(parse(bgOf(row))) > 0.5 : false,
       // White-on-white is the actual defect: measure it, do not eyeball it.
       promptContrast: q ? contrast(cs(q).color, bgOf(q)) : 0,
       optionContrast: opt ? contrast(cs(opt).color, bgOf(opt)) : 0,
-      rowContrast: row ? contrast(cs(row).color, bgOf(row)) : 0,
+      rowContrast: surfaceContrast(row),
       promptFont: q ? parseFloat(cs(q).fontSize) : 0,
       questionCount: document.querySelectorAll('.race-turn .answer-option').length,
       cells: document.querySelectorAll('.race-track .race-cell').length,
@@ -196,16 +199,16 @@ function treasureGame() {
     };
   })()`);
 
-  check('race: turn panel is a dark surface, not white', race.turnOpaque === true && race.turnDark === true,
-    `turn bg ${race.turnBg}`);
-  check('race: team rows use a dark surface too', race.rowOpaque === true && race.rowDark === true,
-    `row bg ${race.rowBg} (active row is highlighted)`);
+  check('race: turn panel sits on the light stage surface (#220)', race.turnLight === true,
+    `turn bg ${race.turnBg} over ${race.turnSurface}`);
+  check('race: team rows sit on the same light surface', race.rowLight === true,
+    `row bg ${race.rowBg} over ${race.rowSurface} (active row is highlighted)`);
+  check('race: standings ink does not vanish into the row', race.rowContrast >= 4.5,
+    `${race.rowContrast.toFixed(2)}:1`);
   check('race: prompt text has readable contrast (>=4.5:1)', race.promptContrast >= 4.5,
     `${race.promptContrast.toFixed(2)}:1`);
   check('race: answer options have readable contrast (>=4.5:1)', race.optionContrast >= 4.5,
     `${race.optionContrast.toFixed(2)}:1`);
-  check('race: standings text has readable contrast (>=4.5:1)', race.rowContrast >= 4.5,
-    `${race.rowContrast.toFixed(2)}:1`);
   check('race: prompt stays classroom-readable (>=20px)', race.promptFont >= 20, `${race.promptFont}px`);
   check('race: drawing a question shows four answers', race.questionCount === 4, `${race.questionCount} options`);
   check('race: whole 40-cell track is rendered', race.cells === 40, `${race.cells} cells`);
@@ -293,8 +296,8 @@ function treasureGame() {
   check('treasure: map stays pinned while the stage scrolls', treasure.mapSticky === 'sticky', treasure.mapSticky);
   check('treasure: page itself does not double-scroll',
     treasure.docHeight <= treasure.viewport.h + 2, `${treasure.docHeight} vs ${treasure.viewport.h}`);
-  check('treasure: fullscreen panel has a dark backdrop (no white flash)',
-    treasure.panelBg === 'rgb(11, 14, 26)', treasure.panelBg);
+  check('treasure: fullscreen panel keeps an opaque light backdrop (#220)',
+    treasure.panelBg === 'rgb(244, 246, 253)', treasure.panelBg);
 
   const failed = results.filter(r => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} checks passed`);

@@ -63,11 +63,11 @@
   flex-wrap: wrap;
   margin: 10px 0 16px;
   padding: 10px 16px;
-  border: 1px solid rgba(139, 130, 255, 0.28);
+  border: 1px solid var(--world-option-border, rgba(23, 32, 51, 0.16));
   border-radius: 14px;
-  background: linear-gradient(135deg, rgba(32, 38, 68, 0.95), rgba(20, 25, 47, 0.95));
-  color: #e2e7f8;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--world-ink, #17203a);
+  box-shadow: 0 2px 6px rgba(23, 32, 51, 0.1);
   flex-shrink: 0;
 }
 .modal[data-player-theme] .team-turn-summary {
@@ -75,7 +75,7 @@
   align-items: center;
   gap: 10px;
   font-size: clamp(13px, 1.1vw, 15px);
-  color: #f0f3ff;
+  color: var(--world-ink, #17203a);
 }
 .modal[data-player-theme] .team-score-list {
   display: flex;
@@ -89,22 +89,22 @@
   gap: 6px;
   padding: 5px 12px;
   border-radius: 999px;
-  background: #192038;
-  border: 1px solid #333c62;
-  color: #cad1ea;
+  background: #ffffff;
+  border: 1px solid var(--world-option-border, rgba(23, 32, 51, 0.16));
+  color: var(--world-meta, #46527a);
   font-size: 12px;
   font-weight: 650;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .modal[data-player-theme] .team-score-chip.is-active {
-  background: linear-gradient(135deg, #373373, #232252);
-  border-color: #8b82ff;
-  color: #ffffff;
-  box-shadow: 0 0 14px rgba(139, 130, 255, 0.4);
+  background: var(--world-card-selected-bg, linear-gradient(180deg, #fff8da 0%, #f9edb8 100%));
+  border-color: var(--world-accent-ink, #8a4b06);
+  color: var(--world-ink, #17203a);
+  box-shadow: 0 0 0 2px var(--world-accent-soft, rgba(242, 178, 74, 0.3));
   transform: translateY(-1px);
 }
 .modal[data-player-theme] .team-score-chip b {
-  color: #ffd977;
+  color: var(--world-accent-ink, #8a4b06);
   font-size: 13px;
   font-weight: 800;
 }
@@ -113,12 +113,12 @@
   align-items: center;
   gap: 7px;
   font-size: 12px;
-  color: #aeb6d5;
+  color: var(--world-meta, #46527a);
 }
 .modal[data-player-theme] .team-turn-select select {
-  background: #232a48;
-  border: 1px solid #3e4873;
-  color: #f1f4ff;
+  background: #ffffff;
+  border: 1px solid var(--world-option-border, rgba(23, 32, 51, 0.16));
+  color: var(--world-ink, #17203a);
   border-radius: 8px;
   padding: 5px 10px;
   font-size: 12px;
@@ -126,7 +126,7 @@
   outline: none;
   cursor: pointer;
 }
-.modal[data-player-theme] .team-turn-select select:hover { border-color: #8b82ff; }
+.modal[data-player-theme] .team-turn-select select:hover { border-color: var(--world-accent-ink, #8a4b06); }
 html[data-fullscreen="1"] .modal[data-player-theme] .team-turn-bar {
   padding: clamp(10px, 1.4vh, 16px) clamp(16px, 1.8vw, 24px);
   margin-bottom: clamp(10px, 1.5vh, 20px);
@@ -148,33 +148,35 @@ html[data-fullscreen="1"] .modal[data-player-theme] .team-score-chip {
 }
 .modal[data-player-theme] .match-card {
   padding: clamp(12px, 1.4vh, 18px) clamp(16px, 1.5vw, 22px);
-  border: 2px solid #394266;
+  border: 2px solid var(--world-option-border, rgba(23, 32, 51, 0.16));
   border-radius: 12px;
-  background: linear-gradient(180deg, #212848 0%, #19203c 100%);
-  color: #f1f4ff;
+  background: var(--world-option-bg, linear-gradient(180deg, #ffffff 0%, #f5f8ff 100%));
+  color: var(--world-ink, #17203a);
   font-size: clamp(14px, 1.25vw, 18px);
   font-weight: 600;
   line-height: 1.4;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 6px rgba(23, 32, 51, 0.1);
   transition: transform 0.15s, border-color 0.15s, background 0.15s, box-shadow 0.15s;
 }
 .modal[data-player-theme] .match-card:hover:not(:disabled) {
   transform: translateY(-2px);
   border-color: var(--world-card-hover-border, #8b82ff);
-  background: var(--world-card-hover-bg, linear-gradient(180deg, #2a335a 0%, #212848 100%));
-  box-shadow: 0 8px 20px rgba(109, 99, 255, 0.28);
+  background: var(--world-card-hover-bg, linear-gradient(180deg, #ffffff 0%, #eef2ff 100%));
+  box-shadow: 0 8px 20px rgba(109, 99, 255, 0.22);
 }
 .modal[data-player-theme] .match-card.selected {
   border-color: var(--world-card-selected-border, #8b82ff);
-  background: var(--world-card-selected-bg, linear-gradient(180deg, #323b6b 0%, #252d54 100%));
-  box-shadow: 0 0 0 2px var(--world-focus-soft, rgba(139, 130, 255, 0.4)), 0 8px 24px rgba(109, 99, 255, 0.35);
+  background: var(--world-card-selected-bg, linear-gradient(180deg, #eef1ff 0%, #dfe5ff 100%));
+  box-shadow: 0 0 0 2px var(--world-focus-soft, rgba(109, 99, 255, 0.35)), 0 8px 24px rgba(109, 99, 255, 0.22);
   transform: scale(1.02);
 }
+/* A matched pair keeps its ink dark and only fades: the card is still read
+   under the green veil, and 0.65 on white keeps the text above 4.5:1. */
 .modal[data-player-theme] .match-card.matched {
-  background: linear-gradient(180deg, #133a32 0%, #0e2a24 100%);
+  background: var(--world-option-bg, linear-gradient(180deg, #ffffff 0%, #f5f8ff 100%));
   border-color: #2f9e80;
-  opacity: 0.65;
+  opacity: 0.72;
   box-shadow: none;
   cursor: default;
   transform: none;
@@ -191,25 +193,25 @@ html[data-fullscreen="1"] .modal[data-player-theme] .team-score-chip {
 .modal[data-player-theme] .memory-card {
   min-height: clamp(80px, 12vh, 130px);
   padding: 12px;
-  border: 2px solid #394266;
+  border: 2px solid var(--world-option-border, rgba(23, 32, 51, 0.16));
   border-radius: 14px;
-  background: linear-gradient(135deg, #1d2444 0%, #171c36 100%);
-  color: #f1f4ff;
+  background: var(--world-option-bg, linear-gradient(135deg, #ffffff 0%, #f2f6ff 100%));
+  color: var(--world-ink, #17203a);
   font-size: clamp(15px, 1.35vw, 20px);
   font-weight: 700;
   cursor: pointer;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 4px 14px rgba(23, 32, 51, 0.12);
   transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 .modal[data-player-theme] .memory-card:hover:not(:disabled) {
   transform: translateY(-2px) scale(1.02);
-  border-color: #8b82ff;
-  box-shadow: 0 8px 22px rgba(109, 99, 255, 0.3);
+  border-color: #6d63ff;
+  box-shadow: 0 8px 22px rgba(109, 99, 255, 0.22);
 }
 .modal[data-player-theme] .memory-card.flipped {
   animation: memory-flip 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  background: var(--world-card-selected-bg, linear-gradient(180deg, #2b3360 0%, #202648 100%));
-  border-color: var(--world-card-selected-border, #8b82ff);
+  background: var(--world-card-selected-bg, linear-gradient(180deg, #eef1ff 0%, #dfe5ff 100%));
+  border-color: var(--world-card-selected-border, #6d63ff);
 }
 .modal[data-player-theme] .memory-card .memory-face {
   font-size: clamp(20px, 2.5vw, 32px);
@@ -225,27 +227,27 @@ html[data-fullscreen="1"] .modal[data-player-theme] .team-score-chip {
   gap: 14px;
 }
 .modal[data-player-theme] .group-box {
-  border: 2px dashed #4f5b91;
+  border: 2px dashed var(--world-option-border, rgba(23, 32, 51, 0.25));
   border-radius: 14px;
   padding: 14px 16px;
-  background: rgba(22, 27, 54, 0.85);
-  color: #f1f4ff;
+  background: var(--world-option-bg, rgba(255, 255, 255, 0.85));
+  color: var(--world-ink, #17203a);
   transition: border-color 0.15s, background 0.15s;
 }
 .modal[data-player-theme] .group-box:hover {
-  border-color: #8b82ff;
-  background: rgba(33, 40, 78, 0.9);
+  border-color: #6d63ff;
+  background: #ffffff;
 }
 .modal[data-player-theme] .group-box strong {
   font-size: clamp(14px, 1.2vw, 17px);
-  color: #ffd977;
+  color: var(--world-accent-ink, #8a4b06);
 }
 .modal[data-player-theme] .group-chip {
   padding: 7px 12px;
   border-radius: 999px;
-  background: #252e59;
-  border: 1px solid #3e497a;
-  color: #e2e7f8;
+  background: var(--world-chip-bg, #eef1fb);
+  border: 1px solid var(--world-option-border, rgba(23, 32, 51, 0.16));
+  color: var(--world-ink, #17203a);
   font-size: 13px;
   font-weight: 600;
 }
@@ -254,14 +256,14 @@ html[data-fullscreen="1"] .modal[data-player-theme] .team-score-chip {
 }
 .modal[data-player-theme] .race-cell:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 12px rgba(23, 32, 51, 0.18);
 }
 .modal[data-player-theme] .race-team-row {
   border-radius: 10px;
   transition: transform 0.12s, background 0.15s;
 }
 .modal[data-player-theme] .race-team-row.active {
-  box-shadow: 0 0 14px rgba(139, 130, 255, 0.35);
+  box-shadow: 0 0 14px rgba(109, 99, 255, 0.25);
 }
 @media (prefers-reduced-motion: reduce) {
   .modal[data-player-theme] .answer-option.correct,

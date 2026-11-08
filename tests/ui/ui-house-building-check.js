@@ -229,7 +229,7 @@ function RUN(gameJson, answers, opts) {
         })(),
         houseScale: group ? group.scale.x : null,
         houseY: group ? group.position.y : null,
-        emblemVisible: threeStageHandle ? threeStageHandle.emblem.visible : null,
+        hasEmblem: Boolean(threeStageHandle && threeStageHandle.emblem),
         stageHeight: stageEl ? Math.round(stageEl.getBoundingClientRect().height) : null,
         // The showcase must stay inside the visible play surface (#142). The
         // bottom edge of that surface is the CONTENT box of .modal-body — the
@@ -484,8 +484,10 @@ const fits = (b, r, minSpan = 60) => Boolean(b) && Boolean(r) &&
   check('house mode reserves a house slot instead of the auto placeholder picture',
     open6.slot === true && open6.illustration === false && open6.houseArt === false,
     `slot=${open6.slot} illustration=${open6.illustration} houseArt=${open6.houseArt}`);
-  check('house mode parks the decorative emblem', open6.emblemVisible === false,
-    `emblem=${open6.emblemVisible}`);
+  // DECISIONS #220: the emblem is gone from the shared 3D layer, so house mode
+  // cannot leak it and nothing has to park it.
+  check('no decorative emblem anywhere in the 3D layer', open6.hasEmblem === false,
+    `emblem=${open6.hasEmblem}`);
   check('stagePoint projects the stage centre to the world origin',
     Boolean(open6.stagePointCenter) && Math.abs(open6.stagePointCenter.x) < 0.001 && Math.abs(open6.stagePointCenter.y) < 0.001,
     JSON.stringify(open6.stagePointCenter));
@@ -710,7 +712,7 @@ const fits = (b, r, minSpan = 60) => Boolean(b) && Boolean(r) &&
       canvas: Boolean(document.querySelector('.game-stage canvas')),
       houseBuild: state.houseBuild,
       slot: Boolean(document.querySelector('.house-stage-slot')),
-      emblemVisible: threeStageHandle ? threeStageHandle.emblem.visible : null
+      hasEmblem: Boolean(threeStageHandle && threeStageHandle.emblem)
     };
     document.querySelector('.answer-option[data-answer="a"]').click();
     await sleep(450);
@@ -741,9 +743,9 @@ const fits = (b, r, minSpan = 60) => Boolean(b) && Boolean(r) &&
   check('classic mode still mounts the 3D backdrop', classic.before.canvas === true);
   check('classic mode keeps house state untouched', classic.before.houseBuild === null,
     JSON.stringify(classic.before.houseBuild));
-  check('classic mode keeps the spinning emblem and no house slot',
-    classic.before.emblemVisible === true && classic.before.slot === false,
-    `emblem=${classic.before.emblemVisible} slot=${classic.before.slot}`);
+  check('classic mode shows no emblem (#220) and no house slot',
+    classic.before.hasEmblem === false && classic.before.slot === false,
+    `emblem=${classic.before.hasEmblem} slot=${classic.before.slot}`);
   check('classic mode never enters the house showcase', classic.after.showcase === false);
   check('classic mode scoring is unchanged (one answer recorded)', classic.after.answers === 1,
     `${classic.after.answers} answers`);

@@ -50,14 +50,14 @@
   transition: opacity 0.18s ease-in;
 }
 .treasure-story-dialog {
-  background: linear-gradient(180deg, #181d38 0%, #11152a 100%);
-  border: 1px solid #3c4672;
+  background: linear-gradient(180deg, #fffdf7 0%, #f7f0e1 100%);
+  border: 1px solid #ddcaa4;
   border-radius: 18px;
   width: min(620px, 94vw);
   max-height: 86vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65);
+  box-shadow: 0 20px 50px rgba(42, 33, 23, 0.32);
   animation: dialog-pop 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   overflow: hidden;
 }
@@ -71,8 +71,8 @@
   justify-content: space-between;
   gap: 12px;
   padding: 16px 20px;
-  background: #141830;
-  border-bottom: 1px solid #2d3558;
+  background: #fffdf7;
+  border-bottom: 1px solid #e7dcc2;
 }
 .treasure-story-close-btn {
   width: 32px;
@@ -80,15 +80,15 @@
   display: grid;
   place-items: center;
   border-radius: 8px;
-  background: #232b4b;
-  color: #c5cced;
-  border: 1px solid #3c4672;
+  background: #ffffff;
+  color: #4a3a22;
+  border: 1px solid #ddcaa4;
   cursor: pointer;
   transition: all 0.15s;
 }
 .treasure-story-close-btn:hover {
-  background: #364170;
-  color: #fff;
+  background: #fbf2dd;
+  color: #2a2117;
 }
 .treasure-story-dialog-body {
   padding: 20px;
@@ -100,12 +100,12 @@
 .treasure-story-block {
   padding: 14px 16px;
   border-radius: 12px;
-  background: #19203a;
-  border: 1px solid #2e375e;
+  background: #ffffff;
+  border: 1px solid #e7dcc2;
 }
 .treasure-story-block.is-mission {
-  background: linear-gradient(135deg, rgba(39, 48, 88, 0.8), rgba(24, 30, 58, 0.8));
-  border-color: #4a5792;
+  background: linear-gradient(135deg, #fff8e8, #fdf2d9);
+  border-color: #ddcaa4;
 }
 .story-block-tag {
   margin-bottom: 8px;
@@ -113,12 +113,12 @@
 .story-block-text {
   font-size: 13.5px;
   line-height: 1.6;
-  color: #e2e6f7;
+  color: #2a2117;
   margin: 0;
 }
 .mission-lead {
   font-size: 14px;
-  color: #ffd977;
+  color: #7c4a0c;
   margin-bottom: 6px;
 }
 .mission-specs {
@@ -130,18 +130,18 @@
 .spec-chip {
   padding: 4px 10px;
   border-radius: 999px;
-  background: #222a4c;
-  border: 1px solid #394473;
+  background: #fffdf7;
+  border: 1px solid #ddcaa4;
   font-size: 11.5px;
-  color: #c9d0eb;
+  color: #3f3425;
 }
 .spec-chip b {
-  color: #fff;
+  color: #2a2117;
 }
 .treasure-story-dialog-foot {
   padding: 14px 20px;
-  border-top: 1px solid #2f375e;
-  background: #141830;
+  border-top: 1px solid #e7dcc2;
+  background: #fffdf7;
   display: flex;
   justify-content: flex-end;
 }
@@ -161,18 +161,18 @@
   100% { opacity: 1; transform: scale(1); }
 }
 .treasure-reward-card.is-champion {
-  background: linear-gradient(135deg, rgba(68, 48, 12, 0.95), rgba(46, 28, 76, 0.95));
-  border: 2px solid #ffd977;
-  box-shadow: 0 0 40px rgba(255, 217, 119, 0.38);
+  background: linear-gradient(135deg, #fff6dc, #fdf0c8);
+  border: 2px solid #c98a1c;
+  box-shadow: 0 0 34px rgba(201, 138, 28, 0.28);
 }
 .treasure-reward-card.is-blessing {
-  background: linear-gradient(135deg, rgba(22, 50, 42, 0.95), rgba(28, 38, 78, 0.95));
-  border: 2px solid #35d39f;
-  box-shadow: 0 0 35px rgba(53, 211, 159, 0.32);
+  background: linear-gradient(135deg, #e6f7ef, #dff3ea);
+  border: 2px solid #1f8f63;
+  box-shadow: 0 0 30px rgba(31, 143, 99, 0.22);
 }
 .treasure-reward-card.is-encouragement {
-  background: #1a213c;
-  border: 1px solid #364270;
+  background: #ffffff;
+  border: 1px solid #ddcaa4;
 }
 .reward-badge {
   display: inline-block;
@@ -181,19 +181,19 @@
 .reward-headline {
   font-size: clamp(16px, 1.4vw, 20px);
   font-weight: 850;
-  color: #ffd977;
+  color: #7c4a0c;
   margin-bottom: 8px;
 }
 .reward-quote {
   font-size: clamp(14px, 1.25vw, 17px);
   font-style: italic;
   line-height: 1.65;
-  color: #ffffff;
+  color: #2a2117;
   margin: 8px 0;
 }
 .reward-sub {
   font-size: 13px;
-  color: #c9d0eb;
+  color: #5b4a33;
   font-weight: 600;
   margin-top: 10px;
 }
@@ -228,13 +228,13 @@
 .journey-map-headline h2 {
   font-size: clamp(20px, 2.2vw, 30px);
   font-weight: 850;
-  color: #fff;
+  color: var(--world-ink, #2a2117);
   letter-spacing: -0.3px;
   margin: 0 0 6px;
 }
 .journey-map-sub {
   font-size: clamp(13px, 1.2vw, 16px);
-  color: #cdd4ee;
+  color: var(--world-meta, #5b4a33);
   margin: 0;
 }
 
@@ -242,8 +242,8 @@
   width: 100%;
   border-radius: 16px;
   overflow: hidden;
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
-  border: 1px solid #38426b;
+  box-shadow: 0 12px 30px rgba(42, 33, 23, 0.18);
+  border: 1px solid #ddcaa4;
 }
 .journey-map-frame .treasure-map {
   margin-bottom: 0;
@@ -251,12 +251,12 @@
 }
 
 .journey-next-stage-card {
-  background: linear-gradient(135deg, rgba(28, 35, 68, 0.95), rgba(18, 23, 46, 0.95));
-  border: 1px solid #434e7f;
+  background: linear-gradient(135deg, #fffdf7, #fbf4e3);
+  border: 1px solid #ddcaa4;
   border-radius: 18px;
   padding: clamp(16px, 2vh, 24px) clamp(18px, 2.4vw, 32px);
   text-align: center;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 8px 26px rgba(42, 33, 23, 0.16);
   animation: dialog-pop 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .next-stage-badge {
@@ -270,12 +270,12 @@
 .next-stage-task {
   font-size: clamp(14px, 1.3vw, 18px);
   font-weight: 600;
-  color: #f1f4ff;
+  color: #2a2117;
   margin: 0 0 6px;
 }
 .next-stage-type {
   font-size: 13px;
-  color: #ffd977;
+  color: #7c4a0c;
   margin: 0;
 }
 
@@ -402,16 +402,19 @@
   border: none !important;
 }
 
-/* Định dạng thẻ gợi ý (.is-hint) */
+/* Định dạng thẻ gợi ý (.is-hint). #220: nền SÁNG như phần còn lại của màn chơi —
+   tấm xanh navy cũ là một mảng tối duy nhất còn lại trên giấy kem, và mực xanh nhạt
+   của nó không đọc được trên nền đó. `!important` giữ vì `.feedback.good` cũng là
+   `!important`-free nhưng cùng độ đặc hiệu một bậc thấp hơn. */
 .modal[data-player-theme] .feedback.is-hint {
-  border: 1px solid #227093 !important;
+  border: 1px solid #21608c !important;
   border-left-width: 4px !important;
-  background: linear-gradient(180deg, #132738 0%, #101e2c 100%) !important;
-  box-shadow: 0 4px 16px rgba(56, 189, 248, 0.12) !important;
-  color: #d1ecf1 !important;
+  background: linear-gradient(180deg, #e8f2f9 0%, #dbeaf5 100%) !important;
+  box-shadow: 0 4px 16px rgba(33, 96, 140, 0.14) !important;
+  color: var(--world-ink, #1b2438) !important;
 }
 .modal[data-player-theme] .feedback.is-hint strong {
-  color: #7dd3fc !important;
+  color: #145574 !important;
 }
 
 /* Nút mở gợi ý cho Quiz / Scenario */
@@ -419,15 +422,15 @@
   font-size: 12px !important;
   padding: 4px 10px !important;
   border-radius: 8px !important;
-  border-color: #3b4268 !important;
-  color: #ffd166 !important;
-  background: rgba(255, 209, 102, 0.08) !important;
+  border-color: #d8cfb8 !important;
+  color: #8a4b06 !important;
+  background: #fffdf7 !important;
   cursor: pointer !important;
   transition: all 0.2s ease !important;
 }
 .quiz-hint-btn:hover:not(:disabled) {
-  background: rgba(255, 209, 102, 0.18) !important;
-  border-color: #ffd166 !important;
+  background: #fbf2dd !important;
+  border-color: #c98a1c !important;
 }
 .quiz-hint-btn:disabled {
   opacity: 0.6 !important;
@@ -495,7 +498,11 @@ html[data-fullscreen="1"] .modal[data-player-theme] .race-turn .stage-illustrati
   box-shadow: 0 6px 20px rgba(98, 88, 232, 0.55) !important;
 }
 
-/* --- Gộp Vòng-Lượt và Các đội chung 1 hàng (DECISIONS #95) --- */
+/* --- Gộp Vòng-Lượt và Các đội chung 1 hàng (DECISIONS #95) ---
+   #220: thanh này là dải duy nhất còn nền navy trên sân sáng. Mỗi thẻ đội bên
+   trong đã có nền trắng riêng, nên chiều tối biến dải thành hòn đảo tối giữa
+   tờ giấy và chữ "LƯỢT HIỆN TẠI" (mực tối) chỉ còn 1.1:1. Chuyển dải sang tờ
+   sáng của thế giới đua, giữ viền/nhãn theo token thế giới. */
 .modal[data-player-theme] .race-status-bar {
   display: flex !important;
   flex-direction: row !important;
@@ -504,11 +511,10 @@ html[data-fullscreen="1"] .modal[data-player-theme] .race-turn .stage-illustrati
   justify-content: space-between !important;
   gap: 12px !important;
   padding: 8px 14px !important;
-  background: rgba(17, 21, 43, 0.85) !important;
-  border: 1px solid #303651 !important;
+  background: var(--world-option-bg, #fff) !important;
+  border: 1px solid var(--world-option-border, #f0d3b4) !important;
   border-radius: 12px !important;
   margin-bottom: 12px !important;
-  backdrop-filter: blur(8px) !important;
 }
 
 .modal[data-player-theme] .race-turn-indicator {
@@ -533,28 +539,28 @@ html[data-fullscreen="1"] .modal[data-player-theme] .race-turn .stage-illustrati
   gap: 6px !important;
   padding: 4px 12px !important;
   border-radius: 8px !important;
-  background: rgba(139, 130, 255, 0.15) !important;
-  border: 1px solid rgba(139, 130, 255, 0.45) !important;
-  color: #ffffff !important;
+  background: var(--world-accent-soft, rgba(255, 138, 61, 0.2)) !important;
+  border: 1px solid var(--world-tag-border, rgba(154, 61, 5, 0.28)) !important;
+  color: var(--world-ink, #17203a) !important;
   font-size: clamp(13px, 1.5vh, 16px) !important;
 }
 
 .modal[data-player-theme] .race-active-kicker {
   font-size: 11px !important;
   letter-spacing: 0.5px !important;
-  color: #aeb5ce !important;
+  color: var(--world-meta, #46527a) !important;
   font-weight: 700 !important;
 }
 
 .modal[data-player-theme] .race-active-name {
   font-weight: 800 !important;
-  color: #ffd166 !important;
+  color: var(--world-accent-ink, #9a3d05) !important;
 }
 
 .modal[data-player-theme] .race-rule-pill {
   font-size: clamp(11px, 1.3vh, 13px) !important;
-  color: #9aa2c2 !important;
-  background: rgba(255, 255, 255, 0.05) !important;
+  color: var(--world-meta, #46527a) !important;
+  background: rgba(23, 32, 58, 0.06) !important;
   padding: 3px 9px !important;
   border-radius: 6px !important;
   white-space: nowrap !important;
@@ -579,10 +585,10 @@ html[data-fullscreen="1"] .modal[data-player-theme] .race-turn .stage-illustrati
   align-items: center !important;
   gap: 8px !important;
   padding: 5px 11px !important;
-  border: 1px solid #384166 !important;
+  border: 1px solid var(--world-option-border, #ccd5ea) !important;
   border-radius: 8px !important;
-  background: #1b2140 !important;
-  color: #e8ebf7 !important;
+  background: #ffffff !important;
+  color: var(--world-ink, #17203a) !important;
   font-size: clamp(12px, 1.4vh, 14px) !important;
   white-space: nowrap !important;
   flex: 0 1 auto !important;
@@ -590,9 +596,9 @@ html[data-fullscreen="1"] .modal[data-player-theme] .race-turn .stage-illustrati
 }
 
 .modal[data-player-theme] .race-status-bar .race-team-row.active {
-  background: #262c50 !important;
-  border-color: #8b82ff !important;
-  box-shadow: 0 0 12px rgba(139, 130, 255, 0.4) !important;
+  background: var(--world-card-selected-bg, linear-gradient(180deg, #ffe9d9 0%, #fbd8bf 100%)) !important;
+  border-color: var(--world-accent-ink, #9a3d05) !important;
+  box-shadow: inset 3px 0 0 var(--world-accent, #ff8a3d) !important;
   transform: translateY(-1px) !important;
 }
 
@@ -603,20 +609,20 @@ html[data-fullscreen="1"] .modal[data-player-theme] .race-turn .stage-illustrati
 
 .modal[data-player-theme] .race-team-identity {
   font-weight: 700 !important;
-  color: #ffffff !important;
+  color: var(--world-ink, #17203a) !important;
 }
 
 .modal[data-player-theme] .race-team-pos {
-  color: #8ce8c5 !important;
+  color: #0f6b4a !important;
   font-size: 11px !important;
   font-weight: 600 !important;
-  background: rgba(16, 185, 129, 0.12) !important;
+  background: rgba(16, 185, 129, 0.14) !important;
   padding: 1px 6px !important;
   border-radius: 4px !important;
 }
 
 .modal[data-player-theme] .race-team-pts {
-  color: #ffd166 !important;
+  color: #8a4b06 !important;
   font-weight: 700 !important;
   font-size: 12px !important;
 }

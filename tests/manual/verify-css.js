@@ -12,15 +12,19 @@ const expectations = [
   ['app-wide thin scrollbar (7px)', /::-webkit-scrollbar\{width:7px/],
   ['dark-theme scrollbar thumb', /\[data-theme=("?)dark\1\] ::-webkit-scrollbar-thumb/],
   ['player scrollbar thinned to 8px', /\[data-player-theme\] ::-webkit-scrollbar\{width:8px/],
-  ['race turn panel is dark', /\.race-turn\{[^}]*background:#1b2140/],
-  ['race team row is dark', /\.race-team-row\{[^}]*background:#1b2140/],
-  ['race active row is dark', /\.race-team-row\.active\{[^}]*background:#262c50/],
+  // #220 turned the play surfaces light. These pins used to require the night-sky
+  // plates (#1b2140 / #262c50); they now require the light panel and the light
+  // "active" tint, so a regression back to dark panels is still caught.
+  ['race turn panel is light', /\.race-turn\{[^}]*background:#fff(fff)?[;}]/],
+  ['race team row is light', /\.race-team-row\{[^}]*background:#fff(fff)?[;}]/],
+  ['race active row is a light accent tint', /\.race-team-row\.active\{[^}]*background:#eef0ff/],
   // Tailwind collapses `overflow-x/y` into `overflow:hidden auto` (x=hidden,
   // y=auto): same behaviour, different text — assert the computed shape.
   ['stage is a scroll container', /\[data-player-theme\] \.game-stage\{[^}]*min-height:0[^}]*(overflow-y:auto|overflow:hidden auto)/],
   ['race track is height-bounded', /\[data-player-theme\] \.race-track\{[^}]*max-height:172px/],
   ['race turn question sized', /\[data-player-theme\] \.race-turn \.stage-question\{/],
-  ['fullscreen panel is dark', /html\[data-fullscreen=("?)1\1\] \.modal\{[^}]*background:#0b0e1a/],
+  // #220: fullscreen keeps the light paper instead of the old night panel (#0b0e1a).
+  ['fullscreen panel is light', /html\[data-fullscreen=("?)1\1\] \.modal\{[^}]*background:#f4f6fd/],
   ['fullscreen body clips (no page scroll)', /html\[data-fullscreen=("?)1\1\] body\{overflow:hidden\}/],
   ['treasure map pinned', /\[data-player-theme\] \.treasure-map\{[^}]*position:sticky/],
   // LAN honour roll: without these the podium collapses to three equal cards and the
@@ -143,7 +147,8 @@ const expectations = [
   // #209 task 7: "Giải thích" là một cái nút + một hộp lời giải trên màn chơi. Nếu
   // Tailwind bỏ các rule này thì nút vẫn mở được modal nhưng modal nằm trần trên nền
   // sáng của `#modalRoot` — đúng lỗi "hòn đảo sáng" đã hai lần sửa (#160, #202).
-  ['the explanation button keeps its dark pill', /\.answer-explain-btn\{[^}]*background:#232a45/],
+  // #220: the pill is white paper with accent-ink text; the dark #232a45 pill is gone.
+  ['the explanation button keeps its opaque light pill', /\.answer-explain-btn\{[^}]*background:#fff/],
   ['the explanation box covers the play surface', /\.answer-explain-backdrop\{[^}]*position:fixed/],
   ['the explanation box sits above the stage popup', /\.answer-explain-backdrop\{[^}]*z-index:110/],
   ['the explanation dialog is dark', /\.answer-explain-dialog\{[^}]*linear-gradient/],

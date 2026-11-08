@@ -139,47 +139,6 @@
     });
   }
 
-  // A gently drifting field of points tinted to the world accent.
-  function buildParticles(count, accent) {
-    const positions = new Float32Array(count * 3);
-    const speeds = new Float32Array(count);
-    for (let i = 0; i < count; i++) {
-      positions[i * 3] = (Math.random() - 0.5) * 26;
-      positions[i * 3 + 1] = (Math.random() - 0.5) * 15;
-      positions[i * 3 + 2] = (Math.random() - 0.5) * 8;
-      speeds[i] = 0.05 + Math.random() * 0.25;
-    }
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    const material = new THREE.PointsMaterial({
-      color: accent,
-      size: 0.09,
-      transparent: true,
-      opacity: 0.5,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending
-    });
-    const points = new THREE.Points(geometry, material);
-    points.userData.speeds = speeds;
-    points.userData.count = count;
-    return points;
-  }
-
-  // The rotating "world emblem" — a low-poly torus knot tinted to the accent.
-  function buildEmblem(accent) {
-    const geometry = new THREE.TorusKnotGeometry(2.1, 0.62, 96, 12);
-    const material = new THREE.MeshStandardMaterial({
-      color: accent,
-      roughness: 0.35,
-      metalness: 0.25,
-      emissive: accent,
-      emissiveIntensity: 0.12
-    });
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.userData.baseScale = 1;
-    return mesh;
-  }
-
   function enablePointer(handle) {
     if (handle.pointerOn) return;
     handle.pointerOn = true;
@@ -190,6 +149,10 @@
       const rect = handle.canvas.getBoundingClientRect();
       handle.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       handle.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      // Hover easing converges over a few frames after the last move, so the
+      // loop keeps drawing for a short tail instead of stopping mid-ease.
+      handle.pointerActive = true;
+      handle.hoverTail = 0.6;
     };
     const onClick = (event) => {
       handle.raycaster.setFromCamera(handle.pointer, handle.camera);
@@ -259,19 +222,32 @@
    * after a resize (a mount, a fullscreen switch) would read the previous frame.
    * This runs ONE projection pass and one draw synchronously, never a loop.
    */
-  function refreshAnchors(handle) {
-    if (!handle || !handles.has(handle.id)) return;
+  /**
+   * Match the drawing buffer to the container; true when the size changed.
+   *
+   * The buffer is a SIZE × pixelRatio product that Chromium rounds to whole
+   * device pixels, so dividing it back yields 1244.67 for a 1245 px box. Compared
+   * exactly, that mismatch repeats on EVERY frame and would mark the picture
+   * dirty forever (measured: 60 draws/s on an idle board). A sub-pixel
+   * difference is not a resize.
+   */
+  function matchSize(handle) {
     const w = handle.container.clientWidth || 1;
     const h = handle.container.clientHeight || 1;
     const pw = handle.renderer.domElement.width / handle.renderer.getPixelRatio();
     const ph = handle.renderer.domElement.height / handle.renderer.getPixelRatio();
-    if (w !== pw || h !== ph) {
-      handle.renderer.setSize(w, h, false);
-      if (!handle.fixedAspect) {
-        handle.camera.aspect = w / h;
-        handle.camera.updateProjectionMatrix();
-      }
+    if (Math.abs(w - pw) < 1 && Math.abs(h - ph) < 1) return false;
+    handle.renderer.setSize(w, h, false);
+    if (!handle.fixedAspect) {
+      handle.camera.aspect = w / h;
+      handle.camera.updateProjectionMatrix();
     }
+    return true;
+  }
+
+  function refreshAnchors(handle) {
+    if (!handle || !handles.has(handle.id)) return;
+    matchSize(handle);
     handle.camera.updateMatrixWorld(true);
     for (const a of handle.anchors) applyAnchor(handle, a);
     handle.renderer.render(handle.scene, handle.camera);
@@ -333,23 +309,6 @@
     handle.onDropStar = typeof handler === 'function' ? handler : null;
   }
 
-  /**
-   * Let a board own its camera aspect.
-   *
-   * The layer keeps `camera.aspect` equal to the canvas for every other game. A
-   * board that fits its own picture inside one frame of that canvas sets this
-   * instead, and the layer stops touching it (measured: resetting it shrank the
-   * constellation and moved every star off its label).
-   */
-  function fixAspect(handle, aspect) {
-    if (!handle || !handles.has(handle.id)) return;
-    handle.fixedAspect = true;
-    if (aspect > 0) {
-      handle.camera.aspect = aspect;
-      handle.camera.updateProjectionMatrix();
-    }
-  }
-
   function mount(container, opts = {}) {
     if (!container || !isAvailable()) return null;
     try {
@@ -362,7 +321,12 @@
       canvas.style.pointerEvents = 'none';
       container.appendChild(canvas);
 
-      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+      // DECISIONS #220: the loop now STOPS drawing when nothing moves, so the
+      // drawing buffer has to survive between frames. Without this flag Chromium
+      // clears it as soon as the compositor takes a frame, and an idle board —
+      // the whole point of the idle gate — paints its stars for a second and then
+      // goes blank (measured: 14 frames at mount, then 0% opaque pixels).
+      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
       renderer.setClearColor(0x000000, 0);
       renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -382,15 +346,9 @@
       key.position.set(5, 8, 6);
       scene.add(key);
 
-      const accent = color(opts.accent, 0x6d7cf0);
-      const particles = buildParticles(opts.count !== undefined ? opts.count : 46, accent);
-      scene.add(particles);
-
-      const emblem = buildEmblem(accent);
-      // Park it top-left so it never fights the centred question text.
-      emblem.position.set(-6.5, 2.7, -2);
-      emblem.visible = opts.emblem !== false;
-      scene.add(emblem);
+      // The backdrop is CSS now (DECISIONS #220): the canvas only carries the
+      // board's own objects — stars, cubes, chests, bursts. No dust, no emblem;
+      // `opts.accent` is still accepted so callers need no change.
 
       const handle = {
         id: nextId++,
@@ -399,8 +357,6 @@
         renderer,
         scene,
         camera,
-        particles,
-        emblem,
         bursts: [],
         tweens: [],
         effects: [],
@@ -409,7 +365,11 @@
         clickables: [],
         paused: false,
         pointerOn: false,
+        pointerActive: false,
+        hoverTail: 0,
         raf: 0,
+        dirty: true,
+        idleAccum: 0,
         clock: new THREE.Clock()
       };
       handles.set(handle.id, handle);
@@ -495,58 +455,62 @@
     if (i >= 0) handle.anchors[i] = slot;
     else handle.anchors.push(slot);
     applyAnchor(handle, slot);
+    handle.dirty = true;
     return object;
   }
 
   function step(handle) {
     const dt = Math.min(handle.clock.getDelta(), 0.1);
     if (handle.paused) {
-      handle.renderer.render(handle.scene, handle.camera);
+      if (handle.dirty) {
+        handle.dirty = false;
+        handle.renderer.render(handle.scene, handle.camera);
+      }
       return;
     }
-    const w = handle.container.clientWidth || 1;
-    const h = handle.container.clientHeight || 1;
-    const pw = handle.renderer.domElement.width / handle.renderer.getPixelRatio();
-    const ph = handle.renderer.domElement.height / handle.renderer.getPixelRatio();
-    if (w !== pw || h !== ph) {
-      handle.renderer.setSize(w, h, false);
-      // A board that frames its own picture inside the canvas keeps its aspect.
-      if (!handle.fixedAspect) {
-        handle.camera.aspect = w / h;
-        handle.camera.updateProjectionMatrix();
-      }
-    }
+    // A board that frames its own picture inside the canvas keeps its aspect.
+    if (matchSize(handle)) handle.dirty = true;
     // Screen-fraction anchors are re-projected every frame, so a prop keeps its
     // place on screen when the stage resizes (native fullscreen arrives after
     // the surface is rendered, and step() is where the new aspect is absorbed).
     for (const a of handle.anchors) applyAnchor(handle, a);
-    // ambient drift
-    const pos = handle.particles.geometry.attributes.position;
-    const speeds = handle.particles.userData.speeds;
-    const n = handle.particles.userData.count;
-    for (let i = 0; i < n; i++) {
-      let y = pos.getY(i) + speeds[i] * dt;
-      if (y > 7.5) y = -7.5;
-      pos.setY(i, y);
-    }
-    pos.needsUpdate = true;
-    handle.particles.rotation.y += dt * 0.03;
-    // emblem spin (skipped when the caller parked it, e.g. the house showcase)
-    if (handle.emblem.visible) {
-      handle.emblem.rotation.x += dt * 0.25;
-      handle.emblem.rotation.y += dt * 0.4;
-    }
-    // Worlds that animate themselves (the Object Connection board's idle float)
-    // hook in here, so they run on the ONE shared loop and stop with it.
+    // Worlds that animate themselves (the constellation's twinkle and float)
+    // advance here, BEFORE the draw decision — a hook that runs after the gate
+    // could never put a frame on screen on its own.
+    let hookMoved = false;
     if (typeof handle.onStep === 'function') {
       try {
-        handle.onStep(dt, reducedMotion());
+        hookMoved = handle.onStep(dt, reducedMotion()) === true;
       } catch (err) {
         console.warn('threeGame step hook failed:', err && err.message ? err.message : err);
       }
     }
+    // DECISIONS #220: nothing in the scene moves on its own any more. The gate
+    // below decides whether this frame is worth a draw at all — the backdrop is
+    // CSS, so an idle board costs zero GPU work instead of 60 draws a second.
+    // Anything that changes the picture (a burst, a tween, an effect, a hover,
+    // a resize, a new object) calls invalidate(), and a world whose own step
+    // animates says so through its onStep return value.
+    const drawing = handle.dirty || handle.bursts.length > 0 || handle.tweens.length > 0
+      || handle.effects.length > 0 || handle.pointerActive;
+    if (!drawing) {
+      // A self-animating world still gets its picture at a steady half rate; one
+      // that reported no motion (reduced motion, a frozen scene) gets nothing.
+      if (!hookMoved) {
+        handle.idleAccum = 0;
+        return;
+      }
+      handle.idleAccum += dt;
+      if (handle.idleAccum < 1 / 30) return;
+      handle.idleAccum = 0;
+    }
+    handle.dirty = false;
     // hover / click targets
-    if (handle.pointerOn && (handle.hoverables.length || handle.clickables.length)) {
+    if (handle.pointerActive) {
+      handle.hoverTail -= dt;
+      if (handle.hoverTail <= 0) handle.pointerActive = false;
+    }
+    if (handle.pointerActive && (handle.hoverables.length || handle.clickables.length)) {
       handle.raycaster.setFromCamera(handle.pointer, handle.camera);
       const targets = handle.hoverables.concat(handle.clickables);
       const hitIds = new Set(handle.raycaster.intersectObjects(targets, false).map((hit) => hit.object.id));
@@ -620,6 +584,12 @@
     handle.renderer.render(handle.scene, handle.camera);
   }
 
+  /** Mark the picture as changed, so the next frame draws even if nothing animates. */
+  function invalidate(handle) {
+    if (!handle || !handles.has(handle.id)) return;
+    handle.dirty = true;
+  }
+
   function unmount(handle) {
     if (!handle || !handles.has(handle.id)) return;
     handles.delete(handle.id);
@@ -633,6 +603,7 @@
   function setPaused(handle, paused) {
     if (!handle) return;
     handle.paused = Boolean(paused);
+    handle.dirty = true;
   }
 
   function burst(handle, opts = {}) {
@@ -686,6 +657,7 @@
     if (!handle || !object || !handles.has(handle.id)) return;
     if (x !== undefined) object.position.set(x, y, z);
     handle.scene.add(object);
+    handle.dirty = true;
   }
 
   // --- gameplay-driven pattern factories ------------------------------------
@@ -969,6 +941,11 @@
     // this on, `z` is already in world units and the radius is scaled by the
     // perspective factor.
     const depthCompensated = opts.depthCompensated === true;
+    // A board standing on a BRIGHT surface (DECISIONS #220) cannot use additive
+    // light: adding to white is white, so the halo and bloom vanish and each star
+    // turns into a flat coin. `light` swaps the glows for a solid gold body with
+    // a pale rim, and draws the edges in the same solid gold.
+    const light = opts.light === true;
 
     const group = new THREE.Group();
     let fitScale = 1;
@@ -983,11 +960,19 @@
     const beamMaterial = new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.95 });
     const ghostMaterial = new THREE.MeshBasicMaterial({ color: 0x9aa4c2, transparent: true, opacity: 0.16, depthWrite: false });
     // A star: a warm emissive core that reads against the dark frame.
-    const starMaterial = new THREE.MeshStandardMaterial({ color: 0xfff3c4, roughness: 0.3, metalness: 0, transparent: true, opacity: 1, emissive: 0xffd977, emissiveIntensity: 0.9 });
-    const haloMaterial = new THREE.MeshBasicMaterial({ color: 0xffd977, transparent: true, opacity: 0.22, depthWrite: false, blending: THREE.AdditiveBlending });
+    const starMaterial = light
+      ? new THREE.MeshStandardMaterial({ color: 0xffefb8, roughness: 0.45, metalness: 0.05, transparent: true, opacity: 1, emissive: 0xf2b24a, emissiveIntensity: 0.25 })
+      : new THREE.MeshStandardMaterial({ color: 0xfff3c4, roughness: 0.3, metalness: 0, transparent: true, opacity: 1, emissive: 0xffd977, emissiveIntensity: 0.9 });
+    // Dark boards get an additive halo; a bright one needs normal blending with a
+    // solid gold, because adding light to white paints nothing at all.
+    const haloMaterial = light
+      ? new THREE.MeshBasicMaterial({ color: 0xfbe3a6, transparent: true, opacity: 0.55, depthWrite: false })
+      : new THREE.MeshBasicMaterial({ color: 0xffd977, transparent: true, opacity: 0.22, depthWrite: false, blending: THREE.AdditiveBlending });
     // The outer bloom: a bigger additive shell with no depth write, so it glows
     // through the board without hiding the star behind it.
-    const bloomMaterial = new THREE.MeshBasicMaterial({ color: 0xffe9a8, transparent: true, opacity: 0.16, depthWrite: false, blending: THREE.AdditiveBlending });
+    const bloomMaterial = light
+      ? new THREE.MeshBasicMaterial({ color: 0xffd06a, transparent: true, opacity: 0.3, depthWrite: false })
+      : new THREE.MeshBasicMaterial({ color: 0xffe9a8, transparent: true, opacity: 0.16, depthWrite: false, blending: THREE.AdditiveBlending });
 
     for (const node of nodes) {
       const root = new THREE.Group();
@@ -1085,16 +1070,18 @@
       // A constellation edge is ONE mesh whose shader clips along its length, so
       // revealing it is one uniform write per frame — cheap on a projector laptop,
       // and exact (a chain of boxes shows its joints while it draws).
-      const revealMaterial = new THREE.ShaderMaterial({
-        transparent: true,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-        uniforms: { uColor: { value: new THREE.Color(0xf2c46b) }, uReveal: { value: 0 }, uProgress: { value: 0 } },
-        vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-        fragmentShader: 'uniform vec3 uColor; uniform float uReveal; uniform float uProgress; varying vec2 vUv; void main() { if (vUv.x > uReveal) discard; float spark = smoothstep(0.8, 1.0, vUv.x) * (1.0 - smoothstep(uReveal - 0.08, uReveal, vUv.x)); gl_FragColor = vec4(uColor * (1.0 + spark * 2.0), 0.92); }'
-      });
+      const revealMaterial = light
+        ? new THREE.MeshBasicMaterial({ color: 0xd99422, transparent: true, opacity: 0.95 })
+        : new THREE.ShaderMaterial({
+          transparent: true,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          uniforms: { uColor: { value: new THREE.Color(0xf2c46b) }, uReveal: { value: 0 }, uProgress: { value: 0 } },
+          vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+          fragmentShader: 'uniform vec3 uColor; uniform float uReveal; uniform float uProgress; varying vec2 vUv; void main() { if (vUv.x > uReveal) discard; float spark = smoothstep(0.8, 1.0, vUv.x) * (1.0 - smoothstep(uReveal - 0.08, uReveal, vUv.x)); gl_FragColor = vec4(uColor * (1.0 + spark * 2.0), 0.92); }'
+        });
       const curve = new THREE.CatmullRomCurve3(points, false, 'catmullrom', 0.0);
-      const line = new THREE.Mesh(new THREE.TubeGeometry(curve, Math.max(24, points.length * 6), 0.035, 4, false), revealMaterial);
+      const line = new THREE.Mesh(new THREE.TubeGeometry(curve, Math.max(24, points.length * 6), light ? 0.05 : 0.035, 4, false), revealMaterial);
       line.visible = false;
       beam.add(line);
       group.add(beam);
@@ -1128,10 +1115,11 @@
         entry.ghost.visible = !isOn;
         // A star stays BRIGHT when it is lit and dims (never disappears) when it
         // is not: the figure reads as "these stars are still to come", not as
-        // empty space. A dot keeps the old, dimmer rule.
-        const targetOpacity = isOn ? 1 : (entry.kind === 'star' ? 0.4 : 0.25);
+        // empty space. A dot keeps the old, dimmer rule. On a bright board the
+        // unearned star needs more presence, or pale gold on white is invisible.
+        const targetOpacity = isOn ? 1 : (entry.kind === 'star' ? (light ? 0.62 : 0.4) : 0.25);
         const targetScale = isOn ? 1 : (entry.kind === 'star' ? 0.86 : 0.7);
-        if (entry.halo) entry.halo.material.opacity = isOn ? 0.3 : 0;
+        if (entry.halo) entry.halo.material.opacity = isOn ? (light ? 0.55 : 0.3) : 0;
         if (entry.bloom) entry.bloom.material.opacity = isOn ? 0.2 : 0.1;
         if (!animate) {
           entry.root.scale.setScalar(targetScale);
@@ -1159,7 +1147,10 @@
         if (!animate) entry.reveal = isOn ? 1 : 0;
         else if (isOn && !wasDrawn) entry.reveal = 0;
         else if (!isOn) entry.reveal = 0;
-        if (entry.tube.material) entry.tube.material.uniforms.uReveal.value = entry.reveal >= 1 ? 1 : 0;
+        if (entry.tube.material) {
+          if (entry.tube.material.uniforms) entry.tube.material.uniforms.uReveal.value = entry.reveal >= 1 ? 1 : 0;
+          else entry.tube.material.opacity = entry.reveal >= 1 ? 0.95 : 0;
+        }
       }
     }
 
@@ -1172,10 +1163,24 @@
      * board read as a 3D world instead of a flat picture with depth: earned parts
      * breathe, ghosts stay still so the difference between "done" and "still to do"
      * is motion, not only colour. Runs from the shared render loop, not a timer.
+     *
+     * DECISIONS #220: the decorative breathing is on HOLD. It ran on every star for
+     * the whole lesson (measured: 22–24 renders a second on an idle board, because
+     * the caller reports motion and the loop keeps drawing), which is exactly the
+     * cost this decision removes. Set BREATHE to true to bring it back; the float
+     * and the twinkle are still wired, and the layer's idle gate is what keeps an
+     * untouched board at zero frames.
      */
+    const BREATHE = false;
     let elapsed = 0;
     function tick(dt, reduced) {
-      if (reduced) return;
+      if (reduced) return false;
+      const revealing = linkObjects.some((link) => link.reveal < 1);
+      // No reveal running and no breathing: report "nothing moved" so the shared
+      // loop can skip the draw entirely instead of pacing frames for a still frame.
+      // The caller must forward this value; returning `true` unconditionally is
+      // what kept an untouched board drawing ~23 frames a second.
+      if (!revealing && !BREATHE) return false;
       elapsed += dt;
       // The edge reveal is time-based, so a caught-up `dt` (a tab that came back)
       // finishes the line instead of leaving it half drawn.
@@ -1183,21 +1188,26 @@
         if (link.reveal >= 1) continue;
         link.reveal = Math.min(1, link.reveal + dt / 0.55);
         if (link.tube && link.tube.material) {
-          link.tube.material.uniforms.uReveal.value = 1 - Math.pow(1 - link.reveal, 3);
-          link.tube.material.uniforms.uProgress.value = elapsed;
+          if (link.tube.material.uniforms) {
+            link.tube.material.uniforms.uReveal.value = 1 - Math.pow(1 - link.reveal, 3);
+            link.tube.material.uniforms.uProgress.value = elapsed;
+          } else {
+            // A bright board's edge has no clipping shader: opacity carries the
+            // draw-on, so the line still grows out of its first star.
+            link.tube.material.opacity = 0.95 * (1 - Math.pow(1 - link.reveal, 3));
+          }
         }
       }
       for (const node of nodes) {
         const entry = byId[node.id];
-        if (!entry) continue;
-        // Every star breathes a little; an earned one also floats and turns, so
-        // "done" and "still to do" differ by motion as well as by light.
+        if (!entry || !BREATHE) continue;
         const twinkle = 0.5 + 0.5 * Math.sin(elapsed * (entry.earned ? 1.6 : 0.9) + entry.phase);
         if (entry.bloom) entry.bloom.material.opacity = (entry.earned ? 0.2 : 0.1) + twinkle * (entry.earned ? 0.12 : 0.05);
         if (!entry.earned) continue;
         entry.root.position.y = entry.homeY + Math.sin(elapsed * 1.3 + entry.phase) * 0.045;
         entry.root.rotation.y = Math.sin(elapsed * 0.7 + entry.phase) * 0.12;
       }
+      return true;
     }
 
     let hotId = null;
@@ -1248,199 +1258,6 @@
     };
   }
 
-  /**
-   * (J) Cosmos — the room a constellation floats in (DECISIONS #173).
-   *
-   * Three pieces, all procedural and all DOM-free (the unit tests build this with
-   * a stub document that has no canvas context): a gradient sky painted on an
-   * inverted sphere, ONE Points cloud of distant stars that twinkle from their own
-   * phase, and a few additive nebula planes far behind. Nothing here is a drop
-   * target and nothing here carries lesson content — the board's own stars come
-   * from `makeNodeGraph`, and the cosmos is only depth.
-   *
-   * Cost is the reason for the shape: one sky mesh, one draw call for every
-   * distant star, one draw call per cloud. A projector laptop pays ~5 extra draws
-   * and no per-frame geometry work — the twinkle and the drift live in the
-   * shaders, driven by a single `uTime`.
-   */
-  function makeCosmos(opts = {}) {
-    const accent = color(opts.accent, 0x6d7cf0);
-    const count = Math.max(0, opts.count === undefined ? 640 : Number(opts.count) || 0);
-    // A star is a handful of physical pixels, so its size must be scaled by the
-    // device pixel ratio the caller passes in (CSS pixels would halve on a Retina
-    // laptop and double on a 1080p projector).
-    const pixelScale = Math.max(0.5, Number(opts.pixelScale) || 1);
-
-    const group = new THREE.Group();
-    // The field, not the sky, is what parallax turns: a sky that moves with the
-    // pointer reads as a spinning ball, a star field that moves reads as depth.
-    const field = new THREE.Group();
-    group.add(field);
-
-    const skyMaterial = new THREE.ShaderMaterial({
-      side: THREE.BackSide,
-      depthWrite: false,
-      uniforms: {
-        uTop: { value: color(opts.top, 0x0a1030) },
-        uBottom: { value: color(opts.bottom, 0x03050d) },
-        uGlow: { value: accent.clone() }
-      },
-      vertexShader: [
-        'varying vec3 vDir;',
-        'void main() {',
-        '  vDir = normalize(position);',
-        '  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);',
-        '}'
-      ].join('\n'),
-      fragmentShader: [
-        'uniform vec3 uTop; uniform vec3 uBottom; uniform vec3 uGlow;',
-        'varying vec3 vDir;',
-        'void main() {',
-        '  float h = clamp(vDir.y * 0.5 + 0.5, 0.0, 1.0);',
-        '  vec3 c = mix(uBottom, uTop, pow(h, 1.3));',
-        // one wide, dim band of accent light low in the sky: the room has a floor
-        '  float band = smoothstep(0.72, 0.0, abs(vDir.y + 0.2));',
-        '  gl_FragColor = vec4(c + uGlow * band * 0.16, 1.0);',
-        '}'
-      ].join('\n')
-    });
-    const sky = new THREE.Mesh(new THREE.SphereGeometry(70, 24, 16), skyMaterial);
-    sky.renderOrder = -20;
-    group.add(sky);
-
-    const positions = new Float32Array(count * 3);
-    const sizes = new Float32Array(count);
-    const phases = new Float32Array(count);
-    for (let i = 0; i < count; i += 1) {
-      // A shell between 24 and 58 units, so no distant star sits on the board's
-      // plane and competes with a real target.
-      const r = 24 + Math.random() * 34;
-      const theta = Math.random() * Math.PI * 2;
-      const y = Math.random() * 2 - 1;
-      const spread = Math.sqrt(Math.max(0, 1 - y * y));
-      positions[i * 3] = r * spread * Math.cos(theta);
-      positions[i * 3 + 1] = r * y * 0.62;
-      positions[i * 3 + 2] = r * spread * Math.sin(theta);
-      // most stars small, a few bright: a flat size range reads as static noise.
-      sizes[i] = 0.8 + Math.pow(Math.random(), 3) * 2.4;
-      phases[i] = Math.random() * Math.PI * 2;
-    }
-    const starGeometry = new THREE.BufferGeometry();
-    starGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    starGeometry.setAttribute('aSize', new THREE.BufferAttribute(sizes, 1));
-    starGeometry.setAttribute('aPhase', new THREE.BufferAttribute(phases, 1));
-    const starMaterial = new THREE.ShaderMaterial({
-      transparent: true,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-      uniforms: {
-        uTime: { value: 0 },
-        uScale: { value: pixelScale },
-        uTint: { value: color(opts.starTint, 0xdfe6ff) }
-      },
-      vertexShader: [
-        'attribute float aSize; attribute float aPhase;',
-        'uniform float uTime; uniform float uScale;',
-        'varying float vAlpha;',
-        'void main() {',
-        '  vec4 mv = modelViewMatrix * vec4(position, 1.0);',
-        '  gl_Position = projectionMatrix * mv;',
-        // two frequencies so a field never blinks in lockstep
-        '  vAlpha = 0.55 + 0.45 * sin(uTime * 0.8 + aPhase) * 0.5 + 0.225 * sin(uTime * 2.3 + aPhase * 1.7);',
-        '  gl_PointSize = aSize * uScale;',
-        '}'
-      ].join('\n'),
-      fragmentShader: [
-        'uniform vec3 uTint;',
-        'varying float vAlpha;',
-        'void main() {',
-        '  float d = length(gl_PointCoord - vec2(0.5));',
-        '  float a = smoothstep(0.5, 0.08, d) * clamp(vAlpha, 0.15, 1.0);',
-        '  if (a <= 0.01) discard;',
-        '  gl_FragColor = vec4(uTint, a);',
-        '}'
-      ].join('\n')
-    });
-    const stars = new THREE.Points(starGeometry, starMaterial);
-    stars.renderOrder = -12;
-    field.add(stars);
-
-    // A cloud is a quad whose alpha falls off from its own centre — a texture
-    // would need a canvas, and this layer must build with no DOM at all.
-    const cloudSpecs = Array.isArray(opts.clouds) && opts.clouds.length
-      ? opts.clouds
-      : [
-        { x: -19, y: 8, z: -46, size: 44, color: 0x3b3f8f, opacity: 0.2, spin: 0.01 },
-        { x: 22, y: -10, z: -52, size: 52, color: 0x1f5f74, opacity: 0.15, spin: -0.008 },
-        { x: 5, y: 15, z: -58, size: 62, color: 0x5a3a86, opacity: 0.11, spin: 0.006 }
-      ];
-    const clouds = cloudSpecs.map((spec, index) => {
-      const material = new THREE.ShaderMaterial({
-        transparent: true,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-        uniforms: {
-          uColor: { value: color(spec.color, 0x3b3f8f) },
-          uOpacity: { value: Number(spec.opacity) || 0.14 },
-          uTime: { value: 0 }
-        },
-        vertexShader: [
-          'varying vec2 vUv;',
-          'void main() {',
-          '  vUv = uv;',
-          '  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);',
-          '}'
-        ].join('\n'),
-        fragmentShader: [
-          'uniform vec3 uColor; uniform float uOpacity; uniform float uTime;',
-          'varying vec2 vUv;',
-          'void main() {',
-          '  vec2 p = vUv - 0.5;',
-          // two soft lobes, slowly sliding: a flat disc looks like a lamp, not a cloud
-          '  float d1 = length(p - vec2(0.1 * sin(uTime * 0.05), 0.06));',
-          '  float d2 = length(p + vec2(0.12, 0.05 * cos(uTime * 0.04)));',
-          '  float a = pow(clamp(1.0 - d1 * 2.0, 0.0, 1.0), 2.4) + pow(clamp(1.0 - d2 * 2.2, 0.0, 1.0), 2.8) * 0.7;',
-          '  a *= smoothstep(0.5, 0.34, max(abs(p.x), abs(p.y)));',
-          '  gl_FragColor = vec4(uColor, clamp(a, 0.0, 1.0) * uOpacity);',
-          '}'
-        ].join('\n')
-      });
-      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), material);
-      const side = Number(spec.size) || 44;
-      mesh.scale.set(side, side * 0.72, 1);
-      mesh.position.set(Number(spec.x) || 0, Number(spec.y) || 0, Number(spec.z) || -46);
-      mesh.renderOrder = -14 + index;
-      field.add(mesh);
-      return { mesh, spin: Number(spec.spin) || 0.008 };
-    });
-
-    let elapsed = 0;
-
-    /** Advance the field. `reduced` freezes every motion, never the stars. */
-    function tick(dt, reduced) {
-      const step = reduced ? 0 : Math.min(Number(dt) || 0, 0.1);
-      if (step <= 0) return;
-      elapsed += step;
-      starMaterial.uniforms.uTime.value = elapsed;
-      for (const cloud of clouds) {
-        cloud.mesh.material.uniforms.uTime.value = elapsed;
-        cloud.mesh.rotation.z += cloud.spin * step;
-      }
-      // The whole field turns a hair: distant stars sliding past the board is what
-      // makes the depth read, and it is one matrix write per frame.
-      field.rotation.y += step * 0.006;
-    }
-
-    function dispose() {
-      disposeObject(group);
-    }
-
-    return {
-      group, field, sky, stars, clouds, tick, dispose,
-      count,
-      uniforms: { sky: skyMaterial.uniforms, stars: starMaterial.uniforms }
-    };
-  }
 
 
   // (H) Glow — a halo that swells once at a point. `glowAt` is the one-shot form
@@ -1493,9 +1310,11 @@
     if (!handle || !handles.has(handle.id)) return;
     handle.camera.position.z = CAMERA_REST_Z;
     handle.camera.updateMatrixWorld(true);
+    handle.dirty = true;
   }
 
-  // (E) Celebration — staggered multicolour bursts + an emblem pop.
+  // (E) Celebration — staggered multicolour bursts. The emblem pop is gone with
+  // the emblem itself (DECISIONS #220); the bursts are the celebration.
   function celebrate(handle, opts = {}) {
     if (!handle || !handles.has(handle.id)) return;
     const count = opts.count !== undefined ? opts.count : 3;
@@ -1505,24 +1324,6 @@
         burst(handle, { color: palette[i % palette.length], count: 30 });
       });
     }
-    tween(handle, {
-      target: handle.emblem,
-      from: 1,
-      to: 1.3,
-      duration: 0.25,
-      ease: 'easeOutBack',
-      apply: (v) => handle.emblem.scale.setScalar(v),
-      onComplete: () => {
-        tween(handle, {
-          target: handle.emblem,
-          from: 1.3,
-          to: 1,
-          duration: 0.4,
-          ease: 'easeOutCubic',
-          apply: (v) => handle.emblem.scale.setScalar(v)
-        });
-      }
-    });
   }
 
   // --- named-event registry (3D-scoped; gameplay emits intent, never points) ---
@@ -1566,10 +1367,12 @@
     makeReactive,
     makeNodeGraph,
     makeGlow,
-    makeCosmos,
     dolly,
     resetDolly,
     celebrate,
+    // #220: the loop draws on demand; a caller that changes a prop by hand (a
+    // cube turning, a star recoloured) asks for one frame instead of a free-run.
+    invalidate,
     // #171: the constellation board is a drop surface; these are the whole input
     // contract (a DOM point → a star, a drop → a handler, a fixed aspect).
     pick,

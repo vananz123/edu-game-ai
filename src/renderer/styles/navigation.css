@@ -233,7 +233,10 @@ html[data-theme="dark"] .nav-icon { background: var(--surface-2); color: #a0a8c0
 }
 
 
-/* --- after answering: feedback legibility + dark scrollbar --- */
+/* --- after answering: feedback legibility + light scrollbar ---
+   Phản hồi nằm trên nền SÁNG (#220): chữ mực đậm, nền pastel cùng sắc
+   xanh/hồng để "đúng" và "sai" vẫn khác nhau ngay cả khi mất sắc màu nhờ viền
+   trái 4px và nhãn chữ. */
 .modal[data-player-theme] .feedback {
   width: 100%;
   max-width: 1040px;
@@ -242,34 +245,35 @@ html[data-theme="dark"] .nav-icon { background: var(--surface-2); color: #a0a8c0
   border-radius: 12px;
   font-size: clamp(13px, 1.15vw, 16px);
   line-height: 1.65;
-  color: #dfe3f2;
+  color: var(--world-ink, #1b2438);
 }
-.modal[data-player-theme] .feedback strong { color: #fff; }
+.modal[data-player-theme] .feedback strong { color: #0f3d2c; }
 .modal[data-player-theme] .feedback.good {
-  border: 1px solid #2f9e80;
+  border: 1px solid #1f8f63;
   border-left-width: 4px;
-  background: linear-gradient(180deg, #14332c 0%, #122a25 100%);
+  background: linear-gradient(180deg, #e2f5ec 0%, #d0eee0 100%);
 }
 .modal[data-player-theme] .feedback.bad {
-  border: 1px solid #a35468;
+  border: 1px solid #b8324f;
   border-left-width: 4px;
-  background: linear-gradient(180deg, #35202a 0%, #2b1b23 100%);
+  background: linear-gradient(180deg, #fbe4e9 0%, #f7d3db 100%);
 }
+.modal[data-player-theme] .feedback.bad strong { color: #7c1a30; }
 
-/* The play modal scrolls on short windows; the default white scrollbar on a
-   dark surface is very distracting on a projector, so it gets an even thinner
-   bar with muted navy colours. */
-.modal[data-player-theme] { scrollbar-width: thin; scrollbar-color: #454d75 var(--world-scroll, #141a35); }
+/* The play modal scrolls on short windows; a default scrollbar on a tinted
+   surface is distracting on a projector, so it gets an even thinner bar with
+   muted slate colours that match the world surfaces. */
+.modal[data-player-theme] { scrollbar-width: thin; scrollbar-color: #b8bfd4 var(--world-scroll, #eef2fd); }
 .modal[data-player-theme] ::-webkit-scrollbar { width: 8px; height: 8px; }
-.modal[data-player-theme] ::-webkit-scrollbar-track { background: #141a35; }
+.modal[data-player-theme] ::-webkit-scrollbar-track { background: transparent; }
 .modal[data-player-theme] ::-webkit-scrollbar-thumb {
-  background: #454d75;
-  border: 2px solid #141a35;
+  background: #b8bfd4;
+  border: 2px solid transparent;
   border-radius: 999px;
   background-clip: padding-box;
 }
-.modal[data-player-theme] ::-webkit-scrollbar-thumb:hover { background: #5b638f; }
-.modal[data-player-theme] ::-webkit-scrollbar-corner { background: #141a35; }
+.modal[data-player-theme] ::-webkit-scrollbar-thumb:hover { background: #98a1bd; }
+.modal[data-player-theme] ::-webkit-scrollbar-corner { background: transparent; }
 
 /* Trimming the stage so a scenario question + 4 options + feedback still fit
    in a 1366x768 projector window without scrolling. */

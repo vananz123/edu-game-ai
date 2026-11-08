@@ -14,11 +14,17 @@
   padding: 2px 2px 4px;
   flex: 0 0 auto;
 }
-.modal[data-player-theme] .race-cell { background: #1b2140; color: #eef1ff; }
-.modal[data-player-theme] .race-cell-boost { background: #17322a; }
-.modal[data-player-theme] .race-cell-penalty { background: #3a1f31; }
-.modal[data-player-theme] .race-cell-lucky { background: #3a3119; }
-.modal[data-player-theme] .race-cell-challenge { background: #281f45; }
+/* #220: bàn cờ đường đua là giấy sáng trên nền ban ngày, mực đậm; các ô đặc
+   biệt là pastel cùng họ (xanh lá / hồng / hổ phách / tím), không phải ô tối. */
+.modal[data-player-theme] .race-cell {
+  background: var(--world-option-bg, linear-gradient(180deg, #ffffff 0%, #f5f8ff 100%));
+  color: var(--world-ink, #17203a);
+  border-color: var(--world-option-border, #ccd5ea);
+}
+.modal[data-player-theme] .race-cell-boost { background: #e6f7ee; border-color: #3f9f74; }
+.modal[data-player-theme] .race-cell-penalty { background: #fdecef; border-color: #c9686f; }
+.modal[data-player-theme] .race-cell-lucky { background: #fdf5e0; border-color: #c9a94f; }
+.modal[data-player-theme] .race-cell-challenge { background: #f0ebfd; border-color: #8f6ad4; }
 
 .modal[data-player-theme] .race-scoreboard { flex: 0 0 auto; }
 .modal[data-player-theme] .race-team-row { font-size: 13px; padding: 10px 14px; }
@@ -41,8 +47,8 @@
   min-height: clamp(54px, 6vh, 76px);
   font-size: clamp(15px, 1.3vw, 19px);
 }
-/* Empty-state copy inside the turn panel is dark-surface text, not grey. */
-.modal[data-player-theme] .race-turn .small { color: #aeb5ce !important; font-size: 14px; }
+/* Empty-state copy inside the turn panel uses the world's muted ink. */
+.modal[data-player-theme] .race-turn .small { color: var(--world-meta, #46527a) !important; font-size: 14px; }
 
 @media (max-height: 800px) {
   .modal[data-player-theme] .race-track { max-height: 130px; }

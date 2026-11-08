@@ -10,8 +10,9 @@
 //   2. the world changes the question font (quiz/treasure serif vs matching/
 //      race sans),
 //   3. the ribbon chip (`.stage-world-tag`) names the game and is visible,
-//   4. the palette does not break legibility: the question keeps a readable
-//      warm/light ink and every answer option sits on an opaque surface,
+//   4. the palette does not break legibility: the question ink clears 4.5:1 on
+//      the stage's own background and every answer option sits on an opaque
+//      surface,
 //
 // Run against a built app started with --remote-debugging-port:
 //   npm run build
@@ -99,6 +100,15 @@ const GAMES = [
   { world: 'race', label: 'ĐƯỜNG ĐUA TRI THỨC', make: raceGame, serif: false }
 ];
 
+function rgb(value) {
+  const channels = (String(value).match(/[\d.]+/g) || []).slice(0, 3).map(Number);
+  return channels.length === 3 && channels.every(channel => Number.isFinite(channel)) ? channels : null;
+}
+function luminance([r, g, b]) {
+  const channel = v => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4); };
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+}
+
 (async () => {
   const { ws, evaluate } = await connect();
   const seen = [];
@@ -131,6 +141,34 @@ const GAMES = [
       return {
         world: stage ? stage.getAttribute('data-game-world') : null,
         stageBg: cs(stage)?.backgroundImage || '',
+        // #220: the stage is light paper now. Measure the ink against the first
+        // opaque plate behind it — the stage's own colour when it has one, otherwise
+        // the modal it sits on — not against a brightness proxy that assumed a dark sky.
+        stageColor: (() => {
+          const layers = [];
+          for (let el = stage; el; el = el.parentElement) {
+            const c = getComputedStyle(el).backgroundColor;
+            if (c === 'transparent') continue;
+            // Escaped for the outer template literal: an unescaped \\d collapses
+            // to a bare "d" in the page and the colour then never parses.
+            const parts = c.match(/[\\d.]+/g) || [];
+            // "rgba(0, 0, 0, 0)" carries no digits for alpha, so the count alone
+            // decides: four tokens means an explicit alpha, three means opaque.
+            const alpha = parts.length >= 4 ? Number(parts[3]) : 1;
+            if (!(alpha > 0)) continue;
+            if (alpha >= 0.95) return c;
+            layers.push({ rgb: parts.slice(0, 3).map(Number), alpha });
+          }
+          // The paper may be a translucent tint (e.g. the modal's own rgba veil).
+          // Flatten every translucent layer over the default white page so the
+          // ink is measured against the colour that actually renders.
+          let base = [255, 255, 255];
+          for (let i = layers.length - 1; i >= 0; i--) {
+            const { rgb: over, alpha } = layers[i];
+            base = base.map((ch, k) => Math.round(over[k] * alpha + ch * (1 - alpha)));
+          }
+          return 'rgb(' + base.join(', ') + ')';
+        })(),
         modalBg: modal ? getComputedStyle(modal).backgroundImage : '',
         accent: stage ? getComputedStyle(stage).getPropertyValue('--world-accent').trim() : '',
         questionFont: cs(question)?.fontFamily || '',
@@ -183,12 +221,16 @@ const GAMES = [
       JSON.stringify({ font: probe.questionFont, expectedSerif: game.serif })
     );
     check(
-      `${game.world}: the question is light ink on the dark stage`,
+      `${game.world}: the question ink clears 4.5:1 on the stage`,
       (() => {
-        const m = probe.questionColor.match(/[\d.]+/g) || [];
-        return m.length >= 3 && Number(m[0]) + Number(m[1]) + Number(m[2]) > 450;
+        const ink = rgb(probe.questionColor);
+        const paper = rgb(probe.stageColor);
+        if (!ink || !paper) return false;
+        const a = luminance(ink);
+        const b = luminance(paper);
+        return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) >= 4.5;
       })(),
-      JSON.stringify({ color: probe.questionColor, font: probe.questionFont, tag: probe.tagLabels })
+      JSON.stringify({ color: probe.questionColor, stage: probe.stageColor, font: probe.questionFont, tag: probe.tagLabels })
     );
     check(
       `${game.world}: answer options sit on an opaque surfaced card`,

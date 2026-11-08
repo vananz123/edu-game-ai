@@ -328,17 +328,19 @@ html[data-fullscreen="1"] .modal[data-player-theme] .game-stage.is-house-mode .s
   overflow-y: auto;
   padding: 12px 14px;
   border-radius: 16px;
-  background: linear-gradient(180deg, #143f38, #12302c);
-  border: 1px solid #35b68e;
-  box-shadow: 0 14px 32px #0009;
-  color: #e7fff8;
+  /* #220: chủ đề sáng — cùng pastel xanh/hồng với `.feedback` của hòn đảo sáng,
+     để thẻ giải thích ở màn trình diễn không còn là tấm tối đứng cạnh giấy kem. */
+  background: linear-gradient(180deg, #e2f5ec, #d0eee0);
+  border: 1px solid #1f8f63;
+  box-shadow: 0 10px 24px rgba(23, 32, 51, 0.16);
+  color: var(--world-ink, #17251f);
   font-size: clamp(13px, 1.5vh, 16px);
   text-align: left;
 }
 .modal[data-player-theme] .game-stage.is-house-showcase #answerFeedback.bad {
-  background: linear-gradient(180deg, #482a3b, #3a2030);
-  border-color: #ef6d89;
-  color: #ffe9ef;
+  background: linear-gradient(180deg, #fbe4e9, #f7d3db);
+  border-color: #b8324f;
+  color: #7c1a30;
 }
 .game-stage.is-house-showcase #answerFeedback > strong:first-child {
   display: block;

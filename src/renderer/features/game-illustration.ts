@@ -16,32 +16,32 @@
 //     fails via build:icons:check if that copy is stale.
 
 const STAGE_ILLUSTRATION_PALETTES = {
-  animals: { glow: '#2e9e6b', fill: '#12291f', ink: '#d6f5e4', sky: '#16332a', ground: '#0c1d16' },
-  plants: { glow: '#3f9a3f', fill: '#132714', ink: '#dcf6dc', sky: '#18301a', ground: '#0d1b0e' },
-  space: { glow: '#5b4bd6', fill: '#171436', ink: '#e2dfff', sky: '#110f2b', ground: '#0a0819' },
-  'human-body': { glow: '#d1495b', fill: '#2b1218', ink: '#ffdfe3', sky: '#33151c', ground: '#1e0c10' },
-  transport: { glow: '#2f7ed8', fill: '#101f31', ink: '#d8e9fb', sky: '#13273d', ground: '#0a1522' },
-  safety: { glow: '#d98c2b', fill: '#2c1e0d', ink: '#ffe8c7', sky: '#342410', ground: '#1e1409' },
-  environment: { glow: '#2f9e8f', fill: '#0f2624', ink: '#d4f5ef', sky: '#12302d', ground: '#0a1a19' },
-  history: { glow: '#b07a3c', fill: '#2a1d10', ink: '#f6e2c8', sky: '#332314', ground: '#1d140b' },
-  geography: { glow: '#3b82a8', fill: '#102430', ink: '#d5edf7', sky: '#132d3b', ground: '#0b1921' },
-  jobs: { glow: '#7a6bd8', fill: '#1c1730', ink: '#e6e0ff', sky: '#221c3a', ground: '#141021' },
-  sports: { glow: '#e0742b', fill: '#2e1708', ink: '#ffe3cc', sky: '#381c0a', ground: '#200f06' },
-  music: { glow: '#a24bc4', fill: '#23122b', ink: '#f0dbff', sky: '#2b1634', ground: '#180d1d' },
-  art: { glow: '#c4497f', fill: '#2b1020', ink: '#ffdceb', sky: '#331327', ground: '#1d0b16' },
-  math: { glow: '#3f6fd8', fill: '#111d33', ink: '#dbe6ff', sky: '#14233d', ground: '#0b1221' },
-  language: { glow: '#4c8f5a', fill: '#132319', ink: '#dcf3e2', sky: '#172b1e', ground: '#0d1911' },
-  science: { glow: '#2f9ea8', fill: '#0f2426', ink: '#d6f2f4', sky: '#122d30', ground: '#0a191b' },
-  technology: { glow: '#4a6bd0', fill: '#131a2e', ink: '#dde5ff', sky: '#162039', ground: '#0c111f' },
-  health: { glow: '#d1546b', fill: '#2b1218', ink: '#ffdde3', sky: '#33151c', ground: '#1d0c10' },
-  family: { glow: '#c07a4a', fill: '#2a1a10', ink: '#f8e3d2', sky: '#322014', ground: '#1c110b' },
-  community: { glow: '#6b7fd0', fill: '#151a2e', ink: '#e0e6ff', sky: '#192038', ground: '#0e111f' },
-  weather: { glow: '#4b93c9', fill: '#10222f', ink: '#d8ecf8', sky: '#132a3a', ground: '#0b1720' },
-  food: { glow: '#c98a2b', fill: '#2b1e0c', ink: '#fff0cd', sky: '#33240e', ground: '#1c140a' },
-  objects: { glow: '#8a8fa8', fill: '#1a1d28', ink: '#e6e8f0', sky: '#1f2331', ground: '#12151c' },
-  'water-world': { glow: '#2f97c9', fill: '#0f2230', ink: '#d6eef9', sky: '#123043', ground: '#081722' }
+  animals: { glow: '#2e9e6b', fill: '#eaf7f0', ink: '#1c5f42', sky: '#e2f3ea', ground: '#d3ebdf' },
+  plants: { glow: '#3f9a3f', fill: '#eef7ea', ink: '#2c6630', sky: '#e6f3e0', ground: '#d8ecce' },
+  space: { glow: '#5b4bd6', fill: '#eef0fc', ink: '#3a2f92', sky: '#e7e9fa', ground: '#dcdff3' },
+  'human-body': { glow: '#d1495b', fill: '#fdeff1', ink: '#96283a', sky: '#fbe6e9', ground: '#f5d6db' },
+  transport: { glow: '#2f7ed8', fill: '#eaf2fb', ink: '#1d5b9c', sky: '#e2eef9', ground: '#d3e4f4' },
+  safety: { glow: '#d98c2b', fill: '#fdf3e6', ink: '#8a5206', sky: '#fcedd9', ground: '#f5dfc4' },
+  environment: { glow: '#2f9e8f', fill: '#e8f6f4', ink: '#1c6f64', sky: '#e0f2ef', ground: '#d0e9e5' },
+  history: { glow: '#b07a3c', fill: '#f7f0e6', ink: '#7a5326', sky: '#f2e9da', ground: '#e8dcc6' },
+  geography: { glow: '#3b82a8', fill: '#eaf3f7', ink: '#1f5a75', sky: '#e2eff5', ground: '#d2e5ee' },
+  jobs: { glow: '#7a6bd8', fill: '#f1effc', ink: '#4b3f9c', sky: '#ebe8fa', ground: '#dfdaf3' },
+  sports: { glow: '#e0742b', fill: '#fdf0e7', ink: '#9a4715', sky: '#fce9da', ground: '#f5dac4' },
+  music: { glow: '#a24bc4', fill: '#f8edfc', ink: '#72258f', sky: '#f4e4fa', ground: '#ecd6f3' },
+  art: { glow: '#c4497f', fill: '#fceef4', ink: '#93285a', sky: '#fae3ee', ground: '#f4d3e2' },
+  math: { glow: '#3f6fd8', fill: '#ecf1fc', ink: '#24499c', sky: '#e4ebf9', ground: '#d6e0f4' },
+  language: { glow: '#4c8f5a', fill: '#eff6ec', ink: '#2f6138', sky: '#e7f2e2', ground: '#d9e9d2' },
+  science: { glow: '#2f9ea8', fill: '#e9f6f7', ink: '#1c6c74', sky: '#e1f2f3', ground: '#d1e8ea' },
+  technology: { glow: '#4a6bd0', fill: '#edf1fc', ink: '#2b4a9e', sky: '#e5ebf9', ground: '#d7e0f4' },
+  health: { glow: '#d1546b', fill: '#fdeef0', ink: '#96283a', sky: '#fbe5e8', ground: '#f5d5da' },
+  family: { glow: '#c07a4a', fill: '#fbf1e9', ink: '#8a4b26', sky: '#f7e9dd', ground: '#eedccb' },
+  community: { glow: '#6b7fd0', fill: '#eff2fc', ink: '#3a4b9c', sky: '#e7ebf9', ground: '#d9e0f3' },
+  weather: { glow: '#4b93c9', fill: '#eaf3f9', ink: '#21608c', sky: '#e2eef7', ground: '#d2e4f0' },
+  food: { glow: '#c98a2b', fill: '#fdf5e6', ink: '#8a5206', sky: '#fcefd9', ground: '#f4e2c2' },
+  objects: { glow: '#8a8fa8', fill: '#f1f3f8', ink: '#464e63', sky: '#eaedf4', ground: '#dee2ec' },
+  'water-world': { glow: '#2f97c9', fill: '#e8f3fa', ink: '#1a6289', sky: '#e0eef8', ground: '#cfe4f3' }
 };
-const STAGE_ILLUSTRATION_DEFAULT_PALETTE = { glow: '#5b6cff', fill: '#1b2140', ink: '#dfe4ff' };
+const STAGE_ILLUSTRATION_DEFAULT_PALETTE = { glow: '#5b6cff', fill: '#eceff9', ink: '#2b3563' };
 /* Must match DEFAULT_ILLUSTRATION_* in src/shared/illustration-registry.ts
    (docs/DECISIONS.md #89): the scene drawn when the item carries no artwork at
    all. `language` is a real palette, so the default is an ordinary scene and
