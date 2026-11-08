@@ -1110,12 +1110,35 @@
           vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
           fragmentShader: 'uniform vec3 uColor; uniform float uReveal; uniform float uProgress; varying vec2 vUv; void main() { if (vUv.x > uReveal) discard; float spark = smoothstep(0.8, 1.0, vUv.x) * (1.0 - smoothstep(uReveal - 0.08, uReveal, vUv.x)); gl_FragColor = vec4(uColor * (1.0 + spark * 2.0), 0.92); }'
         });
-      const curve = new THREE.CatmullRomCurve3(points, false, 'catmullrom', 0.0);
-      const line = new THREE.Mesh(new THREE.TubeGeometry(curve, Math.max(24, points.length * 6), light ? 0.05 : 0.035, 4, false), revealMaterial);
+      // The unearned edge is a faint THIN line, not empty space: without it the
+      // board is a scatter of dots and a class cannot see the figure it is
+      // building. The #168 board drew its unearned beams in this same grey; #172
+      // moved the edge to one tube and left it hidden until a match, which is the
+      // regression this pair fixes. The ghost keeps the bowed shape (same points,
+      // slimmer) and the gold tube is drawn on top of it.
+      //
+      // Each tube needs its OWN curve instance. A TubeGeometry resamples the curve
+      // it is given and a second TubeGeometry over an already-sampled curve comes
+      // out degenerate — it renders zero pixels while its attribute buffer looks
+      // identical to the working one (#222). Two curves over the same points cost
+      // a few hundred vector allocations at build time and nothing per frame.
+      //
+      // Its own material at a higher opacity than a node ghost: grey at a node
+      // ghost's 0.16 is lost against the night sky, and a line has to read as a
+      // line from the back row, not as noise.
+      const tubeSegments = Math.max(24, points.length * 6);
+      const curveFor = () => new THREE.CatmullRomCurve3(points.map(p => p.clone()), false, 'catmullrom', 0.0);
+      const linkGhostMaterial = new THREE.MeshBasicMaterial({ color: 0xaab4cf, transparent: true, opacity: light ? 0.3 : 0.55, depthWrite: false });
+      // Visible from the first frame: an unearned edge is the faint line a class
+      // sees, and `setEarned` only decides when the gold tube replaces it (#222).
+      const ghost = new THREE.Mesh(new THREE.TubeGeometry(curveFor(), tubeSegments, light ? 0.022 : 0.017, 4, false), linkGhostMaterial);
+      beam.add(ghost);
+      const tubeGeometry = new THREE.TubeGeometry(curveFor(), tubeSegments, light ? 0.05 : 0.035, 4, false);
+      const line = new THREE.Mesh(tubeGeometry, revealMaterial);
       line.visible = false;
       beam.add(line);
       group.add(beam);
-      linkObjects.push({ id: link.id, group: beam, segments: [], tube: line, reveal: 0, drawn: false });
+      linkObjects.push({ id: link.id, group: beam, segments: [], tube: line, ghost, reveal: 0, drawn: false });
     }
 
     let stageIds = [];
@@ -1181,6 +1204,9 @@
           if (entry.tube.material.uniforms) entry.tube.material.uniforms.uReveal.value = entry.reveal >= 1 ? 1 : 0;
           else entry.tube.material.opacity = entry.reveal >= 1 ? 0.95 : 0;
         }
+        // The faint edge stays until the gold one is COMPLETE, so a draw-on never
+        // leaves the part it has not reached looking like a missing link.
+        if (entry.ghost) entry.ghost.visible = entry.reveal < 1;
       }
     }
 
@@ -1217,6 +1243,7 @@
       for (const link of linkObjects) {
         if (link.reveal >= 1) continue;
         link.reveal = Math.min(1, link.reveal + dt / 0.55);
+        if (link.reveal >= 1 && link.ghost) link.ghost.visible = false;
         if (link.tube && link.tube.material) {
           if (link.tube.material.uniforms) {
             link.tube.material.uniforms.uReveal.value = 1 - Math.pow(1 - link.reveal, 3);

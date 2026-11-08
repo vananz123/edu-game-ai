@@ -141,9 +141,21 @@ const graph = run(`(() => {
     links: g.links.length,
     plateChildren: g.nodes.a.root.children.length,
     ringChildren: g.nodes.b.root.children.length,
-    // #172: an edge is ONE mesh (a UV-clipped tube that draws itself on), not a
-    // stitched row of boxes — cheaper to build and cheaper to animate.
+    // #172: an edge is ONE reveal mesh (a UV-clipped tube that draws itself on).
+    // #222 adds a faint ghost tube beside it — same curve, drawn before the gold
+    // one — so the figure is visible before a match.
     linkChildren: g.links.find(l => l.id === 'bc').group.children.length,
+    ghostVisible: g.links.find(l => l.id === 'bc').ghost.visible,
+    ghostRadius: g.links.find(l => l.id === 'bc').ghost.geometry.parameters.radius,
+    tubeRadius: g.links.find(l => l.id === 'bc').tube.geometry.parameters.radius,
+    sameCurvePoints: (() => {
+      const link = g.links.find(l => l.id === 'bc');
+      const a = link.ghost.geometry.parameters.path.points;
+      const b = link.tube.geometry.parameters.path.points;
+      return a.length === b.length && a.every((p, i) => p.distanceTo(b[i]) < 1e-9);
+    })(),
+    separateCurves: g.links.find(l => l.id === 'bc').ghost.geometry.parameters.path
+      !== g.links.find(l => l.id === 'bc').tube.geometry.parameters.path,
     hasReveal: Boolean(g.links.find(l => l.id === 'bc').tube),
     revealAtStart: g.links.find(l => l.id === 'bc').reveal,
     groupChildren: g.group.children.length,
@@ -155,7 +167,13 @@ assert.equal(graph.nodes, 3, 'makeNodeGraph builds one root per node');
 assert.equal(graph.links, 2, 'makeNodeGraph builds one group per link');
 assert.equal(graph.plateChildren, 2, 'a plate is a body plus a ghost outline');
 assert.equal(graph.ringChildren, 2, 'a ring is a body plus a ghost outline');
-assert.equal(graph.linkChildren, 1, 'a link is ONE reveal line (DECISIONS #172)');
+assert.equal(graph.linkChildren, 2, 'a link is one reveal line plus one faint ghost (DECISIONS #172, #222)');
+assert.equal(graph.ghostVisible, true, 'the faint edge is visible from the first frame');
+assert.ok(graph.ghostRadius < graph.tubeRadius, 'the ghost is thinner than the gold edge');
+assert.equal(graph.sameCurvePoints, true, 'the ghost follows the same bowed path');
+// A second TubeGeometry over an already-sampled curve came out degenerate and
+// rendered no pixels (#222); each tube gets its own curve instance.
+assert.equal(graph.separateCurves, true, 'the ghost and the gold edge do not share a curve object');
 assert.equal(graph.hasReveal, true, 'the link owns the mesh that draws it on');
 assert.equal(graph.revealAtStart, 0, 'nothing is drawn before a match');
 assert.equal(graph.groupChildren, 5, 'the group holds every node and every link');

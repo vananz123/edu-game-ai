@@ -7,7 +7,8 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
-### 2026-11-08 — Nền sáng (#220), trả bầu trời đêm 3D về Chòm sao (#221), đóng nợ #212, #219 (Chòm sao tri thức)
+### 2026-11-08 — Nền sáng (#220), trả bầu trời đêm 3D về Chòm sao (#221), đường nối mờ trước khi ghép (#222), đóng nợ #212, #219 (Chòm sao tri thức)
+- **#222 (2026-11-08) — Chòm sao tri thức: đường nối giữa các sao hiện lại TRƯỚC khi ghép (nét mờ xám), ghép đúng thì nét vàng vẽ dần đè lên.** Chi tiết ở đầu handoff mới nhất bên dưới; quyết định #222 trong `docs/DECISIONS.md`.
 - **#221 (2026-11-08) — Trả toàn bộ bầu trời đêm 3D (cosmos 620 sao + emblem, vòng vẽ sống) lại cho Chòm sao tri thức theo yêu cầu chủ dự án; năm thế giới còn lại giữ nền sáng #220.** Chi tiết ở đầu handoff mới nhất bên dưới; quyết định #221 trong `docs/DECISIONS.md` (chỉ thay phần chòm sao của #220).
 - **#220 (2026-11-08) — Bỏ lớp 3D ở NỀN trò chơi (giữ nguyên 3D chơi), nền sáng chữ đậm, vòng vẽ chỉ chạy khi có việc.** Bản lưu trữ: [docs/handoff/status/2026-11-08.md](handoff/status/2026-11-08.md); quyết định #220 trong `docs/DECISIONS.md` (thay #173).
 - **#219 (2026-11-08) — Board Chòm sao tri thức: cỡ chữ nâng lên, phản hồi đúng/sai kể đúng tên vế–sao, dấu sai đỏ.** Bản lưu trữ: [docs/handoff/status/2026-11-08.md](handoff/status/2026-11-08.md); quyết định #219 trong `docs/DECISIONS.md`.
@@ -268,6 +269,16 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - Editor kéo-thả (matching + race) + xem trước đường đua
 - Lịch sử trước 2026-10-19
 ## Bàn giao gần nhất
+
+### #222 — Trả lại đường nối mờ giữa các sao trước khi ghép (2026-11-08)
+
+**Files changed.** `src/renderer/features/three-game-interaction.ts` (+30/−3; mỗi cạnh trong `makeNodeGraph` dựng thêm một **ghost tube** mảnh xám từ curve riêng, cùng các điểm cong `bend`; `setEarned` bật/tắt ghost theo `reveal`, `tick` tắt ghost khi cạnh vàng vẽ xong), `tests/unit/three-game-interaction.test.ts` (4 assertion mới cho ghost + quy tắc "một curve — một TubeGeometry"), `tests/ui/ui-constellation-check.js` (2 assertion cũ "không có đường nào trước khi ghép" thay bằng "ghost hiện / ống vàng chưa vẽ"; thêm assertion "ghost biến mất khi ống vàng vẽ xong"). Docs: `docs/DECISIONS.md` #222, `docs/STATUS.md`.
+
+**Behavior.** Trước khi ghép, board chòm sao lại có **toàn bộ đường nối** giữa các sao, dạng nét mờ xám bám đúng cung cong của thẳng/vòng cung 3D — hình chòm sao đọc được ngay từ khung đầu, học sinh thấy mình đang ghép gì. Ghép đúng thì ống vàng **vẽ dần** đè lên ghost và ghost chỉ tắt khi ống vàng vẽ xong, nên không có đoạn nào bị "hổng" giữa chừng. Sửa gốc là #172: khi gộp cạnh thành một ống có shader cắt dần, cạnh chưa mở bị `visible = false` hoàn toàn, còn đường đứt nét cũ nằm trong SVG fallback mà canvas `is-3d` che mất. Lỗi kỹ thuật đáng ghi: bản ghost đầu dựng từ **cùng** đối tượng `CatmullRomCurve3` đã bị ống vàng lấy mẫu trước, nên `TubeGeometry` thứ hai suy biến, vẽ **0 pixel** dù buffer đỉnh giống hệt; phải cấp cho mỗi ống một curve riêng.
+
+**Commands and results.** `npx tsc --noEmit` — rc 0; `node tests/run-unit.js` — **89/89**; `npm run check:renderer-globals` — 68/70 scripts, 1.018 hàm / 8.144 điểm gọi, 0 undefined; `npm run verify:css` — **61/61**. Trên instance riêng (CDP 9403, `--user-data-dir` TEMP, khởi động lại để nạp build mới): `ui-constellation-check` **105/105**; `ui-three-game-check` **19/19**; `ui-game-background-check` **42/42**; `ui-game-worlds-check` **52/52**. Đo pixel: trên ảnh đen (ẩn cosmos/sao/ống vàng) ghost bật → **10 786** pixel (trung bình 49/255), tắt → **0**; dọc cung belt-1 trên cảnh thật, độ sáng trung bình đi từ ~15–36 (nền) lên ~68–216; ống vàng đã ghép ~27 900 pixel / trung bình 123.
+
+**Chưa xác minh.** Chưa xem ảnh trước/sau bằng mắt (không có mô hình thị giác trong phiên này) — độ "vừa đủ mờ" cần chủ dự án duyệt cảm quan; chưa đo máy chiếu thật / màn hình < 720p / bản đóng gói. **Kế tiếp:** duyệt cảm quan trên 1366×768, chỉnh `opacity` (0,55) và bán kính (0,017) nếu cần, rồi gộp vào 0.4.3.
 
 ### #221 — Trả bầu trời đêm 3D về Chòm sao tri thức (2026-11-08)
 

@@ -2437,3 +2437,22 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 **Không chứng minh.** Không so ảnh trước/sau bằng mắt (phiên này không có mô hình thị giác); "giống như trước" được chứng minh bằng số đo. Chưa đo máy chiếu thật, màn hình < 720p, bản đóng gói.
 
 **Việc kế tiếp.** Soát board chòm sao bằng mắt ở 1366×768; gộp vào 0.4.3 và chạy lại `check:packaged-install` + `check:packaged-feed`.
+
+## #222 — Trả lại đường nối mờ giữa các sao TRƯỚC khi ghép (Chòm sao tri thức) (2026-11-08)
+
+**Yêu cầu, nguyên văn:** *"còn phần đường nối giữa các ngôi sao đâu?"* — sau #221 bầu trời đã về, nhưng board chỉ còn các ngôi sao rời rạc: không có đường nào nối chúng cho tới khi ghép đúng.
+
+**Lỗi và gốc rễ.** #168 vẽ **mọi** cạnh ngay từ đầu: đoạn chưa mở dùng vật liệu xám mờ (`ghostMaterial`), ghép đúng thì thay bằng vật liệu vàng. #172 gộp một cạnh thành **một** ống có shader cắt dần theo `uReveal`, và đặt `tube.visible = isOn` — nên cạnh chưa mở **biến mất hoàn toàn**. Đường đứt nét còn lại chỉ sống trong fallback SVG, mà SVG lại bị canvas `is-3d` che. Đo trước khi sửa (`probe-hide`): bật/tắt mọi ghost cho ra **cùng một** pixel — trên board không có gì để đổi.
+
+**Quyết định 1 — mỗi cạnh mang HAI ống: ghost mảnh xám tại chỗ, ống vàng trên nó.** Ghost dùng đúng các điểm chia đôi cung cong của cạnh (`bend`), bán kính 0,017 (so với 0,035 của ống vàng), màu `#aab4cf`, opacity **0,55**, `depthWrite: false`. Cạnh chưa ghép = ghost; ghost ở lại cho tới khi `reveal` chạm 1, rồi tắt trong `tick`/`setEarned`. Nhờ vậy lúc ống vàng đang **vẽ dần**, phần nó chưa vẽ tới vẫn là một nét mờ, không phải một lỗ hổng.
+
+**Quyết định 2 — mỗi ống phải có Curve RIÊNG.** Bản đầu dựng ghost từ **cùng** đối tượng `CatmullRomCurve3` sau ống vàng và nó vẽ ra **0 pixel**, trong khi `geometry.attributes.position` giống hệt ống vàng từng byte (395 đỉnh, 1872 index, không NaN, bbox khớp). Đổi vật liệu, `depthTest`, `DoubleSide`, `renderOrder`, `renderOrder + depthWrite` đều không cứu. Gán `ghost.geometry = tube.geometry` thì ghost **vẽ được** — chứng minh lỗi ở geometry, không ở vật liệu. Kết luận đã dùng: dựng mỗi `TubeGeometry` từ một `new CatmullRomCurve3(points.map(p => p.clone()))` riêng (chi phí vài trăm vector lúc build, 0 mỗi khung). Đây là quy tắc cho mọi code sau này: **một curve — một TubeGeometry**.
+
+**Quyết định 3 — ghost phải sáng hơn ghost của sao.** Ghost sao ở opacity 0,16 là đúng cho một chấm tròn to; một ống rộng 1,7 % ở 0,34 lại chìm vào bầu trời. Đo trên ảnh đen (ẩn cosmos/sao/ống vàng): ghost bật cho **10 786** pixel hữu ích (trung bình 49/255, đỉnh 290/765), tắt cho **0**; trên cảnh thật, độ sáng trung bình dọc cung belt-1 đi từ **~15–36** (chỉ có nền) lên **~68–216**. Ống vàng khi đã ghép cho ~27 900 pixel / trung bình 123 — ghost rõ ràng là bậc yếu hơn, đúng ý "nét mờ để thấy hình, không tranh với sao".
+
+**Số (log tươi, instance 9403 trên `npm run build` của HEAD).** `npx tsc --noEmit` rc 0 · `node tests/run-unit.js` **89/89** (suite `three-game-interaction` thêm 4 assertion: ghost hiện từ đầu, mảnh hơn ống vàng, cùng đường cong, **không** dùng chung đối tượng curve) · `check:renderer-globals` 68/70 script, **1.018** hàm / **8.144** điểm gọi, 0 undefined · `verify:css` **61/61** · `ui-constellation-check` **105/105** (thay 2 assertion cũ "không có đường nào" bằng "ghost hiện / ống vàng chưa vẽ", thêm 1 assertion "ghost biến mất khi ống vàng vẽ xong") · `ui-three-game-check` **19/19** · `ui-game-background-check` **42/42** · `ui-game-worlds-check` **52/52**.
+
+**Không chứng minh.** Không xem ảnh trước/sau bằng mắt (phiên này không có mô hình thị giác); độ "vừa đủ mờ" được chốt bằng số pixel, cần chủ dự án duyệt cảm quan. Chưa đo máy chiếu thật, màn hình < 720p, bản đóng gói.
+
+**Việc kế tiếp.** Duyệt cảm quan độ mờ của ghost trên 1366×768 và máy chiếu; nếu cần, chỉ chỉnh `opacity` 0,55 và bán kính 0,017 trong một chỗ. Gộp vào 0.4.3.
+

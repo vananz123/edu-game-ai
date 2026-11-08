@@ -212,12 +212,20 @@ const snapshot = () => `JSON.stringify({
     `tray=${JSON.stringify(layout.tray)} scene=${JSON.stringify(layout.scene)}`);
   // The static SVG lives in the scene for the no-WebGL fallback; with 3D live it
   // is covered by the canvas, so what must be empty is the SVG's own drawing.
-  check('the scene carries no constellation edge before a match',
+  check('the SVG fallback draws no edge before a match; the 3D board shows them faint',
     layout.edges === '0000' && layout.fallbackDrawn === 0,
     `edges=${layout.edges} fallback paths=${layout.fallbackDrawn}`);
-  check('three-dimensional edges exist but none is drawn',
-    (await evaluate(`threeWorld.graph.links.map(l => (l.tube ? (l.tube.visible ? 'v' : 'h') : 'none')).join('')`)) === 'hhhh',
-    'every edge starts hidden');
+  // DECISIONS #222: every edge is present from the first frame as a faint ghost,
+  // so a class can see the figure it is building. The gold tube is what a match
+  // reveals; the ghost stays until that draw-on is complete.
+  check('every edge is a visible ghost whose gold tube is not drawn yet',
+    (await evaluate(`(() => {
+      const links = threeWorld.graph.links;
+      const ghosts = links.map(l => (l.ghost ? (l.ghost.visible ? 'v' : 'h') : 'none')).join('');
+      const tubes = links.map(l => (l.tube.visible ? 'v' : 'h')).join('');
+      return ghosts + '|' + tubes;
+    })()`)) === 'vvvv|hhhh',
+    'ghosts visible, gold hidden at the start');
 
   console.log('\n=== the room: no frame, real space (#221) ===');
   // --------------------------------------------------- the room: no frame --
@@ -589,6 +597,13 @@ const snapshot = () => `JSON.stringify({
   check('every edge of the figure is revealed when the board is complete',
     finish.snap.edges === '1111' && finish.snap.connected.length === 5,
     `edges=${finish.snap.edges} connected=${finish.snap.connected.length}`);
+  // The gold line has replaced its ghost: a finished figure is solid, not faded.
+  check('the faint ghosts are gone once the gold edges are complete',
+    (await evaluate(`(() => {
+      const links = threeWorld.graph.links;
+      return links.every(l => l.tube.visible && l.reveal >= 1 && !(l.ghost && l.ghost.visible));
+    })()`)) === true,
+    'every link: tube drawn to the end, ghost hidden');
 
   const resultsScreen = JSON.parse(await evaluate(`(async () => {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
