@@ -2511,3 +2511,19 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 **Không chứng minh.** Chưa so ảnh bằng mắt trong phiên này; ảnh/màu chứng minh bằng `getBoundingClientRect` + `getComputedStyle`. Chưa đo máy chiếu, màn < 720p, bản đóng gói. Không động vào nhánh AI local.
 
 **Việc kế tiếp.** Gộp #224/#225 vào 0.4.3 cùng nợ đo máy chiếu của #221/#222.
+
+## #226 — Phát hành EduGame Studio 0.5.0 (2026-11-08)
+
+**Yêu cầu, nguyên văn:** *"xóa release cũ ở máy, tạo release mới và đẩy lên git release"*. Ba lựa chọn chủ dự án chốt: dọn **chỉ build cũ trên máy** (giữ nguyên ba release và tag `v0.4.0`–`v0.4.2` trên GitHub), phiên bản **0.5.0**, **bản đầy đủ công bố ngay** (không để draft).
+
+**Quyết định 1 — "release cũ ở máy" là `release/`, không phải GitHub.** `release/` bị gitignore và tích ~2,9 GB output (8 thư mục `--dir`/`win-unpacked`/bản cũ, installer 0.4.0/0.4.1, `latest.yml`, bản `pre-perf`). Xoá hết, giữ `release/.icon-ico` (dữ liệu icon dùng lại khi đóng gói). Không xoá release/tag nào trên GitHub: người dùng đã tải 0.4.x vẫn còn link, và `electron-updater` so version trong `latest.yml` nên bản cũ không cần bị gỡ.
+
+**Quyết định 2 — 0.5.0 là mốc phiên bản nhỏ.** Cụm #220–#225 đổi hành vi người dùng nhìn thấy (bỏ một lựa chọn cấu hình, thay đổi bố cục/typography của Chòm sao và màn chơi), nên bump minor thay vì patch. Bump ở ba nơi giữ đồng bộ: `package.json`, khoá gốc `package-lock.json`, và `/health` của AI gateway (`server/index.ts`).
+
+**Quyết định 3 — thứ tự upload như #217.** Draft → `exe` → `.blockmap` → `latest.yml` **sau cùng** → xác minh tên/kích thước/SHA-256 → publish. `latest.yml` đặt cuối để cửa sổ mà feed thấy đến muộn nhất là lúc cả hai tệp còn lại đã sẵn sàng — giáo viên không bao giờ nhận bản cập nhật trỏ tới tệp chưa có.
+
+**Điều đã đi kiểm.** Build `npm run dist:win` rc 0. Installer `EduGame-Studio-Setup-0.5.0.exe` **92 667 619** byte, SHA-256 `e65322d0cb2d9b9360a7291fe89411555d15746cdcd5e493d41337a550fbdcb4` (hash GitHub báo cho asset trùng khít), `FileVersion`/`ProductVersion` = **0.5.0**; `latest.yml` 356 byte, `version: 0.5.0`, `size` khớp. `vendor/three.global.js` và `vendor/confetti.global.js` có trong `app.asar`. Binary đóng gói chạy CDP báo `edugame-studio/0.5.0`: `offline-packaged` **11/11**, và khi reload trang bắt được **72** request với **0** request remote (mọi script/stylesheet đều `file://` trong asar). Release <https://github.com/vananz123/edu-game-ai/releases/tag/v0.5.0> có ba asset ở trạng thái `uploaded`, draft `false`; feed công khai `releases/latest/download/latest.yml` trả `version: 0.5.0`; `packaged-feed-check` trên chính binary 0.5.0 **24/24**, badge *"Ứng dụng đã mới nhất"*, ghi chú *"Bản 0.5.0 là bản mới nhất đã công bố · kiểm tra lúc 22:23"*.
+
+**Không chứng minh.** Installer **chưa ký Authenticode** — Windows SmartScreen có thể chặn/hỏi ở lần chạy đầu. Chưa cài bộ cài thật trên máy Windows sạch ngắt mạng (**P7 vẫn mở**, `npm run measure:p7` chưa chạy với 0.5.0). Chưa đo máy chiếu, màn < 720p. Nhánh AI local không đo theo chỉ đạo. Ba release 0.4.x trên GitHub được giữ nguyên theo lựa chọn, nên `releases/latest` chỉ trỏ 0.5.0 vì nó mới nhất chứ 0.4.x không bị xoá.
+
+**Việc kế tiếp.** P7 trên máy sạch với installer 0.5.0; quyết định Authenticode (trả phí); hộp xác nhận khi lưu game cũ (nợ #223).

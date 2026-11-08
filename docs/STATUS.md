@@ -7,10 +7,11 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
-### 2026-11-08 — Khối thảo luận mở ở màn không ảnh (#225), mực câu hỏi cho dòng thảo luận (#224), bỏ "Giữ hành vi hiện tại" (#223), nền sáng (#220), trả bầu trời đêm 3D về Chòm sao (#221), đường nối mờ trước khi ghép (#222), đóng nợ #212, #219 (Chòm sao tri thức)
-- **#225 (2026-11-08) — Màn Tình huống tắt ảnh minh hoạ mở khối "Thảo luận" thành ô đọc được (`:has(.feedback-discussion)`), có trần chiều cao và tự cuộn; màn không có câu thảo luận vẫn giữ ô 1×1 ẩn.** Chi tiết ở đầu handoff mới nhất bên dưới; quyết định #225 trong `docs/DECISIONS.md`.
+### 2026-11-08 — Phát hành 0.5.0 (#226), khối thảo luận mở ở màn không ảnh (#225), mực câu hỏi cho dòng thảo luận (#224), bỏ "Giữ hành vi hiện tại" (#223), nền sáng (#220), trả bầu trời đêm 3D về Chòm sao (#221), đường nối mờ trước khi ghép (#222), đóng nợ #212, #219 (Chòm sao tri thức)
+- **#226 (2026-11-08) — Phát hành EduGame Studio 0.5.0 lên GitHub Releases: bump ba chỗ, bộ cài 92.667.619 B (SHA-256 `e65322d0…dcb4`), binary báo đúng 0.5.0, offline 11/11 với 0 request ra ngoài, `latest.yml` công khai ở 0.5.0, `check:packaged-feed` 24/24 `up-to-date`.** Chi tiết ở đầu handoff mới nhất bên dưới; quyết định #226 trong `docs/DECISIONS.md`.
+- **#225 (2026-11-08) — Màn Tình huống tắt ảnh minh hoạ mở khối "Thảo luận" thành ô đọc được (`:has(.feedback-discussion)`), có trần chiều cao và tự cuộn; màn không có câu thảo luận vẫn giữ ô 1×1 ẩn.** Bản lưu trữ: [docs/handoff/status/2026-11-08.md](handoff/status/2026-11-08.md); quyết định #225 trong `docs/DECISIONS.md`.
 - **#224 (2026-11-08) — Dòng "Thảo luận" của Tình huống thành khối riêng mang mực câu hỏi; khối phản hồi dưới ảnh hết chữ trắng trên nền sáng.** Bản lưu trữ: [docs/handoff/status/2026-11-08.md](handoff/status/2026-11-08.md); quyết định #224 trong `docs/DECISIONS.md`.
-- **#223 (2026-11-08) — Ba bề mặt cấu hình chỉ còn Thi đấu · Luyện tập · Thử thách; game tạo trước #209 mở ra là Thi đấu và lần lưu kế tiếp ghi `tra-loi:thi-dau`, xoá chế độ điểm cũ.** Chi tiết ở đầu handoff mới nhất bên dưới; quyết định #223 trong `docs/DECISIONS.md`.
+- **#223 (2026-11-08) — Ba bề mặt cấu hình chỉ còn Thi đấu · Luyện tập · Thử thách; game tạo trước #209 mở ra là Thi đấu và lần lưu kế tiếp ghi `tra-loi:thi-dau`, xoá chế độ điểm cũ.** Bản lưu trữ: [docs/handoff/status/2026-11-08.md](handoff/status/2026-11-08.md); quyết định #223 trong `docs/DECISIONS.md`.
 - **#222 (2026-11-08) — Chòm sao tri thức: đường nối giữa các sao hiện lại TRƯỚC khi ghép (nét mờ xám), ghép đúng thì nét vàng vẽ dần đè lên.** Bản lưu trữ: [docs/handoff/status/2026-11-08.md](handoff/status/2026-11-08.md); quyết định #222 trong `docs/DECISIONS.md`.
 - **#221 (2026-11-08) — Trả toàn bộ bầu trời đêm 3D (cosmos 620 sao + emblem, vòng vẽ sống) lại cho Chòm sao tri thức theo yêu cầu chủ dự án; năm thế giới còn lại giữ nền sáng #220.** Bản lưu trữ: [docs/handoff/status/2026-11-08.md](handoff/status/2026-11-08.md); quyết định #221 trong `docs/DECISIONS.md` (chỉ thay phần chòm sao của #220).
 - **#220 (2026-11-08) — Bỏ lớp 3D ở NỀN trò chơi (giữ nguyên 3D chơi), nền sáng chữ đậm, vòng vẽ chỉ chạy khi có việc.** Bản lưu trữ: [docs/handoff/status/2026-11-08.md](handoff/status/2026-11-08.md); quyết định #220 trong `docs/DECISIONS.md` (thay #173).
@@ -273,6 +274,18 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - Lịch sử trước 2026-10-19
 ## Bàn giao gần nhất
 
+### #226 — Phát hành EduGame Studio 0.5.0 lên GitHub Releases (2026-11-08)
+
+**Files changed.** `package.json`, `package-lock.json` (khoá gốc), `server/index.ts` (`/health` → `0.5.0`); commit `c370fad`, tag annotated `v0.5.0`. Docs: `docs/DECISIONS.md` #226, `docs/ROADMAP.md`, `docs/STATUS.md`, `docs/handoff/status/2026-11-08.md`.
+
+**Behavior.** Chủ dự án chọn: dọn **chỉ build cũ trên máy**, phiên bản **0.5.0**, công bố ngay. `release/` được dọn sạch ~2,9 GB output cũ (8 thư mục bản đóng gói trước, installer 0.4.0/0.4.1, `latest.yml`, bản `pre-perf`), giữ `release/.icon-ico`; ba release và tag `v0.4.0`–`v0.4.2` trên GitHub giữ nguyên. Bản 0.5.0 gồm: bỏ "Giữ hành vi hiện tại" (#223), mực câu hỏi cho dòng Thảo luận và khối phản hồi dưới ảnh hết chữ trắng (#224), khối thảo luận mở được ở màn không ảnh (#225), Chòm sao tri thức chữ to/đường nối mờ/bầu trời đêm 3D (#219–#222), nền sáng năm thế giới còn lại (#220).
+
+**Commands and results.** `npm run dist:win` rc 0 · installer **92 667 619** byte, SHA-256 `e65322d0cb2d9b9360a7291fe89411555d15746cdcd5e493d41337a550fbdcb4`, `FileVersion`/`ProductVersion` 0.5.0 · `latest.yml` 356 byte, `version: 0.5.0`, `size` khớp · `three.global.js` + `confetti.global.js` có trong `app.asar` · binary đóng gói: `offline-packaged` **11/11**, reload bắt 72 request / **0 remote** · release có 3 asset `uploaded`, draft `false` · feed công khai `releases/latest/download/latest.yml` = 0.5.0 · `packaged-feed-check` trên binary 0.5.0 **24/24** (`up-to-date`, *"Bản 0.5.0 là bản mới nhất đã công bố"*).
+
+**Chưa xác minh.** Installer **chưa ký Authenticode** (SmartScreen có thể hỏi ở lần chạy đầu); chưa cài trên máy Windows sạch ngắt mạng — **P7 vẫn mở**; chưa đo máy chiếu, màn < 720p; nhánh AI local không đo theo chỉ đạo.
+
+**Việc kế tiếp.** Chạy `npm run measure:p7` với installer 0.5.0 trên máy sạch theo `tests/packaging/P7-OFFLINE-INSTALL.md`; quyết định Authenticode; hộp xác nhận khi lưu game cũ (nợ #223).
+
 ### #225 — Màn Tình huống không ảnh minh hoạ mở khối "Thảo luận" thành ô đọc được (2026-11-08)
 
 **Files changed.** `src/renderer/styles/gameplay.css` (luật mới `.quiz-answer-live:has(.feedback-discussion)`); `tests/ui/ui-answer-mode-check.js` (trường snapshot `fbFrame` đo hình học `#answerFeedback`; `scenarioWith` tắt ảnh khi khoá chứa `no-art`/`quiet`; ván chơi mới `scenarioNoArt`/`scenarioNoArtMiss` và `scenarioQuiet`/`scenarioQuietMiss`; hai check mới). Docs: `docs/DECISIONS.md` #225, `docs/STATUS.md`, `docs/handoff/status/2026-11-08.md`.
@@ -292,7 +305,6 @@ Bản lưu trữ: [docs/handoff/status/2026-11-08.md](handoff/status/2026-11-08.
 ### #223 — Bỏ "Giữ hành vi hiện tại": game cũ mở ra là Thi đấu, lưu bằng token (2026-11-08)
 
 Bản lưu trữ: [docs/handoff/status/2026-11-08.md](handoff/status/2026-11-08.md); quyết định #223 trong `docs/DECISIONS.md`.
-
 ### #219 — Chòm sao tri thức: chữ to hơn, phản hồi đúng/sai rõ ràng (2026-11-08)
 
 Bản lưu trữ: [docs/handoff/status/2026-11-08.md](handoff/status/2026-11-08.md); quyết định #219 trong `docs/DECISIONS.md`.

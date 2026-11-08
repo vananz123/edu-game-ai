@@ -510,4 +510,16 @@ Yêu cầu của chủ dự án: *"tiếp theo là loại bỏ cách trả lời
 - [x] **Bước 2 — ba bề mặt:** Tạo (`#setupScoringMode`), trình soạn thảo (`#editAnswerMode`, lưu cũng xoá khoá cất), wizard (`wizardAnswerModeSelect`) chỉ còn Thi đấu · Luyện tập · Thử thách, kèm dòng lời nhắc theo luật đang chọn.
 - [x] **Bước 3 — test + cổng:** `answer-mode.test.ts` (chỉ ba mục, `legacy` mang nhãn Thi đấu), `game-project-adapter.test.ts` (năm chế độ cũ đều lưu `tra-loi:thi-dau`, không cất, `timeBonus` giữ nguyên, `.egame` không mang khoá cất), `ui-answer-mode-check.js` viết lại mục C–F → **215/215**; `tsc` 0 · unit **89/89** · globals 68/70 · `verify:css` **61/61**.
 - [ ] **Nợ của #223.** (a) Không đo bản đóng gói / máy chiếu / máy pilot. (b) Lưu một game cũ **âm thầm** làm mất chế độ điểm `tốc độ` / `theo độ khó` / `thi đấu đội` / `luyện tập` — chưa có lời nhắc cho giáo viên. (c) Nhánh AI local không đo theo chỉ đạo.
-- [ ] **Việc kế tiếp.** (Tuỳ chọn) hộp xác nhận một dòng ở nút Lưu của trình soạn thảo khi game cũ sắp đổi sang Thi đấu; gộp #223 vào 0.4.3 cùng nợ đo của #221/#222.
+- [ ] **Việc kế tiếp.** (Tuỳ chọn) hộp xác nhận một dòng ở nút Lưu của trình soạn thảo khi game cũ sắp đổi sang Thi đấu; ~~gộp #223 vào 0.4.3~~ — **đã gộp vào 0.5.0 ở #226**.
+
+## Phát hành 0.5.0 (#226, 2026-11-08, DECISIONS #226)
+
+Chủ dự án yêu cầu: *"xóa release cũ ở máy, tạo release mới và đẩy lên git release"*, chọn **chỉ dọn build cũ trên máy** (ba release trên GitHub v0.4.0–v0.4.2 giữ nguyên), phiên bản **0.5.0**, **bản đầy đủ công bố ngay**.
+
+- [x] **Bước 1 — dọn build cũ trên máy:** xoá `release/{0.4.2,204,205,206,210,218,win-unpacked,win-unpacked-0.4.1-local}`, các `Setup-0.4.0/0.4.1` + `.blockmap` + bản `pre-perf`, `builder-debug.yml`, `latest.yml` — ~2,9 GB; giữ `release/.icon-ico` (`latest.yml` cũng 0.4.0–0.4.2 trên GitHub **không bị đụng**).
+- [x] **Bước 2 — bump 0.5.0:** `package.json`, khoá gốc `package-lock.json`, `/health` của AI gateway; commit `c370fad`; tag annotated `v0.5.0` push lên origin.
+- [x] **Bước 3 — dựng + đo bản đóng gói:** `npm run dist:win` rc 0; `Setup-0.5.0.exe` **92 667 619** byte, SHA-256 `e65322d0…dcb4`, `FileVersion`/`ProductVersion` = 0.5.0, `latest.yml` khớp; `vendor/three.global.js` + `confetti.global.js` có trong asar; `offline-packaged` **11/11**; reload bắt 72 request, **0 remote**.
+- [x] **Bước 4 — công bố:** draft → upload `exe` + `.blockmap` → `latest.yml` sau cùng → verify tên/kích thước/hash → publish <https://github.com/vananz123/edu-game-ai/releases/tag/v0.5.0>. Feed công khai trả `version: 0.5.0`; `check:packaged-feed` trên binary 0.5.0 **24/24** — *"Ứng dụng đã mới nhất · Bản 0.5.0 là bản mới nhất đã công bố"*.
+- [ ] **Nợ của #226.** (a) Installer **chưa ký Authenticode** — SmartScreen có thể hỏi khi chạy lần đầu. (b) Chưa cài bộ cài thật trên máy Windows sạch ngắt mạng — **P7 vẫn mở**. (c) Chưa đo máy chiếu, màn < 720p. (d) Nhánh AI local không đo theo chỉ đạo.
+- [ ] **Việc kế tiếp.** Chạy `npm run measure:p7` trên máy sạch theo `tests/packaging/P7-OFFLINE-INSTALL.md` với installer 0.5.0; quyết định Authenticode; hộp xác nhận khi lưu game cũ (nợ #223).
+
