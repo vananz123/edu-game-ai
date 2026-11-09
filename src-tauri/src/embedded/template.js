@@ -18,7 +18,9 @@
   var available = {};
   /* @slot EGVALIDATE */
   /* @slot EGFIELDS */
+  /* @slot EGCONTRACTS */
   /* @slot EGOPS */
+  /* @slot EGPROJECTS */
 
   // Luật trong `library-ops.ts` viết theo kiểu đồng bộ (bên Electron
   // `better-sqlite3` cũng đồng bộ). Ba op của Rust cũng đồng bộ, nên cầu này
@@ -37,6 +39,7 @@
   };
 
   var ops = available.EGOPS;
+  var projects = available.EGPROJECTS;
 
   /** Bảng op → hàm; thiếu op là lỗi của người dựng, không phải của dữ liệu. */
   var dispatch = {
@@ -48,6 +51,17 @@
     'library:delete-sessions': async function (sessionIds) { return ops.deleteSessions(store, sessionIds); },
     // Lần chạy đầu: `library.rs` gọi op này ngay sau khi mở tệp.
     'library:seed': async function () { return ops.seedLibrary(store, __eg_now); },
+    // Nhóm `project:*`: năm kênh của preload, cộng một kênh dọn ảnh.
+    'project:save-draft': async function (project) { return projects.saveProjectDraft(store, project, __eg_now); },
+    'project:get': async function (projectId) { return projects.getProject(store, projectId); },
+    'project:list': async function () { return projects.listProjects(store); },
+    'project:delete': async function (projectId) { return projects.deleteProject(store, projectId); },
+    'project:delete-many': async function (projectIds) { return projects.deleteProjects(store, projectIds); },
+    // Bản nháp còn nhắc tới ảnh nào — cùng câu đọc với `library:image-refs`, tách
+    // tên để cổng kiểm tra biết kênh nào dọn ảnh sau một lệnh xoá dự án.
+    'project:image-refs': async function () {
+      return store.select('SELECT data_json FROM game_projects', {});
+    },
     // Id ảnh mà mọi trò chơi đã lưu và mọi bản nháp còn nhắc tới — Rust đọc
     // trước khi dọn `images/<id>.img` sau một lệnh xoá (`removeUnusedCustomImages`).
     'library:image-refs': async function () {

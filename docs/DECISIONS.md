@@ -2650,6 +2650,36 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 
 **Việc kế tiếp.** Chưa duyệt bắt đầu code. Khi duyệt: dựng khung Tauri v2 + Rust toolchain trong nhánh riêng, chuyển lớp truy cập desktop sang facade TS (kế hoạch mục 4) và làm vòng 1 theo mục 1.
 
+## Giai đoạn 3 (3/6) — Năm kênh `project:*`: cùng engine, cùng luật; xoá lô giữ trần 200 và ảnh của bản nháp bị dọn ở Rust (2026-11-09)
+
+**Báo cáo.** Bước 3/6 port nhóm dự án (`project:save-draft`, `project:get`, `project:list`, `project:delete`, `project:delete-many`) lên SQLite của vỏ Tauri, dùng lại nguyên văn `project-ops.ts` — không viết lại luật sang Rust. Bằng chứng nghiệm thu là **ba bản nháp lưu → đóng hẳn ứng dụng → mở lại đúng thứ tự mới-sửa-trước và đúng `createdAt` → sửa giữ `id` → xoá một / xoá lô**.
+
+**Quyết định.**
+
+1. **`project:delete-many` giữ đúng trần 200 và câu lỗi của Electron.** Nhóm xoá lô nhận `{ok, deleted, missing}`; danh sách rỗng báo "Chưa chọn dự án nào để xoá.", quá 200 báo "Mỗi lần chỉ xoá tối đa 200 dự án." — cùng chữ mà `main.ts` dùng. Câu lỗi khác nhau giữa hai vỏ sẽ khiến giáo viên thấy hai ứng dụng khác nhau; test Rust so nguyên câu.
+2. **Ảnh của bản nháp bị dọn ở Rust, sau khi dòng biến mất.** `deleteProject`/`deleteProjects` trả `images` (id ảnh được tham chiếu); Rust xoá `images/<id>.img` chỉ với id không còn trò chơi hay bản nháp nào nhắc tới — cùng luật `removeUnreferencedImages` của Electron. Lỗi đọc/xoá một tệp ảnh không biến thao tác xoá dự án thành thất bại.
+3. **Cổng tauri-webview mở rộng chứ không thêm cổng mới.** Pha một lưu ba bản nháp (`eg-check-p1..p3`) và ghi `id`/`createdAt` vào cùng tệp memo; pha hai (tiến trình mới trên cùng profile) so danh sách lọc `eg-check-` phải đúng `p3,p2,p1`, sửa `p1` giữ `createdAt` và đứng đầu, rồi xoá một (`p2`), xoá lô (`p1` nhân đôi + id rỗng + id không có → `{deleted:1, missing:1}`), no-op (`p3`), lô rỗng và 201 id phải đỏ. Một cổng, hai tầng pha — tránh việc mở app hai lần cho hai nhóm kênh.
+4. **Cổng mạng miễn trừ `ipc.localhost`.** Tauri gọi lệnh và đăng ký `plugin:event|listen` qua `http://ipc.localhost/`; đó là giao thức nội bộ như `tauri.localhost`, không phải request ra ngoài. Đo trên binary release: 76 tài nguyên, 0 ngoài.
+
+**Lỗi đã sửa trong lúc làm (ghi lại vì cổng đã đỏ sẵn ở HEAD).**
+
+- `tests/unit/tauri-storage-schema.test.ts` đỏ vì comment `--` nằm giữa danh sách cột (`evidence_meta` bên `lesson-store.ts`): gộp dòng trước khi bỏ `--` thì chữ sau comment dính vào cột sau và bị đọc thành cột rác. Sửa: tách dòng theo `\r?\n`, bỏ `--` **trên từng dòng**, rồi mới gộp khoảng trắng. Gate vẫn so chữ ký cấu trúc, không nới lỏng.
+- Cổng mạng đỏ oan `fetch:http://ipc.localhost/plugin%3Aevent%7Clisten` — xem quyết định 4.
+
+**Kiểm chứng.**
+
+- `cargo test --manifest-path src-tauri/Cargo.toml -- --test-threads=1`: **35/35**, gồm bảy bài dự án (lưu/liệt kê/đọc theo luật Electron, sửa giữ `createdAt` và đứng đầu, xoá một và lô, lô rỗng và trần 200 với câu Electron, dọn ảnh của bản nháp).
+- `build-tauri-release.js --check` trên binary **release**: pha một **17/17**, pha hai **8/8** (5 bài trò chơi cũ + 3 bài dự án mới).
+- `npm test`: **97/97**; `check:embedded` khớp; `tsc --noEmit` sạch; `tauri-contract` ok.
+
+**Chưa xác minh.**
+
+- 67 kênh còn lại vẫn `unsupported!`; UI Dự án trên Tauri mới đi qua façade, chưa bấm qua giao diện.
+- `.egame`, import tài liệu/ảnh, export chẩn đoán và chơi offline là bước 4–6.
+- Dựng Rust trên máy này cần hai bước chỉ tồn tại ở máy: bản vá `build.rs` của crate `v8` (bỏ bước tạo symlink, chỉ có tác dụng trên đường prebuilt) và `RUSTY_V8_ARCHIVE` trỏ tới `rusty_v8_simdutf_release_x86_64-pc-windows-msvc.lib.gz` (deno_core bật feature `simdutf`). Không có bản vá thì `cargo build` dừng ở `Failed to create symlink` (win 1314) vì thư mục đích ở D: còn crate ở C:.
+
+**Việc kế tiếp.** Bước 4/6: `.egame` — xuất rồi nhập lại phải giữ dữ liệu; gói sai/độc hại (sai schema, id lạ, đường dẫn thoát thư mục) phải bị từ chối với lỗi đọc được.
+
 ## Giai đoạn 3 (2/6) — Sáu kênh `library:*`: luật giữ nguyên trong V8 nhúng, engine ở một luồng riêng, dòng phải sống qua lần đóng ứng dụng (2026-11-09)
 
 **Báo cáo.** Bước 2/6 port nhóm `library:*` (`get`, `save-game`, `delete-game`, `delete-games`, `save-session`, `delete-sessions`) lên SQLite của vỏ Tauri. Bằng chứng nghiệm thu không phải "lệnh gọi trả dữ liệu", mà là **lưu rồi đóng hẳn ứng dụng, mở lại trên cùng thư mục, dòng vẫn còn đúng `id` và `createdAt`** — rồi sửa và xoá trên lượt chạy thứ hai.

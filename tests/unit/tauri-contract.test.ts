@@ -75,13 +75,14 @@ function rustChannels(): Map<string, string> {
   return channels;
 }
 
-/// Tên hàm khai trong thân `library_channel! { … }`.
+/// Tên hàm khai trong thân `library_channel! { … }` — cả dòng có tham số
+/// (`save_game(game: …)`) lẫn dòng không tham số (`list_projects()`).
 function macroGenerated(): Set<string> {
   const start = apiSource.indexOf('library_channel! {');
   if (start < 0) return new Set();
   const end = apiSource.indexOf('\n}', start);
   const body = apiSource.slice(start, end);
-  return new Set([...body.matchAll(/^\s{4}([a-z0-9_]+)\([^)]*\) => "[^"]+",/gm)].map(match => match[1]));
+  return new Set([...body.matchAll(/^\s{4}([a-z0-9_]+)\([^)]*\) => "[^"]+",?;?$/gm)].map(match => match[1]));
 }
 
 function registeredCommands(): Set<string> {

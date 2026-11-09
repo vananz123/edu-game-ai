@@ -28,10 +28,16 @@ function findRepoRoot(start: string): string {
 const root = findRepoRoot(__dirname);
 const read = (...parts: string[]) => fs.readFileSync(path.join(root, ...parts), 'utf8');
 
-/** Bỏ comment `--` và gộp mọi khoảng trắng/xuống dòng thành một dấu cách. */
+/**
+ * Bỏ comment `--` và gộp mọi khoảng trắng/xuống dòng thành một dấu cách.
+ *
+ * Phải bỏ comment TRƯỚC khi gộp dòng: comment nằm giữa danh sách cột (như
+ * `evidence_meta` bên `lesson-store.ts`) mà gộp trước thì phần chữ sau `--`
+ * dính vào cột sau nó và regex tách cột đọc thành tên cột rác.
+ */
 function normalizeSql(sql: string): string {
   return sql
-    .split('\n')
+    .split(/\r?\n/)
     .map(line => line.replace(/--.*$/, ''))
     .join('\n')
     .replace(/\s+/g, ' ')

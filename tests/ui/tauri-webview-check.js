@@ -17,10 +17,11 @@
 //   node tests/ui/tauri-webview-check.js <port>
 //
 // Khi `EDUGAME_TAURI_MEMO` có mặt (do `build-tauri-release.js --check` đặt), cổng
-// chạy thêm phép lưu thật: ghi trò chơi rồi ghi lại id/createdAt xuống tệp memo
-// và THOÁT với mã 0. Pha hai (tham số `--reopen`) so tệp memo với thư viện đọc
-// từ đĩa trên tiến trình MỚI, sửa rồi xoá. Tiến trình ứng dụng do script cha
-// spawn/kill nên cổng không tự đóng mở nó được — vì vậy mới có hai pha.
+// chạy thêm phép lưu thật: ghi trò chơi và ba bản nháp dự án rồi ghi lại
+// id/createdAt xuống tệp memo và THOÁT với mã 0. Pha hai (tham số `--reopen`) so
+// tệp memo với thư viện đọc từ đĩa trên tiến trình MỚI, sửa rồi xoá. Tiến trình
+// ứng dụng do script cha spawn/kill nên cổng không tự đóng mở nó được — vì vậy
+// mới có hai pha.
 const fs = require('node:fs');
 const { check, connect, results } = require('../manual/lib/ui-check-lib');
 
@@ -35,6 +36,10 @@ const reopenPhase = process.argv.includes('--reopen');
   if (reopenPhase) {
     const memo = JSON.parse(fs.readFileSync(memoFile, 'utf8'));
     const out = await evaluate(reopenRunner(memo));
+    const projects = memo.projects
+      ? await evaluate(reopenProjectRunner(memo.projects))
+      : { listOk: false, listMsg: 'memo không có dự án (pha một chưa ghi)' };
+    Object.assign(out, projects);
     check('mở lại: trò chơi vẫn còn với id + createdAt cũ',
       out.found === true && out.sameCreatedAt === true && out.sameId === true, out.msg);
     check('mở lại: không seed thêm trò chơi mẫu lần hai', out.sampleTwice === false, out.sampleMsg);
@@ -42,6 +47,9 @@ const reopenPhase = process.argv.includes('--reopen');
     check('xoá trò chơi, thư viện về lại như trước khi lưu', out.deleteOk === true, out.deleteMsg);
     check('lưu/xoá lượt chơi qua library:save-session/delete-sessions',
       out.sessionOk === true, out.sessionMsg);
+    check('mở lại: ba bản nháp dự án còn, đúng thứ tự mới-sửa-trước', out.listOk === true, out.listMsg);
+    check('dự án: sửa giữ id + createdAt, tiêu đề mới đứng đầu', out.projectEditOk === true, out.projectEditMsg);
+    check('dự án: xoá lô trả {ok, deleted, missing} và trần 200', out.projectDeleteOk === true, out.projectDeleteMsg);
     const failedReopen = results.filter(r => !r.ok).length;
     console.log(`\n${results.length - failedReopen}/${results.length} checks passed`);
     process.exit(failedReopen ? 1 : 0);
@@ -71,7 +79,14 @@ const reopenPhase = process.argv.includes('--reopen');
     // Ghi thật qua façade rồi để lại memo cho pha hai (tiến trình khác) so.
     const first = await evaluate(saveRunner('Kiểm tra lưu ' + Date.now()));
     check('lưu trò chơi qua library:save-game', first.ok === true, first.msg);
-    fs.writeFileSync(memoFile, JSON.stringify({ id: first.gameId, createdAt: first.createdAt, title: first.title }));
+    const projects = await evaluate(projectSaveRunner('Kiểm tra dự án ' + Date.now()));
+    check('lưu dự án qua project:save-draft (kiểm dữ liệu + dọn ảnh)', projects.ok === true, projects.msg);
+    fs.writeFileSync(memoFile, JSON.stringify({
+      id: first.gameId,
+      createdAt: first.createdAt,
+      title: first.title,
+      projects,
+    }));
   }
 
   const failed = results.filter(r => !r.ok).length;
@@ -95,8 +110,14 @@ const RUNNER = `(async () => {
     const text = String(u || '');
     return text.startsWith('http://tauri.localhost/') || text === 'http://tauri.localhost';
   };
-  // Mọi giao thức mạng khác máy chủ tài nguyên của Tauri đều tính là ra ngoài.
-  const isRemote = u => /^(https?|wss?|ftp):/i.test(String(u || '')) && !isTauriAsset(u);
+  // ipc.localhost là kênh gọi lệnh của Tauri (plugin:event|listen đi qua đây),
+  // vẫn nằm trong máy — cùng loại giao thức nội bộ như tauri.localhost.
+  const isIpcChannel = u => {
+    const text = String(u || '');
+    return text.startsWith('http://ipc.localhost/') || text === 'http://ipc.localhost';
+  };
+  // Mọi giao thức mạng khác máy chủ tài nguyên/kênh nội bộ của Tauri đều tính là ra ngoài.
+  const isRemote = u => /^(https?|wss?|ftp):/i.test(String(u || '')) && !isTauriAsset(u) && !isIpcChannel(u);
   const origFetch = window.fetch;
   window.fetch = function (input) {
     const u = typeof input === 'string' ? input : (input && input.url);
@@ -272,6 +293,136 @@ const saveRunner = (title) => `(async () => {
   } catch (error) {
     out.ok = false;
     out.msg = 'saveGame lỗi: ' + (error && error.code) + ': ' + (error && error.message);
+  }
+  return out;
+})()`;
+
+/**
+ * Bản nháp dự án tối giản — đúng những trường `validateProjectForWrite` bắt,
+ * cùng hình dạng fixture `draft()` của `library.rs`. `updatedAt` lùi dần theo
+ * `rank` để pha hai đo được `ORDER BY updated_at DESC` (dòng mới sửa đứng đầu).
+ */
+function projectDraft(id, title, rank) {
+  const stamp = `2026-01-0${rank}T00:00:00.000Z`;
+  return {
+    id,
+    schemaVersion: 1,
+    status: 'draft',
+    step: 'input',
+    title,
+    description: '',
+    tags: [],
+    sourceName: '',
+    lesson: null,
+    analysisId: null,
+    recommendationId: null,
+    config: null,
+    draft: null,
+    gameSnapshot: null,
+    gameId: null,
+    createdAt: stamp,
+    updatedAt: stamp,
+  };
+}
+
+/**
+ * Lượt một (dự án): ghi ba bản nháp qua `saveProjectDraft`, kiểm chúng đọc lại
+ * được qua `getProject` + `listProjects`, rồi để lại id để pha hai so.
+ */
+const projectSaveRunner = (title) => `(async () => {
+  const out = {};
+  const title = ${JSON.stringify(title)};
+  const drafts = ${JSON.stringify([
+    projectDraft('eg-check-p1', '__T1__', 1),
+    projectDraft('eg-check-p2', '__T2__', 2),
+    projectDraft('eg-check-p3', '__T3__', 3),
+  ])}.map((draft, index) => Object.assign(draft, {
+    title: title + ' ' + (index + 1),
+    updatedAt: '2026-01-0' + (index + 1) + 'T00:00:00.000Z',
+    createdAt: '2026-01-0' + (index + 1) + 'T00:00:00.000Z',
+  }));
+  try {
+    for (const draft of drafts) await desktop.call('saveProjectDraft', draft);
+    const listed = await desktop.call('listProjects');
+    const ids = listed.map(project => project.id).filter(id => id.indexOf('eg-check-p') === 0);
+    const one = await desktop.call('getProject', 'eg-check-p2');
+    out.ok = ids.length === 3 && ids[0] === 'eg-check-p3' &&
+      Boolean(one && one.id === 'eg-check-p2' && one.status === 'draft' && one.step === 'input');
+    out.ids = ids;
+    out.createdAt = {};
+    for (const draft of drafts) out.createdAt[draft.id] = draft.createdAt;
+    out.msg = 'ids=' + ids.join(',') + ', get=' + (one && one.title);
+  } catch (error) {
+    out.ok = false;
+    out.msg = 'saveProjectDraft lỗi: ' + (error && error.code) + ': ' + (error && error.message);
+  }
+  return out;
+})()`;
+
+/**
+ * Lượt hai (dự án, tiến trình mới, cùng profile): thứ tự còn đúng; sửa giữ
+ * id + createdAt và đẩy dòng lên đầu; lô `delete-many` trả
+ * `{ok, deleted, missing}` đúng luật Electron (bỏ id trùng/rỗng, đếm thiếu) và
+ * chặn lô rỗng / quá 200 bằng CHÍNH câu của Electron.
+ */
+const reopenProjectRunner = memo => `(async () => {
+  const out = {};
+  const memo = ${JSON.stringify(memo)};
+  const list = () => desktop.call('listProjects');
+  const mine = list => list.filter(project => project.id.indexOf('eg-check-p') === 0);
+
+  try {
+    const reopened = mine(await list());
+    out.listOk = reopened.length === 3 &&
+      reopened.map(project => project.id).join(',') === memo.ids.join(',') &&
+      reopened.every(project => project.createdAt === memo.createdAt[project.id]);
+    out.listMsg = 'ids=' + reopened.map(project => project.id).join(',') +
+      ', createdAt=' + reopened.map(project => project.createdAt).join('|');
+  } catch (error) {
+    out.listOk = false;
+    out.listMsg = 'listProjects lỗi: ' + error.message;
+  }
+
+  try {
+    const old = await desktop.call('getProject', 'eg-check-p1');
+    const edited = await desktop.call('saveProjectDraft', Object.assign({}, old, {
+      title: old.title + ' (sửa)',
+      updatedAt: '2026-02-01T00:00:00.000Z',
+    }));
+    const after = mine(await list());
+    out.projectEditOk = edited.id === 'eg-check-p1' &&
+      edited.createdAt === memo.createdAt['eg-check-p1'] &&
+      after.length === 3 && after[0].id === 'eg-check-p1' &&
+      after[0].title === old.title + ' (sửa)' &&
+      after.filter(project => project.id === 'eg-check-p1').length === 1;
+    out.projectEditMsg = 'createdAt=' + edited.createdAt + ', đầu=' + (after[0] && after[0].id) +
+      ', tiêu đề=' + (after[0] && after[0].title);
+  } catch (error) {
+    out.projectEditOk = false;
+    out.projectEditMsg = 'sửa dự án lỗi: ' + (error && error.code) + ': ' + error.message;
+  }
+
+  try {
+    const single = await desktop.call('deleteProject', 'eg-check-p2');
+    const gone = await desktop.call('getProject', 'eg-check-p2');
+    const batch = await desktop.call('deleteProjects', ['eg-check-p1', 'eg-check-p1', '', 'không-có']);
+    const left = mine(await list());
+    const noop = await desktop.call('deleteProjects', ['eg-check-p3']);
+    const emptyError = await desktop.call('deleteProjects', []).then(() => '', error => error.message);
+    const tooMany = Array.from({ length: 201 }, (_, index) => 'eg-check-x' + index);
+    const capError = await desktop.call('deleteProjects', tooMany).then(() => '', error => error.message);
+    out.projectDeleteOk = single && single.ok === true &&
+      gone === null &&
+      batch && batch.ok === true && batch.deleted === 1 && batch.missing === 1 &&
+      left.length === 1 && noop.deleted === 1 && noop.missing === 0 &&
+      /Chưa chọn dự án nào để xoá/.test(emptyError) &&
+      /tối đa 200 dự án/.test(capError);
+    out.projectDeleteMsg = 'một=' + JSON.stringify(single) + ', lô=' + JSON.stringify(batch) +
+      ', còn=' + left.length + ', cuối=' + JSON.stringify(noop) +
+      ', rỗng="' + emptyError + '", trần="' + capError + '"';
+  } catch (error) {
+    out.projectDeleteOk = false;
+    out.projectDeleteMsg = 'xoá dự án lỗi: ' + (error && error.code) + ': ' + error.message;
   }
   return out;
 })()`;

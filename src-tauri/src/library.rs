@@ -34,10 +34,18 @@ use tauri::{AppHandle, Manager};
 use crate::embedded::Embedded;
 use crate::storage::{self, DbError};
 
-/// Kênh nào dọn ảnh: hai kênh xoá trò chơi trả về id ảnh mà dòng đã xoá nhắc
-/// tới (xem `deleteGame`/`deleteGames` của `library-ops.ts`).
+/// Kênh nào dọn ảnh: hai kênh xoá trò chơi và hai kênh xoá dự án trả về id ảnh
+/// mà dòng đã xoá nhắc tới (xem `deleteGame`/`deleteGames` của `library-ops.ts`
+/// và `deleteProject`/`deleteProjects` của `project-ops.ts`).
 pub const DELETE_GAME: &str = "library:delete-game";
 pub const DELETE_GAMES: &str = "library:delete-games";
+pub const DELETE_PROJECT: &str = "project:delete";
+pub const DELETE_PROJECTS: &str = "project:delete-many";
+
+/// Kênh xoá nào trả `images` để `remove_unused_images` dọn sau.
+fn removes_images(channel: &str) -> bool {
+    matches!(channel, DELETE_GAME | DELETE_GAMES | DELETE_PROJECT | DELETE_PROJECTS)
+}
 
 /// Một lượt gọi qua luồng của engine.
 struct Job {
@@ -95,10 +103,24 @@ impl Library {
         let (ready, opened) = channel();
         let worker = std::thread::Builder::new()
             .name("edugame-library".into())
-            .spawn(move || match Embedded::open(database, &owned) {
-                Ok(engine) => serve(Engine(engine), &ready, &incoming),
-                Err(error) => {
-                    let _ = ready.send(Err(error.to_string()));
+            .spawn(move || {
+                // `deno_core` hỏi `tokio::runtime::Handle::try_current()` lúc dựng
+                // isolate; không có handle mà V8 đăng một tác vụ trễ (bộ dọn bộ nhớ
+                // của zod đủ để đăng) thì nó `abort()` cả tiến trình. Runtime một
+                // luồng chỉ sống trên luồng này và chỉ để V8 có chỗ hẹn giờ.
+                let runtime = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
+                    Ok(runtime) => runtime,
+                    Err(error) => {
+                        let _ = ready.send(Err(format!("không dựng được runtime cho V8: {error}")));
+                        return;
+                    }
+                };
+                let _guard = runtime.enter();
+                match Embedded::open(database, &owned) {
+                    Ok(engine) => serve(Engine(engine), &ready, &incoming),
+                    Err(error) => {
+                        let _ = ready.send(Err(error.to_string()));
+                    }
                 }
             })
             .map_err(|error| DbError::Io(format!("không mở được luồng thư viện: {error}")))?;
@@ -130,7 +152,7 @@ impl Library {
     /// Phần dùng chung của mọi kênh, không cần `AppHandle` — test gọi thẳng đây.
     pub fn run(&self, channel: &str, args: &[Value]) -> Result<Value, DbError> {
         let result = self.call(channel, args)?;
-        if channel == DELETE_GAME || channel == DELETE_GAMES {
+        if removes_images(channel) {
             self.remove_unused_images(&result);
         }
         Ok(result)
@@ -304,12 +326,16 @@ pub const CHANNELS: &[&str] = &[
     "library:delete-games",
     "library:save-session",
     "library:delete-sessions",
+    "project:save-draft",
+    "project:get",
+    "project:list",
+    "project:delete",
+    "project:delete-many",
 ];
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::tests::fresh;
 
     /// Một trò chơi hợp lệ tối giản (bốn bộ kiểm của V8 phải nhận).
     fn scenario(title: &str) -> Value {
@@ -554,5 +580,161 @@ mod tests {
         let games = answer["games"].as_array().expect("games");
         assert_eq!(games.len(), 1, "tệp đã có dữ liệu không bị seed");
         assert_eq!(games[0]["id"], "g1");
+    }
+
+    /// Một bản nháp tối giản: chỉ những trường mà `validateProjectForWrite` bắt.
+    fn draft(id: &str, title: &str) -> Value {
+        serde_json::json!({
+            "id": id,
+            "schemaVersion": 1,
+            "status": "draft",
+            "step": "input",
+            "title": title,
+            "description": "",
+            "tags": [],
+            "sourceName": "",
+            "lesson": Value::Null,
+            "analysisId": Value::Null,
+            "recommendationId": Value::Null,
+            "config": Value::Null,
+            "draft": Value::Null,
+            "gameSnapshot": Value::Null,
+            "gameId": Value::Null,
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "updatedAt": "2026-01-01T00:00:00.000Z"
+        })
+    }
+
+    #[test]
+    fn saves_lists_and_reads_a_project_with_electron_rules() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let library = library(dir.path());
+        let saved = library
+            .run("project:save-draft", &[draft("p1", "Bản nháp đầu")])
+            .expect("lưu dự án");
+        assert_eq!(saved["id"], "p1");
+        assert_eq!(saved["createdAt"], "2026-01-01T00:00:00.000Z", "createdAt của bản nháp được giữ");
+        assert_ne!(saved["updatedAt"], "2026-01-01T00:00:00.000Z", "updatedAt là lúc ghi");
+
+        let listed = library.run("project:list", &[]).expect("liệt kê");
+        assert_eq!(listed.as_array().map(Vec::len), Some(1));
+        assert_eq!(listed[0]["title"], "Bản nháp đầu");
+
+        let one = library.run("project:get", &[Value::from("p1")]).expect("đọc một");
+        assert_eq!(one["step"], "input");
+        assert!(library.run("project:get", &[Value::from("không-có")]).expect("đọc thiếu").is_null());
+    }
+
+    #[test]
+    fn editing_a_project_keeps_created_at_and_moves_it_first() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let library = library(dir.path());
+        let first = library.run("project:save-draft", &[draft("p1", "Một")]).expect("lưu 1");
+        library.run("project:save-draft", &[draft("p2", "Hai")]).expect("lưu 2");
+
+        let mut edited = draft("p1", "Một (sửa)");
+        edited["createdAt"] = Value::from("2026-05-05T00:00:00.000Z");
+        let updated = library.run("project:save-draft", &[edited]).expect("sửa");
+        assert_eq!(updated["createdAt"], first["createdAt"], "dòng cũ giữ created_at của nó");
+
+        let listed = library.run("project:list", &[]).expect("liệt kê");
+        let listed = listed.as_array().expect("mảng");
+        assert_eq!(listed.len(), 2, "sửa không thêm dòng");
+        assert_eq!(listed[0]["title"], "Một (sửa)", "mới sửa đứng đầu");
+    }
+
+    #[test]
+    fn refuses_a_project_the_electron_rules_reject() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let library = library(dir.path());
+        let mut broken = draft("p1", "Sai");
+        broken["status"] = Value::from("đang-làm");
+        let error = library.run("project:save-draft", &[broken]).expect_err("trạng thái lạ");
+        assert_eq!(error.code(), "DB_INVALID_INPUT");
+        assert_eq!(error.to_string(), "Trạng thái dự án không hợp lệ: đang-làm.");
+
+        let mut newer = draft("p2", "Mới hơn");
+        newer["schemaVersion"] = Value::from(99);
+        let error = library.run("project:save-draft", &[newer]).expect_err("phiên bản mới hơn");
+        assert!(error.to_string().contains("ứng dụng chỉ hỗ trợ 1"), "{}", error);
+    }
+
+    #[test]
+    fn deletes_projects_one_by_one_and_in_a_batch() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let library = library(dir.path());
+        for id in ["p1", "p2", "p3"] {
+            library.run("project:save-draft", &[draft(id, id)]).expect("lưu");
+        }
+        let single = library.run("project:delete", &[Value::from("p3")]).expect("xoá một");
+        assert_eq!(single["ok"], true);
+        assert!(library.run("project:get", &[Value::from("p3")]).expect("đọc").is_null());
+
+        let batch = library
+            .run("project:delete-many", &[serde_json::json!(["p1", "p1", "", "không-có"])])
+            .expect("xoá lô");
+        assert_eq!(batch["deleted"], 1, "id trùng và id rỗng bị lọc trước");
+        assert_eq!(batch["missing"], 1);
+        assert_eq!(library.run("project:list", &[]).expect("liệt kê").as_array().map(Vec::len), Some(1));
+    }
+
+    #[test]
+    fn refuses_project_batches_with_the_electron_sentences() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let library = library(dir.path());
+        let error = library.run("project:delete-many", &[serde_json::json!([])]).expect_err("lô rỗng");
+        assert_eq!(error.to_string(), "Chưa chọn dự án nào để xoá.");
+        let too_many = serde_json::json!((0..201).map(|n| format!("p{n}")).collect::<Vec<_>>());
+        let error = library.run("project:delete-many", &[too_many]).expect_err("quá 200");
+        assert_eq!(error.to_string(), "Mỗi lần chỉ xoá tối đa 200 dự án.");
+    }
+
+    #[test]
+    fn deleting_a_project_removes_only_the_images_nothing_else_keeps() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let images = dir.path().join("images");
+        std::fs::create_dir_all(&images).expect("thư mục ảnh");
+        let shared = format!("ci-{}", "c".repeat(32));
+        let lonely = format!("ci-{}", "d".repeat(32));
+        for id in [&shared, &lonely] {
+            std::fs::write(images.join(format!("{id}.img")), b"png").expect("ghi ảnh");
+        }
+        let library = library(dir.path());
+        let with_image = |id: &str, image: &str| {
+            let mut project = draft(id, id);
+            project["gameSnapshot"] = serde_json::json!({
+                "title": id, "template": "scenario",
+                "questions": [{ "id": "q1", "type": "scenario", "prompt": "Hỏi?", "illustrationAssetId": image,
+                                "options": [{ "id": "a", "text": "A" }, { "id": "b", "text": "B" }],
+                                "correctOptionId": "a", "explanation": "Vì thế." }]
+            });
+            project
+        };
+        let kept = library.run("project:save-draft", &[with_image("p1", &shared)]).expect("lưu 1");
+        let dropped = library.run("project:save-draft", &[with_image("p2", &shared)]).expect("lưu 2");
+        library.run("project:save-draft", &[with_image("p3", &lonely)]).expect("lưu 3");
+        assert_eq!(kept["id"], "p1");
+        assert_eq!(dropped["id"], "p2");
+
+        library.run("project:delete", &[Value::from("p2")]).expect("xoá dự án dùng chung ảnh");
+        assert!(images.join(format!("{shared}.img")).exists(), "ảnh còn bản nháp khác dùng");
+
+        library.run("project:delete-many", &[serde_json::json!(["p1", "p3"])]).expect("xoá lô");
+        assert!(!images.join(format!("{shared}.img")).exists(), "ảnh hết người dùng phải biến mất");
+        assert!(!images.join(format!("{lonely}.img")).exists(), "ảnh riêng của bản nháp cũng vậy");
+        assert_eq!(library.run("project:list", &[]).expect("liệt kê").as_array().map(Vec::len), Some(0));
+    }
+
+    #[test]
+    fn a_saved_project_survives_closing_and_reopening() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        {
+            let library = library(dir.path());
+            library.run("project:save-draft", &[draft("p1", "Còn đây")]).expect("lưu");
+        }
+        let library = library(dir.path());
+        let listed = library.run("project:list", &[]).expect("đọc lại");
+        assert_eq!(listed.as_array().map(Vec::len), Some(1), "dự án sống qua lần đóng");
+        assert_eq!(listed[0]["title"], "Còn đây");
     }
 }

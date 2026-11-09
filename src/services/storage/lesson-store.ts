@@ -16,11 +16,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import type { EducationalGame } from '../../shared/types';
 import type {
   ArenaDraft,
-  GameConfig,
-  GameDraft,
   GameProject,
   LessonAnalysis,
   LessonChat,
@@ -35,13 +32,14 @@ import type {
 } from '../../shared/lesson-types';
 import type { LessonChunk } from '../lesson/lesson-chunker';
 import { LESSON_SCHEMA_VERSION } from '../../shared/lesson-types';
-import { parseGameConfig, parseGameDraft } from '../lesson/lesson-contracts';
 import {
-  validateMatchingGame,
-  validateRaceGame,
-  validateScenarioGame,
-  validateTreasureHuntGame
-} from '../game/game-validation';
+  parseProjectRow,
+  PROJECT_DELETE_SQL,
+  PROJECT_SELECT_ALL_SQL,
+  PROJECT_SELECT_ROW_SQL,
+  PROJECT_UPSERT_SQL,
+  validateProjectForWrite
+} from '../lesson/lesson-project-rules';
 
 export const LESSON_STORE_SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS lesson_documents (
@@ -425,9 +423,6 @@ interface RecommendationRow {
   schema_version: number;
   created_at: string;
 }
-
-const PROJECT_STATUSES = new Set(['draft', 'review', 'ready']);
-const PROJECT_STEPS = new Set(['input', 'analyze', 'recommend', 'configure', 'generate', 'edit', 'done']);
 
 export class LessonStore {
   private readonly db: LessonStoreDatabase;
@@ -1116,13 +1111,7 @@ export class LessonStore {
     const createdAt = existing?.created_at || validated.createdAt || new Date().toISOString();
     const updatedAt = new Date().toISOString();
     const saved: GameProject = { ...validated, createdAt, updatedAt };
-    this.db.prepare(`
-      INSERT INTO game_projects (id,game_id,status,step,data_json,schema_version,created_at,updated_at)
-      VALUES (@id,@game_id,@status,@step,@data_json,@schema_version,@created_at,@updated_at)
-      ON CONFLICT(id) DO UPDATE SET
-        game_id=excluded.game_id, status=excluded.status, step=excluded.step,
-        data_json=excluded.data_json, schema_version=excluded.schema_version, updated_at=excluded.updated_at
-    `).run({
+    this.db.prepare(PROJECT_UPSERT_SQL).run({
       id: saved.id,
       game_id: saved.gameId,
       status: saved.status,
@@ -1142,12 +1131,12 @@ export class LessonStore {
   }
 
   listProjects(): GameProject[] {
-    const rows = this.db.prepare('SELECT * FROM game_projects ORDER BY updated_at DESC').all() as ProjectRow[];
+    const rows = this.db.prepare(PROJECT_SELECT_ALL_SQL).all() as ProjectRow[];
     return rows.map(parseProjectRow);
   }
 
   deleteProject(projectId: string): boolean {
-    const result = this.db.prepare('DELETE FROM game_projects WHERE id = ?').run(projectId) as { changes?: number };
+    const result = this.db.prepare(PROJECT_DELETE_SQL).run(projectId) as { changes?: number };
     return Boolean(result && result.changes);
   }
 
@@ -1218,7 +1207,7 @@ export class LessonStore {
   }
 
   private getProjectRow(projectId: string): ProjectRow | undefined {
-    return this.db.prepare('SELECT * FROM game_projects WHERE id = ?').get(projectId) as ProjectRow | undefined;
+    return this.db.prepare(PROJECT_SELECT_ROW_SQL).get(projectId) as ProjectRow | undefined;
   }
 }
 
@@ -1309,23 +1298,6 @@ function parseRecommendationRow(row: RecommendationRow): GameRecommendation {
   const recommendation = parseJsonObject(row.data_json, row.id);
   assertRecommendation(recommendation);
   return recommendation;
-}
-
-function parseProjectRow(row: ProjectRow): GameProject {
-  if (row.schema_version > LESSON_SCHEMA_VERSION) {
-    throw new LessonStoreError(
-      'PROJECT_VERSION_UNSUPPORTED',
-      `Dự án ${row.id} dùng phiên bản dữ liệu ${row.schema_version}; ứng dụng chỉ hỗ trợ ${LESSON_SCHEMA_VERSION}.`
-    );
-  }
-  if (row.schema_version < LESSON_SCHEMA_VERSION) {
-    throw new LessonStoreError(
-      'PROJECT_MIGRATION_MISSING',
-      `Dự án ${row.id} dùng phiên bản dữ liệu cũ (${row.schema_version}) chưa có bảng chuyển đổi.`
-    );
-  }
-  const project = parseJsonObject(row.data_json, row.id);
-  return validateProjectForWrite(project);
 }
 
 function parseJsonObject(dataJson: string, id: string): Record<string, unknown> {
@@ -1549,96 +1521,6 @@ function assertRecommendation(value: unknown): asserts value is GameRecommendati
       typeof recommendation.gameType !== 'string') {
     throw new LessonStoreError('STORE_INVALID_RECOMMENDATION', 'Đề xuất cần có mã, mã phân tích và thể loại trò chơi.');
   }
-}
-
-function validateProjectForWrite(value: unknown): GameProject {
-  const project = value as GameProject | null;
-  if (!project || typeof project !== 'object' || Array.isArray(project)) {
-    throw new LessonStoreError('STORE_INVALID_PROJECT', 'Dữ liệu dự án không hợp lệ.');
-  }
-  if (typeof project.id !== 'string' || !project.id) {
-    throw new LessonStoreError('STORE_INVALID_PROJECT', 'Dự án cần có mã.');
-  }
-  if (project.schemaVersion === undefined || project.schemaVersion === null) {
-    throw new LessonStoreError('PROJECT_MIGRATION_MISSING', `Dự án ${project.id} thiếu schemaVersion.`);
-  }
-  if (project.schemaVersion > LESSON_SCHEMA_VERSION) {
-    throw new LessonStoreError(
-      'PROJECT_VERSION_UNSUPPORTED',
-      `Dự án ${project.id} dùng phiên bản dữ liệu ${project.schemaVersion}; ứng dụng chỉ hỗ trợ ${LESSON_SCHEMA_VERSION}.`
-    );
-  }
-  if (project.schemaVersion < LESSON_SCHEMA_VERSION) {
-    throw new LessonStoreError(
-      'PROJECT_MIGRATION_MISSING',
-      `Dự án ${project.id} dùng phiên bản dữ liệu cũ (${project.schemaVersion}) chưa có bảng chuyển đổi.`
-    );
-  }
-  if (!PROJECT_STATUSES.has(String(project.status))) {
-    throw new LessonStoreError('STORE_INVALID_PROJECT', `Trạng thái dự án không hợp lệ: ${String(project.status)}.`);
-  }
-  if (!PROJECT_STEPS.has(String(project.step))) {
-    throw new LessonStoreError('STORE_INVALID_PROJECT', `Bước dự án không hợp lệ: ${String(project.step)}.`);
-  }
-
-  let config: GameConfig | null = null;
-  if (project.config) {
-    try {
-      config = parseGameConfig(project.config);
-    } catch (error) {
-      throw new LessonStoreError('STORE_INVALID_PROJECT', messageOf(error));
-    }
-  }
-  let draft: GameDraft | null = null;
-  if (project.draft) {
-    try {
-      draft = parseGameDraft(project.draft);
-    } catch (error) {
-      throw new LessonStoreError('STORE_INVALID_PROJECT', messageOf(error));
-    }
-  }
-  if (config && draft && config.gameType !== draft.gameType) {
-    throw new LessonStoreError(
-      'STORE_INVALID_PROJECT',
-      `Cấu hình là “${config.gameType}” nhưng nội dung là “${draft.gameType}”.`
-    );
-  }
-  if (project.gameSnapshot) {
-    assertSnapshot(project.gameSnapshot, project.id);
-  }
-
-  return { ...project, config, draft };
-}
-
-function assertSnapshot(snapshot: EducationalGame, projectId: string): void {
-  try {
-    switch (snapshot.template) {
-      case 'scenario':
-        validateScenarioGame(snapshot);
-        break;
-      case 'matching':
-        validateMatchingGame(snapshot);
-        break;
-      case 'treasure-hunt':
-        validateTreasureHuntGame(snapshot);
-        break;
-      case 'race':
-        validateRaceGame(snapshot);
-        break;
-      default:
-        break;
-    }
-  } catch (error) {
-    throw new LessonStoreError(
-      'PROJECT_SNAPSHOT_INVALID',
-      `Bản xem trước của dự án ${projectId} không hợp lệ: ${messageOf(error)}`,
-      [messageOf(error)]
-    );
-  }
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function normalizeExt(ext: string): string {

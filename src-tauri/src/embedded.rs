@@ -223,7 +223,11 @@ pub(crate) fn is_known_sql(sql: &str) -> bool {
         "SELECT id FROM games ORDER BY updated_at DESC LIMIT 1",
         "SELECT data_json FROM games",
         "SELECT data_json FROM game_projects",
+        "SELECT * FROM game_projects",
+        "SELECT * FROM game_projects WHERE id = @id",
+        "SELECT * FROM game_projects ORDER BY updated_at DESC",
         "DELETE FROM games WHERE id = @id",
+        "DELETE FROM game_projects WHERE id = @id",
         "DELETE FROM sessions WHERE id = @id",
     ];
     KNOWN.contains(&sql) || known_write(sql)
@@ -236,6 +240,7 @@ fn known_write(sql: &str) -> bool {
     const KNOWN_WRITES: &[&str] = &[
         "INSERT INTO games (id,title,subject,grade,topic,template,created_at,updated_at,data_json) VALUES (@id,@title,@subject,@grade,@topic,@template,@created_at,@updated_at,@data_json) ON CONFLICT(id) DO UPDATE SET title=excluded.title, subject=excluded.subject, grade=excluded.grade, topic=excluded.topic, template=excluded.template, updated_at=excluded.updated_at, data_json=excluded.data_json",
         "INSERT INTO sessions (id,created_at,data_json) VALUES (@id,@created_at,@data_json) ON CONFLICT(id) DO UPDATE SET data_json=excluded.data_json",
+        "INSERT INTO game_projects (id,game_id,status,step,data_json,schema_version,created_at,updated_at) VALUES (@id,@game_id,@status,@step,@data_json,@schema_version,@created_at,@updated_at) ON CONFLICT(id) DO UPDATE SET game_id=excluded.game_id, status=excluded.status, step=excluded.step, data_json=excluded.data_json, schema_version=excluded.schema_version, updated_at=excluded.updated_at",
         "DELETE FROM sessions WHERE id <> @id AND id NOT IN ( SELECT id FROM sessions WHERE id <> @id ORDER BY created_at DESC LIMIT 999 )",
     ];
     let squashed = sql.split_whitespace().collect::<Vec<_>>().join(" ");

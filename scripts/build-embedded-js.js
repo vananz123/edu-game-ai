@@ -29,7 +29,12 @@ const outPath = path.join(root, 'src-tauri', 'src', 'embedded', 'bundle.js');
 const SLOTS = [
   { slot: 'EGVALIDATE', entry: 'src/services/game/game-validation.ts' },
   { slot: 'EGFIELDS', entry: 'src/services/game/game-fields.ts' },
-  { slot: 'EGOPS', entry: 'src/services/storage/library-ops.ts' }
+  { slot: 'EGOPS', entry: 'src/services/storage/library-ops.ts' },
+  // Nhóm `project:*`: luật bản nháp (`lesson-project-rules.ts`) và đường lưu/đọc/
+  // xoá (`project-ops.ts`). `lesson-contracts.ts` đi kèm vì bộ kiểm dự án dùng
+  // `parseGameConfig`/`parseGameDraft` của nó — cùng bộ Zod mà Electron chạy.
+  { slot: 'EGCONTRACTS', entry: 'src/services/lesson/lesson-contracts.ts' },
+  { slot: 'EGPROJECTS', entry: 'src/services/storage/project-ops.ts' }
 ];
 
 /**

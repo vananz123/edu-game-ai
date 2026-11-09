@@ -51,6 +51,13 @@ pub fn hand_written(command: &str) -> Option<(&'static str, &'static str)> {
         "delete_games" => ("library:delete-games", "delete_games"),
         "save_session" => ("library:save-session", "save_session"),
         "delete_sessions" => ("library:delete-sessions", "delete_sessions"),
+        // Năm kênh của dự án: cũng sinh bởi `library_channel!`, chạy trên cùng
+        // `edugame.sqlite` và cùng engine V8 (`project-ops.ts`).
+        "save_project_draft" => ("project:save-draft", "save_project_draft"),
+        "get_project" => ("project:get", "get_project"),
+        "list_projects" => ("project:list", "list_projects"),
+        "delete_project" => ("project:delete", "delete_project"),
+        "delete_projects" => ("project:delete-many", "delete_projects"),
         "get_settings" => ("settings:get", "get_settings"),
         "get_local_ai_models" => ("ai:local-models", "get_local_ai_models"),
         "invoke_channel" => ("channel:invoke", "invoke_channel"),
@@ -182,6 +189,12 @@ fn dispatch(app: &AppHandle, channel: &str, args: &[Value]) -> Result<Value, Str
         | "library:delete-games"
         | "library:save-session"
         | "library:delete-sessions" => crate::library::run(app, channel, &args),
+        // Nhóm `project:*` đi cùng đường: cùng luồng engine, cùng kết nối SQLite.
+        "project:save-draft"
+        | "project:get"
+        | "project:list"
+        | "project:delete"
+        | "project:delete-many" => crate::library::run(app, channel, &args),
         _ => Err(format!("Kênh `{channel}` chưa có thân trong vỏ Tauri")),
     }
 }
@@ -259,11 +272,19 @@ pub fn get_library(app: AppHandle) -> Result<serde_json::Value, String> {
 /// Thân thật nằm ở `library.rs` → V8 nhúng; các lệnh ở đây chỉ để hợp đồng
 /// Electron có đúng một lệnh cho mỗi kênh (`tests/unit/tauri-contract.test.ts`).
 macro_rules! library_channel {
-    ($($fn_name:ident($arg:ident: $kind:ty) => $channel:literal),* $(,)?) => {
+    ($($fn_name:ident($arg:ident: $kind:ty) => $channel:literal),* $(,)?;
+     $($no_arg:ident() => $no_arg_channel:literal),* $(,)?) => {
         $(
             #[tauri::command]
             pub fn $fn_name(app: AppHandle, $arg: $kind) -> Result<serde_json::Value, String> {
                 crate::library::run(&app, $channel, &[serde_json::to_value($arg).map_err(|error| error.to_string())?])
+            }
+        )*
+        $(
+            /// Kênh không nhận tham số: preload gọi `ipcRenderer.invoke(kênh)` trần.
+            #[tauri::command]
+            pub fn $no_arg(app: AppHandle) -> Result<serde_json::Value, String> {
+                crate::library::run(&app, $no_arg_channel, &[])
             }
         )*
     };
@@ -275,6 +296,14 @@ library_channel! {
     delete_games(game_ids: Vec<String>) => "library:delete-games",
     save_session(session: serde_json::Value) => "library:save-session",
     delete_sessions(session_ids: Vec<String>) => "library:delete-sessions",
+    // Nhóm `project:*`: tham số đúng như `saveProjectDraft`/`getProject`/… của
+    // `preload.ts` gửi — một bản nháp, một id (chuỗi rỗng cũng hợp lệ), một mảng
+    // id. Bước kiểm dữ liệu nằm ở `lesson-project-rules.ts`, không ở đây.
+    save_project_draft(project: serde_json::Value) => "project:save-draft",
+    get_project(project_id: String) => "project:get",
+    delete_project(project_id: String) => "project:delete",
+    delete_projects(project_ids: Vec<String>) => "project:delete-many";
+    list_projects() => "project:list",
 }
 
 /// Cài đặt của bản Tauri. Bản thử giai đoạn 1 chưa có trang Cài đặt đầy đủ, nên
@@ -341,10 +370,10 @@ macro_rules! unsupported {
     };
 }
 
-// Phần còn lại của 78 kênh invoke trong desktop-contract.json; bốn kênh có thật
-// là `app:info`, `library:get`, `settings:get`, `ai:local-models` ở trên (và
-// `shell:info` không thuộc preload của Electron). Thứ tự theo preload.ts để dễ
-// đối chiếu bằng mắt.
+// Phần còn lại của các kênh invoke trong desktop-contract.json; các kênh có thật
+// là `app:info`, `library:get`, `settings:get`, `ai:local-models` ở trên, sáu
+// `library:*` và năm `project:*` qua `library_channel!` (và `shell:info` không
+// thuộc preload của Electron). Thứ tự theo preload.ts để dễ đối chiếu bằng mắt.
 unsupported! {
     set_fullscreen => "window:set-fullscreen",
     save_lesson_document => "lesson:save-document",
@@ -352,11 +381,6 @@ unsupported! {
     list_lesson_library => "lesson:library",
     delete_lesson_document => "lesson:delete-document",
     delete_lesson_documents => "lesson:delete-documents",
-    save_project_draft => "project:save-draft",
-    get_project => "project:get",
-    list_projects => "project:list",
-    delete_project => "project:delete",
-    delete_projects => "project:delete-many",
     import_document => "files:import-document",
     import_document_from_path => "files:import-document-from-path",
     import_questions => "files:import-questions",
