@@ -8,9 +8,10 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 ## Mục lục bàn giao
 
 ### 2026-11-08 — Bộ xử lý AI local: lựa chọn GPU tới được tiến trình đang chạy (#227), Phát hành 0.5.0 (#226), khối thảo luận mở ở màn không ảnh (#225), mực câu hỏi cho dòng thảo luận (#224), bỏ "Giữ hành vi hiện tại" (#223), nền sáng (#220), trả bầu trời đêm 3D về Chòm sao (#221), đường nối mờ trước khi ghép (#222), đóng nợ #212, #219 (Chòm sao tri thức)
+- **npm start chạy bản mới (2026-11-09) — build sạch 0.5.1 đúng chuỗi `npm start`, xác minh #250 trên chính dist vừa build: app báo 0.5.1, luồng xoá cuộc trò chuyện bằng confirm thật xong gõ được ngay không cần bấm ô. Bản đã cài (0.5.0) chưa có #250 — phân biệt bằng Cài đặt → Giới thiệu.** Chi tiết ở đầu handoff mới nhất bên dưới; bump 0.5.1 ba chỗ, chưa phát hành.
 - **#250 (2026-11-09) — Khung chat Giáo án: xoá một cuộc trò chuyện xong vẫn gõ được, và gửi xong ô nhập tự trống. Caret được nhớ ở `mousedown` (pha capture, nối document một lần) rồi trả lại sau mỗi render; câu đã gửi được xoá trong `finally` của `lessonChatSend` nên cả lượt bị từ chối lẫn lượt lỗi (AI chưa sẵn sàng) đều để ô trống; câu dưới 3 ký tự xoá ô + toast.** `ui-lesson-chat-check` trên instance riêng: toàn bộ qua (mục 11c #250 mới, mục #187 gõ thật sau khi xoá); `run-unit` 92/92, `check:renderer-globals` 0 undefined. Quyết định #250 trong `docs/DECISIONS.md`.
 - **#229 (2026-11-09) — Mục 4 của đợt kiểm tra: hỏi đáp AI local cắt quá nhiều. Ngân sách tài liệu giờ tính từ `--ctx-size` thật của runtime (2,5 ký tự/token trừ chi phí prompt, sàn 16.480 ký tự thay vì 12.000); tài liệu quá dài được lược phần giữa (giữ đầu 30 %/đuôi 40 %, có dòng đánh dấu) thay vì cắt cụt; trần trả lời 512 → 1.024 token, 1.536 khi hỏi chi tiết; lời nhắc "tối đa 6 câu" chuyển vào prompt.** `run-unit` 92/92, `check:renderer-globals` 0 undefined. Nhánh AI local **chưa chạy** (theo chỉ đạo). Quyết định #229 trong `docs/DECISIONS.md`.
-- **#228 (2026-11-09) — Thay bản CPU→Vulkan không còn bị khóa thư mục: retry 6 lần + dừng máy chủ embedding khi `onReplaceLocked`, đường "Cài model" cài đúng bản đã chọn, lỗi thay bản hiện tên hai bản; quyết định dùng lại runtime đọc thêm bản trên đĩa (`installedBackend`) nên di chứng thay bản hỏng không bị "an phận" trên CPU.** Test thật `EBUSY` (`runtime-backend-swap`), `run-unit` 92/92, `check:renderer-globals` 0 undefined. Bản 0.5.0 đã phát hành chưa có sửa này. Quyết định #228 trong `docs/DECISIONS.md`; chi tiết ở bàn giao mới nhất bên dưới.
+- **#228 (2026-11-09) — Thay bản CPU→Vulkan không còn bị khóa thư mục: retry 6 lần + dừng máy chủ embedding khi `onReplaceLocked`, đường "Cài model" cài đúng bản đã chọn, lỗi thay bản hiện tên hai bản; quyết định dùng lại runtime đọc thêm bản trên đĩa (`installedBackend`) nên di chứng thay bản hỏng không bị "an phận" trên CPU.** Test thật `EBUSY` (`runtime-backend-swap`), `run-unit` 92/92, `check:renderer-globals` 0 undefined. Bản 0.5.0 đã phát hành chưa có sửa này. Quyết định #228 trong `docs/DECISIONS.md`; bản lưu trữ: [docs/handoff/status/2026-11-09.md](handoff/status/2026-11-09.md).
 - **#227 (2026-11-08) — Mục 1 của đợt kiểm tra: đã chọn GPU nhưng tác vụ AI local vẫn chạy full CPU. Sửa cả ba lỗi: runtime backend là một phần danh tính của tiến trình (`runtime-restart.ts`, restart khi lệch backend, có log `runtime.restart`); renderer luôn gửi `runtimeBackend` (`'auto'` thay `undefined`) ở cả ba đường lưu nên "Kiểm tra kết nối" không xoá được lựa chọn; Cài đặt có dòng "Đang chạy" + lý do GPU tự chuyển CPU.** Test mới `runtime-restart` (12 nhánh) và `settings-runtime-backend` (jsdom, 5 bài, đã kiểm ngược là đỏ trên code cũ); `run-unit` 91/91, `check:renderer-globals` 0 undefined, `ui-settings-sections-check` 28/28, đo IPC thật: `vulkan` sống sót qua lần lưu "kiểm tra kết nối". Nhánh AI local **chưa chạy** (theo chỉ đạo). Quyết định #227 trong `docs/DECISIONS.md`; chi tiết ở bàn giao mới nhất bên dưới.
 - **#226 (2026-11-08) — Phát hành EduGame Studio 0.5.0 lên GitHub Releases: bump ba chỗ, bộ cài 92.667.619 B (SHA-256 `e65322d0…dcb4`), binary báo đúng 0.5.0, offline 11/11 với 0 request ra ngoài, `latest.yml` công khai ở 0.5.0, `check:packaged-feed` 24/24 `up-to-date`.** Chi tiết ở đầu handoff mới nhất bên dưới; quyết định #226 trong `docs/DECISIONS.md`.
 - **#225 (2026-11-08, lưu trữ) — Màn Tình huống tắt ảnh minh hoạ mở khối "Thảo luận" thành ô đọc được (`:has(.feedback-discussion)`), có trần chiều cao và tự cuộn; màn không có câu thảo luận vẫn giữ ô 1×1 ẩn.** Bản lưu trữ: [docs/handoff/status/2026-11-08.md](handoff/status/2026-11-08.md); quyết định #225 trong `docs/DECISIONS.md`.
@@ -24,7 +25,7 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ### 2026-11-07 — Phát hành v0.4.2, #216 và #215
 - **Phát hành EduGame Studio v0.4.2** — bản lưu trữ: [docs/handoff/status/2026-11-07.md](handoff/status/2026-11-07.md); quyết định #217 trong `docs/DECISIONS.md`.
-- **Chế độ dev `npm run dev` (2026-11-07) — sửa renderer tự reload cửa sổ, không cần mở lại app; main process vẫn phải chạy lại.** Chi tiết ở đầu handoff mới nhất bên dưới.
+- **Chế độ dev `npm run dev` (2026-11-07) — sửa renderer tự reload cửa sổ, không cần mở lại app; main process vẫn phải chạy lại.** Bản lưu trữ: [docs/handoff/status/2026-11-07.md](handoff/status/2026-11-07.md).
 - **#216 (2026-11-07) — Nút tiếp tục nổi góc dưới phải, đáp án giữ nguyên cỡ.** Bản lưu trữ: [docs/handoff/status/2026-11-07.md](handoff/status/2026-11-07.md); quyết định #216 trong `docs/DECISIONS.md`.
 - **#215 (2026-11-07) — Bỏ dải HUD phản hồi, điểm hiện dạng nổi rồi tự ẩn, nút Giải thích neo góc dưới trái.** Bản lưu trữ: [docs/handoff/status/2026-11-07.md](handoff/status/2026-11-07.md); quyết định #215 trong `docs/DECISIONS.md`.
 - **#214 và bố trí “Nội dung gửi AI” dưới cụm tab.** Bản lưu trữ: [docs/handoff/status/2026-11-07.md](handoff/status/2026-11-07.md); quyết định #214 trong `docs/DECISIONS.md`.
@@ -278,6 +279,20 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - Lịch sử trước 2026-10-19
 ## Bàn giao gần nhất
 
+### npm start chạy bản mới: build sạch 0.5.1 và xác minh #250 trên chính dist vừa build (2026-11-09)
+
+**Bối cảnh.** Sau khi #250 được đẩy lên, giáo viên vẫn báo "xoá cuộc trò chuyện xong không nhập được câu hỏi" và nghĩ `npm start` đang chạy bản cũ; yêu cầu: làm cho `npm start` chạy bản mới.
+
+**Đã xác minh (không sửa code ứng dụng).** (1) Máy chỉ có **một** thư mục mã nguồn; `npm start` = `npm run build && electron .` — luôn xoá sạch `dist` và build lại trước khi mở app, nên không thể nạp code cũ nếu chạy đúng thư mục này. (2) `src/main.ts` **không có** `requestSingleInstanceLock` — không có chuyện tiến trình cũ nuốt lần mở mới; lúc kiểm tra không có tiến trình Electron nào của người dùng chạy (chỉ instance đo CDP của trợ lý). (3) Mọi bản đã phát hành (v0.4.1/v0.4.2/v0.5.0) đều **chưa có #250**: nếu mở app đã cài bằng shortcut thì đó là bản cũ. Phân biệt: **Cài đặt → Giới thiệu** phải hiện "Phiên bản 0.5.1" (npm start, `packaged=false`), bản cài hiện 0.5.0. (4) Mtime cũ của `dist/src/index.html` là do copyfiles giữ mtime tệp nguồn — nội dung khớp `src/index.html` từng byte, không phải tệp cũ.
+
+**Files changed.** `package.json`, `package-lock.json`, `server/index.ts`: phiên bản 0.5.0 → **0.5.1** (ba chỗ, chuẩn bị gói 0.5.1 của #247 — **chưa phát hành**). Docs: `docs/STATUS.md`, `docs/handoff/status/2026-11-09.md` (mới, nhận bàn giao #228), `docs/handoff/status/2026-11-07.md` (nhận bàn giao `npm run dev`).
+
+**Commands and results.** `npm run build` rc 0 (build sạch đúng bước đầu của npm start) · `dist/src/main.js` + `dist/src/renderer/features/lesson-chat.js` biên dịch lại, `wireLessonChatDocumentOnce` có trong dist, `diff src/index.html dist/src/index.html` = identical · mở Electron từ dist mới trên profile riêng (CDP 9347): `aboutInfo()` trả **version 0.5.1, packaged=false**, cả ba hàm #250 (`lessonChatCaptureFocus`, `wireLessonChatDocumentOnce`, `closeHistoryAndRefocusComposer`) đều nạp · kịch bản luồng thật (bấm chuột thật + **confirm native thật** được chấp nhận): sau khi xoá `active=lessonChatInput`, `chatId=''`, popover đóng; **gõ ngay không cần bấm ô** nhận đủ chữ; bấm ô rồi gõ tiếp vẫn nhận. Instance đo đã đóng, worktree scratch v0.5.0 đã gỡ (junction node_modules tháo trước).
+
+**Chưa xác minh.** Chưa xem tận mắt app người dùng đang mở; không biết chính xác lệnh nào đã chạy khi giáo viên thấy bản cũ. Nhánh AI local không chạy (theo chỉ đạo).
+
+**Việc kế tiếp.** Giáo viên chạy `npm start` trong thư mục mã nguồn và kiểm tra Cài đặt → Giới thiệu phải là **0.5.1**; nếu vẫn thấy lỗi, báo lại chính xác cửa sổ nào đang mở (tên tiến trình/shortcut). Phát hành 0.5.1 (#247) khi chủ dự án cho phép để bản cài cũng có #250.
+
 ### #250 — Khung chat Giáo án: xoá cuộc trò chuyện xong vẫn gõ được, gửi xong ô nhập tự trống (2026-11-09)
 
 **Bối cảnh.** Giáo viên báo hai lỗi ở khung chat cột trái của trang Giáo án: (1) xoá một cuộc trò chuyện thì ô nhập không nhận chữ nữa; (2) gõ câu hỏi rồi Gửi thì chữ không tự xoá. Cả hai đều đúng và cùng gốc từ kiến trúc render của app.
@@ -306,17 +321,7 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ### #228 — CPU → Vulkan: lần thay bản không bị khóa thư mục nữa, và bỏ trạng thái "cài GPU vẫn chạy CPU" (2026-11-09)
 
-**Bối cảnh.** Gói chẩn đoán 0.5.0 ngày 2026-11-08 (`runtime.backend-swap-failed {wanted:"vulkan",installed:"cpu"}` ×3, `runtime.gpu-fallback`, `runtime.restart` ×2) cho thấy lựa chọn GPU đã tới được `startLocalRuntimeUnlocked` nhưng lần thay bản **vẫn trả về đường CPU**.
-
-**Files changed.** `src/ai-core/runtime-installer.ts` (`onReplaceLocked`, `replaceInstalledBuild` có retry, `delay`/`isLockedError`), `src/main.ts` (`stopEmbeddingRuntimeForRuntimeSwap`, installer theo entry đã chọn ở cả `ai:install-local-model` lẫn đường thay bản, lỗi thay bản hiện tên hai bản), `src/ai-core/runtime-restart.ts` (đầu vào `installedBackend`, kiểm mâu thuẫn trước khi so backend); test `tests/unit/runtime-backend-swap.test.ts` (mới), `runtime-installer.test.ts`, `runtime-restart.test.ts`.
-
-**Behavior.** (1) Xoá thư mục runtime để thay bản giờ thử lại 6 lần trong ~6,75 s thay vì bỏ ngay; khi còn khóa, app **dừng máy chủ embedding** (tiến trình `llama-server.exe` thứ hai chạy từ chính thư mục đó) rồi thử lại. (2) Đường "Cài model" trong Cài đặt cài **đúng bản resolver chọn** thay vì mặc định zip CPU — trước đây nó có thể ghi đè bản Vulkan vừa cài. (3) Thay bản hỏng giờ báo lỗi nêu tên bản cũ/mới thay vì lặng lẽ chạy tiếp CPU. (4) Quyết định dùng lại runtime đọc thêm **bản đang có trên đĩa**: tiến trình Vulkan mà đĩa là CPU (di chứng thay bản hỏng) → restart; tiến trình CPU mà yêu cầu Vulkan → vẫn restart (không "an phận" trên CPU nữa). Bản đĩa `unknown`/không đọc được không bao giờ tự restart.
-
-**Commands and results.** `npx tsc -p tsconfig.json` rc 0 · `node tests/run-unit.js` **92/92** · `npm run check:renderer-globals` 68/70 script, 1.018 hàm / 8.140 điểm gọi, 0 undefined · `tests/unit/runtime-backend-swap.test.ts` giữ thư mục **thật** bằng tiến trình con (`cwd`) để tái hiện `EBUSY` trên Windows: không nhả → lỗi `EBUSY/EPERM/EACCES` không còn `.installing`; có `onReplaceLocked` nhả khóa → đổi được sang `vulkan`.
-
-**Chưa xác minh.** Nhánh AI local không chạy (theo chỉ đạo): chưa thấy trên máy thật một lần `cpu → vulkan` hoàn tất, chưa đo thời gian retry khi embedding đang bận. Bản 0.5.0 đã phát hành **không có** các sửa này; cần bản 0.5.1 (hoặc chạy dev) mới tới được máy người dùng.
-
-**Việc kế tiếp.** Mục 4 (hỏi đáp AI local bị cắt quá nhiều) — đã xong ở #229; gói 0.5.1 gồm #227 + #228 + #229.
+Bản lưu trữ: [docs/handoff/status/2026-11-09.md](handoff/status/2026-11-09.md); quyết định #228 trong `docs/DECISIONS.md`.
 
 ### #224 — Dòng "Thảo luận" của Tình huống mang mực câu hỏi; khối phản hồi dưới ảnh hết chữ trắng (2026-11-08)
 
@@ -335,12 +340,4 @@ Bản lưu trữ: [docs/handoff/status/2026-11-08.md](handoff/status/2026-11-08.
 
 ### Chế độ dev `npm run dev` — sửa renderer thấy ngay, không cần mở lại app (2026-11-07)
 
-**Files changed.** `scripts/dev.js` (mới), `package.json` (+1 script `dev`), `src/main.ts` (+23 dòng: khối auto-reload gated sau `EDUGAME_DEV_RELOAD`), `docs/STATUS.md`.
-
-**Behavior.** `npm run dev` chạy build một lần rồi bật ba watcher: `tsc --watch`, `tailwindcss --watch`, và watch/copy file tĩnh (`index.html`, `renderer/styles/*.css`, `presentation/*`, `lan/mobile/*`, `renderer/assets/*` — đúng danh sách copyfiles của `npm run build`), sau đó khởi động Electron với `EDUGAME_DEV_RELOAD=1`. Main process canh `dist/src` (debounce 300 ms) và `reloadIgnoringCache()` mọi cửa sổ khi có file `.js/.html/.css` đổi. Sửa renderer (TS/HTML/CSS/asset) áp dụng sau ~1–2 giây không cần mở lại app; sửa main process (`src/main.ts`, services) vẫn phải Ctrl+C và chạy lại — Electron không hot-swap được main. Watcher chỉ bật khi `EDUGAME_DEV_RELOAD=1` và `!app.isPackaged`, nên `npm start` và bản đóng gói không đổi hành vi. Tham số CLI được chuyển tiếp tới Electron (`npm run dev -- --remote-debugging-port=9222`). Đóng cửa sổ app thì dev.js thoát và kill cả cây tiến trình con (taskkill /T trên Windows). Lưu ý: reload mất trạng thái in-memory chưa lưu (ván chơi đang dở, wizard chưa lưu) — đúng bản chất reload.
-
-**Commands and results.** `npm run check` — passed; `npm run check:renderer-globals` — 68/70 scripts, 1.014 hàm / 8.108 điểm gọi, 0 undefined; `npm run dev -- --remote-debugging-port=9222` — build 0 lỗi, tsc watch "Found 0 errors", app mở. Đo thật qua CDP: (1) đổi `<title>` trong `src/index.html` → log `[dev] copied src/index.html` và title của CDP target đổi theo, Electron không restart; (2) đặt marker `window.__devReloadProbe` qua CDP → thêm một dòng comment vào `src/renderer/core/bootstrap.ts` → tsc incremental compile 0 errors → marker biến mất (cửa sổ đã reload). Cả hai thay đổi thử đã hoàn tác, probe scratch đã xoá. Đóng cửa sổ app → dev.js exit 0, không còn tiến trình electron/watcher mồ côi.
-
-**Not verified.** Nhánh Tailwind watch chưa đo riêng (cùng cơ chế reload như tsc: ghi vào `dist`); độ ổn định dài hạn của `fs.watch` recursive trên Windows; hành vi trên macOS/Linux (nhánh kill dùng SIGTERM, chưa chạy thử); chưa chạy lại full unit suite (không đổi logic thuần, `main.ts` là `@ts-nocheck`).
-
-**Next recommended task.** Dùng `npm run dev` cho việc sửa UI; nếu cần main process tự restart khi sửa thì cân nhắc `electronmon` (thêm dependency — cần duyệt).
+Bản lưu trữ: [docs/handoff/status/2026-11-07.md](handoff/status/2026-11-07.md).

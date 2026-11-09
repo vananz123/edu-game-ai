@@ -63,7 +63,7 @@ async function requireUser(req: AuthenticatedRequest, res: Response, next: NextF
   next();
 }
 
-app.get('/health', (_req, res) => res.json({ ok: true, service: 'edugame-ai-gateway', version: '0.5.0' }));
+app.get('/health', (_req, res) => res.json({ ok: true, service: 'edugame-ai-gateway', version: '0.5.1' }));
 
 app.post('/v1/generate', requireConfiguration, requireUser, async (req: AuthenticatedRequest, res: Response) => {
   const parsed = requestSchema.safeParse(req.body);
