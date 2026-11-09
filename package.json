@@ -56,7 +56,9 @@
     "test:native": "node tests/run-unit.js lesson-store",
     "build:desktop-contract": "node scripts/build-desktop-contract.js",
     "check:desktop-contract": "node scripts/build-desktop-contract.js --check",
-    "build:tauri": "npm run build && node scripts/build-tauri-frontend.js",
+    "build:embedded": "node scripts/build-embedded-js.js",
+    "check:embedded": "node scripts/build-embedded-js.js --check",
+    "build:tauri": "npm run build:embedded && node scripts/build-tauri-frontend.js",
     "tauri:run": "node scripts/build-tauri-release.js --run",
     "tauri:check": "node scripts/build-tauri-release.js --check"
   },

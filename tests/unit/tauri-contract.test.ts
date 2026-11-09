@@ -60,13 +60,28 @@ function rustChannels(): Map<string, string> {
     assert.ok(![...channels.values()].includes(match[2]), `api.rs khai trùng kênh ${match[2]}`);
     channels.set(match[1], match[2]);
   }
+  // Lệnh sinh bởi `library_channel!` cũng là lệnh thật: hàm do macro viết ra,
+  // nên tìm tên ở dòng `save_game(game: …) => "library:save-game",` trong khối macro.
+  const generated = macroGenerated();
   for (const [channel, name] of handWritten()) {
-    assert.ok(apiSource.includes(`pub fn ${name}(`), `api.rs thiếu lệnh viết tay ${name}`);
+    assert.ok(
+      apiSource.includes(`pub fn ${name}(`) || generated.has(name),
+      `api.rs thiếu lệnh viết tay ${name}`
+    );
     assert.ok(!channels.has(name), `api.rs khai ${name} hai lần`);
     assert.ok(![...channels.values()].includes(channel), `${channel} vừa viết tay vừa unsupported!`);
     channels.set(name, channel);
   }
   return channels;
+}
+
+/// Tên hàm khai trong thân `library_channel! { … }`.
+function macroGenerated(): Set<string> {
+  const start = apiSource.indexOf('library_channel! {');
+  if (start < 0) return new Set();
+  const end = apiSource.indexOf('\n}', start);
+  const body = apiSource.slice(start, end);
+  return new Set([...body.matchAll(/^\s{4}([a-z0-9_]+)\([^)]*\) => "[^"]+",/gm)].map(match => match[1]));
 }
 
 function registeredCommands(): Set<string> {
@@ -163,9 +178,14 @@ test('invoke_channel/send_channel được đăng ký và lọc kênh trước k
   assert.ok(handlers.has('invoke_channel'), 'invoke_channel chưa đăng ký');
   assert.ok(handlers.has('send_channel'), 'send_channel chưa đăng ký');
   // Cửa chung phải từ chối trước khi tới `dispatch()`: nếu không, frontend gửi
-  // một chuỗi kênh tuỳ ý và tự chọn nhánh nào chạy.
-  assert.match(apiSource, /pub fn invoke_channel\(app: AppHandle, channel: String\)/,
-    'invoke_channel không được nhận thêm tham số tuỳ ý từ frontend');
+  // một chuỗi kênh tuỳ ý và tự chọn nhánh nào chạy. Tham số `args` là dữ liệu
+  // của KÊNH ĐÃ LỌC (một trò chơi, một id), nên hợp đồng chốt đúng ba tham số:
+  // một chuỗi kênh, một danh sách giá trị, và không gì khác.
+  assert.match(
+    apiSource,
+    /pub fn invoke_channel\(\s*app: AppHandle,\s*channel: String,\s*args: Option<Vec<Value>>,\s*\) -> Result<Value, String>/,
+    'invoke_channel không được nhận thêm tham số tuỳ ý từ frontend'
+  );
   assert.ok(apiSource.includes('!INVOKE_CHANNELS.contains(&channel.as_str())'),
     'invoke_channel thiếu bước lọc theo INVOKE_CHANNELS');
   assert.ok(apiSource.includes('!SEND_CHANNELS.contains(&channel.as_str())'),

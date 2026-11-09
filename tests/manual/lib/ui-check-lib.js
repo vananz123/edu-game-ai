@@ -85,6 +85,20 @@ async function connect() {
   for (let attempt = 0; attempt < 40 && !(await pageReady()); attempt += 1) {
     await new Promise(resolve => setTimeout(resolve, 150));
   }
+  // Cổng gỡ lỗi mở trước khi trang ứng dụng dựng xong DOM, nhất là trên WebView2:
+  // `readyState` có thể đã `complete` với một tài liệu trống. Chờ thêm shell để
+  // mọi phép đo DOM không rơi vào một khung hình chưa có gì.
+  const hasShell = async () => {
+    try {
+      const r = await send('Runtime.evaluate', { expression: 'Boolean(document.querySelector("body > *"))', returnByValue: true });
+      return r.result?.result?.value === true;
+    } catch {
+      return false;
+    }
+  };
+  for (let attempt = 0; attempt < 60 && !(await hasShell()); attempt += 1) {
+    await new Promise(resolve => setTimeout(resolve, 150));
+  }
   await send('Runtime.enable');
   await send('Page.setWebLifecycleState', { state: 'active' });
   await send('Emulation.setFocusEmulationEnabled', { enabled: true });

@@ -15,12 +15,41 @@
 //   - thư mục dữ liệu nằm dưới định danh Tauri, KHÔNG phải thư mục của Electron.
 //
 //   node tests/ui/tauri-webview-check.js <port>
+//
+// Khi `EDUGAME_TAURI_MEMO` có mặt (do `build-tauri-release.js --check` đặt), cổng
+// chạy thêm phép lưu thật: ghi trò chơi rồi ghi lại id/createdAt xuống tệp memo
+// và THOÁT với mã 0. Pha hai (tham số `--reopen`) so tệp memo với thư viện đọc
+// từ đĩa trên tiến trình MỚI, sửa rồi xoá. Tiến trình ứng dụng do script cha
+// spawn/kill nên cổng không tự đóng mở nó được — vì vậy mới có hai pha.
+const fs = require('node:fs');
 const { check, connect, results } = require('../manual/lib/ui-check-lib');
+
+const memoFile = process.env.EDUGAME_TAURI_MEMO;
+const reopenPhase = process.argv.includes('--reopen');
 
 (async () => {
   const { evaluate } = await connect();
+
+  // Pha hai: ứng dụng vừa được script cha mở lại trên cùng profile. Không chạy
+  // lại các phép đo giao diện — chỉ so dữ liệu trên đĩa.
+  if (reopenPhase) {
+    const memo = JSON.parse(fs.readFileSync(memoFile, 'utf8'));
+    const out = await evaluate(reopenRunner(memo));
+    check('mở lại: trò chơi vẫn còn với id + createdAt cũ',
+      out.found === true && out.sameCreatedAt === true && out.sameId === true, out.msg);
+    check('mở lại: không seed thêm trò chơi mẫu lần hai', out.sampleTwice === false, out.sampleMsg);
+    check('sửa giữ id, createdAt và tiêu đề mới đứng đầu', out.editOk === true, out.editMsg);
+    check('xoá trò chơi, thư viện về lại như trước khi lưu', out.deleteOk === true, out.deleteMsg);
+    check('lưu/xoá lượt chơi qua library:save-session/delete-sessions',
+      out.sessionOk === true, out.sessionMsg);
+    const failedReopen = results.filter(r => !r.ok).length;
+    console.log(`\n${results.length - failedReopen}/${results.length} checks passed`);
+    process.exit(failedReopen ? 1 : 0);
+  }
+
   const out = await evaluate(RUNNER);
   if (!out || typeof out !== 'object') throw new Error('runner returned nothing');
+
 
   check('trang được nạp từ gói cục bộ (không http)', out.local === true, out.url);
   check('tiêu đề và shell của Electron còn nguyên', out.shell === true, out.shellMsg);
@@ -37,6 +66,13 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
   check('kênh chưa port bị từ chối not-supported (không treo)', out.unsupported === true, out.unsupportedMsg);
   check('lỗi khởi động không che UI (không có trang lỗi nào)', out.boot === true, out.bootMsg);
   check('thư mục dữ liệu dưới vn.edugame.studio.tauri', out.dataDir === true, out.dataDirMsg);
+
+  if (memoFile) {
+    // Ghi thật qua façade rồi để lại memo cho pha hai (tiến trình khác) so.
+    const first = await evaluate(saveRunner('Kiểm tra lưu ' + Date.now()));
+    check('lưu trò chơi qua library:save-game', first.ok === true, first.msg);
+    fs.writeFileSync(memoFile, JSON.stringify({ id: first.gameId, createdAt: first.createdAt, title: first.title }));
+  }
 
   const failed = results.filter(r => !r.ok).length;
   console.log(`\n${results.length - failed}/${results.length} checks passed`);
@@ -153,7 +189,6 @@ const RUNNER = `(async () => {
     out.library = false;
     out.libraryMsg = 'library:get lỗi: ' + (error && error.message);
   }
-
   try {
     const settings = await facade.call('getSettings');
     const theme = settings && settings.preferences && settings.preferences.theme;
@@ -175,15 +210,16 @@ const RUNNER = `(async () => {
     out.localAiMsg = 'ai:local-models lỗi: ' + (error && error.message);
   }
 
-  // Một kênh có trả lời nhưng chưa port (ví dụ lưu trò chơi) phải từ chối ĐỌC
-  // ĐƯỢC. Câu lỗi đi qua cửa chung nên nó phải nêu tên kênh, không được treo.
+  // Một kênh có trả lời nhưng chưa port (ví dụ lưu tài liệu giáo án) phải từ
+  // chối ĐỌC ĐƯỢC. Câu lỗi đi qua cửa chung nên nó phải nêu tên kênh, không
+  // được treo. Giai đoạn 3 đã port nhóm library:*, nên chọn kênh còn trống.
   try {
-    await facade.call('saveGame', { title: 'synthetic' });
+    await facade.call('saveLessonDocument', { title: 'synthetic' });
     out.unsupported = false;
-    out.unsupportedMsg = 'saveGame lại trả thành công';
+    out.unsupportedMsg = 'saveLessonDocument lại trả thành công';
   } catch (error) {
     const message = String((error && error.message) || '');
-    out.unsupported = Boolean(error && error.code) && /library:save-game/.test(message);
+    out.unsupported = Boolean(error && error.code) && /lesson:save-document/.test(message);
     out.unsupportedMsg = (error && error.code) + ': ' + message;
   }
 
@@ -193,5 +229,110 @@ const RUNNER = `(async () => {
   const body = content ? content.innerText : '';
   out.boot = !/Không thể khởi tạo ứng dụng/.test(body);
   out.bootMsg = body.replace(/\\s+/g, ' ').trim().slice(0, 120);
+  return out;
+})()`;
+
+// Trò chơi hợp lệ tối giản, cùng hình dạng mà test Rust `library.rs` dùng:
+// bốn bộ kiểm của `library-ops.ts` phải nhận thì mới đo được đường lưu thật.
+// Dựng bằng `JSON.stringify` thay vì viết thẳng trong template để không phải
+// nhân đôi dấu `\\` trong chuỗi lồng.
+function scenario(title) {
+  return {
+    title,
+    template: 'scenario',
+    questions: [{
+      id: 'q1',
+      type: 'scenario',
+      prompt: 'Đèn đỏ thì dừng?',
+      options: [{ id: 'a', text: 'Đi tiếp' }, { id: 'b', text: 'Dừng lại' }],
+      correctOptionId: 'b',
+      explanation: 'Dừng trước vạch.',
+    }],
+  };
+}
+
+/**
+ * Lượt một: ghi qua ĐÚNG cửa renderer (`desktop.call` → adapter Tauri →
+ * `invoke_channel`), rồi đọc lại để chốt id/createdAt mà lượt mở lại sẽ so.
+ */
+const saveRunner = (title) => `(async () => {
+  const out = {};
+  const title = ${JSON.stringify(title)};
+  const before = await desktop.call('getLibrary');
+  out.title = title;
+  try {
+    const game = await desktop.call('saveGame', ${JSON.stringify(scenario('__TITLE__')).replace('"__TITLE__"', 'title')});
+    const after = await desktop.call('getLibrary');
+    out.ok = Boolean(game && game.id && game.createdAt && game.updatedAt) &&
+      after.games.length === before.games.length + 1 &&
+      after.games.some(g => g.id === game.id);
+    out.gameId = game && game.id;
+    out.createdAt = game && game.createdAt;
+    out.msg = 'id=' + (game && game.id) + ', games ' + before.games.length + '→' + after.games.length;
+  } catch (error) {
+    out.ok = false;
+    out.msg = 'saveGame lỗi: ' + (error && error.code) + ': ' + (error && error.message);
+  }
+  return out;
+})()`;
+
+/**
+ * Lượt hai (tiến trình mới, cùng profile): dòng phải còn; sửa giữ id/createdAt;
+ * xoá trả thư viện về số trò chơi trước khi lưu; lượt chơi lưu rồi xoá không
+ * đụng trò chơi. `memo` do phía Node ghi xuống tệp sau lượt một (sessionStorage
+ * không sống qua tiến trình mới).
+ */
+const reopenRunner = memo => `(async () => {
+  const out = {};
+  const memo = ${JSON.stringify(memo)};
+  const games = async () => (await desktop.call('getLibrary')).games;
+
+  const reopened = await games();
+  const mine = reopened.find(g => g.id === memo.id);
+  out.found = Boolean(mine);
+  out.sameId = Boolean(mine && mine.id === memo.id);
+  out.sameCreatedAt = Boolean(mine && mine.createdAt === memo.createdAt);
+  out.msg = 'id=' + memo.id + ', thấy=' + out.found + ', createdAt=' + (mine && mine.createdAt);
+  const samples = reopened.filter(g => g.id === 'sample-traffic-001').length;
+  out.sampleTwice = samples > 1;
+  out.sampleMsg = 'trò chơi mẫu: ' + samples;
+
+  try {
+    const edited = await desktop.call('saveGame', Object.assign({}, mine, { title: memo.title + ' (sửa)' }));
+    const afterEdit = await games();
+    out.editOk = edited.id === memo.id && edited.createdAt === memo.createdAt &&
+      afterEdit.filter(g => g.id === memo.id).length === 1 &&
+      afterEdit[0].id === memo.id && afterEdit[0].title === memo.title + ' (sửa)';
+    out.editMsg = 'id=' + edited.id + ', đầu danh sách=' + (afterEdit[0] && afterEdit[0].title);
+  } catch (error) {
+    out.editOk = false;
+    out.editMsg = 'sửa lỗi: ' + (error && error.code) + ': ' + (error && error.message);
+  }
+
+  try {
+    await desktop.call('saveSession', { gameId: memo.id, score: 70, playerName: 'Bạn A' });
+    const withSession = await desktop.call('getLibrary');
+    const saved = withSession.sessions.find(s => s.gameId === memo.id);
+    const removed = await desktop.call('deleteSessions', [saved && saved.id]);
+    const final = await desktop.call('getLibrary');
+    out.sessionOk = Boolean(saved && saved.id) && removed.deleted === 1 &&
+      !final.sessions.some(s => s.id === saved.id) && final.games.some(g => g.id === memo.id);
+    out.sessionMsg = 'phiên=' + (saved && saved.id) + ', xoá=' + (removed && removed.deleted) +
+      ', trò chơi còn=' + final.games.length;
+  } catch (error) {
+    out.sessionOk = false;
+    out.sessionMsg = 'phiên lỗi: ' + (error && error.code) + ': ' + (error && error.message);
+  }
+
+  try {
+    const before = (await games()).length;
+    const removed = await desktop.call('deleteGames', [memo.id]);
+    const after = await games();
+    out.deleteOk = removed.deleted === 1 && after.length === before - 1 && !after.some(g => g.id === memo.id);
+    out.deleteMsg = 'trước=' + before + ', sau=' + after.length + ', xoá=' + removed.deleted;
+  } catch (error) {
+    out.deleteOk = false;
+    out.deleteMsg = 'xoá lỗi: ' + (error && error.code) + ': ' + (error && error.message);
+  }
   return out;
 })()`;

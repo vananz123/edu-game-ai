@@ -18,13 +18,11 @@ use tauri::{AppHandle, Manager};
 /// quen thuộc; đường dẫn cha vẫn khác Electron nên không có chuyện ghi lẫn.
 pub const DATA_SUBDIR: &str = "edugame-data";
 
-/// Tệp thư viện (JSON) của bản Tauri.
+/// Tệp cài đặt (JSON) của bản Tauri.
 ///
-/// Giai đoạn 1 chưa port SQLite: Electron giữ thư viện trong `library.sqlite`,
-/// còn bản Tauri chỉ cần mở được vỏ và hiện danh sách rỗng bằng một tệp riêng.
-/// Khi migration chạy, tệp này được thay bằng cơ sở dữ liệu thật — và vì nó nằm
-/// dưới thư mục riêng của Tauri, không có bước nào ở đây chạm vào dữ liệu Electron.
-pub const LIBRARY_FILE: &str = "library.json";
+/// Thư viện KHÔNG còn nằm ở đây: từ giai đoạn 3 nó là `edugame.sqlite` trong
+/// cùng thư mục (`storage::DB_FILE`, mở bởi `library::open`). Cài đặt vẫn là
+/// một tệp JSON riêng vì chưa có bảng nào cho nó trong schema 0.5.1.
 pub const SETTINGS_FILE: &str = "settings.json";
 
 /// Thư mục dữ liệu của bản Tauri, đã có sẵn để đọc/ghi.

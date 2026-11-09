@@ -26,10 +26,17 @@ const takeValue = (flag, fallback) => {
 };
 const port = takeValue('--port', '9557');
 const profile = takeValue('--profile', path.join(os.tmpdir(), 'eg-tauri-fresh'));
+// Tệp bàn giao giữa hai pha của cổng kiểm tra (xem `startAndCheck`).
+const memo = path.join(os.tmpdir(), 'eg-tauri-check-memo.json');
 
 const isWindows = process.platform === 'win32';
 const exeName = isWindows ? 'edugame-studio-tauri.exe' : 'edugame-studio-tauri';
-const binary = path.join(root, 'src-tauri', 'target', debug ? 'debug' : 'release', exeName);
+// `CARGO_TARGET_DIR` đổi thư mục đích của cargo; bỏ qua nó thì script chạy lại
+// binary CŨ nằm ở `src-tauri/target` và cổng kiểm tra báo nhầm.
+const targetDir = process.env.CARGO_TARGET_DIR
+  ? path.resolve(root, process.env.CARGO_TARGET_DIR)
+  : path.join(root, 'src-tauri', 'target');
+const binary = path.join(targetDir, debug ? 'debug' : 'release', exeName);
 
 function cargo() {
   const onPath = spawnSync('cargo', ['--version'], { encoding: 'utf8', shell: isWindows });
@@ -72,33 +79,59 @@ function build() {
 
 function startAndCheck() {
   fs.rmSync(profile, { recursive: true, force: true });
-  const child = spawn(binary, [], {
-    env: {
-      ...process.env,
-      WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port}`,
-      WEBVIEW2_USER_DATA_FOLDER: profile,
-    },
-    stdio: 'ignore',
-  });
-  const stop = () => { try { child.kill(); } catch {} };
+  let child = null;
+  const launch = () => {
+    child = spawn(binary, [], {
+      env: {
+        ...process.env,
+        WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port}`,
+        WEBVIEW2_USER_DATA_FOLDER: profile,
+      },
+      stdio: 'ignore',
+    });
+  };
+  const stop = () => { try { child && child.kill(); } catch {} };
   process.on('exit', stop);
-  (async () => {
-    for (let attempt = 0; attempt < 60; attempt += 1) {
+  // Chờ cổng VÀ trang ứng dụng: cổng mở sớm khi WebView2 mới có `about:blank`,
+  // nên chỉ nhìn cổng là chạy phép đo trên một DOM rỗng.
+  const isAppPage = x => x.type === 'page' && /^(http:\/\/tauri\.localhost\/?|file:.*index\.html)/.test(x.url);
+  const waitForPort = async (want) => {
+    for (let attempt = 0; attempt < 120; attempt += 1) {
+      let open = false;
       try {
         const list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
-        if (Array.isArray(list) && list.some(x => x.type === 'page')) break;
+        open = Array.isArray(list) && list.some(isAppPage);
       } catch {}
+      if (open === want) return true;
       await new Promise(resolve => setTimeout(resolve, 250));
     }
+    return false;
+  };
+  const runCheck = (extra) => spawnSync(
+    process.execPath,
+    [path.join(root, 'tests', 'ui', 'tauri-webview-check.js'), port, ...extra],
+    { stdio: 'inherit', env: { ...process.env, EDUGAME_TAURI_MEMO: memo } },
+  );
+  launch();
+  (async () => {
+    await waitForPort(true);
     if (!check) {
       console.log(`WebView2 CDP tại cổng ${port}, profile ${profile}. Ctrl+C để dừng.`);
       return;
     }
-    const result = spawnSync(process.execPath, [path.join(root, 'tests', 'ui', 'tauri-webview-check.js'), port], {
-      stdio: 'inherit',
-    });
+    fs.rmSync(memo, { force: true });
+    const first = runCheck([]);
+    // Pha một ghi trò chơi + memo. Mở lại trên CÙNG profile để pha hai chứng minh
+    // dòng nằm trên đĩa; `child.kill()` phải xong trước khi tiến trình mới chạy,
+    // nếu không hai tiến trình cùng mở một tệp SQLite và khoá ghi.
     stop();
-    process.exit(result.status || 0);
+    await waitForPort(false);
+    if (first.status !== 0) process.exit(first.status || 1);
+    launch();
+    await waitForPort(true);
+    const second = runCheck(['--reopen']);
+    stop();
+    process.exit(second.status || 0);
   })();
 }
 

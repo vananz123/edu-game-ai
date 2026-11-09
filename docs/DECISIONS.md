@@ -2650,6 +2650,32 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 
 **Việc kế tiếp.** Chưa duyệt bắt đầu code. Khi duyệt: dựng khung Tauri v2 + Rust toolchain trong nhánh riêng, chuyển lớp truy cập desktop sang facade TS (kế hoạch mục 4) và làm vòng 1 theo mục 1.
 
+## Giai đoạn 3 (2/6) — Sáu kênh `library:*`: luật giữ nguyên trong V8 nhúng, engine ở một luồng riêng, dòng phải sống qua lần đóng ứng dụng (2026-11-09)
+
+**Báo cáo.** Bước 2/6 port nhóm `library:*` (`get`, `save-game`, `delete-game`, `delete-games`, `save-session`, `delete-sessions`) lên SQLite của vỏ Tauri. Bằng chứng nghiệm thu không phải "lệnh gọi trả dữ liệu", mà là **lưu rồi đóng hẳn ứng dụng, mở lại trên cùng thư mục, dòng vẫn còn đúng `id` và `createdAt`** — rồi sửa và xoá trên lượt chạy thứ hai.
+
+**Quyết định.**
+
+1. **Luật lưu/xoá không viết lại sang Rust.** `library-ops.ts`, `library-schema` và bước seed (`sample-game.ts`) chạy **nguyên văn** trong V8 nhúng (`deno_core 0.413`), bundle bằng `scripts/build-embedded-js.js` vào `src-tauri/src/embedded/bundle.js`. Điều này giữ đúng bốn bộ kiểm dữ liệu, chuẩn hoá `createdAt`/`updatedAt`, trần 500 trò chơi / 1000 lượt chơi, transaction và bước dọn ảnh — hai bản luật song song là cách chắc chắn nhất để chúng lệch nhau ở lần sửa thứ ba. Cổng `npm run check:embedded` (`build-embedded-js --check`) bắt bundle cũ.
+2. **Engine ở một luồng riêng, `Library` chỉ là kênh tin nhắn.** `JsRuntime` không `Send`, nên không đặt thẳng vào state của Tauri. Luồng `edugame-library` dựng engine, giữ một kết nối `rusqlite` cho cả phiên, mở + chạy schema + seed lần đầu, rồi xử lý lệnh theo thứ tự đến — cùng kiểu tuần tự như `better-sqlite3` bên Electron.
+3. **Rust vẫn sở hữu phần thuộc về vỏ.** Dọn `images/<id>.img` sau `delete-game`/`delete-games` làm ở Rust, SAU khi dòng đã biến mất, và chỉ với id không còn trò chơi hay bản nháp nào nhắc tới (cùng luật `removeUnreferencedImages`). Lỗi của một tệp ảnh mồ côi không được biến thao tác xoá thành thất bại.
+4. **Hợp đồng giá trị thô được giữ có chủ đích.** `__eg_store.select/execute/transaction` trả nguyên giá trị op (`select`/`transaction` là **chuỗi** JSON); chỉ `template.js` parse. Parse thêm một lần nữa ở Rust là "Unexpected end of JSON input" — lỗi này đã xảy ra và được ghi trong `embedded.rs`.
+5. **Nghiệm thu hai pha, do script cha điều khiển.** Cổng CDP không tự giết được tiến trình ứng dụng, nên `build-tauri-release.js --check` mở app → chạy pha một (đo giao diện + lưu thật + ghi `id`/`createdAt` xuống tệp memo) → **đóng hẳn** → mở lại trên cùng profile → chạy pha hai (`--reopen`: so memo với dữ liệu đọc từ đĩa, sửa, xoá, lưu/xoá phiên). Chờ "cổng mở" là chưa đủ: WebView2 mở cổng gỡ lỗi khi trang còn trống, nên cả cha lẫn `connect()` phải chờ **trang ứng dụng có nội dung** — thiếu bước này cả bảy phép đo DOM đỏ oan.
+
+**Kiểm chứng.**
+
+- `cargo test --manifest-path src-tauri/Cargo.toml`: **28/28**, gồm lưu/đọc/sửa/xoá, giới hạn 500, seed chỉ một lần, dọn ảnh theo luật "không còn ai nhắc tới", và mở lại thư viện giữ dòng.
+- `build-tauri-release.js --check` trên binary **release** thật: pha một **16/16** (nạp gói cục bộ, shell 252px, CSP khớp `tauri.conf.json`, 0 request ra ngoài, `getLibrary` `{version:1,games,sessions}`, kênh chưa port vẫn `not-supported`, lưu thật `games 2→3`), pha hai **5/5** (đúng `id` + `createdAt` sau khi mở lại, không seed lần hai, sửa giữ `id`/`createdAt`, xoá về `3→2`, lưu rồi xoá lượt chơi không đụng trò chơi).
+- `npm test`: **97/97**; `check:desktop-contract` 81 invoke + 3 send + 8 sự kiện; `npm run check:embedded` khớp 41,3 KiB.
+
+**Chưa xác minh.**
+
+- 72 kênh còn lại vẫn `unsupported!`; UI Thư viện trên Tauri mới đi qua façade, chưa bấm qua giao diện như giáo viên.
+- `.egame`, import tài liệu/ảnh, export chẩn đoán và chơi offline trên bản gói là bước 3–6.
+- `WEBVIEW2_USER_DATA_FOLDER` chỉ đổi profile WebView2, **không** đổi thư mục dữ liệu Tauri — phép kiểm ghi vào `%APPDATA%/vn.edugame.studio.tauri/edugame-data` thật; dòng thử đã dọn, chỉ còn trò chơi mẫu. Giai đoạn 4 phải làm phép đo "đóng/mở lại" trên một thư mục dữ liệu tạm.
+
+**Việc kế tiếp.** Bước 3/6: kênh `projects:*` (đọc, xoá một, xoá nhiều) trên cùng luồng engine, giữ kiểm tra dữ liệu và dọn ảnh; mở rộng cổng tauri-webview cho luồng lưu dự án → đóng → mở lại → xoá.
+
 ## Giai đoạn 3 (1/6) — Chốt backend SQLite của vỏ Tauri: `rusqlite` bundled, cùng tệp, cùng DDL, đọc thẳng từ nguồn TypeScript (2026-11-09)
 
 **Báo cáo.** Kế hoạch mục 4 giai đoạn 3 việc 1 yêu cầu chọn backend SQLite trước khi chuyển bất kỳ dữ liệu nào. Bước 1/6 làm đúng việc đó: chọn crate, dựng lớp mở tệp, và chứng minh nó mở được dữ liệu 0.5.1 thật — chưa port kênh nào, đúng như thứ tự kế hoạch.

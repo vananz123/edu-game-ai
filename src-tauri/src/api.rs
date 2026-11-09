@@ -2,8 +2,9 @@
 //!
 //! Giai đoạn 1 chỉ có bốn lệnh dữ liệu thật (`getLibrary`, `getSettings`,
 //! `getLocalAiModels` và `appInfo`); chúng đọc/ghi trong thư mục dữ liệu riêng
-//! của Tauri. Không lệnh nào giả vờ thành công: một kênh chưa port phải báo lỗi
-//! để giáo viên biết, thay vì lặng lẽ trả dữ liệu rỗng.
+//! của Tauri. Giai đoạn 3 mở thêm sáu kênh `library:*` trên `edugame.sqlite`
+//! (`library.rs`). Không lệnh nào giả vờ thành công: một kênh chưa port phải báo
+//! lỗi để giáo viên biết, thay vì lặng lẽ trả dữ liệu rỗng.
 //!
 //! Phần còn lại của hợp đồng Electron (xem `src/shared/desktop-contract.json`)
 //! được đăng ký bằng `unsupported!` để renderer nhận một lỗi đọc được thay vì
@@ -43,6 +44,13 @@ pub fn hand_written(command: &str) -> Option<(&'static str, &'static str)> {
         "app_info" => ("app:info", "app_info"),
         "shell_info" => ("shell:info", "shell_info"),
         "get_library" => ("library:get", "get_library"),
+        // Năm kênh ghi của thư viện: hàm sinh bởi `library_channel!` ở dưới,
+        // nhưng vẫn là lệnh riêng chứ không phải nhánh `unsupported!`.
+        "save_game" => ("library:save-game", "save_game"),
+        "delete_game" => ("library:delete-game", "delete_game"),
+        "delete_games" => ("library:delete-games", "delete_games"),
+        "save_session" => ("library:save-session", "save_session"),
+        "delete_sessions" => ("library:delete-sessions", "delete_sessions"),
         "get_settings" => ("settings:get", "get_settings"),
         "get_local_ai_models" => ("ai:local-models", "get_local_ai_models"),
         "invoke_channel" => ("channel:invoke", "invoke_channel"),
@@ -160,13 +168,20 @@ const SEND_CHANNELS: &[&str] = &[
 ///
 /// `invoke_channel` đã lọc theo `INVOKE_CHANNELS`, nên `_` ở đây không tới
 /// được — nó chỉ là lưới an toàn nếu hai danh sách lệch nhau lúc sửa tay.
-fn dispatch(app: &AppHandle, channel: &str) -> Result<Value, String> {
+fn dispatch(app: &AppHandle, channel: &str, args: &[Value]) -> Result<Value, String> {
     match channel {
         "app:info" => json(app_info(app.clone())),
         "shell:info" => json(shell_info(app.clone())),
         "library:get" => json(get_library(app.clone())),
         "settings:get" => json(get_settings(app.clone())),
         "ai:local-models" => json(get_local_ai_models()),
+        // Năm kênh ghi của thư viện nhận thẳng tham số renderer gửi (một trò
+        // chơi, một id, một mảng id), nên chúng đi qua `args` của cửa chung.
+        "library:save-game"
+        | "library:delete-game"
+        | "library:delete-games"
+        | "library:save-session"
+        | "library:delete-sessions" => crate::library::run(app, channel, &args),
         _ => Err(format!("Kênh `{channel}` chưa có thân trong vỏ Tauri")),
     }
 }
@@ -181,11 +196,15 @@ fn json<T: Serialize>(value: Result<T, String>) -> Result<Value, String> {
 /// chuỗi kênh thuộc danh sách tĩnh, nên frontend không thể mượn cửa này để đọc
 /// tệp tuỳ ý. Đó là lý do không mở quyền filesystem cho WebView.
 #[tauri::command]
-pub fn invoke_channel(app: AppHandle, channel: String) -> Result<Value, String> {
+pub fn invoke_channel(
+    app: AppHandle,
+    channel: String,
+    args: Option<Vec<Value>>,
+) -> Result<Value, String> {
     if !INVOKE_CHANNELS.contains(&channel.as_str()) {
         return Err(format!("Kênh `{channel}` không thuộc hợp đồng desktop"));
     }
-    dispatch(&app, &channel)
+    dispatch(&app, &channel, args.as_deref().unwrap_or_default())
 }
 
 /// Cửa chung cho ba kênh `send` của trình chiếu.
@@ -228,14 +247,34 @@ pub fn app_info(app: AppHandle) -> Result<AppInfo, String> {
 }
 
 /// Thư viện của bản Tauri: `{version, games, sessions}` đúng hình dạng `readDb()`
-/// của Electron trả về. Chưa có tệp = thư viện rỗng của lần chạy đầu.
+/// của Electron trả về. Câu đọc chạy trong V8 nhúng trên kết nối đang mở
+/// (`library.rs`), nên hình dạng dữ liệu đến từ đúng `library-ops.ts` mà
+/// Electron dùng — không phải một bản viết lại bằng Rust.
 #[tauri::command]
 pub fn get_library(app: AppHandle) -> Result<serde_json::Value, String> {
-    paths::read_json(&app, paths::LIBRARY_FILE, empty_library())
+    crate::library::run(&app, "library:get", &[])
 }
 
-fn empty_library() -> serde_json::Value {
-    serde_json::json!({ "version": 1, "games": [], "sessions": [] })
+/// Bốn kênh ghi của thư viện, một tham số đúng như hook của `preload.ts` gửi.
+/// Thân thật nằm ở `library.rs` → V8 nhúng; các lệnh ở đây chỉ để hợp đồng
+/// Electron có đúng một lệnh cho mỗi kênh (`tests/unit/tauri-contract.test.ts`).
+macro_rules! library_channel {
+    ($($fn_name:ident($arg:ident: $kind:ty) => $channel:literal),* $(,)?) => {
+        $(
+            #[tauri::command]
+            pub fn $fn_name(app: AppHandle, $arg: $kind) -> Result<serde_json::Value, String> {
+                crate::library::run(&app, $channel, &[serde_json::to_value($arg).map_err(|error| error.to_string())?])
+            }
+        )*
+    };
+}
+
+library_channel! {
+    save_game(game: serde_json::Value) => "library:save-game",
+    delete_game(game_id: String) => "library:delete-game",
+    delete_games(game_ids: Vec<String>) => "library:delete-games",
+    save_session(session: serde_json::Value) => "library:save-session",
+    delete_sessions(session_ids: Vec<String>) => "library:delete-sessions",
 }
 
 /// Cài đặt của bản Tauri. Bản thử giai đoạn 1 chưa có trang Cài đặt đầy đủ, nên
@@ -308,11 +347,6 @@ macro_rules! unsupported {
 // đối chiếu bằng mắt.
 unsupported! {
     set_fullscreen => "window:set-fullscreen",
-    save_game => "library:save-game",
-    delete_game => "library:delete-game",
-    delete_games => "library:delete-games",
-    save_session => "library:save-session",
-    delete_sessions => "library:delete-sessions",
     save_lesson_document => "lesson:save-document",
     get_lesson_document => "lesson:get-document",
     list_lesson_library => "lesson:library",
@@ -398,13 +432,16 @@ mod tests {
     }
 
     #[test]
-    fn library_answer_has_the_electron_shape() {
-        // `readDb()` của Electron trả `{version, games, sessions}`; renderer đọc
-        // đúng ba khoá đó, nên thư viện rỗng của Tauri phải giống hệt.
-        let value = super::empty_library();
-        assert_eq!(value["version"], 1);
-        assert!(value["games"].as_array().is_some_and(|list| list.is_empty()));
-        assert!(value["sessions"].as_array().is_some_and(|list| list.is_empty()));
+    fn library_answers_shape_comes_from_the_typescript_rules() {
+        // `library.rs` chạy `getLibraryPayload()` của `library-ops.ts`, nên hình
+        // dạng `{version, games, sessions}` có test riêng ở đó. Ở đây chỉ chốt
+        // rằng `get_library` đi qua engine chứ không còn đọc `library.json` của
+        // giai đoạn 1. Phép so trên chính tệp này phải ghép chuỗi, nếu không
+        // câu assert tự khớp với chính nó.
+        let source = include_str!("api.rs");
+        assert!(source.contains("crate::library::run(&app, \"library:get\", &[])"));
+        let legacy = ["paths::", "LIBRARY", "_FILE"].concat();
+        assert!(!source.contains(&legacy));
     }
 
     #[test]

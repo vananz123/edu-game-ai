@@ -10,9 +10,8 @@
 //!
 //! Tên tệp cũng lấy từ `main.ts` (`DB_FILE`), không gõ lại chuỗi ở đây.
 //!
-//! Giai đoạn này chưa có lệnh IPC nào dùng `Database`: chọn backend và chứng
-//! minh nó mở được dữ liệu 0.5.1 là việc của bước 1/6. Các bước sau port từng
-//! nhóm kênh lên trên nó.
+//! Tệp này chỉ giữ phần mở/khoá/tạo bảng và các kiểu lỗi dùng chung. Câu SQL
+//! của thư viện nằm ở `library.rs`, bộ chuyển tham số ở `sql_params.rs`.
 
 use std::path::Path;
 
@@ -27,7 +26,7 @@ pub const STORE_SCHEMA_SQL: &str = include_str!("../../src/db/lesson-store-schem
 /// Tên tệp cơ sở dữ liệu, đúng hằng `DB_FILE` trong `main.ts`.
 pub const DB_FILE: &str = "edugame.sqlite";
 
-/// Lỗi đọc tệp cơ sở dữ liệu. Mọi thông điệp đều tiếng Việt để renderer hiện
+/// Lỗi đọc/ghi cơ sở dữ liệu. Mọi thông điệp đều tiếng Việt để renderer hiện
 /// thẳng được cho giáo viên, kèm mã ổn định cho cổng kiểm tra.
 #[derive(Debug)]
 pub enum DbError {
@@ -39,6 +38,8 @@ pub enum DbError {
     Data(String),
     /// Không ghi được tệp (đĩa đầy, không có quyền).
     Io(String),
+    /// Dữ liệu của giáo viên không qua được luật của chính ứng dụng.
+    Invalid(String),
 }
 
 impl DbError {
@@ -48,6 +49,7 @@ impl DbError {
             DbError::Schema(_) => "DB_SCHEMA_FAILED",
             DbError::Data(_) => "DB_DATA_CORRUPT",
             DbError::Io(_) => "DB_IO_FAILED",
+            DbError::Invalid(_) => "DB_INVALID_INPUT",
         }
     }
 }
@@ -56,9 +58,12 @@ impl std::fmt::Display for DbError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let (label, text) = match self {
             DbError::Open(text) => ("không mở được cơ sở dữ liệu", text),
-            DbError::Schema(text) => ("không tạo được bảng", text),
+            DbError::Schema(text) => ("không chạy được câu SQL của thư viện", text),
             DbError::Data(text) => ("dữ liệu trong thư viện hỏng", text),
             DbError::Io(text) => ("không ghi được cơ sở dữ liệu", text),
+            // Câu lỗi của luật (ví dụ "Mỗi lần chỉ xoá tối đa 500 trò chơi.")
+            // được giáo viên đọc nguyên văn; thêm tiền tố kỹ thuật là lạc đề.
+            DbError::Invalid(text) => return write!(f, "{text}"),
         };
         write!(f, "{label}: {text}")
     }
@@ -68,7 +73,7 @@ impl std::error::Error for DbError {}
 
 /// Chuyển lỗi của `rusqlite` thành lỗi đọc được. Không lộ chuỗi tiếng Anh trần
 /// ra giao diện: câu gốc vẫn nằm ở cuối để người sửa lỗi thấy nguyên nhân.
-fn sql_error(error: rusqlite::Error) -> String {
+pub(crate) fn sql_text(error: rusqlite::Error) -> String {
     format!("{error}")
 }
 
@@ -78,16 +83,16 @@ fn sql_error(error: rusqlite::Error) -> String {
 /// khi một tiến trình khác đang ghi. Cron trước `foreign_keys` vì SQLite chỉ
 /// đọc pragma đó khi đặt, không khi mở.
 pub fn open(path: &Path) -> Result<Connection, DbError> {
-    let connection = Connection::open(path).map_err(|error| DbError::Open(sql_error(error)))?;
+    let connection = Connection::open(path).map_err(|error| DbError::Open(sql_text(error)))?;
     connection
         .pragma_update(None, "journal_mode", "WAL")
-        .map_err(|error| DbError::Open(sql_error(error)))?;
+        .map_err(|error| DbError::Open(sql_text(error)))?;
     connection
         .pragma_update(None, "foreign_keys", "ON")
-        .map_err(|error| DbError::Open(sql_error(error)))?;
+        .map_err(|error| DbError::Open(sql_text(error)))?;
     connection
         .busy_timeout(std::time::Duration::from_secs(5))
-        .map_err(|error| DbError::Open(sql_error(error)))?;
+        .map_err(|error| DbError::Open(sql_text(error)))?;
     Ok(connection)
 }
 
@@ -101,16 +106,16 @@ pub fn open(path: &Path) -> Result<Connection, DbError> {
 pub fn ensure_schema(connection: &Connection) -> Result<(), DbError> {
     connection
         .execute_batch(LIBRARY_SCHEMA_SQL)
-        .map_err(|error| DbError::Schema(sql_error(error)))?;
+        .map_err(|error| DbError::Schema(sql_text(error)))?;
     connection
         .execute_batch(STORE_SCHEMA_SQL)
-        .map_err(|error| DbError::Schema(sql_error(error)))?;
+        .map_err(|error| DbError::Schema(sql_text(error)))?;
     add_column_if_missing(connection, "lesson_analyses", "cache_key", "TEXT")?;
     connection
         .execute_batch(
             "CREATE INDEX IF NOT EXISTS idx_lesson_analyses_cache ON lesson_analyses(document_id, cache_key)",
         )
-        .map_err(|error| DbError::Schema(sql_error(error)))?;
+        .map_err(|error| DbError::Schema(sql_text(error)))?;
     add_column_if_missing(connection, "lesson_chat_messages", "evidence_meta", "TEXT")?;
     Ok(())
 }
@@ -124,10 +129,10 @@ fn add_column_if_missing(
     let statement = format!("PRAGMA table_info({table})");
     let mut prepared = connection
         .prepare(&statement)
-        .map_err(|error| DbError::Schema(sql_error(error)))?;
+        .map_err(|error| DbError::Schema(sql_text(error)))?;
     let mut names = prepared
         .query_map([], |row| row.get::<_, String>(1))
-        .map_err(|error| DbError::Schema(sql_error(error)))?;
+        .map_err(|error| DbError::Schema(sql_text(error)))?;
     let exists = names
         .any(|name| name.is_ok_and(|name| name == column));
     if exists {
@@ -136,86 +141,25 @@ fn add_column_if_missing(
     let alter = format!("ALTER TABLE {table} ADD COLUMN {column} {kind}");
     connection
         .execute_batch(&alter)
-        .map_err(|error| DbError::Schema(sql_error(error)))
-}
-
-/// Hình dạng mà renderer đọc: `{version, games, sessions}` đúng `readDb()`.
-#[derive(Debug, PartialEq)]
-pub struct Library {
-    pub games: Vec<serde_json::Value>,
-    pub sessions: Vec<serde_json::Value>,
-}
-
-/// Đọc thư viện giống `readDb()`: game theo `updated_at` giảm dần, tối đa 1000
-/// phiên theo `created_at` giảm dần.
-///
-/// Một dòng `data_json` hỏng trả `DbError::Data` thay vì bỏ qua im lặng: bản
-/// Electron sẽ ném ở `JSON.parse` và cả màn hình không mở được, nhưng ở đây
-/// lỗi có mã để màn hình báo "thư viện hỏng" kèm tên dòng — bỏ qua thì giáo
-/// viên mất game mà không biết tại sao.
-pub fn read_library(connection: &Connection) -> Result<Library, DbError> {
-    let mut game_statement = connection
-        .prepare("SELECT data_json FROM games ORDER BY updated_at DESC")
-        .map_err(|error| DbError::Schema(sql_error(error)))?;
-    let games = read_payloads(&mut game_statement, "games")?;
-    let mut session_statement = connection
-        .prepare("SELECT data_json FROM sessions ORDER BY created_at DESC LIMIT 1000")
-        .map_err(|error| DbError::Schema(sql_error(error)))?;
-    let sessions = read_payloads(&mut session_statement, "sessions")?;
-    Ok(Library { games, sessions })
-}
-
-fn read_payloads(
-    statement: &mut rusqlite::Statement<'_>,
-    table: &str,
-) -> Result<Vec<serde_json::Value>, DbError> {
-    let rows = statement
-        .query_map([], |row| row.get::<_, String>(0))
-        .map_err(|error| DbError::Schema(sql_error(error)))?;
-    let mut values = Vec::new();
-    for row in rows {
-        let text = row.map_err(|error| DbError::Schema(sql_error(error)))?;
-        let value = serde_json::from_str(&text)
-            .map_err(|error| DbError::Data(format!("bảng {table}: {error}")))?;
-        values.push(value);
-    }
-    Ok(values)
+        .map_err(|error| DbError::Schema(sql_text(error)))
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
-    /// Dữ liệu thử dựng đúng hình dạng 0.5.1: hai bảng thư viện, chín bảng
-    /// sidecar, một game, một phiên, một dự án và một tài liệu giáo án. Không
-    /// dùng dữ liệu thật của học sinh theo quy tắc dự án — tên người là giả.
-    fn seed_0_5_1(connection: &Connection) {
-        connection
-            .execute_batch(
-                "INSERT INTO games (id,title,subject,grade,topic,template,created_at,updated_at,data_json)
-                 VALUES ('g1','An toàn giao thông','GDCD','7','An toàn','scenario',
-                         '2026-10-01T08:00:00.000Z','2026-10-02T09:30:00.000Z',
-                         '{\"id\":\"g1\",\"title\":\"An toàn giao thông\",\"template\":\"scenario\"}');
-                 INSERT INTO sessions (id,created_at,data_json)
-                 VALUES ('s1','2026-10-02T10:00:00.000Z','{\"id\":\"s1\",\"gameId\":\"g1\",\"score\":80}');
-                 INSERT INTO lesson_documents
-                   (id,name,ext,size_bytes,characters,text_rel_path,sha256,schema_version,created_at)
-                 VALUES ('doc1','Bài 3.docx','docx',1200,900,'lessons/doc1.txt',NULL,1,'2026-10-01T07:00:00.000Z');
-                 INSERT INTO game_projects
-                   (id,game_id,status,step,data_json,schema_version,created_at,updated_at)
-                 VALUES ('p1',NULL,'draft','content','{\"id\":\"p1\",\"status\":\"draft\"}',1,
-                         '2026-10-01T08:00:00.000Z','2026-10-03T08:00:00.000Z');",
-            )
-            .expect("seed 0.5.1");
+    /// Tệp mới trong thư mục tạm, đã có đủ hai khối schema. Không chạm thư mục
+    /// dữ liệu thật; tên người trong dữ liệu thử đều là giả.
+    pub(crate) fn fresh() -> (tempfile::TempDir, Connection) {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let connection = open(&dir.path().join(DB_FILE)).expect("mở");
+        ensure_schema(&connection).expect("schema");
+        (dir, connection)
     }
 
     #[test]
     fn opens_a_fresh_file_with_both_schemas_and_the_electron_pragmas() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let path = dir.path().join(DB_FILE);
-        let connection = open(&path).expect("mở được tệp mới");
-        ensure_schema(&connection).expect("tạo được schema");
-
+        let (_dir, connection) = fresh();
         let journal: String = connection
             .pragma_query_value(None, "journal_mode", |row| row.get(0))
             .expect("đọc journal_mode");
@@ -240,49 +184,27 @@ mod tests {
             assert!(tables.iter().any(|name| name == table), "thiếu bảng {table}: {tables:?}");
         }
         assert_eq!(tables.len(), 11, "schema 0.5.1 có đúng 11 bảng: {tables:?}");
-
-        let library = read_library(&connection).expect("thư viện rỗng đọc được");
-        assert_eq!(library, Library { games: vec![], sessions: vec![] });
     }
 
     #[test]
-    fn reopens_a_closed_0_5_1_file_with_the_same_rows() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let path = dir.path().join(DB_FILE);
-        {
-            let connection = open(&path).expect("mở lần đầu");
-            ensure_schema(&connection).expect("schema lần đầu");
-            seed_0_5_1(&connection);
-        }
-        let connection = open(&path).expect("mở lại sau khi đóng");
-        ensure_schema(&connection).expect("chạy schema lần hai phải vô hại");
-        let library = read_library(&connection).expect("đọc thư viện đã ghi");
-        assert_eq!(library.games.len(), 1);
-        assert_eq!(library.games[0]["id"], "g1");
-        assert_eq!(library.sessions.len(), 1);
-        assert_eq!(library.sessions[0]["score"], 80);
-
-        // Sidecar giữ nguyên, và cột migration đã có mặt.
-        let documents: i64 = connection
-            .query_row("SELECT COUNT(*) FROM lesson_documents", [], |row| row.get(0))
+    fn creating_the_schema_twice_is_harmless() {
+        let (_dir, connection) = fresh();
+        ensure_schema(&connection).expect("chạy schema lần hai");
+        let indexes: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name IN ('idx_games_updated_at','idx_sessions_created_at','idx_lesson_analyses_cache')",
+                [],
+                |row| row.get(0),
+            )
             .unwrap();
-        assert_eq!(documents, 1);
-        let cache_key: bool = connection
-            .prepare("PRAGMA table_info(lesson_analyses)")
-            .unwrap()
-            .query_map([], |row| row.get::<_, String>(1))
-            .unwrap()
-            .any(|name| name.unwrap() == "cache_key");
-        assert!(cache_key, "migration cache_key");
+        assert_eq!(indexes, 3);
     }
 
     #[test]
     fn cascades_delete_documents_to_their_analyses() {
         // `foreign_keys = ON` là điều kiện của `ON DELETE CASCADE`; test này
         // chứng minh pragma thật sự có tác dụng chứ không chỉ được đặt.
-        let dir = tempfile::tempdir().expect("tempdir");
-        let connection = open(&dir.path().join(DB_FILE)).expect("mở");
-        ensure_schema(&connection).expect("schema");
+        let (_dir, connection) = fresh();
         connection
             .execute_batch(
                 "INSERT INTO lesson_documents
@@ -303,20 +225,18 @@ mod tests {
     }
 
     #[test]
-    fn corrupt_payload_names_the_table_instead_of_vanishing() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let connection = open(&dir.path().join(DB_FILE)).expect("mở");
-        ensure_schema(&connection).expect("schema");
-        connection
-            .execute(
-                "INSERT INTO games (id,title,created_at,updated_at,data_json)
-                 VALUES ('g1','x','2026-10-01T00:00:00Z','2026-10-01T00:00:00Z','{không phải json')",
-                [],
-            )
-            .expect("seed");
-        let error = read_library(&connection).expect_err("JSON hỏng phải là lỗi");
-        assert_eq!(error.code(), "DB_DATA_CORRUPT");
-        assert!(error.to_string().contains("games"), "{error}");
+    fn every_error_code_is_stable() {
+        // Cổng UI và renderer dựa vào mã; đổi mã là đổi hợp đồng. Lỗi luật
+        // `Invalid` không có tiền tố: renderer hiện thẳng câu của nó.
+        assert_eq!(DbError::Open(String::new()).code(), "DB_OPEN_FAILED");
+        assert_eq!(DbError::Schema(String::new()).code(), "DB_SCHEMA_FAILED");
+        assert_eq!(DbError::Data(String::new()).code(), "DB_DATA_CORRUPT");
+        assert_eq!(DbError::Io(String::new()).code(), "DB_IO_FAILED");
+        assert_eq!(DbError::Invalid(String::new()).code(), "DB_INVALID_INPUT");
+        assert_eq!(
+            DbError::Invalid("Mỗi lần chỉ xoá tối đa 500 trò chơi.".into()).to_string(),
+            "Mỗi lần chỉ xoá tối đa 500 trò chơi."
+        );
     }
 
     #[test]

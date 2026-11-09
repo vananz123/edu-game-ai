@@ -1,9 +1,10 @@
 # Roadmap
 
-## Vỏ Tauri có **lớp dữ liệu SQLite** riêng: `rusqlite` bundled mở đúng tệp 0.5.1, DDL đọc thẳng từ nguồn (2026-11-09, DECISIONS "Giai đoạn 3 (1/6)")
+## Vỏ Tauri có **lớp dữ liệu SQLite** riêng: `rusqlite` bundled + sáu kênh `library:*` sống qua lần đóng ứng dụng (2026-11-09, DECISIONS "Giai đoạn 3 (1/6)", "(2/6)")
 - **Bước 1/6 xong:** `src-tauri/src/storage.rs` mở `edugame.sqlite` (WAL, `foreign_keys`, busy 5 s), chạy hai khối DDL + hai `ALTER TABLE` như `LessonStore.migrateSchema`, `read_library` trả đúng `{version, games, sessions}` của `readDb()`; lỗi có mã `DB_*`. DDL là bản sao trong `src/db/` được `include_str!`; `tauri-storage-schema` so chữ ký cấu trúc với `main.ts`/`lesson-store.ts`.
-- **Đo:** bản sao dữ liệu 0.5.1 thật mở được — 11 bảng/12 index, 14 game · 268 phiên · 36 tài liệu · 17 dự án; `cargo test` **11/11**, `npm test` **97/97**, exe release **4,2 MiB** (cap 25 MiB còn nguyên).
-- **Còn mở:** chưa kênh nào dùng `storage`; WAL chưa xử lý khi chép tệp (giai đoạn 4). **Kế tiếp:** bước 2/6 — nhóm `library:*`.
+- **Bước 2/6 xong:** `src-tauri/src/library.rs` + `embedded.rs` — luật `library-ops.ts` chạy **nguyên văn** trong V8 nhúng (`deno_core`), engine trên một luồng riêng, một kết nối `rusqlite` cho cả phiên; `library:get/save-game/delete-game/delete-games/save-session/delete-sessions` đã có thân. Rust dọn `images/<id>.img` sau khi xoá, chỉ với id không còn ai nhắc tới.
+- **Đo:** dữ liệu 0.5.1 thật mở được — 11 bảng/12 index, 14 game · 268 phiên · 36 tài liệu · 17 dự án; `cargo test` **28/28**; cổng hai pha trên binary release: pha một **16/16**, pha hai **5/5** (lưu → **đóng** → mở lại thấy đúng `id`/`createdAt` → sửa → xoá; lưu/xoá phiên không đụng trò chơi); `npm test` **97/97**; exe release **4,2 MiB** (cap 25 MiB còn nguyên).
+- **Còn mở:** 72 kênh vẫn `unsupported!`; UI Thư viện mới đo qua façade, chưa bấm qua giao diện; WAL chưa xử lý khi chép tệp (giai đoạn 4); cổng ghi vào thư mục dữ liệu Tauri thật. **Kế tiếp:** bước 3/6 — nhóm `projects:*`.
 
 ## Renderer đi qua **façade desktop** thay vì `window.eduGame`; adapter Electron + Tauri, Tauri không còn cầu eduGame (2026-11-09, DECISIONS "Giai đoạn 2")
 - **Giai đoạn 2 xong:** `src/renderer/core/{desktop-facade-schema,desktop-adapter-electron,desktop-adapter-tauri,desktop-facade,desktop-host}.ts` — `desktop.call(khoá, …)` / `desktop.listen(sự kiện, fn) → hàm huỷ`, lỗi là `DesktopError` có `code` + `call`; 92 lời gọi + 8 sự kiện theo nhóm. Vỏ khai `missingGroups`/`hasChannel`; ba kênh `send` trình chiếu bị từ chối `not-supported` trước IPC. `desktop.stub` chỉ cho cổng UI. `src-tauri/src/api.rs` có `invoke_channel` + `send_channel`; `build-tauri-frontend.js` bỏ hẳn `edugame-bridge.js`.

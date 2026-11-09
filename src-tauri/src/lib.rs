@@ -3,13 +3,25 @@
 //! Giai đoạn 1 chỉ chạy UI đã đóng gói sẵn trong WebView2 với HTML/CSS/thứ tự
 //! script y như bản Electron, trong một định danh ứng dụng và thư mục dữ liệu
 //! riêng (quyết định #251 câu 2). Không đọc, không ghi profile Electron.
+//!
+//! Giai đoạn 3 mở `edugame.sqlite` một lần trong `setup` (`library::install`) và
+//! giữ kết nối trong state của ứng dụng; mọi kênh `library:*` chạy trên đó.
 
 pub mod api;
+pub mod embedded;
+pub mod library;
 pub mod paths;
+pub mod sql_params;
 pub mod storage;
 
 pub fn run() {
     tauri::Builder::default()
+        .setup(|app| {
+            // Không mở được thư viện thì dừng hẳn: một cửa sổ mà mọi lệnh lưu/xoá
+            // đều hỏng sẽ khiến giáo viên tưởng đã mất dữ liệu.
+            library::Library::install(app.handle()).map_err(|error| Box::<dyn std::error::Error>::from(error.to_string()))?;
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             api::app_info,
             api::shell_info,
