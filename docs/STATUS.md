@@ -7,6 +7,10 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-09 — Kế hoạch khảo sát và chuyển EduGame Studio từ Electron sang Tauri; giai đoạn 0 kiểm kê API + baseline Electron
+- **Giai đoạn 0 (2026-11-09) — Kiểm kê bề mặt desktop và đo baseline Electron 0.5.1, không sửa mã.** 82 `ipcMain.handle` (+3 `ipcMain.on`, 8 sự kiện đẩy về renderer), 92 khoá `window.eduGame`, renderer gọi 75 API trong 26 tệp, 11 phụ thuộc gắn Electron/Node, danh sách dữ liệu phải giữ; installer **88,4 MiB** (91 % là Electron), khởi động ~**1,9 s**, nhàn rỗi **294 MiB** private / **1,41 %** CPU. Chi tiết: [docs/handoff/plans/2026-11-09-tauri-phase0-survey.md](handoff/plans/2026-11-09-tauri-phase0-survey.md).
+- Lưu kế hoạch theo giai đoạn, kiến trúc đích, migration dữ liệu, AI local, LAN, trình chiếu, updater và cổng nghiệm thu tại [docs/handoff/plans/2026-11-09-tauri-migration.md](handoff/plans/2026-11-09-tauri-migration.md). Đây là đề xuất, chưa được duyệt để triển khai; chưa sửa ứng dụng hoặc chạy build/test Tauri.
+
 ### 2026-11-08 — Bộ xử lý AI local: lựa chọn GPU tới được tiến trình đang chạy (#227), Phát hành 0.5.0 (#226), khối thảo luận mở ở màn không ảnh (#225), mực câu hỏi cho dòng thảo luận (#224), bỏ "Giữ hành vi hiện tại" (#223), nền sáng (#220), trả bầu trời đêm 3D về Chòm sao (#221), đường nối mờ trước khi ghép (#222), đóng nợ #212, #219 (Chòm sao tri thức)
 - **npm start chạy bản mới (2026-11-09) — build sạch 0.5.1 đúng chuỗi `npm start`, xác minh #250 trên chính dist vừa build: app báo 0.5.1, luồng xoá cuộc trò chuyện bằng confirm thật xong gõ được ngay không cần bấm ô. Bản đã cài (0.5.0) chưa có #250 — phân biệt bằng Cài đặt → Giới thiệu.** Chi tiết ở đầu handoff mới nhất bên dưới; bump 0.5.1 ba chỗ, chưa phát hành.
 - **#250 (2026-11-09) — Khung chat Giáo án: xoá một cuộc trò chuyện xong vẫn gõ được, và gửi xong ô nhập tự trống. Caret được nhớ ở `mousedown` (pha capture, nối document một lần) rồi trả lại sau mỗi render; câu đã gửi được xoá trong `finally` của `lessonChatSend` nên cả lượt bị từ chối lẫn lượt lỗi (AI chưa sẵn sàng) đều để ô trống; câu dưới 3 ký tự xoá ô + toast.** `ui-lesson-chat-check` trên instance riêng: toàn bộ qua (mục 11c #250 mới, mục #187 gõ thật sau khi xoá); `run-unit` 92/92, `check:renderer-globals` 0 undefined. Quyết định #250 trong `docs/DECISIONS.md`.
@@ -278,6 +282,38 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - Editor kéo-thả (matching + race) + xem trước đường đua
 - Lịch sử trước 2026-10-19
 ## Bàn giao gần nhất
+
+### Giai đoạn 0 của kế hoạch Tauri: kiểm kê API desktop và đo baseline Electron 0.5.1 (2026-11-09)
+
+**Bối cảnh.** Chủ dự án chọn phương án đo bổ sung bằng chứng cho kế hoạch Tauri trước khi quyết định triển khai: kiểm kê đầy đủ API/IPC và đo kích thước/khởi động/RAM hiện tại của Electron. Không sửa mã ứng dụng.
+
+**Files changed.** `docs/handoff/plans/2026-11-09-tauri-phase0-survey.md` (mới — báo cáo kiểm kê + baseline), `docs/handoff/plans/2026-11-09-tauri-migration.md` (thêm ghi chú trỏ sang báo cáo), `docs/STATUS.md`.
+
+**Behavior.** Không đổi hành vi ứng dụng. Số đo chính:
+- **Bề mặt hợp đồng:** 82 `ipcMain.handle` (61 `main.ts` + 7 about + 6 lan + 4 setup + 4 presentation), 3 `ipcMain.on`, 8 sự kiện đẩy về renderer; `preload.ts` expose 92 khoá (81 invoke, 3 send, 8 subscribe); renderer gọi 75 API trong 26 tệp; 1 handler chết (`ai:health`). Ba nhóm dùng alias (`about-panel.ts` `api.*`, `lan.ts` `bridge.*`) làm phép đếm tĩnh đầu tiên báo sai — đã ghi thành bẫy cho cổng giai đoạn 2.
+- **Phụ thuộc gắn Electron/Node:** 11 mục, nặng nhất là `better-sqlite3`, `safeStorage`, `edugame-file:` protocol, `screen`+cửa sổ phụ trình chiếu, express+socket.io LAN, `spawn` `llama-server`, `electron-updater`.
+- **Dữ liệu phải bảo toàn:** `%APPDATA%/EduGame Studio/edugame-data` gồm `edugame.sqlite`, `library.json` legacy, `settings.json` (key BYOK qua `safeStorage`), `lessons/`, `images/`, `logs/`, `ai-local/`.
+- **Kích thước:** installer 0.5.1 **92.681.365 B (88,4 MiB)**, `win-unpacked` **332 MiB**, `app.asar` **50,8 MiB / 5.399 tệp**, `EduGame Studio.exe` **180 MiB**, `locales/` 41 MiB. Tức ~91 % khối lượng là Electron/Chromium, không phải mã sản phẩm.
+- **Khởi động (3 lần nguội, profile tạm mới):** spawn → `readyState=complete` **1.939 / 2.131 / 1.684 ms**; `app.boot.phases.totalMs` **1.735 / 1.930 / 1.503 ms**; `documentLoaded` **715 / 796 / 635 ms**. Require đắt nhất khi bật `EDUGAME_BOOT_TRACE`: `zod` 106 ms, `mammoth` ~103 ms, `jszip` 65 ms, `lesson-store` 57 ms.
+- **Nhàn rỗi (22,2 s):** 4 tiến trình, working set **475 MiB**, private **294 MiB**, CPU **1,41 % một nhân** (renderer private 163,6 MiB, main 76,5 MiB).
+
+**Commands and results.** Không chạy `npm run build` hay unit suite (không đổi mã). Đo trên instance Electron riêng, profile tạm `%TEMP%/eg-baseline`, không chạm profile giáo viên: 3 lần chạy nguội đọc `document.readyState` qua CDP + dòng `app.boot.phases` trong `edugame-data/logs`; 1 lần với `EDUGAME_BOOT_TRACE=1` lấy `topRequires`; PowerShell `Get-Process` trên các `electron.exe` của instance để lấy working set/private/CPU; `ls`/`du` cho installer và `win-unpacked`; đếm IPC bằng grep có đối chiếu chéo main ↔ preload (hiệu số đúng bằng các kênh thuộc module about/lan/presentation/setup). Mọi instance đo đã đóng, thư mục `%TEMP%/eg-baseline` và script scratch đã xoá.
+
+**Chưa xác minh.** Một máy, một cấu hình, không lặp đủ để có khoảng tin cậy; đo bản dev (`electron .` trên `dist`) chứ không đo bản cài NSIS. Chưa đo thời gian mở trang Giáo án / chơi game 3D / chạy AI local (nhánh AI local không chạy theo chỉ đạo). Chưa có số Tauri để so — theo kế hoạch chỉ có sau giai đoạn 1. Chưa kiểm kê chi tiết input/output từng payload (báo cáo nhóm theo chức năng, đủ để chốt phạm vi nhưng chưa đủ để viết facade).
+
+**Việc kế tiếp.** Chốt bảy câu hỏi ở mục 7 của kế hoạch (trước hết: bản Tauri đầu tiên có LAN + trình chiếu + updater hay không — nếu có, estimate 6–10 tuần là dưới thực tế). Nếu duyệt triển khai, dùng ma trận nhóm API trong báo cáo làm danh sách kiểm cho facade giai đoạn 2, và giữ bộ đo `boot-baseline` để so Tauri với Electron trên cùng máy.
+
+### Kế hoạch khảo sát/chuyển Electron sang Tauri (2026-11-09)
+
+**Files changed.** `docs/handoff/plans/2026-11-09-tauri-migration.md` (kế hoạch chi tiết); `docs/STATUS.md` (mục lục và bàn giao).
+
+**Behavior.** Không đổi hành vi ứng dụng. Tài liệu ghi kiến trúc đích, 8 giai đoạn, cổng nghiệm thu, rủi ro, quyết định cần chốt và ước lượng sơ bộ. Chưa được duyệt để bắt đầu triển khai.
+
+**Commands and results.** Không chạy build/test; thay đổi chỉ là tài liệu. Đã kiểm tra worktree trước khi sửa và xác nhận không có thay đổi tồn đọng.
+
+**Chưa xác minh.** Chưa cài Rust/Tauri, chưa tạo prototype, chưa kiểm kê toàn bộ API/IPC hoặc thử migration profile thực tế. Ước lượng thời gian và lựa chọn backend Rust/SQLite cần xác nhận sau prototype.
+
+**Việc kế tiếp.** Duyệt phạm vi bản thử nghiệm và các quyết định ở mục 7 trong kế hoạch; sau đó lập ma trận API và kế hoạch migration chi tiết trước khi code.
 
 ### npm start chạy bản mới: build sạch 0.5.1 và xác minh #250 trên chính dist vừa build (2026-11-09)
 

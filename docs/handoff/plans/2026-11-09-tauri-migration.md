@@ -1,0 +1,320 @@
+# Kế hoạch khảo sát và chuyển EduGame Studio từ Electron sang Tauri
+
+Ngày lập: 2026-11-09  
+Trạng thái: **đề xuất, chưa được duyệt để triển khai**  
+Phạm vi: ứng dụng desktop Windows hiện tại, phiên bản nguồn 0.5.1.
+
+## 1. Mục tiêu
+
+Chuyển vỏ desktop từ Electron sang Tauri v2, tái sử dụng tối đa giao diện và
+nghiệp vụ TypeScript, đồng thời giữ các cam kết của sản phẩm:
+
+- Game đã lưu, chấm điểm, lịch sử và gói `.egame` hoạt động khi offline.
+- Không để renderer có quyền truy cập filesystem, SQLite hay tiến trình tùy ý.
+- Bảo toàn dữ liệu Electron hiện có; không ghi đè hoặc xóa profile khi thử nghiệm.
+- Giữ bản Electron hoạt động cho tới khi Tauri vượt qua các cổng nghiệm thu.
+- Không viết lại giao diện hoặc game engine nếu chưa có lý do kỹ thuật.
+
+Đây không chỉ là thay công cụ đóng gói. Electron hiện gom nhiều tích hợp desktop
+vào `src/main.ts` và cung cấp cho renderer một API qua `src/preload.ts`; Tauri
+cần thay thế cả hai bề mặt này.
+
+> **Cập nhật 2026-11-09:** phần kiểm kê và baseline của giai đoạn 0 đã có số
+> đo thật — xem [2026-11-09-tauri-phase0-survey.md](2026-11-09-tauri-phase0-survey.md)
+> (82 handler, 92 khoá `window.eduGame`, 11 phụ thuộc gắn Electron/Node,
+> installer 88,4 MiB, khởi động ~1,9 s, nhàn rỗi 294 MiB private / 1,41 % CPU).
+> Ma trận và số đo ở đó thay cho các ước lượng trong tài liệu này.
+
+## 2. Cơ sở khảo sát
+
+- Dự án hiện là Electron + TypeScript, nhắm Windows; `package.json` đang ở
+  phiên bản 0.5.1.
+- Có khoảng 150 file TypeScript: renderer khoảng 64 file, services 38 file,
+  game engine 4 file.
+- Renderer là HTML/CSS và các script toàn cục có thứ tự nạp cố định; chưa dùng
+  React hoặc ES modules cho renderer.
+- `src/main.ts` khoảng 4.251 dòng và đăng ký khoảng 61 `ipcMain.handle`.
+  `src/preload.ts` có khoảng 81 lời gọi `ipcRenderer.invoke`.
+- `better-sqlite3`, Electron `safeStorage`, `electron-updater`, hộp thoại file,
+  custom protocol, quản lý process AI, cửa sổ trình chiếu và server LAN đều gắn
+  với Electron/Node.
+- Repo chưa có `Cargo.toml` hay cấu hình Tauri; trên máy khảo sát không tìm thấy
+  `cargo`, `rustc` hoặc `rustup`.
+- Đây là ước lượng từ khảo sát cấu trúc, không thay thế kiểm kê API chi tiết,
+  build thử hoặc đo kích thước/hiệu năng Tauri.
+
+## 3. Kiến trúc đích đề xuất
+
+```text
+Renderer TypeScript/HTML hiện tại
+        │
+        ▼
+EduGame desktop API (hợp đồng TypeScript ổn định)
+        ├── Electron adapter — duy trì trong giai đoạn chuyển
+        └── Tauri adapter — commands và events
+                            │
+                            ▼
+                   Rust desktop services
+                   ├── SQLite và file
+                   ├── dialog, cửa sổ, màn hình
+                   ├── AI runtime và tải model
+                   ├── secrets, log, cập nhật
+                   └── LAN server
+```
+
+Renderer gọi facade desktop API thay vì phụ thuộc trực tiếp vào `window.eduGame`.
+Facade giữ giao diện hàm/kiểu dữ liệu đủ gần hiện trạng để chuyển theo từng nhóm.
+Các lỗi native cần được trả về có cấu trúc và hiển thị rõ, không dùng kết quả
+thành công giả hoặc fallback im lặng.
+
+Tiếp tục dùng TypeScript cho logic nghiệp vụ thuần như game engine, kiểm tra và
+chuẩn hóa dữ liệu, prompt và workflow. Dùng Rust cho thao tác cần quyền máy:
+SQLite, file, dialog, secrets, process và tích hợp hệ điều hành. Không mặc định
+đóng gói Node.js sidecar để tránh chuyển các trách nhiệm native; chỉ cân nhắc nếu
+có yêu cầu tương thích cụ thể và đã đánh giá chi phí/bảo mật.
+
+## 4. Lộ trình
+
+### Giai đoạn 0 — Chốt phạm vi, dữ liệu và phương án quay lại
+
+**Công việc**
+
+1. Kiểm kê đầy đủ các API trong `preload.ts`, IPC được đăng ký tại `main.ts` và
+   các module Electron riêng (`presentation`, `lan`, `about`, updater, setup).
+2. Lập ma trận: API hiện tại, nơi UI gọi, dữ liệu đầu vào/đầu ra, quyền cần có,
+   adapter Tauri dự kiến và test thay thế.
+3. Phân loại tính năng thành: bắt buộc cho bản Tauri đầu tiên, có thể hoãn,
+   hoặc cần quyết định sản phẩm.
+4. Xác định đường dẫn profile Electron trên Windows, các file cần chuyển và
+   chính sách backup/rollback. Dùng profile sao chép và dữ liệu tổng hợp.
+5. Chốt xử lý khóa BYOK đã mã hóa, model/runtime lớn và khả năng cài song song.
+
+**Đầu ra và cổng hoàn tất**
+
+- Ma trận API/tính năng và danh sách dữ liệu cần bảo toàn.
+- Kịch bản migration/rollback được duyệt trước khi đụng vào dữ liệu người dùng.
+- Profile test tổng hợp, không chứa thông tin cá nhân của học sinh hoặc giáo viên.
+
+### Giai đoạn 1 — Toolchain và vỏ Tauri tối thiểu
+
+**Công việc**
+
+1. Cài Rust toolchain và các thành phần build Windows cần thiết trên máy phát
+   triển/CI; ghi lại phiên bản và cách tái tạo môi trường.
+2. Thêm Tauri v2 trên nhánh thử nghiệm với application identifier, thư mục dữ
+   liệu và đầu ra installer riêng với Electron.
+3. Chạy UI hiện tại trong WebView2, giữ nguyên HTML, CSS và thứ tự script.
+4. Xác định quy trình build frontend, dev server và frontend distribution.
+5. Xác minh CSP, đường dẫn tài nguyên cục bộ, icon, kích thước cửa sổ và scaling.
+
+**Cổng hoàn tất**
+
+- App Tauri mở UI đóng gói cục bộ và không phụ thuộc mạng để render.
+- Bản thử nghiệm không đọc/ghi profile Electron và cài song song được.
+- Không có thay đổi ngoài ý muốn trong các script renderer hoặc CSS.
+
+### Giai đoạn 2 — Tách API desktop khỏi renderer
+
+**Công việc**
+
+1. Thiết kế facade TypeScript có hợp đồng rõ ràng cho các nhóm:
+   - app info và cửa sổ;
+   - thư viện game, lịch sử, giáo án và dự án;
+   - file import/export và ảnh minh họa;
+   - cài đặt, AI, tiến độ và hủy tác vụ;
+   - chẩn đoán;
+   - trình chiếu;
+   - LAN;
+   - cập nhật.
+2. Thêm adapter Electron để facade vẫn gọi được implementation hiện tại.
+3. Thêm adapter Tauri qua `invoke`/events; cho phép test facade bằng fake adapter.
+4. Chuyển renderer theo nhóm chức năng, không thay tất cả lời gọi trong một lần.
+5. Chốt schema payload, lỗi, cancellation, tiến độ và unsubscribe event.
+6. Giới hạn Tauri capabilities theo cửa sổ/command; không cấp quyền filesystem
+   tổng quát cho frontend.
+
+**Cổng hoàn tất**
+
+- Renderer dùng facade thay cho các lời gọi Electron trực tiếp.
+- Test hợp đồng bao phủ kết quả, lỗi và luồng sự kiện.
+- Electron build và hành vi hiện tại vẫn được giữ nguyên.
+
+### Giai đoạn 3 — SQLite, file và nhập/xuất
+
+**Công việc**
+
+1. Đánh giá backend SQLite Rust/plugin theo nhu cầu transaction, migration,
+   Windows build và test; chốt dependency trước khi chuyển dữ liệu.
+2. Giữ schema SQLite và migration hiện hữu; triển khai thao tác game, session,
+   lesson store, project và cache.
+3. Chuyển user data path và thao tác file; đặt giới hạn kích thước, kiểm tra
+   dữ liệu và xử lý đường dẫn an toàn phía native.
+4. Chuyển dialog mở/lưu file; đọc DOCX/PDF và CSV/TSV/XLSX; import/export `.egame`.
+5. Chuyển lưu/xóa ảnh minh họa và thay `edugame-file:` bằng cách phục vụ tài
+   nguyên chỉ cho phép ID hợp lệ trong thư mục ứng dụng.
+6. Chuyển log/chẩn đoán và thao tác mở thư mục.
+
+**Cổng hoàn tất**
+
+- Lưu, đóng, mở lại, sửa và xóa game/session/project hoạt động.
+- `.egame` có thể xuất rồi nhập lại; gói sai/độc hại bị từ chối.
+- Import tài liệu, câu hỏi, ảnh và export chẩn đoán chạy trong app Tauri.
+- Chơi game đã lưu khi offline; không có request mạng trong quá trình chơi.
+
+### Giai đoạn 4 — Migration profile Electron
+
+**Công việc**
+
+1. Phát hiện profile Electron cũ hoặc cho phép người dùng chọn thủ công.
+2. Sao lưu nguồn trước; không sửa hoặc xóa profile Electron.
+3. Kiểm tra version/schema, dữ liệu SQLite, đường dẫn lesson files và ảnh trước
+   khi nhập.
+4. Thực hiện migration có thể chạy lại an toàn; ghi nhận kết quả và lỗi theo
+   từng phần, tránh trạng thái nhập dở được báo thành công.
+5. Xác minh số lượng/ID game, session, lesson, project và checksum các file.
+6. Xác định riêng chính sách model/runtime: tái sử dụng sau xác minh hoặc tải lại
+   khi người dùng chọn; không sao chép bắt buộc các model lớn.
+
+**Cổng hoàn tất**
+
+- Migration thử trên bản sao profile 0.5.1, không phải dữ liệu thật.
+- Chạy lại migration không nhân đôi hoặc làm hỏng dữ liệu.
+- Lỗi giữa chừng có thể khôi phục từ backup; bản nguồn không bị thay đổi.
+
+### Giai đoạn 5 — AI local và bí mật
+
+**Công việc**
+
+1. Viết Rust service tải runtime/model đã pin, kiểm tra dung lượng, checksum và
+   giải nén an toàn.
+2. Quản lý `llama-server.exe`: `shell`/args cố định, không nhận executable path
+   tùy ý từ renderer; bind loopback; kiểm tra health; timeout, cancel, restart
+   và shutdown.
+3. Phát tiến độ cài đặt/tác vụ qua events Tauri có unsubscribe và giới hạn tần
+   suất phù hợp.
+4. Giữ manifest, version, nguồn tải, checksum và quy tắc chọn CPU/Vulkan hiện tại.
+5. Thay `safeStorage` bằng cơ chế bảo vệ bí mật tương thích Windows.
+6. Xử lý API key BYOK: chỉ tự migrate nếu chứng minh được giải mã/mã hóa an toàn;
+   nếu không, giữ provider settings không chứa key và yêu cầu người dùng nhập
+   lại. Tuyệt đối không lưu key plaintext.
+
+**Cổng hoàn tất**
+
+- Runtime/model sai checksum không được chạy.
+- Cài, khởi động, kiểm tra, hủy và dừng runtime đúng trên Windows.
+- App vẫn mở và chơi game offline khi AI chưa cài, lỗi hoặc không khả dụng.
+- Không lộ key hoặc nội dung nhạy cảm trong renderer, log hay installer.
+
+### Giai đoạn 6 — Trình chiếu, LAN và tích hợp Windows
+
+**Công việc**
+
+1. Chuyển cửa sổ trình chiếu, chọn màn hình, fullscreen và xử lý rút màn hình.
+2. Chuyển server LAN Express/Socket.IO sang Rust/WebSocket hoặc giải pháp Tauri
+   phù hợp; giữ nguyên giới hạn dữ liệu và kiểm soát kết nối.
+3. Thay custom protocol ảnh và các thao tác shell/hộp thoại bằng API native an toàn.
+4. Kiểm tra firewall, port, địa chỉ LAN và shutdown socket.
+5. Thay `electron-updater` bằng luồng cập nhật Tauri; kiểm tra chữ ký, nguồn feed,
+   phiên bản, tải xuống, cài đặt, lỗi và rollback.
+6. Đánh giá ký số installer và gói cập nhật trước khi phát hành cho người dùng.
+
+**Cổng hoàn tất**
+
+- Trình chiếu chạy trên màn hình thứ hai; rút màn hình không để cửa sổ thất lạc.
+- Điện thoại kết nối LAN và chỉ nhận dữ liệu phiên chơi đã cho phép.
+- Update chỉ chạy từ nguồn tin cậy, lỗi cập nhật không làm mất app hoặc dữ liệu.
+- Các tính năng được kiểm tra trên Windows thật, không chỉ unit test.
+
+### Giai đoạn 7 — Kiểm thử tương đương và phát hành thử
+
+**Công việc**
+
+1. Giữ lại unit test cho logic TypeScript thuần.
+2. Thay test IPC/CDP phù hợp bằng integration test command/event và UI trên app
+   Tauri thật.
+3. Thêm kiểm tra offline, migration, import/export, process lifecycle, LAN,
+   trình chiếu và updater.
+4. Build installer Tauri riêng; cài cạnh Electron; thử cài mới, nâng cấp,
+   migration, rollback, gỡ cài đặt và giữ lại dữ liệu.
+5. Đo kích thước installer, thời gian mở, mức dùng CPU/RAM khi nhàn rỗi và thời
+   gian tác vụ AI; so sánh với Electron trên cùng máy.
+6. Chạy pilot giới hạn; duy trì Electron cho tới khi có quyết định chuyển kênh
+   phát hành.
+
+**Cổng hoàn tất**
+
+- Toàn bộ cổng nghiệm thu ở mục 5 đạt trên Windows thật.
+- Có hướng dẫn migration/rollback và hỗ trợ người dùng.
+- Chủ dự án chấp thuận parity, chất lượng và số đo trước khi ngừng Electron.
+
+## 5. Cổng nghiệm thu sản phẩm
+
+1. **Offline:** mở và chơi game đã lưu khi ngắt mạng; xác nhận không request ra
+   ngoài trong lúc chơi.
+2. **Lưu trữ:** lưu, đóng app, mở lại; game, lịch sử, giáo án và dự án còn nguyên.
+3. **`.egame`:** xuất/nhập lại thành công; dữ liệu lỗi bị từ chối rõ ràng.
+4. **Migration:** profile Electron nguồn còn nguyên; dữ liệu nhập khớp; lỗi giữa
+   chừng có thể phục hồi.
+5. **AI local:** tiến trình khởi động/dừng/hủy đúng; file checksum sai không chạy;
+   app vẫn dùng được nếu AI lỗi.
+6. **Bảo mật:** frontend không có quyền truy cập filesystem tùy ý; key không
+   xuất hiện trong renderer, log hoặc installer.
+7. **Windows:** trình chiếu, fullscreen, LAN, dialog, cài/gỡ cài đặt và cập nhật
+   được kiểm tra trên Windows thật.
+8. **Hồi quy:** unit tests TypeScript hiện hữu tiếp tục chạy; có integration tests
+   thay thế cho các hành vi Electron đã chuyển.
+
+## 6. Rủi ro và cách giảm thiểu
+
+| Rủi ro | Tác động | Cách giảm thiểu |
+|---|---|---|
+| Profile người dùng và schema bị chuyển sai | Mất dữ liệu game/giáo án | Backup bất biến, migration idempotent, kiểm đếm/checksum, test bản sao |
+| Key BYOK không tương thích cơ chế mã hóa mới | Mất cấu hình truy cập provider hoặc lộ key nếu xử lý sai | Không migrate dạng plaintext; yêu cầu nhập lại nếu không chuyển an toàn |
+| AI runtime và model nặng, phụ thuộc Windows | Cài đặt lỗi, runtime treo hoặc không dọn process | Rust service riêng, manifest pin, timeout/cancel/shutdown, test checksum |
+| Tính năng Electron không tương đương trực tiếp | Trình chiếu, updater, LAN có hồi quy | Chuyển riêng từng nhóm, xác lập test nghiệm thu trước khi thay |
+| WebView2/CSP/capabilities khác Chromium của Electron | Lỗi UI hoặc tăng quyền không cần thiết | Test UI đóng gói, CSP tối thiểu, chỉ cấp capability cụ thể |
+| Chuyển đổi quá rộng cùng lúc | Khó tìm nguyên nhân lỗi, ảnh hưởng bản phát hành | Giữ adapter Electron và chia giai đoạn; không gỡ Electron sớm |
+| Cài đặt Tauri không nhẹ như kỳ vọng | Lợi ích sản phẩm thấp hơn chi phí chuyển | Đo installer, boot, RAM/CPU sau giai đoạn thử nghiệm; quyết định dựa trên số liệu |
+
+## 7. Quyết định cần chốt trước khi code
+
+- Bản Tauri có phải thay thế toàn bộ tính năng Electron ngay lần đầu, hay ra bản
+  thử nghiệm giới hạn trước?
+- Có cho cài song song và giữ profile Tauri riêng trong giai đoạn thử không?
+- Khi phát hiện profile Electron, app tự đề xuất nhập hay người dùng phải chọn?
+- Nếu không chuyển được key BYOK an toàn, có chấp nhận yêu cầu nhập lại không?
+- Model/runtime sẽ được tái sử dụng sau xác minh hay tải lại theo yêu cầu?
+- LAN, trình chiếu và cập nhật tự động có bắt buộc cho bản Tauri đầu tiên không?
+- Tiêu chí định lượng nào sẽ quyết định Tauri tốt hơn đủ để ngừng Electron?
+
+## 8. Ước lượng và thứ tự ưu tiên
+
+Ước lượng sơ bộ: **6–10 tuần cho một lập trình viên** đã quen TypeScript, Rust
+và Windows để đạt bản Tauri có các tính năng chính. Đây chưa phải estimate đã
+được kiểm chứng; cần cập nhật sau giai đoạn 1–2. Migration dữ liệu, AI runtime,
+LAN và updater là các nguồn bất định lớn nhất. Chưa tính thời gian pilot và sửa
+lỗi sau phản hồi người dùng.
+
+Thứ tự ưu tiên đề xuất:
+
+1. Tauri chạy UI hiện tại.
+2. Desktop API facade và adapter.
+3. SQLite, file, import/export và offline gameplay.
+4. Migration profile Electron.
+5. AI local và bảo vệ secrets.
+6. Trình chiếu và LAN.
+7. Updater, ký gói và phát hành thử.
+
+Nếu cần có bản thử nghiệm sớm, có thể giới hạn vòng đầu vào thư viện, chỉnh sửa
+game, `.egame` và offline gameplay. Không ngừng phát hành Electron cho tới khi
+các tính năng còn lại có quyết định rõ ràng và các cổng nghiệm thu tương ứng
+được thông qua.
+
+## 9. Trạng thái sau khảo sát
+
+- Chưa có file ứng dụng nào được sửa hoặc chuyển.
+- Chưa cài Rust toolchain và chưa chạy build/test Tauri.
+- Kế hoạch này chưa phải quyết định kiến trúc được duyệt; cần chốt các câu hỏi ở
+  mục 7 trước khi triển khai.
+- Bước tiếp theo: duyệt phạm vi bản thử nghiệm, sau đó lập ma trận API và profile
+  migration chi tiết trong giai đoạn 0.
