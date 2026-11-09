@@ -1,5 +1,10 @@
 # Roadmap
 
+## Vỏ Tauri có **lớp dữ liệu SQLite** riêng: `rusqlite` bundled mở đúng tệp 0.5.1, DDL đọc thẳng từ nguồn (2026-11-09, DECISIONS "Giai đoạn 3 (1/6)")
+- **Bước 1/6 xong:** `src-tauri/src/storage.rs` mở `edugame.sqlite` (WAL, `foreign_keys`, busy 5 s), chạy hai khối DDL + hai `ALTER TABLE` như `LessonStore.migrateSchema`, `read_library` trả đúng `{version, games, sessions}` của `readDb()`; lỗi có mã `DB_*`. DDL là bản sao trong `src/db/` được `include_str!`; `tauri-storage-schema` so chữ ký cấu trúc với `main.ts`/`lesson-store.ts`.
+- **Đo:** bản sao dữ liệu 0.5.1 thật mở được — 11 bảng/12 index, 14 game · 268 phiên · 36 tài liệu · 17 dự án; `cargo test` **11/11**, `npm test` **97/97**, exe release **4,2 MiB** (cap 25 MiB còn nguyên).
+- **Còn mở:** chưa kênh nào dùng `storage`; WAL chưa xử lý khi chép tệp (giai đoạn 4). **Kế tiếp:** bước 2/6 — nhóm `library:*`.
+
 ## Renderer đi qua **façade desktop** thay vì `window.eduGame`; adapter Electron + Tauri, Tauri không còn cầu eduGame (2026-11-09, DECISIONS "Giai đoạn 2")
 - **Giai đoạn 2 xong:** `src/renderer/core/{desktop-facade-schema,desktop-adapter-electron,desktop-adapter-tauri,desktop-facade,desktop-host}.ts` — `desktop.call(khoá, …)` / `desktop.listen(sự kiện, fn) → hàm huỷ`, lỗi là `DesktopError` có `code` + `call`; 92 lời gọi + 8 sự kiện theo nhóm. Vỏ khai `missingGroups`/`hasChannel`; ba kênh `send` trình chiếu bị từ chối `not-supported` trước IPC. `desktop.stub` chỉ cho cổng UI. `src-tauri/src/api.rs` có `invoke_channel` + `send_channel`; `build-tauri-frontend.js` bỏ hẳn `edugame-bridge.js`.
 - **Ba cổng nghiệm thu ĐẠT:** `renderer-facade-only` 6/6 (không tệp nào ngoài façade đọc cầu preload) · `desktop-facade` 20 bài phủ kết quả/lỗi/sự kiện/huỷ đăng ký · Electron giữ nguyên (ui-about 91/91, 3 cổng AI, cài đặt, dự án trên instance riêng).

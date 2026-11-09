@@ -2650,7 +2650,38 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 
 **Việc kế tiếp.** Chưa duyệt bắt đầu code. Khi duyệt: dựng khung Tauri v2 + Rust toolchain trong nhánh riêng, chuyển lớp truy cập desktop sang facade TS (kế hoạch mục 4) và làm vòng 1 theo mục 1.
 
+## Giai đoạn 3 (1/6) — Chốt backend SQLite của vỏ Tauri: `rusqlite` bundled, cùng tệp, cùng DDL, đọc thẳng từ nguồn TypeScript (2026-11-09)
+
+**Báo cáo.** Kế hoạch mục 4 giai đoạn 3 việc 1 yêu cầu chọn backend SQLite trước khi chuyển bất kỳ dữ liệu nào. Bước 1/6 làm đúng việc đó: chọn crate, dựng lớp mở tệp, và chứng minh nó mở được dữ liệu 0.5.1 thật — chưa port kênh nào, đúng như thứ tự kế hoạch.
+
+**Quyết định.**
+
+1. **`rusqlite` 0.41 với feature `bundled`, không dùng `tauri-plugin-sql`.** Cả hai đều là SQLite trên cùng một tệp. Lý do chọn `rusqlite` trực tiếp: transaction và câu lệnh nằm ngay trong hàm Rust của từng kênh, nên lỗi mang mã ổn định (`DB_OPEN_FAILED`, `DB_SCHEMA_FAILED`, `DB_DATA_CORRUPT`, `DB_IO_FAILED`) mà màn hình hiện thẳng được; nhánh xử lý kiểm bằng `cargo test` mà không cần dựng WebView; và không có thêm một lớp cầu IPC thứ hai (plugin) nằm giữa renderer và SQL. `tauri-plugin-sql` chỉ đáng giá nếu frontend tự viết SQL — đúng điều giai đoạn 2 vừa bỏ đi khi façade thành một cửa.
+2. **`bundled` là bắt buộc, không phải tuỳ chọn.** Máy giáo viên không được yêu cầu cài DLL SQLite nào, và phiên bản SQLite của hệ điều hành không được quyết định định dạng tệp dữ liệu. Giá của nó đo được: bản release là **4,2 MiB** (4.411.392 byte), vẫn cách rất xa ngưỡng installer 25 MiB của #251.
+3. **Cùng tệp, cùng pragma với Electron.** Tên tệp là `edugame.sqlite` — cùng hằng `DB_FILE` của `main.ts`, và có test Rust đọc `main.ts` để chốt điều đó. Khi mở: `journal_mode = WAL`, `foreign_keys = ON`, thêm `busy_timeout` 5 giây (Electron dựa vào mặc định khác nhau giữa các tiến trình; một vỏ không có bước `db.prepare` đồng bộ thì chờ 5 giây đọc được hơn là lỗi `SQLITE_BUSY` ngay). Đây là thư mục dữ liệu RIÊNG của Tauri, nên chép từ Electron sang là thao tác có chủ ý của giai đoạn 4, không phải đường mặc định.
+4. **DDL không được chép tay hai lần.** `src-tauri/src/storage.rs` `include_str!` hai tệp `src/db/library-schema.sql` (khối `ensureData()` của `main.ts`) và `src/db/lesson-store-schema.sql` (`LESSON_STORE_SCHEMA_SQL` của `lesson-store.ts`). Cổng `tests/unit/tauri-storage-schema.test.ts` so **chữ ký cấu trúc** (cột, kiểu, NOT NULL, DEFAULT, PRIMARY KEY, khoá ngoại, index) giữa bản sao và nguồn TypeScript — không so từng chữ trắng, nên định dạng lại không đỏ cổng, còn bỏ `DEFAULT 'quiz'` hay đổi kiểu cột thì đỏ. Đã thử phá một bản sao: cổng đỏ đúng chỗ rồi xanh lại sau khi khôi phục.
+5. **Migration `ALTER TABLE` được port nguyên, kèm điều kiện.** Hai cột `lesson_analyses.cache_key` và `lesson_chat_messages.evidence_meta` thêm bằng `PRAGMA table_info` + `ALTER TABLE` y như `LessonStore.migrateSchema()`. Một tệp tạo trước #186 mà thiếu bước này sẽ mất dòng "AI đã đọc …" của mọi cuộc trò chuyện cũ.
+6. **Dòng `data_json` hỏng báo lỗi có bảng, không bị bỏ qua.** Electron ném ở `JSON.parse` và cả màn hình không mở; ở đây trả `DB_DATA_CORRUPT` kèm tên bảng. Im lặng bỏ qua thì game biến mất mà giáo viên không biết vì sao — dữ liệu hỏng phải hiện thành lỗi, không thành danh sách ngắn hơn.
+
+**Kiểm chứng.**
+
+- **Dữ liệu 0.5.1 thật:** mở một BẢN SAO của `%APPDATA%/edugame-studio/edugame-data/edugame.sqlite` bằng đúng crate/feature này (nhưng như một binary riêng, nên đây là phép đo ngoài lớp `storage`): SQLite 3.54.1, `journal_mode=wal`, đúng **11 bảng và 12 index**, đọc ra **14 game, 268 phiên, 36 tài liệu giáo án, 17 dự án**; hai cột migration (`cache_key`, `evidence_meta`) đã có sẵn. Tệp gốc không bị chạm (mtime giữ nguyên), bản sao và crate tạm đã xoá sau đo.
+- `cargo test --lib`: **11/11** (6 cũ + 5 mới của `storage`), gồm mở tệp mới đúng pragma/11 bảng, đóng rồi mở lại giữ nguyên dòng, `ON DELETE CASCADE` có tác dụng thật, JSON hỏng báo đúng bảng, tên tệp khớp `main.ts`.
+- `cargo clippy --all-targets`: không cảnh báo.
+- `npm test`: **97/97** (96 cũ + `tauri-storage-schema`); `npm run check` sạch; `check:renderer-globals` 0 biến chưa khai; `check:desktop-contract` 81 invoke + 3 send + 8 sự kiện.
+- `cargo build --release`: exe **4,2 MiB**.
+
+**Chưa xác minh.**
+
+- Chưa có kênh IPC nào gọi `storage` — đó là bước 2/6. Vì vậy chưa có hành vi mới nào trong WebView2 để kiểm.
+- Dữ liệu thật có 268 phiên; `readDb()` giới hạn 1000 ở SQL, nhưng chưa đo danh sách lớn sau khi port kênh.
+- WAL còn mở: một tệp chép nguyên `.sqlite` mà SOURCE còn `-wal` chưa checkpoint sẽ mất phần cuối. Bản sao trong phép đo được chép khi tiến trình Electron đã đóng; giai đoạn 4 (migration profile) bắt buộc phải xử lý cả `-wal`.
+
+**Việc kế tiếp.** Bước 2/6: port `library:*` (`get`, `save-game`, `delete-game`, `delete-games`, `save-session`, `delete-sessions`) sang `storage` — giữ nguyên kiểm tra dữ liệu, chuẩn hoá `createdAt`/`updatedAt` của `upsertGameRow`, giới hạn 500/1000 id, và dọn ảnh sau khi xoá.
+
+
 ## Giai đoạn 2 — Tách API desktop khỏi renderer: facade một cửa, hai adapter, không còn `window.eduGame` trong vỏ Tauri (2026-11-09)
+
 
 **Báo cáo.** Kế hoạch mục 4 đặt mục tiêu: renderer không gọi thẳng lớp desktop, mà đi qua một facade có hợp đồng rõ ràng, để sau này đổi vỏ (Electron → Tauri) mà không sửa từng chỗ gọi. Giai đoạn 2 làm đúng phần đó. Ba cổng nghiệm thu của kế hoạch **ĐẠT**: (1) renderer dùng facade thay cho lời gọi Electron trực tiếp — `tests/unit/renderer-facade-only.test.ts` chặn mọi tệp ngoài thư mục façade đọc cầu preload; (2) test hợp đồng bao phủ kết quả, lỗi và luồng sự kiện — `desktop-facade.test.ts` 20 bài; (3) Electron giữ nguyên hành vi — `ui-about` 91/91, ba cổng AI, cài đặt, dự án, draft-guard trên instance riêng.
 

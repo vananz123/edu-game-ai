@@ -6,6 +6,7 @@
 
 pub mod api;
 pub mod paths;
+pub mod storage;
 
 pub fn run() {
     tauri::Builder::default()

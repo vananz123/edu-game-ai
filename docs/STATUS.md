@@ -8,6 +8,12 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 ## Mục lục bàn giao
 
 ### 2026-11-09 — Kế hoạch khảo sát và chuyển EduGame Studio từ Electron sang Tauri; giai đoạn 0 kiểm kê API + baseline Electron; chốt bảy quyết định phạm vi (#251)
+- **Giai đoạn 3 bước 1/6 (2026-11-09) — Chốt backend SQLite của vỏ Tauri: `rusqlite` 0.41 bundled, mở đúng `edugame.sqlite` với cùng DDL; đã mở được bản sao dữ liệu 0.5.1 thật.**
+  - **Files đổi:** mới `src-tauri/src/storage.rs` (mở tệp + pragma WAL/`foreign_keys`/busy 5 s, `ensure_schema` + hai `ALTER TABLE` như `LessonStore.migrateSchema`, `read_library` đúng hình `{version, games, sessions}` của `readDb()`, lỗi có mã `DB_OPEN_FAILED`/`DB_SCHEMA_FAILED`/`DB_DATA_CORRUPT`/`DB_IO_FAILED`), `src/db/library-schema.sql`, `src/db/lesson-store-schema.sql` (bản sao DDL), `tests/unit/tauri-storage-schema.test.ts`; sửa `src-tauri/Cargo.toml` (thêm `rusqlite` bundled + `tempfile` dev), `src-tauri/src/lib.rs` (`pub mod storage`), `src-tauri/Cargo.lock`.
+  - **Hành vi:** chưa có kênh IPC nào dùng `storage` (đó là bước 2/6) — bước này chỉ chốt backend và chứng minh nó mở được dữ liệu cũ. DDL của Rust không viết lại: `include_str!` đọc thẳng hai tệp `.sql` là bản sao của khối SQL trong `main.ts`/`lesson-store.ts`, có cổng so chữ ký cấu trúc.
+  - **Lệnh đã chạy:** bản sao `%APPDATA%/edugame-studio/edugame-data/edugame.sqlite` mở bằng crate này → SQLite 3.54.1, WAL, **11 bảng/12 index**, **14 game · 268 phiên · 36 tài liệu · 17 dự án**, cột `cache_key`/`evidence_meta` có sẵn (tệp gốc không đổi mtime; bản sao đã xoá) · `cargo test --lib` **11/11** · `cargo clippy --all-targets` không cảnh báo · `npm test` **97/97** · `npm run check` sạch · `check:renderer-globals` 0 undefined · `check:desktop-contract` 81 invoke + 3 send + 8 sự kiện · cổng schema đã thử phá một `DEFAULT` → đỏ, khôi phục → xanh · `cargo build --release` → exe **4,2 MiB** (cap 25 MiB của #251 còn nguyên).
+  - **Chưa xác minh:** chưa có hành vi mới trong WebView2; chưa port kênh nào; WAL chưa checkpoint khi chép tệp (ràng buộc cho giai đoạn 4); chưa đo danh sách 268 phiên trên UI Tauri.
+  - Quyết định: mục "Giai đoạn 3 (1/6)" trong `docs/DECISIONS.md`.
 - **Giai đoạn 2 (2026-11-09) — Tách API desktop khỏi renderer: một façade `desktop.call/listen`, adapter Electron + Tauri, không còn `window.eduGame` trong vỏ Tauri; ba cổng nghiệm thu của kế hoạch ĐẠT.**
   - **Files đổi:** mới `src/renderer/core/{desktop-facade-schema,desktop-adapter-electron,desktop-adapter-tauri,desktop-facade,desktop-host}.ts`, `tests/unit/{desktop-facade,renderer-facade-only}.test.ts`; sửa `src/index.html` (năm tệp façade nạp trước mọi tệp gọi `desktop.*`), `src-tauri/src/api.rs` (`invoke_channel`/`send_channel` + bảng 78/3 kênh), `scripts/build-tauri-frontend.js` (bỏ cầu `edugame-bridge.js`, chỉ còn `edugame-guard.js`), `tests/ui/tauri-webview-check.js`, `tests/ui/ui-about-check.js`, `ui-ai-provider-*-check.js` (3 tệp), `ui-offline-packaged-check`/`packaged-feed`/`packaged-install` (chuyển sang `desktop.call`/`desktop.stub`).
   - **Hành vi:** renderer gọi `desktop.call('<khoá façade>', …)` / `desktop.listen(...) → hàm huỷ`; mọi lỗi thành `DesktopError` có `code` + `call`. Adapter Electron bọc `window.eduGame` (hành vi không đổi); adapter Tauri gửi **chuỗi kênh hợp đồng** (`app:info`) tới `invoke_channel`/`send_channel` — không phải tên khoá. Ba kênh `send` trình chiếu bị từ chối `not-supported` trước IPC. `desktop.stub` (chỉ test) thay phản hồi cho cổng UI.
@@ -295,6 +301,24 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - Editor kéo-thả (matching + race) + xem trước đường đua
 - Lịch sử trước 2026-10-19
 ## Bàn giao gần nhất
+
+### Giai đoạn 3 bước 1/6 — Chốt backend SQLite của vỏ Tauri: `rusqlite` bundled, cùng tệp, cùng DDL, đã mở được dữ liệu 0.5.1 thật (2026-11-09)
+
+**Bối cảnh.** Kế hoạch mục 4 giai đoạn 3 việc 1: chọn backend SQLite (transaction, migration, build Windows, test) **trước khi** chuyển dữ liệu. Bước này trả lời đúng câu đó và dừng ở đó — chưa port kênh nào, đúng thứ tự kế hoạch.
+
+**Files changed.** Mới: `src-tauri/src/storage.rs` (`DbError` bốn mã, `open` với WAL + `foreign_keys` + busy 5 s, `ensure_schema` chạy hai khối DDL + hai `ALTER TABLE` như `LessonStore.migrateSchema`, `read_library` trả `{version, games, sessions}` đúng `readDb()`, 5 test), `src/db/library-schema.sql`, `src/db/lesson-store-schema.sql` (bản sao DDL dùng `include_str!`), `tests/unit/tauri-storage-schema.test.ts` (5 phép so chữ ký cấu trúc). Sửa: `src-tauri/Cargo.toml` (`rusqlite 0.41` feature `bundled`, `tempfile` dev-dependency), `src-tauri/src/lib.rs` (`pub mod storage`), `src-tauri/Cargo.lock`.
+
+**Behavior.** Chưa có hành vi trong app: không kênh nào gọi `storage` (bước 2/6). Điều đã chốt: vỏ Tauri dùng **chính `edugame.sqlite`**, tên lấy từ hằng `DB_FILE` của `main.ts` (có test Rust đọc `main.ts` để bắt lệch); DDL không chép tay hai lần — Rust `include_str!` hai tệp `.sql` là bản sao của khối SQL trong `main.ts`/`lesson-store.ts` và cổng Node so từng cột/kiểu/`DEFAULT`/khoá ngoại/index; `data_json` hỏng trả `DB_DATA_CORRUPT` kèm tên bảng thay vì bỏ qua. Rust 1.99.1, SQLite bundle 3.54.1.
+
+**Lệnh đã chạy.**
+- Bản sao `%APPDATA%/edugame-studio/edugame-data/edugame.sqlite` mở bằng crate + feature này (binary riêng): **11 bảng, 12 index**, `journal_mode=wal`, **14 game · 268 phiên · 36 tài liệu giáo án · 17 dự án**; `cache_key` + `evidence_meta` đã có sẵn. Tệp gốc giữ nguyên mtime; bản sao + crate tạm đã xoá.
+- `cargo test --lib` → **11/11** · `cargo clippy --all-targets` → không cảnh báo · `cargo build --release` → exe **4,2 MiB**.
+- `npm test` → **97/97** · `npm run check` → sạch · `npm run check:renderer-globals` → 0 undefined · `npm run check:desktop-contract` → 92 khoá.
+- Thử phá cổng schema (bỏ `DEFAULT 'quiz'` ở bản sao) → đỏ đúng cột, khôi phục → 5/5 xanh.
+
+**Chưa xác minh.** Chưa có hành vi mới trong WebView2 (không kênh nào dùng `storage`). Tệp đang mở WAL: chép `.sqlite` mà bỏ `-wal` sẽ mất phần đuôi — giai đoạn 4 phải xử lý; phép đo trên dùng tệp sinh từ một instance đã đóng. Chưa đo danh sách 268 phiên trên UI Tauri. Nhánh AI local không chạy (theo chỉ đạo).
+
+**Việc kế tiếp.** Bước 2/6: port nhóm `library:*` (`get`, `save-game`, `delete-game`, `delete-games`, `save-session`, `delete-sessions`) lên `storage`, giữ nguyên kiểm tra dữ liệu, `createdAt`/`updatedAt`, giới hạn 500/1000 id và dọn ảnh sau khi xoá.
 
 ### Giai đoạn 2 — Tách API desktop khỏi renderer: một façade, hai adapter, Tauri không còn `window.eduGame` (2026-11-09)
 

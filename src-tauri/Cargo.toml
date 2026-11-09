@@ -22,6 +22,18 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = ["devtools"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Giai đoạn 3: thư viện và sidecar của renderer sống trong `edugame.sqlite` y như
+# bản Electron. `bundled` biên dịch SQLite kèm theo, nên máy Windows của giáo viên
+# không cần cài DLL nào và bản build không phụ thuộc phiên bản SQLite của hệ điều
+# hành. Chọn `rusqlite` thay vì `tauri-plugin-sql`: cùng một file, cùng SQL, nhưng
+# mở trực tiếp trong Rust để ném lỗi tiếng Việt có mã, giữ transaction tường minh
+# và kiểm bằng `cargo test` — không thêm một lớp cầu IPC thứ hai.
+rusqlite = { version = "0.41", features = ["bundled"] }
+
+[dev-dependencies]
+# Thư mục tạm tự dọn cho test storage: mỗi test mở một tệp 0.5.1 riêng, không
+# bao giờ chạm thư mục dữ liệu thật.
+tempfile = "3"
 
 [profile.release]
 # Installer là một trong ba ngưỡng ngừng Electron (#251), nên tối ưu kích thước ngay

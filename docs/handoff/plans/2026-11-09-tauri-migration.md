@@ -145,6 +145,8 @@ có yêu cầu tương thích cụ thể và đã đánh giá chi phí/bảo m�
 
 ### Giai đoạn 3 — SQLite, file và nhập/xuất
 
+**Trạng thái: ĐANG LÀM — bước 1/6 XONG (2026-11-09, DECISIONS "Giai đoạn 3 (1/6)").** Backend chốt là `rusqlite` 0.41 `bundled`; `src-tauri/src/storage.rs` mở `edugame.sqlite` với WAL + `foreign_keys` và chạy đúng hai khối DDL `include_str!` từ `src/db/` (bản sao do `tests/unit/tauri-storage-schema.test.ts` canh với `main.ts`/`lesson-store.ts`). Đã mở được bản sao dữ liệu 0.5.1 thật (11 bảng, 14 game, 268 phiên). Chưa có kênh nào dùng `storage` — bước 2/6 là nhóm `library:*`.
+
 **Công việc**
 
 1. Đánh giá backend SQLite Rust/plugin theo nhu cầu transaction, migration,
