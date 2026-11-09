@@ -7,7 +7,8 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
-### 2026-11-09 — Kế hoạch khảo sát và chuyển EduGame Studio từ Electron sang Tauri; giai đoạn 0 kiểm kê API + baseline Electron
+### 2026-11-09 — Kế hoạch khảo sát và chuyển EduGame Studio từ Electron sang Tauri; giai đoạn 0 kiểm kê API + baseline Electron; chốt bảy quyết định phạm vi (#251)
+- **#251 (2026-11-09) — Chốt bảy câu hỏi mục 7 của kế hoạch Tauri. Bản thử giới hạn trước (vòng 1: thư viện, chơi offline, `.egame`, import tài liệu, ảnh, cài đặt, migration; LAN/trình chiếu/updater/AI local vòng sau); không cài song song mà thay thế luôn (kéo theo bắt buộc: application identifier + thư mục dữ liệu riêng, backup tự động không xoá được, cài đè không chạy lại migration, không có nút Kiểm tra cập nhật ở vòng 1); nhập profile là gợi ý cho giáo viên bấm; BYOK nhập lại chứ không migrate; không sao chép model/runtime, tải lại; ngưỡng ngừng Electron = installer ≤ 25 MiB (đo 92.681.365 B), khởi động ≤ 1.200 ms (đo 1.931 ms), nhàn rỗi ≤ 200 MiB private (đo 294 MiB) — parity là cổng nghiệm thu mục 5, không phải câu trả lời của câu 7.** Chưa sửa mã, chưa có `Cargo.toml`. Quyết định #251 trong `docs/DECISIONS.md`; mục 7/7.1/7.2 của [kế hoạch](handoff/plans/2026-11-09-tauri-migration.md) là bản phản ánh.
 - **Giai đoạn 0 (2026-11-09) — Kiểm kê bề mặt desktop và đo baseline Electron 0.5.1, không sửa mã.** 82 `ipcMain.handle` (+3 `ipcMain.on`, 8 sự kiện đẩy về renderer), 92 khoá `window.eduGame`, renderer gọi 75 API trong 26 tệp, 11 phụ thuộc gắn Electron/Node, danh sách dữ liệu phải giữ; installer **88,4 MiB** (91 % là Electron), khởi động ~**1,9 s**, nhàn rỗi **294 MiB** private / **1,41 %** CPU. Chi tiết: [docs/handoff/plans/2026-11-09-tauri-phase0-survey.md](handoff/plans/2026-11-09-tauri-phase0-survey.md).
 - Lưu kế hoạch theo giai đoạn, kiến trúc đích, migration dữ liệu, AI local, LAN, trình chiếu, updater và cổng nghiệm thu tại [docs/handoff/plans/2026-11-09-tauri-migration.md](handoff/plans/2026-11-09-tauri-migration.md). Đây là đề xuất, chưa được duyệt để triển khai; chưa sửa ứng dụng hoặc chạy build/test Tauri.
 
@@ -283,6 +284,20 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - Lịch sử trước 2026-10-19
 ## Bàn giao gần nhất
 
+### #251 — Chốt bảy quyết định phạm vi/tiêu chí của kế hoạch Tauri (2026-11-09)
+
+**Bối cảnh.** Kế hoạch chuyển Electron → Tauri v2 để lại bảy câu hỏi mở ở mục 7; giai đoạn 0 (#0a) đã cung cấp bằng chứng để trả lời. Chủ dự án trả lời từng câu.
+
+**Files changed.** `docs/handoff/plans/2026-11-09-tauri-migration.md` (viết lại mục 7 thành bảng 7 câu đã chốt + 7.1 ngưỡng ngừng Electron + 7.2 ràng buộc do "thay thế luôn"; sửa dòng parity và điều kiện chuyển kênh; cập nhật trạng thái/phạm vi ở đầu tệp), `docs/DECISIONS.md` (#251), `docs/STATUS.md`.
+
+**Behavior.** Không đổi hành vi ứng dụng, không sửa mã. Nội dung đã chốt: (1) bản thử giới hạn trước — vòng 1 gồm thư viện, chơi offline, `.egame`, import tài liệu, ảnh minh hoạ, cài đặt, migration; LAN/trình chiếu/updater/AI local vòng sau; Electron vẫn là kênh phát hành chính. (2) Không cài song song — thay thế luôn, kéo theo: application identifier + thư mục dữ liệu riêng cho tới khi migration xong, backup tự động không xoá được trong app, cài đè không chạy lại migration, không có nút Kiểm tra cập nhật ở vòng 1, Windows thật + pilot giới hạn bắt buộc. (3) Nhập profile chỉ khi giáo viên bấm, có số liệu và bỏ qua được. (4) BYOK: giữ provider/base URL/model, yêu cầu nhập lại key, không ghi plaintext. (5) Không sao chép `ai-local/`, tải lại (hoặc dùng lại khi checksum khớp). (6) LAN/trình chiếu/updater không bắt buộc vòng 1. (7) Ngưỡng bắt buộc: installer **≤ 25 MiB** (đo 92.681.365 B), khởi động **≤ 1.200 ms** (đo 1.931 ms), nhàn rỗi **≤ 200 MiB** private (đo 294 MiB); parity là cổng nghiệm thu mục 5, không phải một lựa chọn của câu 7.
+
+**Commands and results.** Không chạy build/test (chỉ tài liệu). Đã kiểm tra CRLF: `bareLF=0` cho `DECISIONS.md`, `STATUS.md`, tệp kế hoạch; BOM của `STATUS.md` còn nguyên.
+
+**Chưa xác minh.** Ngưỡng ≤ 25 MiB / ≤ 1,2 s / ≤ 200 MiB **chưa chứng minh khả thi** — chưa có Rust toolchain, chưa có `Cargo.toml`, chưa có số đo Tauri nào. Kế hoạch ghi rõ: nếu làm đúng kiến trúc mà installer vẫn > 25 MiB thì dừng dự án Tauri.
+
+**Việc kế tiếp.** Việc đang chờ chủ dự án: duyệt bắt đầu code giai đoạn 1 (khung Tauri v2 + facade TS). Việc độc lập còn treo: phát hành 0.5.1 gồm #250 (cần uỷ quyền).
+
 ### Giai đoạn 0 của kế hoạch Tauri: kiểm kê API desktop và đo baseline Electron 0.5.1 (2026-11-09)
 
 **Bối cảnh.** Chủ dự án chọn phương án đo bổ sung bằng chứng cho kế hoạch Tauri trước khi quyết định triển khai: kiểm kê đầy đủ API/IPC và đo kích thước/khởi động/RAM hiện tại của Electron. Không sửa mã ứng dụng.
@@ -301,7 +316,7 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 **Chưa xác minh.** Một máy, một cấu hình, không lặp đủ để có khoảng tin cậy; đo bản dev (`electron .` trên `dist`) chứ không đo bản cài NSIS. Chưa đo thời gian mở trang Giáo án / chơi game 3D / chạy AI local (nhánh AI local không chạy theo chỉ đạo). Chưa có số Tauri để so — theo kế hoạch chỉ có sau giai đoạn 1. Chưa kiểm kê chi tiết input/output từng payload (báo cáo nhóm theo chức năng, đủ để chốt phạm vi nhưng chưa đủ để viết facade).
 
-**Việc kế tiếp.** Chốt bảy câu hỏi ở mục 7 của kế hoạch (trước hết: bản Tauri đầu tiên có LAN + trình chiếu + updater hay không — nếu có, estimate 6–10 tuần là dưới thực tế). Nếu duyệt triển khai, dùng ma trận nhóm API trong báo cáo làm danh sách kiểm cho facade giai đoạn 2, và giữ bộ đo `boot-baseline` để so Tauri với Electron trên cùng máy.
+**Việc kế tiếp.** Đã chốt bảy câu hỏi ở mục 7 (#251). Nếu duyệt triển khai, dùng ma trận nhóm API trong báo cáo làm danh sách kiểm cho facade giai đoạn 2, và giữ bộ đo `boot-baseline` để so Tauri với Electron trên cùng máy.
 
 ### Kế hoạch khảo sát/chuyển Electron sang Tauri (2026-11-09)
 

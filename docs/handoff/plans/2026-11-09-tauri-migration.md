@@ -1,8 +1,10 @@
 # Kế hoạch khảo sát và chuyển EduGame Studio từ Electron sang Tauri
 
 Ngày lập: 2026-11-09  
-Trạng thái: **đề xuất, chưa được duyệt để triển khai**  
-Phạm vi: ứng dụng desktop Windows hiện tại, phiên bản nguồn 0.5.1.
+Trạng thái: **đã chốt bảy quyết định phạm vi/tiêu chí (mục 7, #251); chưa duyệt để
+bắt đầu code** — chưa cài Rust toolchain, chưa có `Cargo.toml`.  
+Phạm vi: ứng dụng desktop Windows hiện tại, phiên bản nguồn 0.5.1, **bản Tauri
+đầu tiên là bản thử giới hạn** (không có LAN, trình chiếu, updater, AI local).
 
 ## 1. Mục tiêu
 
@@ -276,16 +278,58 @@ có yêu cầu tương thích cụ thể và đã đánh giá chi phí/bảo m�
 | Chuyển đổi quá rộng cùng lúc | Khó tìm nguyên nhân lỗi, ảnh hưởng bản phát hành | Giữ adapter Electron và chia giai đoạn; không gỡ Electron sớm |
 | Cài đặt Tauri không nhẹ như kỳ vọng | Lợi ích sản phẩm thấp hơn chi phí chuyển | Đo installer, boot, RAM/CPU sau giai đoạn thử nghiệm; quyết định dựa trên số liệu |
 
-## 7. Quyết định cần chốt trước khi code
+## 7. Quyết định đã chốt (2026-11-09)
 
-- Bản Tauri có phải thay thế toàn bộ tính năng Electron ngay lần đầu, hay ra bản
-  thử nghiệm giới hạn trước?
-- Có cho cài song song và giữ profile Tauri riêng trong giai đoạn thử không?
-- Khi phát hiện profile Electron, app tự đề xuất nhập hay người dùng phải chọn?
-- Nếu không chuyển được key BYOK an toàn, có chấp nhận yêu cầu nhập lại không?
-- Model/runtime sẽ được tái sử dụng sau xác minh hay tải lại theo yêu cầu?
-- LAN, trình chiếu và cập nhật tự động có bắt buộc cho bản Tauri đầu tiên không?
-- Tiêu chí định lượng nào sẽ quyết định Tauri tốt hơn đủ để ngừng Electron?
+Chủ dự án trả lời trực tiếp; ghi lại nguyên văn lựa chọn đã chọn. Quyết định #251
+trong `docs/DECISIONS.md` là bản có hiệu lực.
+
+| # | Câu hỏi | Chốt |
+|---|---|---|
+| 1 | Parity hay thử giới hạn trước | **Bản thử giới hạn trước.** Vòng 1: thư viện + chơi offline + `.egame` + import tài liệu + ảnh minh hoạ + cài đặt + migration. LAN, trình chiếu, updater, AI local để vòng sau. Electron vẫn là kênh phát hành chính cho tới khi có quyết định khác. |
+| 2 | Cài song song + profile riêng | **Không: thay thế luôn.** Không cài song song. Hệ quả bắt buộc: giai đoạn 4 phải giữ **bản sao lưu profile nguồn** và có đường quay lại, vì sau khi thay thế thì không còn bản chạy song song để đối chiếu; và installer Tauri phải **không** ghi đè `%APPDATA%/EduGame Studio/edugame-data` của Electron (xem 7.2). |
+| 3 | Nhập profile tự động hay do giáo viên chọn | **Gợi ý, giáo viên bấm nhập.** App phát hiện và hiện số game/giáo án tìm thấy kèm nút "Nhập vào bản mới"; không tự đọc ghi. Bỏ qua được. |
+| 4 | BYOK key khi không giải mã an toàn | **Yêu cầu nhập lại, không migrate.** Giữ provider/base URL/model, xoá key đã mã hoá, hiện lời nhắc. Không ghi key plaintext ở bất kỳ đâu. |
+| 5 | Model/runtime AI local | **Không sao chép, tải lại.** Migration không đụng `ai-local/`. Nếu phát hiện thư mục cũ thì hỏi "Dùng lại thư mục cũ" (chỉ khi checksum khớp) hoặc tải lại. |
+| 6 | LAN / trình chiếu / updater có bắt buộc vòng 1 | **Không bắt buộc cả ba.** Bản đầu cập nhật bằng cách chạy lại installer (cài đè); **chưa** có nút Kiểm tra cập nhật trong app Tauri vòng 1. |
+| 7 | Tiêu chí định lượng để ngừng Electron | **Cả ba mốc hiệu năng đều bắt buộc** (installer ≤ 25 MiB, khởi động ≤ 1.200 ms, nhàn rỗi ≤ 200 MiB private). Xem 7.1. Parity **không** phải câu trả lời của câu 7 — nó vốn đã là cổng nghiệm thu mục 5 và vẫn giữ nguyên hiệu lực độc lập. |
+
+### 7.1 Ngưỡng ngừng Electron
+
+Đo cùng bộ công cụ đã dùng ở [báo cáo giai đoạn 0](2026-11-09-tauri-phase0-survey.md#7-cách-tái-lập-phép-đo),
+trên cùng máy, cùng cách chạy nguội, cùng profile tạm:
+
+| Chỉ số | Electron 0.5.1 (đo) | Ngưỡng bắt buộc cho Tauri | Ý nghĩa |
+|---|---|---|---|
+| Installer | 92.681.365 B (88,4 MiB) | **≤ 25 MiB** | Phải giảm ít nhất ~72 % |
+| Khởi động (spawn → `readyState=complete`, trung vị) | 1.931 ms | **≤ 1.200 ms** | Nhanh hơn ít nhất ~38 % |
+| Nhàn rỗi private bytes | 294 MiB | **≤ 200 MiB** | Giảm ít nhất ~32 % |
+| Parity | — | **Không phải câu trả lời câu 7.** Parity = toàn bộ cổng nghiệm thu mục 5 đạt trên Windows thật + mọi cổng hiện có xanh trên bản Tauri; ràng buộc này có hiệu lực sẵn, không phụ thuộc lựa chọn ở đây |
+
+Điều kiện **cần** để chuyển kênh phát hành: ba mốc hiệu năng đạt **và** cổng nghiệm
+thu mục 5 (parity) đạt **và** vòng 2 (LAN + trình chiếu + updater) đã xong. Điều
+kiện **đủ** để quyết định đóng dự án
+Tauri: nếu **installer không xuống dưới 25 MiB** sau khi đã làm đúng kế hoạch
+(mã TS tách riêng + Rust, không sidecar Node), thì lợi ích chính không đạt và
+không nên tiếp tục đánh đổi bằng việc chuyển đổi.
+
+### 7.2 Hệ quả của "thay thế luôn" (câu 2)
+
+Vì không có bản chạy song song, các ràng buộc sau thành **bắt buộc** trong khi code:
+
+- **Tách định danh dữ liệu.** Electron hiện dùng `appId: vn.edugame.studio`,
+  `productName: "EduGame Studio"`, và dữ liệu ở `%APPDATA%/EduGame Studio/edugame-data`
+  (`src/main.ts:436`). Bản Tauri **phải** dùng application identifier khác và thư
+  mục dữ liệu riêng cho tới khi migration chạy xong; nếu dùng chung thư mục thì
+  lần mở đầu tiên của bản Tauri sẽ ghi vào dữ liệu mà giáo viên vẫn đang dùng
+  bằng Electron với một schema do tiến trình khác quản lý.
+- **Sao lưu trước khi nhập.** Backup profile nguồn là bước bắt buộc, tự động, và
+  không xoá được từ trong app; đường quay lại = cài lại installer Electron cũ +
+  phục hồi backup.
+- **Interim không có nút "Kiểm tra cập nhật" trong app Tauri.** Cài đè installer
+  phải giữ dữ liệu (`deleteAppDataOnUninstall: false` như hiện tại ở
+  `package.json:137`), và cài đè **không** được chạy lại migration lần hai.
+- **Không có lưới an toàn để so.** Vì vậy Windows thật + pilot giới hạn là bắt
+  buộc trước khi gỡ Electron khỏi kênh phát hành, không chỉ unit test.
 
 ## 8. Ước lượng và thứ tự ưu tiên
 

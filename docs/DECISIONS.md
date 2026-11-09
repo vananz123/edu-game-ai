@@ -2616,3 +2616,36 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 **Đánh đổi.** Nối một listener `mousedown` (capture) ở `document` là chỗ duy nhất cần, vì listener trên phần tử sẽ mất theo mỗi render. Ghi nhớ caret không bao giờ vượt ra ngoài `.lesson-chat-col`: bấm sang trang khác thì không được kéo caret về.
 
 **Không chứng minh.** Không xem bằng mắt trên app của giáo viên; đo trên instance Electron riêng 1280×800 bằng CDP. Nhánh AI local không chạy (theo chỉ đạo).
+
+## #251 — Tauri v2: chốt bảy quyết định phạm vi và ngưỡng ngừng Electron (2026-11-09)
+
+**Báo cáo.** [Kế hoạch chuyển Electron → Tauri v2](handoff/plans/2026-11-09-tauri-migration.md) mục 7 để lại bảy câu hỏi mở. [Báo cáo giai đoạn 0](handoff/plans/2026-11-09-tauri-phase0-survey.md) đã cung cấp bằng chứng (82 `ipcMain.handle`, 92 khoá preload, 11 dependency gắn Electron/Node, danh sách dữ liệu phải giữ, baseline kích thước/boot/RAM). Chủ dự án trả lời từng câu; dưới đây là bản có hiệu lực.
+
+**Quyết định.**
+
+1. **Bản thử giới hạn trước, không parity ngay.** Vòng 1 của bản Tauri: thư viện, chơi offline, `.egame`, import tài liệu, ảnh minh hoạ, cài đặt, migration dữ liệu. LAN, trình chiếu, updater, AI local để vòng sau. Electron vẫn là kênh phát hành chính cho tới khi có quyết định khác.
+2. **Không cài song song — thay thế luôn.** Người dùng không giữ hai bản trên cùng máy. Hệ quả bắt buộc (đã ghi thành ràng buộc code ở mục 7.2 của kế hoạch): bản Tauri dùng **application identifier và thư mục dữ liệu khác** cho tới khi migration xong, vì Electron đang giữ dữ liệu ở `%APPDATA%/EduGame Studio/edugame-data` ([src/main.ts:436](file:///D:/Laptrinh/edugame-studio-v0.3-handoff/edugame-studio-v0.3-handoff/edugame-studio-v0.3/src/main.ts#L436)); backup profile nguồn là bước **tự động, bắt buộc, không xoá được từ trong app**; đường quay lại = cài lại installer Electron cũ + phục hồi backup; cài đè **không** được chạy lại migration lần hai; cài đè phải giữ dữ liệu (`deleteAppDataOnUninstall: false`, `package.json:137`); Windows thật + pilot giới hạn là bắt buộc trước khi gỡ Electron khỏi kênh phát hành, và **không có nút "Kiểm tra cập nhật" trong app Tauri vòng 1**.
+3. **Nhập profile là gợi ý, không tự động.** App phát hiện profile Electron cũ, hiện số game/giáo án tìm thấy kèm nút "Nhập vào bản mới"; giáo viên bấm mới đọc ghi; bỏ qua được.
+4. **BYOK key: yêu cầu nhập lại, không migrate.** Giữ nhà cung cấp / base URL / model, xoá key đã mã hoá, hiện lời nhắc nhập lại. Không ghi key plaintext ở bất kỳ đâu — kể cả trong log, file migration hay backup.
+5. **Model/runtime AI local: không sao chép, tải lại.** Migration không đụng `ai-local/`. Nếu phát hiện thư mục cũ thì hỏi "Dùng lại thư mục cũ" (chỉ khi checksum khớp) hoặc tải lại.
+6. **LAN / trình chiếu / updater không bắt buộc vòng 1.** Bản đầu cập nhật bằng cách chạy lại installer (cài đè).
+7. **Ba ngưỡng hiệu năng đều bắt buộc** để ngừng Electron, đo cùng bộ công cụ, cùng máy, cùng cách chạy nguội với giai đoạn 0:
+
+   | Chỉ số | Electron 0.5.1 (đo) | Ngưỡng |
+   |---|---|---|
+   | Installer | 92.681.365 B (88,4 MiB) | **≤ 25 MiB** |
+   | Khởi động (spawn → `readyState=complete`, trung vị) | 1.931 ms | **≤ 1.200 ms** |
+   | Nhàn rỗi private bytes | 294 MiB | **≤ 200 MiB** |
+
+   Parity (toàn bộ cổng nghiệm thu mục 5 + các cổng hiện có xanh trên bản Tauri) **không** phải câu trả lời của câu 7: đó là cổng nghiệm thu vốn có của kế hoạch, vẫn hiệu lực độc lập và vẫn phải đạt cùng ba ngưỡng trên.
+
+**Đánh đổi.**
+- Không cài song song nghĩa là mất lưới đối chiếu trực tiếp giữa hai bản trong lúc chuyển; đổi lại không có tình trạng hai tiến trình cùng ghi một profile, và không phải giải bài toán đồng bộ hai bản. Rủi ro được chuyển sang backup + pilot giới hạn, không biến mất.
+- Bản thử giới hạn vòng 1 bỏ LAN/trình chiếu/updater/AI local, nên chưa thể dùng cho toàn bộ giáo viên pilot; nó chỉ đủ để đo installer/boot/RAM và độ chắc của migration.
+- Ngưỡng ≤ 25 MiB là mục tiêu **có thể không đạt**: nó gồm WebView2 loader + Rust + toàn bộ renderer đóng gói. Kế hoạch ghi rõ nếu làm đúng kiến trúc (TS tách riêng + Rust, không sidecar Node) mà vẫn không xuống dưới ngưỡng thì **dừng dự án Tauri**, không đánh đổi thêm.
+
+**Kiểm chứng.** Đây là quyết định phạm vi, không có test. Các số ở bảng 7 là số **đo** của Electron 0.5.1 trên máy này (xem cách tái lập ở mục 7 báo cáo giai đoạn 0); ngưỡng phía Tauri thì **chưa đo được** vì chưa có `Cargo.toml` và chưa cài Rust toolchain.
+
+**Không chứng minh.** Chưa có dòng mã Tauri nào, chưa kiểm chứng ngưỡng khả thi. Chưa xác nhận WebView2 sandbox/capabilities đủ thay `contextBridge` + `sandbox: true` cho 92 khoá preload. Chưa đo ảnh hưởng của WebView2 runtime (thường có sẵn trên Windows 10/11 nhưng installer phải xử lý máy thiếu).
+
+**Việc kế tiếp.** Chưa duyệt bắt đầu code. Khi duyệt: dựng khung Tauri v2 + Rust toolchain trong nhánh riêng, chuyển lớp truy cập desktop sang facade TS (kế hoạch mục 4) và làm vòng 1 theo mục 1.
