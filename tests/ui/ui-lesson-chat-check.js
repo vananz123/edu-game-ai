@@ -82,6 +82,13 @@ const AFTER_DELETE_QUESTION = 'Sau khi xoá cuộc trò chuyện, câu hỏi nà
 // typed mid-turn and must still be there when the answer lands.
 const FLIGHT_QUESTION = 'Khi AI đang viết trả lời thì khung gõ còn dùng được không?';
 const QUEUED_TEXT = 'Câu hỏi giáo viên gõ trong lúc chờ câu trả lời trước.';
+// #250: typed with real key events, never `input.focus()` — the reported bug was that
+// the caret stayed on <body> after a composer button re-rendered the page, and an
+// explicit focus() is exactly what hid it.
+const TYPED_BEFORE_CONTROLS = 'Quang hop la gi';
+const TYPED_MORE = ' them';
+const TOO_SHORT_QUESTION = 'hi';
+const AGAIN_QUESTION = 'Hỏi lại sau khi kiểm tra ô nhập.';
 
 const QUESTION_TEMPLATES = [
   {
@@ -192,6 +199,21 @@ function startMockServer() {
 }
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+/** A human click at a measured point: mousedown/mouseup, which is where focus moves. */
+async function realClick(cdp, point, label) {
+  if (!point) throw new Error('no point to click for ' + label);
+  for (const type of ['mousePressed', 'mouseReleased']) {
+    await cdp.send('Input.dispatchMouseEvent', { type, x: point.x, y: point.y, button: 'left', clickCount: 1 });
+  }
+  await sleep(400);
+}
+
+/** One character at a time, as a keyboard does, so the box must really have the caret. */
+async function realType(cdp, text) {
+  for (const character of text) await cdp.send('Input.insertText', { text: character });
+  await sleep(250);
+}
 
 // ---------------------------------------------------------------------------
 // Scenario pieces (page-side; no backticks inside these template literals)
@@ -770,6 +792,8 @@ const DELETE_AND_RETYPE = `(async () => {
   window.__errs = [];
   const realError = console.error;
   console.error = (...args) => { window.__errs.push(args.map(String).join(' ')); realError(...args); };
+  // The caret starts in the box, the way a teacher leaves it before clicking the list.
+  document.getElementById('lessonChatInput').focus();
   document.querySelector('[data-action="lesson-chat-history"]').click();
   await new Promise(r => setTimeout(r, 400));
   const rowsBefore = document.querySelectorAll('[data-action="lesson-chat-open"]').length;
@@ -794,14 +818,11 @@ const DELETE_AND_RETYPE = `(async () => {
   // delete redraws the composer and the trash button that held focus is gone with it.
   const caretAfterDelete = document.activeElement ? (document.activeElement.id || document.activeElement.tagName) : '';
   const popoverAfterDelete = Boolean(document.querySelector('[data-lesson-chat-history]'));
-  let typed = '';
   let sendDisabled = null;
+  // Nothing below focuses the box: the caret has to be back on its own, and the typing
+  // the caller does right after this evaluate is the proof (a scripted focus() made the
+  // old version of this check pass while a real teacher got a dead box — #250).
   if (input) {
-    input.focus();
-    input.value = __AFTER_DELETE_QUESTION__;
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    await new Promise(r => setTimeout(r, 250));
-    typed = String(lessonChatUi.draft || '');
     const send = document.querySelector('[data-lesson-chat-send]');
     sendDisabled = send ? send.disabled === true : null;
   }
@@ -820,7 +841,6 @@ const DELETE_AND_RETYPE = `(async () => {
     hasComposer: Boolean(document.querySelector('.lesson-chat-composer')),
     hasInput: Boolean(input),
     inputDisabled: input ? input.disabled === true : null,
-    typed,
     sendDisabled,
     historyStillOpen: Boolean(document.querySelector('[data-lesson-chat-history]')),
     caretAfterDelete,
@@ -908,6 +928,67 @@ const CLEANUP = `(async () => {
     statusAfter: provider.status,
     hasKeyAfter: provider.hasKey === true,
     baseUrlAfter: provider.baseUrl || ''
+  };
+})()`;
+
+// #250: what the caret and the box do when a composer control re-renders the page, and
+// when a send is refused. The harness drives real mouse and key events
+// (`Input.dispatchMouseEvent` / `Input.insertText`), never .click(), .value or focus():
+// the reported bug lived exactly in that gap, and a scripted focus() hid it.
+const REAL_INPUT_STATE = "({ active: document.activeElement ? (document.activeElement.id || document.activeElement.tagName) : '', value: (document.getElementById('lessonChatInput') || {}).value || '', draft: String(lessonChatUi.draft || '') })";
+
+/** Where the box and each composer control are, for a real pointer to aim at. */
+const REAL_INPUT_LAYOUT = `(async () => {
+  navigate('lesson-plans');
+  await new Promise(r => setTimeout(r, 800));
+  lessonChatUi.draft = '';
+  lessonChatUi.mode = 'auto';
+  lessonChatUi.showHistory = false;
+  lessonChatUi.focusComposer = false;
+  render();
+  await new Promise(r => setTimeout(r, 400));
+  const rectOf = selector => {
+    const el = document.querySelector(selector);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+  };
+  return {
+    box: rectOf('#lessonChatInput'),
+    modeAnswer: rectOf('[data-action="lesson-chat-mode"][data-id="answer"]'),
+    modeQuestionSet: rectOf('[data-action="lesson-chat-mode"][data-id="question_set"]'),
+    picker: rectOf('[data-action="lesson-chat-picker"]'),
+    pickerClose: rectOf('[data-action="lesson-chat-picker-close"]'),
+    provider: rectOf('#lessonChatProvider'),
+    hasCount: Boolean(document.getElementById('lessonChatCount'))
+  };
+})()`;
+
+const COUNT_TO_SEVEN = `(() => {
+  const c = document.getElementById('lessonChatCount');
+  if (!c) return { missing: true };
+  c.value = '7';
+  c.dispatchEvent(new Event('change', { bubbles: true }));
+  return { missing: false };
+})()`;
+
+const PRESENT = selector => `Boolean(document.querySelector(${JSON.stringify(selector)}))`;
+
+/** The whole box state after a real send (a refused one is the interesting case). */
+const REAL_INPUT_SEND = `(async () => {
+  const send = document.querySelector('[data-lesson-chat-send]');
+  if (!send || send.disabled) return { clicked: false, disabled: true };
+  send.click();
+  const deadline = Date.now() + 30000;
+  while (Date.now() < deadline && lessonChatUi.sending) await new Promise(r => setTimeout(r, 150));
+  await new Promise(r => setTimeout(r, 600));
+  return {
+    clicked: true,
+    active: document.activeElement ? (document.activeElement.id || document.activeElement.tagName) : '',
+    value: (document.getElementById('lessonChatInput') || {}).value || '',
+    draft: String(lessonChatUi.draft || ''),
+    toast: (document.getElementById('toast') || {}).textContent || '',
+    error: String(lessonChatUi.error || '')
   };
 })()`;
 
@@ -1161,6 +1242,16 @@ function fill(script, values) {
     // composer. Reported as "xoá 1 cuộc trò chuyện thì không nhập chat được nữa", so the
     // check types a new question right after the delete and then really sends it.
     const del = await cdp.evaluate(fill(DELETE_AND_RETYPE, { ...values, AFTER_DELETE_QUESTION: JSON.stringify(AFTER_DELETE_QUESTION) }));
+    // Typed from here with real key events and no focus() call: the box has to already
+    // hold the caret when the delete returns, or nothing lands (#250).
+    await realType(cdp, AFTER_DELETE_QUESTION);
+    const delTyped = await cdp.evaluate(REAL_INPUT_STATE);
+    // Read after the typing: an empty box disables the button by design, so asking
+    // before the question lands would only measure that rule, not the delete.
+    const sendAfterType = await cdp.evaluate(`(() => {
+      const send = document.querySelector('[data-lesson-chat-send]');
+      return send ? send.disabled === true : null;
+    })()`);
     check('#187 the page still draws the chat frame after a delete',
       del.pageBroken === false && del.hasComposer === true && del.hasInput === true,
       `composer=${del.hasComposer} input=${del.hasInput} disabled=${del.inputDisabled} ${del.clickThrew}`);
@@ -1170,11 +1261,15 @@ function fill(script, values) {
     check('#187 the open conversation is released, not left dangling',
       del.chatIdAfter === '' && /Cuộc trò chuyện mới/.test(del.headTitle), `${del.chatIdAfter || '(empty)'} · ${del.headTitle}`);
     check('#187 no swallowed wiring error behind the dead box', del.errs.length === 0 && del.wireErrorPage === '', `${del.errs.join(' | ') || 'clean'} page=${del.wireErrorPage}`);
-    check('#187 typing after the delete reaches the draft', del.typed === AFTER_DELETE_QUESTION, `${del.typed.length}/${AFTER_DELETE_QUESTION.length} ký tự`);
-    check('#187 the send button wakes up again after a delete', del.sendDisabled === false, `disabled=${del.sendDisabled} error=${del.chatError.slice(0, 60)}`);
+    check('#187 typing after the delete reaches the draft',
+      delTyped.value === AFTER_DELETE_QUESTION && delTyped.draft === AFTER_DELETE_QUESTION,
+      `${delTyped.draft.length}/${AFTER_DELETE_QUESTION.length} ký tự · active=${delTyped.active}`);
+    check('#187 the send button wakes up again after a delete', sendAfterType === false, `disabled=${sendAfterType} error=${del.chatError.slice(0, 60)}`);
     // The two things a teacher actually feels: the caret is where they were typing, and
     // the list they clicked in has stepped back out of the way.
-    check('#187 the delete hands the caret back to the box', del.caretAfterDelete === 'lessonChatInput', `active=${del.caretAfterDelete}`);
+    check('#187 the delete hands the caret back to the box',
+      del.caretAfterDelete === 'lessonChatInput' && delTyped.active === 'lessonChatInput',
+      `after delete=${del.caretAfterDelete} after typing=${delTyped.active}`);
     check('#187 the history popover steps back after the delete', del.popoverAfterDelete === false, `open=${del.popoverAfterDelete}`);
     check('#187 the composer stays inside the frame after a delete',
       del.composerInsideFrame === true && del.frameBottom <= del.viewportH + 2,
@@ -1210,6 +1305,91 @@ function fill(script, values) {
       flight.stillSending === false && flight.error === ''
       && flight.draftAfter === QUEUED_TEXT && flight.inputValueAfter === QUEUED_TEXT && flight.bubbles >= 2,
       `draft="${flight.draftAfter.slice(0, 24)}" value="${flight.inputValueAfter.slice(0, 24)}" bubbles=${flight.bubbles} ${flight.error.slice(0, 40)}`);
+
+    // 11c. #250 — the two defects the teacher reported on this composer, driven with a
+    // real pointer and a real keyboard: deleting a conversation left the box unable to
+    // take typing, and a sent question stayed in the box. The check above could not see
+    // either because it focused the box itself and then read the state object.
+    const real = await cdp.evaluate(REAL_INPUT_LAYOUT);
+    check('#250 the composer is measurable in the frame', Boolean(real.box && real.modeAnswer && real.picker), JSON.stringify(real).slice(0, 120));
+    await realClick(cdp, real.box, 'the typing box');
+    const caretInBox = await cdp.evaluate(REAL_INPUT_STATE);
+    check('#250 a click in the box puts the caret there', caretInBox.active === 'lessonChatInput', `active=${caretInBox.active}`);
+    await realType(cdp, TYPED_BEFORE_CONTROLS);
+    const typedStart = await cdp.evaluate(REAL_INPUT_STATE);
+    check('#250 the box takes real typing', typedStart.value === TYPED_BEFORE_CONTROLS && typedStart.draft === TYPED_BEFORE_CONTROLS, `"${typedStart.value}"`);
+    // The answer-mode button calls render(), which rebuilds the whole page.
+    await realClick(cdp, real.modeAnswer, 'the answer-mode button');
+    const afterMode = await cdp.evaluate(REAL_INPUT_STATE);
+    check('#250 switching the answer mode keeps the caret in the box', afterMode.active === 'lessonChatInput' && afterMode.value === TYPED_BEFORE_CONTROLS, `active=${afterMode.active} value="${afterMode.value.slice(0, 24)}"`);
+    await realType(cdp, TYPED_MORE);
+    const typedAfterMode = await cdp.evaluate(REAL_INPUT_STATE);
+    check('#250 typing keeps working after the mode switch', typedAfterMode.value === TYPED_BEFORE_CONTROLS + TYPED_MORE && typedAfterMode.active === 'lessonChatInput', `"${typedAfterMode.value}" · active=${typedAfterMode.active}`);
+    // Opening and closing the lesson picker is the control next to the caret. The
+    // popover's own buttons only exist while it is open, so they are measured after.
+    await realClick(cdp, real.picker, 'the lesson picker');
+    const pickerOpenExists = await cdp.evaluate(PRESENT('[data-lesson-chat-picker]'));
+    const pickerClose = await cdp.evaluate(`(() => {
+      const el = document.querySelector('[data-action="lesson-chat-picker-close"]');
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+    })()`);
+    await realClick(cdp, pickerClose, 'the picker close button');
+    const afterPicker = await cdp.evaluate(REAL_INPUT_STATE);
+    check('#250 opening and closing the picker keeps the caret in the box', pickerOpenExists === true && afterPicker.active === 'lessonChatInput', `popover=${pickerOpenExists} active=${afterPicker.active}`);
+    // The question count only exists in "Bộ câu hỏi" mode; entering that mode is itself
+    // a render, so typing has to survive it first (the assert below is what proves it
+    // cannot be done in "Trả lời" mode). Switching there with the count already showing:
+    await realClick(cdp, real.modeQuestionSet, 'the question-set mode button');
+    const afterSetMode = await cdp.evaluate(REAL_INPUT_STATE);
+    check('#250 switching to question-set mode keeps the caret in the box', afterSetMode.active === 'lessonChatInput', `active=${afterSetMode.active}`);
+    // The question count is a native control inside the composer; it renders too.
+    const hasCount = await cdp.evaluate(PRESENT('#lessonChatCount'));
+    if (hasCount) {
+      await cdp.evaluate(COUNT_TO_SEVEN);
+      await sleep(450);
+      const afterCount = await cdp.evaluate(REAL_INPUT_STATE);
+      check('#250 changing the question count keeps the caret in the box',
+        afterCount.active === 'lessonChatInput' && Boolean(afterCount.value) && afterCount.draft === afterCount.value,
+        `active=${afterCount.active} value="${afterCount.value.slice(0, 28)}" count=${await cdp.evaluate('lessonChatUi.questionCount')}`);
+    } else {
+      check('#250 changing the question count keeps the caret in the box', false, 'no #lessonChatCount in question_set mode');
+    }
+    // A question under 3 characters is refused before any AI call: Enter must empty the
+    // box and say why, because a sentence left sitting there is exactly what "bấm Gửi
+    // mà ô không tự xoá" describes.
+    await realClick(cdp, real.box, 'the typing box (refused question)');
+    await cdp.evaluate(`(() => { const box = document.getElementById('lessonChatInput'); box.select(); return true; })()`);
+    await realType(cdp, TOO_SHORT_QUESTION);
+    const shortBefore = await cdp.evaluate(REAL_INPUT_STATE);
+    await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 });
+    await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 });
+    await sleep(800);
+    const shortAfter = await cdp.evaluate(REAL_INPUT_STATE);
+    const shortToast = await cdp.evaluate("(document.getElementById('toast') || {}).textContent || ''");
+    check('#250 a refused question leaves the box empty',
+      shortBefore.value === TOO_SHORT_QUESTION && shortAfter.value === '' && shortAfter.draft === '',
+      `"${shortBefore.value}" -> "${shortAfter.value}"`);
+    check('#250 a refused question says why and keeps the caret',
+      shortAfter.active === 'lessonChatInput' && /3 ký tự/.test(String(shortToast)),
+      `active=${shortAfter.active} toast="${String(shortToast).slice(0, 40)}"`);
+
+    // A real send with a provider that refuses (no AI ready is the teacher's case here):
+    // the box empties either way, and the error says what happened. The question is
+    // typed for real first, so an empty box afterwards is the send's doing.
+    await realClick(cdp, real.box, 'the typing box (before the send)');
+    await realType(cdp, AGAIN_QUESTION);
+    const sendBefore = await cdp.evaluate(REAL_INPUT_STATE);
+    const failing = await cdp.evaluate(REAL_INPUT_SEND);
+    check('#250 a send that the AI refuses still empties the box',
+      sendBefore.value === AGAIN_QUESTION && failing.clicked === true && failing.value === '' && failing.draft === '',
+      `"${String(sendBefore.value).slice(0, 24)}" -> "${String(failing.value).slice(0, 24)}" · ${String(failing.error).slice(0, 50)}`);
+    check('#250 the caret is back in the box after that send', failing.active === 'lessonChatInput', `active=${failing.active}`);
+    // The conversation this check might have just created (a provider that answered) is
+    // this check's to delete; a refused turn stores one too when a chat already existed.
+    const realChatId = await cdp.evaluate('String(lessonChatUi.chatId || "")');
+    if (realChatId && !chatIds.includes(realChatId)) chatIds.push(realChatId);
 
     // 12. Leave the profile as it was found.
     const cleanup = await cdp.evaluate(fill(CLEANUP, { ...values, DOC_IDS: JSON.stringify(docIds), CHAT_IDS: JSON.stringify(chatIds.filter(Boolean)) }));

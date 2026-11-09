@@ -2594,3 +2594,25 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 **Không chứng minh.** Nhánh AI local không chạy (theo chỉ đạo): chưa đo trên llama.cpp một câu trả lời dài thật sự trọn với 1.024/1.536 token, chưa xem dòng "AI đã đọc" mới trong app. Máy GPU chưa đo `contextTokens` thật khác 8.192.
 
 **Việc kế tiếp.** Phát hành 0.5.1 với #227 + #228 + #229; sau đó mục 3 (ô nhập không tự xoá) và mục 2 (xoá cuộc trò chuyện xong không gõ được).
+
+## #250 — Khung chat Giáo án: xoá cuộc trò chuyện xong ô nhập vẫn gõ được, và gửi xong ô tự trống (2026-11-09)
+
+**Báo cáo.** Giáo viên: "trang giáo án, lỗi khi xóa 1 cuộc trò chuyện thì không nhập được vào input text, lỗi khi nhập input text và gửi thì không tự xóa". Hỏi lại: lỗi ở **khung chat cột trái** của trang Giáo án, lúc **AI không chạy / đã xong**.
+
+**Nguyên nhân (đo được, không phỏng đoán).**
+1. *Không nhập được.* `render()` dựng lại `#pageContent.innerHTML` toàn bộ, nên mọi nút trong khung gõ (Trả lời / Bộ câu hỏi, Chọn giáo án, số câu, nhà cung cấp, xoá, mới) phá luôn thẻ `<textarea>` đang giữ caret. Trên trình duyệt, `mousedown` lên nút đã chuyển focus sang nút **trước khi** handler chạy (`focusout` ở textarea rồi `focusin` ở nút), nên trong handler không còn gì để trả lại. Kết quả: caret nằm ở `<body>`, gõ không vào đâu. Với nút xoá thì nút bị xoá luôn cùng trang, nên caret càng mất hẳn.
+2. *Không tự xoá.* Hai đường: câu **dưới 3 ký tự** bị từ chối mà chữ vẫn nằm trong ô; và mọi lượt **lỗi** (chưa có AI sẵn sàng, offline) cũng vậy vì `lessonChatUi.draft` chỉ được xoá ở nhánh thành công. Đây đúng là trường hợp của giáo viên — "AI không chạy".
+
+**Cách sửa.**
+- Nhớ caret ở **`mousedown` pha capture**, không ở trong handler click: `wireLessonChatDocumentOnce()` nối **một lần** vào `document` (khung gõ được dựng lại mỗi render, `document` thì không). Nếu con trỏ đang ở `#lessonChatInput` → ghi `focusComposer = true` + `caret = selectionStart`; bấm ra ngoài khung → xoá ghi nhớ (không cướp caret); bấm chính vào ô → khỏi trả lại, trình duyệt tự đặt caret.
+- `wireLessonChat()` gọi `wireLessonChatDocumentOnce()`, và sau render, nếu có ghi nhớ thì `lessonChatFocusField()` đặt lại caret đúng vị trí cũ. Ghi nhớ là **một lần**: dùng xong xoá `caret`.
+- Câu đã gửi được xoá trong **`finally`** của `lessonChatSend`, không chỉ ở nhánh thành công. Xoá **đúng câu đó** thôi: `draft === question ? '' : draft.replace(question, '')` — lượt chậm (#187) vẫn cho giáo viên gõ câu kế tiếp và câu đó phải sống sót khi câu trả lời đáp xuống.
+- Câu dưới 3 ký tự: xoá `draft`, đặt lỗi + `focusComposer`, `render()`, `toast('Câu hỏi quá ngắn — hãy viết ít nhất 3 ký tự.')`.
+
+**Vì sao kiểm cũ không bắt được.** `ui-lesson-chat-check` mục #187 tự gọi `input.focus()`, tự gán `input.value` rồi đọc `lessonChatUi.draft` — **không** có lần render nào chen giữa caret và chữ, và trạng thái đọc là trạng thái kịch bản, không phải hộp chữ trên màn hình. Cả hai lỗi vì thế đều vô hình.
+
+**Kiểm chứng.** Mục 11c mới dùng chuột/bàn phím thật (`Input.dispatchMouseEvent` + `Input.insertText` từng ký tự), không `focus()`: bấm vào ô, gõ "Quang hop la gi" → đổi chế độ Trả lời (render) → caret vẫn trong ô, gõ thêm " them" được; mở/đóng "Chọn giáo án" → caret còn; sang Bộ câu hỏi + đổi số câu 7 → caret + chữ còn; Enter với "hi" → ô trống, toast 3 ký tự, caret về ô; gửi thật khi AI chưa sẵn sàng → ô trống, caret về ô, lỗi hiện. Mục #187 được sửa theo cùng chuẩn: sau khi xoá cuộc trò chuyện, check **gõ thật** 59 ký tự, đọc đúng `value`/`draft`, và chỉ sau đó mới hỏi nút Gửi (ô trống thì nút tắt là đúng thiết kế).
+
+**Đánh đổi.** Nối một listener `mousedown` (capture) ở `document` là chỗ duy nhất cần, vì listener trên phần tử sẽ mất theo mỗi render. Ghi nhớ caret không bao giờ vượt ra ngoài `.lesson-chat-col`: bấm sang trang khác thì không được kéo caret về.
+
+**Không chứng minh.** Không xem bằng mắt trên app của giáo viên; đo trên instance Electron riêng 1280×800 bằng CDP. Nhánh AI local không chạy (theo chỉ đạo).

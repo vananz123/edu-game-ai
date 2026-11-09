@@ -37,6 +37,7 @@ const lessonChatUi = {
   scrollTop: null,
   pinned: true,
   focusComposer: false,
+  caret: null,
   lastTurn: null
 };
 
@@ -147,6 +148,58 @@ function lessonChatRestoreScroll() {
   const box = document.getElementById('lessonChatScroll');
   if (!box) return;
   box.scrollTop = lessonChatUi.pinned ? box.scrollHeight : (Number(lessonChatUi.scrollTop) || 0);
+}
+
+/**
+ * #250: `render()` rebuilds the whole page, so every composer control that calls it
+ * (answer mode, attach/detach a lesson, provider, question count, delete, new) used to
+ * leave the caret on `<body>`: the teacher keeps typing, nothing appears, and the box
+ * reads as "không nhập được nữa". Remembering WHICH field held the caret before the
+ * markup is thrown away is what makes the hand-back general — a button's own focus is
+ * not brought back, only a typing field (plus the caret offsets) is.
+ *
+ * The memory has to be taken on `mousedown`, not when the handler runs: pressing a
+ * button already moved focus off the textarea by then, so the click saw `BUTTON` and
+ * had nothing to hand back (`focusout` before `mousedown`, page-side). `mousedown`
+ * fires first, while the textarea still owns the caret.
+ */
+function lessonChatCaptureFocus() {
+  const active = document.activeElement;
+  if (!active || active.id !== 'lessonChatInput') return;
+  lessonChatUi.focusComposer = true;
+  lessonChatUi.caret = active.selectionStart;
+}
+
+let lessonChatMouseWired = false;
+
+/** Subscribed once: the composer is rebuilt on every render, the document is not. */
+function wireLessonChatDocumentOnce() {
+  if (lessonChatMouseWired || typeof document === 'undefined') return;
+  lessonChatMouseWired = true;
+  document.addEventListener('mousedown', event => {
+    const target = event.target;
+    if (!target || typeof target.closest !== 'function') return;
+    if (!target.closest('.lesson-chat-col')) {
+      // A click elsewhere is a deliberate move away from the composer.
+      lessonChatUi.focusComposer = false;
+      lessonChatUi.caret = null;
+      return;
+    }
+    lessonChatCaptureFocus();
+    if (target === document.getElementById('lessonChatInput')) {
+      // A click inside the box keeps its own caret: nothing to hand back later.
+      lessonChatUi.focusComposer = false;
+      lessonChatUi.caret = null;
+    }
+  }, true);
+}
+
+function lessonChatFocusField() {
+  const target = document.getElementById('lessonChatInput');
+  if (!target) return;
+  target.focus();
+  const end = Number.isFinite(lessonChatUi.caret) ? lessonChatUi.caret : target.value.length;
+  try { target.setSelectionRange(end, end); } catch (error) { /* caret placement is cosmetic */ }
 }
 
 // ---------------------------------------------------------------------------
@@ -364,6 +417,7 @@ function clampQuestionCountUi(value) {
 /** Khung chat — cột trái của trang Giáo án (#182). */
 function lessonChatPanelHtml() {
   lessonChatCaptureScroll();
+  lessonChatCaptureFocus();
   return `<aside class="lesson-chat-col" id="lessonChatCol">
     <div class="lesson-chat-frame" data-lesson-chat-frame>
       ${lessonChatHeadHtml()}
@@ -381,6 +435,7 @@ function lessonChatPanelHtml() {
 let lessonChatProgressWired = false;
 
 function wireLessonChat() {
+  wireLessonChatDocumentOnce();
   const input = document.getElementById('lessonChatInput');
   if (input) {
     input.addEventListener('input', event => {
@@ -397,9 +452,8 @@ function wireLessonChat() {
     });
     if (lessonChatUi.focusComposer) {
       lessonChatUi.focusComposer = false;
-      input.focus();
-      const end = input.value.length;
-      try { input.setSelectionRange(end, end); } catch (error) { /* caret placement is cosmetic */ }
+      lessonChatFocusField();
+      lessonChatUi.caret = null;
     }
   }
   document.querySelectorAll('#pageContent [data-lesson-chat-pick]').forEach(box => {
@@ -624,8 +678,14 @@ async function lessonChatSend() {
   // #183: không còn chốt "phải chọn giáo án" ở đây — một câu hỏi trơn cũng là một
   // lượt hợp lệ, main sẽ soạn prompt "không có giáo án kèm theo".
   if (question.length < 3) {
-    lessonChatUi.error = 'Câu hỏi quá ngắn.';
+    // #250: a refused turn still takes the sentence out of the box. Leaving it there
+    // read as "bấm Gửi mà ô không tự xoá"; the hint says what to do instead, because
+    // a bare "quá ngắn" with an empty box would hide why nothing was sent.
+    lessonChatUi.draft = '';
+    lessonChatUi.error = '';
+    lessonChatUi.focusComposer = true;
     render();
+    toast('Câu hỏi quá ngắn — hãy viết ít nhất 3 ký tự.');
     return;
   }
   const requestId = lessonChatRequestId();
@@ -648,9 +708,6 @@ async function lessonChatSend() {
     });
     lessonChatUi.chat = turn && turn.chat ? turn.chat : lessonChatUi.chat;
     lessonChatUi.chatId = (lessonChatUi.chat || {}).id || lessonChatUi.chatId;
-    // Only the question that was actually sent leaves the box: the box stays open
-    // during a turn (#187), so anything else in it is the teacher's next question.
-    if (String(lessonChatUi.draft || '').trim() === question) lessonChatUi.draft = '';
     lessonChatUi.lastTurn = turn || null;
     if (turn && turn.intent === 'question_set') lessonChatUi.mode = 'question_set';
     await lessonChatRefreshChats();
@@ -670,6 +727,14 @@ async function lessonChatSend() {
     // mà không thấy gì xảy ra.
     lessonChatUi.error = message;
   } finally {
+    // #250: the submitted sentence leaves the box whether the turn worked or not.
+    // A refused/question-too-short turn used to keep its text, and so did every
+    // failed turn (no provider ready, offline) — both read as "bấm Gửi mà ô không
+    // tự xoá". Only THAT sentence leaves: a slow turn (#187) lets the teacher write
+    // the next question, and the answer landing must not throw those keystrokes away.
+    lessonChatUi.draft = lessonChatUi.draft === question
+      ? ''
+      : String(lessonChatUi.draft || '').replace(question, '');
     lessonChatUi.sending = false;
     lessonChatUi.pendingQuestion = '';
     lessonChatUi.stage = '';
