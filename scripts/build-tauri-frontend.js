@@ -6,10 +6,18 @@
 // (Electron 28+ chỉ nạp được trong tiến trình Electron). Ở đây chỉ chép phần
 // renderer: `index.html`, CSS, script renderer, engine game, vendor và asset.
 //
+// Từ giai đoạn 2 renderer KHÔNG còn đọc `window.eduGame`: mọi lời gọi đi qua
+// façade `desktop.*`, và `desktop-adapter-tauri.js` nói thẳng với `__TAURI__`
+// qua hai lệnh chung `invoke_channel` / `send_channel` (src-tauri/src/api.rs).
+// Vì vậy giai đoạn 1 đã sinh `edugame-bridge.js` ở đây — bản sao 92 khoá của
+// preload Electron — và giai đoạn 2 đã bỏ hẳn. Không còn khoá nào có thể lệch
+// khỏi preload, vì không còn bảng khoá thứ hai.
+//
 // Thứ tự script trong `index.html` là luật (tests/unit/renderer-load-order), nên
-// HTML chỉ được sửa ĐÚNG MỘT chỗ: chèn thẻ cầu `edugame-bridge.js` ngay đầu
-// <body>. Mọi thẻ cũ giữ nguyên thứ tự. Cổng tests/unit/tauri-contract.test.ts
-// đọc lại `dist-tauri/index.html` để chốt điều đó.
+// script này KHÔNG sửa thẻ script nào. Nó chỉ chèn một cổng chặn nhỏ ngay đầu
+// <body>, trước mọi script renderer, để một `window.eduGame` sót lại — hoặc
+// không có `__TAURI__` — hiện ra thành lỗi đọc được thay vì `undefined is not a
+// function` ở giữa màn hình.
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -40,81 +48,42 @@ function copyDir(from, to) {
   }
 }
 
-// Cầu `window.eduGame` cho WebView2.
+// Cổng chặn của vỏ Tauri, nạp TRƯỚC mọi script renderer.
 //
-// Renderer được viết cho một preload Electron đã expose `window.eduGame`. Vỏ
-// Tauri không có preload đó, nên cầu này dựng cùng hình dạng API từ
-// `src/shared/desktop-contract.json` — bản ghi 92 khoá đã được cổng
-// tests/unit/desktop-contract.test.ts chốt với preload.ts. Sinh từ JSON thay vì
-// gõ tay để danh sách khoá không thể lệch khỏi Electron mà không ai thấy.
-//
-// Mã sinh ra là script cổng thường nạp TRƯỚC mọi script trong index.html, và
-// dùng toàn bộ global của Tauri (__TAURI__), không import module.
-function bridgeSource(contract, commands) {
-  const invokes = Object.entries(contract.invoke)
-    .map(([key, channel]) => `    ${key}: (...args) => call(${JSON.stringify(channel)}, args),`)
-    .join('\n');
-  const sends = Object.entries(contract.send)
-    .map(([key, channel]) => `    ${key}: (...args) => call(${JSON.stringify(channel)}, args),`)
-    .join('\n');
-  const events = Object.entries(contract.event)
-    .map(
-      ([key, channel]) => `    ${key}: callback => {
-      const stopping = listen(${JSON.stringify(channel)}, event => callback(event.payload));
-      stopping.catch(() => {});
-      return () => stopping.then(stop => stop()).catch(() => {});
-    },`,
-    )
-    .join('\n');
-
-  return `// TỆP SINH TỰ ĐỘNG bởi scripts/build-tauri-frontend.js từ src/shared/desktop-contract.json.
-// Đừng sửa tay: chạy \`npm run build:tauri\` để sinh lại.
+// Hai điều kiện, cả hai đều là "vỏ này chưa chạy được", không phải lỗi dữ liệu:
+//   • thiếu `__TAURI__` → `desktop-adapter-tauri.js` không nối được, mọi lời gọi
+//     façade từ chối `not-supported`; cùng lắm giáo viên thấy lỗi từng nút.
+//   • còn `window.eduGame` → có người đã chèn cầu giai đoạn 1 lại; renderer sẽ
+//     thấy hai cửa desktop. Ghi rõ ra console để người dựng biết mà gỡ.
+// Không ném lỗi: chặn trang là làm giáo viên mất cả giao diện vì một chi tiết
+// vỏ, trong khi các nhánh "chưa hỗ trợ" của façade đã nói lý do rõ ràng.
+function guardSource() {
+  return `// TỆP SINH TỰ ĐỘNG bởi scripts/build-tauri-frontend.js. Đừng sửa tay.
+// Renderer nói với vỏ qua façade \`desktop.*\` (adapter Tauri → __TAURI__ →
+// invoke_channel/send_channel), không qua \`window.eduGame\`.
 (function () {
   'use strict';
-  const api = window.__TAURI__;
-  if (!api || !api.core) {
-    // Không có với Tauri: để renderer báo lỗi rõ ràng thay vì "undefined is not a function".
-    window.__eduGameBridgeError = 'Vỏ Tauri không expose __TAURI__ — kiểm tra app.withGlobalTauri trong tauri.conf.json';
-    return;
+  if (!window.__TAURI__ || !window.__TAURI__.core) {
+    console.error('Vỏ Tauri không expose __TAURI__ — kiểm tra app.withGlobalTauri trong tauri.conf.json');
   }
-  const invoke = api.core.invoke;
-  const listen = api.event.listen;
-  const COMMANDS = ${JSON.stringify(commands, null, 2)};
-
-  // Tauri đăng ký lệnh theo tên hàm Rust; bảng này dịch kênh Electron sang lệnh.
-  // Tauri từ chối bằng chuỗi; renderer đọc \`error.message\`, nên chuẩn hóa về Error
-  // và giữ nguyên văn lý do của vỏ (ví dụ "Kênh \`library:get\` chưa có…").
-  const call = (channel, args) => {
-    const command = COMMANDS[channel];
-    if (!command) {
-      return Promise.reject(new Error('Kênh ' + channel + ' không có lệnh trong vỏ Tauri'));
-    }
-    return invoke(command, args[0] === undefined ? {} : { args }).catch(error => {
-      if (error instanceof Error) throw error;
-      throw new Error(typeof error === 'string' ? error : JSON.stringify(error));
-    });
-  };
-
-  window.eduGame = Object.freeze({
-${invokes}
-${sends}
-${events}
-  });
+  if (window.eduGame) {
+    console.error('window.eduGame còn tồn tại trong gói Tauri: renderer giai đoạn 2 chỉ dùng façade desktop.*');
+  }
 })();
 `;
 }
 
-// Bảng kênh IPC → tên lệnh Tauri.
+// Bảng kênh → lệnh của `api.rs`, dùng cho phép so với hợp đồng desktop.
 //
-// Tauri đăng ký lệnh theo TÊN HÀM Rust (`app_info`), không theo chuỗi kênh của
-// Electron (`app:info`; Tauri còn cấm hai dấu `:` trong một tên). Bảng này là
-// cầu nối duy nhất, lấy từ hai nguồn trong `api.rs`: `hand_written()` (lệnh có
-// thân thật) và `unsupported!(x => "channel")` — nên không thể lệch khỏi những
-// gì thực sự được đăng ký.
+// Tauri đăng ký lệnh theo tên hàm Rust (`app_info`), không theo chuỗi kênh của
+// Electron (`app:info`; Tauri còn cấm hai dấu `:` trong một tên). Bảng lấy từ
+// hai nguồn trong api.rs: nhánh `hand_written()` và `unsupported!(…)`. Lệnh
+// chung `invoke_channel`/`send_channel` khai kênh giả (`channel:invoke`,
+// `channel:send`) — chúng KHÔNG phục vụ một kênh cụ thể nên bị loại khỏi phép
+// so; cổng tests/unit/tauri-contract.test.ts chốt hai danh sách bên trong
+// `INVOKE_CHANNELS`/`SEND_CHANNELS` thay cho việc này.
 function commandMap(apiSource) {
   const map = {};
-  // Mỗi nhánh `"name" => ("channel", "name"),` trong `hand_written`. Ba nhóm tách
-  // rời (không backreference) để cổng Node và script đọc giống hệt nhau.
   for (const match of apiSource.matchAll(/^\s{8}"([a-z0-9_]+)" => \("([^"]+)", "([a-z0-9_]+)"\),/gm)) {
     if (match[1] !== match[3]) {
       throw new Error(`api.rs: nhánh hand_written() ${match[1]} trả về lệnh ${match[3]}`);
@@ -132,6 +101,15 @@ function commandMap(apiSource) {
     map[channel] = name;
   }
   return map;
+}
+
+// Kênh thuộc `INVOKE_CHANNELS` của api.rs — danh sách `invoke_channel` nhận.
+function channelList(apiSource, constName) {
+  const start = apiSource.indexOf(`const ${constName}: &[&str] = &[`);
+  if (start < 0) throw new Error(`api.rs thiếu ${constName}`);
+  const end = apiSource.indexOf('];', start);
+  if (end < 0) throw new Error(`api.rs: ${constName} không đóng danh sách`);
+  return [...apiSource.slice(start, end).matchAll(/"([^"]+)"/g)].map(match => match[1]);
 }
 
 function main() {
@@ -156,32 +134,50 @@ function main() {
   const contract = JSON.parse(
     fs.readFileSync(path.join(root, 'src', 'shared', 'desktop-contract.json'), 'utf8'),
   );
-  const commands = commandMap(
-    fs.readFileSync(path.join(root, 'src-tauri', 'src', 'api.rs'), 'utf8'),
-  );
-  const uncovered = Object.values(contract.invoke).filter(channel => !commands[channel]);
+  const apiSource = fs.readFileSync(path.join(root, 'src-tauri', 'src', 'api.rs'), 'utf8');
+  const commands = commandMap(apiSource);
+
+  // `invoke_channel` là cửa duy nhất cho kênh có trả lời; kênh nào preload khai
+  // mà danh sách này không có thì bản Tauri sẽ từ chối nó ở cửa — dừng build để
+  // danh sách được sửa cùng hợp đồng, không để giáo viên gặp lúc chạy.
+  const invokeChannels = new Set(channelList(apiSource, 'INVOKE_CHANNELS'));
+  const uncovered = Object.values(contract.invoke).filter(channel => !invokeChannels.has(channel));
   if (uncovered.length) {
-    console.error(`Kênh chưa có lệnh Tauri: ${uncovered.join(', ')}`);
+    console.error(`Kênh chưa có trong INVOKE_CHANNELS của api.rs: ${uncovered.join(', ')}`);
     process.exit(1);
   }
-  fs.writeFileSync(path.join(out, 'edugame-bridge.js'), bridgeSource(contract, commands), 'utf8');
+  const sendChannels = new Set(channelList(apiSource, 'SEND_CHANNELS'));
+  const missingSend = Object.values(contract.send).filter(channel => !sendChannels.has(channel));
+  if (missingSend.length) {
+    console.error(`Kênh send chưa có trong SEND_CHANNELS của api.rs: ${missingSend.join(', ')}`);
+    process.exit(1);
+  }
+  // Bảng lệnh vẫn phải đọc được (đăng ký lệnh thật), kể cả khi renderer không
+  // còn gọi thẳng tên lệnh: `tests/unit/tauri-contract.test.ts` dựa vào nó để
+  // chốt lib.rs đăng ký đủ lệnh.
+  if (!commands['app:info'] || !commands['about:check']) {
+    console.error('api.rs: bảng lệnh đọc được nhưng thiếu kênh bắt buộc — kiểm tra lại');
+    process.exit(1);
+  }
+
+  fs.writeFileSync(path.join(out, 'edugame-guard.js'), guardSource(), 'utf8');
 
   // CSP của index.html là `script-src 'self'` — thẻ script ngoài là hợp lệ, không
-  // cần 'unsafe-inline'. Chèn NGAY đầu <body> để `window.eduGame` có trước mọi
-  // script renderer; thứ tự các thẻ còn lại không đổi.
+  // cần 'unsafe-inline'. Chèn NGAY đầu <body> để cổng chặn có trước mọi script
+  // renderer; thứ tự các thẻ còn lại không đổi.
   const htmlPath = path.join(out, 'index.html');
   const html = fs.readFileSync(htmlPath, 'utf8');
-  if (/preload\.js|main\.js/.test(html)) {
-    console.error('index.html nhắc tới preload.js/main.js — bản Tauri không có hai tệp này.');
+  if (/preload\.js|main\.js|edugame-bridge\.js/.test(html)) {
+    console.error('index.html nhắc tới preload.js/main.js/edugame-bridge.js — bản Tauri không có các tệp này.');
     process.exit(1);
   }
   if (!html.includes('<body>')) {
-    console.error('index.html không có thẻ <body> để chèn cầu eduGame.');
+    console.error('index.html không có thẻ <body> để chèn cổng chặn.');
     process.exit(1);
   }
   fs.writeFileSync(
     htmlPath,
-    html.replace('<body>', '<body>\n  <script src="edugame-bridge.js"></script>'),
+    html.replace('<body>', '<body>\n  <script src="edugame-guard.js"></script>'),
     'utf8',
   );
 
@@ -197,4 +193,6 @@ function main() {
   console.log(`dist-tauri: ${count} tệp`);
 }
 
-main();
+if (require.main === module) main();
+
+module.exports = { commandMap, channelList };

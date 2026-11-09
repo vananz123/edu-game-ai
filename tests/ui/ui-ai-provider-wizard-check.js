@@ -4,10 +4,11 @@
  * DECISIONS #180 — step 2 also states how much of the lesson that provider reads
  * (a cloud endpoint gets the whole document; the local runtime has a budget).
  *
- * The page is given a provider view through a temporary `ai:providers` override
- * (`window.eduGame` is frozen, and the checks must not depend on the network), and
- * `analyzeLesson` / `generateLessonDraft` are wrapped so the request can be read
- * without running a model. Nothing is generated: every check is about what the
+ * The page is given a provider view through `desktop.stub('getAiProviders')` (the
+ * renderer only calls the façade now, and the gate must not depend on the network —
+ * #259/#260), and
+ * hai lời gọi `analyzeLesson` / `generateLessonDraft` được thay bằng hàm ghi lại
+ * yêu cầu, không chạy model nào. Nothing is generated: every check is about what the
  * wizard shows and what it asks for.
  *
  * Usage: node tests/ui/ui-ai-provider-wizard-check.js [port]
@@ -65,14 +66,11 @@ function providerView({ localRunning = true, gemini = null, openai = null } = {}
 
 /**
  * Installs a fake provider view and captures the payloads of the two workflow
- * calls. `window.eduGame` is frozen, so the override replaces `getSettings` on a
- * Proxy and wraps the two bridge methods on a second object.
+ * calls. The renderer only reaches the shell through `desktop`, and the façade's
+ * `stub()` is meant for exactly this: substitute an answer without a model.
  */
-// Step 2 reads its result back through `saveLessonAnalysis`; that bridge method is
-// harmless, so the proxy passes it through untouched.
-// DECISIONS #132 D16: entering step 2 refreshes the provider view from the bridge.
-// The bridge is frozen and a Proxy may not shadow its frozen properties, so the
-// harness keeps the scenario's view on every render instead (same effect, no proxy).
+// DECISIONS #132 D16: entering step 2 refreshes the provider view. The stub below
+// answers that refresh with the scenario's view, and the render keeps it in place.
 const KEEP_PROVIDER_VIEW = `(() => {
   if (window.__keepProviderView) return;
   window.__keepProviderView = true;
@@ -91,15 +89,10 @@ const TEARDOWN = `(async () => {
   if (window.__realRender) window.render = window.__realRender;
   delete window.__realRender;
   delete window.__providerView;
-  delete window.__providerFake;
   delete window.__providerCalls;
-  delete window.__realBridge;
-  delete window.eduGameAiProviders;
-  delete window.eduGameAnalyzeOverride;
-  delete window.eduGameGenerateOverride;
-  delete window.eduGameRegenerateOverride;
+  ['getAiProviders', 'analyzeLesson', 'generateLessonDraft', 'regenerateLessonItem'].forEach(name => desktop.stub(name, null));
   window.__keepProviderView = false;
-  state.settings = await window.eduGame.getSettings();
+  state.settings = await desktop.call('getSettings');
   navigate('home');
   render();
   await new Promise(r => setTimeout(r, 250));
@@ -108,37 +101,22 @@ const TEARDOWN = `(async () => {
 
 function installHarness(view, analyzeBehaviour = 'ok') {
   return `(async () => {
-    // The real bridge is frozen (contextBridge), so the page keeps it. What the wizard
-    // reads (state.settings) and calls (the bridge methods below) is captured in wrappers.
-    // in wrappers the scenario installs on the renderer's own functions.
+    // What the wizard reads (state.settings) and calls (desktop.call) is set here:
+    // the façade decides every call, so stubs are enough and no model runs.
     window.__providerView = ${JSON.stringify(view)};
     window.__providerCalls = [];
     const behaviour = ${JSON.stringify(analyzeBehaviour)};
-    const realAnalyze = window.eduGame.analyzeLesson;
-    const realGenerate = window.eduGame.generateLessonDraft;
-    const realRegenerate = window.eduGame.regenerateLessonItem;
-    if (typeof window.eduGame.analyzeLesson === 'function') {
-      window.analyzeLessonWrapped = true;
-    }
-    window.eduGameAnalyzeOverride = async payload => {
+    desktop.stub('analyzeLesson', async payload => {
       window.__providerCalls.push({ kind: 'analyze', ...payload });
       if (behaviour === 'no-provider') throw new Error('[AI_NO_PROVIDER] Chưa có nhà cung cấp AI nào sẵn sàng.');
       return { analysis: { id: 'a1', topic: 'Quang hợp', subject: 'Sinh học', grade: 8, objectives: [{ id: 'o1', description: 'Mô tả quang hợp', cognitiveLevel: 'understand' }], keyConcepts: [], uncertainties: [] }, project: null, cached: false };
-    };
-    window.eduGameGenerateOverride = async payload => { window.__providerCalls.push({ kind: 'generate', ...payload }); throw new Error('[AI_CANCELLED] stop'); };
-    window.eduGameRegenerateOverride = async payload => { window.__providerCalls.push({ kind: 'regenerate', ...payload }); throw new Error('[AI_CANCELLED] stop'); };
-    window.__realBridge = { analyze: realAnalyze, generate: realGenerate, regenerate: realRegenerate };
+    });
+    desktop.stub('generateLessonDraft', async payload => { window.__providerCalls.push({ kind: 'generate', ...payload }); throw new Error('[AI_CANCELLED] stop'); });
+    desktop.stub('regenerateLessonItem', async payload => { window.__providerCalls.push({ kind: 'regenerate', ...payload }); throw new Error('[AI_CANCELLED] stop'); });
     // DECISIONS #132 D16: entering step 2 refreshes the provider view. Answer with this
     // scenario's view so the step shows what the harness set up, not the real profile.
-    window.eduGameAiProviders = async () => JSON.parse(JSON.stringify(window.__providerView));
+    desktop.stub('getAiProviders', async () => JSON.parse(JSON.stringify(window.__providerView)));
     state.settings = JSON.parse(JSON.stringify(${JSON.stringify(view)}));
-    // The scenarios re-install this exact view (the bridge cannot be replaced).
-    window.__providerView = JSON.parse(JSON.stringify(${JSON.stringify(view)}));
-    window.__providerFake = {
-      analyzeLesson: window.eduGameAnalyzeOverride,
-      generateLessonDraft: window.eduGameGenerateOverride,
-      regenerateLessonItem: window.eduGameRegenerateOverride
-    };
     return { provider: state.settings.ai.provider, picker: state.settings.ai.picker };
   })()`;
 }
@@ -149,9 +127,13 @@ function installHarness(view, analyzeBehaviour = 'ok') {
   const localOnly = await cdp.evaluate(`(async () => {
     navigate('create-wizard');
     await new Promise(r => setTimeout(r, 400));
-    return { hasBridge: typeof window.eduGame.testAiProvider === 'function' };
+    return {
+      hasBridge: Boolean(DESKTOP_FACADE_SCHEMA.calls.testAiProvider),
+      shell: typeof desktop !== 'undefined' ? desktop.info().adapter : 'none'
+    };
   })()`);
-  check('the provider bridges exist in the real page', localOnly.hasBridge === true);
+  check('the provider calls are in the façade contract and the shell is attached',
+    localOnly.hasBridge === true && localOnly.shell === 'electron', JSON.stringify(localOnly));
 
   // 1. Two providers ready → the small picker appears on step 2 and step 5.
   const two = await cdp.evaluate(installHarness(providerView({ gemini: true })));

@@ -297,7 +297,7 @@ const READ = `(async () => {
     const el = g(id);
     return Boolean(el) && !el.classList.contains('hidden') && el.getClientRects().length > 0;
   };
-  const state = await window.eduGame.aboutState();
+  const state = await desktop.call('aboutState');
   return {
     ready: document.readyState,
     panelOpen: shown('settingsPanel-about'),
@@ -485,7 +485,7 @@ async function runScenario(name, probeId) {
   try {
     facts.bootMs = (await waitForCdp(CDP_PORT, 60000)).elapsedMs;
     page = await connectCdp(CDP_PORT);
-    const info = await page.evaluate(`(async () => await window.eduGame.aboutInfo())()`);
+    const info = await page.evaluate(`(async () => await desktop.call('aboutInfo'))()`);
     facts.version = info.version;
     facts.packaged = info.packaged;
     facts.userData = info.userDataPath;

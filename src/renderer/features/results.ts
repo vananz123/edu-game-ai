@@ -63,7 +63,7 @@ async function saveResultSession(game, summary, details, playerName, options) {
   const lanDetails = typeof lanCollectSessionPayload === 'function' ? lanCollectSessionPayload() : {};
   const payload = resultSessionPayload(game, summary, { ...details, ...lanDetails }, playerName || session.playerName);
   session.playerName = payload.playerName;
-  session.saving = window.eduGame.saveSession(payload)
+  session.saving = desktop.call('saveSession', payload)
     .then(async stored => {
       session.saved = stored;
       session.failed = false;

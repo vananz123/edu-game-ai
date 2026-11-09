@@ -2,8 +2,8 @@
 //
 // `tauri::generate_context!()` nhúng `frontendDist` vào binary LÚC BIÊN DỊCH, nên
 // dựng `dist-tauri` sau `cargo build --release` sẽ để binary phục vụ bản frontend
-// CŨ — UI vẫn mở nhưng cầu eduGame thiếu lệnh mới. Script này chỉ chạy công cụ,
-// còn frontend đã được `npm run build:tauri` dựng xong trước đó.
+// CŨ — UI vẫn mở nhưng thiếu script hoặc thiếu cửa chung mới. Script này chỉ chạy
+// công cụ, còn frontend đã được `npm run build:tauri` dựng xong trước đó.
 //
 //   node scripts/build-tauri-release.js [--debug] [--run] [--check] [--port <n>] [--profile <dir>]
 //
@@ -41,7 +41,8 @@ function cargo() {
 }
 
 function assertFreshFrontend() {
-  const dist = path.join(root, 'dist-tauri', 'edugame-bridge.js');
+  // Mốc là tệp cuối cùng `build-tauri-frontend.js` ghi: có nó nghĩa là gói mới.
+  const dist = path.join(root, 'dist-tauri', 'edugame-guard.js');
   if (!fs.existsSync(dist)) {
     console.error('Chưa có dist-tauri — chạy `npm run build:tauri` trước.');
     process.exit(1);

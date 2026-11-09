@@ -433,6 +433,7 @@ function lessonChatPanelHtml() {
 // ---------------------------------------------------------------------------
 
 let lessonChatProgressWired = false;
+let lessonChatProgressStop = null;
 
 function wireLessonChat() {
   wireLessonChatDocumentOnce();
@@ -480,9 +481,9 @@ function wireLessonChat() {
   });
   // O7 pattern (create-wizard.ts): subscribe once, filter by requestId, and write
   // the stage into the working bubble instead of re-rendering the whole page.
-  if (!lessonChatProgressWired && window.eduGame && typeof window.eduGame.onLessonProgress === 'function') {
+  if (!lessonChatProgressWired && desktop.info().adapter !== 'none') {
     lessonChatProgressWired = true;
-    window.eduGame.onLessonProgress(progress => {
+    lessonChatProgressStop = desktop.listen('onLessonProgress', progress => {
       if (!progress || progress.requestId !== lessonChatUi.requestId) return;
       lessonChatUi.stage = String(progress.stage || '');
       const host = document.querySelector('[data-lesson-chat-working]');
@@ -563,7 +564,7 @@ async function lessonChatHandle(action, element) {
     return true;
   }
   if (action === 'lesson-chat-stop') {
-    if (lessonChatUi.requestId) await window.eduGame.cancelAi(lessonChatUi.requestId);
+    if (lessonChatUi.requestId) await desktop.call('cancelAi', lessonChatUi.requestId);
     return true;
   }
   if (action === 'lesson-chat-game') {
@@ -575,7 +576,7 @@ async function lessonChatHandle(action, element) {
 
 async function lessonChatRefreshChats() {
   try {
-    lessonChatUi.chats = await window.eduGame.listLessonChats() || [];
+    lessonChatUi.chats = await desktop.call('listLessonChats') || [];
     lessonChatUi.chatsError = '';
   } catch (error) {
     lessonChatUi.chats = [];
@@ -591,7 +592,7 @@ async function lessonChatRefreshChats() {
 async function lessonChatOpen(chatId) {
   if (!chatId) return;
   try {
-    const chat = await window.eduGame.getLessonChat(chatId);
+    const chat = await desktop.call('getLessonChat', chatId);
     if (!chat) {
       toast('Không tìm thấy cuộc trò chuyện này.');
       await lessonChatRefreshChats();
@@ -618,7 +619,7 @@ async function lessonChatDelete(chatId) {
     return;
   }
   try {
-    const result = await window.eduGame.deleteLessonChats([chatId]);
+    const result = await desktop.call('deleteLessonChats', [chatId]);
     if (lessonChatUi.chatId === chatId) {
       lessonChatUi.chatId = '';
       lessonChatUi.chat = null;
@@ -651,9 +652,9 @@ function closeHistoryAndRefocusComposer() {
  */
 async function lessonChatImportDocument() {
   try {
-    const doc = await window.eduGame.importDocument();
+    const doc = await desktop.call('importDocument');
     if (!doc) return;
-    const stored = await window.eduGame.saveLessonDocument({
+    const stored = await desktop.call('saveLessonDocument', {
       name: doc.name,
       ext: (doc.name || '').split('.').pop() || 'txt',
       text: doc.text,
@@ -697,7 +698,7 @@ async function lessonChatSend() {
   lessonChatUi.pinned = true;
   render();
   try {
-    const turn = await window.eduGame.sendLessonChat({
+    const turn = await desktop.call('sendLessonChat', {
       chatId: lessonChatUi.chatId || '',
       documentIds: lessonChatUi.docIds.slice(),
       question,

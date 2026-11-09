@@ -80,11 +80,8 @@ function playGame(game, options = {}) {
 }
 /** Read display info from the main process; null means unknown (treat as one screen). */
 async function getDisplayInfo() {
-    const eduGame = window.eduGame;
-    if (!eduGame || typeof eduGame.getDisplays !== 'function')
-        return null;
     try {
-        const result = await eduGame.getDisplays();
+        const result = await desktop.call('getDisplays');
         if (!result || !result.ok || !result.data)
             return null;
         return result.data;
@@ -123,7 +120,7 @@ async function playGameFullscreen(game) {
 // onFullscreenChanged, so the flag only reflects what really happened.
 async function setPlayFullscreen(enabled) {
     try {
-        const result = await window.eduGame.setFullscreen(Boolean(enabled));
+        const result = await desktop.call('setFullscreen', Boolean(enabled));
         if (result && result.ok)
             return true;
     }
@@ -131,11 +128,9 @@ async function setPlayFullscreen(enabled) {
     toast('Không đổi được chế độ toàn màn hình. Hãy thử lại.', 5000);
     return false;
 }
-if (window.eduGame && typeof window.eduGame.onFullscreenChanged === 'function') {
-    window.eduGame.onFullscreenChanged((enabled) => {
-        document.documentElement.dataset.fullscreen = enabled ? '1' : '0';
-    });
-}
+desktop.listen('onFullscreenChanged', (enabled) => {
+    document.documentElement.dataset.fullscreen = enabled ? '1' : '0';
+});
 // Leaving the play surface must also release the window back to normal size.
 function closePlaySurface() {
     // `data-fullscreen` is updated by the main process.  Do not send a second

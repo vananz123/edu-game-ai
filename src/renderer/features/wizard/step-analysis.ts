@@ -313,7 +313,7 @@ async function wizardAnalyzeRun(force, providerId) {
   let result = null;
   let failure = null;
   try {
-    result = await window.eduGame.analyzeLesson({
+    result = await desktop.call('analyzeLesson', {
       documentId: wizardState.documentId,
       projectId: wizardState.projectId || undefined,
       analysisId: wizardState.analysisId || undefined,
@@ -394,7 +394,7 @@ async function wizardAnalyzeNext() {
   wizardState.quick = null;
   render();
   try {
-    wizardState.analysis = await window.eduGame.saveLessonAnalysis(wizardState.analysis);
+    wizardState.analysis = await desktop.call('saveLessonAnalysis', wizardState.analysis);
     wizardState.step = 'recommend';
     await wizardSaveProject('recommend');
     wizardSetNotice('Đã lưu phân tích. Bước tiếp theo: chọn thể loại trò chơi.');
@@ -409,7 +409,7 @@ async function wizardAnalyzeCancel() {
   const requestId = wizardState.activeRequestId;
   if (!requestId) return;
   try {
-    await window.eduGame.cancelAi(requestId);
+    await desktop.call('cancelAi', requestId);
   } catch {
     /* cancelling is best-effort */
   }
@@ -473,8 +473,8 @@ async function wizardQuickGenerate() {
   render();
   try {
     // Teacher edits must be stored before the rule-based recommender reads them.
-    s.analysis = await window.eduGame.saveLessonAnalysis(s.analysis);
-    const result = await window.eduGame.recommendGames({
+    s.analysis = await desktop.call('saveLessonAnalysis', s.analysis);
+    const result = await desktop.call('recommendGames', {
       analysisId: s.analysisId,
       projectId: s.projectId || undefined,
       requestId: wizardNewRequestId('recommend')

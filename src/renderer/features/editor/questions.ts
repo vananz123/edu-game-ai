@@ -164,7 +164,7 @@ function editorItemArtValue(row) {
 
 /** The one call that opens the file dialog for the editor (a seam for the UI check). */
 function editorImportIllustration() {
-  return window.eduGame.importIllustration();
+  return desktop.call('importIllustration');
 }
 
 /** Writes the choice to the hidden input, then redraws the control from that input. */

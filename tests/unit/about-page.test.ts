@@ -36,6 +36,15 @@ for (const file of [SHARED_JS, PANEL_JS]) {
 }
 
 const panelSource = fs.readFileSync(PANEL_JS, 'utf8');
+// Giai đoạn 2: panel nói với façade (`desktop.call` / `desktop.listen`), không với
+// `window.eduGame`. Suite nạp đúng bốn tệp façade mà index.html nạp rồi cắm adapter
+// Electron thật trên cầu giả — nên nó đo cả adapter lẫn panel.
+const FACADE_FILES = ['desktop-facade-schema.js', 'desktop-adapter-electron.js', 'desktop-adapter-tauri.js', 'desktop-facade.js'];
+const facadeSources = FACADE_FILES.map(name => {
+  const file = path.join(DIST, 'renderer', 'core', name);
+  assert.ok(fs.existsSync(file), `${name} is missing — run npm run build`);
+  return fs.readFileSync(file, 'utf8');
+});
 
 /** Bản `UpdateState` hợp lệ, có thể ghi đè từng trường. */
 function updateState(over = {}) {
@@ -94,13 +103,17 @@ function boot(behaviour = {}) {
   });
   const win = dom.window;
   const doc = win.document;
-  // Đúng thứ tự index.html: shared.js trước, panel sau — hai `<script>` cổ điển chia nhau
-  // global lexical scope, nên `escapeHtml` và `state` panel đọc được như ngoài đời.
-  for (const source of [fs.readFileSync(SHARED_JS, 'utf8'), panelSource]) {
+  // Đúng thứ tự index.html: façade trước, rồi shared.js, rồi panel. Lưu ý: mọi tệp renderer
+  // là lệnh "kinh điển" chia nhau MỘT phạm vi lệnh cấp cao nhất; jsdom chạy mỗi thẻ
+  // `<script>` bằng `eval` riêng nên `const desktop` của façade không lọt sang thẻ sau.
+  // Nối bốn tệp façade thành một thẻ duy nhất để giữ đúng phạm vi đó.
+  const head = facadeSources.join('\n') + '\n' + fs.readFileSync(SHARED_JS, 'utf8');
+  for (const source of [head, panelSource]) {
     const tag = doc.createElement('script');
     tag.textContent = source;
     doc.head.appendChild(tag);
   }
+  if (!behaviour.noApi) win.eval("desktop.attach(createElectronDesktopAdapter('eduGame'));");
   if (behaviour.mount !== false) {
     // Controller dựng trang Cài đặt, sau đó `wire()` gọi `wireAboutPanel()`. Panel ẩn
     // (tab khác đang mở) cho tới khi test yêu cầu hiện.

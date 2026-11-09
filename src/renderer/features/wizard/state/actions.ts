@@ -40,7 +40,7 @@ async function wizardConvertOrDiscardForGenre(target) {
     : wizardConfigForImportedQuestions(target);
   let converted = null;
   try {
-    converted = await window.eduGame.convertLessonDraft({ draft: source, target, config });
+    converted = await desktop.call('convertLessonDraft', { draft: source, target, config });
   } catch {
     // A failed conversion is treated like "cannot convert": never block the click.
     converted = null;
@@ -123,7 +123,7 @@ async function wizardStartAnotherGame() {
       try {
         // No projectId: this only fills the deterministic suggestion list. The
         // new project stays at `recommend` until the teacher picks a genre.
-        const result = await window.eduGame.recommendGames({
+        const result = await desktop.call('recommendGames', {
           analysisId: wizardState.analysisId,
           requestId: wizardNewRequestId('recommend')
         });
@@ -187,7 +187,7 @@ async function wizardSaveGameToLibrary() {
   wizardClearMessages();
   render();
   try {
-    const saved = await window.eduGame.saveGame(game);
+    const saved = await desktop.call('saveGame', game);
     wizardState.gameSnapshot = saved;
     wizardState.gameId = saved.id;
     await wizardSaveProject('done');
@@ -205,7 +205,7 @@ async function wizardSaveGameToLibrary() {
 
 async function wizardRefreshProjects() {
   try {
-    wizardState.projects = await window.eduGame.listProjects();
+    wizardState.projects = await desktop.call('listProjects');
   } catch {
     wizardState.projects = [];
   }
@@ -214,7 +214,7 @@ async function wizardRefreshProjects() {
 
 /** Reopens a draft from the store without calling AI. */
 async function wizardOpenProject(projectId) {
-  const project = await window.eduGame.getProject(projectId);
+  const project = await desktop.call('getProject', projectId);
   if (!project) throw new Error('Không tìm thấy dự án để mở.');
   wizardReset();
   wizardState.projectId = project.id;
@@ -235,9 +235,9 @@ async function wizardOpenProject(projectId) {
   // accepted its item count, so never rewrite it automatically.
   wizardState.countTouched = Boolean(project.draft || project.gameSnapshot);
   wizardState.quick = null;
-  if (project.draft && project.config && typeof window.eduGame.checkLessonQuality === 'function') {
+  if (project.draft && project.config) {
     try {
-      wizardState.quality = await window.eduGame.checkLessonQuality({ projectId: project.id });
+      wizardState.quality = await desktop.call('checkLessonQuality', { projectId: project.id });
     } catch {
       wizardState.quality = null;
     }
@@ -247,7 +247,7 @@ async function wizardOpenProject(projectId) {
 
   if (project.lesson) {
     try {
-      const document = await window.eduGame.getLessonDocument(project.lesson.documentId);
+      const document = await desktop.call('getLessonDocument', project.lesson.documentId);
       if (document) {
         wizardState.text = document.text || '';
         wizardState.documentMeta = { characters: document.characters, ext: document.ext, sizeBytes: document.sizeBytes };
@@ -261,9 +261,9 @@ async function wizardOpenProject(projectId) {
     }
   }
   if (project.analysisId) {
-    wizardState.analysis = await window.eduGame.getLessonAnalysis(project.analysisId);
+    wizardState.analysis = await desktop.call('getLessonAnalysis', project.analysisId);
     wizardState.analysisOriginal = wizardState.analysis;
-    wizardState.recommendations = await window.eduGame.getLessonRecommendations(project.analysisId);
+    wizardState.recommendations = await desktop.call('getLessonRecommendations', project.analysisId);
     if (project.recommendationId) {
       const chosen = wizardState.recommendations.find(item => item.id === project.recommendationId);
       wizardState.selectedGameType = chosen ? chosen.gameType : (project.config ? project.config.gameType : null);
@@ -280,9 +280,9 @@ async function wizardOpenProject(projectId) {
  * game from it.
  */
 async function wizardLoadSavedLesson(documentId, analysisId) {
-  const document = await window.eduGame.getLessonDocument(documentId);
+  const document = await desktop.call('getLessonDocument', documentId);
   if (!document) throw new Error('Không tìm thấy tệp giáo án đã lưu. Hãy nhập lại tài liệu nguồn.');
-  const analysis = analysisId ? await window.eduGame.getLessonAnalysis(analysisId) : null;
+  const analysis = analysisId ? await desktop.call('getLessonAnalysis', analysisId) : null;
   if (analysisId && (!analysis || analysis.documentId !== document.id)) {
     throw new Error('Không tìm thấy kết quả phân tích của giáo án này.');
   }
@@ -299,7 +299,7 @@ async function wizardLoadSavedLesson(documentId, analysisId) {
     wizardState.analysis = analysis;
     wizardState.analysisOriginal = analysis;
     wizardState.analysisId = analysis.id;
-    wizardState.recommendations = await window.eduGame.getLessonRecommendations(analysis.id);
+    wizardState.recommendations = await desktop.call('getLessonRecommendations', analysis.id);
     wizardState.step = 'analyze';
   } else {
     wizardState.step = 'input';
@@ -338,8 +338,8 @@ async function wizardCreateGameFromSavedLesson(documentId, analysisId) {
     const { analysis } = await wizardLoadSavedLesson(documentId, analysisId);
     if (!analysis) throw new Error('Giáo án này chưa có kết quả phân tích. Hãy phân tích trước khi tạo trò chơi.');
     if (!wizardState.recommendations.length) {
-      await window.eduGame.recommendGames({ analysisId: analysis.id });
-      wizardState.recommendations = await window.eduGame.getLessonRecommendations(analysis.id);
+      await desktop.call('recommendGames', { analysisId: analysis.id });
+      wizardState.recommendations = await desktop.call('getLessonRecommendations', analysis.id);
     }
     wizardState.step = 'recommend';
     wizardState.projectId = wizardNewProjectId();
@@ -352,4 +352,4 @@ async function wizardCreateGameFromSavedLesson(documentId, analysisId) {
   wizardState.busy = '';
   render();
   return undefined;
-}
+}

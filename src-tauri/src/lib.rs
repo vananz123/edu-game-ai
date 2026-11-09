@@ -12,6 +12,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             api::app_info,
             api::shell_info,
+            // Giai đoạn 2: hai cửa chung cho façade renderer (xem api.rs đầu tệp).
+            api::invoke_channel,
+            api::send_channel,
             api::get_library,
             api::get_settings,
             api::get_local_ai_models,

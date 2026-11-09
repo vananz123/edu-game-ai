@@ -106,6 +106,7 @@ function renderCreateWizard() {
 
 /** O7: one listener for `lesson:progress`, registered on the first mount. */
 let wizardProgressWired = false;
+let wizardProgressStop = null;
 
 function wizardSyncDocFromDom() {
   const text = document.getElementById('wizardDocText');
@@ -134,9 +135,9 @@ function wireCreateWizard() {
   root.addEventListener('change', wizardHandleChange);
   // O7: subscribe once. Events are filtered by requestId, so a cancelled run
   // cannot move the stages of the next one.
-  if (!wizardProgressWired && window.eduGame && typeof window.eduGame.onLessonProgress === 'function') {
+  if (!wizardProgressWired && desktop.info().adapter !== 'none') {
     wizardProgressWired = true;
-    window.eduGame.onLessonProgress(progress => {
+    wizardProgressStop = desktop.listen('onLessonProgress', progress => {
       if (!progress || progress.requestId !== wizardState.activeRequestId) return;
       const stage = String(progress.stage || '');
       if (!stage) return;

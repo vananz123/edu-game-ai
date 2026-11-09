@@ -72,7 +72,7 @@ async function wizardUseImportedQuestions(gameType, provenance) {
     const source = wizardImportedSourceDraft(usable);
     let draft = target === 'arena' ? source : null;
     if (!draft) {
-      const converted = await window.eduGame.convertLessonDraft({ draft: source, target, config });
+      const converted = await desktop.call('convertLessonDraft', { draft: source, target, config });
       draft = converted && converted.draft ? converted.draft : null;
       if (draft && converted.gaps && converted.gaps.length) {
         wizardSetNotice(`Đã chuyển ${converted.converted} câu. Phần chưa chuyển được: ${converted.gaps.map(gap => gap.reason).join(' ')}`);
@@ -227,7 +227,7 @@ async function wizardBuildGameAfterSave(target, draft, config) {
   // awaits the save: the call site reads "save, then build", and a failure here cannot
   // be mistaken for a failed save.
   if (!draft) return null;
-  const saved = await window.eduGame.generateLessonDraft({
+  const saved = await desktop.call('generateLessonDraft', {
     projectId: wizardState.projectId,
     requestId: wizardNewRequestId('bank'),
     mode: config.generationMode || 'fast',
@@ -241,7 +241,7 @@ async function wizardBuildGameAfterSave(target, draft, config) {
   if (draft.gameType === 'arena' && saved && saved.game) return saved.game;
   // Any other genre is a different template: build it from its converted draft with the
   // same pure converter the "change genre" path uses.
-  const converted = await window.eduGame.convertLessonDraft({ draft, target: draft.gameType, config });
+  const converted = await desktop.call('convertLessonDraft', { draft, target: draft.gameType, config });
   return converted && converted.game ? converted.game : (saved && saved.game ? saved.game : null);
 }
 
@@ -355,10 +355,10 @@ async function wizardSaveProject(step) {
     wizardState.createdAt = wizardNow();
   }
   const project = wizardBuildProject(step);
-  const saved = await window.eduGame.saveProjectDraft(project);
+  const saved = await desktop.call('saveProjectDraft', project);
   wizardState.projectId = saved.id;
   wizardState.createdAt = saved.createdAt || wizardState.createdAt;
-  wizardState.projects = await window.eduGame.listProjects();
+  wizardState.projects = await desktop.call('listProjects');
   wizardState.projectsLoaded = true;
   return saved;
 }
@@ -427,13 +427,13 @@ let wizardCapacityInflight = '';
 async function wizardEnsureCapacity() {
   const s = wizardState;
   const config = s.config;
-  if (!config || !s.projectId || typeof window.eduGame.estimateLessonCapacity !== 'function') return;
+  if (!config || !s.projectId) return;
   const key = `${s.projectId}|${config.gameType}|${config.generationMode}`;
   if (s.capacity && s.capacity.key === key) return;
   if (wizardCapacityInflight === key) return;
   wizardCapacityInflight = key;
   try {
-    const estimate = await window.eduGame.estimateLessonCapacity({
+    const estimate = await desktop.call('estimateLessonCapacity', {
       projectId: s.projectId,
       gameType: config.gameType,
       mode: config.generationMode

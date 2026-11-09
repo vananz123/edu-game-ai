@@ -117,6 +117,8 @@ có yêu cầu tương thích cụ thể và đã đánh giá chi phí/bảo m�
 
 ### Giai đoạn 2 — Tách API desktop khỏi renderer
 
+**Trạng thái: XONG (2026-11-09, DECISIONS "Giai đoạn 2").** Façade năm tệp trong `src/renderer/core/`, `desktop.stub` cho cổng UI, `invoke_channel`/`send_channel` trong `api.rs`; cầu `edugame-bridge.js` đã gỡ khỏi gói Tauri. Cả ba cổng hoàn tất ĐẠT — xem mục "Kiểm chứng" của quyết định. Lưu ý cho người đọc lại: adapter Tauri phải gửi **chuỗi kênh hợp đồng** (`app:info`), không phải tên khoá façade (`appInfo`).
+
 **Công việc**
 
 1. Thiết kế facade TypeScript có hợp đồng rõ ràng cho các nhóm:

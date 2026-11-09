@@ -434,10 +434,7 @@ function renderPresentation(state) {
   const exitBtn = document.getElementById('presentationExitBtn');
   if (exitBtn) {
     exitBtn.onclick = () => {
-      const eduGame = window.eduGame;
-      if (eduGame && typeof eduGame.sendPresentationExit === 'function') {
-        eduGame.sendPresentationExit({ sessionId: state.sessionId });
-      }
+      sendPresentationExit({ sessionId: state.sessionId });
     };
   }
 }
@@ -450,12 +447,21 @@ function syncState(state) {
   renderPresentation(state);
 }
 
+/**
+ * `sendPresentationExit` là kênh GỬI (không chờ kết quả). Cửa sổ trình chiếu chỉ
+ * dùng được khi vỏ có kênh đó; `not-supported` (Tauri giai đoạn 2 chưa có
+ * `send_channel`) chỉ có nghĩa là không ai nhận tin — cửa sổ vẫn đóng bình thường.
+ */
+function sendPresentationExit(payload) {
+  desktop.call('sendPresentationExit', payload).catch((error) => {
+    if (error && error.code === 'not-supported') return;
+    console.error('Không gửi được yêu cầu thoát trình chiếu', error);
+  });
+}
+
 /** Close presentation and notify main process. */
 function closePresentation() {
-  const eduGame = window.eduGame;
-  if (eduGame && typeof eduGame.sendPresentationExit === 'function') {
-    eduGame.sendPresentationExit({ sessionId: currentState?.sessionId ?? '' });
-  }
+  sendPresentationExit({ sessionId: currentState?.sessionId ?? '' });
   window.close();
 }
 
@@ -463,19 +469,26 @@ function closePresentation() {
 function initPresentation() {
   if (!isPresentationMode()) return;
 
-  const eduGame = window.eduGame;
-  if (!eduGame) {
-    console.error('eduGame API not available in presentation window.');
+  const chosen = desktopCoreChooseAdapter(window);
+  if (!chosen) {
+    console.error('Không có cầu desktop trong cửa sổ trình chiếu.');
     return;
   }
+  desktop.attach(chosen.adapter);
 
-  eduGame.onPresentationState?.((state) => {
+  desktop.listen('onPresentationState', (state) => {
     syncState(state);
   });
 
-  eduGame.onPresentationExit?.(() => {
-    closePresentation();
-  });
+  // Vỏ chưa nối kênh `presentation:exit` (ví dụ Tauri giai đoạn 2): tin "thoát"
+  // sẽ không bao giờ tới, nhưng Esc trong chính cửa sổ này vẫn phải chạy.
+  try {
+    desktop.listen('onPresentationExit', () => {
+      closePresentation();
+    });
+  } catch (error) {
+    console.error('Cửa sổ trình chiếu chưa nhận được sự kiện thoát', error);
+  }
 
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
@@ -484,9 +497,10 @@ function initPresentation() {
     }
   });
 
-  if (typeof eduGame.requestPresentationState === 'function') {
-    eduGame.requestPresentationState();
-  }
+  desktop.call('requestPresentationState').catch((error) => {
+    if (error && error.code === 'not-supported') return;
+    console.error('Không xin được trạng thái trình chiếu', error);
+  });
 }
 
 initPresentation();

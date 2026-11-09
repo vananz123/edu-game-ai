@@ -45,10 +45,10 @@ function openLocalAiModal() {
 }
 async function refreshLocalAiState() {
   try {
-    const result = await window.eduGame.getLocalAiModels();
+    const result = await desktop.call('getLocalAiModels');
     state.localAiModels = result.models;
     state.localAiMachine = result.machine;
-    state.settings = await window.eduGame.getSettings();
+    state.settings = await desktop.call('getSettings');
   } catch (error) {
     toast(error.message || 'Không nạp được danh sách AI local.');
   }
@@ -66,7 +66,7 @@ async function installLocalModel(requestedModelId) {
     ? $(`[data-local-progress="${modelId}"]`)
     : $('#localAiProgress');
   if (button) { button.disabled = true; button.textContent = 'Đang tải…'; }
-  const unsubscribe = window.eduGame.onLocalAiProgress(value => {
+  const unsubscribe = desktop.listen('onLocalAiProgress', value => {
     if (value.stage === 'starting') {
       const modalProgress = $('#localModalProgress');
       if (modalProgress?.isConnected) modalProgress.textContent = 'Đang khởi động llama.cpp…';
@@ -79,10 +79,10 @@ async function installLocalModel(requestedModelId) {
     progress.textContent = `${phase}: ${formatBytes(value.receivedBytes)} / ${formatBytes(value.totalBytes)} (${percent}%)`;
   });
   try {
-    const result = await window.eduGame.installLocalAiModel(modelId);
+    const result = await desktop.call('installLocalAiModel', modelId);
     state.localAiModels = result.models.models;
     state.localAiMachine = result.models.machine;
-    state.settings = await window.eduGame.getSettings();
+    state.settings = await desktop.call('getSettings');
     if (state.page === 'create' && !inModal) {
       state.draft = { ...collectDraft(), localModelId: modelId, mode: 'local' };
       render();
@@ -125,10 +125,10 @@ async function startLocalRuntimeFromModal() {
   if (startBtn) { startBtn.disabled = true; startBtn.textContent = 'Đang khởi động llama.cpp…'; }
   if (progress) progress.textContent = 'Đang khởi động llama.cpp trên CPU; lần đầu có thể mất vài phút…';
   try {
-    const result = await window.eduGame.startLocalRuntime(modelId);
+    const result = await desktop.call('startLocalRuntime', modelId);
     state.localAiModels = result.models.models;
     state.localAiMachine = result.models.machine;
-    state.settings = await window.eduGame.getSettings();
+    state.settings = await desktop.call('getSettings');
     if (state.page === 'create') state.draft = { ...collectDraft(), localModelId: modelId, mode: 'local', assistMode: 'local' };
     root.innerHTML = '';
     if (state.page === 'create') render();
@@ -151,7 +151,7 @@ async function startLocalRuntimeFromModal() {
 }
 async function stopLocalRuntimeFromModal() {
   try {
-    const result = await window.eduGame.stopLocalRuntime();
+    const result = await desktop.call('stopLocalRuntime');
     state.localAiModels = result.models.models;
     state.localAiMachine = result.models.machine;
     $('#modalRoot').innerHTML = '';

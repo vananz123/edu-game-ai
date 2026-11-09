@@ -266,7 +266,7 @@ const READ = `(async () => {
   const shown = el => Boolean(el) && !el.classList.contains('hidden') && el.getClientRects().length > 0;
   const app = state;
   const bar = g('aboutProgressFill');
-  const update = await window.eduGame.aboutState();
+  const update = await desktop.call('aboutState');
   const view = window.aboutPanelSnapshot();
   const chipSlot = document.querySelector('[data-about-tab-chip]');
   return {
@@ -317,7 +317,7 @@ const phaseOf = dom => (dom && dom.state && dom.state.phase) || '';
 async function settleBeforeClick(page, timeoutMs = 60000) {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
-    const update = await page.evaluate(`(async () => await window.eduGame.aboutState())()`);
+    const update = await page.evaluate(`(async () => await desktop.call('aboutState'))()`);
     if (update.phase !== 'checking' || Date.now() > deadline) return update;
     await wait(200);
   }
@@ -449,17 +449,26 @@ function report() {
   check('the standalone About files are deleted from src', retired.source.length === 0, retired.source.join(', '));
   check('the build emits no About window assets', retired.built.length === 0, retired.built.join(', '));
 
+  // #259/#260: renderer gọi qua façade `desktop.*`, không còn `window.eduGame`.
+  // Cổng chốt đúng bảy lời gọi của tab Giới thiệu có trong hợp đồng, và rằng
+  // đường cầu cũ đã rời khỏi renderer (bản thân preload vẫn expose nó cho các
+  // tệp chưa chuyển, nhưng panel này không được chạm tới).
   const bridge = await main.evaluate(`(() => {
-    const api = window.eduGame || {};
+    const calls = ['openAbout', 'aboutInfo', 'aboutState', 'aboutCheck', 'aboutDownload', 'aboutInstall',
+      'aboutOpenReleases', 'onAboutState'];
     return {
       aboutAPI: typeof window.aboutAPI,
-      names: ['openAbout', 'aboutInfo', 'aboutState', 'aboutCheck', 'aboutDownload', 'aboutInstall',
-        'aboutOpenReleases', 'onAboutState'].filter(name => typeof api[name] === 'function'),
+      names: calls.filter(name => {
+        try { return Boolean(DESKTOP_FACADE_SCHEMA.calls[name]); } catch (error) { return false; }
+      }),
+      adapter: desktop.info().adapter,
       panel: typeof window.aboutPanelHtml,
       snapshot: typeof window.aboutPanelSnapshot
     };
   })()`);
-  check('the About bridge now lives on window.eduGame', bridge.names.length === 8, JSON.stringify(bridge.names));
+  check('the About calls live in the desktop façade contract', bridge.names.length === 8, JSON.stringify(bridge.names));
+  check('the panel talks to the desktop façade, not window.eduGame',
+    bridge.adapter === 'electron', String(bridge.adapter));
   check('the retired second-window preload is not loaded anywhere',
     bridge.aboutAPI === 'undefined', String(bridge.aboutAPI));
   check('the panel module is reachable as a renderer global',
@@ -564,7 +573,7 @@ function report() {
     JSON.stringify({ before: beforeManual, after: feed.counts.latest, phase: manual.state.phase }));
 
   // 5. Thông tin ứng dụng qua `about:info` — cùng hộ chiếu dữ liệu như cửa sổ cũ.
-  const info = await main.evaluate(`(async () => await window.eduGame.aboutInfo())()`);
+  const info = await main.evaluate(`(async () => await desktop.call('aboutInfo'))()`);
   const ALLOWLIST = ['name', 'version', 'description', 'author', 'license', 'packaged', 'electron', 'chrome',
     'node', 'platform', 'arch', 'userDataPath', 'releasePageUrl'];
   check('about:info carries nothing beyond the allowlist',

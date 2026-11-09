@@ -133,7 +133,7 @@ const READ = `(async () => {
   // lớp about-hidden riêng của cửa sổ cũ.
   const shown = el => Boolean(el) && !el.classList.contains('hidden') && el.getClientRects().length > 0;
   const panel = g('settingsPanel-about');
-  const state = await window.eduGame.aboutState();
+  const state = await desktop.call('aboutState');
   return {
     panelOpen: shown(panel),
     badge: g('aboutStatusText') ? g('aboutStatusText').textContent.trim() : '',
@@ -253,7 +253,7 @@ function report() {
   if (!opened) report();
 
   const about = main;
-  const info = await about.evaluate(`(async () => await window.eduGame.aboutInfo())()`);
+  const info = await about.evaluate(`(async () => await desktop.call('aboutInfo'))()`);
 
   // 1. Đúng binary đã phát hành, không phải bản dev đội lốt.
   check('the app reports itself packaged', info.packaged === true, JSON.stringify({ packaged: info.packaged }));

@@ -388,7 +388,7 @@ function wizardAiReadinessHint() {
 
 async function wizardInputImportFile() {
   try {
-    const document = await window.eduGame.importDocument();
+    const document = await desktop.call('importDocument');
     if (!document) return; // dialog cancelled
     wizardState.text = document.text || '';
     wizardState.documentName = document.name || 'giao-an.txt';
@@ -483,7 +483,7 @@ async function wizardInputNextLesson() {
   render();
   try {
     const name = (wizardState.documentName || '').trim() || `giao-an-${Date.now()}.txt`;
-    const document = await window.eduGame.saveLessonDocument({
+    const document = await desktop.call('saveLessonDocument', {
       documentId: wizardState.documentId || undefined,
       name,
       ext: (name.split('.').pop() || 'txt').toLowerCase(),

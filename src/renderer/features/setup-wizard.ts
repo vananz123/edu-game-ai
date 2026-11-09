@@ -8,7 +8,7 @@
  * button in `pages/settings.ts`, so there is exactly one implementation of the
  * flow. Everything the teacher sees is decided by `resolveWizardView()`; this
  * file maps that view onto the app's existing `.modal` / `.btn` / `.info-box`
- * styling and talks to `window.eduGame`.
+ * styling and talks to the desktop facade (`desktop`, nhóm `app`).
  *
  * Guarantees:
  *   - no inline event handlers (the app has a strict CSP: `script-src 'self'`);
@@ -266,8 +266,8 @@ function scheduleSetupWizardFrame(callback) {
  */
 function ensureSetupProgressSubscription() {
   if (setupWizardState.unsubscribeProgress) return;
-  if (typeof window.eduGame?.onSetupProgress !== 'function') return;
-  setupWizardState.unsubscribeProgress = window.eduGame.onSetupProgress(progress => {
+  if (desktop.info().adapter === 'none') return;
+  setupWizardState.unsubscribeProgress = desktop.listen('onSetupProgress', progress => {
     if (!setupWizardState.open) return;
     setupWizardState.progress = progress;
     // The step in a byte event is authoritative while a run is going: the
@@ -298,7 +298,7 @@ function releaseSetupProgressSubscription() {
  */
 async function refreshSetupWizardStatus() {
   try {
-    const status = await window.eduGame.getSetupStatus();
+    const status = await desktop.call('getSetupStatus');
     setupWizardState.status = status;
     if (status?.modelId) setupWizardState.modelId = status.modelId;
   } catch (error) {
@@ -317,7 +317,7 @@ async function refreshSetupWizardStatus() {
  * Preflight never downloads, so this is safe on every open.
  */
 async function runSetupWizardPreflight() {
-  if (typeof window.eduGame?.preflightSetup !== 'function') return;
+  if (desktop.info().adapter === 'none') return;
   setupWizardState.preflightPending = true;
   setupWizardState.error = null;
   renderSetupWizard();
@@ -325,7 +325,7 @@ async function runSetupWizardPreflight() {
     // An absent `modelId` lets `setup-ipc` apply the hardware recommendation;
     // sending a stale pin would override it.
     const payload = setupWizardState.modelId ? { modelId: setupWizardState.modelId } : {};
-    setupWizardState.status = await window.eduGame.preflightSetup(payload);
+    setupWizardState.status = await desktop.call('preflightSetup', payload);
   } catch (error) {
     setupWizardState.error = { message: String((error && error.message) || 'Không kiểm tra được máy.') };
   } finally {
@@ -420,7 +420,7 @@ async function startSetupFromWizard() {
     // (`busy`), so a rejection is expected there and is handled below.
     // Omitted when unknown, so main applies the same recommendation `preflight` used.
     const payload = setupWizardState.modelId ? { modelId: setupWizardState.modelId } : {};
-    const status = await window.eduGame.startSetup(payload);
+    const status = await desktop.call('startSetup', payload);
     setupWizardState.status = status;
   } catch (error) {
     // The orchestrator records its own failure and `start` rejects with the
@@ -442,7 +442,7 @@ async function startSetupFromWizard() {
     // becomes available), so refresh the screens that show it.
     if (setupWizardState.status?.complete) {
       try {
-        const localAi = await window.eduGame.getLocalAiModels();
+        const localAi = await desktop.call('getLocalAiModels');
         state.localAiModels = localAi.models;
         state.localAiMachine = localAi.machine;
         if (typeof window.refreshAiStatusBar === 'function') window.refreshAiStatusBar();
@@ -458,7 +458,7 @@ async function cancelSetupFromWizard() {
   setupWizardState.busy = true;
   renderSetupWizard();
   try {
-    setupWizardState.status = await window.eduGame.cancelSetup();
+    setupWizardState.status = await desktop.call('cancelSetup');
     setupWizardState.progress = undefined;
   } catch (error) {
     setupWizardState.error = { message: String((error && error.message) || 'Không hủy được cài đặt.') };

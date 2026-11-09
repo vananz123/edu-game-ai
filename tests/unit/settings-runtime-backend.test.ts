@@ -29,6 +29,12 @@ for (const file of [SHARED_JS, SETTINGS_JS]) {
 }
 
 const settingsSource = fs.readFileSync(SETTINGS_JS, 'utf8');
+const FACADE_FILES = ['desktop-facade-schema.js', 'desktop-adapter-electron.js', 'desktop-adapter-tauri.js', 'desktop-facade.js'];
+function readFacade(name) {
+  const file = path.join(DIST, 'renderer', 'core', name);
+  assert.ok(fs.existsSync(file), `${name} is missing — run npm run build`);
+  return fs.readFileSync(file, 'utf8');
+}
 
 /** Trang Cài đặt tối thiểu: đúng những id mà `saveSettings`/`testAiProvider` đọc. */
 function pageHtml(selectValue) {
@@ -75,11 +81,14 @@ function boot(selectValue) {
     }
   });
   const doc = dom.window.document;
-  for (const source of [fs.readFileSync(SHARED_JS, 'utf8'), settingsSource]) {
-    const tag = doc.createElement('script');
-    tag.textContent = source;
-    doc.head.appendChild(tag);
-  }
+  // Giai đoạn 2: settings.js nói với façade, không với `window.eduGame`. jsdom chạy mỗi
+  // thẻ `<script>` bằng `eval` riêng, trong khi ngoài đời mọi tệp renderer chia nhau MỘT
+  // phạm vi lệnh — nên façade + shared.js phải nằm chung một thẻ.
+  const head = [...FACADE_FILES.map(readFacade), fs.readFileSync(SHARED_JS, 'utf8')].join('\n');
+  const tag = doc.createElement('script');
+  tag.textContent = head + '\n' + settingsSource;
+  doc.head.appendChild(tag);
+  dom.window.eval("desktop.attach(createElectronDesktopAdapter('eduGame'));");
   return { dom, win: dom.window, doc, saves };
 }
 

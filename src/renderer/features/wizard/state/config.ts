@@ -126,7 +126,7 @@ async function wizardClassifyInput() {
   const requestId = (wizardState.classifySeq || 0) + 1;
   wizardState.classifySeq = requestId;
   try {
-    const result = await window.eduGame.classifyLessonInput({ text });
+    const result = await desktop.call('classifyLessonInput', { text });
     if (wizardState.classifySeq !== requestId) return null;
     wizardState.inputClassification = result.classification || null;
     wizardState.inputSemantic = result.semantic || null;

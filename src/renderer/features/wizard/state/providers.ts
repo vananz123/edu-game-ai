@@ -74,7 +74,7 @@ async function wizardSyncProviders() {
   if (wizardState.providerSyncInFlight === true) return;
   wizardState.providerSyncInFlight = true;
   try {
-    const view = await window.eduGame.getAiProviders();
+    const view = await desktop.call('getAiProviders');
     if (view && view.ai) {
       state.settings.ai = view.ai;
       render();

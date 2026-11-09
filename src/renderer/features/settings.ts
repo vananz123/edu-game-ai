@@ -66,8 +66,8 @@ async function saveSettings() {
   // `providers[id].apiKey`, and that is decided above.
   delete settings.ai.apiKey;
   delete settings.ai.apiKeyEncrypted;
-  const result = await window.eduGame.saveSettings(settings);
-  state.settings = (result && result.settings) || await window.eduGame.getSettings();
+  const result = await desktop.call('saveSettings', settings);
+  state.settings = (result && result.settings) || await desktop.call('getSettings');
   applyTheme(state.settings && state.settings.preferences && state.settings.preferences.theme);
   if (state.draft) {
     state.draft = {
@@ -106,12 +106,12 @@ async function testAiProvider(providerId) {
     // Save what the form shows first: a test must check the values the teacher sees,
     // not the previous saved state. `runtimeBackend` travels with it: this save used
     // to omit the key, which dropped a saved GPU choice from the file.
-    await window.eduGame.saveSettings({ ai: { ...state.settings.ai, runtimeBackend: readRuntimeBackendSelection(), providers: readAiProviderPatches() }, preferences: state.settings.preferences });
-    const result = await window.eduGame.testAiProvider({ providerId: id });
-    state.settings = (result && result.settings) || await window.eduGame.getSettings();
+    await desktop.call('saveSettings', { ai: { ...state.settings.ai, runtimeBackend: readRuntimeBackendSelection(), providers: readAiProviderPatches() }, preferences: state.settings.preferences });
+    const result = await desktop.call('testAiProvider', { providerId: id });
+    state.settings = (result && result.settings) || await desktop.call('getSettings');
     toast(`Kết nối ${(aiProviderView(id) || {}).label || id} thành công (${result.durationMs} ms).`);
   } catch (error) {
-    state.settings = await window.eduGame.getSettings();
+    state.settings = await desktop.call('getSettings');
     const message = String((error && error.message) || error || '').replace(/^Error invoking remote method '[^']*':\s*/, '').replace(/^[A-Za-z]*Error:\s*/, '');
     toast(`Chưa kết nối được ${(aiProviderView(id) || {}).label || id}: ${message}`, 7000);
   } finally {
@@ -129,10 +129,10 @@ async function saveAiProviderKey(providerId) {
   try {
     // The key save sends the form as it stands: a base URL or model typed just
     // before the key must not be lost when the page re-renders afterwards.
-    const request = window.eduGame.saveSettings({ ai: { ...state.settings.ai, runtimeBackend: readRuntimeBackendSelection(), providers: { ...readAiProviderPatches(), [providerId]: { ...(readAiProviderPatches()[providerId] || {}), apiKey: input.value.trim() } } }, preferences: state.settings.preferences });
+    const request = desktop.call('saveSettings', { ai: { ...state.settings.ai, runtimeBackend: readRuntimeBackendSelection(), providers: { ...readAiProviderPatches(), [providerId]: { ...(readAiProviderPatches()[providerId] || {}), apiKey: input.value.trim() } } }, preferences: state.settings.preferences });
     aiKeySaveInFlight = request;
     const result = await request;
-    state.settings = (result && result.settings) || await window.eduGame.getSettings();
+    state.settings = (result && result.settings) || await desktop.call('getSettings');
     toast('Đã lưu khoá. Hãy bấm “Kiểm tra kết nối”.');
   } catch (error) {
     const message = String((error && error.message) || error || '');
@@ -166,7 +166,7 @@ function markAiProviderKeyClear(providerId) {
 
 // ---------------------------------------------------------------------------
 // update_plan_3 §8: AI task manager UI (settings page).
-// Pure view over `window.eduGame.listAiTasks()` / `verifyCpuRuntime()` — no
+// Pure view over `desktop.call('listAiTasks')` / `desktop.call('verifyCpuRuntime')` — no
 // task state lives in the renderer; history rows are always `restored: true`.
 // ---------------------------------------------------------------------------
 
@@ -263,7 +263,7 @@ async function refreshAiTaskList() {
   try {
     // The first page is where a brand-new task shows up; other pages also need live
     // rows so a running task is visible from anywhere.
-    const result = await window.eduGame.listAiTasks({
+    const result = await desktop.call('listAiTasks', {
       limit: AI_TASK_PAGE_SIZE,
       offset: aiTaskPage * AI_TASK_PAGE_SIZE,
       history: true
@@ -304,7 +304,7 @@ function startAiTaskAutoRefresh() {
   const timer = setInterval(async () => {
     if (state.page !== 'settings') { clearInterval(timer); return; }
     try {
-      const live = await window.eduGame.listAiTasks({ limit: 5, history: false });
+      const live = await desktop.call('listAiTasks', { limit: 5, history: false });
       const key = (live.live || []).map(task => `${task.taskId}:${task.state}`).join('|');
       if (key !== startAiTaskAutoRefresh.lastLive) {
         startAiTaskAutoRefresh.lastLive = key;
@@ -332,7 +332,7 @@ async function verifyCpuRuntimeUi() {
   if (!box) return;
   if (button) { button.disabled = true; button.textContent = 'Đang xác minh…'; }
   try {
-    const result = await window.eduGame.verifyCpuRuntime();
+    const result = await desktop.call('verifyCpuRuntime');
     const lines = [
       `Bộ xử lý đang dùng: ${result.backend}`,
       `Phiên bản runtime: ${result.expectedVersion}`,
@@ -360,7 +360,7 @@ async function exportDiagnosticsUi() {
   if (!box) return;
   if (button) { button.disabled = true; button.textContent = 'Đang xuất…'; }
   try {
-    const result = await window.eduGame.exportDiagnostics();
+    const result = await desktop.call('exportDiagnostics');
     box.classList.remove('hidden');
     box.innerHTML = `<strong>Đã lưu ${result.lines} dòng log.</strong><br>Gửi tệp này cho người hỗ trợ:<br><code>${escapeHtml(result.path)}</code>`;
   } catch (error) {
@@ -375,7 +375,7 @@ async function exportDiagnosticsUi() {
 async function openLogFolderUi() {
   const box = $('#diagnosticsResult');
   try {
-    const result = await window.eduGame.openDiagnosticsFolder();
+    const result = await desktop.call('openDiagnosticsFolder');
     if (!box) return;
     box.classList.remove('hidden');
     box.innerHTML = result.ok
@@ -393,7 +393,7 @@ async function refreshDiagnosticsInfo() {
   const info = $('#diagnosticsInfo');
   if (!info) return;
   try {
-    const result = await window.eduGame.diagnosticsInfo();
+    const result = await desktop.call('diagnosticsInfo');
     const megabytes = (result.bytes / (1024 * 1024)).toFixed(1);
     info.textContent = `Log trên máy: ${result.files} tệp · ${megabytes} MB · tự xóa sau ${result.retentionDays} ngày · ${result.folder}`;
   } catch (error) {
@@ -425,7 +425,7 @@ async function clearDiagnosticsUi() {
   if (diagnosticsClearTimer) { clearTimeout(diagnosticsClearTimer); diagnosticsClearTimer = null; }
   button.disabled = true;
   try {
-    const result = await window.eduGame.clearDiagnostics();
+    const result = await desktop.call('clearDiagnostics');
     const megabytes = (result.bytes / (1024 * 1024)).toFixed(1);
     box.classList.remove('hidden');
     box.innerHTML = `Đã xóa ${result.removed} tệp log (${megabytes} MB) trong dữ liệu ứng dụng.`;

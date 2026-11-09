@@ -309,7 +309,7 @@ async function wizardLoadGenerationHistory(force) {
     return wizardState.generationHistory;
   }
   try {
-    const result = await window.eduGame.listAiTasks({ limit: 50 });
+    const result = await desktop.call('listAiTasks', { limit: 50 });
     const history = (result && result.history) || [];
     wizardState.generationHistory = history.filter(row => row && row.kind === 'generate-lesson' && row.finishedAt);
     wizardState.generationHistoryLoadedAt = now;

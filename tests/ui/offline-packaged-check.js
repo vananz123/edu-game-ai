@@ -20,7 +20,7 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
   if (!out || typeof out !== 'object') throw new Error('runner returned nothing');
 
   check('the app runs from the packaged build (file:// + asar)', out.packaged === true, out.packagedMsg);
-  check('the preload bridge exists in the packaged build', out.bridge === true, out.bridgeMsg);
+  check('the façade is attached to the preload bridge in the packaged build', out.bridge === true, out.bridgeMsg);
   check('no outbound request was attempted while playing', out.attempts === 0, `attempts=${out.attempts} ${out.attemptUrls}`);
   check('the network counter is proven live (positive control)', out.controlSeen === true, out.controlMsg);
   check('offline: quiz plays and draws its illustration', out.quiz === true, out.quizMsg);
@@ -78,8 +78,11 @@ const RUNNER = `(async () => {
   const loc = location.href;
   out.packaged = loc.startsWith('file://');
   out.packagedMsg = loc.slice(0, 62);
-  out.bridge = typeof window.eduGame === 'object' && window.eduGame !== null;
-  out.bridgeMsg = 'typeof window.eduGame = ' + typeof window.eduGame;
+  // Renderer chỉ đi qua façade; `window.eduGame` là cầu preload bên dưới nó.
+  out.bridge = typeof desktop === 'object' && desktop !== null && desktop.info().adapter === 'electron' &&
+    typeof window.eduGame === 'object' && window.eduGame !== null;
+  out.bridgeMsg = 'adapter=' + (typeof desktop === 'object' ? desktop.info().adapter : 'none') +
+    ', typeof window.eduGame = ' + typeof window.eduGame;
 
   // --- one synthetic fixture per template ----------------------------------
   // Shapes copied from tests/ui/ui-stage-illustration-check.js, which is proven

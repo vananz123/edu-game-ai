@@ -83,6 +83,15 @@ function loadModule() {
   };
   sandbox.globalThis = sandbox;
   const context = vm.createContext(sandbox);
+  // Giai đoạn 2: module nói với façade, không với `window.eduGame` — nạp đúng bốn
+  // tệp façade mà index.html nạp, rồi cắm adapter Electron thật trên cầu giả.
+  const FACADE_FILES = ['desktop-facade-schema.js', 'desktop-adapter-electron.js', 'desktop-adapter-tauri.js', 'desktop-facade.js'];
+  for (const name of FACADE_FILES) {
+    const file = path.join(path.dirname(path.dirname(MODULE_FILE)), 'core', name);
+    assert.ok(fs.existsSync(file), `${name} is missing — run npm run build`);
+    vm.runInContext(fs.readFileSync(file, 'utf8'), context, { filename: file });
+  }
+  vm.runInContext("desktop.attach(createElectronDesktopAdapter('eduGame'));", context, { filename: 'attach.js' });
   vm.runInContext(fs.readFileSync(MODULE_FILE, 'utf8'), context, { filename: 'ai-status.js' });
 
   return {

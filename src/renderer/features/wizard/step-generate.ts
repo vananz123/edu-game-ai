@@ -128,9 +128,7 @@ async function wizardAutoAdjustCount(report) {
   config[key] = counts.found;
   try {
     await wizardSaveProject('generate');
-    if (typeof window.eduGame.checkLessonQuality === 'function') {
-      s.quality = (await window.eduGame.checkLessonQuality({ projectId: s.projectId })) || s.quality;
-    }
+    s.quality = (await desktop.call('checkLessonQuality', { projectId: s.projectId })) || s.quality;
     toast(`AI tạo được ${counts.found} ${counts.unit} — đã tự điều chỉnh cấu hình xuống ${counts.found}.`);
   } catch {
     // If the save fails, keep the original configuration and the warning.
@@ -452,7 +450,7 @@ function wizardQueueArtTask(task) {
 
 /** Applies a patch to one item and adopts the project/ game main returns. */
 async function wizardApplyItemPatch(position, patch) {
-  const result = await window.eduGame.patchLessonItemAssets({
+  const result = await desktop.call('patchLessonItemAssets', {
     projectId: wizardState.projectId,
     itemIndex: position,
     patch
@@ -472,7 +470,7 @@ async function wizardApplyItemPatch(position, patch) {
   // once the save succeeded. main refuses to delete anything another game or project
   // still points at, so this only removes what would otherwise be an orphan file.
   if (/^ci-[a-f0-9]{32}$/u.test(previousId) && previousId !== String(patch.illustrationAssetId || '')) {
-    window.eduGame.deleteIllustration(previousId).catch(() => {});
+    desktop.call('deleteIllustration', previousId).catch(() => {});
   }
   return result;
 }
@@ -530,13 +528,13 @@ async function wizardEnsureProjectSaved() {
 /**
  * The one call that opens the file dialog and copies the picture.
  *
- * It is a named function rather than a direct `window.eduGame` call so the dialog — the
+ * It is a named function rather than a direct façade call so the dialog — the
  * only step a headless check cannot drive — can be replaced while everything after it
  * (validation, patch, project save, card) stays the real code path (see
  * `tests/ui/ui-art-upload-flow-check.js`).
  */
 function wizardImportIllustration() {
-  return window.eduGame.importIllustration();
+  return desktop.call('importIllustration');
 }
 
 /**
@@ -744,7 +742,7 @@ function renderWizardGenerationProgress() {
 async function wizardCancelGenerate() {
   const requestId = wizardState.activeRequestId;
   try {
-    if (requestId) await window.eduGame.cancelAi(requestId);
+    if (requestId) await desktop.call('cancelAi', requestId);
   } catch (error) {
     /* cancelling is best-effort */
   }
@@ -847,7 +845,7 @@ async function wizardGenerateRun(options) {
   render();
   wizardStartGenerationClock();
   try {
-    const result = await window.eduGame.generateLessonDraft({
+    const result = await desktop.call('generateLessonDraft', {
       projectId: wizardState.projectId,
       requestId: wizardState.activeRequestId,
       mode: wizardState.config.generationMode,
@@ -912,7 +910,7 @@ async function wizardRegenerateItem(position) {
   render();
   wizardStartGenerationClock();
   try {
-    const result = await window.eduGame.regenerateLessonItem({
+    const result = await desktop.call('regenerateLessonItem', {
       projectId: wizardState.projectId,
       requestId: wizardState.activeRequestId,
       itemIndex: position,

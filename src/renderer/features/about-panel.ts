@@ -275,21 +275,16 @@ function paintAboutInfo(info) {
  * bấm nút và không thấy gì, đúng cái lỗi #187 đã sửa.
  */
 function aboutCall(name) {
-  const api = window.eduGame || {};
-  const fn = api[name];
-  if (typeof fn !== 'function') {
-    aboutBridgeFailure('the update bridge is not available in this window');
-    return Promise.resolve({ ok: false, error: 'Bộ cập nhật không khả dụng trong cửa sổ này.' });
-  }
-  return Promise.resolve(fn()).then(function (result) {
+  return desktop.call(name).then(function (result) {
     if (result && result.state) {
       aboutPanel.state = result.state;
       paintAboutPanel();
     }
     return result;
   }, function (error) {
-    // invoke() từ chối khi handler phía main ném lỗi: phải hiện lời, không được để
-    // màn hình đứng nguyên chỗ cũ.
+    // Vỏ từ chối lời gọi: phải hiện lời, không được để màn hình đứng nguyên chỗ cũ.
+    // `desktop.call` đã chuẩn hoá lỗi thành `DesktopError` có `code`, nên không cần
+    // tự đoán `not-supported` từ danh sách hàm có mặt hay không.
     aboutBridgeFailure(String((error && error.message) || error || 'the update request failed'));
     return { ok: false, error: String((error && error.message) || error || '') };
   });
@@ -315,17 +310,17 @@ function aboutBridgeFailure(message) {
  * thể chạy nhiều lần trong lúc IPC còn đang chờ, và mỗi lần lại gọi cặp kênh này.
  */
 function aboutLoad() {
+  // Không có vỏ desktop (trang mở ngoài Electron/Tauri, hoặc preload chết hẳn) thì
+  // không có gì để nạp: hiện thẻ lỗi ngay lúc gắn tab là nói dối "cập nhật hỏng".
+  // Bấm nút mới là lúc phải trả lời — `aboutCall` lo phần đó.
+  if (desktop.info().adapter === 'none') return Promise.resolve();
   if (aboutPanel.loading) return Promise.resolve();
-  const api = window.eduGame || {};
-  if (typeof api.aboutInfo !== 'function' && typeof api.aboutState !== 'function') return Promise.resolve();
   aboutPanel.loading = true;
   const jobs = [];
-  if (typeof api.aboutInfo === 'function') jobs.push(api.aboutInfo().then(paintAboutInfo, () => {}));
-  if (typeof api.aboutState === 'function') {
-    jobs.push(api.aboutState().then(state => {
-      if (state) { aboutPanel.state = state; paintAboutPanel(); }
-    }, () => {}));
-  }
+  jobs.push(desktop.call('aboutInfo').then(paintAboutInfo, () => {}));
+  jobs.push(desktop.call('aboutState').then(state => {
+    if (state) { aboutPanel.state = state; paintAboutPanel(); }
+  }, () => {}));
   return Promise.all(jobs).then(function (value) {
     aboutPanel.loading = false;
     return value;
@@ -338,9 +333,10 @@ function aboutLoad() {
  * Tối đa một lần mỗi phiên: đổi tab qua lại không được thành nhiều request ra ngoài.
  */
 function aboutKickCheck() {
+  // Không có vỏ desktop thì không có nguồn cập nhật: đừng gửi gì để khỏi phải báo lỗi
+  // ngay khi tab hiện ra (xem `aboutLoad`).
+  if (desktop.info().adapter === 'none') return;
   if (aboutPanel.kicked) return;
-  const api = window.eduGame || {};
-  if (typeof api.openAbout !== 'function') return;
   aboutPanel.kicked = true;
   // Không chờ: một nguồn chậm mà chặn thì tab hiện ra trắng xoá vài chục giây.
   aboutCall('openAbout').then(result => {
@@ -359,8 +355,8 @@ function wireAboutPanel() {
   const panel = aboutEl('settingsPanel-about');
   if (!panel) return;
 
-  if (!aboutPanel.subscribed && window.eduGame && typeof window.eduGame.onAboutState === 'function') {
-    aboutPanel.detach = window.eduGame.onAboutState(state => {
+  if (!aboutPanel.subscribed && desktop.info().adapter !== 'none') {
+    aboutPanel.detach = desktop.listen('onAboutState', state => {
       if (!state) return;
       aboutPanel.state = state;
       paintAboutPanel();
@@ -378,10 +374,8 @@ function wireAboutPanel() {
   });
   aboutEl('aboutErrorReleasesLink').addEventListener('click', event => {
     event.preventDefault();
-    const api = window.eduGame || {};
-    if (typeof api.aboutOpenReleases === 'function') {
-      void api.aboutOpenReleases((aboutPanel.info && aboutPanel.info.releasePageUrl) || '');
-    }
+    void desktop.call('aboutOpenReleases', (aboutPanel.info && aboutPanel.info.releasePageUrl) || '')
+      .catch(() => { /* liên kết dự phòng vẫn mở được từ thanh trạng thái */ });
   });
 
   paintAboutPanel();

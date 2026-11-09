@@ -118,6 +118,20 @@
           gắn listener DOM đã có sẵn ở trên) — không tệp nào đọc binding của tệp
           khác lúc nạp. `tests/unit/renderer-load-order.test.ts` khoá bất biến này.
        Thêm script mới: luôn kèm `defer`; thứ tự trong danh sách là thứ tự chạy. -->
+  <!-- Giai đoạn 2 của kế hoạch Tauri: cửa DUY NHẤT của renderer ra lớp desktop.
+       `desktop-facade-schema` → hai adapter → `desktop-facade` → `desktop-host` (nối
+       adapter theo vỏ đang chạy). Đây là NĂM THẺ ĐẦU TIÊN vì cả `constellation-constants`
+       (dòng 136) lẫn `features/about-panel.js` (dòng 150) đều đứng trước khối script
+       cũ: tệp nào gọi `desktop.*` cũng phải nạp sau tệp cuối của khối này.
+       `desktop-host` chỉ nối adapter, không gọi kênh nào lúc nạp.
+       Cửa sổ trình chiếu nạp BỐN tệp đầu, không nạp `desktop-host`: nó chỉ có
+       nhóm trình chiếu, và tự gọi `desktopCoreChooseAdapter()` trong
+       `presentation.ts` (xem src/presentation/presentation.html). -->
+  <script defer src="renderer/core/desktop-facade-schema.js"></script>
+  <script defer src="renderer/core/desktop-adapter-electron.js"></script>
+  <script defer src="renderer/core/desktop-adapter-tauri.js"></script>
+  <script defer src="renderer/core/desktop-facade.js"></script>
+  <script defer src="renderer/core/desktop-host.js"></script>
   <!-- Constellation constants (DECISIONS #171). `shared.js` reads the game name
        and the retired BETA label while it paints a library card, so these names
        must exist BEFORE line 105 — the trap #168 documented. -->

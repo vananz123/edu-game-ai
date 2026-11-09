@@ -347,13 +347,15 @@ function buildPresentationState(extra = {}) {
 function sendPresentationState(extra = {}) {
     if (!presentationStarted)
         return;
-    const eduGame = window.eduGame;
-    if (!eduGame || typeof eduGame.sendPresentationState !== 'function')
-        return;
     const payload = buildPresentationState(extra);
     if (!payload)
         return;
-    eduGame.sendPresentationState(payload);
+    desktop.call('sendPresentationState', payload).catch((error) => {
+        // `not-supported`: vỏ chưa nối kênh gửi. Không có cửa sổ nào để cập nhật.
+        if (error && error.code === 'not-supported')
+            return;
+        console.error('Không gửi được trạng thái trình chiếu', error);
+    });
 }
 /** Explicitly start Presentation Mode. Never called from normal question rendering. */
 async function startPresentationMode(options = {}) {
@@ -361,8 +363,9 @@ async function startPresentationMode(options = {}) {
         return true;
     if (presentationStarting)
         return false;
-    const eduGame = window.eduGame;
-    if (!eduGame || typeof eduGame.startPresentation !== 'function') {
+    // "Vỏ này có trình chiếu không" hỏi bằng một lời gọi thật, không bằng `typeof`
+    // trên cầu: façade từ chối lời gọi với `not-supported` khi nhóm/kênh vắng mặt.
+    if (desktop.info().adapter === 'none') {
         toast('Bản này không hỗ trợ trình chiếu.', 5000);
         return false;
     }
@@ -389,7 +392,7 @@ async function startPresentationMode(options = {}) {
     const token = ++presentationToken;
     presentationStarting = true;
     try {
-        const result = await eduGame.startPresentation(payload);
+        const result = await desktop.call('startPresentation', payload);
         if (token !== presentationToken)
             return false;
         if (result && result.ok) {
@@ -401,7 +404,10 @@ async function startPresentationMode(options = {}) {
     }
     catch (error) {
         if (token === presentationToken) {
-            toast(`Không mở được cửa sổ trình chiếu: ${(error && error.message) || 'lỗi không xác định'}`, 5000);
+            if (error && error.code === 'not-supported')
+                toast('Bản này không hỗ trợ trình chiếu.', 5000);
+            else
+                toast(`Không mở được cửa sổ trình chiếu: ${(error && error.message) || 'lỗi không xác định'}`, 5000);
         }
         return false;
     }
@@ -412,19 +418,11 @@ async function startPresentationMode(options = {}) {
 }
 /** Stop presentation mode and reset tracking. */
 function stopPresentationMode() {
-    const eduGame = window.eduGame;
     presentationToken += 1;
     presentationStarting = false;
-    if (eduGame && typeof eduGame.stopPresentation === 'function') {
-        try {
-            const result = eduGame.stopPresentation();
-            if (result && typeof result.catch === 'function')
-                result.catch(() => { });
-        }
-        catch {
-            // Stopping a presentation that was never open is harmless.
-        }
-    }
+    // Stopping a presentation that was never open is harmless; so is a shell
+    // without the channel (`not-supported`).
+    desktop.call('stopPresentation').catch(() => { });
     presentationStarted = false;
     presentationRevision = 0;
 }
@@ -585,13 +583,16 @@ function openPlayModal() {
     renderQuestion();
 }
 function initPresentationTracking() {
-    const eduGame = window.eduGame;
-    if (!eduGame || typeof eduGame.onPresentationExit !== 'function')
-        return;
-    eduGame.onPresentationExit(() => {
-        presentationStarted = false;
-        presentationStarting = false;
-        presentationToken += 1;
-    });
+    try {
+        desktop.listen('onPresentationExit', () => {
+            presentationStarted = false;
+            presentationStarting = false;
+            presentationToken += 1;
+        });
+    }
+    catch (error) {
+        // Cửa sổ chính luôn nhận được sự kiện này; chỉ một cửa sổ kỳ lạ mới không.
+        console.error('Không theo dõi được lần thoát trình chiếu', error);
+    }
 }
 initPresentationTracking();

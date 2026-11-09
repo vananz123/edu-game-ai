@@ -1,5 +1,5 @@
 // @ts-nocheck -- migrated legacy UI logic; new contracts are typed in src/shared/types.ts.
-async function refreshDb() { state.db = await window.eduGame.getLibrary(); }
+async function refreshDb() { state.db = await desktop.call('getLibrary'); }
 
 /**
  * Loads the project list independently from the game library. `state.projects =
@@ -10,7 +10,7 @@ async function refreshProjectsPage() {
   state.projects = null;
   if (state.page === 'my-projects') render();
   try {
-    const projects = await window.eduGame.listProjects();
+    const projects = await desktop.call('listProjects');
     state.projects = Array.isArray(projects) ? projects : [];
   } catch (error) {
     state.projects = [];
@@ -27,7 +27,7 @@ async function refreshLessonLibraryPage() {
   state.lessonSelection = new Set();
   if (state.page === 'lesson-plans') render();
   try {
-    const documents = await window.eduGame.listLessonLibrary();
+    const documents = await desktop.call('listLessonLibrary');
     state.lessonLibrary = Array.isArray(documents) ? documents : [];
   } catch (error) {
     state.lessonLibrary = [];
@@ -129,14 +129,14 @@ const topbarFs = $('#topbarFullscreenBtn');
 if (topbarFs) {
   topbarFs.addEventListener('click', async () => {
     const isFs = document.documentElement.dataset.fullscreen === '1';
-    try { await window.eduGame.setFullscreen(!isFs); } catch {}
+    try { await desktop.call('setFullscreen', !isFs); } catch {}
   });
 }
 window.addEventListener('keydown', async e => {
   if (e.key === 'F11' && !Boolean($('#modalRoot')?.children.length)) {
     e.preventDefault();
     const isFs = document.documentElement.dataset.fullscreen === '1';
-    try { await window.eduGame.setFullscreen(!isFs); } catch {}
+    try { await desktop.call('setFullscreen', !isFs); } catch {}
   }
   // #119/#120: Escape closes an open card menu.
   if (e.key === 'Escape' && typeof closeGameMenus === 'function') closeGameMenus();
@@ -162,8 +162,8 @@ window.addEventListener('resize', () => {
 });
 (async function init() {
   try {
-    state.db = await window.eduGame.getLibrary();
-    state.settings = await window.eduGame.getSettings();
+    state.db = await desktop.call('getLibrary');
+    state.settings = await desktop.call('getSettings');
     applyTheme(state.settings && state.settings.preferences && state.settings.preferences.theme);
     // DECISIONS #161: the static shell (sidebar) carries `data-icon` hooks instead
     // of emoji, because index.html cannot call uiIcon(). Painted before the first
@@ -172,7 +172,7 @@ window.addEventListener('resize', () => {
     // Chơi LAN: subscribes to `lan:state` so a room opened before a reload (or on a
     // second window) is drawn again. Never throws when the bridge is absent.
     if (typeof lanInit === 'function') lanInit();
-    const localAi = await window.eduGame.getLocalAiModels();
+    const localAi = await desktop.call('getLocalAiModels');
     state.localAiModels = localAi.models;
     state.localAiMachine = localAi.machine;
     render();

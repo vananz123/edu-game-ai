@@ -10,21 +10,34 @@
 //! "command not found" của Tauri. `tests/unit/tauri-contract.test.ts` so danh
 //! sách dưới đây với JSON, nên thêm kênh ở preload mà quên ở đây là đỏ cổng.
 //!
-//! Kênh `send` (3 kênh) không có đường tương đương trong `invoke_handler`;
-//! `requestPresentationState`/`sendPresentationExit`/`sendPresentationState`
-//! thuộc trình chiếu — vòng 2 theo #251 câu 1.
+//! Giai đoạn 2 mở thêm hai cửa CHUNG cho façade của renderer:
+//! `invoke_channel` (một kênh, có trả lời) và `send_channel` (ba kênh trình
+//! chiếu, không chờ kết quả). Nhờ vậy renderer chỉ cần nói chuyện với lớp
+//! desktop, không cần `edugame-bridge.js` dựng lại 92 khoá của preload Electron.
+//! Hai lệnh này KHÔNG tự làm gì: mỗi kênh vẫn chạy qua bảng `dispatch()` bên
+//! dưới, nên kênh chưa port vẫn trả lỗi đọc được chứ không giả vờ thành công.
+//!
+//! Tauri đăng ký lệnh theo TÊN HÀM, và tên hàm không được chứa `:`; nên chuỗi
+//! kênh của Electron (`library:get`) đi qua đây dưới dạng THAM SỐ, không phải
+//! tên lệnh. Đó là lý do duy nhất hai lệnh chung này tồn tại — mọi logic vẫn
+//! nằm ở hàm riêng của từng kênh.
 
 use serde::Serialize;
+use serde_json::Value;
 use tauri::AppHandle;
 
 use crate::paths;
 
 /// Lệnh đã có thân thật, kèm kênh Electron mà nó phục vụ.
 ///
-/// Bảng này là nguồn duy nhất cho việc sinh bảng `COMMANDS` của cầu
-/// `edugame-bridge.js` (`scripts/build-tauri-frontend.js` đọc đúng dòng đầu của
-/// mỗi nhánh). Tauri đăng ký lệnh theo tên hàm Rust, không theo chuỗi kênh, nên
-/// thiếu dòng ở đây nghĩa là cầu không gọi được lệnh dù `generate_handler!` có.
+/// Tauri đăng ký lệnh theo tên hàm Rust, không theo chuỗi kênh, nên bảng này là
+/// nơi duy nhất nối hai thứ đó lại. `tests/unit/tauri-contract.test.ts` đọc
+/// từng dòng để chốt rằng mỗi kênh của hợp đồng có đúng một lệnh, và mọi lệnh ở
+/// đây đều được `generate_handler!` trong lib.rs đăng ký.
+///
+/// Hai dòng `channel:*` là kênh giả của hai cửa chung giai đoạn 2: cổng kiểm tra
+/// bỏ qua chúng và đối chiếu chúng với `INVOKE_CHANNELS`/`SEND_CHANNELS` thay vì
+/// với preload Electron.
 pub fn hand_written(command: &str) -> Option<(&'static str, &'static str)> {
     Some(match command {
         "app_info" => ("app:info", "app_info"),
@@ -32,8 +45,160 @@ pub fn hand_written(command: &str) -> Option<(&'static str, &'static str)> {
         "get_library" => ("library:get", "get_library"),
         "get_settings" => ("settings:get", "get_settings"),
         "get_local_ai_models" => ("ai:local-models", "get_local_ai_models"),
+        "invoke_channel" => ("channel:invoke", "invoke_channel"),
+        "send_channel" => ("channel:send", "send_channel"),
         _ => return None,
     })
+}
+
+/// Kênh mà `invoke_channel` phục vụ: một kênh có trả lời, đi qua `dispatch()`.
+///
+/// Lời gọi được façade gửi nguyên văn từ `desktop-contract.json`
+/// (`desktop.call('library:get', …)` → `invoke('invoke_channel', {channel:
+/// 'library:get', args})`). Vì vậy đây là cửa DUY NHẤT mà renderer dùng cho
+/// nhóm "có trả lời"; kênh lạ bị từ chối ngay tại đây thay vì rơi xuống một
+/// nhánh `_` nào đó.
+const INVOKE_CHANNELS: &[&str] = &[
+    "app:info",
+    "window:set-fullscreen",
+    "library:get",
+    "library:save-game",
+    "library:delete-game",
+    "library:delete-games",
+    "library:save-session",
+    "library:delete-sessions",
+    "lesson:save-document",
+    "lesson:get-document",
+    "lesson:library",
+    "lesson:delete-document",
+    "lesson:delete-documents",
+    "project:save-draft",
+    "project:get",
+    "project:list",
+    "project:delete",
+    "project:delete-many",
+    "files:import-document",
+    "files:import-document-from-path",
+    "files:import-questions",
+    "files:export-game",
+    "files:import-game",
+    "files:import-illustration",
+    "files:delete-illustration",
+    "settings:get",
+    "settings:save",
+    "ai:providers",
+    "ai:test-provider",
+    "ai:local-models",
+    "ai:local-status",
+    "ai:install-local-model",
+    "ai:start-local-runtime",
+    "ai:stop-local-runtime",
+    "ai:cancel",
+    "ai:tasks",
+    "ai:runtime-verify",
+    "ai:generate",
+    "setup:status",
+    "setup:preflight",
+    "setup:start",
+    "setup:cancel",
+    "diagnostics:export",
+    "diagnostics:info",
+    "diagnostics:clear",
+    "diagnostics:open-folder",
+    "lesson:analyze",
+    "lesson:classify-input",
+    "lesson:convert-draft",
+    "lesson:get-structure",
+    "lesson:preview-selection",
+    "lesson:chat-send",
+    "lesson:chats",
+    "lesson:chat-get",
+    "lesson:chat-delete",
+    "lesson:recommend",
+    "lesson:capacity",
+    "lesson:get-analysis",
+    "lesson:save-analysis",
+    "lesson:recommendations",
+    "lesson:generate",
+    "lesson:regenerate-item",
+    "lesson:quality",
+    "lesson:patch-item-assets",
+    "presentation:start",
+    "presentation:stop",
+    "presentation:toggle",
+    "presentation:displays",
+    "about:open",
+    "about:info",
+    "about:state",
+    "about:check",
+    "about:download",
+    "about:install",
+    "about:open-releases",
+    "lan:start",
+    "lan:stop",
+    "lan:assign-team",
+    "lan:begin",
+    "lan:next",
+    "lan:finish",
+];
+
+/// Ba kênh `send` của trình chiếu. Bên Electron chúng là `ipcRenderer.send`
+/// (không có kết quả); ở vỏ Tauri chúng đi qua `send_channel`, trả `null` cho
+/// lời hứa của façade nhưng không đợi ai. Tách khỏi `INVOKE_CHANNELS` để một
+/// kênh lỡ nằm ở cả hai bên bị từ chối, chứ không im lặng chạy hai lần.
+const SEND_CHANNELS: &[&str] = &[
+    "presentation:request-state",
+    "presentation:exit",
+    "presentation:state-update",
+];
+
+/// Một kênh có trả lời: gọi ĐÚNG hàm của kênh đó, không nhánh chung nào khác.
+///
+/// Kênh có thân thật thì gọi hàm thật; kênh còn lại gọi hàm `unsupported!` của
+/// chính nó, nên câu lỗi giống hệt khi gọi bằng lệnh riêng (giai đoạn 1) hay qua
+/// `invoke_channel` (giai đoạn 2). Không nhánh nào trả dữ liệu rỗng giả.
+///
+/// `invoke_channel` đã lọc theo `INVOKE_CHANNELS`, nên `_` ở đây không tới
+/// được — nó chỉ là lưới an toàn nếu hai danh sách lệch nhau lúc sửa tay.
+fn dispatch(app: &AppHandle, channel: &str) -> Result<Value, String> {
+    match channel {
+        "app:info" => json(app_info(app.clone())),
+        "shell:info" => json(shell_info(app.clone())),
+        "library:get" => json(get_library(app.clone())),
+        "settings:get" => json(get_settings(app.clone())),
+        "ai:local-models" => json(get_local_ai_models()),
+        _ => Err(format!("Kênh `{channel}` chưa có thân trong vỏ Tauri")),
+    }
+}
+
+fn json<T: Serialize>(value: Result<T, String>) -> Result<Value, String> {
+    value.and_then(|inner| serde_json::to_value(inner).map_err(|error| error.to_string()))
+}
+
+/// Cửa chung cho mọi kênh có trả lời (xem đầu tệp).
+///
+/// Không nhận `app.get_webview_window` hay đường dẫn nào từ frontend: chỉ một
+/// chuỗi kênh thuộc danh sách tĩnh, nên frontend không thể mượn cửa này để đọc
+/// tệp tuỳ ý. Đó là lý do không mở quyền filesystem cho WebView.
+#[tauri::command]
+pub fn invoke_channel(app: AppHandle, channel: String) -> Result<Value, String> {
+    if !INVOKE_CHANNELS.contains(&channel.as_str()) {
+        return Err(format!("Kênh `{channel}` không thuộc hợp đồng desktop"));
+    }
+    dispatch(&app, &channel)
+}
+
+/// Cửa chung cho ba kênh `send` của trình chiếu.
+///
+/// Ba kênh đó chưa có nhánh thật trong vỏ này (giai đoạn 2 theo #251 câu 1),
+/// nên chúng trả lỗi — renderer biết trình chiếu chưa chạy thay vì tưởng đã gửi.
+/// Không nhận `AppHandle` vì chưa nhánh nào cần cửa sổ; thêm khi có thân thật.
+#[tauri::command]
+pub fn send_channel(channel: String) -> Result<Value, String> {
+    if !SEND_CHANNELS.contains(&channel.as_str()) {
+        return Err(format!("Kênh `{channel}` không phải kênh gửi của trình chiếu"));
+    }
+    Err(format!("Kênh `{channel}` chưa có thân trong vỏ Tauri giai đoạn 2"))
 }
 
 #[derive(Serialize)]
@@ -252,11 +417,25 @@ mod tests {
     }
 
     #[test]
-    fn hand_written_commands_are_exported_for_the_bridge() {
-        // Cầu eduGame chỉ biết tên lệnh qua bảng này; lệch tên ở đây nghĩa là
-        // `invoke` gọi một lệnh không tồn tại dù `generate_handler!` đã có.
+    fn hand_written_commands_are_exported_for_the_gate() {
+        // Cổng Node chỉ biết tên lệnh qua bảng này; lệch tên ở đây nghĩa là
+        // `generate_handler!` đăng ký một lệnh mà không kênh nào gọi tới.
         assert_eq!(super::hand_written("get_library"), Some(("library:get", "get_library")));
         assert_eq!(super::hand_written("shell_info"), Some(("shell:info", "shell_info")));
         assert_eq!(super::hand_written("about_check"), None);
+    }
+
+    #[test]
+    fn channel_lists_do_not_overlap_and_cover_the_real_bodies() {
+        // Hai cửa chung lọc theo hai danh sách tĩnh. Một kênh nằm ở cả hai bên
+        // nghĩa là cùng một chuỗi chạy hai đường; ba kênh khởi động vắng mặt
+        // nghĩa là renderer báo "không thuộc hợp đồng desktop" ngay lần đầu mở.
+        for channel in super::INVOKE_CHANNELS {
+            assert!(!super::SEND_CHANNELS.contains(channel), "{channel} nằm ở cả hai danh sách");
+        }
+        for channel in ["app:info", "library:get", "settings:get", "ai:local-models"] {
+            assert!(super::INVOKE_CHANNELS.contains(&channel), "{channel} thiếu trong INVOKE_CHANNELS");
+        }
+        assert_eq!(super::SEND_CHANNELS.len(), 3);
     }
 }

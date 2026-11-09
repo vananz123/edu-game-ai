@@ -133,14 +133,14 @@ function editorCancelPending() {
   const id = editorAiRequestId;
   editorAiRequestId = '';
   editorAiBusy = false;
-  window.eduGame.cancelAi(id).catch(() => {});
+  desktop.call('cancelAi', id).catch(() => {});
 }
 
 async function editorCancelAi() {
   if (!editorAiRequestId) return;
   toast('Đang huỷ yêu cầu AI…');
   try {
-    await window.eduGame.cancelAi(editorAiRequestId);
+    await desktop.call('cancelAi', editorAiRequestId);
   } catch (error) {
     /* the pending call reports the typed cancellation */
   }
@@ -182,7 +182,7 @@ async function editorRegenerateItem(button) {
   editorSetBusyUi(root, button, true);
   toast(`Đang nhờ AI viết lại ${kind} ${position}. Có thể mất 1–2 phút; bấm “Huỷ” trên nút để dừng.`);
   try {
-    const result = await window.eduGame.regenerateLessonItem({
+    const result = await desktop.call('regenerateLessonItem', {
       projectId: context.projectId,
       requestId,
       itemIndex: position

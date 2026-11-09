@@ -1,5 +1,11 @@
 # Roadmap
 
+## Renderer đi qua **façade desktop** thay vì `window.eduGame`; adapter Electron + Tauri, Tauri không còn cầu eduGame (2026-11-09, DECISIONS "Giai đoạn 2")
+- **Giai đoạn 2 xong:** `src/renderer/core/{desktop-facade-schema,desktop-adapter-electron,desktop-adapter-tauri,desktop-facade,desktop-host}.ts` — `desktop.call(khoá, …)` / `desktop.listen(sự kiện, fn) → hàm huỷ`, lỗi là `DesktopError` có `code` + `call`; 92 lời gọi + 8 sự kiện theo nhóm. Vỏ khai `missingGroups`/`hasChannel`; ba kênh `send` trình chiếu bị từ chối `not-supported` trước IPC. `desktop.stub` chỉ cho cổng UI. `src-tauri/src/api.rs` có `invoke_channel` + `send_channel`; `build-tauri-frontend.js` bỏ hẳn `edugame-bridge.js`.
+- **Ba cổng nghiệm thu ĐẠT:** `renderer-facade-only` 6/6 (không tệp nào ngoài façade đọc cầu preload) · `desktop-facade` 20 bài phủ kết quả/lỗi/sự kiện/huỷ đăng ký · Electron giữ nguyên (ui-about 91/91, 3 cổng AI, cài đặt, dự án trên instance riêng).
+- **Đo:** `build-tauri-release.js --check` **15/15** trên WebView2 (adapter `tauri`, 4 kênh khởi động trả dữ liệu thật, `saveGame` → "chưa có thân") · `run-unit` **96/96** · `check:desktop-contract` 92 khoá · `cargo test` 6/6 · `tsc` sạch, 0 undefined global.
+- **Còn mở:** 78 kênh Tauri vẫn `unsupported!` — vòng 1 #251 câu 1 chưa xong; trình chiếu chưa có thân `send`; chưa đo lại boot/nhàn rỗi; chưa cài thử bộ cài Tauri. **Kế tiếp:** nhóm dữ liệu (migration SQLite, `.egame`, `files:*`), mỗi nhóm một lần.
+
 ## Vỏ **Tauri v2** chạy được UI đóng gói — installer **2,21 MiB**, boot **508 ms**, nhàn rỗi **190,7 MiB**, cả ba ngưỡng #251 ĐẠT (2026-11-09, DECISIONS "Giai đoạn 1")
 - **Giai đoạn 1 xong:** `src-tauri/` (Tauri 2.12.5), `dist-tauri/` sinh từ `dist/` bởi `scripts/build-tauri-frontend.js`, cầu `window.eduGame` 92 khoá sinh từ `src/shared/desktop-contract.json`, identifier `vn.edugame.studio.tauri` với thư mục dữ liệu riêng (không chạm hồ sơ Electron). 5 lệnh Rust thật, 78 kênh còn stub.
 - **Đổi duy nhất ở renderer:** mọi script `defer` (boot 1.240 → 508 ms). Không đổi CSS, không đổi thứ tự logic.

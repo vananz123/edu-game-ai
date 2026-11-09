@@ -81,7 +81,7 @@ function wizardBlockedKindSummary(blocked) {
  */
 async function wizardRefreshCompatibilityScores() {
   try {
-    const result = await window.eduGame.classifyLessonInput({ text: String(wizardState.text || '') });
+    const result = await desktop.call('classifyLessonInput', { text: String(wizardState.text || '') });
     if (result && Array.isArray(result.compatibility)) wizardState.questionCompatibility = result.compatibility;
     if (result && result.import) {
       wizardState.importedQuestions = result.import.questions || [];
@@ -190,7 +190,7 @@ async function wizardRecommendRun() {
   wizardState.activeRequestId = requestId;
   render();
   try {
-    const result = await window.eduGame.recommendGames({
+    const result = await desktop.call('recommendGames', {
       analysisId: wizardState.analysisId,
       projectId: wizardState.projectId || undefined,
       requestId

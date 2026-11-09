@@ -89,7 +89,7 @@
 
   async function refreshRuntime(forceModels) {
     try {
-      runtime = (await window.eduGame.getLocalRuntimeStatus()) || runtime;
+      runtime = (await desktop.call('getLocalRuntimeStatus')) || runtime;
     } catch (e) {
       runtime = { state: 'STOPPED', modelId: null, message: (e && e.message) || '' };
     }
@@ -98,7 +98,7 @@
     // actually changed state (or when the caller explicitly asked).
     if (changed || forceModels || !modelsLoaded) {
       try {
-        const result = await window.eduGame.getLocalAiModels();
+        const result = await desktop.call('getLocalAiModels');
         const shared = rendererState();
         if (shared) {
           shared.localAiModels = result.models;
@@ -112,7 +112,7 @@
 
   async function refreshTasks() {
     try {
-      const result = await window.eduGame.listAiTasks({ limit: 10, history: false });
+      const result = await desktop.call('listAiTasks', { limit: 10, history: false });
       const live = ((result && result.live) || []).filter(function (task) {
         return task && ACTIVE_TASK_STATES.indexOf(task.state) !== -1;
       });
@@ -244,7 +244,7 @@
       return;
     }
     try {
-      const result = await window.eduGame.stopLocalRuntime();
+      const result = await desktop.call('stopLocalRuntime');
       const shared = rendererState();
       if (shared && result && result.models) {
         shared.localAiModels = result.models.models;
@@ -275,7 +275,7 @@
     const task = activeTask;
     if (!task || !task.requestId) return;
     try {
-      await window.eduGame.cancelAi(task.requestId);
+      await desktop.call('cancelAi', task.requestId);
       notify('Đang huỷ yêu cầu AI…');
       await refresh();
     } catch (e) {

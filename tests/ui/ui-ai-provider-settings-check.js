@@ -60,7 +60,7 @@ function check(label, ok, detail = '') {
     if (clear && !clear.disabled) clear.click();
     document.querySelector('#saveSettingsBtn').click();
     await new Promise(r => setTimeout(r, 800));
-    const ai = (await window.eduGame.getSettings()).ai;
+    const ai = (await desktop.call('getSettings')).ai;
     return (ai.providers.find(p => p.id === 'gemini') || {}).status;
   })()`;
   // A fresh page first: the renderer keeps `state.settings` from whatever a previous
@@ -87,20 +87,22 @@ function check(label, ok, detail = '') {
   const initial = await cdp.evaluate(`(async () => {
     navigate('settings');
     await new Promise(r => setTimeout(r, 500));
-    const ai = (await window.eduGame.getAiProviders()).ai || {};
+    const ai = (await desktop.call('getAiProviders')).ai || {};
     return {
       cards: document.querySelectorAll('[data-ai-provider]').length,
       ids: [...document.querySelectorAll('[data-ai-provider]')].map(n => n.dataset.aiProvider).join(','),
       keysInPayload: JSON.stringify(ai).includes('apiKey'),
       provider: ai.provider,
       configured: ai.providers.find(p => p.id === 'gemini').status,
-      hasBridge: typeof window.eduGame.testAiProvider === 'function' && typeof window.eduGame.getAiProviders === 'function'
+      hasBridge: Boolean(DESKTOP_FACADE_SCHEMA.calls.testAiProvider && DESKTOP_FACADE_SCHEMA.calls.getAiProviders),
+      shell: desktop.info().adapter
     };
   })()`);
   // #158: the AI section splits into tabs and the cloud tab lists only the providers
   // that need a key; `local` has its own tab, so it is deliberately not a card here.
   check('every key-based provider has a card in Settings', initial.cards === 4 && !initial.ids.split(',').includes('local'), `${initial.cards} / ${initial.ids}`);
-  check('the provider bridges exist', initial.hasBridge === true);
+  check('the provider calls are in the façade contract and the shell is attached',
+    initial.hasBridge === true && initial.shell === 'electron', JSON.stringify({ hasBridge: initial.hasBridge, shell: initial.shell }));
   // On a fresh isolated profile local is the only candidate; after an earlier run left a
   // verified cloud key the view may name that one instead (it is what the policy picks).
   check('the active provider is always one of the usable ones', Boolean(initial.provider), initial.provider);
@@ -118,7 +120,7 @@ function check(label, ok, detail = '') {
     document.querySelector('[data-ai-key-input="gemini"]').value = ${JSON.stringify(KEY)};
     document.querySelector('[data-ai-key-save="gemini"]').click();
     await new Promise(r => setTimeout(r, 900));
-    const ai = (await window.eduGame.getSettings()).ai;
+    const ai = (await desktop.call('getSettings')).ai;
     const gemini = ai.providers.find(p => p.id === 'gemini');
     return {
       status: gemini.status,
@@ -146,7 +148,7 @@ function check(label, ok, detail = '') {
     document.querySelector('[data-ai-test="gemini"]').click();
     await new Promise(r => setTimeout(r, 300));
     await new Promise(r => setTimeout(r, 1500));
-    const ai = (await window.eduGame.getSettings()).ai;
+    const ai = (await desktop.call('getSettings')).ai;
     const gemini = ai.providers.find(p => p.id === 'gemini');
     return { reason: gemini.reason, status: gemini.status, lastTestOk: gemini.lastTestOk, chip: document.querySelector('[data-ai-provider="gemini"] [data-ai-provider-chip]').textContent.trim(), picker: ai.picker };
   })()`);
@@ -172,7 +174,7 @@ function check(label, ok, detail = '') {
     document.querySelector('[data-ai-test="gemini"]').click();
     await new Promise(r => setTimeout(r, 300));
     await new Promise(r => setTimeout(r, 1200));
-    const ai = (await window.eduGame.getSettings()).ai;
+    const ai = (await desktop.call('getSettings')).ai;
     const gemini = ai.providers.find(p => p.id === 'gemini');
     // The active id is the provider the policy would use now: Gemini was the only ready
     // one and it just failed a real test, so the view falls back instead of keeping a
@@ -187,7 +189,7 @@ function check(label, ok, detail = '') {
   // The wizard: with no cloud provider the policy falls back to the local one and
   // the step says so; it never invents a provider.
   const wizard = await cdp.evaluate(`(async () => {
-    const ai = (await window.eduGame.getSettings()).ai;
+    const ai = (await desktop.call('getSettings')).ai;
     return { auto: ai.provider, usable: ai.providers.filter(p => p.wizardEligible && p.usable).map(p => p.id).join(',') };
   })()`);
   // DECISIONS #132 D17: "custom" (tự cấu hình) is a wizard provider once verified;
@@ -200,7 +202,7 @@ function check(label, ok, detail = '') {
     await new Promise(r => setTimeout(r, 200));
     document.querySelector('#saveSettingsBtn').click();
     await new Promise(r => setTimeout(r, 900));
-    const ai = (await window.eduGame.getSettings()).ai;
+    const ai = (await desktop.call('getSettings')).ai;
     const gemini = ai.providers.find(p => p.id === 'gemini');
     return { status: gemini.status, hasKey: gemini.hasKey, picker: ai.picker.show };
   })()`);

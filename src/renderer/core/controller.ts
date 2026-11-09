@@ -283,8 +283,8 @@ function wirePage() {
       ai: { ...state.settings.ai, localModelId }
     };
     try {
-      await window.eduGame.saveSettings(settings);
-      state.settings = await window.eduGame.getSettings();
+      await desktop.call('saveSettings', settings);
+      state.settings = await desktop.call('getSettings');
       if (draft) state.draft = { ...draft, localModelId };
       render();
     } catch (error) {
@@ -317,9 +317,9 @@ async function handleLessonDrop(event) {
       toast('Không lấy được đường dẫn tệp. Hãy dùng nút nhập giáo án.');
       return;
     }
-    const doc = await window.eduGame.importDocumentFromPath(filePath);
+    const doc = await desktop.call('importDocumentFromPath', filePath);
     if (doc) {
-      const stored = await window.eduGame.saveLessonDocument({
+      const stored = await desktop.call('saveLessonDocument', {
         name: doc.name,
         ext: (doc.name || '').split('.').pop() || 'txt',
         text: doc.text,
@@ -358,9 +358,9 @@ async function handleAction(action, id, element) { try {
     }
     if (action === 'edit') editGame(findGame(id));
     if (action === 'import-document') {
-      const doc = await window.eduGame.importDocument();
+      const doc = await desktop.call('importDocument');
       if (doc) {
-        const stored = await window.eduGame.saveLessonDocument({
+        const stored = await desktop.call('saveLessonDocument', {
           name: doc.name,
           ext: (doc.name || '').split('.').pop() || 'txt',
           text: doc.text,
@@ -381,9 +381,9 @@ async function handleAction(action, id, element) { try {
       // process validates the file and assigns a fresh id, so a re-import never
       // overwrites the original game.
       try {
-        const game = await window.eduGame.importGame();
+        const game = await desktop.call('importGame');
         if (!game) return; // the teacher cancelled the file dialog
-        const saved = await window.eduGame.saveGame(game);
+        const saved = await desktop.call('saveGame', game);
         await refreshDb();
         render();
         toast(`Đã nhập “${saved.title}” vào Thư viện trò chơi.`);
@@ -404,14 +404,14 @@ async function handleAction(action, id, element) { try {
       if (!trimmed) return toast('Tên dự án không được để trống.');
       if (!project) return toast('Không tìm thấy dự án.');
       const updated = { ...project, title: trimmed, updatedAt: new Date().toISOString() };
-      await window.eduGame.saveProjectDraft(updated);
+      await desktop.call('saveProjectDraft', updated);
       await refreshProjectsPage();
       toast('Đã đổi tên dự án.');
     }
     if (action === 'delete-project') {
       const project = (state.projects || []).find(item => item.id === id);
       if (confirm(`Xoá dự án “${project ? project.title : 'này'}”?\nTrò chơi đã lưu trong Thư viện trò chơi vẫn được giữ lại.`)) {
-        await window.eduGame.deleteProject(id);
+        await desktop.call('deleteProject', id);
         await refreshProjectsPage();
         toast('Đã xoá dự án.');
       }
@@ -443,7 +443,7 @@ async function handleAction(action, id, element) { try {
       // worries about: the saved game lives in the library and must stay.
       if (!confirm(`Xoá ${ids.length} dự án đã chọn?\n${preview}\nChỉ xoá bản nháp tiến trình — trò chơi đã lưu trong Thư viện trò chơi vẫn được giữ lại.`)) return;
       try {
-        const result = await window.eduGame.deleteProjects(ids);
+        const result = await desktop.call('deleteProjects', ids);
         state.projectSelection = new Set();
         await refreshProjectsPage();
         const parts = [`Đã xoá ${result.deleted} dự án`];
@@ -487,7 +487,7 @@ async function handleAction(action, id, element) { try {
       // with it (#124), so the wording says both before anything is touched.
       if (!confirm(`Xoá ${ids.length} trò chơi đã chọn khỏi máy?\n${preview}\nKhông thể hoàn tác — hãy xuất gói .egame trước nếu muốn giữ bản sao.`)) return;
       try {
-        const result = await window.eduGame.deleteGames(ids);
+        const result = await desktop.call('deleteGames', ids);
         state.librarySelection = new Set();
         await refreshDb();
         render();
@@ -528,9 +528,9 @@ async function handleAction(action, id, element) { try {
       // teacher may expect "xoá" to mean more.
       if (!confirm(`Xoá ${ids.length} lượt chơi đã chọn khỏi lịch sử?\nKết quả này không thể khôi phục. Trò chơi và giáo án vẫn được giữ nguyên.`)) return;
       try {
-        const result = await window.eduGame.deleteSessions(ids);
+        const result = await desktop.call('deleteSessions', ids);
         state.sessionSelection = new Set();
-        state.db = await window.eduGame.getLibrary();
+        state.db = await desktop.call('getLibrary');
         render();
         const parts = [`Đã xoá ${result.deleted} lượt chơi`];
         if (result.missing) parts.push(`${result.missing} không còn tồn tại`);
@@ -574,7 +574,7 @@ async function handleAction(action, id, element) { try {
       const detail = analysisCount ? `\n${analysisCount} kết quả phân tích và phần trích dẫn của các tài liệu này cũng bị xoá.` : '';
       if (!confirm(`Xoá ${ids.length} giáo án đã chọn?\n${preview}${detail}\nTrò chơi đã lưu trong Thư viện vẫn được giữ lại.`)) return;
       try {
-        const result = await window.eduGame.deleteLessonDocuments(ids);
+        const result = await desktop.call('deleteLessonDocuments', ids);
         state.lessonSelection = new Set();
         state.lessonLibrary = null;
         await refreshLessonLibraryPage();
@@ -600,7 +600,7 @@ async function handleAction(action, id, element) { try {
       if (!confirm(`Xoá “${name}” khỏi kho giáo án?${detail}\nTrò chơi đã lưu trong Thư viện vẫn được giữ lại.`)) return;
       try {
                 // The IPC answers `true`/`false` (see `LessonStore.deleteDocument`).
-                const deleted = await window.eduGame.deleteLessonDocument(id);
+                const deleted = await desktop.call('deleteLessonDocument', id);
                 state.lessonLibrary = null;
                 await refreshLessonLibraryPage();
                 toast(deleted ? `Đã xoá “${name}”.` : 'Không tìm thấy giáo án để xoá.');
@@ -619,19 +619,19 @@ async function handleAction(action, id, element) { try {
     if (action === 'export-first') {
       const game = state.db.games[0];
       if (!game) return toast('Thư viện chưa có trò chơi để xuất.');
-      const result = await window.eduGame.exportGame(game);
+      const result = await desktop.call('exportGame', game);
       if (result?.ok) toast('Đã xuất gói trò chơi.');
     }
     if (action === 'export-game') {
       const game = findGame(id);
       if (!game) return toast('Không tìm thấy trò chơi.');
-      const result = await window.eduGame.exportGame(game);
+      const result = await desktop.call('exportGame', game);
       if (result?.ok) toast('Đã xuất gói trò chơi ra tệp .egame.');
     }
     if (action === 'clear-lesson') { state.importedDoc = null; render(); toast('Đã xóa giáo án đã nhập.'); }
     if (action === 'delete') {
       const target = findGame(id);
-      if (confirm('Xóa vĩnh viễn “' + (target?.title || 'trò chơi này') + '” khỏi máy?\nKhông thể hoàn tác — hãy xuất gói .egame trước nếu muốn giữ bản sao.')) { await window.eduGame.deleteGame(id); await refreshDb(); render(); toast('Đã xóa “' + (target?.title || 'trò chơi') + '”.'); }
+      if (confirm('Xóa vĩnh viễn “' + (target?.title || 'trò chơi này') + '” khỏi máy?\nKhông thể hoàn tác — hãy xuất gói .egame trước nếu muốn giữ bản sao.')) { await desktop.call('deleteGame', id); await refreshDb(); render(); toast('Đã xóa “' + (target?.title || 'trò chơi') + '”.'); }
     }
     if (action === 'export-results') exportResults();
   } catch (e) { toast(e.message || 'Đã xảy ra lỗi.'); }

@@ -209,7 +209,7 @@ editorQuestions.addEventListener('click', e => {
 });
 $('#importQuestionsBtn', root).addEventListener('click', async () => {
   try {
-    applyImportedQuestions(root, game, await window.eduGame.importQuestions());
+    applyImportedQuestions(root, game, await desktop.call('importQuestions'));
   } catch (error) {
     toast(error.message || 'Không nhập được câu hỏi.');
   }
@@ -307,8 +307,8 @@ async function saveEditedGame(original, exportAfter) {
       matchingGame: matching
     };
     try {
-      const saved = await window.eduGame.saveGame(game);
-      if (exportAfter) await window.eduGame.exportGame(saved);
+      const saved = await desktop.call('saveGame', game);
+      if (exportAfter) await desktop.call('exportGame', saved);
       editorPageState = null;
       await refreshDb();
       navigate('library');
@@ -331,8 +331,8 @@ async function saveEditedGame(original, exportAfter) {
       treasureHunt: hunt
     };
     try {
-      const saved = await window.eduGame.saveGame(game);
-      if (exportAfter) await window.eduGame.exportGame(saved);
+      const saved = await desktop.call('saveGame', game);
+      if (exportAfter) await desktop.call('exportGame', saved);
       editorPageState = null;
       await refreshDb();
       navigate('library');
@@ -355,8 +355,8 @@ async function saveEditedGame(original, exportAfter) {
       race
     };
     try {
-      const saved = await window.eduGame.saveGame(game);
-      if (exportAfter) await window.eduGame.exportGame(saved);
+      const saved = await desktop.call('saveGame', game);
+      if (exportAfter) await desktop.call('exportGame', saved);
       editorPageState = null;
       await refreshDb();
       navigate('library');
@@ -425,8 +425,8 @@ async function saveEditedGame(original, exportAfter) {
     questions
   };
   try {
-    const saved = await window.eduGame.saveGame(game);
-    if (exportAfter) await window.eduGame.exportGame(saved);
+    const saved = await desktop.call('saveGame', game);
+    if (exportAfter) await desktop.call('exportGame', saved);
     root.innerHTML = '';
     await refreshDb();
     navigate('library');

@@ -265,7 +265,7 @@ async function wizardStructureRefresh() {
   s.error = null;
   if (wizardState.step === 'input') render();
   try {
-    const result = await window.eduGame.inspectLessonStructure({ text, name: wizardState.documentName || '' });
+    const result = await desktop.call('inspectLessonStructure', { text, name: wizardState.documentName || '' });
     // The teacher may have edited the text while the analyzer ran.
     if (String(wizardState.text || '') !== text) return;
     s.tree = result || null;
@@ -311,7 +311,7 @@ async function wizardStructurePreview() {
   }
   s.previewLoading = true;
   try {
-    s.preview = await window.eduGame.previewLessonSelection({
+    s.preview = await desktop.call('previewLessonSelection', {
       text: String(wizardState.text || ''),
       structure: tree,
       selectedIds: s.customized ? s.selected : undefined,

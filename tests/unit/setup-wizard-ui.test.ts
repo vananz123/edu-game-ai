@@ -23,6 +23,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 
+// Façade đã biên dịch: từ giai đoạn 2, wizard nói với `desktop`, không với
+// `window.eduGame`, nên suite này nạp đúng bốn tệp mà index.html nạp và cắm một
+// adapter giả — cùng cách test hợp đồng của façade làm.
+const BUILT = path.join(__dirname, '..', '..', '..', 'dist', 'src', 'renderer');
+const FACADE_FILES = [
+  'core/desktop-facade-schema.js',
+  'core/desktop-adapter-electron.js',
+  'core/desktop-adapter-tauri.js',
+  'core/desktop-facade.js'
+];
 const RENDERER = path.join(__dirname, '..', '..', 'src', 'renderer');
 
 function createElement() {
@@ -127,7 +137,8 @@ const calls: string[] = [];
 let setupStatus: Record<string, unknown> = { step: 'idle', complete: false, running: false };
 let progressHandler: ((progress: unknown) => void) | null = null;
 
-const eduGame = {
+/** Lời gọi của wizard, theo tên lời gọi của façade (không phải kênh IPC). */
+const wizardBridge: Record<string, any> = {
   getSetupStatus: async () => { calls.push('status'); return setupStatus; },
   preflightSetup: async (payload: unknown) => {
     calls.push(`preflight:${JSON.stringify(payload)}`);
@@ -159,7 +170,7 @@ const eduGame = {
   }
 };
 
-const windowObject: Record<string, any> = { eduGame };
+const windowObject: Record<string, any> = { eduGame: wizardBridge };
 const sandbox: Record<string, any> = {
   console,
   document,
@@ -191,9 +202,18 @@ function runFile(name: string) {
   vm.runInContext(fs.readFileSync(file, 'utf8'), context, { filename: file });
 }
 
-// Load order must match `index.html`: the icon data and its painter first (the
+// Load order must match `index.html`: the façade first (the wizard calls
+// `desktop.call` / `desktop.listen`), then the icon data and its painter (the
 // wizard's close button asks uiIcon() for an <svg>), then the model, then the
 // DOM layer.
+for (const file of FACADE_FILES) {
+  const full = path.join(BUILT, file);
+  assert.ok(fs.existsSync(full), `${file} is missing — run npm run build`);
+  vm.runInContext(fs.readFileSync(full, 'utf8'), context, { filename: full });
+}
+// Electron giả: chính adapter thật của Electron bọc `window.eduGame` (cùng đường
+// mà bản chạy dùng), nên suite này đo cả adapter lẫn façade, không chỉ wizard.
+vm.runInContext("desktop.attach(createElectronDesktopAdapter('eduGame'));", context, { filename: 'attach.js' });
 runFile('features/icon-data.js');
 runFile('features/ui-icons.js');
 runFile('setup-wizard-model.js');
@@ -356,9 +376,9 @@ async function main() {
   // regression that made setup install a weaker model than Settings recommended.
   {
     wizard.setupWizardState.dismissed = false;
-    delete windowObject.eduGame.getSetupStatus;
-    windowObject.eduGame.getSetupStatus = async () => ({ step: 'idle', complete: false, running: false });
-    windowObject.eduGame.preflightSetup = async (payload: unknown) => {
+    delete wizardBridge.getSetupStatus;
+    wizardBridge.getSetupStatus = async () => ({ step: 'idle', complete: false, running: false });
+    wizardBridge.preflightSetup = async (payload: unknown) => {
       calls.push(`preflight:${JSON.stringify(payload)}`);
       return {
         step: 'detecting',
@@ -401,9 +421,9 @@ async function main() {
     wizard.setupWizardState.dismissed = false;
     // A fresh launch: nothing pinned from a previous preflight answer.
     wizard.setupWizardState.modelId = null;
-    delete windowObject.eduGame.getSetupStatus;
-    windowObject.eduGame.getSetupStatus = async () => ({ step: 'idle', complete: false, running: false });
-    windowObject.eduGame.preflightSetup = async () => ({ step: 'detecting', complete: false, running: false });
+    delete wizardBridge.getSetupStatus;
+    wizardBridge.getSetupStatus = async () => ({ step: 'idle', complete: false, running: false });
+    wizardBridge.preflightSetup = async () => ({ step: 'detecting', complete: false, running: false });
     const degradedOpen = await wizard.openSetupWizard({ probe: false });
     assert.equal(degradedOpen, true, 'the wizard still opens without a plan');
     await flush();
@@ -418,7 +438,7 @@ async function main() {
   // --- A broken setup channel degrades to "stay closed" -------------------
   // An older build without `setup:*` handlers rejects every call. The gate must
   // then do nothing at all: the app still opens, saved games still play.
-  windowObject.eduGame.getSetupStatus = async () => { throw new Error('No handler registered for setup:status'); };
+  wizardBridge.getSetupStatus = async () => { throw new Error('No handler registered for setup:status'); };
   const probeOpened = await wizard.openSetupWizard({ probe: true });
   assert.equal(probeOpened, false, 'a missing setup channel must not open the wizard');
   assert.equal(modalRoot.innerHTML, '', 'and must not leave a half-rendered modal');

@@ -24,14 +24,9 @@ const LAN_UI = {
   unsubscribe: null
 };
 
-function lanBridge() {
-  const bridge = window.eduGame;
-  return bridge && typeof bridge.lanStart === 'function' ? bridge : null;
-}
-
-/** True when this build can host a room at all (older builds have no bridge). */
+/** True when this build can host a room at all (a window with no desktop layer cannot). */
 function lanAvailable() {
-  return Boolean(lanBridge());
+  return desktop.info().adapter !== 'none';
 }
 
 /**
@@ -52,10 +47,10 @@ function lanButtonHtml(game) {
   return `<button class="play-tool play-tool-lan${open ? ' is-open' : ''}" data-play-lan title="${open ? 'Phòng LAN đang mở' : 'Học sinh trả lời trên điện thoại qua Wi-Fi lớp'}" aria-label="Chơi LAN"><span class="play-tool-icon">${open ? '🟢' : '📱'}</span><span class="play-tool-label">${open ? 'LAN đang mở' : 'Chơi LAN'}</span></button>`;
 }
 
-/** Attach the bridge once; every window state update re-renders what is open. */
+/** Attach the listener once; every window state update re-renders what is open. */
 function lanEnsureSubscribed() {
-  if (LAN_UI.unsubscribe || !lanBridge()) return;
-  LAN_UI.unsubscribe = lanBridge().onLanState(snapshot => {
+  if (LAN_UI.unsubscribe || !lanAvailable()) return;
+  LAN_UI.unsubscribe = desktop.listen('onLanState', snapshot => {
     LAN_UI.snapshot = snapshot || null;
     LAN_UI.pending = false;
     lanApplySnapshot();
@@ -64,11 +59,10 @@ function lanEnsureSubscribed() {
 
 async function lanOpenRoom() {
   const game = state.currentGame;
-  const bridge = lanBridge();
   // From the LAN button on a library card the play surface is opened first
   // (controller.ts action 'lan'), so `state.currentGame` is set by the time we get
   // here. Opening from an empty screen is a no-op rather than a broken room.
-  if (!bridge || !game) {
+  if (!lanAvailable() || !game) {
     if (!game) toast('Hãy mở một trò chơi trước khi tạo phòng LAN.');
     return;
   }
@@ -81,7 +75,7 @@ async function lanOpenRoom() {
   // projector. The LAN screen is a separate modal (plan §8.5).
   lanOpenRoomModal(true);
   try {
-    const result = await bridge.lanStart({ game });
+    const result = await desktop.call('lanStart', { game });
     LAN_UI.pending = false;
     if (!result || !result.ok) {
       lanShowRoomError((result && result.message) || 'Không mở được phòng LAN.');
@@ -96,9 +90,8 @@ async function lanOpenRoom() {
 }
 
 async function lanCloseRoom() {
-  const bridge = lanBridge();
-  if (!bridge) return;
-  try { await bridge.lanStop(); } catch { /* closing is best effort */ }
+  if (!lanAvailable()) return;
+  try { await desktop.call('lanStop'); } catch { /* closing is best effort */ }
   LAN_UI.snapshot = null;
   LAN_UI.renderedState = null;
   // Closing the room on purpose also dismisses a finished podium.
@@ -271,8 +264,7 @@ function lanOpenRoomModal(loading) {
     const move = event.target.closest('[data-lan-move]');
     if (move) {
       const [playerId, teamId] = String(move.dataset.lanMove).split(':');
-      const bridge = lanBridge();
-      if (bridge) bridge.lanAssignTeam({ playerId, teamId });
+      desktop.call('lanAssignTeam', { playerId, teamId }).catch(() => { /* the room may have just closed */ });
       return;
     }
     const begin = event.target.closest('[data-lan-begin]');
@@ -293,11 +285,10 @@ function lanOpenRoomModal(loading) {
  * teacher is looking at the same question as the class.
  */
 async function lanBeginRound(button) {
-  const bridge = lanBridge();
-  if (!bridge || !bridge.lanBegin) return;
+  if (!lanAvailable()) return;
   if (button) button.disabled = true;
   try {
-    const result = await bridge.lanBegin();
+    const result = await desktop.call('lanBegin');
     if (!result || !result.ok) {
       toast((result && result.message) || 'Chưa mở được câu hỏi.');
       if (button) button.disabled = false;
@@ -329,9 +320,8 @@ async function lanBeginRound(button) {
  * call when no room is open (most lessons).
  */
 function lanAdvanceRound() {
-  const bridge = lanBridge();
-  if (!bridge || !bridge.lanNext || !LAN_UI.snapshot) return;
-  bridge.lanNext().catch(() => { /* the room may have just closed */ });
+  if (!lanAvailable() || !LAN_UI.snapshot) return;
+  desktop.call('lanNext').catch(() => { /* the room may have just closed */ });
 }
 
 /**
@@ -346,10 +336,9 @@ function lanAdvanceRound() {
  * Safe to call when no room is open or the room already finished.
  */
 function lanFinishRoom() {
-  const bridge = lanBridge();
-  if (!bridge || !bridge.lanFinish || !LAN_UI.snapshot) return;
+  if (!lanAvailable() || !LAN_UI.snapshot) return;
   if (LAN_UI.snapshot.state === 'finished') return;
-  bridge.lanFinish().catch(() => { /* the room may have just closed */ });
+  desktop.call('lanFinish').catch(() => { /* the room may have just closed */ });
 }
 
 function lanShowRoomError(message) {
@@ -440,7 +429,7 @@ function lanFinishRoomPanel(snapshot) {
     }));
     LAN_UI.showingPodium = true;
   }
-  if (lanBridge()) lanBridge().lanStop().catch(() => {});
+  if (lanAvailable()) desktop.call('lanStop').catch(() => {});
   LAN_UI.snapshot = null;
   lanRefreshHeaderButton();
 }
@@ -478,7 +467,7 @@ function lanReleaseForNewGame() {
   if (!LAN_UI.snapshot) return;
   const panel = $('[data-lan-panel]');
   if (panel) panel.remove();
-  if (lanBridge()) lanBridge().lanStop().catch(() => {});
+  if (lanAvailable()) desktop.call('lanStop').catch(() => {});
   LAN_UI.snapshot = null;
 }
 

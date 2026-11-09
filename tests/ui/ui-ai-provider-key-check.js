@@ -36,10 +36,10 @@ const resetProviderKey = `(async () => {
     }
     document.querySelector('#saveSettingsBtn').click();
     await new Promise(r => setTimeout(r, 1200));
-    const ai = (await window.eduGame.getSettings()).ai;
+    const ai = (await desktop.call('getSettings')).ai;
     if (!ai.providers.find(p => p.id === 'gemini').hasKey) break;
   }
-  const ai = (await window.eduGame.getSettings()).ai;
+  const ai = (await desktop.call('getSettings')).ai;
   return ai.providers.find(p => p.id === 'gemini').hasKey === true;
 })()`;
 
@@ -65,7 +65,7 @@ function check(label, ok, detail = '') {
   const before = await cdp.evaluate(`(async () => {
     navigate('settings');
     await new Promise(r => setTimeout(r, 500));
-    const ai = (await window.eduGame.getSettings()).ai || {};
+    const ai = (await desktop.call('getSettings')).ai || {};
     return { page: state.page, provider: ai.provider || '', hasKey: (${providerSelect} || {}).hasKey === true };
   })()`);
   check('the cleanup removed any earlier key', leftover === false, String(leftover));
@@ -77,8 +77,8 @@ function check(label, ok, detail = '') {
     document.querySelector('[data-ai-key-input="gemini"]').value = ${JSON.stringify(KEY)};
     document.querySelector('[data-ai-key-save="gemini"]').click();
     await new Promise(r => setTimeout(r, 900));
-    const ai = (await window.eduGame.getSettings()).ai || {};
-    const provider = ((await window.eduGame.getSettings()).ai.providers || []).find(p => p.id === 'gemini');
+    const ai = (await desktop.call('getSettings')).ai || {};
+    const provider = ((await desktop.call('getSettings')).ai.providers || []).find(p => p.id === 'gemini');
     return {
       hasKey: (provider || {}).hasKey === true,
       apiKeyIsMissing: ai.apiKey === undefined,
@@ -120,7 +120,7 @@ function check(label, ok, detail = '') {
     await new Promise(r => setTimeout(r, 150));
     document.querySelector('#saveSettingsBtn').click();
     await new Promise(r => setTimeout(r, 900));
-    const ai = (await window.eduGame.getSettings()).ai;
+    const ai = (await desktop.call('getSettings')).ai;
     const provider = state.settings.ai.providers.find(p => p.id === 'gemini');
     return { found: true, hasKey: (provider || {}).hasKey === true, mask: (provider || {}).keyMasked || '', status: (provider || {}).status };
   })()`);

@@ -2650,6 +2650,37 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 
 **Việc kế tiếp.** Chưa duyệt bắt đầu code. Khi duyệt: dựng khung Tauri v2 + Rust toolchain trong nhánh riêng, chuyển lớp truy cập desktop sang facade TS (kế hoạch mục 4) và làm vòng 1 theo mục 1.
 
+## Giai đoạn 2 — Tách API desktop khỏi renderer: facade một cửa, hai adapter, không còn `window.eduGame` trong vỏ Tauri (2026-11-09)
+
+**Báo cáo.** Kế hoạch mục 4 đặt mục tiêu: renderer không gọi thẳng lớp desktop, mà đi qua một facade có hợp đồng rõ ràng, để sau này đổi vỏ (Electron → Tauri) mà không sửa từng chỗ gọi. Giai đoạn 2 làm đúng phần đó. Ba cổng nghiệm thu của kế hoạch **ĐẠT**: (1) renderer dùng facade thay cho lời gọi Electron trực tiếp — `tests/unit/renderer-facade-only.test.ts` chặn mọi tệp ngoài thư mục façade đọc cầu preload; (2) test hợp đồng bao phủ kết quả, lỗi và luồng sự kiện — `desktop-facade.test.ts` 20 bài; (3) Electron giữ nguyên hành vi — `ui-about` 91/91, ba cổng AI, cài đặt, dự án, draft-guard trên instance riêng.
+
+**Quyết định.**
+
+1. **Một cửa: `desktop.call(tên, …args)` và `desktop.listen(tên, fn) → hàm huỷ`.** Tên là **khoá camelCase của `DESKTOP_FACADE_SCHEMA.calls`** (`appInfo`, `getLibrary`, …), tức đúng khoá `window.eduGame` của preload Electron — nên adapter Electron chỉ việc tra thẳng, không có bảng dịch. Mọi từ chối (sai tên, sai loại, nhóm vỏ chưa có, lỗi của vỏ) đi ra dưới dạng `DesktopError` có `code` (`invalid-argument`, `unknown-call`, `not-supported`, `host-error`) và `call`; lỗi đồng bộ cũng trả `Promise.reject`, không ném nửa chừng.
+2. **Hai adapter, một renderer.** Electron: bọc `window.eduGame`, hành vi không đổi. Tauri: `__TAURI__.core.invoke('invoke_channel', { channel, args })`, nhóm trình chiếu là `send_channel`, sự kiện là `event.listen`. Vỏ Tauri **không** dựng `window.eduGame` nữa (giai đoạn 1 dựng lại bằng cầu sinh tự động; `scripts/build-tauri-frontend.js` bỏ hẳn bước đó, chỉ còn `edugame-guard.js`), vì renderer nay nói thẳng với `__TAURI__`.
+3. **Hai tên kênh, cố ý khác nhau — và đây là bẫy đã cắn thật.** Adapter Tauri phải gửi **chuỗi kênh hợp đồng** (`app:info`, `library:get`, `about:state-push`), không phải tên khoá façade (`appInfo`): `dispatch()` của `api.rs` đánh khoá theo kênh IPC Electron. Lượt chạy đầu gửi tên khoá và `invoke_channel` từ chối mọi lời gọi (`Kênh \`appInfo\` không thuộc hợp đồng desktop`) — unit test khi đó lại **khẳng định đúng cái sai** (`payload.channel === 'getLibrary'`) nên không bắt được. Sửa ở `channelOf()` trong `desktop-adapter-tauri.ts`; ba bài test Tauri giờ so chuỗi kênh hợp đồng ở cả chiều `invoke` lẫn chiều `listen`.
+4. **`desktop.stub(tên, fn | null)` chỉ để đo UI.** Cổng UI cần phản hồi có hình dạng thật mà không gọi model hay mạng. Stub thay phản hồi **sau** mọi phép kiểm của façade (vẫn bị `unknown-call`/`not-supported` chặn trước), lỗi do stub ném ra vẫn thành `DesktopError('host-error')`, và `null` gỡ stub. Cổng phải gỡ stub trong teardown. Đây là ngoại lệ duy nhất cho luật "mọi lời gọi đi qua adapter", nên nó nằm trong chính facade chứ không phải một biến `window.__*` mà không ai kiểm soát — ba cổng UI trước đây đang ghi vào các biến như vậy mà renderer **không hề đọc**, tức chúng đo một API đã chết.
+5. **Vỏ khai phần chưa làm, façade từ chối trước ranh giới IPC.** Hai câu hỏi tách rời: `missingGroups` (cả nhóm chưa có) và `hasChannel(kênh, tên)` (kênh cụ thể chưa nối). Tauri giai đoạn 2 có `missingGroups: []` + `supportsSend: false`, nên ba kênh `send` của trình chiếu bị từ chối ở cửa với `not-supported` mà **không chạm IPC**, trong khi `onPresentationExit` (cùng chuỗi kênh, nhưng là sự kiện) vẫn đăng ký được.
+6. **Không cấp quyền hệ tệp chung cho frontend.** `invoke_channel`/`send_channel` là hai lệnh duy nhất renderer gọi được; chúng nhận **tên kênh**, và Rust tự quyết kênh nào có thân. Không có `fs:default`, không có đường mở tệp tuỳ ý từ JS: mọi I/O vẫn đi qua lệnh có địa chỉ (`openLessonFile`, `exportGameArchive`, …). Thêm một kênh phải đụng ba chỗ: `preload.ts`, `desktop-facade-schema.ts`, `api.rs` — `check:desktop-contract` và `tauri-contract` đỏ nếu lệch.
+
+**Đánh đổi.**
+
+- Hai adapter phải giữ hành vi khớp nhau bằng tay; hiện chỉ Electron chạy thật đủ nhóm, Tauri mới thật 5 kênh (`app:info`, `shell:info`, `library:get`, `settings:get`, `ai:local-models`) — 78 kênh còn lại báo "chưa có thân".
+- `stub` là lỗ mở cho test; nếu ai dùng nó để che một lời gọi thật trong sản phẩm thì cổng sẽ xanh mà app hỏng. Chưa có gate chặn `stub` ngoài thư mục `tests/ui`.
+- Năm tệp façade nạp bằng `<script defer>` phải đứng trước mọi tệp gọi `desktop.*`; `renderer-load-order.test.ts` và `renderer-facade-only.test.ts` giữ bất biến này.
+- Adapter Tauri nằm sau **cả** tham số hoá `invokeCommand`/`sendCommand` (chỉ để chẩn đoán/chạy thử) lẫn `channelOf()`; `desktop-host` đọc `adapter.commands` cho `desktopHost.channels` thay vì gõ lại tên lệnh.
+
+**Kiểm chứng.**
+
+- `node scripts/build-tauri-release.js --check` → **15/15** trên binary release thật trong WebView2: adapter `tauri`, `appInfo` trả `{version:"0.5.1", platform:"windows", userData:"…\\vn.edugame.studio.tauri\\edugame-data"}`, `getLibrary {1,0,0}`, `getSettings {offline, system}`, `getLocalAiModels {0, STOPPED}`, `saveGame` → `host-error: Kênh \`library:save-game\` chưa có thân trong vỏ Tauri`, 78 tài nguyên, 0 request ra ngoài.
+- `node tests/run-unit.js` **96/96** (`desktop-facade.test.ts` 20 bài: kết quả, mã lỗi, huỷ đăng ký khi `listen` còn chờ, nhóm thiếu, `stub`).
+- Electron thật, instance riêng + hồ sơ sạch: `ui-about` **91/91**, ba cổng AI (key, settings, wizard) **all passed**, `ui-settings-sections`, `ui-project-selection` **all passed**; `ui-draft-guard` 7/8 — bài đỏ cần nhà cung cấp AI cấu hình sẵn, hồ sơ mới không có (lỗi môi trường, không phải hồi quy).
+- Tĩnh: `tsc -p .` sạch, `check:renderer-globals` 73/75 script / 1.041 hàm / 8.264 chỗ gọi — 0 undefined, `check:desktop-contract` 81 invoke + 3 send + 8 sự kiện (92 khoá), `renderer-facade-only` 6/6, `tauri-contract` 6/6, `cargo test` 6/6.
+
+**Không chứng minh / chưa làm.** Nhánh AI local không chạy (theo chỉ đạo) — nhánh Tauri của nó chỉ chứng minh kênh đi tới Rust, không chứng minh tác vụ chạy. 78 kênh còn `unsupported!`: vòng 1 của #251 câu 1 (thư viện, chơi offline, `.egame`, import, ảnh, cài đặt, migration) **chưa xong**. Trình chiếu thật trong vỏ Tauri chưa có thân `send`. Chưa đo lại boot/nhàn rỗi sau khi thêm năm tệp façade; chưa cài thử bộ cài Tauri.
+
+**Việc kế tiếp.** Vòng 1 theo #251 câu 1, nhóm dữ liệu trước: `library:*`, `migration`, `.egame` (`exportGameArchive`/`importGameArchive`) và `files:*`, mỗi nhóm một lần, kèm bài trong `tauri-contract` và một lượt `build-tauri-release --check` mở rộng.
+
 ## Giai đoạn 1 — Khung Tauri v2 + facade TS: vỏ chạy được UI đóng gói, ba ngưỡng #251 đều ĐẠT (2026-11-09)
 
 **Báo cáo.** #251 chốt ba ngưỡng (installer ≤ 25 MiB, boot ≤ 1.200 ms, nhàn rỗi ≤ 200 MiB private) nhưng chưa có dòng mã Tauri nào. Giai đoạn 1 dựng vỏ tối thiểu để trả lời đúng một câu: **kiến trúc đích có thật sự xuống dưới ba ngưỡng không?** Câu trả lời là có, nên dự án Tauri tiếp tục; điều kiện dừng của #251 câu 7 ("nếu làm đúng kiến trúc mà vẫn không xuống dưới ngưỡng thì dừng dự án") **không kích hoạt**.

@@ -2,11 +2,15 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
-// Cổng của vỏ Tauri giai đoạn 1. Chốt ba thứ mà một lần sửa tay có thể làm lệch:
+// Cổng của vỏ Tauri. Chốt bốn thứ mà một lần sửa tay có thể làm lệch:
 //   1. `api.rs` khai đúng từng kênh invoke của preload.ts, không thừa không thiếu;
 //   2. `lib.rs` đăng ký đúng các lệnh đó vào invoke_handler;
-//   3. tauri.conf.json giữ định danh/thư mục dữ liệu tách khỏi Electron, và
-//      index.html của dist-tauri nạp cầu eduGame TRƯỚC mọi script renderer.
+//   3. giai đoạn 2: `invoke_channel`/`send_channel` là cửa chung của façade, và
+//      danh sách kênh của chúng khớp desktop-contract.json — renderer không còn
+//      `window.eduGame`, nên đây là đường duy nhất để một kênh tới được vỏ;
+//   4. tauri.conf.json giữ định danh/thư mục dữ liệu tách khỏi Electron, và
+//      index.html của dist-tauri nạp cổng `edugame-guard.js` TRƯỚC mọi script,
+//      KHÔNG còn `edugame-bridge.js` của giai đoạn 1.
 // Test này chỉ đọc đĩa, không chạy cargo: nó chạy trong `npm test` trên máy
 // không có Rust.
 
@@ -30,8 +34,11 @@ const conf = JSON.parse(
 );
 
 // Lệnh viết tay (không qua `unsupported!`) và kênh của chúng, đọc thẳng từ bảng
-// `hand_written()` trong api.rs — cũng là nguồn cầu eduGame dựng bảng `COMMANDS`.
-// `shell:info` không thuộc preload Electron nên bị lọc khỏi phép so với contract.
+// `hand_written()` trong api.rs. Hai dòng `channel:*` là kênh GIẢ của hai cửa
+// chung giai đoạn 2 (chúng không thuộc preload Electron, chỉ giữ hình dạng bảng)
+// nên bị bỏ khỏi mọi phép so với contract. `shell:info` cũng không thuộc preload.
+const PSEUDO_CHANNELS = new Set(['channel:invoke', 'channel:send']);
+
 function handWritten(): Map<string, string> {
   const table = new Map<string, string>();
   // "command" => ("channel", "command"), — nhóm 3 lặp lại đúng tên nhóm 1.
@@ -81,7 +88,8 @@ function test(name: string, fn: () => void) {
 }
 
 test('api.rs khai được mọi kênh invoke của desktop-contract.json', () => {
-  const declared = new Set([...rustChannels().values()].filter(channel => channel !== 'shell:info'));
+  const declared = new Set([...rustChannels().values()]
+    .filter(channel => channel !== 'shell:info' && !PSEUDO_CHANNELS.has(channel)));
   const expected = new Set(Object.values(contract.invoke));
   const missing = [...expected].filter(channel => !declared.has(channel as string)).sort();
   const extra = [...declared].filter(channel => !expected.has(channel as string)).sort();
@@ -115,21 +123,77 @@ test('ba kênh dữ liệu khởi động có lệnh thật, không phải lện
 });
 
 test('ba kênh send thuộc trình chiếu chưa mở trong vỏ Tauri', () => {
-  // Ghi nhận có chủ đích: send không qua invoke_handler, và ba kênh này là trình
-  // chiếu — vòng 2 của #251 câu 1. Nếu preload thêm kênh send mới, hàng dưới đỏ
-  // để buộc người sửa quyết định thay vì im lặng bỏ qua.
+  // Ghi nhận có chủ đích: ba kênh này là trình chiếu — vòng 2 của #251 câu 1.
+  // Giai đoạn 2 mở cửa `send_channel` cho đúng ba kênh đó, nhưng mỗi kênh vẫn
+  // trả lỗi "chưa có thân" cho tới khi port thật. Nếu preload thêm kênh send
+  // mới, hàng dưới đỏ để buộc người sửa quyết định thay vì im lặng bỏ qua.
   assert.deepEqual(Object.keys(contract.send).sort(), [
     'requestPresentationState',
     'sendPresentationExit',
     'sendPresentationState',
   ]);
+  assert.deepEqual(channelList('SEND_CHANNELS').slice().sort(), (Object.values(contract.send) as string[]).sort(),
+    'SEND_CHANNELS của api.rs phải khớp đúng ba kênh send của hợp đồng');
+});
+
+// Hai danh sách kênh của api.rs là cửa DUY NHẤT để renderer tới được vỏ Tauri
+// (adapter `invoke('invoke_channel', { channel })`). Lệch một kênh ở đây nghĩa
+// là một nút trong app Tauri trả "không thuộc hợp đồng desktop" dù đã port.
+function channelList(constName: string): string[] {
+  const start = apiSource.indexOf(`const ${constName}: &[&str] = &[`);
+  assert.ok(start >= 0, `api.rs thiếu ${constName}`);
+  const end = apiSource.indexOf('];', start);
+  const body = apiSource.slice(start, end);
+  const channels = [...body.matchAll(/"([^"]+)"/g)].map(match => match[1]);
+  assert.equal(new Set(channels).size, channels.length, `${constName} khai trùng kênh`);
+  return channels;
+}
+
+test('invoke_channel nhận đúng mọi kênh invoke của hợp đồng, không thừa không thiếu', () => {
+  const channels = channelList('INVOKE_CHANNELS');
+  const expected = Object.values(contract.invoke) as string[];
+  const missing = expected.filter(channel => !channels.includes(channel)).sort();
+  const extra = channels.filter(channel => !expected.includes(channel)).sort();
+  assert.deepEqual(missing, [], `INVOKE_CHANNELS thiếu: ${missing.join(', ')}`);
+  assert.deepEqual(extra, [], `INVOKE_CHANNELS thừa: ${extra.join(', ')}`);
+});
+
+test('invoke_channel/send_channel được đăng ký và lọc kênh trước khi chạy', () => {
+  const handlers = registeredCommands();
+  assert.ok(handlers.has('invoke_channel'), 'invoke_channel chưa đăng ký');
+  assert.ok(handlers.has('send_channel'), 'send_channel chưa đăng ký');
+  // Cửa chung phải từ chối trước khi tới `dispatch()`: nếu không, frontend gửi
+  // một chuỗi kênh tuỳ ý và tự chọn nhánh nào chạy.
+  assert.match(apiSource, /pub fn invoke_channel\(app: AppHandle, channel: String\)/,
+    'invoke_channel không được nhận thêm tham số tuỳ ý từ frontend');
+  assert.ok(apiSource.includes('!INVOKE_CHANNELS.contains(&channel.as_str())'),
+    'invoke_channel thiếu bước lọc theo INVOKE_CHANNELS');
+  assert.ok(apiSource.includes('!SEND_CHANNELS.contains(&channel.as_str())'),
+    'send_channel thiếu bước lọc theo SEND_CHANNELS');
+});
+
+test('không cấp quyền filesystem cho frontend', () => {
+  // Kế hoạch giai đoạn 2 câu 6: cửa chung không được thành đường vòng để đọc
+  // tệp tuỳ ý. Cửa sổ chính chỉ có `core:default`; thêm bất kỳ quyền fs/dialog
+  // vào là đỏ, kể cả `fs:default`.
+  const dir = path.join(root, 'src-tauri', 'capabilities');
+  const files = fs.readdirSync(dir).filter(name => name.endsWith('.json'));
+  assert.ok(files.length >= 1, 'không có capability nào');
+  for (const file of files) {
+    const cap = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8'));
+    for (const permission of cap.permissions || []) {
+      const name = typeof permission === 'string' ? permission : permission.identifier;
+      assert.ok(!/^(fs|dialog|path|shell):/.test(name),
+        `${file} cấp quyền ${name} — frontend Tauri không được chạm tệp trực tiếp`);
+    }
+  }
 });
 
 test('tauri.conf.json tách khỏi Electron', () => {
   assert.equal(conf.identifier, 'vn.edugame.studio.tauri');
   assert.notEqual(conf.productName, 'EduGame Studio', 'trùng productName với Electron');
   assert.equal(conf.build.frontendDist, '../dist-tauri');
-  assert.equal(conf.app.withGlobalTauri, true, 'renderer cần __TAURI__ cho cầu eduGame');
+  assert.equal(conf.app.withGlobalTauri, true, 'adapter Tauri đọc __TAURI__ từ window');
 });
 
 test('CSP của vỏ Tauri không nới hơn CSP của index.html', () => {
@@ -139,7 +203,7 @@ test('CSP của vỏ Tauri không nới hơn CSP của index.html', () => {
   assert.equal(conf.app.security.csp, meta[1]);
 });
 
-test('dist-tauri nạp cầu eduGame trước mọi script renderer', () => {
+test('dist-tauri nạp cổng chặn trước mọi script renderer và không còn cầu eduGame', () => {
   const distIndex = path.join(root, 'dist-tauri', 'index.html');
   if (!fs.existsSync(distIndex)) {
     // Chưa dựng `npm run build:tauri` — bỏ qua theo cách nói rõ, không im lặng.
@@ -148,16 +212,10 @@ test('dist-tauri nạp cầu eduGame trước mọi script renderer', () => {
   }
   const html = fs.readFileSync(distIndex, 'utf8');
   const scripts = [...html.matchAll(/<script src="([^"]+)"/g)].map(match => match[1]);
-  assert.equal(scripts[0], 'edugame-bridge.js', 'script đầu tiên phải là cầu eduGame');
-  assert.equal(scripts.filter(src => src === 'edugame-bridge.js').length, 1);
+  assert.equal(scripts[0], 'edugame-guard.js', 'script đầu tiên phải là cổng chặn của vỏ Tauri');
+  assert.equal(scripts.filter(src => src === 'edugame-guard.js').length, 1);
+  assert.ok(!scripts.includes('edugame-bridge.js'), 'cầu eduGame của giai đoạn 1 không được quay lại');
+  assert.ok(!fs.existsSync(path.join(root, 'dist-tauri', 'edugame-bridge.js')),
+    'dist-tauri còn edugame-bridge.js — bản dựng cũ hoặc script sinh lại cầu');
   assert.ok(!scripts.some(src => src.startsWith('..') || src.includes('://')), 'script phải là đường dẫn tương đối');
-
-  const bridge = fs.readFileSync(path.join(root, 'dist-tauri', 'edugame-bridge.js'), 'utf8');
-  for (const key of [
-    ...Object.keys(contract.invoke),
-    ...Object.keys(contract.send),
-    ...Object.keys(contract.event),
-  ]) {
-    assert.ok(bridge.includes(`    ${key}:`), `cầu thiếu khoá ${key}`);
-  }
 });
