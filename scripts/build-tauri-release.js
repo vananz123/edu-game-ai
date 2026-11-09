@@ -28,6 +28,28 @@ const port = takeValue('--port', '9557');
 const profile = takeValue('--profile', path.join(os.tmpdir(), 'eg-tauri-fresh'));
 // Tệp bàn giao giữa hai pha của cổng kiểm tra (xem `startAndCheck`).
 const memo = path.join(os.tmpdir(), 'eg-tauri-check-memo.json');
+// Bốn đường dẫn hộp thoại gói `.egame` mà cổng kiểm tra cần (xem `package.rs`,
+// `GATE_ENV`). Chúng chỉ tồn tại trong tiến trình do script này mở: biến môi
+// trường của tiến trình cha, nên renderer không tự chọn được tệp nào.
+const packagePaths = {
+  save: path.join(os.tmpdir(), 'eg-tauri-gate-package.egame'),
+  open: path.join(os.tmpdir(), 'eg-tauri-gate-package.egame'),
+  broken: path.join(os.tmpdir(), 'eg-tauri-gate-broken.egame'),
+  empty: path.join(os.tmpdir(), 'eg-tauri-gate-empty.egame'),
+  oversized: path.join(os.tmpdir(), 'eg-tauri-gate-oversized.egame'),
+};
+const PACKAGE_LIMIT = 20 * 1024 * 1024;
+
+/** Ghi ba gói xấu cổng dùng để đo đường từ chối. */
+function writeGatePackages() {
+  fs.rmSync(packagePaths.open, { force: true });
+  fs.writeFileSync(packagePaths.broken, '{ "packageFormat": "edugame", "game": ', 'utf8');
+  fs.writeFileSync(packagePaths.empty, JSON.stringify({ packageFormat: 'edugame', packageVersion: 1, game: { title: 'Thiếu câu hỏi' } }), 'utf8');
+  // Chỉ lớn hơn trần một byte: cổng phải chặn bằng `metadata`, không đọc 20 MB.
+  const fd = fs.openSync(packagePaths.oversized, 'w');
+  fs.ftruncateSync(fd, PACKAGE_LIMIT + 1);
+  fs.closeSync(fd);
+}
 
 const isWindows = process.platform === 'win32';
 const exeName = isWindows ? 'edugame-studio-tauri.exe' : 'edugame-studio-tauri';
@@ -80,10 +102,23 @@ function build() {
 function startAndCheck() {
   fs.rmSync(profile, { recursive: true, force: true });
   let child = null;
+  // Cổng `.egame` chỉ bật khi đang kiểm: một lần chạy tay (`--run`) mở hộp thoại
+  // thật cho giáo viên, còn `--check` mở hộp thoại do biến môi trường quyết định.
+  const gateEnv = check
+    ? {
+        EDUGAME_TAURI_PACKAGE: 'gate',
+        EDUGAME_TAURI_PACKAGE_SAVE: packagePaths.save,
+        EDUGAME_TAURI_PACKAGE_OPEN: packagePaths.open,
+        EDUGAME_TAURI_PACKAGE_BROKEN: packagePaths.broken,
+        EDUGAME_TAURI_PACKAGE_EMPTY: packagePaths.empty,
+        EDUGAME_TAURI_PACKAGE_OVERSIZED: packagePaths.oversized,
+      }
+    : {};
   const launch = () => {
     child = spawn(binary, [], {
       env: {
         ...process.env,
+        ...gateEnv,
         WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port}`,
         WEBVIEW2_USER_DATA_FOLDER: profile,
       },
@@ -107,10 +142,13 @@ function startAndCheck() {
     }
     return false;
   };
+  // Bản sao của `gateEnv` phải đi kèm: script cổng dựa vào chính các biến này
+  // để biết đường dẫn hộp thoại, nên thiếu chúng là phần gói `.egame` bị bỏ
+  // qua im lặng trong khi cổng vẫn xanh.
   const runCheck = (extra) => spawnSync(
     process.execPath,
     [path.join(root, 'tests', 'ui', 'tauri-webview-check.js'), port, ...extra],
-    { stdio: 'inherit', env: { ...process.env, EDUGAME_TAURI_MEMO: memo } },
+    { stdio: 'inherit', env: { ...process.env, ...gateEnv, EDUGAME_TAURI_MEMO: memo } },
   );
   launch();
   (async () => {
@@ -120,6 +158,7 @@ function startAndCheck() {
       return;
     }
     fs.rmSync(memo, { force: true });
+    writeGatePackages();
     const first = runCheck([]);
     // Pha một ghi trò chơi + memo. Mở lại trên CÙNG profile để pha hai chứng minh
     // dòng nằm trên đĩa; `child.kill()` phải xong trước khi tiến trình mới chạy,
@@ -131,6 +170,8 @@ function startAndCheck() {
     await waitForPort(true);
     const second = runCheck(['--reopen']);
     stop();
+    // Tệp gói của cổng là thứ do chính script này ghi, nên dọn được.
+    for (const target of Object.values(packagePaths)) fs.rmSync(target, { force: true });
     process.exit(second.status || 0);
   })();
 }

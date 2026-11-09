@@ -70,6 +70,13 @@ async function run(): Promise<void> {
   const second = readGamePackage(pack(quiz), newId);
   assert.notEqual(second.id, wrapped.id, 'importing twice keeps both games');
 
+  // ... and a package whose id is already in the library gets the new one too, so a
+  // re-import never writes over the row it came from (Tauri's `package:read`).
+  const reimport = readGamePackage(pack(JSON.parse(JSON.stringify(quiz))), newId, id => id === 'game-original');
+  assert.match(reimport.id, /^imported-\d+$/u, 'a taken id is replaced');
+  const freshIdKept = readGamePackage(pack(JSON.parse(JSON.stringify(quiz))), newId, () => false);
+  assert.equal(freshIdKept.id, 'game-original', 'an id nobody uses is kept, so a copy keeps its name');
+
   // --- external resource URLs are dropped, built-in ids are kept --------------
   assert.equal((wrapped.questions[0] as { imageUrl?: string }).imageUrl, undefined, 'remote image removed');
   assert.equal(wrapped.questions[0].illustrationAssetId, 'ho-guom', 'built-in illustration kept');

@@ -2650,6 +2650,41 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 
 **Việc kế tiếp.** Chưa duyệt bắt đầu code. Khi duyệt: dựng khung Tauri v2 + Rust toolchain trong nhánh riêng, chuyển lớp truy cập desktop sang facade TS (kế hoạch mục 4) và làm vòng 1 theo mục 1.
 
+## Giai đoạn 3 (4/6) — Gói `.egame`: luật gói chạy nguyên văn trong V8, hộp thoại và tệp chỉ ở Rust, cổng chọn lượt bằng SỐ không bằng đường dẫn (2026-11-09)
+
+**Báo cáo.** Bước 4/6 port `files:export-game` và `files:import-game` lên vỏ Tauri. Renderer vẫn gọi `desktop.call('exportGame' | 'importGame')`; phía vỏ mở hộp thoại, đọc/ghi tệp, còn mọi luật về nội dung gói vẫn là `game-package.ts`. Bằng chứng nghiệm thu: **xuất ra tệp thật → tệp đúng hình dạng `{packageFormat:"edugame", packageVersion:1, game}` → nhập lại được với `id` mới và ngân hàng câu hỏi nguyên → ba gói xấu bị từ chối bằng câu đọc được mà thư viện không thêm dòng nào → mở lại ứng dụng, trò chơi nhập từ gói vẫn còn và xoá được.**
+
+**Quyết định.**
+
+1. **Luật gói không chép sang Rust.** `src/services/game/game-package-ops.ts` chỉ là cửa vào cho slot `EGPACKAGES` (entry `writePackage`/`readPackage`/`suggestedFileName`/`IMPORT_GAME_MAX_BYTES`), gọi thẳng `writeGamePackage`/`readGamePackage` của Electron. `readGamePackage` giữ nguyên bốn bộ kiểm của lúc lưu, bỏ URL tài nguyên ngoài, và chỉ giữ id tác giả khi id đó chưa có trong thư viện — gói là đầu vào không tin được, nên không nới bước nào ở đường Tauri.
+2. **Id đã có thì đổi, id chưa có thì giữ.** Bộ đếm id của Electron là `id('imported')`; ở Tauri danh sách id đã lưu do Rust đọc (`SELECT id FROM games`, thêm vào allowlist `is_known_sql`) và nguồn thời gian do Rust đưa sang: `imported_<millis base36><nonce><n>_<6 ký tự>`. `nonce` là phần nano-giây của đồng hồ tiến trình, nên hai lượt trong cùng một mili-giây vẫn khác nhau. Cùng luật với Electron: id CHƯA ai dùng thì giữ nguyên, id đã có thì thay — bản sao giữ được tên, bản trùng không ghi đè.
+3. **Hộp thoại và tệp chỉ ở Rust; renderer không chọn được đường dẫn.** `export` mở `blocking_save_file` (tiêu đề "Xuất gói trò chơi", bộ lọc `egame`/`json`, `defaultPath` lấy từ `suggestedFileName`) rồi `fs::write`; `import` mở `pick_file`, kiểm `is_file` và trần 20 MB (`IMPORT_GAME_MAX_BYTES` đọc từ chính TS, có `MAX_BYTES_FALLBACK` chỉ khi bundle cũ chưa có kênh `package:max-bytes`), rồi mới đọc. Huỷ hộp thoại trả `{canceled:true}` (xuất) / `null` (nhập) như Electron.
+4. **Cổng kiểm tra chọn lượt bằng SỐ, không bằng đường dẫn.** Renderer không đặt được biến môi trường của tiến trình, nên bốn đường dẫn cổng (`SAVE`/`OPEN`/`BROKEN`/`EMPTY`/`OVERSIZED`) do `scripts/build-tauri-release.js --check` ghi và truyền cho binary; renderer chỉ gọi được `desktop.gate('setPackageGateTurn', n)` → kênh `package:gate-turn` → đặt `EDUGAME_TAURI_PACKAGE_NEXT`. `gate_target` đọc bộ đếm: lượt 0 là gói tốt, lượt 1–3 là ba gói xấu. Kênh điều khiển này KHÔNG thuộc hợp đồng Electron (`GATE_CHANNELS` trong `tauri-contract.test.ts` loại nó khỏi hai danh sách kênh) và bị từ chối `EG_GATE` khi cổng chưa bật — nên bản release cho giáo viên không có đường nào để renderer tự chọn tệp.
+5. **Tệp không phải chữ UTF-8 là "chọn nhầm tệp", không phải sự cố.** Chọn nhầm ảnh/PDF/tệp bảng tính đổi đuôi trước đây lộ lỗi `std`; giờ ra `EG_READ: Tệp <đường dẫn> không phải tệp chữ UTF-8 — có thể đã chọn nhầm tệp.`, các lỗi đọc khác giữ câu `không đọc được <đường dẫn>: <lỗi>`. Mã lỗi còn lại: `EG_TOO_LARGE`, `EG_PACKAGE` (JSON hỏng/thiếu trường), `EG_WRITE`, `EG_PATH`, `EG_GATE`.
+6. **Cổng tauri-webview mở rộng thêm bốn phép đo ở pha một và một phép đo ở pha hai.** Pha một xuất → so hình dạng tệp trên đĩa → nhập lại (title, template, số câu, câu giải thích, id `imported_`, thư viện +1, không có `createdAt` lạ) → ba gói xấu (JSON hỏng, thiếu câu hỏi, >20 MB) mỗi gói phải ra mã `EG_…` và không thêm dòng; memo ghi `importedId`. Pha hai (tiến trình mới) tìm lại đúng id, đúng câu hỏi, rồi xoá 1. Cổng bài `packageGate` giờ BẮT BUỘC khi chạy với memo: thiếu biến của script cha là thoát mã 1, không bỏ qua im lặng (xem lỗi bên dưới).
+
+**Lỗi đã sửa trong lúc làm.**
+
+- Lần chạy cổng đầu tiên xanh **17/17** nhưng KHÔNG có phép đo gói nào: `runCheck` chỉ truyền `EDUGAME_TAURI_MEMO` cho tiến trình kiểm, nên script tự thấy mình không bật cổng và bỏ qua cả bốn phép đo. Sửa hai đầu: `runCheck` truyền `...gateEnv`, và script con thoát mã 1 khi có memo mà thiếu `EDUGAME_TAURI_PACKAGE_SAVE`. Xanh nhưng không đo là kiểu đỏ tệ nhất.
+- Phép đo gói xấu đọc mã ở `error.code`, nhưng lỗi của vỏ tới renderer dưới dạng chuỗi nên façade gói thành `host-error` với mã `EG_…` ở ĐẦU message. Sửa: đo mã ở message.
+- `"packageFormat":"edugame"` không khớp tệp trên đĩa vì `writeGamePackage` in thụt lề (`JSON.stringify(…, null, 2)`); bài test Rust so lại câu có dấu cách.
+
+**Kiểm chứng.**
+
+- `cargo test --manifest-path src-tauri/Cargo.toml -- --test-threads=1`: **45/45**, gồm `round_trip_keeps_the_game_and_its_question_bank` và `a_binary_file_is_refused_as_a_wrong_file_not_as_a_crash`.
+- `build-tauri-release.js --check` trên binary **release**: pha một **21/21**, pha hai **9/9**.
+- `npm test`: **98/98**; `tauri` **5/5**, `game-package` **2/2**; `check:embedded` khớp **1004,2 KiB**.
+
+**Chưa xác minh.**
+
+- 65 kênh còn `unsupported!`.
+- Gói `.egame` có ảnh: đường Tauri chưa có phép đo riêng; nhánh ảnh (`edugame-file:`) vẫn là đường Electron.
+- UI Thư viện/Trình tạo trên Tauri mới đi qua façade, chưa bấm qua giao diện.
+- Import tài liệu/ảnh, export chẩn đoán và chơi offline là bước 5–6.
+- Dựng Rust vẫn cần bản vá `build.rs` cục bộ của crate `v8` + `RUSTY_V8_ARCHIVE` (xem mục 3/6).
+
+**Việc kế tiếp.** Bước 5/6: import tài liệu, câu hỏi, ảnh và export chẩn đoán chạy trong app Tauri.
+
 ## Giai đoạn 3 (3/6) — Năm kênh `project:*`: cùng engine, cùng luật; xoá lô giữ trần 200 và ảnh của bản nháp bị dọn ở Rust (2026-11-09)
 
 **Báo cáo.** Bước 3/6 port nhóm dự án (`project:save-draft`, `project:get`, `project:list`, `project:delete`, `project:delete-many`) lên SQLite của vỏ Tauri, dùng lại nguyên văn `project-ops.ts` — không viết lại luật sang Rust. Bằng chứng nghiệm thu là **ba bản nháp lưu → đóng hẳn ứng dụng → mở lại đúng thứ tự mới-sửa-trước và đúng `createdAt` → sửa giữ `id` → xoá một / xoá lô**.

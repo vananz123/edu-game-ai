@@ -60,7 +60,11 @@ function isSendChannel(call: string): boolean {
  */
 function channelOf(call: string): string {
   const spec = DESKTOP_FACADE_SCHEMA.calls[call];
-  return spec && spec.channel ? spec.channel : call;
+  if (spec && spec.channel) return spec.channel;
+  // Lời gọi điều khiển của cổng kiểm tra: kênh riêng, không thuộc hợp đồng
+  // Electron (`desktop.gate('setPackageGateTurn', n)`).
+  const gate = DESKTOP_FACADE_SCHEMA.gateCalls[call];
+  return gate || call;
 }
 
 function createTauriDesktopAdapter(tauriApi?: any, options?: TauriAdapterOptions): DesktopAdapter | null {

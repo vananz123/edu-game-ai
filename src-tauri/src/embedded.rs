@@ -221,6 +221,8 @@ pub(crate) fn is_known_sql(sql: &str) -> bool {
         "SELECT created_at FROM sessions WHERE id = @id",
         "SELECT data_json FROM games WHERE id = @id",
         "SELECT id FROM games ORDER BY updated_at DESC LIMIT 1",
+        // Gói `.egame` đọc id của mọi dòng để id trùng không đè dòng thật.
+        "SELECT id FROM games",
         "SELECT data_json FROM games",
         "SELECT data_json FROM game_projects",
         "SELECT * FROM game_projects",

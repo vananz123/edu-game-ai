@@ -18,7 +18,10 @@ import { validateMatchingGame, validateRaceGame, validateScenarioGame, validateT
 
 // `game-service` is a CommonJS module (legacy, `@ts-nocheck`); require it the way the
 // rest of main does so the same implementation runs here and in the editor.
-const { normalizeGame } = require('./game-service') as { normalizeGame: (game: unknown) => EducationalGame };
+const { normalizeGame, useIdCheck } = require('./game-service') as {
+  normalizeGame: (game: unknown) => EducationalGame;
+  useIdCheck: (check: ((id: string) => boolean) | null) => void;
+};
 
 /** A game plus text plus illustration ids is small; anything bigger is the wrong file. */
 export const IMPORT_GAME_MAX_BYTES = 20 * 1024 * 1024;
@@ -75,11 +78,19 @@ export function writeGamePackage(game: EducationalGame): string {
 /**
  * Parses the text of a `.egame`/`.json` package into a game ready to save.
  *
- * `newId` is injected so the result is deterministic in tests. `createdAt`/`updatedAt`
- * are dropped: the store sets them on insert, and keeping the author's timestamps
- * would make a fresh import look older than the row it came from.
+ * `newId` keeps the result deterministic in tests: it names the game when
+ * `isIdTaken` reports the package's own id is already in the library. `idTaken`
+ * (optional) is the caller's look-up of the library, so a re-import never
+ * overwrites the row it came from; without it every id counts as new.
+ * `createdAt`/`updatedAt` are dropped: the store sets them on insert, and keeping
+ * the author's timestamps would make a fresh import look older than the row it
+ * came from.
  */
-export function readGamePackage(text: string, newId: () => string): EducationalGame {
+export function readGamePackage(
+  text: string,
+  newId: () => string,
+  idTaken?: (id: string) => boolean
+): EducationalGame {
   let parsed: unknown;
   try {
     parsed = JSON.parse(String(text || ''));
@@ -101,7 +112,19 @@ export function readGamePackage(text: string, newId: () => string): EducationalG
   // `contentCategory`) — those are re-attached per item, by position, from the original
   // package, so a game imported here renders the same illustrations it had.
   const assetFields = collectItemAssets(game.questions);
-  const normalized = normalizeGame(game) as EducationalGame & { createdAt?: string; updatedAt?: string };
+  // `normalizeGame` keeps the package's own id only when the library has not used
+  // it yet; otherwise it mints one. Either way this `newId` is only for the case
+  // above, so a re-import can never overwrite the row it came from.
+  const lookUp = typeof idTaken === 'function' ? idTaken : null;
+  const idForPackage = lookUp && typeof game.id === 'string' && game.id.trim() ? lookUp(game.id.trim()) : true;
+  useIdCheck(lookUp && idForPackage ? lookUp : null);
+  let normalized: EducationalGame;
+  try {
+    normalized = normalizeGame(game) as EducationalGame & { createdAt?: string; updatedAt?: string };
+  } finally {
+    useIdCheck(null);
+  }
+  if (idForPackage) normalized.id = newId();
   reattachItemAssets(normalized.questions, assetFields);
   try {
     validateQuizAnswers(normalized);
@@ -113,7 +136,6 @@ export function readGamePackage(text: string, newId: () => string): EducationalG
     throw new GamePackageError(`Gói trò chơi không hợp lệ: ${(error && (error as Error).message) || 'dữ liệu sai cấu trúc'}`);
   }
   stripImportedAssetUrls(normalized);
-  normalized.id = newId();
   delete normalized.createdAt;
   delete normalized.updatedAt;
   return normalized;

@@ -256,6 +256,15 @@ const DESKTOP_FACADE_SCHEMA = Object.freeze({
   calls: DESKTOP_CALLS,
   argc: DESKTOP_ARGC,
   argv: DESKTOP_ARGV,
+  /**
+   * Lời gọi KHÔNG có trong preload Electron, nên không thuộc `DESKTOP_CALLS` và
+   * không được `calls` kiểm: chỉ cổng kiểm tra Tauri dùng. Vỏ Tauri từ chối khi
+   * biến `EDUGAME_TAURI_PACKAGE` chưa bật, nên bản phát hành không mở đường nào
+   * (`package.rs::set_gate_turn`).
+   */
+  gateCalls: Object.freeze({
+    setPackageGateTurn: 'package:gate-turn',
+  }),
   error: desktopError,
   toError: toDesktopError,
   callCount: Object.keys(DESKTOP_CALLS).length,

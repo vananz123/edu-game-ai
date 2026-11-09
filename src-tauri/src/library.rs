@@ -159,7 +159,10 @@ impl Library {
     }
 
     /// Gửi một lượt gọi sang luồng engine và chờ nó trả lời.
-    fn call(&self, channel: &str, args: &[Value]) -> Result<Value, DbError> {
+    ///
+    /// `pub(crate)` cho `package.rs`: gói `.egame` dùng CÙNG engine (và cùng
+    /// kết nối SQLite để tra id đã dùng), chỉ khác là tệp do nó đọc/ghi.
+    pub(crate) fn call(&self, channel: &str, args: &[Value]) -> Result<Value, DbError> {
         let (reply, answer) = std::sync::mpsc::channel();
         self.jobs
             .send(Job {

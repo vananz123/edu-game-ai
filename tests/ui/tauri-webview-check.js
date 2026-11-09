@@ -28,6 +28,18 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
 const memoFile = process.env.EDUGAME_TAURI_MEMO;
 const reopenPhase = process.argv.includes('--reopen');
 
+/**
+ * Bốn đường dẫn của cổng gói `.egame`. Tiến trình cha (`build-tauri-release.js`)
+ * ĐẶT BIẾN MÔI TRƯỜNG CỦA CHÍNH NÓ trước khi mở binary — renderer không đặt được
+ * biến của tiến trình, nên đường dẫn hộp thoại chỉ có thể đến từ vỏ. Khi chưa có
+ * biến, ba phép đo gói bị bỏ qua (cùng cách `EDUGAME_TAURI_MEMO` bật phần lưu).
+ */
+const packagePaths = {
+  save: process.env.EDUGAME_TAURI_PACKAGE_SAVE || '',
+  open: process.env.EDUGAME_TAURI_PACKAGE_OPEN || '',
+};
+const packageGate = Boolean(process.env.EDUGAME_TAURI_PACKAGE_SAVE);
+
 (async () => {
   const { evaluate } = await connect();
 
@@ -50,6 +62,13 @@ const reopenPhase = process.argv.includes('--reopen');
     check('mở lại: ba bản nháp dự án còn, đúng thứ tự mới-sửa-trước', out.listOk === true, out.listMsg);
     check('dự án: sửa giữ id + createdAt, tiêu đề mới đứng đầu', out.projectEditOk === true, out.projectEditMsg);
     check('dự án: xoá lô trả {ok, deleted, missing} và trần 200', out.projectDeleteOk === true, out.projectDeleteMsg);
+    if (memo.package && memo.package.importedId) {
+      // Trò chơi nhập từ gói phải NẰM TRÊN ĐĨA: pha một chỉ chứng minh nó lưu
+      // được qua cầu, pha hai chứng minh nó sống qua một tiến trình mới và xoá
+      // được như mọi dòng khác.
+      const pack = await evaluate(reopenPackageRunner(memo.package));
+      check('mở lại: trò chơi nhập từ .egame còn với id + câu hỏi cũ, xoá được', pack.ok === true, pack.msg);
+    }
     const failedReopen = results.filter(r => !r.ok).length;
     console.log(`\n${results.length - failedReopen}/${results.length} checks passed`);
     process.exit(failedReopen ? 1 : 0);
@@ -76,16 +95,39 @@ const reopenPhase = process.argv.includes('--reopen');
   check('thư mục dữ liệu dưới vn.edugame.studio.tauri', out.dataDir === true, out.dataDirMsg);
 
   if (memoFile) {
+    // Cổng chạy bằng `--check` LUÔN phải đo gói `.egame`; thiếu biến ở đây là
+    // script cha quên truyền, không phải một cấu hình hợp lệ — bỏ qua im lặng
+    // thì bốn phép đo gói không bao giờ chạy mà cổng vẫn xanh.
+    if (!reopenPhase && !packageGate) {
+      console.error('EDUGAME_TAURI_PACKAGE_SAVE thiếu: script cha phải truyền biến cổng gói cho tiến trình kiểm');
+      process.exit(1);
+    }
     // Ghi thật qua façade rồi để lại memo cho pha hai (tiến trình khác) so.
     const first = await evaluate(saveRunner('Kiểm tra lưu ' + Date.now()));
     check('lưu trò chơi qua library:save-game', first.ok === true, first.msg);
     const projects = await evaluate(projectSaveRunner('Kiểm tra dự án ' + Date.now()));
     check('lưu dự án qua project:save-draft (kiểm dữ liệu + dọn ảnh)', projects.ok === true, projects.msg);
+    // Gói `.egame`: xuất tệp thật qua hộp thoại lưu của CỔNG, rồi nhập lại ngay
+    // trong tiến trình này (một tệp, hai lượt) — pha hai chỉ đo phần cần tiến
+    // trình mới.
+    let imported = null;
+    if (packageGate) {
+      const exported = await evaluate(exportRunner('Gói qua cổng', packagePaths.save));
+      check('xuất .egame qua files:export-game (tệp thật + {ok, path})', exported.ok === true, exported.msg);
+      const onDisk = fs.existsSync(packagePaths.save);
+      check('tệp .egame ghi xuống đĩa đúng hình dạng gói', onDisk && packageShape(fs.readFileSync(packagePaths.save, 'utf8')),
+        onDisk ? fs.readFileSync(packagePaths.save, 'utf8').slice(0, 100) : 'không có tệp');
+      imported = await evaluate(importRunner('Gói qua cổng'));
+      check('nhập lại .egame: trò chơi + ngân hàng câu hỏi còn nguyên, id mới', imported.ok === true, imported.msg);
+      const refused = await evaluate(hostileRunner());
+      check('gói hỏng/độc hại bị từ chối với câu đọc được, không treo', refused.ok === true, refused.msg);
+    }
     fs.writeFileSync(memoFile, JSON.stringify({
       id: first.gameId,
       createdAt: first.createdAt,
       title: first.title,
       projects,
+      package: imported ? { path: packagePaths.save, importedId: imported.gameId } : null,
     }));
   }
 
@@ -271,6 +313,133 @@ function scenario(title) {
     }],
   };
 }
+
+/** Chữ của một gói `.egame` hợp lệ, đúng envelope `writeGamePackage` ghi. */
+function packageShape(text) {
+  try {
+    const parsed = JSON.parse(text);
+    return parsed.packageFormat === 'edugame' && parsed.packageVersion === 1 &&
+      Boolean(parsed.game) && typeof parsed.game.title === 'string' &&
+      Array.isArray(parsed.game.questions);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Lượt xuất: qua ĐÚNG cửa renderer (`desktop.call('exportGame')` → adapter →
+ * `invoke_channel` → `package::export`), hộp thoại lưu bị CỔNG thay bằng đường dẫn
+ * trong biến môi trường của tiến trình. Kết quả phải nói đúng tệp đã ghi.
+ */
+const exportRunner = (title, target) => `(async () => {
+  const out = {};
+  const title = ${JSON.stringify(title)};
+  const target = ${JSON.stringify(target)};
+  // Trò chơi xuất đi là một trò CHƯA lưu: bản xuất không cần dòng trong thư viện.
+  const game = ${JSON.stringify(scenario('__TITLE__')).replace('"__TITLE__"', 'title')};
+  try {
+    const result = await desktop.call('exportGame', game);
+    out.ok = Boolean(result && result.ok === true && result.path === target);
+    out.msg = JSON.stringify(result);
+  } catch (error) {
+    out.ok = false;
+    out.msg = 'exportGame lỗi: ' + (error && error.code) + ': ' + (error && error.message);
+  }
+  return out;
+})()`;
+
+/**
+ * Lượt nhập: `desktop.call('importGame')` mở hộp thoại nhập của cổng trên CÙNG
+ * tệp vừa ghi, lưu trò chơi trả về, rồi đọc lại từ thư viện. Id phải KHÁC id tác
+ * giả nếu gói mang id đã có trong thư viện; ở đây gói không mang id nên trò chơi
+ * vẫn nhận id `imported_…` do máy này sinh.
+ */
+const importRunner = (title) => `(async () => {
+  const out = {};
+  const title = ${JSON.stringify(title)};
+  try {
+    const before = (await desktop.call('getLibrary')).games.length;
+    // Lượt 1 = đường nhập thật của cổng (tệp vừa xuất); các lượt sau là gói xấu.
+    await desktop.gate('setPackageGateTurn', 1);
+    const game = await desktop.call('importGame');
+    out.title = game && game.title;
+    out.gameId = game && game.id;
+    const saved = game ? await desktop.call('saveGame', game) : null;
+    const after = (await desktop.call('getLibrary')).games;
+    out.ok = Boolean(game && saved) &&
+      game.title === title &&
+      game.template === 'scenario' &&
+      Array.isArray(game.questions) && game.questions.length === 1 &&
+      game.questions[0].explanation === 'Dừng trước vạch.' &&
+      /^imported_/.test(String(game.id)) &&
+      after.length === before + 1 && after.some(g => g.id === saved.id) &&
+      !('createdAt' in game);
+    out.msg = 'id=' + (game && game.id) + ', câu hỏi=' + (game && game.questions && game.questions.length) +
+      ', games ' + before + '→' + after.length;
+  } catch (error) {
+    out.ok = false;
+    out.msg = 'importGame lỗi: ' + (error && error.code) + ': ' + (error && error.message);
+  }
+  return out;
+})()`;
+
+/**
+ * Ba gói xấu, mỗi gói một đường dẫn mà tiến trình cha đã ghi sẵn: JSON hỏng, gói
+ * đúng JSON nhưng thiếu câu hỏi, và tệp lớn hơn trần 20 MB. Cả ba phải ném lỗi
+ * ĐỌC ĐƯỢC có mã `EG_…`, không được trả một trò chơi rỗng và không được treo.
+ */
+const hostileRunner = () => `(async () => {
+  const out = { cases: [] };
+  // Bộ đếm của cổng đọc lúc gọi. Lượt nhập thật vừa dùng giá trị 1; các lượt sau
+  // là 2, 3, 4 (ba gói xấu theo thứ tự JSON hỏng → thiếu câu hỏi → quá 20 MB).
+  // Renderer chỉ chọn được SỐ, không chọn được đường dẫn.
+  const attempt = async (label, turn) => {
+    await desktop.gate('setPackageGateTurn', turn);
+    const before = (await desktop.call('getLibrary')).games.length;
+    try {
+      const game = await desktop.call('importGame');
+      out.cases.push(label + ': TRẢ THÀNH CÔNG ' + JSON.stringify(game && game.id));
+    } catch (error) {
+      const after = (await desktop.call('getLibrary')).games.length;
+      // Lỗi của vỏ Tauri tới renderer dưới dạng chuỗi, nên façade gói nó thành
+      // 'host-error' với mã 'EG_…' ở ĐẦU message — đúng thứ giáo viên thấy. Cổng
+      // đo mã đó ở message, không ở error.code (luôn là 'host-error').
+      const message = String((error && error.message) || '');
+      const code = (/^EG_[A-Z_]+/.exec(message) || [''])[0];
+      if (!code || after !== before) out.cases.push(label + ': sai mã/đã ghi dòng — ' + message.slice(0, 40));
+      else out.cases.push(label + ': ' + code + ' | ' + message.slice(0, 80));
+    }
+  };
+  await attempt('JSON hỏng', 2);
+  await attempt('thiếu câu hỏi', 3);
+  await attempt('quá 20 MB', 4);
+  out.ok = out.cases.length === 3 && out.cases.every(line => /^[^:]+: EG_[A-Z_]+ \\| /.test(line));
+  out.msg = out.cases.join(' · ');
+  return out;
+})()`;
+
+/**
+ * Pha hai (gói nhập): trò chơi nhập từ `.egame` còn trên đĩa với đúng id và câu
+ * hỏi, rồi xoá được như mọi dòng khác.
+ */
+const reopenPackageRunner = memo => `(async () => {
+  const out = {};
+  const memo = ${JSON.stringify(memo)};
+  const games = async () => (await desktop.call('getLibrary')).games;
+  const found = (await games()).find(g => g.id === memo.importedId);
+  out.ok = Boolean(found) && found.title === 'Gói qua cổng' &&
+    Array.isArray(found.questions) && found.questions.length === 1 &&
+    found.questions[0].explanation === 'Dừng trước vạch.';
+  if (out.ok) {
+    const before = (await games()).length;
+    const removed = await desktop.call('deleteGames', [memo.importedId]);
+    out.ok = removed.deleted === 1 && (await games()).length === before - 1;
+    out.msg = 'id=' + memo.importedId + ', xoá=' + removed.deleted;
+  } else {
+    out.msg = 'không thấy trò chơi nhập ' + memo.importedId;
+  }
+  return out;
+})()`;
 
 /**
  * Lượt một: ghi qua ĐÚNG cửa renderer (`desktop.call` → adapter Tauri →

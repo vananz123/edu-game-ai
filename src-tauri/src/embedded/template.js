@@ -21,6 +21,7 @@
   /* @slot EGCONTRACTS */
   /* @slot EGOPS */
   /* @slot EGPROJECTS */
+  /* @slot EGPACKAGES */
 
   // Luật trong `library-ops.ts` viết theo kiểu đồng bộ (bên Electron
   // `better-sqlite3` cũng đồng bộ). Ba op của Rust cũng đồng bộ, nên cầu này
@@ -40,6 +41,7 @@
 
   var ops = available.EGOPS;
   var projects = available.EGPROJECTS;
+  var packages = available.EGPACKAGES;
 
   /** Bảng op → hàm; thiếu op là lỗi của người dựng, không phải của dữ liệu. */
   var dispatch = {
@@ -68,7 +70,16 @@
       var games = await store.select('SELECT data_json FROM games', {});
       var projects = await store.select('SELECT data_json FROM game_projects', {});
       return games.concat(projects);
-    }
+    },
+    // Gói `.egame`: Rust mở hộp thoại và đọc/ghi tệp, slot này chỉ thấy chuỗi.
+    // `package:read` nhận luôn danh sách id đã lưu để gói trùng id không đè dòng
+    // thật; danh sách đọc ngay trong cùng lượt gọi, không qua Rust.
+    'package:export': async function (game) { return packages.writePackage(game); },
+    'package:read': async function (text, now, nonce) {
+      var rows = await store.select('SELECT id FROM games', {});
+      return packages.readPackage(text, now, nonce, rows.map(function (row) { return row.id; }));
+    },
+    'package:max-bytes': async function () { return packages.IMPORT_GAME_MAX_BYTES; }
   };
 
   globalThis.__eg_run = async function () {

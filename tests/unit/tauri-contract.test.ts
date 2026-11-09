@@ -38,6 +38,10 @@ const conf = JSON.parse(
 // chung giai đoạn 2 (chúng không thuộc preload Electron, chỉ giữ hình dạng bảng)
 // nên bị bỏ khỏi mọi phép so với contract. `shell:info` cũng không thuộc preload.
 const PSEUDO_CHANNELS = new Set(['channel:invoke', 'channel:send']);
+// Kênh ĐIỀU KHIỂN của cổng kiểm tra: không có trong preload Electron, không
+// renderer nào gọi (`desktop.gate(...)`, chỉ `tests/ui/tauri-webview-check.js`),
+// và `package.rs` từ chối khi `EDUGAME_TAURI_PACKAGE` chưa bật.
+const GATE_CHANNELS = new Set(['package:gate-turn']);
 
 function handWritten(): Map<string, string> {
   const table = new Map<string, string>();
@@ -105,7 +109,7 @@ function test(name: string, fn: () => void) {
 
 test('api.rs khai được mọi kênh invoke của desktop-contract.json', () => {
   const declared = new Set([...rustChannels().values()]
-    .filter(channel => channel !== 'shell:info' && !PSEUDO_CHANNELS.has(channel)));
+    .filter(channel => channel !== 'shell:info' && !PSEUDO_CHANNELS.has(channel) && !GATE_CHANNELS.has(channel)));
   const expected = new Set(Object.values(contract.invoke));
   const missing = [...expected].filter(channel => !declared.has(channel as string)).sort();
   const extra = [...declared].filter(channel => !expected.has(channel as string)).sort();
@@ -169,7 +173,7 @@ test('invoke_channel nhận đúng mọi kênh invoke của hợp đồng, khôn
   const channels = channelList('INVOKE_CHANNELS');
   const expected = Object.values(contract.invoke) as string[];
   const missing = expected.filter(channel => !channels.includes(channel)).sort();
-  const extra = channels.filter(channel => !expected.includes(channel)).sort();
+  const extra = channels.filter(channel => !expected.includes(channel) && !GATE_CHANNELS.has(channel)).sort();
   assert.deepEqual(missing, [], `INVOKE_CHANNELS thiếu: ${missing.join(', ')}`);
   assert.deepEqual(extra, [], `INVOKE_CHANNELS thừa: ${extra.join(', ')}`);
 });

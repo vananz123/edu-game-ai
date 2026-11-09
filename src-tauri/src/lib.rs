@@ -10,12 +10,16 @@
 pub mod api;
 pub mod embedded;
 pub mod library;
+pub mod package;
 pub mod paths;
 pub mod sql_params;
 pub mod storage;
 
 pub fn run() {
     tauri::Builder::default()
+        // Hộp thoại mở/lưu của gói `.egame`. Plugin chỉ được Rust gọi
+        // (`AppHandle::dialog()`); frontend không có quyền `dialog:*` nào.
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             // Không mở được thư viện thì dừng hẳn: một cửa sổ mà mọi lệnh lưu/xoá
             // đều hỏng sẽ khiến giáo viên tưởng đã mất dữ liệu.

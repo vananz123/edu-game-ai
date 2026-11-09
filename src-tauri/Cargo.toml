@@ -32,6 +32,9 @@ rusqlite = { version = "0.41", features = ["bundled"] }
 deno_core = { version = "0.413.0", default-features = false, features = ["v8", "reactor-tokio"] }
 deno_error = "0.7.1"
 tokio = { version = "1", features = ["rt", "macros"] }
+# Gói `.egame`: hộp thoại mở/lưu là của TIẾN TRÌNH (Rust), không của WebView —
+# frontend không có quyền `dialog:`/`fs:`, nên nó không tự chọn được đường dẫn.
+tauri-plugin-dialog = "2"
 
 [dev-dependencies]
 # Thư mục tạm tự dọn cho test storage: mỗi test mở một tệp 0.5.1 riêng, không

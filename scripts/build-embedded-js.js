@@ -34,20 +34,43 @@ const SLOTS = [
   // xoá (`project-ops.ts`). `lesson-contracts.ts` đi kèm vì bộ kiểm dự án dùng
   // `parseGameConfig`/`parseGameDraft` của nó — cùng bộ Zod mà Electron chạy.
   { slot: 'EGCONTRACTS', entry: 'src/services/lesson/lesson-contracts.ts' },
-  { slot: 'EGPROJECTS', entry: 'src/services/storage/project-ops.ts' }
+  { slot: 'EGPROJECTS', entry: 'src/services/storage/project-ops.ts' },
+  // Gói `.egame`: bộ đọc/ghi của Electron (`game-package.ts`) với `normalizeGame`
+  // và bốn bộ kiểm thể loại đi kèm. Rust mở hộp thoại và đọc/ghi tệp; slot này
+  // chỉ thấy chuỗi.
+  { slot: 'EGPACKAGES', entry: 'src/services/game/game-package-ops.ts' }
 ];
+
+/**
+ * UUID v4 dựng từ `Math.random`, dùng trong V8 nhúng thay cho `node:crypto`.
+ * Cùng thứ `id()` của `main.ts` dựng id — không phải bí mật, chỉ cần khó trùng.
+ */
+const UUID_FALLBACK =
+  '(function () { return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (ch) {' +
+  ' var n = Math.floor(Math.random() * 16);' +
+  ' return (ch === "x" ? n : (n & 3) | 8).toString(16); }); })()';
+
+/**
+ * Dạng esbuild ĐỂ LẠI trong kết quả cho câu `require('node:crypto').randomUUID()`
+ * của `game-service.ts`, khi `node:crypto` được khai `external`.
+ */
+const UUID_REQUIRE = 'require("node:crypto").randomUUID()';
 
 /**
  * Bundle một entry thành CJS một dòng.
  *
- * Không dùng `external`: nếu một module lỡ `import` `node:fs`, esbuild phải
- * nhúng nó và V8 nhúng sẽ ném lúc nạp — đúng điều mình muốn biết ngay khi dựng,
- * thay vì lặng lẽ gọi ra ngoài. `platform: 'neutral'` tắt các polyfill Node mà
- * một trò chơi không nên có.
+ * Không dùng `external` cho hầu hết thứ: nếu một module lỡ `import` `node:fs`,
+ * esbuild phải nhúng nó và V8 nhúng sẽ ném lúc nạp — đúng điều mình muốn biết ngay
+ * khi dựng, thay vì lặng lẽ gọi ra ngoài. `platform: 'neutral'` tắt các polyfill
+ * Node mà một trò chơi không nên có, và cũng không phân giải được module lõi
+ * Node. Ngoại lệ duy nhất là `crypto` (`UUID_REQUIRE`): để esbuild chuyển nó
+ * thành `require("crypto")` bình thường, rồi thay ĐÚNG chuỗi đó bằng
+ * `UUID_FALLBACK`. Câu require nào khác còn lại trong kết quả là lỗi.
  */
-function bundleModule(entry) {
-  const result = esbuild.buildSync({
+async function bundleModule(entry) {
+  const result = await esbuild.build({
     entryPoints: [path.join(root, entry)],
+    external: ['node:crypto'],
     bundle: true,
     write: false,
     format: 'cjs',
@@ -58,8 +81,13 @@ function bundleModule(entry) {
     legalComments: 'none',
     logLevel: 'silent'
   });
-  const text = result.outputFiles[0].text.trim();
-  if (/require\(["'](?:node:)?(?:fs|os|child_process|worker_threads|vm|module)["']\)/.test(text)) {
+  const bundled = result.outputFiles[0].text.trim();
+  // Đúng một lần: nhiều hơn nghĩa là một module khác cũng gọi crypto, và thay
+  // hết sẽ giấu mất chỗ cần xem lại.
+  const uses = bundled.split(UUID_REQUIRE).length - 1;
+  if (uses > 1) throw new Error(`${entry}: ${uses} chỗ gọi UUID — chỉ chấp nhận một.`);
+  const text = uses === 1 ? bundled.split(UUID_REQUIRE).join(UUID_FALLBACK) : bundled;
+  if (/require\(["'](?:node:)?(?:fs|os|child_process|worker_threads|vm|module|crypto)["']\)/.test(text)) {
     throw new Error(`${entry}: bundle vẫn còn require() của module lõi Node — V8 nhúng không có module nào.`);
   }
   return text;
@@ -86,17 +114,17 @@ function fill(template, slot, code) {
   return template.slice(0, index) + injected + template.slice(index + marker.length);
 }
 
-function build() {
+async function build() {
   let source = fs.readFileSync(templatePath, 'utf8');
-  for (const { slot, entry } of SLOTS) source = fill(source, slot, bundleModule(entry));
+  for (const { slot, entry } of SLOTS) source = fill(source, slot, await bundleModule(entry));
   const header = `// TỆP SINH TỰ ĐỘNG bởi scripts/build-embedded-js.js. Đừng sửa tay.\n` +
     `// Nguồn: src-tauri/src/embedded/template.js + ${SLOTS.map(entry => entry.entry).join(', ')}\n`;
   return header + source;
 }
 
-function main() {
+async function main() {
   const check = process.argv.includes('--check');
-  const next = build();
+  const next = await build();
   if (check) {
     const current = fs.existsSync(outPath) ? fs.readFileSync(outPath, 'utf8') : '';
     if (current !== next) {
@@ -110,6 +138,11 @@ function main() {
   console.log(`embedded bundle: ${outPath} (${(Buffer.byteLength(next) / 1024).toFixed(1)} KiB)`);
 }
 
-if (require.main === module) main();
+if (require.main === module) {
+  main().catch(error => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exit(1);
+  });
+}
 
 module.exports = { build, SLOTS };

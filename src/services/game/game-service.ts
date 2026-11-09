@@ -1,5 +1,24 @@
 // @ts-nocheck -- migrated legacy UI logic; new contracts are typed in src/shared/types.ts.
-const crypto = require('node:crypto');
+
+// Điểm duy nhất của tệp này cần Node là UUID. Vỏ Tauri chạy CHÍNH tệp này trong
+// V8 nhúng (`deno_core`) qua `game-package.ts`, mà V8 nhúng không có module lõi
+// Node nào — nên `newUuid()` xuống thẳng tới `require("node:crypto")`, và bản
+// bundle `EGPACKAGES` của `scripts/build-embedded-js.js` thay đúng câu đó bằng
+// nhánh `Math.random` (cổng dựng đỏ nếu không tìm thấy). Electron chạy nguyên bản.
+
+// Câu hỏi "id này đã có trong thư viện chưa?" — do bộ gọi (bộ đọc gói ở
+// `game-package.ts`) đưa vào, vì tệp này không đọc cơ sở dữ liệu. `null` là
+// "không ai tra" (mọi id đều mới), nên đặt lại `null` sau lượt gọi là hợp lệ.
+let isIdTaken = null;
+
+function useIdCheck(check) {
+  if (check !== null && typeof check !== 'function') throw new TypeError('useIdCheck cần một hàm hoặc null.');
+  isIdTaken = check;
+}
+
+function newUuid() {
+  return require('node:crypto').randomUUID();
+}
 
 function normalizeGame(game) {
   if (!game || typeof game.title !== 'string' || !Array.isArray(game.questions)) {
@@ -54,8 +73,14 @@ function normalizeGame(game) {
   if (game.race && typeof game.race === 'object' && !Array.isArray(game.race)) {
     race = game.race;
   }
+  // Id tác giả chỉ được giữ khi CHƯA có ai dùng: nhập lại một gói vào thư viện
+  // đang chứa chính nó (hay một gói chép tay ghi trùng id) nhận id mới, nên
+  // không bao giờ ghi đè dòng đang có. `idOwner` do bộ gọi đưa vào; không có thì
+  // mọi id đều là mới. Xem DECISIONS "Giai đoạn 3 (4/6)".
+  const authorId = typeof game.id === 'string' ? game.id.trim() : '';
+  const idTaken = authorId && typeof isIdTaken === 'function' && isIdTaken(authorId);
   return {
-    id: game.id || `game_${crypto.randomUUID()}`,
+    id: authorId && !idTaken ? authorId : `game_${newUuid()}`,
     title: game.title.trim(),
     subject: String(game.subject || ''),
     grade: String(game.grade || ''),
@@ -74,4 +99,4 @@ function normalizeGame(game) {
   };
 }
 
-module.exports = { normalizeGame };
+module.exports = { normalizeGame, useIdCheck };

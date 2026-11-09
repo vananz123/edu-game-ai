@@ -313,5 +313,28 @@ const desktop = (function createDesktopFacade() {
     else delete overrides[callName];
   }
 
-  return Object.freeze({ call, listen, attach, detach, info, stub });
+  /**
+   * Gọi một lời gọi ĐIỀU KHIỂN của cổng kiểm tra (`SCHEMA.gateCalls`): không có
+   * trong preload Electron, nên không thể đi qua `call()`. Vỏ Tauri từ chối khi
+   * biến `EDUGAME_TAURI_PACKAGE` chưa bật; adapter Electron không có kênh này nên
+   * lời gọi thất bại, và đó là điều cổng cần biết khi chạy trên Electron.
+   */
+  function gate(callName: string, ...args: unknown[]): Promise<unknown> {
+    const channel = SCHEMA.gateCalls[callName];
+    if (!channel) {
+      return Promise.reject(DESKTOP_ERROR('unknown-call', String(callName), `Không có lời gọi điều khiển ${String(callName)}`));
+    }
+    try {
+      return Promise.resolve(requireAdapter().invoke(callName, args)).then(
+        (value: unknown) => value,
+        (thrown: unknown) => {
+          throw DESKTOP_TO_ERROR(callName, thrown);
+        },
+      );
+    } catch (thrown) {
+      return Promise.reject(DESKTOP_TO_ERROR(callName, thrown));
+    }
+  }
+
+  return Object.freeze({ call, listen, attach, detach, info, stub, gate });
 })();

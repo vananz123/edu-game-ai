@@ -58,6 +58,10 @@ pub fn hand_written(command: &str) -> Option<(&'static str, &'static str)> {
         "list_projects" => ("project:list", "list_projects"),
         "delete_project" => ("project:delete", "delete_project"),
         "delete_projects" => ("project:delete-many", "delete_projects"),
+        // Gói `.egame`: luật trong V8 (`game-package.ts`), hộp thoại và tệp ở
+        // `package.rs`. Hàm nhận thêm `AppHandle` để mở hộp thoại của tiến trình.
+        "export_game" => ("files:export-game", "export_game"),
+        "import_game" => ("files:import-game", "import_game"),
         "get_settings" => ("settings:get", "get_settings"),
         "get_local_ai_models" => ("ai:local-models", "get_local_ai_models"),
         "invoke_channel" => ("channel:invoke", "invoke_channel"),
@@ -97,6 +101,9 @@ const INVOKE_CHANNELS: &[&str] = &[
     "files:import-questions",
     "files:export-game",
     "files:import-game",
+    // Không thuộc hợp đồng Electron: chỉ cổng kiểm tra gọi, và `package.rs` từ
+    // chối khi `EDUGAME_TAURI_PACKAGE` không bật.
+    "package:gate-turn",
     "files:import-illustration",
     "files:delete-illustration",
     "settings:get",
@@ -195,6 +202,21 @@ fn dispatch(app: &AppHandle, channel: &str, args: &[Value]) -> Result<Value, Str
         | "project:list"
         | "project:delete"
         | "project:delete-many" => crate::library::run(app, channel, &args),
+        // Hai kênh gói: tham số đầu là trò chơi (chỉ kênh xuất dùng), phần còn
+        // lại nằm ở `package.rs`.
+        "files:export-game" => match args.first() {
+            Some(game) if !game.is_null() => crate::package::export(
+                app,
+                game.clone(),
+                crate::package::gate_target(channel),
+            ),
+            _ => Err("EG_PACKAGE: thiếu trò chơi để xuất".to_string()),
+        },
+        "files:import-game" => crate::package::import(app, crate::package::gate_target(channel)),
+        // Chỉ có nghĩa khi cổng kiểm tra bật (`EDUGAME_TAURI_PACKAGE=gate`): đặt
+        // bộ đếm để lượt nhập sau chọn biến đường dẫn khác. `package.rs` từ chối
+        // khi cổng tắt, nên bản phát hành không mở thêm đường nào.
+        "package:gate-turn" => crate::package::set_gate_turn(args.first()),
         _ => Err(format!("Kênh `{channel}` chưa có thân trong vỏ Tauri")),
     }
 }
@@ -306,6 +328,19 @@ library_channel! {
     list_projects() => "project:list",
 }
 
+/// Hai kênh gói nhận tham số đúng như hook của `preload.ts` gửi
+/// (`exportGame: game => …`, `importGame: () => …`) nhưng đi qua `package.rs`
+/// thay vì engine của thư viện, vì chúng còn mở hộp thoại của tiến trình.
+#[tauri::command]
+pub fn export_game(app: AppHandle, game: serde_json::Value) -> Result<serde_json::Value, String> {
+    crate::package::export(&app, game, crate::package::gate_target("files:export-game"))
+}
+
+#[tauri::command]
+pub fn import_game(app: AppHandle) -> Result<serde_json::Value, String> {
+    crate::package::import(&app, crate::package::gate_target("files:import-game"))
+}
+
 /// Cài đặt của bản Tauri. Bản thử giai đoạn 1 chưa có trang Cài đặt đầy đủ, nên
 /// chỉ trả mặc định đủ để renderer áp giao diện sáng và không thấy AI nào bật.
 #[tauri::command]
@@ -384,8 +419,6 @@ unsupported! {
     import_document => "files:import-document",
     import_document_from_path => "files:import-document-from-path",
     import_questions => "files:import-questions",
-    export_game => "files:export-game",
-    import_game => "files:import-game",
     save_settings => "settings:save",
     get_ai_providers => "ai:providers",
     test_ai_provider => "ai:test-provider",
