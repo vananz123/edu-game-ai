@@ -19,7 +19,11 @@ function check(name, ok, detail) {
 
 async function connect() {
   const list = await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json();
-  const target = list.find(x => x.type === 'page' && /index\.html/.test(x.url));
+  // Tauri phục vụ trang qua giao thức riêng nên URL là `http://tauri.localhost/`
+  // (không có `index.html`); vỏ Electron thì dùng `file:///…/index.html`.
+  const target = list.find(
+    x => x.type === 'page' && (/index\.html/.test(x.url) || /^https?:\/\/tauri\.localhost\/?$/.test(x.url)),
+  );
   if (!target) throw new Error('no index.html page target on port ' + PORT);
   const ws = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((res, rej) => {

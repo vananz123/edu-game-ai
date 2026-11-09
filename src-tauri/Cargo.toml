@@ -1,0 +1,33 @@
+[package]
+name = "edugame-studio-tauri"
+# Phiên bản theo dõi app Electron đang có; bump cùng lúc với package.json khi phát hành.
+version = "0.5.1"
+description = "EduGame Studio - vỏ Tauri (thử nghiệm giai đoạn 1)"
+authors = ["EduGame Studio"]
+edition = "2021"
+rust-version = "1.99"
+publish = false
+
+[lib]
+# Windows cần một lib rlib cho binary gọi vào, chuẩn của Tauri v2.
+name = "edugame_studio_tauri_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# `devtools`: cổng nghiệm thu của giai đoạn 1 đo UI trong WebView2 qua CDP, và
+# Tauri không mở cổng gỡ lỗi nếu thiếu cờ tính năng này.
+tauri = { version = "2", features = ["devtools"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+# Installer là một trong ba ngưỡng ngừng Electron (#251), nên tối ưu kích thước ngay
+# từ giai đoạn 1 thay vì phải sửa profile về sau.
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

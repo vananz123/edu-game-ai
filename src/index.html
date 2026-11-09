@@ -108,137 +108,147 @@
     </main>
   </div>
   <div id="modalRoot"></div>
+  <!-- MỌI script renderer đều `defer`. Hai lý do:
+       1. ĐO ĐƯỢC: 70 thẻ classic script (2,2 MB) parse tuần tự chặn hết
+          `DOMContentLoaded`. `defer` giữ nguyên thứ tự xuất hiện, chạy sau khi
+          parse xong và trước `DOMContentLoaded`, nên mọi comment "nạp trước …
+          vì …" bên dưới vẫn đúng từng chữ. Trên vỏ Tauri (giai đoạn 1) phép đo
+          spawn → `readyState=complete` giảm từ trung vị 1.240 ms xuống 1.086 ms.
+       2. Nhân quả: file này là plain global script, mỗi tệp chỉ khai báo (hoặc
+          gắn listener DOM đã có sẵn ở trên) — không tệp nào đọc binding của tệp
+          khác lúc nạp. `tests/unit/renderer-load-order.test.ts` khoá bất biến này.
+       Thêm script mới: luôn kèm `defer`; thứ tự trong danh sách là thứ tự chạy. -->
   <!-- Constellation constants (DECISIONS #171). `shared.js` reads the game name
        and the retired BETA label while it paints a library card, so these names
        must exist BEFORE line 105 — the trap #168 documented. -->
-  <script src="renderer/shared/constellation-constants.js"></script>
-  <script src="renderer/shared.js"></script>
-  <script src="renderer/features/treasure-art.js"></script>
-  <script src="renderer/features/game-audio.js"></script>
+  <script defer src="renderer/shared/constellation-constants.js"></script>
+  <script defer src="renderer/shared.js"></script>
+  <script defer src="renderer/features/treasure-art.js"></script>
+  <script defer src="renderer/features/game-audio.js"></script>
   <!-- #204: tab "Giới thiệu" của trang Cài đặt. Nạp TRƯỚC pages/settings.js vì
        renderSettings() gọi aboutPanelHtml() ở mỗi lần vẽ — cùng lý do (và cùng gate
        tests/unit/renderer-load-order.test.ts) như khối lesson-chat bên dưới. -->
-  <script src="renderer/features/about-panel.js"></script>
-  <script src="renderer/pages/library.js"></script>
-  <script src="renderer/pages/create.js"></script>
-  <script src="renderer/pages/sessions.js"></script>
-  <script src="renderer/pages/settings.js"></script>
+  <script defer src="renderer/features/about-panel.js"></script>
+  <script defer src="renderer/pages/library.js"></script>
+  <script defer src="renderer/pages/create.js"></script>
+  <script defer src="renderer/pages/sessions.js"></script>
+  <script defer src="renderer/pages/settings.js"></script>
   <!-- #182: khung chatbot của trang Giáo án. Nạp TRƯỚC pages/lesson-plans.js vì
        renderLessonPlans() gọi lessonChatPanelHtml(); tsc chạy renderer với
        @ts-nocheck nên thứ tự này chỉ được kiểm bởi tests/unit/renderer-load-order. -->
-  <script src="renderer/features/lesson-chat.js"></script>
-  <script src="renderer/pages/lesson-plans.js"></script>
-  <script src="renderer/pages/my-projects.js"></script>
+  <script defer src="renderer/features/lesson-chat.js"></script>
+  <script defer src="renderer/pages/lesson-plans.js"></script>
+  <script defer src="renderer/pages/my-projects.js"></script>
   <!-- State dùng chung của wizard, tách theo khu vực (DECISIONS #150). Nạp đúng
        thứ tự cũ: một số hằng số cấp cao được tính ngay lúc nạp, nên đảo thứ tự
        có thể gây "Cannot access … before initialization" (xem
        tests/unit/renderer-load-order.test.ts). -->
-  <script src="renderer/features/wizard/state/core.js"></script>
-  <script src="renderer/features/wizard/state/providers.js"></script>
-  <script src="renderer/features/wizard/state/config.js"></script>
-  <script src="renderer/features/wizard/state/draft.js"></script>
-  <script src="renderer/features/wizard/state/actions.js"></script>
-  <script src="renderer/features/wizard/step-structure.js"></script>
-<script src="renderer/features/wizard/step-input.js"></script>
-  <script src="renderer/features/wizard/step-analysis.js"></script>
-  <script src="renderer/features/wizard/step-recommend.js"></script>
-  <script src="renderer/features/wizard/step-configure.js"></script>
-  <script src="renderer/features/wizard/step-generate.js"></script>
-  <script src="renderer/pages/create-wizard.js"></script>
-  <script src="renderer/features/icon-data.js"></script>
+  <script defer src="renderer/features/wizard/state/core.js"></script>
+  <script defer src="renderer/features/wizard/state/providers.js"></script>
+  <script defer src="renderer/features/wizard/state/config.js"></script>
+  <script defer src="renderer/features/wizard/state/draft.js"></script>
+  <script defer src="renderer/features/wizard/state/actions.js"></script>
+  <script defer src="renderer/features/wizard/step-structure.js"></script>
+<script defer src="renderer/features/wizard/step-input.js"></script>
+  <script defer src="renderer/features/wizard/step-analysis.js"></script>
+  <script defer src="renderer/features/wizard/step-recommend.js"></script>
+  <script defer src="renderer/features/wizard/step-configure.js"></script>
+  <script defer src="renderer/features/wizard/step-generate.js"></script>
+  <script defer src="renderer/pages/create-wizard.js"></script>
+  <script defer src="renderer/features/icon-data.js"></script>
   <!-- Chrome icons (DECISIONS #161): uiIcon()/paintUiIcons() paint the Lucide SVGs
        behind every `data-icon` hook. Loads right after icon-data.js because that is
        the only copy of the node data the renderer can reach, and before render.js
        (which calls paintUiIcons) and the editor (which calls uiIcon at render). -->
-  <script src="renderer/features/ui-icons.js"></script>
+  <script defer src="renderer/features/ui-icons.js"></script>
   <!-- Sidebar "Lối tắt" (#161): what the deleted Tổng quan page was for. Must load
        before core/render.js, which repaints the block on every render. -->
-  <script src="renderer/features/sidebar-shortcuts.js"></script>
-  <script src="renderer/core/render.js"></script>
+  <script defer src="renderer/features/sidebar-shortcuts.js"></script>
+  <script defer src="renderer/core/render.js"></script>
   <!-- Trình soạn thảo, tách theo khu vực (DECISIONS #150). Renderer là script
        toàn cục nạp theo thứ tự, nên chỉ khai báo hàm ở đỉnh tệp; không tệp nào
        đọc biến của tệp khác lúc nạp. Thứ tự: AI → trang/lưu → câu hỏi → kéo-thả
        → matching → treasure → race. -->
-  <script src="renderer/features/editor/ai.js"></script>
-  <script src="renderer/features/editor/page.js"></script>
-  <script src="renderer/features/editor/questions.js"></script>
-  <script src="renderer/features/editor/drag.js"></script>
-  <script src="renderer/features/editor/matching.js"></script>
-  <script src="renderer/features/editor/treasure.js"></script>
-  <script src="renderer/features/editor/race.js"></script>
-  <script src="renderer/core/controller.js"></script>
-  <script src="renderer/features/local-ai.js"></script>
+  <script defer src="renderer/features/editor/ai.js"></script>
+  <script defer src="renderer/features/editor/page.js"></script>
+  <script defer src="renderer/features/editor/questions.js"></script>
+  <script defer src="renderer/features/editor/drag.js"></script>
+  <script defer src="renderer/features/editor/matching.js"></script>
+  <script defer src="renderer/features/editor/treasure.js"></script>
+  <script defer src="renderer/features/editor/race.js"></script>
+  <script defer src="renderer/core/controller.js"></script>
+  <script defer src="renderer/features/local-ai.js"></script>
 <!-- First-run AI setup (§7): the typed, unit-tested decisions load before the
      DOM layer that renders them. -->
-<script src="renderer/setup-wizard-model.js"></script>
-<script src="renderer/features/setup-wizard.js"></script>
-  <script src="renderer/features/game-generation.js"></script>
-  <script src="game-engine/runtime.js"></script>
+<script defer src="renderer/setup-wizard-model.js"></script>
+<script defer src="renderer/features/setup-wizard.js"></script>
+  <script defer src="renderer/features/game-generation.js"></script>
+  <script defer src="game-engine/runtime.js"></script>
   <!-- Answer modes (DECISIONS #209): the one law four games must not re-invent.
        Loaded with runtime.js so every game/engine consumer sees the globals. -->
-  <script src="game-engine/answer-mode.js"></script>
+  <script defer src="game-engine/answer-mode.js"></script>
   <!-- #209 task 3: the machine that APPLIES that law to one question/turn — retry,
        lock, practice penalty, explanation gate, and the once-only score record.
        Must load before every features/games/*.js that calls it. -->
-  <script src="game-engine/answer-flow.js"></script>
+  <script defer src="game-engine/answer-flow.js"></script>
   <!-- House Building Mode (DECISIONS #140): pure construction/streak economy,
        loaded before games/house.js which drives the 3D house from it. -->
-  <script src="game-engine/house-build.js"></script>
+  <script defer src="game-engine/house-build.js"></script>
 
   <!-- Object Connection (DECISIONS #168): constants, template data and the pure
        progression. All three declare globals only, and they are loaded before
        every page/feature that renders a template (wizard step 4, editor, play
        surface), so the gallery can be built during the first render. -->
-  <script src="renderer/shared/connection-constants.js"></script>
-  <script src="renderer/shared/connection-data.js"></script>
-  <script src="renderer/connection-core.js"></script>
+  <script defer src="renderer/shared/connection-constants.js"></script>
+  <script defer src="renderer/shared/connection-data.js"></script>
+  <script defer src="renderer/connection-core.js"></script>
   <!-- Constellation (DECISIONS #171): the seven figures, the legacy id map and
        the pure star selection. Loaded after `connection-core.js` because the star
        template is handed to that file's planner unchanged. -->
-  <script src="renderer/shared/constellation-data.js"></script>
-  <script src="renderer/constellation-core.js"></script>
+  <script defer src="renderer/shared/constellation-data.js"></script>
+  <script defer src="renderer/constellation-core.js"></script>
 
-  <script src="renderer/features/game-illustration.js"></script>
+  <script defer src="renderer/features/game-illustration.js"></script>
 
   <!-- Three.js (DECISIONS #137): bundled by scripts/build-three.js into a single
        classic <script> global `THREE`; the renderer is not ES-module and CSP is
        script-src 'self', so this must be a local IIFE, never a CDN. -->
-  <script src="renderer/vendor/three.global.js"></script>
+  <script defer src="renderer/vendor/three.global.js"></script>
   <!-- Canvas Confetti (DECISIONS #194): bundled by scripts/build-confetti.js into a single
        classic <script> global `confetti`; local IIFE, offline celebration animations. -->
-  <script src="renderer/vendor/confetti.global.js"></script>
+  <script defer src="renderer/vendor/confetti.global.js"></script>
 
   <!-- window.threeGame: the shared, scoring-agnostic 3D presentation layer
        (DECISIONS #137). Loaded after THREE, before games/three-stage.js which calls it. -->
-  <script src="renderer/features/three-game-interaction.js"></script>
+  <script defer src="renderer/features/three-game-interaction.js"></script>
 
   <!-- Play surface, split by responsibility (DECISIONS #147). The renderer is plain
        global scripts, so the files only declare; nothing reads another file's
        binding while loading. Order: entry → 3D → house → results → games. -->
-  <script src="renderer/features/games/shell.js"></script>
+  <script defer src="renderer/features/games/shell.js"></script>
   <!-- #209 task 7: MỘT cửa cho chữ "Giải thích" của bốn trò + máy chiếu. Trước
        result-screen.js vì buildQuizView/buildTreasureView gọi nó. -->
-  <script src="renderer/features/games/answer-explanation.js"></script>
-  <script src="renderer/features/games/three-stage.js"></script>
-  <script src="renderer/features/games/house.js"></script>
+  <script defer src="renderer/features/games/answer-explanation.js"></script>
+  <script defer src="renderer/features/games/three-stage.js"></script>
+  <script defer src="renderer/features/games/house.js"></script>
   <!-- #168: the SVG panel + gallery; quiz.js and three-stage.js call into it. -->
-  <script src="renderer/features/games/connection.js"></script>
+  <script defer src="renderer/features/games/connection.js"></script>
   <!-- #171: the constellation play surface (cards, chips, drops, lines). Loaded
        after connection.js because it calls its template/side helpers, and before
        matching.js which renders the board and calls into it. -->
-  <script src="renderer/features/games/constellation.js"></script>
-  <script src="renderer/features/games/result-screen.js"></script>
-  <script src="renderer/features/games/quiz.js"></script>
-  <script src="renderer/features/games/matching.js"></script>
-  <script src="renderer/features/games/treasure.js"></script>
-  <script src="renderer/features/games/race.js"></script>
-  <script src="renderer/features/results.js"></script>
+  <script defer src="renderer/features/games/constellation.js"></script>
+  <script defer src="renderer/features/games/result-screen.js"></script>
+  <script defer src="renderer/features/games/quiz.js"></script>
+  <script defer src="renderer/features/games/matching.js"></script>
+  <script defer src="renderer/features/games/treasure.js"></script>
+  <script defer src="renderer/features/games/race.js"></script>
+  <script defer src="renderer/features/results.js"></script>
   <!-- Chơi LAN: after gameplay/results (adds the header button and the saved `lan`
        block). Before bootstrap, which calls lanInit(). -->
-  <script src="renderer/features/lan.js"></script>
-  <script src="renderer/features/settings.js"></script>
-  <script src="renderer/features/ai-status.js"></script>
-  <script src="renderer/core/bootstrap.js"></script>
-  <script src="renderer/features/presentation.js"></script>
+  <script defer src="renderer/features/lan.js"></script>
+  <script defer src="renderer/features/settings.js"></script>
+  <script defer src="renderer/features/ai-status.js"></script>
+  <script defer src="renderer/core/bootstrap.js"></script>
+  <script defer src="renderer/features/presentation.js"></script>
 </body>
 </html>

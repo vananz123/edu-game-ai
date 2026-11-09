@@ -2649,3 +2649,51 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 **Không chứng minh.** Chưa có dòng mã Tauri nào, chưa kiểm chứng ngưỡng khả thi. Chưa xác nhận WebView2 sandbox/capabilities đủ thay `contextBridge` + `sandbox: true` cho 92 khoá preload. Chưa đo ảnh hưởng của WebView2 runtime (thường có sẵn trên Windows 10/11 nhưng installer phải xử lý máy thiếu).
 
 **Việc kế tiếp.** Chưa duyệt bắt đầu code. Khi duyệt: dựng khung Tauri v2 + Rust toolchain trong nhánh riêng, chuyển lớp truy cập desktop sang facade TS (kế hoạch mục 4) và làm vòng 1 theo mục 1.
+
+## Giai đoạn 1 — Khung Tauri v2 + facade TS: vỏ chạy được UI đóng gói, ba ngưỡng #251 đều ĐẠT (2026-11-09)
+
+**Báo cáo.** #251 chốt ba ngưỡng (installer ≤ 25 MiB, boot ≤ 1.200 ms, nhàn rỗi ≤ 200 MiB private) nhưng chưa có dòng mã Tauri nào. Giai đoạn 1 dựng vỏ tối thiểu để trả lời đúng một câu: **kiến trúc đích có thật sự xuống dưới ba ngưỡng không?** Câu trả lời là có, nên dự án Tauri tiếp tục; điều kiện dừng của #251 câu 7 ("nếu làm đúng kiến trúc mà vẫn không xuống dưới ngưỡng thì dừng dự án") **không kích hoạt**.
+
+**Quyết định.**
+
+1. **Dùng Tauri v2.12.5 + `tauri-cli` 2.12.4.** `src-tauri/` nằm trong repo; `dist-tauri/` là đầu ra UI riêng (đã vào `.gitignore` cùng `src-tauri/target/`). Renderer TS không đổi logic nào: `npm run build` cũ vẫn là nguồn duy nhất, `scripts/build-tauri-frontend.js` chỉ chép `dist/` → `dist-tauri/` rồi sinh cầu.
+2. **Cầu `window.eduGame` sinh tự động, không viết tay.** `src/shared/desktop-contract.json` là nguồn duy nhất (81 invoke + 3 send + 8 event = 92 khoá). `scripts/build-desktop-contract.js` trích từ `preload.ts`; `--check` so lại và đỏ khi lệch, nên hợp đồng không thể lặng lẽ trôi.
+3. **Bảng lệnh Tauri có một nguồn.** `api.rs::hand_written(command)` trả về cặp `(kênh, lệnh)`; cả `build-tauri-frontend.js` lẫn `tests/unit/tauri-contract.test.ts` đọc đúng bảng đó, nên danh sách kênh không thể khác nhau giữa script và test. Lệnh chưa làm giữ `unsupported!` (78 stub) — thiếu thì báo lỗi, không im lặng trả rỗng.
+4. **Thư mục dữ liệu tách hẳn.** Identifier `vn.edugame.studio.tauri` (đã chốt ở #251 câu 2); dữ liệu vào `%APPDATA%/vn.edugame.studio.tauri/edugame-data`, **không** đọc/ghi `%APPDATA%/EduGame Studio`. Lượt này dữ liệu chỉ đọc — boot mở thư mục mới, để trống.
+5. **`defer` cho MỌI script renderer.** Đây là thay đổi duy nhất chạm renderer. 70 thẻ classic script (2,2 MB) parse tuần tự chặn `DOMContentLoaded`; `defer` giữ nguyên thứ tự xuất hiện và chạy trước `DOMContentLoaded`, nên mọi comment "nạp trước … vì …" vẫn đúng. Không tệp nào đọc binding của tệp khác lúc nạp, nên không có ràng buộc thời điểm nào bị phá. `tests/unit/renderer-load-order.test.ts` khoá bất biến "mọi script renderer đều `defer`".
+6. **Đo bằng cùng bộ công cụ, cùng định nghĩa.** Boot = spawn → `document.readyState === 'complete'` (đúng phép đo baseline Electron ở báo cáo giai đoạn 0), không phải "màn hình có chữ". `scripts/measure-tauri-shell.js` ghi thêm mốc render xong (`#pageContent` có nội dung) là **thông tin phụ**, không phải chỉ số #251. Idle = tổng private bytes của cả cây tiến trình sau 5 s (WebView2 chạy ở tiến trình con).
+
+**Kết quả đo (5 lần mỗi chỉ số, máy này, binary release).**
+
+| Chỉ số | Electron 0.5.1 (baseline) | Tauri (đo) | Ngưỡng #251 |
+|---|---|---|---|
+| Installer NSIS | 92.681.365 B (88,4 MiB) | **2.314.235 B (2,21 MiB)** | ≤ 25 MiB → ĐẠT |
+| Boot trung vị | 1.931 ms | **508 ms** (487–941) | ≤ 1.200 ms → ĐẠT |
+| Nhàn rỗi private | 294 MiB | **190,68 MiB** (7 tiến trình) | ≤ 200 MiB → ĐẠT |
+| Binary | — | 4.384.744 B (4,18 MiB) | — |
+
+Lần đo đầu trên bản CHƯA `defer` ra boot trung vị **1.240 ms** — vượt ngưỡng. Đó là lý do quyết định 5 tồn tại: sau `defer` còn **508 ms**. Ghi lại để sau này không ai coi `defer` là tối ưu thẩm mỹ.
+
+**Đánh đổi.**
+
+- Cầu sinh tự động + test hợp đồng đọc cùng bảng làm vỏ Tauri **gắn chặt** vào `preload.ts`: mỗi kênh mới ở Electron phải có nhánh trong `api.rs` hoặc `unsupported!`, nếu không `check:desktop-contract`/`tauri-contract` đỏ. Đó là cố ý; cái giá là mỗi lần thêm IPC phải sửa hai chỗ.
+- `defer` đổi thời điểm chạy script: mọi thứ trong danh sách chạy sau khi DOM parse xong. Hiện không tệp nào dựa vào việc chạy **trước** một phần tử DOM phía dưới, nhưng nếu sau này ai thêm `document.write` hoặc cần script chạy khi DOM còn đang tới thì `defer` sẽ cắn. Test load-order chỉ bắt được thứ tự, không bắt được thứ này.
+- Boot 508 ms đo trên máy này, hồ sơ WebView2 mới mỗi lần; chưa đo máy cài thật, máy yếu, hay máy chưa có WebView2 runtime.
+
+**Kiểm chứng.**
+
+- `npm run tauri:check` → build release + 13/13 kiểm CDP trên WebView2: UI cục bộ ở `http://tauri.localhost/`, 71 script với `edugame-bridge.js` đầu tiên, sidebar 252 px, CSP khớp `index.html`, **0 request ra ngoài** (73 tài nguyên), cầu 92 khoá, `app:info`/`library:get`/`settings:get`/`ai:local-models` trả dữ liệu thật, không trang lỗi, thư mục dữ liệu dưới `vn.edugame.studio.tauri`.
+- `cargo tauri build` → `EduGame Studio (Tauri)_0.5.1_x64-setup.exe` 2.314.235 B.
+- `node scripts/measure-tauri-shell.js --runs 5` → bảng trên.
+- `npm test` **94/94**, `npm run check:renderer-globals` 68/70 script không có global chưa khai, `npm run verify:css` **61/61**, `npm run check:desktop-contract` 92 khoá, `npx tsc --noEmit` sạch.
+- `%APPDATA%/EduGame Studio` **không tồn tại** trên máy đo; `%APPDATA%/vn.edugame.studio.tauri/edugame-data` tồn tại và **rỗng** sau khi boot → vỏ không chạm hồ sơ Electron.
+
+**Không chứng minh / chưa làm.**
+
+- Chưa chạy thử **bộ cài**: mới đóng gói NSIS, chưa cài lên máy sạch, chưa thử cạnh Electron, chưa thử gỡ. Chưa ký Authenticode (nợ cũ vẫn mở).
+- Facade TS mới có **5 lệnh thật** (`app:info`, `shell:info`, `library:get`, `settings:get`, `ai:local-models`); 78 kênh còn lại vẫn là stub báo "chưa hỗ trợ". Vòng 1 của #251 câu 1 (thư viện, chơi offline, `.egame`, import tài liệu, ảnh, cài đặt, migration) **chưa xong** — lượt này mới chứng minh cái khung.
+- Chưa kiểm WebView2 runtime vắng mặt (Windows 10 LTSC hoặc bản N).
+- Chưa đo trên máy yếu/máy pilot; số vẫn là một máy.
+- Nhánh AI local không chạy (theo chỉ đạo).
+
+**Việc kế tiếp.** Giai đoạn 2 theo kế hoạch: chuyển từng nhóm API sang lệnh Rust thật, mỗi nhóm một lần và có test hợp đồng — bắt đầu từ nhóm dữ liệu (migration SQLite + `.egame`) vì đó là thứ #251 câu 2–4 bắt buộc đúng trước khi thử cài đè.

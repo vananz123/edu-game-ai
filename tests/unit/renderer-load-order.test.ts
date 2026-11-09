@@ -23,7 +23,13 @@ import vm from 'node:vm';
 const ROOT = path.join(__dirname, '..', '..', '..');
 const DIST = path.join(ROOT, 'dist', 'src');
 const INDEX = fs.readFileSync(path.join(DIST, 'index.html'), 'utf8');
-const ORDER = [...INDEX.matchAll(/<script src="([^"]+)"><\/script>/g)].map(match => match[1]);
+// `<script src="x"></script>` và `<script defer src="x"></script>`: thuộc tính
+// phụ (như `defer` của ba script vendor) không được làm cổng bỏ sót script.
+const ORDER = [...INDEX.matchAll(/<script\b([^>]*)\bsrc="([^"]+)"[^>]*><\/script>/g)].map(
+  match => ({ src: match[2], defer: /\bdefer\b/.test(match[1]) }),
+);
+assert.ok(ORDER.length > 60, `chỉ đọc được ${ORDER.length} script từ index.html`);
+assert.ok(ORDER.every(entry => typeof entry.src === 'string'));
 
 function noop() {}
 
@@ -85,7 +91,14 @@ function createContext() {
 // `index.html` lists the full renderer. `bootstrap.js` is the last script and
 // attaches to real DOM nodes that the stub deliberately does not emulate; it is
 // the only one excluded, and it declares nothing the other scripts read.
-const SCRIPTS = ORDER.filter(src => !src.includes('core/bootstrap'));
+// `defer` không đổi thứ tự: script defer chạy sau khi tài liệu parse xong, theo
+// đúng thứ tự xuất hiện, nên mọi script vẫn thấy `THREE`/`confetti` như trước.
+const SCRIPTS = ORDER.map(entry => entry.src).filter(src => !src.includes('core/bootstrap'));
+assert.deepEqual(
+  ORDER.filter(entry => !entry.defer).map(entry => entry.src),
+  ['edugame-bridge.js'].filter(src => ORDER.some(entry => entry.src === src)),
+  'mọi script renderer phải `defer`; thẻ duy nhất nạp đồng bộ là cầu eduGame của vỏ Tauri',
+);
 
 assert.ok(SCRIPTS.length >= 30, `index.html should list the whole renderer, found ${SCRIPTS.length} scripts`);
 assert.ok(

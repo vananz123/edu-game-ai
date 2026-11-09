@@ -53,7 +53,12 @@
     "measure:p7": "powershell -ExecutionPolicy Bypass -File tests/packaging/p7-offline-install.ps1",
     "check:presentation-ui": "node tests/ui/ui-presentation-check.js",
     "launch:ui": "powershell -ExecutionPolicy Bypass -File tests/ui/launch-app.ps1",
-    "test:native": "node tests/run-unit.js lesson-store"
+    "test:native": "node tests/run-unit.js lesson-store",
+    "build:desktop-contract": "node scripts/build-desktop-contract.js",
+    "check:desktop-contract": "node scripts/build-desktop-contract.js --check",
+    "build:tauri": "npm run build && node scripts/build-tauri-frontend.js",
+    "tauri:run": "node scripts/build-tauri-release.js --run",
+    "tauri:check": "node scripts/build-tauri-release.js --check"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.0",

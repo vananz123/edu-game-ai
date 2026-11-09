@@ -388,18 +388,33 @@ export interface GenerateGameResponse {
 
 export interface EduGameBridge {
   appInfo(): Promise<{ version: string; platform: string; userData: string }>;
+  /**
+   * Vỏ đang chạy. Electron không có kênh này; vỏ Tauri dùng nó để tự nhận diện và
+   * để cổng `tests/ui/tauri-webview-check.js` chứng minh nó không đọc thư mục dữ
+   * liệu của Electron.
+   */
+  shellInfo?(): Promise<{ shell: 'tauri'; dataDir: string; electronDataDirUntouched: boolean }>;
   getLibrary(): Promise<LocalLibrary>;
   saveGame(game: EducationalGame): Promise<EducationalGame>;
   deleteGame(id: string): Promise<{ ok: boolean }>;
+  /** Xoá nhiều trò chơi một lượt: `missing` = mã đã không còn trong thư viện. */
+  deleteGames(gameIds: string[]): Promise<{ ok: boolean; deleted: number; missing: number }>;
   saveSession(session: GameSession): Promise<{ ok: boolean }>;
   /** #123: deletes finished-play results by id; games are not affected. */
   deleteSessions(sessionIds: string[]): Promise<{ ok: boolean; deleted: number; missing: number }>;
   saveLessonDocument(payload: { documentId?: string; name: string; ext: string; sizeBytes?: number; text: string; characters?: number }): Promise<import('./lesson-types').LessonDocument>;
   getLessonDocument(documentId: string): Promise<(import('./lesson-types').LessonDocument & { text: string }) | null>;
+  /** Toàn bộ kho giáo án (mới nhất trước) kèm cờ `sourceAvailable` và các phân tích đã lưu. */
+  listLessonLibrary(): Promise<import('../services/storage/lesson-store').LessonDocumentSummary[]>;
+  deleteLessonDocument(documentId: string): Promise<{ ok: boolean }>;
+  /** Xoá nhiều giáo án: `failed` = lỗi khi đọc/xoá tệp, khác với `missing`. */
+  deleteLessonDocuments(documentIds: string[]): Promise<{ deleted: number; missing: number; failed: number }>;
   saveProjectDraft(project: GameProject): Promise<GameProject>;
   getProject(projectId: string): Promise<GameProject | null>;
   listProjects(): Promise<GameProject[]>;
   deleteProject(projectId: string): Promise<{ ok: boolean }>;
+  /** Xoá nhiều dự án; mỗi dự án còn xoá cả ảnh minh hoạ riêng của nó. */
+  deleteProjects(projectIds: string[]): Promise<{ ok: boolean; deleted: number; missing: number }>;
   importDocument(): Promise<{ name: string; text: string } | null>;
   importDocumentFromPath(filePath: string): Promise<{ name: string; text: string; path?: string; characters?: number; sizeBytes?: number } | null>;
   setFullscreen(enabled: boolean): Promise<{ ok: boolean }>;
@@ -453,6 +468,14 @@ export interface EduGameBridge {
     args: string[];
     note: string;
   }>;
+  /** Trạng thái bộ cài đặt lần đầu (runtime + model), đọc từ state machine bền. */
+  getSetupStatus(): Promise<import('../ai-core/setup-orchestrator').SetupStatus>;
+  /** Kiểm tra trước khi cài: đĩa, RAM, backend — không tải gì. Bị chặn thì trả `status.blocked`. */
+  preflightSetup(payload?: { modelId?: string }): Promise<import('../ai-core/setup-orchestrator').SetupStatus & { blocked?: { code: string; message: string } }>;
+  /** Backend KHÔNG lấy từ payload: nó luôn theo lựa chọn đã lưu của giáo viên. */
+  startSetup(payload?: { modelId?: string }): Promise<import('../ai-core/setup-orchestrator').SetupStatus>;
+  cancelSetup(): Promise<import('../ai-core/setup-orchestrator').SetupStatus>;
+  onSetupProgress(callback: (progress: unknown) => void): () => void;
   /**
    * O10: writes a single diagnostics .txt (machine facts + recent log lines) to
    * the Desktop (fallback: the log folder) and returns its absolute path.
@@ -526,6 +549,19 @@ export interface EduGameBridge {
     gameType: import('./lesson-types').WorkflowGameType;
     mode?: 'fast' | 'deep';
   }): Promise<import('../services/lesson/item-capacity').ItemCapacityEstimate>;
+  /** Danh sách cuộc trò chuyện giáo án, không kèm tin nhắn. */
+  listLessonChats(): Promise<import('./lesson-types').LessonChatSummary[]>;
+  getLessonChat(chatId: string): Promise<import('./lesson-types').LessonChat | null>;
+  /** Xoá nhiều cuộc trò chuyện: `failed` = lỗi khi đọc/xoá, khác với `missing`. */
+  deleteLessonChats(chatIds: string[]): Promise<{ deleted: number; missing: number; failed: number }>;
+  /** #76: cấu trúc tài liệu + bản xem trước vùng chọn. Thuần cục bộ, không gọi model. */
+  inspectLessonStructure(payload: { text?: string; documentId?: string }): Promise<unknown>;
+  previewLessonSelection(payload: { text: string; structure?: unknown; selectedIds?: string[]; mode?: 'fast' | 'deep'; providerId?: string }): Promise<unknown>;
+  /** #182: khung chat giáo án thay kênh hỏi đáp một tài liệu của bản BETA. */
+  sendLessonChat(payload: Record<string, unknown>): Promise<unknown>;
+  /** Tiến trình phân tích/tạo nội dung, lọc theo `requestId` ở phía renderer. */
+  onLessonProgress(callback: (progress: { requestId?: string; stage?: string } & Record<string, unknown>) => void): () => void;
+  regenerateLessonItem(payload: { projectId: string; requestId: string; itemIndexes?: number[]; itemIndex?: number }): Promise<unknown>;
   getLessonAnalysis(analysisId: string): Promise<import('./lesson-types').LessonAnalysis | null>;
   /** Persists teacher edits to an analysis without calling the model again. */
   saveLessonAnalysis(analysis: import('./lesson-types').LessonAnalysis): Promise<import('./lesson-types').LessonAnalysis>;
@@ -588,6 +624,34 @@ export interface EduGameBridge {
   }>;
   onLocalAiProgress(callback: (progress: import('../ai-core/contracts').LocalAiDownloadProgress) => void): () => void;
   generateGame(payload: GenerateGameRequest): Promise<GenerateGameResponse>;
+
+  /**
+   * Trình chiếu (màn hình phụ). Kênh `start`/`toggle` trả đúng `InvokeResult` của main:
+   * thất bại là một giá trị `ok: false` kèm `error`, không phải promise bị reject.
+   */
+  startPresentation(state: import('./presentation-types').StartPresentationPayload): Promise<import('./presentation-types').InvokeResult<{ display: import('./presentation-types').DisplayInfo; sessionId: string }>>;
+  stopPresentation(): Promise<import('./presentation-types').InvokeResult>;
+  togglePresentation(state: import('./presentation-types').StartPresentationPayload): Promise<import('./presentation-types').InvokeResult<{ display: import('./presentation-types').DisplayInfo; sessionId: string }> & { presenting: boolean }>;
+  /** Danh sách màn hình + màn hình được ưu tiên; `null` = chỉ có một màn hình. */
+  getDisplays(): Promise<import('./presentation-types').InvokeResult<import('./presentation-types').GetDisplaysResult>>;
+  onPresentationState(callback: (state: import('./presentation-types').PresentationState) => void): () => void;
+  onPresentationExit(callback: () => void): () => void;
+  /** Kênh `send` một chiều: không có kết quả trả về. */
+  sendPresentationExit(payload?: { sessionId?: string }): void;
+  requestPresentationState(): void;
+  sendPresentationState(state: import('./presentation-types').PresentationState): void;
+
+  /** #204: tab "Giới thiệu" — kiểm tra/cập nhật qua GitHub Releases. */
+  /** Mở tab Giới thiệu: bắt đầu kiểm tra cập nhật (không chờ) và trả trạng thái ngay. */
+  openAbout(): Promise<{ ok: boolean; state: import('./about-types').UpdateState }>;
+  aboutInfo(): Promise<import('./about-types').AboutAppInfo>;
+  aboutState(): Promise<import('./about-types').UpdateState>;
+  aboutCheck(): Promise<import('./about-types').AboutActionResult>;
+  aboutDownload(): Promise<import('./about-types').AboutActionResult>;
+  aboutInstall(): Promise<import('./about-types').AboutActionResult>;
+  /** Chỉ mở URL phát hành công khai; main từ chối mọi URL khác. */
+  aboutOpenReleases(url?: string): Promise<{ ok: boolean; error?: string }>;
+  onAboutState(callback: (state: import('./about-types').UpdateState) => void): () => void;
 
   /**
    * LAN Classroom Mode. The teacher PC hosts the room; phones answer on the LAN.

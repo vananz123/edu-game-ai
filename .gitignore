@@ -152,6 +152,12 @@ vite.config.ts.timestamp-*
 release/
 .DS_Store
 
+# Vỏ Tauri (giai đoạn 1): đầu ra Rust, UI đóng gói riêng cho WebView2, và schema
+# ACL do `cargo tauri` sinh lại mỗi lần build.
+src-tauri/target/
+src-tauri/gen/
+dist-tauri/
+
 # Smoke test reports
 smoke*-report.json
 

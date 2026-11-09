@@ -339,7 +339,12 @@ function main() {
   }
 
   const html = fs.readFileSync(INDEX, 'utf8');
-  const scripts = [...html.matchAll(/<script src="([^"]+)"><\/script>/g)].map(m => m[1]);
+  // Quét theo `src`, bất kể thuộc tính phụ (`defer` của ba script vendor/3D):
+  // khớp chặt `<script src="…">` sẽ LẶNG LẼ bỏ qua chúng, đúng lỗ mù phải tránh.
+  const scripts = [...html.matchAll(/<script\b([^>]*)><\/script>/g)]
+    .map(m => /src="([^"]+)"/.exec(m[1]))
+    .filter(Boolean)
+    .map(src => src[1]);
   if (scripts.length === 0) {
     console.error('check-renderer-undefined-globals: index.html lists no renderer scripts; refusing to pass vacuously.');
     process.exit(2);

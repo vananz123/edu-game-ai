@@ -1,5 +1,11 @@
 # Roadmap
 
+## Vỏ **Tauri v2** chạy được UI đóng gói — installer **2,21 MiB**, boot **508 ms**, nhàn rỗi **190,7 MiB**, cả ba ngưỡng #251 ĐẠT (2026-11-09, DECISIONS "Giai đoạn 1")
+- **Giai đoạn 1 xong:** `src-tauri/` (Tauri 2.12.5), `dist-tauri/` sinh từ `dist/` bởi `scripts/build-tauri-frontend.js`, cầu `window.eduGame` 92 khoá sinh từ `src/shared/desktop-contract.json`, identifier `vn.edugame.studio.tauri` với thư mục dữ liệu riêng (không chạm hồ sơ Electron). 5 lệnh Rust thật, 78 kênh còn stub.
+- **Đổi duy nhất ở renderer:** mọi script `defer` (boot 1.240 → 508 ms). Không đổi CSS, không đổi thứ tự logic.
+- **Đo:** `cargo tauri build` → NSIS 2.314.235 B · `npm run tauri:check` 13/13 trên WebView2, 0 request ra ngoài · `npm test` 94/94, `verify:css` 61/61, `check:desktop-contract` 92 khoá, `tsc` sạch.
+- **Còn mở:** chưa cài thử bộ cài, chưa Authenticode, chưa máy thiếu WebView2 runtime. **Kế tiếp giai đoạn 2:** chuyển từng nhóm API sang Rust thật, bắt đầu nhóm dữ liệu (migration SQLite + `.egame`) để đủ điều kiện thử cài đè theo #251 câu 2–4.
+
 ## Khung chat sống lại sau cú **xoá cuộc trò chuyện** (#187) · trang **Giới thiệu** + **tự cập nhật** từ GitHub Releases (#188) (2026-11-04, DECISIONS #187, #188)
 
 Hai yêu cầu đi kèm nhau, nguyên văn: *"bug: khung chatbot khi xóa 1 cuộc trò chuyện thì không nhập chat được nữa"* và *"Act as a Senior Electron.js Developer. Help me build a fully functional 'About' page for my Electron app that displays application information and handles the automatic update process using `electron-updater` from GitHub Releases"* — đặc tả bốn mục (folder structure · main process `autoDownload = false` + `checkForUpdatesAndNotify()` + bốn sự kiện + IPC · preload `contextBridge` thành `window.aboutAPI` · renderer dashboard có badge, progress bar %, "Restart to Install", lỗi hiển thị được), *"security best practices (contextIsolation: true, nodeIntegration: false)"*, *"Use Vietnamese for the user-facing text inside the about.html UI"*. **Spec nói app ở v0.3.0; thực tế đã là 0.4.0 từ #185** — mọi con số trên trang và trong test theo 0.4.0.
