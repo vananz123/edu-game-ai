@@ -315,6 +315,44 @@ const filesGate = Boolean(process.env.EDUGAME_TAURI_FILES_DOCUMENT);
     out.dataDir === true || (gateDataDir && path.resolve(out.dataDirMsg) === path.resolve(gateDataDir)),
     out.dataDirMsg);
 
+  // Giai đoạn 5: settings.json chỉ được có blob DPAPI. Phép đọc đĩa nằm ở Node vì
+  // trang không có quyền đọc tệp; `out.settingsSave` đã chứng minh vòng IPC.
+  const gateSettingsPath = gateDataDir ? path.join(gateDataDir, 'settings.json') : '';
+  let gateSettingsText = '';
+  let gateSettings = {};
+  try {
+    gateSettingsText = gateSettingsPath && fs.existsSync(gateSettingsPath)
+      ? fs.readFileSync(gateSettingsPath, 'utf8')
+      : '';
+    gateSettings = gateSettingsText ? JSON.parse(gateSettingsText) : {};
+  } catch {
+    gateSettings = {};
+  }
+  const gateGemini = gateSettings && gateSettings.ai && gateSettings.ai.providers &&
+    gateSettings.ai.providers.gemini || {};
+  check('settings:save chỉ ghi blob DPAPI, không có plaintext trong settings.json',
+    out.settingsSave === true &&
+      typeof gateGemini.apiKeyEncrypted === 'string' && gateGemini.apiKeyEncrypted.length > 20 &&
+      !gateSettingsText.includes('AIza-synthetic-gate-1234') && !('apiKey' in gateGemini),
+    out.settingsSaveMsg + ' · tệp=' + (gateSettingsText ? gateSettingsText.length + ' ký tự' : 'không có'));
+
+  const cleared = await evaluate(`(async () => {
+    const facade = typeof desktop === 'undefined' ? null : desktop;
+    const before = await facade.call('getSettings');
+    const saved = await facade.call('saveSettings', {
+      ai: { provider: 'local', providers: { gemini: { clearKey: true } } },
+      preferences: before.preferences || {}
+    });
+    const settings = await facade.call('getSettings');
+    const gemini = (settings && settings.ai && settings.ai.providers || [])
+      .find(provider => provider && provider.id === 'gemini') || {};
+    return {
+      ok: Boolean(saved && saved.ok === true && gemini.hasKey === false && gemini.keyMasked === ''),
+      msg: JSON.stringify({ ok: saved && saved.ok, hasKey: gemini.hasKey, keyMasked: gemini.keyMasked })
+    };
+  })()`);
+  check('settings:save clearKey xoá khoá đã lưu, view không còn hasKey', cleared.ok === true, cleared.msg);
+
   // Cổng nhập tệp (#270): cùng lý do với cổng gói — thiếu biến là script cha quên
   // truyền, không phải một cấu hình hợp lệ.
   if (!reopenPhase && !filesGate) {
@@ -553,6 +591,44 @@ const RUNNER = `(async () => {
   } catch (error) {
     out.settings = false;
     out.settingsMsg = 'settings:get lỗi: ' + (error && error.message);
+  }
+
+  // Giai đoạn 5: lưu một khoá tổng hợp qua ĐÚNG façade rồi đọc lại. Khoá chỉ
+  // được trả về dưới dạng hasKey/keyMasked; phép đọc đĩa ở phía Node mới chứng
+  // minh settings.json có blob DPAPI mà không có plaintext.
+  try {
+    const before = await facade.call('getSettings');
+    const saved = await facade.call('saveSettings', {
+      ai: {
+        provider: 'gemini',
+        providers: {
+          gemini: {
+            baseUrl: 'https://synthetic.example/v1',
+            model: 'synthetic-gate-model',
+            apiKey: 'AIza-synthetic-gate-1234'
+          }
+        }
+      },
+      preferences: before.preferences || {}
+    });
+    const after = await facade.call('getSettings');
+    const pick = value => (value && value.ai && value.ai.providers || [])
+      .find(provider => provider && provider.id === 'gemini') || {};
+    const gemini = pick(saved && saved.settings);
+    const again = pick(after);
+    out.settingsSave = Boolean(saved && saved.ok === true && gemini.hasKey === true &&
+      gemini.keyMasked === '••••1234' && again.hasKey === true &&
+      !('apiKeyEncrypted' in gemini) && !('apiKey' in gemini));
+    out.settingsSaveMsg = JSON.stringify({
+      ok: saved && saved.ok,
+      hasKey: gemini.hasKey,
+      keyMasked: gemini.keyMasked,
+      againHasKey: again.hasKey,
+      visibleKeyFields: Object.keys(gemini).filter(key => /apiKey/i.test(key))
+    });
+  } catch (error) {
+    out.settingsSave = false;
+    out.settingsSaveMsg = 'settings:save lỗi: ' + (error && error.message);
   }
 
   try {

@@ -79,6 +79,9 @@ src/
       game-constellation.css bảng chòm sao: HUD một dòng, cảnh lớn, hàng câu dài,
                           MỘT khay thẻ đáp án, đường trỏ, dự phòng (#171, bố cục lại #172)
   game-engine/         Runtime chạy game đã lưu (offline)
+src-tauri/             Vỏ Tauri v2 (Rust): api.rs hợp đồng IPC + dispatch, storage/
+                       library/project/package/embedded, settings.rs + secrets.rs
+                       (DPAPI), migration.rs, diagnostics/picker/illustration
 server/                Cloud AI Gateway (Express + Supabase + Gemini) — không chạy khi chơi
 scripts/               Script build (icon, kiểm tra global renderer):
                        build-icon-registry.js tải bộ Lucide về `shared/icon-registry.ts`,
@@ -124,6 +127,8 @@ vendor/                DLL VC++ đóng gói kèm
 | AI local (cài model, chạy llama.cpp) | `src/ai-core/*`, `features/local-ai.ts`, `features/setup-wizard.ts` |
 | Prompt / schema gọi AI | `src/services/lesson/lesson-prompts.ts`, `lesson/lesson-contracts.ts`, `ai/ai-tasks.ts` |
 | Nhà cung cấp AI của Step 2/Step 5, khoá theo từng nhà cung cấp, trạng thái sẵn sàng (#132) | `src/services/ai/ai-providers.ts` (registry + chọn nhà cung cấp + migration khoá), `main.ts` (`createChatClientForProvider`, `ai:test-provider`, `settings:get/save` không trả khoá), `pages/settings.ts` + `features/settings.ts` (thẻ từng nhà cung cấp), `features/wizard/state/providers.ts` (`wizardProviderCard`/`wizardProviderPickerHtml`) |
+| Khoá BYOK trên vỏ Tauri (DPAPI + view không khoá) | `src-tauri/src/secrets.rs` (DPAPI/base64/mask), `src-tauri/src/settings.rs` (registry provider Rust, gộp `apiKey`/`clearKey`, `settings:get/save`, `ai:providers`), `src-tauri/src/api.rs` + `lib.rs`; renderer vẫn dùng `features/settings.ts` + `pages/settings.ts` |
+| Vỏ Tauri / kênh IPC chưa port | `src-tauri/src/api.rs` (`hand_written` + `unsupported!`), `src-tauri/src/lib.rs` (`generate_handler!`), `src/renderer/core/desktop-facade-schema.ts`, `tests/unit/tauri-contract.test.ts` |
 | Lưu trữ (SQLite, `.egame`) | `src/services/storage/lesson-store.ts`, `src/services/game/game-package.ts`, `main.ts` (IPC), `preload.ts` (API) |
 | Màu nền 5 thế giới trò chơi | `styles/game-worlds.css`, mục "NĂM THẾ GIỚI TRÒ CHƠI" + `GAME_WORLDS` trong `games/result-screen.ts` |
 | Màn hình kết quả, trình chiếu, thi đấu đội | `features/games/result-screen.ts` |

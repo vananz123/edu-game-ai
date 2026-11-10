@@ -78,6 +78,10 @@ pub fn hand_written(command: &str) -> Option<(&'static str, &'static str)> {
         "clear_diagnostics" => ("diagnostics:clear", "clear_diagnostics"),
         "open_diagnostics_folder" => ("diagnostics:open-folder", "open_diagnostics_folder"),
         "get_settings" => ("settings:get", "get_settings"),
+        // Giai đoạn 5: ghi cài đặt + khoá BYOK. Khoá mới chỉ được ghi dưới dạng
+        // blob DPAPI; `save_settings` hỏng trước khi ghi nếu DPAPI không dùng được.
+        "save_settings" => ("settings:save", "save_settings"),
+        "get_ai_providers" => ("ai:providers", "get_ai_providers"),
         "get_local_ai_models" => ("ai:local-models", "get_local_ai_models"),
         // Giai đoạn 4: nhập profile Electron. Ba kênh KHÔNG có trong preload
         // Electron — `tests/unit/tauri-contract.test.ts` miễn trừ chúng khỏi phép
@@ -216,6 +220,13 @@ async fn dispatch(app: &AppHandle, channel: &str, args: &[Value]) -> Result<Valu
         "shell:info" => json(shell_info(app.clone())),
         "library:get" => json(get_library(app.clone())),
         "settings:get" => json(get_settings(app.clone())),
+        "settings:save" => match args.first() {
+            Some(incoming) if incoming.is_object() => {
+                json(crate::settings::save(app, incoming.clone()))
+            }
+            _ => Err("AI_CONFIG: thiếu đối tượng cài đặt cần lưu".to_string()),
+        },
+        "ai:providers" => json(get_ai_providers(app.clone())),
         "ai:local-models" => json(get_local_ai_models()),
         // Năm kênh ghi của thư viện nhận thẳng tham số renderer gửi (một trò
         // chơi, một id, một mảng id), nên chúng đi qua `args` của cửa chung.
@@ -508,28 +519,27 @@ pub fn open_diagnostics_folder(app: AppHandle) -> Result<serde_json::Value, Stri
     crate::diagnostics::open_folder(&app)
 }
 
-/// Cài đặt của bản Tauri. Bản thử giai đoạn 1 chưa có trang Cài đặt đầy đủ, nên
-/// chỉ trả mặc định đủ để renderer áp giao diện sáng và không thấy AI nào bật.
+/// Cài đặt của bản Tauri, đã chuyển sang hình dạng renderer được thấy:
+/// `ai.providers` là mảng, không có blob/khoá. Phần lưu và trộn nằm ở
+/// `settings.rs`; khoá mới đi qua DPAPI trong `secrets.rs`.
 #[tauri::command]
 pub fn get_settings(app: AppHandle) -> Result<serde_json::Value, String> {
-    paths::read_json(&app, paths::SETTINGS_FILE, default_settings())
+    crate::settings::get(&app)
 }
 
-fn default_settings() -> serde_json::Value {
-    serde_json::json!({
-        "ai": {
-            "mode": "offline",
-            "baseUrl": "",
-            "model": "",
-            "provider": "local",
-            "providerPolicy": "auto",
-            "providers": [],
-            "hasKey": false,
-            "keyMasked": "",
-            "picker": { "show": false, "options": [], "activeId": "local" }
-        },
-        "preferences": { "sound": true, "largeText": false, "theme": "system" }
-    })
+/// Giáo viên lưu cài đặt AI. Chỉ nhận một đối tượng; provider nào có `apiKey`
+/// mới sẽ được mã hoá trước khi ghi, `clearKey` xoá khoá, còn khoá rỗng giữ
+/// nguyên khoá đã lưu (xem `settings.rs`).
+#[tauri::command]
+pub fn save_settings(app: AppHandle, incoming: Value) -> Result<serde_json::Value, String> {
+    crate::settings::save(&app, incoming)
+}
+
+/// Registry provider + trạng thái hiện tại cho trang Cài đặt và wizard. Cùng
+/// hình dạng với `settings:get` như bản Electron.
+#[tauri::command]
+pub fn get_ai_providers(app: AppHandle) -> Result<serde_json::Value, String> {
+    crate::settings::get(&app)
 }
 
 /// Danh mục AI local của bản Tauri: rỗng, và `runtimeSupported: false` để mọi
@@ -582,8 +592,6 @@ unsupported! {
     list_lesson_library => "lesson:library",
     delete_lesson_document => "lesson:delete-document",
     delete_lesson_documents => "lesson:delete-documents",
-    save_settings => "settings:save",
-    get_ai_providers => "ai:providers",
     test_ai_provider => "ai:test-provider",
     get_local_runtime_status => "ai:local-status",
     install_local_ai_model => "ai:install-local-model",
@@ -660,11 +668,11 @@ mod tests {
 
     #[test]
     fn default_settings_carry_the_keys_the_shell_reads() {
-        let value = super::default_settings();
+        let value = crate::settings::default_settings();
         // Bootstrap đọc `preferences.theme` trước lần render đầu tiên.
         assert_eq!(value["preferences"]["theme"], "system");
         assert_eq!(value["ai"]["mode"], "offline");
-        assert_eq!(value["ai"]["hasKey"], false);
+        assert!(value["ai"]["providers"].is_object());
     }
 
     #[test]

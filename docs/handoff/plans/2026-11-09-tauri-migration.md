@@ -1,8 +1,8 @@
 # Kế hoạch khảo sát và chuyển EduGame Studio từ Electron sang Tauri
 
 Ngày lập: 2026-11-09; cập nhật trạng thái: 2026-11-10  
-Trạng thái: **đã duyệt và đang triển khai** — giai đoạn 0–4 XONG (giai đoạn 4
-chốt ngày 2026-11-10), giai đoạn 5 (AI local và bí mật) là việc kế tiếp.
+Trạng thái: **đã duyệt và đang triển khai** — giai đoạn 0–4 XONG, giai đoạn 5
+xong phần bí mật (DPAPI + `settings:get/save`), phần AI local là việc kế tiếp.
 Phạm vi: ứng dụng desktop Windows hiện tại, phiên bản nguồn 0.5.1, **bản Tauri
 đầu tiên là bản thử giới hạn** (không có LAN, trình chiếu, updater, AI local).
 
@@ -145,7 +145,7 @@ có yêu cầu tương thích cụ thể và đã đánh giá chi phí/bảo m�
 
 ### Giai đoạn 3 — SQLite, file và nhập/xuất
 
-**Trạng thái: XONG 6/6 (2026-11-10, DECISIONS "Giai đoạn 3 (1/6)"–"(6/6)").** Backend là `rusqlite` 0.41 `bundled`; `src-tauri/src/storage.rs` mở `edugame.sqlite` với WAL + `foreign_keys` và chạy đúng hai khối DDL `include_str!` từ `src/db/`, đã mở bản sao dữ liệu 0.5.1 thật (11 bảng, 14 game, 268 phiên). Sáu kênh `library:*` và năm kênh `project:*` chạy luật TypeScript **nguyên văn** trong V8 nhúng (`deno_core`, slot `EGLIBRARY`); `.egame` qua slot `EGPACKAGES`; import tài liệu/câu hỏi/ảnh + chẩn đoán qua slot `EGFILES`; hộp thoại và tệp chỉ ở Rust. Cổng hai pha trên binary release đạt **46/46 + 10/10**, gồm chơi offline trò chơi đã lưu (bước 6/6 — không thêm kênh Rust, chỉ là cổng nghiệm thu). 55 kênh còn `unsupported!` (lesson/AI/setup/settings:save/presentation/about/LAN) — thuộc vòng sau, không nằm trên đường chơi offline.
+**Trạng thái: XONG 6/6 (2026-11-10, DECISIONS "Giai đoạn 3 (1/6)"–"(6/6)").** Backend là `rusqlite` 0.41 `bundled`; `src-tauri/src/storage.rs` mở `edugame.sqlite` với WAL + `foreign_keys` và chạy đúng hai khối DDL `include_str!` từ `src/db/`, đã mở bản sao dữ liệu 0.5.1 thật (11 bảng, 14 game, 268 phiên). Sáu kênh `library:*` và năm kênh `project:*` chạy luật TypeScript **nguyên văn** trong V8 nhúng (`deno_core`, slot `EGLIBRARY`); `.egame` qua slot `EGPACKAGES`; import tài liệu/câu hỏi/ảnh + chẩn đoán qua slot `EGFILES`; hộp thoại và tệp chỉ ở Rust. Cổng hai pha trên binary release đạt **46/46 + 10/10**, gồm chơi offline trò chơi đã lưu (bước 6/6 — không thêm kênh Rust, chỉ là cổng nghiệm thu). 53 kênh còn `unsupported!` (lesson/AI/setup/presentation/about/LAN) — thuộc vòng sau, không nằm trên đường chơi offline.
 
 **Công việc**
 
@@ -190,6 +190,8 @@ có yêu cầu tương thích cụ thể và đã đánh giá chi phí/bảo m�
 - Lỗi giữa chừng có thể khôi phục từ backup; bản nguồn không bị thay đổi.
 
 ### Giai đoạn 5 — AI local và bí mật
+
+**Trạng thái: XONG phần bí mật (2026-11-10, DECISIONS "Giai đoạn 5 (bí mật)").** `src-tauri/src/secrets.rs` dùng DPAPI của Windows (`CryptProtectData`/`CryptUnprotectData` qua `windows-sys`) và lưu blob base64 ở `ai.providers.<id>.apiKeyEncrypted`; `src-tauri/src/settings.rs` gộp provider, trả view chỉ có `hasKey`/`keyMasked`, xử lý `apiKey` rỗng/`clearKey`/thay khoá và xoá kết quả test cũ. Migration vẫn tước khoá, giáo viên nhập lại. Cổng release đạt **48/48 + 10/10 + 12/12**, gồm phép đọc `settings.json` chứng minh không có plaintext. **Còn lại:** mục 1–4 của giai đoạn này — runtime/model đã pin, checksum, giải nén an toàn, quản lý `llama-server` loopback và event tiến độ. Chưa thử khoá thật/tài khoản Windows khác, chưa dựng lại installer NSIS sau thay đổi.
 
 **Công việc**
 
@@ -371,5 +373,11 @@ các tính năng còn lại có quyết định rõ ràng và các cổng nghi�
   Tauri không còn cầu `window.eduGame`.
 - Giai đoạn 3 XONG 6/6: SQLite, `library:*`/`project:*`, `.egame`, import tài
   liệu/câu hỏi/ảnh, chẩn đoán và chơi offline; cổng hai pha **46/46 + 10/10**.
-- Chưa làm: giai đoạn 4 (migration profile), 5 (AI local + secrets), 6 (trình
-  chiếu/LAN), 7 (updater/ký/phát hành thử). 55 kênh còn `unsupported!`.
+- Giai đoạn 4 XONG: phát hiện/mời nhập profile Electron, backup bất biến, nhập
+  idempotent, tước khoá BYOK; cổng ba pha **46/46 + 10/10 + 12/12**, chạy trên bản
+  sao profile 0.5.1 thật và cài đè installer trong thư mục tạm.
+- Giai đoạn 5 XONG phần bí mật: DPAPI thay `safeStorage`, `settings:get/save` chỉ
+  trả `hasKey`/`keyMasked`, BYOK nhập lại; cổng release **48/48 + 10/10 + 12/12**.
+  Phần AI local (pin runtime/model, checksum, `llama-server` loopback) còn lại.
+- Chưa làm: giai đoạn 5 phần AI local, 6 (trình chiếu/LAN), 7 (updater/ký/phát
+  hành thử). 53 kênh còn `unsupported!`.

@@ -2650,6 +2650,36 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 
 **Việc kế tiếp.** Chưa duyệt bắt đầu code. Khi duyệt: dựng khung Tauri v2 + Rust toolchain trong nhánh riêng, chuyển lớp truy cập desktop sang facade TS (kế hoạch mục 4) và làm vòng 1 theo mục 1.
 
+## Giai đoạn 5 (bí mật) — DPAPI thay `safeStorage`, `settings:get/save` trả view không khoá, BYOK nhập lại qua façade; cổng release 48/48 + 10/10 + 12/12 (2026-11-10)
+
+**Báo cáo.** Hai việc cuối của giai đoạn 5 trong kế hoạch là thay `safeStorage` bằng cơ chế bảo vệ bí mật tương thích Windows và xử lý API key BYOK: chỉ migrate khi chứng minh được giải mã/mã hoá an toàn, nếu không thì giữ provider settings không chứa key và yêu cầu nhập lại. Bước này làm phần bí mật trước phần AI local vì `settings:save` còn là kênh `unsupported!` và migration giai đoạn 4 **tước khoá theo thiết kế**; không có đường lưu khoá thì giáo viên không thể dùng lại provider sau khi chuyển vỏ. Kết quả: khoá được mã hoá bằng DPAPI của Windows, chỉ nằm dưới dạng blob base64 trong `settings.json`, renderer chỉ nhận `hasKey` + `keyMasked`; lưu khoá rỗng giữ blob cũ, `clearKey` xoá blob, thay khoá xoá kết quả test cũ. Cổng WebView2 lưu một khoá tổng hợp, đọc `settings.json` từ thư mục cổng để chứng minh không có plaintext, rồi `clearKey` trả `hasKey=false`; release gate đạt **48/48 + 10/10 + 12/12**. Không migrate khoá Electron cũ: giáo viên nhập lại, đúng #251 câu 4.
+
+**Quyết định.**
+
+1. **DPAPI là cơ chế bảo vệ bí mật, không phải mã hoá tự chế.** `src-tauri/src/secrets.rs` gọi `CryptProtectData`/`CryptUnprotectData` qua `windows-sys` (`Win32_Security_Cryptography`, `LocalFree` ở `Win32_Foundation`), lưu blob dưới dạng base64. Không có khoá sản phẩm, không có IV/khóa riêng trong repo hay installer; phạm vi bảo vệ là tài khoản Windows đang chạy app. Lỗi mã hoá trả `AI_KEY_STORAGE_UNAVAILABLE: …` và **huỷ lần lưu trước khi ghi**, để settings cũ còn nguyên thay vì ghi đè bằng dữ liệu dở.
+2. **Một trường blob cho mỗi provider.** `settings.json` giữ `ai.providers.<id>.apiKeyEncrypted` (base64 DPAPI). Renderer gửi `providers[id].apiKey` khi nhập khoá mới, `clearKey: true` khi xoá; **không** bao giờ gửi blob. `settings:save` gộp theo đúng luật Electron: `apiKey` rỗng = giữ blob cũ, `clearKey` = xoá blob, khoá mới = mã hoá rồi thay, đồng thời xoá `lastTestAt/Ok/Code/Message` cũ và mọi field plaintext (`apiKey`, `apiKeyEncrypted` do renderer gửi lên) trước khi ghi.
+3. **View công khai không có khoá.** `settings:get`, `settings:save` và `ai:providers` trả cùng một hình dạng `ai.providers[]` với `id`, `label`, `baseUrl`, `model`, `defaultBaseUrl`, `defaultModel`, `enabled`, `hasKey`, `keyMasked`, `status`, `reason`, `lastTest*`, `usable`; không có `apiKey`, không có `apiKeyEncrypted`. `keyMasked` là bốn ký tự cuối (`••••1234`) hoặc rỗng. Đây là hợp đồng D2 đã áp dụng cho Electron, nay Rust giữ đúng.
+4. **Profile mới vẫn `ai.mode === "offline"`.** Khi chưa có cấu hình provider, `default_settings()` giữ mode offline để cổng WebView hiện tại không mở nhầm; sau một lần lưu thật, mode được tính từ provider đang bật. Quy tắc này giữ nguyên hành vi bootstrap thay vì đổi cổng UI trong cùng bước.
+5. **Registry provider ở Rust là bản sao tay.** Năm provider (Gemini, OpenAI, OpenRouter, Groq, custom) và base URL/model mặc định được khai trong `settings.rs`, không sinh từ TypeScript lúc build. Thêm provider ở `src/services/ai/ai-providers.ts` **phải** thêm hàng tương ứng ở Rust; test đối chiếu hình dạng view chỉ bắt được lệch cấu trúc, không bắt được provider thiếu.
+6. **Cổng dùng khoá tổng hợp và đọc đĩa ở phía Node.** Trang không có quyền đọc tệp, nên `tests/ui/tauri-webview-check.js` lưu `AIza-synthetic-gate-1234` qua đúng façade, kiểm `hasKey`/`keyMasked`, rồi Node đọc `settings.json` trong `EDUGAME_TAURI_DATA_DIR` để chứng minh có blob > 20 ký tự, không có chuỗi khoá, không có field `apiKey`; sau đó một lời gọi `clearKey` kiểm view trả `hasKey=false`, `keyMasked=''`. Không dùng khoá thật và không ghi vào profile thật.
+7. **Không migrate khoá, không thêm mục nhập lại riêng trong bước này.** Migration vẫn tước `apiKey*`; đường nhập lại là màn Cài đặt hiện có (ô khoá + "Lưu cài đặt"). Quyết định có thêm mục "Nhập lại khoá" riêng hay không vẫn để mở; bước này không đổi UI.
+
+**Kiểm chứng.**
+
+- `cargo check --manifest-path src-tauri/Cargo.toml` — sạch; `cargo test --lib --manifest-path src-tauri/Cargo.toml -- --test-threads=1` — **87/87** (gồm round-trip DPAPI, mask, blob hỏng, gộp provider, `clearKey`, xoá kết quả test, giữ blob khi `apiKey` rỗng).
+- `node tests/run-unit.js` — **98/98**; `npm run check` — sạch.
+- `node scripts/build-tauri-release.js --check` trên binary release — pha một **48/48**, pha hai **10/10**, pha ba `--migration` **12/12**. Phép đo mới: lưu khoá tổng hợp qua façade → `hasKey=true`, `keyMasked='••••1234'`, đọc lại vẫn `hasKey=true`; `settings.json` **767 ký tự**, có `apiKeyEncrypted`, **không** có `AIza-synthetic-gate-1234`, không có field `apiKey`; `clearKey` → `hasKey=false`, `keyMasked=''`.
+- `node --check tests/ui/tauri-webview-check.js` — không lỗi.
+
+**Chưa xác minh.**
+
+- Chưa thử với khoá thật của giáo viên hoặc với tài khoản Windows khác (DPAPI gắn phạm vi người dùng); chưa xem màn Cài đặt nhập lại bằng mắt.
+- Chưa dựng lại installer NSIS sau thay đổi này; installer đã đo ở giai đoạn 4 vẫn là bản trước `settings:save`.
+- `ai.mode` chỉ được tính lại sau lần lưu đầu tiên; profile mới vẫn offline.
+- 53 kênh còn `unsupported!`; nhánh AI local chưa chạy.
+
+**Việc kế tiếp.** Phần còn lại của giai đoạn 5: manifest runtime/model đã pin, tải và giải nén an toàn có checksum, quản lý `llama-server` loopback (health, timeout, cancel, restart, shutdown) và phát tiến độ qua event Tauri.
+
 ## Giai đoạn 4 — Migration profile Electron: phát hiện và mời nhập, backup bất biến, nhập idempotent, tước khoá BYOK; cổng ba pha 46/46 + 10/10 + 12/12, chạy thật trên bản sao profile 0.5.1 và cài đè installer (2026-11-10)
 
 **Báo cáo.** Kế hoạch mục 4 giai đoạn 4 đòi sáu việc: phát hiện profile hoặc cho chọn thủ công; sao lưu trước và không sửa/xoá nguồn; kiểm version/schema/dữ liệu/đường dẫn; migration chạy lại an toàn, lỗi từng phần không được báo thành công; xác minh số lượng/id/checksum; tách chính sách model/runtime. Bước này làm đủ sáu việc trên **profile tổng hợp**, dựng cổng nghiệm thu riêng trên binary release, rồi đóng nốt cổng bằng **bản sao profile 0.5.1 thật** (không đụng profile gốc) và **cài đè installer** trong thư mục tạm. Kết quả: giáo viên thấy lời mời khi có profile cũ, bấm mới nhập; bản sao lưu nằm dưới `backups/electron-*` và không có kênh xoá; nhập xong thư viện có đúng trò chơi/phiên/tài liệu/dự án, ảnh và giáo án; chạy lại không nhân đôi; khoá BYOK không xuất hiện ở bất kỳ đâu; `ai-local/` không bị chép. Trên bản sao thật: **694 dòng** được nhập, **3 khoá** bị tước, 14 game/268 phiên/36 tài liệu/17 dự án khớp nguồn, 6 ảnh + 36 giáo án khớp SHA-256, lần chạy lại `alreadyMigrated` và nhập **0 dòng**; installer **14,37 MiB** cài vào thư mục tạm cho cùng kết quả, cài đè lần hai giữ nguyên DB/backup và không mời nhập lại. Profile Electron thật trên máy không bị sửa.

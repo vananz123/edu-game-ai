@@ -44,6 +44,12 @@ getrandom = "0.3"
 sha2 = "0.10"
 hex = "0.4"
 
+[target.'cfg(windows)'.dependencies]
+# Giai đoạn 5: khoá BYOK được bảo vệ bằng DPAPI của Windows, không dùng
+# `safeStorage` của Electron và không ghi plaintext xuống đĩa. Chỉ khai tính năng
+# Cryptography + LocalFree; `windows-sys` đã có sẵn trong cây phụ thuộc.
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography"] }
+
 [dev-dependencies]
 # Thư mục tạm tự dọn cho test storage: mỗi test mở một tệp 0.5.1 riêng, không
 # bao giờ chạm thư mục dữ liệu thật.

@@ -20,6 +20,8 @@ pub mod migration;
 pub mod package;
 pub mod paths;
 pub mod picker;
+pub mod secrets;
+pub mod settings;
 pub mod sql_params;
 pub mod storage;
 
