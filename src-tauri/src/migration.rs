@@ -914,10 +914,18 @@ fn create_backup(source: &Path, target: &Path) -> MResult<Backup> {
     let work = WorkDir::new(target, "backup")?;
     let raw = work.0.join("db");
     let copied = copy_db_set(source, &raw)?;
+    // `build_snapshot` checkpoint WAL và để SQLite dọn `-wal`/`-shm`. Nếu mở
+    // thẳng `raw/` thì bản backup sẽ mất hai tệp vừa được ghi vào manifest —
+    // đúng lỗi gặp trên profile 0.5.1 thật có WAL rỗng. Vì vậy snapshot đọc từ
+    // một bản sao thứ hai; `raw/` vẫn là byte-copy nguyên trạng để phục hồi.
+    let snapshot_raw = work.0.join("snapshot-db");
+    copy_db_set(&raw, &snapshot_raw)?;
     // Tên snapshot trong bản sao lưu là `edugame.sqlite` (chép đè là phục hồi
     // được), khác `db/edugame.sqlite` là bản byte-copy nguyên trạng.
     let snapshot = work.0.join(storage::DB_FILE);
-    let probe = build_snapshot(&raw, &snapshot)?;
+    let probe = build_snapshot(&snapshot_raw, &snapshot)?;
+    fs::remove_dir_all(&snapshot_raw)
+        .map_err(|error| Fail::new("EG_MIGRATION_IO", "backup", format!("không dọn được bản sao tạm: {error}")))?;
     let report = source_report(source, &probe)?;
 
     let mut manifest = Vec::new();
@@ -1924,6 +1932,32 @@ mod tests {
         assert_eq!(before, hashes(&data));
         assert!(!target.join(STATUS_FILE).exists());
         assert!(!target.join(BACKUP_DIR).exists());
+    }
+
+    #[test]
+    fn backup_keeps_raw_wal_and_shm_and_manifest_verifies() {
+        let temp = TempDir::new().unwrap();
+        let (_, data) = seed_source(temp.path());
+        let target = seed_target(temp.path());
+        // Giữ một kết nối WAL đang mở để nguồn có `-wal`/`-shm` thật, giống
+        // profile Electron của giáo viên. `VACUUM INTO` trên chính `db/` sẽ làm
+        // SQLite xoá hai tệp này; test chốt rằng chúng vẫn còn trong backup.
+        let source_db = data.join(storage::DB_FILE);
+        let connection = rusqlite::Connection::open(&source_db).unwrap();
+        connection.pragma_update(None, "journal_mode", "WAL").unwrap();
+        connection
+            .execute_batch("CREATE TABLE gate_wal_marker (value TEXT NOT NULL); INSERT INTO gate_wal_marker VALUES ('x');")
+            .unwrap();
+        let wal = data.join(format!("{}-wal", storage::DB_FILE));
+        let shm = data.join(format!("{}-shm", storage::DB_FILE));
+        assert!(wal.is_file() && fs::metadata(&wal).unwrap().len() > 0);
+        assert!(shm.is_file());
+
+        let backup = create_backup(&data, &target).unwrap();
+        assert!(backup.dir.join("db").join(format!("{}-wal", storage::DB_FILE)).is_file());
+        assert!(backup.dir.join("db").join(format!("{}-shm", storage::DB_FILE)).is_file());
+        verify_manifest(&backup.dir);
+        drop(connection);
     }
 
     #[test]
