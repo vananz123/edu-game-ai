@@ -8,6 +8,8 @@
 //     `window.eduGame` của giai đoạn 1 KHÔNG còn trong gói;
 //   - CSP trong tài liệu khớp tauri.conf.json (không bị nới thành null);
 //   - không request mạng nào ra ngoài (file: + ipc chỉ là giao thức nội bộ);
+//   - chơi trò chơi ĐÃ LƯU đi hết màn kết quả bằng đúng đường người dùng
+//     (Chơi ngay → trả lời → tự lưu phiên) mà không request mạng (bước 6/6);
 //   - façade `desktop.*` nối được adapter Tauri và bốn lời gọi khởi động
 //     (`appInfo`, `getLibrary`, `getSettings`, `getLocalAiModels`) đi qua
 //     `invoke_channel` trả dữ liệu đúng hình dạng Electron đọc;
@@ -74,6 +76,13 @@ const filesGate = Boolean(process.env.EDUGAME_TAURI_FILES_DOCUMENT);
   // lại các phép đo giao diện — chỉ so dữ liệu trên đĩa.
   if (reopenPhase) {
     const memo = JSON.parse(fs.readFileSync(memoFile, 'utf8'));
+    // Phiên của lượt chơi offline phải sống qua tiến trình mới. Đo và xoá TRƯỚC
+    // reopenRunner: phép đo phiên ở đó tìm theo gameId, để lại dòng này thì nó
+    // có thể nhặt nhầm phiên của lượt chơi thay vì phiên nó vừa lưu.
+    if (memo.play && memo.play.sessionId) {
+      const play = await evaluate(reopenPlayRunner(memo));
+      check('mở lại: phiên của lượt chơi offline còn trên đĩa đúng điểm, xoá được', play.ok === true, play.msg);
+    }
     const out = await evaluate(reopenRunner(memo));
     const projects = memo.projects
       ? await evaluate(reopenProjectRunner(memo.projects))
@@ -206,12 +215,27 @@ const filesGate = Boolean(process.env.EDUGAME_TAURI_FILES_DOCUMENT);
       const refused = await evaluate(hostileRunner());
       check('gói hỏng/độc hại bị từ chối với câu đọc được, không treo', refused.ok === true, refused.msg);
     }
+    // Chơi offline (#271): trò chơi VỪA LƯU ở trên được chơi bằng đúng đường
+    // người dùng — bấm "Chơi ngay" trên thẻ thư viện, chọn đáp án, màn kết quả
+    // tự lưu phiên qua library:save-session. Bộ đếm mạng bọc đúng bốn cửa
+    // fetch/XHR/WebSocket/sendBeacon + tài nguyên mới, cùng đối chứng dương
+    // của cổng offline Electron. Pha hai so phiên này trên tiến trình mới.
+    console.log('… chơi offline trò chơi vừa lưu (#271)');
+    const play = await evaluate(offlinePlayRunner(first.gameId));
+    check('chơi offline: Chơi ngay trên thẻ → trả lời → kết quả tự lưu', play.played === true, play.msg);
+    check('chơi offline: phiên đúng trò chơi, 100/100 điểm, 1 quyết định', play.sessionOk === true, JSON.stringify(play.session));
+    check('chơi offline: 0 request mạng trong lượt chơi, đối chứng dương có ghi',
+      play.networkOk === true && play.control === true, 'đối chứng=' + play.control + ', ' + play.networkMsg);
+    check('chơi offline: minh hoạ SVG nội tuyến, không ảnh từ xa, đóng màn sạch',
+      Array.isArray(play.remoteArt) && play.remoteArt.length === 0 && play.svgCount >= 1 && play.closed === true,
+      'svg=' + play.svgCount + ', xa=' + JSON.stringify(play.remoteArt) + ', đóng=' + play.closed);
     fs.writeFileSync(memoFile, JSON.stringify({
       id: first.gameId,
       createdAt: first.createdAt,
       title: first.title,
       projects,
       package: imported ? { path: packagePaths.save, importedId: imported.gameId } : null,
+      play: play.sessionOk ? { sessionId: play.sessionId, points: play.session.points, percent: play.session.percent } : null,
     }));
   }
 
@@ -1017,5 +1041,152 @@ const reopenRunner = memo => `(async () => {
     out.deleteOk = false;
     out.deleteMsg = 'xoá lỗi: ' + (error && error.code) + ': ' + (error && error.message);
   }
+  return out;
+})()`;
+
+/**
+ * Chơi offline (#271): trò chơi ĐÃ LƯU (id do saveRunner ghi) được mở bằng đúng
+ * đường người dùng — thư viện nạp lại từ vỏ, bấm "Chơi ngay" trên thẻ, chọn đáp
+ * án đúng, bấm tiếp tới màn kết quả và đợi phiên TỰ LƯU xong. Trong suốt lượt
+ * chơi, bốn cửa mạng (fetch/XHR/WebSocket/sendBeacon) bị bọc để ghi mọi URL ra
+ * ngoài, cộng tài nguyên mới trong Performance API; đối chứng dương fetch một
+ * URL .invalid để chứng minh bộ đếm không câm. Ba host nội bộ của vỏ
+ * (tauri.localhost, ipc.localhost, edugame-file.tauri.localhost) không phải mạng:
+ * hai host đầu là tài nguyên đóng gói/kênh lệnh, host thứ ba phục vụ ảnh TRÊN
+ * ĐĨA của ứng dụng (bước 5/6 đã đo vòng đời ảnh đó).
+ */
+const offlinePlayRunner = (gameId) => `(async () => {
+  const out = {};
+  const gameId = ${JSON.stringify(gameId)};
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const waitFor = async (fn, timeoutMs) => {
+    const end = Date.now() + (timeoutMs || 10000);
+    while (Date.now() < end) { const value = fn(); if (value) return value; await sleep(100); }
+    return null;
+  };
+  const isLocalHost = u => {
+    const text = String(u || '');
+    return ['http://tauri.localhost', 'http://ipc.localhost', 'http://edugame-file.tauri.localhost']
+      .some(origin => text === origin || text.startsWith(origin + '/'));
+  };
+  const isRemote = u => /^(https?|wss?|ftp):/i.test(String(u || '')) && !isLocalHost(u);
+  const attempts = [];
+  const origFetch = window.fetch;
+  const origOpen = XMLHttpRequest.prototype.open;
+  const OrigWebSocket = window.WebSocket;
+  const origBeacon = navigator.sendBeacon;
+  window.fetch = function (input) {
+    const u = typeof input === 'string' ? input : (input && input.url);
+    if (isRemote(u)) attempts.push('fetch:' + u);
+    return origFetch.apply(this, arguments);
+  };
+  XMLHttpRequest.prototype.open = function (method, u) {
+    if (isRemote(u)) attempts.push('xhr:' + u);
+    return origOpen.apply(this, arguments);
+  };
+  window.WebSocket = function (url, protocols) {
+    if (isRemote(url)) attempts.push('ws:' + url);
+    return protocols === undefined ? new OrigWebSocket(url) : new OrigWebSocket(url, protocols);
+  };
+  window.WebSocket.prototype = OrigWebSocket.prototype;
+  navigator.sendBeacon = function (url, data) {
+    if (isRemote(url)) attempts.push('beacon:' + url);
+    return origBeacon.apply(this, arguments);
+  };
+  // Buffer mặc định 250 entry có thể tràn khi trang nạp ~200 tài nguyên; nới để
+  // phần cắt theo mốc không mất entry mới.
+  performance.setResourceTimingBufferSize(2000);
+  const resourceBaseline = performance.getEntriesByType('resource').length;
+  const control = 'https://example.invalid/edugame-offline-control';
+
+  try {
+    // Đối chứng dương phải đi qua ĐÚNG cửa đã bọc; cuộc gọi thật sẽ thất bại
+    // (tên miền .invalid) nhưng bản ghi phải xuất hiện, nếu không "0 request"
+    // chỉ là bộ đếm hỏng. Race với sleep để DNS đen không treo cổng.
+    await Promise.race([window.fetch(control).catch(() => {}), sleep(3000)]);
+    out.control = attempts.some(line => line.indexOf(control) >= 0);
+
+    await refreshDb();
+    navigate('library');
+    const playBtn = await waitFor(() => document.querySelector('[data-library-item="' + gameId + '"] [data-action="play"]'));
+    out.card = Boolean(playBtn);
+    if (playBtn) playBtn.click();
+    const option = await waitFor(() => document.querySelector('#playBody .game-stage[data-game="scenario"] .answer-option[data-answer="b"]'));
+    out.stage = Boolean(option);
+    // Minh hoạ của câu hỏi: SVG nội tuyến, không img/image nào trỏ ra ngoài.
+    out.remoteArt = [...document.querySelectorAll('#playBody .game-stage img, #playBody .game-stage image')]
+      .map(node => node.getAttribute('src') || node.getAttribute('href') || '')
+      .filter(isRemote);
+    out.svgCount = document.querySelectorAll('#playBody .game-stage svg.stage-illustration-svg').length;
+    if (option) option.click();
+    const next = await waitFor(() => {
+      const btn = document.getElementById('nextQuestionBtn');
+      return btn && !btn.classList.contains('hidden') ? btn : null;
+    });
+    out.answered = Boolean(next);
+    if (next) next.click();
+    const status = await waitFor(() => {
+      const node = document.getElementById('resultSaveStatus');
+      return node && /^✓ Đã tự lưu/.test(node.textContent) ? node : null;
+    }, 15000);
+    out.result = Boolean(document.querySelector('#playBody .result-screen'));
+    out.saved = Boolean(status);
+    out.sessionId = status ? String(status.dataset.sessionId || '') : '';
+    out.played = out.card && out.stage && out.answered && out.result && out.saved;
+
+    // Phiên phải đọc lại được từ vỏ (đĩa), đúng trò chơi và đúng điểm của một
+    // quyết định đúng: 100/100, 1/1 (calculateScenarioSummary).
+    const library = await desktop.call('getLibrary');
+    const session = library.sessions.find(s => s.id === out.sessionId);
+    out.session = session ? { id: session.id, gameId: session.gameId, points: session.points,
+      max: session.max, percent: session.percent, correct: session.correct, total: session.total } : null;
+    out.sessionOk = Boolean(session && session.gameId === gameId &&
+      session.points === 100 && session.max === 100 && session.percent === 100 &&
+      session.correct === 1 && session.total === 1);
+
+    const close = document.getElementById('closeResultBtn');
+    if (close) close.click();
+    await sleep(300);
+    out.closed = document.getElementById('modalRoot').children.length === 0;
+
+    // Đối chứng dương cũng để lại một entry resource; loại nó khỏi cả hai nguồn
+    // (attempts lẫn resource timing) để "0 request" chỉ đếm lượt chơi thật.
+    const newResources = performance.getEntriesByType('resource').slice(resourceBaseline)
+      .map(entry => entry.name).filter(u => isRemote(u) && u.indexOf(control) < 0);
+    const real = attempts.filter(line => line.indexOf(control) < 0);
+    out.networkOk = real.length === 0 && newResources.length === 0;
+    out.networkMsg = 'ngoài=' + (real.concat(newResources).join(',') || '(không)');
+    out.msg = 'thẻ=' + out.card + ', sân khấu=' + out.stage + ', trả lời=' + out.answered +
+      ', kết quả=' + out.result + ', tự lưu=' + out.saved + ', phiên=' + out.sessionId;
+  } finally {
+    window.fetch = origFetch;
+    XMLHttpRequest.prototype.open = origOpen;
+    window.WebSocket = OrigWebSocket;
+    navigator.sendBeacon = origBeacon;
+  }
+  return out;
+})()`;
+
+/**
+ * Pha hai (lượt chơi offline): phiên của lượt chơi phải còn trên đĩa với đúng
+ * trò chơi và điểm, rồi xoá được. Chạy TRƯỚC reopenRunner để phép đo phiên ở đó
+ * không nhặt nhầm dòng này (nó tìm phiên theo gameId).
+ */
+const reopenPlayRunner = memo => `(async () => {
+  const out = {};
+  const memo = ${JSON.stringify(memo)};
+  const library = await desktop.call('getLibrary');
+  const session = library.sessions.find(s => s.id === memo.play.sessionId);
+  out.found = Boolean(session);
+  out.same = Boolean(session && session.gameId === memo.id &&
+    session.points === memo.play.points && session.percent === memo.play.percent);
+  out.deleted = false;
+  if (session) {
+    const removed = await desktop.call('deleteSessions', [session.id]);
+    const after = await desktop.call('getLibrary');
+    out.deleted = removed.deleted === 1 && !after.sessions.some(s => s.id === session.id);
+  }
+  out.ok = out.found && out.same && out.deleted;
+  out.msg = 'phiên=' + memo.play.sessionId + ', thấy=' + out.found + ', khớp=' + out.same + ', xoá=' + out.deleted;
   return out;
 })()`;
