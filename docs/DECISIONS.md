@@ -2650,6 +2650,38 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 
 **Việc kế tiếp.** Chưa duyệt bắt đầu code. Khi duyệt: dựng khung Tauri v2 + Rust toolchain trong nhánh riêng, chuyển lớp truy cập desktop sang facade TS (kế hoạch mục 4) và làm vòng 1 theo mục 1.
 
+## Giai đoạn 3 (6/6) — Chơi offline: cổng nghiệm thu bấm đúng đường người dùng trên trò chơi vừa lưu, bốn cửa mạng bị bọc + đối chứng dương, phiên tự lưu sống qua tiến trình mới (2026-11-10)
+
+**Báo cáo.** Bước 6/6 đóng giai đoạn 3 bằng cổng nghiệm thu chơi offline, **không thêm kênh Rust nào**: đường chơi đã đủ từ bước 2 (`library:get` + `library:save-session`), nên toàn bộ thay đổi là `tests/ui/tauri-webview-check.js` (+171 dòng: `offlinePlayRunner`, `reopenPlayRunner`, `memo.play`). Bằng chứng trên binary release thật: **pha một 46/46, pha hai 10/10** — bấm "Chơi ngay" trên thẻ thư viện của trò chơi vừa lưu, trả lời đúng, đi hết màn kết quả, phiên tự lưu `100/100` điểm với `1/1` câu đúng, **0 request mạng** trong suốt lượt chơi (đối chứng dương có ghi), minh hoạ là SVG nội tuyến không ảnh từ xa, đóng màn sạch; mở lại ứng dụng thấy phiên còn đúng điểm rồi xoá được, trò chơi còn `id` + `createdAt`.
+
+**Quyết định.**
+
+1. **Chơi offline là cổng nghiệm thu, không phải mã tính năng.** Renderer đã có đủ đường đọc thư viện và ghi phiên từ bước 2/6; bước này chỉ chứng minh đường đó đi hết được một lượt chơi thật. Đây cũng là bằng chứng kiến trúc cho vòng 1 #251: chơi game đã lưu **không** phụ thuộc `lesson:*`/`ai:*`/`setup:*` — 55 kênh còn `unsupported!` không nằm trên đường chơi. Nếu bước này phải sửa Rust mới xanh thì đó là dấu hiệu một kênh nền đang thiếu, không phải việc của cổng.
+2. **Cổng bấm đúng đường người dùng, không gọi kênh trực tiếp.** `refreshDb()` → `navigate('library')` → `[data-library-item="<id>"] [data-action="play"]` → `#playBody .game-stage[data-game="scenario"] .answer-option[data-answer="b"]` → `#nextQuestionBtn` → màn kết quả → chờ phiên tự lưu. Không gọi `desktop.call('saveSession')` để "làm xanh" phép đo: phiên phải do chính màn kết quả ghi, nếu không cổng chỉ đang đo kênh IPC.
+3. **Bốn cửa mạng bị bọc + đối chứng dương bắt buộc.** `fetch`, `XMLHttpRequest.open`, `WebSocket`, `navigator.sendBeacon` ghi mọi URL ra ngoài; cộng tài nguyên mới trong Performance API (`setResourceTimingBufferSize(2000)` để trang ~200 tài nguyên không tràn mất entry mới). Đối chứng dương `https://example.invalid/…` phải xuất hiện trong bản ghi — không có nó thì "0 request" chỉ là bộ đếm câm; lượt đối chứng race 3 s để DNS đen không treo cổng. Ba host nội bộ (`tauri.localhost`, `ipc.localhost`, `edugame-file.tauri.localhost`) không tính là mạng: hai host đầu là gói/kênh lệnh, host thứ ba phục vụ ảnh **trên đĩa** của ứng dụng (vòng đời ảnh đã đo ở bước 5/6) — cùng luật miễn trừ với cổng offline của Electron.
+4. **Đo cả "không ảnh từ xa":** minh hoạ phải là SVG nội tuyến (`svg.stage-illustration-svg` ≥ 1), mọi `img`/`image` có `src|href` remote phải rỗng, và đóng màn phải sạch — chơi offline không chỉ là không gọi mạng mà còn không được lén tải tài nguyên.
+5. **Pha hai đo và xoá phiên của lượt chơi TRƯỚC `reopenRunner`.** `reopenRunner` tìm phiên theo `gameId`; để lại phiên của lượt chơi thì nó nhặt nhầm phiên đó thay vì phiên nó vừa lưu. Thứ tự là một phần của phép đo, không phải tiện tay: `reopenPlayRunner` xác nhận phiên còn trên đĩa đúng điểm rồi xoá trong cùng lượt.
+6. **Không dựng fixture trò chơi riêng cho bước này.** Dùng chính trò chơi `saveRunner` vừa lưu (`scenario` một câu), nhờ vậy đo trọn chuỗi "lưu → đóng → mở lại → chơi" trên cùng một dòng dữ liệu chứ không phải hai fixture song song.
+
+**Kiểm chứng.**
+
+- `npm run tauri:check` — dựng lại release **3m18s**, exe **52,76 MiB**; pha một **46/46**, pha hai **10/10**:
+  - `chơi offline: Chơi ngay trên thẻ → trả lời → kết quả tự lưu` — `thẻ=true, sân khấu=true, trả lời=true, kết quả=true, tự lưu=true, phiên=session_…`
+  - `chơi offline: phiên đúng trò chơi, 100/100 điểm, 1 quyết định` — `{"points":100,"max":100,"percent":100,"correct":1,"total":1}`
+  - `chơi offline: 0 request mạng trong lượt chơi, đối chứng dương có ghi` — `đối chứng=true, ngoài=(không)`
+  - `chơi offline: minh hoạ SVG nội tuyến, không ảnh từ xa, đóng màn sạch` — `svg=1, xa=[], đóng=true`
+  - `mở lại: phiên của lượt chơi offline còn trên đĩa đúng điểm, xoá được` — `thấy=true, khớp=true, xoá=true`; `mở lại: trò chơi vẫn còn với id + createdAt cũ` — `id=game_…, thấy=true`
+- `node tests/run-unit.js` **98/98** · `npx tsc -p tsconfig.json` sạch · `check:renderer-globals` 73/75 script, 1.043 hàm / 8.279 điểm gọi, **0 undefined**.
+
+**Chưa xác minh.**
+
+- 55 kênh còn `unsupported!` (lesson/AI/setup/settings:save/presentation/about/LAN).
+- Chỉ một trò chơi `scenario` một câu được chơi qua giao diện; bốn template còn lại (race/arena/treasure/matching) chưa có lượt bấm tương đương trên vỏ Tauri.
+- UI Thư viện/Dự án/Trình tạo ngoài luồng chơi này vẫn mới đo qua façade, chưa bấm qua giao diện; hộp thoại Windows thật chưa người bấm (cổng chọn bằng biến môi trường).
+- Nhánh AI local không chạy (theo chỉ đạo); chưa cài thử installer Tauri, chưa ký Authenticode, chưa thử máy thiếu WebView2 runtime.
+
+**Việc kế tiếp.** Giai đoạn 4 — migration profile Electron: backup bất biến, idempotent, kiểm schema/số lượng/checksum trên bản sao dữ liệu 0.5.1, và xử lý WAL khi chép tệp (ràng buộc đã ghi từ bước 1/6).
+
 ## Giai đoạn 3 (5/6) — Import tài liệu/câu hỏi/ảnh + chẩn đoán: chữ đọc nguyên văn trong V8 với thư viện bản trình duyệt, hộp thoại là lệnh async, ảnh WebView2 đi qua host localhost (2026-11-10)
 
 **Báo cáo.** Bước 5/6 port mười kênh: năm `files:*` (`import-document`, `import-document-from-path`, `import-questions`, `import-illustration`, `delete-illustration`), bốn `diagnostics:*` (`export`, `info`, `clear`, `open-folder`) và `window:set-fullscreen`. Bằng chứng nghiệm thu: **cổng hai pha trên binary release đạt 42/42 + 9/9** — năm định dạng tài liệu (.txt/.md/.docx/.pptx/.pdf) ra chữ trong V8 nhúng, huỷ hộp thoại trả `null`, PDF hỏng và đuôi .xls bị từ chối đúng mã; CSV/TSV/XLSX cùng ra câu hỏi đầu tiên, .xls bị từ chối; ảnh PNG nhập thành id `ci-`, nạp được trong `<img>` qua host WebView2, scheme thật `edugame-file://` chứng minh KHÔNG nạp được (lý do đổi host), xoá xong ảnh hết thật (404); gói chẩn đoán đúng tên/ngày/CRLF, `folder` là thư mục log, clear/open-folder chạy; cộng các phép đo trò chơi/dự án/gói của bước trước và mở lại ứng dụng.

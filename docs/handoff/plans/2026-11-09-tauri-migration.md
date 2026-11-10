@@ -1,8 +1,8 @@
 # Kế hoạch khảo sát và chuyển EduGame Studio từ Electron sang Tauri
 
-Ngày lập: 2026-11-09  
-Trạng thái: **đã chốt bảy quyết định phạm vi/tiêu chí (mục 7, #251); chưa duyệt để
-bắt đầu code** — chưa cài Rust toolchain, chưa có `Cargo.toml`.  
+Ngày lập: 2026-11-09; cập nhật trạng thái: 2026-11-10  
+Trạng thái: **đã duyệt và đang triển khai** — giai đoạn 0–3 XONG (bước 6/6 chốt
+ngày 2026-11-10), giai đoạn 4 (migration profile Electron) là việc kế tiếp.  
 Phạm vi: ứng dụng desktop Windows hiện tại, phiên bản nguồn 0.5.1, **bản Tauri
 đầu tiên là bản thử giới hạn** (không có LAN, trình chiếu, updater, AI local).
 
@@ -145,7 +145,7 @@ có yêu cầu tương thích cụ thể và đã đánh giá chi phí/bảo m�
 
 ### Giai đoạn 3 — SQLite, file và nhập/xuất
 
-**Trạng thái: ĐANG LÀM — bước 1/6 XONG (2026-11-09, DECISIONS "Giai đoạn 3 (1/6)").** Backend chốt là `rusqlite` 0.41 `bundled`; `src-tauri/src/storage.rs` mở `edugame.sqlite` với WAL + `foreign_keys` và chạy đúng hai khối DDL `include_str!` từ `src/db/` (bản sao do `tests/unit/tauri-storage-schema.test.ts` canh với `main.ts`/`lesson-store.ts`). Đã mở được bản sao dữ liệu 0.5.1 thật (11 bảng, 14 game, 268 phiên). Chưa có kênh nào dùng `storage` — bước 2/6 là nhóm `library:*`.
+**Trạng thái: XONG 6/6 (2026-11-10, DECISIONS "Giai đoạn 3 (1/6)"–"(6/6)").** Backend là `rusqlite` 0.41 `bundled`; `src-tauri/src/storage.rs` mở `edugame.sqlite` với WAL + `foreign_keys` và chạy đúng hai khối DDL `include_str!` từ `src/db/`, đã mở bản sao dữ liệu 0.5.1 thật (11 bảng, 14 game, 268 phiên). Sáu kênh `library:*` và năm kênh `project:*` chạy luật TypeScript **nguyên văn** trong V8 nhúng (`deno_core`, slot `EGLIBRARY`); `.egame` qua slot `EGPACKAGES`; import tài liệu/câu hỏi/ảnh + chẩn đoán qua slot `EGFILES`; hộp thoại và tệp chỉ ở Rust. Cổng hai pha trên binary release đạt **46/46 + 10/10**, gồm chơi offline trò chơi đã lưu (bước 6/6 — không thêm kênh Rust, chỉ là cổng nghiệm thu). 55 kênh còn `unsupported!` (lesson/AI/setup/settings:save/presentation/about/LAN) — thuộc vòng sau, không nằm trên đường chơi offline.
 
 **Công việc**
 
@@ -358,11 +358,16 @@ game, `.egame` và offline gameplay. Không ngừng phát hành Electron cho t�
 các tính năng còn lại có quyết định rõ ràng và các cổng nghiệm thu tương ứng
 được thông qua.
 
-## 9. Trạng thái sau khảo sát
+## 9. Trạng thái triển khai (cập nhật 2026-11-10)
 
-- Chưa có file ứng dụng nào được sửa hoặc chuyển.
-- Chưa cài Rust toolchain và chưa chạy build/test Tauri.
-- Kế hoạch này chưa phải quyết định kiến trúc được duyệt; cần chốt các câu hỏi ở
-  mục 7 trước khi triển khai.
-- Bước tiếp theo: duyệt phạm vi bản thử nghiệm, sau đó lập ma trận API và profile
-  migration chi tiết trong giai đoạn 0.
+- Giai đoạn 0 XONG: kiểm kê API + baseline Electron (xem
+  [2026-11-09-tauri-phase0-survey.md](2026-11-09-tauri-phase0-survey.md)); bảy
+  quyết định phạm vi chốt ở #251.
+- Giai đoạn 1 XONG: vỏ Tauri v2 chạy UI đóng gói; installer **2,21 MiB**, boot
+  **508 ms**, nhàn rỗi **190,7 MiB** — cả ba ngưỡng #251 ĐẠT.
+- Giai đoạn 2 XONG: renderer đi qua façade `desktop.*`, adapter Electron + Tauri,
+  Tauri không còn cầu `window.eduGame`.
+- Giai đoạn 3 XONG 6/6: SQLite, `library:*`/`project:*`, `.egame`, import tài
+  liệu/câu hỏi/ảnh, chẩn đoán và chơi offline; cổng hai pha **46/46 + 10/10**.
+- Chưa làm: giai đoạn 4 (migration profile), 5 (AI local + secrets), 6 (trình
+  chiếu/LAN), 7 (updater/ký/phát hành thử). 55 kênh còn `unsupported!`.
