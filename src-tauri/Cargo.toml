@@ -38,6 +38,11 @@ tauri-plugin-dialog = "2"
 # Id ảnh minh hoạ (`ci-` + 32 hex) lấy từ nguồn ngẫu nhiên của hệ điều hành: id
 # đoán được thì một tệp trong `images/` có thể bị dò bằng URL `edugame-file:`.
 getrandom = "0.3"
+# Giai đoạn 4: bản sao lưu profile Electron ghi kèm SHA-256 của từng tệp, và bước
+# nhập chỉ báo thành công sau khi đối chiếu lại. Hai crate đã có trong cây phụ
+# thuộc (qua tauri/rusqlite); khai trực tiếp để không dựa vào một đường gián tiếp.
+sha2 = "0.10"
+hex = "0.4"
 
 [dev-dependencies]
 # Thư mục tạm tự dọn cho test storage: mỗi test mở một tệp 0.5.1 riêng, không

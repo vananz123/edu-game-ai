@@ -2650,6 +2650,45 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 
 **Việc kế tiếp.** Chưa duyệt bắt đầu code. Khi duyệt: dựng khung Tauri v2 + Rust toolchain trong nhánh riêng, chuyển lớp truy cập desktop sang facade TS (kế hoạch mục 4) và làm vòng 1 theo mục 1.
 
+## Giai đoạn 4 — Migration profile Electron: phát hiện và mời nhập, backup bất biến, nhập idempotent, tước khoá BYOK; cổng ba pha 46/46 + 10/10 + 12/12 (2026-11-10)
+
+**Báo cáo.** Kế hoạch mục 4 giai đoạn 4 đòi sáu việc: phát hiện profile hoặc cho chọn thủ công; sao lưu trước và không sửa/xoá nguồn; kiểm version/schema/dữ liệu/đường dẫn; migration chạy lại an toàn, lỗi từng phần không được báo thành công; xác minh số lượng/id/checksum; tách chính sách model/runtime. Bước này làm đủ sáu việc trên **profile tổng hợp** và dựng cổng nghiệm thu riêng trên binary release. Kết quả: giáo viên thấy lời mời khi có profile cũ, bấm mới nhập; bản sao lưu nằm dưới `backups/electron-*` và không có kênh xoá; nhập xong thư viện có đúng trò chơi/phiên/tài liệu/dự án, ảnh và giáo án; chạy lại không nhân đôi; khoá BYOK không xuất hiện ở bất kỳ đâu; `ai-local/` không bị chép.
+
+**Quyết định.**
+
+1. **Chỉ gợi ý, không tự nhập.** `migration:detect` chỉ đọc và trả số liệu; modal mời nhập chỉ mở khi tìm thấy profile. Nguồn được giải theo thứ tự: thư mục giáo viên chọn trong hộp thoại (state Rust) → `EDUGAME_ELECTRON_PROFILE` → `%APPDATA%\edugame-studio\edugame-data` → `%APPDATA%\EduGame Studio\edugame-data`. Renderer **không bao giờ** truyền đường dẫn; hộp thoại chọn thư mục là lệnh async riêng. Bỏ qua chỉ có hiệu lực phiên này; lần mở sau vẫn mời, vì chưa có quyết định lưu "đã bỏ qua".
+2. **Backup là điều kiện tiên quyết, không phải tuỳ chọn.** Trước khi nhập, DB nguồn được chép cùng `-wal`/`-shm` với chữ ký trước/sau (thử lại tối đa 4 lần nếu Electron đang ghi), rồi mở bằng `VACUUM INTO` để có ảnh chụp nhất quán. Bản sao lưu chứa `db/` (tệp thô), `edugame.sqlite` (ảnh chụp), `images/`, `lessons/`, `settings.json` đã tước khoá và `manifest.json`; chỉ ghi manifest **sau khi** đã băm/đối chiếu từng tệp. `ai-local/` và `logs/` bị loại. Không sửa/xoá dữ liệu bền vững của nguồn; app không có kênh xoá backup.
+3. **Nhập idempotent trong một transaction.** `ATTACH` bản sao lưu vào DB đích rồi `INSERT OR IGNORE` theo thứ tự khoá ngoại: games, sessions, lesson_documents, lesson_analyses, game_recommendations, game_projects, lesson_chunks, ai_generation_cache, ai_tasks, lesson_chats, lesson_chat_messages; `defer_foreign_keys=ON` để thứ tự bảng không phá ràng buộc. Sau commit, xác minh id từng bảng và checksum tệp giáo án; `migration.json` chỉ ghi `completedAt` khi mọi bước xong. Chạy lại nhập **0 dòng**, giữ bản sao lưu đầu tiên; lỗi giữa chừng không bao giờ được báo thành công và backup vẫn còn để phục hồi.
+4. **BYOK nhập lại, không migrate.** `settings.json` được tước khoá đệ quy (`apiKey*` ở mọi cấp), giữ `provider`/`baseUrl`/`model`, đặt `hasKey=false` và `keyMasked=''`. Không có plaintext key trong DB, `migration.json`, manifest, backup hay log. Đây là cùng luật #251 câu 4, nay được thực thi bằng code và kiểm bằng chuỗi mẫu trong toàn bộ bản sao lưu.
+5. **Ảnh/giáo án: chép có đối chiếu, không ghi đè bản mới.** Tệp trong backup phải khớp manifest trước khi dùng làm nguồn; đích chưa có thì chép rồi băm lại. Đích đã có cùng nội dung → `existing`; khác nội dung → ghi vào `conflicts` và **không ghi đè** (giáo viên có thể đã sửa trong Tauri).
+6. **Ba kênh Tauri-only, không mở rộng hợp đồng Electron.** `migration:detect`, `migration:browse`, `migration:import` nằm trong `hostCalls` của façade và `INVOKE_CHANNELS` của Rust, không thêm vào preload/92 khoá Electron. Renderer dùng `desktop.host(...)`; modal có `data-migration-phase` (`offer`/`importing`/`done`/`failed`) cùng `data-migration-source`/`-backup`/`-inserted`/`-keys` để cổng quan sát. `bootstrap` không mở wizard AI khi modal đang mở; nhập xong giáo viên bấm "Mở lại ứng dụng" thay vì tự reload.
+7. **Cổng tách khỏi dữ liệu thật.** `paths.rs` chỉ đổi thư mục Tauri khi **cả** `EDUGAME_TAURI_GATE=1` và `EDUGAME_TAURI_DATA_DIR` được đặt. Script cha dựng profile Electron **tổng hợp** bằng `node:sqlite` + đúng DDL `src/db/`, chạy thêm pha ba `--migration` (không chạy lại các phép đo giao diện pha một), rồi dọn thư mục tạm. Nhờ vậy pha một/hai vẫn đo trên dữ liệu sạch, không phụ thuộc log hay profile thật.
+8. **Chưa thêm mục "Nhập lại" trong Cài đặt.** Pha này chỉ có detect/browse/import; quyết định có thêm đường nhập lại sau khi đã bỏ qua vẫn để mở.
+
+**Lỗi đã sửa trong lúc làm.**
+
+- Cổng chẩn đoán trước đây chỉ xanh nhờ log `diagnostics.export` còn sót từ profile thật. Với thư mục dữ liệu cổng mới, gói đầu tiên có 0 dòng log. Sửa cổng: gọi `clearDiagnostics` trước `exportDiagnostics` và kiểm dòng `diagnostics.clear` của chính lượt đó.
+- Trò chơi tổng hợp trong profile Electron phải mang `id`/`title` trong `data_json`; thư viện đọc id từ JSON nên thiếu nó sẽ hiện thẻ trống dù dòng DB đã nhập.
+- Phép đếm detect dùng khoá camelCase (`lessonDocuments`, `lessonAnalyses`, …), không phải snake_case; sửa kỳ vọng của cổng.
+
+**Kiểm chứng.**
+
+- `node tests/run-unit.js` — **98/98**.
+- `npx tsc -p tsconfig.json` — sạch (chạy hai lần trong `npm run build`); `npm run check:renderer-globals` — 74/76 script, **1.057** hàm, **8.373** điểm gọi, **0 undefined**.
+- `cargo check --manifest-path src-tauri/Cargo.toml` — `Finished`; `cargo test migration::tests --manifest-path src-tauri/Cargo.toml -- --test-threads=1` — **7/7** (detect không chạm nguồn; backup/rows/files/settings; chạy lại 0 dòng + giữ backup đầu; lỗi settings giữ backup/nguồn và retry được; tước khoá đệ quy; safe-join).
+- `npm run build:tauri` — bundle nhúng **5.354,7 KiB**, `dist-tauri` **195 tệp**.
+- `node scripts/build-tauri-release.js --check` trên binary release — pha một **46/46**, pha hai **10/10**, pha ba `--migration` **12/12**: detect đúng 2 game/1 phiên/1 tài liệu/1 phân tích/1 gợi ý/1 dự án/2 chunk/1 cache/1 task/1 chat/2 tin nhắn; modal đúng đường dẫn nguồn; bấm nhập báo xong **14 dòng + 3 khoá bị bỏ**; backup dưới `backups/electron-*` có `db/edugame.sqlite` + snapshot; manifest khớp SHA-256, `settings.sanitized=true`, `keysRemoved=3`, loại `ai-local/`; không có `SK-GATE-SECRET` trong backup; hash các tệp bền vững của nguồn không đổi; ảnh/giáo án sang đích đúng byte; không có `ai-local/` ở đích; settings đích giữ `https://gate.example/v1`/`gate-model`, bỏ key; thư viện 3 game gồm `sample-traffic-001`; detect lần hai `alreadyMigrated=true`, không còn nguồn.
+- `node --check tests/ui/tauri-webview-check.js` và `node --check scripts/build-tauri-release.js` — không lỗi.
+
+**Chưa xác minh.**
+
+- Cổng chỉ dùng profile **tổng hợp**; chưa chạy migration trên **bản sao** profile 0.5.1 thật (14 game · 268 phiên · 36 tài liệu · 17 dự án) dù Rust test đã mở bản sao dữ liệu thật ở giai đoạn 3.
+- Chưa bấm hộp thoại thư mục Windows thật (cổng chọn nguồn bằng `EDUGAME_ELECTRON_PROFILE`); chưa cài đè installer lên bản đang có; chưa xem modal/backup bằng mắt.
+- Bỏ qua chưa được lưu và chưa có mục "Nhập lại" trong Cài đặt; chưa đo thời gian backup/nhập trên profile lớn thật.
+- 55 kênh vẫn `unsupported!`; nhánh AI local không chạy; chưa có installer Tauri, Authenticode hay máy thiếu WebView2.
+
+**Việc kế tiếp.** Đóng nốt cổng giai đoạn 4 bằng một lần chạy trên **bản sao** profile 0.5.1 thật + cài đè installer (không dùng profile gốc), rồi sang giai đoạn 5 — AI local và bí mật — theo kế hoạch. Quyết định có thêm mục nhập lại trong Cài đặt vẫn để mở.
+
 ## Giai đoạn 3 (6/6) — Chơi offline: cổng nghiệm thu bấm đúng đường người dùng trên trò chơi vừa lưu, bốn cửa mạng bị bọc + đối chứng dương, phiên tự lưu sống qua tiến trình mới (2026-11-10)
 
 **Báo cáo.** Bước 6/6 đóng giai đoạn 3 bằng cổng nghiệm thu chơi offline, **không thêm kênh Rust nào**: đường chơi đã đủ từ bước 2 (`library:get` + `library:save-session`), nên toàn bộ thay đổi là `tests/ui/tauri-webview-check.js` (+171 dòng: `offlinePlayRunner`, `reopenPlayRunner`, `memo.play`). Bằng chứng trên binary release thật: **pha một 46/46, pha hai 10/10** — bấm "Chơi ngay" trên thẻ thư viện của trò chơi vừa lưu, trả lời đúng, đi hết màn kết quả, phiên tự lưu `100/100` điểm với `1/1` câu đúng, **0 request mạng** trong suốt lượt chơi (đối chứng dương có ghi), minh hoạ là SVG nội tuyến không ảnh từ xa, đóng màn sạch; mở lại ứng dụng thấy phiên còn đúng điểm rồi xoá được, trò chơi còn `id` + `createdAt`.

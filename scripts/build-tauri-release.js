@@ -11,6 +11,7 @@
 //            profile Electron, không đụng phiên WebView2 của giáo viên).
 //   --check  sau khi chạy, chạy luôn tests/ui/tauri-webview-check.js.
 const { spawn, spawnSync } = require('node:child_process');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -39,6 +40,18 @@ const packagePaths = {
   oversized: path.join(os.tmpdir(), 'eg-tauri-gate-oversized.egame'),
 };
 const PACKAGE_LIMIT = 20 * 1024 * 1024;
+// Thư mục dữ liệu RIÊNG cho cổng. `paths::data_dir_path` chỉ chuyển hướng khi
+// tiến trình cha đặt cả `EDUGAME_TAURI_GATE=1` lẫn `EDUGAME_TAURI_DATA_DIR`, nên
+// cổng không bao giờ ghi vào profile thật của bản Tauri trên máy đang kiểm.
+const gateDataDir = path.join(os.tmpdir(), 'eg-tauri-gate-data');
+const migrationDataDir = path.join(os.tmpdir(), 'eg-tauri-gate-migration-data');
+// Profile Electron TỔNG HỢP cho cổng Giai đoạn 4: không có dữ liệu học sinh thật.
+// `EDUGAME_ELECTRON_PROFILE` trỏ vào chính thư mục `edugame-data` này.
+const electronProfileRoot = path.join(os.tmpdir(), 'eg-tauri-gate-electron');
+const electronProfile = path.join(electronProfileRoot, 'edugame-data');
+const MIGRATION_SECRETS = ['SK-GATE-SECRET-1', 'SK-GATE-SECRET-2', 'SK-GATE-SECRET-3'];
+const MIGRATION_LESSON = 'Giáo án tổng hợp: phân số bằng nhau.';
+const MIGRATION_IMAGE = Buffer.from('gate-image-bytes');
 
 /**
  * Cổng nhập tệp (#270): đường dẫn hộp thoại cho từng lượt của `document.rs`
@@ -93,6 +106,102 @@ function writeFilesGate() {
   return { env, foreign };
 }
 
+/**
+ * Ghi một profile Electron TỔNG HỢP (không có dữ liệu thật) cho cổng Giai đoạn 4.
+ *
+ * `node:sqlite` của Node 22 dựng được tệp SQLite mà không cần `better-sqlite3`
+ * (bản đã biên cho ABI Electron). Dùng đúng DDL của `src/db/` để cổng đo trên
+ * schema thật, không phải một bản sao gõ tay. Mọi giá trị đều cố định, nên phép
+ * so số dòng của cổng không phụ thuộc thời gian chạy.
+ */
+function writeElectronProfile() {
+  fs.rmSync(electronProfileRoot, { recursive: true, force: true });
+  fs.mkdirSync(path.join(electronProfile, 'images'), { recursive: true });
+  fs.mkdirSync(path.join(electronProfile, 'lessons'), { recursive: true });
+  fs.mkdirSync(path.join(electronProfile, 'ai-local'), { recursive: true });
+  fs.writeFileSync(path.join(electronProfile, 'images', 'ci-gate.img'), MIGRATION_IMAGE);
+  fs.writeFileSync(path.join(electronProfile, 'lessons', 'gate-lesson.txt'), MIGRATION_LESSON, 'utf8');
+  fs.writeFileSync(path.join(electronProfile, 'ai-local', 'model.gguf'), 'gate-model', 'utf8');
+
+  const lessonSha = crypto.createHash('sha256').update(MIGRATION_LESSON, 'utf8').digest('hex');
+  const { DatabaseSync } = require('node:sqlite');
+  const db = new DatabaseSync(path.join(electronProfile, 'edugame.sqlite'));
+  try {
+    db.exec('PRAGMA journal_mode = WAL;');
+    db.exec(fs.readFileSync(path.join(root, 'src', 'db', 'library-schema.sql'), 'utf8'));
+    db.exec(fs.readFileSync(path.join(root, 'src', 'db', 'lesson-store-schema.sql'), 'utf8'));
+    const insertGame = db.prepare(
+      'INSERT INTO games (id,title,subject,grade,topic,template,created_at,updated_at,data_json) VALUES (?,?,?,?,?,?,?,?,?)'
+    );
+    // `data_json` phải mang `id`/`title` như một trò chơi do engine lưu: danh
+    // sách thư viện đọc từ JSON này (không ghép cột `id`), nên thiếu `id` sẽ
+    // hiện một thẻ trống dù dòng DB đã nhập đúng.
+    insertGame.run('gate-game-1', 'Trò chơi cổng 1', 'Toán', '4', 'Phân số', 'quiz',
+      '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z',
+      JSON.stringify({ id: 'gate-game-1', title: 'Trò chơi cổng 1', template: 'quiz', rounds: [] }));
+    insertGame.run('gate-game-2', 'Trò chơi cổng 2', 'Toán', '4', 'Phân số', 'match',
+      '2026-01-03T00:00:00Z', '2026-01-04T00:00:00Z',
+      JSON.stringify({ id: 'gate-game-2', title: 'Trò chơi cổng 2', template: 'match', rounds: [] }));
+    db.prepare('INSERT INTO sessions (id,created_at,data_json) VALUES (?,?,?)')
+      .run('gate-session-1', '2026-01-05T00:00:00Z', '{"score":1}');
+    db.prepare(
+      'INSERT INTO lesson_documents (id,name,ext,size_bytes,characters,text_rel_path,sha256,schema_version,created_at) VALUES (?,?,?,?,?,?,?,?,?)'
+    ).run('gate-doc-1', 'Giáo án cổng', 'txt', Buffer.byteLength(MIGRATION_LESSON), MIGRATION_LESSON.length,
+      'lessons/gate-lesson.txt', lessonSha, 1, '2026-01-06T00:00:00Z');
+    db.prepare(
+      'INSERT INTO lesson_analyses (id,document_id,data_json,schema_version,cache_key,created_at,updated_at) VALUES (?,?,?,?,?,?,?)'
+    ).run('gate-analysis-1', 'gate-doc-1', '{}', 1, 'gate-cache-1', '2026-01-07T00:00:00Z', '2026-01-07T00:00:00Z');
+    db.prepare(
+      'INSERT INTO game_recommendations (id,analysis_id,data_json,schema_version,created_at) VALUES (?,?,?,?,?)'
+    ).run('gate-rec-1', 'gate-analysis-1', '{}', 1, '2026-01-07T00:00:00Z');
+    db.prepare(
+      'INSERT INTO game_projects (id,game_id,status,step,data_json,schema_version,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)'
+    ).run('gate-project-1', 'gate-game-1', 'draft', 'design', '{}', 1,
+      '2026-01-08T00:00:00Z', '2026-01-08T00:00:00Z');
+    const insertChunk = db.prepare(
+      'INSERT INTO lesson_chunks (document_id,chunk_index,text,heading,char_start,char_end,token_count) VALUES (?,?,?,?,?,?,?)'
+    );
+    insertChunk.run('gate-doc-1', 0, 'phần một', 'Mở đầu', 0, 9, 3);
+    insertChunk.run('gate-doc-1', 1, 'phần hai', null, 9, 18, 3);
+    db.prepare(
+      'INSERT INTO ai_generation_cache (cache_key,kind,game_type,analysis_id,model_id,prompt_version,payload_json,created_at) VALUES (?,?,?,?,?,?,?,?)'
+    ).run('gate-cache-1', 'game', 'quiz', 'gate-analysis-1', 'gate-model', 'v1', '{}', '2026-01-09T00:00:00Z');
+    db.prepare(
+      'INSERT INTO ai_tasks (task_id,request_id,kind,project_id,document_id,label,state,progress,started_at) VALUES (?,?,?,?,?,?,?,?,?)'
+    ).run('gate-task-1', 'gate-request-1', 'generate', 'gate-project-1', 'gate-doc-1', 'Sinh trò chơi',
+      'done', 'done', '2026-01-09T00:00:00Z');
+    db.prepare(
+      'INSERT INTO lesson_chats (id,title,document_ids,message_count,last_intent,schema_version,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)'
+    ).run('gate-chat-1', 'Hỏi bài cổng', '["gate-doc-1"]', 2, 'ask', 1,
+      '2026-01-10T00:00:00Z', '2026-01-10T00:00:00Z');
+    const insertMessage = db.prepare(
+      'INSERT INTO lesson_chat_messages (id,chat_id,position,role,text,intent,citations,provider_id,error_code,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)'
+    );
+    insertMessage.run('gate-message-1', 'gate-chat-1', 0, 'user', 'Hỏi', 'ask', '[]', '', '', '2026-01-10T00:00:00Z');
+    insertMessage.run('gate-message-2', 'gate-chat-1', 1, 'assistant', 'Đáp', 'ask', '[]', 'openai', '', '2026-01-10T00:00:01Z');
+  } finally {
+    db.close();
+  }
+
+  fs.writeFileSync(path.join(electronProfile, 'settings.json'), JSON.stringify({
+    theme: 'light',
+    ai: {
+      mode: 'cloud',
+      providers: {
+        openai: {
+          baseUrl: 'https://gate.example/v1',
+          model: 'gate-model',
+          hasKey: true,
+          keyMasked: 'sk-…',
+          apiKeyEncrypted: MIGRATION_SECRETS[0],
+        },
+      },
+      apiKeyEncrypted: MIGRATION_SECRETS[1],
+      apiKey: MIGRATION_SECRETS[2],
+    },
+  }, null, 2), 'utf8');
+}
+
 const isWindows = process.platform === 'win32';
 const exeName = isWindows ? 'edugame-studio-tauri.exe' : 'edugame-studio-tauri';
 // `CARGO_TARGET_DIR` đổi thư mục đích của cargo; bỏ qua nó thì script chạy lại
@@ -143,6 +252,11 @@ function build() {
 
 function startAndCheck() {
   fs.rmSync(profile, { recursive: true, force: true });
+  // Cổng Giai đoạn 4 dùng một thư mục dữ liệu Tauri và một profile Electron
+  // tổng hợp RIÊNG; dọn trước mỗi lần chạy để số dòng đo được là cố định.
+  fs.rmSync(gateDataDir, { recursive: true, force: true });
+  fs.rmSync(migrationDataDir, { recursive: true, force: true });
+  fs.rmSync(electronProfileRoot, { recursive: true, force: true });
   let child = null;
   // Đường dẫn hộp thoại của cổng nhập tệp phải có TRƯỚC lần mở binary đầu tiên:
   // chúng là biến môi trường của tiến trình, không đặt được từ renderer.
@@ -158,13 +272,18 @@ function startAndCheck() {
         EDUGAME_TAURI_PACKAGE_EMPTY: packagePaths.empty,
         EDUGAME_TAURI_PACKAGE_OVERSIZED: packagePaths.oversized,
         ...files.env,
+        // Hai biến này bật thư mục dữ liệu riêng của cổng (`paths.rs`). Chỉ đặt
+        // khi `--check`: chạy tay vẫn dùng profile thật của bản Tauri.
+        EDUGAME_TAURI_GATE: '1',
+        EDUGAME_TAURI_DATA_DIR: gateDataDir,
       }
     : {};
-  const launch = () => {
+  const launch = (envExtra = {}) => {
     child = spawn(binary, [], {
       env: {
         ...process.env,
         ...gateEnv,
+        ...envExtra,
         WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port}`,
         WEBVIEW2_USER_DATA_FOLDER: profile,
       },
@@ -190,11 +309,12 @@ function startAndCheck() {
   };
   // Bản sao của `gateEnv` phải đi kèm: script cổng dựa vào chính các biến này
   // để biết đường dẫn hộp thoại, nên thiếu chúng là phần gói `.egame` bị bỏ
-  // qua im lặng trong khi cổng vẫn xanh.
-  const runCheck = (extra) => spawnSync(
+  // qua im lặng trong khi cổng vẫn xanh. `envExtra` đặt SAU để pha Giai đoạn 4
+  // trỏ sang thư mục dữ liệu/profile Electron riêng của nó.
+  const runCheck = (extra, envExtra = {}) => spawnSync(
     process.execPath,
     [path.join(root, 'tests', 'ui', 'tauri-webview-check.js'), port, ...extra],
-    { stdio: 'inherit', env: { ...process.env, ...gateEnv, EDUGAME_TAURI_MEMO: memo } },
+    { stdio: 'inherit', env: { ...process.env, ...gateEnv, ...envExtra, EDUGAME_TAURI_MEMO: memo } },
   );
   launch();
   (async () => {
@@ -216,10 +336,32 @@ function startAndCheck() {
     await waitForPort(true);
     const second = runCheck(['--reopen']);
     stop();
+    await waitForPort(false);
     // Tệp gói của cổng là thứ do chính script này ghi, nên dọn được.
     for (const target of Object.values(packagePaths)) fs.rmSync(target, { force: true });
     fs.rmSync(files.foreign, { force: true });
-    process.exit(second.status || 0);
+    if (second.status !== 0) process.exit(second.status || 1);
+
+    // Pha ba (Giai đoạn 4): profile Electron tổng hợp + thư mục Tauri rỗng, trên
+    // một tiến trình MỚI. Cổng bấm đúng nút "Nhập vào bản mới" của modal, rồi
+    // kiểm báo cáo, bản sao lưu và tệp đã chép. `EDUGAME_ELECTRON_PROFILE` chỉ
+    // được đặt trong tiến trình này; pha một/hai không thấy profile nên không
+    // có modal nhập dữ liệu đè lên phép đo giao diện.
+    writeElectronProfile();
+    launch({ EDUGAME_TAURI_DATA_DIR: migrationDataDir, EDUGAME_ELECTRON_PROFILE: electronProfile });
+    await waitForPort(true);
+    const third = runCheck(['--migration'], {
+      EDUGAME_TAURI_DATA_DIR: migrationDataDir,
+      EDUGAME_ELECTRON_PROFILE: electronProfile,
+    });
+    stop();
+    await waitForPort(false);
+    if (third.status === 0) {
+      fs.rmSync(gateDataDir, { recursive: true, force: true });
+      fs.rmSync(migrationDataDir, { recursive: true, force: true });
+      fs.rmSync(electronProfileRoot, { recursive: true, force: true });
+    }
+    process.exit(third.status || 0);
   })();
 }
 

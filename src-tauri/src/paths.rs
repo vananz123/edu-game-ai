@@ -2,7 +2,7 @@
 //!
 //! Quyết định #251 câu 2 ("thay thế luôn") bắt buộc bản Tauri phải dùng thư mục
 //! dữ liệu RIÊNG, ít nhất cho tới khi migration chạy xong. Electron giữ dữ liệu ở
-//! `%APPDATA%/EduGame Studio/edugame-data`; ghi vào đó từ một tiến trình khác
+//! `%APPDATA%/edugame-studio/edugame-data`; ghi vào đó từ một tiến trình khác
 //! chưa có migration là cách chắc chắn nhất để làm hỏng dữ liệu giáo viên.
 //!
 //! Tauri đặt thư mục dữ liệu theo `identifier` trong `tauri.conf.json`
@@ -35,11 +35,32 @@ pub fn data_dir(app: &AppHandle) -> Result<PathBuf, String> {
 
 /// Chỉ tính đường dẫn, không tạo thư mục — dùng khi cần báo cáo vị trí dữ liệu.
 pub fn data_dir_path(app: &AppHandle) -> Result<PathBuf, String> {
+    // Cổng kiểm tra chạy trên binary release thật, nên không thể dùng một bản
+    // dựng riêng để đổi thư mục. Chỉ khi tiến trình cha đặt CẢ HAI biến
+    // `EDUGAME_TAURI_GATE=1` và `EDUGAME_TAURI_DATA_DIR=<thư mục tạm>` thì mới
+    // chuyển hướng; một biến đơn lẻ (hoặc biến do giáo viên lỡ đặt) bị bỏ qua.
+    // Nhờ vậy cổng không bao giờ ghi vào `%APPDATA%/vn.edugame.studio.tauri`
+    // của máy đang dùng để kiểm.
+    if let Some(dir) = gate_data_dir() {
+        return Ok(dir);
+    }
     let base = app
         .path()
         .app_data_dir()
         .map_err(|error| format!("không xác định được thư mục dữ liệu: {error}"))?;
     Ok(base.join(DATA_SUBDIR))
+}
+
+/// Thư mục dữ liệu của cổng kiểm tra, chỉ có khi cả hai biến môi trường hợp lệ.
+fn gate_data_dir() -> Option<PathBuf> {
+    if std::env::var("EDUGAME_TAURI_GATE").ok().as_deref() != Some("1") {
+        return None;
+    }
+    let value = std::env::var_os("EDUGAME_TAURI_DATA_DIR")?;
+    if value.is_empty() {
+        return None;
+    }
+    Some(PathBuf::from(value))
 }
 
 /// Đọc JSON ở `name` trong thư mục dữ liệu; tệp chưa có hoặc hỏng = `fallback`.
@@ -73,8 +94,8 @@ mod tests {
 
     #[test]
     fn data_subdir_is_not_the_electron_folder() {
-        // Electron dùng `%APPDATA%/EduGame Studio/edugame-data`. Nếu ai đó đổi
-        // identifier thành "EduGame Studio" thì bản Tauri sẽ ghi vào đúng thư mục
+        // Electron dùng `%APPDATA%/edugame-studio/edugame-data`. Nếu ai đó đổi
+        // identifier thành "edugame-studio" thì bản Tauri sẽ ghi vào đúng thư mục
         // của Electron — test này chỉ chốt phần tên thư mục con; phía identifier
         // do `tauri.conf.json` và cổng kiểm tra Node giữ.
         assert_eq!(DATA_SUBDIR, "edugame-data");

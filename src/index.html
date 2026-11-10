@@ -262,6 +262,10 @@
   <script defer src="renderer/features/lan.js"></script>
   <script defer src="renderer/features/settings.js"></script>
   <script defer src="renderer/features/ai-status.js"></script>
+  <!-- Giai đoạn 4: lời mời nhập profile Electron, chỉ chạy trên vỏ Tauri. Nạp
+       TRƯỚC bootstrap vì bootstrap gọi `offerElectronMigrationImport()` sau
+       render đầu tiên. Không có tác dụng phụ lúc nạp. -->
+  <script defer src="renderer/features/migration.js"></script>
   <script defer src="renderer/core/bootstrap.js"></script>
   <script defer src="renderer/features/presentation.js"></script>
 </body>

@@ -79,6 +79,12 @@ pub fn hand_written(command: &str) -> Option<(&'static str, &'static str)> {
         "open_diagnostics_folder" => ("diagnostics:open-folder", "open_diagnostics_folder"),
         "get_settings" => ("settings:get", "get_settings"),
         "get_local_ai_models" => ("ai:local-models", "get_local_ai_models"),
+        // Giai đoạn 4: nhập profile Electron. Ba kênh KHÔNG có trong preload
+        // Electron — `tests/unit/tauri-contract.test.ts` miễn trừ chúng khỏi phép
+        // so với `desktop-contract.json`, và renderer chỉ gọi trên vỏ Tauri.
+        "migration_detect" => ("migration:detect", "migration_detect"),
+        "migration_browse" => ("migration:browse", "migration_browse"),
+        "migration_import" => ("migration:import", "migration_import"),
         "invoke_channel" => ("channel:invoke", "invoke_channel"),
         "send_channel" => ("channel:send", "send_channel"),
         _ => return None,
@@ -174,6 +180,10 @@ const INVOKE_CHANNELS: &[&str] = &[
     "about:download",
     "about:install",
     "about:open-releases",
+    // Giai đoạn 4: chỉ vỏ Tauri có ba kênh này; renderer Electron bỏ qua chúng.
+    "migration:detect",
+    "migration:browse",
+    "migration:import",
     "lan:start",
     "lan:stop",
     "lan:assign-team",
@@ -258,6 +268,12 @@ async fn dispatch(app: &AppHandle, channel: &str, args: &[Value]) -> Result<Valu
         "diagnostics:info" => crate::diagnostics::info(app),
         "diagnostics:clear" => crate::diagnostics::clear(app),
         "diagnostics:open-folder" => crate::diagnostics::open_folder(app),
+        // Giai đoạn 4: `migration.rs` tự mở bản sao lưu và transaction; không
+        // tham số nào của renderer đi vào đường dẫn nguồn (hộp thoại/hằng môi
+        // trường giữ đường dẫn).
+        "migration:detect" => crate::migration::detect(app).await,
+        "migration:browse" => crate::migration::browse(app).await,
+        "migration:import" => crate::migration::import(app).await,
         _ => Err(format!("Kênh `{channel}` chưa có thân trong vỏ Tauri")),
     }
 }
@@ -387,6 +403,25 @@ pub async fn export_game(app: AppHandle, game: serde_json::Value) -> Result<serd
 #[tauri::command]
 pub async fn import_game(app: AppHandle) -> Result<serde_json::Value, String> {
     crate::package::import(&app, crate::package::gate_target("files:import-game")).await
+}
+
+/// Ba lệnh Giai đoạn 4 (nhập profile Electron). Chúng `async` vì `migration.rs`
+/// đẩy việc chép/đọc SQLite sang luồng chặn; hộp thoại chọn thư mục cũng cần
+/// runtime của Tauri (xem đầu `picker.rs`). Không nhận tham số đường dẫn từ
+/// renderer.
+#[tauri::command]
+pub async fn migration_detect(app: AppHandle) -> Result<serde_json::Value, String> {
+    crate::migration::detect(&app).await
+}
+
+#[tauri::command]
+pub async fn migration_browse(app: AppHandle) -> Result<serde_json::Value, String> {
+    crate::migration::browse(&app).await
+}
+
+#[tauri::command]
+pub async fn migration_import(app: AppHandle) -> Result<serde_json::Value, String> {
+    crate::migration::import(&app).await
 }
 
 /// Ba kênh nhập tệp có hộp thoại của tiến trình. Renderer không có quyền

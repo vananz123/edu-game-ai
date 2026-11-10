@@ -64,7 +64,10 @@ function channelOf(call: string): string {
   // Lời gọi điều khiển của cổng kiểm tra: kênh riêng, không thuộc hợp đồng
   // Electron (`desktop.gate('setPackageGateTurn', n)`).
   const gate = DESKTOP_FACADE_SCHEMA.gateCalls[call];
-  return gate || call;
+  if (gate) return gate;
+  // Giai đoạn 4: ba lời gọi chỉ vỏ Tauri (`desktop.host('migrationDetect')`).
+  const host = DESKTOP_FACADE_SCHEMA.hostCalls[call];
+  return host || call;
 }
 
 function createTauriDesktopAdapter(tauriApi?: any, options?: TauriAdapterOptions): DesktopAdapter | null {

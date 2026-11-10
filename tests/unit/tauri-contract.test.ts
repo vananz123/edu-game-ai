@@ -43,6 +43,10 @@ const PSEUDO_CHANNELS = new Set(['channel:invoke', 'channel:send']);
 // và `package.rs`/`document.rs` từ chối khi biến `EDUGAME_TAURI_PACKAGE` /
 // `EDUGAME_TAURI_FILES` chưa bật.
 const GATE_CHANNELS = new Set(['package:gate-turn', 'files:gate-turn']);
+// Kênh CHỈ vỏ Tauri có (Giai đoạn 4: nhập profile Electron). Không thuộc preload
+// Electron, nên không đối chiếu với `desktop-contract.json`; renderer chỉ gọi qua
+// `desktop.host(...)` khi `desktopHost.shell === 'tauri'`.
+const TAURI_ONLY_CHANNELS = new Set(['migration:detect', 'migration:browse', 'migration:import']);
 
 function handWritten(): Map<string, string> {
   const table = new Map<string, string>();
@@ -112,7 +116,7 @@ function test(name: string, fn: () => void) {
 
 test('api.rs khai được mọi kênh invoke của desktop-contract.json', () => {
   const declared = new Set([...rustChannels().values()]
-    .filter(channel => channel !== 'shell:info' && !PSEUDO_CHANNELS.has(channel) && !GATE_CHANNELS.has(channel)));
+    .filter(channel => channel !== 'shell:info' && !PSEUDO_CHANNELS.has(channel) && !GATE_CHANNELS.has(channel) && !TAURI_ONLY_CHANNELS.has(channel)));
   const expected = new Set(Object.values(contract.invoke));
   const missing = [...expected].filter(channel => !declared.has(channel as string)).sort();
   const extra = [...declared].filter(channel => !expected.has(channel as string)).sort();
@@ -172,14 +176,50 @@ function channelList(constName: string): string[] {
   return channels;
 }
 
+/** Ba tên `desktop.host(...)` của façade (Giai đoạn 4), đọc từ schema đã build. */
+function hostCalls(): Map<string, string> {
+  const source = fs.readFileSync(path.join(root, 'src', 'renderer', 'core', 'desktop-facade-schema.ts'), 'utf8');
+  const start = source.indexOf('hostCalls: Object.freeze({');
+  assert.ok(start >= 0, 'desktop-facade-schema.ts thiếu hostCalls');
+  const end = source.indexOf('})', start);
+  assert.ok(end > start, 'hostCalls không đóng đúng');
+  const body = source.slice(start, end);
+  const calls = new Map<string, string>();
+  for (const match of body.matchAll(/([A-Za-z0-9_]+): '([^']+)'/g)) {
+    assert.ok(!calls.has(match[1]), `hostCalls khai trùng ${match[1]}`);
+    calls.set(match[1], match[2]);
+  }
+  assert.ok(calls.size >= 3, `hostCalls chỉ đọc được ${calls.size} lời gọi`);
+  return calls;
+}
+
 test('invoke_channel nhận đúng mọi kênh invoke của hợp đồng, không thừa không thiếu', () => {
   const channels = channelList('INVOKE_CHANNELS');
   const expected = Object.values(contract.invoke) as string[];
   const missing = expected.filter(channel => !channels.includes(channel)).sort();
-  const extra = channels.filter(channel => !expected.includes(channel) && !GATE_CHANNELS.has(channel)).sort();
+  const extra = channels.filter(channel =>
+    !expected.includes(channel) && !GATE_CHANNELS.has(channel) && !TAURI_ONLY_CHANNELS.has(channel)
+  ).sort();
   assert.deepEqual(missing, [], `INVOKE_CHANNELS thiếu: ${missing.join(', ')}`);
   assert.deepEqual(extra, [], `INVOKE_CHANNELS thừa: ${extra.join(', ')}`);
 });
+
+test('ba kênh nhập profile Electron: façade ↔ INVOKE_CHANNELS ↔ lệnh Rust', () => {
+  const calls = hostCalls();
+  assert.deepEqual([...calls.keys()].sort(), ['migrationBrowse', 'migrationDetect', 'migrationImport'],
+    'hostCalls phải là đúng ba lời gọi Giai đoạn 4');
+  assert.equal(new Set([...calls.values()]).size, calls.size, 'hostCalls ánh xạ hai tên về cùng một kênh');
+  const channels = channelList('INVOKE_CHANNELS');
+  const declared = new Set(rustChannels().values());
+  const contractChannels = new Set(Object.values(contract.invoke) as string[]);
+  for (const [name, channel] of calls) {
+    assert.ok(channels.includes(channel), `INVOKE_CHANNELS thiếu ${channel} của ${name}`);
+    assert.ok(declared.has(channel), `api.rs chưa có lệnh cho ${channel} của ${name}`);
+    assert.ok(!contractChannels.has(channel),
+      `${channel} vừa thuộc preload Electron vừa là kênh chỉ Tauri — phải chọn một`);
+  }
+});
+
 
 test('invoke_channel/send_channel được đăng ký và lọc kênh trước khi chạy', () => {
   const handlers = registeredCommands();

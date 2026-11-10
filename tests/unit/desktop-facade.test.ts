@@ -445,6 +445,44 @@ const GROUP_COUNTS = { app: 8, data: 19, files: 7, ai: 30, diagnostics: 4, prese
     assert.deepEqual(lengths, [0], 'handler được gọi với 0 đối số');
   });
 
+  // ── 5b. Giai đoạn 4: ba lời gọi CHỈ Tauri (`desktop.host`) ───────────────
+  await it('host: ba kênh nhập profile đi qua invoke_channel, đối số giữ nguyên', async () => {
+    const tauri = fakeTauri();
+    const { desktop, schema } = boot({ __TAURI__: tauri.api });
+    assert.deepEqual(JSON.parse(JSON.stringify(schema.hostCalls)), {
+      migrationDetect: 'migration:detect',
+      migrationBrowse: 'migration:browse',
+      migrationImport: 'migration:import',
+    });
+    await desktop.host('migrationDetect');
+    await desktop.host('migrationImport', { ignored: true });
+    assert.deepEqual(JSON.parse(JSON.stringify(tauri.invokes)), [
+      { command: 'invoke_channel', payload: { channel: 'migration:detect' } },
+      { command: 'invoke_channel', payload: { channel: 'migration:import', args: [{ ignored: true }] } },
+    ]);
+  });
+
+  await it('host: Electron, chưa nối adapter và tên lạ đều bị từ chối trước IPC', async () => {
+    const bridge = fakeBridge();
+    const electron = boot({ eduGame: bridge.bridge });
+    await assert.rejects(electron.desktop.host('migrationDetect'), error => {
+      assert.equal(error.code, 'not-supported');
+      assert.equal(error.call, 'migrationDetect');
+      return true;
+    });
+    assert.equal(bridge.calls.length, 0, 'Electron không được chạm cầu preload');
+
+    const none = boot();
+    await assert.rejects(none.desktop.host('migrationDetect'), error => error.code === 'not-supported');
+
+    const tauri = fakeTauri();
+    const context = boot({ __TAURI__: tauri.api });
+    await assert.rejects(context.desktop.host('migrationNope'), error => error.code === 'unknown-call');
+    await assert.rejects(context.desktop.call('migrationDetect'), error => error.code === 'unknown-call',
+      'kênh chỉ Tauri không được lọt vào call() của hợp đồng Electron');
+    assert.equal(tauri.invokes.length, 0, 'lời gọi sai không qua ranh giới IPC');
+  });
+
   // ── 6. Adapter giả: dùng được cho test của tầng renderer ─────────────────
   await it('adapter giả ghi lời gọi, phát sự kiện và đếm đăng ký còn mở', async () => {
     const fake = createFakeDesktopAdapter({

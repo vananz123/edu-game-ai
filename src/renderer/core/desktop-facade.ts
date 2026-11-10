@@ -336,5 +336,32 @@ const desktop = (function createDesktopFacade() {
     }
   }
 
-  return Object.freeze({ call, listen, attach, detach, info, stub, gate });
+  /**
+   * Gọi một lời gọi CHỈ vỏ Tauri (`SCHEMA.hostCalls`), ví dụ nhập profile Electron.
+   * Không đi qua `call()` vì hợp đồng Electron không có ba tên này; adapter Tauri
+   * mới dịch được chúng sang kênh `migration:*`. Trên Electron trả
+   * `not-supported` trước khi chạm IPC.
+   */
+  function host(callName: string, ...args: unknown[]): Promise<unknown> {
+    const channel = SCHEMA.hostCalls[callName];
+    if (!channel) {
+      return Promise.reject(DESKTOP_ERROR('unknown-call', String(callName), `Không có lời gọi Tauri ${String(callName)}`));
+    }
+    try {
+      const current = requireAdapter();
+      if (current.name !== 'tauri') {
+        return Promise.reject(DESKTOP_ERROR('not-supported', callName, 'Lời gọi này chỉ có trên vỏ Tauri.'));
+      }
+      return Promise.resolve(current.invoke(callName, args)).then(
+        (value: unknown) => value,
+        (thrown: unknown) => {
+          throw DESKTOP_TO_ERROR(callName, thrown);
+        },
+      );
+    } catch (thrown) {
+      return Promise.reject(DESKTOP_TO_ERROR(callName, thrown));
+    }
+  }
+
+  return Object.freeze({ call, listen, attach, detach, info, stub, gate, host });
 })();

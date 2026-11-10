@@ -1,8 +1,8 @@
 # Kế hoạch khảo sát và chuyển EduGame Studio từ Electron sang Tauri
 
 Ngày lập: 2026-11-09; cập nhật trạng thái: 2026-11-10  
-Trạng thái: **đã duyệt và đang triển khai** — giai đoạn 0–3 XONG (bước 6/6 chốt
-ngày 2026-11-10), giai đoạn 4 (migration profile Electron) là việc kế tiếp.  
+Trạng thái: **đã duyệt và đang triển khai** — giai đoạn 0–4 XONG (giai đoạn 4
+chốt ngày 2026-11-10), giai đoạn 5 (AI local và bí mật) là việc kế tiếp.
 Phạm vi: ứng dụng desktop Windows hiện tại, phiên bản nguồn 0.5.1, **bản Tauri
 đầu tiên là bản thử giới hạn** (không có LAN, trình chiếu, updater, AI local).
 
@@ -168,6 +168,8 @@ có yêu cầu tương thích cụ thể và đã đánh giá chi phí/bảo m�
 - Chơi game đã lưu khi offline; không có request mạng trong quá trình chơi.
 
 ### Giai đoạn 4 — Migration profile Electron
+
+**Trạng thái: XONG (2026-11-10, DECISIONS "Giai đoạn 4").** `migration.rs` phát hiện profile, chỉ mời nhập khi giáo viên bấm, sao lưu bắt buộc dưới `backups/electron-*` (DB+WAL+SHM thô, `VACUUM INTO`, ảnh/giáo án, settings đã tước khoá, manifest SHA-256), nhập bằng `ATTACH` + `INSERT OR IGNORE` theo thứ tự khoá ngoại trong một transaction, xác minh id/tệp và chạy lại 0 dòng; không chép `ai-local/`, không lưu khoá BYOK. Cổng ba pha trên binary release đạt **46/46 + 10/10 + 12/12** (pha ba `--migration` với profile Electron tổng hợp). Chưa chạy trên bản sao profile 0.5.1 thật hoặc cài đè installer — xem "Chưa xác minh" của quyết định.
 
 **Công việc**
 
