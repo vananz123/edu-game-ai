@@ -83,6 +83,12 @@ pub fn hand_written(command: &str) -> Option<(&'static str, &'static str)> {
         "save_settings" => ("settings:save", "save_settings"),
         "get_ai_providers" => ("ai:providers", "get_ai_providers"),
         "get_local_ai_models" => ("ai:local-models", "get_local_ai_models"),
+        // Giai đoạn 5: AI local — tải model/runtime và quản lý llama-server.
+        // Bốn kênh này không còn là `unsupported!`; renderer vẫn chỉ gửi id model.
+        "get_local_runtime_status" => ("ai:local-status", "get_local_runtime_status"),
+        "install_local_ai_model" => ("ai:install-local-model", "install_local_ai_model"),
+        "start_local_runtime" => ("ai:start-local-runtime", "start_local_runtime"),
+        "stop_local_runtime" => ("ai:stop-local-runtime", "stop_local_runtime"),
         // Giai đoạn 4: nhập profile Electron. Ba kênh KHÔNG có trong preload
         // Electron — `tests/unit/tauri-contract.test.ts` miễn trừ chúng khỏi phép
         // so với `desktop-contract.json`, và renderer chỉ gọi trên vỏ Tauri.
@@ -227,7 +233,15 @@ async fn dispatch(app: &AppHandle, channel: &str, args: &[Value]) -> Result<Valu
             _ => Err("AI_CONFIG: thiếu đối tượng cài đặt cần lưu".to_string()),
         },
         "ai:providers" => json(get_ai_providers(app.clone())),
-        "ai:local-models" => json(get_local_ai_models()),
+        "ai:local-models" => get_local_ai_models(app.clone()),
+        "ai:local-status" => Ok(crate::ai_local::status(app)),
+        "ai:install-local-model" => {
+            crate::ai_local::install(app.clone(), args.first().cloned()).await
+        }
+        "ai:start-local-runtime" => {
+            crate::ai_local::start(app.clone(), args.first().cloned()).await
+        }
+        "ai:stop-local-runtime" => crate::ai_local::stop(app.clone()).await,
         // Năm kênh ghi của thư viện nhận thẳng tham số renderer gửi (một trò
         // chơi, một id, một mảng id), nên chúng đi qua `args` của cửa chung.
         "library:save-game"
@@ -542,18 +556,44 @@ pub fn get_ai_providers(app: AppHandle) -> Result<serde_json::Value, String> {
     crate::settings::get(&app)
 }
 
-/// Danh mục AI local của bản Tauri: rỗng, và `runtimeSupported: false` để mọi
-/// nút tải/chạy trong giao diện không hứa điều vỏ này chưa làm được.
+/// Danh mục AI local thật: runtime/model đã tải, cấu hình máy, model đề xuất và
+/// trạng thái tiến trình. Không nhận tham số nào từ renderer; URL/SHA-256 nằm
+/// trong `ai_local.rs`.
 #[tauri::command]
-pub fn get_local_ai_models() -> Result<serde_json::Value, String> {
-    Ok(serde_json::json!({
-        "models": [],
-        "machine": {
-            "runtimeInstalled": false,
-            "runtimeState": "STOPPED",
-            "runtimeSupported": false
-        }
-    }))
+pub fn get_local_ai_models(app: AppHandle) -> Result<serde_json::Value, String> {
+    crate::ai_local::catalog(&app)
+}
+
+/// Tải runtime (nếu thiếu/sai backend) và model, xác minh SHA-256 rồi ghi lựa
+/// chọn `ai.mode = "local"` vào settings. Chỉ nhận id model thuộc danh mục.
+#[tauri::command]
+pub async fn install_local_ai_model(
+    app: AppHandle,
+    model_id: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    crate::ai_local::install(app, model_id).await
+}
+
+/// Trạng thái tiến trình llama-server (`STOPPED`/`STARTING`/`READY`/`ERROR`).
+#[tauri::command]
+pub fn get_local_runtime_status(app: AppHandle) -> Result<serde_json::Value, String> {
+    Ok(crate::ai_local::status(&app))
+}
+
+/// Khởi động llama-server trên cổng loopback trống, chờ `/health`, và hạ xuống
+/// CPU nếu backend Vulkan đã chọn không lên được.
+#[tauri::command]
+pub async fn start_local_runtime(
+    app: AppHandle,
+    model_id: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    crate::ai_local::start(app, model_id).await
+}
+
+/// Dừng tiến trình llama-server đang chạy (nếu có).
+#[tauri::command]
+pub async fn stop_local_runtime(app: AppHandle) -> Result<serde_json::Value, String> {
+    crate::ai_local::stop(app).await
 }
 
 /// Thông tin vỏ đang chạy: renderer và cổng kiểm tra phân biệt được Tauri với
@@ -582,10 +622,10 @@ macro_rules! unsupported {
     };
 }
 
-// Phần còn lại của các kênh invoke trong desktop-contract.json; các kênh có thật
-// là `app:info`, `library:get`, `settings:get`, `ai:local-models` ở trên, sáu
-// `library:*` và năm `project:*` qua `library_channel!` (và `shell:info` không
-// thuộc preload của Electron). Thứ tự theo preload.ts để dễ đối chiếu bằng mắt.
+// Phần còn lại của các kênh invoke trong desktop-contract.json; các kênh đã có
+// thân thật nằm ở `hand_written` + `dispatch` phía trên (khởi động, library,
+// project, package, files, settings, AI local, migration). Thứ tự dưới đây theo
+// preload.ts để dễ đối chiếu bằng mắt.
 unsupported! {
     save_lesson_document => "lesson:save-document",
     get_lesson_document => "lesson:get-document",
@@ -593,10 +633,6 @@ unsupported! {
     delete_lesson_document => "lesson:delete-document",
     delete_lesson_documents => "lesson:delete-documents",
     test_ai_provider => "ai:test-provider",
-    get_local_runtime_status => "ai:local-status",
-    install_local_ai_model => "ai:install-local-model",
-    start_local_runtime => "ai:start-local-runtime",
-    stop_local_runtime => "ai:stop-local-runtime",
     cancel_ai => "ai:cancel",
     list_ai_tasks => "ai:tasks",
     verify_cpu_runtime => "ai:runtime-verify",

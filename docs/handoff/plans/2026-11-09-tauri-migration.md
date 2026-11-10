@@ -2,9 +2,11 @@
 
 Ngày lập: 2026-11-09; cập nhật trạng thái: 2026-11-10  
 Trạng thái: **đã duyệt và đang triển khai** — giai đoạn 0–4 XONG, giai đoạn 5
-xong phần bí mật (DPAPI + `settings:get/save`), phần AI local là việc kế tiếp.
+xong cả phần bí mật (DPAPI + `settings:get/save`) lẫn AI local (tải runtime/model
++ `llama-server` loopback); việc kế tiếp là port `ai:generate`/setup wizard.
 Phạm vi: ứng dụng desktop Windows hiện tại, phiên bản nguồn 0.5.1, **bản Tauri
-đầu tiên là bản thử giới hạn** (không có LAN, trình chiếu, updater, AI local).
+đầu tiên là bản thử giới hạn** (không có LAN, trình chiếu, updater; AI local mới
+có phần cài/chạy, chưa sinh nội dung).
 
 ## 1. Mục tiêu
 
@@ -191,7 +193,7 @@ có yêu cầu tương thích cụ thể và đã đánh giá chi phí/bảo m�
 
 ### Giai đoạn 5 — AI local và bí mật
 
-**Trạng thái: XONG phần bí mật (2026-11-10, DECISIONS "Giai đoạn 5 (bí mật)").** `src-tauri/src/secrets.rs` dùng DPAPI của Windows (`CryptProtectData`/`CryptUnprotectData` qua `windows-sys`) và lưu blob base64 ở `ai.providers.<id>.apiKeyEncrypted`; `src-tauri/src/settings.rs` gộp provider, trả view chỉ có `hasKey`/`keyMasked`, xử lý `apiKey` rỗng/`clearKey`/thay khoá và xoá kết quả test cũ. Migration vẫn tước khoá, giáo viên nhập lại. Cổng release đạt **48/48 + 10/10 + 12/12**, gồm phép đọc `settings.json` chứng minh không có plaintext. **Còn lại:** mục 1–4 của giai đoạn này — runtime/model đã pin, checksum, giải nén an toàn, quản lý `llama-server` loopback và event tiến độ. Chưa thử khoá thật/tài khoản Windows khác, chưa dựng lại installer NSIS sau thay đổi.
+**Trạng thái: XONG (2026-11-10, DECISIONS "Giai đoạn 5 (bí mật)" + "Giai đoạn 5 (AI local)").** Phần bí mật: `src-tauri/src/secrets.rs` dùng DPAPI của Windows (`CryptProtectData`/`CryptUnprotectData` qua `windows-sys`) và lưu blob base64 ở `ai.providers.<id>.apiKeyEncrypted`; `src-tauri/src/settings.rs` gộp provider, trả view chỉ có `hasKey`/`keyMasked`, xử lý `apiKey` rỗng/`clearKey`/thay khoá và xoá kết quả test cũ. Migration vẫn tước khoá, giáo viên nhập lại. Phần AI local: `src-tauri/src/ai_local.rs` giữ catalog pin 3 model + runtime CPU/Vulkan b11681, tải HTTPS có allowlist + Range resume, kiểm kích thước/SHA-256, giải nén ZIP phẳng, cài runtime/model và chạy `llama-server` loopback với health poll/progress. Ba lệnh cài/chạy/dừng trả `{ok, models}` như Electron, `start` kèm `baseUrl` loopback; cổng release **sau khi sửa hình dạng trả về** đạt **50/50 (53/53 khi bật tải thật) + 10/10 + 12/12** (`shapeOk`, `startOk`, `stoppedOk` đều đúng). Installer NSIS **15,28 MiB** (16.023.921 B) cài mới exit 0 rồi cài đè trong thư mục tạm không đổi dữ liệu. **Còn mở:** `ai:generate`/setup wizard chưa port; Vulkan/fallback, huỷ/đổi model, khoá thật và máy sạch chưa kiểm chứng — xem "Chưa chứng minh" của quyết định AI local.
 
 **Công việc**
 
@@ -376,8 +378,11 @@ các tính năng còn lại có quyết định rõ ràng và các cổng nghi�
 - Giai đoạn 4 XONG: phát hiện/mời nhập profile Electron, backup bất biến, nhập
   idempotent, tước khoá BYOK; cổng ba pha **46/46 + 10/10 + 12/12**, chạy trên bản
   sao profile 0.5.1 thật và cài đè installer trong thư mục tạm.
-- Giai đoạn 5 XONG phần bí mật: DPAPI thay `safeStorage`, `settings:get/save` chỉ
-  trả `hasKey`/`keyMasked`, BYOK nhập lại; cổng release **48/48 + 10/10 + 12/12**.
-  Phần AI local (pin runtime/model, checksum, `llama-server` loopback) còn lại.
-- Chưa làm: giai đoạn 5 phần AI local, 6 (trình chiếu/LAN), 7 (updater/ký/phát
-  hành thử). 53 kênh còn `unsupported!`.
+- Giai đoạn 5 XONG cả hai phần: DPAPI thay `safeStorage`, `settings:get/save` chỉ
+  trả `hasKey`/`keyMasked`, BYOK nhập lại; AI local pin runtime/model + SHA-256,
+  tải resume, `llama-server` loopback. Ba lệnh cài/chạy/dừng trả `{ok, models}`
+  như Electron, `start` kèm `baseUrl` loopback; cổng release sau khi sửa hình
+  dạng trả về **50/50 (53/53 khi bật tải thật) + 10/10 + 12/12**, installer NSIS
+  **15,28 MiB** (16.023.921 B) cài mới exit 0 rồi cài đè không đổi dữ liệu.
+- Chưa làm: 6 (trình chiếu/LAN), 7 (updater/ký/phát hành thử), `ai:generate`/setup
+  wizard và các kênh còn lại. 49 kênh còn `unsupported!`.

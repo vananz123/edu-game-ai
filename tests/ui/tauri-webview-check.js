@@ -37,6 +37,9 @@ const reopenPhase = process.argv.includes('--reopen');
 // Pha ba của Giai đoạn 4: profile Electron TỔNG HỢP + thư mục Tauri rỗng, chạy
 // trên tiến trình mới. Pha này chỉ đo nhập dữ liệu, không chạy lại các phép đo
 // giao diện của pha một — modal nhập sẽ đè lên màn hình khi có profile nguồn.
+// Cổng AI local thật (tải model/runtime) chỉ chạy khi script cha đặt biến này.
+// Mặc định cổng release không tải hàng GB; lượt kiểm riêng dùng thư mục tạm.
+const aiInstallId = process.env.EDUGAME_TAURI_AI_INSTALL || '';
 const migrationPhase = process.argv.includes('--migration');
 
 function sha256File(file) {
@@ -111,6 +114,191 @@ function verifyBackupManifest(backupDir) {
     msg: bad.length ? bad.join(' · ') : `${files.length} tệp khớp SHA-256`,
     manifest,
   };
+}
+
+/** SHA-256 theo luồng: model GGUF hơn 1 GB, không đọc cả tệp vào RAM. */
+function sha256FileStream(file) {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256');
+    const stream = fs.createReadStream(file);
+    stream.on('error', reject);
+    stream.on('data', chunk => hash.update(chunk));
+    stream.on('end', () => resolve(hash.digest('hex')));
+  });
+}
+
+/**
+ * Cổng AI local THẬT (tuỳ chọn): tải model nhỏ nhất + runtime qua đúng lệnh
+ * `installLocalAiModel`, kiểm tệp trên đĩa bằng kích thước/SHA-256, rồi khởi
+ * động `llama-server` tới READY và dừng. Chỉ chạy khi `EDUGAME_TAURI_AI_INSTALL`
+ * có id model; mặc định cổng release không tải hàng GB.
+ */
+async function aiLocalDownloadChecks(evaluate, modelId, dataDir) {
+  const waitMs = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const modelLiteral = JSON.stringify(modelId);
+  const started = await evaluate(`(async () => {
+    const facade = typeof desktop === 'undefined' ? null : desktop;
+    if (!facade) return { started: false, error: 'desktop facade không có' };
+    const previous = window.__aiDownload;
+    if (previous && previous.unlisten) { try { previous.unlisten(); } catch {} }
+    const state = window.__aiDownload = {
+      done: false, error: '', stages: [], last: null, result: null
+    };
+    state.unlisten = facade.listen('onLocalAiProgress', value => {
+      state.last = value || null;
+      if (value && typeof value.stage === 'string' && !state.stages.includes(value.stage)) {
+        state.stages.push(value.stage);
+      }
+    });
+    facade.call('installLocalAiModel', ${modelLiteral})
+      .then(result => { state.result = result; state.done = true; })
+      .catch(error => { state.error = String((error && error.message) || error); state.done = true; });
+    return { started: true };
+  })()`);
+  if (!started || started.started !== true) {
+    check('AI local thật: bắt đầu tải model', false, JSON.stringify(started));
+    return;
+  }
+
+  const deadline = Date.now() + 45 * 60 * 1000;
+  let logAt = 0;
+  let state = null;
+  while (Date.now() < deadline) {
+    await waitMs(3000);
+    state = await evaluate(`(() => {
+      const s = window.__aiDownload || {};
+      return {
+        done: Boolean(s.done), error: s.error || '',
+        stages: Array.isArray(s.stages) ? s.stages : [],
+        last: s.last || null,
+      };
+    })()`);
+    if (state.last && state.last.receivedBytes && Date.now() - logAt > 30000) {
+      logAt = Date.now();
+      const percent = state.last.totalBytes
+        ? Math.floor((state.last.receivedBytes * 100) / state.last.totalBytes)
+        : 0;
+      console.log(`   AI local ${state.last.stage}: ${percent}% ` +
+        `(${state.last.receivedBytes}/${state.last.totalBytes} byte)`);
+    }
+    if (state.done) break;
+  }
+
+  const finished = await evaluate(`(() => {
+    const s = window.__aiDownload || {};
+    if (s.unlisten) { try { s.unlisten(); } catch {} }
+    return {
+      done: Boolean(s.done), error: s.error || '',
+      stages: Array.isArray(s.stages) ? s.stages : [],
+      last: s.last || null, result: s.result || null,
+    };
+  })()`);
+  const result = finished.result || null;
+  const models = result && result.models && Array.isArray(result.models.models)
+    ? result.models.models
+    : [];
+  const model = models.find(entry => entry && entry.id === modelId) || null;
+  const shapeOk = Boolean(result && result.ok === true && result.models && result.models.machine);
+  check('AI local thật: tải runtime + model xong, có tiến độ runtime/model',
+    finished.done === true && !finished.error && shapeOk && Boolean(model && model.installed === true) &&
+      finished.stages.includes('runtime') && finished.stages.includes('model'),
+    JSON.stringify({
+      done: finished.done, error: finished.error, shapeOk,
+      installed: model && model.installed, stages: finished.stages,
+      last: finished.last && finished.last.stage,
+    }));
+  if (!(finished.done === true && !finished.error && model)) return;
+
+  const modelFile = dataDir
+    ? path.join(dataDir, 'ai-local', 'models', `${model.id}-${model.version}.gguf`)
+    : '';
+  const modelBytes = modelFile && fs.existsSync(modelFile) ? fs.statSync(modelFile).size : -1;
+  const modelSha = modelFile && fs.existsSync(modelFile) ? await sha256FileStream(modelFile) : '';
+  const runtimeRoot = dataDir ? path.join(dataDir, 'ai-local', 'runtime') : '';
+  const runtimeDirs = runtimeRoot && fs.existsSync(runtimeRoot)
+    ? fs.readdirSync(runtimeRoot).map(name => path.join(runtimeRoot, name))
+    : [];
+  const runtimeDir = runtimeDirs.find(dir =>
+    fs.existsSync(path.join(dir, 'llama-server.exe'))) || '';
+  const supportNames = ['msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll'];
+  const supportOk = Boolean(runtimeDir) &&
+    supportNames.every(name => fs.existsSync(path.join(runtimeDir, name)));
+  check('AI local thật: model đúng byte/SHA-256, runtime + DLL VC++ cạnh llama-server.exe',
+    modelBytes === model.sizeBytes &&
+      String(modelSha).toLowerCase() === String(model.sha256).toLowerCase() &&
+      Boolean(runtimeDir) && supportOk,
+    JSON.stringify({
+      modelBytes, expectedBytes: model.sizeBytes,
+      shaOk: String(modelSha).toLowerCase() === String(model.sha256).toLowerCase(),
+      runtime: runtimeDir, support: supportOk,
+    }));
+
+  const startStarted = await evaluate(`(async () => {
+    const facade = typeof desktop === 'undefined' ? null : desktop;
+    if (!facade) return { started: false, error: 'desktop facade không có' };
+    const previous = window.__aiStart;
+    if (previous && previous.unlisten) { try { previous.unlisten(); } catch {} }
+    const state = window.__aiStart = {
+      done: false, error: '', stages: [], last: null, result: null
+    };
+    state.unlisten = facade.listen('onLocalAiProgress', value => {
+      state.last = value || null;
+      if (value && typeof value.stage === 'string' && !state.stages.includes(value.stage)) {
+        state.stages.push(value.stage);
+      }
+    });
+    facade.call('startLocalRuntime', ${modelLiteral})
+      .then(result => { state.result = result; state.done = true; })
+      .catch(error => { state.error = String((error && error.message) || error); state.done = true; });
+    return { started: true };
+  })()`);
+  if (!startStarted || startStarted.started !== true) {
+    check('AI local thật: bắt đầu chạy llama-server', false, JSON.stringify(startStarted));
+    return;
+  }
+  const startDeadline = Date.now() + 10 * 60 * 1000;
+  do {
+    await waitMs(2000);
+    state = await evaluate(`(() => {
+      const s = window.__aiStart || {};
+      return {
+        done: Boolean(s.done), error: s.error || '',
+        stages: Array.isArray(s.stages) ? s.stages : [],
+        last: s.last || null,
+      };
+    })()`);
+  } while (!state.done && Date.now() < startDeadline);
+
+  const runtime = await evaluate(`(async () => {
+    const s = window.__aiStart || {};
+    if (s.unlisten) { try { s.unlisten(); } catch {} }
+    const before = await desktop.call('getLocalRuntimeStatus');
+    const stopped = await desktop.call('stopLocalRuntime');
+    const after = await desktop.call('getLocalRuntimeStatus');
+    const startResult = s.result || null;
+    return {
+      done: Boolean(s.done), error: s.error || '',
+      stages: Array.isArray(s.stages) ? s.stages : [], last: s.last || null,
+      startOk: Boolean(startResult && startResult.ok === true &&
+        startResult.models && Array.isArray(startResult.models.models)),
+      startBaseUrl: startResult && startResult.baseUrl ? startResult.baseUrl : '',
+      before,
+      stoppedOk: Boolean(stopped && stopped.ok === true &&
+        stopped.models && Array.isArray(stopped.models.models)),
+      stoppedModels: stopped && stopped.models && Array.isArray(stopped.models.models)
+        ? stopped.models.models.length : 0,
+      after,
+    };
+  })()`);
+  check('AI local thật: llama-server lên READY trên loopback, stop trả STOPPED',
+    runtime.done === true && !runtime.error && runtime.startOk === true &&
+      typeof runtime.startBaseUrl === 'string' &&
+      runtime.startBaseUrl.startsWith('http://127.0.0.1:') &&
+      Number(runtime.startBaseUrl.split(':').pop()) > 0 &&
+      runtime.before && runtime.before.state === 'READY' &&
+      runtime.after && runtime.after.state === 'STOPPED' && runtime.stoppedOk === true &&
+      runtime.stoppedModels === 3 && runtime.stages.includes('starting'),
+    JSON.stringify(runtime));
 }
 
 /**
@@ -305,6 +493,10 @@ const filesGate = Boolean(process.env.EDUGAME_TAURI_FILES_DOCUMENT);
   check('getLibrary trả {version, games, sessions} thật', out.library === true, out.libraryMsg);
   check('getSettings trả theme + ai.mode', out.settings === true, out.settingsMsg);
   check('getLocalAiModels trả {models, machine}', out.localAi === true, out.localAiMsg);
+  check('AI local: 3 model đã xác minh, máy thật, có model đề xuất',
+    out.localAiCatalog === true, out.localAiMsg);
+  check('AI local: id lạ bị từ chối, status STOPPED, stop trả danh mục',
+    out.localAiControl === true, out.localAiControlMsg);
   check('kênh chưa port bị từ chối not-supported (không treo)', out.unsupported === true, out.unsupportedMsg);
   check('lỗi khởi động không che UI (không có trang lỗi nào)', out.boot === true, out.bootMsg);
   const gateDataDir = process.env.EDUGAME_TAURI_DATA_DIR || '';
@@ -314,6 +506,13 @@ const filesGate = Boolean(process.env.EDUGAME_TAURI_FILES_DOCUMENT);
   check('thư mục dữ liệu đúng (identifier hoặc thư mục cổng đã đặt)',
     out.dataDir === true || (gateDataDir && path.resolve(out.dataDirMsg) === path.resolve(gateDataDir)),
     out.dataDirMsg);
+
+  // Tuỳ chọn: tải model/runtime AI local THẬT trên thư mục cổng tạm. Không bật
+  // trong cổng release thường vì model nhỏ nhất đã 1,19 GiB.
+  if (aiInstallId && !reopenPhase && !migrationPhase) {
+    console.log('… tải và chạy AI local thật (' + aiInstallId + ')');
+    await aiLocalDownloadChecks(evaluate, aiInstallId, gateDataDir);
+  }
 
   // Giai đoạn 5: settings.json chỉ được có blob DPAPI. Phép đọc đĩa nằm ở Node vì
   // trang không có quyền đọc tệp; `out.settingsSave` đã chứng minh vòng IPC.
@@ -633,13 +832,47 @@ const RUNNER = `(async () => {
 
   try {
     const models = await facade.call('getLocalAiModels');
+    const catalog = models && Array.isArray(models.models) ? models.models : [];
     out.localAi = Boolean(models && Array.isArray(models.models) && models.machine &&
       typeof models.machine.runtimeState === 'string');
-    out.localAiMsg = JSON.stringify({ models: models && models.models && models.models.length,
-      state: models && models.machine && models.machine.runtimeState });
+    out.localAiCatalog = catalog.length === 3 &&
+      catalog.every(model => typeof model.id === 'string' && model.sizeBytes > 0 &&
+        typeof model.installed === 'boolean') &&
+      models.machine.runtimeSupported === true &&
+      catalog.some(model => model.id === models.machine.recommendedModelId);
+    out.localAiMsg = JSON.stringify({ models: catalog.length,
+      state: models && models.machine && models.machine.runtimeState,
+      recommended: models && models.machine && models.machine.recommendedModelId });
   } catch (error) {
     out.localAi = false;
+    out.localAiCatalog = false;
     out.localAiMsg = 'ai:local-models lỗi: ' + (error && error.message);
+  }
+
+  // AI local: một id lạ phải bị từ chối trước khi chạm mạng/đĩa; trạng thái và
+  // lệnh dừng phải trả lời được khi chưa có tiến trình nào chạy.
+  try {
+    let refused = false;
+    try {
+      await facade.call('installLocalAiModel', 'not-a-real-model');
+    } catch (error) {
+      refused = /danh mục/.test(String((error && error.message) || ''));
+    }
+    const status = await facade.call('getLocalRuntimeStatus');
+    const stopped = await facade.call('stopLocalRuntime');
+    const stoppedModels = stopped && stopped.models && Array.isArray(stopped.models.models)
+      ? stopped.models.models.length : 0;
+    out.localAiControl = refused && status && status.state === 'STOPPED' &&
+      Boolean(stopped && stopped.ok === true && stoppedModels === 3);
+    out.localAiControlMsg = JSON.stringify({
+      refused,
+      state: status && status.state,
+      stoppedOk: Boolean(stopped && stopped.ok === true),
+      stoppedModels,
+    });
+  } catch (error) {
+    out.localAiControl = false;
+    out.localAiControlMsg = 'AI local control lỗi: ' + (error && error.message);
   }
 
   // Một kênh có trả lời nhưng chưa port (ví dụ lưu tài liệu giáo án) phải từ

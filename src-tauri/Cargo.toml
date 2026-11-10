@@ -31,7 +31,12 @@ serde_json = "1"
 rusqlite = { version = "0.41", features = ["bundled"] }
 deno_core = { version = "0.413.0", default-features = false, features = ["v8", "reactor-tokio"] }
 deno_error = "0.7.1"
-tokio = { version = "1", features = ["rt", "macros"] }
+tokio = { version = "1", features = ["rt", "macros", "process", "sync", "time", "fs", "io-util"] }
+# AI local: tải runtime/model từ HTTPS có giới hạn host, giải nén zip runtime.
+# `reqwest` đã nằm trong cây phụ thuộc của Tauri; khai trực tiếp để dùng stream.
+reqwest = { version = "0.13", features = ["stream"] }
+futures-util = "0.3"
+zip = { version = "9", default-features = false, features = ["deflate"] }
 # Gói `.egame`: hộp thoại mở/lưu là của TIẾN TRÌNH (Rust), không của WebView —
 # frontend không có quyền `dialog:`/`fs:`, nên nó không tự chọn được đường dẫn.
 tauri-plugin-dialog = "2"
@@ -48,7 +53,7 @@ hex = "0.4"
 # Giai đoạn 5: khoá BYOK được bảo vệ bằng DPAPI của Windows, không dùng
 # `safeStorage` của Electron và không ghi plaintext xuống đĩa. Chỉ khai tính năng
 # Cryptography + LocalFree; `windows-sys` đã có sẵn trong cây phụ thuộc.
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography", "Win32_Storage_FileSystem", "Win32_System_SystemInformation"] }
 
 [dev-dependencies]
 # Thư mục tạm tự dọn cho test storage: mỗi test mở một tệp 0.5.1 riêng, không

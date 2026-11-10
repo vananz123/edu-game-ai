@@ -9,6 +9,7 @@
 //! nhập tệp ảnh dùng giao thức `edugame-file:` thay cho `protocol.handle` của
 //! Electron — cùng một kho ảnh, cùng luật chỉ phục vụ id do app sinh ra.
 
+pub mod ai_local;
 pub mod api;
 pub mod base64;
 pub mod diagnostics;
@@ -57,6 +58,9 @@ pub fn run() {
             // Log chẩn đoán mở sau thư viện: thư mục log nằm cùng thư mục dữ liệu,
             // và một dòng `app.start` lỗi thư mục không được chặn cửa sổ.
             diagnostics::Logs::install(app.handle()).map_err(|error| Box::<dyn std::error::Error>::from(error))?;
+            // AI local: danh mục/tải model và tiến trình llama-server do vỏ này
+            // quản lý. State rỗng cho tới lần tải/khởi động đầu tiên.
+            app.manage(ai_local::AiLocal::default());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
