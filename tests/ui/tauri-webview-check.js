@@ -23,7 +23,11 @@
 // ứng dụng do script cha spawn/kill nên cổng không tự đóng mở nó được — vì vậy
 // mới có hai pha.
 const fs = require('node:fs');
+const path = require('node:path');
 const { check, connect, results } = require('../manual/lib/ui-check-lib');
+// Host mà WebView2 nạp được ảnh `edugame-file:` (wry đổi scheme sang host này).
+// Đọc từ chính module renderer dùng, không gõ lại: đổi một bên là cổng thấy ngay.
+const { TAURI_IMAGE_ORIGIN } = require('../../dist/src/services/storage/custom-illustration');
 
 const memoFile = process.env.EDUGAME_TAURI_MEMO;
 const reopenPhase = process.argv.includes('--reopen');
@@ -39,6 +43,29 @@ const packagePaths = {
   open: process.env.EDUGAME_TAURI_PACKAGE_OPEN || '',
 };
 const packageGate = Boolean(process.env.EDUGAME_TAURI_PACKAGE_SAVE);
+
+/**
+ * Cổng nhập tệp (giai đoạn 3, #270): đường dẫn hộp thoại cho tài liệu, bảng câu
+ * hỏi và ảnh — ĐÚNG tám lượt của `GATE_DOCUMENT_TURNS` trong `document.rs`, cộng
+ * hai hộp thoại một lượt còn lại — cùng thư mục nhận gói chẩn đoán. Cùng nguyên
+ * tắc với cổng gói: biến do tiến trình cha đặt, renderer chỉ chọn được SỐ lượt.
+ *
+ * Thứ tự `documents` phải khớp thứ tự gọi `importDocument` trong `filesRunner`;
+ * một tệp lệch chỗ là phép đo so nhầm định dạng, không phải hỏng.
+ */
+const documentTurns = Array.from({ length: 8 }, (_, index) => index + 1);
+const filePaths = {
+  documents: documentTurns.map(turn => process.env[turn === 1 ? 'EDUGAME_TAURI_FILES_DOCUMENT' : `EDUGAME_TAURI_FILES_DOCUMENT_${turn}`] || ''),
+  // Tám lượt tài liệu: năm định dạng thật, đường rỗng = Huỷ, PDF hỏng, rồi `.xls`.
+  // Năm lượt bảng tính: ba định dạng thật, `.xls` bị từ chối, đường rỗng = Huỷ.
+  questions: Array.from({ length: 5 }, (_, index) => process.env[index === 0 ? 'EDUGAME_TAURI_FILES_QUESTIONS' : `EDUGAME_TAURI_FILES_QUESTIONS_${index + 1}`] || ''),
+  illustrations: Array.from({ length: 3 }, (_, index) => process.env[index === 0 ? 'EDUGAME_TAURI_FILES_ILLUSTRATION' : `EDUGAME_TAURI_FILES_ILLUSTRATION_${index + 1}`] || ''),
+  // Tệp không phải tài liệu, dùng cho kênh "theo đường dẫn" (kéo thả) — đường
+  // dẫn đi qua ĐỐI SỐ của lời gọi, nên chạy THẬT sự, không cần bộ đếm hộp thoại.
+  foreignDocument: process.env.EDUGAME_TAURI_FILES_FOREIGN || '',
+};
+const diagnosticsDir = process.env.EDUGAME_DIAGNOSTICS_DIR || '';
+const filesGate = Boolean(process.env.EDUGAME_TAURI_FILES_DOCUMENT);
 
 (async () => {
   const { evaluate } = await connect();
@@ -94,6 +121,63 @@ const packageGate = Boolean(process.env.EDUGAME_TAURI_PACKAGE_SAVE);
   check('lỗi khởi động không che UI (không có trang lỗi nào)', out.boot === true, out.bootMsg);
   check('thư mục dữ liệu dưới vn.edugame.studio.tauri', out.dataDir === true, out.dataDirMsg);
 
+  // Cổng nhập tệp (#270): cùng lý do với cổng gói — thiếu biến là script cha quên
+  // truyền, không phải một cấu hình hợp lệ.
+  if (!reopenPhase && !filesGate) {
+    console.error('EDUGAME_TAURI_FILES_DOCUMENT thiếu: script cha phải truyền cổng nhập tệp cho tiến trình kiểm');
+    process.exit(1);
+  }
+  console.log('… đo nhập tệp (#270)');
+  if (filesGate) {
+    console.time('files');
+    const files = await evaluate(filesRunner(filePaths, filePaths.foreignDocument));
+    const docs = files.docs || [];
+    // Bảng 8 lượt: 5 định dạng thật + Huỷ (đo riêng bên dưới) + PDF hỏng và .xls
+    // bị từ chối. Năm lượt đầu phải đọc ra chữ; hai lượt cuối phải ném EG_DOCUMENT.
+    const realDocs = docs.filter(entry => entry.kind === 'doc');
+    check('importDocument đọc .txt/.md/.docx/.pptx/.pdf trong V8 nhúng',
+      docs.length === 8 && realDocs.length === 5 && realDocs.every(entry => entry.ok === true) &&
+      docs.filter(entry => entry.kind === 'refuse').every(entry => entry.ok === true),
+      docs.map(entry => (entry.ok ? 'ok ' : 'LỖI ') + (entry.name || '').split(/[\\/]/).pop() +
+        ' (' + entry.characters + ' ký tự) ' + (entry.ok ? String(entry.text).slice(0, 24) : entry.error)).join(' · '));
+    check('Huỷ hộp thoại nhập tài liệu trả null', files.cancel === true, files.cancelMsg);
+    check('importDocumentFromPath mang sizeBytes + name, không qua hộp thoại',
+      files.byPath === true, files.byPathMsg);
+    check('kênh theo đường dẫn từ chối .xls TRƯỚC đĩa, câu của main.ts',
+      files.foreign === true, files.foreignMsg);
+    check('kênh theo đường dẫn với đường rỗng = Huỷ', files.foreignEmpty === true,
+      String(files.foreignEmpty));
+    const sheets = files.sheets || [];
+    // Ba định dạng đều đọc ra CÙNG bộ câu hỏi, nên câu đầu được so CHUNG giữa ba
+    // bảng: một bảng đọc lệch là đỏ ngay, còn chuỗi cứng thì không cần gõ lại.
+    check('importQuestions đọc .csv/.tsv/.xlsx ra {name, questions[]}',
+      sheets.length === 5 && sheets.slice(0, 3).every(entry => entry.ok === true) &&
+      new Set(sheets.slice(0, 3).map(entry => entry.first)).size === 1,
+      sheets.filter(entry => entry.kind === 'sheet')
+        .map(entry => (entry.ok ? 'ok ' : 'LỖI ') + (entry.name || '').split(/[\\/]/).pop() +
+          ' (' + entry.count + ' câu: ' + String(entry.first || entry.error).slice(0, 24) + ')').join(' · '));
+    check('bảng tính: đuôi lạ bị từ chối, đường rỗng = Huỷ',
+      sheets.length === 5 && sheets[3].ok === true && sheets[4].ok === true,
+      JSON.stringify(sheets.slice(3)));
+    const images = files.images || [];
+    check('importIllustration ghi PNG thật thành ci-<32 hex>, trả {id, bytes, format}',
+      Boolean(images[0]) && images[0].ok === true, JSON.stringify(images[0] || null));
+    check('ảnh đuôi lạ và "ảnh" chỉ mang tên ảnh bị từ chối',
+      images.length === 3 && images.slice(1).every(entry => entry.ok === true),
+      images.slice(1).map(entry => String(entry.error || entry.got)).join(' · '));
+    check('ảnh nạp được trong <img> qua host edugame-file.tauri.localhost (CSP img-src cho phép)',
+      files.served === true, files.servedMsg);
+    check('scheme thật edugame-file:// không nạp được trong WebView2 (lý do đổi host)',
+      files.realScheme === true, 'edugame-file:// bị từ chối=' + files.realScheme);
+    check('deleteIllustration: id lạ → {ok:false}, id thật → {ok:true}, tệp thôi phục vụ',
+      files.deleteForeign === true && files.deleteOk === true && files.servedAfterDelete === true,
+      'id lạ=' + files.deleteForeign + ', xoá=' + files.deleteOk + ', 404 sau xoá=' + files.servedAfterDelete);
+    check('setFullscreen bật/tắt trả {ok:true}', files.fullscreen === true, files.fullscreenMsg);
+    console.timeEnd('files');
+    await diagnosticsChecks(evaluate, diagnosticsDir, files);
+  }
+
+  console.log('… lưu trò chơi + .egame, ghi memo');
   if (memoFile) {
     // Cổng chạy bằng `--check` LUÔN phải đo gói `.egame`; thiếu biến ở đây là
     // script cha quên truyền, không phải một cấu hình hợp lệ — bỏ qua im lặng
@@ -417,6 +501,285 @@ const hostileRunner = () => `(async () => {
   out.msg = out.cases.join(' · ');
   return out;
 })()`;
+
+/**
+ * Phần đo cần ĐĨA của cổng (Node), tách khỏi `evaluate` vì trang không đọc được
+ * tệp: gói chẩn đoán vừa ghi, rồi `diagnostics:clear`/`open-folder` ở trong trang.
+ *
+ * Tên tệp gói mang giờ hệ thống, nên so bằng MẪU cộng dòng "Tạo lúc" của nội
+ * dung, không so tên chính xác.
+ */
+async function diagnosticsChecks(evaluate, dir, summary) {
+  const exported = summary.diagnostics;
+  const ok = Boolean(exported && exported.path && fs.existsSync(exported.path));
+  check('exportDiagnostics ghi tệp .txt vào thư mục chẩn đoán của cổng', ok,
+    ok ? exported.path : (summary.diagnosticsError || JSON.stringify(exported)));
+  if (!ok) return;
+  const name = path.basename(exported.path);
+  const text = fs.readFileSync(exported.path, 'utf8');
+  const inside = path.resolve(exported.path).startsWith(path.resolve(dir) + path.sep);
+  check('tên gói theo mẫu, tệp nằm ĐÚNG thư mục cổng (không rơi về thư mục log)',
+    /^EduGame-Studio-chan-doan-\d{4}-\d{2}-\d{2}-\d{9}\.txt$/.test(name) && inside,
+    name + ' @ ' + exported.path);
+  const head = text.split('\r\n');
+  check('gói mở đầu bằng tiêu đề + phiên bản + thư mục log, xuống dòng CRLF',
+    head[0] === 'EduGame Studio — gói chẩn đoán AI' &&
+    /^Tạo lúc: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(head[1] || '') &&
+    /^Phiên bản ứng dụng: \d/.test(head[2] || '') &&
+    /^Thư mục log: .+ \(giữ 14 ngày\)$/.test(head.find(line => line.startsWith('Thư mục log: ')) || '') &&
+    head.includes('Lưu ý quyền riêng tư: log chỉ chứa id dự án/tài liệu, số lượng mục, thời gian, model/runtime và mã lỗi.') &&
+    head.some(line => /^--- log \(\d+ dòng gần nhất\) ---$/.test(line)) &&
+    !/\n/.test(text.replace(/\r\n/g, '')) &&
+    exported.bytes === Buffer.byteLength(text, 'utf8'),
+    head.slice(0, 4).join(' | '));
+  check('gói có dòng diagnostics.export của chính lượt này',
+    /"event":"diagnostics\.export"/.test(text),
+    (text.match(/"event":"diagnostics\.export"[^\r\n]*/) || ['(không thấy)'])[0].slice(0, 120));
+  const info = summary.diagnosticsInfo;
+  check('diagnosticsInfo trả {folder, files, bytes, retentionDays:14}',
+    Boolean(info) && info.retentionDays === 14 && typeof info.folder === 'string' &&
+    Number(info.files) >= 1 && Number(info.bytes) > 0,
+    JSON.stringify(info));
+
+  // Xoá log rồi mở thư mục: xoá phải xoá TỆP LOG và để lại đúng một dòng về
+  // lượt xoá; mở thư mục trả đúng đường của thư mục log.
+  const after = await evaluate(`(async () => {
+    const out = {};
+    out.cleared = await desktop.call('clearDiagnostics');
+    out.info = await desktop.call('diagnosticsInfo');
+    out.folder = await desktop.call('openDiagnosticsFolder');
+    try { out.last = (await desktop.call('exportDiagnostics')).path; } catch (error) { out.last = ''; }
+    return out;
+  })()`);
+  check('clearDiagnostics trả {removed, bytes, folder} và xoá hết tệp log',
+    Boolean(after.cleared) && Number(after.cleared.removed) >= 1 &&
+    after.cleared.folder === exported.folder &&
+    after.info && after.info.files === 1,
+    JSON.stringify(after.cleared) + ' → info=' + JSON.stringify(after.info));
+  // Thư mục xuất của cổng là riêng (`EDUGAME_DIAGNOSTICS_DIR`), không phải
+  // Desktop: đếm tệp trong đó để chứng minh clear không chạm gói giáo viên.
+  const kept = fs.readdirSync(dir).map(name => path.join(dir, name));
+  check('gói vừa xuất vẫn còn sau khi xoá log (gói là của giáo viên)',
+    fs.existsSync(exported.path) && kept.length >= 1 && Boolean(after.last) && fs.existsSync(after.last),
+    exported.path + ' · thư mục cổng: ' + kept.length + ' tệp');
+  check('openDiagnosticsFolder trả {ok, path} của thư mục log',
+    Boolean(after.folder) && after.folder.ok === true &&
+    after.folder.path === (summary.diagnosticsInfo && summary.diagnosticsInfo.folder),
+    JSON.stringify(after.folder));
+}
+
+/**
+ * Năm định dạng tài liệu + Huỷ, rồi kênh "theo đường dẫn" (kéo thả). Mỗi lượt
+ * chọn đúng SỐ hộp thoại, còn đường dẫn do tiến trình cha đặt — y như bộ đếm của
+ * cổng gói. Thứ tự `paths` phải khớp thứ tự `calls` ở phía Node: lệch một chỗ là
+ * phép đo so nhầm định dạng.
+ *
+ * Lượt Huỷ dùng đường dẫn RỖNG: `pick` coi đường rỗng là Huỷ, không phải lỗi
+ * đọc tệp. Kênh theo đường dẫn kiểm đuôi TRƯỚC đĩa, nên tệp bịa vẫn ra đúng câu
+ * "chưa hỗ trợ" của `main.ts`.
+ */
+const filesRunner = (paths, foreign) => `(async () => {
+  const out = {};
+  const paths = ${JSON.stringify(paths)};
+  const foreign = ${JSON.stringify(foreign)};
+  const documentBytes = ${JSON.stringify(PATHS_SIZE_BYTES)};
+  const illustrationBytes = ${JSON.stringify(ILLUSTRATION_BYTES)};
+  const tauriImageOrigin = ${JSON.stringify(TAURI_IMAGE_ORIGIN)};
+  const turn = async value => { await desktop.gate('setFilesGateTurn', value); };
+
+  // 1) Năm định dạng: chữ đọc trong V8 nhúng, cùng chuỗi xử lý của Electron.
+  // Bảng có 8 lượt, xen lẫn trường hợp lỗi: 0..4 là năm định dạng THẬT, 5 là
+  // đường rỗng = Huỷ, 6 là PDF hỏng, 7 là đuôi .xls bị từ chối trước khi đọc.
+  out.docs = [];
+  for (let index = 0; index < paths.documents.length; index += 1) {
+    // Kết quả trả TÊN TỆP (basename như Electron), không trả đường dẫn. Trong
+    // template này mỗi dấu nháy ngược phải viết đôi: [\\\\/] sinh ra [\\/] khớp
+    // cả \ của Windows lẫn / — viết hai dấu thì chỉ còn khớp / và tên không bao giờ tách.
+    const expected = paths.documents[index].split(/[\\\\/]/).pop();
+    const kind = index < 5 ? 'doc' : (index === 5 ? 'cancel' : 'refuse');
+    await turn(index + 1);
+    try {
+      const doc = await desktop.call('importDocument');
+      const text = doc && typeof doc.text === 'string' ? doc.text : '';
+      // characters đếm chuỗi CHƯA trim (đúng main.ts), còn text đã che phần
+      // đầu khoảng trắng — nên chỉ so phần chữ, không so độ dài hai bên.
+      const ok = Boolean(doc) && kind === 'doc' && doc.name === expected &&
+        !/^EG_/.test(text) &&
+        Number(doc.characters) > 0 && text.length > 0 && text.trim().length > 0;
+      out.docs.push({ kind, name: doc && doc.name, characters: doc && doc.characters,
+        text: text.slice(0, 40), error: text.slice(0, 90), ok });
+    } catch (error) {
+      const message = String((error && error.message) || error);
+      // Cùng câu lỗi, cùng mã ở đầu message như bản Electron.
+      out.docs.push({ kind, name: expected, characters: 0, ok: kind === 'refuse' && /^EG_DOCUMENT/.test(message),
+        error: message.slice(0, 90) });
+    }
+  }
+
+  // 2) Huỷ hộp thoại: trả về null, không phải một tài liệu rỗng. Lượt 6 là lượt
+  // đường rỗng của bảng tài liệu (lượt 8 là đuôi .xls).
+  await turn(6);
+  try {
+    out.cancel = (await desktop.call('importDocument')) === null;
+    out.cancelMsg = 'importDocument → null';
+  } catch (error) {
+    out.cancel = false;
+    out.cancelMsg = 'Huỷ lại ném: ' + String((error && error.message) || error).slice(0, 80);
+  }
+
+  // 3) Kênh theo đường dẫn: tệp hợp lệ đi qua ĐỐI SỐ, không qua hộp thoại.
+  try {
+    const doc = await desktop.call('importDocumentFromPath', paths.documents[0]);
+    // sizeBytes là cỡ TỆP trên đĩa; characters đếm chuỗi CHƯA trim còn text đã
+    // trim, nên chỉ so "có chữ" — không so độ dài hai bên.
+    out.byPath = Boolean(doc) && doc.name === paths.documents[0].split(/[\\\\/]/).pop() &&
+      Number(doc.sizeBytes) === documentBytes &&
+      Number(doc.characters) > 0 && String(doc.text).trim().length > 0;
+    out.byPathMsg = 'name=' + (doc && doc.name) + ', sizeBytes=' + (doc && doc.sizeBytes) +
+      ' (đĩa ' + documentBytes + '), characters=' + (doc && doc.characters);
+  } catch (error) {
+    out.byPath = false;
+    out.byPathMsg = 'importDocumentFromPath lỗi: ' + String((error && error.message) || error).slice(0, 90);
+  }
+
+  // 4) Kênh theo đường dẫn với đuôi lạ: từ chối TRƯỚC đĩa, câu của main.ts.
+  try {
+    await desktop.call('importDocumentFromPath', foreign);
+    out.foreign = false;
+    out.foreignMsg = 'tệp .xls lại được nhận';
+  } catch (error) {
+    const message = String((error && error.message) || '');
+    out.foreign = /Định dạng này chưa được hỗ trợ\\./.test(message) && /^EG_DOCUMENT/.test(message);
+    out.foreignMsg = message.slice(0, 90);
+  }
+  // 5) Đường rỗng = Huỷ ở kênh theo đường dẫn, giống Electron.
+  try {
+    out.foreignEmpty = (await desktop.call('importDocumentFromPath', '')) === null;
+  } catch (error) {
+    out.foreignEmpty = false;
+  }
+
+  // 6) Bảng câu hỏi: ba định dạng, huỷ, rồi hai đường từ chối.
+  out.sheets = [];
+  for (let index = 0; index < paths.questions.length; index += 1) {
+    const expected = paths.questions[index].split(/[\\\\/]/).pop();
+    // Ba lượt đầu là ba định dạng THẬT; lượt 3 của bảng là tệp .xls (đuôi lạ),
+    // lượt 4 là đường rỗng = Huỷ. Cùng thứ tự filePaths.questions bên Node.
+    const kind = index < 3 ? 'sheet' : (index === 3 ? 'refuse' : 'cancel');
+    // Ba khoá riêng: bảng câu hỏi KHÔNG đánh số theo lượt tài liệu.
+    await turn(index + 1);
+    try {
+      const answer = await desktop.call('importQuestions');
+      if (kind === 'sheet') {
+        const questions = answer && Array.isArray(answer.questions) ? answer.questions : [];
+        const ok = Boolean(answer) && answer.name === expected && questions.length > 0 &&
+          typeof questions[0].prompt === 'string' && questions[0].prompt.length > 0;
+        out.sheets.push({ kind, name: answer && answer.name, count: questions.length, ok,
+          first: questions[0] && questions[0].prompt });
+      } else if (kind === 'cancel') {
+        out.sheets.push({ kind, ok: answer === null, got: JSON.stringify(answer) });
+      } else {
+        out.sheets.push({ kind, ok: false, got: 'TRẢ THÀNH CÔNG ' + JSON.stringify(answer).slice(0, 60) });
+      }
+    } catch (error) {
+      const message = String((error && error.message) || '');
+      out.sheets.push({ kind, ok: kind === 'refuse' && /Chỉ hỗ trợ tệp CSV, TSV hoặc XLSX\\./.test(message),
+        error: message.slice(0, 90) });
+    }
+  }
+
+  // 7) Ảnh: PNG thật được ghi vào images/, đọc lại qua giao thức edugame-file:,
+  // rồi xoá. Đuôi lạ và tệp không phải ảnh bị từ chối mà không ghi gì.
+  out.images = [];
+  for (let index = 0; index < paths.illustrations.length; index += 1) {
+    const kind = index === 0 ? 'png' : 'refuse';
+    // Ảnh cũng có bộ khoá riêng: lượt 1..3 của EDUGAME_TAURI_FILES_ILLUSTRATION*.
+    await turn(index + 1);
+    try {
+      const image = await desktop.call('importIllustration');
+      if (kind === 'png') {
+        out.image = image;
+        out.images.push({ kind, ok: Boolean(image) && /^ci-[a-f0-9]{32}$/.test(String(image.id)) &&
+          image.format === '.png' && Number(image.bytes) === illustrationBytes, got: image && image.id });
+      } else {
+        out.images.push({ kind, ok: false, got: 'TRẢ THÀNH CÔNG ' + JSON.stringify(image).slice(0, 60) });
+      }
+    } catch (error) {
+      out.images.push({ kind, ok: kind === 'refuse', error: String((error && error.message) || error).slice(0, 90) });
+    }
+  }
+
+  if (out.image && out.image.id) {
+    // Đo ĐÚNG URL renderer dựng (stage với ảnh của giáo viên): trong WebView2,
+    // scheme edugame-file: được wry trả trên host này — scheme tự đặt thì WebView2
+    // không nạp được (ERR_UNKNOWN_URL_SCHEME). Host lấy từ module renderer dùng,
+    // gán vào một biến ở tệp này trước.
+    const url = tauriImageOrigin + '/img/' + encodeURIComponent(out.image.id);
+    // Đo ĐÚNG đường renderer dùng: một thẻ <img>. Electron khai báo giao thức
+    // edugame-file: với supportFetchAPI false, nên fetch không phải cửa
+    // của sản phẩm — <img> mới là (và CSP img-src là thứ cho phép nó).
+    const loadImage = src => new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => resolve({ ok: true, width: img.naturalWidth, height: img.naturalHeight });
+      img.onerror = () => resolve({ ok: false });
+      img.src = src;
+    });
+    const loaded = await loadImage(url);
+    out.served = loaded.ok && loaded.width > 0 && loaded.height > 0;
+    out.servedMsg = url + ' → <img> ' + (loaded.ok ? loaded.width + 'x' + loaded.height : 'không nạp');
+    // Cùng ảnh, đúng địa chỉ Electron dùng: WebView2 không biết scheme này, nên đỏ
+    // ở đây là DẤU HIỆU ĐÚNG — nó chứng minh vì sao renderer phải đổi host.
+    out.realScheme = !(await loadImage('edugame-file://img/' + encodeURIComponent(out.image.id))).ok;
+    // Id không do module này sinh ra không bao giờ được xoá (và không bao giờ được ghép đường dẫn).
+    try {
+      out.deleteForeign = JSON.stringify(await desktop.call('deleteIllustration', '../../edugame.sqlite')) === '{"ok":false}';
+    } catch (error) {
+      out.deleteForeign = false;
+    }
+    try {
+      out.deleteOk = JSON.stringify(await desktop.call('deleteIllustration', out.image.id)) === '{"ok":true}';
+    } catch (error) {
+      out.deleteOk = false;
+    }
+    // Sau khi xoá, ảnh phải KHÔNG nạp được nữa. WebView2 giữ ảnh trong bộ nhớ
+    // đệm nên cùng URL nguyên văn có thể trả ảnh cũ; thêm query (đường dẫn tệp
+    // không đổi, handler chỉ đọc path) để buộc nó hỏi lại giao thức.
+    out.servedAfterDelete = !(await loadImage(url + '?after-delete=' + Date.now())).ok;
+  }
+
+  // 8) Toàn màn hình: cửa sổ thật của tiến trình.
+  try {
+    const on = await desktop.call('setFullscreen', true);
+    const off = await desktop.call('setFullscreen', false);
+    out.fullscreen = on && on.ok === true && off && off.ok === true;
+    out.fullscreenMsg = 'bật=' + JSON.stringify(on) + ', tắt=' + JSON.stringify(off);
+  } catch (error) {
+    out.fullscreen = false;
+    out.fullscreenMsg = String((error && error.message) || error).slice(0, 90);
+  }
+
+  // 9) Chẩn đoán: xuất gói .txt ra thư mục cổng (script cha đã đặt
+  // EDUGAME_DIAGNOSTICS_DIR), rồi đọc lại chính tệp đó ở phía Node. Gọi qua
+  // ĐÚNG cửa renderer như nút "Xuất gói chẩn đoán" của trang Cài đặt.
+  try {
+    out.diagnostics = await desktop.call('exportDiagnostics');
+    out.diagnosticsInfo = await desktop.call('diagnosticsInfo');
+  } catch (error) {
+    out.diagnostics = null;
+    out.diagnosticsError = String((error && error.message) || error).slice(0, 120);
+  }
+  return out;
+})()`;
+
+/** Kích thước tệp mẫu — đọc từ đĩa, không gõ lại số. */
+function sizeOf(file) {
+  try { return fs.statSync(file || '').size; } catch { return -1; }
+}
+// Đọc theo `filePaths` của TIẾN TRÌNH NÀY, không theo biến môi trường còn sót lại
+// trong lúc dev: nếu đọc `process.env` trực tiếp thì cổng có thể so với một tệp
+// mà app chưa từng mở.
+const PATHS_SIZE_BYTES = sizeOf(filePaths.documents[0]);
+const ILLUSTRATION_BYTES = sizeOf(filePaths.illustrations[0]);
 
 /**
  * Pha hai (gói nhập): trò chơi nhập từ `.egame` còn trên đĩa với đúng id và câu

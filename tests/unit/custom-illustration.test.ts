@@ -13,6 +13,7 @@ import {
   CustomImageError,
   customImageFileName,
   customImageMime,
+  customImageUrl,
   inspectCustomImage,
   isCustomImageId
 } from '../../src/services/storage/custom-illustration';
@@ -50,6 +51,12 @@ async function run(): Promise<void> {
   assert.equal(customImageMime(png), 'image/png');
   assert.equal(customImageMime(jpeg), 'image/jpeg');
   assert.equal(customImageMime(exe), null);
+
+  // --- the URL a page loads the picture from ---------------------------------
+  // No shell (unit run): Electron's real scheme. A new host must never appear by accident.
+  assert.equal(customImageUrl(id), 'edugame-file://img/' + id);
+  assert.equal(customImageUrl('ci-xyz'), null, 'an id this module did not make has no URL');
+  assert.equal(customImageUrl('../secret'), null);
 
   console.log('Custom illustration tests passed');
 }

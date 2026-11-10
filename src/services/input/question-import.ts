@@ -13,7 +13,9 @@ import {
 } from './input-classifier';
 import { cleanQuestionLine, cleanQuestionText, normalizePromptKey } from './question-text';
 
-const MAX_FILE_BYTES = 10 * 1024 * 1024;
+/** Exported for the Tauri shell (`src-tauri/src/document.rs`): it refuses an oversized
+ *  sheet before reading bytes instead of duplicating the number. */
+export const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const MAX_SHEET_XML_BYTES = 5 * 1024 * 1024;
 const MAX_QUESTIONS = 100;
 const MAX_COLUMNS = 32;
@@ -104,7 +106,7 @@ export async function importQuestionsFromFile(
   } else if (extension === 'xlsx') {
     rows = await parseXlsx(file);
   } else {
-    throw new Error('Chỉ hỗ trợ tệp .csv, .tsv hoặc .xlsx.');
+    throw new Error('Chỉ hỗ trợ tệp CSV, TSV hoặc XLSX.');
   }
   return rowsToQuestions(rows);
 }
@@ -874,7 +876,9 @@ async function readZipText(file: JSZip.JSZipObject): Promise<string> {
     throw new Error('Trang tính XLSX vượt quá giới hạn kích thước.');
   }
   const text = await file.async('text');
-  if (Buffer.byteLength(text, 'utf8') > MAX_SHEET_XML_BYTES) {
+  // `TextEncoder` thay `Buffer.byteLength`: cùng số byte UTF-8, nhưng chạy được cả
+  // trong V8 nhúng của vỏ Tauri (không có `Buffer`) lẫn tiến trình Node.
+  if (new TextEncoder().encode(text).length > MAX_SHEET_XML_BYTES) {
     throw new Error('Trang tính XLSX vượt quá giới hạn kích thước.');
   }
   return text;

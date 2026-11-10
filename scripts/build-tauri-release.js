@@ -40,6 +40,23 @@ const packagePaths = {
 };
 const PACKAGE_LIMIT = 20 * 1024 * 1024;
 
+/**
+ * Cổng nhập tệp (#270): đường dẫn hộp thoại cho từng lượt của `document.rs`
+ * (`GATE_DOCUMENT_TURNS` 8 lượt, `GATE_QUESTIONS_TURNS` 5, `GATE_ILLUSTRATION_TURNS` 3),
+ * cùng thư mục nhận gói chẩn đoán. Thứ tự tài liệu phải khớp thứ tự gọi
+ * `importDocument` trong `filesRunner` của cổng kiểm tra.
+ */
+const fixtures = path.join(root, 'tests', 'fixtures', 'tauri-import');
+const diagnosticsDir = path.join(os.tmpdir(), 'eg-tauri-gate-diagnostics');
+const filePaths = {
+  documents: ['giao-an.txt', 'giao-an.md', 'bai-hoc.docx', 'bai-giang.pptx', 'giao-an.pdf', '', 'hong.pdf', 'bang-tinh.xls'],
+  // Ba bảng tính thật, rồi `.xls` (đuôi lạ) và đường rỗng = Huỷ.
+  questions: ['cau-hoi.csv', 'cau-hoi.tsv', 'cau-hoi.xlsx', 'bang-tinh.xls', ''],
+  // PNG thật, rồi ảnh giả (đuôi .png, nội dung không phải ảnh), rồi đuôi lạ.
+  illustrations: ['anh-minh-hoa.png', 'anh-gia.png', 'anh-minh-hoa.exe'],
+  foreign: 'bang-tinh.xls',
+};
+
 /** Ghi ba gói xấu cổng dùng để đo đường từ chối. */
 function writeGatePackages() {
   fs.rmSync(packagePaths.open, { force: true });
@@ -49,6 +66,31 @@ function writeGatePackages() {
   const fd = fs.openSync(packagePaths.oversized, 'w');
   fs.ftruncateSync(fd, PACKAGE_LIMIT + 1);
   fs.closeSync(fd);
+}
+
+/**
+ * Biến của cổng nhập tệp. Ba tệp cần có mặt TRƯỚC khi mở binary, và một bản sao
+ * của "ảnh giả" đổi đuôi phải được ghi ra đĩa vì fixture `.exe` không được giữ
+ * trong repo (nó trông như tệp đáng ngờ với công cụ quét mã nguồn).
+ */
+function writeFilesGate() {
+  fs.rmSync(diagnosticsDir, { recursive: true, force: true });
+  const foreign = path.join(os.tmpdir(), 'eg-tauri-gate-anh-minh-hoa.exe');
+  fs.copyFileSync(path.join(fixtures, 'anh-minh-hoa.png'), foreign);
+  // Tên khoá → 8 lượt tài liệu, 5 lượt bảng tính, 3 lượt ảnh; `''` giữa chừng là
+  // lượt HUỶ, nên biến vẫn phải được đặt (rỗng), không bỏ qua.
+  const numbered = (prefix, names) => names.map((name, index) =>
+    [index === 0 ? prefix : `${prefix}_${index + 1}`, name ? path.join(fixtures, name) : '']);
+  const env = {
+    EDUGAME_TAURI_FILES: 'gate',
+    EDUGAME_DIAGNOSTICS_DIR: diagnosticsDir,
+    EDUGAME_TAURI_FILES_FOREIGN: path.join(fixtures, filePaths.foreign),
+  };
+  for (const [name, value] of numbered('EDUGAME_TAURI_FILES_DOCUMENT', filePaths.documents)) env[name] = value;
+  for (const [name, value] of numbered('EDUGAME_TAURI_FILES_QUESTIONS', filePaths.questions)) env[name] = value;
+  numbered('EDUGAME_TAURI_FILES_ILLUSTRATION', filePaths.illustrations)
+    .forEach(([name, value], index) => { env[name] = index === 2 ? foreign : value; });
+  return { env, foreign };
 }
 
 const isWindows = process.platform === 'win32';
@@ -102,6 +144,9 @@ function build() {
 function startAndCheck() {
   fs.rmSync(profile, { recursive: true, force: true });
   let child = null;
+  // Đường dẫn hộp thoại của cổng nhập tệp phải có TRƯỚC lần mở binary đầu tiên:
+  // chúng là biến môi trường của tiến trình, không đặt được từ renderer.
+  const files = writeFilesGate();
   // Cổng `.egame` chỉ bật khi đang kiểm: một lần chạy tay (`--run`) mở hộp thoại
   // thật cho giáo viên, còn `--check` mở hộp thoại do biến môi trường quyết định.
   const gateEnv = check
@@ -112,6 +157,7 @@ function startAndCheck() {
         EDUGAME_TAURI_PACKAGE_BROKEN: packagePaths.broken,
         EDUGAME_TAURI_PACKAGE_EMPTY: packagePaths.empty,
         EDUGAME_TAURI_PACKAGE_OVERSIZED: packagePaths.oversized,
+        ...files.env,
       }
     : {};
   const launch = () => {
@@ -172,6 +218,7 @@ function startAndCheck() {
     stop();
     // Tệp gói của cổng là thứ do chính script này ghi, nên dọn được.
     for (const target of Object.values(packagePaths)) fs.rmSync(target, { force: true });
+    fs.rmSync(files.foreign, { force: true });
     process.exit(second.status || 0);
   })();
 }

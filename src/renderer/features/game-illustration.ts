@@ -404,18 +404,36 @@ function stageIconSvg(name, size, className) {
  * Layers match renderSceneSvg() in src/shared/illustration-scene.ts (#72):
  * sky -> far -> mid -> halo -> subject -> props -> fg.
  */
+
+/**
+ * URL of the teacher's picture for `assetId`, or '' when it is not an id this app
+ * produced (#124). The address (real scheme in Electron, the WebView2 host in Tauri)
+ * comes from customImageUrl() in src/services/storage/custom-illustration.ts; the
+ * copy lives here because this file is a classic script and that module is
+ * CommonJS, so `require` is not available.
+ */
+function customImageSrc(assetId) {
+  const id = String(assetId || '');
+  if (!/^ci-[a-f0-9]{32}$/.test(id)) return '';
+  const path = '/img/' + encodeURIComponent(id);
+  const shell = typeof desktopHost === 'undefined' ? 'none' : desktopHost.shell;
+  return shell === 'tauri' ? 'http://edugame-file.tauri.localhost' + path : 'edugame-file:' + path;
+}
+
 function stageIllustrationHtml(item, game, extraClass) {
   const resolved = resolveStageIllustration(item, game);
   if (!resolved) return '';
   if (resolved.custom) {
     // #124: the teacher's own picture, framed like a built-in scene so the layout does
-    // not change between the two. `edugame-file:` is the only source CSP allows besides
-    // `self`/`data:`; the protocol serves nothing outside the app's image folder.
+    // not change between the two. Besides `self`/`data:` the CSP allows only the
+    // `edugame-file:` scheme, which serves nothing outside the app's image folder;
+    // under Tauri that scheme is reached through a WebView2 host (customImageSrc).
     // `meet` (contain) not `slice`: an uploaded picture can be portrait, square or
     // panorama, and `slice` cropped it to the fixed 16:10 frame (a portrait photo lost
     // top and bottom). `meet` shows the whole picture, letterboxed on `.is-custom`.
+    const src = customImageSrc(resolved.assetId);
+    if (!src) return '';
     const cls = 'stage-illustration is-custom' + (extraClass ? ' ' + extraClass : '');
-    const src = `edugame-file://img/${encodeURIComponent(resolved.assetId)}`;
     return `<div class="${cls}" data-illustration="${escapeHtml(resolved.assetId)}" aria-hidden="true">` +
       `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" preserveAspectRatio="xMidYMid meet" class="stage-illustration-svg" aria-hidden="true" focusable="false">` +
       `<image href="${escapeHtml(src)}" x="0" y="0" width="320" height="200" preserveAspectRatio="xMidYMid meet"/>` +

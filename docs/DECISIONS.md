@@ -2650,6 +2650,42 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 
 **Việc kế tiếp.** Chưa duyệt bắt đầu code. Khi duyệt: dựng khung Tauri v2 + Rust toolchain trong nhánh riêng, chuyển lớp truy cập desktop sang facade TS (kế hoạch mục 4) và làm vòng 1 theo mục 1.
 
+## Giai đoạn 3 (5/6) — Import tài liệu/câu hỏi/ảnh + chẩn đoán: chữ đọc nguyên văn trong V8 với thư viện bản trình duyệt, hộp thoại là lệnh async, ảnh WebView2 đi qua host localhost (2026-11-10)
+
+**Báo cáo.** Bước 5/6 port mười kênh: năm `files:*` (`import-document`, `import-document-from-path`, `import-questions`, `import-illustration`, `delete-illustration`), bốn `diagnostics:*` (`export`, `info`, `clear`, `open-folder`) và `window:set-fullscreen`. Bằng chứng nghiệm thu: **cổng hai pha trên binary release đạt 42/42 + 9/9** — năm định dạng tài liệu (.txt/.md/.docx/.pptx/.pdf) ra chữ trong V8 nhúng, huỷ hộp thoại trả `null`, PDF hỏng và đuôi .xls bị từ chối đúng mã; CSV/TSV/XLSX cùng ra câu hỏi đầu tiên, .xls bị từ chối; ảnh PNG nhập thành id `ci-`, nạp được trong `<img>` qua host WebView2, scheme thật `edugame-file://` chứng minh KHÔNG nạp được (lý do đổi host), xoá xong ảnh hết thật (404); gói chẩn đoán đúng tên/ngày/CRLF, `folder` là thư mục log, clear/open-folder chạy; cộng các phép đo trò chơi/dự án/gói của bước trước và mở lại ứng dụng.
+
+**Quyết định.**
+
+1. **Trích chữ tài liệu chạy trong V8 nhúng, không viết lại bằng Rust.** Slot mới `EGFILES` (`src-tauri/src/embedded/files-ops.ts`, `neutral: true`) giữ đúng chuỗi xử lý của `main.ts`: `.txt`/`.md` đọc UTF-8, `.docx` qua mammoth, `.pdf` qua pdf-parse, `.pptx` qua jszip — cùng trần 120.000 ký tự, cùng câu lỗi. Hai thư viện được nhập THEO TÊN GÓI và `build-embedded-js.js` trỏ sang bản trình duyệt của chúng (bản Node của mammoth mở zip bằng luồng Node, bản Node của pdf-parse dựng thư mục đệm trên đĩa — cả hai không chạy trong V8). Đầu vào là byte base64 do Rust đọc (`base64.rs`, bảng 64 ký tự tự viết có test đối chiếu `Buffer.from(…, 'base64')` của Node — không kéo thêm crate chỉ vì một cầu JSON). Câu hỏi CSV/TSV/XLSX chạy `question-import.ts` **nguyên văn**; hai sửa nhỏ để nó chạy được cả hai môi trường: `MAX_FILE_BYTES` export cho Rust đọc (từ chối tệp quá khổ trước khi đọc byte, không chép số), và `TextEncoder` thay `Buffer.byteLength` (cùng số byte UTF-8, không cần `Buffer`). Bộ shim `node:*` nằm ở `src-tauri/src/embedded/shims/`: `url`/`os`/`path` là hàm thật vì pdf.js gọi `require("os").cpus()` ngay khi nạp; nhánh chỉ-Node ném lỗi để một slot vô tình dùng I/O là hỏng ngay bước dựng.
+2. **Hộp thoại tệp phải là lệnh ASYNC (`picker.rs`).** `blocking_pick_file` chờ trên kênh đồng bộ trong khi dựng hộp thoại cần post tác vụ lên luồng chính; lệnh đồng bộ chạy NGAY trên luồng chính nên hộp thoại dựng bên trong lời gọi chờ và cửa sổ đóng băng. Lệnh async chạy trên runtime của Tauri, hộp thoại vẽ bình thường. KHÔNG đẩy cả lệnh sang `spawn_blocking`: ở đó `AppHandle::try_state` không thấy state, mọi kênh cần thư viện chết thay vì trả lỗi.
+3. **Ảnh: phép kiểm đồng bộ chép sang Rust, không qua V8.** `illustration.rs` nhận ảnh (magic byte năm chữ ký, trần 8 MB, id `ci-` + 32 hex), chép vào `images/<id>.img` — chép chứ không giữ đường dẫn gốc vì trò chơi đã lưu phải chơi offline nhiều tháng sau; giao thức chỉ phục vụ id hợp lệ TRONG thư mục ảnh, mọi thứ khác 404; xoá chỉ id không còn trò chơi/bản nháp nào nhắc tới. Chống trôi: bài test Rust chạy cùng bộ byte fixture với `custom-illustration.test.ts`, cổng đo cả vòng đời nhập → nạp → xoá → 404 trong app thật.
+4. **WebView2 không nạp được scheme tự đặt — ảnh đi qua host localhost, CSP nới ĐÚNG một host.** Renderer Tauri hỏi `http://edugame-file.tauri.localhost/img/<id>`; wry chặn host đó và đổi lại thành `edugame-file://…` trước handler Rust, nên một handler phục vụ cả hai vỏ. `customImageUrl()` (module) và `customImageSrc()` (bản chép cho script cổ điển `game-illustration.ts`, không `require` được module CommonJS) chọn host theo `desktopHost.shell`; Electron giữ scheme thật. CSP `img-src` nới thêm đúng host đó ở cả `tauri.conf.json` lẫn thẻ meta của `dist-tauri/index.html` (script dựng viết lại từ meta Electron, `tauri-contract` ghim delta duy nhất + meta dist == conf); `src/index.html` của Electron không đổi. Cổng chứng minh cả hai chiều: ảnh nạp được qua host, và scheme thật KHÔNG nạp được trong WebView2.
+5. **Chẩn đoán là bản Rust của `ai-log.ts`, giữ đúng luật riêng tư.** JSONL theo ngày trong `<data>/logs`, che khoá nhạy cảm theo TÊN khoá, không nội dung giáo án/prompt/câu trả lời; xoay 2 MB/tệp, giữ 14 ngày; export gói 200 dòng gần nhất + thông tin máy ra Desktop (không ghi được thì rơi về thư mục log), tên `EduGame-Studio-chan-doan-YYYY-MM-DD-HHMMSSmmm.txt`, dòng CRLF; `info`/`clear` trả `folder` là thư mục log như Electron. **Khác biệt có chủ đích:** `clear` chỉ xoá `ai-*.jsonl`, không chạm mọi gói đã xuất (Electron xoá cả `diagnostics-*.txt` trong thư mục log) — tệp gói giáo viên đã nhận không bị xoá sau lưng họ.
+6. **Cổng chọn lượt bằng SỐ, mở rộng khuôn `package:gate-turn`.** `files:gate-turn` (`desktop.gate('setFilesGateTurn', n)`, từ chối `EG_GATE` khi cổng chưa bật) đặt bộ đếm cho ba họ `EDUGAME_TAURI_FILES_DOCUMENT[_2.._8]` / `_QUESTIONS[_2.._5]` / `_ILLUSTRATION[_2.._3]`: tám lượt tài liệu (năm định dạng + huỷ + PDF hỏng + .xls), năm lượt câu hỏi, ba lượt ảnh. Lượt ngoài bảng mở hộp thoại THẬT nên cổng treo — bộ đếm là ràng buộc, không phải tiện ích. Fixture tổng hợp do `scripts/build-tauri-import-fixtures.js` sinh (12 tệp trong `tests/fixtures/tauri-import/`, không dữ liệu thật).
+
+**Lỗi đã sửa trong lúc làm.**
+
+- Backtick trong comment BÊN TRONG template literal của runner vẫn tách template: `node --check` qua nhưng mã sinh ra hỏng lúc chạy. Mọi comment trong runner phải không backtick.
+- Regex viết trong template bị nuốt một tầng escape: `/[\\/]/` trong tệp sinh ra `/[\/]/` chỉ khớp `/`, nên đường dẫn Windows không bao giờ tách được basename (cổng đỏ 37/42 dù dữ liệu đúng). Viết `/[\\\\/]/` trong tệp để mã sinh khớp cả `\` lẫn `/`; đo bằng probe trước khi sửa cổng.
+- WebView2 nhớ đệm `<img>` trong bộ nhớ kể cả khi đáp án có `Cache-Control: no-cache`: phép đo "xoá xong hết ảnh" phải thêm query cache-buster (handler chỉ đọc `path`, query không đổi tệp phục vụ).
+- Regex tên gói chẩn đoán `\d{8}` không khớp ngày có gạch `2026-11-10` → `\d{4}-\d{2}-\d{2}`.
+- Test cũ của `tauri-contract` ghim CSP Tauri === meta Electron; viết lại thành ghim delta duy nhất được phép (host ảnh) + meta `dist-tauri` === conf, nên nới thêm bất kỳ nguồn nào cũng đỏ.
+
+**Kiểm chứng.**
+
+- `cargo test --lib -- --test-threads=1` (với `RUSTY_V8_ARCHIVE` bản simdutf): **71/71**.
+- `node scripts/build-tauri-release.js --check` trên binary **release**: pha một **42/42**, pha hai **9/9**, exit 0.
+- `node tests/run-unit.js`: **98/98** · `check:renderer-globals`: 73/75 script, 1.043 hàm / 8.279 điểm gọi, **0 undefined** · `tsc --noEmit` sạch · `check:embedded` khớp **5354,7 KiB** · `build:tauri` 193 tệp, CSP dist-tauri nới đúng host, CSP Electron nguyên.
+
+**Chưa xác minh.**
+
+- 55 kênh còn `unsupported!` (lesson/AI/setup/settings:save/presentation/about/LAN).
+- UI Thư viện/Dự án/Trình tạo trên Tauri mới đo qua façade, chưa bấm qua giao diện; hộp thoại Windows thật do cổng chọn bằng biến môi trường, chưa người bấm.
+- Chơi offline là bước 6/6; nhánh AI local không chạy (theo chỉ đạo).
+- Dựng Rust vẫn cần bản vá `build.rs` cục bộ của crate `v8` + `RUSTY_V8_ARCHIVE` (xem mục 3/6).
+
+**Việc kế tiếp.** Bước 6/6: chơi game đã lưu khi offline; không có request mạng trong quá trình chơi.
+
 ## Giai đoạn 3 (4/6) — Gói `.egame`: luật gói chạy nguyên văn trong V8, hộp thoại và tệp chỉ ở Rust, cổng chọn lượt bằng SỐ không bằng đường dẫn (2026-11-09)
 
 **Báo cáo.** Bước 4/6 port `files:export-game` và `files:import-game` lên vỏ Tauri. Renderer vẫn gọi `desktop.call('exportGame' | 'importGame')`; phía vỏ mở hộp thoại, đọc/ghi tệp, còn mọi luật về nội dung gói vẫn là `game-package.ts`. Bằng chứng nghiệm thu: **xuất ra tệp thật → tệp đúng hình dạng `{packageFormat:"edugame", packageVersion:1, game}` → nhập lại được với `id` mới và ngân hàng câu hỏi nguyên → ba gói xấu bị từ chối bằng câu đọc được mà thư viện không thêm dòng nào → mở lại ứng dụng, trò chơi nhập từ gói vẫn còn và xoá được.**

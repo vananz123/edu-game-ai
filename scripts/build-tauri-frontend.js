@@ -166,13 +166,29 @@ function main() {
   // cần 'unsafe-inline'. Chèn NGAY đầu <body> để cổng chặn có trước mọi script
   // renderer; thứ tự các thẻ còn lại không đổi.
   const htmlPath = path.join(out, 'index.html');
-  const html = fs.readFileSync(htmlPath, 'utf8');
+  let html = fs.readFileSync(htmlPath, 'utf8');
   if (/preload\.js|main\.js|edugame-bridge\.js/.test(html)) {
     console.error('index.html nhắc tới preload.js/main.js/edugame-bridge.js — bản Tauri không có các tệp này.');
     process.exit(1);
   }
   if (!html.includes('<body>')) {
     console.error('index.html không có thẻ <body> để chèn cổng chặn.');
+    process.exit(1);
+  }
+  // Ảnh minh hoạ (#270): WebView2 không nạp được scheme tự đặt, nên wry trả
+  // `edugame-file:` trên host `http://edugame-file.tauri.localhost`. Tauri tiêm
+  // CSP từ tauri.conf.json, nhưng thẻ meta trong index.html vẫn là bản sao renderer
+  // đọc được — hai bản phải trùng nhau, nên bản này cũng nới img-src y như bản kia.
+  // Electron không đi qua cổng này nên giữ nguyên thẻ meta của `src/index.html`.
+  // Thiếu chuỗi phải thay là lỗi im lặng (CSP không nới, ảnh chết), nên dừng build.
+  const tauriImgSrc = "img-src 'self' data: edugame-file: http://edugame-file.tauri.localhost;";
+  if (!html.includes("img-src 'self' data: edugame-file:;") && !html.includes(tauriImgSrc)) {
+    console.error('index.html: không tìm thấy img-src của CSP để nới cho host ảnh Tauri.');
+    process.exit(1);
+  }
+  html = html.split("img-src 'self' data: edugame-file:;").join(tauriImgSrc);
+  if (!html.includes(tauriImgSrc)) {
+    console.error('index.html: CSP sau khi nới không còn img-src của host ảnh Tauri.');
     process.exit(1);
   }
   fs.writeFileSync(

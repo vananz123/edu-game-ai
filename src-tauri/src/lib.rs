@@ -5,25 +5,55 @@
 //! riêng (quyết định #251 câu 2). Không đọc, không ghi profile Electron.
 //!
 //! Giai đoạn 3 mở `edugame.sqlite` một lần trong `setup` (`library::install`) và
-//! giữ kết nối trong state của ứng dụng; mọi kênh `library:*` chạy trên đó.
+//! giữ kết nối trong state của ứng dụng; mọi kênh `library:*` chạy trên đó. Nhóm
+//! nhập tệp ảnh dùng giao thức `edugame-file:` thay cho `protocol.handle` của
+//! Electron — cùng một kho ảnh, cùng luật chỉ phục vụ id do app sinh ra.
 
 pub mod api;
+pub mod base64;
+pub mod diagnostics;
+pub mod document;
 pub mod embedded;
+pub mod illustration;
 pub mod library;
 pub mod package;
 pub mod paths;
+pub mod picker;
 pub mod sql_params;
 pub mod storage;
+
+use tauri::Manager;
 
 pub fn run() {
     tauri::Builder::default()
         // Hộp thoại mở/lưu của gói `.egame`. Plugin chỉ được Rust gọi
         // (`AppHandle::dialog()`); frontend không có quyền `dialog:*` nào.
         .plugin(tauri_plugin_dialog::init())
+        // Ảnh minh hoạ: `edugame-file://img/<id>` đọc đúng một tệp `<id>.img`
+        // trong `<data>/images`. Cùng CSP với bản Electron (`img-src` cho phép
+        // `edugame-file:`), và không tệp nào khác trên đĩa đọc được từ trang.
+        .register_uri_scheme_protocol("edugame-file", |ctx, request| {
+            let bytes = ctx
+                .app_handle()
+                .try_state::<library::Library>()
+                .and_then(|library| illustration::read_image(&library.images_dir(), request.uri().path()));
+            match bytes {
+                Some(image) => tauri::http::Response::builder()
+                    .status(200)
+                    .header(tauri::http::header::CONTENT_TYPE, image.mime)
+                    .header(tauri::http::header::CACHE_CONTROL, "no-cache")
+                    .body(image.bytes)
+                    .unwrap_or_else(|_| not_found()),
+                None => not_found(),
+            }
+        })
         .setup(|app| {
             // Không mở được thư viện thì dừng hẳn: một cửa sổ mà mọi lệnh lưu/xoá
             // đều hỏng sẽ khiến giáo viên tưởng đã mất dữ liệu.
             library::Library::install(app.handle()).map_err(|error| Box::<dyn std::error::Error>::from(error.to_string()))?;
+            // Log chẩn đoán mở sau thư viện: thư mục log nằm cùng thư mục dữ liệu,
+            // và một dòng `app.start` lỗi thư mục không được chặn cửa sổ.
+            diagnostics::Logs::install(app.handle()).map_err(|error| Box::<dyn std::error::Error>::from(error))?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -115,4 +145,14 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("không khởi động được vỏ Tauri");
+}
+
+/// Câu trả lời của mọi đường dẫn `edugame-file:` không được phục vụ — cùng câu
+/// "Not found" của handler bên `main.ts`.
+fn not_found() -> tauri::http::Response<Vec<u8>> {
+    tauri::http::Response::builder()
+        .status(tauri::http::StatusCode::NOT_FOUND)
+        .header(tauri::http::header::CONTENT_TYPE, "text/plain")
+        .body(b"Not found".to_vec())
+        .expect("câu trả lời 404 dựng được")
 }

@@ -61,10 +61,28 @@ async function connect() {
     }
   };
   void pageReady;
+  // `awaitPromise` không có hạn: một promise không bao giờ settle để CDP im lặng
+  // mãi và cả cổng treo không một dòng FAIL nào — đúng cách một lỗi thật đã từng
+  // biến mất khỏi log. Hết hạn thì coi như hỏng, để phép đo báo đỏ.
+  const EVAL_TIMEOUT_MS = 120000;
   const evaluateOnce = async expression => {
-    const r = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
-    if (r.result?.exceptionDetails) throw new Error(r.result.exceptionDetails.exception?.description || 'eval error');
-    return r.result?.result?.value;
+    let timer;
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`biểu thức không trả lời sau ${EVAL_TIMEOUT_MS / 1000} s`)),
+        EVAL_TIMEOUT_MS,
+      );
+    });
+    try {
+      const r = await Promise.race([
+        send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }),
+        timeout,
+      ]);
+      if (r.result?.exceptionDetails) throw new Error(r.result.exceptionDetails.exception?.description || 'eval error');
+      return r.result?.result?.value;
+    } finally {
+      clearTimeout(timer);
+    }
   };
   const evaluate = async expression => {
     // The renderer declares its globals from classic scripts that may still be

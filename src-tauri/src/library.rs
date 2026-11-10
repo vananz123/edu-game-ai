@@ -58,7 +58,7 @@ struct Job {
 /// dùng lại, trên một luồng riêng.
 pub struct Library {
     jobs: Sender<Job>,
-    images_dir: PathBuf,
+    data_dir: PathBuf,
     worker: Option<JoinHandle<()>>,
 }
 
@@ -127,7 +127,7 @@ impl Library {
         match opened.recv() {
             Ok(Ok(())) => Ok(Library {
                 jobs,
-                images_dir: data_dir.join("images"),
+                data_dir: data_dir.to_path_buf(),
                 worker: Some(worker),
             }),
             Ok(Err(error)) => Err(DbError::Open(error)),
@@ -176,6 +176,25 @@ impl Library {
             .map_err(|_| DbError::Io("luồng thư viện không trả lời.".into()))?
     }
 
+    /// Thư mục dữ liệu của bản chạy (`.../vn.edugame.studio.tauri`). `paths.rs`
+    /// dựng nó lại từ `AppHandle`; đây là bản của chính thư viện để đường dẫn
+    /// của những tệp không do `AppHandle` mở (test) trỏ đúng chỗ.
+    pub fn data_dir(&self) -> &Path {
+        &self.data_dir
+    }
+
+    /// Thư mục ảnh minh hoạ (`<data>/images`) — `illustration.rs` ghi/xoá và
+    /// giao thức `edugame-file:` đọc từ đây.
+    pub fn images_dir(&self) -> PathBuf {
+        self.data_dir.join(crate::illustration::IMAGES_DIR)
+    }
+
+    /// Gọi một op V8 của slot `EGFILES` (`files:max-bytes`, …) — đường vào cho
+    /// các module tệp cần một con số do luật TypeScript quyết định.
+    pub(crate) fn files_op(&self, op: &str) -> Option<Value> {
+        self.call(op, &[]).ok()
+    }
+
     /// Xoá `images/<id>.img` cho từng id mà lệnh xoá vừa trả về, trừ id còn được
     /// một trò chơi hay bản nháp khác nhắc tới. Cố ý bỏ qua lỗi: dòng đã xoá
     /// xong, một tệp ảnh mồ côi không được biến thao tác xoá thành thất bại.
@@ -199,15 +218,16 @@ impl Library {
             if still_used.iter().any(|kept| *kept == id) {
                 continue;
             }
-            let _ = std::fs::remove_file(self.images_dir.join(format!("{id}.img")));
+            let _ = std::fs::remove_file(self.images_dir().join(format!("{id}.img")));
         }
     }
 
     /// Id ảnh còn được nhắc tới bởi mọi trò chơi đã lưu và mọi bản nháp.
     ///
     /// Dòng hỏng không giữ ảnh nào: cùng cách `referencedCustomImageIds()` bỏ qua
-    /// một `data_json` không đọc được.
-    fn referenced_images(&self) -> Vec<String> {
+    /// một `data_json` không đọc được. `pub(crate)` cho `illustration.rs`: lệnh
+    /// `files:delete-illustration` phải từ chối một ảnh đang được dùng.
+    pub(crate) fn referenced_images(&self) -> Vec<String> {
         let Ok(rows) = self.call("library:image-refs", &[]) else {
             return Vec::new();
         };

@@ -320,6 +320,12 @@ impl Embedded {
         self.shared.borrow().sql_calls
     }
 
+    /// Gọi một op nhận byte (slot `EGFILES`): byte đi sang V8 dưới dạng chuỗi
+    /// base64, vì `__eg_input` là JSON và JSON không có kiểu byte.
+    pub fn call_with_bytes(&mut self, op: &str, args: Vec<Value>, now: &str) -> Result<Value, DbError> {
+        self.call(op, &args, now)
+    }
+
     fn install(&mut self, input: &str, now: &str) -> Result<(), DbError> {
         let now = serde_json::to_string(now).map_err(|error| DbError::Data(error.to_string()))?;
         let input = serde_json::to_string(input).map_err(|error| DbError::Data(error.to_string()))?;
@@ -352,7 +358,7 @@ impl Embedded {
     fn eval(&mut self, expression: &str) -> Result<String, DbError> {
         let global = self
             .runtime
-            .execute_script("eg:run", format!("Promise.resolve({expression})"))
+            .execute_script("eg:run", format!("(0, {expression})"))
             .map_err(|error| DbError::Schema(format!("chạy V8: {error}")))?;
         let runtime = &mut self.runtime;
         deno_core::scope!(scope, runtime);
@@ -420,5 +426,87 @@ mod tests {
         ] {
             assert!(!is_known_sql(sql), "câu lạ phải bị từ chối: {sql}");
         }
+    }
+
+    /// Một engine mở trên tệp 0.5.1 tạm — đủ để slot `EGFILES` chạy mà không cần
+    /// `AppHandle` (nó không chạm SQL cho hai op dưới, nhưng `Embedded::open` vẫn
+    /// cần một kết nối).
+    ///
+    /// Phải dựng TRONG một tokio runtime một luồng, đúng như `library::spawn` làm
+    /// ở bản chạy thật: `deno_core` hỏi `Handle::try_current()` lúc dựng isolate, và
+    /// thiếu handle mà V8 đăng một tác vụ trễ (nạp bundle 5 MB đủ để đăng) thì nó
+    /// `abort()` cả tiến trình test.
+    fn engine() -> (tempfile::TempDir, Embedded) {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let owned = dir.path().to_path_buf();
+        let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().expect("tokio");
+        let _guard = runtime.enter();
+        let engine = Embedded::open(owned.join("edugame.sqlite"), &owned).expect("engine");
+        (dir, engine)
+    }
+
+    fn fixture(name: &str) -> Vec<u8> {
+        std::fs::read(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("..")
+                .join("tests")
+                .join("fixtures")
+                .join("tauri-import")
+                .join(name),
+        )
+        .unwrap_or_else(|error| panic!("thiếu fixture {name}: {error}"))
+    }
+
+    fn import(engine: &mut Embedded, name: &str) -> Result<Value, DbError> {
+        let bytes = crate::base64::encode(&fixture(name));
+        engine.call_with_bytes(
+            "files:import-document",
+            vec![Value::String(name.to_string()), Value::String(bytes)],
+            "2026-01-01T00:00:00.000Z",
+        )
+    }
+
+    #[test]
+    fn the_files_slot_reads_chua_text_inside_embedded_v8() {
+        let (_dir, mut engine) = engine();
+        let text = import(&mut engine, "giao-an.txt").expect("txt");
+        assert_eq!(text["name"], "giao-an.txt");
+        // Fixture có dấu tiếng Việt nên khẳng định này cũng đo bộ giải mã UTF-8
+        // của V8 trần (không có `TextDecoder` của nền tảng).
+        let body = text["text"].as_str().unwrap_or("");
+        assert!(body.contains("Giáo án"), "{text}");
+        assert!(body.contains("đèn xanh"), "{text}");
+        let md = import(&mut engine, "giao-an.md").expect("md");
+        assert!(md["characters"].as_u64().unwrap_or(0) > 0);
+        // Ba định dạng còn lại đi qua ba thư viện khác nhau (mammoth + jszip,
+        // pdf.js, jszip): mỗi cái là một nhánh riêng của `readDocument`.
+        let docx = import(&mut engine, "bai-hoc.docx").expect("docx");
+        assert!(docx["text"].as_str().unwrap_or("").contains("Hoc sinh"), "{docx}");
+        let pptx = import(&mut engine, "bai-giang.pptx").expect("pptx");
+        let slides = pptx["text"].as_str().unwrap_or("");
+        // `Cau hoi hai` trước `Cau hoi muoi` chứng minh thứ tự sắp theo SỐ slide
+        // (`slide10` không lọt lên trước `slide2` vì so chuỗi), và `&` đã được
+        // giải mã từ `&amp;` của XML.
+        assert!(slides.contains("Cau hoi hai & an toan"), "{pptx}");
+        assert!(slides.contains("Cau hoi muoi"), "pptx mất slide 10: {pptx}");
+        assert!(
+            slides.find("Cau hoi hai").unwrap_or(usize::MAX) < slides.find("Cau hoi muoi").unwrap_or(0),
+            "thứ tự slide sai: {pptx}"
+        );
+        let pdf = import(&mut engine, "giao-an.pdf").expect("pdf");
+        assert!(pdf["characters"].as_u64().unwrap_or(0) > 0, "{pdf}");
+    }
+
+    #[test]
+    fn a_broken_file_is_refused_with_a_sentence_not_a_hang() {
+        // `Embedded::eval` chỉ chạy microtask checkpoint. Nếu một slot thật sự cần
+        // vòng sự kiện (I/O bất đồng bộ) thì chỗ này héo: promise còn treo là lỗi
+        // `Schema`, không phải câu lỗi có mã `DB_INVALID_INPUT`.
+        let (_dir, mut engine) = engine();
+        let error = import(&mut engine, "hong.pdf").expect_err("PDF hỏng");
+        assert_ne!(error.code(), "DB_SCHEMA_FAILED", "slot treo sau microtask: {error}");
+        let error = import(&mut engine, "bang-tinh.xls").expect_err("đuôi lạ");
+        assert_eq!(error.code(), "DB_INVALID_INPUT", "xls: {error}");
+        assert!(error.to_string().contains("chưa được hỗ trợ"), "{error}");
     }
 }

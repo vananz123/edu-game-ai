@@ -10,11 +10,18 @@
  * deleted (or sit on a USB stick), and a game must still play offline months later.
  *
  * Why not a `file://` URL: the page's CSP allows `img-src 'self' data:
- * edugame-file:` only, and `file://` would let a stored path read anything on disk.
+ * edugame-file:` (plus the WebView2 host the Tauri shell rewrites that scheme to,
+ * see customImageUrl()) only, and `file://` would let a stored path read anything
+ * on disk.
  *
- * Pure-ish module: no Electron import; the caller passes the folder.
+ * Pure-ish module: no Electron import; the caller passes the folder. The only
+ * window reference is the read-only `desktopHost.shell` lookup in customImageUrl().
  */
 import path from 'node:path';
+
+// `desktopHost` is declared by another renderer script of the same page; this file
+// must build without a declaration, so it is read by name behind a typeof guard.
+declare const desktopHost: { shell: 'electron' | 'tauri' | 'none' } | undefined;
 
 /** Extensions a browser window can decode and that we accept. */
 export const CUSTOM_IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp', '.gif'] as const;
@@ -69,6 +76,29 @@ export function inspectCustomImage(filePath: string, bytes: Buffer): { ext: stri
 export function customImageFileName(id: unknown): string | null {
   return isCustomImageId(id) ? `${id}.img` : null;
 }
+
+/**
+ * URL a `<img>`/`<image>` uses to load the picture of `id`, or null when the id is
+ * not ours.
+ *
+ * WebView2 cannot load a made-up scheme at all (`ERR_UNKNOWN_URL_SCHEME`), so wry
+ * answers `edugame-file:` URLs on `http://edugame-file.tauri.localhost/…` instead.
+ * The Tauri page therefore asks for that host and `tauri.conf.json` adds it to
+ * `img-src`; Electron keeps the real scheme from `protocol.handle`.
+ */
+export function customImageUrl(id: unknown): string | null {
+  if (!isCustomImageId(id)) return null;
+  const path = `/img/${encodeURIComponent(id)}`;
+  const shell = typeof desktopHost === 'undefined' ? null : desktopHost.shell;
+  return shell === 'tauri' ? `${TAURI_IMAGE_ORIGIN}${path}` : `edugame-file://img/${encodeURIComponent(id)}`;
+}
+
+/**
+ * The origin WebView2 actually loads `edugame-file:` pictures from in the Tauri
+ * shell. The gate loads an imported picture through this exact host, so a change in
+ * the rewrite below cannot pass unnoticed.
+ */
+export const TAURI_IMAGE_ORIGIN = 'http://edugame-file.tauri.localhost';
 
 /**
  * MIME type from the stored bytes (the file keeps no extension on purpose, so a rename

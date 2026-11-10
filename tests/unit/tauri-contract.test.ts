@@ -40,8 +40,9 @@ const conf = JSON.parse(
 const PSEUDO_CHANNELS = new Set(['channel:invoke', 'channel:send']);
 // Kênh ĐIỀU KHIỂN của cổng kiểm tra: không có trong preload Electron, không
 // renderer nào gọi (`desktop.gate(...)`, chỉ `tests/ui/tauri-webview-check.js`),
-// và `package.rs` từ chối khi `EDUGAME_TAURI_PACKAGE` chưa bật.
-const GATE_CHANNELS = new Set(['package:gate-turn']);
+// và `package.rs`/`document.rs` từ chối khi biến `EDUGAME_TAURI_PACKAGE` /
+// `EDUGAME_TAURI_FILES` chưa bật.
+const GATE_CHANNELS = new Set(['package:gate-turn', 'files:gate-turn']);
 
 function handWritten(): Map<string, string> {
   const table = new Map<string, string>();
@@ -68,8 +69,10 @@ function rustChannels(): Map<string, string> {
   // nên tìm tên ở dòng `save_game(game: …) => "library:save-game",` trong khối macro.
   const generated = macroGenerated();
   for (const [channel, name] of handWritten()) {
+    // `pub async fn` là lệnh Tauri hợp lệ: các kênh mở hộp thoại phải `async` để
+    // hộp thoại hiện trên luồng chính thay vì dựng bên trong lời gọi chờ.
     assert.ok(
-      apiSource.includes(`pub fn ${name}(`) || generated.has(name),
+      new RegExp(`pub (async )?fn ${name}\\(`).test(apiSource) || generated.has(name),
       `api.rs thiếu lệnh viết tay ${name}`
     );
     assert.ok(!channels.has(name), `api.rs khai ${name} hai lần`);
@@ -188,7 +191,7 @@ test('invoke_channel/send_channel được đăng ký và lọc kênh trước k
   // một chuỗi kênh, một danh sách giá trị, và không gì khác.
   assert.match(
     apiSource,
-    /pub fn invoke_channel\(\s*app: AppHandle,\s*channel: String,\s*args: Option<Vec<Value>>,\s*\) -> Result<Value, String>/,
+    /pub async fn invoke_channel\(\s*app: AppHandle,\s*channel: String,\s*args: Option<Vec<Value>>,\s*\) -> Result<Value, String>/,
     'invoke_channel không được nhận thêm tham số tuỳ ý từ frontend'
   );
   assert.ok(apiSource.includes('!INVOKE_CHANNELS.contains(&channel.as_str())'),
@@ -221,11 +224,21 @@ test('tauri.conf.json tách khỏi Electron', () => {
   assert.equal(conf.app.withGlobalTauri, true, 'adapter Tauri đọc __TAURI__ từ window');
 });
 
-test('CSP của vỏ Tauri không nới hơn CSP của index.html', () => {
+test('CSP của vỏ Tauri chỉ nới đúng host ảnh WebView2, không hơn', () => {
   const html = fs.readFileSync(path.join(root, 'src', 'index.html'), 'utf8');
   const meta = /content="([^"]*default-src[^"]*)"/.exec(html);
   assert.ok(meta, 'index.html không có CSP');
-  assert.equal(conf.app.security.csp, meta[1]);
+  // WebView2 không nạp scheme tự đặt; wry trả edugame-file: trên host này (#270).
+  // Đó là khác biệt DUY NHẤT được phép so với CSP của Electron.
+  const widened = meta[1].replace("img-src 'self' data: edugame-file:;",
+    "img-src 'self' data: edugame-file: http://edugame-file.tauri.localhost;");
+  assert.equal(conf.app.security.csp, widened);
+  const distIndex = path.join(root, 'dist-tauri', 'index.html');
+  if (fs.existsSync(distIndex)) {
+    const distMeta = /content="([^"]*default-src[^"]*)"/.exec(fs.readFileSync(distIndex, 'utf8'));
+    assert.ok(distMeta, 'dist-tauri/index.html không có CSP');
+    assert.equal(distMeta[1], conf.app.security.csp, 'thẻ meta của bản Tauri phải khớp tauri.conf.json');
+  }
 });
 
 test('dist-tauri nạp cổng chặn trước mọi script renderer và không còn cầu eduGame', () => {

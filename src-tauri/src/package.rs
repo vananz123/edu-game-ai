@@ -53,10 +53,11 @@ pub fn gate_target(channel: &str) -> Option<PathBuf> {
     }
     let name = match channel {
         "files:export-game" => GATE_SAVE,
-        "files:import-game" => match gate_turn() {
-            0 => GATE_OPEN,
-            turn => GATE_FLAKY.get(turn - 1).copied().unwrap_or(GATE_OPEN),
-        },
+        "files:import-game" => gate_turn()
+            .checked_sub(1)
+            .and_then(|index| usize::try_from(index).ok())
+            .and_then(|index| GATE_FLAKY.get(index).copied())
+            .unwrap_or(GATE_OPEN),
         _ => return None,
     };
     std::env::var_os(name).map(PathBuf::from)
@@ -135,25 +136,66 @@ fn max_bytes(app: &AppHandle) -> u64 {
 ///
 /// Đường dẫn của cổng kiểm tra (`requested`) chỉ đến từ tiến trình cha: renderer
 /// không đặt được biến môi trường của tiến trình, nên nó không chọn được tệp nào.
-fn pick(
-    app: &AppHandle,
-    requested: Option<PathBuf>,
-    dialog: impl FnOnce(&AppHandle) -> Option<tauri_plugin_dialog::FilePath>,
-) -> Result<Option<PathBuf>, String> {
-    if let Some(path) = requested {
+fn gate_path(requested: Option<PathBuf>) -> Option<Option<PathBuf>> {
+    requested.map(|path| {
         // Chuỗi rỗng là pha của cổng giả lập "bấm Huỷ".
-        return Ok(if path.as_os_str().is_empty() { None } else { Some(path) });
-    }
-    match dialog(app) {
-        Some(path) => Ok(Some(path.into_path().map_err(|error| fail("EG_PATH", error.to_string()))?)),
-        None => Ok(None),
-    }
+        if path.as_os_str().is_empty() {
+            None
+        } else {
+            Some(path)
+        }
+    })
 }
 
 /// Xuất: hỏi đường dẫn, lấy chữ của gói từ V8, ghi UTF-8.
-pub fn export(app: &AppHandle, game: Value, requested: Option<PathBuf>) -> Result<Value, String> {
+///
+/// `async` để hộp thoại không dựng bên trong lời gọi chờ (xem `picker.rs`); chỉ
+/// lượt GHI TỆP đi sang luồng chặn — lượt gọi V8 chờ ở đây vì `spawn_blocking`
+/// không thấy state thư viện.
+pub async fn export(app: &AppHandle, game: Value, requested: Option<PathBuf>) -> Result<Value, String> {
+    let target = match gate_path(requested) {
+        Some(Some(path)) => path,
+        Some(None) => return canceled(),
+        None => {
+            let file_name = default_file_name(app, &game)?;
+            let chosen = crate::picker::choose(app, move |app| {
+                app.dialog()
+                    .file()
+                    .set_title("Xuất gói trò chơi")
+                    .set_file_name(&file_name)
+                    .add_filter("EduGame package", &["egame", "json"])
+            })
+            .await;
+            match chosen.map(crate::picker::to_path).transpose()? {
+                Some(path) => path,
+                None => return canceled(),
+            }
+        }
+    };
+    write_package(app, game, &target).await
+}
+
+/// Tên tệp gợi ý của hộp thoại xuất — cùng luật `package:export` mà nửa ghi dùng.
+fn default_file_name(app: &AppHandle, game: &Value) -> Result<String, String> {
     let library = library(app)?;
     let written = library
+        .call("package:export", &[game.clone()])
+        .map_err(|error| fail("EG_PACKAGE", error.to_string()))?;
+    Ok(written
+        .get("fileName")
+        .and_then(Value::as_str)
+        .unwrap_or("tro-choi.egame")
+        .to_string())
+}
+
+fn canceled() -> Result<Value, String> {
+    serde_json::to_value(Canceled { canceled: true }).map_err(|error| error.to_string())
+}
+
+/// Nửa sau của `export`: chữ của gói lấy từ V8 ở đây, chỉ phần ghi tệp đi sang
+/// luồng chặn.
+pub(crate) async fn write_package(app: &AppHandle, game: Value, target: &Path) -> Result<Value, String> {
+    let written = library(app)?
         .call("package:export", &[game])
         .map_err(|error| fail("EG_PACKAGE", error.to_string()))?;
     let text = written
@@ -161,27 +203,15 @@ pub fn export(app: &AppHandle, game: Value, requested: Option<PathBuf>) -> Resul
         .and_then(Value::as_str)
         .ok_or_else(|| fail("EG_PACKAGE", "bộ ghi gói không trả chữ"))?
         .to_string();
-    let file_name = written
-        .get("fileName")
-        .and_then(Value::as_str)
-        .unwrap_or("tro-choi.egame")
-        .to_string();
 
-    let Some(target) = pick(app, requested, |app| {
-        app.dialog()
-            .file()
-            .set_title("Xuất gói trò chơi")
-            .set_file_name(&file_name)
-            .add_filter("EduGame package", &["egame", "json"])
-            .blocking_save_file()
-    })?
-    else {
-        return serde_json::to_value(Canceled { canceled: true }).map_err(|error| error.to_string());
-    };
-
-    std::fs::write(&target, text).map_err(|error| {
-        fail("EG_WRITE", format!("không ghi được {}: {error}", target.display()))
-    })?;
+    let path = target.to_path_buf();
+    let written_to = path.clone();
+    crate::picker::io(move || {
+        std::fs::write(&path, text)
+            .map(|()| written_to.display().to_string())
+            .map_err(|error| fail("EG_WRITE", format!("không ghi được {}: {error}", path.display())))
+    })
+    .await?;
     let result = ExportResult {
         ok: true,
         path: target.display().to_string(),
@@ -191,23 +221,31 @@ pub fn export(app: &AppHandle, game: Value, requested: Option<PathBuf>) -> Resul
 
 /// Nhập: hỏi tệp, chặn tệp quá lớn trước khi đọc, đọc UTF-8, rồi để luật của
 /// `readPackage` quyết định. `Ok(Value::Null)` là người dùng bấm Huỷ.
-pub fn import(app: &AppHandle, requested: Option<PathBuf>) -> Result<Value, String> {
-    let library = library(app)?;
-    let Some(target) = pick(app, requested, |app| {
-        app.dialog()
-            .file()
-            .set_title("Nhập trò chơi")
-            .add_filter("EduGame package", &["egame", "json"])
-            .blocking_pick_file()
-    })?
-    else {
-        return Ok(Value::Null);
+pub async fn import(app: &AppHandle, requested: Option<PathBuf>) -> Result<Value, String> {
+    let target = match gate_path(requested) {
+        Some(Some(path)) => path,
+        Some(None) => return Ok(Value::Null),
+        None => {
+            let chosen = crate::picker::choose(app, |app| {
+                app.dialog()
+                    .file()
+                    .set_title("Nhập trò chơi")
+                    .add_filter("EduGame package", &["egame", "json"])
+            })
+            .await;
+            match chosen.map(crate::picker::to_path).transpose()? {
+                Some(path) => path,
+                None => return Ok(Value::Null),
+            }
+        }
     };
-    read_and_import(app, &library, &target)
+    let library = library(app)?;
+    read_and_import(app, &library, &target).await
 }
 
-/// Nửa sau của lượt nhập, tách ra để test gọi thẳng với tệp trong thư mục tạm.
-pub fn read_and_import(app: &AppHandle, library: &Library, target: &Path) -> Result<Value, String> {
+/// Đọc tệp thành chữ (sang luồng chặn) rồi đưa luật nhập của V8 áp lên — lượt
+/// gọi V8 chờ ở luồng của runtime, nơi state thư viện còn nhìn thấy được.
+pub async fn read_and_import(app: &AppHandle, library: &Library, target: &Path) -> Result<Value, String> {
     let meta = std::fs::metadata(target)
         .map_err(|error| fail("EG_READ", format!("không đọc được {}: {error}", target.display())))?;
     if !meta.is_file() {
@@ -220,13 +258,22 @@ pub fn read_and_import(app: &AppHandle, library: &Library, target: &Path) -> Res
             format!("Tệp lớn hơn {limit} MB — có thể đã chọn nhầm tệp."),
         ));
     }
-    read_file_text(library, target)
+    let path = target.to_path_buf();
+    let text = crate::picker::io(move || read_file_text(&path)).await?;
+    let now = crate::library::now();
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.subsec_nanos().to_string())
+        .unwrap_or_else(|_| "0".to_string());
+    library
+        .call("package:read", &[Value::String(text), Value::String(now), Value::String(nonce)])
+        .map_err(|error| fail("EG_PACKAGE", error.to_string()))
 }
 
-/// Đọc tệp thành chữ rồi đưa luật nhập của V8 áp lên. Tách khỏi `read_and_import`
-/// để test chạm được nhánh "tệp nhị phân" mà không cần `AppHandle`.
-fn read_file_text(library: &Library, target: &Path) -> Result<Value, String> {
-    let text = std::fs::read_to_string(target).map_err(|error| {
+/// Đọc tệp thành chữ. Tách khỏi `read_and_import` để test chạm được nhánh "tệp
+/// nhị phân" mà không cần `AppHandle` — và để nó chạy được trên luồng chặn.
+fn read_file_text(target: &Path) -> Result<String, String> {
+    std::fs::read_to_string(target).map_err(|error| {
         // Tệp nhị phân (hoặc tệp của bảng tính đổi đuôi): câu dưới nói đúng
         // việc cần làm thay vì lộ lỗi của `std`.
         if error.kind() == std::io::ErrorKind::InvalidData {
@@ -237,15 +284,7 @@ fn read_file_text(library: &Library, target: &Path) -> Result<Value, String> {
         } else {
             fail("EG_READ", format!("không đọc được {}: {error}", target.display()))
         }
-    })?;
-    let now = crate::library::now();
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|elapsed| elapsed.subsec_nanos().to_string())
-        .unwrap_or_else(|_| "0".to_string());
-    library
-        .call("package:read", &[Value::String(text), Value::String(now), Value::String(nonce)])
-        .map_err(|error| fail("EG_PACKAGE", error.to_string()))
+    })
 }
 
 /// Cổng kiểm tra cần biết tiêu đề của tệp vừa xuất — đọc lại để so với lúc nhập.
@@ -275,11 +314,10 @@ mod tests {
     #[test]
     fn a_binary_file_is_refused_as_a_wrong_file_not_as_a_crash() {
         let dir = tempfile::tempdir().expect("tempdir");
-        let library = Library::open(dir.path()).expect("thư viện");
         let file = dir.path().join("anh.png");
         // Byte 0xFF không hợp lệ trong UTF-8, giống một tệp ảnh đổi đuôi.
         std::fs::write(&file, [0xFF, 0xFE, 0x00, 0x01]).expect("write");
-        let error = read_file_text(&library, &file).expect_err("phải từ chối");
+        let error = read_file_text(&file).expect_err("phải từ chối");
         assert!(error.starts_with("EG_READ: "), "{error}");
         assert!(error.contains("không phải tệp chữ UTF-8"), "{error}");
     }

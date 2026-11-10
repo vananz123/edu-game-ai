@@ -38,7 +38,11 @@ const SLOTS = [
   // Gói `.egame`: bộ đọc/ghi của Electron (`game-package.ts`) với `normalizeGame`
   // và bốn bộ kiểm thể loại đi kèm. Rust mở hộp thoại và đọc/ghi tệp; slot này
   // chỉ thấy chuỗi.
-  { slot: 'EGPACKAGES', entry: 'src/services/game/game-package-ops.ts' }
+  { slot: 'EGPACKAGES', entry: 'src/services/game/game-package-ops.ts' },
+  // Nhập tài liệu (`files:import-document`, `files:import-document-from-path`):
+  // cùng năm định dạng và cùng thư viện của `main.ts`, nhưng chạy trong V8 nhúng.
+  // Rust chọn tệp và đọc byte; slot này chỉ thấy `Uint8Array` cùng tên tệp.
+  { slot: 'EGFILES', entry: 'src-tauri/src/embedded/files-ops.ts', neutral: true }
 ];
 
 /**
@@ -66,8 +70,62 @@ const UUID_REQUIRE = 'require("node:crypto").randomUUID()';
  * Node. Ngoại lệ duy nhất là `crypto` (`UUID_REQUIRE`): để esbuild chuyển nó
  * thành `require("crypto")` bình thường, rồi thay ĐÚNG chuỗi đó bằng
  * `UUID_FALLBACK`. Câu require nào khác còn lại trong kết quả là lỗi.
+ *
+ * Slot `neutral: true` (chỉ slot nhập tài liệu) cần thêm ba thứ mà bundle của
+ * luật không cần:
+ *   • `require("node:crypto")` thay bằng `__eg_require` của `template.js` — nơi
+ *     duy nhất có UUID cho id;
+ *   • module lõi Node mà thư viện đọc tệp vẫn với tới (dù đã chọn bản trình
+ *     duyệt) được thay bằng shim: `module` (createRequire), `zlib`
+ *     (DecompressionStream), `fs` (chỉ ném câu đọc được);
+ *   • `jszip` trỏ sang bản `dist/` — bản `lib/` của nó là cây stream của Node.
+ *     Hai đường dẫn dưới đây đọc TÊN GÓI từ `node_modules` của chính repo, nên
+ *     một slot vô tình dùng nhánh Node là hỏng ngay ở bước dựng.
  */
-async function bundleModule(entry) {
+const SHIM_DIR = path.join(root, 'src-tauri', 'src', 'embedded', 'shims');
+// `lib/` của jszip là cây stream của Node; không có chỗ trong V8 nhúng. Đổi sang
+// bản `dist/` của chính nó ở mức GÓI, rồi mới tới các module lõi Node.
+//
+// `url`/`os`/`path` có shim riêng chứ không phải một shim ném lỗi: esbuild dịch
+// lời gọi `require("url")` của UMD trong `dist/jszip.min.js` thành import, và
+// nhánh Node của pdf.js 1.10.100 gọi `require("os").cpus()` ngay khi nạp
+// (mammoth cũng vậy) — chúng cần một hàm thật, không phải một câu lỗi. Nhánh
+// đọc/ghi tệp và nhánh nén đã có shim chạy được ở trên; `http`/`https` chưa
+// thấy chỗ gọi nào trong nhánh đang chạy, nên giữ một câu lỗi có tên gói.
+const THROWING_SHIM = path.join(SHIM_DIR, 'node-only.js');
+const NEUTRAL_OVERRIDES = {
+  module: path.join(SHIM_DIR, 'module.js'),
+  zlib: path.join(SHIM_DIR, 'zlib.js'),
+  fs: path.join(SHIM_DIR, 'fs.js'),
+  url: path.join(SHIM_DIR, 'url.js'),
+  os: path.join(SHIM_DIR, 'os.js'),
+  path: path.join(SHIM_DIR, 'path.js'),
+  http: THROWING_SHIM,
+  https: THROWING_SHIM,
+  jszip: path.join(root, 'node_modules', 'jszip', 'dist', 'jszip.min.js')
+};
+
+/**
+ * Mở pdf.js `v1.10.100` — bản duy nhất `pdf-parse` chạy.
+ *
+ * `pdf-parse` viết `require(\`./pdf.js/${options.version}/build/pdf.js\`)` với
+ * `options.version` mặc định `v1.10.100`. esbuild không tĩnh hoá được chuỗi đó,
+ * nên các bản dựng còn lại (v1.9.426, v1.10.88, v2.0.550 — thư mục trong gói,
+ * không phải gói riêng) cũng bị gom vào cùng một `require`, kéo theo ba bản
+ * `pdf.js` nữa với những câu `require('zlib')`/`require('http')`/… khác nhau.
+ * Trỏ MỌI đường `pdf.js/<bản>/build/pdf.js` về bản 1.10.100 thì nhánh chết đó
+ * biến mất, và bundle giữ đúng một bản pdf.js.
+ */
+const PDF_BUILD = path.join(root, 'node_modules', 'pdf-parse', 'lib', 'pdf.js');
+const PDFJS_ENTRY = path.join(PDF_BUILD, 'v1.10.100', 'build', 'pdf.js');
+const pdfPathsPlugin = {
+  name: 'eg-pdf-paths',
+  setup(build) {
+    build.onResolve({ filter: /pdf\.js\/v\d+\.\d+\.\d+\/build\/pdf\.js$/ }, () => ({ path: PDFJS_ENTRY }));
+  }
+};
+
+async function bundleModule(entry, neutral = false) {
   const result = await esbuild.build({
     entryPoints: [path.join(root, entry)],
     external: ['node:crypto'],
@@ -75,20 +133,45 @@ async function bundleModule(entry) {
     write: false,
     format: 'cjs',
     platform: 'neutral',
-    mainFields: ['module', 'main'],
+    // Bản TRÌNH DUYỆT của mammoth/jszip nằm sau `browser` của từng gói; thiếu nó
+    // thì mammoth mở zip bằng luồng Node. Chỉ slot `neutral` mới cần (bundle của
+    // luật đọc đúng như cũ), nên khai theo điều kiện cùng các thứ dưới.
+    mainFields: neutral ? ['browser', 'module', 'main'] : ['module', 'main'],
     target: 'es2022',
     minify: true,
     legalComments: 'none',
-    logLevel: 'silent'
+    logLevel: 'silent',
+    ...(neutral
+      ? {
+          alias: NEUTRAL_OVERRIDES,
+          plugins: [pdfPathsPlugin],
+          nodePaths: [path.join(root, 'node_modules')]
+        }
+      : {})
   });
-  const bundled = result.outputFiles[0].text.trim();
+  let text = result.outputFiles[0].text.trim();
   // Đúng một lần: nhiều hơn nghĩa là một module khác cũng gọi crypto, và thay
   // hết sẽ giấu mất chỗ cần xem lại.
-  const uses = bundled.split(UUID_REQUIRE).length - 1;
+  const uses = text.split(UUID_REQUIRE).length - 1;
   if (uses > 1) throw new Error(`${entry}: ${uses} chỗ gọi UUID — chỉ chấp nhận một.`);
-  const text = uses === 1 ? bundled.split(UUID_REQUIRE).join(UUID_FALLBACK) : bundled;
-  if (/require\(["'](?:node:)?(?:fs|os|child_process|worker_threads|vm|module|crypto)["']\)/.test(text)) {
-    throw new Error(`${entry}: bundle vẫn còn require() của module lõi Node — V8 nhúng không có module nào.`);
+  text = uses === 1 ? text.split(UUID_REQUIRE).join(UUID_FALLBACK) : text;
+  if (neutral) {
+    // Hàm `require` GỐC của bundle là chỗ thư viện đọc tệp vẫn gọi vào. Thay nó
+    // bằng một hàm báo lỗi CÓ TÊN GÓI, để bundle thiếu một mảnh là hỏng lúc dựng
+    // (phép so ngay dưới) chứ không hỏng lúc giáo viên bấm nút.
+    //
+    // Thay hai lời gọi `__eg_require` TRƯỚC khi chèn: `neutral-globals.js` (tệp
+    // nguồn) cũng nhắc đúng hai chuỗi đó trong chú thích, và một lần thay sau khi
+    // chèn sẽ biến chú thích thành lời gọi — chính nó làm cổng báo còn `require`.
+    text = text
+      .replace(/require\(\s*["']module["']\s*\)/g, '__eg_require("module")')
+      .replace(/require\(\s*["']node:crypto["']\s*\)/g, '__eg_require("node:crypto")');
+    const injected = fs.readFileSync(path.join(SHIM_DIR, 'neutral-globals.js'), 'utf8');
+    text = injected + '\n' + text;
+  }
+  const leftover = /require\(["'](?:node:)?(?:fs|os|child_process|worker_threads|vm|module|crypto|zlib|http|https|url|stream|util|events|buffer|path)["']\)/.exec(text);
+  if (leftover) {
+    throw new Error(`${entry}: bundle vẫn còn ${leftover[0]} của module lõi Node — V8 nhúng không có module nào.`);
   }
   return text;
 }
@@ -116,7 +199,9 @@ function fill(template, slot, code) {
 
 async function build() {
   let source = fs.readFileSync(templatePath, 'utf8');
-  for (const { slot, entry } of SLOTS) source = fill(source, slot, await bundleModule(entry));
+  for (const { slot, entry, neutral } of SLOTS) {
+    source = fill(source, slot, await bundleModule(entry, Boolean(neutral)));
+  }
   const header = `// TỆP SINH TỰ ĐỘNG bởi scripts/build-embedded-js.js. Đừng sửa tay.\n` +
     `// Nguồn: src-tauri/src/embedded/template.js + ${SLOTS.map(entry => entry.entry).join(', ')}\n`;
   return header + source;

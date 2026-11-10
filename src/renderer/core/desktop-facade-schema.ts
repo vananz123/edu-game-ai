@@ -259,11 +259,12 @@ const DESKTOP_FACADE_SCHEMA = Object.freeze({
   /**
    * Lời gọi KHÔNG có trong preload Electron, nên không thuộc `DESKTOP_CALLS` và
    * không được `calls` kiểm: chỉ cổng kiểm tra Tauri dùng. Vỏ Tauri từ chối khi
-   * biến `EDUGAME_TAURI_PACKAGE` chưa bật, nên bản phát hành không mở đường nào
-   * (`package.rs::set_gate_turn`).
+   * biến `EDUGAME_TAURI_PACKAGE` / `EDUGAME_TAURI_FILES` chưa bật, nên bản phát
+   * hành không mở đường nào (`package.rs` / `document.rs::set_gate_turn`).
    */
   gateCalls: Object.freeze({
     setPackageGateTurn: 'package:gate-turn',
+    setFilesGateTurn: 'files:gate-turn',
   }),
   error: desktopError,
   toError: toDesktopError,

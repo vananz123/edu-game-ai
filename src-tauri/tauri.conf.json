@@ -22,12 +22,14 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: edugame-file:; connect-src https: http://127.0.0.1:* http://localhost:*;"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: edugame-file: http://edugame-file.tauri.localhost; connect-src https: http://127.0.0.1:* http://localhost:*;"
     }
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": [
+      "nsis"
+    ],
     "publisher": "EduGame Studio",
     "icon": [
       "icons/32x32.png",

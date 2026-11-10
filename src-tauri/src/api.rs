@@ -62,6 +62,21 @@ pub fn hand_written(command: &str) -> Option<(&'static str, &'static str)> {
         // `package.rs`. Hàm nhận thêm `AppHandle` để mở hộp thoại của tiến trình.
         "export_game" => ("files:export-game", "export_game"),
         "import_game" => ("files:import-game", "import_game"),
+        // Nhóm `files:*` còn lại: hộp thoại + byte ở `document.rs` (V8 đọc chữ),
+        // ảnh ở `illustration.rs`. Cả ba cùng lý do nhận `AppHandle`.
+        "import_document" => ("files:import-document", "import_document"),
+        "import_document_from_path" => ("files:import-document-from-path", "import_document_from_path"),
+        "import_questions" => ("files:import-questions", "import_questions"),
+        "import_illustration" => ("files:import-illustration", "import_illustration"),
+        "delete_illustration" => ("files:delete-illustration", "delete_illustration"),
+        // Trình duyệt toàn màn hình: `WebviewWindow::set_fullscreen` của tiến trình.
+        "set_fullscreen" => ("window:set-fullscreen", "set_fullscreen"),
+        // Chẩn đoán: log JSONL trong `diagnostics.rs`; gói xuất ra Desktop của
+        // giáo viên, không phải một thư mục nội bộ.
+        "export_diagnostics" => ("diagnostics:export", "export_diagnostics"),
+        "diagnostics_info" => ("diagnostics:info", "diagnostics_info"),
+        "clear_diagnostics" => ("diagnostics:clear", "clear_diagnostics"),
+        "open_diagnostics_folder" => ("diagnostics:open-folder", "open_diagnostics_folder"),
         "get_settings" => ("settings:get", "get_settings"),
         "get_local_ai_models" => ("ai:local-models", "get_local_ai_models"),
         "invoke_channel" => ("channel:invoke", "invoke_channel"),
@@ -104,6 +119,9 @@ const INVOKE_CHANNELS: &[&str] = &[
     // Không thuộc hợp đồng Electron: chỉ cổng kiểm tra gọi, và `package.rs` từ
     // chối khi `EDUGAME_TAURI_PACKAGE` không bật.
     "package:gate-turn",
+    // Cùng kiểu, cho hai hộp thoại nhập: `document.rs` từ chối khi
+    // `EDUGAME_TAURI_FILES` chưa bật.
+    "files:gate-turn",
     "files:import-illustration",
     "files:delete-illustration",
     "settings:get",
@@ -182,7 +200,7 @@ const SEND_CHANNELS: &[&str] = &[
 ///
 /// `invoke_channel` đã lọc theo `INVOKE_CHANNELS`, nên `_` ở đây không tới
 /// được — nó chỉ là lưới an toàn nếu hai danh sách lệch nhau lúc sửa tay.
-fn dispatch(app: &AppHandle, channel: &str, args: &[Value]) -> Result<Value, String> {
+async fn dispatch(app: &AppHandle, channel: &str, args: &[Value]) -> Result<Value, String> {
     match channel {
         "app:info" => json(app_info(app.clone())),
         "shell:info" => json(shell_info(app.clone())),
@@ -209,14 +227,37 @@ fn dispatch(app: &AppHandle, channel: &str, args: &[Value]) -> Result<Value, Str
                 app,
                 game.clone(),
                 crate::package::gate_target(channel),
-            ),
+            )
+            .await,
             _ => Err("EG_PACKAGE: thiếu trò chơi để xuất".to_string()),
         },
-        "files:import-game" => crate::package::import(app, crate::package::gate_target(channel)),
+        "files:import-game" => crate::package::import(app, crate::package::gate_target(channel)).await,
         // Chỉ có nghĩa khi cổng kiểm tra bật (`EDUGAME_TAURI_PACKAGE=gate`): đặt
         // bộ đếm để lượt nhập sau chọn biến đường dẫn khác. `package.rs` từ chối
         // khi cổng tắt, nên bản phát hành không mở thêm đường nào.
         "package:gate-turn" => crate::package::set_gate_turn(args.first()),
+        // Cùng bộ đếm cho hộp thoại nhập tài liệu / câu hỏi / ảnh.
+        "files:gate-turn" => crate::document::set_gate_turn(args.first()),
+        // Nhập tệp: tham số giữ nguyên hình dạng `preload.ts` gửi.
+        "files:import-document" => crate::document::import_document(app).await,
+        "files:import-document-from-path" => crate::document::import_document_from_path(app, args.first()),
+        "files:import-questions" => crate::document::import_questions(app).await,
+        // Ảnh: tham số đầu là đường dẫn TÙY CHỌN của renderer (kéo thả); rỗng thì
+        // hộp thoại của tiến trình chọn.
+        "files:import-illustration" => {
+            crate::illustration::import(
+                app,
+                crate::document::illustration_gate_target(),
+                args.first().and_then(Value::as_str),
+            )
+            .await
+        }
+        "files:delete-illustration" => crate::illustration::delete(app, args.first()),
+        "window:set-fullscreen" => set_fullscreen(app.clone(), args.first().cloned()),
+        "diagnostics:export" => crate::diagnostics::export(app),
+        "diagnostics:info" => crate::diagnostics::info(app),
+        "diagnostics:clear" => crate::diagnostics::clear(app),
+        "diagnostics:open-folder" => crate::diagnostics::open_folder(app),
         _ => Err(format!("Kênh `{channel}` chưa có thân trong vỏ Tauri")),
     }
 }
@@ -227,11 +268,18 @@ fn json<T: Serialize>(value: Result<T, String>) -> Result<Value, String> {
 
 /// Cửa chung cho mọi kênh có trả lời (xem đầu tệp).
 ///
+/// `async` để lệnh chạy trên runtime của Tauri, không trên luồng chính: kênh
+/// nào mở hộp thoại (`files:*`) sẽ dựng hộp thoại thật trên luồng chính thay vì
+/// dựng nó bên trong lời gọi chờ — một hộp thoại như thế không hiện ra và đóng
+/// băng cả cửa sổ (xem đầu `picker.rs`). `dispatch` là hàm đồng bộ: chờ V8/SQLite
+/// ở đây chỉ chiếm luồng runtime, còn hộp thoại tự chuyển việc chặn của nó sang
+/// `spawn_blocking`.
+///
 /// Không nhận `app.get_webview_window` hay đường dẫn nào từ frontend: chỉ một
 /// chuỗi kênh thuộc danh sách tĩnh, nên frontend không thể mượn cửa này để đọc
 /// tệp tuỳ ý. Đó là lý do không mở quyền filesystem cho WebView.
 #[tauri::command]
-pub fn invoke_channel(
+pub async fn invoke_channel(
     app: AppHandle,
     channel: String,
     args: Option<Vec<Value>>,
@@ -239,7 +287,7 @@ pub fn invoke_channel(
     if !INVOKE_CHANNELS.contains(&channel.as_str()) {
         return Err(format!("Kênh `{channel}` không thuộc hợp đồng desktop"));
     }
-    dispatch(&app, &channel, args.as_deref().unwrap_or_default())
+    dispatch(&app, &channel, args.as_deref().unwrap_or_default()).await
 }
 
 /// Cửa chung cho ba kênh `send` của trình chiếu.
@@ -332,13 +380,97 @@ library_channel! {
 /// (`exportGame: game => …`, `importGame: () => …`) nhưng đi qua `package.rs`
 /// thay vì engine của thư viện, vì chúng còn mở hộp thoại của tiến trình.
 #[tauri::command]
-pub fn export_game(app: AppHandle, game: serde_json::Value) -> Result<serde_json::Value, String> {
-    crate::package::export(&app, game, crate::package::gate_target("files:export-game"))
+pub async fn export_game(app: AppHandle, game: serde_json::Value) -> Result<serde_json::Value, String> {
+    crate::package::export(&app, game, crate::package::gate_target("files:export-game")).await
 }
 
 #[tauri::command]
-pub fn import_game(app: AppHandle) -> Result<serde_json::Value, String> {
-    crate::package::import(&app, crate::package::gate_target("files:import-game"))
+pub async fn import_game(app: AppHandle) -> Result<serde_json::Value, String> {
+    crate::package::import(&app, crate::package::gate_target("files:import-game")).await
+}
+
+/// Ba kênh nhập tệp có hộp thoại của tiến trình. Renderer không có quyền
+/// `dialog:`/`fs:`, nên nó không chọn được tệp nào — nó chỉ nhận kết quả.
+///
+/// `async` là điều kiện để hộp thoại hiện ra: xem đầu `picker.rs`.
+#[tauri::command]
+pub async fn import_document(app: AppHandle) -> Result<serde_json::Value, String> {
+    crate::document::import_document(&app).await
+}
+
+/// Đường DUY NHẤT renderer đề xuất đường dẫn (kéo thả). `document.rs` kiểm phần
+/// mở rộng trước khi chạm đĩa và từ chối tệp quá trần.
+#[tauri::command]
+pub fn import_document_from_path(
+    app: AppHandle,
+    file_path: Option<Value>,
+) -> Result<serde_json::Value, String> {
+    crate::document::import_document_from_path(&app, file_path.as_ref())
+}
+
+#[tauri::command]
+pub async fn import_questions(app: AppHandle) -> Result<serde_json::Value, String> {
+    crate::document::import_questions(&app).await
+}
+
+#[tauri::command]
+pub async fn import_illustration(
+    app: AppHandle,
+    source_path: Option<String>,
+) -> Result<serde_json::Value, String> {
+    crate::illustration::import(
+        &app,
+        crate::document::illustration_gate_target(),
+        source_path.as_deref(),
+    )
+    .await
+}
+
+#[tauri::command]
+pub fn delete_illustration(app: AppHandle, image_id: Option<Value>) -> Result<serde_json::Value, String> {
+    crate::illustration::delete(&app, image_id.as_ref())
+}
+
+/// `window:set-fullscreen` → `{ok}`. Electron trả `{ok:false}` khi cửa sổ đã bị
+/// huỷ; ở đây cửa sổ thiếu cũng cùng câu trả lời, không ném.
+#[tauri::command]
+pub fn set_fullscreen(app: AppHandle, enabled: Option<Value>) -> Result<serde_json::Value, String> {
+    use tauri::Manager;
+    let wanted = match enabled {
+        Some(Value::Bool(flag)) => flag,
+        Some(Value::Null) | None => false,
+        // `Boolean(x)` của JavaScript: mọi giá trị khác bool đều là `true`.
+        Some(_) => true,
+    };
+    let Some(window) = app.get_webview_window("main") else {
+        return Ok(serde_json::json!({ "ok": false }));
+    };
+    window
+        .set_fullscreen(wanted)
+        .map_err(|error| format!("EG_WINDOW: không đổi được chế độ toàn màn hình: {error}"))?;
+    Ok(serde_json::json!({ "ok": true }))
+}
+
+/// Bốn kênh chẩn đoán: log JSONL trong `<data>/logs`, cùng thư mục
+/// `LOG_DIR()` của `main.ts`.
+#[tauri::command]
+pub fn export_diagnostics(app: AppHandle) -> Result<serde_json::Value, String> {
+    crate::diagnostics::export(&app)
+}
+
+#[tauri::command]
+pub fn diagnostics_info(app: AppHandle) -> Result<serde_json::Value, String> {
+    crate::diagnostics::info(&app)
+}
+
+#[tauri::command]
+pub fn clear_diagnostics(app: AppHandle) -> Result<serde_json::Value, String> {
+    crate::diagnostics::clear(&app)
+}
+
+#[tauri::command]
+pub fn open_diagnostics_folder(app: AppHandle) -> Result<serde_json::Value, String> {
+    crate::diagnostics::open_folder(&app)
 }
 
 /// Cài đặt của bản Tauri. Bản thử giai đoạn 1 chưa có trang Cài đặt đầy đủ, nên
@@ -410,15 +542,11 @@ macro_rules! unsupported {
 // `library:*` và năm `project:*` qua `library_channel!` (và `shell:info` không
 // thuộc preload của Electron). Thứ tự theo preload.ts để dễ đối chiếu bằng mắt.
 unsupported! {
-    set_fullscreen => "window:set-fullscreen",
     save_lesson_document => "lesson:save-document",
     get_lesson_document => "lesson:get-document",
     list_lesson_library => "lesson:library",
     delete_lesson_document => "lesson:delete-document",
     delete_lesson_documents => "lesson:delete-documents",
-    import_document => "files:import-document",
-    import_document_from_path => "files:import-document-from-path",
-    import_questions => "files:import-questions",
     save_settings => "settings:save",
     get_ai_providers => "ai:providers",
     test_ai_provider => "ai:test-provider",
@@ -433,10 +561,6 @@ unsupported! {
     preflight_setup => "setup:preflight",
     start_setup => "setup:start",
     cancel_setup => "setup:cancel",
-    export_diagnostics => "diagnostics:export",
-    diagnostics_info => "diagnostics:info",
-    clear_diagnostics => "diagnostics:clear",
-    open_diagnostics_folder => "diagnostics:open-folder",
     analyze_lesson => "lesson:analyze",
     classify_lesson_input => "lesson:classify-input",
     convert_lesson_draft => "lesson:convert-draft",
@@ -455,8 +579,6 @@ unsupported! {
     regenerate_lesson_item => "lesson:regenerate-item",
     check_lesson_quality => "lesson:quality",
     patch_lesson_item_assets => "lesson:patch-item-assets",
-    import_illustration => "files:import-illustration",
-    delete_illustration => "files:delete-illustration",
     generate_game => "ai:generate",
     start_presentation => "presentation:start",
     stop_presentation => "presentation:stop",
