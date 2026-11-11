@@ -3,8 +3,9 @@
 Ngày lập: 2026-11-09; cập nhật trạng thái: 2026-11-11  
 Trạng thái: **đã duyệt và đang triển khai** — giai đoạn 0–4 XONG, giai đoạn 5
 xong cả phần bí mật (DPAPI + `settings:get/save`), AI local (tải runtime/model
-+ `llama-server` loopback) và setup wizard (`setup:*`); việc kế tiếp là port
-`ai:generate`.
++ `llama-server` loopback) và setup wizard (`setup:*`); việc kế tiếp là luồng
+`lesson:*` — `ai:generate` là kênh legacy không còn màn hình nào gọi (DECISIONS
+"Giai đoạn 5 (kế tiếp)").
 Phạm vi: ứng dụng desktop Windows hiện tại, phiên bản nguồn 0.5.1, **bản Tauri
 đầu tiên là bản thử giới hạn** (không có LAN, trình chiếu, updater; AI local đã
 có phần cài/chạy và wizard lần đầu, chưa sinh nội dung).
@@ -388,5 +389,6 @@ các tính năng còn lại có quyết định rõ ràng và các cổng nghi�
   khi bật tải thật) + 10/10 + 12/12**; installer NSIS dựng từ cây cuối
   **16.139.500 B** cài mới/cài đè/gỡ sạch trong thư mục tạm, cài đè không đổi
   hash DB/WAL/SHM.
-- Chưa làm: 6 (trình chiếu/LAN), 7 (updater/ký/phát hành thử), `ai:generate` và
-  các kênh còn lại. 45 kênh còn `unsupported!`.
+- Chưa làm: 6 (trình chiếu/LAN), 7 (updater/ký/phát hành thử), luồng `lesson:*`
+  (ưu tiên kế tiếp; `ai:generate` là kênh legacy) và các kênh còn lại. 45 kênh
+  còn `unsupported!`.

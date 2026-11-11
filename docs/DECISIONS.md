@@ -2650,6 +2650,20 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 
 **Việc kế tiếp.** Chưa duyệt bắt đầu code. Khi duyệt: dựng khung Tauri v2 + Rust toolchain trong nhánh riêng, chuyển lớp truy cập desktop sang facade TS (kế hoạch mục 4) và làm vòng 1 theo mục 1.
 
+## Giai đoạn 5 (kế tiếp) — `ai:generate` là kênh legacy, không còn màn hình nào gọi; ưu tiên port luồng `lesson:*` (2026-11-11)
+
+**Báo cáo.** Sau khi setup wizard xong, bước kế tiếp theo kế hoạch cũ là port `ai:generate`, nhưng rà lại renderer thì kênh này đã chết: `src/preload.ts`, `src/shared/types.ts`, `src/shared/desktop-contract.json` và `desktop-facade-schema.ts` vẫn khai nó, còn `features/game-generation.ts` từ P5 chỉ mở trình chỉnh sửa trống (nút "Tạo trò chơi" không gọi `desktop.generateGame`). Luồng tạo nội dung thật nằm ở wizard "Tạo từ giáo án": `features/wizard/step-analysis.ts` gọi `analyzeLesson` + `recommendGames`, `features/wizard/step-generate.ts` và `state/draft.ts` gọi `generateLessonDraft`, `features/lesson-chat.ts` gọi `sendLessonChat`, `features/wizard/state/config.ts` gọi `classifyLessonInput`. Vì vậy port `ai:generate` không mở được tính năng nào cho giáo viên; 23 kênh `lesson:*` (cùng 5 kênh `ai:*` phụ trợ) mới là đường tạo nội dung, và `storage.rs` đã tạo sẵn các bảng `lesson_documents`/`lesson_analyses`/`game_recommendations`/`lesson_chats` trong `edugame.sqlite`.
+
+**Quyết định.**
+1. **Không port `ai:generate` trước.** Giữ nó trong `unsupported!`; chỉ port nếu sau này khôi phục màn hình legacy.
+2. **Slice kế tiếp là hạ tầng AI + ba kênh đọc/ghi đầu tiên:** `lesson:classify-input`, `lesson:analyze`, `lesson:recommend` (lưu `lesson_documents`/`lesson_analyses`/`game_recommendations`), rồi `lesson:generate`, `lesson:regenerate-item`, chat và các kênh còn lại.
+3. **Giữ nguyên ràng buộc của luồng Electron:** schema JSON game draft nghiêm ngặt, timeout 300 s cho model local / 90 s cho cloud, single-flight, hủy theo `requestId`, không bao giờ chạy mã do model sinh; khoá cloud chỉ đọc từ blob DPAPI, không nhận từ renderer.
+4. **Port `ai:test-provider`/`ai:cancel`/`ai:tasks`/`ai:runtime-verify` cùng hạ tầng** khi màn Cài đặt/thanh trạng thái cần, không dựng cơ chế song song.
+
+**Chưa chứng minh.** Chưa có mã của slice này; chưa đo parity `lesson:*`; chưa chốt thứ tự ưu tiên trong nhóm `lesson:*` với giáo viên.
+
+**Việc kế tiếp.** Chốt thứ tự slice (analyze trước hay chat trước), rồi port transport (loopback local + cloud BYOK/DPAPI) và kênh đầu tiên kèm cổng hình dạng.
+
 ## Giai đoạn 5 (setup wizard) — bốn kênh `setup:*` với máy trạng thái bền vững và smoke-test sinh chữ thật; cổng 51/51 (56/56 khi bật tải thật) + 10/10 + 12/12 (2026-11-11)
 
 **Báo cáo.** Sau khi AI local đã cài và chạy được, màn hình cài đặt lần đầu vẫn là lỗ hổng cuối của luồng AI: `features/setup-wizard.ts` và `setup-wizard-model.ts` đã có sẵn trong renderer, nhưng vỏ Tauri chưa có thân cho bốn kênh `setup:*`, nên giáo viên mở app thấy wizard báo "chưa hỗ trợ". Bước này port đúng ba lớp Electron — `setup-state.ts` (máy trạng thái bền vững), `setup-orchestrator.ts` (thứ tự bước, hủy, thử nghiệm) và `setup-ipc.ts` (chỉ nhận id model) — sang `src-tauri/src/setup.rs`, dùng lại `ai_local` cho mọi thao tác đĩa/mạng/tiến trình thay vì viết bộ tải thứ hai. Cổng thường thêm một phép đo setup (**51/51**); cổng tải thật chạy `startSetup` sau khi model đã cài và đạt `complete` nhờ khởi động + smoke-test sinh chữ thật (**56/56**). Bốn kênh rời `unsupported!`, còn **45** kênh chưa port.
