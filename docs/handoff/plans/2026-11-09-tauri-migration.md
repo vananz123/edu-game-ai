@@ -421,6 +421,7 @@ các tính năng còn lại có quyết định rõ ràng và các cổng nghi�
   hình ưu tiên, bảo vệ rút cáp, đồng bộ snapshot hai chiều). `unsupported!` về
   **0 — đủ 100 % hợp đồng desktop** (81 kênh invoke + 3 kênh send); test Rust
   **151/151**, Node **99/99**, `npm run tauri:check` **51/51 + 10/10 + 12/12**.
+- Cổng tổng thể trên cây sau port kênh (2026-11-11): `npm run tauri:check` ba pha **51/51 + 10/10 + 12/12**; `cargo tauri build` → NSIS **15,64 MiB** (dưới ngưỡng 25 MiB #251), cài mới/cài đè/gỡ exit 0 trong thư mục tạm, đủ 3 DLL VC++, cài đè không đổi hash exe, gỡ giữ dữ liệu (`deleteAppDataOnUninstall` mặc định tắt).
 - Chưa làm: giai đoạn 7 — cổng nghiệm thu trên Windows thật (máy chiếu vật lý,
   điện thoại kết nối Wi-Fi phòng học thật, model thật/BYOK thật, huỷ giữa HTTP
   thật, installer trên máy sạch/VM, ký số) và updater tự động hoàn chỉnh; đường
