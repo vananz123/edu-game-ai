@@ -956,16 +956,16 @@ const RUNNER = `(async () => {
     out.setupMsg = 'setup:* lỗi: ' + (error && error.message);
   }
 
-  // Một kênh có trả lời nhưng chưa port (ví dụ chat giáo án) phải từ chối ĐỌC
-  // ĐƯỢC. Câu lỗi đi qua cửa chung nên nó phải nêu tên kênh, không được treo.
-  // Khi một kênh được port, đổi phép dò sang kênh còn trống kế tiếp.
+  // Một kênh có trả lời nhưng chưa port (ví dụ kiểm tra nhà cung cấp AI)
+  // phải từ chối ĐỌC ĐƯỢC. Câu lỗi đi qua cửa chung nên nó phải nêu tên kênh,
+  // không được treo. Khi một kênh được port, đổi phép dò sang kênh còn trống kế tiếp.
   try {
-    await facade.call('sendLessonChat', {});
+    await facade.call('testAiProvider', {});
     out.unsupported = false;
-    out.unsupportedMsg = 'sendLessonChat lại trả thành công';
+    out.unsupportedMsg = 'testAiProvider lại trả thành công';
   } catch (error) {
     const message = String((error && error.message) || '');
-    out.unsupported = Boolean(error && error.code) && /lesson:chat-send/.test(message);
+    out.unsupported = Boolean(error && error.code) && /ai:test-provider/.test(message);
     out.unsupportedMsg = (error && error.code) + ': ' + message;
   }
 

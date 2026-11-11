@@ -78,6 +78,7 @@ import {
   generateGameDraft,
   regenerateGameItem
 } from '../../../src/services/lesson/lesson-workflow';
+import { runLessonChatTurn } from '../../../src/services/lesson/lesson-chat';
 import { classifyInput, resolveInputKind } from '../../../src/services/input/input-classifier';
 import { cleanQuestionText } from '../../../src/services/input/question-text';
 import { parseQuestionsFromText } from '../../../src/services/input/question-import';
@@ -867,4 +868,32 @@ export async function regenerate(input: RegenerateInput) {
     cached: false,
     itemContext: { items: indexes.length, narrowed: itemsNarrowed }
   };
+}
+
+/**
+ * Lượt hỏi đáp giáo án (`lesson:chat-send`, #182).
+ *
+ * Tái sử dụng `runLessonChatTurn` nguyên văn của Electron. Model được gọi qua
+ * `createClient(target)` (dùng `__eg_http` đồng bộ của Rust). Mốc tiến trình
+ * được chuyển tiếp qua `report(stage)`.
+ */
+export async function chat(input: Record<string, unknown>) {
+  const target = input?.target as WorkflowTarget;
+  const client = createClient(target);
+  const registry = new AiRequestRegistry();
+  const requestId = String(input?.requestId || target?.requestId || '');
+  report('retrieve');
+  return runLessonChatTurn({
+    client,
+    registry,
+    requestId,
+    documents: (input?.documents || []) as never,
+    question: String(input?.question || ''),
+    history: (input?.history || []) as never,
+    mode: input?.mode as never,
+    questionCount: typeof input?.questionCount === 'number' ? input.questionCount : undefined,
+    localOnGpu: input?.localOnGpu === true,
+    contextTokens: typeof input?.contextTokens === 'number' ? input.contextTokens : undefined,
+    onStage: stage => report(stage)
+  });
 }

@@ -120,6 +120,11 @@ pub fn hand_written(command: &str) -> Option<(&'static str, &'static str)> {
         "patch_lesson_item_assets" => ("lesson:patch-item-assets", "patch_lesson_item_assets"),
         "generate_lesson_draft" => ("lesson:generate", "generate_lesson_draft"),
         "regenerate_lesson_item" => ("lesson:regenerate-item", "regenerate_lesson_item"),
+        // Chat giáo án (#182)
+        "send_lesson_chat" => ("lesson:chat-send", "send_lesson_chat"),
+        "list_lesson_chats" => ("lesson:chats", "list_lesson_chats"),
+        "get_lesson_chat" => ("lesson:chat-get", "get_lesson_chat"),
+        "delete_lesson_chats" => ("lesson:chat-delete", "delete_lesson_chats"),
         // Cùng `AiGate`: bật cờ huỷ của lượt đang chờ HTTP trong Rust.
         "cancel_ai" => ("ai:cancel", "cancel_ai"),
         // Giai đoạn 4: nhập profile Electron. Ba kênh KHÔNG có trong preload
@@ -306,6 +311,10 @@ async fn dispatch(app: &AppHandle, channel: &str, args: &[Value]) -> Result<Valu
         "lesson:regenerate-item" => {
             crate::lesson::regenerate_item(app.clone(), args.first().cloned()).await
         }
+        "lesson:chat-send" => crate::lesson::send_chat(app.clone(), args.first().cloned()).await,
+        "lesson:chats" => crate::lesson::list_chats(app),
+        "lesson:chat-get" => crate::lesson::get_chat(app, &text_arg(args, 0)),
+        "lesson:chat-delete" => crate::lesson::delete_chats(app, args.first()),
         // #132: huỷ lượt đang chờ HTTP; trả `{ok}` như `aiRequests.cancel`.
         "ai:cancel" => crate::lesson::cancel(app, &text_arg(args, 0)),
         // Năm kênh ghi của thư viện nhận thẳng tham số renderer gửi (một trò
@@ -888,6 +897,33 @@ pub async fn regenerate_lesson_item(
     crate::lesson::regenerate_item(app, payload).await
 }
 
+/// Lượt hỏi đáp giáo án (`lesson:chat-send`, #182).
+#[tauri::command]
+pub async fn send_lesson_chat(
+    app: AppHandle,
+    payload: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    crate::lesson::send_chat(app, payload).await
+}
+
+#[tauri::command]
+pub fn list_lesson_chats(app: AppHandle) -> Result<serde_json::Value, String> {
+    crate::lesson::list_chats(&app)
+}
+
+#[tauri::command]
+pub fn get_lesson_chat(app: AppHandle, chat_id: &str) -> Result<serde_json::Value, String> {
+    crate::lesson::get_chat(&app, chat_id)
+}
+
+#[tauri::command]
+pub fn delete_lesson_chats(
+    app: AppHandle,
+    chat_ids: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    crate::lesson::delete_chats(&app, chat_ids.as_ref())
+}
+
 /// Huỷ lượt AI đang chờ. Trả `{ok}`: `false` khi không có lượt nào mang
 /// `requestId` đó, đúng `aiRequests.cancel` của Electron.
 #[tauri::command]
@@ -936,10 +972,6 @@ unsupported! {
     test_ai_provider => "ai:test-provider",
     list_ai_tasks => "ai:tasks",
     verify_cpu_runtime => "ai:runtime-verify",
-    send_lesson_chat => "lesson:chat-send",
-    list_lesson_chats => "lesson:chats",
-    get_lesson_chat => "lesson:chat-get",
-    delete_lesson_chats => "lesson:chat-delete",
     generate_game => "ai:generate",
     start_presentation => "presentation:start",
     stop_presentation => "presentation:stop",

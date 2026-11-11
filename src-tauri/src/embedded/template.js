@@ -387,7 +387,8 @@
     'lesson-generation-cache': async function (input) { return lessons.generationCache(input); },
     'lesson-generation-offline': async function (input) { return lessons.generationOffline(input); },
     'lesson-generate': async function (input) { return lessons.generate(input); },
-    'lesson-regenerate': async function (input) { return lessons.regenerate(input); }
+    'lesson-regenerate': async function (input) { return lessons.regenerate(input); },
+    'lesson-chat': async function (input) { return lessons.chat(input); }
   };
 
   globalThis.__eg_run = async function () {

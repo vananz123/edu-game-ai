@@ -923,6 +923,199 @@ pub fn cancel(app: &AppHandle, request_id: &str) -> Result<Value, String> {
     Ok(json!({ "ok": gate.cancel(request_id) }))
 }
 
+// ---------------------------------------------------------------------------
+// Chat giáo án (#182)
+// ---------------------------------------------------------------------------
+
+pub fn list_chats(app: &AppHandle) -> Result<Value, String> {
+    library::run(app, "lesson-store:list-chats", &[])
+}
+
+pub fn get_chat(app: &AppHandle, chat_id: &str) -> Result<Value, String> {
+    library::run(app, "lesson-store:get-chat", &[json!(chat_id)])
+}
+
+pub fn delete_chats(app: &AppHandle, payload: Option<&Value>) -> Result<Value, String> {
+    let ids = chat_ids_for_delete(payload);
+    library::run(app, "lesson-store:delete-chats", &[json!(ids)])
+}
+
+fn chat_ids_for_delete(payload: Option<&Value>) -> Vec<String> {
+    match payload {
+        Some(Value::Array(list)) => list
+            .iter()
+            .filter_map(Value::as_str)
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| s.trim().to_string())
+            .collect(),
+        Some(Value::String(id)) if !id.trim().is_empty() => vec![id.trim().to_string()],
+        Some(val) if val.is_object() => val
+            .get("chatIds")
+            .and_then(Value::as_array)
+            .map(|list| {
+                list.iter()
+                    .filter_map(Value::as_str)
+                    .filter(|s| !s.trim().is_empty())
+                    .map(|s| s.trim().to_string())
+                    .collect()
+            })
+            .unwrap_or_default(),
+        _ => Vec::new(),
+    }
+}
+
+pub async fn send_chat(app: AppHandle, payload: Option<Value>) -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(move || send_chat_blocking(&app, payload.as_ref()))
+        .await
+        .map_err(|failure| format!("Lượt hỏi giáo án bị dừng: {failure}"))?
+}
+
+fn send_chat_blocking(app: &AppHandle, payload: Option<&Value>) -> Result<Value, String> {
+    let payload = payload.cloned().unwrap_or(Value::Null);
+    let question = text_field(&payload, "question").trim().to_string();
+    if question.len() < 3 {
+        return Err(error("Câu hỏi quá ngắn."));
+    }
+    let request_id = {
+        let req = text_field(&payload, "requestId");
+        if req.is_empty() {
+            let millis = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(0);
+            format!("chat-{millis}")
+        } else {
+            req
+        }
+    };
+    let requested_chat_id = text_field(&payload, "chatId");
+
+    let document_ids: Vec<String> = payload
+        .get("documentIds")
+        .and_then(Value::as_array)
+        .map(|list| {
+            let mut set = std::collections::BTreeSet::new();
+            for item in list {
+                if let Some(id) = item.as_str() {
+                    let trimmed = id.trim();
+                    if !trimmed.is_empty() {
+                        set.insert(trimmed.to_string());
+                    }
+                }
+            }
+            set.into_iter().collect()
+        })
+        .unwrap_or_default();
+
+    let mut documents = Vec::new();
+    for doc_id in &document_ids {
+        let doc = library::run(app, "lesson-store:get-document", &[json!(doc_id)])?;
+        if !doc.is_null() {
+            documents.push(json!({
+                "id": doc.get("id").and_then(Value::as_str).unwrap_or(doc_id),
+                "name": doc.get("name").and_then(Value::as_str).unwrap_or(""),
+                "text": doc.get("text").and_then(Value::as_str).unwrap_or("")
+            }));
+        }
+    }
+    if !document_ids.is_empty() && documents.is_empty() {
+        return Err(error(
+            "Không đọc được giáo án nào trong số đã chọn. Hãy nhập lại tài liệu.",
+        ));
+    }
+
+    let history = if requested_chat_id.is_empty() {
+        Vec::new()
+    } else {
+        let chat = library::run(app, "lesson-store:get-chat", &[json!(requested_chat_id)])?;
+        chat.get("messages")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+    };
+
+    let provider_id = payload
+        .get("providerId")
+        .and_then(Value::as_str)
+        .filter(|v| !v.trim().is_empty());
+
+    let target = settings::workflow_provider(app, provider_id, false)?;
+
+    let gate = app
+        .try_state::<AiGate>()
+        .ok_or_else(|| error("AI_CONFIG: hàng đợi AI chưa sẵn sàng. Hãy khởi động lại ứng dụng."))?;
+    let label = "trả lời câu hỏi về giáo án".to_string();
+    let cancel = gate.begin(&request_id, &label)?;
+
+    let _ = app.emit(
+        "lesson:progress",
+        json!({ "requestId": request_id, "stage": "retrieve" }),
+    );
+
+    let ai = AiTarget {
+        request_id: request_id.clone(),
+        base_url: target.base_url.clone(),
+        api_key: target.api_key.clone(),
+        mode: target.mode.clone(),
+        cancel,
+    };
+
+    let facts = crate::ai_local::local_facts(app);
+    let local_on_gpu = facts.backend.as_deref() == Some("vulkan");
+    let context_tokens = 8192;
+
+    let turn_result = library::run_with_ai_progress(
+        app,
+        "lesson-chat",
+        &[json!({
+            "target": {
+                "requestId": request_id,
+                "model": target.model,
+                "mode": target.mode,
+            },
+            "requestId": request_id,
+            "question": question,
+            "documents": documents,
+            "history": history,
+            "mode": payload.get("mode").cloned().unwrap_or(json!("auto")),
+            "questionCount": payload.get("questionCount").cloned().unwrap_or(Value::Null),
+            "localOnGpu": local_on_gpu,
+            "contextTokens": context_tokens,
+        })],
+        ai,
+        &request_id,
+    );
+
+    gate.finish(&request_id);
+    let turn = turn_result?;
+
+    let append_payload = json!({
+        "chatId": requested_chat_id,
+        "documentIds": document_ids,
+        "question": question,
+        "answer": turn.get("answer").cloned().unwrap_or(Value::Null),
+        "intent": turn.get("intent").cloned().unwrap_or(Value::Null),
+        "citations": turn.get("citations").cloned().unwrap_or_else(|| json!([])),
+        "questionSet": turn.get("questionSet").cloned().unwrap_or(Value::Null),
+        "providerId": turn.get("providerId").cloned().unwrap_or(Value::Null),
+        "errorCode": turn.get("errorCode").cloned().unwrap_or(Value::Null),
+        "evidence": turn.get("evidence").cloned().unwrap_or(Value::Null),
+    });
+
+    let chat = library::run(app, "lesson-store:append-chat-turn", &[append_payload])?;
+
+    let _ = app.emit(
+        "lesson:progress",
+        json!({ "requestId": request_id, "stage": "ready" }),
+    );
+
+    let mut response = turn;
+    if let Some(obj) = response.as_object_mut() {
+        obj.insert("chat".to_string(), chat);
+    }
+    Ok(response)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -944,6 +1137,23 @@ mod tests {
         assert_eq!(
             document_ids_for_delete(Some(&json!(allowed))).unwrap().len(),
             200
+        );
+    }
+
+    #[test]
+    fn chat_ids_for_delete_accepts_single_array_and_object() {
+        assert_eq!(chat_ids_for_delete(None), Vec::<String>::new());
+        assert_eq!(
+            chat_ids_for_delete(Some(&json!("chat_1"))),
+            vec!["chat_1".to_string()]
+        );
+        assert_eq!(
+            chat_ids_for_delete(Some(&json!(["chat_1", " ", "chat_2"]))),
+            vec!["chat_1".to_string(), "chat_2".to_string()]
+        );
+        assert_eq!(
+            chat_ids_for_delete(Some(&json!({ "chatIds": ["chat_3", ""] }))),
+            vec!["chat_3".to_string()]
         );
     }
 }

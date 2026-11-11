@@ -204,7 +204,7 @@ có yêu cầu tương thích cụ thể và đã đánh giá chi phí/bảo m�
 
 ### Giai đoạn 5 — Luồng giáo án
 
-**Trạng thái: XONG phần đầu + sinh nội dung (2026-11-11, DECISIONS "Giai đoạn 5 (luồng giáo án)" + "Giai đoạn 5 (sinh nội dung)").** `src-tauri/src/lesson.rs` nối settings/runtime/HTTP/kho với slot V8 `EGLESSON` (`src-tauri/src/embedded/lesson-ops.ts`), giữ nguyên `analyzeLesson`/`requestChatJson`/prompt/schema/normalize/classifier/`lesson-projects.ts` của Electron. Mười lăm kênh phần đầu rời `unsupported!` (`lesson:save-document`, `get-document`, `library`, `delete-document`, `delete-documents`, `get-analysis`, `save-analysis`, `recommendations`, `get-structure`, `preview-selection`, `classify-input`, `analyze`, `recommend`, `capacity`, `ai:cancel`), **45 → 30**. Kế tiếp, năm kênh sinh nội dung (`lesson:convert-draft`, `quality`, `patch-item-assets`, `generate`, `regenerate-item`) chạy qua V8 + Rust cache `draft_v1_<sha>`, đưa `unsupported!` **30 → 25**. `lesson_store.rs` thêm kho chat và bảng cache sinh nội dung; tiến trình có danh sách trắng 7 mốc với `op_progress`; manifest comctl32 v6 hỗ trợ cả test lib. Test Rust **128/128**, Node **99/99**, `npm run check` sạch, `check:embedded` khớp 6109,2 KiB. **Còn mở:** cổng WebView2 không gọi kênh `lesson:*`; chưa chạy model thật/BYOK thật, chưa xem wizard bằng mắt, chưa huỷ giữa HTTP thật, chưa mở tài liệu từ profile 0.5.1 sau migration; bốn kênh `lesson:chat-*` và `ai:test-provider`/`ai:tasks`/`ai:runtime-verify` còn `not-supported` (tổng 25).
+**Trạng thái: XONG toàn bộ luồng giáo án gồm phân tích, sinh nội dung và chat (2026-11-11, DECISIONS "Giai đoạn 5 (luồng giáo án)" + "Giai đoạn 5 (sinh nội dung)" + "Giai đoạn 5 (chat giáo án)").** `src-tauri/src/lesson.rs` nối settings/runtime/HTTP/kho với slot V8 `EGLESSON` (`src-tauri/src/embedded/lesson-ops.ts`), giữ nguyên `analyzeLesson`/`requestChatJson`/`runLessonChatTurn`/prompt/schema/normalize/classifier/`lesson-projects.ts` của Electron. Mười lăm kênh phần đầu rời `unsupported!` (`lesson:save-document`, `get-document`, `library`, `delete-document`, `delete-documents`, `get-analysis`, `save-analysis`, `recommendations`, `get-structure`, `preview-selection`, `classify-input`, `analyze`, `recommend`, `capacity`, `ai:cancel`), **45 → 30**. Kế tiếp, năm kênh sinh nội dung (`lesson:convert-draft`, `quality`, `patch-item-assets`, `generate`, `regenerate-item`) chạy qua V8 + Rust cache `draft_v1_<sha>`, đưa `unsupported!` **30 → 25**. Cuối cùng, bốn kênh chat giáo án (`lesson:chat-send`, `chats`, `chat-get`, `chat-delete`) hoàn tất, đưa `unsupported!` **25 → 21**. `lesson_store.rs` có kho chat SQLite và bảng cache sinh nội dung; tiến trình có danh sách trắng 7 mốc với `op_progress`; manifest comctl32 v6 hỗ trợ cả test lib. Test Rust **130/130**, Node **99/99**, `npm run check` sạch, `check:embedded` khớp 6125,0 KiB. **Còn mở:** cổng WebView2 không gọi kênh `lesson:*`; chưa chạy model thật/BYOK thật, chưa xem wizard bằng mắt, chưa huỷ giữa HTTP thật, chưa mở tài liệu từ profile 0.5.1 sau migration; `ai:test-provider`/`ai:tasks`/`ai:runtime-verify` và 18 kênh khác còn `not-supported` (tổng 21).
 
 **Công việc**
 
@@ -403,9 +403,10 @@ các tính năng còn lại có quyết định rõ ràng và các cổng nghi�
   **45 → 30**; nhóm sinh nội dung chạy thêm **5 kênh `lesson:convert-draft`/
   `quality`/`patch-item-assets`/`generate`/`regenerate-item`** (cache `draft_v1_<sha>`,
   tiến trình `op_progress`, V8 giữ adapter/prompt/rules), `unsupported!` **30 → 25**;
-  test Rust **128/128**, Node **99/99**, `check:embedded` khớp 6109,2 KiB.
-- Chưa làm: 6 (trình chiếu/LAN), 7 (updater/ký/phát hành thử), nhóm chat giáo án
-  `lesson:chat-send`/`chat-get`/`chats`/`chat-delete`, `ai:test-provider`/`ai:tasks`/
-  `ai:runtime-verify` và các kênh còn lại. 25 kênh còn `unsupported!`; đường sinh nội dung
+  nhóm chat giáo án chạy thêm **4 kênh `lesson:chat-send`/`chats`/`chat-get`/`chat-delete`**
+  (V8 giữ `runLessonChatTurn`, SQLite lưu turn/chat, single-flight `AiGate`),
+  `unsupported!` **25 → 21**; test Rust **130/130**, Node **99/99**, `check:embedded` khớp 6125,0 KiB.
+- Chưa làm: 6 (trình chiếu/LAN), 7 (updater/ký/phát hành thử), `ai:test-provider`/`ai:tasks`/
+  `ai:runtime-verify` và các kênh còn lại. 21 kênh còn `unsupported!`; đường luồng giáo án
   mới chứng minh bằng Rust + server giả loopback, chưa chạy model thật/BYOK thật và
   cổng WebView2 chưa gọi kênh `lesson:*`.

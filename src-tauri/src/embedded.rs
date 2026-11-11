@@ -972,4 +972,50 @@ mod tests {
             "{error}"
         );
     }
+
+    #[test]
+    fn the_lesson_slot_runs_chat_turn_through_model() {
+        let (_dir, mut engine) = engine();
+        let answer_json = json!({
+            "answer": "Quang hợp là quá trình thực vật tổng hợp chất hữu cơ nhờ ánh sáng mặt trời."
+        });
+        let (base_url, server) = serve_one_chat(&answer_json.to_string());
+        let result = engine
+            .call_with_ai(
+                "lesson-chat",
+                &[json!({
+                    "requestId": "req_chat_1",
+                    "question": "Quang hợp là gì?",
+                    "documents": [{
+                        "id": "doc_1",
+                        "name": "giao-an.txt",
+                        "text": "Bài 12: Quang hợp là quá trình thực vật sử dụng năng lượng ánh sáng để tổng hợp chất hữu cơ."
+                    }],
+                    "history": [],
+                    "mode": "auto",
+                    "localOnGpu": false,
+                    "contextTokens": 8192,
+                    "target": {
+                        "requestId": "req_chat_1",
+                        "model": "qwen3.5-2b-q4_k_m",
+                        "mode": "local"
+                    }
+                })],
+                NOW,
+                Some(AiTarget {
+                    request_id: "req_chat_1".to_string(),
+                    base_url,
+                    api_key: None,
+                    mode: "local".to_string(),
+                    cancel: std::sync::Arc::new(crate::ai_http::CancelFlag::default()),
+                }),
+            )
+            .expect("chat turn");
+        let request = server.join().expect("server");
+        assert!(request.contains("Quang hợp là gì?"), "{request}");
+        assert_eq!(result["intent"], "answer");
+        assert!(result["answer"].as_str().unwrap().contains("Quang hợp"));
+        assert_eq!(result["grounded"], true);
+        assert_eq!(result["citations"].as_array().map(Vec::len), Some(1));
+    }
 }

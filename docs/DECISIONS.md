@@ -2650,6 +2650,27 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 
 **Việc kế tiếp.** Chưa duyệt bắt đầu code. Khi duyệt: dựng khung Tauri v2 + Rust toolchain trong nhánh riêng, chuyển lớp truy cập desktop sang facade TS (kế hoạch mục 4) và làm vòng 1 theo mục 1.
 
+## Giai đoạn 5 (chat giáo án) — bốn kênh `lesson:chat-send`/`chats`/`chat-get`/`chat-delete` chạy trong vỏ Tauri: V8 giữ luật `runLessonChatTurn`, Rust giữ kho chat SQLite, khoá `AiGate`, HTTP và huỷ; unsupported giảm từ 25 xuống 21 (2026-11-11)
+
+**Báo cáo.** Sau khi luồng sinh nội dung hoàn tất, bốn kênh chat giáo án (`lesson:chat-send`, `lesson:chats`, `lesson:chat-get`, `lesson:chat-delete`) là mắt xích cuối của module `lesson:*`. Bốn kênh này được port trọn vẹn sang vỏ Tauri: V8 giữ nguyên hàm `runLessonChatTurn` của Electron, Rust giữ kho chat SQLite, điều phối khoá single-flight `AiGate`, đọc tài liệu/lịch sử, gửi HTTP và huỷ theo `requestId`. Số kênh `unsupported!` giảm từ **25 xuống 21**. Phép dò kênh chưa port của cổng nghiệm thu chuyển sang `testAiProvider`/`ai:test-provider`.
+
+**Quyết định.**
+
+1. **V8 giữ nguyên logic chat của Electron.** Slot `EGLESSON` gọi `runLessonChatTurn` trong `src/services/lesson/lesson-chat.ts`. Hàm này nhận client chat (`createClient(target)` kết nối qua `op_http` của Rust) và callback `report` (kết nối qua `op_progress`). V8 tự xử lý prompt hỏi đáp giáo án, lịch sử chat, các trích dẫn tài liệu và kiểm tra/sửa JSON từ model.
+2. **Rust kiểm biên và điều phối khoá trước khi gọi V8.** `lesson:chat-send` kiểm tra độ dài câu hỏi (< 3 ký tự báo `"Câu hỏi quá ngắn."`), giải quyết tài liệu qua `lesson-store:get-document` (báo `"Không đọc được giáo án nào trong số đã chọn. Hãy nhập lại tài liệu."` nếu không đọc được tài liệu nào), đọc lịch sử nếu có `chatId`, chọn provider qua `settings::workflow_provider`, chiếm khoá single-flight `AiGate` theo `requestId`.
+3. **Tiến trình và lưu trữ bền vững.** Rust phát tiến trình `retrieve → generate → validate → ready`. Sau khi V8 trả kết quả turn mới, Rust lưu turn vào SQLite qua `lesson-store:append-chat-turn` và trả về `{ ...turn, chat }` khớp đúng hợp đồng Electron. `gate.finish(&request_id)` luôn được gọi trong khối dọn dẹp.
+4. **Ba kênh quản lý cuộc trò chuyện gọi thẳng SQLite.** `lesson:chats` gọi `lesson-store:list-chats`. `lesson:chat-get` gọi `lesson-store:get-chat`. `lesson:chat-delete` nhận `chatId` hoặc mảng `chatIds` (qua helper `chat_ids_for_delete`) và gọi `lesson-store:delete-chats`.
+
+**Đánh đổi.**
+- Chat giáo án chưa có MiniLM semantic search nên dùng trích dẫn văn bản/lexical.
+- Chưa hỗ trợ stream token hiển thị dần trong UI chat (giữ đúng thiết kế một lượt response JSON của Electron).
+
+**Kiểm chứng.** `cargo test --lib -- --test-threads=1` **130/130** (thêm test chat V8 slot và test `chat_ids_for_delete`) · `node tests/run-unit.js` **99/99** · `npm run check` sạch · `npm run check:embedded` khớp **6125,0 KiB** · `npm run check:renderer-globals` 74/76 script, 1.057 hàm / 8.373 điểm gọi, **0 undefined**.
+
+**Không chứng minh.** Chưa chạy model thật/BYOK thật (mới server loopback giả trong test slot V8). Chưa xem khung chat wizard bằng mắt. 21 kênh còn `unsupported!` (`ai:test-provider`, `ai:tasks`, `ai:runtime-verify`,...).
+
+**Việc kế tiếp.** Port `ai:test-provider` và `ai:tasks`, sau đó `ai:runtime-verify`.
+
 ## Giai đoạn 5 (sinh nội dung) — năm kênh `lesson:convert-draft`/`quality`/`patch-item-assets`/`generate`/`regenerate-item` chạy trong vỏ Tauri: V8 giữ luật sinh, Rust giữ cache/provider/khoá/huỷ; cache hit không gọi model, tiến trình có `repair` (2026-11-11)
 
 **Báo cáo.** Sau khi phần phân tích của luồng giáo án chạy được, nút "Tạo nội dung" vẫn rơi vào `not-supported` vì năm kênh cuối chưa có thân: chuyển thể loại, báo cáo chất lượng, đổi minh hoạ một mục, tạo toàn bộ nội dung và tạo lại một mục. Slice này nối đủ năm kênh trên cùng transport đã có, đưa `unsupported!` từ **30 xuống 25**. Cùng lượt, kho chat + cache sinh nội dung được port sang `lesson_store.rs` (kênh chat để slice sau), tiến trình `repair` được phát qua một op V8 có danh sách trắng, và cơ chế manifest của bản build được sửa để test lib cũng có comctl32 v6.
