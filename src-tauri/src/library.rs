@@ -51,6 +51,9 @@ fn removes_images(channel: &str) -> bool {
 struct Job {
     channel: String,
     args: Vec<Value>,
+    /// Đích AI của một lượt `lesson:analyze` (xem `ai_http.rs`). `None` cho mọi
+    /// kênh khác; `serve` đặt nó vào engine chỉ trong lượt gọi ấy.
+    ai: Option<crate::ai_http::AiTarget>,
     reply: Sender<Result<Value, DbError>>,
 }
 
@@ -163,11 +166,22 @@ impl Library {
     /// `pub(crate)` cho `package.rs`: gói `.egame` dùng CÙNG engine (và cùng
     /// kết nối SQLite để tra id đã dùng), chỉ khác là tệp do nó đọc/ghi.
     pub(crate) fn call(&self, channel: &str, args: &[Value]) -> Result<Value, DbError> {
+        self.call_with_ai(channel, args, None)
+    }
+
+    /// Như `call`, nhưng mang đích AI vào lượt V8. Chỉ `lesson:analyze` dùng.
+    pub(crate) fn call_with_ai(
+        &self,
+        channel: &str,
+        args: &[Value],
+        ai: Option<crate::ai_http::AiTarget>,
+    ) -> Result<Value, DbError> {
         let (reply, answer) = std::sync::mpsc::channel();
         self.jobs
             .send(Job {
                 channel: channel.to_string(),
                 args: args.to_vec(),
+                ai,
                 reply,
             })
             .map_err(|_| DbError::Io("luồng thư viện đã dừng.".into()))?;
@@ -254,16 +268,43 @@ fn serve(engine: Engine, ready: &Sender<Result<(), String>>, incoming: &Receiver
         return;
     }
     while let Ok(job) = incoming.recv() {
-        let _ = job.reply.send(engine.0.call(&job.channel, &job.args, &now()));
+        // Kho giáo án chạy SQL trực tiếp trên cùng kết nối của engine, không qua
+        // V8: ba bảng `lesson_*` không có trong danh sách câu SQL của slot nào, và
+        // văn bản còn phải ghi ra `lessons/<id>.txt`.
+        if let Some(op) = job.channel.strip_prefix("lesson-store:") {
+            let shared = engine.0.shared();
+            let inner = shared.borrow();
+            let result = crate::lesson_store::dispatch(&inner.connection, &inner.data_dir, op, &job.args);
+            drop(inner);
+            let _ = job.reply.send(result);
+            continue;
+        }
+        let _ = job.reply.send(engine.0.call_with_ai(&job.channel, &job.args, &now(), job.ai));
     }
 }
 
 /// Chạy một kênh `library:*` với tham số renderer đã gửi.
 pub fn run(app: &AppHandle, channel: &str, args: &[Value]) -> Result<Value, String> {
-    let library = app
-        .try_state::<Library>()
-        .ok_or_else(|| "Thư viện chưa mở được: hãy khởi động lại ứng dụng.".to_string())?;
-    library.run(channel, args).map_err(|error| error.to_string())
+    library(app)?.run(channel, args).map_err(|error| error.to_string())
+}
+
+/// Chạy `lesson:analyze` với đích AI. Kênh không có `AppHandle` nào lộ URL/khoá:
+/// `ai` do `lesson.rs` dựng từ settings + runtime local.
+pub fn run_with_ai(
+    app: &AppHandle,
+    channel: &str,
+    args: &[Value],
+    ai: crate::ai_http::AiTarget,
+) -> Result<Value, String> {
+    library(app)?
+        .call_with_ai(channel, args, Some(ai))
+        .map_err(|error| error.to_string())
+}
+
+fn library(app: &AppHandle) -> Result<&Library, String> {
+    app.try_state::<Library>()
+        .map(|state| state.inner())
+        .ok_or_else(|| "Thư viện chưa mở được: hãy khởi động lại ứng dụng.".to_string())
 }
 
 /// Cùng biểu thức `CUSTOM_IMAGE_ID` của `custom-illustration.ts`; id lạ không

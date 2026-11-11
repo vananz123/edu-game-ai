@@ -9,6 +9,7 @@
 //! nhập tệp ảnh dùng giao thức `edugame-file:` thay cho `protocol.handle` của
 //! Electron — cùng một kho ảnh, cùng luật chỉ phục vụ id do app sinh ra.
 
+pub mod ai_http;
 pub mod ai_local;
 pub mod api;
 pub mod base64;
@@ -16,6 +17,8 @@ pub mod diagnostics;
 pub mod document;
 pub mod embedded;
 pub mod illustration;
+pub mod lesson;
+pub mod lesson_store;
 pub mod library;
 pub mod migration;
 pub mod package;
@@ -65,6 +68,9 @@ pub fn run() {
             // Wizard cài đặt lần đầu: trạng thái bền vững ở `setup.rs`, khóa
             // chạy/cờ hủy/cache kế hoạch ở đây.
             app.manage(setup::Setup::default());
+            // Khoá một-lượt + cờ huỷ của mọi lượt gọi model. `lesson:analyze`
+            // giữ khoá này; `ai:cancel` bật cờ để luồng HTTP của Rust dừng.
+            app.manage(ai_http::AiGate::default());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

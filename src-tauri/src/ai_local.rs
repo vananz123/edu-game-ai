@@ -532,6 +532,60 @@ fn runtime_snapshot(app: &AppHandle) -> (String, Option<String>, Option<String>)
     snapshot
 }
 
+/// Sự thật runtime mà Settings và luồng phân tích cần, đọc một lần.
+///
+/// `running` chỉ đúng khi `llama-server` đã qua `/health` và còn cổng loopback;
+/// `model_ready` kiểm tệp model đã chọn trên đĩa. Electron lấy hai cờ này từ
+/// `localAiManager.getStatus()` + `getLocalModel(...).installed`.
+#[derive(Debug, Clone, Default)]
+pub struct LocalFacts {
+    pub running: bool,
+    pub state: String,
+    pub model_id: Option<String>,
+    pub model_ready: bool,
+    pub base_url: Option<String>,
+    pub backend: Option<String>,
+}
+
+pub fn local_facts(app: &AppHandle) -> LocalFacts {
+    let (state, running_model, backend) = runtime_snapshot(app);
+    let port = app
+        .try_state::<AiLocal>()
+        .and_then(|state| state.runtime.lock().ok().and_then(|runtime| runtime.port));
+    let selected = selected_model_id(app);
+    let model_ready = match (paths::data_dir(app).ok(), MODELS.iter().find(|model| model.id == selected)) {
+        (Some(data), Some(model)) => model_path(&data, model)
+            .metadata()
+            .map(|meta| meta.is_file() && meta.len() == model.size_bytes)
+            .unwrap_or(false),
+        _ => false,
+    };
+    let running = state == "READY" && port.is_some();
+    LocalFacts {
+        running,
+        state,
+        model_id: running_model.or(Some(selected)),
+        model_ready,
+        base_url: port.map(|port| format!("http://127.0.0.1:{port}")),
+        backend,
+    }
+}
+
+/// Id model AI local đang được chọn; id lạ trong settings rơi về model đầu danh
+/// mục, đúng như `getLocalModel` của Electron.
+pub fn selected_model_id(app: &AppHandle) -> String {
+    paths::read_json(app, paths::SETTINGS_FILE, crate::settings::default_settings())
+        .ok()
+        .and_then(|settings| {
+            settings
+                .pointer("/ai/localModelId")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .filter(|id| MODELS.iter().any(|model| model.id == id))
+        .unwrap_or_else(|| MODELS[0].id.to_string())
+}
+
 /// Tải runtime (nếu chưa có đúng backend) và model, rồi ghi lựa chọn vào settings.
 pub async fn install(app: AppHandle, requested: Option<Value>) -> Result<Value, String> {
     let model = model_from_value(requested)?;

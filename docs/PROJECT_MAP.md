@@ -82,7 +82,9 @@ src/
 src-tauri/             Vỏ Tauri v2 (Rust): api.rs hợp đồng IPC + dispatch, storage/
                        library/project/package/embedded, settings.rs + secrets.rs
                        (DPAPI), migration.rs, ai_local.rs (catalog/tải/runtime
-                       llama-server), setup.rs (wizard lần đầu), diagnostics/picker/illustration
+                       llama-server), setup.rs (wizard lần đầu), lesson.rs +
+                       lesson_store.rs (luồng giáo án + kho tài liệu/phân tích/đề xuất),
+                       ai_http.rs (HTTP model, single-flight, huỷ), diagnostics/picker/illustration
 server/                Cloud AI Gateway (Express + Supabase + Gemini) — không chạy khi chơi
 scripts/               Script build (icon, kiểm tra global renderer):
                        build-icon-registry.js tải bộ Lucide về `shared/icon-registry.ts`,
@@ -131,7 +133,8 @@ vendor/                DLL VC++ đóng gói kèm
 | Khoá BYOK trên vỏ Tauri (DPAPI + view không khoá) | `src-tauri/src/secrets.rs` (DPAPI/base64/mask), `src-tauri/src/settings.rs` (registry provider Rust, gộp `apiKey`/`clearKey`, `settings:get/save`, `ai:providers`), `src-tauri/src/api.rs` + `lib.rs`; renderer vẫn dùng `features/settings.ts` + `pages/settings.ts` |
 | AI local trên vỏ Tauri (catalog pin, tải runtime/model, `llama-server`) | `src-tauri/src/ai_local.rs` (catalog + SHA-256 + Range resume + ZIP phẳng + vòng đời/health + `tail_chars`), `src-tauri/src/{api,lib}.rs` (năm kênh `ai:local-models`/`ai:local-status`/`ai:install-local-model`/`ai:start-local-runtime`/`ai:stop-local-runtime`, state `AiLocal`), `src-tauri/tauri.conf.json` + `vendor/vc-runtime/` (DLL VC++ đóng gói), `tests/ui/tauri-webview-check.js` (cổng tuỳ chọn `EDUGAME_TAURI_AI_INSTALL`) |
 | Wizard cài AI lần đầu trên vỏ Tauri | `src-tauri/src/setup.rs` (máy trạng thái `<data>/ai-local/setup-state.json`, preflight phần cứng/dung lượng, điều phối bước, hủy, smoke-test sinh chữ thật), `src-tauri/src/{api,lib}.rs` (bốn kênh `setup:status`/`setup:preflight`/`setup:start`/`setup:cancel`, state `Setup`), `src-tauri/src/ai_local.rs` (`*_for_setup`, `CancelToken`, `repair_support_files`); renderer vẫn là `src/renderer/features/setup-wizard.ts` + `setup-wizard-model.ts`; cổng `tests/ui/tauri-webview-check.js` (kiểm hình dạng + `setupRealChecks` khi bật `EDUGAME_TAURI_AI_INSTALL`) |
-| Vỏ Tauri / kênh IPC chưa port | `src-tauri/src/api.rs` (`hand_written` + `unsupported!` còn 45 kênh), `src-tauri/src/lib.rs` (`generate_handler!`), `src/renderer/core/desktop-facade-schema.ts`, `tests/unit/tauri-contract.test.ts` |
+| Luồng giáo án trên vỏ Tauri (lưu tài liệu, phân tích, đề xuất, dự án) | `src-tauri/src/lesson.rs` (cầu 15 kênh, chọn provider trước cache key, hai op `lesson-plan`/`lesson-analyze`, `lesson:progress`), `src-tauri/src/embedded/lesson-ops.ts` (slot V8 giữ nguyên `analyzeLesson`/`recommendGamesForAnalysis`/`lesson-projects.ts`/classifier), `src-tauri/src/lesson_store.rs` (tài liệu + `lessons/<id>.txt`, phân tích theo `cacheKey`, đề xuất), `src-tauri/src/ai_http.rs` (`AiGate`, `CancelFlag`, `post_json` không redirect, 300 s/90 s) + `src-tauri/src/embedded.rs` (`op_http`, `op_sha256`, `call_with_ai`), `src-tauri/src/api.rs` (15 lệnh + `cancel_ai`); renderer vẫn là `pages/create-wizard.ts` + `features/wizard/*` |
+| Vỏ Tauri / kênh IPC chưa port | `src-tauri/src/api.rs` (`hand_written` + `unsupported!` còn 30 kênh), `src-tauri/src/lib.rs` (`generate_handler!`), `src/renderer/core/desktop-facade-schema.ts`, `tests/unit/tauri-contract.test.ts` |
 | Lưu trữ (SQLite, `.egame`) | `src/services/storage/lesson-store.ts`, `src/services/game/game-package.ts`, `main.ts` (IPC), `preload.ts` (API) |
 | Màu nền 5 thế giới trò chơi | `styles/game-worlds.css`, mục "NĂM THẾ GIỚI TRÒ CHƠI" + `GAME_WORLDS` trong `games/result-screen.ts` |
 | Màn hình kết quả, trình chiếu, thi đấu đội | `features/games/result-screen.ts` |

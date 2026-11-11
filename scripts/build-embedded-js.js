@@ -42,7 +42,12 @@ const SLOTS = [
   // Nhập tài liệu (`files:import-document`, `files:import-document-from-path`):
   // cùng năm định dạng và cùng thư viện của `main.ts`, nhưng chạy trong V8 nhúng.
   // Rust chọn tệp và đọc byte; slot này chỉ thấy `Uint8Array` cùng tên tệp.
-  { slot: 'EGFILES', entry: 'src-tauri/src/embedded/files-ops.ts', neutral: true }
+  { slot: 'EGFILES', entry: 'src-tauri/src/embedded/files-ops.ts', neutral: true },
+  // Luồng giáo án: giữ nguyên `lesson-workflow.ts`, cache key, cắt đoạn và luật
+  // dự án của Electron; chỉ thay HTTP (op `__eg_http`) và SHA-256 (op
+  // `__eg_sha256`). `neutral` cần cho shim `node:crypto` mà `lesson-cache.ts`
+  // dùng để băm văn bản.
+  { slot: 'EGLESSON', entry: 'src-tauri/src/embedded/lesson-ops.ts', neutral: true }
 ];
 
 /**
@@ -169,7 +174,9 @@ async function bundleModule(entry, neutral = false) {
     const injected = fs.readFileSync(path.join(SHIM_DIR, 'neutral-globals.js'), 'utf8');
     text = injected + '\n' + text;
   }
-  const leftover = /require\(["'](?:node:)?(?:fs|os|child_process|worker_threads|vm|module|crypto|zlib|http|https|url|stream|util|events|buffer|path)["']\)/.exec(text);
+  // `__eg_require(...)` là cầu có chủ đích của `template.js`; chỉ một lời gọi
+  // `require(...)` THẬT của Node mới là lỗi.
+  const leftover = /(?<!__eg_)require\(["'](?:node:)?(?:fs|os|child_process|worker_threads|vm|module|crypto|zlib|http|https|url|stream|util|events|buffer|path)["']\)/.exec(text);
   if (leftover) {
     throw new Error(`${entry}: bundle vẫn còn ${leftover[0]} của module lõi Node — V8 nhúng không có module nào.`);
   }

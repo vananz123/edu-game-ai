@@ -35,6 +35,7 @@ use deno_core::{op2, JsRuntime, OpState, RuntimeOptions};
 use rusqlite::Connection;
 use serde_json::{json, Map, Value};
 
+use crate::ai_http::AiTarget;
 use crate::sql_params;
 use crate::storage::DbError;
 
@@ -50,6 +51,11 @@ const SCRIPT_NAME: &str = "edugame-embedded.js";
 pub struct RuntimeInner {
     pub connection: Connection,
     pub sql_calls: usize,
+    /// Thư mục dữ liệu của vỏ: kho giáo án dùng để đọc/ghi `lessons/<id>.txt`.
+    pub data_dir: std::path::PathBuf,
+    /// Đích AI của lượt đang chạy. Chỉ sống trong khoảng `call_with_ai`; V8 chỉ
+    /// thấy `requestId`, không thấy URL hay khoá.
+    pub ai: Option<AiTarget>,
 }
 
 pub type SharedRuntime = Rc<RefCell<RuntimeInner>>;
@@ -178,7 +184,7 @@ fn run_transaction(runtime: &SharedRuntime, payload: &str) -> Result<String, Str
 
 deno_core::extension!(
     eg,
-    ops = [op_sql_select, op_sql_execute, op_sql_transaction],
+    ops = [op_sql_select, op_sql_execute, op_sql_transaction, op_http, op_sha256],
     options = { runtime: SharedRuntime },
     state = |state, options| state.put(options.runtime),
 );
@@ -209,6 +215,51 @@ fn op_sql_transaction(
 ) -> Result<String, deno_error::JsErrorBox> {
     let runtime = state.borrow::<SharedRuntime>().clone();
     run_transaction(&runtime, payload).map_err(deno_error::JsErrorBox::generic)
+}
+
+/// Một lượt HTTP tới nhà cung cấp AI. Đích (`base_url`/khoá/thời gian) nằm
+/// trong `RuntimeInner.ai`, không trong payload; V8 chỉ gửi `requestId` và
+/// thân JSON. Op này ĐỒNG BỘ để chuỗi promise của `requestChatJson` đáp ngay
+/// trong microtask checkpoint (xem đầu tệp); nó chạy HTTP trên luồng riêng.
+#[op2]
+#[string]
+fn op_http(state: &mut OpState, #[string] payload: &str) -> Result<String, deno_error::JsErrorBox> {
+    let runtime = state.borrow::<SharedRuntime>().clone();
+    let target = runtime.borrow().ai.clone();
+    let Some(target) = target else {
+        return Err(deno_error::JsErrorBox::generic(
+            "[AI_CONFIG] Không có lượt AI nào đang mở cho HTTP.",
+        ));
+    };
+    let value: Value = serde_json::from_str(payload)
+        .map_err(|error| deno_error::JsErrorBox::generic(format!("payload HTTP không phải JSON: {error}")))?;
+    let request_id = value
+        .get("requestId")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if request_id != target.request_id {
+        return Err(deno_error::JsErrorBox::generic(
+            "[AI_CONFIG] Mã yêu cầu AI không khớp lượt đang chạy.",
+        ));
+    }
+    let body = value
+        .get("body")
+        .and_then(Value::as_str)
+        .ok_or_else(|| deno_error::JsErrorBox::generic("payload HTTP thiếu `body`"))?
+        .to_string();
+    let answer = crate::ai_http::post_json(&target, body);
+    serde_json::to_string(&answer).map_err(|error| deno_error::JsErrorBox::generic(error.to_string()))
+}
+
+/// SHA-256 thay cho `node:crypto.createHash` trong slot giáo án. Cùng đầu ra
+/// hex thường, nên khoá cache phân tích trùng từng byte với bản Electron.
+#[op2]
+#[string]
+fn op_sha256(#[string] text: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(text.as_bytes());
+    hex::encode(hasher.finalize())
 }
 
 /// Câu SQL nhóm thư viện. Đây không phải "danh sách cấm DDL": mọi câu ở đây do
@@ -269,6 +320,7 @@ impl Embedded {
         let connection = crate::storage::open(&database)?;
         crate::storage::ensure_schema(&connection)?;
         let mut engine = Self::new(connection)?;
+        engine.shared.borrow_mut().data_dir = data_dir.to_path_buf();
         engine.call("library:seed", &[], &crate::library::now())?;
         Ok(engine)
     }
@@ -277,6 +329,8 @@ impl Embedded {
         let shared: SharedRuntime = Rc::new(RefCell::new(RuntimeInner {
             connection,
             sql_calls: 0,
+            data_dir: std::path::PathBuf::new(),
+            ai: None,
         }));
         let mut runtime = JsRuntime::new(RuntimeOptions {
             extensions: vec![eg::init(shared.clone())],
@@ -292,32 +346,55 @@ impl Embedded {
     /// trị JSON. Lỗi luật mà JS từ chối được giữ nguyên câu tiếng Việt của nó,
     /// vì chính nó là câu giáo viên đọc được.
     pub fn call(&mut self, op: &str, args: &[Value], now: &str) -> Result<Value, DbError> {
-        let input = json!({ "op": op, "args": args }).to_string();
-        self.install(&input, now)?;
-        let raw = self.eval("__eg_run()")?;
-        let answer = serde_json::from_str::<Value>(&raw)
-            .map_err(|error| DbError::Data(format!("V8 trả về không phải JSON ({error}): {raw}")))?;
-        if answer.get("ok").and_then(Value::as_bool) == Some(true) {
-            return Ok(answer.get("value").cloned().unwrap_or(Value::Null));
-        }
-        let message = answer
-            .get("message")
-            .and_then(Value::as_str)
-            .unwrap_or("op không chạy được");
-        Err(match answer.get("code").and_then(Value::as_str) {
-            Some("EG_UNKNOWN_OP") => DbError::Schema(format!("op `{op}` chưa có trong V8 nhúng")),
-            Some("EG_BAD_INPUT") => DbError::Data(message.to_string()),
-            // `library-ops.ts` kiểm dữ liệu rồi ném câu tiếng Việt; câu đó đã là
-            // thứ renderer hiện, nên trả nguyên văn. Lỗi V8-ngoài-luật (payload
-            // hỏng, câu SQL lạ) mang tiền tố op để biết đường truy.
-            Some("EG_OP_FAILED") => DbError::Invalid(message.to_string()),
-            _ => DbError::Data(format!("{op}: {message}")),
-        })
+        self.call_with_ai(op, args, now, None)
+    }
+
+    /// Như `call`, kèm đích AI cho lượt đang chạy. `ai = None` nghĩa là slot này
+    /// không được gọi `__eg_http`; op HTTP từ chối thay vì đoán một máy chủ.
+    pub fn call_with_ai(
+        &mut self,
+        op: &str,
+        args: &[Value],
+        now: &str,
+        ai: Option<AiTarget>,
+    ) -> Result<Value, DbError> {
+        self.shared.borrow_mut().ai = ai;
+        let result = (|| {
+            let input = json!({ "op": op, "args": args }).to_string();
+            self.install(&input, now)?;
+            let raw = self.eval("__eg_run()")?;
+            let answer = serde_json::from_str::<Value>(&raw)
+                .map_err(|error| DbError::Data(format!("V8 trả về không phải JSON ({error}): {raw}")))?;
+            if answer.get("ok").and_then(Value::as_bool) == Some(true) {
+                return Ok(answer.get("value").cloned().unwrap_or(Value::Null));
+            }
+            let message = answer
+                .get("message")
+                .and_then(Value::as_str)
+                .unwrap_or("op không chạy được");
+            Err(match answer.get("code").and_then(Value::as_str) {
+                Some("EG_UNKNOWN_OP") => DbError::Schema(format!("op `{op}` chưa có trong V8 nhúng")),
+                Some("EG_BAD_INPUT") => DbError::Data(message.to_string()),
+                // `library-ops.ts` kiểm dữ liệu rồi ném câu tiếng Việt; câu đó đã là
+                // thứ renderer hiện, nên trả nguyên văn. Lỗi V8-ngoài-luật (payload
+                // hỏng, câu SQL lạ) mang tiền tố op để biết đường truy.
+                Some("EG_OP_FAILED") => DbError::Invalid(message.to_string()),
+                _ => DbError::Data(format!("{op}: {message}")),
+            })
+        })();
+        self.shared.borrow_mut().ai = None;
+        result
     }
 
     /// Số câu SQL đã chạy — cổng kiểm tra đối chiếu với số dòng thật.
     pub fn sql_calls(&self) -> usize {
         self.shared.borrow().sql_calls
+    }
+
+    /// Trạng thái dùng chung của engine. `library.rs` mượn kết nối + thư mục dữ
+    /// liệu ở đây cho nhóm `lesson-store:*` (chạy SQL trực tiếp, không qua V8).
+    pub fn shared(&self) -> SharedRuntime {
+        self.shared.clone()
     }
 
     /// Gọi một op nhận byte (slot `EGFILES`): byte đi sang V8 dưới dạng chuỗi
@@ -339,6 +416,8 @@ impl Embedded {
                 execute: (payload) => Deno.core.ops.op_sql_execute(payload),\
                 transaction: (payload) => Deno.core.ops.op_sql_transaction(payload)\
              }});\
+             globalThis.__eg_http = (payload) => Deno.core.ops.op_http(payload);\
+             globalThis.__eg_sha256 = (text) => Deno.core.ops.op_sha256(text);\
              globalThis.__eg_now = {now};\
              globalThis.__eg_input = {input};"
         );
@@ -508,5 +587,323 @@ mod tests {
         let error = import(&mut engine, "bang-tinh.xls").expect_err("đuôi lạ");
         assert_eq!(error.code(), "DB_INVALID_INPUT", "xls: {error}");
         assert!(error.to_string().contains("chưa được hỗ trợ"), "{error}");
+    }
+
+    const NOW: &str = "2026-01-01T00:00:00.000Z";
+
+    #[test]
+    fn the_lesson_slot_hashes_and_plans_offline() {
+        let (_dir, mut engine) = engine();
+        // ASCII để `documentChars` (độ dài UTF-16 của JS) so được trực tiếp với
+        // `str::len`; phần tiếng Việt đã có test riêng bên dưới.
+        let text = "I. MUC TIEU\n- Neu duoc vai tro cua anh sang.\nII. NOI DUNG\n- Quang hop.";
+        let input = json!({
+            "text": text,
+            "name": "giao-an.txt",
+            "mode": "fast",
+            "providerId": "local",
+            "modelId": "qwen3.5-2b-q4_k_m"
+        });
+        let first = engine
+            .call("lesson-plan", &[input.clone()], NOW)
+            .expect("plan");
+        let second = engine.call("lesson-plan", &[input], NOW).expect("plan again");
+        assert_eq!(first["cacheKey"], second["cacheKey"], "cache key phải tất định");
+        let key = first["cacheKey"].as_str().unwrap_or("");
+        assert!(key.starts_with("analysis_v1_"), "{key}");
+        assert_eq!(key.len(), "analysis_v1_".len() + 64, "{key}");
+        // Không chọn mục nào = toàn văn, đúng nhánh `prepareWholeLessonText`.
+        assert_eq!(first["selection"], Value::Null);
+        assert_eq!(first["sent"]["provider"], "local");
+        assert_eq!(first["sent"]["scoped"], false);
+        assert_eq!(first["sent"]["documentChars"].as_i64(), Some(text.len() as i64));
+        assert!(first["sent"]["budgetChars"].as_i64().unwrap_or(0) > 0);
+        // #132: provider là một phần của key, nên cùng giáo án + model nhưng chạy
+        // bằng provider khác phải ra key khác.
+        let other = engine
+            .call(
+                "lesson-plan",
+                &[json!({
+                    "text": text,
+                    "name": "giao-an.txt",
+                    "mode": "fast",
+                    "providerId": "gemini",
+                    "modelId": "qwen3.5-2b-q4_k_m"
+                })],
+                NOW,
+            )
+            .expect("other provider");
+        assert_ne!(first["cacheKey"], other["cacheKey"]);
+    }
+
+    #[test]
+    fn the_lesson_slot_reads_the_structure_without_the_network() {
+        let (_dir, mut engine) = engine();
+        let text = "I. MUC TIEU\n- Neu duoc vai tro cua anh sang.\n\nII. NOI DUNG\n- Quang hop o thuc vat.\n";
+        let tree = engine
+            .call("lesson-structure", &[json!(text)], NOW)
+            .expect("structure");
+        assert_eq!(tree["root"]["kind"], "document", "{tree}");
+        assert_eq!(tree["headingsFound"], 2, "{tree}");
+        let nodes = tree["nodes"].as_array().expect("nodes");
+        assert!(!nodes.is_empty(), "không đọc được mục nào: {tree}");
+        assert!(
+            nodes.iter().any(|node| node["title"]
+                .as_str()
+                .unwrap_or("")
+                .to_uppercase()
+                .contains("MUC TIEU")),
+            "{tree}"
+        );
+        // Văn bản rỗng vẫn trả một cây (một nút toàn tài liệu), không ném.
+        let empty = engine
+            .call("lesson-structure", &[json!("")], NOW)
+            .expect("empty structure");
+        assert!(empty["nodes"].is_array(), "{empty}");
+        assert_eq!(empty["empty"], true, "{empty}");
+    }
+
+    #[test]
+    fn the_lesson_slot_classifies_with_rules_and_reports_the_missing_semantic_layer() {
+        let (_dir, mut engine) = engine();
+        let result = engine
+            .call(
+                "lesson-classify",
+                &[json!({
+                    "text": "Cau 1: Thu do Viet Nam la gi?\nA. Ha Noi\nB. Hue\nC. Da Nang\nD. Hai Phong"
+                })],
+                NOW,
+            )
+            .expect("classify");
+        assert_eq!(result["semantic"], "unavailable", "{result}");
+        assert!(
+            result["semanticNote"]
+                .as_str()
+                .unwrap_or("")
+                .contains("Bộ đọc hiểu chưa sẵn sàng"),
+            "{result}"
+        );
+        let kind = result["kind"].as_str().unwrap_or("");
+        assert!(["lesson", "questions", "outline"].contains(&kind), "{result}");
+        assert!(result["classification"].is_object(), "{result}");
+
+        // Văn bản rỗng giữ đúng `skipped` của Electron, không báo thiếu model.
+        let empty = engine
+            .call("lesson-classify", &[json!({ "text": "" })], NOW)
+            .expect("empty classify");
+        assert_eq!(empty["semantic"], "skipped", "{empty}");
+        assert_eq!(empty["semanticNote"].as_str(), Some(""));
+    }
+
+    #[test]
+    fn the_lesson_slot_rejects_an_unknown_game_type_with_the_electron_sentence() {
+        let (_dir, mut engine) = engine();
+        let error = engine
+            .call("lesson-capacity", &[json!({ "gameType": "khong-co" })], NOW)
+            .expect_err("thể loại lạ");
+        assert_eq!(error.code(), "DB_INVALID_INPUT");
+        assert!(
+            error.to_string().contains("Thể loại trò chơi không hợp lệ."),
+            "{error}"
+        );
+
+        let estimate = engine
+            .call(
+                "lesson-capacity",
+                &[json!({
+                    "gameType": "arena",
+                    "documentCharacters": 4000,
+                    "objectiveCount": 3,
+                    "conceptCount": 5,
+                    "modelId": "qwen3.5-2b-q4_k_m",
+                    "mode": "fast"
+                })],
+                NOW,
+            )
+            .expect("capacity");
+        let suggested = estimate["suggested"].as_i64().unwrap_or(0);
+        assert!((4..=7).contains(&suggested), "{estimate}");
+        assert_eq!(estimate["mode"], "fast");
+        assert_eq!(estimate["material"]["documentCharacters"], 4000);
+    }
+
+    /// Một máy chủ OpenAI tối giản: đọc đúng một request rồi trả `content`.
+    /// Trả về `(base_url, join handle)`; join handle cho ta thân request để kiểm
+    /// model/prompt đã đi qua Rust chứ không bị dựng lại sai.
+    fn serve_one_chat(content: &str) -> (String, std::thread::JoinHandle<String>) {
+        use std::io::{Read, Write};
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+        let base_url = format!("http://127.0.0.1:{}", listener.local_addr().expect("addr").port());
+        let body = json!({
+            "id": "chatcmpl-test",
+            "object": "chat.completion",
+            "choices": [{
+                "index": 0,
+                "message": { "role": "assistant", "content": content },
+                "finish_reason": "stop"
+            }],
+            "usage": { "prompt_tokens": 10, "completion_tokens": 20 }
+        })
+        .to_string();
+        let handle = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let mut buffer = Vec::new();
+            let mut chunk = [0_u8; 4096];
+            let header_end = loop {
+                let read = stream.read(&mut chunk).expect("read headers");
+                assert!(read > 0, "client đóng trước khi gửi header");
+                buffer.extend_from_slice(&chunk[..read]);
+                if let Some(index) = buffer.windows(4).position(|window| window == b"\r\n\r\n") {
+                    break index + 4;
+                }
+            };
+            let headers = String::from_utf8_lossy(&buffer[..header_end]).to_string();
+            let length = headers
+                .lines()
+                .find_map(|line| {
+                    let (name, value) = line.split_once(':')?;
+                    name.eq_ignore_ascii_case("content-length")
+                        .then(|| value.trim().parse::<usize>().ok())
+                        .flatten()
+                })
+                .unwrap_or(0);
+            while buffer.len() < header_end + length {
+                let read = stream.read(&mut chunk).expect("read body");
+                if read == 0 {
+                    break;
+                }
+                buffer.extend_from_slice(&chunk[..read]);
+            }
+            let request = String::from_utf8_lossy(&buffer[header_end..]).to_string();
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            stream.write_all(response.as_bytes()).expect("write response");
+            stream.flush().expect("flush");
+            request
+        });
+        (base_url, handle)
+    }
+
+    /// Đi trọn đường V8 → `requestChatJson` → `__eg_http` → Rust `post_json` →
+    /// máy chủ giả, rồi chuẩn hoá kết quả bằng đúng `analyzeLesson`.
+    #[test]
+    fn the_lesson_slot_calls_the_model_through_rust_and_normalizes_the_answer() {
+        let (_dir, mut engine) = engine();
+        let content = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("..")
+                .join("tests")
+                .join("fixtures")
+                .join("wizard")
+                .join("happy")
+                .join("lesson_analysis.json"),
+        )
+        .expect("fixture phân tích");
+        let (base_url, server) = serve_one_chat(&content);
+        let result = engine
+            .call_with_ai(
+                "lesson-analyze",
+                &[json!({
+                    "text": "I. MUC TIEU\n- Neu duoc vai tro cua anh sang.\nII. NOI DUNG\n- Quang hop o thuc vat.",
+                    "name": "giao-an.txt",
+                    "mode": "fast",
+                    "providerId": "local",
+                    "documentId": "doc_test_1",
+                    "requestId": "req_test_1",
+                    "analysisId": "analysis_test_1",
+                    "now": NOW,
+                    "plan": { "selection": null },
+                    "target": {
+                        "requestId": "req_test_1",
+                        "model": "qwen3.5-2b-q4_k_m",
+                        "mode": "local"
+                    }
+                })],
+                NOW,
+                Some(AiTarget {
+                    request_id: "req_test_1".to_string(),
+                    base_url,
+                    api_key: None,
+                    mode: "local".to_string(),
+                    cancel: std::sync::Arc::new(crate::ai_http::CancelFlag::default()),
+                }),
+            )
+            .expect("analyze");
+        let request = server.join().expect("server");
+        assert!(request.contains("\"model\":\"qwen3.5-2b-q4_k_m\""), "{request}");
+        assert!(request.contains("MUC TIEU"), "prompt thiếu giáo án: {request}");
+        let analysis = &result["analysis"];
+        assert_eq!(analysis["id"], "analysis_test_1");
+        assert_eq!(analysis["documentId"], "doc_test_1");
+        assert_eq!(analysis["subject"], "Sinh học");
+        assert_eq!(analysis["topic"], "Quang hợp ở thực vật");
+        assert_eq!(analysis["objectives"].as_array().map(Vec::len), Some(3));
+        assert_eq!(analysis["keyConcepts"].as_array().map(Vec::len), Some(2));
+
+        // Cùng engine: ghép phân tích vào dự án rồi lưu bằng đúng bộ kiểm Zod
+        // của Electron — đường mà `lesson.rs` đi sau lượt model.
+        let project = engine
+            .call(
+                "lesson-project",
+                &[json!({
+                    "action": "create",
+                    "document": {
+                        "documentId": "doc_test_1",
+                        "name": "giao-an.txt",
+                        "characters": 82
+                    },
+                    "analysis": analysis,
+                    "now": NOW
+                })],
+                NOW,
+            )
+            .expect("lesson-project");
+        assert_eq!(project["analysisId"], "analysis_test_1");
+        assert_eq!(project["step"], "recommend");
+        assert_eq!(project["title"], "Quang hợp ở thực vật");
+        let saved = engine
+            .call("project:save-draft", &[project], NOW)
+            .expect("project:save-draft");
+        let project_id = saved["id"].as_str().unwrap_or("");
+        assert!(project_id.starts_with("project_"), "{saved}");
+        let read = engine
+            .call("project:get", &[json!(project_id)], NOW)
+            .expect("project:get");
+        assert_eq!(read["analysisId"], "analysis_test_1");
+        assert_eq!(read["lesson"]["documentId"], "doc_test_1");
+    }
+
+    /// `__eg_http` chỉ sống trong một lượt `call_with_ai`; ngoài lượt đó slot
+    /// không được lặng lẽ gọi một máy chủ nào.
+    #[test]
+    fn the_lesson_slot_cannot_reach_http_without_a_target() {
+        let (_dir, mut engine) = engine();
+        let error = engine
+            .call(
+                "lesson-analyze",
+                &[json!({
+                    "text": "bài",
+                    "mode": "fast",
+                    "providerId": "local",
+                    "documentId": "doc_test_1",
+                    "requestId": "req_test_1",
+                    "target": {
+                        "requestId": "req_test_1",
+                        "model": "qwen3.5-2b-q4_k_m",
+                        "mode": "local"
+                    }
+                })],
+                NOW,
+            )
+            .expect_err("không có đích AI");
+        assert_eq!(error.code(), "DB_INVALID_INPUT", "{error}");
+        assert!(
+            error.to_string().contains("AI_CONFIG") || error.to_string().contains("AI_CONNECTION"),
+            "{error}"
+        );
     }
 }

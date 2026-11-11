@@ -2,13 +2,15 @@
 
 Ngày lập: 2026-11-09; cập nhật trạng thái: 2026-11-11  
 Trạng thái: **đã duyệt và đang triển khai** — giai đoạn 0–4 XONG, giai đoạn 5
-xong cả phần bí mật (DPAPI + `settings:get/save`), AI local (tải runtime/model
-+ `llama-server` loopback) và setup wizard (`setup:*`); việc kế tiếp là luồng
-`lesson:*` — `ai:generate` là kênh legacy không còn màn hình nào gọi (DECISIONS
-"Giai đoạn 5 (kế tiếp)").
+xong bí mật (DPAPI + `settings:get/save`), AI local (tải runtime/model +
+`llama-server` loopback), setup wizard (`setup:*`) và **phần đầu luồng giáo án**
+(15 kênh `lesson:*` + `ai:cancel`: kho tài liệu, phân loại, phân tích, đề xuất,
+dự án); việc kế tiếp là nhóm sinh nội dung `lesson:generate`/`chat-*`/
+`convert-draft`/`regenerate-item`/`quality`/`patch-item-assets` — `ai:generate`
+là kênh legacy không còn màn hình nào gọi (DECISIONS "Giai đoạn 5 (luồng giáo án)").
 Phạm vi: ứng dụng desktop Windows hiện tại, phiên bản nguồn 0.5.1, **bản Tauri
 đầu tiên là bản thử giới hạn** (không có LAN, trình chiếu, updater; AI local đã
-có phần cài/chạy và wizard lần đầu, chưa sinh nội dung).
+có phần cài/chạy, wizard lần đầu và phân tích giáo án, chưa sinh nội dung trò chơi).
 
 ## 1. Mục tiêu
 
@@ -197,6 +199,10 @@ có yêu cầu tương thích cụ thể và đã đánh giá chi phí/bảo m�
 
 **Trạng thái: XONG (2026-11-10/11, DECISIONS "Giai đoạn 5 (bí mật)" + "Giai đoạn 5 (AI local)" + "Giai đoạn 5 (setup wizard)").** Phần bí mật: `src-tauri/src/secrets.rs` dùng DPAPI của Windows (`CryptProtectData`/`CryptUnprotectData` qua `windows-sys`) và lưu blob base64 ở `ai.providers.<id>.apiKeyEncrypted`; `src-tauri/src/settings.rs` gộp provider, trả view chỉ có `hasKey`/`keyMasked`, xử lý `apiKey` rỗng/`clearKey`/thay khoá và xoá kết quả test cũ. Migration vẫn tước khoá, giáo viên nhập lại. Phần AI local: `src-tauri/src/ai_local.rs` giữ catalog pin 3 model + runtime CPU/Vulkan b11681, tải HTTPS có allowlist + Range resume, kiểm kích thước/SHA-256, giải nén ZIP phẳng, cài runtime/model và chạy `llama-server` loopback với health poll/progress. Ba lệnh cài/chạy/dừng trả `{ok, models}` như Electron, `start` kèm `baseUrl` loopback; cổng release **sau khi sửa hình dạng trả về** đạt **50/50 (53/53 khi bật tải thật) + 10/10 + 12/12** (`shapeOk`, `startOk`, `stoppedOk` đều đúng). Phần setup wizard: `src-tauri/src/setup.rs` port ba lớp `setup-state.ts`/`setup-orchestrator.ts`/`setup-ipc.ts`, trạng thái bền vững ở `<data>/ai-local/setup-state.json`, preflight phần cứng/dung lượng, resume theo bước hỏng, hủy giữ byte đã tải và smoke-test sinh chữ thật; bốn kênh `setup:*` rời `unsupported!` (49 → 45). Cổng release **51/51 (56/56 khi bật tải thật) + 10/10 + 12/12**. Installer NSIS dựng từ cây cuối **16.139.500 B** (SHA-256 `2593FF55…73375`); cài mới exit 0 (exe 57.822.208 B, đủ ba DLL VC++), cài đè exit 0 không đổi hash DB/WAL/SHM, gỡ `/S` exit 0 xoá sạch thư mục cài trong thư mục tạm. **Còn mở:** `ai:generate` chưa port; Vulkan/fallback, huỷ/đổi model, khoá thật và máy sạch chưa kiểm chứng — xem "Chưa chứng minh" của các quyết định AI local + setup wizard.
 
+### Giai đoạn 5 — Luồng giáo án
+
+**Trạng thái: XONG phần đầu (2026-11-11, DECISIONS "Giai đoạn 5 (luồng giáo án)").** `src-tauri/src/lesson.rs` nối settings/runtime/HTTP/kho với slot V8 `EGLESSON` (`src-tauri/src/embedded/lesson-ops.ts`), giữ nguyên `analyzeLesson`/`requestChatJson`/prompt/schema/normalize/classifier/`lesson-projects.ts` của Electron. Mười lăm kênh rời `unsupported!` (`lesson:save-document`, `get-document`, `library`, `delete-document`, `delete-documents`, `get-analysis`, `save-analysis`, `recommendations`, `get-structure`, `preview-selection`, `classify-input`, `analyze`, `recommend`, `capacity`, `ai:cancel`), **45 → 30**. `lesson_store.rs` dùng cùng kết nối SQLite của engine; `ai_http.rs` giữ khoá/endpoint, HTTP không redirect, 300 s/90 s, single-flight + hủy theo `requestId`. Cache key phân tích trùng từng byte với Electron (provider chốt trước key, model AI local đang chọn). Test Rust **124/124** (gồm 7 test slot chạy phân tích qua server OpenAI giả rồi lưu/đọc dự án), Node **98/98**, `npm run check` sạch, `check:embedded` khớp 6017,6 KiB, cổng **51/51 + 10/10 + 12/12**; installer NSIS **16.241.001 B**, exe cài **58.630.144 B**, cài mới/cài đè/gỡ `/S` trong thư mục tạm exit 0. **Còn mở:** cổng WebView2 không gọi kênh `lesson:*`; chưa chạy model thật/BYOK thật, chưa xem wizard bằng mắt, chưa huỷ giữa HTTP thật, chưa mở tài liệu từ profile 0.5.1 sau migration; `lesson:convert-draft`/`chat-*`/`generate`/`regenerate-item`/`quality`/`patch-item-assets` và `ai:test-provider`/`ai:tasks` còn `not-supported`.
+
 **Công việc**
 
 1. Viết Rust service tải runtime/model đã pin, kiểm tra dung lượng, checksum và
@@ -380,7 +386,7 @@ các tính năng còn lại có quyết định rõ ràng và các cổng nghi�
 - Giai đoạn 4 XONG: phát hiện/mời nhập profile Electron, backup bất biến, nhập
   idempotent, tước khoá BYOK; cổng ba pha **46/46 + 10/10 + 12/12**, chạy trên bản
   sao profile 0.5.1 thật và cài đè installer trong thư mục tạm.
-- Giai đoạn 5 XONG cả ba phần: DPAPI thay `safeStorage`, `settings:get/save` chỉ
+- Giai đoạn 5 XONG bốn phần: DPAPI thay `safeStorage`, `settings:get/save` chỉ
   trả `hasKey`/`keyMasked`, BYOK nhập lại; AI local pin runtime/model + SHA-256,
   tải resume, `llama-server` loopback. Ba lệnh cài/chạy/dừng trả `{ok, models}`
   như Electron, `start` kèm `baseUrl` loopback; cổng release sau khi sửa hình
@@ -388,7 +394,14 @@ các tính năng còn lại có quyết định rõ ràng và các cổng nghi�
   `setup:*` chạy máy trạng thái bền vững + smoke-test thật, cổng **51/51 (56/56
   khi bật tải thật) + 10/10 + 12/12**; installer NSIS dựng từ cây cuối
   **16.139.500 B** cài mới/cài đè/gỡ sạch trong thư mục tạm, cài đè không đổi
-  hash DB/WAL/SHM.
-- Chưa làm: 6 (trình chiếu/LAN), 7 (updater/ký/phát hành thử), luồng `lesson:*`
-  (ưu tiên kế tiếp; `ai:generate` là kênh legacy) và các kênh còn lại. 45 kênh
-  còn `unsupported!`.
+  hash DB/WAL/SHM. Luồng giáo án phần đầu chạy **15 kênh `lesson:*` +
+  `ai:cancel`** (kho tài liệu, cấu trúc/xem trước/phân loại, phân tích qua HTTP
+  của Rust với cache key trùng Electron, đề xuất, ước lượng, dự án), `unsupported!`
+  **45 → 30**; test Rust **124/124**, Node **98/98**, cổng **51/51 + 10/10 +
+  12/12**; installer NSIS **16.241.001 B**, exe cài **58.630.144 B**, cài
+  mới/cài đè/gỡ `/S` trong thư mục tạm đều exit 0.
+- Chưa làm: 6 (trình chiếu/LAN), 7 (updater/ký/phát hành thử), nhóm sinh nội
+  dung `lesson:generate`/`chat-*`/`convert-draft`/`regenerate-item`/`quality`/
+  `patch-item-assets`, `ai:test-provider`/`ai:tasks` và các kênh còn lại. 30 kênh
+  còn `unsupported!`; đường phân tích mới chứng minh bằng Rust + server giả,
+  chưa chạy model thật/BYOK thật và cổng WebView2 chưa gọi kênh `lesson:*`.

@@ -99,6 +99,45 @@
     globalThis.clearInterval = function clearInterval() {};
   }
 
+  // `AiRequestRegistry` và `requestChatJson` dùng `AbortController`/`AbortSignal`
+  // để ghi nhớ một lượt đã huỷ. V8 trần không có hai lớp này. Bản shim chỉ cần
+  // đúng những gì luồng ấy dùng: `signal.aborted`, `signal.reason`, `.abort()`.
+  // KHÔNG có `AbortSignal.timeout`/`.any`: thời gian chờ và huỷ thật do Rust giữ,
+  // nên `createRequestSignal` không được tự đặt hẹn giờ trong V8.
+  if (typeof AbortController !== 'function') {
+    globalThis.AbortController = function AbortController() {
+      var listeners = [];
+      var signal = {
+        aborted: false,
+        reason: undefined,
+        addEventListener: function (name, listener) {
+          if (name === 'abort' && typeof listener === 'function') listeners.push(listener);
+        },
+        removeEventListener: function (name, listener) {
+          if (name !== 'abort') return;
+          var at = listeners.indexOf(listener);
+          if (at >= 0) listeners.splice(at, 1);
+        },
+        throwIfAborted: function () {
+          if (signal.aborted) throw signal.reason;
+        }
+      };
+      this.signal = signal;
+      this.abort = function (reason) {
+        if (signal.aborted) return;
+        signal.aborted = true;
+        signal.reason = reason;
+        var copy = listeners.slice();
+        for (var index = 0; index < copy.length; index += 1) {
+          try { copy[index].call(signal, { type: 'abort', target: signal }); } catch (_) { /* một listener hỏng không chặn lượt huỷ */ }
+        }
+      };
+    };
+  }
+  if (typeof AbortSignal !== 'function') {
+    globalThis.AbortSignal = function AbortSignal() {};
+  }
+
   // pdf.js 1.10.100 mở mỗi bundle con bằng khối tương thích
   // `if (typeof PDFJS > "u" || !PDFJS.compatibilityChecked) { … }` rồi mới
   // `typeof PDFJS>"u" && (R.PDFJS = {})`. Trên trình duyệt `PDFJS` là biến toàn
@@ -134,6 +173,31 @@
             var n = Math.floor(Math.random() * 16);
             return (ch === 'x' ? n : (n & 3) | 8).toString(16);
           });
+        },
+        // `lesson-cache.ts` gọi đúng ba việc: `createHash('sha256')`,
+        // `.update(text)` (mặc định UTF-8) và `.digest('hex')`. Chuỗi được nối
+        // rồi băm một lần — cùng byte với băm từng mảnh, vì UTF-8 của chuỗi nối
+        // vẫn là UTF-8 của từng mảnh cộng lại.
+        createHash: function (algorithm) {
+          if (String(algorithm || '').toLowerCase() !== 'sha256') {
+            throw new Error('V8 nhúng chỉ băm được sha256.');
+          }
+          var parts = [];
+          return {
+            update: function (value, encoding) {
+              if (encoding && String(encoding).toLowerCase() !== 'utf8') {
+                throw new Error('V8 nhúng chỉ băm được chuỗi UTF-8.');
+              }
+              parts.push(String(value == null ? '' : value));
+              return this;
+            },
+            digest: function (encoding) {
+              if (encoding && String(encoding).toLowerCase() !== 'hex') {
+                throw new Error('V8 nhúng chỉ trả băm dạng hex.');
+              }
+              return globalThis.__eg_sha256(parts.join(''));
+            }
+          };
         }
       };
     }
@@ -141,6 +205,7 @@
   };
 
   /* @slot EGFILES */
+  /* @slot EGLESSON */
 
   // Luật trong `library-ops.ts` viết theo kiểu đồng bộ (bên Electron
   // `better-sqlite3` cũng đồng bộ). Ba op của Rust cũng đồng bộ, nên cầu này
@@ -162,6 +227,7 @@
   var projects = available.EGPROJECTS;
   var packages = available.EGPACKAGES;
   var files = available.EGFILES;
+  var lessons = available.EGLESSON;
 
   /**
    * Byte của một tệp do Rust đọc, gửi sang dưới dạng chuỗi base64 (JSON không có
@@ -303,7 +369,17 @@
     },
     // Trần kích thước tệp nhập: Rust đọc con số từ đây thay vì gõ lại 10 MB.
     'files:max-bytes': async function () { return files.DOCUMENT_MAX_BYTES; },
-    'files:questions-max-bytes': async function () { return files.QUESTIONS_MAX_BYTES; }
+    'files:questions-max-bytes': async function () { return files.QUESTIONS_MAX_BYTES; },
+    // Luồng giáo án: Rust chỉ chuyển dữ liệu đã lưu và đích AI; mọi luật (cache
+    // key, cắt đoạn, prompt, sửa JSON, xếp hạng) ở slot EGLESSON.
+    'lesson-plan': async function (input) { return lessons.plan(input); },
+    'lesson-analyze': async function (input) { return lessons.analyze(input); },
+    'lesson-recommend': async function (input) { return lessons.recommend(input); },
+    'lesson-capacity': async function (input) { return lessons.capacity(input); },
+    'lesson-structure': async function (text) { return lessons.structure(text); },
+    'lesson-preview': async function (input) { return lessons.preview(input); },
+    'lesson-classify': async function (input) { return lessons.classify(input); },
+    'lesson-project': async function (input) { return lessons.projectStep(input); }
   };
 
   globalThis.__eg_run = async function () {

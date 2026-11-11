@@ -14,7 +14,7 @@
 use serde_json::{json, Value};
 use tauri::AppHandle;
 
-use crate::{paths, secrets};
+use crate::{ai_local, paths, secrets};
 
 struct ProviderDef {
     id: &'static str,
@@ -92,7 +92,7 @@ pub(crate) fn default_settings() -> Value {
 
 pub fn get(app: &AppHandle) -> Result<Value, String> {
     let raw = paths::read_json(app, paths::SETTINGS_FILE, default_settings())?;
-    Ok(public_view(&raw))
+    Ok(public_view_with_local(&raw, &ai_local::local_facts(app)))
 }
 
 pub fn save(app: &AppHandle, incoming: Value) -> Result<Value, String> {
@@ -104,7 +104,10 @@ pub fn save(app: &AppHandle, incoming: Value) -> Result<Value, String> {
     // Chỉ ghi sau khi mọi khoá mới đã được DPAPI mã hoá. Một lỗi ở giữa không
     // được để lại settings nửa vời hay một `apiKey` plaintext.
     paths::write_json(app, paths::SETTINGS_FILE, &merged)?;
-    Ok(json!({ "ok": true, "settings": public_view(&merged) }))
+    Ok(json!({
+        "ok": true,
+        "settings": public_view_with_local(&merged, &ai_local::local_facts(app))
+    }))
 }
 
 fn merge(current: &Value, incoming: &Value) -> Result<Value, String> {
@@ -203,7 +206,12 @@ fn merge(current: &Value, incoming: &Value) -> Result<Value, String> {
     Ok(Value::Object(out))
 }
 
-fn public_view(settings: &Value) -> Value {
+/// Hình dạng renderer được thấy, với sự thật runtime AI local.
+///
+/// Electron lấy `localRunning`/`localModelReady` từ `localAiManager.getStatus()`
+/// và `getLocalModel(...)`. Ở đây chúng đến từ `ai_local::local_facts`, nên một
+/// runtime đang chạy thật mới làm provider `local` thành `ready`/`usable`.
+fn public_view_with_local(settings: &Value, local: &ai_local::LocalFacts) -> Value {
     let mut view = settings.as_object().cloned().unwrap_or_default();
     let mut ai = settings.get("ai").and_then(Value::as_object).cloned().unwrap_or_default();
     let stored = ai
@@ -269,14 +277,14 @@ fn public_view(settings: &Value) -> Value {
             last_test_ok,
             last_test_at.as_deref(),
             last_test_code.as_deref(),
+            local,
         );
-        // AI local chỉ usable khi runtime thật đang chạy; Phase 5 chưa mở runtime
-        // nên cờ này luôn false. Cloud chỉ usable sau một lần kiểm tra thành công
-        // (đúng luật #132 §D7), không phải chỉ vì đã có key.
+        // AI local chỉ usable khi runtime thật đang chạy; cloud chỉ usable sau một
+        // lần kiểm tra thành công (đúng luật #132 §D7), không phải chỉ vì đã có key.
         let usable = definition.wizard_eligible
             && enabled
             && if definition.id == "local" {
-                false
+                local.running
             } else {
                 status == "ready"
             };
@@ -377,6 +385,159 @@ fn find_provider<'a>(providers: &'a [Value], id: &str) -> Option<&'a Value> {
         .find(|provider| provider.get("id").and_then(Value::as_str) == Some(id))
 }
 
+/// Chỉ dùng trong test: hình dạng công khai với một profile chưa có runtime local.
+#[cfg(test)]
+fn public_view(settings: &Value) -> Value {
+    public_view_with_local(settings, &ai_local::LocalFacts::default())
+}
+
+/// Đích gọi model mà `lesson.rs` dựng cho một lượt phân tích.
+///
+/// `base_url` và `api_key` chỉ nằm trong Rust: chúng đi thẳng vào `AiTarget`,
+/// không bao giờ vào V8 hay renderer. `id` được dùng làm thành phần của cache key
+/// (provider đã chọn), đúng như `analysisCacheProvider` bên Electron.
+pub struct ProviderTarget {
+    pub id: String,
+    pub label: String,
+    pub base_url: String,
+    pub model: String,
+    pub api_key: Option<String>,
+    pub mode: String,
+}
+
+/// Bản Rust của `chooseProvider` (`src/services/ai/ai-providers.ts`).
+///
+/// - `requested` thắng nếu nó là provider hợp lệ và đang usable; không usable là
+///   lỗi, không lặng lẽ đổi sang provider khác.
+/// - `localPreferred` (nút “AI trên máy”) chỉ chấp nhận runtime local đang chạy.
+/// - Không có yêu cầu: `local → gemini → openai`, rồi `custom`; `opencode` không
+///   bao giờ được chọn.
+pub fn workflow_provider(
+    app: &AppHandle,
+    requested: Option<&str>,
+    local_preferred: bool,
+) -> Result<ProviderTarget, String> {
+    let raw = paths::read_json(app, paths::SETTINGS_FILE, default_settings())?;
+    let local = ai_local::local_facts(app);
+    let view = public_view_with_local(&raw, &local);
+    let providers = view
+        .pointer("/ai/providers")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+
+    let requested = requested.map(str::trim).unwrap_or("");
+    let chosen = if !requested.is_empty() {
+        let Some(definition) = provider_def(requested) else {
+            return Err(
+                "[AI_NO_PROVIDER] Nhà cung cấp AI không tồn tại trong ứng dụng.".to_string(),
+            );
+        };
+        let Some(found) = find_provider(&providers, requested).cloned() else {
+            return Err(format!(
+                "[AI_NO_PROVIDER] {} không có trong danh sách nhà cung cấp của ứng dụng.",
+                definition.label
+            ));
+        };
+        if !definition.wizard_eligible {
+            return Err(format!(
+                "[AI_PROVIDER_NOT_ELIGIBLE] {} chưa dùng được cho luồng tạo trò chơi. Hãy chọn AI local, Gemini hoặc ChatGPT trong Cài đặt AI.",
+                definition.label
+            ));
+        }
+        if found["usable"] != Value::Bool(true) {
+            let reason = found["reason"].as_str().unwrap_or("Chưa cấu hình.");
+            return Err(format!(
+                "[AI_PROVIDER_NOT_READY] {} chưa sẵn sàng: {reason}",
+                definition.label
+            ));
+        }
+        found
+    } else if local_preferred {
+        let usable = find_provider(&providers, "local")
+            .map(|provider| provider["usable"] == Value::Bool(true))
+            .unwrap_or(false);
+        if !usable {
+            return Err("[AI_NOT_RUNNING] AI local chưa chạy. Hãy nhấn “Tổng hợp với AI trên máy” để mở cửa sổ AI local · llama.cpp, chọn model đã tải đầy đủ rồi nhấn “Bắt đầu chạy”, hoặc dùng nút phân tích bằng AI ngoài.".to_string());
+        }
+        find_provider(&providers, "local")
+            .cloned()
+            .expect("provider local luôn có trong danh sách")
+    } else {
+        let auto = ["local", "gemini", "openai"]
+            .iter()
+            .find_map(|id| {
+                find_provider(&providers, id)
+                    .filter(|provider| provider["usable"] == Value::Bool(true))
+                    .cloned()
+            })
+            .or_else(|| {
+                find_provider(&providers, "custom")
+                    .filter(|provider| provider["usable"] == Value::Bool(true))
+                    .cloned()
+            });
+        match auto {
+            Some(provider) => provider,
+            None => {
+                return Err("[AI_NO_PROVIDER] Chưa có nhà cung cấp AI nào sẵn sàng. Hãy chạy AI local hoặc thêm API key của Gemini hoặc ChatGPT trong Cài đặt AI.".to_string())
+            }
+        }
+    };
+
+    let id = chosen["id"].as_str().unwrap_or("local").to_string();
+    let label = chosen["label"].as_str().unwrap_or("").to_string();
+    if id == "local" {
+        let base_url = local.base_url.clone().ok_or_else(|| {
+            "[AI_NOT_RUNNING] AI local chưa chạy. Hãy nhấn “Tổng hợp với AI trên máy” để mở cửa sổ AI local · llama.cpp, chọn model đã tải đầy đủ rồi nhấn “Bắt đầu chạy”, hoặc dùng nút phân tích bằng AI ngoài.".to_string()
+        })?;
+        return Ok(ProviderTarget {
+            id,
+            label,
+            base_url,
+            model: ai_local::selected_model_id(app),
+            api_key: None,
+            mode: "local".to_string(),
+        });
+    }
+
+    let base_url = chosen["baseUrl"]
+        .as_str()
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            format!(
+                "[AI_CONFIG] {label} chưa có điểm cuối (base URL). Hãy nhập trong Cài đặt AI."
+            )
+        })?
+        .to_string();
+    let model = chosen["model"]
+        .as_str()
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            format!("[AI_CONFIG] {label} chưa có tên model. Hãy nhập trong Cài đặt AI.")
+        })?
+        .to_string();
+    let api_key = raw
+        .pointer(&format!("/ai/providers/{id}/apiKeyEncrypted"))
+        .and_then(Value::as_str)
+        .filter(|blob| !blob.is_empty())
+        .map(|blob| {
+            secrets::unprotect_secret(blob).map_err(|_| {
+                format!(
+                    "[AI_CONFIG] Không đọc được API key đã lưu của {label}. Hãy nhập lại API key trong Cài đặt AI."
+                )
+            })
+        })
+        .transpose()?;
+    Ok(ProviderTarget {
+        id,
+        label,
+        base_url,
+        model,
+        api_key,
+        mode: "online".to_string(),
+    })
+}
+
 fn provider_status(
     definition: &ProviderDef,
     has_key: bool,
@@ -385,12 +546,18 @@ fn provider_status(
     last_test_ok: Option<bool>,
     last_test_at: Option<&str>,
     last_test_code: Option<&str>,
+    local: &ai_local::LocalFacts,
 ) -> (&'static str, String) {
     if definition.id == "local" {
-        return (
-            "configured",
-            "Chưa chạy AI local trong bản Tauri này.".to_string(),
-        );
+        if local.running {
+            return ("ready", "Đang chạy trên máy này.".to_string());
+        }
+        let reason = if local.model_ready {
+            "Model đã tải nhưng chưa chạy. Nhấn “Bắt đầu chạy” trong cửa sổ AI local."
+        } else {
+            "Chưa có model. Hãy tải model trong phần AI local phía trên."
+        };
+        return ("configured", reason.to_string());
     }
     let configured = if definition.id == "opencode" {
         !base_url.is_empty() && !model.is_empty()

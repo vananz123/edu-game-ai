@@ -95,6 +95,25 @@ pub fn hand_written(command: &str) -> Option<(&'static str, &'static str)> {
         "preflight_setup" => ("setup:preflight", "preflight_setup"),
         "start_setup" => ("setup:start", "start_setup"),
         "cancel_setup" => ("setup:cancel", "cancel_setup"),
+        // Giai đoạn 5: kho giáo án + luồng phân tích. Kho chạy SQL trên cùng kết
+        // nối của engine (`lesson_store.rs`); phần luật (prompt, cache key, cắt
+        // đoạn, dự án) ở slot V8 `EGLESSON`.
+        "save_lesson_document" => ("lesson:save-document", "save_lesson_document"),
+        "get_lesson_document" => ("lesson:get-document", "get_lesson_document"),
+        "list_lesson_library" => ("lesson:library", "list_lesson_library"),
+        "delete_lesson_document" => ("lesson:delete-document", "delete_lesson_document"),
+        "delete_lesson_documents" => ("lesson:delete-documents", "delete_lesson_documents"),
+        "analyze_lesson" => ("lesson:analyze", "analyze_lesson"),
+        "classify_lesson_input" => ("lesson:classify-input", "classify_lesson_input"),
+        "inspect_lesson_structure" => ("lesson:get-structure", "inspect_lesson_structure"),
+        "preview_lesson_selection" => ("lesson:preview-selection", "preview_lesson_selection"),
+        "recommend_games" => ("lesson:recommend", "recommend_games"),
+        "estimate_lesson_capacity" => ("lesson:capacity", "estimate_lesson_capacity"),
+        "get_lesson_analysis" => ("lesson:get-analysis", "get_lesson_analysis"),
+        "save_lesson_analysis" => ("lesson:save-analysis", "save_lesson_analysis"),
+        "get_lesson_recommendations" => ("lesson:recommendations", "get_lesson_recommendations"),
+        // Cùng `AiGate`: bật cờ huỷ của lượt đang chờ HTTP trong Rust.
+        "cancel_ai" => ("ai:cancel", "cancel_ai"),
         // Giai đoạn 4: nhập profile Electron. Ba kênh KHÔNG có trong preload
         // Electron — `tests/unit/tauri-contract.test.ts` miễn trừ chúng khỏi phép
         // so với `desktop-contract.json`, và renderer chỉ gọi trên vỏ Tauri.
@@ -254,6 +273,26 @@ async fn dispatch(app: &AppHandle, channel: &str, args: &[Value]) -> Result<Valu
         "setup:preflight" => crate::setup::preflight(app.clone(), args.first().cloned()).await,
         "setup:start" => crate::setup::start(app.clone(), args.first().cloned()).await,
         "setup:cancel" => crate::setup::cancel(app),
+        // Kho giáo án: cùng luồng engine, cùng kết nối SQLite; tham số renderer
+        // giữ nguyên hình dạng preload gửi.
+        "lesson:save-document" => crate::lesson::save_document(app, args.first()),
+        "lesson:get-document" => crate::lesson::get_document(app, &text_arg(args, 0)),
+        "lesson:library" => crate::lesson::library_documents(app),
+        "lesson:delete-document" => crate::lesson::delete_document(app, &text_arg(args, 0)),
+        "lesson:delete-documents" => crate::lesson::delete_documents(app, args.first()),
+        // Lượt model duy nhất: chờ tới 300 s, nên chạy trên `spawn_blocking`
+        // (`lesson::analyze`) để `ai:cancel` vẫn được phục vụ.
+        "lesson:analyze" => crate::lesson::analyze(app.clone(), args.first().cloned()).await,
+        "lesson:classify-input" => crate::lesson::classify(app, args.first()),
+        "lesson:get-structure" => crate::lesson::structure(app, args.first()),
+        "lesson:preview-selection" => crate::lesson::preview(app, args.first()),
+        "lesson:recommend" => crate::lesson::recommend(app, args.first()),
+        "lesson:capacity" => crate::lesson::capacity(app, args.first()),
+        "lesson:get-analysis" => crate::lesson::get_analysis(app, &text_arg(args, 0)),
+        "lesson:save-analysis" => crate::lesson::save_analysis(app, args.first()),
+        "lesson:recommendations" => crate::lesson::list_recommendations(app, &text_arg(args, 0)),
+        // #132: huỷ lượt đang chờ HTTP; trả `{ok}` như `aiRequests.cancel`.
+        "ai:cancel" => crate::lesson::cancel(app, &text_arg(args, 0)),
         // Năm kênh ghi của thư viện nhận thẳng tham số renderer gửi (một trò
         // chơi, một id, một mảng id), nên chúng đi qua `args` của cửa chung.
         "library:save-game"
@@ -317,6 +356,15 @@ async fn dispatch(app: &AppHandle, channel: &str, args: &[Value]) -> Result<Valu
 
 fn json<T: Serialize>(value: Result<T, String>) -> Result<Value, String> {
     value.and_then(|inner| serde_json::to_value(inner).map_err(|error| error.to_string()))
+}
+
+/// Tham số chuỗi của kênh (`lesson:get-document`, `ai:cancel`, …). Thiếu hoặc
+/// sai kiểu thành chuỗi rỗng, đúng cách `String(payload || '')` của preload.
+fn text_arg(args: &[Value], index: usize) -> String {
+    args.get(index)
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string()
 }
 
 /// Cửa chung cho mọi kênh có trả lời (xem đầu tệp).
@@ -638,6 +686,161 @@ pub fn cancel_setup(app: AppHandle) -> Result<serde_json::Value, String> {
     crate::setup::cancel(&app)
 }
 
+/// Lưu tài liệu giáo án (văn bản đã trích xuất + metadata). Luật kiểm nằm ở
+/// `lesson_store.rs`, cùng câu lỗi với `lesson-store.ts` của Electron.
+#[tauri::command]
+pub fn save_lesson_document(
+    app: AppHandle,
+    payload: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    crate::lesson::save_document(&app, payload.as_ref())
+}
+
+/// Đọc một tài liệu kèm văn bản; `null` khi id không tồn tại.
+#[tauri::command]
+pub fn get_lesson_document(
+    app: AppHandle,
+    document_id: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    let id = document_id
+        .as_ref()
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
+    crate::lesson::get_document(&app, id)
+}
+
+/// Toàn bộ thư viện giáo án (không kèm văn bản).
+#[tauri::command]
+pub fn list_lesson_library(app: AppHandle) -> Result<serde_json::Value, String> {
+    crate::lesson::library_documents(&app)
+}
+
+/// Xoá một tài liệu và tệp `.txt` đi kèm.
+#[tauri::command]
+pub fn delete_lesson_document(
+    app: AppHandle,
+    document_id: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    let id = document_id
+        .as_ref()
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
+    crate::lesson::delete_document(&app, id)
+}
+
+/// Xoá nhiều tài liệu trong một lượt; trả số dòng đã xoá và id thiếu.
+#[tauri::command]
+pub fn delete_lesson_documents(
+    app: AppHandle,
+    document_ids: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    crate::lesson::delete_documents(&app, document_ids.as_ref())
+}
+
+/// Phân tích giáo án: chọn provider, tra cache, gọi model một lần, lưu kết quả
+/// và ghép vào dự án. Đây là lệnh duy nhất chờ model, nên là `async`.
+#[tauri::command]
+pub async fn analyze_lesson(
+    app: AppHandle,
+    payload: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    crate::lesson::analyze(app, payload).await
+}
+
+/// Phân loại đầu vào (câu hỏi / giáo án / văn bản) bằng luật offline.
+#[tauri::command]
+pub fn classify_lesson_input(
+    app: AppHandle,
+    payload: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    crate::lesson::classify(&app, payload.as_ref())
+}
+
+/// Cây mục lục offline của bước 1, từ `text` hoặc `documentId`.
+#[tauri::command]
+pub fn inspect_lesson_structure(
+    app: AppHandle,
+    payload: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    crate::lesson::structure(&app, payload.as_ref())
+}
+
+/// Bản xem trước phần giáo án sẽ gửi — cùng phép cắt đoạn với lượt phân tích.
+#[tauri::command]
+pub fn preview_lesson_selection(
+    app: AppHandle,
+    payload: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    crate::lesson::preview(&app, payload.as_ref())
+}
+
+/// Gợi ý thể loại trò chơi từ kết quả phân tích (luật, không gọi model).
+#[tauri::command]
+pub fn recommend_games(
+    app: AppHandle,
+    payload: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    crate::lesson::recommend(&app, payload.as_ref())
+}
+
+/// Ước lượng số lượng nội dung mà dự án + phân tích + model có thể chống đỡ.
+#[tauri::command]
+pub fn estimate_lesson_capacity(
+    app: AppHandle,
+    payload: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    crate::lesson::capacity(&app, payload.as_ref())
+}
+
+/// Đọc một kết quả phân tích đã lưu.
+#[tauri::command]
+pub fn get_lesson_analysis(
+    app: AppHandle,
+    analysis_id: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    let id = analysis_id
+        .as_ref()
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
+    crate::lesson::get_analysis(&app, id)
+}
+
+/// Lưu kết quả phân tích (đường của renderer, không kèm cache key).
+#[tauri::command]
+pub fn save_lesson_analysis(
+    app: AppHandle,
+    analysis: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    crate::lesson::save_analysis(&app, analysis.as_ref())
+}
+
+/// Danh sách đề xuất đã lưu cho một phân tích.
+#[tauri::command]
+pub fn get_lesson_recommendations(
+    app: AppHandle,
+    analysis_id: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    let id = analysis_id
+        .as_ref()
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
+    crate::lesson::list_recommendations(&app, id)
+}
+
+/// Huỷ lượt AI đang chờ. Trả `{ok}`: `false` khi không có lượt nào mang
+/// `requestId` đó, đúng `aiRequests.cancel` của Electron.
+#[tauri::command]
+pub fn cancel_ai(
+    app: AppHandle,
+    request_id: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    let id = request_id
+        .as_ref()
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
+    crate::lesson::cancel(&app, id)
+}
+
 /// Thông tin vỏ đang chạy: renderer và cổng kiểm tra phân biệt được Tauri với
 /// Electron, và biết thư mục dữ liệu nằm ở đâu.
 #[tauri::command]
@@ -669,29 +872,14 @@ macro_rules! unsupported {
 // project, package, files, settings, AI local, migration). Thứ tự dưới đây theo
 // preload.ts để dễ đối chiếu bằng mắt.
 unsupported! {
-    save_lesson_document => "lesson:save-document",
-    get_lesson_document => "lesson:get-document",
-    list_lesson_library => "lesson:library",
-    delete_lesson_document => "lesson:delete-document",
-    delete_lesson_documents => "lesson:delete-documents",
     test_ai_provider => "ai:test-provider",
-    cancel_ai => "ai:cancel",
     list_ai_tasks => "ai:tasks",
     verify_cpu_runtime => "ai:runtime-verify",
-    analyze_lesson => "lesson:analyze",
-    classify_lesson_input => "lesson:classify-input",
     convert_lesson_draft => "lesson:convert-draft",
-    inspect_lesson_structure => "lesson:get-structure",
-    preview_lesson_selection => "lesson:preview-selection",
     send_lesson_chat => "lesson:chat-send",
     list_lesson_chats => "lesson:chats",
     get_lesson_chat => "lesson:chat-get",
     delete_lesson_chats => "lesson:chat-delete",
-    recommend_games => "lesson:recommend",
-    estimate_lesson_capacity => "lesson:capacity",
-    get_lesson_analysis => "lesson:get-analysis",
-    save_lesson_analysis => "lesson:save-analysis",
-    get_lesson_recommendations => "lesson:recommendations",
     generate_lesson_draft => "lesson:generate",
     regenerate_lesson_item => "lesson:regenerate-item",
     check_lesson_quality => "lesson:quality",

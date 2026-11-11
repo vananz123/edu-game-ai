@@ -956,16 +956,16 @@ const RUNNER = `(async () => {
     out.setupMsg = 'setup:* lỗi: ' + (error && error.message);
   }
 
-  // Một kênh có trả lời nhưng chưa port (ví dụ lưu tài liệu giáo án) phải từ
+  // Một kênh có trả lời nhưng chưa port (ví dụ đổi thể loại bản nháp) phải từ
   // chối ĐỌC ĐƯỢC. Câu lỗi đi qua cửa chung nên nó phải nêu tên kênh, không
-  // được treo. Giai đoạn 3 đã port nhóm library:*, nên chọn kênh còn trống.
+  // được treo. Khi một kênh được port, đổi phép dò sang kênh còn trống kế tiếp.
   try {
-    await facade.call('saveLessonDocument', { title: 'synthetic' });
+    await facade.call('convertLessonDraft', {});
     out.unsupported = false;
-    out.unsupportedMsg = 'saveLessonDocument lại trả thành công';
+    out.unsupportedMsg = 'convertLessonDraft lại trả thành công';
   } catch (error) {
     const message = String((error && error.message) || '');
-    out.unsupported = Boolean(error && error.code) && /lesson:save-document/.test(message);
+    out.unsupported = Boolean(error && error.code) && /lesson:convert-draft/.test(message);
     out.unsupportedMsg = (error && error.code) + ': ' + message;
   }
 
