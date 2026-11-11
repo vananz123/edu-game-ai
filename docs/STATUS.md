@@ -1,4 +1,4 @@
-﻿# Trạng thái dự án
+# Trạng thái dự án
 
 Bàn giao mới nhất nằm ngay trong file này (3 mục gần nhất). Các bàn giao cũ được lưu ở
 `docs/handoff/status/` — mỗi ngày một file, nối thêm vào cuối file của ngày đó khi cần.
@@ -6,6 +6,14 @@ Quy ước: sau mỗi việc, chèn bàn giao mới ngay dưới tiêu đề "B�
 chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập nhật mục lục.
 
 ## Mục lục bàn giao
+
+### 2026-11-11 — Dọn Electron batch 1: 21 cổng ui launcher-only chạy hết trên vỏ Tauri — 15 xanh nguyên trạng, 5 sửa giả định cũ trong check, 1 hồi quy THẬT trong Rust (`provider_status`) được tìm và sửa
+- **Trạng thái:** Port xong nhóm check không cần `window.eduGame` theo bảng C1. 15/21 xanh ngay trên launcher Tauri. 5 tệp đỏ vì giả định Electron-era trong CHÍNH check: `ui-chrome-icons` (đòi UI 0.4.1 trong khi release 0.4.2 `2740fc2` đã xóa nhóm "Thao tác nhanh", nâng trần recent 3→5 — check đổi sang phản-điều + đọc `SIDEBAR_RECENT_GAME_COUNT` thật), `ui-fullscreen` + 2 `ui-setup-*` (lọc URL `/index\.html/` và hardcode cổng 9333 — nay nhận `http://tauri.localhost/` + argv/`CDP_PORT`), `ui-wizard-structure` (flake 1/3: chờ đúng 1 rAF trong khi `step-structure.ts` có đường restore focus ở frame hai — sửa thành chờ có trần 10 frame), 2 provider checks (assert `adapter === 'electron'` — chấp nhận cả `tauri`). **1 hồi quy thật**: `provider_status()` Rust ghi note thẻ lỗi bằng mã trần `(AI_AUTH)` + ISO thô thay vì nhãn tiếng Việt + giờ địa phương của `lastTestNote()` nguyên bản — sửa `settings.rs` (ERROR_LABELS + `chrono`, crate đã có trong lockfile), thêm hậu tố "Chưa dùng được cho luồng tạo trò chơi." cho provider ngoài wizard, thêm 2 unit test Rust.
+- **Files đổi:** `src-tauri/src/settings.rs`, `src-tauri/Cargo.toml` (+chrono), `tests/ui/ui-chrome-icons-check.js`, `tests/ui/ui-fullscreen-check.js`, `tests/ui/ui-setup-progress-check.js`, `tests/ui/ui-setup-fullscreen-check.js`, `tests/ui/ui-wizard-structure-check.js`, `tests/ui/ui-ai-provider-settings-check.js`, `tests/ui/ui-ai-provider-wizard-check.js`, `docs/archive/specs/electron-removal-plan.md` (bảng C2 mới), `docs/DECISIONS.md`, `docs/STATUS.md`, `docs/handoff/status/2026-11-11.md`.
+- **Hành vi:** Product đổi 1 chỗ hiển thị: note lỗi/thành công trên thẻ provider trong Cài đặt (ngôn ngữ giáo viên, không còn mã máy). 7 tệp check chỉ sửa giả định cũ, không nới assertion hành vi thật.
+- **Lệnh đã chạy:** `cargo test --lib` **153/153** · `npm run check` sạch · `npm test` **95/95** · 21/21 phép kiểm ui batch 1 xanh trên binary release mới (số chốt lấy từ instance vừa khởi động lại; `ui-chrome-icons` **17/17**, `ui-fullscreen` **20/20**, `ui-wizard-structure` **19/19 ×5**, provider settings/wizard **all passed**) · `cargo tauri build` OK (exe 59.237.376 B) · `node scripts/build-tauri-release.js --check` ba pha **51/51 + 10/10 + 12/12** rc 0 · NSIS bundle mới **15,66 MiB** — khác byte bản 0.5.1 đã phát hành trên GitHub (P7 vẫn neo số của bảnđã publish; phải republish hoặc bump khi đóng phát hành).
+- **Chưa xác minh:** ~27 ui check còn lại có payload `window.eduGame` chưa port (batch 2); 15 smoke check chưa map vào gate Rust; nhóm D (`unload-guard.ts`, `setup-ipc.ts`) chưa rà; P7 vẫn MỞ.
+- **Việc kế tiếp:** Batch 2 — port payload sang façade `desktop.*`, bắt đầu từ 5 tệp "không được xóa trước khi có bản port" của C1 (`ui-lesson-chat`, `ui-typography-readability`, `ui-input-routing`, `ui-presentation`, `ui-draft-guard`).
 
 ### 2026-11-11 — Dọn Electron nhóm B/C: launcher Tauri thay launch-app.ps1 cũ, xóa 14 tệp test chết, viết lại tests/README.md và bảng phân loại electron-removal-plan
 - **Trạng thái:** Sau parity 100% (`unsupported!` = 0), lượt này dọn phần Electron sót trong `tests/`. `tests/ui/launch-app.ps1` được **viết lại thành launcher Tauri** (mở `edugame-studio-tauri.exe` bản release, `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port`, profile tạm, chờ đúng trang `tauri.localhost` trong `/json/list`) thay vì xóa như kế hoạch B1; `npm run launch:ui` còn dùng được, 8 header `ui-*` không phải sửa. Xóa **14 tệp chết đã xác minh** (zero caller theo `rg`): `tests/legacy/` cả 5, `smoke64/65/67/76/77`, `packaged-install-check.js`, `packaged-feed-check.js`, `offline-packaged-check.js`, `grading-packaged-check.js` — các tệp này drive `electron.cmd`/`release\win-unpacked`/hook `EDUGAME_AI_TEST_DIR` đã bị gỡ cùng Electron. `tests/README.md` viết lại theo Tauri: bảng layout, cổng `tauri:check` ba pha, mục ghi tiêu chí nghiệm thu updater tương lai (chép từ hai cổng feed/install đã xóa), hướng dẫn thêm test đúng cơ chế `run-unit.js`. `P7-OFFLINE-INSTALL.md` + `p7-offline-install.ps1` neo bundle Tauri 0.5.1 (16.403.858 B, SHA-256 `7AE04626959338D8…`), script giữ nguyên vì installer-agnostic. Bảng phân loại C1 (PORT ~48 ui + 15 smoke, KEEP có cứ liệu, bất-di `ui-check-lib`) thêm vào `electron-removal-plan.md`. Quyết định ghi tại mục "Dọn Electron nhóm B/C" của `docs/DECISIONS.md`.
@@ -24,19 +32,10 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - **Chưa xác minh:** installer trên máy sạch/VM thật (cài thử trong thư mục tạm trên máy dev); máy chiếu vật lý; điện thoại Wi-Fi thật; model thật/BYOK thật; dọn nhóm B/C của `electron-removal-plan.md` (`launch-app.ps1` và `launch:ui` đang hỏng vì `electron.cmd` không còn — đã xác nhận).
 - **Việc kế tiếp:** Giai đoạn 7 — xếp loại smoke/packaging Electron còn lại theo nhóm B/C của `electron-removal-plan.md`, thay kiểm tra P7 bằng checklist nghiệm thu installer Tauri, chạy installer trên máy sạch.
 
-### 2026-11-11 — Tiếp tục loại bỏ Electron: cập nhật docs và lập danh mục dọn file
-- **Trạng thái:** Backend desktop, renderer bridge, dependency/build và các luồng chính đã chuyển sang Tauri. Kế hoạch đã chia file còn lại thành Electron-only, test cần port/đánh giá, helper cần xác minh consumer, và dữ liệu/hạ tầng phải giữ.
-- **Files đổi:** README, `docs/ARCHITECTURE.md`, `docs/PROJECT_MAP.md`, `docs/AGENT_HANDOFF.md`, `docs/STATUS.md`, `docs/handoff/status/2026-11-11.md`, `docs/archive/specs/electron-removal-plan.md`, `src-tauri/src/api.rs`, `src/ai-core/setup-ipc.ts`.
-- **Hành vi:** Không xóa file hay đổi luồng runtime trong lượt lập kế hoạch. Kế hoạch nêu rõ các runner Electron lỗi thời, coverage Tauri cần thay trước khi dọn, các file đã được xóa trong worktree và các thành phần phải giữ (profile migration, SQLite, `.egame`, app-data).
-- **Lệnh đã chạy:** `npm run check` qua · `npm test` **95/95** (có cảnh báo `EPERM` khi dọn `dist\\server\\index.js`, nhưng suite hoàn tất) · Rust tests **151/151** · `npm run build:tauri` đóng gói 203 tệp, embedded **6125.3 KiB** · `npm run check:embedded` khớp · `npm run check:renderer-globals` 73/75 script, không undefined globals · `npm run tauri:check` **51/51 + 10/10 + migration 12/12** · `git diff --check` qua.
-- **Chưa xác minh:** Cài/nâng cấp/gỡ installer trên Windows sạch/VM và giữ profile; máy chiếu vật lý. `tauri:check` đã xác minh bundle và migration bằng dữ liệu tổng hợp, không thay thế nghiệm thu installer phát hành.
-- **Việc kế tiếp:** Rà soát/xếp loại smoke và packaging Electron còn sót; kiểm thử installer sạch trên Windows trước khi đóng migration.
-
+- **Tiếp tục loại bỏ Electron (2026-11-11)** — Bản lưu trữ: [docs/handoff/status/2026-11-11.md](handoff/status/2026-11-11.md).
 - **Giai đoạn 6 — Trình chiếu (2026-11-11)** — Bản lưu trữ: [docs/handoff/status/2026-11-11.md](handoff/status/2026-11-11.md); quyết định tương ứng trong `docs/DECISIONS.md`.
-
 - **Giai đoạn 6 — Mạng nội bộ & Legacy AI (2026-11-11)** — Bản lưu trữ: [docs/handoff/status/2026-11-11.md](handoff/status/2026-11-11.md); quyết định tương ứng trong `docs/DECISIONS.md`.
 - **Giai đoạn 6 — Giới thiệu & Cập nhật (2026-11-11)** — Bản lưu trữ: [docs/handoff/status/2026-11-11.md](handoff/status/2026-11-11.md); quyết định tương ứng trong `docs/DECISIONS.md`.
-
 - **Giai đoạn 5 — nhóm AI (2026-11-11)** — Bản lưu trữ: [docs/handoff/status/2026-11-11.md](handoff/status/2026-11-11.md); quyết định tương ứng trong `docs/DECISIONS.md`.
 - **Giai đoạn 5 — chat giáo án (2026-11-11)** — Bản lưu trữ: [docs/handoff/status/2026-11-11.md](handoff/status/2026-11-11.md); quyết định tương ứng trong `docs/DECISIONS.md`.
 - **Giai đoạn 5 — sinh nội dung (2026-11-11)** — Bản lưu trữ: [docs/handoff/status/2026-11-11.md](handoff/status/2026-11-11.md); quyết định tương ứng trong `docs/DECISIONS.md`.

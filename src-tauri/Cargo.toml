@@ -50,6 +50,10 @@ getrandom = "0.3"
 # thuộc (qua tauri/rusqlite); khai trực tiếp để không dựa vào một đường gián tiếp.
 sha2 = "0.10"
 hex = "0.4"
+# Ghi chú thẻ nhà cung cấp (mốc giờ "HH:mm dd/MM" theo múi giờ máy) và các nhãn
+# lỗi tiếng Việt phải khớp nguyên bản `ai-providers.ts` của Electron. `chrono`
+# đã có trong cây phụ thuộc (qua tauri); khai trực tiếp để không dựa vào gián tiếp.
+chrono = "0.4"
 
 [target.'cfg(windows)'.dependencies]
 # Giai đoạn 5: khoá BYOK được bảo vệ bằng DPAPI của Windows, không dùng

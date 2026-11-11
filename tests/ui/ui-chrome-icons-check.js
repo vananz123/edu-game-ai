@@ -22,7 +22,10 @@
  *     empty states and card menus carry no emoji left (the game-content emoji
  *     that #161 deliberately kept are allowlisted below);
  *   - the sidebar has no "Tổng quan" entry and the app lands on the library;
- *   - the shortcut block really renders its two groups and its quick actions;
+ *   - the shortcut block really renders its one group (release 0.4.2 removed the
+ *     "Thao tác nhanh" group and raised the recent cap from 3 to 5; the checks
+ *     below assert that removal so the commented-out block in
+ *     sidebar-shortcuts.ts can never silently come back);
  *   - the decorative eyebrows removed with the overview page stay removed.
  *
  * Usage: launch with --remote-debugging-port=PORT, then
@@ -132,6 +135,8 @@ const SCENARIO = String.raw`(async () => {
     total: items.length,
     recent: items.filter(i => i.getAttribute('data-action') === 'play').length,
     quick: items.filter(i => i.getAttribute('data-page')).length,
+    cap: typeof SIDEBAR_RECENT_GAME_COUNT === 'number' ? SIDEBAR_RECENT_GAME_COUNT : -1,
+    games: ((typeof state === 'object' && state.db && state.db.games) || []).length,
     unpainted: items.filter(i => !painted(i.querySelector('.shortcut-icon'))).length,
     emptyText: block && !items.length ? String((block.querySelector('.shortcut-empty') || {}).textContent || '') : ''
   };
@@ -171,13 +176,14 @@ const SCENARIO = String.raw`(async () => {
   check('the shortcut block renders under the nav', out.shortcuts.present && /Lối tắt/.test(out.shortcuts.head),
     JSON.stringify({ present: out.shortcuts.present, head: out.shortcuts.head }));
   check('its Lucide header icon is painted', out.shortcuts.headPainted === true);
-  check('it holds the two groups the overview page was actually for',
-    out.shortcuts.labels.includes('Gần đây') && out.shortcuts.labels.includes('Thao tác nhanh'), out.shortcuts.labels.join(','));
-  check('the two quick actions navigate and stay inside the sidebar',
-    out.shortcuts.quick === 2 && out.shortcuts.unpainted === 0,
+  check('the shortcut block holds the one group 0.4.2 kept',
+    out.shortcuts.labels.includes('Gần đây') && !out.shortcuts.labels.includes('Thao tác nhanh'), out.shortcuts.labels.join(','));
+  check('the quick-action rows removed in 0.4.2 stay removed',
+    out.shortcuts.quick === 0 && out.shortcuts.unpainted === 0,
     `quick=${out.shortcuts.quick} unpainted=${out.shortcuts.unpainted}`);
-  check('recent games are capped at three', out.shortcuts.recent <= 3,
-    out.shortcuts.recent ? `recent=${out.shortcuts.recent}` : `empty: ${out.shortcuts.emptyText.slice(0, 40)}`);
+  check('recent games are capped by SIDEBAR_RECENT_GAME_COUNT',
+    out.shortcuts.cap >= 0 && out.shortcuts.recent === Math.min(out.shortcuts.games, out.shortcuts.cap),
+    `cap=${out.shortcuts.cap} games=${out.shortcuts.games} recent=${out.shortcuts.recent}${out.shortcuts.recent ? '' : ` empty: ${out.shortcuts.emptyText.slice(0, 40)}`}`);
   check('the library card menu uses a Lucide toggle', out.cardMenu.present && out.cardMenu.painted,
     JSON.stringify(out.cardMenu));
 

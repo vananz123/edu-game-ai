@@ -901,13 +901,21 @@ fn provider_status(
         };
         return ("not-configured", reason.to_string());
     }
-    let when = last_test_at.map(|at| format!(" lúc {at}")).unwrap_or_default();
+    let when = last_test_at.map(format_short_time);
+    let when = when.as_deref().unwrap_or("");
+    let when = if last_test_at.is_some() { format!(" lúc {when}") } else { String::new() };
     match last_test_ok {
         Some(false) => {
-            let code = last_test_code.map(|code| format!(" ({code})")).unwrap_or_default();
-            ("failing", format!("Kiểm tra gần nhất thất bại{when}{code}."))
+            let code = last_test_code.map(error_label).unwrap_or("Lỗi chưa xác định");
+            ("failing", format!("Kiểm tra gần nhất thất bại{when} ({code})."))
         }
-        Some(true) => ("ready", format!("Kiểm tra kết nối thành công{when}.")),
+        Some(true) => {
+            let mut note = format!("Kiểm tra kết nối thành công{when}.");
+            if !definition.wizard_eligible {
+                note.push_str(" Chưa dùng được cho luồng tạo trò chơi.");
+            }
+            ("ready", note)
+        }
         None => (
             "configured",
             "Đã cấu hình nhưng chưa kiểm tra kết nối.".to_string(),
@@ -915,11 +923,37 @@ fn provider_status(
     }
 }
 
+/// Bản sao `formatShortTime()` trong `ai-providers.ts`: ISO UTC → "HH:mm dd/MM"
+/// theo múi giờ máy. Chuỗi không parse được trả rỗng, như nguyên bản.
+fn format_short_time(iso: &str) -> String {
+    chrono::DateTime::parse_from_rfc3339(iso)
+        .map(|at| at.with_timezone(&chrono::Local).format("%H:%M %d/%m").to_string())
+        .unwrap_or_default()
+}
+
+/// Bản sao `ERROR_LABELS`/`errorLabel()` trong `ai-providers.ts` — nhãn ngắn cho
+/// thẻ Cài đặt, khác thông dài của `classify_http_error` dùng ở banner.
+fn error_label(code: &str) -> &'static str {
+    match code {
+        "AI_AUTH" => "API key không hợp lệ hoặc bị thu hồi",
+        "AI_QUOTA" => "Tài khoản hết hạn mức",
+        "AI_RATE_LIMIT" => "Đang bị giới hạn số yêu cầu",
+        "AI_NETWORK" | "AI_CONNECTION" => "Không kết nối được tới nhà cung cấp",
+        "AI_TIMEOUT" => "Nhà cung cấp phản hồi quá lâu",
+        "AI_MODEL_NOT_FOUND" => "Không có model này",
+        "AI_CONFIG" => "Cấu hình chưa đúng",
+        "AI_KEY_STORAGE_UNAVAILABLE" => "Máy không lưu được khoá an toàn",
+        "AI_INVALID_JSON" => "Nhà cung cấp trả về dữ liệu không đọc được",
+        "AI_HTTP" | "AI_PROVIDER_HTTP" => "Nhà cung cấp báo lỗi",
+        _ => "Lỗi chưa xác định",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::{json, Value};
 
-    use super::{classify_http_error, default_settings, merge, public_view};
+    use super::{classify_http_error, default_settings, merge, provider_def, provider_status, public_view};
 
     fn provider<'a>(view: &'a Value, id: &str) -> &'a Value {
         view["ai"]["providers"]
@@ -1062,5 +1096,44 @@ mod tests {
         assert_eq!(classify_http_error(400, "model not found").0, "AI_MODEL_NOT_FOUND");
         assert_eq!(classify_http_error(429, "too many requests").0, "AI_RATE_LIMIT");
         assert_eq!(classify_http_error(500, "internal error").0, "AI_PROVIDER_HTTP");
+    }
+
+    #[test]
+    fn failing_note_uses_the_vietnamese_label_and_compact_time() {
+        let facts = crate::ai_local::LocalFacts::default();
+        let definition = provider_def("gemini").expect("gemini có trong registry");
+        let (status, reason) = provider_status(
+            definition, true, "https://synthetic.example/v1", "synthetic-model",
+            Some(false), Some("2026-01-02T03:04:05.678Z"), Some("AI_AUTH"), &facts,
+        );
+        assert_eq!(status, "failing");
+        assert!(reason.contains("API key không hợp lệ hoặc bị thu hồi"), "{reason}");
+        assert!(!reason.contains("AI_AUTH"), "mã trần không được hiện ra: {reason}");
+        assert!(!reason.contains("2026-01-02T"), "ISO thô không được hiện ra: {reason}");
+        let at = reason.find("lúc ").expect("phải có mốc giờ");
+        let stamp: Vec<char> = reason[at + "lúc ".len()..].chars().take(11).collect();
+        assert!(
+            stamp.len() == 11 && stamp[2] == ':' && stamp[5] == ' ' && stamp[8] == '/'
+                && stamp.iter().step_by(3).take(4).all(|c| c.is_ascii_digit()),
+            "mốc giờ phải là HH:mm dd/MM, nhận {stamp:?}"
+        );
+    }
+
+    #[test]
+    fn ready_note_flags_providers_the_game_flow_cannot_use() {
+        let facts = crate::ai_local::LocalFacts::default();
+        let opencode = provider_def("opencode").expect("opencode có trong registry");
+        let (_, reason) = provider_status(
+            opencode, false, "https://synthetic.example/v1", "synthetic-model",
+            Some(true), Some("2026-01-02T03:04:05.678Z"), None, &facts,
+        );
+        assert!(reason.contains("Chưa dùng được cho luồng tạo trò chơi."), "{reason}");
+        let gemini = provider_def("gemini").expect("gemini có trong registry");
+        let (status, reason) = provider_status(
+            gemini, true, "https://synthetic.example/v1", "synthetic-model",
+            Some(true), Some("2026-01-02T03:04:05.678Z"), None, &facts,
+        );
+        assert_eq!(status, "ready");
+        assert!(!reason.contains("Chưa dùng được"), "{reason}");
     }
 }

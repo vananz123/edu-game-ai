@@ -2650,7 +2650,23 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 
 **Việc kế tiếp.** Chưa duyệt bắt đầu code. Khi duyệt: dựng khung Tauri v2 + Rust toolchain trong nhánh riêng, chuyển lớp truy cập desktop sang facade TS (kế hoạch mục 4) và làm vòng 1 theo mục 1.
 
+## Dọn Electron batch 1 (2026-11-11) — 21 cổng ui launcher-only chạy hết trên vỏ Tauri: 15 xanh nguyên trạng, 5 sửa giả định cũ trong check, 1 hồi quy thật tìm thấy và sửa trong Rust (`provider_status` note tiếng Việt)
+
+**Bối cảnh.** Bảng C1 của `electron-removal-plan.md` chia ~48 ui check thành hai loại: chỉ cần launcher mới (không gọi `window.eduGame` trong payload CDP) và cần port payload. Batch 1 = đúng 21 tệp loại một, chạy thật trên binary release qua `launch-app.ps1 -Port 9361`.
+
+**Kết quả phân loại (chi tiết trong bảng C2 của kế hoạch).**
+1. **15 xanh nguyên trạng** — không sửa gì: nav-hint, play-surface (774 kiểm), game-background, stage-illustration, constellation, ai-status-bar, connection-mode, wizard-cancel-genre, four three-game checks, matching-finish, ai-provider-key.
+2. **5 đỏ vì giả định cũ trong CHÍNH check** (mục ruỗng từ cuối kỳ Electron, không liên quan Tauri): (a) `ui-chrome-icons` — 3 assertion vẫn đòi UI 0.4.1 trong khi release 0.4.2 (`2740fc2`) đã xóa nhóm "Thao tác nhanh" và nâng trần recent 3→5; check mới dùng **phản-điều** (assert `quick === 0`, label vắng) và đọc trần mới trực tiếp từ `SIDEBAR_RECENT_GAME_COUNT` — 17/17. (b) `ui-fullscreen` + 2 setup checks — `findTarget` nội bộ lọc URL `/index\.html/` (định dạng Electron) và hardcode cổng 9333; Nay nhận cả `http://tauri.localhost/` + argv/`CDP_PORT` như `ui-check-lib`. (c) `ui-wizard-structure` — flake 1/3 lượt: check chờ ĐÚNG một `requestAnimationFrame` trong khi `step-structure.ts` có đường restore focus ở frame thứ hai (microtask); sửa thành chờ có trần 10 frame — 19/19 ×5 liên tiếp. (d) 2 provider checks — assert `adapter === 'electron'`; chấp nhận `['electron','tauri']`.
+3. **1 hồi quy THẬT của port Rust** — `provider_status()` (settings.rs) viết note thẻ nhà cung cấp bằng mã lỗi trần `(AI_AUTH)` + ISO thô, còn nguyên bản `ai-providers.ts` (`lastTestNote` + `ERROR_LABELS` + `formatShortTime`) cho giáo viên nhãn tiếng Việt và giờ địa phương. `ui-ai-provider-settings-check` là cổng đầu tiên bắt được. Sửa Rust: chiếu `ERROR_LABELS` (kể cả hậu tố "Chưa dùng được cho luồng tạo trò chơi." cho provider ngoài wizard — ô TS có mà Rust từng bỏ), format giờ qua `chrono` (crate đã có trong cây phụ thuộc — lockfile xác nhận, không tải mới); thêm 2 unit test khóa hành vi (note phải có nhãn, không còn mã trần/ISO thô, đúng khuôn `HH:mm dd/MM`). Đo lại trên binary dựng lại: cả hai check **all passed**.
+
+**Số cổng.** `cargo test --lib` **153/153** · `npm run check` sạch · `npm test` **95/95** · `npm run tauri:check` ba pha (kết quả ghi ở commit này khi xong).
+
+**Không chứng minh / chưa làm.** ~27 ui check có payload `window.eduGame` chưa port (batch 2 — nhóm paging/answer/draft/presentation); 15 smoke check chưa map vào gate Rust; phát hiện phụ: các check chia sẻ một instance nên thứ tự chạy ảnh hưởng kết quả (đã ghi quy tắc "số chốt lấy từ instance vừa khởi động lại" vào C2).
+
+**Việc kế tiếp.** Batch 2: port payload `window.eduGame` → façade `desktop.*` cho các ui check còn lại, ưu tiên 5 tệp "không được xóa trước khi có bản port" của C1.
+
 ## Dọn Electron nhóm B/C (2026-11-11) — launcher Tauri thay vì xóa `launch-app.ps1`; xóa 14 tệp chết; P7 giữ và neo số 0.5.1
+
 
 **Bối cảnh.** Hợp đồng desktop đã parity 100 % (`unsupported!` = 0). `docs/archive/specs/electron-removal-plan.md` nhóm B/C yêu cầu phân loại từng tệp test còn sót trước khi xóa, với cứ liệu caller và cổng xác minh.
 

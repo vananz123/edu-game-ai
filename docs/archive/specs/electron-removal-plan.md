@@ -84,6 +84,28 @@ hook `will-prevent-unload` Electron không còn tương đương trực tiếp).
 Cổng cho từng lượt PORT: chạy launcher mới trên cổng tự chọn → chạy phép kiểm → nếu FAIL thì xác định
 đó là giả định preload/data cũ hay hồi quy thật của Tauri, rồi sửa check hoặc mở issue.
 
+### C2. Batch 1 (2026-11-11) — 21 phép kiểm ui KHÔNG có payload `window.eduGame` (chỉ cần launcher)
+
+Chạy đủ 21/21 phép kiểm trên instance Tauri release qua launcher mới (`launch-app.ps1 -Port 9361`).
+Kết quả và phân loại theo cổng C1:
+
+| Phép kiểm | Kết quả | Phân loại / hành động |
+|---|---|---|
+| nav-hint, play-surface (774), game-background (42), stage-illustration (169), constellation (105), ai-status-bar, connection-mode (7), wizard-cancel-genre (8), three-game (19), three-game-4games (41), three-game-patterns (31), three-game-reactions (11), matching-finish (22), ai-provider-key | **PASS nguyên trạng** | Không sửa gì — launcher Tauri đủ. |
+| ui-chrome-icons (17) | FAIL 3 → **17/17 sau sửa check** | Giả định cũ: release 0.4.2 (`2740fc2`, 2026-11-07) đã xóa nhóm "Thao tác nhanh" và nâng trần recent 3→5, check không cập nhật theo (mục ruỗng từ trước Tauri). Check mới còn phản-điều (assert `quick === 0`, label không còn "Thao tác nhanh") và đọc trần từ `SIDEBAR_RECENT_GAME_COUNT` thật. |
+| ui-fullscreen (20) | FAIL do cổng cứng → **20/20** | `findTarget` nội bộ lọc `/index\.html/` (URL Electron) và bỏ qua argv/`CDP_PORT`; nay nhận cả `http://tauri.localhost/` như `ui-check-lib`, header đổi sang launcher. |
+| ui-setup-progress, ui-setup-fullscreen | ECONNREFUSED → **PASS hết** | Cùng bệnh trên: hardcoded 9333, không nhận argv/`CDP_PORT`. Đã sửa + cập nhật header. |
+| ui-wizard-structure (19) | Flake 1/3 lượt → **19/19 ×5** | Không phải Tauri: check chỉ chờ ĐÚNG một `requestAnimationFrame`, còn `step-structure.ts` restore focus ở frame thứ hai khi tick đi đường microtask — race vốn có, máy chậm hơn là đỏ. Check sửa thành chờ có trần (10 frame) cho đúng row được tick. |
+| ui-ai-provider-settings, ui-ai-provider-wizard | FAIL 2–3 → **all passed trên binary mới** | Hai loại: (a) assert `desktop.info().adapter === 'electron'` — giả định vỏ cũ, nay chấp nhận `['electron','tauri']`; (b) **hồi quy THẬT của port Rust**: `provider_status()` trong `settings.rs` ghi note lỗi bằng mã trần `(AI_AUTH)` + ISO thô, còn nguyên bản `lastTestNote()` (ai-providers.ts) chiếu qua `ERROR_LABELS` ("API key không hợp lệ hoặc bị thu hồi") và `formatShortTime` giờ địa phương — giáo viên thấy mã máy thay vì câu giải thích. Đã sửa Rust (`chrono` đã có trong cây phụ thuộc), thêm 2 unit test Rust khóa hành vi; đo lại trên binary dựng lại: cả hai check xanh. |
+
+Kết luận batch: 15/21 xanh nguyên trạng; 5/21 đỏ vì giả định cũ trong CHÍNH check (đã sửa check);
+1/21 đỏ vì hồi quy thật trong Rust (đã sửa sản phẩm + test). Không có ô nào phải mở issue riêng.
+
+Lưu ý vận hành rút ra khi đo: các check **chia sẻ một instance app**; check dựng wizard setup
+(provider-settings/wizard) có thể để lại `state.page = 'home'` và làm đỏ ô "lands on the library"
+của phép kiểm chạy sau — không phải hồi quy. Số chốt của mỗi check lấy từ lượt chạy trên instance
+vừa khởi động lại; chạy lại `ui-chrome-icons-check` trên instance sạch: **17/17**.
+
 ### D. Soát mã TypeScript cũ — không phải đợt xóa hàng loạt
 
 - `src/ai-core/unload-guard.ts` là ứng viên Electron-specific cần xác định behavior đóng cửa sổ nào còn được Tauri/Rust xử lý; hiện có `tests/unit/unload-guard.test.ts`, nên quyết định phải bao gồm cả test và luồng đóng cửa sổ.

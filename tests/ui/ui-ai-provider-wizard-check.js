@@ -133,7 +133,7 @@ function installHarness(view, analyzeBehaviour = 'ok') {
     };
   })()`);
   check('the provider calls are in the façade contract and the shell is attached',
-    localOnly.hasBridge === true && localOnly.shell === 'electron', JSON.stringify(localOnly));
+    localOnly.hasBridge === true && ['electron', 'tauri'].includes(localOnly.shell), JSON.stringify(localOnly));
 
   // 1. Two providers ready → the small picker appears on step 2 and step 5.
   const two = await cdp.evaluate(installHarness(providerView({ gemini: true })));

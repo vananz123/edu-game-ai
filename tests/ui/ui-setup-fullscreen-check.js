@@ -1,7 +1,7 @@
 // tests/ui/ui-setup-fullscreen-check.js — setup must own the window, not float over it.
 //
-//   npx electron . --remote-debugging-port=9333   (from another terminal), then:
-//   node tests/ui/ui-setup-fullscreen-check.js
+//   powershell -ExecutionPolicy Bypass -File tests/ui/launch-app.ps1 -Port 9333   (from another terminal), then:
+//   node tests/ui/ui-setup-fullscreen-check.js [port]
 //
 // A teacher who can still see (and click) the dashboard behind the wizard tries
 // to use the app underneath it. This measures, on the real renderer, that:
@@ -11,8 +11,10 @@
 //   * the action buttons are inside the viewport (not pushed below the fold);
 //   * finishing or closing the wizard gives the window back.
 (async () => {
-  const res = await fetch('http://127.0.0.1:9333/json/list');
-  const target = (await res.json()).find(x => x.type === 'page' && /index\.html/.test(x.url));
+  const PORT = Number(process.argv[2] || process.env.CDP_PORT || 9333);
+  const res = await fetch(`http://127.0.0.1:${PORT}/json/list`);
+  const target = (await res.json()).find(x => x.type === 'page'
+    && (/index\.html/.test(x.url) || /^https?:\/\/tauri\.localhost\/?$/.test(x.url)));
   if (!target) throw new Error('no CDP target');
   const ws = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((r, j) => { ws.addEventListener('open', r, { once: true }); ws.addEventListener('error', j, { once: true }); });

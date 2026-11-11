@@ -78,8 +78,17 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     // below waits for that frame, the scroll check must not.
     const immediateList = document.querySelector('[data-structure-tree]');
     const restoredScroll = immediateList ? immediateList.scrollTop : null;
-    await new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
-    const immediateFocus = document.activeElement;
+    // The render can restore focus on the very next frame, or one frame later
+    // when the tick took the microtask path (step-structure.ts re-applies in a
+    // second requestAnimationFrame). Wait for the restore with a bound instead
+    // of assuming exactly one frame — that assumption flakes on slower shells.
+    let immediateFocus = document.activeElement;
+    for (let f = 0; f < 10; f++) {
+      if (immediateFocus && immediateFocus.getAttribute
+        && immediateFocus.getAttribute('data-wizard-section') === id) break;
+      await new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+      immediateFocus = document.activeElement;
+    }
     const restored = {
       scroll: restoredScroll,
       focusedSection: immediateFocus && immediateFocus.getAttribute ? immediateFocus.getAttribute('data-wizard-section') : null

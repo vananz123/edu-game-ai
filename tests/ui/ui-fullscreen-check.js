@@ -2,9 +2,9 @@
 // (sidebar/nav must not show through while a game is being played).
 //
 // Start the app with:
-//   EDUGAME_USER_DATA=<temp folder> electron . --remote-debugging-port=9337
+//   powershell -ExecutionPolicy Bypass -File tests/ui/launch-app.ps1 -Port 9361
 // Then:
-//   node tests/ui/ui-fullscreen-check.js
+//   CDP_PORT=9361 node tests/ui/ui-fullscreen-check.js
 const PORT = Number(process.env.CDP_PORT || 9337);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const results = [];
@@ -17,7 +17,8 @@ async function findTarget() {
   for (let i = 0; i < 60; i++) {
     try {
       const list = await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json();
-      const target = list.find(x => x.type === 'page' && /index\.html/.test(x.url));
+      const target = list.find(x => x.type === 'page'
+        && (/index\.html/.test(x.url) || /^https?:\/\/tauri\.localhost\/?$/.test(x.url)));
       if (target) return target;
     } catch {}
     await sleep(1000);

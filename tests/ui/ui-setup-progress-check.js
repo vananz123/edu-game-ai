@@ -1,7 +1,7 @@
 // tests/ui/ui-setup-progress-check.js — setup modal must not judder while downloading.
 //
-//   app launched with --remote-debugging-port=9333, then:
-//   node tests/ui/ui-setup-progress-check.js
+//   powershell -ExecutionPolicy Bypass -File tests/ui/launch-app.ps1 -Port 9333, then:
+//   node tests/ui/ui-setup-progress-check.js [port]
 //
 // Opens the first-run wizard from Settings, drives 400 synthetic
 // `setup:progress` events through the real preload bridge listener (via the
@@ -11,8 +11,10 @@
 // Before the fix every event rebuilt `#modalRoot.innerHTML`; on a 1.1 GB model
 // that is hundreds of rebuilds per second and the modal visibly juddered.
 (async () => {
-  const res = await fetch('http://127.0.0.1:9333/json/list');
-  const target = (await res.json()).find(x => x.type === 'page' && /index\.html/.test(x.url));
+  const PORT = Number(process.argv[2] || process.env.CDP_PORT || 9333);
+  const res = await fetch(`http://127.0.0.1:${PORT}/json/list`);
+  const target = (await res.json()).find(x => x.type === 'page'
+    && (/index\.html/.test(x.url) || /^https?:\/\/tauri\.localhost\/?$/.test(x.url)));
   if (!target) throw new Error('no CDP target');
   const ws = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((r, j) => { ws.addEventListener('open', r, { once: true }); ws.addEventListener('error', j, { once: true }); });
