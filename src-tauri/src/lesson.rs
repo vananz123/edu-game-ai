@@ -441,6 +441,477 @@ pub fn capacity(app: &AppHandle, payload: Option<&Value>) -> Result<Value, Strin
 }
 
 // ---------------------------------------------------------------------------
+// Bước 5–6: chuyển đổi, chất lượng, minh hoạ, tạo nội dung, tạo lại một mục
+// ---------------------------------------------------------------------------
+
+/// `lesson:convert-draft`: toàn bộ phép kiểm nằm trong slot V8 (`convertDraft`).
+pub fn convert_draft(app: &AppHandle, payload: Option<&Value>) -> Result<Value, String> {
+    let payload = payload.cloned().unwrap_or(Value::Null);
+    library::run(app, "lesson-convert", &[payload])
+}
+
+/// `lesson:quality`: đọc dự án rồi để `checkDraftQuality` chấm. Không có dự án
+/// hoặc chưa có bản nháp thì trả `null` như Electron, không phải lỗi.
+pub fn quality(app: &AppHandle, payload: Option<&Value>) -> Result<Value, String> {
+    let payload = payload.cloned().unwrap_or(Value::Null);
+    let project_id = text_field(&payload, "projectId");
+    if project_id.is_empty() {
+        return Ok(Value::Null);
+    }
+    let project = library::run(app, "project:get", &[json!(project_id)])?;
+    if project.is_null() || project.get("draft").map(Value::is_null).unwrap_or(true) {
+        return Ok(Value::Null);
+    }
+    let analysis = analysis_of_project(app, &project)?;
+    library::run(
+        app,
+        "lesson-quality",
+        &[json!({
+            "draft": project.get("draft").cloned().unwrap_or(Value::Null),
+            "config": project.get("config").cloned().unwrap_or(Value::Null),
+            "analysis": analysis
+        })],
+    )
+}
+
+/// `lesson:patch-item-assets`: chỉ ba trường minh hoạ, rồi adapter + lưu dự án.
+pub fn patch_item_assets(app: &AppHandle, payload: Option<&Value>) -> Result<Value, String> {
+    let payload = payload.cloned().unwrap_or(Value::Null);
+    let project_id = text_field(&payload, "projectId");
+    if project_id.is_empty() {
+        return Err(error("Thiếu mã dự án để đổi minh hoạ."));
+    }
+    let patch = payload.get("patch").cloned().unwrap_or(Value::Null);
+    if !patch.is_object() {
+        return Err(error("Thiếu thông tin minh hoạ cần đổi."));
+    }
+    if !asset_patch_changed(&patch) {
+        return Err(error(
+            "Không có trường minh hoạ nào được gửi lên. Chỉ đổi được chủ đề, biểu tượng và hình minh hoạ.",
+        ));
+    }
+    let project = library::run(app, "project:get", &[json!(project_id)])?;
+    if project.is_null() {
+        return Err(error(
+            "Không tìm thấy dự án. Hãy lưu dự án trước khi đổi minh hoạ.",
+        ));
+    }
+    if project.get("draft").map(Value::is_null).unwrap_or(true) {
+        return Err(error(
+            "Dự án chưa có nội dung. Hãy tạo nội dung trước khi đổi minh hoạ.",
+        ));
+    }
+    let config = project.get("config").cloned().unwrap_or(Value::Null);
+    if config.is_null() {
+        return Err(error(
+            "Dự án chưa có cấu hình trò chơi. Hãy hoàn tất bước cấu hình.",
+        ));
+    }
+    let draft_type = project
+        .pointer("/draft/gameType")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let config_type = config
+        .get("gameType")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if draft_type != config_type {
+        return Err(error(
+            "[GENERATION_INVALID] Nội dung hiện tại không khớp thể loại đã chọn. Hãy tạo lại toàn bộ nội dung.",
+        ));
+    }
+    let result = library::run(
+        app,
+        "lesson-patch-assets",
+        &[json!({
+            "project": project,
+            "itemIndex": payload.get("itemIndex").cloned().unwrap_or(Value::Null),
+            "patch": patch
+        })],
+    )?;
+    let Some(saved_input) = result.get("project").cloned() else {
+        return Err(error("Không lưu được dự án sau khi đổi minh hoạ."));
+    };
+    let saved = library::run(app, "project:save-draft", &[saved_input])?;
+    let mut result = result;
+    if let Some(object) = result.as_object_mut() {
+        object.insert("project".to_string(), saved);
+    }
+    Ok(result)
+}
+
+/// Cùng `Object.prototype.hasOwnProperty` của `applyItemAssetPatch`: có ít nhất
+/// một trong ba khoá, kể cả khi giá trị là `null`.
+fn asset_patch_changed(patch: &Value) -> bool {
+    ["contentCategory", "iconName", "illustrationAssetId"]
+        .iter()
+        .any(|key| patch.get(*key).is_some())
+}
+
+/// Chạy `lesson:generate` trên luồng chặn riêng, như `analyze`.
+pub async fn generate(app: AppHandle, payload: Option<Value>) -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(move || generate_blocking(&app, payload.as_ref()))
+        .await
+        .map_err(|failure| format!("Lượt tạo nội dung bị dừng: {failure}"))?
+}
+
+fn generate_blocking(app: &AppHandle, payload: Option<&Value>) -> Result<Value, String> {
+    let payload = payload.cloned().unwrap_or(Value::Null);
+    let project_id = text_field(&payload, "projectId");
+    let request_id = text_field(&payload, "requestId");
+    if project_id.is_empty() {
+        return Err(error("Thiếu mã dự án để tạo nội dung."));
+    }
+    let project = library::run(app, "project:get", &[json!(project_id)])?;
+    if project.is_null() {
+        return Err(error(
+            "Không tìm thấy dự án. Hãy lưu dự án trước khi tạo nội dung.",
+        ));
+    }
+    let config = project.get("config").cloned().unwrap_or(Value::Null);
+    if config.is_null() {
+        return Err(error(
+            "Dự án chưa có cấu hình trò chơi. Hãy hoàn tất bước cấu hình.",
+        ));
+    }
+    let analysis_id = text_field(&project, "analysisId");
+    let draft_source = text_field(&project, "draftSource");
+    let source_draft = project
+        .get("draft")
+        .filter(|draft| {
+            draft.get("gameType").and_then(Value::as_str)
+                == config.get("gameType").and_then(Value::as_str)
+        })
+        .cloned();
+    // Chỉ hai nguồn do giáo viên soạn mới được đi nhánh không gọi AI; một bản
+    // nháp AI bị mất `analysisId` không được lặng lẽ thành trò chơi hoàn chỉnh.
+    let no_model_draft = source_draft.is_some()
+        && (draft_source == "imported-questions" || draft_source == "chat-questions");
+    if analysis_id.is_empty() && no_model_draft {
+        let from_chat = draft_source == "chat-questions";
+        let _ = app.emit(
+            "lesson:progress",
+            json!({ "requestId": request_id, "stage": "validate" }),
+        );
+        let result = library::run(
+            app,
+            "lesson-generation-offline",
+            &[json!({
+                "project": project,
+                "sourceDraft": source_draft,
+                "fromChat": from_chat
+            })],
+        )?;
+        let Some(saved_input) = result.get("project").cloned() else {
+            return Err(error("Không lưu được dự án sau khi chuyển đổi câu hỏi."));
+        };
+        let saved = library::run(app, "project:save-draft", &[saved_input])?;
+        let _ = app.emit(
+            "lesson:progress",
+            json!({ "requestId": request_id, "stage": "ready" }),
+        );
+        let mut result = result;
+        if let Some(object) = result.as_object_mut() {
+            object.insert("project".to_string(), saved);
+        }
+        return Ok(result);
+    }
+    if payload.get("localOnly").and_then(Value::as_bool) == Some(true) {
+        return Err(error(
+            "[GENERATION_INVALID] Chưa có nội dung soạn sẵn hợp lệ để tạo trò chơi. Hãy kiểm tra lại câu hỏi.",
+        ));
+    }
+    if analysis_id.is_empty() {
+        return Err(error("Dự án chưa có kết quả phân tích giáo án."));
+    }
+    let analysis = get_analysis(app, &analysis_id)?;
+    if analysis.is_null() {
+        return Err(error(
+            "Không tìm thấy kết quả phân tích giáo án. Hãy phân tích lại.",
+        ));
+    }
+    let deep = text_field(&payload, "mode") == "deep"
+        || text_field(&config, "generationMode") == "deep";
+    let mode = if deep { "deep" } else { "fast" };
+    let model_id = crate::ai_local::selected_model_id(app);
+    let provider_id = payload
+        .get("providerId")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty());
+    let key_value = library::run(
+        app,
+        "lesson-generation-key",
+        &[json!({
+            "project": project,
+            "analysis": analysis,
+            "modelId": model_id,
+            "mode": mode,
+            "providerId": provider_id
+        })],
+    )?;
+    let cache_key = key_value.as_str().unwrap_or("").to_string();
+    let regenerate = payload
+        .get("regenerate")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    if !regenerate && !cache_key.is_empty() {
+        let entry = library::run(
+            app,
+            "lesson-store:generation-cache-get",
+            &[json!(cache_key)],
+        )?;
+        if !entry.is_null() {
+            let cached = library::run(
+                app,
+                "lesson-generation-cache",
+                &[json!({
+                    "project": project,
+                    "analysis": analysis,
+                    "payload": entry.get("payload").cloned().unwrap_or(Value::Null)
+                })],
+            );
+            match cached {
+                Ok(result) => {
+                    let Some(saved_input) = result.get("project").cloned() else {
+                        return Err(error("Không lưu được dự án từ bộ nhớ đệm."));
+                    };
+                    let saved = library::run(app, "project:save-draft", &[saved_input])?;
+                    let _ = app.emit(
+                        "lesson:progress",
+                        json!({ "requestId": request_id, "stage": "cached" }),
+                    );
+                    let mut result = result;
+                    if let Some(object) = result.as_object_mut() {
+                        object.insert("project".to_string(), saved);
+                    }
+                    return Ok(result);
+                }
+                Err(_) => {
+                    // Hàng cache do schema/adapter cũ phải bị bỏ, không được chặn
+                    // lượt tạo mới.
+                    let _ = library::run(
+                        app,
+                        "lesson-store:generation-cache-delete",
+                        &[json!(cache_key)],
+                    );
+                }
+            }
+        }
+    }
+
+    // Đọc tài liệu trước khi chiếm khoá AI: lỗi đọc kho không được để lại khoá
+    // đang giữ, vì lượt sau sẽ bị `[AI_BUSY]` mãi.
+    let text = project_document_text(app, &project)?;
+    let target = settings::workflow_provider(app, provider_id, false)?;
+    let gate = app
+        .try_state::<AiGate>()
+        .ok_or_else(|| error("AI_CONFIG: hàng đợi AI chưa sẵn sàng. Hãy khởi động lại ứng dụng."))?;
+    let label = format!("tạo nội dung {}", text_field(&config, "gameType"));
+    let cancel = gate.begin(&request_id, &label)?;
+    let ai = AiTarget {
+        request_id: request_id.clone(),
+        base_url: target.base_url.clone(),
+        api_key: target.api_key.clone(),
+        mode: target.mode.clone(),
+        cancel,
+    };
+    let result = library::run_with_ai_progress(
+        app,
+        "lesson-generate",
+        &[json!({
+            "project": project,
+            "analysis": analysis,
+            "text": text,
+            "mode": mode,
+            "requestId": request_id,
+            "target": {
+                "requestId": request_id,
+                "model": target.model,
+                "mode": target.mode
+            }
+        })],
+        ai,
+        &request_id,
+    );
+    // Luôn nhả khoá, kể cả khi model lỗi hay giáo viên huỷ.
+    gate.finish(&request_id);
+    let result = result?;
+    let Some(saved_input) = result.get("project").cloned() else {
+        return Err(error("Không lưu được dự án sau khi tạo nội dung."));
+    };
+    let saved = library::run(app, "project:save-draft", &[saved_input])?;
+    // Ghi cache là best-effort: giáo viên đã chờ model xong, một lỗi cache không
+    // được biến lượt tạo thành thất bại.
+    if !cache_key.is_empty() {
+        if let Some(draft) = result.get("draft").cloned() {
+            let _ = library::run(
+                app,
+                "lesson-store:generation-cache-put",
+                &[json!({
+                    "cacheKey": cache_key,
+                    "kind": "draft",
+                    "gameType": text_field(&config, "gameType"),
+                    "analysisId": analysis_id,
+                    "modelId": model_id,
+                    "promptVersion": text_field(&result, "promptVersion"),
+                    "payload": {
+                        "draft": draft,
+                        "mode": mode,
+                        "context": result.get("context").cloned().unwrap_or(Value::Null)
+                    }
+                })],
+            );
+            let _ = library::run(app, "lesson-store:generation-cache-prune", &[json!(50)]);
+        }
+    }
+    let _ = app.emit(
+        "lesson:progress",
+        json!({ "requestId": request_id, "stage": "ready" }),
+    );
+    let mut result = result;
+    if let Some(object) = result.as_object_mut() {
+        object.insert("project".to_string(), saved);
+    }
+    Ok(result)
+}
+
+/// `lesson:regenerate-item`: một model call cho mỗi mục, không dùng cache.
+pub async fn regenerate_item(app: AppHandle, payload: Option<Value>) -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(move || regenerate_blocking(&app, payload.as_ref()))
+        .await
+        .map_err(|failure| format!("Lượt tạo lại nội dung bị dừng: {failure}"))?
+}
+
+fn regenerate_blocking(app: &AppHandle, payload: Option<&Value>) -> Result<Value, String> {
+    let payload = payload.cloned().unwrap_or(Value::Null);
+    let project_id = text_field(&payload, "projectId");
+    let request_id = text_field(&payload, "requestId");
+    if project_id.is_empty() {
+        return Err(error("Thiếu mã dự án để tạo lại nội dung."));
+    }
+    if request_id.is_empty() {
+        return Err(error("Thiếu mã yêu cầu AI."));
+    }
+    let project = library::run(app, "project:get", &[json!(project_id)])?;
+    if project.is_null() {
+        return Err(error(
+            "Không tìm thấy dự án. Hãy lưu dự án trước khi tạo lại nội dung.",
+        ));
+    }
+    let config = project.get("config").cloned().unwrap_or(Value::Null);
+    if config.is_null() {
+        return Err(error(
+            "Dự án chưa có cấu hình trò chơi. Hãy hoàn tất bước cấu hình.",
+        ));
+    }
+    if project.get("draft").map(Value::is_null).unwrap_or(true) {
+        return Err(error(
+            "Dự án chưa có nội dung để tạo lại. Hãy tạo nội dung trước.",
+        ));
+    }
+    let analysis_id = text_field(&project, "analysisId");
+    if analysis_id.is_empty() {
+        return Err(error("Dự án chưa có kết quả phân tích giáo án."));
+    }
+    let draft_type = project
+        .pointer("/draft/gameType")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let config_type = config
+        .get("gameType")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if draft_type != config_type {
+        return Err(error(
+            "[GENERATION_INVALID] Nội dung hiện tại không khớp thể loại đã chọn. Hãy tạo lại toàn bộ nội dung.",
+        ));
+    }
+    let analysis = get_analysis(app, &analysis_id)?;
+    if analysis.is_null() {
+        return Err(error(
+            "Không tìm thấy kết quả phân tích giáo án. Hãy phân tích lại.",
+        ));
+    }
+    let deep = text_field(&config, "generationMode") == "deep";
+    let mode = if deep { "deep" } else { "fast" };
+    let provider_id = payload
+        .get("providerId")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty());
+    let text = project_document_text(app, &project)?;
+    let target = settings::workflow_provider(app, provider_id, false)?;
+    let gate = app
+        .try_state::<AiGate>()
+        .ok_or_else(|| error("AI_CONFIG: hàng đợi AI chưa sẵn sàng. Hãy khởi động lại ứng dụng."))?;
+    let cancel = gate.begin(&request_id, "tạo lại một mục nội dung")?;
+    let ai = AiTarget {
+        request_id: request_id.clone(),
+        base_url: target.base_url.clone(),
+        api_key: target.api_key.clone(),
+        mode: target.mode.clone(),
+        cancel,
+    };
+    let result = library::run_with_ai_progress(
+        app,
+        "lesson-regenerate",
+        &[json!({
+            "project": project,
+            "analysis": analysis,
+            "text": text,
+            "mode": mode,
+            "itemIndex": payload.get("itemIndex").cloned().unwrap_or(Value::Null),
+            "itemIndexes": payload.get("itemIndexes").cloned().unwrap_or(Value::Null),
+            "requestId": request_id,
+            "target": {
+                "requestId": request_id,
+                "model": target.model,
+                "mode": target.mode
+            }
+        })],
+        ai,
+        &request_id,
+    );
+    gate.finish(&request_id);
+    let result = result?;
+    let Some(saved_input) = result.get("project").cloned() else {
+        return Err(error("Không lưu được dự án sau khi tạo lại nội dung."));
+    };
+    let saved = library::run(app, "project:save-draft", &[saved_input])?;
+    let mut result = result;
+    if let Some(object) = result.as_object_mut() {
+        object.insert("project".to_string(), saved);
+    }
+    Ok(result)
+}
+
+/// Đọc kết quả phân tích đang gắn với dự án; thiếu là `null` (chất lượng vẫn
+/// chấm được, chỉ không có ngữ cảnh mục tiêu).
+fn analysis_of_project(app: &AppHandle, project: &Value) -> Result<Value, String> {
+    let analysis_id = text_field(project, "analysisId");
+    if analysis_id.is_empty() {
+        return Ok(Value::Null);
+    }
+    get_analysis(app, &analysis_id)
+}
+
+/// Văn bản giáo án của dự án; tài liệu đã bị xoá là chuỗi rỗng, đúng nhánh
+/// `if (!document || !document.text)` của Electron.
+fn project_document_text(app: &AppHandle, project: &Value) -> Result<String, String> {
+    let document_id = project
+        .pointer("/lesson/documentId")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if document_id.is_empty() {
+        return Ok(String::new());
+    }
+    let document = get_document(app, document_id)?;
+    if document.is_null() {
+        return Ok(String::new());
+    }
+    Ok(text_field(&document, "text"))
+}
+
+// ---------------------------------------------------------------------------
 // Huỷ
 // ---------------------------------------------------------------------------
 

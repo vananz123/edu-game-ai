@@ -112,6 +112,14 @@ pub fn hand_written(command: &str) -> Option<(&'static str, &'static str)> {
         "get_lesson_analysis" => ("lesson:get-analysis", "get_lesson_analysis"),
         "save_lesson_analysis" => ("lesson:save-analysis", "save_lesson_analysis"),
         "get_lesson_recommendations" => ("lesson:recommendations", "get_lesson_recommendations"),
+        // Bước 5–6: chuyển đổi tất định, chất lượng, minh hoạ, rồi hai lượt model.
+        // Hai lượt model chạy `spawn_blocking` như `lesson:analyze` để `ai:cancel`
+        // vẫn được phục vụ.
+        "convert_lesson_draft" => ("lesson:convert-draft", "convert_lesson_draft"),
+        "check_lesson_quality" => ("lesson:quality", "check_lesson_quality"),
+        "patch_lesson_item_assets" => ("lesson:patch-item-assets", "patch_lesson_item_assets"),
+        "generate_lesson_draft" => ("lesson:generate", "generate_lesson_draft"),
+        "regenerate_lesson_item" => ("lesson:regenerate-item", "regenerate_lesson_item"),
         // Cùng `AiGate`: bật cờ huỷ của lượt đang chờ HTTP trong Rust.
         "cancel_ai" => ("ai:cancel", "cancel_ai"),
         // Giai đoạn 4: nhập profile Electron. Ba kênh KHÔNG có trong preload
@@ -291,6 +299,13 @@ async fn dispatch(app: &AppHandle, channel: &str, args: &[Value]) -> Result<Valu
         "lesson:get-analysis" => crate::lesson::get_analysis(app, &text_arg(args, 0)),
         "lesson:save-analysis" => crate::lesson::save_analysis(app, args.first()),
         "lesson:recommendations" => crate::lesson::list_recommendations(app, &text_arg(args, 0)),
+        "lesson:convert-draft" => crate::lesson::convert_draft(app, args.first()),
+        "lesson:quality" => crate::lesson::quality(app, args.first()),
+        "lesson:patch-item-assets" => crate::lesson::patch_item_assets(app, args.first()),
+        "lesson:generate" => crate::lesson::generate(app.clone(), args.first().cloned()).await,
+        "lesson:regenerate-item" => {
+            crate::lesson::regenerate_item(app.clone(), args.first().cloned()).await
+        }
         // #132: huỷ lượt đang chờ HTTP; trả `{ok}` như `aiRequests.cancel`.
         "ai:cancel" => crate::lesson::cancel(app, &text_arg(args, 0)),
         // Năm kênh ghi của thư viện nhận thẳng tham số renderer gửi (một trò
@@ -827,6 +842,52 @@ pub fn get_lesson_recommendations(
     crate::lesson::list_recommendations(&app, id)
 }
 
+/// Chuyển một bản nháp sang thể loại đích (`convertDraft`, không gọi model).
+#[tauri::command]
+pub fn convert_lesson_draft(
+    app: AppHandle,
+    payload: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    crate::lesson::convert_draft(&app, payload.as_ref())
+}
+
+/// Báo cáo chất lượng tư vấn của bản nháp đang lưu; `null` khi chưa có nháp.
+#[tauri::command]
+pub fn check_lesson_quality(
+    app: AppHandle,
+    payload: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    crate::lesson::quality(&app, payload.as_ref())
+}
+
+/// Đổi đúng ba trường minh hoạ của một mục, không gọi AI.
+#[tauri::command]
+pub fn patch_lesson_item_assets(
+    app: AppHandle,
+    payload: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    crate::lesson::patch_item_assets(&app, payload.as_ref())
+}
+
+/// Tạo toàn bộ nội dung của dự án: cache hit không gọi model, cache miss chờ
+/// tới 300 s nên phải chạy ngoài luồng async.
+#[tauri::command]
+pub async fn generate_lesson_draft(
+    app: AppHandle,
+    payload: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    crate::lesson::generate(app, payload).await
+}
+
+/// Tạo lại đúng các mục được chọn; luôn gọi model (không dùng cache).
+#[tauri::command]
+pub async fn regenerate_lesson_item(
+    app: AppHandle,
+    payload: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    crate::lesson::regenerate_item(app, payload).await
+}
+
 /// Huỷ lượt AI đang chờ. Trả `{ok}`: `false` khi không có lượt nào mang
 /// `requestId` đó, đúng `aiRequests.cancel` của Electron.
 #[tauri::command]
@@ -875,15 +936,10 @@ unsupported! {
     test_ai_provider => "ai:test-provider",
     list_ai_tasks => "ai:tasks",
     verify_cpu_runtime => "ai:runtime-verify",
-    convert_lesson_draft => "lesson:convert-draft",
     send_lesson_chat => "lesson:chat-send",
     list_lesson_chats => "lesson:chats",
     get_lesson_chat => "lesson:chat-get",
     delete_lesson_chats => "lesson:chat-delete",
-    generate_lesson_draft => "lesson:generate",
-    regenerate_lesson_item => "lesson:regenerate-item",
-    check_lesson_quality => "lesson:quality",
-    patch_lesson_item_assets => "lesson:patch-item-assets",
     generate_game => "ai:generate",
     start_presentation => "presentation:start",
     stop_presentation => "presentation:stop",

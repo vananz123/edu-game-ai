@@ -56,6 +56,17 @@ pub struct RuntimeInner {
     /// Đích AI của lượt đang chạy. Chỉ sống trong khoảng `call_with_ai`; V8 chỉ
     /// thấy `requestId`, không thấy URL hay khoá.
     pub ai: Option<AiTarget>,
+    /// Nơi nhận các mốc `lesson:progress` của lượt đang chạy. Chỉ sống trong
+    /// khoảng `call_with_ai_progress`, và chỉ chuyển tiếp các mốc có trong danh
+    /// sách trắng của op `op_progress`.
+    pub progress: Option<ProgressTarget>,
+}
+
+/// Đích phát tiến trình: cửa sổ đang chờ và mã yêu cầu renderer đã biết.
+#[derive(Clone)]
+pub struct ProgressTarget {
+    pub app: tauri::AppHandle,
+    pub request_id: String,
 }
 
 pub type SharedRuntime = Rc<RefCell<RuntimeInner>>;
@@ -184,7 +195,7 @@ fn run_transaction(runtime: &SharedRuntime, payload: &str) -> Result<String, Str
 
 deno_core::extension!(
     eg,
-    ops = [op_sql_select, op_sql_execute, op_sql_transaction, op_http, op_sha256],
+    ops = [op_sql_select, op_sql_execute, op_sql_transaction, op_http, op_sha256, op_progress],
     options = { runtime: SharedRuntime },
     state = |state, options| state.put(options.runtime),
 );
@@ -249,6 +260,37 @@ fn op_http(state: &mut OpState, #[string] payload: &str) -> Result<String, deno_
         .to_string();
     let answer = crate::ai_http::post_json(&target, body);
     serde_json::to_string(&answer).map_err(|error| deno_error::JsErrorBox::generic(error.to_string()))
+}
+
+/// Chuyển một mốc tiến trình thật của luồng giáo án sang renderer (O7).
+///
+/// Chỉ bảy mốc dưới đây được phát: V8 không được tự đặt tên sự kiện hay gửi
+/// payload tuỳ ý, và một mốc lạ là lỗi lập trình chứ không phải dữ liệu người
+/// dùng. Không có `progress` (test, slot thư viện) thì op là no-op.
+#[op2(fast)]
+fn op_progress(
+    state: &mut OpState,
+    #[string] stage: &str,
+) -> Result<(), deno_error::JsErrorBox> {
+    const STAGES: [&str; 7] = [
+        "prepare", "retrieve", "generate", "repair", "validate", "cached", "ready",
+    ];
+    if !STAGES.contains(&stage) {
+        return Err(deno_error::JsErrorBox::generic(
+            "[STORE_INVALID] Mốc tiến trình không hợp lệ.",
+        ));
+    }
+    let shared = state.borrow::<SharedRuntime>().clone();
+    let target = shared.borrow().progress.clone();
+    drop(shared);
+    if let Some(target) = target {
+        use tauri::Emitter;
+        let _ = target.app.emit(
+            "lesson:progress",
+            serde_json::json!({ "requestId": target.request_id, "stage": stage }),
+        );
+    }
+    Ok(())
 }
 
 /// SHA-256 thay cho `node:crypto.createHash` trong slot giáo án. Cùng đầu ra
@@ -331,6 +373,7 @@ impl Embedded {
             sql_calls: 0,
             data_dir: std::path::PathBuf::new(),
             ai: None,
+            progress: None,
         }));
         let mut runtime = JsRuntime::new(RuntimeOptions {
             extensions: vec![eg::init(shared.clone())],
@@ -358,7 +401,25 @@ impl Embedded {
         now: &str,
         ai: Option<AiTarget>,
     ) -> Result<Value, DbError> {
-        self.shared.borrow_mut().ai = ai;
+        self.call_with_ai_progress(op, args, now, ai, None)
+    }
+
+    /// Như `call_with_ai`, kèm đích `lesson:progress` của lượt đang chạy. Cả hai
+    /// đích chỉ sống trong đúng lượt này; dù op lỗi, chúng vẫn được xoá trước khi
+    /// trả về.
+    pub fn call_with_ai_progress(
+        &mut self,
+        op: &str,
+        args: &[Value],
+        now: &str,
+        ai: Option<AiTarget>,
+        progress: Option<ProgressTarget>,
+    ) -> Result<Value, DbError> {
+        {
+            let mut inner = self.shared.borrow_mut();
+            inner.ai = ai;
+            inner.progress = progress;
+        }
         let result = (|| {
             let input = json!({ "op": op, "args": args }).to_string();
             self.install(&input, now)?;
@@ -382,7 +443,11 @@ impl Embedded {
                 _ => DbError::Data(format!("{op}: {message}")),
             })
         })();
-        self.shared.borrow_mut().ai = None;
+        {
+            let mut inner = self.shared.borrow_mut();
+            inner.ai = None;
+            inner.progress = None;
+        }
         result
     }
 
@@ -418,6 +483,7 @@ impl Embedded {
              }});\
              globalThis.__eg_http = (payload) => Deno.core.ops.op_http(payload);\
              globalThis.__eg_sha256 = (text) => Deno.core.ops.op_sha256(text);\
+             globalThis.__eg_progress = (stage) => Deno.core.ops.op_progress(stage);\
              globalThis.__eg_now = {now};\
              globalThis.__eg_input = {input};"
         );

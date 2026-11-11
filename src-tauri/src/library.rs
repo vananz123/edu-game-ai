@@ -54,6 +54,8 @@ struct Job {
     /// Đích AI của một lượt `lesson:analyze` (xem `ai_http.rs`). `None` cho mọi
     /// kênh khác; `serve` đặt nó vào engine chỉ trong lượt gọi ấy.
     ai: Option<crate::ai_http::AiTarget>,
+    /// Đích `lesson:progress` của lượt đang chạy; xem `embedded::ProgressTarget`.
+    progress: Option<crate::embedded::ProgressTarget>,
     reply: Sender<Result<Value, DbError>>,
 }
 
@@ -176,12 +178,24 @@ impl Library {
         args: &[Value],
         ai: Option<crate::ai_http::AiTarget>,
     ) -> Result<Value, DbError> {
+        self.call_with_ai_progress(channel, args, ai, None)
+    }
+
+    /// Như `call_with_ai`, kèm đích phát `lesson:progress` cho đúng lượt này.
+    pub(crate) fn call_with_ai_progress(
+        &self,
+        channel: &str,
+        args: &[Value],
+        ai: Option<crate::ai_http::AiTarget>,
+        progress: Option<crate::embedded::ProgressTarget>,
+    ) -> Result<Value, DbError> {
         let (reply, answer) = std::sync::mpsc::channel();
         self.jobs
             .send(Job {
                 channel: channel.to_string(),
                 args: args.to_vec(),
                 ai,
+                progress,
                 reply,
             })
             .map_err(|_| DbError::Io("luồng thư viện đã dừng.".into()))?;
@@ -279,7 +293,13 @@ fn serve(engine: Engine, ready: &Sender<Result<(), String>>, incoming: &Receiver
             let _ = job.reply.send(result);
             continue;
         }
-        let _ = job.reply.send(engine.0.call_with_ai(&job.channel, &job.args, &now(), job.ai));
+        let _ = job.reply.send(engine.0.call_with_ai_progress(
+            &job.channel,
+            &job.args,
+            &now(),
+            job.ai,
+            job.progress,
+        ));
     }
 }
 
@@ -298,6 +318,28 @@ pub fn run_with_ai(
 ) -> Result<Value, String> {
     library(app)?
         .call_with_ai(channel, args, Some(ai))
+        .map_err(|error| error.to_string())
+}
+
+/// Như `run_with_ai`, kèm `requestId` để V8 phát các mốc `lesson:progress`.
+/// Chỉ các mốc trong danh sách trắng của `op_progress` đi qua được.
+pub fn run_with_ai_progress(
+    app: &AppHandle,
+    channel: &str,
+    args: &[Value],
+    ai: crate::ai_http::AiTarget,
+    request_id: &str,
+) -> Result<Value, String> {
+    library(app)?
+        .call_with_ai_progress(
+            channel,
+            args,
+            Some(ai),
+            Some(crate::embedded::ProgressTarget {
+                app: app.clone(),
+                request_id: request_id.to_string(),
+            }),
+        )
         .map_err(|error| error.to_string())
 }
 

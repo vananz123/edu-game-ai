@@ -3,14 +3,17 @@
 Ngày lập: 2026-11-09; cập nhật trạng thái: 2026-11-11  
 Trạng thái: **đã duyệt và đang triển khai** — giai đoạn 0–4 XONG, giai đoạn 5
 xong bí mật (DPAPI + `settings:get/save`), AI local (tải runtime/model +
-`llama-server` loopback), setup wizard (`setup:*`) và **phần đầu luồng giáo án**
-(15 kênh `lesson:*` + `ai:cancel`: kho tài liệu, phân loại, phân tích, đề xuất,
-dự án); việc kế tiếp là nhóm sinh nội dung `lesson:generate`/`chat-*`/
-`convert-draft`/`regenerate-item`/`quality`/`patch-item-assets` — `ai:generate`
-là kênh legacy không còn màn hình nào gọi (DECISIONS "Giai đoạn 5 (luồng giáo án)").
+`llama-server` loopback), setup wizard (`setup:*`), **phần đầu luồng giáo án**
+(15 kênh `lesson:*` + `ai:cancel`) và **nhóm sinh nội dung** (năm kênh
+`lesson:convert-draft`/`quality`/`patch-item-assets`/`generate`/`regenerate-item`
+với cache `draft_v1_<sha>`); việc kế tiếp là `lesson:chat-send`/`chat-get`/
+`chats`/`chat-delete`, rồi `ai:test-provider`/`ai:tasks`/`ai:runtime-verify` —
+`ai:generate` là kênh legacy không còn màn hình nào gọi (DECISIONS "Giai đoạn 5
+(luồng giáo án)" + "Giai đoạn 5 (sinh nội dung)").
 Phạm vi: ứng dụng desktop Windows hiện tại, phiên bản nguồn 0.5.1, **bản Tauri
 đầu tiên là bản thử giới hạn** (không có LAN, trình chiếu, updater; AI local đã
-có phần cài/chạy, wizard lần đầu và phân tích giáo án, chưa sinh nội dung trò chơi).
+có phần cài/chạy, wizard lần đầu, phân tích giáo án và sinh nội dung trò chơi,
+chưa có chat giáo án).
 
 ## 1. Mục tiêu
 
@@ -201,7 +204,7 @@ có yêu cầu tương thích cụ thể và đã đánh giá chi phí/bảo m�
 
 ### Giai đoạn 5 — Luồng giáo án
 
-**Trạng thái: XONG phần đầu (2026-11-11, DECISIONS "Giai đoạn 5 (luồng giáo án)").** `src-tauri/src/lesson.rs` nối settings/runtime/HTTP/kho với slot V8 `EGLESSON` (`src-tauri/src/embedded/lesson-ops.ts`), giữ nguyên `analyzeLesson`/`requestChatJson`/prompt/schema/normalize/classifier/`lesson-projects.ts` của Electron. Mười lăm kênh rời `unsupported!` (`lesson:save-document`, `get-document`, `library`, `delete-document`, `delete-documents`, `get-analysis`, `save-analysis`, `recommendations`, `get-structure`, `preview-selection`, `classify-input`, `analyze`, `recommend`, `capacity`, `ai:cancel`), **45 → 30**. `lesson_store.rs` dùng cùng kết nối SQLite của engine; `ai_http.rs` giữ khoá/endpoint, HTTP không redirect, 300 s/90 s, single-flight + hủy theo `requestId`. Cache key phân tích trùng từng byte với Electron (provider chốt trước key, model AI local đang chọn). Test Rust **124/124** (gồm 7 test slot chạy phân tích qua server OpenAI giả rồi lưu/đọc dự án), Node **98/98**, `npm run check` sạch, `check:embedded` khớp 6017,6 KiB, cổng **51/51 + 10/10 + 12/12**; installer NSIS **16.241.001 B**, exe cài **58.630.144 B**, cài mới/cài đè/gỡ `/S` trong thư mục tạm exit 0. **Còn mở:** cổng WebView2 không gọi kênh `lesson:*`; chưa chạy model thật/BYOK thật, chưa xem wizard bằng mắt, chưa huỷ giữa HTTP thật, chưa mở tài liệu từ profile 0.5.1 sau migration; `lesson:convert-draft`/`chat-*`/`generate`/`regenerate-item`/`quality`/`patch-item-assets` và `ai:test-provider`/`ai:tasks` còn `not-supported`.
+**Trạng thái: XONG phần đầu + sinh nội dung (2026-11-11, DECISIONS "Giai đoạn 5 (luồng giáo án)" + "Giai đoạn 5 (sinh nội dung)").** `src-tauri/src/lesson.rs` nối settings/runtime/HTTP/kho với slot V8 `EGLESSON` (`src-tauri/src/embedded/lesson-ops.ts`), giữ nguyên `analyzeLesson`/`requestChatJson`/prompt/schema/normalize/classifier/`lesson-projects.ts` của Electron. Mười lăm kênh phần đầu rời `unsupported!` (`lesson:save-document`, `get-document`, `library`, `delete-document`, `delete-documents`, `get-analysis`, `save-analysis`, `recommendations`, `get-structure`, `preview-selection`, `classify-input`, `analyze`, `recommend`, `capacity`, `ai:cancel`), **45 → 30**. Kế tiếp, năm kênh sinh nội dung (`lesson:convert-draft`, `quality`, `patch-item-assets`, `generate`, `regenerate-item`) chạy qua V8 + Rust cache `draft_v1_<sha>`, đưa `unsupported!` **30 → 25**. `lesson_store.rs` thêm kho chat và bảng cache sinh nội dung; tiến trình có danh sách trắng 7 mốc với `op_progress`; manifest comctl32 v6 hỗ trợ cả test lib. Test Rust **128/128**, Node **99/99**, `npm run check` sạch, `check:embedded` khớp 6109,2 KiB. **Còn mở:** cổng WebView2 không gọi kênh `lesson:*`; chưa chạy model thật/BYOK thật, chưa xem wizard bằng mắt, chưa huỷ giữa HTTP thật, chưa mở tài liệu từ profile 0.5.1 sau migration; bốn kênh `lesson:chat-*` và `ai:test-provider`/`ai:tasks`/`ai:runtime-verify` còn `not-supported` (tổng 25).
 
 **Công việc**
 
@@ -397,11 +400,12 @@ các tính năng còn lại có quyết định rõ ràng và các cổng nghi�
   hash DB/WAL/SHM. Luồng giáo án phần đầu chạy **15 kênh `lesson:*` +
   `ai:cancel`** (kho tài liệu, cấu trúc/xem trước/phân loại, phân tích qua HTTP
   của Rust với cache key trùng Electron, đề xuất, ước lượng, dự án), `unsupported!`
-  **45 → 30**; test Rust **124/124**, Node **98/98**, cổng **51/51 + 10/10 +
-  12/12**; installer NSIS **16.241.001 B**, exe cài **58.630.144 B**, cài
-  mới/cài đè/gỡ `/S` trong thư mục tạm đều exit 0.
-- Chưa làm: 6 (trình chiếu/LAN), 7 (updater/ký/phát hành thử), nhóm sinh nội
-  dung `lesson:generate`/`chat-*`/`convert-draft`/`regenerate-item`/`quality`/
-  `patch-item-assets`, `ai:test-provider`/`ai:tasks` và các kênh còn lại. 30 kênh
-  còn `unsupported!`; đường phân tích mới chứng minh bằng Rust + server giả,
-  chưa chạy model thật/BYOK thật và cổng WebView2 chưa gọi kênh `lesson:*`.
+  **45 → 30**; nhóm sinh nội dung chạy thêm **5 kênh `lesson:convert-draft`/
+  `quality`/`patch-item-assets`/`generate`/`regenerate-item`** (cache `draft_v1_<sha>`,
+  tiến trình `op_progress`, V8 giữ adapter/prompt/rules), `unsupported!` **30 → 25**;
+  test Rust **128/128**, Node **99/99**, `check:embedded` khớp 6109,2 KiB.
+- Chưa làm: 6 (trình chiếu/LAN), 7 (updater/ký/phát hành thử), nhóm chat giáo án
+  `lesson:chat-send`/`chat-get`/`chats`/`chat-delete`, `ai:test-provider`/`ai:tasks`/
+  `ai:runtime-verify` và các kênh còn lại. 25 kênh còn `unsupported!`; đường sinh nội dung
+  mới chứng minh bằng Rust + server giả loopback, chưa chạy model thật/BYOK thật và
+  cổng WebView2 chưa gọi kênh `lesson:*`.

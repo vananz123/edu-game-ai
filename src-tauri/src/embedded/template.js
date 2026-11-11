@@ -379,7 +379,15 @@
     'lesson-structure': async function (text) { return lessons.structure(text); },
     'lesson-preview': async function (input) { return lessons.preview(input); },
     'lesson-classify': async function (input) { return lessons.classify(input); },
-    'lesson-project': async function (input) { return lessons.projectStep(input); }
+    'lesson-project': async function (input) { return lessons.projectStep(input); },
+    'lesson-convert': async function (input) { return lessons.convert(input); },
+    'lesson-quality': async function (input) { return lessons.quality(input); },
+    'lesson-patch-assets': async function (input) { return lessons.patchAssets(input); },
+    'lesson-generation-key': async function (input) { return lessons.generationKey(input); },
+    'lesson-generation-cache': async function (input) { return lessons.generationCache(input); },
+    'lesson-generation-offline': async function (input) { return lessons.generationOffline(input); },
+    'lesson-generate': async function (input) { return lessons.generate(input); },
+    'lesson-regenerate': async function (input) { return lessons.regenerate(input); }
   };
 
   globalThis.__eg_run = async function () {
