@@ -9,6 +9,7 @@
 //! nhập tệp ảnh dùng giao thức `edugame-file:` thay cho `protocol.handle` của
 //! Electron — cùng một kho ảnh, cùng luật chỉ phục vụ id do app sinh ra.
 
+pub mod about;
 pub mod ai_http;
 pub mod ai_local;
 pub mod ai_tasks;

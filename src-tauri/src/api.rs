@@ -131,6 +131,14 @@ pub fn hand_written(command: &str) -> Option<(&'static str, &'static str)> {
         "verify_cpu_runtime" => ("ai:runtime-verify", "verify_cpu_runtime"),
         // Cùng `AiGate`: bật cờ huỷ của lượt đang chờ HTTP trong Rust.
         "cancel_ai" => ("ai:cancel", "cancel_ai"),
+        // Tab Giới thiệu và cập nhật ứng dụng (#188, #204)
+        "open_about" => ("about:open", "open_about"),
+        "about_info" => ("about:info", "about_info"),
+        "about_state" => ("about:state", "about_state"),
+        "about_check" => ("about:check", "about_check"),
+        "about_download" => ("about:download", "about_download"),
+        "about_install" => ("about:install", "about_install"),
+        "about_open_releases" => ("about:open-releases", "about_open_releases"),
         // Giai đoạn 4: nhập profile Electron. Ba kênh KHÔNG có trong preload
         // Electron — `tests/unit/tauri-contract.test.ts` miễn trừ chúng khỏi phép
         // so với `desktop-contract.json`, và renderer chỉ gọi trên vỏ Tauri.
@@ -387,6 +395,13 @@ async fn dispatch(app: &AppHandle, channel: &str, args: &[Value]) -> Result<Valu
             crate::ai_tasks::list_tasks(app, payload)
         }
         "ai:runtime-verify" => crate::ai_local::verify_runtime(app),
+        "about:open" => crate::about::open(app.clone()).await,
+        "about:info" => crate::about::info(app),
+        "about:state" => crate::about::state(app),
+        "about:check" => crate::about::check(app.clone()).await,
+        "about:download" => crate::about::download(app),
+        "about:install" => crate::about::install(app),
+        "about:open-releases" => crate::about::open_releases(args.first().and_then(Value::as_str)),
         _ => Err(format!("Kênh `{channel}` chưa có thân trong vỏ Tauri")),
     }
 }
@@ -987,6 +1002,41 @@ pub fn verify_cpu_runtime(app: AppHandle) -> Result<serde_json::Value, String> {
     crate::ai_local::verify_runtime(&app)
 }
 
+#[tauri::command]
+pub async fn open_about(app: AppHandle) -> Result<serde_json::Value, String> {
+    crate::about::open(app).await
+}
+
+#[tauri::command]
+pub fn about_info(app: AppHandle) -> Result<serde_json::Value, String> {
+    crate::about::info(&app)
+}
+
+#[tauri::command]
+pub fn about_state(app: AppHandle) -> Result<serde_json::Value, String> {
+    crate::about::state(&app)
+}
+
+#[tauri::command]
+pub async fn about_check(app: AppHandle) -> Result<serde_json::Value, String> {
+    crate::about::check(app).await
+}
+
+#[tauri::command]
+pub fn about_download(app: AppHandle) -> Result<serde_json::Value, String> {
+    crate::about::download(&app)
+}
+
+#[tauri::command]
+pub fn about_install(app: AppHandle) -> Result<serde_json::Value, String> {
+    crate::about::install(&app)
+}
+
+#[tauri::command]
+pub fn about_open_releases(url: Option<String>) -> Result<serde_json::Value, String> {
+    crate::about::open_releases(url.as_deref())
+}
+
 macro_rules! unsupported {
     ($($fn_name:ident => $channel:literal),* $(,)?) => {
         $(
@@ -1011,13 +1061,6 @@ unsupported! {
     stop_presentation => "presentation:stop",
     toggle_presentation => "presentation:toggle",
     get_displays => "presentation:displays",
-    open_about => "about:open",
-    about_info => "about:info",
-    about_state => "about:state",
-    about_check => "about:check",
-    about_download => "about:download",
-    about_install => "about:install",
-    about_open_releases => "about:open-releases",
     lan_start => "lan:start",
     lan_stop => "lan:stop",
     lan_assign_team => "lan:assign-team",
@@ -1032,8 +1075,8 @@ mod tests {
     // những bất biến đơn giản; đối chiếu với JSON nằm ở cổng Node.
     #[test]
     fn unsupported_message_names_the_channel() {
-        let text = super::about_check().unwrap_err();
-        assert!(text.contains("about:check"), "{text}");
+        let text = super::start_presentation().unwrap_err();
+        assert!(text.contains("presentation:start"), "{text}");
         assert!(text.contains("giai đoạn 1"), "{text}");
     }
 
@@ -1065,7 +1108,7 @@ mod tests {
         // `generate_handler!` đăng ký một lệnh mà không kênh nào gọi tới.
         assert_eq!(super::hand_written("get_library"), Some(("library:get", "get_library")));
         assert_eq!(super::hand_written("shell_info"), Some(("shell:info", "shell_info")));
-        assert_eq!(super::hand_written("about_check"), None);
+        assert_eq!(super::hand_written("lan_start"), None);
     }
 
     #[test]

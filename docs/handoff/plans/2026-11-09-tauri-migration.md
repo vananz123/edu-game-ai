@@ -5,14 +5,15 @@ Trạng thái: **đã duyệt và đang triển khai** — giai đoạn 0–4 XO
 xong bí mật (DPAPI + `settings:get/save`), AI local (tải runtime/model +
 `llama-server` loopback), setup wizard (`setup:*`), **toàn bộ luồng giáo án**
 (24 kênh `lesson:*` + `ai:cancel` gồm phân tích, sinh nội dung, chat) và
-**nhóm kênh AI phụ trợ** (`ai:test-provider`, `ai:tasks`, `ai:runtime-verify`);
-việc kế tiếp là các kênh còn lại (presentation, about, lan, hoặc `ai:generate`) —
-`ai:generate` là kênh legacy không còn màn hình nào gọi (DECISIONS "Giai đoạn 5
-(nhóm AI)").
+**nhóm kênh AI phụ trợ** (`ai:test-provider`, `ai:tasks`, `ai:runtime-verify`) và
+**nhóm Giới thiệu & Cập nhật** (7 kênh `about:*`);
+việc kế tiếp là các kênh còn lại (presentation, lan, hoặc `ai:generate`) —
+`ai:generate` là kênh legacy không còn màn hình nào gọi (DECISIONS "Giai đoạn 6
+(Giới thiệu & Cập nhật)").
 Phạm vi: ứng dụng desktop Windows hiện tại, phiên bản nguồn 0.5.1, **bản Tauri
 đầu tiên là bản thử giới hạn** (không có LAN, trình chiếu, updater; AI local đã
 có phần cài/chạy, wizard lần đầu, phân tích giáo án, sinh nội dung trò chơi,
-chat giáo án và probe/task manager/runtime-verify).
+chat giáo án, probe/task manager/runtime-verify và tab Giới thiệu).
 
 ## 1. Mục tiêu
 
@@ -406,8 +407,10 @@ các tính năng còn lại có quyết định rõ ràng và các cổng nghi�
   (V8 giữ `runLessonChatTurn`, SQLite lưu turn/chat, single-flight `AiGate`),
   `unsupported!` **25 → 21**; nhóm phụ trợ AI chạy thêm **3 kênh `ai:test-provider`/
   `ai:tasks`/`ai:runtime-verify`** (probe DPAPI/timeout 30s, SQLite task/in-memory, verify runtime llama.cpp),
-  `unsupported!` **21 → 18**; test Rust **133/133**, Node **99/99**, `check:embedded` khớp 6125,0 KiB.
-- Chưa làm: 6 (trình chiếu/LAN), 7 (updater/ký/phát hành thử), `ai:generate`
-  và các kênh presentation/about/lan. 18 kênh còn `unsupported!`; đường luồng giáo án
+  `unsupported!` **21 → 18**; nhóm Giới thiệu & Cập nhật chạy thêm **7 kênh `about:*`**
+  (AboutAppInfo, UpdateState dev-mode/GitHub Releases, mở release page),
+  `unsupported!` **18 → 11**; test Rust **136/136**, Node **99/99**, `check:embedded` khớp 6125,0 KiB.
+- Chưa làm: 6 (trình chiếu/LAN), 7 (updater tự động hoàn chỉnh/ký/phát hành thử), `ai:generate`
+  và các kênh presentation/lan. 11 kênh còn `unsupported!`; đường luồng giáo án
   mới chứng minh bằng Rust + server giả loopback, chưa chạy model thật/BYOK thật và
   cổng WebView2 chưa gọi kênh `lesson:*`.

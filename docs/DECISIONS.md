@@ -2650,6 +2650,33 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 
 **Việc kế tiếp.** Chưa duyệt bắt đầu code. Khi duyệt: dựng khung Tauri v2 + Rust toolchain trong nhánh riêng, chuyển lớp truy cập desktop sang facade TS (kế hoạch mục 4) và làm vòng 1 theo mục 1.
 
+## Giai đoạn 6 (Giới thiệu & Cập nhật) — bảy kênh `about:*` chạy trong vỏ Tauri: thông tin ứng dụng AboutAppInfo, máy trạng thái cập nhật dev-mode/GitHub Releases, mở release page; unsupported giảm từ 18 xuống 11 (2026-11-11)
+
+**Báo cáo.** Sau khi nhóm kênh AI phụ trợ hoàn tất, module `about:*` gồm 7 kênh phục vụ tab "Giới thiệu" trong Cài đặt và máy trạng thái cập nhật (`about:open`, `about:info`, `about:state`, `about:check`, `about:download`, `about:install`, `about:open-releases`) được chuyển sang lệnh Rust thật. Số kênh `unsupported!` giảm từ **18 xuống 11**.
+
+**Quyết định.**
+
+1. **`about:info` giữ đúng 13 trường của hộ chiếu `AboutAppInfo`.**
+   - Trả về object chứa đầy đủ các trường: `name` ("EduGame Studio"), `version` ("0.5.1"), `description` (câu mô tả giao diện tiếng Việt), `author`, `license`, `packaged` (`!cfg!(debug_assertions)`), `chrome: "WebView2"`, `platform: "win32"`, `arch: "x64"`, `userDataPath` (đường dẫn `edugame-data` của Tauri), `releasePageUrl` (link GitHub releases). Khớp đúng 13 khoá trong danh sách allowlist của cổng kiểm tra Electron.
+2. **`UpdateState` hỗ trợ dev-mode và kiểm tra GitHub Releases.**
+   - Ở chế độ phát triển (`cfg!(debug_assertions)`): máy trạng thái trả `phase: "error"` với `errorKind: "dev-mode"` và thông báo rõ ràng: "Bản bạn đang chạy không phải bộ cài đặt (nó chạy từ mã nguồn), nên không thể tự cập nhật...". Nút "Xem trang phát hành" mở trang tải bộ cài.
+   - Ở chế độ đóng gói release: `about:check` truy vấn `GET https://api.github.com/repos/vananz123/edu-game-ai/releases/latest` qua reqwest với User-Agent chuẩn. So sánh phiên bản semver (`is_newer_version`) để cập nhật `phase: "available"` hoặc `phase: "up-to-date"`. Khi lỗi mạng thì phân loại `offline`, khi 404 thì `feed`.
+   - `about:open` trả về trạng thái hiện tại và khởi chạy kiểm tra ngầm, không làm treo giao diện.
+3. **Mở link phát hành an toàn qua `about:open-releases`.**
+   - Chỉ cho phép các URL có tiền tố `https://github.com/`. Mở bằng lệnh hệ thống `cmd /c start ""` (Windows) hoặc `open`/`xdg-open` trên trình duyệt mặc định của hệ điều hành.
+4. **`download` và `install` ở vòng 1 hướng dẫn cập nhật qua bộ cài mới.**
+   - Theo quyết định #251 câu 6, bản thử nghiệm Tauri vòng 1 chưa tự động tải/ghi đè installer; nút download/install trả thông điệp hướng dẫn tải và chạy bộ cài mới để cập nhật.
+
+**Đánh đổi.**
+- Vòng 1 chưa tích hợp `tauri-plugin-updater` hay NSIS silent upgrade từ trong app, giữ nguyên quyết định #251 câu 6 (cài đè thủ công qua installer).
+- Quản lý trạng thái update dùng `OnceLock<Mutex<UpdateState>>` trong Rust process, phát sự kiện `about:state-push` qua `tauri::Emitter`.
+
+**Kiểm chứng.** `cargo test --lib -- --test-threads=1` **136/136** (thêm 3 test: so sánh semver, kiểm tra URL GitHub, dev-mode state) · `node tests/run-unit.js` **99/99** · `node tests/run-unit.js tauri-contract` **11/11** · `npm run check` sạch · `npm run check:embedded` khớp **6125,0 KiB** · `npm run check:renderer-globals` 74/76 script, 1.057 hàm / 8.373 điểm gọi, **0 undefined**.
+
+**Không chứng minh.** Chưa kiểm tra thực tế trên release binary khi có bản phát hành GitHub mới hơn 0.5.1; 11 kênh còn `unsupported!` (`ai:generate`, 4 `presentation:*`, 6 `lan:*`).
+
+**Việc kế tiếp.** Port nhóm `presentation:*` (trình chiếu màn hình phụ/máy chiếu) hoặc `lan:*` (phòng chơi mạng nội bộ).
+
 ## Giai đoạn 5 (nhóm AI) — ba kênh `ai:test-provider`, `ai:tasks`, `ai:runtime-verify` chạy trong vỏ Tauri: probe provider qua DPAPI + timeout 30s, kho tác vụ SQLite + bộ nhớ sống, verify runtime llama.cpp; unsupported giảm từ 21 xuống 18 (2026-11-11)
 
 **Báo cáo.** Sau khi luồng giáo án và chat hoàn tất, ba kênh phụ trợ AI còn lại gồm `ai:test-provider` (kiểm tra kết nối provider trong Cài đặt), `ai:tasks` (danh sách tác vụ AI trong Task Manager), và `ai:runtime-verify` (kiểm tra runtime CPU/Vulkan) được chuyển sang lệnh Rust thật. Số kênh `unsupported!` giảm từ **21 xuống 18**. Phép dò kênh chưa port của cổng nghiệm thu chuyển sang `startPresentation`/`presentation:start`.
