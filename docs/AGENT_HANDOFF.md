@@ -1,9 +1,9 @@
 # Agent Handoff — Start Here
 
-You are taking over development of **EduGame Studio v0.3**. This file is the source of truth for product intent and known status. Inspect the code before assuming that a feature is complete.
+You are taking over development of **EduGame Studio v0.5.1**. This file records product intent and handoffs; verify current implementation and `docs/STATUS.md` before assuming a feature is complete.
 
 ## One-sentence product description
-EduGame Studio is a Windows Electron + TypeScript app that helps teachers create educational games from lesson materials, stores games locally, and lets saved games play offline; cloud AI generation is mediated by a backend so provider keys are never shipped in the desktop app.
+EduGame Studio is a Windows Tauri v2 + TypeScript app that helps teachers create educational games from lesson materials, stores games locally, and lets saved games play offline; Rust owns desktop capabilities, SQLite, local AI, and protected provider keys.
 
 ## Read in this order
 1. `AGENTS.md` — working rules.
@@ -15,9 +15,10 @@ EduGame Studio is a Windows Electron + TypeScript app that helps teachers create
 7. `docs/ROADMAP.md` — planned sequence.
 
 ## Architecture map
-- `src/main.ts`: Electron main process, local database, IPC handlers, document operations.
-- `src/preload.ts`: allowlisted IPC API exposed to renderer.
-- `src/index.html`: desktop window shell and ordered renderer script/style loading.
+- `src-tauri/src/api.rs` and `lib.rs`: Tauri command/event bridge and registration.
+- `src-tauri/src/storage.rs`, `library.rs`, `lesson_store.rs`: SQLite and local data operations.
+- `src/renderer/core/desktop-facade.ts`, `desktop-adapter-tauri.ts`, and `desktop-facade-schema.ts`: typed renderer desktop API and channel contract.
+- `src/index.html`: renderer shell and ordered script/style loading.
 - `src/renderer/pages/`: individual screens (home, Giáo án/lesson plans, Dự án của tôi/my projects, game library, manual creation, lesson wizard, sessions/history, settings).
 - `src/renderer/features/`: UI flows (local AI, result auto-save in `results.ts`, lesson wizard in `wizard/` with shared state split into `wizard/state/*`, game editor split into `editor/*` — DECISIONS #150). `treasure-art.ts` holds the built-in treasure SVG scenes/avatars and `game-audio.ts` the offline Web Audio effects + mute preference; both are loaded before the editor and `games/*` scripts in `index.html`.
 - `src/renderer/core/`: renderer initialization, navigation, and page wiring.
@@ -26,9 +27,9 @@ EduGame Studio is a Windows Electron + TypeScript app that helps teachers create
 - `src/shared/types.ts`: shared contracts/types.
 - `src/services/` — pure business logic grouped by area (DECISIONS #148): `lesson/` (lesson-to-game workflow: `lesson-contracts` zod, `lesson-prompts`, `lesson-chunker`/`lesson-retrieval`, `lesson-preprocess`, `lesson-structure`, `lesson-quality`, `lesson-cache`, `lesson-workflow`, `lesson-projects`, `lesson-item-repair`, `item-capacity`), `ai/` (`ai-transport`, `ai-providers`, `ai-tasks`, `ai-log`, `opencode-zen`), `game/` (`game-service` normalize, `game-validation` 4 template validators, `game-project-adapter` draft ⇄ `EducationalGame`, `game-package` `.egame`, `ai-game-normalize`, `ai-game-design`, `game-type-rules`, `game-recommender`, `draft-convert`), `storage/` (`lesson-store` sidecar tables + lesson files, `custom-illustration`), `input/` (`input-classifier` + semantic, `question-import` CSV/TSV/XLSX, `question-compatibility`, `question-text`).
 - `src/game-engine/runtime.ts`: game runtime (scoring, text answers, dedupe helpers).
-- `server/index.ts`: Express AI Gateway scaffold.
+- `server/index.ts`: separate Express AI Gateway scaffold; not required for offline gameplay.
 - `server/schema.sql`: Supabase tables/RPC for usage quotas.
-- `tests/`: unit tests (runtime, AI manager, model/runtime installer, model catalog, document-assist, question-import, game-validation, ai-game-normalize, ai-game-design, lesson-contracts, game-project-adapter, ai-transport, lesson-workflow, lesson-projects, lesson-quality, lesson-chunker, lesson-retrieval, embedding-catalog, lesson-cache, lesson-item-repair, lesson-prompts, lesson-store, item-capacity) run by `npm test`; `tests/smoke56-81.js` are CDP UI smokes (need `electron . --remote-debugging-port=9333` with `EDUGAME_USER_DATA=<empty folder>`; `smoke64/66/67` also need `EDUGAME_AI_TEST_DIR`; `smoke69/70` use port **9334** and synthetic data; `smoke71` checks treasure art/audio on port **9333**). `tests/manual/persistence71.js` is a two-phase write/verify check on port **9335** that must run write, quit, relaunch the same `EDUGAME_USER_DATA`, then verify. `tests/manual/real-ai-e2e.js` runs on port **9336** against a profile whose `edugame-data/ai-local` contains the downloaded Qwen model + llama.cpp runtime; it starts the runtime, cancels one analysis, verifies single-flight, then does a real analyze/generate/save/play cycle (about 3–4 minutes on the i5-10210U target).; `tests/manual/bench-ai.js` measures the real local model over HTTP (`analyze|generate|batch|thinking`) and writes `docs/BENCHMARKS.md` numbers — it needs a running `llama-server` and never runs in CI; `tests/fixtures/bench/lessons.json` is its synthetic Vietnamese lesson corpus; `tests/legacy/` holds older smokes kept for history.
+- `tests/`: Node unit tests run with `npm test`; Rust unit tests run with `cargo test --manifest-path src-tauri/Cargo.toml --lib -- --test-threads=1`; `npm run tauri:check` is the integrated Tauri release/WebView2/migration gate. `tests/ui/tauri-webview-check.js` exercises the built Tauri frontend. Older Electron CDP smoke/manual and packaged updater checks remain under `tests/smoke/`, `tests/manual/`, and `tests/ui/`; they are historical, not the current Tauri acceptance path, and still need final review.
 
 ## Do not break these invariants
 1. Saved game playback works offline.
@@ -40,22 +41,15 @@ EduGame Studio is a Windows Electron + TypeScript app that helps teachers create
 7. Do not claim tests/build passed unless commands were run and results observed.
 
 ## First task for the new agent
-Read the latest dated update in `docs/STATUS.md` before relying on older notes. Do not start with a large rewrite or new features. Establish the actual build/test state:
+Read the latest dated update in `docs/STATUS.md` before relying on older notes. The Electron-to-Tauri migration is in final cleanup/verification; do not restore Electron as a fallback. Establish the actual build/test state:
 
 ```bash
-npm install
 npm run check
 npm test
-npm start
+npm run tauri:check
 ```
 
-Run commands in order, fix the first reproducible errors, and report exact command output/summary. If native dependencies fail on the current OS, distinguish environment/toolchain issues from application defects. On Windows, separately test:
-
-```bash
-npm run dist:win
-```
-
-Then manually verify save/reopen, `.egame` export/import, and offline gameplay.
+Run commands in order, fix the first reproducible errors, and report exact command output/summary. `tauri:check` validates/builds the Tauri release gate but does not replace a clean-machine installer acceptance test. Then manually verify save/reopen, `.egame` export/import, presentation mode, and offline gameplay.
 
 ## Current development focus
 **2026-10-22 — first-run setup is a full screen, not a dialog.** Requested after a teacher kept clicking the dashboard visible behind the wizard. Setup now sets `html[data-setup-fullscreen="1"]`, hides `.app-shell` / `.topbar` / `.ai-status-bar` via `visibility`, and renders `.setup-fullscreen` into `#modalRoot`; the flag is dropped for `complete` / `error` / `blocked` and in `closeSetupWizard()`. Markup no longer claims `role="dialog"`. Verified on the real renderer with `tests/ui/ui-setup-fullscreen-check.js` (11/11: surface equals the viewport, shell hidden, buttons in view, shell restored) plus `tests/setup-wizard-ui.test.ts`. Not checked: 1366×768 @125% and dark theme. See DECISIONS #47.

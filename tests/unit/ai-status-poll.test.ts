@@ -56,13 +56,7 @@ function loadModule() {
   const status = { current: { state: 'STOPPED', modelId: null, message: '' } };
   const tasks = { live: [] };
   const calls = [];
-  const windowObject = {
-    eduGame: {
-      getLocalRuntimeStatus: async () => { calls.push('status'); return status.current; },
-      getLocalAiModels: async () => { calls.push('models'); return { models: [], machine: {} }; },
-      listAiTasks: async () => { calls.push('tasks'); return { live: tasks.live, history: [] }; }
-    }
-  };
+  const windowObject = {};
 
   const sandbox = {
     console,
@@ -83,15 +77,27 @@ function loadModule() {
   };
   sandbox.globalThis = sandbox;
   const context = vm.createContext(sandbox);
-  // Giai đoạn 2: module nói với façade, không với `window.eduGame` — nạp đúng bốn
-  // tệp façade mà index.html nạp, rồi cắm adapter Electron thật trên cầu giả.
-  const FACADE_FILES = ['desktop-facade-schema.js', 'desktop-adapter-electron.js', 'desktop-adapter-tauri.js', 'desktop-facade.js'];
+  // Nạp façade chung và cắm adapter giả để bài test tập trung vào nhịp của module.
+  const FACADE_FILES = ['desktop-facade-schema.js', 'desktop-facade.js'];
   for (const name of FACADE_FILES) {
     const file = path.join(path.dirname(path.dirname(MODULE_FILE)), 'core', name);
     assert.ok(fs.existsSync(file), `${name} is missing — run npm run build`);
     vm.runInContext(fs.readFileSync(file, 'utf8'), context, { filename: file });
   }
-  vm.runInContext("desktop.attach(createElectronDesktopAdapter('eduGame'));", context, { filename: 'attach.js' });
+  sandbox.testAdapter = {
+    name: 'test',
+    invoke(call) {
+      const handlers = {
+        getLocalRuntimeStatus: async () => { calls.push('status'); return status.current; },
+        getLocalAiModels: async () => { calls.push('models'); return { models: [], machine: {} }; },
+        listAiTasks: async () => { calls.push('tasks'); return { live: tasks.live, history: [] }; }
+      };
+      if (!handlers[call]) throw new Error(`unexpected desktop call: ${call}`);
+      return handlers[call]();
+    },
+    listen() { return () => {}; }
+  };
+  vm.runInContext('desktop.attach(testAdapter)', context, { filename: 'attach.js' });
   vm.runInContext(fs.readFileSync(MODULE_FILE, 'utf8'), context, { filename: 'ai-status.js' });
 
   return {

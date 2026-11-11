@@ -29,7 +29,7 @@ for (const file of [SHARED_JS, SETTINGS_JS]) {
 }
 
 const settingsSource = fs.readFileSync(SETTINGS_JS, 'utf8');
-const FACADE_FILES = ['desktop-facade-schema.js', 'desktop-adapter-electron.js', 'desktop-adapter-tauri.js', 'desktop-facade.js'];
+const FACADE_FILES = ['desktop-facade-schema.js', 'desktop-facade.js'];
 function readFacade(name) {
   const file = path.join(DIST, 'renderer', 'core', name);
   assert.ok(fs.existsSync(file), `${name} is missing — run npm run build`);
@@ -73,22 +73,30 @@ function boot(selectValue) {
       window.render = () => {};
       window.applyTheme = () => {};
       window.toast = () => {};
-      window.eduGame = {
+      window.__testCalls = {
         saveSettings: payload => { saves.push(JSON.parse(JSON.stringify(payload))); return Promise.resolve({ ok: true, settings: window.state.settings }); },
         getSettings: () => Promise.resolve(window.state.settings),
         testAiProvider: () => Promise.resolve({ durationMs: 1, settings: window.state.settings })
       };
+      window.__testAdapter = {
+        name: 'test',
+        invoke(call, args) {
+          const handler = window.__testCalls[call];
+          if (typeof handler !== 'function') throw new Error(`unexpected desktop call: ${call}`);
+          return Promise.resolve(handler(...args));
+        },
+        listen() { return () => {}; }
+      };
     }
   });
   const doc = dom.window.document;
-  // Giai đoạn 2: settings.js nói với façade, không với `window.eduGame`. jsdom chạy mỗi
-  // thẻ `<script>` bằng `eval` riêng, trong khi ngoài đời mọi tệp renderer chia nhau MỘT
-  // phạm vi lệnh — nên façade + shared.js phải nằm chung một thẻ.
+  // jsdom chạy mỗi thẻ `<script>` bằng `eval` riêng, trong khi ngoài đời mọi tệp
+  // renderer chia nhau MỘT phạm vi lệnh — nên façade + shared.js phải nằm chung.
   const head = [...FACADE_FILES.map(readFacade), fs.readFileSync(SHARED_JS, 'utf8')].join('\n');
   const tag = doc.createElement('script');
   tag.textContent = head + '\n' + settingsSource;
   doc.head.appendChild(tag);
-  dom.window.eval("desktop.attach(createElectronDesktopAdapter('eduGame'));");
+  dom.window.eval('desktop.attach(window.__testAdapter);');
   return { dom, win: dom.window, doc, saves };
 }
 

@@ -27,12 +27,7 @@ import vm from 'node:vm';
 // `window.eduGame`, nên suite này nạp đúng bốn tệp mà index.html nạp và cắm một
 // adapter giả — cùng cách test hợp đồng của façade làm.
 const BUILT = path.join(__dirname, '..', '..', '..', 'dist', 'src', 'renderer');
-const FACADE_FILES = [
-  'core/desktop-facade-schema.js',
-  'core/desktop-adapter-electron.js',
-  'core/desktop-adapter-tauri.js',
-  'core/desktop-facade.js'
-];
+const FACADE_FILES = ['core/desktop-facade-schema.js', 'core/desktop-facade.js'];
 const RENDERER = path.join(__dirname, '..', '..', 'src', 'renderer');
 
 function createElement() {
@@ -132,7 +127,7 @@ const document = {
   querySelectorAll() { return []; }
 };
 
-/** Scripted IPC surface; each call is recorded so the flow can be asserted. */
+/** Scripted desktop-call surface; each call is recorded so the flow can be asserted. */
 const calls: string[] = [];
 let setupStatus: Record<string, unknown> = { step: 'idle', complete: false, running: false };
 let progressHandler: ((progress: unknown) => void) | null = null;
@@ -170,7 +165,7 @@ const wizardBridge: Record<string, any> = {
   }
 };
 
-const windowObject: Record<string, any> = { eduGame: wizardBridge };
+const windowObject: Record<string, any> = {};
 const sandbox: Record<string, any> = {
   console,
   document,
@@ -188,6 +183,19 @@ const sandbox: Record<string, any> = {
   navigate: (page: string) => { calls.push(`navigate:${page}`); },
   openLocalAiModal: () => { calls.push('openLocalAiModal'); },
   toast: () => {}
+};
+sandbox.desktopTestAdapter = {
+  name: 'test',
+  invoke(call: string, args: unknown[]) {
+    const handler = wizardBridge[call];
+    if (typeof handler !== 'function') throw new Error(`unexpected desktop call: ${call}`);
+    return Promise.resolve(handler(...args));
+  },
+  listen(call: string, handler: (payload: unknown) => void) {
+    const subscribe = wizardBridge[call];
+    if (typeof subscribe !== 'function') throw new Error(`unexpected desktop event: ${call}`);
+    return subscribe(handler);
+  }
 };
 sandbox.globalThis = sandbox;
 const context = vm.createContext(sandbox);
@@ -211,9 +219,8 @@ for (const file of FACADE_FILES) {
   assert.ok(fs.existsSync(full), `${file} is missing — run npm run build`);
   vm.runInContext(fs.readFileSync(full, 'utf8'), context, { filename: full });
 }
-// Electron giả: chính adapter thật của Electron bọc `window.eduGame` (cùng đường
-// mà bản chạy dùng), nên suite này đo cả adapter lẫn façade, không chỉ wizard.
-vm.runInContext("desktop.attach(createElectronDesktopAdapter('eduGame'));", context, { filename: 'attach.js' });
+// Adapter test tối giản giữ suite tập trung vào façade và DOM wizard, không vỏ Electron.
+vm.runInContext('desktop.attach(desktopTestAdapter)', context, { filename: 'attach.js' });
 runFile('features/icon-data.js');
 runFile('features/ui-icons.js');
 runFile('setup-wizard-model.js');

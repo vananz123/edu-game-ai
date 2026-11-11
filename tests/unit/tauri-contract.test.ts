@@ -3,11 +3,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 // Cổng của vỏ Tauri. Chốt bốn thứ mà một lần sửa tay có thể làm lệch:
-//   1. `api.rs` khai đúng từng kênh invoke của preload.ts, không thừa không thiếu;
+//   1. `api.rs` khai đúng từng kênh invoke của desktop-facade-schema.ts, không thừa không thiếu;
 //   2. `lib.rs` đăng ký đúng các lệnh đó vào invoke_handler;
 //   3. giai đoạn 2: `invoke_channel`/`send_channel` là cửa chung của façade, và
-//      danh sách kênh của chúng khớp desktop-contract.json — renderer không còn
-//      `window.eduGame`, nên đây là đường duy nhất để một kênh tới được vỏ;
+//      danh sách kênh của chúng khớp DESKTOP_CALLS trong desktop-facade-schema.ts —
+//      renderer không còn `window.eduGame`, nên đây là đường duy nhất để một kênh
+//      tới được vỏ;
 //   4. tauri.conf.json giữ định danh/thư mục dữ liệu tách khỏi Electron, và
 //      index.html của dist-tauri nạp cổng `edugame-guard.js` TRƯỚC mọi script,
 //      KHÔNG còn `edugame-bridge.js` của giai đoạn 1.
@@ -24,28 +25,52 @@ function findRepoRoot(start: string): string {
 }
 
 const root = findRepoRoot(__dirname);
-const contract = JSON.parse(
-  fs.readFileSync(path.join(root, 'src', 'shared', 'desktop-contract.json'), 'utf8'),
-);
 const apiSource = fs.readFileSync(path.join(root, 'src-tauri', 'src', 'api.rs'), 'utf8');
 const libSource = fs.readFileSync(path.join(root, 'src-tauri', 'src', 'lib.rs'), 'utf8');
 const conf = JSON.parse(
   fs.readFileSync(path.join(root, 'src-tauri', 'tauri.conf.json'), 'utf8'),
 );
 
+/**
+ * Đọc DESKTOP_CALLS từ desktop-facade-schema.ts và phân loại thành ba nhóm:
+ *   - invoke: kind === 'value'
+ *   - send:   kind === 'send'
+ *   - event:  kind === 'stream'
+ * Trả về đúng hình dạng mà các test dưới dùng (Record<name, channel>).
+ */
+function loadFacadeContract(): { invoke: Record<string, string>; send: Record<string, string>; event: Record<string, string> } {
+  const schemaSource = fs.readFileSync(
+    path.join(root, 'src', 'renderer', 'core', 'desktop-facade-schema.ts'),
+    'utf8',
+  );
+  const invoke: Record<string, string> = {};
+  const send: Record<string, string> = {};
+  const event: Record<string, string> = {};
+  for (const match of schemaSource.matchAll(
+    /^\s{2}([a-zA-Z0-9_]+): \{ channel: '([^']+)', group: '[^']+', kind: '(value|send|stream)'/gm,
+  )) {
+    const [, name, channel, kind] = match;
+    if (kind === 'value') invoke[name] = channel;
+    else if (kind === 'send') send[name] = channel;
+    else event[name] = channel;
+  }
+  return { invoke, send, event };
+}
+
+const contract = loadFacadeContract();
+
 // Lệnh viết tay (không qua `unsupported!`) và kênh của chúng, đọc thẳng từ bảng
 // `hand_written()` trong api.rs. Hai dòng `channel:*` là kênh GIẢ của hai cửa
-// chung giai đoạn 2 (chúng không thuộc preload Electron, chỉ giữ hình dạng bảng)
-// nên bị bỏ khỏi mọi phép so với contract. `shell:info` cũng không thuộc preload.
+// chung giai đoạn 2 (chúng không thuộc DESKTOP_CALLS, chỉ giữ hình dạng bảng)
+// nên bị bỏ khỏi mọi phép so với contract. `shell:info` cũng không thuộc façade.
 const PSEUDO_CHANNELS = new Set(['channel:invoke', 'channel:send']);
-// Kênh ĐIỀU KHIỂN của cổng kiểm tra: không có trong preload Electron, không
+// Kênh ĐIỀU KHIỂN của cổng kiểm tra: không có trong DESKTOP_CALLS, không
 // renderer nào gọi (`desktop.gate(...)`, chỉ `tests/ui/tauri-webview-check.js`),
 // và `package.rs`/`document.rs` từ chối khi biến `EDUGAME_TAURI_PACKAGE` /
 // `EDUGAME_TAURI_FILES` chưa bật.
 const GATE_CHANNELS = new Set(['package:gate-turn', 'files:gate-turn']);
-// Kênh CHỈ vỏ Tauri có (Giai đoạn 4: nhập profile Electron). Không thuộc preload
-// Electron, nên không đối chiếu với `desktop-contract.json`; renderer chỉ gọi qua
-// `desktop.host(...)` khi `desktopHost.shell === 'tauri'`.
+// Kênh CHỈ vỏ Tauri có (Giai đoạn 4: nhập profile). Không thuộc DESKTOP_CALLS;
+// renderer chỉ gọi qua `desktop.host(...)` khi `desktopHost.shell === 'tauri'`.
 const TAURI_ONLY_CHANNELS = new Set(['migration:detect', 'migration:browse', 'migration:import']);
 
 function handWritten(): Map<string, string> {
@@ -114,7 +139,7 @@ function test(name: string, fn: () => void) {
   }
 }
 
-test('api.rs khai được mọi kênh invoke của desktop-contract.json', () => {
+test('api.rs khai được mọi kênh invoke của desktop-facade-schema.ts', () => {
   const declared = new Set([...rustChannels().values()]
     .filter(channel => channel !== 'shell:info' && !PSEUDO_CHANNELS.has(channel) && !GATE_CHANNELS.has(channel) && !TAURI_ONLY_CHANNELS.has(channel)));
   const expected = new Set(Object.values(contract.invoke));
@@ -149,18 +174,16 @@ test('ba kênh dữ liệu khởi động có lệnh thật, không phải lện
   }
 });
 
-test('ba kênh send thuộc trình chiếu chưa mở trong vỏ Tauri', () => {
-  // Ghi nhận có chủ đích: ba kênh này là trình chiếu — vòng 2 của #251 câu 1.
-  // Giai đoạn 2 mở cửa `send_channel` cho đúng ba kênh đó, nhưng mỗi kênh vẫn
-  // trả lỗi "chưa có thân" cho tới khi port thật. Nếu preload thêm kênh send
-  // mới, hàng dưới đỏ để buộc người sửa quyết định thay vì im lặng bỏ qua.
+test('ba kênh send thuộc trình chiếu được khai đúng trong vỏ Tauri', () => {
+  // Nếu façade thêm kênh send mới, hàng dưới đỏ để buộc người sửa port nó thay
+  // vì im lặng bỏ qua.
   assert.deepEqual(Object.keys(contract.send).sort(), [
     'requestPresentationState',
     'sendPresentationExit',
     'sendPresentationState',
   ]);
   assert.deepEqual(channelList('SEND_CHANNELS').slice().sort(), (Object.values(contract.send) as string[]).sort(),
-    'SEND_CHANNELS của api.rs phải khớp đúng ba kênh send của hợp đồng');
+    'SEND_CHANNELS của api.rs phải khớp đúng ba kênh send của façade');
 });
 
 // Hai danh sách kênh của api.rs là cửa DUY NHẤT để renderer tới được vỏ Tauri
@@ -216,7 +239,7 @@ test('ba kênh nhập profile Electron: façade ↔ INVOKE_CHANNELS ↔ lệnh R
     assert.ok(channels.includes(channel), `INVOKE_CHANNELS thiếu ${channel} của ${name}`);
     assert.ok(declared.has(channel), `api.rs chưa có lệnh cho ${channel} của ${name}`);
     assert.ok(!contractChannels.has(channel),
-      `${channel} vừa thuộc preload Electron vừa là kênh chỉ Tauri — phải chọn một`);
+      `${channel} vừa thuộc DESKTOP_CALLS (invoke) vừa là kênh chỉ Tauri — phải chọn một`);
   }
 });
 

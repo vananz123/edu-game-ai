@@ -1,27 +1,14 @@
-//! Các lệnh IPC mà vỏ Tauri mở ra cho renderer.
+//! Tauri command bridge for the renderer desktop façade.
 //!
-//! Giai đoạn 1 chỉ có bốn lệnh dữ liệu thật (`getLibrary`, `getSettings`,
-//! `getLocalAiModels` và `appInfo`); chúng đọc/ghi trong thư mục dữ liệu riêng
-//! của Tauri. Giai đoạn 3 mở thêm sáu kênh `library:*` trên `edugame.sqlite`
-//! (`library.rs`). Không lệnh nào giả vờ thành công: một kênh chưa port phải báo
-//! lỗi để giáo viên biết, thay vì lặng lẽ trả dữ liệu rỗng.
+//! The renderer channel contract is declared in
+//! `src/renderer/core/desktop-facade-schema.ts`; `invoke_channel` and
+//! `send_channel` route requests through `dispatch()` below. Unknown or
+//! intentionally unsupported channels return an explicit error rather than a
+//! success-shaped fallback.
 //!
-//! Phần còn lại của hợp đồng Electron (xem `src/shared/desktop-contract.json`)
-//! được đăng ký bằng `unsupported!` để renderer nhận một lỗi đọc được thay vì
-//! "command not found" của Tauri. `tests/unit/tauri-contract.test.ts` so danh
-//! sách dưới đây với JSON, nên thêm kênh ở preload mà quên ở đây là đỏ cổng.
-//!
-//! Giai đoạn 2 mở thêm hai cửa CHUNG cho façade của renderer:
-//! `invoke_channel` (một kênh, có trả lời) và `send_channel` (ba kênh trình
-//! chiếu, không chờ kết quả). Nhờ vậy renderer chỉ cần nói chuyện với lớp
-//! desktop, không cần `edugame-bridge.js` dựng lại 92 khoá của preload Electron.
-//! Hai lệnh này KHÔNG tự làm gì: mỗi kênh vẫn chạy qua bảng `dispatch()` bên
-//! dưới, nên kênh chưa port vẫn trả lỗi đọc được chứ không giả vờ thành công.
-//!
-//! Tauri đăng ký lệnh theo TÊN HÀM, và tên hàm không được chứa `:`; nên chuỗi
-//! kênh của Electron (`library:get`) đi qua đây dưới dạng THAM SỐ, không phải
-//! tên lệnh. Đó là lý do duy nhất hai lệnh chung này tồn tại — mọi logic vẫn
-//! nằm ở hàm riêng của từng kênh.
+//! Tauri registers Rust command function names, not channel strings such as
+//! `library:get`, so the channel is passed as an argument and mapped to the
+//! command implementation here.
 
 use serde::Serialize;
 use serde_json::Value;
@@ -29,16 +16,15 @@ use tauri::AppHandle;
 
 use crate::paths;
 
-/// Lệnh đã có thân thật, kèm kênh Electron mà nó phục vụ.
+/// Tauri command implementation and the renderer channel it serves.
 ///
 /// Tauri đăng ký lệnh theo tên hàm Rust, không theo chuỗi kênh, nên bảng này là
 /// nơi duy nhất nối hai thứ đó lại. `tests/unit/tauri-contract.test.ts` đọc
 /// từng dòng để chốt rằng mỗi kênh của hợp đồng có đúng một lệnh, và mọi lệnh ở
 /// đây đều được `generate_handler!` trong lib.rs đăng ký.
 ///
-/// Hai dòng `channel:*` là kênh giả của hai cửa chung giai đoạn 2: cổng kiểm tra
-/// bỏ qua chúng và đối chiếu chúng với `INVOKE_CHANNELS`/`SEND_CHANNELS` thay vì
-/// với preload Electron.
+/// The generic bridge commands are checked against the façade's invoke/send
+/// channel lists rather than treated as individual renderer channels.
 pub fn hand_written(command: &str) -> Option<(&'static str, &'static str)> {
     Some(match command {
         "app_info" => ("app:info", "app_info"),
@@ -153,9 +139,8 @@ pub fn hand_written(command: &str) -> Option<(&'static str, &'static str)> {
         "stop_presentation" => ("presentation:stop", "stop_presentation"),
         "toggle_presentation" => ("presentation:toggle", "toggle_presentation"),
         "get_displays" => ("presentation:displays", "get_displays"),
-        // Giai đoạn 4: nhập profile Electron. Ba kênh KHÔNG có trong preload
-        // Electron — `tests/unit/tauri-contract.test.ts` miễn trừ chúng khỏi phép
-        // so với `desktop-contract.json`, và renderer chỉ gọi trên vỏ Tauri.
+        // Profile migration commands are Tauri-only and are not renderer façade
+        // channels; the migration wizard calls the registered commands directly.
         "migration_detect" => ("migration:detect", "migration_detect"),
         "migration_browse" => ("migration:browse", "migration_browse"),
         "migration_import" => ("migration:import", "migration_import"),
@@ -167,7 +152,7 @@ pub fn hand_written(command: &str) -> Option<(&'static str, &'static str)> {
 
 /// Kênh mà `invoke_channel` phục vụ: một kênh có trả lời, đi qua `dispatch()`.
 ///
-/// Lời gọi được façade gửi nguyên văn từ `desktop-contract.json`
+/// Lời gọi được façade gửi theo `desktop-facade-schema.ts`
 /// (`desktop.call('library:get', …)` → `invoke('invoke_channel', {channel:
 /// 'library:get', args})`). Vì vậy đây là cửa DUY NHẤT mà renderer dùng cho
 /// nhóm "có trả lời"; kênh lạ bị từ chối ngay tại đây thay vì rơi xuống một
@@ -278,9 +263,8 @@ const SEND_CHANNELS: &[&str] = &[
 
 /// Một kênh có trả lời: gọi ĐÚNG hàm của kênh đó, không nhánh chung nào khác.
 ///
-/// Kênh có thân thật thì gọi hàm thật; kênh còn lại gọi hàm `unsupported!` của
-/// chính nó, nên câu lỗi giống hệt khi gọi bằng lệnh riêng (giai đoạn 1) hay qua
-/// `invoke_channel` (giai đoạn 2). Không nhánh nào trả dữ liệu rỗng giả.
+/// Kênh có thân thật thì gọi hàm thật; kênh chưa được hỗ trợ trả lỗi rõ ràng.
+/// Không nhánh nào trả dữ liệu rỗng giả.
 ///
 /// `invoke_channel` đã lọc theo `INVOKE_CHANNELS`, nên `_` ở đây không tới
 /// được — nó chỉ là lưới an toàn nếu hai danh sách lệch nhau lúc sửa tay.
@@ -652,7 +636,7 @@ pub fn delete_illustration(app: AppHandle, image_id: Option<Value>) -> Result<se
 /// huỷ; ở đây cửa sổ thiếu cũng cùng câu trả lời, không ném.
 #[tauri::command]
 pub fn set_fullscreen(app: AppHandle, enabled: Option<Value>) -> Result<serde_json::Value, String> {
-    use tauri::Manager;
+    use tauri::{Emitter, Manager};
     let wanted = match enabled {
         Some(Value::Bool(flag)) => flag,
         Some(Value::Null) | None => false,
@@ -665,6 +649,7 @@ pub fn set_fullscreen(app: AppHandle, enabled: Option<Value>) -> Result<serde_js
     window
         .set_fullscreen(wanted)
         .map_err(|error| format!("EG_WINDOW: không đổi được chế độ toàn màn hình: {error}"))?;
+    let _ = app.emit("window:fullscreen-changed", wanted);
     Ok(serde_json::json!({ "ok": true }))
 }
 
@@ -1151,8 +1136,8 @@ macro_rules! unsupported {
     };
 }
 
-// Toàn bộ 81 kênh invoke của desktop-contract.json đã có lệnh thật trong vỏ Tauri.
-// unsupported! hiện rỗng.
+// The current renderer contract is implemented; keep the explicit error macro
+// available for future channels that have not yet been ported.
 unsupported! {}
 
 #[cfg(test)]

@@ -79,7 +79,7 @@ function createContext() {
     requestAnimationFrame: noop,
     cancelAnimationFrame: noop,
     matchMedia: () => ({ matches: false, addEventListener: noop, removeEventListener: noop }),
-    location: { href: '', search: '', hash: '' },
+    location: { href: '', search: '', hash: '', pathname: '' },
     alert: noop,
     URLSearchParams
   };

@@ -1,14 +1,10 @@
 //! Cơ sở dữ liệu của vỏ Tauri — giai đoạn 3 của kế hoạch chuyển đổi.
 //!
-//! Bản Electron giữ thư viện và các bảng sidecar trong MỘT tệp `edugame.sqlite`
-//! (WAL, `foreign_keys = ON`). Ở đây dùng đúng tệp đó, đúng DDL đó, để dữ liệu
-//! của một giáo viên có thể chép sang rồi mở bằng vỏ này mà không có bước đổi
-//! giữa. Hai khối DDL KHÔNG được viết lại ở đây: `include_str!` đọc thẳng từ tệp
-//! TypeScript đang sở hữu chúng (`main.ts` và `lesson-store.ts`), nên sửa cột ở
-//! một nơi là cả hai vỏ biết. `tests/unit/tauri-storage-schema.test.ts` canh
-//! rằng khối được trích vẫn đúng là khối đang chạy bên Electron.
-//!
-//! Tên tệp cũng lấy từ `main.ts` (`DB_FILE`), không gõ lại chuỗi ở đây.
+//! Thư viện và các bảng sidecar cùng nằm trong `edugame.sqlite` (WAL,
+//! `foreign_keys = ON`), giữ nguyên định dạng để nhập profile đã có. Hai khối
+//! DDL không được viết lại ở đây: `include_str!` đọc trực tiếp các tệp SQL dùng
+//! làm nguồn sự thật. `tests/unit/tauri-storage-schema.test.ts` kiểm tra cấu
+//! trúc và việc `Library` dùng đúng tên tệp tương thích.
 //!
 //! Tệp này chỉ giữ phần mở/khoá/tạo bảng và các kiểu lỗi dùng chung. Câu SQL
 //! của thư viện nằm ở `library.rs`, bộ chuyển tham số ở `sql_params.rs`.
@@ -17,13 +13,13 @@ use std::path::Path;
 
 use rusqlite::Connection;
 
-/// DDL của `games`/`sessions`, đúng nguyên văn chuỗi trong `ensureData()`.
+/// DDL của `games`/`sessions`.
 pub const LIBRARY_SCHEMA_SQL: &str = include_str!("../../src/db/library-schema.sql");
 
-/// DDL của chín bảng sidecar, đúng `LESSON_STORE_SCHEMA_SQL` của `lesson-store.ts`.
+/// DDL của chín bảng sidecar.
 pub const STORE_SCHEMA_SQL: &str = include_str!("../../src/db/lesson-store-schema.sql");
 
-/// Tên tệp cơ sở dữ liệu, đúng hằng `DB_FILE` trong `main.ts`.
+/// Tên tệp cơ sở dữ liệu tương thích với profile cũ.
 pub const DB_FILE: &str = "edugame.sqlite";
 
 /// Lỗi đọc/ghi cơ sở dữ liệu. Mọi thông điệp đều tiếng Việt để renderer hiện
@@ -99,8 +95,8 @@ pub fn open(path: &Path) -> Result<Connection, DbError> {
 /// Tạo bảng của cả hai khối (`CREATE … IF NOT EXISTS` nên chạy lại vô hại) và
 /// áp các migration cộng thêm của `LessonStore.migrateSchema()`.
 ///
-/// Hai cột `cache_key` / `evidence_meta` được thêm bằng `ALTER TABLE` y như bên
-/// Electron: `CREATE TABLE IF NOT EXISTS` không bao giờ thêm cột vào bảng đã có,
+/// Hai cột `cache_key` / `evidence_meta` được thêm bằng `ALTER TABLE`:
+/// `CREATE TABLE IF NOT EXISTS` không bao giờ thêm cột vào bảng đã có,
 /// nên một tệp tạo trước #186 mà thiếu bước này sẽ mất phần "AI đã đọc …" của
 /// mọi cuộc trò chuyện cũ.
 pub fn ensure_schema(connection: &Connection) -> Result<(), DbError> {
@@ -240,11 +236,11 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn database_file_name_matches_the_electron_one() {
-        let main_ts = include_str!("../../src/main.ts");
-        assert!(
-            main_ts.contains(&format!("path.join(DATA_DIR(), '{DB_FILE}')")),
-            "DB_FILE phải là tên tệp mà main.ts mở: {DB_FILE}"
+    fn database_file_name_is_used_by_the_library() {
+        assert_eq!(DB_FILE, "edugame.sqlite");
+        assert_eq!(
+            crate::library::Library::database_path(Path::new("data")),
+            Path::new("data").join(DB_FILE)
         );
     }
 }

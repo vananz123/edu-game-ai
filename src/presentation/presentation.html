@@ -9,15 +9,12 @@
   </style>
 </head>
 <body>
-  <!-- Giai đoạn 2: cửa sổ này cũng đi qua façade desktop như cửa sổ chính. Bốn tệp
-       đầu dựng façade + phép chọn adapter; `presentation.js` tự nối adapter và đăng
-       ký hai sự kiện trước khi vẽ. Không nạp `desktop-host` — tệp đó nối adapter cho
-       cửa sổ chính, còn cửa sổ này chỉ cần nhóm trình chiếu. Thứ tự khớp với
-       tests/unit/renderer-load-order.test.ts (script cổng thường, không defer). -->
+  <!-- Cửa sổ trình chiếu dùng cùng façade và adapter Tauri như cửa sổ chính.
+       desktop-host cung cấp desktopCoreChooseAdapter() trước khi presentation.js chạy. -->
   <script src="../renderer/core/desktop-facade-schema.js"></script>
-  <script src="../renderer/core/desktop-adapter-electron.js"></script>
   <script src="../renderer/core/desktop-adapter-tauri.js"></script>
   <script src="../renderer/core/desktop-facade.js"></script>
+  <script src="../renderer/core/desktop-host.js"></script>
   <script src="../renderer/features/presentation.js"></script>
 </body>
 </html>

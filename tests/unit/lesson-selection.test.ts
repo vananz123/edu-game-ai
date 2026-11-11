@@ -81,7 +81,15 @@ async function run(): Promise<void> {
   // --- Empty selection is an explicit error (§10.12) -----------------------
   assert.throws(() => resolveSelection(structure, []), /SELECTION_EMPTY|ít nhất một phần/);
   assert.throws(() => prepareSelectedLessonText(LESSON, structure, []), /ít nhất một phần/);
-  assert.throws(() => resolveSelection(structure, ['sec_999999']), /không còn trong cấu trúc/);
+  // An unknown id is now silently dropped (stale section); only when ALL ids are
+  // unknown (nothing left to analyse) should it throw SELECTION_EMPTY.
+  assert.throws(() => resolveSelection(structure, ['sec_999999']), /SELECTION_EMPTY|ít nhất một phần|không còn trong cấu trúc/,
+    'resolveSelection with only stale ids must throw SELECTION_EMPTY');
+  // A mix of a valid id and a stale one should succeed (stale id is filtered out).
+  const staleIds: string[] = [];
+  const mixedResult = resolveSelection(structure, [goal.id, 'sec_999999'], { staleIds });
+  assert.ok(mixedResult.length > 0, 'valid id in a mix with stale id should still return ranges');
+  assert.deepStrictEqual(staleIds, ['sec_999999'], 'stale id should be reported in staleIds array');
 
   // --- Unselected text is never sent (§4.2) --------------------------------
   const onlyObjectives = prepareSelectedLessonText(LESSON, structure, [goal.id], { maxChars: 6_000 });

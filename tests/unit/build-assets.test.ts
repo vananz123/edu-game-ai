@@ -3,21 +3,19 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 /**
- * Build-artifact guard: every non-TypeScript file the app loads at runtime must
+ * Build-artifact guard: every static file loaded by the Tauri renderer must
  * actually exist in `dist/`.
  *
  * Why this exists. `npm run build` runs `tsc` (emits .js/.js.map only) and then
  * `copyfiles` for the handful of static assets. Anything not listed there is
- * silently absent from `dist/` — and from the packaged installer, since
- * electron-builder ships `dist/**`. `tsc` cannot catch it (the file is not
+ * silently absent from `dist/` — and from the Tauri frontend. `tsc` cannot
+ * catch it (the file is not
  * TypeScript), and no unit test executed the built app, so Presentation Mode
  * loaded `presentation.html` from a path that did not exist (`net::
  * ERR_FILE_NOT_FOUND`) while the whole suite stayed green.
  *
  * The list below is derived from what code actually opens at runtime:
- *   - src/main.ts            -> loadFile('index.html')
  *   - src/presentation/*     -> path.join(__dirname, 'presentation.html')
- *                               path.join(__dirname, 'presentation-preload.js')
  *   - src/index.html         -> <link href="renderer/styles/app.css">
  *   - src/presentation/presentation.html -> <script src="../renderer/features/presentation.js">
  *
@@ -40,7 +38,6 @@ const COPIED_ASSETS = [
   'src/index.html',
   'src/renderer/styles/app.css',
   'src/presentation/presentation.html',
-  'src/presentation/presentation-preload.js',
   // DECISIONS #204 removed `src/about/about.html` + `about-preload.js`: the "Giới thiệu"
   // panel is built by `renderer/features/about-panel.js`, which index.html lists below and
   // section 3 of this test resolves like every other script tag. Keeping a second HTML page
@@ -51,9 +48,8 @@ const COPIED_ASSETS = [
   'src/lan/mobile/index.html',
   'src/lan/mobile/mobile.css',
   'src/lan/mobile/mobile.js',
-  // DECISIONS #185: `src/main.ts` sets the window/taskbar icon to this file at
-  // runtime. `tsc` never emits it and a missing asset is not an error, so an
-  // icon that is not copied simply falls back to the Electron logo.
+  // Shared renderer artwork; Tauri executable and installer icons are defined
+  // separately in src-tauri/tauri.conf.json.
   'src/renderer/assets/app-icon.png'
 ];
 
@@ -92,6 +88,8 @@ for (const name of areaImports) {
 //    A wrong relative depth here is how the projector page would 404 its script.
 const distHtml = path.join(BUILD_ROOT, 'src', 'presentation', 'presentation.html');
 const html = fs.readFileSync(distHtml, 'utf8');
+assert.doesNotMatch(html, /desktop-adapter-electron|presentation-preload\.js|window\.eduGame/,
+  'presentation.html must use the Tauri desktop façade, not Electron');
 const scripts = [...html.matchAll(/<script[^>]*src="([^"]+)"/g)].map((m) => m[1]);
 assert.ok(scripts.length > 0, 'presentation.html should load at least one script');
 for (const src of scripts) {
@@ -101,6 +99,8 @@ for (const src of scripts) {
 
 const indexHtml = path.join(BUILD_ROOT, 'src', 'index.html');
 const index = fs.readFileSync(indexHtml, 'utf8');
+assert.doesNotMatch(index, /desktop-adapter-electron|edugame-bridge\.js|window\.eduGame/,
+  'index.html must use the Tauri desktop façade, not Electron');
 for (const m of index.matchAll(/<(?:script[^>]*src|link[^>]*href)="([^"]+)"/g)) {
   const ref = m[1];
   if (/^(https?:|data:|#)/.test(ref)) continue;

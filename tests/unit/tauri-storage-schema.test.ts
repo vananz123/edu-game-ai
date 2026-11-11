@@ -1,11 +1,9 @@
 /**
- * Giai đoạn 3 bước 1/6 — SQL mà vỏ Tauri chạy phải là SQL đang chạy bên Electron.
+ * Giai đoạn 3 bước 1/6 — SQL mà vỏ Tauri chạy phải đồng bộ với các tệp `.sql`.
  *
  * `src-tauri/src/storage.rs` không viết lại DDL: nó `include_str!` hai tệp
- * `.sql` dưới `src/db/`. Hai tệp đó là BẢN SAO của hai khối SQL nằm trong
- * `main.ts` (`ensureData`) và `lesson-store.ts` (`LESSON_STORE_SCHEMA_SQL`).
- * Hai bản sao chỉ an toàn khi mỗi cột, mỗi khoá, mỗi index khớp nguyên văn —
- * lệch một cột là dữ liệu chép từ máy Electron sang máy Tauri mất dữ liệu.
+ * `.sql` dưới `src/db/`. Những tệp đó là nguồn sự thật cho schema SQLite;
+ * mọi thay đổi schema phải đi qua hai tệp SQL đó (không gõ lại chuỗi ở chỗ khác).
  *
  * Phép so dưới đây không so từng chữ trắng mà so CHỮ KÝ cấu trúc: `(cột, kiểu,
  * not null, default)` của từng bảng và danh sách index. Nhờ vậy comment, thứ tự
@@ -32,7 +30,7 @@ const read = (...parts: string[]) => fs.readFileSync(path.join(root, ...parts), 
  * Bỏ comment `--` và gộp mọi khoảng trắng/xuống dòng thành một dấu cách.
  *
  * Phải bỏ comment TRƯỚC khi gộp dòng: comment nằm giữa danh sách cột (như
- * `evidence_meta` bên `lesson-store.ts`) mà gộp trước thì phần chữ sau `--`
+ * `evidence_meta` trong schema sidecar) mà gộp trước thì phần chữ sau `--`
  * dính vào cột sau nó và regex tách cột đọc thành tên cột rác.
  */
 function normalizeSql(sql: string): string {
@@ -97,28 +95,15 @@ function signature(sql: string): { tables: Record<string, string[]>; indexes: st
   return { tables, indexes };
 }
 
-// --- Khối thư viện: `games` + `sessions` trong `ensureData()` của main.ts ---
-const mainSource = read('src', 'main.ts');
-const libraryInTs = sliceBetween(
-  mainSource,
-  "sqlite.exec(`",
-  '`);',
-  'main.ts ensureData'
-);
+// --- Khối thư viện: `games` + `sessions` trong `src/db/library-schema.sql` ---
 const libraryInSql = read('src', 'db', 'library-schema.sql');
 
-// --- Khối sidecar: `LESSON_STORE_SCHEMA_SQL` của lesson-store.ts ---
-const storeSource = read('src', 'services', 'storage', 'lesson-store.ts');
-const storeInTs = sliceBetween(
-  storeSource,
-  'export const LESSON_STORE_SCHEMA_SQL = `',
-  '`;',
-  'lesson-store.ts LESSON_STORE_SCHEMA_SQL'
-);
+// --- Schema sidecar dùng trực tiếp bởi backend Rust ---
 const storeInSql = read('src', 'db', 'lesson-store-schema.sql');
 
-// --- Vỏ Tauri thật sự include đúng hai tệp đó ---
+// --- Backend Tauri thật sự include đúng hai tệp đó ---
 const storageSource = read('src-tauri', 'src', 'storage.rs');
+const librarySource = read('src-tauri', 'src', 'library.rs');
 
 let passed = 0;
 function check(name: string, run: () => void): void {
@@ -143,9 +128,8 @@ check('storage.rs include_str! đúng hai tệp SQL trong src/db', () => {
   );
 });
 
-check('thư viện: cùng bảng, cùng cột và cùng index với main.ts', () => {
-  assert.deepEqual(signature(libraryInSql), signature(libraryInTs));
-  const { tables, indexes } = signature(libraryInTs);
+check('thư viện: cùng bảng, cùng cột và cùng index với library-schema.sql', () => {
+  const { tables, indexes } = signature(libraryInSql);
   assert.deepEqual(Object.keys(tables).sort(), ['games', 'sessions']);
   assert.deepEqual(indexes.sort(), [
     'idx_games_updated_at ON games(updated_at DESC)',
@@ -153,11 +137,9 @@ check('thư viện: cùng bảng, cùng cột và cùng index với main.ts', ()
   ].map(index => index.replace(/\s+/g, '').replace(/^(\w+)ON/, '$1 ON ')));
 });
 
-check('sidecar: cùng 9 bảng, cùng cột và cùng index với lesson-store.ts', () => {
-  const fromTs = signature(storeInTs);
+check('sidecar: đủ 9 bảng, cột, index và khoá ngoại trong schema SQL', () => {
   const fromSql = signature(storeInSql);
-  assert.deepEqual(fromSql, fromTs);
-  assert.deepEqual(Object.keys(fromTs.tables).sort(), [
+  assert.deepEqual(Object.keys(fromSql.tables).sort(), [
     'ai_generation_cache',
     'ai_tasks',
     'game_projects',
@@ -170,7 +152,7 @@ check('sidecar: cùng 9 bảng, cùng cột và cùng index với lesson-store.t
   ]);
   // Khoá ngoại là điều kiện của `ON DELETE CASCADE`, và pragma `foreign_keys`
   // của Rust chỉ có tác dụng nếu DDL thật sự khai chúng.
-  const foreignKeys = Object.values(fromTs.tables)
+  const foreignKeys = Object.values(fromSql.tables)
     .flat()
     .filter(entry => entry.startsWith('FOREIGN KEY'));
   assert.equal(foreignKeys.length, 4, `khoá ngoại: ${foreignKeys.join(' · ')}`);
@@ -179,7 +161,7 @@ check('sidecar: cùng 9 bảng, cùng cột và cùng index với lesson-store.t
 check('sidecar: hai cột được migration bằng ALTER TABLE trong Rust cũng có trong DDL', () => {
   // `migrateSchema()` thêm hai cột cho tệp cũ. Chúng phải có sẵn trong DDL mới,
   // nếu không một tệp tạo mới sẽ thiếu cột và câu INSERT của Rust sẽ sai.
-  const { tables } = signature(storeInTs);
+  const { tables } = signature(storeInSql);
   assert.ok(tables.lesson_analyses.some(entry => entry.startsWith('cache_key|')), 'cache_key');
   assert.ok(
     tables.lesson_chat_messages.some(entry => entry.startsWith('evidence_meta|')),
@@ -192,13 +174,14 @@ check('sidecar: hai cột được migration bằng ALTER TABLE trong Rust cũng
   );
 });
 
-check('tên tệp cơ sở dữ liệu của Rust trùng hằng DB_FILE của main.ts', () => {
-  const dbFile = mainSource.match(/const DB_FILE = \(\) => path\.join\(DATA_DIR\(\), '([^']+)'\)/);
-  assert.ok(dbFile, 'main.ts không còn gọi `const DB_FILE = () => path.join(DATA_DIR(), …)`');
+check('tên tệp database giữ tương thích và được Library sử dụng', () => {
+  const dbFile = storageSource.match(/pub const DB_FILE: &str = "([^"]+)"/);
+  assert.ok(dbFile, 'storage.rs phải khai báo DB_FILE');
+  assert.equal(dbFile[1], 'edugame.sqlite', 'tên tệp phải tương thích với profile hiện có');
   assert.ok(
-    storageSource.includes(`pub const DB_FILE: &str = "${dbFile[1]}"`),
-    `storage.rs phải khai DB_FILE = "${dbFile[1]}"`
+    librarySource.includes('data_dir.join(storage::DB_FILE)'),
+    'Library phải mở DB_FILE trong thư mục dữ liệu Tauri'
   );
 });
 
-console.log(`\n${passed} kiểm tra schema Tauri ↔ Electron đều đạt.`);
+console.log(`\n${passed} kiểm tra schema Tauri đều đạt.`);

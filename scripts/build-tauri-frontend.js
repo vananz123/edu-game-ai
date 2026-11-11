@@ -132,23 +132,34 @@ function main() {
     else fs.copyFileSync(source, target);
   }
 
-  const contract = JSON.parse(
-    fs.readFileSync(path.join(root, 'src', 'shared', 'desktop-contract.json'), 'utf8'),
+  const facadeSchema = fs.readFileSync(
+    path.join(root, 'src', 'renderer', 'core', 'desktop-facade-schema.ts'),
+    'utf8',
   );
+  const facadeChannels = { invoke: [], send: [] };
+  for (const match of facadeSchema.matchAll(
+    /^\s{2}[a-zA-Z0-9_]+: \{ channel: '([^']+)', group: '[^']+', kind: '(value|send)'/gm,
+  )) {
+    facadeChannels[match[2] === 'send' ? 'send' : 'invoke'].push(match[1]);
+  }
+  if (!facadeChannels.invoke.length || !facadeChannels.send.length) {
+    console.error('desktop-facade-schema.ts: không đọc được danh sách kênh Tauri.');
+    process.exit(1);
+  }
   const apiSource = fs.readFileSync(path.join(root, 'src-tauri', 'src', 'api.rs'), 'utf8');
   const commands = commandMap(apiSource);
 
-  // `invoke_channel` là cửa duy nhất cho kênh có trả lời; kênh nào preload khai
+  // `invoke_channel` là cửa duy nhất cho kênh có trả lời; kênh nào façade khai
   // mà danh sách này không có thì bản Tauri sẽ từ chối nó ở cửa — dừng build để
   // danh sách được sửa cùng hợp đồng, không để giáo viên gặp lúc chạy.
   const invokeChannels = new Set(channelList(apiSource, 'INVOKE_CHANNELS'));
-  const uncovered = Object.values(contract.invoke).filter(channel => !invokeChannels.has(channel));
+  const uncovered = facadeChannels.invoke.filter(channel => !invokeChannels.has(channel));
   if (uncovered.length) {
     console.error(`Kênh chưa có trong INVOKE_CHANNELS của api.rs: ${uncovered.join(', ')}`);
     process.exit(1);
   }
   const sendChannels = new Set(channelList(apiSource, 'SEND_CHANNELS'));
-  const missingSend = Object.values(contract.send).filter(channel => !sendChannels.has(channel));
+  const missingSend = facadeChannels.send.filter(channel => !sendChannels.has(channel));
   if (missingSend.length) {
     console.error(`Kênh send chưa có trong SEND_CHANNELS của api.rs: ${missingSend.join(', ')}`);
     process.exit(1);

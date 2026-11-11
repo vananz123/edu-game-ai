@@ -1,18 +1,18 @@
-# EduGame Studio v0.4 — TypeScript
+# EduGame Studio v0.5.1 — Tauri + TypeScript
 
-Ứng dụng desktop Windows cho giáo viên tạo, chỉnh sửa, lưu, chia sẻ và chơi trò chơi giáo dục. v0.3 giữ lại các tính năng của v0.2, chuyển mã nguồn ứng dụng sang TypeScript, thay thư viện JSON cục bộ bằng SQLite và bổ sung khung AI Gateway cloud. Đã tích hợp thử nghiệm AI local llama.cpp cho Windows x64 CPU, gồm hỏi đáp/tóm tắt tài liệu và tạo game từ nội dung đã phân tích.
+Ứng dụng desktop Windows giúp giáo viên tạo, chỉnh sửa, lưu, chia sẻ và chơi trò chơi giáo dục. Renderer viết bằng TypeScript; vỏ desktop Tauri v2 dùng Rust cho lưu trữ SQLite, truy cập tệp, AI local và các lệnh hệ thống. Game đã lưu vẫn chơi offline.
 
 ## Hướng Offline AI V1
 
-- Ứng dụng tự tải và quản lý bản llama.cpp CPU x64 đã ghim phiên bản, kiểm tra kích thước/SHA-256, giải nén vào thư mục dữ liệu riêng và khởi chạy bằng AIManager. Không yêu cầu cài Ollama, LM Studio, llama.cpp hay công cụ nào khác.
-- Có ba lựa chọn GGUF Q4_0: Qwen3.5 2B (~1.21 GB), Qwen3.5 4B (~2.58 GB) và Qwen2.5 7B (~4.44 GB, nguồn bartowski). URL theo revision cố định, kích thước và SHA-256 được khai báo trong `src/ai-core/model-catalog.ts`; giấy phép model là Apache-2.0.
+- Vỏ Tauri tự tải và quản lý runtime llama.cpp cùng model đã ghim phiên bản, xác minh kích thước/SHA-256, rồi khởi chạy trong thư mục dữ liệu riêng. Không yêu cầu cài Ollama, LM Studio hay llama.cpp.
+- Catalog runtime/model và metadata tải được quản lý ở backend Rust trong `src-tauri/src/ai_local.rs`; chi tiết model hiển thị trong ứng dụng là nguồn chính xác hơn tài liệu này.
 - Model và runtime được lưu trong thư mục dữ liệu ứng dụng, không trong bộ cài/Program Files. Nếu model đúng kích thước đã có, ứng dụng xác minh SHA-256 rồi dùng lại, không tải lại. Tải lần đầu cần Internet; sau khi cài, hỏi đáp, tóm tắt và tạo game chạy trên máy.
 - Màn hình tạo game hiển thị dung lượng, license, RAM máy, luồng CPU, ước tính RAM và kết quả mong đợi. Các ước tính RAM/kết quả không phải cam kết hiệu năng; runtime hiện dùng CPU, chưa bật GPU.
-- `AIManager` giữ một tiến trình, bind loopback, chờ health check và dừng khi thoát ứng dụng. Model download có resume HTTP Range; runtime tải một lần và được xác minh SHA-256 trước khi giải nén.
+- Backend Rust giữ một tiến trình, chỉ bind loopback, chờ health check và dừng khi thoát ứng dụng. Tải model hỗ trợ resume HTTP Range; runtime và model được xác minh trước khi dùng.
 - Đây là tích hợp prototype: chưa kiểm chứng trải nghiệm suy luận trên mọi máy, độ chính xác đầu ra cần giáo viên duyệt; Windows x64 CPU là nền tảng được hỗ trợ hiện tại.
 - BYOK/OpenAI-compatible và Gateway Supabase/Gemini là hành vi prototype v0.3 hiện có, chưa bị xóa trong bước chuyển tiếp; chúng không thuộc đường AI offline mục tiêu.
 
-## Tính năng trong v0.3
+## Tính năng trong v0.5.1
 
 - Dashboard tiếng Việt, thư viện game, trình chỉnh sửa, lịch sử kết quả và cài đặt.
 - Trò chơi mẫu an toàn giao thông; engine trắc nghiệm/tình huống; điểm số, giải thích và chơi lại.
@@ -23,47 +23,44 @@
 - API online tương thích OpenAI vẫn là tùy chọn riêng do người dùng cấu hình; Gateway Gemini là scaffold riêng, chưa được desktop gọi.
 - Dữ liệu thư viện và kết quả lưu trong SQLite trên máy; tự di trú `library.json` từ v0.2 khi khởi động lần đầu.
 - Gói `.egame` để xuất/nhập qua USB; kết quả xuất CSV.
-- Electron dùng `contextIsolation`, `nodeIntegration: false`, `sandbox: true` và API qua preload.
-- Khóa endpoint AI cá nhân được mã hóa bằng `safeStorage` nếu hệ điều hành hỗ trợ. Không nhúng khóa bí mật của EduGame Studio vào ứng dụng.
+- Renderer chỉ gọi backend qua desktop façade và adapter Tauri; không có quyền Node.js trực tiếp.
+- Khóa AI do người dùng cung cấp được xử lý ở backend Rust/DPAPI; không nhúng khóa bí mật của EduGame Studio vào ứng dụng.
 - Cloud AI Gateway TypeScript (Express + Supabase Auth/DB + Gemini API), schema hạn mức free/plus và hạn chế tốc độ.
 - Shared TypeScript contracts và cấu hình TypeScript build/test.
 
 ## Yêu cầu
 
-- Node.js LTS (khuyến nghị 20.x hoặc 22.x)
+- Node.js 22.13 trở lên
 - npm
-- Windows 10/11 để đóng gói bộ cài Windows; có thể phát triển trên Linux/macOS
+- Rust stable/Cargo và Windows 10/11 với WebView2 để chạy hoặc đóng gói ứng dụng Windows
 - Cần kết nối internet lần đầu để cài dependencies
 
 ## Chạy ứng dụng desktop
 
 ```bash
 npm install
-npm start
+npm run build
+npm run build:tauri
+npm run tauri:run
 ```
 
-Kiểm tra TypeScript và chạy test:
+Kiểm tra TypeScript, test và cổng nghiệm thu Tauri:
 
 ```bash
 npm run check
 npm test
+npm run tauri:check
 ```
 
-Đóng gói Windows (chạy lệnh trên Windows để tạo installer phù hợp):
-
-```bash
-npm install
-npm run dist:win
-```
-
-Installer nằm trong `release/`.
+`npm run tauri:check` dựng binary release và chạy các kiểm tra WebView2/migration; đây là cổng kiểm tra, không phải lệnh tạo installer phát hành.
 
 ## Dữ liệu cục bộ
 
-Electron lưu dữ liệu trong thư mục `userData/edugame-data/`:
+Tauri lưu dữ liệu trong thư mục app data của hệ điều hành:
 
-- `edugame.sqlite`: thư viện game và lịch sử kết quả.
-- `settings.json`: cài đặt ứng dụng và thông tin cấu hình endpoint. API key local do người dùng tự cung cấp được mã hóa bằng Electron `safeStorage` nếu hệ điều hành hỗ trợ.
+- `edugame.sqlite`: thư viện game, lịch sử và dữ liệu giáo án.
+- `settings.json`, ảnh, tài liệu và model/runtime AI: dữ liệu ứng dụng do backend Tauri quản lý.
+- Profile Electron cũ không bị ghi đè; wizard migration của Tauri có thể sao lưu và nhập dữ liệu tương thích.
 - Game có thể xuất ra `.egame` để chuyển qua USB. Sau khi đã lưu, chơi game không cần internet.
 
 SQLite là cơ sở dữ liệu cục bộ, không phải tài khoản cloud. Không lưu khóa Gemini/OpenAI của sản phẩm trong SQLite hoặc trong bộ cài.
@@ -103,7 +100,7 @@ Backend nằm trong `server/` và được viết bằng TypeScript. Gateway:
 5. Kiểm tra `http://localhost:8787/health`.
 6. Trước khi nối desktop, hoàn thành luồng đăng nhập Supabase trong Electron và gửi access token của người dùng tới `POST /v1/generate` bằng header `Authorization: Bearer <access_token>`.
 
-**Quan trọng:** Cloud Gateway được cung cấp như khung backend v0.3, chưa được nối vào màn hình đăng nhập của desktop và chưa phải dịch vụ production đã triển khai. Không phát hành chế độ cloud cho người dùng công khai trước khi hoàn tất login, khôi phục phiên, xác thực gói Plus, kiểm thử hạn mức, HTTPS, log/monitoring và chính sách dữ liệu. `SUPABASE_SERVICE_ROLE_KEY` và `GEMINI_API_KEY` chỉ nằm trên backend.
+**Quan trọng:** Cloud Gateway là khung backend, chưa được nối vào màn hình đăng nhập của Tauri desktop và chưa phải dịch vụ production đã triển khai. Bước 6 ở trên là ghi chú tích hợp cũ thời Electron; không thực hiện theo hướng dẫn đó. Khi kết nối auth, cần dùng desktop façade/Tauri và giữ provider key ở backend. Không phát hành chế độ cloud công khai trước khi hoàn tất login, khôi phục phiên, xác thực gói Plus, kiểm thử hạn mức, HTTPS, log/monitoring và chính sách dữ liệu. `SUPABASE_SERVICE_ROLE_KEY` và `GEMINI_API_KEY` chỉ nằm trên backend.
 
 ### Các endpoint
 
@@ -125,16 +122,14 @@ Backend nằm trong `server/` và được viết bằng TypeScript. Gateway:
 - Matching hiện chưa có giao diện kéo-thả riêng.
 - Tích hợp cloud backend có scaffold nhưng login UI và kết nối cloud từ desktop chưa hoàn tất.
 - Chưa có hệ thống thanh toán tự động; gói Plus hiện là logic hạn mức phía backend, cần kết nối quy trình thanh toán trước khi thu tiền.
-- Chưa kiểm thử installer Electron/SQLite trên Windows thật trong môi trường này. Cần chạy `npm install`, `npm test`, rồi `npm run dist:win` trên Windows trước phát hành.
+- Cổng Tauri đã được chạy trên Windows; installer phát hành và cài đặt sạch trên máy Windows chưa được xác minh trong lượt này.
 
 ## Cấu trúc
 
 ```text
 edugame-studio-v0.3/
 ├── src/
-│   ├── main.ts                 # Electron main process + SQLite (~120 KB)
-│   ├── preload.ts              # API IPC an toàn
-│   ├── index.html              # Khung cửa sổ ứng dụng
+│   ├── index.html              # Khung renderer và thứ tự script
 │   ├── ai-core/                # AI local: runtime, model, manifest, cài đặt lần đầu
 │   ├── presentation/           # Trình chiếu trên màn hình phụ / máy chiếu
 │   ├── renderer/
@@ -154,7 +149,7 @@ edugame-studio-v0.3/
 ├── tests/                      # unit/ · ui/ · smoke/ · manual/ · fixtures/ · legacy/
 │   └── README.md               # Cái nào chạy bằng `npm test`, cái nào chạy tay
 ├── vendor/vc-runtime/          # DLL VC++ đóng gói cùng runtime llama.cpp
-├── build/installer.nsh         # Hook NSIS của electron-builder
+├── src-tauri/                  # Backend Rust, SQLite, Tauri commands và cấu hình NSIS
 ├── docs/                       # Bàn giao, quyết định, trạng thái, kế hoạch
 ├── tsconfig.json
 └── package.json
@@ -162,9 +157,9 @@ edugame-studio-v0.3/
 
 ## Hướng phát triển
 
-1. Hoàn tất TypeScript typing ở renderer/main (một số logic UI kế thừa từ v0.2 tạm dùng `@ts-nocheck`; contract dùng chung đã được định nghĩa).
+1. Hoàn thiện các luồng còn thiếu trong backend Tauri và renderer.
 2. Nối Supabase Auth vào ứng dụng desktop và tích hợp Gateway.
-3. Thêm test schema game, kiểm thử prompt/đáp án, và kiểm thử migration SQLite.
+3. Hoàn thiện kiểm thử đóng gói/migration trên máy Windows sạch.
 4. Hoàn thiện matching kéo-thả, game phân nhánh, ảnh minh họa cặp ghép và tài sản do giáo viên tải lên (kho báu đã có hình nền/nhân vật/âm thanh dựng sẵn).
-5. Kiểm thử cài đặt và inference Qwen local trên nhiều cấu hình máy, ưu tiên máy cấu hình thấp; AI local là tùy chọn, không bắt buộc để chơi game.
+5. Kiểm thử cài đặt và inference AI local trên nhiều cấu hình máy, ưu tiên máy cấu hình thấp; AI local là tùy chọn, không bắt buộc để chơi game.
 6. Thêm thanh toán, trang quản trị, ký số installer và quy trình hỗ trợ người dùng.

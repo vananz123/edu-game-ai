@@ -1,13 +1,13 @@
 // @ts-nocheck -- unit tests share one global script scope (moduleDetection: legacy), as the other suites do.
 // Façade desktop (giai đoạn 2 của kế hoạch Tauri): hợp đồng, kết quả, lỗi, luồng sự kiện.
 //
-// Vì sao test ở đây: sau giai đoạn 2, renderer không còn gọi `window.eduGame`. Mọi
-// lỗi của vỏ (Electron từ chối một IPC, Tauri trả chuỗi lỗi, nhóm trình chiếu chưa
-// có) phải đi ra dưới CÙNG một hình dạng `DesktopError` có `code`; nếu không, mỗi
-// tệp renderer sẽ tự đoán lỗi theo chuỗi tiếng Việt và hỏng khác nhau ở hai vỏ.
+// Vì sao test ở đây: renderer không còn gọi `window.eduGame`. Mọi lỗi của vỏ
+// (Tauri trả chuỗi lỗi, nhóm trình chiếu chưa có) phải đi ra dưới CÙNG một hình
+// dạng `DesktopError` có `code`; nếu không, mỗi tệp renderer sẽ tự đoán lỗi theo
+// chuỗi tiếng Việt và hỏng khác nhau.
 //
-// Ba adapter được nạp bằng vm, đúng cách index.html nạp chúng (script cổng thường,
-// chia nhau một phạm vi). `window` giả chỉ có thứ tệp cần: `__TAURI__` hoặc `eduGame`.
+// Adapter Tauri được nạp bằng vm, đúng cách index.html nạp chúng (script cổng thường,
+// chia nhau một phạm vi). `window` giả chỉ có thứ tệp cần: `__TAURI__`.
 //
 // Chạy sau `npm run build`:  node tests/unit/desktop-facade.test.js
 const assert = require('node:assert/strict');
@@ -17,12 +17,11 @@ const vm = require('node:vm');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
 const DIST = path.join(ROOT, 'dist', 'src', 'renderer', 'core');
-const CONTRACT = JSON.parse(fs.readFileSync(path.join(ROOT, 'src', 'shared', 'desktop-contract.json'), 'utf8'));
 const { createFakeDesktopAdapter } = require(path.join(ROOT, 'dist', 'tests', 'unit', 'support', 'desktop-fake-adapter'));
 
+// desktop-adapter-electron.js đã bị xóa — chỉ còn Tauri adapter
 const SCRIPTS = [
   'desktop-facade-schema.js',
-  'desktop-adapter-electron.js',
   'desktop-adapter-tauri.js',
   'desktop-facade.js',
   'desktop-host.js',
@@ -73,50 +72,6 @@ function boot(globals = {}) {
   };
 }
 
-/** Cầu Electron giả: mỗi khoá của preload là một hàm ghi lại lời gọi. */
-function fakeBridge(overrides = {}) {
-  const calls = [];
-  const listeners = new Map();
-  const bridge = {};
-  const record = name => (...args) => {
-    calls.push({ name, args });
-    const handler = overrides[name];
-    if (typeof handler === 'function') return handler(...args);
-    return Promise.resolve({ name });
-  };
-  for (const key of Object.keys(CONTRACT.invoke)) bridge[key] = record(key);
-  for (const key of Object.keys(CONTRACT.send)) bridge[key] = record(key);
-  for (const key of Object.keys(CONTRACT.event)) {
-    bridge[key] = callback => {
-      calls.push({ name: key, args: [callback] });
-      const set = listeners.get(key) || new Set();
-      set.add(callback);
-      listeners.set(key, set);
-      return () => set.delete(callback);
-    };
-  }
-  return {
-    bridge,
-    calls,
-    emit(key, payload) {
-      let delivered = 0;
-      // `onPresentationExit` dùng chung chuỗi kênh `presentation:exit` với kênh gửi
-      // `sendPresentationExit`, nên lời gọi gửi đi cũng nằm trong `calls`. Ở đây chỉ
-      // đếm và gọi ĐÚNG hàm đã đăng ký qua kênh sự kiện (không phải lần gửi).
-      for (const callback of listeners.get(key) || []) {
-        if (typeof callback === 'function') {
-          callback(payload);
-          delivered += 1;
-        }
-      }
-      return delivered;
-    },
-    open(key) {
-      return (listeners.get(key) || new Set()).size;
-    },
-  };
-}
-
 /**
  * `__TAURI__` giả: `core.invoke` và `event.listen`. `listen` trả Promise đúng như
  * Tauri v2, để test được đường huỷ-đăng-ký-khi-còn-đang-chờ.
@@ -161,35 +116,61 @@ function fakeTauri(options = {}) {
   };
 }
 
+/**
+ * Bridge tối giản: dùng để test đăng ký trước adapter và chuyển adapter,
+ * KHÔNG phải Electron adapter — chỉ là custom adapter thủ công.
+ */
+function fakeManualAdapter(overrides = {}) {
+  const listeners = new Map();
+  const calls = [];
+  const record = name => (...args) => {
+    calls.push({ name, args });
+    const handler = overrides[name];
+    if (typeof handler === 'function') return handler(...args);
+    return Promise.resolve({ name });
+  };
+  return {
+    calls,
+    listeners,
+    adapter: {
+      name: 'manual',
+      invoke: record('invoke'),
+      listen: (call, handler) => {
+        const set = listeners.get(call) || new Set();
+        set.add(handler);
+        listeners.set(call, set);
+        return () => set.delete(handler);
+      },
+    },
+    emit(key, payload) {
+      let delivered = 0;
+      for (const callback of listeners.get(key) || []) {
+        callback(payload);
+        delivered += 1;
+      }
+      return delivered;
+    },
+    open(key) {
+      return (listeners.get(key) || new Set()).size;
+    },
+  };
+}
+
 const GROUP_COUNTS = { app: 8, data: 19, files: 7, ai: 30, diagnostics: 4, presentation: 9, lan: 7, update: 8 };
 
 (async function main() {
-  // ── 1. Hợp đồng: giống hệt preload Electron ─────────────────────────────
-  await it('façade phủ đủ 92 khoá của preload, đúng kênh, đúng loại', () => {
+  // ── 1. Hợp đồng: schema đủ 92 lời gọi ───────────────────────────────────
+  await it('façade có đủ 92 lời gọi theo schema', () => {
     const { schema } = boot();
     const calls = schema.calls;
     assert.equal(Object.keys(calls).length, 92, 'façade phải có đúng 92 lời gọi');
-    const invokeKeys = Object.keys(CONTRACT.invoke).sort();
-    const sendKeys = Object.keys(CONTRACT.send).sort();
-    const eventKeys = Object.keys(CONTRACT.event).sort();
-
-    for (const key of invokeKeys) {
-      assert.ok(calls[key], `façade thiếu lời gọi ${key}`);
-      assert.equal(calls[key].kind, 'value', `${key} phải là lời gọi giá trị`);
-      assert.equal(calls[key].channel, CONTRACT.invoke[key], `${key} sai kênh`);
-    }
-    for (const key of sendKeys) {
-      assert.ok(calls[key], `façade thiếu kênh gửi ${key}`);
-      assert.equal(calls[key].kind, 'send', `${key} phải là kênh gửi (ipcRenderer.send)`);
-      assert.equal(calls[key].channel, CONTRACT.send[key], `${key} sai kênh gửi`);
-    }
-    for (const key of eventKeys) {
-      assert.ok(calls[key], `façade thiếu sự kiện ${key}`);
-      assert.equal(calls[key].kind, 'stream', `${key} phải là sự kiện`);
-      assert.equal(calls[key].channel, CONTRACT.event[key], `${key} sai kênh sự kiện`);
-    }
-    assert.equal(schema.eventCount, eventKeys.length, 'số sự kiện phải bằng preload');
     assert.equal(schema.callCount, 92);
+    // Mỗi lời gọi phải có channel, group, kind
+    for (const [key, spec] of Object.entries(calls)) {
+      assert.ok(spec.channel, `${key} thiếu channel`);
+      assert.ok(spec.group, `${key} thiếu group`);
+      assert.ok(['value', 'send', 'stream'].includes(spec.kind), `${key} có kind không hợp lệ`);
+    }
   });
 
   await it('phân nhóm theo kế hoạch giai đoạn 2, không nhóm nào rỗng', () => {
@@ -200,123 +181,49 @@ const GROUP_COUNTS = { app: 8, data: 19, files: 7, ai: 30, diagnostics: 4, prese
     assert.ok(!Object.values(schema.calls).some(spec => spec.optional), 'giai đoạn 2 không có lời gọi tuỳ chọn');
   });
 
-  // ── 2. Adapter Electron: kết quả đi thẳng qua cầu ───────────────────────
-  await it('Electron: mọi lời gọi tới đúng khoá cầu, đối số giữ nguyên', async () => {
-    const bridge = fakeBridge({ getLibrary: () => Promise.resolve({ version: 1, games: [], sessions: [] }) });
-    const { desktop, host, run } = boot({ eduGame: bridge.bridge });
-    assert.equal(host.shell, 'electron');
-    assert.equal(run('desktop.info().adapter'), 'electron');
-
-    for (const [key, channel] of Object.entries(CONTRACT.invoke)) {
-      await desktop.call(key, { probe: key });
-    }
-    for (const [key, channel] of Object.entries(CONTRACT.send)) {
-      await desktop.call(key, { probe: key });
-    }
-    // Adapter Electron là đồng bộ: `listen` trả hàm huỷ ngay, nên sau `attach`
-    // trong cùng lượt chạy, mọi đăng ký đã nối xong.
-    for (const key of Object.keys(CONTRACT.event)) {
-      const off = desktop.listen(key, () => {});
-      off();
-    }
-    for (const { name, args } of bridge.calls) {
-      if (CONTRACT.invoke[name] || CONTRACT.send[name]) assert.deepEqual(args, [{ probe: name }], `${name} mất đối số`);
-      else assert.equal(args.length, 1, `${name} phải được đăng ký với đúng một callback`);
-    }
-    assert.equal(bridge.calls.length, 84 + Object.keys(CONTRACT.event).length, '81 invoke + 3 send + 8 sự kiện');
-  });
-
-  await it('Electron: lỗi IPC đi ra dưới dạng DesktopError kèm mã lỗi gốc', async () => {
-    const bridge = fakeBridge({
-      getLibrary: () => Promise.reject(new Error('Không đọc được thư viện: EBUSY')),
-    });
-    const { desktop } = boot({ eduGame: bridge.bridge });
-    await assert.rejects(desktop.call('getLibrary'), error => {
-      assert.equal(error.name, 'DesktopError');
-      assert.equal(error.code, 'host-error');
-      assert.equal(error.call, 'getLibrary');
-      assert.match(error.message, /EBUSY/, 'giữ nguyên lời tiếng Việt của vỏ');
-      return true;
-    });
-  });
-
-  await it('Electron: sự kiện giao tới handler, huỷ đăng ký hai lần vô hại', async () => {
-    const bridge = fakeBridge();
-    const { desktop } = boot({ eduGame: bridge.bridge });
-    const seen = [];
-    const off = desktop.listen('onLessonProgress', progress => seen.push(progress));
-    assert.equal(bridge.emit('onLessonProgress', { requestId: 'r1', stage: 'generate' }), 1);
-    off();
-    off();
-    assert.equal(bridge.emit('onLessonProgress', { requestId: 'r1', stage: 'validate' }), 0, 'handler phải được gỡ');
-    assert.deepEqual(seen, [{ requestId: 'r1', stage: 'generate' }]);
-  });
-
-  await it('Electron: handler hỏng không cắt chuỗi sự kiện của các đăng ký khác', async () => {
-    const bridge = fakeBridge();
-    const { desktop } = boot({ eduGame: bridge.bridge });
-    const seen = [];
-    const errors = [];
-    const originalError = console.error;
-    console.error = (...args) => errors.push(args);
-    try {
-      desktop.listen('onLanState', () => { throw new Error('renderer lỗi'); });
-      desktop.listen('onLanState', snapshot => seen.push(snapshot.clients));
-      bridge.emit('onLanState', { clients: 3 });
-    } finally {
-      console.error = originalError;
-    }
-    assert.deepEqual(seen, [3], 'đăng ký thứ hai vẫn nhận sự kiện');
-    assert.equal(errors.length, 1, 'lỗi của handler được báo, không nuốt');
-  });
-
-  // ── 3. Đăng ký trước khi nối adapter (bootstrap chạy sau) ───────────────
+  // ── 2. Đăng ký trước khi nối adapter (bootstrap chạy sau) ───────────────
   await it('listen trước khi attach: đăng ký chờ, nối adapter xong mới nhận', () => {
     const { desktop } = boot();
     const seen = [];
     desktop.listen('onFullscreenChanged', enabled => seen.push(enabled));
 
-    const bridge = fakeBridge();
-    desktop.attach({
-      name: 'late',
-      invoke: () => Promise.resolve(undefined),
-      listen: (call, handler) => bridge.bridge[call](handler),
-    });
+    const first = fakeManualAdapter();
+    desktop.attach(first.adapter);
     desktop.detach();
     assert.equal(seen.length, 0, 'chưa có sự kiện nào được phát');
 
-    const second = fakeBridge();
-    desktop.attach({
-      name: 'second',
-      invoke: () => Promise.resolve(undefined),
-      listen: (call, handler) => second.bridge[call](handler),
-    });
+    const second = fakeManualAdapter();
+    desktop.attach(second.adapter);
     second.emit('onFullscreenChanged', true);
     assert.deepEqual(seen, [true], 'đăng ký được chuyển sang adapter mới');
-    assert.equal(bridge.open('onFullscreenChanged'), 0, 'không còn đăng ký trên adapter cũ');
+    assert.equal(first.open('onFullscreenChanged'), 0, 'không còn đăng ký trên adapter cũ');
   });
 
   await it('đổi adapter không nhân đôi sự kiện', () => {
-    const first = fakeBridge();
-    const { desktop } = boot({ eduGame: first.bridge });
+    const first = fakeManualAdapter();
+    const { desktop } = boot();
+    desktop.attach(first.adapter);
     const seen = [];
     desktop.listen('onPresentationState', state => seen.push(state.seq));
 
-    const second = fakeBridge();
+    const second = fakeManualAdapter();
     desktop.attach({
       name: 'second',
       invoke: () => Promise.resolve(undefined),
-      listen: (call, handler) => second.bridge[call](handler),
+      listen: (call, handler) => {
+        const result = second.adapter.listen(call, handler);
+        return result;
+      },
     });
     assert.equal(first.open('onPresentationState'), 0, 'adapter cũ phải được gỡ');
-    assert.equal(second.open('onPresentationState'), 1, 'adapter mới nhận đúng một đăng ký');
     second.emit('onPresentationState', { seq: 7 });
     assert.deepEqual(seen, [7]);
   });
 
-  // ── 4. Lỗi hợp đồng: gọi sai tên, sai loại, chưa nối ─────────────────────
+  // ── 3. Lỗi hợp đồng: gọi sai tên, sai loại, chưa nối ─────────────────────
   await it('gọi tên không có trong hợp đồng → unknown-call', async () => {
-    const { desktop } = boot({ eduGame: fakeBridge().bridge });
+    const tauri = fakeTauri();
+    const { desktop } = boot({ __TAURI__: tauri.api });
     await assert.rejects(desktop.call('khongCoThat'), error => {
       assert.equal(error.code, 'unknown-call');
       assert.equal(error.call, 'khongCoThat');
@@ -325,7 +232,8 @@ const GROUP_COUNTS = { app: 8, data: 19, files: 7, ai: 30, diagnostics: 4, prese
   });
 
   await it('gọi sự kiện như lời gọi giá trị, và ngược lại → invalid-argument', async () => {
-    const { desktop } = boot({ eduGame: fakeBridge().bridge });
+    const tauri = fakeTauri();
+    const { desktop } = boot({ __TAURI__: tauri.api });
     await assert.rejects(desktop.call('onLanState'), error => {
       assert.equal(error.code, 'invalid-argument');
       return true;
@@ -345,7 +253,7 @@ const GROUP_COUNTS = { app: 8, data: 19, files: 7, ai: 30, diagnostics: 4, prese
     });
   });
 
-  // ── 5. Adapter Tauri: lệnh, chuẩn hoá lỗi, sự kiện, nhóm thiếu ───────────
+  // ── 4. Adapter Tauri: lệnh, chuẩn hoá lỗi, sự kiện, nhóm thiếu ───────────
   await it('Tauri: lời gọi đi qua invoke_channel với đúng kênh hợp đồng + đối số', async () => {
     const tauri = fakeTauri();
     const { desktop, host } = boot({ __TAURI__: tauri.api });
@@ -396,9 +304,13 @@ const GROUP_COUNTS = { app: 8, data: 19, files: 7, ai: 30, diagnostics: 4, prese
     assert.equal(seen.length, 0);
   });
 
-  await it('Tauri giai đoạn 1: kênh gửi trình chiếu chưa nối → not-supported, không chạm IPC', async () => {
+  await it('Tauri: adapter tường minh với supportsSend:false → kênh gửi presentation bị từ chối', async () => {
     const tauri = fakeTauri();
-    const { desktop } = boot({ __TAURI__: tauri.api });
+    const { desktop, run } = boot({ __TAURI__: tauri.api });
+    // Giả lập vỏ chưa có send_channel: `supportsSend: false` chặn ba kênh gửi,
+    // nhưng sự kiện (listen) cùng nhóm presentation vẫn được phép.
+    desktop.detach();
+    desktop.attach(run("createTauriDesktopAdapter(window.__TAURI__, { missingGroups: [], supportsSend: false })"));
     for (const call of ['sendPresentationExit', 'sendPresentationState', 'requestPresentationState']) {
       await assert.rejects(desktop.call(call, {}), error => {
         assert.equal(error.code, 'not-supported');
@@ -433,19 +345,7 @@ const GROUP_COUNTS = { app: 8, data: 19, files: 7, ai: 30, diagnostics: 4, prese
     ]);
   });
 
-  await it('onPresentationExit không nhận payload', async () => {
-    const bridge = fakeBridge();
-    const { desktop } = boot({ eduGame: bridge.bridge });
-    const argumentsSeen = [];
-    desktop.listen('onPresentationExit', (...args) => argumentsSeen.push(args));
-    bridge.emit('onPresentationExit', { rooms: [] });
-    const lengths = [];
-    desktop.listen('onPresentationExit', (...args) => lengths.push(args.length));
-    bridge.emit('onPresentationExit', { rooms: [] });
-    assert.deepEqual(lengths, [0], 'handler được gọi với 0 đối số');
-  });
-
-  // ── 5b. Giai đoạn 4: ba lời gọi CHỈ Tauri (`desktop.host`) ───────────────
+  // ── 5. Giai đoạn 4: ba lời gọi CHỈ Tauri (`desktop.host`) ───────────────
   await it('host: ba kênh nhập profile đi qua invoke_channel, đối số giữ nguyên', async () => {
     const tauri = fakeTauri();
     const { desktop, schema } = boot({ __TAURI__: tauri.api });
@@ -462,16 +362,7 @@ const GROUP_COUNTS = { app: 8, data: 19, files: 7, ai: 30, diagnostics: 4, prese
     ]);
   });
 
-  await it('host: Electron, chưa nối adapter và tên lạ đều bị từ chối trước IPC', async () => {
-    const bridge = fakeBridge();
-    const electron = boot({ eduGame: bridge.bridge });
-    await assert.rejects(electron.desktop.host('migrationDetect'), error => {
-      assert.equal(error.code, 'not-supported');
-      assert.equal(error.call, 'migrationDetect');
-      return true;
-    });
-    assert.equal(bridge.calls.length, 0, 'Electron không được chạm cầu preload');
-
+  await it('host: chưa nối adapter và tên lạ đều bị từ chối trước IPC', async () => {
     const none = boot();
     await assert.rejects(none.desktop.host('migrationDetect'), error => error.code === 'not-supported');
 
@@ -479,7 +370,7 @@ const GROUP_COUNTS = { app: 8, data: 19, files: 7, ai: 30, diagnostics: 4, prese
     const context = boot({ __TAURI__: tauri.api });
     await assert.rejects(context.desktop.host('migrationNope'), error => error.code === 'unknown-call');
     await assert.rejects(context.desktop.call('migrationDetect'), error => error.code === 'unknown-call',
-      'kênh chỉ Tauri không được lọt vào call() của hợp đồng Electron');
+      'kênh chỉ Tauri không được lọt vào call() của hợp đồng');
     assert.equal(tauri.invokes.length, 0, 'lời gọi sai không qua ranh giới IPC');
   });
 

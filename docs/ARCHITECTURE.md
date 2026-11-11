@@ -1,40 +1,26 @@
 # EduGame Studio — Architecture
 
-## Current desktop prototype
+## Desktop application
 
-- Electron main process owns file dialogs, SQLite, document extraction, import/export, settings, and existing AI requests.
-- Preload exposes an allowlisted API through `contextBridge`; the renderer has no direct Node.js access.
-- Renderer TypeScript is compiled to JavaScript for Chromium.
-- SQLite stores games and sessions under Electron `userData`; the first-start migration imports v0.2 `library.json` when the games table is empty.
-- `.egame` is a portable JSON bundle, independent of SQLite.
+- Tauri v2 hosts the TypeScript renderer in WebView2; backend commands and system access are implemented in Rust under `src-tauri/src/`.
+- Renderer scripts call the desktop façade (`src/renderer/core/desktop-facade.ts`). The Tauri adapter translates calls to `invoke_channel`/`send_channel` and events to Tauri listeners; there is no Electron main process or preload bridge.
+- `src-tauri/src/api.rs` validates and dispatches renderer channels. `src-tauri/src/lib.rs` registers the commands and application state.
+- SQLite stores games, sessions, lesson documents, analyses, and related workflow data in the Tauri app-data directory. `src-tauri/src/storage.rs` includes the shared SQL schema; profile migration preserves the existing Electron profile and imports supported data only after user action.
+- `.egame` remains a portable game package independent of the local database.
 
-The desktop supports document analysis and evidence-based Q&A, reviewable sample questions and quiz/scenario recommendations. The selected analysis is included in AI game-generation prompts. The embedded local path uses a managed llama.cpp CPU runtime and pinned Qwen3.5 GGUF files; it does not require an external AI application and sends lesson text only to loopback. The online path remains a user-configured OpenAI-compatible HTTPS provider. Offline mode remains rule-based and does not call a model. The separate Express/Supabase/Gemini Gateway scaffold is not called by the desktop.
+## AI and document workflows
 
-## Offline AI V1 target
+- Rust owns local model/runtime downloads, checksum validation, process lifecycle, loopback HTTP, setup, settings, and protected provider keys.
+- Lesson analysis and recommendations reuse validated TypeScript business logic through the embedded JavaScript bundle, while Rust owns persistence and model requests.
+- Online providers are user-configured. Product-owned provider secrets remain on the backend; the separate Express/Supabase/Gemini Gateway scaffold is not a dependency of gameplay.
+- Generated model output is treated as data, validated against schemas, and rendered by fixed game engines. Arbitrary generated JavaScript/HTML is never executed.
 
-Electron Main -> `AIManager` -> verified app-managed `llama-server.exe` -> loopback API bound only to `127.0.0.1`.
+## Security boundaries
 
-The application downloads a pinned llama.cpp Windows x64 CPU archive and verifies its size/SHA-256 before safely extracting executable/DLL files. `src/ai-core/model-installer.ts` checks disk space, handles progress and HTTP Range resume, validates pinned manifest metadata, checks final byte size and SHA-256, and atomically installs models under Electron `userData`. A model file already present is reused only after checksum verification. No model/runtime is written to the installer or `Program Files`.
-
-The create-game view offers three verified local models with pinned Hub revisions, file sizes, SHA-256, source and Apache-2.0 licence: **Qwen3.5 2B** (the default, 4 GB RAM minimum), **Qwen3.5 4B** (8 GB minimum) and **Gemma 4 E2B** (manual choice only — first-run setup never selects it; measured on the pilot hardware as **slower than 2B** in prefill and decoding, 4.65 B MoE parameters, and its template starts a *thinking* block, so a short generation window returns reasoning rather than an answer — `docs/BENCHMARKS.md`). It displays available RAM, logical CPU count, rough RAM estimates and expected use. Estimates are guidance rather than measured compatibility or speed. The default runtime is the **CPU** build; a Vulkan build for integrated GPUs stays available as an explicit advanced choice (`runtimeBackend: 'vulkan'`) and is measured **slower** than CPU on the pilot hardware (`docs/BENCHMARKS.md`). If the installed runtime does not match the requested backend, the app logs `runtime.backend-swap-failed` and continues on CPU rather than failing to start.
-
-Document summarization, Q&A, and game generation send requests only to the locally managed server in local mode. Generated JSON is validated by schemas/game normalization before it can be edited or saved. Generated text is data only and is never executed as code. The selected model runtime starts on first local request, one process at a time, and stops when the app closes.
-
-If local inference reaches its request timeout, Electron aborts the request, stops the potentially unresponsive runtime, and starts the same model again before returning the timeout message. A failed restart is surfaced explicitly so the teacher can restart AI local manually.
-
-SQLite continues to own local projects and history. Exported games use the existing trusted offline game runtime and must not depend on the AI process.
-
-The current BYOK and cloud Gateway code is retained as legacy v0.3 behavior during migration. It is not a dependency of the new offline AI path, and no cloud credentials belong in the offline desktop or installer.
-
-## Security
-
-- `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`.
-- Start the AI process only from Electron Main or another trusted backend module using `spawn()` with `shell: false`; Renderer never supplies executable paths or command-line arguments.
-- Bind the model API to `127.0.0.1`, use a selected nonzero port, and verify health before reporting `READY`.
-- Validate IPC data in Main. Apply startup/generation timeouts, cancellation, crash handling, and bounded logs without lesson text or unnecessary personal data.
-- Verify runtime origin, version, model metadata, size, and checksum before use. Never automatically execute an unverified download.
-- Do not execute arbitrary code generated by an LLM. Use fixed, tested game engines and structured game data.
+- Renderer access is limited to the explicit Tauri command/event surface. The WebView uses a restrictive CSP and does not receive Node.js APIs.
+- Rust validates command payloads, selects fixed executable paths, and launches the local model server without a shell. The model endpoint binds only to loopback.
+- File access, settings, imports/exports, and database operations remain backend-owned. Do not expose provider keys, arbitrary filesystem access, or process arguments to renderer code.
 
 ## Offline guarantees
 
-Saved-game play, scoring, explanations, history, local file import, and `.egame` import/export do not require network or an AI process. Installing a model may require internet; generation is local after a verified model has been installed.
+Saved-game playback, scoring, explanations, local history, and `.egame` import/export do not require network or an AI process. Installing a model may require internet; local generation is available after its verified runtime and model are installed.

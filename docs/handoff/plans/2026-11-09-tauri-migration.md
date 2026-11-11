@@ -1,19 +1,21 @@
 # Kế hoạch khảo sát và chuyển EduGame Studio từ Electron sang Tauri
 
 Ngày lập: 2026-11-09; cập nhật trạng thái: 2026-11-11  
-Trạng thái: **đã duyệt và đang triển khai** — giai đoạn 0–4 XONG, giai đoạn 5
-xong bí mật (DPAPI + `settings:get/save`), AI local (tải runtime/model +
-`llama-server` loopback), setup wizard (`setup:*`), **toàn bộ luồng giáo án**
-(24 kênh `lesson:*` + `ai:cancel` gồm phân tích, sinh nội dung, chat) và
-**nhóm kênh AI phụ trợ** (`ai:test-provider`, `ai:tasks`, `ai:runtime-verify`) và
-**nhóm Giới thiệu & Cập nhật** (7 kênh `about:*`);
-việc kế tiếp là các kênh còn lại (presentation, lan, hoặc `ai:generate`) —
-`ai:generate` là kênh legacy không còn màn hình nào gọi (DECISIONS "Giai đoạn 6
-(Giới thiệu & Cập nhật)").
+Trạng thái: **đã duyệt và đang triển khai** — giai đoạn 0–5 XONG (bí mật DPAPI,
+AI local, setup wizard, toàn bộ luồng giáo án, nhóm AI phụ trợ, nhóm Giới thiệu &
+Cập nhật); **toàn bộ hợp đồng desktop đã port xong — `unsupported!` = 0** tính cả
+nhóm LAN + `ai:generate` (`lan:*` sáu kênh qua server HTTP/WebSocket Rust, kênh
+legacy `ai:generate`) và nhóm Trình chiếu (`presentation:*` bốn kênh invoke + ba
+kênh send, cửa sổ máy chiếu riêng, đồng bộ snapshot hai chiều). Việc kế tiếp là
+giai đoạn 7: cổng nghiệm thu trên Windows thật (máy chiếu vật lý, điện thoại qua
+Wi-Fi, model thật/BYOK thật, installer máy sạch) rồi phát hành thử — xem
+"Chưa làm" ở mục 9.
 Phạm vi: ứng dụng desktop Windows hiện tại, phiên bản nguồn 0.5.1, **bản Tauri
-đầu tiên là bản thử giới hạn** (không có LAN, trình chiếu, updater; AI local đã
-có phần cài/chạy, wizard lần đầu, phân tích giáo án, sinh nội dung trò chơi,
-chat giáo án, probe/task manager/runtime-verify và tab Giới thiệu).
+đầu tiên là bản thử giới hạn** (updater tự động hoàn chỉnh + ký số chưa có; đủ
+mọi kênh desktop còn lại — LAN và trình chiếu đã port nhưng chưa nghiệm thu trên
+thiết bị thật; AI local đã có phần cài/chạy, wizard lần đầu, phân tích giáo án,
+sinh nội dung trò chơi, chat giáo án, probe/task manager/runtime-verify và tab
+Giới thiệu).
 
 ## 1. Mục tiêu
 
@@ -230,6 +232,8 @@ có yêu cầu tương thích cụ thể và đã đánh giá chi phí/bảo m�
 
 ### Giai đoạn 6 — Trình chiếu, LAN và tích hợp Windows
 
+**Trạng thái port kênh: XONG (2026-11-11, DECISIONS "Giai đoạn 6 (Mạng nội bộ & Legacy AI)" + "Giai đoạn 6 (Trình chiếu)").** `src-tauri/src/lan.rs` chạy server HTTP + WebSocket RFC 6455 thuần trên cổng tự cấp với máy trạng thái phòng chơi và sự kiện `lan:state` (sáu kênh `lan:*`); `src-tauri/src/ai_generate.rs` port kênh legacy `ai:generate` (bộ sinh câu hỏi mẫu ngoại tuyến theo luật cũ); `src-tauri/src/presentation.rs` port bốn kênh invoke `presentation:start/stop/toggle/displays` và ba kênh send `presentation:request-state/state-update/exit` (chọn màn hình ưu tiên, bảo vệ rút cáp, cửa sổ `WebviewWindowBuilder`, hook test `EDUGAME_PRESENTATION_TEST_DISPLAYS`). `unsupported!` về **0 — 100 % hợp đồng desktop**; test Rust **151/151**, Node **99/99**, `tauri:check` **51/51 + 10/10 + 12/12**. **Còn mở (cổng Windows thật của giai đoạn 7):** máy chiếu vật lý, điện thoại kết nối qua Wi-Fi phòng học thật, updater tự động hoàn chỉnh + ký số chưa làm.
+
 **Công việc**
 
 1. Chuyển cửa sổ trình chiếu, chọn màn hình, fullscreen và xử lý rút màn hình.
@@ -410,7 +414,15 @@ các tính năng còn lại có quyết định rõ ràng và các cổng nghi�
   `unsupported!` **21 → 18**; nhóm Giới thiệu & Cập nhật chạy thêm **7 kênh `about:*`**
   (AboutAppInfo, UpdateState dev-mode/GitHub Releases, mở release page),
   `unsupported!` **18 → 11**; test Rust **136/136**, Node **99/99**, `check:embedded` khớp 6125,0 KiB.
-- Chưa làm: 6 (trình chiếu/LAN), 7 (updater tự động hoàn chỉnh/ký/phát hành thử), `ai:generate`
-  và các kênh presentation/lan. 11 kênh còn `unsupported!`; đường luồng giáo án
-  mới chứng minh bằng Rust + server giả loopback, chưa chạy model thật/BYOK thật và
-  cổng WebView2 chưa gọi kênh `lesson:*`.
+- Giai đoạn 6 XONG phần port kênh (2026-11-11): `lan:*` sáu kênh (server HTTP +
+  WebSocket RFC 6455 thuần, máy trạng thái phòng chơi, sự kiện `lan:state`), kênh
+  legacy `ai:generate` (bộ sinh câu hỏi mẫu ngoại tuyến), `presentation:*` bốn
+  kênh invoke + ba kênh send (cửa sổ máy chiếu `WebviewWindowBuilder`, chọn màn
+  hình ưu tiên, bảo vệ rút cáp, đồng bộ snapshot hai chiều). `unsupported!` về
+  **0 — đủ 100 % hợp đồng desktop** (81 kênh invoke + 3 kênh send); test Rust
+  **151/151**, Node **99/99**, `npm run tauri:check` **51/51 + 10/10 + 12/12**.
+- Chưa làm: giai đoạn 7 — cổng nghiệm thu trên Windows thật (máy chiếu vật lý,
+  điện thoại kết nối Wi-Fi phòng học thật, model thật/BYOK thật, huỷ giữa HTTP
+  thật, installer trên máy sạch/VM, ký số) và updater tự động hoàn chỉnh; đường
+  luồng giáo án mới chứng minh bằng Rust + server giả loopback, cổng WebView2 chưa
+  gọi kênh `lesson:*`.

@@ -2,7 +2,6 @@
   "name": "edugame-studio",
   "version": "0.5.1",
   "description": "EduGame Studio - ứng dụng Windows tạo, quản lý và chơi game giáo dục offline, TypeScript",
-  "main": "dist/src/main.js",
   "engines": {
     "node": ">=22.13.0"
   },
@@ -10,19 +9,12 @@
   "license": "MIT",
   "scripts": {
     "clean": "node -e \"try{require('node:fs').rmSync('dist',{recursive:true,force:true})}catch(e){console.warn('clean warning:',e.message)}\"",
-    "build": "npm run clean && node scripts/build-icon-data.js --bootstrap && tsc -p tsconfig.json && npm run build:icons && tsc -p tsconfig.json && npm run build:icons:check && copyfiles -u 1 \"src/index.html\" \"src/renderer/styles/*.css\" \"src/presentation/presentation.html\" \"src/presentation/presentation-preload.js\" \"src/lan/mobile/*\" \"src/renderer/assets/*\" dist/src && npm run build:css && npm run build:three && npm run build:confetti",
+    "build": "npm run clean && node scripts/build-icon-data.js --bootstrap && tsc -p tsconfig.json && npm run build:icons && tsc -p tsconfig.json && npm run build:icons:check && copyfiles -u 1 \"src/index.html\" \"src/renderer/styles/*.css\" \"src/presentation/presentation.html\" \"src/lan/mobile/*\" \"src/renderer/assets/*\" dist/src && npm run build:css && npm run build:three && npm run build:confetti",
     "build:css": "tailwindcss -i src/renderer/styles/app.css -o dist/src/renderer/styles/app.css --minify",
     "build:three": "node scripts/build-three.js",
     "build:confetti": "node scripts/build-confetti.js",
-    "start": "npm run build && electron .",
-    "dev": "node scripts/dev.js",
     "check": "tsc --noEmit -p tsconfig.json",
     "test": "npm run build && node tests/run-unit.js",
-    "dist:win": "npm run build && electron-builder --win nsis",
-    "dist:dir": "npm run build && electron-builder --dir",
-    "server:dev": "tsx watch server/index.ts",
-    "server:start": "node dist/server/index.js",
-    "server:build": "tsc -p tsconfig.json",
     "verify:css": "node tests/manual/verify-css.js",
     "check:renderer-globals": "node scripts/check-renderer-undefined-globals.js",
     "check:item-assets-ui": "node tests/ui/ui-item-assets-editor-check.js",
@@ -41,21 +33,8 @@
     "check:game-background-ui": "node tests/ui/ui-game-background-check.js",
     "check:stage-illustration-ui": "node tests/ui/ui-stage-illustration-check.js",
     "check:play-surface-ui": "node tests/ui/ui-play-surface-check.js",
-    "check:offline-packaged": "node tests/ui/offline-packaged-check.js",
-    "check:packaged-feed": "node tests/ui/packaged-feed-check.js",
-    "check:packaged-feed-available": "node tests/ui/packaged-feed-check.js 9371 available",
-    "check:packaged-feed-vacuum": "node tests/ui/packaged-feed-check.js 9371 error",
-    "check:packaged-install": "node tests/ui/packaged-install-check.js 9399",
-    "check:packaged-install-direct": "node tests/ui/packaged-install-check.js 9399 direct",
-    "check:packaged-install-elevate": "node tests/ui/packaged-install-check.js 9399 elevate",
-    "check:packaged-install-no-elevate": "node tests/ui/packaged-install-check.js 9399 no-elevate",
-    "check:packaged-install-badhash": "node tests/ui/packaged-install-check.js 9399 badhash",
-    "measure:p7": "powershell -ExecutionPolicy Bypass -File tests/packaging/p7-offline-install.ps1",
     "check:presentation-ui": "node tests/ui/ui-presentation-check.js",
     "launch:ui": "powershell -ExecutionPolicy Bypass -File tests/ui/launch-app.ps1",
-    "test:native": "node tests/run-unit.js lesson-store",
-    "build:desktop-contract": "node scripts/build-desktop-contract.js",
-    "check:desktop-contract": "node scripts/build-desktop-contract.js --check",
     "build:embedded": "node scripts/build-embedded-js.js",
     "check:embedded": "node scripts/build-embedded-js.js --check",
     "build:tauri": "npm run build:embedded && node scripts/build-tauri-frontend.js",
@@ -65,9 +44,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.57.0",
     "@types/canvas-confetti": "^1.9.0",
-    "better-sqlite3": "^11.7.0",
     "canvas-confetti": "^1.9.4",
-    "electron-updater": "^6.8.11",
     "express": "^5.1.0",
     "express-rate-limit": "^8.1.0",
     "jszip": "^3.10.1",
@@ -79,68 +56,15 @@
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.3.3",
-    "@types/better-sqlite3": "^7.6.13",
     "@types/express": "^5.0.3",
     "@types/node": "^22.15.30",
     "copyfiles": "^2.4.1",
     "daisyui": "^5.7.50",
-    "electron": "^33.2.1",
-    "electron-builder": "^25.1.8",
     "esbuild": "^0.28.2",
     "jsdom": "^29.1.1",
     "socket.io-client": "^4.8.4",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2"
-  },
-  "build": {
-    "appId": "vn.edugame.studio",
-    "productName": "EduGame Studio",
-    "asar": true,
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "vananz123",
-        "repo": "edu-game-ai",
-        "releaseType": "release"
-      }
-    ],
-    "files": [
-      "dist/**/*",
-      "package.json",
-      "node_modules/**/*",
-      "!node_modules/**/@types/**",
-      "!node_modules/**/*.d.ts",
-      "!node_modules/**/*.map",
-      "!node_modules/**/{test,tests,__tests__,docs,example,examples}/**"
-    ],
-    "extraResources": [
-      {
-        "from": "vendor/vc-runtime",
-        "to": "vc-runtime",
-        "filter": [
-          "*.dll"
-        ]
-      }
-    ],
-    "directories": {
-      "output": "release"
-    },
-    "npmRebuild": true,
-    "win": {
-      "icon": "build/icon.png",
-      "target": [
-        "nsis"
-      ],
-      "artifactName": "EduGame-Studio-Setup-${version}.${ext}"
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "deleteAppDataOnUninstall": false,
-      "include": "build/installer.nsh"
-    }
   }
 }

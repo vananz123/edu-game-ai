@@ -129,20 +129,26 @@ export function descendantIds(node: LessonSectionNode): string[] {
 export function resolveSelection(
   structure: LessonStructure,
   selectedIds: readonly string[],
-  options: { includeContext?: boolean } = {}
+  options: { includeContext?: boolean; staleIds?: string[] } = {}
 ): SelectedRange[] {
   const byId = new Map(structure.nodes.map(node => [node.id, node]));
-  const ids = Array.from(new Set((selectedIds || []).map(id => String(id || '').trim()).filter(Boolean)));
+  const rawIds = Array.from(new Set((selectedIds || []).map(id => String(id || '').trim()).filter(Boolean)));
   // The document root is not a section: selecting it would mean "send everything",
   // which this function must never infer from a section id (decision A, §10.12).
-  if (ids.includes(structure.root.id)) {
+  if (rawIds.includes(structure.root.id)) {
     throw selectionError('SELECTION_UNKNOWN_ID', `Phần "${structure.root.id}" là toàn bộ tài liệu, không phải một mục để chọn.`);
   }
-  if (!ids.length) {
+  if (!rawIds.length) {
     throw selectionError('SELECTION_EMPTY', 'Hãy chọn ít nhất một phần của tài liệu, hoặc chọn "Phân tích toàn bộ tài liệu".');
   }
-  for (const id of ids) {
-    if (!byId.has(id)) throw selectionError('SELECTION_UNKNOWN_ID', `Phần "${id}" không còn trong cấu trúc tài liệu. Hãy mở lại bước chọn nội dung.`);
+  // IDs that no longer exist in the current structure are silently dropped so the
+  // wizard can still proceed with the remaining valid selections. The caller can
+  // inspect `options.staleIds` (populated here) to surface a warning in the UI.
+  const stale = rawIds.filter(id => !byId.has(id));
+  if (options.staleIds) options.staleIds.push(...stale);
+  const ids = rawIds.filter(id => byId.has(id));
+  if (!ids.length) {
+    throw selectionError('SELECTION_EMPTY', 'Tất cả các phần đã chọn không còn trong cấu trúc tài liệu. Hãy chọn ít nhất một phần hợp lệ.');
   }
 
   const wanted = new Set<string>(ids);
@@ -308,8 +314,12 @@ export function prepareSelectedLessonText(
 ): PreparedSelection {
   const source = normalizeLessonSource(rawText ?? '');
   const maxChars = budgetFrom(options);
-  const ranges = resolveSelection(structure, selectedIds, { includeContext: options.includeContext });
+  const staleIds: string[] = [];
+  const ranges = resolveSelection(structure, selectedIds, { includeContext: options.includeContext, staleIds });
   const warnings: string[] = [];
+  if (staleIds.length) {
+    warnings.push(`${staleIds.length} phần đã chọn không còn trong tài liệu và đã bị bỏ qua: ${staleIds.join(', ')}.`);
+  }
   if (structure.textLength !== source.length) {
     warnings.push('Cấu trúc được lưu cho một phiên bản khác của tài liệu; hãy phân tích lại cấu trúc.');
   }

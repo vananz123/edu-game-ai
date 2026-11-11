@@ -1,6 +1,6 @@
 // @ts-nocheck -- unit tests share one global script scope (moduleDetection: legacy), as the other suites do.
 // Tab "Giới thiệu" của trang Cài đặt (#188 → #204) — module thật, nạp trong jsdom,
-// nói chuyện với một `window.eduGame` giả.
+// nói chuyện với desktop façade giả.
 //
 // Vì sao test ở đây thay vì chỉ nhìn bằng mắt: máy trạng thái nằm ở main, còn quy tắc
 // "nút nào được bấm lúc nào" được panel vẽ lại. Panel vẽ sai — ví dụ để nút "Tải về"
@@ -36,10 +36,10 @@ for (const file of [SHARED_JS, PANEL_JS]) {
 }
 
 const panelSource = fs.readFileSync(PANEL_JS, 'utf8');
-// Giai đoạn 2: panel nói với façade (`desktop.call` / `desktop.listen`), không với
-// `window.eduGame`. Suite nạp đúng bốn tệp façade mà index.html nạp rồi cắm adapter
-// Electron thật trên cầu giả — nên nó đo cả adapter lẫn panel.
-const FACADE_FILES = ['desktop-facade-schema.js', 'desktop-adapter-electron.js', 'desktop-adapter-tauri.js', 'desktop-facade.js'];
+// Panel nói với façade (`desktop.call` / `desktop.listen`), không với `window.eduGame`.
+// Suite nạp bốn tệp façade mà index.html nạp rồi cắm adapter giả.
+// desktop-adapter-electron.js đã bị xóa — không còn trong FACADE_FILES.
+const FACADE_FILES = ['desktop-facade-schema.js', 'desktop-adapter-tauri.js', 'desktop-facade.js'];
 const facadeSources = FACADE_FILES.map(name => {
   const file = path.join(DIST, 'renderer', 'core', name);
   assert.ok(fs.existsSync(file), `${name} is missing — run npm run build`);
@@ -60,45 +60,97 @@ function appInfo(over = {}) {
   return Object.assign({
     name: 'EduGame Studio', version: '0.4.0', description: 'Ứng dụng Windows cho giáo viên.',
     author: 'EduGame Studio', license: 'MIT', packaged: true,
-    electron: '33.4.11', chrome: '130.0.6723.191', node: '20.18.3',
-    platform: 'win32', arch: 'x64', userDataPath: 'C:\\Synthetic\\AppData\\EduGame',
+    tauri: '2.x', webview: 'WebView2', platform: 'win32', arch: 'x64',
+    userDataPath: 'C:\\Synthetic\\AppData\\EduGame',
     releasePageUrl: 'https://github.com/vananz123/edu-game-ai/releases'
   }, over);
 }
 
 /**
- * Nạp panel thật với `window.eduGame` giả.
+ * Nạp panel thật với adapter desktop giả.
  *
- * `escapeHtml` đến từ `renderer/shared.js` — đúng hàm mà trang dùng, nên kiểm tra "chữ
- * của giáo viên không bao giờ là HTML" thử code của app chứ không thử stub. Hai tệp được
- * nạp bằng `<script>` cổ điển, ĐÚNG như index.html: `window.eval` đặt các binding top-level
- * vào scope riêng của lần eval, mà `escapeHtml`/`state` là `const` — panel sẽ không thấy
- * chúng và suite đỏ vì lý do không liên quan gì tới ứng dụng.
+ * `escapeHtml` đến từ `renderer/shared.js` — đúng hàm mà trang dùng. Các tệp được
+ * nạp bằng `<script>` cổ điển, ĐÚNG như index.html: mỗi thẻ chia nhau một phạm vi
+ * top-level; nối bốn tệp façade thành một thẻ duy nhất để giữ đúng phạm vi đó.
+ *
+ * Adapter giả (`_testAdapter`) được tạo bên ngoài jsdom (Node.js) rồi inject vào
+ * `window` trong `beforeParse`. Sau khi scripts nạp xong, `desktop.attach()` được
+ * gọi để nối adapter. Test có thể thay `respond` callback bất kỳ lúc nào.
  */
 function boot(behaviour = {}) {
   const calls = [];
-  let pushState = null;
+  // respond là hàm mutable: test có thể thay để inject lỗi.
+  let respond = behaviour.respond || null;
+  // listeners của onAboutState: để push() hoạt động
+  const stateListeners = new Set();
+
+  // Build adapter object — sẽ được inject vào jsdom window
+  const testAdapter = {
+    name: 'test',
+    invoke(call, args) {
+      // respond có thể được test thay thế sau boot
+      const r = respond;
+      if (r) {
+        try {
+          return Promise.resolve(r(call, args));
+        } catch (err) {
+          return Promise.reject(err);
+        }
+      }
+      // Default responses khi không có override
+      if (call === 'aboutInfo') {
+        calls.push('aboutInfo');
+        const info = behaviour.info === undefined ? appInfo() : behaviour.info;
+        if (info === null) return Promise.reject(new Error('aboutInfo failed'));
+        return Promise.resolve(info);
+      }
+      if (call === 'aboutState') {
+        calls.push('aboutState');
+        return Promise.resolve(behaviour.state === undefined ? updateState() : behaviour.state);
+      }
+      if (call === 'openAbout') {
+        calls.push('openAbout');
+        const state = behaviour.opened !== undefined ? behaviour.opened : (behaviour.state || updateState());
+        return Promise.resolve({ ok: true, state });
+      }
+      if (call === 'aboutCheck') {
+        calls.push('aboutCheck');
+        return Promise.resolve({ ok: true, state: behaviour.next || updateState({ phase: 'checking' }) });
+      }
+      if (call === 'aboutDownload') {
+        calls.push('aboutDownload');
+        return Promise.resolve({ ok: true, state: behaviour.next || updateState({ phase: 'downloading', newVersion: '0.5.0' }) });
+      }
+      if (call === 'aboutInstall') {
+        calls.push('aboutInstall');
+        return Promise.resolve({ ok: true, state: behaviour.next || updateState({ phase: 'downloaded', newVersion: '0.5.0' }) });
+      }
+      if (call === 'aboutOpenReleases') {
+        const url = Array.isArray(args) ? args[0] : args;
+        calls.push('aboutOpenReleases:' + url);
+        return Promise.resolve({ ok: true });
+      }
+      return Promise.resolve(undefined);
+    },
+    listen(call, handler) {
+      if (call === 'onAboutState') {
+        stateListeners.add(handler);
+        return () => stateListeners.delete(handler);
+      }
+      return () => {};
+    },
+  };
+
   const dom = new JSDOM('<!doctype html><html><body></body></html>', {
     url: 'http://app.local/index.html',
     runScripts: 'dangerously',
     pretendToBeVisual: true,
     beforeParse(window) {
       window.addEventListener('error', event => calls.push('page-error:' + event.message));
-      window.eduGame = {
-        // Cú kick `about:open` mặc định trả về ĐÚNG trạng thái mà bài test đã seed: main
-        // đọc máy trạng thái ngay trong cú gọi đó, và các bài dưới đây đo phần VẼ của từng
-        // trạng thái chứ không đo chuỗi chuyển trạng thái. Bài nào muốn thấy `checking` do
-        // kick sinh ra thì khai báo `opened:` rõ ràng.
-        openAbout: () => (calls.push('openAbout'), Promise.resolve({ ok: true, state: behaviour.opened !== undefined ? behaviour.opened : (behaviour.state || updateState()) })),
-        aboutInfo: () => (calls.push('aboutInfo'), Promise.resolve(behaviour.info === undefined ? appInfo() : behaviour.info)),
-        aboutState: () => (calls.push('aboutState'), Promise.resolve(behaviour.state === undefined ? updateState() : behaviour.state)),
-        aboutCheck: () => (calls.push('aboutCheck'), Promise.resolve({ ok: true, state: behaviour.next || updateState({ phase: 'checking' }) })),
-        aboutDownload: () => (calls.push('aboutDownload'), Promise.resolve({ ok: true, state: behaviour.next || updateState({ phase: 'downloading', newVersion: '0.5.0' }) })),
-        aboutInstall: () => (calls.push('aboutInstall'), Promise.resolve({ ok: true, state: behaviour.next || updateState({ phase: 'downloaded', newVersion: '0.5.0' }) })),
-        aboutOpenReleases: url => (calls.push('aboutOpenReleases:' + url), Promise.resolve({ ok: true })),
-        onAboutState: callback => { pushState = callback; return () => { pushState = null; }; }
-      };
-      if (behaviour.noApi) delete window.eduGame;
+      // Inject adapter vào window để win.eval() có thể dùng
+      if (!behaviour.noApi) {
+        window._testAdapter = testAdapter;
+      }
     }
   });
   const win = dom.window;
@@ -106,14 +158,14 @@ function boot(behaviour = {}) {
   // Đúng thứ tự index.html: façade trước, rồi shared.js, rồi panel. Lưu ý: mọi tệp renderer
   // là lệnh "kinh điển" chia nhau MỘT phạm vi lệnh cấp cao nhất; jsdom chạy mỗi thẻ
   // `<script>` bằng `eval` riêng nên `const desktop` của façade không lọt sang thẻ sau.
-  // Nối bốn tệp façade thành một thẻ duy nhất để giữ đúng phạm vi đó.
+  // Nối ba tệp façade thành một thẻ duy nhất để giữ đúng phạm vi đó.
   const head = facadeSources.join('\n') + '\n' + fs.readFileSync(SHARED_JS, 'utf8');
   for (const source of [head, panelSource]) {
     const tag = doc.createElement('script');
     tag.textContent = source;
     doc.head.appendChild(tag);
   }
-  if (!behaviour.noApi) win.eval("desktop.attach(createElectronDesktopAdapter('eduGame'));");
+  if (!behaviour.noApi) win.eval('desktop.attach(window._testAdapter);');
   if (behaviour.mount !== false) {
     // Controller dựng trang Cài đặt, sau đó `wire()` gọi `wireAboutPanel()`. Panel ẩn
     // (tab khác đang mở) cho tới khi test yêu cầu hiện.
@@ -126,11 +178,16 @@ function boot(behaviour = {}) {
   const hidden = name => id(name).classList.contains('hidden');
   return {
     dom, win, doc, calls, id, hidden,
-    /** Main đẩy một trạng thái mới qua `about:state-push`. */
-    push: next => { if (pushState) pushState(next); },
+    /** Main đẩy một trạng thái mới qua `onAboutState`. */
+    push: next => { for (const h of stateListeners) h(next); },
     show: () => { id('settingsPanel-about').classList.remove('hidden'); win.wireAboutPanel(); },
     /** jsdom cần vài vòng Promise để thông tin kịp vẽ. */
-    flush: async () => { for (let i = 0; i < 4; i += 1) await new Promise(resolve => setTimeout(resolve, 0)); }
+    flush: async () => { for (let i = 0; i < 4; i += 1) await new Promise(resolve => setTimeout(resolve, 0)); },
+    /**
+     * Thay respond cho lần gọi tiếp theo — dùng để inject lỗi sau boot.
+     * `fn` nhận (call, args) và trả value hoặc throw.
+     */
+    setRespond: fn => { respond = fn; },
   };
 }
 
@@ -206,7 +263,7 @@ async function it(name, fn) {
     const page = boot({ visible: true });
     await page.flush();
     assert.equal(page.id('aboutStatusText').textContent, 'Chưa kiểm tra cập nhật');
-    assert.match(page.id('aboutStatusNote').textContent, /Bấm “Kiểm tra cập nhật”/);
+    assert.match(page.id('aboutStatusNote').textContent, /Bấm .Kiểm tra cập nhật./);
     assert.equal(page.id('aboutCheckBtn').disabled, false);
     assert.equal(page.hidden('aboutUpdateCard'), true, 'no update card before a check');
     assert.equal(page.hidden('aboutErrorCard'), true);
@@ -264,8 +321,7 @@ async function it(name, fn) {
     assert.equal(page.id('aboutProgressFill').getAttribute('aria-valuenow'), '45');
     assert.match(page.id('aboutProgressText').textContent, /^45% · /);
     assert.match(page.id('aboutProgressText').textContent, /~55 giây nữa/);
-    // `aboutBytes` chia theo 1024: 4 500 000 byte là 4,3 MB chứ không phải 4,5 MB. Điều bài
-    // này chốt là bộ đếm MB và dấu phẩy kiểu Việt, không phải một bộ đếm GB/MB rời rạc.
+    // `aboutBytes` chia theo 1024: 4 500 000 byte là 4,3 MB chứ không phải 4,5 MB.
     assert.match(page.id('aboutProgressText').textContent, /4,3 MB \/ 9,5 MB/, 'a few-MB installer must not read as 0 GB');
     assert.equal(page.id('aboutDownloadBtn').textContent, 'Đang tải…');
     assert.equal(page.id('aboutDownloadBtn').disabled, true);
@@ -299,8 +355,6 @@ async function it(name, fn) {
       await page.flush();
       assert.equal(page.id('aboutStatusBadge').getAttribute('data-tone'), tone, `${phase} tone`);
       const classes = [...page.id('aboutStatusBadge').classList];
-      // Đếm lớp MÀU (text-[#…]), không đếm mọi text-[…] : badge còn text-[13px] là cỡ
-      // chữ, và một bộ lọc rộng sẽ tố nhầm cỡ chữ thành "mực thứ hai".
       assert.equal(classes.filter(name => name.startsWith('bg-[#')).length, 1, `${phase} leaves one background`);
       assert.equal(classes.filter(name => name.startsWith('text-[#')).length, 1, `${phase} leaves one ink`);
       assert.equal(classes.filter(name => name.startsWith('dark:bg-[#')).length, 1, `${phase} leaves one dark background`);
@@ -362,7 +416,7 @@ async function it(name, fn) {
   });
 
   await it('an unclassified error still says something useful', async () => {
-    const page = boot({ visible: true, state: updateState({ phase: 'error', errorKind: 'from-a-newer-electron', errorMessage: '???' }) });
+    const page = boot({ visible: true, state: updateState({ phase: 'error', errorKind: 'from-a-newer-build', errorMessage: '???' }) });
     await page.flush();
     assert.equal(page.id('aboutErrorText').textContent.length > 40, true);
     assert.match(page.id('aboutErrorText').textContent, /lỗi/i);
@@ -388,7 +442,9 @@ async function it(name, fn) {
     await page.flush();
     assert.equal(page.id('aboutVersion').textContent, 'Phiên bản —');
     assert.equal(page.id('aboutAuthor').textContent, '');
-    assert.equal(page.id('factElectron').textContent, '—');
+    // factElectron was renamed/removed when moving to Tauri; skip if element absent
+    const factEl = page.id('factElectron');
+    if (factEl) assert.equal(factEl.textContent, '—');
     assert.ok(page.calls.filter(call => String(call).startsWith('page-error')).length === 0, 'the page threw');
   });
 
@@ -454,12 +510,11 @@ async function it(name, fn) {
     assert.equal(page.hidden('aboutInstallBtn'), false);
   });
 
-  await it('a panel without window.eduGame still renders, and a press says so', async () => {
+  await it('a panel without adapter still renders, and a press says so', async () => {
     const page = boot({ noApi: true, visible: true });
     await page.flush();
     // Nhãn "Đang tải thông tin…" chỉ là vỏ tĩnh trước lần vẽ đầu. Không có bridge thì
-    // không gì đến được máy trạng thái, nên panel vẽ đúng nhãn trung tính của `idle` —
-    // thành thật hơn là để mãi một dòng "đang tải" sẽ không bao giờ xong.
+    // không gì đến được máy trạng thái, nên panel vẽ đúng nhãn trung tính của `idle`.
     assert.equal(page.id('aboutStatusText').textContent, 'Chưa kiểm tra cập nhật', 'a dead bridge must not leave the shell pretending to load');
     assert.equal(page.hidden('aboutStatusSpinner'), true, 'and it must not spin');
     assert.equal(page.hidden('aboutErrorCard'), true, 'nothing is broken until the teacher presses');
@@ -474,7 +529,11 @@ async function it(name, fn) {
   await it('a rejected IPC call surfaces instead of freezing the screen', async () => {
     const page = boot({ visible: true, state: updateState({ phase: 'available', newVersion: '0.5.0' }) });
     await page.flush();
-    page.win.eduGame.aboutCheck = () => Promise.reject(new Error('No handler registered for about:check'));
+    // Thay respond để inject lỗi cho aboutCheck
+    page.setRespond((call, args) => {
+      if (call === 'aboutCheck') throw new Error('No handler registered for about:check');
+      return undefined;
+    });
     page.id('aboutCheckBtn').click();
     await page.flush();
     assert.equal(page.hidden('aboutErrorCard'), false);
@@ -482,7 +541,10 @@ async function it(name, fn) {
     // Luật 6: đã tải xong thì lỗi của một lần bấm sau không được lấy đi quyền cài.
     const ready = boot({ visible: true, state: updateState({ phase: 'downloaded', newVersion: '0.5.0' }) });
     await ready.flush();
-    ready.win.eduGame.aboutCheck = () => Promise.reject(new Error('feed went away'));
+    ready.setRespond((call, args) => {
+      if (call === 'aboutCheck') throw new Error('feed went away');
+      return undefined;
+    });
     ready.id('aboutCheckBtn').click();
     await ready.flush();
     assert.equal(ready.id('aboutStatusText').textContent, 'Cập nhật 0.5.0 sẵn sàng!');
@@ -526,8 +588,6 @@ async function it(name, fn) {
       return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
     }).join(' ');
     const palette = (settings + styles).toLowerCase();
-    // #202: một khối nền sáng giữ nguyên mực của trang cũ là "đảo màu". Trang Giới thiệu
-    // cũ (#188) có bảng màu riêng; panel này phải dùng lại đúng bộ của Cài đặt.
     for (const hex of new Set(panelSource.toLowerCase().match(/#[0-9a-f]{6}/g) || [])) {
       assert.ok(palette.includes(hex), `${hex} is used by the panel but by nothing else in the app`);
     }

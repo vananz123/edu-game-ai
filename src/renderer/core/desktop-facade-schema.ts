@@ -1,4 +1,4 @@
-// Hợp đồng duy nhất giữa renderer và lớp desktop (giai đoạn 2, kế hoạch Tauri).
+﻿// Hợp đồng duy nhất giữa renderer và lớp desktop (giai đoạn 2, kế hoạch Tauri).
 //
 // Trước giai đoạn 2, renderer gọi thẳng `window.eduGame.*` — hợp đồng đó do
 // `src/preload.ts` (Electron) và cầu sinh tự động (Tauri) cung cấp. Ở đây renderer
@@ -24,7 +24,7 @@
  * Nhóm chức năng của kế hoạch Tauri, giai đoạn 2 (thứ tự = thứ tự chuyển dần):
  * `app | data | files | ai | diagnostics | presentation | lan | update`.
  *
- * 92 lời gọi của façade dưới đây, theo thứ tự `src/preload.ts` để soát bằng mắt.
+ * 92 lời gọi của façade dưới đây. `group` là phân nhóm chức năng;
  * Khoá trùng hệt khoá của `window.eduGame`, để khi chuyển từng tệp chỉ đổi
  * `eduGame.x(` → `desktop.call('x')(`. `group` là phân nhóm của kế hoạch;
  * `channel` là chuỗi Electron đã chốt trong `src/shared/desktop-contract.json`;
