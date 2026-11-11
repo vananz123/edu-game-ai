@@ -26,7 +26,7 @@ use std::{
     process::Stdio,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
     time::{Duration, Instant},
 };
@@ -80,6 +80,217 @@ const RUNTIME_VULKAN: RuntimeSpec = RuntimeSpec {
 };
 
 const RUNTIMES: &[&RuntimeSpec] = &[&RUNTIME_CPU, &RUNTIME_VULKAN];
+
+/// Tín hiệu hủy dùng chung giữa lệnh `setup:cancel` và các bước đang chạy.
+///
+/// Chỉ là một cờ nguyên tử: tải xuống, kiểm tra sức khỏe và thử nghiệm đều đọc
+/// nó ở mỗi vòng lặp. Nhờ vậy hủy không cần giết task async (dễ bỏ rơi tiến
+/// trình con) và byte đã tải vẫn nằm trên đĩa để lần sau tải tiếp.
+#[derive(Clone, Default)]
+pub(crate) struct CancelToken {
+    flag: Arc<AtomicBool>,
+}
+
+impl CancelToken {
+    pub(crate) fn new() -> Self {
+        Self::default()
+    }
+
+    pub(crate) fn cancel(&self) {
+        self.flag.store(true, Ordering::SeqCst);
+    }
+
+    pub(crate) fn is_cancelled(&self) -> bool {
+        self.flag.load(Ordering::SeqCst)
+    }
+}
+
+pub(crate) const CANCELLED_MESSAGE: &str = "Đã hủy cài đặt.";
+
+/// Ngữ cảnh tiến trình riêng của wizard. Khi có ngữ cảnh này, `Progress` phát
+/// `setup:progress` thay vì `ai:local-progress`; hai kênh không bị trộn.
+#[derive(Clone)]
+pub(crate) struct SetupProgressContext {
+    pub step: &'static str,
+    pub item_id: String,
+    pub message: String,
+}
+
+/// Thông tin model tối thiểu mà `setup.rs` được phép thấy. Không lộ URL/SHA.
+#[derive(Clone, Copy)]
+pub(crate) struct SetupModel {
+    pub id: &'static str,
+    pub display_name: &'static str,
+    pub size_bytes: u64,
+}
+
+/// Một runtime đã xác minh, đủ để dựng kế hoạch cài đặt.
+#[derive(Clone, Copy)]
+pub(crate) struct SetupRuntime {
+    pub backend: &'static str,
+    pub size_bytes: u64,
+}
+
+impl SetupRuntime {
+    pub(crate) fn id(&self) -> String {
+        format!(
+            "llama.cpp-{RUNTIME_VERSION}-{}-win32-x64",
+            self.backend
+        )
+    }
+
+    pub(crate) fn display_name(&self) -> &'static str {
+        if self.backend == "vulkan" {
+            "llama.cpp Vulkan (Windows x64)"
+        } else {
+            "llama.cpp CPU (Windows x64)"
+        }
+    }
+}
+
+/// Ảnh chụp cấu hình máy cho preflight; không chứa đường dẫn hay thông tin ảnh.
+#[derive(Clone)]
+pub(crate) struct MachineSnapshot {
+    pub total_ram_bytes: u64,
+    pub logical_cpu_count: u32,
+    pub cpu_model: String,
+}
+
+fn ensure_not_cancelled(cancel: Option<&CancelToken>) -> Result<(), String> {
+    match cancel {
+        Some(token) if token.is_cancelled() => Err(CANCELLED_MESSAGE.to_string()),
+        _ => Ok(()),
+    }
+}
+
+/// Các hàm `setup.rs` dùng, giữ bề mặt hẹp: chỉ id model/backend, không URL.
+pub(crate) fn setup_model(id: &str) -> Option<SetupModel> {
+    MODELS
+        .iter()
+        .find(|model| model.id == id.trim())
+        .map(|model| SetupModel {
+            id: model.id,
+            display_name: model.display_name,
+            size_bytes: model.size_bytes,
+        })
+}
+
+pub(crate) fn recommended_model_id() -> &'static str {
+    recommend_model_id(&machine_info())
+}
+
+pub(crate) fn machine_snapshot() -> MachineSnapshot {
+    let machine = machine_info();
+    MachineSnapshot {
+        total_ram_bytes: machine.total_ram_bytes,
+        logical_cpu_count: machine.logical_cpu_count,
+        cpu_model: machine.cpu_model,
+    }
+}
+
+pub(crate) fn setup_runtime(backend: &str) -> Option<SetupRuntime> {
+    RUNTIMES
+        .iter()
+        .find(|runtime| runtime.backend == backend)
+        .map(|runtime| SetupRuntime {
+            backend: runtime.backend,
+            size_bytes: runtime.size_bytes,
+        })
+}
+
+pub(crate) fn requested_backend(app: &AppHandle) -> &'static str {
+    wanted_backend(app)
+}
+
+pub(crate) fn installed_runtime_backend(data: &Path) -> Option<&'static str> {
+    detect_installed_backend(&runtime_dir(data))
+}
+
+pub(crate) fn runtime_installed(data: &Path) -> bool {
+    runtime_executable(data).is_some()
+}
+
+pub(crate) fn model_installed(data: &Path, model_id: &str) -> bool {
+    MODELS
+        .iter()
+        .find(|model| model.id == model_id)
+        .map(|model| {
+            model_path(data, model)
+                .metadata()
+                .map(|meta| meta.is_file() && meta.len() == model.size_bytes)
+                .unwrap_or(false)
+        })
+        .unwrap_or(false)
+}
+
+pub(crate) fn disk_free_bytes(directory: &Path) -> Option<u64> {
+    available_bytes(directory)
+}
+
+/// Sửa thư viện VC++ của runtime đã cài mà không tải lại gói. Bản cũ có thể đã
+/// có `llama-server.exe` nhưng thiếu DLL, đúng lỗi mà bước sửa chữa tồn tại để
+/// tránh.
+pub(crate) fn repair_support_files(app: &AppHandle, backend: &str) -> Result<(), String> {
+    let data = paths::data_dir(app)?;
+    let target = runtime_dir(&data);
+    if detect_installed_backend(&target) == Some(runtime_spec(backend).backend)
+        && runtime_executable(&data).is_some()
+    {
+        copy_support_files(app, &target)?;
+    }
+    Ok(())
+}
+
+pub(crate) async fn install_runtime_for_setup(
+    app: &AppHandle,
+    backend: &str,
+    model_id: &str,
+    cancel: &CancelToken,
+    progress: &SetupProgressContext,
+) -> Result<(), String> {
+    let data = paths::data_dir(app)?;
+    ensure_runtime(
+        app,
+        &data,
+        backend,
+        model_id,
+        Some(cancel),
+        Some(progress),
+    )
+    .await
+}
+
+pub(crate) async fn install_model_for_setup(
+    app: &AppHandle,
+    model_id: &str,
+    cancel: &CancelToken,
+    progress: &SetupProgressContext,
+) -> Result<(), String> {
+    let model = MODELS
+        .iter()
+        .find(|model| model.id == model_id)
+        .ok_or_else(|| "Model AI local không nằm trong danh mục đã xác minh.".to_string())?;
+    let data = paths::data_dir(app)?;
+    install_model(app, &data, model, Some(cancel), Some(progress)).await
+}
+
+pub(crate) async fn start_for_setup(
+    app: &AppHandle,
+    model_id: &str,
+    cancel: &CancelToken,
+) -> Result<String, String> {
+    let model = MODELS
+        .iter()
+        .find(|model| model.id == model_id)
+        .ok_or_else(|| "Model AI local không nằm trong danh mục đã xác minh.".to_string())?;
+    let state = app.state::<AiLocal>();
+    let _guard = state.start.lock().await;
+    start_locked(app, model, Some(cancel)).await
+}
+
+pub(crate) async fn stop_for_setup(app: &AppHandle) -> Result<(), String> {
+    stop_internal(app).await
+}
 
 #[derive(Debug)]
 struct ModelSpec {
@@ -328,8 +539,8 @@ pub async fn install(app: AppHandle, requested: Option<Value>) -> Result<Value, 
     let _guard = state.install.lock().await;
     let data = paths::data_dir(&app)?;
     let backend = wanted_backend(&app);
-    ensure_runtime(&app, &data, backend, model.id).await?;
-    install_model(&app, &data, &model).await?;
+    ensure_runtime(&app, &data, backend, model.id, None, None).await?;
+    install_model(&app, &data, &model, None, None).await?;
     mark_local_active(&app, model.id)?;
     // Cùng hình dạng `{ok, models}` với Electron: `local-ai.ts` đọc
     // `result.models.models` và `result.models.machine`, không phải catalog trần.
@@ -342,18 +553,34 @@ pub async fn start(app: AppHandle, requested: Option<Value>) -> Result<Value, St
     let model = model_from_value(requested)?;
     let start_state = app.state::<AiLocal>();
     let _guard = start_state.start.lock().await;
+    let base_url = start_locked(&app, &model, None).await?;
+    Ok(json!({
+        "ok": true,
+        "baseUrl": base_url,
+        "models": catalog(&app)?,
+    }))
+}
 
-    let data = paths::data_dir(&app)?;
+/// Phần thân dùng chung cho `ai:start-local-runtime` và bước `starting` của
+/// wizard. `cancel` chỉ có ở wizard; luồng Settings giữ nguyên hành vi cũ.
+async fn start_locked(
+    app: &AppHandle,
+    model: &ModelSpec,
+    cancel: Option<&CancelToken>,
+) -> Result<String, String> {
+    ensure_not_cancelled(cancel)?;
+    let data = paths::data_dir(app)?;
     if runtime_executable(&data).is_none() {
         return Err("Runtime llama.cpp chưa được cài. Hãy tải model trước.".to_string());
     }
-    let model_file = model_path(&data, &model);
+    let model_file = model_path(&data, model);
     verify_file(&model_file, model.size_bytes, model.sha256).await?;
+    ensure_not_cancelled(cancel)?;
 
-    let requested_backend = wanted_backend(&app);
+    let requested_backend = wanted_backend(app);
     let installed_backend = detect_installed_backend(&runtime_dir(&data));
     if installed_backend != Some(requested_backend) {
-        ensure_runtime(&app, &data, requested_backend, model.id).await?;
+        ensure_runtime(app, &data, requested_backend, model.id, cancel, None).await?;
     }
 
     let mut attempts = vec![requested_backend];
@@ -363,14 +590,22 @@ pub async fn start(app: AppHandle, requested: Option<Value>) -> Result<Value, St
 
     let mut last_error = String::new();
     for backend in attempts {
+        ensure_not_cancelled(cancel)?;
         if backend != requested_backend {
-            ensure_runtime(&app, &data, backend, model.id).await?;
+            ensure_runtime(app, &data, backend, model.id, cancel, None).await?;
         }
         let executable = runtime_executable(&data)
             .ok_or_else(|| "Runtime llama.cpp chưa được cài.".to_string())?;
-        match run_backend(&app, &model, &executable, backend, &model_file).await {
+        match run_backend(app, model, &executable, backend, &model_file, cancel).await {
             Ok(()) => {
-                mark_local_active(&app, model.id)?;
+                if let Err(error) = ensure_not_cancelled(cancel) {
+                    let _ = stop_internal(app).await;
+                    return Err(error);
+                }
+                if let Err(error) = mark_local_active(app, model.id) {
+                    let _ = stop_internal(app).await;
+                    return Err(error);
+                }
                 let base_url = app
                     .state::<AiLocal>()
                     .runtime
@@ -379,15 +614,11 @@ pub async fn start(app: AppHandle, requested: Option<Value>) -> Result<Value, St
                     .and_then(|runtime| runtime.port)
                     .map(|port| format!("http://127.0.0.1:{port}"))
                     .unwrap_or_default();
-                return Ok(json!({
-                    "ok": true,
-                    "baseUrl": base_url,
-                    "models": catalog(&app)?,
-                }));
+                return Ok(base_url);
             }
             Err(error) => {
                 last_error = error;
-                let _ = stop_internal(&app).await;
+                let _ = stop_internal(app).await;
             }
         }
     }
@@ -495,7 +726,10 @@ async fn ensure_runtime(
     data: &Path,
     backend: &str,
     model_id: &str,
+    cancel: Option<&CancelToken>,
+    setup: Option<&SetupProgressContext>,
 ) -> Result<(), String> {
+    ensure_not_cancelled(cancel)?;
     let spec = runtime_spec(backend);
     let target = runtime_dir(data);
     if detect_installed_backend(&target) == Some(spec.backend) && runtime_executable(data).is_some()
@@ -517,7 +751,10 @@ async fn ensure_runtime(
     let _ = tokio::fs::remove_dir_all(&temporary).await;
 
     ensure_space(&runtime_root, spec.size_bytes).await?;
-    let mut progress = Progress::new(app, "runtime", model_id);
+    let mut progress = match setup {
+        Some(context) => Progress::for_setup(app, "runtime", context),
+        None => Progress::new(app, "runtime", model_id),
+    };
     download_verified(
         &archive,
         spec.download_url,
@@ -525,8 +762,10 @@ async fn ensure_runtime(
         spec.sha256,
         false,
         &mut progress,
+        cancel,
     )
     .await?;
+    ensure_not_cancelled(cancel)?;
 
     let result = extract_runtime(&archive, &temporary);
     let result = match result {
@@ -538,6 +777,7 @@ async fn ensure_runtime(
     };
     let _ = tokio::fs::remove_file(&archive).await;
     let _ = tokio::fs::remove_dir_all(&temporary).await;
+    ensure_not_cancelled(cancel)?;
     result
 }
 
@@ -689,7 +929,14 @@ fn support_directory(app: &AppHandle) -> Option<PathBuf> {
     development.is_dir().then_some(development)
 }
 
-async fn install_model(app: &AppHandle, data: &Path, model: &ModelSpec) -> Result<(), String> {
+async fn install_model(
+    app: &AppHandle,
+    data: &Path,
+    model: &ModelSpec,
+    cancel: Option<&CancelToken>,
+    setup: Option<&SetupProgressContext>,
+) -> Result<(), String> {
+    ensure_not_cancelled(cancel)?;
     let directory = data.join(LOCAL_ROOT).join("models");
     tokio::fs::create_dir_all(&directory)
         .await
@@ -711,6 +958,7 @@ async fn install_model(app: &AppHandle, data: &Path, model: &ModelSpec) -> Resul
     }
     if received == model.size_bytes {
         verify_file(&partial, model.size_bytes, model.sha256).await?;
+        ensure_not_cancelled(cancel)?;
         tokio::fs::rename(&partial, &destination)
             .await
             .map_err(|error| format!("không đổi tên model đã tải: {error}"))?;
@@ -718,7 +966,10 @@ async fn install_model(app: &AppHandle, data: &Path, model: &ModelSpec) -> Resul
     }
     ensure_space(&directory, model.size_bytes - received).await?;
 
-    let mut progress = Progress::new(app, "model", model.id);
+    let mut progress = match setup {
+        Some(context) => Progress::for_setup(app, "model", context),
+        None => Progress::new(app, "model", model.id),
+    };
     download_verified(
         &partial,
         model.download_url,
@@ -726,8 +977,10 @@ async fn install_model(app: &AppHandle, data: &Path, model: &ModelSpec) -> Resul
         model.sha256,
         received > 0,
         &mut progress,
+        cancel,
     )
     .await?;
+    ensure_not_cancelled(cancel)?;
     tokio::fs::rename(&partial, &destination)
         .await
         .map_err(|error| format!("không đổi tên model đã tải: {error}"))?;
@@ -781,7 +1034,9 @@ async fn download_verified(
     expected_sha: &str,
     resume: bool,
     progress: &mut Progress,
+    cancel: Option<&CancelToken>,
 ) -> Result<(), String> {
+    ensure_not_cancelled(cancel)?;
     let mut offset = if resume {
         destination.metadata().map(|info| info.len()).unwrap_or(0)
     } else {
@@ -795,6 +1050,7 @@ async fn download_verified(
     if offset > 0 {
         hash_prefix(destination, offset, &mut hasher).await?;
     }
+    ensure_not_cancelled(cancel)?;
 
     let client = download_client()?;
     let mut request = client.get(url);
@@ -805,6 +1061,7 @@ async fn download_verified(
         .send()
         .await
         .map_err(|error| format!("Không tải được {url}: {error}"))?;
+    ensure_not_cancelled(cancel)?;
     let status = response.status();
 
     let mut append = offset > 0;
@@ -857,6 +1114,7 @@ async fn download_verified(
     let mut written = offset;
     let mut stream = response.bytes_stream();
     while let Some(chunk) = stream.next().await {
+        ensure_not_cancelled(cancel)?;
         let chunk = chunk.map_err(|error| format!("Tải tệp bị gián đoạn: {error}"))?;
         written = written
             .checked_add(chunk.len() as u64)
@@ -1033,7 +1291,9 @@ async fn run_backend(
     executable: &Path,
     backend: &str,
     model_file: &Path,
+    cancel: Option<&CancelToken>,
 ) -> Result<(), String> {
+    ensure_not_cancelled(cancel)?;
     let state = app.state::<AiLocal>();
     let generation = state.generation.load(Ordering::SeqCst);
     let port = free_loopback_port()?;
@@ -1120,7 +1380,8 @@ async fn run_backend(
         tokio::spawn(drain_stream(stderr, output.clone()));
     }
 
-    wait_for_health(app, port, generation, &output).await?;
+    wait_for_health(app, port, generation, &output, cancel).await?;
+    ensure_not_cancelled(cancel)?;
 
     {
         let state = app.state::<AiLocal>();
@@ -1143,6 +1404,7 @@ async fn wait_for_health(
     port: u16,
     generation: u64,
     output: &Arc<Mutex<String>>,
+    cancel: Option<&CancelToken>,
 ) -> Result<(), String> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(2))
@@ -1151,6 +1413,7 @@ async fn wait_for_health(
     let url = format!("http://127.0.0.1:{port}/health");
     let deadline = Instant::now() + HEALTH_TIMEOUT;
     while Instant::now() < deadline {
+        ensure_not_cancelled(cancel)?;
         {
             let state = app.state::<AiLocal>();
             if state.generation.load(Ordering::SeqCst) != generation {
@@ -1464,18 +1727,39 @@ fn format_memory(bytes: u64) -> String {
 struct Progress {
     app: AppHandle,
     stage: &'static str,
-    model_id: String,
+    item_id: String,
+    setup_step: Option<&'static str>,
+    setup_message: Option<String>,
     started: Instant,
     last: Instant,
 }
 
 impl Progress {
-    fn new(app: &AppHandle, stage: &'static str, model_id: &str) -> Self {
+    fn new(app: &AppHandle, stage: &'static str, item_id: &str) -> Self {
         let now = Instant::now();
         Self {
             app: app.clone(),
             stage,
-            model_id: model_id.to_string(),
+            item_id: item_id.to_string(),
+            setup_step: None,
+            setup_message: None,
+            started: now,
+            last: now,
+        }
+    }
+
+    fn for_setup(
+        app: &AppHandle,
+        stage: &'static str,
+        context: &SetupProgressContext,
+    ) -> Self {
+        let now = Instant::now();
+        Self {
+            app: app.clone(),
+            stage,
+            item_id: context.item_id.clone(),
+            setup_step: Some(context.step),
+            setup_message: Some(context.message.clone()),
             started: now,
             last: now,
         }
@@ -1487,16 +1771,32 @@ impl Progress {
         }
         self.last = Instant::now();
         let elapsed = self.started.elapsed().as_secs_f64().max(0.001);
-        let _ = self.app.emit(
-            "ai:local-progress",
-            json!({
-                "stage": self.stage,
-                "modelId": self.model_id,
-                "receivedBytes": received,
-                "totalBytes": total,
-                "bytesPerSecond": (received as f64 / elapsed).round() as u64,
-            }),
-        );
+        let bytes_per_second = (received as f64 / elapsed).round() as u64;
+        let (channel, payload) = match self.setup_step {
+            Some(step) => (
+                "setup:progress",
+                json!({
+                    "step": step,
+                    "stage": self.stage,
+                    "itemId": self.item_id,
+                    "receivedBytes": received,
+                    "totalBytes": total,
+                    "bytesPerSecond": bytes_per_second,
+                    "message": self.setup_message.clone().unwrap_or_default(),
+                }),
+            ),
+            None => (
+                "ai:local-progress",
+                json!({
+                    "stage": self.stage,
+                    "modelId": self.item_id,
+                    "receivedBytes": received,
+                    "totalBytes": total,
+                    "bytesPerSecond": bytes_per_second,
+                }),
+            ),
+        };
+        let _ = self.app.emit(channel, payload);
     }
 }
 
@@ -1615,5 +1915,34 @@ mod tests {
             assert!(tail.chars().all(|ch| ch == 'ế'));
         }
         assert_eq!(tail_chars("abc", 10), "abc");
+    }
+
+    #[test]
+    fn cancel_token_is_shared_and_sticky() {
+        let token = CancelToken::new();
+        let clone = token.clone();
+        assert!(!token.is_cancelled());
+        clone.cancel();
+        assert!(token.is_cancelled());
+        assert!(ensure_not_cancelled(Some(&token)).is_err());
+        assert!(ensure_not_cancelled(None).is_ok());
+    }
+
+    #[test]
+    fn setup_model_and_runtime_views_hide_download_details() {
+        let model = setup_model("qwen3.5-2b-q4_k_m").unwrap();
+        assert_eq!(model.display_name, "Qwen3.5 2B · Q4_K_M");
+        assert_eq!(model.size_bytes, 1_280_835_840);
+        assert!(setup_model("not-a-model").is_none());
+        let cpu = setup_runtime("cpu").unwrap();
+        let vulkan = setup_runtime("vulkan").unwrap();
+        assert_eq!(cpu.id(), "llama.cpp-b11681-cpu-win32-x64");
+        assert_eq!(vulkan.id(), "llama.cpp-b11681-vulkan-win32-x64");
+        assert_eq!(cpu.display_name(), "llama.cpp CPU (Windows x64)");
+        assert_eq!(
+            vulkan.display_name(),
+            "llama.cpp Vulkan (Windows x64)"
+        );
+        assert!(setup_runtime("openvino").is_none());
     }
 }

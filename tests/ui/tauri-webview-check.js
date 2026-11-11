@@ -13,6 +13,9 @@
 //   - façade `desktop.*` nối được adapter Tauri và bốn lời gọi khởi động
 //     (`appInfo`, `getLibrary`, `getSettings`, `getLocalAiModels`) đi qua
 //     `invoke_channel` trả dữ liệu đúng hình dạng Electron đọc;
+//   - `setup:*` (wizard cài đặt lần đầu) trả status/preflight đúng hình dạng;
+//     payload hỏng bị từ chối và id model lạ trả `blocked`
+//     (bước cài thật chỉ chạy với `EDUGAME_TAURI_AI_INSTALL`);
 //   - lời gọi kênh chưa port vẫn bị từ chối với `not-supported`, không treo;
 //   - thư mục dữ liệu nằm dưới định danh Tauri, KHÔNG phải thư mục của Electron.
 //
@@ -302,6 +305,44 @@ async function aiLocalDownloadChecks(evaluate, modelId, dataDir) {
 }
 
 /**
+ * Cổng wizard THẬT (tuỳ chọn): sau khi AI local thật đã cài xong, `startSetup`
+ * phải chạm tới `complete` nhờ bước khởi động + smoke-test sinh nội dung thật
+ * (model/runtime đã có, nên không tải lại hàng GB), và `setup-state.json` phải
+ * được ghi bền vững dưới `ai-local/`. Kết thúc bằng `stopLocalRuntime` để không
+ * bỏ lại tiến trình llama-server chạy sau cổng.
+ */
+async function setupRealChecks(evaluate, modelId, dataDir) {
+  const finished = await evaluate(`(async () => {
+    const started = await desktop.call('startSetup', { modelId: ${JSON.stringify(modelId)} });
+    const after = await desktop.call('getSetupStatus');
+    await desktop.call('stopLocalRuntime');
+    return { started, after };
+  })()`);
+  const status = finished && finished.started ? finished.started : null;
+  const after = finished && finished.after ? finished.after : null;
+  check('setup thật: startSetup chạy tới complete (khởi động + smoke-test thật)',
+    Boolean(status && status.complete === true && after && after.complete === true),
+    JSON.stringify({
+      step: status && status.step,
+      complete: status && status.complete,
+      afterStep: after && after.step,
+      error: status && status.error && status.error.message,
+    }));
+
+  const statePath = dataDir ? path.join(dataDir, 'ai-local', 'setup-state.json') : '';
+  if (statePath) {
+    let state = null;
+    try { state = JSON.parse(fs.readFileSync(statePath, 'utf8')); } catch {}
+    const steps = state && Array.isArray(state.completedSteps) ? state.completedSteps : [];
+    check('setup-state.json: step complete, đủ completedSteps, có completedAt',
+      Boolean(state && state.step === 'complete' &&
+        steps.includes('starting') && steps.includes('smoke-test') &&
+        typeof state.completedAt === 'string' && state.schemaVersion === 1),
+      state ? `${statePath}: step=${state.step} steps=${steps.join(',')}` : `${statePath}: không đọc được`);
+  }
+}
+
+/**
  * Bốn đường dẫn của cổng gói `.egame`. Tiến trình cha (`build-tauri-release.js`)
  * ĐẶT BIẾN MÔI TRƯỜNG CỦA CHÍNH NÓ trước khi mở binary — renderer không đặt được
  * biến của tiến trình, nên đường dẫn hộp thoại chỉ có thể đến từ vỏ. Khi chưa có
@@ -497,6 +538,8 @@ const filesGate = Boolean(process.env.EDUGAME_TAURI_FILES_DOCUMENT);
     out.localAiCatalog === true, out.localAiMsg);
   check('AI local: id lạ bị từ chối, status STOPPED, stop trả danh mục',
     out.localAiControl === true, out.localAiControlMsg);
+  check('setup: status/preflight đúng hình dạng, id lạ trả blocked, payload hỏng bị từ chối',
+    out.setup === true, out.setupMsg);
   check('kênh chưa port bị từ chối not-supported (không treo)', out.unsupported === true, out.unsupportedMsg);
   check('lỗi khởi động không che UI (không có trang lỗi nào)', out.boot === true, out.bootMsg);
   const gateDataDir = process.env.EDUGAME_TAURI_DATA_DIR || '';
@@ -512,6 +555,7 @@ const filesGate = Boolean(process.env.EDUGAME_TAURI_FILES_DOCUMENT);
   if (aiInstallId && !reopenPhase && !migrationPhase) {
     console.log('… tải và chạy AI local thật (' + aiInstallId + ')');
     await aiLocalDownloadChecks(evaluate, aiInstallId, gateDataDir);
+    await setupRealChecks(evaluate, aiInstallId, gateDataDir);
   }
 
   // Giai đoạn 5: settings.json chỉ được có blob DPAPI. Phép đọc đĩa nằm ở Node vì
@@ -873,6 +917,43 @@ const RUNNER = `(async () => {
   } catch (error) {
     out.localAiControl = false;
     out.localAiControlMsg = 'AI local control lỗi: ' + (error && error.message);
+  }
+
+  // Wizard cài đặt lần đầu (setup:*): status/preflight chỉ đọc. Payload hỏng
+  // phải bị từ chối, id model lạ phải trả blocked — không rejected promise —
+  // đúng hợp đồng Electron.
+  try {
+    const status = await facade.call('getSetupStatus');
+    const preflight = await facade.call('preflightSetup');
+    const blocked = await facade.call('preflightSetup', { modelId: 'not-a-real-model' });
+    let rejected = false;
+    try {
+      await facade.call('startSetup', 42);
+    } catch (error) {
+      rejected = true;
+    }
+    out.setup = Boolean(status && typeof status.step === 'string' &&
+      typeof status.complete === 'boolean' && typeof status.running === 'boolean' &&
+      preflight && preflight.hardware && typeof preflight.hardware.logicalCpuCount === 'number' &&
+      preflight.plan && typeof preflight.plan.remainingBytes === 'number' &&
+      typeof preflight.plan.enoughDiskSpace === 'boolean' &&
+      preflight.plan.runtime && typeof preflight.plan.runtime.id === 'string' &&
+      preflight.plan.runtime.id.indexOf('llama.cpp-b11681-') === 0 &&
+      preflight.plan.model && typeof preflight.plan.model.id === 'string' &&
+      preflight.plan.model.id.length > 0 &&
+      blocked && blocked.blocked && blocked.blocked.code === 'incomplete-configuration' &&
+      rejected);
+    out.setupMsg = JSON.stringify({
+      step: status && status.step,
+      running: status && status.running,
+      runtimeId: preflight && preflight.plan && preflight.plan.runtime && preflight.plan.runtime.id,
+      modelId: preflight && preflight.plan && preflight.plan.model && preflight.plan.model.id,
+      blockedCode: blocked && blocked.blocked && blocked.blocked.code,
+      rejected,
+    });
+  } catch (error) {
+    out.setup = false;
+    out.setupMsg = 'setup:* lỗi: ' + (error && error.message);
   }
 
   // Một kênh có trả lời nhưng chưa port (ví dụ lưu tài liệu giáo án) phải từ

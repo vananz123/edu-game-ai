@@ -23,6 +23,7 @@ pub mod paths;
 pub mod picker;
 pub mod secrets;
 pub mod settings;
+pub mod setup;
 pub mod sql_params;
 pub mod storage;
 
@@ -61,6 +62,9 @@ pub fn run() {
             // AI local: danh mục/tải model và tiến trình llama-server do vỏ này
             // quản lý. State rỗng cho tới lần tải/khởi động đầu tiên.
             app.manage(ai_local::AiLocal::default());
+            // Wizard cài đặt lần đầu: trạng thái bền vững ở `setup.rs`, khóa
+            // chạy/cờ hủy/cache kế hoạch ở đây.
+            app.manage(setup::Setup::default());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

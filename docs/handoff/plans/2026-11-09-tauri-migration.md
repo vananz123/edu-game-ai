@@ -1,12 +1,13 @@
 # Kế hoạch khảo sát và chuyển EduGame Studio từ Electron sang Tauri
 
-Ngày lập: 2026-11-09; cập nhật trạng thái: 2026-11-10  
+Ngày lập: 2026-11-09; cập nhật trạng thái: 2026-11-11  
 Trạng thái: **đã duyệt và đang triển khai** — giai đoạn 0–4 XONG, giai đoạn 5
-xong cả phần bí mật (DPAPI + `settings:get/save`) lẫn AI local (tải runtime/model
-+ `llama-server` loopback); việc kế tiếp là port `ai:generate`/setup wizard.
+xong cả phần bí mật (DPAPI + `settings:get/save`), AI local (tải runtime/model
++ `llama-server` loopback) và setup wizard (`setup:*`); việc kế tiếp là port
+`ai:generate`.
 Phạm vi: ứng dụng desktop Windows hiện tại, phiên bản nguồn 0.5.1, **bản Tauri
-đầu tiên là bản thử giới hạn** (không có LAN, trình chiếu, updater; AI local mới
-có phần cài/chạy, chưa sinh nội dung).
+đầu tiên là bản thử giới hạn** (không có LAN, trình chiếu, updater; AI local đã
+có phần cài/chạy và wizard lần đầu, chưa sinh nội dung).
 
 ## 1. Mục tiêu
 
@@ -193,7 +194,7 @@ có yêu cầu tương thích cụ thể và đã đánh giá chi phí/bảo m�
 
 ### Giai đoạn 5 — AI local và bí mật
 
-**Trạng thái: XONG (2026-11-10, DECISIONS "Giai đoạn 5 (bí mật)" + "Giai đoạn 5 (AI local)").** Phần bí mật: `src-tauri/src/secrets.rs` dùng DPAPI của Windows (`CryptProtectData`/`CryptUnprotectData` qua `windows-sys`) và lưu blob base64 ở `ai.providers.<id>.apiKeyEncrypted`; `src-tauri/src/settings.rs` gộp provider, trả view chỉ có `hasKey`/`keyMasked`, xử lý `apiKey` rỗng/`clearKey`/thay khoá và xoá kết quả test cũ. Migration vẫn tước khoá, giáo viên nhập lại. Phần AI local: `src-tauri/src/ai_local.rs` giữ catalog pin 3 model + runtime CPU/Vulkan b11681, tải HTTPS có allowlist + Range resume, kiểm kích thước/SHA-256, giải nén ZIP phẳng, cài runtime/model và chạy `llama-server` loopback với health poll/progress. Ba lệnh cài/chạy/dừng trả `{ok, models}` như Electron, `start` kèm `baseUrl` loopback; cổng release **sau khi sửa hình dạng trả về** đạt **50/50 (53/53 khi bật tải thật) + 10/10 + 12/12** (`shapeOk`, `startOk`, `stoppedOk` đều đúng). Installer NSIS **15,28 MiB** (16.023.921 B) cài mới exit 0 rồi cài đè trong thư mục tạm không đổi dữ liệu. **Còn mở:** `ai:generate`/setup wizard chưa port; Vulkan/fallback, huỷ/đổi model, khoá thật và máy sạch chưa kiểm chứng — xem "Chưa chứng minh" của quyết định AI local.
+**Trạng thái: XONG (2026-11-10/11, DECISIONS "Giai đoạn 5 (bí mật)" + "Giai đoạn 5 (AI local)" + "Giai đoạn 5 (setup wizard)").** Phần bí mật: `src-tauri/src/secrets.rs` dùng DPAPI của Windows (`CryptProtectData`/`CryptUnprotectData` qua `windows-sys`) và lưu blob base64 ở `ai.providers.<id>.apiKeyEncrypted`; `src-tauri/src/settings.rs` gộp provider, trả view chỉ có `hasKey`/`keyMasked`, xử lý `apiKey` rỗng/`clearKey`/thay khoá và xoá kết quả test cũ. Migration vẫn tước khoá, giáo viên nhập lại. Phần AI local: `src-tauri/src/ai_local.rs` giữ catalog pin 3 model + runtime CPU/Vulkan b11681, tải HTTPS có allowlist + Range resume, kiểm kích thước/SHA-256, giải nén ZIP phẳng, cài runtime/model và chạy `llama-server` loopback với health poll/progress. Ba lệnh cài/chạy/dừng trả `{ok, models}` như Electron, `start` kèm `baseUrl` loopback; cổng release **sau khi sửa hình dạng trả về** đạt **50/50 (53/53 khi bật tải thật) + 10/10 + 12/12** (`shapeOk`, `startOk`, `stoppedOk` đều đúng). Phần setup wizard: `src-tauri/src/setup.rs` port ba lớp `setup-state.ts`/`setup-orchestrator.ts`/`setup-ipc.ts`, trạng thái bền vững ở `<data>/ai-local/setup-state.json`, preflight phần cứng/dung lượng, resume theo bước hỏng, hủy giữ byte đã tải và smoke-test sinh chữ thật; bốn kênh `setup:*` rời `unsupported!` (49 → 45). Cổng release **51/51 (56/56 khi bật tải thật) + 10/10 + 12/12**. Installer NSIS dựng từ cây cuối **16.139.500 B** (SHA-256 `2593FF55…73375`); cài mới exit 0 (exe 57.822.208 B, đủ ba DLL VC++), cài đè exit 0 không đổi hash DB/WAL/SHM, gỡ `/S` exit 0 xoá sạch thư mục cài trong thư mục tạm. **Còn mở:** `ai:generate` chưa port; Vulkan/fallback, huỷ/đổi model, khoá thật và máy sạch chưa kiểm chứng — xem "Chưa chứng minh" của các quyết định AI local + setup wizard.
 
 **Công việc**
 
@@ -364,7 +365,7 @@ game, `.egame` và offline gameplay. Không ngừng phát hành Electron cho t�
 các tính năng còn lại có quyết định rõ ràng và các cổng nghiệm thu tương ứng
 được thông qua.
 
-## 9. Trạng thái triển khai (cập nhật 2026-11-10)
+## 9. Trạng thái triển khai (cập nhật 2026-11-11)
 
 - Giai đoạn 0 XONG: kiểm kê API + baseline Electron (xem
   [2026-11-09-tauri-phase0-survey.md](2026-11-09-tauri-phase0-survey.md)); bảy
@@ -378,11 +379,14 @@ các tính năng còn lại có quyết định rõ ràng và các cổng nghi�
 - Giai đoạn 4 XONG: phát hiện/mời nhập profile Electron, backup bất biến, nhập
   idempotent, tước khoá BYOK; cổng ba pha **46/46 + 10/10 + 12/12**, chạy trên bản
   sao profile 0.5.1 thật và cài đè installer trong thư mục tạm.
-- Giai đoạn 5 XONG cả hai phần: DPAPI thay `safeStorage`, `settings:get/save` chỉ
+- Giai đoạn 5 XONG cả ba phần: DPAPI thay `safeStorage`, `settings:get/save` chỉ
   trả `hasKey`/`keyMasked`, BYOK nhập lại; AI local pin runtime/model + SHA-256,
   tải resume, `llama-server` loopback. Ba lệnh cài/chạy/dừng trả `{ok, models}`
   như Electron, `start` kèm `baseUrl` loopback; cổng release sau khi sửa hình
-  dạng trả về **50/50 (53/53 khi bật tải thật) + 10/10 + 12/12**, installer NSIS
-  **15,28 MiB** (16.023.921 B) cài mới exit 0 rồi cài đè không đổi dữ liệu.
-- Chưa làm: 6 (trình chiếu/LAN), 7 (updater/ký/phát hành thử), `ai:generate`/setup
-  wizard và các kênh còn lại. 49 kênh còn `unsupported!`.
+  dạng trả về **50/50 (53/53 khi bật tải thật) + 10/10 + 12/12**. Setup wizard
+  `setup:*` chạy máy trạng thái bền vững + smoke-test thật, cổng **51/51 (56/56
+  khi bật tải thật) + 10/10 + 12/12**; installer NSIS dựng từ cây cuối
+  **16.139.500 B** cài mới/cài đè/gỡ sạch trong thư mục tạm, cài đè không đổi
+  hash DB/WAL/SHM.
+- Chưa làm: 6 (trình chiếu/LAN), 7 (updater/ký/phát hành thử), `ai:generate` và
+  các kênh còn lại. 45 kênh còn `unsupported!`.

@@ -89,6 +89,12 @@ pub fn hand_written(command: &str) -> Option<(&'static str, &'static str)> {
         "install_local_ai_model" => ("ai:install-local-model", "install_local_ai_model"),
         "start_local_runtime" => ("ai:start-local-runtime", "start_local_runtime"),
         "stop_local_runtime" => ("ai:stop-local-runtime", "stop_local_runtime"),
+        // Giai đoạn 5: wizard cài đặt AI lần đầu. Bốn kênh này chỉ nhận id model;
+        // trạng thái bền vững nằm ở `<data>/ai-local/setup-state.json`.
+        "get_setup_status" => ("setup:status", "get_setup_status"),
+        "preflight_setup" => ("setup:preflight", "preflight_setup"),
+        "start_setup" => ("setup:start", "start_setup"),
+        "cancel_setup" => ("setup:cancel", "cancel_setup"),
         // Giai đoạn 4: nhập profile Electron. Ba kênh KHÔNG có trong preload
         // Electron — `tests/unit/tauri-contract.test.ts` miễn trừ chúng khỏi phép
         // so với `desktop-contract.json`, và renderer chỉ gọi trên vỏ Tauri.
@@ -242,6 +248,12 @@ async fn dispatch(app: &AppHandle, channel: &str, args: &[Value]) -> Result<Valu
             crate::ai_local::start(app.clone(), args.first().cloned()).await
         }
         "ai:stop-local-runtime" => crate::ai_local::stop(app.clone()).await,
+        // Wizard lần đầu: cùng `args` như lệnh riêng, nên payload sai vẫn bị
+        // `setup.rs` từ chối y như gọi trực tiếp.
+        "setup:status" => crate::setup::status(app),
+        "setup:preflight" => crate::setup::preflight(app.clone(), args.first().cloned()).await,
+        "setup:start" => crate::setup::start(app.clone(), args.first().cloned()).await,
+        "setup:cancel" => crate::setup::cancel(app),
         // Năm kênh ghi của thư viện nhận thẳng tham số renderer gửi (một trò
         // chơi, một id, một mảng id), nên chúng đi qua `args` của cửa chung.
         "library:save-game"
@@ -596,6 +608,36 @@ pub async fn stop_local_runtime(app: AppHandle) -> Result<serde_json::Value, Str
     crate::ai_local::stop(app).await
 }
 
+/// Wizard AI lần đầu: chỉ đọc trạng thái đã lưu và kế hoạch của lần dò gần nhất.
+#[tauri::command]
+pub fn get_setup_status(app: AppHandle) -> Result<serde_json::Value, String> {
+    crate::setup::status(&app)
+}
+
+/// Dò phần cứng/dung lượng và chọn runtime; lỗi trả `blocked`, không reject.
+#[tauri::command]
+pub async fn preflight_setup(
+    app: AppHandle,
+    request: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    crate::setup::preflight(app, request).await
+}
+
+/// Chạy hoặc tiếp tục wizard; lỗi của quá trình trả về trong status.
+#[tauri::command]
+pub async fn start_setup(
+    app: AppHandle,
+    request: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    crate::setup::start(app, request).await
+}
+
+/// Đặt cờ hủy cho lượt đang chạy; byte đã tải được giữ để tải tiếp.
+#[tauri::command]
+pub fn cancel_setup(app: AppHandle) -> Result<serde_json::Value, String> {
+    crate::setup::cancel(&app)
+}
+
 /// Thông tin vỏ đang chạy: renderer và cổng kiểm tra phân biệt được Tauri với
 /// Electron, và biết thư mục dữ liệu nằm ở đâu.
 #[tauri::command]
@@ -636,10 +678,6 @@ unsupported! {
     cancel_ai => "ai:cancel",
     list_ai_tasks => "ai:tasks",
     verify_cpu_runtime => "ai:runtime-verify",
-    get_setup_status => "setup:status",
-    preflight_setup => "setup:preflight",
-    start_setup => "setup:start",
-    cancel_setup => "setup:cancel",
     analyze_lesson => "lesson:analyze",
     classify_lesson_input => "lesson:classify-input",
     convert_lesson_draft => "lesson:convert-draft",
