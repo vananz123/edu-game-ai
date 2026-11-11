@@ -31,7 +31,9 @@ serde_json = "1"
 rusqlite = { version = "0.41", features = ["bundled"] }
 deno_core = { version = "0.413.0", default-features = false, features = ["v8", "reactor-tokio"] }
 deno_error = "0.7.1"
-tokio = { version = "1", features = ["rt", "macros", "process", "sync", "time", "fs", "io-util"] }
+# Giai đoạn 6: phòng chơi mạng nội bộ (LAN Classroom Mode) lắng nghe trên
+# `0.0.0.0` với cổng do hệ điều hành cấp (port 0); cần tính năng `net` của tokio.
+tokio = { version = "1", features = ["rt", "macros", "process", "sync", "time", "fs", "io-util", "net"] }
 # AI local: tải runtime/model từ HTTPS có giới hạn host, giải nén zip runtime.
 # `reqwest` đã nằm trong cây phụ thuộc của Tauri; khai trực tiếp để dùng stream.
 reqwest = { version = "0.13", features = ["stream"] }

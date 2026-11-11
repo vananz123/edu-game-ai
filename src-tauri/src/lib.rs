@@ -10,6 +10,7 @@
 //! Electron — cùng một kho ảnh, cùng luật chỉ phục vụ id do app sinh ra.
 
 pub mod about;
+pub mod ai_generate;
 pub mod ai_http;
 pub mod ai_local;
 pub mod ai_tasks;
@@ -19,6 +20,7 @@ pub mod diagnostics;
 pub mod document;
 pub mod embedded;
 pub mod illustration;
+pub mod lan;
 pub mod lesson;
 pub mod lesson_store;
 pub mod library;

@@ -139,6 +139,15 @@ pub fn hand_written(command: &str) -> Option<(&'static str, &'static str)> {
         "about_download" => ("about:download", "about_download"),
         "about_install" => ("about:install", "about_install"),
         "about_open_releases" => ("about:open-releases", "about_open_releases"),
+        // Kênh legacy ai:generate
+        "generate_game" => ("ai:generate", "generate_game"),
+        // Nhóm kênh mạng nội bộ (LAN Classroom Mode)
+        "lan_start" => ("lan:start", "lan_start"),
+        "lan_stop" => ("lan:stop", "lan_stop"),
+        "lan_assign_team" => ("lan:assign-team", "lan_assign_team"),
+        "lan_begin" => ("lan:begin", "lan_begin"),
+        "lan_next" => ("lan:next", "lan_next"),
+        "lan_finish" => ("lan:finish", "lan_finish"),
         // Giai đoạn 4: nhập profile Electron. Ba kênh KHÔNG có trong preload
         // Electron — `tests/unit/tauri-contract.test.ts` miễn trừ chúng khỏi phép
         // so với `desktop-contract.json`, và renderer chỉ gọi trên vỏ Tauri.
@@ -402,6 +411,13 @@ async fn dispatch(app: &AppHandle, channel: &str, args: &[Value]) -> Result<Valu
         "about:download" => crate::about::download(app),
         "about:install" => crate::about::install(app),
         "about:open-releases" => crate::about::open_releases(args.first().and_then(Value::as_str)),
+        "ai:generate" => crate::ai_generate::generate(app.clone(), args.first().cloned()).await,
+        "lan:start" => crate::lan::start(app.clone(), args.first().cloned()).await,
+        "lan:stop" => crate::lan::stop(app.clone()).await,
+        "lan:assign-team" => crate::lan::assign_team(app.clone(), args.first().cloned()).await,
+        "lan:begin" => crate::lan::begin(app.clone()).await,
+        "lan:next" => crate::lan::next(app.clone()).await,
+        "lan:finish" => crate::lan::finish(app.clone()).await,
         _ => Err(format!("Kênh `{channel}` chưa có thân trong vỏ Tauri")),
     }
 }
@@ -1037,6 +1053,41 @@ pub fn about_open_releases(url: Option<String>) -> Result<serde_json::Value, Str
     crate::about::open_releases(url.as_deref())
 }
 
+#[tauri::command]
+pub async fn generate_game(app: AppHandle, payload: Option<Value>) -> Result<Value, String> {
+    crate::ai_generate::generate(app, payload).await
+}
+
+#[tauri::command]
+pub async fn lan_start(app: AppHandle, payload: Option<Value>) -> Result<Value, String> {
+    crate::lan::start(app, payload).await
+}
+
+#[tauri::command]
+pub async fn lan_stop(app: AppHandle) -> Result<Value, String> {
+    crate::lan::stop(app).await
+}
+
+#[tauri::command]
+pub async fn lan_assign_team(app: AppHandle, payload: Option<Value>) -> Result<Value, String> {
+    crate::lan::assign_team(app, payload).await
+}
+
+#[tauri::command]
+pub async fn lan_begin(app: AppHandle) -> Result<Value, String> {
+    crate::lan::begin(app).await
+}
+
+#[tauri::command]
+pub async fn lan_next(app: AppHandle) -> Result<Value, String> {
+    crate::lan::next(app).await
+}
+
+#[tauri::command]
+pub async fn lan_finish(app: AppHandle) -> Result<Value, String> {
+    crate::lan::finish(app).await
+}
+
 macro_rules! unsupported {
     ($($fn_name:ident => $channel:literal),* $(,)?) => {
         $(
@@ -1053,20 +1104,13 @@ macro_rules! unsupported {
 
 // Phần còn lại của các kênh invoke trong desktop-contract.json; các kênh đã có
 // thân thật nằm ở `hand_written` + `dispatch` phía trên (khởi động, library,
-// project, package, files, settings, AI local, migration). Thứ tự dưới đây theo
-// preload.ts để dễ đối chiếu bằng mắt.
+// project, package, files, settings, AI local, migration, lesson, about, ai:generate, lan).
+// Chỉ còn lại 4 kênh của nhóm presentation.
 unsupported! {
-    generate_game => "ai:generate",
     start_presentation => "presentation:start",
     stop_presentation => "presentation:stop",
     toggle_presentation => "presentation:toggle",
     get_displays => "presentation:displays",
-    lan_start => "lan:start",
-    lan_stop => "lan:stop",
-    lan_assign_team => "lan:assign-team",
-    lan_begin => "lan:begin",
-    lan_next => "lan:next",
-    lan_finish => "lan:finish",
 }
 
 #[cfg(test)]
@@ -1108,7 +1152,9 @@ mod tests {
         // `generate_handler!` đăng ký một lệnh mà không kênh nào gọi tới.
         assert_eq!(super::hand_written("get_library"), Some(("library:get", "get_library")));
         assert_eq!(super::hand_written("shell_info"), Some(("shell:info", "shell_info")));
-        assert_eq!(super::hand_written("lan_start"), None);
+        assert_eq!(super::hand_written("lan_start"), Some(("lan:start", "lan_start")));
+        assert_eq!(super::hand_written("generate_game"), Some(("ai:generate", "generate_game")));
+        assert_eq!(super::hand_written("start_presentation"), None);
     }
 
     #[test]

@@ -2650,6 +2650,47 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 
 **Việc kế tiếp.** Chưa duyệt bắt đầu code. Khi duyệt: dựng khung Tauri v2 + Rust toolchain trong nhánh riêng, chuyển lớp truy cập desktop sang facade TS (kế hoạch mục 4) và làm vòng 1 theo mục 1.
 
+## Giai đoạn 6 (Mạng nội bộ & Legacy AI) — bảy kênh gồm sáu kênh LAN `lan:*` (`lan:start`, `stop`, `assign-team`, `begin`, `next`, `finish`) và kênh legacy `ai:generate` chạy trong vỏ Tauri: server HTTP + RFC 6455 WebSocket trên cổng OS tự cấp, SHA-1 pure Rust, máy trạng thái phòng chơi và phát `lan:state`, sinh nháp offline; unsupported giảm từ 11 xuống 4 (2026-11-11)
+
+**Báo cáo.** Sau khi hoàn tất nhóm Giới thiệu & Cập nhật, nhóm 6 kênh LAN Classroom Mode (`lan:start`, `lan:stop`, `lan:assign-team`, `lan:begin`, `lan:next`, `lan:finish` cùng stream sự kiện `lan:state`) và kênh legacy `ai:generate` được chuyển sang Rust trong vỏ Tauri. Số kênh `unsupported!` giảm từ **11 xuống chỉ còn 4** (toàn bộ 4 kênh còn lại thuộc nhóm `presentation:*`).
+
+**Quyết định.**
+
+1. **Server LAN HTTP + RFC 6455 WebSocket thuần Rust.**
+   - Thay thế server Node Express/Socket.IO bằng HTTP listener và WebSocket RFC 6455 viết trực tiếp bằng `tokio::net` (`tokio` bật feature `net`), không kéo thêm crate bên ngoài. Handshake `Sec-WebSocket-Accept` dùng thuật toán băm SHA-1 chuẩn RFC 3174 viết gọn trong Rust và mã hóa base64 chuẩn.
+   - Server lắng nghe trên địa chỉ `0.0.0.0:0` (cổng do hệ điều hành tự cấp phát động), quét IP giao diện mạng nội bộ riêng (dải 10.x, 172.16-31.x, 192.168.x) và sinh mã phòng 6 ký tự không gây nhầm lẫn (`ABCDEFGHJKLMNPQRSTUVWXYZ23456789`).
+   - Phục vụ trực tiếp tài nguyên web mobile nhúng trong nhị phân (`index.html`, `mobile.css`, `mobile.js`), endpoint kiểm tra `/health`, `/join`, và endpoint WebSocket `/ws`.
+2. **Máy trạng thái phiên chơi mạng nội bộ `LanSessionState` và bảo mật snapshot học sinh.**
+   - Hỗ trợ các thể loại game được chấp nhận (`lan_profile_for`: `quiz`, `scenario`, `treasure-hunt`).
+   - `LanSnapshot` lưu trạng thái chung (phòng, danh sách học sinh, 4 đội mặc định, trạng thái `lobby`/`question`/`finished`, câu hỏi hiện tại, bảng điểm). Đẩy realtime về màn hình desktop của giáo viên qua sự kiện Tauri `app.emit("lan:state", &snapshot)`.
+   - Hàm `phone_snapshot` lọc dữ liệu gửi tới từng học sinh: ẩn đáp án đúng, chỉ trả về nội dung câu hỏi và danh sách phương án, đảm bảo học sinh không thể soi đáp án qua mạng.
+   - Xử lý các thông điệp WebSocket từ điện thoại: `lan:join` (tự cân bằng đội, cấp token), `lan:rejoin`, và `lan:answer` (chấm điểm trắc nghiệm, tình huống, điền từ, kho báu).
+3. **Cầu nối WebSocket trong `src/lan/mobile/mobile.js`.**
+   - Bổ sung hàm `createWsBridge()` tự động phát hiện khi chạy trên trình duyệt thật (không có thư viện `io` Socket.IO) để kết nối trực tiếp tới `/ws` của server Rust. Đồng thời giữ nguyên đường chạy qua `io()` nếu có sẵn để đảm bảo các bài test jsdom hiện có (`lan-mobile.test.ts`) tiếp tục xanh 100%.
+4. **Kênh legacy `ai:generate` sinh nháp câu hỏi ngoại tuyến.**
+   - Cung cấp `generate_offline` theo đúng luật của Electron: phân tách câu theo dấu chấm/ngắt dòng/chấm than/hỏi chấm, lọc độ dài 30–450 ký tự, tối đa 20 câu, gắn nhãn `'Ngoại tuyến'` và `'Cần duyệt'`, provider `'offline-template'`.
+   - Sinh cấu trúc chặng kho báu (`stages`) và câu hỏi đường đua (`raceData`) nếu trò chơi là treasure-hunt hoặc race.
+   - Khi ở chế độ `mode == "local"`, kiểm tra trạng thái AI local qua `ai_local::status(app)` và trả về đúng thông điệp lỗi tiếng Việt nếu chưa sẵn sàng.
+
+**Đánh đổi.**
+- WebSocket RFC 6455 được cài đặt ở mức đủ cho giao thức trao đổi JSON giữa mobile và desktop (hỗ trợ text frame, unmasking frame từ client, ping/pong, close frame). Không hỗ trợ binary frame hay per-message deflate để giữ mã nguồn đơn giản, không phụ thuộc crate nặng.
+- Cổng gán động `0.0.0.0:0` tránh xung đột cổng trên máy giáo viên, nhưng phụ thuộc vào mạng Wi-Fi cục bộ không chặn traffic giữa các thiết bị con (AP isolation).
+
+**Kiểm chứng.**
+- `cargo check --lib` sạch.
+- `cargo test --lib -- --test-threads=1` **145/145** (thêm 9 bài test mới: SHA-1 test vector RFC 3174, RFC 6455 accept key hash, kiểm tra mã phòng, kiểm tra lan profile cho các loại game, mã hoá frame WebSocket, sinh câu hỏi offline rỗng/ngắn/đủ câu, cấu trúc chặng kho báu).
+- `node tests/run-unit.js` **99/99** (bao gồm 4/4 suite LAN: `lan-adapters` 30, `lan-mobile` 14, `lan-podium` 9, `lan-reducer` 18).
+- `node tests/run-unit.js tauri-contract` **11/11**.
+- `npm run check` sạch.
+- `npm run check:embedded` khớp **6125,0 KiB**.
+- `npm run check:renderer-globals` 74/76 script, 1.057 hàm / 8.373 điểm gọi, **0 undefined**.
+
+**Không chứng minh.**
+- Chưa thử kết nối thực tế từ điện thoại vật lý qua sóng Wi-Fi phòng học thật (mới kiểm bằng unit test WebSocket và jsdom).
+- 4 kênh còn `unsupported!` toàn bộ thuộc nhóm `presentation:*` (`presentation:start`, `presentation:stop`, `presentation:toggle`, `presentation:displays`).
+
+**Việc kế tiếp.** Port nhóm `presentation:*` (trình chiếu màn hình phụ/máy chiếu).
+
 ## Giai đoạn 6 (Giới thiệu & Cập nhật) — bảy kênh `about:*` chạy trong vỏ Tauri: thông tin ứng dụng AboutAppInfo, máy trạng thái cập nhật dev-mode/GitHub Releases, mở release page; unsupported giảm từ 18 xuống 11 (2026-11-11)
 
 **Báo cáo.** Sau khi nhóm kênh AI phụ trợ hoàn tất, module `about:*` gồm 7 kênh phục vụ tab "Giới thiệu" trong Cài đặt và máy trạng thái cập nhật (`about:open`, `about:info`, `about:state`, `about:check`, `about:download`, `about:install`, `about:open-releases`) được chuyển sang lệnh Rust thật. Số kênh `unsupported!` giảm từ **18 xuống 11**.

@@ -15,7 +15,48 @@
   var LS_ROOM = 'edugame.lan.room';
   var LS_NAME = 'edugame.lan.name';
 
-  var socket = io({ autoConnect: true, reconnectionDelay: 800, reconnectionDelayMax: 8000 });
+  function createWsBridge() {
+    var handlers = {};
+    var ws = null;
+    var reconnectTimer = null;
+    function connect() {
+      var proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(proto + '//' + window.location.host + '/ws');
+      ws.onopen = function () {
+        if (handlers['connect']) handlers['connect']();
+      };
+      ws.onclose = function () {
+        if (handlers['disconnect']) handlers['disconnect']();
+        if (!reconnectTimer) {
+          reconnectTimer = setTimeout(function () {
+            reconnectTimer = null;
+            connect();
+          }, 1500);
+        }
+      };
+      ws.onmessage = function (event) {
+        try {
+          var msg = JSON.parse(event.data);
+          if (msg && msg.event && handlers[msg.event]) {
+            handlers[msg.event](msg.payload);
+          }
+        } catch (e) {}
+      };
+    }
+    connect();
+    return {
+      on: function (event, fn) { handlers[event] = fn; },
+      emit: function (event, payload) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ event: event, payload: payload }));
+        }
+      }
+    };
+  }
+
+  var socket = (typeof io === 'function')
+    ? io({ autoConnect: true, reconnectionDelay: 800, reconnectionDelayMax: 8000 })
+    : createWsBridge();
   var player = { id: null, token: null, name: '', teamId: '' };
   var latest = null;
   var answeredRound = -1;
