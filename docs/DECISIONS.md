@@ -2650,6 +2650,49 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 
 **Việc kế tiếp.** Chưa duyệt bắt đầu code. Khi duyệt: dựng khung Tauri v2 + Rust toolchain trong nhánh riêng, chuyển lớp truy cập desktop sang facade TS (kế hoạch mục 4) và làm vòng 1 theo mục 1.
 
+## Giai đoạn 6 (Trình chiếu — Presentation Mode) — bốn kênh invoke `presentation:*` (start, stop, toggle, displays) và ba kênh send (request-state, state-update, exit) chạy trong vỏ Tauri: quản lý cửa sổ máy chiếu riêng, chính sách chọn màn hình phụ, đồng bộ hai chiều snapshot; unsupported giảm từ 4 về 0 — ĐẠT 100% PARITY HỢP ĐỒNG DESKTOP (2026-11-11)
+
+**Báo cáo.** Sau khi hoàn tất nhóm Mạng nội bộ và kênh legacy `ai:generate`, nhóm 4 kênh invoke cuối cùng của module Presentation Mode (`presentation:start`, `presentation:stop`, `presentation:toggle`, `presentation:displays`) cùng 3 kênh send (`presentation:request-state`, `presentation:state-update`, `presentation:exit`) được chuyển hoàn toàn sang Rust trong vỏ Tauri. Số kênh `unsupported!` chính thức giảm từ **4 về 0**, hoàn tất toàn bộ 81 kênh invoke và 3 kênh send của hợp đồng desktop (`desktop-contract.json`).
+
+**Quyết định.**
+
+1. **Quản lý danh sách màn hình và chính sách màn hình phụ (`select_preferred_display`, `select_display_for_removal`).**
+   - Đọc danh sách màn hình từ hệ điều hành qua `app.available_monitors()`. Nếu danh sách rỗng (môi trường không màn hình/test), fallback về màn hình chuẩn 1920×1080.
+   - Hàm `select_preferred_display` tự động ưu tiên màn hình phụ (`!primary`), nếu không có màn hình phụ thì dùng màn hình chính (`primary`).
+   - Hook kiểm thử `with_test_display`: khi có biến môi trường `EDUGAME_PRESENTATION_TEST_DISPLAYS=2` và chỉ có 1 màn hình vật lý, tự động sinh màn hình phụ ảo với `id: "test-secondary"`, `primary: false` đặt ở bên phải màn hình chính để các bài test CDP có thể chạy được trên máy đơn màn hình.
+   - Hàm `select_display_for_removal` xử lý tình huống rút dây cáp máy chiếu hoặc đổi độ phân giải: nếu cửa sổ không còn nằm trong bất kỳ màn hình nào, tự động chuyển cửa sổ về màn hình khả dụng (`move`) hoặc đóng an toàn (`close`), không để cửa sổ bị kẹt ngoài không gian hiển thị.
+2. **Cửa sổ trình chiếu riêng biệt qua `WebviewWindowBuilder`.**
+   - Mở cửa sổ mang nhãn `"presentation"`, nạp `presentation/presentation.html` (được đóng gói vào `dist-tauri/presentation/presentation.html` bởi `scripts/build-tauri-frontend.js`).
+   - Cửa sổ chạy ở chế độ toàn màn hình (`fullscreen: true`), không viền (`decorations: false`), luôn nổi trên cùng (`always_on_top: true`), ẩn taskbar (`skip_taskbar: true`).
+   - Nếu cửa sổ đã tồn tại, tự động tái sử dụng: định vị lại theo bounds của màn hình mục tiêu, hiển thị, lấy nét và gửi snapshot hiện tại.
+3. **Đồng bộ hai chiều trạng thái trò chơi (snapshot) và vòng đời.**
+   - Quản lý phiên trong `PresentationSessionState`: lưu `last_session_id`, `last_revision`, `last_state`.
+   - Cửa sổ trình chiếu sau khi nạp gửi `presentation:request-state` qua `send_channel` để xin snapshot mới nhất.
+   - Cửa sổ chính gửi `presentation:state-update` với `revision` tăng dần; Rust kiểm tra `revision > last_revision` và phát sự kiện `presentation:state-sync` tới cửa sổ trình chiếu.
+   - Phím Escape hoặc nút thoát trong cửa sổ trình chiếu gửi `presentation:exit`, đóng cửa sổ trình chiếu và phát sự kiện `presentation:exit` về cửa sổ chính.
+4. **Adapter Tauri kích hoạt `supportsSend: true` và `unsupported!` về 0.**
+   - `desktop-host.ts` chuyển `supportsSend: true` cho `createTauriDesktopAdapter`, mở đường cho toàn bộ các kênh gửi của façade.
+   - Toàn bộ 81 kênh invoke của `desktop-contract.json` đã có thân thật trong `api.rs`. Macro `unsupported!` rỗng.
+   - Cổng kiểm tra `tests/ui/tauri-webview-check.js` chuyển từ kiểm tra `startPresentation` sang kiểm tra kênh lạ không thuộc hợp đồng bị từ chối đọc được qua `invoke_channel`.
+
+**Đánh đổi.**
+- Cửa sổ trình chiếu trong WebView2 chạy trên tiến trình riêng của Tauri; việc đồng bộ dữ liệu giữa giáo viên và học sinh đi qua kênh sự kiện IPC nhẹ `presentation:state-sync` mà không cần chia sẻ bộ nhớ renderer.
+
+**Kiểm chứng.**
+- `cargo check --lib` sạch.
+- `cargo test --lib -- --test-threads=1` **151/151** (thêm 6 test mới: chọn màn hình phụ, kiểm tra màn hình phụ, kiểm tra bao chứa bounds, quyết định khi rút màn hình, hook test display, theo dõi phiên & lọc revision).
+- `node tests/run-unit.js` **99/99**.
+- `node tests/run-unit.js tauri-contract` **11/11**.
+- `npm run check` sạch (`tsc --noEmit`).
+- `npm run check:embedded` khớp **6125,0 KiB**.
+- `npm run check:renderer-globals` 74/76 script, 1.057 hàm / 8.373 điểm gọi, **0 undefined**.
+- `node scripts/build-tauri-frontend.js` đóng gói 205 tệp vào `dist-tauri`.
+
+**Không chứng minh.**
+- Chưa thử nghiệm thực tế với máy chiếu vật lý cắm qua cổng HDMI/DisplayPort thật trên Windows.
+
+**Việc kế tiếp.** Chạy kiểm thử nghiệm thu tổng thể (`npm run tauri:check`) và đo lường hiệu năng khởi động / bộ cài Tauri.
+
 ## Giai đoạn 6 (Mạng nội bộ & Legacy AI) — bảy kênh gồm sáu kênh LAN `lan:*` (`lan:start`, `stop`, `assign-team`, `begin`, `next`, `finish`) và kênh legacy `ai:generate` chạy trong vỏ Tauri: server HTTP + RFC 6455 WebSocket trên cổng OS tự cấp, SHA-1 pure Rust, máy trạng thái phòng chơi và phát `lan:state`, sinh nháp offline; unsupported giảm từ 11 xuống 4 (2026-11-11)
 
 **Báo cáo.** Sau khi hoàn tất nhóm Giới thiệu & Cập nhật, nhóm 6 kênh LAN Classroom Mode (`lan:start`, `lan:stop`, `lan:assign-team`, `lan:begin`, `lan:next`, `lan:finish` cùng stream sự kiện `lan:state`) và kênh legacy `ai:generate` được chuyển sang Rust trong vỏ Tauri. Số kênh `unsupported!` giảm từ **11 xuống chỉ còn 4** (toàn bộ 4 kênh còn lại thuộc nhóm `presentation:*`).

@@ -28,6 +28,7 @@ pub mod migration;
 pub mod package;
 pub mod paths;
 pub mod picker;
+pub mod presentation;
 pub mod secrets;
 pub mod settings;
 pub mod setup;

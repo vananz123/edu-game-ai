@@ -540,7 +540,7 @@ const filesGate = Boolean(process.env.EDUGAME_TAURI_FILES_DOCUMENT);
     out.localAiControl === true, out.localAiControlMsg);
   check('setup: status/preflight đúng hình dạng, id lạ trả blocked, payload hỏng bị từ chối',
     out.setup === true, out.setupMsg);
-  check('kênh chưa port bị từ chối not-supported (không treo)', out.unsupported === true, out.unsupportedMsg);
+  check('kênh lạ không thuộc hợp đồng bị từ chối đọc được (toàn bộ 81 kênh đã port)', out.unsupported === true, out.unsupportedMsg);
   check('lỗi khởi động không che UI (không có trang lỗi nào)', out.boot === true, out.bootMsg);
   const gateDataDir = process.env.EDUGAME_TAURI_DATA_DIR || '';
   // Khi cổng chạy với thư mục tạm (Giai đoạn 4), đường dẫn KHÔNG còn chứa
@@ -956,17 +956,19 @@ const RUNNER = `(async () => {
     out.setupMsg = 'setup:* lỗi: ' + (error && error.message);
   }
 
-  // Một kênh có trả lời nhưng chưa port (ví dụ trình chiếu)
-  // phải từ chối ĐỌC ĐƯỢC. Câu lỗi đi qua cửa chung nên nó phải nêu tên kênh,
-  // không được treo. Khi một kênh được port, đổi phép dò sang kênh còn trống kế tiếp.
+  // Toàn bộ 81 kênh invoke của desktop-contract.json đã có lệnh thật trong vỏ Tauri.
+  // Kiểm tra một kênh lạ không thuộc hợp đồng đi qua cửa chung invoke_channel phải
+  // bị từ chối ĐỌC ĐƯỢC, nêu đúng tên kênh và không bị treo.
   try {
-    await facade.call('startPresentation', {});
+    if (window.__TAURI__ && window.__TAURI__.core) {
+      await window.__TAURI__.core.invoke('invoke_channel', { channel: 'unsupported:channel' });
+    }
     out.unsupported = false;
-    out.unsupportedMsg = 'startPresentation lại trả thành công';
+    out.unsupportedMsg = 'kênh lạ lại trả thành công';
   } catch (error) {
-    const message = String((error && error.message) || '');
-    out.unsupported = Boolean(error && error.code) && /presentation:start/.test(message);
-    out.unsupportedMsg = (error && error.code) + ': ' + message;
+    const message = String((error && error.message) || error || '');
+    out.unsupported = /unsupported:channel/.test(message) && /không thuộc hợp đồng/.test(message);
+    out.unsupportedMsg = message;
   }
 
   // Trang lỗi khởi tạo của bootstrap là dấu hiệu vỏ chưa nối được cầu.

@@ -31,6 +31,7 @@ const ENTRIES = [
   'index.html',
   'renderer',
   'game-engine',
+  'presentation',
 ];
 
 // Tiến trình main/preload của Electron, không có đường tương đương ở vỏ Tauri:

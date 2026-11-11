@@ -38,10 +38,9 @@ function desktopCoreChooseAdapter(root: any): { adapter: any; shell: 'electron' 
   if (!root) return null;
   if (root.__TAURI__ && root.__TAURI__.core) {
     const adoption = createTauriDesktopAdapter(root.__TAURI__, {
-      // Không cấm nhóm nào: sự kiện `onPresentationExit` dùng được, và ba lệnh
-      // `send` chưa port bị adapter từ chối qua `hasChannel` (supportsSend).
+      // Nhóm trình chiếu và toàn bộ các kênh send đã có thân thật trong vỏ Tauri.
       missingGroups: [],
-      supportsSend: false,
+      supportsSend: true,
     });
     if (adoption) return { adapter: adoption, shell: 'tauri' };
   }

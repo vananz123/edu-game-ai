@@ -148,6 +148,11 @@ pub fn hand_written(command: &str) -> Option<(&'static str, &'static str)> {
         "lan_begin" => ("lan:begin", "lan_begin"),
         "lan_next" => ("lan:next", "lan_next"),
         "lan_finish" => ("lan:finish", "lan_finish"),
+        // Nhóm trình chiếu màn hình phụ / máy chiếu (presentation:*)
+        "start_presentation" => ("presentation:start", "start_presentation"),
+        "stop_presentation" => ("presentation:stop", "stop_presentation"),
+        "toggle_presentation" => ("presentation:toggle", "toggle_presentation"),
+        "get_displays" => ("presentation:displays", "get_displays"),
         // Giai đoạn 4: nhập profile Electron. Ba kênh KHÔNG có trong preload
         // Electron — `tests/unit/tauri-contract.test.ts` miễn trừ chúng khỏi phép
         // so với `desktop-contract.json`, và renderer chỉ gọi trên vỏ Tauri.
@@ -418,6 +423,10 @@ async fn dispatch(app: &AppHandle, channel: &str, args: &[Value]) -> Result<Valu
         "lan:begin" => crate::lan::begin(app.clone()).await,
         "lan:next" => crate::lan::next(app.clone()).await,
         "lan:finish" => crate::lan::finish(app.clone()).await,
+        "presentation:start" => crate::presentation::start(app, args.first().cloned()).await,
+        "presentation:stop" => crate::presentation::stop(app, args.first().cloned()).await,
+        "presentation:toggle" => crate::presentation::toggle(app, args.first().cloned()).await,
+        "presentation:displays" => crate::presentation::get_displays(app),
         _ => Err(format!("Kênh `{channel}` chưa có thân trong vỏ Tauri")),
     }
 }
@@ -461,15 +470,35 @@ pub async fn invoke_channel(
 
 /// Cửa chung cho ba kênh `send` của trình chiếu.
 ///
-/// Ba kênh đó chưa có nhánh thật trong vỏ này (giai đoạn 2 theo #251 câu 1),
-/// nên chúng trả lỗi — renderer biết trình chiếu chưa chạy thay vì tưởng đã gửi.
-/// Không nhận `AppHandle` vì chưa nhánh nào cần cửa sổ; thêm khi có thân thật.
+/// Ba kênh này không chờ kết quả: chuyển tới handler của module presentation
+/// để đồng bộ snapshot và vòng đời cửa sổ trình chiếu.
 #[tauri::command]
-pub fn send_channel(channel: String) -> Result<Value, String> {
+pub async fn send_channel(
+    app: AppHandle,
+    channel: String,
+    args: Option<Vec<Value>>,
+) -> Result<Value, String> {
     if !SEND_CHANNELS.contains(&channel.as_str()) {
         return Err(format!("Kênh `{channel}` không phải kênh gửi của trình chiếu"));
     }
-    Err(format!("Kênh `{channel}` chưa có thân trong vỏ Tauri giai đoạn 2"))
+    match channel.as_str() {
+        "presentation:request-state" => {
+            crate::presentation::handle_request_state(&app);
+            Ok(Value::Null)
+        }
+        "presentation:state-update" => {
+            if let Some(state) = args.and_then(|a| a.into_iter().next()) {
+                crate::presentation::handle_state_update(&app, state);
+            }
+            Ok(Value::Null)
+        }
+        "presentation:exit" => {
+            let payload = args.and_then(|a| a.into_iter().next());
+            crate::presentation::handle_exit(&app, payload);
+            Ok(Value::Null)
+        }
+        _ => Err(format!("Kênh `{channel}` chưa có thân trong vỏ Tauri")),
+    }
 }
 
 #[derive(Serialize)]
@@ -1088,6 +1117,26 @@ pub async fn lan_finish(app: AppHandle) -> Result<Value, String> {
     crate::lan::finish(app).await
 }
 
+#[tauri::command]
+pub async fn start_presentation(app: AppHandle, payload: Option<Value>) -> Result<Value, String> {
+    crate::presentation::start(&app, payload).await
+}
+
+#[tauri::command]
+pub async fn stop_presentation(app: AppHandle, payload: Option<Value>) -> Result<Value, String> {
+    crate::presentation::stop(&app, payload).await
+}
+
+#[tauri::command]
+pub async fn toggle_presentation(app: AppHandle, payload: Option<Value>) -> Result<Value, String> {
+    crate::presentation::toggle(&app, payload).await
+}
+
+#[tauri::command]
+pub async fn get_displays(app: AppHandle) -> Result<Value, String> {
+    crate::presentation::get_displays(&app)
+}
+
 macro_rules! unsupported {
     ($($fn_name:ident => $channel:literal),* $(,)?) => {
         $(
@@ -1102,26 +1151,17 @@ macro_rules! unsupported {
     };
 }
 
-// Phần còn lại của các kênh invoke trong desktop-contract.json; các kênh đã có
-// thân thật nằm ở `hand_written` + `dispatch` phía trên (khởi động, library,
-// project, package, files, settings, AI local, migration, lesson, about, ai:generate, lan).
-// Chỉ còn lại 4 kênh của nhóm presentation.
-unsupported! {
-    start_presentation => "presentation:start",
-    stop_presentation => "presentation:stop",
-    toggle_presentation => "presentation:toggle",
-    get_displays => "presentation:displays",
-}
+// Toàn bộ 81 kênh invoke của desktop-contract.json đã có lệnh thật trong vỏ Tauri.
+// unsupported! hiện rỗng.
+unsupported! {}
 
 #[cfg(test)]
 mod tests {
     // Danh sách tên lệnh được sinh lại từ chính file này, nên test ở đây chỉ chốt
     // những bất biến đơn giản; đối chiếu với JSON nằm ở cổng Node.
     #[test]
-    fn unsupported_message_names_the_channel() {
-        let text = super::start_presentation().unwrap_err();
-        assert!(text.contains("presentation:start"), "{text}");
-        assert!(text.contains("giai đoạn 1"), "{text}");
+    fn invoke_channel_rejects_unknown_channel() {
+        assert!(!super::INVOKE_CHANNELS.contains(&"unknown:dummy"));
     }
 
     #[test]
@@ -1154,7 +1194,8 @@ mod tests {
         assert_eq!(super::hand_written("shell_info"), Some(("shell:info", "shell_info")));
         assert_eq!(super::hand_written("lan_start"), Some(("lan:start", "lan_start")));
         assert_eq!(super::hand_written("generate_game"), Some(("ai:generate", "generate_game")));
-        assert_eq!(super::hand_written("start_presentation"), None);
+        assert_eq!(super::hand_written("start_presentation"), Some(("presentation:start", "start_presentation")));
+        assert_eq!(super::hand_written("unknown_command"), None);
     }
 
     #[test]

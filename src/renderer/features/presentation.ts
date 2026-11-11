@@ -7,7 +7,7 @@ let lastRenderedRevision = -1;
 /** Detect whether this window is running in presentation mode. */
 function isPresentationMode() {
   if (typeof location === 'undefined') return false;
-  return new URLSearchParams(location.search).has('presentation');
+  return new URLSearchParams(location.search).has('presentation') || location.pathname.includes('presentation.html');
 }
 
 /** Escape HTML to prevent XSS when rendering user-provided text. */
