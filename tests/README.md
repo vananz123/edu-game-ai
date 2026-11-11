@@ -10,12 +10,11 @@ lesson documents or a real machine profile.
 | `unit/` | `*.test.ts` — plain `node:assert` tests for pure logic and IPC wiring. | `npm test` (compiled to `dist/tests/unit/`) |
 | `helpers/` | Shared fakes imported by `unit/` (e.g. `setup-fake.ts`). | Compiled alongside `unit/` |
 | `ui/` | CDP checks that measure the **real renderer** (geometry, visibility, DOM churn). | Manual — need a running app, see below |
-| `smoke/` | End-to-end flows driven through CDP against the running app. | Manual — need a running app |
-| `manual/` | One-off scripts: benchmarks, A/B geometry dumps, real-model probes, the Electron-Node runner, CSS verifier. | Manual, one at a time |
-| `manual/lib/` | Shared CDP client (`ui-check-lib.js`) required by `ui/ui-play-surface-check.js` and `ui/ui-race-treasure-check.js`. | — |
-| `packaging/` | The P7 clean-machine measurement pack: PowerShell script + one-page checklist for installing the real `.exe` on an offline machine. | `npm run measure:p7` (PowerShell 5.1, no repo/Node needed) |
+| `smoke/` | End-to-end flows driven through CDP against the running app. **Electron-era:** most still assume the old preload API and the deleted `EDUGAME_AI_TEST_DIR` hook; being re-classified per `docs/archive/specs/electron-removal-plan.md` (group C) before deletion or porting. | Manual — need a running app |
+| `manual/` | One-off scripts: benchmarks, A/B geometry dumps, real-model probes, CSS verifier. | Manual, one at a time |
+| `manual/lib/` | Shared CDP client (`ui-check-lib.js`) required by **all** `ui/` and `smoke/` CDP checks and by `ui/tauri-webview-check.js`. Never delete it. | — |
+| `packaging/` | The P7 clean-machine measurement pack: PowerShell script + one-page checklist for installing the real Tauri `.exe` on an offline machine. | `powershell -ExecutionPolicy Bypass -File tests/packaging/p7-offline-install.ps1` (PowerShell 5.1; copy the two files to the pilot machine — no repo, no Node needed) |
 | `fixtures/` | Synthetic lesson / AI-output fixtures used by `smoke/`. | — |
-| `legacy/` | Superseded smokes kept for reference only. Not maintained. | Do not run |
 
 ### `tests/tailieu/` was deleted on purpose (2026-10-25)
 
@@ -47,116 +46,62 @@ number came from a fixture rather than a real document.
 ## Running the automated suite
 
 ```powershell
-npm test          # build + all unit tests (39 suites)
-npx tsc --noEmit  # typecheck only
+npm test          # build + all unit tests
+npm run check     # typecheck only (tsc --noEmit)
 npm run verify:css  # asserts the compiled Tailwind output kept UI rules
+npm run tauri:check # release build + three-phase WebView2 gate (51+10+12)
 ```
 
 ## Running the CDP checks
 
-They talk to a live app over the DevTools protocol, so start the app first:
+They talk to a live app over the DevTools protocol. The app is the **Tauri** shell now:
 
 ```powershell
-npm run build
-npx electron . --remote-debugging-port=9333
+npm run build:tauri            # embedded bundle + dist-tauri
+cargo tauri build              # release binary (once per code change)
+powershell -ExecutionPolicy Bypass -File tests/ui/launch-app.ps1 -Port 9361
 # then, in another terminal:
-node tests/ui/ui-setup-fullscreen-check.js
-node tests/ui/ui-setup-progress-check.js
-node tests/smoke/smoke81.js
+node tests/ui/ui-chrome-icons-check.js 9361
 ```
 
-### Layout / play-surface / grading checks
+`launch-app.ps1` sets `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=<port>`
+and waits until `/json/list` actually contains the app page at `http://tauri.localhost/`
+(port open alone is not enough — WebView2 serves `about:blank` first, same trap the
+`tauri:check` gate documents). `npm run tauri:run` is the equivalent one-liner that also
+pins a throwaway WebView2 profile in `%TEMP%`.
 
-These three are the regression net for the 2026-10-22 UI and grading work. They
-also run unchanged against the **packaged** app — start the built executable
-instead of `npx electron .` to verify what actually ships:
+Individual `ui/` and `smoke/` checks were written against the Electron preload
+(`window.eduGame`); those payloads need migrating to the `desktop.*` façade before their
+assertions can be trusted under Tauri — see the group-C table in
+`docs/archive/specs/electron-removal-plan.md`. Ports differ per script — read the header
+comment of each file; the port is the first argument or comes from `CDP_PORT`.
 
-```powershell
-& "release\win-unpacked\EduGame Studio.exe" --remote-debugging-port=9352
-node tests/ui/nav-hint-check.js 9352             # 15/15 — sidebar rows + "Gợi ý" button
-node tests/ui/ui-play-surface-check.js 9352      # 27/27 — question width, fonts, tools
-node tests/ui/grading-packaged-check.js 9352     # 7/7   — text-answer grading end-to-end
-```
+### Offline play (Phase 5 acceptance)
 
-`ui-play-surface-check.js` measures geometry of a **real** game (it clicks *Chơi* and
-forces `data-fullscreen`); an empty library makes it silently measure stale elements,
-which is how it used to false-pass. Close the app before running `npm run dist:win`,
-otherwise electron-builder fails with `Access is denied` on `d3dcompiler_47.dll`.
+The offline promise is now gated by `npm run tauri:check` itself: phase one plays a saved
+game inside the packaged shell and asserts **zero outbound network requests** with a
+positive control that must fire (a blind counter can't green-light the run), and phase two
+re-opens the app and finds the session on disk. The Electron-era `offline-packaged-check.js`
+and `grading-packaged-check.js` went out with the Electron removal; text-answer grading
+regression coverage is on the port list.
 
-Ports differ per script — read the header comment of each file; the port is the
-first argument or comes from `CDP_PORT`.
+### Update / install path (was: `quitAndInstall()` on the packaged binary, #212)
 
-### Offline / packaged check (Phase 5 acceptance)
-
-`ui/offline-packaged-check.js` is the acceptance step that proves the offline
-promise on the **packaged** app: it plays one synthetic game per template, asserts
-the stage illustration renders from inline SVG, and counts every outbound request
-(fetch / XHR / WebSocket / beacon / subresource) made while doing so.
-
-```powershell
-$env:EDUGAME_USER_DATA = "$env:TEMP\eg-pkg-check-$PID"   # fresh data dir
-& "release\win-unpacked\EduGame Studio.exe" --remote-debugging-port=9380
-node tests/ui/offline-packaged-check.js 9380   # 11/11
-```
-
-Two traps, both measured the hard way on 2026-10-24:
-
-1. **`EDUGAME_USER_DATA` must be a fresh directory.** `src/main.ts` pins the
-   userData path from that variable, so `--user-data-dir` is ignored. Reusing the
-   directory reuses the same renderer document, and any prototypes a previous run
-   patched survive — which produced hours of bogus "the wrapper is blind" results.
-2. **The positive control must call `window.fetch`, never the saved original.**
-   Calling `origFetch.call(...)` bypasses the wrapper and always looks blind.
-
-The run fails loudly if the control does not fire, so a `0 attempts` result can
-never be trusted on its own.
-
-### Install path: `quitAndInstall()` on the packaged binary (#212)
-
-`ui/packaged-install-check.js` is the only gate that lets the app actually **install**
-something. It never runs a real product installer: it compiles a harmless NSIS dummy with
-the cached `makensis.exe` (`RequestExecutionLevel user`, `SilentInstall silent`, an
-`InstallDir` baked into `%TEMP%\eg-install\target\<scenario>`, and a Section that writes its
-own `$CMDLINE`), serves it from a loopback `generic` feed with a correct `sha512`/`size`, and
-drives the real `release/210/win-unpacked` binary through four scenarios.
-
-```powershell
-npm run build
-npm run check:packaged-install            # all four scenarios, 61/61
-npm run check:packaged-install-direct     # or one at a time (same port 9399)
-```
-
-| scenario | feed says | `resources/elevate.exe` | what gets measured |
-|---|---|---|---|
-| `direct` | no admin flag | absent | the branch the **published** feed actually takes: `<pending\…9.9.9.exe> --updated --force-run`, app quits by itself |
-| `elevate` | `isAdminRightsRequired: true` in the `files` entry | **fake** | `elevate.exe <installer> --updated --force-run`, exactly one `Executing:`, and no installer log ⇒ the fake did not forward |
-| `no-elevate` | admin flag | **absent** | `ENOENT`, nothing installs, the app still quits, and there is no `shell.openPath` fallback |
-| `badhash` | wrong `sha512` | absent | full download, then refusal — never `downloaded`, install button stays hidden, and the error is classified `checksum` with its own Vietnamese card (#218 closed debt #212) |
-
-Three traps, all paid for:
-
-1. **`isAdminRightsRequired` belongs inside the `files` entry, not at top level.**
-   `DownloadedUpdateHelper.js` reads `fileInfo.info.isAdminRightsRequired` and `Provider.js`
-   sets `info` to exactly one element of `files`, so a top-level flag is skipped **silently**
-   and the elevate branch never runs. Write fake manifests against the library's read path.
-2. **Never derive the updater cache dir from `dirname(spawned)`.** In the elevate branch the
-   first token is `resources\elevate.exe`, so that path is the app's own `resources` — and the
-   cleanup step would then delete `app.asar` from the measured binary. Read the
-   `updater cache dir:` line from the updater's own log and only accept a directory named
-   `eg-install-probe`.
-3. **`ELECTRON_RUN_AS_NODE` inherited from the shell turns the `.exe` into plain Node** — it
-   exits 0 immediately and the measurement silently means nothing. The gate and the P7 script
-   both clear it.
-
-The gate also asserts the invariant that a run must not change `git status` at all (snapshot
-taken before, diffed after — so uncommitted work from the current task is not a false red),
-that `resources/` returns to `--dir` state, and that no `Setup-9.9.9` copy is left in the tree.
+The `packaged-install-check.js` / `packaged-feed-check.js` gates drove `electron-updater`
+against a dummy NSIS feed. They are deleted — the product has no `electron-updater` any
+more, and the Tauri updater flow does not exist yet. When it is built (migration plan
+giai đoạn 6, item 5), its acceptance criteria are the ones those gates encoded: feed trust,
+signature/checksum verification (`sha512`/size), version comparison, install that cannot
+brick the app or its data, and rollback on failure. What *is* measured today, per release:
+clean install / overlay install / uninstall of the real NSIS bundle in a temp dir
+(`scripts/build-tauri-release.js` protocol) and **P7** below for a real clean machine.
 
 ### P7: measuring a clean machine that installs the real `.exe` (#212)
 
 The other half of P7 cannot be measured on a dev box, so it is measured by whoever sits at the
 pilot machine: `packaging/P7-OFFLINE-INSTALL.md` is the one-page checklist and
-`packaging/p7-offline-install.ps1` is the self-logging script (`npm run measure:p7`).
+`packaging/p7-offline-install.ps1` is the self-logging script (copy both files to the machine;
+there is no npm script for it and none is needed).
 It records M1…M12 — machine, disk/RAM, elevation state, antivirus, installer bytes +
 SHA-256 + `Get-AuthenticodeSignature`, `Zone.Identifier`, install duration **plus distinct
 `consent.exe` PIDs** (a count of UAC prompts, not an opinion), install dir contents,

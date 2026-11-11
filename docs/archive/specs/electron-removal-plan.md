@@ -16,7 +16,7 @@
 | 1. Backend Electron | Hoàn tất | `src/main.ts`, `src/preload.ts` và các handler IPC Electron đã được thay bằng Rust/Tauri. Storage, settings, AI local, setup, lesson, LAN và trình chiếu có implementation Rust tương ứng. |
 | 2. Adapter renderer | Hoàn tất | Renderer dùng desktop façade và adapter Tauri; HTML trình chiếu nạp adapter Tauri. Kiểm tra contract không còn channel chưa hỗ trợ trong bộ contract hiện hành. |
 | 3. Dependency/build | Hoàn tất | Manifest và lockfile không còn Electron, electron-builder, electron-updater hay better-sqlite3; build frontend và release đi qua scripts Tauri. |
-| 4. Tests và công cụ | Đang rà soát | Unit suite hiện hành không còn phụ thuộc Electron ABI và bỏ qua artifact biên dịch mồ côi không có source test. `tests/smoke/` còn CDP smokes lịch sử; `tests/ui/packaged-feed-check.js` và `packaged-install-check.js` vẫn kiểm thử `electron-updater`/electron-builder; `tests/manual/` còn một số runner nhắm Electron. Không còn package script gọi các packaged checks, nhưng cần xếp loại từng file trước khi xóa, chuyển hoặc giữ ở khu vực lịch sử. |
+| 4. Tests và công cụ | Đang thực thi nhóm B/C | Đã xóa 14 file chết (5 `tests/legacy/`, 5 smoke bám hook `EDUGAME_AI_TEST_DIR` đã bị gỡ, 4 check `*-packaged-*` drives electron-updater/app.asar); viết lại `launch-app.ps1` mở binary Tauri qua `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` — `launch:ui` còn dùng được. 20 smoke + ~50 ui check còn lại cần map/port theo bảng bên dưới. |
 | 5. Tài liệu và phát hành | Đang hoàn tất | README, Architecture, Project Map và Agent Handoff đã được cập nhật theo Tauri. Tiếp tục tìm các chỉ dẫn Electron còn lại ở docs hiện hành; giữ mô tả Electron chỉ trong lịch sử/migration. Chưa nghiệm thu bộ cài trên máy Windows sạch. |
 
 ## Các thay đổi đã hoàn tất trong lần tiếp tục gần nhất
@@ -47,9 +47,9 @@ Không khôi phục những file này trong quá trình dọn. Các phần thay 
 
 | File hiện còn | Kế hoạch | Điều kiện trước khi xóa |
 |---|---|---|
-| `tests/ui/launch-app.ps1` | Xóa runner khởi chạy `node_modules\.bin\electron.cmd`; thay script npm `launch:ui` bằng quy trình chạy Tauri phù hợp hoặc gỡ script nếu không còn dùng. | Liệt kê các UI check còn gọi script này; giữ một đường chạy Tauri có hướng dẫn rõ ràng. |
-| `tests/ui/packaged-feed-check.js`, `tests/ui/packaged-install-check.js` | Gỡ khỏi luồng kiểm tra hiện hành rồi xóa hoặc chuyển tài liệu lịch sử cần thiết. Hai file kiểm tra `electron-updater`/electron-builder, không kiểm thử updater Tauri. | Tìm hết caller và lưu các yêu cầu kiểm thử có giá trị (feed, checksum, install/update) thành tiêu chí Tauri nếu sản phẩm còn cần. |
-| `tests/packaging/p7-offline-install.ps1`, `tests/packaging/P7-OFFLINE-INSTALL.md` | Không dùng nguyên trạng cho Tauri; thay bằng checklist nghiệm thu installer Tauri offline, rồi xóa hai file cũ khi kết quả P7 Electron đã được lưu ở handoff/lịch sử. | Có checklist mới dùng đúng installer Tauri, profile app-data, upgrade/uninstall và offline gameplay. Không xóa mục tiêu nghiệm thu offline. |
+| `tests/ui/launch-app.ps1` | **ĐÃ THỰC HIỆN 2026-11-11 — không xóa mà viết lại**: mở `src-tauri/target/release/edugame-studio-tauri.exe` với `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=<port>` + `WEBVIEW2_USER_DATA_FOLDER`, chờ đúng trang `tauri.localhost` trong `/json/list` (cổng mở sớm với `about:blank` — cùng bẫy cổng gate ghi nhận). `launch:ui` giữ nguyên và dùng được. | Đã chứng minh: CDP lên sau 1 s; `ui-chrome-icons-check.js` kết nối và chạy 6 kiểm (3 PASS / 3 FAIL — 3 FAIL là việc PORT giả định preload/data cũ, không phải launcher). |
+| `tests/ui/packaged-feed-check.js`, `tests/ui/packaged-install-check.js` | **ĐÃ THỰC HIỆN 2026-11-11 — xóa cùng `grading-packaged-check.js` và `offline-packaged-check.js`** (bốn file đều drive `release\win-unpacked\EduGame Studio.exe` / electron-updater / app.asar — các mục tiêu không còn tồn tại; git history giữ lại toàn bộ). | Tiêu chí còn giá trị (feed, checksum, install/update) đã chép vào mục "Update / install path" của `tests/README.md` và Giai đoạn 6 mục 5 của kế hoạch di trú. Offline play nay do `tauri:check` pha một + hai bảo đảm. |
+| `tests/packaging/p7-offline-install.ps1`, `tests/packaging/P7-OFFLINE-INSTALL.md` | **SỬA KẾ HOẠCH — không thay bằng checklist mới:** script chỉ ASCII và installer-agnostic (nhận `-Installer`/`-AppExe` tham số, không API Electron nào); đã đổi ví dụ + đường mặc định sang `EduGame Studio (Tauri)_0.5.1_x64-setup.exe` / `edugame-studio-tauri.exe` và md điểm danh số 0.5.1 (16.403.858 B, SHA-256 `7AE04626…FD6E`). P7 **vẫn MỞ** cho tới khi có số máy sạch thật. | Bốn câu hỏi thật (máy sạch, SmartScreen, AV, offline) giữ nguyên giá trị; phần biện minh electron-updater viết lại theo cổng Tauri hiện hành. |
 
 ### C. Rà soát rồi mới quyết định — CDP/UI tests và smoke lịch sử
 
@@ -58,6 +58,31 @@ Không khôi phục những file này trong quá trình dọn. Các phần thay 
 3. **`tests/manual/`:** xét từng runner, không xóa cả thư mục. Ưu tiên rà `persistence71.js`, `real-ai-e2e.js`, `real-ai-status.js`, `install-local-model.js`, `lan-smoke.js`, `tiny-cdp.js` và `manual/lib/ui-check-lib.js`; giữ/port phép thử AI, persistence, LAN còn phù hợp, chỉ xóa harness Electron khi đã có phương án Tauri. Các benchmark/model scripts không phụ thuộc desktop tiếp tục được giữ.
 4. **`tests/legacy/`:** xem `smoke-ui.js`, `smoke2.js`, `smoke60.js`, `smoke-p1.js`, `smoke-delete.js`. Xóa nếu không có giá trị ngoài git history; nếu giữ, README phải nói rõ chúng không được chạy bởi test suite và chỉ để tham khảo.
 5. **Helper dùng chung:** chỉ xóa `tests/ui/lib/screenshot-capture.js` hoặc `tests/manual/lib/ui-check-lib.js` sau khi `rg` xác nhận không còn consumer cần giữ. Không xóa helper chỉ vì tên/thư mục có liên quan đến CDP.
+
+### C1. Kết quả phân loại và hành động (2026-11-11)
+
+Kiểm kê toàn bộ `tests/ui` (55 mục, gồm 4 packaged checks), `tests/smoke` (25),
+`tests/manual` (24 gồm lib), `tests/legacy` (5), `tests/packaging` (2).
+
+| Hành động | tests/ui | tests/smoke | tests/manual | tests/legacy | tests/packaging |
+|---|---|---|---|---|---|
+| **ĐÃ XÓA 2026-11-11 (14 tệp)** | 4 (`grading-/offline-packaged-check`, `packaged-feed/install-check` — drive `release\win-unpacked` + electron-updater đã bị gỡ) | 5 (`smoke64/65/67/76/77` — bám hook `EDUGAME_AI_TEST_DIR` không còn trong src) | 0 | 5 (header tự khai "RETIRED — do NOT run", zero caller) | 0 |
+| **ĐÃ PORT 2026-11-11 (2 tệp)** | 1 (`launch-app.ps1` viết lại thành launcher Tauri — thay vì xóa như B1 từng dự kiến) | 0 | 0 | 0 | 1 (`P7-OFFLINE-INSTALL.md` neo lại số 0.5.1) |
+| **PORT (còn lại)** | ~48 phép kiểm: ~23 chỉ cần launcher mới; ~25 có payload gọi `window.eduGame` phải chuyển sang façade `desktop.*` | 15 CDP-era cần map hành vi vào Rust/Tauri gate trước khi xóa | 4 (`install-local-model`, `real-ai-e2e`, `real-ai-status`, `scene-preview`) | 0 | ps1 P7 giữ, chờ số máy sạch |
+| **KEEP-AS-IS** | `tauri-webview-check.js`; `ui/lib/screenshot-capture.js` (6 consumer, 5 đang KEEP/PORT); `manual/lib/ui-check-lib.js` | 5 còn lại chờ rà | ~14 (benchmarks/probes/`lan-smoke`/`lan-qr-verify`/`tiny-cdp`/`verify-css`; 6 script tailieu fail-ENOENT **giữ theo chính sách** §`tests/tailieu` README) | — | — |
+
+Quy tắc cứng rút ra: **không bao giờ xóa `tests/manual/lib/ui-check-lib.js`** (`tauri-webview-check.js`
+require nó qua `connect()` đã nhận `http://tauri.localhost/`).
+
+Năm phép kiểm **không được xóa trước khi có bản port** (hành vi còn giá trị, chi phí dựng lại cao):
+`ui-lesson-chat-check.js` (luồng chat giáo án #182–184 end-to-end, ~1.400 dòng),
+`ui-typography-readability-check.js` (sàn accessibility #181), `ui-input-routing-check.js` (dán ngân
+hàng câu hỏi bỏ qua AI, §3 nhánh B), `ui-presentation-check.js` (cửa sổ máy chiếu — phải viết lại
+theo mô hình cửa sổ Tauri của 39f38db), `ui-draft-guard-check.js` (chốt "giáo viên không mất dữ liệu";
+hook `will-prevent-unload` Electron không còn tương đương trực tiếp).
+
+Cổng cho từng lượt PORT: chạy launcher mới trên cổng tự chọn → chạy phép kiểm → nếu FAIL thì xác định
+đó là giả định preload/data cũ hay hồi quy thật của Tauri, rồi sửa check hoặc mở issue.
 
 ### D. Soát mã TypeScript cũ — không phải đợt xóa hàng loạt
 

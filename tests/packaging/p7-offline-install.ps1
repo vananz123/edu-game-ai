@@ -14,9 +14,9 @@
 # Cach dung (buoc 1 - chi do may, khong cai gi):
 #   powershell -ExecutionPolicy Bypass -File p7-offline-install.ps1
 # Buoc 2 - co bo cai that (wizard hien ra, lam dung nhu giao vien lam):
-#   powershell -ExecutionPolicy Bypass -File p7-offline-install.ps1 -Installer "$env:USERPROFILE\Downloads\EduGame-Studio-Setup-0.4.1.exe"
+#   powershell -ExecutionPolicy Bypass -File p7-offline-install.ps1 -Installer "`"$env:USERPROFILE\Downloads\EduGame Studio (Tauri)_0.5.1_x64-setup.exe`""
 # Buoc 3 - do luc choi (app tu mo, tu tat sau PlaySeconds):
-#   ... -AppExe "$env:LOCALAPPDATA\Programs\EduGame Studio\EduGame Studio.exe" -PlaySeconds 120
+#   ... -AppExe "`"$env:LOCALAPPDATA\Programs\EduGame Studio (Tauri)\edugame-studio-tauri.exe`"" -PlaySeconds 120
 #
 # Dau ra: %TEMP%\eg-p7\p7-log.txt (dong co moc gio) va p7-results.md (bang so). Script
 # khong tu bam nut nao trong wizard; no chi canh thoi gian va dem.
@@ -171,14 +171,14 @@ if ($Installer -ne '' -and (Test-Path -LiteralPath $Installer)) {
   Record 'M7' 'Cai dat' 'BO QUA (khong co -Installer)'
 }
 
-$installDir = Join-Path $env:LOCALAPPDATA 'Programs\EduGame Studio'
+$installDir = Join-Path $env:LOCALAPPDATA 'Programs\EduGame Studio (Tauri)'
 if ($AppExe -ne '') { $installDir = Split-Path -Parent $AppExe }
 if (Test-Path -LiteralPath $installDir) {
   $files = @(Get-ChildItem -LiteralPath $installDir -Recurse -File -ErrorAction SilentlyContinue)
   $bytes = 0
   foreach ($f in $files) { $bytes += $f.Length }
-  $exeGuess = Join-Path $installDir 'EduGame Studio.exe'
-  $ver = 'khong tim thay "EduGame Studio.exe"'
+  $exeGuess = Join-Path $installDir 'edugame-studio-tauri.exe'
+  $ver = 'khong tim thay "edugame-studio-tauri.exe"'
   if (Test-Path -LiteralPath $exeGuess) {
     $vi = (Get-Item -LiteralPath $exeGuess).VersionInfo
     $ver = 'ProductVersion=' + $vi.ProductVersion + ' FileVersion=' + $vi.FileVersion

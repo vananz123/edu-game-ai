@@ -2650,6 +2650,20 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 
 **Việc kế tiếp.** Chưa duyệt bắt đầu code. Khi duyệt: dựng khung Tauri v2 + Rust toolchain trong nhánh riêng, chuyển lớp truy cập desktop sang facade TS (kế hoạch mục 4) và làm vòng 1 theo mục 1.
 
+## Dọn Electron nhóm B/C (2026-11-11) — launcher Tauri thay vì xóa `launch-app.ps1`; xóa 14 tệp chết; P7 giữ và neo số 0.5.1
+
+**Bối cảnh.** Hợp đồng desktop đã parity 100 % (`unsupported!` = 0). `docs/archive/specs/electron-removal-plan.md` nhóm B/C yêu cầu phân loại từng tệp test còn sót trước khi xóa, với cứ liệu caller và cổng xác minh.
+
+**Quyết định.**
+1. `tests/ui/launch-app.ps1` **được viết lại thành launcher Tauri** thay vì xóa như B1 dự kiến: mở `src-tauri/target/release/edugame-studio-tauri.exe` với `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=<port>`, `WEBVIEW2_USER_DATA_FOLDER` tạm, chờ đúng trang `tauri.localhost` trong `/json/list` (cổng mở sớm với `about:blank` — cùng bẫy gate đã ghi). `launch:ui` giữ nguyên và còn dùng được; 8 header `ui-*` tham chiếu tệp này không phải sửa.
+2. Xóa **14 tệp chết đã xác minh** (không khôi phục; git history giữ): `tests/legacy/` cả 5 (tự khai RETIRED, zero caller), `smoke64/65/67/76/77` (phụ thuộc hook `EDUGAME_AI_TEST_DIR` đã bị gỡ khỏi src — `rg` xác nhận 0 tham chiếu), `grading-packaged-check.js`, `offline-packaged-check.js`, `packaged-feed-check.js`, `packaged-install-check.js` (drive `release\win-unpacked` + electron-updater — mục tiêu không còn; tiêu chí feed/checksum/install chép vào `tests/README.md`, sẽ là nghiệm thu của updater Tauri giai đoạn 6 mục 5).
+3. **Sửa kế hoạch với P7:** `p7-offline-install.ps1` là installer-agnostic (chỉ nhận `-Installer`/`-AppExe`), không API Electron nào — KEEP, đổi ví dụ + đường mặc định sang bundle Tauri; `P7-OFFLINE-INSTALL.md` neo số 0.5.1 (16.403.858 B, SHA-256 `7AE04626959338D8AE6A963B0FF593ED24151F3C9F686F09AE7A942CFB16FD6E`). P7 vẫn MỞ tới khi có số máy sạch thật.
+4. Bảng phân loại C1 (số liệu từng tệp + 5 phép kiểm cấm xóa trước khi port + quy tắc bất-di-`ui-check-lib`) ghi trong kế hoạch; PORT ~48 ui + 15 smoke + 4 manual để các lượt sau.
+
+**Kiểm chứng.** `npm run check` sạch · `npm test` **95/95** · `check:renderer-globals` 73/75, 0 undefined · launcher test thật: CDP lên sau 1 s, `ui-chrome-icons-check.js 9361` chạy 6 kiểm 3 PASS/3 FAIL (FAIL = giả định cũ của check, việc PORT; không phải launcher). Rust không đổi.
+
+**Không chứng minh / chưa làm.** 20 smoke và ~48 ui check chưa port; các FAIL của `ui-chrome-icons-check` chưa phân loại hồi-quy-thật vs giả-định-cũ từng cái; nhóm D (soát `unload-guard.ts`, `setup-ipc.ts`) chưa rà.
+
 ## Giai đoạn 6 (Trình chiếu — Presentation Mode) — bốn kênh invoke `presentation:*` (start, stop, toggle, displays) và ba kênh send (request-state, state-update, exit) chạy trong vỏ Tauri: quản lý cửa sổ máy chiếu riêng, chính sách chọn màn hình phụ, đồng bộ hai chiều snapshot; unsupported giảm từ 4 về 0 — ĐẠT 100% PARITY HỢP ĐỒNG DESKTOP (2026-11-11)
 
 **Báo cáo.** Sau khi hoàn tất nhóm Mạng nội bộ và kênh legacy `ai:generate`, nhóm 4 kênh invoke cuối cùng của module Presentation Mode (`presentation:start`, `presentation:stop`, `presentation:toggle`, `presentation:displays`) cùng 3 kênh send (`presentation:request-state`, `presentation:state-update`, `presentation:exit`) được chuyển hoàn toàn sang Rust trong vỏ Tauri. Số kênh `unsupported!` chính thức giảm từ **4 về 0**, hoàn tất toàn bộ 81 kênh invoke và 3 kênh send của hợp đồng desktop (`desktop-contract.json`).
