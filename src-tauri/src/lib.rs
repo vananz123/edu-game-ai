@@ -11,6 +11,7 @@
 
 pub mod ai_http;
 pub mod ai_local;
+pub mod ai_tasks;
 pub mod api;
 pub mod base64;
 pub mod diagnostics;

@@ -586,6 +586,84 @@ pub fn selected_model_id(app: &AppHandle) -> String {
         .unwrap_or_else(|| MODELS[0].id.to_string())
 }
 
+/// Xác minh runtime CPU/Vulkan hiện có trên máy (kênh `ai:runtime-verify`).
+pub fn verify_runtime(app: &AppHandle) -> Result<Value, String> {
+    let data = paths::data_dir(app)?;
+    let runtime_d = runtime_dir(&data);
+    let mut files = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&runtime_d) {
+        for entry in entries.flatten() {
+            files.push(entry.file_name().to_string_lossy().to_string());
+        }
+    }
+    files.sort();
+
+    let lower: Vec<String> = files.iter().map(|name| name.to_ascii_lowercase()).collect();
+    let gpu_markers: Vec<String> = lower
+        .into_iter()
+        .filter(|name| {
+            name.contains("cuda")
+                || name.contains("cublas")
+                || name.contains("cudart")
+                || name.contains("vulkan")
+                || name.contains("nccl")
+                || name.contains("cudnn")
+        })
+        .collect();
+
+    let selected_backend = requested_backend(app);
+    let spec = runtime_spec(selected_backend);
+    let installed_backend = detect_installed_backend(&runtime_d);
+    let executable_path = runtime_executable_in(&runtime_d);
+    let installed = executable_path.is_some();
+    let backend_mismatch = installed && installed_backend != Some(selected_backend);
+
+    let gpu_layers = if selected_backend == "vulkan" { 99 } else { 0 };
+
+    let mut args = vec![
+        "--n-gpu-layers".to_string(),
+        gpu_layers.to_string(),
+    ];
+    if selected_backend == "vulkan" {
+        args.push("--device".to_string());
+        args.push("Vulkan0".to_string());
+    }
+    args.push("--parallel".to_string());
+    args.push("1".to_string());
+    args.push("--ctx-checkpoints".to_string());
+    args.push("0".to_string());
+
+    let note = if backend_mismatch {
+        format!(
+            "Thư mục runtime đang chứa bản {}, nhưng cấu hình chọn {}. Bấm “Cài model” (hoặc chạy lại AI local) để thay bằng bản đã chọn.",
+            installed_backend.unwrap_or("không rõ"),
+            selected_backend
+        )
+    } else {
+        String::new()
+    };
+
+    Ok(json!({
+        "cpuOnly": selected_backend == "cpu",
+        "backend": format!("llama.cpp b11681 ({})", selected_backend.to_uppercase()),
+        "selectedBackend": selected_backend,
+        "installedBackend": installed_backend,
+        "backendMismatch": backend_mismatch,
+        "gpuVendor": "unknown",
+        "gpuNames": Vec::<String>::new(),
+        "expectedVersion": "b11681",
+        "expectedDownloadUrl": spec.download_url,
+        "expectedSizeBytes": spec.size_bytes,
+        "executablePath": executable_path.map(|p| p.to_string_lossy().to_string()),
+        "installed": installed,
+        "files": files,
+        "gpuMarkers": gpu_markers,
+        "gpuBackendShipped": !gpu_markers.is_empty(),
+        "args": args,
+        "note": note
+    }))
+}
+
 /// Tải runtime (nếu chưa có đúng backend) và model, rồi ghi lựa chọn vào settings.
 pub async fn install(app: AppHandle, requested: Option<Value>) -> Result<Value, String> {
     let model = model_from_value(requested)?;

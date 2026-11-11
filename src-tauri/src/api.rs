@@ -125,6 +125,10 @@ pub fn hand_written(command: &str) -> Option<(&'static str, &'static str)> {
         "list_lesson_chats" => ("lesson:chats", "list_lesson_chats"),
         "get_lesson_chat" => ("lesson:chat-get", "get_lesson_chat"),
         "delete_lesson_chats" => ("lesson:chat-delete", "delete_lesson_chats"),
+        // Nhóm AI bổ sung: kiểm tra kết nối provider, tác vụ và xác minh runtime
+        "test_ai_provider" => ("ai:test-provider", "test_ai_provider"),
+        "list_ai_tasks" => ("ai:tasks", "list_ai_tasks"),
+        "verify_cpu_runtime" => ("ai:runtime-verify", "verify_cpu_runtime"),
         // Cùng `AiGate`: bật cờ huỷ của lượt đang chờ HTTP trong Rust.
         "cancel_ai" => ("ai:cancel", "cancel_ai"),
         // Giai đoạn 4: nhập profile Electron. Ba kênh KHÔNG có trong preload
@@ -374,6 +378,15 @@ async fn dispatch(app: &AppHandle, channel: &str, args: &[Value]) -> Result<Valu
         "migration:detect" => crate::migration::detect(app).await,
         "migration:browse" => crate::migration::browse(app).await,
         "migration:import" => crate::migration::import(app).await,
+        "ai:test-provider" => {
+            let payload = args.first().cloned().unwrap_or(Value::Null);
+            crate::settings::test_provider(app.clone(), payload).await
+        }
+        "ai:tasks" => {
+            let payload = args.first().cloned().unwrap_or(Value::Null);
+            crate::ai_tasks::list_tasks(app, payload)
+        }
+        "ai:runtime-verify" => crate::ai_local::verify_runtime(app),
         _ => Err(format!("Kênh `{channel}` chưa có thân trong vỏ Tauri")),
     }
 }
@@ -950,6 +963,30 @@ pub fn shell_info(app: AppHandle) -> Result<ShellInfo, String> {
     })
 }
 
+/// Kiểm tra kết nối tới nhà cung cấp AI.
+#[tauri::command]
+pub async fn test_ai_provider(
+    app: AppHandle,
+    payload: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    crate::settings::test_provider(app, payload.unwrap_or(serde_json::Value::Null)).await
+}
+
+/// Danh sách tác vụ AI đang chạy và lịch sử.
+#[tauri::command]
+pub fn list_ai_tasks(
+    app: AppHandle,
+    payload: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    crate::ai_tasks::list_tasks(&app, payload.unwrap_or(serde_json::Value::Null))
+}
+
+/// Xác minh runtime CPU/Vulkan hiện có trên máy.
+#[tauri::command]
+pub fn verify_cpu_runtime(app: AppHandle) -> Result<serde_json::Value, String> {
+    crate::ai_local::verify_runtime(&app)
+}
+
 macro_rules! unsupported {
     ($($fn_name:ident => $channel:literal),* $(,)?) => {
         $(
@@ -969,9 +1006,6 @@ macro_rules! unsupported {
 // project, package, files, settings, AI local, migration). Thứ tự dưới đây theo
 // preload.ts để dễ đối chiếu bằng mắt.
 unsupported! {
-    test_ai_provider => "ai:test-provider",
-    list_ai_tasks => "ai:tasks",
-    verify_cpu_runtime => "ai:runtime-verify",
     generate_game => "ai:generate",
     start_presentation => "presentation:start",
     stop_presentation => "presentation:stop",

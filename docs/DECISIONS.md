@@ -2650,6 +2650,35 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 
 **Việc kế tiếp.** Chưa duyệt bắt đầu code. Khi duyệt: dựng khung Tauri v2 + Rust toolchain trong nhánh riêng, chuyển lớp truy cập desktop sang facade TS (kế hoạch mục 4) và làm vòng 1 theo mục 1.
 
+## Giai đoạn 5 (nhóm AI) — ba kênh `ai:test-provider`, `ai:tasks`, `ai:runtime-verify` chạy trong vỏ Tauri: probe provider qua DPAPI + timeout 30s, kho tác vụ SQLite + bộ nhớ sống, verify runtime llama.cpp; unsupported giảm từ 21 xuống 18 (2026-11-11)
+
+**Báo cáo.** Sau khi luồng giáo án và chat hoàn tất, ba kênh phụ trợ AI còn lại gồm `ai:test-provider` (kiểm tra kết nối provider trong Cài đặt), `ai:tasks` (danh sách tác vụ AI trong Task Manager), và `ai:runtime-verify` (kiểm tra runtime CPU/Vulkan) được chuyển sang lệnh Rust thật. Số kênh `unsupported!` giảm từ **21 xuống 18**. Phép dò kênh chưa port của cổng nghiệm thu chuyển sang `startPresentation`/`presentation:start`.
+
+**Quyết định.**
+
+1. **`ai:test-provider` thực thi probe kết nối mạng và local an toàn.**
+   - Với provider `local`: kiểm tra trạng thái máy chủ AI local, thăm dò cổng loopback.
+   - Với provider online (`gemini`, `openai`, `custom`...): chỉ cho phép HTTPS hoặc loopback, giải mã API key qua DPAPI Windows (`secrets::unprotect_secret`), gửi request POST `/chat/completions` (timeout 30s, non-streaming, max_tokens 16) với schema chuẩn.
+   - Phân loại lỗi HTTP chi tiết theo mã lỗi định danh (`classify_http_error`): 401/403 -> `AI_AUTH`, 402/quota -> `AI_QUOTA`, 404/model -> `AI_MODEL_NOT_FOUND`, 429 -> `AI_RATE_LIMIT`, 5xx -> `AI_PROVIDER_HTTP`.
+   - Lưu kết quả kiểm tra vào `settings.json` (thời điểm kiểm tra, trạng thái ok/error, mã lỗi) và trả về `{ ok, providerId, model, durationMs, detail, settings }`.
+2. **`ai:tasks` kết hợp bộ nhớ sống và lưu trữ SQLite.**
+   - Quản lý các tác vụ AI đang thực thi trong bộ nhớ (`LIVE_TASKS`) và lưu trữ lịch sử tác vụ vào bảng `ai_tasks` của SQLite (`lesson-store:ai-task-save` và `ai-task-list`), tự động tỉa tối đa 30 tác vụ gần nhất giống như Electron.
+   - Hỗ trợ huỷ tác vụ theo `requestId` qua `lesson:cancel`.
+3. **`ai:runtime-verify` kiểm tra layout runtime llama.cpp.**
+   - Kiểm tra thư mục `<data>/ai-local/runtime/llama.cpp-b11681`.
+   - Nhận diện backend đã cài: phát hiện thư viện Vulkan (`ggml-vulkan.dll`) hoặc CPU.
+   - So sánh với `requested_backend` trong cấu hình máy/cài đặt và trả về cấu trúc `{ installed, backend, requestedBackend, matchesRequested, canRun, flags, note }`.
+
+**Đánh đổi.**
+- `test-provider` gửi request trực tiếp từ Rust qua `reqwest` thay vì qua V8 nhúng (tiết kiệm tài nguyên và kiểm tra chính xác kết nối mạng của shell desktop).
+- Chưa mở rộng custom ca-certificates ngoài cấu hình hệ thống Windows.
+
+**Kiểm chứng.** `cargo test --lib -- --test-threads=1` **133/133** (3 test mới cho phân loại lỗi HTTP, lưu/đọc/tỉa task SQLite, định dạng ID task) · `node tests/run-unit.js` **99/99** · `node tests/run-unit.js tauri-contract` **11/11** · `npm run check` sạch · `npm run check:embedded` khớp **6125,0 KiB** · `npm run check:renderer-globals` 74/76 script, 1.057 hàm / 8.373 điểm gọi, **0 undefined**.
+
+**Không chứng minh.** Chưa test provider online với API key thật (chỉ test qua loopback mock và unit test phân loại lỗi). Chưa test Vulkan trên GPU rời vật lý. 18 kênh còn `unsupported!` (`ai:generate`, 4 `presentation:*`, 7 `about:*`, 6 `lan:*`).
+
+**Việc kế tiếp.** Port các kênh còn lại (presentation, about, lan, hoặc `ai:generate`).
+
 ## Giai đoạn 5 (chat giáo án) — bốn kênh `lesson:chat-send`/`chats`/`chat-get`/`chat-delete` chạy trong vỏ Tauri: V8 giữ luật `runLessonChatTurn`, Rust giữ kho chat SQLite, khoá `AiGate`, HTTP và huỷ; unsupported giảm từ 25 xuống 21 (2026-11-11)
 
 **Báo cáo.** Sau khi luồng sinh nội dung hoàn tất, bốn kênh chat giáo án (`lesson:chat-send`, `lesson:chats`, `lesson:chat-get`, `lesson:chat-delete`) là mắt xích cuối của module `lesson:*`. Bốn kênh này được port trọn vẹn sang vỏ Tauri: V8 giữ nguyên hàm `runLessonChatTurn` của Electron, Rust giữ kho chat SQLite, điều phối khoá single-flight `AiGate`, đọc tài liệu/lịch sử, gửi HTTP và huỷ theo `requestId`. Số kênh `unsupported!` giảm từ **25 xuống 21**. Phép dò kênh chưa port của cổng nghiệm thu chuyển sang `testAiProvider`/`ai:test-provider`.

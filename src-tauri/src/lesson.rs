@@ -920,7 +920,9 @@ pub fn cancel(app: &AppHandle, request_id: &str) -> Result<Value, String> {
     let gate = app
         .try_state::<AiGate>()
         .ok_or_else(|| error("AI_CONFIG: hàng đợi AI chưa sẵn sàng. Hãy khởi động lại ứng dụng."))?;
-    Ok(json!({ "ok": gate.cancel(request_id) }))
+    let cancelled = gate.cancel(request_id);
+    crate::ai_tasks::cancel_task_by_request(app, request_id);
+    Ok(json!({ "ok": cancelled }))
 }
 
 // ---------------------------------------------------------------------------

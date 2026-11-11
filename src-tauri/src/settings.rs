@@ -538,6 +538,333 @@ pub fn workflow_provider(
     })
 }
 
+pub(crate) fn record_provider_test(
+    app: &AppHandle,
+    provider_id: &str,
+    ok: bool,
+    code: Option<&str>,
+) -> Result<(), String> {
+    let mut raw = paths::read_json(app, paths::SETTINGS_FILE, default_settings())?;
+    let ai = raw.get_mut("ai").and_then(Value::as_object_mut);
+    let Some(ai) = ai else { return Ok(()); };
+    let providers = ai.entry("providers").or_insert_with(|| json!({})).as_object_mut();
+    let Some(providers) = providers else { return Ok(()); };
+    let entry = providers.entry(provider_id).or_insert_with(|| json!({})).as_object_mut();
+    let Some(entry) = entry else { return Ok(()); };
+
+    entry.insert("lastTestAt".to_string(), Value::String(crate::library::now()));
+    entry.insert("lastTestOk".to_string(), Value::Bool(ok));
+    if ok {
+        entry.remove("lastTestCode");
+    } else {
+        entry.insert("lastTestCode".to_string(), Value::String(code.unwrap_or("UNKNOWN").to_string()));
+    }
+
+    paths::write_json(app, paths::SETTINGS_FILE, &raw)
+}
+
+fn classify_http_error(status: u16, body: &str) -> (&'static str, String) {
+    let text = body.to_ascii_lowercase();
+    let model_missing = text.contains("model_not_found")
+        || text.contains("model not found")
+        || text.contains("does not exist")
+        || text.contains("not found")
+        || text.contains("unsupported model")
+        || text.contains("unknown model")
+        || text.contains("invalid model");
+
+    if status == 402 || text.contains("insufficient_quota") || text.contains("billing") || text.contains("exceeded your current quota") {
+        (
+            "AI_QUOTA",
+            "Tài khoản nhà cung cấp đã hết hạn mức hoặc chưa bật thanh toán. Hãy kiểm tra trang quản lý của nhà cung cấp.".to_string(),
+        )
+    } else if status == 401 || status == 403 {
+        (
+            "AI_AUTH",
+            "API key không hợp lệ, bị thu hồi hoặc không có quyền dùng model này. Hãy nhập lại khoá trong Cài đặt.".to_string(),
+        )
+    } else if status == 404 || (status == 400 && model_missing) {
+        (
+            "AI_MODEL_NOT_FOUND",
+            "Nhà cung cấp không có model này (hoặc điểm cuối sai). Hãy kiểm tra tên model và base URL trong Cài đặt.".to_string(),
+        )
+    } else if status == 429 {
+        (
+            "AI_RATE_LIMIT",
+            "Nhà cung cấp đang giới hạn số yêu cầu. Hãy đợi một lát rồi thử lại.".to_string(),
+        )
+    } else if status >= 500 {
+        (
+            "AI_PROVIDER_HTTP",
+            format!("Nhà cung cấp báo lỗi máy chủ (HTTP {status}). Hãy thử lại sau."),
+        )
+    } else if status == 400 {
+        (
+            "AI_PROVIDER_HTTP",
+            "Nhà cung cấp từ chối yêu cầu (HTTP 400). Hãy kiểm tra model và nội dung gửi đi.".to_string(),
+        )
+    } else {
+        (
+            "AI_PROVIDER_HTTP",
+            format!("Nhà cung cấp AI trả về lỗi HTTP {status}. Kiểm tra endpoint, model và cấu hình xác thực."),
+        )
+    }
+}
+
+async fn run_local_probe(_app: &AppHandle, local: &ai_local::LocalFacts) -> Result<(), (&'static str, String)> {
+    if !local.running {
+        return Err((
+            "AI_NOT_RUNNING",
+            "AI local chưa chạy. Hãy nhấn “Tổng hợp với AI trên máy” để mở cửa sổ AI local · llama.cpp, chọn model đã tải đầy đủ rồi nhấn “Bắt đầu chạy”.".to_string(),
+        ));
+    }
+    let Some(base_url) = local.base_url.as_deref() else {
+        return Err((
+            "AI_NOT_RUNNING",
+            "AI local chưa có địa chỉ kết nối hợp lệ.".to_string(),
+        ));
+    };
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| ("AI_CONNECTION", format!("Không tạo được HTTP client: {e}")))?;
+
+    let body = json!({
+        "model": "local",
+        "messages": [{ "role": "user", "content": "Trả lời đúng một từ: OK" }],
+        "max_tokens": 16,
+        "temperature": 0
+    });
+
+    let resp = client
+        .post(format!("{}/chat/completions", base_url.trim_end_matches('/')))
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .body(body.to_string())
+        .send()
+        .await
+        .map_err(|e| ("AI_CONNECTION", format!("Không kết nối được tới AI local: {e}")))?;
+
+    if !resp.status().is_success() {
+        return Err((
+            "AI_CONNECTION",
+            format!("AI local trả về lỗi HTTP {}.", resp.status()),
+        ));
+    }
+
+    let text = resp
+        .text()
+        .await
+        .map_err(|e| ("AI_CONNECTION", format!("Không đọc được phản hồi từ AI local: {e}")))?;
+
+    let json: Value = serde_json::from_str(&text)
+        .map_err(|e| ("AI_INVALID_JSON", format!("Không đọc được JSON từ AI local: {e}")))?;
+
+    let content = json
+        .pointer("/choices/0/message/content")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim();
+
+    if content.is_empty() {
+        return Err((
+            "AI_EMPTY",
+            "AI local nhận được yêu cầu nhưng trả về nội dung rỗng. Hãy kiểm tra model.".to_string(),
+        ));
+    }
+
+    Ok(())
+}
+
+async fn run_online_probe(
+    _app: &AppHandle,
+    definition: &ProviderDef,
+    resolved: &Value,
+    raw_settings: &Value,
+) -> Result<(), (&'static str, String)> {
+    let base_url = resolved
+        .get("baseUrl")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or("");
+    let model = resolved
+        .get("model")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or("");
+
+    if base_url.is_empty() || model.is_empty() {
+        return Err((
+            "AI_CONFIG",
+            format!("{}: thiếu base URL hoặc tên model.", definition.label),
+        ));
+    }
+
+    let parsed_url = reqwest::Url::parse(base_url).map_err(|_| {
+        (
+            "AI_CONFIG",
+            "API Base URL không hợp lệ.".to_string(),
+        )
+    })?;
+
+    let is_loopback = matches!(
+        parsed_url.host_str(),
+        Some("localhost" | "127.0.0.1" | "[::1]")
+    );
+
+    if parsed_url.scheme() != "https" && !(parsed_url.scheme() == "http" && is_loopback) {
+        return Err((
+            "AI_CONFIG",
+            "API online phải dùng HTTPS.".to_string(),
+        ));
+    }
+
+    let api_key = if resolved.get("hasKey") == Some(&Value::Bool(true)) {
+        raw_settings
+            .pointer(&format!("/ai/providers/{}/apiKeyEncrypted", definition.id))
+            .and_then(Value::as_str)
+            .and_then(|enc| secrets::unprotect_secret(enc).ok())
+            .unwrap_or_default()
+    } else {
+        String::new()
+    };
+
+    if definition.requires_key && api_key.is_empty() {
+        return Err((
+            "AI_CONFIG",
+            format!("{}: chưa có API key. Hãy nhập khoá rồi kiểm tra lại.", definition.label),
+        ));
+    }
+
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| ("AI_NETWORK", format!("{}: không tạo được HTTP client ({e}).", definition.label)))?;
+
+    let body = json!({
+        "model": model,
+        "temperature": 0,
+        "max_tokens": 8,
+        "messages": [{ "role": "user", "content": "Trả lời đúng một từ: OK" }]
+    });
+
+    let endpoint = format!("{}/chat/completions", base_url.trim_end_matches('/'));
+    let mut req = client
+        .post(&endpoint)
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .body(body.to_string());
+
+    if !api_key.is_empty() {
+        req = req.header(reqwest::header::AUTHORIZATION, format!("Bearer {api_key}"));
+    }
+
+    let resp = req.send().await.map_err(|e| {
+        (
+            "AI_NETWORK",
+            format!("{}: không kết nối được ({e}).", definition.label),
+        )
+    })?;
+
+    let status = resp.status();
+    let text = resp.text().await.unwrap_or_default();
+    if !status.is_success() {
+        let (code, msg) = classify_http_error(status.as_u16(), &text);
+        return Err((code, format!("{}: {msg}", definition.label)));
+    }
+
+    let data: Value = serde_json::from_str(&text).map_err(|e| {
+        (
+            "AI_INVALID_JSON",
+            format!("{}: phản hồi không phải JSON hợp lệ ({e}).", definition.label),
+        )
+    })?;
+
+    let content = data
+        .pointer("/choices/0/message/content")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim();
+
+    if content.is_empty() {
+        return Err((
+            "AI_EMPTY",
+            format!(
+                "{} nhận được yêu cầu nhưng trả về nội dung rỗng. Hãy kiểm tra model.",
+                definition.label
+            ),
+        ));
+    }
+
+    Ok(())
+}
+
+pub async fn test_provider(app: AppHandle, payload: Value) -> Result<Value, String> {
+    let provider_id = payload
+        .get("providerId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or("");
+    if provider_id.is_empty() {
+        return Err("[AI_CONFIG] Thiếu mã nhà cung cấp AI.".to_string());
+    }
+    let Some(definition) = provider_def(provider_id) else {
+        return Err("[AI_CONFIG] Nhà cung cấp AI không tồn tại.".to_string());
+    };
+
+    let started_at = std::time::Instant::now();
+    let raw = paths::read_json(&app, paths::SETTINGS_FILE, default_settings())?;
+    let local = ai_local::local_facts(&app);
+    let view = public_view_with_local(&raw, &local);
+    let resolved = view
+        .pointer("/ai/providers")
+        .and_then(Value::as_array)
+        .and_then(|arr| find_provider(arr, provider_id))
+        .cloned();
+
+    let Some(resolved) = resolved else {
+        return Err("[AI_CONFIG] Nhà cung cấp AI không tồn tại trong cấu hình.".to_string());
+    };
+
+    let model = resolved
+        .get("model")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+
+    let test_result = if provider_id == "local" {
+        run_local_probe(&app, &local).await
+    } else {
+        run_online_probe(&app, definition, &resolved, &raw).await
+    };
+
+    let duration_ms = started_at.elapsed().as_millis() as u64;
+
+    match test_result {
+        Ok(()) => {
+            let _ = record_provider_test(&app, provider_id, true, None);
+            let updated = get(&app)?;
+            let detail = if provider_id == "local" {
+                "Model local trả lời được."
+            } else {
+                "Nhà cung cấp trả lời được yêu cầu thử nhỏ."
+            };
+            Ok(json!({
+                "ok": true,
+                "providerId": provider_id,
+                "model": model,
+                "durationMs": duration_ms,
+                "detail": detail,
+                "settings": updated
+            }))
+        }
+        Err((code, message)) => {
+            let _ = record_provider_test(&app, provider_id, false, Some(code));
+            Err(format!("[{code}] {message}"))
+        }
+    }
+}
+
 fn provider_status(
     definition: &ProviderDef,
     has_key: bool,
@@ -592,7 +919,7 @@ fn provider_status(
 mod tests {
     use serde_json::{json, Value};
 
-    use super::{default_settings, merge, public_view};
+    use super::{classify_http_error, default_settings, merge, public_view};
 
     fn provider<'a>(view: &'a Value, id: &str) -> &'a Value {
         view["ai"]["providers"]
@@ -723,5 +1050,17 @@ mod tests {
         assert!(merged["ai"]["providers"]["gemini"].get("apiKey").is_none());
         let text = serde_json::to_string(&merged).unwrap();
         assert!(!text.contains("synthetic-leak"));
+    }
+
+    #[test]
+    fn classify_http_error_categorizes_status_codes_and_bodies() {
+        assert_eq!(classify_http_error(401, "").0, "AI_AUTH");
+        assert_eq!(classify_http_error(403, "").0, "AI_AUTH");
+        assert_eq!(classify_http_error(429, "insufficient_quota").0, "AI_QUOTA");
+        assert_eq!(classify_http_error(402, "").0, "AI_QUOTA");
+        assert_eq!(classify_http_error(404, "").0, "AI_MODEL_NOT_FOUND");
+        assert_eq!(classify_http_error(400, "model not found").0, "AI_MODEL_NOT_FOUND");
+        assert_eq!(classify_http_error(429, "too many requests").0, "AI_RATE_LIMIT");
+        assert_eq!(classify_http_error(500, "internal error").0, "AI_PROVIDER_HTTP");
     }
 }

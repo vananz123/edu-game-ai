@@ -68,6 +68,8 @@ pub fn dispatch(
             connection,
             args.first().and_then(Value::as_i64).unwrap_or(50),
         ),
+        "ai-task-save" => ai_task_save(connection, args.first().cloned().unwrap_or(Value::Null)),
+        "ai-task-list" => ai_task_list(connection, args.first().cloned().unwrap_or(Value::Null)),
         other => Err(DbError::Schema(format!("op `lesson-store:{other}` chưa có"))),
     }
 }
@@ -1180,6 +1182,163 @@ fn generation_cache_prune(connection: &Connection, keep: i64) -> Result<Value, D
     Ok(json!(changed as i64))
 }
 
+fn ai_task_save(connection: &Connection, payload: Value) -> Result<Value, DbError> {
+    let object = payload.as_object().ok_or_else(|| {
+        invalid("STORE_INVALID_TASK", "Tác vụ AI phải là một đối tượng JSON.")
+    })?;
+    let task_id = object
+        .get("taskId")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| invalid("STORE_INVALID_TASK", "Thiếu taskId của tác vụ AI."))?;
+    let request_id = object
+        .get("requestId")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| invalid("STORE_INVALID_TASK", "Thiếu requestId của tác vụ AI."))?;
+    let kind = object
+        .get("kind")
+        .and_then(Value::as_str)
+        .unwrap_or("analyze");
+    let project_id = object
+        .get("projectId")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty());
+    let document_id = object
+        .get("documentId")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty());
+    let label = object
+        .get("label")
+        .and_then(Value::as_str)
+        .unwrap_or("Tác vụ AI");
+    let state = object
+        .get("state")
+        .and_then(Value::as_str)
+        .unwrap_or("running");
+    let progress = object
+        .get("progress")
+        .and_then(Value::as_str)
+        .unwrap_or("running");
+    let error_code = object
+        .get("errorCode")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty());
+    let error_message = object
+        .get("errorMessage")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty());
+    let result_summary = object
+        .get("resultSummary")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty());
+    let started_at = object
+        .get("startedAt")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let finished_at = object
+        .get("finishedAt")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty());
+
+    connection
+        .execute(
+            "INSERT INTO ai_tasks \
+             (task_id,request_id,kind,project_id,document_id,label,state,progress,error_code,error_message,result_summary,started_at,finished_at) \
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13) \
+             ON CONFLICT(task_id) DO UPDATE SET \
+               state=excluded.state, progress=excluded.progress, error_code=excluded.error_code, \
+               error_message=excluded.error_message, result_summary=excluded.result_summary, \
+               finished_at=excluded.finished_at",
+            params![
+                task_id,
+                request_id,
+                kind,
+                project_id,
+                document_id,
+                label,
+                state,
+                progress,
+                error_code,
+                error_message,
+                result_summary,
+                started_at,
+                finished_at,
+            ],
+        )
+        .map_err(db_error)?;
+
+    // Giữ tối đa 30 tác vụ gần nhất như Electron (AI_TASK_HISTORY_LIMIT)
+    let _ = connection.execute(
+        "DELETE FROM ai_tasks WHERE task_id NOT IN (\
+           SELECT task_id FROM ai_tasks ORDER BY started_at DESC LIMIT 30\
+         )",
+        [],
+    );
+
+    Ok(json!({ "ok": true }))
+}
+
+fn ai_task_list(connection: &Connection, payload: Value) -> Result<Value, DbError> {
+    let limit = payload
+        .get("limit")
+        .and_then(Value::as_i64)
+        .unwrap_or(50)
+        .clamp(1, 200);
+    let offset = payload
+        .get("offset")
+        .and_then(Value::as_i64)
+        .unwrap_or(0)
+        .max(0);
+
+    let total: i64 = connection
+        .query_row("SELECT COUNT(*) FROM ai_tasks", [], |r| r.get(0))
+        .map_err(db_error)?;
+
+    let mut stmt = connection
+        .prepare(
+            "SELECT task_id,request_id,kind,project_id,document_id,label,state,progress,\
+                    error_code,error_message,result_summary,started_at,finished_at \
+             FROM ai_tasks \
+             ORDER BY started_at DESC \
+             LIMIT ?1 OFFSET ?2",
+        )
+        .map_err(db_error)?;
+
+    let rows = stmt
+        .query_map(params![limit, offset], |row| {
+            Ok(json!({
+                "taskId": row.get::<_, String>(0)?,
+                "requestId": row.get::<_, String>(1)?,
+                "kind": row.get::<_, String>(2)?,
+                "projectId": row.get::<_, Option<String>>(3)?,
+                "documentId": row.get::<_, Option<String>>(4)?,
+                "label": row.get::<_, String>(5)?,
+                "state": row.get::<_, String>(6)?,
+                "progress": row.get::<_, String>(7)?,
+                "errorCode": row.get::<_, Option<String>>(8)?,
+                "errorMessage": row.get::<_, Option<String>>(9)?,
+                "resultSummary": row.get::<_, Option<String>>(10)?,
+                "startedAt": row.get::<_, String>(11)?,
+                "finishedAt": row.get::<_, Option<String>>(12)?,
+                "restored": true,
+            }))
+        })
+        .map_err(db_error)?;
+
+    let mut history = Vec::new();
+    for row in rows {
+        if let Ok(item) = row {
+            history.push(item);
+        }
+    }
+
+    Ok(json!({
+        "history": history,
+        "total": total
+    }))
+}
+
 // ---------------------------------------------------------------------------
 // Kiểm dữ liệu — cùng câu chữ của `lesson-store.ts`
 // ---------------------------------------------------------------------------
@@ -1942,5 +2101,34 @@ mod tests {
             .expect("delete again"),
             json!(false)
         );
+    }
+
+    #[test]
+    fn ai_tasks_save_list_and_prune() {
+        let (data, connection) = store();
+        let task = json!({
+            "taskId": "task_1",
+            "requestId": "req_1",
+            "kind": "analyze",
+            "label": "Phân tích giáo án",
+            "state": "completed",
+            "progress": "ready",
+            "startedAt": "2026-11-11T00:00:00.000Z",
+            "finishedAt": "2026-11-11T00:01:00.000Z",
+            "resultSummary": "6 mục tiêu"
+        });
+        assert_eq!(
+            dispatch(&connection, data.path(), "ai-task-save", &[task]).expect("save"),
+            json!({ "ok": true })
+        );
+
+        let list = dispatch(&connection, data.path(), "ai-task-list", &[json!({ "limit": 10 })]).expect("list");
+        let total = list["total"].as_i64().expect("total");
+        assert_eq!(total, 1);
+        let history = list["history"].as_array().expect("history");
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0]["taskId"], "task_1");
+        assert_eq!(history[0]["restored"], true);
+        assert_eq!(history[0]["resultSummary"], "6 mục tiêu");
     }
 }
