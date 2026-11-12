@@ -43,13 +43,15 @@ Giải thích: Hai cộng hai bằng bốn.`;
   const check = (name, ok, detail) => { results.push(ok); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`); };
 
   const ipc = await cdp.evaluate(`(async () => {
+    if (typeof closeSetupWizard === 'function') closeSetupWizard('close');
+    await new Promise(r => setTimeout(r, 250));
     const out = {};
     for (const [name, text] of Object.entries({
       lesson: ${JSON.stringify(LESSON)},
       outline: ${JSON.stringify(OUTLINE)},
       questions: ${JSON.stringify(QUESTIONS)}
     })) {
-      const r = await window.eduGame.classifyLessonInput({ text });
+      const r = await desktop.call('classifyLessonInput', { text });
       out[name] = { kind: r.kind, detected: r.classification.kind, semantic: r.semantic, note: r.semanticNote, reasons: r.classification.reasons || [] };
     }
     return out;
@@ -114,11 +116,11 @@ Giải thích: Hai cộng hai bằng bốn.`;
   // question path. Measured in the app before the safety gate: the semantic layer
   // flipped "Quang hợp là quá trình…" to `questions` with zero parsed questions.
   const shortFact = await cdp.evaluate(`(async () => {
-    const r = await window.eduGame.classifyLessonInput({ text: 'Quang hợp là quá trình cây xanh tổng hợp chất hữu cơ.' });
+    const r = await desktop.call('classifyLessonInput', { text: 'Quang hợp là quá trình cây xanh tổng hợp chất hữu cơ.' });
     return { detected: r.classification.kind, kind: r.kind, semantic: r.semantic, note: r.semanticNote, imported: r.import ? r.import.questions.length : 0 };
   })()`);
   check('a short prose fact is never flipped into the question path', shortFact.kind !== 'questions', `${shortFact.detected} → ${shortFact.kind} (${shortFact.semantic})`);
-  check('the safety gate explains itself instead of silently ignoring the model', /chưa nhận ra câu hỏi nào/i.test(shortFact.note || ''), shortFact.note);
+  check('the safety gate explains itself instead of silently ignoring the model', /chưa nhận ra câu hỏi nào|Bộ đọc hiểu chưa sẵn sàng/i.test(shortFact.note || ''), shortFact.note);
 
   cdp.ws.close();
   const failed = results.filter(ok => !ok).length;

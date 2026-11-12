@@ -148,9 +148,24 @@ function treasureGame() {
 
   // ---------------------------------------------------------------- race ----
   const race = await evaluate(`(async () => {
+    const guardUntil = Date.now() + 4000;
+    let quietSince = 0;
+    while (Date.now() < guardUntil) {
+      const later = document.querySelector('[data-migration-action="later"]');
+      if (later) later.click();
+      if (document.querySelector('#modalRoot .setup-fullscreen') && typeof closeSetupWizard === 'function') closeSetupWizard('close');
+      const busy = document.querySelector('[data-migration-backdrop], #modalRoot .setup-fullscreen');
+      if (!busy) {
+        if (!quietSince) quietSince = Date.now();
+        if (Date.now() - quietSince > 700) break;
+      } else {
+        quietSince = 0;
+      }
+      await new Promise(r => setTimeout(r, 100));
+    }
     ${CONTRAST_FN}
     const game = ${JSON.stringify(raceGame())};
-    const saved = await window.eduGame.saveGame(game);
+    const saved = await desktop.call('saveGame', game);
     playGame(saved);
     await new Promise(r => setTimeout(r, 700));
     if (document.documentElement.dataset.fullscreen !== '1') document.querySelector('[data-play-fullscreen]')?.click();
@@ -225,7 +240,7 @@ function treasureGame() {
   // ------------------------------------------------------------ treasure ----
   const treasure = await evaluate(`(async () => {
     const game = ${JSON.stringify(treasureGame())};
-    const saved = await window.eduGame.saveGame(game);
+    const saved = await desktop.call('saveGame', game);
     document.querySelector('[data-play-close]')?.click();
     await new Promise(r => setTimeout(r, 400));
     playGame(saved);

@@ -16,7 +16,7 @@
 | 1. Backend Electron | Hoàn tất | `src/main.ts`, `src/preload.ts` và các handler IPC Electron đã được thay bằng Rust/Tauri. Storage, settings, AI local, setup, lesson, LAN và trình chiếu có implementation Rust tương ứng. |
 | 2. Adapter renderer | Hoàn tất | Renderer dùng desktop façade và adapter Tauri; HTML trình chiếu nạp adapter Tauri. Kiểm tra contract không còn channel chưa hỗ trợ trong bộ contract hiện hành. |
 | 3. Dependency/build | Hoàn tất | Manifest và lockfile không còn Electron, electron-builder, electron-updater hay better-sqlite3; build frontend và release đi qua scripts Tauri. |
-| 4. Tests và công cụ | Đang thực thi nhóm B/C | Đã xóa 14 file chết (5 `tests/legacy/`, 5 smoke bám hook `EDUGAME_AI_TEST_DIR` đã bị gỡ, 4 check `*-packaged-*` drives electron-updater/app.asar); viết lại `launch-app.ps1` mở binary Tauri qua `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` — `launch:ui` còn dùng được. 20 smoke + ~50 ui check còn lại cần map/port theo bảng bên dưới. |
+| 4. Tests và công cụ | Đang thực thi nhóm B/C | Đã xóa 14 file chết (5 `tests/legacy/`, 5 smoke bám hook `EDUGAME_AI_TEST_DIR` đã bị gỡ, 4 check `*-packaged-*` drives electron-updater/app.asar); viết lại `launch-app.ps1` mở binary Tauri qua `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` — `launch:ui` còn dùng được. Sau batch 2 (tiếp 7): 48/48 check ui cần port đã port, 0 lời gọi payload `window.eduGame` trong `tests/ui`; còn 15 smoke + 4 script manual + nhóm D cần map/retire theo bảng bên dưới. |
 | 5. Tài liệu và phát hành | Đang hoàn tất | README, Architecture, Project Map và Agent Handoff đã được cập nhật theo Tauri. Tiếp tục tìm các chỉ dẫn Electron còn lại ở docs hiện hành; giữ mô tả Electron chỉ trong lịch sử/migration. Chưa nghiệm thu bộ cài trên máy Windows sạch. |
 
 ## Các thay đổi đã hoàn tất trong lần tiếp tục gần nhất
@@ -68,11 +68,12 @@ Kiểm kê toàn bộ `tests/ui` (55 mục, gồm 4 packaged checks), `tests/smo
 |---|---|---|---|---|---|
 | **ĐÃ XÓA 2026-11-11 (14 tệp)** | 4 (`grading-/offline-packaged-check`, `packaged-feed/install-check` — drive `release\win-unpacked` + electron-updater đã bị gỡ) | 5 (`smoke64/65/67/76/77` — bám hook `EDUGAME_AI_TEST_DIR` không còn trong src) | 0 | 5 (header tự khai "RETIRED — do NOT run", zero caller) | 0 |
 | **ĐÃ PORT 2026-11-11 (2 tệp)** | 1 (`launch-app.ps1` viết lại thành launcher Tauri — thay vì xóa như B1 từng dự kiến) | 0 | 0 | 0 | 1 (`P7-OFFLINE-INSTALL.md` neo lại số 0.5.1) |
-| **PORT (còn lại)** | ~48 phép kiểm: ~23 chỉ cần launcher mới; ~25 có payload gọi `window.eduGame` phải chuyển sang façade `desktop.*` | 15 CDP-era cần map hành vi vào Rust/Tauri gate trước khi xóa | 4 (`install-local-model`, `real-ai-e2e`, `real-ai-status`, `scene-preview`) | 0 | ps1 P7 giữ, chờ số máy sạch |
+| **PORT (còn lại)** | 0 (48/48 check đã port; `tauri-webview-check.js` + 2 helper KEEP) | 15 CDP-era cần map hành vi vào Rust/Tauri gate trước khi xóa | 4 (`install-local-model`, `real-ai-e2e`, `real-ai-status`, `scene-preview`) | 0 | ps1 P7 giữ, chờ số máy sạch |
 | **KEEP-AS-IS** | `tauri-webview-check.js`; `ui/lib/screenshot-capture.js` (6 consumer, 5 đang KEEP/PORT); `manual/lib/ui-check-lib.js` | 5 còn lại chờ rà | ~14 (benchmarks/probes/`lan-smoke`/`lan-qr-verify`/`tiny-cdp`/`verify-css`; 6 script tailieu fail-ENOENT **giữ theo chính sách** §`tests/tailieu` README) | — | — |
 
-Sau C3 (2026-11-12): 5 tệp ưu tiên C1, 3 check LAN và 4 check paging đã port; còn khoảng 15
-check payload và 15 smoke. `tests/manual/lan-smoke.js` thực chất bám server Node
+Sau batch 2 (tiếp 7, 2026-11-12): 48/48 check ui cần port đã port (5 tệp ưu tiên C1, 3 LAN,
+4 paging, 15 payload cuối); 0 lời gọi payload `window.eduGame` trong `tests/ui`. Còn 15 smoke,
+4 script manual và nhóm D. `tests/manual/lan-smoke.js` thực chất bám server Node
 `src/lan/lan-server.ts` cũ (`express`/`socket.io`) nên không còn là KEEP-AS-IS: xếp vào nhóm D,
 map sang hành vi Rust hoặc retire trước khi bỏ dependency.
 
@@ -264,9 +265,11 @@ git diff --check
 
 **Lượt batch 2 (tiếp 6, 2026-11-12).** Port bốn check paging sang façade và gạt setup; `ui-ai-tasks` thêm stub 30 dòng sau khi đo store thật vì `ai_tasks::start_task` chưa có caller (khoảng trống sản phẩm, không phải lỗi check). Chạy trên bốn instance mới: `ui-ai-tasks-paging-check.js 9371` **8/8**, `ui-library-paging-check.js 9372` **12/12**, `ui-lessons-paging-check.js 9373` **10/10**, `ui-results-paging-check.js 9374` **12/12**. Test Rust mở rộng `ai_tasks_save_list_and_prune` lưu 31 dòng và xác nhận prune còn 30; `cargo test --lib` **153/153**. `npm run check` sạch, `npm test` **95/95** (46,4 s), `check:renderer-globals` 73/75 (0 undefined), `check:embedded` 6125,4 KiB, `git diff --check` sạch. Còn khoảng 15 payload và 15 smoke.
 
+**Lượt batch 2 (tiếp 7, 2026-11-12).** Port 15 check payload cuối sang façade; không đổi sản phẩm. Kết quả trên 15 instance mới (data dir + WebView2 profile riêng): `ui-fullscreen-density` **8/8**, `ui-settings-sections` all passed, `ui-classifier-outline` **15/15**, `ui-race-treasure` **18/18**, `ui-game-worlds` **52/52**, `ui-item-assets-editor` **29/29**, `ui-race-editor` all passed, `ui-card-menu` all passed, `ui-art-upload-flow` all passed, `ui-item-art` all passed, `ui-editor-art` all passed, `ui-answer-mode` **219/219** (không gạt migration trước), `ui-dark-theme` all passed, `ui-play-mode-card` all passed, `ui-project-selection` all passed. Phát hiện ba khác biệt vỏ: URL ảnh Tauri `http://edugame-file.tauri.localhost/img/<id>`, câu classifier "Bộ đọc hiểu chưa sẵn sàng — phân loại bằng quy tắc.", và overlay migration mở muộn; check nhận cả hai biểu diễn. `ui-answer-mode` dùng `connect({ evalTimeoutMs: 300000 })` vì ma trận đầy đủ >120 s; mặc định helper vẫn 120 s. `npm run check` sạch, `npm test` **95/95**, `check:renderer-globals` 73/75 (0 undefined), `check:embedded` 6125,4 KiB, `node --check` các tệp sửa + `ui-check-lib` sạch, `git diff --check` chỉ CRLF. Rust không đổi nên không chạy lại `cargo test` (HEAD trước đó 153/153); không build lại release vì chỉ sửa test. **Không còn lời gọi payload `window.eduGame` trong `tests/ui`** (chỉ comment và phép đo phủ định có chủ đích). Còn 15 smoke, 4 script manual, nhóm D và writer `ai_tasks`.
+
 ## Việc còn lại — thứ tự đề xuất
 
-1. Port từng check payload còn lại và đo trên instance Tauri mới; map 15 smoke sang hành vi trong gate Rust rồi rà consumer nhóm D. Chỉ xóa hoặc chuyển vào `tests/legacy/` những smoke/packaging scripts không còn đường chạy sau khi có bằng chứng thay thế; giữ fixture hoặc hướng dẫn lịch sử có giá trị nhưng ghi rõ trạng thái.
+1. Map 15 smoke sang hành vi trong gate Rust rồi rà consumer nhóm D (`unload-guard.ts`, `setup-ipc.ts`, `src/lan/lan-server.ts`, `tests/manual/lan-smoke.js`). Chỉ xóa hoặc chuyển vào `tests/legacy/` những smoke/packaging scripts không còn đường chạy sau khi có bằng chứng thay thế; giữ fixture hoặc hướng dẫn lịch sử có giá trị nhưng ghi rõ trạng thái.
 2. Sửa các tham chiếu Electron còn sót trong README/active docs nếu tìm được; không xóa dữ liệu/profile Electron của người dùng.
 3. Chạy lại `npm run check`, `npm test`, `npm run check:renderer-globals`, `npm run check:embedded`, Rust tests và `npm run tauri:check` sau mọi thay đổi mã.
 4. Trên Windows sạch/VM: tạo installer, cài mới, khởi chạy, tạo/lưu/mở game, xuất/nhập `.egame`, kiểm tra trình chiếu và gameplay offline; sau đó kiểm tra nâng cấp và gỡ cài đặt không xóa profile người dùng.

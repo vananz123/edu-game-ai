@@ -32,13 +32,13 @@ const SCENARIO = String.raw`(async () => {
   await sleep(250);
 
   // Leftovers from an interrupted run would make the counts non-deterministic.
-  const before = await window.eduGame.listProjects();
+  const before = await desktop.call('listProjects');
   const leftovers = (before || []).filter(p => String(p.title || '').startsWith('probe-proj-'));
-  if (leftovers.length) await window.eduGame.deleteProjects(leftovers.map(p => p.id));
+  if (leftovers.length) await desktop.call('deleteProjects', leftovers.map(p => p.id));
 
   const runTag = Date.now().toString(36);
   for (let index = 0; index < 5; index += 1) {
-    await window.eduGame.saveProjectDraft({
+    await desktop.call('saveProjectDraft', {
       id: 'probe-proj-' + runTag + '-' + index,
       title: 'probe-proj-' + String(index).padStart(2, '0') + ' · Dự án thử xoá nhiều',
       description: 'Nội dung tổng hợp cho check xoá hàng loạt.',
@@ -49,14 +49,14 @@ const SCENARIO = String.raw`(async () => {
   // One draft the search term does NOT match: the batch delete must leave it alone, and
   // "select all" can never reach it because it only ever sees rendered cards.
   const teacherId = 'du-an-giao-vien-' + runTag;
-  await window.eduGame.saveProjectDraft({
+  await desktop.call('saveProjectDraft', {
     id: teacherId,
     title: 'Tiết 12 · Vận dụng (không trùng từ khóa)',
     description: 'Dự án của giáo viên, không được phép bị xoá.',
     status: 'review', step: 'edit', schemaVersion: 1, sourceName: 'ui-check',
     createdAt: new Date().toISOString()
   });
-  const otherProjects = (await window.eduGame.listProjects())
+  const otherProjects = (await desktop.call('listProjects'))
     .filter(project => !String(project.title || '').startsWith('probe-proj-')).length;
 
   navigate('my-projects');
@@ -136,20 +136,20 @@ const SCENARIO = String.raw`(async () => {
   out.untickedAgainOut = !toDelete.includes(untickedId);
 
   // The IPC refuses an empty batch instead of silently answering "0 deleted".
-  try { await window.eduGame.deleteProjects([]); out.emptyBatchRejected = false; }
+  try { await desktop.call('deleteProjects', []); out.emptyBatchRejected = false; }
   catch (error) { out.emptyBatchRejected = true; }
   // An id that is not in the store is reported, not counted as deleted.
-  const ghost = await window.eduGame.deleteProjects(['probe-proj-khong-ton-tai-' + runTag]);
+  const ghost = await desktop.call('deleteProjects', ['probe-proj-khong-ton-tai-' + runTag]);
   out.ghostReport = ghost.deleted + '/' + ghost.missing;
 
-  const gamesBefore = (await window.eduGame.getLibrary()).games.length;
+  const gamesBefore = (await desktop.call('getLibrary')).games.length;
   const realConfirm = window.confirm;
   window.confirm = () => true;
   document.querySelector('#projectDeleteSelectedBtn').click();
   await sleep(1600);
   window.confirm = realConfirm;
 
-  const after = await window.eduGame.listProjects();
+  const after = await desktop.call('listProjects');
   const afterProbe = (after || []).filter(p => String(p.title || '').startsWith('probe-proj-'));
   out.leftProbe = afterProbe.length;
   out.expectedLeft = 5 - out.reselectedIds;
@@ -157,7 +157,7 @@ const SCENARIO = String.raw`(async () => {
   out.teacherDraftSurvived = (after || []).some(p => p.id === teacherId);
   out.projectsAfter = (after || []).length;
   out.otherProjectsAfter = (after || []).filter(p => !String(p.title || '').startsWith('probe-proj-')).length;
-  out.gamesAfter = (await window.eduGame.getLibrary()).games.length;
+  out.gamesAfter = (await desktop.call('getLibrary')).games.length;
   out.gamesBefore = gamesBefore;
   out.selectionNow = state.projectSelection instanceof Set ? state.projectSelection.size : -1;
   const countNode = document.querySelector('[data-project-selected-count]');
@@ -165,8 +165,8 @@ const SCENARIO = String.raw`(async () => {
   out.deleteDisabledAfter = (document.querySelector('#projectDeleteSelectedBtn') || {}).disabled;
 
   const remaining = (after || []).filter(p => String(p.title || '').startsWith('probe-proj-'));
-  if (remaining.length) await window.eduGame.deleteProjects(remaining.map(p => p.id));
-  await window.eduGame.deleteProjects([teacherId]);
+  if (remaining.length) await desktop.call('deleteProjects', remaining.map(p => p.id));
+  await desktop.call('deleteProjects', [teacherId]);
   state.projectSelection = new Set();
   state.search = '';
   navigate('my-projects');

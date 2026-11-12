@@ -207,7 +207,7 @@ const SCENARIO = String.raw`(async () => {
   if (largeText) largeText.checked = out.expectedLargeText;
   document.querySelector('#saveSettingsBtn').click();
   await sleep(1300);
-  out.savedLargeText = ((await window.eduGame.getSettings()).preferences || {}).largeText;
+  out.savedLargeText = ((await desktop.call('getSettings')).preferences || {}).largeText;
   out.sectionAfterSave = state.settingsSection;
   out.visibleAfterSave = visiblePanels();
   out.tabAfterSave = { state: state.settingsAiTab, panels: shownAiPanels() };

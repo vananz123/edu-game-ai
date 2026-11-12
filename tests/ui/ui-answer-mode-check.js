@@ -40,7 +40,7 @@
 const { check, connect, results } = require('../manual/lib/ui-check-lib');
 
 (async () => {
-  const ctx = await connect();
+  const ctx = await connect({ evalTimeoutMs: 300000 });
   const { evaluate } = ctx;
 
   const PAGE = `(async () => {
@@ -68,21 +68,32 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
     const PREFIX = 'AM209 ';
     const title = key => PREFIX + key;
 
-    // Onboarding của profile mới chiếm cửa sổ; đóng TRƯỚC khi đụng tới #modalRoot,
-    // vì xoá DOM của wizard mà không hoàn lại cờ thì .app-shell stays hidden forever.
-    for (let i = 0; i < 40; i++) {
-      if (document.querySelector('#modalRoot .setup-fullscreen')) break;
+    // Onboarding của profile mới chiếm cửa sổ; lời mời nhập dữ liệu Electron có thể
+    // tới muộn hơn và đè #modalRoot. Đóng cả hai TRƯỚC khi đụng tới #modalRoot, rồi
+    // chờ yên một nhịp để lần vẽ cuối không rơi vào giữa bài đo.
+    const guardUntil = Date.now() + 4000;
+    let quietSince = 0;
+    while (Date.now() < guardUntil) {
+      const later = document.querySelector('[data-migration-action="later"]');
+      if (later) later.click();
+      if (document.querySelector('#modalRoot .setup-fullscreen') && typeof closeSetupWizard === 'function') closeSetupWizard('close');
+      const busy = document.querySelector('[data-migration-backdrop], #modalRoot .setup-fullscreen');
+      if (!busy) {
+        if (!quietSince) quietSince = Date.now();
+        if (Date.now() - quietSince > 700) break;
+      } else {
+        quietSince = 0;
+      }
       await sleep(100);
     }
-    if (typeof closeSetupWizard === 'function') closeSetupWizard('close');
     await sleep(200);
 
     // Một lần chạy bị ném lại để lại fixture trong kho; dọn trước để kho luôn sạch.
     try {
-      const before = await window.eduGame.getLibrary();
+      const before = await desktop.call('getLibrary');
       const stale = (before.games || []).filter(g => String(g.title || '').indexOf(PREFIX) === 0).map(g => g.id);
       out.staleFixtures = stale.length;
-      if (stale.length && typeof window.eduGame.deleteGames === 'function') await window.eduGame.deleteGames(stale);
+      if (stale.length) await desktop.call('deleteGames', stale);
     } catch (error) {
       out.staleFixtures = 'skip: ' + String(error && error.message || error);
     }
@@ -150,7 +161,7 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
     };
 
     const stored = async key => {
-      const lib = await window.eduGame.getLibrary();
+      const lib = await desktop.call('getLibrary');
       const game = (lib.games || []).find(g => g.title === title(key));
       return game ? {
         scoringMode: game.gameSetup ? game.gameSetup.scoringMode : null,
@@ -1550,12 +1561,12 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
       if (typeof closeEditorPage === 'function') closeEditorPage();
 
       // Không để fixture lại trong kho của giáo viên.
-      const all = await window.eduGame.getLibrary();
+      const all = await desktop.call('getLibrary');
       const mine = (all.games || []).filter(g => String(g.title || '').indexOf(PREFIX) === 0).map(g => g.id);
       out.cleanup = { deleted: mine.length, left: mine.length };
-      if (mine.length && typeof window.eduGame.deleteGames === 'function') {
-        await window.eduGame.deleteGames(mine);
-        const after = await window.eduGame.getLibrary();
+      if (mine.length) {
+        await desktop.call('deleteGames', mine);
+        const after = await desktop.call('getLibrary');
         out.cleanup.left = (after.games || []).filter(g => String(g.title || '').indexOf(PREFIX) === 0).length;
       }
     };
@@ -2325,7 +2336,7 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
      rỗng". Viết `bad(X).length === 0` thì điều kiện sai với MỌI ô, kể cả khi không có
      ô nào lệch — chính xác 11 mục đỏ của lần chạy đầu tiên. Hai việc tách làm hai helper. */
   const none = list => list.length === 0;
-  const bad = list => list.map(c => c.surface + '/' + c.mode).join(' ') || 'none';
+  const bad = list => (list || []).filter(Boolean).map(c => c.surface + '/' + c.mode).join(' ') || 'none';
   const MCELLS = mx || [];
   const MLOCKED = MCELLS.filter(c => c.mode !== 'practice');
   const MSILENT = MCELLS.filter(c => c.surface === 'race');
@@ -2764,7 +2775,7 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
        writeGamePackage()  = chính chữ mà files:export-game ghi ra tệp
        fs viết/đọc một tệp .egame THẬT ở thư mục tạm
        readGamePackage()   = chính hàm mà files:import-game gọi (src/main.ts:3130)
-       window.eduGame.saveGame = IPC library:save-game, xuống SQLite
+       desktop.call('saveGame') = IPC library:save-game, xuống SQLite
        editor + màn chơi THẬT đọc lại bản ghi đó.
      Chưa đo: hộp thoại chọn tệp thật (native dialog) — nó chỉ chọn đường dẫn, mọi
      xử lý sau đó đã ở đây rồi. */
@@ -2840,8 +2851,8 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
       await closePlay();
       if (typeof closeEditorPage === 'function') closeEditorPage();
       // 1. Lưu THẬT: cùng IPC mà files:import-game gọi sau khi đọc tệp xong.
-      out.saved = await window.eduGame.saveGame(JSON.parse(JSON.stringify(GAME)));
-      const lib = await window.eduGame.getLibrary();
+      out.saved = await desktop.call('saveGame', JSON.parse(JSON.stringify(GAME)));
+      const lib = await desktop.call('getLibrary');
       const row = (lib.games || []).find(g => g.title === GAME.title);
       out.row = row && row.gameSetup ? {
         mode: row.gameSetup.scoringMode, park: row.gameSetup.legacyScoringMode,
@@ -2878,8 +2889,8 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
       out.door = await tap('#answerExplainOkBtn');
       await closePlay();
       // 4. Dọn kho của giáo viên.
-      if (row) await window.eduGame.deleteGames([row.id]);
-      const after = await window.eduGame.getLibrary();
+      if (row) await desktop.call('deleteGames', [row.id]);
+      const after = await desktop.call('getLibrary');
       out.left = (after.games || []).filter(g => String(g.title || '').indexOf('AM209 ') === 0).length;
     } catch (error) {
       out.error = String(error && error.message || error);

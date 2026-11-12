@@ -34,6 +34,8 @@ fs.writeFileSync(pngPath, Buffer.from(
 ));
 
 const SCENARIO = String.raw`(async () => {
+  if (typeof closeSetupWizard === 'function') closeSetupWizard('close');
+  await new Promise(r => setTimeout(r, 250));
   const out = {};
   navigate('create');
   await new Promise(r => setTimeout(r, 500));
@@ -68,8 +70,7 @@ const SCENARIO = String.raw`(async () => {
   out.after = document.querySelectorAll('#raceCells [data-cell-row]').length;
 
   // 3. Picture upload on a race question (dialog replaced at the renderer entry point).
-  const realDialog = window.eduGame.importIllustration;
-  window.editorImportIllustration = () => realDialog(${JSON.stringify(pngPath)});
+  window.editorImportIllustration = () => desktop.call('importIllustration', ${JSON.stringify(pngPath)});
   const upload = document.querySelector('#raceQuestions [data-editor-art-upload]');
   out.hasUpload = Boolean(upload);
   upload.click();
@@ -85,17 +86,17 @@ const SCENARIO = String.raw`(async () => {
   document.querySelector('#pageContent #saveGameBtn').click();
   await new Promise(r => setTimeout(r, 1600));
   window.toast = realToast;
-  const lib = await window.eduGame.getLibrary();
+  const lib = await desktop.call('getLibrary');
   const saved = lib.games.find(g => g.template === 'race' && g.race && g.race.questions
     && g.race.questions.some(q => q.illustrationAssetId === out.uploadedId));
   out.savedColor = saved ? saved.race.teams[0].color : 'none';
   out.savedImage = saved ? saved.race.questions[0].illustrationAssetId : 'none';
   out.pageAfterSave = state.page;
   if (saved) {
-    await window.eduGame.deleteGame(saved.id);
-    try { await window.eduGame.deleteIllustration(out.uploadedId); } catch (e) { void e; }
+    await desktop.call('deleteGame', saved.id);
+    try { await desktop.call('deleteIllustration', out.uploadedId); } catch (e) { void e; }
   }
-  state.db = await window.eduGame.getLibrary();
+  state.db = await desktop.call('getLibrary');
   state.page = 'library';
   render();
   return out;

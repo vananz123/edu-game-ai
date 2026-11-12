@@ -108,7 +108,7 @@ const CLOSE = `
   const was = document.documentElement.dataset.fullscreen === '1';
   document.querySelector('[data-play-close]')?.click();
   await new Promise(r => setTimeout(r, 300));
-  if (was) { try { await window.eduGame.setFullscreen(false); } catch {} }
+  if (was) { try { await desktop.call('setFullscreen', false); } catch {} }
   return true;
 `;
 

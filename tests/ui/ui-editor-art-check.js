@@ -41,7 +41,7 @@ const SCENARIO = String.raw`(async () => {
   }
   if (typeof closeSetupWizard === 'function') closeSetupWizard('close');
   await new Promise(r => setTimeout(r, 250));
-  const game = await window.eduGame.saveGame({
+  const game = await desktop.call('saveGame', {
     title: 'Kiểm tra ảnh trình soạn thảo', template: 'quiz', description: '', subject: 'Toán', grade: '4',
     gameSetup: { illustrationMode: 'auto' },
     questions: [
@@ -52,7 +52,7 @@ const SCENARIO = String.raw`(async () => {
     ]
   });
   out.gameId = game.id;
-  state.db = await window.eduGame.getLibrary();
+  state.db = await desktop.call('getLibrary');
   // Open the editor the way a teacher does: the library card's "Chỉnh sửa" menu item.
   navigate('library');
   await new Promise(r => setTimeout(r, 600));
@@ -108,11 +108,10 @@ const SCENARIO = String.raw`(async () => {
   // 2. Upload on question 2, through the same entry the button uses. The dialog is the
   //    only thing replaced (it cannot be driven headlessly); the picture is a real file
   //    read by main, and the patch/redraw below is the real handler.
-  const realDialog = window.eduGame.importIllustration;
-  window.editorImportIllustration = () => realDialog(${JSON.stringify(pngPath)});
+  window.editorImportIllustration = () => desktop.call('importIllustration', ${JSON.stringify(pngPath)});
   listRows()[1].querySelector('[data-editor-art-upload]').click();
   await new Promise(r => setTimeout(r, 1500));
-  window.editorImportIllustration = () => realDialog();
+  window.editorImportIllustration = () => desktop.call('importIllustration');
   const uploadRow = () => [...document.querySelectorAll('#pageContent #editorQuestions [data-editor-art]')][1];
   out.uploadField = uploadRow().parentElement.querySelector('[data-field="illustrationAssetId"]').value;
   out.uploadBadge = uploadRow().querySelector('[data-editor-art-badge]').textContent.trim();
@@ -147,7 +146,7 @@ const SCENARIO = String.raw`(async () => {
   await new Promise(r => setTimeout(r, 150));
   document.querySelector('#pageContent #saveGameBtn')?.click();
   await new Promise(r => setTimeout(r, 1200));
-  const after = await window.eduGame.getLibrary();
+  const after = await desktop.call('getLibrary');
   const stored = after.games.find(g => g.id === game.id);
   out.saved1 = stored && stored.questions[0].illustrationAssetId;
   out.saved2 = stored && stored.questions[1].illustrationAssetId;
@@ -172,7 +171,7 @@ const SCENARIO = String.raw`(async () => {
   out.removeOther = listRows()[0].parentElement.querySelector('[data-field="illustrationAssetId"]').value;
   document.querySelector('#pageContent #saveGameBtn')?.click();
   await new Promise(r => setTimeout(r, 1200));
-  const afterNone = await window.eduGame.getLibrary();
+  const afterNone = await desktop.call('getLibrary');
   const storedNone = afterNone.games.find(g => g.id === game.id);
   out.savedNone1 = storedNone && storedNone.questions[0].illustrationAssetId;
   out.savedNone2 = storedNone && storedNone.questions[1].illustrationAssetId;
@@ -189,9 +188,9 @@ const SCENARIO = String.raw`(async () => {
   document.querySelector('[data-play-close]')?.click();
   await new Promise(r => setTimeout(r, 300));
 
-  try { await window.eduGame.deleteGame(game.id); } catch (e) { void e; }
-  try { await window.eduGame.deleteIllustration(out.uploadField); } catch (e) { void e; }
-  state.db = await window.eduGame.getLibrary();
+  try { await desktop.call('deleteGame', game.id); } catch (e) { void e; }
+  try { await desktop.call('deleteIllustration', out.uploadField); } catch (e) { void e; }
+  state.db = await desktop.call('getLibrary');
   if (state.page === 'editor') closeEditorPage({ cancel: true });
   return out;
 })()`;
@@ -207,7 +206,7 @@ const SCENARIO = String.raw`(async () => {
   check('the badge names the picked picture', /Vũ trụ/.test(result.pickBadge || ''),
     `${result.pickBadge} | direct: ${result.directBadge} | preview ${result.directPreview}`);
   check('uploading writes the picture id', Boolean(result.uploadField) && result.uploadField !== 'space-scene', result.uploadField);
-  check('the uploaded picture shows and loads', /^edugame-file:\/\/img\//.test(result.uploadHref || '') && /^ok /.test(result.uploadLoads || ''),
+  check('the uploaded picture shows and loads', /^(?:edugame-file:\/\/|http:\/\/edugame-file\.tauri\.localhost\/)img\//.test(result.uploadHref || '') && /^ok /.test(result.uploadLoads || ''),
     `${result.uploadHref} → ${result.uploadLoads}`);
   check('"Tự động" clears its own question and leaves the other alone',
     result.resetField === '' && result.resetOther === result.uploadField && /Tổng quát/.test(result.resetBadge || ''),

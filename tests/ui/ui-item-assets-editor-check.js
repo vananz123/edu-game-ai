@@ -84,7 +84,7 @@ const { PROJECTOR_SIZES, measureAt, setViewport, setViewportAndWait } = require(
     // ---- 2. LƯU THẬT rồi mở lại từ kho: khoá + chế độ minh hoạ còn nguyên ----
     // Đây là bước bắt được lỗi "xoá âm thầm": saveEditedGame dựng lại object game
     // theo từng trường, nên giá trị phải đi qua DOM chứ không phải biến JS.
-    const saved = await window.eduGame.saveGame(Object.assign({}, arena, { title: 'UE asset roundtrip' }));
+    const saved = await desktop.call('saveGame', Object.assign({}, arena, { title: 'UE asset roundtrip' }));
     out.savedOk = !!saved && !!saved.id;
 
     document.getElementById('modalRoot').innerHTML = '';
@@ -102,7 +102,7 @@ const { PROJECTOR_SIZES, measureAt, setViewport, setViewportAndWait } = require(
 
     // Read back through IPC (the store on disk), not just in-memory state: that is
     // what proves the value really persisted instead of surviving in a JS object.
-    const lib = await window.eduGame.getLibrary();
+    const lib = await desktop.call('getLibrary');
     const stored = (lib?.games || []).find(g => g.title === 'UE asset roundtrip');
     const q = stored?.questions?.[0];
     out.afterSave = { contentCategory: q?.contentCategory, iconName: q?.iconName, illustrationAssetId: q?.illustrationAssetId };
@@ -126,7 +126,7 @@ const { PROJECTOR_SIZES, measureAt, setViewport, setViewportAndWait } = require(
     await sleep(200);
     document.getElementById('saveGameBtn')?.click();
     await sleep(900);
-    const lib2 = await window.eduGame.getLibrary();
+    const lib2 = await desktop.call('getLibrary');
     const lg = (lib2?.games || []).find(g => g.title === 'UE legacy game')?.questions?.[0];
     out.legacyStayedClean = !!lg && !('contentCategory' in lg) && !('iconName' in lg) && !('illustrationAssetId' in lg);
 

@@ -2650,6 +2650,24 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 
 **Việc kế tiếp.** Chưa duyệt bắt đầu code. Khi duyệt: dựng khung Tauri v2 + Rust toolchain trong nhánh riêng, chuyển lớp truy cập desktop sang facade TS (kế hoạch mục 4) và làm vòng 1 theo mục 1.
 
+## Dọn Electron batch 2 (tiếp 7, 2026-11-12) — port 15 check payload cuối sang façade; hết lời gọi `window.eduGame` trong `tests/ui`, thêm hạn đo riêng cho ma trận dài
+
+**Bối cảnh.** Sau các batch trước, 15 check trong `tests/ui` vẫn còn gọi payload `window.eduGame.*` (hoặc dựa vào hình dạng dữ liệu của profile Electron) và không chạy được trên instance Tauri mới. Chúng trải từ trình soạn thảo/ảnh, thế giới trò chơi, cài đặt, đến ma trận chế độ trả lời. Khi port, ba khác biệt nền tảng lộ ra: URL ảnh do Tauri phục vụ khác Electron, câu ghi chú của bộ phân loại local khác, và overlay migration có thể mở muộn đè `#modalRoot`.
+
+**Quyết định.**
+
+1. **Port cơ học, giữ nguyên assertion.** `window.eduGame.X(args)` → `desktop.call('X', args)`, `window.eduGame.X()` → `desktop.call('X')`, monkey-patch → `desktop.stub`. Không nới ngưỡng, không bỏ phép đo nào. Thêm khối gạt setup/migration cho các check chạm `#modalRoot`, và chờ ~700 ms yên trước khi đo.
+2. **Chấp nhận cả hai biểu diễn nền tảng thay vì sửa sản phẩm.** URL ảnh `edugame-file://img/<id>` **hoặc** `http://edugame-file.tauri.localhost/img/<id>`; ghi chú classifier cũ **hoặc** câu Tauri "Bộ đọc hiểu chưa sẵn sàng — phân loại bằng quy tắc.". Đây là khác biệt vỏ, không phải nới tiêu chuẩn hành vi.
+3. **Cho phép từng check tự đặt hạn đo.** `connect({ evalTimeoutMs })` trong `tests/manual/lib/ui-check-lib.js`; mặc định vẫn 120 s để treo thật vẫn bị bắt. `ui-answer-mode` dùng 300 s vì ma trận đầy đủ chạy hơn 120 s trên máy này.
+4. **Hai check dài tự gạt overlay, không cần thao tác từ ngoài.** `ui-answer-mode` và `ui-race-treasure` tự đóng setup + migration trong trang, chờ yên rồi mới đo. `ui-answer-mode` coi ô ma trận `null` là một check đỏ thay vì ném `TypeError`, để báo cáo một phần vẫn có ích.
+5. **Không đổi mã sản phẩm.** Nếu một check đỏ vì hành vi sản phẩm, ghi lại; không sửa app chỉ để làm xanh test. Sau batch này không còn lời gọi payload `window.eduGame.*` trong `tests/ui`; chỉ còn comment và phép đo phủ định có chủ đích ở `tauri-webview-check`/`ui-about`.
+
+**Kiểm chứng.** Mười lăm instance Tauri mới (data dir + WebView2 profile tạm riêng, `EDUGAME_TAURI_GATE=1`/`EDUGAME_TAURI_DATA_DIR`): `ui-fullscreen-density` **8/8** · `ui-settings-sections` **all checks passed** · `ui-classifier-outline` **15/15** · `ui-race-treasure` **18/18** · `ui-game-worlds` **52/52** · `ui-item-assets-editor` **29/29** · `ui-race-editor` **all checks passed** · `ui-card-menu` **all checks passed** · `ui-art-upload-flow` **all checks passed** · `ui-item-art` **all checks passed** · `ui-editor-art` **all checks passed** · `ui-answer-mode` **219/219** (instance mới, không gạt migration trước) · `ui-dark-theme` **all dark-theme checks passed** · `ui-play-mode-card` **all play-mode card checks passed** · `ui-project-selection` **all project selection checks passed**. `node --check` các tệp đã sửa + `ui-check-lib` sạch · `npm run check` (tsc) sạch · `npm run check:renderer-globals` 73/75 script, 1.055 hàm/8.359 điểm gọi, 0 undefined · `npm run check:embedded` khớp 6125,4 KiB · `npm test` **95/95** · `git diff --check` chỉ còn cảnh báo CRLF. Rust không đổi nên không chạy lại `cargo test` (HEAD trước đó đã 153/153 trên cùng cây); `tauri:check`/`build:tauri` không chạy lại vì chỉ sửa test.
+
+**Chưa xác minh / chưa làm.** 15 smoke chưa map/retire; nhóm D (`unload-guard.ts`, `setup-ipc.ts`, `src/lan/lan-server.ts`, `tests/manual/lan-smoke.js`) chưa rà; writer `ai_tasks` vẫn thiếu nên lịch sử/live task AI trên Tauri vẫn rỗng. Chưa thử điện thoại thật/Wi-Fi lớp, màn hình phụ vật lý/rút cáp, installer trên Windows sạch/P7, AI local thật.
+
+**Việc kế tiếp.** Map/retire 15 smoke sang hành vi trong gate Rust, rồi rà nhóm D trước khi xóa dependency LAN cũ. Nối writer `ai_tasks` vào các đường AI hoặc ghi rõ tính năng lịch sử tác vụ đang tắt trước khi tuyên bố parity.
+
 ## Dọn Electron batch 2 (tiếp 6, 2026-11-12) — port bốn check paging sang façade `desktop.*`; `ui-ai-tasks` phải stub 30 dòng vì Tauri chưa có writer `ai_tasks`
 
 **Bối cảnh.** Bốn check paging còn payload `window.eduGame`: `ui-ai-tasks-paging`, `ui-library-paging`, `ui-lessons-paging`, `ui-results-paging`. Chúng từng dựa vào dữ liệu có sẵn trong profile (đặc biệt lịch sử AI task), nên không chạy được trên hồ sơ Tauri mới. Khi port, `ui-ai-tasks` lộ một khoảng trống sản phẩm: `ai_tasks::start_task`, `progress_task`, `complete_task`, `fail_task` không có caller nào trong Rust, và renderer không gọi `lesson-store:ai-task-save`, nên bảng `ai_tasks` không bao giờ được ghi trên Tauri; UI "Tác vụ AI" luôn rỗng dù pager vẫn vẽ.

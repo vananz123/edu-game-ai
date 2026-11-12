@@ -55,6 +55,8 @@ const NAVIGATE = `(async () => {
 })()`;
 
 const SCENARIO = String.raw`(async () => {
+  if (typeof closeSetupWizard === 'function') closeSetupWizard('close');
+  await new Promise(r => setTimeout(r, 250));
   if (typeof wizardReset === 'function') wizardReset();
   navigate('create-wizard');
   await new Promise(r => setTimeout(r, 400));
@@ -82,7 +84,7 @@ const SCENARIO = String.raw`(async () => {
   out.thumbsInCards = cards.filter(card => card.querySelector('.wizard-art-thumb')).length;
 
   // The real upload channel (the dialog is replaced by a known path for the check).
-  const uploaded = await window.eduGame.importIllustration(${JSON.stringify(imagePath)});
+  const uploaded = await desktop.call('importIllustration', ${JSON.stringify(imagePath)});
   out.uploadedId = uploaded && uploaded.id;
   await wizardPatchItemAssets(1, { illustrationAssetId: uploaded.id });
   await new Promise(r => setTimeout(r, 500));
@@ -111,7 +113,7 @@ const SCENARIO = String.raw`(async () => {
   const saved = await wizardEnsureProjectSaved();
   out.orphanSuite = saved && wizardState.projectId ? 'saved' : 'failed';
   const patchedOrphan = saved
-    ? await window.eduGame.patchLessonItemAssets({ projectId: wizardState.projectId, itemIndex: 1, patch: { illustrationAssetId: uploaded.id } })
+    ? await desktop.call('patchLessonItemAssets', { projectId: wizardState.projectId, itemIndex: 1, patch: { illustrationAssetId: uploaded.id } })
     : null;
   out.orphanApplied = patchedOrphan && patchedOrphan.project && patchedOrphan.project.draft
     ? String(Boolean((patchedOrphan.project.draft.questions || [])[0].illustrationAssetId))
@@ -120,12 +122,10 @@ const SCENARIO = String.raw`(async () => {
   // Leave nothing behind: both probe projects and any picture they uploaded. The
   // fixture image is deleted by main together with the project that used it (#127), and
   // the fallback below only runs if that did not happen.
-  if (window.eduGame.deleteProject) {
-    for (const projectId of new Set([projectForCleanup, wizardState.projectId].filter(Boolean))) {
-      try { await window.eduGame.deleteProject(projectId); } catch { /* best effort */ }
-    }
+  for (const projectId of new Set([projectForCleanup, wizardState.projectId].filter(Boolean))) {
+    try { await desktop.call('deleteProject', projectId); } catch { /* best effort */ }
   }
-  try { await window.eduGame.deleteIllustration(uploaded.id); } catch { /* best effort */ }
+  try { await desktop.call('deleteIllustration', uploaded.id); } catch { /* best effort */ }
   return out;
 })()`;
 
@@ -145,7 +145,11 @@ const SCENARIO = String.raw`(async () => {
     `${result.answersInCards.join(',')} answers / ${result.correctInCards.join(',')} correct`);
   check('an uploaded picture is saved on the item', Boolean(result.uploadedId) && result.cardUsesCustom, `${result.uploadedId} / ${result.cardUsesCustom}`);
   check('the card label says the picture is the teacher\'s', /Ảnh tự tải lên/.test(result.cardBadge), result.cardBadge);
-  check('the card loads it through edugame-file:', result.href.startsWith('edugame-file://img/' + result.uploadedId), result.href);
+  const expectedHrefs = [
+    'edugame-file://img/' + result.uploadedId,
+    'http://edugame-file.tauri.localhost/img/' + result.uploadedId,
+  ];
+  check('the card loads it through edugame-file:', expectedHrefs.includes(result.href), result.href);
   check('the card picture actually loads', /^ok /.test(result.thumbLoaded || ''), result.thumbLoaded);
   check('the picture stays with its own question', result.secondUnchanged === true);
   // #126: the real report — step 5 reached with no `projectId` in the wizard state. The

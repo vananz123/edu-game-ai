@@ -17,7 +17,7 @@ function check(name, ok, detail) {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
 }
 
-async function connect() {
+async function connect(options = {}) {
   const list = await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json();
   // Tauri phục vụ trang qua giao thức riêng nên URL là `http://tauri.localhost/`
   // (không có `index.html`); vỏ Electron thì dùng `file:///…/index.html`.
@@ -64,7 +64,9 @@ async function connect() {
   // `awaitPromise` không có hạn: một promise không bao giờ settle để CDP im lặng
   // mãi và cả cổng treo không một dòng FAIL nào — đúng cách một lỗi thật đã từng
   // biến mất khỏi log. Hết hạn thì coi như hỏng, để phép đo báo đỏ.
-  const EVAL_TIMEOUT_MS = 120000;
+  // Check dài (ma trận 5 bề mặt × 3 chế độ) có thể cần hơn 120 s; nó truyền
+  // `evalTimeoutMs` riêng thay vì nới hạn cho mọi check.
+  const EVAL_TIMEOUT_MS = Number(options && options.evalTimeoutMs) || 120000;
   const evaluateOnce = async expression => {
     let timer;
     const timeout = new Promise((_, reject) => {

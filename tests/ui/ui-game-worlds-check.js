@@ -126,7 +126,7 @@ function luminance([r, g, b]) {
   for (const game of GAMES) {
     const probe = await evaluate(`(async () => {
       const game = ${JSON.stringify(game.make())};
-      const saved = await window.eduGame.saveGame(game);
+      const saved = await desktop.call('saveGame', game);
       document.querySelector('[data-play-close]')?.click();
       await new Promise(r => setTimeout(r, 250));
       playGame(saved);
@@ -257,7 +257,7 @@ function luminance([r, g, b]) {
     quiz.title = 'UI world stale panel';
     quiz.gameSetup = Object.assign({}, quiz.gameSetup, { gameplayMode: 'house' });
     quiz.matchingGame = { mode: 'columns', pairs: [{ id: 'p1', left: 'L1', right: 'R1' }, { id: 'p2', left: 'L2', right: 'R2' }] };
-    const saved = await window.eduGame.saveGame(quiz);
+    const saved = await desktop.call('saveGame', quiz);
     out.savedKeys = Object.keys(saved);
     out.savedHasMatching = 'matchingGame' in saved;
     document.querySelector('[data-play-close]')?.click();
@@ -279,7 +279,7 @@ function luminance([r, g, b]) {
     out.editorKeys = Object.keys(editorPageState.game);
     document.getElementById('saveGameBtn')?.click();
     await sleep(1200);
-    const lib = await window.eduGame.getLibrary();
+    const lib = await desktop.call('getLibrary');
     const stored = (lib.games || []).find(g => g.title === 'UI world stale panel');
     out.storedHasMatching = stored ? 'matchingGame' in stored : null;
     out.storedHasTreasure = stored ? 'treasureHunt' in stored : null;

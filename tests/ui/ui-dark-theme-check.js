@@ -83,13 +83,13 @@ const SCENARIO = String.raw`(async () => {
   const runTag = Date.now().toString(36);
   const seeded = { games: [], docs: [], projects: [], sessions: [] };
   const projectId = SEED_PREFIX + runTag;
-  await window.eduGame.saveProjectDraft({
+  await desktop.call('saveProjectDraft', {
     id: projectId, title: SEED_PREFIX + ' dự án thử giao diện tối', description: 'Dữ liệu tổng hợp.',
     status: 'draft', step: 'edit', schemaVersion: 1, sourceName: 'ui-check', createdAt: new Date().toISOString()
   });
   seeded.projects.push(projectId);
   const gameId = SEED_PREFIX + runTag;
-  await window.eduGame.saveGame({
+  await desktop.call('saveGame', {
     id: gameId, title: SEED_PREFIX + ' trò chơi thử giao diện tối', subject: 'Kỹ năng sống', grade: '6',
     template: 'quiz', description: 'Dữ liệu tổng hợp.', tags: [], sourceName: 'ui-check',
     createdAt: new Date().toISOString(), gameSetup: { scoringMode: 'cơ bản' },
@@ -100,24 +100,24 @@ const SCENARIO = String.raw`(async () => {
     }]
   });
   seeded.games.push(gameId);
-  const doc = await window.eduGame.saveLessonDocument({
+  const doc = await desktop.call('saveLessonDocument', {
     name: SEED_PREFIX + runTag + '.txt', ext: 'txt',
     text: 'Nội dung thử giao diện tối. ' + 'x'.repeat(120), characters: 145, sizeBytes: 145
   });
   // The store returns the saved document, but an older shape answers without an id;
   // reading it back by name keeps the cleanup honest either way.
   const docId = (doc && doc.id)
-    || ((await window.eduGame.listLessonLibrary() || []).find(d => d.name === SEED_PREFIX + runTag + '.txt') || {}).id;
+    || ((await desktop.call('listLessonLibrary') || []).find(d => d.name === SEED_PREFIX + runTag + '.txt') || {}).id;
   if (docId) seeded.docs.push(docId);
   const sessionId = SEED_PREFIX + runTag;
-  await window.eduGame.saveSession({
+  await desktop.call('saveSession', {
     id: sessionId, gameId, gameTitle: SEED_PREFIX + ' trò chơi thử giao diện tối', template: 'quiz',
     playerName: SEED_PREFIX + ' người chơi', durationSeconds: 60, points: 100, percent: 50,
     createdAt: new Date().toISOString()
   });
   seeded.sessions.push(sessionId);
-  state.db = await window.eduGame.getLibrary();
-  state.projects = await window.eduGame.listProjects();
+  state.db = await desktop.call('getLibrary');
+  state.projects = await desktop.call('listProjects');
 
   const parse = rgb => {
     const m = String(rgb).match(/rgba?\(([^)]+)\)/);
@@ -378,17 +378,17 @@ const SCENARIO = String.raw`(async () => {
   const lightSweep = await sweep('light');
   applyTheme(savedTheme);
   await sleep(200);
-  for (const id of seeded.projects) await window.eduGame.deleteProjects([id]);
-  for (const id of seeded.games) await window.eduGame.deleteGames([id]);
-  for (const id of seeded.sessions) await window.eduGame.deleteSessions([id]);
-  for (const id of seeded.docs) await window.eduGame.deleteLessonDocument(id);
+  for (const id of seeded.projects) await desktop.call('deleteProjects', [id]);
+  for (const id of seeded.games) await desktop.call('deleteGames', [id]);
+  for (const id of seeded.sessions) await desktop.call('deleteSessions', [id]);
+  for (const id of seeded.docs) await desktop.call('deleteLessonDocument', id);
   // Read the stores back AFTER the deletes: a snapshot taken before them would always
   // report the probe rows as still present.
-  const after = await window.eduGame.getLibrary();
-  const projects = await window.eduGame.listProjects();
-  const docs = await window.eduGame.listLessonLibrary();
+  const after = await desktop.call('getLibrary');
+  const projects = await desktop.call('listProjects');
+  const docs = await desktop.call('listLessonLibrary');
   state.db = after;
-  state.projects = await window.eduGame.listProjects();
+  state.projects = await desktop.call('listProjects');
   state.lessonLibrary = null;
   render();
   await sleep(300);

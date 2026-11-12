@@ -21,6 +21,8 @@ function check(label, ok, detail = '') {
 (async () => {
   const cdp = await connect();
   const result = await cdp.evaluate(`(async () => {
+    if (typeof closeSetupWizard === 'function') closeSetupWizard('close');
+    await new Promise(r => setTimeout(r, 250));
     // Two synthetic games so "one menu at a time" has something to compete with; both
     // are removed again before returning, so the teacher's library is untouched.
     const base = {
@@ -28,9 +30,9 @@ function check(label, ok, detail = '') {
       questions: [{ id: 'q1', type: 'multiple-choice', prompt: '1+1?', explanation: 'Hai.', points: 100,
         options: [{ id: 'a', text: '2' }, { id: 'b', text: '3' }], correctOptionId: 'a' }]
     };
-    const first = await window.eduGame.saveGame({ ...base, title: 'Kiểm tra menu chấm' });
-    const second = await window.eduGame.saveGame({ ...base, title: 'Kiểm tra menu chấm 2' });
-    state.db = await window.eduGame.getLibrary();
+    const first = await desktop.call('saveGame', { ...base, title: 'Kiểm tra menu chấm' });
+    const second = await desktop.call('saveGame', { ...base, title: 'Kiểm tra menu chấm 2' });
+    state.db = await desktop.call('getLibrary');
     navigate('library');
     await new Promise(r => setTimeout(r, 400));
 
@@ -58,11 +60,10 @@ function check(label, ok, detail = '') {
 
     // Picking a feature closes the menu before the action runs.
     toggle.click();
-    const realExport = window.eduGame.exportGame;
-    window.eduGame.exportGame = async () => ({ canceled: true });
+    desktop.stub('exportGame', async () => ({ canceled: true }));
     menu.querySelector('[data-action="export-game"]').click();
     await new Promise(r => setTimeout(r, 150));
-    window.eduGame.exportGame = realExport;
+    desktop.stub('exportGame', null);
     out.itemPicked = !open() && !expanded();
 
     // Only one menu open at a time.
@@ -74,9 +75,9 @@ function check(label, ok, detail = '') {
     navigate('library');
     out.closedOnNavigate = document.querySelectorAll('[data-game-menu-root] [role="menu"]:not([hidden])').length === 0;
 
-    await window.eduGame.deleteGame(first.id);
-    await window.eduGame.deleteGame(second.id);
-    state.db = await window.eduGame.getLibrary();
+    await desktop.call('deleteGame', first.id);
+    await desktop.call('deleteGame', second.id);
+    state.db = await desktop.call('getLibrary');
     navigate('library');
     return out;
   })()`);

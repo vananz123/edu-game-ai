@@ -29,9 +29,9 @@ const SCENARIO = String.raw`(async () => {
   await sleep(250);
 
   // Leftovers from an interrupted run would leave cards that confuse the lookup.
-  const existing = await window.eduGame.getLibrary();
+  const existing = await desktop.call('getLibrary');
   const leftovers = (existing.games || []).filter(g => String(g.title || '').startsWith('probe-mode-'));
-  if (leftovers.length) await window.eduGame.deleteGames(leftovers.map(g => g.id));
+  if (leftovers.length) await desktop.call('deleteGames', leftovers.map(g => g.id));
 
   const tag = Date.now().toString(36);
   const question = {
@@ -46,7 +46,7 @@ const SCENARIO = String.raw`(async () => {
   };
   const created = [];
   const save = async (suffix, patch) => {
-    const game = await window.eduGame.saveGame({ ...base, ...patch, title: 'probe-mode-' + tag + '-' + suffix });
+    const game = await desktop.call('saveGame', { ...base, ...patch, title: 'probe-mode-' + tag + '-' + suffix });
     created.push(game);
     return game;
   };
@@ -59,7 +59,7 @@ const SCENARIO = String.raw`(async () => {
     matchingGame: { mode: 'columns', pairs: [{ id: 'p1', left: 'Thuật ngữ A', right: 'Định nghĩa 1' }, { id: 'p2', left: 'Thuật ngữ B', right: 'Định nghĩa 2' }] }
   });
 
-  state.db = await window.eduGame.getLibrary();
+  state.db = await desktop.call('getLibrary');
   state.libraryPage = 0;
   state.librarySelection = new Set();
   navigate('library');
@@ -104,9 +104,9 @@ const SCENARIO = String.raw`(async () => {
     ? [...houseCard.querySelectorAll('[data-action]')].filter(node => !node.closest('[role="menu"]')).map(node => node.dataset.action)
     : [];
 
-  for (const game of created) await window.eduGame.deleteGame(game.id);
+  for (const game of created) await desktop.call('deleteGame', game.id);
   state.search = '';
-  state.db = await window.eduGame.getLibrary();
+  state.db = await desktop.call('getLibrary');
   state.librarySelection = new Set();
   state.libraryPage = 0;
   navigate('library');

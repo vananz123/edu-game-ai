@@ -35,6 +35,8 @@ fs.writeFileSync(pngPath, PNG_RED);
 fs.writeFileSync(pngPath2, PNG_RED);
 
 const SCENARIO = String.raw`(async () => {
+  if (typeof closeSetupWizard === 'function') closeSetupWizard('close');
+  await new Promise(r => setTimeout(r, 250));
   const out = {};
   // A bank game reaches step 5 without the model (#117) and saves its project.
   if (typeof wizardReset === 'function') wizardReset();
@@ -78,8 +80,8 @@ const SCENARIO = String.raw`(async () => {
 
   // 2. Real upload into item 1, then into item 2 without waiting: both must land, and
   //    the second must not be swallowed by the first one's busy state.
-  const fileOne = await window.eduGame.importIllustration(${JSON.stringify(pngPath)});
-  const fileTwo = await window.eduGame.importIllustration(${JSON.stringify(pngPath2)});
+  const fileOne = await desktop.call('importIllustration', ${JSON.stringify(pngPath)});
+  const fileTwo = await desktop.call('importIllustration', ${JSON.stringify(pngPath2)});
   out.imageOne = fileOne && fileOne.id;
   out.imageTwo = fileTwo && fileTwo.id;
   let call = 0;
@@ -107,7 +109,7 @@ const SCENARIO = String.raw`(async () => {
   });
 
   // 3. A picture that a saved project still uses cannot be deleted from under it.
-  out.deleteInUse = await window.eduGame.deleteIllustration(fileOne.id);
+  out.deleteInUse = await desktop.call('deleteIllustration', fileOne.id);
 
   // 4. "Tự động" clears only its own card.
   await wizardPatchItemAssets(2, { contentCategory: '', illustrationAssetId: '' });
@@ -119,8 +121,8 @@ const SCENARIO = String.raw`(async () => {
 
   window.wizardImportIllustration = originalImport;
   // Leave nothing behind.
-  try { await window.eduGame.deleteProject(wizardState.projectId); } catch (e) { void e; }
-  try { await window.eduGame.deleteIllustration(fileTwo.id); } catch (e) { void e; }
+  try { await desktop.call('deleteProject', wizardState.projectId); } catch (e) { void e; }
+  try { await desktop.call('deleteIllustration', fileTwo.id); } catch (e) { void e; }
   return out;
 })()`;
 
@@ -137,7 +139,10 @@ const SCENARIO = String.raw`(async () => {
   check('a second upload while the first is running is not swallowed',
     result.upload && result.upload.item2 === result.imageTwo, `${result.upload && result.upload.item2} vs ${result.imageTwo}`);
   check('the busy flag clears after both writes', result.upload && result.upload.busy === false, String(result.upload && result.upload.busy));
-  check('the card points at the uploaded file', result.card1Href === `edugame-file://img/${result.imageOne}`, result.card1Href);
+  const fileHref = result.card1Href || '';
+  check('the card points at the uploaded file',
+    fileHref === `edugame-file://img/${result.imageOne}` || fileHref === `http://edugame-file.tauri.localhost/img/${result.imageOne}`,
+    result.card1Href);
   check('the card says the picture is the teacher\'s', /Ảnh tự tải lên/.test(result.card1Badge || ''), result.card1Badge);
   check('the card picture loads', /^ok /.test(result.card1Loads || ''), result.card1Loads);
   check('a picture in use cannot be deleted', result.deleteInUse && result.deleteInUse.ok === false && result.deleteInUse.inUse === true,
