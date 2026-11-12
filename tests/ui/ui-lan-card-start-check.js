@@ -7,13 +7,14 @@
 //      screen's own "Tiếp tục →" moves the phones to the next one.
 //
 // Run:
-//   npm run build
+//   npm run build:tauri
 //   powershell -ExecutionPolicy Bypass -File tests/ui/launch-app.ps1 -Port 9375
 //   node tests/ui/ui-lan-card-start-check.js 9375
 //
-// Synthetic games only (AGENTS.md). Uses a real socket.io client over the room URL.
+// Synthetic games only (AGENTS.md). Uses the Rust server's native WebSocket
+// protocol over the real room URL (see tests/manual/lib/lan-phone.js).
 const { check, connect, results } = require('../manual/lib/ui-check-lib');
-const { io } = require('socket.io-client');
+const { openPhone } = require('../manual/lib/lan-phone');
 
 const GAMES = [
   {
@@ -42,6 +43,9 @@ const GAMES = [
 
 (async () => {
   const cdp = await connect();
+  // A fresh profile opens the setup wizard over the shell; dismiss it before the
+  // script drives the library and play screens.
+  await cdp.evaluate(`(() => { if (typeof closeSetupWizard === 'function') closeSetupWizard('close'); return true; })()`);
 
   // 1. Card buttons: supported templates only.
   const cards = await cdp.evaluate(`(() => {
@@ -108,16 +112,11 @@ const GAMES = [
   }
 
   // 3. A pupil joins over the LAN URL.
-  const socket = io(new URL(room.url).origin, { transports: ['websocket'] });
-  await new Promise((resolve, reject) => {
-    socket.once('connect', resolve);
-    socket.once('connect_error', reject);
-  });
-  const phoneStates = [];
-  socket.on('lan:state', snapshot => phoneStates.push(snapshot));
-  socket.emit('lan:join', { room: room.code, name: 'Lan' });
-  const joined = await new Promise(resolve => socket.once('lan:joined', resolve));
+  const phone = openPhone(room.url, { room: room.code, name: 'Lan' });
+  await phone.opened;
+  const joined = await phone.next('lan:joined');
   check('a pupil can join over the QR URL', Boolean(joined && joined.token));
+  const phoneStates = phone.states;
 
   await new Promise(resolve => setTimeout(resolve, 500));
   const afterJoin = await cdp.evaluate(`(() => {
@@ -146,8 +145,8 @@ const GAMES = [
   const next = phoneStates.slice(before).filter(entry => entry && entry.currentRoundIndex === 1).pop();
   check('advancing the play screen moves the phones to the next question', Boolean(next), next ? `round ${next.currentRoundIndex + 1}/${next.roundCount}` : 'no state pushed');
 
-  socket.disconnect();
-  await cdp.evaluate('window.eduGame.lanStop()');
+  phone.close();
+  await cdp.evaluate("desktop.call('lanStop')");
   cdp.ws.close();
 
   const failed = results.filter(entry => !entry.ok).length;

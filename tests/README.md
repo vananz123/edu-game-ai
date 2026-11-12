@@ -12,7 +12,7 @@ lesson documents or a real machine profile.
 | `ui/` | CDP checks that measure the **real renderer** (geometry, visibility, DOM churn). | Manual — need a running app, see below |
 | `smoke/` | End-to-end flows driven through CDP against the running app. **Electron-era:** most still assume the old preload API and the deleted `EDUGAME_AI_TEST_DIR` hook; being re-classified per `docs/archive/specs/electron-removal-plan.md` (group C) before deletion or porting. | Manual — need a running app |
 | `manual/` | One-off scripts: benchmarks, A/B geometry dumps, real-model probes, CSS verifier. | Manual, one at a time |
-| `manual/lib/` | Shared CDP client (`ui-check-lib.js`) required by **all** `ui/` and `smoke/` CDP checks and by `ui/tauri-webview-check.js`. Never delete it. | — |
+| `manual/lib/` | Shared CDP client (`ui-check-lib.js`) required by **all** `ui/` and `smoke/` CDP checks and by `ui/tauri-webview-check.js`; native LAN phone client (`lan-phone.js`) for the `ui-lan-*` checks. Never delete `ui-check-lib.js`. | — |
 | `packaging/` | The P7 clean-machine measurement pack: PowerShell script + one-page checklist for installing the real Tauri `.exe` on an offline machine. | `powershell -ExecutionPolicy Bypass -File tests/packaging/p7-offline-install.ps1` (PowerShell 5.1; copy the two files to the pilot machine — no repo, no Node needed) |
 | `fixtures/` | Synthetic lesson / AI-output fixtures used by `smoke/`. | — |
 
@@ -75,6 +75,10 @@ Individual `ui/` and `smoke/` checks were written against the Electron preload
 assertions can be trusted under Tauri — see the group-C table in
 `docs/archive/specs/electron-removal-plan.md`. Ports differ per script — read the header
 comment of each file; the port is the first argument or comes from `CDP_PORT`.
+
+The `ui-lan-*` checks emulate the pupil phone through `manual/lib/lan-phone.js`, which speaks
+the Rust server's native `/ws` JSON frames (`{ event, payload }`). Do not switch them to
+`socket.io-client`: the Tauri server has no Engine.IO handshake, so a socket.io phone cannot join.
 
 ### Offline play (Phase 5 acceptance)
 

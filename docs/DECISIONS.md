@@ -2650,6 +2650,23 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 
 **Việc kế tiếp.** Chưa duyệt bắt đầu code. Khi duyệt: dựng khung Tauri v2 + Rust toolchain trong nhánh riêng, chuyển lớp truy cập desktop sang facade TS (kế hoạch mục 4) và làm vòng 1 theo mục 1.
 
+## Dọn Electron batch 2 (tiếp 5, 2026-11-12) — port ba check LAN sang WebSocket native của Tauri; `socket.io-client` cũ không nói được với server Rust
+
+**Bối cảnh.** Ba check LAN còn payload `window.eduGame`: `ui-lan-wiring`, `ui-lan-card-start`, `ui-lan-treasure-finish`. Chúng dùng `socket.io-client` để đóng vai điện thoại học sinh. Server Tauri trong `src-tauri/src/lan.rs` chỉ nói RFC 6455 thô với frame JSON `{ event, payload }` (`lan:join`, `lan:answer`, `lan:state`); route `/socket.io` chỉ nâng cấp WebSocket rồi đọc cùng frame, không có Engine.IO handshake. Vì vậy client cũ không thể join phòng — đây không phải chỉ đổi tên API mà phải thay tầng điện thoại của check.
+
+**Quyết định.**
+
+1. **Helper điện thoại native dùng chung.** Thêm `tests/manual/lib/lan-phone.js`: mở `ws://<host>/ws` bằng WebSocket có sẵn của Node 22, gửi `lan:join` ngay khi mở, gom `lan:joined` và `lan:state`, trả sự kiện đã đến trước khi caller gọi `next` (tránh đua), timeout 8 giây. Không thêm dependency; dữ liệu vẫn tổng hợp.
+2. **`ui-lan-wiring` kiểm đúng nửa Tauri.** Assert `desktop.info().adapter === 'tauri'`, dùng `desktop.call('lanStart', { game })` và `desktop.call('lanStop')`; gạt setup onboarding trước khi lái play modal. Giữ nguyên các phép đo QR, mã 6 ký tự, URL LAN và panel biến mất sau stop.
+3. **Hai check luồng giữ nguyên assertion, chỉ thay phone và façade.** `ui-lan-card-start` và `ui-lan-treasure-finish` dùng helper native; start/begin/stop qua `desktop.call`; vẫn kiểm card chỉ hỗ trợ mới có nút, start chờ phone join, phone nhận câu hỏi/đáp án không kèm answer key, "Tiếp tục" sang câu kế, treasure kết thúc bằng state `finished` + bảng vinh danh.
+4. **Không đổi sản phẩm và chưa xóa LAN cũ.** `src-tauri/src/lan.rs` và renderer nguyên. Không xóa `src/lan/lan-server.ts` (Node/Express/Socket.IO) hay dependency `express`/`socket.io` trong lượt này vì `tests/manual/lan-smoke.js` còn khởi động server đó; ghi thành việc nhóm D: map `lan-smoke` sang hành vi Rust gate hoặc nghỉ hưu trước khi bỏ dependency.
+
+**Kiểm chứng.** `node tests/ui/ui-lan-wiring-check.js 9368` **7/7** · `node tests/ui/ui-lan-card-start-check.js 9366` **12/12** · `node tests/ui/ui-lan-treasure-finish-check.js 9367` **5/5** — mỗi lượt trên instance Tauri mới (data dir + WebView2 profile tạm riêng, `EDUGAME_TAURI_GATE=1`/`EDUGAME_TAURI_DATA_DIR`); cả ba cũng xanh trên instance ấm 9365. `node --check` cả bốn tệp sạch · `npm run check` (tsc) sạch · `npm test` **95/95** (45,2 s) · `npm run check:renderer-globals` 73/75 script, 1.055 hàm/8.359 điểm gọi, 0 undefined · `npm run check:embedded` khớp 6125,4 KiB · `cargo test --manifest-path src-tauri/Cargo.toml --lib -- --test-threads=1` **153/153** · `git diff --check` sạch. Chỉ sửa test nên không build lại binary release.
+
+**Chưa xác minh / chưa làm.** Khoảng 19 check payload còn lại và 15 smoke chưa map. `tests/manual/lan-smoke.js` vẫn dùng `socket.io-client` và server Node cũ — không còn caller sản phẩm nhưng chưa được thay thế. Chưa thử điện thoại thật qua Wi-Fi lớp: client Node chạy cùng máy và chỉ dùng URL LAN `192.168.1.4`. Installer/P7, màn hình phụ/rút cáp và AI local thật vẫn mở.
+
+**Việc kế tiếp.** Port nhóm paging còn lại (`ui-ai-tasks-paging`, `ui-library-paging`, `ui-lessons-paging`, `ui-results-paging`), rồi map/retire `lan-smoke` và rà `src/lan/lan-server.ts` cùng dependency LAN cũ theo nhóm D.
+
 ## Dọn Electron batch 2 (tiếp 4, 2026-11-12) — trình chiếu Tauri thật: sửa ACL nghe sự kiện và CSS bị CSP chặn, 93/93 ×2 instance mới
 
 **Bối cảnh.** Tệp ưu tiên thứ năm, cuối danh sách C1. Check cũ dùng iframe/eval/preload giả nên không chứng minh cửa sổ trình chiếu native nhận được dữ liệu và áp dụng CSS. Viết lại trên cửa sổ thật phát hiện hai lỗi sản phẩm, không chỉ giả định Electron lỗi thời.

@@ -71,6 +71,11 @@ Kiểm kê toàn bộ `tests/ui` (55 mục, gồm 4 packaged checks), `tests/smo
 | **PORT (còn lại)** | ~48 phép kiểm: ~23 chỉ cần launcher mới; ~25 có payload gọi `window.eduGame` phải chuyển sang façade `desktop.*` | 15 CDP-era cần map hành vi vào Rust/Tauri gate trước khi xóa | 4 (`install-local-model`, `real-ai-e2e`, `real-ai-status`, `scene-preview`) | 0 | ps1 P7 giữ, chờ số máy sạch |
 | **KEEP-AS-IS** | `tauri-webview-check.js`; `ui/lib/screenshot-capture.js` (6 consumer, 5 đang KEEP/PORT); `manual/lib/ui-check-lib.js` | 5 còn lại chờ rà | ~14 (benchmarks/probes/`lan-smoke`/`lan-qr-verify`/`tiny-cdp`/`verify-css`; 6 script tailieu fail-ENOENT **giữ theo chính sách** §`tests/tailieu` README) | — | — |
 
+Sau C3 (2026-11-12): 5 tệp ưu tiên C1 và 3 check LAN đã port; còn khoảng 19 check payload và
+15 smoke. `tests/manual/lan-smoke.js` thực chất bám server Node `src/lan/lan-server.ts` cũ
+(`express`/`socket.io`) nên không còn là KEEP-AS-IS: xếp vào nhóm D, map sang hành vi Rust hoặc
+retire trước khi bỏ dependency.
+
 Quy tắc cứng rút ra: **không bao giờ xóa `tests/manual/lib/ui-check-lib.js`** (`tauri-webview-check.js`
 require nó qua `connect()` đã nhận `http://tauri.localhost/`).
 
@@ -168,9 +173,20 @@ Kho báu thiếu `mission.type:'question'` nên không có đáp án, và helper
 
 Trạng thái xác minh trình chiếu: **93/93 ×2** trên hai instance mới, mỗi lượt data dir và
 WebView2 profile riêng; đủ 10 ảnh, chữ nhỏ nhất 20px, không cắt/tràn/cuộn/chồng lấn, không lỗi
-renderer hay CSP stylesheet. Năm tệp ưu tiên C1 đã hoàn tất; khoảng 22 check payload khác,
+renderer hay CSP stylesheet. Năm tệp ưu tiên C1 đã hoàn tất; khoảng 19 check payload khác,
 15 smoke và nhóm D vẫn còn. Màn hình phụ vật lý/rút cáp, installer/P7 và AI local chưa xác minh.
 Khuôn `desktop.stub('generateLessonDraft')` vẫn dùng được cho các check còn lại cần bước sinh.
+
+Ba tệp LAN còn payload — `ui-lan-wiring-check.js`, `ui-lan-card-start-check.js`,
+`ui-lan-treasure-finish-check.js` — được port sang façade và WebSocket native. Server Rust
+`src-tauri/src/lan.rs` chỉ nói RFC 6455 thô với frame `{ event, payload }`, không có Engine.IO
+handshake, nên `socket.io-client` cũ không thể join phòng. Thêm helper
+`tests/manual/lib/lan-phone.js` thay tầng điện thoại; giữ nguyên assertion bảo mật (phone không
+nhận answer key) và luồng finish/podium. Kết quả trên instance mới: wiring **7/7** (9368),
+card/start **12/12** (9366), treasure finish **5/5** (9367); cả ba cũng xanh trên instance ấm
+9365. Không đổi sản phẩm. `tests/manual/lan-smoke.js` vẫn bám server Node
+`src/lan/lan-server.ts` và `socket.io-client`; server đó không còn caller sản phẩm, nên phải
+map/retire trước khi bỏ `express`/`socket.io` (nhóm D).
 
 ### D. Soát mã TypeScript cũ — không phải đợt xóa hàng loạt
 
@@ -233,6 +249,8 @@ git diff --check
 **Lượt batch 2 (tiếp 3, 2026-11-12).** Port `ui-input-routing-check` — chỉ sửa check, không đổi sản phẩm. Cổng chạy lại: `npm run check` (tsc) sạch, `npm test` **95/95** (44,1 s), `npm run check:renderer-globals` 73/75 (0 undefined), `node --check` tệp check OK, `git diff --check` sạch, và `ui-input-routing-check` **52/52 ×2** trên instance Tauri sạch vừa khởi động (port 9363, data dir + profile tạm riêng, gate env; lượt 1 lạnh, lượt 2 ấm cùng instance). Rust không đổi nên không chạy lại `cargo test` (batch-2 tiếp chốt 153/153 trên cùng cây); `tauri:check`/`build:tauri` không chạy lại vì frontend không đổi.
 
 **Lượt batch 2 (tiếp 4, 2026-11-12).** Viết lại `ui-presentation-check` cho cửa sổ Tauri thật; sửa capability event tối thiểu và CSS tĩnh nhận nonce CSP. `node tests/ui/ui-presentation-check.js 9364` **93/93 ×2** trên hai instance mới, data/profile riêng; 5 loại × 2 viewport, nhỏ nhất 20px, không lỗi renderer/CSP stylesheet. `node --check tests/ui/ui-presentation-check.js` và `node --import tsx tests/unit/tauri-contract.test.ts` qua; `npm test` **95/95** (50,8 s), `npm run build:tauri` 203 tệp, `npm run check` sạch, `npm run check:renderer-globals` 73/75 (0 undefined), `npm run check:embedded` khớp 6125,4 KiB, `cargo test --manifest-path src-tauri/Cargo.toml --lib -- --test-threads=1` **153/153**, `npm run tauri:check` **51/51 + 10/10 mở lại + 12/12 migration** (release 56,49 MiB), `git diff --check` sạch. Màn hình phụ vật lý/rút cáp, installer/P7 và AI local thật chưa xác minh.
+
+**Lượt batch 2 (tiếp 5, 2026-11-12).** Port ba check LAN sang façade và WebSocket native. Phát hiện server Rust chỉ nói RFC 6455 thô (`{event,payload}`), nên `socket.io-client` cũ không thể join; thêm `tests/manual/lib/lan-phone.js`. `node tests/ui/ui-lan-wiring-check.js 9368` **7/7**, `node tests/ui/ui-lan-card-start-check.js 9366` **12/12**, `node tests/ui/ui-lan-treasure-finish-check.js 9367` **5/5** — mỗi lượt trên instance mới (data dir + WebView2 profile tạm riêng, gate env); cả ba cũng xanh trên instance ấm 9365. `npm run check` sạch, `npm test` **95/95** (45,2 s), `check:renderer-globals` 73/75 (0 undefined), `check:embedded` khớp 6125,4 KiB, `cargo test --lib` **153/153**, `git diff --check` sạch. Còn ~19 check payload và 15 smoke; `tests/manual/lan-smoke.js` vẫn bám server Node/Express/Socket.IO cũ, phải map/retire trước khi bỏ dependency.
 
 ## Việc còn lại — thứ tự đề xuất
 

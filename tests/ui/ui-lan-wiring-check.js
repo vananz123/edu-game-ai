@@ -1,12 +1,12 @@
 // ui-lan-wiring-check.js — proves LAN Classroom Mode is wired into the real app.
 //
-// Unit tests cover the reducer/adapters and `lan-smoke.js` covers the server; this
-// check is the only one that proves the *Electron* half: main registered the IPC
-// handlers, the sandboxed preload exposes `window.eduGame.lanStart`, and pressing
-// "Chơi LAN" in a real play modal opens a room the teacher can see (QR + code).
+// Unit tests cover the reducer/adapters; this check proves the Tauri half: the
+// renderer's desktop façade reaches the Rust `lan:start`/`lan:stop` channels, the
+// `lan:state` stream paints the room panel, and pressing "Chơi LAN" in a real play
+// modal opens a room the teacher can see (QR + code).
 //
 // Run:
-//   npm run build
+//   npm run build:tauri
 //   powershell -ExecutionPolicy Bypass -File tests/ui/launch-app.ps1 -Port 9362
 //   node tests/ui/ui-lan-wiring-check.js 9362
 //
@@ -28,7 +28,12 @@ const SYNTHETIC_GAME = {
 (async () => {
   const cdp = await connect();
 
-  check('the preload exposes the LAN bridge', await cdp.evaluate(`typeof window.eduGame.lanStart === 'function' && typeof window.eduGame.onLanState === 'function'`));
+  // A fresh profile opens the setup wizard over the shell; every scripted check
+  // dismisses it first.
+  await cdp.evaluate(`(() => { if (typeof closeSetupWizard === 'function') closeSetupWizard('close'); return true; })()`);
+
+  check('the desktop façade exposes the LAN channels',
+    await cdp.evaluate(`desktop.info().adapter === 'tauri' && typeof desktop.call === 'function' && typeof desktop.listen === 'function'`));
 
   // Open the play modal through the app's own entry point, exactly as a card does.
   // `state`/`playGame` are classic-script globals; they are reachable by name but
@@ -41,7 +46,7 @@ const SYNTHETIC_GAME = {
   check('the play header shows a "Chơi LAN" button for a quiz', opened);
 
   const started = await cdp.evaluate(`(async () => {
-    const result = await window.eduGame.lanStart({ game: state.currentGame });
+    const result = await desktop.call('lanStart', { game: state.currentGame });
     if (!result || !result.ok) return { ok: false, message: result && result.message };
     // Give the 'lan:state' push a moment to render the room panel.
     await new Promise(resolve => setTimeout(resolve, 600));
@@ -60,7 +65,7 @@ const SYNTHETIC_GAME = {
   check('the room shows a join URL on a LAN address', /^http:\/\/\d+\.\d+\.\d+\.\d+:\d+\/\?room=/.test(String(started.url || '')), started.url);
 
   const stopped = await cdp.evaluate(`(async () => {
-    const result = await window.eduGame.lanStop();
+    const result = await desktop.call('lanStop');
     await new Promise(resolve => setTimeout(resolve, 400));
     return { ok: Boolean(result && result.ok), panelGone: !document.querySelector('[data-lan-panel]') };
   })()`);

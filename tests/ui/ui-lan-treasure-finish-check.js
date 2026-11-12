@@ -6,11 +6,11 @@
 // appeared.
 //
 // Run:
-//   npm run build
+//   npm run build:tauri
 //   powershell -ExecutionPolicy Bypass -File tests/ui/launch-app.ps1 -Port 9410
 //   node tests/ui/ui-lan-treasure-finish-check.js 9410
 const { connect } = require('../manual/lib/ui-check-lib');
-const { io } = require('socket.io-client');
+const { openPhone } = require('../manual/lib/lan-phone');
 
 const stage = (id, n, next) => ({
   id, name: `Chặng ${n}`, story: 'Truyện mẫu.', taskDescription: 'Nhiệm vụ mẫu.',
@@ -27,25 +27,24 @@ const check = (name, ok, detail) => { results.push(ok); console.log(`${ok ? 'PAS
 
 (async () => {
   const cdp = await connect();
-  await cdp.evaluate('window.eduGame.lanStop()');
+  await cdp.evaluate(`(() => { if (typeof closeSetupWizard === 'function') closeSetupWizard('close'); return true; })()`);
+  await cdp.evaluate("desktop.call('lanStop').catch(() => {})");
   const room = await cdp.evaluate(`(async () => {
     state.currentGame = ${JSON.stringify(GAME)};
     playGame(state.currentGame);
     await new Promise(r => setTimeout(r, 400));
-    const r = await window.eduGame.lanStart({ game: state.currentGame });
+    const r = await desktop.call('lanStart', { game: state.currentGame });
     return r.ok ? { code: r.snapshot.roomCode, url: r.snapshot.urls[0] } : { error: r.message };
   })()`);
   check('a LAN treasure room opens', Boolean(room.url), room.error || room.code);
   if (!room.url) { cdp.ws.close(); process.exit(1); }
 
-  const socket = io(new URL(room.url).origin, { transports: ['websocket'] });
-  await new Promise((resolve, reject) => { socket.once('connect', resolve); socket.once('connect_error', reject); });
-  const states = [];
-  socket.on('lan:state', snapshot => states.push(snapshot));
-  socket.emit('lan:join', { room: room.code, name: 'Lan' });
-  await new Promise(resolve => socket.once('lan:joined', resolve));
+  const phone = openPhone(room.url, { room: room.code, name: 'Lan' });
+  await phone.opened;
+  await phone.next('lan:joined');
+  const states = phone.states;
 
-  await cdp.evaluate('window.eduGame.lanBegin()');
+  await cdp.evaluate("desktop.call('lanBegin')");
   await new Promise(r => setTimeout(r, 500));
   const afterBegin = states.filter(s => s.state === 'question').pop();
   check('the lesson starts on the first stage', Boolean(afterBegin));
@@ -69,8 +68,8 @@ const check = (name, ok, detail) => { results.push(ok); console.log(`${ok ? 'PAS
   })()`);
   check('the honour roll is on the teacher screen', podium.count > 0, `${podium.count} podium steps`);
 
-  socket.disconnect();
-  await cdp.evaluate('window.eduGame.lanStop()');
+  phone.close();
+  await cdp.evaluate("desktop.call('lanStop')");
   cdp.ws.close();
   const failed = results.filter(ok => !ok).length;
   console.log(`\n${results.length - failed}/${results.length} LAN treasure finish checks passed`);

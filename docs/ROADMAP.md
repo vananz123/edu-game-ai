@@ -1,5 +1,11 @@
 # Roadmap
 
+## Dọn Electron batch 2 (tiếp 5) — ba check LAN chạy trên WebSocket native của Tauri (2026-11-12)
+- **Đã xác minh:** `ui-lan-wiring` **7/7**, `ui-lan-card-start` **12/12**, `ui-lan-treasure-finish` **5/5**, mỗi tệp trên một instance Tauri mới (data dir + WebView2 profile riêng); cả ba cũng xanh trên instance ấm. Check dùng façade `desktop.call` và helper phone mới `tests/manual/lib/lan-phone.js`; phone không nhận answer key, start chờ join, "Tiếp tục" sang câu kế, treasure kết thúc bằng podium.
+- **Phát hiện:** `src-tauri/src/lan.rs` chỉ nói RFC 6455 thô với `{event,payload}`, không có Engine.IO; `socket.io-client` của ba check cũ không thể join phòng, nên phần LAN chưa từng được đo trên vỏ Tauri.
+- **Cổng chạy lại:** `npm run check` sạch · `npm test` **95/95** (45,2 s) · `check:renderer-globals` 73/75, 0 undefined · `check:embedded` 6125,4 KiB · `cargo test --lib` **153/153** · `git diff --check` sạch. Chỉ sửa test, không build lại release.
+- **Còn mở / kế tiếp:** port khoảng 19 check payload còn lại, map 15 smoke rồi rà nhóm D. `tests/manual/lan-smoke.js` vẫn bám `src/lan/lan-server.ts` (Node/Express/Socket.IO, không còn caller sản phẩm) — map/retire trước khi bỏ `express`/`socket.io`. Chưa thử điện thoại thật qua Wi-Fi lớp; màn hình phụ/rút cáp, Windows sạch/installer/P7 và AI local chưa xác minh.
+
 ## Dọn Electron batch 2 — đủ 5 tệp UI ưu tiên C1; trình chiếu native 93/93 ×2 (2026-11-12)
 - **Đã xác minh:** `ui-presentation-check` dùng cửa sổ Tauri thật, giữ ma trận 5 loại nội dung × 2 độ phân giải và sàn 20px; snapshot đầu tiên không gửi bù, reload tài liệu mới, lọc revision/phiên, tái sử dụng cửa sổ và ba đường đóng đều qua trên hai instance/profile mới. Khép danh sách ưu tiên draft-guard/lesson-chat/typography/input-routing/presentation.
 - **Hai lỗi sản phẩm đã sửa:** capability riêng chỉ listen/unlisten cho cửa sổ trình chiếu; chuyển nguyên CSS động sang HTML tĩnh để Tauri cấp nonce, không nới CSP. Unit contract khóa cả hai; xem DECISIONS "Dọn Electron batch 2 (tiếp 4)".
