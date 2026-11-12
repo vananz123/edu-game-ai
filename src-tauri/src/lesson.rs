@@ -20,6 +20,7 @@ use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::ai_http::{AiGate, AiTarget};
+use crate::ai_tasks;
 use crate::library;
 use crate::settings;
 
@@ -222,6 +223,15 @@ fn analyze_blocking(app: &AppHandle, payload: Option<&Value>) -> Result<Value, S
     let cached = !analysis.is_null();
 
     if analysis.is_null() {
+        // Tạo bản ghi tác vụ AI trước khi gọi model (ghi vào bảng ai_tasks).
+        let task_id = ai_tasks::start_task(
+            app,
+            &request_id,
+            "analyze",
+            None, // project_id gán sau khi có project (dưới cùng của hàm)
+            Some(document_id.clone()),
+            "phân tích giáo án",
+        );
         let gate = app
             .try_state::<AiGate>()
             .ok_or_else(|| error("AI_CONFIG: hàng đợi AI chưa sẵn sàng. Hãy khởi động lại ứng dụng."))?;
@@ -274,18 +284,26 @@ fn analyze_blocking(app: &AppHandle, payload: Option<&Value>) -> Result<Value, S
         );
         // Luôn nhả khoá, kể cả khi model lỗi hay giáo viên huỷ.
         gate.finish(&request_id);
-        let value = result?;
-        analysis = value.get("analysis").cloned().unwrap_or(Value::Null);
-        // Cùng thứ tự Electron: lưu phân tích ngay khi model trả xong.
-        library::run(
-            app,
-            "lesson-store:save-analysis",
-            &[analysis.clone(), json!({ "cacheKey": cache_key })],
-        )?;
-        let _ = app.emit(
-            "lesson:progress",
-            json!({ "requestId": request_id, "stage": "ready" }),
-        );
+        match result {
+            Ok(value) => {
+                ai_tasks::complete_task(app, &task_id, Some("phân tích hoàn thành"));
+                analysis = value.get("analysis").cloned().unwrap_or(Value::Null);
+                // Cùng thứ tự Electron: lưu phân tích ngay khi model trả xong.
+                library::run(
+                    app,
+                    "lesson-store:save-analysis",
+                    &[analysis.clone(), json!({ "cacheKey": cache_key })],
+                )?;
+                let _ = app.emit(
+                    "lesson:progress",
+                    json!({ "requestId": request_id, "stage": "ready" }),
+                );
+            }
+            Err(e) => {
+                ai_tasks::fail_task(app, &task_id, Some("AI_ERROR"), Some(&e));
+                return Err(e);
+            }
+        }
     }
 
     // Ghép vào dự án (nếu có) bằng luật `lesson-projects.ts`, rồi lưu bằng
@@ -707,6 +725,15 @@ fn generate_blocking(app: &AppHandle, payload: Option<&Value>) -> Result<Value, 
         .try_state::<AiGate>()
         .ok_or_else(|| error("AI_CONFIG: hàng đợi AI chưa sẵn sàng. Hãy khởi động lại ứng dụng."))?;
     let label = format!("tạo nội dung {}", text_field(&config, "gameType"));
+    // Tạo bản ghi tác vụ AI trước khi gọi model (ghi vào bảng ai_tasks).
+    let task_id = ai_tasks::start_task(
+        app,
+        &request_id,
+        "generate",
+        Some(project_id.clone()),
+        None,
+        &label,
+    );
     let cancel = gate.begin(&request_id, &label)?;
     let ai = AiTarget {
         request_id: request_id.clone(),
@@ -735,7 +762,16 @@ fn generate_blocking(app: &AppHandle, payload: Option<&Value>) -> Result<Value, 
     );
     // Luôn nhả khoá, kể cả khi model lỗi hay giáo viên huỷ.
     gate.finish(&request_id);
-    let result = result?;
+    let result = match result {
+        Ok(r) => {
+            ai_tasks::complete_task(app, &task_id, Some("tạo nội dung hoàn thành"));
+            r
+        }
+        Err(e) => {
+            ai_tasks::fail_task(app, &task_id, Some("AI_ERROR"), Some(&e));
+            return Err(e);
+        }
+    };
     let Some(saved_input) = result.get("project").cloned() else {
         return Err(error("Không lưu được dự án sau khi tạo nội dung."));
     };
@@ -844,6 +880,15 @@ fn regenerate_blocking(app: &AppHandle, payload: Option<&Value>) -> Result<Value
         .try_state::<AiGate>()
         .ok_or_else(|| error("AI_CONFIG: hàng đợi AI chưa sẵn sàng. Hãy khởi động lại ứng dụng."))?;
     let cancel = gate.begin(&request_id, "tạo lại một mục nội dung")?;
+    // Tạo bản ghi tác vụ AI trước khi gọi model (ghi vào bảng ai_tasks).
+    let task_id = ai_tasks::start_task(
+        app,
+        &request_id,
+        "regenerate",
+        Some(project_id.clone()),
+        None,
+        "tạo lại một mục nội dung",
+    );
     let ai = AiTarget {
         request_id: request_id.clone(),
         base_url: target.base_url.clone(),
@@ -872,7 +917,16 @@ fn regenerate_blocking(app: &AppHandle, payload: Option<&Value>) -> Result<Value
         &request_id,
     );
     gate.finish(&request_id);
-    let result = result?;
+    let result = match result {
+        Ok(r) => {
+            ai_tasks::complete_task(app, &task_id, Some("tạo lại nội dung hoàn thành"));
+            r
+        }
+        Err(e) => {
+            ai_tasks::fail_task(app, &task_id, Some("AI_ERROR"), Some(&e));
+            return Err(e);
+        }
+    };
     let Some(saved_input) = result.get("project").cloned() else {
         return Err(error("Không lưu được dự án sau khi tạo lại nội dung."));
     };
@@ -1047,6 +1101,15 @@ fn send_chat_blocking(app: &AppHandle, payload: Option<&Value>) -> Result<Value,
         .try_state::<AiGate>()
         .ok_or_else(|| error("AI_CONFIG: hàng đợi AI chưa sẵn sàng. Hãy khởi động lại ứng dụng."))?;
     let label = "trả lời câu hỏi về giáo án".to_string();
+    // Tạo bản ghi tác vụ AI trước khi gọi model (ghi vào bảng ai_tasks).
+    let task_id = ai_tasks::start_task(
+        app,
+        &request_id,
+        "chat",
+        None,
+        None,
+        &label,
+    );
     let cancel = gate.begin(&request_id, &label)?;
 
     let _ = app.emit(
@@ -1090,7 +1153,16 @@ fn send_chat_blocking(app: &AppHandle, payload: Option<&Value>) -> Result<Value,
     );
 
     gate.finish(&request_id);
-    let turn = turn_result?;
+    let turn = match turn_result {
+        Ok(t) => {
+            ai_tasks::complete_task(app, &task_id, Some("trả lời hoàn thành"));
+            t
+        }
+        Err(e) => {
+            ai_tasks::fail_task(app, &task_id, Some("AI_ERROR"), Some(&e));
+            return Err(e);
+        }
+    };
 
     let append_payload = json!({
         "chatId": requested_chat_id,
