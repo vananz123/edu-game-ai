@@ -20,14 +20,22 @@ function check(label, ok, detail = '') {
 }
 
 const SCENARIO = String.raw`(async () => {
+  // A fresh profile opens the setup wizard over the shell; dismiss it before
+  // driving the lesson page.
+  for (let i = 0; i < 40; i++) {
+    if (document.querySelector('#modalRoot .setup-fullscreen')) break;
+    await new Promise(r => setTimeout(r, 100));
+  }
+  if (typeof closeSetupWizard === 'function') closeSetupWizard('close');
+  await new Promise(r => setTimeout(r, 250));
   // Leftovers from an interrupted earlier run would make the counts non-deterministic.
-  const existing = await window.eduGame.listLessonLibrary();
+  const existing = await desktop.call('listLessonLibrary');
   for (const doc of (Array.isArray(existing) ? existing : []).filter(d => String(d.name || '').startsWith('probe-paging-'))) {
-    await window.eduGame.deleteLessonDocument(doc.id);
+    await desktop.call('deleteLessonDocument', doc.id);
   }
   const created = [];
   for (let index = 0; index < 15; index += 1) {
-    created.push(await window.eduGame.saveLessonDocument({
+    created.push(await desktop.call('saveLessonDocument', {
       name: 'probe-paging-' + String(index).padStart(2, '0') + '.txt',
       ext: 'txt',
       text: 'Nội dung thử phân trang số ' + index + '. ' + 'x'.repeat(120),
@@ -86,7 +94,7 @@ const SCENARIO = String.raw`(async () => {
   await new Promise(r => setTimeout(r, 1500));
   window.confirm = realConfirm;
 
-  const library = await window.eduGame.listLessonLibrary();
+  const library = await desktop.call('listLessonLibrary');
   const left = (Array.isArray(library) ? library : []).filter(doc => String(doc.name || '').startsWith('probe-paging-'));
   out.leftAfterDelete = left.length;
   out.expectedLeft = 15 - selectedIds.length;
@@ -94,7 +102,7 @@ const SCENARIO = String.raw`(async () => {
   const countNode = document.querySelector('[data-lesson-selected-count]');
   out.countReset = countNode ? countNode.textContent.trim() : '';
 
-  for (const doc of left) await window.eduGame.deleteLessonDocument(doc.id);
+  for (const doc of left) await desktop.call('deleteLessonDocument', doc.id);
   state.lessonLibrary = null;
   refreshLessonLibraryPage();
   return out;

@@ -20,10 +20,18 @@ function check(label, ok, detail = '') {
 }
 
 const SCENARIO = String.raw`(async () => {
+  // A fresh profile opens the setup wizard over the shell; dismiss it before
+  // driving the results page.
+  for (let i = 0; i < 40; i++) {
+    if (document.querySelector('#modalRoot .setup-fullscreen')) break;
+    await new Promise(r => setTimeout(r, 100));
+  }
+  if (typeof closeSetupWizard === 'function') closeSetupWizard('close');
+  await new Promise(r => setTimeout(r, 250));
   // Leftovers from an interrupted run would make the counts non-deterministic.
-  const existing = await window.eduGame.getLibrary();
+  const existing = await desktop.call('getLibrary');
   for (const session of (existing.sessions || []).filter(s => String(s.playerName || '').startsWith('probe-result-'))) {
-    await window.eduGame.deleteSessions([session.id]);
+    await desktop.call('deleteSessions', [session.id]);
   }
   const gamesBefore = (existing.games || []).length;
   const created = [];
@@ -48,10 +56,10 @@ const SCENARIO = String.raw`(async () => {
       percent: 50 + index,
       createdAt: new Date(Date.UTC(2026, 0, 1, 0, index)).toISOString()
     };
-    await window.eduGame.saveSession(session);
+    await desktop.call('saveSession', session);
     created.push(session);
   }
-  state.db = await window.eduGame.getLibrary();
+  state.db = await desktop.call('getLibrary');
   const sessionsBeforeDelete = (state.db.sessions || []).length;
   state.sessionPage = 0;
   state.sessionSelection = new Set();
@@ -99,7 +107,7 @@ const SCENARIO = String.raw`(async () => {
   await new Promise(r => setTimeout(r, 1200));
   window.confirm = realConfirm;
 
-  const after = await window.eduGame.getLibrary();
+  const after = await desktop.call('getLibrary');
   const leftProbe = (after.sessions || []).filter(s => isRunRow(s.id)).length;
   out.toast = typeof window.toastLast === 'string' ? window.toastLast : '';
   out.selectionNow = state.sessionSelection instanceof Set ? state.sessionSelection.size : -1;
@@ -114,8 +122,8 @@ const SCENARIO = String.raw`(async () => {
 
   const leftovers = (after.sessions || [])
     .filter(s => isRunRow(s.id) || String(s.playerName || '').startsWith('probe-result-'));
-  if (leftovers.length) await window.eduGame.deleteSessions(leftovers.map(s => s.id));
-  state.db = await window.eduGame.getLibrary();
+  if (leftovers.length) await desktop.call('deleteSessions', leftovers.map(s => s.id));
+  state.db = await desktop.call('getLibrary');
   state.sessionSelection = new Set();
   render();
   return out;

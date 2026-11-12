@@ -2130,5 +2130,38 @@ mod tests {
         assert_eq!(history[0]["taskId"], "task_1");
         assert_eq!(history[0]["restored"], true);
         assert_eq!(history[0]["resultSummary"], "6 mục tiêu");
+
+        // #121: the table keeps only the newest 30 rows. task_1 is now the oldest,
+        // so saving 30 more must prune it and keep task_31.
+        for i in 2..=31 {
+            let task = json!({
+                "taskId": format!("task_{i}"),
+                "requestId": format!("req_{i}"),
+                "kind": "generate",
+                "label": "synthetic",
+                "state": "completed",
+                "progress": "ready",
+                "startedAt": format!("2026-11-11T00:{:02}:00.000Z", i),
+                "finishedAt": format!("2026-11-11T00:{:02}:30.000Z", i),
+            });
+            dispatch(&connection, data.path(), "ai-task-save", &[task]).expect("save");
+        }
+        let capped = dispatch(
+            &connection,
+            data.path(),
+            "ai-task-list",
+            &[json!({ "limit": 50 })],
+        )
+        .expect("list capped");
+        assert_eq!(capped["total"].as_i64(), Some(30));
+        let ids: Vec<String> = capped["history"]
+            .as_array()
+            .expect("history")
+            .iter()
+            .filter_map(|row| row["taskId"].as_str().map(str::to_string))
+            .collect();
+        assert_eq!(ids.len(), 30);
+        assert!(!ids.iter().any(|id| id == "task_1"), "oldest row must be pruned");
+        assert!(ids.iter().any(|id| id == "task_31"), "newest row must remain");
     }
 }

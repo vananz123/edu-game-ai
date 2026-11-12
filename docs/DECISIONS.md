@@ -2650,6 +2650,23 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 
 **Việc kế tiếp.** Chưa duyệt bắt đầu code. Khi duyệt: dựng khung Tauri v2 + Rust toolchain trong nhánh riêng, chuyển lớp truy cập desktop sang facade TS (kế hoạch mục 4) và làm vòng 1 theo mục 1.
 
+## Dọn Electron batch 2 (tiếp 6, 2026-11-12) — port bốn check paging sang façade `desktop.*`; `ui-ai-tasks` phải stub 30 dòng vì Tauri chưa có writer `ai_tasks`
+
+**Bối cảnh.** Bốn check paging còn payload `window.eduGame`: `ui-ai-tasks-paging`, `ui-library-paging`, `ui-lessons-paging`, `ui-results-paging`. Chúng từng dựa vào dữ liệu có sẵn trong profile (đặc biệt lịch sử AI task), nên không chạy được trên hồ sơ Tauri mới. Khi port, `ui-ai-tasks` lộ một khoảng trống sản phẩm: `ai_tasks::start_task`, `progress_task`, `complete_task`, `fail_task` không có caller nào trong Rust, và renderer không gọi `lesson-store:ai-task-save`, nên bảng `ai_tasks` không bao giờ được ghi trên Tauri; UI "Tác vụ AI" luôn rỗng dù pager vẫn vẽ.
+
+**Quyết định.**
+
+1. **Port façade và gạt setup cho cả bốn check.** Giữ nguyên phép đo nghiệp vụ: library 9 thẻ/trang + chọn/xoá theo lô, lessons 12/trang, results 15/trang, AI tasks 10 dòng/trang. Mỗi check dùng prefix dữ liệu tổng hợp riêng và dọn sau lượt; không dùng dữ liệu học sinh thật.
+2. **`ui-ai-tasks` đo store thật trước, rồi mới stub.** Trước khi stub, gọi `listAiTasks` thật để xác nhận trần 30 và offset 30 rỗng trên hồ sơ mới. Sau đó `desktop.stub('listAiTasks')` trả 30 dòng tổng hợp theo `limit`/`offset` để đo pager 3 trang, nút Sau/Trước và "Làm mới" một cách tất định. Không hạ assertion pager, nhưng **không** gọi đây là bằng chứng lịch sử AI thật.
+3. **Trần 30 được kiểm ở tầng store bằng test Rust.** Mở rộng `ai_tasks_save_list_and_prune`: lưu 31 dòng, xác nhận `total` còn 30, dòng cũ nhất bị xoá và dòng mới nhất còn. Đây là test thuần store, không thay cho việc nối writer.
+4. **Ghi khoảng trống sản phẩm thay vì che.** Không tự thêm kênh test-only hay mở `lesson-store:ai-task-save` cho renderer chỉ để làm xanh check. Việc nối writer `ai_tasks` vào các đường AI (kèm requestId, tiến trình, lỗi) là việc sản phẩm riêng, phải làm trước khi tuyên bố parity đầy đủ cho DECISIONS #121.
+
+**Kiểm chứng.** Bốn instance Tauri mới (data dir + WebView2 profile tạm riêng, `EDUGAME_TAURI_GATE=1`/`EDUGAME_TAURI_DATA_DIR`): `node tests/ui/ui-ai-tasks-paging-check.js 9371` **8/8** · `node tests/ui/ui-library-paging-check.js 9372` **12/12** · `node tests/ui/ui-lessons-paging-check.js 9373` **10/10** · `node tests/ui/ui-results-paging-check.js 9374` **12/12**. `cargo test --manifest-path src-tauri/Cargo.toml --lib -- --test-threads=1` **153/153** (gồm test prune 31→30) · `npm run check` sạch · `npm test` **95/95** (46,4 s) · `npm run check:renderer-globals` 73/75 script, 1.055 hàm/8.359 điểm gọi, 0 undefined · `npm run check:embedded` khớp 6125,4 KiB · `node --check` cả bốn tệp sạch · `git diff --check` sạch. Chỉ sửa test (và test Rust) nên không build lại binary release.
+
+**Chưa xác minh / chưa làm.** Pager AI task chạy trên dữ liệu stub; chưa có 30 dòng thật đi qua UI vì Tauri chưa ghi `ai_tasks`. Lịch sử và danh sách live task AI trên Tauri vẫn rỗng — cần nối writer hoặc ghi rõ tính năng đang tắt. Khoảng 15 check payload còn lại, 15 smoke và nhóm D (`unload-guard.ts`, `setup-ipc.ts`, `src/lan/lan-server.ts`, `tests/manual/lan-smoke.js`) chưa xong. Chưa thử điện thoại thật/Wi-Fi lớp, màn hình phụ/rút cáp, installer trên Windows sạch/P7 và AI local thật.
+
+**Việc kế tiếp.** Port khoảng 15 check payload còn lại (art/editor/race/game-worlds/settings…), map/retire 15 smoke, rồi rà nhóm D. Trước khi tuyên bố parity, nối writer `ai_tasks` vào các đường phân tích/sinh nội dung/chat hoặc ghi rõ lịch sử tác vụ đang tắt.
+
 ## Dọn Electron batch 2 (tiếp 5, 2026-11-12) — port ba check LAN sang WebSocket native của Tauri; `socket.io-client` cũ không nói được với server Rust
 
 **Bối cảnh.** Ba check LAN còn payload `window.eduGame`: `ui-lan-wiring`, `ui-lan-card-start`, `ui-lan-treasure-finish`. Chúng dùng `socket.io-client` để đóng vai điện thoại học sinh. Server Tauri trong `src-tauri/src/lan.rs` chỉ nói RFC 6455 thô với frame JSON `{ event, payload }` (`lan:join`, `lan:answer`, `lan:state`); route `/socket.io` chỉ nâng cấp WebSocket rồi đọc cùng frame, không có Engine.IO handshake. Vì vậy client cũ không thể join phòng — đây không phải chỉ đổi tên API mà phải thay tầng điện thoại của check.

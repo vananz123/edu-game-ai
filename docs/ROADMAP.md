@@ -1,5 +1,11 @@
 # Roadmap
 
+## Dọn Electron batch 2 (tiếp 6) — bốn check paging chạy trên façade; lịch sử AI task vẫn rỗng vì Tauri thiếu writer (2026-11-12)
+- **Đã xác minh:** `ui-ai-tasks-paging` **8/8**, `ui-library-paging` **12/12**, `ui-lessons-paging` **10/10**, `ui-results-paging` **12/12**, mỗi tệp trên một instance Tauri mới (data dir + WebView2 profile riêng). Library 9 thẻ/trang, lessons 12/trang, results 15/trang; AI tasks 10 dòng/trang, 3 trang từ 30 dòng, "Làm mới" về trang 1.
+- **Phát hiện:** `ai_tasks::start_task`/`progress_task`/`complete_task`/`fail_task` không có caller, renderer cũng không gọi `lesson-store:ai-task-save`; hồ sơ Tauri mới luôn có 0 dòng `ai_tasks`. Check đo store thật (total 0, offset 30 rỗng) rồi stub 30 dòng để đo pager; đây là khoảng trống sản phẩm, không phải bằng chứng lịch sử AI thật. Test Rust `ai_tasks_save_list_and_prune` lưu 31 dòng, xác nhận prune còn 30 và xoá dòng cũ nhất.
+- **Cổng chạy lại:** `npm run check` sạch · `npm test` **95/95** (46,4 s) · `check:renderer-globals` 73/75, 0 undefined · `check:embedded` 6125,4 KiB · `cargo test --lib` **153/153** · `node --check` bốn tệp · `git diff --check` sạch. Chỉ sửa test (và test Rust), không build lại release.
+- **Còn mở / kế tiếp:** nối writer `ai_tasks` vào các đường AI (hoặc ghi rõ tính năng lịch sử tác vụ đang tắt) trước khi tuyên bố parity #121; port khoảng 15 check payload còn lại, map 15 smoke rồi rà nhóm D. Chưa xác minh điện thoại thật/Wi-Fi lớp, màn hình phụ/rút cáp, installer Windows sạch/P7, AI local thật.
+
 ## Dọn Electron batch 2 (tiếp 5) — ba check LAN chạy trên WebSocket native của Tauri (2026-11-12)
 - **Đã xác minh:** `ui-lan-wiring` **7/7**, `ui-lan-card-start` **12/12**, `ui-lan-treasure-finish` **5/5**, mỗi tệp trên một instance Tauri mới (data dir + WebView2 profile riêng); cả ba cũng xanh trên instance ấm. Check dùng façade `desktop.call` và helper phone mới `tests/manual/lib/lan-phone.js`; phone không nhận answer key, start chờ join, "Tiếp tục" sang câu kế, treasure kết thúc bằng podium.
 - **Phát hiện:** `src-tauri/src/lan.rs` chỉ nói RFC 6455 thô với `{event,payload}`, không có Engine.IO; `socket.io-client` của ba check cũ không thể join phòng, nên phần LAN chưa từng được đo trên vỏ Tauri.

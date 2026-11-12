@@ -29,9 +29,9 @@ const SCENARIO = String.raw`(async () => {
   await sleep(250);
 
   // Leftovers from an interrupted run would make the counts non-deterministic.
-  const existing = await window.eduGame.getLibrary();
+  const existing = await desktop.call('getLibrary');
   const leftovers = (existing.games || []).filter(g => String(g.title || '').startsWith('probe-lib-'));
-  if (leftovers.length) await window.eduGame.deleteGames(leftovers.map(g => g.id));
+  if (leftovers.length) await desktop.call('deleteGames', leftovers.map(g => g.id));
   const otherGames = (existing.games || []).length - leftovers.length;
 
   const runTag = Date.now().toString(36);
@@ -51,10 +51,10 @@ const SCENARIO = String.raw`(async () => {
         correctOptionId: 'a', correctAnswer: '', explanation: 'Giải thích.', points: 100
       }]
     };
-    await window.eduGame.saveGame(game);
+    await desktop.call('saveGame', game);
     created.push(game);
   }
-  state.db = await window.eduGame.getLibrary();
+  state.db = await desktop.call('getLibrary');
   state.libraryPage = 0;
   state.librarySelection = new Set();
   const link = [...document.querySelectorAll('[data-page]')].find(node => node.dataset.page === 'library');
@@ -109,7 +109,7 @@ const SCENARIO = String.raw`(async () => {
   out.probeSelected = selectedIds.filter(value => value.startsWith('probe-lib-')).length;
 
   // The IPC refuses an empty batch instead of silently answering "0 deleted".
-  try { await window.eduGame.deleteGames([]); out.emptyBatchRejected = false; }
+  try { await desktop.call('deleteGames', []); out.emptyBatchRejected = false; }
   catch (error) { out.emptyBatchRejected = true; }
 
   const realConfirm = window.confirm;
@@ -120,7 +120,7 @@ const SCENARIO = String.raw`(async () => {
   await sleep(1500);
   window.confirm = realConfirm;
 
-  const after = await window.eduGame.getLibrary();
+  const after = await desktop.call('getLibrary');
   const afterGames = after.games || [];
   out.leftProbe = afterGames.filter(g => String(g.title || '').startsWith('probe-lib-')).length;
   out.expectedLeft = 11 - out.probeSelected;
@@ -133,11 +133,11 @@ const SCENARIO = String.raw`(async () => {
   out.countReset = countNode ? countNode.textContent.trim() : '';
 
   const remaining = afterGames.filter(g => String(g.title || '').startsWith('probe-lib-'));
-  if (remaining.length) await window.eduGame.deleteGames(remaining.map(g => g.id));
+  if (remaining.length) await desktop.call('deleteGames', remaining.map(g => g.id));
   state.librarySelection = new Set();
   state.libraryPage = 0;
   state.search = '';
-  state.db = await window.eduGame.getLibrary();
+  state.db = await desktop.call('getLibrary');
   render();
   return out;
 })()`;
