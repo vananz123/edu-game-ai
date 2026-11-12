@@ -7,6 +7,17 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-12 — Commit nối writer ai_tasks vào 4 đường gọi AI (f106cc0): lesson:analyze, lesson:generate, lesson:regenerate-item, lesson:chat-send
+- **Trạng thái:** `ai_tasks::start_task/progress_task/complete_task/fail_task` trong `src-tauri/src/ai_tasks.rs` đã có đầy đủ implementation nhưng chưa có caller. Lượt này nối writer vào 4 đường gọi model trong `src-tauri/src/lesson.rs`:
+  - `lesson:analyze`: `start_task` trước `gate.begin`, `complete_task` khi thành công, `fail_task` khi lỗi (kind: "analyze", document_id có sẵn)
+  - `lesson:generate`: `start_task` với `project_id`, `complete_task`/`fail_task` quanh `run_with_ai_progress` (kind: "generate")
+  - `lesson:regenerate-item`: `start_task` với `project_id`, `complete_task`/`fail_task` quanh model call (kind: "regenerate")
+  - `lesson:chat-send`: `start_task`, `complete_task`/`fail_task` quanh model call (kind: "chat")
+- **Files đã đổi:** `src-tauri/src/lesson.rs` (87 insertions, 15 deletions)
+- **Lệnh đã chạy:** `cargo check --manifest-path src-tauri/Cargo.toml` — Finished dev profile, 0 lỗi
+- **Chưa xác minh:** Chạy `cargo test --lib` để đảm bảo không làm hỏng test Rust hiện tại; chạy UI check `ui-ai-tasks-paging` trên profile thật để xác nhận bảng `ai_tasks` có dữ liệu sau khi gọi AI; đóng P7; AI local thật chưa chạy.
+- **Việc kế tiếp:** Chạy `cargo test --lib`, sau đó xác minh end-to-end qua UI check AI tasks.
+
 ### 2026-11-12 — Commit dọn Electron batch 2 (243e348): xoá smoke tests, wizard fixtures, lan-server — 93 files, 13.984 dòng xóa
 - **Trạng thái:** Commit toàn bộ working tree Electron-removal vào `main`. Xoá 20 tệp `tests/smoke/*.js` (CDP-era Electron, không chạy trên Tauri), thư mục `tests/fixtures/wizard/`, `src/lan/lan-server.ts` + `tests/manual/lan-smoke.js` (thiếu `socket.io` trong dependencies ⇒ không compile). Giữ `src/ai-core/unload-guard.ts` + `tests/unit/unload-guard.test.ts` và `src/ai-core/setup-ipc.ts` (pure TypeScript, compile được). Thêm `docs/handoff/plans/2026-11-12-smoke-mapping.md`.
 - **Files đã commit:** 93 files (xem `git show --stat 243e348`)
