@@ -21,25 +21,28 @@
  * shrinks the transcript instead of the frame, and the compacted list card expands
  * into — and back out of — a "Xem chi tiết" block that never leaves its column.
  *
- * The endpoint is `http://127.0.0.1:<port>/v1`, which main accepts for HTTP only
- * because it is loopback ("trong môi trường thử nghiệm"), so the whole cloud path
- * — provider choice, `response_format`, the JSON contract, `normalizeDraft`, the
- * store — runs unchanged. `EDUGAME_AI_TEST_DIR` must stay UNSET: the fixture seam
- * would answer before the transport and this check would measure nothing.
+ * The endpoint is `http://127.0.0.1:<port>/v1`, which the Rust backend accepts for
+ * HTTP only because it is loopback (settings.rs allows http for localhost/127.0.0.1/
+ * [::1]), so the whole cloud path — provider choice, `response_format`, the JSON
+ * contract, `normalizeDraft`, the store — runs unchanged. Unlike ui-draft-guard, this
+ * check uses NO `desktop.stub`: it drives the real Rust cloud transport against the
+ * loopback mock, so a stub would answer before the transport and measure nothing.
  *
  * The key is synthetic (AGENTS.md). Nothing here runs a local model; the local
  * provider is only proven not to fall back to the cloud endpoint silently (#132 D13).
  *
- * Usage: start the app on a fresh profile (the check deletes what it creates, but a
- * used profile carries other providers and lessons into the measurements), then
- *   rm -rf "$TEMP/qoder-lessonchat" && mkdir -p "$TEMP/qoder-lessonchat"
- *   EDUGAME_USER_DATA=$TEMP/qoder-lessonchat env -u ELECTRON_RUN_AS_NODE \
- *     -u EDUGAME_AI_TEST_DIR npx electron . \
- *     --remote-debugging-port=9347 --disable-backgrounding-occluded-windows \
- *     --disable-renderer-backgrounding --disable-background-timer-throttling
- *   node tests/ui/ui-lesson-chat-check.js 9347
+ * Usage: build the Tauri release, then start it on an ISOLATED data dir (the check
+ * deletes what it creates, but a used profile carries other providers and lessons
+ * into the measurements). EDUGAME_TAURI_GATE=1 + EDUGAME_TAURI_DATA_DIR redirect the
+ * release binary's data dir (paths.rs) — the Tauri equivalent of EDUGAME_USER_DATA:
+ *   npm run build:tauri && cargo tauri build
+ *   rm -rf "$TEMP/eg-lessonchat-data" "$TEMP/eg-lessonchat-webview"
+ *   EDUGAME_TAURI_GATE=1 EDUGAME_TAURI_DATA_DIR="$TEMP/eg-lessonchat-data" \
+ *     powershell -ExecutionPolicy Bypass -File tests/ui/launch-app.ps1 -Port 9361 \
+ *     -WebviewProfile "$TEMP/eg-lessonchat-webview"
+ *   node tests/ui/ui-lesson-chat-check.js 9361
  */
-process.argv[2] = process.argv[2] || process.env.CDP_PORT || '9347';
+process.argv[2] = process.argv[2] || process.env.CDP_PORT || '9361';
 
 const http = require('node:http');
 const { connect, check } = require('../manual/lib/ui-check-lib');
@@ -252,7 +255,7 @@ const CONFIGURE_PROVIDER = `(async () => {
     await new Promise(r => setTimeout(r, 200));
   }
   const card = document.querySelector('[data-ai-provider="custom"]');
-  const ai = (await window.eduGame.getSettings()).ai || {};
+  const ai = (await desktop.call('getSettings')).ai || {};
   const provider = (ai.providers || []).find(item => item.id === 'custom') || {};
   return {
     missing: false,
@@ -268,8 +271,8 @@ const CONFIGURE_PROVIDER = `(async () => {
 })()`;
 
 const SEED_AND_LAYOUT = `(async () => {
-  const a = await window.eduGame.saveLessonDocument({ name: __A_NAME__, ext: 'txt', text: __A_TEXT__ });
-  const b = await window.eduGame.saveLessonDocument({ name: __B_NAME__, ext: 'txt', text: __B_TEXT__ });
+  const a = await desktop.call('saveLessonDocument', { name: __A_NAME__, ext: 'txt', text: __A_TEXT__ });
+  const b = await desktop.call('saveLessonDocument', { name: __B_NAME__, ext: 'txt', text: __B_TEXT__ });
   await refreshLessonLibraryPage();
   navigate('lesson-plans');
   await new Promise(r => setTimeout(r, 600));
@@ -466,8 +469,8 @@ const sendTurn = (mode, question, waitSelector) => `(async () => {
 
 const PERSISTENCE = `(async () => {
   const chatId = lessonChatUi.chatId;
-  const stored = await window.eduGame.getLessonChat(chatId);
-  const chats = (await window.eduGame.listLessonChats()) || [];
+  const stored = await desktop.call('getLessonChat', chatId);
+  const chats = (await desktop.call('listLessonChats')) || [];
   return {
     chatId,
     found: Boolean(stored),
@@ -517,7 +520,7 @@ const HANDOFF = `(async () => {
     await new Promise(r => setTimeout(r, 200));
   }
   const panel = document.querySelector('[data-wizard-bank-finish="1"]');
-  const project = wizardState.projectId ? await window.eduGame.getProject(wizardState.projectId) : null;
+  const project = wizardState.projectId ? await desktop.call('getProject', wizardState.projectId) : null;
   return {
     clicked: true,
     page: state.page,
@@ -543,7 +546,7 @@ const SAVE_TO_LIBRARY = `(async () => {
   const deadline = Date.now() + 40000;
   while (Date.now() < deadline && wizardState.busy) await new Promise(r => setTimeout(r, 200));
   const game = wizardState.gameSnapshot;
-  const library = await window.eduGame.getLibrary();
+  const library = await desktop.call('getLibrary');
   const row = ((library || {}).games || []).find(item => item.id === (game || {}).id) || null;
   return {
     found: true,
@@ -639,7 +642,7 @@ const UNGROUNDED_TURN = `(async () => {
   const bubbles = [...document.querySelectorAll('.lesson-chat-bubble')];
   const last = bubbles[bubbles.length - 1] || null;
   const chatId = lessonChatUi.chatId;
-  const stored = await window.eduGame.getLessonChat(chatId);
+  const stored = await desktop.call('getLessonChat', chatId);
   // #186: a turn that read no lesson must not print a reading score.
   const readsNode = last ? last.querySelector('[data-lesson-chat-reads]') : null;
   return {
@@ -658,7 +661,7 @@ const UNGROUNDED_TURN = `(async () => {
 // no analysis has nothing to expand, so one is stored for real first (the same shape
 // step-structure saves) — otherwise every assert below would pass on an empty card.
 const LESSON_CARD = `(async () => {
-  await window.eduGame.saveLessonAnalysis({
+  await desktop.call('saveLessonAnalysis', {
     id: __ANALYSIS_ID__, schemaVersion: 1, documentId: __DOC_A__,
     subject: 'Sinh học', grade: 6, topic: 'Quang hợp và hô hấp',
     objectives: [
@@ -812,7 +815,7 @@ const DELETE_AND_RETYPE = `(async () => {
   window.confirm = realConfirm;
   console.error = realError;
   const errs = window.__errs.slice(0, 4);
-  const stored = openId ? await window.eduGame.getLessonChat(openId) : null;
+  const stored = openId ? await desktop.call('getLessonChat', openId) : null;
   const input = document.getElementById('lessonChatInput');
   // Where the page itself left the caret, before this check touches anything: the
   // delete redraws the composer and the trash button that held focus is gone with it.
@@ -902,13 +905,13 @@ const CLEANUP = `(async () => {
   const removed = { chats: 0, documents: 0, games: 0, projects: 0 };
   const chatIds = __CHAT_IDS__.filter(Boolean);
   if (chatIds.length) {
-    const result = await window.eduGame.deleteLessonChats(chatIds);
+    const result = await desktop.call('deleteLessonChats', chatIds);
     removed.chats = Number(result && result.deleted) || 0;
   }
-  if (wizardState.gameId) { await window.eduGame.deleteGame(wizardState.gameId); removed.games = 1; }
-  if (wizardState.projectId) { await window.eduGame.deleteProject(wizardState.projectId); removed.projects = 1; }
+  if (wizardState.gameId) { await desktop.call('deleteGame', wizardState.gameId); removed.games = 1; }
+  if (wizardState.projectId) { await desktop.call('deleteProject', wizardState.projectId); removed.projects = 1; }
   const ids = __DOC_IDS__;
-  if (ids.length) { await window.eduGame.deleteLessonDocuments(ids); removed.documents = ids.length; }
+  if (ids.length) { await desktop.call('deleteLessonDocuments', ids); removed.documents = ids.length; }
   navigate('settings');
   await new Promise(r => setTimeout(r, 500));
   const base = document.querySelector('[data-ai-provider-baseurl="custom"]');
@@ -920,7 +923,7 @@ const CLEANUP = `(async () => {
   await new Promise(r => setTimeout(r, 200));
   document.querySelector('#saveSettingsBtn').click();
   await new Promise(r => setTimeout(r, 1200));
-  const ai = (await window.eduGame.getSettings()).ai || {};
+  const ai = (await desktop.call('getSettings')).ai || {};
   const provider = (ai.providers || []).find(item => item.id === 'custom') || {};
   navigate('home');
   return {
@@ -1207,7 +1210,7 @@ function fill(script, values) {
     check('the lesson-free turn is stored with no documents',
       Boolean(free.chatId) && free.storedDocumentIds.length === 0 && free.storedCitations.every(count => count === 0),
       `${JSON.stringify(free.storedDocumentIds)}/${JSON.stringify(free.storedCitations)}`);
-    const groundedAgain = await cdp.evaluate(`(async () => ((await window.eduGame.getLessonChat(${JSON.stringify(stored.chatId)})) || {}).documentIds || [])()`);
+    const groundedAgain = await cdp.evaluate(`(async () => ((await desktop.call('getLessonChat', ${JSON.stringify(stored.chatId)})) || {}).documentIds || [])()`);
     check('the earlier grounded conversation kept its two lessons', groundedAgain.length === 2, JSON.stringify(groundedAgain));
 
     // 10. The compacted lesson card and its "Xem chi tiết" (#184 vế 4) — the other half
@@ -1310,6 +1313,32 @@ function fill(script, values) {
     // real pointer and a real keyboard: deleting a conversation left the box unable to
     // take typing, and a sent question stayed in the box. The check above could not see
     // either because it focused the box itself and then read the state object.
+    // The Tauri shell offers to import old Electron data on first launch ("Nhập dữ
+    // liệu từ bản cũ"). On a machine that still has %APPDATA%/edugame-studio that
+    // modal covers the shell, and unlike the scripted steps above a REAL pointer
+    // hit-tests the topmost element: the click lands on the modal, not the box, so
+    // the caret never moves. "Để sau" only closes it (migration.ts). Clear any
+    // first-launch overlay before driving the real pointer, and assert it is gone —
+    // an overlay left open must fail here, not as four mysterious caret misses.
+    const overlay = await cdp.evaluate(`(async () => {
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      const deadline = Date.now() + 6000;
+      let dismissed = '';
+      while (Date.now() < deadline) {
+        const later = document.querySelector('[data-migration-action="later"]');
+        if (later) { later.click(); dismissed = 'migration'; await sleep(250); continue; }
+        if (document.querySelector('#modalRoot .setup-fullscreen')) {
+          if (typeof closeSetupWizard === 'function') closeSetupWizard('close');
+          dismissed = dismissed || 'setup'; await sleep(250); continue;
+        }
+        const root = document.getElementById('modalRoot');
+        if (!root || root.children.length === 0) break;
+        await sleep(150);
+      }
+      const root = document.getElementById('modalRoot');
+      return { dismissed, clear: !root || root.children.length === 0 };
+    })()`);
+    check('#250 no first-launch overlay covers the composer', overlay.clear === true, JSON.stringify(overlay));
     const real = await cdp.evaluate(REAL_INPUT_LAYOUT);
     check('#250 the composer is measurable in the frame', Boolean(real.box && real.modeAnswer && real.picker), JSON.stringify(real).slice(0, 120));
     await realClick(cdp, real.box, 'the typing box');

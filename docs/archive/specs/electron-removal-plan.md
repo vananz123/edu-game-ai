@@ -121,7 +121,17 @@ thay hook fixture Electron đã chết bằng cửa stub thiết kế của faç
 | Chọn recommendation **bắt buộc** `matching`, bỏ fallback | Stub trả bảng ghép; recommender luật luôn liệt kê matching cho analysis này — fallback sẽ giấu lỗi thiếu matching. |
 | Thêm khối dọn `deleteGame/deleteProject/deleteLessonDocument` cuối phiên | Electron chạy trong `EDUGAME_USER_DATA` riêng; Tauri dùng app-data chung nên check phải tự rút các dòng tổng hợp. |
 
-Bốn tệp ưu tiên còn lại của C1 chưa port: `ui-lesson-chat`, `ui-typography-readability`,
+Tệp thứ hai: `ui-lesson-chat-check.js` (luồng chat giáo án #182–184 end-to-end). Khác draft-guard,
+check này KHÔNG dùng stub — nó lái vận chuyển cloud thật của Rust chống mock OpenAI loopback, nên
+đo được cả đường ghi lịch sử. Lượt này tìm và sửa **1 hồi quy thật**: mọi lượt chat lưu mất
+`providerId` vì `createClient` của V8 nhúng không trả provider và Rust không truyền `target.id`
+(`lesson.rs` + `lesson-ops.ts`, thêm test hồi quy 3 ca). 5 FAIL còn lại là môi trường: modal mời
+nhập dữ liệu Electron cũ đè `#modalRoot` chặn con trỏ thật (`Input.dispatchMouseEvent` hit-test
+phần tử trên cùng), trong khi bước scripted bỏ qua hit-test nên draft-guard không thấy. Check gạt
+overlay first-launch trước khối #250 và assert `#modalRoot` trống. Kết quả trên instance sạch:
+**all checks passed** (`providerOfTurn=custom/[2,2]`, #250 xanh, dọn sạch cuối phiên).
+
+Ba tệp ưu tiên còn lại của C1 chưa port: `ui-typography-readability`,
 `ui-input-routing`, `ui-presentation` (riêng presentation phải viết lại theo mô hình cửa sổ Tauri).
 Cùng khuôn stub `desktop.stub('generateLessonDraft')` dùng lại được cho các check cần bước sinh.
 
@@ -155,7 +165,7 @@ Các kết quả dưới đây là từ lần kiểm tra mã trước khi cập 
 
 ```text
 cargo test --manifest-path src-tauri\Cargo.toml --lib -- --test-threads=1
-  151 passed, 0 failed
+  153 passed, 0 failed
 
 npm test
   95/95 suites passed
@@ -164,20 +174,22 @@ npm run check:renderer-globals
   passed; 73/75 scripts scanned, no undefined globals
 
 npm run check:embedded
-  passed; embedded bundle 6125.3 KiB
+  passed; embedded bundle 6125.4 KiB
 
 npm run tauri:check
   passed; release binary built; WebView2 checks 51/51,
   second phase 10/10, migration 12/12
 
 npm run build:tauri
-  passed; embedded bundle 6125.3 KiB, 203 frontend files
+  passed; embedded bundle 6125.4 KiB, 203 frontend files
 
 git diff --check
   passed
 ```
 
 `npm test` in cảnh báo `EPERM` khi dọn `dist\server\index.js`; test/build vẫn hoàn tất thành công. Vì đây là artifact do build sinh ra, cần kiểm tra riêng trên máy sạch nếu cảnh báo tiếp tục. `npm run tauri:check` là cổng kiểm tra/build, không chứng minh installer đã cài đặt sạch trên máy chưa có môi trường phát triển.
+
+**Lượt batch 2 (tiếp, 2026-11-12).** Các cổng chạy lại lượt này: `cargo test --lib` **153/153**, `npm test` **95/95**, `check:renderer-globals` 73/75, `check:embedded` khớp 6125.4 KiB, `git diff --check` sạch, và `ui-lesson-chat-check` **all checks passed** trên instance sạch (binary release dựng lại, nhúng bundle mới). `tauri:check`/`build:tauri` trong khối trên giữ kết quả lần chạy đầy đủ trước — frontend không đổi lượt này nên không chạy lại.
 
 ## Việc còn lại — thứ tự đề xuất
 

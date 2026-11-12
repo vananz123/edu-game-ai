@@ -16,6 +16,7 @@
 import assert from 'node:assert/strict';
 import type { GameConfig, GameDraft, GameProject } from '../../src/shared/lesson-types';
 import {
+  chat,
   convert,
   generate,
   generationCache,
@@ -381,6 +382,45 @@ async function main(): Promise<void> {
   assert.equal(draft.questions[2].prompt, 'Thủ đô Việt Nam là ...');
   assert.equal(draft.questions[2].id, 'q3');
   assert.equal(regenerated.game.questions.length, 3);
+
+  // Lượt chat ghi nguồn trả lời vào lịch sử: `runLessonChatTurn` đọc
+  // `client.providerId`, nên client của Tauri phải mang provider đã chọn như
+  // `createChatClientForProvider` của Electron. Thiếu nó thì mọi lượt mất
+  // providerId (cổng ui-lesson-chat bắt đúng lỗi này).
+  resetFake(JSON.stringify({ answer: 'Quang hợp tạo chất hữu cơ từ ánh sáng.' }));
+  const chatTurn = await chat({
+    target: { requestId: 'chat_test_1', model: 'gemini-2.5-flash', mode: 'online', providerId: 'custom' },
+    requestId: 'chat_test_1',
+    question: 'Quang hợp là gì?',
+    documents: [],
+    mode: 'auto'
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(chatTurn.providerId, 'custom');
+  assert.equal(chatTurn.intent, 'answer');
+  assert.equal(chatTurn.errorCode, '');
+  assert.equal(chatTurn.answer, 'Quang hợp tạo chất hữu cơ từ ánh sáng.');
+
+  // Provider khác cũng được giữ nguyên, không hard-code; thiếu providerId thì
+  // lượt chat để rỗng (đúng phần fallback `|| ''` của runLessonChatTurn).
+  resetFake(JSON.stringify({ answer: 'Trả lời bằng gemini.' }));
+  const geminiTurn = await chat({
+    target: { requestId: 'chat_test_2', model: 'gemini-2.5-flash', mode: 'online', providerId: 'gemini' },
+    requestId: 'chat_test_2',
+    question: 'Nước sôi ở bao nhiêu độ?',
+    documents: [],
+    mode: 'auto'
+  });
+  assert.equal(geminiTurn.providerId, 'gemini');
+  resetFake(JSON.stringify({ answer: 'Không rõ provider.' }));
+  const autoTurn = await chat({
+    target: { requestId: 'chat_test_3', model: 'gemini-2.5-flash', mode: 'online' },
+    requestId: 'chat_test_3',
+    question: 'Một câu hỏi tự do?',
+    documents: [],
+    mode: 'auto'
+  });
+  assert.equal(autoTurn.providerId, '');
 
   console.log('Tauri lesson generation tests passed');
 }

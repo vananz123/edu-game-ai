@@ -116,6 +116,10 @@ interface WorkflowTarget {
   requestId: string;
   model: string;
   mode: 'local' | 'online';
+  /** Provider đã chọn (kể cả khi lượt chạy bằng chính sách). `runLessonChatTurn`
+   *  đọc `client.providerId` để ghi nguồn trả lời vào lịch sử; thiếu nó thì mọi
+   *  lượt chat mất providerId, khác bản Electron (`createChatClientForProvider`). */
+  providerId?: string;
 }
 
 interface SelectionPlan {
@@ -152,6 +156,7 @@ function sendFailure(result: Record<string, unknown>): Error {
  */
 function createClient(target: WorkflowTarget) {
   return {
+    providerId: target.providerId || '',
     async chatJson(request: {
       messages: unknown;
       maxTokens: number;
