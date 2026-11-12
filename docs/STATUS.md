@@ -1,4 +1,4 @@
-# Trạng thái dự án
+﻿# Trạng thái dự án
 
 Bàn giao mới nhất nằm ngay trong file này (3 mục gần nhất). Các bàn giao cũ được lưu ở
 `docs/handoff/status/` — mỗi ngày một file, nối thêm vào cuối file của ngày đó khi cần.
@@ -6,6 +6,14 @@ Quy ước: sau mỗi việc, chèn bàn giao mới ngay dưới tiêu đề "B�
 chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập nhật mục lục.
 
 ## Mục lục bàn giao
+
+### 2026-11-12 — Dọn Electron batch 2 (mở đầu): port `ui-draft-guard-check` sang façade `desktop.*` — 10/10 ×4 lượt, hook fixture AI thay bằng `desktop.stub`, không đổi sản phẩm
+- **Trạng thái:** Bản port `ui-draft-guard-check.js` nằm treo trong worktree từ phiên trước (dừng ở FAIL bước sinh/lưu, để lại scratch `_probe-draft.js`). Lượt này chạy lại trên cây hiện tại: **10/10 ×4 lượt liên tiếp** (1 profile mới + 3 profile ấm) trên binary release dựng tại HEAD `de72138`. FAIL cũ đã được chính các sửa trong bản port giải quyết (stub bước sinh + bắt buộc matching + dọn dòng); phiên trước dừng trước khi xác nhận. Đã xóa scratch probe.
+- **Files đổi:** `tests/ui/ui-draft-guard-check.js` (payload `window.eduGame.*` → `desktop.call`; thêm khối gạt setup onboarding; hook `EDUGAME_AI_TEST_DIR` → `desktop.stub('generateLessonDraft')` trả bảng ghép cố định; chọn recommendation bắt buộc `matching` bỏ fallback; thêm khối dọn `deleteGame/deleteProject/deleteLessonDocument`), `docs/archive/specs/electron-removal-plan.md` (mục C3 mới), `docs/DECISIONS.md`, `docs/STATUS.md`, `docs/handoff/status/2026-11-11.md`; xóa `_probe-draft.js`.
+- **Hành vi:** Không đổi mã sản phẩm (Rust/renderer nguyên). Check vẫn đo đúng hợp đồng guard: ba hàng truth-table của `wizardHasUnsavedDraft`, `beforeunload` chỉ chặn khi có nháp chưa lưu, e2e sinh nháp thật → chặn đóng → lưu vào thư viện → cho đóng. Khuôn `desktop.stub('generateLessonDraft')` dùng lại được cho bốn check ưu tiên còn lại cần bước sinh.
+- **Lệnh đã chạy:** `node tests/ui/ui-draft-guard-check.js 9361` **10/10 ×4** (launcher Tauri `launch-app.ps1 -Port 9361`, profile mới rồi ấm) · `npm run check` (tsc) sạch · `npm test` **95/95** (54,8 s). Rust không đổi nên không chạy lại `cargo test` (batch 1 chốt 153/153 trên cùng cây); binary release đã tồn tại đúng HEAD, app-source sạch.
+- **Chưa xác minh:** bốn tệp ưu tiên còn lại của C1 chưa port (`ui-lesson-chat`, `ui-typography-readability`, `ui-input-routing`, `ui-presentation`); ~22 check payload `window.eduGame` khác chưa port; 15 smoke chưa map vào gate Rust; nhóm D (`unload-guard.ts`, `setup-ipc.ts`) chưa rà; P7 vẫn MỞ.
+- **Việc kế tiếp:** Port `ui-lesson-chat-check` (luồng chat giáo án end-to-end) dùng cùng khuôn `desktop.stub`; mỗi tệp một commit, số chốt lấy từ instance vừa khởi động lại. Quyết định: mục "Dọn Electron batch 2 (mở đầu)" trong `docs/DECISIONS.md`.
 
 ### 2026-11-11 — Dọn Electron batch 1: 21 cổng ui launcher-only chạy hết trên vỏ Tauri — 15 xanh nguyên trạng, 5 sửa giả định cũ trong check, 1 hồi quy THẬT trong Rust (`provider_status`) được tìm và sửa
 - **Trạng thái:** Port xong nhóm check không cần `window.eduGame` theo bảng C1. 15/21 xanh ngay trên launcher Tauri. 5 tệp đỏ vì giả định Electron-era trong CHÍNH check: `ui-chrome-icons` (đòi UI 0.4.1 trong khi release 0.4.2 `2740fc2` đã xóa nhóm "Thao tác nhanh", nâng trần recent 3→5 — check đổi sang phản-điều + đọc `SIDEBAR_RECENT_GAME_COUNT` thật), `ui-fullscreen` + 2 `ui-setup-*` (lọc URL `/index\.html/` và hardcode cổng 9333 — nay nhận `http://tauri.localhost/` + argv/`CDP_PORT`), `ui-wizard-structure` (flake 1/3: chờ đúng 1 rAF trong khi `step-structure.ts` có đường restore focus ở frame hai — sửa thành chờ có trần 10 frame), 2 provider checks (assert `adapter === 'electron'` — chấp nhận cả `tauri`). **1 hồi quy thật**: `provider_status()` Rust ghi note thẻ lỗi bằng mã trần `(AI_AUTH)` + ISO thô thay vì nhãn tiếng Việt + giờ địa phương của `lastTestNote()` nguyên bản — sửa `settings.rs` (ERROR_LABELS + `chrono`, crate đã có trong lockfile), thêm hậu tố "Chưa dùng được cho luồng tạo trò chơi." cho provider ngoài wizard, thêm 2 unit test Rust.
@@ -24,13 +32,7 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - **Việc kế tiếp:** Port các ui check nhóm C1 theo bảng, bắt đầu từ nhóm geometry/visibility vì launcher Tauri đã chạy được CDP; mỗi nhóm một commit. Chạy `ui-chrome-icons-check` trên cây sạch để phân loại 3 FAIL.
 
 
-### 2026-11-11 — Xác minh và commit presentation + dọn Electron; cập nhật kế hoạch Tauri sang `unsupported!` = 0
-- **Trạng thái:** Hai khối việc treo trong worktree đã được xác minh trên cây hiện tại và tách thành hai commit: `39f38db feat(tauri): port presentation mode channels to Tauri backend` (11 tệp, +700) và `445c5a1 chore(electron): remove Electron shell, adapters, and Electron-only tooling` (54 tệp, −13.633 dòng; 21 tệp xóa khớp chính xác nhóm A của `electron-removal-plan.md`).
-- **Files đổi:** `docs/handoff/plans/2026-11-09-tauri-migration.md` (header + phạm vi + trạng thái giai đoạn 6 + mục 9: toàn bộ hợp đồng desktop đã port, việc kế tiếp là cổng nghiệm thu giai đoạn 7 trên Windows thật), `docs/STATUS.md` (chuyển hai bàn giao Giai đoạn 6 cũ nhất vào kho lưu, gỡ dòng mục lục trùng lặp), `docs/handoff/status/2026-11-11.md` (nhận hai mục lưu trữ).
-- **Hành vi:** Không đổi mã nguồn trong lượt này — chỉ tài liệu trạng thái và lịch sử commit. `.qwen/settings.local.json` để ngoài version control.
-- **Lệnh đã chạy:** `npm run check` sạch · `npm test` **95/95** · `cargo test --lib -- --test-threads=1` **151/151** · `npm run check:embedded` khớp **6125.3 KiB** · `npm run check:renderer-globals` 73/75 script, không undefined globals. Sau commit, trên đúng cây HEAD: `npm run build:tauri` OK · `npm run tauri:check` ba pha **51/51 + 10/10 + 12/12** · `cargo tauri build` → NSIS **16.403.858 B (15,64 MiB**, SHA-256 `7ae04626959338d8…`, dưới ngưỡng 25 MiB của #251); cài mới `/S /D=<temp>` exit 0 (exe 59.207.168 B, `vc-runtime` đủ 3 DLL), cài đè exit 0 không đổi hash exe (`91DB194B…`), gỡ `/S` exit 0 xoá sạch thư mục cài; `deleteAppDataOnUninstall` không bật nên dữ liệu được giữ.
-- **Chưa xác minh:** installer trên máy sạch/VM thật (cài thử trong thư mục tạm trên máy dev); máy chiếu vật lý; điện thoại Wi-Fi thật; model thật/BYOK thật; dọn nhóm B/C của `electron-removal-plan.md` (`launch-app.ps1` và `launch:ui` đang hỏng vì `electron.cmd` không còn — đã xác nhận).
-- **Việc kế tiếp:** Giai đoạn 7 — xếp loại smoke/packaging Electron còn lại theo nhóm B/C của `electron-removal-plan.md`, thay kiểm tra P7 bằng checklist nghiệm thu installer Tauri, chạy installer trên máy sạch.
+- **Xác minh và commit presentation + dọn Electron (2026-11-11)** — Bản lưu trữ: [docs/handoff/status/2026-11-11.md](handoff/status/2026-11-11.md).
 
 - **Tiếp tục loại bỏ Electron (2026-11-11)** — Bản lưu trữ: [docs/handoff/status/2026-11-11.md](handoff/status/2026-11-11.md).
 - **Giai đoạn 6 — Trình chiếu (2026-11-11)** — Bản lưu trữ: [docs/handoff/status/2026-11-11.md](handoff/status/2026-11-11.md); quyết định tương ứng trong `docs/DECISIONS.md`.

@@ -106,6 +106,25 @@ Lưu ý vận hành rút ra khi đo: các check **chia sẻ một instance app**
 của phép kiểm chạy sau — không phải hồi quy. Số chốt của mỗi check lấy từ lượt chạy trên instance
 vừa khởi động lại; chạy lại `ui-chrome-icons-check` trên instance sạch: **17/17**.
 
+### C3. Batch 2 (2026-11-12) — port payload `window.eduGame` sang façade `desktop.*`
+
+Mở đầu bằng `ui-draft-guard-check.js` (một trong năm tệp "không được xóa trước khi có bản port").
+Kết quả: **10/10 ×4 lượt liên tiếp** (một lượt profile mới + ba lượt profile ấm) trên binary release
+qua `launch-app.ps1 -Port 9361`. Không đổi mã sản phẩm — chỉ chuyển chính check sang façade và
+thay hook fixture Electron đã chết bằng cửa stub thiết kế của façade:
+
+| Thay đổi trong check | Lý do |
+|---|---|
+| `window.eduGame.saveLessonDocument/saveLessonAnalysis/saveProjectDraft` → `desktop.call(...)` | Cầu preload Electron không còn; façade là đường duy nhất. |
+| Thêm khối gạt setup onboarding (`closeSetupWizard('close')`) đầu phiên | Profile mới mở setup toàn màn hình đè shell; mọi check khác đều gạt. |
+| Hook `EDUGAME_AI_TEST_DIR` (fixture AI trên đĩa) → `desktop.stub('generateLessonDraft', …)` trả bảng ghép cố định | Hook đĩa đã gỡ cùng Electron; `desktop.stub` là cửa designed cho UI check cần hình dạng dữ liệu thật mà không cần model (DECISIONS batch 2). |
+| Chọn recommendation **bắt buộc** `matching`, bỏ fallback | Stub trả bảng ghép; recommender luật luôn liệt kê matching cho analysis này — fallback sẽ giấu lỗi thiếu matching. |
+| Thêm khối dọn `deleteGame/deleteProject/deleteLessonDocument` cuối phiên | Electron chạy trong `EDUGAME_USER_DATA` riêng; Tauri dùng app-data chung nên check phải tự rút các dòng tổng hợp. |
+
+Bốn tệp ưu tiên còn lại của C1 chưa port: `ui-lesson-chat`, `ui-typography-readability`,
+`ui-input-routing`, `ui-presentation` (riêng presentation phải viết lại theo mô hình cửa sổ Tauri).
+Cùng khuôn stub `desktop.stub('generateLessonDraft')` dùng lại được cho các check cần bước sinh.
+
 ### D. Soát mã TypeScript cũ — không phải đợt xóa hàng loạt
 
 - `src/ai-core/unload-guard.ts` là ứng viên Electron-specific cần xác định behavior đóng cửa sổ nào còn được Tauri/Rust xử lý; hiện có `tests/unit/unload-guard.test.ts`, nên quyết định phải bao gồm cả test và luồng đóng cửa sổ.

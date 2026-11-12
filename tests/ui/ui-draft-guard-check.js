@@ -11,17 +11,28 @@
 //   draft, not in the library   -> block the close
 //   draft, already saved        -> close freely (the library copy survives)
 //
-// Run against a built app started with a fixture AI directory:
-//   npm run build
-//   $env:EDUGAME_USER_DATA=<empty folder>; $env:EDUGAME_AI_TEST_DIR=tests/fixtures/wizard/happy
-//   npx electron . --remote-debugging-port=9362
-//   node tests/ui/ui-draft-guard-check.js 9362
+// Run against the built Tauri release binary (no model needed — the generate
+// step is answered by a `desktop.stub` inside the page, see DECISIONS
+// "Dọn Electron batch 2 (mở đầu, 2026-11-12)"):
+//   npm run build:tauri && cargo tauri build
+//   powershell -ExecutionPolicy Bypass -File tests/ui/launch-app.ps1 -Port 9361
+//   node tests/ui/ui-draft-guard-check.js 9361
 const { check, connect, results } = require('../manual/lib/ui-check-lib');
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 (async () => {
   const { ws, evaluate } = await connect();
+
+  // A fresh profile opens the setup onboarding as a full-screen page over the
+  // shell; dismiss it like every other UI check does (canonical guard).
+  await evaluate(`(async () => {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    for (let i = 0; i < 40; i++) { if (document.querySelector('#modalRoot .setup-fullscreen')) break; await sleep(100); }
+    if (typeof closeSetupWizard === 'function') closeSetupWizard('close');
+    await sleep(250);
+    return true;
+  })()`);
 
   // ---------------------------------------------------------------------
   // The predicate is the contract. Assert its truth table directly: these
@@ -119,7 +130,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     const waitFor = async (fn, ms) => { const started = Date.now(); while (Date.now() - started < (ms || 30000)) { if (fn()) return true; await new Promise(r => setTimeout(r, 150)); } return false; };
     const stamp = String(Date.now());
     const text = 'Quang hop la qua trinh thuc vat tong hop chat huu co nho nang luong anh sang mat troi.';
-    const lessonDoc = await window.eduGame.saveLessonDocument({ name: 'guard-' + stamp + '.txt', ext: 'txt', text, characters: text.length });
+    const lessonDoc = await desktop.call('saveLessonDocument', { name: 'guard-' + stamp + '.txt', ext: 'txt', text, characters: text.length });
     const analysis = {
       id: 'analysis_guard_' + stamp, schemaVersion: 1, documentId: lessonDoc.id,
       subject: 'Sinh hoc', grade: 7, topic: 'Quang hop',
@@ -127,10 +138,10 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
       keyConcepts: [{ id: 'concept_1', term: 'Quang hop', explanation: 'Tong hop chat huu co.' }],
       uncertainties: [], sourceDocumentIds: [lessonDoc.id], createdAt: new Date().toISOString()
     };
-    await window.eduGame.saveLessonAnalysis(analysis);
+    await desktop.call('saveLessonAnalysis', analysis);
     const projectId = 'project_guard_' + stamp;
     const now = new Date().toISOString();
-    await window.eduGame.saveProjectDraft({
+    await desktop.call('saveProjectDraft', {
       id: projectId, schemaVersion: 1, status: 'review', step: 'recommend', title: 'Guard ' + stamp,
       description: 'Quang hop', tags: [], sourceName: 'guard.txt',
       lesson: { documentId: lessonDoc.id, name: 'guard.txt', characters: text.length },
@@ -147,8 +158,10 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     navigate('create-wizard');
     await new Promise(r => setTimeout(r, 300));
     await wizardRecommendRun();
-    const target = wizardState.recommendations.find(item => item.gameType === 'matching') || wizardState.recommendations[0];
-    if (!target) return { error: 'no recommendations' };
+    // The canned generate reply below is a matching board; a rules-based
+    // recommender always lists matching for this analysis, so do not fall back.
+    const target = wizardState.recommendations.find(item => item.gameType === 'matching');
+    if (!target) return { error: 'no matching recommendation', got: (wizardState.recommendations || []).map(item => item.gameType).join(',') };
     // The cards render a tick after the recommendation run resolves, so poll for
     // the button rather than assuming it is already in the DOM.
     let card = null;
@@ -171,8 +184,43 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     if (!onGenerate) return { error: 'did not reach step 5', step: wizardState.step };
     const generateBtn = document.getElementById('wizardGenerateBtn');
     if (!generateBtn) return { error: 'no wizardGenerateBtn' };
+    // The Electron-era EDUGAME_AI_TEST_DIR fixture hook is gone; the gate answers
+    // the model itself through the facade stub — the designed door for UI checks.
+    const stampNow = new Date().toISOString();
+    const pairs = [
+      { id: 'p1', left: 'Quang hop', right: 'Tong hop chat huu co nho anh sang' },
+      { id: 'p2', left: 'Diep luc', right: 'Sac to hap anh sang trong luc lap' },
+      { id: 'p3', left: 'Luc lap', right: 'Bo quan dien ra quang hop' },
+      { id: 'p4', left: 'Ho hap', right: 'Phan giai huu co de giai phong nang luong' }
+    ];
+    const questions = ['q1', 'q2', 'q3', 'q4'].map(qid => ({
+      id: qid, type: 'quiz', prompt: 'Anh sang mat troi can cho qua trinh nao?',
+      options: [{ id: qid + 'a', text: 'Quang hop' }, { id: qid + 'b', text: 'Ho hap' }],
+      correctOptionId: qid + 'a', explanation: 'Quang hop can anh sang.'
+    }));
+    desktop.stub('generateLessonDraft', () => {
+      const type = (wizardState.config && wizardState.config.gameType) || 'matching';
+      const draft = type === 'matching'
+        ? { gameType: type, schemaVersion: 1, mode: 'columns', pairs, pointsPerPair: 100, completionBonus: 50, wrongPenalty: 0, timeBonus: 0, bonusUnderSeconds: 0, practiceMode: false }
+        : { gameType: type, schemaVersion: 1, questions };
+      const game = type === 'matching'
+        ? {
+            id: 'game_guard_' + stamp, title: 'Quang hop guard ' + stamp,
+            subject: 'Sinh hoc', grade: '7', topic: 'Quang hop', template: type,
+            schemaVersion: 1, questions: [],
+            matchingGame: { mode: 'columns', pairs, pointsPerPair: 100, completionBonus: 50, wrongPenalty: 0, timeBonus: 0, bonusUnderSeconds: 0, practiceMode: false },
+            createdAt: stampNow, updatedAt: stampNow
+          }
+        : Object.assign({}, draft, {
+            id: 'game_guard_' + stamp, title: 'Quang hop guard ' + stamp,
+            subject: 'Sinh hoc', grade: '7', topic: 'Quang hop', template: type,
+            createdAt: stampNow, updatedAt: stampNow
+          });
+      return { cached: false, project: { id: wizardState.projectId, createdAt: stampNow, draft }, game, quality: null, context: null };
+    });
     generateBtn.click();
     const generated = await waitFor(() => !wizardState.busy && Boolean(wizardState.gameSnapshot), 60000);
+    desktop.stub('generateLessonDraft', null);
     return {
       generated,
       hasDraft: Boolean(wizardState.draft),
@@ -237,6 +285,15 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     cancellable.prevents === true || cancellable.prevented === true,
     JSON.stringify(cancellable)
   );
+
+  // The Electron run used an isolated EDUGAME_USER_DATA folder; on the shared
+  // Tauri app-data the gate must take its synthetic rows back out.
+  await evaluate(`(async () => {
+    try { if (wizardState.gameId) await desktop.call('deleteGame', wizardState.gameId); } catch {}
+    try { if (wizardState.projectId) await desktop.call('deleteProject', wizardState.projectId); } catch {}
+    try { if (wizardState.documentId) await desktop.call('deleteLessonDocument', wizardState.documentId); } catch {}
+    return true;
+  })()`);
 
   const failed = results.filter(r => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);

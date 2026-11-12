@@ -2650,6 +2650,25 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 
 **Việc kế tiếp.** Chưa duyệt bắt đầu code. Khi duyệt: dựng khung Tauri v2 + Rust toolchain trong nhánh riêng, chuyển lớp truy cập desktop sang facade TS (kế hoạch mục 4) và làm vòng 1 theo mục 1.
 
+## Dọn Electron batch 2 (mở đầu, 2026-11-12) — port `ui-draft-guard-check` sang façade `desktop.*`: hook fixture AI trên đĩa thay bằng `desktop.stub('generateLessonDraft')`, 10/10 ×4 lượt, không đổi sản phẩm
+
+**Bối cảnh.** Batch 1 đã chạy 21 check launcher-only. Batch 2 port các check còn gọi `window.eduGame` trong payload CDP sang façade `desktop.*`, ưu tiên năm tệp "không được xóa trước khi có bản port" của C1. Lượt này mở đầu bằng `ui-draft-guard-check.js` — chốt "giáo viên không mất dữ liệu" (Spec §4/§12). Bản port đã nằm trong worktree từ phiên trước nhưng dừng ở một FAIL bước sinh/lưu và để lại scratch probe; lượt này xác minh lại trên cây hiện tại, chốt xanh và dọn scratch.
+
+**Quyết định.**
+
+1. **Hook fixture `EDUGAME_AI_TEST_DIR` chết cùng Electron — thay bằng `desktop.stub`, không dựng lại đường đĩa.** Bước sinh của wizard gọi `desktop.call('generateLessonDraft')` (kênh `lesson:generate`). Check trả lời bước đó bằng `desktop.stub('generateLessonDraft', () => ({ cached:false, project:{…draft}, game, quality:null, context:null }))` — đúng cửa façade thiết kế cho UI check cần hình dạng dữ liệu thật mà không cần model (`stub` ghi đè `overrides[callName]`, gỡ bằng `null`). Không còn đường nào đọc thư mục fixture AI trên đĩa trong vỏ Tauri, và không nên dựng lại: stub nằm trong trang, không chạm vỏ, nên bản release cho giáo viên không có cửa này. Đây là khuôn dùng lại cho bốn check ưu tiên còn lại cần bước sinh.
+2. **Recommendation bắt buộc `matching`, bỏ fallback.** Stub trả bảng ghép; recommender luật luôn liệt kê `matching` cho analysis quang hợp này. Fallback `|| recommendations[0]` của bản Electron sẽ âm thầm chọn thể loại khác rồi để stub trả sai hình dạng — giấu lỗi. Check mới trả `error:'no matching recommendation'` kèm danh sách thể loại thật nếu thiếu.
+3. **Check tự dọn dòng tổng hợp vì Tauri dùng app-data chung.** Electron chạy trong `EDUGAME_USER_DATA` riêng nên không cần dọn; Tauri chia sẻ `%APPDATA%/vn.edugame.studio.tauri/edugame-data`, nên cuối phiên check gọi `deleteGame/deleteProject/deleteLessonDocument` cho các id nó tạo. Khối dọn chạy cả khi e2e lỗi sớm (id vẫn nằm trong `wizardState`).
+4. **Gạt setup onboarding đầu phiên như mọi check khác.** Profile mới mở setup toàn màn hình đè shell; check chờ `#modalRoot .setup-fullscreen` rồi `closeSetupWizard('close')`. Không phải hành vi sản phẩm mới.
+
+**Không đổi sản phẩm.** Lượt này chỉ sửa chính check (`tests/ui/ui-draft-guard-check.js`); không chạm mã Rust/renderer. Hồi quy thật duy nhất của nhóm provider đã sửa ở batch 1. Scratch `_probe-draft.js` (probe bước sinh/lưu của phiên trước) đã xóa.
+
+**Kiểm chứng.** `node tests/ui/ui-draft-guard-check.js 9361` trên binary release (dựng tại HEAD `de72138`, app-source sạch): **10/10 ×4 lượt liên tiếp** (1 profile mới + 3 profile ấm) — cả ba hàng truth-table của predicate, `beforeunload` không chặn khi không có gì mất / chặn khi có nháp chưa lưu, e2e sinh nháp thật báo dirty, chặn đóng khi nháp chưa lưu, cho đóng sau khi lưu vào thư viện. `npm run check` (tsc) sạch · `npm test` **95/95**. Rust không đổi nên không chạy lại `cargo test` (batch 1 đã chốt 153/153 trên cùng cây).
+
+**Chưa xác minh / chưa làm.** Bốn tệp ưu tiên còn lại của C1 chưa port (`ui-lesson-chat`, `ui-typography-readability`, `ui-input-routing`, `ui-presentation` — presentation phải viết lại theo mô hình cửa sổ Tauri); ~22 check payload khác chưa port; 15 smoke chưa map vào gate Rust; nhóm D (`unload-guard.ts`, `setup-ipc.ts`) chưa rà; P7 vẫn MỞ.
+
+**Việc kế tiếp.** Port tiếp `ui-lesson-chat-check` (luồng chat giáo án end-to-end) dùng cùng khuôn `desktop.stub`; mỗi tệp một commit, chạy trên instance vừa khởi động lại để lấy số chốt.
+
 ## Dọn Electron batch 1 (2026-11-11) — 21 cổng ui launcher-only chạy hết trên vỏ Tauri: 15 xanh nguyên trạng, 5 sửa giả định cũ trong check, 1 hồi quy thật tìm thấy và sửa trong Rust (`provider_status` note tiếng Việt)
 
 **Bối cảnh.** Bảng C1 của `electron-removal-plan.md` chia ~48 ui check thành hai loại: chỉ cần launcher mới (không gọi `window.eduGame` trong payload CDP) và cần port payload. Batch 1 = đúng 21 tệp loại một, chạy thật trên binary release qua `launch-app.ps1 -Port 9361`.
