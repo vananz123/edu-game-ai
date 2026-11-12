@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "presentation-window",
+  "description": "Cửa sổ trình chiếu: nhận snapshot và sự kiện thoát từ vỏ.",
+  "windows": ["presentation"],
+  "permissions": ["core:event:allow-listen", "core:event:allow-unlisten"]
+}

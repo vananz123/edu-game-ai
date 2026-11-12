@@ -1,43 +1,25 @@
-// ui-presentation-check.js — projector readability of the SECONDARY-DISPLAY
-// presentation window (src/presentation/presentation.html + features/presentation.ts).
-//
-// Why this exists (update_UI.txt §7.1, §7.2, §14):
-// The presentation window is a SEPARATE renderer. It does not reuse
-// the play surface (renderer/features/games/*), it does not load app.css, and its own <style> block hardcodes
-// font sizes. None of the measured fullscreen rules
-// (`html[data-fullscreen="1"] .modal[data-player-theme] …` in app.css) can
-// reach it, because its DOM root is `document.body > .presentation-root`.
-// So the classroom projector can show text far smaller than the same game in
-// the main window — exactly the "chữ quá nhỏ" complaint, on the surface that
-// matters most.
-//
-// Run:
-//   npm run build
-//   npx electron . --remote-debugging-port=9361
-//   node tests/ui/ui-presentation-check.js 9361
-//
-// The window is driven the way the app drives it: `syncState(state)` with a
-// monotonically increasing `revision`, the same contract
-// `eduGame.onPresentationState` uses (see presentation.ts:307-335).
+// Chạy trên instance Tauri riêng: node tests/ui/ui-presentation-check.js <CDP port>.
 const { check, results } = require('../manual/lib/ui-check-lib');
-const { PROJECTOR_SIZES, setViewport, capture, measureLayout, findTarget, listTargets } = require('./lib/screenshot-capture');
+const { PROJECTOR_SIZES, setViewportAndWait, capture, measureLayout, findTarget, listTargets } = require('./lib/screenshot-capture');
 
 const PORT = Number(process.argv[2] || process.env.CDP_PORT || 9361);
+const SESSION_ID = 'pres-check-' + Date.now();
+const PRESENTATION_URL = /\/presentation\/presentation\.html(?:\?|$)/;
+const runtimeErrors = [];
+const styleErrors = [];
 
-/** The script under test runs inside this same-origin iframe (see below). */
-const IFRAME_SEL = '#pres-harness';
+async function waitFor(read, description, timeoutMs = 8000) {
+  const deadline = Date.now() + timeoutMs;
+  do {
+    const value = await read();
+    if (value) return value;
+    await new Promise(r => setTimeout(r, 80));
+  } while (Date.now() < deadline);
+  throw new Error('Timed out: ' + description);
+}
 
-/**
- * Connect to a specific CDP target by URL matcher.
- * Mirrors ui-check-lib.connect() but does not hardcode index.html, because the
- * presentation window is a separate target.
- */
 async function connectTo(matcher) {
-  const target = await findTarget(PORT, matcher);
-  if (!target) {
-    const found = (await listTargets(PORT)).map(t => t.url).join('\n  ');
-    throw new Error(`no target matching ${matcher} on port ${PORT}. Pages:\n  ` + found);
-  }
+  const target = await waitFor(() => findTarget(PORT, matcher), 'CDP target ' + matcher);
   const ws = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((res, rej) => {
     ws.addEventListener('open', res, { once: true });
@@ -47,6 +29,9 @@ async function connectTo(matcher) {
   const pend = new Map();
   ws.addEventListener('message', e => {
     const m = JSON.parse(e.data);
+    if (m.method === 'Runtime.exceptionThrown') runtimeErrors.push(m.params.exceptionDetails);
+    if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error') runtimeErrors.push(m.params.args);
+    if (m.method === 'Log.entryAdded' && m.params.entry.source === 'security' && /style-src/.test(m.params.entry.text)) styleErrors.push(m.params.entry.text);
     if (m.id && pend.has(m.id)) { pend.get(m.id)(m); pend.delete(m.id); }
   });
   const send = (method, params = {}) => new Promise((r, j) => {
@@ -55,7 +40,7 @@ async function connectTo(matcher) {
       pend.delete(i);
       j(new Error(`CDP timeout after 15s: ${method}`));
     }, 15000);
-    pend.set(i, (m) => { clearTimeout(timer); r(m); });
+    pend.set(i, (m) => { clearTimeout(timer); m.error ? j(new Error(method + ': ' + m.error.message)) : r(m); });
     ws.send(JSON.stringify({ id: i, method, params }));
   });
   const evaluate = async expression => {
@@ -65,6 +50,7 @@ async function connectTo(matcher) {
   };
   await send('Runtime.enable');
   await send('Page.enable');
+  await send('Log.enable');
   return { ws, send, evaluate, target };
 }
 
@@ -85,7 +71,7 @@ function mapTemplate(kind) {
 
 function baseState(kind, revision) {
   return {
-    sessionId: 'pres-check', gameId: 'pres-check-game',
+    sessionId: SESSION_ID, gameId: 'pres-check-game',
     gameTitle: 'Ôn tập kỹ năng sống lớp 6', template: mapTemplate(kind),
     gameIndex: 0, gameAnswers: [], isComplete: false, revision,
     timer: 45,
@@ -122,7 +108,8 @@ function stateFor(kind, revision) {
         kind: 'treasure', character: 'explorer', currentStageId: 's2',
         stageName: 'Chặng 2 — Kỹ năng lắng nghe',
         prompt: LONG_PROMPT, story: 'Nhà thám hiểm bước vào ngôi đền tri thức.',
-        missionType: 'multiple-choice',
+        missionType: 'question',
+        mission: { type: 'question' },
         stages: [
           // Statuses are exactly what treasureNodeState() in
           // renderer/features/games/treasure.ts emits:
@@ -169,146 +156,147 @@ function stateFor(kind, revision) {
 
 
 
-// Drive the window through the SAME contract the app uses: presentation.ts:341
-// calls initPresentation(), which subscribes via eduGame.onPresentationState
-// and renders whatever state arrives (syncState -> renderPresentation).
-//
-// The real api cannot be patched: window.eduGame is exposed by Electron's
-// contextBridge and is deep-frozen (isFrozen true), and because this tab was
-// navigated from index.html it still carries the MAIN preload, whose
-// onPresentationState is wired to a different IPC channel. So the presentation
-// script is re-executed here with a recording api, and states are pushed through
-// the captured subscriber. The script body, the DOM root (document.body >
-// .presentation-root) and its own inline <style> are exactly production's.
-const RERUN_WITH_RECORDING_API = `
-  (async () => {
-    // window.eduGame is non-configurable (contextBridge), so it cannot be
-    // shadowed in this window. Run the presentation script inside a same-origin
-    // iframe instead: that document has a fresh, writable window where the
-    // recording api can be installed before the script executes. The document
-    // root, the script's own inline <style>, and every selector are identical.
-    const src = await (await fetch(SCRIPT_URL)).text();
-    const frame = document.createElement('iframe');
-    frame.id = 'pres-harness';
-    frame.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;border:0;margin:0';
-    document.body.innerHTML = '';
-    document.body.style.margin = '0';
-    document.body.appendChild(frame);
+async function call(ctx, name, ...args) {
+  return ctx.evaluate(`desktop.call(${[name, ...args].map(x => JSON.stringify(x)).join(',')})`);
+}
 
-    const w = frame.contentWindow;
-    const listeners = [];
-    w.eduGame = {
-      onPresentationState: (cb) => { listeners.push(cb); return () => {}; },
-      onPresentationExit: () => {},
-      requestPresentationState: () => {},
-      sendPresentationExit: () => {},
-      sendPresentationState: () => {}
-    };
-    // The script decides presentation mode from location.search.
-    w.history.replaceState(null, '', '?presentation=1&session=pres-check');
-    w.eval(src);
+async function waitForQuiz(ctx) {
+  return waitFor(() => ctx.evaluate(`document.querySelector('.prompt')?.textContent === ${JSON.stringify(LONG_PROMPT)} && document.querySelectorAll('.option').length === 4`), 'initial snapshot renders without a test push');
+}
 
-    if (!listeners.length) return { ok: false, reason: 'script did not subscribe' };
-    window.__presPush = (state) => listeners.forEach(fn => fn(state));
-    return { ok: true, listeners: listeners.length };
-  })()
-`;
-
-// Push one state exactly once the page has subscribed.
-function pushState(kind, revision) {
-  return `
-    (async () => {
-      const sleep = ms => new Promise(r => setTimeout(r, ms));
-      if (typeof window.__presPush !== 'function') {
-        return { ok: false, reason: 'no onPresentationState subscriber' };
-      }
-      window.__presPush(${JSON.stringify(stateFor(kind, revision))});
-      await sleep(450);
-      return { ok: true };
-    })()
-  `;
+async function observeState(ctx, revision) {
+  await ctx.evaluate(`(() => {
+    window.__presProbe = { count: 0, state: null };
+    desktop.listen('onPresentationState', state => {
+      window.__presProbe.count++;
+      window.__presProbe.state = state;
+    });
+    return true;
+  })()`);
+  await call(ctx, 'requestPresentationState');
+  await waitFor(() => ctx.evaluate(`window.__presProbe.state?.revision === ${revision}`), 'snapshot subscription');
 }
 
 (async () => {
   const KINDS = ['quiz', 'matching', 'treasure', 'race', 'results'];
   let revision = 1;
+  let pres;
+  let started = false;
+  const main = await connectTo(/^https?:\/\/tauri\.localhost\/(?:index\.html)?$/);
+  try {
+    await waitFor(() => main.evaluate(`typeof desktop !== 'undefined' && desktop.info().adapter === 'tauri'`), 'main facade');
+    if (await findTarget(PORT, PRESENTATION_URL)) throw new Error('Use an isolated instance without an active presentation');
+    const displays = await call(main, 'getDisplays');
+    check('Rust reports an available display', displays.ok && displays.data.displays.length > 0);
+    started = true;
+    const opened = await call(main, 'startPresentation', stateFor('quiz', revision));
+    check('startPresentation succeeds', opened.ok && opened.data.sessionId === SESSION_ID, JSON.stringify(opened));
+    pres = await connectTo(PRESENTATION_URL);
+    check('presentation is a separate CDP target', pres.target.id !== main.target.id, pres.target.url);
+    await waitForQuiz(pres);
+    check('initial snapshot arrives through the production subscription', true);
+    check('real top-level Tauri renderer, no iframe harness', await pres.evaluate(`desktop.info().adapter === 'tauri' && !!document.querySelector('body > .presentation-root') && !document.querySelector('iframe')`));
+    check('static presentation CSS has an active Tauri nonce', await pres.evaluate(`(() => {
+      const style = document.querySelector('head style');
+      return !!style?.nonce && !!style.sheet && !document.querySelector('body style')
+        && getComputedStyle(document.querySelector('.presentation-root')).fontSize === '20px';
+    })()`));
+    await observeState(pres, revision);
 
-  // Recover from a previous interrupted run that left the tab on the
-  // presentation page: find any page target and send it back to index.html.
-  const anyPage = await findTarget(PORT, /.*/);
-  if (!anyPage) throw new Error(`no CDP page targets on port ${PORT}`);
-  let main;
-  if (/index\.html/.test(anyPage.url)) {
-    main = await connectTo(/index\.html/);
-  } else {
-    const indexUrl = anyPage.url.replace(/presentation[\/\\]presentation\.html.*$/, 'index.html');
-    const tmp = await connectTo(/presentation\.html/);
-    await tmp.send('Page.enable');
-    await tmp.send('Page.navigate', { url: indexUrl });
-    await new Promise(r => setTimeout(r, 2500));
-    try { tmp.ws.close(); } catch {}
-    main = await connectTo(/index\.html/);
-  }
+    const reused = await call(main, 'startPresentation', stateFor('quiz', ++revision));
+    await waitFor(() => pres.evaluate(`window.__presProbe.state?.revision === ${revision}`), 'reused window state');
+    const targets = (await listTargets(PORT)).filter(t => PRESENTATION_URL.test(t.url));
+    check('starting again reuses the same window', reused.ok && targets.length === 1 && targets[0].id === pres.target.id);
 
-  // The real presentation window is a frameless, fullscreen BrowserWindow
-  // created by the main process (presentation-manager.ts:40-56) and loaded with
-  // loadURL to src/presentation/presentation.html. Its scripts cannot be
-  // reproduced by window.open() (blocked from file://) and Electron's CDP has
-  // no Target.createTarget, so the page is navigated into this tab as a
-  // top-level document: same URL, same document.body > .presentation-root, and
-  // sized with device metrics to the exact projector resolution.
-  const presPath = 'presentation/presentation.html?presentation=1&session=pres-check';
-  const presUrl = main.target.url.replace(/index\.html.*$/, presPath);
-
-  await main.send('Page.enable');
-  const nav = await main.send('Page.navigate', { url: presUrl });
-  if (nav?.result?.errorText) throw new Error('navigate to presentation failed: ' + nav.result.errorText);
-  await new Promise(r => setTimeout(r, 2000));
-
-  const pres = await connectTo(/presentation\.html/);
-  console.log('presentation page: ' + pres.target.url);
-  const scriptUrl = new URL('../renderer/features/presentation.js', pres.target.url).href;
-  const rerun = await pres.evaluate(RERUN_WITH_RECORDING_API.replace('SCRIPT_URL', JSON.stringify(scriptUrl)));
-  console.log('re-ran presentation.js with recording api: ' + JSON.stringify(rerun));
-  if (!rerun || !rerun.ok) throw new Error('presentation.js did not subscribe: ' + JSON.stringify(rerun));
-
-  for (const size of PROJECTOR_SIZES) {
-    await setViewport(pres.send, size);
-    console.log(`\n=== presentation @ ${size.label} ===`);
-    for (const kind of KINDS) {
-      const pushed = await pres.evaluate(pushState(kind, ++revision));
-      if (!pushed || !pushed.ok) {
-        check(`${size.label} ${kind}: presentation rendered`, false, pushed && pushed.reason);
-        continue;
-      }
-      const m = await measureLayout(pres.evaluate, IFRAME_SEL);
-      const shot = await capture(pres.send, `presentation-${kind}-${size.label}`);
-      const file = shot.file || ('(no image: ' + shot.error + ')');
-      console.log(`  ${kind.padEnd(9)} minFont ${m.minFont.toFixed(0)}px  clipped ${m.clippedCount}  outside ${m.outsideCount}  scrolls ${m.scrolls}  -> ${file}`);
-
-      // §7.2: the smallest text on a projector screen must still be readable
-      // from the back of a classroom. 20px is the floor already enforced for
-      // answers in the main window (ui-fullscreen-density-check.js:127).
-      check(`${size.label} ${kind}: smallest text >= 20px`, m.minFont >= 20,
-        `${m.minFont.toFixed(1)}px` + (m.smallest ? ` (${m.smallest.tag}.${m.smallest.cls} "${m.smallest.text}")` : ''));
-      check(`${size.label} ${kind}: no clipped text`, m.clippedCount === 0,
-        m.clippedCount ? JSON.stringify(m.clipped[0]) : '');
-      check(`${size.label} ${kind}: nothing outside the viewport`, m.outsideCount === 0, String(m.outsideCount));
-      check(`${size.label} ${kind}: no page scroll`, !m.scrolls, `${m.docHeight} vs ${size.height}`);
-      check(`${size.label} ${kind}: no inner scroll area hides content`,
-        m.innerScrollers.length === 0, m.innerScrollers.join(', '));
-      check(`${size.label} ${kind}: question and answers do not overlap`, !m.questionAnswerOverlap);
-      if (process.env.DIAG_HOLD && process.env.DIAG_HOLD === `${size.label}:${kind}`) {
-        await new Promise(r => setTimeout(r, 25000));
+    for (const size of PROJECTOR_SIZES) {
+      await setViewportAndWait(pres, size);
+      console.log(`\n=== presentation @ ${size.label} ===`);
+      for (const kind of KINDS) {
+        const state = stateFor(kind, ++revision);
+        await call(main, 'sendPresentationState', state);
+        await waitFor(() => pres.evaluate(`window.__presProbe.state?.revision === ${revision}`), 'state-update round trip');
+        const content = await pres.evaluate(`(() => {
+          const q = document.querySelector('.prompt');
+          const grid = document.querySelector('.options');
+          const a = q?.getBoundingClientRect(), b = grid?.getBoundingClientRect();
+          return {
+            prompt: q?.textContent,
+            options: [...document.querySelectorAll('.option > span:last-child')].map(el => el.textContent),
+            matching: document.querySelectorAll('.match-card').length,
+            results: document.querySelectorAll('.result-row').length,
+            overlap: a && b ? a.bottom > b.top + 2 && b.bottom > a.top + 2 && a.right > b.left + 2 && b.right > a.left + 2 : null
+          };
+        })()`);
+        const hasQuestion = ['quiz', 'treasure', 'race'].includes(kind);
+        check(`${size.label} ${kind}: expected content is rendered`, hasQuestion
+          ? content.prompt === LONG_PROMPT && JSON.stringify(content.options) === JSON.stringify(OPTIONS.map(o => o.text))
+          : kind === 'matching' ? content.matching === 8 : content.results === 3, JSON.stringify(content));
+        const m = await measureLayout(pres.evaluate);
+        const shot = await capture(pres.send, `presentation-tauri-${kind}-${size.label}`);
+        check(`${size.label} ${kind}: screenshot captured`, Boolean(shot.file), shot.file || shot.error);
+        check(`${size.label} ${kind}: smallest text >= 20px`, m.minFont >= 20,
+          `${m.minFont.toFixed(1)}px` + (m.smallest ? ` (${m.smallest.tag}.${m.smallest.cls} "${m.smallest.text}")` : ''));
+        check(`${size.label} ${kind}: no clipped text`, m.clippedCount === 0, JSON.stringify(m.clipped));
+        check(`${size.label} ${kind}: nothing outside the viewport`, m.outsideCount === 0, JSON.stringify(m.outside));
+        check(`${size.label} ${kind}: no page scroll`, !m.scrolls, `${m.docHeight} vs ${size.height}`);
+        check(`${size.label} ${kind}: no inner scroll area hides content`, m.innerScrollers.length === 0, m.innerScrollers.join(', '));
+        if (hasQuestion) check(`${size.label} ${kind}: question and answers do not overlap`, content.overlap === false);
       }
     }
-  }
 
-  await setViewport(pres.send, null);
-  try { pres.ws.close(); } catch {}
-  // The tab now shows the presentation page instead of the app. Leave it on
-  // index.html so the running app is not left in a strange state.
-  try { await main.send('Page.navigate', { url: main.target.url }); } catch {}
+    for (const invalid of [
+      { ...stateFor('quiz', revision - 1), gameTitle: 'STALE MUST NOT RENDER' },
+      { ...stateFor('quiz', revision + 100), sessionId: SESSION_ID + '-other', gameTitle: 'FOREIGN MUST NOT RENDER' },
+    ]) {
+      await call(main, 'sendPresentationState', invalid);
+      const count = await pres.evaluate('window.__presProbe.count');
+      await call(pres, 'requestPresentationState');
+      await waitFor(() => pres.evaluate(`window.__presProbe.count > ${count}`), 'snapshot after rejected update');
+      check('stale/foreign update cannot replace the snapshot', await pres.evaluate(`window.__presProbe.state.revision === ${revision} && window.__presProbe.state.sessionId === ${JSON.stringify(SESSION_ID)} && document.querySelectorAll('.result-row').length === 3`), invalid.gameTitle);
+    }
+
+    await pres.evaluate('window.__presBeforeReload = true');
+    await pres.send('Page.reload', { ignoreCache: true });
+    await waitFor(() => pres.evaluate(`!window.__presBeforeReload && document.querySelectorAll('.result-row').length === 3`), 'snapshot in a new document after reload');
+    check('reloaded presentation requests and renders the stored snapshot', true);
+    await setViewportAndWait(pres, null);
+    await pres.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+    await waitFor(async () => !(await findTarget(PORT, PRESENTATION_URL)), 'Escape closes presentation');
+    pres.ws.close();
+    pres = null;
+    check('Escape closes the real presentation window', true);
+
+    await call(main, 'startPresentation', stateFor('quiz', 1));
+    pres = await connectTo(PRESENTATION_URL);
+    await waitForQuiz(pres);
+    check('reopening starts a fresh revision sequence', true);
+    const button = await pres.evaluate(`(() => { const r = document.querySelector('#presentationExitBtn').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
+    await pres.send('Input.dispatchMouseEvent', { type: 'mousePressed', ...button, button: 'left', clickCount: 1 });
+    await pres.send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...button, button: 'left', clickCount: 1 });
+    await waitFor(async () => !(await findTarget(PORT, PRESENTATION_URL)), 'exit button closes presentation');
+    pres.ws.close();
+    pres = null;
+    check('exit button closes the real presentation window', true);
+    await call(main, 'startPresentation', stateFor('quiz', 1));
+    pres = await connectTo(PRESENTATION_URL);
+    await waitForQuiz(pres);
+    await call(main, 'stopPresentation');
+    await waitFor(async () => !(await findTarget(PORT, PRESENTATION_URL)), 'main stops presentation');
+    pres.ws.close();
+    pres = null;
+    check('main can stop the real presentation window', true);
+    check('main target survives unchanged', (await listTargets(PORT)).some(t => t.id === main.target.id && t.url === main.target.url));
+    check('no renderer exceptions or console errors', runtimeErrors.length === 0, JSON.stringify(runtimeErrors));
+    check('no stylesheet CSP violations', styleErrors.length === 0, JSON.stringify(styleErrors));
+  } finally {
+    if (pres?.ws.readyState === WebSocket.OPEN) await setViewportAndWait(pres, null).catch(() => {});
+    if (started) {
+      await call(main, 'stopPresentation');
+      await waitFor(async () => !(await findTarget(PORT, PRESENTATION_URL)), 'presentation cleanup');
+    }
+    pres?.ws.close();
+    main.ws.close();
+  }
   const failed = results.filter(r => !r.ok);
   console.log(`\nui-presentation-check: ${results.length - failed.length}/${results.length} passed`);
   process.exit(failed.length ? 1 : 0);

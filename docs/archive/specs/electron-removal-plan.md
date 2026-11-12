@@ -154,9 +154,23 @@ phải model). Thêm khối gạt setup onboarding chuẩn. Kết quả trên in
 khi chỉ đổi thể loại, bước 4 giữ 3 câu `source:'imported-questions'`, bước 5 treasure/matching từ
 chối kèm lý do, race giữ 3 câu nguyên văn. Không đổi sản phẩm.
 
-Một tệp ưu tiên còn lại của C1 chưa port: `ui-presentation` (phải viết lại theo mô hình cửa sổ
-Tauri, không port máy móc). Cùng khuôn stub `desktop.stub('generateLessonDraft')` dùng lại được
-cho các check cần bước sinh.
+Tệp thứ năm: `ui-presentation-check.js` được viết lại để mở cửa sổ Tauri thật qua façade,
+không điều hướng trang chính, không iframe/eval/preload giả. Giữ ma trận 5 loại nội dung ×
+1920×1080/1366×768 và sàn chữ 20px; bổ sung snapshot khởi tạo không gửi bù, tái sử dụng cửa sổ,
+loại revision cũ/sai phiên, reload tài liệu mới, Escape/nút thoát/stop từ cửa sổ chính.
+
+Hai hồi quy thật được bài kiểm tra native phát hiện: (1) ACL chỉ cấp quyền cho `main`, khiến
+`presentation` không nghe được sự kiện; thêm capability riêng chỉ `core:event:allow-listen` và
+`core:event:allow-unlisten`. (2) Tauri cấp nonce cho CSS tĩnh nên style tạo động trong renderer
+bị CSP từ chối; chuyển nguyên 147 dòng CSS sang head của HTML trình chiếu, không nới CSP.
+Unit contract chốt cả hai ranh giới. Hai giả định sai trong check cũ cũng được sửa: fixture
+Kho báu thiếu `mission.type:'question'` nên không có đáp án, và helper overlap không tìm `.prompt`.
+
+Trạng thái xác minh trình chiếu: **93/93 ×2** trên hai instance mới, mỗi lượt data dir và
+WebView2 profile riêng; đủ 10 ảnh, chữ nhỏ nhất 20px, không cắt/tràn/cuộn/chồng lấn, không lỗi
+renderer hay CSP stylesheet. Năm tệp ưu tiên C1 đã hoàn tất; khoảng 22 check payload khác,
+15 smoke và nhóm D vẫn còn. Màn hình phụ vật lý/rút cáp, installer/P7 và AI local chưa xác minh.
+Khuôn `desktop.stub('generateLessonDraft')` vẫn dùng được cho các check còn lại cần bước sinh.
 
 ### D. Soát mã TypeScript cũ — không phải đợt xóa hàng loạt
 
@@ -218,9 +232,11 @@ git diff --check
 
 **Lượt batch 2 (tiếp 3, 2026-11-12).** Port `ui-input-routing-check` — chỉ sửa check, không đổi sản phẩm. Cổng chạy lại: `npm run check` (tsc) sạch, `npm test` **95/95** (44,1 s), `npm run check:renderer-globals` 73/75 (0 undefined), `node --check` tệp check OK, `git diff --check` sạch, và `ui-input-routing-check` **52/52 ×2** trên instance Tauri sạch vừa khởi động (port 9363, data dir + profile tạm riêng, gate env; lượt 1 lạnh, lượt 2 ấm cùng instance). Rust không đổi nên không chạy lại `cargo test` (batch-2 tiếp chốt 153/153 trên cùng cây); `tauri:check`/`build:tauri` không chạy lại vì frontend không đổi.
 
+**Lượt batch 2 (tiếp 4, 2026-11-12).** Viết lại `ui-presentation-check` cho cửa sổ Tauri thật; sửa capability event tối thiểu và CSS tĩnh nhận nonce CSP. `node tests/ui/ui-presentation-check.js 9364` **93/93 ×2** trên hai instance mới, data/profile riêng; 5 loại × 2 viewport, nhỏ nhất 20px, không lỗi renderer/CSP stylesheet. `node --check tests/ui/ui-presentation-check.js` và `node --import tsx tests/unit/tauri-contract.test.ts` qua; `npm test` **95/95** (50,8 s), `npm run build:tauri` 203 tệp, `npm run check` sạch, `npm run check:renderer-globals` 73/75 (0 undefined), `npm run check:embedded` khớp 6125,4 KiB, `cargo test --manifest-path src-tauri/Cargo.toml --lib -- --test-threads=1` **153/153**, `npm run tauri:check` **51/51 + 10/10 mở lại + 12/12 migration** (release 56,49 MiB), `git diff --check` sạch. Màn hình phụ vật lý/rút cáp, installer/P7 và AI local thật chưa xác minh.
+
 ## Việc còn lại — thứ tự đề xuất
 
-1. Rà soát chính xác các file Electron còn sót bằng tìm kiếm source/docs và kiểm tra từng consumer. Xóa hoặc chuyển vào `tests/legacy/` những smoke/packaging scripts không còn đường chạy; giữ fixture hoặc hướng dẫn lịch sử có giá trị nhưng ghi rõ trạng thái.
+1. Port từng check payload còn lại và đo trên instance Tauri mới; map 15 smoke sang hành vi trong gate Rust rồi rà consumer nhóm D. Chỉ xóa hoặc chuyển vào `tests/legacy/` những smoke/packaging scripts không còn đường chạy sau khi có bằng chứng thay thế; giữ fixture hoặc hướng dẫn lịch sử có giá trị nhưng ghi rõ trạng thái.
 2. Sửa các tham chiếu Electron còn sót trong README/active docs nếu tìm được; không xóa dữ liệu/profile Electron của người dùng.
 3. Chạy lại `npm run check`, `npm test`, `npm run check:renderer-globals`, `npm run check:embedded`, Rust tests và `npm run tauri:check` sau mọi thay đổi mã.
 4. Trên Windows sạch/VM: tạo installer, cài mới, khởi chạy, tạo/lưu/mở game, xuất/nhập `.egame`, kiểm tra trình chiếu và gameplay offline; sau đó kiểm tra nâng cấp và gỡ cài đặt không xóa profile người dùng.

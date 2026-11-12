@@ -280,6 +280,25 @@ test('không cấp quyền filesystem cho frontend', () => {
   }
 });
 
+test('cửa sổ trình chiếu chỉ được nghe và hủy nghe sự kiện Tauri', () => {
+  const file = path.join(root, 'src-tauri', 'capabilities', 'presentation.json');
+  assert.ok(fs.existsSync(file), 'thiếu capability cho cửa sổ presentation');
+  const cap = JSON.parse(fs.readFileSync(file, 'utf8'));
+  assert.deepEqual(cap.windows, ['presentation']);
+  assert.equal(cap.remote, undefined);
+  assert.deepEqual(cap.permissions.slice().sort(), ['core:event:allow-listen', 'core:event:allow-unlisten']);
+});
+
+test('CSS trình chiếu nằm trong HTML tĩnh để Tauri cấp nonce CSP', () => {
+  const html = fs.readFileSync(path.join(root, 'src', 'presentation', 'presentation.html'), 'utf8');
+  const renderer = fs.readFileSync(path.join(root, 'src', 'renderer', 'features', 'presentation.ts'), 'utf8');
+  const style = /<head>[\s\S]*?<style>([\s\S]*?)<\/style>[\s\S]*?<\/head>/.exec(html);
+  assert.ok(style, 'thiếu CSS tĩnh trong head của trang trình chiếu');
+  assert.match(style[1], /\.presentation-root\s*\{[^}]*font-size:\s*20px/);
+  assert.match(style[1], /\.presentation-exit-btn\s*\{[^}]*font-size:\s*20px/);
+  assert.ok(!/<style\b/i.test(renderer), 'style tạo động không được Tauri cấp nonce');
+});
+
 test('tauri.conf.json tách khỏi Electron', () => {
   assert.equal(conf.identifier, 'vn.edugame.studio.tauri');
   assert.notEqual(conf.productName, 'EduGame Studio', 'trùng productName với Electron');
