@@ -1,8 +1,10 @@
 // persistence71.js - two-phase persistence smoke (close/reopen the app).
-// Phase 1 writes synthetic lesson/analysis/project/game/session rows.
+// Phase 1 writes synthetic lesson/project/game/session rows.
 // Phase 2 runs in a new app process with the same profile and reads them back.
-// Usage: PHASE=write node tests/manual/persistence71.js
-//        PHASE=verify node tests/manual/persistence71.js
+// Usage in PowerShell:
+//   $env:PHASE='write'; node tests/manual/persistence71.js
+//   $env:PHASE='verify'; node tests/manual/persistence71.js
+// Start the Tauri app with CDP on port 9335 before each phase.
 const fs = require('node:fs');
 const PORT = Number(process.env.CDP_PORT || 9335);
 const PHASE = process.env.PHASE || 'write';
@@ -11,7 +13,6 @@ const DOC_NAME = `persist71-${RUN_ID}.txt`;
 const STATE_FILE = 'persistence71-state.json';
 const previousState = PHASE === 'verify' ? JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')) : null;
 const DOC_ID = previousState ? previousState.documentId : '';
-const ANALYSIS_ID = `analysis_${RUN_ID}`;
 const PROJECT_ID = `project_${RUN_ID}`;
 const GAME_ID = `game_${RUN_ID}`;
 const SESSION_ID = `session_${RUN_ID}`;
@@ -26,7 +27,7 @@ async function findTarget() {
     try {
       const response = await fetch(`http://127.0.0.1:${PORT}/json/list`);
       const list = await response.json();
-      const target = list.find(item => item.type === 'page' && /index\.html/.test(item.url));
+      const target = list.find(item => item.type === 'page' && /(index\.html|tauri\.localhost)/.test(item.url));
       if (target) return target;
     } catch {}
     await sleep(1000);
@@ -64,7 +65,7 @@ async function findTarget() {
   const booted = await must(`(async () => {
     const started = Date.now();
     while (Date.now() - started < 30000) {
-      if (typeof state !== 'undefined' && window.eduGame && document.querySelector('#pageContent')?.children.length) return true;
+      if (typeof state !== 'undefined' && typeof desktop !== 'undefined' && document.querySelector('#pageContent')?.children.length) return true;
       await new Promise(r => setTimeout(r, 200));
     }
     return false;
@@ -73,73 +74,62 @@ async function findTarget() {
 
   if (PHASE === 'write') {
     const written = await must(`(async () => {
-      const document = await window.eduGame.saveLessonDocument({
+      const document = await desktop.call('saveLessonDocument', {
         name: ${JSON.stringify(DOC_NAME)}, ext: 'txt',
         text: 'Quang hợp là quá trình cây xanh tổng hợp chất hữu cơ nhờ ánh sáng. Hô hấp giải phóng năng lượng.',
         characters: 104
       });
-      const analysis = {
-        id: ${JSON.stringify(ANALYSIS_ID)}, schemaVersion: 1, documentId: document.id,
-        subject: 'Sinh học', grade: 6, topic: 'Quang hợp và hô hấp (persistence)',
-        objectives: [{ id: 'o1', description: 'Phân biệt quang hợp và hô hấp.' }],
-        keyConcepts: [{ id: 'k1', term: 'Quang hợp', explanation: 'Tổng hợp chất hữu cơ nhờ ánh sáng.' }],
-        uncertainties: [], sourceDocumentIds: [document.id], createdAt: new Date().toISOString()
-      };
-      await window.eduGame.saveLessonAnalysis(analysis);
       const project = {
         id: ${JSON.stringify(PROJECT_ID)}, schemaVersion: 1, status: 'ready', step: 'generate',
         title: 'Dự án persistence 71', description: 'Kiểm tra đóng/mở ứng dụng.', sourceName: document.name,
         gameId: null, template: 'scenario',
         lesson: { documentId: document.id, name: document.name, ext: 'txt', characters: 104, sizeBytes: 0 },
-        analysisId: analysis.id, recommendationId: null, config: null, draft: null, gameSnapshot: null,
+        analysisId: null, recommendationId: null, config: null, draft: null, gameSnapshot: null,
         createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
       };
-      await window.eduGame.saveProjectDraft(project);
+      await desktop.call('saveProjectDraft', project);
       const game = {
         id: ${JSON.stringify(GAME_ID)}, title: 'Trò chơi persistence 71', subject: 'Sinh học', grade: 'Lớp 6', topic: 'Quang hợp',
         template: 'scenario', description: 'Synthetic persistence check.', tags: ['PERSIST'],
         gameSetup: { difficulty: 'trung bình', duration: '10', scoringMode: 'cơ bản', players: 'cá nhân', pointsPerCorrect: '100', timeBonus: '0', style: 'trò chơi' },
         questions: [{ id: 's1', type: 'scenario', context: 'Bối cảnh', prompt: 'Tình huống persistence?', options: [{ id: 'a', text: 'Đúng' }, { id: 'b', text: 'Sai' }], correctOptionId: 'a', explanation: 'Vì vậy.', points: 100, nextSituationId: null }]
       };
-      await window.eduGame.saveGame(game);
-      await window.eduGame.saveSession({
+      await desktop.call('saveGame', game);
+      await desktop.call('saveSession', {
         id: ${JSON.stringify(SESSION_ID)}, gameId: game.id, gameTitle: game.title, gameTemplate: game.template,
         playerName: 'Persistence 71', points: 100, max: 100, percent: 100, correct: 1, total: 1,
         durationSeconds: 3, completedAt: new Date().toISOString(), createdAt: new Date().toISOString()
       });
-      const library = await window.eduGame.getLibrary();
+      const library = await desktop.call('getLibrary');
       return {
         documentId: document.id,
         hasGame: library.games.some(item => item.id === game.id),
         hasSession: library.sessions.some(item => item.id === ${JSON.stringify(SESSION_ID)})
       };
     })()`);
-    check('T1 wrote lesson/analysis/project/game/session', written && written.hasGame && written.hasSession, JSON.stringify(written));
+    check('T1 wrote lesson/project/game/session', written && written.hasGame && written.hasSession, JSON.stringify(written));
     fs.writeFileSync(STATE_FILE, JSON.stringify({ documentId: written && written.documentId }, null, 2));
     check('T1 document id captured for restart', Boolean(written && written.documentId), written && written.documentId);
   } else {
     const read = await must(`(async () => {
       await refreshDb();
-      const document = await window.eduGame.getLessonDocument(${JSON.stringify(DOC_ID)});
-      const library = await window.eduGame.listLessonLibrary();
-      const projects = await window.eduGame.listProjects();
+      const document = await desktop.call('getLessonDocument', ${JSON.stringify(DOC_ID)});
+      const library = await desktop.call('listLessonLibrary');
+      const projects = await desktop.call('listProjects');
       const lessons = Array.isArray(library) ? library : (library.documents || []);
       const lesson = lessons.find(item => item.id === ${JSON.stringify(DOC_ID)});
       const project = projects.find(item => item.id === ${JSON.stringify(PROJECT_ID)});
       return {
         documentText: document && document.text || '',
         lessonFound: Boolean(lesson),
-        analysisFound: Boolean(lesson && (lesson.analyses || []).some(item => item.id === ${JSON.stringify(ANALYSIS_ID)})),
         projectFound: Boolean(project),
         projectStep: project && project.step,
-        projectAnalysisId: project && project.analysisId,
         hasGame: state.db.games.some(item => item.id === ${JSON.stringify(GAME_ID)}),
         hasSession: state.db.sessions.some(item => item.id === ${JSON.stringify(SESSION_ID)})
       };
     })()`);
     check('T2 lesson source survives restart', Boolean(read && read.documentText && read.lessonFound), JSON.stringify({ text: read && read.documentText.slice(0, 40), lessonFound: read && read.lessonFound }));
-    check('T2 saved analysis survives restart', read && read.analysisFound, read && read.analysisFound);
-    check('T2 project and its analysis link survive restart', read && read.projectFound && read.projectAnalysisId === ANALYSIS_ID, JSON.stringify({ found: read && read.projectFound, step: read && read.projectStep, analysisId: read && read.projectAnalysisId }));
+    check('T2 saved project survives restart', read && read.projectFound, JSON.stringify({ found: read && read.projectFound, step: read && read.projectStep }));
     check('T2 saved game survives restart', read && read.hasGame, read && read.hasGame);
     check('T2 result session survives restart', read && read.hasSession, read && read.hasSession);
     const ui = await must(`(async () => {
@@ -159,7 +149,7 @@ async function findTarget() {
         game: libraryPage.includes('Trò chơi persistence 71')
       };
     })()`);
-    check('T2 Giáo án page renders the persisted source/analysis', ui && ui.lesson, JSON.stringify(ui));
+    check('T2 Giáo án page renders the persisted source', ui && ui.lesson, JSON.stringify(ui));
     check('T2 Dự án page renders the persisted project', ui && ui.project, JSON.stringify(ui));
     check('T2 Library page renders the persisted game', ui && ui.game, JSON.stringify(ui));
   }

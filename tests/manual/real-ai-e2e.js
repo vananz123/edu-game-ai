@@ -1,7 +1,7 @@
-// Real-model e2e inside the actual Electron app.
+// Real-model e2e inside the actual Tauri app.
 // Requires a downloaded Qwen model + llama.cpp runtime in the isolated profile.
 // Usage: node tests/manual/real-ai-e2e.js
-// Optional: CDP_PORT=9336
+// Start the app first with `tests/ui/launch-app.ps1 -Port 9336`; optionally set CDP_PORT.
 const PORT = Number(process.env.CDP_PORT || 9336);
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const results = [];
@@ -14,7 +14,7 @@ async function findTarget() {
     try {
       const response = await fetch(`http://127.0.0.1:${PORT}/json/list`);
       const list = await response.json();
-      const target = list.find(item => item.type === 'page' && /index\.html/.test(item.url));
+      const target = list.find(item => item.type === 'page' && /(index\.html|tauri\.localhost)/.test(item.url));
       if (target) return target;
     } catch {}
     await sleep(1000);
@@ -68,7 +68,7 @@ async function findTarget() {
   const booted = await must(`(async () => {
     const started = Date.now();
     while (Date.now() - started < 30000) {
-      if (typeof state !== 'undefined' && window.eduGame && document.querySelector('#pageContent')?.children.length) return true;
+      if (typeof state !== 'undefined' && typeof desktop !== 'undefined' && document.querySelector('#pageContent')?.children.length) return true;
       await new Promise(r => setTimeout(r, 200));
     }
     return false;
@@ -77,7 +77,7 @@ async function findTarget() {
 
   try {
     const models = await must(`(async () => {
-      const result = await window.eduGame.getLocalAiModels();
+      const result = await desktop.call('getLocalAiModels');
       return {
         models: result.models.map(model => ({ id: model.id, friendlyName: model.friendlyName, installed: model.installed })),
         machine: { runtimeInstalled: result.machine.runtimeInstalled, runtimeState: result.machine.runtimeState, runtimeModelId: result.machine.runtimeModelId }
@@ -91,25 +91,25 @@ async function findTarget() {
 
     const runtime = await must(`(async () => {
       const started = Date.now();
-      const result = await window.eduGame.startLocalRuntime(${JSON.stringify(preferred.id)});
+      const result = await desktop.call('startLocalRuntime', ${JSON.stringify(preferred.id)});
       return { elapsedSeconds: Math.round((Date.now() - started) / 1000), machine: result.models.machine };
     })()`, 5 * 60 * 1000);
     check('T2 llama.cpp reports READY', runtime.machine && runtime.machine.runtimeState === 'READY', JSON.stringify(runtime));
     check('T2 runtime start finished in under 5 minutes', runtime.elapsedSeconds < 300, runtime.elapsedSeconds + 's');
 
     const cancelled = await must(`(async () => {
-      const document = await window.eduGame.saveLessonDocument({
+      const document = await desktop.call('saveLessonDocument', {
         name: 'real-ai-cancel.txt', ext: 'txt',
         text: 'Quang hợp là quá trình cây xanh tổng hợp chất hữu cơ nhờ ánh sáng. Hô hấp giải phóng năng lượng.',
         characters: 104
       });
       const requestId = 'real-e2e-cancel-' + Date.now();
-      const request = window.eduGame.analyzeLesson({ documentId: document.id, requestId, mode: 'fast', force: true });
+      const request = desktop.call('analyzeLesson', { documentId: document.id, requestId, mode: 'fast', force: true });
       await new Promise(r => setTimeout(r, 1200));
-      const cancel = await window.eduGame.cancelAi(requestId);
+      const cancel = await desktop.call('cancelAi', requestId);
       let error = '';
       try { await request; } catch (reason) { error = String((reason && reason.message) || reason); }
-      const status = await window.eduGame.getLocalRuntimeStatus();
+      const status = await desktop.call('getLocalRuntimeStatus');
       return { cancel, error, runtimeState: status.state };
     })()`, 2 * 60 * 1000);
     check('T2b cancel mid-analysis reports a cancellation', /AI_CANCELLED|huỷ|hủy|cancel/i.test(cancelled.error || ''), (cancelled.error || '').slice(0, 180));
@@ -117,19 +117,19 @@ async function findTarget() {
 
     const analyzed = await must(`(async () => {
       window.__realAiProgress = [];
-      window.__realAiUnsubscribe = window.eduGame.onLessonProgress(value => window.__realAiProgress.push(value));
-      const document = await window.eduGame.saveLessonDocument({
+      window.__realAiUnsubscribe = desktop.listen('onLessonProgress', value => window.__realAiProgress.push(value));
+      const document = await desktop.call('saveLessonDocument', {
         name: 'real-ai-e2e.txt', ext: 'txt',
         text: 'Bài học: Quang hợp ở cây xanh. Quang hợp là quá trình lá cây sử dụng nước, khí carbon dioxide và năng lượng ánh sáng để tổng hợp chất hữu cơ, đồng thời giải phóng khí oxygen. Diệp lục là sắc tố hấp thụ ánh sáng. Hô hấp tế bào phân giải chất hữu cơ, giải phóng năng lượng cho hoạt động sống và tạo ra carbon dioxide, nước. Quang hợp và hô hấp là hai quá trình có quan hệ bổ sung: quang hợp tạo chất hữu cơ và oxygen, hô hấp sử dụng chất hữu cơ và oxygen. Cây xanh có vai trò quan trọng trong việc cân bằng khí oxygen và carbon dioxide trong không khí.',
         characters: 520
       });
       const startedAt = Date.now();
       const requestId = 'real-e2e-analysis-' + Date.now();
-      const first = window.eduGame.analyzeLesson({ documentId: document.id, requestId, mode: 'fast', force: true });
+      const first = desktop.call('analyzeLesson', { documentId: document.id, requestId, mode: 'fast', force: true });
       await new Promise(r => setTimeout(r, 700));
       let busy = '';
       try {
-        await window.eduGame.analyzeLesson({ documentId: document.id, requestId: requestId + '-second', mode: 'fast', force: true });
+        await desktop.call('analyzeLesson', { documentId: document.id, requestId: requestId + '-second', mode: 'fast', force: true });
       } catch (error) {
         busy = String((error && error.message) || error);
       }
@@ -160,7 +160,7 @@ async function findTarget() {
 
     const generated = await must(`(async () => {
       const analysis = ${JSON.stringify(analyzed.analysis)};
-      const project = await window.eduGame.getProject(${JSON.stringify(analyzed.projectId)});
+      const project = await desktop.call('getProject', ${JSON.stringify(analyzed.projectId)});
       const config = {
         gameType: 'arena',
         title: 'Kiểm tra Qwen thật',
@@ -173,12 +173,12 @@ async function findTarget() {
         generationMode: 'fast', questionCount: 4,
         scoringMode: 'basic', pointsPerCorrect: 100, timeBonus: 10
       };
-      const savedProject = await window.eduGame.saveProjectDraft({ ...project, config, step: 'generate', status: 'ready' });
+      const savedProject = await desktop.call('saveProjectDraft', { ...project, config, step: 'generate', status: 'ready' });
       const requestId = 'real-e2e-generate-' + Date.now();
       const startedAt = Date.now();
       window.__realAiGenProgress = [];
-      const unsubscribe = window.eduGame.onLessonProgress(value => window.__realAiGenProgress.push(value));
-      const result = await window.eduGame.generateLessonDraft({ projectId: savedProject.id, mode: 'fast', requestId, regenerate: true });
+      const unsubscribe = desktop.listen('onLessonProgress', value => window.__realAiGenProgress.push(value));
+      const result = await desktop.call('generateLessonDraft', { projectId: savedProject.id, mode: 'fast', requestId, regenerate: true });
       unsubscribe && unsubscribe();
       return {
         projectId: savedProject.id,
@@ -198,7 +198,7 @@ async function findTarget() {
     check('T4 generation progress reached ready', generationStages.includes('ready'), JSON.stringify(generationStages));
 
     const played = await must(`(async () => {
-      const saved = await window.eduGame.saveGame(${JSON.stringify(generated.game)});
+      const saved = await desktop.call('saveGame', ${JSON.stringify(generated.game)});
       await refreshDb();
       playGame(saved);
       await new Promise(r => setTimeout(r, 400));
@@ -209,15 +209,15 @@ async function findTarget() {
     check('T5 generated game saves and opens in the player', played.promptVisible && played.answers >= 2, JSON.stringify(played));
 
     const cleanup = await must(`(async () => {
-      if (${JSON.stringify(generated.game && generated.game.id)}) await window.eduGame.deleteGame(${JSON.stringify(generated.game && generated.game.id)});
-      if (${JSON.stringify(analyzed.projectId)}) await window.eduGame.deleteProject(${JSON.stringify(analyzed.projectId)});
-      const stop = await window.eduGame.stopLocalRuntime();
+      if (${JSON.stringify(generated.game && generated.game.id)}) await desktop.call('deleteGame', ${JSON.stringify(generated.game && generated.game.id)});
+      if (${JSON.stringify(analyzed.projectId)}) await desktop.call('deleteProject', ${JSON.stringify(analyzed.projectId)});
+      const stop = await desktop.call('stopLocalRuntime');
       await refreshDb();
       return { runtime: stop.models && stop.models.machine && stop.models.machine.runtimeState };
     })()`);
     check('T6 runtime stopped after the run', cleanup.runtime !== 'READY', JSON.stringify(cleanup));
   } finally {
-    try { await must(`window.eduGame.stopLocalRuntime()`, 60 * 1000); } catch {}
+    try { await must(`desktop.call('stopLocalRuntime')`, 60 * 1000); } catch {}
     const failed = results.filter(item => !item.pass).length;
     console.log(`\n${results.length - failed}/${results.length} checks passed`);
     ws.close();

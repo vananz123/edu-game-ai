@@ -9,12 +9,11 @@ lesson documents or a real machine profile.
 | --- | --- | --- |
 | `unit/` | `*.test.ts` — plain `node:assert` tests for pure logic and IPC wiring. | `npm test` (compiled to `dist/tests/unit/`) |
 | `helpers/` | Shared fakes imported by `unit/` (e.g. `setup-fake.ts`). | Compiled alongside `unit/` |
-| `ui/` | CDP checks that measure the **real renderer** (geometry, visibility, DOM churn). | Manual — need a running app, see below |
-| `smoke/` | End-to-end flows driven through CDP against the running app. **Electron-era:** most still assume the old preload API and the deleted `EDUGAME_AI_TEST_DIR` hook; being re-classified per `docs/archive/specs/electron-removal-plan.md` (group C) before deletion or porting. | Manual — need a running app |
-| `manual/` | One-off scripts: benchmarks, A/B geometry dumps, real-model probes, CSS verifier. | Manual, one at a time |
-| `manual/lib/` | Shared CDP client (`ui-check-lib.js`) required by **all** `ui/` and `smoke/` CDP checks and by `ui/tauri-webview-check.js`; native LAN phone client (`lan-phone.js`) for the `ui-lan-*` checks. Never delete `ui-check-lib.js`. | — |
+| `ui/` | CDP checks that measure the **real renderer** (geometry, visibility, DOM churn) through the `desktop.*` façade. | Manual — need a running app, see below |
+| `manual/` | One-off scripts: benchmarks, A/B geometry dumps, real-model probes, CSS verifier. CDP app checks use the Tauri launcher and `desktop.*` facade. | Manual, one at a time |
+| `manual/lib/` | Shared CDP client (`ui-check-lib.js`) required by **all** `ui/` CDP checks and by `ui/tauri-webview-check.js`; native LAN phone client (`lan-phone.js`) for the `ui-lan-*` checks. Never delete either helper without checking consumers. | — |
 | `packaging/` | The P7 clean-machine measurement pack: PowerShell script + one-page checklist for installing the real Tauri `.exe` on an offline machine. | `powershell -ExecutionPolicy Bypass -File tests/packaging/p7-offline-install.ps1` (PowerShell 5.1; copy the two files to the pilot machine — no repo, no Node needed) |
-| `fixtures/` | Synthetic lesson / AI-output fixtures used by `smoke/`. | — |
+| `fixtures/` | Synthetic lesson / import fixtures used by the remaining tests (`bench/`, `tauri-import/`). | — |
 
 ### `tests/tailieu/` was deleted on purpose (2026-10-25)
 
@@ -70,15 +69,17 @@ and waits until `/json/list` actually contains the app page at `http://tauri.loc
 `tauri:check` gate documents). `npm run tauri:run` is the equivalent one-liner that also
 pins a throwaway WebView2 profile in `%TEMP%`.
 
-Individual `ui/` and `smoke/` checks were written against the Electron preload
-(`window.eduGame`); those payloads need migrating to the `desktop.*` façade before their
-assertions can be trusted under Tauri — see the group-C table in
-`docs/archive/specs/electron-removal-plan.md`. Ports differ per script — read the header
-comment of each file; the port is the first argument or comes from `CDP_PORT`.
+The `ui/` checks now run through the `desktop.*` façade. The 20 Electron-era
+`tests/smoke/*.js` scripts were retired on 2026-11-12 because none could run on Tauri;
+their behavior map, replacement gates, and remaining gaps are in
+`docs/handoff/plans/2026-11-12-smoke-mapping.md`. Ports differ per script — read the
+header comment of each file; the port is the first argument or comes from `CDP_PORT`.
 
 The `ui-lan-*` checks emulate the pupil phone through `manual/lib/lan-phone.js`, which speaks
 the Rust server's native `/ws` JSON frames (`{ event, payload }`). Do not switch them to
 `socket.io-client`: the Tauri server has no Engine.IO handshake, so a socket.io phone cannot join.
+The obsolete Node/Express/Socket.IO LAN server and `manual/lan-smoke.js` have been removed;
+Rust LAN tests and the three Tauri `ui-lan-*` checks cover the active implementation.
 
 ### Offline play (Phase 5 acceptance)
 
@@ -123,8 +124,8 @@ log it is supposed to keep trustworthy. The Vietnamese version of the steps live
 1. Pure logic → `unit/<name>.test.ts`, and add `node dist/tests/unit/<name>.test.js`
    to the `test` script in `package.json`. A test that is not in that script never
    runs in CI-free development either — it silently rots.
-2. Anything that needs a real window → `ui/` or `smoke/`, with a header comment
-   stating the exact port and the command to run it.
+2. Anything that needs a real window → `ui/`, with a header comment stating the exact
+   port and the command to run it. Do not add new Electron-era `smoke/` scripts.
 3. `unit/` files sit one level deeper than before, so imports to application code
    are `../../src/...`. Code paths resolved at runtime use
    `path.join(__dirname, '..', '..', 'src', ...)` because `__dirname` points into

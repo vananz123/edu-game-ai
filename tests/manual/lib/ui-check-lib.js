@@ -7,7 +7,7 @@
 //
 // Run against a built app started with --remote-debugging-port:
 //   npm run build
-//   npx electron . --remote-debugging-port=9341
+//   powershell -ExecutionPolicy Bypass -File tests/ui/launch-app.ps1 -Port 9341
 //   node tests/ui-play-surface-check.js 9341
 const PORT = Number(process.argv[2] || process.env.CDP_PORT || 9341);
 
@@ -20,7 +20,7 @@ function check(name, ok, detail) {
 async function connect(options = {}) {
   const list = await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json();
   // Tauri phục vụ trang qua giao thức riêng nên URL là `http://tauri.localhost/`
-  // (không có `index.html`); vỏ Electron thì dùng `file:///…/index.html`.
+  // (không có `index.html`); chỉ các trang ứng dụng Tauri được chọn.
   const target = list.find(
     x => x.type === 'page' && (/index\.html/.test(x.url) || /^https?:\/\/tauri\.localhost\/?$/.test(x.url)),
   );

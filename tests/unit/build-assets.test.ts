@@ -42,9 +42,8 @@ const COPIED_ASSETS = [
   // panel is built by `renderer/features/about-panel.js`, which index.html lists below and
   // section 3 of this test resolves like every other script tag. Keeping a second HTML page
   // in the installer was the thing that needed its own CSP and its own colour palette.
-  // LAN Classroom Mode: the phone page is served from dist/src/lan/mobile by
-  // `startLanServer()`. If it is missing from the installer, every phone gets a
-  // 404 while the desktop happily shows "Đã mở phòng".
+  // LAN Classroom Mode: the Tauri Rust server serves the phone page from the
+  // embedded assets in src/lan/mobile.
   'src/lan/mobile/index.html',
   'src/lan/mobile/mobile.css',
   'src/lan/mobile/mobile.js',
@@ -116,12 +115,13 @@ const mobilePage = fs.readFileSync(mobileHtml, 'utf8');
 const mobileRefs = [...mobilePage.matchAll(/<(?:script[^>]*src|link[^>]*href)="([^"]+)"/g)].map((m) => m[1]);
 assert.ok(mobileRefs.length >= 2, 'the LAN mobile page should load mobile.js and mobile.css');
 for (const src of mobileRefs) {
-  // `/socket.io/socket.io.min.js` is served by the Socket.IO server at runtime.
+  // Root-relative routes are served by the Tauri LAN server.
   if (src.startsWith('/')) continue;
   const resolved = path.resolve(path.dirname(mobileHtml), src);
   assert.ok(fs.existsSync(resolved), `lan/mobile/index.html references ${src}, which resolves to ${resolved} and does not exist`);
 }
 assert.match(mobilePage, /http-equiv="Content-Security-Policy"/, 'the LAN page must keep its CSP: classroom Wi-Fi may have no trusted origins');
 assert.doesNotMatch(mobilePage, /<script[^>]+src="https?:/, 'the LAN page must not load scripts from the Internet');
+assert.doesNotMatch(mobilePage, /socket\.io/i, 'the Tauri LAN page must not depend on the retired Socket.IO server');
 
 console.log(`build-assets: ${COPIED_ASSETS.length} copied assets present, all HTML references resolve`);

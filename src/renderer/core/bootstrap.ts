@@ -48,17 +48,15 @@ async function showHelp() {
  * game exists only in memory. `wizardHasUnsavedDraft()` owns the decision and is
  * false once the game is in the library, so a finished wizard closes normally.
  *
- * Chromium turns a cancelled `beforeunload` into `will-prevent-unload` in main,
- * which is where the close is actually stopped; this handler cannot prevent the
- * close by itself. Both halves are required.
+ * This only prevents a document unload. Native-window close confirmation is a
+ * separate host concern and must not be inferred from this browser event alone.
  */
 window.addEventListener('beforeunload', event => {
   // A reload or window close must not leave the LAN server listening (Windows keeps
   // the port busy and the next launch trips Firewall again).
   if (typeof lanReleaseForNewGame === 'function') lanReleaseForNewGame();
   if (typeof wizardHasUnsavedDraft !== 'function' || !wizardHasUnsavedDraft()) return;
-  // `preventDefault()` and `returnValue` are both set: Chromium and Electron
-  // differ in which one they honour, and the cost of setting both is nil.
+  // Set both forms because WebView implementations differ in which they honour.
   event.preventDefault();
   event.returnValue = '';
 });

@@ -89,7 +89,7 @@ const DUMP_EXPR = (freeze) => `
 
 // Đóng băng vị trí trỏ chuột: dispatch mouseMoved về góc trên-trái (chỉ có sidebar
 // padding/brand, không phần tử nào có :hover ở đó). Không có bước này thì vị trí
-// con trỏ OS thật trên cửa sổ Electron làm lệch dump do :hover (translateY + border
+// con trỏ OS thật trên cửa sổ ứng dụng làm lệch dump do :hover (translateY + border
 // + shadow) — đã gặp: lệch 3px y ở game-card/template-card tùy lần dump.
 async function parkPointer(send) {
   await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 2, y: 2, buttons: 0, button: 'none' });

@@ -3,7 +3,7 @@
 // (DECISIONS #59); bản chấm PASS/FAIL là tests/ui/ui-fullscreen-density-check.js.
 //
 //   npm run build
-//   npx electron . --remote-debugging-port=9357
+//   powershell -ExecutionPolicy Bypass -File tests/ui/launch-app.ps1 -Port 9357
 //   node tests/manual/repro-fullscreen-density.js 9357
 const { connect } = require('./lib/ui-check-lib');
 
@@ -107,7 +107,7 @@ const CLOSE = `
   const was = document.documentElement.dataset.fullscreen === '1';
   document.querySelector('[data-play-close]')?.click();
   await new Promise(r => setTimeout(r, 300));
-  if (was) { try { await window.eduGame.setFullscreen(false); } catch {} }
+  if (was) { try { await desktop.call('setFullscreen', false); } catch {} }
   return true;
 `;
 

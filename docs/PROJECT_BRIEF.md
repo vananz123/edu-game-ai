@@ -25,7 +25,7 @@ A Windows application that helps teachers turn lesson plans, teaching documents,
 - The app should be simple for non-technical teachers.
 
 ## Initial scope
-- Windows desktop app using Electron + TypeScript.
+- Windows desktop app using Tauri v2, TypeScript renderer, and Rust backend.
 - Local SQLite database for game library and session history.
 - Game package `.egame` for portability.
 - Cloud AI Gateway using TypeScript/Express, Supabase Auth/DB, and Gemini API as the initial provider.

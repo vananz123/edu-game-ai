@@ -1,10 +1,11 @@
 // tests/install-local-model.js — one-off installer helper (NOT a regression smoke).
 //
 // Downloads + SHA-256-verifies the bundled llama.cpp runtime and a Qwen GGUF by
-// calling the app's own IPC (`ai:install-local-model`), then starts the runtime
-// (`ai:start-local-runtime`). Progress is streamed through `ai:local-progress`.
+// calling the Tauri desktop facade, then starts the runtime. Progress is
+// streamed through the facade's local-AI progress subscription.
 //
-// Usage (app must be open with --remote-debugging-port=9333):
+// Usage (Tauri app must be open with CDP on port 9333):
+//   powershell -ExecutionPolicy Bypass -File tests/ui/launch-app.ps1 -Port 9333
 //   node tests/manual/install-local-model.js [modelId]        # default qwen3.5-2b-q4_k_m
 //   node tests/manual/install-local-model.js qwen3.5-2b-q4_k_m status
 const modelId = process.argv[2] || 'qwen3.5-2b-q4_k_m';
@@ -15,7 +16,7 @@ function mb(bytes) { return (bytes / 1024 / 1024).toFixed(1) + ' MB'; }
 
 (async () => {
   const res = await fetch('http://127.0.0.1:9333/json/list');
-  const target = (await res.json()).find(x => x.type === 'page' && /index\.html/.test(x.url));
+  const target = (await res.json()).find(x => x.type === 'page' && /(index\.html|tauri\.localhost)/.test(x.url));
   if (!target) throw new Error('no CDP target — is the app running on 9333?');
   const ws = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((r, j) => { ws.addEventListener('open', r, { once: true }); ws.addEventListener('error', j, { once: true }); });
@@ -30,8 +31,8 @@ function mb(bytes) { return (bytes / 1024 / 1024).toFixed(1) + ' MB'; }
 
   // Report the current machine/model view first.
   const before = await evalv(`(async () => {
-    const state = await window.eduGame.getLocalAiModels();
-    const status = await window.eduGame.getLocalRuntimeStatus();
+    const state = await desktop.call('getLocalAiModels');
+    const status = await desktop.call('getLocalRuntimeStatus');
     return {
       runtimeInstalled: state.runtimeInstalled,
       recommendedModelId: state.recommendedModelId,
@@ -46,8 +47,8 @@ function mb(bytes) { return (bytes / 1024 / 1024).toFixed(1) + ' MB'; }
   // Kick the install WITHOUT awaiting it, so we can poll progress on the same socket.
   await evalv(`(() => {
     window.__install = { state: 'running', progress: null };
-    window.eduGame.onLocalAiProgress(p => { window.__install.progress = p; });
-    window.eduGame.installLocalAiModel(${JSON.stringify(modelId)})
+    window.__install.unsubscribe = desktop.listen('onLocalAiProgress', p => { window.__install.progress = p; });
+    desktop.call('installLocalAiModel', ${JSON.stringify(modelId)})
       .then(models => { window.__install.state = 'done'; window.__install.models = models; })
       .catch(e => { window.__install.state = 'error'; window.__install.error = String((e && e.message) || e); });
     return true;
@@ -70,13 +71,18 @@ function mb(bytes) { return (bytes / 1024 / 1024).toFixed(1) + ' MB'; }
     if (st.state === 'error') { console.error(`install FAILED: ${st.error}`); process.exitCode = 1; break; }
   }
 
-  if (mode === 'install-only') { ws.close(); return; }
+  if (mode === 'install-only') {
+    await evalv('window.__install && window.__install.unsubscribe && window.__install.unsubscribe()');
+    ws.close();
+    return;
+  }
 
   console.log('starting llama.cpp runtime …');
-  const started = await evalv(`window.eduGame.startLocalRuntime(${JSON.stringify(modelId)}).then(r => ({ ok: true, baseUrl: r.baseUrl })).catch(e => ({ ok: false, error: String((e && e.message) || e) }))`);
+  const started = await evalv(`desktop.call('startLocalRuntime', ${JSON.stringify(modelId)}).then(r => ({ ok: true, baseUrl: r.baseUrl })).catch(e => ({ ok: false, error: String((e && e.message) || e) }))`);
   console.log('start result:', JSON.stringify(started));
-  const after = await evalv(`window.eduGame.getLocalRuntimeStatus()`);
+  const after = await evalv(`desktop.call('getLocalRuntimeStatus')`);
   console.log('runtime status:', JSON.stringify(after));
+  await evalv('window.__install && window.__install.unsubscribe && window.__install.unsubscribe()');
   if (!started.ok) process.exitCode = 1;
   ws.close();
 })().catch(error => { console.error('DRIVER ERROR:', error.message); process.exitCode = 1; });

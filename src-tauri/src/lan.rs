@@ -836,7 +836,7 @@ async fn handle_connection(
 
     let is_ws_upgrade = req_str.to_lowercase().contains("upgrade: websocket");
 
-    if is_ws_upgrade && (path == "/ws" || path.starts_with("/socket.io")) {
+    if is_ws_upgrade && path == "/ws" {
         // Tìm Sec-WebSocket-Key
         let mut ws_key = "";
         for line in req_str.lines() {
@@ -878,11 +878,6 @@ async fn handle_connection(
         }
         ("GET", "/health") => {
             send_http_response(&mut stream, 200, "application/json", b"{\"ok\":true}").await;
-        }
-        ("GET", p) if p.contains("socket.io") => {
-            // Cung cấp script cầu nối tương thích cho index.html
-            let stub = b"window.io = function() { return undefined; };";
-            send_http_response(&mut stream, 200, "application/javascript; charset=utf-8", stub).await;
         }
         ("POST", "/join") => {
             let body = req_str.split("\r\n\r\n").nth(1).unwrap_or("");

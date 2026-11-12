@@ -5,8 +5,8 @@
  * giữ điểm số — máy giáo viên là nguồn chân lý duy nhất.
  *
  * Ràng buộc: HTML/CSS/JS thuần, không bundler (copyfiles chép thẳng như
- * presentation.html). `io` là socket.io-client đi kèm server (route /socket.io/),
- * nên không cần mạng Internet và không tải script từ origin khác (CSP chặn).
+ * presentation.html). Tauri serves this page with its native WebSocket protocol;
+ * it does not depend on Socket.IO or an Internet-hosted script.
  */
 (function () {
   'use strict';

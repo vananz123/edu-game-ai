@@ -1,9 +1,8 @@
 // real-ai-status.js — real-model run that calibrates the wizard step-5 estimate
 // and verifies the AI status bar while a real generation is in flight.
 //
-// Requires a profile with an installed Qwen model + llama.cpp runtime:
-//   EDUGAME_USER_DATA=<profile with edugame-data/ai-local> \
-//   electron . --remote-debugging-port=9336
+// Requires a Tauri profile with an installed Qwen model + llama.cpp runtime.
+// Start the app first with `tests/ui/launch-app.ps1 -Port 9336`.
 //   node tests/manual/real-ai-status.js
 //
 // Optional: CDP_PORT=9336, REAL_MODEL_ID=qwen3.5-2b-q4_k_m
@@ -23,7 +22,7 @@ async function findTarget() {
     try {
       const response = await fetch(`http://127.0.0.1:${PORT}/json/list`);
       const list = await response.json();
-      const target = list.find(item => item.type === 'page' && /index\.html/.test(item.url));
+      const target = list.find(item => item.type === 'page' && /(index\.html|tauri\.localhost)/.test(item.url));
       if (target) return target;
     } catch {}
     await sleep(1000);
@@ -87,7 +86,7 @@ async function findTarget() {
   const booted = await must(`(async () => {
     const started = Date.now();
     while (Date.now() - started < 30000) {
-      if (typeof state !== 'undefined' && typeof wizardGenerateRun === 'function' && window.eduGame && document.querySelector('#pageContent')?.children.length) return true;
+      if (typeof state !== 'undefined' && typeof wizardGenerateRun === 'function' && typeof desktop !== 'undefined' && document.querySelector('#pageContent')?.children.length) return true;
       await new Promise(r => setTimeout(r, 200));
     }
     return false;
@@ -96,7 +95,7 @@ async function findTarget() {
 
   try {
     const models = await must(`(async () => {
-      const result = await window.eduGame.getLocalAiModels();
+      const result = await desktop.call('getLocalAiModels');
       return {
         installed: result.models.filter(model => model.installed).map(model => model.id),
         runtimeInstalled: result.machine.runtimeInstalled,
@@ -108,17 +107,17 @@ async function findTarget() {
 
     const runtime = await must(`(async () => {
       const started = Date.now();
-      const result = await window.eduGame.startLocalRuntime(${JSON.stringify(MODEL_ID)});
+      const result = await desktop.call('startLocalRuntime', ${JSON.stringify(MODEL_ID)});
       return { seconds: Math.round((Date.now() - started) / 1000), machine: result.models && result.models.machine };
     })()`, 6 * 60 * 1000);
     check('T2 llama.cpp reports READY', runtime.machine && runtime.machine.runtimeState === 'READY', JSON.stringify(runtime));
 
     const analyzed = await must(`(async () => {
       const text = 'Bài học: Quang hợp ở cây xanh. Quang hợp là quá trình lá cây sử dụng nước, khí carbon dioxide và năng lượng ánh sáng để tổng hợp chất hữu cơ, đồng thời giải phóng khí oxygen. Diệp lục là sắc tố hấp thụ ánh sáng. Hô hấp tế bào phân giải chất hữu cơ, giải phóng năng lượng cho hoạt động sống và tạo ra carbon dioxide, nước. Quang hợp và hô hấp là hai quá trình có quan hệ bổ sung: quang hợp tạo chất hữu cơ và oxygen, hô hấp sử dụng chất hữu cơ và oxygen.';
-      const document = await window.eduGame.saveLessonDocument({ name: 'real-ai-status.txt', ext: 'txt', text, characters: text.length });
+      const document = await desktop.call('saveLessonDocument', { name: 'real-ai-status.txt', ext: 'txt', text, characters: text.length });
       const startedAt = Date.now();
       const requestId = 'real-status-analysis-' + Date.now();
-      const result = await window.eduGame.analyzeLesson({ documentId: document.id, requestId, mode: 'fast', force: true });
+      const result = await desktop.call('analyzeLesson', { documentId: document.id, requestId, mode: 'fast', force: true });
       return {
         documentId: document.id,
         seconds: Math.round((Date.now() - startedAt) / 1000),
@@ -131,7 +130,7 @@ async function findTarget() {
 
     const setup = await must(`(async () => {
       const analysis = ${JSON.stringify(analyzed.analysis)};
-      const project = await window.eduGame.getProject(${JSON.stringify(analyzed.projectId)});
+      const project = await desktop.call('getProject', ${JSON.stringify(analyzed.projectId)});
       const recommendation = {
         gameType: 'arena', title: 'Real status bar check', rationale: 'calibration',
         suggestedQuestionCount: 4, suggestedDurationMinutes: 10,
@@ -139,7 +138,7 @@ async function findTarget() {
         difficulty: 'trung bình'
       };
       const config = wizardDefaultConfig(recommendation, analysis);
-      const saved = await window.eduGame.saveProjectDraft({ ...project, config, draft: null, gameSnapshot: null, gameId: null, step: 'generate', status: 'ready' });
+      const saved = await desktop.call('saveProjectDraft', { ...project, config, draft: null, gameSnapshot: null, gameId: null, step: 'generate', status: 'ready' });
       wizardState.documentId = ${JSON.stringify(analyzed.documentId)};
       wizardState.analysis = analysis;
       wizardState.analysisId = analysis.id;
@@ -281,7 +280,7 @@ async function findTarget() {
       deep: { seconds: deep.seconds, questions: deep.after.questions, quality: deep.after.quality, stages: deep.stages, visibility: [...new Set(deep.samples.map(sample => sample.vis))], timerSamples: deepTimers.length, firstTimer: deepTimers[0], lastTimer: deepTimers[deepTimers.length - 1], bars: deepBars.slice(0, 4) }
     }, null, 2));
   } finally {
-    try { await must('window.eduGame.stopLocalRuntime()', 60 * 1000); } catch {}
+    try { await must(`desktop.call('stopLocalRuntime')`, 60 * 1000); } catch {}
     const failed = results.filter(item => !item.pass).length;
     console.log(`\n${results.length - failed}/${results.length} checks passed`);
     ws.close();

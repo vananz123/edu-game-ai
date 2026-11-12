@@ -30,13 +30,9 @@ src/
     storage/           lưu trữ: lesson-store (SQLite + file giáo án), custom-illustration
     input/             nhập liệu: phân loại đầu vào, nhập câu hỏi CSV/XLSX, chuẩn hoá câu
   presentation/        Cửa sổ trình chiếu sang màn hình thứ hai
-  lan/                 Chơi LAN: máy giáo viên làm máy chủ, học sinh trả lời
-                       trên điện thoại (Express + Socket.IO trong main process)
-    lan-reducer.ts     Máy trạng thái THUẦN (join, trả lời, chốt câu) — test kỹ nhất
-    lan-adapters.ts    Game → các "lượt" LAN, chấm điểm bằng game-engine/runtime.ts
-    lan-server.ts      HTTP + Socket.IO, chỉ phục vụ trang trong lan/mobile/
-    lan-ipc.ts         IPC lan:start / lan:stop / lan:assign-team / lan:state
-    mobile/            Trang điện thoại (HTML/CSS/JS thuần, copyfiles chép vào dist)
+  lan/                 Giao diện + trang điện thoại LAN; mạng do src-tauri/src/lan.rs quản lý
+    lan-reducer.ts     Máy trạng thái thuần, giữ kiểm thử chuyển đổi nghiệp vụ
+    mobile/            Trang điện thoại (HTML/CSS/JS thuần, Rust nhúng và phục vụ)
   renderer/            Toàn bộ UI chạy trong cửa sổ (script toàn cục, KHÔNG module)
     core/              render() + điều hướng trang + wirePage
     pages/             Một file cho mỗi trang (library, create, create-wizard,
@@ -122,7 +118,7 @@ vendor/                DLL VC++ đóng gói kèm
 | Hình minh họa trò chơi | `features/game-illustration.ts`, `features/treasure-art.ts`, `shared/illustration-*` |
 | Âm thanh | `features/game-audio.ts` |
 | Trình chiếu màn hình 2 | `features/presentation.ts` + `src/presentation/presentation.html` + `src-tauri/src/presentation.rs` |
-| Chơi LAN (học sinh trên điện thoại) | `src/lan/lan-reducer.ts` (trạng thái), `lan-adapters.ts` (điểm), `lan-server.ts` (mạng), `features/lan.ts` (màn hình giáo viên) |
+| Chơi LAN (học sinh trên điện thoại) | `src-tauri/src/lan.rs` (mạng/state), `src/lan/mobile/` (trang điện thoại), `src/renderer/features/lan.ts` (màn hình giáo viên) |
 | Trình sửa game | `features/editor/*.ts` (tách #150: `page`, `questions`, `matching`, `treasure`, `race`, `ai`, `drag`), `features/setup-wizard.ts` |
 | AI local (cài model, chạy llama.cpp) | `src-tauri/src/ai_local.rs`, `setup.rs`, `features/local-ai.ts`, `features/setup-wizard.ts` |
 | Prompt / schema gọi AI | `src/services/lesson/lesson-prompts.ts`, `lesson/lesson-contracts.ts`, `ai/ai-tasks.ts` |

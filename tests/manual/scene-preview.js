@@ -6,9 +6,9 @@
 // looked at. This script renders the REAL renderer code (dist/), not a mock, so
 // what you see is what a teacher's screen shows.
 //
-// Usage (the app must be running with a debugging port):
+// Usage (the Tauri app must be running with a debugging port):
 //   npm run build
-//   npx electron . --remote-debugging-port=9341
+//   powershell -ExecutionPolicy Bypass -File tests/ui/launch-app.ps1 -Port 9341
 //   node tests/manual/scene-preview.js 9341 math science history          # a few
 //   node tests/manual/scene-preview.js 9341 all                          # all 24
 const fs = require('fs');
