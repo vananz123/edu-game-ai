@@ -7,6 +7,13 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-12 — Commit dọn Electron batch 2 (243e348): xoá smoke tests, wizard fixtures, lan-server — 93 files, 13.984 dòng xóa
+- **Trạng thái:** Commit toàn bộ working tree Electron-removal vào `main`. Xoá 20 tệp `tests/smoke/*.js` (CDP-era Electron, không chạy trên Tauri), thư mục `tests/fixtures/wizard/`, `src/lan/lan-server.ts` + `tests/manual/lan-smoke.js` (thiếu `socket.io` trong dependencies ⇒ không compile). Giữ `src/ai-core/unload-guard.ts` + `tests/unit/unload-guard.test.ts` và `src/ai-core/setup-ipc.ts` (pure TypeScript, compile được). Thêm `docs/handoff/plans/2026-11-12-smoke-mapping.md`.
+- **Files đã commit:** 93 files (xem `git show --stat 243e348`)
+- **Lệnh đã chạy:** `npm run check` (tsc) sạch · `npm test` **95/95** · `check:renderer-globals` 73/75 script, 1.055 hàm/8.359 điểm gọi, 0 undefined · `check:embedded` khớp 6125.4 KiB · `git diff --check` chỉ cảnh báo CRLF
+- **Chưa xác minh:** Nhóm D còn lại: `unload-guard.ts`, `setup-ipc.ts` (giữ tạm cho đến khi có Rust close guard + gate LAN Tauri); writer `ai_tasks` chưa có caller (lịch sử/live task AI rỗng trên Tauri); P7 vẫn mở; AI local thật chưa chạy.
+- **Việc kế tiếp:** Nối writer `ai_tasks` vào đường AI hoặc ghi rõ tính năng đang tắt; ra nhóm D trước khi xóa dependency LAN cũ; đóng P7.
+
 ### 2026-11-12 — Dọn Electron batch 2 (tiếp 7): port 15 check payload cuối sang façade `desktop.*` — tất cả xanh trên instance Tauri mới, hết lời gọi `window.eduGame` trong `tests/ui`
 - **Trạng thái:** 15 check payload còn lại đã port sang façade `desktop.*`; không còn lời gọi `window.eduGame.*` nào trong `tests/ui` (chỉ còn comment và phép đo phủ định ở `tauri-webview-check`/`ui-about`). Không đổi mã sản phẩm. Ba giả định nền tảng được sửa trong check: Tauri phục vụ ảnh qua `http://edugame-file.tauri.localhost/img/<id>` (không chỉ `edugame-file://`), ghi chú classifier dùng câu "Bộ đọc hiểu chưa sẵn sàng — phân loại bằng quy tắc.", và lời mời migration có thể mở muộn đè `#modalRoot`.
 - **Files đổi:** `tests/manual/lib/ui-check-lib.js` (thêm `connect({ evalTimeoutMs })`, mặc định vẫn 120 s), 15 tệp `tests/ui/ui-*-check.js` (`ui-answer-mode`, `ui-art-upload-flow`, `ui-card-menu`, `ui-classifier-outline`, `ui-dark-theme`, `ui-editor-art`, `ui-fullscreen-density`, `ui-game-worlds`, `ui-item-art`, `ui-item-assets-editor`, `ui-play-mode-card`, `ui-project-selection`, `ui-race-editor`, `ui-race-treasure`, `ui-settings-sections`), `docs/STATUS.md`, `docs/DECISIONS.md`, `docs/ROADMAP.md`, `docs/archive/specs/electron-removal-plan.md`, `docs/handoff/status/2026-11-12.md` (xoay bàn giao tiếp 4).
