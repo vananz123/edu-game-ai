@@ -5,10 +5,16 @@
 //   2. skips the lesson-analysis step entirely (the AI never starts),
 //   3. reaches a usable game without any model call.
 //
-// Run:
-//   npm run build
-//   powershell -ExecutionPolicy Bypass -File tests/ui/launch-app.ps1 -Port 9400
-//   node tests/ui/ui-input-routing-check.js 9400
+// Ported to the Tauri façade (DECISIONS "Dọn Electron batch 2"): every IPC call
+// goes through `desktop.call(...)`. The "model never runs" assertions are now
+// real counting stubs — `desktop.stub('analyzeLesson', …)` genuinely overrides
+// the call, so a counter of 0 is a proof, not the vacuous pass the frozen
+// Electron `window.eduGame` gave. Sections 4/5 call the real local pipeline.
+//
+// Run against the built Tauri release binary (no model needed):
+//   npm run build:tauri && cargo tauri build
+//   powershell -ExecutionPolicy Bypass -File tests/ui/launch-app.ps1 -Port 9361
+//   node tests/ui/ui-input-routing-check.js 9361
 const { connect } = require('../manual/lib/ui-check-lib');
 
 const QUESTION_BANK = `Câu 1: Thủ đô của Việt Nam là gì?
@@ -65,10 +71,21 @@ Học sinh thảo luận nhóm và ghi lại những điểm chưa chắc chắn
   const results = [];
   const check = (name, ok, detail) => { results.push(ok); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`); };
 
+  // A fresh profile opens the setup onboarding as a full-screen page over the
+  // shell; dismiss it like every other UI check does (canonical guard).
+  await cdp.evaluate(`(async () => {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const guardDeadline = Date.now() + 4000;
+    while (Date.now() < guardDeadline && !document.querySelector('#modalRoot .setup-fullscreen')) await sleep(100);
+    if (typeof closeSetupWizard === 'function') closeSetupWizard('close');
+    await sleep(250);
+    return true;
+  })()`);
+
   // 1. IPC contract: classification + parsing happen in main, without the model.
   const ipc = await cdp.evaluate(`(async () => {
-    const bank = await window.eduGame.classifyLessonInput({ text: ${JSON.stringify(QUESTION_BANK)} });
-    const lesson = await window.eduGame.classifyLessonInput({ text: ${JSON.stringify(LESSON)} });
+    const bank = await desktop.call('classifyLessonInput', { text: ${JSON.stringify(QUESTION_BANK)} });
+    const lesson = await desktop.call('classifyLessonInput', { text: ${JSON.stringify(LESSON)} });
     return {
       bankKind: bank.kind,
       bankQuestions: bank.import ? bank.import.questions.length : 0,
@@ -79,7 +96,7 @@ Học sinh thảo luận nhóm và ghi lại những điểm chưa chắc chắn
       lessonKind: lesson.kind,
       lessonQuestions: lesson.import ? lesson.import.questions.length : 0,
       lessonCompat: Array.isArray(lesson.compatibility) ? lesson.compatibility.length : -1,
-      hasConvert: typeof window.eduGame.convertLessonDraft === 'function'
+      hasConvert: Boolean(DESKTOP_FACADE_SCHEMA.calls.convertLessonDraft)
     };
   })()`);
   check('a question bank is classified as "questions"', ipc.bankKind === 'questions', ipc.bankKind);
@@ -93,7 +110,7 @@ Học sinh thảo luận nhóm và ghi lại những điểm chưa chắc chắn
   // 1b. #116: the teacher's own paste (decoration + options on the prompt line) is
   //     recognized, cleaned and converted without the model.
   const slide = await cdp.evaluate(`(async () => {
-    const bank = await window.eduGame.classifyLessonInput({ text: ${JSON.stringify(SLIDE_BANK)} });
+    const bank = await desktop.call('classifyLessonInput', { text: ${JSON.stringify(SLIDE_BANK)} });
     const parsed = bank.import ? bank.import.parsed : [];
     return {
       kind: bank.kind,
@@ -128,12 +145,11 @@ Học sinh thảo luận nhóm và ghi lại những điểm chưa chắc chắn
     await new Promise(r => setTimeout(r, 300));
     const kind = wizardResolveInputKind();
     const hasNote = Boolean(document.querySelector("[data-question-bank-summary]"));
-    const realAnalyze = window.eduGame.analyzeLesson;
     let analyzeCalls = 0;
-    window.eduGame.analyzeLesson = (...args) => { analyzeCalls += 1; return realAnalyze.apply(window.eduGame, args); };
+    desktop.stub('analyzeLesson', () => { analyzeCalls += 1; return Promise.reject(new Error('analyzeLesson must not run on the bank path')); });
     await wizardInputNext();
     await new Promise(r => setTimeout(r, 700));
-    window.eduGame.analyzeLesson = realAnalyze;
+    desktop.stub('analyzeLesson', null);
     return { kind, hasNote, analyzeCalls, step: wizardState.step, questions: (wizardState.parsedQuestions || []).length };
   })()`);
   check('a single pasted question is still recognized', single.questions === 1, `${single.questions} (kind ${single.kind})`);
@@ -184,12 +200,11 @@ Học sinh thảo luận nhóm và ghi lại những điểm chưa chắc chắn
     await wizardClassifyInput();
     render();
     await new Promise(r => setTimeout(r, 300));
-    const realAnalyze = window.eduGame.analyzeLesson;
     let analyzeCalls = 0;
-    window.eduGame.analyzeLesson = (...args) => { analyzeCalls += 1; return realAnalyze.apply(window.eduGame, args); };
+    desktop.stub('analyzeLesson', () => { analyzeCalls += 1; return Promise.reject(new Error('analyzeLesson must not run on the bank path')); });
     await wizardInputNext();
     await new Promise(r => setTimeout(r, 500));
-    window.eduGame.analyzeLesson = realAnalyze;
+    desktop.stub('analyzeLesson', null);
     const cards = [...document.querySelectorAll('[data-wizard-step-body="recommend"] [data-wizard-recommendation]')];
     const recommended = document.querySelector('[data-compat-recommended="true"]');
     const recommendedCard = recommended ? recommended.closest('[data-game-type]') : null;
@@ -210,16 +225,14 @@ Học sinh thảo luận nhóm và ghi lại những điểm chưa chắc chắn
 
   // 3b. Changing genre recalculates in place and never converts or generates.
   const switched = await cdp.evaluate(`(async () => {
-    const realConvert = window.eduGame.convertLessonDraft;
-    const realGenerate = window.eduGame.generateLessonDraft;
     let convertCalls = 0;
     let generateCalls = 0;
-    window.eduGame.convertLessonDraft = (...args) => { convertCalls += 1; return realConvert.apply(window.eduGame, args); };
-    window.eduGame.generateLessonDraft = (...args) => { generateCalls += 1; return realGenerate.apply(window.eduGame, args); };
+    desktop.stub('convertLessonDraft', () => { convertCalls += 1; return Promise.reject(new Error('convertLessonDraft must not run when only changing genre')); });
+    desktop.stub('generateLessonDraft', () => { generateCalls += 1; return Promise.reject(new Error('generateLessonDraft must not run when only changing genre')); });
     await wizardRecommendSelectType('race');
     await new Promise(r => setTimeout(r, 400));
-    window.eduGame.convertLessonDraft = realConvert;
-    window.eduGame.generateLessonDraft = realGenerate;
+    desktop.stub('convertLessonDraft', null);
+    desktop.stub('generateLessonDraft', null);
     const cards = [...document.querySelectorAll('[data-wizard-step-body="recommend"] [data-wizard-recommendation]')];
     const selected = cards.filter(card => card.dataset.selected === 'true').map(card => card.dataset.gameType);
     const recommended = document.querySelector('[data-compat-recommended="true"]');
@@ -253,14 +266,16 @@ Học sinh thảo luận nhóm và ghi lại những điểm chưa chắc chắn
     wizardState.step = "recommend";
     render();
     await new Promise(r => setTimeout(r, 300));
-    // contextBridge freezes window.eduGame, so spies here do not observe calls: the
-    // outcome is the signal. A game appearing with no analysis id can only come from
-    // the local pipeline; the model path refuses a project without an analysis.
+    // Trên Tauri, desktop.stub thay được lời gọi thật. Chỉ chặn analyzeLesson (model)
+    // để đếm; generateLessonDraft vẫn chạy thật vì nó là bộ phân phối cục bộ cho câu
+    // hỏi nhập sẵn. Có game mà không analysisId chỉ có thể đến từ pipeline cục bộ.
+    let analyzeCalls = 0;
+    desktop.stub('analyzeLesson', () => { analyzeCalls += 1; return Promise.reject(new Error('analyzeLesson must not run on the bank path')); });
     await wizardRecommendNext();
     await new Promise(r => setTimeout(r, 1500));
+    desktop.stub('analyzeLesson', null);
     return {
-      generateCalls: 1,
-      analyzeCalls: 0,
+      analyzeCalls,
       error: wizardState.error ? String(wizardState.error.message || wizardState.error) : "",
       step: wizardState.step,
       analysisId: wizardState.analysisId || null,
@@ -270,7 +285,7 @@ Học sinh thảo luận nhóm và ghi lại những điểm chưa chắc chắn
   })()`);
   // A game appearing with no analysis id can only come from the local pipeline; the
   // model path refuses a project without an analysis.
-  check('step 3 builds the game locally without analyze', advanced.hasGame && !advanced.analysisId && !advanced.error, `game ${advanced.hasGame} / analysis ${advanced.analysisId} / err ${advanced.error}`);
+  check('step 3 builds the game locally without analyze', advanced.hasGame && !advanced.analysisId && !advanced.error && advanced.analyzeCalls === 0, `game ${advanced.hasGame} / analysis ${advanced.analysisId} / analyze ${advanced.analyzeCalls} / err ${advanced.error}`);
   check('step 3 lands on the finishing step with a game', advanced.step === 'generate' && advanced.hasGame && advanced.gameQuestions === 3, `${advanced.step} / ${advanced.gameQuestions} / err ${advanced.error}`);
 
   // 3d. The visible [A] button is the same path: dump the bank straight into a game.
@@ -284,12 +299,11 @@ Học sinh thảo luận nhóm và ghi lại những điểm chưa chắc chắn
     render();
     await new Promise(r => setTimeout(r, 300));
     const btn = document.querySelector('[data-wizard-action="bank-create-now"]');
-    const realAnalyze = window.eduGame.analyzeLesson;
     let analyzeCalls = 0;
-    window.eduGame.analyzeLesson = (...args) => { analyzeCalls += 1; return realAnalyze.apply(window.eduGame, args); };
+    desktop.stub('analyzeLesson', () => { analyzeCalls += 1; return Promise.reject(new Error('analyzeLesson must not run on the bank path')); });
     if (btn) btn.click();
     await new Promise(r => setTimeout(r, 900));
-    window.eduGame.analyzeLesson = realAnalyze;
+    desktop.stub('analyzeLesson', null);
     return {
       hasButton: Boolean(btn),
       analyzeCalls,
@@ -315,7 +329,7 @@ Học sinh thảo luận nhóm và ghi lại những điểm chưa chắc chắn
   // 4. Generating must not call the model either.
   const generated = await cdp.evaluate(`(async () => {
     const before = wizardState.draft ? JSON.stringify(wizardState.draft) : '';
-    const result = await window.eduGame.generateLessonDraft({ projectId: wizardState.projectId, requestId: 'ui-routing-' + Date.now(), mode: 'fast' });
+    const result = await desktop.call('generateLessonDraft', { projectId: wizardState.projectId, requestId: 'ui-routing-' + Date.now(), mode: 'fast' });
     return {
       source: result && result.source,
       cached: Boolean(result && result.cached),
@@ -331,9 +345,9 @@ Học sinh thảo luận nhóm và ghi lại những điểm chưa chắc chắn
   const converted = await cdp.evaluate(`(async () => {
     const draft = wizardState.draft;
     if (!draft) return { error: 'no draft' };
-    const treasure = await window.eduGame.convertLessonDraft({ draft, target: 'treasure', config: wizardConfigForImportedQuestions('treasure') });
-    const race = await window.eduGame.convertLessonDraft({ draft, target: 'race', config: wizardConfigForImportedQuestions('race') });
-    const matching = await window.eduGame.convertLessonDraft({ draft, target: 'matching', config: wizardConfigForImportedQuestions('matching') });
+    const treasure = await desktop.call('convertLessonDraft', { draft, target: 'treasure', config: wizardConfigForImportedQuestions('treasure') });
+    const race = await desktop.call('convertLessonDraft', { draft, target: 'race', config: wizardConfigForImportedQuestions('race') });
+    const matching = await desktop.call('convertLessonDraft', { draft, target: 'matching', config: wizardConfigForImportedQuestions('matching') });
     return {
       treasureDraft: Boolean(treasure.draft),
       treasureComplete: treasure.complete,
@@ -362,12 +376,11 @@ Học sinh thảo luận nhóm và ghi lại những điểm chưa chắc chắn
     render();
     await new Promise(r => setTimeout(r, 300));
     const btn = document.querySelector('[data-wizard-action="bank-analyze"]');
-    const realAnalyze = window.eduGame.analyzeLesson;
     let analyzeCalls = 0;
-    window.eduGame.analyzeLesson = (...args) => { analyzeCalls += 1; return realAnalyze.apply(window.eduGame, args); };
+    desktop.stub('analyzeLesson', () => { analyzeCalls += 1; return Promise.reject(new Error('analyzeLesson must not run from step 1')); });
     if (btn) btn.click();
     await new Promise(r => setTimeout(r, 400));
-    window.eduGame.analyzeLesson = realAnalyze;
+    desktop.stub('analyzeLesson', null);
     return { hasButton: Boolean(btn), step: wizardState.step, draftOrigin: wizardState.draftOrigin, kept: (wizardState.parsedQuestions || []).length, analyzeCalls };
   })()`);
   check('choice [B] exists and moves to the analysis step', branchB.hasButton && branchB.step === 'analyze', `${branchB.hasButton} / ${branchB.step}`);
@@ -387,7 +400,7 @@ Học sinh thảo luận nhóm và ghi lại những điểm chưa chắc chắn
   check('a lesson still routes to the analysis path', lessonPath.kind === 'lesson', lessonPath.kind);
 
   // Clean up the project created by this check.
-  await cdp.evaluate(`(async () => { try { if (wizardState.projectId) await window.eduGame.deleteProject(wizardState.projectId); } catch {} return true; })()`);
+  await cdp.evaluate(`(async () => { try { if (wizardState.projectId) await desktop.call('deleteProject', wizardState.projectId); } catch {} return true; })()`);
   cdp.ws.close();
 
   const failed = results.filter(ok => !ok).length;

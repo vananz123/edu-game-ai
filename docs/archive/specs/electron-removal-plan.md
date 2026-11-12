@@ -141,9 +141,22 @@ instance sạch port 9362: **All typography checks passed** ngay lượt đầu 
 1503 run/32 sweep (767 light/736 dark), nhỏ nhất 11px, tương phản xấu nhất 4.74:1 (0 dưới 4.5:1),
 48 nhãn hover/focus xấu nhất 4.72:1, seeded 5 dọn sạch.
 
-Hai tệp ưu tiên còn lại của C1 chưa port: `ui-input-routing`,
-`ui-presentation` (riêng presentation phải viết lại theo mô hình cửa sổ Tauri).
-Cùng khuôn stub `desktop.stub('generateLessonDraft')` dùng lại được cho các check cần bước sinh.
+Tệp thứ tư: `ui-input-routing-check.js` (đường ngân hàng câu hỏi — luật bước 1 nhận diện câu hỏi
+dán vào mà không gọi model, bỏ hẳn bước phân tích giáo án, tới trò chơi dùng được cục bộ). Port
+máy móc payload `window.eduGame.*` → `desktop.call(...)` (classifyLessonInput/generateLessonDraft/
+convertLessonDraft/deleteProject). **Điểm mạnh hơn bản Electron:** `contextBridge` từng đóng băng
+`window.eduGame` nên monkey-patch spy không quan sát được lời gọi (`analyzeCalls===0` luôn đúng
+rỗng); trên Tauri `desktop.stub` ghi đè thật nên 6 spy → stub đếm (reject nếu bị gọi) biến `===0`
+thành bằng chứng THẬT. Bước 3c bỏ placeholder hardcode + comment contextBridge cũ, thay bằng stub
+analyze thật (generate vẫn chạy thật — bộ phân phối cục bộ trả `source:'imported-questions'`, không
+phải model). Thêm khối gạt setup onboarding chuẩn. Kết quả trên instance sạch port 9363:
+**52/52 ngay lượt đầu** (chạy lại ấm vẫn 52/52) — `analyze 0` ở cả 5 khối, `convert 0 / generate 0`
+khi chỉ đổi thể loại, bước 4 giữ 3 câu `source:'imported-questions'`, bước 5 treasure/matching từ
+chối kèm lý do, race giữ 3 câu nguyên văn. Không đổi sản phẩm.
+
+Một tệp ưu tiên còn lại của C1 chưa port: `ui-presentation` (phải viết lại theo mô hình cửa sổ
+Tauri, không port máy móc). Cùng khuôn stub `desktop.stub('generateLessonDraft')` dùng lại được
+cho các check cần bước sinh.
 
 ### D. Soát mã TypeScript cũ — không phải đợt xóa hàng loạt
 
@@ -202,6 +215,8 @@ git diff --check
 **Lượt batch 2 (tiếp, 2026-11-12).** Các cổng chạy lại lượt này: `cargo test --lib` **153/153**, `npm test` **95/95**, `check:renderer-globals` 73/75, `check:embedded` khớp 6125.4 KiB, `git diff --check` sạch, và `ui-lesson-chat-check` **all checks passed** trên instance sạch (binary release dựng lại, nhúng bundle mới). `tauri:check`/`build:tauri` trong khối trên giữ kết quả lần chạy đầy đủ trước — frontend không đổi lượt này nên không chạy lại.
 
 **Lượt batch 2 (tiếp 2, 2026-11-12).** Port `ui-typography-readability-check` — chỉ sửa check, không đổi sản phẩm. Cổng chạy lại: `npm run check` (tsc) sạch, `npm test` **95/95** (46,6 s), `node --check` tệp check OK, `git diff --check` sạch, và `ui-typography-readability-check` **All typography checks passed** trên instance Tauri sạch vừa khởi động (port 9362, data dir + profile tạm riêng, gate env) — 1503 run/32 sweep, nhỏ nhất 11px, xấu nhất 4.74:1, 48 hover/focus xấu nhất 4.72:1, seeded 5 dọn sạch. Rust không đổi nên không chạy lại `cargo test` (batch-2 tiếp chốt 153/153 trên cùng cây); `tauri:check`/`build:tauri` không chạy lại vì frontend không đổi.
+
+**Lượt batch 2 (tiếp 3, 2026-11-12).** Port `ui-input-routing-check` — chỉ sửa check, không đổi sản phẩm. Cổng chạy lại: `npm run check` (tsc) sạch, `npm test` **95/95** (44,1 s), `npm run check:renderer-globals` 73/75 (0 undefined), `node --check` tệp check OK, `git diff --check` sạch, và `ui-input-routing-check` **52/52 ×2** trên instance Tauri sạch vừa khởi động (port 9363, data dir + profile tạm riêng, gate env; lượt 1 lạnh, lượt 2 ấm cùng instance). Rust không đổi nên không chạy lại `cargo test` (batch-2 tiếp chốt 153/153 trên cùng cây); `tauri:check`/`build:tauri` không chạy lại vì frontend không đổi.
 
 ## Việc còn lại — thứ tự đề xuất
 
