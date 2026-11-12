@@ -7,6 +7,12 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-12 — Tạo installer mới (0.5.1): EduGame Studio (Tauri)_0.5.1_x64-setup.exe (15.65 MiB)
+- **Trạng thái:** Build NSIS installer thành công qua `cargo tauri build`. Frontend build qua `npm run build:tauri` (203 files). Binary tại `src-tauri/target/release/edugame-studio-tauri.exe`, installer tại `src-tauri/target/release/bundle/nsis/EduGame Studio (Tauri)_0.5.1_x64-setup.exe`.
+- **Files đã đổi:** `src-tauri/src/lesson.rs` (nối writer ai_tasks vào 4 đường gọi AI, đã commit ở f106cc0)
+- **Lệnh đã chạy:** `npm run build:tauri` (203 files) · `cargo tauri build` — Finished 1 bundle, 15.65 MiB · `cargo check` sạch · `cargo test --lib ai_tasks` **2/2** · `cargo test --lib lesson` **19/20** (1 fail là missing fixture trong `embedded`, không liên quan)
+- **Chưa xác minh:** Chạy UI check `ui-ai-tasks-paging` trên profile thật để xác nhận bảng `ai_tasks` có dữ liệu sau khi gọi AI; đóng P7; AI local thật chưa chạy; chạy installer trên Windows sạch chưa xác minh.
+
 ### 2026-11-12 — Commit nối writer ai_tasks vào 4 đường gọi AI (f106cc0): lesson:analyze, lesson:generate, lesson:regenerate-item, lesson:chat-send
 - **Trạng thái:** `ai_tasks::start_task/progress_task/complete_task/fail_task` trong `src-tauri/src/ai_tasks.rs` đã có đầy đủ implementation nhưng chưa có caller. Lượt này nối writer vào 4 đường gọi model trong `src-tauri/src/lesson.rs`:
   - `lesson:analyze`: `start_task` trước `gate.begin`, `complete_task` khi thành công, `fail_task` khi lỗi (kind: "analyze", document_id có sẵn)
