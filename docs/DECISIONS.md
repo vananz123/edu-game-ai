@@ -2650,6 +2650,22 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 
 **Việc kế tiếp.** Chưa duyệt bắt đầu code. Khi duyệt: dựng khung Tauri v2 + Rust toolchain trong nhánh riêng, chuyển lớp truy cập desktop sang facade TS (kế hoạch mục 4) và làm vòng 1 theo mục 1.
 
+## Dọn Electron batch 2 (tiếp 2, 2026-11-12) — port `ui-typography-readability-check` sang façade `desktop.*`: port SẠCH, all checks passed ngay lượt đầu, không đổi sản phẩm
+
+**Bối cảnh.** Tệp ưu tiên thứ ba của C1 (sau `ui-draft-guard`, `ui-lesson-chat`). Đây là sàn accessibility #181: census cỡ chữ + tương phản trên 16 màn hình × 2 theme, kèm lượt `:hover`/`:focus` ép bằng `CSS.forcePseudoState`. Khác lesson-chat, check này tự reload trang (`Page.reload {ignoreCache:true}`) và đo bằng computed-style walking chứ không bằng con trỏ thật, nên modal mời nhập dữ liệu Electron cũ (nếu có) không chặn phép đo — không cần khối gạt overlay.
+
+**Quyết định.**
+
+1. **Port máy móc 22 lời gọi payload, không đổi assertion.** Toàn bộ `window.eduGame.*` trong SCENARIO/CLEANUP → `desktop.call(...)` theo đúng tên hợp đồng (map 1:1 với method Electron cũ, đã đối chiếu `desktop-facade-schema.ts`): `getLibrary/listProjects/listLessonLibrary` (0 tham số), `saveProjectDraft/saveGame/saveSession/saveLessonDocument` (1 object), `deleteProjects/deleteGames/deleteSessions` (1 mảng id), `deleteLessonDocument` (1 id đơn). Không nới ngưỡng `MIN_SIZE=11`/`MIN_CONTRAST=4.5`, không đổi danh sách màn hình hay luật đo.
+2. **Check KHÔNG dùng `desktop.stub` — seed dòng tổng hợp thật qua façade rồi tự dọn.** Nó purge prefix `typo-probe-` trước khi seed (phòng lượt chạy trước chết dở để lại dòng), seed 5 dòng (1 project, 1 game, 2 document pdf/txt, 1 session) để các chip chỉ xuất hiện khi có hàng được vẽ, rồi Node-side CLEANUP rút hết sau lượt hover. Đây là khuôn self-cleanup của batch-2 vì Tauri dùng app-data chung.
+3. **Không đổi sản phẩm.** Lượt này chỉ sửa chính check (`tests/ui/ui-typography-readability-check.js`); Rust/renderer nguyên. Hồi quy providerId của nhóm chat đã đóng ở batch-2 tiếp (`c888b12`).
+
+**Kiểm chứng.** `node tests/ui/ui-typography-readability-check.js 9362` trên instance Tauri sạch vừa khởi động (data dir + webview profile tạm riêng, gate env `EDUGAME_TAURI_GATE=1` + `EDUGAME_TAURI_DATA_DIR`): **All typography checks passed** ngay lượt đầu (chạy lại lần hai vẫn xanh) — 1503 run over 32 sweep (767 light / 736 dark), nhỏ nhất 11px (179/1503 ở sàn), tương phản xấu nhất 4.74:1 (0 dưới 4.5:1, 548 run trong khoảng 4.5–7:1), 48 nhãn hover/focus xấu nhất 4.72:1, không sweep nào rỗng, dialog light không thừa hưởng mực light của dark, seeded 5 dọn sạch (`gamesLeft:0, sessionsLeft:0, projectsLeft:0, docsLeft:0`). `npm run check` (tsc) sạch · `npm test` **95/95** (46,6 s) · `node --check` tệp check OK · `git diff --check` sạch. Rust không đổi nên không chạy lại `cargo test` (batch-2 tiếp chốt 153/153 trên cùng cây).
+
+**Chưa xác minh / chưa làm.** Hai tệp ưu tiên còn lại của C1 chưa port (`ui-input-routing`, `ui-presentation` — presentation phải viết lại theo mô hình cửa sổ Tauri); ~22 check payload khác chưa port; 15 smoke chưa map vào gate Rust; nhóm D (`unload-guard.ts`, `setup-ipc.ts`) chưa rà; P7 vẫn MỞ. Nhánh AI local không chạy (theo quy ước tự kiểm).
+
+**Việc kế tiếp.** Port tiếp `ui-input-routing-check` rồi `ui-presentation-check`; mỗi tệp một commit, chạy trên instance vừa khởi động lại để lấy số chốt.
+
 ## Dọn Electron batch 2 (tiếp, 2026-11-12) — port `ui-lesson-chat-check` sang façade `desktop.*`: 1 hồi quy THẬT (mất `providerId` lượt chat) sửa trong Rust + V8 nhúng, 5 FAIL còn lại là overlay first-launch chặn con trỏ thật — all checks passed
 
 **Bối cảnh.** Tệp ưu tiên thứ hai của C1 (sau `ui-draft-guard`). Bản port payload `window.eduGame.*` → `desktop.call(...)` đã làm ở phiên trước; lượt này chạy lại trên binary release và phân loại 6 FAIL theo đúng luật kế hoạch: giả định cũ của check hay hồi quy thật của Tauri. Check này KHÔNG dùng `desktop.stub` — nó lái vận chuyển cloud thật của Rust chống một mock OpenAI loopback, nên đo được cả đường ghi lịch sử chứ không chỉ hình dạng dữ liệu.

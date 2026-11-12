@@ -131,8 +131,18 @@ phần tử trên cùng), trong khi bước scripted bỏ qua hit-test nên draf
 overlay first-launch trước khối #250 và assert `#modalRoot` trống. Kết quả trên instance sạch:
 **all checks passed** (`providerOfTurn=custom/[2,2]`, #250 xanh, dọn sạch cuối phiên).
 
-Ba tệp ưu tiên còn lại của C1 chưa port: `ui-typography-readability`,
-`ui-input-routing`, `ui-presentation` (riêng presentation phải viết lại theo mô hình cửa sổ Tauri).
+Tệp thứ ba: `ui-typography-readability-check.js` (sàn accessibility #181 — census cỡ chữ +
+tương phản 16 màn × 2 theme, kèm lượt `:hover`/`:focus` ép bằng `CSS.forcePseudoState`). Port
+SẠCH: 22 lời gọi `window.eduGame.*` → `desktop.call(...)` theo đúng tên hợp đồng, không nới
+ngưỡng 11px/4.5:1, không đổi sản phẩm. Check tự reload trang + đo computed-style (không dùng
+con trỏ thật) nên không cần gạt overlay migration; không dùng stub mà seed 5 dòng tổng hợp thật
+qua façade rồi tự dọn (purge prefix `typo-probe-` trước, CLEANUP sau lượt hover). Kết quả trên
+instance sạch port 9362: **All typography checks passed** ngay lượt đầu (chạy lại vẫn xanh) —
+1503 run/32 sweep (767 light/736 dark), nhỏ nhất 11px, tương phản xấu nhất 4.74:1 (0 dưới 4.5:1),
+48 nhãn hover/focus xấu nhất 4.72:1, seeded 5 dọn sạch.
+
+Hai tệp ưu tiên còn lại của C1 chưa port: `ui-input-routing`,
+`ui-presentation` (riêng presentation phải viết lại theo mô hình cửa sổ Tauri).
 Cùng khuôn stub `desktop.stub('generateLessonDraft')` dùng lại được cho các check cần bước sinh.
 
 ### D. Soát mã TypeScript cũ — không phải đợt xóa hàng loạt
@@ -190,6 +200,8 @@ git diff --check
 `npm test` in cảnh báo `EPERM` khi dọn `dist\server\index.js`; test/build vẫn hoàn tất thành công. Vì đây là artifact do build sinh ra, cần kiểm tra riêng trên máy sạch nếu cảnh báo tiếp tục. `npm run tauri:check` là cổng kiểm tra/build, không chứng minh installer đã cài đặt sạch trên máy chưa có môi trường phát triển.
 
 **Lượt batch 2 (tiếp, 2026-11-12).** Các cổng chạy lại lượt này: `cargo test --lib` **153/153**, `npm test` **95/95**, `check:renderer-globals` 73/75, `check:embedded` khớp 6125.4 KiB, `git diff --check` sạch, và `ui-lesson-chat-check` **all checks passed** trên instance sạch (binary release dựng lại, nhúng bundle mới). `tauri:check`/`build:tauri` trong khối trên giữ kết quả lần chạy đầy đủ trước — frontend không đổi lượt này nên không chạy lại.
+
+**Lượt batch 2 (tiếp 2, 2026-11-12).** Port `ui-typography-readability-check` — chỉ sửa check, không đổi sản phẩm. Cổng chạy lại: `npm run check` (tsc) sạch, `npm test` **95/95** (46,6 s), `node --check` tệp check OK, `git diff --check` sạch, và `ui-typography-readability-check` **All typography checks passed** trên instance Tauri sạch vừa khởi động (port 9362, data dir + profile tạm riêng, gate env) — 1503 run/32 sweep, nhỏ nhất 11px, xấu nhất 4.74:1, 48 hover/focus xấu nhất 4.72:1, seeded 5 dọn sạch. Rust không đổi nên không chạy lại `cargo test` (batch-2 tiếp chốt 153/153 trên cùng cây); `tauri:check`/`build:tauri` không chạy lại vì frontend không đổi.
 
 ## Việc còn lại — thứ tự đề xuất
 

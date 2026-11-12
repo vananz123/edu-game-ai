@@ -121,32 +121,32 @@ const SCENARIO = String.raw`(async () => {
   // profile, and this gate reads the real lists — so it purges its own prefix before it
   // seeds, and reports how much it found.
   const purge = async () => {
-    const lib = await window.eduGame.getLibrary();
-    const projects = await window.eduGame.listProjects() || [];
-    const docs = await window.eduGame.listLessonLibrary() || [];
+    const lib = await desktop.call('getLibrary');
+    const projects = await desktop.call('listProjects') || [];
+    const docs = await desktop.call('listLessonLibrary') || [];
     const found = {
       games: (lib.games || []).filter(g => String(g.title || '').startsWith(SEED_PREFIX)).map(g => g.id),
       sessions: (lib.sessions || []).filter(s => String(s.playerName || '').startsWith(SEED_PREFIX)).map(s => s.id),
       projects: projects.filter(p => String(p.title || '').startsWith(SEED_PREFIX)).map(p => p.id),
       docs: (Array.isArray(docs) ? docs : []).filter(d => String(d.name || '').startsWith(SEED_PREFIX)).map(d => d.id)
     };
-    if (found.projects.length) await window.eduGame.deleteProjects(found.projects);
-    if (found.games.length) await window.eduGame.deleteGames(found.games);
-    if (found.sessions.length) await window.eduGame.deleteSessions(found.sessions);
-    for (const id of found.docs) await window.eduGame.deleteLessonDocument(id);
+    if (found.projects.length) await desktop.call('deleteProjects', found.projects);
+    if (found.games.length) await desktop.call('deleteGames', found.games);
+    if (found.sessions.length) await desktop.call('deleteSessions', found.sessions);
+    for (const id of found.docs) await desktop.call('deleteLessonDocument', id);
     return Object.values(found).reduce((n, v) => n + v.length, 0);
   };
   const purged = await purge();
   const runTag = Date.now().toString(36);
   const seeded = { games: [], docs: [], projects: [], sessions: [] };
   const projectId = SEED_PREFIX + runTag;
-  await window.eduGame.saveProjectDraft({
+  await desktop.call('saveProjectDraft', {
     id: projectId, title: SEED_PREFIX + ' dự án thử độ đọc của chữ', description: 'Dữ liệu tổng hợp.',
     status: 'draft', step: 'edit', schemaVersion: 1, sourceName: 'ui-check', createdAt: new Date().toISOString()
   });
   seeded.projects.push(projectId);
   const gameId = SEED_PREFIX + runTag;
-  await window.eduGame.saveGame({
+  await desktop.call('saveGame', {
     id: gameId, title: SEED_PREFIX + ' trò chơi thử độ đọc của chữ', subject: 'Kỹ năng sống', grade: '6',
     template: 'quiz', description: 'Dữ liệu tổng hợp.', tags: [], sourceName: 'ui-check',
     createdAt: new Date().toISOString(), gameSetup: { scoringMode: 'cơ bản' },
@@ -157,28 +157,28 @@ const SCENARIO = String.raw`(async () => {
     }]
   });
   seeded.games.push(gameId);
-  const pdfDoc = await window.eduGame.saveLessonDocument({
+  const pdfDoc = await desktop.call('saveLessonDocument', {
     name: SEED_PREFIX + runTag + '.pdf', ext: 'pdf',
     text: 'Nội dung thử độ đọc. ' + 'x'.repeat(120), characters: 140, sizeBytes: 140
   });
-  const txtDoc = await window.eduGame.saveLessonDocument({
+  const txtDoc = await desktop.call('saveLessonDocument', {
     name: SEED_PREFIX + runTag + '.txt', ext: 'txt',
     text: 'Nội dung thử độ đọc. ' + 'x'.repeat(120), characters: 140, sizeBytes: 140
   });
-  const library = await window.eduGame.listLessonLibrary() || [];
+  const library = await desktop.call('listLessonLibrary') || [];
   for (const d of [pdfDoc, txtDoc]) {
     const id = (d && d.id) || (library.find(x => x.name === (d && d.name)) || {}).id;
     if (id) seeded.docs.push(id);
   }
   const sessionId = SEED_PREFIX + runTag;
-  await window.eduGame.saveSession({
+  await desktop.call('saveSession', {
     id: sessionId, gameId, gameTitle: SEED_PREFIX + ' trò chơi thử độ đọc của chữ', template: 'quiz',
     playerName: SEED_PREFIX + ' người chơi', durationSeconds: 60, points: 100, percent: 50,
     createdAt: new Date().toISOString()
   });
   seeded.sessions.push(sessionId);
-  state.db = await window.eduGame.getLibrary();
-  state.projects = await window.eduGame.listProjects();
+  state.db = await desktop.call('getLibrary');
+  state.projects = await desktop.call('listProjects');
 
   const swatch = document.createElement('canvas');
   swatch.width = swatch.height = 1;
@@ -316,16 +316,16 @@ const SCENARIO = String.raw`(async () => {
 const CLEANUP = seeded => String.raw`(async () => {
   const SEED_PREFIX = 'typo-probe-';
   const seeded = ${JSON.stringify(seeded)};
-  for (const id of seeded.projects) await window.eduGame.deleteProjects([id]);
-  for (const id of seeded.games) await window.eduGame.deleteGames([id]);
-  for (const id of seeded.sessions) await window.eduGame.deleteSessions([id]);
-  for (const id of seeded.docs) await window.eduGame.deleteLessonDocument(id);
+  for (const id of seeded.projects) await desktop.call('deleteProjects', [id]);
+  for (const id of seeded.games) await desktop.call('deleteGames', [id]);
+  for (const id of seeded.sessions) await desktop.call('deleteSessions', [id]);
+  for (const id of seeded.docs) await desktop.call('deleteLessonDocument', id);
   // The hover sweep ends on the dark pass; without this the page stays dark for
   // whatever gate runs next and a light-surface check reads dark-mode inks.
   applyTheme((state.settings.preferences || {}).theme || 'light');
-  const lib = await window.eduGame.getLibrary();
-  const projects = await window.eduGame.listProjects();
-  const docs = await window.eduGame.listLessonLibrary() || [];
+  const lib = await desktop.call('getLibrary');
+  const projects = await desktop.call('listProjects');
+  const docs = await desktop.call('listLessonLibrary') || [];
   return JSON.stringify({
     gamesLeft: ((lib || {}).games || []).filter(g => String(g.title || '').startsWith(SEED_PREFIX)).length,
     sessionsLeft: ((lib || {}).sessions || []).filter(s => String(s.playerName || '').startsWith(SEED_PREFIX)).length,
