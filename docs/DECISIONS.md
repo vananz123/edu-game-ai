@@ -2667,6 +2667,23 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 
 **Không chứng minh.** Chưa chạy `npm run tauri:check` (cần build release + WebView2, và đang vướng dòng `devPath` chưa commit của người dùng), chưa mở app thật sau khi gỡ, chưa build lại installer. Việc gỡ không có nghĩa profile Electron bị xoá — nó vẫn nguyên trên đĩa; chỉ đường đọc/nhập nó đã biến mất.
 
+## Phát hành EduGame Studio 0.5.1 — vỏ Tauri (2026-11-13)
+
+**Bối cảnh.** Sau khi gỡ đường nhập dữ liệu Electron, cây `main` đã là vỏ Tauri hoàn chỉnh nhưng GitHub mới chỉ có `v0.5.0` (bản Electron): chưa từng có tag hay release 0.5.1. Installer 0.5.1 dựng cục bộ hồi 2026-11-12 (16.414.058 B) chưa ai tải được, trong khi `tests/packaging/P7-OFFLINE-INSTALL.md` lại neo byte/SHA-256 của một tệp chưa có trên Releases.
+
+**Quyết định.**
+
+1. **Phát hành đúng số 0.5.1, không bump.** `package.json`, `Cargo.toml` và `tauri.conf.json` đã là 0.5.1 và tag `v0.5.1` chưa tồn tại; đây là bản Tauri đầu tiên được công bố. Bump lên 0.5.2 chỉ để đánh dấu sẽ làm lệch số đã ghi trong cài đặt/P7 mà không thêm thông tin.
+2. **Tag trên đúng commit đã dựng (`0dc3b23`)**, không tag commit docs sau đó: source archive của release phải khớp mã sinh ra installer.
+3. **Asset đặt tên không dấu cách/ngoặc.** GitHub tự đổi `EduGame Studio (Tauri)_0.5.1_x64-setup.exe` thành `EduGame.Studio.Tauri._0.5.1_x64-setup.exe` khi upload qua API. Tên tệp cục bộ do `productName` sinh ra nên giữ nguyên, còn asset được tải lại với tên sạch `EduGame-Studio-Tauri_0.5.1_x64-setup.exe` để URL dễ đọc và P7 chỉ phải neo một tên.
+4. **Neo P7 vào byte/SHA-256 của bản đã phát hành**, không dùng số của bản dựng cục bộ trước đó: dựng lại installer không tái lập từng byte (bài học #191).
+
+**Đánh đổi.** Bản 0.5.1 chưa ký Authenticode nên SmartScreen vẫn có thể cảnh báo; phát hành công khai trước khi P7 đóng nghĩa là người tải có thể gặp lỗi mà repo chưa từng thấy trên máy sạch. Đổi lại, bản Tauri đầu tiên có đường tải thật để chạy P7 và để feed `releases/latest` (tab Giới thiệu) trả đúng số phiên bản thay vì 0.5.0 của Electron.
+
+**Kiểm chứng.** `npm run build` · `npm run build:tauri` (201 tệp; `check:embedded` 6125,4 KiB) · `cargo tauri build` → NSIS **16.371.819 B (15,61 MiB)**, SHA-256 `205DCC14D668B36749DF16E298DE319F1929A9F4755C9A4012CB1AD439BF5D88`. Cài silent vào `%TEMP%` exit 0, exe **59.095.552 B**, `ProductVersion 0.5.1`, `vc-runtime` đủ ba DLL; gỡ `/S` exit 0 và thư mục cài sạch. Tag `v0.5.1` → `0dc3b23`; release công khai có asset `EduGame-Studio-Tauri_0.5.1_x64-setup.exe`; tải lại từ URL công khai được **16.371.819 B**, SHA-256 khớp. Để Cargo/Tauri đọc được `tauri.conf.json`, dòng `devPath` chưa commit được tạm bỏ rồi khôi phục **nguyên 1.405 byte**.
+
+**Không chứng minh.** Chưa chạy `npm run tauri:check` trên cây này, chưa mở app sau khi cài, chưa cài trên máy Windows sạch (P7 vẫn MỞ: SmartScreen, antivirus, chơi offline sau khi rút mạng), chưa ký Authenticode. Không chạy lại `npm test`/`cargo test` trong lượt này vì chỉ dựng và phát hành, không sửa mã (lượt trước: unit 95/95, Rust 145/145).
+
 ## Dọn Electron batch 2 (tiếp 7, 2026-11-12) — port 15 check payload cuối sang façade; hết lời gọi `window.eduGame` trong `tests/ui`, thêm hạn đo riêng cho ma trận dài
 
 **Bối cảnh.** Sau các batch trước, 15 check trong `tests/ui` vẫn còn gọi payload `window.eduGame.*` (hoặc dựa vào hình dạng dữ liệu của profile Electron) và không chạy được trên instance Tauri mới. Chúng trải từ trình soạn thảo/ảnh, thế giới trò chơi, cài đặt, đến ma trận chế độ trả lời. Khi port, ba khác biệt nền tảng lộ ra: URL ảnh do Tauri phục vụ khác Electron, câu ghi chú của bộ phân loại local khác, và overlay migration có thể mở muộn đè `#modalRoot`.

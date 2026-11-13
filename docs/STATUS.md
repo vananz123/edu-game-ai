@@ -7,6 +7,14 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-13 — Phát hành EduGame Studio 0.5.1 (vỏ Tauri) lên GitHub Releases — bộ cài 16.371.819 B, cài/gỡ silent trong TEMP exit 0
+- **Trạng thái:** Dựng lại installer từ HEAD `0dc3b23` (sau khi gỡ phần nhập dữ liệu Electron) và phát hành công khai `v0.5.1` — bản Tauri đầu tiên. Trước lượt này GitHub chỉ có `v0.5.0` (bản Electron), chưa từng có tag hay release 0.5.1, nên bản 0.5.1 dựng cục bộ hồi 2026-11-12 chưa ai tải được.
+- **Files đã đổi:** `tests/packaging/P7-OFFLINE-INSTALL.md` (tên tệp/byte/SHA-256 theo bản đã phát hành), `docs/STATUS.md`, `docs/DECISIONS.md`, `docs/ROADMAP.md`; artefact ngoài git: `src-tauri/target/release/bundle/nsis/EduGame Studio (Tauri)_0.5.1_x64-setup.exe`.
+- **Hành vi:** Không đổi mã sản phẩm. Để Cargo/Tauri đọc được `tauri.conf.json`, dòng `devPath` chưa commit được tạm bỏ rồi khôi phục **nguyên 1.405 byte**; profile Electron và `opencode.exe` không bị chạm. Bộ cài NSIS cài theo từng người dùng, gỡ không xoá học liệu/trò chơi/lịch sử.
+- **Lệnh đã chạy:** `npm run build` · `npm run build:tauri` (201 tệp; `check:embedded` **6125,4 KiB**) · `cargo tauri build` → NSIS **16.371.819 B (15,61 MiB)**, SHA-256 `205DCC14…BF5D88` · cài silent `/S /D=%TEMP%\eg-install-smoke` exit 0, exe **59.095.552 B**, `ProductVersion 0.5.1`, `vc-runtime` đủ 3 DLL; gỡ `/S` exit 0, thư mục cài sạch · `git tag -a v0.5.1 0dc3b23` + push · tạo release qua GitHub API, asset `EduGame-Studio-Tauri_0.5.1_x64-setup.exe`, tải lại **16.371.819 B** và SHA-256 **khớp**.
+- **Chưa xác minh:** Chưa chạy `npm run tauri:check` trên cây này (cần WebView2/GUI và vướng `devPath` chưa commit); chưa mở app sau khi cài; chưa cài trên máy Windows sạch nên **P7 vẫn MỞ** (SmartScreen, antivirus, chơi offline sau khi rút mạng); bản chưa ký Authenticode. Không chạy lại `npm test`/`cargo test` trong lượt này vì chỉ dựng và phát hành, không sửa mã (lượt trước: unit 95/95, Rust 145/145).
+- **Việc kế tiếp:** Đóng P7 bằng một máy sạch dùng đúng byte/SHA-256 mới; sau đó chạy `npm run tauri:check` khi xử lý xong `devPath`, rồi tiếp tục các khoảng trống parity (AI local thật, UI xuất/xoá chẩn đoán, wizard nâng cao).
+
 ### 2026-11-13 — Xoá hẳn phần nhập dữ liệu từ bản Electron cũ: không còn overlay migration, `desktop.host`, kênh `migration:*` hay `migration.rs`
 - **Trạng thái:** Gỡ trọn "Giai đoạn 4" (nhập profile Electron) khỏi sản phẩm. Renderer không còn mời nhập dữ liệu ở lần chạy đầu, không còn gọi `desktop.host(...)`, façade không còn `hostCalls`; vỏ Tauri không còn ba lệnh `migration:*`, module `migration.rs`, hay `picker::choose_folder`. Wizard mở ngay, không còn bị hoãn chờ overlay migration. Profile Electron trên máy người dùng **không bị xoá hay sửa**: bản Tauri chỉ không đọc/không nhập nữa.
 - **Files đã đổi:** xoá `src/renderer/features/migration.ts`, `src-tauri/src/migration.rs`; sửa `src/index.html` (bỏ `<script>` migration), `src/renderer/core/bootstrap.ts` (bỏ `offerElectronMigrationImport()` + deferral), `desktop-facade-schema.ts` / `desktop-facade.ts` / `desktop-adapter-tauri.ts` (bỏ `hostCalls`/`host()` và nhánh `channelOf` migration), `src-tauri/src/{api,lib,paths,picker}.rs` (bỏ command, allowlist, `INVOKE_CHANNELS`, `generate_handler!`, `choose_folder`), `scripts/build-tauri-release.js` + `tests/ui/tauri-webview-check.js` (bỏ pha migration, profile tổng hợp, `EDUGAME_ELECTRON_PROFILE`, `--migration`, `MIGRATION_RUNNER`), `tests/ui/{ui-answer-mode,ui-race-treasure,ui-lesson-chat}-check.js` (bỏ khối gạt overlay migration), `tests/unit/{desktop-facade,tauri-contract}.test.ts` (khẳng định tính năng đã vắng mặt), `src-tauri/src/embedded.rs` (nhúng fixture phân tích vào test vì `tests/fixtures/wizard/` đã bị xoá ở `243e348`), cùng `docs/STATUS.md`, `docs/DECISIONS.md`, `docs/ROADMAP.md`.
@@ -22,15 +30,7 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - **Chưa xác minh:** Chạy UI check `ui-ai-tasks-paging` trên profile thật để xác nhận bảng `ai_tasks` có dữ liệu sau khi gọi AI; đóng P7; AI local thật chưa chạy; chạy installer trên Windows sạch chưa xác minh.
 
 ### 2026-11-12 — Commit nối writer ai_tasks vào 4 đường gọi AI (f106cc0): lesson:analyze, lesson:generate, lesson:regenerate-item, lesson:chat-send
-- **Trạng thái:** `ai_tasks::start_task/progress_task/complete_task/fail_task` trong `src-tauri/src/ai_tasks.rs` đã có đầy đủ implementation nhưng chưa có caller. Lượt này nối writer vào 4 đường gọi model trong `src-tauri/src/lesson.rs`:
-  - `lesson:analyze`: `start_task` trước `gate.begin`, `complete_task` khi thành công, `fail_task` khi lỗi (kind: "analyze", document_id có sẵn)
-  - `lesson:generate`: `start_task` với `project_id`, `complete_task`/`fail_task` quanh `run_with_ai_progress` (kind: "generate")
-  - `lesson:regenerate-item`: `start_task` với `project_id`, `complete_task`/`fail_task` quanh model call (kind: "regenerate")
-  - `lesson:chat-send`: `start_task`, `complete_task`/`fail_task` quanh model call (kind: "chat")
-- **Files đã đổi:** `src-tauri/src/lesson.rs` (87 insertions, 15 deletions)
-- **Lệnh đã chạy:** `cargo check --manifest-path src-tauri/Cargo.toml` — Finished dev profile, 0 lỗi
-- **Chưa xác minh:** Chạy `cargo test --lib` để đảm bảo không làm hỏng test Rust hiện tại; chạy UI check `ui-ai-tasks-paging` trên profile thật để xác nhận bảng `ai_tasks` có dữ liệu sau khi gọi AI; đóng P7; AI local thật chưa chạy.
-- **Việc kế tiếp:** Chạy `cargo test --lib`, sau đó xác minh end-to-end qua UI check AI tasks.
+- **Trạng thái:** Nối `ai_tasks::start_task/progress_task/complete_task/fail_task` vào 4 đường gọi model trong `src-tauri/src/lesson.rs` (analyze/generate/regenerate/chat). Bản đầy đủ: [docs/handoff/status/2026-11-12.md](handoff/status/2026-11-12.md); quyết định tương ứng trong `docs/DECISIONS.md`.
 
 - **Commit dọn Electron batch 2 (243e348, 2026-11-12)** — xoá smoke tests, wizard fixtures, lan-server (93 files, 13.984 dòng xoá); commit này cũng xoá `tests/fixtures/wizard/` khiến test fixture trong `embedded` phải nhúng thẳng. Bản lưu trữ: [docs/handoff/status/2026-11-12.md](handoff/status/2026-11-12.md); quyết định tương ứng trong `docs/DECISIONS.md`.
 

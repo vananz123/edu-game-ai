@@ -21,9 +21,11 @@ chơi đã lưu có chơi được offline trên máy của giáo viên không. 
 
 1. Một máy Windows 10/11 **chưa từng cài** EduGame Studio (máy của đồng nghiệp là đủ; không
    cần quyền admin — ứng dụng cài cho từng người dùng, `installMode: currentUser`).
-2. Tải `EduGame Studio (Tauri)_0.5.1_x64-setup.exe` từ trang Releases về thư mục Downloads.
-   Byte phải là **16.403.858** và SHA-256 phải là
-   `7AE04626959338D8AE6A963B0FF593ED24151F3C9F686F09AE7A942CFB16FD6E`.
+2. Tải `EduGame-Studio-Tauri_0.5.1_x64-setup.exe` từ trang Releases về thư mục Downloads
+   (đây là tên asset trên GitHub; bộ dựng cục bộ sinh tệp cùng byte với tên
+   `EduGame Studio (Tauri)_0.5.1_x64-setup.exe`).
+   Byte phải là **16.371.819** và SHA-256 phải là
+   `205DCC14D668B36749DF16E298DE319F1929A9F4755C9A4012CB1AD439BF5D88`.
    Sai một trong hai ⇒ đang đo nhầm tệp, dừng lại.
 3. Copy **hai tệp** này sang máy đó (không cần repo, không cần Node):
    `tests/packaging/p7-offline-install.ps1` và tài liệu này.
@@ -37,7 +39,7 @@ powershell -ExecutionPolicy Bypass -File p7-offline-install.ps1
 
 # buoc 2 — cai bo cai that; wizard hien ra, lam dung nhu giao vien lam
 powershell -ExecutionPolicy Bypass -File p7-offline-install.ps1 `
-  -Installer "$env:USERPROFILE\Downloads\EduGame Studio (Tauri)_0.5.1_x64-setup.exe"
+  -Installer "$env:USERPROFILE\Downloads\EduGame-Studio-Tauri_0.5.1_x64-setup.exe"
 
 # buoc 3 — RÚT MẠNG (rút LAN / tắt Wi-Fi), rồi mở app và chơi trò đã lưu trong 120 giay
 powershell -ExecutionPolicy Bypass -File p7-offline-install.ps1 `

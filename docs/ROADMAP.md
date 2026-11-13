@@ -1,5 +1,10 @@
 # Roadmap
 
+## Phát hành EduGame Studio 0.5.1 (vỏ Tauri) — bản Tauri đầu tiên lên GitHub Releases (2026-11-13)
+- **Đã xác minh:** `npm run build` · `npm run build:tauri` (201 tệp, `check:embedded` 6125,4 KiB) · `cargo tauri build` → NSIS **16.371.819 B (15,61 MiB)**, SHA-256 `205DCC14D668B36749DF16E298DE319F1929A9F4755C9A4012CB1AD439BF5D88` · cài silent `/S /D=%TEMP%\eg-install-smoke` exit 0 (`ProductVersion 0.5.1`, exe 59.095.552 B, đủ 3 DLL VC++), gỡ `/S` exit 0 và sạch thư mục · release `v0.5.1` công khai, asset `EduGame-Studio-Tauri_0.5.1_x64-setup.exe` tải lại khớp byte và SHA-256.
+- **Phạm vi:** tag `v0.5.1` trên `0dc3b23` (đúng commit đã dựng), không đổi mã sản phẩm; P7 cập nhật neo số mới; `devPath` chưa commit được tạm bỏ rồi khôi phục nguyên byte, không chạm profile Electron hay `opencode.exe`.
+- **Còn mở / kế tiếp:** `npm run tauri:check` chưa chạy trên cây này; P7 (máy Windows sạch, SmartScreen, chơi offline sau khi rút mạng) vẫn MỞ; bản chưa ký Authenticode.
+
 ## Xoá nhập dữ liệu từ bản Electron cũ — hết overlay migration, `desktop.host` và kênh `migration:*` (2026-11-13)
 - **Đã xác minh:** `npm run check` sạch · `npm test` **95/95** · `check:renderer-globals` **72/74 script**, 0 undefined · `check:embedded` **6125,4 KiB** · `cargo test --lib` **145/145** (tám test migration đã xoá) · `node --check` sạch cho các script/UI check đã sửa.
 - **Phạm vi:** xoá `features/migration.ts` + script tag, `offerElectronMigrationImport()` và deferral trong `bootstrap.ts`, `hostCalls`/`host()` khỏi façade/schema/adapter, ba lệnh `migration:*` + `migration.rs` + `picker::choose_folder`, pha migration và profile tổng hợp khỏi `build-tauri-release.js`/`tauri-webview-check.js`, khối gạt overlay trong ba UI check. Không xoá profile Electron hay backup của người dùng.
