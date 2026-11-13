@@ -139,7 +139,9 @@ const SCENARIO = String.raw`(async () => {
   out.cardIds = [...document.querySelectorAll('[data-ai-provider]')].map(node => node.dataset.aiProvider).join(',');
   out.localControlsWhileLocal = {
     modelSelect: Boolean(document.querySelector('#localModelSelect')),
-    installBtn: Boolean(document.querySelector('#installLocalModelBtn'))
+    installBtn: Boolean(document.querySelector('#installLocalModelBtn')),
+    // Xoá model đã tải nằm cạnh nút tải, trong cùng panel — không có cửa thứ hai.
+    deleteBtn: Boolean(document.querySelector('#deleteLocalModelBtn'))
   };
 
   aiTab('cloud').click();

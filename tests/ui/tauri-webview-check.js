@@ -703,7 +703,7 @@ const RUNNER = `(async () => {
       typeof models.machine.runtimeState === 'string');
     out.localAiCatalog = catalog.length === 3 &&
       catalog.every(model => typeof model.id === 'string' && model.sizeBytes > 0 &&
-        typeof model.installed === 'boolean') &&
+        typeof model.installed === 'boolean' && typeof model.partialBytes === 'number') &&
       models.machine.runtimeSupported === true &&
       catalog.some(model => model.id === models.machine.recommendedModelId);
     out.localAiMsg = JSON.stringify({ models: catalog.length,
@@ -724,14 +724,22 @@ const RUNNER = `(async () => {
     } catch (error) {
       refused = /danh mục/.test(String((error && error.message) || ''));
     }
+    // Xoá cũng chỉ nhận id trong danh mục; id lạ bị từ chối trước khi chạm đĩa.
+    let removeRefused = false;
+    try {
+      await facade.call('removeLocalAiModel', 'not-a-real-model');
+    } catch (error) {
+      removeRefused = /danh mục/.test(String((error && error.message) || ''));
+    }
     const status = await facade.call('getLocalRuntimeStatus');
     const stopped = await facade.call('stopLocalRuntime');
     const stoppedModels = stopped && stopped.models && Array.isArray(stopped.models.models)
       ? stopped.models.models.length : 0;
-    out.localAiControl = refused && status && status.state === 'STOPPED' &&
+    out.localAiControl = refused && removeRefused && status && status.state === 'STOPPED' &&
       Boolean(stopped && stopped.ok === true && stoppedModels === 3);
     out.localAiControlMsg = JSON.stringify({
       refused,
+      removeRefused,
       state: status && status.state,
       stoppedOk: Boolean(stopped && stopped.ok === true),
       stoppedModels,

@@ -168,7 +168,9 @@ function renderSettings() {
   const modelStatus = selectedLocalModel
     ? selectedLocalModel.installed
       ? machine.runtimeInstalled ? 'Model và runtime đã sẵn sàng trên máy.' : 'Model đã có; runtime sẽ được cài khi bạn bắt đầu dùng AI local.'
-      : 'Model chưa được tải. Nhấn nút bên dưới để tải và xác minh.'
+      : selectedLocalModel.partialBytes > 0
+        ? `Có bản tải dở (${formatBytes(selectedLocalModel.partialBytes)}). Nhấn “Tải / xác minh” để tải tiếp, hoặc xoá bản tải dở để giải phóng dung lượng.`
+        : 'Model chưa được tải. Nhấn nút bên dưới để tải và xác minh.'
     : 'Đang nạp danh sách model AI local…';
 
   const inputCls = 'w-full px-3 py-2 border border-[#cbd5e1] dark:border-[#334155] rounded-lg bg-white dark:bg-[#1e2544] text-[#1e293b] dark:text-[#f8fafc] text-[13px] focus:outline-none focus:border-[#6366f1]';
@@ -276,6 +278,7 @@ function renderSettings() {
 
             <div class="flex items-center gap-3 flex-wrap">
               <button class="${btnSecondaryCls}" id="installLocalModelBtn" ${machine.runtimeSupported===false?'disabled':''}>${selectedLocalModel?.installed&&machine.runtimeInstalled?'Xác minh model và runtime':'Tải / xác minh model và runtime'}</button>
+              <button class="${btnSecondaryCls}" id="deleteLocalModelBtn" ${!selectedLocalModel||(!selectedLocalModel.installed&&!(selectedLocalModel.partialBytes>0))?'disabled':''}>Xoá model khỏi máy</button>
               <button class="${btnSecondaryCls}" id="openSetupWizardBtn">Cài đặt lại AI từ đầu</button>
               <span id="localAiProgress" class="${hintCls}">${selectedLocalModel?.installed&&machine.runtimeInstalled?'Model và runtime đã được xác minh.':'Tải model lần đầu cần Internet; sau khi cài, AI local có thể chạy ngoại tuyến.'}</span>
             </div>

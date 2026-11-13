@@ -73,6 +73,7 @@ pub fn hand_written(command: &str) -> Option<(&'static str, &'static str)> {
         // Bốn kênh này không còn là `unsupported!`; renderer vẫn chỉ gửi id model.
         "get_local_runtime_status" => ("ai:local-status", "get_local_runtime_status"),
         "install_local_ai_model" => ("ai:install-local-model", "install_local_ai_model"),
+        "remove_local_ai_model" => ("ai:remove-local-model", "remove_local_ai_model"),
         "start_local_runtime" => ("ai:start-local-runtime", "start_local_runtime"),
         "stop_local_runtime" => ("ai:stop-local-runtime", "stop_local_runtime"),
         // Giai đoạn 5: wizard cài đặt AI lần đầu. Bốn kênh này chỉ nhận id model;
@@ -191,6 +192,7 @@ const INVOKE_CHANNELS: &[&str] = &[
     "ai:local-models",
     "ai:local-status",
     "ai:install-local-model",
+    "ai:remove-local-model",
     "ai:start-local-runtime",
     "ai:stop-local-runtime",
     "ai:cancel",
@@ -276,6 +278,9 @@ async fn dispatch(app: &AppHandle, channel: &str, args: &[Value]) -> Result<Valu
         "ai:local-status" => Ok(crate::ai_local::status(app)),
         "ai:install-local-model" => {
             crate::ai_local::install(app.clone(), args.first().cloned()).await
+        }
+        "ai:remove-local-model" => {
+            crate::ai_local::remove(app.clone(), args.first().cloned()).await
         }
         "ai:start-local-runtime" => {
             crate::ai_local::start(app.clone(), args.first().cloned()).await
@@ -680,6 +685,16 @@ pub async fn install_local_ai_model(
     model_id: Option<serde_json::Value>,
 ) -> Result<serde_json::Value, String> {
     crate::ai_local::install(app, model_id).await
+}
+
+/// Xoá model AI local đã tải (kể cả bản tải dở) khỏi đĩa. Chỉ nhận id thuộc
+/// danh mục; dừng llama-server trước nếu chính model đó đang chạy.
+#[tauri::command]
+pub async fn remove_local_ai_model(
+    app: AppHandle,
+    model_id: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    crate::ai_local::remove(app, model_id).await
 }
 
 /// Trạng thái tiến trình llama-server (`STOPPED`/`STARTING`/`READY`/`ERROR`).
@@ -1146,6 +1161,7 @@ mod tests {
         assert_eq!(super::hand_written("lan_start"), Some(("lan:start", "lan_start")));
         assert_eq!(super::hand_written("generate_game"), Some(("ai:generate", "generate_game")));
         assert_eq!(super::hand_written("start_presentation"), Some(("presentation:start", "start_presentation")));
+        assert_eq!(super::hand_written("remove_local_ai_model"), Some(("ai:remove-local-model", "remove_local_ai_model")));
         assert_eq!(super::hand_written("unknown_command"), None);
     }
 
@@ -1157,7 +1173,7 @@ mod tests {
         for channel in super::INVOKE_CHANNELS {
             assert!(!super::SEND_CHANNELS.contains(channel), "{channel} nằm ở cả hai danh sách");
         }
-        for channel in ["app:info", "library:get", "settings:get", "ai:local-models"] {
+        for channel in ["app:info", "library:get", "settings:get", "ai:local-models", "ai:remove-local-model"] {
             assert!(super::INVOKE_CHANNELS.contains(&channel), "{channel} thiếu trong INVOKE_CHANNELS");
         }
         assert_eq!(super::SEND_CHANNELS.len(), 3);

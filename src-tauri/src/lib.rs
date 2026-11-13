@@ -112,6 +112,7 @@ pub fn run() {
             api::test_ai_provider,
             api::get_local_runtime_status,
             api::install_local_ai_model,
+            api::remove_local_ai_model,
             api::start_local_runtime,
             api::stop_local_runtime,
             api::cancel_ai,

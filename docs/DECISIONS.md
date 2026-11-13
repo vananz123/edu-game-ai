@@ -2650,6 +2650,24 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 
 **Việc kế tiếp.** Chưa duyệt bắt đầu code. Khi duyệt: dựng khung Tauri v2 + Rust toolchain trong nhánh riêng, chuyển lớp truy cập desktop sang facade TS (kế hoạch mục 4) và làm vòng 1 theo mục 1.
 
+## Xoá model AI local đã tải — lệnh `ai:remove-local-model`, giữ nguyên cấu hình đã lưu và chỉ xoá đúng tệp của model (2026-11-13)
+
+**Bối cảnh.** Model AI local là tệp lớn (model nhỏ nhất đã 1,28 GB) nằm trong `<data>/ai-local/models`; catalog đã cho tải và chạy nhưng chưa có đường xoá, nên giáo viên muốn lấy lại dung lượng phải tìm thư mục dữ liệu bằng tay — đúng thứ ứng dụng không nên bắt người dùng làm. Xoá cũng là thao tác phá huỷ, phải chặn được id lạ trước khi chạm đĩa và phải xử lý được trường hợp model đang chạy.
+
+**Quyết định.**
+
+1. **Một lệnh mới `ai:remove-local-model`, không thêm kênh riêng cho từng bước.** Rust nhận `{modelId}` (chuỗi), đối chiếu `MODELS` rồi mới chạm đĩa; id lạ trả lỗi "không nằm trong danh mục đã xác minh" trước khi mở thư mục. Trả `{ok, removedId, freedBytes, models}` với `catalog()` mới để renderer vẽ lại danh sách và trạng thái bằng một lượt.
+2. **Chỉ xoá hai đường dẫn suy ra từ catalog** (`<id>-<version>.gguf` và `.gguf.part`), không quét thư mục, không xoá runtime, không đụng model khác. Xoá khi không có tệp nào trả lỗi đọc được thay vì im lặng thành công.
+3. **Model đang chạy thì dừng trước rồi mới xoá.** Windows không xoá được tệp đang mở; `remove` lấy khoá `install` + `start`, gọi `stop_internal` nếu `runtime.model_id` trùng, nên giáo viên không phải tự bấm "Dừng llama.cpp" trước. `install_model_for_setup` lấy cùng khoá `install` để wizard không ghi vào tệp mà một lần xoá khác đang gỡ (và ngược lại).
+4. **Không ghi lại cấu hình đã lưu.** `ai.localModelId` vẫn có thể trỏ vào model vừa xoá. UI hiện model đó là "Chưa tải" và lượt sinh nội dung báo lỗi rõ ràng cho tới khi tải lại; chọn im lặng chuyển sang chế độ AI khác sẽ khiến giáo viên tưởng model vẫn còn. Bản nháp đang mở chỉ được chuyển sang một model **còn trên đĩa** nếu có, không chuyển sang model chưa tải.
+5. **Bản tải dở cũng xoá được.** `catalog()` thêm `partialBytes` (byte của `.gguf.part`), nên thẻ model hiện "Bản tải dở: …" và nút xoá bật dù model chưa cài đủ — đây là trường hợp giáo viên hay gặp khi tải bị gián đoạn.
+
+**Đánh đổi.** Giáo viên có thể xoá model mà một dự án nháp đang cần; ứng dụng không tự tải lại và không tự đổi cấu hình, nên họ thấy lỗi cho tới khi tải lại. Đổi lại, không có lần ghi ngầm nào vào `settings.json` sau một thao tác phá huỷ, và một lần xoá không thể kéo theo model khác hoặc runtime.
+
+**Kiểm chứng.** `cargo test --lib` **146/146** (thêm `remove_model_files_deletes_only_the_selected_model`: chỉ tệp của model được chọn biến mất, `.gguf.part` bị xoá, model khác còn nguyên); `npm run check` sạch; `npm test` **95/95** (façade đúng **93** lời gọi, nhóm `ai` **31**); `npm run check:renderer-globals` 72/74 script, 0 undefined; `npm run check:embedded` khớp 6125,4 KiB. Để Cargo đọc được `tauri.conf.json`, dòng `devPath` chưa commit được tạm bỏ rồi khôi phục nguyên byte (SHA-256 `380F9E89…B974768`).
+
+**Không chứng minh.** Chưa xoá một model thật trên đĩa (test dùng thư mục tạm); chưa chạy nhánh dừng `llama-server` đang chạy rồi xoá; `ui-settings-sections-check`/`tauri-webview-check` chưa chạy trên WebView2 sống; chưa build lại installer.
+
 ## Xoá nhập dữ liệu từ bản Electron cũ (Giai đoạn 4, 2026-11-13) — bỏ overlay, `desktop.host`, kênh `migration:*` và `migration.rs`
 
 **Bối cảnh.** Giai đoạn 4 từng thêm một đường nhập dữ liệu từ profile Electron cũ: overlay mời giáo viên chọn thư mục, ba lệnh `migration:*` trong Rust đọc/ghi bản sao profile, và `desktop.host(...)` trong façade để renderer gọi được nhóm lệnh chỉ dùng cho migration. Đường này chỉ có giá trị một lần cho người chuyển từ bản Electron, nhưng phải giữ đúng định dạng profile cũ qua mọi thay đổi schema, tạo thêm bề mặt quyền ghi vào thư mục ngoài app, và làm lần chạy đầu phức tạp (overlay có thể mở muộn, đè `#modalRoot`, buộc wizard phải chờ). Chủ dự án chốt bỏ hẳn thay vì tiếp tục bảo trì.

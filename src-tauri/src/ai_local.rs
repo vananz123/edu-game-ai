@@ -270,6 +270,10 @@ pub(crate) async fn install_model_for_setup(
         .iter()
         .find(|model| model.id == model_id)
         .ok_or_else(|| "Model AI local không nằm trong danh mục đã xác minh.".to_string())?;
+    // Cùng khoá với `install`/`remove`: wizard không được ghi vào tệp mà một lần
+    // xoá khác đang gỡ, và ngược lại.
+    let state = app.state::<AiLocal>();
+    let _guard = state.install.lock().await;
     let data = paths::data_dir(app)?;
     install_model(app, &data, model, Some(cancel), Some(progress)).await
 }
@@ -447,6 +451,10 @@ pub fn catalog(app: &AppHandle) -> Result<Value, String> {
                 .metadata()
                 .map(|meta| meta.is_file() && meta.len() == model.size_bytes)
                 .unwrap_or(false);
+            let partial_bytes = model_partial_path(&data, model)
+                .metadata()
+                .map(|meta| if meta.is_file() { meta.len() } else { 0 })
+                .unwrap_or(0);
             let memory = memory_status(&machine, model);
             let cpu_recommended = machine.logical_cpu_count >= model.recommended_cpu_threads;
             let status = recommendation_status(memory, cpu_recommended, &machine, model);
@@ -474,6 +482,7 @@ pub fn catalog(app: &AppHandle) -> Result<Value, String> {
                 "status": recommendation_name(status),
                 "recommendationReason": recommendation_reason(memory, cpu_recommended, &machine, model),
                 "installed": installed,
+                "partialBytes": partial_bytes,
                 "isRecommended": model.id == recommended,
                 "supportedLanguages": model.supported_languages,
                 "expectedResult": model.expected_result,
@@ -774,6 +783,35 @@ pub async fn stop(app: AppHandle) -> Result<Value, String> {
     Ok(json!({ "ok": true, "models": catalog(&app)? }))
 }
 
+/// Xoá model đã tải khỏi đĩa (kể cả bản tải dở `.part`). Chỉ nhận id thuộc
+/// danh mục, nên renderer không thể chỉ đường dẫn tới một tệp bất kỳ.
+///
+/// Nếu model đó đang chạy, `llama-server` được dừng trước: Windows không cho xoá
+/// tệp đang mở, và giữ runtime trỏ vào một tệp đã mất là trạng thái không hợp lệ.
+pub async fn remove(app: AppHandle, requested: Option<Value>) -> Result<Value, String> {
+    let model = model_from_value(requested)?;
+    let state = app.state::<AiLocal>();
+    // Khoá cả hai đường: không xoá trong lúc một model khác đang tải/khởi động.
+    let _install = state.install.lock().await;
+    let _start = state.start.lock().await;
+    let data = paths::data_dir(&app)?;
+    let running = state
+        .runtime
+        .lock()
+        .map(|runtime| runtime.model_id.as_deref() == Some(model.id))
+        .unwrap_or(false);
+    if running {
+        stop_internal(&app).await?;
+    }
+    let freed = remove_model_files(&data, model)?;
+    Ok(json!({
+        "ok": true,
+        "removedId": model.id,
+        "freedBytes": freed,
+        "models": catalog(&app)?,
+    }))
+}
+
 async fn stop_internal(app: &AppHandle) -> Result<(), String> {
     let state = app.state::<AiLocal>();
     state.generation.fetch_add(1, Ordering::SeqCst);
@@ -842,6 +880,37 @@ fn model_path(data: &Path, model: &ModelSpec) -> PathBuf {
     data.join(LOCAL_ROOT)
         .join("models")
         .join(format!("{}-{}{MODEL_EXTENSION}", model.id, model.version))
+}
+
+/// Bản tải dở mà `install_model` để lại cạnh tệp đích (`<model>.gguf.part`).
+fn model_partial_path(data: &Path, model: &ModelSpec) -> PathBuf {
+    PathBuf::from(format!("{}.part", model_path(data, model).display()))
+}
+
+/// Xoá đúng hai đường dẫn suy ra từ id/version trong danh mục; không quét thư
+/// mục. Trả số byte đã giải phóng, hoặc lỗi khi không có gì để xoá.
+fn remove_model_files(data: &Path, model: &ModelSpec) -> Result<u64, String> {
+    let mut freed = 0u64;
+    let mut removed = false;
+    for path in [model_path(data, model), model_partial_path(data, model)] {
+        match path.metadata() {
+            Ok(meta) if meta.is_file() => {
+                freed += meta.len();
+                std::fs::remove_file(&path)
+                    .map_err(|error| format!("không xoá được {}: {error}", path.display()))?;
+                removed = true;
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(format!("không đọc được {}: {error}", path.display()));
+            }
+        }
+    }
+    if !removed {
+        return Err("Model này chưa được tải trên máy.".to_string());
+    }
+    Ok(freed)
 }
 
 fn runtime_executable(data: &Path) -> Option<PathBuf> {
@@ -2014,6 +2083,34 @@ mod tests {
         let error = model_from_value(Some(Value::String("not-a-model".to_string()))).unwrap_err();
         assert!(error.contains("danh mục"));
         assert!(model_from_value(None).is_err());
+    }
+
+    #[test]
+    fn remove_model_files_deletes_only_the_selected_model() {
+        let dir = tempfile::tempdir().unwrap();
+        let models = dir.path().join(LOCAL_ROOT).join("models");
+        std::fs::create_dir_all(&models).unwrap();
+        let first = &MODELS[0];
+        let second = &MODELS[1];
+        let first_path = model_path(dir.path(), first);
+        let partial = model_partial_path(dir.path(), first);
+        let second_path = model_path(dir.path(), second);
+        assert_eq!(
+            partial.file_name().unwrap().to_string_lossy(),
+            format!("{}-{}{MODEL_EXTENSION}.part", first.id, first.version)
+        );
+        std::fs::write(&first_path, b"complete").unwrap();
+        std::fs::write(&partial, b"part").unwrap();
+        std::fs::write(&second_path, b"other").unwrap();
+
+        let freed = remove_model_files(dir.path(), first).unwrap();
+        assert_eq!(freed, 8 + 4);
+        assert!(!first_path.exists());
+        assert!(!partial.exists());
+        assert!(second_path.exists(), "không được xoá model khác");
+        // Lần thứ hai không còn gì để xoá, nhưng tệp model khác vẫn nguyên.
+        assert!(remove_model_files(dir.path(), first).is_err());
+        assert!(second_path.exists());
     }
 
     #[test]

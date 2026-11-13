@@ -435,6 +435,16 @@ export interface EduGameBridge {
   }>;
   getLocalRuntimeStatus(): Promise<{ state: string; modelId?: string; message?: string }>;
   installLocalAiModel(modelId: string): Promise<{ ok: boolean }>;
+  /** Xoá tệp model (kể cả bản tải dở) của đúng id trong danh mục; dừng runtime nếu đang dùng nó. */
+  removeLocalAiModel(modelId: string): Promise<{
+    ok: boolean;
+    removedId: string;
+    freedBytes: number;
+    models: {
+      models: import('../ai-core/contracts').LocalAiModelStatus[];
+      machine: import('../ai-core/contracts').LocalAiMachineProfile;
+    };
+  }>;
   startLocalRuntime(modelId: string): Promise<{ ok: boolean; baseUrl: string }>;
   stopLocalRuntime(): Promise<{ ok: boolean }>;
   /** Cancels an in-flight AI request by the `requestId` passed to a workflow call. */

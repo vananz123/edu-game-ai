@@ -24,7 +24,7 @@
  * Nhóm chức năng của kế hoạch Tauri, giai đoạn 2 (thứ tự = thứ tự chuyển dần):
  * `app | data | files | ai | diagnostics | presentation | lan | update`.
  *
- * 92 lời gọi của façade dưới đây. `group` là phân nhóm chức năng;
+ * 93 lời gọi của façade dưới đây. `group` là phân nhóm chức năng;
  * Khoá trùng hệt khoá của `window.eduGame`, để khi chuyển từng tệp chỉ đổi
  * `eduGame.x(` → `desktop.call('x')(`. `group` là phân nhóm của kế hoạch;
  * `channel` là chuỗi Electron đã chốt trong `src/shared/desktop-contract.json`;
@@ -81,6 +81,7 @@ const DESKTOP_CALLS = Object.freeze({
   getLocalAiModels: { channel: 'ai:local-models', group: 'ai', kind: 'value', optional: false },
   getLocalRuntimeStatus: { channel: 'ai:local-status', group: 'ai', kind: 'value', optional: false },
   installLocalAiModel: { channel: 'ai:install-local-model', group: 'ai', kind: 'value', optional: false },
+  removeLocalAiModel: { channel: 'ai:remove-local-model', group: 'ai', kind: 'value', optional: false },
   startLocalRuntime: { channel: 'ai:start-local-runtime', group: 'ai', kind: 'value', optional: false },
   stopLocalRuntime: { channel: 'ai:stop-local-runtime', group: 'ai', kind: 'value', optional: false },
   cancelAi: { channel: 'ai:cancel', group: 'ai', kind: 'value', optional: false },
@@ -150,6 +151,7 @@ const DESKTOP_ARGC = Object.freeze({
   aboutOpenReleases: 1,
   importDocumentFromPath: 1,
   installLocalAiModel: 1,
+  removeLocalAiModel: 1,
   startLocalRuntime: 1,
   cancelAi: 1,
   listAiTasks: 1,

@@ -156,15 +156,15 @@ function fakeManualAdapter(overrides = {}) {
   };
 }
 
-const GROUP_COUNTS = { app: 8, data: 19, files: 7, ai: 30, diagnostics: 4, presentation: 9, lan: 7, update: 8 };
+const GROUP_COUNTS = { app: 8, data: 19, files: 7, ai: 31, diagnostics: 4, presentation: 9, lan: 7, update: 8 };
 
 (async function main() {
-  // ── 1. Hợp đồng: schema đủ 92 lời gọi ───────────────────────────────────
-  await it('façade có đủ 92 lời gọi theo schema', () => {
+  // ── 1. Hợp đồng: schema đủ 93 lời gọi ───────────────────────────────────
+  await it('façade có đủ 93 lời gọi theo schema', () => {
     const { schema } = boot();
     const calls = schema.calls;
-    assert.equal(Object.keys(calls).length, 92, 'façade phải có đúng 92 lời gọi');
-    assert.equal(schema.callCount, 92);
+    assert.equal(Object.keys(calls).length, 93, 'façade phải có đúng 93 lời gọi');
+    assert.equal(schema.callCount, 93);
     // Mỗi lời gọi phải có channel, group, kind
     for (const [key, spec] of Object.entries(calls)) {
       assert.ok(spec.channel, `${key} thiếu channel`);

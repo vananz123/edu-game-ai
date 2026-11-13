@@ -292,6 +292,7 @@ function wirePage() {
     }
   });
   $('#installLocalModelBtn')?.addEventListener('click', () => installLocalModel());
+  $('#deleteLocalModelBtn')?.addEventListener('click', () => removeLocalModel());
   $('#openLocalAiSettingsModalBtn')?.addEventListener('click', () => openLocalAiModal());
   // Trang "Tạo trò chơi" chỉ tạo thủ công: cả hai nút đều mở trình chỉnh sửa trống.
   $('#previewManualBtn')?.addEventListener('click', () => window.createBlankGame?.());

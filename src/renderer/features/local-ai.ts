@@ -12,7 +12,8 @@ function localModalCard(model, machine) {
     + `<p class="small muted mb-[8px] mt-0">Dung lượng ${formatBytes(model.sizeBytes)} · RAM tối thiểu ${formatBytes(model.minimumRamBytes)}, khuyến nghị ${formatBytes(model.recommendedRamBytes)} · ${escapeHtml(model.recommendationReason || '')}</p>`
     + `<p class="small muted mb-[8px] mt-0">Kỹ thuật: ${escapeHtml(model.displayName)} · Giấy phép ${escapeHtml(model.licenseName)}</p>`
     + `<div class="flex items-center gap-[8px] flex-wrap"><button class="btn btn-secondary btn-small" data-local-download="${escapeHtml(model.id)}" ${machine.runtimeSupported === false ? 'disabled' : ''}>${model.installed ? 'Xác minh lại' : 'Tải model này'}</button>`
-    + `<span class="field-hint" data-local-progress="${escapeHtml(model.id)}">${model.installed ? 'Đã có trên máy; nhấn Tải để xác minh lại.' : 'Chưa có trên máy.'}</span></div></div>`;
+    + `<button class="btn btn-secondary btn-small" data-local-delete="${escapeHtml(model.id)}" ${!model.installed && !(model.partialBytes > 0) ? 'disabled' : ''}>Xoá khỏi máy</button>`
+    + `<span class="field-hint" data-local-progress="${escapeHtml(model.id)}">${model.installed ? 'Đã có trên máy; nhấn Tải để xác minh lại.' : model.partialBytes > 0 ? `Bản tải dở: ${formatBytes(model.partialBytes)}.` : 'Chưa có trên máy.'}</span></div></div>`;
 }
 function localRuntimeStateLabel(machine) {
   if (machine.runtimeState === 'READY') {
@@ -40,6 +41,7 @@ function openLocalAiModal() {
   const root = $('#modalRoot');
   root.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', () => { root.innerHTML = ''; }));
   root.querySelectorAll('[data-local-download]').forEach(btn => btn.addEventListener('click', () => installLocalModel(btn.dataset.localDownload)));
+  root.querySelectorAll('[data-local-delete]').forEach(btn => btn.addEventListener('click', () => removeLocalModel(btn.dataset.localDelete)));
   $('#startLocalRuntimeBtn', root)?.addEventListener('click', startLocalRuntimeFromModal);
   $('#stopLocalRuntimeBtn', root)?.addEventListener('click', stopLocalRuntimeFromModal);
 }
@@ -98,6 +100,57 @@ async function installLocalModel(requestedModelId) {
     else if (button?.isConnected) {
       button.disabled = false;
       button.textContent = 'Tải / xác minh model và runtime';
+    }
+  }
+}
+async function removeLocalModel(requestedModelId) {
+  const modelId = requestedModelId
+    || ($('#localModalSelect')?.value)
+    || ($('#localModelSelect')?.value);
+  if (!modelId) return toast('Chọn model trước khi xoá.');
+  const model = (state.localAiModels || []).find(item => item.id === modelId);
+  if (!model) return toast('Model này không nằm trong danh mục đã xác minh.');
+  const machine = state.localAiMachine || {};
+  const runningIds = [machine.runtimeModelId, machine.runningModelId].filter(Boolean);
+  const runningSame = (machine.runtimeState === 'READY' || machine.runtimeState === 'STARTING')
+    && runningIds.includes(modelId);
+  const partialOnly = !model.installed && model.partialBytes > 0;
+  const size = (model.installed ? model.sizeBytes : 0) + (model.partialBytes || 0);
+  const title = `Xoá ${partialOnly ? 'bản tải dở của ' : ''}“${localModelLabel(model)}” khỏi máy?`;
+  const warning = runningSame ? '\nllama.cpp đang dùng model này và sẽ được dừng trước khi xoá.' : '';
+  if (!confirm(`${title}\nGiải phóng ${formatBytes(size)}.${warning}\nCó thể tải lại từ Internet khi cần.`)) return;
+
+  const inModal = Boolean($('#modalRoot')?.querySelector('[data-local-delete]'));
+  const button = inModal
+    ? $(`[data-local-delete="${modelId}"]`)
+    : $('#deleteLocalModelBtn');
+  const progress = inModal
+    ? $(`[data-local-progress="${modelId}"]`)
+    : $('#localAiProgress');
+  if (button) { button.disabled = true; button.textContent = 'Đang xoá…'; }
+  if (progress) progress.textContent = `Đang xoá ${localModelLabel(model)}…`;
+  try {
+    const result = await desktop.call('removeLocalAiModel', modelId);
+    state.localAiModels = result.models.models;
+    state.localAiMachine = result.models.machine;
+    state.settings = await desktop.call('getSettings');
+    if (state.draft && state.draft.localModelId === modelId) {
+      // Bản nháp không được trỏ vào tệp vừa xoá: chỉ chuyển sang model còn trên đĩa.
+      const installed = result.models.models.filter(item => item.id !== modelId && item.installed);
+      const fallback = installed.find(item => item.id === result.models.machine.recommendedModelId)
+        || installed[0];
+      if (fallback) state.draft = { ...state.draft, localModelId: fallback.id };
+    }
+    if (inModal) openLocalAiModal();
+    else if (state.page === 'settings' || state.page === 'create') render();
+    toast(`Đã xoá “${localModelLabel(model)}” khỏi máy, giải phóng ${formatBytes(result.freedBytes)}.${runningSame ? ' llama.cpp đã dừng.' : ''}`);
+  } catch (error) {
+    const message = (error && error.message) || 'Không xoá được model AI local.';
+    toast(message, 6000);
+    if (progress?.isConnected) progress.textContent = message;
+    if (button?.isConnected) {
+      button.disabled = false;
+      button.textContent = inModal ? 'Xoá khỏi máy' : 'Xoá model khỏi máy';
     }
   }
 }

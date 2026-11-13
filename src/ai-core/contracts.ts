@@ -125,6 +125,8 @@ export interface LocalAiModelStatus {
   licenseUrl: string;
   sourceUrl: string;
   installed: boolean;
+  /** Byte của bản tải dở `<model>.gguf.part` còn trên đĩa (0 khi không có). */
+  partialBytes?: number;
   selected: boolean;
   minimumRamBytes: number;
   recommendedRamBytes: number;
