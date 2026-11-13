@@ -29,7 +29,7 @@ EduGame Studio is a Windows Tauri v2 + TypeScript app that helps teachers create
 - `src/game-engine/runtime.ts`: game runtime (scoring, text answers, dedupe helpers).
 - `server/index.ts`: separate Express AI Gateway scaffold; not required for offline gameplay.
 - `server/schema.sql`: Supabase tables/RPC for usage quotas.
-- `tests/`: Node unit tests run with `npm test`; Rust unit tests run with `cargo test --manifest-path src-tauri/Cargo.toml --lib -- --test-threads=1`; `npm run tauri:check` is the integrated Tauri release/WebView2/migration gate. `tests/ui/tauri-webview-check.js` exercises the built Tauri frontend. `tests/ui/` now runs through the `desktop.*` façade. The old Electron `tests/smoke/` set was retired on 2026-11-12; see `docs/handoff/plans/2026-11-12-smoke-mapping.md` for the behavior map and remaining gaps. Some `tests/manual/` scripts are still Electron-era, so read each header before running it.
+- `tests/`: Node unit tests run with `npm test`; Rust unit tests run with `cargo test --manifest-path src-tauri/Cargo.toml --lib -- --test-threads=1`; `npm run tauri:check` is the integrated Tauri release/WebView2 gate. `tests/ui/tauri-webview-check.js` exercises the built Tauri frontend. `tests/ui/` now runs through the `desktop.*` façade. The old Electron `tests/smoke/` set was retired on 2026-11-12; see `docs/handoff/plans/2026-11-12-smoke-mapping.md` for the behavior map and remaining gaps. The Electron-profile data import (Giai đoạn 4) was removed on 2026-11-13; the Tauri app never reads or modifies the old Electron profile. Some `tests/manual/` scripts are still Electron-era, so read each header before running it.
 
 ## Do not break these invariants
 1. Saved game playback works offline.

@@ -5,7 +5,7 @@
 - Tauri v2 hosts the TypeScript renderer in WebView2; backend commands and system access are implemented in Rust under `src-tauri/src/`.
 - Renderer scripts call the desktop façade (`src/renderer/core/desktop-facade.ts`). The Tauri adapter translates calls to `invoke_channel`/`send_channel` and events to Tauri listeners; there is no Electron main process or preload bridge.
 - `src-tauri/src/api.rs` validates and dispatches renderer channels. `src-tauri/src/lib.rs` registers the commands and application state.
-- SQLite stores games, sessions, lesson documents, analyses, and related workflow data in the Tauri app-data directory. `src-tauri/src/storage.rs` includes the shared SQL schema; profile migration preserves the existing Electron profile and imports supported data only after user action.
+- SQLite stores games, sessions, lesson documents, analyses, and related workflow data in the Tauri app-data directory. `src-tauri/src/storage.rs` includes the shared SQL schema. The app never reads or modifies the old Electron profile; teachers move data by exporting/importing `.egame` files.
 - `.egame` remains a portable game package independent of the local database.
 
 ## AI and document workflows

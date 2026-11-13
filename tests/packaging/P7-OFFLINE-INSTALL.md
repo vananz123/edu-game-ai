@@ -8,7 +8,7 @@ kết quả dưới đây có số của một máy thật.
 
 Cổng repo của vỏ Tauri (`tests/ui/tauri-webview-check.js`, chạy qua `npm run tauri:check`)
 đo trên **binary release + profile tạm trong TEMP**: cài mới/cài đè/gỡ NSIS trong thư mục
-tạm, migration bằng dữ liệu tổng hợp, và chơi offline một trò đã lưu với bộ đếm request
+tạm, và chơi offline một trò đã lưu với bộ đếm request
 mạng. Nó chứng minh bộ cài thật spawn đúng, ứng dụng đúng quit, và không có kết nối ra
 ngoài LAN trong lượt chơi. Nó KHÔNG chứng minh: bộ cài Tauri có chạy được trên một **máy
 sạch chưa từng cài** không, SmartScreen có chặn không, antivirus có báo động không, và trò

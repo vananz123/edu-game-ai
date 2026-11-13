@@ -1,5 +1,11 @@
 # Roadmap
 
+## Xoá nhập dữ liệu từ bản Electron cũ — hết overlay migration, `desktop.host` và kênh `migration:*` (2026-11-13)
+- **Đã xác minh:** `npm run check` sạch · `npm test` **95/95** · `check:renderer-globals` **72/74 script**, 0 undefined · `check:embedded` **6125,4 KiB** · `cargo test --lib` **145/145** (tám test migration đã xoá) · `node --check` sạch cho các script/UI check đã sửa.
+- **Phạm vi:** xoá `features/migration.ts` + script tag, `offerElectronMigrationImport()` và deferral trong `bootstrap.ts`, `hostCalls`/`host()` khỏi façade/schema/adapter, ba lệnh `migration:*` + `migration.rs` + `picker::choose_folder`, pha migration và profile tổng hợp khỏi `build-tauri-release.js`/`tauri-webview-check.js`, khối gạt overlay trong ba UI check. Không xoá profile Electron hay backup của người dùng.
+- **Cổng chạy lại:** `tauri:check` **chưa chạy** (cần build release + WebView2 và đang vướng `devPath` chưa commit); chưa mở app thật, chưa build lại installer.
+- **Còn mở / kế tiếp:** giải quyết `devPath` rồi chạy `npm run tauri:check` + build installer; sau đó tiếp tục các khoảng trống parity cũ (AI local thật, UI chẩn đoán, wizard nâng cao, P7).
+
 ## Dọn Electron batch 2 (tiếp 7) — 15 check payload cuối chạy trên façade, hết `window.eduGame` trong `tests/ui` (2026-11-12)
 - **Đã xác minh:** `ui-fullscreen-density` **8/8**, `ui-settings-sections` all passed, `ui-classifier-outline` **15/15**, `ui-race-treasure` **18/18**, `ui-game-worlds` **52/52**, `ui-item-assets-editor` **29/29**, `ui-race-editor` all passed, `ui-card-menu` all passed, `ui-art-upload-flow` all passed, `ui-item-art` all passed, `ui-editor-art` all passed, `ui-answer-mode` **219/219** (không gạt migration trước), `ui-dark-theme` all passed, `ui-play-mode-card` all passed, `ui-project-selection` all passed — mỗi tệp trên một instance Tauri mới (data dir + WebView2 profile riêng).
 - **Phát hiện:** Tauri phục vụ ảnh qua `http://edugame-file.tauri.localhost/img/<id>` (không chỉ `edugame-file://`), ghi chú classifier dùng câu "Bộ đọc hiểu chưa sẵn sàng — phân loại bằng quy tắc.", và overlay migration có thể mở muộn đè `#modalRoot`. Check nhận cả hai biểu diễn nền tảng; không đổi sản phẩm. `ui-answer-mode` cần `connect({ evalTimeoutMs: 300000 })` vì ma trận đầy đủ chạy hơn 120 s; mặc định helper vẫn 120 s.

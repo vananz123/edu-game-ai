@@ -24,7 +24,6 @@ pub mod lan;
 pub mod lesson;
 pub mod lesson_store;
 pub mod library;
-pub mod migration;
 pub mod package;
 pub mod paths;
 pub mod picker;
@@ -108,11 +107,6 @@ pub fn run() {
             api::import_questions,
             api::export_game,
             api::import_game,
-            // Giai đoạn 4: phát hiện / chọn tay / nhập profile Electron. Ba kênh
-            // này không thuộc preload Electron; chỉ façade Tauri gọi.
-            api::migration_detect,
-            api::migration_browse,
-            api::migration_import,
             api::save_settings,
             api::get_ai_providers,
             api::test_ai_provider,

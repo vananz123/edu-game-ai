@@ -1,9 +1,9 @@
 //! Đường dẫn dữ liệu của bản Tauri.
 //!
 //! Quyết định #251 câu 2 ("thay thế luôn") bắt buộc bản Tauri phải dùng thư mục
-//! dữ liệu RIÊNG, ít nhất cho tới khi migration chạy xong. Electron giữ dữ liệu ở
-//! `%APPDATA%/edugame-studio/edugame-data`; ghi vào đó từ một tiến trình khác
-//! chưa có migration là cách chắc chắn nhất để làm hỏng dữ liệu giáo viên.
+//! dữ liệu RIÊNG. Electron giữ dữ liệu ở `%APPDATA%/edugame-studio/edugame-data`;
+//! ghi vào đó từ một tiến trình khác là cách chắc chắn nhất để làm hỏng dữ liệu
+//! giáo viên, và dự án đã bỏ hẳn đường nhập dữ liệu từ bản Electron cũ.
 //!
 //! Tauri đặt thư mục dữ liệu theo `identifier` trong `tauri.conf.json`
 //! (`vn.edugame.studio.tauri`), tách hẳn khỏi Electron. Ở đây chỉ dựng thư mục
@@ -14,8 +14,8 @@ use tauri::{AppHandle, Manager};
 
 /// Tên thư mục con trong app-data-dir của Tauri.
 ///
-/// Giữ tên `edugame-data` để khi migration sang, dữ liệu Tauri nằm đúng bố cục
-/// quen thuộc; đường dẫn cha vẫn khác Electron nên không có chuyện ghi lẫn.
+/// Giữ tên `edugame-data` để bố cục quen thuộc; đường dẫn cha vẫn khác Electron
+/// nên không có chuyện ghi lẫn.
 pub const DATA_SUBDIR: &str = "edugame-data";
 
 /// Tệp cài đặt (JSON) của bản Tauri.

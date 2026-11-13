@@ -2650,6 +2650,23 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 
 **Việc kế tiếp.** Chưa duyệt bắt đầu code. Khi duyệt: dựng khung Tauri v2 + Rust toolchain trong nhánh riêng, chuyển lớp truy cập desktop sang facade TS (kế hoạch mục 4) và làm vòng 1 theo mục 1.
 
+## Xoá nhập dữ liệu từ bản Electron cũ (Giai đoạn 4, 2026-11-13) — bỏ overlay, `desktop.host`, kênh `migration:*` và `migration.rs`
+
+**Bối cảnh.** Giai đoạn 4 từng thêm một đường nhập dữ liệu từ profile Electron cũ: overlay mời giáo viên chọn thư mục, ba lệnh `migration:*` trong Rust đọc/ghi bản sao profile, và `desktop.host(...)` trong façade để renderer gọi được nhóm lệnh chỉ dùng cho migration. Đường này chỉ có giá trị một lần cho người chuyển từ bản Electron, nhưng phải giữ đúng định dạng profile cũ qua mọi thay đổi schema, tạo thêm bề mặt quyền ghi vào thư mục ngoài app, và làm lần chạy đầu phức tạp (overlay có thể mở muộn, đè `#modalRoot`, buộc wizard phải chờ). Chủ dự án chốt bỏ hẳn thay vì tiếp tục bảo trì.
+
+**Quyết định.**
+
+1. **Xoá toàn bộ đường nhập ở renderer.** Xoá `src/renderer/features/migration.ts` và `<script>` tương ứng trong `src/index.html`; bỏ `offerElectronMigrationImport()` cùng phần hoãn wizard trong `src/renderer/core/bootstrap.ts`. Wizard mở ngay ở lần chạy đầu, không còn lớp chờ migration.
+2. **Xoá API migration-only.** Bỏ `hostCalls`/`host()` khỏi `desktop-facade-schema.ts`, `desktop-facade.ts` và nhánh `channelOf` trong `desktop-adapter-tauri.ts`; bỏ ba `#[tauri::command]` `migration:*`, mapping `hand_written`, entry `INVOKE_CHANNELS` và đăng ký `generate_handler!`; xoá `src-tauri/src/migration.rs` và `picker::choose_folder` (chỉ migration dùng). `picker::pick` vẫn giữ cho import tài liệu/ảnh.
+3. **Cổng kiểm không còn pha migration.** Bỏ profile tổng hợp, `migrationDataDir`, `EDUGAME_ELECTRON_PROFILE`, `--migration` và `MIGRATION_RUNNER` khỏi `scripts/build-tauri-release.js` và `tests/ui/tauri-webview-check.js`; bỏ khối gạt overlay trong `ui-answer-mode-check.js`, `ui-race-treasure-check.js`, `ui-lesson-chat-check.js`. `tests/unit/desktop-facade.test.ts` và `tauri-contract.test.ts` khẳng định `host()`/`hostCalls` và kênh `migration:*` đã vắng mặt để không ai vô tình thêm lại.
+4. **Không chạm dữ liệu người dùng.** Không xoá hay sửa profile Electron, không xoá bản sao lưu nào. Bản Tauri tiếp tục dùng thư mục riêng dưới định danh Tauri; SQLite, `.egame` import/export và chơi offline không đổi.
+
+**Đánh đổi.** Giáo viên đang có dữ liệu ở bản Electron cũ không còn nút nhập một bước; họ phải xuất `.egame` từ bản cũ rồi nhập vào bản Tauri, hoặc tiếp tục dùng bản cũ để xuất. Đổi lại, sản phẩm bớt một module phải bảo trì theo profile của bản đã ngừng phát triển, bớt quyền ghi ra ngoài thư mục app, và lần chạy đầu chỉ còn một luồng. Nếu sau này cần chuyển dữ liệu trở lại, nên làm công cụ xuất/nhập tệp tường minh thay vì đọc profile ngầm.
+
+**Kiểm chứng.** `npm run check` sạch · `npm test` **95/95** · `npm run check:renderer-globals` **72/74 script**, 0 undefined (giảm một script vì đã xoá `migration.ts`) · `npm run check:embedded` khớp **6125,4 KiB** · `cargo test --manifest-path src-tauri/Cargo.toml --lib -- --test-threads=1` **145/145** (tám test migration đã xoá; phải tạm bỏ dòng `devPath` chưa commit trong `src-tauri/tauri.conf.json` để Cargo đọc được cấu hình, sau đó khôi phục nguyên byte) · `node --check` sạch cho `build-tauri-release.js`, `tauri-webview-check.js` và ba UI check đã sửa.
+
+**Không chứng minh.** Chưa chạy `npm run tauri:check` (cần build release + WebView2, và đang vướng dòng `devPath` chưa commit của người dùng), chưa mở app thật sau khi gỡ, chưa build lại installer. Việc gỡ không có nghĩa profile Electron bị xoá — nó vẫn nguyên trên đĩa; chỉ đường đọc/nhập nó đã biến mất.
+
 ## Dọn Electron batch 2 (tiếp 7, 2026-11-12) — port 15 check payload cuối sang façade; hết lời gọi `window.eduGame` trong `tests/ui`, thêm hạn đo riêng cho ma trận dài
 
 **Bối cảnh.** Sau các batch trước, 15 check trong `tests/ui` vẫn còn gọi payload `window.eduGame.*` (hoặc dựa vào hình dạng dữ liệu của profile Electron) và không chạy được trên instance Tauri mới. Chúng trải từ trình soạn thảo/ảnh, thế giới trò chơi, cài đặt, đến ma trận chế độ trả lời. Khi port, ba khác biệt nền tảng lộ ra: URL ảnh do Tauri phục vụ khác Electron, câu ghi chú của bộ phân loại local khác, và overlay migration có thể mở muộn đè `#modalRoot`.

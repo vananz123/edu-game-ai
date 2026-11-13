@@ -75,7 +75,7 @@ src/
   game-engine/         Runtime chạy game đã lưu (offline)
 src-tauri/             Vỏ Tauri v2 (Rust): api.rs hợp đồng command + dispatch,
                        storage/library/project/package/embedded, settings.rs +
-                       secrets.rs (DPAPI), migration.rs, ai_local.rs, setup.rs,
+                       secrets.rs (DPAPI), ai_local.rs, setup.rs,
                        lesson.rs + lesson_store.rs, ai_http.rs, presentation.rs,
                        lan.rs, diagnostics/picker/illustration
 server/                Cloud AI Gateway (Express + Supabase + Gemini) — không chạy khi chơi

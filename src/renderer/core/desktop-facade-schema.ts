@@ -266,17 +266,6 @@ const DESKTOP_FACADE_SCHEMA = Object.freeze({
     setPackageGateTurn: 'package:gate-turn',
     setFilesGateTurn: 'files:gate-turn',
   }),
-  /**
-   * Lời gọi CHỈ vỏ Tauri có, không thuộc preload Electron: Giai đoạn 4 nhập profile
-   * Electron. `desktop.host()` từ chối tên không nằm ở đây, nên renderer không mượn
-   * được cửa này để gọi kênh tuỳ ý. Adapter Tauri dịch tên → chuỗi kênh; adapter
-   * Electron không biết ba tên này nên lời gọi hỏng (đúng ý: chỉ chạy trên Tauri).
-   */
-  hostCalls: Object.freeze({
-    migrationDetect: 'migration:detect',
-    migrationBrowse: 'migration:browse',
-    migrationImport: 'migration:import',
-  }),
   error: desktopError,
   toError: toDesktopError,
   callCount: Object.keys(DESKTOP_CALLS).length,

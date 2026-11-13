@@ -68,16 +68,13 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
     const PREFIX = 'AM209 ';
     const title = key => PREFIX + key;
 
-    // Onboarding của profile mới chiếm cửa sổ; lời mời nhập dữ liệu Electron có thể
-    // tới muộn hơn và đè #modalRoot. Đóng cả hai TRƯỚC khi đụng tới #modalRoot, rồi
-    // chờ yên một nhịp để lần vẽ cuối không rơi vào giữa bài đo.
+    // Onboarding của profile mới chiếm cửa sổ; đóng nó TRƯỚC khi đụng tới
+    // #modalRoot, rồi chờ yên một nhịp để lần vẽ cuối không rơi vào giữa bài đo.
     const guardUntil = Date.now() + 4000;
     let quietSince = 0;
     while (Date.now() < guardUntil) {
-      const later = document.querySelector('[data-migration-action="later"]');
-      if (later) later.click();
       if (document.querySelector('#modalRoot .setup-fullscreen') && typeof closeSetupWizard === 'function') closeSetupWizard('close');
-      const busy = document.querySelector('[data-migration-backdrop], #modalRoot .setup-fullscreen');
+      const busy = document.querySelector('#modalRoot .setup-fullscreen');
       if (!busy) {
         if (!quietSince) quietSince = Date.now();
         if (Date.now() - quietSince > 700) break;

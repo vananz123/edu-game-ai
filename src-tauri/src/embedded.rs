@@ -859,16 +859,23 @@ mod tests {
     #[test]
     fn the_lesson_slot_calls_the_model_through_rust_and_normalizes_the_answer() {
         let (_dir, mut engine) = engine();
-        let content = std::fs::read_to_string(
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("..")
-                .join("tests")
-                .join("fixtures")
-                .join("wizard")
-                .join("happy")
-                .join("lesson_analysis.json"),
-        )
-        .expect("fixture phân tích");
+        // Fixture nhúng thẳng vào test: thư mục `tests/fixtures/wizard/` đã bị xoá
+        // cùng bộ smoke Electron (2026-11-12), nên đọc đĩa sẽ làm test này hỏng.
+        let content = r#"{
+  "subject": "Sinh học",
+  "grade": 7,
+  "topic": "Quang hợp ở thực vật",
+  "objectives": [
+    { "description": "Nêu được vai trò của ánh sáng trong quá trình quang hợp.", "cognitiveLevel": "remember" },
+    { "description": "Giải thích mối liên hệ giữa quang hợp và hô hấp ở thực vật.", "cognitiveLevel": "understand" },
+    { "description": "Vận dụng kiến thức để giải thích hiện tượng cây thiếu ánh sáng.", "cognitiveLevel": "apply" }
+  ],
+  "keyConcepts": [
+    { "term": "Quang hợp", "explanation": "Quá trình tổng hợp chất hữu cơ nhờ năng lượng ánh sáng." },
+    { "term": "Diệp lục", "explanation": "Sắc tố hấp thụ ánh sáng trong lục lạp." }
+  ],
+  "uncertainties": ["Giáo án không nêu rõ thời lượng tiết học."]
+}"#;
         let (base_url, server) = serve_one_chat(&content);
         let result = engine
             .call_with_ai(

@@ -52,7 +52,7 @@ npm test
 npm run tauri:check
 ```
 
-`npm run tauri:check` dựng binary release và chạy các kiểm tra WebView2/migration; đây là cổng kiểm tra, không phải lệnh tạo installer phát hành.
+`npm run tauri:check` dựng binary release và chạy các kiểm tra WebView2; đây là cổng kiểm tra, không phải lệnh tạo installer phát hành.
 
 ## Dữ liệu cục bộ
 
@@ -60,7 +60,7 @@ Tauri lưu dữ liệu trong thư mục app data của hệ điều hành:
 
 - `edugame.sqlite`: thư viện game, lịch sử và dữ liệu giáo án.
 - `settings.json`, ảnh, tài liệu và model/runtime AI: dữ liệu ứng dụng do backend Tauri quản lý.
-- Profile Electron cũ không bị ghi đè; wizard migration của Tauri có thể sao lưu và nhập dữ liệu tương thích.
+- Bản Tauri không đọc, không ghi và không nhập profile Electron cũ; giáo viên chuyển dữ liệu bằng tệp `.egame`.
 - Game có thể xuất ra `.egame` để chuyển qua USB. Sau khi đã lưu, chơi game không cần internet.
 
 SQLite là cơ sở dữ liệu cục bộ, không phải tài khoản cloud. Không lưu khóa Gemini/OpenAI của sản phẩm trong SQLite hoặc trong bộ cài.
@@ -159,7 +159,7 @@ edugame-studio-v0.3/
 
 1. Hoàn thiện các luồng còn thiếu trong backend Tauri và renderer.
 2. Nối Supabase Auth vào ứng dụng desktop và tích hợp Gateway.
-3. Hoàn thiện kiểm thử đóng gói/migration trên máy Windows sạch.
+3. Hoàn thiện kiểm thử đóng gói trên máy Windows sạch.
 4. Hoàn thiện matching kéo-thả, game phân nhánh, ảnh minh họa cặp ghép và tài sản do giáo viên tải lên (kho báu đã có hình nền/nhân vật/âm thanh dựng sẵn).
 5. Kiểm thử cài đặt và inference AI local trên nhiều cấu hình máy, ưu tiên máy cấu hình thấp; AI local là tùy chọn, không bắt buộc để chơi game.
 6. Thêm thanh toán, trang quản trị, ký số installer và quy trình hỗ trợ người dùng.

@@ -10,6 +10,9 @@ kênh send, cửa sổ máy chiếu riêng, đồng bộ snapshot hai chiều). 
 giai đoạn 7: cổng nghiệm thu trên Windows thật (máy chiếu vật lý, điện thoại qua
 Wi-Fi, model thật/BYOK thật, installer máy sạch) rồi phát hành thử — xem
 "Chưa làm" ở mục 9.
+**Cập nhật 2026-11-13:** giai đoạn 4 (nhập profile Electron) đã bị gỡ khỏi sản
+phẩm theo yêu cầu chủ dự án; mục 4 dưới đây chỉ còn là lịch sử, đừng dựng lại
+importer. Xem `docs/DECISIONS.md`, mục "Xoá nhập dữ liệu từ bản Electron cũ".
 Phạm vi: ứng dụng desktop Windows hiện tại, phiên bản nguồn 0.5.1, **bản Tauri
 đầu tiên là bản thử giới hạn** (updater tự động hoàn chỉnh + ký số chưa có; đủ
 mọi kênh desktop còn lại — LAN và trình chiếu đã port nhưng chưa nghiệm thu trên

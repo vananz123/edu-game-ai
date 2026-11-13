@@ -345,32 +345,14 @@ const GROUP_COUNTS = { app: 8, data: 19, files: 7, ai: 30, diagnostics: 4, prese
     ]);
   });
 
-  // ── 5. Giai đoạn 4: ba lời gọi CHỈ Tauri (`desktop.host`) ───────────────
-  await it('host: ba kênh nhập profile đi qua invoke_channel, đối số giữ nguyên', async () => {
+  // ── 5. Không còn cửa CHỈ Tauri: lời mời nhập profile Electron đã bị xoá ── ───────────────
+  await it('façade không còn host()/hostCalls, kênh migration:* không gọi được', async () => {
     const tauri = fakeTauri();
     const { desktop, schema } = boot({ __TAURI__: tauri.api });
-    assert.deepEqual(JSON.parse(JSON.stringify(schema.hostCalls)), {
-      migrationDetect: 'migration:detect',
-      migrationBrowse: 'migration:browse',
-      migrationImport: 'migration:import',
-    });
-    await desktop.host('migrationDetect');
-    await desktop.host('migrationImport', { ignored: true });
-    assert.deepEqual(JSON.parse(JSON.stringify(tauri.invokes)), [
-      { command: 'invoke_channel', payload: { channel: 'migration:detect' } },
-      { command: 'invoke_channel', payload: { channel: 'migration:import', args: [{ ignored: true }] } },
-    ]);
-  });
-
-  await it('host: chưa nối adapter và tên lạ đều bị từ chối trước IPC', async () => {
-    const none = boot();
-    await assert.rejects(none.desktop.host('migrationDetect'), error => error.code === 'not-supported');
-
-    const tauri = fakeTauri();
-    const context = boot({ __TAURI__: tauri.api });
-    await assert.rejects(context.desktop.host('migrationNope'), error => error.code === 'unknown-call');
-    await assert.rejects(context.desktop.call('migrationDetect'), error => error.code === 'unknown-call',
-      'kênh chỉ Tauri không được lọt vào call() của hợp đồng');
+    assert.equal('host' in schema, false, 'schema không được còn hostCalls');
+    assert.equal(typeof desktop.host, 'undefined', 'façade không được còn desktop.host');
+    await assert.rejects(desktop.call('migrationDetect'), error => error.code === 'unknown-call',
+      'kênh migration:* không được lọt vào call() của hợp đồng');
     assert.equal(tauri.invokes.length, 0, 'lời gọi sai không qua ranh giới IPC');
   });
 

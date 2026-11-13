@@ -1,6 +1,8 @@
 # Kế hoạch loại bỏ Electron — trạng thái và phần còn lại
 
 > Cập nhật sau khi đối chiếu mã nguồn và các cổng kiểm tra gần nhất. Đây không còn là kế hoạch "chưa thực hiện": lõi ứng dụng đã chuyển sang Tauri v2. Chỉ đánh dấu hoàn tất những gì đã có bằng chứng; không xem cổng build là nghiệm thu installer sạch.
+>
+> **Cập nhật 2026-11-13:** đường nhập dữ liệu từ profile Electron cũ ("Giai đoạn 4" của kế hoạch Tauri) đã bị **gỡ hẳn** theo yêu cầu chủ dự án — xem mục "Xoá nhập dữ liệu từ bản Electron cũ" trong `docs/DECISIONS.md`. Các câu bên dưới về việc giữ importer/migration chỉ còn là lịch sử; đừng dựng lại importer. Profile Electron của người dùng vẫn phải được giữ nguyên trên đĩa (không đọc, không sửa, không xoá).
 
 ## Mục tiêu
 

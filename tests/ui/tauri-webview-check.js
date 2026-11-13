@@ -37,87 +37,9 @@ const { TAURI_IMAGE_ORIGIN } = require('../../dist/src/services/storage/custom-i
 
 const memoFile = process.env.EDUGAME_TAURI_MEMO;
 const reopenPhase = process.argv.includes('--reopen');
-// Pha ba của Giai đoạn 4: profile Electron TỔNG HỢP + thư mục Tauri rỗng, chạy
-// trên tiến trình mới. Pha này chỉ đo nhập dữ liệu, không chạy lại các phép đo
-// giao diện của pha một — modal nhập sẽ đè lên màn hình khi có profile nguồn.
 // Cổng AI local thật (tải model/runtime) chỉ chạy khi script cha đặt biến này.
 // Mặc định cổng release không tải hàng GB; lượt kiểm riêng dùng thư mục tạm.
 const aiInstallId = process.env.EDUGAME_TAURI_AI_INSTALL || '';
-const migrationPhase = process.argv.includes('--migration');
-
-function sha256File(file) {
-  return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
-}
-
-/**
- * Băm mọi tệp bền vững của một thư mục (đường dẫn tương đối dạng `/`).
- *
- * Bỏ `-wal`/`-shm`: SQLite có thể dựng lại hai tệp tạm này khi mở đọc, nên băm
- * chúng sẽ báo "nguồn bị sửa" dù dữ liệu giáo viên không đổi. `edugame.sqlite`,
- * ảnh, giáo án, cài đặt và `ai-local/` vẫn được băm đầy đủ.
- */
-function stableHashes(dir) {
-  const hashes = {};
-  const walk = current => {
-    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
-      const full = path.join(current, entry.name);
-      if (entry.isDirectory()) {
-        walk(full);
-      } else if (!/-wal$|-shm$/i.test(entry.name)) {
-        const relative = path.relative(dir, full).split(path.sep).join('/');
-        hashes[relative] = sha256File(full);
-      }
-    }
-  };
-  walk(dir);
-  return hashes;
-}
-
-function filesContaining(dir, needles) {
-  const hits = [];
-  const walk = current => {
-    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
-      const full = path.join(current, entry.name);
-      if (entry.isDirectory()) {
-        walk(full);
-        continue;
-      }
-      const bytes = fs.readFileSync(full);
-      for (const needle of needles) {
-        if (bytes.includes(Buffer.from(needle, 'utf8'))) {
-          hits.push(`${path.relative(dir, full).split(path.sep).join('/')}: ${needle}`);
-        }
-      }
-    }
-  };
-  walk(dir);
-  return hits;
-}
-
-function verifyBackupManifest(backupDir) {
-  const manifestPath = path.join(backupDir, 'manifest.json');
-  if (!fs.existsSync(manifestPath)) return { ok: false, msg: 'thiếu manifest.json' };
-  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-  const files = Array.isArray(manifest.files) ? manifest.files : [];
-  const bad = [];
-  for (const entry of files) {
-    if (!entry || typeof entry.path !== 'string' || typeof entry.sha256 !== 'string') {
-      bad.push('mục manifest sai hình dạng');
-      continue;
-    }
-    const file = path.join(backupDir, ...entry.path.split('/'));
-    if (!fs.existsSync(file)) {
-      bad.push(`${entry.path}: thiếu tệp`);
-      continue;
-    }
-    if (sha256File(file) !== entry.sha256) bad.push(`${entry.path}: sai SHA-256`);
-  }
-  return {
-    ok: bad.length === 0 && files.length > 0,
-    msg: bad.length ? bad.join(' · ') : `${files.length} tệp khớp SHA-256`,
-    manifest,
-  };
-}
 
 /** SHA-256 theo luồng: model GGUF hơn 1 GB, không đọc cả tệp vào RAM. */
 function sha256FileStream(file) {
@@ -418,106 +340,6 @@ const filesGate = Boolean(process.env.EDUGAME_TAURI_FILES_DOCUMENT);
     process.exit(failedReopen ? 1 : 0);
   }
 
-  // Pha ba (Giai đoạn 4): app tự thấy profile Electron tổng hợp, hiện modal, và
-  // cổng bấm đúng nút "Nhập vào bản mới". Kiểm cả phía UI (số dòng, đường dẫn
-  // nguồn, nút) lẫn phía đĩa (bản sao lưu + manifest, tệp đã chép, settings đã
-  // tước khoá) — không chỉ tin báo cáo JSON của Rust.
-  if (migrationPhase) {
-    const source = process.env.EDUGAME_ELECTRON_PROFILE || '';
-    const target = process.env.EDUGAME_TAURI_DATA_DIR || '';
-    if (!source || !target) {
-      console.error('EDUGAME_ELECTRON_PROFILE/EDUGAME_TAURI_DATA_DIR thiếu: script cha phải truyền pha Giai đoạn 4');
-      process.exit(1);
-    }
-    const sourceBefore = stableHashes(source);
-    const out = await evaluate(MIGRATION_RUNNER);
-    if (!out || typeof out !== 'object') throw new Error('migration runner returned nothing');
-
-    check('Giai đoạn 4: detect thấy profile tổng hợp, đúng số dòng/tệp',
-      out.detect && out.detect.found === true && out.detect.alreadyMigrated === false &&
-      out.detect.sourcePath && path.resolve(out.detect.sourcePath) === path.resolve(source) &&
-      out.detect.source && out.detect.source.counts &&
-      out.detect.source.counts.games === 2 && out.detect.source.counts.sessions === 1 &&
-      out.detect.source.counts.lessonDocuments === 1 && out.detect.source.counts.lessonAnalyses === 1 &&
-      out.detect.source.counts.gameRecommendations === 1 && out.detect.source.counts.gameProjects === 1 &&
-      out.detect.source.counts.lessonChunks === 2 && out.detect.source.counts.aiGenerationCache === 1 &&
-      out.detect.source.counts.aiTasks === 1 && out.detect.source.counts.lessonChats === 1 &&
-      out.detect.source.counts.lessonChatMessages === 2,
-      JSON.stringify(out.detect && out.detect.source && out.detect.source.counts));
-
-    check('Giai đoạn 4: modal mời nhập hiện đúng đường dẫn nguồn, không tự nhập',
-      out.offer === true && out.clicked === true && out.sourcePath &&
-      path.resolve(out.sourcePath) === path.resolve(source),
-      `offer=${out.offer}, clicked=${out.clicked}, source=${out.sourcePath}`);
-
-    check('Giai đoạn 4: bấm "Nhập vào bản mới" báo xong, đủ 14 dòng và 3 khoá bị bỏ',
-      out.done === true && out.failed === false && out.inserted === 14 && out.keys === 3,
-      `done=${out.done}, failed=${out.failed}, inserted=${out.inserted}, keys=${out.keys}` +
-        (out.failedText ? ` · ${out.failedText.slice(0, 200)}` : ''));
-
-    const backup = out.backup || '';
-    const backupInsideTarget = backup && path.resolve(backup).startsWith(path.resolve(target) + path.sep);
-    check('Giai đoạn 4: bản sao lưu nằm dưới backups/electron-* của thư mục Tauri',
-      backupInsideTarget && fs.existsSync(path.join(backup, 'edugame.sqlite')) &&
-      fs.existsSync(path.join(backup, 'db', 'edugame.sqlite')),
-      backup || '(không có đường dẫn)');
-
-    const manifest = backup ? verifyBackupManifest(backup) : { ok: false, msg: 'không có bản sao lưu', manifest: null };
-    check('Giai đoạn 4: manifest.json băm đúng từng tệp, ghi 3 khoá đã bỏ, loại ai-local/',
-      manifest.ok === true && manifest.manifest &&
-      manifest.manifest.settings && manifest.manifest.settings.sanitized === true &&
-      manifest.manifest.settings.keysRemoved === 3 &&
-      Array.isArray(manifest.manifest.excluded) && manifest.manifest.excluded.includes('ai-local/'),
-      manifest.msg);
-
-    const secrets = backup ? filesContaining(backup, ['SK-GATE-SECRET']) : ['không có bản sao lưu'];
-    check('Giai đoạn 4: không có chuỗi khoá nào trong bản sao lưu (kể cả DB thô)',
-      secrets.length === 0, secrets.join(' · '));
-
-    const sourceAfter = stableHashes(source);
-    const changed = Object.keys({ ...sourceBefore, ...sourceAfter })
-      .filter(relative => sourceBefore[relative] !== sourceAfter[relative]);
-    check('Giai đoạn 4: profile nguồn không bị sửa (DB, ảnh, giáo án, cài đặt)',
-      changed.length === 0, changed.join(', '));
-
-    const targetImage = path.join(target, 'images', 'ci-gate.img');
-    const targetLesson = path.join(target, 'lessons', 'gate-lesson.txt');
-    check('Giai đoạn 4: ảnh + giáo án được chép sang đúng thư mục đích',
-      fs.existsSync(targetImage) && fs.existsSync(targetLesson) &&
-      fs.readFileSync(targetImage).equals(fs.readFileSync(path.join(source, 'images', 'ci-gate.img'))) &&
-      fs.readFileSync(targetLesson, 'utf8') === fs.readFileSync(path.join(source, 'lessons', 'gate-lesson.txt'), 'utf8'),
-      `${targetImage} / ${targetLesson}`);
-
-    check('Giai đoạn 4: không chép ai-local/ sang bản mới', !fs.existsSync(path.join(target, 'ai-local')),
-      path.join(target, 'ai-local'));
-
-    let targetSettings = null;
-    try {
-      targetSettings = JSON.parse(fs.readFileSync(path.join(target, 'settings.json'), 'utf8'));
-    } catch {}
-    const provider = targetSettings && targetSettings.ai && targetSettings.ai.providers &&
-      targetSettings.ai.providers.openai;
-    check('Giai đoạn 4: settings đích giữ base URL/model, bỏ khoá và hasKey/keyMasked',
-      Boolean(provider) && provider.baseUrl === 'https://gate.example/v1' &&
-      provider.model === 'gate-model' && provider.hasKey === false && provider.keyMasked === '' &&
-      !('apiKeyEncrypted' in provider) &&
-      !('apiKeyEncrypted' in targetSettings.ai) && !('apiKey' in targetSettings.ai),
-      JSON.stringify(targetSettings));
-
-    check('Giai đoạn 4: thư viện đích có 2 trò chơi nhập + trò chơi mẫu, đúng id',
-      out.games === 3 && out.gameIds.includes('gate-game-1') && out.gameIds.includes('gate-game-2') &&
-      out.gameIds.includes('sample-traffic-001'),
-      `games=${out.games}, ids=${(out.gameIds || []).join(',')}`);
-
-    check('Giai đoạn 4: detect lần hai trả alreadyMigrated, không mời nhập lại',
-      out.again && out.again.found === true && out.again.alreadyMigrated === true &&
-      !out.again.source, JSON.stringify(out.again));
-
-    const failedMigration = results.filter(result => !result.ok).length;
-    console.log(`\n${results.length - failedMigration}/${results.length} checks passed`);
-    process.exit(failedMigration ? 1 : 0);
-  }
-
   const out = await evaluate(RUNNER);
   if (!out || typeof out !== 'object') throw new Error('runner returned nothing');
 
@@ -543,7 +365,7 @@ const filesGate = Boolean(process.env.EDUGAME_TAURI_FILES_DOCUMENT);
   check('kênh lạ không thuộc hợp đồng bị từ chối đọc được (toàn bộ 81 kênh đã port)', out.unsupported === true, out.unsupportedMsg);
   check('lỗi khởi động không che UI (không có trang lỗi nào)', out.boot === true, out.bootMsg);
   const gateDataDir = process.env.EDUGAME_TAURI_DATA_DIR || '';
-  // Khi cổng chạy với thư mục tạm (Giai đoạn 4), đường dẫn KHÔNG còn chứa
+  // Khi cổng chạy với thư mục tạm, đường dẫn KHÔNG còn chứa
   // identifier mà phải đúng thư mục cha đã đặt. Nếu không có biến, giữ nguyên
   // phép đo cũ: dữ liệu thật phải nằm dưới identifier của bản Tauri.
   check('thư mục dữ liệu đúng (identifier hoặc thư mục cổng đã đặt)',
@@ -552,7 +374,7 @@ const filesGate = Boolean(process.env.EDUGAME_TAURI_FILES_DOCUMENT);
 
   // Tuỳ chọn: tải model/runtime AI local THẬT trên thư mục cổng tạm. Không bật
   // trong cổng release thường vì model nhỏ nhất đã 1,19 GiB.
-  if (aiInstallId && !reopenPhase && !migrationPhase) {
+  if (aiInstallId && !reopenPhase) {
     console.log('… tải và chạy AI local thật (' + aiInstallId + ')');
     await aiLocalDownloadChecks(evaluate, aiInstallId, gateDataDir);
     await setupRealChecks(evaluate, aiInstallId, gateDataDir);
@@ -1016,50 +838,6 @@ function packageShape(text) {
  * `invoke_channel` → `package::export`), hộp thoại lưu bị CỔNG thay bằng đường dẫn
  * trong biến môi trường của tiến trình. Kết quả phải nói đúng tệp đã ghi.
  */
-/**
- * Pha ba (Giai đoạn 4): đọc modal thật do bootstrap mở, bấm nút nhập, rồi trả
- * về cả báo cáo JSON của vỏ lẫn các thuộc tính `data-migration-*` của modal.
- * Node phía ngoài kiểm đĩa (bản sao lưu, manifest, tệp đích) — runner không được
- * tự tuyên bố thành công chỉ vì nút đã bấm.
- */
-const MIGRATION_RUNNER = `(async () => {
-  const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-  const waitFor = async (probe, timeout) => {
-    const started = Date.now();
-    while (Date.now() - started < timeout) {
-      const value = probe();
-      if (value) return value;
-      await sleep(50);
-    }
-    return null;
-  };
-  const out = { detect: null, offer: false, clicked: false, sourcePath: '', done: false, failed: false };
-  out.detect = await desktop.host('migrationDetect');
-  const offer = await waitFor(() => document.querySelector('[data-migration-phase="offer"]'), 15000);
-  out.offer = Boolean(offer);
-  out.sourcePath = offer ? offer.getAttribute('data-migration-source') || '' : '';
-  const button = offer && offer.querySelector('[data-migration-action="import"]');
-  out.clicked = Boolean(button);
-  if (button) button.click();
-  const terminal = await waitFor(
-    () => document.querySelector('[data-migration-phase="done"], [data-migration-phase="failed"]'),
-    180000
-  );
-  const phase = terminal ? terminal.getAttribute('data-migration-phase') : '';
-  out.done = phase === 'done';
-  out.failed = phase === 'failed';
-  out.backup = out.done ? terminal.getAttribute('data-migration-backup') || '' : '';
-  out.inserted = out.done ? Number(terminal.getAttribute('data-migration-inserted')) : 0;
-  out.keys = out.done ? Number(terminal.getAttribute('data-migration-keys')) : 0;
-  out.doneText = terminal ? String(terminal.textContent || '') : '';
-  out.failedText = out.failed ? String(terminal.textContent || '') : '';
-  out.again = await desktop.host('migrationDetect');
-  const library = await desktop.call('getLibrary');
-  out.games = Array.isArray(library && library.games) ? library.games.length : -1;
-  out.gameIds = Array.isArray(library && library.games) ? library.games.map(game => game.id).sort() : [];
-  return out;
-})()`;
-
 const exportRunner = (title, target) => `(async () => {
   const out = {};
   const title = ${JSON.stringify(title)};

@@ -6,8 +6,8 @@
 //! Blob DPAPI được base64 và nằm trong `settings.json`; chỉ tiến trình Rust đọc
 //! được nó, renderer chỉ thấy `hasKey` + `keyMasked`.
 //!
-//! Không tự chuyển khoá từ profile Electron: giai đoạn 4 đã tước khoá khỏi bản
-//! sao lưu và settings đích, nên giáo viên nhập lại khoá trên bản Tauri. Nếu
+//! Không tự chuyển khoá từ profile Electron, và không còn đường nhập profile nào
+//! (Giai đoạn 4 đã bị gỡ): giáo viên nhập lại khoá trên bản Tauri. Nếu
 //! không mã hoá được, lời gọi lưu phải HỎNG với mã `AI_KEY_STORAGE_UNAVAILABLE`
 //! và cấu hình cũ phải giữ nguyên — không bao giờ ghi plaintext để "cứu" thao tác.
 

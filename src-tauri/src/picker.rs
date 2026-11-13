@@ -59,24 +59,6 @@ where
     answer.recv().ok().flatten()
 }
 
-/// Chọn một THƯ MỤC (giai đoạn 4: nguồn profile Electron khi giáo viên muốn chỉ
-/// tay). Cùng lý do `async` như `pick`: hộp thoại phải được dựng trên luồng chính.
-pub(crate) async fn choose_folder(app: &AppHandle, title: &'static str) -> Option<PathBuf> {
-    let handle = app.clone();
-    let (picked, answer) = std::sync::mpsc::channel();
-    let started = tauri::async_runtime::spawn_blocking(move || {
-        handle
-            .dialog()
-            .file()
-            .set_title(title)
-            .pick_folder(move |path| {
-                let _ = picked.send(path);
-            });
-    });
-    let _ = started.await;
-    answer.recv().ok().flatten().and_then(|path| to_path(path).ok())
-}
-
 /// Mở một hộp thoại chọn tệp với tiêu đề, bộ lọc và tên gợi ý — cả bốn lệnh
 /// nhập/xuất dùng chung đúng hình dạng này.
 pub(crate) async fn pick(app: &AppHandle, title: &'static str, filters: &'static [(&'static str, &'static [&'static str])]) -> Option<PathBuf> {

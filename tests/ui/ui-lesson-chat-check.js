@@ -1313,11 +1313,8 @@ function fill(script, values) {
     // real pointer and a real keyboard: deleting a conversation left the box unable to
     // take typing, and a sent question stayed in the box. The check above could not see
     // either because it focused the box itself and then read the state object.
-    // The Tauri shell offers to import old Electron data on first launch ("Nhập dữ
-    // liệu từ bản cũ"). On a machine that still has %APPDATA%/edugame-studio that
-    // modal covers the shell, and unlike the scripted steps above a REAL pointer
-    // hit-tests the topmost element: the click lands on the modal, not the box, so
-    // the caret never moves. "Để sau" only closes it (migration.ts). Clear any
+    // A REAL pointer hit-tests the topmost element, so a first-launch overlay
+    // left open would swallow the click and the caret would never move. Clear any
     // first-launch overlay before driving the real pointer, and assert it is gone —
     // an overlay left open must fail here, not as four mysterious caret misses.
     const overlay = await cdp.evaluate(`(async () => {
@@ -1325,8 +1322,6 @@ function fill(script, values) {
       const deadline = Date.now() + 6000;
       let dismissed = '';
       while (Date.now() < deadline) {
-        const later = document.querySelector('[data-migration-action="later"]');
-        if (later) { later.click(); dismissed = 'migration'; await sleep(250); continue; }
         if (document.querySelector('#modalRoot .setup-fullscreen')) {
           if (typeof closeSetupWizard === 'function') closeSetupWizard('close');
           dismissed = dismissed || 'setup'; await sleep(250); continue;
