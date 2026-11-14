@@ -175,7 +175,7 @@ function renderSettings() {
 
   const inputCls = 'w-full px-3 py-2 border border-[#cbd5e1] dark:border-[#334155] rounded-lg bg-white dark:bg-[#1e2544] text-[#1e293b] dark:text-[#f8fafc] text-[13px] focus:outline-none focus:border-[#6366f1]';
   const labelCls = 'text-[12px] font-bold text-[#475569] dark:text-[#cbd5e1] mb-1 block';
-  const sectionCls = 'bg-white dark:bg-[#171c32] border border-[#e2e8f0] dark:border-[#2a324b] rounded-2xl p-5';
+  const sectionCls = 'bg-white dark:bg-[#171c32] border border-[#e2e8f0] dark:border-[#2a324b] rounded-xl p-4';
   const hintCls = 'text-[12px] text-[#4f5a6e] dark:text-[#94a3b8] leading-relaxed';
   const btnSecondaryCls = 'btn btn-secondary btn-small';
 
@@ -217,14 +217,12 @@ function renderSettings() {
   const sectionTabs = SETTINGS_TABS.map(tab => ({ ...tab, chip: sectionTabChips[tab.id] || '' }));
 
   return `<!-- Header -->
-  <div class="flex items-center justify-between gap-4 mb-[16px] flex-wrap pb-[8px] border-b border-[#f1f5f9] dark:border-[#2a324b]">
-    <div>
-      <h1 class="text-[22px] tracking-[-0.9px] m-0 font-[700]">Cài đặt ứng dụng</h1>
-    </div>
+  <div class="page-head">
+    <div class="page-head-title"><h1>Cài đặt ứng dụng</h1></div>
   </div>
 
-  <div class="grid grid-cols-[minmax(0,1fr)_280px] gap-5 items-start">
-    <div class="flex flex-col gap-5 min-w-0">
+  <div class="grid grid-cols-[minmax(0,1fr)_260px] gap-3 items-start">
+    <div class="flex flex-col gap-3 min-w-0">
 
       ${settingsTabStripHtml({ tabs: sectionTabs, selected: openSection, attr: 'settings-section', idPrefix: 'settingsTabBtn', panelPrefix: 'settingsPanel', ariaLabel: 'Các mục cài đặt', cls: '' })}
 
@@ -233,7 +231,7 @@ function renderSettings() {
         ${settingsPanelHeader(SETTINGS_TABS[0], aiChips)}
         ${settingsTabStripHtml({ tabs: SETTINGS_AI_TABS, selected: aiTab, attr: 'ai-tab', idPrefix: 'settingsAiTabBtn', panelPrefix: 'settingsAiTabPanel', ariaLabel: 'Nhà cung cấp AI', cls: 'mb-3' })}
         <div role="tabpanel" id="settingsAiTabPanel-local" data-ai-tabpanel="local" aria-labelledby="settingsAiTabBtn-local" class="${aiTab === 'local' ? '' : 'hidden'}">
-        <p class="${hintCls} mb-4">Cài và chọn model Qwen chạy cùng llama.cpp ngay trong ứng dụng. Model và runtime được lưu trong dữ liệu ứng dụng trên máy này.</p>
+        <p class="${hintCls} mb-3">Model Qwen chạy bằng llama.cpp ngay trong ứng dụng; model và runtime lưu trên máy này.</p>
 
         ${machine.runtimeSupported === false ? `<div class="p-3 bg-[#fef2f2] dark:bg-[#2d1313] border border-[#fecaca] dark:border-[#4a1b1b] rounded-lg mb-4 text-[12px] text-[#b91c1c] dark:text-[#fca5a5]"><strong>Chưa hỗ trợ cấu hình này</strong> — Runtime AI local tích hợp hiện chỉ hỗ trợ Windows x64.</div>` : ''}
 
@@ -403,7 +401,7 @@ function renderSettings() {
           <div class="grid grid-cols-2 gap-3">
             <div class="p-3 bg-[#f8fafc] dark:bg-[#151a30] rounded-lg border border-[#f1f5f9] dark:border-[#2a324b]">
               <strong class="text-[12px] text-[#1e293b] dark:text-[#f1f5f9] flex items-center gap-[6px] mb-1"><span data-icon="lock" data-icon-size="13"></span> Quyền riêng tư</strong>
-              <p class="${hintCls} m-0">Trò chơi, kết quả, model và runtime AI local được lưu trong dữ liệu ứng dụng trên máy. AI local tích hợp xử lý trên máy; khi tải model lần đầu cần Internet. Khi dùng AI online, nội dung bài học được gửi tới nhà cung cấp tại endpoint bạn cấu hình. Không có đồng bộ đám mây tự động.</p>
+              <p class="${hintCls} m-0">Dữ liệu lưu trên máy; AI local xử lý nội bộ (lần tải model đầu cần Internet). AI online gửi nội dung bài học tới endpoint bạn cấu hình; không có đồng bộ đám mây tự động.</p>
             </div>
             <div class="p-3 bg-[#f8fafc] dark:bg-[#151a30] rounded-lg border border-[#f1f5f9] dark:border-[#2a324b]">
               <strong class="text-[12px] text-[#1e293b] dark:text-[#f1f5f9] flex items-center gap-[6px] mb-1"><span data-icon="archive" data-icon-size="13"></span> Định dạng gói</strong>
@@ -422,7 +420,7 @@ function renderSettings() {
       <section class="${sectionCls} ${openSection === 'tasks' ? '' : 'hidden'}" role="tabpanel" aria-labelledby="settingsTabBtn-tasks" data-settings-card="tasks" data-settings-panel="tasks" id="settingsPanel-tasks">
         ${settingsPanelHeader(SETTINGS_TABS[3])}
         <div class="flex items-start justify-between gap-3 flex-wrap mb-3">
-          <p class="${hintCls} m-0 max-w-[60ch]">Các tác vụ phân tích giáo án, sinh nội dung và tạo lại mục bằng AI local. Lịch sử được lưu trên máy và khôi phục khi mở lại ứng dụng. Mỗi trang 10 tác vụ; hệ thống chỉ giữ <b>30 tác vụ gần nhất</b> và tự xoá tác vụ cũ hơn.</p>
+          <p class="${hintCls} m-0 max-w-[68ch]" title="Các tác vụ phân tích giáo án, sinh nội dung và tạo lại mục bằng AI local. Lịch sử được lưu trên máy và khôi phục khi mở lại ứng dụng.">Tác vụ AI local, lịch sử lưu trên máy. Giữ <b>30 tác vụ gần nhất</b>, 10 tác vụ mỗi trang.</p>
           <div class="flex gap-2 shrink-0">
             <button class="${btnSecondaryCls}" id="aiTasksRefreshBtn">Làm mới</button>
             <button class="${btnSecondaryCls}" id="cpuRuntimeVerifyBtn">Xác minh runtime</button>
@@ -437,7 +435,7 @@ function renderSettings() {
       <section class="${sectionCls} ${openSection === 'diagnostics' ? '' : 'hidden'}" role="tabpanel" aria-labelledby="settingsTabBtn-diagnostics" data-diagnostics-panel data-settings-card="diagnostics" data-settings-panel="diagnostics" id="settingsPanel-diagnostics">
         ${settingsPanelHeader(SETTINGS_TABS[4])}
         <div class="flex items-start justify-between gap-3 flex-wrap mb-2">
-          <p class="${hintCls} m-0 max-w-[60ch]">Chẩn đoán AI: ứng dụng tự ghi lại thời gian chạy, model, số mục đã tạo, số lần thử lại và lỗi. Log chỉ chứa id, số lượng, thời gian và mã lỗi; không có nội dung giáo án hay khóa API.</p>
+          <p class="${hintCls} m-0 max-w-[68ch]" title="Log chỉ chứa id, số lượng, thời gian và mã lỗi; không có nội dung giáo án hay khóa API.">Chẩn đoán AI: log ghi thời gian chạy, model, số mục đã tạo, số lần thử lại và mã lỗi.</p>
           <div class="flex gap-2 shrink-0 flex-wrap">
             <button class="${btnSecondaryCls}" id="exportDiagnosticsBtn">Xuất gói chẩn đoán</button>
             <button class="${btnSecondaryCls}" id="openLogFolderBtn">Mở thư mục log</button>
@@ -462,16 +460,15 @@ function renderSettings() {
     </div>
 
     <!-- ═══ SIDEBAR: Nút lưu sticky + tóm tắt ═══ -->
-    <aside class="flex flex-col gap-4 sticky top-5">
+    <aside class="flex flex-col gap-3 sticky top-4">
       <!-- Nút Lưu cài đặt — sticky -->
-      <section class="bg-gradient-to-br from-[#4f46e5] to-[#6d28d9] rounded-2xl p-5 text-white">
+      <section class="bg-gradient-to-br from-[#4f46e5] to-[#6d28d9] rounded-xl p-4 text-white">
         <h3 class="text-[14px] font-bold m-0 mb-2">Lưu thay đổi</h3>
-        <p class="text-[12px] text-[#e0e7ff] mb-3 leading-relaxed m-0">Lưu toàn bộ cài đặt trên trang này — kể cả các tab đang ẩn.</p>
-        <button class="bg-white text-[#4f46e5] border-0 rounded-lg px-4 py-2.5 font-bold text-[13px] cursor-pointer w-full inline-flex items-center justify-center gap-[7px] hover:bg-[#f8f7ff] transition shadow-[0_4px_12px_rgba(0,0,0,0.1)]" id="saveSettingsBtn"><span data-icon="save" data-icon-size="14"></span> Lưu cài đặt</button>
+        <button class="bg-white text-[#4f46e5] border-0 rounded-lg px-4 py-2 font-bold text-[13px] cursor-pointer w-full inline-flex items-center justify-center gap-[7px] hover:bg-[#f8f7ff] transition shadow-[0_4px_12px_rgba(0,0,0,0.1)]" id="saveSettingsBtn"><span data-icon="save" data-icon-size="14"></span> Lưu cài đặt</button>
       </section>
 
       <!-- Tóm tắt cấu hình -->
-      <section class="bg-white dark:bg-[#171c32] border border-[#e2e8f0] dark:border-[#2a324b] rounded-2xl p-5">
+      <section class="bg-white dark:bg-[#171c32] border border-[#e2e8f0] dark:border-[#2a324b] rounded-xl p-4">
         <h3 class="text-[13px] font-bold text-[#1e293b] dark:text-[#f1f5f9] m-0 mb-3">Tóm tắt cấu hình</h3>
         <div class="flex flex-col gap-2.5">
           <div class="flex items-center justify-between">
@@ -513,7 +510,7 @@ function renderSettings() {
       </section>
 
       <!-- Liên kết nhanh -->
-      <section class="bg-white dark:bg-[#171c32] border border-[#e2e8f0] dark:border-[#2a324b] rounded-2xl p-5">
+      <section class="bg-white dark:bg-[#171c32] border border-[#e2e8f0] dark:border-[#2a324b] rounded-xl p-4">
         <h3 class="text-[13px] font-bold text-[#1e293b] dark:text-[#f1f5f9] m-0 mb-3">Liên kết nhanh</h3>
         <div class="flex flex-col gap-2">
           <button class="text-left text-[12px] text-[#4f46e5] dark:text-[#818cf8] hover:underline bg-transparent border-0 cursor-pointer p-0 inline-flex items-center gap-[7px]" data-page="create-wizard"><span data-icon="wand-sparkles" data-icon-size="14"></span> Tạo trò chơi từ giáo án</button>

@@ -87,13 +87,10 @@ function renderWizardProjects() {
 
 function renderCreateWizard() {
   return `<div id="wizardRoot">
-    <div class="flex justify-between items-start gap-[20px] mb-[25px]"><div>
-      <h1 class="text-[22px] tracking-[-0.9px] m-0 font-[700]">Tạo trò chơi từ giáo án</h1>
-    </div>
-    <button class="border-0 rounded-[9px] px-[15px] py-[11px] inline-flex items-center justify-center gap-[7px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-white border border-[#e7eaf2] text-[#515c72]" data-wizard-action="new"><span data-icon="circle-plus" data-icon-size="14"></span> Dự án mới</button></div>
+    <div class="page-head"><div class="page-head-title"><h1>Tạo trò chơi từ giáo án</h1></div><div class="page-head-actions"><button class="btn btn-secondary btn-small" data-wizard-action="new"><span data-icon="circle-plus" data-icon-size="14"></span> Dự án mới</button></div></div>
     ${renderWizardStepper()}
     ${renderWizardStatus()}
-    <div class="grid grid-cols-[minmax(0,1.7fr)_minmax(280px,.8fr)] gap-[18px] items-start">
+    <div class="grid grid-cols-[minmax(0,1.7fr)_minmax(270px,.8fr)] gap-3 items-start">
       <div class="min-w-0">${renderWizardStepBody()}</div>
       <aside class="min-w-0">${renderWizardProjects()}</aside>
     </div>

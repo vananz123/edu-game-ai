@@ -24,41 +24,39 @@ function renderCreate() {
     ['race','🏁','Đường đua chinh phục','Đua tiến độ · Chiến thuật · Thi đấu đội','Trả lời đúng để tiến thêm ô, ô đặc biệt tăng tốc hoặc câu hỏi bonus.','10–15 phút','Thi đấu đồng đội']
   ];
   const templateDetails = {
-    quiz: 'Cách chơi: Học sinh trả lời lần lượt các câu hỏi trắc nghiệm từ nội dung bài học. Cơ chế: Tính điểm theo đáp án đúng, thời gian và độ khó; có bảng xếp hạng. Phù hợp: Khởi động bài học, ôn tập cuối tiết, kiểm tra kiến thức. Thời lượng gợi ý: 5–10 phút.',
-    scenario: 'Cách chơi: Đọc hoặc nghe tình huống, chọn cách xử lý phù hợp. Cơ chế: Giải thích vì sao lựa chọn đúng hoặc sai, phân tích hậu quả và cách xử lý tốt hơn. Phù hợp: Giáo dục kỹ năng sống, an toàn giao thông, môi trường, an toàn số. Thời lượng gợi ý: 5–15 phút.',
-    matching: 'Cách chơi: Ghép thuật ngữ với định nghĩa, hình ảnh, ví dụ hoặc đáp án tương ứng. Cơ chế: Tính điểm theo số cặp đúng, thời gian hoàn thành và số lần thử. Phù hợp: Từ vựng, khái niệm khoa học, thuật ngữ CNTT, công thức và phân loại. Thời lượng gợi ý: 3–10 phút.',
-    'treasure-hunt': 'Cách chơi: Mỗi màn là một thử thách kiến thức hoặc nhiệm vụ nhỏ; trả lời đúng để nhận chìa khóa, manh mối hoặc vật phẩm, hoàn thành đủ để mở màn tiếp theo. Phù hợp: Khoa học tự nhiên, Lịch sử, Địa lý, Tin học, STEM. Thời lượng gợi ý: 10–20 phút.',
-    race: 'Cách chơi: Mỗi đội chọn nhân vật hoặc phương tiện đại diện; trả lời đúng để tiến thêm số ô tương ứng, có ô tăng tốc, câu hỏi bonus hoặc thử thách phụ. Đội về đích trước hoặc đạt mục tiêu sau số lượt quy định sẽ thắng. Thời lượng gợi ý: 10–15 phút.'
+    quiz: 'Trả lời lần lượt các câu trắc nghiệm theo nội dung bài học; điểm tính theo đáp án đúng, thời gian và độ khó, có bảng xếp hạng. Hợp: khởi động, ôn tập cuối tiết, kiểm tra kiến thức.',
+    scenario: 'Đọc hoặc nghe tình huống rồi chọn cách xử lý; có giải thích vì sao đúng/sai và cách làm tốt hơn. Hợp: kỹ năng sống, an toàn giao thông, môi trường, an toàn số.',
+    matching: 'Ghép thuật ngữ với định nghĩa, hình ảnh hoặc ví dụ tương ứng; điểm theo số cặp đúng và thời gian hoàn thành. Hợp: từ vựng, khái niệm khoa học, thuật ngữ CNTT.',
+    'treasure-hunt': 'Mỗi màn là một thử thách; trả lời đúng để nhận chìa khóa hoặc manh mối, đủ điều kiện thì mở màn tiếp theo. Hợp: Khoa học tự nhiên, Lịch sử, Địa lý, STEM.',
+    race: 'Mỗi đội chọn nhân vật; trả lời đúng để tiến thêm ô, có ô tăng tốc và câu hỏi bonus. Đội về đích trước thắng. Hợp: thi đấu đồng đội.'
   };
 
-  return `<div class="flex items-center justify-between gap-4 mb-[16px] flex-wrap pb-[8px] border-b border-[#f1f5f9] dark:border-[#2a324b]">
-    <div>
-      <div class="flex items-center gap-2">
-        <span class="d-badge d-badge-secondary d-badge-sm font-bold">Thủ công</span>
-        <h1 class="text-[22px] tracking-[-0.9px] m-0 font-[700]">Tạo trò chơi mới</h1>
-      </div>
+  return `<div class="page-head">
+    <div class="page-head-title">
+      <h1>Tạo trò chơi mới</h1>
+      <span class="d-badge d-badge-secondary d-badge-sm font-bold">Thủ công</span>
     </div>
-    <div class="flex items-center gap-2">
+    <div class="page-head-actions">
       <button class="btn btn-secondary btn-small" data-page="library"><span data-icon="arrow-left" data-icon-size="14"></span> Thư viện</button>
       <button class="btn btn-primary btn-small" data-page="create-wizard"><span data-icon="wand-sparkles" data-icon-size="14"></span> Tạo từ giáo án</button>
     </div>
   </div>
 
-  <div class="grid grid-cols-[minmax(0,1fr)_280px] gap-5 items-start">
-    <div class="flex flex-col gap-5 min-w-0">
+  <div class="grid grid-cols-[minmax(0,1fr)_260px] gap-3 items-start">
+    <div class="flex flex-col gap-3 min-w-0">
 
       <!-- Chọn loại trò chơi -->
-      <section class="bg-white dark:bg-[#171c32] border border-[#e2e8f0] dark:border-[#2a324b] rounded-2xl p-5">
-        <div class="flex justify-between items-center mb-4">
+      <section class="bg-white dark:bg-[#171c32] border border-[#e2e8f0] dark:border-[#2a324b] rounded-xl p-4">
+        <div class="flex justify-between items-center mb-3">
           <div class="flex items-center gap-2">
             <span class="text-[#4f46e5] dark:text-[#818cf8]" data-icon="shapes" data-icon-size="17"></span>
             <h3 class="text-[15px] font-bold text-[#1e293b] dark:text-[#f1f5f9] m-0">Chọn loại trò chơi</h3>
           </div>
           <span class="px-2 py-1 bg-[#f1f5f9] dark:bg-[#1e2544] rounded-lg text-[#4f5a6e] dark:text-[#94a3b8] text-[12px] font-semibold">5 mẫu có sẵn</span>
         </div>
-        <div class="grid grid-cols-[repeat(auto-fit,minmax(250px,1fr))] gap-3">
-          ${templateCards.map(([id,emoji,title,short,desc,duration,purpose])=>`<button type="button" class="border rounded-xl p-4 text-left min-w-0 transition-all duration-150 cursor-pointer flex gap-3 items-start ${state.selectedTemplate===id ? 'border-[#6366f1] bg-[#f8f7ff] dark:bg-[#1e2544] dark:border-[#818cf8] shadow-[0_0_0_2px_rgba(99,102,241,0.15)]' : 'border-[#e2e8f0] dark:border-[#2a324b] bg-white dark:bg-[#171c32] hover:border-[#c7c4ff] dark:hover:border-[#4f46e5] hover:-translate-y-[1px]'}" data-template="${id}">
-            <span class="text-[28px] leading-none shrink-0 mt-0.5">${emoji}</span>
+        <div class="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-2.5">
+          ${templateCards.map(([id,emoji,title,short,desc,duration,purpose])=>`<button type="button" class="border rounded-xl p-3 text-left min-w-0 transition-colors duration-150 cursor-pointer flex gap-2.5 items-start ${state.selectedTemplate===id ? 'border-[#6366f1] bg-[#f8f7ff] dark:bg-[#1e2544] dark:border-[#818cf8] shadow-[0_0_0_2px_rgba(99,102,241,0.15)]' : 'border-[#e2e8f0] dark:border-[#2a324b] bg-white dark:bg-[#171c32] hover:border-[#c7c4ff] dark:hover:border-[#4f46e5]'}" data-template="${id}">
+            <span class="text-[26px] leading-none shrink-0 mt-0.5">${emoji}</span>
             <span class="flex flex-col gap-1 min-w-0">
               <div class="flex items-center justify-between gap-1 flex-wrap">
                 <strong class="text-[13px] text-[#1e293b] dark:text-[#f1f5f9]">${title}</strong>
@@ -70,14 +68,14 @@ function renderCreate() {
             </span>
           </button>`).join('')}
         </div>
-        <div class="text-[12px] text-[#4f5a6e] dark:text-[#94a3b8] mt-3 leading-relaxed p-3 bg-[#f8fafc] dark:bg-[#151a30] rounded-lg border border-[#f1f5f9] dark:border-[#2a324b]">
+        <div class="text-[12px] text-[#4f5a6e] dark:text-[#94a3b8] mt-2.5 leading-relaxed p-2.5 bg-[#f8fafc] dark:bg-[#151a30] rounded-lg border border-[#f1f5f9] dark:border-[#2a324b]">
           ${templateDetails[state.selectedTemplate] || templateDetails.quiz}
         </div>
       </section>
 
       <!-- Thiết lập trò chơi -->
-      <section class="bg-white dark:bg-[#171c32] border border-[#e2e8f0] dark:border-[#2a324b] rounded-2xl p-5">
-        <div class="flex items-center gap-2 mb-4">
+      <section class="bg-white dark:bg-[#171c32] border border-[#e2e8f0] dark:border-[#2a324b] rounded-xl p-4">
+        <div class="flex items-center gap-2 mb-3">
           <span class="text-[#4f46e5] dark:text-[#818cf8]" data-icon="settings" data-icon-size="17"></span>
           <h3 class="text-[15px] font-bold text-[#1e293b] dark:text-[#f1f5f9] m-0">Thiết lập trò chơi</h3>
         </div>
@@ -125,78 +123,66 @@ function renderCreate() {
             </div>
 
             <div class="text-[12px] text-[#4f5a6e] dark:text-[#94a3b8] leading-relaxed p-3 bg-white dark:bg-[#1a1f3a] rounded-lg border border-[#f1f5f9] dark:border-[#2a324b]" id="scoringModeHint">${answerModeHint(answerMode)}</div>
-            <div class="text-[12px] text-[#4f5a6e] dark:text-[#94a3b8] leading-relaxed">"Cách trả lời" thay cho "Chế độ tính điểm" cũ và dùng chung một trường lưu. Điểm mỗi câu vẫn lấy từ "Điểm / câu đúng" (hoặc điểm riêng của câu). Giải thích không tự hiện sau mỗi câu nữa — khi câu đã kết thúc sẽ có nút Giải thích. Game tạo trước đây mở ra với "Thi đấu" — đúng luật nó đã chơi — và lưu lại theo cách trả lời đó.</div>
+            <div class="text-[12px] text-[#4f5a6e] dark:text-[#94a3b8] leading-relaxed" title="Dùng chung một trường lưu với Chế độ tính điểm cũ. Điểm mỗi câu lấy từ Điểm / câu đúng hoặc điểm riêng của câu. Giải thích hiện qua nút Giải thích sau khi câu kết thúc. Game tạo trước đây mở với Thi đấu — đúng luật nó đã chơi — và lưu lại theo cách trả lời đó.">"Cách trả lời" thay cho "Chế độ tính điểm" cũ; game cũ mở với "Thi đấu".</div>
           </div>
         </details>
       </section>
 
       <!-- Mở trình chỉnh sửa -->
-      <section class="bg-white dark:bg-[#171c32] border border-[#e2e8f0] dark:border-[#2a324b] rounded-2xl p-5">
-        <div class="flex items-center gap-2 mb-3">
+      <section class="bg-white dark:bg-[#171c32] border border-[#e2e8f0] dark:border-[#2a324b] rounded-xl p-4">
+        <div class="flex items-center gap-2 mb-2.5">
           <span class="text-[#4f46e5] dark:text-[#818cf8]" data-icon="pencil" data-icon-size="17"></span>
           <h3 class="text-[15px] font-bold text-[#1e293b] dark:text-[#f1f5f9] m-0">Soạn nội dung & Mở trình chỉnh sửa</h3>
           <span class="ml-auto px-2 py-0.5 bg-[#f1f5f9] dark:bg-[#1e2544] rounded text-[12px] font-semibold text-[#4f5a6e] dark:text-[#94a3b8]">Không dùng AI</span>
         </div>
-        <div class="flex gap-3 items-start bg-[#f8f7ff] dark:bg-[#1a1f3a] border border-dashed border-[#c7c4ff] dark:border-[#4f46e5] rounded-xl p-4 mb-4">
-          <span class="shrink-0 text-[#5f6a7d]" data-icon="info" data-icon-size="20"></span>
+        <div class="flex gap-3 items-start bg-[#f8f7ff] dark:bg-[#1a1f3a] border border-dashed border-[#c7c4ff] dark:border-[#4f46e5] rounded-xl p-3 mb-3">
+          <span class="shrink-0 text-[#5f6a7d]" data-icon="info" data-icon-size="18"></span>
           <div class="min-w-0">
             <strong class="text-[13px] text-[#1e293b] dark:text-[#f1f5f9] block mb-1">Bạn tự nhập câu hỏi, phương án và đáp án đúng</strong>
-            <small class="text-[12px] text-[#4f5a6e] dark:text-[#94a3b8] leading-relaxed block">Nhấn "Mở trình chỉnh sửa câu hỏi" để mở trình chỉnh sửa trống theo thể loại đã chọn. Không cần AI, không cần Internet.</small>
+            <small class="text-[12px] text-[#4f5a6e] dark:text-[#94a3b8] leading-relaxed block">Trình chỉnh sửa mở trống theo thể loại đã chọn. Không cần AI, không cần Internet.</small>
           </div>
         </div>
         <div class="flex items-center gap-3 flex-wrap">
-          <button class="btn btn-primary !py-2.5 !px-5 !text-[13px] !font-bold" id="generateBtn"><span data-icon="pencil" data-icon-size="15"></span> Mở trình chỉnh sửa câu hỏi</button>
+          <button class="btn btn-primary !py-2 !px-4 !text-[13px] !font-bold" id="generateBtn"><span data-icon="pencil" data-icon-size="15"></span> Mở trình chỉnh sửa câu hỏi</button>
           <button class="btn btn-secondary" id="previewManualBtn"><span data-icon="eye" data-icon-size="14"></span> Xem trước mẫu trống</button>
         </div>
-        <div class="text-[12px] text-[#4f5a6e] dark:text-[#94a3b8] mt-3 leading-relaxed">Trình chỉnh sửa mở đúng thể loại đã chọn để bạn tự nhập câu hỏi, đáp án và điểm số. Sau khi lưu, vào "Dự án của tôi" để chạy thử như học sinh, tiếp tục chỉnh sửa và xuất gói .egame chạy ngoại tuyến.</div>
+        <div class="text-[12px] text-[#4f5a6e] dark:text-[#94a3b8] mt-2.5 leading-relaxed" title="Sau khi lưu, vào Dự án của tôi để chạy thử như học sinh, tiếp tục chỉnh sửa và xuất gói .egame chạy ngoại tuyến.">Lưu xong, vào "Dự án của tôi" để chạy thử, chỉnh sửa tiếp hoặc xuất gói .egame ngoại tuyến.</div>
       </section>
 
     </div>
 
     <!-- Sidebar -->
-    <aside class="flex flex-col gap-4">
-      <section class="bg-white dark:bg-[#171c32] border border-[#e2e8f0] dark:border-[#2a324b] rounded-2xl p-5">
+    <aside class="flex flex-col gap-3">
+      <section class="bg-white dark:bg-[#171c32] border border-[#e2e8f0] dark:border-[#2a324b] rounded-xl p-4">
         <h3 class="text-[14px] font-bold text-[#1e293b] dark:text-[#f1f5f9] m-0 mb-1">Quy trình thủ công</h3>
-        <div class="text-[12px] text-[#4f5a6e] dark:text-[#94a3b8] mb-4">Tự soạn nội dung, không cần AI.</div>
-        <div class="flex flex-col gap-3">
-          <div class="flex items-start gap-3">
-            <div class="w-7 h-7 rounded-lg bg-[#eef2ff] dark:bg-[#262c55] text-[#4f46e5] dark:text-[#a5b4fc] grid place-items-center text-[12px] font-bold shrink-0">1</div>
-            <div class="min-w-0">
-              <strong class="text-[12px] text-[#1e293b] dark:text-[#f1f5f9] block">Chọn thể loại</strong>
-              <p class="text-[12px] text-[#4f5a6e] dark:text-[#94a3b8] m-0 leading-snug">Chọn 1 trong 5 mẫu phù hợp với mục tiêu tiết học.</p>
-            </div>
+        <div class="text-[12px] text-[#4f5a6e] dark:text-[#94a3b8] mb-3">Tự soạn nội dung, không cần AI.</div>
+        <div class="flex flex-col gap-2">
+          <div class="flex items-center gap-2.5" title="Chọn 1 trong 5 mẫu phù hợp với mục tiêu tiết học.">
+            <div class="w-6 h-6 rounded-md bg-[#eef2ff] dark:bg-[#262c55] text-[#4f46e5] dark:text-[#a5b4fc] grid place-items-center text-[12px] font-bold shrink-0">1</div>
+            <strong class="text-[12px] text-[#1e293b] dark:text-[#f1f5f9] min-w-0">Chọn thể loại</strong>
           </div>
-          <div class="flex items-start gap-3">
-            <div class="w-7 h-7 rounded-lg bg-[#eef2ff] dark:bg-[#262c55] text-[#4f46e5] dark:text-[#a5b4fc] grid place-items-center text-[12px] font-bold shrink-0">2</div>
-            <div class="min-w-0">
-              <strong class="text-[12px] text-[#1e293b] dark:text-[#f1f5f9] block">Thiết lập luật chơi</strong>
-              <p class="text-[12px] text-[#4f5a6e] dark:text-[#94a3b8] m-0 leading-snug">Điểm số, độ khó, thời lượng, số người chơi và thi đấu.</p>
-            </div>
+          <div class="flex items-center gap-2.5" title="Điểm số, độ khó, thời lượng, số người chơi và thi đấu.">
+            <div class="w-6 h-6 rounded-md bg-[#eef2ff] dark:bg-[#262c55] text-[#4f46e5] dark:text-[#a5b4fc] grid place-items-center text-[12px] font-bold shrink-0">2</div>
+            <strong class="text-[12px] text-[#1e293b] dark:text-[#f1f5f9] min-w-0">Thiết lập luật chơi</strong>
           </div>
-          <div class="flex items-start gap-3">
-            <div class="w-7 h-7 rounded-lg bg-[#eef2ff] dark:bg-[#262c55] text-[#4f46e5] dark:text-[#a5b4fc] grid place-items-center text-[12px] font-bold shrink-0">3</div>
-            <div class="min-w-0">
-              <strong class="text-[12px] text-[#1e293b] dark:text-[#f1f5f9] block">Tự nhập câu hỏi</strong>
-              <p class="text-[12px] text-[#4f5a6e] dark:text-[#94a3b8] m-0 leading-snug">Mở trình chỉnh sửa và điền câu hỏi, phương án, đáp án đúng, giải thích.</p>
-            </div>
+          <div class="flex items-center gap-2.5" title="Mở trình chỉnh sửa và điền câu hỏi, phương án, đáp án đúng, giải thích.">
+            <div class="w-6 h-6 rounded-md bg-[#eef2ff] dark:bg-[#262c55] text-[#4f46e5] dark:text-[#a5b4fc] grid place-items-center text-[12px] font-bold shrink-0">3</div>
+            <strong class="text-[12px] text-[#1e293b] dark:text-[#f1f5f9] min-w-0">Tự nhập câu hỏi</strong>
           </div>
-          <div class="flex items-start gap-3">
-            <div class="w-7 h-7 rounded-lg bg-[#eef2ff] dark:bg-[#262c55] text-[#4f46e5] dark:text-[#a5b4fc] grid place-items-center text-[12px] font-bold shrink-0">4</div>
-            <div class="min-w-0">
-              <strong class="text-[12px] text-[#1e293b] dark:text-[#f1f5f9] block">Chơi và lưu kết quả</strong>
-              <p class="text-[12px] text-[#4f5a6e] dark:text-[#94a3b8] m-0 leading-snug">Game đã lưu không cần mạng, có thể xuất qua USB.</p>
-            </div>
+          <div class="flex items-center gap-2.5" title="Game đã lưu không cần mạng, có thể xuất qua USB.">
+            <div class="w-6 h-6 rounded-md bg-[#eef2ff] dark:bg-[#262c55] text-[#4f46e5] dark:text-[#a5b4fc] grid place-items-center text-[12px] font-bold shrink-0">4</div>
+            <strong class="text-[12px] text-[#1e293b] dark:text-[#f1f5f9] min-w-0">Chơi và lưu kết quả</strong>
           </div>
         </div>
       </section>
 
-      <section class="bg-gradient-to-br from-[#4f46e5] to-[#6d28d9] rounded-2xl p-5 text-white">
+      <section class="bg-gradient-to-br from-[#4f46e5] to-[#6d28d9] rounded-xl p-4 text-white">
         <h3 class="text-[14px] font-bold m-0 mb-1">Muốn dùng AI?</h3>
         <div class="text-[12px] text-[#e0e7ff] mb-3 leading-relaxed">AI phân tích giáo án và gợi ý trò chơi, chạy trên máy bằng llama.cpp.</div>
-        <button class="bg-white text-[#4f46e5] border-0 rounded-lg px-4 py-2.5 font-bold text-[12px] cursor-pointer w-full inline-flex items-center justify-center gap-[7px] hover:bg-[#f8f7ff] transition" data-page="create-wizard"><span data-icon="wand-sparkles" data-icon-size="14"></span> Tạo trò chơi từ giáo án</button>
+        <button class="bg-white text-[#4f46e5] border-0 rounded-lg px-4 py-2 font-bold text-[12px] cursor-pointer w-full inline-flex items-center justify-center gap-[7px] hover:bg-[#f8f7ff] transition" data-page="create-wizard"><span data-icon="wand-sparkles" data-icon-size="14"></span> Tạo trò chơi từ giáo án</button>
       </section>
 
-      <section class="bg-white dark:bg-[#171c32] border border-[#e2e8f0] dark:border-[#2a324b] rounded-2xl p-5">
+      <section class="bg-white dark:bg-[#171c32] border border-[#e2e8f0] dark:border-[#2a324b] rounded-xl p-4">
         <h3 class="text-[13px] font-bold text-[#1e293b] dark:text-[#f1f5f9] m-0 mb-3">Trạng thái hệ thống</h3>
         <div class="flex flex-col gap-2">
           <div class="flex items-center justify-between py-1.5">
