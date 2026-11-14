@@ -2650,6 +2650,25 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 
 **Việc kế tiếp.** Chưa duyệt bắt đầu code. Khi duyệt: dựng khung Tauri v2 + Rust toolchain trong nhánh riêng, chuyển lớp truy cập desktop sang facade TS (kế hoạch mục 4) và làm vòng 1 theo mục 1.
 
+## Mật độ giao diện theo hướng ứng dụng Windows — đầu trang dùng chung, bỏ chuyển động vị trí, cắt copy thay vì giảm cỡ chữ (2026-11-15)
+
+**Bối cảnh.** Ứng dụng chạy trong cửa sổ desktop nhưng đọc như một trang web: mỗi màn có header lớn riêng, thẻ và nút nâng lên khi hover, sidebar và nội dung thoáng theo kiểu landing page, nhiều đoạn mô tả 3–5 dòng lặp lại điều người dùng đã thấy trên màn hình. Giáo viên mở app để làm một việc trong vài phút, nên mật độ và sự ổn định của bố cục quan trọng hơn "không gian thở". Hai ràng buộc không được vi phạm: (1) cổng typography đang giữ sàn 11px và 4,5:1 trên 8 trang + 5 bước wizard, cả hai theme, kể cả trạng thái hover/focus; (2) 6 nhãn tab Cài đặt và 9 game/trang ở Thư viện là hành vi đã được kiểm chứng, không đụng tới.
+
+**Quyết định.**
+
+1. **Một `.page-head` dùng chung cho mọi trang giáo viên.** Tiêu đề `h1` 17px, nút hành động nằm bên phải, thay cho header lớn riêng từng trang. Nhờ vậy chiều cao đầu trang ổn định 21–29px ở mọi màn và bớt một tầng tiêu đề lặp lại. Các trang Thư viện, Giáo án, Dự án của tôi, Lịch sử, Tạo trò chơi, Tạo từ giáo án, Cài đặt đều dùng cùng markup này.
+2. **Bỏ mọi chuyển động vị trí, giữ phản hồi bằng màu và bóng.** Hover/active không còn `translateY`, `translateX` hay `scale` trên nav, nút, thẻ, thẻ game; chỉ còn transition `background-color`, `color`, `border-color`, `box-shadow`. Đây là điều làm giao diện hết "nhún" như web và cũng là lý do phải viết lại `tests/unit/ui-polish.test.ts`: các khẳng định cũ mã hoá đúng kiểu nâng hover vừa bị xoá, nên giữ nguyên chúng sẽ khoá lại thứ đang muốn bỏ. Test mới khẳng định phản hồi màu/bóng **còn** và chuyển động vị trí **vắng mặt**.
+3. **Dày bằng bề rộng dòng, khoảng cách và copy — không bằng cỡ chữ.** Sidebar 232px (hẹp hơn: 208px, tab: 184px) với nhãn vẫn hiện; nội dung rộng tối đa 1280px; padding thẻ 12–16px; khoảng cách lưới 12px; mô tả dài cắt còn 1–2 dòng, phần còn lại vào `title=` để vẫn tra được. Sàn 11px và 4,5:1 không đổi, nên mật độ không đạt được bằng cách thu nhỏ chữ.
+4. **Giữ nguyên hành vi đã kiểm chứng.** 6 tab Cài đặt, 9 game/trang Thư viện, SQLite, `.egame`, chơi offline và các luồng nghiệp vụ không đổi. Lượt này chỉ đổi trình bày.
+
+**Đánh đổi.** Bề rộng dòng hẹp hơn (khoảng 46ch cho đoạn mô tả) làm một số câu dài xuống dòng nhiều hơn, nhưng tổng chiều cao trang vẫn giảm vì bỏ header lớn và các đoạn lặp. Đưa giải thích vào `title=` khiến nội dung đó chỉ hiện khi rê chuột — chấp nhận được vì các đoạn bị rút không phải thông tin bắt buộc để hoàn thành thao tác. Bỏ chuyển động làm phản hồi "mềm" hơn về cảm giác, đổi lại bố cục không nhảy khi rê chuột và ảnh chụp/đo đạc ổn định hơn.
+
+**Kiểm chứng.** `npm run check` sạch · `npm run check:renderer-globals` 72/74 script, 1042 hàm, 8303 điểm gọi, 0 undefined · `npm test` **95/95** · binary release build lại (201 tệp) rồi chạy các cổng CDP trên binary đó: `ui-typography-readability` **2055 run/32 sweep**, nhỏ nhất 11px, xấu nhất **4,74:1** (hover **4,72:1**); `ui-dark-theme`, `ui-settings-sections`, `ui-library-paging`, `ui-lessons-paging`, `ui-results-paging`, `ui-project-selection`, `ui-card-menu` all passed; `ui-fullscreen-density` **8/8** · đo hình học: không tràn ngang ở 1280×800 / 1920×1080 / 1024×700, `.page-head` cao 21–29px, 1920×1080 không cần cuộn, thẻ Library 319×275 @1280 (245×310 @1024, 400×275 @1920) · 42 ảnh bằng chứng ở `tests/ui/shots/density/`.
+
+**Không chứng minh.** Chưa xem ảnh bằng mắt trong phiên này (không có đầu vào hình ảnh); đánh giá thị giác dựa trên số đo cổng + hình học. Chưa thử DPI 125–150% hay màn hình nhỏ hơn 1024×700. Không chạy lại `cargo test` (Rust không đổi) và chưa build installer mới.
+
+**Việc kế tiếp.** Duyệt 42 ảnh bằng mắt; nếu đạt, build installer 0.5.2 và chạy `npm run tauri:check` trên cây này.
+
 ## Xoá model AI local đã tải — lệnh `ai:remove-local-model`, giữ nguyên cấu hình đã lưu và chỉ xoá đúng tệp của model (2026-11-13)
 
 **Bối cảnh.** Model AI local là tệp lớn (model nhỏ nhất đã 1,28 GB) nằm trong `<data>/ai-local/models`; catalog đã cho tải và chạy nhưng chưa có đường xoá, nên giáo viên muốn lấy lại dung lượng phải tìm thư mục dữ liệu bằng tay — đúng thứ ứng dụng không nên bắt người dùng làm. Xoá cũng là thao tác phá huỷ, phải chặn được id lạ trước khi chạm đĩa và phải xử lý được trường hợp model đang chạy.

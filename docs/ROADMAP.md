@@ -1,5 +1,10 @@
 # Roadmap
 
+## Mật độ giao diện theo hướng ứng dụng Windows — `.page-head` dùng chung, bỏ chuyển động vị trí, cắt copy ở vỏ + Library/Settings/Create (2026-11-15)
+- **Đã xác minh:** `npm run check` sạch · `npm run check:renderer-globals` 72/74 script, 0 undefined · `npm test` **95/95** · binary release build lại (201 tệp) rồi chạy cổng CDP: `ui-typography-readability` **2055 run/32 sweep**, nhỏ nhất 11px, xấu nhất **4,74:1** (hover **4,72:1**) · `ui-dark-theme` / `ui-settings-sections` / `ui-library-paging` / `ui-lessons-paging` / `ui-results-paging` / `ui-project-selection` / `ui-card-menu` all passed · `ui-fullscreen-density` **8/8** · 42 ảnh bằng chứng ở `tests/ui/shots/density/`.
+- **Phạm vi:** sidebar 232/208/184px, hàng nav thấp hơn, `#pageContent` `max-w-[1280px]`; họ `.page-head*` dùng chung; bỏ `translateX`/`translateY`/`scale` khi hover ở nav/nút/thẻ/thẻ game, chỉ còn màu + bóng; thẻ game cover 96px, mô tả `line-clamp-2`; empty state 68×60/28px icon; Settings/Create grid 260px, section `rounded-xl p-4`; copy dài vào `title=`. Giữ 6 tab Cài đặt, 9 game/trang, sàn 11px/4,5:1, SQLite, `.egame`, offline.
+- **Còn mở / kế tiếp:** chưa duyệt ảnh bằng mắt; chưa thử DPI 125–150% hay màn hình < 1024×700; chưa build installer mới; `tauri:check` vẫn chưa chạy trên cây này.
+
 ## Phát hành EduGame Studio 0.5.1 (vỏ Tauri) — bản Tauri đầu tiên lên GitHub Releases (2026-11-13)
 - **Đã xác minh:** `npm run build` · `npm run build:tauri` (201 tệp, `check:embedded` 6125,4 KiB) · `cargo tauri build` → NSIS **16.371.819 B (15,61 MiB)**, SHA-256 `205DCC14D668B36749DF16E298DE319F1929A9F4755C9A4012CB1AD439BF5D88` · cài silent `/S /D=%TEMP%\eg-install-smoke` exit 0 (`ProductVersion 0.5.1`, exe 59.095.552 B, đủ 3 DLL VC++), gỡ `/S` exit 0 và sạch thư mục · release `v0.5.1` công khai, asset `EduGame-Studio-Tauri_0.5.1_x64-setup.exe` tải lại khớp byte và SHA-256.
 - **Phạm vi:** tag `v0.5.1` trên `0dc3b23` (đúng commit đã dựng), không đổi mã sản phẩm; P7 cập nhật neo số mới; `devPath` chưa commit được tạm bỏ rồi khôi phục nguyên byte, không chạm profile Electron hay `opencode.exe`.
