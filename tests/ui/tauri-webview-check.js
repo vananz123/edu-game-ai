@@ -348,7 +348,7 @@ const filesGate = Boolean(process.env.EDUGAME_TAURI_FILES_DOCUMENT);
   check('tiêu đề và shell của Electron còn nguyên', out.shell === true, out.shellMsg);
   check('script nạp đúng thứ tự, không có main.js/preload.js', out.scripts === true, out.scriptsMsg);
   check('cổng chặn edugame-guard.js đứng đầu, không còn cầu eduGame', out.guard === true, out.guardMsg);
-  check('CSS cục bộ đã áp (sidebar 252px)', out.css === true, out.cssMsg);
+  check('CSS cục bộ đã áp (sidebar theo breakpoint)', out.css === true, out.cssMsg);
   check('CSP trong tài liệu khớp tauri.conf.json', out.csp === true, out.cspMsg);
   check('không có request mạng ra ngoài', out.network === true, out.networkMsg);
   check('façade nối adapter Tauri (desktop.info().adapter)', out.facade === true, out.facadeMsg);
@@ -591,7 +591,12 @@ const RUNNER = `(async () => {
 
   const aside = document.querySelector('.app-shell aside');
   const width = aside ? Math.round(aside.getBoundingClientRect().width) : 0;
-  out.css = width === 252;
+  // Bề rộng sidebar theo breakpoint trong src/index.html:
+  // 232px mặc định, 208px ở breakpoint max-wide, 184px ở max-tab,
+  // 64px ở max-compact. Cửa sổ của cổng này cho 232px; con số cũ 252px là
+  // trước bản làm dày giao diện 2026-11-15 nên cổng đỏ oan từ đó.
+  const SIDEBAR_WIDTHS = [232, 208, 184, 64];
+  out.css = SIDEBAR_WIDTHS.includes(width);
   out.cssMsg = 'sidebar=' + width + 'px';
 
   const meta = document.querySelector('meta[http-equiv="Content-Security-Policy"]');
