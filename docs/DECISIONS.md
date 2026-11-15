@@ -4030,3 +4030,39 @@ nền sao); mô hình thị giác xác nhận hàng bậc rõ, mũi tên đúng 
 
 **Không đổi hash vàng.** 24 hash của P0 vẫn nguyên: chúng băm cảnh dựng từ **category**, không
 đi qua blueprint, nên `process` không chạm tới.
+
+## #268 — UI `process` trong trình soạn: tự chọn bậc 2, và một cái bẫy redraw
+
+**Quyết định.** Trình soạn có thêm lựa chọn Kiểu **"Quy trình nhiều bậc"** cùng hai ô
+`Bậc 2`/`Bậc 3` (`[data-editor-art-step="0"|"1"]`), và bố cục này cũng chỉ giữ **2 góc trên**
+như `compare` — vì `left`/`right` đúng chỗ bậc 1 và bậc 3.
+
+**Một cú bấm phải ra cảnh vẽ được.** Đổi Kiểu sang `process` mà chưa chọn bậc nào thì cổng
+chuẩn hoá sẽ hạ về `single`, và control **tự nhảy lại** — đúng lớp lỗi #128 mà `compare` đã
+gặp ở #262 bước 3. Nên handler tự chọn **icon chưa dùng** cho bậc 2 ngay khi đổi Kiểu; bậc 3
+để trống. Danh sách bậc **loại trước** chủ thể, bậc kia, icon góc và props (như #260), thay vì
+cho chọn rồi âm thầm bỏ. Quay về `single` thì `steps` bị **xoá khỏi JSON**, không nằm lại.
+
+**Cái bẫy đã sập và cách sửa.** Khối kiểm thứ hai của cổng giữ node `[data-editor-art]` trong
+biến rồi thao tác tiếp sau khi đổi Kiểu. Nhưng `redrawEditorArtRow` **thay hẳn** node đó, nên
+biến trỏ vào node đã rời khỏi trang: `select` vẫn tồn tại, `change` vẫn chạy, mà
+`closest('[data-editor-art]').parentElement` là `null` ⇒ **ghi vào hư không**, và bài kiểm
+đọc `sceneBlueprint` ra `null`. Sửa: giữ **hàng câu hỏi** rồi `host.querySelector('[data-editor-art]')`
+lại mỗi lần. Đây là cùng một lỗi "closure trên node cũ" mà comment `wireEditorItemArtRow` đã
+cảnh báo từ #257 — lần này nó nằm trong **test**, nên triệu chứng là "cổng đỏ dù code đúng".
+
+**Một bài kiểm suýt nói dối.** Bản đầu gán cứng `stepSel(1).value = 'leaf'`; nhưng bậc 2 đã
+được tự chọn và danh sách bậc 3 **loại** nó — nếu bậc 2 tình cờ là `leaf` thì phép gán không
+đổi gì, `change` vẫn bắn, và bài kiểm kết luận sai. Sửa: đọc option có thật trong danh sách
+rồi mới chọn, và ghi lại id đã chọn để so.
+
+**Bằng chứng.** `ui-item-assets-editor-check` **107 → 130/130** trên binary release build lại
+(23 check mới: có option `process`, tự chọn bậc 2, 2 ô bậc, không còn ô so sánh, chỉ 2 góc trên,
+danh sách loại chủ thể/props/bậc kia, preview 2 bậc + 1 mũi tên, không còn hộp chủ thể giữa,
+chọn bậc 3 ⇒ 3 hộp + 2 mũi tên, giữ icon góc, về `single` thì mất `steps`, cảnh so sánh không
+mang `steps`, và **một lần lưu thật** mở lại từ kho rồi đọc qua IPC). `run-unit` **99/99** ·
+`npm run check` 52 tệp UI sạch · `renderer-globals` 0 undefined (1057 hàm / 8488 lời gọi) ·
+`check:embedded` khớp **6212,2 KiB**. Ảnh trong app thật: `images/scene-267-app.png` — Kiểu
+"Quy trình nhiều bậc", Bậc 2 = Quả táo, Bậc 3 = Cái hộp, preview 3 icon + 2 mũi tên.
+`devPath` gỡ → build → khôi phục, SHA-256 khớp ghim `5ae0bf6…b20e`; tiến trình app đã tắt và
+hai thư mục tạm đã xoá.

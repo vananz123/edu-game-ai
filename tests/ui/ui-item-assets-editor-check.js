@@ -287,6 +287,47 @@ const { PROJECTOR_SIZES, measureAt, setViewport, setViewportAndWait } = require(
     out.comparePreviewKeepsCorners = !!row.querySelector('[data-editor-art-thumb] [data-scene-position="top-left"]');
     out.comparePreviewSubjectCount = row.querySelectorAll('[data-editor-art-thumb] [data-scene-subject]').length;
 
+    // ---- 7b. #267: bố cục quy trình nhiều bậc ----
+    // Đổi Kiểu sang quy trình phải ra ngay dải hợp lệ: tự chọn bậc 2, nếu không
+    // cổng chuẩn hoá hạ về Một hình và control tự nhảy lại.
+    layoutSel().value = 'process';
+    layoutSel().dispatchEvent(new Event('change'));
+    await sleep(300);
+    let proc = null;
+    try { proc = JSON.parse(bpInput().value || 'null'); } catch (error) {}
+    out.processWritten = !!proc && proc.layout === 'process';
+    out.layoutOptionCount = layoutSel().options.length;
+    out.layoutHasProcessOption = Array.from(layoutSel().options).some(op => op.value === 'process');
+    out.processAutoStage = !!proc && (proc.steps || []).length === 1;
+    out.processStageDiffers = !!proc && !!proc.steps && proc.steps[0] !== proc.mainIcon;
+    out.processStepSelects = row.querySelectorAll('[data-editor-art-step]').length;
+    out.processNoCompareFields = row.querySelectorAll('[data-editor-art-compare-icon], [data-editor-art-sign]').length;
+    out.processSlotCount = row.querySelectorAll('[data-editor-art-slot]').length;
+    out.processSlotsAreTop = Array.from(row.querySelectorAll('[data-editor-art-slot]'))
+      .map(node => node.getAttribute('data-editor-art-slot')).join(',');
+    out.processPreviewSteps = row.querySelectorAll('[data-editor-art-thumb] [data-scene-step]').length;
+    out.processPreviewArrows = row.querySelectorAll('[data-editor-art-thumb] [data-scene-arrow]').length;
+    out.processPreviewNoSubjectBox = row.querySelectorAll('[data-editor-art-thumb] [data-scene-subject]').length;
+    const stepSel = index => row.querySelector('[data-editor-art-step="' + index + '"]');
+    out.processStepExcludesSubject = Array.from(stepSel(0).options).every(op => op.value !== 'paw-print');
+    out.processStepExcludesProps = Array.from(stepSel(0).options).every(op => op.value !== 'apple' && op.value !== 'fish');
+    out.processStepExcludesStages = Array.from(stepSel(1).options).every(op => op.value !== (proc && proc.steps ? proc.steps[0] : ''));
+    // Chọn một id có thật trong danh sách: bậc 2 đã bị loại khỏi danh sách bậc 3,
+    // nên gán cứng một id vô tình trùng sẽ không đổi được gì và phép đo sẽ nói dối.
+    const stageChoices = Array.from(stepSel(1).options).map(op => op.value).filter(Boolean);
+    const thirdStage = stageChoices[0] || '';
+    out.processThirdOffered = stageChoices.length > 0;
+    stepSel(1).value = thirdStage;
+    stepSel(1).dispatchEvent(new Event('change'));
+    await sleep(300);
+    let proc3 = null;
+    try { proc3 = JSON.parse(bpInput().value || 'null'); } catch (error) {}
+    out.processThirdWritten = !!proc3 && (proc3.steps || []).length === 2 && proc3.steps[1] === thirdStage;
+    out.processThirdKept = !!stepSel(1) && stepSel(1).value === thirdStage;
+    out.processPreviewThreeSteps = row.querySelectorAll('[data-editor-art-thumb] [data-scene-step]').length;
+    out.processPreviewTwoArrows = row.querySelectorAll('[data-editor-art-thumb] [data-scene-arrow]').length;
+    out.processKeptCorner = !!proc3 && (proc3.subIcons || []).length === 1 && proc3.subIcons[0].icon === 'lightbulb';
+
     // Đổi về "Một hình": hai trường so sánh phải BIẾN MẤT, và 4 góc trở lại.
     layoutSel().value = 'single';
     layoutSel().dispatchEvent(new Event('change'));
@@ -295,6 +336,8 @@ const { PROJECTOR_SIZES, measureAt, setViewport, setViewportAndWait } = require(
     try { cmpBack = JSON.parse(bpInput().value || 'null'); } catch (error) {}
     out.compareClearedBack = !!cmpBack && cmpBack.layout === 'single' &&
       cmpBack.compareIcon === undefined && cmpBack.compareSign === undefined;
+    // #267: quay về Một hình thì các bậc cũng phải biến mất, không nằm lại trong JSON.
+    out.processClearedBack = !!cmpBack && cmpBack.steps === undefined;
     out.compareSlotsRestored = row.querySelectorAll('[data-editor-art-slot]').length === 4;
     out.comparePreviewOneSubject = row.querySelectorAll('[data-editor-art-thumb] [data-scene-subject]').length === 0;
 
@@ -324,9 +367,51 @@ const { PROJECTOR_SIZES, measureAt, setViewport, setViewportAndWait } = require(
       bq.sceneBlueprint.compareIcon === 'bird' && bq.sceneBlueprint.compareSign === 'greater-than';
     out.compareSaveKeptCorner = !!bq?.sceneBlueprint && (bq.sceneBlueprint.subIcons || []).length === 1 &&
       bq.sceneBlueprint.subIcons[0].icon === 'lightbulb';
+    // Một cảnh so sánh không được mang theo bậc của lần thử quy trình trước đó.
+    out.processStayedOut = !!bq?.sceneBlueprint && bq.sceneBlueprint.steps === undefined;
 
     document.getElementById('modalRoot').innerHTML = '';
     return out;
+  })()`);
+
+  // #267: một cảnh quy trình đi qua lần lưu THẬT — mở lại từ kho, sửa, lưu, đọc IPC.
+  const procSave = await evaluate(`(async () => {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const results = {};
+    const lib = await desktop.call('getLibrary');
+    const game = (lib?.games || []).find(g => g.title === 'UE blueprint roundtrip');
+    results.found = !!game;
+    if (!game) return results;
+    document.getElementById('modalRoot').innerHTML = '';
+    editGame(JSON.parse(JSON.stringify(game)));
+    await sleep(400);
+    // The art control REPLACES itself on every change, so hold the question row and
+    // re-query the control each time; a captured art node goes detached and its
+    // selects then write into a node that is no longer on the page.
+    const host = document.querySelector('#editorQuestions .editor-question');
+    results.rowFound = !!host;
+    if (!host) return results;
+    const art = () => host.querySelector('[data-editor-art]');
+    const layout = art().querySelector('[data-editor-art-layout]');
+    layout.value = 'process';
+    layout.dispatchEvent(new Event('change'));
+    await sleep(300);
+    const second = art().querySelector('[data-editor-art-step="1"]');
+    results.secondOffered = !!second;
+    if (second) {
+      const choices = Array.from(second.options).map(op => op.value).filter(Boolean);
+      results.secondChoices = choices.length;
+      second.value = choices[0] || '';
+      second.dispatchEvent(new Event('change'));
+      await sleep(300);
+    }
+    try { results.edited = JSON.parse(host.querySelector('[data-field="sceneBlueprint"]')?.value || 'null'); } catch (error) { results.edited = null; }
+    document.getElementById('saveGameBtn')?.click();
+    await sleep(900);
+    const lib2 = await desktop.call('getLibrary');
+    results.saved = (lib2?.games || []).find(g => g.title === 'UE blueprint roundtrip')?.questions?.[0]?.sceneBlueprint || null;
+    document.getElementById('modalRoot').innerHTML = '';
+    return results;
   })()`);
 
   // All five item templates must render the hidden inputs; a template that
@@ -387,8 +472,7 @@ const { PROJECTOR_SIZES, measureAt, setViewport, setViewportAndWait } = require(
   check('picking a built-in scene keeps the stored blueprint', out.pickKeepsBlueprint === true);
   check('"Tự động" revives the blueprint', out.resetRevivesBlueprint === true);
   check('"Bỏ ảnh" wins over the blueprint', out.removeWinsOverBlueprint === true);
-  check('the blueprint survives a real editor save', out.blueprintSurvivedSave === true, JSON.stringify(out.blueprintAfterSave));
-  check('a blueprint-only item stores no illustrationAssetId', out.blueprintDidNotAddPick === true);
+  check('the blueprint survives a real editor save', out.blueprintSurvivedSave === true, JSON.stringify(out.blueprintAfterSave));  check('a blueprint-only item stores no illustrationAssetId', out.blueprintDidNotAddPick === true);
 
   // #257: four corner pickers, and a choice that really reaches the scene.
   check('the scene editor offers four corner pickers', out.slotCount === 4, String(out.slotCount));
@@ -429,6 +513,31 @@ const { PROJECTOR_SIZES, measureAt, setViewport, setViewportAndWait } = require(
   check('switching back to single draws one subject again', out.comparePreviewOneSubject === true);
   check('a compare scene survives a real editor save', out.compareSurvivedSave === true, JSON.stringify(out.blueprintAfterSave));
   check('saving a compare scene keeps the corner icon', out.compareSaveKeptCorner === true);
+
+  // #267: quy trình nhiều bậc trong trình soạn.
+  check('Kiểu offers the process layout', out.layoutHasProcessOption === true, String(out.layoutOptionCount));
+  check('switching to process writes a drawable sequence', out.processWritten === true);
+  check('switching to process picks stage 2 by itself', out.processAutoStage === true);
+  check('the auto-picked stage is not the subject', out.processStageDiffers === true);
+  check('process offers two stage pickers', out.processStepSelects === 2, String(out.processStepSelects));
+  check('process hides the compare fields', out.processNoCompareFields === 0, String(out.processNoCompareFields));
+  check('process keeps only the two upper corners', out.processSlotCount === 2 && out.processSlotsAreTop === 'top-left,top-right', out.processSlotsAreTop);
+  check('the stage list excludes the subject icon', out.processStepExcludesSubject === true);
+  check('the stage list excludes ground props', out.processStepExcludesProps === true);
+  check('the stage list excludes the other stage', out.processStepExcludesStages === true);
+  check('the preview draws two stages', out.processPreviewSteps === 2, String(out.processPreviewSteps));
+  check('the preview draws an arrow between the stages', out.processPreviewArrows === 1, String(out.processPreviewArrows));
+  check('a sequence draws no centre subject box', out.processPreviewNoSubjectBox === 0);
+  check('picking stage 3 writes a second step', out.processThirdWritten === true);
+  check('the stage picker keeps its choice after the redraw', out.processThirdKept === true);
+  check('three stages draw three boxes', out.processPreviewThreeSteps === 3, String(out.processPreviewThreeSteps));
+  check('three stages draw two arrows', out.processPreviewTwoArrows === 2, String(out.processPreviewTwoArrows));
+  check('a stage change keeps the corner icon', out.processKeptCorner === true);
+  check('switching back to single removes the stages', out.processClearedBack === true);
+  check('a compare scene does not carry stage fields', out.processStayedOut === true);
+  check('a process scene survives a real editor save', !!(procSave && procSave.saved && procSave.saved.layout === 'process'), JSON.stringify(procSave && procSave.saved));
+  check('the saved process scene keeps both stages', !!(procSave && procSave.saved && (procSave.saved.steps || []).join(',') === (procSave && procSave.edited ? procSave.edited.steps.join(',') : 'x')), JSON.stringify({ edited: procSave && procSave.edited && procSave.edited.steps, saved: procSave && procSave.saved && procSave.saved.steps, choices: procSave && procSave.secondChoices }));
+  check('the saved process scene has no compare fields', !!(procSave && procSave.saved && procSave.saved.compareIcon === undefined && procSave.saved.compareSign === undefined));
 
   // ---- #265 "Gợi ý cảnh": the editor button, driven through `desktop.stub` ----
   // No network in a gate: the button's contract is "whatever the channel returns,

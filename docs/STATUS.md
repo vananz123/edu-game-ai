@@ -7,6 +7,16 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-16 — #268 UI `process` trong trình soạn (Kiểu + Bậc 2/Bậc 3) — cổng assets 107 → 130/130
+- **Trạng thái:** Giáo viên đã chọn được bố cục quy trình: Kiểu có thêm "Quy trình nhiều bậc", hai ô `Bậc 2`/`Bậc 3` điền các bậc sau bước đầu; preview vẽ ngay dải 3 icon + 2 mũi tên. Đổi Kiểu sang quy trình là **tự chọn bậc 2** để một cú bấm ra cảnh hợp lệ (không tự nhảy về Một hình); về `single` thì `steps` bị xoá khỏi JSON.
+- **Files:** `src/renderer/features/editor/questions.ts` (hằng số bậc + ô chọn + nhánh ghi blueprint + wire `change`), `tests/ui/ui-item-assets-editor-check.js` (+23 check, thêm khối lưu thật thứ hai), `docs/AI_SCENE_DIRECTOR_DESIGN.md` (§3.4 + đầu tài liệu: UI không còn "CHƯA CÓ"), `docs/DECISIONS.md` #268, `docs/ROADMAP.md`, `images/scene-267-app.png`.
+- **Đã đo:** `ui-item-assets-editor-check` **130/130** trên binary release build lại (CDP 9365) · `run-unit` **99/99** (45,4 s) · `npm run check` 52 tệp UI sạch · `renderer-globals` 0 undefined (1057 hàm / 8488 lời gọi) · `check:embedded` khớp **6212,2 KiB** · installer 15,67 MiB · `devPath` gỡ → build → khôi phục, SHA-256 khớp ghim.
+- **Đối chứng âm (từ chính lượt này):** gán cứng bậc 3 một id đã bị loại khỏi danh sách ⇒ 5 check đỏ và lộ ra rằng phép đo đang nói dối; giữ node `[data-editor-art]` qua một lần redraw ⇒ `sceneBlueprint` đọc ra `null`. Cả hai đã sửa trong test, không nới cổng.
+- **Bằng chứng thị giác:** `images/scene-267-app.png` (chụp trong app thật) — Kiểu "Quy trình nhiều bậc", Bậc 2 = Quả táo, Bậc 3 = Cái hộp, preview 3 icon + 2 mũi tên, không cắt/không đè.
+- **Học được:** `redrawEditorArtRow` **thay hẳn** node `[data-editor-art]`; giữ node đó qua một lần redraw thì mọi `select` sau đó ghi vào hư không — phải giữ **hàng câu hỏi** và query lại. Và một bài kiểm gán cứng giá trị vào `<select>` mà không kiểm option có tồn tại sẽ "xanh giả".
+- **Chưa xác minh:** chưa chạy `process` qua model thật · chưa duyệt bằng mắt người · `surround` vẫn CHƯA CÓ · `ui-play-surface-check` vẫn 787/788 (lỗi giật 2px có sẵn, không liên quan).
+- **Việc kế tiếp:** chạy "Gợi ý cảnh" một câu quy trình thật để xem model có chọn `process` không, hoặc `surround`, hoặc sửa lỗi giật 2px ở màn chơi.
+
 ### 2026-11-16 — #267 `process`: dải 2–3 bậc (dữ liệu + hình + prompt; UI CHƯA CÓ) — unit 99/99, scene-blueprint 39/39
 - **Trạng thái:** Layout thứ ba `process` ra đời: `mainIcon` là **bậc 1**, `steps` (tối đa 2) là các bậc sau **theo đúng thứ tự**; engine vẽ thành **dải ngang** 2–3 bậc với mũi tên giữa các khe. Prompt §5 đã dạy model `process` kèm **ví dụ JSON thật** chạy qua `normalizeSceneBlueprint` với 0 issue. **UI trình soạn chưa có** nên giáo viên chưa tự chọn được `process` — chỉ kênh AI sinh ra nó.
 - **Hình học (đo bằng test):** 2 bậc x = 48/196, 3 bậc x = 16/122/228, y = 66, cạnh 76; mũi tên rộng 14 nằm giữa khe, tâm y 104; góc chỉ còn `top-left`/`top-right` (40px, y 6) vì `left`/`right` đúng chỗ bậc 1 và bậc 3; props giữ nguyên y 146.
@@ -28,15 +38,7 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - **Chưa xác minh:** chưa duyệt bằng mắt người · `ui-play-surface-check` **787/788** — ở 1920×1080 trả lời **đúng** làm ô đáp án đầu dịch xuống **2px** (lỗi giật bố cục có sẵn, không do màu cảnh) · chưa thử 2 vật trên cùng một bên đất.
 - **Việc kế tiếp:** P2 `process`/`surround` (chứng minh bằng toạ độ, không cần model), rồi sửa lỗi giật 2px ở màn chơi.
 
-### 2026-11-15 — #265 kênh `scene:suggest` + nút "Gợi ý cảnh": lần chạy model THẬT đầu tiên (1047 ms) — 107/107
-- **Trạng thái:** Nút "Gợi ý cảnh" trong khối minh hoạ đã gọi được AI thật qua kiến trúc Tauri: kênh `scene:suggest` (V8 slot `EGSCENE` giữ luật, Rust `scene.rs` giữ khoá/endpoint), `ai_tasks` ghi `kind=scene`, renderer nhận JSON rồi vẫn đi qua `normalizeSceneBlueprint` lần nữa.
-- **Files:** `src-tauri/src/embedded/scene-ops.ts`, `src-tauri/src/scene.rs`, `src-tauri/src/api.rs`, `src-tauri/src/lib.rs`, `src-tauri/src/embedded/template.js`, `scripts/build-embedded-js.js`, `src/renderer/core/desktop-facade-schema.ts`, `src/renderer/features/editor/questions.ts`, `tests/ui/ui-item-assets-editor-check.js` (+18 check), `tests/unit/desktop-facade.test.ts` (93 → 94 lời gọi), `docs/DECISIONS.md` #265, `docs/ROADMAP.md`.
-- **Đo thật với Gemini `gemini-3.5-flash-lite`:** *"Con vật nào lớn hơn: con kiến hay con voi?"* → **1047 ms**, `layout=compare`, `mainIcon=bug`, `compareIcon=paw-print`, `compareSign=less-than`, 2 chủ thể + 2 góc trong preview, không toast. *"Phân số nào lớn hơn: 3/4 hay 2/5?"* → **2569 ms**, `layout=single` (classroom/math/calculator + 2 góc), preview **30 hình**/3776 byte SVG. SQLite: `ai_tasks` có hàng `kind=scene`, `state=completed`, summary `gợi ý cảnh: model`.
-- **Lệnh đã chạy:** `ui-item-assets-editor-check` **107/107** trên binary release build lại · `run-unit` **99/99** (45,7 s) · `npm run check` 52 tệp UI sạch · `renderer-globals` **0 undefined** (1056 hàm / 8460 lời gọi) · `check:embedded` khớp **6210,6 KiB**. `devPath` gỡ → build → khôi phục, SHA-256 khớp ghim `5ae0bf6…b20e`.
-- **Học được:** cloud provider chỉ `usable` **sau một lần `testAiProvider` thành công** (#132 §D7) — "đã lưu khoá" ≠ "dùng được", và triệu chứng là `[AI_NO_PROVIDER]` chứ không phải lỗi mạng. Thêm một lời gọi façade làm đỏ **hai** cổng hợp đồng có sẵn (`tauri-contract`, `desktop-facade`); cách sửa là thêm lệnh Rust thật + nâng số đếm, không nới cổng.
-- **Chưa xác minh:** `listAiTasks` trả rỗng ngay sau lượt chạy dù SQLite có hàng — cần một lượt riêng · chưa thử nút này trên câu `scenario` (bố cục #254) · chưa có người duyệt bằng mắt (mới qua vision-model).
-- **Việc kế tiếp:** P2 `process`/`surround` (không cần model), hoặc điều tra `listAiTasks`.
-
+### 2026-11-15 — #265 kênh `scene:suggest` + nút "Gợi ý cảnh": lần chạy model THẬT đầu tiên (1047 ms) — 107/107 — bản đầy đủ: [docs/handoff/status/2026-11-15.md](handoff/status/2026-11-15.md).
 ### 2026-11-15 — #264 đường ống gợi ý cảnh (thuần TS, model tiêm, luôn có fallback) — bản đầy đủ: [docs/handoff/status/2026-11-15.md](handoff/status/2026-11-15.md).
 ### 2026-11-15 — #263 P3 bước prompt: `compare` vào §5 + ví dụ mẫu chạy qua cổng dữ liệu thật — bản đầy đủ: [docs/handoff/status/2026-11-15.md](handoff/status/2026-11-15.md).
 

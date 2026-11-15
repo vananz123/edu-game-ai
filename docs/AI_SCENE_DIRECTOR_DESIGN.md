@@ -7,8 +7,8 @@
 > **Đã có trong mã:** P0 (quyết định #252) — blueprint `v:1`, `layout: 'single'`, cổng
 > chuẩn hoá, lưu `.egame`, nút "Cảnh thử" **không gọi mạng**.
 > **Đã có:** `compare` (dữ liệu + hình + UI + prompt, #262), kênh AI `scene:suggest`
-> (#265), màu chủ thể + người trong cảnh (#266), và `process` (dữ liệu + hình + prompt,
-> #267 — xem §3.4). UI chọn `process` trong trình soạn **chưa có**.
+> (#265), màu chủ thể + người trong cảnh (#266), và `process` trọn bộ (dữ liệu + hình +
+> prompt #267, UI #268 — xem §3.4).
 > **Chưa có:** `surround` (P2 còn lại). Mục đó ghi rõ "CHƯA CÓ" bên dưới.
 
 ---
@@ -94,7 +94,7 @@ này được cài và đo.
 layout?: 'surround';           // vật thể chính ở giữa, các thứ khác vây quanh
 ```
 
-### 3.4 `process` — dữ liệu CÓ, hình CÓ, prompt CÓ; UI CHƯA CÓ (#267)
+### 3.4 `process` — dữ liệu, hình, UI và prompt đều CÓ (#267, UI ở #268)
 
 ```ts
 layout: 'single' | 'compare' | 'process';
