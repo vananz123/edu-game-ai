@@ -176,6 +176,45 @@ const { PROJECTOR_SIZES, measureAt, setViewport, setViewportAndWait } = require(
     row.querySelector('[data-editor-art-reset]').click();
     await sleep(200);
 
+    // ---- 5. #257: bốn góc vật thể phụ ----
+    // Sau "Cảnh thử" phải có 4 ô chọn góc; chọn một vật thể thì ghi vào blueprint
+    // đúng dạng {icon, position}, vẽ lại ngay vào preview, và "— trống —" thì bỏ.
+    // Lưu ý: mỗi lần đổi góc là một lần vẽ lại control, nên mọi truy vấn phải chạy
+    // lại từ row (input ẩn nằm ngoài control nên không bị thay).
+    const slotSel = pos => row.querySelector('[data-editor-art-slot="' + pos + '"]');
+    out.slotCount = row.querySelectorAll('[data-editor-art-slot]').length;
+    out.slotPositions = Array.from(row.querySelectorAll('[data-editor-art-slot]'))
+      .map(node => node.getAttribute('data-editor-art-slot')).join(',');
+    out.slotHasIcons = !!slotSel('left') && slotSel('left').options.length > 30;
+
+    slotSel('left').value = 'leaf';
+    slotSel('left').dispatchEvent(new Event('change'));
+    await sleep(250);
+    let withSub = null;
+    try { withSub = JSON.parse(bpInput().value || 'null'); } catch (error) {}
+    out.slotLeftWritten = !!withSub && Array.isArray(withSub.subIcons) && withSub.subIcons.length === 1 &&
+      withSub.subIcons[0].icon === 'leaf' && withSub.subIcons[0].position === 'left';
+    out.slotLeftKept = !!slotSel('left') && slotSel('left').value === 'leaf';
+    out.slotLeftInPreview = !!row.querySelector('[data-editor-art-thumb] [data-scene-position="left"]');
+
+    slotSel('top-left').value = 'lightbulb';
+    slotSel('top-left').dispatchEvent(new Event('change'));
+    await sleep(250);
+    let withTwo = null;
+    try { withTwo = JSON.parse(bpInput().value || 'null'); } catch (error) {}
+    out.slotTwoWritten = !!withTwo && (withTwo.subIcons || []).length === 2 &&
+      withTwo.subIcons.some(sub => sub.icon === 'lightbulb' && sub.position === 'top-left');
+    out.slotTopLeftInPreview = !!row.querySelector('[data-editor-art-thumb] [data-scene-position="top-left"]');
+    out.slotSavedSubIcons = (withTwo && withTwo.subIcons || []).length;
+
+    slotSel('left').value = '';
+    slotSel('left').dispatchEvent(new Event('change'));
+    await sleep(250);
+    let withOne = null;
+    try { withOne = JSON.parse(bpInput().value || 'null'); } catch (error) {}
+    out.slotEmptyDrops = !!withOne && (withOne.subIcons || []).length === 1 && withOne.subIcons[0].icon === 'lightbulb';
+    out.slotMainIconKept = !!withOne && withOne.mainIcon === 'paw-print';
+
     document.getElementById('saveGameBtn')?.click();
     await sleep(900);
     const lib3 = await desktop.call('getLibrary');
@@ -184,6 +223,8 @@ const { PROJECTOR_SIZES, measureAt, setViewport, setViewportAndWait } = require(
     out.blueprintSurvivedSave = !!bq?.sceneBlueprint && bq.sceneBlueprint.mainIcon === 'paw-print' &&
       bq.sceneBlueprint.backdrop === 'forest' && bq.sceneBlueprint.paletteKey === 'animals';
     out.blueprintDidNotAddPick = !bq || bq.illustrationAssetId === undefined;
+    out.slotSurvivedSave = !!bq?.sceneBlueprint && (bq.sceneBlueprint.subIcons || []).length === 1 &&
+      bq.sceneBlueprint.subIcons[0].icon === 'lightbulb' && bq.sceneBlueprint.subIcons[0].position === 'top-left';
 
     document.getElementById('modalRoot').innerHTML = '';
     return out;
@@ -249,6 +290,19 @@ const { PROJECTOR_SIZES, measureAt, setViewport, setViewportAndWait } = require(
   check('"Bỏ ảnh" wins over the blueprint', out.removeWinsOverBlueprint === true);
   check('the blueprint survives a real editor save', out.blueprintSurvivedSave === true, JSON.stringify(out.blueprintAfterSave));
   check('a blueprint-only item stores no illustrationAssetId', out.blueprintDidNotAddPick === true);
+
+  // #257: four corner pickers, and a choice that really reaches the scene.
+  check('the scene editor offers four corner pickers', out.slotCount === 4, String(out.slotCount));
+  check('the corners are the ones the renderer knows', out.slotPositions === 'left,right,top-left,top-right', out.slotPositions);
+  check('each corner lists the drawable icons', out.slotHasIcons === true);
+  check('picking an icon writes {icon, position} into the blueprint', out.slotLeftWritten === true, JSON.stringify(out.slotLeftWritten));
+  check('the picker keeps the chosen icon after the redraw', out.slotLeftKept === true);
+  check('the chosen corner appears in the editor preview', out.slotLeftInPreview === true);
+  check('a second corner keeps the first one', out.slotTwoWritten === true);
+  check('the upper corner is drawn in the preview too', out.slotTopLeftInPreview === true);
+  check('clearing a corner drops that icon only', out.slotEmptyDrops === true);
+  check('clearing a corner keeps the subject icon', out.slotMainIconKept === true);
+  check('a corner choice survives a real editor save', out.slotSurvivedSave === true, JSON.stringify(out.blueprintAfterSave));
 
   // ---- Phase B (docs/UI-PLAN-V2.md): the editor is where a teacher spends the
   // longest single stretch, so it is measured at both real resolutions too.

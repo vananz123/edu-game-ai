@@ -58,6 +58,15 @@
 .editor-art-buttons{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .editor-art-buttons select{font-size:13px;padding:6px;border:1px solid var(--line);border-radius:7px;background:#fff;color:#3f4859;max-width:220px}
 .editor-art-hint{font-size:12px;color:#5f6a7d;line-height:1.5}
+/* #257: the four corner pickers. Two columns so they read as "trên / dưới" and
+   stay one glance; the whole block is hidden unless a scene blueprint exists. */
+.editor-art-slots{display:grid;grid-template-columns:repeat(2,minmax(140px,1fr));gap:6px 10px;padding:8px;border:1px solid var(--line);border-radius:8px;background:#fafbfe}
+.editor-art-slots-label{grid-column:1/-1;font-size:11px;font-weight:800;color:#3f4859;letter-spacing:.2px}
+.editor-art-slot{display:flex;align-items:center;gap:6px;font-size:11px;color:#5f6a7d;min-width:0}
+.editor-art-slot span{flex:0 0 52px}
+.editor-art-slot select{flex:1;min-width:0;font-size:12px;padding:4px 6px;border:1px solid var(--line);border-radius:6px;background:#fff;color:#3f4859}
+.editor-art-slots-hint{grid-column:1/-1;font-size:11px;color:#7b8698}
+@media (max-width:640px){.editor-art-slots{grid-template-columns:1fr}}
 @media (max-width:640px){
   .editor-item-art{flex-direction:column}
   .editor-art-thumb{width:100%;flex-basis:auto}

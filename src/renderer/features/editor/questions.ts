@@ -72,6 +72,30 @@ const EDITOR_CONTENT_CATEGORY_IDS = ['general','animals','plants','space','human
    hidden rather than rendered as a broken glyph. */
 const EDITOR_ICON_NAMES = new Set(['paw-print','leaf','rocket','heart-pulse','car','shield-check','recycle','landmark','map','briefcase','trophy','file-music','palette','calculator','languages','flask-conical','cpu','stethoscope','users','house','cloud-sun','apple','box','waves-horizontal','layout-grid','book-open','lightbulb','star','check','x','arrow-right','arrow-left','play','pause','rotate-ccw','skip-forward','volume-2','volume-x','maximize','minimize','search','settings','library','pencil','trash','plus','download','upload','clock','target','brain','zap','sparkles','gift','shield-alert','mountain','fish','bird','bug','utility-pole']);
 const EDITOR_CATEGORY_LABEL = {'general':"Tổng quát",'animals':"Động vật",'plants':"Thực vật",'space':"Vũ trụ",'human-body':"Cơ thể người",'transport':"Giao thông",'safety':"An toàn",'environment':"Môi trường",'history':"Lịch sử",'geography':"Địa lí",'jobs':"Nghề nghiệp",'sports':"Thể thao",'music':"Âm nhạc",'art':"Mỹ thuật",'math':"Toán",'language':"Tiếng Việt",'science':"Khoa học",'technology':"Công nghệ",'health':"Sức khỏe",'family':"Gia đình",'community':"Cộng đồng",'weather':"Thời tiết",'food':"Thực phẩm",'objects':"Đồ vật",'water-world':"Thế giới nước"};
+/* #257: the 38 icons a scene may draw, with a Vietnamese name. A teacher picking
+   "which object goes in this corner" cannot read `flask-conical`; the ids stay
+   the stored value, this map is only the label. The list is filtered against
+   `stageIsSceneIconId` at render time, so an id removed from the catalogue
+   disappears from the picker instead of producing an undrawable blueprint. */
+const EDITOR_SCENE_ICON_LABEL = {
+  'paw-print': 'Dấu chân', 'leaf': 'Lá cây', 'rocket': 'Tên lửa', 'heart-pulse': 'Nhịp tim',
+  'car': 'Ô tô', 'shield-check': 'Khiên an toàn', 'recycle': 'Tái chế', 'landmark': 'Công trình cổ',
+  'map': 'Bản đồ', 'briefcase': 'Cặp đi làm', 'trophy': 'Cúp', 'file-music': 'Bản nhạc',
+  'palette': 'Bảng màu', 'calculator': 'Máy tính', 'languages': 'Ngôn ngữ', 'flask-conical': 'Bình thí nghiệm',
+  'cpu': 'Vi mạch', 'stethoscope': 'Ống nghe', 'users': 'Nhóm người', 'house': 'Ngôi nhà',
+  'cloud-sun': 'Nắng có mây', 'apple': 'Quả táo', 'box': 'Cái hộp', 'waves-horizontal': 'Sóng nước',
+  'book-open': 'Quyển sách', 'lightbulb': 'Bóng đèn', 'star': 'Ngôi sao', 'clock': 'Đồng hồ',
+  'target': 'Bia ngắm', 'brain': 'Bộ não', 'zap': 'Tia sét', 'sparkles': 'Lấp lánh',
+  'gift': 'Món quà', 'pencil': 'Bút chì', 'mountain': 'Ngọn núi', 'fish': 'Cá',
+  'bird': 'Chim', 'bug': 'Con bọ'
+};
+/** The four corners in the order the editor shows them: bottom row, then top. */
+const EDITOR_SCENE_SLOTS = [
+  { position: 'left', label: 'Trái dưới' },
+  { position: 'right', label: 'Phải dưới' },
+  { position: 'top-left', label: 'Trái trên' },
+  { position: 'top-right', label: 'Phải trên' }
+];
 /* #252: a blueprint is stored as compact JSON. The editor keeps it in a hidden
    input like the other asset fields; this turns either a stored object or the
    raw string back into a string safe for an attribute. */
@@ -129,6 +153,32 @@ function editorItemArtHtml(item) {
     ? assetId
     : '';
   const blueprint = editorBlueprintJson(source.sceneBlueprint);
+  // #257: the blueprint's sub icons, read through the same total normaliser the
+  // game uses, so the picker shows exactly what will be drawn (and an old
+  // string-form blueprint shows up in its upgraded corner form).
+  const normalized = blueprint && typeof stageNormalizeBlueprint === 'function'
+    ? stageNormalizeBlueprint(blueprint)
+    : null;
+  const placedSubs = normalized && Array.isArray(normalized.subIcons) ? normalized.subIcons : [];
+  const slotsHtml = normalized
+    ? `<div class="editor-art-slots" data-editor-art-slots>
+        <span class="editor-art-slots-label">Vật thể phụ ở 4 góc</span>
+        ${EDITOR_SCENE_SLOTS.map(slot => {
+          const current = placedSubs.filter(sub => sub.position === slot.position)[0];
+          const iconOptions = Object.keys(EDITOR_SCENE_ICON_LABEL)
+            .filter(id => typeof stageIsSceneIconId !== 'function' || stageIsSceneIconId(id))
+            .map(id => `<option value="${escapeHtml(id)}"${current && current.icon === id ? ' selected' : ''}>${escapeHtml(EDITOR_SCENE_ICON_LABEL[id])}</option>`)
+            .join('');
+          return `<label class="editor-art-slot" title="Chọn vật thể cho góc ${escapeHtml(slot.label.toLowerCase())} của cảnh">
+            <span>${escapeHtml(slot.label)}</span>
+            <select data-editor-art-slot="${escapeHtml(slot.position)}">
+              <option value="">— trống —</option>${iconOptions}
+            </select>
+          </label>`;
+        }).join('')}
+        <span class="editor-art-slots-hint">Chọn tối đa 4 vật thể để cảnh kể đúng câu chuyện. Không bao giờ đè lên hình chính.</span>
+      </div>`
+    : '';
   const badge = isNone
     ? 'Không dùng ảnh'
     : isCustom
@@ -162,6 +212,7 @@ function editorItemArtHtml(item) {
         <button type="button" class="btn btn-secondary btn-small" data-editor-art-remove title="Bỏ hẳn ảnh minh hoạ của riêng câu hỏi này"${isNone ? ' disabled' : ''}>${uiIcon('ban', '', 13)} Bỏ ảnh</button>
       </div>
       <div class="editor-art-hint">Minh hoạ đi kèm câu hỏi này. Ảnh tải lên được lưu trên máy và chơi được khi không có mạng. “Cảnh thử” dựng một cảnh từ chủ đề (chưa dùng AI); “Bỏ ảnh” tắt hình riêng câu hỏi này; “Tự động” trả lại hình theo chủ đề.</div>
+      ${slotsHtml}
     </div>
   </div>`;
 }
@@ -234,6 +285,41 @@ function redrawEditorArtRow(row) {
 }
 
 /**
+ * #257: writes the four corner choices into the blueprint, then redraws.
+ *
+ * The blueprint is rebuilt from the normalised copy, so unknown ids and a
+ * duplicate of the main icon are dropped here exactly as they would be on load.
+ * An emptied choice keeps `mainIcon`; only `subIcons` disappears.
+ */
+function applyEditorSceneSlots(row) {
+  if (!row) return;
+  const live = row.closest('[data-editor-art]') || row;
+  const scope = live.parentElement;
+  const field = scope ? scope.querySelector('[data-field="sceneBlueprint"]') : null;
+  if (!field || typeof stageNormalizeBlueprint !== 'function') return;
+  const current = stageNormalizeBlueprint(field.value);
+  if (!current) return;
+  const picks = [];
+  EDITOR_SCENE_SLOTS.forEach(slot => {
+    const select = live.querySelector('[data-editor-art-slot="' + slot.position + '"]');
+    const icon = select && select.value ? select.value.trim() : '';
+    if (icon) picks.push({ icon: icon, position: slot.position });
+  });
+  const next = Object.assign({}, current);
+  delete next.subIcons;
+  if (picks.length) next.subIcons = picks;
+  const normalized = stageNormalizeBlueprint(next);
+  if (!normalized) return;
+  field.value = JSON.stringify(normalized);
+  // A topic picture would win over the blueprint on the play surface, so editing
+  // the scene clears it — the two are already mutually exclusive (#252). An
+  // explicit "no picture" sentinel is left alone: that is the teacher's choice.
+  const artField = scope.querySelector('[data-field="illustrationAssetId"]');
+  if (artField && artField.value && artField.value !== 'none') artField.value = '';
+  redrawEditorArtRow(live);
+}
+
+/**
  * Binds one control.
  *
  * The change is a custom `art-change` event dispatched by the control itself: the
@@ -261,6 +347,15 @@ function wireEditorItemArtRow(row) {
   if (blueprintButton) blueprintButton.addEventListener('click', () => {
     const live = blueprintButton.closest('[data-editor-art]');
     applyEditorBlueprint(live);
+  });
+  // #257: one listener per corner. A redraw replaces these selects, so the
+  // handler re-resolves the live row from the changed node instead of closing
+  // over the old one (the "second click does nothing" bug of #128).
+  row.querySelectorAll('[data-editor-art-slot]').forEach(select => {
+    select.addEventListener('change', () => {
+      const live = select.isConnected ? select.closest('[data-editor-art]') : null;
+      if (live) applyEditorSceneSlots(live);
+    });
   });
   // #153: "Bỏ ảnh" writes the opt-out sentinel, not '' — '' would let `auto` draw the
   // topic picture again, which is the opposite of what the teacher asked for.

@@ -3697,5 +3697,23 @@ Ba ràng buộc không đổi: (1) game đã lưu phải chơi được **offlin
 
 **Việc kế tiếp.** P-B2 `props[]` (vật thể phụ ở mặt đất, có primitive riêng) hoặc P1 `compare` (hai chủ thể + dấu so sánh). UI chọn góc là việc riêng, có thể làm trước nếu ưu tiên giáo viên tự đặt cảnh.
 
+---
+
+## #257 — Giáo viên tự đặt 4 góc bằng dropdown, không phải sửa JSON
+
+**Bối cảnh.** #256 mở 4 góc ở tầng dữ liệu, nhưng chỉ JSON hoặc AI viết được — giáo viên không chạm tới, nên khả năng mới **không đem lại giá trị nào** cho đúng người dùng của sản phẩm. Bước này là điều kiện để #256 có nghĩa.
+
+**Quyết định.** (a) Khối “Vật thể phụ ở 4 góc” chỉ hiện **khi đã có blueprint**, vì không có cảnh thì không có chỗ để đặt. (b) Mỗi góc là một `<select>` gồm **38 icon vẽ được**, nhãn **tiếng Việt** (`flask-conical` → “Bình thí nghiệm”): giáo viên không đọc được id tiếng Anh, mà nhãn sai còn tệ hơn không có nhãn. (c) Danh sách lọc qua `stageIsSceneIconId` lúc render, nên icon bị bỏ khỏi catalogue sẽ **tự biến mất** khỏi picker thay vì tạo blueprint không vẽ được. (d) Mọi thay đổi đi qua `stageNormalizeBlueprint` — cùng cổng với lúc tải game — nên UI không thể tạo ra trạng thái mà lúc chơi sẽ bị từ chối.
+
+**Vì sao dropdown chứ không kéo-thả.** Kéo-thả cần toạ độ tự do, mà engine chỉ có **4 vị trí cố định** đã đo là không đè chủ thể; cho kéo tự do sẽ tạo ra cảnh giáo viên thích nhưng engine không vẽ đúng, và mọi phép kiểm toạ độ của #256 mất hiệu lực. Dropdown nói đúng sự thật về những gì engine làm được.
+
+**Vì sao sửa cảnh thì xoá ảnh chủ đề.** Trên màn chơi, ảnh chủ đề thắng blueprint (#252); nếu không xoá, giáo viên chọn 4 góc rồi vẫn thấy ảnh cũ và tưởng nút không tác dụng. Dấu `none` (“Bỏ ảnh”) thì **giữ**, vì đó là ý muốn của giáo viên chứ không phải trạng thái kỹ thuật.
+
+**Kiểm chứng.** `npm run check` sạch · `node tests/run-unit.js` **98/98** · `check:renderer-globals` 1053 hàm/8385 call site, 0 undefined · build release thật (`cargo tauri build`, exit 0, installer 15,66 MiB, `devPath` khôi phục đúng SHA-256) · `ui-item-assets-editor-check` **54/54** trên binary đó, gồm 12 check mới và một check “góc sống sót qua lần lưu thật” · duyệt thị giác qua mô hình nhìn ảnh: khối 2×2, nhãn rõ, không cắt chữ.
+
+**Không chứng minh.** Chưa có ảnh chụp **có icon thực ở góc** được người duyệt bằng mắt (ảnh đã duyệt là trạng thái “tất cả trống”, đúng dữ liệu); chưa thử trên game cũ có blueprint dạng chuỗi trong app thật (unit test đã phủ); chưa chạy lại `ui-play-surface-check`.
+
+**Bài học lặp lại 3 lần.** Dấu **backtick trong chú thích** của `tests/ui/*.js` làm hỏng cả tệp vì nội dung được `toString()` vào template literal. Lần này nó lại xảy ra và bị phát hiện ngay bằng `SyntaxError` khi chạy. Đề xuất: một cổng nhỏ quét các dòng `//` nằm giữa `evaluate(`…`)()` và báo nếu có backtick.
+
 
 
