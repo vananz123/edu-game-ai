@@ -50,6 +50,7 @@ test('normalisation is idempotent', () => {
     VALID,
     { ...VALID, backdrop: 'castle', paletteKey: 'banana' },
     { ...VALID, subIcons: ['bird', 'bird', 'paw-print', 'leaf', 'fish', 'bug'] },
+    { ...VALID, props: ['apple', 'apple', 'paw-print', 'leaf', 'fish', 'bug', 42] },
     JSON.stringify(VALID),
   ];
   for (const input of inputs) {
@@ -183,6 +184,19 @@ test('the blueprint outranks the category default but not a teacher choice', () 
   assert.equal(broken!.blueprint, undefined);
 });
 
+test('ground props are cleaned, capped at two, and never repeat the subject or a sub icon', () => {
+  const result = normalizeSceneBlueprint({
+    ...VALID,
+    props: ['apple', 'apple', 'paw-print', 'leaf', 'fish', 'bug', 'nope', 7],
+  })!;
+  // `paw-print` is the subject and `leaf` is a sub icon, so neither may come back.
+  assert.deepEqual(result.props, ['apple', 'fish']);
+  assert.equal(normalizeSceneBlueprint({ ...VALID, props: 'apple' })!.props, undefined);
+  assert.equal(normalizeSceneBlueprint({ ...VALID, props: [] })!.props, undefined);
+  // Idempotent: feeding the output back keeps exactly one copy of each.
+  assert.deepEqual(normalizeSceneBlueprint(result)!.props, ['apple', 'fish']);
+});
+
 test('the shared renderer draws a blueprint with its own layers and sub icons', () => {
   const palette = getIllustrationPalette(VALID.paletteKey);
   const svg = renderBlueprintSvg(VALID, palette, { assetId: 'animals-scene', label: 'Động vật' });
@@ -227,6 +241,29 @@ test('four corner sub icons stay off the subject box, measured in the SVG itself
     assert.ok(entry.x >= 0 && entry.x + size <= 320, `${entry.position} is clipped horizontally`);
     assert.ok(entry.y >= 0 && entry.y + size <= 200, `${entry.position} is clipped vertically`);
   }
+});
+
+test('ground props are drawn beside the subject, never over it, and inside the frame', () => {
+  const scene = normalizeSceneBlueprint({ ...VALID, subIcons: [], props: ['apple', 'fish'] })!;
+  const svg = renderBlueprintSvg(scene, getIllustrationPalette(scene.paletteKey));
+  assert.match(svg, /data-scene-primitive="ground-props"/);
+
+  const placed = [...svg.matchAll(/data-scene-position="ground-(left|right)" transform="translate\((\d+) (\d+)\)/g)].map(
+    (match) => ({ side: match[1], x: Number(match[2]), y: Number(match[3]) })
+  );
+  assert.deepEqual(placed.map((entry) => entry.side), ['left', 'right']);
+  const size = 40;
+  const subject = { x0: 100, x1: 220, y0: 50, y1: 170 };
+  for (const entry of placed) {
+    const overlapsX = entry.x < subject.x1 && entry.x + size > subject.x0;
+    const overlapsY = entry.y < subject.y1 && entry.y + size > subject.y0;
+    assert.ok(!(overlapsX && overlapsY), `ground-${entry.side} covers the subject at (${entry.x},${entry.y})`);
+    assert.ok(entry.x >= 0 && entry.x + size <= 320, `ground-${entry.side} is clipped horizontally`);
+    assert.ok(entry.y >= 0 && entry.y + size <= 200, `ground-${entry.side} is clipped vertically`);
+  }
+  // A blueprint without props must not grow a ground-props group.
+  const plain = normalizeSceneBlueprint(VALID)!;
+  assert.ok(!renderBlueprintSvg(plain, getIllustrationPalette(plain.paletteKey)).includes('ground-props'));
 });
 
 test('a resolved blueprint renders through the shared registry', () => {

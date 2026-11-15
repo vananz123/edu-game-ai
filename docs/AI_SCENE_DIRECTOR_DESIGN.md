@@ -197,6 +197,7 @@ QUY TẮC BẮT BUỘC
 4. Bắt buộc có "v": 1 và "layout": "single".
 5. Không tham chiếu tài nguyên ngoài: không URL, không ảnh, không font, không script.
 6. Tối đa 4 subIcons; chúng phải KHÁC mainIcon và không trùng nhau.
+7. Tối đa 2 props, KHÁC mainIcon và KHÁC mọi subIcons.
 7. Toàn bộ JSON dưới 600 byte.
 
 QUY TRÌNH SUY NGHĨ (làm trong đầu, KHÔNG viết ra)
@@ -226,11 +227,13 @@ subIcons (0-4, tuỳ chọn): cùng danh sách trên, khác mainIcon, không l�
    Mỗi mục là {"icon": "<tên>", "position": "left|right|top-left|top-right"}.
    Bốn góc là chỗ duy nhất được đặt: left/right ngang tầm chân chủ thể,
    top-left/top-right phía trên, không bao giờ đè chủ thể.
+props (0-2, tuỳ chọn): cùng danh sách trên, là vật thể ĐỨNG Ở MẶT ĐẤT hai bên;
+   khác mainIcon, khác mọi subIcons.
 SCENE-PROMPT-VOCAB:END
 
 ĐỊNH DẠNG ĐẦU RA
 {"v":1,"layout":"single","backdrop":"...","paletteKey":"...","mainIcon":"...",
- "subIcons":[{"icon":"...","position":"left"}]}
+ "subIcons":[{"icon":"...","position":"left"}],"props":["..."]}
 ```
 
 ### 5.3 Cảnh được vẽ thế nào từ JSON đó
@@ -245,7 +248,7 @@ cố định, đúng thứ tự chồng (mỗi lớp nhận **một hoặc nhi�
 | `mid` | cây, bụi, toà nhà, sách, dụng cụ | `backdrop` |
 | `halo` | quầng sáng sau chủ thể | `paletteKey` |
 | `subject` | **mainIcon**, 120px, đúng giữa khung | `mainIcon` |
-| `props` | tới 4 subIcons 52px: `left`/`right` ngang tầm chân, `top-left`/`top-right` phía trên; không đè chủ thể | `subIcons[].position` |
+| `props` | tới 4 subIcons 52px + tới 2 props 40px ở mặt đất hai bên; `left`/`right` ngang tầm chân, `top-left`/`top-right` phía trên; không đè chủ thể | `subIcons[].position`, `props[]` |
 | `fg` | cỏ, rễ, đá, sóng, bảng | `backdrop` |
 
 Khung vẽ là `viewBox="0 0 320 200"` do engine đặt, **không** do model đặt — nên

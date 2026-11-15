@@ -26,6 +26,9 @@ export const SCENE_BLUEPRINT_VERSION = 1;
 /** A blueprint carries at most two supporting icons. */
 export const SCENE_MAX_SUB_ICONS = 4;
 
+/** Ground props beside the subject (#259): two at most, one per side. */
+export const SCENE_MAX_PROPS = 2;
+
 /**
  * The four corners a supporting icon may sit in (#256). Named instead of
  * numeric so a blueprint stays readable in SQLite and in the AI prompt, and so

@@ -42,7 +42,7 @@ function idsFor(key: string): string[] {
   const start = block.search(new RegExp('\\b' + key + '\\b[^:]*:'));
   if (start === -1) return [];
   const tail = block.slice(start);
-  const next = tail.slice(1).search(/\n(?:backdrop|paletteKey|mainIcon|subIcons)\b/);
+  const next = tail.slice(1).search(/\n(?:backdrop|paletteKey|mainIcon|subIcons|props)\b/);
   const section = next === -1 ? tail : tail.slice(0, next + 1);
   const body = section.slice(section.indexOf(':') + 1);
   return body
@@ -79,6 +79,14 @@ test('the prompt lists every allowed icon, and nothing else', () => {
 
 test('sub-icons point at the same list instead of a second one that can drift', () => {
   assert.match(vocabBlock(), /subIcons[^:]*:\s*cùng danh sách trên/);
+});
+
+test('ground props are offered from the same list and capped at two', () => {
+  assert.match(vocabBlock(), /props[^:]*:\s*cùng danh sách trên/);
+  assert.match(promptBlock(), /Tối đa 2 props/);
+  // A prop that repeats the subject or a sub icon would be dropped by the
+  // normaliser, so a model that does it loses an object silently.
+  assert.match(promptBlock(), /KHÁC mọi subIcons/);
 });
 
 test('the prompt never asks a model for markup, a URL or a fixed canvas', () => {

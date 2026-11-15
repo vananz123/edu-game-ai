@@ -17,6 +17,7 @@ import {
   DEFAULT_SCENE_PALETTE_KEY,
   SCENE_BLUEPRINT_MAX_BYTES,
   SCENE_BLUEPRINT_VERSION,
+  SCENE_MAX_PROPS,
   SCENE_MAX_SUB_ICONS,
   SCENE_SUB_ICON_POSITIONS,
   getBackdropSpec,
@@ -51,6 +52,8 @@ export interface SceneBlueprint {
   mainIcon: string;
   /** Up to four keys of `SCENE_ICON_IDS`, each in its own corner. */
   subIcons?: SceneSubIcon[];
+  /** Up to two keys of `SCENE_ICON_IDS` standing on the ground (#259). */
+  props?: string[];
 }
 
 /** `book-open` is the default subject (same icon as #89's fallback scene). */
@@ -81,6 +84,8 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  *     (`{icon, position}`); invalid, duplicate and the main icon are dropped, a
  *     taken/unknown position falls back to the first free corner, then the list
  *     is capped at `SCENE_MAX_SUB_ICONS` (4);
+ *   - `props` (#259): ground objects, same cleaning rules, capped at
+ *     `SCENE_MAX_PROPS` (2) and never a duplicate of the subject or a sub icon;
  *   - > `SCENE_BLUEPRINT_MAX_BYTES` -> `null` (a compact blueprint is the point).
  */
 export function normalizeSceneBlueprint(
@@ -188,6 +193,31 @@ export function normalizeSceneBlueprint(
     }
   }
 
+  const props: string[] = [];
+  if (raw.props !== undefined) {
+    if (!Array.isArray(raw.props)) {
+      issues.push('props');
+    } else {
+      for (const entry of raw.props as unknown[]) {
+        const icon = typeof entry === 'string' ? entry.trim() : '';
+        if (
+          !isSceneIconId(icon) ||
+          icon === mainIcon ||
+          props.includes(icon) ||
+          subIcons.some((sub) => sub.icon === icon)
+        ) {
+          issues.push('props');
+          continue;
+        }
+        if (props.length >= SCENE_MAX_PROPS) {
+          issues.push('props');
+          continue;
+        }
+        props.push(icon);
+      }
+    }
+  }
+
   return {
     v: SCENE_BLUEPRINT_VERSION,
     layout: 'single',
@@ -195,6 +225,7 @@ export function normalizeSceneBlueprint(
     paletteKey,
     mainIcon,
     ...(subIcons.length ? { subIcons } : {}),
+    ...(props.length ? { props } : {}),
   };
 }
 

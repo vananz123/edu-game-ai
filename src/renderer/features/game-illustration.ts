@@ -160,6 +160,8 @@ const STAGE_SCENE_CATEGORY_BACKDROPS = {
    SCENE_BLUEPRINT_MAX_BYTES in the shared catalog. */
 const STAGE_SCENE_BLUEPRINT_VERSION = 1;
 const STAGE_SCENE_MAX_SUB_ICONS = 4;
+const STAGE_SCENE_MAX_PROPS = 2;
+const STAGE_SCENE_GROUND_PROP_SIZE = 40;
 /** Same four corners as SCENE_SUB_ICON_POSITIONS in the shared catalogue (#256). */
 const STAGE_SUB_ICON_POSITIONS = ['left', 'right', 'top-left', 'top-right'];
 const STAGE_SCENE_BLUEPRINT_MAX_BYTES = 600;
@@ -218,6 +220,7 @@ function stageNormalizeBlueprint(value) {
   const backdrop = stageIsSceneBackdropId(raw.backdrop) ? raw.backdrop : STAGE_SCENE_BACKDROP_DEFAULT;
   const paletteKey = stageIsScenePaletteKey(raw.paletteKey) ? raw.paletteKey : 'language';
   const subIcons = [];
+  const props = [];
   if (Array.isArray(raw.subIcons)) {
     for (const entry of raw.subIcons) {
       const isObject = entry && typeof entry === 'object' && !Array.isArray(entry);
@@ -237,6 +240,16 @@ function stageNormalizeBlueprint(value) {
   }
   const blueprint: any = { v: 1, layout: 'single', backdrop: backdrop, paletteKey: paletteKey, mainIcon: mainIcon };
   if (subIcons.length) blueprint.subIcons = subIcons;
+  if (Array.isArray(raw.props)) {
+    for (const entry of raw.props) {
+      const icon = typeof entry === 'string' ? entry.trim() : '';
+      if (!stageIsSceneIconId(icon) || icon === mainIcon || props.indexOf(icon) >= 0) continue;
+      if (subIcons.some(function (sub) { return sub.icon === icon; })) continue;
+      if (props.length >= STAGE_SCENE_MAX_PROPS) continue;
+      props.push(icon);
+    }
+  }
+  if (props.length) blueprint.props = props;
   return blueprint;
 }
 
@@ -459,6 +472,23 @@ function stageSubIconsSvg(list, palette) {
   return icons ? '<g data-scene-primitive="sub-icons">' + icons + '</g>' : '';
 }
 
+/** Ground props, mirroring renderGroundProps in the shared composer (#259). */
+function stageGroundPropsSvg(names, palette) {
+  const list = Array.isArray(names) ? names.slice(0, STAGE_SCENE_MAX_PROPS) : [];
+  const slots = [
+    { x: 12, y: 200 - 14 - STAGE_SCENE_GROUND_PROP_SIZE },
+    { x: 320 - 12 - STAGE_SCENE_GROUND_PROP_SIZE, y: 200 - 14 - STAGE_SCENE_GROUND_PROP_SIZE }
+  ];
+  const icons = list.map(function (name, index) {
+    const svg = stageIconSvg(name, STAGE_SCENE_GROUND_PROP_SIZE, 'stage-illustration-prop');
+    if (!svg) return '';
+    return '<g data-scene-prop="' + escapeHtml(name) + '" data-scene-position="ground-' + (index === 0 ? 'left' : 'right') + '" ' +
+      'transform="translate(' + slots[index].x + ' ' + slots[index].y + ')" ' +
+      'color="' + escapeHtml(palette.ink) + '" opacity="0.55">' + svg + '</g>';
+  }).join('');
+  return icons ? '<g data-scene-primitive="ground-props">' + icons + '</g>' : '';
+}
+
 /** The four corners, mirroring SCENE_SUB_ICON_SLOTS in the shared composer. */
 const STAGE_SUB_ICON_SLOTS = {
   left: { x: 28, y: STAGE_ILLUSTRATION_HORIZON - STAGE_SCENE_SUB_ICON_SIZE - 4 },
@@ -610,6 +640,7 @@ function stageIllustrationHtml(item, game, extraClass) {
   const palette = STAGE_ILLUSTRATION_PALETTES[resolved.category] || STAGE_ILLUSTRATION_DEFAULT_PALETTE;
   const spec = blueprint ? stageBackdropSpec(blueprint.backdrop) : stageSceneSpec(resolved.category);
   const subIcons = blueprint && Array.isArray(blueprint.subIcons) ? blueprint.subIcons : [];
+  const groundProps = blueprint && Array.isArray(blueprint.props) ? blueprint.props : [];
   const sky = palette.sky || palette.fill;
   const ground = palette.ground || palette.fill;
   const x = Math.round((320 - STAGE_ILLUSTRATION_SUBJECT_SIZE) / 2);
@@ -625,7 +656,7 @@ function stageIllustrationHtml(item, game, extraClass) {
     stageLayer('mid', stagePrimitivesOf(spec.standing).map(function (p) { return stageMidSvg(p, palette); }).join('')) +
     stageLayer('halo', `<circle cx="160" cy="${spec.subjectY}" r="72" fill="${escapeHtml(palette.glow)}" opacity="0.15"/>`) +
     stageLayer('subject', `<g transform="translate(${x} ${y})" color="${escapeHtml(palette.ink)}">${subjectIcon}</g>`) +
-    stageLayer('props', stagePrimitivesOf(spec.standing).map(function (p) { return stagePropsSvg(p, palette); }).join('') + stageSubIconsSvg(subIcons, palette)) +
+    stageLayer('props', stagePrimitivesOf(spec.standing).map(function (p) { return stagePropsSvg(p, palette); }).join('') + stageGroundPropsSvg(groundProps, palette) + stageSubIconsSvg(subIcons, palette)) +
     stageLayer('fg', stagePrimitivesOf(spec.fg).map(function (p) { return stageFgSvg(p, palette); }).join('')) +
     `</svg></div>`;
 }

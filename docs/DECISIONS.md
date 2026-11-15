@@ -3715,5 +3715,37 @@ Ba ràng buộc không đổi: (1) game đã lưu phải chơi được **offlin
 
 **Bài học lặp lại 3 lần.** Dấu **backtick trong chú thích** của `tests/ui/*.js` làm hỏng cả tệp vì nội dung được `toString()` vào template literal. Lần này nó lại xảy ra và bị phát hiện ngay bằng `SyntaxError` khi chạy. Đề xuất: một cổng nhỏ quét các dòng `//` nằm giữa `evaluate(`…`)()` và báo nếu có backtick.
 
+---
+
+## #258 — Cổng `check:ui-tests`: biên dịch `tests/ui/*.js`, không dò chuỗi
+
+**Bối cảnh.** Đề xuất ghi ở #257 vừa được làm ngay. Backtick trong chú thích của `tests/ui/*.js` đã làm hỏng cổng UI **3 lần** (#254, #256, #257), mỗi lần phát hiện chỉ sau khi mở app thật — tức là trả giá bằng cả một lần launch (hoặc một lần build) để biết mình gõ sai một ký tự.
+
+**Quyết định.** `scripts/check-ui-test-syntax.js` **biên dịch** từng tệp bằng `vm.Script` (không chạy), nối vào `npm run check`. Khi lỗi, nó in thêm các dòng `//` có backtick để chỉ thẳng thủ phạm.
+
+**Vì sao biên dịch chứ không regex.** Regex phải đoán chỗ nào là template literal, chỗ nào là mã thật — và chính việc đoán đó sai khi literal đã bị đóng sớm. Trình biên dịch là nguồn sự thật: nếu nó parse được thì cổng UI sẽ nạp được. Chi phí: 52 tệp trong ~0,2 giây.
+
+**Đã chứng minh cổng không rỗng.** Tạo `tests/ui/.tmp-bad-syntax.js` có backtick trong chú thích → `FAIL …: missing ) after argument list` + `dong 5 co dau backtick trong chu thich -> template literal cua evaluate() bi dong som`, `exit=1`; xoá tệp → 52 tệp sạch, `exit=0`.
+
+**Không chứng minh.** Cổng chỉ bắt **cú pháp**, không bắt lỗi logic trong trang (ví dụ chọn sai selector). Nó cũng không thay `ui-*-check` chạy trên app thật.
+
+---
+
+## #259 — `props[]`: vật thể đứng ở mặt đất (2 chỗ, 40px)
+
+**Bối cảnh.** Sau #256/#257 cảnh có 4 góc nhưng tất cả vật thể đều **lơ lửng quanh chủ thể**; không có gì đứng trên mặt đất, nên cảnh vẫn giống “một biểu tượng với các nhãn” hơn là một khung cảnh có tiền cảnh.
+
+**Quyết định.** Thêm `props?: string[]` (tối đa **2**), vẽ ở hai đầu dải đất, kích thước **40px** và `opacity 0.55`, **nằm trong lớp `props`** (trước `fg`) để cỏ/đá của nền có thể phủ lên — đó là thứ làm chúng thuộc về cảnh thay vì dán lên trên.
+
+**Vì sao nhỏ hơn và mờ hơn sub icon.** Một prop là **đạo cụ giải thích bối cảnh**, không phải vật thứ hai để nhận ra. Nếu nó cùng cỡ và cùng độ đậm với sub icon thì mắt trẻ em có 6 thứ ngang hàng và không còn chủ thể.
+
+**Vì sao vẫn `v: 1` và vẫn tương thích ngược.** `props` là khoá tuỳ chọn; blueprint cũ không có nó vẫn hợp lệ, và blueprint không props **không** sinh nhóm `ground-props` (có test). Cùng lý do đã ghi ở #256: bump version chỉ tạo việc chuyển đổi mà không thêm khả năng.
+
+**Đo, không đoán.** Props ở `(12,146)` và `(268,146)`, hộp 40px trong khung 320×200: test đọc `transform="translate(x y)"` trong SVG và khẳng định **không giao** hộp chủ thể (x 100–220, y 50–170), không tràn khung, và thứ tự trái/phải đúng.
+
+**Kiểm chứng.** `npm run check` sạch · `node tests/run-unit.js` **98/98** · parity renderer/shared vẫn xanh (có thêm ca `props` trong danh sách so sánh) · `check:embedded` khớp **6162,6 KiB** · 24 hash vàng không đổi.
+
+**Không chứng minh.** **Chưa có UI** cho props (đúng như #256 trước khi có #257), chưa build lại binary sau thay đổi này, nên **chưa có bằng chứng thị giác** nào cho hai vật thể mặt đất. Đây là việc kế tiếp, không phải việc đã xong.
+
 
 

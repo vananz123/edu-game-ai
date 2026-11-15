@@ -22,7 +22,7 @@
 import { renderIconSvg } from './icon-registry';
 import type { IllustrationPalette } from './illustration-registry';
 import type { SceneBlueprint, SceneSubIcon } from './scene-blueprint';
-import { SCENE_MAX_SUB_ICONS, getBackdropSpec, type SceneSubIconPosition } from './scene-asset-catalog';
+import { SCENE_MAX_PROPS, SCENE_MAX_SUB_ICONS, getBackdropSpec, type SceneSubIconPosition } from './scene-asset-catalog';
 
 /** Canvas the scenes are authored in; matches `renderIllustrationSvg`. */
 export const SCENE_WIDTH = 320;
@@ -37,6 +37,8 @@ export const SCENE_HEIGHT = 200;
 export const SCENE_SUBJECT_SIZE = 120;
 /** Supporting icons beside the subject; outside its 120px box (x 100..220). */
 export const SCENE_SUB_ICON_SIZE = 52;
+/** Ground props are smaller: set dressing, not a second subject (#259). */
+export const SCENE_GROUND_PROP_SIZE = 40;
 /** Horizon: the far layer sits above this, the ground band fills below it. */
 export const SCENE_HORIZON = 150;
 
@@ -505,6 +507,29 @@ function renderSubIcons(subIcons: readonly SceneSubIcon[], palette: Illustration
 }
 
 /**
+ * Ground props (#259): up to two icons standing on the ground band beside the
+ * subject. Smaller and flatter than a sub icon on purpose — a prop is set
+ * dressing that explains the place, not a second thing to recognise — and it
+ * sits inside the props layer so the foreground can overlap it.
+ */
+function renderGroundProps(props: readonly string[], palette: IllustrationPalette): string {
+  const slots = [
+    { x: 12, y: SCENE_HEIGHT - 14 - SCENE_GROUND_PROP_SIZE },
+    { x: SCENE_WIDTH - 12 - SCENE_GROUND_PROP_SIZE, y: SCENE_HEIGHT - 14 - SCENE_GROUND_PROP_SIZE },
+  ];
+  const icons = props.slice(0, SCENE_MAX_PROPS).map((name, index) => {
+    const svg = renderIconSvg(name, { size: SCENE_GROUND_PROP_SIZE, className: 'stage-illustration-prop' });
+    if (!svg) return '';
+    return (
+      `<g data-scene-prop="${esc(name)}" data-scene-position="ground-${index === 0 ? 'left' : 'right'}" ` +
+      `transform="translate(${slots[index].x} ${slots[index].y})" ` +
+      `color="${esc(palette.ink)}" opacity="0.55">${svg}</g>`
+    );
+  }).join('');
+  return icons ? `<g data-scene-primitive="ground-props">${icons}</g>` : '';
+}
+
+/**
  * The one composer. `renderSceneSvg` passes an empty sub-icon list, so a game
  * saved before blueprints existed renders byte-identically (#70/#72 contract).
  */
@@ -513,6 +538,7 @@ function composeSceneSvg(
   palette: IllustrationPalette,
   subject: string,
   subIcons: readonly SceneSubIcon[],
+  groundProps: readonly string[],
   options: SceneSvgOptions = {}
 ): string {
   if (!subject) return '';
@@ -545,7 +571,7 @@ function composeSceneSvg(
     layer('mid', primitivesOf(spec.standing).map((p) => renderMid(p, palette)).join('')) +
     layer('halo', `<circle cx="${SCENE_WIDTH / 2}" cy="${spec.subjectY}" r="72" fill="${esc(palette.glow)}" opacity="0.15"/>`) +
     layer('subject', `<g transform="translate(${x} ${y})" color="${esc(palette.ink)}">${subject}</g>`) +
-    layer('props', primitivesOf(spec.standing).map((p) => renderProps(p, palette)).join('') + renderSubIcons(subIcons, palette)) +
+    layer('props', primitivesOf(spec.standing).map((p) => renderProps(p, palette)).join('') + renderGroundProps(groundProps, palette) + renderSubIcons(subIcons, palette)) +
     layer('fg', primitivesOf(spec.fg).map((p) => renderFg(p, palette)).join('')) +
     `</svg>`
   );
@@ -562,7 +588,7 @@ export function renderSceneSvg(
   options: SceneSvgOptions = {}
 ): string {
   const subject = renderIconSvg(iconName, { size: SCENE_SUBJECT_SIZE, className: 'stage-illustration-icon' });
-  return composeSceneSvg(getSceneSpec(category), palette, subject, [], options);
+  return composeSceneSvg(getSceneSpec(category), palette, subject, [], [], options);
 }
 
 /**
@@ -588,6 +614,7 @@ export function renderBlueprintSvg(
     palette,
     subject,
     Array.isArray(blueprint.subIcons) ? blueprint.subIcons : [],
+    Array.isArray(blueprint.props) ? blueprint.props : [],
     options
   );
 }
