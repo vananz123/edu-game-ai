@@ -3781,3 +3781,25 @@ Ba ràng buộc không đổi: (1) game đã lưu phải chơi được **offlin
 - **Kiểm chéo độc lập:** lấy **107 mẩu câu** (>55 ký tự) từ 42 block gốc trong bản sao lưu, đối chiếu với STATUS + 22 tệp lưu trữ ⇒ **0 mất**, 0 trùng. Không có ký tự hỏng nào.
 - **Lỗi đã mắc và sửa trong lượt:** (1) `dateOf` chỉ đọc tiêu đề nên 15 block không có ngày ở tiêu đề bị dồn vào `undated-070-079.md` — sửa thành đọc ngày trong thân block, chỉ block ghi rõ "Không ghi ngày" mới vào tệp undated. (2) script ghi tệp lưu trữ **trước** khi dựng lại STATUS nên khi crash giữa đường, lưu trữ đã đổi mà STATUS chưa — đã khôi phục nguyên thư mục từ bản sao rồi chạy lại. (3) phần "kiểm" đầu tiên báo 59 lỗi giả vì lấy mẫu là **dòng tiêu đề**, mà dòng trỏ cũng chứa tiêu đề ⇒ luôn "còn trong STATUS"; phải lấy mẫu từ **thân** block.
 - **Quy tắc rút ra:** script di chuyển tài liệu phải **ghi đích sau cùng** (hoặc chạy được lặp lại), và phép kiểm phải dùng mẩu câu **chỉ có trong thân bài** — không bao giờ là tiêu đề.
+
+---
+
+## #262 — P1 `compare`: bước 1 là DỮ LIỆU, chưa phải hình
+
+**Bối cảnh.** Lộ trình P1 là bố cục so sánh (hai chủ thể + dấu). Cám dỗ là làm một phát cả dữ liệu, hình, UI và prompt — nhưng mọi bước sau đều dựa vào hình dạng JSON, nên sai hình dạng thì sai cả bốn.
+
+**Quyết định (bước 1, đã xong).**
+- `SCENE_LAYOUT_IDS = ['single', 'compare']` + `isSceneLayoutId`; `SCENE_COMPARE_SIGNS = ['greater-than','less-than','equal']` + `isSceneCompareSign` (id **có tên**, không phải ký tự `>`, vì blueprint không bao giờ chở chữ/markup — engine tự quyết cách vẽ).
+- Blueprint thêm `compareIcon` (chủ thể **phải**) và `compareSign` (tuỳ chọn). `mainIcon` là chủ thể **trái**.
+- **`compare` thiếu/trùng chủ thể thứ hai → hạ xuống `single`**, không `null`: ảnh vẫn cho thấy đúng thứ câu hỏi nói tới; ảnh trống thì không cho thấy gì. Issue `compareIcon` để còn truy được.
+- **`compareSign` lạ → bỏ dấu, giữ `compare`**: hai chủ thể không dấu vẫn là ảnh hợp lệ.
+- **`single` mà mang `compareIcon`/`compareSign` → xoá hai trường** (issue `compare`), để hai lần lưu của cùng nội dung ra cùng chuỗi.
+- `subIcons`/`props` bị loại nếu trùng **một trong hai** chủ thể.
+- Bản sao renderer `stageNormalizeBlueprint` cập nhật y hệt — test parity hiện có so **từng input** giữa hai bản, nên lệch là đỏ ngay.
+- `v` **vẫn là 1**: khoá mới đều tuỳ chọn, blueprint cũ hợp lệ nguyên vẹn.
+
+**Đã đo.** 17 → **24** check trong `scene-blueprint` (7 check mới cho `compare`). Blueprint `compare` "béo" nhất (2 chủ thể + 4 góc + 2 props + dấu) = **324 byte**, dưới hạn `SCENE_BLUEPRINT_MAX_BYTES = 600`. `98/98` suite (46,2 s) · `renderer-globals` 1054 hàm / 8411 lời gọi, 0 undefined · bundle nhúng **6163,8 KiB** (+1,2 so với 6162,6).
+
+**Thứ tự bắt buộc cho phần còn lại của P1.** dữ liệu (xong) → **vẽ** (2 chủ thể + dấu trên cả 10 nền, test toạ độ phải mở rộng cho **hai** hộp chủ thể) → **UI editor** → **cuối cùng** mới thêm `compare` vào prompt §5. Cổng `scene-prompt-doc.test.ts` vẫn ghim `"layout": "single"` trong prompt, nên nó là cái phanh cho ai sửa §5 sớm.
+
+**Chưa xác minh.** Chưa có phép vẽ nào cho `compare`: hôm nay `compare` vẫn ra ảnh **một** chủ thể (đúng, chưa sai) vì engine vẽ theo `mainIcon`. Chưa có UI, chưa có trên binary thật.

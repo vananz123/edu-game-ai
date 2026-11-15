@@ -7,6 +7,14 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-15 — #262 P1 `compare` bước 1: dữ liệu + chuẩn hoá (chưa vẽ)
+- **Trạng thái:** Blueprint nhận `layout: 'compare'` với `compareIcon` (chủ thể phải) và `compareSign` (`greater-than`/`less-than`/`equal`). Thiếu/trùng chủ thể thứ hai → hạ về `single` (không `null`); dấu lạ → bỏ dấu; `single` mang trường compare → bị xoá.
+- **Files đã đổi:** `src/shared/scene-asset-catalog.ts` (`SCENE_LAYOUT_IDS`, `SCENE_COMPARE_SIGNS`, 2 hàm kiểm), `src/shared/scene-blueprint.ts` (`compareIcon`/`compareSign`, luật hạ cấp), `src/renderer/features/game-illustration.ts` (bản sao y hệt), `tests/unit/scene-blueprint.test.ts` (+7 check, +5 input parity), `docs/AI_SCENE_DIRECTOR_DESIGN.md` (§3.3 mới + thứ tự bắt buộc).
+- **Đo được:** `scene-blueprint` **17 → 24** check; blueprint compare "béo" nhất **324 byte** < 600.
+- **Lệnh đã chạy:** `npm run check` sạch (tsc + 52 tệp UI) · `node tests/run-unit.js` **98/98** (46,2 s) · `check:renderer-globals` 0 undefined (1054 hàm / 8411 lời gọi) · `check:embedded` khớp **6163,8 KiB** (đã build lại).
+- **Chưa xác minh:** **chưa có hình** cho `compare` — engine vẫn vẽ theo `mainIcon` nên ra ảnh một chủ thể; chưa có UI; chưa chạy trên binary thật.
+- **Việc kế tiếp:** **bước 2** — vẽ hai chủ thể + dấu trên cả 10 nền, mở rộng test toạ độ cho **hai** hộp chủ thể (hiện chỉ một hộp `x 100–220, y 50–170`).
+
 ### 2026-11-15 — #260 UI cho `props`: 2 ô “Đất trái / Đất phải”, khép vòng #259
 - **Trạng thái:** Khối minh hoạ trong editor có thêm hàng **“Vật thể đứng ở mặt đất”** với 2 ô `Đất trái` / `Đất phải`, cùng cơ chế ghi với 4 góc. Danh sách **loại sẵn** chủ thể và các icon đã dùng ở góc, vì normaliser sẽ bỏ chúng — thà không cho chọn còn hơn cho chọn rồi im lặng mất.
 - **Files đã đổi:** `src/renderer/features/editor/questions.ts` (khối `[data-editor-art-props]`, `propsHtml`, `applyEditorSceneSlots` ghi cả `props`, wire `change`) · `tests/ui/ui-item-assets-editor-check.js` (**+9 check**) · `docs/STATUS.md`, `docs/DECISIONS.md`.
@@ -25,13 +33,7 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - **Chưa xác minh:** **Chưa có UI** cho `props` (như #256 trước #257: hiện chỉ JSON/AI đặt được), nên cũng **chưa có bằng chứng thị giác** cho 2 vật thể mặt đất trên app thật. Chưa build lại binary sau #259 (lần build gần nhất là của #257). Chưa thử `props` trên game đã lưu.
 - **Việc kế tiếp:** UI 2 ô `props` trong khối “Vật thể phụ ở 4 góc” (đang có sẵn code đường dẫn), rồi build lại + chạy `check:item-assets-ui` trên binary mới; sau đó P1 `compare`. `docs/STATUS.md` nay có **9** bàn giao (quy ước 3).
 
-### 2026-11-15 — #257 UI chọn 4 góc cho giáo viên (trước đó chỉ JSON/AI đặt được)
-- **Trạng thái:** Trong editor minh hoạ, khi câu hỏi **đã có blueprint** (bấm “Cảnh thử”), xuất hiện khối **“Vật thể phụ ở 4 góc”** với 4 ô chọn: `Trái dưới` / `Phải dưới` / `Trái trên` / `Phải trên`. Mỗi ô chọn một trong **38 icon vẽ được**, có **tên tiếng Việt** (`flask-conical` → “Bình thí nghiệm”), hoặc “— trống —”. Chọn xong thì blueprint + preview + nút lưu đổi ngay, giáo viên không cần biết JSON.
-- **Files đã đổi:** `src/renderer/features/editor/questions.ts` (`EDITOR_SCENE_ICON_LABEL` 38 tên, `EDITOR_SCENE_SLOTS`, khối `[data-editor-art-slots]`, `applyEditorSceneSlots`, wire `change` cho từng góc) · `src/renderer/styles/components.css` (khối `.editor-art-slots` 2 cột, 1 cột dưới 640px) · `tests/ui/ui-item-assets-editor-check.js` (**+12 check**) · `docs/AI_SCENE_DIRECTOR_DESIGN.md`, `docs/STATUS.md`, `docs/DECISIONS.md`.
-- **Hành vi:** 4 góc ghi vào blueprint qua **cùng** `stageNormalizeBlueprint` như lúc tải game, nên id sai/trùng chủ thể bị loại ngay tại UI, không phải chờ đến lúc chơi. Để trống một góc thì **chỉ bỏ icon đó**, giữ chủ thể. Sửa cảnh thì **xoá ảnh chủ đề đang chọn** (vì ảnh chủ đề thắng blueprint) nhưng **không** xoá dấu “Bỏ ảnh” — đó là lựa chọn của giáo viên. Thêm 1 hàm renderer ⇒ `renderer-globals` 1053 hàm / 8385 call site, 0 undefined.
-- **Lệnh đã chạy:** `npm run check` sạch · `node tests/run-unit.js` **98/98** (47,2 s) · `check:embedded` khớp **6162,0 KiB** · **build + app thật:** tạm bỏ `devPath` → `npm run build && npm run build:tauri && cargo tauri build` (exit 0, installer 15,66 MiB) → khôi phục **nguyên byte** (`SHA-256 5AE0BF64…13B20E`) · trên binary release qua CDP 9361: `ui-item-assets-editor-check` **54/54** (gồm 12 check mới; blueprint sau khi lưu: `subIcons:[{"icon":"lightbulb","position":"top-left"}]`) · duyệt thị giác bằng mô hình nhìn ảnh: khối 2×2 đúng, nhãn rõ, **không cắt chữ** (xem ảnh chụp nhất thời, đã xoá).
-- **Chưa xác minh:** Chưa thử kéo-thả (chỉ dropdown); chưa có ảnh chụp **có icon ở góc** được người duyệt bằng mắt — mô hình xác nhận khối chọn và preview còn trống đúng như dữ liệu. Chưa chạy lại `ui-play-surface-check` sau khi thêm UI này (chỉ đổi editor). Chưa thử với game đã lưu từ trước (blueprint dạng chuỗi) trên app thật — unit test đã phủ.
-- **Việc kế tiếp:** P-B2 `props[]` (vật thể ở mặt đất) hoặc P1 `compare`. Đáng làm sớm: một cổng quét `tests/ui/*.js` để bắt **dấu backtick trong chú thích** — đây là lần thứ **3** nó làm hỏng cổng UI (lỗi cú pháp ngay khi nạp tệp). `docs/STATUS.md` nay có **8** bàn giao (quy ước 3).
+### 2026-11-15 — #257 UI chọn 4 góc cho giáo viên (trước đó chỉ JSON/AI đặt được) — Bản lưu trữ: [docs/handoff/status/2026-11-15.md](handoff/status/2026-11-15.md).
 
 ### 2026-11-15 — #252–#256, phát hành 0.5.2, `tauri:check` xanh lần đầu, giao diện dày — Bản lưu trữ: [docs/handoff/status/2026-11-15.md](handoff/status/2026-11-15.md).
 

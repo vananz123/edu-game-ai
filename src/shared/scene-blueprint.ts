@@ -22,14 +22,18 @@ import {
   SCENE_SUB_ICON_POSITIONS,
   getBackdropSpec,
   isSceneBackdropId,
+  isSceneCompareSign,
   isSceneIconId,
+  isSceneLayoutId,
   isScenePaletteKey,
   isSceneSubIconPosition,
   sceneBackdropForCategory,
+  type SceneCompareSign,
+  type SceneLayoutId,
   type SceneSubIconPosition,
 } from './scene-asset-catalog';
 
-export type SceneBlueprintLayout = 'single';
+export type SceneBlueprintLayout = SceneLayoutId;
 
 /** One supporting icon and the corner it sits in. */
 export interface SceneSubIcon {
@@ -48,8 +52,13 @@ export interface SceneBlueprint {
   backdrop: string;
   /** A palette key — the *mood*, independent of the place. */
   paletteKey: string;
-  /** A key of `SCENE_ICON_IDS` — the thing the question is about. */
+  /** A key of `SCENE_ICON_IDS` — the thing the question is about. In a
+   * `compare` scene this is the **left** subject. */
   mainIcon: string;
+  /** `compare` only (#262): the right subject, a key of `SCENE_ICON_IDS`. */
+  compareIcon?: string;
+  /** `compare` only (#262): the sign between the subjects, or nothing. */
+  compareSign?: SceneCompareSign;
   /** Up to four keys of `SCENE_ICON_IDS`, each in its own corner. */
   subIcons?: SceneSubIcon[];
   /** Up to two keys of `SCENE_ICON_IDS` standing on the ground (#259). */
@@ -79,6 +88,10 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  *     (text) and `.egame` (object);
  *   - wrong `v` or `layout`, or an unknown/missing `mainIcon` -> `null`, because
  *     none of them has a safe meaning;
+ *   - `layout: 'compare'` (#262) needs a valid, different `compareIcon`; if it is
+ *     missing/unknown/equal to the subject the scene degrades to `single`;
+ *     `compareSign` is optional and an unknown sign is simply dropped; both
+ *     fields are removed from a `single` blueprint;
  *   - unknown `backdrop` -> `plain`, unknown `paletteKey` -> `language`;
  *   - `subIcons`: accepts the P0 form (`"leaf"`) and the `#256` form
  *     (`{icon, position}`); invalid, duplicate and the main icon are dropped, a
@@ -131,7 +144,7 @@ export function normalizeSceneBlueprint(
     issues.push('version');
     return null;
   }
-  if (raw.layout !== 'single') {
+  if (!isSceneLayoutId(raw.layout)) {
     issues.push('layout');
     return null;
   }
@@ -141,6 +154,34 @@ export function normalizeSceneBlueprint(
     issues.push('icon');
     return null;
   }
+
+  // #262 — `compare` asks for a second subject; a sign is optional. A missing,
+  // unknown or equal second subject degrades to `single` (the picture still
+  // shows the thing the question is about) instead of dropping the whole scene.
+  let layout: SceneBlueprintLayout = raw.layout;
+  let compareIcon = '';
+  let compareSign: SceneCompareSign | undefined;
+  if (layout === 'compare') {
+    const wantedSecond = typeof raw.compareIcon === 'string' ? raw.compareIcon.trim() : '';
+    if (!isSceneIconId(wantedSecond) || wantedSecond === mainIcon) {
+      issues.push('compareIcon');
+      layout = 'single';
+    } else {
+      compareIcon = wantedSecond;
+      const wantedSign = typeof raw.compareSign === 'string' ? raw.compareSign.trim() : '';
+      if (isSceneCompareSign(wantedSign)) {
+        compareSign = wantedSign;
+      } else if (wantedSign) {
+        issues.push('compareSign');
+      }
+    }
+  } else if (raw.compareIcon !== undefined || raw.compareSign !== undefined) {
+    // Kept out of `single` on purpose: a stored scene must not carry fields the
+    // engine would ignore, or equality checks between two saves start to lie.
+    issues.push('compare');
+  }
+
+  const subjects = compareIcon ? [mainIcon, compareIcon] : [mainIcon];
 
   let backdrop = typeof raw.backdrop === 'string' ? raw.backdrop.trim() : '';
   if (!isSceneBackdropId(backdrop)) {
@@ -168,7 +209,7 @@ export function normalizeSceneBlueprint(
           : typeof entry === 'string'
             ? entry.trim()
             : '';
-        if (!isSceneIconId(icon) || icon === mainIcon || subIcons.some((sub) => sub.icon === icon)) {
+        if (!isSceneIconId(icon) || subjects.includes(icon) || subIcons.some((sub) => sub.icon === icon)) {
           issues.push('subIcons');
           continue;
         }
@@ -202,7 +243,7 @@ export function normalizeSceneBlueprint(
         const icon = typeof entry === 'string' ? entry.trim() : '';
         if (
           !isSceneIconId(icon) ||
-          icon === mainIcon ||
+          subjects.includes(icon) ||
           props.includes(icon) ||
           subIcons.some((sub) => sub.icon === icon)
         ) {
@@ -220,10 +261,12 @@ export function normalizeSceneBlueprint(
 
   return {
     v: SCENE_BLUEPRINT_VERSION,
-    layout: 'single',
+    layout,
     backdrop,
     paletteKey,
     mainIcon,
+    ...(compareIcon ? { compareIcon } : {}),
+    ...(compareSign ? { compareSign } : {}),
     ...(subIcons.length ? { subIcons } : {}),
     ...(props.length ? { props } : {}),
   };

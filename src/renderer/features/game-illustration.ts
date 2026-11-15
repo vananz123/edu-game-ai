@@ -164,6 +164,9 @@ const STAGE_SCENE_MAX_PROPS = 2;
 const STAGE_SCENE_GROUND_PROP_SIZE = 40;
 /** Same four corners as SCENE_SUB_ICON_POSITIONS in the shared catalogue (#256). */
 const STAGE_SUB_ICON_POSITIONS = ['left', 'right', 'top-left', 'top-right'];
+/** Same layouts and signs as SCENE_LAYOUT_IDS / SCENE_COMPARE_SIGNS (#262). */
+const STAGE_SCENE_LAYOUTS = ['single', 'compare'];
+const STAGE_SCENE_COMPARE_SIGNS = ['greater-than', 'less-than', 'equal'];
 const STAGE_SCENE_BLUEPRINT_MAX_BYTES = 600;
 const STAGE_SCENE_DEFAULT_ICON = 'book-open';
 /** Subject icon size in the 320x200 frame; matches SCENE_SUB_ICON_SIZE (#252). */
@@ -214,9 +217,23 @@ function stageNormalizeBlueprint(value) {
   }
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   if (raw.v !== STAGE_SCENE_BLUEPRINT_VERSION) return null;
-  if (raw.layout !== 'single') return null;
+  if (STAGE_SCENE_LAYOUTS.indexOf(raw.layout) < 0) return null;
   const mainIcon = typeof raw.mainIcon === 'string' ? raw.mainIcon.trim() : '';
   if (!stageIsSceneIconId(mainIcon)) return null;
+  let layout = raw.layout;
+  let compareIcon = '';
+  let compareSign = '';
+  if (layout === 'compare') {
+    const wantedSecond = typeof raw.compareIcon === 'string' ? raw.compareIcon.trim() : '';
+    if (!stageIsSceneIconId(wantedSecond) || wantedSecond === mainIcon) {
+      layout = 'single';
+    } else {
+      compareIcon = wantedSecond;
+      const wantedSign = typeof raw.compareSign === 'string' ? raw.compareSign.trim() : '';
+      if (STAGE_SCENE_COMPARE_SIGNS.indexOf(wantedSign) >= 0) compareSign = wantedSign;
+    }
+  }
+  const subjects = compareIcon ? [mainIcon, compareIcon] : [mainIcon];
   const backdrop = stageIsSceneBackdropId(raw.backdrop) ? raw.backdrop : STAGE_SCENE_BACKDROP_DEFAULT;
   const paletteKey = stageIsScenePaletteKey(raw.paletteKey) ? raw.paletteKey : 'language';
   const subIcons = [];
@@ -227,7 +244,7 @@ function stageNormalizeBlueprint(value) {
       const icon = isObject
         ? typeof entry.icon === 'string' ? entry.icon.trim() : ''
         : typeof entry === 'string' ? entry.trim() : '';
-      if (!stageIsSceneIconId(icon) || icon === mainIcon || subIcons.some(function (sub) { return sub.icon === icon; })) continue;
+      if (!stageIsSceneIconId(icon) || subjects.indexOf(icon) >= 0 || subIcons.some(function (sub) { return sub.icon === icon; })) continue;
       if (subIcons.length >= STAGE_SCENE_MAX_SUB_ICONS) continue;
       const wanted = isObject && typeof entry.position === 'string' ? entry.position.trim() : '';
       let position = STAGE_SUB_ICON_POSITIONS.indexOf(wanted) >= 0 && !subIcons.some(function (sub) { return sub.position === wanted; })
@@ -238,12 +255,14 @@ function stageNormalizeBlueprint(value) {
       subIcons.push({ icon: icon, position: position });
     }
   }
-  const blueprint: any = { v: 1, layout: 'single', backdrop: backdrop, paletteKey: paletteKey, mainIcon: mainIcon };
+  const blueprint: any = { v: 1, layout: layout, backdrop: backdrop, paletteKey: paletteKey, mainIcon: mainIcon };
+  if (compareIcon) blueprint.compareIcon = compareIcon;
+  if (compareSign) blueprint.compareSign = compareSign;
   if (subIcons.length) blueprint.subIcons = subIcons;
   if (Array.isArray(raw.props)) {
     for (const entry of raw.props) {
       const icon = typeof entry === 'string' ? entry.trim() : '';
-      if (!stageIsSceneIconId(icon) || icon === mainIcon || props.indexOf(icon) >= 0) continue;
+      if (!stageIsSceneIconId(icon) || subjects.indexOf(icon) >= 0 || props.indexOf(icon) >= 0) continue;
       if (subIcons.some(function (sub) { return sub.icon === icon; })) continue;
       if (props.length >= STAGE_SCENE_MAX_PROPS) continue;
       props.push(icon);

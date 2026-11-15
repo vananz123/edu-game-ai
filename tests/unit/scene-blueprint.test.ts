@@ -14,6 +14,7 @@ import {
   DEFAULT_SCENE_ICON,
   normalizeSceneBlueprint,
   sceneBlueprintFromCategory,
+  sceneBlueprintJson,
   type SceneBlueprint,
 } from '../../src/shared/scene-blueprint';
 import { SCENE_BLUEPRINT_MAX_BYTES } from '../../src/shared/scene-asset-catalog';
@@ -68,7 +69,7 @@ test('undrawable shapes are refused, never thrown', () => {
     ['', 'empty'],
     ['{not json', 'json'],
     [{ ...VALID, v: 2 }, 'version'],
-    [{ ...VALID, layout: 'compare' }, 'layout'],
+    [{ ...VALID, layout: 'side-by-side' }, 'layout'],
     [{ ...VALID, mainIcon: 'chevron-down' }, 'icon'],
     [{ ...VALID, mainIcon: 'banana' }, 'icon'],
   ];
@@ -284,6 +285,96 @@ test('the old category scene is unchanged by the composer refactor', () => {
   assert.equal(svg.length, 2729);
 });
 
+// --- #262 compare: two subjects, one sign ----------------------------------
+const COMPARE: SceneBlueprint = {
+  v: 1,
+  layout: 'compare',
+  backdrop: 'forest',
+  paletteKey: 'animals',
+  mainIcon: 'paw-print',
+  compareIcon: 'fish',
+  compareSign: 'greater-than',
+};
+
+test('a compare blueprint keeps both subjects and its sign', () => {
+  const issues: string[] = [];
+  const scene = normalizeSceneBlueprint(COMPARE, issues)!;
+  assert.equal(scene.layout, 'compare');
+  assert.equal(scene.mainIcon, 'paw-print');
+  assert.equal(scene.compareIcon, 'fish');
+  assert.equal(scene.compareSign, 'greater-than');
+  assert.deepEqual(issues, [], 'a valid compare scene must not report issues');
+});
+
+test('a compare scene without a usable second subject degrades to one subject', () => {
+  for (const bad of [undefined, '', 'chevron-down', 'paw-print']) {
+    const issues: string[] = [];
+    const scene = normalizeSceneBlueprint({ ...COMPARE, compareIcon: bad }, issues)!;
+    assert.equal(scene.layout, 'single', `compareIcon=${String(bad)} must degrade`);
+    assert.equal(scene.compareIcon, undefined);
+    assert.ok(issues.includes('compareIcon'), 'the fallback must be observable');
+    assert.equal(scene.mainIcon, 'paw-print', 'the left subject is never lost');
+  }
+});
+
+test('an unknown comparison sign is dropped, not the scene', () => {
+  const issues: string[] = [];
+  const scene = normalizeSceneBlueprint({ ...COMPARE, compareSign: '>>' }, issues)!;
+  assert.equal(scene.layout, 'compare');
+  assert.equal(scene.compareIcon, 'fish');
+  assert.equal(scene.compareSign, undefined);
+  assert.ok(issues.includes('compareSign'));
+
+  const noSign = normalizeSceneBlueprint({ ...COMPARE, compareSign: undefined })!;
+  assert.equal(noSign.layout, 'compare', 'two subjects with no sign is a valid picture');
+  assert.equal(noSign.compareSign, undefined);
+});
+
+test('a single-layout blueprint never carries compare fields', () => {
+  const issues: string[] = [];
+  const scene = normalizeSceneBlueprint(
+    { ...VALID, compareIcon: 'fish', compareSign: 'equal' },
+    issues
+  )!;
+  assert.equal(scene.layout, 'single');
+  assert.equal(scene.compareIcon, undefined);
+  assert.equal(scene.compareSign, undefined);
+  assert.ok(issues.includes('compare'), 'dropping the fields must be observable');
+});
+
+test('no extra icon may reuse either subject in a compare scene', () => {
+  const scene = normalizeSceneBlueprint({
+    ...COMPARE,
+    subIcons: ['fish', { icon: 'paw-print', position: 'left' }, 'leaf'],
+    props: ['fish', 'paw-print', 'apple'],
+  })!;
+  assert.deepEqual(scene.subIcons?.map((sub) => sub.icon), ['leaf']);
+  assert.deepEqual(scene.props, ['apple']);
+});
+
+test('normalising a compare scene twice changes nothing', () => {
+  const once = normalizeSceneBlueprint({ ...COMPARE, subIcons: ['leaf'], props: ['apple'] })!;
+  assert.deepEqual(normalizeSceneBlueprint(once), once);
+  assert.deepEqual(normalizeSceneBlueprint(JSON.stringify(once)), once);
+});
+
+test('the richest compare scene still fits the byte budget', () => {
+  const scene = normalizeSceneBlueprint({
+    ...COMPARE,
+    subIcons: [
+      { icon: 'leaf', position: 'left' },
+      { icon: 'bird', position: 'right' },
+      { icon: 'bug', position: 'top-left' },
+      { icon: 'star', position: 'top-right' },
+    ],
+    props: ['apple', 'box'],
+  })!;
+  assert.equal(scene.subIcons?.length, 4);
+  assert.equal(scene.props?.length, 2);
+  const bytes = sceneBlueprintJson(scene).length;
+  assert.ok(bytes <= SCENE_BLUEPRINT_MAX_BYTES, `compare blueprint is ${bytes} bytes`);
+});
+
 // --- renderer mirror parity ------------------------------------------------
 const RENDERER_DIR = path.join(__dirname, '..', '..', 'src', 'renderer', 'features');
 const sandbox: Record<string, unknown> = {
@@ -305,6 +396,12 @@ test('the renderer normaliser and generator match the shared ones', () => {
     { ...VALID, backdrop: 'castle', paletteKey: 'banana' },
     { ...VALID, v: 2 },
     { ...VALID, layout: 'compare' },
+    COMPARE,
+    JSON.stringify(COMPARE),
+    { ...COMPARE, compareIcon: 'paw-print' },
+    { ...COMPARE, compareSign: 'banana' },
+    { ...COMPARE, layout: 'side-by-side' },
+    { ...COMPARE, subIcons: ['fish', 'leaf'] },
     { ...VALID, mainIcon: 'chevron-down' },
     { ...VALID, subIcons: ['bird', 'bird', 'paw-print', 'leaf', 'fish', 'bug'] },
     { v: 1, layout: 'single', mainIcon: 'paw-print' },

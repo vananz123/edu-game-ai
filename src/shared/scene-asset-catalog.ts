@@ -50,9 +50,25 @@ export function isSceneSubIconPosition(value: unknown): value is SceneSubIconPos
 /** Rejected above this size. A valid blueprint is ~120–180 bytes. */
 export const SCENE_BLUEPRINT_MAX_BYTES = 600;
 
-/** The only layout P0 can draw. The field exists so P1/P2 can add more. */
-export const SCENE_LAYOUT_IDS = Object.freeze(['single'] as const);
+/** The only layouts that exist in the data model so far. */
+export const SCENE_LAYOUT_IDS = Object.freeze(['single', 'compare'] as const);
 export type SceneLayoutId = (typeof SCENE_LAYOUT_IDS)[number];
+
+export function isSceneLayoutId(value: unknown): value is SceneLayoutId {
+  return typeof value === 'string' && (SCENE_LAYOUT_IDS as readonly string[]).includes(value);
+}
+
+/**
+ * The comparison sign a `compare` scene may show between its two subjects
+ * (#262). Named ids, not glyphs: the engine chooses how to draw `>`, and a
+ * blueprint never carries text or markup.
+ */
+export const SCENE_COMPARE_SIGNS = Object.freeze(['greater-than', 'less-than', 'equal'] as const);
+export type SceneCompareSign = (typeof SCENE_COMPARE_SIGNS)[number];
+
+export function isSceneCompareSign(value: unknown): value is SceneCompareSign {
+  return typeof value === 'string' && (SCENE_COMPARE_SIGNS as readonly string[]).includes(value);
+}
 
 /**
  * Named places, each one an existing `SceneSpec` (#70/#72). No new drawing

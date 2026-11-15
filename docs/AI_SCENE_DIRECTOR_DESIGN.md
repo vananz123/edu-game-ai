@@ -6,8 +6,8 @@
 >
 > **Đã có trong mã:** P0 (quyết định #252) — blueprint `v:1`, `layout: 'single'`, cổng
 > chuẩn hoá, lưu `.egame`, nút "Cảnh thử" **không gọi mạng**.
-> **Chưa có:** `compare`/`process`/`surround` (P1/P2), `props`, `subIcons` có vị trí,
-> và **toàn bộ kênh AI** (P3). Các mục đó ghi rõ "CHƯA CÓ" bên dưới.
+> **Chưa có:** phần **vẽ** của `compare` (dữ liệu đã có — xem §3.3), `process`/
+> `surround` (P2), và **toàn bộ kênh AI** (P3). Các mục đó ghi rõ "CHƯA CÓ" bên dưới.
 
 ---
 
@@ -88,10 +88,34 @@ Chỉ ghi để P1/P2 không phải thiết kế lại. **Không** dùng để v
 các bố cục này được cài và đo.
 
 ```ts
-// CHƯA CÓ — P1/P2
-layout?: 'compare' | 'process' | 'surround';
-props?: string[];   // CHƯA CÓ, và chưa có primitive vẽ nào cho nó
+// CHƯA CÓ — P2
+layout?: 'process' | 'surround';
 ```
+
+### 3.3 `compare` — dữ liệu CÓ, phần vẽ CHƯA CÓ (#262)
+
+```ts
+// CÓ trong mã
+layout: 'single' | 'compare';
+compareIcon?: string;          // chủ thể PHẢI, khi layout = 'compare'
+compareSign?: 'greater-than' | 'less-than' | 'equal';   // tuỳ chọn
+```
+
+Luật chuẩn hoá (đã có test):
+- `layout` lạ → **`null`** (không có nghĩa an toàn nào).
+- `compare` mà `compareIcon` thiếu / lạ / **trùng `mainIcon`** → hạ xuống **`single`**,
+  ghi issue `compareIcon`. Hạ xuống chứ không `null`: ảnh vẫn cho thấy đúng thứ câu hỏi
+  nói tới, còn ảnh trống thì không cho thấy gì.
+- `compareSign` lạ → **bỏ dấu**, vẫn `compare` (hai chủ thể không dấu là ảnh hợp lệ).
+- `single` mà có `compareIcon`/`compareSign` → **xoá hai trường**, ghi issue, để hai lần
+  lưu giống nhau thì so sánh được.
+- `subIcons` và `props` **không được trùng cả hai chủ thể**.
+
+**Thứ tự bắt buộc cho P1:** dữ liệu (bước này) → **vẽ** (engine + test toạ độ cho **hai**
+chủ thể) → **UI editor** → cuối cùng mới đưa `compare` vào prompt §5. Lý do: prompt là
+lời hứa với model; hứa một bố cục mà engine chưa vẽ được thì giáo viên nhận ảnh sai.
+Cổng `scene-prompt-doc.test.ts` hiện vẫn **ghim `\"layout\": \"single\"`** trong prompt,
+nên nó sẽ chặn đúng lúc ai đó sửa §5 sớm.
 
 **Đã xong ở #256 (tách khỏi P1/P2 vì không cần `layout` mới):**
 
