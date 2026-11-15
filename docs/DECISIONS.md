@@ -3988,3 +3988,45 @@ ghi lý do ngay tại chỗ.
 **đúng**, ô đáp án đầu **dịch xuống 2px** (508,53 → 510,53) trong khi trả lời sai thì không.
 Chiều cao ô không đổi ⇒ có gì đó **phía trên** co lại 2px khi hiện phản hồi đúng. Đây là lỗi
 giật bố cục có sẵn của màn chơi, không liên quan màu cảnh; ghi lại để lượt sau sửa.
+
+## #267 — `process`: một dải 2–3 bậc, dữ liệu + hình + prompt (UI CHƯA CÓ)
+
+**Quyết định.** `process` trở thành layout thứ ba: `mainIcon` là **bậc 1**, `steps` (tối đa 2)
+là các bậc sau, **đúng thứ tự thời gian**. Dữ liệu, hình học, prompt và test xong trong lượt
+này; **UI trong trình soạn thì chưa** — giáo viên hiện chỉ chọn được `single`/`compare`, nên
+đường duy nhất sinh ra `process` là kênh AI. Việc còn lại ghi ở ROADMAP để không ai tưởng P2
+đã xong.
+
+**Vì sao phải làm dữ liệu VÀ hình trong cùng một lượt.** Prompt §5 được sửa để dạy model
+`process`; nếu engine chưa vẽ, model trả về `process` và màn chơi lặng lẽ vẽ **một** hình —
+đúng lớp lỗi #128 (dữ liệu nhận, hình bỏ qua). Nên bốn thứ đi cùng nhau như #262: hằng số
+hình học, nhánh vẽ, luật chuẩn hoá, prompt + ví dụ.
+
+**Hình học — đo, không đoán.** Khung 320×200, dải đất bắt đầu ở `SCENE_HORIZON - 4` và props
+đứng ở y 146..186, nên hàng bậc có y 66..142: bậc **76px**. Hai bậc ở x 48/196 (căn giữa, không
+dồn trái), ba bậc ở x 16/122/228; mũi tên rộng 14 nằm giữa khe, tâm y 104. Bậc vẽ bằng
+`glow` (cùng luật #266 cho chủ thể), mũi tên bằng `ink` để không tranh màu với bậc. Không có
+`<text>` nào — mũi tên là một `<path>`.
+
+**Bốn góc không giữ được.** Slot `left`/`right` nằm đúng chỗ bậc 1 và bậc 3, y hệt lý do của
+`compare` (#262), nên `process` chỉ giữ `top-left`/`top-right` với icon 40px; góc `left`/`right`
+được **dời** lên góc trống đầu tiên chứ không bị bỏ.
+
+**Hạ cấp thay vì vẽ dải cụt.** Không còn bước nào dùng được ⇒ về `single` + issue `steps`.
+Một bước sai bị bỏ, các bước còn lại vẫn thành dải; quá 2 bước thì bỏ phần thừa. `single` mang
+`steps` ⇒ bỏ + issue; `process` mang `compareIcon`/`compareSign` ⇒ bỏ + issue. Lý do như #262:
+một cảnh đã lưu không được mang trường mà engine sẽ lờ đi, nếu không hai lần lưu "bằng nhau"
+lại khác nhau.
+
+**Bằng chứng.** `scene-blueprint` **30 → 39** check (9 check mới: thứ tự bậc, hạ cấp, bỏ bậc
+sai, trần 2 bước, chống lặp, trường thừa, dời góc, không tái dùng bậc, hình học đo được), và
+test parity renderer↔shared **giờ so cả `steps` lẫn `arrows`** — trước đó nó chỉ so
+`subjects/icons/props/sign` nên một cây cung lệch khe vẫn xanh. Hai đối chứng âm: đổi
+`STAGE_SCENE_PROCESS_STEP_TOP` 66→68 ở bản mirror ⇒ `renderer geometry differs`; bỏ `arrows.join`
+ở bản shared ⇒ `an arrow between stage 1-2 and 2-3`. `scene-prompt-doc` **15 → 16** check (ví dụ
+`process` là JSON thật, chạy qua `normalizeSceneBlueprint` với **0 issue**; cổng cấm layout
+chưa cài chỉ còn `surround`). Ảnh: `images/process-267.png` (2 bậc, 3 bậc có góc + props, 3 bậc
+nền sao); mô hình thị giác xác nhận hàng bậc rõ, mũi tên đúng chiều, không đè dải đất hay góc.
+
+**Không đổi hash vàng.** 24 hash của P0 vẫn nguyên: chúng băm cảnh dựng từ **category**, không
+đi qua blueprint, nên `process` không chạm tới.

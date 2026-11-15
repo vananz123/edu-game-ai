@@ -6,8 +6,10 @@
 >
 > **Đã có trong mã:** P0 (quyết định #252) — blueprint `v:1`, `layout: 'single'`, cổng
 > chuẩn hoá, lưu `.egame`, nút "Cảnh thử" **không gọi mạng**.
-> **Chưa có:** phần **vẽ** của `compare` (dữ liệu đã có — xem §3.3), `process`/
-> `surround` (P2), và **toàn bộ kênh AI** (P3). Các mục đó ghi rõ "CHƯA CÓ" bên dưới.
+> **Đã có:** `compare` (dữ liệu + hình + UI + prompt, #262), kênh AI `scene:suggest`
+> (#265), màu chủ thể + người trong cảnh (#266), và `process` (dữ liệu + hình + prompt,
+> #267 — xem §3.4). UI chọn `process` trong trình soạn **chưa có**.
+> **Chưa có:** `surround` (P2 còn lại). Mục đó ghi rõ "CHƯA CÓ" bên dưới.
 
 ---
 
@@ -49,7 +51,7 @@ Các tệp thật sự tham gia:
 5. `stageIllustrationHtml` (đúng hàm của màn chơi) vẽ preview.
 6. Lưu: blueprint nằm trong dữ liệu item; xuất `.egame` chỉ ghi JSON.
 
-**P3 — CHƯA CÓ.** Bước 2 đổi thành "✨ Gợi ý cảnh từ nội dung": gửi nội dung câu hỏi +
+**P3 — CÓ (#265).** Bước 2 đổi thành "✨ Gợi ý cảnh từ nội dung": gửi nội dung câu hỏi +
 danh mục asset tới model, model trả JSON, JSON đi qua **cùng**
 `normalizeSceneBlueprint`, ghi qua `ai_tasks`. Không có đường nào cho model chạm vào
 markup/SVG.
@@ -84,13 +86,36 @@ do model sinh ra sẽ bị chặn ở cổng `version`.
 
 ### 3.2 Hình dạng DỰ KIẾN — CHƯA CÓ trong mã
 
-Chỉ ghi để P1/P2 không phải thiết kế lại. **Không** dùng để viết prompt ở P3 trước khi
-các bố cục này được cài và đo.
+Chỉ ghi để P2 không phải thiết kế lại. **Không** dùng để viết prompt trước khi bố cục
+này được cài và đo.
 
 ```ts
-// CHƯA CÓ — P2
-layout?: 'process' | 'surround';
+// CHƯA CÓ — P2 (phần còn lại)
+layout?: 'surround';           // vật thể chính ở giữa, các thứ khác vây quanh
 ```
+
+### 3.4 `process` — dữ liệu CÓ, hình CÓ, prompt CÓ; UI CHƯA CÓ (#267)
+
+```ts
+layout: 'single' | 'compare' | 'process';
+steps?: string[];              // 1-2 bước SAU bước đầu, khi layout = 'process'
+```
+
+`mainIcon` là **bước 1**, `steps` là các bước sau theo đúng thứ tự thời gian — thứ tự
+chính là nghĩa của bố cục này. Hình học (đo bằng test, không bằng mắt):
+
+| Thành phần | Toạ độ |
+|---|---|
+| 2 bậc | x = 48, 196; y = 66; cạnh 76 |
+| 3 bậc | x = 16, 122, 228; y = 66; cạnh 76 |
+| mũi tên | giữa khe, rộng 14, tâm y = 104, màu `ink`, opacity 0.7 |
+| subIcons | chỉ `top-left`/`top-right`, cạnh 40, y = 6 |
+| props | giữ nguyên #259: cạnh 40, y = 146 |
+
+Quy tắc hạ cấp giống `compare`: mất hết bước ⇒ về `single` và ghi issue `steps`, chứ
+không vẽ dải cụt. Một bước sai bị **bỏ** và các bước còn lại vẫn thành dải; nhiều hơn 2
+bước thì bỏ phần thừa. `single` không được mang `steps`; `process` không được mang
+`compareIcon`/`compareSign` — trường thừa bị bỏ và ghi issue.
 
 ### 3.3 `compare` — dữ liệu CÓ, hình CÓ, UI CÓ, prompt CÓ (#262)
 
@@ -205,7 +230,7 @@ Mặc định khi tên sai: **`language`** (không phải `default-pastel` — t
 
 ---
 
-## 5. System prompt cho AI (P3 — CHƯA CÓ kênh gọi)
+## 5. System prompt cho AI (P3 — CÓ kênh gọi, #265)
 
 Prompt dưới đây là **nguồn sự thật** cho P3. Hai điều khoá nó lại:
 
@@ -238,16 +263,21 @@ QUY TẮC BẮT BUỘC
 1. CHỈ dùng đúng tên asset trong danh sách. Không bịa tên mới.
 2. KHÔNG viết mã SVG, HTML hay markup. Chỉ trả JSON dữ liệu.
 3. Trả về DUY NHẤT một khối JSON, không lời chào, không giải thích, không markdown.
-4. Bắt buộc có "v": 1 và "layout" là "single" hoặc "compare" — không có bố cục nào khác.
+4. Bắt buộc có "v": 1 và "layout" là "single", "compare" hoặc "process" — không có bố cục nào khác.
 5. Không tham chiếu tài nguyên ngoài: không URL, không ảnh, không font, không script.
-6. Tối đa 4 subIcons (chỉ 2 khi layout = compare); chúng phải KHÁC mainIcon và không trùng nhau.
-7. Tối đa 2 props, KHÁC mainIcon, KHÁC mọi subIcons và KHÁC compareIcon.
+6. Tối đa 4 subIcons (chỉ 2 khi layout = compare hoặc process); chúng phải KHÁC mainIcon và không trùng nhau.
+7. Tối đa 2 props, KHÁC mainIcon, KHÁC mọi subIcons, KHÁC compareIcon VÀ khác mọi bước
+   của process.
 8. Toàn bộ JSON dưới 600 byte.
 9. Chọn "compare" CHỈ khi câu hỏi thật sự so sánh hai đối tượng ngang hàng (lớn hơn,
    nhỏ hơn, bằng, nhiều hơn, ít hơn). Câu một đối tượng thì để "single".
 10. Khi layout = "compare": mainIcon là hình BÊN TRÁI, compareIcon là hình BÊN PHẢI
    (bắt buộc, KHÁC mainIcon), compareSign là dấu ở giữa; chỉ được dùng góc
    top-left và top-right cho subIcons, vì hai góc dưới đã có hai hình.
+11. Khi layout = "process": mainIcon là BƯỚC 1, "steps" là 1-2 bước tiếp theo theo
+   ĐÚNG THỨ TỰ thời gian (bắt buộc, không trùng nhau, không trùng mainIcon); chỉ
+   được dùng góc top-left và top-right cho subIcons. Process KHÔNG có compareIcon
+   và KHÔNG có compareSign.
 
 QUY TRÌNH SUY NGHĨ (làm trong đầu, KHÔNG viết ra)
 1. Xác định môn học và ý chính của câu hỏi.
@@ -258,11 +288,14 @@ QUY TRÌNH SUY NGHĨ (làm trong đầu, KHÔNG viết ra)
 5. Chỉ thêm subIcons khi chúng làm rõ nghĩa (dụng cụ, đối tượng so sánh).
 6. Nếu câu hỏi so sánh hai đối tượng (con nào lớn hơn, cái nào nặng hơn, nhiều hơn
    hay ít hơn): dùng layout "compare", đặt hai đối tượng vào mainIcon/compareIcon
-   và chọn dấu đúng chiều đọc. Nếu là quy trình nhiều bước: chưa có bố cục cho nó,
-   giữ "single" và dùng tối đa 2 subIcons để gợi ý. KHÔNG tự bịa layout mới.
+   và chọn dấu đúng chiều đọc.
+7. Nếu câu hỏi là một QUY TRÌNH 2-3 bước theo thứ tự (gieo hạt → nảy mầm, trứng →
+   sâu → bướm): dùng layout "process", mainIcon là bước đầu và "steps" là các bước
+   sau, đúng thứ tự. Quy trình dài hơn 3 bước hoặc không có thứ tự: giữ "single".
+   KHÔNG tự bịa layout mới.
 
 SCENE-PROMPT-VOCAB:START
-layout (chọn 1): single, compare
+layout (chọn 1): single, compare, process
 backdrop (chọn 1): plain, meadow, forest, mountain, sea, stars, city,
                    classroom, lab, studio
 paletteKey (chọn 1): animals, plants, space, human-body, transport, safety,
@@ -280,6 +313,9 @@ compareIcon (chỉ khi layout = compare): cùng danh sách trên, khác mainIcon
    Đây là hình BÊN PHẢI; mainIcon là hình BÊN TRÁI.
 Dấu so sánh đọc là: greater-than = ">" · less-than = "<" · equal = "=".
 compareSign (chỉ khi layout = compare): greater-than, less-than, equal
+steps (chỉ khi layout = process): 1-2 tên, là các bước SAU bước đầu; mainIcon là bước 1,
+   xếp theo đúng thứ tự thời gian, khác mainIcon và khác nhau.
+   Process không có compareIcon và không có compareSign.
 subIcons (0-4, tuỳ chọn; 0-2 khi compare): cùng danh sách trên, khác mainIcon,
    khác compareIcon, không lặp.
    Mỗi mục là {"icon": "<tên>", "position": "left|right|top-left|top-right"}.
@@ -291,7 +327,7 @@ props (0-2, tuỳ chọn): cùng danh sách trên, là vật thể ĐỨNG Ở M
    khác mainIcon, khác mọi subIcons, khác compareIcon.
 SCENE-PROMPT-VOCAB:END
 
-ĐỊNH DẠNG ĐẦU RA (hai ví dụ dưới đây là JSON THẬT, chạy được ngay)
+ĐỊNH DẠNG ĐẦU RA (ba ví dụ dưới đây là JSON THẬT, chạy được ngay)
 Một hình:
 {"v":1,"layout":"single","backdrop":"classroom","paletteKey":"math",
  "mainIcon":"calculator","subIcons":[{"icon":"pencil","position":"left"}],
@@ -300,6 +336,10 @@ So sánh hai hình:
 {"v":1,"layout":"compare","backdrop":"forest","paletteKey":"animals",
  "mainIcon":"paw-print","compareIcon":"fish","compareSign":"greater-than",
  "subIcons":[{"icon":"leaf","position":"top-right"}],"props":["apple"]}
+Quy trình ba bước:
+{"v":1,"layout":"process","backdrop":"meadow","paletteKey":"plants",
+ "mainIcon":"leaf","steps":["apple","box"],
+ "subIcons":[{"icon":"cloud-sun","position":"top-right"}]}
 ```
 
 ### 5.3 Cảnh được vẽ thế nào từ JSON đó

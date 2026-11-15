@@ -20,6 +20,8 @@ import {
   SCENE_COMPARE_SUB_ICON_POSITIONS,
   SCENE_MAX_PROPS,
   SCENE_MAX_SUB_ICONS,
+  SCENE_PROCESS_MAX_EXTRA_STEPS,
+  SCENE_PROCESS_SUB_ICON_POSITIONS,
   SCENE_SUB_ICON_POSITIONS,
   getBackdropSpec,
   isSceneBackdropId,
@@ -59,6 +61,8 @@ export interface SceneBlueprint {
   compareIcon?: string;
   /** `compare` only (#262): the sign between the subjects, or nothing. */
   compareSign?: SceneCompareSign;
+  /** `process` only (#267): stages 2..3, left to right. `mainIcon` is stage 1. */
+  steps?: string[];
   /** Up to four keys of `SCENE_ICON_IDS`, each in its own corner. */
   subIcons?: SceneSubIcon[];
   /** Up to two keys of `SCENE_ICON_IDS` standing on the ground (#259). */
@@ -182,10 +186,47 @@ export function normalizeSceneBlueprint(
     issues.push('compare');
   }
 
-  const subjects = compareIcon ? [mainIcon, compareIcon] : [mainIcon];
-  /** Compare keeps only the two upper corners; the rest are moved there (#262). */
+  // #267 — `process` is a sequence, so it needs stages. The same rule as
+  // `compare`: a sequence that lost a stage is not worth showing as a sequence,
+  // so it degrades to the single picture instead of drawing a broken strip.
+  const steps: string[] = [];
+  if (layout === 'process') {
+    const wanted: unknown[] = Array.isArray(raw.steps) ? (raw.steps as unknown[]) : [];
+    for (const entry of wanted) {
+      const asObject = isPlainObject(entry);
+      const icon = asObject
+        ? typeof entry.icon === 'string'
+          ? entry.icon.trim()
+          : ''
+        : typeof entry === 'string'
+          ? entry.trim()
+          : '';
+      if (!isSceneIconId(icon) || icon === mainIcon || steps.includes(icon)) {
+        issues.push('steps');
+        continue;
+      }
+      if (steps.length >= SCENE_PROCESS_MAX_EXTRA_STEPS) {
+        issues.push('steps');
+        continue;
+      }
+      steps.push(icon);
+    }
+    if (!steps.length) {
+      issues.push('steps');
+      layout = 'single';
+    }
+  } else if (raw.steps !== undefined) {
+    issues.push('steps');
+  }
+
+  const subjects = [mainIcon, ...(compareIcon ? [compareIcon] : []), ...(layout === 'process' ? steps : [])];
+  /** Compare and process keep only the two upper corners; the rest are moved there. */
   const allowedPositions: readonly SceneSubIconPosition[] =
-    layout === 'compare' ? SCENE_COMPARE_SUB_ICON_POSITIONS : SCENE_SUB_ICON_POSITIONS;
+    layout === 'compare'
+      ? SCENE_COMPARE_SUB_ICON_POSITIONS
+      : layout === 'process'
+        ? SCENE_PROCESS_SUB_ICON_POSITIONS
+        : SCENE_SUB_ICON_POSITIONS;
 
   let backdrop = typeof raw.backdrop === 'string' ? raw.backdrop.trim() : '';
   if (!isSceneBackdropId(backdrop)) {
@@ -271,6 +312,7 @@ export function normalizeSceneBlueprint(
     mainIcon,
     ...(compareIcon ? { compareIcon } : {}),
     ...(compareSign ? { compareSign } : {}),
+    ...(layout === 'process' && steps.length ? { steps } : {}),
     ...(subIcons.length ? { subIcons } : {}),
     ...(props.length ? { props } : {}),
   };

@@ -7,6 +7,17 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-16 — #267 `process`: dải 2–3 bậc (dữ liệu + hình + prompt; UI CHƯA CÓ) — unit 99/99, scene-blueprint 39/39
+- **Trạng thái:** Layout thứ ba `process` ra đời: `mainIcon` là **bậc 1**, `steps` (tối đa 2) là các bậc sau **theo đúng thứ tự**; engine vẽ thành **dải ngang** 2–3 bậc với mũi tên giữa các khe. Prompt §5 đã dạy model `process` kèm **ví dụ JSON thật** chạy qua `normalizeSceneBlueprint` với 0 issue. **UI trình soạn chưa có** nên giáo viên chưa tự chọn được `process` — chỉ kênh AI sinh ra nó.
+- **Hình học (đo bằng test):** 2 bậc x = 48/196, 3 bậc x = 16/122/228, y = 66, cạnh 76; mũi tên rộng 14 nằm giữa khe, tâm y 104; góc chỉ còn `top-left`/`top-right` (40px, y 6) vì `left`/`right` đúng chỗ bậc 1 và bậc 3; props giữ nguyên y 146.
+- **Files:** `src/shared/scene-asset-catalog.ts` (`SCENE_LAYOUT_IDS`, `SCENE_PROCESS_MAX_EXTRA_STEPS`, `SCENE_PROCESS_SUB_ICON_POSITIONS`), `src/shared/scene-blueprint.ts` (kiểu `steps`, luật hạ cấp), `src/shared/illustration-scene.ts` (hằng số + `renderProcessStrip`), `src/renderer/features/game-illustration.ts` (mirror), `docs/AI_SCENE_DIRECTOR_DESIGN.md` (§3.4 mới, §5.2 từ vựng + luật 4/6/7/11 + ví dụ), `tests/unit/scene-blueprint.test.ts` (30 → 39), `tests/unit/scene-prompt-doc.test.ts` (15 → 16), `docs/DECISIONS.md` #267, `images/process-267.png`.
+- **Đã đo:** `run-unit` **99/99** (44,3 s) · `scene-blueprint` **39/39** · `scene-prompt-doc` **16/16** · `npm run check` 52 tệp UI sạch · `renderer-globals` 0 undefined (1057 hàm / 8477 lời gọi) · `check:embedded` khớp **6212,2 KiB** · 24 hash vàng **không đổi** (cảnh P0 dựng từ category, không qua blueprint).
+- **Đối chứng âm:** `STAGE_SCENE_PROCESS_STEP_TOP` 66→68 ở mirror ⇒ `renderer geometry differs`; bỏ `arrows.join` ở bản shared ⇒ `an arrow between stage 1-2 and 2-3`; bỏ nhánh hạ cấp ⇒ `steps=undefined must degrade`; nâng trần bước lên 3 ⇒ deep-equal sai. Tất cả khôi phục ⇒ xanh.
+- **Bằng chứng thị giác:** `images/process-267.png` — 3 cảnh (2 bậc có góc; 3 bậc có 2 góc + props; 3 bậc nền sao). Mô hình thị giác: hàng bậc rõ thứ tự, mũi tên đúng chiều, không đè dải đất hay icon góc.
+- **Học được:** test parity cũ chỉ so `subjects/icons/props/sign` nên **không bắt được** hình học mới — phải mở `sceneBoxes` cho `steps` và `arrows`, nếu không thì hai bản vẽ lệch nhau mà cổng vẫn xanh. Và `node tests/run-unit.js` đọc `dist/`, nên đối chứng âm sửa `.ts` mà **không chạy `tsc`** sẽ "xanh giả" (mắc lại lần này).
+- **Chưa xác minh:** UI trình soạn cho `process` (chưa có) · chưa chạy `process` qua model thật · chưa duyệt bằng mắt người · `surround` vẫn CHƯA CÓ.
+- **Việc kế tiếp:** UI trình soạn cho `process` (bước 3 của P2), rồi `surround` hoặc sửa lỗi giật 2px ở màn chơi.
+
 ### 2026-11-15 — #266 màu cho cảnh + người trong cảnh (3 icon người, chủ thể dùng màu nhấn) — unit 99/99, assets 107/107
 - **Trạng thái:** Cảnh minh hoạ không còn là sơ đồ một màu: **chủ thể và icon góc vẽ bằng màu nhấn của bảng màu** (`glow`) thay cho mực (`ink`); chủ thể thứ hai khi so sánh giữ `ink` nên hai hình khác màu nhau. Thêm **3 dòng người** vào từ vựng: `user` (Một người), `graduation-cap` (Học sinh), `hard-hat` (Người lao động) — dùng được ở chủ thể, hình so sánh, 4 góc và 2 ô đất.
 - **Files:** `src/shared/illustration-scene.ts`, `src/renderer/features/game-illustration.ts` (mirror), `src/shared/scene-asset-catalog.ts`, `src/renderer/features/editor/questions.ts` (nhãn), `docs/AI_SCENE_DIRECTOR_DESIGN.md` (§4.2 + khối từ vựng §5.2), `tests/unit/{scene-blueprint,illustration-registry}.test.ts`, `tests/ui/ui-play-surface-check.js` (ngưỡng 28 → 26px cho khớp quyết định), `docs/DECISIONS.md` #266.
@@ -26,17 +37,7 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - **Chưa xác minh:** `listAiTasks` trả rỗng ngay sau lượt chạy dù SQLite có hàng — cần một lượt riêng · chưa thử nút này trên câu `scenario` (bố cục #254) · chưa có người duyệt bằng mắt (mới qua vision-model).
 - **Việc kế tiếp:** P2 `process`/`surround` (không cần model), hoặc điều tra `listAiTasks`.
 
-### 2026-11-15 — #264 đường ống gợi ý cảnh (thuần TS, model tiêm, luôn có fallback) — 99/99
-- **Trạng thái:** Thêm `src/services/ai/scene-suggest.ts`: prompt dựng **từ catalog**, trích `{…}` cân bằng (hiểu chuỗi/escape/fence), chạy `normalizeSceneBlueprint`, và **luôn trả cảnh vẽ được** — gọi lỗi / JSON hỏng / id lạ / quá dài ⇒ rơi về `sceneBlueprintFromCategory` kèm `issues`.
-- **Files:** `src/services/ai/scene-suggest.ts` (mới), `tests/unit/scene-suggest.test.ts` (mới, 12 check), `docs/DECISIONS.md` #264, `docs/ROADMAP.md`, `docs/STATUS.md`.
-- **Quyết định:** model **tiêm** từ ngoài (kiểm được không cần khoá/mạng) · chặn phản hồi >8000 ký tự **trước** khi parse · phân biệt `source:'fallback'` với `source:'model'` + `issues` khi `compare` bị hạ cấp (gộp lại sẽ giấu đúng lỗi #262 dựng luật để tránh).
-- **Lệnh đã chạy:** `node tests/run-unit.js scene-suggest` **12/12** · `run-unit` **99/99** (44,6 s) · `npm run check` sạch (52 tệp UI) · `renderer-globals` 0 undefined · `check:embedded` khớp 6163,8 KiB.
-- **Đối chứng âm (đỏ đúng chỗ):** bỏ trần 8000 ký tự ⇒ check 11 · bỏ hiểu chuỗi JSON ⇒ check 6 · bỏ nhánh fallback ⇒ check 9.
-- **Học được:** ca thử ngoặc **cân nhau** trong chuỗi không phân biệt được scanner với phép đếm ký tự — phải dùng ca **lệch** thì đối chứng mới đỏ. Và sửa file bằng `python` trong heredoc tiếp tục ăn mất escape `
-` hai lần; phải dùng `edit` cho các chuỗi có dấu `\`.
-- **Chưa xác minh (quan trọng):** module **chưa nối vào đâu** — chưa có kênh Rust `scene:suggest`, chưa có nút "✨ Gợi ý cảnh từ nội dung", chưa ghi `ai_tasks`, **chưa chạy lần nào với model thật**. Giáo viên vẫn chỉ có "Cảnh thử".
-- **Việc kế tiếp:** kênh Rust `scene:suggest` (khoá ở backend, gọi `ai_http`, ghi `ai_tasks`) + nút trong editor gọi `suggestSceneBlueprint`, rồi đo trên binary thật.
-
+### 2026-11-15 — #264 đường ống gợi ý cảnh (thuần TS, model tiêm, luôn có fallback) — bản đầy đủ: [docs/handoff/status/2026-11-15.md](handoff/status/2026-11-15.md).
 ### 2026-11-15 — #263 P3 bước prompt: `compare` vào §5 + ví dụ mẫu chạy qua cổng dữ liệu thật — bản đầy đủ: [docs/handoff/status/2026-11-15.md](handoff/status/2026-11-15.md).
 
 ### 2026-11-15 — P1 `compare` chốt sổ: ROADMAP cập nhật + smoke-install bản 0.5.2 vào thư mục tạm — bản đầy đủ: [docs/handoff/status/2026-11-15.md](handoff/status/2026-11-15.md).

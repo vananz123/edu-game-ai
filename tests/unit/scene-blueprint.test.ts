@@ -402,8 +402,18 @@ function sceneBoxes(svg: string) {
   const icons = [...svg.matchAll(/data-scene-position="([a-z-]+)"[^>]*data-scene-size="(\d+)"[^>]*transform="translate\((\d+) (\d+)\)/g)].map(
     (match) => ({ position: match[1], size: Number(match[2]), x: Number(match[3]), y: Number(match[4]) })
   );
+  const steps = [...svg.matchAll(/data-scene-step="(\d+)" data-scene-size="(\d+)" transform="translate\((\d+) (\d+)\)/g)].map(
+    (match) => ({ step: Number(match[1]), size: Number(match[2]), x: Number(match[3]), y: Number(match[4]) })
+  );
+  // #267: the arrows are geometry too — a parity check that ignores them would
+  // pass while one composer pointed its arrow at the wrong gap.
+  const arrows = [...svg.matchAll(/data-scene-arrow="(\d+)" d="M(\d+) (\d+)h(\d+)/g)].map(
+    (match) => ({ index: Number(match[1]), x: Number(match[2]), y: Number(match[3]), length: Number(match[4]) })
+  );
   return {
     subjects,
+    steps,
+    arrows,
     icons: icons.filter((entry) => entry.position.startsWith('ground-') === false),
     props: icons.filter((entry) => entry.position.startsWith('ground-')),
     sign: sign
@@ -497,6 +507,138 @@ test('a single scene is untouched by compare: one subject, no sign layer', () =>
   assert.ok(!svg.includes('data-scene-layer="sign"'), 'no sign layer in single');
 });
 
+// --- #267 process: a sequence, not a second picture ------------------------
+const PROCESS: SceneBlueprint = {
+  v: 1,
+  layout: 'process',
+  backdrop: 'meadow',
+  paletteKey: 'plants',
+  mainIcon: 'leaf',
+  steps: ['apple', 'box'],
+};
+
+test('a process scene keeps its stages in the order they were given', () => {
+  const issues: string[] = [];
+  const scene = normalizeSceneBlueprint(PROCESS, issues)!;
+  assert.equal(scene.layout, 'process');
+  assert.equal(scene.mainIcon, 'leaf', 'mainIcon is stage 1');
+  assert.deepEqual(scene.steps, ['apple', 'box'], 'stage order is the meaning');
+  assert.deepEqual(issues, [], 'a valid process scene must not report issues');
+});
+
+test('a process scene without stages becomes one picture, not a broken strip', () => {
+  for (const bad of [undefined, [], ['dragon'], ['leaf']]) {
+    const issues: string[] = [];
+    const scene = normalizeSceneBlueprint({ ...PROCESS, steps: bad }, issues)!;
+    assert.equal(scene.layout, 'single', `steps=${JSON.stringify(bad)} must degrade`);
+    assert.equal(scene.steps, undefined);
+    assert.ok(issues.includes('steps'), 'the degradation must be observable');
+    assert.equal(scene.mainIcon, 'leaf', 'the first stage is never lost');
+  }
+});
+
+test('one bad stage is dropped and the rest still make a sequence', () => {
+  const issues: string[] = [];
+  const scene = normalizeSceneBlueprint({ ...PROCESS, steps: ['apple', 'dragon', 'box'] }, issues)!;
+  assert.equal(scene.layout, 'process');
+  assert.deepEqual(scene.steps, ['apple', 'box']);
+  assert.ok(issues.includes('steps'), 'the dropped stage must be reported');
+});
+
+test('a process scene is three stages at most', () => {
+  const issues: string[] = [];
+  const scene = normalizeSceneBlueprint({ ...PROCESS, steps: ['apple', 'box', 'fish', 'bug'] }, issues)!;
+  assert.deepEqual(scene.steps, ['apple', 'box']);
+  assert.ok(issues.includes('steps'));
+});
+
+test('a process stage cannot be repeated or be the first stage', () => {
+  const scene = normalizeSceneBlueprint({ ...PROCESS, steps: ['box', 'box'] })!;
+  assert.deepEqual(scene.steps, ['box']);
+});
+
+test('single must not carry stages, and process must not carry compare fields', () => {
+  const single = normalizeSceneBlueprint({ ...VALID, steps: ['box'] })!;
+  assert.equal(single.layout, 'single');
+  assert.equal(single.steps, undefined, 'a stored scene must not carry fields the engine ignores');
+  const mixed = normalizeSceneBlueprint({ ...PROCESS, compareIcon: 'fish', compareSign: 'equal' })!;
+  assert.equal(mixed.layout, 'process');
+  assert.equal(mixed.compareIcon, undefined);
+  assert.equal(mixed.compareSign, undefined);
+});
+
+test('process moves corner icons to the two upper corners', () => {
+  // The left/right slots are exactly where stage 1 and stage 3 are drawn, so the
+  // normaliser moves them up instead of dropping them (#262's rule, reused).
+  const scene = normalizeSceneBlueprint({
+    ...PROCESS,
+    subIcons: [{ icon: 'leaf', position: 'left' }, { icon: 'fish', position: 'right' }],
+  }, [])!;
+  const slots = (scene.subIcons || []).map((sub) => sub.position);
+  assert.ok(slots.length >= 1);
+  for (const slot of slots) assert.ok(['top-left', 'top-right'].includes(slot), `${slot} is not an upper corner`);
+});
+
+test('a stage is never reused as a corner icon or a ground prop', () => {
+  const scene = normalizeSceneBlueprint({
+    ...PROCESS,
+    subIcons: [{ icon: 'apple', position: 'top-left' }],
+    props: ['box', 'leaf'],
+  }, [])!;
+  assert.equal(scene.subIcons, undefined, 'a stage must not also sit in a corner');
+  assert.equal(scene.props, undefined, 'a stage must not also stand on the ground');
+});
+
+test('process draws its stages in a measured row, above the ground props', () => {
+  const boxes = (svg: string) => [
+    ...svg.matchAll(/data-scene-step="(\d+)" data-scene-size="(\d+)" transform="translate\((\d+) (\d+)\)/g),
+  ].map((match) => ({ step: Number(match[1]), size: Number(match[2]), x: Number(match[3]), y: Number(match[4]) }));
+  const arrows = (svg: string) =>
+    [...svg.matchAll(/data-scene-arrow="(\d+)" d="M(\d+) (\d+)h/g)].map((match) => ({
+      index: Number(match[1]),
+      x: Number(match[2]),
+      y: Number(match[3]),
+    }));
+  const draw = (steps: string[]) =>
+    renderBlueprintSvg({ ...PROCESS, steps }, getIllustrationPalette(PROCESS.paletteKey));
+
+  const three = draw(['apple', 'box']);
+  const threeSteps = boxes(three);
+  assert.deepEqual(threeSteps.map((box) => box.x), [16, 122, 228], 'three stages split the width evenly');
+  assert.deepEqual([...new Set(threeSteps.map((box) => box.y))], [66], 'one row, one height');
+  assert.deepEqual([...new Set(threeSteps.map((box) => box.size))], [76], 'one size for every stage');
+  assert.deepEqual(threeSteps.map((box) => box.step), [1, 2, 3], 'the order is the meaning');
+  // Bottom must clear the ground props (y 146) and the top must clear the corner
+  // band (y 6..46), or a stage would sit inside another element.
+  for (const box of threeSteps) {
+    assert.ok(box.y + box.size <= 146, `stage at ${box.x} overlaps the ground props`);
+    assert.ok(box.y >= 50, `stage at ${box.x} climbs into the corner band`);
+  }
+  const threeArrows = arrows(three);
+  assert.equal(threeArrows.length, 2, 'an arrow between stage 1-2 and 2-3');
+  for (const arrow of threeArrows) {
+    const gapStart = threeSteps[arrow.index - 1].x + 76;
+    const gapEnd = threeSteps[arrow.index].x;
+    assert.ok(arrow.x >= gapStart && arrow.x + 14 <= gapEnd, `arrow ${arrow.index} is not inside its gap`);
+    assert.ok(arrow.y > 66 && arrow.y < 142, 'the arrow points at the middle of the row');
+  }
+
+  const two = draw(['box']);
+  assert.deepEqual(boxes(two).map((box) => box.x), [48, 196], 'two stages are centred, not left-aligned');
+  assert.equal(arrows(two).length, 1);
+
+  // Corner icons hug the top of the frame in process, like compare: the left and
+  // right slots would sit exactly on stage 1 and stage 3.
+  const withCorners = renderBlueprintSvg(
+    { ...PROCESS, steps: ['box'], subIcons: [{ icon: 'fish', position: 'top-left' }] },
+    getIllustrationPalette(PROCESS.paletteKey)
+  );
+  const corners = sceneBoxes(withCorners).icons;
+  assert.equal(corners.length, 1);
+  assert.equal(corners[0].size, 40, 'process uses the smaller corner icons');
+  assert.equal(corners[0].y, 6);
+});
+
 // --- renderer mirror parity ------------------------------------------------
 const RENDERER_DIR = path.join(__dirname, '..', '..', 'src', 'renderer', 'features');
 const sandbox: Record<string, unknown> = {
@@ -518,6 +660,9 @@ test('the renderer draws a compare scene with the same geometry as the shared on
   // this checks the drawing, which is where a duplicated geometry drifts.
   const cases: SceneBlueprint[] = [
     COMPARE,
+    PROCESS,
+    { ...PROCESS, steps: ['box'] },
+    { ...PROCESS, steps: ['apple', 'box'], subIcons: [{ icon: 'fish', position: 'top-right' }], props: ['leaf'] },
     { ...COMPARE, compareSign: 'equal', subIcons: [{ icon: 'leaf', position: 'top-left' }] },
     { ...COMPARE, backdrop: 'sea', paletteKey: 'water-world', compareIcon: 'fish', mainIcon: 'waves-horizontal' },
     { ...COMPARE, compareSign: undefined, props: ['apple', 'box'] },
@@ -546,6 +691,13 @@ test('the renderer normaliser and generator match the shared ones', () => {
     { ...COMPARE, compareIcon: 'paw-print' },
     { ...COMPARE, compareSign: 'banana' },
     { ...COMPARE, layout: 'side-by-side' },
+    PROCESS,
+    JSON.stringify(PROCESS),
+    { ...PROCESS, steps: [] },
+    { ...PROCESS, steps: ['apple', 'leaf', 'box', 'fish'] },
+    { ...PROCESS, steps: ['dragon'] },
+    { ...PROCESS, compareIcon: 'fish', compareSign: 'equal' },
+    { ...PROCESS, subIcons: [{ icon: 'leaf', position: 'right' }], props: ['box'] },
     { ...COMPARE, subIcons: ['fish', 'leaf'] },
     { ...VALID, mainIcon: 'chevron-down' },
     { ...VALID, subIcons: ['bird', 'bird', 'paw-print', 'leaf', 'fish', 'bug'] },

@@ -167,8 +167,15 @@ const STAGE_SCENE_GROUND_PROP_SIZE = 40;
 /** Same four corners as SCENE_SUB_ICON_POSITIONS in the shared catalogue (#256). */
 const STAGE_SUB_ICON_POSITIONS = ['left', 'right', 'top-left', 'top-right'];
 /** Same layouts and signs as SCENE_LAYOUT_IDS / SCENE_COMPARE_SIGNS (#262). */
-const STAGE_SCENE_LAYOUTS = ['single', 'compare'];
+const STAGE_SCENE_LAYOUTS = ['single', 'compare', 'process'];
+/** `process` (#267) keeps only the two upper corners, like `compare`. */
+const STAGE_SCENE_PROCESS_MAX_EXTRA_STEPS = 2;
 const STAGE_SCENE_COMPARE_SIGNS = ['greater-than', 'less-than', 'equal'];
+/* Process geometry, mirroring the SCENE_PROCESS_* constants (#267). */
+const STAGE_SCENE_PROCESS_STEP_SIZE = 76;
+const STAGE_SCENE_PROCESS_STEP_TOP = 66;
+const STAGE_SCENE_PROCESS_ARROW_WIDTH = 14;
+const STAGE_SCENE_PROCESS_STEP_X = { 2: [48, 196], 3: [16, 122, 228] };
 /** Compare geometry, mirroring the SCENE_COMPARE_* constants (#262). */
 const STAGE_SCENE_COMPARE_SUBJECT_SIZE = 92;
 const STAGE_SCENE_COMPARE_SUBJECT_LIFT = 12;
@@ -245,9 +252,27 @@ function stageNormalizeBlueprint(value) {
       if (STAGE_SCENE_COMPARE_SIGNS.indexOf(wantedSign) >= 0) compareSign = wantedSign;
     }
   }
-  const subjects = compareIcon ? [mainIcon, compareIcon] : [mainIcon];
-  /** Compare keeps only the two upper corners; the rest move there (#262). */
-  const allowedSlots = layout === 'compare'
+  // #267: a `process` sequence drops back to one picture when it loses stages.
+  const steps = [];
+  if (layout === 'process') {
+    if (Array.isArray(raw.steps)) {
+      for (const entry of raw.steps) {
+        const isStepObject = entry && typeof entry === 'object' && !Array.isArray(entry);
+        const stepIcon = isStepObject
+          ? typeof entry.icon === 'string' ? entry.icon.trim() : ''
+          : typeof entry === 'string' ? entry.trim() : '';
+        if (!stageIsSceneIconId(stepIcon) || stepIcon === mainIcon || steps.indexOf(stepIcon) >= 0) continue;
+        if (steps.length >= STAGE_SCENE_PROCESS_MAX_EXTRA_STEPS) continue;
+        steps.push(stepIcon);
+      }
+    }
+    if (!steps.length) layout = 'single';
+  }
+  const subjects = [mainIcon]
+    .concat(compareIcon ? [compareIcon] : [])
+    .concat(layout === 'process' ? steps : []);
+  /** Compare and process keep only the two upper corners; the rest move there. */
+  const allowedSlots = layout === 'compare' || layout === 'process'
     ? Object.keys(STAGE_SUB_ICON_COMPARE_SLOTS)
     : STAGE_SUB_ICON_POSITIONS;
   const backdrop = stageIsSceneBackdropId(raw.backdrop) ? raw.backdrop : STAGE_SCENE_BACKDROP_DEFAULT;
@@ -274,6 +299,7 @@ function stageNormalizeBlueprint(value) {
   const blueprint: any = { v: 1, layout: layout, backdrop: backdrop, paletteKey: paletteKey, mainIcon: mainIcon };
   if (compareIcon) blueprint.compareIcon = compareIcon;
   if (compareSign) blueprint.compareSign = compareSign;
+  if (layout === 'process' && steps.length) blueprint.steps = steps;
   if (subIcons.length) blueprint.subIcons = subIcons;
   if (Array.isArray(raw.props)) {
     for (const entry of raw.props) {
@@ -681,6 +707,32 @@ function customImageSrc(assetId) {
   return shell === 'tauri' ? 'http://edugame-file.tauri.localhost' + path : 'edugame-file:' + path;
 }
 
+/**
+ * Process strip, mirroring the shared composer (#267): 2-3 stages left to right
+ * with an arrow between them; '' when a stage will not draw.
+ */
+function stageProcessStripSvg(stages, palette) {
+  const xs = STAGE_SCENE_PROCESS_STEP_X[stages.length];
+  if (!xs) return '';
+  const boxes = [];
+  for (let index = 0; index < stages.length; index += 1) {
+    const svg = stageIconSvg(stages[index], STAGE_SCENE_PROCESS_STEP_SIZE, 'stage-illustration-icon');
+    if (!svg) return '';
+    boxes.push('<g data-scene-step="' + (index + 1) + '" data-scene-size="' + STAGE_SCENE_PROCESS_STEP_SIZE + '" ' +
+      'transform="translate(' + xs[index] + ' ' + STAGE_SCENE_PROCESS_STEP_TOP + ')" color="' + escapeHtml(palette.glow) + '">' + svg + '</g>');
+  }
+  const arrows = xs.slice(1).map(function (next, index) {
+    const gapStart = xs[index] + STAGE_SCENE_PROCESS_STEP_SIZE;
+    const x = Math.round((gapStart + next) / 2 - STAGE_SCENE_PROCESS_ARROW_WIDTH / 2);
+    const y = STAGE_SCENE_PROCESS_STEP_TOP + Math.round(STAGE_SCENE_PROCESS_STEP_SIZE / 2);
+    const tip = STAGE_SCENE_PROCESS_ARROW_WIDTH - 5;
+    return '<path data-scene-arrow="' + (index + 1) + '" d="M' + x + ' ' + y + 'h' + tip +
+      'M' + (x + tip - 4) + ' ' + (y - 4) + 'l4 4-4 4" fill="none" stroke="' + escapeHtml(palette.ink) +
+      '" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"/>';
+  });
+  return boxes.join('') + arrows.join('');
+}
+
 function stageIllustrationHtml(item, game, extraClass) {
   const resolved = resolveStageIllustration(item, game);
   if (!resolved) return '';
@@ -713,6 +765,11 @@ function stageIllustrationHtml(item, game, extraClass) {
     ? stageIconSvg(blueprint.compareIcon, STAGE_SCENE_COMPARE_SUBJECT_SIZE, 'stage-illustration-icon')
     : '';
   const isCompare = !!compareSecond;
+  // #267: a sequence is drawn as a strip instead of one centre picture.
+  const processStages = blueprint && blueprint.layout === 'process' && Array.isArray(blueprint.steps)
+    ? [blueprint.mainIcon].concat(blueprint.steps)
+    : [];
+  const isProcess = processStages.length >= 2;
   const subjectSize = isCompare ? STAGE_SCENE_COMPARE_SUBJECT_SIZE : STAGE_ILLUSTRATION_SUBJECT_SIZE;
   const subjectY = isCompare ? spec.subjectY + STAGE_SCENE_COMPARE_SUBJECT_LIFT : spec.subjectY;
   const sky = palette.sky || palette.fill;
@@ -729,12 +786,14 @@ function stageIllustrationHtml(item, game, extraClass) {
       `<rect x="0" y="${STAGE_ILLUSTRATION_HORIZON}" width="320" height="${200 - STAGE_ILLUSTRATION_HORIZON}" fill="${escapeHtml(ground)}"/>`) +
     stageLayer('mid', stagePrimitivesOf(spec.standing).map(function (p) { return stageMidSvg(p, palette); }).join('')) +
     stageLayer('halo', `<circle cx="160" cy="${subjectY}" r="72" fill="${escapeHtml(palette.glow)}" opacity="0.15"/>`) +
-    stageLayer('subject', isCompare
+    stageLayer('subject', isProcess
+      ? stageProcessStripSvg(processStages, palette) || '<g transform="translate(' + x + ' ' + y + ')" color="' + escapeHtml(palette.glow) + '">' + subjectIcon + '</g>'
+      : isCompare
       // #266: subject in the palette accent, mirroring the shared composer.
       ? '<g data-scene-subject="main" data-scene-size="' + subjectSize + '" transform="translate(' + STAGE_SCENE_COMPARE_SUBJECT_X.left + ' ' + y + ')" color="' + escapeHtml(palette.glow) + '">' + subjectIcon + '</g>' +
         '<g data-scene-subject="second" data-scene-size="' + subjectSize + '" transform="translate(' + STAGE_SCENE_COMPARE_SUBJECT_X.right + ' ' + y + ')" color="' + escapeHtml(palette.ink) + '">' + compareSecond + '</g>'
       : `<g transform="translate(${x} ${y})" color="${escapeHtml(palette.glow)}">${subjectIcon}</g>`) +
-    stageLayer('props', stagePrimitivesOf(spec.standing).map(function (p) { return stagePropsSvg(p, palette); }).join('') + stageGroundPropsSvg(groundProps, palette) + stageSubIconsSvg(subIcons, palette, isCompare)) +
+    stageLayer('props', stagePrimitivesOf(spec.standing).map(function (p) { return stagePropsSvg(p, palette); }).join('') + stageGroundPropsSvg(groundProps, palette) + stageSubIconsSvg(subIcons, palette, isCompare || isProcess)) +
     stageLayer('sign', isCompare
       ? '<g data-scene-sign="' + escapeHtml(String(blueprint.compareSign || '')) + '" data-scene-size="' + STAGE_SCENE_COMPARE_SIGN_SIZE + '" ' +
         'transform="translate(' + (160 - STAGE_SCENE_COMPARE_SIGN_SIZE / 2) + ' ' + Math.round(subjectY - STAGE_SCENE_COMPARE_SIGN_SIZE / 2) + ')" ' +

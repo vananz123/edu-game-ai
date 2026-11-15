@@ -55,11 +55,27 @@ export function isSceneSubIconPosition(value: unknown): value is SceneSubIconPos
  */
 export const SCENE_COMPARE_SUB_ICON_POSITIONS = Object.freeze(['top-left', 'top-right'] as const);
 
+/** `process` stages after the first one: 1 extra = two steps, 2 extras = three. */
+export const SCENE_PROCESS_MAX_EXTRA_STEPS = 2;
+
+/**
+ * A `process` scene keeps only the two upper corners, for the same measured
+ * reason as `compare`: the left/right corner slots sit exactly where stage 1
+ * and stage 3 are drawn.
+ */
+export const SCENE_PROCESS_SUB_ICON_POSITIONS = Object.freeze(['top-left', 'top-right'] as const);
+
 /** Rejected above this size. A valid blueprint is ~120–180 bytes. */
 export const SCENE_BLUEPRINT_MAX_BYTES = 600;
 
-/** The only layouts that exist in the data model so far. */
-export const SCENE_LAYOUT_IDS = Object.freeze(['single', 'compare'] as const);
+/**
+ * The layouts that exist in the data model.
+ *
+ * `process` (#267) is a left-to-right sequence: `mainIcon` is stage 1 and
+ * `steps` holds up to two more stages. It is a different GEOMETRY, not a
+ * different palette — that is why it is a layout and not a flag.
+ */
+export const SCENE_LAYOUT_IDS = Object.freeze(['single', 'compare', 'process'] as const);
 export type SceneLayoutId = (typeof SCENE_LAYOUT_IDS)[number];
 
 export function isSceneLayoutId(value: unknown): value is SceneLayoutId {

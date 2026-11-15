@@ -50,7 +50,7 @@ function idsFor(key: string): string[] {
   const tail = block.slice(start);
   const next = tail
     .slice(1)
-    .search(/\n(?:layout|backdrop|paletteKey|mainIcon|compareIcon|compareSign|subIcons|props)\b/);
+    .search(/\n(?:layout|backdrop|paletteKey|mainIcon|compareIcon|compareSign|steps|subIcons|props)\b/);
   const section = next === -1 ? tail : tail.slice(0, next + 1);
   const body = section.slice(section.indexOf(':') + 1);
   return body
@@ -133,7 +133,11 @@ test('the prompt offers exactly the layouts the engine can draw', () => {
   // returns null, which renders an empty column.
   assert.match(prompt, /"layout":\s*"single"/);
   assert.match(prompt, /"layout":\s*"compare"/);
-  for (const missing of ['process', 'surround']) {
+  // #267 released `process` from this brake together with its normaliser rules,
+  // its geometry and a worked example. `surround` stays banned until it has all
+  // four, because a layout the engine cannot draw renders an empty column.
+  assert.match(prompt, /"layout":\s*"process"/);
+  for (const missing of ['surround']) {
     assert.ok(!new RegExp('"layout":\\s*"' + missing + '"').test(prompt), `${missing} is offered but not implemented`);
   }
 });
@@ -172,7 +176,10 @@ test('compare restricts corner icons to the corners the engine actually keeps', 
 
 test('the prompt caps sub-icons lower in compare than in single', () => {
   const prompt = promptBlock();
-  assert.match(prompt, /Tối đa 4 subIcons \(chỉ 2 khi layout = compare\)/);
+  // #267 added `process` to the same cap; the rule must still name `compare`,
+  // because a reader (or a model) that only knows `compare` must see the cap.
+  assert.match(prompt, /Tối đa 4 subIcons \(chỉ 2 khi layout = compare/);
+  assert.match(prompt, /chỉ 2 khi layout = compare hoặc process/);
 });
 
 /** Every balanced `{...}` object in the prompt, in order — the worked examples.

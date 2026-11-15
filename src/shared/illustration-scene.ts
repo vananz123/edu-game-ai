@@ -68,6 +68,30 @@ export const SCENE_COMPARE_SUB_ICON_SLOTS: Readonly<
   'top-right': { x: SCENE_WIDTH - 12 - SCENE_COMPARE_SUB_ICON_SIZE, y: 6 },
 });
 
+/* Process layout (#267): a left-to-right sequence of two or three stages.
+ *
+ * Measured, not guessed. The frame is 320x200 and the ground band starts at
+ * SCENE_HORIZON - 4 (the props sit at y 146..186), so the stage row has
+ * y 66..142 to work with: 76px stages, which still read as "things", not dots.
+ *
+ *   n = 2:   x 48..124   x 196..272   arrow centred at 160
+ *   n = 3:   x 16..92   x 122..198   x 228..304   arrows at 100 and 206
+ *   y  6..46   the two corner icons (40px), same band as compare
+ *   y 66..142  the stage row, bottom-aligned just above the ground props
+ *   y146..186  ground props (#259), unchanged
+ *
+ * The left/right corner slots would sit exactly on stage 1 and stage 3, which is
+ * why `process` only keeps the two upper corners (SCENE_PROCESS_SUB_ICON_POSITIONS).
+ */
+export const SCENE_PROCESS_STEP_SIZE = 76;
+export const SCENE_PROCESS_STEP_TOP = 66;
+export const SCENE_PROCESS_ARROW_WIDTH = 14;
+/** Left edge of each stage box, per stage count. */
+export const SCENE_PROCESS_STEP_X: Readonly<Record<number, readonly number[]>> = Object.freeze({
+  2: Object.freeze([48, 196]),
+  3: Object.freeze([16, 122, 228]),
+});
+
 /**
  * The eight deterministic primitives a scene is assembled from (#72). Fixed
  * coordinates only — no randomness — so a saved game renders byte-identically
@@ -562,6 +586,40 @@ function renderSubIcons(
  * it looks the same on every machine and cannot be affected by font fallback.
  * Unknown sign -> '' (two subjects with no sign is still a valid picture).
  */
+/**
+ * Process strip (#267): 2-3 stages left to right, with an arrow between them.
+ * Returns '' when a stage will not draw, so the caller falls back to the single
+ * picture instead of showing an arrow pointing at nothing.
+ */
+function renderProcessStrip(stages: readonly string[], palette: IllustrationPalette): string {
+  const xs = SCENE_PROCESS_STEP_X[stages.length];
+  if (!xs) return '';
+  const boxes: string[] = [];
+  for (let index = 0; index < stages.length; index += 1) {
+    const svg = renderIconSvg(stages[index], {
+      size: SCENE_PROCESS_STEP_SIZE,
+      className: 'stage-illustration-icon',
+    });
+    if (!svg) return '';
+    boxes.push(
+      `<g data-scene-step="${index + 1}" data-scene-size="${SCENE_PROCESS_STEP_SIZE}" ` +
+        `transform="translate(${xs[index]} ${SCENE_PROCESS_STEP_TOP})" color="${esc(palette.glow)}">${svg}</g>`
+    );
+  }
+  const arrows = xs.slice(1).map((next, index) => {
+    const gapStart = xs[index] + SCENE_PROCESS_STEP_SIZE;
+    const x = Math.round((gapStart + next) / 2 - SCENE_PROCESS_ARROW_WIDTH / 2);
+    const y = SCENE_PROCESS_STEP_TOP + Math.round(SCENE_PROCESS_STEP_SIZE / 2);
+    const tip = SCENE_PROCESS_ARROW_WIDTH - 5;
+    return (
+      `<path data-scene-arrow="${index + 1}" d="M${x} ${y}h${tip}M${x + tip - 4} ${y - 4}l4 4-4 4" ` +
+      `fill="none" stroke="${esc(palette.ink)}" stroke-width="2.2" stroke-linecap="round" ` +
+      `stroke-linejoin="round" opacity="0.7"/>`
+    );
+  });
+  return boxes.join('') + arrows.join('');
+}
+
 function renderCompareSign(sign: SceneCompareSign | undefined, palette: IllustrationPalette): string {
   const ink = esc(palette.ink);
   const stroke = `fill="none" stroke="${ink}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"`;
@@ -611,7 +669,8 @@ function composeSceneSvg(
   subIcons: readonly SceneSubIcon[],
   groundProps: readonly string[],
   options: SceneSvgOptions = {},
-  compare: { second: string; sign: SceneCompareSign | undefined } | null = null
+  compare: { second: string; sign: SceneCompareSign | undefined } | null = null,
+  processStages: readonly string[] = []
 ): string {
   if (!subject) return '';
 
@@ -651,11 +710,14 @@ function composeSceneSvg(
     // a pale wash; the accent is the only saturated colour a palette owns, and
     // giving it to the one thing the question is about makes the picture read
     // as a picture instead of a diagram.
-    layer('subject', isCompare
+    layer('subject', processStages.length >= 2
+      // #267: a sequence is drawn as a strip, not as one centre picture.
+      ? renderProcessStrip(processStages, palette) || `<g transform="translate(${Math.round((SCENE_WIDTH - SCENE_SUBJECT_SIZE) / 2)} ${y})" color="${esc(palette.glow)}">${subject}</g>`
+      : isCompare
       ? `<g data-scene-subject="main" data-scene-size="${subjectSize}" transform="translate(${SCENE_COMPARE_SUBJECT_X.left} ${y})" color="${esc(palette.glow)}">${subject}</g>` +
         `<g data-scene-subject="second" data-scene-size="${subjectSize}" transform="translate(${SCENE_COMPARE_SUBJECT_X.right} ${y})" color="${esc(palette.ink)}">${compare!.second}</g>`
       : `<g transform="translate(${Math.round((SCENE_WIDTH - SCENE_SUBJECT_SIZE) / 2)} ${y})" color="${esc(palette.glow)}">${subject}</g>`) +
-    layer('props', primitivesOf(spec.standing).map((p) => renderProps(p, palette)).join('') + renderGroundProps(groundProps, palette) + renderSubIcons(subIcons, palette, isCompare)) +
+    layer('props', primitivesOf(spec.standing).map((p) => renderProps(p, palette)).join('') + renderGroundProps(groundProps, palette) + renderSubIcons(subIcons, palette, isCompare || processStages.length >= 2)) +
     layer('sign', isCompare
       ? `<g data-scene-sign="${esc(String(compare!.sign || ''))}" data-scene-size="${SCENE_COMPARE_SIGN_SIZE}" ` +
         `transform="translate(${SCENE_WIDTH / 2 - SCENE_COMPARE_SIGN_SIZE / 2} ${Math.round(subjectY - SCENE_COMPARE_SIGN_SIZE / 2)})" ` +
@@ -716,7 +778,10 @@ export function renderBlueprintSvg(
     Array.isArray(blueprint.subIcons) ? blueprint.subIcons : [],
     Array.isArray(blueprint.props) ? blueprint.props : [],
     options,
-    second ? { second, sign: blueprint.compareSign } : null
+    second ? { second, sign: blueprint.compareSign } : null,
+    blueprint.layout === 'process' && Array.isArray(blueprint.steps)
+      ? [blueprint.mainIcon, ...blueprint.steps]
+      : []
   );
 }
 
