@@ -1,5 +1,10 @@
 # Roadmap
 
+## Nút thắt `tauri:check` đã đóng: `devPath` là khoá Tauri v1, và cổng sidebar 252px đã đỏ oan từ 2026-11-15 (2026-11-15)
+- **Đã xác minh:** `npm run tauri:check` → **51/51** + **10/10** mở lại, 0 FAIL, `sidebar=232px`; `npm test` **97/97**; `npm run check` sạch; `check:renderer-globals` 72/74 script, 1051 hàm, 0 undefined; `build:icons:check` 129 icon; `check:embedded` khớp 6160,9 KiB.
+- **Phạm vi:** `tests/ui/tauri-webview-check.js` đòi cứng `sidebar === 252px` — số đo **trước** bản làm dày giao diện, nay 232px — nên cổng đỏ oan và che mất một sản phẩm đang xanh. Cổng nay nhận 4 bề rộng breakpoint trong `src/index.html` (232/208/184/64). Nguyên nhân thật khiến cổng chưa từng chạy: `tauri.conf.json` có `build.devPath` là **khoá Tauri v1** trong khi dự án dùng **Tauri 2** (`$schema` config/2) → Cargo không parse được; `build-tauri-release.js` **không** tự xử lý.
+- **Còn mở / kế tiếp:** Build/phát hành installer **0.5.2**; `cargo test` chưa chạy lại (Rust không đổi); các cổng UI rời chưa chạy lại; chưa duyệt bằng mắt.
+
 ## AI Scene Director — cảnh minh hoạ ghép từ JSON nhỏ: P0 xong, P1 compare, P2 process/surround/props, P3 kênh AI, P4 cổng (2026-11-15)
 - **P0 — xong (quyết định #252).** Từ vựng cảnh (`src/shared/scene-asset-catalog.ts`: 10 nền · 24 khoá màu · 38 icon), blueprint `v:1`/`layout:'single'` (`src/shared/scene-blueprint.ts`), cổng chuẩn hoá tổng + bất biến, vẽ bằng `composeSceneSvg` (24/24 hash vàng khớp), lưu trữ + `.egame` (chuẩn hoá lại khi nhập, không đổi Rust), bản sao renderer + parity test, nút tạm "Cảnh thử" trong editor. Chưa gọi AI.
 - **Đã xác minh:** `npm run check` sạch · `check:renderer-globals` 72/74 script/1051 hàm/8358 điểm gọi/0 undefined · `build:icons:check` 129 icon · `npm test` **97/97** (46,5 s) · `npm run build:tauri` 6160,9 KiB + 201 tệp · `build-tauri-release` 56,43 MiB (3m31s) · trên binary thật: `check:item-assets-ui` **43/43** (14 check #252) + bố cục 1920×1080/1366×768 không tràn, chữ ≥11px.

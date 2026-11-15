@@ -3578,3 +3578,23 @@ Ba ràng buộc không đổi: (1) game đã lưu phải chơi được **offlin
 - Chưa đo dung lượng `.egame` thật trước/sau trên một bộ game lớn; con số ~120–180 byte/câu là suy ra từ hình dạng, chưa phải phép đo trên gói.
 
 **Việc kế tiếp.** Refactor gộp bảng cảnh bằng esbuild để bỏ bản sao renderer (một lượt riêng, có parity test làm lưới), rồi P1: bố cục `compare` (hai vế + dấu so sánh) trên cùng cổng kiểm tra và cùng golden-hash. Sau P2 mới mở kênh AI ở P3, và chỉ khi đó mới đổi nhãn "Cảnh thử" thành "Cảnh gợi ý".
+
+## Đóng nút thắt `tauri:check`: `devPath` là khoá Tauri v1, cổng sidebar bám breakpoint thay vì hằng số (2026-11-15)
+
+**Bối cảnh.** Năm bàn giao liên tiếp ghi "`npm run tauri:check` chưa chạy trên cây này — vướng `devPath` chưa commit". Lượt này chạy được và tìm ra hai việc khác nhau, đừng lẫn.
+
+1. **`build.devPath` là khoá của Tauri v1, không phải v2.** `tauri.conf.json` khai `"$schema": "https://schema.tauri.app/config/2"` và `Cargo.toml` dùng `tauri = "2"`, nhưng `build` vẫn có `"devPath": "http://localhost:5173"`. Tauri 2 không có khoá này (v2 dùng `build.devUrl`), nên cấu hình không parse được và Cargo dừng trước cả khi biên dịch. Đó chính là lý do mọi lượt trước phải "tạm bỏ `devPath` rồi khôi phục nguyên byte".
+2. **`scripts/build-tauri-release.js` không tự xử lý `devPath`.** Đã đọc cả 242 dòng: không có tham chiếu nào tới `devPath` hay `tauri.conf.json`. Việc tạm bỏ vốn làm **bằng tay** mỗi lượt, nên nó không phải một bước tự động có thể tin.
+3. **Cổng `sidebar 252px` đã đỏ oan từ bản làm dày giao diện.** `tauri-webview-check.js` khẳng định `width === 252`. Bản 2026-11-15 đổi sidebar thành `232px` (`max-wide` 208, `max-tab` 184, `max-compact` 64) và cập nhật `src/index.html` nhưng không cập nhật cổng, nên cổng báo FAIL cho một sản phẩm đúng — và vì `tauri:check` chưa từng chạy được, không ai thấy.
+
+**Quyết định.** (a) Cổng nhận **cả bốn** bề rộng breakpoint (`SIDEBAR_WIDTHS = [232, 208, 184, 64]`) thay vì một hằng số, để cửa sổ hẹp không làm đỏ lại lần nữa; nguồn sự thật vẫn là `src/index.html`. (b) **Không** đổi `devPath` thành `devUrl` và **không** commit dòng đó: đây là cấu hình dev của chủ dự án, đã ghim SHA-256 `380F9E89…B974768` trong bốn chỗ của docs. Cách đúng là tạm bỏ → chạy → khôi phục, có kiểm SHA. (c) Ghi lại `devPath` là khoá v1 để lượt sau không phải đoán lại.
+
+**Đánh đổi.** Cổng chấp nhận một tập bề rộng thay vì một con số: nếu ai đổi sidebar sang giá trị ngoài tập đó, cổng vẫn bắt — nhưng nếu ai đổi cả `src/index.html` **và** không cập nhật tập này, cổng báo đỏ cho một thiết kế mới hợp lệ. Chấp nhận, vì đỏ-rõ-ràng dễ sửa hơn xanh-giả.
+
+**Kiểm chứng.** `npm run tauri:check` → **51/51** + **10/10** mở lại, 0 FAIL, `sidebar=232px` (trước đó 50/51 với đúng một FAIL ở dòng sidebar). `npm test` **97/97**; `npm run check` sạch; `check:renderer-globals` 72/74 script, 1051 hàm, 8358 điểm gọi, 0 undefined; `build:icons:check` 129 icon; `check:embedded` khớp 6160,9 KiB. `src-tauri/tauri.conf.json` sau khi khôi phục có SHA-256 `380F9E893D859D794D8EEAA644D51FB6A60C1AA451C902D3B8169C8C3B974768`, khớp bản sao lưu và khớp docs.
+
+**Bài học lặp lại (đã ghi một lần ở `settings.ts`).** `tests/ui/*-check.js` được `toString()` rồi nhúng vào trang, nên **backtick trong comment** phá template literal bao ngoài. Lượt này mắc lại đúng lỗi đó ở `tauri-webview-check.js` và `node --check` bắt ngay. Comment trong các tệp check phải tránh backtick.
+
+**Không chứng minh.** Chưa build/phát hành installer 0.5.2; chưa chạy lại `cargo test` (Rust không đổi); các cổng UI rời (`ui-typography-readability`, `ui-dark-theme`, …) chưa chạy lại trong lượt này; chưa duyệt bằng mắt.
+
+**Việc kế tiếp.** Build installer 0.5.2 theo đúng thủ tục tạm bỏ `devPath` + khôi phục SHA, rồi quay lại refactor gộp bảng cảnh bằng esbuild trước P1 `compare`.
