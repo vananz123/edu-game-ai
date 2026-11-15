@@ -84,15 +84,24 @@ export type ScenePrimitive =
   | 'waves'
   | 'none';
 
+/**
+ * A layer may hold one primitive or several. Stacking is why a scene stopped
+ * reading as "one icon on a card": `sky: ['sun','clouds']` draws both, and
+ * `standing: ['trees','bushes']` gives the middle distance depth. Before this
+ * each layer held exactly one primitive, so a richer backdrop was impossible
+ * without adding a new primitive kind.
+ */
+export type SceneLayerPrimitives = ScenePrimitive | readonly ScenePrimitive[];
+
 export interface SceneSpec {
   /** Sky layer: what the scene sits under. */
-  sky: ScenePrimitive;
+  sky: SceneLayerPrimitives;
   /** Far layer: the horizon shape. */
-  horizon: ScenePrimitive;
+  horizon: SceneLayerPrimitives;
   /** Mid layer: things standing on the ground. */
-  standing: ScenePrimitive;
+  standing: SceneLayerPrimitives;
   /** Foreground layer: what overlaps the subject's feet. */
-  fg: ScenePrimitive;
+  fg: SceneLayerPrimitives;
   /** Vertical position of the subject's centre. Grounded scenes sit higher. */
   subjectY: number;
 }
@@ -121,30 +130,30 @@ export const SCENE_LAYER_ORDER: readonly string[] = Object.freeze([
  * preview but invisible to every string assertion.
  */
 const SCENE_SPECS: Readonly<Record<string, SceneSpec>> = Object.freeze({
-  animals: { sky: 'sun', horizon: 'hills', standing: 'trees', fg: 'grass', subjectY: 88 },
-  plants: { sky: 'sun', horizon: 'hills', standing: 'bushes', fg: 'roots', subjectY: 88 },
-  space: { sky: 'stars', horizon: 'mountains', standing: 'none', fg: 'stones', subjectY: 84 },
-  'human-body': { sky: 'rays', horizon: 'line', standing: 'none', fg: 'stones', subjectY: 84 },
-  transport: { sky: 'clouds', horizon: 'skyline', standing: 'towers', fg: 'stones', subjectY: 88 },
-  safety: { sky: 'sun', horizon: 'skyline', standing: 'tools', fg: 'stones', subjectY: 88 },
-  environment: { sky: 'clouds', horizon: 'mountains', standing: 'trees', fg: 'grass', subjectY: 88 },
-  history: { sky: 'sun', horizon: 'mountains', standing: 'books', fg: 'stones', subjectY: 88 },
-  geography: { sky: 'clouds', horizon: 'mountains', standing: 'trees', fg: 'grass', subjectY: 88 },
-  jobs: { sky: 'clouds', horizon: 'skyline', standing: 'towers', fg: 'stones', subjectY: 88 },
-  sports: { sky: 'sun', horizon: 'hills', standing: 'none', fg: 'grass', subjectY: 88 },
-  music: { sky: 'rays', horizon: 'line', standing: 'none', fg: 'stones', subjectY: 84 },
-  art: { sky: 'rays', horizon: 'line', standing: 'books', fg: 'boards', subjectY: 86 },
-  math: { sky: 'clouds', horizon: 'line', standing: 'graph', fg: 'stones', subjectY: 86 },
-  language: { sky: 'clouds', horizon: 'line', standing: 'books', fg: 'stones', subjectY: 86 },
-  science: { sky: 'rays', horizon: 'line', standing: 'graph', fg: 'stones', subjectY: 86 },
-  technology: { sky: 'clouds', horizon: 'line', standing: 'graph', fg: 'stones', subjectY: 86 },
-  health: { sky: 'sun', horizon: 'line', standing: 'none', fg: 'grass', subjectY: 86 },
-  family: { sky: 'sun', horizon: 'skyline', standing: 'trees', fg: 'grass', subjectY: 88 },
-  community: { sky: 'clouds', horizon: 'skyline', standing: 'towers', fg: 'stones', subjectY: 88 },
-  weather: { sky: 'clouds', horizon: 'hills', standing: 'none', fg: 'grass', subjectY: 86 },
-  food: { sky: 'sun', horizon: 'hills', standing: 'bushes', fg: 'roots', subjectY: 88 },
-  objects: { sky: 'clouds', horizon: 'line', standing: 'books', fg: 'stones', subjectY: 86 },
-  'water-world': { sky: 'moon', horizon: 'sea', standing: 'none', fg: 'waves', subjectY: 84 },
+  animals: { sky: ['sun', 'clouds'], horizon: 'hills', standing: ['trees', 'bushes'], fg: ['grass', 'stones'], subjectY: 88 },
+  plants: { sky: ['sun', 'clouds'], horizon: 'hills', standing: ['bushes', 'trees'], fg: ['roots', 'grass'], subjectY: 88 },
+  space: { sky: ['stars', 'moon'], horizon: 'mountains', standing: ['bubbles'], fg: ['stones'], subjectY: 84 },
+  'human-body': { sky: ['rays', 'clouds'], horizon: 'line', standing: ['graph'], fg: ['stones'], subjectY: 84 },
+  transport: { sky: ['clouds', 'sun'], horizon: 'skyline', standing: ['towers'], fg: ['stones', 'grass'], subjectY: 88 },
+  safety: { sky: ['sun', 'clouds'], horizon: 'skyline', standing: ['tools', 'towers'], fg: ['stones'], subjectY: 88 },
+  environment: { sky: ['clouds', 'sun'], horizon: ['mountains', 'hills'], standing: ['trees', 'bushes'], fg: ['grass', 'stones'], subjectY: 88 },
+  history: { sky: ['sun', 'clouds'], horizon: ['mountains', 'hills'], standing: ['books', 'towers'], fg: ['stones'], subjectY: 88 },
+  geography: { sky: ['clouds', 'sun'], horizon: ['mountains', 'hills'], standing: ['trees', 'bushes'], fg: ['grass', 'stones'], subjectY: 88 },
+  jobs: { sky: ['clouds', 'sun'], horizon: 'skyline', standing: ['towers', 'tools'], fg: ['stones'], subjectY: 88 },
+  sports: { sky: ['sun', 'clouds'], horizon: 'hills', standing: ['bushes'], fg: ['grass', 'stones'], subjectY: 88 },
+  music: { sky: ['rays', 'clouds'], horizon: 'line', standing: 'none', fg: ['stones', 'boards'], subjectY: 84 },
+  art: { sky: ['rays', 'clouds'], horizon: 'line', standing: ['books'], fg: ['boards'], subjectY: 86 },
+  math: { sky: ['clouds', 'sun'], horizon: 'line', standing: ['graph', 'books'], fg: ['stones'], subjectY: 86 },
+  language: { sky: ['clouds', 'sun'], horizon: 'line', standing: ['books', 'graph'], fg: ['stones'], subjectY: 86 },
+  science: { sky: ['rays', 'clouds'], horizon: 'line', standing: ['graph', 'flasks'], fg: ['stones'], subjectY: 86 },
+  technology: { sky: ['clouds', 'rays'], horizon: 'line', standing: ['graph', 'bubbles'], fg: ['stones'], subjectY: 86 },
+  health: { sky: ['sun', 'clouds'], horizon: 'line', standing: ['graph'], fg: ['grass', 'stones'], subjectY: 86 },
+  family: { sky: ['sun', 'clouds'], horizon: 'skyline', standing: ['trees', 'bushes'], fg: ['grass', 'stones'], subjectY: 88 },
+  community: { sky: ['clouds', 'sun'], horizon: 'skyline', standing: ['towers', 'bushes'], fg: ['stones', 'grass'], subjectY: 88 },
+  weather: { sky: 'clouds', horizon: 'hills', standing: ['bushes', 'trees'], fg: ['grass', 'stones'], subjectY: 86 },
+  food: { sky: ['sun', 'clouds'], horizon: 'hills', standing: ['bushes'], fg: ['roots', 'grass'], subjectY: 88 },
+  objects: { sky: ['clouds', 'sun'], horizon: 'line', standing: ['books', 'tools'], fg: ['stones'], subjectY: 86 },
+  'water-world': { sky: ['moon', 'stars'], horizon: 'sea', standing: ['bubbles'], fg: ['waves', 'stones'], subjectY: 84 },
 });
 
 const DEFAULT_SCENE: SceneSpec = Object.freeze({
@@ -177,6 +186,11 @@ function darken(hex: string): string {
 }
 
 /** Sky layer: what the scene sits under. Drawn first, so everything overlaps it. */
+/** One value or a stack, normalised to a list the renderers can loop over. */
+function primitivesOf(value: SceneLayerPrimitives): readonly ScenePrimitive[] {
+  return Array.isArray(value) ? (value as readonly ScenePrimitive[]) : [value as ScenePrimitive];
+}
+
 function renderSky(primitive: ScenePrimitive, palette: IllustrationPalette): string {
   const ink = esc(palette.ink);
   const glow = esc(palette.glow);
@@ -509,17 +523,17 @@ function composeSceneSvg(
       // Frame fills first so rounded corners are covered on every palette.
       `<rect x="0" y="0" width="${SCENE_WIDTH}" height="${SCENE_HEIGHT}" rx="26" fill="${esc(palette.fill)}"/>` +
       `<rect x="0" y="0" width="${SCENE_WIDTH}" height="${SCENE_HEIGHT}" rx="26" fill="${esc(sky)}"/>` +
-      renderSky(spec.sky, palette)
+      primitivesOf(spec.sky).map((p) => renderSky(p, palette)).join('')
     ) +
     layer('far',
-      renderFar(spec.horizon, palette) +
+      primitivesOf(spec.horizon).map((p) => renderFar(p, palette)).join('') +
       `<rect x="0" y="${SCENE_HORIZON}" width="${SCENE_WIDTH}" height="${SCENE_HEIGHT - SCENE_HORIZON}" fill="${esc(ground)}"/>`
     ) +
-    layer('mid', renderMid(spec.standing, palette)) +
+    layer('mid', primitivesOf(spec.standing).map((p) => renderMid(p, palette)).join('')) +
     layer('halo', `<circle cx="${SCENE_WIDTH / 2}" cy="${spec.subjectY}" r="72" fill="${esc(palette.glow)}" opacity="0.15"/>`) +
     layer('subject', `<g transform="translate(${x} ${y})" color="${esc(palette.ink)}">${subject}</g>`) +
-    layer('props', renderProps(spec.standing, palette) + renderSubIcons(subIcons, palette)) +
-    layer('fg', renderFg(spec.fg, palette)) +
+    layer('props', primitivesOf(spec.standing).map((p) => renderProps(p, palette)).join('') + renderSubIcons(subIcons, palette)) +
+    layer('fg', primitivesOf(spec.fg).map((p) => renderFg(p, palette)).join('')) +
     `</svg>`
   );
 }

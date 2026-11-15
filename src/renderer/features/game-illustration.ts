@@ -91,30 +91,30 @@ function stageIllustrationCategory(assetId) {
  * `sky`, `horizon`, `standing` and `fg` are paint slots, not just motifs.
  */
 const STAGE_ILLUSTRATION_SCENES = {
-  animals: { sky: 'sun', horizon: 'hills', standing: 'trees', fg: 'grass', subjectY: 88 },
-  plants: { sky: 'sun', horizon: 'hills', standing: 'bushes', fg: 'roots', subjectY: 88 },
-  space: { sky: 'stars', horizon: 'mountains', standing: 'none', fg: 'stones', subjectY: 84 },
-  'human-body': { sky: 'rays', horizon: 'line', standing: 'none', fg: 'stones', subjectY: 84 },
-  transport: { sky: 'clouds', horizon: 'skyline', standing: 'towers', fg: 'stones', subjectY: 88 },
-  safety: { sky: 'sun', horizon: 'skyline', standing: 'tools', fg: 'stones', subjectY: 88 },
-  environment: { sky: 'clouds', horizon: 'mountains', standing: 'trees', fg: 'grass', subjectY: 88 },
-  history: { sky: 'sun', horizon: 'mountains', standing: 'books', fg: 'stones', subjectY: 88 },
-  geography: { sky: 'clouds', horizon: 'mountains', standing: 'trees', fg: 'grass', subjectY: 88 },
-  jobs: { sky: 'clouds', horizon: 'skyline', standing: 'towers', fg: 'stones', subjectY: 88 },
-  sports: { sky: 'sun', horizon: 'hills', standing: 'none', fg: 'grass', subjectY: 88 },
-  music: { sky: 'rays', horizon: 'line', standing: 'none', fg: 'stones', subjectY: 84 },
-  art: { sky: 'rays', horizon: 'line', standing: 'books', fg: 'boards', subjectY: 86 },
-  math: { sky: 'clouds', horizon: 'line', standing: 'graph', fg: 'stones', subjectY: 86 },
-  language: { sky: 'clouds', horizon: 'line', standing: 'books', fg: 'stones', subjectY: 86 },
-  science: { sky: 'rays', horizon: 'line', standing: 'graph', fg: 'stones', subjectY: 86 },
-  technology: { sky: 'clouds', horizon: 'line', standing: 'graph', fg: 'stones', subjectY: 86 },
-  health: { sky: 'sun', horizon: 'line', standing: 'none', fg: 'grass', subjectY: 86 },
-  family: { sky: 'sun', horizon: 'skyline', standing: 'trees', fg: 'grass', subjectY: 88 },
-  community: { sky: 'clouds', horizon: 'skyline', standing: 'towers', fg: 'stones', subjectY: 88 },
-  weather: { sky: 'clouds', horizon: 'hills', standing: 'none', fg: 'grass', subjectY: 86 },
-  food: { sky: 'sun', horizon: 'hills', standing: 'bushes', fg: 'roots', subjectY: 88 },
-  objects: { sky: 'clouds', horizon: 'line', standing: 'books', fg: 'stones', subjectY: 86 },
-  'water-world': { sky: 'moon', horizon: 'sea', standing: 'none', fg: 'waves', subjectY: 84 }
+  animals: { sky: ['sun', 'clouds'], horizon: 'hills', standing: ['trees', 'bushes'], fg: ['grass', 'stones'], subjectY: 88 },
+  plants: { sky: ['sun', 'clouds'], horizon: 'hills', standing: ['bushes', 'trees'], fg: ['roots', 'grass'], subjectY: 88 },
+  space: { sky: ['stars', 'moon'], horizon: 'mountains', standing: ['bubbles'], fg: ['stones'], subjectY: 84 },
+  'human-body': { sky: ['rays', 'clouds'], horizon: 'line', standing: ['graph'], fg: ['stones'], subjectY: 84 },
+  transport: { sky: ['clouds', 'sun'], horizon: 'skyline', standing: ['towers'], fg: ['stones', 'grass'], subjectY: 88 },
+  safety: { sky: ['sun', 'clouds'], horizon: 'skyline', standing: ['tools', 'towers'], fg: ['stones'], subjectY: 88 },
+  environment: { sky: ['clouds', 'sun'], horizon: ['mountains', 'hills'], standing: ['trees', 'bushes'], fg: ['grass', 'stones'], subjectY: 88 },
+  history: { sky: ['sun', 'clouds'], horizon: ['mountains', 'hills'], standing: ['books', 'towers'], fg: ['stones'], subjectY: 88 },
+  geography: { sky: ['clouds', 'sun'], horizon: ['mountains', 'hills'], standing: ['trees', 'bushes'], fg: ['grass', 'stones'], subjectY: 88 },
+  jobs: { sky: ['clouds', 'sun'], horizon: 'skyline', standing: ['towers', 'tools'], fg: ['stones'], subjectY: 88 },
+  sports: { sky: ['sun', 'clouds'], horizon: 'hills', standing: ['bushes'], fg: ['grass', 'stones'], subjectY: 88 },
+  music: { sky: ['rays', 'clouds'], horizon: 'line', standing: 'none', fg: ['stones', 'boards'], subjectY: 84 },
+  art: { sky: ['rays', 'clouds'], horizon: 'line', standing: ['books'], fg: ['boards'], subjectY: 86 },
+  math: { sky: ['clouds', 'sun'], horizon: 'line', standing: ['graph', 'books'], fg: ['stones'], subjectY: 86 },
+  language: { sky: ['clouds', 'sun'], horizon: 'line', standing: ['books', 'graph'], fg: ['stones'], subjectY: 86 },
+  science: { sky: ['rays', 'clouds'], horizon: 'line', standing: ['graph', 'flasks'], fg: ['stones'], subjectY: 86 },
+  technology: { sky: ['clouds', 'rays'], horizon: 'line', standing: ['graph', 'bubbles'], fg: ['stones'], subjectY: 86 },
+  health: { sky: ['sun', 'clouds'], horizon: 'line', standing: ['graph'], fg: ['grass', 'stones'], subjectY: 86 },
+  family: { sky: ['sun', 'clouds'], horizon: 'skyline', standing: ['trees', 'bushes'], fg: ['grass', 'stones'], subjectY: 88 },
+  community: { sky: ['clouds', 'sun'], horizon: 'skyline', standing: ['towers', 'bushes'], fg: ['stones', 'grass'], subjectY: 88 },
+  weather: { sky: 'clouds', horizon: 'hills', standing: ['bushes', 'trees'], fg: ['grass', 'stones'], subjectY: 86 },
+  food: { sky: ['sun', 'clouds'], horizon: 'hills', standing: ['bushes'], fg: ['roots', 'grass'], subjectY: 88 },
+  objects: { sky: ['clouds', 'sun'], horizon: 'line', standing: ['books', 'tools'], fg: ['stones'], subjectY: 86 },
+  'water-world': { sky: ['moon', 'stars'], horizon: 'sea', standing: ['bubbles'], fg: ['waves', 'stones'], subjectY: 84 }
 };
 
 const STAGE_ILLUSTRATION_DEFAULT_SCENE = {
@@ -127,15 +127,15 @@ const STAGE_ILLUSTRATION_DEFAULT_SCENE = {
    normalisers directly. */
 const STAGE_SCENE_BACKDROPS = {
   plain: { sky: 'none', horizon: 'line', standing: 'none', fg: 'none', subjectY: 88 },
-  meadow: { sky: 'sun', horizon: 'hills', standing: 'none', fg: 'grass', subjectY: 88 },
-  forest: { sky: 'clouds', horizon: 'hills', standing: 'trees', fg: 'roots', subjectY: 88 },
-  mountain: { sky: 'sun', horizon: 'mountains', standing: 'trees', fg: 'stones', subjectY: 88 },
-  sea: { sky: 'moon', horizon: 'sea', standing: 'none', fg: 'waves', subjectY: 84 },
-  stars: { sky: 'stars', horizon: 'mountains', standing: 'none', fg: 'stones', subjectY: 84 },
-  city: { sky: 'clouds', horizon: 'skyline', standing: 'towers', fg: 'stones', subjectY: 88 },
-  classroom: { sky: 'rays', horizon: 'line', standing: 'books', fg: 'stones', subjectY: 86 },
-  lab: { sky: 'rays', horizon: 'line', standing: 'graph', fg: 'stones', subjectY: 86 },
-  studio: { sky: 'rays', horizon: 'line', standing: 'books', fg: 'boards', subjectY: 86 }
+  meadow: { sky: ['sun', 'clouds'], horizon: 'hills', standing: ['bushes'], fg: ['grass', 'stones'], subjectY: 88 },
+  forest: { sky: ['clouds', 'sun'], horizon: 'hills', standing: ['trees', 'bushes'], fg: ['roots', 'grass'], subjectY: 88 },
+  mountain: { sky: ['sun', 'clouds'], horizon: ['mountains', 'hills'], standing: ['trees'], fg: ['stones', 'grass'], subjectY: 88 },
+  sea: { sky: ['moon', 'stars'], horizon: 'sea', standing: ['bubbles'], fg: ['waves', 'stones'], subjectY: 84 },
+  stars: { sky: ['stars', 'moon'], horizon: ['mountains'], standing: ['bubbles'], fg: ['stones'], subjectY: 84 },
+  city: { sky: ['clouds', 'sun'], horizon: 'skyline', standing: ['towers', 'bushes'], fg: ['stones', 'grass'], subjectY: 88 },
+  classroom: { sky: 'rays', horizon: 'line', standing: ['books', 'graph'], fg: ['stones'], subjectY: 86 },
+  lab: { sky: 'rays', horizon: 'line', standing: ['graph', 'flasks'], fg: ['stones'], subjectY: 86 },
+  studio: { sky: 'rays', horizon: 'line', standing: ['books', 'towers'], fg: ['boards', 'stones'], subjectY: 86 }
 };
 const STAGE_SCENE_BACKDROP_DEFAULT = 'plain';
 const STAGE_SCENE_ICON_IDS = [
@@ -448,6 +448,11 @@ function stageSubIconsSvg(names, palette) {
   return icons ? '<g data-scene-primitive="sub-icons">' + icons + '</g>' : '';
 }
 
+/** One value or a stack, normalised to a list. Mirrors `primitivesOf` in the shared composer. */
+function stagePrimitivesOf(value) {
+  return Array.isArray(value) ? value : [value];
+}
+
 /** One tagged layer; same `data-scene-layer` names as the shared composer. */
 function stageLayer(name, content) {
   return content ? '<g data-scene-layer="' + name + '">' + content + '</g>' : '';
@@ -595,13 +600,13 @@ function stageIllustrationHtml(item, game, extraClass) {
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" preserveAspectRatio="xMidYMid meet" class="stage-illustration-svg" aria-hidden="true" focusable="false">` +
     stageLayer('sky', `<rect x="0" y="0" width="320" height="200" rx="26" fill="${escapeHtml(palette.fill)}"/>` +
       `<rect x="0" y="0" width="320" height="200" rx="26" fill="${escapeHtml(sky)}"/>` +
-      stageSkySvg(spec.sky, palette)) +
-    stageLayer('far', stageFarSvg(spec.horizon, palette) +
+      stagePrimitivesOf(spec.sky).map(function (p) { return stageSkySvg(p, palette); }).join('')) +
+    stageLayer('far', stagePrimitivesOf(spec.horizon).map(function (p) { return stageFarSvg(p, palette); }).join('') +
       `<rect x="0" y="${STAGE_ILLUSTRATION_HORIZON}" width="320" height="${200 - STAGE_ILLUSTRATION_HORIZON}" fill="${escapeHtml(ground)}"/>`) +
-    stageLayer('mid', stageMidSvg(spec.standing, palette)) +
+    stageLayer('mid', stagePrimitivesOf(spec.standing).map(function (p) { return stageMidSvg(p, palette); }).join('')) +
     stageLayer('halo', `<circle cx="160" cy="${spec.subjectY}" r="72" fill="${escapeHtml(palette.glow)}" opacity="0.15"/>`) +
     stageLayer('subject', `<g transform="translate(${x} ${y})" color="${escapeHtml(palette.ink)}">${subjectIcon}</g>`) +
-    stageLayer('props', stagePropsSvg(spec.standing, palette) + stageSubIconsSvg(subIcons, palette)) +
-    stageLayer('fg', stageFgSvg(spec.fg, palette)) +
+    stageLayer('props', stagePrimitivesOf(spec.standing).map(function (p) { return stagePropsSvg(p, palette); }).join('') + stageSubIconsSvg(subIcons, palette)) +
+    stageLayer('fg', stagePrimitivesOf(spec.fg).map(function (p) { return stageFgSvg(p, palette); }).join('')) +
     `</svg></div>`;
 }

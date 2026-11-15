@@ -65,7 +65,12 @@ test('every backdrop is an existing set of scene layers', () => {
     const spec = SCENE_BACKDROPS[id];
     assert.equal(isSceneBackdropId(id), true);
     for (const slot of ['sky', 'horizon', 'standing', 'fg'] as const) {
-      assert.ok(PRIMITIVES.has(spec[slot]), `${id}.${slot} = ${spec[slot]} is not a scene primitive`);
+      const value = spec[slot];
+      const names = Array.isArray(value) ? value : [value];
+      assert.ok(names.length > 0, `${id}.${slot} is empty`);
+      for (const name of names) {
+        assert.ok(PRIMITIVES.has(name), `${id}.${slot} = ${name} is not a scene primitive`);
+      }
     }
     assert.ok(spec.subjectY > 70 && spec.subjectY < SCENE_HORIZON, `${id} subject is not above the horizon`);
     assert.equal(getBackdropSpec(id), spec);
@@ -118,20 +123,40 @@ function rendererObjectBody(name: string): string {
 
 test('the renderer backdrop table matches the shared catalog', () => {
   const body = rendererObjectBody('STAGE_SCENE_BACKDROPS');
-  const parsed: Record<string, { sky: string; horizon: string; standing: string; fg: string; subjectY: number }> = {};
-  const re =
-    /'?([a-z-]+)'?:\s*\{\s*sky:\s*'([a-z]+)',\s*horizon:\s*'([a-z]+)',\s*standing:\s*'([a-z]+)',\s*fg:\s*'([a-z]+)',\s*subjectY:\s*(\d+)\s*\}/g;
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(body))) {
-    parsed[match[1]] = {
-      sky: match[2],
-      horizon: match[3],
-      standing: match[4],
-      fg: match[5],
-      subjectY: Number(match[6]),
+  type Parsed = { sky: string[]; horizon: string[]; standing: string[]; fg: string[]; subjectY: number };
+  const parsed: Record<string, Parsed> = {};
+  const names = (text: string): string[] => [...text.matchAll(/'([a-z]+)'/g)].map((x) => x[1]);
+  // Parse one table row at a time; a layer is a single name or a bracketed list.
+  for (const line of body.split('\n')) {
+    const row = /^\s*(?:'([a-z-]+)'|([a-z-]+)):\s*\{(.*)\}\s*,?\s*$/.exec(line);
+    if (!row) continue;
+    const entry = row[3];
+    const grab = (slot: string): string[] => {
+      const mm = new RegExp(slot + ":\\s*(\\[[^\\]]*\\]|'[a-z]+')").exec(entry);
+      return mm ? names(mm[1]) : [];
+    };
+    const y = /subjectY:\s*(\d+)/.exec(entry);
+    parsed[row[1] || row[2]] = {
+      sky: grab('sky'),
+      horizon: grab('horizon'),
+      standing: grab('standing'),
+      fg: grab('fg'),
+      subjectY: y ? Number(y[1]) : 0,
     };
   }
-  assert.deepEqual(parsed, { ...SCENE_BACKDROPS });
+  const listOf = (value: unknown): string[] =>
+    Array.isArray(value) ? value.map(String) : [String(value)];
+  const expected: Record<string, Parsed> = {};
+  for (const [id, spec] of Object.entries(SCENE_BACKDROPS)) {
+    expected[id] = {
+      sky: listOf(spec.sky),
+      horizon: listOf(spec.horizon),
+      standing: listOf(spec.standing),
+      fg: listOf(spec.fg),
+      subjectY: spec.subjectY,
+    };
+  }
+  assert.deepEqual(parsed, expected);
 });
 
 test('the renderer icon whitelist matches the shared catalog', () => {

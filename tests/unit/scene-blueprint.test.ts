@@ -183,7 +183,8 @@ test('the old category scene is unchanged by the composer refactor', () => {
     className: 'stage-illustration-svg',
   });
   assert.doesNotMatch(svg, /sub-icon/, 'the legacy path must not grow a sub-icon layer');
-  assert.equal(svg.length, 2043);
+  // 2043 bytes before stacked layers; richer now, and still the legacy path.
+  assert.equal(svg.length, 2729);
 });
 
 // --- renderer mirror parity ------------------------------------------------

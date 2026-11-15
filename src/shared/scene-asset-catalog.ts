@@ -42,15 +42,15 @@ export type SceneLayoutId = (typeof SCENE_LAYOUT_IDS)[number];
  */
 export const SCENE_BACKDROPS: Readonly<Record<string, SceneSpec>> = Object.freeze({
   plain: { sky: 'none', horizon: 'line', standing: 'none', fg: 'none', subjectY: 88 },
-  meadow: { sky: 'sun', horizon: 'hills', standing: 'none', fg: 'grass', subjectY: 88 },
-  forest: { sky: 'clouds', horizon: 'hills', standing: 'trees', fg: 'roots', subjectY: 88 },
-  mountain: { sky: 'sun', horizon: 'mountains', standing: 'trees', fg: 'stones', subjectY: 88 },
-  sea: { sky: 'moon', horizon: 'sea', standing: 'none', fg: 'waves', subjectY: 84 },
-  stars: { sky: 'stars', horizon: 'mountains', standing: 'none', fg: 'stones', subjectY: 84 },
-  city: { sky: 'clouds', horizon: 'skyline', standing: 'towers', fg: 'stones', subjectY: 88 },
-  classroom: { sky: 'rays', horizon: 'line', standing: 'books', fg: 'stones', subjectY: 86 },
-  lab: { sky: 'rays', horizon: 'line', standing: 'graph', fg: 'stones', subjectY: 86 },
-  studio: { sky: 'rays', horizon: 'line', standing: 'books', fg: 'boards', subjectY: 86 },
+  meadow: { sky: ['sun', 'clouds'], horizon: 'hills', standing: ['bushes'], fg: ['grass', 'stones'], subjectY: 88 },
+  forest: { sky: ['clouds', 'sun'], horizon: 'hills', standing: ['trees', 'bushes'], fg: ['roots', 'grass'], subjectY: 88 },
+  mountain: { sky: ['sun', 'clouds'], horizon: ['mountains', 'hills'], standing: ['trees'], fg: ['stones', 'grass'], subjectY: 88 },
+  sea: { sky: ['moon', 'stars'], horizon: 'sea', standing: ['bubbles'], fg: ['waves', 'stones'], subjectY: 84 },
+  stars: { sky: ['stars', 'moon'], horizon: ['mountains'], standing: ['bubbles'], fg: ['stones'], subjectY: 84 },
+  city: { sky: ['clouds', 'sun'], horizon: 'skyline', standing: ['towers', 'bushes'], fg: ['stones', 'grass'], subjectY: 88 },
+  classroom: { sky: 'rays', horizon: 'line', standing: ['books', 'graph'], fg: ['stones'], subjectY: 86 },
+  lab: { sky: 'rays', horizon: 'line', standing: ['graph', 'flasks'], fg: ['stones'], subjectY: 86 },
+  studio: { sky: 'rays', horizon: 'line', standing: ['books', 'towers'], fg: ['boards', 'stones'], subjectY: 86 },
 });
 
 export const DEFAULT_SCENE_BACKDROP = 'plain';

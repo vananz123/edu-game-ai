@@ -3630,3 +3630,18 @@ Ba ràng buộc không đổi: (1) game đã lưu phải chơi được **offlin
 **Không chứng minh.** Chưa cài silent (`/S /D=…`) lên máy sạch, chưa kiểm SmartScreen/cảnh báo bản chưa ký, chưa chơi offline sau khi rút mạng (**P7 vẫn MỞ**), chưa tạo GitHub release `v0.5.2` nên chưa tải lại asset để so SHA.
 
 **Việc kế tiếp.** Cài thử silent trên máy này rồi chạy `npm run check:item-assets-ui` trên binary 0.5.2; nếu đạt thi tạo release `v0.5.2`; sau đó quay lại refactor gộp bảng cảnh bằng esbuild trước P1 `compare`.
+
+---
+
+## #253 — Mỗi lớp cảnh xếp được nhiều primitive, thay vì thêm lớp mới; và 24 hash vàng được lấy lại có chủ ý
+
+**Bối cảnh.** Chủ dự án báo "cảnh thử vẫn quá đơn giản, thiếu nhiều thành phần" ngay sau P0 #252. Đo lại thì P0 **không hề** làm cảnh đặc hơn: `sceneBlueprintFromCategory` suy ra nền/màu/icon chính từ chủ đề, **không** sinh icon phụ, nên đầu ra trùng khớp từng byte với cảnh cũ — 24 hash vàng không đổi chính là **bằng chứng không có thay đổi thị giác**, không phải bằng chứng có tính năng. Giới hạn thật nằm ở engine: `SceneSpec` có 4 lớp (`sky`, `horizon`, `standing`, `fg`) nhưng mỗi lớp chỉ nhận **một** tên primitive, nên `sky` là `sun` **hoặc** `clouds`. Bộ primitive không nghèo (~20 hình), chỉ là không xếp được.
+
+**Quyết định.** (a) Mở rộng **kiểu dữ liệu** của lớp thành `ScenePrimitive | readonly ScenePrimitive[]` thay vì thêm trường lớp mới — mọi dòng bảng cũ vẫn hợp lệ, không phải sửa cú pháp 34 dòng, và bản sao renderer giữ được cùng hình dạng. (b) Renderer duyệt cả chồng qua helper `primitivesOf`; `'none'` vẫn vô hại vì cả 5 hàm vẽ đều rơi vào `default: return ''`. (c) Làm dày **cả** `SCENE_SPECS` (đường theo chủ đề) **và** `SCENE_BACKDROPS` (đường blueprint), ở **cả** bản shared **và** bản sao renderer — nếu chỉ làm một bên thì cảnh trong editor (blueprint) đặc còn cảnh trong game (đường cũ) vẫn thưa.
+
+**Vì sao ghi lại.** 24 hash vàng **đã đổi**, và đây là lần đầu chúng đổi **có chủ ý**. Cần phân biệt rõ với sự cố: đổi hash vì refactor là **hỏng**; đổi hash vì làm dày là **tính năng**. Cảnh đã lưu của giáo viên vì thế sẽ **đặc hơn** sau khi cập nhật, không bị hỏng: cùng asset, cùng `subjectY`, cùng thứ tự lớp `sky → far → mid → halo → subject → props → fg`. Mật độ đo được: **19–23 → 31–52** hình/cảnh (trung bình **42,9**); đường blueprint **33–49** (trung bình **41,8**). Từ nay chỉ lấy lại hash khi có **bằng chứng thị giác** và ghi vào đây.
+
+**Ba lỗi do lưới cũ bắt được (giữ lại làm bài học).** (1) `weather` có icon `cloud-sun`, nên `sky: ['clouds','sun']` là **lặp chủ thể** — check "no layer repeats the subject" bắt; (2) `art` đặt `boards` ở **cả** props lẫn fg → chồng hình, check "props and foreground never paint over each other" bắt; (3) bộ đọc bảng renderer bằng regex một-dòng **ngừng khớp** khi lớp thành mảng, và vì `dist/` cũ nên lần đầu còn báo sai "0 scene parsed" — đã chuyển sang đọc **theo dòng**, chắc hơn regex toàn bảng.
+
+**Chưa chứng minh.** Chưa có duyệt bằng **mắt người** (phiên không có đầu vào hình ảnh) nên "đặc hơn" mới là số đo hình trong SVG; chưa chạy lại các cổng UI rời và `tauri:check`; chưa build installer. Lượt này **không** thêm `compare`/`process`/`surround`/`props`/`subIcons` 4 vị trí — đó là P2 và vẫn **CHƯA CÓ**.
+

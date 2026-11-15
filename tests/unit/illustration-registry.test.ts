@@ -271,18 +271,36 @@ test('the renderer icon map matches getCategoryIcon()', () => {
   }
 });
 
-/** `animals: { sky: 'sun', horizon: 'hills', standing: 'trees', fg: 'grass', subjectY: 96 }`. */
-function rendererScenes(): Record<
-  string,
-  { sky: string; horizon: string; standing: string; fg: string; subjectY: number }
-> {
+/** `animals: { sky: ['sun','clouds'], horizon: 'hills', standing: ['trees','bushes'], fg: ['grass'], subjectY: 88 }`. */
+type ParsedScene = {
+  sky: string[];
+  horizon: string[];
+  standing: string[];
+  fg: string[];
+  subjectY: number;
+};
+
+function rendererScenes(): Record<string, ParsedScene> {
   const body = constBody('STAGE_ILLUSTRATION_SCENES');
-  const out: Record<string, { sky: string; horizon: string; standing: string; fg: string; subjectY: number }> = {};
-  const re =
-    /'?([a-z-]+)'?:\s*\{\s*sky:\s*'([a-z]+)',\s*horizon:\s*'([a-z]+)',\s*standing:\s*'([a-z]+)',\s*fg:\s*'([a-z]+)',\s*subjectY:\s*(\d+)\s*\}/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(body))) {
-    out[m[1]] = { sky: m[2], horizon: m[3], standing: m[4], fg: m[5], subjectY: Number(m[6]) };
+  const out: Record<string, ParsedScene> = {};
+  const names = (text: string): string[] => [...text.matchAll(/'([a-z]+)'/g)].map((x) => x[1]);
+  // Parse one table row at a time; a layer is a single name or a bracketed list.
+  for (const line of body.split('\n')) {
+    const row = /^\s*(?:'([a-z-]+)'|([a-z-]+)):\s*\{(.*)\}\s*,?\s*$/.exec(line);
+    if (!row) continue;
+    const entry = row[3];
+    const grab = (slot: string): string[] => {
+      const mm = new RegExp(slot + ":\\s*(\\[[^\\]]*\\]|'[a-z]+')").exec(entry);
+      return mm ? names(mm[1]) : [];
+    };
+    const y = /subjectY:\s*(\d+)/.exec(entry);
+    out[row[1] || row[2]] = {
+      sky: grab('sky'),
+      horizon: grab('horizon'),
+      standing: grab('standing'),
+      fg: grab('fg'),
+      subjectY: y ? Number(y[1]) : 0,
+    };
   }
   return out;
 }
@@ -291,8 +309,21 @@ test('the renderer scene table matches the shared scene composer', () => {
   const scenes = rendererScenes();
   const categories = Object.keys(scenes);
   assert.ok(categories.length >= 20, `only ${categories.length} scenes parsed from the renderer`);
+  const listOf = (value: unknown): string[] =>
+    Array.isArray(value) ? value.map(String) : [String(value)];
   for (const category of categories) {
-    assert.deepEqual(getSceneSpec(category), scenes[category], `${category} scene differs`);
+    const shared = getSceneSpec(category);
+    assert.deepEqual(
+      {
+        sky: listOf(shared.sky),
+        horizon: listOf(shared.horizon),
+        standing: listOf(shared.standing),
+        fg: listOf(shared.fg),
+        subjectY: shared.subjectY,
+      },
+      scenes[category],
+      `${category} scene differs`
+    );
   }
   // Every drawable category has a scene, so the renderer never has to guess.
   for (const id of ILLUSTRATION_ASSET_IDS) {
@@ -300,35 +331,42 @@ test('the renderer scene table matches the shared scene composer', () => {
   }
 });
 
-test('the composer refactor kept every pre-blueprint scene byte-identical', () => {
+test('the scene composer output is pinned so saved scenes stay stable', () => {
   // #252 split `renderSceneSvg` into `composeSceneSvg(..., subIcons = [])`.
-  // These hashes were taken from the output BEFORE that split; if they change,
-  // a game saved under #70/#72 would look different after an update.
+  // That refactor alone kept all 24 scenes byte-identical.
+  //
+  // The hashes below were then re-taken ON PURPOSE by the stacked-layer change:
+  // every layer may now hold several primitives (`sky: ['sun','clouds']`), which
+  // is what makes a scene read as a place instead of one icon on a background.
+  // Drawable shapes per scene went from 19-23 to 31-52 (mean 42.9).
+  // Games saved before this change therefore look RICHER after an update, never
+  // broken: same assets, same layout, more of them. Re-take these hashes only
+  // with a visual proof, and record it in docs/DECISIONS.md.
   const golden: Record<string, string> = {
-    animals: '24dbd6a5d02322624213af8c8207fcf0dd96ff0b929f178fde27e9361fb5f374',
-    plants: 'afd37626d64ec356148330b3d86a6bf687bc13bfce2eb0b25bc8815e46d68a6f',
-    space: '6af21ab86ee547eb45ca79f43359e9addff6d7a6a4f5e4952fd162e0cb0d7c26',
-    'human-body': '3512072117687a28fbbd194f5a9eff7a11ab2fa8b47d53aed003b035033e77ce',
-    transport: '507a165690b02e74f9f444be8b5ca6c0a0710268c1282ed317f43d35626f7b6b',
-    safety: '1b7f852a51342ba9a7e48a18e5268274a18cabc9c7c79f71757b6b620597513c',
-    environment: 'e5845231c9b09a6ee969fbe703137fbdec5e97826e2876ae822e2f061596afdf',
-    history: 'baafb7363b72816fad03395e6fb22d72e63c3dd316a90834cc69ab8c0501cb9f',
-    geography: '864281a2296aab8dd4fcaf139e3f2b42224cd1ee5f4f66992220260b2285b0da',
-    jobs: 'f03d599094cd24df79331e726db70df8dbcb64fcbeced713bf6594457b0f2abe',
-    sports: 'df14f0233084c07bd2f9c064bd130a4cb81e300f99f2f7c24306f62d7c41c14a',
-    music: 'b683d9c35ea064c0911af04d2d3d3d63637d005ccb0171e5d0a4f145f84d9790',
-    art: '159c92d1146f1950fe19820858a2c27c74a8610cd638d87195c79133c4afe7cd',
-    math: 'b22e8bfdbef1946b044563b2e082c86171407aeca1795281b6d20fb84104a290',
-    language: '8ad54be0f15652813dfb5fd33a49f94fefc4621716a22e786a77a0ed7c25cfab',
-    science: 'd4feded1a99cdb355e76ea2de36a621ed0aea51302ffeb6fd0745e28fd79be85',
-    technology: '58ffb31b2b4ea66acb45928c8ffeeb927a250fbcc5e5cbf8fa754d8715e00e97',
-    health: '3394c741d21c658ebaf4e680510a6fe2fd9dee0cef838af34975c786e701a2a6',
-    family: '4988824945ea977e85d48f612997e7961faa9ba86bde87dbeab063446e83db7e',
-    community: 'b9d9fc7b34eff91f3653f55dea2f55e508ead5513185f35e970e1ed02769ae74',
-    weather: '59fc2126fed6189014f66fbcb71e887ffeb96516d2c60e06391fb655789f6dd3',
-    food: '6f3c920e5e59d268443a90a0941241f41ed37e2b793889c8ab3e8cd8f30e279a',
-    objects: 'be690a09f9cc60169e8b107374a1c8d5692671655f9c012595ecff5f6a895e50',
-    'water-world': '060a097b9987e4228d8ae7062f0b72fcc4cb4087c5768ff825bfb71b7d1828ee',
+    animals: '147b4067740c5170d54a02b3a383c93c6ea8d6f75360e11de603d82770b66ef5',
+    plants: '0de97ddf5b4c6f97bb0a3df587dfd8188495f396e51279c995c2c1047c7d8c39',
+    space: '48cb4aedd66260ab4f3bd783327e15cff36c53e930c488afca6cd4af16363e79',
+    'human-body': 'c1ad91e7629fda6ca3cbcac13b7b91fdc99a9e00e717c29f95fa8ecfc1f295d5',
+    transport: 'b7ef8163f7b5176ade94f0af893171544b47fafbc2e1f5a61c6bea05a12d57c6',
+    safety: 'df27d97df9aa39217cdb2a11a07b9dc410158f42b07f483f5f4930db976859f0',
+    environment: '3ca1028e8d8e95aebb1f2bf80eed6dc9df66c973589ff854659dc491918d42ba',
+    history: 'e47702b49d99d048ed42c13e3e5a0e973c3bb535ccddf2a7fd6e301b5cd0c2fe',
+    geography: '54865b651379b034816db11083e27dd55241a61e5900c82d25c20fe6523b5a22',
+    jobs: '98f8db731963dee111aa9723feea54f3d888fdb38c2d5ff5351eb7b3b52a04e3',
+    sports: '7967456f876212352f7bbf47842d37714e58cccd719d58b828db77f69764ee2f',
+    music: '4ba64e0592ef270b33b87763363f615630e4896b2802ed8b456e82389aded214',
+    art: 'b39b3e0d1e3cc5379ae1ee7ec53519981853ff34e86d785be596b5981ac53e42',
+    math: '9447f40e4f40e8b7042680c269b3c90c693e2bd0972e4f29f400de984370ea84',
+    language: '46c4100f6219c186c4c1cc5c397d224329a211dbe2d9ecbc6ccdeb0fbd70db8e',
+    science: '753736db712892452f922e5011a384e643974bd559d4368bfef1dc89b88a4c2b',
+    technology: '85da78dc315f35d6f2b99f7c071dcc587ab34ce8898e4f8524d5cd76c8e73027',
+    health: '74ca8cb7ce2ade8d9cd8563f9fff1f3ad713a7428c419c04caec8fb5ee9036c6',
+    family: 'ebd5cae6a8dbedbb6c433c7f5bf8de045327ac60ca6212f4970e0c4d5f505fbf',
+    community: '73bbe1edf27914acd25f64140323047e4325ce61a24e42a981a6d6750a40ebbd',
+    weather: '97e52475cc2701771c65eea78584ddd8893cb90b40a004427462cb040534206c',
+    food: '8410c4932ea5359aed93a97c1beaaf4be65a6eaa5035769a2159e4c175da0343',
+    objects: '56acca5342fd09881833c637685f2a52d3a7a5f245c9687cb38e497ca8153fa2',
+    'water-world': 'eebe03e4d27f1211136db19e57d7dda72ea9d25bca060af36f4287095277ce89',
   };
   for (const id of ILLUSTRATION_ASSET_IDS) {
     const category = id.slice(0, -'-scene'.length);
@@ -459,21 +497,32 @@ test('the subject never straddles the horizon', () => {
 });
 
 test('every scene has real depth, and no layer repeats the subject', () => {
+  // A layer may stack several primitives (#252 follow-up), so every assertion
+  // here reads the whole stack instead of a single name.
+  const listOf = (value: unknown): string[] =>
+    Array.isArray(value) ? value.map(String) : [String(value)];
   for (const assetId of ILLUSTRATION_ASSET_IDS) {
     const category = assetId.slice(0, -'-scene'.length);
     const icon = String(getCategoryIcon(category));
     const spec = getSceneSpec(category);
-    assert.notEqual(spec.sky, 'none', `${assetId}: no sky layer, so the scene has no background`);
-    assert.notEqual(spec.horizon, 'none', `${assetId}: no horizon layer, so the subject floats`);
+    const sky = listOf(spec.sky);
+    const horizon = listOf(spec.horizon);
+    const standing = listOf(spec.standing);
+    const fg = listOf(spec.fg);
+    assert.ok(sky.length > 0 && !sky.includes('none'), `${assetId}: no sky layer, so the scene has no background`);
     assert.ok(
-      spec.fg !== 'none' || spec.standing !== 'none',
+      horizon.length > 0 && !horizon.includes('none'),
+      `${assetId}: no horizon layer, so the subject floats`
+    );
+    assert.ok(
+      standing.some((p) => p !== 'none') || fg.some((p) => p !== 'none'),
       `${assetId}: neither a mid nor a foreground layer; this is a flat card again`
     );
-    assert.notEqual(spec.fg, 'none', `${assetId}: no foreground layer, so the subject floats above the ground`);
-    const clash = SUBJECT_SKY_CLASH[spec.sky] || [];
+    assert.ok(fg.length > 0 && !fg.includes('none'), `${assetId}: no foreground layer, so the subject floats above the ground`);
+    const clash = sky.flatMap((p) => SUBJECT_SKY_CLASH[p] || []);
     assert.ok(
       !clash.includes(icon),
-      `${assetId}: sky layer '${spec.sky}' repeats the subject icon '${icon}', so the scene reads as a duplicate`
+      `${assetId}: sky layer '${sky.join('+')}' repeats the subject icon '${icon}', so the scene reads as a duplicate`
     );
   }
 });
@@ -495,17 +544,24 @@ function overlaps(a: [number, number], b: [number, number]): number {
 }
 
 test('props and foreground never paint over each other', () => {
+  const listOf = (value: unknown): string[] =>
+    Array.isArray(value) ? value.map(String) : [String(value)];
   for (const assetId of ILLUSTRATION_ASSET_IDS) {
     const category = assetId.slice(0, -'-scene'.length);
     const spec = getSceneSpec(category);
-    const props = PRIMITIVE_SPANS[spec.standing] || [];
-    const fg = PRIMITIVE_SPANS[spec.fg] || [];
-    for (const p of props) {
-      for (const f of fg) {
-        assert.ok(
-          overlaps(p, f) <= 0,
-          `${assetId}: props '${spec.standing}' [${p}] collides with fg '${spec.fg}' [${f}]`
-        );
+    // Stacked layers: every standing primitive must clear every fg primitive.
+    for (const standingName of listOf(spec.standing)) {
+      for (const fgName of listOf(spec.fg)) {
+        const props = PRIMITIVE_SPANS[standingName] || [];
+        const fg = PRIMITIVE_SPANS[fgName] || [];
+        for (const p of props) {
+          for (const f of fg) {
+            assert.ok(
+              overlaps(p, f) <= 0,
+              `${assetId}: props '${standingName}' [${p}] collides with fg '${fgName}' [${f}]`
+            );
+          }
+        }
       }
     }
   }
@@ -528,10 +584,13 @@ test('every primitive in a scene table actually renders', () => {
     const category = assetId.slice(0, -'-scene'.length);
     const spec = getSceneSpec(category);
     for (const [slot, allowed] of Object.entries(knownIn)) {
-      const value = String(spec[slot as keyof typeof spec]);
-      if (value === 'none') continue;
-      const ok = allowed.includes(value) || (slot === 'standing' && propsFromStanding.includes(value));
-      assert.ok(ok, `${assetId}: ${slot} uses '${value}', which that layer cannot draw`);
+      const raw = spec[slot as keyof typeof spec];
+      const names = Array.isArray(raw) ? raw.map(String) : [String(raw)];
+      for (const value of names) {
+        if (value === 'none') continue;
+        const ok = allowed.includes(value) || (slot === 'standing' && propsFromStanding.includes(value));
+        assert.ok(ok, `${assetId}: ${slot} uses '${value}', which that layer cannot draw`);
+      }
     }
   }
 });
