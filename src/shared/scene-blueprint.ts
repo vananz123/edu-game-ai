@@ -17,6 +17,7 @@ import {
   DEFAULT_SCENE_PALETTE_KEY,
   SCENE_BLUEPRINT_MAX_BYTES,
   SCENE_BLUEPRINT_VERSION,
+  SCENE_COMPARE_SUB_ICON_POSITIONS,
   SCENE_MAX_PROPS,
   SCENE_MAX_SUB_ICONS,
   SCENE_SUB_ICON_POSITIONS,
@@ -26,7 +27,6 @@ import {
   isSceneIconId,
   isSceneLayoutId,
   isScenePaletteKey,
-  isSceneSubIconPosition,
   sceneBackdropForCategory,
   type SceneCompareSign,
   type SceneLayoutId,
@@ -96,7 +96,8 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  *   - `subIcons`: accepts the P0 form (`"leaf"`) and the `#256` form
  *     (`{icon, position}`); invalid, duplicate and the main icon are dropped, a
  *     taken/unknown position falls back to the first free corner, then the list
- *     is capped at `SCENE_MAX_SUB_ICONS` (4);
+ *     is capped at `SCENE_MAX_SUB_ICONS` (4); in `compare` only `top-left` and
+ *     `top-right` exist, so the lower corners are moved up (#262);
  *   - `props` (#259): ground objects, same cleaning rules, capped at
  *     `SCENE_MAX_PROPS` (2) and never a duplicate of the subject or a sub icon;
  *   - > `SCENE_BLUEPRINT_MAX_BYTES` -> `null` (a compact blueprint is the point).
@@ -182,6 +183,9 @@ export function normalizeSceneBlueprint(
   }
 
   const subjects = compareIcon ? [mainIcon, compareIcon] : [mainIcon];
+  /** Compare keeps only the two upper corners; the rest are moved there (#262). */
+  const allowedPositions: readonly SceneSubIconPosition[] =
+    layout === 'compare' ? SCENE_COMPARE_SUB_ICON_POSITIONS : SCENE_SUB_ICON_POSITIONS;
 
   let backdrop = typeof raw.backdrop === 'string' ? raw.backdrop.trim() : '';
   if (!isSceneBackdropId(backdrop)) {
@@ -221,11 +225,11 @@ export function normalizeSceneBlueprint(
         // is used, so a duplicate position never drops an icon a child needs.
         const wanted = asObject && typeof entry.position === 'string' ? entry.position.trim() : '';
         let position: SceneSubIconPosition;
-        if (isSceneSubIconPosition(wanted) && !subIcons.some((sub) => sub.position === wanted)) {
-          position = wanted;
+        if (allowedPositions.includes(wanted as SceneSubIconPosition) && !subIcons.some((sub) => sub.position === wanted)) {
+          position = wanted as SceneSubIconPosition;
         } else {
           if (wanted) issues.push('subIcons');
-          position = SCENE_SUB_ICON_POSITIONS.find(
+          position = allowedPositions.find(
             (slot) => !subIcons.some((sub) => sub.position === slot)
           ) as SceneSubIconPosition;
         }

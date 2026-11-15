@@ -228,7 +228,7 @@ test('four corner sub icons stay off the subject box, measured in the SVG itself
   const svg = renderBlueprintSvg(four, getIllustrationPalette(four.paletteKey));
 
   const size = 52;
-  const placed = [...svg.matchAll(/data-scene-position="([a-z-]+)" transform="translate\((\d+) (\d+)\)/g)].map(
+  const placed = [...svg.matchAll(/data-scene-position="([a-z-]+)"[^>]*transform="translate\((\d+) (\d+)\)/g)].map(
     (match) => ({ position: match[1], x: Number(match[2]), y: Number(match[3]) })
   );
   assert.equal(placed.length, 4, 'all four sub icons must be drawn');
@@ -375,6 +375,110 @@ test('the richest compare scene still fits the byte budget', () => {
   assert.ok(bytes <= SCENE_BLUEPRINT_MAX_BYTES, `compare blueprint is ${bytes} bytes`);
 });
 
+/** Pull every box a compare scene drew, from the SVG itself (#262). */
+function sceneBoxes(svg: string) {
+  const subjects = [...svg.matchAll(/data-scene-subject="([a-z]+)" data-scene-size="(\d+)" transform="translate\((\d+) (\d+)\)/g)].map(
+    (match) => ({ name: match[1], size: Number(match[2]), x: Number(match[3]), y: Number(match[4]) })
+  );
+  const sign = svg.match(/data-scene-sign="([a-z-]*)" data-scene-size="(\d+)" transform="translate\((\d+) (\d+)\)/);
+  const icons = [...svg.matchAll(/data-scene-position="([a-z-]+)"[^>]*data-scene-size="(\d+)"[^>]*transform="translate\((\d+) (\d+)\)/g)].map(
+    (match) => ({ position: match[1], size: Number(match[2]), x: Number(match[3]), y: Number(match[4]) })
+  );
+  return {
+    subjects,
+    icons: icons.filter((entry) => entry.position.startsWith('ground-') === false),
+    props: icons.filter((entry) => entry.position.startsWith('ground-')),
+    sign: sign
+      ? { name: sign[1], size: Number(sign[2]), x: Number(sign[3]), y: Number(sign[4]) }
+      : null,
+  };
+}
+
+function boxesOverlap(a: { x: number; y: number; size: number }, b: { x: number; y: number; size: number }): boolean {
+  return a.x < b.x + b.size && a.x + a.size > b.x && a.y < b.y + b.size && a.y + a.size > b.y;
+}
+
+const ALL_BACKDROPS = ['plain', 'meadow', 'forest', 'mountain', 'sea', 'stars', 'city', 'classroom', 'lab', 'studio'];
+
+test('a compare scene draws two subjects that never touch each other', () => {
+  for (const backdrop of ALL_BACKDROPS) {
+    const scene = normalizeSceneBlueprint({ ...COMPARE, backdrop })!;
+    const svg = renderBlueprintSvg(scene, getIllustrationPalette(scene.paletteKey));
+    const { subjects } = sceneBoxes(svg);
+    assert.deepEqual(subjects.map((box) => box.name), ['main', 'second'], `${backdrop}: both subjects`);
+    const [left, right] = subjects;
+    assert.ok(left.x + left.size <= right.x, `${backdrop}: subjects touch (${left.x + left.size} vs ${right.x})`);
+    for (const box of subjects) {
+      assert.ok(box.x >= 0 && box.x + box.size <= 320, `${backdrop}: ${box.name} is clipped horizontally`);
+      assert.ok(box.y >= 0 && box.y + box.size <= 200, `${backdrop}: ${box.name} is clipped vertically`);
+    }
+  }
+});
+
+test('the comparison sign sits in the gap between the subjects, above the ground', () => {
+  for (const backdrop of ALL_BACKDROPS) {
+    for (const sign of ['greater-than', 'less-than', 'equal', undefined] as const) {
+      const scene = normalizeSceneBlueprint({ ...COMPARE, backdrop, compareSign: sign })!;
+      const svg = renderBlueprintSvg(scene, getIllustrationPalette(scene.paletteKey));
+      const boxes = sceneBoxes(svg);
+      const [left, right] = boxes.subjects;
+      assert.ok(boxes.sign, `${backdrop}/${String(sign)}: the sign group must be emitted`);
+      const glyph = boxes.sign!;
+      assert.ok(glyph.x >= left.x + left.size, `${backdrop}/${String(sign)}: sign overlaps the left subject`);
+      assert.ok(glyph.x + glyph.size <= right.x, `${backdrop}/${String(sign)}: sign overlaps the right subject`);
+      assert.ok(glyph.y >= 0 && glyph.y + glyph.size <= 200, `${backdrop}/${String(sign)}: sign is clipped`);
+      // The sign is drawn from shapes only: a font could not be relied on offline.
+      assert.doesNotMatch(svg, /<text[\s>]/, 'the sign must not use <text>');
+      if (sign === undefined) {
+        assert.ok(!svg.includes('data-scene-primitive="compare-sign"'), 'no sign means no glyph');
+      } else {
+        assert.ok(svg.includes('data-scene-primitive="compare-sign"'), `${sign} must draw a glyph`);
+      }
+    }
+  }
+});
+
+test('compare keeps both corner icons clear of both subjects on every backdrop', () => {
+  for (const backdrop of ALL_BACKDROPS) {
+    const scene = normalizeSceneBlueprint({
+      ...COMPARE,
+      backdrop,
+      subIcons: [
+        { icon: 'leaf', position: 'left' },
+        { icon: 'bird', position: 'right' },
+      ],
+      props: ['apple'],
+    })!;
+    const svg = renderBlueprintSvg(scene, getIllustrationPalette(scene.paletteKey));
+    const boxes = sceneBoxes(svg);
+    assert.equal(boxes.icons.length, 2, `${backdrop}: both sub icons must still be drawn`);
+    // The lower corners are where a subject now stands, so they are moved up.
+    assert.deepEqual(boxes.icons.map((box) => box.position).sort(), ['top-left', 'top-right']);
+    for (const icon of boxes.icons) {
+      for (const subject of boxes.subjects) {
+        assert.ok(!boxesOverlap(icon, subject), `${backdrop}: ${icon.position} covers the ${subject.name} subject`);
+      }
+      for (const prop of boxes.props) {
+        assert.ok(!boxesOverlap(icon, prop), `${backdrop}: ${icon.position} covers a ground prop`);
+      }
+      assert.ok(icon.x >= 0 && icon.x + icon.size <= 320, `${backdrop}: ${icon.position} is clipped`);
+      assert.ok(icon.y >= 0 && icon.y + icon.size <= 200, `${backdrop}: ${icon.position} is clipped`);
+    }
+    for (const prop of boxes.props) {
+      for (const subject of boxes.subjects) {
+        assert.ok(!boxesOverlap(prop, subject), `${backdrop}: a ground prop covers the ${subject.name} subject`);
+      }
+    }
+  }
+});
+
+test('a single scene is untouched by compare: one subject, no sign layer', () => {
+  const single = normalizeSceneBlueprint(VALID)!;
+  const svg = renderBlueprintSvg(single, getIllustrationPalette(single.paletteKey));
+  assert.ok(!svg.includes('data-scene-subject='), 'the single layout keeps its old markup');
+  assert.ok(!svg.includes('data-scene-layer="sign"'), 'no sign layer in single');
+});
+
 // --- renderer mirror parity ------------------------------------------------
 const RENDERER_DIR = path.join(__dirname, '..', '..', 'src', 'renderer', 'features');
 const sandbox: Record<string, unknown> = {
@@ -387,7 +491,30 @@ vm.runInContext(readFileSync(path.join(RENDERER_DIR, 'game-illustration.js'), 'u
 const renderer = sandbox as {
   stageNormalizeBlueprint: (value: unknown) => unknown;
   stageBlueprintForCategory: (category: unknown) => unknown;
+  stageIllustrationHtml: (item: unknown, game: unknown) => string;
 };
+
+test('the renderer draws a compare scene with the same geometry as the shared one', () => {
+  // Two implementations of the same picture exist for a real reason (the play
+  // surface is a classic script). Parity of the *normaliser* was already checked;
+  // this checks the drawing, which is where a duplicated geometry drifts.
+  const cases: SceneBlueprint[] = [
+    COMPARE,
+    { ...COMPARE, compareSign: 'equal', subIcons: [{ icon: 'leaf', position: 'top-left' }] },
+    { ...COMPARE, backdrop: 'sea', paletteKey: 'water-world', compareIcon: 'fish', mainIcon: 'waves-horizontal' },
+    { ...COMPARE, compareSign: undefined, props: ['apple', 'box'] },
+  ];
+  for (const blueprint of cases) {
+    const shared = renderBlueprintSvg(blueprint, getIllustrationPalette(blueprint.paletteKey));
+    const html = renderer.stageIllustrationHtml({ sceneBlueprint: JSON.stringify(blueprint) }, {});
+    assert.ok(html.includes('<svg'), 'the renderer must produce a frame');
+    assert.deepEqual(
+      sceneBoxes(html),
+      sceneBoxes(shared),
+      `renderer geometry differs for ${JSON.stringify(blueprint)}`
+    );
+  }
+});
 
 test('the renderer normaliser and generator match the shared ones', () => {
   const inputs: unknown[] = [

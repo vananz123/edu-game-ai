@@ -3803,3 +3803,17 @@ Ba ràng buộc không đổi: (1) game đã lưu phải chơi được **offlin
 **Thứ tự bắt buộc cho phần còn lại của P1.** dữ liệu (xong) → **vẽ** (2 chủ thể + dấu trên cả 10 nền, test toạ độ phải mở rộng cho **hai** hộp chủ thể) → **UI editor** → **cuối cùng** mới thêm `compare` vào prompt §5. Cổng `scene-prompt-doc.test.ts` vẫn ghim `"layout": "single"` trong prompt, nên nó là cái phanh cho ai sửa §5 sớm.
 
 **Chưa xác minh.** Chưa có phép vẽ nào cho `compare`: hôm nay `compare` vẫn ra ảnh **một** chủ thể (đúng, chưa sai) vì engine vẽ theo `mainIcon`. Chưa có UI, chưa có trên binary thật.
+
+**Bước 2 (vẽ) — đã xong.** Phương án **B** đã chọn: `compare` chỉ dùng **2 góc trên**, chủ thể **92px**. Lý do phải chọn: khung chỉ 320×200, hai chủ thể 92px bắt đầu từ `x 42` sẽ nằm **dưới** ô `top-left` của #256 — 4 góc không thể sống chung với bố cục so sánh.
+- **Hình học mới (hằng số, có test):** dải góc `y 6…46` (icon **40px**) · chủ thể `92px` ở `x 42`/`x 186`, **hạ 12px** so với nền (`subjectY + 12`) · dấu `24px` ở `x 148…172` · props mặt đất `y 146…186` không đổi.
+- **Dấu vẽ bằng hình, không dùng `<text>`:** offline không có font chắc chắn, và test cấm thẻ `<text>` trong cảnh.
+- **`left`/`right` trong `compare` được DỜI lên** `top-left`/`top-right` (không bỏ), cùng nguyên tắc "mất một vật làm câu chuyện sai, dời thì chỉ đổi bố cục" của #256. Luật này nằm ở **cả** normaliser shared **và** bản sao renderer.
+- **`compare` hỏng chủ thể thứ hai → vẽ `single`**, không vẽ nửa phép so sánh.
+
+**Đo được.** `scene-blueprint` **24 → 29** check. Test hình học đọc toạ độ **từ chính SVG** (`data-scene-subject-data-scene-size-transform`) và khẳng định trên **cả 10 nền**: 2 hộp chủ thể không giao nhau, dấu nằm giữa và không chạm chủ thể, icon góc không chạm **cả hai** chủ thể, props không chạm chủ thể, không gì bị cắt.
+**Kiểm chứng phép đo không rỗng:** hạ `SCENE_COMPARE_SUBJECT_LIFT` từ 12 → 0 ⇒ test báo `plain: top-left covers the main subject`; trả lại 12 ⇒ xanh.
+**Parity vẽ (mới):** renderer `stageIllustrationHtml` và shared `renderBlueprintSvg` được so **toạ độ từng hộp** trên 4 blueprint `compare` — hai bản sao không thể lệch mà không ai biết.
+**Duyệt thị giác (mô hình nhìn ảnh, ảnh chụp bằng `msedge --headless`):** 3 thẻ `compare` (forest `>`, sea `=`, classroom `<`) đều có **hai chủ thể tách rời + dấu ở giữa không chạm bên nào**, icon góc rời chủ thể, không gì bị cắt; thẻ `single` vẫn **một** chủ thể như cũ.
+**`98/98` suite** (49,2 s) · `renderer-globals` 1055 hàm / 8426 lời gọi, 0 undefined · bundle nhúng **6163,8 KiB**.
+
+**Chưa xác minh.** Chưa có UI editor cho `compare` (chưa giáo viên nào đặt được hai chủ thể bằng chuột) và chưa chạy trên binary thật; ảnh duyệt ở trên là SVG dựng bằng engine, không phải màn chơi thật.

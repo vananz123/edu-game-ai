@@ -22,7 +22,7 @@
 import { renderIconSvg } from './icon-registry';
 import type { IllustrationPalette } from './illustration-registry';
 import type { SceneBlueprint, SceneSubIcon } from './scene-blueprint';
-import { SCENE_MAX_PROPS, SCENE_MAX_SUB_ICONS, getBackdropSpec, type SceneSubIconPosition } from './scene-asset-catalog';
+import { SCENE_MAX_PROPS, SCENE_MAX_SUB_ICONS, getBackdropSpec, type SceneCompareSign, type SceneSubIconPosition } from './scene-asset-catalog';
 
 /** Canvas the scenes are authored in; matches `renderIllustrationSvg`. */
 export const SCENE_WIDTH = 320;
@@ -41,6 +41,32 @@ export const SCENE_SUB_ICON_SIZE = 52;
 export const SCENE_GROUND_PROP_SIZE = 40;
 /** Horizon: the far layer sits above this, the ground band fills below it. */
 export const SCENE_HORIZON = 150;
+
+/* Compare layout (#262): two subjects plus a sign between them.
+ *
+ * The 320x200 frame cannot hold two 120px subjects and the four corner icons
+ * from #256: a 92px subject starting at x 42 would sit under the `top-left`
+ * slot. So compare mode owns its own geometry instead of guessing:
+ *
+ *   y  6..46   the two corner icons (40px)  - the only spots left in compare
+ *   y 50..146  subject band, subjects are LIFTED 12px to make that true
+ *   y 148..176 the sign, in the 52px gap between the two subject boxes
+ *   y146..186  ground props (#259), unchanged, just clear of the subject band
+ */
+export const SCENE_COMPARE_SUBJECT_SIZE = 92;
+/** Subjects sit 12px lower so the corner band above them stays free. */
+export const SCENE_COMPARE_SUBJECT_LIFT = 12;
+export const SCENE_COMPARE_SUB_ICON_SIZE = 40;
+export const SCENE_COMPARE_SIGN_SIZE = 24;
+/** Left/right edges of the two subject boxes (92px wide, centered on 88 / 232). */
+export const SCENE_COMPARE_SUBJECT_X = Object.freeze({ left: 42, right: 186 });
+/** Only two corners survive compare mode; they hug the frame's top edge. */
+export const SCENE_COMPARE_SUB_ICON_SLOTS: Readonly<
+  Partial<Record<SceneSubIconPosition, { x: number; y: number }>>
+> = Object.freeze({
+  'top-left': { x: 12, y: 6 },
+  'top-right': { x: SCENE_WIDTH - 12 - SCENE_COMPARE_SUB_ICON_SIZE, y: 6 },
+});
 
 /**
  * The eight deterministic primitives a scene is assembled from (#72). Fixed
@@ -491,19 +517,64 @@ const SCENE_SUB_ICON_SLOTS: Readonly<Record<SceneSubIconPosition, { x: number; y
  * Up to four supporting icons around the subject. They live in the props layer
  * (in front of the subject's box, never on top of it) so the subject stays the
  * one thing a child has to recognise.
+ *
+ * In compare mode (#262) only the two upper corners exist and the icons are
+ * smaller (40px): the left/right slots would sit on top of a subject. A caller
+ * that still passes `left`/`right` is moved to the first free upper corner
+ * rather than dropped — same rule as #256.
  */
-function renderSubIcons(subIcons: readonly SceneSubIcon[], palette: IllustrationPalette): string {
+function renderSubIcons(
+  subIcons: readonly SceneSubIcon[],
+  palette: IllustrationPalette,
+  compare: boolean
+): string {
+  const size = compare ? SCENE_COMPARE_SUB_ICON_SIZE : SCENE_SUB_ICON_SIZE;
+  const taken: string[] = [];
   const icons = subIcons.slice(0, SCENE_MAX_SUB_ICONS).map((sub) => {
-    const svg = renderIconSvg(sub.icon, { size: SCENE_SUB_ICON_SIZE, className: 'stage-illustration-subicon' });
+    const svg = renderIconSvg(sub.icon, { size, className: 'stage-illustration-subicon' });
     if (!svg) return '';
-    const slot = SCENE_SUB_ICON_SLOTS[sub.position] || SCENE_SUB_ICON_SLOTS.left;
+    let position: SceneSubIconPosition = sub.position;
+    if (compare) {
+      if (!SCENE_COMPARE_SUB_ICON_SLOTS[position] || taken.includes(position)) {
+        const free = (Object.keys(SCENE_COMPARE_SUB_ICON_SLOTS) as SceneSubIconPosition[]).find(
+          (slot) => !taken.includes(slot)
+        );
+        if (!free) return '';
+        position = free;
+      }
+    }
+    taken.push(position);
+    const slot = compare
+      ? SCENE_COMPARE_SUB_ICON_SLOTS[position]!
+      : SCENE_SUB_ICON_SLOTS[position] || SCENE_SUB_ICON_SLOTS.left;
     return (
-      `<g data-scene-subicon="${esc(sub.icon)}" data-scene-position="${esc(sub.position)}" ` +
+      `<g data-scene-subicon="${esc(sub.icon)}" data-scene-position="${esc(position)}" ` +
+      `data-scene-size="${size}" ` +
       `transform="translate(${slot.x} ${slot.y})" ` +
       `color="${esc(palette.ink)}" opacity="0.72">${svg}</g>`
     );
   }).join('');
   return icons ? `<g data-scene-primitive="sub-icons">${icons}</g>` : '';
+}
+
+/**
+ * The comparison sign (#262), drawn from fixed coordinates: no text, no font, so
+ * it looks the same on every machine and cannot be affected by font fallback.
+ * Unknown sign -> '' (two subjects with no sign is still a valid picture).
+ */
+function renderCompareSign(sign: SceneCompareSign | undefined, palette: IllustrationPalette): string {
+  const ink = esc(palette.ink);
+  const stroke = `fill="none" stroke="${ink}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"`;
+  const body =
+    sign === 'greater-than'
+      ? `<path d="M5 4 L20 12 L5 20" ${stroke}/>`
+      : sign === 'less-than'
+        ? `<path d="M20 4 L5 12 L20 20" ${stroke}/>`
+        : sign === 'equal'
+          ? `<rect x="4" y="7" width="16" height="4" rx="2" fill="${ink}"/>` +
+            `<rect x="4" y="14" width="16" height="4" rx="2" fill="${ink}"/>`
+          : '';
+  return body ? `<g data-scene-primitive="compare-sign">${body}</g>` : '';
 }
 
 /**
@@ -539,12 +610,17 @@ function composeSceneSvg(
   subject: string,
   subIcons: readonly SceneSubIcon[],
   groundProps: readonly string[],
-  options: SceneSvgOptions = {}
+  options: SceneSvgOptions = {},
+  compare: { second: string; sign: SceneCompareSign | undefined } | null = null
 ): string {
   if (!subject) return '';
 
-  const x = Math.round((SCENE_WIDTH - SCENE_SUBJECT_SIZE) / 2);
-  const y = Math.round(spec.subjectY - SCENE_SUBJECT_SIZE / 2);
+  // Compare mode is a different geometry, not a re-centre: see the constants
+  // block above for why a 92px subject cannot keep #256's four corners.
+  const isCompare = Boolean(compare);
+  const subjectSize = isCompare ? SCENE_COMPARE_SUBJECT_SIZE : SCENE_SUBJECT_SIZE;
+  const subjectY = isCompare ? spec.subjectY + SCENE_COMPARE_SUBJECT_LIFT : spec.subjectY;
+  const y = Math.round(subjectY - subjectSize / 2);
   const sky = palette.sky || palette.fill;
   const ground = palette.ground || darken(palette.fill);
 
@@ -569,9 +645,17 @@ function composeSceneSvg(
       `<rect x="0" y="${SCENE_HORIZON}" width="${SCENE_WIDTH}" height="${SCENE_HEIGHT - SCENE_HORIZON}" fill="${esc(ground)}"/>`
     ) +
     layer('mid', primitivesOf(spec.standing).map((p) => renderMid(p, palette)).join('')) +
-    layer('halo', `<circle cx="${SCENE_WIDTH / 2}" cy="${spec.subjectY}" r="72" fill="${esc(palette.glow)}" opacity="0.15"/>`) +
-    layer('subject', `<g transform="translate(${x} ${y})" color="${esc(palette.ink)}">${subject}</g>`) +
-    layer('props', primitivesOf(spec.standing).map((p) => renderProps(p, palette)).join('') + renderGroundProps(groundProps, palette) + renderSubIcons(subIcons, palette)) +
+    layer('halo', `<circle cx="${SCENE_WIDTH / 2}" cy="${subjectY}" r="72" fill="${esc(palette.glow)}" opacity="0.15"/>`) +
+    layer('subject', isCompare
+      ? `<g data-scene-subject="main" data-scene-size="${subjectSize}" transform="translate(${SCENE_COMPARE_SUBJECT_X.left} ${y})" color="${esc(palette.ink)}">${subject}</g>` +
+        `<g data-scene-subject="second" data-scene-size="${subjectSize}" transform="translate(${SCENE_COMPARE_SUBJECT_X.right} ${y})" color="${esc(palette.ink)}">${compare!.second}</g>`
+      : `<g transform="translate(${Math.round((SCENE_WIDTH - SCENE_SUBJECT_SIZE) / 2)} ${y})" color="${esc(palette.ink)}">${subject}</g>`) +
+    layer('props', primitivesOf(spec.standing).map((p) => renderProps(p, palette)).join('') + renderGroundProps(groundProps, palette) + renderSubIcons(subIcons, palette, isCompare)) +
+    layer('sign', isCompare
+      ? `<g data-scene-sign="${esc(String(compare!.sign || ''))}" data-scene-size="${SCENE_COMPARE_SIGN_SIZE}" ` +
+        `transform="translate(${SCENE_WIDTH / 2 - SCENE_COMPARE_SIGN_SIZE / 2} ${Math.round(subjectY - SCENE_COMPARE_SIGN_SIZE / 2)})" ` +
+        `color="${esc(palette.ink)}">${renderCompareSign(compare!.sign, palette)}</g>`
+      : '') +
     layer('fg', primitivesOf(spec.fg).map((p) => renderFg(p, palette)).join('')) +
     `</svg>`
   );
@@ -605,17 +689,29 @@ export function renderBlueprintSvg(
   options: SceneSvgOptions = {}
 ): string {
   if (!blueprint || typeof blueprint !== 'object') return '';
+  const isCompare =
+    blueprint.layout === 'compare' && typeof blueprint.compareIcon === 'string' && Boolean(blueprint.compareIcon);
+  const subjectSize = isCompare ? SCENE_COMPARE_SUBJECT_SIZE : SCENE_SUBJECT_SIZE;
   const subject = renderIconSvg(blueprint.mainIcon, {
-    size: SCENE_SUBJECT_SIZE,
+    size: subjectSize,
     className: 'stage-illustration-icon',
   });
+  // A compare blueprint whose second subject will not render degrades to the
+  // single layout instead of drawing half a comparison.
+  const second = isCompare
+    ? renderIconSvg(blueprint.compareIcon as string, {
+        size: SCENE_COMPARE_SUBJECT_SIZE,
+        className: 'stage-illustration-icon',
+      })
+    : '';
   return composeSceneSvg(
     getBackdropSpec(blueprint.backdrop),
     palette,
     subject,
     Array.isArray(blueprint.subIcons) ? blueprint.subIcons : [],
     Array.isArray(blueprint.props) ? blueprint.props : [],
-    options
+    options,
+    second ? { second, sign: blueprint.compareSign } : null
   );
 }
 

@@ -92,7 +92,7 @@ các bố cục này được cài và đo.
 layout?: 'process' | 'surround';
 ```
 
-### 3.3 `compare` — dữ liệu CÓ, phần vẽ CHƯA CÓ (#262)
+### 3.3 `compare` — dữ liệu CÓ và hình CÓ (#262); UI editor CHƯA CÓ
 
 ```ts
 // CÓ trong mã
@@ -116,6 +116,19 @@ chủ thể) → **UI editor** → cuối cùng mới đưa `compare` vào promp
 lời hứa với model; hứa một bố cục mà engine chưa vẽ được thì giáo viên nhận ảnh sai.
 Cổng `scene-prompt-doc.test.ts` hiện vẫn **ghim `\"layout\": \"single\"`** trong prompt,
 nên nó sẽ chặn đúng lúc ai đó sửa §5 sớm.
+
+**Hình học của `compare` (đã cài, đã đo bằng test):**
+
+| Vùng | Toạ độ | Ghi chú |
+|---|---|---|
+| 2 icon góc | `y 6…46`, x `12…52` và `268…308`, cỡ **40px** | chỉ `top-left`/`top-right` tồn tại ở `compare` |
+| chủ thể trái / phải | cỡ **92px**, x `42…134` / `186…278`, `y = subjectY + 12` | hạ 12px để dải góc phía trên trống |
+| dấu so sánh | cỡ **24px**, x `148…172`, giữa hai chủ thể | vẽ bằng `<path>`/`<rect>`, **không** dùng `<text>` (offline không có font chắc chắn) |
+| props mặt đất | `y 146…186` | không đổi so với #259, vừa chạm đáy dải chủ thể |
+
+Dấu `left`/`right` cũ bị **dời lên** `top-left`/`top-right` chứ không bị bỏ (cùng nguyên tắc #256).
+
+**Chưa xong ở P1:** UI editor cho hai chủ thể + dấu, và đưa `compare` vào prompt §5 (sau khi UI xong).
 
 **Đã xong ở #256 (tách khỏi P1/P2 vì không cần `layout` mới):**
 

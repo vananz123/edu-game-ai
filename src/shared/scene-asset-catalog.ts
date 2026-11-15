@@ -47,6 +47,14 @@ export function isSceneSubIconPosition(value: unknown): value is SceneSubIconPos
   return typeof value === 'string' && (SCENE_SUB_ICON_POSITIONS as readonly string[]).includes(value);
 }
 
+/**
+ * In a `compare` scene only the two upper corners are free (#262): the low `left`
+ * and `right` slots sit where a second subject now stands. A blueprint naming one
+ * of them is **moved** to the first free upper corner, exactly as #256 moves a
+ * taken corner instead of dropping the icon.
+ */
+export const SCENE_COMPARE_SUB_ICON_POSITIONS = Object.freeze(['top-left', 'top-right'] as const);
+
 /** Rejected above this size. A valid blueprint is ~120–180 bytes. */
 export const SCENE_BLUEPRINT_MAX_BYTES = 600;
 

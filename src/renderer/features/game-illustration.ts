@@ -167,6 +167,16 @@ const STAGE_SUB_ICON_POSITIONS = ['left', 'right', 'top-left', 'top-right'];
 /** Same layouts and signs as SCENE_LAYOUT_IDS / SCENE_COMPARE_SIGNS (#262). */
 const STAGE_SCENE_LAYOUTS = ['single', 'compare'];
 const STAGE_SCENE_COMPARE_SIGNS = ['greater-than', 'less-than', 'equal'];
+/** Compare geometry, mirroring the SCENE_COMPARE_* constants (#262). */
+const STAGE_SCENE_COMPARE_SUBJECT_SIZE = 92;
+const STAGE_SCENE_COMPARE_SUBJECT_LIFT = 12;
+const STAGE_SCENE_COMPARE_SUB_ICON_SIZE = 40;
+const STAGE_SCENE_COMPARE_SIGN_SIZE = 24;
+const STAGE_SCENE_COMPARE_SUBJECT_X = { left: 42, right: 186 };
+const STAGE_SUB_ICON_COMPARE_SLOTS = {
+  'top-left': { x: 12, y: 6 },
+  'top-right': { x: 320 - 12 - STAGE_SCENE_COMPARE_SUB_ICON_SIZE, y: 6 }
+};
 const STAGE_SCENE_BLUEPRINT_MAX_BYTES = 600;
 const STAGE_SCENE_DEFAULT_ICON = 'book-open';
 /** Subject icon size in the 320x200 frame; matches SCENE_SUB_ICON_SIZE (#252). */
@@ -234,6 +244,10 @@ function stageNormalizeBlueprint(value) {
     }
   }
   const subjects = compareIcon ? [mainIcon, compareIcon] : [mainIcon];
+  /** Compare keeps only the two upper corners; the rest move there (#262). */
+  const allowedSlots = layout === 'compare'
+    ? Object.keys(STAGE_SUB_ICON_COMPARE_SLOTS)
+    : STAGE_SUB_ICON_POSITIONS;
   const backdrop = stageIsSceneBackdropId(raw.backdrop) ? raw.backdrop : STAGE_SCENE_BACKDROP_DEFAULT;
   const paletteKey = stageIsScenePaletteKey(raw.paletteKey) ? raw.paletteKey : 'language';
   const subIcons = [];
@@ -247,9 +261,9 @@ function stageNormalizeBlueprint(value) {
       if (!stageIsSceneIconId(icon) || subjects.indexOf(icon) >= 0 || subIcons.some(function (sub) { return sub.icon === icon; })) continue;
       if (subIcons.length >= STAGE_SCENE_MAX_SUB_ICONS) continue;
       const wanted = isObject && typeof entry.position === 'string' ? entry.position.trim() : '';
-      let position = STAGE_SUB_ICON_POSITIONS.indexOf(wanted) >= 0 && !subIcons.some(function (sub) { return sub.position === wanted; })
+      let position = allowedSlots.indexOf(wanted) >= 0 && !subIcons.some(function (sub) { return sub.position === wanted; })
         ? wanted
-        : STAGE_SUB_ICON_POSITIONS.filter(function (slot) {
+        : allowedSlots.filter(function (slot) {
             return !subIcons.some(function (sub) { return sub.position === slot; });
           })[0];
       subIcons.push({ icon: icon, position: position });
@@ -478,17 +492,48 @@ function stageFgSvg(primitive, palette) {
  * src/shared/illustration-scene.ts. Outside x 100..220, in the props layer, so
  * the subject is never covered.
  */
-function stageSubIconsSvg(list, palette) {
+function stageSubIconsSvg(list, palette, compare) {
   const subs = Array.isArray(list) ? list.slice(0, STAGE_SCENE_MAX_SUB_ICONS) : [];
+  const size = compare ? STAGE_SCENE_COMPARE_SUB_ICON_SIZE : STAGE_SCENE_SUB_ICON_SIZE;
+  const taken = [];
   const icons = subs.map(function (sub) {
-    const svg = stageIconSvg(sub.icon, STAGE_SCENE_SUB_ICON_SIZE, 'stage-illustration-subicon');
+    const svg = stageIconSvg(sub.icon, size, 'stage-illustration-subicon');
     if (!svg) return '';
-    const slot = STAGE_SUB_ICON_SLOTS[sub.position] || STAGE_SUB_ICON_SLOTS.left;
-    return '<g data-scene-subicon="' + escapeHtml(sub.icon) + '" data-scene-position="' + escapeHtml(sub.position) + '" ' +
+    let position = sub.position;
+    if (compare) {
+      if (!STAGE_SUB_ICON_COMPARE_SLOTS[position] || taken.indexOf(position) >= 0) {
+        const free = Object.keys(STAGE_SUB_ICON_COMPARE_SLOTS).filter(function (slot) {
+          return taken.indexOf(slot) < 0;
+        })[0];
+        if (!free) return '';
+        position = free;
+      }
+    }
+    taken.push(position);
+    const slot = compare ? STAGE_SUB_ICON_COMPARE_SLOTS[position] : (STAGE_SUB_ICON_SLOTS[position] || STAGE_SUB_ICON_SLOTS.left);
+    return '<g data-scene-subicon="' + escapeHtml(sub.icon) + '" data-scene-position="' + escapeHtml(position) + '" ' +
+      'data-scene-size="' + size + '" ' +
       'transform="translate(' + slot.x + ' ' + slot.y + ')" ' +
       'color="' + escapeHtml(palette.ink) + '" opacity="0.72">' + svg + '</g>';
   }).join('');
   return icons ? '<g data-scene-primitive="sub-icons">' + icons + '</g>' : '';
+}
+
+/**
+ * The comparison sign (#262), mirroring renderCompareSign in the shared composer:
+ * fixed coordinates, no text and no font.
+ */
+function stageCompareSignSvg(sign, palette) {
+  const ink = escapeHtml(palette.ink);
+  const stroke = 'fill="none" stroke="' + ink + '" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"';
+  let body = '';
+  if (sign === 'greater-than') body = '<path d="M5 4 L20 12 L5 20" ' + stroke + '/>';
+  else if (sign === 'less-than') body = '<path d="M20 4 L5 12 L20 20" ' + stroke + '/>';
+  else if (sign === 'equal') {
+    body = '<rect x="4" y="7" width="16" height="4" rx="2" fill="' + ink + '"/>' +
+      '<rect x="4" y="14" width="16" height="4" rx="2" fill="' + ink + '"/>';
+  }
+  return body ? '<g data-scene-primitive="compare-sign">' + body + '</g>' : '';
 }
 
 /** Ground props, mirroring renderGroundProps in the shared composer (#259). */
@@ -660,10 +705,18 @@ function stageIllustrationHtml(item, game, extraClass) {
   const spec = blueprint ? stageBackdropSpec(blueprint.backdrop) : stageSceneSpec(resolved.category);
   const subIcons = blueprint && Array.isArray(blueprint.subIcons) ? blueprint.subIcons : [];
   const groundProps = blueprint && Array.isArray(blueprint.props) ? blueprint.props : [];
+  // #262 compare: a second subject plus a sign. Falls back to one subject when the
+  // second icon will not render, so the frame is never half a comparison.
+  const compareSecond = blueprint && blueprint.layout === 'compare' && blueprint.compareIcon
+    ? stageIconSvg(blueprint.compareIcon, STAGE_SCENE_COMPARE_SUBJECT_SIZE, 'stage-illustration-icon')
+    : '';
+  const isCompare = !!compareSecond;
+  const subjectSize = isCompare ? STAGE_SCENE_COMPARE_SUBJECT_SIZE : STAGE_ILLUSTRATION_SUBJECT_SIZE;
+  const subjectY = isCompare ? spec.subjectY + STAGE_SCENE_COMPARE_SUBJECT_LIFT : spec.subjectY;
   const sky = palette.sky || palette.fill;
   const ground = palette.ground || palette.fill;
-  const x = Math.round((320 - STAGE_ILLUSTRATION_SUBJECT_SIZE) / 2);
-  const y = Math.round(spec.subjectY - STAGE_ILLUSTRATION_SUBJECT_SIZE / 2);
+  const x = Math.round((320 - subjectSize) / 2);
+  const y = Math.round(subjectY - subjectSize / 2);
   const cls = 'stage-illustration' + (extraClass ? ' ' + extraClass : '');
   return `<div class="${cls}" data-illustration="${escapeHtml(resolved.assetId)}" aria-hidden="true">` +
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" preserveAspectRatio="xMidYMid meet" class="stage-illustration-svg" aria-hidden="true" focusable="false">` +
@@ -673,9 +726,17 @@ function stageIllustrationHtml(item, game, extraClass) {
     stageLayer('far', stagePrimitivesOf(spec.horizon).map(function (p) { return stageFarSvg(p, palette); }).join('') +
       `<rect x="0" y="${STAGE_ILLUSTRATION_HORIZON}" width="320" height="${200 - STAGE_ILLUSTRATION_HORIZON}" fill="${escapeHtml(ground)}"/>`) +
     stageLayer('mid', stagePrimitivesOf(spec.standing).map(function (p) { return stageMidSvg(p, palette); }).join('')) +
-    stageLayer('halo', `<circle cx="160" cy="${spec.subjectY}" r="72" fill="${escapeHtml(palette.glow)}" opacity="0.15"/>`) +
-    stageLayer('subject', `<g transform="translate(${x} ${y})" color="${escapeHtml(palette.ink)}">${subjectIcon}</g>`) +
-    stageLayer('props', stagePrimitivesOf(spec.standing).map(function (p) { return stagePropsSvg(p, palette); }).join('') + stageGroundPropsSvg(groundProps, palette) + stageSubIconsSvg(subIcons, palette)) +
+    stageLayer('halo', `<circle cx="160" cy="${subjectY}" r="72" fill="${escapeHtml(palette.glow)}" opacity="0.15"/>`) +
+    stageLayer('subject', isCompare
+      ? '<g data-scene-subject="main" data-scene-size="' + subjectSize + '" transform="translate(' + STAGE_SCENE_COMPARE_SUBJECT_X.left + ' ' + y + ')" color="' + escapeHtml(palette.ink) + '">' + subjectIcon + '</g>' +
+        '<g data-scene-subject="second" data-scene-size="' + subjectSize + '" transform="translate(' + STAGE_SCENE_COMPARE_SUBJECT_X.right + ' ' + y + ')" color="' + escapeHtml(palette.ink) + '">' + compareSecond + '</g>'
+      : `<g transform="translate(${x} ${y})" color="${escapeHtml(palette.ink)}">${subjectIcon}</g>`) +
+    stageLayer('props', stagePrimitivesOf(spec.standing).map(function (p) { return stagePropsSvg(p, palette); }).join('') + stageGroundPropsSvg(groundProps, palette) + stageSubIconsSvg(subIcons, palette, isCompare)) +
+    stageLayer('sign', isCompare
+      ? '<g data-scene-sign="' + escapeHtml(String(blueprint.compareSign || '')) + '" data-scene-size="' + STAGE_SCENE_COMPARE_SIGN_SIZE + '" ' +
+        'transform="translate(' + (160 - STAGE_SCENE_COMPARE_SIGN_SIZE / 2) + ' ' + Math.round(subjectY - STAGE_SCENE_COMPARE_SIGN_SIZE / 2) + ')" ' +
+        'color="' + escapeHtml(palette.ink) + '">' + stageCompareSignSvg(blueprint.compareSign, palette) + '</g>'
+      : '') +
     stageLayer('fg', stagePrimitivesOf(spec.fg).map(function (p) { return stageFgSvg(p, palette); }).join('')) +
     `</svg></div>`;
 }
