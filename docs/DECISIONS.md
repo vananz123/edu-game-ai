@@ -3763,5 +3763,16 @@ Ba ràng buộc không đổi: (1) game đã lưu phải chơi được **offlin
 
 **Việc kế tiếp.** P1 `compare` — hạng mục lớn tiếp theo, cần chia đôi khung cho cả 10 nền và bài vẽ mới; mọi phép kiểm toạ độ hiện có sẽ phải mở rộng cho hai hộp chủ thể.
 
+---
 
+## #261 — Lưu trữ `docs/STATUS.md`: chuyển bằng script và kiểm bằng số, không chép tay
 
+**Bối cảnh.** Quy ước trong `AGENTS.md` là `docs/STATUS.md` chỉ giữ **3** bàn giao mới nhất, phần cũ chuyển sang `docs/handoff/status/<ngày>.md`. Sau #252–#260, tệp có **11** bàn giao cùng ngày và đã phình lên 134 KB. Tôi đã trì hoãn việc này 3 lượt vì "phải chép tay ~2 KB tiếng Việt" — đó là lý do sai: chép tay là rủi ro, còn script thì kiểm được.
+
+**Quyết định.** Viết script một lần: tách theo dòng `### `, giữ 3 block đầu, chuyển phần còn lại của **cùng ngày** sang `docs/handoff/status/2026-11-15.md` (đổi `###` thành `##` cho khớp quy ước tệp lưu trữ), để lại **một dòng stub** trỏ tới tệp lưu trữ. Script **tự kiểm**: mỗi block đã chuyển phải có trong tệp lưu trữ và **không** còn trong STATUS.
+
+**Kết quả đo được.** 8 block chuyển (đã kiểm 8/8), STATUS 134.085 → **112.337** ký tự; kiểm độc lập: 11 tiêu đề ngày cũ = **3 trong STATUS + 8 trong lưu trữ, 0 mất**.
+
+**Bài học (đã mắc và đã sửa ngay trong lượt).** Lần chạy đầu đếm **khoảng trắng đầu tệp** thành một "block", nên `KEEP = 3` giữ `[rỗng, #260, #258]` và **#257 bị đẩy sang lưu trữ**. Phát hiện vì script in ra `archived 9` trong khi chỉ có 8 bàn giao cần chuyển. Đã khôi phục cả hai tệp từ bản sao và chạy lại với bộ tách bỏ block không có tiêu đề. Nguyên tắc rút ra: **đếm số block đã chuyển và so với số kỳ vọng**, đừng chỉ nhìn tệp thấy "có vẻ đúng".
+
+**Còn lại.** Các bàn giao của ngày **khác** (2026-11-12, 11-10, 11-09) vẫn là block đầy đủ; chúng cần một lượt riêng theo từng ngày, vì mỗi ngày một tệp lưu trữ. Không làm trong lượt này để không trộn hai loại rủi ro.
