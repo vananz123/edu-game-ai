@@ -18,6 +18,7 @@
 - **P2 — `process`/`surround` + `props`:** bố cục nhiều bước và vật thể phụ; mỗi bố cục có bài vẽ riêng trước khi mở cho model.
 - **P3 — kênh AI thật:** prompt sinh từ cùng catalog, đầu ra JSON qua đúng `normalizeSceneBlueprint`, nút "✨ Gợi ý cảnh từ nội dung" thay "Cảnh thử", ghi qua `ai_tasks`; **không bao giờ chạy markup của model**. Prompt và từ vựng asset phải viết theo [`docs/AI_SCENE_DIRECTOR_DESIGN.md`](AI_SCENE_DIRECTOR_DESIGN.md) — bản thiết kế cũ dùng tên không tồn tại (`garden-day`, `cat`, `tree`, `default-pastel`) nên đã bị thay.
 - **P4 — cổng + docs:** mở rộng `check:item-assets-ui` cho từng bố cục, thêm phép đo dung lượng `.egame` thật, duyệt thị giác, rồi mới tính installer/phát hành.
+- **Prompt + cổng chống trôi — XONG trước P1 (quyết định #255).** §5 của [`docs/AI_SCENE_DIRECTOR_DESIGN.md`](AI_SCENE_DIRECTOR_DESIGN.md) nay là prompt đầy đủ (quy tắc, quy trình suy nghĩ, kho từ vựng có mốc), và `tests/unit/scene-prompt-doc.test.ts` so **từng tên** trong prompt với `scene-asset-catalog.ts` — thêm/bớt asset mà quên sửa prompt là đỏ. Nhánh "model xuất raw SVG" của spec ban đầu bị **loại**: inline SVG là markup thực thi được, `AGENTS.md` cấm chạy markup do model sinh.
 - **Còn mở:** chưa có bằng chứng model thật trả JSON hợp lệ; chưa duyệt cảnh bằng mắt; blueprint chưa đi qua đường wizard (`lesson:patch-item-assets` vẫn allowlist 3 khoá); chưa đo `.egame` trên bộ game lớn.
 
 ## Một bảng màu nút phẳng cho toàn vỏ — brand đặc / trắng viền / đỏ xoá, bỏ gradient và quầng màu (2026-11-15)
