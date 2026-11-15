@@ -46,6 +46,11 @@ function renderQuestion() {
     // so the illustration is dropped and a slot reserves its screen area.
     const illusHtml = houseMode ? '' : stageIllustrationHtml(q, game, 'is-stage');
     const hasIllus = Boolean(illusHtml);
+    /* #254: câu hỏi TÌNH HUỐNG ("Quyết định") nhận bố cục riêng — ảnh LỚN bên
+       trái, câu hỏi + đáp án bên phải — để học sinh hình dung được tình huống
+       trước khi chọn. Phải có ảnh thật: bố cục nửa màn hình trống chỉ làm câu
+       hỏi hẹp lại mà không thêm thông tin. Xây nhà giữ nguyên bố cục của nó. */
+    const situationSplit = stageGame === 'scenario' && !houseMode && hasIllus;
     // #153: nhà 3D chiếm ô giữ chỗ, nhưng ảnh giáo viên CHỌN cho câu hỏi vẫn được
     // hiện — đặt ngang hàng, bên trái ô nhà. Chỉ ảnh chỉ định (hình có sẵn / ảnh
     // tải lên): tranh "tự động" không phải là "câu hỏi có ảnh", nếu không mọi câu
@@ -78,7 +83,7 @@ function renderQuestion() {
     const classicLeadRow = stageGame === 'quiz' && !houseMode && hasIllus;
     const sideColHtml = houseMode || classicLeadRow
         ? ''
-        : `<div class="stage-col stage-side-col">${illusHtml}${hasIllus ? '<div id="answerFeedback" class="feedback-under-illustration"></div>' : ''}</div>`;
+        : `<div class="stage-col stage-side-col${situationSplit ? ' is-situation-art' : ''}">${illusHtml}${hasIllus ? '<div id="answerFeedback" class="feedback-under-illustration"></div>' : ''}</div>`;
     const hintButton = q.hint && !textQ ? `<button type="button" class="btn btn-secondary btn-small quiz-hint-btn" id="quizHintBtn">💡 Gợi ý</button>` : '';
     const kickerRow = kicker || hintButton
         ? `<div class="stage-kicker-row flex items-center justify-between gap-2 mb-2 flex-wrap">${kicker ? `<div class="stage-kicker d-badge d-badge-neutral">${kicker}</div>` : ''}${hintButton}</div>`
@@ -111,7 +116,7 @@ function renderQuestion() {
     const nextInStage = game.template === 'quiz' ? '' : nextBtnHtml;
     const nextDock = game.template === 'quiz' ? `<div id="quizNextDock" class="quiz-next-dock">${nextBtnHtml}</div>` : '';
     const stageBottomHtml = `<div class="stage-bottom"><span class="stage-tip">${scoringTip}</span>${nextInStage}</div>`;
-    root.innerHTML = `<div class="game-stage${houseMode ? ' is-house-mode' : ''}${game.template === 'quiz' ? ' is-arena-quiz' : ''}" data-game="${stageGame}" data-game-world="quiz">${gameWorldLabel(stageGame)}<div class="stage-top"><span class="stage-meta">${escapeHtml(game.subject || 'TRÒ CHƠI HỌC TẬP')} · ${game.grade ? 'LỚP ' + escapeHtml(game.grade) : 'MỌI LỚP'}</span><span class="stage-meta stage-meta-right"><span class="stage-chip">${game.template === 'scenario' ? 'QUYẾT ĐỊNH' : 'CÂU'} <b>${state.gameAnswers.length + 1}</b>/${game.questions.length}</span><span class="stage-chip stage-chip-score">🏆 <b>${state.gameAnswers.reduce((s, a) => s + a.points, 0)}</b> điểm</span></span></div><div class="stage-progress"><div data-progress="${progress}"></div></div>${state.teamPlay ? teamTurnBarHtml() : ''}<div class="stage-center">${houseHudHtml}${sideColHtml}<div class="stage-col is-main">${centerLeadHtml}${houseAnswerRow || answerArea}${mainFeedbackHtml}${stageBottomHtml}</div></div>${nextDock}<div id="answerExplanationDock" class="answer-explain-dock"></div></div>`;
+    root.innerHTML = `<div class="game-stage${houseMode ? ' is-house-mode' : ''}${game.template === 'quiz' ? ' is-arena-quiz' : ''}" data-game="${stageGame}" data-game-world="quiz">${gameWorldLabel(stageGame)}<div class="stage-top"><span class="stage-meta">${escapeHtml(game.subject || 'TRÒ CHƠI HỌC TẬP')} · ${game.grade ? 'LỚP ' + escapeHtml(game.grade) : 'MỌI LỚP'}</span><span class="stage-meta stage-meta-right"><span class="stage-chip">${game.template === 'scenario' ? 'QUYẾT ĐỊNH' : 'CÂU'} <b>${state.gameAnswers.length + 1}</b>/${game.questions.length}</span><span class="stage-chip stage-chip-score">🏆 <b>${state.gameAnswers.reduce((s, a) => s + a.points, 0)}</b> điểm</span></span></div><div class="stage-progress"><div data-progress="${progress}"></div></div>${state.teamPlay ? teamTurnBarHtml() : ''}<div class="stage-center${situationSplit ? ' is-situation' : ''}">${houseHudHtml}${sideColHtml}<div class="stage-col is-main">${centerLeadHtml}${houseAnswerRow || answerArea}${mainFeedbackHtml}${stageBottomHtml}</div></div>${nextDock}<div id="answerExplanationDock" class="answer-explain-dock"></div></div>`;
     paintProgress(root);
     $$('.answer-option', root).forEach(btn => btn.addEventListener('click', () => chooseAnswer(q, btn.dataset.answer)));
     const qHintBtn = $('#quizHintBtn', root);

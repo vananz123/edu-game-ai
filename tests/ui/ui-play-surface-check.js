@@ -1356,6 +1356,107 @@ function assertNav(nav, tag) {
 
 
 
+  /* ==== #254: bo cuc TINH HUONG (anh LON ben trai, cau hoi + dap an ben phai) ====
+     Khang dinh ba dieu code khong tu bao: (1) class `is-situation` chi xuat hien cho
+     cau hoi `scenario` CO anh; (2) cot anh nam BEN TRAI cot chu; (3) anh rong hon
+     tran 440px cu. Do ca hai che do: toan man hinh (may chieu) va cua so trong app. */
+  function scenarioGame() {
+    const questions = [1, 2, 3].map(n => ({
+      id: 'q' + n,
+      type: 'scenario',
+      prompt: LONG,
+      context: 'Trong gio ra choi, mot ban trong lop bi treu choc vi ngoai hinh.',
+      contentCategory: 'community',
+      iconName: 'users',
+      illustrationAssetId: 'community-scene',
+      options: SHORT_OPTIONS,
+      correctOptionId: 'a',
+      correctAnswer: '',
+      explanation: 'Hoi tham va bao thay co la cach ton trong ban.',
+      hint: '',
+      points: 100
+    }));
+    return JSON.stringify({
+      id: 'ui-play-surface-situation', title: 'Quyet dinh', subject: 'Dao duc', grade: '4',
+      template: 'scenario', description: '', tags: [], sourceName: 'ui-check',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      gameSetup: { scoringMode: 'co ban', gameplayMode: 'classic', illustrationMode: 'auto', houseStyle: 'auto' },
+      questions
+    });
+  }
+
+  const SITUATION_GEOM = `(() => {
+    const boxOf = el => {
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { l: Math.round(r.left), t: Math.round(r.top), r: Math.round(r.right), b: Math.round(r.bottom), w: Math.round(r.width), h: Math.round(r.height) };
+    };
+    const center = document.querySelector('.stage-center');
+    const opts = Array.from(document.querySelectorAll('.answer-option')).map(boxOf);
+    return {
+      isSituation: Boolean(center && center.classList.contains('is-situation')),
+      artCol: boxOf(document.querySelector('.stage-col.is-situation-art')),
+      mainCol: boxOf(document.querySelector('.stage-col.is-main')),
+      art: boxOf(document.querySelector('.stage-illustration')),
+      options: opts,
+      vw: innerWidth, vh: innerHeight
+    };
+  })()`;
+
+  if (want('situation')) {
+    for (const size of PROJECTOR_SIZES) {
+      const tag = `${size.label} situation`;
+      console.log(`\n=== situation @ ${size.label} ===`);
+      await setViewportAndWait(ctx, size);
+      let opened = await evaluate(OPEN(scenarioGame()));
+      // Lần mở ĐẦU TIÊN sau khi app khởi động có thể chưa kịp dựng xong
+      // (bootstrap còn vẽ). Thử lại một lần thay vì báo sai là cổng đỏ.
+      if (!opened || !opened.stage) {
+        await new Promise(r => setTimeout(r, 1500));
+        opened = await evaluate(OPEN(scenarioGame()));
+      }
+      check(`[${tag}] scenario stage opened`,
+        Boolean(opened && opened.stage && opened.question && opened.option),
+        opened ? JSON.stringify(opened) : 'no result');
+      if (!opened || !opened.option) continue;
+
+      const g = await evaluate(SITUATION_GEOM);
+      check(`[${tag}] .stage-center carries is-situation`, g.isSituation,
+        g.isSituation ? 'is-situation present' : 'class missing, scenario got the old layout');
+      check(`[${tag}] the art column exists`, Boolean(g.artCol), g.artCol ? `${g.artCol.w}px` : 'no .is-situation-art');
+      check(`[${tag}] art column sits LEFT of the text column`,
+        Boolean(g.artCol && g.mainCol && g.artCol.r <= g.mainCol.l + 2),
+        g.artCol && g.mainCol ? `art right ${g.artCol.r} vs text left ${g.mainCol.l}` : 'columns missing');
+      // 440px la tran CU cua bo cuc 2 cot; bai hoc la "anh la mot tam the,
+      // khong phai mot buc tranh". Doi hoi phai RONG HON han, khong phai bang.
+      check(`[${tag}] situation art is wider than the old 440px cap`,
+        Boolean(g.art && g.art.w >= 460),
+        g.art ? `${g.art.w}x${g.art.h}px` : 'no .stage-illustration');
+      const hidden = g.options.filter(o => o.b > g.vh + 2 || o.r > g.vw + 2);
+      check(`[${tag}] all four answers fit on screen`,
+        g.options.length === 4 && hidden.length === 0,
+        hidden.length ? hidden.map(o => `${o.t}..${o.b}`).join(' | ') : `${g.options.length} answers, last bottom ${g.options[3] ? g.options[3].b : '-'} of ${g.vh}`);
+
+      /* Cua so trong app: bo cuc CO Y giu 1 cot. Do tren binary that: `.stage-center`
+         trong cua so chi ~1045px bat ke viewport, nen tach cot bop cot chu con 393px
+         va day dap an cuoi xuong 1164px (ban 1 cot: 1083px). Check nay khoa dung
+         ranh gioi do, de mot lan sau them nhieu che do se khong "sua" ma khong biet. */
+      await evaluate(`(async () => { document.documentElement.dataset.fullscreen = '0'; await new Promise(r => setTimeout(r, 250)); return true; })()`);
+      const w = await evaluate(SITUATION_GEOM);
+      // Class do JS gắn ở mọi chế độ; CSS chỉ hành động ở toàn màn hình. Vậy
+      // phải khẳng định BỐ CỤC, không phải class. Hai cột chỉ tồn tại khi mép
+      // phải cột ảnh nằm BÊN TRÁI mép trái cột chữ; ở 1 cột (.stage-col là
+      // `display: contents`) cả hai khung cùng trải hết bề rộng nên chồng nhau.
+      const sideBySide = Boolean(w.artCol && w.mainCol && w.artCol.r <= w.mainCol.l + 2);
+      check(`[${tag}] the app window keeps the one-column fallback`,
+        !sideBySide && w.options.length === 4,
+        sideBySide
+          ? `columns side by side: art right ${w.artCol.r}, text left ${w.mainCol.l}`
+          : 'one column, as designed');
+      console.log(`situation ${size.label}: fullscreen art ${g.art ? g.art.w + 'x' + g.art.h : '-'}px, text col ${g.mainCol ? g.mainCol.w : '-'}px; app window in-situation=${w.isSituation}`);
+    }
+  }
+
   await evaluate(`(async () => {
     document.querySelector('[data-play-close]')?.click();
     document.getElementById('modalRoot').innerHTML = '';

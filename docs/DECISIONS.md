@@ -3645,3 +3645,20 @@ Ba ràng buộc không đổi: (1) game đã lưu phải chơi được **offlin
 
 **Chưa chứng minh.** Chưa có duyệt bằng **mắt người** (phiên không có đầu vào hình ảnh) nên "đặc hơn" mới là số đo hình trong SVG; chưa chạy lại các cổng UI rời và `tauri:check`; chưa build installer. Lượt này **không** thêm `compare`/`process`/`surround`/`props`/`subIcons` 4 vị trí — đó là P2 và vẫn **CHƯA CÓ**.
 
+---
+
+## #254 — Bố cục tình huống ảnh-lớn-trái / chữ-phải, CHỈ toàn màn hình; và vì sao **không** dùng unDraw
+
+**Bối cảnh.** Chủ dự án muốn trò chơi **tình huống thực tế** có ảnh minh hoạ lớn bên trái, câu hỏi + đáp án bên phải, để học sinh hình dung tình huống; và đề nghị lấy hình từ [undraw.co](https://undraw.co).
+
+**Quyết định.** (a) Bố cục mới `.stage-center.is-situation` chỉ cho câu `q.type === 'scenario'` **có ảnh**; khung ảnh nâng `clamp(300px,28vw,440px)` → `clamp(320px,34vw,620px)`: **620×388px** ở 1920 (diện tích ×1,98), **464×290px** ở 1366 (×1,56). (b) Bố cục **chỉ áp ở toàn màn hình** (`html[data-fullscreen="1"]`), cửa sổ trong app giữ 1 cột. (c) **Không** thêm unDraw ở lượt này.
+
+**Vì sao chỉ toàn màn hình — đo, không đoán.** Đã thử cho bố cục chạy cả trong cửa sổ app và **trượt**: `.stage-center` trong cửa sổ chỉ rộng ~**1045px** bất kể viewport (toàn màn hình: 1517px), nên tách cột bóp cột chữ còn **393px** và đẩy đáp án cuối xuống **1164px**, trong khi bản 1 cột đã là **1083px** — tức "cải tiến" làm mọi thứ tệ hơn. Ở 1366 cửa sổ thì tách cột lại tốt hơn baseline (910 vs 1011) nhưng **cả hai** đều vượt 768, nên đó là nợ có sẵn của màn hình hẹp, không phải thứ lượt này sửa. Cổng `ui-play-surface-check` giờ **khoá đúng ranh giới** này (mục `situation`).
+
+**Vì sao chưa dùng unDraw (ghi để lần sau không phải tra lại).** (1) **License** ([undraw.co/license](https://undraw.co/license)): dùng thương mại, không cần ghi công — nhưng **cấm** "distribute the assets in packs" và **cấm** mọi cách *automated … download the assets*; nên **không được** viết script build tự tải, phải **tải tay** rồi commit, kèm file NOTICE (repo hiện **không có** NOTICE nào). (2) **Độ phân giải ngữ nghĩa**: unDraw vẽ cho ~800×600 với nhân vật nét mảnh; ở khung cũ 320–440px nét <1px thành vệt xám. Nay khung **620px** nên nó **khả thi hơn trước** — nhưng vẫn cần người tải hình và một bước **sanitize SVG** (bỏ `<script>`, `<foreignObject>`, href ra mạng) trước khi nhúng. (3) unDraw là hình người cách điệu, **không phải** ảnh tình huống thực tế; muốn "đúng tình huống" thì mỗi câu cần một hình riêng, tức phụ thuộc số hình tải tay.
+
+**Kiểm chứng.** `npm run check` sạch · `node tests/run-unit.js` **97/97** · `check:embedded` khớp **6161,3 KiB** · `cargo tauri build` **4m57s**, `devPath` tạm bỏ rồi khôi phục **nguyên byte** (`5AE0BF64…13B20E`) · trên binary thật (CDP 9361): `ui-play-surface-check 9361 situation` **14/14**, phần quiz cũ **436/436**.
+
+**Không chứng minh.** Chưa duyệt bằng mắt; chưa thử DPI 125–150% hay máy chiếu 4:3 (1024×768); cảnh vẫn do engine primitive vẽ, chưa có ảnh tình huống thật.
+
+
