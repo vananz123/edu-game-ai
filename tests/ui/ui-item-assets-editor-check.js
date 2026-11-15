@@ -328,6 +328,44 @@ const { PROJECTOR_SIZES, measureAt, setViewport, setViewportAndWait } = require(
     out.processPreviewTwoArrows = row.querySelectorAll('[data-editor-art-thumb] [data-scene-arrow]').length;
     out.processKeptCorner = !!proc3 && (proc3.subIcons || []).length === 1 && proc3.subIcons[0].icon === 'lightbulb';
 
+
+    // ---- 7c. #270: bố cục vây quanh ----
+    // Đổi Kiểu sang vây quanh phải ra ngay một vòng hợp lệ (tự chọn 1 vật), bỏ hết
+    // vật thể phụ ở góc, và KHÔNG hiện ô bậc/thứ hai/dấu của các bố cục khác.
+    layoutSel().value = 'surround';
+    layoutSel().dispatchEvent(new Event('change'));
+    await sleep(300);
+    let ring = null;
+    try { ring = JSON.parse(bpInput().value || 'null'); } catch (error) {}
+    out.surroundWritten = !!ring && ring.layout === 'surround';
+    out.surroundAutoItem = !!ring && (ring.around || []).length === 1;
+    out.surroundItemDiffers = !!ring && ring.around[0] !== ring.mainIcon;
+    out.surroundSelects = row.querySelectorAll('[data-editor-art-around]').length;
+    out.surroundNoCornerSlots = row.querySelectorAll('[data-editor-art-slot]').length;
+    out.surroundNoCompare = row.querySelectorAll('[data-editor-art-compare-icon], [data-editor-art-sign]').length;
+    out.surroundNoSteps = row.querySelectorAll('[data-editor-art-step]').length;
+    out.surroundDropsCorners = !!ring && ring.subIcons === undefined;
+    out.surroundExcludesSubject = Array.from(row.querySelector('[data-editor-art-around="0"]').options)
+      .every(op => op.value !== 'paw-print');
+    out.surroundPreviewRing = row.querySelectorAll('[data-editor-art-thumb] [data-scene-around]').length;
+    out.surroundPreviewSubject = row.querySelectorAll('[data-editor-art-thumb] [data-scene-subject="main"]').length;
+    out.surroundPreviewSubjectSize = row.querySelector('[data-editor-art-thumb] [data-scene-subject="main"]')?.getAttribute('data-scene-size');
+    const ringSel = index => row.querySelector('[data-editor-art-around="' + index + '"]');
+    for (const index of [1, 2, 3]) {
+      const pick = Array.from(row.querySelector('[data-editor-art-around="' + index + '"]').options)
+        .map(op => op.value).filter(Boolean)[0] || '';
+      row.querySelector('[data-editor-art-around="' + index + '"]').value = pick;
+      row.querySelector('[data-editor-art-around="' + index + '"]').dispatchEvent(new Event('change'));
+      await sleep(250);
+    }
+    let ring4 = null;
+    try { ring4 = JSON.parse(bpInput().value || 'null'); } catch (error) {}
+    out.surroundFourWritten = !!ring4 && (ring4.around || []).length === 4;
+    out.surroundFourUnique = !!ring4 && new Set(ring4.around || []).size === 4;
+    out.surroundPreviewFour = row.querySelectorAll('[data-editor-art-thumb] [data-scene-around]').length;
+    out.surroundRingOrder = !!ring4 && ring4.around.join(',') === (ring4.around || []).slice().join(',');
+    out.surroundKeptFirst = !!ringSel(0) && ringSel(0).value === ring4.around[0];
+
     // Đổi về "Một hình": hai trường so sánh phải BIẾN MẤT, và 4 góc trở lại.
     layoutSel().value = 'single';
     layoutSel().dispatchEvent(new Event('change'));
@@ -351,6 +389,14 @@ const { PROJECTOR_SIZES, measureAt, setViewport, setViewportAndWait } = require(
     row.querySelector('[data-editor-art-sign]').value = 'greater-than';
     row.querySelector('[data-editor-art-sign]').dispatchEvent(new Event('change'));
     await sleep(250);
+    // #270: the surround probe deliberately DROPS corner icons (a ring owns all four
+    // corners), so the corner has to be picked again before the save checks below.
+    const cornerBack = row.querySelector('[data-editor-art-slot="top-left"]');
+    if (cornerBack) {
+      cornerBack.value = 'lightbulb';
+      cornerBack.dispatchEvent(new Event('change'));
+      await sleep(250);
+    }
 
     document.getElementById('saveGameBtn')?.click();
     await sleep(900);
@@ -404,6 +450,42 @@ const { PROJECTOR_SIZES, measureAt, setViewport, setViewportAndWait } = require(
       second.value = choices[0] || '';
       second.dispatchEvent(new Event('change'));
       await sleep(300);
+    }
+    try { results.edited = JSON.parse(host.querySelector('[data-field="sceneBlueprint"]')?.value || 'null'); } catch (error) { results.edited = null; }
+    document.getElementById('saveGameBtn')?.click();
+    await sleep(900);
+    const lib2 = await desktop.call('getLibrary');
+    results.saved = (lib2?.games || []).find(g => g.title === 'UE blueprint roundtrip')?.questions?.[0]?.sceneBlueprint || null;
+    document.getElementById('modalRoot').innerHTML = '';
+    return results;
+  })()`);
+
+  // #270: một cảnh vây quanh đi qua lần lưu THẬT, giống phép thử của process ở trên.
+  const ringSave = await evaluate(`(async () => {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const results = {};
+    const lib = await desktop.call('getLibrary');
+    const game = (lib?.games || []).find(g => g.title === 'UE blueprint roundtrip');
+    results.found = !!game;
+    if (!game) return results;
+    document.getElementById('modalRoot').innerHTML = '';
+    editGame(JSON.parse(JSON.stringify(game)));
+    await sleep(400);
+    const host = document.querySelector('#editorQuestions .editor-question');
+    results.rowFound = !!host;
+    if (!host) return results;
+    const art = () => host.querySelector('[data-editor-art]');
+    const layout = art().querySelector('[data-editor-art-layout]');
+    layout.value = 'surround';
+    layout.dispatchEvent(new Event('change'));
+    await sleep(300);
+    for (const index of [1, 2, 3]) {
+      const select = art().querySelector('[data-editor-art-around="' + index + '"]');
+      if (!select) continue;
+      const pick = Array.from(select.options).map(op => op.value).filter(Boolean)[0] || '';
+      select.value = pick;
+      select.dispatchEvent(new Event('change'));
+      await sleep(250);
     }
     try { results.edited = JSON.parse(host.querySelector('[data-field="sceneBlueprint"]')?.value || 'null'); } catch (error) { results.edited = null; }
     document.getElementById('saveGameBtn')?.click();
@@ -515,7 +597,7 @@ const { PROJECTOR_SIZES, measureAt, setViewport, setViewportAndWait } = require(
   check('saving a compare scene keeps the corner icon', out.compareSaveKeptCorner === true);
 
   // #267: quy trình nhiều bậc trong trình soạn.
-  check('Kiểu offers the process layout', out.layoutHasProcessOption === true, String(out.layoutOptionCount));
+  check('Kiểu offers all four layouts', out.layoutOptionCount === 4 && out.layoutHasProcessOption === true, String(out.layoutOptionCount));
   check('switching to process writes a drawable sequence', out.processWritten === true);
   check('switching to process picks stage 2 by itself', out.processAutoStage === true);
   check('the auto-picked stage is not the subject', out.processStageDiffers === true);
@@ -538,6 +620,9 @@ const { PROJECTOR_SIZES, measureAt, setViewport, setViewportAndWait } = require(
   check('a process scene survives a real editor save', !!(procSave && procSave.saved && procSave.saved.layout === 'process'), JSON.stringify(procSave && procSave.saved));
   check('the saved process scene keeps both stages', !!(procSave && procSave.saved && (procSave.saved.steps || []).join(',') === (procSave && procSave.edited ? procSave.edited.steps.join(',') : 'x')), JSON.stringify({ edited: procSave && procSave.edited && procSave.edited.steps, saved: procSave && procSave.saved && procSave.saved.steps, choices: procSave && procSave.secondChoices }));
   check('the saved process scene has no compare fields', !!(procSave && procSave.saved && procSave.saved.compareIcon === undefined && procSave.saved.compareSign === undefined));
+  check('a surround scene survives a real editor save', !!(ringSave && ringSave.saved && ringSave.saved.layout === 'surround'), JSON.stringify(ringSave && ringSave.saved && ringSave.saved.layout));
+  check('the saved ring keeps its items in order', !!(ringSave && ringSave.saved && ringSave.edited && (ringSave.saved.around || []).join(',') === (ringSave.edited.around || []).join(',')), JSON.stringify({ edited: ringSave && ringSave.edited && ringSave.edited.around, saved: ringSave && ringSave.saved && ringSave.saved.around }));
+  check('the saved ring scene carries no corner icons', !!(ringSave && ringSave.saved && ringSave.saved.subIcons === undefined));
 
 
   // ---- #265 "Gợi ý cảnh": the editor button, driven through `desktop.stub` ----
@@ -679,6 +764,25 @@ const { PROJECTOR_SIZES, measureAt, setViewport, setViewportAndWait } = require(
   check('an AI process scene draws two arrows', Boolean(suggest && suggest.suggestProcessPreviewArrows === 2), String(suggest && suggest.suggestProcessPreviewArrows));
   check('the layout picker follows the AI process scene', Boolean(suggest && suggest.suggestProcessLayoutValue === 'process'), suggest && suggest.suggestProcessLayoutValue);
   check('an AI process scene shows no compare controls', Boolean(suggest && suggest.suggestProcessNoCompare === 0), String(suggest && suggest.suggestProcessNoCompare));
+
+  // #270: bố cục vây quanh trong trình soạn.
+  check('Kiểu lists surround among the four layouts', out.layoutOptionCount === 4, String(out.layoutOptionCount));
+  check('switching to surround writes a drawable ring', out.surroundWritten === true);
+  check('switching to surround picks one item by itself', out.surroundAutoItem === true);
+  check('the auto-picked ring item is not the subject', out.surroundItemDiffers === true);
+  check('surround offers four ring pickers', out.surroundSelects === 4, String(out.surroundSelects));
+  check('surround hides the corner pickers', out.surroundNoCornerSlots === 0, String(out.surroundNoCornerSlots));
+  check('surround hides the compare controls', out.surroundNoCompare === 0, String(out.surroundNoCompare));
+  check('surround hides the stage pickers', out.surroundNoSteps === 0, String(out.surroundNoSteps));
+  check('switching to surround drops the corner icons', out.surroundDropsCorners === true);
+  check('the ring list excludes the subject icon', out.surroundExcludesSubject === true);
+  check('the preview draws the ring item', out.surroundPreviewRing === 1, String(out.surroundPreviewRing));
+  check('the preview still draws the subject', out.surroundPreviewSubject === 1, String(out.surroundPreviewSubject));
+  check('the surround subject is drawn at 88px', out.surroundPreviewSubjectSize === '88', String(out.surroundPreviewSubjectSize));
+  check('four ring picks write four items', out.surroundFourWritten === true);
+  check('the ring items are four different icons', out.surroundFourUnique === true);
+  check('the preview draws four ring items', out.surroundPreviewFour === 4, String(out.surroundPreviewFour));
+  check('the first ring item keeps its place after the redraws', out.surroundKeptFirst === true);
   check('an empty question is refused without calling AI', Boolean(suggest && suggest.emptyPromptRefused));
   check('an empty question explains what to do first', Boolean(suggest && /Hãy viết nội dung/.test(suggest.emptyPromptToast)), suggest && suggest.emptyPromptToast);
 

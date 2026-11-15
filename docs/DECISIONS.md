@@ -4092,3 +4092,60 @@ initialization`; đã dời xuống sau khối suggest.
 `GEMINI_API_KEY` trong môi trường và các thư mục dữ liệu tạm cũ không giữ khoá (khoá chỉ nằm
 DPAPI-encrypted trong thư mục dữ liệu của app, đã xoá sau mỗi lượt). Vì vậy câu "model có
 chọn `process` cho câu 'hạt → mầm → cây' không" vẫn **mở**.
+
+## #270 — `surround`: chủ thể ở giữa, tối đa 4 vật ở bốn góc (dữ liệu + hình + UI + prompt)
+
+**Quyết định.** Bố cục thứ tư: `mainIcon` ở **giữa**, `around[]` (1–4) là những thứ **quanh
+nó**, xếp **theo chiều kim đồng hồ từ góc trên-trái**. Dữ liệu **không** mang toạ độ — thứ tự
+là thứ tự vòng, còn bốn chỗ đứng do engine sở hữu, nên hai lần lưu cùng một cảnh không thể
+"cãi nhau" về chỗ đứng của một vật. Đây là khác biệt so với `subIcons` (mang `position`): một
+vòng là **một dãy có thứ tự**, không phải bốn lựa chọn rời.
+
+**Hình học — đo, không đoán.** Khung 320×200, props đứng từ y 146 (giữ nguyên #259), nên chỉ
+còn hàng trên y 10..58 và hai bên y 96..144. Vì vậy chủ thể **nhỏ lại còn 88px** (x 116..204,
+y 52..140) và vòng là **48px** tại (28,10) (244,10) (244,96) (28,96). Chủ thể 120px như
+`single` sẽ đè cả bốn ô; vòng 5–6 vật không vừa ở cỡ còn đọc được, nên trần là **4**.
+
+**`surround` KHÔNG có subIcons.** Bốn góc đã là vòng. Icon góc bị **từ chối kèm issue**
+`subIcons` chứ không bị dời vào chân chủ thể — dời như vậy là bịa một chỗ đứng không có trong
+thiết kế. Đây là chỗ khác `compare`/`process` (chúng **dời** vì còn chỗ trống thật).
+
+**Hạ cấp.** Vòng rỗng ⇒ về `single` + issue `around` (vòng rỗng không phải vòng). Vật sai,
+trùng, trùng chủ thể, hoặc thứ 5 trở đi bị **bỏ**, phần còn lại vẫn thành vòng. `single` mang
+`around` ⇒ bỏ + issue. Màu: chủ thể `glow`, vòng `ink` opacity 0.85 — để chủ thể vẫn là thứ
+duy nhất "sáng", đúng luật #266.
+
+**Prompt.** `surround` vào từ vựng §5.2 (khoá `around`), luật 6 sửa lại ("KHÔNG có subIcons khi
+surround"), thêm luật 12 và bước suy nghĩ 8 ("hỏi về một vật và những thứ quanh nó"), cùng **ví
+dụ JSON thật** thứ tư chạy qua `normalizeSceneBlueprint` với 0 issue. **Cái phanh cũ đã gỡ:**
+`scene-prompt-doc` từng cấm mọi id chưa cài; giờ nó kiểm **chiều ngược lại** — mỗi id trong
+`SCENE_LAYOUT_IDS` phải có ví dụ trong prompt. Tài liệu thiết kế: §3.2 "Hình dạng DỰ KIẾN —
+CHƯA CÓ" bị xoá (không còn bố cục nào ở trạng thái dự kiến), thêm §3.5.
+
+**UI.** Kiểu có "Vật thể vây quanh" + **4 ô** `[data-editor-art-around="0..3"]` nhãn "Vây 1
+(trên-trái)" … "Vây 4 (dưới-trái)" — nhãn là **vị trí**, vì giáo viên chọn một chỗ chứ không
+chọn chỉ số. Đổi Kiểu sang vây quanh là **tự chọn 1 vật** (vòng rỗng sẽ bị hạ về `single`);
+các ô góc **ẩn hẳn** (không mời rồi từ chối); danh sách loại trước chủ thể và các vật đã dùng;
+về `single` thì xoá `around`.
+
+**Bằng chứng.** `scene-blueprint` **39 → 46** check (thứ tự vòng, hạ cấp, bỏ vật sai, trần 4,
+`single` mang `around`, từ chối subIcons, không tái dùng làm prop, **hình học đo được** gồm
+kiểm không chồng chủ thể và không chạm dải đất) · `scene-prompt-doc` **16** (ví dụ thứ tư +
+kiểm chiều ngược) · `ui-item-assets-editor-check` **137 → 157/157** trên binary release thật,
+gồm **một lần lưu thật thứ ba** cho vòng · `run-unit` **99/99** · `npm run check` 52 tệp sạch ·
+`renderer-globals` 0 undefined (1058 hàm / 8513 lời gọi) · `check:embedded` khớp **6213,9 KiB**
+· installer 15,68 MiB · `devPath` gỡ → build → khôi phục, SHA-256 khớp ghim.
+Hai đối chứng âm: bỏ nhánh hạ cấp ⇒ `around=undefined must degrade`; đổi một slot của bản
+mirror 96→98 ⇒ `renderer geometry differs`. Ảnh: `images/surround-270.png` (2 cảnh vây quanh +
+1 cảnh `single` đối chứng); mô hình thị giác xác nhận chủ thể ở giữa và là thứ duy nhất màu
+nhấn, vòng không đè chủ thể.
+
+**Một chỗ suýt báo đỏ sai.** Ảnh chụp trong app lần này ra **trắng** (4.019 byte, giống hệt
+nhau ở ba cách canh toạ độ khác nhau) trong khi DOM đo được đủ (`4 ô vây`, `3 vật trong
+preview`, `layout=surround`, `0 ô góc`). Cửa sổ app đang ở trạng thái không vẽ được, nên bằng
+chứng UI dựa vào **cổng 157/157 + phép đo DOM**, không dựa vào ảnh; ảnh trắng đã xoá chứ không
+commit.
+
+**Đã đóng P2.** Bốn bố cục (`single`, `compare`, `process`, `surround`) đều có dữ liệu, hình,
+UI và prompt. Còn mở duy nhất của AI Scene Director: `process`/`surround` **chưa chạy qua model
+thật** (cần khoá) — đường ống đã chứng minh, chỉ lựa chọn của model là chưa biết.

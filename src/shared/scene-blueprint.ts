@@ -21,6 +21,7 @@ import {
   SCENE_MAX_PROPS,
   SCENE_MAX_SUB_ICONS,
   SCENE_PROCESS_MAX_EXTRA_STEPS,
+  SCENE_SURROUND_MAX_ICONS,
   SCENE_PROCESS_SUB_ICON_POSITIONS,
   SCENE_SUB_ICON_POSITIONS,
   getBackdropSpec,
@@ -63,6 +64,8 @@ export interface SceneBlueprint {
   compareSign?: SceneCompareSign;
   /** `process` only (#267): stages 2..3, left to right. `mainIcon` is stage 1. */
   steps?: string[];
+  /** `surround` only (#270): up to four things around the subject, in ring order. */
+  around?: string[];
   /** Up to four keys of `SCENE_ICON_IDS`, each in its own corner. */
   subIcons?: SceneSubIcon[];
   /** Up to two keys of `SCENE_ICON_IDS` standing on the ground (#259). */
@@ -219,14 +222,59 @@ export function normalizeSceneBlueprint(
     issues.push('steps');
   }
 
-  const subjects = [mainIcon, ...(compareIcon ? [compareIcon] : []), ...(layout === 'process' ? steps : [])];
-  /** Compare and process keep only the two upper corners; the rest are moved there. */
+  /* #270 — `surround` is a ring with the subject in the middle. The data carries
+     only the ORDER of the items: the engine owns the four coordinates, so two
+     saves of the same scene can never disagree about where a thing stands.
+     Same degradation rule as compare/process: a ring with nothing in it is not a
+     ring, so the scene falls back to the single picture. */
+  const around: string[] = [];
+  if (layout === 'surround') {
+    const wanted: unknown[] = Array.isArray(raw.around) ? (raw.around as unknown[]) : [];
+    for (const entry of wanted) {
+      const asObject = isPlainObject(entry);
+      const icon = asObject
+        ? typeof entry.icon === 'string'
+          ? entry.icon.trim()
+          : ''
+        : typeof entry === 'string'
+          ? entry.trim()
+          : '';
+      if (!isSceneIconId(icon) || icon === mainIcon || around.includes(icon)) {
+        issues.push('around');
+        continue;
+      }
+      if (around.length >= SCENE_SURROUND_MAX_ICONS) {
+        issues.push('around');
+        continue;
+      }
+      around.push(icon);
+    }
+    if (!around.length) {
+      issues.push('around');
+      layout = 'single';
+    }
+  } else if (raw.around !== undefined) {
+    issues.push('around');
+  }
+
+  const subjects = [
+    mainIcon,
+    ...(compareIcon ? [compareIcon] : []),
+    ...(layout === 'process' ? steps : []),
+    ...(layout === 'surround' ? around : []),
+  ];
+  /* Compare and process keep only the two upper corners; the rest are moved
+     there. `surround` keeps NONE: all four corners hold the ring (#270), so a
+     sub-icon would land on a ring item. The icons are dropped with an issue
+     rather than silently moved into the subject's feet. */
   const allowedPositions: readonly SceneSubIconPosition[] =
     layout === 'compare'
       ? SCENE_COMPARE_SUB_ICON_POSITIONS
       : layout === 'process'
         ? SCENE_PROCESS_SUB_ICON_POSITIONS
-        : SCENE_SUB_ICON_POSITIONS;
+        : layout === 'surround'
+          ? []
+          : SCENE_SUB_ICON_POSITIONS;
 
   let backdrop = typeof raw.backdrop === 'string' ? raw.backdrop.trim() : '';
   if (!isSceneBackdropId(backdrop)) {
@@ -246,6 +294,12 @@ export function normalizeSceneBlueprint(
       issues.push('subIcons');
     } else {
       for (const entry of raw.subIcons as SceneSubIconInput[]) {
+        // #270: `surround` has no corner left for a sub-icon, so they are refused
+        // here instead of being pushed with an undefined position.
+        if (!allowedPositions.length) {
+          issues.push('subIcons');
+          continue;
+        }
         const asObject = isPlainObject(entry);
         const icon = asObject
           ? typeof entry.icon === 'string'
@@ -313,6 +367,7 @@ export function normalizeSceneBlueprint(
     ...(compareIcon ? { compareIcon } : {}),
     ...(compareSign ? { compareSign } : {}),
     ...(layout === 'process' && steps.length ? { steps } : {}),
+    ...(layout === 'surround' && around.length ? { around } : {}),
     ...(subIcons.length ? { subIcons } : {}),
     ...(props.length ? { props } : {}),
   };

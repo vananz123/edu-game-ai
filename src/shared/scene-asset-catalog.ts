@@ -69,13 +69,34 @@ export const SCENE_PROCESS_SUB_ICON_POSITIONS = Object.freeze(['top-left', 'top-
 export const SCENE_BLUEPRINT_MAX_BYTES = 600;
 
 /**
+ * `surround` (#270): things gathered around one subject, one per frame corner.
+ * Four is what the frame can hold without touching the subject or the ground
+ * props — a real ring of five or six does not fit 320x200 at a readable size.
+ */
+export const SCENE_SURROUND_MAX_ICONS = 4;
+
+/**
+ * The four ring slots, clockwise from the top-left corner. Fixed by the engine:
+ * the data carries only the ORDER of the items, never their coordinates, so two
+ * saves of the same scene cannot disagree about where a thing stands.
+ */
+export const SCENE_SURROUND_SLOTS = Object.freeze([
+  'top-left',
+  'top-right',
+  'bottom-right',
+  'bottom-left',
+] as const);
+export type SceneSurroundSlot = (typeof SCENE_SURROUND_SLOTS)[number];
+
+/**
  * The layouts that exist in the data model.
  *
  * `process` (#267) is a left-to-right sequence: `mainIcon` is stage 1 and
- * `steps` holds up to two more stages. It is a different GEOMETRY, not a
- * different palette — that is why it is a layout and not a flag.
+ * `steps` holds up to two more stages. `surround` (#270) is a ring: `mainIcon`
+ * in the middle and `around` in the four corners. Both are a different GEOMETRY,
+ * not a different palette — that is why they are layouts and not flags.
  */
-export const SCENE_LAYOUT_IDS = Object.freeze(['single', 'compare', 'process'] as const);
+export const SCENE_LAYOUT_IDS = Object.freeze(['single', 'compare', 'process', 'surround'] as const);
 export type SceneLayoutId = (typeof SCENE_LAYOUT_IDS)[number];
 
 export function isSceneLayoutId(value: unknown): value is SceneLayoutId {

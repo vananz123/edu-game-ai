@@ -133,12 +133,16 @@ test('the prompt offers exactly the layouts the engine can draw', () => {
   // returns null, which renders an empty column.
   assert.match(prompt, /"layout":\s*"single"/);
   assert.match(prompt, /"layout":\s*"compare"/);
-  // #267 released `process` from this brake together with its normaliser rules,
-  // its geometry and a worked example. `surround` stays banned until it has all
-  // four, because a layout the engine cannot draw renders an empty column.
-  assert.match(prompt, /"layout":\s*"process"/);
-  for (const missing of ['surround']) {
-    assert.ok(!new RegExp('"layout":\\s*"' + missing + '"').test(prompt), `${missing} is offered but not implemented`);
+  // #267 released `process` and #270 released `surround`: every layout the engine
+  // draws is now offered, each with its own worked example (checked below). The
+  // brake that used to ban an unimplemented id is gone, so the guard is now the
+  // positive one — the prompt lists exactly the catalog ids and nothing else,
+  // which `idsFor('layout')` above already asserts.
+  for (const id of SCENE_LAYOUT_IDS) {
+    assert.ok(
+      new RegExp('"layout":\\s*"' + id + '"').test(prompt),
+      `the prompt never shows a worked example of "${id}"`
+    );
   }
 });
 

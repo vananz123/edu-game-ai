@@ -405,6 +405,10 @@ function sceneBoxes(svg: string) {
   const steps = [...svg.matchAll(/data-scene-step="(\d+)" data-scene-size="(\d+)" transform="translate\((\d+) (\d+)\)/g)].map(
     (match) => ({ step: Number(match[1]), size: Number(match[2]), x: Number(match[3]), y: Number(match[4]) })
   );
+  // #270: the ring is geometry too.
+  const around = [...svg.matchAll(/data-scene-around="(\d+)" data-scene-position="([a-z-]+)" data-scene-size="(\d+)" transform="translate\((\d+) (\d+)\)/g)].map(
+    (match) => ({ index: Number(match[1]), position: match[2], size: Number(match[3]), x: Number(match[4]), y: Number(match[5]) })
+  );
   // #267: the arrows are geometry too — a parity check that ignores them would
   // pass while one composer pointed its arrow at the wrong gap.
   const arrows = [...svg.matchAll(/data-scene-arrow="(\d+)" d="M(\d+) (\d+)h(\d+)/g)].map(
@@ -413,6 +417,7 @@ function sceneBoxes(svg: string) {
   return {
     subjects,
     steps,
+    around,
     arrows,
     icons: icons.filter((entry) => entry.position.startsWith('ground-') === false),
     props: icons.filter((entry) => entry.position.startsWith('ground-')),
@@ -639,6 +644,116 @@ test('process draws its stages in a measured row, above the ground props', () =>
   assert.equal(corners[0].y, 6);
 });
 
+// --- #270 surround: a ring around one subject ------------------------------
+const SURROUND: SceneBlueprint = {
+  v: 1,
+  layout: 'surround',
+  backdrop: 'meadow',
+  paletteKey: 'plants',
+  mainIcon: 'leaf',
+  around: ['apple', 'box', 'fish', 'bug'],
+};
+
+test('a surround scene keeps the ring order it was given', () => {
+  const issues: string[] = [];
+  const scene = normalizeSceneBlueprint(SURROUND, issues)!;
+  assert.equal(scene.layout, 'surround');
+  assert.equal(scene.mainIcon, 'leaf', 'the subject stays in the middle');
+  assert.deepEqual(scene.around, ['apple', 'box', 'fish', 'bug'], 'ring order is the meaning');
+  assert.equal(scene.subIcons, undefined);
+  assert.deepEqual(issues, []);
+});
+
+test('a surround scene with an empty ring becomes one picture', () => {
+  for (const bad of [undefined, [], ['dragon'], ['leaf']]) {
+    const issues: string[] = [];
+    const scene = normalizeSceneBlueprint({ ...SURROUND, around: bad }, issues)!;
+    assert.equal(scene.layout, 'single', `around=${JSON.stringify(bad)} must degrade`);
+    assert.equal(scene.around, undefined);
+    assert.ok(issues.includes('around'), 'the degradation must be observable');
+  }
+});
+
+test('one bad ring item is dropped and the rest still surround the subject', () => {
+  const issues: string[] = [];
+  const scene = normalizeSceneBlueprint({ ...SURROUND, around: ['apple', 'dragon', 'box', 'box', 'leaf'] }, issues)!;
+  assert.equal(scene.layout, 'surround');
+  assert.deepEqual(scene.around, ['apple', 'box'], 'unknown, duplicate and self are all dropped');
+  assert.ok(issues.includes('around'));
+});
+
+test('a surround ring is four items at most', () => {
+  const issues: string[] = [];
+  const scene = normalizeSceneBlueprint(
+    { ...SURROUND, around: ['apple', 'box', 'fish', 'bug', 'bird'] },
+    issues
+  )!;
+  assert.deepEqual(scene.around, ['apple', 'box', 'fish', 'bug']);
+  assert.ok(issues.includes('around'));
+});
+
+test('single must not carry a ring, and surround refuses corner icons', () => {
+  const single = normalizeSceneBlueprint({ ...VALID, around: ['apple'] })!;
+  assert.equal(single.around, undefined, 'a stored scene must not carry fields the engine ignores');
+  // #270: the ring owns all four corners, so a sub-icon has nowhere to stand.
+  const issues: string[] = [];
+  const ring = normalizeSceneBlueprint(
+    { ...SURROUND, subIcons: [{ icon: 'bird', position: 'top-left' }] },
+    issues
+  )!;
+  assert.equal(ring.layout, 'surround');
+  assert.equal(ring.subIcons, undefined, 'a sub-icon must not be pushed with no corner');
+  assert.ok(issues.includes('subIcons'));
+});
+
+test('a ring item is never reused as a ground prop', () => {
+  const scene = normalizeSceneBlueprint({ ...SURROUND, props: ['apple', 'leaf'] }, [])!;
+  assert.equal(scene.props, undefined, 'a ring item must not also stand on the ground');
+});
+
+test('surround draws the subject in the middle and the ring in the four corners', () => {
+  const ringBoxes = (svg: string) =>
+    [...svg.matchAll(/data-scene-around="(\d+)" data-scene-position="([a-z-]+)" data-scene-size="(\d+)" transform="translate\((\d+) (\d+)\)/g)].map(
+      (match) => ({
+        index: Number(match[1]),
+        position: match[2],
+        size: Number(match[3]),
+        x: Number(match[4]),
+        y: Number(match[5]),
+      })
+    );
+  const draw = (around: string[]) =>
+    renderBlueprintSvg({ ...SURROUND, around }, getIllustrationPalette(SURROUND.paletteKey));
+
+  const full = draw(['apple', 'box', 'fish', 'bug']);
+  const ring = ringBoxes(full);
+  assert.deepEqual(
+    ring.map((item) => item.position),
+    ['top-left', 'top-right', 'bottom-right', 'bottom-left'],
+    'clockwise from the top-left corner'
+  );
+  assert.deepEqual(ring.map((item) => item.size), [48, 48, 48, 48]);
+  assert.deepEqual(
+    ring.map((item) => `${item.x},${item.y}`),
+    ['28,10', '244,10', '244,96', '28,96']
+  );
+
+  const subject = sceneBoxes(full).subjects.filter((box) => box.name === 'main')[0];
+  assert.equal(subject.size, 88, 'the surround subject is smaller so the ring fits');
+  assert.deepEqual([subject.x, subject.y], [116, 52]);
+  // Geometry must be true, not just documented: no ring item may touch the
+  // subject box (x 116..204, y 52..140) or the ground props (y 146..186).
+  for (const item of ring) {
+    const overlapsSubject = item.x < subject.x + subject.size && item.x + item.size > subject.x &&
+      item.y < subject.y + subject.size && item.y + item.size > subject.y;
+    assert.ok(!overlapsSubject, `ring item ${item.position} overlaps the subject`);
+    assert.ok(item.y + item.size <= 146, `ring item ${item.position} reaches the ground props`);
+  }
+
+  const three = ringBoxes(draw(['apple', 'box', 'fish']));
+  assert.deepEqual(three.map((item) => item.position), ['top-left', 'top-right', 'bottom-right']);
+});
+
 // --- renderer mirror parity ------------------------------------------------
 const RENDERER_DIR = path.join(__dirname, '..', '..', 'src', 'renderer', 'features');
 const sandbox: Record<string, unknown> = {
@@ -661,6 +776,9 @@ test('the renderer draws a compare scene with the same geometry as the shared on
   const cases: SceneBlueprint[] = [
     COMPARE,
     PROCESS,
+    SURROUND,
+    { ...SURROUND, around: ['apple'] },
+    { ...SURROUND, around: ['apple', 'box'], props: ['fish'] },
     { ...PROCESS, steps: ['box'] },
     { ...PROCESS, steps: ['apple', 'box'], subIcons: [{ icon: 'fish', position: 'top-right' }], props: ['leaf'] },
     { ...COMPARE, compareSign: 'equal', subIcons: [{ icon: 'leaf', position: 'top-left' }] },
@@ -698,6 +816,12 @@ test('the renderer normaliser and generator match the shared ones', () => {
     { ...PROCESS, steps: ['dragon'] },
     { ...PROCESS, compareIcon: 'fish', compareSign: 'equal' },
     { ...PROCESS, subIcons: [{ icon: 'leaf', position: 'right' }], props: ['box'] },
+    SURROUND,
+    JSON.stringify(SURROUND),
+    { ...SURROUND, around: [] },
+    { ...SURROUND, around: ['dragon'] },
+    { ...SURROUND, around: ['apple', 'box', 'fish', 'bug', 'bird'] },
+    { ...SURROUND, subIcons: [{ icon: 'bird', position: 'top-left' }] },
     { ...COMPARE, subIcons: ['fish', 'leaf'] },
     { ...VALID, mainIcon: 'chevron-down' },
     { ...VALID, subIcons: ['bird', 'bird', 'paw-print', 'leaf', 'fish', 'bug'] },

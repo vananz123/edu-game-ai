@@ -92,6 +92,27 @@ export const SCENE_PROCESS_STEP_X: Readonly<Record<number, readonly number[]>> =
   3: Object.freeze([16, 122, 228]),
 });
 
+/* Surround layout (#270): one subject in the middle, up to four things around it.
+ *
+ * Measured against the props band (y 146..186) and the frame edges:
+ *
+ *   subject   88px, centred: x 116..204, y 52..140
+ *   ring      48px at (28,10) (244,10) (244,96) (28,96)
+ *
+ * The left/right ring slots sit below the subject's waist and stop 2px short of
+ * the ground props; the upper slots clear the subject's head by 4px. There is no
+ * corner left for a sub-icon, which is why `surround` refuses them (#270).
+ */
+export const SCENE_SURROUND_SUBJECT_SIZE = 88;
+export const SCENE_SURROUND_ICON_SIZE = 48;
+/** Left/top of each ring slot, clockwise from the top-left corner. */
+export const SCENE_SURROUND_SLOT_PX: Readonly<Record<string, { x: number; y: number }>> = Object.freeze({
+  'top-left': Object.freeze({ x: 28, y: 10 }),
+  'top-right': Object.freeze({ x: SCENE_WIDTH - 28 - SCENE_SURROUND_ICON_SIZE, y: 10 }),
+  'bottom-right': Object.freeze({ x: SCENE_WIDTH - 28 - SCENE_SURROUND_ICON_SIZE, y: 96 }),
+  'bottom-left': Object.freeze({ x: 28, y: 96 }),
+});
+
 /**
  * The eight deterministic primitives a scene is assembled from (#72). Fixed
  * coordinates only — no randomness — so a saved game renders byte-identically
@@ -587,6 +608,24 @@ function renderSubIcons(
  * Unknown sign -> '' (two subjects with no sign is still a valid picture).
  */
 /**
+ * The surround ring (#270): up to four items in the four frame corners, drawn in
+ * `ink` so the subject stays the one glowing thing a child is asked about.
+ */
+function renderSurroundRing(items: readonly string[], palette: IllustrationPalette): string {
+  const slots = Object.keys(SCENE_SURROUND_SLOT_PX);
+  return items.map((icon, index) => {
+    const slot = SCENE_SURROUND_SLOT_PX[slots[index]] || SCENE_SURROUND_SLOT_PX['top-left'];
+    const svg = renderIconSvg(icon, { size: SCENE_SURROUND_ICON_SIZE, className: 'stage-illustration-subicon' });
+    if (!svg) return '';
+    return (
+      `<g data-scene-around="${index + 1}" data-scene-position="${esc(slots[index])}" ` +
+      `data-scene-size="${SCENE_SURROUND_ICON_SIZE}" transform="translate(${slot.x} ${slot.y})" ` +
+      `color="${esc(palette.ink)}" opacity="0.85">${svg}</g>`
+    );
+  }).join('');
+}
+
+/**
  * Process strip (#267): 2-3 stages left to right, with an arrow between them.
  * Returns '' when a stage will not draw, so the caller falls back to the single
  * picture instead of showing an arrow pointing at nothing.
@@ -670,14 +709,22 @@ function composeSceneSvg(
   groundProps: readonly string[],
   options: SceneSvgOptions = {},
   compare: { second: string; sign: SceneCompareSign | undefined } | null = null,
-  processStages: readonly string[] = []
+  processStages: readonly string[] = [],
+  surroundRing: readonly string[] = []
 ): string {
   if (!subject) return '';
 
   // Compare mode is a different geometry, not a re-centre: see the constants
   // block above for why a 92px subject cannot keep #256's four corners.
   const isCompare = Boolean(compare);
-  const subjectSize = isCompare ? SCENE_COMPARE_SUBJECT_SIZE : SCENE_SUBJECT_SIZE;
+  // #270: the ring owns the corners, so its subject is 88px and sits at a fixed
+  // y (52) instead of following a backdrop's subjectY.
+  const isSurround = surroundRing.length > 0;
+  const subjectSize = isSurround
+    ? SCENE_SURROUND_SUBJECT_SIZE
+    : isCompare
+      ? SCENE_COMPARE_SUBJECT_SIZE
+      : SCENE_SUBJECT_SIZE;
   const subjectY = isCompare ? spec.subjectY + SCENE_COMPARE_SUBJECT_LIFT : spec.subjectY;
   const y = Math.round(subjectY - subjectSize / 2);
   const sky = palette.sky || palette.fill;
@@ -710,14 +757,18 @@ function composeSceneSvg(
     // a pale wash; the accent is the only saturated colour a palette owns, and
     // giving it to the one thing the question is about makes the picture read
     // as a picture instead of a diagram.
-    layer('subject', processStages.length >= 2
+    layer('subject', surroundRing.length
+      ? `<g data-scene-subject="main" data-scene-size="${SCENE_SURROUND_SUBJECT_SIZE}" ` +
+        `transform="translate(${Math.round((SCENE_WIDTH - SCENE_SURROUND_SUBJECT_SIZE) / 2)} 52)" ` +
+        `color="${esc(palette.glow)}">${subject}</g>`
+      : processStages.length >= 2
       // #267: a sequence is drawn as a strip, not as one centre picture.
       ? renderProcessStrip(processStages, palette) || `<g transform="translate(${Math.round((SCENE_WIDTH - SCENE_SUBJECT_SIZE) / 2)} ${y})" color="${esc(palette.glow)}">${subject}</g>`
       : isCompare
       ? `<g data-scene-subject="main" data-scene-size="${subjectSize}" transform="translate(${SCENE_COMPARE_SUBJECT_X.left} ${y})" color="${esc(palette.glow)}">${subject}</g>` +
         `<g data-scene-subject="second" data-scene-size="${subjectSize}" transform="translate(${SCENE_COMPARE_SUBJECT_X.right} ${y})" color="${esc(palette.ink)}">${compare!.second}</g>`
       : `<g transform="translate(${Math.round((SCENE_WIDTH - SCENE_SUBJECT_SIZE) / 2)} ${y})" color="${esc(palette.glow)}">${subject}</g>`) +
-    layer('props', primitivesOf(spec.standing).map((p) => renderProps(p, palette)).join('') + renderGroundProps(groundProps, palette) + renderSubIcons(subIcons, palette, isCompare || processStages.length >= 2)) +
+    layer('props', primitivesOf(spec.standing).map((p) => renderProps(p, palette)).join('') + renderGroundProps(groundProps, palette) + renderSurroundRing(surroundRing, palette) + renderSubIcons(subIcons, palette, isCompare || processStages.length >= 2)) +
     layer('sign', isCompare
       ? `<g data-scene-sign="${esc(String(compare!.sign || ''))}" data-scene-size="${SCENE_COMPARE_SIGN_SIZE}" ` +
         `transform="translate(${SCENE_WIDTH / 2 - SCENE_COMPARE_SIGN_SIZE / 2} ${Math.round(subjectY - SCENE_COMPARE_SIGN_SIZE / 2)})" ` +
@@ -758,7 +809,13 @@ export function renderBlueprintSvg(
   if (!blueprint || typeof blueprint !== 'object') return '';
   const isCompare =
     blueprint.layout === 'compare' && typeof blueprint.compareIcon === 'string' && Boolean(blueprint.compareIcon);
-  const subjectSize = isCompare ? SCENE_COMPARE_SUBJECT_SIZE : SCENE_SUBJECT_SIZE;
+  const isSurround =
+    blueprint.layout === 'surround' && Array.isArray(blueprint.around) && blueprint.around.length > 0;
+  const subjectSize = isSurround
+    ? SCENE_SURROUND_SUBJECT_SIZE
+    : isCompare
+      ? SCENE_COMPARE_SUBJECT_SIZE
+      : SCENE_SUBJECT_SIZE;
   const subject = renderIconSvg(blueprint.mainIcon, {
     size: subjectSize,
     className: 'stage-illustration-icon',
@@ -781,7 +838,8 @@ export function renderBlueprintSvg(
     second ? { second, sign: blueprint.compareSign } : null,
     blueprint.layout === 'process' && Array.isArray(blueprint.steps)
       ? [blueprint.mainIcon, ...blueprint.steps]
-      : []
+      : [],
+    blueprint.layout === 'surround' && Array.isArray(blueprint.around) ? blueprint.around : []
   );
 }
 

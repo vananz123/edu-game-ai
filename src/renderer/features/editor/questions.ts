@@ -108,6 +108,14 @@ const EDITOR_SCENE_PROCESS_SLOTS = ['top-left', 'top-right'];
 const EDITOR_SCENE_MAX_EXTRA_STEPS = 2;
 /** "Bậc 2", "Bậc 3" — `mainIcon` is stage 1, which the subject picker already owns. */
 const EDITOR_SCENE_STEP_LABELS = ['Bậc 2', 'Bậc 3'];
+/* #270: a surround ring has four fixed slots, clockwise from the top-left corner.
+   The lab-labels name the POSITION, because a teacher picks a place, not an index. */
+const EDITOR_SCENE_AROUND_SLOTS = [
+  { position: 'top-left', label: 'Vây 1 (trên-trái)' },
+  { position: 'top-right', label: 'Vây 2 (trên-phải)' },
+  { position: 'bottom-right', label: 'Vây 3 (dưới-phải)' },
+  { position: 'bottom-left', label: 'Vây 4 (dưới-trái)' }
+];
 /** The comparison signs a `compare` scene may show (#262). */
 const EDITOR_SCENE_SIGNS = [
   { id: '', label: 'Không dấu' },
@@ -184,7 +192,9 @@ function editorItemArtHtml(item) {
   // #267: a process scene draws stage 1 and stage 3 exactly where the left/right
   // corner icons would sit, so it keeps the same two upper corners as compare.
   const isProcess = !!normalized && normalized.layout === 'process';
-  const layoutKind = isCompare ? 'compare' : isProcess ? 'process' : 'single';
+  const isSurround = !!normalized && normalized.layout === 'surround';
+  const layoutKind = isCompare ? 'compare' : isProcess ? 'process' : isSurround ? 'surround' : 'single';
+  const placedAround = normalized && Array.isArray(normalized.around) ? normalized.around : [];
   const activeSlots = isCompare || isProcess
     ? EDITOR_SCENE_SLOTS.filter(slot => EDITOR_SCENE_PROCESS_SLOTS.indexOf(slot.position) >= 0)
     : EDITOR_SCENE_SLOTS;
@@ -198,8 +208,12 @@ function editorItemArtHtml(item) {
     ? 'Bố cục so sánh chỉ còn 2 góc trên; hai góc dưới là chỗ của hai hình chính.'
     : isProcess
       ? 'Bố cục quy trình chỉ còn 2 góc trên; hai góc dưới là chỗ của bậc đầu và bậc cuối.'
-      : 'Chọn tối đa 4 vật thể để cảnh kể đúng câu chuyện. Không bao giờ đè lên hình chính.';
-  const slotsHtml = normalized
+      : isSurround
+        ? 'Bố cục vây quanh KHÔNG dùng vật thể phụ ở góc: cả bốn góc là vòng quanh chủ thể.'
+        : 'Chọn tối đa 4 vật thể để cảnh kể đúng câu chuyện. Không bao giờ đè lên hình chính.';
+  // #270: a surround ring owns all four corners, so the corner pickers are hidden
+  // rather than offered and then refused by the normaliser.
+  const slotsHtml = normalized && !isSurround
     ? `<div class="editor-art-slots" data-editor-art-slots>
         <span class="editor-art-slots-label">${slotsLabel}</span>
         ${activeSlots.map(slot => {
@@ -225,6 +239,7 @@ function editorItemArtHtml(item) {
   const usedIcons = [normalized && normalized.mainIcon]
     .concat(isCompare && normalized && normalized.compareIcon ? [normalized.compareIcon] : [])
     .concat(placedSteps)
+    .concat(placedAround)
     .concat(placedSubs.map(sub => sub.icon))
     .concat(placedProps)
     .filter(Boolean);
@@ -268,6 +283,7 @@ function editorItemArtHtml(item) {
             <option value="single"${layoutKind === 'single' ? ' selected' : ''}>Một hình</option>
             <option value="compare"${layoutKind === 'compare' ? ' selected' : ''}>So sánh hai hình</option>
             <option value="process"${layoutKind === 'process' ? ' selected' : ''}>Quy trình nhiều bậc</option>
+            <option value="surround"${layoutKind === 'surround' ? ' selected' : ''}>Vật thể vây quanh</option>
           </select>
         </label>
         ${isCompare
@@ -302,7 +318,27 @@ function editorItemArtHtml(item) {
             </label>`;
           }).join('')
           : ''}
-        <span class="editor-art-slots-hint">${isProcess
+        ${isSurround
+          ? EDITOR_SCENE_AROUND_SLOTS.map((slot, index) => {
+            const current = placedAround[index] || '';
+            /* An id that the normaliser would drop (the subject, another ring item,
+               a ground prop) is not offered at all — same rule as #260. */
+            const aroundOptions = Object.keys(EDITOR_SCENE_ICON_LABEL)
+              .filter(id => typeof stageIsSceneIconId !== 'function' || stageIsSceneIconId(id))
+              .filter(id => id === current || usedIcons.indexOf(id) < 0)
+              .map(id => `<option value="${escapeHtml(id)}"${current === id ? ' selected' : ''}>${escapeHtml(EDITOR_SCENE_ICON_LABEL[id])}</option>`)
+              .join('');
+            return `<label class="editor-art-slot" title="Vật thể đứng ở ${escapeHtml(slot.label.toLowerCase())}, quanh hình chính">
+              <span>${escapeHtml(slot.label)}</span>
+              <select data-editor-art-around="${index}">
+                <option value="">— trống —</option>${aroundOptions}
+              </select>
+            </label>`;
+          }).join('')
+          : ''}
+        <span class="editor-art-slots-hint">${isSurround
+          ? 'Vây quanh vẽ chủ thể ở giữa và tối đa 4 vật ở bốn góc, theo chiều kim đồng hồ từ trên-trái. Bố cục này không dùng vật thể phụ ở góc.'
+          : isProcess
           ? 'Quy trình vẽ các bậc từ trái sang phải, mũi tên ở giữa. Hình chính là bậc 1; điền Bậc 2/Bậc 3 theo đúng thứ tự.'
           : 'So sánh đặt hai hình cạnh nhau kèm dấu ở giữa — dùng cho câu "con nào lớn hơn?" hay "5 ... 3".'}</span>
       </div>`
@@ -467,6 +503,7 @@ function applyEditorSceneSlots(row) {
   delete next.compareIcon;
   delete next.compareSign;
   delete next.steps;
+  delete next.around;
   if (picks.length) next.subIcons = picks;
   const props = [];
   [0, 1].forEach(index => {
@@ -484,7 +521,8 @@ function applyEditorSceneSlots(row) {
   const wanted = layoutSelect && layoutSelect.value ? layoutSelect.value.trim() : 'single';
   const wantCompare = wanted === 'compare';
   const wantProcess = wanted === 'process';
-  next.layout = wantCompare ? 'compare' : wantProcess ? 'process' : 'single';
+  const wantSurround = wanted === 'surround';
+  next.layout = wantCompare ? 'compare' : wantProcess ? 'process' : wantSurround ? 'surround' : 'single';
   if (wantCompare) {
     const compareSelect = live.querySelector('[data-editor-art-compare-icon]');
     let second = compareSelect && compareSelect.value ? compareSelect.value.trim() : '';
@@ -517,6 +555,23 @@ function applyEditorSceneSlots(row) {
       if (free) stages.push(free);
     }
     if (stages.length) next.steps = stages.slice(0, EDITOR_SCENE_MAX_EXTRA_STEPS);
+  }
+  /* #270: the ring, in slot order. A restore of the same rule as above — with no
+     item the normaliser would fall back to `single`, so a fresh ring gets one item. */
+  if (wantSurround) {
+    const ring = [];
+    EDITOR_SCENE_AROUND_SLOTS.forEach((slot, index) => {
+      const select = live.querySelector('[data-editor-art-around="' + index + '"]');
+      const icon = select && select.value ? select.value.trim() : '';
+      if (icon && icon !== current.mainIcon && ring.indexOf(icon) < 0) ring.push(icon);
+    });
+    if (!ring.length) {
+      const free = Object.keys(EDITOR_SCENE_ICON_LABEL).filter(id =>
+        (typeof stageIsSceneIconId !== 'function' || stageIsSceneIconId(id)) && id !== current.mainIcon
+      )[0] || '';
+      if (free) ring.push(free);
+    }
+    if (ring.length) next.around = ring.slice(0, EDITOR_SCENE_AROUND_SLOTS.length);
   }
   const normalized = stageNormalizeBlueprint(next);
   if (!normalized) return;
@@ -629,7 +684,7 @@ function wireEditorItemArtRow(row) {
   });
   // #262: layout, second subject and sign all rebuild the same blueprint. Resolve
   // the live row from the changed node, never from a closure over the old one.
-  row.querySelectorAll('[data-editor-art-layout], [data-editor-art-compare-icon], [data-editor-art-sign], [data-editor-art-step]').forEach(select => {
+  row.querySelectorAll('[data-editor-art-layout], [data-editor-art-compare-icon], [data-editor-art-sign], [data-editor-art-step], [data-editor-art-around]').forEach(select => {
     select.addEventListener('change', () => {
       const live = select.isConnected ? select.closest('[data-editor-art]') : null;
       if (live) applyEditorSceneSlots(live);

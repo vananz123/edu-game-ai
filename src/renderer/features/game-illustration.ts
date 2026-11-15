@@ -167,10 +167,21 @@ const STAGE_SCENE_GROUND_PROP_SIZE = 40;
 /** Same four corners as SCENE_SUB_ICON_POSITIONS in the shared catalogue (#256). */
 const STAGE_SUB_ICON_POSITIONS = ['left', 'right', 'top-left', 'top-right'];
 /** Same layouts and signs as SCENE_LAYOUT_IDS / SCENE_COMPARE_SIGNS (#262). */
-const STAGE_SCENE_LAYOUTS = ['single', 'compare', 'process'];
+const STAGE_SCENE_LAYOUTS = ['single', 'compare', 'process', 'surround'];
+/** `surround` (#270) keeps four ring slots and no corner icons. */
+const STAGE_SCENE_SURROUND_MAX_ICONS = 4;
 /** `process` (#267) keeps only the two upper corners, like `compare`. */
 const STAGE_SCENE_PROCESS_MAX_EXTRA_STEPS = 2;
 const STAGE_SCENE_COMPARE_SIGNS = ['greater-than', 'less-than', 'equal'];
+/* Surround geometry, mirroring the SCENE_SURROUND_* constants (#270). */
+const STAGE_SCENE_SURROUND_SUBJECT_SIZE = 88;
+const STAGE_SCENE_SURROUND_ICON_SIZE = 48;
+const STAGE_SCENE_SURROUND_SLOT_PX = {
+  'top-left': { x: 28, y: 10 },
+  'top-right': { x: 320 - 28 - 48, y: 10 },
+  'bottom-right': { x: 320 - 28 - 48, y: 96 },
+  'bottom-left': { x: 28, y: 96 }
+};
 /* Process geometry, mirroring the SCENE_PROCESS_* constants (#267). */
 const STAGE_SCENE_PROCESS_STEP_SIZE = 76;
 const STAGE_SCENE_PROCESS_STEP_TOP = 66;
@@ -268,18 +279,37 @@ function stageNormalizeBlueprint(value) {
     }
     if (!steps.length) layout = 'single';
   }
+  // #270: a ring with nothing in it is not a ring, so it falls back to one picture.
+  const around = [];
+  if (layout === 'surround') {
+    if (Array.isArray(raw.around)) {
+      for (const entry of raw.around) {
+        const isRingObject = entry && typeof entry === 'object' && !Array.isArray(entry);
+        const ringIcon = isRingObject
+          ? typeof entry.icon === 'string' ? entry.icon.trim() : ''
+          : typeof entry === 'string' ? entry.trim() : '';
+        if (!stageIsSceneIconId(ringIcon) || ringIcon === mainIcon || around.indexOf(ringIcon) >= 0) continue;
+        if (around.length >= STAGE_SCENE_SURROUND_MAX_ICONS) continue;
+        around.push(ringIcon);
+      }
+    }
+    if (!around.length) layout = 'single';
+  }
   const subjects = [mainIcon]
     .concat(compareIcon ? [compareIcon] : [])
-    .concat(layout === 'process' ? steps : []);
+    .concat(layout === 'process' ? steps : [])
+    .concat(layout === 'surround' ? around : []);
   /** Compare and process keep only the two upper corners; the rest move there. */
-  const allowedSlots = layout === 'compare' || layout === 'process'
-    ? Object.keys(STAGE_SUB_ICON_COMPARE_SLOTS)
-    : STAGE_SUB_ICON_POSITIONS;
+  const allowedSlots = layout === 'surround'
+    ? []
+    : layout === 'compare' || layout === 'process'
+      ? Object.keys(STAGE_SUB_ICON_COMPARE_SLOTS)
+      : STAGE_SUB_ICON_POSITIONS;
   const backdrop = stageIsSceneBackdropId(raw.backdrop) ? raw.backdrop : STAGE_SCENE_BACKDROP_DEFAULT;
   const paletteKey = stageIsScenePaletteKey(raw.paletteKey) ? raw.paletteKey : 'language';
   const subIcons = [];
   const props = [];
-  if (Array.isArray(raw.subIcons)) {
+  if (Array.isArray(raw.subIcons) && allowedSlots.length) {
     for (const entry of raw.subIcons) {
       const isObject = entry && typeof entry === 'object' && !Array.isArray(entry);
       const icon = isObject
@@ -300,6 +330,7 @@ function stageNormalizeBlueprint(value) {
   if (compareIcon) blueprint.compareIcon = compareIcon;
   if (compareSign) blueprint.compareSign = compareSign;
   if (layout === 'process' && steps.length) blueprint.steps = steps;
+  if (layout === 'surround' && around.length) blueprint.around = around;
   if (subIcons.length) blueprint.subIcons = subIcons;
   if (Array.isArray(raw.props)) {
     for (const entry of raw.props) {
@@ -708,6 +739,22 @@ function customImageSrc(assetId) {
 }
 
 /**
+ * Surround ring, mirroring the shared composer (#270): up to four items in the
+ * four frame corners, in ink so the subject stays the glowing anchor.
+ */
+function stageSurroundRingSvg(items, palette) {
+  const slots = Object.keys(STAGE_SCENE_SURROUND_SLOT_PX);
+  return items.map(function (icon, index) {
+    const slot = STAGE_SCENE_SURROUND_SLOT_PX[slots[index]] || STAGE_SCENE_SURROUND_SLOT_PX['top-left'];
+    const svg = stageIconSvg(icon, STAGE_SCENE_SURROUND_ICON_SIZE, 'stage-illustration-subicon');
+    if (!svg) return '';
+    return '<g data-scene-around="' + (index + 1) + '" data-scene-position="' + slots[index] + '" ' +
+      'data-scene-size="' + STAGE_SCENE_SURROUND_ICON_SIZE + '" transform="translate(' + slot.x + ' ' + slot.y + ')" ' +
+      'color="' + escapeHtml(palette.ink) + '" opacity="0.85">' + svg + '</g>';
+  }).join('');
+}
+
+/**
  * Process strip, mirroring the shared composer (#267): 2-3 stages left to right
  * with an arrow between them; '' when a stage will not draw.
  */
@@ -770,7 +817,16 @@ function stageIllustrationHtml(item, game, extraClass) {
     ? [blueprint.mainIcon].concat(blueprint.steps)
     : [];
   const isProcess = processStages.length >= 2;
-  const subjectSize = isCompare ? STAGE_SCENE_COMPARE_SUBJECT_SIZE : STAGE_ILLUSTRATION_SUBJECT_SIZE;
+  // #270: the ring owns the corners and fixes the subject at 88px in the centre.
+  const surroundRing = blueprint && blueprint.layout === 'surround' && Array.isArray(blueprint.around)
+    ? blueprint.around
+    : [];
+  const isSurround = surroundRing.length > 0;
+  const subjectSize = isSurround
+    ? STAGE_SCENE_SURROUND_SUBJECT_SIZE
+    : isCompare
+      ? STAGE_SCENE_COMPARE_SUBJECT_SIZE
+      : STAGE_ILLUSTRATION_SUBJECT_SIZE;
   const subjectY = isCompare ? spec.subjectY + STAGE_SCENE_COMPARE_SUBJECT_LIFT : spec.subjectY;
   const sky = palette.sky || palette.fill;
   const ground = palette.ground || palette.fill;
@@ -786,14 +842,18 @@ function stageIllustrationHtml(item, game, extraClass) {
       `<rect x="0" y="${STAGE_ILLUSTRATION_HORIZON}" width="320" height="${200 - STAGE_ILLUSTRATION_HORIZON}" fill="${escapeHtml(ground)}"/>`) +
     stageLayer('mid', stagePrimitivesOf(spec.standing).map(function (p) { return stageMidSvg(p, palette); }).join('')) +
     stageLayer('halo', `<circle cx="160" cy="${subjectY}" r="72" fill="${escapeHtml(palette.glow)}" opacity="0.15"/>`) +
-    stageLayer('subject', isProcess
+    stageLayer('subject', isSurround
+      ? '<g data-scene-subject="main" data-scene-size="' + STAGE_SCENE_SURROUND_SUBJECT_SIZE + '" ' +
+        'transform="translate(' + Math.round((320 - STAGE_SCENE_SURROUND_SUBJECT_SIZE) / 2) + ' 52)" ' +
+        'color="' + escapeHtml(palette.glow) + '">' + subjectIcon + '</g>'
+      : isProcess
       ? stageProcessStripSvg(processStages, palette) || '<g transform="translate(' + x + ' ' + y + ')" color="' + escapeHtml(palette.glow) + '">' + subjectIcon + '</g>'
       : isCompare
       // #266: subject in the palette accent, mirroring the shared composer.
       ? '<g data-scene-subject="main" data-scene-size="' + subjectSize + '" transform="translate(' + STAGE_SCENE_COMPARE_SUBJECT_X.left + ' ' + y + ')" color="' + escapeHtml(palette.glow) + '">' + subjectIcon + '</g>' +
         '<g data-scene-subject="second" data-scene-size="' + subjectSize + '" transform="translate(' + STAGE_SCENE_COMPARE_SUBJECT_X.right + ' ' + y + ')" color="' + escapeHtml(palette.ink) + '">' + compareSecond + '</g>'
       : `<g transform="translate(${x} ${y})" color="${escapeHtml(palette.glow)}">${subjectIcon}</g>`) +
-    stageLayer('props', stagePrimitivesOf(spec.standing).map(function (p) { return stagePropsSvg(p, palette); }).join('') + stageGroundPropsSvg(groundProps, palette) + stageSubIconsSvg(subIcons, palette, isCompare || isProcess)) +
+    stageLayer('props', stagePrimitivesOf(spec.standing).map(function (p) { return stagePropsSvg(p, palette); }).join('') + stageGroundPropsSvg(groundProps, palette) + stageSurroundRingSvg(surroundRing, palette) + stageSubIconsSvg(subIcons, palette, isCompare || isProcess)) +
     stageLayer('sign', isCompare
       ? '<g data-scene-sign="' + escapeHtml(String(blueprint.compareSign || '')) + '" data-scene-size="' + STAGE_SCENE_COMPARE_SIGN_SIZE + '" ' +
         'transform="translate(' + (160 - STAGE_SCENE_COMPARE_SIGN_SIZE / 2) + ' ' + Math.round(subjectY - STAGE_SCENE_COMPARE_SIGN_SIZE / 2) + ')" ' +

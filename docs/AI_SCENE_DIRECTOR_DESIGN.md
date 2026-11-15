@@ -7,9 +7,8 @@
 > **Đã có trong mã:** P0 (quyết định #252) — blueprint `v:1`, `layout: 'single'`, cổng
 > chuẩn hoá, lưu `.egame`, nút "Cảnh thử" **không gọi mạng**.
 > **Đã có:** `compare` (dữ liệu + hình + UI + prompt, #262), kênh AI `scene:suggest`
-> (#265), màu chủ thể + người trong cảnh (#266), và `process` trọn bộ (dữ liệu + hình +
-> prompt #267, UI #268 — xem §3.4).
-> **Chưa có:** `surround` (P2 còn lại). Mục đó ghi rõ "CHƯA CÓ" bên dưới.
+> (#265), màu chủ thể + người trong cảnh (#266), `process` trọn bộ (#267 dữ liệu/hình/prompt,
+> #268 UI), và `surround` trọn bộ (#270 — xem §3.5). **Cả bốn bố cục của P2 đều có trong mã.**
 
 ---
 
@@ -84,15 +83,39 @@ interface SceneBlueprint {
 Điểm phải nhớ: **`v` là bắt buộc.** Bản tài liệu cũ bỏ trường này, nên mọi blueprint
 do model sinh ra sẽ bị chặn ở cổng `version`.
 
-### 3.2 Hình dạng DỰ KIẾN — CHƯA CÓ trong mã
+### 3.2 Hình dạng chung
 
-Chỉ ghi để P2 không phải thiết kế lại. **Không** dùng để viết prompt trước khi bố cục
-này được cài và đo.
+Không còn bố cục nào ở trạng thái "dự kiến": cả bốn giá trị của `layout` đều có dữ liệu,
+hình, UI và prompt. Thêm bố cục mới về sau phải đi đủ bốn bước như #262/#267/#270 —
+hằng số hình học, nhánh vẽ, luật chuẩn hoá, prompt + ví dụ — chứ không mở prompt trước.
+
+### 3.5 `surround` — dữ liệu, hình, UI và prompt đều CÓ (#270)
 
 ```ts
-// CHƯA CÓ — P2 (phần còn lại)
-layout?: 'surround';           // vật thể chính ở giữa, các thứ khác vây quanh
+layout: 'single' | 'compare' | 'process' | 'surround';
+around?: string[];             // 1-4 thứ vây quanh chủ thể, khi layout = 'surround'
 ```
+
+`mainIcon` là vật **ở giữa**; `around` là những thứ **quanh nó**, tối đa 4, xếp theo chiều
+kim đồng hồ từ góc trên-trái. Dữ liệu **không** mang toạ độ: thứ tự là thứ tự vòng, còn bốn
+chỗ đứng do engine sở hữu — nhờ vậy hai lần lưu cùng một cảnh không thể "cãi nhau" về chỗ
+đứng của một vật.
+
+| Thành phần | Toạ độ (đo bằng test) |
+|---|---|
+| chủ thể | 88px, giữa khung: x 116–204, y 52–140, màu `glow` |
+| vòng 1–4 | 48px tại (28,10) → (244,10) → (244,96) → (28,96), màu `ink`, opacity 0.85 |
+| props | giữ nguyên #259: 40px, y 146 |
+
+**Vì sao chủ thể nhỏ còn 88px:** khung 320×200, props đứng từ y 146, nên hàng trên chỉ còn
+y 10..58 và hai bên y 96..144. Chủ thể 120px như `single` sẽ đè cả bốn ô.
+
+**Vì sao `surround` KHÔNG có subIcons:** bốn góc đã là vòng. Icon góc bị **từ chối kèm issue**
+`subIcons` chứ không bị dời vào chân chủ thể, vì dời như vậy là bịa ra một chỗ đứng không có
+trong thiết kế.
+
+**Hạ cấp:** không còn vật nào dùng được ⇒ về `single` + issue `around` (vòng rỗng không phải
+vòng). Vật sai/thừa bị bỏ, phần còn lại vẫn thành vòng. `single` mang `around` ⇒ bỏ + issue.
 
 ### 3.4 `process` — dữ liệu, hình, UI và prompt đều CÓ (#267, UI ở #268)
 
@@ -265,7 +288,8 @@ QUY TẮC BẮT BUỘC
 3. Trả về DUY NHẤT một khối JSON, không lời chào, không giải thích, không markdown.
 4. Bắt buộc có "v": 1 và "layout" là "single", "compare" hoặc "process" — không có bố cục nào khác.
 5. Không tham chiếu tài nguyên ngoài: không URL, không ảnh, không font, không script.
-6. Tối đa 4 subIcons (chỉ 2 khi layout = compare hoặc process); chúng phải KHÁC mainIcon và không trùng nhau.
+6. Tối đa 4 subIcons (chỉ 2 khi layout = compare hoặc process; KHÔNG có khi layout =
+   surround); chúng phải KHÁC mainIcon và không trùng nhau.
 7. Tối đa 2 props, KHÁC mainIcon, KHÁC mọi subIcons, KHÁC compareIcon VÀ khác mọi bước
    của process.
 8. Toàn bộ JSON dưới 600 byte.
@@ -278,6 +302,9 @@ QUY TẮC BẮT BUỘC
    ĐÚNG THỨ TỰ thời gian (bắt buộc, không trùng nhau, không trùng mainIcon); chỉ
    được dùng góc top-left và top-right cho subIcons. Process KHÔNG có compareIcon
    và KHÔNG có compareSign.
+12. Khi layout = "surround": mainIcon là vật thể Ở GIỮA, "around" là 1-4 thứ đứng
+   quanh nó (bắt buộc, không trùng nhau, không trùng mainIcon), xếp theo chiều kim
+   đồng hồ từ góc trên-trái. Surround KHÔNG có subIcons, KHÔNG có steps, KHÔNG có dấu.
 
 QUY TRÌNH SUY NGHĨ (làm trong đầu, KHÔNG viết ra)
 1. Xác định môn học và ý chính của câu hỏi.
@@ -292,10 +319,12 @@ QUY TRÌNH SUY NGHĨ (làm trong đầu, KHÔNG viết ra)
 7. Nếu câu hỏi là một QUY TRÌNH 2-3 bước theo thứ tự (gieo hạt → nảy mầm, trứng →
    sâu → bướm): dùng layout "process", mainIcon là bước đầu và "steps" là các bước
    sau, đúng thứ tự. Quy trình dài hơn 3 bước hoặc không có thứ tự: giữ "single".
-   KHÔNG tự bịa layout mới.
+8. Nếu câu hỏi hỏi về MỘT vật và những thứ quanh nó (các bộ phận của cây, đồ vật
+   trong phòng, con gì sống quanh ao): dùng layout "surround", mainIcon là vật ở
+   giữa và "around" là những thứ còn lại, tối đa 4. KHÔNG tự bịa layout mới.
 
 SCENE-PROMPT-VOCAB:START
-layout (chọn 1): single, compare, process
+layout (chọn 1): single, compare, process, surround
 backdrop (chọn 1): plain, meadow, forest, mountain, sea, stars, city,
                    classroom, lab, studio
 paletteKey (chọn 1): animals, plants, space, human-body, transport, safety,
@@ -316,6 +345,9 @@ compareSign (chỉ khi layout = compare): greater-than, less-than, equal
 steps (chỉ khi layout = process): 1-2 tên, là các bước SAU bước đầu; mainIcon là bước 1,
    xếp theo đúng thứ tự thời gian, khác mainIcon và khác nhau.
    Process không có compareIcon và không có compareSign.
+around (chỉ khi layout = surround): 1-4 tên, là các thứ VÂY QUANH chủ thể; thứ tự là
+   vòng theo chiều kim đồng hồ từ góc trên-trái. Khác mainIcon và khác nhau.
+   Surround KHÔNG có subIcons (bốn góc đã là vòng), không có steps, không có dấu.
 subIcons (0-4, tuỳ chọn; 0-2 khi compare): cùng danh sách trên, khác mainIcon,
    khác compareIcon, không lặp.
    Mỗi mục là {"icon": "<tên>", "position": "left|right|top-left|top-right"}.
@@ -327,7 +359,7 @@ props (0-2, tuỳ chọn): cùng danh sách trên, là vật thể ĐỨNG Ở M
    khác mainIcon, khác mọi subIcons, khác compareIcon.
 SCENE-PROMPT-VOCAB:END
 
-ĐỊNH DẠNG ĐẦU RA (ba ví dụ dưới đây là JSON THẬT, chạy được ngay)
+ĐỊNH DẠNG ĐẦU RA (bốn ví dụ dưới đây là JSON THẬT, chạy được ngay)
 Một hình:
 {"v":1,"layout":"single","backdrop":"classroom","paletteKey":"math",
  "mainIcon":"calculator","subIcons":[{"icon":"pencil","position":"left"}],
@@ -340,6 +372,9 @@ Quy trình ba bước:
 {"v":1,"layout":"process","backdrop":"meadow","paletteKey":"plants",
  "mainIcon":"leaf","steps":["apple","box"],
  "subIcons":[{"icon":"cloud-sun","position":"top-right"}]}
+Vật thể vây quanh:
+{"v":1,"layout":"surround","backdrop":"classroom","paletteKey":"math",
+ "mainIcon":"box","around":["apple","pencil","fish"],"props":["leaf"]}
 ```
 
 ### 5.3 Cảnh được vẽ thế nào từ JSON đó
