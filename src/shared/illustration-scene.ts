@@ -551,7 +551,7 @@ function renderSubIcons(
       `<g data-scene-subicon="${esc(sub.icon)}" data-scene-position="${esc(position)}" ` +
       `data-scene-size="${size}" ` +
       `transform="translate(${slot.x} ${slot.y})" ` +
-      `color="${esc(palette.ink)}" opacity="0.72">${svg}</g>`
+      `color="${esc(palette.glow)}" opacity="0.78">${svg}</g>`
     );
   }).join('');
   return icons ? `<g data-scene-primitive="sub-icons">${icons}</g>` : '';
@@ -646,10 +646,15 @@ function composeSceneSvg(
     ) +
     layer('mid', primitivesOf(spec.standing).map((p) => renderMid(p, palette)).join('')) +
     layer('halo', `<circle cx="${SCENE_WIDTH / 2}" cy="${subjectY}" r="72" fill="${esc(palette.glow)}" opacity="0.15"/>`) +
+    // #266: the subject is drawn in the palette ACCENT (`glow`), not in ink.
+    // Every element used to be ink, so a scene read as one dark blue outline on
+    // a pale wash; the accent is the only saturated colour a palette owns, and
+    // giving it to the one thing the question is about makes the picture read
+    // as a picture instead of a diagram.
     layer('subject', isCompare
-      ? `<g data-scene-subject="main" data-scene-size="${subjectSize}" transform="translate(${SCENE_COMPARE_SUBJECT_X.left} ${y})" color="${esc(palette.ink)}">${subject}</g>` +
+      ? `<g data-scene-subject="main" data-scene-size="${subjectSize}" transform="translate(${SCENE_COMPARE_SUBJECT_X.left} ${y})" color="${esc(palette.glow)}">${subject}</g>` +
         `<g data-scene-subject="second" data-scene-size="${subjectSize}" transform="translate(${SCENE_COMPARE_SUBJECT_X.right} ${y})" color="${esc(palette.ink)}">${compare!.second}</g>`
-      : `<g transform="translate(${Math.round((SCENE_WIDTH - SCENE_SUBJECT_SIZE) / 2)} ${y})" color="${esc(palette.ink)}">${subject}</g>`) +
+      : `<g transform="translate(${Math.round((SCENE_WIDTH - SCENE_SUBJECT_SIZE) / 2)} ${y})" color="${esc(palette.glow)}">${subject}</g>`) +
     layer('props', primitivesOf(spec.standing).map((p) => renderProps(p, palette)).join('') + renderGroundProps(groundProps, palette) + renderSubIcons(subIcons, palette, isCompare)) +
     layer('sign', isCompare
       ? `<g data-scene-sign="${esc(String(compare!.sign || ''))}" data-scene-size="${SCENE_COMPARE_SIGN_SIZE}" ` +

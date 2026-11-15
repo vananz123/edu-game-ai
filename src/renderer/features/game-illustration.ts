@@ -144,7 +144,9 @@ const STAGE_SCENE_ICON_IDS = [
   'languages', 'flask-conical', 'cpu', 'stethoscope', 'users', 'house', 'cloud-sun',
   'apple', 'box', 'waves-horizontal',
   'book-open', 'lightbulb', 'star', 'clock', 'target', 'brain', 'zap', 'sparkles',
-  'gift', 'pencil', 'mountain', 'fish', 'bird', 'bug'
+  'gift', 'pencil', 'mountain', 'fish', 'bird', 'bug',
+  // #266 people (mirror of src/shared/scene-asset-catalog.ts)
+  'user', 'graduation-cap', 'hard-hat'
 ];
 const STAGE_SCENE_ICON_SET = new Set(STAGE_SCENE_ICON_IDS);
 const STAGE_SCENE_CATEGORY_BACKDROPS = {
@@ -514,7 +516,7 @@ function stageSubIconsSvg(list, palette, compare) {
     return '<g data-scene-subicon="' + escapeHtml(sub.icon) + '" data-scene-position="' + escapeHtml(position) + '" ' +
       'data-scene-size="' + size + '" ' +
       'transform="translate(' + slot.x + ' ' + slot.y + ')" ' +
-      'color="' + escapeHtml(palette.ink) + '" opacity="0.72">' + svg + '</g>';
+      'color="' + escapeHtml(palette.glow) + '" opacity="0.78">' + svg + '</g>';
   }).join('');
   return icons ? '<g data-scene-primitive="sub-icons">' + icons + '</g>' : '';
 }
@@ -728,9 +730,10 @@ function stageIllustrationHtml(item, game, extraClass) {
     stageLayer('mid', stagePrimitivesOf(spec.standing).map(function (p) { return stageMidSvg(p, palette); }).join('')) +
     stageLayer('halo', `<circle cx="160" cy="${subjectY}" r="72" fill="${escapeHtml(palette.glow)}" opacity="0.15"/>`) +
     stageLayer('subject', isCompare
-      ? '<g data-scene-subject="main" data-scene-size="' + subjectSize + '" transform="translate(' + STAGE_SCENE_COMPARE_SUBJECT_X.left + ' ' + y + ')" color="' + escapeHtml(palette.ink) + '">' + subjectIcon + '</g>' +
+      // #266: subject in the palette accent, mirroring the shared composer.
+      ? '<g data-scene-subject="main" data-scene-size="' + subjectSize + '" transform="translate(' + STAGE_SCENE_COMPARE_SUBJECT_X.left + ' ' + y + ')" color="' + escapeHtml(palette.glow) + '">' + subjectIcon + '</g>' +
         '<g data-scene-subject="second" data-scene-size="' + subjectSize + '" transform="translate(' + STAGE_SCENE_COMPARE_SUBJECT_X.right + ' ' + y + ')" color="' + escapeHtml(palette.ink) + '">' + compareSecond + '</g>'
-      : `<g transform="translate(${x} ${y})" color="${escapeHtml(palette.ink)}">${subjectIcon}</g>`) +
+      : `<g transform="translate(${x} ${y})" color="${escapeHtml(palette.glow)}">${subjectIcon}</g>`) +
     stageLayer('props', stagePrimitivesOf(spec.standing).map(function (p) { return stagePropsSvg(p, palette); }).join('') + stageGroundPropsSvg(groundProps, palette) + stageSubIconsSvg(subIcons, palette, isCompare)) +
     stageLayer('sign', isCompare
       ? '<g data-scene-sign="' + escapeHtml(String(blueprint.compareSign || '')) + '" data-scene-size="' + STAGE_SCENE_COMPARE_SIGN_SIZE + '" ' +

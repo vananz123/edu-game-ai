@@ -3947,3 +3947,44 @@ phương án A (nối kênh) và đưa khoá Gemini để chứng minh bằng s�
 **Quan sát chưa xác minh.** `desktop.call('listAiTasks', …)` trả **rỗng** ngay sau lượt chạy,
 trong khi hàng `ai_tasks` có thật trong SQLite. Chưa rõ đây là lỗi có sẵn của kênh đọc hay do
 cửa sổ kiểm tra chưa nạp lịch sử; cần một lượt riêng.
+
+## #266 — Màu cho cảnh và người trong cảnh
+
+**Bối cảnh.** #265 xong kênh AI. Ảnh chụp cảnh thật cho thấy cảnh đọc như **sơ đồ một màu**:
+mọi thứ nhìn thấy (chủ thể, icon góc, vật trên đất, dấu so sánh) đều vẽ bằng `palette.ink`
+— màu tối nhất, gần như đen-xanh — trên một nền nhạt. Và mọi cảnh đều **không có người**,
+dù rất nhiều câu hỏi hỏi "ai": giáo viên không có cách nào đặt một người vào cảnh.
+
+**Người (#266a) — dùng lại kho icon, không vẽ mới.** Thêm 3 tên vào `SCENE_ICON_IDS`:
+`user` (Một người), `graduation-cap` (Học sinh), `hard-hat` (Người lao động). Chúng đã có
+trong `icon-registry` nên không thêm byte vẽ nào, nhưng **không** tự động dùng được: cả
+`src/shared/scene-asset-catalog.ts` (nguồn) lẫn bản mirror `src/renderer/features/game-illustration.ts`
+(`STAGE_SCENE_ICON_IDS`) phải có, nhãn tiếng Việt trong `EDITOR_SCENE_ICON_LABEL` phải có,
+và tài liệu prompt (§4.2 + khối `SCENE-PROMPT-VOCAB`) phải có — nếu thiếu, cổng
+`scene-prompt-doc` đỏ ngay. Đây là cùng một tên đi qua **4 nơi**, nên nó có test riêng.
+
+**Màu (#266b) — chủ thể và icon góc dùng màu NHẤN, không dùng mực.** `palette.glow` là màu
+bão hoà duy nhất mỗi bảng màu sở hữu (trước đây chỉ xuất hiện ở 0.1–0.3 opacity cho nền).
+Giờ: chủ thể `ink` → **`glow`**, icon góc `ink@0.72` → **`glow@0.78`**. Chủ thể thứ hai khi
+so sánh **giữ `ink`**, nên hai hình so sánh khác màu nhau thay vì cùng một màu. Mực vẫn dùng
+cho dấu `>` và vật trên đất để nền/đất vẫn "lặng".
+
+**Cái giá, đã trả có ý thức.** 24 hash vàng trong `tests/unit/illustration-registry.test.ts`
+**đổi hết** và được **lấy lại có chủ đích** (không phải nới cổng: cổng vẫn so byte). Độ dài
+byte **không đổi** (`#1c5f42` → `#2e9e6b` cùng 7 ký tự), nên chỉ hash bắt được thay đổi này —
+đó chính là lý do hash tồn tại. Comment của bảng golden ghi rõ lần lấy lại thứ hai thuộc #266.
+
+**Bằng chứng.** Ảnh dựng trực tiếp từ `renderBlueprintSvg`: `images/color-266.png` (3 cảnh:
+người ở lớp, người-vs-cá, mèo-rừng) và `images/scene-266-app.png` (chụp **trong app thật**:
+`user` + `graduation-cap` + dấu `>`, sách ở góc, táo trên đất). Thuộc tính màu đo được trong
+DOM app: `#6b7fd0` (nhấn) và `#3a4b9c` (mực) — hai màu khác nhau, không còn một màu.
+
+**Sửa một cổng lệch thiết kế trong cùng lượt.** `ui-play-surface-check` đòi ô icon điều hướng
+**≥28px** trong khi quyết định đã ghi là **26px** (28px chỉ ở media ≥1100). Cổng giữ số cũ thì
+mọi lần chạy đều đỏ vì một lý do không ai còn muốn sửa; hạ ngưỡng về 26px cho khớp tài liệu và
+ghi lý do ngay tại chỗ.
+
+**Còn đỏ (không do #266).** `ui-play-surface-check` **787/788**: ở 1920×1080, sau khi trả lời
+**đúng**, ô đáp án đầu **dịch xuống 2px** (508,53 → 510,53) trong khi trả lời sai thì không.
+Chiều cao ô không đổi ⇒ có gì đó **phía trên** co lại 2px khi hiện phản hồi đúng. Đây là lỗi
+giật bố cục có sẵn của màn chơi, không liên quan màu cảnh; ghi lại để lượt sau sửa.

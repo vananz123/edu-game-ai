@@ -17,10 +17,11 @@ import {
   sceneBlueprintJson,
   type SceneBlueprint,
 } from '../../src/shared/scene-blueprint';
-import { SCENE_BLUEPRINT_MAX_BYTES } from '../../src/shared/scene-asset-catalog';
+import { SCENE_BLUEPRINT_MAX_BYTES, SCENE_ICON_IDS } from '../../src/shared/scene-asset-catalog';
 import { CONTENT_CATEGORY_IDS } from '../../src/shared/content-categories';
 import { getIllustrationPalette, renderIllustrationSvg, resolveIllustration } from '../../src/shared/illustration-registry';
 import { renderBlueprintSvg, renderSceneSvg } from '../../src/shared/illustration-scene';
+import { renderIconSvg } from '../../src/shared/icon-registry';
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -265,6 +266,23 @@ test('ground props are drawn beside the subject, never over it, and inside the f
   // A blueprint without props must not grow a ground-props group.
   const plain = normalizeSceneBlueprint(VALID)!;
   assert.ok(!renderBlueprintSvg(plain, getIllustrationPalette(plain.paletteKey)).includes('ground-props'));
+});
+
+// --- #266 people: a scene about "who" must be able to show a who -------------
+test('the three person icons are selectable everywhere a scene expects an icon', () => {
+  for (const person of ['user', 'graduation-cap', 'hard-hat']) {
+    assert.ok(SCENE_ICON_IDS.includes(person), `${person} must be in the shared whitelist`);
+    const drawn = renderIconSvg(person, { size: 120, className: 'stage-illustration-icon' });
+    assert.ok(drawn && drawn.includes('<'), `${person} must draw, not vanish`);
+    // The knowledge worth pinning: a person is a *subject*, so it has to survive
+    // the normalizer as mainIcon, as compareIcon and as a ground prop.
+    const main = normalizeSceneBlueprint({ v: 1, layout: 'single', mainIcon: person })!;
+    assert.equal(main.mainIcon, person, `${person} must survive as mainIcon`);
+    const second = normalizeSceneBlueprint({ v: 1, layout: 'compare', mainIcon: 'book-open', compareIcon: person })!;
+    assert.equal(second.compareIcon, person, `${person} must survive as compareIcon`);
+    const prop = normalizeSceneBlueprint({ v: 1, layout: 'single', mainIcon: 'book-open', props: [person] })!;
+    assert.deepEqual(prop.props, [person], `${person} must survive as a ground prop`);
+  }
 });
 
 test('a resolved blueprint renders through the shared registry', () => {

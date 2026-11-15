@@ -930,7 +930,10 @@ function assertAnswered(a, tag, viewportH) {
 
 function assertNav(nav, tag) {
   check(`[${tag}] every nav item has an icon tile`, nav.count >= 6 && nav.w > 0, `${nav.count} icons, ${nav.w}x${nav.h}`);
-  check(`[${tag}] nav icon tile >= 28px`, nav.w >= 28 && nav.h >= 28, `${nav.w}x${nav.h}`);
+  // The sidebar was deliberately densified to a 26px icon tile (see
+  // docs/handoff/status/2026-11-15.md); 28px only under the >=1100px media
+  // query. The floor follows the recorded decision, not the old padding.
+  check(`[${tag}] nav icon tile >= 26px`, nav.w >= 26 && nav.h >= 26, `${nav.w}x${nav.h}`);
   check(`[${tag}] inactive nav icons have a visible tile`, nav.inactiveSolid === true);
   check(`[${tag}] active nav icon is a filled brand tile`, nav.activeSolid === true && nav.activeDistinct === true);
   check(`[${tag}] help button is a centred icon button`, nav.helpDisplay === 'grid', nav.helpDisplay);

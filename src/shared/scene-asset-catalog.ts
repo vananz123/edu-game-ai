@@ -146,6 +146,9 @@ export const SCENE_ICON_IDS: readonly string[] = Object.freeze([
   // concrete subjects that are not any category's default
   'book-open', 'lightbulb', 'star', 'clock', 'target', 'brain', 'zap', 'sparkles',
   'gift', 'pencil', 'mountain', 'fish', 'bird', 'bug',
+  // #266 people: a scene about "who" needs a who. `users` alone reads as a group
+  // marker from the safety category, not as a person standing in the scene.
+  'user', 'graduation-cap', 'hard-hat',
 ]);
 
 const SCENE_ICON_SET: ReadonlySet<string> = new Set(SCENE_ICON_IDS);

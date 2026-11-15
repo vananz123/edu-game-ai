@@ -84,6 +84,7 @@ const EDITOR_SCENE_ICON_LABEL = {
   'palette': 'Bảng màu', 'calculator': 'Máy tính', 'languages': 'Ngôn ngữ', 'flask-conical': 'Bình thí nghiệm',
   'cpu': 'Vi mạch', 'stethoscope': 'Ống nghe', 'users': 'Nhóm người', 'house': 'Ngôi nhà',
   'cloud-sun': 'Nắng có mây', 'apple': 'Quả táo', 'box': 'Cái hộp', 'waves-horizontal': 'Sóng nước',
+  'user': 'Một người', 'graduation-cap': 'Học sinh', 'hard-hat': 'Người lao động',
   'book-open': 'Quyển sách', 'lightbulb': 'Bóng đèn', 'star': 'Ngôi sao', 'clock': 'Đồng hồ',
   'target': 'Bia ngắm', 'brain': 'Bộ não', 'zap': 'Tia sét', 'sparkles': 'Lấp lánh',
   'gift': 'Món quà', 'pencil': 'Bút chì', 'mountain': 'Ngọn núi', 'fish': 'Cá',

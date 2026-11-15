@@ -10,12 +10,16 @@
 - **Phạm vi:** `tests/ui/tauri-webview-check.js` đòi cứng `sidebar === 252px` — số đo **trước** bản làm dày giao diện, nay 232px — nên cổng đỏ oan và che mất một sản phẩm đang xanh. Cổng nay nhận 4 bề rộng breakpoint trong `src/index.html` (232/208/184/64). Nguyên nhân thật khiến cổng chưa từng chạy: `tauri.conf.json` có `build.devPath` là **khoá Tauri v1** trong khi dự án dùng **Tauri 2** (`$schema` config/2) → Cargo không parse được; `build-tauri-release.js` **không** tự xử lý.
 - **Còn mở / kế tiếp:** Build/phát hành installer **0.5.2**; `cargo test` chưa chạy lại (Rust không đổi); các cổng UI rời chưa chạy lại; chưa duyệt bằng mắt.
 
-## AI Scene Director — cảnh minh hoạ ghép từ JSON nhỏ: P0 xong, P1 `compare` XONG (dữ liệu+hình+UI+prompt), P3 kênh AI XONG (đã chạy model thật), P2 process/surround, P4 cổng (2026-11-15)
+## AI Scene Director — cảnh minh hoạ ghép từ JSON nhỏ: P0 xong, P1 `compare` XONG (dữ liệu+hình+UI+prompt), P3 kênh AI XONG (đã chạy model thật), #266 màu + người XONG, P2 process/surround, P4 cổng (2026-11-15)
 - **P0 — xong (quyết định #252).** Từ vựng cảnh (`src/shared/scene-asset-catalog.ts`: 10 nền · 24 khoá màu · 38 icon), blueprint `v:1`/`layout:'single'` (`src/shared/scene-blueprint.ts`), cổng chuẩn hoá tổng + bất biến, vẽ bằng `composeSceneSvg` (24/24 hash vàng khớp), lưu trữ + `.egame` (chuẩn hoá lại khi nhập, không đổi Rust), bản sao renderer + parity test, nút tạm "Cảnh thử" trong editor. Chưa gọi AI.
 - **Đã xác minh:** `npm run check` sạch · `check:renderer-globals` 72/74 script/1051 hàm/8358 điểm gọi/0 undefined · `build:icons:check` 129 icon · `npm test` **97/97** (46,5 s) · `npm run build:tauri` 6160,9 KiB + 201 tệp · `build-tauri-release` 56,43 MiB (3m31s) · trên binary thật: `check:item-assets-ui` **43/43** (14 check #252) + bố cục 1920×1080/1366×768 không tràn, chữ ≥11px.
 - **Trước P1 — một lượt refactor riêng:** gộp bảng cảnh shared + bản sao `game-illustration.ts` bằng esbuild, để mỗi id mới chỉ phải khai một chỗ. Giữ parity test làm lưới; không trộn vào P1.
 - **P1 — `compare` — XONG cả 3 bước (quyết định #262).** (1) *Dữ liệu:* `layout:'compare'` + `compareIcon` + `compareSign` (`greater-than`/`less-than`/`equal`), `v` vẫn **1** vì khoá đều tuỳ chọn; chủ thể thứ hai hỏng → **hạ về `single`** chứ không `null`. (2) *Hình:* hai chủ thể **92px** ở `x 42`/`186` (hạ 12px), dấu **24px** giữa, icon góc còn **2 ô trên** (40px) và `left`/`right` được **dời** lên; dấu vẽ bằng `<path>`/`<rect>`, **không** `<text>`. Test toạ độ đọc từ chính SVG, chạy **cả 10 nền**, cộng parity vẽ shared ↔ renderer. (3) *UI:* `Kiểu`/`Hình phải`/`Dấu` trong editor, đổi sang so sánh là ra blueprint hợp lệ ngay. *(Verified — `scene-blueprint` **29/29** · `98/98` suite · `check:item-assets-ui` **89/89** trên binary release thật · installer 15,67 MiB · duyệt ảnh chụp thật: 2 chủ thể + `>` giữa, không chồng, không cắt.)* ⚠️ Chưa thử `compare` trên câu `scenario`; chưa đưa vào prompt §5.
 - **P2 — `process`/`surround` + `props`:** bố cục nhiều bước và vật thể phụ; mỗi bố cục có bài vẽ riêng trước khi mở cho model.
+- **#266 — màu + người XONG:** chủ thể và icon góc vẽ bằng `palette.glow` (màu nhấn) thay `ink`;
+  chủ thể thứ hai khi so sánh giữ `ink` nên hai hình khác màu; 3 dòng người (`user`, `graduation-cap`,
+  `hard-hat`) vào từ vựng cảnh (dùng được ở chủ thể / hình so sánh / 4 góc / 2 ô đất). 24 hash vàng
+  lấy lại có chủ đích (độ dài byte không đổi). Bằng chứng: `images/color-266.png`, `images/scene-266-app.png`.
 - **P3 — kênh AI thật XONG (#265):** `scene:suggest` = `questions.ts` (nút "Gợi ý cảnh")
   → façade `suggestScene` → `api::suggest_scene` → `scene.rs` (`settings::workflow_provider`, `AiGate`, `ai_tasks` kind `scene`)
   → slot V8 `EGSCENE` (`scene-ops.ts`) → `ai_http`; khoá chỉ sống trong Rust. **Đo trên binary release**: câu so sánh
@@ -24,7 +28,9 @@
   mới, stub kênh). Nhắc lại luật: model **không bao giờ** phát SVG, và renderer vẫn chuẩn hoá lại JSON lần nữa.
   Bài học: cloud provider chỉ `usable` sau một lần `testAiProvider` thành công (#132 §D7) — "đã lưu khoá" ≠ "dùng được".- **P4 — cổng + docs:** mở rộng `check:item-assets-ui` cho từng bố cục, thêm phép đo dung lượng `.egame` thật, duyệt thị giác, rồi mới tính installer/phát hành.
 - **Prompt + cổng chống trôi — XONG trước P1 (quyết định #255).** §5 của [`docs/AI_SCENE_DIRECTOR_DESIGN.md`](AI_SCENE_DIRECTOR_DESIGN.md) nay là prompt đầy đủ (quy tắc, quy trình suy nghĩ, kho từ vựng có mốc), và `tests/unit/scene-prompt-doc.test.ts` so **từng tên** trong prompt với `scene-asset-catalog.ts` — thêm/bớt asset mà quên sửa prompt là đỏ. Nhánh "model xuất raw SVG" của spec ban đầu bị **loại**: inline SVG là markup thực thi được, `AGENTS.md` cấm chạy markup do model sinh.
-- **Còn mở:** `listAiTasks` trả rỗng ngay sau lượt chạy dù SQLite có hàng `kind=scene` (cần một lượt riêng);
+- **Còn mở:** `ui-play-surface-check` **787/788** — ở 1920×1080 trả lời ĐÚNG làm ô đáp án đầu dịch
+  xuống 2px (lỗi giật bố cục có sẵn, không do màu cảnh); `listAiTasks` trả rỗng ngay sau lượt chạy dù
+  SQLite có hàng `kind=scene` (cần một lượt riêng);
   `compare` chưa thử trên câu `scenario` (bố cục #254); blueprint chưa đi qua đường wizard
   (`lesson:patch-item-assets` vẫn allowlist 3 khoá); chưa đo `.egame` trên bộ game lớn; chưa có người duyệt bằng mắt
   cho nút mới (mới qua vision-model). (Duyệt thị giác: đã làm cho #257/#260/#262 bằng ảnh chụp thật.)

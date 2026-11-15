@@ -74,8 +74,8 @@ interface SceneBlueprint {
   layout: 'single';        // P0 chỉ vẽ được 'single'
   backdrop: string;        // một trong 10 tên ở §4.1
   paletteKey: string;      // một trong 24 khoá ở §4.3
-  mainIcon: string;        // một trong 38 tên ở §4.2. Sai -> null (không có chủ thể thì không có cảnh)
-  subIcons?: string[];     // tối đa 2, phải ∈ 38 icon, không trùng mainIcon, không trùng nhau
+  mainIcon: string;        // một trong 41 tên ở §4.2. Sai -> null (không có chủ thể thì không có cảnh)
+  subIcons?: string[];     // tối đa 2, phải ∈ 41 icon, không trùng mainIcon, không trùng nhau
 }
 ```
 
@@ -166,15 +166,19 @@ của các cảnh cũ.
 | `lab` | Phòng thí nghiệm |
 | `studio` | Phòng thu / xưởng sáng tạo |
 
-### 4.2 Icon — 38 tên
+### 4.2 Icon — 41 tên
 
 **24 icon đại diện category:** `paw-print`, `leaf`, `rocket`, `heart-pulse`, `car`,
 `shield-check`, `recycle`, `landmark`, `map`, `briefcase`, `trophy`, `file-music`,
 `palette`, `calculator`, `languages`, `flask-conical`, `cpu`, `stethoscope`, `users`,
 `house`, `cloud-sun`, `apple`, `box`, `waves-horizontal`
 
-**14 chủ thể cụ thể:** `book-open`, `lightbulb`, `star`, `clock`, `target`, `brain`,
+**17 chủ thể cụ thể:** `book-open`, `lightbulb`, `star`, `clock`, `target`, `brain`,
 `zap`, `sparkles`, `gift`, `pencil`, `mountain`, `fish`, `bird`, `bug`
+
+**3 dòng người (#266):** `user`, `graduation-cap`, `hard-hat` — cảnh về "ai" cần một người
+đứng trong cảnh chứ không chỉ một biểu tượng nhóm; dùng được ở `mainIcon`, `compareIcon`,
+4 góc và 2 ô đất.
 
 ### 4.3 `paletteKey` — 24 khoá (= category)
 
@@ -270,7 +274,8 @@ mainIcon (chọn 1): paw-print, leaf, rocket, heart-pulse, car, shield-check,
                    calculator, languages, flask-conical, cpu, stethoscope, users,
                    house, cloud-sun, apple, box, waves-horizontal, book-open,
                    lightbulb, star, clock, target, brain, zap, sparkles, gift,
-                   pencil, mountain, fish, bird, bug
+                   pencil, mountain, fish, bird, bug, user, graduation-cap,
+                   hard-hat
 compareIcon (chỉ khi layout = compare): cùng danh sách trên, khác mainIcon.
    Đây là hình BÊN PHẢI; mainIcon là hình BÊN TRÁI.
 Dấu so sánh đọc là: greater-than = ">" · less-than = "<" · equal = "=".
@@ -335,7 +340,7 @@ trả `SceneBlueprint | null`.
 | `null` / `undefined` / mảng / số | `null` | `shape` |
 | thiếu `v` hoặc `v ≠ 1` | `null` | `version` |
 | `layout` khác `'single'` | `null` | `layout` |
-| `mainIcon` không có trong 38 icon | `null` | `icon` |
+| `mainIcon` không có trong 41 icon | `null` | `icon` |
 | `backdrop` lạ | lùi về `plain`, **giữ cảnh** | `backdrop` |
 | `paletteKey` lạ | lùi về `language`, **giữ cảnh** | `palette` |
 | `subIcons` sai / trùng / trùng mainIcon / quá 2 | bỏ từng id sai, cắt còn 2 | `subIcons` |

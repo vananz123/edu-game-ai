@@ -7,6 +7,16 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-15 — #266 màu cho cảnh + người trong cảnh (3 icon người, chủ thể dùng màu nhấn) — unit 99/99, assets 107/107
+- **Trạng thái:** Cảnh minh hoạ không còn là sơ đồ một màu: **chủ thể và icon góc vẽ bằng màu nhấn của bảng màu** (`glow`) thay cho mực (`ink`); chủ thể thứ hai khi so sánh giữ `ink` nên hai hình khác màu nhau. Thêm **3 dòng người** vào từ vựng: `user` (Một người), `graduation-cap` (Học sinh), `hard-hat` (Người lao động) — dùng được ở chủ thể, hình so sánh, 4 góc và 2 ô đất.
+- **Files:** `src/shared/illustration-scene.ts`, `src/renderer/features/game-illustration.ts` (mirror), `src/shared/scene-asset-catalog.ts`, `src/renderer/features/editor/questions.ts` (nhãn), `docs/AI_SCENE_DIRECTOR_DESIGN.md` (§4.2 + khối từ vựng §5.2), `tests/unit/{scene-blueprint,illustration-registry}.test.ts`, `tests/ui/ui-play-surface-check.js` (ngưỡng 28 → 26px cho khớp quyết định), `docs/DECISIONS.md` #266.
+- **Đã đo:** `run-unit` **99/99** (54,4 s) · `ui-item-assets-editor-check` **107/107** trên binary release build lại · `check` 52 tệp UI sạch · `renderer-globals` 0 undefined · `check:embedded` khớp **6210,7 KiB** · **24 hash vàng lấy lại có chủ đích** (độ dài byte không đổi nên chỉ hash bắt được) · `devPath` gỡ → build → khôi phục, SHA-256 khớp ghim.
+- **Đối chứng âm:** bỏ dòng 3 icon người khỏi `scene-asset-catalog` ⇒ `scene-blueprint` đỏ đúng chỗ (`user must be in the shared whitelist`), khôi phục ⇒ xanh.
+- **Bằng chứng thị giác:** `images/color-266.png` (3 cảnh dựng bằng `renderBlueprintSvg`) và `images/scene-266-app.png` (chụp **trong app thật**: người + mũ tốt nghiệp + dấu `>`, sách ở góc, táo trên đất). Màu đo trong DOM: `#6b7fd0` (nhấn) và `#3a4b9c` (mực).
+- **Học được:** một tên icon phải đi qua **4 nơi** (catalog, mirror renderer, nhãn editor, tài liệu prompt) — thiếu một nơi là cổng đỏ; và `node tests/run-unit.js` chạy `dist/`, nên sửa test mà quên `tsc` sẽ thấy lỗi "không có thật" (lại mắc lần nữa trong lượt này).
+- **Chưa xác minh:** chưa duyệt bằng mắt người · `ui-play-surface-check` **787/788** — ở 1920×1080 trả lời **đúng** làm ô đáp án đầu dịch xuống **2px** (lỗi giật bố cục có sẵn, không do màu cảnh) · chưa thử 2 vật trên cùng một bên đất.
+- **Việc kế tiếp:** P2 `process`/`surround` (chứng minh bằng toạ độ, không cần model), rồi sửa lỗi giật 2px ở màn chơi.
+
 ### 2026-11-15 — #265 kênh `scene:suggest` + nút "Gợi ý cảnh": lần chạy model THẬT đầu tiên (1047 ms) — 107/107
 - **Trạng thái:** Nút "Gợi ý cảnh" trong khối minh hoạ đã gọi được AI thật qua kiến trúc Tauri: kênh `scene:suggest` (V8 slot `EGSCENE` giữ luật, Rust `scene.rs` giữ khoá/endpoint), `ai_tasks` ghi `kind=scene`, renderer nhận JSON rồi vẫn đi qua `normalizeSceneBlueprint` lần nữa.
 - **Files:** `src-tauri/src/embedded/scene-ops.ts`, `src-tauri/src/scene.rs`, `src-tauri/src/api.rs`, `src-tauri/src/lib.rs`, `src-tauri/src/embedded/template.js`, `scripts/build-embedded-js.js`, `src/renderer/core/desktop-facade-schema.ts`, `src/renderer/features/editor/questions.ts`, `tests/ui/ui-item-assets-editor-check.js` (+18 check), `tests/unit/desktop-facade.test.ts` (93 → 94 lời gọi), `docs/DECISIONS.md` #265, `docs/ROADMAP.md`.
@@ -27,14 +37,7 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - **Chưa xác minh (quan trọng):** module **chưa nối vào đâu** — chưa có kênh Rust `scene:suggest`, chưa có nút "✨ Gợi ý cảnh từ nội dung", chưa ghi `ai_tasks`, **chưa chạy lần nào với model thật**. Giáo viên vẫn chỉ có "Cảnh thử".
 - **Việc kế tiếp:** kênh Rust `scene:suggest` (khoá ở backend, gọi `ai_http`, ghi `ai_tasks`) + nút trong editor gọi `suggestSceneBlueprint`, rồi đo trên binary thật.
 
-### 2026-11-15 — #263 P3 bước prompt: `compare` vào §5 + ví dụ mẫu chạy qua cổng dữ liệu thật
-- **Trạng thái:** §5.2 có `layout (single, compare)`, `compareIcon`, `compareSign`; quy tắc mới (4/6/7/9/10); §5.3 thêm lớp `sign`. Cổng `scene-prompt-doc` **13 → 15** check. §3.3 hết ghi "UI CHƯA CÓ" (giờ: dữ liệu · hình · UI · prompt **đều CÓ**).
-- **Files:** `docs/AI_SCENE_DIRECTOR_DESIGN.md` (§5.2, §5.3, §3.3), `tests/unit/scene-prompt-doc.test.ts`, `docs/DECISIONS.md` #263, `docs/ROADMAP.md`.
-- **Quyết định đáng nhớ:** ví dụ đầu ra đổi từ `"mainIcon": "..."` sang **JSON thật**, và cổng **chạy chính hai ví dụ** qua `normalizeSceneBlueprint` đòi `issues` **rỗng** — vì blueprint bị hạ `single` vẫn vẽ ra ảnh, nên chỉ kiểm "khác null" là bỏ lọt.
-- **Lệnh đã chạy:** `node tests/run-unit.js scene-prompt-doc` **15/15** · **4 đối chứng âm đỏ đúng chỗ** (bỏ `compare` khỏi layout · dấu bịa `gte` · bỏ luật góc compare · `compareIcon` trùng `mainIcon`) · `run-unit` **98/98** (75,2 s) · `npm run check` sạch (52 tệp UI) · `renderer-globals` **0 undefined** (1055 hàm / 8438 lời gọi).
-- **Học được:** `idsFor()` tách mục theo dấu phẩy ⇒ chú thích sau danh sách bị cắt thành id (`'= giữa hai hình).'`); chú thích chứa tên khoá cũng bị nhận là mục mới. Luật: dòng id sạch, chú thích ở trên, không dấu phẩy. Và: sửa bằng `python` ở chỗ có escape đã **không khớp** một lần (lookahead `idsFor` còn nguyên) — phải kiểm lại nội dung file sau mỗi lần thay bằng script.
-- **Chưa xác minh:** chưa có kênh gọi model (`scene:suggest`), chưa dựng prompt bằng mã từ catalog, chưa có bằng chứng model thật trả JSON hợp lệ. Prompt là **hợp đồng đã kiểm**, chưa phải **lời gọi đã chạy**.
-- **Việc kế tiếp:** `scene:suggest` (backend giữ khoá, prompt từ §5, `normalizeSceneBlueprint` làm cổng, hỏng thì rơi về cảnh theo `contentCategory`).
+### 2026-11-15 — #263 P3 bước prompt: `compare` vào §5 + ví dụ mẫu chạy qua cổng dữ liệu thật — bản đầy đủ: [docs/handoff/status/2026-11-15.md](handoff/status/2026-11-15.md).
 
 ### 2026-11-15 — P1 `compare` chốt sổ: ROADMAP cập nhật + smoke-install bản 0.5.2 vào thư mục tạm — bản đầy đủ: [docs/handoff/status/2026-11-15.md](handoff/status/2026-11-15.md).
 
