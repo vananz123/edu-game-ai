@@ -3614,3 +3614,19 @@ Ba ràng buộc không đổi: (1) game đã lưu phải chơi được **offlin
 **Không chứng minh.** Chưa có model thật trả JSON (P3 chưa mở kênh gọi); chưa chạy lại `npm test` sau khi thêm tài liệu (chỉ là tệp `.md`, không có test nào đọc nó — sẽ chạy lại ở lượt commit).
 
 **Việc kế tiếp.** Build installer 0.5.2; sau đó refactor gộp bảng cảnh bằng esbuild, rồi P1 `compare` với prompt viết theo `docs/AI_SCENE_DIRECTOR_DESIGN.md`.
+
+## Phát hành 0.5.2 — một chỗ version không đủ, và hash ghim đổi theo phiên bản (2026-11-15)
+
+**Bối cảnh.** Sau P0 #252, làm dày giao diện và bảng màu nút phẳng, 0.5.1 không còn mô tả đúng cây này; năm bàn giao liền ghi "chưa build/phát hành installer 0.5.2".
+
+**Quyết định.** (a) Bump **0.5.2** ở **sáu** chỗ, không phải một: `package.json`, `package-lock.json`, `server/index.ts` (`/health`), `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json`. (b) `package-lock.json` cập nhật bằng `npm install --package-lock-only` thay vì sửa tay, để npm tự ghi đúng cả `version` top-level lẫn `packages[""].version`. (c) `devPath` của chủ dự án vẫn **không** vào git: gỡ tạm cho cả build và commit, khôi phục nguyên byte sau đó.
+
+**Vì sao ghi lại.** Bump version trông như việc một dòng, nhưng lượt này hai chỗ đã trượt và chỉ `brand-assets.test.js` bắt được: (1) `package-lock.json` giữ version top-level **riêng** — bump `package.json` xong lock vẫn 0.5.1, không có gì báo; (2) `server/index.ts` phục vụ `/health` bằng **literal** thay vì đọc `package.json`, nên gateway báo sai phiên bản. Cả hai đã sửa; test giờ là lưới cho lần bump sau.
+
+**Hash ghim đổi — đừng nhầm là hỏng.** `tauri.conf.json` sau khi lên 0.5.2 (kèm `devPath`) có SHA-256 `5AE0BF649CB60325461FF3ED2E9A7BC7CF96D2770FAB914B25B216F35613B20E`. Bốn chỗ trong docs còn ghi `380F9E89…B974768` — đó là trạng thái **0.5.1**, vẫn đúng cho lịch sử nhưng **không còn** là hash của cây hiện tại. Từ lượt này, hash kỳ vọng của cây 0.5.2 là `5AE0BF64…13B20E`.
+
+**Kiểm chứng.** `cargo tauri build` → release **3m52s**; NSIS `EduGame Studio (Tauri)_0.5.2_x64-setup.exe` **16.405.637 B (15,65 MiB)**, SHA-256 `298AA8FCFF6C87B7A870548146DE3CCFC17ECF201CD980D470B6F3E9ECAE363A`; `ProductVersion` của exe = **0.5.2**; `npm run build:tauri` → bundle nhúng **6160,9 KiB**, **201** tệp; `check:embedded` khớp; `npm run check` sạch; `npm test` **97/97** (48,3 s). Commit `2e46fa0`.
+
+**Không chứng minh.** Chưa cài silent (`/S /D=…`) lên máy sạch, chưa kiểm SmartScreen/cảnh báo bản chưa ký, chưa chơi offline sau khi rút mạng (**P7 vẫn MỞ**), chưa tạo GitHub release `v0.5.2` nên chưa tải lại asset để so SHA.
+
+**Việc kế tiếp.** Cài thử silent trên máy này rồi chạy `npm run check:item-assets-ui` trên binary 0.5.2; nếu đạt thi tạo release `v0.5.2`; sau đó quay lại refactor gộp bảng cảnh bằng esbuild trước P1 `compare`.
