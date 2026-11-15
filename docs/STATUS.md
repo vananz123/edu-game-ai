@@ -7,6 +7,15 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-15 — #260 UI cho `props`: 2 ô “Đất trái / Đất phải”, khép vòng #259
+- **Trạng thái:** Khối minh hoạ trong editor có thêm hàng **“Vật thể đứng ở mặt đất”** với 2 ô `Đất trái` / `Đất phải`, cùng cơ chế ghi với 4 góc. Danh sách **loại sẵn** chủ thể và các icon đã dùng ở góc, vì normaliser sẽ bỏ chúng — thà không cho chọn còn hơn cho chọn rồi im lặng mất.
+- **Files đã đổi:** `src/renderer/features/editor/questions.ts` (khối `[data-editor-art-props]`, `propsHtml`, `applyEditorSceneSlots` ghi cả `props`, wire `change`) · `tests/ui/ui-item-assets-editor-check.js` (**+9 check**) · `docs/STATUS.md`, `docs/DECISIONS.md`.
+- **Hành vi:** Chọn prop → blueprint + preview + lần lưu đổi ngay; xoá prop chỉ bỏ prop đó, giữ 4 góc và chủ thể. CSS dùng lại `.editor-art-slots` nên không thêm khai báo mới.
+- **Lệnh đã chạy:** `npm run check` sạch (tsc + 52 tệp UI biên dịch được) · `check:renderer-globals` 1054 hàm / 8398 call site, 0 undefined · `node tests/run-unit.js` **98/98** (48,9 s) · `check:embedded` khớp **6162,6 KiB** · **build + app thật:** tạm bỏ `devPath` → `npm run build && npm run build:tauri && cargo tauri build` (exit 0, installer 15,66 MiB) → khôi phục **nguyên byte** (`5AE0BF64…13B20E`) · `ui-item-assets-editor-check` trên binary đó: **63/63**, blueprint sau lưu = `…"subIcons":[{"icon":"lightbulb","position":"top-left"}],"props":["apple","fish"]`.
+- **Duyệt thị giác (mô hình nhìn ảnh):** preview có **chủ thể paw-print ở giữa**, `leaf` bên trái, `lightbulb` góc trên trái, **táo và cá ở hai góc dưới — nhỏ và mờ hơn rõ rệt**, **không che chủ thể**; các ô chọn hiển thị đúng “Lá cây / Bóng đèn / — trống — / — trống —” và “Quả táo / Cá”.
+- **Chưa xác minh:** Chưa thử `props` trên **game đã lưu từ trước** (blueprint không có `props`) trong app thật — unit test đã phủ. Chưa chạy lại `ui-play-surface-check` (chỉ đổi editor). Chưa thử hai prop cùng một phía bị đổi thứ tự (engine gán trái trước, phải sau theo ý nghĩa).
+- **Việc kế tiếp:** P1 `compare` (hai chủ thể + dấu so sánh) — hạng mục lớn tiếp theo; hoặc trả nợ `docs/STATUS.md` (nay **10** bàn giao, quy ước 3).
+
 ### 2026-11-15 — #258 cổng chống backtick + #259 `props[]` (vật thể ở mặt đất)
 - **#258 — cổng mới `scripts/check-ui-test-syntax.js`:** biên dịch **thật** cả 52 tệp `tests/ui/*.js` bằng `vm.Script` (không chạy), nên mọi lỗi cú pháp bị bắt **trước khi mở app**. Khi lỗi, nó chỉ thẳng dòng có backtick trong chú thích — cái bẫy đã hỏng cổng UI **3 lần**. Nối vào `npm run check` (`tsc && check-ui-test-syntax`), thêm `npm run check:ui-tests`. **Đã chứng minh cổng không rỗng:** tạo tệp có backtick trong chú thích → `FAIL … missing ) after argument list` + `dong 5 co dau backtick…`, `exit=1`; xoá → 52 tệp sạch.
 - **#259 — `props[]` trong blueprint:** tối đa **2** icon **đứng ở mặt đất** hai bên (40px, opacity 0.55, nằm trong lớp `props` để lớp `fg` phủ lên được). Cùng luật làm sạch như `subIcons`: loại id lạ, loại trùng chủ thể **và** trùng subIcons, cắt còn 2, **idempotent**. Prompt đã có `props` + luật “tối đa 2, khác mainIcon, khác mọi subIcons”; test tài liệu kiểm tiếp.

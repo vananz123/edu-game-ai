@@ -215,6 +215,31 @@ const { PROJECTOR_SIZES, measureAt, setViewport, setViewportAndWait } = require(
     out.slotEmptyDrops = !!withOne && (withOne.subIcons || []).length === 1 && withOne.subIcons[0].icon === 'lightbulb';
     out.slotMainIconKept = !!withOne && withOne.mainIcon === 'paw-print';
 
+    // ---- 6. #260: hai vật thể đứng ở mặt đất ----
+    // Cùng cơ chế ghi, nhưng là mảng chuỗi; và danh sách phải LOẠI chủ thể cùng
+    // các icon đã dùng ở góc, nếu không normaliser sẽ bỏ chúng một cách âm thầm.
+    const propSel = index => row.querySelector('[data-editor-art-prop="' + index + '"]');
+    out.propCount = row.querySelectorAll('[data-editor-art-prop]').length;
+    out.propExcludesSubject = !!propSel(0) && Array.from(propSel(0).options).every(op => op.value !== 'paw-print');
+    out.propExcludesCorner = !!propSel(0) && Array.from(propSel(0).options).every(op => op.value !== 'lightbulb');
+
+    propSel(0).value = 'apple';
+    propSel(0).dispatchEvent(new Event('change'));
+    await sleep(250);
+    let withProp = null;
+    try { withProp = JSON.parse(bpInput().value || 'null'); } catch (error) {}
+    out.propWritten = !!withProp && Array.isArray(withProp.props) && withProp.props.length === 1 && withProp.props[0] === 'apple';
+    out.propKept = !!propSel(0) && propSel(0).value === 'apple';
+    out.propInPreview = !!row.querySelector('[data-editor-art-thumb] [data-scene-prop="apple"]');
+    out.propKeptCorners = !!withProp && (withProp.subIcons || []).length === 1;
+
+    propSel(1).value = 'fish';
+    propSel(1).dispatchEvent(new Event('change'));
+    await sleep(250);
+    let twoProps = null;
+    try { twoProps = JSON.parse(bpInput().value || 'null'); } catch (error) {}
+    out.propTwoWritten = !!twoProps && (twoProps.props || []).length === 2;
+
     document.getElementById('saveGameBtn')?.click();
     await sleep(900);
     const lib3 = await desktop.call('getLibrary');
@@ -225,6 +250,7 @@ const { PROJECTOR_SIZES, measureAt, setViewport, setViewportAndWait } = require(
     out.blueprintDidNotAddPick = !bq || bq.illustrationAssetId === undefined;
     out.slotSurvivedSave = !!bq?.sceneBlueprint && (bq.sceneBlueprint.subIcons || []).length === 1 &&
       bq.sceneBlueprint.subIcons[0].icon === 'lightbulb' && bq.sceneBlueprint.subIcons[0].position === 'top-left';
+    out.propsSurvivedSave = !!bq?.sceneBlueprint && (bq.sceneBlueprint.props || []).join(',') === 'apple,fish';
 
     document.getElementById('modalRoot').innerHTML = '';
     return out;
@@ -303,6 +329,17 @@ const { PROJECTOR_SIZES, measureAt, setViewport, setViewportAndWait } = require(
   check('clearing a corner drops that icon only', out.slotEmptyDrops === true);
   check('clearing a corner keeps the subject icon', out.slotMainIconKept === true);
   check('a corner choice survives a real editor save', out.slotSurvivedSave === true, JSON.stringify(out.blueprintAfterSave));
+
+  // #260: two ground props, offered without the ids the normaliser would drop.
+  check('the scene editor offers two ground-prop pickers', out.propCount === 2, String(out.propCount));
+  check('a prop cannot repeat the subject icon', out.propExcludesSubject === true);
+  check('a prop cannot repeat a corner icon', out.propExcludesCorner === true);
+  check('picking a prop writes it to the blueprint', out.propWritten === true);
+  check('the prop picker keeps its value after the redraw', out.propKept === true);
+  check('the prop is drawn in the editor preview', out.propInPreview === true);
+  check('adding a prop keeps the corner choices', out.propKeptCorners === true);
+  check('a second prop is stored too', out.propTwoWritten === true);
+  check('props survive a real editor save', out.propsSurvivedSave === true, JSON.stringify(out.blueprintAfterSave));
 
   // ---- Phase B (docs/UI-PLAN-V2.md): the editor is where a teacher spends the
   // longest single stretch, so it is measured at both real resolutions too.

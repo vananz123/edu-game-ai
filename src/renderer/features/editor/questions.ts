@@ -179,6 +179,34 @@ function editorItemArtHtml(item) {
         <span class="editor-art-slots-hint">Chọn tối đa 4 vật thể để cảnh kể đúng câu chuyện. Không bao giờ đè lên hình chính.</span>
       </div>`
     : '';
+  // #260: two ground props. A prop that repeats the subject or a corner icon is
+  // dropped by the normaliser, so those ids are left out of the list instead of
+  // being offered and then silently ignored.
+  const placedProps = normalized && Array.isArray(normalized.props) ? normalized.props : [];
+  const usedIcons = [normalized && normalized.mainIcon]
+    .concat(placedSubs.map(sub => sub.icon))
+    .concat(placedProps)
+    .filter(Boolean);
+  const propsHtml = normalized
+    ? `<div class="editor-art-slots" data-editor-art-props>
+        <span class="editor-art-slots-label">Vật thể đứng ở mặt đất</span>
+        ${[0, 1].map(index => {
+          const current = placedProps[index] || '';
+          const iconOptions = Object.keys(EDITOR_SCENE_ICON_LABEL)
+            .filter(id => typeof stageIsSceneIconId !== 'function' || stageIsSceneIconId(id))
+            .filter(id => id === current || usedIcons.indexOf(id) < 0)
+            .map(id => `<option value="${escapeHtml(id)}"${current === id ? ' selected' : ''}>${escapeHtml(EDITOR_SCENE_ICON_LABEL[id])}</option>`)
+            .join('');
+          return `<label class="editor-art-slot" title="Vật thể đứng trên mặt đất, ${index === 0 ? 'bên trái' : 'bên phải'} hình chính">
+            <span>${index === 0 ? 'Đất trái' : 'Đất phải'}</span>
+            <select data-editor-art-prop="${index}">
+              <option value="">— trống —</option>${iconOptions}
+            </select>
+          </label>`;
+        }).join('')}
+        <span class="editor-art-slots-hint">Tối đa 2. Nhỏ và mờ hơn vật thể phụ để không tranh với hình chính.</span>
+      </div>`
+    : '';
   const badge = isNone
     ? 'Không dùng ảnh'
     : isCustom
@@ -213,6 +241,7 @@ function editorItemArtHtml(item) {
       </div>
       <div class="editor-art-hint">Minh hoạ đi kèm câu hỏi này. Ảnh tải lên được lưu trên máy và chơi được khi không có mạng. “Cảnh thử” dựng một cảnh từ chủ đề (chưa dùng AI); “Bỏ ảnh” tắt hình riêng câu hỏi này; “Tự động” trả lại hình theo chủ đề.</div>
       ${slotsHtml}
+      ${propsHtml}
     </div>
   </div>`;
 }
@@ -307,7 +336,15 @@ function applyEditorSceneSlots(row) {
   });
   const next = Object.assign({}, current);
   delete next.subIcons;
+  delete next.props;
   if (picks.length) next.subIcons = picks;
+  const props = [];
+  [0, 1].forEach(index => {
+    const select = live.querySelector('[data-editor-art-prop="' + index + '"]');
+    const icon = select && select.value ? select.value.trim() : '';
+    if (icon) props.push(icon);
+  });
+  if (props.length) next.props = props;
   const normalized = stageNormalizeBlueprint(next);
   if (!normalized) return;
   field.value = JSON.stringify(normalized);
@@ -352,6 +389,13 @@ function wireEditorItemArtRow(row) {
   // handler re-resolves the live row from the changed node instead of closing
   // over the old one (the "second click does nothing" bug of #128).
   row.querySelectorAll('[data-editor-art-slot]').forEach(select => {
+    select.addEventListener('change', () => {
+      const live = select.isConnected ? select.closest('[data-editor-art]') : null;
+      if (live) applyEditorSceneSlots(live);
+    });
+  });
+  // #260: the two ground-prop selects go through the same writer.
+  row.querySelectorAll('[data-editor-art-prop]').forEach(select => {
     select.addEventListener('change', () => {
       const live = select.isConnected ? select.closest('[data-editor-art]') : null;
       if (live) applyEditorSceneSlots(live);

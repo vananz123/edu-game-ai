@@ -3747,5 +3747,21 @@ Ba ràng buộc không đổi: (1) game đã lưu phải chơi được **offlin
 
 **Không chứng minh.** **Chưa có UI** cho props (đúng như #256 trước khi có #257), chưa build lại binary sau thay đổi này, nên **chưa có bằng chứng thị giác** nào cho hai vật thể mặt đất. Đây là việc kế tiếp, không phải việc đã xong.
 
+---
+
+## #260 — UI cho `props`, và vì sao danh sách **loại sẵn** icon không dùng được
+
+**Bối cảnh.** #259 thêm `props[]` ở tầng dữ liệu nhưng giáo viên không chạm tới — đúng lỗi mà #256 từng mắc trước khi có #257.
+
+**Quyết định.** Thêm hàng “Vật thể đứng ở mặt đất” với 2 ô `Đất trái`/`Đất phải` trong cùng khối, dùng **chung** `applyEditorSceneSlots` (một đường ghi duy nhất cho cả 6 ô) và cùng `stageNormalizeBlueprint`.
+
+**Vì sao danh sách props loại sẵn chủ thể + icon đã dùng ở góc.** Normaliser **bỏ** prop trùng (`paw-print`, `leaf`…) để giữ luật “không lặp”. Nếu UI vẫn cho chọn thì giáo viên chọn xong, bấm lưu, và prop **biến mất im lặng** — đúng loại lỗi tệ nhất: không có thông báo, không có dấu vết. Thà không cho chọn. Có 2 check riêng khẳng định danh sách không chứa chủ thể và không chứa icon ở góc.
+
+**Kiểm chứng.** `npm run check` sạch · `node tests/run-unit.js` **98/98** · `check:renderer-globals` 0 undefined · `check:embedded` khớp **6162,6 KiB** · build release thật exit 0 (installer 15,66 MiB, `devPath` khôi phục đúng SHA-256) · `ui-item-assets-editor-check` **63/63** trên binary đó · **duyệt thị giác:** preview có paw-print ở giữa, `leaf` bên trái, `lightbulb` trên trái, **táo + cá ở hai góc dưới nhỏ và mờ hơn rõ rệt**, không che chủ thể; các ô chọn hiện đúng nhãn tiếng Việt.
+
+**Không chứng minh.** Chưa thử trên game cũ (blueprint không có `props`) trong app thật — unit test đã phủ. Chưa chạy lại `ui-play-surface-check`. Chưa kiểm trường hợp hai prop cùng phía (engine luôn gán trái trước, phải sau theo thứ tự mảng).
+
+**Việc kế tiếp.** P1 `compare` — hạng mục lớn tiếp theo, cần chia đôi khung cho cả 10 nền và bài vẽ mới; mọi phép kiểm toạ độ hiện có sẽ phải mở rộng cho hai hộp chủ thể.
+
 
 
