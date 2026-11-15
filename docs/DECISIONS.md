@@ -3598,3 +3598,19 @@ Ba ràng buộc không đổi: (1) game đã lưu phải chơi được **offlin
 **Không chứng minh.** Chưa build/phát hành installer 0.5.2; chưa chạy lại `cargo test` (Rust không đổi); các cổng UI rời (`ui-typography-readability`, `ui-dark-theme`, …) chưa chạy lại trong lượt này; chưa duyệt bằng mắt.
 
 **Việc kế tiếp.** Build installer 0.5.2 theo đúng thủ tục tạm bỏ `devPath` + khôi phục SHA, rồi quay lại refactor gộp bảng cảnh bằng esbuild trước P1 `compare`.
+
+## Tài liệu thiết kế AI Scene Director đi theo từ vựng của mã, không đổi catalog (2026-11-15)
+
+**Bối cảnh.** Chủ dự án đưa một "Tài liệu Thiết kế Kỹ thuật" đầy đủ cho AI Scene Director (4 bố cục, `subIcons` có vị trí, `props`, prompt cho model). Đối chiếu với mã cho thấy tài liệu dùng **từ vựng asset gần như không tồn tại**: backdrop `garden-day`/`night-sky`/`lab-science`/`nature-hills`/`ocean-sea`/`default-scene` (mã có `plain, meadow, forest, mountain, sea, stars, city, classroom, lab, studio` — chỉ trùng `classroom`); icon `cat`/`dog`/`tree`/`atom`/`flask-triangle`/`ruler`/`gear`/`arrow-right` (mã có 38 tên khác, trùng 6/19); `paletteKey: "default-pastel"` (mặc định thật là `language`). Tài liệu cũng **bỏ `v`**, mô tả `subIcons` dạng `{icon, position}[]` và `props`, và khai 4 `layout` trong khi P0 chỉ có `'single'`.
+
+**Vì sao không thể cài nguyên văn.** `normalizeSceneBlueprint` trả **`null`** khi `mainIcon` không có trong danh mục. Prompt cũ yêu cầu `"mainIcon": "tree"` — không tồn tại — nên **mọi** câu hỏi sẽ ra cảnh trống, không phải một cảnh hơi sai. `layout: "process"` cũng `null`; `props` bị bỏ; `subIcons` dạng object bị bỏ vì không phải string.
+
+**Quyết định.** (a) Tài liệu được **sửa theo mã**, không sửa mã theo tài liệu: đổi sang 10 backdrop / 38 icon / 24 palette thật, thêm lại `v: 1`, ghi rõ P1/P2 (`compare`, `process`, `surround`, `props`, `subIcons` có vị trí) là **CHƯA CÓ**, và viết lại prompt P3 chỉ bằng tên có thật. (b) **Không** mở rộng catalog: làm vậy sẽ đổi **24 hash vàng** và mọi cảnh đã lưu qua #252 đổi hình — đắt và có rủi ro hồi quy, trong khi giá trị của tên mới (`cat`, `dog`, `tree`) chỉ là thẩm mỹ. (c) Tài liệu mới nằm ở `docs/AI_SCENE_DIRECTOR_DESIGN.md` và là nguồn sự thật cho từ vựng asset; §8 của nó liệt kê 9 chỗ bản cũ sai để không lặp lại.
+
+**Đánh đổi.** Prompt P3 sẽ dùng những cái tên trừu tượng hơn (`paw-print` thay vì `cat`, `leaf` thay vì `tree`) nên cảnh có thể kém "cụ thể" hơn mong đợi. Đổi lại: không phá cảnh đã lưu, không đổi hash, và không có lớp map hai chiều dễ trôi. Nếu sau này thật sự cần `cat`/`dog`, đó là một lượt **thêm** icon vào catalog kèm hash vàng mới — quyết định riêng, không gộp vào P3.
+
+**Kiểm chứng.** Đã kiểm chéo bằng script đọc thẳng catalog: **38/38** icon và **10/10** backdrop trong tài liệu đều tồn tại; **24/24** khoá palette khớp `CATEGORY_PALETTES`. (Script báo một cờ `default-pastel` — đó là câu cố ý nêu tên sai ở §8, không phải lỗi tài liệu.)
+
+**Không chứng minh.** Chưa có model thật trả JSON (P3 chưa mở kênh gọi); chưa chạy lại `npm test` sau khi thêm tài liệu (chỉ là tệp `.md`, không có test nào đọc nó — sẽ chạy lại ở lượt commit).
+
+**Việc kế tiếp.** Build installer 0.5.2; sau đó refactor gộp bảng cảnh bằng esbuild, rồi P1 `compare` với prompt viết theo `docs/AI_SCENE_DIRECTOR_DESIGN.md`.

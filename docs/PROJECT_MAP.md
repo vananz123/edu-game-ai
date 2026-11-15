@@ -11,6 +11,7 @@ tài liệu khác vẫn cần đọc nhưng trả lời câu hỏi khác:
 | `docs/PROJECT_MAP.md` (file này) | **Sửa X thì mở file nào** |
 | `docs/DECISIONS.md` | Vì sao làm vậy: tóm tắt #1–#56 + chỉ dẫn sang `docs/handoff/decisions/` cho #57–#145 |
 | `docs/STATUS.md` | Việc gì đã xong: 3 bàn giao mới nhất + mục lục đầy đủ (lịch sử ở `docs/handoff/status/`) |
+| `docs/AI_SCENE_DIRECTOR_DESIGN.md` | Thiết kế AI Scene Director: từ vựng asset **thật** (10 backdrop / 38 icon / 24 palette), schema `v:1`, bảng cổng kiểm duyệt, prompt P3 |
 | `docs/handoff/` | Lịch sử bàn giao theo ngày và chi tiết quyết định cũ (chỉ đọc khi cần tra cứu) |
 | `tests/README.md` | Chạy test thế nào |
 

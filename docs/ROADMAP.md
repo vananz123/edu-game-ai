@@ -11,7 +11,7 @@
 - **Trước P1 — một lượt refactor riêng:** gộp bảng cảnh shared + bản sao `game-illustration.ts` bằng esbuild, để mỗi id mới chỉ phải khai một chỗ. Giữ parity test làm lưới; không trộn vào P1.
 - **P1 — `compare`:** hai vế + dấu so sánh, cùng cổng kiểm tra và cùng golden-hash; thêm khoá vào catalog chứ không nới validator.
 - **P2 — `process`/`surround` + `props`:** bố cục nhiều bước và vật thể phụ; mỗi bố cục có bài vẽ riêng trước khi mở cho model.
-- **P3 — kênh AI thật:** prompt sinh từ cùng catalog, đầu ra JSON qua đúng `normalizeSceneBlueprint`, nút "✨ Gợi ý cảnh từ nội dung" thay "Cảnh thử", ghi qua `ai_tasks`; **không bao giờ chạy markup của model**.
+- **P3 — kênh AI thật:** prompt sinh từ cùng catalog, đầu ra JSON qua đúng `normalizeSceneBlueprint`, nút "✨ Gợi ý cảnh từ nội dung" thay "Cảnh thử", ghi qua `ai_tasks`; **không bao giờ chạy markup của model**. Prompt và từ vựng asset phải viết theo [`docs/AI_SCENE_DIRECTOR_DESIGN.md`](AI_SCENE_DIRECTOR_DESIGN.md) — bản thiết kế cũ dùng tên không tồn tại (`garden-day`, `cat`, `tree`, `default-pastel`) nên đã bị thay.
 - **P4 — cổng + docs:** mở rộng `check:item-assets-ui` cho từng bố cục, thêm phép đo dung lượng `.egame` thật, duyệt thị giác, rồi mới tính installer/phát hành.
 - **Còn mở:** chưa có bằng chứng model thật trả JSON hợp lệ; chưa duyệt cảnh bằng mắt; blueprint chưa đi qua đường wizard (`lesson:patch-item-assets` vẫn allowlist 3 khoá); chưa đo `.egame` trên bộ game lớn.
 
