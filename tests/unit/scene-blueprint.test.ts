@@ -34,7 +34,10 @@ const VALID: SceneBlueprint = {
   backdrop: 'forest',
   paletteKey: 'animals',
   mainIcon: 'paw-print',
-  subIcons: ['leaf', 'bird'],
+  subIcons: [
+    { icon: 'leaf', position: 'left' },
+    { icon: 'bird', position: 'right' },
+  ],
 };
 
 test('a valid blueprint survives both an object and a JSON string', () => {
@@ -85,14 +88,39 @@ test('an unknown place or palette falls back instead of failing', () => {
   assert.equal(missing.paletteKey, 'language');
 });
 
-test('sub icons are validated, deduped, exclude the subject and cap at two', () => {
+test('sub icons are validated, deduped, exclude the subject and cap at four', () => {
   const result = normalizeSceneBlueprint({
     ...VALID,
     subIcons: ['bird', 'bird', 'paw-print', 'leaf', 'fish', 'bug', 'nope', 42],
   })!;
-  assert.deepEqual(result.subIcons, ['bird', 'leaf']);
+  assert.deepEqual(result.subIcons, [
+    { icon: 'bird', position: 'left' },
+    { icon: 'leaf', position: 'right' },
+    { icon: 'fish', position: 'top-left' },
+    { icon: 'bug', position: 'top-right' },
+  ]);
   assert.equal(normalizeSceneBlueprint({ ...VALID, subIcons: 'bird' })!.subIcons, undefined);
   assert.equal(normalizeSceneBlueprint({ ...VALID, subIcons: [] })!.subIcons, undefined);
+});
+
+test('a named corner is kept, and a taken or unknown one falls back to the first free slot', () => {
+  const placed = normalizeSceneBlueprint({
+    ...VALID,
+    subIcons: [
+      { icon: 'leaf', position: 'top-right' },
+      { icon: 'bird', position: 'top-right' },
+      { icon: 'fish', position: 'nowhere' },
+      { icon: 'bug' },
+    ],
+  })!;
+  // First wins its corner; the duplicate and the unknown one take free slots
+  // instead of being dropped, because a missing icon is worse than a moved one.
+  assert.deepEqual(placed.subIcons, [
+    { icon: 'leaf', position: 'top-right' },
+    { icon: 'bird', position: 'left' },
+    { icon: 'fish', position: 'right' },
+    { icon: 'bug', position: 'top-left' },
+  ]);
 });
 
 test('oversized JSON is refused before parsing', () => {
@@ -167,6 +195,38 @@ test('the shared renderer draws a blueprint with its own layers and sub icons', 
   assert.match(svg, /aria-label="Động vật"/);
   // An unrenderable subject must produce nothing, not a broken frame.
   assert.equal(renderBlueprintSvg({ ...VALID, mainIcon: 'not-an-icon' }, palette), '');
+});
+
+test('four corner sub icons stay off the subject box, measured in the SVG itself', () => {
+  // Nobody can eyeball this in CI, so the geometry is asserted: the subject owns
+  // x 100..220 and 120px of height, and no 52px sub icon may touch that box —
+  // otherwise the one shape a child must recognise gets covered.
+  const four = normalizeSceneBlueprint({
+    ...VALID,
+    subIcons: [
+      { icon: 'leaf', position: 'left' },
+      { icon: 'bird', position: 'right' },
+      { icon: 'fish', position: 'top-left' },
+      { icon: 'bug', position: 'top-right' },
+    ],
+  })!;
+  const svg = renderBlueprintSvg(four, getIllustrationPalette(four.paletteKey));
+
+  const size = 52;
+  const placed = [...svg.matchAll(/data-scene-position="([a-z-]+)" transform="translate\((\d+) (\d+)\)/g)].map(
+    (match) => ({ position: match[1], x: Number(match[2]), y: Number(match[3]) })
+  );
+  assert.equal(placed.length, 4, 'all four sub icons must be drawn');
+  assert.deepEqual(placed.map((entry) => entry.position).sort(), ['left', 'right', 'top-left', 'top-right']);
+
+  const subject = { x0: 100, x1: 220, y0: 50, y1: 170 };
+  for (const entry of placed) {
+    const overlapsX = entry.x < subject.x1 && entry.x + size > subject.x0;
+    const overlapsY = entry.y < subject.y1 && entry.y + size > subject.y0;
+    assert.ok(!(overlapsX && overlapsY), `${entry.position} covers the subject at (${entry.x},${entry.y})`);
+    assert.ok(entry.x >= 0 && entry.x + size <= 320, `${entry.position} is clipped horizontally`);
+    assert.ok(entry.y >= 0 && entry.y + size <= 200, `${entry.position} is clipped vertically`);
+  }
 });
 
 test('a resolved blueprint renders through the shared registry', () => {

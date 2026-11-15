@@ -3679,5 +3679,23 @@ Ba ràng buộc không đổi: (1) game đã lưu phải chơi được **offlin
 
 **Việc kế tiếp.** P-B: schema `v:2` + engine cho `compare`/`process`/`surround`, `props[]`, `subIcons` có `position`; cập nhật prompt cùng lúc (test sẽ đỏ nếu quên).
 
+---
+
+## #256 — `subIcons` có góc (4 vị trí, tối đa 4) và `v` vẫn là 1
+
+**Bối cảnh.** #255 khoá prompt bằng test nhưng cảnh vẫn chỉ có **một** icon phụ hai bên, không có cách nào đặt vật thể vào góc trên hay nói "hai vật này ở hai phía". Muốn cảnh "nhiều thành phần" thì bước đầu phải mở **vị trí**, không phải mở layout — layout `compare` kéo theo hai chủ thể và bài toán chia đôi khung cho mọi nền, việc lớn hơn nhiều.
+
+**Quyết định.** (a) `subIcons` nhận `{icon, position}` với 4 giá trị `left`/`right`/`top-left`/`top-right`; `SCENE_MAX_SUB_ICONS` 2 → **4**. (b) **Không bump `v`**: đây là thêm khoá tuỳ chọn, blueprint cũ vẫn hợp lệ và vẫn vẽ được; `v:2` sẽ buộc chuyển đổi SQLite + `.egame` + đổi prompt mà **không** thêm khả năng gì. (c) Chuỗi trần của P0 vẫn nhận → `.egame` cũ không phải sửa. (d) Góc trùng hoặc tên góc lạ ⇒ **dời sang góc trống đầu tiên**, không bỏ icon.
+
+**Vì sao dời chứ không bỏ.** "Không mất thông tin" quan trọng hơn "tôn trọng vị trí tuyệt đối" ở đây: giáo viên đặt 4 vật thể để kể một câu chuyện, mất một vật làm câu chuyện sai nghĩa; dời một vật chỉ làm bố cục khác đi. Ngược lại **icon sai/trùng chủ thể thì vẫn bỏ**, vì nó không mang nghĩa mới.
+
+**Vì sao kiểm bằng toạ độ.** Phiên làm việc không có đầu vào hình ảnh, nên "không đè chủ thể" không thể là lời khẳng định. Test `four corner sub icons stay off the subject box, measured in the SVG itself` đọc chính `transform="translate(x y)"` trong SVG, dựng hộp 52px cho từng góc, và khẳng định nó **không giao** với hộp chủ thể (x 100–220, y 50–170) cũng như không tràn khung 320×200.
+
+**Kiểm chứng.** `npm run check` sạch · `node tests/run-unit.js` **98/98** · `check:renderer-globals` 0 undefined · `check:embedded` khớp **6162,0 KiB** (tăng 0,7) · 24 hash vàng **không đổi** (cảnh category vẫn gọi `renderSceneSvg(..., [])`).
+
+**Không chứng minh.** Chưa duyệt bằng mắt; hai góc trên có thể chật trên nền có bảng đen (`classroom`, `lab`) — test chỉ chứng minh **không đè chủ thể**, không chứng minh **không đè nền**. Chưa có UI chọn góc cho giáo viên. Chưa có `props[]`/`compare`/`process`/`surround`.
+
+**Việc kế tiếp.** P-B2 `props[]` (vật thể phụ ở mặt đất, có primitive riêng) hoặc P1 `compare` (hai chủ thể + dấu so sánh). UI chọn góc là việc riêng, có thể làm trước nếu ưu tiên giáo viên tự đặt cảnh.
+
 
 

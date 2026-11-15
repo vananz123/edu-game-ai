@@ -90,11 +90,21 @@ các bố cục này được cài và đo.
 ```ts
 // CHƯA CÓ — P1/P2
 layout?: 'compare' | 'process' | 'surround';
-subIcons?: { icon: string; position: 'left' | 'right' | 'center' | 'floating' }[];
 props?: string[];   // CHƯA CÓ, và chưa có primitive vẽ nào cho nó
 ```
 
-Khi P1/P2 mở các khoá này, phải **thêm vào danh mục** và **giữ nguyên** 24 hash vàng
+**Đã xong ở #256 (tách khỏi P1/P2 vì không cần `layout` mới):**
+
+```ts
+// CÓ trong mã — `v` vẫn là 1 vì hình dạng cũ vẫn hợp lệ
+subIcons?: { icon: string; position: 'left' | 'right' | 'top-left' | 'top-right' }[];
+const SCENE_MAX_SUB_ICONS = 4;   // 2 -> 4
+```
+
+Chuỗi trần của P0 (`subIcons: ["leaf"]`) vẫn được nhận và được nâng lên dạng có góc,
+nên `.egame` cũ và game đã lưu không phải chuyển đổi.
+
+Khi P1/P2 mở các khoá còn lại, phải **thêm vào danh mục** và **giữ nguyên** 24 hash vàng
 của các cảnh cũ.
 
 ---
@@ -186,7 +196,7 @@ QUY TẮC BẮT BUỘC
 3. Trả về DUY NHẤT một khối JSON, không lời chào, không giải thích, không markdown.
 4. Bắt buộc có "v": 1 và "layout": "single".
 5. Không tham chiếu tài nguyên ngoài: không URL, không ảnh, không font, không script.
-6. Tối đa 2 subIcons; chúng phải KHÁC mainIcon và không trùng nhau.
+6. Tối đa 4 subIcons; chúng phải KHÁC mainIcon và không trùng nhau.
 7. Toàn bộ JSON dưới 600 byte.
 
 QUY TRÌNH SUY NGHĨ (làm trong đầu, KHÔNG viết ra)
@@ -212,11 +222,15 @@ mainIcon (chọn 1): paw-print, leaf, rocket, heart-pulse, car, shield-check,
                    house, cloud-sun, apple, box, waves-horizontal, book-open,
                    lightbulb, star, clock, target, brain, zap, sparkles, gift,
                    pencil, mountain, fish, bird, bug
-subIcons (0-2, tuỳ chọn): cùng danh sách trên, khác mainIcon, không lặp.
+subIcons (0-4, tuỳ chọn): cùng danh sách trên, khác mainIcon, không lặp.
+   Mỗi mục là {"icon": "<tên>", "position": "left|right|top-left|top-right"}.
+   Bốn góc là chỗ duy nhất được đặt: left/right ngang tầm chân chủ thể,
+   top-left/top-right phía trên, không bao giờ đè chủ thể.
 SCENE-PROMPT-VOCAB:END
 
 ĐỊNH DẠNG ĐẦU RA
-{"v":1,"layout":"single","backdrop":"...","paletteKey":"...","mainIcon":"...","subIcons":["..."]}
+{"v":1,"layout":"single","backdrop":"...","paletteKey":"...","mainIcon":"...",
+ "subIcons":[{"icon":"...","position":"left"}]}
 ```
 
 ### 5.3 Cảnh được vẽ thế nào từ JSON đó
@@ -231,7 +245,7 @@ cố định, đúng thứ tự chồng (mỗi lớp nhận **một hoặc nhi�
 | `mid` | cây, bụi, toà nhà, sách, dụng cụ | `backdrop` |
 | `halo` | quầng sáng sau chủ thể | `paletteKey` |
 | `subject` | **mainIcon**, 120px, đúng giữa khung | `mainIcon` |
-| `props` | 2 subIcons 52px ở hai góc dưới | `subIcons` |
+| `props` | tới 4 subIcons 52px: `left`/`right` ngang tầm chân, `top-left`/`top-right` phía trên; không đè chủ thể | `subIcons[].position` |
 | `fg` | cỏ, rễ, đá, sóng, bảng | `backdrop` |
 
 Khung vẽ là `viewBox="0 0 320 200"` do engine đặt, **không** do model đặt — nên

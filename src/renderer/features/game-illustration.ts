@@ -159,7 +159,9 @@ const STAGE_SCENE_CATEGORY_BACKDROPS = {
 /* Must match SCENE_BLUEPRINT_VERSION, SCENE_MAX_SUB_ICONS and
    SCENE_BLUEPRINT_MAX_BYTES in the shared catalog. */
 const STAGE_SCENE_BLUEPRINT_VERSION = 1;
-const STAGE_SCENE_MAX_SUB_ICONS = 2;
+const STAGE_SCENE_MAX_SUB_ICONS = 4;
+/** Same four corners as SCENE_SUB_ICON_POSITIONS in the shared catalogue (#256). */
+const STAGE_SUB_ICON_POSITIONS = ['left', 'right', 'top-left', 'top-right'];
 const STAGE_SCENE_BLUEPRINT_MAX_BYTES = 600;
 const STAGE_SCENE_DEFAULT_ICON = 'book-open';
 /** Subject icon size in the 320x200 frame; matches SCENE_SUB_ICON_SIZE (#252). */
@@ -218,10 +220,19 @@ function stageNormalizeBlueprint(value) {
   const subIcons = [];
   if (Array.isArray(raw.subIcons)) {
     for (const entry of raw.subIcons) {
-      const icon = typeof entry === 'string' ? entry.trim() : '';
-      if (!stageIsSceneIconId(icon) || icon === mainIcon || subIcons.indexOf(icon) >= 0) continue;
+      const isObject = entry && typeof entry === 'object' && !Array.isArray(entry);
+      const icon = isObject
+        ? typeof entry.icon === 'string' ? entry.icon.trim() : ''
+        : typeof entry === 'string' ? entry.trim() : '';
+      if (!stageIsSceneIconId(icon) || icon === mainIcon || subIcons.some(function (sub) { return sub.icon === icon; })) continue;
       if (subIcons.length >= STAGE_SCENE_MAX_SUB_ICONS) continue;
-      subIcons.push(icon);
+      const wanted = isObject && typeof entry.position === 'string' ? entry.position.trim() : '';
+      let position = STAGE_SUB_ICON_POSITIONS.indexOf(wanted) >= 0 && !subIcons.some(function (sub) { return sub.position === wanted; })
+        ? wanted
+        : STAGE_SUB_ICON_POSITIONS.filter(function (slot) {
+            return !subIcons.some(function (sub) { return sub.position === slot; });
+          })[0];
+      subIcons.push({ icon: icon, position: position });
     }
   }
   const blueprint: any = { v: 1, layout: 'single', backdrop: backdrop, paletteKey: paletteKey, mainIcon: mainIcon };
@@ -435,18 +446,26 @@ function stageFgSvg(primitive, palette) {
  * src/shared/illustration-scene.ts. Outside x 100..220, in the props layer, so
  * the subject is never covered.
  */
-function stageSubIconsSvg(names, palette) {
-  const list = Array.isArray(names) ? names.slice(0, STAGE_SCENE_MAX_SUB_ICONS) : [];
-  const icons = list.map(function (name, index) {
-    const svg = stageIconSvg(name, STAGE_SCENE_SUB_ICON_SIZE, 'stage-illustration-subicon');
+function stageSubIconsSvg(list, palette) {
+  const subs = Array.isArray(list) ? list.slice(0, STAGE_SCENE_MAX_SUB_ICONS) : [];
+  const icons = subs.map(function (sub) {
+    const svg = stageIconSvg(sub.icon, STAGE_SCENE_SUB_ICON_SIZE, 'stage-illustration-subicon');
     if (!svg) return '';
-    const x = index === 0 ? 28 : 320 - 28 - STAGE_SCENE_SUB_ICON_SIZE;
-    const y = STAGE_ILLUSTRATION_HORIZON - STAGE_SCENE_SUB_ICON_SIZE - 4;
-    return '<g data-scene-subicon="' + escapeHtml(name) + '" transform="translate(' + x + ' ' + y + ')" ' +
+    const slot = STAGE_SUB_ICON_SLOTS[sub.position] || STAGE_SUB_ICON_SLOTS.left;
+    return '<g data-scene-subicon="' + escapeHtml(sub.icon) + '" data-scene-position="' + escapeHtml(sub.position) + '" ' +
+      'transform="translate(' + slot.x + ' ' + slot.y + ')" ' +
       'color="' + escapeHtml(palette.ink) + '" opacity="0.72">' + svg + '</g>';
   }).join('');
   return icons ? '<g data-scene-primitive="sub-icons">' + icons + '</g>' : '';
 }
+
+/** The four corners, mirroring SCENE_SUB_ICON_SLOTS in the shared composer. */
+const STAGE_SUB_ICON_SLOTS = {
+  left: { x: 28, y: STAGE_ILLUSTRATION_HORIZON - STAGE_SCENE_SUB_ICON_SIZE - 4 },
+  right: { x: 320 - 28 - STAGE_SCENE_SUB_ICON_SIZE, y: STAGE_ILLUSTRATION_HORIZON - STAGE_SCENE_SUB_ICON_SIZE - 4 },
+  'top-left': { x: 28, y: 22 },
+  'top-right': { x: 320 - 28 - STAGE_SCENE_SUB_ICON_SIZE, y: 22 }
+};
 
 /** One value or a stack, normalised to a list. Mirrors `primitivesOf` in the shared composer. */
 function stagePrimitivesOf(value) {

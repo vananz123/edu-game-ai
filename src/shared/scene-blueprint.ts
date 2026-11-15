@@ -18,17 +18,29 @@ import {
   SCENE_BLUEPRINT_MAX_BYTES,
   SCENE_BLUEPRINT_VERSION,
   SCENE_MAX_SUB_ICONS,
+  SCENE_SUB_ICON_POSITIONS,
   getBackdropSpec,
   isSceneBackdropId,
   isSceneIconId,
   isScenePaletteKey,
+  isSceneSubIconPosition,
   sceneBackdropForCategory,
+  type SceneSubIconPosition,
 } from './scene-asset-catalog';
 
 export type SceneBlueprintLayout = 'single';
 
+/** One supporting icon and the corner it sits in. */
+export interface SceneSubIcon {
+  icon: string;
+  position: SceneSubIconPosition;
+}
+
+/** What a caller may hand in: a bare id (P0 shape) or `{icon, position}`. */
+export type SceneSubIconInput = string | { icon?: unknown; position?: unknown };
+
 export interface SceneBlueprint {
-  /** Shape version; currently `1`. */
+  /** Shape version; currently `1`. `#256` added fields without breaking it. */
   v: typeof SCENE_BLUEPRINT_VERSION;
   layout: SceneBlueprintLayout;
   /** A key of `SCENE_BACKDROPS` — the *place*. */
@@ -37,8 +49,8 @@ export interface SceneBlueprint {
   paletteKey: string;
   /** A key of `SCENE_ICON_IDS` — the thing the question is about. */
   mainIcon: string;
-  /** Up to two keys of `SCENE_ICON_IDS`, flanking the subject. */
-  subIcons?: string[];
+  /** Up to four keys of `SCENE_ICON_IDS`, each in its own corner. */
+  subIcons?: SceneSubIcon[];
 }
 
 /** `book-open` is the default subject (same icon as #89's fallback scene). */
@@ -65,8 +77,10 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  *   - wrong `v` or `layout`, or an unknown/missing `mainIcon` -> `null`, because
  *     none of them has a safe meaning;
  *   - unknown `backdrop` -> `plain`, unknown `paletteKey` -> `language`;
- *   - `subIcons`: invalid, duplicate and the main icon are dropped, then capped
- *     at `SCENE_MAX_SUB_ICONS`;
+ *   - `subIcons`: accepts the P0 form (`"leaf"`) and the `#256` form
+ *     (`{icon, position}`); invalid, duplicate and the main icon are dropped, a
+ *     taken/unknown position falls back to the first free corner, then the list
+ *     is capped at `SCENE_MAX_SUB_ICONS` (4);
  *   - > `SCENE_BLUEPRINT_MAX_BYTES` -> `null` (a compact blueprint is the point).
  */
 export function normalizeSceneBlueprint(
@@ -135,14 +149,21 @@ export function normalizeSceneBlueprint(
     paletteKey = DEFAULT_SCENE_PALETTE_KEY;
   }
 
-  const subIcons: string[] = [];
+  const subIcons: SceneSubIcon[] = [];
   if (raw.subIcons !== undefined) {
     if (!Array.isArray(raw.subIcons)) {
       issues.push('subIcons');
     } else {
-      for (const entry of raw.subIcons) {
-        const icon = typeof entry === 'string' ? entry.trim() : '';
-        if (!isSceneIconId(icon) || icon === mainIcon || subIcons.includes(icon)) {
+      for (const entry of raw.subIcons as SceneSubIconInput[]) {
+        const asObject = isPlainObject(entry);
+        const icon = asObject
+          ? typeof entry.icon === 'string'
+            ? entry.icon.trim()
+            : ''
+          : typeof entry === 'string'
+            ? entry.trim()
+            : '';
+        if (!isSceneIconId(icon) || icon === mainIcon || subIcons.some((sub) => sub.icon === icon)) {
           issues.push('subIcons');
           continue;
         }
@@ -150,7 +171,19 @@ export function normalizeSceneBlueprint(
           issues.push('subIcons');
           continue;
         }
-        subIcons.push(icon);
+        // A named corner wins when it is free; otherwise the first free corner
+        // is used, so a duplicate position never drops an icon a child needs.
+        const wanted = asObject && typeof entry.position === 'string' ? entry.position.trim() : '';
+        let position: SceneSubIconPosition;
+        if (isSceneSubIconPosition(wanted) && !subIcons.some((sub) => sub.position === wanted)) {
+          position = wanted;
+        } else {
+          if (wanted) issues.push('subIcons');
+          position = SCENE_SUB_ICON_POSITIONS.find(
+            (slot) => !subIcons.some((sub) => sub.position === slot)
+          ) as SceneSubIconPosition;
+        }
+        subIcons.push({ icon, position });
       }
     }
   }

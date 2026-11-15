@@ -21,8 +21,8 @@
  */
 import { renderIconSvg } from './icon-registry';
 import type { IllustrationPalette } from './illustration-registry';
-import type { SceneBlueprint } from './scene-blueprint';
-import { getBackdropSpec } from './scene-asset-catalog';
+import type { SceneBlueprint, SceneSubIcon } from './scene-blueprint';
+import { SCENE_MAX_SUB_ICONS, getBackdropSpec, type SceneSubIconPosition } from './scene-asset-catalog';
 
 /** Canvas the scenes are authored in; matches `renderIllustrationSvg`. */
 export const SCENE_WIDTH = 320;
@@ -473,18 +473,31 @@ export interface SceneSvgOptions {
 }
 
 /**
- * Up to two supporting icons beside the subject. They live in the props layer
+ * The four corners a sub-icon may occupy, in pixels (#256). Left/right hug the
+ * horizon exactly as in P0, so an old blueprint renders the same; the upper two
+ * sit above the subject and are clear of it horizontally (subject spans
+ * x 100..220), so nothing covers the one shape a child has to recognise.
+ */
+const SCENE_SUB_ICON_SLOTS: Readonly<Record<SceneSubIconPosition, { x: number; y: number }>> = Object.freeze({
+  left: { x: 28, y: SCENE_HORIZON - SCENE_SUB_ICON_SIZE - 4 },
+  right: { x: SCENE_WIDTH - 28 - SCENE_SUB_ICON_SIZE, y: SCENE_HORIZON - SCENE_SUB_ICON_SIZE - 4 },
+  'top-left': { x: 28, y: 22 },
+  'top-right': { x: SCENE_WIDTH - 28 - SCENE_SUB_ICON_SIZE, y: 22 },
+});
+
+/**
+ * Up to four supporting icons around the subject. They live in the props layer
  * (in front of the subject's box, never on top of it) so the subject stays the
  * one thing a child has to recognise.
  */
-function renderSubIcons(subIcons: readonly string[], palette: IllustrationPalette): string {
-  const icons = subIcons.slice(0, 2).map((name, index) => {
-    const svg = renderIconSvg(name, { size: SCENE_SUB_ICON_SIZE, className: 'stage-illustration-subicon' });
+function renderSubIcons(subIcons: readonly SceneSubIcon[], palette: IllustrationPalette): string {
+  const icons = subIcons.slice(0, SCENE_MAX_SUB_ICONS).map((sub) => {
+    const svg = renderIconSvg(sub.icon, { size: SCENE_SUB_ICON_SIZE, className: 'stage-illustration-subicon' });
     if (!svg) return '';
-    const x = index === 0 ? 28 : SCENE_WIDTH - 28 - SCENE_SUB_ICON_SIZE;
-    const y = SCENE_HORIZON - SCENE_SUB_ICON_SIZE - 4;
+    const slot = SCENE_SUB_ICON_SLOTS[sub.position] || SCENE_SUB_ICON_SLOTS.left;
     return (
-      `<g data-scene-subicon="${esc(name)}" transform="translate(${x} ${y})" ` +
+      `<g data-scene-subicon="${esc(sub.icon)}" data-scene-position="${esc(sub.position)}" ` +
+      `transform="translate(${slot.x} ${slot.y})" ` +
       `color="${esc(palette.ink)}" opacity="0.72">${svg}</g>`
     );
   }).join('');
@@ -499,7 +512,7 @@ function composeSceneSvg(
   spec: SceneSpec,
   palette: IllustrationPalette,
   subject: string,
-  subIcons: readonly string[],
+  subIcons: readonly SceneSubIcon[],
   options: SceneSvgOptions = {}
 ): string {
   if (!subject) return '';

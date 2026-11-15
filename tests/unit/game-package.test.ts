@@ -110,7 +110,12 @@ async function run(): Promise<void> {
     backdrop: 'forest',
     paletteKey: 'animals',
     mainIcon: 'paw-print',
-    subIcons: ['leaf', 'bird']
+    // Written in the P0 string form on purpose: an old package must keep
+    // importing, and the gate upgrades it to the #256 corner form.
+    subIcons: [
+      { icon: 'leaf', position: 'left' },
+      { icon: 'bird', position: 'right' },
+    ]
   });
 
   // A hand-edited package gets the same gate as a saved game: a bad blueprint is
@@ -131,7 +136,7 @@ async function run(): Promise<void> {
     backdrop: 'plain',
     paletteKey: 'language',
     mainIcon: 'paw-print',
-    subIcons: ['leaf']
+    subIcons: [{ icon: 'leaf', position: 'left' }]
   }, 'an unknown place/palette falls back and sub icons are cleaned');
 
   const asString = JSON.parse(JSON.stringify(withBlueprint));

@@ -24,7 +24,25 @@ import type { SceneSpec } from './illustration-scene';
 export const SCENE_BLUEPRINT_VERSION = 1;
 
 /** A blueprint carries at most two supporting icons. */
-export const SCENE_MAX_SUB_ICONS = 2;
+export const SCENE_MAX_SUB_ICONS = 4;
+
+/**
+ * The four corners a supporting icon may sit in (#256). Named instead of
+ * numeric so a blueprint stays readable in SQLite and in the AI prompt, and so
+ * an unknown value can be rejected rather than guessed.
+ */
+export const SCENE_SUB_ICON_POSITIONS = Object.freeze([
+  'left',
+  'right',
+  'top-left',
+  'top-right',
+] as const);
+
+export type SceneSubIconPosition = (typeof SCENE_SUB_ICON_POSITIONS)[number];
+
+export function isSceneSubIconPosition(value: unknown): value is SceneSubIconPosition {
+  return typeof value === 'string' && (SCENE_SUB_ICON_POSITIONS as readonly string[]).includes(value);
+}
 
 /** Rejected above this size. A valid blueprint is ~120–180 bytes. */
 export const SCENE_BLUEPRINT_MAX_BYTES = 600;
