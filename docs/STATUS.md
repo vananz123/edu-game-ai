@@ -7,6 +7,14 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-16 — #269 kênh AI nhận `process`: cổng assets 130 → 137/137
+- **Trạng thái:** Phần **đường ống** của "AI gợi ý quy trình" đã được chứng minh: cổng stub kênh `scene:suggest` trả blueprint `process` thật, rồi kiểm trình soạn lưu `layout:'process'` + 2 bậc, hiện 2 ô `Bậc 2`/`Bậc 3`, vẽ 3 bậc + 2 mũi tên, ô Kiểu hiện "Quy trình nhiều bậc", và không hiện ô so sánh. Phần **model có chọn `process` hay không** vẫn mở — cần một lần chạy có khoá.
+- **Files:** `tests/ui/ui-item-assets-editor-check.js` (+7 check, thêm ca 2b cho kênh AI), `docs/DECISIONS.md` #269, `docs/STATUS.md`, `docs/ROADMAP.md`.
+- **Đã đo:** `ui-item-assets-editor-check` **137/137** trên binary release thật (CDP 9366) · `run-unit` **99/99** (45,6 s) · `npm run check` 52 tệp sạch · `renderer-globals` 0 undefined (1057 hàm / 8488 lời gọi) · app đã tắt, hai thư mục tạm đã xoá.
+- **Học được:** đặt `check(...)` mới ngay sau khối UI `process` làm chúng chạy **trước** khi `const suggest` khai báo ⇒ `ReferenceError: Cannot access 'suggest' before initialization`; cổng đỏ vì **thứ tự khai báo trong test**, không phải vì sản phẩm. Phải dời xuống sau khối suggest.
+- **Chưa xác minh:** không có `GEMINI_API_KEY` trong môi trường và các thư mục dữ liệu tạm cũ không giữ khoá, nên **chưa có lần chạy model thật** với câu hỏi quy trình · chưa duyệt bằng mắt người · `surround` vẫn CHƯA CÓ · `ui-play-surface-check` 787/788 (lỗi giật 2px có sẵn).
+- **Việc kế tiếp:** một lần chạy "Gợi ý cảnh" thật với câu "Cây lớn lên như thế nào: hạt → mầm → cây" (cần khoá), hoặc `surround`, hoặc sửa lỗi giật 2px.
+
 ### 2026-11-16 — #268 UI `process` trong trình soạn (Kiểu + Bậc 2/Bậc 3) — cổng assets 107 → 130/130
 - **Trạng thái:** Giáo viên đã chọn được bố cục quy trình: Kiểu có thêm "Quy trình nhiều bậc", hai ô `Bậc 2`/`Bậc 3` điền các bậc sau bước đầu; preview vẽ ngay dải 3 icon + 2 mũi tên. Đổi Kiểu sang quy trình là **tự chọn bậc 2** để một cú bấm ra cảnh hợp lệ (không tự nhảy về Một hình); về `single` thì `steps` bị xoá khỏi JSON.
 - **Files:** `src/renderer/features/editor/questions.ts` (hằng số bậc + ô chọn + nhánh ghi blueprint + wire `change`), `tests/ui/ui-item-assets-editor-check.js` (+23 check, thêm khối lưu thật thứ hai), `docs/AI_SCENE_DIRECTOR_DESIGN.md` (§3.4 + đầu tài liệu: UI không còn "CHƯA CÓ"), `docs/DECISIONS.md` #268, `docs/ROADMAP.md`, `images/scene-267-app.png`.
@@ -28,16 +36,7 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - **Chưa xác minh:** UI trình soạn cho `process` (chưa có) · chưa chạy `process` qua model thật · chưa duyệt bằng mắt người · `surround` vẫn CHƯA CÓ.
 - **Việc kế tiếp:** UI trình soạn cho `process` (bước 3 của P2), rồi `surround` hoặc sửa lỗi giật 2px ở màn chơi.
 
-### 2026-11-15 — #266 màu cho cảnh + người trong cảnh (3 icon người, chủ thể dùng màu nhấn) — unit 99/99, assets 107/107
-- **Trạng thái:** Cảnh minh hoạ không còn là sơ đồ một màu: **chủ thể và icon góc vẽ bằng màu nhấn của bảng màu** (`glow`) thay cho mực (`ink`); chủ thể thứ hai khi so sánh giữ `ink` nên hai hình khác màu nhau. Thêm **3 dòng người** vào từ vựng: `user` (Một người), `graduation-cap` (Học sinh), `hard-hat` (Người lao động) — dùng được ở chủ thể, hình so sánh, 4 góc và 2 ô đất.
-- **Files:** `src/shared/illustration-scene.ts`, `src/renderer/features/game-illustration.ts` (mirror), `src/shared/scene-asset-catalog.ts`, `src/renderer/features/editor/questions.ts` (nhãn), `docs/AI_SCENE_DIRECTOR_DESIGN.md` (§4.2 + khối từ vựng §5.2), `tests/unit/{scene-blueprint,illustration-registry}.test.ts`, `tests/ui/ui-play-surface-check.js` (ngưỡng 28 → 26px cho khớp quyết định), `docs/DECISIONS.md` #266.
-- **Đã đo:** `run-unit` **99/99** (54,4 s) · `ui-item-assets-editor-check` **107/107** trên binary release build lại · `check` 52 tệp UI sạch · `renderer-globals` 0 undefined · `check:embedded` khớp **6210,7 KiB** · **24 hash vàng lấy lại có chủ đích** (độ dài byte không đổi nên chỉ hash bắt được) · `devPath` gỡ → build → khôi phục, SHA-256 khớp ghim.
-- **Đối chứng âm:** bỏ dòng 3 icon người khỏi `scene-asset-catalog` ⇒ `scene-blueprint` đỏ đúng chỗ (`user must be in the shared whitelist`), khôi phục ⇒ xanh.
-- **Bằng chứng thị giác:** `images/color-266.png` (3 cảnh dựng bằng `renderBlueprintSvg`) và `images/scene-266-app.png` (chụp **trong app thật**: người + mũ tốt nghiệp + dấu `>`, sách ở góc, táo trên đất). Màu đo trong DOM: `#6b7fd0` (nhấn) và `#3a4b9c` (mực).
-- **Học được:** một tên icon phải đi qua **4 nơi** (catalog, mirror renderer, nhãn editor, tài liệu prompt) — thiếu một nơi là cổng đỏ; và `node tests/run-unit.js` chạy `dist/`, nên sửa test mà quên `tsc` sẽ thấy lỗi "không có thật" (lại mắc lần nữa trong lượt này).
-- **Chưa xác minh:** chưa duyệt bằng mắt người · `ui-play-surface-check` **787/788** — ở 1920×1080 trả lời **đúng** làm ô đáp án đầu dịch xuống **2px** (lỗi giật bố cục có sẵn, không do màu cảnh) · chưa thử 2 vật trên cùng một bên đất.
-- **Việc kế tiếp:** P2 `process`/`surround` (chứng minh bằng toạ độ, không cần model), rồi sửa lỗi giật 2px ở màn chơi.
-
+### 2026-11-15 — #266 màu cho cảnh + người trong cảnh (3 icon người, chủ thể dùng màu nhấn) — unit 99/99, assets 107/107 — bản đầy đủ: [docs/handoff/status/2026-11-15.md](handoff/status/2026-11-15.md).
 ### 2026-11-15 — #265 kênh `scene:suggest` + nút "Gợi ý cảnh": lần chạy model THẬT đầu tiên (1047 ms) — 107/107 — bản đầy đủ: [docs/handoff/status/2026-11-15.md](handoff/status/2026-11-15.md).
 ### 2026-11-15 — #264 đường ống gợi ý cảnh (thuần TS, model tiêm, luôn có fallback) — bản đầy đủ: [docs/handoff/status/2026-11-15.md](handoff/status/2026-11-15.md).
 ### 2026-11-15 — #263 P3 bước prompt: `compare` vào §5 + ví dụ mẫu chạy qua cổng dữ liệu thật — bản đầy đủ: [docs/handoff/status/2026-11-15.md](handoff/status/2026-11-15.md).

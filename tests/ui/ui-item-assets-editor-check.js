@@ -539,6 +539,7 @@ const { PROJECTOR_SIZES, measureAt, setViewport, setViewportAndWait } = require(
   check('the saved process scene keeps both stages', !!(procSave && procSave.saved && (procSave.saved.steps || []).join(',') === (procSave && procSave.edited ? procSave.edited.steps.join(',') : 'x')), JSON.stringify({ edited: procSave && procSave.edited && procSave.edited.steps, saved: procSave && procSave.saved && procSave.saved.steps, choices: procSave && procSave.secondChoices }));
   check('the saved process scene has no compare fields', !!(procSave && procSave.saved && procSave.saved.compareIcon === undefined && procSave.saved.compareSign === undefined));
 
+
   // ---- #265 "Gợi ý cảnh": the editor button, driven through `desktop.stub` ----
   // No network in a gate: the button's contract is "whatever the channel returns,
   // the row ends up with a drawable blueprint, or with nothing changed at all".
@@ -597,6 +598,26 @@ const { PROJECTOR_SIZES, measureAt, setViewport, setViewportAndWait } = require(
       ? artRow().querySelector('[data-editor-art-sign]').value : null;
     out.previewSubjects = artRow().querySelectorAll('[data-scene-subject]').length;
 
+    // 2b. #267: a process blueprint from the channel is stored and drawn as a strip,
+    //     and its two stage pickers appear without a second click.
+    desktop.stub('suggestScene', () => ({
+      source: 'model', issues: [], json: JSON.stringify({
+        v: 1, layout: 'process', backdrop: 'meadow', paletteKey: 'plants',
+        mainIcon: 'leaf', steps: ['apple', 'box']
+      })
+    }));
+    button().click();
+    await sleep(400);
+    const procStored = JSON.parse(bpInput().value || 'null');
+    out.suggestProcessLayout = procStored && procStored.layout;
+    out.suggestProcessStages = procStored && procStored.steps;
+    out.suggestProcessStepSelects = artRow().querySelectorAll('[data-editor-art-step]').length;
+    out.suggestProcessPreviewSteps = artRow().querySelectorAll('[data-scene-step]').length;
+    out.suggestProcessPreviewArrows = artRow().querySelectorAll('[data-scene-arrow]').length;
+    out.suggestProcessLayoutValue = artRow().querySelector('[data-editor-art-layout]')
+      ? artRow().querySelector('[data-editor-art-layout]').value : null;
+    out.suggestProcessNoCompare = artRow().querySelectorAll('[data-editor-art-compare-icon], [data-editor-art-sign]').length;
+
     // 3. A degraded reply (the channel fell back) is still a drawable scene: the
     //    teacher gets a category picture, not an empty frame.
     desktop.stub('suggestScene', () => ({
@@ -650,6 +671,14 @@ const { PROJECTOR_SIZES, measureAt, setViewport, setViewportAndWait } = require(
   check('a degraded AI reply tells the teacher it fell back', Boolean(suggest && /cảnh theo chủ đề/.test(suggest.fallbackToast)), suggest && suggest.fallbackToast);
   check('an unusable AI reply does not wipe the existing scene', Boolean(suggest && suggest.junkKeptPrevious));
   check('an unusable AI reply says the scene was not replaced', Boolean(suggest && /không dùng được/.test(suggest.junkToast)), suggest && suggest.junkToast);
+  // #267: kênh AI trả về `process` thì trình soạn phải dựng được dải, không chỉ nhận JSON.
+  check('an AI process scene is stored with its layout', Boolean(suggest && suggest.suggestProcessLayout === 'process'), suggest && suggest.suggestProcessLayout);
+  check('an AI process scene keeps both stages', Boolean(suggest && suggest.suggestProcessStages && suggest.suggestProcessStages.length === 2), JSON.stringify(suggest && suggest.suggestProcessStages));
+  check('an AI process scene redraws the two stage pickers', Boolean(suggest && suggest.suggestProcessStepSelects === 2), String(suggest && suggest.suggestProcessStepSelects));
+  check('an AI process scene draws three stages', Boolean(suggest && suggest.suggestProcessPreviewSteps === 3), String(suggest && suggest.suggestProcessPreviewSteps));
+  check('an AI process scene draws two arrows', Boolean(suggest && suggest.suggestProcessPreviewArrows === 2), String(suggest && suggest.suggestProcessPreviewArrows));
+  check('the layout picker follows the AI process scene', Boolean(suggest && suggest.suggestProcessLayoutValue === 'process'), suggest && suggest.suggestProcessLayoutValue);
+  check('an AI process scene shows no compare controls', Boolean(suggest && suggest.suggestProcessNoCompare === 0), String(suggest && suggest.suggestProcessNoCompare));
   check('an empty question is refused without calling AI', Boolean(suggest && suggest.emptyPromptRefused));
   check('an empty question explains what to do first', Boolean(suggest && /Hãy viết nội dung/.test(suggest.emptyPromptToast)), suggest && suggest.emptyPromptToast);
 

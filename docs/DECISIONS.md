@@ -4066,3 +4066,29 @@ mang `steps`, và **một lần lưu thật** mở lại từ kho rồi đọc q
 "Quy trình nhiều bậc", Bậc 2 = Quả táo, Bậc 3 = Cái hộp, preview 3 icon + 2 mũi tên.
 `devPath` gỡ → build → khôi phục, SHA-256 khớp ghim `5ae0bf6…b20e`; tiến trình app đã tắt và
 hai thư mục tạm đã xoá.
+
+## #269 — Kênh AI nhận `process`: chứng minh đường ống, tách khỏi "model có chọn không"
+
+**Quyết định.** Cổng `ui-item-assets-editor-check` stub kênh `scene:suggest` trả về một
+blueprint `process` thật, rồi kiểm **trình soạn** làm gì với nó: lưu `layout:'process'` +
+2 bậc, hiện 2 ô `Bậc 2`/`Bậc 3`, vẽ 3 bậc + 2 mũi tên, ô Kiểu hiện "Quy trình nhiều bậc",
+và **không** hiện ô so sánh. Nhờ vậy câu "AI có gợi ý được quy trình không?" tách làm hai
+phần: *đường ống* (chứng minh được, không cần mạng, không cần khoá) và *lựa chọn của model*
+(cần một lần chạy thật, có khoá).
+
+**Vì sao tách.** Một bài kiểm phụ thuộc mạng và khoá sẽ đỏ ngẫu nhiên và không ai sửa được
+lúc 2 giờ sáng — cùng lý do đã ghi ở #265. Nhưng nếu chỉ có stub thì không ai biết model có
+thực sự chọn `process` hay không; nên phần chưa biết được ghi rõ là **chưa xác minh**, chứ
+không được im lặng coi như xong.
+
+**Bằng chứng.** `ui-item-assets-editor-check` **130 → 137/137** trên binary release thật; 7
+check mới đều đỏ được (chúng đọc từ chính DOM sau một lần bấm nút, không đọc biến của test).
+`run-unit` **99/99** · `npm run check` 52 tệp sạch · `renderer-globals` 0 undefined. Một lỗi
+đã sửa trong lúc làm: đặt các `check(...)` mới ngay sau khối UI `process` khiến chúng chạy
+**trước** khi `const suggest` được khai báo ⇒ `ReferenceError: Cannot access 'suggest' before
+initialization`; đã dời xuống sau khối suggest.
+
+**Chưa xác minh.** Chưa có lần chạy model thật nào với câu hỏi quy trình: máy này không có
+`GEMINI_API_KEY` trong môi trường và các thư mục dữ liệu tạm cũ không giữ khoá (khoá chỉ nằm
+DPAPI-encrypted trong thư mục dữ liệu của app, đã xoá sau mỗi lượt). Vì vậy câu "model có
+chọn `process` cho câu 'hạt → mầm → cây' không" vẫn **mở**.
