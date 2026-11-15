@@ -975,6 +975,34 @@ function assertNav(nav, tag) {
       check(`[${tag}] play surface is readable`, false, 'no play surface to measure');
     }
 
+    // #271: the pointer is parked away from the tiles before the answer run.
+    // `.answer-option:hover:not(:disabled)` lifts a tile by 2px on purpose, so a
+    // cursor resting on the first answer (left there by the previous step) made
+    // the "tiles keep their positions" comparison below fail by exactly 2px at
+    // 1366x768 — a measurement artefact, not a layout shift. Park first, then
+    // prove the lift is real and reversible with a genuine mouse move.
+    await ctx.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 2, y: 2 });
+    await new Promise(r => setTimeout(r, 120));
+    const hoverLift = await evaluate(`(async () => {
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      const tile = document.querySelector('.answer-option');
+      if (!tile) return { missing: true };
+      const y = () => tile.getBoundingClientRect().y;
+      const rest = y();
+      return { rest, centre: (() => { const r = tile.getBoundingClientRect(); return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) }; })() };
+    })()`);
+    if (hoverLift && !hoverLift.missing) {
+      await ctx.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: hoverLift.centre.x, y: hoverLift.centre.y });
+      await new Promise(r => setTimeout(r, 220));
+      const lifted = await evaluate(`document.querySelector('.answer-option').getBoundingClientRect().y`);
+      await ctx.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 2, y: 2 });
+      await new Promise(r => setTimeout(r, 260));
+      const back = await evaluate(`document.querySelector('.answer-option').getBoundingClientRect().y`);
+      check(`[${tag}] hovering an answer tile lifts it 2px and it settles back`,
+        Math.abs((hoverLift.rest - lifted) - 2) <= 0.5 && Math.abs(back - hoverLift.rest) <= 0.5,
+        `rest ${hoverLift.rest.toFixed(2)} -> hover ${lifted.toFixed(2)} -> back ${back.toFixed(2)}`);
+    }
+
     // Answered state, measured and photographed too: the feedback panel is the
     // block that pushed the stage off-screen in earlier bugs.
     const a = await evaluate(ANSWER);

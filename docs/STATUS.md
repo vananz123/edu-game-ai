@@ -7,6 +7,16 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-16 — #271 "lỗi giật 2px" ở màn chơi: hoá ra là `:hover`, cổng đo sai chỗ — 787/788 → **790/790**
+- **Trạng thái:** Nợ duy nhất của màn chơi đã đóng, và **không phải bằng cách sửa CSS**: bố cục chưa từng xê dịch. Ô đáp án đầu tiên bị con trỏ chuột còn đứng trên nó (từ bước bấm trước) nên được `:hover` nhấc lên đúng 2px; sau khi trả lời, ô `disabled` ⇒ hết khớp `:hover:not(:disabled)` ⇒ trở về chỗ cũ. Cổng đo "trước" trong lúc con trỏ đứng sai chỗ, nên báo một lỗi bố cục không tồn tại.
+- **Sửa:** đặt con trỏ về góc (2,2) trước khi chụp "trước", giữ nguyên dung sai ±1px (không nới), và thêm một check dùng chuột THẬT để chốt hợp đồng "rê vào thì nhấc 2px, rời ra thì về chỗ cũ" — nếu ai đổi hiệu ứng hover sau này, cổng sẽ nói đúng câu đó.
+- **Files:** `tests/ui/ui-play-surface-check.js` (+2 check), `docs/DECISIONS.md` #271, `docs/ROADMAP.md`, `docs/STATUS.md`. `src/renderer/styles/gameplay.css` chỉ bị chạm để thử đối chứng rồi **khôi phục byte-identical** (SHA-256 `82ed1f2de9766485…`), nên không nằm trong diff.
+- **Đã đo:** `ui-play-surface-check` **790/790** trên binary release build lại (CDP 9370) · `run-unit` **99/99** (46,0 s) · `npm run check` 52 tệp sạch · `renderer-globals` 0 undefined · `check:embedded` khớp **6213,9 KiB** · `devPath` gỡ → build → khôi phục, SHA-256 khớp ghim.
+- **Đối chứng âm:** đổi `translateY(-2px)` → `-3px` rồi build lại ⇒ đỏ đúng hai chỗ (`rest 510,53 -> hover 507,53`, `rest 456,72 -> hover 453,72`; 100/102 ở phần `play`); khôi phục `-2px` ⇒ xanh. Nhờ đó chứng minh con số 2px trong báo cáo cũ **chính là** độ nhấc hover.
+- **Học được:** một cổng đo bố cục mà không kiểm soát con trỏ chuột thì đang đo cả trạng thái chuột — `Input.dispatchMouseEvent` về góc trước mỗi phép đo. Và đừng chữa check đỏ bằng cách nới dung sai: đọc `transform` tại hai thời điểm rẻ hơn nhiều so với đoán phần tử nào co lại.
+- **Chưa xác minh:** chưa duyệt màn chơi bằng mắt người ở lượt này (chỉ số đo + ảnh do cổng tự chụp) · `process`/`surround` vẫn chưa chạy qua model thật · chưa có GitHub release `v0.5.2`.
+- **Việc kế tiếp:** gộp bản mirror `game-illustration.ts` với `src/shared/*` bằng esbuild (món nợ kỹ thuật còn lại của AI Scene Director), hoặc một lần chạy "Gợi ý cảnh" thật nếu có khoá.
+
 ### 2026-11-16 — #270 `surround`: chủ thể ở giữa + tối đa 4 vật ở bốn góc — ĐÓNG P2: cổng assets 157/157, scene-blueprint 46/46
 - **Trạng thái:** Bố cục thứ tư ra đời và **cả bốn bố cục P2 giờ đều có dữ liệu, hình, UI và prompt**. `mainIcon` ở giữa, `around[]` (1–4) là những thứ quanh nó, thứ tự **chiều kim đồng hồ từ trên-trái**; dữ liệu không mang toạ độ, engine sở hữu bốn chỗ đứng. Giáo viên chọn được trong Kiểu ("Vật thể vây quanh") với 4 ô Vây 1..4; đổi Kiểu là **tự chọn 1 vật** để một cú bấm ra cảnh hợp lệ.
 - **Hình học (đo bằng test):** chủ thể **88px** ở (116,52); vòng **48px** tại (28,10) (244,10) (244,96) (28,96); màu chủ thể `glow`, vòng `ink` 0.85; props giữ nguyên #259 (40px, y 146). Test kiểm **không chồng chủ thể** và **không chạm dải đất**, không chỉ kiểm toạ độ.
@@ -27,16 +37,7 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - **Chưa xác minh:** không có `GEMINI_API_KEY` trong môi trường và các thư mục dữ liệu tạm cũ không giữ khoá, nên **chưa có lần chạy model thật** với câu hỏi quy trình · chưa duyệt bằng mắt người · `surround` vẫn CHƯA CÓ · `ui-play-surface-check` 787/788 (lỗi giật 2px có sẵn).
 - **Việc kế tiếp:** một lần chạy "Gợi ý cảnh" thật với câu "Cây lớn lên như thế nào: hạt → mầm → cây" (cần khoá), hoặc `surround`, hoặc sửa lỗi giật 2px.
 
-### 2026-11-16 — #268 UI `process` trong trình soạn (Kiểu + Bậc 2/Bậc 3) — cổng assets 107 → 130/130
-- **Trạng thái:** Giáo viên đã chọn được bố cục quy trình: Kiểu có thêm "Quy trình nhiều bậc", hai ô `Bậc 2`/`Bậc 3` điền các bậc sau bước đầu; preview vẽ ngay dải 3 icon + 2 mũi tên. Đổi Kiểu sang quy trình là **tự chọn bậc 2** để một cú bấm ra cảnh hợp lệ (không tự nhảy về Một hình); về `single` thì `steps` bị xoá khỏi JSON.
-- **Files:** `src/renderer/features/editor/questions.ts` (hằng số bậc + ô chọn + nhánh ghi blueprint + wire `change`), `tests/ui/ui-item-assets-editor-check.js` (+23 check, thêm khối lưu thật thứ hai), `docs/AI_SCENE_DIRECTOR_DESIGN.md` (§3.4 + đầu tài liệu: UI không còn "CHƯA CÓ"), `docs/DECISIONS.md` #268, `docs/ROADMAP.md`, `images/scene-267-app.png`.
-- **Đã đo:** `ui-item-assets-editor-check` **130/130** trên binary release build lại (CDP 9365) · `run-unit` **99/99** (45,4 s) · `npm run check` 52 tệp UI sạch · `renderer-globals` 0 undefined (1057 hàm / 8488 lời gọi) · `check:embedded` khớp **6212,2 KiB** · installer 15,67 MiB · `devPath` gỡ → build → khôi phục, SHA-256 khớp ghim.
-- **Đối chứng âm (từ chính lượt này):** gán cứng bậc 3 một id đã bị loại khỏi danh sách ⇒ 5 check đỏ và lộ ra rằng phép đo đang nói dối; giữ node `[data-editor-art]` qua một lần redraw ⇒ `sceneBlueprint` đọc ra `null`. Cả hai đã sửa trong test, không nới cổng.
-- **Bằng chứng thị giác:** `images/scene-267-app.png` (chụp trong app thật) — Kiểu "Quy trình nhiều bậc", Bậc 2 = Quả táo, Bậc 3 = Cái hộp, preview 3 icon + 2 mũi tên, không cắt/không đè.
-- **Học được:** `redrawEditorArtRow` **thay hẳn** node `[data-editor-art]`; giữ node đó qua một lần redraw thì mọi `select` sau đó ghi vào hư không — phải giữ **hàng câu hỏi** và query lại. Và một bài kiểm gán cứng giá trị vào `<select>` mà không kiểm option có tồn tại sẽ "xanh giả".
-- **Chưa xác minh:** chưa chạy `process` qua model thật · chưa duyệt bằng mắt người · `surround` vẫn CHƯA CÓ · `ui-play-surface-check` vẫn 787/788 (lỗi giật 2px có sẵn, không liên quan).
-- **Việc kế tiếp:** chạy "Gợi ý cảnh" một câu quy trình thật để xem model có chọn `process` không, hoặc `surround`, hoặc sửa lỗi giật 2px ở màn chơi.
-
+### 2026-11-16 — #268 UI `process` trong trình soạn (Kiểu + Bậc 2/Bậc 3) — cổng assets 107 → 130/130 — bản đầy đủ: [docs/handoff/status/2026-11-16.md](handoff/status/2026-11-16.md).
 ### 2026-11-16 — #267 `process`: dải 2–3 bậc (dữ liệu + hình + prompt; UI CHƯA CÓ) — unit 99/99, scene-blueprint 39/39 — bản đầy đủ: [docs/handoff/status/2026-11-16.md](handoff/status/2026-11-16.md).
 ### 2026-11-15 — #266 màu cho cảnh + người trong cảnh (3 icon người, chủ thể dùng màu nhấn) — unit 99/99, assets 107/107 — bản đầy đủ: [docs/handoff/status/2026-11-15.md](handoff/status/2026-11-15.md).
 ### 2026-11-15 — #265 kênh `scene:suggest` + nút "Gợi ý cảnh": lần chạy model THẬT đầu tiên (1047 ms) — 107/107 — bản đầy đủ: [docs/handoff/status/2026-11-15.md](handoff/status/2026-11-15.md).

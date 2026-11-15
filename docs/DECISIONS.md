@@ -4149,3 +4149,46 @@ commit.
 **Đã đóng P2.** Bốn bố cục (`single`, `compare`, `process`, `surround`) đều có dữ liệu, hình,
 UI và prompt. Còn mở duy nhất của AI Scene Director: `process`/`surround` **chưa chạy qua model
 thật** (cần khoá) — đường ống đã chứng minh, chỉ lựa chọn của model là chưa biết.
+
+## #271 — "Lỗi giật 2px" ở màn chơi KHÔNG phải lỗi bố cục: đó là `:hover`, và cổng đo nhầm chỗ
+
+**Triệu chứng đã ghi từ #266.** `ui-play-surface-check` **787/788**: ở 1366×768, sau khi trả
+lời đúng, ô đáp án đầu tiên "nhảy" **2px** (y 454,72 → 456,72) trong khi chiều cao và ba ô còn
+lại không đổi — nhìn như có thứ gì phía trên co lại 2px.
+
+**Nguyên nhân thật (đo, không đoán).** Bơm `getComputedStyle` vào đúng hai thời điểm của phép
+so sánh:
+
+```
+trước khi trả lời:  tile1 transform: matrix(1,0,0,1,0,-2)   tile2 transform: none
+sau khi trả lời:    tile1 transform: none                    tile2 transform: none
+```
+
+`matrix(…,0,-2)` = `translateY(-2px)`, đúng bằng luật
+`.modal[data-player-theme] .answer-option:hover:not(:disabled){transform:translateY(-2px)}`
+(`gameplay.css`). Con trỏ chuột còn nằm trên ô đầu tiên do bước trước đó bấm vào đúng toạ độ
+ấy, nên ô được "nhấc lên" 2px **có chủ ý**. Sau khi chọn đáp án, ô bị `disabled` ⇒
+`:hover:not(:disabled)` hết khớp ⇒ `transform: none` ⇒ ô **trở về** đúng chỗ. Nghĩa là: bố cục
+không hề xê dịch, chỉ có con trỏ đứng sai chỗ khi chụp "trước".
+
+**Sửa (chỉ trong cổng, không sửa CSS).** Cách sai: nới dung sai lên ±2px — nó sẽ che luôn một
+lần lệch thật sau này. Cách đã chọn: **đặt con trỏ về góc (2,2) trước khi đo** rồi giữ nguyên
+phép so sánh ±1px, và **biến ẩn số thành hợp đồng**: thêm một check dùng chuột THẬT
+(`Input.dispatchMouseEvent`) để chứng minh rê vào ô thì ô nhấc đúng 2px và rời ra thì về chỗ
+cũ. Từ nay nếu ai đổi hiệu ứng hover, cổng sẽ nói đúng câu "độ nhấc không còn là 2px" thay vì
+báo một lỗi bố cục không tồn tại.
+
+**Bằng chứng.** Cổng **787/788 → 790/790** (thêm 2 check, mỗi cỡ màn hình một) trên binary
+release build lại (CDP 9370), cùng `run-unit` **99/99**, `npm run check` 52 tệp, `renderer-globals`
+0 undefined, `check:embedded` khớp 6213,9 KiB. `gameplay.css` được khôi phục **byte-identical**
+(SHA-256 `82ed1f2de9766485…` khớp bản sao lưu trước khi thử).
+
+**Đối chứng âm.** Đổi `translateY(-2px)` → `-3px` rồi build lại: cổng đỏ đúng hai chỗ với
+`rest 510,53 -> hover 507,53` và `rest 456,72 -> hover 453,72` (100/102 ở phần `play`). Khôi phục
+`-2px`: xanh lại. Điều này cũng chứng minh con số 2px trong báo cáo cũ **chính là** độ nhấc hover,
+không phải trùng hợp.
+
+**Bài học.** Một cổng đo bố cục mà không kiểm soát con trỏ thì đang đo cả trạng thái chuột; và
+khi một check đỏ "không giải thích được", việc đọc `transform` tại hai thời điểm rẻ hơn nhiều so
+với việc đoán phần tử nào co lại. Cũng đừng chữa bằng cách nới dung sai: ±1px là thứ bắt được
+lỗi thật, còn 2px là thứ đang được báo.

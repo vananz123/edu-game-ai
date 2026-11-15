@@ -28,8 +28,11 @@
   mới, stub kênh). Nhắc lại luật: model **không bao giờ** phát SVG, và renderer vẫn chuẩn hoá lại JSON lần nữa.
   Bài học: cloud provider chỉ `usable` sau một lần `testAiProvider` thành công (#132 §D7) — "đã lưu khoá" ≠ "dùng được".- **P4 — cổng + docs:** mở rộng `check:item-assets-ui` cho từng bố cục, thêm phép đo dung lượng `.egame` thật, duyệt thị giác, rồi mới tính installer/phát hành.
 - **Prompt + cổng chống trôi — XONG trước P1 (quyết định #255).** §5 của [`docs/AI_SCENE_DIRECTOR_DESIGN.md`](AI_SCENE_DIRECTOR_DESIGN.md) nay là prompt đầy đủ (quy tắc, quy trình suy nghĩ, kho từ vựng có mốc), và `tests/unit/scene-prompt-doc.test.ts` so **từng tên** trong prompt với `scene-asset-catalog.ts` — thêm/bớt asset mà quên sửa prompt là đỏ. Nhánh "model xuất raw SVG" của spec ban đầu bị **loại**: inline SVG là markup thực thi được, `AGENTS.md` cấm chạy markup do model sinh.
-- **Còn mở:** `ui-play-surface-check` **787/788** — ở 1920×1080 trả lời ĐÚNG làm ô đáp án đầu dịch
-  xuống 2px (lỗi giật bố cục có sẵn, không do màu cảnh); `listAiTasks` trả rỗng ngay sau lượt chạy dù
+- **Đã đóng (2026-11-16, #271):** `ui-play-surface-check` **787/788 → 790/790** — "lỗi giật 2px" ở 1366×768
+  không phải lỗi bố cục mà là con trỏ chuột còn đứng trên ô đáp án đầu: `:hover` nhấc ô lên đúng
+  2px, sau khi trả lời ô bị `disabled` nên trở về chỗ cũ. Cổng nay đặt con trỏ về góc trước khi
+  đo (giữ nguyên dung sai ±1px) và có thêm một check dùng chuột thật để chốt hợp đồng đó.
+- **Còn mở:** `listAiTasks` trả rỗng ngay sau lượt chạy dù
   SQLite có hàng `kind=scene` (cần một lượt riêng);
   `compare` chưa thử trên câu `scenario` (bố cục #254); blueprint chưa đi qua đường wizard
   (`lesson:patch-item-assets` vẫn allowlist 3 khoá); chưa đo `.egame` trên bộ game lớn; chưa có người duyệt bằng mắt
