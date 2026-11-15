@@ -15,10 +15,16 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import {
+  SCENE_BLUEPRINT_MAX_BYTES,
   SCENE_BACKDROP_IDS,
+  SCENE_COMPARE_SIGNS,
+  SCENE_COMPARE_SUB_ICON_POSITIONS,
   SCENE_ICON_IDS,
+  SCENE_LAYOUT_IDS,
   SCENE_PALETTE_KEYS,
+  SCENE_SUB_ICON_POSITIONS,
 } from '../../src/shared/scene-asset-catalog';
+import { normalizeSceneBlueprint } from '../../src/shared/scene-blueprint';
 
 const DOC = readFileSync(path.join(__dirname, '..', '..', '..', 'docs', 'AI_SCENE_DIRECTOR_DESIGN.md'), 'utf8');
 
@@ -42,7 +48,9 @@ function idsFor(key: string): string[] {
   const start = block.search(new RegExp('\\b' + key + '\\b[^:]*:'));
   if (start === -1) return [];
   const tail = block.slice(start);
-  const next = tail.slice(1).search(/\n(?:backdrop|paletteKey|mainIcon|subIcons|props)\b/);
+  const next = tail
+    .slice(1)
+    .search(/\n(?:layout|backdrop|paletteKey|mainIcon|compareIcon|compareSign|subIcons|props)\b/);
   const section = next === -1 ? tail : tail.slice(0, next + 1);
   const body = section.slice(section.indexOf(':') + 1);
   return body
@@ -116,12 +124,110 @@ test('the prompt never names an asset that does not exist', () => {
   }
 });
 
-test('the prompt pins the blueprint version and the only layout that exists', () => {
+test('the prompt offers exactly the layouts the engine can draw', () => {
+  assert.deepEqual(idsFor('layout').sort(), [...SCENE_LAYOUT_IDS].sort());
   const prompt = promptBlock();
   assert.match(prompt, /"v": 1/);
-  assert.match(prompt, /"layout": "single"/);
-  // P1/P2 will add layouts; until the engine draws them, the prompt must say so.
-  for (const missing of ['compare', 'process', 'surround']) {
-    assert.ok(!new RegExp('"layout": "(?:' + missing + ')"').test(prompt), `${missing} is offered but not implemented`);
+  // A layout the engine cannot draw is worse than no layout at all: the
+  // normaliser drops compare-less blueprints to `single`, and any other id
+  // returns null, which renders an empty column.
+  assert.match(prompt, /"layout":\s*"single"/);
+  assert.match(prompt, /"layout":\s*"compare"/);
+  for (const missing of ['process', 'surround']) {
+    assert.ok(!new RegExp('"layout":\\s*"' + missing + '"').test(prompt), `${missing} is offered but not implemented`);
   }
+});
+
+test('the prompt offers exactly the comparison signs the engine can draw', () => {
+  assert.deepEqual(idsFor('compareSign').sort(), [...SCENE_COMPARE_SIGNS].sort());
+  // The sign is an id, never a glyph: the engine draws > < = with paths, so a
+  // model that sends ">" or "larger" is rejected.
+  const prompt = promptBlock();
+  assert.match(prompt, /"compareSign":\s*"greater-than"/);
+});
+
+test('the second subject points at the icon list and must differ from the first', () => {
+  assert.match(vocabBlock(), /compareIcon[^:]*:\s*cùng danh sách trên/);
+  // The normaliser drops a compareIcon equal to mainIcon and degrades the whole
+  // scene to `single`, so the prompt has to say it out loud.
+  const block = vocabBlock();
+  const line = block.slice(block.indexOf('compareIcon'), block.indexOf('compareSign'));
+  assert.match(line, /khác mainIcon/);
+});
+
+test('compare restricts corner icons to the corners the engine actually keeps', () => {
+  const block = vocabBlock();
+  // In compare the two upper corners hold the two subjects' heads only, and the
+  // normaliser MOVES left/right up. Telling a model it may use them would waste
+  // an object on a silent re-layout.
+  for (const kept of SCENE_COMPARE_SUB_ICON_POSITIONS) {
+    assert.ok(block.includes(kept), `the prompt does not mention the compare corner "${kept}"`);
+  }
+  assert.match(block, /Khi layout = compare chỉ dùng top-left và top-right/);
+  // Both single-layout corners still have to be documented for `single`.
+  for (const slot of SCENE_SUB_ICON_POSITIONS) {
+    assert.ok(block.includes(slot), `the prompt does not mention the corner "${slot}"`);
+  }
+});
+
+test('the prompt caps sub-icons lower in compare than in single', () => {
+  const prompt = promptBlock();
+  assert.match(prompt, /Tối đa 4 subIcons \(chỉ 2 khi layout = compare\)/);
+});
+
+/** Every balanced `{...}` object in the prompt, in order — the worked examples.
+ *  They are the only JSON a model is told to imitate, so they must survive the
+ *  same gate their real output goes through. */
+function exampleObjects(): string[] {
+  const text = promptBlock();
+  const found: string[] = [];
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === '{') {
+      if (depth === 0) start = i;
+      depth += 1;
+    } else if (ch === '}') {
+      depth -= 1;
+      if (depth === 0 && start >= 0) {
+        found.push(text.slice(start, i + 1));
+        start = -1;
+      }
+    }
+  }
+  return found;
+}
+test('every worked example in the prompt normalises into a real blueprint', () => {
+  const examples = exampleObjects().filter((object) => /"v"\s*:/.test(object));
+  assert.ok(examples.length >= 2, `the prompt shows only ${examples.length} worked example(s)`);
+  const layouts = new Set<string>();
+  for (const example of examples) {
+    const issues: string[] = [];
+    const blueprint = normalizeSceneBlueprint(example, issues);
+    assert.ok(blueprint, `an example is not a valid blueprint (issues: ${issues.join(',')}): ${example}`);
+    // Zero issues means nothing was dropped: a model imitating this example keeps
+    // every object it chose. `compare`-specific degradation shows up here.
+    assert.deepEqual(issues, [], `an example loses parts when normalised: ${example}`);
+    assert.ok(Buffer.byteLength(example, 'utf8') <= SCENE_BLUEPRINT_MAX_BYTES, 'an example is over the byte ceiling');
+    layouts.add(blueprint.layout);
+  }
+  assert.deepEqual([...layouts].sort(), [...SCENE_LAYOUT_IDS].sort(), 'the prompt does not show one example per layout');
+});
+
+test('the prompt never asks a model to fill in a placeholder', () => {
+  // `"mainIcon": "..."` is the retired draft's habit. A model that copies it
+  // produces an unknown id, the normaliser returns null, and the question shows
+  // an empty frame with nothing thrown.
+  assert.ok(!/"\s*(?:mainIcon|backdrop|paletteKey|compareIcon|compareSign|icon)\s*"\s*:\s*"\.\.\."/.test(promptBlock()), 'the prompt still contains a "..." placeholder');
+  assert.ok(!/"\.\.\."/.test(promptBlock()), 'the prompt still contains a "..." placeholder');
 });

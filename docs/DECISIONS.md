@@ -3830,3 +3830,20 @@ Blueprint lưu được: `{"v":1,"layout":"compare","backdrop":"forest","palette
 Build: `npm run build && npm run build:tauri && cargo tauri build` exit 0, installer **15,67 MiB**; `devPath` bỏ tạm rồi khôi phục **nguyên byte** (`5AE0BF64…13B20E`).
 
 **Chưa xác minh.** Chưa thử `compare` trên **câu hỏi `scenario`** (bố cục tình huống #254) — mới đo ở editor và preview. Chưa đưa `compare` vào prompt §5 (P3) — có chủ ý: prompt chỉ được hứa sau khi UI này xong, và cổng `scene-prompt-doc.test.ts` vẫn ghim `"layout": "single"`.
+
+## #263 — P3 bước prompt: `compare` vào §5, và ví dụ mẫu phải qua chính cổng của dữ liệu thật
+
+**Bối cảnh.** #262 bước 2 ghi rõ cổng `scene-prompt-doc.test.ts` đang **ghim `"layout": "single"`** — đó là phanh có chủ ý: prompt chỉ được hứa thứ engine vẽ được **và** UI tạo được. #262 bước 3 xong UI ⇒ phanh được nhả.
+
+**Đã làm.** §5.2 có thêm `layout (single, compare)`, `compareIcon`, `compareSign`; quy tắc 4/6/7/9/10 mới; quy trình suy nghĩ bước 6 đổi từ "giữ single" thành "so sánh hai đối tượng ⇒ compare"; §5.3 có thêm dòng lớp `sign`. Cổng 13 → **15 check**.
+
+**Quyết định 1 — ví dụ đầu ra là JSON THẬT, không phải `"..."`.** Bản cũ để `"mainIcon": "..."`. Đó đúng là thói quen của tài liệu đã chết: model copy nguyên `"..."` ⇒ id lạ ⇒ `normalizeSceneBlueprint` trả `null` ⇒ **khung rỗng, không ném lỗi**. Nay ví dụ là hai blueprint cụ thể, và cổng **chạy chính chúng** qua `normalizeSceneBlueprint` rồi đòi `issues` **rỗng**. Phép đối chứng: đổi `compareIcon` thành trùng `mainIcon` ⇒ đỏ ngay ("an example is not a valid blueprint").
+- Vì sao đòi `issues` rỗng chứ không chỉ "khác null": một blueprint bị hạ `single` **vẫn** vẽ ra ảnh, nên chỉ kiểm "khác null" là bỏ lọt đúng lỗi mà bước 1 đã dựng luật để tránh.
+
+**Quyết định 2 — mỗi khoá từ vựng nằm trên đúng một dòng, chú thích đứng TRƯỚC.** `idsFor()` cắt mục bằng cách tìm dòng khoá kế tiếp rồi tách theo dấu phẩy. Chú thích viết sau danh sách (`equal (đọc là >, <, =)`) làm dấu phẩy trong chú thích bị tách thành id ⇒ test đỏ với `'= giữa hai hình).'`. Chú thích chứa chính tên khoá cũng hỏng (`Đọc compareSign: …` bị nhận là dòng khoá). Luật: **dòng id sạch, chú thích ở trên, không chứa tên khoá, không chứa dấu phẩy.**
+
+**Quyết định 3 — cảnh báo "thứ tự" trong tài liệu phải đổi theo sự thật.** §3.3 từng ghi "UI CHƯA CÓ" và "cổng vẫn ghim single". Sau bước 3, cả hai câu đó **sai**; tài liệu mà nói sai về chính nó thì lần sau không ai tin. Đã sửa thành "dữ liệu CÓ, hình CÓ, UI CÓ, prompt CÓ".
+
+**Đã đo.** `scene-prompt-doc` **15/15**; **4 phép đối chứng âm đều đỏ đúng chỗ**: bỏ `compare` khỏi danh sách layout (check 9) · thêm dấu bịa `gte` (check 10) · bỏ luật góc compare (check 12) · `compareIcon` trùng `mainIcon` trong ví dụ (check 14). Toàn bộ: `run-unit` **98/98** (75,2 s) · `npm run check` sạch (52 tệp UI) · `renderer-globals` 1055 hàm/8438 lời gọi/**0 undefined**.
+
+**Chưa làm (còn ở P3).** Chưa có kênh gọi model: chưa có `scene:suggest`, chưa dựng prompt từ catalog bằng mã, chưa có bằng chứng model thật trả JSON hợp lệ. Prompt hiện là **hợp đồng đã kiểm**, chưa phải **lời gọi đã chạy**.

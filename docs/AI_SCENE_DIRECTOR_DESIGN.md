@@ -92,7 +92,7 @@ các bố cục này được cài và đo.
 layout?: 'process' | 'surround';
 ```
 
-### 3.3 `compare` — dữ liệu CÓ và hình CÓ (#262); UI editor CHƯA CÓ
+### 3.3 `compare` — dữ liệu CÓ, hình CÓ, UI CÓ, prompt CÓ (#262)
 
 ```ts
 // CÓ trong mã
@@ -111,11 +111,11 @@ Luật chuẩn hoá (đã có test):
   lưu giống nhau thì so sánh được.
 - `subIcons` và `props` **không được trùng cả hai chủ thể**.
 
-**Thứ tự bắt buộc cho P1:** dữ liệu (bước này) → **vẽ** (engine + test toạ độ cho **hai**
-chủ thể) → **UI editor** → cuối cùng mới đưa `compare` vào prompt §5. Lý do: prompt là
-lời hứa với model; hứa một bố cục mà engine chưa vẽ được thì giáo viên nhận ảnh sai.
-Cổng `scene-prompt-doc.test.ts` hiện vẫn **ghim `\"layout\": \"single\"`** trong prompt,
-nên nó sẽ chặn đúng lúc ai đó sửa §5 sớm.
+**Thứ tự bắt buộc cho P1:** dữ liệu → **vẽ** (engine + test toạ độ cho **hai** chủ thể) →
+**UI editor** → cuối cùng mới đưa `compare` vào prompt §5. Lý do: prompt là lời hứa với
+model; hứa một bố cục mà engine chưa vẽ được thì giáo viên nhận ảnh sai. Cổng
+`scene-prompt-doc.test.ts` đã giữ đúng vai đó — và khi cả ba bước kia xong, nó được **nới
+có chủ ý** để §5 được phép hứa `compare`.
 
 **Hình học của `compare` (đã cài, đã đo bằng test):**
 
@@ -128,7 +128,10 @@ nên nó sẽ chặn đúng lúc ai đó sửa §5 sớm.
 
 Dấu `left`/`right` cũ bị **dời lên** `top-left`/`top-right` chứ không bị bỏ (cùng nguyên tắc #256).
 
-**Chưa xong ở P1:** UI editor cho hai chủ thể + dấu, và đưa `compare` vào prompt §5 (sau khi UI xong).
+**P1 đã xong cả bốn tầng** (dữ liệu · hình · UI · prompt). Prompt §5 nay có `layout` hai
+giá trị, `compareIcon`, `compareSign`, giới hạn 2 icon góc `top-left`/`top-right`, và **hai
+ví dụ JSON thật** — cổng chạy chính hai ví dụ đó qua `normalizeSceneBlueprint` và đòi
+**không một issue nào**, nên ví dụ mẫu không thể lạc khỏi engine.
 
 **Đã xong ở #256 (tách khỏi P1/P2 vì không cần `layout` mới):**
 
@@ -231,11 +234,16 @@ QUY TẮC BẮT BUỘC
 1. CHỈ dùng đúng tên asset trong danh sách. Không bịa tên mới.
 2. KHÔNG viết mã SVG, HTML hay markup. Chỉ trả JSON dữ liệu.
 3. Trả về DUY NHẤT một khối JSON, không lời chào, không giải thích, không markdown.
-4. Bắt buộc có "v": 1 và "layout": "single".
+4. Bắt buộc có "v": 1 và "layout" là "single" hoặc "compare" — không có bố cục nào khác.
 5. Không tham chiếu tài nguyên ngoài: không URL, không ảnh, không font, không script.
-6. Tối đa 4 subIcons; chúng phải KHÁC mainIcon và không trùng nhau.
-7. Tối đa 2 props, KHÁC mainIcon và KHÁC mọi subIcons.
-7. Toàn bộ JSON dưới 600 byte.
+6. Tối đa 4 subIcons (chỉ 2 khi layout = compare); chúng phải KHÁC mainIcon và không trùng nhau.
+7. Tối đa 2 props, KHÁC mainIcon, KHÁC mọi subIcons và KHÁC compareIcon.
+8. Toàn bộ JSON dưới 600 byte.
+9. Chọn "compare" CHỈ khi câu hỏi thật sự so sánh hai đối tượng ngang hàng (lớn hơn,
+   nhỏ hơn, bằng, nhiều hơn, ít hơn). Câu một đối tượng thì để "single".
+10. Khi layout = "compare": mainIcon là hình BÊN TRÁI, compareIcon là hình BÊN PHẢI
+   (bắt buộc, KHÁC mainIcon), compareSign là dấu ở giữa; chỉ được dùng góc
+   top-left và top-right cho subIcons, vì hai góc dưới đã có hai hình.
 
 QUY TRÌNH SUY NGHĨ (làm trong đầu, KHÔNG viết ra)
 1. Xác định môn học và ý chính của câu hỏi.
@@ -244,10 +252,13 @@ QUY TRÌNH SUY NGHĨ (làm trong đầu, KHÔNG viết ra)
 3. Chọn paletteKey theo CHỦ ĐỀ (khớp `contentCategory` của câu hỏi khi có).
 4. Chọn mainIcon là vật thể TRUNG TÂM mà câu hỏi nói tới.
 5. Chỉ thêm subIcons khi chúng làm rõ nghĩa (dụng cụ, đối tượng so sánh).
-6. Nếu câu hỏi cần bố cục so sánh/quy trình mà "layout" chỉ có "single": giữ
-   "single" và dùng tối đa 2 subIcons để gợi ý. KHÔNG tự bịa layout mới.
+6. Nếu câu hỏi so sánh hai đối tượng (con nào lớn hơn, cái nào nặng hơn, nhiều hơn
+   hay ít hơn): dùng layout "compare", đặt hai đối tượng vào mainIcon/compareIcon
+   và chọn dấu đúng chiều đọc. Nếu là quy trình nhiều bước: chưa có bố cục cho nó,
+   giữ "single" và dùng tối đa 2 subIcons để gợi ý. KHÔNG tự bịa layout mới.
 
 SCENE-PROMPT-VOCAB:START
+layout (chọn 1): single, compare
 backdrop (chọn 1): plain, meadow, forest, mountain, sea, stars, city,
                    classroom, lab, studio
 paletteKey (chọn 1): animals, plants, space, human-body, transport, safety,
@@ -260,17 +271,30 @@ mainIcon (chọn 1): paw-print, leaf, rocket, heart-pulse, car, shield-check,
                    house, cloud-sun, apple, box, waves-horizontal, book-open,
                    lightbulb, star, clock, target, brain, zap, sparkles, gift,
                    pencil, mountain, fish, bird, bug
-subIcons (0-4, tuỳ chọn): cùng danh sách trên, khác mainIcon, không lặp.
+compareIcon (chỉ khi layout = compare): cùng danh sách trên, khác mainIcon.
+   Đây là hình BÊN PHẢI; mainIcon là hình BÊN TRÁI.
+Dấu so sánh đọc là: greater-than = ">" · less-than = "<" · equal = "=".
+compareSign (chỉ khi layout = compare): greater-than, less-than, equal
+subIcons (0-4, tuỳ chọn; 0-2 khi compare): cùng danh sách trên, khác mainIcon,
+   khác compareIcon, không lặp.
    Mỗi mục là {"icon": "<tên>", "position": "left|right|top-left|top-right"}.
    Bốn góc là chỗ duy nhất được đặt: left/right ngang tầm chân chủ thể,
    top-left/top-right phía trên, không bao giờ đè chủ thể.
+   Khi layout = compare chỉ dùng top-left và top-right (góc dưới đã có hai hình;
+   đặt left/right ở đó sẽ bị engine tự dời lên).
 props (0-2, tuỳ chọn): cùng danh sách trên, là vật thể ĐỨNG Ở MẶT ĐẤT hai bên;
-   khác mainIcon, khác mọi subIcons.
+   khác mainIcon, khác mọi subIcons, khác compareIcon.
 SCENE-PROMPT-VOCAB:END
 
-ĐỊNH DẠNG ĐẦU RA
-{"v":1,"layout":"single","backdrop":"...","paletteKey":"...","mainIcon":"...",
- "subIcons":[{"icon":"...","position":"left"}],"props":["..."]}
+ĐỊNH DẠNG ĐẦU RA (hai ví dụ dưới đây là JSON THẬT, chạy được ngay)
+Một hình:
+{"v":1,"layout":"single","backdrop":"classroom","paletteKey":"math",
+ "mainIcon":"calculator","subIcons":[{"icon":"pencil","position":"left"}],
+ "props":["box"]}
+So sánh hai hình:
+{"v":1,"layout":"compare","backdrop":"forest","paletteKey":"animals",
+ "mainIcon":"paw-print","compareIcon":"fish","compareSign":"greater-than",
+ "subIcons":[{"icon":"leaf","position":"top-right"}],"props":["apple"]}
 ```
 
 ### 5.3 Cảnh được vẽ thế nào từ JSON đó
@@ -284,8 +308,9 @@ cố định, đúng thứ tự chồng (mỗi lớp nhận **một hoặc nhi�
 | `far` | đồi, núi, đường chân trời ở `y = 150`, biển | `backdrop` |
 | `mid` | cây, bụi, toà nhà, sách, dụng cụ | `backdrop` |
 | `halo` | quầng sáng sau chủ thể | `paletteKey` |
-| `subject` | **mainIcon**, 120px, đúng giữa khung | `mainIcon` |
-| `props` | tới 4 subIcons 52px + tới 2 props 40px ở mặt đất hai bên; `left`/`right` ngang tầm chân, `top-left`/`top-right` phía trên; không đè chủ thể | `subIcons[].position`, `props[]` |
+| `subject` | **mainIcon** 120px đúng giữa khung; ở `compare` là hai hình **92px** ở hai bên, hạ 12px | `mainIcon`, `compareIcon` |
+| `props` | tới 4 subIcons 52px + tới 2 props 40px; `left`/`right` ngang tầm chân, `top-left`/`top-right` phía trên; không đè chủ thể (ở `compare`: icon góc 40px, chỉ hai góc trên) | `subIcons[].position`, `props[]` |
+| `sign` | **chỉ có ở `compare`**: dấu 24px ở giữa hai hình, vẽ bằng nét — không dùng chữ | `compareSign` |
 | `fg` | cỏ, rễ, đá, sóng, bảng | `backdrop` |
 
 Khung vẽ là `viewBox="0 0 320 200"` do engine đặt, **không** do model đặt — nên
