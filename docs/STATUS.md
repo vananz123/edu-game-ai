@@ -7,6 +7,12 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-15 — P1 `compare` chốt sổ: ROADMAP cập nhật + smoke-install bản 0.5.2 vào thư mục tạm
+- **Trạng thái:** `docs/ROADMAP.md` ghi P1 **XONG cả 3 bước** (dữ liệu/hình/UI) kèm số đo, và mục "Còn mở" thêm hai nợ thật: `compare` chưa vào prompt §5, chưa thử trên câu `scenario`.
+- **Smoke-install:** bộ cài NSIS `0.5.2` chạy `/S /D=D:\smoke262` → **exit 0**, có `edugame-studio-tauri.exe` + `uninstall.exe` + `vc-runtime`. Bản **đã cài** mở được CDP 9362 và render đúng mã mới: `layout=compare`, `Hình phải=fish`, `Dấu=greater-than`, `corners=2`, preview **2 chủ thể**. Gỡ bằng `uninstall.exe /S` → **exit 0**, thư mục sạch.
+- **Học được:** lần chạy đầu `/S /D=` qua bash **treo 400 s** (không có output, `cmd //c` còn lỗi cú pháp vì tên tệp có ngoặc + khoảng trắng) — phải dùng `powershell Start-Process -Wait` thì mới thấy exit code.
+- **Việc kế tiếp:** P3 bước prompt (`compare` vào §5 + `scene:suggest`).
+
 ### 2026-11-15 — #262 P1 `compare` bước 3: UI editor (Kiểu / Hình phải / Dấu), cổng thật 63 → 89/89
 - **Trạng thái:** Khối minh hoạ có dòng **“Bố cục cảnh”**: `Kiểu` (Một hình / So sánh hai hình); khi so sánh hiện `Hình phải` + `Dấu` (Không dấu / Lớn hơn / Nhỏ hơn / Bằng). Ở `compare` chỉ còn **2 ô góc trên** (engine dời góc dưới lên), danh sách hình phải/props **loại sẵn** id sẽ bị normaliser bỏ. Đổi sang so sánh **tự chọn hình phải** đầu tiên chưa dùng để blueprint luôn hợp lệ; đổi về `Một hình` thì **xoá** hai trường và trả lại 4 góc.
 - **Files đã đổi:** `src/renderer/features/editor/questions.ts` (`EDITOR_SCENE_SIGNS`, `EDITOR_SCENE_COMPARE_SLOTS`, khối `[data-editor-art-compare]`, writer + 3 listener), `tests/ui/ui-item-assets-editor-check.js` (+26 check), `docs/DECISIONS.md` #262 bước 3.
