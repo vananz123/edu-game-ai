@@ -240,6 +240,75 @@ const { PROJECTOR_SIZES, measureAt, setViewport, setViewportAndWait } = require(
     try { twoProps = JSON.parse(bpInput().value || 'null'); } catch (error) {}
     out.propTwoWritten = !!twoProps && (twoProps.props || []).length === 2;
 
+    // ---- 7. #262: bố cục so sánh hai hình ----
+    // Đổi Kiểu sang "So sánh" phải ra ngay một blueprint HỢP LỆ (có hình phải),
+    // nếu không control sẽ tự nhảy về "Một hình" và giáo viên tưởng nút hỏng.
+    const layoutSel = () => row.querySelector('[data-editor-art-layout]');
+    out.layoutSelectCount = row.querySelectorAll('[data-editor-art-layout]').length;
+    out.layoutDefaultSingle = !!layoutSel() && layoutSel().value === 'single';
+    out.noCompareSelectInSingle = row.querySelectorAll('[data-editor-art-compare-icon]').length === 0;
+
+    layoutSel().value = 'compare';
+    layoutSel().dispatchEvent(new Event('change'));
+    await sleep(250);
+    let cmp = null;
+    try { cmp = JSON.parse(bpInput().value || 'null'); } catch (error) {}
+    out.compareWritten = !!cmp && cmp.layout === 'compare';
+    out.compareSecondDifferent = !!cmp && !!cmp.compareIcon && cmp.compareIcon !== cmp.mainIcon;
+    out.compareSecondNotCorner = !!cmp && (cmp.subIcons || []).every(sub => sub.icon !== cmp.compareIcon);
+    out.compareSecondNotProp = !!cmp && (cmp.props || []).every(prop => prop !== cmp.compareIcon);
+    out.compareSelectAppears = row.querySelectorAll('[data-editor-art-compare-icon]').length === 1;
+    out.compareSignOffered = (row.querySelector('[data-editor-art-sign]')?.options.length || 0) === 4;
+    out.compareSignDefaultNone = row.querySelector('[data-editor-art-sign]')?.value === '';
+    out.compareSlotCount = row.querySelectorAll('[data-editor-art-slot]').length;
+    out.compareSlotsAreTop = Array.from(row.querySelectorAll('[data-editor-art-slot]'))
+      .map(node => node.getAttribute('data-editor-art-slot')).join(',') === 'top-left,top-right';
+
+    const cmpSel = () => row.querySelector('[data-editor-art-compare-icon]');
+    out.compareExcludesSubject = Array.from(cmpSel().options).every(op => op.value !== 'paw-print');
+    out.compareExcludesProps = Array.from(cmpSel().options).every(op => op.value !== 'apple' && op.value !== 'fish');
+    cmpSel().value = 'bird';
+    cmpSel().dispatchEvent(new Event('change'));
+    await sleep(250);
+    let cmpBird = null;
+    try { cmpBird = JSON.parse(bpInput().value || 'null'); } catch (error) {}
+    out.compareSecondWritten = !!cmpBird && cmpBird.compareIcon === 'bird';
+    out.compareSecondKept = !!cmpSel() && cmpSel().value === 'bird';
+
+    row.querySelector('[data-editor-art-sign]').value = 'greater-than';
+    row.querySelector('[data-editor-art-sign]').dispatchEvent(new Event('change'));
+    await sleep(250);
+    let cmpSign = null;
+    try { cmpSign = JSON.parse(bpInput().value || 'null'); } catch (error) {}
+    out.compareSignWritten = !!cmpSign && cmpSign.compareSign === 'greater-than';
+    out.compareSignKept = row.querySelector('[data-editor-art-sign]')?.value === 'greater-than';
+    out.comparePreviewTwoSubjects = row.querySelectorAll('[data-editor-art-thumb] [data-scene-subject]').length === 2;
+    out.comparePreviewSign = !!row.querySelector('[data-editor-art-thumb] [data-scene-sign="greater-than"]');
+    out.comparePreviewKeepsCorners = !!row.querySelector('[data-editor-art-thumb] [data-scene-position="top-left"]');
+    out.comparePreviewSubjectCount = row.querySelectorAll('[data-editor-art-thumb] [data-scene-subject]').length;
+
+    // Đổi về "Một hình": hai trường so sánh phải BIẾN MẤT, và 4 góc trở lại.
+    layoutSel().value = 'single';
+    layoutSel().dispatchEvent(new Event('change'));
+    await sleep(250);
+    let cmpBack = null;
+    try { cmpBack = JSON.parse(bpInput().value || 'null'); } catch (error) {}
+    out.compareClearedBack = !!cmpBack && cmpBack.layout === 'single' &&
+      cmpBack.compareIcon === undefined && cmpBack.compareSign === undefined;
+    out.compareSlotsRestored = row.querySelectorAll('[data-editor-art-slot]').length === 4;
+    out.comparePreviewOneSubject = row.querySelectorAll('[data-editor-art-thumb] [data-scene-subject]').length === 0;
+
+    // Rồi bật lại so sánh để lưu thật và kiểm vòng round-trip.
+    layoutSel().value = 'compare';
+    layoutSel().dispatchEvent(new Event('change'));
+    await sleep(250);
+    row.querySelector('[data-editor-art-compare-icon]').value = 'bird';
+    row.querySelector('[data-editor-art-compare-icon]').dispatchEvent(new Event('change'));
+    await sleep(250);
+    row.querySelector('[data-editor-art-sign]').value = 'greater-than';
+    row.querySelector('[data-editor-art-sign]').dispatchEvent(new Event('change'));
+    await sleep(250);
+
     document.getElementById('saveGameBtn')?.click();
     await sleep(900);
     const lib3 = await desktop.call('getLibrary');
@@ -251,6 +320,10 @@ const { PROJECTOR_SIZES, measureAt, setViewport, setViewportAndWait } = require(
     out.slotSurvivedSave = !!bq?.sceneBlueprint && (bq.sceneBlueprint.subIcons || []).length === 1 &&
       bq.sceneBlueprint.subIcons[0].icon === 'lightbulb' && bq.sceneBlueprint.subIcons[0].position === 'top-left';
     out.propsSurvivedSave = !!bq?.sceneBlueprint && (bq.sceneBlueprint.props || []).join(',') === 'apple,fish';
+    out.compareSurvivedSave = !!bq?.sceneBlueprint && bq.sceneBlueprint.layout === 'compare' &&
+      bq.sceneBlueprint.compareIcon === 'bird' && bq.sceneBlueprint.compareSign === 'greater-than';
+    out.compareSaveKeptCorner = !!bq?.sceneBlueprint && (bq.sceneBlueprint.subIcons || []).length === 1 &&
+      bq.sceneBlueprint.subIcons[0].icon === 'lightbulb';
 
     document.getElementById('modalRoot').innerHTML = '';
     return out;
@@ -329,6 +402,33 @@ const { PROJECTOR_SIZES, measureAt, setViewport, setViewportAndWait } = require(
   check('clearing a corner drops that icon only', out.slotEmptyDrops === true);
   check('clearing a corner keeps the subject icon', out.slotMainIconKept === true);
   check('a corner choice survives a real editor save', out.slotSurvivedSave === true, JSON.stringify(out.blueprintAfterSave));
+  // #262: so sánh hai hình — control, dữ liệu, preview, và vòng lưu thật.
+  check('the scene editor offers a layout picker', out.layoutSelectCount === 1);
+  check('a scene starts as "Một hình"', out.layoutDefaultSingle === true);
+  check('no second-subject picker exists in single layout', out.noCompareSelectInSingle === true);
+  check('switching to compare writes a valid compare blueprint', out.compareWritten === true, JSON.stringify(out.blueprintAfterSave));
+  check('the second subject is picked automatically and differs from the subject', out.compareSecondDifferent === true);
+  check('the automatic second subject is not a corner icon', out.compareSecondNotCorner === true);
+  check('the automatic second subject is not a ground prop', out.compareSecondNotProp === true);
+  check('the second-subject picker appears in compare', out.compareSelectAppears === true);
+  check('compare offers exactly 4 sign choices', out.compareSignOffered === true);
+  check('compare starts with no sign', out.compareSignDefaultNone === true);
+  check('compare keeps only the two upper corners', out.compareSlotCount === 2, String(out.compareSlotCount));
+  check('the two corners offered are the ones compare can draw', out.compareSlotsAreTop === true, out.compareSlotsAreTop);
+  check('the second-subject list excludes the subject icon', out.compareExcludesSubject === true);
+  check('the second-subject list excludes ground props', out.compareExcludesProps === true);
+  check('picking the second subject writes compareIcon', out.compareSecondWritten === true);
+  check('the second-subject picker keeps its choice after the redraw', out.compareSecondKept === true);
+  check('picking a sign writes compareSign', out.compareSignWritten === true);
+  check('the sign picker keeps its choice after the redraw', out.compareSignKept === true);
+  check('the preview draws two subjects in compare', out.comparePreviewTwoSubjects === true, String(out.comparePreviewSubjectCount));
+  check('the preview draws the chosen sign', out.comparePreviewSign === true);
+  check('the preview still draws the corner icon in compare', out.comparePreviewKeepsCorners === true);
+  check('switching back to single removes both compare fields', out.compareClearedBack === true);
+  check('switching back to single restores four corners', out.compareSlotsRestored === true);
+  check('switching back to single draws one subject again', out.comparePreviewOneSubject === true);
+  check('a compare scene survives a real editor save', out.compareSurvivedSave === true, JSON.stringify(out.blueprintAfterSave));
+  check('saving a compare scene keeps the corner icon', out.compareSaveKeptCorner === true);
 
   // #260: two ground props, offered without the ids the normaliser would drop.
   check('the scene editor offers two ground-prop pickers', out.propCount === 2, String(out.propCount));

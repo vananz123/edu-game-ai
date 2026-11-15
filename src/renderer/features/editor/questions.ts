@@ -96,6 +96,17 @@ const EDITOR_SCENE_SLOTS = [
   { position: 'top-left', label: 'Trái trên' },
   { position: 'top-right', label: 'Phải trên' }
 ];
+/* #262: compare mode keeps only the two upper corners, because the lower ones sit
+   exactly where the second subject now stands. The editor offers only what the
+   engine can actually draw, so a teacher never picks something that gets moved. */
+const EDITOR_SCENE_COMPARE_SLOTS = ['top-left', 'top-right'];
+/** The comparison signs a `compare` scene may show (#262). */
+const EDITOR_SCENE_SIGNS = [
+  { id: '', label: 'Không dấu' },
+  { id: 'greater-than', label: 'Lớn hơn (>)' },
+  { id: 'less-than', label: 'Nhỏ hơn (<)' },
+  { id: 'equal', label: 'Bằng (=)' }
+];
 /* #252: a blueprint is stored as compact JSON. The editor keeps it in a hidden
    input like the other asset fields; this turns either a stored object or the
    raw string back into a string safe for an attribute. */
@@ -160,10 +171,15 @@ function editorItemArtHtml(item) {
     ? stageNormalizeBlueprint(blueprint)
     : null;
   const placedSubs = normalized && Array.isArray(normalized.subIcons) ? normalized.subIcons : [];
+  // #262: a compare scene has a second subject, so only the upper corners exist.
+  const isCompare = !!normalized && normalized.layout === 'compare';
+  const activeSlots = isCompare
+    ? EDITOR_SCENE_SLOTS.filter(slot => EDITOR_SCENE_COMPARE_SLOTS.indexOf(slot.position) >= 0)
+    : EDITOR_SCENE_SLOTS;
   const slotsHtml = normalized
     ? `<div class="editor-art-slots" data-editor-art-slots>
-        <span class="editor-art-slots-label">Vật thể phụ ở 4 góc</span>
-        ${EDITOR_SCENE_SLOTS.map(slot => {
+        <span class="editor-art-slots-label">${isCompare ? 'Vật thể phụ (2 góc trên)' : 'Vật thể phụ ở 4 góc'}</span>
+        ${activeSlots.map(slot => {
           const current = placedSubs.filter(sub => sub.position === slot.position)[0];
           const iconOptions = Object.keys(EDITOR_SCENE_ICON_LABEL)
             .filter(id => typeof stageIsSceneIconId !== 'function' || stageIsSceneIconId(id))
@@ -176,7 +192,7 @@ function editorItemArtHtml(item) {
             </select>
           </label>`;
         }).join('')}
-        <span class="editor-art-slots-hint">Chọn tối đa 4 vật thể để cảnh kể đúng câu chuyện. Không bao giờ đè lên hình chính.</span>
+        <span class="editor-art-slots-hint">${isCompare ? 'Bố cục so sánh chỉ còn 2 góc trên; hai góc dưới là chỗ của hai hình chính.' : 'Chọn tối đa 4 vật thể để cảnh kể đúng câu chuyện. Không bao giờ đè lên hình chính.'}</span>
       </div>`
     : '';
   // #260: two ground props. A prop that repeats the subject or a corner icon is
@@ -184,6 +200,7 @@ function editorItemArtHtml(item) {
   // being offered and then silently ignored.
   const placedProps = normalized && Array.isArray(normalized.props) ? normalized.props : [];
   const usedIcons = [normalized && normalized.mainIcon]
+    .concat(isCompare && normalized && normalized.compareIcon ? [normalized.compareIcon] : [])
     .concat(placedSubs.map(sub => sub.icon))
     .concat(placedProps)
     .filter(Boolean);
@@ -205,6 +222,44 @@ function editorItemArtHtml(item) {
           </label>`;
         }).join('')}
         <span class="editor-art-slots-hint">Tối đa 2. Nhỏ và mờ hơn vật thể phụ để không tranh với hình chính.</span>
+      </div>`
+    : '';
+  // #262: layout + second subject + sign. The block is always rendered so the
+  // teacher can switch layout; the two extra selects appear only in compare, where
+  // they mean something. Lists exclude icons the normaliser would drop (the subject,
+  // a corner icon, a ground prop), so nothing is offered and then silently lost.
+  const compareIconValue = isCompare && normalized && normalized.compareIcon ? normalized.compareIcon : '';
+  const signValue = isCompare && normalized && normalized.compareSign ? normalized.compareSign : '';
+  const compareIconOptions = Object.keys(EDITOR_SCENE_ICON_LABEL)
+    .filter(id => typeof stageIsSceneIconId !== 'function' || stageIsSceneIconId(id))
+    .filter(id => id === compareIconValue || usedIcons.indexOf(id) < 0)
+    .map(id => `<option value="${escapeHtml(id)}"${compareIconValue === id ? ' selected' : ''}>${escapeHtml(EDITOR_SCENE_ICON_LABEL[id])}</option>`)
+    .join('');
+  const compareHtml = normalized
+    ? `<div class="editor-art-slots" data-editor-art-compare>
+        <span class="editor-art-slots-label">Bố cục cảnh</span>
+        <label class="editor-art-slot" title="Một hình, hay hai hình để so sánh">
+          <span>Kiểu</span>
+          <select data-editor-art-layout>
+            <option value="single"${isCompare ? '' : ' selected'}>Một hình</option>
+            <option value="compare"${isCompare ? ' selected' : ''}>So sánh hai hình</option>
+          </select>
+        </label>
+        ${isCompare
+          ? `<label class="editor-art-slot" title="Hình thứ hai, đứng bên phải hình chính">
+          <span>Hình phải</span>
+          <select data-editor-art-compare-icon>
+            <option value="">— trống —</option>${compareIconOptions}
+          </select>
+        </label>
+        <label class="editor-art-slot" title="Dấu giữa hai hình: lớn hơn, nhỏ hơn hay bằng">
+          <span>Dấu</span>
+          <select data-editor-art-sign>
+            ${EDITOR_SCENE_SIGNS.map(sign => `<option value="${escapeHtml(sign.id)}"${signValue === sign.id ? ' selected' : ''}>${escapeHtml(sign.label)}</option>`).join('')}
+          </select>
+        </label>`
+          : ''}
+        <span class="editor-art-slots-hint">So sánh đặt hai hình cạnh nhau kèm dấu ở giữa — dùng cho câu "con nào lớn hơn?" hay "5 ... 3".</span>
       </div>`
     : '';
   const badge = isNone
@@ -240,6 +295,7 @@ function editorItemArtHtml(item) {
         <button type="button" class="btn btn-secondary btn-small" data-editor-art-remove title="Bỏ hẳn ảnh minh hoạ của riêng câu hỏi này"${isNone ? ' disabled' : ''}>${uiIcon('ban', '', 13)} Bỏ ảnh</button>
       </div>
       <div class="editor-art-hint">Minh hoạ đi kèm câu hỏi này. Ảnh tải lên được lưu trên máy và chơi được khi không có mạng. “Cảnh thử” dựng một cảnh từ chủ đề (chưa dùng AI); “Bỏ ảnh” tắt hình riêng câu hỏi này; “Tự động” trả lại hình theo chủ đề.</div>
+      ${compareHtml}
       ${slotsHtml}
       ${propsHtml}
     </div>
@@ -337,6 +393,8 @@ function applyEditorSceneSlots(row) {
   const next = Object.assign({}, current);
   delete next.subIcons;
   delete next.props;
+  delete next.compareIcon;
+  delete next.compareSign;
   if (picks.length) next.subIcons = picks;
   const props = [];
   [0, 1].forEach(index => {
@@ -345,6 +403,28 @@ function applyEditorSceneSlots(row) {
     if (icon) props.push(icon);
   });
   if (props.length) next.props = props;
+  /* #262: layout, second subject and sign.
+     Switching to `compare` with no second subject chosen yet would be refused by
+     the normaliser (it falls back to `single`), so the first free icon is picked
+     here — one click must produce a valid compare scene, not a control that
+     snaps back. */
+  const layoutSelect = live.querySelector('[data-editor-art-layout]');
+  const wantCompare = !!layoutSelect && layoutSelect.value === 'compare';
+  next.layout = wantCompare ? 'compare' : 'single';
+  if (wantCompare) {
+    const compareSelect = live.querySelector('[data-editor-art-compare-icon]');
+    let second = compareSelect && compareSelect.value ? compareSelect.value.trim() : '';
+    if (!second) {
+      const taken = [current.mainIcon].concat(picks.map(pick => pick.icon)).concat(props);
+      second = Object.keys(EDITOR_SCENE_ICON_LABEL).filter(id =>
+        (typeof stageIsSceneIconId !== 'function' || stageIsSceneIconId(id)) && taken.indexOf(id) < 0
+      )[0] || '';
+    }
+    if (second) next.compareIcon = second;
+    const signSelect = live.querySelector('[data-editor-art-sign]');
+    const sign = signSelect && signSelect.value ? signSelect.value.trim() : '';
+    if (sign) next.compareSign = sign;
+  }
   const normalized = stageNormalizeBlueprint(next);
   if (!normalized) return;
   field.value = JSON.stringify(normalized);
@@ -396,6 +476,14 @@ function wireEditorItemArtRow(row) {
   });
   // #260: the two ground-prop selects go through the same writer.
   row.querySelectorAll('[data-editor-art-prop]').forEach(select => {
+    select.addEventListener('change', () => {
+      const live = select.isConnected ? select.closest('[data-editor-art]') : null;
+      if (live) applyEditorSceneSlots(live);
+    });
+  });
+  // #262: layout, second subject and sign all rebuild the same blueprint. Resolve
+  // the live row from the changed node, never from a closure over the old one.
+  row.querySelectorAll('[data-editor-art-layout], [data-editor-art-compare-icon], [data-editor-art-sign]').forEach(select => {
     select.addEventListener('change', () => {
       const live = select.isConnected ? select.closest('[data-editor-art]') : null;
       if (live) applyEditorSceneSlots(live);

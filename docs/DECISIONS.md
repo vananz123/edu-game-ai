@@ -3817,3 +3817,16 @@ Ba ràng buộc không đổi: (1) game đã lưu phải chơi được **offlin
 **`98/98` suite** (49,2 s) · `renderer-globals` 1055 hàm / 8426 lời gọi, 0 undefined · bundle nhúng **6163,8 KiB**.
 
 **Chưa xác minh.** Chưa có UI editor cho `compare` (chưa giáo viên nào đặt được hai chủ thể bằng chuột) và chưa chạy trên binary thật; ảnh duyệt ở trên là SVG dựng bằng engine, không phải màn chơi thật.
+
+**Bước 3 (UI editor) — đã xong, đã chạy trên binary thật.** Khối minh hoạ trong editor có thêm dòng **“Bố cục cảnh”**: ô `Kiểu` (`Một hình` / `So sánh hai hình`), và khi chọn so sánh thì hiện `Hình phải` + `Dấu` (Không dấu / Lớn hơn (>)/ Nhỏ hơn (<)/ Bằng (=)).
+- **Đổi sang "So sánh" phải ra ngay một blueprint hợp lệ:** nếu chưa chọn hình phải, writer tự chọn icon đầu tiên **chưa dùng** (khác chủ thể, khác icon góc, khác props). Không làm vậy thì normaliser hạ về `single`, control tự nhảy về "Một hình" và giáo viên tưởng nút hỏng — đúng lỗi #128 một lần nữa.
+- **UI chỉ bày cái engine vẽ được:** ở `compare` còn **2 ô góc** (Trái trên / Phải trên), không bày 2 góc dưới vì engine sẽ dời chúng lên; danh sách `Hình phải` và props **loại sẵn** id mà normaliser sẽ bỏ.
+- Ở `single`, hai trường so sánh **bị xoá khỏi blueprint** khi ghi (không để trường chết trong dữ liệu).
+- Mọi thao tác vẫn đi qua `stageNormalizeBlueprint` — cùng cổng như lúc nạp, nên UI không thể tạo ra trạng thái mà màn chơi từ chối.
+
+**Đo được trên binary release thật (CDP 9361):** `check:item-assets-ui` **63 → 89/89** (26 check mới cho so sánh: có ô Kiểu, mặc định `Một hình`, đổi sang so sánh ghi `layout:'compare'` + hình phải khác chủ thể, chỉ 2 góc, 4 lựa chọn dấu, preview vẽ **2 chủ thể + dấu**, đổi về `Một hình` thì **xoá** 2 trường và trả lại 4 góc, và **vòng lưu thật** giữ `compare`).
+Blueprint lưu được: `{"v":1,"layout":"compare","backdrop":"forest","paletteKey":"animals","mainIcon":"paw-print","compareIcon":"bird","compareSign":"greater-than","subIcons":[{"icon":"lightbulb","position":"top-left"}],"props":["apple","fish"]}`.
+**Duyệt thị giác (ảnh chụp thật từ app):** `Kiểu` = "So sánh hai hình", `Hình phải` = "Cá", `Dấu` = "Lớn hơn (>)", 2 ô góc (Bóng đèn / Lá cây), 2 ô đất (Quả táo / Cái hộp); preview có **hai hình lớn cạnh nhau, dấu `>` ở giữa**, 2 icon góc, 2 vật thể dưới đất, **không gì chồng lên nhau, không cắt chữ**.
+Build: `npm run build && npm run build:tauri && cargo tauri build` exit 0, installer **15,67 MiB**; `devPath` bỏ tạm rồi khôi phục **nguyên byte** (`5AE0BF64…13B20E`).
+
+**Chưa xác minh.** Chưa thử `compare` trên **câu hỏi `scenario`** (bố cục tình huống #254) — mới đo ở editor và preview. Chưa đưa `compare` vào prompt §5 (P3) — có chủ ý: prompt chỉ được hứa sau khi UI này xong, và cổng `scene-prompt-doc.test.ts` vẫn ghim `"layout": "single"`.

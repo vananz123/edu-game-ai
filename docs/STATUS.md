@@ -7,6 +7,15 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-15 — #262 P1 `compare` bước 3: UI editor (Kiểu / Hình phải / Dấu), cổng thật 63 → 89/89
+- **Trạng thái:** Khối minh hoạ có dòng **“Bố cục cảnh”**: `Kiểu` (Một hình / So sánh hai hình); khi so sánh hiện `Hình phải` + `Dấu` (Không dấu / Lớn hơn / Nhỏ hơn / Bằng). Ở `compare` chỉ còn **2 ô góc trên** (engine dời góc dưới lên), danh sách hình phải/props **loại sẵn** id sẽ bị normaliser bỏ. Đổi sang so sánh **tự chọn hình phải** đầu tiên chưa dùng để blueprint luôn hợp lệ; đổi về `Một hình` thì **xoá** hai trường và trả lại 4 góc.
+- **Files đã đổi:** `src/renderer/features/editor/questions.ts` (`EDITOR_SCENE_SIGNS`, `EDITOR_SCENE_COMPARE_SLOTS`, khối `[data-editor-art-compare]`, writer + 3 listener), `tests/ui/ui-item-assets-editor-check.js` (+26 check), `docs/DECISIONS.md` #262 bước 3.
+- **Đo được:** binary release thật, CDP 9361 — `check:item-assets-ui` **89/89** (trước 63/63). Blueprint sau lưu: `{"v":1,"layout":"compare",…,"compareIcon":"bird","compareSign":"greater-than","subIcons":[{"icon":"lightbulb","position":"top-left"}],"props":["apple","fish"]}`.
+- **Duyệt thị giác (ảnh chụp từ app thật):** Kiểu = "So sánh hai hình" · Hình phải = "Cá" · Dấu = "Lớn hơn (>)"; preview có **hai hình lớn + dấu `>` ở giữa**, 2 icon góc, 2 vật thể dưới đất, không chồng, không cắt chữ.
+- **Lệnh đã chạy:** `npm run build && npm run build:tauri && cargo tauri build` exit 0, installer **15,67 MiB**, `devPath` khôi phục nguyên byte (`5AE0BF64…13B20E`) · `npm run check` sạch · `node tests/run-unit.js` **98/98** (48,9 s) · `check:renderer-globals` 0 undefined (1055 hàm / 8426 lời gọi) · `check:embedded` khớp **6163,8 KiB**.
+- **Chưa xác minh:** chưa thử `compare` trên câu `scenario` (bố cục tình huống #254); chưa đưa `compare` vào prompt §5 (có chủ ý).
+- **Việc kế tiếp:** P3 bước prompt (`scene:suggest` + `compare` vào §5 + cổng chống trôi), hoặc P2 `process`/`surround`.
+
 ### 2026-11-15 — #262 P1 `compare` bước 2: VẼ hai chủ thể + dấu (10 nền), test toạ độ hai hộp
 - **Trạng thái:** `layout: 'compare'` giờ ra hình thật: hai chủ thể **92px** (`x 42…134` / `186…278`, hạ 12px), dấu so sánh **24px** ở giữa (`x 148…172`) vẽ bằng `<path>`/`<rect>` không dùng `<text>`, icon góc còn **2 ô trên** (40px, `y 6…46`), props mặt đất giữ nguyên. `left`/`right` bị **dời** lên trên, không bỏ.
 - **Files đã đổi:** `src/shared/illustration-scene.ts` (5 hằng số compare + `renderCompareSign` + layer `sign`), `src/shared/scene-asset-catalog.ts` (`SCENE_COMPARE_SUB_ICON_POSITIONS`), `src/shared/scene-blueprint.ts` (dời góc theo layout), `src/renderer/features/game-illustration.ts` (bản sao vẽ + chuẩn hoá), `tests/unit/scene-blueprint.test.ts` (+5 check, trong đó 1 check parity vẽ), `docs/AI_SCENE_DIRECTOR_DESIGN.md` §3.3 (bảng hình học), `docs/DECISIONS.md` #262 bước 2.
@@ -24,14 +33,7 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - **Chưa xác minh:** **chưa có hình** cho `compare` — engine vẫn vẽ theo `mainIcon` nên ra ảnh một chủ thể; chưa có UI; chưa chạy trên binary thật.
 - **Việc kế tiếp:** **bước 2** — vẽ hai chủ thể + dấu trên cả 10 nền, mở rộng test toạ độ cho **hai** hộp chủ thể (hiện chỉ một hộp `x 100–220, y 50–170`).
 
-### 2026-11-15 — #260 UI cho `props`: 2 ô “Đất trái / Đất phải”, khép vòng #259
-- **Trạng thái:** Khối minh hoạ trong editor có thêm hàng **“Vật thể đứng ở mặt đất”** với 2 ô `Đất trái` / `Đất phải`, cùng cơ chế ghi với 4 góc. Danh sách **loại sẵn** chủ thể và các icon đã dùng ở góc, vì normaliser sẽ bỏ chúng — thà không cho chọn còn hơn cho chọn rồi im lặng mất.
-- **Files đã đổi:** `src/renderer/features/editor/questions.ts` (khối `[data-editor-art-props]`, `propsHtml`, `applyEditorSceneSlots` ghi cả `props`, wire `change`) · `tests/ui/ui-item-assets-editor-check.js` (**+9 check**) · `docs/STATUS.md`, `docs/DECISIONS.md`.
-- **Hành vi:** Chọn prop → blueprint + preview + lần lưu đổi ngay; xoá prop chỉ bỏ prop đó, giữ 4 góc và chủ thể. CSS dùng lại `.editor-art-slots` nên không thêm khai báo mới.
-- **Lệnh đã chạy:** `npm run check` sạch (tsc + 52 tệp UI biên dịch được) · `check:renderer-globals` 1054 hàm / 8398 call site, 0 undefined · `node tests/run-unit.js` **98/98** (48,9 s) · `check:embedded` khớp **6162,6 KiB** · **build + app thật:** tạm bỏ `devPath` → `npm run build && npm run build:tauri && cargo tauri build` (exit 0, installer 15,66 MiB) → khôi phục **nguyên byte** (`5AE0BF64…13B20E`) · `ui-item-assets-editor-check` trên binary đó: **63/63**, blueprint sau lưu = `…"subIcons":[{"icon":"lightbulb","position":"top-left"}],"props":["apple","fish"]`.
-- **Duyệt thị giác (mô hình nhìn ảnh):** preview có **chủ thể paw-print ở giữa**, `leaf` bên trái, `lightbulb` góc trên trái, **táo và cá ở hai góc dưới — nhỏ và mờ hơn rõ rệt**, **không che chủ thể**; các ô chọn hiển thị đúng “Lá cây / Bóng đèn / — trống — / — trống —” và “Quả táo / Cá”.
-- **Chưa xác minh:** Chưa thử `props` trên **game đã lưu từ trước** (blueprint không có `props`) trong app thật — unit test đã phủ. Chưa chạy lại `ui-play-surface-check` (chỉ đổi editor). Chưa thử hai prop cùng một phía bị đổi thứ tự (engine gán trái trước, phải sau theo ý nghĩa).
-- **Việc kế tiếp:** P1 `compare` (hai chủ thể + dấu so sánh) — hạng mục lớn tiếp theo; hoặc trả nợ `docs/STATUS.md` (nay **10** bàn giao, quy ước 3).
+### 2026-11-15 — #260 UI 2 ô props + cổng 63/63 — Bản lưu trữ: [docs/handoff/status/2026-11-15.md](handoff/status/2026-11-15.md).
 
 ### 2026-11-15 — #258 cổng chống backtick + #259 `props[]` — Bản lưu trữ: [docs/handoff/status/2026-11-15.md](handoff/status/2026-11-15.md).
 
