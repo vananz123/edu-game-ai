@@ -3888,3 +3888,62 @@ JSON ⇒ check 6 · bỏ nhánh rơi về cảnh danh mục ⇒ check 9.
 **CHƯA XONG — nói rõ để không ai tưởng đã có tính năng.** Module này **chưa được nối vào đâu**:
 chưa có kênh Rust `scene:suggest`, chưa có nút "✨ Gợi ý cảnh từ nội dung" trong editor, chưa
 ghi `ai_tasks`, **chưa có lần chạy nào với model thật**. Giáo viên hiện vẫn chỉ có "Cảnh thử".
+
+## #265 — Kênh `scene:suggest` + nút "Gợi ý cảnh", và lần chạy model THẬT đầu tiên
+
+**Bối cảnh.** #264 xong phần *logic* (prompt + parse + chuẩn hoá + fallback) nhưng module chưa
+được nối vào đâu: không có kênh, không có nút, không có lần chạy model thật. Người dùng chọn
+phương án A (nối kênh) và đưa khoá Gemini để chứng minh bằng số đo thật.
+
+**Kiến trúc (theo đúng §"khoá ở backend").**
+- `src-tauri/src/embedded/scene-ops.ts` — slot V8 `EGSCENE` (`neutral: true`) chỉ giữ **luật**:
+  dựng `requestChatJson` bằng `buildGenerationOptions`, `SCENE_MAX_TOKENS = 700`, timeout 120 s
+  (local) / 45 s (online), gọi op đồng bộ `__eg_http`, map lỗi cancelled/timeout.
+- `src-tauri/src/scene.rs` — `pub async fn suggest` → `spawn_blocking`; đọc
+  `prompt/answers/category/iconName/subject/grade`, chọn provider bằng
+  `settings::workflow_provider`, `ai_tasks::start_task(kind = "scene")`, `AiGate`
+  (`Policy::none()`, không redirect), `gate.finish`, rồi `complete_task`/`fail_task`.
+- `api.rs`: kênh `"scene:suggest"` trong `INVOKE_CHANNELS` + nhánh `invoke_channel` + lệnh
+  `pub async fn suggest_scene` (đăng ký trong `lib.rs`). Façade:
+  `suggestScene: { channel: 'scene:suggest', group: 'ai', kind: 'value' }`.
+- `questions.ts`: nút `[data-editor-art-suggest]` ("Gợi ý cảnh") gọi `desktop.call('suggestScene', …)`,
+  nhận `{ json, source, issues }`, chạy `stageNormalizeBlueprint` rồi ghi `sceneBlueprint`,
+  xoá `illustrationAssetId` và vẽ lại hàng. Nút tự khoá + "Đang gợi ý…" trong lúc chờ.
+
+**Bằng chứng thật (không phải suy luận).**
+- Khoá Gemini vào app **qua `ai:save-settings`** (mã hoá DPAPI), model `gemini-3.5-flash-lite`.
+- `testAiProvider` → `ok`, 994 ms / 3335 ms. **Cloud provider chỉ `usable` sau một lần thử
+  thành công** (luật #132 §D7) — trước đó nút trả `[AI_NO_PROVIDER]`. Đây là hành vi **đúng**,
+  không phải lỗi; nhưng nó có nghĩa "thêm khoá" ≠ "dùng được ngay".
+- Câu *"Con vật nào lớn hơn: con kiến hay con voi?"* → **1047 ms**, model trả
+  `{"v":1,"layout":"compare","backdrop":"plain","paletteKey":"animals","mainIcon":"bug",
+  "compareIcon":"paw-print","compareSign":"less-than","subIcons":[…2 góc…]}`; editor hiện
+  `layout=compare`, **2 chủ thể**, `sign=less-than`, không toast (đường model sạch).
+- Câu *"Phân số nào lớn hơn: 3/4 hay 2/5?"* → **2569 ms**, `layout=single`
+  (classroom/math/calculator + 2 góc); preview vẽ **30 hình**, 3776 byte SVG.
+- `ai_tasks`: đọc thẳng SQLite sau lượt chạy → `kind=scene`, `state=completed`,
+  `result_summary="gợi ý cảnh: model"`.
+
+**Quyết định.**
+- **Model không bao giờ phát SVG** (AGENTS.md): kênh chỉ vận chuyển JSON, và **mọi** phản hồi
+  vẫn đi qua `normalizeSceneBlueprint` lần nữa ở renderer — tin Rust không có nghĩa là tin dữ liệu.
+- **Phản hồi không dùng được thì KHÔNG xoá cảnh đang có.** Ba nhánh tách biệt: model sạch (im
+  lặng), model hỏng nhưng fallback vẽ được (toast "đã dùng cảnh theo chủ đề"), và dữ liệu không
+  qua nổi chuẩn hoá (toast "chưa thay đổi hình", giữ nguyên cảnh cũ).
+- **Cổng UI stub kênh, không gọi mạng.** Cổng kiểm *hợp đồng* của nút (5 ca: lỗi, compare,
+  fallback, JSON rác, câu hỏi rỗng); còn *chất lượng model* là phép đo riêng ở trên, vì test
+  phụ thuộc mạng/khoá sẽ đỏ ngẫu nhiên và không ai sửa được lúc 2 giờ sáng.
+
+**Đã đo.** `ui-item-assets-editor-check` **89 → 107/107** trên **binary release mới build lại**
+(18 check mới) · `run-unit` **99/99** (45,7 s) · `npm run check` 52 tệp UI sạch ·
+`renderer-globals` 0 undefined (1056 hàm / 8460 lời gọi) · `check:embedded` khớp **6210,6 KiB**
+(bundle **tăng 46,8 KiB** vì slot `EGSCENE` đã vào đường chạy — khác #264).
+
+**Vay nợ đã trả trong cùng lượt.** Thêm `suggestScene` làm đỏ hai cổng hợp đồng có sẵn:
+`tauri-contract` ("kênh chưa có lệnh trong api.rs: scene:suggest") và `desktop-facade`
+(`ai: 32` so với `ai: 31`). Sửa bằng cách **thêm lệnh thật** `suggest_scene` + đăng ký
+`lib.rs`, và nâng số đếm `94` — không nới lỏng cổng.
+
+**Quan sát chưa xác minh.** `desktop.call('listAiTasks', …)` trả **rỗng** ngay sau lượt chạy,
+trong khi hàng `ai_tasks` có thật trong SQLite. Chưa rõ đây là lỗi có sẵn của kênh đọc hay do
+cửa sổ kiểm tra chưa nạp lịch sử; cần một lượt riêng.

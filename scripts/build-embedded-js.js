@@ -47,7 +47,10 @@ const SLOTS = [
   // dự án của Electron; chỉ thay HTTP (op `__eg_http`) và SHA-256 (op
   // `__eg_sha256`). `neutral` cần cho shim `node:crypto` mà `lesson-cache.ts`
   // dùng để băm văn bản.
-  { slot: 'EGLESSON', entry: 'src-tauri/src/embedded/lesson-ops.ts', neutral: true }
+  { slot: 'EGLESSON', entry: 'src-tauri/src/embedded/lesson-ops.ts', neutral: true },
+  // Gợi ý cảnh (`scene:suggest`): luật dựng prompt + cổng blueprint ở
+  // `src/services/ai/scene-suggest.ts`, slot này chỉ nối HTTP qua `__eg_http`.
+  { slot: 'EGSCENE', entry: 'src-tauri/src/embedded/scene-ops.ts', neutral: true }
 ];
 
 /**

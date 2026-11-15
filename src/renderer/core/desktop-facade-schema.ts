@@ -90,6 +90,9 @@ const DESKTOP_CALLS = Object.freeze({
   onLocalAiProgress: { channel: 'ai:local-progress', group: 'ai', kind: 'stream', optional: false },
   generateGame: { channel: 'ai:generate', group: 'ai', kind: 'value', optional: false },
   analyzeLesson: { channel: 'lesson:analyze', group: 'ai', kind: 'value', optional: false },
+  // #265: gợi ý cảnh minh hoạ bằng AI. Khoá/endpoint ở Rust; trả về blueprint
+  // đã qua `normalizeSceneBlueprint` (hoặc cảnh theo danh mục khi model hỏng).
+  suggestScene: { channel: 'scene:suggest', group: 'ai', kind: 'value', optional: false },
   classifyLessonInput: { channel: 'lesson:classify-input', group: 'ai', kind: 'value', optional: false },
   convertLessonDraft: { channel: 'lesson:convert-draft', group: 'ai', kind: 'value', optional: false },
   inspectLessonStructure: { channel: 'lesson:get-structure', group: 'ai', kind: 'value', optional: false },

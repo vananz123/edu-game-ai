@@ -291,10 +291,11 @@ function editorItemArtHtml(item) {
         <button type="button" class="btn btn-secondary btn-small" data-editor-art-upload title="Chọn ảnh PNG/JPG/WEBP/GIF từ máy">${uiIcon('camera', '', 13)} Tải ảnh lên</button>
         <select data-editor-art-pick data-art-picker title="Chọn hình minh hoạ có sẵn">${options}</select>
         <button type="button" class="btn btn-secondary btn-small" data-editor-art-blueprint title="Dựng cảnh thử từ chủ đề của câu hỏi — không cần mạng">${uiIcon('sparkles', '', 13)} Cảnh thử</button>
+        <button type="button" class="btn btn-secondary btn-small" data-editor-art-suggest title="Nhờ AI chọn cảnh từ chính nội dung câu hỏi — cần mạng hoặc AI trên máy">${uiIcon('wand-sparkles', '', 13)} Gợi ý cảnh</button>
         <button type="button" class="btn btn-secondary btn-small" data-editor-art-reset>${uiIcon('rotate-ccw', '', 13)} Tự động</button>
         <button type="button" class="btn btn-secondary btn-small" data-editor-art-remove title="Bỏ hẳn ảnh minh hoạ của riêng câu hỏi này"${isNone ? ' disabled' : ''}>${uiIcon('ban', '', 13)} Bỏ ảnh</button>
       </div>
-      <div class="editor-art-hint">Minh hoạ đi kèm câu hỏi này. Ảnh tải lên được lưu trên máy và chơi được khi không có mạng. “Cảnh thử” dựng một cảnh từ chủ đề (chưa dùng AI); “Bỏ ảnh” tắt hình riêng câu hỏi này; “Tự động” trả lại hình theo chủ đề.</div>
+      <div class="editor-art-hint">Minh hoạ đi kèm câu hỏi này. Ảnh tải lên được lưu trên máy và chơi được khi không có mạng. “Cảnh thử” dựng một cảnh từ chủ đề (chưa dùng AI); “Gợi ý cảnh” nhờ AI đọc câu hỏi và chọn cảnh — hỏng thì tự rơi về cảnh theo chủ đề; “Bỏ ảnh” tắt hình riêng câu hỏi này; “Tự động” trả lại hình theo chủ đề.</div>
       ${compareHtml}
       ${slotsHtml}
       ${propsHtml}
@@ -352,6 +353,31 @@ function applyEditorBlueprint(row) {
   const artField = scope ? scope.querySelector('[data-field="illustrationAssetId"]') : null;
   if (artField) artField.value = '';
   redrawEditorArtRow(row);
+}
+
+/**
+ * #265: writes the blueprint the AI channel returned, then redraws.
+ *
+ * The reply is DATA from Rust (`scene:suggest`), and it is re-normalised here even
+ * though Rust already ran the same gate: the hidden input is the only thing that
+ * gets saved, so the renderer must never store a blueprint it cannot draw. When
+ * the channel degraded (`source !== 'model'`) the blueprint is still a valid
+ * category scene, so the button never leaves the row empty.
+ */
+function applyEditorSuggestedBlueprint(row, response) {
+  if (!row) return false;
+  const scope = row.parentElement;
+  const blueprintField = scope ? scope.querySelector('[data-field="sceneBlueprint"]') : null;
+  if (!blueprintField) return false;
+  const raw = response && typeof response.json === 'string' ? response.json : '';
+  const blueprint = typeof stageNormalizeBlueprint === 'function' ? stageNormalizeBlueprint(raw) : null;
+  if (!blueprint) return false;
+  blueprintField.value = JSON.stringify(blueprint);
+  // Same rule as "Cảnh thử": an explicit pick would hide the new scene entirely.
+  const artField = scope ? scope.querySelector('[data-field="illustrationAssetId"]') : null;
+  if (artField) artField.value = '';
+  redrawEditorArtRow(row);
+  return true;
 }
 
 /** Replaces one control with a fresh one drawn from the hidden input. */
@@ -465,6 +491,59 @@ function wireEditorItemArtRow(row) {
     const live = blueprintButton.closest('[data-editor-art]');
     applyEditorBlueprint(live);
   });
+  // #265 "Gợi ý cảnh": the channel owns the prompt and the gate; this handler only
+  // moves data. It stays enabled-looking on failure: a teacher who sees a disabled
+  // button with no message cannot tell an offline laptop from a broken feature.
+  const suggestButton = row.querySelector('[data-editor-art-suggest]');
+  if (suggestButton) {
+    suggestButton.addEventListener('click', async () => {
+      const control = suggestButton.closest('[data-editor-art]');
+      if (!control) return;
+      const scope = control.parentElement;
+      const promptField = scope ? scope.querySelector('[data-field="prompt"]') : null;
+      const promptText = promptField && promptField.value ? promptField.value.trim() : '';
+      if (!promptText) {
+        toast('Hãy viết nội dung câu hỏi trước khi nhờ AI gợi ý cảnh.');
+        return;
+      }
+      // Answers live on inputs tagged with `data-option-id` (the option text is the
+      // value; the id is the attribute). `data-field="optionText"` does not exist.
+      const answers = Array.from(scope.querySelectorAll('input[data-option-id]'))
+        .map(input => String(input.value || '').trim())
+        .filter(Boolean);
+      const categoryField = scope.querySelector('[data-field="contentCategory"]');
+      const iconField = scope.querySelector('[data-field="iconName"]');
+      suggestButton.disabled = true;
+      const originalHtml = suggestButton.innerHTML;
+      suggestButton.textContent = 'Đang gợi ý…';
+      try {
+        const response = await desktop.call('suggestScene', {
+          requestId: 'scene-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8),
+          prompt: promptText,
+          answers,
+          category: categoryField && categoryField.value ? categoryField.value : undefined,
+          iconName: iconField && iconField.value ? iconField.value : undefined,
+          subject: typeof game !== 'undefined' && game ? game.subject : undefined,
+          grade: typeof game !== 'undefined' && game ? game.grade : undefined
+        });
+        // The row may have been redrawn while the call was in flight.
+        const live = (suggestButton.isConnected ? suggestButton.closest('[data-editor-art]') : null) || control;
+        const ok = applyEditorSuggestedBlueprint(live, response);
+        if (!ok) {
+          toast('AI trả về cảnh không dùng được — chưa thay đổi hình của câu hỏi này.');
+        } else if (response && response.source !== 'model') {
+          toast('AI chưa trả về cảnh dùng được — đã dùng cảnh theo chủ đề của câu hỏi.');
+        }
+      } catch (error) {
+        toast('Không gợi ý được cảnh: ' + String((error && error.message) || 'lỗi không xác định'));
+      } finally {
+        if (suggestButton.isConnected) {
+          suggestButton.disabled = false;
+          suggestButton.innerHTML = originalHtml;
+        }
+      }
+    });
+  }
   // #257: one listener per corner. A redraw replaces these selects, so the
   // handler re-resolves the live row from the changed node instead of closing
   // over the old one (the "second click does nothing" bug of #128).

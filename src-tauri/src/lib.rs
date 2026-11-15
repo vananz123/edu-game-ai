@@ -22,6 +22,7 @@ pub mod embedded;
 pub mod illustration;
 pub mod lan;
 pub mod lesson;
+mod scene;
 pub mod lesson_store;
 pub mod library;
 pub mod package;
@@ -127,6 +128,7 @@ pub fn run() {
             api::clear_diagnostics,
             api::open_diagnostics_folder,
             api::analyze_lesson,
+            api::suggest_scene,
             api::classify_lesson_input,
             api::convert_lesson_draft,
             api::inspect_lesson_structure,

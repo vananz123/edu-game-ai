@@ -430,6 +430,121 @@ const { PROJECTOR_SIZES, measureAt, setViewport, setViewportAndWait } = require(
   check('a compare scene survives a real editor save', out.compareSurvivedSave === true, JSON.stringify(out.blueprintAfterSave));
   check('saving a compare scene keeps the corner icon', out.compareSaveKeptCorner === true);
 
+  // ---- #265 "Gợi ý cảnh": the editor button, driven through `desktop.stub` ----
+  // No network in a gate: the button's contract is "whatever the channel returns,
+  // the row ends up with a drawable blueprint, or with nothing changed at all".
+  // The AI call itself is proven separately on a real model (DECISIONS #265).
+  const suggest = await evaluate(`(async () => {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    document.getElementById('modalRoot').innerHTML = '';
+    const fixture = {
+      id: 'ue-suggest', title: 'Kiểm tra gợi ý cảnh', subject: 'Tự nhiên', grade: '3',
+      template: 'quiz', description: '', tags: [], sourceName: 'ui-check',
+      createdAt: '2026-01-01T00:00:00.000Z', gameSetup: { scoringMode: 'cơ bản' },
+      questions: [{
+        id: 'q1', type: 'multiple-choice', prompt: 'Con vật nào lớn hơn: kiến hay voi?',
+        options: [{ id: 'a', text: 'Con kiến' }, { id: 'b', text: 'Con voi' }],
+        correctOptionId: 'a', correctAnswer: '', explanation: 'Voi lớn hơn kiến.',
+        points: 100, contentCategory: 'animals', iconName: 'paw-print'
+      }]
+    };
+    openEditor(fixture, false, 'test');
+    await sleep(500);
+    const out = {};
+    const artRow = () => document.querySelector('[data-editor-art]');
+    const bpInput = () => document.querySelector('[data-field="sceneBlueprint"]');
+    const button = () => artRow() && artRow().querySelector('[data-editor-art-suggest]');
+    const toastText = () => (document.getElementById('toast') || {}).textContent || '';
+
+    out.suggestButton = Boolean(button());
+    out.suggestLabel = button() ? button().textContent.trim() : '';
+    out.startsWithoutBlueprint = !bpInput().value;
+
+    // 1. A failing channel must leave the row untouched and SAY why.
+    document.getElementById('toast').textContent = '';
+    desktop.stub('suggestScene', () => { throw new Error('mất mạng'); });
+    button().click();
+    await sleep(400);
+    out.failKeptRow = bpInput().value === '';
+    out.failToast = toastText();
+    out.failEnabledAfter = button() ? button().disabled === false : false;
+
+    // 2. A compare blueprint from the channel is stored and drawn, and the compare
+    //    controls appear without a second click.
+    desktop.stub('suggestScene', () => ({
+      source: 'model', issues: [], json: JSON.stringify({
+        v: 1, layout: 'compare', backdrop: 'meadow', paletteKey: 'animals',
+        mainIcon: 'bug', compareIcon: 'paw-print', compareSign: 'less-than'
+      })
+    }));
+    button().click();
+    await sleep(400);
+    const stored = JSON.parse(bpInput().value || 'null');
+    out.appliedLayout = stored && stored.layout;
+    out.appliedSecond = stored && stored.compareIcon;
+    out.appliedSign = stored && stored.compareSign;
+    out.compareControlsAppeared = Boolean(artRow().querySelector('[data-editor-art-layout]'));
+    out.signSelectValue = artRow().querySelector('[data-editor-art-sign]')
+      ? artRow().querySelector('[data-editor-art-sign]').value : null;
+    out.previewSubjects = artRow().querySelectorAll('[data-scene-subject]').length;
+
+    // 3. A degraded reply (the channel fell back) is still a drawable scene: the
+    //    teacher gets a category picture, not an empty frame.
+    desktop.stub('suggestScene', () => ({
+      source: 'fallback', issues: ['no-json'], json: JSON.stringify({
+        v: 1, layout: 'single', backdrop: 'plain', paletteKey: 'animals', mainIcon: 'paw-print'
+      })
+    }));
+    button().click();
+    await sleep(400);
+    const fallbackStored = JSON.parse(bpInput().value || 'null');
+    out.fallbackApplied = Boolean(fallbackStored) && fallbackStored.layout === 'single';
+    out.fallbackToast = toastText();
+
+    // 4. A channel that returns junk must not wipe the scene the teacher already has.
+    const beforeJunk = bpInput().value;
+    desktop.stub('suggestScene', () => ({ source: 'model', issues: [], json: '{"v":1,"mainIcon":"dragon"}' }));
+    button().click();
+    await sleep(400);
+    out.junkKeptPrevious = bpInput().value === beforeJunk;
+    out.junkToast = toastText();
+
+    // 5. An empty question is refused before any call is made.
+    const promptField = document.querySelector('[data-field="prompt"]');
+    const savedPrompt = promptField.value;
+    promptField.value = '   ';
+    let calledWithEmpty = false;
+    desktop.stub('suggestScene', () => { calledWithEmpty = true; return { source: 'model', json: '{"v":1,"layout":"single","backdrop":"plain","paletteKey":"math","mainIcon":"box"}' }; });
+    document.getElementById('toast').textContent = '';
+    button().click();
+    await sleep(300);
+    out.emptyPromptRefused = calledWithEmpty === false;
+    out.emptyPromptToast = toastText();
+    promptField.value = savedPrompt;
+
+    desktop.stub('suggestScene', null);
+    return out;
+  })()`);
+  check('the illustration block offers an AI scene button', suggest && suggest.suggestButton === true);
+  check('the AI button is labelled as a suggestion, not a test', Boolean(suggest && /Gợi ý cảnh/.test(suggest.suggestLabel)), suggest && suggest.suggestLabel);
+  check('a question starts with no scene before asking AI', Boolean(suggest && suggest.startsWithoutBlueprint));
+  check('a failed AI call leaves the scene unchanged', Boolean(suggest && suggest.failKeptRow));
+  check('a failed AI call says why', Boolean(suggest && /Không gợi ý được cảnh/.test(suggest.failToast)), suggest && suggest.failToast);
+  check('the AI button is usable again after a failure', Boolean(suggest && suggest.failEnabledAfter));
+  check('an AI compare scene is stored with its layout', Boolean(suggest && suggest.appliedLayout === 'compare'), suggest && suggest.appliedLayout);
+  check('an AI compare scene keeps the second subject', Boolean(suggest && suggest.appliedSecond === 'paw-print'), suggest && suggest.appliedSecond);
+  check('an AI compare scene keeps the sign', Boolean(suggest && suggest.appliedSign === 'less-than'), suggest && suggest.appliedSign);
+  check('an AI reply redraws the compare controls', Boolean(suggest && suggest.compareControlsAppeared));
+  check('the sign picker shows what the AI chose', Boolean(suggest && suggest.signSelectValue === 'less-than'), suggest && suggest.signSelectValue);
+  check('the preview draws both AI subjects', Boolean(suggest && suggest.previewSubjects === 2), suggest && String(suggest.previewSubjects));
+  check('a degraded AI reply still yields a drawable scene', Boolean(suggest && suggest.fallbackApplied));
+  check('a degraded AI reply tells the teacher it fell back', Boolean(suggest && /cảnh theo chủ đề/.test(suggest.fallbackToast)), suggest && suggest.fallbackToast);
+  check('an unusable AI reply does not wipe the existing scene', Boolean(suggest && suggest.junkKeptPrevious));
+  check('an unusable AI reply says the scene was not replaced', Boolean(suggest && /không dùng được/.test(suggest.junkToast)), suggest && suggest.junkToast);
+  check('an empty question is refused without calling AI', Boolean(suggest && suggest.emptyPromptRefused));
+  check('an empty question explains what to do first', Boolean(suggest && /Hãy viết nội dung/.test(suggest.emptyPromptToast)), suggest && suggest.emptyPromptToast);
+
+
   // #260: two ground props, offered without the ids the normaliser would drop.
   check('the scene editor offers two ground-prop pickers', out.propCount === 2, String(out.propCount));
   check('a prop cannot repeat the subject icon', out.propExcludesSubject === true);

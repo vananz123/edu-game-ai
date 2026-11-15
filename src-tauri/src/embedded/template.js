@@ -206,6 +206,7 @@
 
   /* @slot EGFILES */
   /* @slot EGLESSON */
+  /* @slot EGSCENE */
 
   // Luật trong `library-ops.ts` viết theo kiểu đồng bộ (bên Electron
   // `better-sqlite3` cũng đồng bộ). Ba op của Rust cũng đồng bộ, nên cầu này
@@ -228,6 +229,7 @@
   var packages = available.EGPACKAGES;
   var files = available.EGFILES;
   var lessons = available.EGLESSON;
+  var scenes = available.EGSCENE;
 
   /**
    * Byte của một tệp do Rust đọc, gửi sang dưới dạng chuỗi base64 (JSON không có
@@ -388,7 +390,10 @@
     'lesson-generation-offline': async function (input) { return lessons.generationOffline(input); },
     'lesson-generate': async function (input) { return lessons.generate(input); },
     'lesson-regenerate': async function (input) { return lessons.regenerate(input); },
-    'lesson-chat': async function (input) { return lessons.chat(input); }
+    'lesson-chat': async function (input) { return lessons.chat(input); },
+    // Gợi ý cảnh minh hoạ (#265): Rust chuyển đích AI + nội dung câu hỏi; luật
+    // dựng prompt và cổng `normalizeSceneBlueprint` ở slot EGSCENE.
+    'scene-suggest': async function (input) { return scenes.suggest(input); }
   };
 
   globalThis.__eg_run = async function () {

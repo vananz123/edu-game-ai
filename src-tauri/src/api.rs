@@ -98,6 +98,8 @@ pub fn hand_written(command: &str) -> Option<(&'static str, &'static str)> {
         "estimate_lesson_capacity" => ("lesson:capacity", "estimate_lesson_capacity"),
         "get_lesson_analysis" => ("lesson:get-analysis", "get_lesson_analysis"),
         "save_lesson_analysis" => ("lesson:save-analysis", "save_lesson_analysis"),
+        // #265: gợi ý cảnh; lượt chờ model nên cũng `async` như `analyze_lesson`.
+        "suggest_scene" => ("scene:suggest", "suggest_scene"),
         "get_lesson_recommendations" => ("lesson:recommendations", "get_lesson_recommendations"),
         // Bước 5–6: chuyển đổi tất định, chất lượng, minh hoạ, rồi hai lượt model.
         // Hai lượt model chạy `spawn_blocking` như `lesson:analyze` để `ai:cancel`
@@ -225,6 +227,7 @@ const INVOKE_CHANNELS: &[&str] = &[
     "lesson:regenerate-item",
     "lesson:quality",
     "lesson:patch-item-assets",
+    "scene:suggest",
     "presentation:start",
     "presentation:stop",
     "presentation:toggle",
@@ -302,6 +305,8 @@ async fn dispatch(app: &AppHandle, channel: &str, args: &[Value]) -> Result<Valu
         // Lượt model duy nhất: chờ tới 300 s, nên chạy trên `spawn_blocking`
         // (`lesson::analyze`) để `ai:cancel` vẫn được phục vụ.
         "lesson:analyze" => crate::lesson::analyze(app.clone(), args.first().cloned()).await,
+        // Gợi ý cảnh: cũng là lượt chờ model, nên cùng khuôn `spawn_blocking`.
+        "scene:suggest" => crate::scene::suggest(app.clone(), args.first().cloned()).await,
         "lesson:classify-input" => crate::lesson::classify(app, args.first()),
         "lesson:get-structure" => crate::lesson::structure(app, args.first()),
         "lesson:preview-selection" => crate::lesson::preview(app, args.first()),
@@ -808,6 +813,15 @@ pub async fn analyze_lesson(
     payload: Option<serde_json::Value>,
 ) -> Result<serde_json::Value, String> {
     crate::lesson::analyze(app, payload).await
+}
+
+/// Gợi ý cảnh minh hoạ cho một câu hỏi (#265).
+#[tauri::command]
+pub async fn suggest_scene(
+    app: AppHandle,
+    payload: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    crate::scene::suggest(app, payload).await
 }
 
 /// Phân loại đầu vào (câu hỏi / giáo án / văn bản) bằng luật offline.

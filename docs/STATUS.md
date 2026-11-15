@@ -7,6 +7,15 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-15 — #265 kênh `scene:suggest` + nút "Gợi ý cảnh": lần chạy model THẬT đầu tiên (1047 ms) — 107/107
+- **Trạng thái:** Nút "Gợi ý cảnh" trong khối minh hoạ đã gọi được AI thật qua kiến trúc Tauri: kênh `scene:suggest` (V8 slot `EGSCENE` giữ luật, Rust `scene.rs` giữ khoá/endpoint), `ai_tasks` ghi `kind=scene`, renderer nhận JSON rồi vẫn đi qua `normalizeSceneBlueprint` lần nữa.
+- **Files:** `src-tauri/src/embedded/scene-ops.ts`, `src-tauri/src/scene.rs`, `src-tauri/src/api.rs`, `src-tauri/src/lib.rs`, `src-tauri/src/embedded/template.js`, `scripts/build-embedded-js.js`, `src/renderer/core/desktop-facade-schema.ts`, `src/renderer/features/editor/questions.ts`, `tests/ui/ui-item-assets-editor-check.js` (+18 check), `tests/unit/desktop-facade.test.ts` (93 → 94 lời gọi), `docs/DECISIONS.md` #265, `docs/ROADMAP.md`.
+- **Đo thật với Gemini `gemini-3.5-flash-lite`:** *"Con vật nào lớn hơn: con kiến hay con voi?"* → **1047 ms**, `layout=compare`, `mainIcon=bug`, `compareIcon=paw-print`, `compareSign=less-than`, 2 chủ thể + 2 góc trong preview, không toast. *"Phân số nào lớn hơn: 3/4 hay 2/5?"* → **2569 ms**, `layout=single` (classroom/math/calculator + 2 góc), preview **30 hình**/3776 byte SVG. SQLite: `ai_tasks` có hàng `kind=scene`, `state=completed`, summary `gợi ý cảnh: model`.
+- **Lệnh đã chạy:** `ui-item-assets-editor-check` **107/107** trên binary release build lại · `run-unit` **99/99** (45,7 s) · `npm run check` 52 tệp UI sạch · `renderer-globals` **0 undefined** (1056 hàm / 8460 lời gọi) · `check:embedded` khớp **6210,6 KiB**. `devPath` gỡ → build → khôi phục, SHA-256 khớp ghim `5ae0bf6…b20e`.
+- **Học được:** cloud provider chỉ `usable` **sau một lần `testAiProvider` thành công** (#132 §D7) — "đã lưu khoá" ≠ "dùng được", và triệu chứng là `[AI_NO_PROVIDER]` chứ không phải lỗi mạng. Thêm một lời gọi façade làm đỏ **hai** cổng hợp đồng có sẵn (`tauri-contract`, `desktop-facade`); cách sửa là thêm lệnh Rust thật + nâng số đếm, không nới cổng.
+- **Chưa xác minh:** `listAiTasks` trả rỗng ngay sau lượt chạy dù SQLite có hàng — cần một lượt riêng · chưa thử nút này trên câu `scenario` (bố cục #254) · chưa có người duyệt bằng mắt (mới qua vision-model).
+- **Việc kế tiếp:** P2 `process`/`surround` (không cần model), hoặc điều tra `listAiTasks`.
+
 ### 2026-11-15 — #264 đường ống gợi ý cảnh (thuần TS, model tiêm, luôn có fallback) — 99/99
 - **Trạng thái:** Thêm `src/services/ai/scene-suggest.ts`: prompt dựng **từ catalog**, trích `{…}` cân bằng (hiểu chuỗi/escape/fence), chạy `normalizeSceneBlueprint`, và **luôn trả cảnh vẽ được** — gọi lỗi / JSON hỏng / id lạ / quá dài ⇒ rơi về `sceneBlueprintFromCategory` kèm `issues`.
 - **Files:** `src/services/ai/scene-suggest.ts` (mới), `tests/unit/scene-suggest.test.ts` (mới, 12 check), `docs/DECISIONS.md` #264, `docs/ROADMAP.md`, `docs/STATUS.md`.
@@ -27,11 +36,7 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - **Chưa xác minh:** chưa có kênh gọi model (`scene:suggest`), chưa dựng prompt bằng mã từ catalog, chưa có bằng chứng model thật trả JSON hợp lệ. Prompt là **hợp đồng đã kiểm**, chưa phải **lời gọi đã chạy**.
 - **Việc kế tiếp:** `scene:suggest` (backend giữ khoá, prompt từ §5, `normalizeSceneBlueprint` làm cổng, hỏng thì rơi về cảnh theo `contentCategory`).
 
-### 2026-11-15 — P1 `compare` chốt sổ: ROADMAP cập nhật + smoke-install bản 0.5.2 vào thư mục tạm
-- **Trạng thái:** `docs/ROADMAP.md` ghi P1 **XONG cả 3 bước** (dữ liệu/hình/UI) kèm số đo, và mục "Còn mở" thêm hai nợ thật: `compare` chưa vào prompt §5, chưa thử trên câu `scenario`.
-- **Smoke-install:** bộ cài NSIS `0.5.2` chạy `/S /D=D:\smoke262` → **exit 0**, có `edugame-studio-tauri.exe` + `uninstall.exe` + `vc-runtime`. Bản **đã cài** mở được CDP 9362 và render đúng mã mới: `layout=compare`, `Hình phải=fish`, `Dấu=greater-than`, `corners=2`, preview **2 chủ thể**. Gỡ bằng `uninstall.exe /S` → **exit 0**, thư mục sạch.
-- **Học được:** lần chạy đầu `/S /D=` qua bash **treo 400 s** (không có output, `cmd //c` còn lỗi cú pháp vì tên tệp có ngoặc + khoảng trắng) — phải dùng `powershell Start-Process -Wait` thì mới thấy exit code.
-- **Việc kế tiếp:** P3 bước prompt (`compare` vào §5 + `scene:suggest`).
+### 2026-11-15 — P1 `compare` chốt sổ: ROADMAP cập nhật + smoke-install bản 0.5.2 vào thư mục tạm — bản đầy đủ: [docs/handoff/status/2026-11-15.md](handoff/status/2026-11-15.md).
 
 ### 2026-11-15 — #262 P1 `compare` bước 3: UI editor (Kiểu / Hình phải / Dấu), cổng thật 63 → 89/89 — bản đầy đủ: [docs/handoff/status/2026-11-15.md](handoff/status/2026-11-15.md).
 
