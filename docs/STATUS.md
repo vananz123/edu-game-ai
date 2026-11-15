@@ -7,6 +7,17 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-15 — #264 đường ống gợi ý cảnh (thuần TS, model tiêm, luôn có fallback) — 99/99
+- **Trạng thái:** Thêm `src/services/ai/scene-suggest.ts`: prompt dựng **từ catalog**, trích `{…}` cân bằng (hiểu chuỗi/escape/fence), chạy `normalizeSceneBlueprint`, và **luôn trả cảnh vẽ được** — gọi lỗi / JSON hỏng / id lạ / quá dài ⇒ rơi về `sceneBlueprintFromCategory` kèm `issues`.
+- **Files:** `src/services/ai/scene-suggest.ts` (mới), `tests/unit/scene-suggest.test.ts` (mới, 12 check), `docs/DECISIONS.md` #264, `docs/ROADMAP.md`, `docs/STATUS.md`.
+- **Quyết định:** model **tiêm** từ ngoài (kiểm được không cần khoá/mạng) · chặn phản hồi >8000 ký tự **trước** khi parse · phân biệt `source:'fallback'` với `source:'model'` + `issues` khi `compare` bị hạ cấp (gộp lại sẽ giấu đúng lỗi #262 dựng luật để tránh).
+- **Lệnh đã chạy:** `node tests/run-unit.js scene-suggest` **12/12** · `run-unit` **99/99** (44,6 s) · `npm run check` sạch (52 tệp UI) · `renderer-globals` 0 undefined · `check:embedded` khớp 6163,8 KiB.
+- **Đối chứng âm (đỏ đúng chỗ):** bỏ trần 8000 ký tự ⇒ check 11 · bỏ hiểu chuỗi JSON ⇒ check 6 · bỏ nhánh fallback ⇒ check 9.
+- **Học được:** ca thử ngoặc **cân nhau** trong chuỗi không phân biệt được scanner với phép đếm ký tự — phải dùng ca **lệch** thì đối chứng mới đỏ. Và sửa file bằng `python` trong heredoc tiếp tục ăn mất escape `
+` hai lần; phải dùng `edit` cho các chuỗi có dấu `\`.
+- **Chưa xác minh (quan trọng):** module **chưa nối vào đâu** — chưa có kênh Rust `scene:suggest`, chưa có nút "✨ Gợi ý cảnh từ nội dung", chưa ghi `ai_tasks`, **chưa chạy lần nào với model thật**. Giáo viên vẫn chỉ có "Cảnh thử".
+- **Việc kế tiếp:** kênh Rust `scene:suggest` (khoá ở backend, gọi `ai_http`, ghi `ai_tasks`) + nút trong editor gọi `suggestSceneBlueprint`, rồi đo trên binary thật.
+
 ### 2026-11-15 — #263 P3 bước prompt: `compare` vào §5 + ví dụ mẫu chạy qua cổng dữ liệu thật
 - **Trạng thái:** §5.2 có `layout (single, compare)`, `compareIcon`, `compareSign`; quy tắc mới (4/6/7/9/10); §5.3 thêm lớp `sign`. Cổng `scene-prompt-doc` **13 → 15** check. §3.3 hết ghi "UI CHƯA CÓ" (giờ: dữ liệu · hình · UI · prompt **đều CÓ**).
 - **Files:** `docs/AI_SCENE_DIRECTOR_DESIGN.md` (§5.2, §5.3, §3.3), `tests/unit/scene-prompt-doc.test.ts`, `docs/DECISIONS.md` #263, `docs/ROADMAP.md`.
@@ -22,14 +33,7 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - **Học được:** lần chạy đầu `/S /D=` qua bash **treo 400 s** (không có output, `cmd //c` còn lỗi cú pháp vì tên tệp có ngoặc + khoảng trắng) — phải dùng `powershell Start-Process -Wait` thì mới thấy exit code.
 - **Việc kế tiếp:** P3 bước prompt (`compare` vào §5 + `scene:suggest`).
 
-### 2026-11-15 — #262 P1 `compare` bước 3: UI editor (Kiểu / Hình phải / Dấu), cổng thật 63 → 89/89
-- **Trạng thái:** Khối minh hoạ có dòng **“Bố cục cảnh”**: `Kiểu` (Một hình / So sánh hai hình); khi so sánh hiện `Hình phải` + `Dấu` (Không dấu / Lớn hơn / Nhỏ hơn / Bằng). Ở `compare` chỉ còn **2 ô góc trên** (engine dời góc dưới lên), danh sách hình phải/props **loại sẵn** id sẽ bị normaliser bỏ. Đổi sang so sánh **tự chọn hình phải** đầu tiên chưa dùng để blueprint luôn hợp lệ; đổi về `Một hình` thì **xoá** hai trường và trả lại 4 góc.
-- **Files đã đổi:** `src/renderer/features/editor/questions.ts` (`EDITOR_SCENE_SIGNS`, `EDITOR_SCENE_COMPARE_SLOTS`, khối `[data-editor-art-compare]`, writer + 3 listener), `tests/ui/ui-item-assets-editor-check.js` (+26 check), `docs/DECISIONS.md` #262 bước 3.
-- **Đo được:** binary release thật, CDP 9361 — `check:item-assets-ui` **89/89** (trước 63/63). Blueprint sau lưu: `{"v":1,"layout":"compare",…,"compareIcon":"bird","compareSign":"greater-than","subIcons":[{"icon":"lightbulb","position":"top-left"}],"props":["apple","fish"]}`.
-- **Duyệt thị giác (ảnh chụp từ app thật):** Kiểu = "So sánh hai hình" · Hình phải = "Cá" · Dấu = "Lớn hơn (>)"; preview có **hai hình lớn + dấu `>` ở giữa**, 2 icon góc, 2 vật thể dưới đất, không chồng, không cắt chữ.
-- **Lệnh đã chạy:** `npm run build && npm run build:tauri && cargo tauri build` exit 0, installer **15,67 MiB**, `devPath` khôi phục nguyên byte (`5AE0BF64…13B20E`) · `npm run check` sạch · `node tests/run-unit.js` **98/98** (48,9 s) · `check:renderer-globals` 0 undefined (1055 hàm / 8426 lời gọi) · `check:embedded` khớp **6163,8 KiB**.
-- **Chưa xác minh:** chưa thử `compare` trên câu `scenario` (bố cục tình huống #254); chưa đưa `compare` vào prompt §5 (có chủ ý).
-- **Việc kế tiếp:** P3 bước prompt (`scene:suggest` + `compare` vào §5 + cổng chống trôi), hoặc P2 `process`/`surround`.
+### 2026-11-15 — #262 P1 `compare` bước 3: UI editor (Kiểu / Hình phải / Dấu), cổng thật 63 → 89/89 — bản đầy đủ: [docs/handoff/status/2026-11-15.md](handoff/status/2026-11-15.md).
 
 ### 2026-11-15 — #262 P1 `compare` bước 2: VẼ hai chủ thể + dấu (10 nền), test toạ độ hai hộp — bản đầy đủ: [docs/handoff/status/2026-11-15.md](handoff/status/2026-11-15.md).
 

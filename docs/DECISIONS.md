@@ -3847,3 +3847,44 @@ Build: `npm run build && npm run build:tauri && cargo tauri build` exit 0, insta
 **Đã đo.** `scene-prompt-doc` **15/15**; **4 phép đối chứng âm đều đỏ đúng chỗ**: bỏ `compare` khỏi danh sách layout (check 9) · thêm dấu bịa `gte` (check 10) · bỏ luật góc compare (check 12) · `compareIcon` trùng `mainIcon` trong ví dụ (check 14). Toàn bộ: `run-unit` **98/98** (75,2 s) · `npm run check` sạch (52 tệp UI) · `renderer-globals` 1055 hàm/8438 lời gọi/**0 undefined**.
 
 **Chưa làm (còn ở P3).** Chưa có kênh gọi model: chưa có `scene:suggest`, chưa dựng prompt từ catalog bằng mã, chưa có bằng chứng model thật trả JSON hợp lệ. Prompt hiện là **hợp đồng đã kiểm**, chưa phải **lời gọi đã chạy**.
+
+## #264 — Đường ống "gợi ý cảnh": prompt dựng từ catalog, model được TIÊM, và luôn có cảnh để vẽ
+
+**Bối cảnh.** #263 đóng phần *hợp đồng* (prompt §5 + cổng). Nhưng tới lúc này vẫn không có
+dòng mã nào chạy prompt đó, nên "prompt đúng" chưa chứng minh được gì về hành vi. Kênh gọi
+thật cần Rust (`scene:suggest` + `ai_http` + `ai_tasks`), mà muốn kiểm nó phải có model thật.
+
+**Đã làm — `src/services/ai/scene-suggest.ts` (thuần TypeScript, không I/O):**
+- `buildSceneSuggestPrompt(question)`: dựng prompt **từ `scene-asset-catalog.ts`** chứ không
+  chép lại danh sách. Thêm asset vào catalog là prompt có ngay, không có lần sửa thứ hai.
+- `extractJsonObject(text)`: lấy `{…}` **cân bằng đầu tiên**, hiểu chuỗi và escape — model hay
+  bọc trong ```` ```json ````, thêm "Đây là JSON:", hoặc kèm câu giải thích sau.
+- `suggestSceneBlueprint(question, callModel)`: model **tiêm từ ngoài**; phản hồi đi qua đúng
+  `normalizeSceneBlueprint` như dữ liệu đọc từ SQLite.
+- **Luôn trả về thứ vẽ được:** gọi lỗi, JSON hỏng, id lạ, phản hồi quá dài ⇒ rơi về
+  `sceneBlueprintFromCategory` (hành vi P0 giáo viên đã thấy) kèm `issues` nêu lý do.
+
+**Quyết định 1 — model được TIÊM, không được import.** Nhờ vậy 12 ca kiểm chạy được **không
+cần model, không cần mạng, không cần khoá**; và kênh Rust sau này chỉ lo vận chuyển + khoá,
+không phải viết lại luật.
+
+**Quyết định 2 — phản hồi quá dài bị chặn TRƯỚC khi parse (8000 ký tự).** Một model "nói
+nhiều" không được phép làm chậm luồng dựng ảnh; chặn trước rẻ hơn là quét chuỗi 100 KB.
+
+**Quyết định 3 — phân biệt "fallback" với "model nhưng bị hạ cấp".** Model trả `compare` mà
+thiếu chủ thể phải ⇒ normaliser hạ `single`: **cảnh vẫn vẽ được**, nên `source:'model'` và
+`issues:['compareIcon']`. Gộp hai trường hợp này làm một sẽ **giấu** đúng lỗi mà #262 bước 1
+dựng luật để tránh.
+
+**Đã đo.** `scene-suggest` **12/12**; tổng suite **99/99** (44,6 s) · `npm run check` sạch (52
+tệp UI) · `renderer-globals` 0 undefined · bundle nhúng không đổi (6163,8 KiB — module này
+chưa vào đường chạy của app).
+**3 đối chứng âm, mỗi cái đỏ đúng chỗ:** bỏ trần 8000 ký tự ⇒ check 11 · bỏ hiểu chuỗi trong
+JSON ⇒ check 6 · bỏ nhánh rơi về cảnh danh mục ⇒ check 9.
+- Bài học giữa đường: ca thử `"so sánh {kiến} với [voi]"` **không** phân biệt được scanner
+  với phép đếm ký tự, vì ngoặc trong chuỗi **cân nhau** nên kết quả vẫn đúng. Phải thêm ca
+  **lệch** (`"ngoặc } trong chuỗi"`, `"mở { ngoặc"`) thì đối chứng mới đỏ.
+
+**CHƯA XONG — nói rõ để không ai tưởng đã có tính năng.** Module này **chưa được nối vào đâu**:
+chưa có kênh Rust `scene:suggest`, chưa có nút "✨ Gợi ý cảnh từ nội dung" trong editor, chưa
+ghi `ai_tasks`, **chưa có lần chạy nào với model thật**. Giáo viên hiện vẫn chỉ có "Cảnh thử".
