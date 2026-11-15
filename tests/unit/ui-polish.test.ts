@@ -32,4 +32,32 @@ test('UI Micro-Interactions & Polish (Sprint 5)', async (t) => {
     assert.ok(navCss.includes('prefers-reduced-motion'), 'navigation.css guards micro-interactions');
     assert.ok(componentsCss.includes('prefers-reduced-motion'), 'components.css guards button and card lift effects');
   });
+
+  await t.test('5.5: every chrome button uses one flat brand/white/red palette', () => {
+    const sharedSrc = fs.readFileSync(path.join(rootDir, 'src/renderer/shared.ts'), 'utf8');
+    const pagesDir = path.join(rootDir, 'src/renderer/pages');
+    const pageSrc = fs.readdirSync(pagesDir)
+      .filter(file => file.endsWith('.ts'))
+      .map(file => fs.readFileSync(path.join(pagesDir, file), 'utf8'))
+      .join('\n');
+
+    assert.ok(componentsCss.includes('.btn-primary{background:var(--color-brand);color:#fff}'),
+      '.btn-primary is a single flat brand fill with white ink');
+    assert.ok(componentsCss.includes('.btn-danger{background:#c33b4b;color:#fff}'),
+      '.btn-danger is a single flat red fill with white ink');
+    assert.ok(/\.btn-primary:hover\{background:#5145d6\}/.test(componentsCss),
+      '.btn-primary darkens a shade on hover instead of glowing');
+    assert.ok(!/#6258e82b|0 6px 14px/.test(componentsCss),
+      'no coloured button glow left in components.css');
+
+    const markup = sharedSrc + '\n' + pageSrc;
+    assert.ok(!/shadow-\[0_6px_14px/.test(markup),
+      'card buttons do not hand-roll a coloured shadow');
+    assert.ok(!/hover:-translate-y-\[1px\]/.test(markup),
+      'page buttons do not lift on hover');
+    assert.ok(!/style="background:#c33b4b"/.test(markup),
+      'destructive buttons use .btn-danger instead of inline red');
+    assert.ok(!/bg-gradient-to-br/.test(pageSrc),
+      'no gradient-filled panel or button left in page markup');
+  });
 });

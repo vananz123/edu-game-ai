@@ -439,9 +439,9 @@ function renderSettings() {
           <div class="flex gap-2 shrink-0 flex-wrap">
             <button class="${btnSecondaryCls}" id="exportDiagnosticsBtn">Xuất gói chẩn đoán</button>
             <button class="${btnSecondaryCls}" id="openLogFolderBtn">Mở thư mục log</button>
-            <!-- #181: mực đỏ cũ #dc2626 đo trên chính vệt hover #fef2f2 của nó chỉ 4,41:1;
-                 cùng họ đỏ báo lỗi với chip bên trên nên đổi sang #b42318 (6,01:1). -->
-            <button class="btn btn-small border border-[#e2e8f0] dark:border-[#2a324b] text-[#b42318] dark:text-[#fca5a5] bg-white dark:bg-[#171c32] hover:bg-[#fef2f2] text-[12px] font-semibold px-3 py-1.5 rounded-lg" id="clearDiagnosticsBtn">Xóa log</button>
+            <!-- Nút xoá log dùng chung .btn-danger (nền đỏ đặc, chữ trắng 5,2:1) thay vì
+                 tự ghép viền/mực đỏ — cùng một màu với mọi nút xoá khác. -->
+            <button class="btn btn-danger btn-small" id="clearDiagnosticsBtn">Xóa log</button>
           </div>
         </div>
         <div id="diagnosticsInfo" class="${hintCls} mb-3">Đang đọc thư mục log…</div>
@@ -461,10 +461,11 @@ function renderSettings() {
 
     <!-- ═══ SIDEBAR: Nút lưu sticky + tóm tắt ═══ -->
     <aside class="flex flex-col gap-3 sticky top-4">
-      <!-- Nút Lưu cài đặt — sticky -->
-      <section class="bg-gradient-to-br from-[#4f46e5] to-[#6d28d9] rounded-xl p-4 text-white">
-        <h3 class="text-[14px] font-bold m-0 mb-2">Lưu thay đổi</h3>
-        <button class="bg-white text-[#4f46e5] border-0 rounded-lg px-4 py-2 font-bold text-[13px] cursor-pointer w-full inline-flex items-center justify-center gap-[7px] hover:bg-[#f8f7ff] transition shadow-[0_4px_12px_rgba(0,0,0,0.1)]" id="saveSettingsBtn"><span data-icon="save" data-icon-size="14"></span> Lưu cài đặt</button>
+      <!-- Nút Lưu cài đặt — sticky. Thẻ nền phẳng (tím nhạt, tự lật theo theme qua bảng
+           dịch hex của shell.css) thay cho gradient trước đây. -->
+      <section class="bg-[#f8f7ff] border border-[#e4e0ff] rounded-xl p-4">
+        <h3 class="text-[13px] font-bold text-[#1e293b] m-0 mb-2">Lưu thay đổi</h3>
+        <button class="btn btn-primary w-full" id="saveSettingsBtn"><span data-icon="save" data-icon-size="14"></span> Lưu cài đặt</button>
       </section>
 
       <!-- Tóm tắt cấu hình -->

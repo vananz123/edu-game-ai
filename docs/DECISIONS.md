@@ -2669,6 +2669,26 @@ Installer `EduGame-Studio-Setup-0.4.2.exe` có kích thước 92,597,265 byte, S
 
 **Việc kế tiếp.** Duyệt 42 ảnh bằng mắt; nếu đạt, build installer 0.5.2 và chạy `npm run tauri:check` trên cây này.
 
+## Một bảng màu nút phẳng — brand đặc, trắng viền, đỏ xoá; màu là thứ duy nhất thay đổi khi bấm (2026-11-15)
+
+**Bối cảnh.** Sau lượt làm dày giao diện, các nút hành động vẫn mang theo nhiều bảng màu chồng nhau: nút chính có ba kiểu nền khác nhau (`var(--color-brand)`, `#6258e8` tự viết kèm quầng `0 6px 14px`, và nút xanh dương `#2563eb` cho "Toàn màn hình"), nút xoá có bốn kiểu (nền `#c33b4b` ở ba trang, inline `style="background:#c33b4b"` ở Lịch sử, viền đỏ ở Giáo án, viền xám + mực đỏ ở Cài đặt), còn hai thẻ CTA dùng nền gradient tím với nút trắng bên trong. Nhìn trên cùng một màn hình, ba sắc chàm/xanh khác nhau xuất hiện cạnh nhau và cùng một hành động "xoá" lại có bốn hình thức. Yêu cầu của chủ dự án: "thay đổi tất cả màu button thành màu đơn giản, đồng bộ".
+
+**Quyết định.**
+
+1. **Ba biến thể, không hơn.** `.btn-primary` = nền đặc `var(--color-brand)` (#6258e8 ở cả hai theme) + chữ trắng; hover `#5145d6`, active `#463cb8`. `.btn-secondary` = nền trắng + viền `--line` + chữ `#515c72`; hover `#f5f6fa`, active `#eef0f6`. `.btn-danger` (mới) = nền `#c33b4b` + chữ trắng; hover `#a92f3e`, active `#932838`. Một nút chỉ được chọn một trong ba; không tự ghép nền/mực trong markup.
+2. **Bỏ quầng màu và chuyển động.** `.btn-primary` không còn `box-shadow:0 6px 14px #6258e82b`; không nút nào còn `hover:-translate-y-[1px]` hay `hover:opacity-90`. Phản hồi khi rê/bấm là đổi sắc nền, đúng quyết định "màu thay vì vị trí" của lượt mật độ.
+3. **Bỏ gradient ở thẻ CTA.** Thẻ "Muốn dùng AI?" (Tạo trò chơi) và "Lưu thay đổi" (Cài đặt) thành thẻ phẳng `bg-[#f8f7ff] border border-[#e4e0ff]`, tự lật sang `var(--panel)`/`var(--line)` ở chế độ tối nhờ bảng dịch hex sẵn có; nút bên trong là `.btn-primary` (nút Lưu giữ `w-full`).
+4. **Không đụng nút trong game.** `.d-btn`, nút thế giới (treasure/race), nút đóng modal LAN, thanh điều hướng và nút trên trang điện thoại LAN giữ nguyên: chúng thuộc "thế giới" của trò chơi, không phải chrome của ứng dụng.
+5. **`.btn-secondary` vẫn ghim trắng ở theme tối.** `.modal` là hòn đảo sáng có chủ đích (#181) và các nút phụ bên trong nó phải cùng nền; lật riêng class này sẽ làm hộp thoại loang lổ. Nút phụ trên trang tối vì thế vẫn là trắng — nhất quán với các nút phụ đã có từ trước.
+
+**Đánh đổi.** Nút xoá giờ là mảng đỏ đặc thay vì viền đỏ nhẹ, nên các hành động phá huỷ nổi hơn trên thẻ giáo án — đúng ý đồ (một hành động nguy hiểm chỉ có một hình thức), nhưng làm thẻ Giáo án đậm hơn trước. Nền phẳng thay gradient làm hai thẻ CTA bớt "bắt mắt"; bù lại toàn bộ chrome chỉ còn ba màu và không còn quầng sáng trang trí.
+
+**Kiểm chứng.** `npm run check` sạch · `npm run check:renderer-globals` 72/74 script, 0 undefined · `npm test` **95/95** (mục 5.5 mới khẳng định `.btn-primary`/`.btn-danger` phẳng, không quầng, không nâng, không gradient trong markup trang) · build lại binary release (`npm run build:tauri` 201 tệp; `cargo tauri build` xong sau 9m06s, NSIS 15,64 MiB; `devPath` tạm bỏ rồi khôi phục nguyên byte, SHA-256 `380F9E89…B974768`) · trên binary mới: `ui-typography-readability` **1973 run/32 sweep**, nhỏ nhất 11px, xấu nhất **4,74:1**, hover/focus **88 nhãn xấu nhất 5,98:1** (trước lượt này 4,72:1) · `ui-dark-theme` all passed (thanh chọn 4 trang: nút xoá trắng-trên-đỏ 5,19:1) · `ui-settings-sections` all passed · `ui-library-paging`, `ui-lessons-paging`, `ui-results-paging`, `ui-project-selection`, `ui-card-menu` all passed · `ui-fullscreen-density` **8/8**.
+
+**Không chứng minh.** Chưa xem ảnh bằng mắt (phiên này không có đầu vào hình ảnh); chưa đo lại độ tương phản của nút trong game (không đổi). Chưa thử DPI 125–150%. Chưa chạy `npm run tauri:check` hay build installer 0.5.2.
+
+**Việc kế tiếp.** Duyệt thị giác trên máy; nếu đạt, build installer 0.5.2 và chạy `npm run tauri:check` trên cây này.
+
 ## Xoá model AI local đã tải — lệnh `ai:remove-local-model`, giữ nguyên cấu hình đã lưu và chỉ xoá đúng tệp của model (2026-11-13)
 
 **Bối cảnh.** Model AI local là tệp lớn (model nhỏ nhất đã 1,28 GB) nằm trong `<data>/ai-local/models`; catalog đã cho tải và chạy nhưng chưa có đường xoá, nên giáo viên muốn lấy lại dung lượng phải tìm thư mục dữ liệu bằng tay — đúng thứ ứng dụng không nên bắt người dùng làm. Xoá cũng là thao tác phá huỷ, phải chặn được id lạ trước khi chạm đĩa và phải xử lý được trường hợp model đang chạy.

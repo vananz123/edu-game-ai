@@ -135,10 +135,10 @@
 [data-theme="dark"] .text-\[\#dc2626\] { color: #fca5a5 !important; }
 /* `--danger-ink` chứ không phải một hex cố định: trên nền trang thì lật sang đỏ sáng,
    còn trong hòn đảo sáng (`.modal` của dark) thì vẫn là đỏ sẫm — đúng chỗ nó nằm.
-   `#c33b4b` nhập họ cùng hai màu đỏ báo lỗi (lesson-plans.ts:156 dùng nó làm mực cho nút
-   Xoá trên `bg-white`): thẻ đã lật sang var(--panel) mà mực vẫn là đỏ sẫm thì đo được
-   3,28:1 — dưới sàn 4,5:1 của #181. Lưu ý `bg-[#c33b4b]` ở 4 nút "Xoá đã chọn" là NỀN
-   đặc với chữ trắng (5,19:1) nên không đụng tới; chỉ dòng `text-` này mới là mực. */
+   `#c33b4b` nằm cùng họ hai màu đỏ báo lỗi và vẫn dùng làm MỰC (`text-[#c33b4b]`) trên
+   thẻ đã lật sang var(--panel): để nguyên đỏ sẫm thì đo được 3,28:1 — dưới sàn 4,5:1
+   của #181. Nút xoá đặc dùng `.btn-danger` (components.css) với nền đỏ + chữ trắng và
+   không đi qua bảng dịch này. */
 [data-theme="dark"] .text-\[\#b42318\],
 [data-theme="dark"] .text-\[\#c33b4b\] { color: var(--danger-ink) !important; }
 [data-theme="dark"] .border-\[\#b9b3ff\],

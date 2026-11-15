@@ -176,10 +176,10 @@ function renderCreate() {
         </div>
       </section>
 
-      <section class="bg-gradient-to-br from-[#4f46e5] to-[#6d28d9] rounded-xl p-4 text-white">
-        <h3 class="text-[14px] font-bold m-0 mb-1">Muốn dùng AI?</h3>
-        <div class="text-[12px] text-[#e0e7ff] mb-3 leading-relaxed">AI phân tích giáo án và gợi ý trò chơi, chạy trên máy bằng llama.cpp.</div>
-        <button class="bg-white text-[#4f46e5] border-0 rounded-lg px-4 py-2 font-bold text-[12px] cursor-pointer w-full inline-flex items-center justify-center gap-[7px] hover:bg-[#f8f7ff] transition" data-page="create-wizard"><span data-icon="wand-sparkles" data-icon-size="14"></span> Tạo trò chơi từ giáo án</button>
+      <section class="bg-[#f8f7ff] border border-[#e4e0ff] rounded-xl p-4">
+        <h3 class="text-[13px] font-bold text-[#1e293b] m-0 mb-1">Muốn dùng AI?</h3>
+        <div class="text-[12px] text-[#5f6a7d] mb-3 leading-relaxed">AI phân tích giáo án và gợi ý trò chơi, chạy trên máy bằng llama.cpp.</div>
+        <button class="btn btn-primary btn-small w-full" data-page="create-wizard"><span data-icon="wand-sparkles" data-icon-size="14"></span> Tạo trò chơi từ giáo án</button>
       </section>
 
       <section class="bg-white dark:bg-[#171c32] border border-[#e2e8f0] dark:border-[#2a324b] rounded-xl p-4">

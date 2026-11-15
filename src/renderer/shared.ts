@@ -194,8 +194,8 @@ function gameCard(game, index = 0, deletable = false) {
       <div class="flex gap-[5px] flex-wrap">${playModeChip}${connectionChip}<span class="px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#5f6a7d] text-[11px]">${escapeHtml(game.subject || 'Chưa phân môn')}</span><span class="px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#5f6a7d] text-[11px]">${game.grade ? 'Lớp ' + escapeHtml(game.grade) : 'Mọi lớp'}</span><span class="px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#5f6a7d] text-[11px]">${game.questions?.length || 0} câu</span></div>
       <div class="flex items-center justify-between border-t border-[#f0f1f6] pt-2.5 text-[#5f6a7d] text-[12px]"><span class="inline-flex items-center gap-[5px]"><span data-icon="book-open" data-icon-size="12"></span> ${escapeHtml(game.topic || 'Bài học')}</span><span class="inline-flex items-center gap-[5px]"><span data-icon="clock" data-icon-size="12"></span> ${fmtDate(game.updatedAt || game.createdAt)}</span></div>
       <div class="flex gap-2 mt-2.5">
-        <button class="border-0 rounded-[9px] px-3 py-2 inline-flex items-center justify-center gap-[7px] font-bold text-[12px] transition-colors bg-[#6258e8] text-white shadow-[0_6px_14px_#6258e82b]" data-action="play" data-id="${id}"><span data-icon="play" data-icon-size="13"></span> Chơi ngay</button>
-        <button class="border-0 rounded-[9px] px-3 py-2 inline-flex items-center justify-center gap-[7px] font-bold text-[12px] transition-colors bg-[#2563eb] text-white shadow-[0_6px_14px_#2563eb2b]" data-action="play-fullscreen" data-id="${id}"><span data-icon="maximize" data-icon-size="13"></span> Toàn màn hình</button>
+        <button class="btn btn-primary btn-small" data-action="play" data-id="${id}"><span data-icon="play" data-icon-size="13"></span> Chơi ngay</button>
+        <button class="btn btn-secondary btn-small" data-action="play-fullscreen" data-id="${id}"><span data-icon="maximize" data-icon-size="13"></span> Toàn màn hình</button>
       </div>
     </div>
   </article>`;
@@ -216,6 +216,6 @@ function emptyStateIllustrationSvg() {
 }
 
 function emptyState(title, desc, button, page) {
-  const buttonHtml = button && page ? `<button class="border-0 rounded-[9px] px-[16px] py-[10px] inline-flex items-center justify-center gap-[8px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-[#6258e8] text-white shadow-[0_6px_14px_#6258e82b]" data-page="${page}"><span data-icon="circle-plus" data-icon-size="14"></span> ${escapeHtml(button)}</button>` : '';
+  const buttonHtml = button && page ? `<button class="btn btn-primary" data-page="${page}"><span data-icon="circle-plus" data-icon-size="14"></span> ${escapeHtml(button)}</button>` : '';
   return `<div class="empty-state bg-white dark:bg-[#171c32] border border-dashed border-[#dfe2ed] dark:border-[#2a324b] rounded-xl p-7 text-center text-[#5f6a7d] flex flex-col items-center justify-center">${emptyStateIllustrationSvg()}<h3 class="text-[#1e293b] dark:text-[#f1f5f9] text-[14px] font-bold mb-[4px] mt-0">${escapeHtml(title)}</h3><p class="max-w-[46ch] mx-auto mb-3 leading-[1.55] text-[12px] text-[#5f6a7d] dark:text-[#94a3b8]">${escapeHtml(desc)}</p>${buttonHtml}</div>`;
 }

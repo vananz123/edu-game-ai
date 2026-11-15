@@ -51,7 +51,7 @@ function sessionSelectionBarHtml(pageSessions, selected) {
     </label>
     <div class="flex items-center gap-[10px] flex-wrap">
       <span class="text-[12px] text-[#5b5680]" data-session-selected-count>${selected.size ? `Đã chọn ${selected.size} lượt chơi` : 'Hoặc tick từng lượt để xoá nhiều cùng lúc'}</span>
-      <button type="button" class="border-0 rounded-[8px] px-[11px] py-[7px] font-bold text-[12px] text-white inline-flex items-center gap-[6px] hover:opacity-90 disabled:opacity-50" style="background:#c33b4b" id="sessionDeleteSelectedBtn" data-action="session-delete-selected"${selected.size ? '' : ' disabled'}><span data-icon="trash" data-icon-size="13"></span> Xoá đã chọn${selected.size ? ` (${selected.size})` : ''}</button>
+      <button type="button" class="btn btn-danger btn-small disabled:opacity-50" id="sessionDeleteSelectedBtn" data-action="session-delete-selected"${selected.size ? '' : ' disabled'}><span data-icon="trash" data-icon-size="13"></span> Xoá đã chọn${selected.size ? ` (${selected.size})` : ''}</button>
       <button type="button" class="border-0 rounded-[8px] px-[10px] py-[7px] font-semibold text-[12px] bg-transparent text-[#6b6690] hover:underline disabled:opacity-50" id="sessionClearSelectionBtn" data-action="session-clear-selection"${selected.size ? '' : ' disabled'}>Bỏ chọn</button>
     </div>
   </div>`;

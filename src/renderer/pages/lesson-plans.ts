@@ -68,7 +68,7 @@ function lessonSelectionBarHtml(docs, pageDocs, selected) {
     </label>
     <div class="flex items-center gap-[10px] flex-wrap">
       <span class="text-[12px] text-[#5b5680]" data-lesson-selected-count>${selected.size ? `Đã chọn ${selected.size} giáo án` : 'Hoặc tick từng giáo án để xoá nhiều cùng lúc'}</span>
-      <button type="button" class="border-0 rounded-[8px] px-[11px] py-[7px] inline-flex items-center gap-[6px] font-bold text-[12px] bg-[#c33b4b] text-white hover:bg-[#a92f3e] disabled:opacity-50" id="lessonDeleteSelectedBtn" data-action="lesson-delete-selected"${selected.size ? '' : ' disabled'}><span data-icon="trash" data-icon-size="13"></span> Xoá đã chọn${selected.size ? ` (${selected.size})` : ''}</button>
+      <button type="button" class="btn btn-danger btn-small disabled:opacity-50" id="lessonDeleteSelectedBtn" data-action="lesson-delete-selected"${selected.size ? '' : ' disabled'}><span data-icon="trash" data-icon-size="13"></span> Xoá đã chọn${selected.size ? ` (${selected.size})` : ''}</button>
       <button type="button" class="border-0 rounded-[8px] px-[10px] py-[7px] font-semibold text-[12px] bg-transparent text-[#6b6690] hover:underline disabled:opacity-50" id="lessonClearSelectionBtn" data-action="lesson-clear-selection"${selected.size ? '' : ' disabled'}>Bỏ chọn</button>
     </div>
   </div>`;
@@ -153,9 +153,9 @@ function lessonLibraryCard(document, selected = false) {
         <span>${latest ? `${objectiveCount} mục tiêu · ${conceptCount} khái niệm` : 'Chưa phân tích'}</span>
       </div>
       <div class="flex gap-[6px] flex-wrap items-center justify-end mt-[9px]">
-        ${latest && available ? `<button class="border-0 rounded-[9px] px-[11px] py-[8px] inline-flex items-center justify-center gap-[7px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-[#6258e8] text-white shadow-[0_6px_14px_#6258e82b]" data-action="create-from-lesson" data-id="${escapeHtml(document.id)}" data-analysis="${escapeHtml(latest.id)}"><span data-icon="wand-sparkles" data-icon-size="13"></span> Tạo trò chơi</button>` : ''}
-        ${available ? `<button class="border-0 rounded-[9px] px-[11px] py-[8px] inline-flex items-center justify-center gap-[7px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-white border border-[#e7eaf2] text-[#515c72]" data-action="open-lesson" data-id="${escapeHtml(document.id)}"${latest ? ` data-analysis="${escapeHtml(latest.id)}"` : ''}><span data-icon="circle-fading-arrow-up" data-icon-size="13"></span> Mở lại</button>` : ''}
-        <button class="border-0 rounded-[9px] px-[11px] py-[8px] inline-flex items-center justify-center gap-[7px] font-bold text-[12px] transition-transform duration-120 hover:-translate-y-[1px] bg-white border border-[#f3d6da] text-[#c33b4b] hover:bg-[#fff1f2]" data-action="delete-lesson" data-id="${escapeHtml(document.id)}" title="Xoá tài liệu khỏi kho giáo án"><span data-icon="trash" data-icon-size="13"></span> Xoá</button>
+        ${latest && available ? `<button class="btn btn-primary btn-small" data-action="create-from-lesson" data-id="${escapeHtml(document.id)}" data-analysis="${escapeHtml(latest.id)}"><span data-icon="wand-sparkles" data-icon-size="13"></span> Tạo trò chơi</button>` : ''}
+        ${available ? `<button class="btn btn-secondary btn-small" data-action="open-lesson" data-id="${escapeHtml(document.id)}"${latest ? ` data-analysis="${escapeHtml(latest.id)}"` : ''}><span data-icon="circle-fading-arrow-up" data-icon-size="13"></span> Mở lại</button>` : ''}
+        <button class="btn btn-danger btn-small" data-action="delete-lesson" data-id="${escapeHtml(document.id)}" title="Xoá tài liệu khỏi kho giáo án"><span data-icon="trash" data-icon-size="13"></span> Xoá</button>
       </div>
       ${latest ? `<details class="lesson-card-more">
         <summary class="lesson-card-more-summary cursor-pointer select-none text-[12px] font-bold text-[#4f46e5]"><span data-icon="chevron-down" data-icon-size="12" data-icon-class="lesson-card-more-caret"></span> Xem chi tiết</summary>

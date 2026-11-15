@@ -2,13 +2,24 @@
 /* === Ported legacy rules (G5 thay 5 file stylesheets Ä‘Ã£ xÃ³a) === */
 @layer components {
 /* === from components.css === */
-.btn{border:0;border-radius:9px;padding:9px 13px;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-weight:700;font-size:13px;transition:box-shadow .12s,background-color .12s,color .12s}
+.btn{border:0;border-radius:9px;padding:9px 13px;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-weight:700;font-size:13px;transition:background-color .12s,color .12s,border-color .12s,box-shadow .12s}
 /* App chrome: press states change colour, not position — no hover lift. */
+/* One flat palette for every chrome button (2026-11-15): solid brand fill,
+   white fill with a hairline border, or solid red for a destructive action.
+   No gradients, no coloured glow, no hand-rolled hex fills in markup — a
+   button picks one of these three and nothing else. */
 /* #181: ghim `--color-brand` thay vì alias `--purple`. Dark đổi alias thành #8f88e8,
    và chữ trắng trên #8f88e8 đo được 3,06:1 — một nút chính không đọc được ở chế độ tối.
    #6258e8 giữ nguyên ở cả hai theme nên chữ trắng đạt 5,15:1 ở cả hai. */
-.btn-primary{background:var(--color-brand);color:white;box-shadow:0 6px 14px #6258e82b}
+.btn-primary{background:var(--color-brand);color:#fff}
+.btn-primary:hover{background:#5145d6}
+.btn-primary:active{background:#463cb8}
 .btn-secondary{background:#fff;border:1px solid var(--line);color:#515c72}
+.btn-secondary:hover{background:#f5f6fa}
+.btn-secondary:active{background:#eef0f6}
+.btn-danger{background:#c33b4b;color:#fff}
+.btn-danger:hover{background:#a92f3e}
+.btn-danger:active{background:#932838}
 .btn-small{padding:6px 10px;font-size:12px}
 .section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
 .section-head h3{font-size:15px;margin:0;letter-spacing:-.2px}
