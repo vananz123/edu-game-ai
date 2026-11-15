@@ -128,7 +128,62 @@ const { PROJECTOR_SIZES, measureAt, setViewport, setViewportAndWait } = require(
     await sleep(900);
     const lib2 = await desktop.call('getLibrary');
     const lg = (lib2?.games || []).find(g => g.title === 'UE legacy game')?.questions?.[0];
-    out.legacyStayedClean = !!lg && !('contentCategory' in lg) && !('iconName' in lg) && !('illustrationAssetId' in lg);
+    out.legacyStayedClean = !!lg && !('contentCategory' in lg) && !('iconName' in lg) && !('illustrationAssetId' in lg) && !('sceneBlueprint' in lg);
+
+    // ---- 4. #252 "Cảnh thử": dựng cảnh từ chủ đề, không gọi mạng ----
+    // Nút này là affordance tạm của P0 (P3 thay bằng AI). Nó phải: ghi blueprint
+    // đã chuẩn hoá vào input ẩn, xoá lựa chọn thủ công để cảnh thử NHÌN THẤY được,
+    // và sống sót qua một lần lưu thật.
+    const holder = Object.assign({}, JSON.parse(JSON.stringify(arena)), { title: 'UE blueprint roundtrip' });
+    document.getElementById('modalRoot').innerHTML = '';
+    openEditor(holder, false, 'test');
+    await sleep(250);
+    row = document.querySelector('#editorQuestions .editor-question');
+    const bpButton = row.querySelector('[data-editor-art-blueprint]');
+    out.blueprintButton = !!bpButton && /Cảnh thử/u.test(bpButton.textContent || '');
+    out.blueprintInputPresent = !!row.querySelector('[data-field="sceneBlueprint"]');
+    const artInput = () => row.querySelector('[data-field="illustrationAssetId"]');
+    const bpInput = () => row.querySelector('[data-field="sceneBlueprint"]');
+    out.blueprintClearedPickBeforeClick = artInput().value === 'animals-meadow';
+
+    bpButton.click();
+    await sleep(200);
+    let generated = null;
+    try { generated = JSON.parse(bpInput().value || 'null'); } catch (error) {}
+    out.blueprintWritten = !!generated && generated.v === 1 && generated.layout === 'single' &&
+      generated.backdrop === 'forest' && generated.paletteKey === 'animals' && generated.mainIcon === 'paw-print';
+    out.blueprintClearedPick = artInput().value === '';
+    out.blueprintBadge = /Cảnh thử/u.test(row.querySelector('[data-editor-art-badge]')?.textContent || '');
+    out.blueprintPreview = !!row.querySelector('[data-editor-art-thumb] [data-scene-layer="subject"]');
+    out.blueprintRead = readEditorItemAssets(row)?.sceneBlueprint?.mainIcon === 'paw-print';
+
+    // Chọn lại hình có sẵn: hình chọn thắng, nhưng blueprint vẫn được giữ trong input
+    // (đúng thứ tự ưu tiên đã ghi trong docs/DECISIONS.md #252).
+    const pick = row.querySelector('[data-editor-art-pick]');
+    pick.value = 'space-scene';
+    pick.dispatchEvent(new Event('art-change'));
+    await sleep(200);
+    out.pickWins = artInput().value === 'space-scene';
+    out.pickKeepsBlueprint = !!bpInput().value;
+
+    // "Tự động" bỏ hình chọn -> cảnh thử hiện lại; "Bỏ ảnh" vẫn thắng blueprint.
+    row.querySelector('[data-editor-art-reset]').click();
+    await sleep(200);
+    out.resetRevivesBlueprint = artInput().value === '' && !!bpInput().value;
+    row.querySelector('[data-editor-art-remove]').click();
+    await sleep(200);
+    out.removeWinsOverBlueprint = artInput().value === 'none' && !!bpInput().value;
+    row.querySelector('[data-editor-art-reset]').click();
+    await sleep(200);
+
+    document.getElementById('saveGameBtn')?.click();
+    await sleep(900);
+    const lib3 = await desktop.call('getLibrary');
+    const bq = (lib3?.games || []).find(g => g.title === 'UE blueprint roundtrip')?.questions?.[0];
+    out.blueprintAfterSave = bq?.sceneBlueprint || null;
+    out.blueprintSurvivedSave = !!bq?.sceneBlueprint && bq.sceneBlueprint.mainIcon === 'paw-print' &&
+      bq.sceneBlueprint.backdrop === 'forest' && bq.sceneBlueprint.paletteKey === 'animals';
+    out.blueprintDidNotAddPick = !bq || bq.illustrationAssetId === undefined;
 
     document.getElementById('modalRoot').innerHTML = '';
     return out;
@@ -178,6 +233,22 @@ const { PROJECTOR_SIZES, measureAt, setViewport, setViewportAndWait } = require(
   check('item asset keys survive a real editor save', out.assetsSurvivedSave === true, JSON.stringify(out.afterSave));
   check('illustrationMode survives a real editor save', out.modeSurvivedSave === true);
   check('a game with no asset fields gains none on save', out.legacyStayedClean === true);
+
+  // #252: the editor's "Cảnh thử" affordance (P0, no AI yet).
+  check('the editor shows a "Cảnh thử" button', out.blueprintButton === true);
+  check('the editor renders the hidden sceneBlueprint input', out.blueprintInputPresent === true);
+  check('the fixture starts with an explicit pick (button must clear it)', out.blueprintClearedPickBeforeClick === true);
+  check('"Cảnh thử" writes a normalised blueprint from the category', out.blueprintWritten === true, JSON.stringify(out.blueprintAfterSave));
+  check('"Cảnh thử" clears the explicit pick so the scene is visible', out.blueprintClearedPick === true);
+  check('the badge says "Cảnh thử"', out.blueprintBadge === true);
+  check('the editor preview draws the blueprint scene', out.blueprintPreview === true);
+  check('readEditorItemAssets returns the normalised blueprint', out.blueprintRead === true);
+  check('picking a built-in scene wins over the blueprint', out.pickWins === true);
+  check('picking a built-in scene keeps the stored blueprint', out.pickKeepsBlueprint === true);
+  check('"Tự động" revives the blueprint', out.resetRevivesBlueprint === true);
+  check('"Bỏ ảnh" wins over the blueprint', out.removeWinsOverBlueprint === true);
+  check('the blueprint survives a real editor save', out.blueprintSurvivedSave === true, JSON.stringify(out.blueprintAfterSave));
+  check('a blueprint-only item stores no illustrationAssetId', out.blueprintDidNotAddPick === true);
 
   // ---- Phase B (docs/UI-PLAN-V2.md): the editor is where a teacher spends the
   // longest single stretch, so it is measured at both real resolutions too.

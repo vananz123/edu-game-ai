@@ -14,6 +14,7 @@
  * Pure: no I/O, no clock, no Electron.
  */
 import type { EducationalGame } from '../../shared/types';
+import { normalizeSceneBlueprint } from '../../shared/scene-blueprint';
 import { validateMatchingGame, validateRaceGame, validateScenarioGame, validateTreasureHuntGame } from './game-validation';
 
 // `game-service` is a CommonJS module (legacy, `@ts-nocheck`); require it the way the
@@ -112,6 +113,10 @@ export function readGamePackage(
   // `contentCategory`) — those are re-attached per item, by position, from the original
   // package, so a game imported here renders the same illustrations it had.
   const assetFields = collectItemAssets(game.questions);
+  // #252: a blueprint is an object, so it cannot ride in `ITEM_ASSET_KEYS`
+  // (strings only). It gets its own path and is RE-normalised on the way in: a
+  // hand-edited `.egame` must not be able to smuggle a blueprint past the gate.
+  const blueprints = collectItemBlueprints(game.questions);
   // `normalizeGame` keeps the package's own id only when the library has not used
   // it yet; otherwise it mints one. Either way this `newId` is only for the case
   // above, so a re-import can never overwrite the row it came from.
@@ -126,6 +131,7 @@ export function readGamePackage(
   }
   if (idForPackage) normalized.id = newId();
   reattachItemAssets(normalized.questions, assetFields);
+  reattachItemBlueprints(normalized.questions, blueprints);
   try {
     validateQuizAnswers(normalized);
     validateScenarioGame(normalized);
@@ -167,6 +173,29 @@ function reattachItemAssets(questions: unknown, assets: Array<Record<string, unk
     for (const key of ITEM_ASSET_KEYS) {
       if (fields[key] !== undefined) (question as Record<string, unknown>)[key] = fields[key];
     }
+  });
+}
+
+/** Raw blueprint of each question, in order, before `normalizeGame` drops it. */
+function collectItemBlueprints(questions: unknown): unknown[] {
+  const list = Array.isArray(questions) ? questions : [];
+  return list.map(question => {
+    const source = (question && typeof question === 'object' ? question : {}) as Record<string, unknown>;
+    return source.sceneBlueprint;
+  });
+}
+
+/**
+ * Puts each blueprint back, normalised (#252). The import gate is the same
+ * `normalizeSceneBlueprint` used on save, so an imported blueprint can only ever
+ * be one of the ids the renderer knows; an invalid one is dropped entirely.
+ */
+function reattachItemBlueprints(questions: unknown, blueprints: unknown[]): void {
+  if (!Array.isArray(questions)) return;
+  questions.forEach((question, index) => {
+    if (!question || typeof question !== 'object') return;
+    const blueprint = normalizeSceneBlueprint(blueprints[index]);
+    if (blueprint) (question as Record<string, unknown>).sceneBlueprint = blueprint;
   });
 }
 

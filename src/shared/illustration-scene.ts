@@ -21,6 +21,8 @@
  */
 import { renderIconSvg } from './icon-registry';
 import type { IllustrationPalette } from './illustration-registry';
+import type { SceneBlueprint } from './scene-blueprint';
+import { getBackdropSpec } from './scene-asset-catalog';
 
 /** Canvas the scenes are authored in; matches `renderIllustrationSvg`. */
 export const SCENE_WIDTH = 320;
@@ -33,6 +35,8 @@ export const SCENE_HEIGHT = 200;
  * height) but now stands *in* a place.
  */
 export const SCENE_SUBJECT_SIZE = 120;
+/** Supporting icons beside the subject; outside its 120px box (x 100..220). */
+export const SCENE_SUB_ICON_SIZE = 52;
 /** Horizon: the far layer sits above this, the ground band fills below it. */
 export const SCENE_HORIZON = 150;
 
@@ -455,17 +459,35 @@ export interface SceneSvgOptions {
 }
 
 /**
- * Full `<svg>` scene for one category, or '' when the subject icon is unknown.
- * Pure function of (category, iconName, palette): identical output every call.
+ * Up to two supporting icons beside the subject. They live in the props layer
+ * (in front of the subject's box, never on top of it) so the subject stays the
+ * one thing a child has to recognise.
  */
-export function renderSceneSvg(
-  category: string,
-  iconName: string,
+function renderSubIcons(subIcons: readonly string[], palette: IllustrationPalette): string {
+  const icons = subIcons.slice(0, 2).map((name, index) => {
+    const svg = renderIconSvg(name, { size: SCENE_SUB_ICON_SIZE, className: 'stage-illustration-subicon' });
+    if (!svg) return '';
+    const x = index === 0 ? 28 : SCENE_WIDTH - 28 - SCENE_SUB_ICON_SIZE;
+    const y = SCENE_HORIZON - SCENE_SUB_ICON_SIZE - 4;
+    return (
+      `<g data-scene-subicon="${esc(name)}" transform="translate(${x} ${y})" ` +
+      `color="${esc(palette.ink)}" opacity="0.72">${svg}</g>`
+    );
+  }).join('');
+  return icons ? `<g data-scene-primitive="sub-icons">${icons}</g>` : '';
+}
+
+/**
+ * The one composer. `renderSceneSvg` passes an empty sub-icon list, so a game
+ * saved before blueprints existed renders byte-identically (#70/#72 contract).
+ */
+function composeSceneSvg(
+  spec: SceneSpec,
   palette: IllustrationPalette,
+  subject: string,
+  subIcons: readonly string[],
   options: SceneSvgOptions = {}
 ): string {
-  const spec = getSceneSpec(category);
-  const subject = renderIconSvg(iconName, { size: SCENE_SUBJECT_SIZE, className: 'stage-illustration-icon' });
   if (!subject) return '';
 
   const x = Math.round((SCENE_WIDTH - SCENE_SUBJECT_SIZE) / 2);
@@ -496,8 +518,50 @@ export function renderSceneSvg(
     layer('mid', renderMid(spec.standing, palette)) +
     layer('halo', `<circle cx="${SCENE_WIDTH / 2}" cy="${spec.subjectY}" r="72" fill="${esc(palette.glow)}" opacity="0.15"/>`) +
     layer('subject', `<g transform="translate(${x} ${y})" color="${esc(palette.ink)}">${subject}</g>`) +
-    layer('props', renderProps(spec.standing, palette)) +
+    layer('props', renderProps(spec.standing, palette) + renderSubIcons(subIcons, palette)) +
     layer('fg', renderFg(spec.fg, palette)) +
     `</svg>`
   );
 }
+
+/**
+ * Full `<svg>` scene for one category, or '' when the subject icon is unknown.
+ * Pure function of (category, iconName, palette): identical output every call.
+ */
+export function renderSceneSvg(
+  category: string,
+  iconName: string,
+  palette: IllustrationPalette,
+  options: SceneSvgOptions = {}
+): string {
+  const subject = renderIconSvg(iconName, { size: SCENE_SUBJECT_SIZE, className: 'stage-illustration-icon' });
+  return composeSceneSvg(getSceneSpec(category), palette, subject, [], options);
+}
+
+/**
+ * Full `<svg>` for a validated blueprint (#252). The palette is passed in
+ * rather than looked up so this module never imports the registry (which
+ * imports this one): the caller already has `resolved.palette`.
+ *
+ * Total: an unrenderable subject returns '' so the stage column simply
+ * disappears instead of showing a broken frame.
+ */
+export function renderBlueprintSvg(
+  blueprint: SceneBlueprint,
+  palette: IllustrationPalette,
+  options: SceneSvgOptions = {}
+): string {
+  if (!blueprint || typeof blueprint !== 'object') return '';
+  const subject = renderIconSvg(blueprint.mainIcon, {
+    size: SCENE_SUBJECT_SIZE,
+    className: 'stage-illustration-icon',
+  });
+  return composeSceneSvg(
+    getBackdropSpec(blueprint.backdrop),
+    palette,
+    subject,
+    Array.isArray(blueprint.subIcons) ? blueprint.subIcons : [],
+    options
+  );
+}
+

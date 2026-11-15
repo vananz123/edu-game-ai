@@ -80,6 +80,67 @@ async function run(): Promise<void> {
   // --- external resource URLs are dropped, built-in ids are kept --------------
   assert.equal((wrapped.questions[0] as { imageUrl?: string }).imageUrl, undefined, 'remote image removed');
   assert.equal(wrapped.questions[0].illustrationAssetId, 'ho-guom', 'built-in illustration kept');
+  assert.equal(
+    (wrapped.questions[0] as { sceneBlueprint?: unknown }).sceneBlueprint,
+    undefined,
+    'a game without a blueprint must not gain one on import'
+  );
+
+  // --- #252: a scene blueprint survives the round trip, normalised ------------
+  const withBlueprint = {
+    ...JSON.parse(JSON.stringify(quiz)),
+    questions: [
+      {
+        ...JSON.parse(JSON.stringify(quiz.questions[0])),
+        sceneBlueprint: {
+          v: 1,
+          layout: 'single',
+          backdrop: 'forest',
+          paletteKey: 'animals',
+          mainIcon: 'paw-print',
+          subIcons: ['leaf', 'bird']
+        }
+      }
+    ]
+  };
+  const blueprintRound = readGamePackage(pack(withBlueprint), newId);
+  assert.deepEqual((blueprintRound.questions[0] as { sceneBlueprint?: unknown }).sceneBlueprint, {
+    v: 1,
+    layout: 'single',
+    backdrop: 'forest',
+    paletteKey: 'animals',
+    mainIcon: 'paw-print',
+    subIcons: ['leaf', 'bird']
+  });
+
+  // A hand-edited package gets the same gate as a saved game: a bad blueprint is
+  // dropped, and a partly bad one is repaired to a drawable scene.
+  const hostile = JSON.parse(JSON.stringify(withBlueprint));
+  hostile.questions[0].sceneBlueprint = { v: 1, layout: 'single', mainIcon: '<script>', props: [] };
+  assert.equal(
+    (readGamePackage(pack(hostile), newId).questions[0] as { sceneBlueprint?: unknown }).sceneBlueprint,
+    undefined,
+    'an undrawable blueprint is dropped on import'
+  );
+
+  const repairable = JSON.parse(JSON.stringify(withBlueprint));
+  repairable.questions[0].sceneBlueprint = { v: 1, layout: 'single', mainIcon: 'paw-print', backdrop: 'castle', subIcons: ['nope', 'leaf', 'leaf'] };
+  assert.deepEqual((readGamePackage(pack(repairable), newId).questions[0] as { sceneBlueprint?: unknown }).sceneBlueprint, {
+    v: 1,
+    layout: 'single',
+    backdrop: 'plain',
+    paletteKey: 'language',
+    mainIcon: 'paw-print',
+    subIcons: ['leaf']
+  }, 'an unknown place/palette falls back and sub icons are cleaned');
+
+  const asString = JSON.parse(JSON.stringify(withBlueprint));
+  asString.questions[0].sceneBlueprint = JSON.stringify(withBlueprint.questions[0].sceneBlueprint);
+  assert.equal(
+    (readGamePackage(pack(asString), newId).questions[0] as { sceneBlueprint?: { mainIcon?: string } }).sceneBlueprint?.mainIcon,
+    'paw-print',
+    'a blueprint stored as JSON text is accepted'
+  );
   for (const url of ['http://a/b.png', 'https://a/b.png', 'file:///C:/Windows/x.png', 'data:image/png;base64,AAA', '//cdn.example/x.png']) {
     const item = { imageUrl: url, src: url, nested: { illustration: url } };
     stripImportedAssetUrls(item);

@@ -20,6 +20,7 @@ import {
   type ContentCategory,
 } from './content-categories';
 import { ICON_NAMES, getIconNode, isIconName, renderIconSvg, type IconSvgOptions } from './icon-registry';
+import { normalizeSceneBlueprint, type SceneBlueprint } from './scene-blueprint';
 
 export { CONTENT_CATEGORY_IDS, DEFAULT_CONTENT_CATEGORY, normalizeContentCategory, type ContentCategory };
 export { ICON_NAMES, isIconName };
@@ -68,6 +69,8 @@ export interface NormalizedItemAssets {
   iconName: string;
   /** null when unset. */
   illustrationAssetId: string | null;
+  /** Validated blueprint, or null when absent/invalid (#252). */
+  sceneBlueprint: SceneBlueprint | null;
   /** True when the icon came from the category rather than from the item. */
   iconFromCategory: boolean;
 }
@@ -76,6 +79,8 @@ export interface ItemAssetInput {
   contentCategory?: unknown;
   iconName?: unknown;
   illustrationAssetId?: unknown;
+  /** Object or JSON string; normalised through `normalizeSceneBlueprint`. */
+  sceneBlueprint?: unknown;
 }
 
 /**
@@ -93,6 +98,7 @@ export function normalizeItemAssets(input: ItemAssetInput | null | undefined): N
     contentCategory,
     iconName,
     illustrationAssetId: normalizeIllustrationAssetId(source.illustrationAssetId),
+    sceneBlueprint: normalizeSceneBlueprint(source.sceneBlueprint),
     iconFromCategory: !explicitIcon && iconName !== '',
   };
 }

@@ -121,6 +121,50 @@ const STAGE_ILLUSTRATION_DEFAULT_SCENE = {
   sky: 'clouds', horizon: 'hills', standing: 'none', fg: 'stones', subjectY: 88
 };
 
+/* #252: the scene-blueprint vocabulary, copied from
+   src/shared/scene-asset-catalog.ts. The renderer cannot import shared modules,
+   so `tests/unit/scene-blueprint.test.ts` compares these tables and the two
+   normalisers directly. */
+const STAGE_SCENE_BACKDROPS = {
+  plain: { sky: 'none', horizon: 'line', standing: 'none', fg: 'none', subjectY: 88 },
+  meadow: { sky: 'sun', horizon: 'hills', standing: 'none', fg: 'grass', subjectY: 88 },
+  forest: { sky: 'clouds', horizon: 'hills', standing: 'trees', fg: 'roots', subjectY: 88 },
+  mountain: { sky: 'sun', horizon: 'mountains', standing: 'trees', fg: 'stones', subjectY: 88 },
+  sea: { sky: 'moon', horizon: 'sea', standing: 'none', fg: 'waves', subjectY: 84 },
+  stars: { sky: 'stars', horizon: 'mountains', standing: 'none', fg: 'stones', subjectY: 84 },
+  city: { sky: 'clouds', horizon: 'skyline', standing: 'towers', fg: 'stones', subjectY: 88 },
+  classroom: { sky: 'rays', horizon: 'line', standing: 'books', fg: 'stones', subjectY: 86 },
+  lab: { sky: 'rays', horizon: 'line', standing: 'graph', fg: 'stones', subjectY: 86 },
+  studio: { sky: 'rays', horizon: 'line', standing: 'books', fg: 'boards', subjectY: 86 }
+};
+const STAGE_SCENE_BACKDROP_DEFAULT = 'plain';
+const STAGE_SCENE_ICON_IDS = [
+  'paw-print', 'leaf', 'rocket', 'heart-pulse', 'car', 'shield-check', 'recycle',
+  'landmark', 'map', 'briefcase', 'trophy', 'file-music', 'palette', 'calculator',
+  'languages', 'flask-conical', 'cpu', 'stethoscope', 'users', 'house', 'cloud-sun',
+  'apple', 'box', 'waves-horizontal',
+  'book-open', 'lightbulb', 'star', 'clock', 'target', 'brain', 'zap', 'sparkles',
+  'gift', 'pencil', 'mountain', 'fish', 'bird', 'bug'
+];
+const STAGE_SCENE_ICON_SET = new Set(STAGE_SCENE_ICON_IDS);
+const STAGE_SCENE_CATEGORY_BACKDROPS = {
+  general: 'plain', animals: 'forest', plants: 'forest', space: 'stars',
+  'human-body': 'classroom', transport: 'city', safety: 'city', environment: 'mountain',
+  history: 'mountain', geography: 'mountain', jobs: 'city', sports: 'meadow',
+  music: 'studio', art: 'studio', math: 'classroom', language: 'classroom',
+  science: 'lab', technology: 'lab', health: 'classroom', family: 'meadow',
+  community: 'city', weather: 'meadow', food: 'meadow', objects: 'classroom',
+  'water-world': 'sea'
+};
+/* Must match SCENE_BLUEPRINT_VERSION, SCENE_MAX_SUB_ICONS and
+   SCENE_BLUEPRINT_MAX_BYTES in the shared catalog. */
+const STAGE_SCENE_BLUEPRINT_VERSION = 1;
+const STAGE_SCENE_MAX_SUB_ICONS = 2;
+const STAGE_SCENE_BLUEPRINT_MAX_BYTES = 600;
+const STAGE_SCENE_DEFAULT_ICON = 'book-open';
+/** Subject icon size in the 320x200 frame; matches SCENE_SUB_ICON_SIZE (#252). */
+const STAGE_SCENE_SUB_ICON_SIZE = 52;
+
 /** Subject icon size in the 320x200 frame; matches SCENE_SUBJECT_SIZE (#72). */
 const STAGE_ILLUSTRATION_SUBJECT_SIZE = 120;
 /** Horizon line; matches SCENE_HORIZON. */
@@ -130,6 +174,73 @@ function stageSceneSpec(category) {
   return Object.prototype.hasOwnProperty.call(STAGE_ILLUSTRATION_SCENES, category)
     ? STAGE_ILLUSTRATION_SCENES[category]
     : STAGE_ILLUSTRATION_DEFAULT_SCENE;
+}
+
+/* --- scene blueprints (#252), mirroring src/shared/scene-blueprint.ts ----- */
+
+function stageIsSceneBackdropId(value) {
+  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(STAGE_SCENE_BACKDROPS, value);
+}
+
+function stageBackdropSpec(backdrop) {
+  return stageIsSceneBackdropId(backdrop)
+    ? STAGE_SCENE_BACKDROPS[backdrop]
+    : STAGE_SCENE_BACKDROPS[STAGE_SCENE_BACKDROP_DEFAULT];
+}
+
+function stageIsSceneIconId(value) {
+  return typeof value === 'string' && STAGE_SCENE_ICON_SET.has(value) && typeof getIconNode === 'function' && !!getIconNode(value);
+}
+
+function stageIsScenePaletteKey(value) {
+  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(STAGE_ILLUSTRATION_PALETTES, value);
+}
+
+/**
+ * Total, idempotent mirror of `normalizeSceneBlueprint`. Accepts an object or a
+ * JSON string; returns null for anything undrawable. Keeping the rules identical
+ * is what lets a blueprint saved by the main process render the same in class.
+ */
+function stageNormalizeBlueprint(value) {
+  let raw = value;
+  if (typeof raw === 'string') {
+    const text = raw.trim();
+    if (!text || text.length > STAGE_SCENE_BLUEPRINT_MAX_BYTES) return null;
+    try { raw = JSON.parse(text); } catch (error) { return null; }
+  }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  if (raw.v !== STAGE_SCENE_BLUEPRINT_VERSION) return null;
+  if (raw.layout !== 'single') return null;
+  const mainIcon = typeof raw.mainIcon === 'string' ? raw.mainIcon.trim() : '';
+  if (!stageIsSceneIconId(mainIcon)) return null;
+  const backdrop = stageIsSceneBackdropId(raw.backdrop) ? raw.backdrop : STAGE_SCENE_BACKDROP_DEFAULT;
+  const paletteKey = stageIsScenePaletteKey(raw.paletteKey) ? raw.paletteKey : 'language';
+  const subIcons = [];
+  if (Array.isArray(raw.subIcons)) {
+    for (const entry of raw.subIcons) {
+      const icon = typeof entry === 'string' ? entry.trim() : '';
+      if (!stageIsSceneIconId(icon) || icon === mainIcon || subIcons.indexOf(icon) >= 0) continue;
+      if (subIcons.length >= STAGE_SCENE_MAX_SUB_ICONS) continue;
+      subIcons.push(icon);
+    }
+  }
+  const blueprint: any = { v: 1, layout: 'single', backdrop: backdrop, paletteKey: paletteKey, mainIcon: mainIcon };
+  if (subIcons.length) blueprint.subIcons = subIcons;
+  return blueprint;
+}
+
+/** A P0 "Cảnh thử" scene for a content category; never touches the network. */
+function stageBlueprintForCategory(category) {
+  const own = typeof category === 'string' ? category.trim() : '';
+  const paletteKey = Object.prototype.hasOwnProperty.call(STAGE_ILLUSTRATION_PALETTES, own) ? own : 'language';
+  const ownIcon = Object.prototype.hasOwnProperty.call(STAGE_ILLUSTRATION_CATEGORY_ICONS, own)
+    ? STAGE_ILLUSTRATION_CATEGORY_ICONS[own]
+    : '';
+  const mainIcon = stageIsSceneIconId(ownIcon) ? ownIcon : STAGE_SCENE_DEFAULT_ICON;
+  const backdrop = Object.prototype.hasOwnProperty.call(STAGE_SCENE_CATEGORY_BACKDROPS, own)
+    ? STAGE_SCENE_CATEGORY_BACKDROPS[own]
+    : STAGE_SCENE_BACKDROP_DEFAULT;
+  return { v: 1, layout: 'single', backdrop: backdrop, paletteKey: paletteKey, mainIcon: mainIcon };
 }
 
 /**
@@ -319,6 +430,24 @@ function stageFgSvg(primitive, palette) {
   return '';
 }
 
+/**
+ * Supporting icons beside the subject, copied from `renderSubIcons()` in
+ * src/shared/illustration-scene.ts. Outside x 100..220, in the props layer, so
+ * the subject is never covered.
+ */
+function stageSubIconsSvg(names, palette) {
+  const list = Array.isArray(names) ? names.slice(0, STAGE_SCENE_MAX_SUB_ICONS) : [];
+  const icons = list.map(function (name, index) {
+    const svg = stageIconSvg(name, STAGE_SCENE_SUB_ICON_SIZE, 'stage-illustration-subicon');
+    if (!svg) return '';
+    const x = index === 0 ? 28 : 320 - 28 - STAGE_SCENE_SUB_ICON_SIZE;
+    const y = STAGE_ILLUSTRATION_HORIZON - STAGE_SCENE_SUB_ICON_SIZE - 4;
+    return '<g data-scene-subicon="' + escapeHtml(name) + '" transform="translate(' + x + ' ' + y + ')" ' +
+      'color="' + escapeHtml(palette.ink) + '" opacity="0.72">' + svg + '</g>';
+  }).join('');
+  return icons ? '<g data-scene-primitive="sub-icons">' + icons + '</g>' : '';
+}
+
 /** One tagged layer; same `data-scene-layer` names as the shared composer. */
 function stageLayer(name, content) {
   return content ? '<g data-scene-layer="' + name + '">' + content + '</g>' : '';
@@ -350,6 +479,18 @@ function resolveStageIllustration(item, game) {
   }
   // `manual` never invents artwork: only a picked illustration is allowed.
   if (mode === 'manual') return null;
+  // #252: a valid blueprint outranks the category default but sits below an
+  // explicit pick and below "Bỏ ảnh", both handled above.
+  const blueprint = stageNormalizeBlueprint(source.sceneBlueprint);
+  if (blueprint) {
+    return {
+      assetId: blueprint.paletteKey + '-scene',
+      category: blueprint.paletteKey,
+      iconName: blueprint.mainIcon,
+      explicit: false,
+      blueprint: blueprint
+    };
+  }
   const iconName = stageIllustrationIcon(source);
   if (iconName) {
     const own = typeof source.contentCategory === 'string' ? source.contentCategory.trim() : '';
@@ -439,10 +580,12 @@ function stageIllustrationHtml(item, game, extraClass) {
       `<image href="${escapeHtml(src)}" x="0" y="0" width="320" height="200" preserveAspectRatio="xMidYMid meet"/>` +
       `</svg></div>`;
   }
-  const icon = stageIconSvg(resolved.iconName, STAGE_ILLUSTRATION_SUBJECT_SIZE, 'stage-illustration-icon');
-  if (!icon) return '';
+  const subjectIcon = stageIconSvg(resolved.iconName, STAGE_ILLUSTRATION_SUBJECT_SIZE, 'stage-illustration-icon');
+  if (!subjectIcon) return '';
+  const blueprint = resolved.blueprint;
   const palette = STAGE_ILLUSTRATION_PALETTES[resolved.category] || STAGE_ILLUSTRATION_DEFAULT_PALETTE;
-  const spec = stageSceneSpec(resolved.category);
+  const spec = blueprint ? stageBackdropSpec(blueprint.backdrop) : stageSceneSpec(resolved.category);
+  const subIcons = blueprint && Array.isArray(blueprint.subIcons) ? blueprint.subIcons : [];
   const sky = palette.sky || palette.fill;
   const ground = palette.ground || palette.fill;
   const x = Math.round((320 - STAGE_ILLUSTRATION_SUBJECT_SIZE) / 2);
@@ -457,8 +600,8 @@ function stageIllustrationHtml(item, game, extraClass) {
       `<rect x="0" y="${STAGE_ILLUSTRATION_HORIZON}" width="320" height="${200 - STAGE_ILLUSTRATION_HORIZON}" fill="${escapeHtml(ground)}"/>`) +
     stageLayer('mid', stageMidSvg(spec.standing, palette)) +
     stageLayer('halo', `<circle cx="160" cy="${spec.subjectY}" r="72" fill="${escapeHtml(palette.glow)}" opacity="0.15"/>`) +
-    stageLayer('subject', `<g transform="translate(${x} ${y})" color="${escapeHtml(palette.ink)}">${icon}</g>`) +
-    stageLayer('props', stagePropsSvg(spec.standing, palette)) +
+    stageLayer('subject', `<g transform="translate(${x} ${y})" color="${escapeHtml(palette.ink)}">${subjectIcon}</g>`) +
+    stageLayer('props', stagePropsSvg(spec.standing, palette) + stageSubIconsSvg(subIcons, palette)) +
     stageLayer('fg', stageFgSvg(spec.fg, palette)) +
     `</svg></div>`;
 }

@@ -14,6 +14,7 @@
  * is self-contained inline SVG, never a remote image.
  */
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import {
   DEFAULT_ILLUSTRATION_ASSET_ID,
@@ -299,10 +300,49 @@ test('the renderer scene table matches the shared scene composer', () => {
   }
 });
 
+test('the composer refactor kept every pre-blueprint scene byte-identical', () => {
+  // #252 split `renderSceneSvg` into `composeSceneSvg(..., subIcons = [])`.
+  // These hashes were taken from the output BEFORE that split; if they change,
+  // a game saved under #70/#72 would look different after an update.
+  const golden: Record<string, string> = {
+    animals: '24dbd6a5d02322624213af8c8207fcf0dd96ff0b929f178fde27e9361fb5f374',
+    plants: 'afd37626d64ec356148330b3d86a6bf687bc13bfce2eb0b25bc8815e46d68a6f',
+    space: '6af21ab86ee547eb45ca79f43359e9addff6d7a6a4f5e4952fd162e0cb0d7c26',
+    'human-body': '3512072117687a28fbbd194f5a9eff7a11ab2fa8b47d53aed003b035033e77ce',
+    transport: '507a165690b02e74f9f444be8b5ca6c0a0710268c1282ed317f43d35626f7b6b',
+    safety: '1b7f852a51342ba9a7e48a18e5268274a18cabc9c7c79f71757b6b620597513c',
+    environment: 'e5845231c9b09a6ee969fbe703137fbdec5e97826e2876ae822e2f061596afdf',
+    history: 'baafb7363b72816fad03395e6fb22d72e63c3dd316a90834cc69ab8c0501cb9f',
+    geography: '864281a2296aab8dd4fcaf139e3f2b42224cd1ee5f4f66992220260b2285b0da',
+    jobs: 'f03d599094cd24df79331e726db70df8dbcb64fcbeced713bf6594457b0f2abe',
+    sports: 'df14f0233084c07bd2f9c064bd130a4cb81e300f99f2f7c24306f62d7c41c14a',
+    music: 'b683d9c35ea064c0911af04d2d3d3d63637d005ccb0171e5d0a4f145f84d9790',
+    art: '159c92d1146f1950fe19820858a2c27c74a8610cd638d87195c79133c4afe7cd',
+    math: 'b22e8bfdbef1946b044563b2e082c86171407aeca1795281b6d20fb84104a290',
+    language: '8ad54be0f15652813dfb5fd33a49f94fefc4621716a22e786a77a0ed7c25cfab',
+    science: 'd4feded1a99cdb355e76ea2de36a621ed0aea51302ffeb6fd0745e28fd79be85',
+    technology: '58ffb31b2b4ea66acb45928c8ffeeb927a250fbcc5e5cbf8fa754d8715e00e97',
+    health: '3394c741d21c658ebaf4e680510a6fe2fd9dee0cef838af34975c786e701a2a6',
+    family: '4988824945ea977e85d48f612997e7961faa9ba86bde87dbeab063446e83db7e',
+    community: 'b9d9fc7b34eff91f3653f55dea2f55e508ead5513185f35e970e1ed02769ae74',
+    weather: '59fc2126fed6189014f66fbcb71e887ffeb96516d2c60e06391fb655789f6dd3',
+    food: '6f3c920e5e59d268443a90a0941241f41ed37e2b793889c8ab3e8cd8f30e279a',
+    objects: 'be690a09f9cc60169e8b107374a1c8d5692671655f9c012595ecff5f6a895e50',
+    'water-world': '060a097b9987e4228d8ae7062f0b72fcc4cb4087c5768ff825bfb71b7d1828ee',
+  };
+  for (const id of ILLUSTRATION_ASSET_IDS) {
+    const category = id.slice(0, -'-scene'.length);
+    const svg = renderSceneSvg(category, getCategoryIcon(category) || DEFAULT_ILLUSTRATION_ICON, getIllustrationPalette(category), {
+      label: category,
+      assetId: id,
+      className: 'stage-illustration-svg',
+    });
+    const hash = createHash('sha256').update(svg).digest('hex');
+    assert.equal(hash, golden[category], `${category} scene changed after the #252 refactor`);
+  }
+});
+
 test('the renderer subject size and horizon match the shared composer', () => {
-  // These two numbers are the whole #72 layout contract (subject small enough to
-  // leave room for layers, one shared horizon). A silent skew makes the editor
-  // and the play surface draw different pictures from the same game.
   const size = /const STAGE_ILLUSTRATION_SUBJECT_SIZE = (\d+);/.exec(RENDERER_SOURCE);
   assert.ok(size, 'STAGE_ILLUSTRATION_SUBJECT_SIZE is missing from the renderer');
   assert.equal(Number(size![1]), SCENE_SUBJECT_SIZE, 'subject size in the renderer drifted');

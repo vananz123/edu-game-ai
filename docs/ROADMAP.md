@@ -1,5 +1,15 @@
 # Roadmap
 
+## AI Scene Director — cảnh minh hoạ ghép từ JSON nhỏ: P0 xong, P1 compare, P2 process/surround/props, P3 kênh AI, P4 cổng (2026-11-15)
+- **P0 — xong (quyết định #252).** Từ vựng cảnh (`src/shared/scene-asset-catalog.ts`: 10 nền · 24 khoá màu · 38 icon), blueprint `v:1`/`layout:'single'` (`src/shared/scene-blueprint.ts`), cổng chuẩn hoá tổng + bất biến, vẽ bằng `composeSceneSvg` (24/24 hash vàng khớp), lưu trữ + `.egame` (chuẩn hoá lại khi nhập, không đổi Rust), bản sao renderer + parity test, nút tạm "Cảnh thử" trong editor. Chưa gọi AI.
+- **Đã xác minh:** `npm run check` sạch · `check:renderer-globals` 72/74 script/1051 hàm/8358 điểm gọi/0 undefined · `build:icons:check` 129 icon · `npm test` **97/97** (46,5 s) · `npm run build:tauri` 6160,9 KiB + 201 tệp · `build-tauri-release` 56,43 MiB (3m31s) · trên binary thật: `check:item-assets-ui` **43/43** (14 check #252) + bố cục 1920×1080/1366×768 không tràn, chữ ≥11px.
+- **Trước P1 — một lượt refactor riêng:** gộp bảng cảnh shared + bản sao `game-illustration.ts` bằng esbuild, để mỗi id mới chỉ phải khai một chỗ. Giữ parity test làm lưới; không trộn vào P1.
+- **P1 — `compare`:** hai vế + dấu so sánh, cùng cổng kiểm tra và cùng golden-hash; thêm khoá vào catalog chứ không nới validator.
+- **P2 — `process`/`surround` + `props`:** bố cục nhiều bước và vật thể phụ; mỗi bố cục có bài vẽ riêng trước khi mở cho model.
+- **P3 — kênh AI thật:** prompt sinh từ cùng catalog, đầu ra JSON qua đúng `normalizeSceneBlueprint`, nút "✨ Gợi ý cảnh từ nội dung" thay "Cảnh thử", ghi qua `ai_tasks`; **không bao giờ chạy markup của model**.
+- **P4 — cổng + docs:** mở rộng `check:item-assets-ui` cho từng bố cục, thêm phép đo dung lượng `.egame` thật, duyệt thị giác, rồi mới tính installer/phát hành.
+- **Còn mở:** chưa có bằng chứng model thật trả JSON hợp lệ; chưa duyệt cảnh bằng mắt; blueprint chưa đi qua đường wizard (`lesson:patch-item-assets` vẫn allowlist 3 khoá); chưa đo `.egame` trên bộ game lớn.
+
 ## Một bảng màu nút phẳng cho toàn vỏ — brand đặc / trắng viền / đỏ xoá, bỏ gradient và quầng màu (2026-11-15)
 - **Đã xác minh:** `npm run check` sạch · `npm run check:renderer-globals` 72/74 script, 1042 hàm, 8303 điểm gọi, 0 undefined · `npm test` **95/95** (thêm mục 5.5 khoá bảng màu) · binary release build lại (`npm run build:tauri` 201 tệp, `cargo tauri build` 9m06s, NSIS 15,64 MiB) · `ui-typography-readability` **1973 run/32 sweep** (1002 light/971 dark), nhỏ nhất 11px, xấu nhất **4,74:1**, hover/focus **88 nhãn, xấu nhất 5,98:1** · `ui-dark-theme` / `ui-settings-sections` / `ui-library-paging` / `ui-lessons-paging` / `ui-results-paging` / `ui-project-selection` / `ui-card-menu` all passed · `ui-fullscreen-density` **8/8**.
 - **Phạm vi:** `.btn-primary` nền `var(--color-brand)` chữ trắng, hover `#5145d6`, active `#463cb8`, không bóng; `.btn-secondary` trắng/`--line`/`#515c72`, hover `#f5f6fa`; `.btn-danger` mới `#c33b4b` chữ trắng, hover `#a92f3e`. Bỏ quầng `0 6px 14px`, `hover:-translate-y-[1px]`, gradient tím ở thẻ "Muốn dùng AI?"/"Lưu thay đổi", nút xanh dương `#2563eb` và inline `style="background:#c33b4b"`. Giữ nút trong game/LAN/mobile.

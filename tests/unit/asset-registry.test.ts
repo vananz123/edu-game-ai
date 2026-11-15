@@ -184,9 +184,12 @@ assert.deepEqual(bare, {
   contentCategory: 'general',
   iconName: '',
   illustrationAssetId: null,
+  // #252: a blueprint is always present on the normalised shape, null when absent.
+  sceneBlueprint: null,
   iconFromCategory: false
 });
 assert.equal(normalizeItemAssets(null).contentCategory, 'general');
+assert.equal(normalizeItemAssets(null).sceneBlueprint, null);
 
 // An explicit icon wins; the category icon is the fallback.
 const explicit = normalizeItemAssets({ contentCategory: 'animals', iconName: 'fish' });
@@ -216,6 +219,14 @@ assert.equal(normalizeIllustrationAssetId('  water-drop  '), 'water-drop');
 assert.equal(normalizeIllustrationAssetId('   '), null);
 assert.equal(normalizeIllustrationAssetId(7 as unknown), null);
 assert.equal(normalizeIllustrationAssetId({} as unknown), null);
+
+// #252: the blueprint is normalised on the same path, so callers never see a
+// half-valid one. Object and JSON text are both accepted; garbage becomes null.
+const blueprint = { v: 1, layout: 'single', backdrop: 'sea', paletteKey: 'water-world', mainIcon: 'fish' };
+assert.deepEqual(normalizeItemAssets({ sceneBlueprint: blueprint }).sceneBlueprint, blueprint);
+assert.deepEqual(normalizeItemAssets({ sceneBlueprint: JSON.stringify(blueprint) }).sceneBlueprint, blueprint);
+assert.equal(normalizeItemAssets({ sceneBlueprint: { ...blueprint, v: 2 } }).sceneBlueprint, null);
+assert.equal(normalizeItemAssets({ sceneBlueprint: 'not json' }).sceneBlueprint, null);
 
 // renderItemIcon / getItemIconNode are total.
 assert.ok(renderItemIcon({ contentCategory: 'space' }).includes('lucide-rocket'));

@@ -20,7 +20,8 @@ import {
   type ItemAssetInput,
 } from './asset-validation';
 import { getCategoryIcon, getCategoryLabel, normalizeContentCategory } from './content-categories';
-import { renderSceneSvg } from './illustration-scene';
+import { renderBlueprintSvg, renderSceneSvg } from './illustration-scene';
+import { normalizeSceneBlueprint, type SceneBlueprint } from './scene-blueprint';
 
 export { ILLUSTRATION_MODES, normalizeIllustrationMode, type IllustrationMode };
 
@@ -109,11 +110,18 @@ export function getIllustrationPalette(category: unknown): IllustrationPalette {
 }
 
 /**
+ * Categories that own a palette (every content category except `general`).
+ * Exported so `scene-asset-catalog.ts` can prove its palette-key list has not
+ * drifted; the list is still derived from the palette table, never hand-written.
+ */
+export const ILLUSTRATION_CATEGORY_IDS: readonly string[] = Object.freeze(Object.keys(CATEGORY_PALETTES));
+
+/**
  * The ids a teacher (or the AI) may name. Deliberately derived from the
  * palettes, so adding a category cannot leave the illustration set behind.
  */
 export const ILLUSTRATION_ASSET_IDS: readonly string[] = Object.freeze(
-  Object.keys(CATEGORY_PALETTES).map((id) => `${id}-scene`)
+  ILLUSTRATION_CATEGORY_IDS.map((id) => `${id}-scene`)
 );
 
 export function isIllustrationAssetId(value: unknown): value is string {
@@ -152,6 +160,11 @@ export interface ResolvedIllustration {
   /** True when the teacher chose it, false when derived from the category. */
   explicit: boolean;
   /**
+   * When present, draw this blueprint instead of the category's fixed scene
+   * (#252). Set only in `auto` mode and only below an explicit teacher pick.
+   */
+  blueprint?: SceneBlueprint;
+  /**
    * True when neither a pick nor a category produced this: the item carried no
    * artwork information at all and `DEFAULT_ILLUSTRATION_*` was drawn instead
    * (#89). Callers may show it differently; rendering is identical.
@@ -177,6 +190,19 @@ function resolvedFor(
   };
 }
 
+function resolvedForBlueprint(blueprint: SceneBlueprint): ResolvedIllustration {
+  const category = blueprint.paletteKey;
+  return {
+    assetId: `${category}-scene`,
+    category,
+    iconName: blueprint.mainIcon,
+    palette: getIllustrationPalette(category),
+    label: getCategoryLabel(category),
+    explicit: false,
+    blueprint,
+  };
+}
+
 /**
  * Decides whether and what to draw for one item. Never throws.
  *
@@ -187,9 +213,12 @@ function resolvedFor(
  * - `manual` -> only an illustration the teacher explicitly picked. Missing
  *               means null: the mode promises "don't invent artwork", so
  *               falling back to the category would break that promise.
- * - `auto`   -> the explicit pick when known, otherwise the category default.
- *               Items with NOTHING to go on (`general` and no icon) get the
- *               default illustration instead of an empty column (#89).
+ * - explicit pick -> that scene. It sits ABOVE a blueprint on purpose: the AI
+ *               (or "Cảnh thử") must never overwrite a teacher's choice.
+ * - `auto`   -> the explicit pick, else a valid blueprint (#252), else the
+ *               category default. Items with NOTHING to go on (`general` and
+ *               no icon) get the default illustration instead of an empty
+ *               column (#89).
  * - unknown mode -> treated as `auto` (matches `normalizeIllustrationMode`).
  */
 export function resolveIllustration(request: IllustrationRequest | null | undefined): ResolvedIllustration | null {
@@ -205,6 +234,10 @@ export function resolveIllustration(request: IllustrationRequest | null | undefi
 
   // `manual` never invents artwork, so an explicit pick is the only path above.
   if (mode === 'manual') return null;
+
+  // auto: a generated blueprint outranks the category's own icon, but never the
+  // teacher's explicit pick / opt-out handled above.
+  if (assets.sceneBlueprint) return resolvedForBlueprint(assets.sceneBlueprint);
 
   // auto: the category's own icon / illustration.
   if (assets.iconName) return resolvedFor(assets.contentCategory, assets.iconName, false);
@@ -233,6 +266,13 @@ export function renderIllustrationSvg(
   options: IllustrationSvgOptions = {}
 ): string {
   if (!resolved) return '';
+  if (resolved.blueprint) {
+    return renderBlueprintSvg(resolved.blueprint, resolved.palette, {
+      label: options.label || resolved.label || '',
+      assetId: resolved.assetId,
+      className: 'stage-illustration-svg',
+    });
+  }
   return renderSceneSvg(resolved.category, resolved.iconName, resolved.palette, {
     label: options.label || resolved.label || '',
     assetId: resolved.assetId,

@@ -1,6 +1,7 @@
 /** Shared, versioned domain contracts for EduGame Studio. */
 import type { GameProject } from './lesson-types';
 import type { ContentCategory } from './content-categories';
+import type { SceneBlueprint } from './scene-blueprint';
 
 /**
  * Optional per-item content metadata (docs/DECISIONS.md #60, #61, #62).
@@ -18,6 +19,12 @@ export interface ItemAssetFields {
   iconName?: string;
   /** App-owned illustration id; behaviour depends on the teacher's mode. */
   illustrationAssetId?: string | null;
+  /**
+   * Compact scene description (#252). Drawn in `auto` only, below an explicit
+   * `illustrationAssetId` pick: a generated scene must never overwrite a
+   * teacher's choice. Absent on every game saved before this field existed.
+   */
+  sceneBlueprint?: SceneBlueprint;
 }
 
 export type GameTemplate = 'quiz' | 'scenario' | 'matching' | 'treasure-hunt' | 'race';

@@ -72,6 +72,16 @@ const EDITOR_CONTENT_CATEGORY_IDS = ['general','animals','plants','space','human
    hidden rather than rendered as a broken glyph. */
 const EDITOR_ICON_NAMES = new Set(['paw-print','leaf','rocket','heart-pulse','car','shield-check','recycle','landmark','map','briefcase','trophy','file-music','palette','calculator','languages','flask-conical','cpu','stethoscope','users','house','cloud-sun','apple','box','waves-horizontal','layout-grid','book-open','lightbulb','star','check','x','arrow-right','arrow-left','play','pause','rotate-ccw','skip-forward','volume-2','volume-x','maximize','minimize','search','settings','library','pencil','trash','plus','download','upload','clock','target','brain','zap','sparkles','gift','shield-alert','mountain','fish','bird','bug','utility-pole']);
 const EDITOR_CATEGORY_LABEL = {'general':"Tổng quát",'animals':"Động vật",'plants':"Thực vật",'space':"Vũ trụ",'human-body':"Cơ thể người",'transport':"Giao thông",'safety':"An toàn",'environment':"Môi trường",'history':"Lịch sử",'geography':"Địa lí",'jobs':"Nghề nghiệp",'sports':"Thể thao",'music':"Âm nhạc",'art':"Mỹ thuật",'math':"Toán",'language':"Tiếng Việt",'science':"Khoa học",'technology':"Công nghệ",'health':"Sức khỏe",'family':"Gia đình",'community':"Cộng đồng",'weather':"Thời tiết",'food':"Thực phẩm",'objects':"Đồ vật",'water-world':"Thế giới nước"};
+/* #252: a blueprint is stored as compact JSON. The editor keeps it in a hidden
+   input like the other asset fields; this turns either a stored object or the
+   raw string back into a string safe for an attribute. */
+function editorBlueprintJson(value) {
+  if (typeof value === 'string') return value.trim();
+  if (value && typeof value === 'object') {
+    try { return JSON.stringify(value); } catch (error) { return ''; }
+  }
+  return '';
+}
 function editorAssetFieldsHtml(item, options) {
   const source = item || {};
   const compact = !!(options && options.compact);
@@ -80,14 +90,17 @@ function editorAssetFieldsHtml(item, options) {
   const rawIcon = typeof source.iconName === 'string' ? source.iconName.trim() : '';
   const iconName = EDITOR_ICON_NAMES.has(rawIcon) ? rawIcon : '';
   const illustration = typeof source.illustrationAssetId === 'string' ? source.illustrationAssetId.trim() : '';
+  const blueprint = editorBlueprintJson(source.sceneBlueprint);
   const chips = compact ? '' : `<span class="editor-asset-chip" title="Lĩnh vực nội dung của mục này">${escapeHtml(EDITOR_CATEGORY_LABEL[category] || category)}</span>
     ${illustration === 'none' ? `<span class="editor-asset-chip" title="Câu hỏi này không dùng ảnh minh hoạ">${uiIcon('ban', '', 11)} Không ảnh</span>` : ''}
+    ${blueprint && illustration !== 'none' && !illustration ? `<span class="editor-asset-chip" title="Cảnh do máy dựng từ chủ đề của câu hỏi">${uiIcon('sparkles', '', 11)} Cảnh thử</span>` : ''}
     ${illustration && illustration !== 'none' ? `<span class="editor-asset-chip" title="Minh họa đã gán">${uiIcon('image', '', 11)} ${escapeHtml(illustration)}</span>` : ''}`;
   return `<div class="editor-item-assets${compact ? ' is-compact' : ''}">
     ${chips}
     <input type="hidden" data-field="contentCategory" value="${escapeHtml(category === 'general' ? '' : category)}">
     <input type="hidden" data-field="iconName" value="${escapeHtml(iconName)}">
     <input type="hidden" data-field="illustrationAssetId" value="${escapeHtml(illustration)}">
+    <input type="hidden" data-field="sceneBlueprint" value="${escapeHtml(blueprint)}">
   </div>`;
 }
 
@@ -115,13 +128,16 @@ function editorItemArtHtml(item) {
   const builtIn = !isCustom && !isNone && /-scene$/u.test(assetId) && EDITOR_CONTENT_CATEGORY_IDS.includes(assetId.replace(/-scene$/u, ''))
     ? assetId
     : '';
+  const blueprint = editorBlueprintJson(source.sceneBlueprint);
   const badge = isNone
     ? 'Không dùng ảnh'
     : isCustom
       ? 'Ảnh tự tải lên'
       : builtIn
         ? `Hình có sẵn: ${EDITOR_CATEGORY_LABEL[builtIn.replace(/-scene$/u, '')] || builtIn}`
-        : `Theo chủ đề: ${EDITOR_CATEGORY_LABEL[category] || 'Tổng quát'}`;
+        : blueprint
+          ? 'Cảnh thử'
+          : `Theo chủ đề: ${EDITOR_CATEGORY_LABEL[category] || 'Tổng quát'}`;
   // The preview is the play-surface renderer itself, so the editor shows exactly what
   // the class will see.
   const previewItem = Object.assign({}, source, { illustrationAssetId: assetId });
@@ -141,10 +157,11 @@ function editorItemArtHtml(item) {
       <div class="editor-art-buttons">
         <button type="button" class="btn btn-secondary btn-small" data-editor-art-upload title="Chọn ảnh PNG/JPG/WEBP/GIF từ máy">${uiIcon('camera', '', 13)} Tải ảnh lên</button>
         <select data-editor-art-pick data-art-picker title="Chọn hình minh hoạ có sẵn">${options}</select>
+        <button type="button" class="btn btn-secondary btn-small" data-editor-art-blueprint title="Dựng cảnh thử từ chủ đề của câu hỏi — không cần mạng">${uiIcon('sparkles', '', 13)} Cảnh thử</button>
         <button type="button" class="btn btn-secondary btn-small" data-editor-art-reset>${uiIcon('rotate-ccw', '', 13)} Tự động</button>
         <button type="button" class="btn btn-secondary btn-small" data-editor-art-remove title="Bỏ hẳn ảnh minh hoạ của riêng câu hỏi này"${isNone ? ' disabled' : ''}>${uiIcon('ban', '', 13)} Bỏ ảnh</button>
       </div>
-      <div class="editor-art-hint">Minh hoạ đi kèm câu hỏi này. Ảnh tải lên được lưu trên máy và chơi được khi không có mạng. “Bỏ ảnh” tắt hình riêng câu hỏi này; “Tự động” trả lại hình theo chủ đề.</div>
+      <div class="editor-art-hint">Minh hoạ đi kèm câu hỏi này. Ảnh tải lên được lưu trên máy và chơi được khi không có mạng. “Cảnh thử” dựng một cảnh từ chủ đề (chưa dùng AI); “Bỏ ảnh” tắt hình riêng câu hỏi này; “Tự động” trả lại hình theo chủ đề.</div>
     </div>
   </div>`;
 }
@@ -159,7 +176,12 @@ function editorItemArtValue(row) {
   const scope = row && row.parentElement;
   const field = scope ? scope.querySelector('[data-field="illustrationAssetId"]') : null;
   const category = scope ? scope.querySelector('[data-field="contentCategory"]') : null;
-  return { illustrationAssetId: field ? field.value : '', contentCategory: category ? category.value : '' };
+  const blueprint = scope ? scope.querySelector('[data-field="sceneBlueprint"]') : null;
+  return {
+    illustrationAssetId: field ? field.value : '',
+    contentCategory: category ? category.value : '',
+    sceneBlueprint: blueprint ? blueprint.value : ''
+  };
 }
 
 /** The one call that opens the file dialog for the editor (a seam for the UI check). */
@@ -173,6 +195,26 @@ function applyEditorItemArt(row, assetId) {
   const scope = row.parentElement;
   const field = scope ? scope.querySelector('[data-field="illustrationAssetId"]') : null;
   if (field) field.value = assetId || '';
+  redrawEditorArtRow(row);
+}
+
+/**
+ * #252 "Cảnh thử": builds a blueprint from the item's content category, with
+ * no network call. It also clears an explicit pick so the generated scene is
+ * actually visible — a teacher who wants the built-in picture back picks it
+ * again (the blueprint stays stored, hidden, as designed).
+ */
+function applyEditorBlueprint(row) {
+  if (!row || typeof stageBlueprintForCategory !== 'function') return;
+  const scope = row.parentElement;
+  const categoryField = scope ? scope.querySelector('[data-field="contentCategory"]') : null;
+  const blueprintField = scope ? scope.querySelector('[data-field="sceneBlueprint"]') : null;
+  if (!blueprintField) return;
+  const category = categoryField && categoryField.value ? categoryField.value : 'general';
+  const blueprint = stageBlueprintForCategory(category);
+  blueprintField.value = blueprint ? JSON.stringify(blueprint) : '';
+  const artField = scope ? scope.querySelector('[data-field="illustrationAssetId"]') : null;
+  if (artField) artField.value = '';
   redrawEditorArtRow(row);
 }
 
@@ -214,6 +256,11 @@ function wireEditorItemArtRow(row) {
   if (reset) reset.addEventListener('click', () => {
     const live = reset.closest('[data-editor-art]');
     applyEditorItemArt(live, '');
+  });
+  const blueprintButton = row.querySelector('[data-editor-art-blueprint]');
+  if (blueprintButton) blueprintButton.addEventListener('click', () => {
+    const live = blueprintButton.closest('[data-editor-art]');
+    applyEditorBlueprint(live);
   });
   // #153: "Bỏ ảnh" writes the opt-out sentinel, not '' — '' would let `auto` draw the
   // topic picture again, which is the opposite of what the teacher asked for.
@@ -257,7 +304,8 @@ function readEditorItemAssets(scope) {
   const category = scope?.querySelector('[data-field="contentCategory"]');
   const icon = scope?.querySelector('[data-field="iconName"]');
   const illustration = scope?.querySelector('[data-field="illustrationAssetId"]');
-  if (!category && !icon && !illustration) return {};
+  const blueprint = scope?.querySelector('[data-field="sceneBlueprint"]');
+  if (!category && !icon && !illustration && !blueprint) return {};
   const fields = {};
   const categoryValue = (category?.value || '').trim();
   if (categoryValue && categoryValue !== 'general') fields.contentCategory = categoryValue;
@@ -265,6 +313,14 @@ function readEditorItemAssets(scope) {
   if (iconValue) fields.iconName = iconValue;
   const illustrationValue = (illustration?.value || '').trim();
   if (illustrationValue) fields.illustrationAssetId = illustrationValue;
+  // #252: only a blueprint the renderer can actually draw is persisted. The
+  // hidden input is app-generated, but the same total check guards a hand-edited
+  // DOM as it guards `.egame` import.
+  const blueprintValue = (blueprint?.value || '').trim();
+  if (blueprintValue && typeof stageNormalizeBlueprint === 'function') {
+    const normalized = stageNormalizeBlueprint(blueprintValue);
+    if (normalized) fields.sceneBlueprint = normalized;
+  }
   return fields;
 }
 /* "Minh họa" is a game-level choice (docs/DECISIONS.md #62, #65), stored in

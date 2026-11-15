@@ -3530,3 +3530,51 @@ Lần đo đầu trên bản CHƯA `defer` ra boot trung vị **1.240 ms** — v
 - Nhánh AI local không chạy (theo chỉ đạo).
 
 **Việc kế tiếp.** Giai đoạn 2 theo kế hoạch: chuyển từng nhóm API sang lệnh Rust thật, mỗi nhóm một lần và có test hợp đồng — bắt đầu từ nhóm dữ liệu (migration SQLite + `.egame`) vì đó là thứ #251 câu 2–4 bắt buộc đúng trước khi thử cài đè.
+
+## #252 — AI Scene Director, giai đoạn P0: cảnh minh hoạ ghép được từ một JSON nhỏ, kiểm bằng danh mục, vẽ bằng engine có sẵn (2026-11-15)
+
+**Bối cảnh.** Minh hoạ của một câu hỏi hiện là **một** lựa chọn: `illustrationAssetId` trỏ vào một trong 24 cảnh SVG dựng sẵn (`<category>-scene`), hoặc một icon, hoặc ảnh giáo viên tự tải. Một cảnh dựng sẵn phải phục vụ mọi câu trong cùng chủ đề nên câu nào cũng ra cùng một hình; giáo viên muốn "con cá heo ở biển" thì không có cách nào nói ra. Hướng đích là để AI đọc nội dung câu hỏi rồi **chọn** một cảnh ghép (nền + icon chính + tối đa hai icon phụ + bảng màu) thay vì tự vẽ.
+
+Ba ràng buộc không đổi: (1) game đã lưu phải chơi được **offline**, nên cảnh phải là dữ liệu + engine trong app, không phải ảnh gọi mạng; (2) `.egame` phải nhẹ — không nhét SVG/bitmap vào gói; (3) **không bao giờ chạy đầu ra của model**: không HTML, không JavaScript, không SVG do model sinh. Vì vậy P0 chỉ làm **khung dữ liệu + đường vẽ + đường lưu**, chưa gọi AI.
+
+**Quyết định.**
+
+1. **Một từ vựng duy nhất, một tệp nguồn.** `src/shared/scene-asset-catalog.ts` khai **10** nền (`plain`, `meadow`, `forest`, `mountain`, `sea`, `stars`, `city`, `classroom`, `lab`, `studio` — ánh xạ sang `SceneSpec` đã có), **24** khoá bảng màu (mọi `contentCategory` trừ `general`; dự phòng `language`) và **38** icon được phép dùng trong cảnh (`SCENE_ICON_IDS`), lọc từ 129 icon của registry. `CATEGORY_BACKDROPS` ánh xạ mỗi chủ đề sang một nơi hợp lý. Từ P3, prompt và bộ kiểm tra cùng đọc tệp này, nên model không thể được "dạy" một id mà validator từ chối.
+2. **Hình dạng blueprint khoá ở `v: 1`, chỉ bố cục `single`.** `{ v, layout, backdrop, paletteKey, mainIcon, subIcons? }` — JSON thuần, **~120–180 byte**. Chưa có `props`; `compare`/`process`/`surround` để P1/P2. `.egame` chỉ chở đúng chuỗi JSON này, không chở hình.
+3. **Một cổng kiểm tra TỔNG và BẤT BIẾN.** `normalizeSceneBlueprint()` (`src/shared/scene-blueprint.ts`) nhận object **hoặc** chuỗi JSON, không bao giờ ném lỗi, và chuẩn hoá lại đầu ra của chính nó cho ra đúng object đó. Luật: `v` sai → `null`; `layout` lạ → `null`; `mainIcon` thiếu/không có trong danh mục → `null` (không có ý nghĩa an toàn); `backdrop` lạ → `plain`; `paletteKey` lạ → `language`; `subIcons` sai/trùng/chính là icon chính/vượt trần 2 → bỏ; JSON hỏng hoặc quá **600 byte** → `null`; khoá lạ (kể cả `__proto__`) bị bỏ qua. Cùng một cổng phục vụ lưu trữ, nhập `.egame` và (P3) đầu ra model.
+4. **Thứ tự ưu tiên rõ ràng, AI không đè lựa chọn của giáo viên.** `off` > `'none'` > ảnh tự tải > `illustrationAssetId=<category>-scene` (chọn tay) > `sceneBlueprint` > icon/chủ đề mặc định > cảnh theo ngôn ngữ. Blueprint **chỉ** được dùng khi `illustrationMode === 'auto'`; ở `manual` nó bị bỏ qua nhưng vẫn được giữ trong dữ liệu, nên bỏ ảnh chọn tay là cảnh cũ sống lại.
+5. **Vẽ bằng engine sẵn có, đầu ra cũ không đổi một byte.** `renderSceneSvg` được tách thành `composeSceneSvg(spec, palette, subject, subIcons, options)`; đường cũ gọi với `subIcons = []`, và **24/24 hash vàng** của cả 24 cảnh trước lần tách vẫn khớp. Thêm `renderSubIcons()` (icon phụ 52px) và `renderBlueprintSvg()`. Không có nhánh nào nhận markup từ ngoài.
+6. **Lưu trữ đi qua đúng một chỗ.** `normalizeItemAssets()` trả thêm `sceneBlueprint` (đã chuẩn hoá, `null` khi vắng); `itemAssetsFromDraft()` ghi bản đã chuẩn hoá; `game-package.ts` có `collectItemBlueprints()`/`reattachItemBlueprints()` để `.egame` mang blueprint qua vòng xuất→nhập và **chuẩn hoá lại khi nhập**, nên một gói bị sửa tay cũng không đưa được giá trị lạ vào. **Không đổi một dòng Rust nào**; `ITEM_ASSET_PATCH_KEYS` vẫn là 3 khoá, blueprint cố ý **không** nằm trong allowlist `lesson.rs:564`.
+7. **Bản sao renderer được giữ ở P0, kèm test chống trôi.** `src/renderer/features/game-illustration.ts` là bản viết tay của bảng + bộ chuẩn hoá (renderer là script toàn cục, không import được `src/shared`). `tests/unit/scene-blueprint.test.ts` biên dịch renderer rồi so **cùng đầu vào → cùng blueprint/cùng SVG** với bản shared; `scene-catalog.test.ts` so bảng màu/icon với registry. Việc gộp bằng esbuild là một lượt refactor riêng **trước P1**, không trộn vào P0.
+8. **"Cảnh thử" là affordance tạm, không phải tính năng AI.** Nút nằm trong cụm minh hoạ của **editor** (không phải wizard — đường `lesson:patch-assets` của wizard là allowlist 3 khoá ở Rust). Bấm nút: dựng blueprint từ `contentCategory` **không gọi mạng**, ghi vào input ẩn `sceneBlueprint`, xoá lựa chọn thủ công để cảnh **nhìn thấy được**, hiện badge `Cảnh thử`. Giữ blueprint khi giáo viên chọn lại cảnh dựng sẵn; "Tự động" làm cảnh sống lại; "Bỏ ảnh" vẫn thắng. P3 thay nguồn bằng AI và đổi nhãn thành "Cảnh gợi ý".
+9. **Chia giai đoạn, không gộp.** P0 (xong): danh mục + blueprint + lưu trữ + `.egame` + vẽ `single` + icon phụ + nút thử + bản sao renderer + test + docs. P1: bố cục `compare`. P2: `process`/`surround` + `props`. P3: kênh AI + prompt + nút thật. P4: cổng + docs.
+10. **Số hiệu quyết định là #252.** `#228` đã thuộc về quyết định AI local trên GPU (2026-11-09); mọi tham chiếu mới đã đổi sang #252.
+
+**Đánh đổi.**
+
+- **Hai bản bảng (shared + renderer mirror) là nợ có chủ ý.** Nó cho P0 chạm được cả hai bề mặt mà không phải đổi cách nạp script. Cái giá là mỗi id mới phải sửa hai chỗ; hai test (parity bằng `vm`, và so bảng với registry) là lưới an toàn, nhưng lưới chỉ bắt được cái đã khai — quên cả hai bên thì không ai báo. Vì vậy việc gộp bằng esbuild được xếp **trước** P1.
+- **Danh mục icon là 38/129, không phải tất cả.** Cảnh ghép cần icon "đứng riêng được" ở 52px; cho model chọn trong 129 icon sẽ sinh ra những tổ hợp xấu. Danh sách ngắn là một quyết định thẩm mỹ, không phải giới hạn kỹ thuật.
+- **`mainIcon` sai làm mất cả blueprint, `backdrop` sai chỉ lùi về `plain`.** Cố ý: không có icon thì cảnh vô nghĩa, còn sai nền vẫn là một cảnh dùng được. Nhờ vậy gói hỏng một phần vẫn cứu được.
+- **Trần 600 byte đo bằng `.length`** (id ASCII) để không phụ thuộc `Buffer` trong V8 nhúng của tiến trình chính. Đúng với dữ liệu hiện tại; nếu sau này cho phép chuỗi Unicode thì phải đổi sang đo byte thật.
+- **Nút "Cảnh thử" xoá lựa chọn thủ công.** Đây là hành vi có thể gây ngạc nhiên, nhưng nếu giữ lựa chọn thì bấm nút xong giáo viên **không thấy gì đổi** — tệ hơn. Blueprint vẫn còn trong input nên không mất dữ liệu.
+
+**Kiểm chứng.**
+
+- `npm run check` sạch (`tsc --noEmit`).
+- `npm run check:renderer-globals` → **72/74** script, **1051** hàm, **8358** điểm gọi, **0** undefined.
+- `npm run build:icons:check` → `icon-data.ts` đồng bộ **129** icon.
+- `npm test` → **97/97** suite (**46,5 s**), gồm `scene-catalog` **6** check, `scene-blueprint` **13** check (luật chuẩn hoá, thứ tự ưu tiên, vẽ, parity `vm` với renderer đã biên dịch), 24 hash vàng của `renderSceneSvg`, và các khẳng định mới cho `.egame` (round-trip, gói bị sửa tay, blueprint dạng chuỗi).
+- `npm run build:tauri` → bundle nhúng **6160,9 KiB**, `dist-tauri` **201** tệp (`check:embedded` khớp lại).
+- `node scripts/build-tauri-release.js` → binary release **56,43 MiB** sau **3m31s**; `src-tauri/tauri.conf.json` (đang chứa `devPath` chưa commit của chủ dự án) được khôi phục **nguyên byte**, SHA-256 `380F9E89…B974768`.
+- Trên **binary release thật** (WebView2 qua CDP, cổng 9361, thư mục dữ liệu tạm `EDUGAME_TAURI_GATE=1`): `npm run check:item-assets-ui` → **43/43**, trong đó **14** check mới của #252: nút "Cảnh thử" có mặt, input ẩn có mặt, bấm nút ghi `{"v":1,"layout":"single","backdrop":"forest","paletteKey":"animals","mainIcon":"paw-print"}`, xoá lựa chọn thủ công, badge đúng, preview vẽ cảnh, `readEditorItemAssets` trả blueprint, chọn cảnh dựng sẵn thì cảnh chọn thắng **và** blueprint vẫn còn, "Tự động" làm sống lại, "Bỏ ảnh" thắng, blueprint sống qua **một lần lưu thật**, và mục chỉ có blueprint **không** sinh `illustrationAssetId`. Cùng cổng đo bố cục ở 1920×1080 và 1366×768: chữ nhỏ nhất **11px**, không tràn/cắt.
+
+**Không chứng minh / chưa làm.**
+
+- **Chưa có AI.** Không có kênh model, prompt, nút "✨ Gợi ý cảnh từ nội dung" hay task writer (P3). Vì vậy chưa có bằng chứng nào rằng một model thật trả về JSON hợp lệ — cổng kiểm tra mới chỉ được thử bằng đầu vào tự tạo.
+- Chưa có `compare`/`process`/`surround` hay `props` (P1/P2); schema hiện chỉ vẽ được `single`.
+- Chưa duyệt bằng **mắt người**: phiên này không có đầu vào hình ảnh, nên "cảnh đẹp/hợp chủ đề" chỉ được chứng minh bằng id + cấu trúc SVG, không bằng thẩm mỹ.
+- Chưa thử DPI 125–150%, chưa thử trên máy pilot, chưa build/phát hành installer 0.5.2.
+- Blueprint **không** đi qua `lesson:patch-item-assets` (allowlist 3 khoá của Rust) — cố ý, nhưng nghĩa là đường wizard tạo câu hỏi **chưa** đặt được blueprint; chỉ editor đặt được.
+- Chưa đo dung lượng `.egame` thật trước/sau trên một bộ game lớn; con số ~120–180 byte/câu là suy ra từ hình dạng, chưa phải phép đo trên gói.
+
+**Việc kế tiếp.** Refactor gộp bảng cảnh bằng esbuild để bỏ bản sao renderer (một lượt riêng, có parity test làm lưới), rồi P1: bố cục `compare` (hai vế + dấu so sánh) trên cùng cổng kiểm tra và cùng golden-hash. Sau P2 mới mở kênh AI ở P3, và chỉ khi đó mới đổi nhãn "Cảnh thử" thành "Cảnh gợi ý".

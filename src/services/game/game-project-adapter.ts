@@ -48,6 +48,7 @@ import {
   normalizeIconName,
   normalizeIllustrationAssetId
 } from '../../shared/asset-validation';
+import { normalizeSceneBlueprint } from '../../shared/scene-blueprint';
 import {
   LessonContractError,
   parseGameConfig,
@@ -287,10 +288,12 @@ function itemAssetsFromDraft(source: ItemAssetFields | undefined): ItemAssetFiel
   const contentCategory = normalizeContentCategory(source.contentCategory);
   const iconName = normalizeIconName(source.iconName);
   const illustrationAssetId = normalizeIllustrationAssetId(source.illustrationAssetId);
+  const sceneBlueprint = normalizeSceneBlueprint(source.sceneBlueprint);
   return {
     ...(contentCategory !== 'general' ? { contentCategory } : {}),
     ...(iconName ? { iconName } : {}),
-    ...(illustrationAssetId ? { illustrationAssetId } : {})
+    ...(illustrationAssetId ? { illustrationAssetId } : {}),
+    ...(sceneBlueprint ? { sceneBlueprint } : {})
   };
 }
 
