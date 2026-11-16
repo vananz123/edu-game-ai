@@ -7,6 +7,13 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-16 — #276 quyết định: wizard **không** tự gắn cảnh (giáo viên bấm trong trình soạn)
+- **Không đổi mã.** Chốt hướng (c) trong ba hướng của #275: cảnh vẫn chỉ do giáo viên bấm "Gợi ý cảnh" trong trình soạn.
+- **Lý do:** (a) gắn cảnh theo danh mục cho từng câu ⇒ mọi câu cùng chủ đề nhận cùng một khung, và **che mất** nút gợi ý thật (giáo viên tưởng thế là tốt nhất); (b) gọi model từng câu ⇒ thêm 1–3 s + phí cho một thứ không ảnh hưởng việc học, mà cảnh kém thì giáo viên vẫn phải sửa tay.
+- **Giữ nguyên** cũng đúng nguyên tắc "gameplay không phụ thuộc AI": không có cảnh thì câu hỏi vẫn chơi được.
+- **Đường lui đã ghi:** nếu giáo viên than phải bấm nhiều lần ⇒ làm **"gắn cảnh cho cả game"** trong trình soạn (một lượt model cho nhiều câu, có preview), không phải gắn mặc định trong wizard.
+- **Đã đo:** chỉ tài liệu (`npm run check` 52 tệp sạch); không có mã nào thay đổi nên không chạy lại cổng UI.
+
 ### 2026-11-16 — #275 `lesson:patch-item-assets` nhận `sceneBlueprint` (+ sửa schema draft nuốt khoá này)
 - **Vấn đề:** kênh ghi minh hoạ duy nhất của wizard allowlist đúng **ba khoá chuỗi**, nên cảnh không có đường đi qua wizard — giáo viên soạn bằng wizard không bao giờ có cảnh dù engine đã vẽ được 4 bố cục.
 - **Sửa 1 (`src/shared/asset-validation.ts`):** `ITEM_ASSET_PATCH_KEYS` thêm `sceneBlueprint` — giá trị **object** duy nhất trong allowlist; cổng là `normalizeSceneBlueprint` (đúng cổng lưu + nhập `.egame`), thứ bị từ chối thì **xoá khoá** chứ không lưu rác; `null`/`''`/`v` sai đều là "xoá". Kết quả trả thêm `sceneBlueprint` **ngoài** `applied` (vì `applied` là hợp đồng chuỗi của đường lưu).
@@ -27,15 +34,7 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - **Chưa xác minh:** chưa có người duyệt bằng mắt cho màn chơi/các bố cục · `process`/`surround` vẫn chưa qua model thật · blueprint chưa đi qua đường wizard (`lesson:patch-item-assets` vẫn allowlist 3 khoá) · chưa có GitHub release `v0.5.2` · P7 (Windows sạch/SmartScreen/ký) còn mở.
 - **Việc kế tiếp:** P4 còn hai mục — (a) ma trận duyệt thị giác từng bố cục (cần người), (b) mở `lesson:patch-item-assets` cho `sceneBlueprint` để wizard sinh được cảnh; hoặc P7.
 
-### 2026-11-16 — #273 "`listAiTasks` trả rỗng" không phải bug: `history:false` là live-only; gate tasks 8 → 12/12
-- **Kết luận:** kênh đọc `ai:tasks` **đúng**. Đo trên binary release (provider HTTP loopback trả lời một `scene:suggest` thật): `{limit:10}` ⇒ `history` 1 hàng `scene/completed`; `{limit:10, history:true}` ⇒ 1 hàng; `{limit:10, history:false}` ⇒ `history []`, `total 0`. `history:false` là **live-only theo hợp đồng** (`src-tauri/src/ai_tasks.rs`), và đúng là payload `ai-status` poll mỗi 1,2 giây vì nó chỉ cần tác vụ đang chạy. Ghi chú "nghi lỗi kênh đọc" ở lượt trước là **hiểu sai payload**, không phải lỗi sản phẩm.
-- **Không sửa một dòng sản phẩm nào.** Sửa chỗ *hiểu sai*: đầu tệp `tests/ui/ui-ai-tasks-paging-check.js` từng khẳng định "bản Tauri chưa có writer cho `ai_tasks` (`start_task` không có chỗ gọi)" — sai từ lâu (`scene.rs`, `lesson.rs` đều gọi `start_task`) và chính câu đó làm giả thuyết kia nghe hợp lý. Đầu tệp giờ nói đúng, và gate **tự chạy một lượt AI thật** qua provider loopback rồi kiểm: hàng `scene/completed` được ghi & đọc lại; `history:false` không trả hàng, `total 0`; tác vụ đã xong không còn trong `live`. **8 → 12/12.**
-- **Đối chứng âm (2 lượt `cargo tauri build`):** bỏ rơi hàng trong `ai_task_list` ⇒ đỏ đúng 2 chỗ (`row: none`, `rows 0, total 3`); khôi phục byte-exact (`lesson_store.rs` SHA-256 `64079e3d57bd0393…`) ⇒ **12/12**, chạy hai lượt liên tiếp đều xanh.
-- **Hai lỗi trong chính cái gate, do đối chứng âm lộ ra:** (1) lượt đỏ đầu chỉ đỏ 1 chỗ vì check "đọc lại được" đo `total` — `total` là `SELECT COUNT(*)`, một câu SQL khác câu lấy hàng, nên kênh đọc hỏng vẫn để `total` đúng; check giờ đòi **số hàng**. (2) `desktop.stub('listAiTasks', …)` của lượt trước còn sống trong trang, lượt sau đo qua stub (`history 5, total 30`); gate giờ `location.reload()` trước khi đo.
-- **Đã đo:** `npm run check` 52 tệp sạch (gồm `check-ui-test-syntax`) · `devPath` gỡ → build → khôi phục, SHA-256 khớp ghim (`5ae0bf649cb60325…`) · gate tasks **12/12** trên CDP 9375, hai lượt liên tiếp.
-- **Chưa xác minh:** chưa duyệt màn hình bằng mắt người · `process`/`surround` vẫn chưa chạy qua model thật (lượt này chỉ chạy `single` qua model loopback) · chưa có GitHub release `v0.5.2`.
-- **Việc kế tiếp:** P4 — mở rộng `check:item-assets-ui` cho từng layout, hoặc P7 (máy Windows sạch/SmartScreen/ký), hoặc một lần chạy `surround`/`process` thật nếu có khoá.
-
+### 2026-11-16 — #273 "`listAiTasks` trả rỗng" không phải bug: `history:false` là live-only — bản đầy đủ: [docs/handoff/status/2026-11-16.md](handoff/status/2026-11-16.md).
 ### 2026-11-16 — #272 xoá bản mirror trong renderer: scene code còn MỘT nguồn (esbuild bundle) — bản đầy đủ: [docs/handoff/status/2026-11-16.md](handoff/status/2026-11-16.md).
 ### 2026-11-16 — #271 "lỗi giật 2px" ở màn chơi: hoá ra là `:hover`, và cổng đo nhầm chỗ — bản đầy đủ: [docs/handoff/status/2026-11-16.md](handoff/status/2026-11-16.md).
 ### 2026-11-16 — #270 `surround`: chủ thể ở giữa + tối đa 4 vật vây quanh (4/4 layout, P2 đóng) — bản đầy đủ: [docs/handoff/status/2026-11-16.md](handoff/status/2026-11-16.md).

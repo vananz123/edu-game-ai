@@ -4378,3 +4378,31 @@ release (CDP 9376): `ui-item-assets-editor-check` **157/157**.
 soạn. Bước tiếp theo là một quyết định sản phẩm: wizard tự gắn cảnh **theo danh mục** (offline,
 `sceenBlueprintFromCategory`) cho từng câu vừa sinh, hay gọi model cho từng câu (tốn token + chậm),
 hay chỉ để giáo viên bấm trong trình soạn như hiện nay.
+
+## #276 — Wizard KHÔNG tự gắn cảnh; cảnh vẫn do giáo viên bấm trong trình soạn
+
+**Câu hỏi (sau #275).** Kênh `lesson:patch-item-assets` đã nhận `sceneBlueprint`, nhưng chưa ai
+gửi. Ba hướng: (a) wizard tự gắn cảnh **theo danh mục** cho từng câu vừa sinh (offline), (b) gọi
+model cho từng câu, (c) giữ nguyên — cảnh chỉ do giáo viên bấm "Gợi ý cảnh" trong trình soạn.
+
+**Quyết định: (c).** Giữ nguyên đường hiện tại.
+
+**Vì sao không (a).** Cảnh theo danh mục là **cảnh mặc định**, không phải cảnh của câu hỏi: mọi
+câu cùng category nhận cùng một hình, nên một game 10 câu sẽ có 10 khung giống nhau. Gắn sẵn
+như vậy vừa làm game trông nghèo hơn là không có, vừa **che mất** nút "Gợi ý cảnh" — giáo viên
+sẽ tưởng cảnh đã là tốt nhất có thể và không bấm. Một tính năng trang trí tự động chạy trước
+tính năng thật là cách chắc chắn nhất để tính năng thật không bao giờ được dùng.
+
+**Vì sao không (b).** Mỗi câu một lượt model (1–3 s, có phí) cộng vào thời gian đã dài của bước
+sinh nội dung, cho một thứ **không ảnh hưởng việc học**. Và nếu model trả cảnh kém, giáo viên
+vẫn phải sửa từng câu — tức là trả tiền để có thêm việc.
+
+**Vì sao (c) đúng.** Cảnh là *trang trí cho một câu đã có nội dung*, nên nó thuộc về trình soạn,
+nơi giáo viên đang nhìn đúng câu đó và có nút bấm, preview và nút hoàn tác. Nó cũng đúng với
+nguyên tắc "gameplay không phụ thuộc AI": không có cảnh thì câu hỏi vẫn chơi được, nên không có
+lý do chặn/ làms chậm đường sinh.
+
+**Hệ quả.** #275 vẫn cần (kênh + schema là điều kiện để *bất kỳ* đường nào gắn cảnh được, kể cả
+đường giáo viên bấm), nhưng không thêm bước nào vào wizard. Nếu sau này giáo viên than "phải bấm
+10 lần", đó là lúc làm **"gắn cảnh cho cả game"** bằng một nút trong trình soạn (cùng một lượt
+model cho nhiều câu, có preview) — chứ không phải gắn mặc định trong wizard.
