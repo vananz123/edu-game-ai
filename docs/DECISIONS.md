@@ -4251,3 +4251,46 @@ defined` — tức adapter **không** có đường vòng nào để tự vẽ, 
 **Còn lại.** Bảng `STAGE_ILLUSTRATION_CATEGORY_ICONS` (24 dòng, category → icon mặc định) vẫn
 là bản sao có chủ ý: nó là *dữ liệu mặc định*, không phải hình học, và wizard đọc nó như bảng;
 `illustration-registry.test` so nó với `getCategoryIcon()`.
+
+## #273 — "`listAiTasks` trả rỗng dù SQLite có hàng": KHÔNG phải lỗi kênh đọc, mà là đọc sai `history`
+
+**Giả thuyết cũ (sai).** Sau lượt chạy AI thật (#265), `desktop.call('listAiTasks', …)` trả về
+danh sách rỗng trong khi SQLite đã có hàng `kind=scene` ⇒ tưởng là lỗi kênh đọc giữa V8/Rust.
+
+**Đo được.** Dựng một provider HTTP loopback (đúng đường mà provider cloud đi: kiểm HTTPS trừ
+loopback, bearer, `classifyProviderHttpError`) trả lời một `scene:suggest` thật trên binary
+release, rồi đọc lại cả hai kiểu payload:
+
+| payload | `live` | `history` | `total` |
+| --- | --- | --- | --- |
+| `{limit:10}` | 0 | **1** (`scene/completed/gợi ý cảnh minh hoạ`) | 1 |
+| `{limit:10, history:true}` | 0 | **1** | 1 |
+| `{limit:10, history:false}` | 0 | 0 | 0 |
+
+⇒ Kênh đọc **đúng**. `history:false` là **live-only theo hợp đồng** (`ai_tasks.rs` trả
+`{live, history: [], total: 0}` ngay sau khi lấy live), và đó chính là payload mà `ai-status`
+poll 1,2 giây/lần — nó chỉ cần biết *có tác vụ nào đang chạy*. Không có gì bị mất; chỉ có
+người đọc (tôi, ở ghi chú trước) tưởng `history:false` là "lấy tất cả".
+
+**Sửa gì.**
+- `tests/ui/ui-ai-tasks-paging-check.js` đổi từ *tin* sang *chứng minh*: gate này trước đây ghi
+  thẳng trong đầu tệp rằng "bản Tauri chưa có writer cho `ai_tasks` (`start_task` không có chỗ
+  gọi)" — câu đó **sai từ lâu** (`scene.rs` và `lesson.rs` đều gọi `start_task`), và chính nó
+  làm giả thuyết "kênh đọc hỏng" nghe hợp lý. Đầu tệp giờ nói đúng sự thật, và gate **tự chạy
+  một lượt AI thật** qua provider loopback rồi kiểm 4 điều: hàng `scene/completed` được ghi và
+  đọc lại được với `history:true`; `history:false` không trả hàng nào và `total 0`; một tác vụ
+  đã xong không còn nằm trong `live`. Gate 8 → **12/12**.
+- Không đổi một dòng nào của sản phẩm: đây là *hiểu sai được sửa bằng test*, không phải bug.
+
+**Đối chứng âm (đã chạy, hai lượt build).** Sửa `ai_task_list` để bỏ rơi các hàng
+(`let _ = item;`) ⇒ gate đỏ đúng 2 chỗ: `row: none` và `rows 0, total 3`. Khôi phục byte-exact
+(SHA-256 `64079e3d57bd0393…`) ⇒ xanh 12/12.
+
+**Hai điều đối chứng âm dạy được (và đã sửa ngay trong gate).**
+1. Lượt đỏ **đầu tiên chỉ đỏ 1 chỗ**: check "đọc lại được" đo `total`, mà `total` là
+   `SELECT COUNT(*)` — một câu SQL khác với câu lấy hàng. Kênh đọc hỏng vẫn để `total` đúng.
+   Check giờ đòi **số hàng**, không đòi con số đếm. Một check xanh nhờ đo một thứ khác là
+   check giả.
+2. `desktop.stub('listAiTasks', …)` của lượt trước **còn sống** trong trang (không reload), nên
+   lượt sau đo qua stub và báo `history 5, total 30` — tức chính gate này có thể tự lừa mình.
+   Gate giờ `location.reload()` trước khi đo (chạy hai lượt liên tiếp đều 12/12).
