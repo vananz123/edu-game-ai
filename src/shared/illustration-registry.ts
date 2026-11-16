@@ -37,12 +37,28 @@ export interface IllustrationPalette {
   sky?: string;
   /** Ground band the subject stands on. Defaults to a darkened `fill`. */
   ground?: string;
+  /**
+   * Second hue, the WARM one (#278): props, the sun and anything that should
+   * read as "a thing nearby, in a different material". Every palette used to be
+   * one hue family, so a scene was a monochrome wash — the reference picture a
+   * teacher sent had a blue car, an orange pot and a green plant on cream, i.e.
+   * four hues. This is the smallest change that buys that.
+   */
+  warm?: string;
+  /**
+   * Third hue, the COOL one (#278): distance and secondary accents (mountains,
+   * skyline, towers, pebbles, corner icons). Real distance desaturates and
+   * shifts blue; this is the palette's version of that.
+   */
+  cool?: string;
 }
 
 const DEFAULT_PALETTE: IllustrationPalette = Object.freeze({
   glow: '#5b6cff',
   fill: '#eceff9',
   ink: '#2b3563',
+  warm: '#d79a3c',
+  cool: '#6b7f99',
 });
 
 /**
@@ -72,36 +88,42 @@ export const DEFAULT_ILLUSTRATION_ASSET_ID = `${DEFAULT_ILLUSTRATION_CATEGORY}-s
  * text-first. Categories absent here use `DEFAULT_PALETTE`; that is
  * intentional, not an oversight.
  *
+ * #278: each row carries THREE hues, not one. `glow` is the subject's, `warm`
+ * is the props' (a second material: orange/coral/gold), `cool` is distance
+ * (mountains, skyline, pebbles, corner icons). One hue per palette was the real
+ * reason a finished scene still read as a diagram: the reference picture a
+ * teacher sent has a blue car, an orange pot and a green plant on cream.
+ *
  * #220: the scenes are LIGHT. The play stage is pale from #220 on, so a dark
  * plate with pale ink would be the one dark rectangle left on the board; here
  * `fill` is the card the picture sits in, `sky`/`ground` the two bands, and
  * `ink` the dark stroke of the subject — the same polarity as the stage text.
  */
 const CATEGORY_PALETTES: Readonly<Record<string, IllustrationPalette>> = Object.freeze({
-  animals: { glow: '#2e9e6b', fill: '#eaf7f0', ink: '#1c5f42', sky: '#e2f3ea', ground: '#d3ebdf' },
-  plants: { glow: '#3f9a3f', fill: '#eef7ea', ink: '#2c6630', sky: '#e6f3e0', ground: '#d8ecce' },
-  space: { glow: '#5b4bd6', fill: '#eef0fc', ink: '#3a2f92', sky: '#e7e9fa', ground: '#dcdff3' },
-  'human-body': { glow: '#d1495b', fill: '#fdeff1', ink: '#96283a', sky: '#fbe6e9', ground: '#f5d6db' },
-  transport: { glow: '#2f7ed8', fill: '#eaf2fb', ink: '#1d5b9c', sky: '#e2eef9', ground: '#d3e4f4' },
-  safety: { glow: '#d98c2b', fill: '#fdf3e6', ink: '#8a5206', sky: '#fcedd9', ground: '#f5dfc4' },
-  environment: { glow: '#2f9e8f', fill: '#e8f6f4', ink: '#1c6f64', sky: '#e0f2ef', ground: '#d0e9e5' },
-  history: { glow: '#b07a3c', fill: '#f7f0e6', ink: '#7a5326', sky: '#f2e9da', ground: '#e8dcc6' },
-  geography: { glow: '#3b82a8', fill: '#eaf3f7', ink: '#1f5a75', sky: '#e2eff5', ground: '#d2e5ee' },
-  jobs: { glow: '#7a6bd8', fill: '#f1effc', ink: '#4b3f9c', sky: '#ebe8fa', ground: '#dfdaf3' },
-  sports: { glow: '#e0742b', fill: '#fdf0e7', ink: '#9a4715', sky: '#fce9da', ground: '#f5dac4' },
-  music: { glow: '#a24bc4', fill: '#f8edfc', ink: '#72258f', sky: '#f4e4fa', ground: '#ecd6f3' },
-  art: { glow: '#c4497f', fill: '#fceef4', ink: '#93285a', sky: '#fae3ee', ground: '#f4d3e2' },
-  math: { glow: '#3f6fd8', fill: '#ecf1fc', ink: '#24499c', sky: '#e4ebf9', ground: '#d6e0f4' },
-  language: { glow: '#4c8f5a', fill: '#eff6ec', ink: '#2f6138', sky: '#e7f2e2', ground: '#d9e9d2' },
-  science: { glow: '#2f9ea8', fill: '#e9f6f7', ink: '#1c6c74', sky: '#e1f2f3', ground: '#d1e8ea' },
-  technology: { glow: '#4a6bd0', fill: '#edf1fc', ink: '#2b4a9e', sky: '#e5ebf9', ground: '#d7e0f4' },
-  health: { glow: '#d1546b', fill: '#fdeef0', ink: '#96283a', sky: '#fbe5e8', ground: '#f5d5da' },
-  family: { glow: '#c07a4a', fill: '#fbf1e9', ink: '#8a4b26', sky: '#f7e9dd', ground: '#eedccb' },
-  community: { glow: '#6b7fd0', fill: '#eff2fc', ink: '#3a4b9c', sky: '#e7ebf9', ground: '#d9e0f3' },
-  weather: { glow: '#4b93c9', fill: '#eaf3f9', ink: '#21608c', sky: '#e2eef7', ground: '#d2e4f0' },
-  food: { glow: '#c98a2b', fill: '#fdf5e6', ink: '#8a5206', sky: '#fcefd9', ground: '#f4e2c2' },
-  objects: { glow: '#8a8fa8', fill: '#f1f3f8', ink: '#464e63', sky: '#eaedf4', ground: '#dee2ec' },
-  'water-world': { glow: '#2f97c9', fill: '#e8f3fa', ink: '#1a6289', sky: '#e0eef8', ground: '#cfe4f3' },
+  animals: { glow: '#2e9e6b', fill: '#eaf7f0', ink: '#1c5f42', sky: '#e2f3ea', ground: '#d3ebdf', warm: '#d79a3c', cool: '#4a8b8a' },
+  plants: { glow: '#3f9a3f', fill: '#eef7ea', ink: '#2c6630', sky: '#e6f3e0', ground: '#d8ecce', warm: '#cfa63e', cool: '#5e8a5a' },
+  space: { glow: '#5b4bd6', fill: '#eef0fc', ink: '#3a2f92', sky: '#e7e9fa', ground: '#dcdff3', warm: '#d1698f', cool: '#5a63a8' },
+  'human-body': { glow: '#d1495b', fill: '#fdeff1', ink: '#96283a', sky: '#fbe6e9', ground: '#f5d6db', warm: '#e0904a', cool: '#6b7f99' },
+  transport: { glow: '#2f7ed8', fill: '#eaf2fb', ink: '#1d5b9c', sky: '#e2eef9', ground: '#d3e4f4', warm: '#dd7a5b', cool: '#6b7f99' },
+  safety: { glow: '#d98c2b', fill: '#fdf3e6', ink: '#8a5206', sky: '#fcedd9', ground: '#f5dfc4', warm: '#cfa63e', cool: '#6b7f99' },
+  environment: { glow: '#2f9e8f', fill: '#e8f6f4', ink: '#1c6f64', sky: '#e0f2ef', ground: '#d0e9e5', warm: '#d79a3c', cool: '#4a8b8a' },
+  history: { glow: '#b07a3c', fill: '#f7f0e6', ink: '#7a5326', sky: '#f2e9da', ground: '#e8dcc6', warm: '#cfa63e', cool: '#6b7f99' },
+  geography: { glow: '#3b82a8', fill: '#eaf3f7', ink: '#1f5a75', sky: '#e2eff5', ground: '#d2e5ee', warm: '#dd7a5b', cool: '#4a8b8a' },
+  jobs: { glow: '#7a6bd8', fill: '#f1effc', ink: '#4b3f9c', sky: '#ebe8fa', ground: '#dfdaf3', warm: '#dd7a5b', cool: '#5a63a8' },
+  sports: { glow: '#e0742b', fill: '#fdf0e7', ink: '#9a4715', sky: '#fce9da', ground: '#f5dac4', warm: '#cfa63e', cool: '#6b7f99' },
+  music: { glow: '#a24bc4', fill: '#f8edfc', ink: '#72258f', sky: '#f4e4fa', ground: '#ecd6f3', warm: '#d79a3c', cool: '#5a63a8' },
+  art: { glow: '#c4497f', fill: '#fceef4', ink: '#93285a', sky: '#fae3ee', ground: '#f4d3e2', warm: '#cfa63e', cool: '#6b7f99' },
+  math: { glow: '#3f6fd8', fill: '#ecf1fc', ink: '#24499c', sky: '#e4ebf9', ground: '#d6e0f4', warm: '#dd7a5b', cool: '#5a63a8' },
+  language: { glow: '#4c8f5a', fill: '#eff6ec', ink: '#2f6138', sky: '#e7f2e2', ground: '#d9e9d2', warm: '#d79a3c', cool: '#4a8b8a' },
+  science: { glow: '#2f9ea8', fill: '#e9f6f7', ink: '#1c6c74', sky: '#e1f2f3', ground: '#d1e8ea', warm: '#dd7a5b', cool: '#4a8b8a' },
+  technology: { glow: '#4a6bd0', fill: '#edf1fc', ink: '#2b4a9e', sky: '#e5ebf9', ground: '#d7e0f4', warm: '#dd7a5b', cool: '#5a63a8' },
+  health: { glow: '#d1546b', fill: '#fdeef0', ink: '#96283a', sky: '#fbe5e8', ground: '#f5d5da', warm: '#d79a3c', cool: '#6b7f99' },
+  family: { glow: '#c07a4a', fill: '#fbf1e9', ink: '#8a4b26', sky: '#f7e9dd', ground: '#eedccb', warm: '#cfa63e', cool: '#6b7f99' },
+  community: { glow: '#6b7fd0', fill: '#eff2fc', ink: '#3a4b9c', sky: '#e7ebf9', ground: '#d9e0f3', warm: '#d79a3c', cool: '#5a63a8' },
+  weather: { glow: '#4b93c9', fill: '#eaf3f9', ink: '#21608c', sky: '#e2eef7', ground: '#d2e4f0', warm: '#cfa63e', cool: '#6b7f99' },
+  food: { glow: '#c98a2b', fill: '#fdf5e6', ink: '#8a5206', sky: '#fcefd9', ground: '#f4e2c2', warm: '#dd7a5b', cool: '#4a8b8a' },
+  objects: { glow: '#8a8fa8', fill: '#f1f3f8', ink: '#464e63', sky: '#eaedf4', ground: '#dee2ec', warm: '#dd7a5b', cool: '#6b7f99' },
+  'water-world': { glow: '#2f97c9', fill: '#e8f3fa', ink: '#1a6289', sky: '#e0eef8', ground: '#cfe4f3', warm: '#dd7a5b', cool: '#4a8b8a' },
 });
 
 export function getIllustrationPalette(category: unknown): IllustrationPalette {

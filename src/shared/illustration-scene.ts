@@ -286,12 +286,16 @@ function primitivesOf(value: SceneLayerPrimitives): readonly ScenePrimitive[] {
 function renderSky(primitive: ScenePrimitive, palette: IllustrationPalette): string {
   const ink = esc(palette.ink);
   const glow = esc(palette.glow);
+  // #278: the palette's second and third hue. Both fall back to the two hues a
+  // pre-#278 caller can pass (glow/ink), so an old palette object still renders.
+  const warm = esc(palette.warm || palette.glow);
+  const cool = esc(palette.cool || palette.ink);
   switch (primitive) {
     case 'sun':
       return (
         `<g data-scene-primitive="sun">` +
-        `<circle cx="268" cy="42" r="27" fill="${glow}" opacity="0.16"/>` +
-        `<circle cx="268" cy="42" r="15" fill="${glow}" opacity="0.34"/>` +
+        `<circle cx="268" cy="42" r="27" fill="${warm}" opacity="0.2"/>` +
+        `<circle cx="268" cy="42" r="15" fill="${warm}" opacity="0.42"/>` +
         `</g>`
       );
     case 'moon':
@@ -317,7 +321,7 @@ function renderSky(primitive: ScenePrimitive, palette: IllustrationPalette): str
       );
     case 'clouds':
       return (
-        `<g data-scene-primitive="clouds" fill="${ink}" opacity="0.12">` +
+        `<g data-scene-primitive="clouds" fill="${cool}" opacity="0.16">` +
         `<ellipse cx="66" cy="44" rx="38" ry="16"/><ellipse cx="96" cy="38" rx="26" ry="18"/>` +
         `<ellipse cx="256" cy="58" rx="32" ry="13"/><ellipse cx="234" cy="53" rx="21" ry="15"/>` +
         `</g>`
@@ -334,6 +338,8 @@ function renderSky(primitive: ScenePrimitive, palette: IllustrationPalette): str
 function renderFar(primitive: ScenePrimitive, palette: IllustrationPalette): string {
   const ink = esc(palette.ink);
   const glow = esc(palette.glow);
+  const warm = esc(palette.warm || palette.glow);
+  const cool = esc(palette.cool || palette.ink);
   switch (primitive) {
     case 'hills':
       return (
@@ -343,14 +349,14 @@ function renderFar(primitive: ScenePrimitive, palette: IllustrationPalette): str
       );
     case 'mountains':
       return (
-        `<g data-scene-primitive="mountains" fill="${ink}" opacity="0.16">` +
+        `<g data-scene-primitive="mountains" fill="${cool}" opacity="0.24">` +
         `<path d="M-10 ${SCENE_HORIZON + 6}L54 52l40 62 30-26 44 52z"/>` +
         `<path d="M168 ${SCENE_HORIZON + 6}L228 66l34 50 26-20 44 42z" opacity="0.75"/>` +
         `</g>`
       );
     case 'skyline':
       return (
-        `<g data-scene-primitive="skyline" fill="${ink}" opacity="0.17">` +
+        `<g data-scene-primitive="skyline" fill="${cool}" opacity="0.26">` +
         `<rect x="10" y="94" width="26" height="52" rx="2"/><rect x="42" y="72" width="20" height="74" rx="2"/>` +
         `<rect x="68" y="104" width="24" height="42" rx="2"/><rect x="230" y="98" width="22" height="48" rx="2"/>` +
         `<rect x="258" y="78" width="18" height="68" rx="2"/><rect x="282" y="108" width="26" height="38" rx="2"/>` +
@@ -383,6 +389,8 @@ function renderFar(primitive: ScenePrimitive, palette: IllustrationPalette): str
 function renderMid(primitive: ScenePrimitive, palette: IllustrationPalette): string {
   const ink = esc(palette.ink);
   const glow = esc(palette.glow);
+  const warm = esc(palette.warm || palette.glow);
+  const cool = esc(palette.cool || palette.ink);
   switch (primitive) {
     case 'trees':
       return (
@@ -407,7 +415,7 @@ function renderMid(primitive: ScenePrimitive, palette: IllustrationPalette): str
       );
     case 'towers':
       return (
-        `<g data-scene-primitive="towers" fill="${ink}" opacity="0.13">` +
+        `<g data-scene-primitive="towers" fill="${cool}" opacity="0.18">` +
         `<rect x="24" y="${SCENE_HORIZON - 46}" width="26" height="52" rx="3"/>` +
         `<rect x="58" y="${SCENE_HORIZON - 28}" width="18" height="34" rx="2"/>` +
         `<rect x="270" y="${SCENE_HORIZON - 52}" width="24" height="58" rx="3"/>` +
@@ -442,22 +450,24 @@ function renderMid(primitive: ScenePrimitive, palette: IllustrationPalette): str
 function renderProps(primitive: ScenePrimitive, palette: IllustrationPalette): string {
   const ink = esc(palette.ink);
   const glow = esc(palette.glow);
+  const warm = esc(palette.warm || palette.glow);
+  const cool = esc(palette.cool || palette.ink);
   switch (primitive) {
     case 'books':
       // A small stack with a spine edge, so it reads as books and not as two
       // floating bars. Kept out of x 100..220 (the subject box).
       return (
-        `<g data-scene-primitive="books" opacity="0.55">` +
-        `<rect x="42" y="${SCENE_HORIZON + 4}" width="32" height="6" rx="1.5" fill="${glow}"/>` +
-        `<rect x="46" y="${SCENE_HORIZON + 11}" width="28" height="6" rx="1.5" fill="${ink}"/>` +
-        `<rect x="44" y="${SCENE_HORIZON + 18}" width="30" height="6" rx="1.5" fill="${glow}"/>` +
-        `<rect x="246" y="${SCENE_HORIZON + 6}" width="30" height="6" rx="1.5" fill="${ink}"/>` +
-        `<rect x="242" y="${SCENE_HORIZON + 13}" width="32" height="6" rx="1.5" fill="${glow}"/>` +
+        `<g data-scene-primitive="books" opacity="0.75">` +
+        `<rect x="42" y="${SCENE_HORIZON + 4}" width="32" height="6" rx="1.5" fill="${warm}"/>` +
+        `<rect x="46" y="${SCENE_HORIZON + 11}" width="28" height="6" rx="1.5" fill="${cool}"/>` +
+        `<rect x="44" y="${SCENE_HORIZON + 18}" width="30" height="6" rx="1.5" fill="${warm}"/>` +
+        `<rect x="246" y="${SCENE_HORIZON + 6}" width="30" height="6" rx="1.5" fill="${cool}"/>` +
+        `<rect x="242" y="${SCENE_HORIZON + 13}" width="32" height="6" rx="1.5" fill="${warm}"/>` +
         `</g>`
       );
     case 'flasks':
       return (
-        `<g data-scene-primitive="flasks" fill="${glow}" opacity="0.3">` +
+        `<g data-scene-primitive="flasks" fill="${warm}" opacity="0.4">` +
         `<path d="M55 ${SCENE_HORIZON + 2}h14l2 8H53z"/><path d="M250 ${SCENE_HORIZON + 2}h16l2 8h-20z"/>` +
         `</g>` +
         `<g data-scene-primitive="flasks-outline" fill="none" stroke="${ink}" stroke-width="2" opacity="0.5" stroke-linejoin="round">` +
@@ -469,7 +479,7 @@ function renderProps(primitive: ScenePrimitive, palette: IllustrationPalette): s
       // Generic cogs, not one trade's tool: the category spans safety, jobs and
       // technology, and the icon already says which job this is.
       return (
-        `<g data-scene-primitive="tools" fill="none" stroke="${ink}" stroke-width="2" opacity="0.45">` +
+        `<g data-scene-primitive="tools" fill="none" stroke="${cool}" stroke-width="2" opacity="0.55">` +
         `<circle cx="62" cy="${SCENE_HORIZON - 14}" r="9"/><circle cx="62" cy="${SCENE_HORIZON - 14}" r="3.5"/>` +
         `<circle cx="256" cy="${SCENE_HORIZON - 26}" r="11"/><circle cx="256" cy="${SCENE_HORIZON - 26}" r="4"/>` +
         `</g>`
@@ -487,6 +497,8 @@ function renderProps(primitive: ScenePrimitive, palette: IllustrationPalette): s
 function renderFg(primitive: ScenePrimitive, palette: IllustrationPalette): string {
   const ink = esc(palette.ink);
   const glow = esc(palette.glow);
+  const warm = esc(palette.warm || palette.glow);
+  const cool = esc(palette.cool || palette.ink);
   const foot = SCENE_HORIZON + 14;
   switch (primitive) {
     case 'grass':
@@ -506,7 +518,7 @@ function renderFg(primitive: ScenePrimitive, palette: IllustrationPalette): stri
       // showed them as a clipped grey bar at the bottom edge. They live inside
       // x 84..244, leaving the frame edges to the `props` layer.
       return (
-        `<g data-scene-primitive="stones" fill="${ink}" opacity="0.26">` +
+        `<g data-scene-primitive="stones" fill="${cool}" opacity="0.32">` +
         `<path d="M84 ${foot - 2}a9 6 0 0 1 18 0z"/><path d="M116 ${foot + 2}a7 4 0 0 1 14 0z"/>` +
         `<path d="M190 ${foot + 2}a8 5 0 0 1 16 0z"/><path d="M222 ${foot - 2}a8 5 0 0 1 16 0z"/>` +
         `</g>`
@@ -615,7 +627,7 @@ function renderSubIcons(
       `<g data-scene-subicon="${esc(sub.icon)}" data-scene-position="${esc(position)}" ` +
       `data-scene-size="${size}" ` +
       `transform="translate(${slot.x} ${slot.y})" ` +
-      `color="${esc(palette.glow)}" opacity="0.78">${svg}</g>`
+      `color="${esc(palette.cool || palette.ink)}" opacity="0.9">${svg}</g>`
     );
   }).join('');
   return icons ? `<g data-scene-primitive="sub-icons">${icons}</g>` : '';
@@ -733,7 +745,7 @@ function renderGroundProps(props: readonly string[], palette: IllustrationPalett
     return (
       `<g data-scene-prop="${esc(name)}" data-scene-position="ground-${index === 0 ? 'left' : 'right'}" ` +
       `transform="translate(${slots[index].x} ${slots[index].y})" ` +
-      `color="${esc(palette.ink)}" opacity="0.55">` +
+      `color="${esc(palette.warm || palette.glow)}" opacity="0.85">` +
       groundShadow('prop', slots[index].x + SCENE_GROUND_PROP_SIZE / 2, slots[index].y + SCENE_GROUND_PROP_SIZE, SCENE_GROUND_PROP_SIZE, palette) +
       `${svg}</g>`
     );

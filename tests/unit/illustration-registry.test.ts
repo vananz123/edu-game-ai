@@ -29,6 +29,8 @@ import {
   renderIllustrationSvg,
 } from '../../src/shared/illustration-registry';
 import { renderIconSvg } from '../../src/shared/icon-registry';
+import { normalizeSceneBlueprint } from '../../src/shared/scene-blueprint';
+import { renderBlueprintSvg } from '../../src/shared/illustration-scene';
 import { getCategoryIcon } from '../../src/shared/content-categories';
 import {
   SCENE_HEIGHT,
@@ -326,6 +328,44 @@ test('the renderer reads scene compositions from the shared bundle (#272)', () =
   }
 });
 
+test('#278 every palette carries three hues, and a scene actually paints them', () => {
+  // One hue family per palette was the real reason a finished scene still read
+  // as a diagram. The fix is data, so the guard is data: no palette may fall
+  // back to a missing `warm`/`cool`, and both must be a DIFFERENT colour from
+  // the subject's `glow` (a palette with warm === glow would silently be
+  // monochrome again).
+  const hex = /^#[0-9a-f]{6}$/;
+  for (const category of ILLUSTRATION_CATEGORY_IDS) {
+    const palette = getIllustrationPalette(category);
+    for (const key of ['warm', 'cool'] as const) {
+      const value = palette[key];
+      assert.ok(value, `${category} has no ${key}`);
+      assert.match(String(value), hex, `${category}.${key} is not a hex colour`);
+      assert.notEqual(value, palette.glow, `${category}.${key} repeats the subject hue`);
+      assert.notEqual(value, palette.ink, `${category}.${key} repeats the ink hue`);
+    }
+    assert.notEqual(palette.warm, palette.cool, `${category} warm and cool are the same hue`);
+  }
+
+  // And the hues reach the picture: a single scene with props and corner icons
+  // must publish at least five distinct colours, otherwise the palette data is
+  // decoration nobody draws with.
+  const svg = renderBlueprintSvg(
+    normalizeSceneBlueprint({
+      v: 1,
+      layout: 'single',
+      backdrop: 'meadow',
+      paletteKey: 'animals',
+      mainIcon: 'paw-print',
+      props: ['apple', 'box'],
+      subIcons: [{ icon: 'bird', position: 'top-right' }],
+    })!,
+    getIllustrationPalette('animals')
+  );
+  const hues = new Set(svg.match(/#[0-9a-f]{6}/g) || []);
+  assert.ok(hues.size >= 5, `scene paints ${hues.size} distinct hues, expected 5+`);
+});
+
 test('the scene composer output is pinned so saved scenes stay stable', () => {
   // #252 split `renderSceneSvg` into `composeSceneSvg(..., subIcons = [])`.
   // That refactor alone kept all 24 scenes byte-identical.
@@ -344,36 +384,39 @@ test('the scene composer output is pinned so saved scenes stay stable', () => {
   // the whitelist (#266 - people, no geometry change). Byte lengths did not move
   // (same 7-char hex colours), so only the hashes pin this change.
   //
+  // #278 re-took them a FOURTH time, again with rendered PNGs: every palette
+  // now carries `warm` (sun, props, ground props) and `cool` (clouds, mountains,
+  // skyline, towers, pebbles, corner icons) so a scene is no longer one hue.
   // #277 re-took all 24 hashes a third time, ON PURPOSE and with rendered PNGs
   // checked by eye: every standing thing now casts one soft ground-contact
   // shadow, and the far layer (clouds/hills/mountains/skyline) is less washed
   // out. This is the first change where byte LENGTH moved as well, and the
   // length assertion in scene-blueprint.test.ts pins the legacy path separately.
   const golden: Record<string, string> = {
-    animals: '7d1e10cb4fa71fc5d4d4ad08f878203425998c17d6e28bd1d664fe52eae91cbf',
-    plants: '8499fd97d729baf38c5782524ec66314ef1b3005e866dfc6f70f4735d42e690b',
-    space: 'e467b19a638c61ef13d456143be5f3f2221145a99f19a858088d3e1fec0a2846',
-    'human-body': '48d22c26e1e89d4bc3dc389ffabfce1ae254151fbeea6eb48c9884ecef2d36f4',
-    transport: '0203d8ea366fd62a102d6df39c3a1b7fa4f47fe329d0b14f6c01094faa43846d',
-    safety: 'b5550fb19326ba16ed05e901e0da9dd90e0198e31c90b5050e08a755831e1fdd',
-    environment: '33e16f5a4d955a30dc8eaa734ff9bc146a02407339209dd6e3da786a7e89964c',
-    history: '63b746e95a10819489f7c7f22930730752c5bc2e6c64b91ea1005740e7738ee6',
-    geography: '3d882a9a65df7e8298db82b77db65d039f768923b08492d2da4b93ce76db608b',
-    jobs: '72a79776b98ed532733b264f29f0befbb33bc12a614a070c3adfa4e9afa959e5',
-    sports: '56e96876e73b0adad42cb191e958335df90f8fd52a541976198933ee6918e278',
-    music: 'a8e6078f8b444a870dbea0c6d40e4dd9368d2c1d4046c10ddb27dc0d204d8112',
-    art: '30ac88b6f5e3ca68625ca544d408a1992a1a926681457a92dc61bb4ad04c6e44',
-    math: '87bac77a23b6ab193d021830de8e4d7982c7902cab465c94c125e21aae62b3ca',
-    language: '3a54b54c4946ad303756e29eedba1153006e7dac9df4bc77b2302ca3d3f11883',
-    science: '7c3c11521a5dd5e2451bc91f1e5d56b1e4ff24c3cbc9fe134485e7ae3b7d597d',
-    technology: 'c634affde282b3dd2130debf65d635e660852bcf4326d1962e331e89863fc047',
-    health: '4a2d80b2ce10f229c75a4a3024b242646b367babe484567ee225189c0aa2a769',
-    family: 'fce02cf636e4193052ae900ba3a3b75a2bf9310269906bec7f58151da7059dce',
-    community: '90724f00b8066e6f51c2ff21a64d9101a0bcf2ccd94478cbd5b55d2ecc2bc8c9',
-    weather: '3bc50bbee86af8a3822786f66b7d4c408475404a3446d5715a0fe33600de618e',
-    food: '4f9f7228f0e7e9da700f52af7f481b8324c6497ed559e978054fa8abb2e64fb9',
-    objects: '203a6523f50e0ac86d74a5f3d69c569d3e13ccb79eb5d6d6d07af413acc88024',
-    'water-world': 'e4fc543e990330f06d6c81c7b4f8bce5fca2f536e6f27d249856dc4e9cb08e1c',
+    animals: 'e3ab4fd7ddd1eeae74b09bb361926dc14e4afe94c7a964b2cdd5357045adfc84',
+    plants: '98e36c1c66819844c4ae80202b335c58d894640bbd58b1526687fb1b54ac2e33',
+    space: '66c077a36fd322b51c53457b8ce624bb21b728e442a7e0d602faa3c950c35c21',
+    'human-body': 'c46a978b0ad793f045b3390e1306ade85980e3741d3ba91d42022060895f8806',
+    transport: '930584457955c562c8dbfec66d2fbfa2ddc0c29bf2e3d629b17441f6ffdb7c83',
+    safety: '429aef26b7755930c050e931b275ebcbc2a2979e9250517bbc7421f785001e9b',
+    environment: '3523f6c8d923668bcf44a05e09054186b62cb78dfa8293bfb7b1506bfb01a658',
+    history: '2cf6b1bcffb8eb8c157888c4bdacdc268284cf30cd8c5e67ddd2b6f2ec720287',
+    geography: '049c60331ac5ac3a0d68bb9db2c21953bf680fb26f262b653a1c1581a81a7a02',
+    jobs: '7922eb53db34eb3cc35c9dd9683cfa2df18bed1d30c440ae1548f67bd23a7eac',
+    sports: '76b00fd0aadfe4e067c2c28495019bf481c05be8a1c7da67c11f3687a2172cac',
+    music: 'fe713cb6f2d82f1fe003f5b50022235a257254ef9d983ccddb37fa06ec5a6a52',
+    art: '2c7c5a1ae6b065772133a0bc386dd02f0ceaa0329fa5b4ee151ce6f0054a605f',
+    math: 'ce650ae1cdee6ecbb19216eff17543154fddff226f43d577f68331bf16f6fcaf',
+    language: 'e7a20452c8966e1c7422f07a2bdb6b9e8848310359efe139cafad4084f4b5f80',
+    science: '45bc9aeb3c61988ec7739e628677291860579076d3f37ee4b28aa0c6472320fd',
+    technology: '78ab08eeaf094fb5c1bbbde1c5a6abde807ef4b388409e54f6f1849de10b086d',
+    health: '1afa6c3a9aeb9e5a5bd1eaed8d5c79e1279da55821fd9970ad763d1525b6963f',
+    family: '981d1e21aaa5ca97c9490a396e41feec5f53cbbfc73a642534e2d93665391e7d',
+    community: 'eb19800907779b0db711e5b1474cd2c6b1107f8ef801b20721bcc11f703491b9',
+    weather: '233fa042dc0a7a7ff02ac50d35f41e4b977dea93989193766d6a0b9a726e46aa',
+    food: '9a50d22b3af61d9a79472f3da605d20e54332622c5a784455b8f0375ce7228f2',
+    objects: 'c559b7c7b08dcdf55afafc40add61028f06d7e94512e569646ca1f2b9d293643',
+    'water-world': '66d078bae5ee21588272ee5ce053208de5a184daa964ed54a7daaa870733a39a',
   };
   for (const id of ILLUSTRATION_ASSET_IDS) {
     const category = id.slice(0, -'-scene'.length);

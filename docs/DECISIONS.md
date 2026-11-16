@@ -4449,3 +4449,39 @@ tham chiếu (ô tô xanh dương, chậu cam, cây xanh lá trên nền kem); (
 0.55 và cùng màu ink** nên trông nhạt và "không cùng bút vẽ" với chủ thể. Đó là việc của #278
 (bảng màu nhiều hue) chứ không phải của bóng đổ — bóng chỉ chữa được "lơ lửng", không chữa được
 "đơn sắc". Ghi lại để không ai tưởng #277 đã xong phần "đẹp".
+
+## #278 — Mỗi palette ba hue: chủ thể, "ấm" (prop), "lạnh" (xa)
+
+**Kích hoạt.** #277 mới chữa được "lơ lửng". Vision-model soi lại vẫn gọi cảnh là "sticker dán lên
+giấy" và chỉ đúng hai nguyên nhân còn lại: **một họ hue**, và prop/icon góc ở `opacity 0.55` cùng
+màu `ink` nên trông nhạt, "khác bút vẽ" với chủ thể. Hình tham chiếu của giáo viên dùng 6 hue
+(ô tô xanh dương, chậu cam, cây xanh lá, cột xám, đèn đỏ trên nền kem).
+
+**Quyết định.** `IllustrationPalette` có thêm hai hue (tuỳ chọn, để palette cũ vẫn chạy):
+
+| khoá | dùng cho | vai trò |
+|---|---|---|
+| `glow` | chủ thể (từ #266) | "vật được hỏi" |
+| `warm` | mặt trời, `books`, `flasks`, **ground props** | "vật khác chất liệu, ở gần" |
+| `cool` | mây, núi, skyline, towers, sỏi, **icon góc** | "xa / phụ" — thật ra khoảng cách làm nhạt và ngả xanh |
+
+Không dùng công thức trộn hue tự động: trộn 70% amber vào một `glow` xanh lá cho ra ô-liu bẩn.
+24 hàng được **viết tay** từ ba họ màu (ấm: amber `#d79a3c` / coral `#dd7a5b` / gold `#cfa63e`;
+lạnh: slate `#6b7f99` / teal `#4a8b8a` / indigo `#5a63a8`), chọn theo hue của `glow`.
+
+**Kèm theo (cùng một lỗi "nhạt").** Ground props 0.55 → **0.85** và đổi sang `warm`; icon góc
+0.78 → **0.9** và đổi sang `cool`; books 0.55 → 0.75; flasks 0.3 → 0.4; tools 0.45 → 0.55. Tất cả
+vẫn ≤ 0.9 nên cảnh vẫn sáng (#220).
+
+**Đã kiểm.** Test mới: 24 palette **phải** có `warm`/`cool`, đúng dạng hex, **khác** `glow` và
+`ink` (một palette có `warm === glow` là lại đơn sắc), `warm !== cool`; và một cảnh có prop + icon
+góc phải vẽ ra **≥ 5 hue khác nhau** — dữ liệu palette mà không ai vẽ bằng thì là đồ trang trí.
+Đối chứng âm: bỏ `warm` khỏi hàng `animals` ⇒ đỏ đúng tên (`animals has no warm`); khôi phục ⇒
+xanh. 24 hash vàng lấy lại lần thứ tư, kèm PNG. Đo được: cảnh `meadow` từ **1 họ hue** lên **7 hue**
+(`#eaf7f0 #e2f3ea #d79a3c #4a8b8a #2e9e6b #d3ebdf #1c5f42`).
+
+**Còn hở (ghi để không ai tưởng đã xong).** Vision-model vẫn thấy hai thứ:
+(1) **quầng sáng** `halo` (r 72, opacity 0.15) sau lưng chủ thể là một đĩa tròn nhạt lớn, gây cảm
+giác "dán"; (2) **dải đất cắt ngang** ở `SCENE_HORIZON` là một đường thẳng cứng. Cả hai là thay đổi
+nhìn thấy được nhưng đụng vào hình học đã chốt (#72/#220) nên để riêng thành #279, không trộn vào
+một lần đổi màu.

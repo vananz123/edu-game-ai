@@ -50,6 +50,10 @@
   **che mất** nút gợi ý thật; gọi model từng câu thì thêm 1–3 s + phí cho một thứ không ảnh hưởng
   việc học. Nếu sau này giáo viên than phải bấm nhiều lần, làm **"gắn cảnh cho cả game"** trong
   trình soạn (một lượt, có preview), không phải gắn mặc định trong wizard.
+- **Đã làm (#278):** mỗi palette có **ba hue** (`glow` chủ thể, `warm` prop/mặt trời, `cool`
+  khoảng cách + icon góc) và prop/icon góc không còn ở 0.55; cảnh `meadow` từ 1 họ hue lên **7 hue**.
+  **Còn hở (#279):** quầng `halo` sau lưng chủ thể và dải đất cắt ngang ở `SCENE_HORIZON` — vision-model
+  vẫn gọi là "dán"; cần đổi hình học, làm riêng.
 - **Đã làm (#277):** mỗi vật đứng có một bóng tiếp đất (ink 10%, elip bẹt) và lớp xa đậm hơn
   (đồi 0.20, mây 0.12) — chữa cảm giác "dán lên giấy". **Còn hở:** bảng màu vẫn **một họ hue** và
   prop/góc icon ở opacity 0.55 nên trông nhạt; hình tham chiếu của giáo viên dùng 6 hue. Đó là

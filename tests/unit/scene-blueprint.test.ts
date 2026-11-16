@@ -301,8 +301,9 @@ test('the old category scene is unchanged by the composer refactor', () => {
   assert.doesNotMatch(svg, /sub-icon/, 'the legacy path must not grow a sub-icon layer');
   // 2043 bytes before stacked layers; richer now, and still the legacy path.
   // #277 added the ground-contact shadow (+99 bytes on this scene: the ellipse
-  // plus its data-scene-shadow role).
-  assert.equal(svg.length, 2828);
+  // plus its data-scene-shadow role); #278 changed the sun's opacity from 0.16
+  // to 0.2 (-1 byte), so the length is pinned again rather than relaxed.
+  assert.equal(svg.length, 2827);
 });
 
 // --- #277 ground contact ---------------------------------------------------

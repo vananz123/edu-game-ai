@@ -7,6 +7,15 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-16 — #278 mỗi palette ba hue (ấm/lạnh) — cảnh hết đơn sắc
+- Kích hoạt: giáo viên chọn hướng "bảng màu nhiều hue" sau khi #277 chỉ chữa được "lơ lửng"; vision-model vẫn gọi cảnh là "sticker" vì **một họ hue** + prop/góc ở 0.55 cùng màu ink.
+- **Dữ liệu** (`src/shared/illustration-registry.ts`): `IllustrationPalette` thêm `warm`/`cool` (tuỳ chọn). 24 hàng viết tay từ ba họ: ấm amber `#d79a3c` / coral `#dd7a5b` / gold `#cfa63e`; lạnh slate `#6b7f99` / teal `#4a8b8a` / indigo `#5a63a8`. `DEFAULT_PALETTE` cũng có hai hue này.
+- **Vẽ** (`src/shared/illustration-scene.ts`): mặt trời/books/flasks/ground props → `warm`; mây/núi/skyline/towers/sỏi/icon góc → `cool`. Opacity: ground props 0.55→**0.85**, icon góc 0.78→**0.9**, books 0.55→0.75, flasks 0.3→0.4, tools 0.45→0.55. Có fallback `palette.warm || palette.glow` nên palette cũ vẫn vẽ được.
+- **Đo:** cảnh `meadow` dùng **7 hue** thay vì 1 (`#eaf7f0 #e2f3ea #d79a3c #4a8b8a #2e9e6b #d3ebdf #1c5f42`); vision-model: "cohesive pastel", icon nhỏ "visible, not washed out".
+- **Đã chạy:** `npx tsc` sạch; `node tests/run-unit.js` **99/99**; `npm run check` sạch; `check:scene-runtime` khớp **85.1 KiB**; `check:embedded` khớp **6285.1 KiB**; 24 hash vàng lấy lại lần 4; `scene-blueprint` golden độ dài 2828→**2827** (sun opacity 0.16→0.2).
+- **Đối chứng âm:** bỏ `warm` khỏi `animals` ⇒ đỏ đúng tên `animals has no warm` (sau khi rebuild bundle); khôi phục ⇒ xanh.
+- **Còn hở:** quầng `halo` (đĩa nhạt r72) và dải đất cắt ngang ở `SCENE_HORIZON` — vision-model vẫn kêu; để thành **#279** vì đụng hình học đã chốt. **Chưa ai duyệt bằng mắt người.**
+
 ### 2026-11-16 — #277 bóng tiếp đất + lớp xa bớt nhạt (chữa "dán lên giấy")
 - Kích hoạt: giáo viên gửi một hình tham chiếu tự vẽ và nói "ảnh vẫn rất chán". Đo hai bên: hình tham chiếu có **3 bóng đổ**, 6 hue, 4 lớp nền; cảnh của engine có **0 bóng**, **1 họ màu**, 3 lớp.
 - **Đã làm** (`src/shared/illustration-scene.ts`): `groundShadow()` → một ellipse `data-scene-shadow="subject|prop|stage"` màu `ink` **10%**, rộng 34% hộp vật, dẹt 22%. Bóng chủ thể nằm ở lớp `mid` (dưới chủ thể); bóng prop/bậc quy trình nằm **trong nhóm của chính vật đó**, trước icon. `subIcons`/vòng `surround` **không** có bóng (chúng nổi ở góc, không đứng trên đất). Lớp xa: mây 0.08→0.12, đồi 0.14→0.20, núi 0.1→0.16, skyline 0.11→0.17.
