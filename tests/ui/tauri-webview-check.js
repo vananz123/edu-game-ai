@@ -502,6 +502,31 @@ const filesGate = Boolean(process.env.EDUGAME_TAURI_FILES_DOCUMENT);
       check('nhập lại .egame: trò chơi + ngân hàng câu hỏi còn nguyên, id mới', imported.ok === true, imported.msg);
       const refused = await evaluate(hostileRunner());
       check('gói hỏng/độc hại bị từ chối với câu đọc được, không treo', refused.ok === true, refused.msg);
+      // #274 — phép đo dung lượng trên bộ game lớn (P4). Cùng 40 câu, xuất hai lần:
+      // có cảnh và không cảnh. Hiệu số chia cho 40 là giá thật của một blueprint.
+      // Kiểm cả "blueprint có thật trong tệp" để phép đo không thể xanh nhờ bị bỏ rơi.
+      const withScenes = await evaluate(sizeRunner('Đo gói lớn có cảnh', packagePaths.save, true));
+      const sizeWith = fs.existsSync(packagePaths.save) ? fs.statSync(packagePaths.save).size : 0;
+      // Đọc NGAY sau lượt xuất có cảnh: lượt sau ghi đè chính tệp này.
+      const echoed = sizeWith > 0 ? fs.readFileSync(packagePaths.save, 'utf8') : '';
+      const plain = await evaluate(sizeRunner('Đo gói lớn không cảnh', packagePaths.save, false));
+      const sizePlain = fs.existsSync(packagePaths.save) ? fs.statSync(packagePaths.save).size : 0;
+      // Gói là JSON THỤT LỀ 2 dấu cách (`writeGamePackage`), nên một cảnh 134 byte
+      // gọn tốn ~330 byte trên đĩa. Ngân sách dưới đây là byte THẬT của tệp, đơn vị
+      // mà giáo viên phải chép đi, không phải byte JSON gọn.
+      const perQuestion = sizeWith > sizePlain ? (sizeWith - sizePlain) / MEASURE_QUESTIONS : 0;
+      check('xuất được gói 40 câu cả hai lượt đo', withScenes.ok === true && plain.ok === true && sizeWith > sizePlain,
+        `${sizePlain} → ${sizeWith} byte`);
+      // Tệp là JSON thụt lề, nên so sau khi bỏ mọi khoảng trắng: thêm một dấu cách sau
+      // dấu hai chấm không được làm phép đo này đỏ (hoặc xanh) vì lý do định dạng.
+      const compact = echoed.replace(/\s+/g, '');
+      check('blueprint sống thật trong tệp (không bị bỏ rơi khi xuất)',
+        compact.includes('"layout":"surround"') && compact.includes('"around":[') && compact.includes('"layout":"process"'),
+        `có around: ${compact.includes('"around":[')}`);
+      check('một cảnh tốn dưới 400 byte trên đĩa (JSON thụt lề)', perQuestion > 0 && perQuestion < 400,
+        `${perQuestion.toFixed(1)} byte/câu × ${MEASURE_QUESTIONS}`);
+      check('trò chơi 40 câu kèm cảnh vẫn là tệp nhỏ (dưới 64 KiB)', sizeWith > 0 && sizeWith < 64 * 1024,
+        `${(sizeWith / 1024).toFixed(1)} KiB`);
     }
     // Chơi offline (#271): trò chơi VỪA LƯU ở trên được chơi bằng đúng đường
     // người dùng — bấm "Chơi ngay" trên thẻ thư viện, chọn đáp án, màn kết quả
@@ -833,6 +858,53 @@ function scenario(title) {
     }],
   };
 }
+
+/**
+ * Bốn blueprint thật (một cho mỗi bố cục), đã qua `normalizeSceneBlueprint`: 109–163
+ * byte mỗi cảnh. Dùng cho phép đo dung lượng `.egame` trên bộ game lớn (#274).
+ */
+const MEASURE_BLUEPRINTS = [
+  { v: 1, layout: 'single', backdrop: 'meadow', paletteKey: 'language', mainIcon: 'leaf', props: ['apple', 'box'], subIcons: [{ icon: 'bird', position: 'top-right' }] },
+  { v: 1, layout: 'compare', backdrop: 'city', paletteKey: 'language', mainIcon: 'car', compareIcon: 'bus', compareSign: 'greater-than', subIcons: [{ icon: 'map', position: 'top-left' }] },
+  { v: 1, layout: 'process', backdrop: 'lab', paletteKey: 'language', mainIcon: 'leaf', steps: ['apple', 'box'] },
+  { v: 1, layout: 'surround', backdrop: 'forest', paletteKey: 'language', mainIcon: 'paw-print', around: ['bird', 'fish', 'bug', 'apple'] },
+];
+const MEASURE_QUESTIONS = 40;
+
+/**
+ * Lượt xuất để ĐO DUNG LƯỢNG (#274): cùng một trò chơi 40 câu, xuất hai lần — một
+ * lần có `sceneBlueprint` mỗi câu, một lần không. Hiệu hai cỡ tệp chia cho số câu
+ * là giá thật của blueprint trong `.egame`, đo được chứ không phải ước lượng.
+ */
+const sizeRunner = (title, target, withBlueprints) => `(async () => {
+  const out = {};
+  const title = ${JSON.stringify(title)};
+  const target = ${JSON.stringify(target)};
+  const withBlueprints = ${JSON.stringify(withBlueprints)};
+  const blueprints = ${JSON.stringify(MEASURE_BLUEPRINTS)};
+  const questions = Array.from({ length: ${MEASURE_QUESTIONS} }, (_, i) => {
+    const question = {
+      id: 'q' + i,
+      type: 'scenario',
+      prompt: 'Câu hỏi đo dung lượng số ' + (i + 1) + ': gặp đèn đỏ thì làm gì?',
+      options: [{ id: 'a', text: 'Đi tiếp' }, { id: 'b', text: 'Dừng lại' }],
+      correctOptionId: 'b',
+      explanation: 'Dừng trước vạch.',
+    };
+    if (withBlueprints) question.sceneBlueprint = blueprints[i % blueprints.length];
+    return question;
+  });
+  const game = { title: title, template: 'scenario', questions: questions };
+  try {
+    const result = await desktop.call('exportGame', game);
+    out.ok = Boolean(result && result.ok === true && result.path === target);
+    out.msg = JSON.stringify(result);
+  } catch (error) {
+    out.ok = false;
+    out.msg = 'exportGame lỗi: ' + (error && error.code) + ': ' + (error && error.message);
+  }
+  return out;
+})()`;
 
 /** Chữ của một gói `.egame` hợp lệ, đúng envelope `writeGamePackage` ghi. */
 function packageShape(text) {

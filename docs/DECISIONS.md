@@ -4294,3 +4294,43 @@ người đọc (tôi, ở ghi chú trước) tưởng `history:false` là "lấ
 2. `desktop.stub('listAiTasks', …)` của lượt trước **còn sống** trong trang (không reload), nên
    lượt sau đo qua stub và báo `history 5, total 30` — tức chính gate này có thể tự lừa mình.
    Gate giờ `location.reload()` trước khi đo (chạy hai lượt liên tiếp đều 12/12).
+
+## #274 — Đo dung lượng `.egame` thật trên bộ game lớn: ~334 byte/câu trên đĩa
+
+**Câu hỏi P4.** Trang thiết kế ([`AI_SCENE_DIRECTOR_DESIGN.md`](AI_SCENE_DIRECTOR_DESIGN.md) §1)
+hứa "`.egame` nhẹ: blueprint ~120–180 byte/câu, không ảnh, không markup". Đó là ước lượng của
+JSON **gọn**, chưa ai đo tệp thật trên một bộ game lớn.
+
+**Phép đo (thêm vào `tests/ui/tauri-webview-check.js`, chạy trên binary release thật).** Cùng
+một trò chơi **40 câu** được xuất **hai lần** qua đúng cửa renderer (`desktop.call('exportGame')`
+→ `package::export`), lần đầu mỗi câu mang một blueprint thật (xoay vòng cả 4 bố cục, 109–163
+byte gọn/cảnh), lần sau không mang gì. Hiệu số cỡ tệp chia cho 40 là giá thật của một cảnh:
+
+| | tệp |
+| --- | --- |
+| 40 câu **không** cảnh | 17 507 byte |
+| 40 câu **có** cảnh | 30 839 byte (**30,1 KiB**) |
+| **giá một cảnh trên đĩa** | **333,9 byte/câu** |
+
+**Vì sao 333,9 chứ không phải ~134.** `writeGamePackage` ghi JSON **thụt lề 2 dấu cách**: một
+object 134 byte gọn thành ~334 byte trên đĩa (dấu cách sau mỗi dấu hai chấm + xuống dòng + lề).
+Đơn vị đúng cho một lời hứa về *tệp* là byte trên đĩa, nên ngân sách của cổng là **< 400
+byte/câu** và **< 64 KiB** cho 40 câu — không phải 180. Con số 120–180 trong tài liệu vẫn đúng
+cho JSON gọn (nó là thứ đi vào SQLite), nhưng không mô tả tệp `.egame`.
+
+**Cổng (4 check mới, 51 → 55/55).** Hai lượt xuất đều `{ok, path}` và cỡ phải **tăng**; blueprint
+phải **có thật trong tệp** (`"layout":"surround"`, `"around":[`, `"layout":"process"` sau khi bỏ
+mọi khoảng trắng); một cảnh **> 0 và < 400** byte/câu; tệp **< 64 KiB**.
+
+**Đối chứng âm (một lượt chạy đầy đủ).** Cho `sizeRunner` không gắn blueprint vào câu nào ⇒ đỏ
+**đúng 3 chỗ**: hai lượt xuất ra cùng cỡ (`17510 → 17507`), tệp không có `around`, và
+**`0,0 byte/câu`**. Khôi phục byte-exact (`tests/ui/tauri-webview-check.js` SHA-256
+`85f33c1a319f1680…`) ⇒ **55/55 + 10/10**.
+
+**Ba lỗi trong chính cái cổng, lộ ra ngay lượt chạy đầu (đã sửa).**
+1. Đọc tệp **sau** lượt xuất thứ hai ⇒ lượt "không cảnh" đã ghi đè, `around` báo thiếu. Giờ đọc
+   ngay sau lượt có cảnh.
+2. So `"around":[` trên tệp **thụt lề** ⇒ luôn sai vì có dấu cách sau dấu hai chấm. Giờ bỏ mọi
+   khoảng trắng trước khi so — định dạng không được quyết định việc cổng xanh hay đỏ.
+3. Ngân sách 200 byte/câu lấy từ JSON gọn, trong khi cổng đo byte trên đĩa ⇒ đỏ giả. Ngân sách
+   phải cùng đơn vị với phép đo.
