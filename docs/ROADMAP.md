@@ -42,10 +42,14 @@
 - **Đã đóng:** "`listAiTasks` trả rỗng" — **không phải bug** (#273): `history:false` là live-only
   theo hợp đồng, đúng payload `ai-status` poll; cổng tasks 8 → 12/12 và gate tự chạy một lượt AI
   thật qua provider loopback. Dung lượng `.egame` cũng đã đo (#274, xem P4).
-- **Còn mở:** `compare` chưa thử trên câu `scenario` (bố cục #254); blueprint chưa đi qua đường
-  wizard (`lesson:patch-item-assets` vẫn allowlist 3 khoá); `process`/`surround` chưa chọn bởi
-  model thật (cần khoá); chưa có người duyệt bằng mắt cho các bố cục mới (mới qua vision-model —
-  đã duyệt bằng ảnh chụp thật cho #257/#260/#262/#270).
+- **Đã đóng (#275):** `lesson:patch-item-assets` nhận `sceneBlueprint` (allowlist 3 → 4 khoá, cổng
+  `normalizeSceneBlueprint`, xoá khoá nếu không đọc được) **và** `parseGameDraft` không còn nuốt
+  khoá này (gom rồi gắn lại theo vị trí, cùng cơ chế nhập `.egame`) — kênh cảnh đã đi qua được wizard.
+- **Còn mở:** `compare` chưa thử trên câu `scenario` (bố cục #254); **chưa ai gửi** `sceneBlueprint`
+  qua kênh mới (model không sinh, "Gợi ý cảnh" chỉ ở trình soạn) — cần chọn: tự gắn theo danh mục
+  (offline) / gọi model từng câu / giữ nguyên; `process`/`surround` chưa chọn bởi model thật (cần
+  khoá); chưa có người duyệt bằng mắt cho các bố cục mới (mới qua vision-model — đã duyệt bằng ảnh
+  chụp thật cho #257/#260/#262/#270).
 
 ## Một bảng màu nút phẳng cho toàn vỏ — brand đặc / trắng viền / đỏ xoá, bỏ gradient và quầng màu (2026-11-15)
 - **Đã xác minh:** `npm run check` sạch · `npm run check:renderer-globals` 72/74 script, 1042 hàm, 8303 điểm gọi, 0 undefined · `npm test` **95/95** (thêm mục 5.5 khoá bảng màu) · binary release build lại (`npm run build:tauri` 201 tệp, `cargo tauri build` 9m06s, NSIS 15,64 MiB) · `ui-typography-readability` **1973 run/32 sweep** (1002 light/971 dark), nhỏ nhất 11px, xấu nhất **4,74:1**, hover/focus **88 nhãn, xấu nhất 5,98:1** · `ui-dark-theme` / `ui-settings-sections` / `ui-library-paging` / `ui-lessons-paging` / `ui-results-paging` / `ui-project-selection` / `ui-card-menu` all passed · `ui-fullscreen-density` **8/8**.

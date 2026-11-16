@@ -159,11 +159,12 @@ export function isKnownContentCategory(value: unknown): value is ContentCategory
   return isContentCategory(value);
 }
 
-/** The only three fields a teacher may change per item (DECISIONS #72). */
+/** The only four fields a teacher (or the wizard) may change per item (DECISIONS #72, #275). */
 export const ITEM_ASSET_PATCH_KEYS = Object.freeze([
   'contentCategory',
   'iconName',
   'illustrationAssetId',
+  'sceneBlueprint',
 ] as const);
 
 export type ItemAssetPatchKey = (typeof ITEM_ASSET_PATCH_KEYS)[number];
@@ -172,6 +173,8 @@ export interface ItemAssetPatch {
   contentCategory?: unknown;
   iconName?: unknown;
   illustrationAssetId?: unknown;
+  /** Object or JSON string; normalised through `normalizeSceneBlueprint` (#275). */
+  sceneBlueprint?: unknown;
 }
 
 export interface ItemAssetPatchResult {
@@ -179,7 +182,13 @@ export interface ItemAssetPatchResult {
   item: Record<string, unknown>;
   /** Normalised values that were applied, for the UI/logs. */
   applied: ItemAssetFieldsForSave;
-  /** True when the patch carried at least one of the three keys. */
+  /**
+   * Outcome for the scene alone: a validated blueprint, or `null` when the patch
+   * cleared it or carried something the scene vocabulary does not recognise.
+   * Kept out of `applied` because that object is the string-only save contract.
+   */
+  sceneBlueprint?: SceneBlueprint | null;
+  /** True when the patch carried at least one of the four keys. */
   changed: boolean;
 }
 
@@ -201,6 +210,12 @@ export interface ItemAssetPatchResult {
  *   - `contentCategory: ''`  -> `general` (and `general` is omitted on save)
  *   - `iconName: ''`         -> no explicit icon (category icon applies again)
  *   - `illustrationAssetId: ''` -> cleared, so `auto` falls back to the category
+ *
+ * `sceneBlueprint` (#275) is the one non-string key: it is an OBJECT, so it can
+ * neither be trimmed nor stored as an empty string. Its gate is
+ * `normalizeSceneBlueprint` — the same gate save and `.egame` import use — and
+ * anything it rejects is DELETED rather than stored as junk, so an unreadable
+ * blueprint can never reach the play surface. `null` and `''` mean "clear".
  */
 export function applyItemAssetPatch(
   item: unknown,
@@ -217,6 +232,7 @@ export function applyItemAssetPatch(
   let contentCategory: unknown;
   let iconName: unknown;
   let illustrationAssetId: unknown;
+  let sceneBlueprint: SceneBlueprint | null | undefined;
 
   if (has('contentCategory')) {
     contentCategory = normalizeContentCategory(patch!.contentCategory);
@@ -233,6 +249,14 @@ export function applyItemAssetPatch(
     next.illustrationAssetId = illustrationAssetId;
     changed = true;
   }
+  if (has('sceneBlueprint')) {
+    sceneBlueprint = normalizeSceneBlueprint(patch!.sceneBlueprint);
+    // "Cleared" and "unreadable" look the same from here on purpose: both mean
+    // this item draws no scene, and neither leaves a half-valid object behind.
+    if (sceneBlueprint) next.sceneBlueprint = sceneBlueprint;
+    else delete next.sceneBlueprint;
+    changed = true;
+  }
 
   return {
     item: next,
@@ -241,6 +265,7 @@ export function applyItemAssetPatch(
       iconName: has('iconName') ? iconName : source.iconName,
       illustrationAssetId: has('illustrationAssetId') ? illustrationAssetId : source.illustrationAssetId,
     }),
+    ...(has('sceneBlueprint') ? { sceneBlueprint: sceneBlueprint ?? null } : {}),
     changed,
   };
 }

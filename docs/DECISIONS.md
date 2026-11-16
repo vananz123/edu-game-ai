@@ -4334,3 +4334,47 @@ mọi khoảng trắng); một cảnh **> 0 và < 400** byte/câu; tệp **< 64 
    khoảng trắng trước khi so — định dạng không được quyết định việc cổng xanh hay đỏ.
 3. Ngân sách 200 byte/câu lấy từ JSON gọn, trong khi cổng đo byte trên đĩa ⇒ đỏ giả. Ngân sách
    phải cùng đơn vị với phép đo.
+
+## #275 — `lesson:patch-item-assets` nhận `sceneBlueprint`; schema draft lại nuốt khoá này
+
+**Vấn đề.** Kênh ghi minh hoạ duy nhất của wizard (`lesson:patch-item-assets`) allowlist đúng
+ba khoá chuỗi (`contentCategory`, `iconName`, `illustrationAssetId`), nên **không có đường nào**
+để một cảnh đi qua wizard: giáo viên soạn bằng wizard không bao giờ có cảnh, dù engine đã vẽ được
+4 bố cục.
+
+**Sửa hai chỗ, vì một chỗ là chưa đủ.**
+1. `src/shared/asset-validation.ts` — `ITEM_ASSET_PATCH_KEYS` thêm `sceneBlueprint`. Đây là giá
+   trị **object** duy nhất trong allowlist: cổng của nó là `normalizeSceneBlueprint` (đúng cổng
+   mà lưu và nhập `.egame` dùng), và thứ gì cổng đó từ chối thì **xoá khoá** chứ không lưu rác.
+   `null`, `''` và blueprint sai `v` đều là "xoá". Kết quả trả thêm `sceneBlueprint: SceneBlueprint | null`
+   — **không** nhét vào `applied`, vì `applied` là hợp đồng chuỗi của đường lưu.
+2. `src/services/lesson/lesson-contracts.ts` — `parseGameDraft` **nuốt** khoá này: schema draft
+   (`itemAssetFieldsSchema`) chỉ khai ba chuỗi, nên zod strip `sceneBlueprint` trước khi adapter
+   thấy. Sửa bằng cách **gom rồi gắn lại theo vị trí** (đúng cơ chế `game-package.ts` dùng khi
+   nhập `.egame`), không mở schema.
+
+**Vì sao không khai `sceneBlueprint` trong `itemAssetFieldsSchema`.** Cùng một object mô tả
+**thứ model phải trả lời** (`response_format`). Thêm một object blueprint vào đó là *bảo* model
+sinh cảnh — một quyết định sản phẩm riêng (prompt, ngân sách token, và câu hỏi "model có vẽ nổi
+không"), chưa được đưa ra. Gắn lại sau parse giữ nguyên cả hai phía: model không bị hỏi, dữ liệu
+đã có thì không mất.
+
+**Đây đúng lớp lỗi #65.** Ở #65, schema `matchingPairSchema` không khai ba khoá minh hoạ nên zod
+strip chúng, và editor ghi vào khoảng không. Lần này là cùng cái bẫy với một khoá object, nên test
+mới khẳng định đúng chỗ hay vỡ: blueprint phải **sống qua `parseGameDraft`** (thứ wizard mang
+theo) và tới được `toEducationalGame` (thứ màn chơi đọc).
+
+**Bằng chứng.** `tests/unit/item-assets-patch.test.ts` thêm mục 7: blueprint hợp lệ sống qua
+`parseGameDraft` + adapter; blueprint sai bị xoá; `null`/`''`/`v:2` đều xoá; chuỗi JSON được
+parse; khoá lạ **bên trong** blueprint không đổi được `prompt`; treasure gắn cảnh vào `question`
+lồng (không phải stage); chỉ mục tiêu thay đổi, mục khác byte-identical. Đối chứng âm: bỏ phần
+gắn lại ⇒ đỏ đúng `the scene survives the draft re-parse`; khôi phục ⇒ xanh.
+Đo: `run-unit` **99/99** (47,6 s) · `npm run check` 52 tệp · `renderer-globals` 0 undefined ·
+`check:embedded` khớp **6285,1 KiB** · `check:scene-runtime` khớp · binary build lại · trên binary
+release (CDP 9376): `ui-item-assets-editor-check` **157/157**.
+
+**Còn hở, và cố ý chưa làm.** Kênh đã nhận cảnh nhưng **chưa ai gửi**: model không sinh
+`sceneBlueprint` (chưa có trong schema/prompt của nó), và nút "Gợi ý cảnh" chỉ có trong trình
+soạn. Bước tiếp theo là một quyết định sản phẩm: wizard tự gắn cảnh **theo danh mục** (offline,
+`sceenBlueprintFromCategory`) cho từng câu vừa sinh, hay gọi model cho từng câu (tốn token + chậm),
+hay chỉ để giáo viên bấm trong trình soạn như hiện nay.

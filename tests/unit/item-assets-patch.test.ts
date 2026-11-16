@@ -166,8 +166,8 @@ function main(): void {
     assert.equal(after.iconName, 'paw-print', 'an absent key keeps the existing value');
     assert.deepEqual(
       [...ITEM_ASSET_PATCH_KEYS],
-      ['contentCategory', 'iconName', 'illustrationAssetId'],
-      'exactly three keys are patchable'
+      ['contentCategory', 'iconName', 'illustrationAssetId', 'sceneBlueprint'],
+      'exactly four keys are patchable'
     );
     for (const key of ['prompt', 'id', 'correctOptionId', 'points', 'explanation', 'options']) {
       assert.deepEqual(after[key], before[key], `"${key}" is outside the whitelist and must never change`);
@@ -281,6 +281,69 @@ function main(): void {
     original.questions.splice(0, 1);
     assert.deepEqual(withoutPatched, original, 'nothing outside the targeted item changed');
     assert.equal(withoutPatched.questions.length, 1, 'exactly one item was removed from each copy');
+  }
+
+  // ---------------------------------------------------------------------------
+  // 7. The scene blueprint is patchable, and survives the draft schema (#275)
+  // ---------------------------------------------------------------------------
+  {
+    // A blueprint is the one patch value that is an OBJECT. Everything below is
+    // written from the point of view of a wizard that has just produced a scene for
+    // an item, because that is the flow this opens.
+    const BLUEPRINT = { v: 1, layout: 'single', backdrop: 'meadow', paletteKey: 'language', mainIcon: 'leaf' };
+    const patched = patchDraftItemAssets(arenaDraft, 1, { sceneBlueprint: BLUEPRINT });
+    const item = itemOf(patched, 1);
+    // The parsed draft is the thing the wizard carries, so the key must be there —
+    // `itemAssetFieldsSchema` does not declare it, which is why it is re-attached.
+    assert.deepEqual(item.sceneBlueprint, BLUEPRINT, 'the scene survives the draft re-parse');
+    assert.equal(item.contentCategory, itemOf(arenaDraft, 1).contentCategory, 'a scene patch does not disturb the category');
+    assert.equal(item.iconName, itemOf(arenaDraft, 1).iconName, 'nor the icon');
+    assert.deepEqual(itemOf(patched, 2), itemOf(arenaDraft, 2), 'the other item is byte-identical');
+
+    const game = toEducationalGame({ ...projectFor(patched), draft: patched }) as unknown as {
+      questions: Array<Record<string, unknown>>;
+    };
+    assert.deepEqual(game.questions[0].sceneBlueprint, BLUEPRINT, 'the adapter carries the scene to the play surface');
+    assert.equal(game.questions[1].sceneBlueprint, undefined, 'the untargeted question gains no scene');
+
+    // Junk never becomes a stored scene: the same `normalizeSceneBlueprint` gate as
+    // save is applied, so an unreadable blueprint is DELETED rather than kept.
+    const junk = patchDraftItemAssets(patched, 1, { sceneBlueprint: { v: 1, layout: 'not-a-layout' } });
+    assert.equal(itemOf(junk, 1).sceneBlueprint, undefined, 'an unknown layout clears the scene instead of storing junk');
+
+    // `null` and `''` are the two ways to say "no scene", and both must clear.
+    for (const empty of [null, '', { v: 2, layout: 'single' }]) {
+      const cleared = patchDraftItemAssets(patched, 1, { sceneBlueprint: empty });
+      assert.equal(itemOf(cleared, 1).sceneBlueprint, undefined, `"${JSON.stringify(empty)}" clears the scene`);
+    }
+
+    // A JSON STRING is accepted too (the editor stores drafts from text fields), and
+    // a blueprint cannot smuggle extra keys onto the item.
+    const fromString = patchDraftItemAssets(arenaDraft, 1, {
+      sceneBlueprint: JSON.stringify({ ...BLUEPRINT, prompt: 'ĐỔI CÂU HỎI' })
+    });
+    const stringItem = itemOf(fromString, 1);
+    assert.deepEqual(stringItem.sceneBlueprint, BLUEPRINT, 'a string blueprint is parsed and normalised');
+    assert.equal(stringItem.prompt, itemOf(arenaDraft, 1).prompt, 'a smuggled key inside the blueprint changes nothing');
+
+    // Treasure stores artwork on the nested question, and a scene is artwork.
+    const treasure = patchDraftItemAssets(treasureDraft, 2, { sceneBlueprint: BLUEPRINT });
+    assert.deepEqual(itemOf(treasure, 2).question && (itemOf(treasure, 2).question as Record<string, unknown>).sceneBlueprint,
+      BLUEPRINT, 'a treasure scene lands on the question the renderer reads');
+    assert.equal(itemOf(treasure, 2).sceneBlueprint, undefined, 'the stage itself must not grow a scene key');
+
+    // The result also reports the outcome, because `applied` is the string-only
+    // save contract and cannot carry an object.
+    const result = applyItemAssetPatch({ id: 'x' }, { sceneBlueprint: BLUEPRINT });
+    assert.deepEqual(result.sceneBlueprint, BLUEPRINT, 'the call reports the normalised scene');
+    assert.equal(result.changed, true, 'a scene-only patch is a write');
+    assert.deepEqual(result.applied, {}, 'the string fields of `applied` stay empty');
+    assert.equal(applyItemAssetPatch({ id: 'x', sceneBlueprint: BLUEPRINT }, {}).item.sceneBlueprint !== undefined, true,
+      'an absent key leaves the existing scene alone');
+    assert.equal(applyItemAssetPatch({ id: 'x' }, { sceneBlueprint: BLUEPRINT }).sceneBlueprint !== null, true,
+      'a valid scene is reported as applied, not as cleared');
+    assert.equal(applyItemAssetPatch({ id: 'x' }, { sceneBlueprint: null }).sceneBlueprint, null,
+      'a cleared scene is reported as null');
   }
 
   console.log('item-assets-patch tests passed');

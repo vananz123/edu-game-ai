@@ -19,6 +19,7 @@ import type {
   LessonAnalysisContent,
   WorkflowGameType
 } from '../../shared/lesson-types';
+import { normalizeSceneBlueprint } from '../../shared/scene-blueprint';
 
 export class LessonContractError extends Error {
   readonly code: string;
@@ -761,33 +762,68 @@ function padItemAssetKeys<T>(item: T): T {
   } as T;
 }
 
-function padDraftAssetKeys(draft: GameDraft): GameDraft {
+/**
+ * #275 — a scene blueprint is an OBJECT, so it cannot ride in
+ * `itemAssetFieldsSchema`: those are three plain strings, and the same object
+ * describes what the MODEL must reply, while asking a model for a scene is a
+ * separate decision that has not been taken. So the blueprint is collected from
+ * the input and re-attached after parsing, through the same
+ * `normalizeSceneBlueprint` gate that save and `.egame` import use.
+ *
+ * Without this, `parseGameDraft` silently strips the key that
+ * `lesson:patch-item-assets` just wrote — exactly the mistake #65 made for
+ * matching pairs, where the schema was green while the artwork vanished.
+ */
+function sceneBlueprintOf(item: unknown): unknown {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return undefined;
+  return (item as Record<string, unknown>).sceneBlueprint;
+}
+
+/** Re-attaches the normalised blueprint of `raw` onto the parsed item. */
+function padItemScene<T>(item: T, raw: unknown): T {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return item;
+  const blueprint = normalizeSceneBlueprint(sceneBlueprintOf(raw));
+  const record: Record<string, unknown> = { ...(item as Record<string, unknown>) };
+  if (blueprint) record.sceneBlueprint = blueprint;
+  else delete record.sceneBlueprint;
+  return record as T;
+}
+
+function padDraftAssetKeys(draft: GameDraft, raw: unknown): GameDraft {
   if (!draft || typeof draft !== 'object') return draft;
+  // Items are paired with the input BY POSITION, the same assumption `.egame`
+  // import makes: zod never reorders a list, only strips unknown keys.
+  const source = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
+  const rawAt = (key: string, index: number): unknown => Array.isArray(source[key]) ? (source[key] as unknown[])[index] : undefined;
   switch (draft.gameType) {
     case 'arena':
-      return { ...draft, questions: draft.questions.map(padItemAssetKeys) };
+      return { ...draft, questions: draft.questions.map((item, index) => padItemScene(padItemAssetKeys(item), rawAt('questions', index))) };
     case 'scenario':
-      return { ...draft, situations: draft.situations.map(padItemAssetKeys) };
+      return { ...draft, situations: draft.situations.map((item, index) => padItemScene(padItemAssetKeys(item), rawAt('situations', index))) };
     case 'matching':
-      return { ...draft, pairs: draft.pairs.map(padItemAssetKeys) };
+      return { ...draft, pairs: draft.pairs.map((item, index) => padItemScene(padItemAssetKeys(item), rawAt('pairs', index))) };
     case 'treasure':
       return {
         ...draft,
-        stages: draft.stages.map(stage => ({
-          ...stage,
-          question: padItemAssetKeys(stage.question)
-        }))
+        stages: draft.stages.map((stage, index) => {
+          const rawStage = rawAt('stages', index);
+          const rawQuestion = rawStage && typeof rawStage === 'object' && !Array.isArray(rawStage)
+            ? (rawStage as Record<string, unknown>).question
+            : undefined;
+          return { ...stage, question: padItemScene(padItemAssetKeys(stage.question), rawQuestion) };
+        })
       };
     case 'race':
-      return { ...draft, questions: draft.questions.map(padItemAssetKeys) };
+      return { ...draft, questions: draft.questions.map((item, index) => padItemScene(padItemAssetKeys(item), rawAt('questions', index))) };
     default:
       return draft;
   }
 }
 
 export function parseGameDraft(value: unknown): GameDraft {
-  const parsed = parseOrThrow(gameDraftSchema, canonicalizeDraftAnswers(value), 'DRAFT_INVALID', 'Dữ liệu trò chơi') as GameDraft;
-  return padDraftAssetKeys(parsed);
+  const canonical = canonicalizeDraftAnswers(value);
+  const parsed = parseOrThrow(gameDraftSchema, canonical, 'DRAFT_INVALID', 'Dữ liệu trò chơi') as GameDraft;
+  return padDraftAssetKeys(parsed, canonical);
 }
 
 export function parseGameConfig(value: unknown): GameConfig {
