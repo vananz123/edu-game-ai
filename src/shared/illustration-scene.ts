@@ -42,6 +42,25 @@ export const SCENE_GROUND_PROP_SIZE = 40;
 /** Horizon: the far layer sits above this, the ground band fills below it. */
 export const SCENE_HORIZON = 150;
 
+/* Ground contact (#277).
+ *
+ * A pale scene with no shadow reads as STICKERS ON PAPER: nothing sits on the
+ * ground, so the eye cannot tell which object is nearer. One soft ellipse per
+ * standing thing is the cheapest way to buy depth without a single new asset —
+ * it is the one trick the hand-drawn reference uses on every object (car,
+ * plant) and that this engine had nowhere.
+ *
+ * Every shadow is the palette INK at 10%, never black: the scenes are light by
+ * decision #220, so a dark smudge would be the one dirty mark on the card.
+ */
+export const SCENE_SHADOW_OPACITY = 0.1;
+/** Shadow width as a fraction of the object's box. Wider reads as "on the floor". */
+export const SCENE_SHADOW_WIDTH_RATIO = 0.34;
+/** Shadow height as a fraction of its own width: a squashed ellipse, not a ball. */
+export const SCENE_SHADOW_HEIGHT_RATIO = 0.22;
+/** The surround subject's fixed top edge (#270); the shadow needs it too. */
+export const SCENE_SURROUND_SUBJECT_TOP = 52;
+
 /* Compare layout (#262): two subjects plus a sign between them.
  *
  * The 320x200 frame cannot hold two 120px subjects and the four corner icons
@@ -298,7 +317,7 @@ function renderSky(primitive: ScenePrimitive, palette: IllustrationPalette): str
       );
     case 'clouds':
       return (
-        `<g data-scene-primitive="clouds" fill="${ink}" opacity="0.08">` +
+        `<g data-scene-primitive="clouds" fill="${ink}" opacity="0.12">` +
         `<ellipse cx="66" cy="44" rx="38" ry="16"/><ellipse cx="96" cy="38" rx="26" ry="18"/>` +
         `<ellipse cx="256" cy="58" rx="32" ry="13"/><ellipse cx="234" cy="53" rx="21" ry="15"/>` +
         `</g>`
@@ -318,20 +337,20 @@ function renderFar(primitive: ScenePrimitive, palette: IllustrationPalette): str
   switch (primitive) {
     case 'hills':
       return (
-        `<g data-scene-primitive="hills" fill="${glow}" opacity="0.14">` +
+        `<g data-scene-primitive="hills" fill="${glow}" opacity="0.2">` +
         `<path d="M-12 ${SCENE_HORIZON + 14}q58-52 118-6 28 22 64-14t162-16v80H-12z"/>` +
         `</g>`
       );
     case 'mountains':
       return (
-        `<g data-scene-primitive="mountains" fill="${ink}" opacity="0.1">` +
+        `<g data-scene-primitive="mountains" fill="${ink}" opacity="0.16">` +
         `<path d="M-10 ${SCENE_HORIZON + 6}L54 52l40 62 30-26 44 52z"/>` +
         `<path d="M168 ${SCENE_HORIZON + 6}L228 66l34 50 26-20 44 42z" opacity="0.75"/>` +
         `</g>`
       );
     case 'skyline':
       return (
-        `<g data-scene-primitive="skyline" fill="${ink}" opacity="0.11">` +
+        `<g data-scene-primitive="skyline" fill="${ink}" opacity="0.17">` +
         `<rect x="10" y="94" width="26" height="52" rx="2"/><rect x="42" y="72" width="20" height="74" rx="2"/>` +
         `<rect x="68" y="104" width="24" height="42" rx="2"/><rect x="230" y="98" width="22" height="48" rx="2"/>` +
         `<rect x="258" y="78" width="18" height="68" rx="2"/><rect x="282" y="108" width="26" height="38" rx="2"/>` +
@@ -642,7 +661,9 @@ function renderProcessStrip(stages: readonly string[], palette: IllustrationPale
     if (!svg) return '';
     boxes.push(
       `<g data-scene-step="${index + 1}" data-scene-size="${SCENE_PROCESS_STEP_SIZE}" ` +
-        `transform="translate(${xs[index]} ${SCENE_PROCESS_STEP_TOP})" color="${esc(palette.glow)}">${svg}</g>`
+        `transform="translate(${xs[index]} ${SCENE_PROCESS_STEP_TOP})" color="${esc(palette.glow)}">` +
+        groundShadow('stage', SCENE_PROCESS_STEP_SIZE / 2, SCENE_PROCESS_STEP_SIZE, SCENE_PROCESS_STEP_SIZE, palette) +
+        `${svg}</g>`
     );
   }
   const arrows = xs.slice(1).map((next, index) => {
@@ -680,6 +701,27 @@ function renderCompareSign(sign: SceneCompareSign | undefined, palette: Illustra
  * dressing that explains the place, not a second thing to recognise — and it
  * sits inside the props layer so the foreground can overlap it.
  */
+/**
+ * One soft contact shadow centred on `cx`, its feet at `feetY`.
+ *
+ * `kind` is `subject` | `prop` | `stage` and lands in `data-scene-shadow`, so a
+ * test can count shadows per role instead of counting `<ellipse>` tags (the sky
+ * draws those too).
+ */
+function groundShadow(
+  kind: 'subject' | 'prop' | 'stage',
+  cx: number,
+  feetY: number,
+  boxSize: number,
+  palette: IllustrationPalette
+): string {
+  const rx = Math.max(6, Math.round(boxSize * SCENE_SHADOW_WIDTH_RATIO));
+  const ry = Math.max(2, Math.round(rx * SCENE_SHADOW_HEIGHT_RATIO));
+  const cy = Math.min(SCENE_HEIGHT - 4, Math.round(feetY - ry * 0.4));
+  return `<ellipse data-scene-shadow="${kind}" cx="${Math.round(cx)}" cy="${cy}" rx="${rx}" ry="${ry}" ` +
+    `fill="${esc(palette.ink)}" opacity="${SCENE_SHADOW_OPACITY}"/>`;
+}
+
 function renderGroundProps(props: readonly string[], palette: IllustrationPalette): string {
   const slots = [
     { x: 12, y: SCENE_HEIGHT - 14 - SCENE_GROUND_PROP_SIZE },
@@ -691,7 +733,9 @@ function renderGroundProps(props: readonly string[], palette: IllustrationPalett
     return (
       `<g data-scene-prop="${esc(name)}" data-scene-position="ground-${index === 0 ? 'left' : 'right'}" ` +
       `transform="translate(${slots[index].x} ${slots[index].y})" ` +
-      `color="${esc(palette.ink)}" opacity="0.55">${svg}</g>`
+      `color="${esc(palette.ink)}" opacity="0.55">` +
+      groundShadow('prop', slots[index].x + SCENE_GROUND_PROP_SIZE / 2, slots[index].y + SCENE_GROUND_PROP_SIZE, SCENE_GROUND_PROP_SIZE, palette) +
+      `${svg}</g>`
     );
   }).join('');
   return icons ? `<g data-scene-primitive="ground-props">${icons}</g>` : '';
@@ -730,6 +774,19 @@ function composeSceneSvg(
   const sky = palette.sky || palette.fill;
   const ground = palette.ground || darken(palette.fill);
 
+  // #277: contact shadows for whatever stands on the ground. They are emitted with
+  // the ground plane (`mid`), so the subject and every prop are always in front of
+  // their own shadow no matter which layout is drawing.
+  const feetY = y + subjectSize;
+  const subjectShadows = isSurround
+    ? groundShadow('subject', SCENE_WIDTH / 2, SCENE_SURROUND_SUBJECT_TOP + SCENE_SURROUND_SUBJECT_SIZE, SCENE_SURROUND_SUBJECT_SIZE, palette)
+    : processStages.length >= 2
+      ? '' // the strip draws one per stage instead
+      : isCompare
+        ? groundShadow('subject', SCENE_COMPARE_SUBJECT_X.left + subjectSize / 2, feetY, subjectSize, palette) +
+          groundShadow('subject', SCENE_COMPARE_SUBJECT_X.right + subjectSize / 2, feetY, subjectSize, palette)
+        : groundShadow('subject', SCENE_WIDTH / 2, feetY, subjectSize, palette);
+
   const attrs: string[] = [];
   if (options.assetId) attrs.push(`data-illustration="${esc(options.assetId)}"`);
   attrs.push(options.label ? `role="img" aria-label="${esc(options.label)}"` : 'aria-hidden="true"');
@@ -750,7 +807,7 @@ function composeSceneSvg(
       primitivesOf(spec.horizon).map((p) => renderFar(p, palette)).join('') +
       `<rect x="0" y="${SCENE_HORIZON}" width="${SCENE_WIDTH}" height="${SCENE_HEIGHT - SCENE_HORIZON}" fill="${esc(ground)}"/>`
     ) +
-    layer('mid', primitivesOf(spec.standing).map((p) => renderMid(p, palette)).join('')) +
+    layer('mid', primitivesOf(spec.standing).map((p) => renderMid(p, palette)).join('') + subjectShadows) +
     layer('halo', `<circle cx="${SCENE_WIDTH / 2}" cy="${subjectY}" r="72" fill="${esc(palette.glow)}" opacity="0.15"/>`) +
     // #266: the subject is drawn in the palette ACCENT (`glow`), not in ink.
     // Every element used to be ink, so a scene read as one dark blue outline on
@@ -759,7 +816,7 @@ function composeSceneSvg(
     // as a picture instead of a diagram.
     layer('subject', surroundRing.length
       ? `<g data-scene-subject="main" data-scene-size="${SCENE_SURROUND_SUBJECT_SIZE}" ` +
-        `transform="translate(${Math.round((SCENE_WIDTH - SCENE_SURROUND_SUBJECT_SIZE) / 2)} 52)" ` +
+        `transform="translate(${Math.round((SCENE_WIDTH - SCENE_SURROUND_SUBJECT_SIZE) / 2)} ${SCENE_SURROUND_SUBJECT_TOP})" ` +
         `color="${esc(palette.glow)}">${subject}</g>`
       : processStages.length >= 2
       // #267: a sequence is drawn as a strip, not as one centre picture.

@@ -50,6 +50,10 @@
   **che mất** nút gợi ý thật; gọi model từng câu thì thêm 1–3 s + phí cho một thứ không ảnh hưởng
   việc học. Nếu sau này giáo viên than phải bấm nhiều lần, làm **"gắn cảnh cho cả game"** trong
   trình soạn (một lượt, có preview), không phải gắn mặc định trong wizard.
+- **Đã làm (#277):** mỗi vật đứng có một bóng tiếp đất (ink 10%, elip bẹt) và lớp xa đậm hơn
+  (đồi 0.20, mây 0.12) — chữa cảm giác "dán lên giấy". **Còn hở:** bảng màu vẫn **một họ hue** và
+  prop/góc icon ở opacity 0.55 nên trông nhạt; hình tham chiếu của giáo viên dùng 6 hue. Đó là
+  #278 (bảng màu nhiều hue) — việc lớn tiếp theo của P4.
 - **Còn mở:** `compare` chưa thử trên câu `scenario` (bố cục #254); `process`/`surround` chưa chọn
   bởi model thật (cần khoá); chưa có người duyệt bằng mắt cho các bố cục mới (mới qua vision-model —
   đã duyệt bằng ảnh chụp thật cho #257/#260/#262/#270).

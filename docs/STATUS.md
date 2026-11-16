@@ -7,6 +7,14 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-16 — #277 bóng tiếp đất + lớp xa bớt nhạt (chữa "dán lên giấy")
+- Kích hoạt: giáo viên gửi một hình tham chiếu tự vẽ và nói "ảnh vẫn rất chán". Đo hai bên: hình tham chiếu có **3 bóng đổ**, 6 hue, 4 lớp nền; cảnh của engine có **0 bóng**, **1 họ màu**, 3 lớp.
+- **Đã làm** (`src/shared/illustration-scene.ts`): `groundShadow()` → một ellipse `data-scene-shadow="subject|prop|stage"` màu `ink` **10%**, rộng 34% hộp vật, dẹt 22%. Bóng chủ thể nằm ở lớp `mid` (dưới chủ thể); bóng prop/bậc quy trình nằm **trong nhóm của chính vật đó**, trước icon. `subIcons`/vòng `surround` **không** có bóng (chúng nổi ở góc, không đứng trên đất). Lớp xa: mây 0.08→0.12, đồi 0.14→0.20, núi 0.1→0.16, skyline 0.11→0.17.
+- **Hằng số mới:** `SCENE_SHADOW_OPACITY`, `SCENE_SHADOW_WIDTH_RATIO`, `SCENE_SHADOW_HEIGHT_RATIO`, `SCENE_SURROUND_SUBJECT_TOP` (52 thay cho số literal).
+- **Đã chạy:** `npx tsc` sạch; `node tests/run-unit.js` **99/99** (46.2 s); 24 hash vàng lấy lại có chủ ý; `npm run build:scene-runtime` → **83.7 KiB**; `npm run check:scene-runtime` khớp; `build-embedded-js` + `check:embedded` khớp **6285.1 KiB**; `npm run check` 52 tệp sạch.
+- **Đối chứng âm:** bỏ `+ subjectShadows` khỏi lớp `mid` ⇒ đỏ (2728 vs 2828 + thiếu bóng); khôi phục byte-đúng ⇒ xanh.
+- **Chưa xong phần "đẹp":** vision-model vẫn gọi cảnh là "sticker dán lên giấy" vì (1) **một họ màu**, (2) prop/góc ở opacity 0.55 cùng màu ink. Đó là #278 (bảng màu nhiều hue) — bóng chỉ chữa "lơ lửng". **Chưa ai duyệt bằng mắt người.**
+
 ### 2026-11-16 — #276 quyết định: wizard **không** tự gắn cảnh (giáo viên bấm trong trình soạn)
 - **Không đổi mã.** Chốt hướng (c) trong ba hướng của #275: cảnh vẫn chỉ do giáo viên bấm "Gợi ý cảnh" trong trình soạn.
 - **Lý do:** (a) gắn cảnh theo danh mục cho từng câu ⇒ mọi câu cùng chủ đề nhận cùng một khung, và **che mất** nút gợi ý thật (giáo viên tưởng thế là tốt nhất); (b) gọi model từng câu ⇒ thêm 1–3 s + phí cho một thứ không ảnh hưởng việc học, mà cảnh kém thì giáo viên vẫn phải sửa tay.

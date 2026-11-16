@@ -300,7 +300,83 @@ test('the old category scene is unchanged by the composer refactor', () => {
   });
   assert.doesNotMatch(svg, /sub-icon/, 'the legacy path must not grow a sub-icon layer');
   // 2043 bytes before stacked layers; richer now, and still the legacy path.
-  assert.equal(svg.length, 2729);
+  // #277 added the ground-contact shadow (+99 bytes on this scene: the ellipse
+  // plus its data-scene-shadow role).
+  assert.equal(svg.length, 2828);
+});
+
+// --- #277 ground contact ---------------------------------------------------
+// Every standing thing gets one soft shadow, and it is painted with the GROUND
+// PLANE: an object drawn before its own shadow would be under the floor. The
+// reference for this whole engine (a hand-drawn street) puts a shadow under the
+// car and the plant; without one, a pale scene reads as stickers on paper.
+const shadowsOf = (svg: string): string[] =>
+  (svg.match(/data-scene-shadow="([a-z]+)"/g) || []).map((m) => m.slice('data-scene-shadow="'.length, -1));
+
+test('#277 every standing thing is grounded and no shadow is painted over it', () => {
+  const palette = getIllustrationPalette('animals');
+  const GROUNDED = normalizeSceneBlueprint({
+    v: 1,
+    layout: 'single',
+    backdrop: 'meadow',
+    paletteKey: 'animals',
+    mainIcon: 'paw-print',
+    props: ['apple', 'box'],
+  })!;
+  const single = renderBlueprintSvg(GROUNDED, palette);
+  assert.deepEqual(shadowsOf(single), ['subject', 'prop', 'prop'], 'subject + both ground props');
+  assert.ok(
+    single.indexOf('data-scene-layer="subject"') > single.indexOf('data-scene-shadow="subject"'),
+    'the shadow must be behind the subject'
+  );
+  // A prop's shadow rides INSIDE its own group, which is what keeps the prop
+  // icon in front of it however the layers are reordered later.
+  const propGroup = single.slice(single.indexOf('data-scene-prop="apple"'));
+  const propGroupEnd = propGroup.indexOf('</g>');
+  const propShadow = propGroup.indexOf('data-scene-shadow="prop"');
+  const propIcon = propGroup.indexOf('<svg', propGroupEnd);
+  assert.ok(propShadow >= 0 && propIcon >= 0, 'the apple lost its shadow or its icon');
+  assert.ok(propShadow < propIcon, 'the shadow must be drawn before the prop it belongs to');
+
+  const compare = renderBlueprintSvg(
+    normalizeSceneBlueprint({
+      v: 1,
+      layout: 'compare',
+      backdrop: 'sea',
+      paletteKey: 'math',
+      mainIcon: 'apple',
+      compareIcon: 'box',
+      sign: 'equal',
+    })!,
+    getIllustrationPalette('math')
+  );
+  assert.deepEqual(shadowsOf(compare), ['subject', 'subject'], 'both compared subjects stand on the ground');
+
+  const process = renderBlueprintSvg(
+    normalizeSceneBlueprint({
+      v: 1,
+      layout: 'process',
+      backdrop: 'lab',
+      paletteKey: 'science',
+      mainIcon: 'flask-conical',
+      steps: ['cloud-sun', 'leaf'],
+    })!,
+    getIllustrationPalette('science')
+  );
+  assert.deepEqual(shadowsOf(process), ['stage', 'stage', 'stage'], 'one per stage, never one for the strip');
+
+  const surround = renderBlueprintSvg(
+    normalizeSceneBlueprint({
+      v: 1,
+      layout: 'surround',
+      backdrop: 'forest',
+      paletteKey: 'environment',
+      mainIcon: 'recycle',
+      around: ['leaf', 'fish', 'mountain', 'sparkles'],
+    })!,
+    getIllustrationPalette('environment')
+  );
+  assert.deepEqual(shadowsOf(surround), ['subject'], 'the ring floats at the corners; only the subject touches the ground');
 });
 
 // --- #262 compare: two subjects, one sign ----------------------------------

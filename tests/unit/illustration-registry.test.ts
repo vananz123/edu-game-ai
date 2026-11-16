@@ -343,31 +343,37 @@ test('the scene composer output is pinned so saved scenes stay stable', () => {
   // palette ACCENT instead of ink (#266 - colour), and three person icons joined
   // the whitelist (#266 - people, no geometry change). Byte lengths did not move
   // (same 7-char hex colours), so only the hashes pin this change.
+  //
+  // #277 re-took all 24 hashes a third time, ON PURPOSE and with rendered PNGs
+  // checked by eye: every standing thing now casts one soft ground-contact
+  // shadow, and the far layer (clouds/hills/mountains/skyline) is less washed
+  // out. This is the first change where byte LENGTH moved as well, and the
+  // length assertion in scene-blueprint.test.ts pins the legacy path separately.
   const golden: Record<string, string> = {
-    animals: 'dbec4be3fffc78a8d8c934c2f20e7a672c75168b31894afc202c4cf1c5abbd81',
-    plants: 'b48042d46b8690ee8b8f5490d49f91269205dacadd15ff5442300f30d177aa57',
-    space: 'f4f6b28db375f42e22c5d32cdc19b6b6911842b0b3e787c75652607de0218b2a',
-    'human-body': '8862acd8fb99520e3cc1c7552e05840e859abb5c77fae586f7282fef4eef496c',
-    transport: '9540fedca995ade9fdb6ca3956529c4e8ef0852cf4aa00615c9ebbaddb83d73c',
-    safety: '071ae9d85685b1a085e09260f1427fe92c818af7bd637b949ca4a838f68856f4',
-    environment: 'de295c6b6396bc7a3fc1a49bea9c76f5cc43d2dabf18d63fe61ed795317bfe20',
-    history: '51ac93f3507f405c5144f7aae870e9f3acc6da99e33752abcff672d1e4f43d0f',
-    geography: 'eebb26d85d40e58d7b89927fbfc3c293927a55a6d0018c11eb4cba1ad016481b',
-    jobs: '35a946b62b9d9b5fd382de22a77ed14cd5bfdbfb519ffd2d83d38ac53a511820',
-    sports: '6d30bff7de04214a955ffdf5a9db176430a64d88fd3307b6a26f50626f175764',
-    music: 'edb0f5746ecfd35fe67502d165ac39d2744333521404a885437d61cbaf2dd53e',
-    art: '35d1ecc5f4389b7a6163255342092703219a41a1d48b850f3586892f16d7a72b',
-    math: '15553811489e33b86110707bb213293d0c7c7205b977ef38f35da4b4e3f25d2d',
-    language: 'd53f2339b8e70fdb9d148082b794eab62644810c7edd0f477007c94153a1212d',
-    science: '94a81b3b8211d261841cecdaf7fe5719988a71ddcd57b435e3642e525a2fce38',
-    technology: 'e1d8530ef60f902681b043ea397a7cb17d889850beb04af45e6497d281e4716e',
-    health: '973ca62d3c0f1994a1aa38400b8777c2cf585b96d48e0706e32a73b320621819',
-    family: '89ca1559d62b7f31dd2530a936342edba67ecfd0d0d48b1d8dc9857ee73d2c07',
-    community: '85974316c8dd9e3d0eca6720d655a5091bdb55834470d7f3a7f63ac11e78b79b',
-    weather: '16fea08af2deb69f7c7ffe5533fa4c8a764c9921a61382e410a33b50dc874809',
-    food: 'e72227108c0413b0478a1acd9c96240091d27f594cc0fc1bab6c9a897331878b',
-    objects: '58ab31a983a177702f200fab8b3fb99d26d98e4ddc7101babb070d276739e98d',
-    'water-world': 'f61e8c5a375d56dd34cd01c9225810e84719704f5502db5cc3ae6c52cb03a13c',
+    animals: '7d1e10cb4fa71fc5d4d4ad08f878203425998c17d6e28bd1d664fe52eae91cbf',
+    plants: '8499fd97d729baf38c5782524ec66314ef1b3005e866dfc6f70f4735d42e690b',
+    space: 'e467b19a638c61ef13d456143be5f3f2221145a99f19a858088d3e1fec0a2846',
+    'human-body': '48d22c26e1e89d4bc3dc389ffabfce1ae254151fbeea6eb48c9884ecef2d36f4',
+    transport: '0203d8ea366fd62a102d6df39c3a1b7fa4f47fe329d0b14f6c01094faa43846d',
+    safety: 'b5550fb19326ba16ed05e901e0da9dd90e0198e31c90b5050e08a755831e1fdd',
+    environment: '33e16f5a4d955a30dc8eaa734ff9bc146a02407339209dd6e3da786a7e89964c',
+    history: '63b746e95a10819489f7c7f22930730752c5bc2e6c64b91ea1005740e7738ee6',
+    geography: '3d882a9a65df7e8298db82b77db65d039f768923b08492d2da4b93ce76db608b',
+    jobs: '72a79776b98ed532733b264f29f0befbb33bc12a614a070c3adfa4e9afa959e5',
+    sports: '56e96876e73b0adad42cb191e958335df90f8fd52a541976198933ee6918e278',
+    music: 'a8e6078f8b444a870dbea0c6d40e4dd9368d2c1d4046c10ddb27dc0d204d8112',
+    art: '30ac88b6f5e3ca68625ca544d408a1992a1a926681457a92dc61bb4ad04c6e44',
+    math: '87bac77a23b6ab193d021830de8e4d7982c7902cab465c94c125e21aae62b3ca',
+    language: '3a54b54c4946ad303756e29eedba1153006e7dac9df4bc77b2302ca3d3f11883',
+    science: '7c3c11521a5dd5e2451bc91f1e5d56b1e4ff24c3cbc9fe134485e7ae3b7d597d',
+    technology: 'c634affde282b3dd2130debf65d635e660852bcf4326d1962e331e89863fc047',
+    health: '4a2d80b2ce10f229c75a4a3024b242646b367babe484567ee225189c0aa2a769',
+    family: 'fce02cf636e4193052ae900ba3a3b75a2bf9310269906bec7f58151da7059dce',
+    community: '90724f00b8066e6f51c2ff21a64d9101a0bcf2ccd94478cbd5b55d2ecc2bc8c9',
+    weather: '3bc50bbee86af8a3822786f66b7d4c408475404a3446d5715a0fe33600de618e',
+    food: '4f9f7228f0e7e9da700f52af7f481b8324c6497ed559e978054fa8abb2e64fb9',
+    objects: '203a6523f50e0ac86d74a5f3d69c569d3e13ccb79eb5d6d6d07af413acc88024',
+    'water-world': 'e4fc543e990330f06d6c81c7b4f8bce5fca2f536e6f27d249856dc4e9cb08e1c',
   };
   for (const id of ILLUSTRATION_ASSET_IDS) {
     const category = id.slice(0, -'-scene'.length);

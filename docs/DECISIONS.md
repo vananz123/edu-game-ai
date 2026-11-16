@@ -4406,3 +4406,46 @@ lý do chặn/ làms chậm đường sinh.
 đường giáo viên bấm), nhưng không thêm bước nào vào wizard. Nếu sau này giáo viên than "phải bấm
 10 lần", đó là lúc làm **"gắn cảnh cho cả game"** bằng một nút trong trình soạn (cùng một lượt
 model cho nhiều câu, có preview) — chứ không phải gắn mặc định trong wizard.
+
+## #277 — Mỗi vật đứng đều có bóng; lớp xa bớt nhạt
+
+**Kích hoạt.** Giáo viên: "ảnh vẫn rất chán", kèm một hình tham chiếu tự vẽ (phố có vạch sang
+đường, đèn giao thông, ô tô, chậu cây). So sánh máy móc hai bên:
+
+| | hình tham chiếu | cảnh của engine (trước #277) |
+|---|---|---|
+| số vật thể rời | 12 | 4 |
+| bóng đổ dưới vật | **3** | **0** |
+| số hue dùng | 6 | **1 họ màu** (glow/ink/sky/ground/fill cùng một hue) |
+| lớp nền | nền, vỉa hè, mặt đường, lề, toà nhà | nền, dải đất, vài đám mây |
+
+Suy ra: hình "chán" không phải vì thiếu icon, mà vì (a) **không có vật nào chạm đất** nên mọi
+thứ dán lên giấy, (b) **lớp xa quá nhạt** (0.08–0.14) nên bị xoá khỏi mắt ở khoảng cách máy chiếu.
+
+**Quyết định (bước 1, #277).** Thêm bóng tiếp đất và tăng tương phản lớp xa; **chưa** đổi bảng màu.
+
+- `groundShadow(kind, cx, feetY, boxSize, palette)` → một `<ellipse data-scene-shadow="subject|prop|stage">`
+  màu `ink` ở **10%**, rộng 34% hộp vật, dẹt 22% (elip bẹt, không phải quả bóng).
+- Bóng của **chủ thể** vẽ ở lớp `mid` (tức là *dưới* lớp chủ thể) ⇒ không bao giờ đè lên vật.
+  Bóng của **prop** và **bậc quy trình** vẽ **trong chính nhóm của vật đó**, trước icon ⇒ đảo thứ tự
+  lớp sau này cũng không làm bóng nằm trên vật.
+- `subIcons` (góc) và vòng `surround` **không** có bóng: chúng là icon nổi ở góc, không đứng trên đất.
+- Lớp xa: mây 0.08 → 0.12, đồi 0.14 → **0.20**, núi 0.1 → 0.16, skyline 0.11 → 0.17. Không có
+  màu nào mới, chỉ là opacity; vẫn ≤ 0.2 nên cảnh vẫn "sáng" theo #220.
+
+**Vì sao 10% và không phải màu đen.** #220 quyết định cảnh phải SÁNG (bảng chiếu chữ trước). Một
+bóng đen/xám là vết bẩn duy nhất trên tấm thẻ; bóng lấy `ink` của chính palette nên nó là "bóng
+của màu này", hoà vào tranh.
+
+**Đã kiểm.** 24 hash vàng **được lấy lại có chủ ý** (lần thứ ba), kèm PNG render bằng Edge headless
+và một lần vision-model soi; `scene-blueprint.test.ts` có test mới đếm bóng theo **vai trò**
+(`subject`/`prop`/`stage`) thay vì đếm `<ellipse>` (lớp trời cũng vẽ ellipse), và khẳng định bóng
+nằm **trước** vật. Đối chứng âm: bỏ `+ subjectShadows` khỏi lớp `mid` ⇒ đỏ ngay (2728 vs 2828 và
+thiếu bóng); khôi phục ⇒ 99/99 xanh.
+
+**Còn hở, và đây là điều đáng nói thẳng.** Vision-model vẫn gọi cảnh là "sticker dán lên giấy", với
+hai lý do cụ thể: (1) **một họ màu** — mọi thứ là xanh mint/sage, không có hue thứ hai như hình
+tham chiếu (ô tô xanh dương, chậu cam, cây xanh lá trên nền kem); (2) **prop/góc icon ở opacity
+0.55 và cùng màu ink** nên trông nhạt và "không cùng bút vẽ" với chủ thể. Đó là việc của #278
+(bảng màu nhiều hue) chứ không phải của bóng đổ — bóng chỉ chữa được "lơ lửng", không chữa được
+"đơn sắc". Ghi lại để không ai tưởng #277 đã xong phần "đẹp".
