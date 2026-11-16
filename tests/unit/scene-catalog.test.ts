@@ -108,64 +108,60 @@ test('the icon whitelist is concrete, unique and registered', () => {
   assert.equal(isSceneIconId(null), false);
 });
 
-// --- renderer drift guard --------------------------------------------------
+// --- renderer wiring (#272) ------------------------------------------------
+// Before #272 the renderer kept a hand-written copy of these two tables and
+// these tests compared the copy with the original. The copy is gone: the
+// renderer now loads `renderer/shared/scene-runtime.js`, an esbuild IIFE over
+// `src/shared/scene-runtime.ts`. So the invariant changed from "the two copies
+// agree" to "there is only one copy, and the generated bundle really exposes
+// it" — which is strictly stronger, because a missing bundle now fails here
+// instead of quietly drifting later.
 const RENDERER_SOURCE = readFileSync(
   path.join(__dirname, '..', '..', '..', 'src', 'renderer', 'features', 'game-illustration.ts'),
   'utf8'
 );
+const BUNDLE = path.join(__dirname, '..', '..', '..', 'dist', 'src', 'renderer', 'shared', 'scene-runtime.js');
 
-function rendererObjectBody(name: string): string {
-  const start = RENDERER_SOURCE.indexOf(`const ${name} = {`);
-  assert.ok(start >= 0, `${name} is missing from the renderer`);
-  const end = RENDERER_SOURCE.indexOf('\n};', start);
-  return RENDERER_SOURCE.slice(start, end === -1 ? undefined : end);
+function loadSceneRuntime(): Record<string, any> {
+  const vm = require('node:vm');
+  const sandbox: Record<string, any> = { console };
+  sandbox.globalThis = sandbox;
+  vm.createContext(sandbox);
+  vm.runInContext(readFileSync(BUNDLE, 'utf8'), sandbox);
+  assert.ok(sandbox.SceneRuntime, 'the bundle must publish the SceneRuntime global');
+  return sandbox.SceneRuntime;
 }
 
-test('the renderer backdrop table matches the shared catalog', () => {
-  const body = rendererObjectBody('STAGE_SCENE_BACKDROPS');
-  type Parsed = { sky: string[]; horizon: string[]; standing: string[]; fg: string[]; subjectY: number };
-  const parsed: Record<string, Parsed> = {};
-  const names = (text: string): string[] => [...text.matchAll(/'([a-z]+)'/g)].map((x) => x[1]);
-  // Parse one table row at a time; a layer is a single name or a bracketed list.
-  for (const line of body.split('\n')) {
-    const row = /^\s*(?:'([a-z-]+)'|([a-z-]+)):\s*\{(.*)\}\s*,?\s*$/.exec(line);
-    if (!row) continue;
-    const entry = row[3];
-    const grab = (slot: string): string[] => {
-      const mm = new RegExp(slot + ":\\s*(\\[[^\\]]*\\]|'[a-z]+')").exec(entry);
-      return mm ? names(mm[1]) : [];
-    };
-    const y = /subjectY:\s*(\d+)/.exec(entry);
-    parsed[row[1] || row[2]] = {
-      sky: grab('sky'),
-      horizon: grab('horizon'),
-      standing: grab('standing'),
-      fg: grab('fg'),
-      subjectY: y ? Number(y[1]) : 0,
-    };
+test('the renderer carries no second copy of the scene tables', () => {
+  for (const gone of ['STAGE_SCENE_BACKDROPS', 'STAGE_SCENE_ICON_IDS', 'STAGE_SCENE_LAYOUTS']) {
+    assert.equal(
+      RENDERER_SOURCE.includes(gone),
+      false,
+      `${gone} is back in the renderer — the vocabulary must come from SceneRuntime`
+    );
   }
-  const listOf = (value: unknown): string[] =>
-    Array.isArray(value) ? value.map(String) : [String(value)];
-  const expected: Record<string, Parsed> = {};
-  for (const [id, spec] of Object.entries(SCENE_BACKDROPS)) {
-    expected[id] = {
-      sky: listOf(spec.sky),
-      horizon: listOf(spec.horizon),
-      standing: listOf(spec.standing),
-      fg: listOf(spec.fg),
-      subjectY: spec.subjectY,
-    };
-  }
-  assert.deepEqual(parsed, expected);
+  assert.ok(RENDERER_SOURCE.includes('SceneRuntime.'), 'the renderer must read the shared bundle');
 });
 
-test('the renderer icon whitelist matches the shared catalog', () => {
-  const body = RENDERER_SOURCE.slice(
-    RENDERER_SOURCE.indexOf('const STAGE_SCENE_ICON_IDS = ['),
-    RENDERER_SOURCE.indexOf('];', RENDERER_SOURCE.indexOf('const STAGE_SCENE_ICON_IDS = ['))
-  );
-  const parsed = [...body.matchAll(/'([a-z0-9-]+)'/g)].map((match) => match[1]);
-  assert.deepEqual(parsed, [...SCENE_ICON_IDS]);
+test('the bundled scene runtime exposes the same vocabulary as the catalog', () => {
+  const runtime = loadSceneRuntime();
+  assert.deepEqual([...runtime.SCENE_ICON_IDS], [...SCENE_ICON_IDS], 'icon ids differ in the bundle');
+  for (const id of SCENE_BACKDROP_IDS) {
+    const bundled = runtime.getBackdropSpec(id);
+    const shared = getBackdropSpec(id);
+    assert.deepEqual(
+      JSON.parse(JSON.stringify(bundled)),
+      JSON.parse(JSON.stringify(shared)),
+      `${id} backdrop differs in the bundle`
+    );
+  }
+  for (const value of ['castle', 'banana', '', null]) {
+    assert.equal(runtime.isSceneBackdropId(value), isSceneBackdropId(value), `isSceneBackdropId(${String(value)})`);
+  }
+  for (const id of SCENE_ICON_IDS) {
+    assert.equal(runtime.isSceneIconId(id), true, `${id} must be a scene icon in the bundle`);
+  }
+  assert.equal(runtime.isSceneIconId('chevron-down'), false);
 });
 
 console.log(`\n${passed} scene-catalog checks passed.`);

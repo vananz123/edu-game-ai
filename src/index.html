@@ -221,6 +221,10 @@
   <script defer src="renderer/shared/constellation-data.js"></script>
   <script defer src="renderer/constellation-core.js"></script>
 
+  <!-- #272: the shared scene code (catalogue + normaliser + geometry), bundled
+       into one classic script so the renderer stops carrying a second copy.
+       MUST load before game-illustration.js, which only adapts it. -->
+  <script defer src="renderer/shared/scene-runtime.js"></script>
   <script defer src="renderer/features/game-illustration.js"></script>
 
   <!-- Three.js (DECISIONS #137): bundled by scripts/build-three.js into a single

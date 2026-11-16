@@ -26,7 +26,11 @@
   kiến/voi → **1047 ms**, `layout=compare` + `bug`/`paw-print`/`less-than` + 2 icon góc; câu phân số 3/4 vs 2/5 →
   **2569 ms**, `layout=single` (classroom/math/calculator + 2 góc), preview **30 hình**. Cổng UI **107/107** (18 check
   mới, stub kênh). Nhắc lại luật: model **không bao giờ** phát SVG, và renderer vẫn chuẩn hoá lại JSON lần nữa.
-  Bài học: cloud provider chỉ `usable` sau một lần `testAiProvider` thành công (#132 §D7) — "đã lưu khoá" ≠ "dùng được".- **P4 — cổng + docs:** mở rộng `check:item-assets-ui` cho từng bố cục, thêm phép đo dung lượng `.egame` thật, duyệt thị giác, rồi mới tính installer/phát hành.
+  Bài học: cloud provider chỉ `usable` sau một lần `testAiProvider` thành công (#132 §D7) — "đã lưu khoá" ≠ "dùng được".- **Nợ kỹ thuật đã đóng (2026-11-16, #272):** bản mirror trong renderer bị xoá. `src/shared/scene-runtime.ts`
+  + esbuild → `renderer/shared/scene-runtime.js` (IIFE, `SceneRuntime`, 84,2 KiB, nạp trước `game-illustration.js`);
+  `game-illustration.ts` 864 → 193 dòng, chỉ còn *khi nào vẽ* + ảnh giáo viên. `check:scene-runtime` canh bundle cũ.
+  Đo: `run-unit` 99/99, play-surface 790/790, item-assets 157/157, stage-illustration 169/169, game-background 42/42.
+- **P4 — cổng + docs:** mở rộng `check:item-assets-ui` cho từng bố cục, thêm phép đo dung lượng `.egame` thật, duyệt thị giác, rồi mới tính installer/phát hành.
 - **Prompt + cổng chống trôi — XONG trước P1 (quyết định #255).** §5 của [`docs/AI_SCENE_DIRECTOR_DESIGN.md`](AI_SCENE_DIRECTOR_DESIGN.md) nay là prompt đầy đủ (quy tắc, quy trình suy nghĩ, kho từ vựng có mốc), và `tests/unit/scene-prompt-doc.test.ts` so **từng tên** trong prompt với `scene-asset-catalog.ts` — thêm/bớt asset mà quên sửa prompt là đỏ. Nhánh "model xuất raw SVG" của spec ban đầu bị **loại**: inline SVG là markup thực thi được, `AGENTS.md` cấm chạy markup do model sinh.
 - **Đã đóng (2026-11-16, #271):** `ui-play-surface-check` **787/788 → 790/790** — "lỗi giật 2px" ở 1366×768
   không phải lỗi bố cục mà là con trỏ chuột còn đứng trên ô đáp án đầu: `:hover` nhấc ô lên đúng

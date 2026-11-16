@@ -4192,3 +4192,62 @@ không phải trùng hợp.
 khi một check đỏ "không giải thích được", việc đọc `transform` tại hai thời điểm rẻ hơn nhiều so
 với việc đoán phần tử nào co lại. Cũng đừng chữa bằng cách nới dung sai: ±1px là thứ bắt được
 lỗi thật, còn 2px là thứ đang được báo.
+
+## #272 — Bản mirror trong renderer bị xoá: scene code chỉ còn MỘT nguồn, đóng gói bằng esbuild
+
+**Vấn đề.** `src/renderer/features/game-illustration.ts` (864 dòng) là bản sao tay của
+`scene-asset-catalog.ts` + `scene-blueprint.ts` + `illustration-scene.ts`, vì play surface là
+các **classic script** (không `import` được). Cái giá đã trả hai lần: #262 (icon góc) và #267
+(mũi tên) — mỗi lần hình học đổi phải viết hai chỗ, và test parity ra đời chỉ để canh chính
+cái drift ấy. Đó là hai nguồn sự thật cho một bức hình.
+
+**Quyết định.** Bundle phần shared bằng esbuild thành một script cổ điển:
+`src/shared/scene-runtime.ts` (barrel, chỉ re-export) → `scripts/build-scene-runtime.js`
+(esbuild `format: 'iife'`, `globalName: 'SceneRuntime'`) → `dist/src/renderer/shared/scene-runtime.js`.
+`src/index.html` nạp nó **trước** `game-illustration.js`, và file đó từ 864 → **193 dòng**:
+chỉ còn *khi nào vẽ* (mode `off`/`manual`/`auto`, ảnh giáo viên tự tải, sentinel "Bỏ ảnh"),
+phần vẽ gọi `SceneRuntime`.
+
+**Vì sao không chọn cách khác.**
+- *Đổi renderer sang ES module*: `src/index.html` + `tests/unit/renderer-load-order.test.ts` +
+  `check:renderer-globals` đều dựa trên "script cổ điển, chạy theo thứ tự"; đổi cả ba là một
+  cuộc cách mạng cho một món nợ nhỏ.
+- *Chỉ bỏ phần normaliser, giữ phần vẽ*: vẫn còn hai chỗ vẽ; món nợ chỉ giảm một nửa.
+- *Sinh file `.ts` từ shared bằng script*: vẫn là hai file, chỉ khác là một file do máy viết —
+  không xoá được lớp lỗi, chỉ làm nó khó thấy hơn.
+
+**Vì sao bundle không minify.** `check:renderer-globals` quét **từng dòng** để tìm khai báo
+hàm; bản minify đặt `function X(){` giữa dòng nên mọi lời gọi nội bộ sẽ bị báo "undefined".
+84,2 KiB không minify (thay cho ~30 KiB của bản sao cũ, tức +54 KiB) là giá phải trả để giữ
+được cổng đó — và cổng đó đã bắt được lỗi thật (`wizardStructureScopeError`). Muốn minify thì
+phải chuyển file vào `renderer/vendor/` (được bỏ qua khi quét), tức là giả vờ nó là thư viện
+ngoài: không trung thực bằng cách nói thẳng nó là mã của mình.
+
+**Cổng đổi chiều, không nới.** Bốn test cũ so **hai bản sao** với nhau; giờ chúng kiểm những
+điều mạnh hơn:
+- `scene-catalog`: renderer **không được** chứa lại `STAGE_SCENE_BACKDROPS`/`SCENE_ICON_IDS`/
+  `STAGE_SCENE_LAYOUTS`; bundle phải xuất đúng `SCENE_ICON_IDS` và `getBackdropSpec` của shared.
+- `illustration-registry`: renderer **không được** chứa lại bảng palette/bảng scene/hằng số
+  hình học; bundle phải trả **đúng** palette và scene spec cho cả 24 category; và mọi primitive
+  mà bảng scene *gọi tên* phải có painter trong composer (lỗ "tên có, vẽ không" giờ bị bắt).
+- `scene-blueprint`: sandbox nạp **đúng thứ tự index.html** (icon-data → scene-runtime →
+  adapter), nên thiếu bundle là đỏ ngay; thêm test phủ **cả 41 icon** (bản sao cũ có thể thiếu
+  icon mà không ai thấy) và xác nhận `layout:'surround'` vẫn tới được khung vẽ qua adapter.
+- `check:scene-runtime` (`--check`) so bundle đã build với bản build lại ⇒ quên rebuild là đỏ,
+  thay vì lặng lẽ chạy bundle cũ. Nó là script riêng (không nằm trong `npm run check`) vì cần
+  `dist/` đã build.
+
+**Bằng chứng.** `run-unit` **99/99** (47,6 s) · `npm run check` 52 tệp · `renderer-globals`
+0 undefined (1077 hàm / 8573 lời gọi, 73/75 script — thêm bundle) · `check:scene-runtime` khớp
+**82,2 KiB** · `check:embedded` khớp 6213,9 KiB · installer build lại OK · **trên binary release**:
+`ui-play-surface-check` **790/790**, `ui-item-assets-editor-check` **157/157`,
+`ui-stage-illustration-check` **169/169**, `ui-game-background-check` **42/42** · `devPath` gỡ →
+build → khôi phục, SHA-256 khớp ghim.
+
+**Đối chứng âm (quan sát được, không phải suy đoán).** Khi `dist/src/index.html` còn cũ (chưa
+có thẻ script mới) thì `renderer-load-order` đỏ đúng `ReferenceError: SceneRuntime is not
+defined` — tức adapter **không** có đường vòng nào để tự vẽ, và thứ tự nạp là ràng buộc thật.
+
+**Còn lại.** Bảng `STAGE_ILLUSTRATION_CATEGORY_ICONS` (24 dòng, category → icon mặc định) vẫn
+là bản sao có chủ ý: nó là *dữ liệu mặc định*, không phải hình học, và wizard đọc nó như bảng;
+`illustration-registry.test` so nó với `getCategoryIcon()`.

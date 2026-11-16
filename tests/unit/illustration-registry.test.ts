@@ -21,6 +21,7 @@ import {
   DEFAULT_ILLUSTRATION_CATEGORY,
   DEFAULT_ILLUSTRATION_ICON,
   ILLUSTRATION_ASSET_IDS,
+  ILLUSTRATION_CATEGORY_IDS,
   ILLUSTRATION_NONE_ID,
   getIllustrationPalette,
   isIllustrationAssetId,
@@ -29,7 +30,15 @@ import {
 } from '../../src/shared/illustration-registry';
 import { renderIconSvg } from '../../src/shared/icon-registry';
 import { getCategoryIcon } from '../../src/shared/content-categories';
-import { SCENE_HORIZON, SCENE_SUBJECT_SIZE, getSceneSpec, renderSceneSvg } from '../../src/shared/illustration-scene';
+import {
+  SCENE_HEIGHT,
+  SCENE_HORIZON,
+  SCENE_SUBJECT_SIZE,
+  SCENE_WIDTH,
+  getSceneSpec,
+  renderSceneSvg,
+} from '../../src/shared/illustration-scene';
+import { SCENE_BACKDROPS } from '../../src/shared/scene-asset-catalog';
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -221,23 +230,9 @@ test('the renderer honours the same per-item opt-out (#153)', () => {
 /** Extracts the object literal of a `const NAME = { ... };` from renderer source. */
 function constBody(constName: string): string {
   const start = RENDERER_SOURCE.indexOf(`const ${constName} = {`);
-  assert.ok(start >= 0, `${constName} is missing from the renderer copy`);
+  assert.ok(start >= 0, `${constName} is missing from the renderer`);
   const end = RENDERER_SOURCE.indexOf('\n};', start);
   return RENDERER_SOURCE.slice(start, end === -1 ? undefined : end);
-}
-
-/** `animals: { glow, fill, ink, sky, ground }` -> per-category palettes. */
-function rendererPalettes(): Record<
-  string,
-  { glow: string; fill: string; ink: string; sky: string; ground: string }
-> {
-  const body = constBody('STAGE_ILLUSTRATION_PALETTES');
-  const out: Record<string, { glow: string; fill: string; ink: string; sky: string; ground: string }> = {};
-  const re =
-    /'?([a-z-]+)'?:\s*\{\s*glow:\s*'([^']+)',\s*fill:\s*'([^']+)',\s*ink:\s*'([^']+)',\s*sky:\s*'([^']+)',\s*ground:\s*'([^']+)'\s*\}/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(body))) out[m[1]] = { glow: m[2], fill: m[3], ink: m[4], sky: m[5], ground: m[6] };
-  return out;
 }
 
 /** `animals: 'paw-print', plants: 'leaf'` -> category to icon id. */
@@ -250,16 +245,30 @@ function rendererCategoryIcons(): Record<string, string> {
   return out;
 }
 
-test('the renderer palette table matches the shared registry', () => {
-  const palettes = rendererPalettes();
-  const categories = Object.keys(palettes);
-  assert.ok(categories.length >= 20, `only ${categories.length} palettes parsed from the renderer`);
-  for (const category of categories) {
-    assert.deepEqual(getIllustrationPalette(category), palettes[category], `${category} palette differs`);
-  }
-  // Every category the renderer draws is a category the resolver can produce.
+test('the renderer reads palettes from the shared bundle, not a copy (#272)', () => {
+  // The palette table used to be duplicated in the renderer and compared here.
+  // It is gone: `renderer/shared/scene-runtime.js` IS this module, bundled, so
+  // the check is now that the bundle carries every palette unchanged.
+  assert.equal(
+    RENDERER_SOURCE.includes('STAGE_ILLUSTRATION_PALETTES'),
+    false,
+    'the renderer palette copy came back — delete it and use SceneRuntime'
+  );
+  const runtime = require('node:vm').runInNewContext(
+    `${readFileSync(
+      require('node:path').join(__dirname, '..', '..', '..', 'dist', 'src', 'renderer', 'shared', 'scene-runtime.js'),
+      'utf8'
+    )};SceneRuntime`,
+    { console }
+  );
+  assert.ok(runtime, 'the bundle must publish SceneRuntime');
   for (const id of ILLUSTRATION_ASSET_IDS) {
-    assert.ok(palettes[id.slice(0, -'-scene'.length)], `${id} has no palette in the renderer`);
+    const category = id.slice(0, -'-scene'.length);
+    assert.deepEqual(
+      JSON.parse(JSON.stringify(runtime.getIllustrationPalette(category))),
+      JSON.parse(JSON.stringify(getIllustrationPalette(category))),
+      `${category} palette differs in the bundle`
+    );
   }
 });
 
@@ -271,49 +280,40 @@ test('the renderer icon map matches getCategoryIcon()', () => {
   }
 });
 
-/** `animals: { sky: ['sun','clouds'], horizon: 'hills', standing: ['trees','bushes'], fg: ['grass'], subjectY: 88 }`. */
-type ParsedScene = {
-  sky: string[];
-  horizon: string[];
-  standing: string[];
-  fg: string[];
-  subjectY: number;
-};
-
-function rendererScenes(): Record<string, ParsedScene> {
-  const body = constBody('STAGE_ILLUSTRATION_SCENES');
-  const out: Record<string, ParsedScene> = {};
-  const names = (text: string): string[] => [...text.matchAll(/'([a-z]+)'/g)].map((x) => x[1]);
-  // Parse one table row at a time; a layer is a single name or a bracketed list.
-  for (const line of body.split('\n')) {
-    const row = /^\s*(?:'([a-z-]+)'|([a-z-]+)):\s*\{(.*)\}\s*,?\s*$/.exec(line);
-    if (!row) continue;
-    const entry = row[3];
-    const grab = (slot: string): string[] => {
-      const mm = new RegExp(slot + ":\\s*(\\[[^\\]]*\\]|'[a-z]+')").exec(entry);
-      return mm ? names(mm[1]) : [];
-    };
-    const y = /subjectY:\s*(\d+)/.exec(entry);
-    out[row[1] || row[2]] = {
-      sky: grab('sky'),
-      horizon: grab('horizon'),
-      standing: grab('standing'),
-      fg: grab('fg'),
-      subjectY: y ? Number(y[1]) : 0,
-    };
-  }
-  return out;
-}
-
-test('the renderer scene table matches the shared scene composer', () => {
-  const scenes = rendererScenes();
-  const categories = Object.keys(scenes);
-  assert.ok(categories.length >= 20, `only ${categories.length} scenes parsed from the renderer`);
+test('the renderer reads scene compositions from the shared bundle (#272)', () => {
+  // Same story as the palettes: the hand-written `STAGE_ILLUSTRATION_SCENES`
+  // table is gone, so there is nothing left to drift. What still has to be true
+  // is that every category the app can name resolves to a real composition in
+  // the bundle the renderer actually loads.
+  assert.equal(
+    RENDERER_SOURCE.includes('STAGE_ILLUSTRATION_SCENES'),
+    false,
+    'the renderer scene copy came back — delete it and use SceneRuntime'
+  );
+  const runtime = require('node:vm').runInNewContext(
+    `${readFileSync(
+      require('node:path').join(__dirname, '..', '..', '..', 'dist', 'src', 'renderer', 'shared', 'scene-runtime.js'),
+      'utf8'
+    )};SceneRuntime`,
+    { console }
+  );
   const listOf = (value: unknown): string[] =>
     Array.isArray(value) ? value.map(String) : [String(value)];
-  for (const category of categories) {
+  for (const id of ILLUSTRATION_ASSET_IDS) {
+    const category = id.slice(0, -'-scene'.length);
+    // The bundle runs in its own vm realm, so its objects carry a different
+    // `Object.prototype`/`Array.prototype`; `deepStrictEqual` compares
+    // prototypes, so the values are copied through JSON before comparing.
+    const bundled = JSON.parse(JSON.stringify(runtime.getSceneSpec(category)));
     const shared = getSceneSpec(category);
     assert.deepEqual(
+      {
+        sky: listOf(bundled.sky),
+        horizon: listOf(bundled.horizon),
+        standing: listOf(bundled.standing),
+        fg: listOf(bundled.fg),
+        subjectY: bundled.subjectY,
+      },
       {
         sky: listOf(shared.sky),
         horizon: listOf(shared.horizon),
@@ -321,13 +321,8 @@ test('the renderer scene table matches the shared scene composer', () => {
         fg: listOf(shared.fg),
         subjectY: shared.subjectY,
       },
-      scenes[category],
-      `${category} scene differs`
+      `${category} scene differs in the bundle`
     );
-  }
-  // Every drawable category has a scene, so the renderer never has to guess.
-  for (const id of ILLUSTRATION_ASSET_IDS) {
-    assert.ok(scenes[id.slice(0, -'-scene'.length)], `${id} has no scene in the renderer`);
   }
 });
 
@@ -386,40 +381,65 @@ test('the scene composer output is pinned so saved scenes stay stable', () => {
   }
 });
 
-test('the renderer subject size and horizon match the shared composer', () => {
-  const size = /const STAGE_ILLUSTRATION_SUBJECT_SIZE = (\d+);/.exec(RENDERER_SOURCE);
-  assert.ok(size, 'STAGE_ILLUSTRATION_SUBJECT_SIZE is missing from the renderer');
-  assert.equal(Number(size![1]), SCENE_SUBJECT_SIZE, 'subject size in the renderer drifted');
-  const horizon = /const STAGE_ILLUSTRATION_HORIZON = (\d+);/.exec(RENDERER_SOURCE);
-  assert.ok(horizon, 'STAGE_ILLUSTRATION_HORIZON is missing from the renderer');
-  assert.equal(Number(horizon![1]), SCENE_HORIZON, 'horizon in the renderer drifted');
+test('the renderer takes its geometry from the shared composer (#272)', () => {
+  // These two constants used to be copied into the renderer and compared. #272
+  // deleted the copy, so what is left to check is that the bundle the renderer
+  // loads reports the same frame the composer does — and that the renderer no
+  // longer hard-codes its own sizes (a re-added number is the drift this test
+  // exists to catch).
+  for (const gone of ['STAGE_ILLUSTRATION_SUBJECT_SIZE', 'STAGE_ILLUSTRATION_HORIZON', 'STAGE_SCENE_PROCESS_STEP_TOP']) {
+    assert.equal(
+      RENDERER_SOURCE.includes(gone),
+      false,
+      `${gone} is back in the renderer — geometry belongs to src/shared/illustration-scene.ts`
+    );
+  }
+  const runtime = require('node:vm').runInNewContext(
+    `${readFileSync(
+      require('node:path').join(__dirname, '..', '..', '..', 'dist', 'src', 'renderer', 'shared', 'scene-runtime.js'),
+      'utf8'
+    )};SceneRuntime`,
+    { console }
+  );
+  assert.equal(runtime.SCENE_WIDTH, SCENE_WIDTH);
+  assert.equal(runtime.SCENE_HEIGHT, SCENE_HEIGHT);
 });
 
-test('every layer primitive the renderer knows is one the shared composer knows', () => {
-  // A primitive added to one side only would render '' on the other, which is
-  // invisible in a screenshot of the surface you happened to look at.
-  const declared = new Set(
-    (RENDERER_SOURCE.match(/data-scene-primitive="([a-z-]+)"/g) || []).map((m) =>
-      m.slice('data-scene-primitive="'.length, -1)
-    )
-  );
-  assert.ok(declared.size >= 8, `only ${declared.size} primitives found in the renderer`);
+test('every layer primitive the shared composer draws is one its scene table names', () => {
+  // A primitive named in a scene table but handled by no painter renders '' — a
+  // hole in the picture that no screenshot of the surface you happened to look
+  // at would reveal. Before #272 this compared the renderer's copy against the
+  // shared composer; now both sides are the same file, so the check is that the
+  // composer's painter coverage matches the vocabulary its tables use.
   const shared = readFileSync(
     require('node:path').join(__dirname, '..', '..', '..', 'src', 'shared', 'illustration-scene.ts'),
     'utf8'
   );
-  const sharedPrimitives = new Set(
+  const painted = new Set(
     (shared.match(/data-scene-primitive="([a-z-]+)"/g) || []).map((m) =>
       m.slice('data-scene-primitive="'.length, -1)
     )
   );
-  for (const primitive of declared) {
-    assert.ok(sharedPrimitives.has(primitive), `renderer draws '${primitive}' but the shared composer does not`);
+  assert.ok(painted.size >= 8, `only ${painted.size} primitives painted by the composer`);
+  // Every primitive any published scene/backdrop spec may name must be painted.
+  const named = new Set<string>();
+  for (const spec of [...Object.values(SCENE_BACKDROPS), ...ILLUSTRATION_CATEGORY_IDS.map((id) => getSceneSpec(id))]) {
+    for (const slot of ['sky', 'horizon', 'standing', 'fg'] as const) {
+      const value = (spec as unknown as Record<string, unknown>)[slot];
+      for (const name of Array.isArray(value) ? value : [value]) {
+        if (typeof name === 'string' && name !== 'none') named.add(name);
+      }
+    }
+  }
+  assert.ok(named.size >= 12, `only ${named.size} primitives named by the scene tables`);
+  for (const primitive of named) {
+    assert.ok(painted.has(primitive), `scene tables name '${primitive}' but the composer paints no such layer item`);
   }
 });
 
 test('each palette carries its own sky and ground band', () => {
-  const palettes = rendererPalettes();
+  const palettes: Record<string, { sky?: string; ground?: string }> = {};
+  for (const category of ILLUSTRATION_CATEGORY_IDS) palettes[category] = getIllustrationPalette(category);
   for (const [category, palette] of Object.entries(palettes)) {
     assert.ok(/^#[0-9a-f]{6}$/i.test(palette.sky), `${category} sky is not a hex colour`);
     assert.ok(/^#[0-9a-f]{6}$/i.test(palette.ground), `${category} ground is not a hex colour`);

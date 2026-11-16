@@ -1,54 +1,38 @@
-// Renderer half of the illustration decision (docs/DECISIONS.md #67).
-//
-// Why a copy and not an import: the renderer is loaded as classic `<script>`
-// tags (src/index.html) and src/shared/* compiles to CommonJS, so this file
-// cannot `require` the registry. `editor/questions.ts` already carries the same
-// kind of copy for the item asset fields (#65).
-//
-// What is duplicated, and how drift is prevented:
-//   - the category -> palette table below is the only hand-maintained copy, and
-//     must stay identical to CATEGORY_PALETTES in
-//     src/shared/illustration-registry.ts;
-//   - the category -> icon map is checked against `getCategoryIcon()` by
-//     tests/unit/illustration-registry.test.ts;
-//   - icon path data is NOT copied by hand - it is generated from the registry
-//     into icon-data.ts by scripts/build-icon-data.js, and `npm run build`
-//     fails via build:icons:check if that copy is stale.
-
-const STAGE_ILLUSTRATION_PALETTES = {
-  animals: { glow: '#2e9e6b', fill: '#eaf7f0', ink: '#1c5f42', sky: '#e2f3ea', ground: '#d3ebdf' },
-  plants: { glow: '#3f9a3f', fill: '#eef7ea', ink: '#2c6630', sky: '#e6f3e0', ground: '#d8ecce' },
-  space: { glow: '#5b4bd6', fill: '#eef0fc', ink: '#3a2f92', sky: '#e7e9fa', ground: '#dcdff3' },
-  'human-body': { glow: '#d1495b', fill: '#fdeff1', ink: '#96283a', sky: '#fbe6e9', ground: '#f5d6db' },
-  transport: { glow: '#2f7ed8', fill: '#eaf2fb', ink: '#1d5b9c', sky: '#e2eef9', ground: '#d3e4f4' },
-  safety: { glow: '#d98c2b', fill: '#fdf3e6', ink: '#8a5206', sky: '#fcedd9', ground: '#f5dfc4' },
-  environment: { glow: '#2f9e8f', fill: '#e8f6f4', ink: '#1c6f64', sky: '#e0f2ef', ground: '#d0e9e5' },
-  history: { glow: '#b07a3c', fill: '#f7f0e6', ink: '#7a5326', sky: '#f2e9da', ground: '#e8dcc6' },
-  geography: { glow: '#3b82a8', fill: '#eaf3f7', ink: '#1f5a75', sky: '#e2eff5', ground: '#d2e5ee' },
-  jobs: { glow: '#7a6bd8', fill: '#f1effc', ink: '#4b3f9c', sky: '#ebe8fa', ground: '#dfdaf3' },
-  sports: { glow: '#e0742b', fill: '#fdf0e7', ink: '#9a4715', sky: '#fce9da', ground: '#f5dac4' },
-  music: { glow: '#a24bc4', fill: '#f8edfc', ink: '#72258f', sky: '#f4e4fa', ground: '#ecd6f3' },
-  art: { glow: '#c4497f', fill: '#fceef4', ink: '#93285a', sky: '#fae3ee', ground: '#f4d3e2' },
-  math: { glow: '#3f6fd8', fill: '#ecf1fc', ink: '#24499c', sky: '#e4ebf9', ground: '#d6e0f4' },
-  language: { glow: '#4c8f5a', fill: '#eff6ec', ink: '#2f6138', sky: '#e7f2e2', ground: '#d9e9d2' },
-  science: { glow: '#2f9ea8', fill: '#e9f6f7', ink: '#1c6c74', sky: '#e1f2f3', ground: '#d1e8ea' },
-  technology: { glow: '#4a6bd0', fill: '#edf1fc', ink: '#2b4a9e', sky: '#e5ebf9', ground: '#d7e0f4' },
-  health: { glow: '#d1546b', fill: '#fdeef0', ink: '#96283a', sky: '#fbe5e8', ground: '#f5d5da' },
-  family: { glow: '#c07a4a', fill: '#fbf1e9', ink: '#8a4b26', sky: '#f7e9dd', ground: '#eedccb' },
-  community: { glow: '#6b7fd0', fill: '#eff2fc', ink: '#3a4b9c', sky: '#e7ebf9', ground: '#d9e0f3' },
-  weather: { glow: '#4b93c9', fill: '#eaf3f9', ink: '#21608c', sky: '#e2eef7', ground: '#d2e4f0' },
-  food: { glow: '#c98a2b', fill: '#fdf5e6', ink: '#8a5206', sky: '#fcefd9', ground: '#f4e2c2' },
-  objects: { glow: '#8a8fa8', fill: '#f1f3f8', ink: '#464e63', sky: '#eaedf4', ground: '#dee2ec' },
-  'water-world': { glow: '#2f97c9', fill: '#e8f3fa', ink: '#1a6289', sky: '#e0eef8', ground: '#cfe4f3' }
+/* Illustration markup for the play surface (docs/DECISIONS.md #70, #72, #252).
+ *
+ * This file is the renderer's ADAPTER, not a second implementation. Since #272
+ * the catalogue, the blueprint normaliser and the scene geometry live in
+ * `src/shared/` only; `scripts/build-scene-runtime.js` bundles them into
+ * `renderer/shared/scene-runtime.js`, loaded before this script, and everything
+ * below calls `SceneRuntime`.
+ *
+ * The copy that used to live here drifted twice (#262 corner icons, #267
+ * arrows) because a geometry change had to be written in two places, and
+ * `tests/unit/scene-blueprint.test.ts` existed mostly to catch that drift. The
+ * split is now:
+ *
+ *   shared  : vocabulary, normaliser, paint order, coordinates
+ *   renderer: when to draw at all, the teacher's own picture, the <div> wrapper
+ */
+declare const SceneRuntime: {
+  SCENE_WIDTH: number;
+  SCENE_HEIGHT: number;
+  DEFAULT_SCENE_ICON: string;
+  SCENE_ICON_IDS: readonly string[];
+  normalizeSceneBlueprint(value: unknown): any;
+  sceneBlueprintFromCategory(category: unknown, iconName?: unknown): any;
+  renderBlueprintSvg(blueprint: any, palette: any, options?: any): string;
+  renderSceneSvg(category: string, iconName: string, palette: any, options?: any): string;
+  getIllustrationPalette(category: unknown): any;
+  isSceneIconId(value: unknown): boolean;
+  isScenePaletteKey(value: unknown): boolean;
 };
-const STAGE_ILLUSTRATION_DEFAULT_PALETTE = { glow: '#5b6cff', fill: '#eceff9', ink: '#2b3563' };
-/* Must match DEFAULT_ILLUSTRATION_* in src/shared/illustration-registry.ts
-   (docs/DECISIONS.md #89): the scene drawn when the item carries no artwork at
-   all. `language` is a real palette, so the default is an ordinary scene and
-   needs no special-case rendering. */
-const STAGE_ILLUSTRATION_FALLBACK_CATEGORY = 'language';
-const STAGE_ILLUSTRATION_FALLBACK_ICON = 'book-open';
 
+/* Category -> the icon used when a question names none. Mirrors
+ * ILLUSTRATION_CATEGORY_ICONS in src/shared/illustration-registry.ts, and
+ * `tests/unit/illustration-registry.test.ts` compares the two tables: this is a
+ * *default per category*, not geometry, and it is read by the wizard's Step 5
+ * (`WIZARD_ART_SCENE_CATEGORIES`) as a plain data table. */
 const STAGE_ILLUSTRATION_CATEGORY_ICONS = {
   animals: 'paw-print', plants: 'leaf', space: 'rocket', 'human-body': 'heart-pulse',
   transport: 'car', safety: 'shield-check', environment: 'recycle', history: 'landmark',
@@ -58,13 +42,16 @@ const STAGE_ILLUSTRATION_CATEGORY_ICONS = {
   food: 'apple', objects: 'box', 'water-world': 'waves-horizontal'
 };
 
-function stageIllustrationMode(game) {
+const STAGE_ILLUSTRATION_FALLBACK_CATEGORY = 'language';
+const STAGE_ILLUSTRATION_FALLBACK_ICON = 'book-open';
+
+function stageIllustrationMode(game: any): string {
   const mode = game && game.gameSetup ? game.gameSetup.illustrationMode : '';
   return mode === 'manual' || mode === 'off' ? mode : 'auto';
 }
 
 // Mirrors normalizeItemAssets for just the fields the illustration needs.
-function stageIllustrationIcon(item) {
+function stageIllustrationIcon(item: any): string {
   const source = item && typeof item === 'object' ? item : {};
   const explicit = typeof source.iconName === 'string' ? source.iconName.trim() : '';
   if (explicit) return explicit;
@@ -74,570 +61,51 @@ function stageIllustrationIcon(item) {
     : '';
 }
 
-function stageIllustrationCategory(assetId) {
+function stageIllustrationCategory(assetId: unknown): string {
   const id = typeof assetId === 'string' ? assetId.trim() : '';
   if (!id.endsWith('-scene')) return '';
   const category = id.slice(0, -'-scene'.length);
-  return Object.prototype.hasOwnProperty.call(STAGE_ILLUSTRATION_PALETTES, category) ? category : '';
+  return SceneRuntime.isScenePaletteKey(category) ? category : '';
+}
+
+/** The blueprint gate, on the shared normaliser. Kept as a renderer name so the
+ *  editor (`editor/questions.ts`) keeps working without importing anything. */
+function stageNormalizeBlueprint(value: unknown): any {
+  return SceneRuntime.normalizeSceneBlueprint(value);
+}
+
+/** The blueprint a category starts from — the shared generator, unchanged. */
+function stageBlueprintForCategory(category: unknown, iconName?: unknown): any {
+  return SceneRuntime.sceneBlueprintFromCategory(category, iconName);
+}
+
+/** Icon ids the scene vocabulary accepts, straight from the shared catalogue. */
+function stageIsSceneIconId(value: unknown): boolean {
+  return SceneRuntime.isSceneIconId(value);
 }
 
 /**
- * Category -> scene composition (docs/DECISIONS.md #70, #72). Copied from
- * src/shared/illustration-scene.ts for the same reason as the palettes: this
- * file is a classic <script> and cannot import. tests/unit/illustration-registry.test.ts
- * asserts the two stay identical, including which primitive feeds which layer.
+ * URL of the teacher's picture for `assetId`, or '' when it is not an id this app
+ * produced (#124). The address (real scheme in Electron, the WebView2 host in Tauri)
+ * comes from customImageUrl() in src/services/storage/custom-illustration.ts; the
+ * copy lives here because this file is a classic script and that module is
+ * CommonJS, so `require` is not available.
+ */
+function customImageSrc(assetId: unknown): string {
+  const id = String(assetId || '');
+  if (!/^ci-[a-f0-9]{32}$/.test(id)) return '';
+  const path = '/img/' + encodeURIComponent(id);
+  const shell = typeof desktopHost === 'undefined' ? 'none' : desktopHost.shell;
+  return shell === 'tauri' ? 'http://edugame-file.tauri.localhost' + path : 'edugame-file:' + path;
+}
+
+/**
+ * What to draw for one question, or null for nothing.
  *
- * Layer order is sky -> far -> mid -> halo -> subject -> props -> fg (#72), so
- * `sky`, `horizon`, `standing` and `fg` are paint slots, not just motifs.
+ * Order of precedence (unchanged since #124/#153/#252): teacher's own picture ->
+ * explicit scene pick -> "Bỏ ảnh" -> blueprint -> icon + category -> default.
  */
-const STAGE_ILLUSTRATION_SCENES = {
-  animals: { sky: ['sun', 'clouds'], horizon: 'hills', standing: ['trees', 'bushes'], fg: ['grass', 'stones'], subjectY: 88 },
-  plants: { sky: ['sun', 'clouds'], horizon: 'hills', standing: ['bushes', 'trees'], fg: ['roots', 'grass'], subjectY: 88 },
-  space: { sky: ['stars', 'moon'], horizon: 'mountains', standing: ['bubbles'], fg: ['stones'], subjectY: 84 },
-  'human-body': { sky: ['rays', 'clouds'], horizon: 'line', standing: ['graph'], fg: ['stones'], subjectY: 84 },
-  transport: { sky: ['clouds', 'sun'], horizon: 'skyline', standing: ['towers'], fg: ['stones', 'grass'], subjectY: 88 },
-  safety: { sky: ['sun', 'clouds'], horizon: 'skyline', standing: ['tools', 'towers'], fg: ['stones'], subjectY: 88 },
-  environment: { sky: ['clouds', 'sun'], horizon: ['mountains', 'hills'], standing: ['trees', 'bushes'], fg: ['grass', 'stones'], subjectY: 88 },
-  history: { sky: ['sun', 'clouds'], horizon: ['mountains', 'hills'], standing: ['books', 'towers'], fg: ['stones'], subjectY: 88 },
-  geography: { sky: ['clouds', 'sun'], horizon: ['mountains', 'hills'], standing: ['trees', 'bushes'], fg: ['grass', 'stones'], subjectY: 88 },
-  jobs: { sky: ['clouds', 'sun'], horizon: 'skyline', standing: ['towers', 'tools'], fg: ['stones'], subjectY: 88 },
-  sports: { sky: ['sun', 'clouds'], horizon: 'hills', standing: ['bushes'], fg: ['grass', 'stones'], subjectY: 88 },
-  music: { sky: ['rays', 'clouds'], horizon: 'line', standing: 'none', fg: ['stones', 'boards'], subjectY: 84 },
-  art: { sky: ['rays', 'clouds'], horizon: 'line', standing: ['books'], fg: ['boards'], subjectY: 86 },
-  math: { sky: ['clouds', 'sun'], horizon: 'line', standing: ['graph', 'books'], fg: ['stones'], subjectY: 86 },
-  language: { sky: ['clouds', 'sun'], horizon: 'line', standing: ['books', 'graph'], fg: ['stones'], subjectY: 86 },
-  science: { sky: ['rays', 'clouds'], horizon: 'line', standing: ['graph', 'flasks'], fg: ['stones'], subjectY: 86 },
-  technology: { sky: ['clouds', 'rays'], horizon: 'line', standing: ['graph', 'bubbles'], fg: ['stones'], subjectY: 86 },
-  health: { sky: ['sun', 'clouds'], horizon: 'line', standing: ['graph'], fg: ['grass', 'stones'], subjectY: 86 },
-  family: { sky: ['sun', 'clouds'], horizon: 'skyline', standing: ['trees', 'bushes'], fg: ['grass', 'stones'], subjectY: 88 },
-  community: { sky: ['clouds', 'sun'], horizon: 'skyline', standing: ['towers', 'bushes'], fg: ['stones', 'grass'], subjectY: 88 },
-  weather: { sky: 'clouds', horizon: 'hills', standing: ['bushes', 'trees'], fg: ['grass', 'stones'], subjectY: 86 },
-  food: { sky: ['sun', 'clouds'], horizon: 'hills', standing: ['bushes'], fg: ['roots', 'grass'], subjectY: 88 },
-  objects: { sky: ['clouds', 'sun'], horizon: 'line', standing: ['books', 'tools'], fg: ['stones'], subjectY: 86 },
-  'water-world': { sky: ['moon', 'stars'], horizon: 'sea', standing: ['bubbles'], fg: ['waves', 'stones'], subjectY: 84 }
-};
-
-const STAGE_ILLUSTRATION_DEFAULT_SCENE = {
-  sky: 'clouds', horizon: 'hills', standing: 'none', fg: 'stones', subjectY: 88
-};
-
-/* #252: the scene-blueprint vocabulary, copied from
-   src/shared/scene-asset-catalog.ts. The renderer cannot import shared modules,
-   so `tests/unit/scene-blueprint.test.ts` compares these tables and the two
-   normalisers directly. */
-const STAGE_SCENE_BACKDROPS = {
-  plain: { sky: 'none', horizon: 'line', standing: 'none', fg: 'none', subjectY: 88 },
-  meadow: { sky: ['sun', 'clouds'], horizon: 'hills', standing: ['bushes'], fg: ['grass', 'stones'], subjectY: 88 },
-  forest: { sky: ['clouds', 'sun'], horizon: 'hills', standing: ['trees', 'bushes'], fg: ['roots', 'grass'], subjectY: 88 },
-  mountain: { sky: ['sun', 'clouds'], horizon: ['mountains', 'hills'], standing: ['trees'], fg: ['stones', 'grass'], subjectY: 88 },
-  sea: { sky: ['moon', 'stars'], horizon: 'sea', standing: ['bubbles'], fg: ['waves', 'stones'], subjectY: 84 },
-  stars: { sky: ['stars', 'moon'], horizon: ['mountains'], standing: ['bubbles'], fg: ['stones'], subjectY: 84 },
-  city: { sky: ['clouds', 'sun'], horizon: 'skyline', standing: ['towers', 'bushes'], fg: ['stones', 'grass'], subjectY: 88 },
-  classroom: { sky: 'rays', horizon: 'line', standing: ['books', 'graph'], fg: ['stones'], subjectY: 86 },
-  lab: { sky: 'rays', horizon: 'line', standing: ['graph', 'flasks'], fg: ['stones'], subjectY: 86 },
-  studio: { sky: 'rays', horizon: 'line', standing: ['books', 'towers'], fg: ['boards', 'stones'], subjectY: 86 }
-};
-const STAGE_SCENE_BACKDROP_DEFAULT = 'plain';
-const STAGE_SCENE_ICON_IDS = [
-  'paw-print', 'leaf', 'rocket', 'heart-pulse', 'car', 'shield-check', 'recycle',
-  'landmark', 'map', 'briefcase', 'trophy', 'file-music', 'palette', 'calculator',
-  'languages', 'flask-conical', 'cpu', 'stethoscope', 'users', 'house', 'cloud-sun',
-  'apple', 'box', 'waves-horizontal',
-  'book-open', 'lightbulb', 'star', 'clock', 'target', 'brain', 'zap', 'sparkles',
-  'gift', 'pencil', 'mountain', 'fish', 'bird', 'bug',
-  // #266 people (mirror of src/shared/scene-asset-catalog.ts)
-  'user', 'graduation-cap', 'hard-hat'
-];
-const STAGE_SCENE_ICON_SET = new Set(STAGE_SCENE_ICON_IDS);
-const STAGE_SCENE_CATEGORY_BACKDROPS = {
-  general: 'plain', animals: 'forest', plants: 'forest', space: 'stars',
-  'human-body': 'classroom', transport: 'city', safety: 'city', environment: 'mountain',
-  history: 'mountain', geography: 'mountain', jobs: 'city', sports: 'meadow',
-  music: 'studio', art: 'studio', math: 'classroom', language: 'classroom',
-  science: 'lab', technology: 'lab', health: 'classroom', family: 'meadow',
-  community: 'city', weather: 'meadow', food: 'meadow', objects: 'classroom',
-  'water-world': 'sea'
-};
-/* Must match SCENE_BLUEPRINT_VERSION, SCENE_MAX_SUB_ICONS and
-   SCENE_BLUEPRINT_MAX_BYTES in the shared catalog. */
-const STAGE_SCENE_BLUEPRINT_VERSION = 1;
-const STAGE_SCENE_MAX_SUB_ICONS = 4;
-const STAGE_SCENE_MAX_PROPS = 2;
-const STAGE_SCENE_GROUND_PROP_SIZE = 40;
-/** Same four corners as SCENE_SUB_ICON_POSITIONS in the shared catalogue (#256). */
-const STAGE_SUB_ICON_POSITIONS = ['left', 'right', 'top-left', 'top-right'];
-/** Same layouts and signs as SCENE_LAYOUT_IDS / SCENE_COMPARE_SIGNS (#262). */
-const STAGE_SCENE_LAYOUTS = ['single', 'compare', 'process', 'surround'];
-/** `surround` (#270) keeps four ring slots and no corner icons. */
-const STAGE_SCENE_SURROUND_MAX_ICONS = 4;
-/** `process` (#267) keeps only the two upper corners, like `compare`. */
-const STAGE_SCENE_PROCESS_MAX_EXTRA_STEPS = 2;
-const STAGE_SCENE_COMPARE_SIGNS = ['greater-than', 'less-than', 'equal'];
-/* Surround geometry, mirroring the SCENE_SURROUND_* constants (#270). */
-const STAGE_SCENE_SURROUND_SUBJECT_SIZE = 88;
-const STAGE_SCENE_SURROUND_ICON_SIZE = 48;
-const STAGE_SCENE_SURROUND_SLOT_PX = {
-  'top-left': { x: 28, y: 10 },
-  'top-right': { x: 320 - 28 - 48, y: 10 },
-  'bottom-right': { x: 320 - 28 - 48, y: 96 },
-  'bottom-left': { x: 28, y: 96 }
-};
-/* Process geometry, mirroring the SCENE_PROCESS_* constants (#267). */
-const STAGE_SCENE_PROCESS_STEP_SIZE = 76;
-const STAGE_SCENE_PROCESS_STEP_TOP = 66;
-const STAGE_SCENE_PROCESS_ARROW_WIDTH = 14;
-const STAGE_SCENE_PROCESS_STEP_X = { 2: [48, 196], 3: [16, 122, 228] };
-/** Compare geometry, mirroring the SCENE_COMPARE_* constants (#262). */
-const STAGE_SCENE_COMPARE_SUBJECT_SIZE = 92;
-const STAGE_SCENE_COMPARE_SUBJECT_LIFT = 12;
-const STAGE_SCENE_COMPARE_SUB_ICON_SIZE = 40;
-const STAGE_SCENE_COMPARE_SIGN_SIZE = 24;
-const STAGE_SCENE_COMPARE_SUBJECT_X = { left: 42, right: 186 };
-const STAGE_SUB_ICON_COMPARE_SLOTS = {
-  'top-left': { x: 12, y: 6 },
-  'top-right': { x: 320 - 12 - STAGE_SCENE_COMPARE_SUB_ICON_SIZE, y: 6 }
-};
-const STAGE_SCENE_BLUEPRINT_MAX_BYTES = 600;
-const STAGE_SCENE_DEFAULT_ICON = 'book-open';
-/** Subject icon size in the 320x200 frame; matches SCENE_SUB_ICON_SIZE (#252). */
-const STAGE_SCENE_SUB_ICON_SIZE = 52;
-
-/** Subject icon size in the 320x200 frame; matches SCENE_SUBJECT_SIZE (#72). */
-const STAGE_ILLUSTRATION_SUBJECT_SIZE = 120;
-/** Horizon line; matches SCENE_HORIZON. */
-const STAGE_ILLUSTRATION_HORIZON = 150;
-
-function stageSceneSpec(category) {
-  return Object.prototype.hasOwnProperty.call(STAGE_ILLUSTRATION_SCENES, category)
-    ? STAGE_ILLUSTRATION_SCENES[category]
-    : STAGE_ILLUSTRATION_DEFAULT_SCENE;
-}
-
-/* --- scene blueprints (#252), mirroring src/shared/scene-blueprint.ts ----- */
-
-function stageIsSceneBackdropId(value) {
-  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(STAGE_SCENE_BACKDROPS, value);
-}
-
-function stageBackdropSpec(backdrop) {
-  return stageIsSceneBackdropId(backdrop)
-    ? STAGE_SCENE_BACKDROPS[backdrop]
-    : STAGE_SCENE_BACKDROPS[STAGE_SCENE_BACKDROP_DEFAULT];
-}
-
-function stageIsSceneIconId(value) {
-  return typeof value === 'string' && STAGE_SCENE_ICON_SET.has(value) && typeof getIconNode === 'function' && !!getIconNode(value);
-}
-
-function stageIsScenePaletteKey(value) {
-  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(STAGE_ILLUSTRATION_PALETTES, value);
-}
-
-/**
- * Total, idempotent mirror of `normalizeSceneBlueprint`. Accepts an object or a
- * JSON string; returns null for anything undrawable. Keeping the rules identical
- * is what lets a blueprint saved by the main process render the same in class.
- */
-function stageNormalizeBlueprint(value) {
-  let raw = value;
-  if (typeof raw === 'string') {
-    const text = raw.trim();
-    if (!text || text.length > STAGE_SCENE_BLUEPRINT_MAX_BYTES) return null;
-    try { raw = JSON.parse(text); } catch (error) { return null; }
-  }
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
-  if (raw.v !== STAGE_SCENE_BLUEPRINT_VERSION) return null;
-  if (STAGE_SCENE_LAYOUTS.indexOf(raw.layout) < 0) return null;
-  const mainIcon = typeof raw.mainIcon === 'string' ? raw.mainIcon.trim() : '';
-  if (!stageIsSceneIconId(mainIcon)) return null;
-  let layout = raw.layout;
-  let compareIcon = '';
-  let compareSign = '';
-  if (layout === 'compare') {
-    const wantedSecond = typeof raw.compareIcon === 'string' ? raw.compareIcon.trim() : '';
-    if (!stageIsSceneIconId(wantedSecond) || wantedSecond === mainIcon) {
-      layout = 'single';
-    } else {
-      compareIcon = wantedSecond;
-      const wantedSign = typeof raw.compareSign === 'string' ? raw.compareSign.trim() : '';
-      if (STAGE_SCENE_COMPARE_SIGNS.indexOf(wantedSign) >= 0) compareSign = wantedSign;
-    }
-  }
-  // #267: a `process` sequence drops back to one picture when it loses stages.
-  const steps = [];
-  if (layout === 'process') {
-    if (Array.isArray(raw.steps)) {
-      for (const entry of raw.steps) {
-        const isStepObject = entry && typeof entry === 'object' && !Array.isArray(entry);
-        const stepIcon = isStepObject
-          ? typeof entry.icon === 'string' ? entry.icon.trim() : ''
-          : typeof entry === 'string' ? entry.trim() : '';
-        if (!stageIsSceneIconId(stepIcon) || stepIcon === mainIcon || steps.indexOf(stepIcon) >= 0) continue;
-        if (steps.length >= STAGE_SCENE_PROCESS_MAX_EXTRA_STEPS) continue;
-        steps.push(stepIcon);
-      }
-    }
-    if (!steps.length) layout = 'single';
-  }
-  // #270: a ring with nothing in it is not a ring, so it falls back to one picture.
-  const around = [];
-  if (layout === 'surround') {
-    if (Array.isArray(raw.around)) {
-      for (const entry of raw.around) {
-        const isRingObject = entry && typeof entry === 'object' && !Array.isArray(entry);
-        const ringIcon = isRingObject
-          ? typeof entry.icon === 'string' ? entry.icon.trim() : ''
-          : typeof entry === 'string' ? entry.trim() : '';
-        if (!stageIsSceneIconId(ringIcon) || ringIcon === mainIcon || around.indexOf(ringIcon) >= 0) continue;
-        if (around.length >= STAGE_SCENE_SURROUND_MAX_ICONS) continue;
-        around.push(ringIcon);
-      }
-    }
-    if (!around.length) layout = 'single';
-  }
-  const subjects = [mainIcon]
-    .concat(compareIcon ? [compareIcon] : [])
-    .concat(layout === 'process' ? steps : [])
-    .concat(layout === 'surround' ? around : []);
-  /** Compare and process keep only the two upper corners; the rest move there. */
-  const allowedSlots = layout === 'surround'
-    ? []
-    : layout === 'compare' || layout === 'process'
-      ? Object.keys(STAGE_SUB_ICON_COMPARE_SLOTS)
-      : STAGE_SUB_ICON_POSITIONS;
-  const backdrop = stageIsSceneBackdropId(raw.backdrop) ? raw.backdrop : STAGE_SCENE_BACKDROP_DEFAULT;
-  const paletteKey = stageIsScenePaletteKey(raw.paletteKey) ? raw.paletteKey : 'language';
-  const subIcons = [];
-  const props = [];
-  if (Array.isArray(raw.subIcons) && allowedSlots.length) {
-    for (const entry of raw.subIcons) {
-      const isObject = entry && typeof entry === 'object' && !Array.isArray(entry);
-      const icon = isObject
-        ? typeof entry.icon === 'string' ? entry.icon.trim() : ''
-        : typeof entry === 'string' ? entry.trim() : '';
-      if (!stageIsSceneIconId(icon) || subjects.indexOf(icon) >= 0 || subIcons.some(function (sub) { return sub.icon === icon; })) continue;
-      if (subIcons.length >= STAGE_SCENE_MAX_SUB_ICONS) continue;
-      const wanted = isObject && typeof entry.position === 'string' ? entry.position.trim() : '';
-      let position = allowedSlots.indexOf(wanted) >= 0 && !subIcons.some(function (sub) { return sub.position === wanted; })
-        ? wanted
-        : allowedSlots.filter(function (slot) {
-            return !subIcons.some(function (sub) { return sub.position === slot; });
-          })[0];
-      subIcons.push({ icon: icon, position: position });
-    }
-  }
-  const blueprint: any = { v: 1, layout: layout, backdrop: backdrop, paletteKey: paletteKey, mainIcon: mainIcon };
-  if (compareIcon) blueprint.compareIcon = compareIcon;
-  if (compareSign) blueprint.compareSign = compareSign;
-  if (layout === 'process' && steps.length) blueprint.steps = steps;
-  if (layout === 'surround' && around.length) blueprint.around = around;
-  if (subIcons.length) blueprint.subIcons = subIcons;
-  if (Array.isArray(raw.props)) {
-    for (const entry of raw.props) {
-      const icon = typeof entry === 'string' ? entry.trim() : '';
-      if (!stageIsSceneIconId(icon) || subjects.indexOf(icon) >= 0 || props.indexOf(icon) >= 0) continue;
-      if (subIcons.some(function (sub) { return sub.icon === icon; })) continue;
-      if (props.length >= STAGE_SCENE_MAX_PROPS) continue;
-      props.push(icon);
-    }
-  }
-  if (props.length) blueprint.props = props;
-  return blueprint;
-}
-
-/** A P0 "Cảnh thử" scene for a content category; never touches the network. */
-function stageBlueprintForCategory(category) {
-  const own = typeof category === 'string' ? category.trim() : '';
-  const paletteKey = Object.prototype.hasOwnProperty.call(STAGE_ILLUSTRATION_PALETTES, own) ? own : 'language';
-  const ownIcon = Object.prototype.hasOwnProperty.call(STAGE_ILLUSTRATION_CATEGORY_ICONS, own)
-    ? STAGE_ILLUSTRATION_CATEGORY_ICONS[own]
-    : '';
-  const mainIcon = stageIsSceneIconId(ownIcon) ? ownIcon : STAGE_SCENE_DEFAULT_ICON;
-  const backdrop = Object.prototype.hasOwnProperty.call(STAGE_SCENE_CATEGORY_BACKDROPS, own)
-    ? STAGE_SCENE_CATEGORY_BACKDROPS[own]
-    : STAGE_SCENE_BACKDROP_DEFAULT;
-  return { v: 1, layout: 'single', backdrop: backdrop, paletteKey: paletteKey, mainIcon: mainIcon };
-}
-
-/**
- * Sky layer, copied from renderSky() in src/shared/illustration-scene.ts.
- * Every primitive uses fixed coordinates: the editor and the play surface must
- * draw the same picture, and a saved scene must never change between runs.
- */
-function stageSkySvg(primitive, palette) {
-  const ink = escapeHtml(palette.ink);
-  const glow = escapeHtml(palette.glow);
-  if (primitive === 'sun') {
-    return '<g data-scene-primitive="sun">' +
-      '<circle cx="268" cy="42" r="27" fill="' + glow + '" opacity="0.16"/>' +
-      '<circle cx="268" cy="42" r="15" fill="' + glow + '" opacity="0.34"/></g>';
-  }
-  if (primitive === 'moon') {
-    return '<g data-scene-primitive="moon" fill="' + ink + '" opacity="0.5">' +
-      '<path d="M276 26a20 20 0 1 0 14 34 24 24 0 0 1-14-34z"/></g>';
-  }
-  if (primitive === 'rays') {
-    return '<g data-scene-primitive="rays" stroke="' + glow + '" stroke-width="1.6" opacity="0.3" stroke-linecap="round">' +
-      '<path d="M28 30l10 10M56 22l5 13M20 58l13 5"/>' +
-      '<path d="M292 112l-10 10M264 120l-5 13M300 84l-13 5"/></g>';
-  }
-  if (primitive === 'stars') {
-    return '<g data-scene-primitive="stars" fill="' + ink + '" opacity="0.46">' +
-      '<circle cx="42" cy="30" r="2.3"/><circle cx="86" cy="20" r="1.6"/><circle cx="132" cy="40" r="1.9"/>' +
-      '<circle cx="188" cy="24" r="2.5"/><circle cx="246" cy="36" r="1.7"/><circle cx="286" cy="66" r="2.1"/>' +
-      '<circle cx="30" cy="86" r="1.5"/><circle cx="122" cy="70" r="1.4"/><circle cx="268" cy="104" r="1.8"/></g>';
-  }
-  if (primitive === 'clouds') {
-    return '<g data-scene-primitive="clouds" fill="' + ink + '" opacity="0.08">' +
-      '<ellipse cx="66" cy="44" rx="38" ry="16"/><ellipse cx="96" cy="38" rx="26" ry="18"/>' +
-      '<ellipse cx="256" cy="58" rx="32" ry="13"/><ellipse cx="234" cy="53" rx="21" ry="15"/></g>';
-  }
-  return '';
-}
-
-/**
- * Far layer (the horizon), copied from renderFar(). Low contrast on purpose:
- * it has to read as distance, not as an object competing with the subject.
- */
-function stageFarSvg(primitive, palette) {
-  const ink = escapeHtml(palette.ink);
-  const glow = escapeHtml(palette.glow);
-  const horizon = STAGE_ILLUSTRATION_HORIZON;
-  if (primitive === 'hills') {
-    return '<g data-scene-primitive="hills" fill="' + glow + '" opacity="0.14">' +
-      '<path d="M-12 ' + (horizon + 14) + 'q58-52 118-6 28 22 64-14t162-16v80H-12z"/></g>';
-  }
-  if (primitive === 'mountains') {
-    return '<g data-scene-primitive="mountains" fill="' + ink + '" opacity="0.1">' +
-      '<path d="M-10 ' + (horizon + 6) + 'L54 52l40 62 30-26 44 52z"/>' +
-      '<path d="M168 ' + (horizon + 6) + 'L228 66l34 50 26-20 44 42z" opacity="0.75"/></g>';
-  }
-  if (primitive === 'skyline') {
-    return '<g data-scene-primitive="skyline" fill="' + ink + '" opacity="0.11">' +
-      '<rect x="10" y="94" width="26" height="52" rx="2"/><rect x="42" y="72" width="20" height="74" rx="2"/>' +
-      '<rect x="68" y="104" width="24" height="42" rx="2"/><rect x="230" y="98" width="22" height="48" rx="2"/>' +
-      '<rect x="258" y="78" width="18" height="68" rx="2"/><rect x="282" y="108" width="26" height="38" rx="2"/></g>';
-  }
-  if (primitive === 'sea') {
-    return '<g data-scene-primitive="sea">' +
-      '<rect x="0" y="' + horizon + '" width="320" height="' + (200 - horizon) + '" fill="' + glow + '" opacity="0.12"/>' +
-      '<path d="M0 ' + horizon + 'h320" stroke="' + ink + '" stroke-width="1.4" opacity="0.22"/></g>';
-  }
-  if (primitive === 'line') {
-    return '<g data-scene-primitive="line">' +
-      '<path d="M0 ' + horizon + 'h320" stroke="' + ink + '" stroke-width="1.2" opacity="0.16"/></g>';
-  }
-  return '';
-}
-
-/**
- * Mid layer, copied from renderMid(). Parked at the frame edges so the centre
- * stays clear for the subject icon.
- */
-function stageMidSvg(primitive, palette) {
-  const ink = escapeHtml(palette.ink);
-  const glow = escapeHtml(palette.glow);
-  const h = STAGE_ILLUSTRATION_HORIZON;
-  if (primitive === 'trees') {
-    return '<g data-scene-primitive="trees" fill="' + glow + '" opacity="0.26">' +
-      '<path d="M34 ' + h + 'l-15-30h30z"/><path d="M34 ' + (h - 20) + 'l-11-23h22z"/>' +
-      '<rect x="32" y="' + h + '" width="4" height="16"/>' +
-      '<path d="M288 ' + (h - 4) + 'l-17-34h34z"/><path d="M288 ' + (h - 26) + 'l-12-26h24z"/>' +
-      '<rect x="286" y="' + (h - 4) + '" width="4" height="18"/></g>';
-  }
-  if (primitive === 'bushes') {
-    // Low mounds sitting ON the ground band, not floating above it.
-    return '<g data-scene-primitive="bushes" fill="' + glow + '" opacity="0.24">' +
-      '<ellipse cx="40" cy="' + (h + 10) + '" rx="24" ry="12"/>' +
-      '<ellipse cx="64" cy="' + (h + 14) + '" rx="15" ry="9"/>' +
-      '<ellipse cx="282" cy="' + (h + 10) + '" rx="24" ry="12"/>' +
-      '<ellipse cx="258" cy="' + (h + 14) + '" rx="15" ry="9"/></g>';
-  }
-  if (primitive === 'towers') {
-    return '<g data-scene-primitive="towers" fill="' + ink + '" opacity="0.13">' +
-      '<rect x="24" y="' + (h - 46) + '" width="26" height="52" rx="3"/>' +
-      '<rect x="58" y="' + (h - 28) + '" width="18" height="34" rx="2"/>' +
-      '<rect x="270" y="' + (h - 52) + '" width="24" height="58" rx="3"/></g>';
-  }
-  if (primitive === 'bubbles') {
-    return '<g data-scene-primitive="bubbles" fill="none" stroke="' + ink + '" stroke-width="1.5" opacity="0.3">' +
-      '<circle cx="52" cy="' + (h - 30) + '" r="9"/><circle cx="80" cy="' + (h - 52) + '" r="5"/>' +
-      '<circle cx="270" cy="' + (h - 26) + '" r="11"/><circle cx="244" cy="' + (h - 50) + '" r="6"/></g>';
-  }
-  if (primitive === 'graph') {
-    // On the mid layer, not the far layer: a scene that also has `standing`
-    // would otherwise draw a grid *and* props at once (see the `science` scene).
-    return '<g data-scene-primitive="graph" stroke="' + ink + '" stroke-width="1" opacity="0.1">' +
-      '<path d="M40 ' + (h - 70) + 'v70M40 ' + (h - 70) + 'h240M280 ' + (h - 70) + 'v70"/>' +
-      '<path d="M104 ' + h + 'v-70M168 ' + h + 'v-70M232 ' + h + 'v-70"/></g>';
-  }
-  return '';
-}
-
-/**
- * Props layer, copied from renderProps(). Drawn after the subject but kept
- * outside its 120px box (x 100..220) so the icon is never covered.
- */
-function stagePropsSvg(primitive, palette) {
-  const ink = escapeHtml(palette.ink);
-  const glow = escapeHtml(palette.glow);
-  const h = STAGE_ILLUSTRATION_HORIZON;
-  if (primitive === 'books') {
-    return '<g data-scene-primitive="books" opacity="0.55">' +
-      '<rect x="42" y="' + (h + 4) + '" width="32" height="6" rx="1.5" fill="' + glow + '"/>' +
-      '<rect x="46" y="' + (h + 11) + '" width="28" height="6" rx="1.5" fill="' + ink + '"/>' +
-      '<rect x="44" y="' + (h + 18) + '" width="30" height="6" rx="1.5" fill="' + glow + '"/>' +
-      '<rect x="246" y="' + (h + 6) + '" width="30" height="6" rx="1.5" fill="' + ink + '"/>' +
-      '<rect x="242" y="' + (h + 13) + '" width="32" height="6" rx="1.5" fill="' + glow + '"/></g>';
-  }
-  if (primitive === 'flasks') {
-    return '<g data-scene-primitive="flasks" fill="' + glow + '" opacity="0.3">' +
-      '<path d="M55 ' + (h + 2) + 'h14l2 8H53z"/><path d="M250 ' + (h + 2) + 'h16l2 8h-20z"/></g>' +
-      '<g data-scene-primitive="flasks-outline" fill="none" stroke="' + ink + '" stroke-width="2" opacity="0.5" stroke-linejoin="round">' +
-      '<path d="M62 ' + (h - 18) + 'v10l-9 16h18l-9-16v-10z"/>' +
-      '<path d="M258 ' + (h - 22) + 'v12l-10 18h20l-10-18v-12z"/></g>';
-  }
-  if (primitive === 'tools') {
-    return '<g data-scene-primitive="tools" fill="none" stroke="' + ink + '" stroke-width="2" opacity="0.45">' +
-      '<circle cx="62" cy="' + (h - 14) + '" r="9"/><circle cx="62" cy="' + (h - 14) + '" r="3.5"/>' +
-      '<circle cx="256" cy="' + (h - 26) + '" r="11"/><circle cx="256" cy="' + (h - 26) + '" r="4"/></g>';
-  }
-  return '';
-}
-
-/**
- * Foreground layer, copied from renderFg(). It overlaps the subject's feet, so
- * the icon stands *in* the scene instead of floating above the ground band.
- */
-function stageFgSvg(primitive, palette) {
-  const ink = escapeHtml(palette.ink);
-  const glow = escapeHtml(palette.glow);
-  const foot = STAGE_ILLUSTRATION_HORIZON + 14;
-  if (primitive === 'grass') {
-    return '<g data-scene-primitive="grass" stroke="' + glow + '" stroke-width="2.4" stroke-linecap="round" opacity="0.55">' +
-      '<path d="M108 ' + foot + 'v-9M116 ' + foot + 'v-13M124 ' + foot + 'v-7"/>' +
-      '<path d="M196 ' + foot + 'v-7M204 ' + foot + 'v-13M212 ' + foot + 'v-9"/>' +
-      '<path d="M40 ' + foot + 'v-8M48 ' + foot + 'v-12M56 ' + foot + 'v-6"/>' +
-      '<path d="M266 ' + foot + 'v-6M274 ' + foot + 'v-12M282 ' + foot + 'v-8"/></g>';
-  }
-  if (primitive === 'stones') {
-    return '<g data-scene-primitive="stones" fill="' + ink + '" opacity="0.26">' +
-      '<path d="M84 ' + (foot - 2) + 'a9 6 0 0 1 18 0z"/><path d="M116 ' + (foot + 2) + 'a7 4 0 0 1 14 0z"/>' +
-      '<path d="M190 ' + (foot + 2) + 'a8 5 0 0 1 16 0z"/><path d="M222 ' + (foot - 2) + 'a8 5 0 0 1 16 0z"/></g>';
-  }
-  if (primitive === 'roots') {
-    // Kept as simple blades: a curled shape reads as a caterpillar at this size.
-    return '<g data-scene-primitive="roots" fill="none" stroke="' + glow + '" stroke-width="2.2" stroke-linecap="round" opacity="0.5">' +
-      '<path d="M92 ' + foot + 'q1-14 8-21M100 ' + foot + 'q-2-11 2-17M108 ' + foot + 'q3-10 10-14"/>' +
-      '<path d="M228 ' + foot + 'q-1-14-8-21M220 ' + foot + 'q2-11-2-17M212 ' + foot + 'q-3-10-10-14"/></g>';
-  }
-  if (primitive === 'boards') {
-    return '<g data-scene-primitive="boards" stroke="' + glow + '" stroke-width="2" fill="none" opacity="0.42" stroke-linejoin="round">' +
-      '<path d="M88 ' + foot + 'l4-34h24l4 34"/>' +
-      '<path d="M200 ' + foot + 'l4-38h26l4 38"/></g>' +
-      '<g data-scene-primitive="boards-cleat" stroke="' + ink + '" stroke-width="1.6" opacity="0.28">' +
-      '<path d="M92 ' + (foot - 19) + 'h28M204 ' + (foot - 21) + 'h32"/></g>';
-  }
-  if (primitive === 'waves') {
-    return '<g data-scene-primitive="waves" fill="none" stroke="' + glow + '" stroke-width="2.6" opacity="0.45" stroke-linecap="round">' +
-      '<path d="M0 ' + (foot + 8) + 'q22-12 44 0t44 0 44 0 44 0 44 0 44 0 44 0 44 0"/>' +
-      '<path d="M0 ' + (foot + 24) + 'q22-12 44 0t44 0 44 0 44 0 44 0 44 0 44 0 44 0" opacity="0.6"/></g>';
-  }
-  return '';
-}
-
-/**
- * Supporting icons beside the subject, copied from `renderSubIcons()` in
- * src/shared/illustration-scene.ts. Outside x 100..220, in the props layer, so
- * the subject is never covered.
- */
-function stageSubIconsSvg(list, palette, compare) {
-  const subs = Array.isArray(list) ? list.slice(0, STAGE_SCENE_MAX_SUB_ICONS) : [];
-  const size = compare ? STAGE_SCENE_COMPARE_SUB_ICON_SIZE : STAGE_SCENE_SUB_ICON_SIZE;
-  const taken = [];
-  const icons = subs.map(function (sub) {
-    const svg = stageIconSvg(sub.icon, size, 'stage-illustration-subicon');
-    if (!svg) return '';
-    let position = sub.position;
-    if (compare) {
-      if (!STAGE_SUB_ICON_COMPARE_SLOTS[position] || taken.indexOf(position) >= 0) {
-        const free = Object.keys(STAGE_SUB_ICON_COMPARE_SLOTS).filter(function (slot) {
-          return taken.indexOf(slot) < 0;
-        })[0];
-        if (!free) return '';
-        position = free;
-      }
-    }
-    taken.push(position);
-    const slot = compare ? STAGE_SUB_ICON_COMPARE_SLOTS[position] : (STAGE_SUB_ICON_SLOTS[position] || STAGE_SUB_ICON_SLOTS.left);
-    return '<g data-scene-subicon="' + escapeHtml(sub.icon) + '" data-scene-position="' + escapeHtml(position) + '" ' +
-      'data-scene-size="' + size + '" ' +
-      'transform="translate(' + slot.x + ' ' + slot.y + ')" ' +
-      'color="' + escapeHtml(palette.glow) + '" opacity="0.78">' + svg + '</g>';
-  }).join('');
-  return icons ? '<g data-scene-primitive="sub-icons">' + icons + '</g>' : '';
-}
-
-/**
- * The comparison sign (#262), mirroring renderCompareSign in the shared composer:
- * fixed coordinates, no text and no font.
- */
-function stageCompareSignSvg(sign, palette) {
-  const ink = escapeHtml(palette.ink);
-  const stroke = 'fill="none" stroke="' + ink + '" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"';
-  let body = '';
-  if (sign === 'greater-than') body = '<path d="M5 4 L20 12 L5 20" ' + stroke + '/>';
-  else if (sign === 'less-than') body = '<path d="M20 4 L5 12 L20 20" ' + stroke + '/>';
-  else if (sign === 'equal') {
-    body = '<rect x="4" y="7" width="16" height="4" rx="2" fill="' + ink + '"/>' +
-      '<rect x="4" y="14" width="16" height="4" rx="2" fill="' + ink + '"/>';
-  }
-  return body ? '<g data-scene-primitive="compare-sign">' + body + '</g>' : '';
-}
-
-/** Ground props, mirroring renderGroundProps in the shared composer (#259). */
-function stageGroundPropsSvg(names, palette) {
-  const list = Array.isArray(names) ? names.slice(0, STAGE_SCENE_MAX_PROPS) : [];
-  const slots = [
-    { x: 12, y: 200 - 14 - STAGE_SCENE_GROUND_PROP_SIZE },
-    { x: 320 - 12 - STAGE_SCENE_GROUND_PROP_SIZE, y: 200 - 14 - STAGE_SCENE_GROUND_PROP_SIZE }
-  ];
-  const icons = list.map(function (name, index) {
-    const svg = stageIconSvg(name, STAGE_SCENE_GROUND_PROP_SIZE, 'stage-illustration-prop');
-    if (!svg) return '';
-    return '<g data-scene-prop="' + escapeHtml(name) + '" data-scene-position="ground-' + (index === 0 ? 'left' : 'right') + '" ' +
-      'transform="translate(' + slots[index].x + ' ' + slots[index].y + ')" ' +
-      'color="' + escapeHtml(palette.ink) + '" opacity="0.55">' + svg + '</g>';
-  }).join('');
-  return icons ? '<g data-scene-primitive="ground-props">' + icons + '</g>' : '';
-}
-
-/** The four corners, mirroring SCENE_SUB_ICON_SLOTS in the shared composer. */
-const STAGE_SUB_ICON_SLOTS = {
-  left: { x: 28, y: STAGE_ILLUSTRATION_HORIZON - STAGE_SCENE_SUB_ICON_SIZE - 4 },
-  right: { x: 320 - 28 - STAGE_SCENE_SUB_ICON_SIZE, y: STAGE_ILLUSTRATION_HORIZON - STAGE_SCENE_SUB_ICON_SIZE - 4 },
-  'top-left': { x: 28, y: 22 },
-  'top-right': { x: 320 - 28 - STAGE_SCENE_SUB_ICON_SIZE, y: 22 }
-};
-
-/** One value or a stack, normalised to a list. Mirrors `primitivesOf` in the shared composer. */
-function stagePrimitivesOf(value) {
-  return Array.isArray(value) ? value : [value];
-}
-
-/** One tagged layer; same `data-scene-layer` names as the shared composer. */
-function stageLayer(name, content) {
-  return content ? '<g data-scene-layer="' + name + '">' + content + '</g>' : '';
-}
-
-
-/**
- * The resolved illustration for one item, or null when nothing should be drawn.
- * Same rules as src/shared/illustration-registry.ts:
- *   off -> null; manual -> only an explicit illustration; auto -> explicit or
- *   the category default. Never throws.
- */
-function resolveStageIllustration(item, game) {
+function resolveStageIllustration(item: any, game: any): any {
   const mode = stageIllustrationMode(game);
   if (mode === 'off') return null;
   const source = item && typeof item === 'object' ? item : {};
@@ -686,103 +154,19 @@ function resolveStageIllustration(item, game) {
 }
 
 /**
- * Declared by the generated icon-data.ts, which loads first via index.html.
- * tsc compiles each file in isolation, so a global provided by a sibling
- * classic script must be declared here to stay type-checked.
- */
-declare function getIconNode(name: unknown): ReadonlyArray<readonly [string, Readonly<Record<string, string>>]> | null;
-
-/**
- * Renders an icon as an `<svg>` string from the generated icon data, or '' when
- * the id is unknown. Same attributes and 24x24 viewBox as `renderIconSvg` in
- * src/shared/icon-registry.ts; the renderer cannot import it, so the data is
- * generated at build time (scripts/build-icon-data.js) and cannot drift.
- */
-function stageIconSvg(name, size, className) {
-  const nodes = typeof getIconNode === 'function' ? getIconNode(name) : null;
-  if (!Array.isArray(nodes) || !nodes.length) return '';
-  const px = typeof size === 'number' && size > 0 ? Math.round(size) : 24;
-  const body = nodes.map(function (node) {
-    const tag = node[0];
-    const attrs = node[1] || {};
-    const rendered = Object.keys(attrs).map(function (key) {
-      return key + '="' + String(attrs[key]).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;') + '"';
-    }).join(' ');
-    return '<' + tag + ' ' + rendered + '/>';
-  }).join('');
-  const classes = 'lucide lucide-' + name + (className ? ' ' + className : '');
-  return '<svg xmlns="http://www.w3.org/2000/svg" width="' + px + '" height="' + px + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="' + classes + '" aria-hidden="true" focusable="false">' + body + '</svg>';
-}
-
-/**
  * `<div class="stage-illustration">` markup, or '' when nothing should be
  * drawn. Always '' for `off`, so the sibling node simply disappears and the
  * question keeps the full column - no empty box, no layout shift.
  *
- * Layers match renderSceneSvg() in src/shared/illustration-scene.ts (#72):
- * sky -> far -> mid -> halo -> subject -> props -> fg.
+ * The picture itself comes from SceneRuntime: `renderBlueprintSvg` for a stored
+ * blueprint, `renderSceneSvg` for a category scene. Both return '' when the
+ * subject icon is unknown, which is what keeps a broken id from drawing half a
+ * scene.
  */
-
-/**
- * URL of the teacher's picture for `assetId`, or '' when it is not an id this app
- * produced (#124). The address (real scheme in Electron, the WebView2 host in Tauri)
- * comes from customImageUrl() in src/services/storage/custom-illustration.ts; the
- * copy lives here because this file is a classic script and that module is
- * CommonJS, so `require` is not available.
- */
-function customImageSrc(assetId) {
-  const id = String(assetId || '');
-  if (!/^ci-[a-f0-9]{32}$/.test(id)) return '';
-  const path = '/img/' + encodeURIComponent(id);
-  const shell = typeof desktopHost === 'undefined' ? 'none' : desktopHost.shell;
-  return shell === 'tauri' ? 'http://edugame-file.tauri.localhost' + path : 'edugame-file:' + path;
-}
-
-/**
- * Surround ring, mirroring the shared composer (#270): up to four items in the
- * four frame corners, in ink so the subject stays the glowing anchor.
- */
-function stageSurroundRingSvg(items, palette) {
-  const slots = Object.keys(STAGE_SCENE_SURROUND_SLOT_PX);
-  return items.map(function (icon, index) {
-    const slot = STAGE_SCENE_SURROUND_SLOT_PX[slots[index]] || STAGE_SCENE_SURROUND_SLOT_PX['top-left'];
-    const svg = stageIconSvg(icon, STAGE_SCENE_SURROUND_ICON_SIZE, 'stage-illustration-subicon');
-    if (!svg) return '';
-    return '<g data-scene-around="' + (index + 1) + '" data-scene-position="' + slots[index] + '" ' +
-      'data-scene-size="' + STAGE_SCENE_SURROUND_ICON_SIZE + '" transform="translate(' + slot.x + ' ' + slot.y + ')" ' +
-      'color="' + escapeHtml(palette.ink) + '" opacity="0.85">' + svg + '</g>';
-  }).join('');
-}
-
-/**
- * Process strip, mirroring the shared composer (#267): 2-3 stages left to right
- * with an arrow between them; '' when a stage will not draw.
- */
-function stageProcessStripSvg(stages, palette) {
-  const xs = STAGE_SCENE_PROCESS_STEP_X[stages.length];
-  if (!xs) return '';
-  const boxes = [];
-  for (let index = 0; index < stages.length; index += 1) {
-    const svg = stageIconSvg(stages[index], STAGE_SCENE_PROCESS_STEP_SIZE, 'stage-illustration-icon');
-    if (!svg) return '';
-    boxes.push('<g data-scene-step="' + (index + 1) + '" data-scene-size="' + STAGE_SCENE_PROCESS_STEP_SIZE + '" ' +
-      'transform="translate(' + xs[index] + ' ' + STAGE_SCENE_PROCESS_STEP_TOP + ')" color="' + escapeHtml(palette.glow) + '">' + svg + '</g>');
-  }
-  const arrows = xs.slice(1).map(function (next, index) {
-    const gapStart = xs[index] + STAGE_SCENE_PROCESS_STEP_SIZE;
-    const x = Math.round((gapStart + next) / 2 - STAGE_SCENE_PROCESS_ARROW_WIDTH / 2);
-    const y = STAGE_SCENE_PROCESS_STEP_TOP + Math.round(STAGE_SCENE_PROCESS_STEP_SIZE / 2);
-    const tip = STAGE_SCENE_PROCESS_ARROW_WIDTH - 5;
-    return '<path data-scene-arrow="' + (index + 1) + '" d="M' + x + ' ' + y + 'h' + tip +
-      'M' + (x + tip - 4) + ' ' + (y - 4) + 'l4 4-4 4" fill="none" stroke="' + escapeHtml(palette.ink) +
-      '" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"/>';
-  });
-  return boxes.join('') + arrows.join('');
-}
-
-function stageIllustrationHtml(item, game, extraClass) {
+function stageIllustrationHtml(item: any, game: any, extraClass?: string): string {
   const resolved = resolveStageIllustration(item, game);
   if (!resolved) return '';
+  const frameClass = 'stage-illustration' + (extraClass ? ' ' + extraClass : '');
   if (resolved.custom) {
     // #124: the teacher's own picture, framed like a built-in scene so the layout does
     // not change between the two. Besides `self`/`data:` the CSP allows only the
@@ -793,72 +177,17 @@ function stageIllustrationHtml(item, game, extraClass) {
     // top and bottom). `meet` shows the whole picture, letterboxed on `.is-custom`.
     const src = customImageSrc(resolved.assetId);
     if (!src) return '';
-    const cls = 'stage-illustration is-custom' + (extraClass ? ' ' + extraClass : '');
+    const cls = frameClass + ' is-custom';
     return `<div class="${cls}" data-illustration="${escapeHtml(resolved.assetId)}" aria-hidden="true">` +
       `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" preserveAspectRatio="xMidYMid meet" class="stage-illustration-svg" aria-hidden="true" focusable="false">` +
       `<image href="${escapeHtml(src)}" x="0" y="0" width="320" height="200" preserveAspectRatio="xMidYMid meet"/>` +
       `</svg></div>`;
   }
-  const subjectIcon = stageIconSvg(resolved.iconName, STAGE_ILLUSTRATION_SUBJECT_SIZE, 'stage-illustration-icon');
-  if (!subjectIcon) return '';
-  const blueprint = resolved.blueprint;
-  const palette = STAGE_ILLUSTRATION_PALETTES[resolved.category] || STAGE_ILLUSTRATION_DEFAULT_PALETTE;
-  const spec = blueprint ? stageBackdropSpec(blueprint.backdrop) : stageSceneSpec(resolved.category);
-  const subIcons = blueprint && Array.isArray(blueprint.subIcons) ? blueprint.subIcons : [];
-  const groundProps = blueprint && Array.isArray(blueprint.props) ? blueprint.props : [];
-  // #262 compare: a second subject plus a sign. Falls back to one subject when the
-  // second icon will not render, so the frame is never half a comparison.
-  const compareSecond = blueprint && blueprint.layout === 'compare' && blueprint.compareIcon
-    ? stageIconSvg(blueprint.compareIcon, STAGE_SCENE_COMPARE_SUBJECT_SIZE, 'stage-illustration-icon')
-    : '';
-  const isCompare = !!compareSecond;
-  // #267: a sequence is drawn as a strip instead of one centre picture.
-  const processStages = blueprint && blueprint.layout === 'process' && Array.isArray(blueprint.steps)
-    ? [blueprint.mainIcon].concat(blueprint.steps)
-    : [];
-  const isProcess = processStages.length >= 2;
-  // #270: the ring owns the corners and fixes the subject at 88px in the centre.
-  const surroundRing = blueprint && blueprint.layout === 'surround' && Array.isArray(blueprint.around)
-    ? blueprint.around
-    : [];
-  const isSurround = surroundRing.length > 0;
-  const subjectSize = isSurround
-    ? STAGE_SCENE_SURROUND_SUBJECT_SIZE
-    : isCompare
-      ? STAGE_SCENE_COMPARE_SUBJECT_SIZE
-      : STAGE_ILLUSTRATION_SUBJECT_SIZE;
-  const subjectY = isCompare ? spec.subjectY + STAGE_SCENE_COMPARE_SUBJECT_LIFT : spec.subjectY;
-  const sky = palette.sky || palette.fill;
-  const ground = palette.ground || palette.fill;
-  const x = Math.round((320 - subjectSize) / 2);
-  const y = Math.round(subjectY - subjectSize / 2);
-  const cls = 'stage-illustration' + (extraClass ? ' ' + extraClass : '');
-  return `<div class="${cls}" data-illustration="${escapeHtml(resolved.assetId)}" aria-hidden="true">` +
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" preserveAspectRatio="xMidYMid meet" class="stage-illustration-svg" aria-hidden="true" focusable="false">` +
-    stageLayer('sky', `<rect x="0" y="0" width="320" height="200" rx="26" fill="${escapeHtml(palette.fill)}"/>` +
-      `<rect x="0" y="0" width="320" height="200" rx="26" fill="${escapeHtml(sky)}"/>` +
-      stagePrimitivesOf(spec.sky).map(function (p) { return stageSkySvg(p, palette); }).join('')) +
-    stageLayer('far', stagePrimitivesOf(spec.horizon).map(function (p) { return stageFarSvg(p, palette); }).join('') +
-      `<rect x="0" y="${STAGE_ILLUSTRATION_HORIZON}" width="320" height="${200 - STAGE_ILLUSTRATION_HORIZON}" fill="${escapeHtml(ground)}"/>`) +
-    stageLayer('mid', stagePrimitivesOf(spec.standing).map(function (p) { return stageMidSvg(p, palette); }).join('')) +
-    stageLayer('halo', `<circle cx="160" cy="${subjectY}" r="72" fill="${escapeHtml(palette.glow)}" opacity="0.15"/>`) +
-    stageLayer('subject', isSurround
-      ? '<g data-scene-subject="main" data-scene-size="' + STAGE_SCENE_SURROUND_SUBJECT_SIZE + '" ' +
-        'transform="translate(' + Math.round((320 - STAGE_SCENE_SURROUND_SUBJECT_SIZE) / 2) + ' 52)" ' +
-        'color="' + escapeHtml(palette.glow) + '">' + subjectIcon + '</g>'
-      : isProcess
-      ? stageProcessStripSvg(processStages, palette) || '<g transform="translate(' + x + ' ' + y + ')" color="' + escapeHtml(palette.glow) + '">' + subjectIcon + '</g>'
-      : isCompare
-      // #266: subject in the palette accent, mirroring the shared composer.
-      ? '<g data-scene-subject="main" data-scene-size="' + subjectSize + '" transform="translate(' + STAGE_SCENE_COMPARE_SUBJECT_X.left + ' ' + y + ')" color="' + escapeHtml(palette.glow) + '">' + subjectIcon + '</g>' +
-        '<g data-scene-subject="second" data-scene-size="' + subjectSize + '" transform="translate(' + STAGE_SCENE_COMPARE_SUBJECT_X.right + ' ' + y + ')" color="' + escapeHtml(palette.ink) + '">' + compareSecond + '</g>'
-      : `<g transform="translate(${x} ${y})" color="${escapeHtml(palette.glow)}">${subjectIcon}</g>`) +
-    stageLayer('props', stagePrimitivesOf(spec.standing).map(function (p) { return stagePropsSvg(p, palette); }).join('') + stageGroundPropsSvg(groundProps, palette) + stageSurroundRingSvg(surroundRing, palette) + stageSubIconsSvg(subIcons, palette, isCompare || isProcess)) +
-    stageLayer('sign', isCompare
-      ? '<g data-scene-sign="' + escapeHtml(String(blueprint.compareSign || '')) + '" data-scene-size="' + STAGE_SCENE_COMPARE_SIGN_SIZE + '" ' +
-        'transform="translate(' + (160 - STAGE_SCENE_COMPARE_SIGN_SIZE / 2) + ' ' + Math.round(subjectY - STAGE_SCENE_COMPARE_SIGN_SIZE / 2) + ')" ' +
-        'color="' + escapeHtml(palette.ink) + '">' + stageCompareSignSvg(blueprint.compareSign, palette) + '</g>'
-      : '') +
-    stageLayer('fg', stagePrimitivesOf(spec.fg).map(function (p) { return stageFgSvg(p, palette); }).join('')) +
-    `</svg></div>`;
+  const palette = SceneRuntime.getIllustrationPalette(resolved.category);
+  const options = { className: 'stage-illustration-svg' };
+  const svg = resolved.blueprint
+    ? SceneRuntime.renderBlueprintSvg(resolved.blueprint, palette, options)
+    : SceneRuntime.renderSceneSvg(resolved.category, resolved.iconName, palette, options);
+  if (!svg) return '';
+  return `<div class="${frameClass}" data-illustration="${escapeHtml(resolved.assetId)}" aria-hidden="true">${svg}</div>`;
 }

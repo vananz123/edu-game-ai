@@ -754,14 +754,26 @@ test('surround draws the subject in the middle and the ring in the four corners'
   assert.deepEqual(three.map((item) => item.position), ['top-left', 'top-right', 'bottom-right']);
 });
 
-// --- renderer mirror parity ------------------------------------------------
+// --- renderer wiring (#272) ------------------------------------------------
+// Until #272 the renderer held its OWN copy of the normaliser and the drawing,
+// and these tests compared the two copies. The copy is gone: `game-illustration`
+// is now a thin adapter over `renderer/shared/scene-runtime.js`, the esbuild
+// bundle of `src/shared/scene-runtime.ts`. So what is checked here changed from
+// "the copies agree" to "the adapter wires the shared code up correctly" —
+// right options, right palette, right frame — which is the only thing left that
+// can be wrong.
 const RENDERER_DIR = path.join(__dirname, '..', '..', 'src', 'renderer', 'features');
+// __dirname is dist/tests/unit, so `../..` is dist/ — the compiled tree.
+const RUNTIME_BUNDLE = path.join(__dirname, '..', '..', 'src', 'renderer', 'shared', 'scene-runtime.js');
 const sandbox: Record<string, unknown> = {
   escapeHtml: (value: unknown) => String(value),
   console,
 };
 vm.createContext(sandbox);
+// Load order mirrors `src/index.html`: icon data, then the scene runtime, then
+// the adapter that reads it.
 vm.runInContext(readFileSync(path.join(RENDERER_DIR, 'icon-data.js'), 'utf8'), sandbox);
+vm.runInContext(readFileSync(RUNTIME_BUNDLE, 'utf8'), sandbox);
 vm.runInContext(readFileSync(path.join(RENDERER_DIR, 'game-illustration.js'), 'utf8'), sandbox);
 const renderer = sandbox as {
   stageNormalizeBlueprint: (value: unknown) => unknown;
@@ -795,6 +807,32 @@ test('the renderer draws a compare scene with the same geometry as the shared on
       `renderer geometry differs for ${JSON.stringify(blueprint)}`
     );
   }
+});
+
+test('the renderer adapter draws a frame for every icon the catalogue offers', () => {
+  // #272: one implementation, so this is no longer an equality test — it is the
+  // coverage test that would have caught the old copy carrying a smaller icon set
+  // than the shared registry (the class of bug the copy produced).
+  const game = { gameSetup: { illustrationMode: 'auto' } };
+  for (const icon of SCENE_ICON_IDS) {
+    const html = renderer.stageIllustrationHtml({ iconName: icon, contentCategory: 'animals' }, game);
+    assert.ok(html.includes('<svg'), `${icon} produced no frame`);
+    assert.match(html, /^<div class="stage-illustration"/, `${icon} lost the frame wrapper`);
+    assert.match(html, /data-illustration="animals-scene"/, `${icon} lost its asset id`);
+  }
+  // "Tắt" must still draw nothing at all: the switch lives in the adapter, so it
+  // is the one rule a refactor could silently drop.
+  assert.equal(
+    renderer.stageIllustrationHtml({ iconName: 'leaf' }, { gameSetup: { illustrationMode: 'off' } }),
+    ''
+  );
+  // A blueprint outranks the category icon and goes through the same composer.
+  const blueprint = {
+    v: 1, layout: 'surround', backdrop: 'meadow', paletteKey: 'plants',
+    mainIcon: 'leaf', around: ['apple', 'box'],
+  };
+  const html = renderer.stageIllustrationHtml({ sceneBlueprint: JSON.stringify(blueprint) }, game);
+  assert.equal((html.match(/data-scene-around=/g) || []).length, 2, 'the ring did not reach the frame');
 });
 
 test('the renderer normaliser and generator match the shared ones', () => {
