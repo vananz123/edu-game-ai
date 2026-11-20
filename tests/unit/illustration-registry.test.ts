@@ -328,6 +328,26 @@ test('the renderer reads scene compositions from the shared bundle (#272)', () =
   }
 });
 
+test('#279 the ground is a curve and the halo disc is gone for good', () => {
+  // Two separate regressions hide in one line of SVG:
+  //  * putting the halo back means a 144px translucent disc behind a 120px icon,
+  //    which is exactly the "pasted on" look #279 removed;
+  //  * drawing the ground as a rect at SCENE_HORIZON means a dead-straight cut
+  //    across the card, which is the "sticker sheet" cue.
+  // Both are one-line changes, so both are pinned here rather than trusted.
+  const svg = renderSceneSvg('animals', 'paw-print', getIllustrationPalette('animals'), {
+    label: 'animals',
+    assetId: 'animals-scene',
+  });
+  assert.ok(!svg.includes('data-scene-layer="halo"'), 'the halo disc is back');
+  const far = svg.slice(svg.indexOf('data-scene-layer="far"'), svg.indexOf('data-scene-layer="mid"'));
+  assert.match(far, /<path d="M0 150 C/, 'the ground plane is not a curve any more');
+  assert.doesNotMatch(far, /<rect x="0" y="150"/, 'the straight ground band is back');
+  // And the shade that keeps the band from reading as one flat cut-out.
+  const shades = (far.match(/opacity="0\.05"/g) || []).length;
+  assert.equal(shades, 1, `expected one soft ground shade, found ${shades}`);
+});
+
 test('#278 every palette carries three hues, and a scene actually paints them', () => {
   // One hue family per palette was the real reason a finished scene still read
   // as a diagram. The fix is data, so the guard is data: no palette may fall
@@ -384,6 +404,8 @@ test('the scene composer output is pinned so saved scenes stay stable', () => {
   // the whitelist (#266 - people, no geometry change). Byte lengths did not move
   // (same 7-char hex colours), so only the hashes pin this change.
   //
+  // #279 re-took them a FIFTH time: the halo layer is gone and the ground is a
+  // shallow curve with a soft bottom shade, checked on rendered PNGs.
   // #278 re-took them a FOURTH time, again with rendered PNGs: every palette
   // now carries `warm` (sun, props, ground props) and `cool` (clouds, mountains,
   // skyline, towers, pebbles, corner icons) so a scene is no longer one hue.
@@ -393,30 +415,30 @@ test('the scene composer output is pinned so saved scenes stay stable', () => {
   // out. This is the first change where byte LENGTH moved as well, and the
   // length assertion in scene-blueprint.test.ts pins the legacy path separately.
   const golden: Record<string, string> = {
-    animals: 'e3ab4fd7ddd1eeae74b09bb361926dc14e4afe94c7a964b2cdd5357045adfc84',
-    plants: '98e36c1c66819844c4ae80202b335c58d894640bbd58b1526687fb1b54ac2e33',
-    space: '66c077a36fd322b51c53457b8ce624bb21b728e442a7e0d602faa3c950c35c21',
-    'human-body': 'c46a978b0ad793f045b3390e1306ade85980e3741d3ba91d42022060895f8806',
-    transport: '930584457955c562c8dbfec66d2fbfa2ddc0c29bf2e3d629b17441f6ffdb7c83',
-    safety: '429aef26b7755930c050e931b275ebcbc2a2979e9250517bbc7421f785001e9b',
-    environment: '3523f6c8d923668bcf44a05e09054186b62cb78dfa8293bfb7b1506bfb01a658',
-    history: '2cf6b1bcffb8eb8c157888c4bdacdc268284cf30cd8c5e67ddd2b6f2ec720287',
-    geography: '049c60331ac5ac3a0d68bb9db2c21953bf680fb26f262b653a1c1581a81a7a02',
-    jobs: '7922eb53db34eb3cc35c9dd9683cfa2df18bed1d30c440ae1548f67bd23a7eac',
-    sports: '76b00fd0aadfe4e067c2c28495019bf481c05be8a1c7da67c11f3687a2172cac',
-    music: 'fe713cb6f2d82f1fe003f5b50022235a257254ef9d983ccddb37fa06ec5a6a52',
-    art: '2c7c5a1ae6b065772133a0bc386dd02f0ceaa0329fa5b4ee151ce6f0054a605f',
-    math: 'ce650ae1cdee6ecbb19216eff17543154fddff226f43d577f68331bf16f6fcaf',
-    language: 'e7a20452c8966e1c7422f07a2bdb6b9e8848310359efe139cafad4084f4b5f80',
-    science: '45bc9aeb3c61988ec7739e628677291860579076d3f37ee4b28aa0c6472320fd',
-    technology: '78ab08eeaf094fb5c1bbbde1c5a6abde807ef4b388409e54f6f1849de10b086d',
-    health: '1afa6c3a9aeb9e5a5bd1eaed8d5c79e1279da55821fd9970ad763d1525b6963f',
-    family: '981d1e21aaa5ca97c9490a396e41feec5f53cbbfc73a642534e2d93665391e7d',
-    community: 'eb19800907779b0db711e5b1474cd2c6b1107f8ef801b20721bcc11f703491b9',
-    weather: '233fa042dc0a7a7ff02ac50d35f41e4b977dea93989193766d6a0b9a726e46aa',
-    food: '9a50d22b3af61d9a79472f3da605d20e54332622c5a784455b8f0375ce7228f2',
-    objects: 'c559b7c7b08dcdf55afafc40add61028f06d7e94512e569646ca1f2b9d293643',
-    'water-world': '66d078bae5ee21588272ee5ce053208de5a184daa964ed54a7daaa870733a39a',
+    animals: '54952c27ebdfb277df0d95337d75f2b4482f6d89b86b83c3f8877f346409cb46',
+    plants: '645c21df16eb3f1685fdaae1095f425ada33d2f4368335728800c31085eec3d0',
+    space: '165dfa74fe73cef65bb371c8d5bef4645940581567bd53a2f0841b780c1e8304',
+    'human-body': '7de896f9982915f2cb3898aaf2ca8aedfb8adafe796273f9fc21bd0d9e666326',
+    transport: '21aefbc7c92b67559aa6c9ed1cb01b36ce8723247f0cc3d981a62976c8735770',
+    safety: '900fce6508ece6cc511f104842f61d3180473598cb25dfd8cc7af484b4a8650e',
+    environment: '178355e227ba9489d40d3af37fd0a1e4e922ebf82e298b0f25778ed5d63d9138',
+    history: '139a4fc6db9799b6dad376d2b8794a3ecea28fdeaf8c05b89636a0cc4bdec5c6',
+    geography: 'c83ef7302d698cac89b959e931b0ffb2a1b989fc31f94434d2e2e8d361e752bb',
+    jobs: '9f321c1ecc4c4bff35f1d073808efb5e9ce9c7c041dffc9482163f1e68416373',
+    sports: '884681fd64bf9daf9b5ed9fcce6404a8cc6134884ab9ee98d47091db17bded12',
+    music: 'f7091a6621cd52af433341cb04f9a2404a49e9068b691d4fcd5fd4f36effac4a',
+    art: 'ebf2e08d983e28b3b715984307458ba5429807c9794fa958a15522d2cc2ede5e',
+    math: '2acf580d5d44ecd5ed0f6e7aa7d48a494581fca05b27aaf8b1397e971df82e77',
+    language: 'd51473a1af304419b9bf400fedf1f1e8fa3c47a8a7267aa1cb8a667fbe1f3cfb',
+    science: '93271fe939ee7957d809a5379fafdb82cd5b873886b1c7aa8fbce4ebe6dd8281',
+    technology: 'c49ef527b1162131db3d7a09bc7deadafed42f88085cd68ed9d9696ba60927fc',
+    health: 'e9b5e07e25acf3be395c6c84cf89c567b628a40de29963d89c2916ea2b968a24',
+    family: '76a8d79d2394912ece729e37a0e136b314518c7c88c944e3e31b15e6e35e6e8c',
+    community: '07bb54d3acf00d98f141891333c1728d90f243acb768c7f3a1a4eabb75e41c36',
+    weather: 'f183eca59ed6f6a1f39a54d21d0c8c0e47efa19394718da9e0635deda73550b7',
+    food: 'a8d23c9394885d4dae7beed07a77f3e9bb01d50780b088f427f0e70a096e2e67',
+    objects: 'c88438d69a69baddfa68f4b3d122c8939cd9389fb0f5d1b1d93e5ad5aaf2a4a6',
+    'water-world': '6cabdc9d678064d89f2b040a1da7a810e8a0475d690e65e60308cc6c9590d945',
   };
   for (const id of ILLUSTRATION_ASSET_IDS) {
     const category = id.slice(0, -'-scene'.length);
@@ -675,13 +697,15 @@ test('the rendered stack is ordered back to front', () => {
   // so only the string order can catch it. `mid` and `props` are optional (a
   // scene with nothing standing around the subject emits neither), the rest is
   // mandatory: no sky, no horizon or no foreground means a flat card again.
+  // #279 removed `halo` from the stack: a 144px translucent disc behind a 120px
+  // icon was the last thing making the subject look pasted on.
   for (const assetId of ['animals-scene', 'space-scene', 'water-world-scene', 'science-scene']) {
     const svg = renderIllustrationSvg(resolveIllustration({ illustrationAssetId: assetId, mode: 'auto' }))!;
     const order = (svg.match(/data-scene-layer="([a-z]+)"/g) || []).map((m) =>
       m.slice('data-scene-layer="'.length, -1)
     );
     const mandatory = order.filter((name) => name !== 'props' && name !== 'mid');
-    assert.deepEqual(mandatory, ['sky', 'far', 'halo', 'subject', 'fg'], `${assetId} layer order`);
+    assert.deepEqual(mandatory, ['sky', 'far', 'subject', 'fg'], `${assetId} layer order`);
     if (order.includes('props')) {
       assert.equal(order.indexOf('props'), order.indexOf('subject') + 1, `${assetId}: props must sit on the subject`);
     }

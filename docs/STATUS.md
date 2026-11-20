@@ -7,6 +7,14 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-16 — #279 bỏ quầng `halo` + mặt đất cong + bóng nhẹ cuối nền
+- Kích hoạt: #277/#278 soi PNG còn đúng hai lời phê — đĩa tròn nhạt `halo` sau lưng chủ thể, và dải đất cắt ngang thẳng cứng.
+- **Đã làm** (`src/shared/illustration-scene.ts`): xoá hẳn lớp `halo` khỏi `SCENE_LAYER_ORDER` và composer (tách nền giờ do **màu** #266 + **bóng** #277 lo). Mặt đất thành đường cong `sceneGroundPath()` (không bao giờ xuống dưới `SCENE_HORIZON` nên `line` không hở khe trời). Thêm `sceneGroundShadePath()` ở `ink` **5%** cho 24px cuối. Bóng tiếp đất: `SCENE_SHADOW_WIDTH_RATIO` 0.34→**0.24**, opacity 0.10→**0.12** (0.34 ở máy chiếu là "vũng nước" 246px).
+- **Đã chạy:** `npx tsc` sạch; `run-unit` **99/99**; `check:scene-runtime` khớp **85.3 KiB**; `check:embedded` khớp **6285.1 KiB**; `npm run check` sạch; 24 hash vàng lấy lại lần 5; golden độ dài 2827→**2889**.
+- **Test mới `#279`:** không `data-scene-layer="halo"`; `far` phải có `<path d="M0 150 C`; **không** `<rect x="0" y="150"`; đúng **một** shade `0.05`.
+- **Đối chứng âm:** trả lại `<rect>` thẳng ⇒ đỏ *"the ground plane is not a curve any more"*; khôi phục ⇒ xanh.
+- **Còn hở:** vision-model vẫn thấy "đường đất gần ngang, chỉ mềm hơn" — giới hạn khung phẳng 320×200, muốn hết phải vẽ phối cảnh (việc khác). **Chưa ai duyệt bằng mắt người.**
+
 ### 2026-11-16 — #278 mỗi palette ba hue (ấm/lạnh) — cảnh hết đơn sắc
 - Kích hoạt: giáo viên chọn hướng "bảng màu nhiều hue" sau khi #277 chỉ chữa được "lơ lửng"; vision-model vẫn gọi cảnh là "sticker" vì **một họ hue** + prop/góc ở 0.55 cùng màu ink.
 - **Dữ liệu** (`src/shared/illustration-registry.ts`): `IllustrationPalette` thêm `warm`/`cool` (tuỳ chọn). 24 hàng viết tay từ ba họ: ấm amber `#d79a3c` / coral `#dd7a5b` / gold `#cfa63e`; lạnh slate `#6b7f99` / teal `#4a8b8a` / indigo `#5a63a8`. `DEFAULT_PALETTE` cũng có hai hue này.

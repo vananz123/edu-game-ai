@@ -202,7 +202,7 @@ test('ground props are cleaned, capped at two, and never repeat the subject or a
 test('the shared renderer draws a blueprint with its own layers and sub icons', () => {
   const palette = getIllustrationPalette(VALID.paletteKey);
   const svg = renderBlueprintSvg(VALID, palette, { assetId: 'animals-scene', label: 'Động vật' });
-  for (const layer of ['sky', 'far', 'mid', 'halo', 'subject', 'props', 'fg']) {
+  for (const layer of ['sky', 'far', 'mid', 'subject', 'props', 'fg']) {
     assert.match(svg, new RegExp(`data-scene-layer="${layer}"`), `missing ${layer} layer`);
   }
   assert.match(svg, /data-scene-primitive="sub-icons"/);
@@ -302,8 +302,10 @@ test('the old category scene is unchanged by the composer refactor', () => {
   // 2043 bytes before stacked layers; richer now, and still the legacy path.
   // #277 added the ground-contact shadow (+99 bytes on this scene: the ellipse
   // plus its data-scene-shadow role); #278 changed the sun's opacity from 0.16
-  // to 0.2 (-1 byte), so the length is pinned again rather than relaxed.
-  assert.equal(svg.length, 2827);
+  // to 0.2 (-1 byte); #279 dropped the halo disc (-1 layer) and replaced the
+  // straight ground rect with two curves (+62). The length is pinned again
+  // rather than relaxed: it is the only assertion that sees the legacy path.
+  assert.equal(svg.length, 2889);
 });
 
 // --- #277 ground contact ---------------------------------------------------

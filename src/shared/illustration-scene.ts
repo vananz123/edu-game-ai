@@ -9,7 +9,7 @@
  *
  * #72 replaced the single backdrop motif with a real depth stack:
  *
- *   sky -> far -> mid -> halo -> subject -> props -> fg
+ *   sky -> far -> mid -> subject -> props -> fg
  *
  * Each layer is assembled from a small set of deterministic primitives, so the
  * scene has foreground and background rather than one flat decoration. The
@@ -53,9 +53,15 @@ export const SCENE_HORIZON = 150;
  * Every shadow is the palette INK at 10%, never black: the scenes are light by
  * decision #220, so a dark smudge would be the one dirty mark on the card.
  */
-export const SCENE_SHADOW_OPACITY = 0.1;
-/** Shadow width as a fraction of the object's box. Wider reads as "on the floor". */
-export const SCENE_SHADOW_WIDTH_RATIO = 0.34;
+export const SCENE_SHADOW_OPACITY = 0.12;
+/**
+ * Shadow width as a fraction of the object's box.
+ *
+ * 0.34 rendered as a 246px-wide pale puddle under a 120px subject once the card
+ * is scaled up (vision check on the real PNG called it "a flat puddle whose
+ * lower edge crosses the ground line"). 0.24 tucks it under the feet.
+ */
+export const SCENE_SHADOW_WIDTH_RATIO = 0.24;
 /** Shadow height as a fraction of its own width: a squashed ellipse, not a ball. */
 export const SCENE_SHADOW_HEIGHT_RATIO = 0.22;
 /** The surround subject's fixed top edge (#270); the shadow needs it too. */
@@ -203,11 +209,41 @@ export const SCENE_LAYER_ORDER: readonly string[] = Object.freeze([
   'sky',
   'far',
   'mid',
-  'halo',
   'subject',
   'props',
   'fg',
 ]);
+
+/* Soft ground edge (#279).
+ *
+ * The ground used to start on a dead-straight line at SCENE_HORIZON: a 320px
+ * horizontal cut, which is the strongest "this is a sticker sheet" cue left in
+ * the frame. It is now a shallow rise/dip that never goes BELOW the horizon, so
+ * the `line` primitive's straight horizon stroke can never leave a sliver of sky
+ * between itself and the ground, and every prop anchored to SCENE_HORIZON still
+ * lands on ground.
+ */
+export const SCENE_GROUND_RISE = 3;
+
+/**
+ * A second, darker curve at the bottom of the ground band. Two flat fills
+ * stacked (sky band / ground band) is what makes a scene read as paper cut-outs;
+ * one soft shade behind the foreground props is enough to say "the ground comes
+ * toward the viewer".
+ */
+export function sceneGroundShadePath(): string {
+  return `M0 178 C40 174 80 179 120 176 S200 178 240 175 S300 179 320 177 V${SCENE_HEIGHT} H0 Z`;
+}
+
+/** The ground plane from SCENE_HORIZON to the bottom edge, as a shallow curve. */
+export function sceneGroundPath(): string {
+  const h = SCENE_HORIZON;
+  const r = SCENE_GROUND_RISE;
+  return (
+    `M0 ${h} C40 ${h - r} 80 ${h} 120 ${h - r + 1} S200 ${h} 240 ${h - r} S300 ${h} 320 ${h}` +
+    ` V${SCENE_HEIGHT} H0 Z`
+  );
+}
 
 /**
  * Category -> scene. Categories missing here fall back to `DEFAULT_SCENE`, so
@@ -817,10 +853,11 @@ function composeSceneSvg(
     ) +
     layer('far',
       primitivesOf(spec.horizon).map((p) => renderFar(p, palette)).join('') +
-      `<rect x="0" y="${SCENE_HORIZON}" width="${SCENE_WIDTH}" height="${SCENE_HEIGHT - SCENE_HORIZON}" fill="${esc(ground)}"/>`
+      `<path d="${sceneGroundPath()}" fill="${esc(ground)}"/>` +
+      `<path d="${sceneGroundShadePath()}" fill="${esc(palette.ink)}" opacity="0.05"/>`
     ) +
     layer('mid', primitivesOf(spec.standing).map((p) => renderMid(p, palette)).join('') + subjectShadows) +
-    layer('halo', `<circle cx="${SCENE_WIDTH / 2}" cy="${subjectY}" r="72" fill="${esc(palette.glow)}" opacity="0.15"/>`) +
+
     // #266: the subject is drawn in the palette ACCENT (`glow`), not in ink.
     // Every element used to be ink, so a scene read as one dark blue outline on
     // a pale wash; the accent is the only saturated colour a palette owns, and

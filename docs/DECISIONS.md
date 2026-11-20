@@ -4485,3 +4485,35 @@ xanh. 24 hash vàng lấy lại lần thứ tư, kèm PNG. Đo được: cảnh 
 giác "dán"; (2) **dải đất cắt ngang** ở `SCENE_HORIZON` là một đường thẳng cứng. Cả hai là thay đổi
 nhìn thấy được nhưng đụng vào hình học đã chốt (#72/#220) nên để riêng thành #279, không trộn vào
 một lần đổi màu.
+
+## #279 — Bỏ quầng `halo`; mặt đất thành đường cong + một lớp bóng nhẹ
+
+**Kích hoạt.** #277/#278 soi PNG bằng vision-model, còn đúng hai lời phê:
+(1) sau lưng chủ thể là **một đĩa tròn nhạt lớn** (quầng `halo`, r 72, `glow` 0.15) — chính nó gây
+cảm giác "dán"; (2) **dải đất cắt ngang** là một đường thẳng cứng suốt 320px — dấu hiệu "tờ sticker".
+
+**Quyết định.**
+- **Xoá hẳn lớp `halo`** khỏi `SCENE_LAYER_ORDER` và khỏi composer. Thứ làm chủ thể tách khỏi nền bây
+  giờ là **màu** (#266: chủ thể mang `glow`) và **bóng tiếp đất** (#277) — quầng chỉ là một hình tròn
+  thứ ba chồng lên hai thứ đó. Xoá chứ không làm mờ: một đĩa 144px sau một icon 120px thì không có
+  opacity nào là "vừa".
+- **Mặt đất là đường cong** `sceneGroundPath()`: `M0 150 C40 147 80 150 120 148 S200 150 240 147
+  S300 150 320 150 V200 H0 Z`. Ràng buộc có chủ ý: đường cong **không bao giờ xuống dưới**
+  `SCENE_HORIZON`, nên `line` (primitive đường chân trời thẳng) không thể để lộ một khe trời giữa
+  nét và mặt đất, và mọi prop neo ở 150 vẫn đứng trên đất.
+- **Thêm một lớp bóng nhẹ** `sceneGroundShadePath()` ở `ink` **5%** cho 24px cuối: hai mảng phẳng
+  chồng nhau đọc ra "giấy cắt", một lớp tối dần đọc ra "mặt đất tiến về phía người xem".
+- **Bóng tiếp đất hẹp lại**: `SCENE_SHADOW_WIDTH_RATIO` 0.34 → **0.24**, opacity 0.10 → **0.12**.
+  Ở 0.34, khi thẻ được phóng lên máy chiếu, bóng rộng 246px và vision-model gọi đúng là "vũng nước
+  phẳng, mép dưới cắt qua đường đất". 0.24 thì nó nằm gọn dưới chân.
+
+**Đã kiểm.** Test mới `#279` khoá cả hai thứ trong một chỗ: không được có `data-scene-layer="halo"`,
+lớp `far` phải có `<path d="M0 150 C`, **không** được có `<rect x="0" y="150"`, và đúng **một** lớp
+shade `0.05`. Đối chứng âm: trả lại `<rect>` thẳng ⇒ đỏ đúng câu *"the ground plane is not a curve
+any more"*; khôi phục ⇒ 99/99. 24 hash vàng lấy lại lần thứ năm, kèm PNG. `halo` không còn trong
+danh sách lớp bắt buộc ở hai test còn lại.
+
+**Còn hở, nói thẳng.** Vision-model sau #279 vẫn thấy *"đường đất vẫn là một đường nối gần ngang,
+dù đã mềm hơn"*. Đó là giới hạn của một khung 320×200 phẳng, không phải lỗi còn sót: muốn hết hẳn
+thì phải vẽ theo phối cảnh (vật nhỏ dần theo chiều sâu) — việc của một kế hoạch khác, không phải
+của một lần sửa. Cũng **chưa có người duyệt bằng mắt**; mọi nhận xét ở trên là của vision-model.

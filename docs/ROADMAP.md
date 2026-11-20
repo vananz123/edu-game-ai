@@ -50,6 +50,8 @@
   **che mất** nút gợi ý thật; gọi model từng câu thì thêm 1–3 s + phí cho một thứ không ảnh hưởng
   việc học. Nếu sau này giáo viên than phải bấm nhiều lần, làm **"gắn cảnh cho cả game"** trong
   trình soạn (một lượt, có preview), không phải gắn mặc định trong wizard.
+- **Đã làm (#279):** xoá quầng `halo`, mặt đất thành **đường cong** + một lớp bóng cuối nền, bóng tiếp
+  đất hẹp lại (0.34→0.24). **Còn hở:** đường đất vẫn "gần ngang" — muốn hết phải vẽ phối cảnh.
 - **Đã làm (#278):** mỗi palette có **ba hue** (`glow` chủ thể, `warm` prop/mặt trời, `cool`
   khoảng cách + icon góc) và prop/icon góc không còn ở 0.55; cảnh `meadow` từ 1 họ hue lên **7 hue**.
   **Còn hở (#279):** quầng `halo` sau lưng chủ thể và dải đất cắt ngang ở `SCENE_HORIZON` — vision-model
