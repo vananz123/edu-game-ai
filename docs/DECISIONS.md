@@ -4564,3 +4564,46 @@ tác dụng cho nền và prop — chủ thể không còn "mang màu nhấn" n�
 bộ **hỗn hợp phong cách** (có cái phẳng, có cái có bóng) — vision-model gọi là "clip art lệch nhau"
 khi 4 icon nằm cùng một khung `surround`. (3) Bản quyền đã ổn nhưng **chưa có người duyệt bằng mắt**;
 nếu giáo viên thấy lệch, đường lui rẻ nhất là bỏ một dòng trong `MAP` để id đó quay lại Lucide.
+
+## #281 — Đổi tiếp sang Twemoji (giáo viên chọn sau khi xem 3 bộ dựng thử)
+
+**Kích hoạt.** #280 gắn Microsoft Fluent Emoji; giáo viên xem ảnh và nói *"không, tìm thư viện mới
+đi"*. Không phải lỗi kỹ thuật — Fluent đúng giấy phép, đúng kích thước, nhưng **trộn nhiều cách vẽ
+trong cùng một bộ** (có cái phẳng, có cái có bóng), nên 4 icon trong một khung đọc thành "4 mẩu clip
+art khác nhau". Đó là điều duy nhất ba vòng #277–#279 không sửa được.
+
+**Cách chọn.** Dựng **3 bộ trên cùng một engine thật** (`renderBlueprintSvg`, cùng 4 layout, cùng
+palette), xuất PNG, giáo viên chọn. Không đoán:
+
+| bộ | giấy phép | 41 icon | kết luận |
+|---|---|---|---|
+| **Twemoji** | **CC BY 4.0** (ghi công) | **54.5 KiB** | **giáo viên chọn** |
+| Phosphor Duotone | MIT | 27.6 KiB | đẹp nhưng vẫn là *icon*, ở 40px hơi nhạt |
+| Phosphor Fill | MIT | 18.4 KiB | đơn sắc, đọc tốt nhưng khô |
+
+Twemoji thắng vì **một studio vẽ cả bộ** (đồng bộ thật), phủ đủ khái niệm (mỗi id một dòng), và rẻ
+nhất trong các bộ có màu.
+
+**Id vẫn không đổi** — lần thứ hai chứng minh giá trị của lớp id: đổi từ Fluent sang Twemoji không
+sửa một prompt, một blueprint, một `.egame` nào.
+
+**Một cái bẫy đo được: `Object.freeze` làm bundle nhúng phình +287 KiB.** Bản sinh đầu tiên bọc
+`Object.freeze({...})` cho `EMOJI_ART`; esbuild không tree-shake được một object bị freeze (coi là có
+side effect), nên 57 460 byte art bị nhúng vào **5 slot** của bundle Rust — dù bundle đó không hề vẽ
+icon. Bỏ freeze (giữ `Readonly<Record<...>>` trong type) ⇒ `check:embedded` về đúng **6285.1 KiB**.
+Đây là bài học dạng #274: **hình dạng mã sinh quyết định kích thước tệp**, nên phải đo chứ không tin.
+
+**Giấy phép.** CC BY 4.0 (đồ hoạ) — được đóng gói vào app thương mại, chỉ cần ghi công; không
+share-alike. Ghi ở `docs/THIRD_PARTY_NOTICES.md` (§ Twemoji + nguyên văn + copyright Twitter) và trong
+header file sinh; test đòi **đúng một mục `## Twemoji`** trong notices (đối chứng âm: đổi heading ⇒
+đỏ), nên "quên ghi công" không lọt.
+
+**Đã kiểm.** `run-unit` **100/100**; 24 hash vàng lấy lại lần 7; golden độ dài 4823 → **4049**
+(Twemoji nhỏ hơn Fluent 774 byte ở icon `paw-print`); `check:scene-runtime` **142.6 KiB**;
+`check:embedded` **6285.1 KiB** (không đổi); `npm run check` sạch; `check:renderer-globals` 1080
+hàm/8600 call site 0 undefined. Test `asset-registry` không còn pin `viewBox="0 0 32 32"` (Twemoji là
+36×36) mà đọc viewBox từ chính art — pin hộp của thư viện là cách biến lần đổi thư viện sau thành
+"lỗi render".
+
+**Chưa kiểm:** chưa chạy lại cổng UI trên binary Tauri; chưa có người thứ hai duyệt bằng mắt ngoài
+giáo viên; và vision-model lúc làm việc này đang lỗi nên phần mô tả ảnh là của chính người chọn.

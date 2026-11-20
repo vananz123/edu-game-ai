@@ -304,10 +304,11 @@ test('the old category scene is unchanged by the composer refactor', () => {
   // plus its data-scene-shadow role); #278 changed the sun's opacity from 0.16
   // to 0.2 (-1 byte); #279 dropped the halo disc (-1 layer) and replaced the
   // straight ground rect with two curves (+62); #280 replaced the 120px Lucide
-  // paw-print with Fluent Emoji art (+1934: colour art is bigger than four
-  // strokes, and that is the whole point). The length is pinned again rather
-  // than relaxed: it is the only assertion that sees the legacy path.
-  assert.equal(svg.length, 4823);
+  // paw-print with colour art (+1934: colour art is bigger than four strokes,
+  // and that is the whole point); #281 swapped that art for Twemoji (-774, one
+  // icon of a smaller set). The length is pinned again rather than relaxed: it
+  // is the only assertion that sees the legacy path.
+  assert.equal(svg.length, 4049);
 });
 
 // --- #277 ground contact ---------------------------------------------------

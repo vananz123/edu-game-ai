@@ -1,4 +1,4 @@
-// #280 — the scene icons draw Microsoft Fluent Emoji art.
+// #280/#281 — the scene icons draw Twemoji art.
 //
 // This file guards four separate risks that a "swap the artwork" change carries:
 //
@@ -27,7 +27,7 @@ test('every scene icon has art, and no art is orphaned', () => {
   const artIds = Object.keys(EMOJI_ART).sort();
   assert.deepEqual(artIds, [...SCENE_ICON_IDS].sort(), 'EMOJI_ART and SCENE_ICON_IDS disagree');
   assert.equal(artIds.length, 41, 'the scene icon list is 41 ids');
-  assert.match(EMOJI_ART_SOURCE, /fluentui-emoji/);
+  assert.equal(EMOJI_ART_SOURCE, 'twemoji');
 });
 
 test('the art is offline, inert markup', () => {
@@ -70,7 +70,7 @@ test('the art stays small enough to ship, and renders as a stroke-free svg', () 
     assert.ok(svg.includes(`emoji-${id}`), `${id} lost its class hook`);
     assert.ok(svg.includes('width="40"'), `${id} ignored the requested size`);
   }
-  // 41 icons of flat art. The budget is deliberately loose: it exists to catch an
+  // 41 icons of flat art (55 KiB on the day this was written). The budget is deliberately loose: it exists to catch an
   // accidental "embed the 3D PNGs" or "embed every emoji" regression, not to pin
   // an exact number that a licence-compatible art tweak would break.
   assert.ok(total < 120 * 1024, `art totals ${Math.round(total / 1024)} KiB, over the 120 KiB budget`);
@@ -90,10 +90,10 @@ test('the Lucide fallback is intact: scene ids still resolve as icons too', () =
 
 test('the licence is recorded next to the art, not only in a chat log', () => {
   const notices = readFileSync(join(ROOT, 'docs', 'THIRD_PARTY_NOTICES.md'), 'utf8');
-  assert.match(notices, /Fluent Emoji/i);
-  assert.match(notices, /MIT/);
-  assert.match(notices, /Microsoft/);
+  assert.match(notices, /^## Twemoji$/m, 'the notices file must have a section per bundled set');
+  assert.match(notices, /CC BY 4\.0/);
+  assert.match(notices, /Twitter/);
   const generated = readFileSync(join(ROOT, 'src', 'shared', 'emoji-art.generated.ts'), 'utf8');
-  assert.match(generated, /MIT License/, 'the generated file must carry its own attribution');
-  assert.match(generated, /Microsoft/);
+  assert.match(generated, /CC BY 4\.0/, 'the generated file must carry its own attribution');
+  assert.match(generated, /Twitter/);
 });

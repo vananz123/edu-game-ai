@@ -17,6 +17,7 @@ import {
   isIconName,
   renderIconSvg
 } from '../../src/shared/icon-registry';
+import { EMOJI_ART } from '../../src/shared/emoji-art.generated';
 import {
   ILLUSTRATION_MODES,
   getItemIconNode,
@@ -147,7 +148,10 @@ assert.equal(getIconNode('__proto__'), null);
 const emojiSvg = renderIconSvg('paw-print');
 assert.ok(emojiSvg.startsWith('<svg '), 'renders an <svg>');
 assert.ok(emojiSvg.endsWith('</svg>'));
-assert.ok(emojiSvg.includes('viewBox="0 0 32 32"'), 'emoji art keeps its own viewBox');
+// The box belongs to the art, not to this code: Twemoji draws on 36x36 and the
+// set this replaced drew on 32x32. Pinning the source box here would make the
+// next library swap look like a rendering bug.
+assert.ok(emojiSvg.includes(`viewBox="${EMOJI_ART['paw-print'].viewBox}"`), 'emoji art keeps its own viewBox');
 assert.ok(emojiSvg.includes('stroke="none"'), 'flat art must not inherit a stroke');
 assert.equal(emojiSvg.includes('stroke="currentColor"'), false);
 assert.ok(emojiSvg.includes('class="emoji emoji-paw-print"'));

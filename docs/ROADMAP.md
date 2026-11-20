@@ -50,7 +50,11 @@
   **che mất** nút gợi ý thật; gọi model từng câu thì thêm 1–3 s + phí cho một thứ không ảnh hưởng
   việc học. Nếu sau này giáo viên than phải bấm nhiều lần, làm **"gắn cảnh cho cả game"** trong
   trình soạn (một lượt, có preview), không phải gắn mặc định trong wizard.
-- **Đã làm (#280):** đổi thư viện ảnh — 41 icon cảnh dùng **Microsoft Fluent Emoji (MIT, Flat)**,
+- **Đã làm (#281):** đổi tiếp sang **Twemoji (CC BY 4.0, 54.5 KiB/41 icon)** — giáo viên chọn sau khi
+  xem 3 bộ dựng thử trên cùng engine; Fluent bị loại vì trộn nhiều cách vẽ. Id không đổi, không
+  migration. Renderer bundle **142.6 KiB**, embedded **6285.1 KiB** (bẫy `Object.freeze` đã ghi ở
+  DECISIONS #281). **Còn hở:** chưa chạy lại cổng UI trên binary, chưa có người duyệt thứ hai.
+- **Đã làm (#280, bị #281 thay thế):** đổi thư viện ảnh — 41 icon cảnh dùng **Microsoft Fluent Emoji (MIT, Flat)**,
   id giữ nguyên nên không migration. Renderer bundle 85.3 → 163.1 KiB. **Còn hở:** bộ ảnh là hỗn hợp
   phong cách (vision-model gọi "clip art lệch") và **chưa có mắt người duyệt**; đường lui rẻ nhất là
   bỏ một dòng trong `MAP` của `scripts/fetch-emoji-art.js` để id đó về Lucide.

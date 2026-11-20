@@ -7,6 +7,16 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-16 — #281 đổi tiếp sang Twemoji (giáo viên chọn trong 3 bộ dựng thử)
+- Kích hoạt: #280 gắn Fluent Emoji, giáo viên xem ảnh nói "không, tìm thư viện mới đi". Lý do thật: Fluent **trộn nhiều cách vẽ trong một bộ**, nên 4 icon trong một khung đọc thành "4 mẩu clip art khác nhau".
+- **Cách chọn:** dựng 3 bộ trên **cùng engine thật** (`renderBlueprintSvg`, cùng 4 layout + palette), xuất PNG, giáo viên chọn **số 1 = Twemoji** (CC BY 4.0, 54.5 KiB/41 icon). Loại Phosphor Duotone (vẫn là icon, nhạt ở 40px) và Phosphor Fill (khô).
+- **Id không đổi** lần thứ hai: không sửa prompt, blueprint, `.egame` nào.
+- **Sửa:** `scripts/fetch-emoji-art.js` viết lại cho Twemoji (`jdecked/twemoji`, `assets/svg/<codepoint>.svg`), 41 dòng id→codepoint; `docs/THIRD_PARTY_NOTICES.md` thay mục Fluent bằng Twemoji (CC BY 4.0 + nguyên văn); `renderIconSvg` chỉ đổi comment.
+- **Bẫy đo được:** bản sinh đầu bọc `Object.freeze(EMOJI_ART)` ⇒ esbuild không tree-shake ⇒ 57 460 byte art nhúng vào **5 slot** bundle Rust, `check:embedded` **+287 KiB**. Bỏ freeze ⇒ về đúng **6285.1 KiB**. Bài học: hình dạng mã sinh quyết định kích thước tệp.
+- **Đã chạy:** `npx tsc` sạch; `run-unit` **100/100**; `npm run check` sạch; `check:renderer-globals` 0 undefined; `check:scene-runtime` **142.6 KiB**; `check:embedded` **6285.1 KiB**; 24 hash vàng lấy lại lần 7; golden độ dài 4823→**4049**.
+- **Test:** `asset-registry` thôi pin `viewBox="0 0 32 32"`, đọc viewBox từ chính art (Twemoji 36×36); test notices đòi đúng heading `## Twemoji` — đối chứng âm đổi heading ⇒ đỏ.
+- **Chưa làm:** chưa chạy lại cổng UI trên binary Tauri; vision-model đang lỗi nên không có mô tả ảnh độc lập; **mới một người duyệt bằng mắt**.
+
 ### 2026-11-16 — #280 đổi thư viện ảnh: 41 icon cảnh dùng Microsoft Fluent Emoji (MIT)
 - Kích hoạt: giáo viên — "có thể đổi thư viện khác, thư viện hiện tại không đủ đẹp" — sau khi #277/#278/#279 đã vét hết phần hình học/bảng màu.
 - **Chọn Fluent Emoji (Flat)** vì MIT + art thiết kế cho 32px + **78 KB cho 41 icon**. Loại unDraw (cấm phân phối lại bộ, cấm tải tự động, hỏng dưới ~620px), OpenMoji (CC BY-SA), Twemoji (không có dải minh hoạ phẳng).

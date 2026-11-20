@@ -85,7 +85,7 @@ scripts/               Script build (icon, kiểm tra global renderer):
                        build-icon-data.js sinh `renderer/features/icon-data.ts` từ registry
                        (`--check` là cổng phát hiện file sinh bị cũ),
                        fetch-emoji-art.js sinh `shared/emoji-art.generated.ts` từ
-                       Microsoft Fluent Emoji (#280, chỉ chạy tay, cần mạng)
+                       Twemoji (#280/#281, chỉ chạy tay, cần mạng)
 tests/
   run-unit.js          Runner cho `npm test` (tự tìm tests/unit/*.test.ts)
   unit/                Test logic thuần + façade/command contract (node:assert)

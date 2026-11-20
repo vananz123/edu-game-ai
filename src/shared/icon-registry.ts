@@ -971,8 +971,8 @@ function escapeAttr(value: string): string {
 /**
  * Renders an icon as a self-contained <svg> string, or '' when the name is unknown.
  *
- * Two art sources, one id space (#280): the 41 scene ids draw as Microsoft
- * Fluent Emoji (full-colour, MIT), everything else stays a Lucide stroke. The
+ * Two art sources, one id space (#280/#281): the 41 scene ids draw as Twemoji
+ * (full-colour, CC BY 4.0), everything else stays a Lucide stroke. The
  * ids are unchanged, so no blueprint, prompt or saved game moves when the ART
  * behind an id changes — that indirection is the whole point of the id.
  *
