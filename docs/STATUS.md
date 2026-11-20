@@ -7,6 +7,16 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-16 — #280 đổi thư viện ảnh: 41 icon cảnh dùng Microsoft Fluent Emoji (MIT)
+- Kích hoạt: giáo viên — "có thể đổi thư viện khác, thư viện hiện tại không đủ đẹp" — sau khi #277/#278/#279 đã vét hết phần hình học/bảng màu.
+- **Chọn Fluent Emoji (Flat)** vì MIT + art thiết kế cho 32px + **78 KB cho 41 icon**. Loại unDraw (cấm phân phối lại bộ, cấm tải tự động, hỏng dưới ~620px), OpenMoji (CC BY-SA), Twemoji (không có dải minh hoạ phẳng).
+- **Id không đổi** — chỉ ảnh sau id đổi, nên prompt từ vựng, blueprint trong `.egame` cũ, `v:1` đều y nguyên, không migration.
+- **Mới:** `scripts/fetch-emoji-art.js` (script bảo trì duy nhất dùng mạng, không nằm trong `npm run build`) → `src/shared/emoji-art.generated.ts` (78.4 KiB, 75 973 byte art); `docs/THIRD_PARTY_NOTICES.md` (MIT + ISC, kèm nguyên văn).
+- **Sửa:** `shared/icon-registry.ts` rẽ hai nhánh (art màu với `stroke="none"` / Lucide như cũ); id SVG trong art được namespace `e-<icon>-<id>` để hai bản cùng icon trên một trang không mượn gradient của nhau.
+- **Đã chạy:** `npx tsc` sạch; `run-unit` **100/100** (thêm `emoji-art.test.ts`); `npm run check` sạch; `check:renderer-globals` 1080 hàm/8600 call site, 0 undefined; `check:scene-runtime` khớp **163.1 KiB**; `check:embedded` **6285.1 KiB không đổi** (bundle Rust không vẽ minh hoạ); 24 hash vàng lấy lại lần 6; golden độ dài 2889→**4823**.
+- **Đối chứng âm:** đổi khoá `apple` trong bản biên dịch ⇒ đỏ `EMOJI_ART and SCENE_ICON_IDS disagree`; khôi phục ⇒ xanh.
+- **Chưa làm:** chưa chạy lại các cổng UI trên binary Tauri (mới render PNG thật cho cả 4 layout bằng Edge headless); vision-model gọi bộ icon là "clip art lệch phong cách" khi 4 icon cùng khung `surround`; **chưa ai duyệt bằng mắt người**.
+
 ### 2026-11-16 — #279 bỏ quầng `halo` + mặt đất cong + bóng nhẹ cuối nền
 - Kích hoạt: #277/#278 soi PNG còn đúng hai lời phê — đĩa tròn nhạt `halo` sau lưng chủ thể, và dải đất cắt ngang thẳng cứng.
 - **Đã làm** (`src/shared/illustration-scene.ts`): xoá hẳn lớp `halo` khỏi `SCENE_LAYER_ORDER` và composer (tách nền giờ do **màu** #266 + **bóng** #277 lo). Mặt đất thành đường cong `sceneGroundPath()` (không bao giờ xuống dưới `SCENE_HORIZON` nên `line` không hở khe trời). Thêm `sceneGroundShadePath()` ở `ink` **5%** cho 24px cuối. Bóng tiếp đất: `SCENE_SHADOW_WIDTH_RATIO` 0.34→**0.24**, opacity 0.10→**0.12** (0.34 ở máy chiếu là "vũng nước" 246px).

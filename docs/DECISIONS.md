@@ -4517,3 +4517,50 @@ danh sách lớp bắt buộc ở hai test còn lại.
 dù đã mềm hơn"*. Đó là giới hạn của một khung 320×200 phẳng, không phải lỗi còn sót: muốn hết hẳn
 thì phải vẽ theo phối cảnh (vật nhỏ dần theo chiều sâu) — việc của một kế hoạch khác, không phải
 của một lần sửa. Cũng **chưa có người duyệt bằng mắt**; mọi nhận xét ở trên là của vision-model.
+
+## #280 — Đổi thư viện ảnh: 41 icon cảnh dùng Microsoft Fluent Emoji (MIT)
+
+**Kích hoạt.** Giáo viên: *"có thể đổi thư viện khác, thư viện hiện tại nó không đủ đẹp"* — sau khi
+#277/#278/#279 đã sửa hết những gì sửa được bằng hình học và bảng màu.
+
+**Chọn gì và vì sao.** Bốn ứng viên, chấm theo ba ràng buộc cứng của dự án (offline, gói được vào
+installer, giấy phép cho phép dùng thương mại):
+
+| thư viện | giấy phép | vừa 40–120px | gói offline | kết luận |
+|---|---|---|---|---|
+| **Microsoft Fluent Emoji (Flat)** | **MIT** | có (art thiết kế cho 32px) | **78 KB / 41 icon** | **chọn** |
+| unDraw | free, nhưng **cấm phân phối lại bộ** + cấm tải tự động | **không** (hỏng dưới ~620px) | phải tải tay | loại |
+| OpenMoji | CC BY-SA | có | được | loại: share-alike trên chính tác phẩm |
+| Twemoji | CC BY | có | được | loại: không có dải minh hoạ phẳng cho 24 môn học |
+
+**Điều quan trọng nhất: id không đổi.** 41 id (`paw-print`, `apple`, `leaf`…) vẫn y nguyên, chỉ
+**ảnh đứng sau id** đổi. Nên: prompt + tài liệu từ vựng của AI Scene Director không phải sửa, blueprint
+trong `.egame` cũ vẫn đọc được, không có migration, và `v` vẫn là 1. Đây đúng là lý do id tồn tại —
+nếu id là tên file của thư viện thì đổi thư viện là đổi toàn bộ dữ liệu đã lưu.
+
+**Kỹ thuật.**
+- `scripts/fetch-emoji-art.js` → `src/shared/emoji-art.generated.ts` (78.4 KiB, 41 icon, 75 973 byte art).
+  Đây là **script bảo trì duy nhất dùng mạng**, không nằm trong `npm run build`; app không bao giờ
+  tải ảnh lúc chạy.
+- `renderIconSvg` rẽ hai nhánh: có art ⇒ SVG màu với `stroke="none"` (nếu để Lucide `stroke="currentColor"`
+  trên root thì mọi mảng phẳng bị viền bằng màu ink), không có ⇒ Lucide như cũ. `emoji-rocket` thay
+  `lucide-rocket` trong class.
+- Id trong SVG được **namespace** thành `e-<icon>-<id>`: id SVG là toàn trang, mà editor preview và
+  màn chơi có thể hiện cùng một icon một lúc; trùng id thì bản thứ hai mượn gradient của bản thứ nhất.
+- Chỉ dùng style **Flat**: bản 3D là PNG, sẽ làm installer phình gấp ba mà ở 120px không thấy khác.
+
+**Giấy phép.** MIT, ghi ở `docs/THIRD_PARTY_NOTICES.md` (kèm nguyên văn) và ngay trong header của
+file sinh. Test `emoji-art.test.ts` đọc lại chính file notices đó, nên "quên ghi công" là đỏ.
+
+**Đã kiểm.** `run-unit` **100/100** (thêm `emoji-art.test.ts`), 24 hash vàng lấy lại lần 6; bundle
+renderer 85.3 → **163.1 KiB**; `check:embedded` **6285.1 KiB không đổi** (bundle nhúng của Rust không
+vẽ minh hoạ — chỉ renderer cần art); `npm run check` sạch; `check:renderer-globals` 1080 hàm/8600
+call site, 0 undefined. Test mới khoá 4 thứ: phủ đủ 41 id, không `http`/`<script>`/`<image>`, id
+namespace + không trùng, ngân sách ≤8 KiB/icon và ≤120 KiB tổng. Đối chứng âm: đổi khoá `apple` trong
+bản biên dịch ⇒ đỏ đúng câu `EMOJI_ART and SCENE_ICON_IDS disagree`; khôi phục ⇒ xanh.
+
+**Cái giá, nói thẳng.** (1) Icon mang **màu riêng** nên hệ `glow`/`warm`/`cool` của #266/#278 chỉ còn
+tác dụng cho nền và prop — chủ thể không còn "mang màu nhấn" nữa, nhưng nó có màu thật. (2) Ảnh là một
+bộ **hỗn hợp phong cách** (có cái phẳng, có cái có bóng) — vision-model gọi là "clip art lệch nhau"
+khi 4 icon nằm cùng một khung `surround`. (3) Bản quyền đã ổn nhưng **chưa có người duyệt bằng mắt**;
+nếu giáo viên thấy lệch, đường lui rẻ nhất là bỏ một dòng trong `MAP` để id đó quay lại Lucide.

@@ -12,6 +12,8 @@
 //   - the packaged app carries no icon runtime.
 // Unknown names are handled by getIconNode() returning null, never by throwing.
 
+import { EMOJI_ART } from './emoji-art.generated';
+
 export type IconNode = ReadonlyArray<
   readonly [string, Readonly<Record<string, string | number>>]
 >;
@@ -968,9 +970,31 @@ function escapeAttr(value: string): string {
 
 /**
  * Renders an icon as a self-contained <svg> string, or '' when the name is unknown.
- * Attributes match Lucide's defaults so icons look identical to the upstream set.
+ *
+ * Two art sources, one id space (#280): the 41 scene ids draw as Microsoft
+ * Fluent Emoji (full-colour, MIT), everything else stays a Lucide stroke. The
+ * ids are unchanged, so no blueprint, prompt or saved game moves when the ART
+ * behind an id changes — that indirection is the whole point of the id.
+ *
+ * An emoji root carries `stroke="none"`: the Lucide renderer puts
+ * `stroke="currentColor"` on the root and every child inherits it, which would
+ * outline each flat shape in the palette ink.
  */
 export function renderIconSvg(name: unknown, options: IconSvgOptions = {}): string {
+  const art = typeof name === 'string' ? EMOJI_ART[name] : undefined;
+  if (art) {
+    const artSize = typeof options.size === 'number' && options.size > 0 ? Math.round(options.size) : 24;
+    const artClasses = ['emoji', `emoji-${String(name)}`];
+    if (options.className) artClasses.push(options.className);
+    const artA11y = options.label
+      ? `role="img" aria-label="${escapeAttr(options.label)}"`
+      : 'aria-hidden="true"';
+    return (
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${artSize}" height="${artSize}" ` +
+      `viewBox="${escapeAttr(art.viewBox)}" fill="none" stroke="none" ` +
+      `class="${escapeAttr(artClasses.join(' '))}" ${artA11y} focusable="false">${art.body}</svg>`
+    );
+  }
   const node = getIconNode(name);
   if (!node) return '';
   const size = typeof options.size === 'number' && options.size > 0 ? Math.round(options.size) : 24;

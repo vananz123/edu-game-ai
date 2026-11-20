@@ -83,7 +83,9 @@ server/                Cloud AI Gateway (Express + Supabase + Gemini) — không
 scripts/               Script build (icon, kiểm tra global renderer):
                        build-icon-registry.js tải bộ Lucide về `shared/icon-registry.ts`,
                        build-icon-data.js sinh `renderer/features/icon-data.ts` từ registry
-                       (`--check` là cổng phát hiện file sinh bị cũ)
+                       (`--check` là cổng phát hiện file sinh bị cũ),
+                       fetch-emoji-art.js sinh `shared/emoji-art.generated.ts` từ
+                       Microsoft Fluent Emoji (#280, chỉ chạy tay, cần mạng)
 tests/
   run-unit.js          Runner cho `npm test` (tự tìm tests/unit/*.test.ts)
   unit/                Test logic thuần + façade/command contract (node:assert)
@@ -115,6 +117,7 @@ vendor/                DLL VC++ đóng gói kèm
 | Bóc tách cấu trúc tài liệu | `src/services/lesson/lesson-structure.ts` (+ `features/wizard/step-structure.ts`) |
 | Năm trò chơi (quiz, tình huống, ghép cặp, kho báu, đường đua) | `src/renderer/features/games/quiz.ts`, `matching.ts`, `treasure.ts`, `race.ts`; vào/ra và toàn màn hình ở `games/shell.ts` |
 | Khung cửa sổ: sidebar, trạng thái llama.cpp, chuông thông báo (không còn topbar) | `src/index.html` (`.sidebar` + `[data-sidebar-status]`), `styles/navigation.css` (`.sidebar-status`, popover fixed), `features/ai-status.ts`, `core/bootstrap.ts` (uỷ nhiệm click của sidebar bỏ qua khối này) |
+| Ảnh 41 icon câu hỏi/cảnh (màu) | `shared/emoji-art.generated.ts` (sinh bằng `scripts/fetch-emoji-art.js`, giấy phép ở `docs/THIRD_PARTY_NOTICES.md`), render qua `shared/icon-registry.ts` → `renderIconSvg` |
 | Icon Lucide trong chrome (sidebar, nút, tab, empty state) | `shared/icon-registry.ts` (tên + nét, do `scripts/build-icon-registry.js` tải), `features/icon-data.ts` (do `build-icon-data.js` sinh), `features/ui-icons.ts` (`uiIcon()` / `paintUiIcons()`); markup dùng `<span data-icon="tên">` |
 | Hình minh họa trò chơi | `features/game-illustration.ts`, `features/treasure-art.ts`, `shared/illustration-*` |
 | Âm thanh | `features/game-audio.ts` |

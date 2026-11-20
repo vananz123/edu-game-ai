@@ -50,6 +50,10 @@
   **che mất** nút gợi ý thật; gọi model từng câu thì thêm 1–3 s + phí cho một thứ không ảnh hưởng
   việc học. Nếu sau này giáo viên than phải bấm nhiều lần, làm **"gắn cảnh cho cả game"** trong
   trình soạn (một lượt, có preview), không phải gắn mặc định trong wizard.
+- **Đã làm (#280):** đổi thư viện ảnh — 41 icon cảnh dùng **Microsoft Fluent Emoji (MIT, Flat)**,
+  id giữ nguyên nên không migration. Renderer bundle 85.3 → 163.1 KiB. **Còn hở:** bộ ảnh là hỗn hợp
+  phong cách (vision-model gọi "clip art lệch") và **chưa có mắt người duyệt**; đường lui rẻ nhất là
+  bỏ một dòng trong `MAP` của `scripts/fetch-emoji-art.js` để id đó về Lucide.
 - **Đã làm (#279):** xoá quầng `halo`, mặt đất thành **đường cong** + một lớp bóng cuối nền, bóng tiếp
   đất hẹp lại (0.34→0.24). **Còn hở:** đường đất vẫn "gần ngang" — muốn hết phải vẽ phối cảnh.
 - **Đã làm (#278):** mỗi palette có **ba hue** (`glow` chủ thể, `warm` prop/mặt trời, `cool`

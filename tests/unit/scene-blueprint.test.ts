@@ -303,9 +303,11 @@ test('the old category scene is unchanged by the composer refactor', () => {
   // #277 added the ground-contact shadow (+99 bytes on this scene: the ellipse
   // plus its data-scene-shadow role); #278 changed the sun's opacity from 0.16
   // to 0.2 (-1 byte); #279 dropped the halo disc (-1 layer) and replaced the
-  // straight ground rect with two curves (+62). The length is pinned again
-  // rather than relaxed: it is the only assertion that sees the legacy path.
-  assert.equal(svg.length, 2889);
+  // straight ground rect with two curves (+62); #280 replaced the 120px Lucide
+  // paw-print with Fluent Emoji art (+1934: colour art is bigger than four
+  // strokes, and that is the whole point). The length is pinned again rather
+  // than relaxed: it is the only assertion that sees the legacy path.
+  assert.equal(svg.length, 4823);
 });
 
 // --- #277 ground contact ---------------------------------------------------

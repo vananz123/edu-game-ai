@@ -141,12 +141,25 @@ assert.equal(getIconNode('__proto__'), null);
 
 // --- rendering ------------------------------------------------------------
 
-const svg = renderIconSvg('paw-print');
+// #280: `paw-print` is one of the 41 scene ids, so it draws Fluent Emoji art
+// now. The Lucide contract is checked on an INTERFACE icon instead of being
+// deleted: both art sources have to keep working, and the id space is shared.
+const emojiSvg = renderIconSvg('paw-print');
+assert.ok(emojiSvg.startsWith('<svg '), 'renders an <svg>');
+assert.ok(emojiSvg.endsWith('</svg>'));
+assert.ok(emojiSvg.includes('viewBox="0 0 32 32"'), 'emoji art keeps its own viewBox');
+assert.ok(emojiSvg.includes('stroke="none"'), 'flat art must not inherit a stroke');
+assert.equal(emojiSvg.includes('stroke="currentColor"'), false);
+assert.ok(emojiSvg.includes('class="emoji emoji-paw-print"'));
+assert.ok(emojiSvg.includes('aria-hidden="true"'), 'decorative by default');
+assert.equal((emojiSvg.match(/<svg/g) || []).length, 1);
+
+const svg = renderIconSvg('layout-grid');
 assert.ok(svg.startsWith('<svg '), 'renders an <svg>');
 assert.ok(svg.endsWith('</svg>'));
 assert.ok(svg.includes('viewBox="0 0 24 24"'), 'Lucide viewBox');
 assert.ok(svg.includes('stroke="currentColor"'), 'inherits text colour');
-assert.ok(svg.includes('class="lucide lucide-paw-print"'));
+assert.ok(svg.includes('class="lucide lucide-layout-grid"'));
 assert.ok(svg.includes('aria-hidden="true"'), 'decorative by default');
 assert.equal((svg.match(/<svg/g) || []).length, 1);
 
@@ -229,7 +242,8 @@ assert.equal(normalizeItemAssets({ sceneBlueprint: { ...blueprint, v: 2 } }).sce
 assert.equal(normalizeItemAssets({ sceneBlueprint: 'not json' }).sceneBlueprint, null);
 
 // renderItemIcon / getItemIconNode are total.
-assert.ok(renderItemIcon({ contentCategory: 'space' }).includes('lucide-rocket'));
+// #280: scene ids draw emoji art, so the class prefix is `emoji-`, not `lucide-`.
+assert.ok(renderItemIcon({ contentCategory: 'space' }).includes('emoji-rocket'));
 assert.equal(renderItemIcon({}), '');
 assert.equal(renderItemIcon(null), '');
 assert.ok(getItemIconNode({ contentCategory: 'space' })!.length > 0);
