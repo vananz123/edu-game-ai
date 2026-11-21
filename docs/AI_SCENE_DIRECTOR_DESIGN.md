@@ -211,9 +211,9 @@ bóng ở rìa, nên một câu hỏi về sang đường được vẽ trên b�
 | `meadow` | Đồng cỏ |
 | `forest` | Rừng |
 | `mountain` | Núi, đồi |
-| `sea` | Biển, sóng |
+| `sea` | **Biển ban ngày**: thuyền buồm, cầu tàu gỗ, sóng |
 | `stars` | Bầu trời đêm, sao |
-| `city` | Phố, nhà |
+| `city` | **Phố**: toà nhà, mái hiên cửa hàng, ô tô đỗ bên vỉa hè |
 | `road` | **Đường phố**: mặt nhựa, vạch giữa, vạch mép, cột đèn giao thông, biển báo, vạch sang đường |
 | `classroom` | **Lớp học**: bảng trên tường, bàn học có sách, giá sách |
 | `lab` | **Phòng thí nghiệm**: bảng, bàn thí nghiệm có bình tam giác, giá ống nghiệm |

@@ -39,7 +39,7 @@ const PRIMITIVES = new Set([
   'hills', 'mountains', 'skyline', 'sea', 'line', 'road',
   'trees', 'bushes', 'towers', 'bubbles', 'graph',
   'books', 'flasks', 'tools', 'traffic-light', 'sign', 'streetlight',
-  'blackboard', 'desks', 'shelves', 'labbench', 'counter',
+  'blackboard', 'desks', 'shelves', 'labbench', 'counter', 'awning', 'car', 'boat', 'pier',
   'grass', 'roots', 'stones', 'boards', 'waves', 'zebra', 'kerb', 'rack', 'basket', 'none',
 ]);
 

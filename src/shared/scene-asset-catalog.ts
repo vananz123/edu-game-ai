@@ -126,9 +126,13 @@ export const SCENE_BACKDROPS: Readonly<Record<string, SceneSpec>> = Object.freez
   meadow: { sky: ['sun', 'clouds'], horizon: 'hills', standing: ['bushes'], fg: ['grass', 'stones'], subjectY: 88 },
   forest: { sky: ['clouds', 'sun'], horizon: 'hills', standing: ['trees', 'bushes'], fg: ['roots', 'grass'], subjectY: 88 },
   mountain: { sky: ['sun', 'clouds'], horizon: ['mountains', 'hills'], standing: ['trees'], fg: ['stones', 'grass'], subjectY: 88 },
-  sea: { sky: ['moon', 'stars'], horizon: 'sea', standing: ['bubbles'], fg: ['waves', 'stones'], subjectY: 84 },
+  // (#293) Daytime water with a sailboat and a jetty: the moon+bubbles version
+  // read as 'night wallpaper' and said nothing about a place.
+  sea: { sky: ['sun', 'clouds'], horizon: 'sea', standing: ['boat', 'pier'], fg: ['waves'], subjectY: 86 },
   stars: { sky: ['stars', 'moon'], horizon: ['mountains'], standing: ['bubbles'], fg: ['stones'], subjectY: 84 },
-  city: { sky: ['clouds', 'sun'], horizon: 'skyline', standing: ['towers', 'bushes'], fg: ['stones', 'grass'], subjectY: 88 },
+  // (#293) A street, not a skyline: an awning over a shop window and a car at
+  // the kerb say 'town' where two towers and a bush said 'background'.
+  city: { sky: ['clouds', 'sun'], horizon: 'skyline', standing: ['towers', 'awning', 'car'], fg: ['kerb', 'stones'], subjectY: 88 },
   // (#290) Interiors get FURNITURE. A board on the wall, desks with books, a
   // bookcase: before this, "classroom" was a warm wash plus a chart, which reads
   // as "indoors" but could as easily be a clinic.

@@ -4829,3 +4829,19 @@ ngoài trời vẫn pastel, nên hai nửa sản phẩm sẽ lệch nhau. Lượ
   phải đậm lên ít nhất bằng.
 - **Golden hash lấy lại lần thứ 11, 17/24 dòng** — chấp nhận vì đây là thay đổi mỹ thuật có chủ đích,
   có ảnh trước/sau, và sau lượt này cả 24 palette nằm trong cùng một hệ.
+
+## #293 — Một không gian phải có thứ NGƯỜI TA DÙNG, không chỉ có hình nền; và `sea` phải là ban ngày
+
+`city` là skyline + bụi cây; `sea` là sóng + bong bóng, lại còn dùng `moon`+`stars` nên thành cảnh đêm.
+Cả hai đều không nói được *chỗ nào*, đúng lỗi đã đặt tên ở #288 nhưng chưa sửa.
+
+**Quyết định**
+- **Thêm thứ người ta DÙNG**: mái hiên + cửa hiệu và ô tô đỗ bên vỉa hè cho phố; thuyền buồm và cầu
+  tàu gỗ cho biển. Một cảnh phố có "thứ để đi vào" thì đọc ra phố; hai toà nhà thì chỉ đọc ra hình nền.
+- **`sea` chuyển sang BAN NGÀY.** Bong bóng + trăng là phông nền ban đêm, không phải một chỗ; câu hỏi
+  về nước (cá, thuyền, sông) không mặc định xảy ra lúc nửa đêm. Cảnh đêm vẫn có `stars` cho category
+  `space`.
+- **Thân thuyền nằm TRÊN đường mặt nước**, cọc cầu tàu chạm xuống dưới — nếu không, mọi thứ sẽ "trôi"
+  và đó là lỗi #277 lặp lại (độ sâu đến từ chỗ tiếp đất).
+- **Sọc mái hiên là hai mảng màu phẳng**, không blend, không pattern: giữ luật #278.
+- **Golden hash lấy lại lần thứ 12, đúng 3/24 dòng** — chỉ những category mà *chỗ* thay đổi.

@@ -192,6 +192,15 @@ export type ScenePrimitive =
   | 'shelves'
   | 'labbench'
   | 'counter'
+  /**
+   * #293 the street outside a shop, and the water beside a pier. `city` was a
+   * skyline plus bushes and `sea` was waves plus bubbles: neither said *where*
+   * the question happens, which is the whole point of a backdrop (#288).
+   */
+  | 'awning'
+  | 'car'
+  | 'boat'
+  | 'pier'
   // foreground layer
   | 'grass'
   /** Small roots/leaf sprigs at the feet: a garden, not a lawn. */
@@ -299,7 +308,7 @@ const SCENE_SPECS: Readonly<Record<string, SceneSpec>> = Object.freeze({
   environment: { sky: ['clouds', 'sun'], horizon: ['mountains', 'hills'], standing: ['trees', 'bushes'], fg: ['grass', 'stones'], subjectY: 88 },
   history: { sky: ['sun', 'clouds'], horizon: ['mountains', 'hills'], standing: ['books', 'towers'], fg: ['stones'], subjectY: 88 },
   geography: { sky: ['clouds', 'sun'], horizon: ['mountains', 'hills'], standing: ['trees', 'bushes'], fg: ['grass', 'stones'], subjectY: 88 },
-  jobs: { sky: ['clouds', 'sun'], horizon: 'skyline', standing: ['towers', 'tools'], fg: ['stones'], subjectY: 88 },
+  jobs: { sky: ['clouds', 'sun'], horizon: 'skyline', standing: ['towers', 'awning', 'car'], fg: ['kerb', 'stones'], subjectY: 88 },
   sports: { sky: ['sun', 'clouds'], horizon: 'hills', standing: ['bushes'], fg: ['grass', 'stones'], subjectY: 88 },
   music: { sky: ['rays', 'clouds'], horizon: 'line', standing: 'none', fg: ['stones', 'boards'], subjectY: 84 },
   art: { sky: ['rays', 'clouds'], horizon: 'line', standing: ['books'], fg: ['boards'], subjectY: 86 },
@@ -309,11 +318,11 @@ const SCENE_SPECS: Readonly<Record<string, SceneSpec>> = Object.freeze({
   technology: { sky: ['wall', 'rays', 'clouds'], horizon: 'line', standing: ['blackboard', 'labbench'], fg: ['rack'], subjectY: 86 },
   health: { sky: ['wall', 'rays', 'clouds'], horizon: 'line', standing: ['blackboard', 'desks'], fg: ['grass', 'stones'], subjectY: 86 },
   family: { sky: ['sun', 'clouds'], horizon: 'skyline', standing: ['trees', 'bushes'], fg: ['grass', 'stones'], subjectY: 88 },
-  community: { sky: ['clouds', 'sun'], horizon: 'skyline', standing: ['towers', 'bushes'], fg: ['stones', 'grass'], subjectY: 88 },
+  community: { sky: ['clouds', 'sun'], horizon: 'skyline', standing: ['towers', 'awning', 'car'], fg: ['kerb', 'stones'], subjectY: 88 },
   weather: { sky: 'clouds', horizon: 'hills', standing: ['bushes', 'trees'], fg: ['grass', 'stones'], subjectY: 86 },
   food: { sky: ['wall', 'rays', 'clouds'], horizon: 'line', standing: ['shelves', 'counter'], fg: ['basket'], subjectY: 86 },
   objects: { sky: ['clouds', 'sun'], horizon: 'line', standing: ['books', 'tools'], fg: ['stones'], subjectY: 86 },
-  'water-world': { sky: ['moon', 'stars'], horizon: 'sea', standing: ['bubbles'], fg: ['waves', 'stones'], subjectY: 84 },
+  'water-world': { sky: ['sun', 'clouds'], horizon: 'sea', standing: ['boat', 'pier'], fg: ['waves'], subjectY: 86 },
 });
 
 const DEFAULT_SCENE: SceneSpec = Object.freeze({
@@ -562,6 +571,54 @@ function renderMid(primitive: ScenePrimitive, palette: IllustrationPalette): str
         `<path d="M60 52h20v3.4H60z"/>` +
         `</g>` +
         `<circle cx="79" cy="55" r="4.2" fill="${warm}" opacity="0.8"/>` +
+        `</g>`
+      );
+    case 'awning':
+      // (#293) A striped shop awning on the left edge with a shop window under
+      // it. Stripes are two flat fills in palette hues — never blended.
+      return (
+        `<g data-scene-primitive="awning">` +
+        `<rect x="10" y="86" width="76" height="52" rx="3" fill="${cool}" opacity="0.45"/>` +
+        `<rect x="16" y="92" width="64" height="40" rx="2" fill="${ink}" opacity="0.28"/>` +
+        `<path d="M8 86h80l-6-18H14z" fill="${warm}" opacity="0.9"/>` +
+        `<g fill="#ffffff" opacity="0.55">` +
+        `<path d="M22 68h10l-4 18H18z"/><path d="M44 68h10l-2 18H40z"/><path d="M66 68h10l0 18H64z"/>` +
+        `</g></g>`
+      );
+    case 'car':
+      // (#293) A car parked at the right kerb: body, two windows, two wheels.
+      return (
+        `<g data-scene-primitive="car">` +
+        `<path d="M244 138h48l-4-14h-12l-5-9h-16l-6 9h-5z" fill="${cool}" opacity="0.85"/>` +
+        `<path d="M256 124h7l4 8h-11zM267 124h9l3 8h-12z" fill="#ffffff" opacity="0.6"/>` +
+        `<circle cx="254" cy="139" r="4.6" fill="${ink}" opacity="0.85"/>` +
+        `<circle cx="284" cy="139" r="4.6" fill="${ink}" opacity="0.85"/>` +
+        `<rect x="246" y="128" width="4" height="3" rx="1.5" fill="${warm}" opacity="0.9"/>` +
+        `</g>`
+      );
+    case 'boat':
+      // (#293) A small sailboat on the water, right of centre. The hull sits ON
+      // the sea line, so the scene keeps its horizon.
+      return (
+        `<g data-scene-primitive="boat">` +
+        `<path d="M246 ${SCENE_HORIZON - 8}h56l-10 14h-36z" fill="${cool}" opacity="0.85"/>` +
+        `<path d="M273 ${SCENE_HORIZON - 46}v38" stroke="${ink}" stroke-width="2.4" opacity="0.7"/>` +
+        `<path d="M275 ${SCENE_HORIZON - 44}l20 34h-20z" fill="#ffffff" opacity="0.85"/>` +
+        `<path d="M271 ${SCENE_HORIZON - 40}l-16 30h16z" fill="${warm}" opacity="0.75"/>` +
+        `</g>`
+      );
+    case 'pier':
+      // (#293) A wooden jetty running out from the left edge: deck, posts, and
+      // rails. Planks are one fill plus one darker stripe, not a pattern.
+      return (
+        `<g data-scene-primitive="pier">` +
+        `<path d="M6 ${SCENE_HORIZON + 4}h104v7H6z" fill="${warm}" opacity="0.85"/>` +
+        `<g fill="${ink}" opacity="0.6">` +
+        `<rect x="14" y="${SCENE_HORIZON + 11}" width="5" height="22" rx="2"/>` +
+        `<rect x="62" y="${SCENE_HORIZON + 11}" width="5" height="22" rx="2"/>` +
+        `<rect x="104" y="${SCENE_HORIZON + 11}" width="5" height="22" rx="2"/>` +
+        `</g>` +
+        `<g stroke="${ink}" stroke-width="1.2" opacity="0.3"><path d="M14 ${SCENE_HORIZON + 6}h96"/></g>` +
         `</g>`
       );
     case 'blackboard':

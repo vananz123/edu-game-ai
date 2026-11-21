@@ -414,6 +414,9 @@ test('the scene composer output is pinned so saved scenes stay stable', () => {
   // #278 re-took them a FOURTH time, again with rendered PNGs: every palette
   // now carries `warm` (sun, props, ground props) and `cool` (clouds, mountains,
   // skyline, towers, pebbles, corner icons) so a scene is no longer one hue.
+  // #293 re-took the 3 scenes whose PLACE changed (jobs/community -> a street
+  // with a shop awning and a parked car; water-world -> daytime water with a
+  // sailboat and a jetty). Proof: .tmp-art/newspace.png.
   // #292 re-took the other 17 of 24 (all outdoor categories): the teacher asked
   // for deeper colour, so sky/ground/glow/cool/warm of every remaining palette
   // were rewritten by hand one step darker and one step more saturated.
@@ -440,7 +443,7 @@ test('the scene composer output is pinned so saved scenes stay stable', () => {
     environment: '19c7c4a9ea9585fafce70c0554aad7c7d24f3dd6843df4f0103d11a18477b023',
     history: 'a2c24d5cc8ee5aa9a8aeb3e2ecfc79070f4b01cf8dc79b0a7c8d553306374490',
     geography: '3a0b42c5243cf23be92faf2a1b4e5fa80dc7fefbe0c86319e111d65283405cd9',
-    jobs: 'd46e3c0f8bb39dbaaa169aad3be7e5d896f359744da7fa8d1265aacb54bd9829',
+    jobs: '643730d265159aba8d05eb3bbc57903e5c4401a770457c51cd146eaf861bd36f',
     sports: 'fa6dbc97751ba74032bb91ac3670cd5c59a762d20f987aface8a037ff9b79a0c',
     music: 'c56f6cce2a0a537542d587506b0b998588e3333a7957a26a8ff93150af579bd2',
     art: 'afba122c78bb9577d2ec25be6a2e5e574c6dc9e2766f71e9a1309c99d9b706aa',
@@ -450,11 +453,11 @@ test('the scene composer output is pinned so saved scenes stay stable', () => {
     technology: '895f5e70d70e8f901b81d7b07552b132cfb363379d93975d813fc8b5df4629a4',
     health: '0dd6abdcf2006f0701a197bbbde4d35287887f6f8b7c09c8f9cf12e996089415',
     family: 'e98a6ade9dfdbd4f8e65a27962abf23818e43633e7a23546eaad4cf7130f6b5e',
-    community: 'a040756926e40b97554b6ff461ee3053cb80f01283ff7262eb935b37974e7f08',
+    community: 'dc74ce597276fd27b4faf3201fc23372d2e9d7c50f910db08c93ecefecc84b8c',
     weather: 'a513febfe38b1838b1d958418a490345ac8f06a59aa701390808d0b4e931f099',
     food: '1d2a881f889ff115947bf8af3e0bf28e04a93e3a82a5b0759073495084beb826',
     objects: '96d9514240c792cdbd5e353915f699f20f2b2767ca9840bcb5a4d5053d684287',
-    'water-world': 'aa900aa5e2694dbf3b0a9b44808e59901fd44aed161a4ece554593569bb61bff',
+    'water-world': '485d5f942a450f5b36a597074f993778289f887c177b2e1036d5c8e63bb98589',
   };
   for (const id of ILLUSTRATION_ASSET_IDS) {
     const category = id.slice(0, -'-scene'.length);
@@ -693,7 +696,7 @@ test('every primitive in a scene table actually renders', () => {
     // #290 interiors: the wall furniture (blackboard) and the things a room stands
     // on (desks, shelves, labbench, counter) are all mid-layer; the rack and the
     // basket sit in front of the subject's feet.
-    standing: ['trees', 'bushes', 'towers', 'bubbles', 'graph', 'road', 'traffic-light', 'sign', 'streetlight', 'blackboard', 'desks', 'shelves', 'labbench', 'counter'],
+    standing: ['trees', 'bushes', 'towers', 'bubbles', 'graph', 'road', 'traffic-light', 'sign', 'streetlight', 'blackboard', 'desks', 'shelves', 'labbench', 'counter', 'awning', 'car', 'boat', 'pier'],
     fg: ['grass', 'roots', 'stones', 'boards', 'waves', 'zebra', 'kerb', 'rack', 'basket'],
   };
   // Props reuse the `standing` slot, so they are checked against their own list.
