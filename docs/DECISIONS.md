@@ -4752,3 +4752,18 @@ gặp nhiều nhất) trống hoàn toàn. Một câu hỏi về sang đường 
   đậm lên 0.82 thì nó **che** vạch giữa; cuối cùng vạch giữa thuộc **trung cảnh** (gần chân trời) và
   zebra thuộc **tiền cảnh** (sát chân người xem) — đúng như một con đường thật.
 - **Golden hash lấy lại lần thứ 8**, đúng 2 dòng (`transport`, `safety`), kèm 6 ảnh PNG làm bằng chứng.
+
+## #288 (tiếp) — Cổng UI đo TRẠNG THÁI, nên phải chạy trên app vừa mở
+
+Lượt chạy cổng đầu tiên trên binary mới đỏ: `ui-stage-illustration-check` 135/179,
+`ui-play-surface-check` 740/798 (và số check của cổng thứ hai đổi từ 790 thành 798). Không có hồi quy
+nào: app đang đứng giữa editor với một câu hỏi đã sửa nhưng **chưa lưu**, do chính script kiểm tra ô
+"Không gian" để lại. Khởi động lại app rồi chạy lại: **179/179** và **790/790**.
+
+**Quyết định**
+- **Một cổng UI chỉ có nghĩa trên app vừa khởi động** (hoặc trên trạng thái mà cổng tự dựng và tự dọn).
+  Thêm một bước "đổi backdrop rồi kiểm" vào cùng một cửa sổ là tự làm bẩn phép đo của cổng sau.
+- **Số check khác 790 là dấu hiệu đáng đọc, không phải nhiễu**: nó nói app đang ở màn khác, tức phép
+  đo không còn so sánh được với lần trước.
+- Phép kiểm tính năng mới (11 lựa chọn, blueprint đổi, khung xem trước vẽ `road`) chạy **riêng**, sau
+  đó khởi động lại app rồi mới chạy cổng.

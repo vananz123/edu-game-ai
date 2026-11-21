@@ -16,6 +16,8 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - **Golden hash lấy lại lần thứ 8** (đúng 2 dòng: `transport`, `safety`) — có ảnh `.tmp-art/road-car.png`, `road-crossing.png`, `road-compare.png`, `safety-category.png`, `transport-category.png`, `plain-for-contrast.png` để đối chiếu.
 - Vision model đọc ảnh cuối: *"mặt đường xanh xám tối hơn trời, vạch đứt ở trung cảnh, vạch mép hai bên, vạch sang đường ba dải ở dưới; đọc rõ là phố"* — **không phải người duyệt**.
 - Kiểm: `tsc` sạch · unit **100/100** · `npm run check` 52 tệp · `check:renderer-globals` 1080 hàm/8603 chỗ gọi, không thiếu · `check:scene-runtime` **153.5 KiB**.
+- **Trên binary thật** (dựng lại 10:28, setup 15.70 MiB): `ui-item-assets-editor-check` **157/157**, `ui-stage-illustration-check` **179/179**, `ui-play-surface-check` **790/790**. Đo qua CDP trong cửa sổ thật: ô Không gian có **đủ 11 lựa chọn**, chọn `road` thì `sceneBlueprint.backdrop` thành `road` và khung xem trước **vẽ ra `road` + `zebra`**.
+- **Bài học mới:** lần chạy cổng đầu tiên đỏ (135/179 và 740/798) **không phải hồi quy** — app đang ở giữa editor với thay đổi chưa lưu; khởi động lại sạch thì xanh. Cổng đo trạng thái, nên phải đo trên app vừa mở.
 
 ### 2026-11-16 — #287 AI cloud: không còn ô base URL trống
 - Phản hồi của giáo viên: "phần thêm AI cloud nên để sẵn base url". Kiểm lại thì `gemini`, `openai`, `opencode` **đã** điền sẵn từ registry; ô trống duy nhất là provider **`custom`** ("API tương thích OpenAI (tự cấu hình)") — và đó đúng là cái hiện ra khi giáo viên tự thêm một nhà cung cấp.
