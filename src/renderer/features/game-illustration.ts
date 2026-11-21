@@ -28,6 +28,8 @@ declare const SceneRuntime: {
   isScenePaletteKey(value: unknown): boolean;
   /** #288: place ids (`road`, `classroom`, ...). */
   isSceneBackdropId(value: unknown): boolean;
+  /** #294: draggable node geometry for the editor. */
+  sceneNodeSlots(blueprint: any): any[];
 };
 
 /* Category -> the icon used when a question names none. Mirrors
@@ -89,6 +91,11 @@ function stageIsSceneIconId(value: unknown): boolean {
 /** #288: place ids the scene vocabulary accepts (`road`, `classroom`, ...). */
 function stageIsSceneBackdropId(value: unknown): boolean {
   return SceneRuntime.isSceneBackdropId(value);
+}
+
+/** #294: every node the current blueprint draws, with its geometry in scene px. */
+function stageSceneNodeSlots(blueprint: unknown): any[] {
+  return (SceneRuntime as any).sceneNodeSlots(blueprint) || [];
 }
 
 /**

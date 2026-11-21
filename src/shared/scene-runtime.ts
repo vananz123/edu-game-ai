@@ -35,5 +35,12 @@ export {
   sceneBackdropForCategory,
 } from './scene-asset-catalog';
 export { DEFAULT_SCENE_ICON, normalizeSceneBlueprint, sceneBlueprintFromCategory } from './scene-blueprint';
-export { SCENE_HEIGHT, SCENE_WIDTH, getSceneSpec, renderBlueprintSvg, renderSceneSvg } from './illustration-scene';
+export {
+  SCENE_HEIGHT,
+  SCENE_WIDTH,
+  getSceneSpec,
+  renderBlueprintSvg,
+  renderSceneSvg,
+  sceneNodeSlots,
+} from './illustration-scene';
 export { getIllustrationPalette } from './illustration-registry';

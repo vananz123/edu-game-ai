@@ -385,7 +385,7 @@ function editorItemArtHtml(item) {
     ...(isCustom ? [`<option value="${escapeHtml(assetId)}" selected>Ảnh tự tải lên (giữ nguyên)</option>`] : [])
   ].join('');
   return `<div class="editor-item-art" data-editor-art>
-    <div class="editor-art-thumb${preview ? '' : ' is-empty'}" data-editor-art-thumb>${preview || `<span>${isNone ? 'Không dùng ảnh' : 'Chưa có hình'}</span>`}</div>
+    <div class="editor-art-thumb${preview ? '' : ' is-empty'}" data-editor-art-thumb>${preview || `<span>${isNone ? 'Không dùng ảnh' : 'Chưa có hình'}</span>`}${sceneHandlesHtml(normalized)}</div>
     <div class="editor-art-controls">
       <div class="editor-art-badge" data-editor-art-badge>${escapeHtml(badge)}</div>
       <div class="editor-art-buttons">
@@ -494,6 +494,111 @@ function redrawEditorArtRow(row) {
   next.removeAttribute('data-art-bound');
   row.replaceWith(next);
   wireEditorItemArtRow(next);
+}
+
+/**
+ * #294: drag handles, one per drawn node, positioned in PERCENT of the scene box
+ * so they follow whatever size the preview is rendered at. The handles are the
+ * only way a teacher moves art: the blueprint stores a normalised centre, never
+ * pixels, so the same scene draws correctly at any size (#270 kept coordinates
+ * out of the data for the same reason).
+ */
+function sceneHandlesHtml(blueprint) {
+  if (!blueprint || typeof stageSceneNodeSlots !== 'function') return '';
+  const slots = stageSceneNodeSlots(blueprint);
+  if (!slots.length) return '';
+  const handles = slots.map(slot => {
+    const left = (slot.x / 320) * 100;
+    const top = (slot.y / 200) * 100;
+    // The thumb keeps the scene's 320x200 aspect, so percent of the box is
+    // percent of the art: one handle geometry serves every preview size.
+    const width = Math.max(12, (slot.size / 320) * 100);
+    const height = (slot.size / 200) * 100;
+    return `<button type="button" class="editor-art-handle" data-art-handle="${escapeHtml(slot.key)}" ` +
+      `style="left:${left.toFixed(2)}%;top:${top.toFixed(2)}%;width:${width.toFixed(2)}%;` +
+      `height:${height.toFixed(2)}%" ` +
+      `title="Kéo để đặt ${escapeHtml(slot.label)} ở chỗ khác"></button>`;
+  }).join('');
+  return `<div class="editor-art-handles" data-editor-art-handles>${handles}</div>`;
+}
+
+/**
+ * #294: pointer drag over one handle. The scene preview is redrawn from the
+ * blueprint when the pointer is released, so a drag never fights a re-render:
+ * the handle moves under the finger and the art follows on release.
+ */
+function wireSceneHandles(live) {
+  const field = live.parentElement ? live.parentElement.querySelector('[data-field="sceneBlueprint"]') : null;
+  if (!field || typeof stageNormalizeBlueprint !== 'function') return;
+  live.querySelectorAll('[data-art-handle]').forEach(handle => {
+    /* #294: double-click puts ONE node back where the layout drew it, without
+       touching the others — the row's "Tự động" resets the whole picture. */
+    handle.addEventListener('dblclick', event => {
+      event.preventDefault();
+      const blueprint = stageNormalizeBlueprint(field.value);
+      if (!blueprint || !blueprint.freePos) return;
+      const key = handle.getAttribute('data-art-handle') || '';
+      if (!blueprint.freePos[key]) return;
+      const freePos = Object.assign({}, blueprint.freePos);
+      delete freePos[key];
+      const next = Object.assign({}, blueprint);
+      if (Object.keys(freePos).length) next.freePos = freePos;
+      else delete next.freePos;
+      const clean = stageNormalizeBlueprint(next);
+      if (!clean) return;
+      field.value = JSON.stringify(clean);
+      redrawEditorArtRow(live);
+    });
+    handle.addEventListener('pointerdown', event => {
+      event.preventDefault();
+      const blueprint = stageNormalizeBlueprint(field.value);
+      if (!blueprint) return;
+      const thumb = live.querySelector('[data-editor-art-thumb]');
+      if (!thumb) return;
+      const rect = thumb.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      const key = handle.getAttribute('data-art-handle') || '';
+      const previous = blueprint.freePos && blueprint.freePos[key] ? blueprint.freePos[key] : null;
+      const slot = stageSceneNodeSlots(blueprint).filter(item => item.key === key)[0];
+      if (!slot) return;
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const startLeft = slot.x / 320;
+      const startTop = slot.y / 200;
+      const scale = previous ? previous.s : 1;
+      let moved = false;
+      const onMove = moveEvent => {
+        const dx = (moveEvent.clientX - startX) / rect.width;
+        const dy = (moveEvent.clientY - startY) / rect.height;
+        if (Math.abs(dx) > 0.004 || Math.abs(dy) > 0.004) moved = true;
+        const nx = Math.min(1, Math.max(0, startLeft + dx + slot.size / 640));
+        const ny = Math.min(1, Math.max(0, startTop + dy + slot.size / 400));
+        handle.style.left = ((nx - slot.size / 640) * 100).toFixed(2) + '%';
+        handle.style.top = ((ny - slot.size / 400) * 100).toFixed(2) + '%';
+        handle.dataset.pendingX = String(Math.round(nx * 1000) / 1000);
+        handle.dataset.pendingY = String(Math.round(ny * 1000) / 1000);
+      };
+      const onUp = () => {
+        document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointerup', onUp);
+        if (!moved) return;
+        const next = Object.assign({}, blueprint);
+        const freePos = Object.assign({}, next.freePos || {});
+        freePos[key] = {
+          x: Number(handle.dataset.pendingX || 0.5),
+          y: Number(handle.dataset.pendingY || 0.5),
+          s: scale,
+        };
+        next.freePos = freePos;
+        const clean = stageNormalizeBlueprint(next);
+        if (!clean) return;
+        field.value = JSON.stringify(clean);
+        redrawEditorArtRow(live);
+      };
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', onUp);
+    });
+  });
 }
 
 /**
@@ -620,6 +725,8 @@ function applyEditorSceneSlots(row) {
  * `change` listener is not a reliable path for this control.
  */
 function wireEditorItemArtRow(row) {
+  // #294: the pointer handles live on the preview, not on a form control.
+  wireSceneHandles(row);
   if (!row || row.dataset.artBound === '1') return;
   row.dataset.artBound = '1';
   // The handlers resolve the *current* row from the clicked node each time: a redraw

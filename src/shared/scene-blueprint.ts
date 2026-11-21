@@ -18,6 +18,8 @@ import {
   SCENE_BLUEPRINT_MAX_BYTES,
   SCENE_BLUEPRINT_VERSION,
   SCENE_COMPARE_SUB_ICON_POSITIONS,
+  SCENE_FREE_POS_MAX_SCALE,
+  SCENE_FREE_POS_MIN_SCALE,
   SCENE_MAX_PROPS,
   SCENE_MAX_SUB_ICONS,
   SCENE_PROCESS_MAX_EXTRA_STEPS,
@@ -70,6 +72,14 @@ export interface SceneBlueprint {
   subIcons?: SceneSubIcon[];
   /** Up to two keys of `SCENE_ICON_IDS` standing on the ground (#259). */
   props?: string[];
+  /**
+   * #294 hand-placed nodes. Key is one of `SCENE_FREE_POS_KEYS` (`subject`,
+   * `second`, `sign`, `sub-0..3`, `prop-0..1`, `step-1..3`, `around-1..4`); the
+   * value is a NORMALISED centre `x`,`y` (0..1 of the scene box) plus a scale.
+   * Absent means "derive the position from the layout", so an old `.egame` and a
+   * model reply keep drawing exactly as before.
+   */
+  freePos?: Record<string, { x: number; y: number; s: number }>;
 }
 
 /** `book-open` is the default subject (same icon as #89's fallback scene). */
@@ -358,6 +368,38 @@ export function normalizeSceneBlueprint(
     }
   }
 
+  /* #294: hand-placed nodes. Only keys this layout can actually draw are kept —
+     a `step-3` on a `single` scene would be a position for something that is not
+     there — and every number is clamped, so a corrupt file cannot push a node
+     off the frame. */
+  const freePos: Record<string, { x: number; y: number; s: number }> = {};
+  if (isPlainObject(raw.freePos)) {
+    const allowed = allowedFreePosKeys(layout, subIcons.length, props.length, steps.length, around.length);
+    for (const key of Object.keys(raw.freePos as Record<string, unknown>)) {
+      if (!allowed.includes(key)) {
+        issues.push('freePos');
+        continue;
+      }
+      const entry = (raw.freePos as Record<string, unknown>)[key];
+      if (!isPlainObject(entry)) {
+        issues.push('freePos');
+        continue;
+      }
+      const x = Number(entry.x);
+      const y = Number(entry.y);
+      const s = entry.s === undefined ? 1 : Number(entry.s);
+      if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(s)) {
+        issues.push('freePos');
+        continue;
+      }
+      freePos[key] = {
+        x: round3(Math.min(1, Math.max(0, x))),
+        y: round3(Math.min(1, Math.max(0, y))),
+        s: round3(Math.min(SCENE_FREE_POS_MAX_SCALE, Math.max(SCENE_FREE_POS_MIN_SCALE, s))),
+      };
+    }
+  }
+
   return {
     v: SCENE_BLUEPRINT_VERSION,
     layout,
@@ -370,7 +412,29 @@ export function normalizeSceneBlueprint(
     ...(layout === 'surround' && around.length ? { around } : {}),
     ...(subIcons.length ? { subIcons } : {}),
     ...(props.length ? { props } : {}),
+    ...(Object.keys(freePos).length ? { freePos } : {}),
   };
+}
+
+/** Keys a given layout can draw, in editor order (#294). */
+function allowedFreePosKeys(
+  layout: SceneBlueprintLayout,
+  subCount: number,
+  propCount: number,
+  stepCount: number,
+  aroundCount: number
+): string[] {
+  const keys = ['subject'];
+  for (let i = 0; i < subCount; i += 1) keys.push(`sub-${i}`);
+  for (let i = 0; i < propCount; i += 1) keys.push(`prop-${i}`);
+  if (layout === 'compare') keys.push('second', 'sign');
+  if (layout === 'process') for (let i = 1; i <= stepCount; i += 1) keys.push(`step-${i}`);
+  if (layout === 'surround') for (let i = 1; i <= aroundCount; i += 1) keys.push(`around-${i}`);
+  return keys;
+}
+
+function round3(value: number): number {
+  return Math.round(value * 1000) / 1000;
 }
 
 /**

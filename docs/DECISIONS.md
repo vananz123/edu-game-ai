@@ -4845,3 +4845,24 @@ Cả hai đều không nói được *chỗ nào*, đúng lỗi đã đặt tên
   và đó là lỗi #277 lặp lại (độ sâu đến từ chỗ tiếp đất).
 - **Sọc mái hiên là hai mảng màu phẳng**, không blend, không pattern: giữ luật #278.
 - **Golden hash lấy lại lần thứ 12, đúng 3/24 dòng** — chỉ những category mà *chỗ* thay đổi.
+
+## #294 — Kéo tự do KHÔNG có nghĩa là đưa toạ độ vào dữ liệu mẫu
+
+Giáo viên yêu cầu "edit tự do": kéo hình đến chỗ mình muốn. Cách dễ là thêm `x`,`y` pixel vào
+blueprint, nhưng #270 đã cấm đúng điều đó vì bốn lý do — model không phát ra được, `.egame` phình
+theo từng hình, mọi golden hash đổi, và `compare`/`process`/`surround` mất nghĩa hình học.
+
+**Quyết định**
+- **Toạ độ được chuẩn hoá và TUỲ CHỌN**: `freePos[key] = {x, y, s}`, `x`/`y` là tâm trong 0..1 của
+  khung cảnh. Thiếu khoá ⇒ engine suy ra như cũ, nên cảnh cũ, phản hồi của model và 24 golden hash
+  **không đổi một byte** (đã kiểm bằng cách chạy lại toàn bộ hash).
+- **`v` vẫn 1.** Đây là khoá tuỳ chọn thứ sáu theo đúng cách #256 đã mở rộng blueprint.
+- **Khoá hợp lệ phụ thuộc LAYOUT** (`step-3` không tồn tại trong cảnh `single`), và mọi số bị kẹp.
+  Một file hỏng không thể đẩy hình ra ngoài khung.
+- **Bóng đổ đi theo hình đã kéo.** Đặt hình ở chỗ khác mà để bóng ở chỗ cũ là lỗi #277 lặp lại, và
+  trẻ con sẽ thấy hình đang bay.
+- **Cảnh chỉ vẽ lại lúc THẢ tay**, không vẽ lại theo từng pixel chuột. Kéo mà re-render liên tục thì
+  phần tử đang bị giữ sẽ bị thay thế giữa chừng (#128: một lần vẽ lại đã từng làm chết mọi control).
+- **AI không phát ra `freePos`.** Vị trí là ý của giáo viên, không phải của model; prompt không đổi.
+- **Trần blueprint 600 → 1000 byte** là một đánh đổi có ý thức: mất phần giáo viên vừa kéo tệ hơn
+  nhiều so với 400 byte trong một file `.egame` (~334 byte/câu, #274).

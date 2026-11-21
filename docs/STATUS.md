@@ -7,6 +7,17 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-16 — #294 Sửa cảnh bằng cách KÉO: đặt tự do từng hình, không cần toạ độ trong dữ liệu mẫu
+- Giáo viên yêu cầu "tính năng edit tự do". Trước đó mọi hình do **layout suy ra** (#270 cấm toạ độ), nên không có cách nào đổi chỗ một hình mà vẫn giữ cảnh hợp lệ.
+- **Dữ liệu:** thêm khoá **tuỳ chọn** `freePos` vào blueprint (`v` vẫn **1**): `{ "<khoá>": { x, y, s } }` với `x`,`y` là **tâm chuẩn hoá 0..1** của khung cảnh và `s` là cỡ (0.5–1.6). Khoá hợp lệ theo layout: `subject`, `second`, `sign`, `sub-0..3`, `prop-0..1`, `step-1..3`, `around-1..4`. **Không pixel, không SVG, không toạ độ tuyệt đối** ⇒ model không cần phát ra, cảnh cũ và mọi golden hash **không đổi** (đã kiểm: 24/24 hash vẫn xanh khi không có `freePos`).
+- **Chuẩn hoá:** kẹp `x`,`y` vào 0..1, `s` vào 0.5–1.6, bỏ khoá layout không vẽ tới, bỏ giá trị không phải số, làm tròn 3 chữ số, **idempotent**; trần blueprint 600 → **1000 byte** (một cảnh đặt tay đủ 7 nút ≈ 340 byte — mất chỉnh sửa của giáo viên tệ hơn 400 byte).
+- **Vẽ:** `nodeTransform()` — không có `freePos` thì phát ra **đúng** `translate(left top)` như cũ; có thì `translate(tâm) scale(s) translate(-size/2)`. **Bóng đổ đi theo hình** (nếu không sẽ chỉ vào đất trống — lỗi #277 lặp lại).
+- **Editor:** mỗi hình đang vẽ có một **nút kéo** phủ đúng vị trí (`sceneNodeSlots()` tính hình học, `%` để theo mọi cỡ khung). Kéo → thả thì cảnh vẽ lại từ blueprint; **nhấp đúp** trả riêng một hình về chỗ cũ. Kéo không giành với re-render vì cảnh chỉ vẽ lại lúc thả.
+- **6 test mới** (`tests/unit/scene-free-pos.test.ts`): không `freePos` ⇒ hình học như cũ · đặt tay thì `translate`+`scale` đổi và **bóng đổ theo** · kẹp/lọc/idempotent · sàn cỡ · cảnh đặt tay đủ 7 nút vẫn ≤ 1000 byte · `sceneNodeSlots` đúng cho cả 4 layout.
+- Kiểm: `tsc` sạch · unit **101/101** (48.7 s) · `npm run check` 52 tệp · `renderer-globals` sạch (1088 hàm/8694 chỗ gọi) · `check:scene-runtime` **167.4 KiB** · `check:embedded` **6196.8 KiB**.
+- **Kiểm trên app thật (binary dựng lại, CDP 9569):** editor **157/157**, stage **179/179**, play **790/790**; probe kéo thật trong app: 1 nút kéo cho hình chính, kéo rồi thả ⇒ `sceneBlueprint.freePos = {"subject":{"x":0.227,"y":0.585,"s":1}}`, nhấp đúp ⇒ `freePos` biến mất. **Chưa kiểm bằng mắt người** hình đã kéo trông thế nào.
+- Installer: **16 470 550 byte** / 15.71 MiB / 21-11 **17:28** / SHA-256 `a918779945e908f3f89f93cd073836ce9751985d9149453655069cedb95046de`.
+
 ### 2026-11-16 — #293 `city` thành phố có mái hiên + ô tô, `sea` thành biển có thuyền buồm + cầu tàu
 - Hai không gian còn sơ sài nhất: `city` chỉ là skyline + bụi cây, `sea` chỉ là sóng + bong bóng (và còn là **cảnh đêm** vì dùng moon+stars). Cả hai đều không nói được *chỗ nào*, đúng lỗi mà #288 đã đặt tên.
 - **4 primitive mới**: `awning` (mái hiên sọc + cửa hiệu, sọc là hai mảng màu phẳng, không blend), `car` (ô tô đỗ bên vỉa hè: thân, 2 cửa kính, 2 bánh, đèn), `boat` (thuyền buồm: thân trên đường mặt nước, cột buồm, buồm trắng + buồm màu), `pier` (cầu tàu gỗ: mặt ván + 3 cọc + lan can).

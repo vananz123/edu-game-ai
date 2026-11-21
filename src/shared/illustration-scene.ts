@@ -925,11 +925,12 @@ const SCENE_SUB_ICON_SLOTS: Readonly<Record<SceneSubIconPosition, { x: number; y
 function renderSubIcons(
   subIcons: readonly SceneSubIcon[],
   palette: IllustrationPalette,
-  compare: boolean
+  compare: boolean,
+  free: SceneFreePositions = {}
 ): string {
   const size = compare ? SCENE_COMPARE_SUB_ICON_SIZE : SCENE_SUB_ICON_SIZE;
   const taken: string[] = [];
-  const icons = subIcons.slice(0, SCENE_MAX_SUB_ICONS).map((sub) => {
+  const icons = subIcons.slice(0, SCENE_MAX_SUB_ICONS).map((sub, index) => {
     const svg = renderIconSvg(sub.icon, { size, className: 'stage-illustration-subicon' });
     if (!svg) return '';
     let position: SceneSubIconPosition = sub.position;
@@ -949,7 +950,7 @@ function renderSubIcons(
     return (
       `<g data-scene-subicon="${esc(sub.icon)}" data-scene-position="${esc(position)}" ` +
       `data-scene-size="${size}" ` +
-      `transform="translate(${slot.x} ${slot.y})" ` +
+      `transform="${nodeTransform(`sub-${index}`, slot.x, slot.y, size, free)}" ` +
       `color="${esc(palette.cool || palette.ink)}" opacity="0.9">${svg}</g>`
     );
   }).join('');
@@ -965,7 +966,11 @@ function renderSubIcons(
  * The surround ring (#270): up to four items in the four frame corners, drawn in
  * `ink` so the subject stays the one glowing thing a child is asked about.
  */
-function renderSurroundRing(items: readonly string[], palette: IllustrationPalette): string {
+function renderSurroundRing(
+  items: readonly string[],
+  palette: IllustrationPalette,
+  free: SceneFreePositions = {}
+): string {
   const slots = Object.keys(SCENE_SURROUND_SLOT_PX);
   return items.map((icon, index) => {
     const slot = SCENE_SURROUND_SLOT_PX[slots[index]] || SCENE_SURROUND_SLOT_PX['top-left'];
@@ -973,7 +978,7 @@ function renderSurroundRing(items: readonly string[], palette: IllustrationPalet
     if (!svg) return '';
     return (
       `<g data-scene-around="${index + 1}" data-scene-position="${esc(slots[index])}" ` +
-      `data-scene-size="${SCENE_SURROUND_ICON_SIZE}" transform="translate(${slot.x} ${slot.y})" ` +
+      `data-scene-size="${SCENE_SURROUND_ICON_SIZE}" transform="${nodeTransform(`around-${index + 1}`, slot.x, slot.y, SCENE_SURROUND_ICON_SIZE, free)}" ` +
       `color="${esc(palette.ink)}" opacity="0.85">${svg}</g>`
     );
   }).join('');
@@ -984,7 +989,11 @@ function renderSurroundRing(items: readonly string[], palette: IllustrationPalet
  * Returns '' when a stage will not draw, so the caller falls back to the single
  * picture instead of showing an arrow pointing at nothing.
  */
-function renderProcessStrip(stages: readonly string[], palette: IllustrationPalette): string {
+function renderProcessStrip(
+  stages: readonly string[],
+  palette: IllustrationPalette,
+  free: SceneFreePositions = {}
+): string {
   const xs = SCENE_PROCESS_STEP_X[stages.length];
   if (!xs) return '';
   const boxes: string[] = [];
@@ -996,7 +1005,7 @@ function renderProcessStrip(stages: readonly string[], palette: IllustrationPale
     if (!svg) return '';
     boxes.push(
       `<g data-scene-step="${index + 1}" data-scene-size="${SCENE_PROCESS_STEP_SIZE}" ` +
-        `transform="translate(${xs[index]} ${SCENE_PROCESS_STEP_TOP})" color="${esc(palette.glow)}">` +
+        `transform="${nodeTransform(`step-${index + 1}`, xs[index], SCENE_PROCESS_STEP_TOP, SCENE_PROCESS_STEP_SIZE, free)}" color="${esc(palette.glow)}">` +
         groundShadow('stage', SCENE_PROCESS_STEP_SIZE / 2, SCENE_PROCESS_STEP_SIZE, SCENE_PROCESS_STEP_SIZE, palette) +
         `${svg}</g>`
     );
@@ -1057,7 +1066,11 @@ function groundShadow(
     `fill="${esc(palette.ink)}" opacity="${SCENE_SHADOW_OPACITY}"/>`;
 }
 
-function renderGroundProps(props: readonly string[], palette: IllustrationPalette): string {
+function renderGroundProps(
+  props: readonly string[],
+  palette: IllustrationPalette,
+  free: SceneFreePositions = {}
+): string {
   const slots = [
     { x: 12, y: SCENE_HEIGHT - 14 - SCENE_GROUND_PROP_SIZE },
     { x: SCENE_WIDTH - 12 - SCENE_GROUND_PROP_SIZE, y: SCENE_HEIGHT - 14 - SCENE_GROUND_PROP_SIZE },
@@ -1067,7 +1080,7 @@ function renderGroundProps(props: readonly string[], palette: IllustrationPalett
     if (!svg) return '';
     return (
       `<g data-scene-prop="${esc(name)}" data-scene-position="ground-${index === 0 ? 'left' : 'right'}" ` +
-      `transform="translate(${slots[index].x} ${slots[index].y})" ` +
+      `transform="${nodeTransform(`prop-${index}`, slots[index].x, slots[index].y, SCENE_GROUND_PROP_SIZE, free)}" ` +
       `color="${esc(palette.warm || palette.glow)}" opacity="0.85">` +
       groundShadow('prop', slots[index].x + SCENE_GROUND_PROP_SIZE / 2, slots[index].y + SCENE_GROUND_PROP_SIZE, SCENE_GROUND_PROP_SIZE, palette) +
       `${svg}</g>`
@@ -1080,6 +1093,148 @@ function renderGroundProps(props: readonly string[], palette: IllustrationPalett
  * The one composer. `renderSceneSvg` passes an empty sub-icon list, so a game
  * saved before blueprints existed renders byte-identically (#70/#72 contract).
  */
+/** #294: one hand-placed node — normalised centre (0..1) plus a scale. */
+export type SceneFreePos = { x: number; y: number; s: number };
+export type SceneFreePositions = Readonly<Record<string, SceneFreePos>>;
+
+/**
+ * The transform for one scene node. Without a hand-placed entry it is the same
+ * translate(left top) the engine has always emitted, so an untouched blueprint
+ * draws byte-identically (#294 keeps old scenes and every golden unchanged).
+ */
+function nodeTransform(
+  key: string,
+  left: number,
+  top: number,
+  boxSize: number,
+  free?: SceneFreePositions
+): string {
+  const entry = free && free[key];
+  if (!entry) return `translate(${left} ${top})`;
+  const cx = Math.round(entry.x * SCENE_WIDTH);
+  const cy = Math.round(entry.y * SCENE_HEIGHT);
+  const scale = Math.round(entry.s * 100) / 100;
+  return (
+    `translate(${cx} ${cy}) scale(${scale}) ` +
+    `translate(${-Math.round(boxSize / 2)} ${-Math.round(boxSize / 2)})`
+  );
+}
+
+/** One draggable node as the EDITOR sees it: top-left px, box size, scale. */
+export interface SceneNodeSlot {
+  key: string;
+  label: string;
+  x: number;
+  y: number;
+  size: number;
+  scale: number;
+}
+
+/**
+ * Every node the current blueprint draws, with its DEFAULT geometry (or the
+ * hand-placed one). Used by the editor to put a drag handle on screen and by the
+ * #294 tests to prove a handle sits where the art is.
+ */
+export function sceneNodeSlots(blueprint: SceneBlueprint): SceneNodeSlot[] {
+  if (!blueprint || typeof blueprint !== 'object') return [];
+  const spec = getBackdropSpec(blueprint.backdrop);
+  const free = freePositionsOf(blueprint);
+  const subs = Array.isArray(blueprint.subIcons) ? blueprint.subIcons : [];
+  const props = Array.isArray(blueprint.props) ? blueprint.props : [];
+  const steps =
+    blueprint.layout === 'process' && Array.isArray(blueprint.steps)
+      ? [blueprint.mainIcon, ...blueprint.steps]
+      : [];
+  const around = blueprint.layout === 'surround' && Array.isArray(blueprint.around) ? blueprint.around : [];
+  const isCompare = blueprint.layout === 'compare' && Boolean(blueprint.compareIcon);
+  const isSurround = around.length > 0;
+  const subjectSize = isSurround
+    ? SCENE_SURROUND_SUBJECT_SIZE
+    : isCompare
+      ? SCENE_COMPARE_SUBJECT_SIZE
+      : SCENE_SUBJECT_SIZE;
+  const subjectY = isCompare ? spec.subjectY + SCENE_COMPARE_SUBJECT_LIFT : spec.subjectY;
+  const slots: SceneNodeSlot[] = [];
+
+  const push = (key: string, label: string, left: number, top: number, size: number) => {
+    const entry = free[key];
+    slots.push({
+      key,
+      label,
+      x: entry ? Math.round(entry.x * SCENE_WIDTH - size / 2) : Math.round(left),
+      y: entry ? Math.round(entry.y * SCENE_HEIGHT - size / 2) : Math.round(top),
+      size,
+      scale: entry ? entry.s : 1,
+    });
+  };
+
+  if (isSurround) {
+    push(
+      'subject',
+      'Hình chính',
+      (SCENE_WIDTH - SCENE_SURROUND_SUBJECT_SIZE) / 2,
+      SCENE_SURROUND_SUBJECT_TOP,
+      SCENE_SURROUND_SUBJECT_SIZE
+    );
+  } else if (steps.length >= 2) {
+    const xs = SCENE_PROCESS_STEP_X[steps.length] || [];
+    steps.forEach((_icon, index) => {
+      push(
+        `step-${index + 1}`,
+        index === 0 ? 'Bậc 1' : `Bậc ${index + 1}`,
+        xs[index] || 0,
+        SCENE_PROCESS_STEP_TOP,
+        SCENE_PROCESS_STEP_SIZE
+      );
+    });
+  } else if (isCompare) {
+    push('subject', 'Hình trái', SCENE_COMPARE_SUBJECT_X.left, subjectY - subjectSize / 2, subjectSize);
+    push('second', 'Hình phải', SCENE_COMPARE_SUBJECT_X.right, subjectY - subjectSize / 2, subjectSize);
+    push(
+      'sign',
+      'Dấu so sánh',
+      (SCENE_WIDTH - SCENE_COMPARE_SIGN_SIZE) / 2,
+      subjectY - SCENE_COMPARE_SIGN_SIZE / 2,
+      SCENE_COMPARE_SIGN_SIZE
+    );
+  } else {
+    push(
+      'subject',
+      'Hình chính',
+      (SCENE_WIDTH - SCENE_SUBJECT_SIZE) / 2,
+      subjectY - subjectSize / 2,
+      SCENE_SUBJECT_SIZE
+    );
+  }
+
+  const subSize = isCompare || steps.length >= 2 ? SCENE_COMPARE_SUB_ICON_SIZE : SCENE_SUB_ICON_SIZE;
+  subs.forEach((sub, index) => {
+    const table = isCompare || steps.length >= 2 ? SCENE_COMPARE_SUB_ICON_SLOTS : SCENE_SUB_ICON_SLOTS;
+    const slot = table[sub.position] || SCENE_SUB_ICON_SLOTS.left;
+    push(`sub-${index}`, `Góc ${index + 1}`, slot.x, slot.y, subSize);
+  });
+
+  props.forEach((_icon, index) => {
+    const left = index === 0 ? 12 : SCENE_WIDTH - 12 - SCENE_GROUND_PROP_SIZE;
+    push(`prop-${index}`, `Vật ${index + 1}`, left, SCENE_HEIGHT - 14 - SCENE_GROUND_PROP_SIZE, SCENE_GROUND_PROP_SIZE);
+  });
+
+  if (isSurround) {
+    const ringKeys = Object.keys(SCENE_SURROUND_SLOT_PX);
+    around.forEach((_icon, index) => {
+      const slot = SCENE_SURROUND_SLOT_PX[ringKeys[index]] || SCENE_SURROUND_SLOT_PX['top-left'];
+      push(`around-${index + 1}`, `Vòng ${index + 1}`, slot.x, slot.y, SCENE_SURROUND_ICON_SIZE);
+    });
+  }
+
+  return slots;
+}
+
+function freePositionsOf(blueprint: SceneBlueprint): SceneFreePositions {
+  const raw = blueprint && (blueprint as { freePos?: unknown }).freePos;
+  return raw && typeof raw === 'object' ? (raw as SceneFreePositions) : {};
+}
+
 function composeSceneSvg(
   spec: SceneSpec,
   palette: IllustrationPalette,
@@ -1089,7 +1244,8 @@ function composeSceneSvg(
   options: SceneSvgOptions = {},
   compare: { second: string; sign: SceneCompareSign | undefined } | null = null,
   processStages: readonly string[] = [],
-  surroundRing: readonly string[] = []
+  surroundRing: readonly string[] = [],
+  free: SceneFreePositions = {}
 ): string {
   if (!subject) return '';
 
@@ -1105,22 +1261,31 @@ function composeSceneSvg(
       ? SCENE_COMPARE_SUBJECT_SIZE
       : SCENE_SUBJECT_SIZE;
   const subjectY = isCompare ? spec.subjectY + SCENE_COMPARE_SUBJECT_LIFT : spec.subjectY;
-  const y = Math.round(subjectY - subjectSize / 2);
+  let y = Math.round(subjectY - subjectSize / 2);
   const sky = palette.sky || palette.fill;
   const ground = palette.ground || darken(palette.fill);
 
   // #277: contact shadows for whatever stands on the ground. They are emitted with
   // the ground plane (`mid`), so the subject and every prop are always in front of
   // their own shadow no matter which layout is drawing.
+  // #294: a dragged subject takes its shadow with it. A shadow left at the
+  // derived position would point at empty ground (#277 all over again).
+  const subjectFree = free['subject'];
+  if (subjectFree) {
+    y = Math.round(subjectFree.y * SCENE_HEIGHT - subjectSize / 2);
+  }
   const feetY = y + subjectSize;
+  // #294: a dragged subject keeps its feet inside its own shadow, so the shadow
+  // centre follows the hand-placed x as well as the derived one.
+  const shadowX = (derived: number): number => (subjectFree ? subjectFree.x * SCENE_WIDTH : derived);
   const subjectShadows = isSurround
-    ? groundShadow('subject', SCENE_WIDTH / 2, SCENE_SURROUND_SUBJECT_TOP + SCENE_SURROUND_SUBJECT_SIZE, SCENE_SURROUND_SUBJECT_SIZE, palette)
+    ? groundShadow('subject', shadowX(SCENE_WIDTH / 2), SCENE_SURROUND_SUBJECT_TOP + SCENE_SURROUND_SUBJECT_SIZE, SCENE_SURROUND_SUBJECT_SIZE, palette)
     : processStages.length >= 2
       ? '' // the strip draws one per stage instead
       : isCompare
-        ? groundShadow('subject', SCENE_COMPARE_SUBJECT_X.left + subjectSize / 2, feetY, subjectSize, palette) +
+        ? groundShadow('subject', shadowX(SCENE_COMPARE_SUBJECT_X.left + subjectSize / 2), feetY, subjectSize, palette) +
           groundShadow('subject', SCENE_COMPARE_SUBJECT_X.right + subjectSize / 2, feetY, subjectSize, palette)
-        : groundShadow('subject', SCENE_WIDTH / 2, feetY, subjectSize, palette);
+        : groundShadow('subject', shadowX(SCENE_WIDTH / 2), feetY, subjectSize, palette);
 
   const attrs: string[] = [];
   if (options.assetId) attrs.push(`data-illustration="${esc(options.assetId)}"`);
@@ -1152,19 +1317,19 @@ function composeSceneSvg(
     // as a picture instead of a diagram.
     layer('subject', surroundRing.length
       ? `<g data-scene-subject="main" data-scene-size="${SCENE_SURROUND_SUBJECT_SIZE}" ` +
-        `transform="translate(${Math.round((SCENE_WIDTH - SCENE_SURROUND_SUBJECT_SIZE) / 2)} ${SCENE_SURROUND_SUBJECT_TOP})" ` +
+        `transform="${nodeTransform('subject', Math.round((SCENE_WIDTH - SCENE_SURROUND_SUBJECT_SIZE) / 2), SCENE_SURROUND_SUBJECT_TOP, SCENE_SURROUND_SUBJECT_SIZE, free)}" ` +
         `color="${esc(palette.glow)}">${subject}</g>`
       : processStages.length >= 2
       // #267: a sequence is drawn as a strip, not as one centre picture.
-      ? renderProcessStrip(processStages, palette) || `<g transform="translate(${Math.round((SCENE_WIDTH - SCENE_SUBJECT_SIZE) / 2)} ${y})" color="${esc(palette.glow)}">${subject}</g>`
+      ? renderProcessStrip(processStages, palette) || `<g transform="${nodeTransform('subject', Math.round((SCENE_WIDTH - SCENE_SUBJECT_SIZE) / 2), y, SCENE_SUBJECT_SIZE, free)}" color="${esc(palette.glow)}">${subject}</g>`
       : isCompare
-      ? `<g data-scene-subject="main" data-scene-size="${subjectSize}" transform="translate(${SCENE_COMPARE_SUBJECT_X.left} ${y})" color="${esc(palette.glow)}">${subject}</g>` +
-        `<g data-scene-subject="second" data-scene-size="${subjectSize}" transform="translate(${SCENE_COMPARE_SUBJECT_X.right} ${y})" color="${esc(palette.ink)}">${compare!.second}</g>`
-      : `<g transform="translate(${Math.round((SCENE_WIDTH - SCENE_SUBJECT_SIZE) / 2)} ${y})" color="${esc(palette.glow)}">${subject}</g>`) +
-    layer('props', primitivesOf(spec.standing).map((p) => renderProps(p, palette)).join('') + renderGroundProps(groundProps, palette) + renderSurroundRing(surroundRing, palette) + renderSubIcons(subIcons, palette, isCompare || processStages.length >= 2)) +
+      ? `<g data-scene-subject="main" data-scene-size="${subjectSize}" transform="${nodeTransform('subject', SCENE_COMPARE_SUBJECT_X.left, y, subjectSize, free)}" color="${esc(palette.glow)}">${subject}</g>` +
+        `<g data-scene-subject="second" data-scene-size="${subjectSize}" transform="${nodeTransform('second', SCENE_COMPARE_SUBJECT_X.right, y, subjectSize, free)}" color="${esc(palette.ink)}">${compare!.second}</g>`
+      : `<g transform="${nodeTransform('subject', Math.round((SCENE_WIDTH - SCENE_SUBJECT_SIZE) / 2), y, SCENE_SUBJECT_SIZE, free)}" color="${esc(palette.glow)}">${subject}</g>`) +
+    layer('props', primitivesOf(spec.standing).map((p) => renderProps(p, palette)).join('') + renderGroundProps(groundProps, palette, free) + renderSurroundRing(surroundRing, palette, free) + renderSubIcons(subIcons, palette, isCompare || processStages.length >= 2, free)) +
     layer('sign', isCompare
       ? `<g data-scene-sign="${esc(String(compare!.sign || ''))}" data-scene-size="${SCENE_COMPARE_SIGN_SIZE}" ` +
-        `transform="translate(${SCENE_WIDTH / 2 - SCENE_COMPARE_SIGN_SIZE / 2} ${Math.round(subjectY - SCENE_COMPARE_SIGN_SIZE / 2)})" ` +
+        `transform="${nodeTransform('sign', SCENE_WIDTH / 2 - SCENE_COMPARE_SIGN_SIZE / 2, Math.round(subjectY - SCENE_COMPARE_SIGN_SIZE / 2), SCENE_COMPARE_SIGN_SIZE, free)}" ` +
         `color="${esc(palette.ink)}">${renderCompareSign(compare!.sign, palette)}</g>`
       : '') +
     layer('fg', primitivesOf(spec.fg).map((p) => renderFg(p, palette)).join('')) +
@@ -1232,7 +1397,8 @@ export function renderBlueprintSvg(
     blueprint.layout === 'process' && Array.isArray(blueprint.steps)
       ? [blueprint.mainIcon, ...blueprint.steps]
       : [],
-    blueprint.layout === 'surround' && Array.isArray(blueprint.around) ? blueprint.around : []
+    blueprint.layout === 'surround' && Array.isArray(blueprint.around) ? blueprint.around : [],
+    freePositionsOf(blueprint)
   );
 }
 

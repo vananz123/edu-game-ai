@@ -65,7 +65,34 @@ export const SCENE_PROCESS_MAX_EXTRA_STEPS = 2;
 export const SCENE_PROCESS_SUB_ICON_POSITIONS = Object.freeze(['top-left', 'top-right'] as const);
 
 /** Rejected above this size. A valid blueprint is ~120–180 bytes. */
-export const SCENE_BLUEPRINT_MAX_BYTES = 600;
+/* #294: free placement. A teacher may drag any drawn node; the blueprint stores
+ * a normalised centre (0..1 of the scene box) and a scale, never pixels, never
+ * raw SVG. The keys are the slots the editor can drag, so an unknown key is a
+ * no-op instead of a payload the renderer has to guess at. */
+export const SCENE_FREE_POS_MIN_SCALE = 0.5;
+export const SCENE_FREE_POS_MAX_SCALE = 1.6;
+export const SCENE_FREE_POS_KEYS: readonly string[] = Object.freeze([
+  'subject',
+  'second',
+  'sign',
+  'sub-0',
+  'sub-1',
+  'sub-2',
+  'sub-3',
+  'prop-0',
+  'prop-1',
+  'step-1',
+  'step-2',
+  'step-3',
+  'around-1',
+  'around-2',
+  'around-3',
+  'around-4',
+]);
+/** #294 raised the cap from 600: a fully hand-placed 5-node scene needs ~340 bytes
+ *  of JSON on top of the ids, and dropping the teacher's edits on save is worse
+ *  than the extra 400 bytes (measured: .egame is ~334 bytes/question, #274). */
+export const SCENE_BLUEPRINT_MAX_BYTES = 1000;
 
 /**
  * `surround` (#270): things gathered around one subject, one per frame corner.

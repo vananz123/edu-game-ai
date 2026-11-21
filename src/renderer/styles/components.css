@@ -743,3 +743,10 @@ span[data-icon] svg{display:block}
     animation-duration: 1.5s;
   }
 }
+/* #294: free placement. The handles sit on top of the preview and are the only
+   thing a pointer grabs; the scene redraws from the blueprint on release, so a
+   drag can never fight a re-render. */
+.editor-art-handles{position:absolute;inset:0;z-index:2}
+.editor-art-handle{position:absolute;transform:none;padding:0;border:1px dashed rgba(63,111,216,.75);border-radius:6px;background:rgba(63,111,216,.10);cursor:grab;touch-action:none}
+.editor-art-handle:hover,.editor-art-handle:focus-visible{background:rgba(63,111,216,.22);border-color:#2f5fd0;outline:none}
+.editor-art-handle:active{cursor:grabbing}
