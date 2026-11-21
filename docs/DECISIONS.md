@@ -4866,3 +4866,23 @@ theo từng hình, mọi golden hash đổi, và `compare`/`process`/`surround` 
 - **AI không phát ra `freePos`.** Vị trí là ý của giáo viên, không phải của model; prompt không đổi.
 - **Trần blueprint 600 → 1000 byte** là một đánh đổi có ý thức: mất phần giáo viên vừa kéo tệ hơn
   nhiều so với 400 byte trong một file `.egame` (~334 byte/câu, #274).
+
+## #295 — bảng chỉnh cảnh chỉ ghi `freePos`; kéo không được vẽ lại chính khung đang kéo
+
+Giáo viên muốn "một trình chỉnh sửa giống Canva, nhưng đơn giản, có nút Edit bấm vào thì mở lên".
+Bản #294 đặt khung kéo ngay trên **ảnh thu nhỏ 132px** — đúng về dữ liệu nhưng quá nhỏ để nhắm.
+
+**Quyết định**
+- **Một bề mặt lớn sau một cái nút**, không phải kéo trên ảnh nhỏ. Nút **chỉ hiện khi câu hỏi đã có
+  cảnh**: mở một khung trống không có gì để kéo là một nút hỏng.
+- **Bảng chỉ ghi `freePos`.** Nó không đổi bố cục, không đổi icon/nền/palette, không thêm bớt hình —
+  những việc đó đã có control riêng trong hàng minh hoạ, và một bảng làm hai việc sẽ phải hỏi
+  "thay đổi này thuộc về cái nào" mỗi lần lưu.
+- **Khung kéo là DOM ANH EM của ảnh, không phải con của ảnh.** Nhờ vậy ảnh được vẽ lại theo từng
+  khung hình trong lúc kéo mà phần tử đang bị giữ không bị thay thế (#128: một lần vẽ lại từng làm
+  chết mọi control).
+- **Đóng thì hàng minh hoạ vẽ lại** từ blueprint đã lưu — bảng không giữ trạng thái riêng nào sống
+  sót sau khi đóng.
+- **Một gate mới phải tự dọn app về trạng thái ban đầu.** Lần chạy đầu, panel gate để app ở màn
+  trình sửa và hai gate sau đỏ (135/179, 740/798) — đúng bài học #288 sequel, lần thứ hai. Gate giờ
+  đóng trình sửa ở cuối và tự kiểm tra điều đó (`the gate leaves the app as it found it`).

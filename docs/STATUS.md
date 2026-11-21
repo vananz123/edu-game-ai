@@ -7,6 +7,17 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-16 — #295 Bảng “Chỉnh cảnh”: một khung lớn, kéo từng hình, xong thì đóng
+- Giáo viên nói rõ ý muốn: "một trình chỉnh sửa giống Canva, nhưng đơn giản, và có một nút Edit bấm vào thì mở lên". #294 để nút kéo **ngay trên ảnh thu nhỏ 132px**, quá nhỏ để nhắm.
+- **Nút “Chỉnh cảnh”** trong hàng minh hoạ — **chỉ hiện khi câu hỏi đã có cảnh** (không có gì để kéo thì không mở nút).
+- **Bảng `features/editor/scene-editor.ts`** (script mới, nạp ngay sau `questions.js`): khung cảnh lớn 16:10, mỗi hình một **khung nét đứt có nhãn** (“Hình chính”, “Góc 1”, “Bậc 2”…), cột phải: **Đang chọn · thanh Cỡ 50–160% · Đặt lại hình này · Đặt lại tất cả**, và một dòng ghi chú rằng cảnh vẫn lưu theo bố cục. **Xong** hoặc **Esc** để đóng.
+- **Đúng phạm vi:** bảng chỉ ghi `freePos` — không đổi bố cục, không đổi icon/nền/palette, không thêm/bớt hình. Kéo KHÔNG viết lại cảnh: ảnh được vẽ lại theo từng khung hình trong khi khung kéo là **DOM anh em** của ảnh, nên thao tác kéo không bị thay thế giữa chừng (#128).
+- **Gates:** `tests/ui/ui-scene-editor-panel-check.js` mới — **22/22** check trên app thật: nút chỉ hiện khi có cảnh · mở dialog · 1 khung cho hình chính · khung nằm trong khung vẽ · kéo 6 bước ghi `freePos.subject` và **giữ `v:1`, giữ `layout`/`backdrop`** · thanh Cỡ ghi `s=1.4` và ảnh vẽ `scale(1.4)` · “Đặt lại hình này” chỉ xoá một khoá · “Đặt lại tất cả” xoá hẳn `freePos` · Esc đóng · hàng minh hoạ vẽ lại · **và gate tự dọn app về trạng thái ban đầu**.
+- **Bài học lặp lại lần thứ hai:** chạy panel gate TRƯỚC hai gate kia làm stage **135/179** và play **740/798** — vì gate để app ở màn trình sửa (#288 sequel). Đã thêm bước dọn dẹp vào gate; chạy lại trên app mới mở: stage **179/179**, play **790/790**, editor **157/157**, panel **22/22**.
+- Ảnh chụp bảng: `.tmp-art/scene-editor-panel.png` (mô hình thị giác đọc: khung nét đứt ôm lá/starpaw, không chữ nào tràn).
+- Kiểm: `tsc` sạch · unit **101/101** · `npm run check` **53 tệp** · `renderer-globals` **1090 hàm/8755 chỗ gọi** (có `openSceneEditor`) · `check:scene-runtime` 167.4 KiB · `check:embedded` 6196.8 KiB (bundle Rust không chứa script renderer — đúng).
+- Installer: **16 477 083 byte** / 15.71 MiB / 21-11 **17:58** / SHA-256 `1efcb9293cb415e5b3908fd157aee921be154ce938af05f296be5a7deabaac54`.
+
 ### 2026-11-16 — #294 Sửa cảnh bằng cách KÉO: đặt tự do từng hình, không cần toạ độ trong dữ liệu mẫu
 - Giáo viên yêu cầu "tính năng edit tự do". Trước đó mọi hình do **layout suy ra** (#270 cấm toạ độ), nên không có cách nào đổi chỗ một hình mà vẫn giữ cảnh hợp lệ.
 - **Dữ liệu:** thêm khoá **tuỳ chọn** `freePos` vào blueprint (`v` vẫn **1**): `{ "<khoá>": { x, y, s } }` với `x`,`y` là **tâm chuẩn hoá 0..1** của khung cảnh và `s` là cỡ (0.5–1.6). Khoá hợp lệ theo layout: `subject`, `second`, `sign`, `sub-0..3`, `prop-0..1`, `step-1..3`, `around-1..4`. **Không pixel, không SVG, không toạ độ tuyệt đối** ⇒ model không cần phát ra, cảnh cũ và mọi golden hash **không đổi** (đã kiểm: 24/24 hash vẫn xanh khi không có `freePos`).

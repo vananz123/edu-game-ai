@@ -393,6 +393,7 @@ function editorItemArtHtml(item) {
         <select data-editor-art-pick data-art-picker title="Chọn hình minh hoạ có sẵn">${options}</select>
         <button type="button" class="btn btn-secondary btn-small" data-editor-art-blueprint title="Dựng cảnh thử từ chủ đề của câu hỏi — không cần mạng">${uiIcon('sparkles', '', 13)} Cảnh thử</button>
         <button type="button" class="btn btn-secondary btn-small" data-editor-art-suggest title="Nhờ AI chọn cảnh từ chính nội dung câu hỏi — cần mạng hoặc AI trên máy">${uiIcon('wand-sparkles', '', 13)} Gợi ý cảnh</button>
+        ${normalized ? `<button type="button" class="btn btn-secondary btn-small" data-editor-art-edit title="Mở bảng chỉnh cảnh để kéo từng hình đến chỗ bạn muốn">${uiIcon('move', '', 13)} Chỉnh cảnh</button>` : ''}
         <button type="button" class="btn btn-secondary btn-small" data-editor-art-reset>${uiIcon('rotate-ccw', '', 13)} Tự động</button>
         <button type="button" class="btn btn-secondary btn-small" data-editor-art-remove title="Bỏ hẳn ảnh minh hoạ của riêng câu hỏi này"${isNone ? ' disabled' : ''}>${uiIcon('ban', '', 13)} Bỏ ảnh</button>
       </div>
@@ -750,6 +751,31 @@ function wireEditorItemArtRow(row) {
   // #265 "Gợi ý cảnh": the channel owns the prompt and the gate; this handler only
   // moves data. It stays enabled-looking on failure: a teacher who sees a disabled
   // button with no message cannot tell an offline laptop from a broken feature.
+  /* #295: the big surface. The panel writes only freePos, so this handler holds
+     no scene knowledge: it hands over the JSON, a renderer, and the two fields. */
+  const editButton = row.querySelector('[data-editor-art-edit]');
+  if (editButton) {
+    editButton.addEventListener('click', () => {
+      if (typeof openSceneEditor !== 'function') return;
+      const parent = row.parentElement;
+      if (!parent) return;
+      const blueprintField = parent.querySelector('[data-field="sceneBlueprint"]');
+      const assetField = parent.querySelector('[data-field="illustrationAssetId"]');
+      if (!blueprintField) return;
+      const render = json => {
+        const item = { illustrationAssetId: assetField ? assetField.value : '', sceneBlueprint: json };
+        return typeof stageIllustrationHtml === 'function'
+          ? stageIllustrationHtml(item, { template: 'quiz', gameSetup: { illustrationMode: 'auto' } }, 'is-editor-preview')
+          : '';
+      };
+      openSceneEditor({
+        blueprint: blueprintField.value,
+        render,
+        onChange: json => { blueprintField.value = json; },
+        onClose: () => redrawEditorArtRow(row),
+      });
+    });
+  }
   const suggestButton = row.querySelector('[data-editor-art-suggest]');
   if (suggestButton) {
     suggestButton.addEventListener('click', async () => {
