@@ -7,6 +7,16 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-16 — #290 Nội thất: lớp học có bảng + bàn, phòng thí nghiệm có bàn + ống nghiệm, cửa hàng có quầy + giỏ
+- Tiếp đà #288: giáo viên chọn "làm tiếp không gian cho chỗ khác cũng nhạt". Đo lại thì `classroom` chỉ là một mảng màu ấm + cái biểu đồ, `lab` cũng vậy — đọc ra "trong nhà" nhưng **cũng có thể là phòng khám**. Một lớp học phải có **bàn ghế và bảng**.
+- **5 primitive nội thất + 2 primitive tiền cảnh**: `blackboard` (bảng trên tường, nét "phấn" chỉ là hình, không chữ), `desks` (hai bàn học hai bên, trên mỗi bàn một quyển sách mở), `shelves` (giá sách 3 tầng có gáy sách màu), `labbench` (bàn thí nghiệm + bình tam giác + ống đong), `counter` (quầy + máy tính tiền), `rack` (giá ống nghiệm dưới chân), `basket` (giỏ hàng dưới chân).
+- **Không gian thứ 12: `market`** (Cửa hàng) — `shelves` + `counter` + `basket`; `food` chuyển từ `meadow` sang `market`. `classroom` và `lab` được viết lại; `human-body`, `math`, `language`, `science`, `technology`, `health`, `food` (`SCENE_SPECS`) theo cùng bố cục để đường dự phòng và đường blueprint vẽ giống nhau.
+- **Nguyên tắc giữ nguyên:** bảng để **sau** chủ thể và **rất nhạt** (0.13/0.09) — một cái bảng tương phản đầy đủ sẽ tranh chỗ với hình mà đứa trẻ phải nhận ra; đồ nội thất đứng ở **rìa khung**, chừa giữa cho icon; vẫn **không `<text>`, không ảnh, không toạ độ** trong dữ liệu.
+- **Golden hash lấy lại lần thứ 9** — lần này chỉ **7/24** dòng (`human-body`, `math`, `language`, `science`, `technology`, `health`, `food`), có ảnh `.tmp-art/interiors.png` (5 cảnh) và vision model đọc đúng từng phòng: *"classroom/counting room"*, *"book room"*, *"laboratory"*, *"shop/market"*, và cảnh compare lặp lại đúng phòng.
+- Kiểm: `tsc` sạch · unit **100/100** (56.5 s) · `npm run check` 52 tệp · `check:renderer-globals` sạch · `check:scene-runtime` **157.6 KiB** · `check:embedded` **6191.6 KiB**.
+- **Trên binary thật** (dựng lại 11:10, setup 15.70 MiB, SHA-256 `148af6a0…59599e88`): `ui-stage-illustration-check` **179/179**, `ui-play-surface-check` **790/790**, `ui-item-assets-editor-check` **157/157**. Hỏi thẳng app đang chạy qua CDP: `classroom` vẽ ra **blackboard + desks + shelves**, `lab` ra **blackboard + labbench + rack**, `market` ra **shelves + counter + basket** — tức bundle trong binary đúng là bản mới.
+- Chưa kiểm: `SCENE_BACKDROP_IDS` không lộ ra barrel `SceneRuntime` (trả `n/a`) — số 12 được pin bởi unit test chứ không đọc được qua CDP.
+
 ### 2026-11-16 — #288 Không gian thật: backdrop `road` (đường, vạch kẻ, cột đèn, biển báo) + giáo viên chọn được không gian
 - Phản hồi của giáo viên: *"nó phải mô phỏng được không gian: tình huống giao thông thì phải có đường, cột đèn giao thông, vạch kẻ đường"*. Đo lại thì đúng là không có: 10 backdrop cũ đều là **phông nền**, không cái nào là **chỗ**; 7/10 dùng chung một `stones`; `plain` (mặc định) **trống hoàn toàn**.
 - **6 primitive mới** trong `illustration-scene.ts`: `road` (mặt đường + vạch giữa + vạch mép), `traffic-light` (cột + 3 đèn, chỉ đèn trên sáng), `sign` (biển tròn trên cột), `streetlight`, `zebra` (vạch sang đường), `kerb` (gờ vỉa hè). Không có `<text>`, không ảnh, không toạ độ trong dữ liệu.

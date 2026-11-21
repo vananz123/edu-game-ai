@@ -97,8 +97,8 @@ const EDITOR_SCENE_ICON_LABEL = {
  *  indoors, then the street. */
 const EDITOR_SCENE_BACKDROP_LABEL = {
   plain: 'Nền trơn', meadow: 'Đồng cỏ', forest: 'Rừng', mountain: 'Núi', sea: 'Biển',
-  stars: 'Trời sao', road: 'Đường phố', city: 'Phố xá', classroom: 'Lớp học',
-  lab: 'Phòng thí nghiệm', studio: 'Studio'
+  stars: 'Trời sao', road: 'Đường phố', city: 'Phố xá', market: 'Cửa hàng',
+  classroom: 'Lớp học', lab: 'Phòng thí nghiệm', studio: 'Studio'
 };
 /** The four corners in the order the editor shows them: bottom row, then top. */
 const EDITOR_SCENE_SLOTS = [

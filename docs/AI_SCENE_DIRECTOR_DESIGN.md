@@ -73,7 +73,7 @@ markup/SVG.
 interface SceneBlueprint {
   v: 1;                    // BẮT BUỘC. Thiếu hoặc ≠ 1 -> bị từ chối (null)
   layout: 'single';        // P0 chỉ vẽ được 'single'
-  backdrop: string;        // một trong 10 tên ở §4.1
+  backdrop: string;        // một trong 12 tên ở §4.1
   paletteKey: string;      // một trong 24 khoá ở §4.3
   mainIcon: string;        // một trong 41 tên ở §4.2. Sai -> null (không có chủ thể thì không có cảnh)
   subIcons?: string[];     // tối đa 2, phải ∈ 41 icon, không trùng mainIcon, không trùng nhau
@@ -199,9 +199,13 @@ của các cảnh cũ.
 
 ## 4. Từ vựng asset (nguồn sự thật duy nhất)
 
-### 4.1 Backdrop — 10 tên
+### 4.1 Backdrop — 12 tên
 
-| Tên | Cảnh |
+Backdrop là **CHỖ**, không phải phông màu (bài học #288/#290): mỗi tên phải trả lời được câu
+"đứa trẻ nhìn vào lớp hình này thì gọi nơi đó là gì". Trước #288 cả 10 tên đều là màu + vài
+bóng ở rìa, nên một câu hỏi về sang đường được vẽ trên bãi cỏ.
+
+| Tên | Chỗ |
 |---|---|
 | `plain` | Chân trời trống, không vật thể (mặc định khi tên sai) |
 | `meadow` | Đồng cỏ |
@@ -210,8 +214,10 @@ của các cảnh cũ.
 | `sea` | Biển, sóng |
 | `stars` | Bầu trời đêm, sao |
 | `city` | Phố, nhà |
-| `classroom` | Lớp học, bảng |
-| `lab` | Phòng thí nghiệm |
+| `road` | **Đường phố**: mặt nhựa, vạch giữa, vạch mép, cột đèn giao thông, biển báo, vạch sang đường |
+| `classroom` | **Lớp học**: bảng trên tường, bàn học có sách, giá sách |
+| `lab` | **Phòng thí nghiệm**: bảng, bàn thí nghiệm có bình tam giác, giá ống nghiệm |
+| `market` | **Cửa hàng**: quầy có máy tính tiền, giá hàng, giỏ ở chân người xem |
 | `studio` | Phòng thu / xưởng sáng tạo |
 
 ### 4.2 Icon — 41 tên
@@ -245,7 +251,8 @@ Mặc định khi tên sai: **`language`** (không phải `default-pastel` — t
 | animals / plants | `forest` | art | `studio` |
 | space | `stars` | math / language | `classroom` |
 | human-body | `classroom` | science / technology | `lab` |
-| transport / safety | `city` | health | `classroom` |
+| transport / safety | `road` | health | `classroom` |
+| food | `market` | — | — |
 | environment | `mountain` | family | `meadow` |
 | history / geography | `mountain` | community / jobs | `city` |
 | sports | `meadow` | weather / food | `meadow` |
@@ -326,7 +333,7 @@ QUY TRÌNH SUY NGHĨ (làm trong đầu, KHÔNG viết ra)
 SCENE-PROMPT-VOCAB:START
 layout (chọn 1): single, compare, process, surround
 backdrop (chọn 1): plain, meadow, forest, mountain, sea, stars, city,
-                   classroom, lab, studio, road
+                   classroom, lab, market, studio, road
 paletteKey (chọn 1): animals, plants, space, human-body, transport, safety,
                      environment, history, geography, jobs, sports, music, art,
                      math, language, science, technology, health, family,

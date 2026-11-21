@@ -182,6 +182,16 @@ export type ScenePrimitive =
   | 'traffic-light'
   | 'sign'
   | 'streetlight'
+  /**
+   * #290 interiors: the furniture that makes a room a room — a board on the wall,
+   * pupil desks, a bookcase, a lab bench, a shop counter. Same rule as #288: the
+   * layers must say *where*, and a bare horizon does not say "classroom".
+   */
+  | 'blackboard'
+  | 'desks'
+  | 'shelves'
+  | 'labbench'
+  | 'counter'
   // foreground layer
   | 'grass'
   /** Small roots/leaf sprigs at the feet: a garden, not a lawn. */
@@ -193,6 +203,9 @@ export type ScenePrimitive =
   /** #288 road surface markings, painted in front of the subject's feet. */
   | 'zebra'
   | 'kerb'
+  /** #290 interior foreground: a rack of test tubes, a shopping basket. */
+  | 'rack'
+  | 'basket'
   | 'none';
 
 /**
@@ -274,7 +287,7 @@ const SCENE_SPECS: Readonly<Record<string, SceneSpec>> = Object.freeze({
   animals: { sky: ['sun', 'clouds'], horizon: 'hills', standing: ['trees', 'bushes'], fg: ['grass', 'stones'], subjectY: 88 },
   plants: { sky: ['sun', 'clouds'], horizon: 'hills', standing: ['bushes', 'trees'], fg: ['roots', 'grass'], subjectY: 88 },
   space: { sky: ['stars', 'moon'], horizon: 'mountains', standing: ['bubbles'], fg: ['stones'], subjectY: 84 },
-  'human-body': { sky: ['rays', 'clouds'], horizon: 'line', standing: ['graph'], fg: ['stones'], subjectY: 84 },
+  'human-body': { sky: ['rays', 'clouds'], horizon: 'line', standing: ['blackboard', 'desks'], fg: ['stones'], subjectY: 84 },
   transport: { sky: ['clouds', 'sun'], horizon: 'skyline', standing: ['road', 'traffic-light', 'streetlight'], fg: ['zebra', 'kerb'], subjectY: 88 },
   safety: { sky: ['sun', 'clouds'], horizon: 'skyline', standing: ['road', 'traffic-light', 'sign'], fg: ['zebra', 'kerb'], subjectY: 88 },
   environment: { sky: ['clouds', 'sun'], horizon: ['mountains', 'hills'], standing: ['trees', 'bushes'], fg: ['grass', 'stones'], subjectY: 88 },
@@ -284,15 +297,15 @@ const SCENE_SPECS: Readonly<Record<string, SceneSpec>> = Object.freeze({
   sports: { sky: ['sun', 'clouds'], horizon: 'hills', standing: ['bushes'], fg: ['grass', 'stones'], subjectY: 88 },
   music: { sky: ['rays', 'clouds'], horizon: 'line', standing: 'none', fg: ['stones', 'boards'], subjectY: 84 },
   art: { sky: ['rays', 'clouds'], horizon: 'line', standing: ['books'], fg: ['boards'], subjectY: 86 },
-  math: { sky: ['clouds', 'sun'], horizon: 'line', standing: ['graph', 'books'], fg: ['stones'], subjectY: 86 },
-  language: { sky: ['clouds', 'sun'], horizon: 'line', standing: ['books', 'graph'], fg: ['stones'], subjectY: 86 },
-  science: { sky: ['rays', 'clouds'], horizon: 'line', standing: ['graph', 'flasks'], fg: ['stones'], subjectY: 86 },
-  technology: { sky: ['clouds', 'rays'], horizon: 'line', standing: ['graph', 'bubbles'], fg: ['stones'], subjectY: 86 },
-  health: { sky: ['sun', 'clouds'], horizon: 'line', standing: ['graph'], fg: ['grass', 'stones'], subjectY: 86 },
+  math: { sky: ['clouds', 'sun'], horizon: 'line', standing: ['blackboard', 'desks', 'shelves'], fg: ['stones'], subjectY: 86 },
+  language: { sky: ['clouds', 'sun'], horizon: 'line', standing: ['blackboard', 'desks', 'shelves'], fg: ['stones'], subjectY: 86 },
+  science: { sky: ['rays', 'clouds'], horizon: 'line', standing: ['blackboard', 'labbench'], fg: ['rack'], subjectY: 86 },
+  technology: { sky: ['clouds', 'rays'], horizon: 'line', standing: ['blackboard', 'labbench'], fg: ['rack'], subjectY: 86 },
+  health: { sky: ['sun', 'clouds'], horizon: 'line', standing: ['blackboard', 'desks'], fg: ['grass', 'stones'], subjectY: 86 },
   family: { sky: ['sun', 'clouds'], horizon: 'skyline', standing: ['trees', 'bushes'], fg: ['grass', 'stones'], subjectY: 88 },
   community: { sky: ['clouds', 'sun'], horizon: 'skyline', standing: ['towers', 'bushes'], fg: ['stones', 'grass'], subjectY: 88 },
   weather: { sky: 'clouds', horizon: 'hills', standing: ['bushes', 'trees'], fg: ['grass', 'stones'], subjectY: 86 },
-  food: { sky: ['sun', 'clouds'], horizon: 'hills', standing: ['bushes'], fg: ['roots', 'grass'], subjectY: 88 },
+  food: { sky: ['sun', 'clouds'], horizon: 'line', standing: ['shelves', 'counter'], fg: ['basket'], subjectY: 86 },
   objects: { sky: ['clouds', 'sun'], horizon: 'line', standing: ['books', 'tools'], fg: ['stones'], subjectY: 86 },
   'water-world': { sky: ['moon', 'stars'], horizon: 'sea', standing: ['bubbles'], fg: ['waves', 'stones'], subjectY: 84 },
 });
@@ -531,6 +544,84 @@ function renderMid(primitive: ScenePrimitive, palette: IllustrationPalette): str
         `<circle cx="79" cy="55" r="4.2" fill="${warm}" opacity="0.8"/>` +
         `</g>`
       );
+    case 'blackboard':
+      // (#290) The back wall of a classroom. It sits BEHIND the subject and is
+      // deliberately faint: a board at full contrast would compete with the one
+      // shape a child has to recognise. The two "chalk" strokes are decoration,
+      // never text.
+      return (
+        `<g data-scene-primitive="blackboard">` +
+        `<rect x="40" y="32" width="240" height="66" rx="7" fill="${ink}" opacity="0.13"/>` +
+        `<rect x="48" y="40" width="224" height="50" rx="4" fill="${ink}" opacity="0.09"/>` +
+        `<g stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" opacity="0.45">` +
+        `<path d="M62 58h86"/><path d="M62 70h58"/><path d="M206 62h44"/>` +
+        `</g></g>`
+      );
+    case 'desks':
+      // (#290) Two pupil desks in the row beside the subject, at the frame edges
+      // so the centre stays clear. Legs reach the horizon, tops are at y 118.
+      return (
+        `<g data-scene-primitive="desks">` +
+        `<g fill="${cool}" opacity="0.45">` +
+        `<rect x="14" y="118" width="66" height="7" rx="2.5"/>` +
+        `<rect x="20" y="125" width="5" height="27" rx="1.5"/>` +
+        `<rect x="69" y="125" width="5" height="27" rx="1.5"/>` +
+        `<rect x="240" y="118" width="66" height="7" rx="2.5"/>` +
+        `<rect x="246" y="125" width="5" height="27" rx="1.5"/>` +
+        `<rect x="295" y="125" width="5" height="27" rx="1.5"/>` +
+        `</g>` +
+        // one open book on each desk: a desk reads as a desk when something is on it
+        `<g fill="${warm}" opacity="0.55">` +
+        `<path d="M32 117l14-2v-4l-14 2z"/><path d="M46 115l14 2v-4l-14-2z"/>` +
+        `<path d="M258 115l14-2v-4l-14 2z"/><path d="M272 113l14 2v-4l-14-2z"/>` +
+        `</g></g>`
+      );
+    case 'shelves':
+      // (#290) A bookcase against the left wall: three shelves, coloured spines.
+      return (
+        `<g data-scene-primitive="shelves">` +
+        `<rect x="4" y="86" width="50" height="64" rx="3" fill="${cool}" opacity="0.28"/>` +
+        `<g stroke="${ink}" stroke-width="2" opacity="0.22">` +
+        `<path d="M4 106h50"/><path d="M4 127h50"/>` +
+        `</g>` +
+        `<g opacity="0.7">` +
+        `<rect x="10" y="92" width="5" height="13" fill="${warm}"/>` +
+        `<rect x="17" y="90" width="4" height="15" fill="${glow}"/>` +
+        `<rect x="23" y="94" width="6" height="11" fill="${cool}"/>` +
+        `<rect x="33" y="91" width="4" height="14" fill="${warm}"/>` +
+        `<rect x="10" y="112" width="6" height="14" fill="${glow}"/>` +
+        `<rect x="19" y="114" width="5" height="12" fill="${cool}"/>` +
+        `<rect x="28" y="110" width="4" height="16" fill="${warm}"/>` +
+        `<rect x="36" y="113" width="6" height="13" fill="${glow}"/>` +
+        `</g></g>`
+      );
+    case 'labbench':
+      // (#290) A lab bench with a flask and a rack, right edge. The bench top is
+      // a solid bar so the glassware has something to stand on.
+      return (
+        `<g data-scene-primitive="labbench">` +
+        `<rect x="226" y="116" width="92" height="7" rx="2.5" fill="${cool}" opacity="0.45"/>` +
+        `<rect x="232" y="123" width="5" height="29" rx="1.5" fill="${ink}" opacity="0.28"/>` +
+        `<rect x="307" y="123" width="5" height="29" rx="1.5" fill="${ink}" opacity="0.28"/>` +
+        `<g fill="none" stroke="${glow}" stroke-width="2.2" opacity="0.75">` +
+        `<path d="M240 116v-10h14v10"/>` +
+        `<path d="M262 116v-14h10v14"/>` +
+        `</g>` +
+        `<g fill="${warm}" opacity="0.6">` +
+        `<rect x="243" y="108" width="8" height="8" rx="2"/>` +
+        `<rect x="265" y="106" width="4" height="10" rx="2"/>` +
+        `</g></g>`
+      );
+    case 'counter':
+      // (#290) A shop counter with a till block, right edge.
+      return (
+        `<g data-scene-primitive="counter">` +
+        `<rect x="222" y="112" width="96" height="9" rx="2.5" fill="${cool}" opacity="0.5"/>` +
+        `<rect x="228" y="121" width="84" height="31" rx="2" fill="${ink}" opacity="0.18"/>` +
+        `<rect x="286" y="98" width="20" height="16" rx="3" fill="${ink}" opacity="0.35"/>` +
+        `<rect x="290" y="102" width="12" height="5" rx="1.5" fill="#ffffff" opacity="0.55"/>` +
+        `</g>`
+      );
     case 'bubbles':
       return (
         `<g data-scene-primitive="bubbles" fill="none" stroke="${ink}" stroke-width="1.5" opacity="0.3">` +
@@ -676,6 +767,29 @@ function renderFg(primitive: ScenePrimitive, palette: IllustrationPalette): stri
         `<rect x="0" y="${SCENE_HEIGHT - 6}" width="${SCENE_WIDTH}" height="6" fill="${cool}" opacity="0.34"/>` +
         `<path d="M0 ${SCENE_HEIGHT - 6}h${SCENE_WIDTH}" stroke="${ink}" stroke-width="1.2" opacity="0.22"/>` +
         `</g>`
+      );
+    case 'rack':
+      // (#290) A test-tube rack at the viewer's feet, left side.
+      return (
+        `<g data-scene-primitive="rack">` +
+        `<rect x="18" y="${foot + 8}" width="62" height="8" rx="3" fill="${cool}" opacity="0.45"/>` +
+        `<g fill="${glow}" opacity="0.7">` +
+        `<rect x="24" y="${foot - 8}" width="6" height="17" rx="3"/>` +
+        `<rect x="34" y="${foot - 12}" width="6" height="21" rx="3"/>` +
+        `<rect x="44" y="${foot - 6}" width="6" height="15" rx="3"/>` +
+        `<rect x="54" y="${foot - 11}" width="6" height="20" rx="3"/>` +
+        `<rect x="64" y="${foot - 5}" width="6" height="14" rx="3"/>` +
+        `</g></g>`
+      );
+    case 'basket':
+      // (#290) A shopping basket at the viewer's feet, right side.
+      return (
+        `<g data-scene-primitive="basket">` +
+        `<path d="M236 ${foot + 4}h56l-6 18h-44z" fill="${warm}" opacity="0.4"/>` +
+        `<path d="M244 ${foot + 4}q20-16 40 0" fill="none" stroke="${warm}" stroke-width="2.6" opacity="0.7"/>` +
+        `<g stroke="${ink}" stroke-width="1.4" opacity="0.25">` +
+        `<path d="M248 ${foot + 8}h32M246 ${foot + 13}h36"/>` +
+        `</g></g>`
       );
     case 'waves':
       return (

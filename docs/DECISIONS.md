@@ -4767,3 +4767,25 @@ nào: app đang đứng giữa editor với một câu hỏi đã sửa nhưng *
   đo không còn so sánh được với lần trước.
 - Phép kiểm tính năng mới (11 lựa chọn, blueprint đổi, khung xem trước vẽ `road`) chạy **riêng**, sau
   đó khởi động lại app rồi mới chạy cổng.
+
+## #290 — Nội thất là thứ làm nên một CĂN PHÒNG; và đồ nội thất phải đứng ở rìa, bảng phải ở sau và rất nhạt
+
+`classroom` cũ là một mảng màu ấm + một cái biểu đồ; `lab` cũng gần như thế. Cả hai đọc ra "trong
+nhà" nhưng **cũng có thể là phòng khám** — nghĩa là lớp hình không nói được *chỗ nào*. Giáo viên đã
+chỉ đúng chỗ này ở #288 và chọn làm tiếp.
+
+**Quyết định**
+- **Thêm ĐỒ ĐẠC, không thêm màu**: bảng trên tường, bàn học có sách mở, giá sách ba tầng, bàn thí
+  nghiệm có bình tam giác, quầy có máy tính tiền, giá ống nghiệm và giỏ hàng dưới chân người xem.
+- **Bảng để SAU chủ thể và rất nhạt (0.13/0.09).** Nó ở lớp mid nên bị chủ thể vẽ đè — đúng ý đồ.
+  Một cái bảng tương phản đầy đủ sẽ tranh chỗ với hình mà đứa trẻ phải nhận ra; bài học #259/#277
+  lặp lại: đồ trang trí phải **lùi**, không được **đậm lên cho rõ**.
+- **Đồ nội thất đứng ở RÌA khung**, chừa giữa cho icon — quy tắc đã có từ trước, giữ nguyên.
+- **Nét "phấn" trên bảng chỉ là hình, không phải chữ.** Luật "không `<text>` trong cảnh" không được
+  nới chỉ vì bảng trông trống.
+- **`market` là không gian thứ 12** và `food` mặc định vào đó: một câu hỏi về thức ăn thuộc về cửa
+  hàng, không thuộc về đồng cỏ. Không gian là một phần **nghĩa** của câu hỏi (#288).
+- **`SCENE_SPECS` (đường dự phòng của category) phải vẽ cùng bố cục với `SCENE_BACKDROPS`.** Hai đường
+  dữ liệu mà cho ra hai lớp hình khác nhau thì giáo viên sẽ thấy cảnh "đổi" sau khi AI can thiệp.
+- **Golden hash lấy lại lần thứ 9, chỉ 7/24 dòng** — re-take toàn bộ 24 khi chỉ 7 dòng đổi là che mất
+  dấu vết; luôn ghi rõ lần này đổi những dòng nào và ảnh nào chứng minh.
