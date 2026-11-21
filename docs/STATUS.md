@@ -7,6 +7,14 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-16 — #292 Đậm hoá 17 palette ngoài trời: luminance 222 → 203, bão hoà 0.138 → 0.247
+- #291 mới làm 7 palette **nội thất**; 17 category ngoài trời vẫn pastel. Lượt này làm nốt, theo đúng công thức đã được giáo viên chọn ở #291 (phương án B), **không blend màu**: `sky` −10% lightness +7% saturation, `ground` −12% +9%, `glow` −4% +8%, `cool` −10% +5%, `warm` −3% +10% — rồi ghi **hex viết tay** vào `CATEGORY_PALETTES`.
+- **Đo trên chính lưới 17 cảnh đã render** (cùng một vùng cắt 1360×720, đếm mọi điểm ảnh): luminance trung bình **222 → 203**, bão hoà trung bình **0.138 → 0.247** (**+79%**). Ảnh: `.tmp-art/outdoor-before.png` / `.tmp-art/outdoor-after.png`.
+- **Hai chỗ chủ thể bị chìm đã sửa riêng:** `plants` và `environment` có icon xanh trên nền xanh — hạ `ink` (`#2c6630→#225026`, `#1c6f64→#155a52`) để nét icon tách khỏi nền. Vision model sau khi sửa: *"không icon nào biến mất vào nền"*, gần nhất là `environment` và `objects` nhưng vẫn đọc được.
+- **Golden hash lấy lại lần thứ 11** — 17/24 dòng (tất cả category ngoài trời). Sau lượt này **cả 24 palette đều đã được viết lại theo cùng một hướng**.
+- Kiểm: `tsc` sạch · unit **100/100** (53.1 s) · `npm run check` 52 tệp · `renderer-globals` sạch · `check:scene-runtime` **158.6 KiB** · `check:embedded` **6191.8 KiB**.
+- **Trên binary thật** (dựng lại 15:19, setup 15.71 MiB, SHA-256 `82d529e8…18961188`): editor **157/157**, stage **179/179**, play **790/790**, game-background **42/42**. CDP đọc palette trong cửa sổ thật: `animals` `sky #bbe7d0 / ground #a3dec0`, `transport` `#b5d5f3 / #9dc6ed`, `water-world` `#b3d8f2 / #99c9ec` — đúng bản mới.
+
 ### 2026-11-16 — #291 Giáo viên: "màu đậm hơn, tương phản hơn" — làm 3 phương án trên engine thật rồi để giáo viên chọn
 - Giáo viên xem `.tmp-art/interiors.png` và yêu cầu **màu đậm hơn + tương phản hơn**. Đo bằng số trước khi sửa: luminance (0–255) của tường/sàn so với nội thất — `classroom` tường **108**, sàn **190**, bàn **92**: sàn sáng gần gấp đôi bàn, tức mọi thứ nằm trên một nền gần trắng.
 - **Ba phương án dựng trên engine thật** (`.tmp-art/variants.png`), vision model chấm: **A (hiện tại) yếu · B (nền đậm + bão hoà) mạnh · C (nội thất ngả ink) tạm được** ⇒ chọn **B**.

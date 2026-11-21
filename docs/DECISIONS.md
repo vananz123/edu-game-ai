@@ -4811,3 +4811,21 @@ tức đồ vật đang nằm trên một nền gần trắng, và đó chính l
 - **Phạm vi có ý thức**: chỉ 7 category nội thất. 17 category ngoài trời vẫn pastel; đổi cả 24 palette
   trong một lượt là thay đổi mỹ thuật toàn sản phẩm mà chưa ai duyệt bằng mắt — tách thành #292 để
   giáo viên quyết.
+
+## #292 — Đậm hoá bằng một PHÉP BIẾN ĐỔI CỐ ĐỊNH, rồi ghi hex viết tay; và chủ thể phải tách khỏi nền cùng màu
+
+Sau #291 giáo viên duyệt hướng "nền đậm + bão hoà", nhưng mới 7/24 palette theo hướng đó; 17 category
+ngoài trời vẫn pastel, nên hai nửa sản phẩm sẽ lệch nhau. Lượt này làm nốt.
+
+**Quyết định**
+- **Một phép biến đổi cố định cho cả 17 palette** (`sky` −10% L +7% S, `ground` −12% +9%, `glow` −4%
+  +8%, `cool` −10% +5%, `warm` −3% +10%), để 17 category không mỗi cái một kiểu. Kết quả **ghi thành
+  hex viết tay** trong `CATEGORY_PALETTES` — phép tính chỉ dùng một lần để chọn giá trị, runtime không
+  bao giờ blend màu (#278 giữ nguyên).
+- **Đo bằng ảnh đã render, không bằng cảm giác**: cùng một vùng cắt, đếm mọi điểm ảnh ⇒ luminance
+  222 → 203, bão hoà 0.138 → 0.247. Một thay đổi mỹ thuật toàn sản phẩm phải có số đi kèm.
+- **Đậm nền không được nuốt chủ thể**: `plants`/`environment` có icon cùng họ màu với nền, nên `ink`
+  của hai category đó được hạ thêm một bước. Đây là quy tắc chung: khi nền đậm lên, **nét của chủ thể**
+  phải đậm lên ít nhất bằng.
+- **Golden hash lấy lại lần thứ 11, 17/24 dòng** — chấp nhận vì đây là thay đổi mỹ thuật có chủ đích,
+  có ảnh trước/sau, và sau lượt này cả 24 palette nằm trong cùng một hệ.
