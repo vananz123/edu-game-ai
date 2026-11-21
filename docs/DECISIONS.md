@@ -4607,3 +4607,35 @@ hàm/8600 call site 0 undefined. Test `asset-registry` không còn pin `viewBox=
 
 **Chưa kiểm:** chưa chạy lại cổng UI trên binary Tauri; chưa có người thứ hai duyệt bằng mắt ngoài
 giáo viên; và vision-model lúc làm việc này đang lỗi nên phần mô tả ảnh là của chính người chọn.
+
+## #282 — Cổng UI hỏi "id nào", không hỏi "tiền tố nào"; đo lại trên binary thật
+
+**Kích hoạt.** Sau #281 (Twemoji) cổng `ui-stage-illustration-check` đỏ **10/169** với đúng một câu:
+*"the icon really renders (generated icon data) — emoji emoji-paw-print stage-illustration-icon"*.
+Câu đó khẳng định `iconClass.includes('lucide-paw-print')`. Ảnh vẫn vẽ đúng; **phép đo đã cũ**, vì nó
+pin *nguồn vẽ* (Lucide) chứ không pin *thứ được hứa* (icon nào).
+
+**Sửa.** Hợp đồng là **id**, không phải tiền tố: `carriesIcon(cls, id)` chấp nhận `lucide-<id>` hoặc
+`emoji-<id>`, và **thêm** một phép đo mạnh hơn phép cũ: `iconShapes > 0` (đếm `path/circle/ellipse/
+rect/polygon` bên trong icon). Phép cũ không hề kiểm tra icon có hình hay rỗng — chỉ kiểm tra class.
+Vậy đây là **siết**, không phải nới: 169 → **179** phép đo.
+
+**Kết quả đo lại trên binary v0.5.2 có Twemoji** (không phải trên `dist/`):
+
+| cổng | kết quả |
+|---|---|
+| `ui-play-surface-check` | **790/790** |
+| `ui-stage-illustration-check` | **169 → 179/179** |
+| `ui-item-assets-editor-check` | **157/157** |
+| `ui-game-background-check` | **42/42** |
+| `build-tauri-release --check` (profile ấm) | **55/55 + 10/10** |
+
+**Bài học về cổng (lần thứ hai trong ngày).** Lần chạy release-gate đầu tiên đỏ 3 câu — *"không thấy
+shell"*, *"tổng=1 script"*, *"sidebar=0px"* — và **không phải lỗi hồi quy**: đó là lần mở đầu tiên của
+một exe 56.61 MiB trên profile WebView2 hoàn toàn mới; cổng kịp đo khi trang mới chạy xong
+`edugame-guard.js`. Chạy lại với profile ấm ⇒ **55/55 + 10/10**. Nên: **một cổng đo DOM phải chạy trên
+một cửa sổ đã ấm**, hoặc phải chờ tín hiệu "scripts đã nạp xong", chứ không chỉ chờ URL trang xuất
+hiện — `waitForPort` đang chờ đúng URL đó và vẫn chưa đủ.
+
+**Chưa làm.** Chưa dựng lại installer NSIS (`EduGame Studio (Tauri)_0.5.2_x64-setup.exe` vẫn là bản
+16/11, trước Twemoji) — dựng installer là việc của P7 và cần bạn xác nhận trước khi phát hành.

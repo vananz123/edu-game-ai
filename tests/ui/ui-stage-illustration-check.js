@@ -104,6 +104,17 @@ function raceGame(mode, item) {
   return game;
 }
 
+/**
+ * True when an icon element's class list carries the requested id. The prefix
+ * tells which art source drew it: `lucide-` (stroke icon) or `emoji-` (bundled
+ * colour art). Asserting one prefix would make every future art swap look like
+ * a rendering bug, which is exactly how #280/#281 wasted a gate run.
+ */
+function carriesIcon(className, id) {
+  const cls = String(className || '');
+  return cls.includes(`lucide-${id}`) || cls.includes(`emoji-${id}`);
+}
+
 const TEMPLATES = [
   { key: 'quiz', build: quizGame, opener: '' },
   { key: 'scenario', build: scenarioGame, opener: '' },
@@ -138,6 +149,11 @@ const probe = (game, opener) => `
     drawn: Boolean(el),
     assetId: el ? el.getAttribute('data-illustration') : null,
     iconClass: el ? (el.querySelector('.stage-illustration-icon')?.getAttribute('class') || '') : '',
+    // How many drawing elements the subject icon actually contains. The class
+    // name says WHICH icon was asked for; this says the icon has geometry.
+    // Since #281 the art comes from Twemoji, so counting only Lucide's path
+    // nodes would count zero for a perfectly good icon.
+    iconShapes: el ? el.querySelectorAll('.stage-illustration-icon path, .stage-illustration-icon circle, .stage-illustration-icon ellipse, .stage-illustration-icon rect, .stage-illustration-icon polygon').length : 0,
     // The illustration must share ONE ROW with the question, as sibling blocks.
     // Since the 2-column layout (DECISIONS #84) the picture lives in its own
     // .stage-col wrapper, so a direct nextElementSibling === q test no longer
@@ -204,8 +220,13 @@ const probe = (game, opener) => `
       // the projector runs below are what prove it does not push content off.
       Boolean(auto.size && auto.size.w > 0 && auto.size.h > 0 && auto.size.h <= 300),
       auto.size ? `${auto.size.w}x${auto.size.h}` : 'no size');
+    // The contract is the ID, not the art source (#280/#281): the class carries
+    // the id with the prefix of whichever source drew it - "lucide-" for a
+    // stroke icon, "emoji-" for the bundled colour art.
     check(`${tpl.key}: the icon really renders (generated icon data)`,
-      auto.iconClass.includes('lucide-paw-print'), auto.iconClass || 'no icon');
+      carriesIcon(auto.iconClass, 'paw-print'), auto.iconClass || 'no icon');
+    check(`${tpl.key}: the subject icon has real geometry, not an empty svg`,
+      auto.iconShapes > 0, `${auto.iconShapes} shapes`);
 
     // -- off: nothing at all, whatever the item says ------------------------
     const off = await run(tpl.build('off', { ...ANIMAL_ITEM, illustrationAssetId: 'space-scene' }), tpl.opener);
@@ -263,7 +284,9 @@ const probe = (game, opener) => `
       bare.drawn === true && bare.assetId === 'language-scene',
       bare.drawn ? bare.assetId : 'nothing drawn (empty column)');
     check(`${tpl.key}: the default illustration renders the fallback icon`,
-      bare.iconClass.includes('lucide-book-open'), bare.iconClass || 'no icon');
+      carriesIcon(bare.iconClass, 'book-open'), bare.iconClass || 'no icon');
+    check(`${tpl.key}: the fallback icon has real geometry`,
+      bare.iconShapes > 0, `${bare.iconShapes} shapes`);
     check(`${tpl.key}: the default is still a real scene, not a collapsed box`,
       Boolean(bare.size && bare.size.w > 0 && bare.size.h > 0), bare.size ? `${bare.size.w}x${bare.size.h}` : 'no size');
     // ...but `off` and `manual` must NOT get it: the teacher's switch wins.

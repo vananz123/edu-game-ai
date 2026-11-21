@@ -7,6 +7,14 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-16 — #282 cổng UI đo lại trên binary thật với Twemoji (790/790 · 179/179 · 157/157 · 42/42 · 55/55+10/10)
+- Dựng binary v0.5.2 có Twemoji (`npm run build` + `build:tauri` + `cargo tauri build`, 5m00s, exe **56.61 MiB**) rồi chạy 5 cổng UI trên cửa sổ Tauri thật.
+- **Cổng đỏ đã sửa đúng chỗ:** `ui-stage-illustration-check` đỏ 10 câu vì pin `iconClass.includes('lucide-paw-print')` — tức pin **nguồn vẽ** thay vì pin **id**. Thay bằng `carriesIcon(cls,id)` (nhận `lucide-<id>` hoặc `emoji-<id>`) và **thêm** `iconShapes > 0` (icon phải có hình thật, phép cũ không kiểm tra điều này). 169 → **179** phép đo: siết, không nới.
+- **Kết quả:** play-surface **790/790** · stage-illustration **179/179** · item-assets **157/157** · game-background **42/42** · `build-tauri-release --check` **55/55 + 10/10**.
+- **Bài học:** lần chạy release-gate đầu đỏ 3 câu ("không thấy shell", "tổng=1 script", "sidebar=0px") — **không phải hồi quy**, mà là lần mở đầu của exe 56.61 MiB trên profile WebView2 mới, cổng đo khi trang mới chạy xong `edugame-guard.js`. Profile ấm ⇒ xanh. Ghi vào DECISIONS #282.
+- `src-tauri/tauri.conf.json` tháo dòng `devPath` để build rồi khôi phục **byte-exact** (SHA-256 `5ae0bf6…b20e`).
+- **Chưa làm:** installer NSIS chưa dựng lại (setup.exe 0.5.2 vẫn là bản 16/11, trước Twemoji); chưa chạy `test:native` (lesson-store, cần Electron ABI).
+
 ### 2026-11-16 — #281 đổi tiếp sang Twemoji (giáo viên chọn trong 3 bộ dựng thử)
 - Kích hoạt: #280 gắn Fluent Emoji, giáo viên xem ảnh nói "không, tìm thư viện mới đi". Lý do thật: Fluent **trộn nhiều cách vẽ trong một bộ**, nên 4 icon trong một khung đọc thành "4 mẩu clip art khác nhau".
 - **Cách chọn:** dựng 3 bộ trên **cùng engine thật** (`renderBlueprintSvg`, cùng 4 layout + palette), xuất PNG, giáo viên chọn **số 1 = Twemoji** (CC BY 4.0, 54.5 KiB/41 icon). Loại Phosphor Duotone (vẫn là icon, nhạt ở 40px) và Phosphor Fill (khô).

@@ -50,6 +50,10 @@
   **che mất** nút gợi ý thật; gọi model từng câu thì thêm 1–3 s + phí cho một thứ không ảnh hưởng
   việc học. Nếu sau này giáo viên than phải bấm nhiều lần, làm **"gắn cảnh cho cả game"** trong
   trình soạn (một lượt, có preview), không phải gắn mặc định trong wizard.
+- **Đã đo (#282):** binary v0.5.2 với Twemoji chạy 5 cổng UI — play-surface **790/790**,
+  stage-illustration **179/179** (cổng cũ pin `lucide-` thay vì pin id: đã sửa + siết),
+  item-assets **157/157**, game-background **42/42**, release-gate **55/55 + 10/10**.
+  **Còn hở:** installer chưa dựng lại; chưa có người duyệt mắt thứ hai.
 - **Đã làm (#281):** đổi tiếp sang **Twemoji (CC BY 4.0, 54.5 KiB/41 icon)** — giáo viên chọn sau khi
   xem 3 bộ dựng thử trên cùng engine; Fluent bị loại vì trộn nhiều cách vẽ. Id không đổi, không
   migration. Renderer bundle **142.6 KiB**, embedded **6285.1 KiB** (bẫy `Object.freeze` đã ghi ở
