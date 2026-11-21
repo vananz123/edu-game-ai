@@ -132,12 +132,12 @@ export const SCENE_BACKDROPS: Readonly<Record<string, SceneSpec>> = Object.freez
   // (#290) Interiors get FURNITURE. A board on the wall, desks with books, a
   // bookcase: before this, "classroom" was a warm wash plus a chart, which reads
   // as "indoors" but could as easily be a clinic.
-  classroom: { sky: 'rays', horizon: 'line', standing: ['blackboard', 'desks', 'shelves'], fg: ['stones'], subjectY: 86 },
-  lab: { sky: 'rays', horizon: 'line', standing: ['blackboard', 'labbench'], fg: ['rack'], subjectY: 86 },
-  studio: { sky: 'rays', horizon: 'line', standing: ['books', 'towers'], fg: ['boards', 'stones'], subjectY: 86 },
+  classroom: { sky: ['wall', 'rays'], horizon: 'line', standing: ['blackboard', 'desks', 'shelves'], fg: ['stones'], subjectY: 86 },
+  lab: { sky: ['wall', 'rays'], horizon: 'line', standing: ['blackboard', 'labbench'], fg: ['rack'], subjectY: 86 },
+  studio: { sky: ['wall', 'rays'], horizon: 'line', standing: ['books', 'towers'], fg: ['boards', 'stones'], subjectY: 86 },
   // (#290) A shop: a counter with a till, shelves of goods, a basket at the
   // viewer's feet. Named after what a child would call it, not after the camera.
-  market: { sky: 'rays', horizon: 'line', standing: ['shelves', 'counter'], fg: ['basket'], subjectY: 86 },
+  market: { sky: ['wall', 'rays'], horizon: 'line', standing: ['shelves', 'counter'], fg: ['basket'], subjectY: 86 },
   // (#288) The first space that is a PLACE rather than a colour scheme: asphalt
   // with lane dashes, a traffic light and a sign standing on the pavement, a zebra
   // crossing at the viewer's feet. A traffic-safety question asked on a lawn was

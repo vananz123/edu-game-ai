@@ -7,6 +7,16 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-16 — #291 Giáo viên: "màu đậm hơn, tương phản hơn" — làm 3 phương án trên engine thật rồi để giáo viên chọn
+- Giáo viên xem `.tmp-art/interiors.png` và yêu cầu **màu đậm hơn + tương phản hơn**. Đo bằng số trước khi sửa: luminance (0–255) của tường/sàn so với nội thất — `classroom` tường **108**, sàn **190**, bàn **92**: sàn sáng gần gấp đôi bàn, tức mọi thứ nằm trên một nền gần trắng.
+- **Ba phương án dựng trên engine thật** (`.tmp-art/variants.png`), vision model chấm: **A (hiện tại) yếu · B (nền đậm + bão hoà) mạnh · C (nội thất ngả ink) tạm được** ⇒ chọn **B**.
+- **Đã làm (B):** thêm primitive `wall` (tường + gờ chân tường, vẽ trước, dưới tia sáng) cho `classroom`/`lab`/`market`/`studio`; nội thất chuyển từ "nhạt + trong suốt" sang **hình đặc** (bàn/bệ/quầy dùng `ink` 0.9–0.95, có viền `warm`); **7 palette nội thất viết tay lại** (`human-body`, `math`, `language`, `science`, `technology`, `health`, `food`) — sàn đậm hơn ~10–15% luminance, `cool`/`glow`/`warm` bão hoà hơn, **không blend màu**.
+- Đo lại sau khi sửa: `classroom` tường **99**, sàn **168**, bàn **88** (tương phản sàn↔bàn **80** thay vì 98 nhưng đúng chiều: nền tối xuống, đồ vật giữ nguyên); `lab` sàn 196 → **173**; chủ thể vẫn nổi nhất ở cả 3 cảnh (vision model xác nhận).
+- **Golden hash lấy lại lần thứ 10** — vẫn đúng 7/24 dòng, chứng minh bằng `.tmp-art/interiors-B.png`.
+- Kiểm: `tsc` sạch · unit **100/100** (50.7 s) · `npm run check` 52 tệp · `renderer-globals` sạch · `check:scene-runtime` **158.6 KiB** · `check:embedded` **6191.8 KiB**.
+- **Trên binary thật** (dựng lại 14:58, setup 15.70 MiB, SHA-256 `a1c649dc…2edf2cd4a`): editor **157/157**, stage **179/179**, play **790/790**. CDP trong cửa sổ thật: cảnh `classroom` có primitive `wall`, và `wall` được vẽ **trước** `blackboard`; palette đọc ra `sky #a9c3ee`, `ground #8fb0e6`, `cool #3f4b93` — đúng bản mới.
+- **Chưa kiểm:** phần còn lại (17/24 category ngoài trời) **vẫn dùng palette pastel cũ** — nếu giáo viên muốn đậm cả ngoài trời thì đó là lượt #292 (đổi 17 palette còn lại, 17 golden hash).
+
 ### 2026-11-16 — #290 Nội thất: lớp học có bảng + bàn, phòng thí nghiệm có bàn + ống nghiệm, cửa hàng có quầy + giỏ
 - Tiếp đà #288: giáo viên chọn "làm tiếp không gian cho chỗ khác cũng nhạt". Đo lại thì `classroom` chỉ là một mảng màu ấm + cái biểu đồ, `lab` cũng vậy — đọc ra "trong nhà" nhưng **cũng có thể là phòng khám**. Một lớp học phải có **bàn ghế và bảng**.
 - **5 primitive nội thất + 2 primitive tiền cảnh**: `blackboard` (bảng trên tường, nét "phấn" chỉ là hình, không chữ), `desks` (hai bàn học hai bên, trên mỗi bàn một quyển sách mở), `shelves` (giá sách 3 tầng có gáy sách màu), `labbench` (bàn thí nghiệm + bình tam giác + ống đong), `counter` (quầy + máy tính tiền), `rack` (giá ống nghiệm dưới chân), `basket` (giỏ hàng dưới chân).

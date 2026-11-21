@@ -4789,3 +4789,25 @@ chỉ đúng chỗ này ở #288 và chọn làm tiếp.
   dữ liệu mà cho ra hai lớp hình khác nhau thì giáo viên sẽ thấy cảnh "đổi" sau khi AI can thiệp.
 - **Golden hash lấy lại lần thứ 9, chỉ 7/24 dòng** — re-take toàn bộ 24 khi chỉ 7 dòng đổi là che mất
   dấu vết; luôn ghi rõ lần này đổi những dòng nào và ảnh nào chứng minh.
+
+## #291 — "Đậm hơn" phải được đo bằng luminance trước khi sửa, và phải có nhiều phương án để CHỌN
+
+Giáo viên nhìn ảnh nội thất và nói "màu sắc đậm hơn và có độ tương phản hơn". Đây là một yêu cầu
+cảm tính; biến nó thành số trước khi sửa: lấy mẫu điểm ảnh trên canvas (tường, sàn, đồ nội thất, chủ
+thể) và tính luminance. `classroom` khi đó: tường 108, sàn 190, bàn 92 — sàn sáng gần gấp đôi bàn,
+tức đồ vật đang nằm trên một nền gần trắng, và đó chính là cảm giác "nhạt".
+
+**Quyết định**
+- **Ba phương án dựng trên engine thật rồi để giáo viên chọn** (#281 lặp lại): A giữ nguyên, B nền đậm
+  + bão hoà, C nội thất ngả `ink`. Chọn **B**.
+- **Thêm `wall`** (tường + gờ chân tường) làm primitive trời, vẽ trước tia sáng: gờ chân tường là chỗ
+  mua được tương phản nhiều nhất, vì nó tách tường khỏi sàn đúng tại đường chân trời — nơi nội thất
+  nhạt trước đây tan vào một mảng.
+- **Nội thất phải là hình ĐẶC**: bàn/bệ/quầy dùng `ink` 0.9–0.95. Độ trong suốt 0.3–0.5 là thứ khiến
+  đồ vật "tan" vào tường; nó chỉ hợp với thứ **ở rìa** và **trang trí**, không hợp với đồ đạc.
+- **Màu viết tay, không blend** (#278 giữ nguyên): 7 palette nội thất được sửa từng kênh hex.
+- **Đậm nền, không đậm chủ thể.** Sau khi sửa, sàn tối đi còn đồ vật giữ nguyên độ đậm — chủ thể vẫn
+  là thứ nổi nhất. Một cảnh "đậm" mà chủ thể chìm vào nội thất là một cảnh hỏng.
+- **Phạm vi có ý thức**: chỉ 7 category nội thất. 17 category ngoài trời vẫn pastel; đổi cả 24 palette
+  trong một lượt là thay đổi mỹ thuật toàn sản phẩm mà chưa ai duyệt bằng mắt — tách thành #292 để
+  giáo viên quyết.

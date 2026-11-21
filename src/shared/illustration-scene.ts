@@ -203,6 +203,12 @@ export type ScenePrimitive =
   /** #288 road surface markings, painted in front of the subject's feet. */
   | 'zebra'
   | 'kerb'
+  /**
+   * #291 the back wall of a room, plus a skirting board. Interiors were flat pale
+   * washes because everything in them was pastel over pastel; a wall with a
+   * darker base gives the furniture something to stand against.
+   */
+  | 'wall'
   /** #290 interior foreground: a rack of test tubes, a shopping basket. */
   | 'rack'
   | 'basket'
@@ -287,7 +293,7 @@ const SCENE_SPECS: Readonly<Record<string, SceneSpec>> = Object.freeze({
   animals: { sky: ['sun', 'clouds'], horizon: 'hills', standing: ['trees', 'bushes'], fg: ['grass', 'stones'], subjectY: 88 },
   plants: { sky: ['sun', 'clouds'], horizon: 'hills', standing: ['bushes', 'trees'], fg: ['roots', 'grass'], subjectY: 88 },
   space: { sky: ['stars', 'moon'], horizon: 'mountains', standing: ['bubbles'], fg: ['stones'], subjectY: 84 },
-  'human-body': { sky: ['rays', 'clouds'], horizon: 'line', standing: ['blackboard', 'desks'], fg: ['stones'], subjectY: 84 },
+  'human-body': { sky: ['wall', 'rays', 'clouds'], horizon: 'line', standing: ['blackboard', 'desks'], fg: ['stones'], subjectY: 84 },
   transport: { sky: ['clouds', 'sun'], horizon: 'skyline', standing: ['road', 'traffic-light', 'streetlight'], fg: ['zebra', 'kerb'], subjectY: 88 },
   safety: { sky: ['sun', 'clouds'], horizon: 'skyline', standing: ['road', 'traffic-light', 'sign'], fg: ['zebra', 'kerb'], subjectY: 88 },
   environment: { sky: ['clouds', 'sun'], horizon: ['mountains', 'hills'], standing: ['trees', 'bushes'], fg: ['grass', 'stones'], subjectY: 88 },
@@ -297,15 +303,15 @@ const SCENE_SPECS: Readonly<Record<string, SceneSpec>> = Object.freeze({
   sports: { sky: ['sun', 'clouds'], horizon: 'hills', standing: ['bushes'], fg: ['grass', 'stones'], subjectY: 88 },
   music: { sky: ['rays', 'clouds'], horizon: 'line', standing: 'none', fg: ['stones', 'boards'], subjectY: 84 },
   art: { sky: ['rays', 'clouds'], horizon: 'line', standing: ['books'], fg: ['boards'], subjectY: 86 },
-  math: { sky: ['clouds', 'sun'], horizon: 'line', standing: ['blackboard', 'desks', 'shelves'], fg: ['stones'], subjectY: 86 },
-  language: { sky: ['clouds', 'sun'], horizon: 'line', standing: ['blackboard', 'desks', 'shelves'], fg: ['stones'], subjectY: 86 },
-  science: { sky: ['rays', 'clouds'], horizon: 'line', standing: ['blackboard', 'labbench'], fg: ['rack'], subjectY: 86 },
-  technology: { sky: ['clouds', 'rays'], horizon: 'line', standing: ['blackboard', 'labbench'], fg: ['rack'], subjectY: 86 },
-  health: { sky: ['sun', 'clouds'], horizon: 'line', standing: ['blackboard', 'desks'], fg: ['grass', 'stones'], subjectY: 86 },
+  math: { sky: ['wall', 'rays', 'clouds'], horizon: 'line', standing: ['blackboard', 'desks', 'shelves'], fg: ['stones'], subjectY: 86 },
+  language: { sky: ['wall', 'rays', 'clouds'], horizon: 'line', standing: ['blackboard', 'desks', 'shelves'], fg: ['stones'], subjectY: 86 },
+  science: { sky: ['wall', 'rays', 'clouds'], horizon: 'line', standing: ['blackboard', 'labbench'], fg: ['rack'], subjectY: 86 },
+  technology: { sky: ['wall', 'rays', 'clouds'], horizon: 'line', standing: ['blackboard', 'labbench'], fg: ['rack'], subjectY: 86 },
+  health: { sky: ['wall', 'rays', 'clouds'], horizon: 'line', standing: ['blackboard', 'desks'], fg: ['grass', 'stones'], subjectY: 86 },
   family: { sky: ['sun', 'clouds'], horizon: 'skyline', standing: ['trees', 'bushes'], fg: ['grass', 'stones'], subjectY: 88 },
   community: { sky: ['clouds', 'sun'], horizon: 'skyline', standing: ['towers', 'bushes'], fg: ['stones', 'grass'], subjectY: 88 },
   weather: { sky: 'clouds', horizon: 'hills', standing: ['bushes', 'trees'], fg: ['grass', 'stones'], subjectY: 86 },
-  food: { sky: ['sun', 'clouds'], horizon: 'line', standing: ['shelves', 'counter'], fg: ['basket'], subjectY: 86 },
+  food: { sky: ['wall', 'rays', 'clouds'], horizon: 'line', standing: ['shelves', 'counter'], fg: ['basket'], subjectY: 86 },
   objects: { sky: ['clouds', 'sun'], horizon: 'line', standing: ['books', 'tools'], fg: ['stones'], subjectY: 86 },
   'water-world': { sky: ['moon', 'stars'], horizon: 'sea', standing: ['bubbles'], fg: ['waves', 'stones'], subjectY: 84 },
 });
@@ -365,6 +371,20 @@ function renderSky(primitive: ScenePrimitive, palette: IllustrationPalette): str
         `<g data-scene-primitive="moon" fill="${ink}" opacity="0.5">` +
         `<path d="M276 26a20 20 0 1 0 14 34 24 24 0 0 1-14-34z"/>` +
         `</g>`
+      );
+    case 'wall':
+      // (#291) Painted FIRST, under the light rays. The skirting band is the part
+      // that buys contrast: it separates the wall from the floor at the horizon,
+      // which is exactly where a pale interior used to melt into one wash.
+      return (
+        `<g data-scene-primitive="wall">` +
+        `<rect x="0" y="0" width="${SCENE_WIDTH}" height="${SCENE_HORIZON}" fill="${cool}" opacity="0.26"/>` +
+        `<rect x="0" y="${SCENE_HORIZON - 18}" width="${SCENE_WIDTH}" height="18" fill="${cool}" opacity="0.5"/>` +
+        `<path d="M0 ${SCENE_HORIZON - 18}h${SCENE_WIDTH}" stroke="${ink}" stroke-width="1.2" opacity="0.22"/>` +
+        `<path d="M0 ${SCENE_HORIZON - 0.7}h${SCENE_WIDTH}" stroke="${ink}" stroke-width="1.6" opacity="0.4"/>` +
+        `<g stroke="${ink}" stroke-width="1" opacity="0.12">` +
+        `<path d="M104 0v${SCENE_HORIZON - 18}"/><path d="M216 0v${SCENE_HORIZON - 18}"/>` +
+        `</g></g>`
       );
     case 'rays':
       return (
@@ -551,9 +571,9 @@ function renderMid(primitive: ScenePrimitive, palette: IllustrationPalette): str
       // never text.
       return (
         `<g data-scene-primitive="blackboard">` +
-        `<rect x="40" y="32" width="240" height="66" rx="7" fill="${ink}" opacity="0.13"/>` +
-        `<rect x="48" y="40" width="224" height="50" rx="4" fill="${ink}" opacity="0.09"/>` +
-        `<g stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" opacity="0.45">` +
+        `<rect x="40" y="32" width="240" height="66" rx="7" fill="${ink}" opacity="0.5"/>` +
+        `<rect x="48" y="40" width="224" height="50" rx="4" fill="${ink}" opacity="0.36"/>` +
+        `<g stroke="#ffffff" stroke-width="2.6" stroke-linecap="round" opacity="0.82">` +
         `<path d="M62 58h86"/><path d="M62 70h58"/><path d="M206 62h44"/>` +
         `</g></g>`
       );
@@ -562,16 +582,16 @@ function renderMid(primitive: ScenePrimitive, palette: IllustrationPalette): str
       // so the centre stays clear. Legs reach the horizon, tops are at y 118.
       return (
         `<g data-scene-primitive="desks">` +
-        `<g fill="${cool}" opacity="0.45">` +
+        `<g fill="${ink}" opacity="0.9">` +
         `<rect x="14" y="118" width="66" height="7" rx="2.5"/>` +
-        `<rect x="20" y="125" width="5" height="27" rx="1.5"/>` +
-        `<rect x="69" y="125" width="5" height="27" rx="1.5"/>` +
-        `<rect x="240" y="118" width="66" height="7" rx="2.5"/>` +
-        `<rect x="246" y="125" width="5" height="27" rx="1.5"/>` +
-        `<rect x="295" y="125" width="5" height="27" rx="1.5"/>` +
+        `<rect x="20" y="125" width="5" height="27" rx="1.5" fill="${ink}" opacity="0.62"/>` +
+        `<rect x="69" y="125" width="5" height="27" rx="1.5" fill="${ink}" opacity="0.62"/>` +
+        `<rect x="240" y="118" width="66" height="7" rx="2.5" fill="${ink}" opacity="0.9"/>` +
+        `<rect x="246" y="125" width="5" height="27" rx="1.5" fill="${ink}" opacity="0.62"/>` +
+        `<rect x="295" y="125" width="5" height="27" rx="1.5" fill="${ink}" opacity="0.62"/>` +
         `</g>` +
         // one open book on each desk: a desk reads as a desk when something is on it
-        `<g fill="${warm}" opacity="0.55">` +
+        `<g fill="#ffffff" opacity="0.95">` +
         `<path d="M32 117l14-2v-4l-14 2z"/><path d="M46 115l14 2v-4l-14-2z"/>` +
         `<path d="M258 115l14-2v-4l-14 2z"/><path d="M272 113l14 2v-4l-14-2z"/>` +
         `</g></g>`
@@ -580,8 +600,8 @@ function renderMid(primitive: ScenePrimitive, palette: IllustrationPalette): str
       // (#290) A bookcase against the left wall: three shelves, coloured spines.
       return (
         `<g data-scene-primitive="shelves">` +
-        `<rect x="4" y="86" width="50" height="64" rx="3" fill="${cool}" opacity="0.28"/>` +
-        `<g stroke="${ink}" stroke-width="2" opacity="0.22">` +
+        `<rect x="4" y="86" width="50" height="64" rx="3" fill="${ink}" opacity="0.55"/>` +
+        `<g stroke="#ffffff" stroke-width="2" opacity="0.4">` +
         `<path d="M4 106h50"/><path d="M4 127h50"/>` +
         `</g>` +
         `<g opacity="0.7">` +
@@ -600,14 +620,15 @@ function renderMid(primitive: ScenePrimitive, palette: IllustrationPalette): str
       // a solid bar so the glassware has something to stand on.
       return (
         `<g data-scene-primitive="labbench">` +
-        `<rect x="226" y="116" width="92" height="7" rx="2.5" fill="${cool}" opacity="0.45"/>` +
-        `<rect x="232" y="123" width="5" height="29" rx="1.5" fill="${ink}" opacity="0.28"/>` +
-        `<rect x="307" y="123" width="5" height="29" rx="1.5" fill="${ink}" opacity="0.28"/>` +
-        `<g fill="none" stroke="${glow}" stroke-width="2.2" opacity="0.75">` +
+        `<rect x="226" y="116" width="92" height="7" rx="2.5" fill="${ink}" opacity="0.95"/>` +
+        `<rect x="226" y="116" width="92" height="2.4" rx="1.2" fill="${warm}" opacity="0.55"/>` +
+        `<rect x="232" y="123" width="5" height="29" rx="1.5" fill="${ink}" opacity="0.66"/>` +
+        `<rect x="307" y="123" width="5" height="29" rx="1.5" fill="${ink}" opacity="0.66"/>` +
+        `<g fill="none" stroke="${glow}" stroke-width="2.6" opacity="1">` +
         `<path d="M240 116v-10h14v10"/>` +
         `<path d="M262 116v-14h10v14"/>` +
         `</g>` +
-        `<g fill="${warm}" opacity="0.6">` +
+        `<g fill="${warm}" opacity="0.95">` +
         `<rect x="243" y="108" width="8" height="8" rx="2"/>` +
         `<rect x="265" y="106" width="4" height="10" rx="2"/>` +
         `</g></g>`
@@ -616,10 +637,11 @@ function renderMid(primitive: ScenePrimitive, palette: IllustrationPalette): str
       // (#290) A shop counter with a till block, right edge.
       return (
         `<g data-scene-primitive="counter">` +
-        `<rect x="222" y="112" width="96" height="9" rx="2.5" fill="${cool}" opacity="0.5"/>` +
-        `<rect x="228" y="121" width="84" height="31" rx="2" fill="${ink}" opacity="0.18"/>` +
-        `<rect x="286" y="98" width="20" height="16" rx="3" fill="${ink}" opacity="0.35"/>` +
-        `<rect x="290" y="102" width="12" height="5" rx="1.5" fill="#ffffff" opacity="0.55"/>` +
+        `<rect x="222" y="112" width="96" height="9" rx="2.5" fill="${ink}" opacity="0.95"/>` +
+        `<rect x="222" y="112" width="96" height="3" rx="1.5" fill="${warm}" opacity="0.6"/>` +
+        `<rect x="228" y="121" width="84" height="31" rx="2" fill="${ink}" opacity="0.62"/>` +
+        `<rect x="286" y="98" width="20" height="16" rx="3" fill="${ink}" opacity="0.8"/>` +
+        `<rect x="290" y="102" width="12" height="5" rx="1.5" fill="#ffffff" opacity="0.9"/>` +
         `</g>`
       );
     case 'bubbles':
@@ -772,8 +794,8 @@ function renderFg(primitive: ScenePrimitive, palette: IllustrationPalette): stri
       // (#290) A test-tube rack at the viewer's feet, left side.
       return (
         `<g data-scene-primitive="rack">` +
-        `<rect x="18" y="${foot + 8}" width="62" height="8" rx="3" fill="${cool}" opacity="0.45"/>` +
-        `<g fill="${glow}" opacity="0.7">` +
+        `<rect x="18" y="${foot + 8}" width="62" height="8" rx="3" fill="${ink}" opacity="0.55"/>` +
+        `<g fill="${glow}" opacity="0.95">` +
         `<rect x="24" y="${foot - 8}" width="6" height="17" rx="3"/>` +
         `<rect x="34" y="${foot - 12}" width="6" height="21" rx="3"/>` +
         `<rect x="44" y="${foot - 6}" width="6" height="15" rx="3"/>` +
@@ -785,8 +807,8 @@ function renderFg(primitive: ScenePrimitive, palette: IllustrationPalette): stri
       // (#290) A shopping basket at the viewer's feet, right side.
       return (
         `<g data-scene-primitive="basket">` +
-        `<path d="M236 ${foot + 4}h56l-6 18h-44z" fill="${warm}" opacity="0.4"/>` +
-        `<path d="M244 ${foot + 4}q20-16 40 0" fill="none" stroke="${warm}" stroke-width="2.6" opacity="0.7"/>` +
+        `<path d="M236 ${foot + 4}h56l-6 18h-44z" fill="${warm}" opacity="0.7"/>` +
+        `<path d="M244 ${foot + 4}q20-16 40 0" fill="none" stroke="${warm}" stroke-width="2.8" opacity="0.95"/>` +
         `<g stroke="${ink}" stroke-width="1.4" opacity="0.25">` +
         `<path d="M248 ${foot + 8}h32M246 ${foot + 13}h36"/>` +
         `</g></g>`

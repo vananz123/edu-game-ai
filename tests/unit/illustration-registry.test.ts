@@ -414,9 +414,11 @@ test('the scene composer output is pinned so saved scenes stay stable', () => {
   // #278 re-took them a FOURTH time, again with rendered PNGs: every palette
   // now carries `warm` (sun, props, ground props) and `cool` (clouds, mountains,
   // skyline, towers, pebbles, corner icons) so a scene is no longer one hue.
-  // #290 re-took 7 of the 24 hashes (human-body, math, language, science,
-  // technology, health, food) because those categories now stand in a room with
-  // furniture instead of a warm wash. Proof: .tmp-art/interiors.png.
+  // #290/#291 re-took the same 7 of 24 (human-body, math, language, science,
+  // technology, health, food) twice in one day: first the room got furniture,
+  // then the teacher asked for deeper colour and the palette of those categories
+  // was deepened (variant B of three, chosen by eye). Proof for both rounds:
+  // .tmp-art/interiors.png, .tmp-art/variants.png, .tmp-art/interiors-B.png.
   // #277 re-took all 24 hashes a third time, ON PURPOSE and with rendered PNGs
   // checked by eye: every standing thing now casts one soft ground-contact
   // shadow, and the far layer (clouds/hills/mountains/skyline) is less washed
@@ -426,7 +428,7 @@ test('the scene composer output is pinned so saved scenes stay stable', () => {
     animals: 'd976161268d551da9500bbe9d07e71f84613bf0339fb15e86858b63a032fdb28',
     plants: 'cb8f8cc3a6b3d9c81a8d9f4a4beed1f54e9f9142b8db9fa754f1438ac0255eb5',
     space: 'e4672235e3bd956c5d6c0af4f071454f080142351df998f1d3ae1b96dc048609',
-    'human-body': '09f1909779cc422e2a95457d1a376465e56a192343e3aa65c821b9d97e1959c8',
+    'human-body': '04bf206d4bf4c9e961e66fe5864c905de1170921db3b2ccc9bd6a936e3e52809',
     transport: '2382e7e999b7560b4ec6bc746b9c5fb36271222a86b6e7a2cc7dfb8f5329eb49',
     safety: '594692f15c42e518be9d634c1c727d03989de46aa95c1596a77cdec50cffed7c',
     environment: 'a195bd65e6bdd82e59809e65f06e0b8b0b6d560782bcd930db34ddacdc810314',
@@ -436,15 +438,15 @@ test('the scene composer output is pinned so saved scenes stay stable', () => {
     sports: 'c48b90a8217172d8e2b6e82362eeb0c2edfd9c98ce3ccec1a06e344856a1d0d5',
     music: '1d225563ee037f9beeaa432d54c7c4394ac13e2a54b3f1937ef866de175157a2',
     art: 'fb8844a8d9b695d5d7ca8510c3da1953400902d2f432e0195b1d525964d39920',
-    math: 'b6f5523b5b9fb04f223b5e66655ad6d9b31d3c73b33172d0574a5f3eaf28b662',
-    language: 'f1fc90fddfdf1fe8b2d65f565152beeb694fe2273aec24a6a21a502ef86a79a4',
-    science: 'dac7d612e62cf9e7316971102fa3175041adaf6a0a676b152c9ca981912134ef',
-    technology: '23edf064e75e7fa6d7785659c58f5a849f15e7b6b63eb0689acee8baf0628acd',
-    health: '61a854a20e672f58af4a4e28e29366e7218a51309d10a3b763cb87c6ea636351',
+    math: 'ae7fa202dc741cb5796944c114b98176b6734e4b3f98bc3269c5520a18eb8712',
+    language: 'f01476d5f4579feddab7526ee91fd32fce9298f27ef07d9afc051d8f671f28ba',
+    science: '9f8a676ec211106fae21ece5380fb286a8acc3b177e18d02737a4ed26f9d96b6',
+    technology: '895f5e70d70e8f901b81d7b07552b132cfb363379d93975d813fc8b5df4629a4',
+    health: '0dd6abdcf2006f0701a197bbbde4d35287887f6f8b7c09c8f9cf12e996089415',
     family: 'cf0eea573b8c7eecbdc86d8533477588ac33a091f799f0ce3aa38816c1e68f2a',
     community: '3b35c148292828c0c1f845dc0df536a4298d6a584d399a6d71a19fe9dcbd4f28',
     weather: 'bbca1d9beef17cb4a114e4c7f04db63b54dbbb44bc4a827487cb1536d5bd1854',
-    food: '121b22248cc61610736306b7e4ec7ef56a497dd51671659c14c3f6da82926cee',
+    food: '1d2a881f889ff115947bf8af3e0bf28e04a93e3a82a5b0759073495084beb826',
     objects: '12ac8ae39e746fe7623576c7b89c72c7dc725f2cefcf771cbe8265c852da206b',
     'water-world': '3316888bcc332c1762bb4c947b8ca65c30485cecd5d04684d56401f085635933',
   };
@@ -680,7 +682,7 @@ test('every primitive in a scene table actually renders', () => {
   const knownIn: Record<string, string[]> = {
     // #288 added the road space: `road` is a far-layer surface, the street
     // furniture stands on the pavement and the markings sit under the feet.
-    sky: ['sun', 'moon', 'rays', 'stars', 'clouds'],
+    sky: ['sun', 'moon', 'rays', 'stars', 'clouds', 'wall', 'none'],
     horizon: ['hills', 'mountains', 'skyline', 'sea', 'line'],
     // #290 interiors: the wall furniture (blackboard) and the things a room stands
     // on (desks, shelves, labbench, counter) are all mid-layer; the rack and the

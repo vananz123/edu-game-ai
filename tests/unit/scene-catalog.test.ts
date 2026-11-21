@@ -35,7 +35,7 @@ function test(name: string, fn: () => void) {
 }
 
 const PRIMITIVES = new Set([
-  'sun', 'moon', 'rays', 'stars', 'clouds',
+  'sun', 'moon', 'rays', 'stars', 'clouds', 'wall',
   'hills', 'mountains', 'skyline', 'sea', 'line', 'road',
   'trees', 'bushes', 'towers', 'bubbles', 'graph',
   'books', 'flasks', 'tools', 'traffic-light', 'sign', 'streetlight',
