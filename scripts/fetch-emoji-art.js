@@ -89,6 +89,17 @@ const MAP = {
   user: '1f464',
   'graduation-cap': '1f393',
   'hard-hat': '1f477',
+  // #285 life cycles and weather: a real model asked for "egg -> tadpole -> frog"
+  // and "seed -> sprout" and had nothing to name but `fish` and `leaf`, so it drew
+  // a fish in a frog question (right structure, wrong biology). These six are the
+  // concepts it invented ids for or had to fake. There is no tadpole emoji; `fish`
+  // stays the closest stand-in and the prompt lists it, so the model can pick it.
+  egg: '1f95a',
+  frog: '1f438',
+  sprout: '1f331',
+  butterfly: '1f98b',
+  sun: '2600',
+  droplet: '1f4a7',
 };
 
 const OUT = path.join(__dirname, '..', 'src', 'shared', 'emoji-art.generated.ts');

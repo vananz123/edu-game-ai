@@ -88,7 +88,9 @@ const EDITOR_SCENE_ICON_LABEL = {
   'book-open': 'Quyển sách', 'lightbulb': 'Bóng đèn', 'star': 'Ngôi sao', 'clock': 'Đồng hồ',
   'target': 'Bia ngắm', 'brain': 'Bộ não', 'zap': 'Tia sét', 'sparkles': 'Lấp lánh',
   'gift': 'Món quà', 'pencil': 'Bút chì', 'mountain': 'Ngọn núi', 'fish': 'Cá',
-  'bird': 'Chim', 'bug': 'Con bọ'
+  'bird': 'Chim', 'bug': 'Con bọ',
+  'egg': 'Quả trứng', 'frog': 'Con ếch', 'sprout': 'Mầm cây', 'butterfly': 'Con bướm',
+  'sun': 'Mặt trời', 'droplet': 'Giọt nước'
 };
 /** The four corners in the order the editor shows them: bottom row, then top. */
 const EDITOR_SCENE_SLOTS = [

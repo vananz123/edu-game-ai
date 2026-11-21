@@ -23,6 +23,7 @@ import {
 } from '../../src/shared/scene-asset-catalog';
 import { CONTENT_CATEGORY_IDS, getCategoryIcon } from '../../src/shared/content-categories';
 import { ILLUSTRATION_ASSET_IDS, ILLUSTRATION_CATEGORY_IDS } from '../../src/shared/illustration-registry';
+import { EMOJI_ART } from '../../src/shared/emoji-art.generated';
 import { ICON_NAMES, isIconName } from '../../src/shared/icon-registry';
 import { SCENE_HORIZON } from '../../src/shared/illustration-scene';
 
@@ -89,13 +90,22 @@ test('every content category maps to a known backdrop', () => {
   assert.equal(isSceneBackdropId(sceneBackdropForCategory('banana')), true, 'unknown categories stay safe');
 });
 
-test('the icon whitelist is concrete, unique and registered', () => {
+test('the icon whitelist is concrete, unique and drawable', () => {
+  // The contract is DRAWABLE, not "registered with Lucide". Since #281 the art is
+  // Twemoji and since #285 the catalogue carries concepts Lucide 1.61 has no node
+  // for (`frog`, `butterfly` — checked, they are missing from that version). An id
+  // with art but no Lucide node still renders on every surface, so the Lucide node
+  // is a fallback, not a requirement.
   assert.equal(new Set(SCENE_ICON_IDS).size, SCENE_ICON_IDS.length, 'duplicate icon ids');
   for (const name of SCENE_ICON_IDS) {
-    assert.ok(ICON_NAMES.includes(name), `${name} is not a registry icon`);
-    assert.ok(isIconName(name));
-    assert.equal(isSceneIconId(name), true);
+    assert.ok(
+      ICON_NAMES.includes(name) || Object.prototype.hasOwnProperty.call(EMOJI_ART, name),
+      `${name} is neither a registry icon nor a scene art id`
+    );
+    assert.equal(isSceneIconId(name), true, `${name} is in the catalogue but isSceneIconId rejects it`);
   }
+  // A typo must still fail: the catalogue set is the only gate.
+  assert.equal(isSceneIconId('eggg'), false);
   for (const id of CONTENT_CATEGORY_IDS) {
     const icon = getCategoryIcon(id);
     if (!icon) continue;

@@ -337,7 +337,7 @@ mainIcon (chọn 1): paw-print, leaf, rocket, heart-pulse, car, shield-check,
                    house, cloud-sun, apple, box, waves-horizontal, book-open,
                    lightbulb, star, clock, target, brain, zap, sparkles, gift,
                    pencil, mountain, fish, bird, bug, user, graduation-cap,
-                   hard-hat
+                   hard-hat, egg, frog, sprout, butterfly, sun, droplet
 compareIcon (chỉ khi layout = compare): cùng danh sách trên, khác mainIcon.
    Đây là hình BÊN PHẢI; mainIcon là hình BÊN TRÁI.
 Dấu so sánh đọc là: greater-than = ">" · less-than = "<" · equal = "=".

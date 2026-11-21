@@ -4668,3 +4668,29 @@ trong docs, nên hai bản trôi khỏi nhau mà không có gì đỏ.
 - **Thiếu icon là lỗ hổng từ vựng, không phải lỗi prompt**: "vòng đời con ếch" ra `fish → bug → bird`,
   đúng cấu trúc, sai sinh học, vì 41 icon không có `frog`/`tadpole`/`egg`. Ghi lại để lần mở rộng
   kho icon sau có lý do cụ thể.
+
+## #285 — Catalogue là nguồn duy nhất về "id nào vẽ được"; đừng kiểm lại bằng import
+
+Một lượt model thật (#284) vẽ "trứng → nòng nọc → ếch" thành `fish → bug → bird`: **đúng cấu trúc,
+sai sinh học**, vì kho 41 icon không có `egg`/`frog`/`sprout`. Vậy thêm sáu id (`egg`, `frog`,
+`sprout`, `butterfly`, `sun`, `droplet`) — mỗi id vẫn phải đi đủ bốn chỗ như #266.
+
+Thêm id thì `isSceneIconId` đỏ, vì nó đòi id phải có **node Lucide**. `frog` và `butterfly` không
+có trong **lucide 1.61** đang ghim: đã thử thêm vào danh sách sinh registry, generator báo đúng hai
+tên đó không tồn tại.
+
+**Quyết định**
+- **Không nâng version Lucide** để có thêm hai node. Nâng version đổi path của rất nhiều icon đang
+  dùng; đổi hình 129 icon để lấy hai cái là đánh đổi sai, nhất là khi art Twemoji đã vẽ được cả hai.
+- **`isSceneIconId` = tra tập `SCENE_ICON_SET`**, không kiểm Lucide, không kiểm art. "Mọi id trong
+  catalogue đều vẽ được" là một **bất biến được chứng minh một lần** bằng `scene-catalog.test.ts`
+  (mỗi id phải có node Lucide **hoặc** art Twemoji), không phải một phép kiểm lặp lại ở mỗi lần gọi.
+- **Một hàm kiểm tra không được kéo theo dữ liệu nặng**: hai import đó lôi cả bảng 129 icon Lucide và
+  62 KiB art vào **bundle Rust** — nơi không vẽ icon nào — và đo được **+318 KiB**. Bỏ đi còn
+  **−96.7 KiB** so với trước. Cùng họ với bẫy `Object.freeze` ở #281: cái giá không nằm ở chỗ bạn
+  nghĩ, nó nằm ở chỗ bundler không tree-shake được.
+- **Test phải pin hệ quả, không pin con số**: test art đổi từ `assert.equal(ids.length, 41)` sang so
+  với `SCENE_ICON_IDS.length`, và test Lucide fallback đổi từ "mọi id" sang "id nào có node thì giữ
+  node, id nào không có thì phải có art" — số 41 chỉ là hệ quả của catalogue.
+- **Không có emoji nòng nọc**; `fish` là hình thay thế gần nhất và prompt có nhắc tên, nên model được
+  phép chọn nó. Ghi lại thay vì thêm một id giả.

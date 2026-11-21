@@ -26,7 +26,10 @@ const FORBIDDEN = ['http://', 'https://', '<script', '<image', '<foreignObject',
 test('every scene icon has art, and no art is orphaned', () => {
   const artIds = Object.keys(EMOJI_ART).sort();
   assert.deepEqual(artIds, [...SCENE_ICON_IDS].sort(), 'EMOJI_ART and SCENE_ICON_IDS disagree');
-  assert.equal(artIds.length, 41, 'the scene icon list is 41 ids');
+  // 47 ids since #285 (41 at the Twemoji swap). Pinned to the catalogue rather
+  // than to a literal: the number is a consequence, and a stale 41 only means
+  // someone forgot this line, not that the art is wrong.
+  assert.equal(artIds.length, SCENE_ICON_IDS.length, 'every scene icon has art and nothing else does');
   assert.equal(EMOJI_ART_SOURCE, 'twemoji');
 });
 
@@ -81,9 +84,17 @@ test('the Lucide fallback is intact: scene ids still resolve as icons too', () =
   // If a future cleanup deleted the Lucide node for `apple`, every saved game
   // still renders — but the prompt vocabulary and the editor list would point at
   // an id half the app can no longer draw.
+  // Since #285 two ids have no Lucide node at all (`frog`, `butterfly` are not in
+  // the pinned lucide 1.61), so the fallback is per id, not universal: an id that
+  // HAS a node must keep it, and every id must be drawable by the art table.
   for (const id of SCENE_ICON_IDS) {
-    assert.ok(Object.prototype.hasOwnProperty.call(ICON_NODES, id), `${id} lost its Lucide fallback`);
+    if (Object.prototype.hasOwnProperty.call(ICON_NODES, id)) continue;
+    assert.ok(
+      Object.prototype.hasOwnProperty.call(EMOJI_ART, id),
+      `${id} lost its Lucide fallback and has no art either`
+    );
   }
+  assert.ok(renderIconSvg('frog').includes('emoji-frog'), 'a Twemoji-only id still renders');
   assert.equal(renderIconSvg('nope'), '', 'unknown names still render nothing');
   assert.ok(renderIconSvg('layout-grid').includes('lucide-layout-grid'), 'interface icons stay Lucide');
 });

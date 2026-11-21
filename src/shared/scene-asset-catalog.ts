@@ -17,7 +17,6 @@
  * composer imports it, and the registry imports the composer.
  */
 import { CONTENT_CATEGORY_IDS } from './content-categories';
-import { isIconName } from './icon-registry';
 import type { SceneSpec } from './illustration-scene';
 
 /** Bumped only when the JSON shape changes incompatibly. */
@@ -186,12 +185,29 @@ export const SCENE_ICON_IDS: readonly string[] = Object.freeze([
   // #266 people: a scene about "who" needs a who. `users` alone reads as a group
   // marker from the safety category, not as a person standing in the scene.
   'user', 'graduation-cap', 'hard-hat',
+  // #285 life cycles and weather: "trứng → nòng nọc → ếch" and "hạt → nảy mầm"
+  // had no id, so a real model faked them out of `fish` and `leaf` (right
+  // structure, wrong biology). No emoji is a tadpole; `fish` is the stand-in.
+  'egg', 'frog', 'sprout', 'butterfly', 'sun', 'droplet',
 ]);
 
 const SCENE_ICON_SET: ReadonlySet<string> = new Set(SCENE_ICON_IDS);
 
+/**
+ * Catalogue membership IS the check — a plain set lookup, deliberately.
+ *
+ * It used to also require a Lucide node (`isIconName`). Since #281 the art is
+ * Twemoji and #285 added `frog`/`butterfly`, which the pinned lucide 1.61 has no
+ * node for, so that second gate would reject ids the engine draws perfectly well.
+ * "Every id here is drawable" is not proved by re-checking it at runtime — it is
+ * proved once, by `scene-catalog.test.ts` (registry node or art, for every id).
+ *
+ * The imports this function used to carry were also costly: they dragged the
+ * whole 129-icon Lucide table AND the 62 KiB of Twemoji art into the Rust-embedded
+ * backend, which never draws an icon (+318 KiB measured, #285).
+ */
 export function isSceneIconId(value: unknown): value is string {
-  return typeof value === 'string' && SCENE_ICON_SET.has(value) && isIconName(value);
+  return typeof value === 'string' && SCENE_ICON_SET.has(value);
 }
 
 /**
