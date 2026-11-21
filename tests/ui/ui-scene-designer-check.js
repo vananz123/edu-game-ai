@@ -276,6 +276,37 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
     out.cancelClosed = !sd() && changedInside;
     out.cancelKeptStored = field().value === kept;
 
+    // ---- 11. #300: a double-click opens ONE workshop, and the zoom bar stays put ----
+    const editAgain = row().querySelector('[data-editor-art-edit]');
+    out.editButtonBack = !!editAgain;
+    if (editAgain) {
+      editAgain.click();
+      editAgain.click();
+      editAgain.click();
+      await sleep(700);
+    }
+    out.singleWorkshop = document.querySelectorAll('.scene-designer').length === 1;
+    const zoomUp = sd().querySelector('[data-sd-zoom-in]');
+    for (let step = 0; step < 10; step += 1) {
+      sd().querySelector('[data-sd-zoom-in]').click();
+      await sleep(30);
+    }
+    await sleep(250);
+    const zoomLabel = sd().querySelector('[data-sd-zoom-value]');
+    const labelBox = zoomLabel.getBoundingClientRect();
+    const wrap = sd().querySelector('[data-sd-wrap]');
+    out.zoomAtMax = (zoomLabel.textContent || '').trim();
+    out.zoomBarInView = labelBox.top >= 0 && labelBox.bottom <= window.innerHeight - 1;
+    out.zoomWrapScrolls = !!wrap && wrap.scrollHeight > wrap.clientHeight + 2;
+    out.zoomStillWorksAtMax = (() => {
+      zoomUp.click();
+      return (sd().querySelector('[data-sd-zoom-value]').textContent || '').trim() === '200%';
+    })();
+    sd().querySelector('[data-sd-done]').click();
+    await sleep(600);
+    out.singleWorkshopClosed = !document.querySelector('.scene-designer');
+    out.scrollUnlocked = document.documentElement.classList.contains('is-scene-designer') === false;
+
     // Leave the app exactly as it was found (DECISIONS #288 sequel).
     document.getElementById('modalRoot').innerHTML = '';
     if (typeof closeEditorPage === 'function') closeEditorPage();
@@ -349,6 +380,14 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
   check('"Xong" writes the scene into the question', out.doneWrote === true);
   check('"Huỷ" closes the workshop', out.cancelClosed === true);
   check('"Huỷ" leaves the stored scene untouched', out.cancelKeptStored === true);
+  check('"Chỉnh cảnh" is back after closing', out.editButtonBack === true);
+  check('a double click opens only ONE workshop', out.singleWorkshop === true);
+  check('zoom reaches 200%', out.zoomAtMax === '200%', out.zoomAtMax);
+  check('the zoom label stays on screen at 200%', out.zoomBarInView === true);
+  check('at 200% it is the canvas that scrolls', out.zoomWrapScrolls === true);
+  check('the zoom buttons still answer at 200%', out.zoomStillWorksAtMax === true);
+  check('"Xong" closes the single workshop', out.singleWorkshopClosed === true);
+  check('closing unlocks the page again', out.scrollUnlocked === true);
   check('the gate leaves the app as it found it', out.appRestored === true);
 
   const failed = results.filter(entry => !entry.ok).length;

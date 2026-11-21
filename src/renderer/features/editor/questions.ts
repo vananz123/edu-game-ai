@@ -776,8 +776,23 @@ function wireEditorItemArtRow(row) {
           .map(id => ({ id, label: EDITOR_SCENE_ICON_LABEL[id] })),
         signs: EDITOR_SCENE_SIGNS.filter(entry => !!entry.id),
         backdrops: stageSceneBackdropIds().map(id => ({ id, label: EDITOR_SCENE_BACKDROP_LABEL[id] || id })),
-        onChange: json => { blueprintField.value = json; },
-        onClose: () => redrawEditorArtRow(row),
+        onChange: json => {
+          /* #300: resolve the field from the LIVE row, never from a captured node. A
+             row that was redrawn while the workshop was open would leave the captured
+             field detached and every later change would vanish. */
+          const live = row.isConnected ? row : row.parentElement && row.parentElement.querySelector('[data-question-id="' + row.getAttribute('data-question-id') + '"]');
+          /* The field is not always INSIDE the row (it can be a sibling), so a row
+             lookup that finds nothing must fall back to the live field rather than
+             silently dropping the change — that silent drop is exactly what made
+             "Xong" look broken. */
+          const inRow = live && live.isConnected ? live.querySelector('[data-field="sceneBlueprint"]') : null;
+          const field = inRow || (blueprintField && blueprintField.isConnected ? blueprintField : null);
+          if (field) field.value = json;
+        },
+        onClose: () => {
+          const live = row.isConnected ? row : row.parentElement && row.parentElement.querySelector('[data-question-id="' + row.getAttribute('data-question-id') + '"]');
+          redrawEditorArtRow(live || row);
+        },
       });
     });
   }

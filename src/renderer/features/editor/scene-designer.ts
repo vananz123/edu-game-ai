@@ -25,6 +25,13 @@ const SCENE_DESIGNER_SURROUND_SAMPLE = 4;
 function openSceneDesigner(options) {
   const opts = options || {};
   const host = opts.host || document.body;
+  /* #300: exactly ONE workshop. A second click on "Chỉnh cảnh" (a double-click, or a
+     teacher clicking again because the first click felt slow) used to stack a whole
+     second screen underneath; "Xong" then closed only the top one, the page stayed
+     scroll-locked and the row stopped responding. The newest open wins, and because
+     every change is written through live (#297) nothing is lost by dropping the old
+     screen. */
+  Array.from(document.querySelectorAll('.scene-designer')).forEach(node => node.remove());
   if (typeof stageNormalizeBlueprint !== 'function') return;
   const initial = stageNormalizeBlueprint(opts.blueprint);
   if (!initial) return;
@@ -72,11 +79,16 @@ function openSceneDesigner(options) {
         '<div class="sd-group"><span class="sd-group-title">Hình mẫu — kéo vào khung</span>' +
           '<div class="sd-icons" data-sd-icons></div></div>' +
       '</div>' +
-      '<div class="sd-canvas-wrap">' +
-        '<div class="sd-canvas" data-sd-canvas>' +
-          '<div class="sd-art" data-sd-art></div>' +
-          '<div class="sd-handles" data-sd-handles></div>' +
+      '<div class="sd-stage">' +
+        '<div class="sd-canvas-wrap" data-sd-wrap>' +
+          '<div class="sd-canvas" data-sd-canvas>' +
+            '<div class="sd-art" data-sd-art></div>' +
+            '<div class="sd-handles" data-sd-handles></div>' +
+          '</div>' +
         '</div>' +
+        /* #300: the zoom bar lives OUTSIDE the scrolling area. At 200% the canvas is
+           taller than the column, and a bar that scrolls with it is a bar the teacher
+           cannot reach — which reads as "zoom is missing". */
         '<div class="sd-zoom">' +
           '<button type="button" class="btn btn-secondary btn-small" data-sd-zoom-out title="Thu nhỏ khung vẽ">−</button>' +
           '<span class="sd-zoom-value" data-sd-zoom-value>100%</span>' +
@@ -808,6 +820,10 @@ function openSceneDesigner(options) {
     applyZoom(zoom + (event.deltaY < 0 ? 0.1 : -0.1));
   }, { passive: false } as AddEventListenerOptions);
 
+  /* #300: a row redrawn while the workshop was open would leave the captured field
+     detached, so every keystroke after that wrote into nothing. The lock above makes
+     that impossible for a stacked screen, but the guard is cheap and it is the exact
+     failure the teacher saw as "Xong does not work". */
   // ---- drop an icon from the palette onto the canvas ----
   canvas.addEventListener('dragover', dragEvent => {
     dragEvent.preventDefault();
@@ -830,13 +846,25 @@ function openSceneDesigner(options) {
   const close = apply => {
     document.removeEventListener('keydown', onKey);
     root.remove();
-    // #298: the page behind a full-screen workshop must not scroll — a scrollbar
-    // owned by the page is 10px the workshop cannot cover.
-    document.documentElement.classList.remove('is-scene-designer');
     const saved = apply ? JSON.stringify(blueprint) : originalJson;
     if (!apply && typeof opts.onChange === 'function') opts.onChange(originalJson);
     else if (apply && typeof opts.onChange === 'function') opts.onChange(saved);
-    if (typeof opts.onClose === 'function') opts.onClose(saved, apply);
+    // #300: the page stays locked while ANY workshop is open; unlocking it early is
+    // what made the editor scroll behind a screen that was still there.
+    if (!document.querySelector('.scene-designer')) {
+      document.documentElement.classList.remove('is-scene-designer');
+    }
+    /* #300: a redraw that throws must not leave the app half-closed with no message.
+       The screen is already gone, so the only honest report is a toast. */
+    if (typeof opts.onClose === 'function') {
+      try {
+        opts.onClose(saved, apply);
+      } catch (error) {
+        if (typeof toast === 'function') {
+          toast('Không vẽ lại được hàng minh hoạ: ' + (error && error.message ? error.message : error));
+        }
+      }
+    }
   };
   const onKey = event => {
     if (event.key === 'Escape') {

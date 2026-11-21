@@ -7,6 +7,16 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-16 — #300 "Xong" bị lỗi + thanh thu phóng bị cuộn mất
+- Giáo viên báo **bấm Xong bị lỗi** và **thiếu thu phóng** trong xưởng cảnh.
+- **Nguyên nhân 1 — xưởng cảnh mở chồng:** mỗi cú bấm “Chỉnh cảnh” tạo một màn hình mới. Bấm 3 lần (nháy đúp, hoặc bấm lại vì tưởng chưa ăn) ⇒ **3 xưởng xếp chồng**; “Xong” chỉ đóng cái trên cùng, trang vẫn bị khoá cuộn và hàng minh hoạ không phản hồi — đúng cảm giác “bấm Xong bị lỗi”. Sửa: **một xưởng tại một thời điểm** (mở mới thì gỡ cái cũ; dữ liệu không mất vì mọi thay đổi ghi ngay từ #297), và chỉ **mở khoá cuộn trang khi không còn xưởng nào**.
+- **Nguyên nhân 2 — ô blueprint không nằm trong hàng:** ô `[data-field="sceneBlueprint"]` có thể là **anh em** của hàng chứ không nằm trong hàng, nên phép tra “ô trong hàng” trả `null` và thay đổi bị **bỏ im lặng**. Sửa: tra trong hàng, không thấy thì **lùi về ô đang sống**, và `onClose` bọc `try/catch` + báo toast thay vì nửa đóng nửa mở. (Lỗi này do chính bản #300 đầu tiên tạo ra; đã bắt bằng cách chạy app trong Edge headless rồi soi `window.__ocDebug`, không đoán.)
+- **Thu phóng bị “thiếu”:** thanh zoom nằm TRONG vùng cuộn, nên ở 200% nó bị đẩy ra khỏi màn hình. Sửa: cột giữa thành `.sd-stage` — canvas cuộn, **thanh zoom đứng yên**; thêm `data-sd-wrap` cho vùng cuộn.
+- Gate `ui-scene-designer-check` **66 → 74/74**: thêm “Chỉnh cảnh có lại sau khi đóng” · **“nháy đúp chỉ mở MỘT xưởng”** · “zoom tới 200%” · **“nhãn zoom vẫn nằm trong màn hình ở 200%”** · “ở 200% chính canvas cuộn” · “nút zoom vẫn ăn ở 200%” · “Xong đóng xưởng duy nhất” · “đóng thì mở khoá trang”.
+- Kiểm trên app mới mở (CDP 9606–9608): designer **74/74** · stage **179/179** · play **790/790** · editor **157/157** · background **42/42** · unit **102/102** · `npm run check` 53 tệp · `renderer-globals` **1117 hàm/9027 chỗ gọi** · scene-runtime **170.8 KiB** · embedded **6201.0 KiB**.
+- Ảnh: `.tmp-art/scene-designer-300.png` — thanh zoom **150%** nằm dưới khung, canvas cuộn được, cột phải vẫn còn “Xoá vật này” và thanh Góc xoay.
+- Installer: **16 501 244 byte** / 15.74 MiB / 21-11 **23:16** / SHA-256 `0533b9aea87acee3e0fc9cd03e11d5eb3208b055683998434332751e2896f8cd`.
+
 ### 2026-11-16 — #299 Xưởng cảnh: hoàn tác, thu phóng, xoay bằng tay, xoá mọi hình
 - Giáo viên báo **Ctrl+Z không chạy** và yêu cầu **thu/phóng, xoay ngay trong khung vẽ**, thêm **xoá** ngay trong khung.
 - **Hoàn tác / làm lại**: `history[]` là **ảnh chụp blueprint** (không phải lệnh), 60 bước, nút `[data-sd-undo]`/`[data-sd-redo]` trên đầu xưởng + **Ctrl+Z**, **Ctrl+Shift+Z**, **Ctrl+Y**. Một cú kéo = **một** bước (khung hình trong lúc kéo không ghi); thanh trượt ghi ở `change` (thả tay) nên không tạo 30 bước.

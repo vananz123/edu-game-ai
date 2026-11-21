@@ -4973,3 +4973,22 @@ trong khung vẽ.
   cảnh thủng lỗ còn tệ hơn cho trẻ.
 - **Một nút, nhiều nghĩa, nhãn theo lựa chọn** — “Xoá vật này” cho vật thêm, “Xoá hình này” cho hình
   thuộc bố cục. Không thêm nút thứ hai để giáo viên phải đoán.
+
+## #300 — một màn hình toàn khung là MỘT, và thanh điều khiển không được nằm trong vùng cuộn
+
+Giáo viên báo "bấm Xong bị lỗi" và "thiếu thu phóng".
+
+**Quyết định**
+- **Chỉ một xưởng cảnh tồn tại.** Mỗi cú bấm tạo một màn hình mới; nháy đúp (hoặc bấm lại vì máy chậm)
+  xếp ba màn hình lên nhau, "Xong" đóng cái trên cùng, trang vẫn khoá cuộn, hàng minh hoạ đứng im. Mở
+  mới thì **gỡ cái cũ** — không mất gì vì mọi thay đổi đã ghi ngay từ #297.
+- **Khoá cuộn trang chỉ được mở khi không còn xưởng nào.** Một overlay toàn màn hình đi kèm một trạng
+  thái toàn trang; đóng một trong hai là trạng thái sai.
+- **Một ô nhập có thể là ANH EM của hàng, không phải con.** Tra "ô trong hàng" trả `null` thì phải lùi
+  về ô đang sống, không được im lặng bỏ thay đổi. (Đây là lỗi tôi tự tạo ra ở bản #300 đầu và bắt được
+  bằng cách chạy app trong Edge headless + `window.__ocDebug`, không phải bằng cách đoán.)
+- **Thanh điều khiển không bao giờ nằm trong vùng cuộn của thứ nó điều khiển.** Ở 200% canvas cao hơn
+  cột; thanh zoom cuộn theo là thanh zoom giáo viên không với tới — và cô ấy gọi đó là "thiếu thu phóng".
+  Vì vậy cột giữa tách làm hai: vùng cuộn (canvas) và thanh đứng yên (zoom + trạng thái).
+- **Một thao tác lỗi phải nói ra.** `opts.onClose` được bọc `try/catch` + toast: màn hình đã đóng thì
+  cách báo lỗi trung thực duy nhất là nói cho giáo viên biết, không phải để app nửa sống nửa chết.
