@@ -100,6 +100,22 @@ export function buildSceneSuggestPrompt(question: SceneSuggestQuestion): string 
     '10. Khi layout = "compare": mainIcon là hình BÊN TRÁI, compareIcon là hình BÊN PHẢI',
     '    (bắt buộc, KHÁC mainIcon), compareSign là dấu ở giữa; chỉ dùng góc',
     `    ${SCENE_COMPARE_SUB_ICON_POSITIONS.join(' và ')} cho subIcons.`,
+    // #284: the rules below are the three the model actually broke in the first
+    // real run. `process` and `surround` were listed in the vocabulary but never
+    // DESCRIBED, so the model dumped everything into subIcons and the normaliser
+    // silently flattened the scene to `single`. Naming the shape is what makes a
+    // layout choosable; a bare id is not a description.
+    '11. Khi layout = "process": mainIcon là BƯỚC 1, "steps" là 1-2 bước TIẾP THEO theo',
+    '    ĐÚNG thứ tự (bắt buộc, khác mainIcon và khác nhau). Process KHÔNG có',
+    '    compareIcon, KHÔNG có compareSign. Quy trình dài hơn 3 bước thì để "single".',
+    '12. Khi layout = "surround": mainIcon là vật Ở GIỮA, "around" là 1-4 thứ vây quanh',
+    '    (bắt buộc, khác mainIcon và khác nhau). Surround KHÔNG có subIcons, KHÔNG có',
+    '    steps, KHÔNG có dấu.',
+    '13. Nếu câu hỏi là một QUY TRÌNH 2-3 bước theo thứ tự (trứng → nòng nọc → ếch,',
+    '    gieo hạt → nảy mầm) thì dùng "process", không dùng "single" với subIcons.',
+    '14. Nếu câu hỏi hỏi về MỘT vật và những thứ quanh nó (đồ dùng học tập, các bộ',
+    '    phận của cây, con gì sống quanh ao) thì dùng "surround", không dùng "single"',
+    '    với bốn subIcons.',
     '',
     'KHO ASSET',
     `layout (chọn 1): ${SCENE_LAYOUT_IDS.join(', ')}`,
@@ -108,6 +124,9 @@ export function buildSceneSuggestPrompt(question: SceneSuggestQuestion): string 
     `mainIcon (chọn 1): ${SCENE_ICON_IDS.join(', ')}`,
     'compareIcon (chỉ khi layout = compare): cùng danh sách icon trên, khác mainIcon.',
     `compareSign (chỉ khi layout = compare): ${SCENE_COMPARE_SIGNS.join(', ')}`,
+    'steps (chỉ khi layout = process): tên icon, 1-2 bước SAU bước đầu, đúng thứ tự thời gian.',
+    'around (chỉ khi layout = surround): tên icon, 1-4 thứ vây quanh chủ thể, xếp theo',
+    '    chiều kim đồng hồ từ góc trên-trái.',
     'subIcons (tuỳ chọn): {"icon": "<tên icon>", "position": "' +
       SCENE_SUB_ICON_POSITIONS.join('|') +
       '"}',
@@ -124,14 +143,25 @@ export function buildSceneSuggestPrompt(question: SceneSuggestQuestion): string 
     lines.push(`LỚP / MÔN: ${clip([question.grade, question.subject].filter(Boolean).join(' · '), 80)}`);
   }
 
+  // One worked example PER LAYOUT, written as real JSON a model could copy. The
+  // first real run (#284) proved a rule without an example is a rule the model
+  // skips: it stayed on the two shapes it had seen.
   lines.push(
     '',
-    'ĐỊNH DẠNG ĐẦU RA (một hình):',
-    '{"v":1,"layout":"single","backdrop":"...","paletteKey":"...","mainIcon":"...",',
-    ' "subIcons":[{"icon":"...","position":"left"}],"props":["..."]}',
-    'ĐỊNH DẠNG ĐẦU RA (so sánh hai hình):',
-    '{"v":1,"layout":"compare","backdrop":"...","paletteKey":"...","mainIcon":"...",',
-    ' "compareIcon":"...","compareSign":"greater-than"}'
+    'ĐỊNH DẠNG ĐẦU RA (bốn ví dụ dưới đây là JSON THẬT, chạy được ngay)',
+    'Một hình:',
+    '{"v":1,"layout":"single","backdrop":"classroom","paletteKey":"math",',
+    ' "mainIcon":"calculator","subIcons":[{"icon":"pencil","position":"left"}],',
+    ' "props":["box"]}',
+    'So sánh hai hình:',
+    '{"v":1,"layout":"compare","backdrop":"forest","paletteKey":"animals",',
+    ' "mainIcon":"paw-print","compareIcon":"bird","compareSign":"greater-than"}',
+    'Quy trình nhiều bậc:',
+    '{"v":1,"layout":"process","backdrop":"lab","paletteKey":"science",',
+    ' "mainIcon":"flask-conical","steps":["lightbulb","sparkles"]}',
+    'Một vật ở giữa, những thứ khác vây quanh:',
+    '{"v":1,"layout":"surround","backdrop":"classroom","paletteKey":"language",',
+    ' "mainIcon":"book-open","around":["pencil","calculator","languages","lightbulb"]}'
   );
 
   return lines.join('\n');

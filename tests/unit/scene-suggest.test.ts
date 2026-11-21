@@ -56,6 +56,28 @@ test('the built prompt offers exactly the catalogue, not a copied list', () => {
   assert.deepEqual(idsFor(prompt, 'layout').sort(), [...SCENE_LAYOUT_IDS].sort());
 });
 
+test('every layout the engine draws has a rule AND a worked example in the built prompt', () => {
+  // #284 — the first real model run got 3/6 layouts: it emitted
+  // {"layout":"process"} with no "steps" and {"layout":"single"} with four
+  // subIcons, because the shipped prompt LISTED process/surround in the
+  // vocabulary but never described them and only showed single/compare examples.
+  // The doc had all four; the code did not. This is the test that keeps the two
+  // from drifting again: a layout without a worked example is a layout a model
+  // will not choose.
+  const prompt = buildSceneSuggestPrompt(QUESTION);
+  for (const id of SCENE_LAYOUT_IDS) {
+    assert.ok(
+      new RegExp('"layout":\s*"' + id + '"').test(prompt),
+      `the built prompt never shows a worked example of "${id}"`
+    );
+  }
+  assert.match(prompt, /"steps":\[/, 'process needs its steps field in an example');
+  assert.match(prompt, /"around":\[/, 'surround needs its around field in an example');
+  // The rule has to NAME the shape, not just allow the id.
+  assert.match(prompt, /1-2 bước TIẾP THEO/);
+  assert.match(prompt, /vây quanh/);
+});
+
 test('the built prompt never invites markup, a URL or a placeholder', () => {
   const prompt = buildSceneSuggestPrompt(QUESTION);
   for (const banned of ['<svg', '<script', '<image', 'onload', 'http://', 'https://']) {

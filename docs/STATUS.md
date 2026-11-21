@@ -7,6 +7,16 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-16 — #284 Lượt model THẬT đầu tiên: prompt thiếu mô tả `process`/`surround` (3/6 → 6/6)
+- **Đo trước khi sửa**, bằng `scripts/scene-suggest-live.js` với `gemini-3.5-flash-lite` trên 6 câu hỏi: 6/6 câu có JSON model (`source=model`), nhưng chỉ **3/6 đúng layout**. Hai ca hỏng đều cùng một kiểu: model trả `{"layout":"process"}` **không có `steps`** (dồn bước vào `subIcons`) và `{"layout":"single"}` với 4 `subIcons` khi câu hỏi là "bốn đồ dùng học tập" ⇒ cổng kiểm hạ xuống `single` kèm issue, cảnh đúng nhưng mất hình học.
+- **Nguyên nhân**: prompt gửi cho model (`buildSceneSuggestPrompt`) **liệt kê** `process`/`surround` trong danh mục nhưng **không mô tả** chúng, và phần ĐỊNH DẠNG ĐẦU RA chỉ có 2 ví dụ `single` + `compare`. Bản trong `docs/AI_SCENE_DIRECTOR_DESIGN.md` có đủ 4 luật + 4 ví dụ; **code thì không** — hai bản đã trôi khỏi nhau, và test cũ chỉ kiểm bản trong docs.
+- **Sửa** (`src/services/ai/scene-suggest.ts`): thêm luật 11–14 (mô tả `process` cần `steps` đúng thứ tự, `surround` cần `around`, và "quy trình/vật-quanh-nó thì ĐỔI layout, đừng dồn subIcons"), thêm dòng vocab `steps`/`around`, và **bốn ví dụ JSON thật** (một cho mỗi layout).
+- **Đo lại sau khi sửa, cùng model, cùng 6 câu: 6/6 đúng layout.** `process` ra `flask-conical → sparkles → lightbulb` (ca thí nghiệm), `surround` ra `box` giữa với `pencil/book-open/calculator/lightbulb`.
+- Test mới trong `tests/unit/scene-suggest.test.ts`: mỗi layout trong `SCENE_LAYOUT_IDS` phải có `"layout":"<id>"` trong **prompt do code dựng**, cộng `"steps":[`, `"around":[`, "1-2 bước TIẾP THEO", "vây quanh". **Negative control:** xoá đúng ví dụ `process` khỏi bản đã biên dịch ⇒ test đỏ.
+- **Chưa sửa (có chủ ý)**: (1) model vẫn bịa id không có (`sun`, `pond` ở lượt trước) — cổng kiểm bỏ chúng kèm issue, và lỗi này đã hết khi prompt rõ hơn; (2) ca "vòng đời con ếch" ra `fish → bug → bird` — đúng **cấu trúc**, sai **sinh học**, vì 41 icon không có `frog`/`tadpole`/`egg`; đây là lỗ hổng từ vựng, không phải lỗi prompt.
+- Kiểm: `npx tsc` sạch · `node tests/run-unit.js` **100/100** · `build:scene-runtime` 142.6 KiB · `check:embedded` **6287.1 KiB** (+2.0 KiB so với 6285.1, đúng phần prompt mới) · `npm run check` sạch.
+- Ảnh để giáo viên xem: `.tmp-art/live-0..5.png` (render bằng engine thật). Khoá API **không** nằm trong repo hay `settings.json`.
+
 ### 2026-11-16 — #283 script chạy "Gợi ý cảnh" với model thật (đang chờ khoá)
 - Thêm `scripts/scene-suggest-live.js`: gọi **đúng prompt + đúng cổng kiểm** của app (`suggestSceneBlueprint`) với model thật, 6 câu hỏi nhắm 5 hình học (compare / process / surround / single / scenario + một ca science), in `source`, layout, id, `issues`, thời gian; `--png` render mỗi blueprint ra `.tmp-art/live-<n>.png` bằng engine thật.
 - Khoá **chỉ đọc từ biến môi trường** (`GEMINI_API_KEY`, hoặc `SCENE_AI_KEY`; `SCENE_AI_BASE`/`SCENE_AI_MODEL` để đổi đích) — không ghi vào repo, không ghi `settings.json`. Không có khoá ⇒ thoát với lời nhắn, **không gọi mạng** (đã kiểm: exit 2).

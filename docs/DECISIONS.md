@@ -4639,3 +4639,32 @@ hiện — `waitForPort` đang chờ đúng URL đó và vẫn chưa đủ.
 
 **Chưa làm.** Chưa dựng lại installer NSIS (`EduGame Studio (Tauri)_0.5.2_x64-setup.exe` vẫn là bản
 16/11, trước Twemoji) — dựng installer là việc của P7 và cần bạn xác nhận trước khi phát hành.
+
+## #284 — Một layout không có ví dụ là layout model sẽ không chọn
+
+Lượt model thật đầu tiên (`gemini-3.5-flash-lite`, 6 câu hỏi) cho 6/6 câu có JSON hợp lệ nhưng
+**3/6 đúng layout**: model trả `{"layout":"process"}` mà **không có `steps`**, và trả `"single"`
+với bốn `subIcons` cho câu "bốn đồ dùng học tập". Cổng kiểm hạ cả hai xuống `single` kèm issue —
+đúng theo hợp đồng, nhưng cảnh mất hình học.
+
+Nguyên nhân không nằm ở model: prompt gửi đi **liệt kê** `process`/`surround` trong danh mục mà
+**không mô tả** chúng, và chỉ có hai ví dụ `single` + `compare`. Bản đặc tả trong
+`docs/AI_SCENE_DIRECTOR_DESIGN.md` có đủ bốn luật và bốn ví dụ; code thì không. Test cũ kiểm bản
+trong docs, nên hai bản trôi khỏi nhau mà không có gì đỏ.
+
+**Quyết định**
+- **Luật phải MÔ TẢ hình học, không chỉ cho phép id**: "mainIcon là BƯỚC 1, `steps` là 1-2 bước
+  TIẾP THEO theo đúng thứ tự" mới là thứ model dùng được; dòng `layout (chọn 1): process` thì không.
+- **Mỗi layout phải có một ví dụ JSON thật trong prompt do code dựng**, và test phải kiểm
+  **prompt của code**, không kiểm bản trong docs. Đây là bản sao của luật #263 (ví dụ phải là JSON
+  thật) áp cho phía code.
+- **Nói thẳng cái bẫy**: "quy trình 2-3 bước thì dùng `process`, đừng dùng `single` với subIcons" —
+  model không tự suy ra rằng subIcons là hình học sai cho một chuỗi có thứ tự.
+- **Đo lại ngay sau khi sửa, cùng model, cùng câu hỏi: 6/6.** Không có phép đo này thì "prompt rõ
+  hơn" chỉ là niềm tin.
+- **Không thêm bước "đoán lại ý"**: khi model trả `process` thiếu `steps`, cổng kiểm vẫn hạ xuống
+  `single` kèm issue. Tự suy `subIcons` thành `steps` là đoán thứ tự thời gian từ một danh sách
+  không có thứ tự — cảnh sai còn tệ hơn cảnh đơn giản.
+- **Thiếu icon là lỗ hổng từ vựng, không phải lỗi prompt**: "vòng đời con ếch" ra `fish → bug → bird`,
+  đúng cấu trúc, sai sinh học, vì 41 icon không có `frog`/`tadpole`/`egg`. Ghi lại để lần mở rộng
+  kho icon sau có lý do cụ thể.
