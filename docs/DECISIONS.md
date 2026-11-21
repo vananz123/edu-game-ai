@@ -4694,3 +4694,22 @@ tên đó không tồn tại.
   node, id nào không có thì phải có art" — số 41 chỉ là hệ quả của catalogue.
 - **Không có emoji nòng nọc**; `fish` là hình thay thế gần nhất và prompt có nhắc tên, nên model được
   phép chọn nó. Ghi lại thay vì thêm một id giả.
+
+## #286 — Bản cài phải được kiểm bằng chính binary nó chứa, và `devPath` vẫn là thứ phải trả lại nguyên trạng
+
+Installer 16/11 vẫn nằm trong `bundle/nsis/` sau khi mã nguồn đã đổi ba lần (#280 Twemoji, #284
+prompt, #285 thêm 6 icon). Một tệp setup cũ không hỏng build nào, không làm đỏ test nào, và vẫn cài
+được — nó chỉ lặng lẽ phát cho giáo viên một sản phẩm khác với thứ đang được kiểm.
+
+**Quyết định**
+- **Kiểm cổng UI trên binary VỪA DỰNG, không kiểm trên binary của lần trước.** Ba cổng (179/179,
+  790/790, 157/157) chạy trên `target/release/edugame-studio-tauri.exe` có dấu thời gian của chính
+  lượt build này.
+- **Hỏi thẳng "bản này có biết id mới không" bằng CDP**, thay vì tin rằng `npm run build` đã chạy:
+  `SCENE_ICON_IDS.length = 47` và sáu id mới vẽ ra art thật (`emoji-*` + số hình > 0). Một bản build
+  cũ vẫn qua được mọi cổng UI cũ, vì cổng cũ không biết id mới tồn tại.
+- **`devPath` phải trả lại byte-exact sau mỗi lượt build release**, verify bằng SHA-256
+  `5ae0bf649cb60325461ff3ed2e9a7bc7cf96d2770fab914b25b216f35613b20e`. `git status` vẫn báo
+  ` M src-tauri/tauri.conf.json` — đó là trạng thái bình thường, không phải lỗi cần "sửa".
+- **Không có 7-Zip thì không được nói "installer đã kiểm"**: hiện chỉ có dấu thời gian và thứ tự
+  bước của `cargo tauri build` làm bằng chứng, nên P7 (cài thật trên máy sạch) vẫn là phép kiểm thật.

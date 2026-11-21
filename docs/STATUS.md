@@ -7,6 +7,12 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-16 — #286 Dựng lại NSIS installer (bản cũ vẫn là 16/11, trước Twemoji)
+- Quy trình đầy đủ: kill tiến trình app → `cp tauri.conf.json $TEMP` + `sed -i '7d'` (bỏ `devPath`) → `npm run build` → `npm run build:tauri` (202 tệp, embedded 6190.4 KiB) → `cargo tauri build` → **khôi phục `tauri.conf.json` byte-exact**, SHA-256 `5ae0bf649cb60325461ff3ed2e9a7bc7cf96d2770fab914b25b216f35613b20e` khớp lại.
+- **Sản phẩm**: `src-tauri/target/release/edugame-studio-tauri.exe` 59 268 608 byte và `bundle/nsis/EduGame Studio (Tauri)_0.5.2_x64-setup.exe` **15.71 MiB**, SHA-256 `39f2121c…6583ea`, cùng dấu thời gian 21/11 09:46 (cùng một lượt `cargo`). Bản `0.5.1 … setup.exe` 15/11 vẫn nằm đó — **đừng nhầm**.
+- **Kiểm trên binary vừa dựng** (không phải bản #282): `ui-stage-illustration-check` **179/179**, `ui-play-surface-check` **790/790**, `ui-item-assets-editor-check` **157/157** ở 1366×768. Thêm một phép đo qua CDP trên chính cửa sổ đó: `SceneRuntime.SCENE_ICON_IDS.length = 47`, và **cả 6 icon mới vẽ ra art thật** (`emoji-frog` 14 hình, `butterfly` 17, `egg`/`sun` 8, `droplet`/`sprout` 7) — không phải id rỗng.
+- **Chưa kiểm**: nội dung *bên trong* tệp setup (không có 7-Zip trên máy để bung ra so hash), nên "installer chứa đúng exe này" hiện dựa vào thứ tự bước của `cargo tauri build` + dấu thời gian, **chưa phải bằng chứng byte**. P7 (cài trên máy Windows sạch, đo SmartScreen, chơi offline sau khi cài) vẫn **mở**.
+
 ### 2026-11-16 — #285 Thêm 6 icon cho vòng đời và thời tiết (41 → 47), và bỏ một import đắt
 - **Lý do đo được** (#284): model thật vẽ "trứng → nòng nọc → ếch" thành `fish → bug → bird` — đúng cấu trúc, sai sinh học — và tự bịa id `sun`/`sprout`. Ba khái niệm đó **không có** trong kho 41 icon.
 - **Thêm 6 id**: `egg` 🥚, `frog` 🐸, `sprout` 🌱, `butterfly` 🦋, `sun` ☀, `droplet` 💧. Mỗi id đi đủ 4 chỗ: `SCENE_ICON_IDS` (`scene-asset-catalog.ts`) → art (`scripts/fetch-emoji-art.js` MAP, tải lại từ Twemoji, `emoji-art.generated.ts` **+7.4 KiB**) → nhãn tiếng Việt (`editor/questions.ts`) → danh mục trong `docs/AI_SCENE_DIRECTOR_DESIGN.md`. Prompt của code tự nhận id mới vì nó đọc `SCENE_ICON_IDS`.
