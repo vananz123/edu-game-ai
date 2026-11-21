@@ -7,6 +7,12 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-16 — #283 script chạy "Gợi ý cảnh" với model thật (đang chờ khoá)
+- Thêm `scripts/scene-suggest-live.js`: gọi **đúng prompt + đúng cổng kiểm** của app (`suggestSceneBlueprint`) với model thật, 6 câu hỏi nhắm 5 hình học (compare / process / surround / single / scenario + một ca science), in `source`, layout, id, `issues`, thời gian; `--png` render mỗi blueprint ra `.tmp-art/live-<n>.png` bằng engine thật.
+- Khoá **chỉ đọc từ biến môi trường** (`GEMINI_API_KEY`, hoặc `SCENE_AI_KEY`; `SCENE_AI_BASE`/`SCENE_AI_MODEL` để đổi đích) — không ghi vào repo, không ghi `settings.json`. Không có khoá ⇒ thoát với lời nhắn, **không gọi mạng** (đã kiểm: exit 2).
+- **Đang chặn:** máy này không có `GEMINI_API_KEY` trong môi trường, và profile thật `%APPDATA%n.edugame.studio.tauri\edugame-data\settings.json` có `ai.provider=local`, `ai.mode=online`, **không có blob khoá** ⇒ chưa chạy được lượt thật nào.
+- **Chưa làm:** chưa có kết quả model thật cho `process`/`surround`; `compare` vẫn chưa thử trên câu `scenario`.
+
 ### 2026-11-16 — #282 cổng UI đo lại trên binary thật với Twemoji (790/790 · 179/179 · 157/157 · 42/42 · 55/55+10/10)
 - Dựng binary v0.5.2 có Twemoji (`npm run build` + `build:tauri` + `cargo tauri build`, 5m00s, exe **56.61 MiB**) rồi chạy 5 cổng UI trên cửa sổ Tauri thật.
 - **Cổng đỏ đã sửa đúng chỗ:** `ui-stage-illustration-check` đỏ 10 câu vì pin `iconClass.includes('lucide-paw-print')` — tức pin **nguồn vẽ** thay vì pin **id**. Thay bằng `carriesIcon(cls,id)` (nhận `lucide-<id>` hoặc `emoji-<id>`) và **thêm** `iconShapes > 0` (icon phải có hình thật, phép cũ không kiểm tra điều này). 169 → **179** phép đo: siết, không nới.
