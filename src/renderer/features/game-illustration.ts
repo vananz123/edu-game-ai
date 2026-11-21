@@ -26,6 +26,8 @@ declare const SceneRuntime: {
   getIllustrationPalette(category: unknown): any;
   isSceneIconId(value: unknown): boolean;
   isScenePaletteKey(value: unknown): boolean;
+  /** #288: place ids (`road`, `classroom`, ...). */
+  isSceneBackdropId(value: unknown): boolean;
 };
 
 /* Category -> the icon used when a question names none. Mirrors
@@ -82,6 +84,11 @@ function stageBlueprintForCategory(category: unknown, iconName?: unknown): any {
 /** Icon ids the scene vocabulary accepts, straight from the shared catalogue. */
 function stageIsSceneIconId(value: unknown): boolean {
   return SceneRuntime.isSceneIconId(value);
+}
+
+/** #288: place ids the scene vocabulary accepts (`road`, `classroom`, ...). */
+function stageIsSceneBackdropId(value: unknown): boolean {
+  return SceneRuntime.isSceneBackdropId(value);
 }
 
 /**

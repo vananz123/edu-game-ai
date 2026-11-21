@@ -326,7 +326,7 @@ QUY TRÌNH SUY NGHĨ (làm trong đầu, KHÔNG viết ra)
 SCENE-PROMPT-VOCAB:START
 layout (chọn 1): single, compare, process, surround
 backdrop (chọn 1): plain, meadow, forest, mountain, sea, stars, city,
-                   classroom, lab, studio
+                   classroom, lab, studio, road
 paletteKey (chọn 1): animals, plants, space, human-body, transport, safety,
                      environment, history, geography, jobs, sports, music, art,
                      math, language, science, technology, health, family,

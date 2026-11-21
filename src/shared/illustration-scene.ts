@@ -157,6 +157,12 @@ export type ScenePrimitive =
   | 'sea'
   /** Bare horizon: a single soft line, for interior/abstract scenes. */
   | 'line'
+  /**
+   * #288: the GROUND IS THE SPACE. A road surface, lane markings and the far end
+   * of the street, so a traffic question is asked *on a road* instead of on a
+   * lawn with a skyline behind it.
+   */
+  | 'road'
   // mid layer
   | 'trees'
   | 'bushes'
@@ -172,6 +178,10 @@ export type ScenePrimitive =
   | 'books'
   | 'flasks'
   | 'tools'
+  /** #288 street furniture: a traffic light, a round road sign, a lamp post. */
+  | 'traffic-light'
+  | 'sign'
+  | 'streetlight'
   // foreground layer
   | 'grass'
   /** Small roots/leaf sprigs at the feet: a garden, not a lawn. */
@@ -180,6 +190,9 @@ export type ScenePrimitive =
   /** Angled easel/canvas boards. */
   | 'boards'
   | 'waves'
+  /** #288 road surface markings, painted in front of the subject's feet. */
+  | 'zebra'
+  | 'kerb'
   | 'none';
 
 /**
@@ -262,8 +275,8 @@ const SCENE_SPECS: Readonly<Record<string, SceneSpec>> = Object.freeze({
   plants: { sky: ['sun', 'clouds'], horizon: 'hills', standing: ['bushes', 'trees'], fg: ['roots', 'grass'], subjectY: 88 },
   space: { sky: ['stars', 'moon'], horizon: 'mountains', standing: ['bubbles'], fg: ['stones'], subjectY: 84 },
   'human-body': { sky: ['rays', 'clouds'], horizon: 'line', standing: ['graph'], fg: ['stones'], subjectY: 84 },
-  transport: { sky: ['clouds', 'sun'], horizon: 'skyline', standing: ['towers'], fg: ['stones', 'grass'], subjectY: 88 },
-  safety: { sky: ['sun', 'clouds'], horizon: 'skyline', standing: ['tools', 'towers'], fg: ['stones'], subjectY: 88 },
+  transport: { sky: ['clouds', 'sun'], horizon: 'skyline', standing: ['road', 'traffic-light', 'streetlight'], fg: ['zebra', 'kerb'], subjectY: 88 },
+  safety: { sky: ['sun', 'clouds'], horizon: 'skyline', standing: ['road', 'traffic-light', 'sign'], fg: ['zebra', 'kerb'], subjectY: 88 },
   environment: { sky: ['clouds', 'sun'], horizon: ['mountains', 'hills'], standing: ['trees', 'bushes'], fg: ['grass', 'stones'], subjectY: 88 },
   history: { sky: ['sun', 'clouds'], horizon: ['mountains', 'hills'], standing: ['books', 'towers'], fg: ['stones'], subjectY: 88 },
   geography: { sky: ['clouds', 'sun'], horizon: ['mountains', 'hills'], standing: ['trees', 'bushes'], fg: ['grass', 'stones'], subjectY: 88 },
@@ -457,6 +470,67 @@ function renderMid(primitive: ScenePrimitive, palette: IllustrationPalette): str
         `<rect x="270" y="${SCENE_HORIZON - 52}" width="24" height="58" rx="3"/>` +
         `</g>`
       );
+    case 'road':
+      // (#288) Asphalt fills the whole ground band, so the scene reads as a road
+      // and not as grass with a grey stripe. It is a MID-layer primitive, not a
+      // far-layer one: the far layer is followed by the opaque ground fill, which
+      // painted over every mark and left the road invisible until a render check
+      // caught it. The lane dashes grow toward the
+      // viewer (2.6 -> 4.4 px) which is what makes the surface look like it is
+      // coming forward instead of lying flat like a wall.
+      return (
+        `<g data-scene-primitive="road">` +
+        `<path d="M0 ${SCENE_HORIZON}h${SCENE_WIDTH}v${SCENE_HEIGHT - SCENE_HORIZON}H0z" fill="${cool}" opacity="0.22"/>` +
+        `<path d="M0 ${SCENE_HORIZON}h${SCENE_WIDTH}" stroke="${ink}" stroke-width="1.4" opacity="0.24"/>` +
+        // Lane dashes sit in the MIDDLE DISTANCE and grow toward the viewer, and
+        // the road edges run down the sides. Two review rounds taught this: dashes
+        // at y 188 disappeared under the kerb, then dashes at y 157..184 were
+        // covered by the zebra that the fg layer paints on top. A crossing is near
+        // the viewer and the centre line is further away — so the dashes belong
+        // just under the horizon and the crossing must not reach them.
+        `<g fill="#ffffff" opacity="0.72">` +
+        `<rect x="155" y="153" width="10" height="1.8" rx="0.9"/>` +
+        `<rect x="151" y="158" width="15" height="2.4" rx="1"/>` +
+        `<rect x="145" y="164" width="22" height="3" rx="1.2"/>` +
+        `<rect x="16" y="166" width="4" height="20" rx="2"/>` +
+        `<rect x="300" y="166" width="4" height="20" rx="2"/>` +
+        `</g></g>`
+      );
+    case 'traffic-light':
+      // (#288) Post + three lamps; only the top one is lit, because a traffic
+      // light showing every lamp at once is the thing children are taught to
+      // read as "broken". Left edge, so the subject keeps the centre.
+      return (
+        `<g data-scene-primitive="traffic-light">` +
+        `<rect x="25" y="86" width="4" height="${SCENE_HORIZON - 86}" rx="1.6" fill="${ink}" opacity="0.35"/>` +
+        `<rect x="15" y="44" width="24" height="44" rx="5" fill="${ink}" opacity="0.28"/>` +
+        `<circle cx="27" cy="54" r="5" fill="${warm}" opacity="0.95"/>` +
+        `<circle cx="27" cy="66" r="5" fill="${ink}" opacity="0.16"/>` +
+        `<circle cx="27" cy="78" r="5" fill="${ink}" opacity="0.16"/>` +
+        `</g>`
+      );
+    case 'sign':
+      // (#288) A round prohibitory sign on a post, right edge. The ring is the
+      // warm hue and the face is a white disc: no glyph, no text.
+      return (
+        `<g data-scene-primitive="sign">` +
+        `<rect x="293" y="106" width="4" height="${SCENE_HORIZON - 106}" rx="1.6" fill="${ink}" opacity="0.35"/>` +
+        `<circle cx="295" cy="94" r="14" fill="#ffffff" opacity="0.92"/>` +
+        `<circle cx="295" cy="94" r="12" fill="none" stroke="${warm}" stroke-width="4"/>` +
+        `<rect x="287" y="92.4" width="16" height="3.4" rx="1.7" fill="${ink}" opacity="0.55"/>` +
+        `</g>`
+      );
+    case 'streetlight':
+      // (#288) A lamp on an arm, at the left edge behind the traffic light post.
+      return (
+        `<g data-scene-primitive="streetlight">` +
+        `<g fill="${ink}" opacity="0.3">` +
+        `<rect x="58" y="52" width="3.6" height="${SCENE_HORIZON - 52}" rx="1.6"/>` +
+        `<path d="M60 52h20v3.4H60z"/>` +
+        `</g>` +
+        `<circle cx="79" cy="55" r="4.2" fill="${warm}" opacity="0.8"/>` +
+        `</g>`
+      );
     case 'bubbles':
       return (
         `<g data-scene-primitive="bubbles" fill="none" stroke="${ink}" stroke-width="1.5" opacity="0.3">` +
@@ -581,6 +655,26 @@ function renderFg(primitive: ScenePrimitive, palette: IllustrationPalette): stri
         `</g>` +
         `<g data-scene-primitive="boards-cleat" stroke="${ink}" stroke-width="1.6" opacity="0.28">` +
         `<path d="M92 ${foot - 19}h28M204 ${foot - 21}h32"/>` +
+        `</g>`
+      );
+    case 'zebra':
+      // (#288) A crossing in front of the subject's feet: three bands, widening
+      // toward the viewer, so the stripes read as being on the road surface.
+      return (
+        // Painted at 0.82 and kept above the kerb band: at 0.55 over a pale
+        // asphalt the stripes were invisible in the rendered frame (#288 review).
+        `<g data-scene-primitive="zebra" fill="#ffffff" opacity="0.82">` +
+        `<rect x="70" y="${foot + 2}" width="180" height="4" rx="1.2"/>` +
+        `<rect x="60" y="${foot + 13}" width="200" height="5" rx="1.4"/>` +
+        `<rect x="50" y="${foot + 24}" width="220" height="6" rx="1.6"/>` +
+        `</g>`
+      );
+    case 'kerb':
+      // (#288) The raised edge of the pavement, pinned to the bottom of the frame.
+      return (
+        `<g data-scene-primitive="kerb">` +
+        `<rect x="0" y="${SCENE_HEIGHT - 6}" width="${SCENE_WIDTH}" height="6" fill="${cool}" opacity="0.34"/>` +
+        `<path d="M0 ${SCENE_HEIGHT - 6}h${SCENE_WIDTH}" stroke="${ink}" stroke-width="1.2" opacity="0.22"/>` +
         `</g>`
       );
     case 'waves':

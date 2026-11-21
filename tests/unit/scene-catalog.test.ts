@@ -36,10 +36,10 @@ function test(name: string, fn: () => void) {
 
 const PRIMITIVES = new Set([
   'sun', 'moon', 'rays', 'stars', 'clouds',
-  'hills', 'mountains', 'skyline', 'sea', 'line',
+  'hills', 'mountains', 'skyline', 'sea', 'line', 'road',
   'trees', 'bushes', 'towers', 'bubbles', 'graph',
-  'books', 'flasks', 'tools',
-  'grass', 'roots', 'stones', 'boards', 'waves', 'none',
+  'books', 'flasks', 'tools', 'traffic-light', 'sign', 'streetlight',
+  'grass', 'roots', 'stones', 'boards', 'waves', 'zebra', 'kerb', 'none',
 ]);
 
 test('palette keys are exactly the 24 categories that own a palette', () => {
@@ -61,7 +61,9 @@ test('palette keys are exactly the 24 categories that own a palette', () => {
 
 test('every backdrop is an existing set of scene layers', () => {
   assert.ok(SCENE_BACKDROP_IDS.includes(DEFAULT_SCENE_BACKDROP));
-  assert.equal(SCENE_BACKDROP_IDS.length, 10, 'P0 ships ten named places');
+  // P0 shipped ten; #288 added `road` — the first place whose ground is
+  // infrastructure rather than scenery.
+  assert.equal(SCENE_BACKDROP_IDS.length, 11, 'the catalogue ships eleven named places');
   for (const id of SCENE_BACKDROP_IDS) {
     const spec = SCENE_BACKDROPS[id];
     assert.equal(isSceneBackdropId(id), true);

@@ -132,6 +132,17 @@ export const SCENE_BACKDROPS: Readonly<Record<string, SceneSpec>> = Object.freez
   classroom: { sky: 'rays', horizon: 'line', standing: ['books', 'graph'], fg: ['stones'], subjectY: 86 },
   lab: { sky: 'rays', horizon: 'line', standing: ['graph', 'flasks'], fg: ['stones'], subjectY: 86 },
   studio: { sky: 'rays', horizon: 'line', standing: ['books', 'towers'], fg: ['boards', 'stones'], subjectY: 86 },
+  // (#288) The first space that is a PLACE rather than a colour scheme: asphalt
+  // with lane dashes, a traffic light and a sign standing on the pavement, a zebra
+  // crossing at the viewer's feet. A traffic-safety question asked on a lawn was
+  // the gap the teacher named: the space has to be the situation.
+  road: {
+    sky: ['clouds', 'sun'],
+    horizon: ['skyline'],
+    standing: ['road', 'traffic-light', 'sign'],
+    fg: ['zebra', 'kerb'],
+    subjectY: 88,
+  },
 });
 
 export const DEFAULT_SCENE_BACKDROP = 'plain';
@@ -220,8 +231,10 @@ export const CATEGORY_BACKDROPS: Readonly<Record<string, string>> = Object.freez
   plants: 'forest',
   space: 'stars',
   'human-body': 'classroom',
-  transport: 'city',
-  safety: 'city',
+  // #288: a question about crossing the road or about vehicles belongs on a road,
+  // not in a generic skyline.
+  transport: 'road',
+  safety: 'road',
   environment: 'mountain',
   history: 'mountain',
   geography: 'mountain',

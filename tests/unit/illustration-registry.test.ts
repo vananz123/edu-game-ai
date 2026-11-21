@@ -424,8 +424,8 @@ test('the scene composer output is pinned so saved scenes stay stable', () => {
     plants: 'cb8f8cc3a6b3d9c81a8d9f4a4beed1f54e9f9142b8db9fa754f1438ac0255eb5',
     space: 'e4672235e3bd956c5d6c0af4f071454f080142351df998f1d3ae1b96dc048609',
     'human-body': 'd0b82228036cbced45bd18fd624456654a7bc2dc45ca2f2cec5451ef49232697',
-    transport: '34d59529a0eccfe75bd75c5aedfac22dbae85c52d300ef9ee532ec10c6fd06ce',
-    safety: 'bf202d1e3ca651c611ba544720221445d394c305d07ff4ec4ae40a92a57fe5d2',
+    transport: '2382e7e999b7560b4ec6bc746b9c5fb36271222a86b6e7a2cc7dfb8f5329eb49',
+    safety: '594692f15c42e518be9d634c1c727d03989de46aa95c1596a77cdec50cffed7c',
     environment: 'a195bd65e6bdd82e59809e65f06e0b8b0b6d560782bcd930db34ddacdc810314',
     history: '2f147cd4103fde96035c0ad440813cb2d7ad9796a3469ea49a2b509da9ad9abe',
     geography: '754b15a38ea6481da5c865abbdebc71d731424d1c111298e1596662ca669deae',
@@ -675,10 +675,12 @@ test('every primitive in a scene table actually renders', () => {
   // still produced valid SVG — 30 checks passed. The table and the renderers
   // must agree on which primitive lives in which layer.
   const knownIn: Record<string, string[]> = {
+    // #288 added the road space: `road` is a far-layer surface, the street
+    // furniture stands on the pavement and the markings sit under the feet.
     sky: ['sun', 'moon', 'rays', 'stars', 'clouds'],
     horizon: ['hills', 'mountains', 'skyline', 'sea', 'line'],
-    standing: ['trees', 'bushes', 'towers', 'bubbles', 'graph'],
-    fg: ['grass', 'roots', 'stones', 'boards', 'waves'],
+    standing: ['trees', 'bushes', 'towers', 'bubbles', 'graph', 'road', 'traffic-light', 'sign', 'streetlight'],
+    fg: ['grass', 'roots', 'stones', 'boards', 'waves', 'zebra', 'kerb'],
   };
   // Props reuse the `standing` slot, so they are checked against their own list.
   const propsFromStanding = ['books', 'flasks', 'tools'];

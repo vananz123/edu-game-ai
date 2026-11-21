@@ -4728,3 +4728,27 @@ Giáo viên mở tab AI cloud và thấy một ô trống. Sự thật là ba nh
 - **Điền sẵn không được đổi nghĩa "đã cấu hình"**: vẫn cần khoá **và** base URL **và** model. Một
   provider tự nhận "đã cấu hình" chỉ vì có sẵn URL sẽ khiến giáo viên tưởng đã xong và bấm tạo game
   vào một endpoint không có khoá.
+
+## #288 — Backdrop phải là một CHỖ, không phải một phông nền; và một primitive nằm ở lớp nào là chuyện của thứ tự vẽ
+
+Giáo viên nói thẳng: "tình huống giao thông thì phải có đường, cột đèn giao thông, vạch kẻ đường". Đo
+lại thì cả 10 backdrop đều là màu + vài bóng ở rìa; 7/10 dùng chung một `stones`, `plain` (mặc định,
+gặp nhiều nhất) trống hoàn toàn. Một câu hỏi về sang đường được vẽ trên bãi cỏ.
+
+**Quyết định**
+- **Thêm KHÔNG GIAN, không thêm hiệu ứng**: `road` là backdrop thứ 11 với mặt đường, vạch giữa, vạch
+  mép, cột đèn giao thông, biển báo, vạch sang đường, gờ vỉa hè. Sáu primitive mới, vẫn chỉ là
+  `<path>`/`<rect>`/`<circle>` — không `<text>`, không ảnh, không toạ độ trong dữ liệu.
+- **Đèn giao thông chỉ sáng MỘT đèn.** Cả ba cùng sáng là thứ trẻ con được dạy là "đèn hỏng"; một
+  hình minh hoạ dạy sai thì tệ hơn không có hình.
+- **`transport` và `safety` mặc định vào `road`** — không gian của câu hỏi là một phần nghĩa của nó.
+- **Giáo viên phải chọn được không gian**, không chỉ category/AI: ô "Không gian" trong editor ghi vào
+  đúng khoá `backdrop` của blueprint. Một khái niệm, một khoá, hai đường vào.
+- **Lớp nào vẽ được primitive nào là do THỨ TỰ VẼ quyết định, không do tên gọi.** `road` đặt ở lớp far
+  thì **vô hình**: `sceneGroundPath()` (fill đục) nằm sau lớp far và vẽ đè lên. Nó phải ở lớp mid.
+  Đây là lỗi mà 100/100 unit test vẫn xanh — chỉ ảnh render bắt được, và là lý do luật "golden hash
+  chỉ lấy lại khi có ảnh chứng minh" tồn tại.
+- **Vạch kẻ phải kiểm bằng mắt ở đúng thứ tự chồng**: zebra ở 0.55 trên nhựa nhạt thì **không thấy**;
+  đậm lên 0.82 thì nó **che** vạch giữa; cuối cùng vạch giữa thuộc **trung cảnh** (gần chân trời) và
+  zebra thuộc **tiền cảnh** (sát chân người xem) — đúng như một con đường thật.
+- **Golden hash lấy lại lần thứ 8**, đúng 2 dòng (`transport`, `safety`), kèm 6 ảnh PNG làm bằng chứng.

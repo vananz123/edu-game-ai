@@ -7,6 +7,16 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-16 — #288 Không gian thật: backdrop `road` (đường, vạch kẻ, cột đèn, biển báo) + giáo viên chọn được không gian
+- Phản hồi của giáo viên: *"nó phải mô phỏng được không gian: tình huống giao thông thì phải có đường, cột đèn giao thông, vạch kẻ đường"*. Đo lại thì đúng là không có: 10 backdrop cũ đều là **phông nền**, không cái nào là **chỗ**; 7/10 dùng chung một `stones`; `plain` (mặc định) **trống hoàn toàn**.
+- **6 primitive mới** trong `illustration-scene.ts`: `road` (mặt đường + vạch giữa + vạch mép), `traffic-light` (cột + 3 đèn, chỉ đèn trên sáng), `sign` (biển tròn trên cột), `streetlight`, `zebra` (vạch sang đường), `kerb` (gờ vỉa hè). Không có `<text>`, không ảnh, không toạ độ trong dữ liệu.
+- **Backdrop thứ 11 `road`**: `standing: ['road','traffic-light','sign']`, `fg: ['zebra','kerb']`. `CATEGORY_BACKDROPS` và `SCENE_SPECS` của `transport` + `safety` chuyển sang không gian này ⇒ câu hỏi an toàn giao thông tự có đường.
+- **Giáo viên chọn được không gian** (`[data-editor-art-backdrop]`, 11 nhãn Việt): trước đây chỉ category hoặc AI chọn, không có cách nào đổi. Ghi vào đúng khoá `backdrop` của blueprint, nên AI và tay giáo viên dùng chung một đường dữ liệu.
+- **Ba lỗi tự bắt được bằng ảnh render, không bằng test:** (1) đặt `road` ở **lớp far** thì **mặt đường vô hình** — lớp far bị `sceneGroundPath()` (fill đục) vẽ đè lên; chuyển sang lớp **mid**; (2) vạch giữa ở y 188 bị dải `kerb` che; (3) vạch zebra ở opacity 0.55 trên nhựa nhạt **không nhìn thấy**, và sau khi đậm lên thì nó **che mất** vạch giữa ⇒ dời vạch giữa vào **trung cảnh** (y 153–164), zebra xuống sát chân (y 166–194).
+- **Golden hash lấy lại lần thứ 8** (đúng 2 dòng: `transport`, `safety`) — có ảnh `.tmp-art/road-car.png`, `road-crossing.png`, `road-compare.png`, `safety-category.png`, `transport-category.png`, `plain-for-contrast.png` để đối chiếu.
+- Vision model đọc ảnh cuối: *"mặt đường xanh xám tối hơn trời, vạch đứt ở trung cảnh, vạch mép hai bên, vạch sang đường ba dải ở dưới; đọc rõ là phố"* — **không phải người duyệt**.
+- Kiểm: `tsc` sạch · unit **100/100** · `npm run check` 52 tệp · `check:renderer-globals` 1080 hàm/8603 chỗ gọi, không thiếu · `check:scene-runtime` **153.5 KiB**.
+
 ### 2026-11-16 — #287 AI cloud: không còn ô base URL trống
 - Phản hồi của giáo viên: "phần thêm AI cloud nên để sẵn base url". Kiểm lại thì `gemini`, `openai`, `opencode` **đã** điền sẵn từ registry; ô trống duy nhất là provider **`custom`** ("API tương thích OpenAI (tự cấu hình)") — và đó đúng là cái hiện ra khi giáo viên tự thêm một nhà cung cấp.
 - Sửa: `custom.baseUrl` = `https://generativelanguage.googleapis.com/v1beta/openai` (điểm cuối chạy được ngay, giáo viên ghi đè bằng gateway của trường). **Model vẫn để trống có chủ ý**: tên model phụ thuộc điểm cuối, nên nó là **ví dụ**, không phải mặc định — thêm trường `modelExample: 'gemini-2.5-flash'` và dùng làm placeholder.

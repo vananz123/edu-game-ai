@@ -92,6 +92,14 @@ const EDITOR_SCENE_ICON_LABEL = {
   'egg': 'Quả trứng', 'frog': 'Con ếch', 'sprout': 'Mầm cây', 'butterfly': 'Con bướm',
   'sun': 'Mặt trời', 'droplet': 'Giọt nước'
 };
+/** #288: the SPACE of the scene. A traffic question wants a road, not a lawn, and
+ *  until now only the AI or the category could choose one. Order: outdoors, then
+ *  indoors, then the street. */
+const EDITOR_SCENE_BACKDROP_LABEL = {
+  plain: 'Nền trơn', meadow: 'Đồng cỏ', forest: 'Rừng', mountain: 'Núi', sea: 'Biển',
+  stars: 'Trời sao', road: 'Đường phố', city: 'Phố xá', classroom: 'Lớp học',
+  lab: 'Phòng thí nghiệm', studio: 'Studio'
+};
 /** The four corners in the order the editor shows them: bottom row, then top. */
 const EDITOR_SCENE_SLOTS = [
   { position: 'left', label: 'Trái dưới' },
@@ -196,6 +204,10 @@ function editorItemArtHtml(item) {
   const isProcess = !!normalized && normalized.layout === 'process';
   const isSurround = !!normalized && normalized.layout === 'surround';
   const layoutKind = isCompare ? 'compare' : isProcess ? 'process' : isSurround ? 'surround' : 'single';
+  /* #288: the space the scene is drawn in. A blueprint always carries a backdrop
+     (the normaliser picks `plain` when it is missing), so this never falls back to
+     an empty option. */
+  const backdropValue = normalized && typeof normalized.backdrop === 'string' ? normalized.backdrop : 'plain';
   const placedAround = normalized && Array.isArray(normalized.around) ? normalized.around : [];
   const activeSlots = isCompare || isProcess
     ? EDITOR_SCENE_SLOTS.filter(slot => EDITOR_SCENE_PROCESS_SLOTS.indexOf(slot.position) >= 0)
@@ -279,6 +291,12 @@ function editorItemArtHtml(item) {
   const compareHtml = normalized
     ? `<div class="editor-art-slots" data-editor-art-compare>
         <span class="editor-art-slots-label">Bố cục cảnh</span>
+        <label class="editor-art-slot" title="Không gian của cảnh: ngoài trời, trong lớp hay đường phố">
+          <span>Không gian</span>
+          <select data-editor-art-backdrop>
+            ${Object.keys(EDITOR_SCENE_BACKDROP_LABEL).map(id => `<option value="${escapeHtml(id)}"${backdropValue === id ? ' selected' : ''}>${escapeHtml(EDITOR_SCENE_BACKDROP_LABEL[id])}</option>`).join('')}
+          </select>
+        </label>
         <label class="editor-art-slot" title="Một hình, hai hình để so sánh, hay một chuỗi bậc nối tiếp">
           <span>Kiểu</span>
           <select data-editor-art-layout>
@@ -519,6 +537,13 @@ function applyEditorSceneSlots(row) {
      the normaliser (it falls back to `single`), so the first free icon is picked
      here — one click must produce a valid compare scene, not a control that
      snaps back. */
+  /* #288: the space is a blueprint field the model already emits, so the editor
+     control writes the same key instead of introducing a second way to say it. */
+  const backdropSelect = live.querySelector('[data-editor-art-backdrop]');
+  const wantedBackdrop = backdropSelect && backdropSelect.value ? backdropSelect.value.trim() : '';
+  if (wantedBackdrop && typeof stageIsSceneBackdropId === 'function' && stageIsSceneBackdropId(wantedBackdrop)) {
+    next.backdrop = wantedBackdrop;
+  }
   const layoutSelect = live.querySelector('[data-editor-art-layout]');
   const wanted = layoutSelect && layoutSelect.value ? layoutSelect.value.trim() : 'single';
   const wantCompare = wanted === 'compare';
@@ -686,7 +711,7 @@ function wireEditorItemArtRow(row) {
   });
   // #262: layout, second subject and sign all rebuild the same blueprint. Resolve
   // the live row from the changed node, never from a closure over the old one.
-  row.querySelectorAll('[data-editor-art-layout], [data-editor-art-compare-icon], [data-editor-art-sign], [data-editor-art-step], [data-editor-art-around]').forEach(select => {
+  row.querySelectorAll('[data-editor-art-backdrop], [data-editor-art-layout], [data-editor-art-compare-icon], [data-editor-art-sign], [data-editor-art-step], [data-editor-art-around]').forEach(select => {
     select.addEventListener('change', () => {
       const live = select.isConnected ? select.closest('[data-editor-art]') : null;
       if (live) applyEditorSceneSlots(live);
