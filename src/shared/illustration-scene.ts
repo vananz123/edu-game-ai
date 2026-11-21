@@ -22,7 +22,7 @@
 import { renderIconSvg } from './icon-registry';
 import type { IllustrationPalette } from './illustration-registry';
 import type { SceneBlueprint, SceneSubIcon } from './scene-blueprint';
-import { SCENE_MAX_PROPS, SCENE_MAX_SUB_ICONS, getBackdropSpec, type SceneCompareSign, type SceneSubIconPosition } from './scene-asset-catalog';
+import { SCENE_EXTRA_SIZE, SCENE_MAX_EXTRAS, SCENE_MAX_PROPS, SCENE_MAX_SUB_ICONS, getBackdropSpec, type SceneCompareSign, type SceneSubIconPosition } from './scene-asset-catalog';
 
 /** Canvas the scenes are authored in; matches `renderIllustrationSvg`. */
 export const SCENE_WIDTH = 320;
@@ -1066,6 +1066,40 @@ function groundShadow(
     `fill="${esc(palette.ink)}" opacity="${SCENE_SHADOW_OPACITY}"/>`;
 }
 
+/**
+ * #297: the objects the teacher added. They are painted in the `props` layer, after
+ * the scenery and after the corner icons, so a picture she dragged onto the scene
+ * is never buried under a fence.
+ */
+function renderExtras(
+  extras: readonly { icon: string; x: number; y: number; s: number; r?: number }[],
+  palette: IllustrationPalette,
+  free: SceneFreePositions = {}
+): string {
+  if (!extras.length) return '';
+  return extras.slice(0, SCENE_MAX_EXTRAS).map((extra, index) => {
+    const svg = renderIconSvg(extra.icon, {
+      size: SCENE_EXTRA_SIZE,
+      className: 'stage-illustration-extra',
+    });
+    if (!svg) return '';
+    // The stored placement is the truth; `freePos['extra-i']` is the editor's live
+    // copy of the same numbers, so a drag writes one place and draws from another.
+    const placement = free[`extra-${index}`] || { x: extra.x, y: extra.y, s: extra.s, r: extra.r };
+    const transform = nodeTransform(
+      `extra-${index}`,
+      Math.round(extra.x * SCENE_WIDTH - SCENE_EXTRA_SIZE / 2),
+      Math.round(extra.y * SCENE_HEIGHT - SCENE_EXTRA_SIZE / 2),
+      SCENE_EXTRA_SIZE,
+      { [`extra-${index}`]: placement }
+    );
+    return (
+      `<g data-scene-extra="${index}" data-scene-size="${SCENE_EXTRA_SIZE}" ` +
+      `transform="${transform}" color="${esc(palette.ink)}">${svg}</g>`
+    );
+  }).join('');
+}
+
 function renderGroundProps(
   props: readonly string[],
   palette: IllustrationPalette,
@@ -1094,7 +1128,7 @@ function renderGroundProps(
  * saved before blueprints existed renders byte-identically (#70/#72 contract).
  */
 /** #294: one hand-placed node — normalised centre (0..1) plus a scale. */
-export type SceneFreePos = { x: number; y: number; s: number };
+export type SceneFreePos = { x: number; y: number; s: number; r?: number };
 export type SceneFreePositions = Readonly<Record<string, SceneFreePos>>;
 
 /**
@@ -1114,8 +1148,11 @@ function nodeTransform(
   const cx = Math.round(entry.x * SCENE_WIDTH);
   const cy = Math.round(entry.y * SCENE_HEIGHT);
   const scale = Math.round(entry.s * 100) / 100;
+  // #297: rotation happens BEFORE the scale, so a turned object still grows and
+  // shrinks around its own centre instead of swinging around the frame.
+  const rotation = entry.r ? ` rotate(${Math.round(entry.r)})` : '';
   return (
-    `translate(${cx} ${cy}) scale(${scale}) ` +
+    `translate(${cx} ${cy})${rotation} scale(${scale}) ` +
     `translate(${-Math.round(boxSize / 2)} ${-Math.round(boxSize / 2)})`
   );
 }
@@ -1128,6 +1165,7 @@ export interface SceneNodeSlot {
   y: number;
   size: number;
   scale: number;
+  rotation: number;
 }
 
 /**
@@ -1156,8 +1194,17 @@ export function sceneNodeSlots(blueprint: SceneBlueprint): SceneNodeSlot[] {
   const subjectY = isCompare ? spec.subjectY + SCENE_COMPARE_SUBJECT_LIFT : spec.subjectY;
   const slots: SceneNodeSlot[] = [];
 
-  const push = (key: string, label: string, left: number, top: number, size: number) => {
-    const entry = free[key];
+  const push = (
+    key: string,
+    label: string,
+    left: number,
+    top: number,
+    size: number,
+    source?: SceneFreePos
+  ) => {
+    // #297: an added object keeps its placement in `extras[]`, not in `freePos`,
+    // so its handle has to read the object itself.
+    const entry = free[key] || source;
     slots.push({
       key,
       label,
@@ -1165,6 +1212,7 @@ export function sceneNodeSlots(blueprint: SceneBlueprint): SceneNodeSlot[] {
       y: entry ? Math.round(entry.y * SCENE_HEIGHT - size / 2) : Math.round(top),
       size,
       scale: entry ? entry.s : 1,
+      rotation: entry && entry.r ? entry.r : 0,
     });
   };
 
@@ -1219,6 +1267,20 @@ export function sceneNodeSlots(blueprint: SceneBlueprint): SceneNodeSlot[] {
     push(`prop-${index}`, `Vật ${index + 1}`, left, SCENE_HEIGHT - 14 - SCENE_GROUND_PROP_SIZE, SCENE_GROUND_PROP_SIZE);
   });
 
+  /* #297: the objects the teacher added. They come last because they sit on top of
+     the scenery in the paint order, so they are also the last handles on screen. */
+  const extras = Array.isArray(blueprint.extras) ? blueprint.extras : [];
+  extras.forEach((extra, index) => {
+    push(
+      `extra-${index}`,
+      `Vật thêm ${index + 1}`,
+      extra.x * SCENE_WIDTH - SCENE_EXTRA_SIZE / 2,
+      extra.y * SCENE_HEIGHT - SCENE_EXTRA_SIZE / 2,
+      SCENE_EXTRA_SIZE,
+      extra
+    );
+  });
+
   if (isSurround) {
     const ringKeys = Object.keys(SCENE_SURROUND_SLOT_PX);
     around.forEach((_icon, index) => {
@@ -1245,7 +1307,8 @@ function composeSceneSvg(
   compare: { second: string; sign: SceneCompareSign | undefined } | null = null,
   processStages: readonly string[] = [],
   surroundRing: readonly string[] = [],
-  free: SceneFreePositions = {}
+  free: SceneFreePositions = {},
+  extras: readonly { icon: string; x: number; y: number; s: number; r?: number }[] = []
 ): string {
   if (!subject) return '';
 
@@ -1326,7 +1389,7 @@ function composeSceneSvg(
       ? `<g data-scene-subject="main" data-scene-size="${subjectSize}" transform="${nodeTransform('subject', SCENE_COMPARE_SUBJECT_X.left, y, subjectSize, free)}" color="${esc(palette.glow)}">${subject}</g>` +
         `<g data-scene-subject="second" data-scene-size="${subjectSize}" transform="${nodeTransform('second', SCENE_COMPARE_SUBJECT_X.right, y, subjectSize, free)}" color="${esc(palette.ink)}">${compare!.second}</g>`
       : `<g transform="${nodeTransform('subject', Math.round((SCENE_WIDTH - SCENE_SUBJECT_SIZE) / 2), y, SCENE_SUBJECT_SIZE, free)}" color="${esc(palette.glow)}">${subject}</g>`) +
-    layer('props', primitivesOf(spec.standing).map((p) => renderProps(p, palette)).join('') + renderGroundProps(groundProps, palette, free) + renderSurroundRing(surroundRing, palette, free) + renderSubIcons(subIcons, palette, isCompare || processStages.length >= 2, free)) +
+    layer('props', primitivesOf(spec.standing).map((p) => renderProps(p, palette)).join('') + renderGroundProps(groundProps, palette, free) + renderSurroundRing(surroundRing, palette, free) + renderSubIcons(subIcons, palette, isCompare || processStages.length >= 2, free) +renderExtras(extras, palette, free)) +
     layer('sign', isCompare
       ? `<g data-scene-sign="${esc(String(compare!.sign || ''))}" data-scene-size="${SCENE_COMPARE_SIGN_SIZE}" ` +
         `transform="${nodeTransform('sign', SCENE_WIDTH / 2 - SCENE_COMPARE_SIGN_SIZE / 2, Math.round(subjectY - SCENE_COMPARE_SIGN_SIZE / 2), SCENE_COMPARE_SIGN_SIZE, free)}" ` +
@@ -1398,7 +1461,8 @@ export function renderBlueprintSvg(
       ? [blueprint.mainIcon, ...blueprint.steps]
       : [],
     blueprint.layout === 'surround' && Array.isArray(blueprint.around) ? blueprint.around : [],
-    freePositionsOf(blueprint)
+    freePositionsOf(blueprint),
+    Array.isArray(blueprint.extras) ? blueprint.extras : []
   );
 }
 

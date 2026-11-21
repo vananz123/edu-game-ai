@@ -123,7 +123,7 @@ vendor/                DLL VC++ đóng gói kèm
 | Âm thanh | `features/game-audio.ts` |
 | Trình chiếu màn hình 2 | `features/presentation.ts` + `src/presentation/presentation.html` + `src-tauri/src/presentation.rs` |
 | Chơi LAN (học sinh trên điện thoại) | `src-tauri/src/lan.rs` (mạng/state), `src/lan/mobile/` (trang điện thoại), `src/renderer/features/lan.ts` (màn hình giáo viên) |
-| Trình sửa game | `features/editor/*.ts` (tách #150: `page`, `questions`, `matching`, `treasure`, `race`, `ai`, `drag`), `features/editor/scene-editor.ts` (bảng “Chỉnh cảnh”, #295), `features/setup-wizard.ts` |
+| Trình sửa game | `features/editor/*.ts` (tách #150: `page`, `questions`, `matching`, `treasure`, `race`, `ai`, `drag`), `features/editor/scene-designer.ts` (“Xưởng cảnh”, #297 — màn hình riêng để sửa ảnh), `features/setup-wizard.ts` |
 | AI local (cài model, chạy llama.cpp) | `src-tauri/src/ai_local.rs`, `setup.rs`, `features/local-ai.ts`, `features/setup-wizard.ts` |
 | Prompt / schema gọi AI | `src/services/lesson/lesson-prompts.ts`, `lesson/lesson-contracts.ts`, `ai/ai-tasks.ts` |
 | Nhà cung cấp AI của Step 2/Step 5, khoá theo từng nhà cung cấp, trạng thái sẵn sàng (#132) | `src/services/ai/ai-providers.ts` (registry + chọn nhà cung cấp), `src-tauri/src/settings.rs` + `secrets.rs` (settings, DPAPI, khoá không trả ra renderer), `pages/settings.ts` + `features/settings.ts`, `features/wizard/state/providers.ts` |

@@ -22,6 +22,8 @@ declare const SceneRuntime: {
   normalizeSceneBlueprint(value: unknown): any;
   sceneBlueprintFromCategory(category: unknown, iconName?: unknown): any;
   renderBlueprintSvg(blueprint: any, palette: any, options?: any): string;
+  /** #297: one icon as a standalone SVG, for the workshop's picture palette. */
+  renderIconSvg(name: unknown, options?: any): string;
   renderSceneSvg(category: string, iconName: string, palette: any, options?: any): string;
   getIllustrationPalette(category: unknown): any;
   isSceneIconId(value: unknown): boolean;
@@ -96,6 +98,12 @@ function stageIsSceneBackdropId(value: unknown): boolean {
 /** #294: every node the current blueprint draws, with its geometry in scene px. */
 function stageSceneNodeSlots(blueprint: unknown): any[] {
   return (SceneRuntime as any).sceneNodeSlots(blueprint) || [];
+}
+
+/** #297: icon art for the workshop palette (a picture, not a label). */
+function stageSceneIconHtml(id: string, size: number): string {
+  if (typeof SceneRuntime.renderIconSvg !== 'function') return '';
+  return SceneRuntime.renderIconSvg(id, { size, className: 'sd-icon-svg' });
 }
 
 /**

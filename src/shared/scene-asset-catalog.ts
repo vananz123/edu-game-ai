@@ -71,6 +71,14 @@ export const SCENE_PROCESS_SUB_ICON_POSITIONS = Object.freeze(['top-left', 'top-
  * no-op instead of a payload the renderer has to guess at. */
 export const SCENE_FREE_POS_MIN_SCALE = 0.5;
 export const SCENE_FREE_POS_MAX_SCALE = 1.6;
+/** #297: a hand-placed node may also be turned. Degrees, symmetric around 0, so
+ *  +180 and -180 are the same picture and the clamp has no dead zone. */
+export const SCENE_FREE_POS_MAX_ROTATION = 180;
+/** #297: objects the teacher ADDS herself, beyond the ones the layout draws.
+ *  Six is what a 320x200 frame can hold without turning into confetti. */
+export const SCENE_MAX_EXTRAS = 6;
+/** Base box of an added object before its own scale, same as a corner icon. */
+export const SCENE_EXTRA_SIZE = 52;
 export const SCENE_FREE_POS_KEYS: readonly string[] = Object.freeze([
   'subject',
   'second',
@@ -88,11 +96,20 @@ export const SCENE_FREE_POS_KEYS: readonly string[] = Object.freeze([
   'around-2',
   'around-3',
   'around-4',
+  'extra-0',
+  'extra-1',
+  'extra-2',
+  'extra-3',
+  'extra-4',
+  'extra-5',
 ]);
 /** #294 raised the cap from 600: a fully hand-placed 5-node scene needs ~340 bytes
  *  of JSON on top of the ids, and dropping the teacher's edits on save is worse
- *  than the extra 400 bytes (measured: .egame is ~334 bytes/question, #274). */
-export const SCENE_BLUEPRINT_MAX_BYTES = 1000;
+ *  than the extra 400 bytes (measured: .egame is ~334 bytes/question, #274).
+ *  #297 raised it again to 1600 for the same reason one step further: a scene the
+ *  teacher built by hand from six added objects is ~700 bytes of JSON, and losing
+ *  a picture she assembled by dragging is worse than 600 bytes in a file. */
+export const SCENE_BLUEPRINT_MAX_BYTES = 1600;
 
 /**
  * `surround` (#270): things gathered around one subject, one per frame corner.

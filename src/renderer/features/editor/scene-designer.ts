@@ -1,0 +1,537 @@
+/**
+ * #297 — the scene workshop: picture editing as its own screen.
+ *
+ * The teacher asked for the picture editor to be a real feature, not two sliders
+ * on a thumbnail: edit several objects, grow/shrink them, turn them, start from a
+ * visual template, and drag things around. So this is a full-screen surface with
+ * four parts:
+ *
+ *   Mẫu      four VISUAL templates (one picture, two to compare, a three-step
+ *            sequence, things around one subject) — a template is the layout, and
+ *            the preview is drawn by the game engine, not by a mock-up;
+ *   Hình     every icon the engine can draw, as pictures; click adds an object,
+ *            dragging one onto the canvas adds it where you dropped it;
+ *   canvas   the real scene, with one invisible handle per node;
+ *   panel    the selected node: its icon, its size, its angle, delete, reset.
+ *
+ * What is stored stays a small JSON blueprint: extra objects are `extras[]`, and
+ * a moved/turned node is `freePos[key] = {x, y, s, r}`. Never pixels, never SVG.
+ *
+ * Layout rule from #295 kept: the handles are DOM siblings of the picture, so the
+ * picture can be re-rendered on every pointer move without losing the gesture.
+ */
+const SCENE_DESIGNER_SURROUND_SAMPLE = 4;
+
+function openSceneDesigner(options) {
+  const opts = options || {};
+  const host = opts.host || document.body;
+  if (typeof stageNormalizeBlueprint !== 'function') return;
+  const initial = stageNormalizeBlueprint(opts.blueprint);
+  if (!initial) return;
+
+  const icons = Array.isArray(opts.icons) ? opts.icons : [];
+  const signs = Array.isArray(opts.signs) ? opts.signs : [];
+  const render = blueprint => (typeof opts.render === 'function' ? opts.render(JSON.stringify(blueprint)) || '' : '');
+  const iconHtml = (id, size) =>
+    typeof stageSceneIconHtml === 'function' ? stageSceneIconHtml(id, size) : '';
+
+  let blueprint = initial;
+  let selectedKey = 'subject';
+  // #297: every change is written through immediately, so nothing a teacher did
+  // can be lost by an app that closes. "Huỷ" restores this exact snapshot.
+  const originalJson = JSON.stringify(initial);
+
+  const root = document.createElement('div');
+  root.className = 'scene-designer';
+  root.setAttribute('role', 'region');
+  root.setAttribute('aria-label', 'Xưởng cảnh');
+  root.innerHTML =
+    '<div class="sd-head">' +
+      '<div class="sd-title"><strong>Xưởng cảnh</strong>' +
+        '<span>Kéo hình trên khung để đặt chỗ · chọn một hình để đổi cỡ và góc · kéo một hình mẫu từ cột trái vào khung để thêm vật.</span></div>' +
+      '<div class="sd-head-actions">' +
+        '<button type="button" class="btn btn-secondary btn-small" data-sd-cancel>Huỷ</button>' +
+        '<button type="button" class="btn btn-primary btn-small" data-sd-done>Xong</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="sd-body">' +
+      '<div class="sd-side sd-side-left">' +
+        '<div class="sd-group"><span class="sd-group-title">Mẫu bố cục</span>' +
+          '<div class="sd-templates" data-sd-templates></div></div>' +
+        '<div class="sd-group"><span class="sd-group-title">Hình mẫu — kéo vào khung</span>' +
+          '<div class="sd-icons" data-sd-icons></div></div>' +
+      '</div>' +
+      '<div class="sd-canvas-wrap">' +
+        '<div class="sd-canvas" data-sd-canvas>' +
+          '<div class="sd-art" data-sd-art></div>' +
+          '<div class="sd-handles" data-sd-handles></div>' +
+        '</div>' +
+        '<div class="sd-status" data-sd-status></div>' +
+      '</div>' +
+      '<div class="sd-side sd-side-right">' +
+        '<div class="sd-group"><span class="sd-group-title">Hình đang chọn</span>' +
+          '<strong class="sd-selected" data-sd-name>Hình chính</strong></div>' +
+        '<div class="sd-group" data-sd-icon-row><span class="sd-group-title">Hình</span>' +
+          '<select data-sd-icon></select></div>' +
+        '<div class="sd-group is-hidden" data-sd-sign-row><span class="sd-group-title">Dấu so sánh</span>' +
+          '<select data-sd-sign></select></div>' +
+        '<div class="sd-group"><span class="sd-group-title">Cỡ <em data-sd-scale-value>100%</em></span>' +
+          '<input type="range" min="50" max="160" step="5" value="100" data-sd-scale></div>' +
+        '<div class="sd-group"><span class="sd-group-title">Góc xoay <em data-sd-rotate-value>0°</em></span>' +
+          '<input type="range" min="-180" max="180" step="5" value="0" data-sd-rotate></div>' +
+        '<div class="sd-group">' +
+          '<button type="button" class="btn btn-secondary btn-small" data-sd-reset-one>Trả hình này về chỗ cũ</button>' +
+          '<button type="button" class="btn btn-secondary btn-small is-hidden" data-sd-remove-extra>Xoá vật này</button>' +
+        '</div>' +
+        '<div class="sd-group"><button type="button" class="btn btn-secondary btn-small" data-sd-reset-all>Xoá hết chỉnh tay</button></div>' +
+      '</div>' +
+    '</div>';
+
+  const art = root.querySelector('[data-sd-art]');
+  const handleLayer = root.querySelector('[data-sd-handles]');
+  const canvas = root.querySelector('[data-sd-canvas]');
+  const iconSelect = root.querySelector('[data-sd-icon]') as HTMLSelectElement;
+  const signSelect = root.querySelector('[data-sd-sign]') as HTMLSelectElement;
+  const signRow = root.querySelector('[data-sd-sign-row]') as HTMLElement;
+  const iconRow = root.querySelector('[data-sd-icon-row]') as HTMLElement;
+  const scaleInput = root.querySelector('[data-sd-scale]') as HTMLInputElement;
+  const scaleOut = root.querySelector('[data-sd-scale-value]') as HTMLElement;
+  const rotateInput = root.querySelector('[data-sd-rotate]') as HTMLInputElement;
+  const rotateOut = root.querySelector('[data-sd-rotate-value]') as HTMLElement;
+  const nameOut = root.querySelector('[data-sd-name]') as HTMLElement;
+  const statusOut = root.querySelector('[data-sd-status]') as HTMLElement;
+  const removeExtra = root.querySelector('[data-sd-remove-extra]') as HTMLElement;
+  const templatesBox = root.querySelector('[data-sd-templates]') as HTMLElement;
+  const iconsBox = root.querySelector('[data-sd-icons]') as HTMLElement;
+
+  iconSelect.innerHTML = icons
+    .map(entry => '<option value="' + escapeHtml(entry.id) + '">' + escapeHtml(entry.label) + '</option>')
+    .join('');
+  signSelect.innerHTML = signs
+    .map(entry => '<option value="' + escapeHtml(entry.id) + '">' + escapeHtml(entry.label) + '</option>')
+    .join('');
+
+  const extrasOf = () => (Array.isArray(blueprint.extras) ? blueprint.extras : []);
+  const isExtraKey = key => /^extra-\d+$/.test(key);
+  const extraIndex = key => Number(/^extra-(\d+)$/.exec(key)[1]);
+
+  /** Where the selected node currently is, in the same units `freePos` uses. */
+  function placementOf(key) {
+    const slots = sceneNodeSlotsSafe();
+    const slot = slots.filter(item => item.key === key)[0];
+    if (!slot) return null;
+    return {
+      x: (slot.x + slot.size / 2) / 320,
+      y: (slot.y + slot.size / 2) / 200,
+      s: slot.scale,
+      r: slot.rotation,
+      slot,
+    };
+  }
+
+  function sceneNodeSlotsSafe() {
+    const slots = typeof stageSceneNodeSlots === 'function' ? stageSceneNodeSlots(blueprint) : [];
+    // #297: the added objects live in `extras[]`, so their handles come from there
+    // and not from `freePos`.
+    return slots;
+  }
+
+  function withPlacement(key, next) {
+    const copy = Object.assign({}, blueprint);
+    const x = Math.round(Math.min(1, Math.max(0, next.x)) * 1000) / 1000;
+    const y = Math.round(Math.min(1, Math.max(0, next.y)) * 1000) / 1000;
+    const s = Math.round(Math.min(1.6, Math.max(0.5, next.s)) * 100) / 100;
+    const r = Math.round(Math.min(180, Math.max(-180, next.r || 0)));
+    if (isExtraKey(key)) {
+      const items = extrasOf().slice();
+      const index = extraIndex(key);
+      if (!items[index]) return copy;
+      items[index] = Object.assign({}, items[index], { x, y, s }, r ? { r } : {});
+      if (!r) delete items[index].r;
+      copy.extras = items;
+      return copy;
+    }
+    const freePos = Object.assign({}, copy.freePos || {});
+    const entry = { x, y, s };
+    freePos[key] = r ? Object.assign(entry, { r }) : entry;
+    copy.freePos = freePos;
+    return copy;
+  }
+
+  function commit(next, note) {
+    const clean = stageNormalizeBlueprint(next);
+    if (clean) {
+      blueprint = clean;
+      if (typeof opts.onChange === 'function') opts.onChange(JSON.stringify(blueprint));
+    }
+    paint();
+    if (note) statusOut.textContent = note;
+  }
+
+  function paintTemplates() {
+    const samples = [
+      { layout: 'single', label: 'Một hình' },
+      { layout: 'compare', label: 'So sánh hai hình' },
+      { layout: 'process', label: 'Quy trình ba bậc' },
+      { layout: 'surround', label: 'Vây quanh' },
+    ];
+    templatesBox.innerHTML = samples.map(sample => {
+      const preview = blueprintForLayout(sample.layout);
+      const active = blueprint.layout === sample.layout ? ' is-active' : '';
+      return '<button type="button" class="sd-template' + active + '" data-sd-template="' + sample.layout + '" ' +
+        'title="Dùng bố cục: ' + escapeHtml(sample.label) + '">' +
+        '<span class="sd-template-art">' + render(preview) + '</span>' +
+        '<span class="sd-template-label">' + escapeHtml(sample.label) + '</span></button>';
+    }).join('');
+    templatesBox.querySelectorAll('[data-sd-template]').forEach(button => {
+      button.addEventListener('click', () => applyLayout(button.getAttribute('data-sd-template') || 'single'));
+    });
+  }
+
+  /** A preview blueprint for a layout, using the current icons. */
+  function blueprintForLayout(layout) {
+    const iconList = icons.map(entry => entry.id);
+    const other = iconList.filter(id => id !== blueprint.mainIcon)[0] || blueprint.mainIcon;
+    const base = stageNormalizeBlueprint(Object.assign({}, blueprint, { layout }));
+    if (base && base.layout === layout) return base;
+    // The layout needs something it does not have yet: build it from scratch.
+    const sample = Object.assign({}, blueprint, {
+      layout,
+      compareIcon: layout === 'compare' ? other : blueprint.compareIcon,
+      compareSign: layout === 'compare' ? 'greater-than' : blueprint.compareSign,
+      steps: layout === 'process' ? [other, iconList.filter(id => id !== blueprint.mainIcon && id !== other)[0] || other] : blueprint.steps,
+      around: layout === 'surround' ? Array.from({ length: SCENE_DESIGNER_SURROUND_SAMPLE }, (_v, index) =>
+        iconList[(index + 1) % Math.max(1, iconList.length)] || other) : blueprint.around,
+    });
+    return stageNormalizeBlueprint(sample) || blueprint;
+  }
+
+  /** A template is the LAYOUT, and the normaliser decides if it can be drawn. */
+  function applyLayout(layout) {
+    const next = blueprintForLayout(layout);
+    if (next.layout !== layout) {
+      statusOut.textContent = 'Chưa đổi được bố cục này — cảnh chưa có đủ hình cho nó.';
+      return;
+    }
+    commit(next, 'Đã đổi sang bố cục “' + templateLabel(layout) + '”.');
+  }
+
+  function templateLabel(layout) {
+    const found = [
+      ['single', 'Một hình'],
+      ['compare', 'So sánh hai hình'],
+      ['process', 'Quy trình ba bậc'],
+      ['surround', 'Vây quanh'],
+    ].filter(entry => entry[0] === layout)[0];
+    return found ? found[1] : layout;
+  }
+
+  function paintIcons() {
+    if (!iconHtml('paw-print', 20)) {
+      iconsBox.innerHTML = '<span class="sd-icons-fallback">Chưa nạp được hình mẫu.</span>';
+      return;
+    }
+    iconsBox.innerHTML = icons.map(entry =>
+      '<button type="button" class="sd-icon" data-sd-add="' + escapeHtml(entry.id) + '" draggable="true" ' +
+      'title="' + escapeHtml(entry.label) + '">' + iconHtml(entry.id, 26) + '</button>').join('');
+    iconsBox.querySelectorAll('[data-sd-add]').forEach(button => {
+      const id = button.getAttribute('data-sd-add') || '';
+      // Click = add in a free spot. Drag = add exactly where it was dropped.
+      button.addEventListener('click', () => addExtra(id, null));
+      button.addEventListener('dragstart', dragEvent => {
+        const transfer = (dragEvent as DragEvent).dataTransfer;
+        if (transfer) {
+          transfer.setData('text/plain', id);
+          transfer.effectAllowed = 'copy';
+        }
+      });
+    });
+  }
+
+  /** Add an object: at the drop point when there is one, otherwise in a free spot. */
+  function addExtra(icon, point) {
+    if (!icon) return;
+    const items = extrasOf().slice();
+    if (items.length >= 6) {
+      statusOut.textContent = 'Cảnh đã có 6 vật thêm — xoá bớt một vật trước khi thêm.';
+      return;
+    }
+    const spots = [
+      [0.2, 0.78], [0.8, 0.78], [0.16, 0.24], [0.84, 0.24], [0.5, 0.86], [0.5, 0.16],
+    ];
+    const spot = point || { x: spots[items.length % spots.length][0], y: spots[items.length % spots.length][1] };
+    items.push({ icon, x: Math.round(spot.x * 1000) / 1000, y: Math.round(spot.y * 1000) / 1000, s: 1 });
+    selectedKey = 'extra-' + (items.length - 1);
+    commit(Object.assign({}, blueprint, { extras: items }), 'Đã thêm một vật — kéo để đặt chỗ khác.');
+  }
+
+  function paint() {
+    const slots = sceneNodeSlotsSafe();
+    if (!slots.some(slot => slot.key === selectedKey)) selectedKey = slots.length ? slots[0].key : 'subject';
+    art.innerHTML = render(blueprint);
+    // Small boxes last: an object dropped on top of the subject must be the thing
+    // the pointer hits (same rule as #296).
+    handleLayer.innerHTML = slots.slice().sort((a, b) => b.size - a.size).map(slot => {
+      const left = (slot.x / 320) * 100;
+      const top = (slot.y / 200) * 100;
+      const width = Math.max(6, (slot.size / 320) * 100);
+      const height = (slot.size / 200) * 100;
+      const active = slot.key === selectedKey ? ' is-active' : '';
+      const turned = slot.rotation ? ' transform="rotate(' + slot.rotation + ')"' : '';
+      return '<button type="button" class="sd-handle' + active + '" data-sd-handle="' + escapeHtml(slot.key) + '" ' +
+        'style="left:' + left.toFixed(2) + '%;top:' + top.toFixed(2) + '%;width:' + width.toFixed(2) + '%;height:' + height.toFixed(2) + '%"' +
+        turned + ' title="' + escapeHtml(slot.label) + '"><i>' + escapeHtml(slot.label) + '</i></button>';
+    }).join('');
+    handleLayer.querySelectorAll('[data-sd-handle]').forEach(handle => {
+      handle.addEventListener('pointerdown', event => startDrag(event, handle));
+    });
+
+    const chosen = slots.filter(slot => slot.key === selectedKey)[0];
+    const isSign = selectedKey === 'sign';
+    nameOut.textContent = chosen ? chosen.label : 'Hình chính';
+    iconRow.classList.toggle('is-hidden', isSign);
+    signRow.classList.toggle('is-hidden', !isSign);
+    removeExtra.classList.toggle('is-hidden', !isExtraKey(selectedKey));
+    if (!isSign) {
+      const current = iconOf(selectedKey);
+      if (icons.some(entry => entry.id === current)) iconSelect.value = current;
+    } else if (signs.some(entry => entry.id === (blueprint.compareSign || ''))) {
+      signSelect.value = blueprint.compareSign || '';
+    }
+    if (chosen) {
+      const percent = Math.round(chosen.scale * 100);
+      scaleInput.value = String(percent);
+      scaleOut.textContent = percent + '%';
+      rotateInput.value = String(Math.round(chosen.rotation || 0));
+      rotateOut.textContent = Math.round(chosen.rotation || 0) + '°';
+    }
+    paintTemplates();
+  }
+
+  /** Which icon the selected node draws. */
+  function iconOf(key) {
+    const list = value => (Array.isArray(value) ? value : []);
+    if (key === 'subject') return blueprint.mainIcon;
+    if (key === 'second') return blueprint.compareIcon || '';
+    if (key === 'sign') return blueprint.compareSign || '';
+    const sub = /^sub-(\d+)$/.exec(key);
+    if (sub) {
+      const entry = (Array.isArray(blueprint.subIcons) ? blueprint.subIcons : [])[Number(sub[1])];
+      return entry && entry.icon ? entry.icon : '';
+    }
+    const prop = /^prop-(\d+)$/.exec(key);
+    if (prop) return list(blueprint.props)[Number(prop[1])] || '';
+    const step = /^step-(\d+)$/.exec(key);
+    if (step) {
+      const index = Number(step[1]);
+      return index === 1 ? blueprint.mainIcon : list(blueprint.steps)[index - 2] || '';
+    }
+    const around = /^around-(\d+)$/.exec(key);
+    if (around) return list(blueprint.around)[Number(around[1]) - 1] || '';
+    if (isExtraKey(key)) {
+      const entry = extrasOf()[extraIndex(key)];
+      return entry ? entry.icon : '';
+    }
+    return '';
+  }
+
+  /** Write the icon into the node the picker belongs to. */
+  function withIcon(key, id) {
+    const copy = Object.assign({}, blueprint);
+    const list = value => (Array.isArray(value) ? value.slice() : []);
+    if (key === 'subject') copy.mainIcon = id;
+    else if (key === 'second') copy.compareIcon = id;
+    else if (key === 'sign') {
+      if (id) copy.compareSign = id;
+      else delete copy.compareSign;
+    } else if (isExtraKey(key)) {
+      const items = extrasOf().slice();
+      const index = extraIndex(key);
+      if (!items[index]) return copy;
+      items[index] = Object.assign({}, items[index], { icon: id });
+      copy.extras = items;
+    } else {
+      const sub = /^sub-(\d+)$/.exec(key);
+      const prop = /^prop-(\d+)$/.exec(key);
+      const step = /^step-(\d+)$/.exec(key);
+      const around = /^around-(\d+)$/.exec(key);
+      if (sub) {
+        const items = list(blueprint.subIcons);
+        const index = Number(sub[1]);
+        if (!items[index]) return copy;
+        items[index] = Object.assign({}, items[index], { icon: id });
+        copy.subIcons = items;
+      } else if (prop) {
+        const items = list(blueprint.props);
+        items[Number(prop[1])] = id;
+        copy.props = items;
+      } else if (step) {
+        const index = Number(step[1]);
+        if (index === 1) copy.mainIcon = id;
+        else {
+          const items = list(blueprint.steps);
+          items[index - 2] = id;
+          copy.steps = items;
+        }
+      } else if (around) {
+        const items = list(blueprint.around);
+        items[Number(around[1]) - 1] = id;
+        copy.around = items;
+      }
+    }
+    return copy;
+  }
+
+  function startDrag(event, handle) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const key = handle.getAttribute('data-sd-handle') || '';
+    selectedKey = key;
+    const box = canvas.getBoundingClientRect();
+    const current = placementOf(key);
+    if (!current || !box.width || !box.height) return;
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const startCx = current.x;
+    const startCy = current.y;
+    let moved = false;
+    let pending = null;
+    let frame = 0;
+    const onMove = moveEvent => {
+      const dx = (moveEvent.clientX - startX) / box.width;
+      const dy = (moveEvent.clientY - startY) / box.height;
+      if (Math.abs(dx) > 0.004 || Math.abs(dy) > 0.004) moved = true;
+      pending = withPlacement(key, { x: startCx + dx, y: startCy + dy, s: current.s, r: current.r });
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        if (!pending) return;
+        const clean = stageNormalizeBlueprint(pending);
+        if (!clean) return;
+        blueprint = clean;
+        if (typeof opts.onChange === 'function') opts.onChange(JSON.stringify(blueprint));
+        // Only the picture and this handle move: replacing the whole handle layer
+        // mid-gesture would drop the pointer capture (#128).
+        art.innerHTML = render(blueprint);
+        const movedSlot = sceneNodeSlotsSafe().filter(item => item.key === key)[0];
+        if (movedSlot) {
+          handle.style.left = ((movedSlot.x / 320) * 100).toFixed(2) + '%';
+          handle.style.top = ((movedSlot.y / 200) * 100).toFixed(2) + '%';
+        }
+        const percent = Math.round((movedSlot ? movedSlot.scale : current.s) * 100);
+        scaleOut.textContent = percent + '%';
+      });
+    };
+    const onUp = () => {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      if (frame) cancelAnimationFrame(frame);
+      frame = 0;
+      if (moved && pending) commit(pending, 'Đã đặt lại chỗ cho hình.');
+      else paint();
+    };
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+  }
+
+  // ---- the panel's own controls ----
+  iconSelect.addEventListener('change', () => {
+    if (iconSelect.value) commit(withIcon(selectedKey, iconSelect.value), 'Đã đổi hình.');
+  });
+  signSelect.addEventListener('change', () => commit(withIcon('sign', signSelect.value), 'Đã đổi dấu.'));
+
+  scaleInput.addEventListener('input', () => {
+    const current = placementOf(selectedKey);
+    scaleOut.textContent = scaleInput.value + '%';
+    if (!current) return;
+    commit(withPlacement(selectedKey, { x: current.x, y: current.y, s: Number(scaleInput.value) / 100, r: current.r }), '');
+  });
+
+  rotateInput.addEventListener('input', () => {
+    const current = placementOf(selectedKey);
+    rotateOut.textContent = rotateInput.value + '°';
+    if (!current) return;
+    commit(withPlacement(selectedKey, { x: current.x, y: current.y, s: current.s, r: Number(rotateInput.value) }), '');
+  });
+
+  root.querySelector('[data-sd-reset-one]').addEventListener('click', () => {
+    const copy = Object.assign({}, blueprint);
+    if (isExtraKey(selectedKey)) {
+      // An added object has no "original place": resetting it means turning it
+      // upright at its own size, not deleting it (delete is its own button).
+      const items = extrasOf().slice();
+      const index = extraIndex(selectedKey);
+      if (items[index]) {
+        items[index] = { icon: items[index].icon, x: items[index].x, y: items[index].y, s: 1 };
+        commit(Object.assign(copy, { extras: items }), 'Đã trả vật thêm về cỡ và góc gốc.');
+      }
+      return;
+    }
+    if (!copy.freePos || !copy.freePos[selectedKey]) return;
+    const freePos = Object.assign({}, copy.freePos);
+    delete freePos[selectedKey];
+    if (Object.keys(freePos).length) copy.freePos = freePos;
+    else delete copy.freePos;
+    commit(copy, 'Đã trả hình về chỗ bố cục đặt nó.');
+  });
+
+  root.querySelector('[data-sd-reset-all]').addEventListener('click', () => {
+    const copy = Object.assign({}, blueprint);
+    delete copy.freePos;
+    commit(copy, 'Đã xoá mọi chỉnh tay; các vật thêm vẫn được giữ.');
+  });
+
+  removeExtra.addEventListener('click', () => {
+    if (!isExtraKey(selectedKey)) return;
+    const items = extrasOf().slice();
+    items.splice(extraIndex(selectedKey), 1);
+    const copy = Object.assign({}, blueprint);
+    if (items.length) copy.extras = items;
+    else delete copy.extras;
+    selectedKey = 'subject';
+    commit(copy, 'Đã xoá vật thêm.');
+  });
+
+  // ---- drop an icon from the palette onto the canvas ----
+  canvas.addEventListener('dragover', dragEvent => {
+    dragEvent.preventDefault();
+    const transfer = (dragEvent as DragEvent).dataTransfer;
+    if (transfer) transfer.dropEffect = 'copy';
+  });
+  canvas.addEventListener('drop', dropEvent => {
+    dropEvent.preventDefault();
+    const event = dropEvent as DragEvent;
+    const id = event.dataTransfer ? event.dataTransfer.getData('text/plain') : '';
+    const box = canvas.getBoundingClientRect();
+    if (!id || !box.width || !box.height) return;
+    addExtra(id, {
+      x: Math.max(0, Math.min(1, (event.clientX - box.left) / box.width)),
+      y: Math.max(0, Math.min(1, (event.clientY - box.top) / box.height)),
+    });
+  });
+
+  // ---- open / close ----
+  const close = apply => {
+    document.removeEventListener('keydown', onKey);
+    root.remove();
+    const saved = apply ? JSON.stringify(blueprint) : originalJson;
+    if (!apply && typeof opts.onChange === 'function') opts.onChange(originalJson);
+    else if (apply && typeof opts.onChange === 'function') opts.onChange(saved);
+    if (typeof opts.onClose === 'function') opts.onClose(saved, apply);
+  };
+  const onKey = event => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      close(false);
+    }
+  };
+  root.querySelector('[data-sd-done]').addEventListener('click', () => close(true));
+  root.querySelector('[data-sd-cancel]').addEventListener('click', () => close(false));
+  document.addEventListener('keydown', onKey);
+
+  host.appendChild(root);
+  paintIcons();
+  paint();
+  statusOut.textContent = 'Chọn một hình để đổi cỡ và góc, hoặc kéo một hình mẫu vào khung.';
+  return root;
+}

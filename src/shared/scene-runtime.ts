@@ -35,6 +35,7 @@ export {
   sceneBackdropForCategory,
 } from './scene-asset-catalog';
 export { DEFAULT_SCENE_ICON, normalizeSceneBlueprint, sceneBlueprintFromCategory } from './scene-blueprint';
+export { renderIconSvg } from './icon-registry';
 export {
   SCENE_HEIGHT,
   SCENE_WIDTH,

@@ -7,6 +7,22 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-16 — #297 “Xưởng cảnh”: tách hẳn sửa ảnh thành một tính năng riêng
+- Giáo viên yêu cầu rõ: tách hẳn edit ảnh thành tính năng riêng, sửa **nhiều vật thể**, **thu nhỏ/phóng to**, **xoay góc**, có **hình mẫu trực quan**, **kéo thả dễ dàng**.
+- **Màn hình riêng `features/editor/scene-designer.ts`** (thay hẳn bảng #295/#296) — phủ toàn cửa sổ, ba cột:
+  - **Mẫu bố cục:** 4 thẻ có **ảnh xem trước thật** (do chính engine vẽ) — Một hình · So sánh hai hình · Quy trình ba bậc · Vây quanh. Bấm một thẻ = đổi **layout**, và cảnh vẫn vẽ được nhờ bộ chuẩn hoá.
+  - **Hình mẫu — kéo vào khung:** **47 icon** dạng **hình**, bấm = thêm vật, **kéo thả = thêm đúng chỗ vừa thả**.
+  - **Khung cảnh** ở giữa: mỗi nút một khung kéo **trong suốt** (chỉ hiện khi trỏ vào/đang chọn), nhỏ vẽ sau lớn.
+  - **Cột phải:** hình đang chọn · ô **Hình** · ô **Dấu** (chỉ cho nút dấu) · **Cỡ 50–160%** · **Góc xoay −180°…180°** · **Trả hình này về chỗ cũ** · **Xoá vật này** (vật thêm) · **Xoá hết chỉnh tay**.
+  - **Huỷ** khôi phục đúng ảnh chụp lúc mở; **Xong** đóng. Mọi thay đổi **ghi ngay** vào blueprint khi đang sửa, nên tắt app giữa chừng không mất việc.
+- **Dữ liệu (vẫn `v:1`, khoá tuỳ chọn):** `freePos[key]` thêm **`r`** (góc, kẹp ±180, 0 thì không lưu) và thêm mảng **`extras[]`** — vật không có ô bố cục: `{icon, x, y, s, r?}`, tối đa **6**, mỗi số bị kẹp, icon lạ bị **bỏ** (không làm lệch mảng), và **không đổi layout**. Trần blueprint 1000 → **1600 byte** (một cảnh 6 vật tự dựng ≈700 byte).
+- **Vẽ:** `nodeTransform()` phát ra `translate(tâm) rotate(r) scale(s) translate(-size/2)` — xoay **trước** khi co giãn nên vật quay quanh tâm của nó; `renderExtras()` vẽ vật thêm ở lớp props, **sau** cảnh nền và sau icon góc. Không có `extras`/`r` ⇒ SVG **y nguyên** như cũ (24/24 golden hash vẫn xanh).
+- **Test mới** `tests/unit/scene-extras.test.ts` (7 test): kẹp/round/idempotent góc · SVG có `rotate(-30)` và **không** có `rotate(` khi góc 0 · vật thêm được lưu/vẽ/có nút kéo và **không đổi layout** · icon lạ và số hỏng bị bỏ, có `issues` · trần 6 vật và khoá `extra-i` đi theo · cảnh dựng tay vẫn ≤1600 byte.
+- **Gate mới** `tests/ui/ui-scene-designer-check.js` — **35/35** trên app thật: mở toàn cửa sổ · 4 mẫu có ảnh xem trước thật · 47 hình mẫu đều vẽ được và kéo được · bấm thêm vật (đúng icon, có nút kéo, `layout` không đổi) · kéo vật di chuyển · góc 45° ghi và **vẽ `rotate(45)`** · cỡ 130% ghi · **thả vật đúng chỗ thả (sai số <6%)** · xoá vật này giữ vật kia · mẫu `compare` ghi layout + có nút dấu · mẫu `surround` dựng vòng vẽ được · **Xong** giữ cảnh · **Huỷ** trả lại đúng cảnh đã lưu · gate tự dọn app.
+- Kiểm trên app mới mở (CDP 9579): designer **35/35** · stage **179/179** · play **790/790** · editor **157/157** · background **42/42** · unit **102/102** · `npm run check` 53 tệp · `renderer-globals` **1104 hàm/8903 chỗ gọi** · scene-runtime **170.7 KiB** · embedded **6201.0 KiB**.
+- Ảnh: `.tmp-art/scene-designer.png` — mô hình thị giác đọc đúng: tiêu đề “Xưởng cảnh”, 4 mẫu 2×2, lưới hình mẫu cuộn được, cảnh giữa có 2 vật thêm (một cái đang chọn có khung xanh), cột phải có Hình/Cỡ 100%/Góc 20°.
+- Installer: **16 500 752 byte** / 15.73 MiB / 21-11 **20:07** / SHA-256 `5183a2d84cc7a17ed3289968d87a06cb25432675b7d7b69e4e8df9170e0e2b85`.
+
 ### 2026-11-16 — #296 Bảng Chỉnh cảnh giống Canva hơn: kéo TRÊN ảnh, đổi hình ngay tại chỗ
 - Hai điều còn thiếu so với "giống Canva" (#295): khung nét đứt che ảnh và phải nhắm vào khung mới kéo được; muốn đổi hình thì phải đóng bảng rồi dùng ô chọn trong hàng minh hoạ.
 - **Kéo trên ảnh:** khung kéo giờ **trong suốt** (chỉ hiện nét đứt khi trỏ vào hoặc khi đang chọn), nên giáo viên kéo chính hình mình thấy. Khung **nhỏ vẽ sau khung lớn** để vật ở góc nằm trong khung hình chính vẫn bấm trúng được. Bấm-không-kéo = **chọn** nút đó, **không ghi gì** vào blueprint.

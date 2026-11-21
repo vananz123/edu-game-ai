@@ -18,8 +18,10 @@ import {
   SCENE_BLUEPRINT_MAX_BYTES,
   SCENE_BLUEPRINT_VERSION,
   SCENE_COMPARE_SUB_ICON_POSITIONS,
+  SCENE_FREE_POS_MAX_ROTATION,
   SCENE_FREE_POS_MAX_SCALE,
   SCENE_FREE_POS_MIN_SCALE,
+  SCENE_MAX_EXTRAS,
   SCENE_MAX_PROPS,
   SCENE_MAX_SUB_ICONS,
   SCENE_PROCESS_MAX_EXTRA_STEPS,
@@ -79,7 +81,14 @@ export interface SceneBlueprint {
    * Absent means "derive the position from the layout", so an old `.egame` and a
    * model reply keep drawing exactly as before.
    */
-  freePos?: Record<string, { x: number; y: number; s: number }>;
+  freePos?: Record<string, { x: number; y: number; s: number; r?: number }>;
+  /**
+   * #297: objects the teacher added herself. Each one is a complete placement —
+   * icon, centre, scale, rotation — because there is no layout slot to derive it
+   * from. Adding one does not change the layout, so an old reader sees the same
+   * scene it always saw and simply ignores this key.
+   */
+  extras?: Array<{ icon: string; x: number; y: number; s: number; r?: number }>;
 }
 
 /** `book-open` is the default subject (same icon as #89's fallback scene). */
@@ -368,13 +377,52 @@ export function normalizeSceneBlueprint(
     }
   }
 
+  /* #297: added objects. They are placements, not slots, so every number is
+     clamped here exactly like a hand-placed node and a bad icon is dropped instead
+     of resizing the array. */
+  const extras: Array<{ icon: string; x: number; y: number; s: number; r?: number }> = [];
+  if (Array.isArray(raw.extras)) {
+    for (const entry of raw.extras) {
+      if (extras.length >= SCENE_MAX_EXTRAS) {
+        issues.push('extras');
+        break;
+      }
+      if (!isPlainObject(entry)) {
+        issues.push('extras');
+        continue;
+      }
+      if (!isSceneIconId(entry.icon)) {
+        issues.push('extras');
+        continue;
+      }
+      const x = Number(entry.x);
+      const y = Number(entry.y);
+      const scale = entry.s === undefined ? 1 : Number(entry.s);
+      if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(scale)) {
+        issues.push('extras');
+        continue;
+      }
+      const rotation = entry.r === undefined ? 0 : Number(entry.r);
+      const extra: { icon: string; x: number; y: number; s: number; r?: number } = {
+        icon: entry.icon,
+        x: round3(Math.min(1, Math.max(0, x))),
+        y: round3(Math.min(1, Math.max(0, y))),
+        s: round3(Math.min(SCENE_FREE_POS_MAX_SCALE, Math.max(SCENE_FREE_POS_MIN_SCALE, scale))),
+      };
+      if (Number.isFinite(rotation) && Math.round(rotation) !== 0) {
+        extra.r = Math.round(Math.min(SCENE_FREE_POS_MAX_ROTATION, Math.max(-SCENE_FREE_POS_MAX_ROTATION, rotation)));
+      }
+      extras.push(extra);
+    }
+  }
+
   /* #294: hand-placed nodes. Only keys this layout can actually draw are kept —
      a `step-3` on a `single` scene would be a position for something that is not
      there — and every number is clamped, so a corrupt file cannot push a node
      off the frame. */
-  const freePos: Record<string, { x: number; y: number; s: number }> = {};
+  const freePos: Record<string, { x: number; y: number; s: number; r?: number }> = {};
   if (isPlainObject(raw.freePos)) {
-    const allowed = allowedFreePosKeys(layout, subIcons.length, props.length, steps.length, around.length);
+    const allowed = allowedFreePosKeys(layout, subIcons.length, props.length, steps.length, around.length, extras.length);
     for (const key of Object.keys(raw.freePos as Record<string, unknown>)) {
       if (!allowed.includes(key)) {
         issues.push('freePos');
@@ -392,10 +440,14 @@ export function normalizeSceneBlueprint(
         issues.push('freePos');
         continue;
       }
+      const rotation = entry.r === undefined ? 0 : Number(entry.r);
       freePos[key] = {
         x: round3(Math.min(1, Math.max(0, x))),
         y: round3(Math.min(1, Math.max(0, y))),
         s: round3(Math.min(SCENE_FREE_POS_MAX_SCALE, Math.max(SCENE_FREE_POS_MIN_SCALE, s))),
+        ...(Number.isFinite(rotation) && Math.round(rotation) !== 0
+          ? { r: Math.round(Math.min(SCENE_FREE_POS_MAX_ROTATION, Math.max(-SCENE_FREE_POS_MAX_ROTATION, rotation))) }
+          : {}),
       };
     }
   }
@@ -412,6 +464,7 @@ export function normalizeSceneBlueprint(
     ...(layout === 'surround' && around.length ? { around } : {}),
     ...(subIcons.length ? { subIcons } : {}),
     ...(props.length ? { props } : {}),
+    ...(extras.length ? { extras } : {}),
     ...(Object.keys(freePos).length ? { freePos } : {}),
   };
 }
@@ -422,9 +475,11 @@ function allowedFreePosKeys(
   subCount: number,
   propCount: number,
   stepCount: number,
-  aroundCount: number
+  aroundCount: number,
+  extrasCount = 0
 ): string[] {
   const keys = ['subject'];
+  for (let i = 0; i < extrasCount; i += 1) keys.push(`extra-${i}`);
   for (let i = 0; i < subCount; i += 1) keys.push(`sub-${i}`);
   for (let i = 0; i < propCount; i += 1) keys.push(`prop-${i}`);
   if (layout === 'compare') keys.push('second', 'sign');

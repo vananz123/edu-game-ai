@@ -756,7 +756,7 @@ function wireEditorItemArtRow(row) {
   const editButton = row.querySelector('[data-editor-art-edit]');
   if (editButton) {
     editButton.addEventListener('click', () => {
-      if (typeof openSceneEditor !== 'function') return;
+      if (typeof openSceneDesigner !== 'function') return;
       const parent = row.parentElement;
       if (!parent) return;
       const blueprintField = parent.querySelector('[data-field="sceneBlueprint"]');
@@ -768,7 +768,7 @@ function wireEditorItemArtRow(row) {
           ? stageIllustrationHtml(item, { template: 'quiz', gameSetup: { illustrationMode: 'auto' } }, 'is-editor-preview')
           : '';
       };
-      openSceneEditor({
+      openSceneDesigner({
         blueprint: blueprintField.value,
         render,
         icons: Object.keys(EDITOR_SCENE_ICON_LABEL)

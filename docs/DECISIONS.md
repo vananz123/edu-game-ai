@@ -4904,3 +4904,29 @@ Bảng #295 vẫn chưa giống Canva ở hai điểm: khung nét đứt che ả
   ô riêng và chỉ hiện khi chọn nút dấu — một ô "icon" chứa cả `>` là ô nói dối về dữ liệu.
 - **Mọi thay đổi đi qua bộ chuẩn hoá**, nên icon trùng hoặc không vẽ được bị từ chối và cảnh trở lại
   như trước, thay vì vẽ nửa vời.
+
+## #297 — sửa ảnh là một TÍNH NĂNG riêng; vật thêm nằm trong `extras[]`, không phải `freePos`
+
+Giáo viên yêu cầu tách hẳn phần sửa ảnh thành tính năng riêng: nhiều vật thể, thu nhỏ/phóng to, xoay
+góc, hình mẫu trực quan, kéo thả dễ dàng. Bảng #295/#296 chỉ là hai thanh trượt trên một ảnh nhỏ.
+
+**Quyết định**
+- **Một màn hình, không phải một hộp thoại.** Sửa ảnh cần ba cột (mẫu + hình mẫu / khung vẽ / thuộc
+  tính), và một ảnh nhỏ 132px không thể là nơi làm việc chính. Nút trong hàng minh hoạ chỉ còn là
+  **cửa vào**.
+- **Mẫu bố cục là LAYOUT, không phải ảnh chụp.** Bốn thẻ (một hình / so sánh / quy trình / vây quanh)
+  xem trước bằng chính engine, và bấm vào là gọi bộ chuẩn hoá — không có đường nào tạo ra cảnh không
+  vẽ được.
+- **Vật thêm có mảng riêng `extras[]`**, không nhồi vào `freePos`: `freePos` là *vị trí của một nút bố
+  cục có sẵn*, còn vật thêm là *một đối tượng mới có đủ hình + chỗ + cỡ + góc*. Trộn hai thứ vào một
+  từ điển sẽ khiến "xoá vật" và "trả về chỗ cũ" thành hai câu hỏi mơ hồ.
+- **Thêm vật KHÔNG đổi layout.** Nhờ vậy một trình đọc cũ thấy đúng cảnh cũ và chỉ bỏ qua khoá lạ, và
+  `compare`/`process`/`surround` vẫn giữ nguyên nghĩa hình học (#270).
+- **Xoay trước, co giãn sau.** `translate(centre) rotate(r) scale(s)` để vật quay quanh tâm của nó;
+  đảo thứ tự thì vật sẽ quay quanh tâm khung và trôi khỏi chỗ đã đặt.
+- **Ghi ngay khi đang sửa**, không đợi bấm "Xong": một cú tắt app không được xoá công kéo thả. "Huỷ"
+  khôi phục đúng ảnh chụp lúc mở, nên huỷ vẫn là huỷ.
+- **Trần blueprint 1000 → 1600 byte.** Một cảnh do giáo viên tự dựng (6 vật + chỉnh tay) là ~700 byte
+  JSON; mất nó tệ hơn 600 byte trong một tệp `.egame`.
+- **Kéo thả bằng `DataTransfer`,** và bấm = thêm vào chỗ trống gần nhất. Cả hai đường đều đi qua cùng
+  một hàm `addExtra`, nên không có hành vi thứ hai để lệch.
