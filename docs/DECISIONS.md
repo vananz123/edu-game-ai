@@ -4886,3 +4886,21 @@ Bản #294 đặt khung kéo ngay trên **ảnh thu nhỏ 132px** — đúng v�
 - **Một gate mới phải tự dọn app về trạng thái ban đầu.** Lần chạy đầu, panel gate để app ở màn
   trình sửa và hai gate sau đỏ (135/179, 740/798) — đúng bài học #288 sequel, lần thứ hai. Gate giờ
   đóng trình sửa ở cuối và tự kiểm tra điều đó (`the gate leaves the app as it found it`).
+
+## #296 — kéo TRÊN ảnh, và đổi hình ngay trong bảng; "chọn" không phải là "ghi"
+
+Bảng #295 vẫn chưa giống Canva ở hai điểm: khung nét đứt che ảnh và bắt phải nhắm vào khung mới kéo
+được, còn muốn đổi hình thì phải đóng bảng rồi dùng ô chọn của hàng minh hoạ.
+
+**Quyết định**
+- **Khung kéo trong suốt**; nét đứt chỉ hiện khi trỏ vào hoặc khi nút đó đang được chọn. Cái giáo
+  viên kéo phải là **hình mình thấy**, không phải cái hộp.
+- **Khung nhỏ vẽ sau khung lớn** (sắp xếp theo cỡ giảm dần). Vật ở góc nằm trong khung hình chính
+  vẫn phải bấm trúng; nếu vẽ theo thứ tự dữ liệu thì khung lớn nuốt mất vật nhỏ.
+- **Bấm mà không kéo = CHỌN, không ghi gì.** Một cái bấm không được tạo ra `freePos` "đặt đúng chỗ
+  cũ" — nếu không, giáo viên chỉ xem qua một cảnh là cảnh đó đã bị đánh dấu như đã sửa tay.
+- **Đổi hình cũng nằm trong bảng**, và ghi đúng khoá của nút đang chọn (`mainIcon`, `compareIcon`,
+  `subIcons[i].icon`, `props[i]`, `steps[i-2]`, `around[i-1]`). **Dấu so sánh là loại khác**, nên có
+  ô riêng và chỉ hiện khi chọn nút dấu — một ô "icon" chứa cả `>` là ô nói dối về dữ liệu.
+- **Mọi thay đổi đi qua bộ chuẩn hoá**, nên icon trùng hoặc không vẽ được bị từ chối và cảnh trở lại
+  như trước, thay vì vẽ nửa vời.

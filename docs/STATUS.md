@@ -7,6 +7,16 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-16 — #296 Bảng Chỉnh cảnh giống Canva hơn: kéo TRÊN ảnh, đổi hình ngay tại chỗ
+- Hai điều còn thiếu so với "giống Canva" (#295): khung nét đứt che ảnh và phải nhắm vào khung mới kéo được; muốn đổi hình thì phải đóng bảng rồi dùng ô chọn trong hàng minh hoạ.
+- **Kéo trên ảnh:** khung kéo giờ **trong suốt** (chỉ hiện nét đứt khi trỏ vào hoặc khi đang chọn), nên giáo viên kéo chính hình mình thấy. Khung **nhỏ vẽ sau khung lớn** để vật ở góc nằm trong khung hình chính vẫn bấm trúng được. Bấm-không-kéo = **chọn** nút đó, **không ghi gì** vào blueprint.
+- **Đổi hình trong bảng:** cột phải thêm ô **Hình** (47 icon, đúng danh mục mà engine vẽ được) cho nút đang chọn — `subject`→`mainIcon`, `second`→`compareIcon`, `sub-i`→`subIcons[i].icon`, `prop-i`→`props[i]`, `step-i`→`mainIcon`/`steps[i-2]`, `around-i`→`around[i-1]`. Nút **dấu so sánh** không phải icon nên có ô **Dấu** riêng (3 dấu), chỉ hiện khi chọn nút dấu; đổi dấu ghi `compareSign`.
+- **Ghi qua đúng bộ chuẩn hoá**, nên một icon trùng/không hợp lệ bị từ chối và cảnh trở lại như cũ thay vì vẽ nửa vời.
+- Gate `ui-scene-editor-panel-check` từ **22 → 32/32** check: thêm “bảng liệt kê đủ 47 icon” · “ô Hình đang hiện đúng icon đang vẽ” · “đổi hình ghi `mainIcon` + vẽ lại + `v` vẫn 1” · “cảnh so sánh có nút dấu” · “chọn nút dấu mới hiện ô Dấu” · “chọn nút không ghi gì” · “ô Dấu có đúng 3 dấu” · “đổi dấu ghi `compareSign`”.
+- Ảnh: `.tmp-art/scene-editor-panel-296.png` — mô hình thị giác đọc: cảnh hiện rõ, **chỉ một** nút đang chọn có nét đứt, cột phải có ô “Hình” + thanh “Cỡ”, không chữ nào tràn.
+- Kiểm trên app mới mở (CDP 9574): stage **179/179**, play **790/790**, panel **32/32**, editor **157/157**; `tsc` sạch · `npm run check` 53 tệp · `renderer-globals` **1092 hàm/8802 chỗ gọi**.
+- Installer: **16 483 538 byte** / 15.72 MiB / 21-11 **18:40** / SHA-256 `48b3114fb1b5c85c87839c6cfcef76acaaeba0bc57d5e21abd08574fdebc977b`.
+
 ### 2026-11-16 — #295 Bảng “Chỉnh cảnh”: một khung lớn, kéo từng hình, xong thì đóng
 - Giáo viên nói rõ ý muốn: "một trình chỉnh sửa giống Canva, nhưng đơn giản, và có một nút Edit bấm vào thì mở lên". #294 để nút kéo **ngay trên ảnh thu nhỏ 132px**, quá nhỏ để nhắm.
 - **Nút “Chỉnh cảnh”** trong hàng minh hoạ — **chỉ hiện khi câu hỏi đã có cảnh** (không có gì để kéo thì không mở nút).

@@ -122,6 +122,56 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
     out.rowStillDraws = !!row()?.querySelector('[data-editor-art-thumb] [data-scene-layer="subject"]');
     out.rowKeptBlueprint = !!(bp() && bp().mainIcon === 'paw-print');
 
+    // 8. #296: change the picture of the selected node inside the panel
+    row().querySelector('[data-editor-art-edit]').click();
+    await sleep(400);
+    const iconSel = document.querySelector('.scene-editor [data-se-icon]');
+    out.iconOptionCount = iconSel ? iconSel.options.length : 0;
+    out.iconShowsCurrent = Boolean(iconSel) && iconSel.value === (bp() || {}).mainIcon;
+    const beforeIcon = document.querySelector('.scene-editor [data-se-art]').innerHTML;
+    iconSel.value = 'leaf';
+    iconSel.dispatchEvent(new Event('change', { bubbles: true }));
+    await sleep(350);
+    out.iconWroteMain = (bp() || {}).mainIcon === 'leaf';
+    out.iconRedrewArt = document.querySelector('.scene-editor [data-se-art]').innerHTML !== beforeIcon;
+    out.iconKeptVersion = (bp() || {}).v === 1;
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await sleep(350);
+
+    // 9. #296: the comparison sign is not an icon, so it gets its own picker and
+    // appears only when the sign node is selected.
+    const layoutSel = row().querySelector('[data-editor-art-layout]');
+    layoutSel.value = 'compare';
+    layoutSel.dispatchEvent(new Event('change', { bubbles: true }));
+    await sleep(450);
+    out.compareSceneBuilt = (bp() || {}).layout === 'compare';
+    row().querySelector('[data-editor-art-edit]').click();
+    await sleep(450);
+    const signHandle = document.querySelector('.scene-editor [data-se-handle="sign"]');
+    out.signHandleExists = Boolean(signHandle);
+    if (signHandle) {
+      const box2 = document.querySelector('.scene-editor [data-se-stage]').getBoundingClientRect();
+      const cx2 = box2.left + box2.width / 2;
+      const cy2 = box2.top + box2.height / 2;
+      // a click without movement = "select this node", which must not write freePos
+      signHandle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: cx2, clientY: cy2 }));
+      document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: cx2, clientY: cy2 }));
+      await sleep(300);
+    }
+    const signRow = document.querySelector('.scene-editor [data-se-sign-row]');
+    out.signPickerVisible = Boolean(signRow) && !signRow.classList.contains('is-hidden');
+    out.selectingWroteNothing = !(bp() && bp().freePos);
+    const signSel = document.querySelector('.scene-editor [data-se-sign]');
+    out.signOptionCount = signSel ? signSel.options.length : 0;
+    if (signSel) {
+      signSel.value = 'less-than';
+      signSel.dispatchEvent(new Event('change', { bubbles: true }));
+      await sleep(300);
+    }
+    out.signWrote = (bp() || {}).compareSign === 'less-than';
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await sleep(300);
+
     // Leave the app exactly as it was found: a gate that leaves the editor open
     // makes the NEXT gate measure another screen (DECISIONS #288 sequel).
     document.getElementById('modalRoot').innerHTML = '';
@@ -153,6 +203,18 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
   check('the row draws the scene again after closing', out.rowStillDraws === true);
   check('closing keeps the stored blueprint', out.rowKeptBlueprint === true);
   check('the gate leaves the app as it found it', out.appRestored === true);
+
+  // #296: the panel is also where the picture of the selected node changes.
+  check('the panel lists every drawable icon', out.iconOptionCount === 47, String(out.iconOptionCount));
+  check('the icon picker shows the icon being drawn', out.iconShowsCurrent === true);
+  check('changing the icon writes mainIcon', out.iconWroteMain === true);
+  check('changing the icon redraws the canvas', out.iconRedrewArt === true);
+  check('changing the icon keeps v at 1', out.iconKeptVersion === true);
+  check('a compare scene offers a sign handle', out.compareSceneBuilt === true && out.signHandleExists === true);
+  check('selecting the sign node reveals its picker', out.signPickerVisible === true);
+  check('selecting a node writes nothing on its own', out.selectingWroteNothing === true);
+  check('the sign picker offers the three signs', out.signOptionCount === 3, String(out.signOptionCount));
+  check('changing the sign writes compareSign', out.signWrote === true);
 
   const failed = results.filter(entry => !entry.ok).length;
   console.log(`\n${results.length - failed}/${results.length} checks passed`);
