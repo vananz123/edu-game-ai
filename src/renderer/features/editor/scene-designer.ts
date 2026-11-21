@@ -37,6 +37,13 @@ function openSceneDesigner(options) {
 
   let blueprint = initial;
   let selectedKey = 'subject';
+  /* #299: an undo step is a SNAPSHOT of the blueprint, not a command. A scene is a
+     small JSON object, so 60 snapshots cost less than one picture and every change
+     (drag, slider, template, place, icon, add, delete) becomes undoable for free. */
+  const history: string[] = [JSON.stringify(initial)];
+  let historyAt = 0;
+  /* #299: the view zoom is a VIEW setting — it is never written into the scene. */
+  let zoom = 1;
   // #297: every change is written through immediately, so nothing a teacher did
   // can be lost by an app that closes. "Huỷ" restores this exact snapshot.
   const originalJson = JSON.stringify(initial);
@@ -50,6 +57,8 @@ function openSceneDesigner(options) {
       '<div class="sd-title"><strong>Xưởng cảnh</strong>' +
         '<span>Kéo hình trên khung để đặt chỗ · chọn một hình để đổi cỡ và góc · kéo một hình mẫu từ cột trái vào khung để thêm vật.</span></div>' +
       '<div class="sd-head-actions">' +
+        '<button type="button" class="btn btn-secondary btn-small" data-sd-undo title="Hoàn tác (Ctrl+Z)">↶ Hoàn tác</button>' +
+        '<button type="button" class="btn btn-secondary btn-small" data-sd-redo title="Làm lại (Ctrl+Shift+Z)">↷ Làm lại</button>' +
         '<button type="button" class="btn btn-secondary btn-small" data-sd-cancel>Huỷ</button>' +
         '<button type="button" class="btn btn-primary btn-small" data-sd-done>Xong</button>' +
       '</div>' +
@@ -68,6 +77,12 @@ function openSceneDesigner(options) {
           '<div class="sd-art" data-sd-art></div>' +
           '<div class="sd-handles" data-sd-handles></div>' +
         '</div>' +
+        '<div class="sd-zoom">' +
+          '<button type="button" class="btn btn-secondary btn-small" data-sd-zoom-out title="Thu nhỏ khung vẽ">−</button>' +
+          '<span class="sd-zoom-value" data-sd-zoom-value>100%</span>' +
+          '<button type="button" class="btn btn-secondary btn-small" data-sd-zoom-in title="Phóng to khung vẽ">+</button>' +
+          '<button type="button" class="btn btn-secondary btn-small" data-sd-zoom-fit title="Vừa khung">Vừa khung</button>' +
+        '</div>' +
         '<div class="sd-status" data-sd-status></div>' +
       '</div>' +
       '<div class="sd-side sd-side-right">' +
@@ -83,7 +98,7 @@ function openSceneDesigner(options) {
           '<input type="range" min="-180" max="180" step="5" value="0" data-sd-rotate></div>' +
         '<div class="sd-group">' +
           '<button type="button" class="btn btn-secondary btn-small" data-sd-reset-one>Trả hình này về chỗ cũ</button>' +
-          '<button type="button" class="btn btn-secondary btn-small is-hidden" data-sd-remove-extra>Xoá vật này</button>' +
+          '<button type="button" class="btn btn-secondary btn-small" data-sd-remove>Xoá hình này</button>' +
         '</div>' +
         '<div class="sd-group"><button type="button" class="btn btn-secondary btn-small" data-sd-reset-all>Xoá hết chỉnh tay</button></div>' +
       '</div>' +
@@ -91,7 +106,7 @@ function openSceneDesigner(options) {
 
   const art = root.querySelector('[data-sd-art]');
   const handleLayer = root.querySelector('[data-sd-handles]');
-  const canvas = root.querySelector('[data-sd-canvas]');
+  const canvas = root.querySelector('[data-sd-canvas]') as HTMLElement;
   const iconSelect = root.querySelector('[data-sd-icon]') as HTMLSelectElement;
   const signSelect = root.querySelector('[data-sd-sign]') as HTMLSelectElement;
   const signRow = root.querySelector('[data-sd-sign-row]') as HTMLElement;
@@ -102,7 +117,7 @@ function openSceneDesigner(options) {
   const rotateOut = root.querySelector('[data-sd-rotate-value]') as HTMLElement;
   const nameOut = root.querySelector('[data-sd-name]') as HTMLElement;
   const statusOut = root.querySelector('[data-sd-status]') as HTMLElement;
-  const removeExtra = root.querySelector('[data-sd-remove-extra]') as HTMLElement;
+  const removeNode = root.querySelector('[data-sd-remove]') as HTMLElement;
   const templatesBox = root.querySelector('[data-sd-templates]') as HTMLElement;
   const iconsBox = root.querySelector('[data-sd-icons]') as HTMLElement;
   const placesBox = root.querySelector('[data-sd-places]') as HTMLElement;
@@ -162,14 +177,50 @@ function openSceneDesigner(options) {
     return copy;
   }
 
-  function commit(next, note) {
+  function commit(next, note, options?) {
     const clean = stageNormalizeBlueprint(next);
     if (clean) {
       blueprint = clean;
-      if (typeof opts.onChange === 'function') opts.onChange(JSON.stringify(blueprint));
+      const json = JSON.stringify(blueprint);
+      if (typeof opts.onChange === 'function') opts.onChange(json);
+      recordHistory(json, options && options.silent);
     }
     paint();
     if (note) statusOut.textContent = note;
+  }
+
+  /** Push one undo step. Repeating the same scene does not create a step. */
+  function recordHistory(json: string, silent?: boolean) {
+    if (silent) return;
+    if (history[historyAt] === json) return;
+    history.length = historyAt + 1;
+    history.push(json);
+    if (history.length > 60) history.shift();
+    historyAt = history.length - 1;
+    paintHistoryButtons();
+  }
+
+  function paintHistoryButtons() {
+    const undo = root.querySelector('[data-sd-undo]') as HTMLButtonElement | null;
+    const redo = root.querySelector('[data-sd-redo]') as HTMLButtonElement | null;
+    if (undo) undo.disabled = historyAt <= 0;
+    if (redo) redo.disabled = historyAt >= history.length - 1;
+  }
+
+  /** Step back / forward through the snapshots the teacher created. */
+  function stepHistory(delta: number) {
+    const next = historyAt + delta;
+    if (next < 0 || next >= history.length) return;
+    historyAt = next;
+    const json = history[historyAt];
+    const clean = stageNormalizeBlueprint(json);
+    if (!clean) return;
+    blueprint = clean;
+    if (typeof opts.onChange === 'function') opts.onChange(json);
+    paint();
+    paintPresets();
+    paintHistoryButtons();
+    statusOut.textContent = delta < 0 ? 'Đã hoàn tác.' : 'Đã làm lại.';
   }
 
   function paintTemplates() {
@@ -338,12 +389,17 @@ function openSceneDesigner(options) {
       handle.addEventListener('pointerdown', event => startDrag(event, handle));
     });
 
+    paintRotator();
     const chosen = slots.filter(slot => slot.key === selectedKey)[0];
     const isSign = selectedKey === 'sign';
     nameOut.textContent = chosen ? chosen.label : 'Hình chính';
     iconRow.classList.toggle('is-hidden', isSign);
     signRow.classList.toggle('is-hidden', !isSign);
-    removeExtra.classList.toggle('is-hidden', !isExtraKey(selectedKey));
+    /* #299: the main picture cannot be deleted (a scene needs a subject), so the
+       button is disabled there instead of removing the question's whole picture. */
+    if (canDelete(selectedKey)) removeNode.removeAttribute('disabled');
+    else removeNode.setAttribute('disabled', 'disabled');
+    removeNode.textContent = isExtraKey(selectedKey) ? 'Xoá vật này' : 'Xoá hình này';
     if (!isSign) {
       const current = iconOf(selectedKey);
       if (icons.some(entry => entry.id === current)) iconSelect.value = current;
@@ -357,6 +413,90 @@ function openSceneDesigner(options) {
       rotateInput.value = String(Math.round(chosen.rotation || 0));
       rotateOut.textContent = Math.round(chosen.rotation || 0) + '°';
     }
+  }
+
+  /**
+   * #299: turning on the canvas. The knob sits under the selected node's box and
+   * drags around the node's centre, so "rotate" means the same thing as the slider
+   * and writes the same number.
+   */
+  function paintRotator() {
+    const existing = root.querySelector('[data-sd-rotator]');
+    if (existing) existing.remove();
+    const slots = sceneNodeSlotsSafe();
+    const slot = slots.filter(item => item.key === selectedKey)[0];
+    if (!slot) return;
+    const cx = (slot.x + slot.size / 2) / 320;
+    const cy = (slot.y + slot.size / 2) / 200;
+    const halfHeight = (slot.size * slot.scale) / 2 / 200;
+    const knob = document.createElement('button');
+    knob.type = 'button';
+    knob.className = 'sd-rotator';
+    knob.setAttribute('data-sd-rotator', '1');
+    knob.title = 'Kéo để xoay hình đang chọn';
+    knob.textContent = '↻';
+    knob.style.left = (cx * 100).toFixed(2) + '%';
+    knob.style.top = Math.min(96, (cy + halfHeight) * 100 + 4).toFixed(2) + '%';
+    handleLayer.appendChild(knob);
+    knob.addEventListener('pointerdown', event => startRotate(event));
+  }
+
+  function startRotate(event: PointerEvent) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const slot = sceneNodeSlotsSafe().filter(item => item.key === selectedKey)[0];
+    if (!slot) return;
+    const box = canvas.getBoundingClientRect();
+    const cx = box.left + ((slot.x + slot.size / 2) / 320) * box.width;
+    const cy = box.top + ((slot.y + slot.size / 2) / 200) * box.height;
+    const start = Math.atan2(event.clientY - cy, event.clientX - cx);
+    const base = slot.rotation || 0;
+    let pending = null;
+    let frame = 0;
+    const onMove = (moveEvent: PointerEvent) => {
+      const now = Math.atan2(moveEvent.clientY - cy, moveEvent.clientX - cx);
+      let degrees = base + ((now - start) * 180) / Math.PI;
+      degrees = Math.max(-180, Math.min(180, Math.round(degrees / 5) * 5));
+      rotateOut.textContent = Math.round(degrees) + '°';
+      rotateInput.value = String(Math.round(degrees));
+      pending = withPlacement(selectedKey, {
+        x: (slot.x + slot.size / 2) / 320,
+        y: (slot.y + slot.size / 2) / 200,
+        s: slot.scale,
+        r: degrees,
+      });
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        if (!pending) return;
+        const clean = stageNormalizeBlueprint(pending);
+        if (!clean) return;
+        blueprint = clean;
+        if (typeof opts.onChange === 'function') opts.onChange(JSON.stringify(blueprint));
+        art.innerHTML = render(blueprint);
+      });
+    };
+    const onUp = () => {
+      document.removeEventListener('pointermove', onMove as EventListener);
+      document.removeEventListener('pointerup', onUp);
+      if (frame) cancelAnimationFrame(frame);
+      frame = 0;
+      if (pending) commit(pending, 'Đã xoay hình.');
+    };
+    document.addEventListener('pointermove', onMove as EventListener);
+    document.addEventListener('pointerup', onUp);
+  }
+
+  /** View zoom. Never stored: the scene is the same picture at 60% or 160%. */
+  function applyZoom(next: number) {
+    zoom = Math.max(0.5, Math.min(2, Math.round(next * 100) / 100));
+    /* #299: zoom is a real SIZE change, not a CSS transform: the drag maths and the
+       handle percentages both read the canvas box, so the box must be the truth. */
+    canvas.style.flex = '0 0 auto';
+    canvas.style.width = zoom * 100 + '%';
+    canvas.style.maxWidth = Math.round(860 * zoom) + 'px';
+    const out = root.querySelector('[data-sd-zoom-value]') as HTMLElement | null;
+    if (out) out.textContent = Math.round(zoom * 100) + '%';
   }
 
   /** The two preview grids are expensive (16 engine renders); paint on demand. */
@@ -439,6 +579,112 @@ function openSceneDesigner(options) {
     return copy;
   }
 
+  /** Which selected nodes may be removed at all. `null` = can be deleted. */
+  function canDelete(key: string): boolean {
+    if (key === 'subject') return false;
+    if (key === 'second') return true; // removing the second picture leaves a single
+    return true;
+  }
+
+  /**
+   * #299: delete the selected node. Every branch removes ONE thing and lets the
+   * normaliser decide what is still drawable — a compare scene that lost its second
+   * picture becomes a single scene, an empty sequence becomes a single scene. The
+   * alternative (drawing a scene with a hole in it) is worse for a child.
+   */
+  function deleteSelected() {
+    const key = selectedKey;
+    if (!canDelete(key)) {
+      statusOut.textContent = 'Hình chính không xoá được — cảnh phải có một hình chính.';
+      return;
+    }
+    const copy: any = Object.assign({}, blueprint);
+    const list = value => (Array.isArray(value) ? value.slice() : []);
+    if (isExtraKey(key)) {
+      const items = list(blueprint.extras);
+      items.splice(extraIndex(key), 1);
+      if (items.length) copy.extras = items;
+      else delete copy.extras;
+      delete copy.freePos;
+      selectedKey = 'subject';
+      commit(copy, 'Đã xoá vật thêm.');
+      paintPresets();
+      return;
+    }
+    if (key === 'second') {
+      delete copy.compareIcon;
+      delete copy.compareSign;
+      const freePos = Object.assign({}, copy.freePos || {});
+      delete freePos.second;
+      delete freePos.sign;
+      if (Object.keys(freePos).length) copy.freePos = freePos;
+      else delete copy.freePos;
+      selectedKey = 'subject';
+      commit(copy, 'Đã bỏ hình thứ hai — cảnh trở về một hình.');
+      paintPresets();
+      return;
+    }
+    if (key === 'sign') {
+      delete copy.compareSign;
+      commit(copy, 'Đã bỏ dấu so sánh.');
+      return;
+    }
+    const sub = /^sub-(\d+)$/.exec(key);
+    if (sub) {
+      const items = list(blueprint.subIcons);
+      items.splice(Number(sub[1]), 1);
+      if (items.length) copy.subIcons = items;
+      else delete copy.subIcons;
+      delete copy.freePos;
+      selectedKey = 'subject';
+      commit(copy, 'Đã xoá một vật ở góc.');
+      paintPresets();
+      return;
+    }
+    const prop = /^prop-(\d+)$/.exec(key);
+    if (prop) {
+      const items = list(blueprint.props);
+      items.splice(Number(prop[1]), 1);
+      if (items.length) copy.props = items;
+      else delete copy.props;
+      delete copy.freePos;
+      selectedKey = 'subject';
+      commit(copy, 'Đã xoá một vật dưới đất.');
+      paintPresets();
+      return;
+    }
+    const around = /^around-(\d+)$/.exec(key);
+    if (around) {
+      const items = list(blueprint.around);
+      items.splice(Number(around[1]) - 1, 1);
+      if (items.length) copy.around = items;
+      else delete copy.around;
+      delete copy.freePos;
+      selectedKey = 'subject';
+      commit(copy, 'Đã xoá một vật trong vòng.');
+      paintPresets();
+      return;
+    }
+    const step = /^step-(\d+)$/.exec(key);
+    if (step) {
+      const index = Number(step[1]);
+      if (index === 1) {
+        statusOut.textContent = 'Bậc 1 là hình chính — đổi hình chính thay vì xoá nó.';
+        return;
+      }
+      const items = list(blueprint.steps);
+      items.splice(index - 2, 1);
+      if (items.length) copy.steps = items;
+      else delete copy.steps;
+      delete copy.freePos;
+      selectedKey = 'step-1';
+      commit(copy, 'Đã xoá một bậc.');
+      paintPresets();
+      return;
+    }
+    statusOut.textContent = 'Hình này thuộc bố cục, không xoá riêng được.';
+  }
+
   function startDrag(event, handle) {
     if (event.button !== 0) return;
     event.preventDefault();
@@ -484,6 +730,7 @@ function openSceneDesigner(options) {
       document.removeEventListener('pointerup', onUp);
       if (frame) cancelAnimationFrame(frame);
       frame = 0;
+      // One gesture = ONE undo step: the live frames above are not recorded.
       if (moved && pending) commit(pending, 'Đã đặt lại chỗ cho hình.');
       else paint();
     };
@@ -500,18 +747,21 @@ function openSceneDesigner(options) {
   });
   signSelect.addEventListener('change', () => commit(withIcon('sign', signSelect.value), 'Đã đổi dấu.'));
 
+  scaleInput.addEventListener('change', () => recordHistory(JSON.stringify(blueprint)));
+  rotateInput.addEventListener('change', () => recordHistory(JSON.stringify(blueprint)));
   scaleInput.addEventListener('input', () => {
     const current = placementOf(selectedKey);
     scaleOut.textContent = scaleInput.value + '%';
     if (!current) return;
-    commit(withPlacement(selectedKey, { x: current.x, y: current.y, s: Number(scaleInput.value) / 100, r: current.r }), '');
+    // #299: a slider drag is ONE undo step, recorded when the thumb is released.
+    commit(withPlacement(selectedKey, { x: current.x, y: current.y, s: Number(scaleInput.value) / 100, r: current.r }), '', { silent: true });
   });
 
   rotateInput.addEventListener('input', () => {
     const current = placementOf(selectedKey);
     rotateOut.textContent = rotateInput.value + '°';
     if (!current) return;
-    commit(withPlacement(selectedKey, { x: current.x, y: current.y, s: current.s, r: Number(rotateInput.value) }), '');
+    commit(withPlacement(selectedKey, { x: current.x, y: current.y, s: current.s, r: Number(rotateInput.value) }), '', { silent: true });
   });
 
   root.querySelector('[data-sd-reset-one]').addEventListener('click', () => {
@@ -541,16 +791,22 @@ function openSceneDesigner(options) {
     commit(copy, 'Đã xoá mọi chỉnh tay; các vật thêm vẫn được giữ.');
   });
 
-  removeExtra.addEventListener('click', () => {
-    if (!isExtraKey(selectedKey)) return;
-    const items = extrasOf().slice();
-    items.splice(extraIndex(selectedKey), 1);
-    const copy = Object.assign({}, blueprint);
-    if (items.length) copy.extras = items;
-    else delete copy.extras;
-    selectedKey = 'subject';
-    commit(copy, 'Đã xoá vật thêm.');
-  });
+  removeNode.addEventListener('click', () => deleteSelected());
+
+  // ---- undo / redo ----
+  root.querySelector('[data-sd-undo]').addEventListener('click', () => stepHistory(-1));
+  root.querySelector('[data-sd-redo]').addEventListener('click', () => stepHistory(1));
+
+  // ---- view zoom ----
+  root.querySelector('[data-sd-zoom-in]').addEventListener('click', () => applyZoom(zoom + 0.1));
+  root.querySelector('[data-sd-zoom-out]').addEventListener('click', () => applyZoom(zoom - 0.1));
+  root.querySelector('[data-sd-zoom-fit]').addEventListener('click', () => applyZoom(1));
+  canvas.addEventListener('wheel', wheelEvent => {
+    const event = wheelEvent as WheelEvent;
+    if (!event.ctrlKey) return;
+    event.preventDefault();
+    applyZoom(zoom + (event.deltaY < 0 ? 0.1 : -0.1));
+  }, { passive: false } as AddEventListenerOptions);
 
   // ---- drop an icon from the palette onto the canvas ----
   canvas.addEventListener('dragover', dragEvent => {
@@ -586,6 +842,17 @@ function openSceneDesigner(options) {
     if (event.key === 'Escape') {
       event.preventDefault();
       close(false);
+      return;
+    }
+    const modifier = event.ctrlKey || event.metaKey;
+    if (!modifier) return;
+    const key = (event.key || '').toLowerCase();
+    if (key === 'z') {
+      event.preventDefault();
+      stepHistory(event.shiftKey ? 1 : -1);
+    } else if (key === 'y') {
+      event.preventDefault();
+      stepHistory(1);
     }
   };
   root.querySelector('[data-sd-done]').addEventListener('click', () => close(true));
@@ -597,6 +864,8 @@ function openSceneDesigner(options) {
   paintIcons();
   paint();
   paintPresets();
+  paintHistoryButtons();
+  applyZoom(1);
   statusOut.textContent = 'Chọn một hình để đổi cỡ và góc, hoặc kéo một hình mẫu vào khung.';
   return root;
 }

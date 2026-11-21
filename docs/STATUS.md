@@ -7,6 +7,18 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-16 — #299 Xưởng cảnh: hoàn tác, thu phóng, xoay bằng tay, xoá mọi hình
+- Giáo viên báo **Ctrl+Z không chạy** và yêu cầu **thu/phóng, xoay ngay trong khung vẽ**, thêm **xoá** ngay trong khung.
+- **Hoàn tác / làm lại**: `history[]` là **ảnh chụp blueprint** (không phải lệnh), 60 bước, nút `[data-sd-undo]`/`[data-sd-redo]` trên đầu xưởng + **Ctrl+Z**, **Ctrl+Shift+Z**, **Ctrl+Y**. Một cú kéo = **một** bước (khung hình trong lúc kéo không ghi); thanh trượt ghi ở `change` (thả tay) nên không tạo 30 bước.
+- **Thu phóng khung vẽ** (chỉ là CÁCH NHÌN, không ghi vào cảnh): nút `−` / `+` / **Vừa khung**, **Ctrl+lăn chuột**, 50–200%, nhãn `[data-sd-zoom-value]`. Áp dụng bằng **đổi kích thước thật** của canvas (không dùng CSS transform) để phép kéo và toạ độ % của handle vẫn đúng.
+- **Núm xoay trên khung** `[data-sd-rotator]`: kéo quanh tâm hình đang chọn, mỗi 5°, kẹp ±180, **ghi cùng con số** với thanh trượt Góc; thả tay = một bước hoàn tác.
+- **Một nút xoá cho mọi hình** `[data-sd-remove]`: vật thêm → bớt khỏi `extras`; **hình thứ hai** → cảnh tự lùi về `single`; dấu so sánh, vật góc, vật dưới đất, vật trong vòng, một bậc quy trình → bớt đúng một phần tử và để normaliser quyết định cảnh còn vẽ được; **hình chính bị từ chối** (cảnh phải có hình chính). Nhãn đổi theo lựa chọn: “Xoá vật này” / “Xoá hình này”.
+- Gate `ui-scene-designer-check` **45 → 66/66**: thêm 21 check (núm xoay khớp thanh trượt, zoom 120%/90%/Vừa khung và **zoom không ghi gì vào cảnh**, hoàn tác/làm lại, Ctrl+Z, Ctrl+Shift+Z, xoá hình chính bị chặn, xoá hình thứ hai ⇒ `single`, cảnh sau khi xoá vẫn vẽ).
+- **Hai lỗi tự bắt trong lúc làm gate:** (1) gate chọn handle bằng `.click()` — handle chọn bằng **pointerdown**, nên bài kiểm phải bấm y như giáo viên; (2) khối kiểm xoá nằm sau bước đổi sang `surround` nên “hình thứ hai” không còn tồn tại — dời lên trước.
+- Kiểm trên app mới mở (CDP 9597–9599): designer **66/66** · stage **179/179** · play **790/790** · editor **157/157** · background **42/42** · unit **102/102** · `npm run check` 53 tệp · `renderer-globals` **1117 hàm/9022 chỗ gọi** · scene-runtime **170.8 KiB** · embedded **6201.0 KiB**.
+- Ảnh: `.tmp-art/scene-designer-299.png` — thấy “Hoàn tác”/“Làm lại”, thanh zoom 110%, núm xoay dưới hình đang chọn, nút “Xoá vật này”.
+- Installer: **16 500 732 byte** / 15.73 MiB / 21-11 **22:04** / SHA-256 `f87507c051e68b57332d545fb38ca69bbd0a597592eb5152049ad1203fc8b029`.
+
 ### 2026-11-16 — #298 Đổi NỀN ngay trong Xưởng cảnh: 12 nơi, mỗi nơi một ảnh thật
 - Giáo viên yêu cầu bổ sung phần đổi background vào xưởng cảnh. Trước đó nền chỉ đổi được bằng ô chọn trong hàng minh hoạ, và ô đó là **chữ** (`Đường phố`, `Cửa hàng`…), không cho thấy cảnh sẽ ra sao.
 - **Nhóm “Nền — cảnh diễn ra ở đâu”** ở cột trái: **12 thẻ, 2 cột**, mỗi thẻ là **ảnh xem trước thật** do chính engine vẽ với **đúng icon đang dùng** (bỏ mọi chỉnh tay để 12 ảnh chỉ khác nhau ở NƠI), nhãn ngắn, thẻ đang dùng có viền xanh và **tự cuộn vào tầm nhìn**.

@@ -41,6 +41,14 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
     const bp = () => { try { return JSON.parse(field().value || 'null'); } catch (error) { return null; } };
     const sd = () => document.querySelector('.scene-designer');
     const handles = () => Array.from(sd()?.querySelectorAll('[data-sd-handle]') || []);
+    // #299: a handle is selected by POINTERDOWN (a click alone selects nothing), so
+    // the gate must pick a node the same way a teacher does.
+    const pick = async node => {
+      const box = node.getBoundingClientRect();
+      node.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: box.left + box.width / 2, clientY: box.top + box.height / 2 }));
+      document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: box.left + box.width / 2, clientY: box.top + box.height / 2 }));
+      await sleep(250);
+    };
 
     out.noButtonWithoutScene = !row().querySelector('[data-editor-art-edit]');
     row().querySelector('[data-editor-art-blueprint]').click();
@@ -131,6 +139,50 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
     await sleep(300);
     out.scaleWrote = !!bp().extras && Math.abs(bp().extras[0].s - 1.3) < 0.001;
 
+    // ---- 6b. #299: turn the selected object with the knob on the canvas ----
+    const knob = sd().querySelector('[data-sd-rotator]');
+    out.rotatorPresent = !!knob;
+    if (knob) {
+      const box = sd().querySelector('[data-sd-canvas]').getBoundingClientRect();
+      const node = bp().extras[0];
+      const centreX = box.left + node.x * box.width;
+      const centreY = box.top + node.y * box.height;
+      const radius = box.height * 0.3;
+      const angleBefore = bp().extras[0].r;
+      knob.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: centreX, clientY: centreY + radius }));
+      for (let step = 1; step <= 6; step += 1) {
+        const angle = -Math.PI / 2 + step * 0.12;
+        document.dispatchEvent(new PointerEvent('pointermove', {
+          bubbles: true,
+          clientX: centreX + Math.cos(angle) * radius,
+          clientY: centreY + Math.sin(angle) * radius,
+        }));
+        await sleep(20);
+      }
+      document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+      await sleep(300);
+      out.rotatorTurned = !!bp().extras && bp().extras[0].r !== angleBefore;
+      out.rotatorWroteSlider = (sd().querySelector('[data-sd-rotate]').value | 0) === (bp().extras[0].r | 0);
+    }
+
+    // ---- 6c. #299: zoom the view, which must not touch the scene ----
+    const zoomBefore = sd().querySelector('[data-sd-canvas]').getBoundingClientRect().width;
+    const widthBefore = JSON.stringify(bp());
+    sd().querySelector('[data-sd-zoom-in]').click();
+    sd().querySelector('[data-sd-zoom-in]').click();
+    await sleep(250);
+    out.zoomLabel = (sd().querySelector('[data-sd-zoom-value]').textContent || '').trim();
+    out.zoomGrew = sd().querySelector('[data-sd-canvas]').getBoundingClientRect().width > zoomBefore + 1;
+    out.zoomWroteNothing = JSON.stringify(bp()) === widthBefore;
+    sd().querySelector('[data-sd-zoom-fit]').click();
+    await sleep(200);
+    out.zoomFit = (sd().querySelector('[data-sd-zoom-value]').textContent || '').trim() === '100%';
+    sd().querySelector('[data-sd-zoom-out]').click();
+    await sleep(200);
+    out.zoomOutLabel = (sd().querySelector('[data-sd-zoom-value]').textContent || '').trim();
+    sd().querySelector('[data-sd-zoom-fit]').click();
+    await sleep(200);
+
     // ---- 7. dropping an icon puts it where it was dropped ----
     const transfer = new DataTransfer();
     transfer.setData('text/plain', palette[7].getAttribute('data-sd-add'));
@@ -142,10 +194,35 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
     out.dropNearPoint = !!bp().extras && Math.abs(bp().extras[1].x - 0.3) < 0.06 && Math.abs(bp().extras[1].y - 0.3) < 0.06;
 
     // ---- 8. delete the object the teacher just added ----
-    sd().querySelector('[data-sd-remove-extra]').click();
+    out.removeLabelForExtra = (sd().querySelector('[data-sd-remove]').textContent || '').trim();
+    // The knob turned object 0, so "the others are kept" must compare with what is
+    // there NOW, not with a number from an earlier step.
+    const keptRotation = bp().extras[0].r;
+    sd().querySelector('[data-sd-remove]').click();
     await sleep(350);
     out.deleteRemoved = !!bp().extras && bp().extras.length === 1;
-    out.deleteKeepsFirst = !!bp().extras && bp().extras[0].r === 45;
+    out.deleteKeepsFirst = !!bp().extras && bp().extras[0].r === keptRotation;
+
+    // ---- 8b. #299: undo brings the object back, redo removes it again ----
+    const undoButton = sd().querySelector('[data-sd-undo]');
+    const redoButton = sd().querySelector('[data-sd-redo]');
+    out.undoStartsEnabled = !undoButton.disabled;
+    out.redoStartsDisabled = !!redoButton.disabled;
+    undoButton.click();
+    await sleep(400);
+    out.undoRestored = !!bp().extras && bp().extras.length === 2;
+    out.redoEnabledNow = !sd().querySelector('[data-sd-redo]').disabled;
+    sd().querySelector('[data-sd-redo]').click();
+    await sleep(400);
+    out.redoRemoved = !!bp().extras && bp().extras.length === 1;
+
+    // ---- 8c. Ctrl+Z must work without clicking anything first ----
+    document.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, ctrlKey: true, key: 'z' }));
+    await sleep(400);
+    out.ctrlZRestored = !!bp().extras && bp().extras.length === 2;
+    document.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, ctrlKey: true, shiftKey: true, key: 'z' }));
+    await sleep(400);
+    out.ctrlShiftZRedid = !!bp().extras && bp().extras.length === 1;
 
     // ---- 9. a template is a layout, and it must stay drawable ----
     const compareCard = Array.from(sd().querySelectorAll('[data-sd-template]'))
@@ -155,10 +232,26 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
     out.templateApplied = !!bp() && bp().layout === 'compare';
     out.templateKeepsExtras = !!bp().extras && bp().extras.length === 1;
     out.templateSignHandle = handles().some(node => node.getAttribute('data-sd-handle') === 'sign');
+    // ---- 9b. #299: one delete button for every node (still on the compare scene) ----
+    out.handleKeys = handles().map(node => node.getAttribute('data-sd-handle')).join(',');
+    const subjectHandle = handles().filter(node => node.getAttribute('data-sd-handle') === 'subject')[0];
+    if (subjectHandle) await pick(subjectHandle);
+    out.deleteMainRefused = sd().querySelector('[data-sd-remove]').disabled === true;
+    const secondHandle = handles().filter(node => node.getAttribute('data-sd-handle') === 'second')[0];
+    out.secondHandlePresent = !!secondHandle;
+    if (secondHandle) {
+      await pick(secondHandle);
+      out.deleteLabelForNode = (sd().querySelector('[data-sd-remove]').textContent || '').trim();
+      sd().querySelector('[data-sd-remove]').click();
+      await sleep(500);
+    }
+    out.deleteSecondDowngraded = !!bp() && bp().layout !== 'compare' && !bp().compareIcon;
+    out.deleteSecondStillDraws = !!sd()?.querySelector('[data-sd-art] [data-scene-layer="subject"]');
+
     const surroundCard = Array.from(sd().querySelectorAll('[data-sd-template]'))
       .filter(node => node.getAttribute('data-sd-template') === 'surround')[0];
     surroundCard.click();
-    await sleep(450);
+    await sleep(500);
     out.surroundApplied = !!bp() && bp().layout === 'surround' && Array.isArray(bp().around) && bp().around.length > 0;
     out.surroundStillDraws = !!sd()?.querySelector('[data-sd-art] [data-scene-layer="subject"]');
 
@@ -224,7 +317,28 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
   check('the size slider writes the scale', out.scaleWrote === true);
   check('dropping an icon adds an object', out.dropAdded === true);
   check('the dropped object lands where it was dropped', out.dropNearPoint === true);
+  check('the delete button says "vật" for an added object', /vật/.test(out.removeLabelForExtra || ''), out.removeLabelForExtra);
   check('"Xoá vật này" removes the object', out.deleteRemoved === true);
+  check('the rotate knob is on the selection', out.rotatorPresent === true);
+  check('dragging the knob turns the object', out.rotatorTurned === true);
+  check('the knob and the angle slider agree', out.rotatorWroteSlider === true);
+  check('zoom changes the label', out.zoomLabel === '120%', out.zoomLabel);
+  check('zoom really makes the canvas bigger', out.zoomGrew === true);
+  check('zoom writes nothing into the scene', out.zoomWroteNothing === true);
+  check('"Vừa khung" returns to 100%', out.zoomFit === true);
+  check('zoom out goes below 100%', out.zoomOutLabel === '90%', out.zoomOutLabel);
+  check('undo is available after a change', out.undoStartsEnabled === true);
+  check('redo starts disabled', out.redoStartsDisabled === true);
+  check('undo brings the deleted object back', out.undoRestored === true);
+  check('undo enables redo', out.redoEnabledNow === true);
+  check('redo deletes it again', out.redoRemoved === true);
+  check('Ctrl+Z undoes without touching a button', out.ctrlZRestored === true);
+  check('Ctrl+Shift+Z redoes', out.ctrlShiftZRedid === true);
+  check('the main picture refuses to be deleted', out.deleteMainRefused === true);
+  check('a compare scene has a second handle', out.secondHandlePresent === true, out.handleKeys + ' layout=' + out.layoutHere);
+  check('the delete button says "hình" for a layout node', /hình/.test(out.deleteLabelForNode || ''), out.deleteLabelForNode);
+  check('deleting the second picture degrades to a single scene', out.deleteSecondDowngraded === true);
+  check('the degraded scene still draws', out.deleteSecondStillDraws === true);
   check('deleting one object keeps the others as they were', out.deleteKeepsFirst === true);
   check('a template switches the layout', out.templateApplied === true);
   check('a template keeps the added objects', out.templateKeepsExtras === true);

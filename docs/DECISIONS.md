@@ -4952,3 +4952,24 @@ nơi cho cảnh mà không thấy cảnh. Yêu cầu: bổ sung đổi backgroun
   (`html.is-scene-designer{overflow:hidden}`) và gỡ khi đóng.
 - **Thẻ nơi đang dùng tự cuộn vào tầm nhìn**: lưới có thanh cuộn riêng, nên trạng thái "đang ở đâu"
   phải nhìn thấy được, không phải đi tìm.
+
+## #299 — hoàn tác là ẢNH CHỤP, thu phóng là ĐỔI CỠ THẬT, xoá là để NORMALISER quyết định
+
+Giáo viên báo Ctrl+Z không chạy (đúng: #297 chưa có hoàn tác) và yêu cầu thu/phóng, xoay, xoá ngay
+trong khung vẽ.
+
+**Quyết định**
+- **Một bước hoàn tác = một ảnh chụp blueprint**, không phải một lệnh nghịch đảo. Cảnh là JSON nhỏ,
+  60 ảnh chụp rẻ hơn một bức hình, và mọi đường thay đổi (kéo, thanh trượt, mẫu, nền, hình, thêm,
+  xoá) tự động hoàn tác được mà không phải viết 8 hàm undo.
+- **Một cử chỉ = một bước.** Khung hình trong lúc kéo và lúc trượt ghi thẳng vào cảnh nhưng **không**
+  vào lịch sử; chỉ lúc thả tay mới ghi. Nếu không, Ctrl+Z sẽ phải bấm 30 lần để lùi một cú kéo.
+- **Thu phóng là CÁCH NHÌN, không phải dữ liệu**: không ghi vào blueprint, và áp dụng bằng **đổi
+  kích thước thật** của canvas chứ không phải `transform: scale()`, vì phép kéo và toạ độ % của
+  handle đều đọc `getBoundingClientRect()` của canvas — transform sẽ làm con số đúng mà cú kéo sai.
+- **Núm xoay ghi cùng một con số** với thanh trượt Góc (bội 5, kẹp ±180). Hai điều khiển, một sự thật.
+- **Xoá một hình = bớt một phần tử rồi để normaliser quyết định.** Xoá hình thứ hai ⇒ cảnh `single`;
+  xoá hết bậc/vòng ⇒ cảnh `single`; **hình chính bị từ chối** vì cảnh phải có hình chính. Vẽ một
+  cảnh thủng lỗ còn tệ hơn cho trẻ.
+- **Một nút, nhiều nghĩa, nhãn theo lựa chọn** — “Xoá vật này” cho vật thêm, “Xoá hình này” cho hình
+  thuộc bố cục. Không thêm nút thứ hai để giáo viên phải đoán.

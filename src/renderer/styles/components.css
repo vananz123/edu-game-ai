@@ -809,8 +809,8 @@ span[data-icon] svg{display:block}
 .sd-icon:hover{border-color:#9fb4e8;background:#f4f7ff}
 .sd-icon-svg{width:26px;height:26px;display:block}
 .sd-icons-fallback{font-size:11px;color:#7a8397}
-.sd-canvas-wrap{flex:1 1 auto;display:flex;flex-direction:column;gap:8px;min-width:0;min-height:0;align-items:center;justify-content:center}
-.sd-canvas{position:relative;width:100%;max-width:860px;aspect-ratio:16/10;border-radius:12px;overflow:hidden;background:#eef0f7;box-shadow:0 10px 30px rgba(15,20,36,.12)}
+.sd-canvas-wrap{flex:1 1 auto;display:flex;flex-direction:column;gap:8px;min-width:0;min-height:0;align-items:center;justify-content:center;overflow:auto}
+.sd-canvas{position:relative;width:100%;max-width:860px;aspect-ratio:16/10;border-radius:12px;overflow:hidden;background:#eef0f7;box-shadow:0 10px 30px rgba(15,20,36,.12);flex:0 0 auto}
 .sd-art{position:absolute;inset:0}
 .sd-art .stage-illustration,.sd-art .stage-illustration-svg{width:100%;height:100%;display:block}
 .sd-handles{position:absolute;inset:0}
@@ -835,3 +835,10 @@ span[data-icon] svg{display:block}
 /* #298: while the workshop is open the page behind it does not scroll; otherwise
    its scrollbar takes 10px the fixed overlay can never cover. */
 html.is-scene-designer,html.is-scene-designer body{overflow:hidden}
+/* #299: zoom bar under the canvas, and the rotate knob on the selection. */
+.sd-zoom{display:flex;align-items:center;gap:6px}
+.sd-zoom-value{font-size:11px;color:#4a5468;min-width:44px;text-align:center;font-variant-numeric:tabular-nums}
+.sd-zoom .btn{padding:2px 8px;font-size:11px}
+.sd-rotator{position:absolute;transform:translate(-50%,-50%);width:22px;height:22px;border-radius:50%;border:1px solid #2f5fd0;background:#fff;color:#2f5fd0;font-size:12px;line-height:20px;text-align:center;cursor:grab;box-shadow:0 2px 6px rgba(15,20,36,.18);z-index:3;padding:0}
+.sd-rotator:hover{background:#eaf0fd}
+.sd-rotator:active{cursor:grabbing}
