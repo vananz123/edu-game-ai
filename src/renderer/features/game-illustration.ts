@@ -24,6 +24,8 @@ declare const SceneRuntime: {
   renderBlueprintSvg(blueprint: any, palette: any, options?: any): string;
   /** #297: one icon as a standalone SVG, for the workshop's picture palette. */
   renderIconSvg(name: unknown, options?: any): string;
+  /** #298: every place a scene can be drawn in, for the workshop's backdrop grid. */
+  SCENE_BACKDROP_IDS: readonly string[];
   renderSceneSvg(category: string, iconName: string, palette: any, options?: any): string;
   getIllustrationPalette(category: unknown): any;
   isSceneIconId(value: unknown): boolean;
@@ -98,6 +100,11 @@ function stageIsSceneBackdropId(value: unknown): boolean {
 /** #294: every node the current blueprint draws, with its geometry in scene px. */
 function stageSceneNodeSlots(blueprint: unknown): any[] {
   return (SceneRuntime as any).sceneNodeSlots(blueprint) || [];
+}
+
+/** #298: the twelve places, so the workshop can offer a picture of each one. */
+function stageSceneBackdropIds(): string[] {
+  return Array.isArray(SceneRuntime.SCENE_BACKDROP_IDS) ? SceneRuntime.SCENE_BACKDROP_IDS.slice() : [];
 }
 
 /** #297: icon art for the workshop palette (a picture, not a label). */

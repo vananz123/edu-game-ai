@@ -775,6 +775,7 @@ function wireEditorItemArtRow(row) {
           .filter(id => typeof stageIsSceneIconId !== 'function' || stageIsSceneIconId(id))
           .map(id => ({ id, label: EDITOR_SCENE_ICON_LABEL[id] })),
         signs: EDITOR_SCENE_SIGNS.filter(entry => !!entry.id),
+        backdrops: stageSceneBackdropIds().map(id => ({ id, label: EDITOR_SCENE_BACKDROP_LABEL[id] || id })),
         onChange: json => { blueprintField.value = json; },
         onClose: () => redrawEditorArtRow(row),
       });

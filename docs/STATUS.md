@@ -7,6 +7,17 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-16 — #298 Đổi NỀN ngay trong Xưởng cảnh: 12 nơi, mỗi nơi một ảnh thật
+- Giáo viên yêu cầu bổ sung phần đổi background vào xưởng cảnh. Trước đó nền chỉ đổi được bằng ô chọn trong hàng minh hoạ, và ô đó là **chữ** (`Đường phố`, `Cửa hàng`…), không cho thấy cảnh sẽ ra sao.
+- **Nhóm “Nền — cảnh diễn ra ở đâu”** ở cột trái: **12 thẻ, 2 cột**, mỗi thẻ là **ảnh xem trước thật** do chính engine vẽ với **đúng icon đang dùng** (bỏ mọi chỉnh tay để 12 ảnh chỉ khác nhau ở NƠI), nhãn ngắn, thẻ đang dùng có viền xanh và **tự cuộn vào tầm nhìn**.
+- Bấm một thẻ ⇒ ghi `backdrop`, cảnh vẽ lại ngay; **giữ nguyên icon, bố cục và vật thêm** (chỉ đổi nơi). Danh sách lấy từ `SCENE_BACKDROP_IDS` (qua bridge mới `stageSceneBackdropIds()`), nhãn lấy từ `EDITOR_SCENE_BACKDROP_LABEL` — một nguồn sự thật, không chép tay 12 tên lần thứ ba.
+- **Hiệu năng:** 4 ảnh mẫu bố cục + 12 ảnh nền = 16 lần vẽ engine mỗi lần mở. Trước đây `paint()` vẽ lại cả 16 ở **mỗi** sự kiện thanh trượt; giờ tách `paintPresets()` chỉ chạy khi mở, khi đổi bố cục, khi đổi hình, khi đổi nền.
+- **Hai lỗi bố cục tự bắt được qua ảnh chụp:** (1) lưới 3 cột trong cột trái 208px bị **cắt nhãn** ⇒ 2 cột + cột trái 236px; (2) overlay `fixed` chỉ phủ **1270/1280px** vì thanh cuộn của trang ⇒ khi mở xưởng cảnh đặt `html.is-scene-designer{overflow:hidden}` và gỡ khi đóng (gate “workshop is its own screen” đỏ đúng chỗ này).
+- **Gate `ui-scene-designer-check` 35 → 45/45:** thêm “có đủ 12 nơi” · “mỗi nơi là ảnh thật” · “mỗi nơi có nhãn” · “đúng một nơi đang dùng” · “chọn nơi ghi `backdrop`” · **“nơi ‘Đường phố’ thật sự vẽ `data-scene-primitive="road"`”** · “nơi vừa chọn được đánh dấu” · “đổi được nơi thứ hai” · “đổi nơi giữ icon” · “đổi nơi giữ bố cục”.
+- Kiểm trên app mới mở (CDP 9584): designer **45/45** · stage **179/179** · play **790/790** · editor **157/157** · background **42/42** · unit **102/102** · `npm run check` 53 tệp · `renderer-globals` **1109 hàm/8925 chỗ gọi** · scene-runtime **170.8 KiB** · embedded **6201.0 KiB**.
+- Ảnh: `.tmp-art/scene-designer-places2.png` — lưới nền 2 cột đọc được nhãn, thẻ “Cửa hàng” đang chọn có viền xanh, cảnh giữa có kệ + quầy + giỏ.
+- Installer: **16 496 156 byte** / 15.74 MiB / 21-11 **20:57** / SHA-256 `5df71e120a2e5e9a4728226b519944ef5d36f9f23a08c6812b006453a71ee007`.
+
 ### 2026-11-16 — #297 “Xưởng cảnh”: tách hẳn sửa ảnh thành một tính năng riêng
 - Giáo viên yêu cầu rõ: tách hẳn edit ảnh thành tính năng riêng, sửa **nhiều vật thể**, **thu nhỏ/phóng to**, **xoay góc**, có **hình mẫu trực quan**, **kéo thả dễ dàng**.
 - **Màn hình riêng `features/editor/scene-designer.ts`** (thay hẳn bảng #295/#296) — phủ toàn cửa sổ, ba cột:

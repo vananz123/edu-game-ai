@@ -58,6 +58,8 @@ function openSceneDesigner(options) {
       '<div class="sd-side sd-side-left">' +
         '<div class="sd-group"><span class="sd-group-title">Mẫu bố cục</span>' +
           '<div class="sd-templates" data-sd-templates></div></div>' +
+        '<div class="sd-group"><span class="sd-group-title">Nền — cảnh diễn ra ở đâu</span>' +
+          '<div class="sd-places" data-sd-places></div></div>' +
         '<div class="sd-group"><span class="sd-group-title">Hình mẫu — kéo vào khung</span>' +
           '<div class="sd-icons" data-sd-icons></div></div>' +
       '</div>' +
@@ -103,6 +105,8 @@ function openSceneDesigner(options) {
   const removeExtra = root.querySelector('[data-sd-remove-extra]') as HTMLElement;
   const templatesBox = root.querySelector('[data-sd-templates]') as HTMLElement;
   const iconsBox = root.querySelector('[data-sd-icons]') as HTMLElement;
+  const placesBox = root.querySelector('[data-sd-places]') as HTMLElement;
+  const places: Array<{ id: string; label: string }> = Array.isArray(opts.backdrops) ? opts.backdrops : [];
 
   iconSelect.innerHTML = icons
     .map(entry => '<option value="' + escapeHtml(entry.id) + '">' + escapeHtml(entry.label) + '</option>')
@@ -214,6 +218,7 @@ function openSceneDesigner(options) {
       return;
     }
     commit(next, 'Đã đổi sang bố cục “' + templateLabel(layout) + '”.');
+    paintPresets();
   }
 
   function templateLabel(layout) {
@@ -224,6 +229,53 @@ function openSceneDesigner(options) {
       ['surround', 'Vây quanh'],
     ].filter(entry => entry[0] === layout)[0];
     return found ? found[1] : layout;
+  }
+
+  /**
+   * #298: the twelve places, each shown as a REAL picture of the current scene in
+   * that place. A colour swatch would tell the teacher nothing about a street
+   * versus a shop; the engine can draw both, so it should.
+   */
+  function paintPlaces() {
+    if (!places.length) {
+      placesBox.innerHTML = '<span class="sd-icons-fallback">Chưa nạp được danh sách nền.</span>';
+      return;
+    }
+    placesBox.innerHTML = places.map(place => {
+      const active = blueprint.backdrop === place.id ? ' is-active' : '';
+      return '<button type="button" class="sd-place' + active + '" data-sd-place="' + escapeHtml(place.id) + '" ' +
+        'title="Đặt cảnh ở: ' + escapeHtml(place.label) + '">' +
+        '<span class="sd-place-art">' + render(placePreview(place.id)) + '</span>' +
+        '<span class="sd-place-label">' + escapeHtml(place.label) + '</span></button>';
+    }).join('');
+    placesBox.querySelectorAll('[data-sd-place]').forEach(button => {
+      button.addEventListener('click', () => applyPlace(button.getAttribute('data-sd-place') || 'plain'));
+    });
+    // The grid scrolls; the place in use must be the one the teacher can see
+    // without hunting for it.
+    const activePlace = placesBox.querySelector('.sd-place.is-active');
+    if (activePlace && typeof activePlace.scrollIntoView === 'function') {
+      activePlace.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  /**
+   * A place preview keeps the icons but drops every hand placement, so the twelve
+   * pictures differ ONLY by the place — the thing the teacher is choosing.
+   */
+  function placePreview(id) {
+    const clean = stageNormalizeBlueprint(
+      Object.assign({}, blueprint, { backdrop: id, freePos: undefined, extras: undefined })
+    );
+    return clean || blueprint;
+  }
+
+  function applyPlace(id) {
+    const clean = stageNormalizeBlueprint(Object.assign({}, blueprint, { backdrop: id }));
+    if (!clean) return;
+    const label = (places.filter(entry => entry.id === id)[0] || { label: id }).label;
+    commit(clean, 'Cảnh giờ diễn ra ở: ' + label + '.');
+    paintPlaces();
   }
 
   function paintIcons() {
@@ -305,7 +357,12 @@ function openSceneDesigner(options) {
       rotateInput.value = String(Math.round(chosen.rotation || 0));
       rotateOut.textContent = Math.round(chosen.rotation || 0) + '°';
     }
+  }
+
+  /** The two preview grids are expensive (16 engine renders); paint on demand. */
+  function paintPresets() {
     paintTemplates();
+    paintPlaces();
   }
 
   /** Which icon the selected node draws. */
@@ -436,7 +493,10 @@ function openSceneDesigner(options) {
 
   // ---- the panel's own controls ----
   iconSelect.addEventListener('change', () => {
-    if (iconSelect.value) commit(withIcon(selectedKey, iconSelect.value), 'Đã đổi hình.');
+    if (!iconSelect.value) return;
+    commit(withIcon(selectedKey, iconSelect.value), 'Đã đổi hình.');
+    // The place previews are pictures of THIS scene, so they follow the icon.
+    paintPlaces();
   });
   signSelect.addEventListener('change', () => commit(withIcon('sign', signSelect.value), 'Đã đổi dấu.'));
 
@@ -514,6 +574,9 @@ function openSceneDesigner(options) {
   const close = apply => {
     document.removeEventListener('keydown', onKey);
     root.remove();
+    // #298: the page behind a full-screen workshop must not scroll — a scrollbar
+    // owned by the page is 10px the workshop cannot cover.
+    document.documentElement.classList.remove('is-scene-designer');
     const saved = apply ? JSON.stringify(blueprint) : originalJson;
     if (!apply && typeof opts.onChange === 'function') opts.onChange(originalJson);
     else if (apply && typeof opts.onChange === 'function') opts.onChange(saved);
@@ -530,8 +593,10 @@ function openSceneDesigner(options) {
   document.addEventListener('keydown', onKey);
 
   host.appendChild(root);
+  document.documentElement.classList.add('is-scene-designer');
   paintIcons();
   paint();
+  paintPresets();
   statusOut.textContent = 'Chọn một hình để đổi cỡ và góc, hoặc kéo một hình mẫu vào khung.';
   return root;
 }

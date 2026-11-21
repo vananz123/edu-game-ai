@@ -4930,3 +4930,25 @@ góc, hình mẫu trực quan, kéo thả dễ dàng. Bảng #295/#296 chỉ là
   JSON; mất nó tệ hơn 600 byte trong một tệp `.egame`.
 - **Kéo thả bằng `DataTransfer`,** và bấm = thêm vào chỗ trống gần nhất. Cả hai đường đều đi qua cùng
   một hàm `addExtra`, nên không có hành vi thứ hai để lệch.
+
+## #298 — nền là một LỰA CHỌN BẰNG HÌNH, và một overlay toàn màn hình phải tự khoá cuộn trang
+
+Hàng minh hoạ đã có ô chọn nền từ #288, nhưng nó là **chữ**: "Đường phố", "Cửa hàng". Giáo viên chọn
+nơi cho cảnh mà không thấy cảnh. Yêu cầu: bổ sung đổi background vào xưởng cảnh.
+
+**Quyết định**
+- **Mỗi nơi được vẽ thật**, bằng chính engine, với **đúng icon đang dùng** và **bỏ mọi chỉnh tay**.
+  Nếu giữ chỉnh tay thì 12 ảnh khác nhau vì hai lý do cùng lúc và cái giáo viên đang chọn (NƠI) sẽ
+  lẫn với cái cô ấy không chọn.
+- **Danh sách và nhãn không chép tay.** `SCENE_BACKDROP_IDS` (bridge `stageSceneBackdropIds()`) + 
+  `EDITOR_SCENE_BACKDROP_LABEL`. Thêm nơi thứ 13 sau này sẽ tự hiện, đúng luật "một nguồn sự thật"
+  (#272).
+- **Đổi nơi chỉ đổi nơi**: icon, bố cục, vật thêm, chỉnh tay đều giữ. Một cú bấm đổi nền không được
+  làm mất công sắp đặt.
+- **16 lần vẽ engine không được chạy ở mỗi sự kiện thanh trượt.** Tách `paintPresets()` khỏi
+  `paint()`: ảnh mẫu chỉ vẽ lại khi mở/đổi bố cục/đổi hình/đổi nền.
+- **Một overlay `position:fixed` KHÔNG phủ hết cửa sổ nếu trang phía sau còn thanh cuộn** — đo được
+  1270/1280px. Cách sửa không phải nới lỏng phép kiểm, mà là khoá cuộn trang
+  (`html.is-scene-designer{overflow:hidden}`) và gỡ khi đóng.
+- **Thẻ nơi đang dùng tự cuộn vào tầm nhìn**: lưới có thanh cuộn riêng, nên trạng thái "đang ở đâu"
+  phải nhìn thấy được, không phải đi tìm.

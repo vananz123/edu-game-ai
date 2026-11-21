@@ -64,13 +64,37 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
     out.templateLabels = templates.every(node => (node.textContent || '').trim().length > 3);
 
     // ---- 3. the picture palette: every icon, as a picture ----
+    const beforeExtra = bp();
     const palette = Array.from(sd()?.querySelectorAll('[data-sd-add]') || []);
     out.paletteCount = palette.length;
     out.paletteDraws = palette.every(node => !!node.querySelector('svg'));
     out.paletteDraggable = palette.every(node => node.getAttribute('draggable') === 'true');
 
+    // ---- 3b. #298: the place (backdrop) picker ----
+    const places = Array.from(sd()?.querySelectorAll('[data-sd-place]') || []);
+    out.placeCount = places.length;
+    out.placesDrawArt = places.every(node => !!node.querySelector('.sd-place-art [data-scene-layer]'));
+    out.placesLabelled = places.every(node => (node.textContent || '').trim().length > 2);
+    out.placeIsCurrent = places.filter(node => node.classList.contains('is-active')).length === 1;
+    // The place grid is re-rendered after every choice, so a cached node would be
+    // detached: always query the live DOM.
+    const placeOf = id => sd().querySelector('[data-sd-place="' + id + '"]');
+    const beforePlace = bp().backdrop;
+    placeOf('road').click();
+    await sleep(500);
+    out.placeWrote = !!bp() && bp().backdrop === 'road' && beforePlace !== 'road';
+    // the street is proved by the street it draws, not by the key alone
+    out.placeDrewRoad = !!sd()?.querySelector('[data-sd-art] [data-scene-primitive="road"]');
+    out.placeMarksActive = !!sd().querySelector('[data-sd-place="road"].is-active');
+    placeOf('market').click();
+    await sleep(500);
+    out.placeSecond = !!bp() && bp().backdrop === 'market';
+    out.placeKeepsIcons = !!bp() && bp().mainIcon === beforeExtra.mainIcon;
+    out.placeKeepsLayout = !!bp() && bp().layout === beforeExtra.layout;
+    placeOf(beforePlace).click();
+    await sleep(400);
+
     // ---- 4. clicking an icon ADDS an object ----
-    const beforeExtra = bp();
     palette[4].click();
     await sleep(350);
     out.addedToBlueprint = !!bp().extras && bp().extras.length === 1;
@@ -176,6 +200,16 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
   check('the templates are the four layouts', out.templateKeys === 'single,compare,process,surround', out.templateKeys);
   check('every template shows a drawn preview', out.templatesDrawArt === true);
   check('every template is labelled', out.templateLabels === true);
+  check('the workshop offers all twelve places', out.placeCount === 12, String(out.placeCount));
+  check('every place is shown as a real picture', out.placesDrawArt === true);
+  check('every place is labelled', out.placesLabelled === true);
+  check('exactly one place is marked as current', out.placeIsCurrent === true);
+  check('choosing a place writes the backdrop', out.placeWrote === true);
+  check('the street place really draws a street', out.placeDrewRoad === true);
+  check('the chosen place is marked', out.placeMarksActive === true);
+  check('a second place can be chosen', out.placeSecond === true);
+  check('changing the place keeps the icons', out.placeKeepsIcons === true);
+  check('changing the place keeps the layout', out.placeKeepsLayout === true);
   check('the palette lists every icon', out.paletteCount === 47, String(out.paletteCount));
   check('the palette shows pictures, not names', out.paletteDraws === true);
   check('palette pictures can be dragged', out.paletteDraggable === true);
