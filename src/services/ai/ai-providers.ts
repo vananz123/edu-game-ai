@@ -42,6 +42,13 @@ export interface AiProviderDefinition {
   wizardEligible: boolean;
   /** One line of context under the provider in Settings. */
   note: string;
+  /**
+   * Shown as the placeholder of the model field when the provider has no default
+   * model. Only `custom` has none: a base URL it can start from is knowable (the
+   * OpenAI-compatible endpoint of the service most teachers reach first), but the
+   * model name depends on that service, so it is an EXAMPLE, not a default.
+   */
+  modelExample?: string;
 }
 
 export const AI_PROVIDERS: AiProviderDefinition[] = [
@@ -89,9 +96,14 @@ export const AI_PROVIDERS: AiProviderDefinition[] = [
     id: 'custom',
     label: 'API tương thích OpenAI (tự cấu hình)',
     transport: 'openai-compatible',
-    baseUrl: '',
+    // #287: a blank base URL reads as "the app is unfinished". Prefill the one
+    // endpoint that works out of the box (Google's OpenAI-compatible API) and let
+    // the teacher overwrite it with a school gateway. The model stays empty on
+    // purpose: it depends on the endpoint, so it is an example, not a default.
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
     model: '',
     requiresKey: true,
+    modelExample: 'gemini-2.5-flash',
     // A custom OpenAI-compatible endpoint is a real cloud provider for the lesson
     // workflow once its connection test passes (DECISIONS #132 D17): a teacher whose
     // gateway is not Gemini/ChatGPT must not lose the second analysis button.
@@ -448,6 +460,8 @@ export interface AiProviderPublicView {
   model: string;
   defaultBaseUrl: string;
   defaultModel: string;
+  /** Placeholder for a provider that has no default model (see `modelExample`). */
+  modelExample: string;
   lastTestAt: string | null;
   lastTestOk: boolean | null;
   lastTestCode: string | null;
@@ -474,6 +488,7 @@ export function toPublicProviderView(
     model: provider.model,
     defaultBaseUrl: provider.definition.baseUrl,
     defaultModel: provider.definition.model,
+    modelExample: provider.definition.modelExample || '',
     lastTestAt: provider.lastTestAt,
     lastTestOk: provider.lastTestOk,
     lastTestCode: provider.lastTestCode,

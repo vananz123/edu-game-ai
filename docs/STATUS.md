@@ -7,6 +7,13 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-16 — #287 AI cloud: không còn ô base URL trống
+- Phản hồi của giáo viên: "phần thêm AI cloud nên để sẵn base url". Kiểm lại thì `gemini`, `openai`, `opencode` **đã** điền sẵn từ registry; ô trống duy nhất là provider **`custom`** ("API tương thích OpenAI (tự cấu hình)") — và đó đúng là cái hiện ra khi giáo viên tự thêm một nhà cung cấp.
+- Sửa: `custom.baseUrl` = `https://generativelanguage.googleapis.com/v1beta/openai` (điểm cuối chạy được ngay, giáo viên ghi đè bằng gateway của trường). **Model vẫn để trống có chủ ý**: tên model phụ thuộc điểm cuối, nên nó là **ví dụ**, không phải mặc định — thêm trường `modelExample: 'gemini-2.5-flash'` và dùng làm placeholder.
+- Giữ nguyên hợp đồng "đã cấu hình" = có khoá **và** base URL **và** model: điền sẵn base URL không làm provider tự nhận là đã cấu hình.
+- Kiểm: `tsc` sạch · unit **100/100** (test `ai-providers` có thêm khẳng định base URL của `custom` không bao giờ rỗng) · `npm run check` 52 tệp · `check:embedded` khớp.
+- **Chưa làm** (đang chờ chọn phạm vi): backdrop phong phú hơn (#288) và câu hỏi kéo-thả (#289).
+
 ### 2026-11-16 — #286 Dựng lại NSIS installer (bản cũ vẫn là 16/11, trước Twemoji)
 - Quy trình đầy đủ: kill tiến trình app → `cp tauri.conf.json $TEMP` + `sed -i '7d'` (bỏ `devPath`) → `npm run build` → `npm run build:tauri` (202 tệp, embedded 6190.4 KiB) → `cargo tauri build` → **khôi phục `tauri.conf.json` byte-exact**, SHA-256 `5ae0bf649cb60325461ff3ed2e9a7bc7cf96d2770fab914b25b216f35613b20e` khớp lại.
 - **Sản phẩm**: `src-tauri/target/release/edugame-studio-tauri.exe` 59 268 608 byte và `bundle/nsis/EduGame Studio (Tauri)_0.5.2_x64-setup.exe` **15.71 MiB**, SHA-256 `39f2121c…6583ea`, cùng dấu thời gian 21/11 09:46 (cùng một lượt `cargo`). Bản `0.5.1 … setup.exe` 15/11 vẫn nằm đó — **đừng nhầm**.

@@ -21,7 +21,7 @@ function settingsProviderCard(provider, inputCls, labelCls, hintCls, btnSecondar
     '  <div class="field"><label class="' + labelCls + '">API BASE URL</label>',
     '<input class="' + inputCls + '" data-ai-provider-baseurl="' + escapeHtml(provider.id) + '" value="' + escapeHtml(provider.baseUrl) + '" placeholder="' + escapeHtml(provider.defaultBaseUrl || 'https://…/v1') + '"></div>',
     '  <div class="field"><label class="' + labelCls + '">TÊN MODEL</label>',
-    '<input class="' + inputCls + '" data-ai-provider-model="' + escapeHtml(provider.id) + '" value="' + escapeHtml(provider.model) + '" placeholder="' + escapeHtml(provider.defaultModel || 'Tên model') + '"></div>',
+    '<input class="' + inputCls + '" data-ai-provider-model="' + escapeHtml(provider.id) + '" value="' + escapeHtml(provider.model) + '" placeholder="' + escapeHtml(provider.defaultModel || provider.modelExample || 'Tên model') + '"></div>',
     '</div>',
     '<div class="field mt-2"><label class="' + labelCls + '">API KEY</label>',
     '<input class="' + inputCls + '" type="password" autocomplete="off" data-ai-key-input="' + escapeHtml(provider.id) + '" value="" placeholder="' + escapeHtml(provider.hasKey ? 'Đã lưu khoá — gõ khoá mới để thay' : (provider.requiresKey ? 'Nhập khoá của nhà cung cấp' : 'Khoá (nếu có)')) + '">',

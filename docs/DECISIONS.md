@@ -4713,3 +4713,18 @@ prompt, #285 thêm 6 icon). Một tệp setup cũ không hỏng build nào, khô
   ` M src-tauri/tauri.conf.json` — đó là trạng thái bình thường, không phải lỗi cần "sửa".
 - **Không có 7-Zip thì không được nói "installer đã kiểm"**: hiện chỉ có dấu thời gian và thứ tự
   bước của `cargo tauri build` làm bằng chứng, nên P7 (cài thật trên máy sạch) vẫn là phép kiểm thật.
+
+## #287 — Điền sẵn thứ biết được, để trống thứ phụ thuộc, và không đổi nghĩa "đã cấu hình"
+
+Giáo viên mở tab AI cloud và thấy một ô trống. Sự thật là ba nhà cung cấp có sẵn điểm cuối đã được
+điền từ registry từ lâu; ô trống duy nhất là `custom`, đúng cái hiện ra khi tự thêm nhà cung cấp.
+
+**Quyết định**
+- **Base URL của `custom` được điền sẵn** bằng điểm cuối tương thích OpenAI của Google — cái chạy
+  được ngay mà không cần tra cứu. Một ô trống đọc thành "ứng dụng làm chưa xong", và giáo viên không
+  nên phải đi tìm URL trước khi dùng được tính năng.
+- **Model của `custom` vẫn để trống**, chỉ có **ví dụ** trong placeholder. Base URL là thứ suy ra
+  được; tên model phụ thuộc chính điểm cuối đó, nên điền sẵn là đoán.
+- **Điền sẵn không được đổi nghĩa "đã cấu hình"**: vẫn cần khoá **và** base URL **và** model. Một
+  provider tự nhận "đã cấu hình" chỉ vì có sẵn URL sẽ khiến giáo viên tưởng đã xong và bấm tạo game
+  vào một endpoint không có khoá.

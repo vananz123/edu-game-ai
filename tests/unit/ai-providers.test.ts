@@ -61,10 +61,13 @@ function lifecycle(): void {
   assert.equal(failing.usable, false, 'failing is not usable');
   assert.match(failing.reason, /API key/, `failing names the cause: ${failing.reason}`);
 
-  // The registry defaults each provider's endpoint/model, so only a provider with
-  // no default at all (`custom`) can be missing one.
+  // The registry defaults each provider's endpoint, so `custom` is the only one
+  // whose MODEL can be missing — since #287 even it starts with a working endpoint
+  // prefilled. A provider is configured only when key AND endpoint AND model are
+  // all present, so a key alone must still read as not-configured.
   const custom = (stored: Record<string, unknown>) => resolveProviderState({ settings: { providers: { custom: stored } } as Settings }).find(provider => provider.id === 'custom')!;
-  assert.equal(custom({ apiKeyEncrypted: 'blob' }).status, 'not-configured', 'no endpoint → not-configured even with a key');
+  assert.equal(custom({ apiKeyEncrypted: 'blob' }).status, 'not-configured', 'no model → not-configured even with a key and a prefilled endpoint');
+  assert.ok(custom({ apiKeyEncrypted: 'blob' }).baseUrl.startsWith('https://'), 'custom ships a prefilled base URL so the field is never blank');
   assert.equal(gemini({ baseUrl: 'https://x/v1', model: 'm' }).status, 'not-configured', 'no key → not-configured even with an endpoint');
   assert.equal(gemini({ apiKeyEncrypted: 'blob' }).baseUrl, 'https://generativelanguage.googleapis.com/v1beta/openai', 'a missing endpoint falls back to the provider default');
 
