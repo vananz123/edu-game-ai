@@ -347,6 +347,13 @@ async function runSetupWizardPreflight() {
  */
 async function openSetupWizard(options = {}) {
   const probe = options.probe === true;
+  /* #306: the setup screen belongs to the INSTALLATION, not to every launch. Once the
+     teacher has seen it — whether they finished the download or pressed "Để sau" —
+     auto-opening it again only repeats "cần tải thêm 2,6 GB" at every start, which reads
+     as a broken app. The flag lives in `settings.json` (`preferences.setupScreenSeen`), not
+     in the WebView profile, so clearing browser data does not bring the nag back. The
+     explicit path (`{ probe: false }`, from Cài đặt → "Cài đặt lại AI từ đầu") ignores it. */
+  if (probe && state.settings?.preferences?.setupScreenSeen === true) return false;
   // A probe only ever asks the disk. The in-memory error belongs to an earlier
   // interaction in this session, so replaying it at launch would greet the
   // teacher with a failure they never caused this time.
@@ -380,6 +387,11 @@ async function openSetupWizard(options = {}) {
   // done or the teacher leaves. Errors (including a failed status read) drop the
   // flag again in `renderSetupWizard()`, so the app is never left hidden.
   setSetupWizardFullscreen(true);
+  // #306: this launch counts as "seen" from this moment on, before the teacher can
+  // close the window — a crash or a force-quit must not turn the next start into a
+  // second first run. Written once, fire-and-forget: the flag is convenience, and a
+  // failed write only costs one repeat.
+  if (probe) rememberSetupScreenSeen();
   // `error` is cleared by `refreshSetupWizardStatus()` above (only on a
   // successful read) and by `preflight`. Clearing it here unconditionally would
   // erase a read failure and reopen the wizard with an empty body.
@@ -391,6 +403,16 @@ async function openSetupWizard(options = {}) {
   // looks healthy and fails only when the teacher presses Bắt đầu.
   if (status && needsWork) void runSetupWizardPreflight();
   return true;
+}
+
+/** #306: persist "the setup screen has been shown once" into settings.json. */
+function rememberSetupScreenSeen() {
+  const preferences = state.settings?.preferences;
+  if (preferences && preferences.setupScreenSeen === true) return;
+  state.settings = { ...(state.settings || {}), preferences: { ...(preferences || {}), setupScreenSeen: true } };
+  try {
+    desktop.call('saveSettings', { preferences: state.settings.preferences }).catch(() => {});
+  } catch (error) { /* a build without the settings channel keeps the in-memory flag */ }
 }
 
 function closeSetupWizard(reason = 'close') {

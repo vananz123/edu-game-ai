@@ -76,6 +76,33 @@
 
     closeSetupWizard('close');
     await sleep(200);
+
+    // #306: the setup screen is shown ONCE per installation. A probe must refuse to
+    // re-open it after the teacher has seen it, while the explicit path from Settings
+    // must still work — otherwise "hidden" would mean "unreachable".
+    setupWizardState.status = { step: 'idle', complete: false, running: false };
+    setupWizardState.dismissed = false;
+    // The rule reads the flag from memory, and a machine that already ran this gate once
+    // has it on disk. Clear it in memory only, so the "first launch" branch is observable
+    // on every run without pretending the disk state is different from what the code sees.
+    state.settings = { ...(state.settings || {}), preferences: { ...((state.settings || {}).preferences || {}), setupScreenSeen: false } };
+    out.probeBeforeSeen = await openSetupWizard({ probe: true });
+    await sleep(200);
+    out.probeScreenBeforeSeen = (document.querySelector('#modalRoot [data-setup-screen]') || {}).dataset?.setupScreen || '';
+    closeSetupWizard('close');
+    await sleep(200);
+    out.seenFlag = state.settings?.preferences?.setupScreenSeen === true;
+    const persisted = await desktop.call('getSettings');
+    out.seenFlagPersisted = persisted?.preferences?.setupScreenSeen === true;
+    out.probeAfterSeen = await openSetupWizard({ probe: true });
+    await sleep(200);
+    out.screenAfterSeenProbe = (document.querySelector('#modalRoot [data-setup-screen]') || {}).dataset?.setupScreen || '';
+    out.explicitStillOpens = await openSetupWizard({ probe: false });
+    await sleep(300);
+    out.screenAfterExplicit = (document.querySelector('#modalRoot [data-setup-screen]') || {}).dataset?.setupScreen || '';
+    closeSetupWizard('close');
+    await sleep(200);
+
     out.flagAfterClose = document.documentElement.getAttribute('data-setup-fullscreen');
     out.shellVisibleAfterClose = visible('.app-shell');
     out.rootEmptyAfterClose = document.getElementById('modalRoot').innerHTML === '';
@@ -106,6 +133,18 @@
   check('closing the wizard gives the shell back',
     run.flagAfterClose === null && run.shellVisibleAfterClose === true && run.rootEmptyAfterClose === true,
     { flag: run.flagAfterClose, shellVisible: run.shellVisibleAfterClose, empty: run.rootEmptyAfterClose });
+  // #306 — "Cai dat AI" chi hien mot lan khi cai ung dung.
+  check('the first probe opens the setup screen and records that it was shown',
+    run.probeBeforeSeen === true && Boolean(run.probeScreenBeforeSeen) && run.seenFlag === true,
+    { opened: run.probeBeforeSeen, screen: run.probeScreenBeforeSeen, flag: run.seenFlag });
+  check('the flag is written to settings.json, not just to memory',
+    run.seenFlagPersisted === true, run.seenFlagPersisted);
+  check('a later launch does not open the setup screen again',
+    run.probeAfterSeen === false && run.screenAfterSeenProbe === '',
+    { opened: run.probeAfterSeen, screen: run.screenAfterSeenProbe });
+  check('Settings can still open it on purpose',
+    run.explicitStillOpens === true && Boolean(run.screenAfterExplicit),
+    { opened: run.explicitStillOpens, screen: run.screenAfterExplicit });
   check('no page errors', run.errors.length === 0, run.errors);
 
   console.log(failures === 0 ? '\nALL CHECKS PASSED' : `\n${failures} CHECK(S) FAILED`);

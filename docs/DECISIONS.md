@@ -5086,3 +5086,17 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
 - **Ẩn thì phải để lại một cửa**: dòng chú thích + "Mở lại" mở tab trong **phiên hiện tại**
   (`state.settingsAiReveal`), không ghi vào cài đặt — lần mở app sau lại im lặng.
 - **Tab đang mở bị ẩn thì phải rơi về tab còn hiện**, không được để màn hình trống.
+
+## #306 — “Cài đặt AI” là màn hình của LẦN CÀI ỨNG DỤNG, không phải lời nhắc mỗi lần mở
+
+- **Một lời nhắc lặp lại mỗi lần khởi động bị đọc là app hỏng**, không phải là app đang nhắc.
+  Wizard setup chỉ được tự mở khi cờ `preferences.setupScreenSeen` chưa có.
+- **Cờ nằm trong `settings.json`, không trong `localStorage`**: xoá dữ liệu duyệt web hay dọn
+  WebView2 không được làm màn hình “cần tải thêm 2,6 GB” quay lại.
+- **Ghi cờ ngay khi màn hình SẮP hiện**, không phải khi bấm “Để sau”: tắt app giữa chừng không
+  được biến lần mở sau thành “lần đầu” thứ hai.
+- **Một cờ ẩn phải có một cửa mở**: `probe: false` (nút “Cài đặt lại AI từ đầu”) bỏ qua cờ.
+  Nếu không, người đã “Để sau” sẽ không bao giờ cài được AI nữa.
+- **Cổng kiểm phải tự đặt lại trạng thái nó đo**: một cổng đọc cờ trên đĩa sẽ chỉ đo được nhánh
+  “đã xem” sau lần chạy đầu. Cổng xoá cờ **trong bộ nhớ** để nhánh “lần đầu” luôn đo được, và
+  đọc `getSettings` để chứng minh cờ **đã xuống đĩa** — hai khẳng định khác nhau, hai phép đo.

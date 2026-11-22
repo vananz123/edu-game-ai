@@ -371,11 +371,37 @@ async function main() {
   wizard.setupWizardState.status = { step: 'idle', complete: false, running: false };
   // A new launch: "Để sau" from the previous session no longer applies.
   wizard.setupWizardState.dismissed = false;
+  // #306: what a launch reads is `settings.json`, not memory. This sandbox is a fresh
+  // install, so the "already shown" flag must be absent — the same thing a first run
+  // finds on disk.
+  sandbox.state.settings = { preferences: { ...(sandbox.state.settings?.preferences || {}), setupScreenSeen: false } };
   assert.equal(await wizard.openSetupWizard({ probe: true }), true);
   await flush();
   assert.ok(!modalRoot.innerHTML.includes('lỗi cũ'),
     'a probe must not replay an error left in memory by a previous attempt');
   assert.match(modalRoot.innerHTML, /data-setup-screen="requirements"/);
+
+  // --- #306: the setup screen is shown once per installation ---------------
+  // A teacher who saw "cần tải thêm 2,6 GB" once must not meet it at every start;
+  // the explicit path from Settings stays open or the AI setup becomes unreachable.
+  assert.equal(sandbox.state.settings?.preferences?.setupScreenSeen, true,
+    'showing the setup screen must record that it was shown');
+  wizard.closeSetupWizard('close');
+  // Clear what the previous screen left behind: the probe must now draw NOTHING.
+  modalRoot.innerHTML = '';
+  assert.equal(await wizard.openSetupWizard({ probe: true }), false,
+    'a later launch must not repeat the first-run screen');
+  assert.equal(modalRoot.innerHTML, '', 'and it must not draw anything either');
+  // The explicit path (Settings) is proven against the real app in
+  // tests/ui/ui-setup-fullscreen-check.js; here it would start a preflight whose
+  // late render lands in a later assertion's measurement window.
+  // Let every queued render from the probes above settle before the next block
+  // measures "the gate drew nothing".
+  await flush();
+  modalRoot.innerHTML = '';
+  // The blocks below test other rules (a broken channel, a missing plan). They must not
+  // be short-circuited by the one-time flag, so this sandbox goes back to "fresh install".
+  sandbox.state.settings = { preferences: { ...(sandbox.state.settings?.preferences || {}), setupScreenSeen: false } };
 
   // --- The wizard installs what the backend recommended, not a fixed model --
   // preflight decides from CPU/RAM (2B on 8 GB, 4B on 12 GB and above). The
