@@ -5175,3 +5175,9 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
   `aria-hidden` nên hình vẫn là trang trí, còn nút vẫn tới được bằng bàn phím.
 - **Một listener uỷ nhiệm, không phải listener trên từng nút.** Game vẽ lại toàn màn hình sau
   mỗi câu trả lời, nên listener gắn vào nút sẽ biến mất ở câu sau.
+- **Nút đóng phải lớn theo màn hình, không theo thói quen.** 40×40 đúng ở 1366 nhưng ở
+  2560×1440 đọc là "nhỏ so với màn hình"; từ 1500 px trở lên nút là 48×48. Đây là lần thứ
+  hai một kích thước cố định hoá ra là kích thước *của một màn hình cụ thể* (#308 là lần đầu).
+- **Media emulation của WebView2 không đổi được `hover`/`pointer`.** `(hover:none)` vẫn
+  `false` sau `Emulation.setEmulatedMedia`, nên nhánh cảm ứng **không thể** chứng minh bằng
+  CDP trên máy này — phải nói rõ là "chưa đo", không được coi CSS đúng là đã kiểm.

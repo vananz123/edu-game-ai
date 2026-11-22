@@ -1253,6 +1253,9 @@ html[data-theme="dark"] .lib-empty h3{color:#e6ebf5}
 .art-zoom-close{position:absolute;top:16px;right:18px;width:40px;height:40px;border:1px solid #ffffff3d;border-radius:12px;
   background:#111827b3;color:#fff;font-size:24px;line-height:1;cursor:pointer}
 .art-zoom-close:hover{background:#111827e6}
+/* Nút đóng 40x40 đọc là "nhỏ so với màn hình" ở 2560x1440 (ảnh chụp + vision model);
+   từ 1500px trở lên cho nó 48x48 để vẫn dễ bấm bằng chuột và bằng tay trên màn cảm ứng. */
+@media (min-width:1500px){.art-zoom-close{width:48px;height:48px;font-size:28px;border-radius:14px}}
 @media (max-width:780px){.art-zoom-layer{padding:12px}.art-zoom-figure{width:min(96vw,calc(88vh * 1.6))}}
 @media (prefers-reduced-motion:reduce){.art-zoom-layer{animation:none}}
 html[data-theme="dark"] .art-zoom-figure{background:#111733}
