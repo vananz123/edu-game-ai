@@ -291,7 +291,12 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
     const canvasNow = sd().querySelector('[data-sd-canvas]');
     const wrapBox = stageWrap.getBoundingClientRect();
     const trueBox = canvasNow.getBoundingClientRect();
-    const expected = Math.round(Math.min(wrapBox.width - 12, (wrapBox.height - 12) * 1.6));
+    /* #303: the promise is "the picture fills the work area", so the gate measures the
+       SAME thing the code does — the area inside the mat padding — not a guessed 12px. */
+    const wrapStyle = getComputedStyle(stageWrap);
+    const padX = (parseFloat(wrapStyle.paddingLeft) || 0) + (parseFloat(wrapStyle.paddingRight) || 0);
+    const padY = (parseFloat(wrapStyle.paddingTop) || 0) + (parseFloat(wrapStyle.paddingBottom) || 0);
+    const expected = Math.round(Math.min(wrapBox.width - padX - 2, (wrapBox.height - padY - 2) * 1.6));
     out.canvasFillsStage = Math.abs(trueBox.width - expected) <= 14;
     out.canvasFillsNote = Math.round(trueBox.width) + '/' + expected + ' (' + Math.round(wrapBox.width) + 'x' + Math.round(wrapBox.height) + ')';
     out.noScrollAt100 = stageWrap.scrollHeight <= stageWrap.clientHeight + 2;

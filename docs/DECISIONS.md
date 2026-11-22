@@ -5028,3 +5028,25 @@ nhưng gốc vẫn còn: `row.parentElement.querySelector(...)`.
 - **Bản vá do mình viết cũng phải bị đo**: xoá `const scope` mà còn một chỗ dùng đã tạo
   `ReferenceError: scope is not defined`; chỉ lộ ra khi đọc DOM sau khi bấm, không lộ ra khi
   `tsc` xanh. Một lần nữa: `tsc` xanh không chứng minh nút bấm chạy.
+
+## #303 — giáo viên mở trang sửa bài để sửa CÂU HỎI, nên câu hỏi phải ở màn hình đầu
+
+Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và chỉnh ảnh".
+
+**Quyết định**
+- **Đo trước, thiết kế sau.** Ảnh 1366×768 cho thấy trang sửa bài dành trọn màn hình đầu cho 7 ô
+  cài đặt, không câu hỏi nào; xưởng cảnh có 3 nhóm cuộn chồng nhau và cột phải 7 thẻ rời. Đó là
+  danh sách việc, không phải "cảm giác xấu".
+- **Cài đặt là thứ GẤP, câu hỏi là thứ MỞ.** "Thông tin trò chơi" thành một thẻ `<details>` gấp
+  sẵn — nhưng các ô **vẫn nằm trong DOM**, nên mọi đường đọc/ghi và mọi cổng UI không phải sửa
+  một dòng nào. Gấp bằng CSS/`hidden` thì khác: đó là bỏ khỏi luồng dữ liệu, và đã có lần phải trả
+  giá (#300).
+- **Một cột phải là một BỐ CỤC, không phải một chồng thẻ.** Ba nhóm ở cột trái mỗi nhóm tự cuộn
+  trong chiều cao riêng: cùng thấy, cùng bấm được, không nhóm nào đẩy nhóm khác ra khỏi màn hình.
+- **"Xong" phải nói nó LƯU.** Nhãn đổi thành "Xong — lưu cảnh". Một nút chính không nói hậu quả là
+  một câu hỏi giáo viên phải hỏi.
+- **Một phép đo phải trừ đúng phần NÓ ĐO ĐƯỢC.** `measureBase()` trừ padding đọc từ
+  `getComputedStyle`, không trừ 12px đoán: đoán thiếu 2px sinh thanh cuộn ngang ở 100%, tức chính
+  tính năng "vừa khung" tự phá mình. Cổng đo lại cùng đại lượng ấy (bài học #274/#271).
+- **Nền tối kiểm bằng `getComputedStyle`, không bằng mắt.** Mô hình thị giác nói "header vẫn
+  trắng"; số đo nói rgba(21,26,43,.92). Số đo thắng.

@@ -67,20 +67,22 @@ function openSceneDesigner(options) {
     '<div class="sd-head">' +
       '<div class="sd-title"><strong>Xưởng cảnh</strong>' +
         '<span>Kéo hình trên khung để đặt chỗ · chọn một hình để đổi cỡ và góc · kéo một hình mẫu từ cột trái vào khung để thêm vật.</span></div>' +
+      /* #303: the two things a teacher needs to know are pinned in the header, not
+         left to be discovered: what is selected, and that "Xong" is the save. */ 
       '<div class="sd-head-actions">' +
         '<button type="button" class="btn btn-secondary btn-small" data-sd-undo title="Hoàn tác (Ctrl+Z)">↶ Hoàn tác</button>' +
         '<button type="button" class="btn btn-secondary btn-small" data-sd-redo title="Làm lại (Ctrl+Shift+Z)">↷ Làm lại</button>' +
         '<button type="button" class="btn btn-secondary btn-small" data-sd-cancel>Huỷ</button>' +
-        '<button type="button" class="btn btn-primary btn-small" data-sd-done>Xong</button>' +
+        '<button type="button" class="btn btn-primary btn-small" data-sd-done>Xong — lưu cảnh</button>' +
       '</div>' +
     '</div>' +
     '<div class="sd-body">' +
       '<div class="sd-side sd-side-left">' +
-        '<div class="sd-group"><span class="sd-group-title">Mẫu bố cục</span>' +
+        '<div class="sd-group sd-group-templates"><span class="sd-group-title">Bố cục <em>4</em></span>' +
           '<div class="sd-templates" data-sd-templates></div></div>' +
-        '<div class="sd-group"><span class="sd-group-title">Nền — cảnh diễn ra ở đâu</span>' +
+        '<div class="sd-group sd-group-places"><span class="sd-group-title">Nơi diễn ra <em>12</em></span>' +
           '<div class="sd-places" data-sd-places></div></div>' +
-        '<div class="sd-group"><span class="sd-group-title">Hình mẫu — kéo vào khung</span>' +
+        '<div class="sd-group sd-group-icons"><span class="sd-group-title">Hình mẫu — kéo vào khung <em>47</em></span>' +
           '<div class="sd-icons" data-sd-icons></div></div>' +
       '</div>' +
       '<div class="sd-stage">' +
@@ -102,7 +104,7 @@ function openSceneDesigner(options) {
         '<div class="sd-status" data-sd-status></div>' +
       '</div>' +
       '<div class="sd-side sd-side-right">' +
-        '<div class="sd-group"><span class="sd-group-title">Hình đang chọn</span>' +
+        '<div class="sd-group sd-group-selected"><span class="sd-group-title">Đang chọn</span>' +
           '<strong class="sd-selected" data-sd-name>Hình chính</strong></div>' +
         '<div class="sd-group" data-sd-icon-row><span class="sd-group-title">Hình</span>' +
           '<select data-sd-icon></select></div>' +
@@ -112,11 +114,11 @@ function openSceneDesigner(options) {
           '<input type="range" min="50" max="160" step="5" value="100" data-sd-scale></div>' +
         '<div class="sd-group"><span class="sd-group-title">Góc xoay <em data-sd-rotate-value>0°</em></span>' +
           '<input type="range" min="-180" max="180" step="5" value="0" data-sd-rotate></div>' +
-        '<div class="sd-group">' +
+        '<div class="sd-group sd-group-actions"><span class="sd-group-title">Thao tác</span>' +
           '<button type="button" class="btn btn-secondary btn-small" data-sd-reset-one>Trả hình này về chỗ cũ</button>' +
-          '<button type="button" class="btn btn-secondary btn-small" data-sd-remove>Xoá hình này</button>' +
+          '<button type="button" class="btn btn-secondary btn-small is-danger" data-sd-remove>Xoá hình này</button>' +
+          '<button type="button" class="btn btn-secondary btn-small" data-sd-reset-all>Xoá hết chỉnh tay</button>' +
         '</div>' +
-        '<div class="sd-group"><button type="button" class="btn btn-secondary btn-small" data-sd-reset-all>Xoá hết chỉnh tay</button></div>' +
       '</div>' +
     '</div>';
 
@@ -511,9 +513,17 @@ function openSceneDesigner(options) {
   function measureBase() {
     const wrap = root.querySelector('[data-sd-wrap]') as HTMLElement | null;
     if (!wrap) return;
-    const width = Math.max(180, wrap.clientWidth - 12);
-    const height = Math.max(120, wrap.clientHeight - 12);
+    /* #303: the mat has real padding, so the picture must be measured against the
+       area INSIDE it. Subtracting a guessed 12px left the canvas one or two pixels
+       too wide and the stage grew a scrollbar at 100% — the very thing the fit is
+       supposed to remove. */
+    const style = getComputedStyle(wrap);
+    const padX = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
+    const padY = (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
+    const width = Math.max(180, wrap.clientWidth - padX - 2);
+    const height = Math.max(120, wrap.clientHeight - padY - 2);
     baseWidth = Math.round(Math.min(width, height * 1.6));
+    canvas.setAttribute('data-sd-fit', String(baseWidth));
     paintCanvasSize();
   }
 

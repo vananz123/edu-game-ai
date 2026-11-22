@@ -844,3 +844,183 @@ html.is-scene-designer,html.is-scene-designer body{overflow:hidden}
 .sd-rotator{position:absolute;transform:translate(-50%,-50%);width:22px;height:22px;border-radius:50%;border:1px solid #2f5fd0;background:#fff;color:#2f5fd0;font-size:12px;line-height:20px;text-align:center;cursor:grab;box-shadow:0 2px 6px rgba(15,20,36,.18);z-index:3;padding:0}
 .sd-rotator:hover{background:#eaf0fd}
 .sd-rotator:active{cursor:grabbing}
+
+/* ==========================================================================
+   #303 — Giao diện chỉnh sửa trò chơi & xưởng cảnh, thiết kế lại.
+   Mục tiêu, theo đúng ba điều giáo viên nói: (1) câu hỏi phải nhìn thấy ngay,
+   không bị đẩy xuống dưới 7 ô cài đặt; (2) mỗi câu là MỘT thẻ có đầu thẻ rõ
+   ràng, ảnh nằm cạnh nội dung chứ không chen vào giữa; (3) trong xưởng cảnh,
+   cột trái đọc được, khung vẽ là trung tâm, và "Xong" nói rõ nó LƯU.
+   Chỉ đổi trình bày: mọi selector mà cổng UI đo vẫn giữ nguyên.
+   ========================================================================== */
+
+/* --- Trang chỉnh sửa: một dải đầu trang, không phải hai --- */
+.editor-page-head{gap:12px;padding:10px 20px;border-bottom:0;box-shadow:none;background:transparent}
+.editor-page-title h1{font-size:18px;letter-spacing:-.3px}
+.editor-page-title .small{margin-top:1px;font-size:11.5px}
+.editor-save-bar{top:0;gap:10px;padding:9px 20px;border:1px solid var(--line);border-radius:12px;margin:0 0 14px;
+  background:#fff;box-shadow:0 6px 18px #1f293708}
+.editor-save-hint{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:#7b8698}
+.editor-save-hint svg{width:13px;height:13px;flex:0 0 auto}
+.editor-save-bar[data-dirty="1"] .editor-save-hint{color:#b45309;font-weight:700}
+.editor-save-actions .btn{border-radius:9px}
+.editor-page-body{padding:0 20px 40px;max-width:1200px;gap:14px}
+
+/* --- Thẻ cài đặt: lưới hai cột, gọn, để câu hỏi lên gần màn hình đầu --- */
+.editor-card{border:1px solid var(--line);border-radius:14px;background:#fff;padding:14px 16px 16px;box-shadow:0 1px 2px #1f293706}
+.editor-card-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px;padding-bottom:9px;border-bottom:1px dashed var(--line)}
+.editor-card-head h2{margin:0;font-size:14px;font-weight:800;color:var(--text);letter-spacing:-.1px}
+.editor-card-note{font-size:11.5px;color:var(--muted)}
+.editor-field-grid .field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;margin:0 0 10px}
+.editor-field-grid .field-row .field{margin:0}
+.editor-field-grid>.field{margin:0 0 10px}
+.editor-field-grid .field>label{font-size:11.5px;font-weight:750;color:#3f4859;letter-spacing:.1px}
+.editor-field-grid .field-hint{margin:4px 0 0;font-size:11px;line-height:1.5;color:#7b8698;max-width:78ch}
+.editor-field-grid input,.editor-field-grid select,.editor-field-grid textarea{padding:8px 10px;border-radius:8px}
+
+/* --- Đầu mục câu hỏi: dính dưới dải lưu để luôn thấy nút thêm câu --- */
+.section-head{margin:0}
+.editor-questions-head{position:sticky;top:56px;z-index:12;display:flex;align-items:center;justify-content:space-between;
+  gap:10px;flex-wrap:wrap;padding:9px 12px;margin:0 0 12px;border:1px solid var(--line);border-radius:12px;
+  background:#fffffff2;backdrop-filter:blur(6px);box-shadow:0 4px 14px #1f29370a}
+.editor-questions-head h3{margin:0;font-size:13.5px;font-weight:800;display:flex;align-items:center;gap:8px}
+.editor-questions-head .tag{background:#eef0f9;color:#3f4859}
+
+/* --- Một câu hỏi là một thẻ: đầu thẻ có số thứ tự, nội dung, ảnh --- */
+.editor-question{padding:0;margin-bottom:14px;border-radius:14px;background:#fff;overflow:hidden;
+  box-shadow:0 1px 2px #1f293706;transition:box-shadow .15s ease,border-color .15s ease}
+.editor-question:focus-within{border-color:#b9bdf0;box-shadow:0 0 0 3px #6366f11a}
+.editor-question-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0;
+  padding:9px 12px;border-bottom:1px solid var(--line);background:#fafbfe}
+.editor-question-head strong{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:800;
+  letter-spacing:.4px;text-transform:uppercase;color:#5f6a7d}
+.editor-question-head>div{display:flex;align-items:center;gap:6px}
+.editor-question-head .btn{padding:4px 8px;border-radius:7px}
+.editor-question>textarea,.editor-question>.editor-options,.editor-question>.correct-select,
+.editor-question>.editor-item-assets,.editor-question>.text-answer-fields,
+.editor-question>.scenario-question-fields{margin-left:12px;margin-right:12px}
+.editor-question textarea[data-field="prompt"]{font-size:14px;font-weight:650;line-height:1.45;
+  padding:10px 11px;margin-top:11px;margin-bottom:8px;border-radius:9px}
+.editor-options{gap:8px;margin:0 0 8px}
+.editor-option{gap:8px}
+.editor-option input{padding:8px 10px;border-radius:8px}
+.editor-option .correct-mark{flex:0 0 auto}
+.add-option{margin:0 12px 10px}
+.correct-select{margin:2px 0 6px;padding:7px 10px;border:1px dashed var(--line);border-radius:9px;background:#fafbfe}
+.editor-item-assets{margin:0 12px 11px;padding:8px 9px;border:1px solid var(--line);border-radius:11px;background:#f7f8fc}
+/* Ảnh ở CỘT TRÁI, mọi nút ở cột phải: mắt đọc nội dung câu trước, ảnh sau. */
+.editor-item-art{display:grid;grid-template-columns:auto 1fr;align-items:start;margin:0;padding:0;border:0;background:transparent;gap:12px}
+.editor-art-thumb{width:148px;flex:0 0 148px;border-radius:10px;box-shadow:0 2px 8px #1f293714}
+.editor-art-controls{gap:7px}
+.editor-art-badge{font-size:11.5px;color:#3f4859}
+.editor-art-buttons{gap:6px}
+.editor-art-buttons select{max-width:100%;border-radius:8px}
+.editor-art-hint{font-size:11px;color:#7b8698}
+
+/* --- Xưởng cảnh: đầu trang rõ, hai cột đọc được, khung vẽ là trung tâm --- */
+.scene-designer{background:radial-gradient(1200px 600px at 50% -10%,#f2f4ff 0,#e9ecf6 60%,#e4e7f1 100%)}
+.sd-head{gap:16px;padding:11px 18px;border-bottom:1px solid #d9dde9;background:#ffffffeb;backdrop-filter:blur(8px)}
+.sd-title{min-width:0}
+.sd-title strong{font-size:16px;letter-spacing:-.2px}
+.sd-title span{display:block;margin-top:2px;font-size:11.5px;line-height:1.45;color:#6b7688;max-width:78ch}
+.sd-head-actions{gap:7px}
+.sd-head-actions .btn{border-radius:9px}
+.sd-head-actions [data-sd-done]{padding:7px 14px;font-weight:750}
+.sd-body{gap:12px;padding:12px}
+.sd-side{width:262px;padding:0;gap:10px;background:transparent;overflow:hidden}
+.sd-group{border:1px solid #dfe3ee;border-radius:13px;background:#fff;padding:10px 11px;gap:8px;
+  box-shadow:0 1px 2px #1f293706;min-height:0}
+.sd-group-title{display:flex;align-items:center;justify-content:space-between;gap:6px;
+  font-size:11px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;color:#5f6a7d}
+.sd-group-title em{font-style:normal;font-size:10px;font-weight:800;color:#8b93a7;background:#f2f4fa;
+  border-radius:999px;padding:1px 6px}
+/* Cột trái: ba nhóm, mỗi nhóm tự cuộn — danh sách dài không đẩy nhóm khác ra khỏi màn hình. */
+.sd-side-left .sd-group{display:flex;flex-direction:column}
+.sd-group-templates{flex:0 0 auto}
+.sd-group-places{flex:0 1 auto}
+.sd-group-icons{flex:1 1 auto}
+.sd-places{grid-template-columns:1fr 1fr;max-height:none;overflow:auto;gap:7px;padding-right:2px}
+.sd-group-icons .sd-icons{overflow:auto;padding-right:2px;grid-template-columns:repeat(4,1fr);gap:5px}
+.sd-icons{gap:5px}
+.sd-icon{width:100%;aspect-ratio:1;border-radius:9px}
+.sd-place{border-radius:10px;padding:4px}
+.sd-place-label{font-size:10px}
+.sd-templates{grid-template-columns:1fr 1fr;gap:7px}
+.sd-template{border-radius:10px;padding:5px}
+
+/* Khung vẽ: nền "bàn làm việc" chấm nhẹ, ảnh là tờ giấy có bóng. */
+.sd-stage{padding:0;gap:0}
+.sd-canvas-wrap{padding:14px;border-radius:14px;
+  background-color:#eef1f8;
+  background-image:radial-gradient(#cfd5e6 1px,transparent 1px);
+  background-size:14px 14px}
+.sd-canvas{border-radius:12px;box-shadow:0 14px 34px #1f293726,0 0 0 1px #ffffff80 inset}
+.sd-zoom{position:sticky;bottom:0;align-self:center;margin:0 0 6px;gap:4px;padding:5px 7px;
+  border:1px solid #d9dde9;border-radius:999px;background:#ffffffef;box-shadow:0 6px 18px #1f293714;z-index:5}
+.sd-zoom .btn{padding:3px 8px;border-radius:999px}
+.sd-zoom-value{min-width:44px;text-align:center;font-weight:800;font-size:12px}
+.sd-status{font-size:11px;color:#6b7688;text-align:center;min-height:0}
+
+/* Cột phải: một thẻ "đang chọn", một thẻ "thao tác" — không phải bảy thẻ rời. */
+.sd-side-right{gap:10px}
+.sd-group-selected .sd-selected{font-size:13.5px}
+.sd-side-right input[type="range"]{width:100%;margin:2px 0 0}
+.sd-group-actions{display:flex;flex-direction:column;gap:6px}
+.sd-group-actions .btn{width:100%;justify-content:center}
+.btn.is-danger{color:#b91c1c;border-color:#f0c4c4;background:#fff5f5}
+.btn.is-danger:hover{background:#ffe9e9;border-color:#e6a8a8}
+.btn.is-danger:disabled{color:#b9bfcd;border-color:#e6e8f0;background:#f7f8fc}
+
+@media (max-width:1100px){
+  .sd-side{width:224px}
+  .editor-art-thumb{width:120px;flex-basis:120px}
+}
+@media (max-width:900px){
+  .sd-body{flex-direction:column}
+  .sd-side{width:100%}
+  .sd-group-icons{flex:0 0 auto}
+  .sd-group-icons .sd-icons{max-height:150px}
+  .editor-field-grid .field-row{grid-template-columns:1fr}
+}
+
+/* #303: cài đặt trò chơi là một thẻ GẤP. Giáo viên mở bài ra để sửa CÂU HỎI, nên
+   câu hỏi phải nằm trong màn hình đầu; các ô cài đặt vẫn còn nguyên trong DOM
+   (giá trị đọc/ghi như cũ) và mở ra bằng một cú bấm. */
+.editor-setup{padding:0;overflow:hidden}
+.editor-setup>summary{list-style:none;cursor:pointer;margin:0;padding:12px 16px;border-bottom:0}
+.editor-setup>summary::-webkit-details-marker{display:none}
+.editor-setup>summary::after{content:'▾';margin-left:auto;font-size:12px;color:#8b93a7;transition:transform .15s ease}
+.editor-setup[open]>summary{border-bottom:1px dashed var(--line)}
+.editor-setup[open]>summary::after{transform:rotate(180deg)}
+.editor-setup .editor-card-toggle{font-size:11px;font-weight:750;color:#6366f1;background:#eef0ff;border-radius:999px;padding:2px 8px}
+.editor-setup[open] .editor-card-toggle{display:none}
+.editor-field-grid{padding:12px 16px 14px}
+
+/* #303: ba nhóm ở cột trái phải CÙNG nằm trong màn hình — mỗi nhóm tự cuộn, không
+   nhóm nào đẩy nhóm khác xuống dưới đáy. */
+.sd-group-places>.sd-places{max-height:196px}
+.sd-group-icons .sd-icons{max-height:176px}
+.sd-places::-webkit-scrollbar,.sd-icons::-webkit-scrollbar,.sd-places,.sd-icons{scrollbar-width:thin}
+
+/* #303: giao diện mới dùng thang --surface-* để nền tối không thành một tấm trắng
+   giữa màn hình (bài học #181: một lớp component tự chọn hex là một lớp lật sai). */
+html[data-theme="dark"] .editor-card,
+html[data-theme="dark"] .editor-question,
+html[data-theme="dark"] .editor-save-bar,
+html[data-theme="dark"] .editor-questions-head,
+html[data-theme="dark"] .sd-group,
+html[data-theme="dark"] .sd-zoom{background:var(--surface-1);border-color:var(--line)}
+html[data-theme="dark"] .editor-question-head,
+html[data-theme="dark"] .editor-item-assets,
+html[data-theme="dark"] .correct-select{background:var(--surface-2);border-color:var(--line)}
+html[data-theme="dark"] .scene-designer{background:#0f1320}
+html[data-theme="dark"] .sd-head{background:#151a2beb;border-bottom-color:var(--line)}
+html[data-theme="dark"] .sd-canvas-wrap{background-color:#131829;background-image:radial-gradient(#2a3350 1px,transparent 1px)}
+html[data-theme="dark"] .sd-title span,
+html[data-theme="dark"] .sd-group-title,
+html[data-theme="dark"] .sd-status,
+html[data-theme="dark"] .editor-card-note,
+html[data-theme="dark"] .editor-save-hint,
+html[data-theme="dark"] .editor-field-grid .field-hint{color:#94a3b8}
+html[data-theme="dark"] .btn.is-danger{background:#2a1618;border-color:#5c2a2a;color:#fca5a5}
+html[data-theme="dark"] .editor-setup .editor-card-toggle{background:#1e2440;color:#a5b4fc}
