@@ -5070,3 +5070,19 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
   đúng việc nó làm**. Giữ chữ, chỉ gấp chỗ khác.
 - **Giảm độ phức tạp phải ĐO được**: 900 → 406 ký tự và 4 → 0 dòng gợi ý ở màn hình đầu. Nếu
   không đo trước/sau thì "gọn hơn" chỉ là cảm giác.
+
+## #305 — "Cài đặt AI" là màn hình của LẦN ĐẦU, không phải một tab thường trực
+
+- **Một tab không còn việc gì để làm thì không được đứng đầu trang.** Khi AI đã chạy được
+  (local có model + runtime, hoặc một nhà cung cấp cloud đã `testAiProvider` thành công),
+  tab "Nhà cung cấp AI" ẩn khỏi dải tab; khi chưa xong nó vẫn đứng đầu.
+- **Luật phải là hàm THUẦN của một boolean** (`settingsTabsFor(aiConfigured)`): nhờ vậy cổng
+  kiểm ghim được cả hai kết cục trên một máy chưa cấu hình AI. Một luật nằm rải trong markup
+  thì chỉ kiểm được đúng trạng thái của cái máy đang chạy cổng.
+- **"Đã xong" là trạng thái ĐO ĐƯỢC, không phải cờ người dùng tự đặt**: `status === 'ready'`
+  sau một lần kiểm tra kết nối, nên một khoá bị thu hồi làm tab tự hiện lại — không có đường cụt.
+- **Ẩn không phải xoá** (#159): panel, các thẻ `[data-ai-provider]` và nút "Cài đặt lại AI từ
+  đầu" vẫn ở trong DOM; nếu không, `saveSettings` sẽ lưu thiếu trường.
+- **Ẩn thì phải để lại một cửa**: dòng chú thích + "Mở lại" mở tab trong **phiên hiện tại**
+  (`state.settingsAiReveal`), không ghi vào cài đặt — lần mở app sau lại im lặng.
+- **Tab đang mở bị ẩn thì phải rơi về tab còn hiện**, không được để màn hình trống.

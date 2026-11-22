@@ -494,6 +494,16 @@ function wireSettingsSections() {
   wireSettingsTabStrip('[data-ai-tab]', '[data-ai-tabpanel]', 'aiTab', tabId => {
     state.settingsAiTab = tabId;
   });
+  /* #305: once AI is set up the tab is hidden. This is the one deliberate way back in,
+     and it lasts for this session only: opening the tab then closing the page restores
+     the default, so a later visit is quiet again. */
+  document.querySelectorAll('[data-ai-reveal]').forEach(button => {
+    button.addEventListener('click', () => {
+      state.settingsAiReveal = true;
+      state.settingsSection = 'ai';
+      render();
+    });
+  });
 }
 
 /** Called by the controller when the settings page is (re)wired. */

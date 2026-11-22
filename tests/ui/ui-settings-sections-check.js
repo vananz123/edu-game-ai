@@ -81,9 +81,28 @@ const SCENARIO = String.raw`(async () => {
   navigate('settings');
   await sleep(800);
 
+  // #305: once AI is really set up the AI tab is hidden on purpose, so the rest of this
+  // gate opens it the way a teacher can (the strip note -> "Mo lai") before measuring.
+  // On a machine where AI is not configured the tab is already there and nothing moves.
+  const aiTabMissing = !tab('ai');
+  const aiRevealSeen = Boolean(document.querySelector('[data-ai-reveal]'));
+  if (aiTabMissing) {
+    const revealBtn = document.querySelector('[data-ai-reveal]');
+    if (revealBtn) { revealBtn.click(); await sleep(400); }
+  }
+
   const out = {};
   const tabs = [...document.querySelectorAll('[data-settings-section]')];
   out.ids = tabs.map(node => node.dataset.settingsSection);
+  out.aiRule = {
+    withAi: settingsTabsFor(true).map(entry => entry.id),
+    withoutAi: settingsTabsFor(false).map(entry => entry.id)
+  };
+  out.aiTabWasHidden = aiTabMissing;
+  out.aiRevealSeen = aiRevealSeen;
+  out.aiPanelStaysInDom = Boolean(document.querySelector('[data-settings-panel="ai"]'));
+  out.aiProviderCardsStay = document.querySelectorAll('[data-ai-provider]').length;
+  out.aiSetupButtonStays = Boolean(document.querySelector('#openSetupWizardBtn'));
   out.tabTexts = tabs.map(node => node.textContent.replace(/\s+/g, ' ').trim());
   out.defaultVisible = visiblePanels();
   out.defaultSelected = selectedTabs();
@@ -405,6 +424,19 @@ const SCENARIO = String.raw`(async () => {
     out.aboutLeftBehind.visible.join(',') === 'diagnostics' && out.aboutLeftBehind.aboutNodes > 15
       && out.aboutLeftBehind.badgeText.length > 0,
     JSON.stringify(out.aboutLeftBehind));
+
+  // #305 — "Cai dat AI" is the first-run screen, not a permanent tab. The rule is a pure
+  // function of one boolean, so this gate pins BOTH outcomes on an unconfigured machine.
+  check('the AI tab is hidden once AI is set up, and first when it is not',
+    !out.aiRule.withAi.includes('ai') && out.aiRule.withoutAi[0] === 'ai'
+      && out.aiRule.withoutAi.join(',') === 'ai,teaching,interface,tasks,diagnostics,about',
+    JSON.stringify(out.aiRule));
+  check('hiding the AI tab keeps the panel and the provider inputs in the DOM',
+    out.aiPanelStaysInDom === true && out.aiProviderCardsStay >= 2 && out.aiSetupButtonStays === true,
+    JSON.stringify({ panel: out.aiPanelStaysInDom, cards: out.aiProviderCardsStay, setupBtn: out.aiSetupButtonStays }));
+  check('a hidden AI tab always leaves a visible way back in',
+    out.aiTabWasHidden === false || out.aiRevealSeen === true,
+    JSON.stringify({ hidden: out.aiTabWasHidden, reveal: out.aiRevealSeen }));
 
   console.log(failures ? `\n${failures} check(s) failed` : '\nAll settings tab checks passed');
   cdp.ws.close();

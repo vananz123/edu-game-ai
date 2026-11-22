@@ -77,6 +77,17 @@ const SETTINGS_TABS = [
 
 const SETTINGS_SECTION_IDS = SETTINGS_TABS.map(tab => tab.id);
 
+/* #305: "Cài đặt AI" is a FIRST-RUN screen, not a permanent tab. Once a provider is really
+   ready (the local model+runtime installed, or a cloud key that passed `testAiProvider`),
+   the teacher never needs to see the panel again and it only adds a tab they cannot use.
+   The rule is a pure function of one boolean so the gate can pin both outcomes without
+   having a configured machine: `settingsTabsFor(true)` / `settingsTabsFor(false)`.
+   Nothing is removed from the DOM — `readAiProviderPatches` still walks `[data-ai-provider]`
+   and `openSetupWizardBtn` still exists, which is why hiding must never mean deleting (#159). */
+function settingsTabsFor(aiConfigured) {
+  return aiConfigured === true ? SETTINGS_TABS.filter(tab => tab.id !== 'ai') : SETTINGS_TABS;
+}
+
 /** #158: the AI panel holds two tabs; #159 keeps them as a nested strip inside its panel. */
 const SETTINGS_AI_TABS = [
   { id: 'local', icon: 'monitor', tab: 'AI local' },
@@ -182,7 +193,16 @@ function renderSettings() {
   // #159: a tab is always open, so `''` (the old "everything collapsed" accordion state)
   // is gone — an unrecognised value falls back to the first tab and every re-render after
   // a save or a model change keeps the teacher's choice.
-  const openSection = SETTINGS_SECTION_IDS.includes(state.settingsSection) ? state.settingsSection : SETTINGS_SECTION_IDS[0];
+  /* #305: "AI đã cài xong" = AI local đã có model + runtime, hoặc một nhà cung cấp cloud đã
+     kiểm tra kết nối thành công. Chỉ khi đó tab Cài đặt AI mới ẩn — một khoá sai làm trạng
+     thái rơi khỏi `ready`, tab tự hiện lại, nên không có đường cụt.
+     `state.settingsAiReveal` is the deliberate way back inside one session (Chẩn đoán). */
+  const aiConfigured = (Boolean(selectedLocalModel?.installed && machine.runtimeInstalled)
+    || providers.some(provider => provider.id !== 'local' && provider.status === 'ready'))
+    && state.settingsAiReveal !== true;
+  const sectionTabsList = settingsTabsFor(aiConfigured);
+  const sectionTabIds = sectionTabsList.map(tab => tab.id);
+  const openSection = sectionTabIds.includes(state.settingsSection) ? state.settingsSection : sectionTabIds[0];
   // #158: an unrecognised tab falls back to local, same policy as the section.
   const aiTab = SETTINGS_AI_TABS.some(tab => tab.id === state.settingsAiTab) ? state.settingsAiTab : 'local';
   const localReady = Boolean(selectedLocalModel?.installed && machine.runtimeInstalled);
@@ -214,7 +234,7 @@ function renderSettings() {
     // rather than a string computed here — a push then updates the tab without a re-render.
     about: '<span data-about-tab-chip class="shrink-0"></span>'
   };
-  const sectionTabs = SETTINGS_TABS.map(tab => ({ ...tab, chip: sectionTabChips[tab.id] || '' }));
+  const sectionTabs = sectionTabsList.map(tab => ({ ...tab, chip: sectionTabChips[tab.id] || '' }));
 
   return `<!-- Header -->
   <div class="page-head">
@@ -225,6 +245,7 @@ function renderSettings() {
     <div class="flex flex-col gap-3 min-w-0">
 
       ${settingsTabStripHtml({ tabs: sectionTabs, selected: openSection, attr: 'settings-section', idPrefix: 'settingsTabBtn', panelPrefix: 'settingsPanel', ariaLabel: 'Các mục cài đặt', cls: '' })}
+      ${aiConfigured ? `<div class="${hintCls} flex items-center gap-2 flex-wrap" data-ai-hidden-note>AI đã cấu hình xong nên phần cài đặt AI được ẩn. <button type="button" class="text-link" data-ai-reveal title="Mở lại tab Cài đặt AI trong phiên này">Mở lại</button></div>` : ''}
 
       <!-- ═══ 1. AI: MỘT TAB, HAI TAB CON (local + cloud) ═══ -->
       <section class="${sectionCls} ${openSection === 'ai' ? '' : 'hidden'}" role="tabpanel" aria-labelledby="settingsTabBtn-ai" data-ai-providers data-settings-card="ai" data-settings-panel="ai" id="settingsPanel-ai">
