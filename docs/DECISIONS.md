@@ -4992,3 +4992,20 @@ Giáo viên báo "bấm Xong bị lỗi" và "thiếu thu phóng".
   Vì vậy cột giữa tách làm hai: vùng cuộn (canvas) và thanh đứng yên (zoom + trạng thái).
 - **Một thao tác lỗi phải nói ra.** `opts.onClose` được bọc `try/catch` + toast: màn hình đã đóng thì
   cách báo lỗi trung thực duy nhất là nói cho giáo viên biết, không phải để app nửa sống nửa chết.
+
+## #301 — khung vẽ phải PHỦ KÍN chỗ làm việc, và "không lưu được" phải được đo bằng dữ liệu
+
+Giáo viên báo "thao tác không full ảnh, không lưu được".
+
+**Quyết định**
+- **Cỡ ảnh là số ĐO, không phải số viết tay.** `max-width: 860px` cố định làm ảnh nhỏ trong một cột
+  giữa rộng hơn; đúng cỡ là `min(stageW−12, (stageH−12)×1.6)` cho khung 16:10, đo lại bằng
+  `ResizeObserver`. Zoom ở 100% nghĩa là **vừa khít chỗ làm việc**, không phải "một cỡ cố định".
+- **Zoom vẫn là hệ số trên cỡ nền** — nếu đo lại cỡ nền mà quên chia hệ số, đổi cỡ cửa sổ sẽ làm mất
+  mức zoom giáo viên đang dùng.
+- **"Không lưu được" là một lời khẳng định về DỮ LIỆU, nên phải kiểm bằng dữ liệu**: mở xưởng, đổi nền,
+  thêm vật, Xong, Lưu, rồi đọc lại `getLibrary` và tìm đúng `extras` trong bản ghi. Một ảnh chụp màn
+  hình đẹp không chứng minh được điều đó.
+- **Đo trước, sửa sau.** Sau khi đo, đường lưu–đọc vốn đã đúng trên bản hiện tại; hai lỗi #300 (xưởng
+  mở chồng + ô lưu bị bỏ im lặng) chính là thứ khiến giáo viên thấy "không lưu được". Không thêm
+  cơ chế lưu thứ hai để "chữa" một triệu chứng đã hết.

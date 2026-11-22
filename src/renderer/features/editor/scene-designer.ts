@@ -51,6 +51,10 @@ function openSceneDesigner(options) {
   let historyAt = 0;
   /* #299: the view zoom is a VIEW setting — it is never written into the scene. */
   let zoom = 1;
+  /* #301: the size the scene is drawn at when zoom is 100%. It is measured from the
+     stage, so the picture FILLS the work area instead of floating in the middle of
+     it inside a fixed 860px box. */
+  let baseWidth = 0;
   // #297: every change is written through immediately, so nothing a teacher did
   // can be lost by an app that closes. "Huỷ" restores this exact snapshot.
   const originalJson = JSON.stringify(initial);
@@ -499,14 +503,34 @@ function openSceneDesigner(options) {
     document.addEventListener('pointerup', onUp);
   }
 
+  /**
+   * #301: the biggest 16:10 rectangle that fits the stage. Measured, not guessed:
+   * the stage is 3 columns wide and one window tall, so the binding limit can be
+   * either side and hard-coding it left the picture small with dead space around it.
+   */
+  function measureBase() {
+    const wrap = root.querySelector('[data-sd-wrap]') as HTMLElement | null;
+    if (!wrap) return;
+    const width = Math.max(180, wrap.clientWidth - 12);
+    const height = Math.max(120, wrap.clientHeight - 12);
+    baseWidth = Math.round(Math.min(width, height * 1.6));
+    paintCanvasSize();
+  }
+
+  function paintCanvasSize() {
+    if (!baseWidth) return;
+    /* #299 kept: zoom is a real SIZE change, not a CSS transform — the drag maths and
+       the handle percentages both read the canvas box, so the box must be the truth. */
+    canvas.style.flex = '0 0 auto';
+    canvas.style.width = Math.round(baseWidth * zoom) + 'px';
+    canvas.style.maxWidth = 'none';
+  }
+
   /** View zoom. Never stored: the scene is the same picture at 60% or 160%. */
   function applyZoom(next: number) {
     zoom = Math.max(0.5, Math.min(2, Math.round(next * 100) / 100));
-    /* #299: zoom is a real SIZE change, not a CSS transform: the drag maths and the
-       handle percentages both read the canvas box, so the box must be the truth. */
-    canvas.style.flex = '0 0 auto';
-    canvas.style.width = zoom * 100 + '%';
-    canvas.style.maxWidth = Math.round(860 * zoom) + 'px';
+    if (!baseWidth) measureBase();
+    paintCanvasSize();
     const out = root.querySelector('[data-sd-zoom-value]') as HTMLElement | null;
     if (out) out.textContent = Math.round(zoom * 100) + '%';
   }
@@ -845,6 +869,7 @@ function openSceneDesigner(options) {
   // ---- open / close ----
   const close = apply => {
     document.removeEventListener('keydown', onKey);
+    root.dispatchEvent(new Event('sd-close'));
     root.remove();
     const saved = apply ? JSON.stringify(blueprint) : originalJson;
     if (!apply && typeof opts.onChange === 'function') opts.onChange(originalJson);
@@ -893,7 +918,17 @@ function openSceneDesigner(options) {
   paint();
   paintPresets();
   paintHistoryButtons();
+  measureBase();
   applyZoom(1);
+  // A window that changes size changes the biggest picture that fits.
+  if (typeof ResizeObserver === 'function') {
+    const wrap = root.querySelector('[data-sd-wrap]') as HTMLElement | null;
+    if (wrap) {
+      const observer = new ResizeObserver(() => measureBase());
+      observer.observe(wrap);
+      root.addEventListener('sd-close', () => observer.disconnect());
+    }
+  }
   statusOut.textContent = 'Chọn một hình để đổi cỡ và góc, hoặc kéo một hình mẫu vào khung.';
   return root;
 }

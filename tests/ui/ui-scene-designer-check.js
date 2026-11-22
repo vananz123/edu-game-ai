@@ -286,6 +286,15 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
       await sleep(700);
     }
     out.singleWorkshop = document.querySelectorAll('.scene-designer').length === 1;
+    // #301: at 100% the picture must FILL the stage, not float inside a fixed box.
+    const stageWrap = sd().querySelector('[data-sd-wrap]');
+    const canvasNow = sd().querySelector('[data-sd-canvas]');
+    const wrapBox = stageWrap.getBoundingClientRect();
+    const trueBox = canvasNow.getBoundingClientRect();
+    const expected = Math.round(Math.min(wrapBox.width - 12, (wrapBox.height - 12) * 1.6));
+    out.canvasFillsStage = Math.abs(trueBox.width - expected) <= 14;
+    out.canvasFillsNote = Math.round(trueBox.width) + '/' + expected + ' (' + Math.round(wrapBox.width) + 'x' + Math.round(wrapBox.height) + ')';
+    out.noScrollAt100 = stageWrap.scrollHeight <= stageWrap.clientHeight + 2;
     const zoomUp = sd().querySelector('[data-sd-zoom-in]');
     for (let step = 0; step < 10; step += 1) {
       sd().querySelector('[data-sd-zoom-in]').click();
@@ -382,6 +391,8 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
   check('"Huỷ" leaves the stored scene untouched', out.cancelKeptStored === true);
   check('"Chỉnh cảnh" is back after closing', out.editButtonBack === true);
   check('a double click opens only ONE workshop', out.singleWorkshop === true);
+  check('at 100% the picture fills the stage', out.canvasFillsStage === true, out.canvasFillsNote);
+  check('at 100% nothing needs scrolling', out.noScrollAt100 === true);
   check('zoom reaches 200%', out.zoomAtMax === '200%', out.zoomAtMax);
   check('the zoom label stays on screen at 200%', out.zoomBarInView === true);
   check('at 200% it is the canvas that scrolls', out.zoomWrapScrolls === true);

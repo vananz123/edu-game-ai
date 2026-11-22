@@ -812,7 +812,7 @@ span[data-icon] svg{display:block}
 /* #300: the middle column is a STAGE: the canvas scrolls, the zoom bar does not. */
 .sd-stage{flex:1 1 auto;display:flex;flex-direction:column;gap:8px;min-width:0;min-height:0}
 .sd-canvas-wrap{flex:1 1 auto;display:flex;align-items:center;justify-content:center;min-width:0;min-height:0;overflow:auto;padding:4px}
-.sd-canvas{position:relative;width:100%;max-width:860px;aspect-ratio:16/10;border-radius:12px;overflow:hidden;background:#eef0f7;box-shadow:0 10px 30px rgba(15,20,36,.12);flex:0 0 auto}
+.sd-canvas{position:relative;width:100%;aspect-ratio:16/10;border-radius:12px;overflow:hidden;background:#eef0f7;box-shadow:0 10px 30px rgba(15,20,36,.12);flex:0 0 auto}
 .sd-art{position:absolute;inset:0}
 .sd-art .stage-illustration,.sd-art .stage-illustration-svg{width:100%;height:100%;display:block}
 .sd-handles{position:absolute;inset:0}

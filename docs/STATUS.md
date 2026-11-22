@@ -7,6 +7,15 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-17 — #301 Khung vẽ phủ kín chỗ làm việc + chứng minh lưu thật sự chạy
+- Giáo viên báo **“thao tác không full ảnh, không lưu được”**.
+- **“Không full ảnh”:** khung vẽ bị ghim `max-width: 860px` và canh giữa, nên ở cửa sổ 1366×768 ảnh chỉ chiếm một phần cột giữa, xung quanh là khoảng trống. Sửa: **đo** chỗ trống thật rồi vẽ ảnh lớn nhất có thể — `measureBase()` lấy `min(stageWidth−12, (stageHeight−12)×1.6)` cho khung 16:10, `ResizeObserver` đo lại khi đổi cỡ cửa sổ; zoom vẫn là **hệ số trên cỡ nền** nên 100% = vừa khít, 200% = cuộn.
+- **“Không lưu được”:** đo bằng dữ liệu thật, không bằng cảm giác — chạy app mới, mở xưởng cảnh, đổi nền sang **Cửa hàng**, thêm 1 vật, bấm **Xong**, bấm **Lưu vào thư viện**, rồi đọc lại **`desktop.call('getLibrary')`**: bản ghi có `backdrop:"market"` **và** `extras:[{icon:"trophy",…}]`. Ảnh hàng minh hoạ cũng vẽ lại ngay sau Xong. Vậy đường lưu–đọc chạy đúng trên bản này; hai lỗi “Xong” của #300 (xưởng mở chồng, ô lưu bị bỏ im lặng) là thứ đã làm giáo viên thấy “không lưu được”.
+- Gate `ui-scene-designer-check` **74 → 76/76**: thêm **“ở 100% ảnh phủ kín chỗ làm việc”** (so với `min(w−12,(h−12)×1.6)` đo được, sai số ≤14px) và **“ở 100% không phải cuộn”**.
+- Kiểm trên app mới mở (CDP 9614–9617): designer **76/76** · stage **179/179** · play **790/790** · editor **157/157** · background **42/42** · unit **102/102** · `npm run check` 53 tệp · `renderer-globals` **1119 hàm/9041 chỗ gọi** · scene-runtime **170.8 KiB** · embedded **6201.0 KiB**.
+- Ảnh: `.tmp-art/scene-designer-301.png` — khung cảnh lớn gần kín cột giữa, thanh zoom 100% vẫn dưới khung, hai cột hai bên nguyên vẹn.
+- Installer: **16 507 914 byte** / 15.74 MiB / 22-11 **07:34** / SHA-256 `8813db84050ade2b68b8fe0574573cda2999c9825f4e0cfb1ddc7bfb86bb7a2d`.
+
 ### 2026-11-16 — #300 "Xong" bị lỗi + thanh thu phóng bị cuộn mất
 - Giáo viên báo **bấm Xong bị lỗi** và **thiếu thu phóng** trong xưởng cảnh.
 - **Nguyên nhân 1 — xưởng cảnh mở chồng:** mỗi cú bấm “Chỉnh cảnh” tạo một màn hình mới. Bấm 3 lần (nháy đúp, hoặc bấm lại vì tưởng chưa ăn) ⇒ **3 xưởng xếp chồng**; “Xong” chỉ đóng cái trên cùng, trang vẫn bị khoá cuộn và hàng minh hoạ không phản hồi — đúng cảm giác “bấm Xong bị lỗi”. Sửa: **một xưởng tại một thời điểm** (mở mới thì gỡ cái cũ; dữ liệu không mất vì mọi thay đổi ghi ngay từ #297), và chỉ **mở khoá cuộn trang khi không còn xưởng nào**.
