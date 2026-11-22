@@ -19,8 +19,8 @@ function questionEditor(q, i, allQuestions = []) {
         <option value="short-answer" ${type==='short-answer'?'selected':''}>Trả lời ngắn</option>
       </select>
       ${editorAiButton(q.id)}
-      <button class="text-link danger-text inline-flex items-center gap-[5px]" data-remove-question>${uiIcon('trash', '', 13)} Xóa câu</button>
-      <button class="text-link inline-flex items-center gap-[5px]" data-copy-question>${uiIcon('copy', '', 13)} Sao chép</button>
+      <button class="text-link danger-text q-icon-btn" data-remove-question title="Xoá câu này" aria-label="Xoá câu này">${uiIcon('trash', '', 13)}</button>
+      <button class="text-link q-icon-btn" data-copy-question title="Nhân bản câu này" aria-label="Nhân bản câu này">${uiIcon('copy', '', 13)}</button>
       <button class="text-link q-move" data-move-question-up>${uiIcon('arrow-up', '', 14)}</button>
       <button class="text-link q-move" data-move-question-down>${uiIcon('arrow-down', '', 14)}</button>
     </div>
@@ -43,12 +43,15 @@ function questionEditor(q, i, allQuestions = []) {
       <p class="field-hint">Gợi ý chỉ nên nhắc học sinh nhớ ra đáp án, không chứa chính đáp án. Để trống nếu không cần.</p>
     </div>
     <div class="correct-select ${(isScenario||isText)?'hidden':''}">
-      <span>Đáp án đúng:</span>
+      <span>Đáp án</span>
       <select data-field="correct">${isTF?`<option value="a" ${q.correctOptionId!=='b'?'selected':''}>Đúng</option><option value="b" ${q.correctOptionId==='b'?'selected':''}>Sai</option>`:correctOptions}</select>
-      <span>Điểm</span><input data-field="points" type="number" min="0" max="1000" value="${Number(q.points)||100}" class="w-[70px] m-0 p-[6px]">
-      <span>Thời gian (giây)</span><input data-field="timelimit" type="number" min="0" value="${timeLimit}" placeholder="mặc định" class="w-[90px] m-0 p-[6px]">
     </div>
-    <div class="correct-select"><span>Độ khó</span><select data-field="difficulty" class="w-auto"><option value="" ${!q.difficulty?'selected':''}>— Chưa đặt</option><option value="dễ" ${q.difficulty==='dễ'?'selected':''}>Dễ</option><option value="trung bình" ${q.difficulty==='trung bình'?'selected':''}>Trung bình</option><option value="khó" ${q.difficulty==='khó'?'selected':''}>Khó</option></select></div>
+    <details class="editor-more"><summary>Tuỳ chọn: điểm, thời gian, độ khó</summary>
+      <div class="correct-select"><span>Điểm</span><input data-field="points" type="number" min="0" max="1000" value="${Number(q.points)||100}" class="w-[70px] m-0 p-[6px]">
+        <span>Thời gian (giây)</span><input data-field="timelimit" type="number" min="0" value="${timeLimit}" placeholder="mặc định" class="w-[90px] m-0 p-[6px]">
+        <span>Độ khó</span><select data-field="difficulty" class="w-auto"><option value="" ${!q.difficulty?'selected':''}>— Chưa đặt</option><option value="dễ" ${q.difficulty==='dễ'?'selected':''}>Dễ</option><option value="trung bình" ${q.difficulty==='trung bình'?'selected':''}>Trung bình</option><option value="khó" ${q.difficulty==='khó'?'selected':''}>Khó</option></select>
+      </div>
+    </details>
     ${editorAssetFieldsHtml(q)}${editorItemArtHtml(q)}
     <textarea data-field="explanation" rows="2" placeholder="Giải thích đáp án">${escapeHtml(q.explanation||'')}</textarea>
   </div>`;
@@ -155,7 +158,7 @@ function editorAssetFieldsHtml(item, options) {
   const chips = compact ? '' : `<span class="editor-asset-chip" title="Lĩnh vực nội dung của mục này">${escapeHtml(EDITOR_CATEGORY_LABEL[category] || category)}</span>
     ${illustration === 'none' ? `<span class="editor-asset-chip" title="Câu hỏi này không dùng ảnh minh hoạ">${uiIcon('ban', '', 11)} Không ảnh</span>` : ''}
     ${blueprint && illustration !== 'none' && !illustration ? `<span class="editor-asset-chip" title="Cảnh do máy dựng từ chủ đề của câu hỏi">${uiIcon('sparkles', '', 11)} Cảnh thử</span>` : ''}
-    ${illustration && illustration !== 'none' ? `<span class="editor-asset-chip" title="Minh họa đã gán">${uiIcon('image', '', 11)} ${escapeHtml(illustration)}</span>` : ''}`;
+    ${/^ci-[a-f0-9]{32}$/u.test(illustration) ? `<span class="editor-asset-chip" title="Ảnh giáo viên tự tải lên">${uiIcon('image', '', 11)} Ảnh của bạn</span>` : ''}`;
   return `<div class="editor-item-assets${compact ? ' is-compact' : ''}">
     ${chips}
     <input type="hidden" data-field="contentCategory" value="${escapeHtml(category === 'general' ? '' : category)}">
@@ -389,18 +392,22 @@ function editorItemArtHtml(item) {
     <div class="editor-art-controls">
       <div class="editor-art-badge" data-editor-art-badge>${escapeHtml(badge)}</div>
       <div class="editor-art-buttons">
-        <button type="button" class="btn btn-secondary btn-small" data-editor-art-upload title="Chọn ảnh PNG/JPG/WEBP/GIF từ máy">${uiIcon('camera', '', 13)} Tải ảnh lên</button>
-        <select data-editor-art-pick data-art-picker title="Chọn hình minh hoạ có sẵn">${options}</select>
-        <button type="button" class="btn btn-secondary btn-small" data-editor-art-blueprint title="Dựng cảnh thử từ chủ đề của câu hỏi — không cần mạng">${uiIcon('sparkles', '', 13)} Cảnh thử</button>
-        <button type="button" class="btn btn-secondary btn-small" data-editor-art-suggest title="Nhờ AI chọn cảnh từ chính nội dung câu hỏi — cần mạng hoặc AI trên máy">${uiIcon('wand-sparkles', '', 13)} Gợi ý cảnh</button>
-        ${normalized ? `<button type="button" class="btn btn-secondary btn-small" data-editor-art-edit title="Mở bảng chỉnh cảnh để kéo từng hình đến chỗ bạn muốn">${uiIcon('move', '', 13)} Chỉnh cảnh</button>` : ''}
-        <button type="button" class="btn btn-secondary btn-small" data-editor-art-reset>${uiIcon('rotate-ccw', '', 13)} Tự động</button>
-        <button type="button" class="btn btn-secondary btn-small" data-editor-art-remove title="Bỏ hẳn ảnh minh hoạ của riêng câu hỏi này"${isNone ? ' disabled' : ''}>${uiIcon('ban', '', 13)} Bỏ ảnh</button>
+        ${normalized ? `<button type="button" class="btn btn-primary btn-small" data-editor-art-edit title="Mở xưởng cảnh để kéo từng hình đến chỗ bạn muốn">${uiIcon('move', '', 13)} Chỉnh cảnh</button>` : ''}
+        <button type="button" class="btn btn-secondary btn-small" data-editor-art-pick-open title="Chọn ảnh khác cho câu hỏi này">${uiIcon('image', '', 13)} Đổi ảnh</button>
       </div>
-      <div class="editor-art-hint">Minh hoạ đi kèm câu hỏi này. Ảnh tải lên được lưu trên máy và chơi được khi không có mạng. “Cảnh thử” dựng một cảnh từ chủ đề (chưa dùng AI); “Gợi ý cảnh” nhờ AI đọc câu hỏi và chọn cảnh — hỏng thì tự rơi về cảnh theo chủ đề; “Bỏ ảnh” tắt hình riêng câu hỏi này; “Tự động” trả lại hình theo chủ đề.</div>
-      ${compareHtml}
-      ${slotsHtml}
-      ${propsHtml}
+      <details class="editor-art-more editor-art-swap">
+        <summary>Đổi ảnh &amp; tuỳ chỉnh</summary>
+        <div class="editor-art-buttons">
+          <button type="button" class="btn btn-secondary btn-small" data-editor-art-upload title="Tải ảnh lên từ máy (PNG/JPG/WEBP/GIF)">${uiIcon('camera', '', 13)} Tải ảnh</button>
+          <select data-editor-art-pick data-art-picker title="Chọn hình minh hoạ có sẵn">${options}</select>
+          <button type="button" class="btn btn-secondary btn-small" data-editor-art-blueprint title="Dựng cảnh thử từ chủ đề của câu hỏi — không cần mạng">${uiIcon('sparkles', '', 13)} Cảnh thử</button>
+          <button type="button" class="btn btn-secondary btn-small" data-editor-art-suggest title="Nhờ AI chọn cảnh từ nội dung câu hỏi (cần mạng hoặc AI trên máy)">${uiIcon('wand-sparkles', '', 13)} Gợi ý cảnh</button>
+          <button type="button" class="btn btn-secondary btn-small" data-editor-art-reset title="Trả lại hình theo chủ đề của câu hỏi">${uiIcon('rotate-ccw', '', 13)} Tự động</button>
+          <button type="button" class="btn btn-secondary btn-small" data-editor-art-remove title="Bỏ hẳn ảnh minh hoạ của riêng câu hỏi này"${isNone ? ' disabled' : ''}>${uiIcon('ban', '', 13)} Bỏ ảnh</button>
+        </div>
+        <p class="editor-art-hint">Ảnh tải lên được lưu trên máy và chơi được khi không có mạng. “Cảnh thử” dựng cảnh từ chủ đề, không cần AI.</p>
+        ${(compareHtml || slotsHtml || propsHtml) ? `${compareHtml}${slotsHtml}${propsHtml}` : ''}
+      </details>
     </div>
   </div>`;
 }
@@ -500,6 +507,10 @@ function applyEditorSuggestedBlueprint(row, response) {
 /** Replaces one control with a fresh one drawn from the hidden input. */
 function redrawEditorArtRow(row) {
   if (!row) return;
+  /* #304: every change redraws this control, so an opened "Tuỳ chỉnh cảnh" must be
+     remembered or it would snap shut on the first tick of a slider. */
+  const wasOpen = !!(row.querySelector && row.querySelector('details.editor-art-more[open]'));
+  const wasSwapOpen = !!(row.querySelector && row.querySelector('details.editor-art-swap[open]'));
   const fresh = document.createElement('div');
   fresh.innerHTML = editorItemArtHtml(editorItemArtValue(row));
   const next = fresh.firstElementChild;
@@ -508,6 +519,10 @@ function redrawEditorArtRow(row) {
   // `data-art-bound` marker must not be copied: it means "already bound", and copying it
   // made every control dead after its first redraw (#128).
   next.removeAttribute('data-art-bound');
+  const more = next.querySelector('details.editor-art-more');
+  if (more && wasOpen) more.open = true;
+  const swap = next.querySelector('details.editor-art-swap');
+  if (swap && wasSwapOpen) swap.open = true;
   row.replaceWith(next);
   wireEditorItemArtRow(next);
 }
@@ -811,6 +826,15 @@ function wireEditorItemArtRow(row) {
     });
   }
   const suggestButton = row.querySelector('[data-editor-art-suggest]');
+  /* #304: "Đổi ảnh" is the only picture button on the row. It opens the disclosure
+     that holds the picker, the upload and the scene options — one door, not six. */
+  const swapOpen = row.querySelector('[data-editor-art-pick-open]');
+  if (swapOpen) {
+    swapOpen.addEventListener('click', () => {
+      const more = row.querySelector('details.editor-art-swap');
+      if (more) more.open = !more.open;
+    });
+  }
   if (suggestButton) {
     suggestButton.addEventListener('click', async () => {
       const control = suggestButton.closest('[data-editor-art]');

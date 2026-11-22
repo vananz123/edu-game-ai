@@ -135,7 +135,7 @@ function editorPageHtml(game, isNew, note) {
         <div class="small muted">${escapeHtml(note)}</div></div>
     </header>
     <div class="editor-save-bar" data-editor-save-bar data-dirty="0">
-      <span class="editor-save-hint" data-editor-save-hint>${uiIcon('info', '', 13)} Thay đổi chỉ được lưu khi bấm “Lưu vào thư viện”.</span>
+      <span class="editor-save-hint" data-editor-save-hint></span>
       <div class="editor-save-actions">
         <button class="btn btn-secondary" id="editorCancelBtn">Hủy</button>
         <button class="btn btn-secondary" id="saveExportBtn">Lưu và xuất</button>
@@ -153,6 +153,16 @@ function wireEditorPage(root) {
   // was built from.
   const game = editorPageState ? editorPageState.game : null;
   if (!game) return;
+  /* #304: "chữ quá nhiều" — a paragraph under every field made the form read as a wall.
+     The sentence is not deleted: it moves to the label's tooltip, which is where a
+     teacher looks when a field is unclear, and screen readers still read the label. */
+  root.querySelectorAll('.field-hint').forEach(hint => {
+    const field = hint.closest('.field') || hint.parentElement;
+    const label = field ? field.querySelector('label') : null;
+    const text = (hint.textContent || '').trim();
+    if (label && text && !label.getAttribute('title')) label.setAttribute('title', text);
+    hint.hidden = true;
+  });
   const editorQuestions = $('#editorQuestions', root);
 // #128: picture control (upload / built-in / auto) for every item row.
 if (typeof wireEditorItemArt === 'function') wireEditorItemArt(root);
@@ -254,7 +264,7 @@ $('#importQuestionsBtn', root).addEventListener('click', async () => {
     if (!bar) return;
     bar.dataset.dirty = '1';
     const hint = $('[data-editor-save-hint]', bar);
-    if (hint) hint.textContent = 'Bấm “Lưu vào thư viện” để lưu các thay đổi trên trang này.';
+    if (hint) hint.textContent = 'Có thay đổi chưa lưu';
   };
   root.addEventListener('input', markDirty);
   root.addEventListener('change', markDirty);

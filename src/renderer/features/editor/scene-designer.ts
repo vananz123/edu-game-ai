@@ -66,7 +66,7 @@ function openSceneDesigner(options) {
   root.innerHTML =
     '<div class="sd-head">' +
       '<div class="sd-title"><strong>Xưởng cảnh</strong>' +
-        '<span>Kéo hình trên khung để đặt chỗ · chọn một hình để đổi cỡ và góc · kéo một hình mẫu từ cột trái vào khung để thêm vật.</span></div>' +
+        '<span title="Kéo hình trên khung để đặt chỗ · chọn một hình để đổi cỡ và góc · kéo một hình mẫu từ cột trái vào khung để thêm vật">Kéo hình để đặt chỗ · Xong để lưu</span></div>' +
       /* #303: the two things a teacher needs to know are pinned in the header, not
          left to be discovered: what is selected, and that "Xong" is the save. */ 
       '<div class="sd-head-actions">' +
@@ -78,11 +78,11 @@ function openSceneDesigner(options) {
     '</div>' +
     '<div class="sd-body">' +
       '<div class="sd-side sd-side-left">' +
-        '<div class="sd-group sd-group-templates"><span class="sd-group-title">Bố cục <em>4</em></span>' +
+        '<div class="sd-group sd-group-templates"><span class="sd-group-title">Bố cục</span>' +
           '<div class="sd-templates" data-sd-templates></div></div>' +
-        '<div class="sd-group sd-group-places"><span class="sd-group-title">Nơi diễn ra <em>12</em></span>' +
+        '<div class="sd-group sd-group-places"><span class="sd-group-title">Nơi diễn ra</span>' +
           '<div class="sd-places" data-sd-places></div></div>' +
-        '<div class="sd-group sd-group-icons"><span class="sd-group-title">Hình mẫu — kéo vào khung <em>47</em></span>' +
+        '<div class="sd-group sd-group-icons"><span class="sd-group-title">Hình mẫu — kéo vào khung</span>' +
           '<div class="sd-icons" data-sd-icons></div></div>' +
       '</div>' +
       '<div class="sd-stage">' +
@@ -99,25 +99,25 @@ function openSceneDesigner(options) {
           '<button type="button" class="btn btn-secondary btn-small" data-sd-zoom-out title="Thu nhỏ khung vẽ">−</button>' +
           '<span class="sd-zoom-value" data-sd-zoom-value>100%</span>' +
           '<button type="button" class="btn btn-secondary btn-small" data-sd-zoom-in title="Phóng to khung vẽ">+</button>' +
-          '<button type="button" class="btn btn-secondary btn-small" data-sd-zoom-fit title="Vừa khung">Vừa khung</button>' +
+          '<button type="button" class="btn btn-secondary btn-small sd-zoom-fit" data-sd-zoom-fit title="Vừa khung" aria-label="Vừa khung">⤢</button>' +
         '</div>' +
         '<div class="sd-status" data-sd-status></div>' +
       '</div>' +
       '<div class="sd-side sd-side-right">' +
         '<div class="sd-group sd-group-selected"><span class="sd-group-title">Đang chọn</span>' +
-          '<strong class="sd-selected" data-sd-name>Hình chính</strong></div>' +
-        '<div class="sd-group" data-sd-icon-row><span class="sd-group-title">Hình</span>' +
-          '<select data-sd-icon></select></div>' +
+          '<strong class="sd-selected" data-sd-name>Hình chính</strong>' +
+          '<div class="sd-icon-row" data-sd-icon-row><select data-sd-icon title="Đổi hình cho vật đang chọn"></select></div></div>' +
+
         '<div class="sd-group is-hidden" data-sd-sign-row><span class="sd-group-title">Dấu so sánh</span>' +
           '<select data-sd-sign></select></div>' +
         '<div class="sd-group"><span class="sd-group-title">Cỡ <em data-sd-scale-value>100%</em></span>' +
           '<input type="range" min="50" max="160" step="5" value="100" data-sd-scale></div>' +
         '<div class="sd-group"><span class="sd-group-title">Góc xoay <em data-sd-rotate-value>0°</em></span>' +
           '<input type="range" min="-180" max="180" step="5" value="0" data-sd-rotate></div>' +
-        '<div class="sd-group sd-group-actions"><span class="sd-group-title">Thao tác</span>' +
-          '<button type="button" class="btn btn-secondary btn-small" data-sd-reset-one>Trả hình này về chỗ cũ</button>' +
-          '<button type="button" class="btn btn-secondary btn-small is-danger" data-sd-remove>Xoá hình này</button>' +
-          '<button type="button" class="btn btn-secondary btn-small" data-sd-reset-all>Xoá hết chỉnh tay</button>' +
+        '<div class="sd-group sd-group-actions">' +
+          '<button type="button" class="btn btn-secondary btn-small" data-sd-reset-one title="Trả hình đang chọn về chỗ bố cục đặt nó">↺ Về chỗ cũ</button>' +
+          '<button type="button" class="btn btn-secondary btn-small is-danger" data-sd-remove>Xoá hình</button>' +
+          '<button type="button" class="btn btn-secondary btn-small" data-sd-reset-all title="Bỏ mọi chỗ đã kéo tay, quay về bố cục gốc">Xoá hết</button>' +
         '</div>' +
       '</div>' +
     '</div>';

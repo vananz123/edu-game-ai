@@ -5050,3 +5050,23 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
   tính năng "vừa khung" tự phá mình. Cổng đo lại cùng đại lượng ấy (bài học #274/#271).
 - **Nền tối kiểm bằng `getComputedStyle`, không bằng mắt.** Mô hình thị giác nói "header vẫn
   trắng"; số đo nói rgba(21,26,43,.92). Số đo thắng.
+
+## #304 — Bớt chữ bằng cách GẤP, không bằng cách xoá
+
+- **Một câu giải thích dưới MỌI ô là một bức tường chữ.** Chuyển `.field-hint` thành `title`
+  của nhãn ở **một chỗ duy nhất** (`wireEditorPage`) rồi ẩn đi: nội dung còn nguyên khi rê
+  chuột, màn hình đầu sạch. Không xoá câu nào — giáo viên vẫn cần nó lúc không hiểu ô.
+- **Mỗi thẻ câu chỉ được có HAI việc về ảnh**: xem ảnh và "Chỉnh cảnh". Sáu nút còn lại cùng
+  bảng góc/vật thể nằm sau **một** cửa `<details>`. Cùng chức năng, nhưng không cùng lúc.
+- **Trạng thái mở của `<details>` phải được NHỚ qua lần vẽ lại.** Mỗi thay đổi vẽ lại cả khối,
+  nên nếu không chép `open` sang nút mới thì kéo thanh trượt một nốt là cửa tự đóng — người
+  dùng sẽ tưởng nút hỏng.
+- **Đừng cho giáo viên đọc id của máy.** Chip `animals-meadow` không nói gì với người dạy; chỉ
+  giữ chip lĩnh vực và "Ảnh của bạn".
+- **Hành động phụ thì ẩn tới khi cần**: nút xoá phương án chỉ hiện khi rê chuột vào dòng đó —
+  nhưng vẫn bấm được bằng bàn phím và bằng mã, nên cổng kiểm không phụ thuộc chuột (bài học #271).
+- **Nhãn cổng kiểm đọc được là hợp đồng.** Bỏ chữ "Gợi ý cảnh" khỏi nút AI làm cổng
+  `ui-item-assets-editor-check` đỏ ngay: bài kiểm không kiểm "có nút", nó kiểm **nút đó nói
+  đúng việc nó làm**. Giữ chữ, chỉ gấp chỗ khác.
+- **Giảm độ phức tạp phải ĐO được**: 900 → 406 ký tự và 4 → 0 dòng gợi ý ở màn hình đầu. Nếu
+  không đo trước/sau thì "gọn hơn" chỉ là cảm giác.

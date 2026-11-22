@@ -1024,3 +1024,41 @@ html[data-theme="dark"] .editor-save-hint,
 html[data-theme="dark"] .editor-field-grid .field-hint{color:#94a3b8}
 html[data-theme="dark"] .btn.is-danger{background:#2a1618;border-color:#5c2a2a;color:#fca5a5}
 html[data-theme="dark"] .editor-setup .editor-card-toggle{background:#1e2440;color:#a5b4fc}
+
+/* #304: "chữ quá nhiều" — phần tuỳ chọn GẤP lại, chỉ còn việc chính trên màn hình.
+   Không xoá dữ liệu: mọi select vẫn nằm trong DOM, chỉ không chiếm chỗ. */
+.editor-more,.editor-art-more{margin:8px 12px 10px;border:1px dashed #dfe3ee;border-radius:10px;background:#fbfbfe}
+.editor-art-more{margin:8px 0 0}
+.editor-more>summary,.editor-art-more>summary{cursor:pointer;padding:7px 10px;font-size:11.5px;font-weight:750;color:#4b5568;list-style:none;display:flex;align-items:center;gap:6px}
+.editor-more>summary::-webkit-details-marker,.editor-art-more>summary::-webkit-details-marker{display:none}
+.editor-more>summary::before,.editor-art-more>summary::before{content:'▸';font-size:11px;color:#8b93a7;transition:transform .15s ease}
+.editor-more[open]>summary::before,.editor-art-more[open]>summary::before{transform:rotate(90deg)}
+.editor-more[open]>summary,.editor-art-more[open]>summary{margin-bottom:6px;border-bottom:1px dashed #e6e9f2}
+.editor-art-more .editor-art-slots{margin:0 8px 8px}
+html[data-theme="dark"] .editor-more,
+html[data-theme="dark"] .editor-art-more{background:var(--surface-2);border-color:var(--line)}
+html[data-theme="dark"] .editor-more>summary,
+html[data-theme="dark"] .editor-art-more>summary{color:#c7d0e0}
+.sd-icon-row{display:block}
+.sd-icon-row select{width:100%}
+
+/* #304: hành động phụ chỉ hiện khi cần — nút vuông, tooltip lo phần giải thích.
+   Chữ trên mỗi nút không phải là "giải thích", nó là bảy câu cạnh nhau. */
+.q-icon-btn{display:inline-flex;align-items:center;justify-content:center;padding:6px 8px;min-width:30px;min-height:28px;border-radius:8px}
+.editor-question-head .text-link.q-icon-btn{border:1px solid transparent;background:transparent;color:#5f6a7d}
+.editor-question-head .text-link.q-icon-btn:hover{background:#eef0f9;color:#26304a}
+.editor-question-head .text-link.danger-text.q-icon-btn:hover{background:#fff1f1;color:#b91c1c}
+/* Nút xoá phương án hiện khi rê chuột vào dòng đó: bốn dấu × luôn hiện là bốn lý do
+   để mắt phải bận tâm. Vẫn bấm được bằng bàn phím và bằng mã kiểm. */
+.editor-option [data-remove-option]{opacity:0;transition:opacity .12s ease}
+.editor-option:hover [data-remove-option],.editor-option:focus-within [data-remove-option]{opacity:1}
+@media (hover:none){.editor-option [data-remove-option]{opacity:1}}
+.sd-zoom-fit{min-width:30px;padding:3px 8px}
+
+/* #304: thẻ câu chỉ còn HAI việc về ảnh — xem và "Chỉnh cảnh" — còn lại nằm sau
+   một cửa "Đổi ảnh & tuỳ chỉnh". Cùng chức năng, ít lựa chọn cùng lúc. */
+.editor-art-swap{margin:6px 0 0;border-style:solid;border-color:var(--line);background:#fff}
+.editor-art-swap>summary{font-size:11.5px;color:#4b5568}
+.editor-art-swap .editor-art-buttons{gap:6px;flex-wrap:wrap}
+.editor-art-swap .editor-art-hint{padding:0 10px 8px;margin:0;font-size:11px;color:#7b8698}
+.editor-art-swap .editor-art-slots{margin:0 8px 8px}
