@@ -43,15 +43,15 @@ function libraryPagerHtml(page, total, pageSize = LIBRARY_PAGE_SIZE) {
 function librarySelectionBarHtml(pageGames, selected) {
   if (!pageGames.length) return '';
   const allOnPage = pageGames.every(game => selected.has(game.id));
-  return `<div class="flex items-center justify-between gap-[12px] mb-[12px] flex-wrap bg-[#f8f7ff] border border-[#e4e0ff] rounded-[10px] px-[12px] py-[9px]" data-library-selection-bar>
-    <label class="inline-flex items-center gap-[8px] text-[12px] font-semibold text-[#4c4680] cursor-pointer">
+  return `<div class="lib-selbar" data-library-selection-bar>
+    <label class="lib-selbar-all">
       <input type="checkbox" id="librarySelectAll" class="lesson-check"${allOnPage ? ' checked' : ''} aria-label="Chọn tất cả trò chơi trong trang">
-      Chọn tất cả trang này
+      <span>Chọn tất cả trang này</span>
     </label>
-    <div class="flex items-center gap-[10px] flex-wrap">
-      <span class="text-[12px] text-[#5b5680]" data-library-selected-count>${selected.size ? `Đã chọn ${selected.size} trò chơi` : 'Hoặc tick từng trò chơi để xoá nhiều cùng lúc'}</span>
-      <button type="button" class="btn btn-danger btn-small disabled:opacity-50" id="libraryDeleteSelectedBtn" data-action="library-delete-selected"${selected.size ? '' : ' disabled'}><span data-icon="trash" data-icon-size="13"></span> Xoá đã chọn${selected.size ? ` (${selected.size})` : ''}</button>
-      <button type="button" class="border-0 rounded-[8px] px-[10px] py-[7px] font-semibold text-[12px] bg-transparent text-[#6b6690] hover:underline disabled:opacity-50" id="libraryClearSelectionBtn" data-action="library-clear-selection"${selected.size ? '' : ' disabled'}>Bỏ chọn</button>
+    <div class="lib-selbar-actions">
+      <span class="lib-selbar-count" data-library-selected-count>${selected.size ? `Đã chọn ${selected.size} trò chơi` : 'Hoặc tick từng trò chơi để xoá nhiều cùng lúc'}</span>
+      <button type="button" class="btn btn-danger btn-small" id="libraryDeleteSelectedBtn" data-action="library-delete-selected"${selected.size ? '' : ' disabled'}><span data-icon="trash" data-icon-size="13"></span> Xoá đã chọn${selected.size ? ` (${selected.size})` : ''}</button>
+      <button type="button" class="lib-selbar-clear" id="libraryClearSelectionBtn" data-action="library-clear-selection"${selected.size ? '' : ' disabled'}>Bỏ chọn</button>
     </div>
   </div>`;
 }
@@ -63,8 +63,8 @@ function librarySelectionBarHtml(pageGames, selected) {
  */
 function libraryCardHtml(game, index, selected) {
   const id = escapeHtml(game.id);
-  return `<div class="relative min-w-0 rounded-[14px]${selected ? ' ring-2 ring-[#6258e8]' : ''}" data-library-item="${id}"${selected ? ' data-selected="true"' : ''}>
-    <label class="absolute top-[10px] right-[10px] z-[3] inline-flex items-center justify-center w-[25px] h-[25px] rounded-[7px] bg-white/[90%] border border-[#e7eaf2] cursor-pointer" title="Chọn trò chơi này">
+  return `<div class="lib-item${selected ? ' is-selected' : ''}" data-library-item="${id}"${selected ? ' data-selected="true"' : ''}>
+    <label class="lib-card-check" title="Chọn trò chơi này">
       <input type="checkbox" class="lesson-check" data-action="library-select" data-id="${id}"${selected ? ' checked' : ''} aria-label="Chọn ${escapeHtml(game.title || 'trò chơi')}">
     </label>
     ${gameCard(game, index, true)}
@@ -77,6 +77,11 @@ function renderLibrary() {
   const page = libraryCurrentPage(games.length);
   const pageGames = games.slice(page * LIBRARY_PAGE_SIZE, page * LIBRARY_PAGE_SIZE + LIBRARY_PAGE_SIZE);
   return `<div class="page-head"><div class="page-head-title"><h1>Thư viện trò chơi</h1></div><div class="page-head-actions"><button class="btn btn-primary btn-small" data-page="create"><span data-icon="circle-plus" data-icon-size="14"></span> Tạo trò chơi</button></div></div>
-    <div class="flex gap-[10px] items-center mb-[20px] flex-wrap"><div class="relative flex-1 min-w-[200px]"><input id="librarySearch" placeholder="Tìm theo tên, môn học, lớp..." value="${escapeHtml(state.search)}" class="w-full px-[13px] py-[11px] pl-[37px] border border-line rounded-[9px] bg-white outline-0 text-[12px]"></div><select class="select" id="templateFilter"><option value="all">Tất cả thể loại</option><option value="quiz" ${state.filter==='quiz'?'selected':''}>Đấu trường kiến thức</option><option value="scenario" ${state.filter==='scenario'?'selected':''}>Thử thách tình huống</option><option value="matching" ${state.filter==='matching'?'selected':''}>Ghép cặp kiến thức</option><option value="treasure-hunt" ${state.filter==='treasure-hunt'?'selected':''}>Giải mã kho báu</option><option value="race" ${state.filter==='race'?'selected':''}>Đường đua chinh phục</option></select><button class="btn btn-secondary" data-action="import-game"><span data-icon="upload" data-icon-size="14"></span> Nhập gói .egame</button><span class="px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#5f6a7d] text-[11px]">${games.length} trò chơi</span></div>
-    ${games.length ? `${librarySelectionBarHtml(pageGames, selected)}<div class="grid grid-cols-[repeat(3,minmax(0,1fr))] gap-[16px]">${pageGames.map((g, i) => libraryCardHtml(g, page * LIBRARY_PAGE_SIZE + i, selected.has(g.id))).join('')}</div>${libraryPagerHtml(page, games.length)}` : emptyState('Không tìm thấy trò chơi','Thử từ khóa khác hoặc tạo trò chơi mới.','Tạo trò chơi','create')}`;
+    <div class="lib-toolbar">
+      <div class="lib-search"><span data-icon="search" data-icon-size="14"></span><input id="librarySearch" placeholder="Tìm theo tên, môn học, lớp..." value="${escapeHtml(state.search)}"></div>
+      <select class="select lib-filter" id="templateFilter"><option value="all">Tất cả thể loại</option><option value="quiz" ${state.filter==='quiz'?'selected':''}>Đấu trường kiến thức</option><option value="scenario" ${state.filter==='scenario'?'selected':''}>Thử thách tình huống</option><option value="matching" ${state.filter==='matching'?'selected':''}>Ghép cặp kiến thức</option><option value="treasure-hunt" ${state.filter==='treasure-hunt'?'selected':''}>Giải mã kho báu</option><option value="race" ${state.filter==='race'?'selected':''}>Đường đua chinh phục</option></select>
+      <span class="lib-count">${games.length} trò chơi</span>
+      <button class="btn btn-secondary btn-small lib-import" data-action="import-game"><span data-icon="upload" data-icon-size="14"></span> Nhập gói .egame</button>
+    </div>
+    ${games.length ? `${librarySelectionBarHtml(pageGames, selected)}<div class="lib-grid">${pageGames.map((g, i) => libraryCardHtml(g, page * LIBRARY_PAGE_SIZE + i, selected.has(g.id))).join('')}</div>${libraryPagerHtml(page, games.length)}` : emptyState('Không tìm thấy trò chơi','Thử từ khóa khác hoặc tạo trò chơi mới.','Tạo trò chơi','create')}`;
 }

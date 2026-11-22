@@ -42,15 +42,15 @@ function projectSelectedIds(projects) {
 function projectSelectionBarHtml(projects, selected) {
   if (!projects.length) return '';
   const allOnList = projects.every(project => selected.has(project.id));
-  return `<div class="flex items-center justify-between gap-[12px] mb-[12px] flex-wrap bg-[#f8f7ff] border border-[#e4e0ff] rounded-[10px] px-[12px] py-[9px]" data-project-selection-bar>
-    <label class="inline-flex items-center gap-[8px] text-[12px] font-semibold text-[#4c4680] cursor-pointer">
+  return `<div class="lib-selbar" data-project-selection-bar>
+    <label class="lib-selbar-all">
       <input type="checkbox" id="projectSelectAll" class="lesson-check"${allOnList ? ' checked' : ''} aria-label="Chọn tất cả dự án đang hiển thị">
-      Chọn tất cả danh sách này
+      <span>Chọn tất cả danh sách này</span>
     </label>
-    <div class="flex items-center gap-[10px] flex-wrap">
-      <span class="text-[12px] text-[#5b5680]" data-project-selected-count>${selected.size ? `Đã chọn ${selected.size} dự án` : 'Hoặc tick từng dự án để xoá nhiều cùng lúc'}</span>
-      <button type="button" class="btn btn-danger btn-small disabled:opacity-50" id="projectDeleteSelectedBtn" data-action="project-delete-selected"${selected.size ? '' : ' disabled'}><span data-icon="trash" data-icon-size="13"></span> Xoá đã chọn${selected.size ? ` (${selected.size})` : ''}</button>
-      <button type="button" class="border-0 rounded-[8px] px-[10px] py-[7px] font-semibold text-[12px] bg-transparent text-[#6b6690] hover:underline disabled:opacity-50" id="projectClearSelectionBtn" data-action="project-clear-selection"${selected.size ? '' : ' disabled'}>Bỏ chọn</button>
+    <div class="lib-selbar-actions">
+      <span class="lib-selbar-count" data-project-selected-count>${selected.size ? `Đã chọn ${selected.size} dự án` : 'Hoặc tick từng dự án để xoá nhiều cùng lúc'}</span>
+      <button type="button" class="btn btn-danger btn-small" id="projectDeleteSelectedBtn" data-action="project-delete-selected"${selected.size ? '' : ' disabled'}><span data-icon="trash" data-icon-size="13"></span> Xoá đã chọn${selected.size ? ` (${selected.size})` : ''}</button>
+      <button type="button" class="lib-selbar-clear" id="projectClearSelectionBtn" data-action="project-clear-selection"${selected.size ? '' : ' disabled'}>Bỏ chọn</button>
     </div>
   </div>`;
 }
@@ -62,8 +62,8 @@ function projectSelectionBarHtml(projects, selected) {
  */
 function projectCardHtml(project, index, selected) {
   const id = escapeHtml(project.id);
-  return `<div class="relative min-w-0 rounded-[14px]${selected ? ' ring-2 ring-[#6258e8]' : ''}" data-project-item="${id}"${selected ? ' data-selected="true"' : ''}>
-    <label class="absolute top-[10px] right-[10px] z-[3] inline-flex items-center justify-center w-[25px] h-[25px] rounded-[7px] bg-white/[90%] border border-[#e7eaf2] cursor-pointer" title="Chọn dự án này">
+  return `<div class="lib-item${selected ? ' is-selected' : ''}" data-project-item="${id}"${selected ? ' data-selected="true"' : ''}>
+    <label class="lib-card-check" title="Chọn dự án này">
       <input type="checkbox" class="lesson-check" data-action="project-select" data-id="${id}"${selected ? ' checked' : ''} aria-label="Chọn ${escapeHtml(project.title || 'dự án')}">
     </label>
     ${projectCard(project, index)}
@@ -86,37 +86,58 @@ function renderMyProjects() {
   });
   const selected = projectSelectedIds(projects);
   return `<div class="page-head"><div class="page-head-title"><h1>Dự án của tôi</h1></div><div class="page-head-actions"><button class="btn btn-primary btn-small" data-page="create-wizard"><span data-icon="circle-plus" data-icon-size="14"></span> Tạo dự án mới</button></div></div>
-    <div class="flex gap-[10px] items-center mb-[20px] flex-wrap"><div class="relative flex-1 min-w-[200px]"><input id="librarySearch" placeholder="Tìm theo tên dự án, giáo án, thể loại..." value="${escapeHtml(state.search || '')}" class="w-full px-[13px] py-[11px] pl-[37px] border border-line rounded-[9px] bg-white outline-0 text-[12px]"></div><span class="px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#5f6a7d] text-[11px]">${projects === null ? 'Đang tải…' : `${filtered.length} dự án`}</span></div>
-    <section class="bg-white border border-line rounded-xl p-4">
-      ${projects === null
-        ? `<div class="p-6 text-center text-[#5f6a7d] text-[12px]">Đang tải danh sách dự án…</div>`
-        : filtered.length
-          ? `${projectSelectionBarHtml(filtered, selected)}<div class="grid grid-cols-[repeat(3,minmax(0,1fr))] gap-3">${filtered.map((project, index) => projectCardHtml(project, index, selected.has(project.id))).join('')}</div>`
-          : `<div class="bg-white border border-dashed border-[#dfe2ed] rounded-xl p-6 text-center text-[#5f6a7d] flex flex-col items-center justify-center"><div class="mb-2.5 text-[#5f6a7d]"><span data-icon="folder-open" data-icon-size="28"></span></div><h3 class="text-[#394256] text-[14px] mb-1 mt-0">${query ? 'Không tìm thấy dự án phù hợp' : 'Chưa có dự án nào'}</h3><p class="max-w-[46ch] mx-auto mb-3 leading-[1.55] text-[12px]" title="${query ? 'Thử từ khóa khác hoặc xoá bộ lọc.' : 'Trò chơi đã lưu vào thư viện vẫn còn ở đó nếu bạn xoá dự án.'}">${query ? 'Thử từ khóa khác hoặc xoá bộ lọc.' : 'Một dự án lưu tiến trình từ giáo án đến bản nháp.'}</p><button class="btn btn-primary btn-small" data-page="create-wizard">Tạo dự án từ giáo án</button></div>`}
-    </section>`;
+    <div class="lib-toolbar">
+      <div class="lib-search"><span data-icon="search" data-icon-size="14"></span><input id="librarySearch" placeholder="Tìm theo tên dự án, giáo án, thể loại..." value="${escapeHtml(state.search || '')}"></div>
+      <span class="lib-count">${projects === null ? 'Đang tải…' : `${filtered.length} dự án`}</span>
+    </div>
+    ${projects === null
+      ? `<div class="lib-empty">Đang tải danh sách dự án…</div>`
+      : filtered.length
+        ? `${projectSelectionBarHtml(filtered, selected)}<div class="lib-grid">${filtered.map((project, index) => projectCardHtml(project, index, selected.has(project.id))).join('')}</div>`
+        : `<div class="lib-empty lib-empty-dashed"><div class="lib-empty-icon"><span data-icon="folder-open" data-icon-size="26"></span></div><h3>${query ? 'Không tìm thấy dự án phù hợp' : 'Chưa có dự án nào'}</h3><p>${query ? 'Thử từ khóa khác hoặc xoá bộ lọc.' : 'Một dự án lưu tiến trình từ giáo án đến bản nháp.'}</p><button class="btn btn-primary btn-small" data-page="create-wizard">Tạo dự án từ giáo án</button></div>`}`;
 }
 
 function projectCard(project, index = 0) {
   const config = project.config || {};
   const template = config.gameType ? projectTemplateName(config.gameType) : '';
-  const coverGrad = ['bg-[linear-gradient(135deg,#e9e7ff,#d6d1ff)]','bg-[linear-gradient(135deg,#ddf8ed,#bdeedb)]','bg-[linear-gradient(135deg,#fff0dc,#ffd8a7)]','bg-[linear-gradient(135deg,#e0efff,#c9e1ff)]','bg-[linear-gradient(135deg,#ffe4ed,#ffc9d9)]'][index % 5];
-  const icon = { arena: '🧠', scenario: '🚦', matching: '🧩', treasure: '🗺️', race: '🏁' }[config.gameType] || '🎯';
+  /* #307: the same skeleton as a library card — a tinted cover with one vector glyph, a
+     two-line title, one chip row, and a footer that is pinned to the bottom — so the two
+     grids read as one product instead of two different ones. */
+  const glyph = { arena: 'brain', scenario: 'shield-check', matching: 'layers', treasure: 'map', race: 'flag' }[config.gameType] || 'target';
   const sourceName = (project.lesson && project.lesson.name) || project.sourceName || 'Chưa có giáo án nguồn';
-  const topic = (project.description || (project.title || '')).trim();
+  const topic = (project.description || '').trim();
   const savedGame = projectGameSaved(project);
-  return `<article class="bg-white border border-line rounded-[14px] overflow-hidden min-w-0 transition-all duration-180 hover:-translate-y-[3px] hover:shadow-card hover:border-[#d8d5ff]">
-    <div class="${coverGrad} h-[112px] relative flex items-center justify-center overflow-hidden">
-      <div class="absolute [border:1px_solid_#ffffffaa] w-[120px] h-[120px] rounded-full -left-[15px] top-[35px]"></div>
-      <span class="absolute top-[12px] left-[12px] bg-white/[85%] text-[#4338ca] text-[11px] font-extrabold px-[6px] py-[8px] rounded-[6px] z-[2]">${escapeHtml(projectStepLabel(project))}</span>
-      <div class="text-[46px] [filter:drop-shadow(0_7px_5px_#4c50701c)] relative z-[1]">${template ? icon : '📝'}</div>
-      ${template ? `<span class="absolute bottom-[10px] right-[12px] bg-[#11152bcc] text-white text-[11px] font-bold px-[7px] py-[7px] rounded-[6px]">${escapeHtml(template)}</span>` : ''}
+  const savedChip = savedGame
+    ? '<span class="lib-chip is-ok"><span class="lib-chip-text">Đã lưu thư viện</span></span>'
+    : '<span class="lib-chip"><span class="lib-chip-text">Chưa lưu thư viện</span></span>';
+  return `<article class="lib-card is-project" data-project-card="${escapeHtml(project.id)}">
+    <div class="lib-card-cover">
+      <span class="lib-card-glyph">${uiIcon(glyph, '', 19)}</span>
+      <span class="lib-card-kind">${escapeHtml(projectStepLabel(project))}</span>
+      ${template ? `<span class="lib-mode-pill">${escapeHtml(template)}</span>` : ''}
     </div>
-    <div class="p-[15px]">
-      <div class="flex justify-between gap-[8px] items-start"><div class="text-[13px] font-semibold leading-[1.4] break-words">${escapeHtml(project.title || 'Dự án chưa đặt tên')}</div><div class="flex gap-[4px]"><button class="border-0 bg-transparent text-[#4f46e5] w-[26px] h-[26px] grid place-items-center hover:bg-[#eeeefe] hover:rounded-[7px]" data-action="rename-project" data-id="${escapeHtml(project.id)}" title="Đổi tên dự án"><span data-icon="pencil" data-icon-size="14"></span></button><button class="border-0 bg-transparent text-[#b42318] w-[26px] h-[26px] grid place-items-center hover:bg-[#fff1f2] hover:rounded-[7px]" data-action="delete-project" data-id="${escapeHtml(project.id)}" title="Xóa dự án"><span data-icon="trash" data-icon-size="14"></span></button></div></div>
-      <p class="text-[12px] text-[#5f6a7d] leading-[1.6] mt-[8px] mb-[10px] min-h-[35px]">${escapeHtml(topic || 'Chưa có mô tả nội dung.')}</p>
-      <div class="flex gap-[5px] flex-wrap"><span class="inline-flex items-center gap-[5px] px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#5f6a7d] text-[11px]"><span data-icon="file-text" data-icon-size="11"></span> ${escapeHtml(sourceName)}</span>${config.difficulty ? `<span class="px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#5f6a7d] text-[11px]">${escapeHtml(config.difficulty)}</span>` : ''}${config.durationMinutes ? `<span class="px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#5f6a7d] text-[11px]">${Number(config.durationMinutes)} phút</span>` : ''}</div>
-      <div class="flex items-center justify-between border-t border-[#f0f1f6] pt-[12px] mt-[11px] text-[#5f6a7d] text-[12px]"><span class="inline-flex items-center gap-[5px]"><span data-icon="clock" data-icon-size="12"></span> ${fmtDate(project.updatedAt || project.createdAt)}</span><span>${savedGame ? 'Đã lưu trong thư viện' : 'Chưa lưu thư viện'}</span></div>
-      <div class="flex gap-[8px] mt-[13px]"><button class="btn btn-primary btn-small" data-action="open-project" data-id="${escapeHtml(project.id)}"><span data-icon="pencil" data-icon-size="13"></span> Tiếp tục làm</button>${savedGame ? `<button class="btn btn-secondary btn-small" data-page="library"><span data-icon="library" data-icon-size="13"></span> Thư viện</button>` : ''}</div>
+    <div class="lib-card-body">
+      <div class="lib-card-head">
+        <h3 class="lib-card-title">${escapeHtml(project.title || 'Dự án chưa đặt tên')}</h3>
+        <div class="lib-card-tools">
+          <button class="lib-card-menu" data-action="rename-project" data-id="${escapeHtml(project.id)}" title="Đổi tên dự án" aria-label="Đổi tên dự án"><span data-icon="pencil" data-icon-size="14"></span></button>
+          <button class="lib-card-menu is-danger" data-action="delete-project" data-id="${escapeHtml(project.id)}" title="Xoá dự án" aria-label="Xoá dự án"><span data-icon="trash" data-icon-size="14"></span></button>
+        </div>
+      </div>
+      <p class="lib-card-desc">${escapeHtml(topic || 'Chưa có mô tả nội dung.')}</p>
+      <div class="lib-card-chips">
+        <span class="lib-chip lib-chip-wide"><span data-icon="file-text" data-icon-size="11"></span> <span class="lib-chip-text">${escapeHtml(sourceName)}</span></span>
+        ${config.difficulty ? `<span class="lib-chip"><span class="lib-chip-text">${escapeHtml(config.difficulty)}</span></span>` : ''}
+        ${config.durationMinutes ? `<span class="lib-chip"><span class="lib-chip-text">${Number(config.durationMinutes)} phút</span></span>` : ''}
+        ${savedChip}
+      </div>
+      <div class="lib-card-meta">
+        <span class="lib-meta-item"><span data-icon="clock" data-icon-size="12"></span> ${fmtDate(project.updatedAt || project.createdAt)}</span>
+      </div>
+      <div class="lib-card-actions">
+        <button class="btn btn-primary btn-small lib-card-play" data-action="open-project" data-id="${escapeHtml(project.id)}"><span data-icon="pencil" data-icon-size="13"></span> Tiếp tục làm</button>
+        ${savedGame ? `<button class="btn btn-secondary btn-small lib-card-icon" data-page="library" title="Mở thư viện trò chơi" aria-label="Mở thư viện trò chơi"><span data-icon="library" data-icon-size="13"></span></button>` : ''}
+      </div>
     </div>
   </article>`;
 }

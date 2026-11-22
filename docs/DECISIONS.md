@@ -5100,3 +5100,33 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
 - **Cổng kiểm phải tự đặt lại trạng thái nó đo**: một cổng đọc cờ trên đĩa sẽ chỉ đo được nhánh
   “đã xem” sau lần chạy đầu. Cổng xoá cờ **trong bộ nhớ** để nhánh “lần đầu” luôn đo được, và
   đọc `getSettings` để chứng minh cờ **đã xuống đĩa** — hai khẳng định khác nhau, hai phép đo.
+
+## #307 — Lưới thư viện và lưới dự án là MỘT sản phẩm, nên phải là MỘT cái thẻ
+
+- **Thẻ phải tự quyết chiều cao của nó, không để nội dung quyết.** Ba thứ cố định —
+  tiêu đề 2 dòng, mô tả 2 dòng, chân thẻ `margin-top:auto` — làm mọi thẻ trong một hàng
+  cao bằng nhau và mọi nút nằm trên cùng một đường, kể cả khi tên dài 1 dòng hay 3 dòng.
+  Một lưới mà mép phải so le thì đọc là "thô" ngay cả khi từng thẻ riêng lẻ đẹp.
+- **Emoji không phải icon của sản phẩm.** 🧠 và 🚦 do font hệ thống vẽ, nên độ đậm, cỡ và
+  đường chân khác nhau giữa các thẻ và giữa các máy. Thẻ dùng đúng bộ Lucide mà phần còn
+  lại của app dùng, nên một biểu tượng chỉ còn một kiểu nét.
+- **Màu thể loại sống ở CSS, không ở JavaScript.** Bảng utility `templateThemes` trong
+  `shared.ts` đã bị xoá; màu nằm trong một khối `.lib-card.is-<thể loại>` duy nhất. Khi
+  màu chuyển từ markup sang CSS thì **test phải đọc CSS** — `ui-identity.test.ts` được
+  sửa để khẳng định đúng màu của từng thể loại, chứ không phải để bỏ kiểm.
+- **`text-overflow` trên flex container không cắt được text node vô danh.** Muốn tên dài
+  kết thúc bằng "…" thì nhãn phải có hộp riêng (`.lib-chip-text`); nếu không, chữ bị cắt
+  phẳng lì ở mép thẻ và trông như lỗi.
+- **Nền tối sai vì ĐỘ ĐẶC HIỆU, không vì màu.** `.lib-card.is-quiz .lib-card-cover` (3 lớp)
+  thắng `html[data-theme="dark"] .lib-card-cover` (2 lớp + thuộc tính), nên dải màu vẫn
+  pastel trong nền tối. Quy tắc nền tối phải **nhiều phần hơn** quy tắc nó muốn ghi đè
+  (`html[data-theme] .lib-card .lib-card-cover`), và màu thể loại chuyển sang glyph để
+  vẫn đọc được trên nền tối.
+- **Một nhãn trong cổng kiểm là HỢP ĐỒNG** (#304): câu "Hoặc tick từng … để xoá nhiều cùng
+  lúc" và dải chọn `rgb(248,247,255)` được giữ nguyên, chỉ đổi màu chữ cho đạt 4.5:1 —
+  sửa cổng để hợp với giao diện mới là làm hỏng chính thứ cổng bảo vệ.
+- **Đo bằng mắt có máy hỗ trợ chỉ để TÌM lỗi, không để duyệt.** Ba vòng `look_at_image` tìm
+  ra ba lỗi thật (ô tick đè pill, nền tối pastel, chip cụt) — nhưng mọi kết luận "đã sửa"
+  đều được xác nhận lại bằng `getComputedStyle` hoặc bằng cổng kiểm.
+- **Cổng đo TRẠNG THÁI phải chạy trên app vừa mở** (#288): `ui-game-background-check` cho
+  39/42 trên một phiên đã bị các cổng khác chỉnh, và 42/42 trên phiên mới.

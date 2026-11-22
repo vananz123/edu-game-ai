@@ -11,7 +11,10 @@ const state = { db: { games: [], sessions: [] }, page: 'library', search: '', fi
   // #171: the constellation board's input state only — the card a tap selected
   // and the card a drag is carrying. Never saved, never scored.
   constellationSelected: null, constellationDragging: null };
-const icons = { quiz: '🧠', scenario: '🚦', matching: '🧩', 'treasure-hunt': '🗺️', race: '🏁' };
+/* #307: one vector glyph per template instead of five emoji. Emoji are drawn by the
+   system font, so "🧠" and "🚦" differed in weight and baseline from card to card and
+   from one machine to the next; these come from the same 24px Lucide set as the chrome. */
+const CARD_GLYPH = { quiz: 'brain', scenario: 'shield-check', matching: 'layers', 'treasure-hunt': 'map', race: 'flag', connection: 'sparkles' };
 const treasureMissionMeta = {
   'multiple-choice': { label: 'Trắc nghiệm', icon: '❓', short: 'Chọn đáp án đúng' },
   scenario: { label: 'Xử lý tình huống', icon: '🧭', short: 'Chọn cách xử lý phù hợp' },
@@ -139,13 +142,6 @@ function formatBytes(bytes) { return `${(bytes / 1024 ** 3).toLocaleString('vi-V
  */
 function gameCard(game, index = 0, deletable = false) {
   const template = game.template || 'quiz';
-  const templateThemes = {
-    quiz: { cover: 'bg-[linear-gradient(135deg,#fef3c7,#fde68a)] dark:bg-[linear-gradient(135deg,#382806,#261a03)]', badge: 'bg-white/[90%] text-[#b45309] dark:bg-[#261a03]/[90%] dark:text-[#fde68a]', border: 'border-l-[4px] border-l-[#f59e0b]' },
-    scenario: { cover: 'bg-[linear-gradient(135deg,#d1fae5,#a7f3d0)] dark:bg-[linear-gradient(135deg,#063324,#032117)]', badge: 'bg-white/[90%] text-[#047857] dark:bg-[#032117]/[90%] dark:text-[#a7f3d0]', border: 'border-l-[4px] border-l-[#10b981]' },
-    matching: { cover: 'bg-[linear-gradient(135deg,#ede9fe,#ddd6fe)] dark:bg-[linear-gradient(135deg,#251945,#170e30)]', badge: 'bg-white/[90%] text-[#6d28d9] dark:bg-[#170e30]/[90%] dark:text-[#ddd6fe]', border: 'border-l-[4px] border-l-[#8b5cf6]' },
-    'treasure-hunt': { cover: 'bg-[linear-gradient(135deg,#ffe4e6,#fecdd3)] dark:bg-[linear-gradient(135deg,#3d0e19,#28080f)]', badge: 'bg-white/[90%] text-[#be123c] dark:bg-[#28080f]/[90%] dark:text-[#fecdd3]', border: 'border-l-[4px] border-l-[#f43f5e]' },
-    race: { cover: 'bg-[linear-gradient(135deg,#dbeafe,#bfdbfe)] dark:bg-[linear-gradient(135deg,#0c234a,#08162f)]', badge: 'bg-white/[90%] text-[#1d4ed8] dark:bg-[#08162f]/[90%] dark:text-[#bfdbfe]', border: 'border-l-[4px] border-l-[#3b82f6]' }
-  };
   const id = escapeHtml(game.id);
   const menuId = 'gameMenu-' + String(index + 1);
   const item = (action, label, extra = '') => `<button type="button" role="menuitem" class="w-full flex items-center gap-[9px] border-0 bg-transparent text-left px-[12px] py-[9px] text-[12px] font-semibold text-[#515c72] hover:bg-[#f5f6fa] focus:bg-[#f5f6fa] outline-0 ${extra}" data-action="${action}" data-id="${id}">${label}</button>`;
@@ -154,9 +150,9 @@ function gameCard(game, index = 0, deletable = false) {
   // play mode; absent `gameplayMode` is classic (editorGameplayMode).
   const playMode = template === 'quiz' ? ((game.gameSetup && game.gameSetup.gameplayMode === 'house') ? 'house' : 'classic') : '';
   const playModeChip = playMode === 'house'
-    ? '<span class="px-[4px] py-[7px] bg-[#fff4e9] text-[#9c4808] rounded-[5px] text-[11px] font-bold" data-play-mode="house" title="Cách chơi: Xây nhà — mỗi câu đúng dựng thêm một phần của ngôi nhà 3D">🏗 Cách chơi: Xây nhà</span>'
+    ? '<span class="lib-mode-pill is-house" data-play-mode="house" title="Cách chơi: Xây nhà — mỗi câu đúng dựng thêm một phần của ngôi nhà 3D">Cách chơi: Xây nhà</span>'
     : playMode === 'classic'
-      ? '<span class="px-[4px] py-[7px] bg-[#edf2ff] text-[#4565c9] rounded-[5px] text-[11px] font-semibold" data-play-mode="classic" title="Cách chơi: Cổ điển — trả lời câu hỏi nhận điểm">🎯 Cách chơi: Cổ điển</span>'
+      ? '<span class="lib-mode-pill" data-play-mode="classic" title="Cách chơi: Cổ điển — trả lời câu hỏi nhận điểm">Cách chơi: Cổ điển</span>'
       : '';
   // #168/#171: the constellation board is a MATCHING style, so its chip sits
   // beside the matching label. Mặc định by absence: a board saved before it
@@ -164,22 +160,19 @@ function gameCard(game, index = 0, deletable = false) {
   // instead of lying. The BETA badge is gone (#171): the name is the whole label.
   const connectionBoard = template === 'matching' && game.matchingGame && game.matchingGame.mode === 'connection';
   const connectionChip = connectionBoard
-    ? `<span class="px-[4px] py-[7px] bg-[#e8f5ef] text-[#1c7a58] rounded-[5px] text-[11px] font-bold" data-play-mode="connection" title="Cách chơi: ${CONSTELLATION_GAME_NAME} — mỗi cặp ghép đúng thắp sáng thêm một ngôi sao của chòm sao">🌌 Cách chơi: ${CONSTELLATION_GAME_NAME}</span>`
+    ? `<span class="lib-mode-pill is-connection" data-play-mode="connection" title="Cách chơi: ${CONSTELLATION_GAME_NAME} — mỗi cặp ghép đúng thắp sáng thêm một ngôi sao của chòm sao">Cách chơi: ${CONSTELLATION_GAME_NAME}</span>`
     : '';
-  const cardTheme = connectionBoard ? { cover: 'bg-[linear-gradient(135deg,#cffafe,#a5f3fc)] dark:bg-[linear-gradient(135deg,#082f38,#041e24)]', badge: 'bg-white/[90%] text-[#0e7490] dark:bg-[#041e24]/[90%] dark:text-[#a5f3fc]', border: 'border-l-[4px] border-l-[#06b6d4]' } : (templateThemes[template] || templateThemes.quiz);
-  return `<article class="game-card bg-white dark:bg-[#171c32] border border-line ${cardTheme.border} rounded-xl overflow-hidden min-w-0 transition-shadow duration-180 hover:shadow-card hover:border-[#d8d5ff] dark:hover:border-[#384266]" data-game-card="${id}" data-template="${escapeHtml(template)}">
-    <div class="${cardTheme.cover} h-[96px] relative flex items-center justify-center overflow-hidden">
-      <div class="absolute [border:1px_solid_#ffffffaa] w-[96px] h-[96px] rounded-full -left-[12px] top-[30px]"></div>
-      <div class="absolute [border:1px_solid_#ffffffaa] w-[72px] h-[72px] rounded-full right-[-4px] top-[-16px]"></div>
-      <span class="absolute top-2 left-2 ${cardTheme.badge} text-[11px] font-extrabold px-[8px] py-[4px] rounded-[6px] z-[2] shadow-sm">${escapeHtml(templateLabel(template))}</span>
-      <div class="text-[34px] [filter:drop-shadow(0_5px_4px_#4c50701c)] relative z-[1]">${icons[template] || '🎮'}</div>
+  return `<article class="game-card lib-card${connectionBoard ? ' is-connection' : ' is-' + template}" data-game-card="${id}" data-template="${escapeHtml(template)}">
+    <div class="lib-card-cover">
+      <span class="lib-card-glyph">${uiIcon(CARD_GLYPH[connectionBoard ? 'connection' : template] || 'target', '', 19)}</span>
+      <span class="lib-card-kind">${escapeHtml(templateLabel(template))}</span>
     </div>
-    <div class="p-3">
-      <div class="flex justify-between gap-[8px] items-start">
-        <div class="text-[13px] font-semibold leading-[1.4]">${escapeHtml(game.title)}</div>
+    <div class="lib-card-body">
+      <div class="lib-card-head">
+        <h3 class="lib-card-title">${escapeHtml(game.title)}</h3>
         <!-- The document-level "click outside" guard keys on this wrapper (bootstrap.ts). -->
         <div class="relative shrink-0" data-game-menu-root>
-          <button type="button" class="border-0 bg-transparent text-[#5f6a7d] inline-flex items-center justify-center w-[24px] h-[24px] rounded-[6px] hover:bg-[#f5f6fa]"
+          <button type="button" class="lib-card-menu"
             data-menu-toggle="${menuId}" aria-haspopup="menu" aria-expanded="false" aria-controls="${menuId}" title="Thêm lựa chọn"><span data-icon="ellipsis-vertical" data-icon-size="15"></span></button>
           <div id="${menuId}" role="menu" aria-label="Lựa chọn cho ${escapeHtml(game.title)}" hidden
             class="absolute right-0 top-[24px] z-[20] min-w-[168px] py-[4px] bg-white border border-[#e7eaf2] rounded-[10px] shadow-[0_10px_24px_#1e293b1f]">
@@ -190,12 +183,20 @@ function gameCard(game, index = 0, deletable = false) {
           </div>
         </div>
       </div>
-      <p class="text-[12px] text-[#5f6a7d] leading-[1.55] mt-1.5 mb-2 line-clamp-2">${escapeHtml(game.description || 'Trò chơi học tập tương tác, có thể chơi ngoại tuyến.')}</p>
-      <div class="flex gap-[5px] flex-wrap">${playModeChip}${connectionChip}<span class="px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#5f6a7d] text-[11px]">${escapeHtml(game.subject || 'Chưa phân môn')}</span><span class="px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#5f6a7d] text-[11px]">${game.grade ? 'Lớp ' + escapeHtml(game.grade) : 'Mọi lớp'}</span><span class="px-[4px] py-[7px] bg-[#f5f6fa] rounded-[5px] text-[#5f6a7d] text-[11px]">${game.questions?.length || 0} câu</span></div>
-      <div class="flex items-center justify-between border-t border-[#f0f1f6] pt-2.5 text-[#5f6a7d] text-[12px]"><span class="inline-flex items-center gap-[5px]"><span data-icon="book-open" data-icon-size="12"></span> ${escapeHtml(game.topic || 'Bài học')}</span><span class="inline-flex items-center gap-[5px]"><span data-icon="clock" data-icon-size="12"></span> ${fmtDate(game.updatedAt || game.createdAt)}</span></div>
-      <div class="flex gap-2 mt-2.5">
-        <button class="btn btn-primary btn-small" data-action="play" data-id="${id}"><span data-icon="play" data-icon-size="13"></span> Chơi ngay</button>
-        <button class="btn btn-secondary btn-small" data-action="play-fullscreen" data-id="${id}"><span data-icon="maximize" data-icon-size="13"></span> Toàn màn hình</button>
+      <p class="lib-card-desc">${escapeHtml(game.description || 'Trò chơi học tập tương tác, có thể chơi ngoại tuyến.')}</p>
+      <div class="lib-card-chips">
+        ${playModeChip}${connectionChip}
+        <span class="lib-chip"><span class="lib-chip-text">${escapeHtml(game.subject || 'Chưa phân môn')}</span></span>
+        <span class="lib-chip"><span class="lib-chip-text">${game.grade ? 'Lớp ' + escapeHtml(game.grade) : 'Mọi lớp'}</span></span>
+        <span class="lib-chip"><span class="lib-chip-text">${game.questions?.length || 0} câu</span></span>
+      </div>
+      <div class="lib-card-meta">
+        <span class="lib-meta-item"><span data-icon="book-open" data-icon-size="12"></span> ${escapeHtml(game.topic || 'Bài học')}</span>
+        <span class="lib-meta-item"><span data-icon="clock" data-icon-size="12"></span> ${fmtDate(game.updatedAt || game.createdAt)}</span>
+      </div>
+      <div class="lib-card-actions">
+        <button class="btn btn-primary btn-small lib-card-play" data-action="play" data-id="${id}"><span data-icon="play" data-icon-size="13"></span> Chơi ngay</button>
+        <button class="btn btn-secondary btn-small lib-card-icon" data-action="play-fullscreen" data-id="${id}" title="Chơi toàn màn hình" aria-label="Chơi toàn màn hình"><span data-icon="maximize" data-icon-size="13"></span></button>
       </div>
     </div>
   </article>`;

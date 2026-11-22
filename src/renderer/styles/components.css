@@ -1062,3 +1062,150 @@ html[data-theme="dark"] .editor-art-more>summary{color:#c7d0e0}
 .editor-art-swap .editor-art-buttons{gap:6px;flex-wrap:wrap}
 .editor-art-swap .editor-art-hint{padding:0 10px 8px;margin:0;font-size:11px;color:#7b8698}
 .editor-art-swap .editor-art-slots{margin:0 8px 8px}
+
+/* ═══ #307 — Thư viện trò chơi & Dự án của tôi: một lưới, một thẻ, một nhịp ═══
+   Trước đây hai trang dùng hai kiểu thẻ khác nhau, cao thấp theo nội dung, dải màu
+   trang trí hai vòng tròn mờ, chip mỗi cái một cỡ. Kết quả: hàng lưới so le, chữ và
+   nút không thẳng hàng, nhìn "thô". Ở đây: thẻ là MỘT khối flex cao bằng nhau,
+   tiêu đề 2 dòng cố định, mô tả 2 dòng cố định, chân thẻ luôn bám đáy. */
+
+.lib-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;align-items:stretch}
+.lib-item{position:relative;min-width:0;display:flex}
+.lib-item>.lib-card{width:100%}
+.lib-item.is-selected>.lib-card{border-color:#6258e8;box-shadow:0 0 0 2px #6258e833}
+
+/* ── thanh công cụ: tìm kiếm, lọc, số lượng nằm trong MỘT khối ── */
+.lib-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.lib-search{position:relative;display:flex;align-items:center;gap:8px;flex:1 1 260px;min-width:200px;background:#f6f7fb;border:1px solid #e7eaf2;border-radius:9px;padding:0 10px;color:#8b93a5}
+.lib-search input{flex:1;min-width:0;border:0;background:transparent;outline:0;font:inherit;font-size:12.5px;color:#26304a;padding:9px 0}
+.lib-search:focus-within{border-color:#b9b4ff;background:#fff;box-shadow:0 0 0 3px #6258e814}
+.lib-filter{width:auto;min-width:172px;font-size:12.5px}
+.lib-count{font-size:11.5px;font-weight:700;color:#5f6a7d;background:#f4f5fa;border-radius:999px;padding:5px 11px;white-space:nowrap}
+.lib-import{margin-left:auto}
+
+/* ── thanh chọn nhiều: trung tính, không tô tím ── */
+/* The gate (ui-dark-theme-check, #164) pins the strip colour of all four selection
+   bars to rgb(248,247,255), so the library one keeps that value rather than a new white. */
+.lib-selbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px;background:#f8f7ff;border:1px solid #e6e3fb;border-radius:11px;padding:8px 12px}
+.lib-selbar-all{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:650;color:#48536a;cursor:pointer}
+.lib-selbar-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.lib-selbar-count{font-size:11.5px;color:#5b6478}
+.lib-selbar-clear{border:0;background:transparent;font:inherit;font-size:12px;font-weight:650;color:#5b6478;padding:6px 8px;border-radius:8px;cursor:pointer}
+.lib-selbar-clear:hover:not(:disabled){background:#f4f5fa;color:#3b4459}
+.lib-selbar-clear:disabled{opacity:.45;cursor:not-allowed}
+.lib-selbar .btn:disabled{opacity:.55;cursor:not-allowed}
+
+/* ── thẻ: khối flex, chân bám đáy, hai dòng tiêu đề luôn dành chỗ ── */
+.lib-card{display:flex;flex-direction:column;height:100%;min-width:0;background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:var(--shadow-md);transition:box-shadow .16s,border-color .16s}
+.lib-card:hover{border-color:#d8d5ff;box-shadow:var(--shadow-hover)}
+.lib-card-cover{position:relative;display:flex;align-items:center;gap:9px;height:56px;padding:0 14px;background:linear-gradient(135deg,#f6f5ff,#eceafe)}
+/* Ô tick chọn nằm ở góc phải dải màu, nên dải màu phải chừa chỗ cho nó — nếu không
+   nó đè lên pill "Cách chơi" (đo được ở ảnh chụp #307). */
+.lib-item .lib-card-cover{padding-right:48px}
+.lib-card-glyph{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:#ffffffcc;color:#4f46e5;box-shadow:0 1px 2px #1e293b14}
+.lib-card-kind{font-size:10.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#5b5590}
+.lib-mode-pill{flex:0 1 auto;min-width:0;font-size:10.5px;font-weight:750;color:#4338ca;background:#ffffff8c;border:1px solid #ffffffaa;border-radius:999px;padding:3px 9px;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.lib-card.is-quiz .lib-card-cover{background:linear-gradient(135deg,#fff7ea,#fdeccd)}
+.lib-card.is-quiz .lib-card-glyph{color:#b45309}
+.lib-card.is-quiz .lib-card-kind{color:#8a5410}
+.lib-card.is-scenario .lib-card-cover{background:linear-gradient(135deg,#eefaf3,#d8f3e5)}
+.lib-card.is-scenario .lib-card-glyph{color:#047857}
+.lib-card.is-scenario .lib-card-kind{color:#0b6b4f}
+.lib-card.is-matching .lib-card-cover{background:linear-gradient(135deg,#f4f1ff,#e6e0fe)}
+.lib-card.is-matching .lib-card-glyph{color:#6d28d9}
+.lib-card.is-matching .lib-card-kind{color:#5b21b6}
+.lib-card.is-treasure-hunt .lib-card-cover{background:linear-gradient(135deg,#fff1f3,#fee0e5)}
+.lib-card.is-treasure-hunt .lib-card-glyph{color:#be123c}
+.lib-card.is-treasure-hunt .lib-card-kind{color:#9f1239}
+.lib-card.is-race .lib-card-cover{background:linear-gradient(135deg,#eef4ff,#dbe7fe)}
+.lib-card.is-race .lib-card-glyph{color:#1d4ed8}
+.lib-card.is-race .lib-card-kind{color:#1e40af}
+.lib-card.is-connection .lib-card-cover{background:linear-gradient(135deg,#edfbfd,#d3f2f9)}
+.lib-card.is-connection .lib-card-glyph{color:#0e7490}
+.lib-card.is-connection .lib-card-kind{color:#0e7490}
+
+.lib-card-body{display:flex;flex-direction:column;flex:1;padding:12px 14px 13px;min-width:0}
+.lib-card-head{display:flex;align-items:flex-start;gap:8px}
+.lib-card-title{margin:0;flex:1;min-width:0;font-size:13.5px;font-weight:750;line-height:1.4;color:#1b2437;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.8em}
+.lib-card-desc{margin:7px 0 10px;font-size:12px;line-height:1.5;color:#5f6a7d;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:3em}
+.lib-card-chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;min-width:0}
+.lib-chip{display:inline-flex;align-items:center;gap:5px;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;font-weight:650;color:#4d5768;background:#f3f5fa;border-radius:999px;padding:3px 9px}
+/* text-overflow on a flex container does nothing for an anonymous text item, so the
+   label gets its own box; that is the only way a long lesson-file name ends in "..." */
+.lib-chip-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lib-chip-wide{max-width:100%}
+.lib-chip.is-ok{background:#e9f7f1;color:#0f7b5c}
+/* The play mode is the one chip a teacher reads at class time, so it carries an accent
+   instead of the grey plate — and it lives in the chip row, where the full sentence fits. */
+.lib-card-chips .lib-mode-pill{margin-left:0;background:#eef0ff;border-color:#dcdcfb;color:#4338ca}
+.lib-card-chips .lib-mode-pill.is-house{background:#fff3e6;border-color:#fbe0c4;color:#9a4a06}
+.lib-card-chips .lib-mode-pill.is-connection{background:#e7f6f9;border-color:#c6e9f0;color:#0b5f74}
+.lib-card-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:auto;padding-top:9px;border-top:1px solid #eff1f7;font-size:11.5px;color:#6b7488;min-width:0}
+.lib-meta-item{display:inline-flex;align-items:center;gap:4px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lib-card-actions{display:flex;align-items:center;gap:7px;margin-top:10px}
+.lib-card-play{flex:1;justify-content:center}
+.lib-card-icon{padding:6px 9px;min-width:32px;justify-content:center}
+.lib-card-menu{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;flex:0 0 auto;border:1px solid transparent;border-radius:8px;background:transparent;color:#5f6a7d;cursor:pointer}
+.lib-card-menu:hover{background:#f2f3f9;color:#26304a}
+.lib-card-menu.is-danger:hover{background:#fff1f1;color:#b91c1c}
+.lib-card-tools{display:flex;gap:3px;flex:0 0 auto}
+.lib-card-check{position:absolute;top:9px;right:11px;z-index:3;display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:8px;background:#ffffffd9;border:1px solid #e2e5ef;cursor:pointer;opacity:.6;transition:opacity .14s}
+.lib-item:hover .lib-card-check,.lib-card-check:focus-within,.lib-item.is-selected .lib-card-check{opacity:1}
+@media (hover:none){.lib-card-check{opacity:1}}
+
+/* ── trạng thái rỗng dùng chung ── */
+.lib-empty{background:#fff;border:1px solid var(--line);border-radius:14px;padding:26px 18px;text-align:center;color:#5f6a7d;font-size:12.5px}
+.lib-empty-dashed{border-style:dashed;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.lib-empty-icon{color:#8b93a5;margin-bottom:2px}
+.lib-empty h3{margin:2px 0 0;font-size:14px;color:#394256}
+.lib-empty p{margin:2px 0 12px;max-width:52ch;line-height:1.55;color:#5f6a7d}
+
+/* ── màn hình hẹp: 3 → 2 → 1 cột, để thẻ không bị bóp méo ── */
+@media (max-width:1180px){.lib-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:780px){
+  .lib-grid{grid-template-columns:minmax(0,1fr);gap:14px}
+  .lib-toolbar{padding:9px 10px}
+  .lib-import{margin-left:0}
+}
+
+/* ── nền tối: dùng token, không hex lạc ── */
+html[data-theme="dark"] .lib-toolbar,
+html[data-theme="dark"] .lib-selbar{background:#1e2544;border-color:#333c5c}
+html[data-theme="dark"] .lib-selbar-all{color:#c9d2e4}
+html[data-theme="dark"] .lib-selbar-clear{color:#b9c2d6}
+html[data-theme="dark"] .lib-selbar-clear:hover:not(:disabled){background:#2a3352;color:#eef2fa}
+html[data-theme="dark"] .lib-selbar-count{color:#b3bccf}
+html[data-theme="dark"] .lib-card,
+html[data-theme="dark"] .lib-empty{background:#171c32;border-color:#2a324b}
+html[data-theme="dark"] .lib-search{background:#12172b;border-color:#2a324b;color:#8b93a5}
+html[data-theme="dark"] .lib-search input{color:#e6ebf5}
+html[data-theme="dark"] .lib-count{background:#12172b;color:#9aa3bb}
+html[data-theme="dark"] .lib-card-title{color:#eef2fa}
+html[data-theme="dark"] .lib-card-desc,
+html[data-theme="dark"] .lib-card-meta,
+html[data-theme="dark"] .lib-selbar-count{color:#9aa3bb}
+html[data-theme="dark"] .lib-chip{background:#1e2544;color:#b8c1d6}
+html[data-theme="dark"] .lib-chip.is-ok{background:#12301f;color:#4ade80}
+html[data-theme="dark"] .lib-card-meta{border-top-color:#242c46}
+/* Specificity, not colour, was the bug: `.lib-card.is-quiz .lib-card-cover` (three
+   classes) beat `html[data-theme] .lib-card-cover` (two + attribute), so every cover kept
+   its PASTEL gradient in dark mode and the header label sat on cream. One rule with four
+   parts wins, and the template accent moves to the glyph, where it stays legible. */
+html[data-theme="dark"] .lib-card .lib-card-cover{background:linear-gradient(135deg,#1f2547,#191d36)}
+html[data-theme="dark"] .lib-card.is-quiz .lib-card-glyph{color:#fbbf24;background:#fbbf2418}
+html[data-theme="dark"] .lib-card.is-scenario .lib-card-glyph{color:#4ade80;background:#4ade8018}
+html[data-theme="dark"] .lib-card.is-matching .lib-card-glyph{color:#c4b5fd;background:#c4b5fd18}
+html[data-theme="dark"] .lib-card.is-treasure-hunt .lib-card-glyph{color:#fb7185;background:#fb718518}
+html[data-theme="dark"] .lib-card.is-race .lib-card-glyph{color:#93b4fd;background:#93b4fd18}
+html[data-theme="dark"] .lib-card.is-connection .lib-card-glyph{color:#67e8f9;background:#67e8f918}
+/* One dark rule beats the six per-template accent rules (html[data-theme] + .lib-card +
+   the part), because those set a light-mode ink that is unreadable on a dark cover. */
+html[data-theme="dark"] .lib-card .lib-card-glyph{background:#ffffff12;color:#c7c2ff}
+html[data-theme="dark"] .lib-card .lib-card-kind{color:#a8a2e6}
+html[data-theme="dark"] .lib-card-chips .lib-mode-pill{background:#252c4d;border-color:#38416b;color:#c7c2ff}
+html[data-theme="dark"] .lib-card-chips .lib-mode-pill.is-house{background:#33240f;border-color:#4a3517;color:#fbbf24}
+html[data-theme="dark"] .lib-card-chips .lib-mode-pill.is-connection{background:#0f2f38;border-color:#1b4551;color:#7fd8e8}
+html[data-theme="dark"] .lib-mode-pill{background:#ffffff10;border-color:#ffffff1f;color:#c9d1e6}
+html[data-theme="dark"] .lib-card-check{background:#2b3352;border-color:#5f6b93}
+html[data-theme="dark"] .lib-card-menu:hover{background:#1e2544;color:#e6ebf5}
+html[data-theme="dark"] .lib-empty h3{color:#e6ebf5}
