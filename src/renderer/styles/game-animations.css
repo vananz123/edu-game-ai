@@ -293,7 +293,16 @@ html[data-fullscreen="1"] .modal[data-player-theme] .team-score-chip {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  overscroll-behavior: contain;
+  /* #311: KHÔNG `contain` ở đây. Cửa sổ chơi (nút "Chơi ngay") để sân khấu cao
+     theo nội dung, nên thứ cuộn được là `.modal` (overflow:auto) chứ không phải
+     sân khấu: `scrollHeight == clientHeight` (đo 723/723). `contain` nuốt bánh xe
+     ở một hộp không cuộn được nên trang KHÔNG cuộn nữa, và đáp án cuối nằm dưới
+     đáy cửa sổ không tới được. Chỉ chế độ toàn màn hình mới thật sự lấy sân khấu
+     làm hộp cuộn (ở đó `html,body{overflow:hidden}` nên không có gì để chuyền). */
+  overscroll-behavior-y: auto;
+}
+html[data-fullscreen="1"] .modal[data-player-theme] .game-stage {
+  overscroll-behavior-y: contain;
 }
 html[data-fullscreen="1"] .modal[data-player-theme] .game-stage {
   border-radius: 0;

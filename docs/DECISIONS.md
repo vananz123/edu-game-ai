@@ -5197,3 +5197,20 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
   thành `.egame`, nếu không lần nhập sau bộ lọc `*.egame` không thấy tệp vừa xuất.
 - **Lỗi của vỏ máy phải được dịch.** Toast in nguyên văn "File not found" không nói được
   giáo viên phải làm gì; mã `EG_*` đã có sẵn để đổi thành câu việc-cần-làm.
+
+## #311 — Một hộp KHÔNG cuộn được thì không được giữ bánh xe
+
+- **`overscroll-behavior: contain` trên hộp không cuộn được là một cái khoá.** Ở chế độ
+  cửa sổ, `.game-stage` cao theo nội dung (`scrollHeight == clientHeight`), nên hộp cuộn
+  thật là `.modal`; `contain` trên sân khấu chặn bánh xe chuyền lên, và giáo viên không
+  cuộn được dù thanh cuộn của `.modal` vẫn tồn tại. Chỉ giữ `contain` nơi sân khấu **thật
+  sự** là hộp cuộn (`html[data-fullscreen="1"]`).
+- **"Trang không cuộn" phải được đo bằng bánh xe thật.** `scrollHeight > clientHeight` chỉ
+  nói rằng *có thể* cuộn; phép đo đúng là lăn chuột rồi đọc `scrollTop`. Trước #311 mọi
+  cổng đều xanh vì không cổng nào lăn chuột.
+- **Kiểm chứng kênh đo trước khi tin kết quả đo.** Cùng một phiên: lăn trên trang Thư viện
+  ⇒ `window.scrollY` 0 → 300 (kênh bánh xe hoạt động), rồi lăn trên màn chơi ⇒ 0 (lỗi thật).
+  Không có bước đầu, "0" sẽ bị đọc thành "công cụ không gửi được bánh xe".
+- **Một cổng phải mở đúng chế độ mà lời báo nói tới.** `OPEN` của `ui-play-surface-check`
+  ép `fullscreen: true`, nên nó không thể thấy lỗi của "Chơi ngay"; mục mới gọi
+  `playGame(game, {fullscreen:false})`.

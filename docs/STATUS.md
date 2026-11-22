@@ -7,6 +7,22 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-23 — #311 “Bấm Chơi ngay rồi không cuộn được”: sân khấu nuốt bánh xe
+- Giáo viên: **“nút chơi ngay khi chơi không scroll được”**. Tái hiện trên app thật ở 1024×640 và 1366×768: `.modal` **có** cuộn được (`scrollHeight 866 / clientHeight 576`, `overflow:auto`) nhưng **bánh xe thật không nhích một pixel** (`modal.scrollTop = 0` sau khi lăn 400), và đáp án cuối nằm ở **868 px** trong khi cửa sổ cao **640 px** — tức là không tới được.
+- **Nguyên nhân gốc:** `src/renderer/styles/game-animations.css` đặt `overscroll-behavior: contain` cho `.modal[data-player-theme] .game-stage`. Ở chế độ cửa sổ (“Chơi ngay”), sân khấu cao theo nội dung nên nó **không cuộn được** (`scrollHeight == clientHeight`, đo 723/723) — nhưng `contain` vẫn **chặn bánh xe chuyền lên hộp cuộn thật là `.modal`**. Một hộp không cuộn được mà vẫn giữ bánh xe là một cái khoá trên đường cuộn của cả trang. (Kiểm chứng rằng CDP gửi bánh xe được: cùng một phiên, lăn trên trang Thư viện ⇒ `window.scrollY` 0 → 300.)
+- **Sửa:** bỏ `contain` ở mặc định (`overscroll-behavior-y: auto`), **chỉ** giữ `contain` trong `html[data-fullscreen="1"]` — nơi sân khấu mới thật sự là hộp cuộn (và `html,body{overflow:hidden}` nên không có gì để chuyền).
+- **Đo lại sau khi sửa (bánh xe thật, cả hai chế độ):**
+
+  | cỡ cửa sổ | Chơi ngay | Trình chiếu (toàn màn hình) |
+  |---|---|---|
+  | 1024×640 | `.modal` cuộn 290 px, đáp án cuối 825 → **535** | `.game-stage` cuộn 58 px, 651 → **593** |
+  | 1280×720 | `.modal` cuộn 58 px, 664 → **606** | vừa khít, không cần cuộn (675 trong 720) |
+  | 1366×768 | `.modal` cuộn 35 px, 686 → **651** | vừa khít, không cần cuộn (721 trong 768) |
+
+- **Cổng `ui-play-surface-check`: 806 → 812** với mục `[scroll]` mở đúng chế độ **cửa sổ** (`playGame(game, {fullscreen:false})`, không dùng `OPEN` vì `OPEN` ép toàn màn hình): nội dung phải cao hơn cửa sổ · sân khấu **không** được khoá bánh xe khi nó không cuộn được · bánh xe phải làm `.modal` cuộn (`scrollTop 333`) · đáp án cuối phải tới được sau một lần lăn.
+- Cổng trên bản dựng lại 01:05 (mỗi cổng một phiên sạch): play-surface **812/812** · stage **179/179** · answer-mode **219/219** · fullscreen **20/20** · `npm run check` 53 tệp · embedded khớp **6201.0 KiB**.
+- Installer: **16 518 753 byte** / 15.75 MiB / 23-11 **01:05** / SHA-256 `09da7c66f8169fb28cd3512afb6763e91c326789cfbb979c8cd41bce0c32bf94`.
+
 ### 2026-11-17 — #310 “Tôi không xuất được game, lỗi file not found”
 - Giáo viên: **“tôi không xuất được game lỗi file not found”**. Nguyên nhân gốc: `src-tauri/src/package.rs` dựng hộp thoại xuất bằng `picker::choose` → **`pick_file`**, mà `pick_file` là hộp thoại **MỞ** — nó chỉ chọn được tệp **đang có**. Đặt tên mới cho gói `.egame` rồi bấm nút là Windows trả **“File not found”**, không ghi được byte nào. Hộp thoại **LƯU** là `save_file`.
 - **Sửa:** thêm `picker::choose_save` (cùng cách chống treo luồng chính như `choose`, nhưng gọi `save_file`) và lượt xuất dùng nó. Thêm `picker::saved_path`: giáo viên gõ tên **không có đuôi** thì tệp được ghi thành `.egame`, nếu không lần nhập sau bộ lọc `*.egame` không nhìn thấy tệp vừa xuất.
@@ -32,18 +48,3 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - **Màn cảm ứng: CHƯA đo được.** `Emulation.setEmulatedMedia` của WebView2 **không** đổi được `(hover:none)`/`(pointer:coarse)` (`matchMedia('(hover:none)').matches` vẫn `false`), nên nhánh `@media (hover:none){ … opacity .92; pointer-events auto }` mới chỉ được đọc trong CSS, **chưa có phép đo tại chỗ** — ghi ở đây để lần sau không tưởng là đã kiểm.
 - Ảnh: `.tmp-art/play-zoom-button.png` (nút trong ảnh), `play-zoom-hover.png`, `play-zoom-open.png`, `play-zoom-fullscreen.png` (lớp phóng to).
 - Installer: **16 517 588 byte** / 15.75 MiB / 22-11 **22:21** / SHA-256 `371ab647114b7b8de47cf58bdcc17a5363d7c1da471bf460483978700f3d7796`.
-
-### 2026-11-17 — #308 “Chỉnh cảnh” sửa được NGAY ảnh đang thấy + rà lại giao diện ở màn hình lớn
-- Giáo viên: **“vẫn kiểm tra lại giao diện khi ở màn hình lớn, chỉnh sửa chức năng chỉnh ảnh cho phép chỉnh ngay ảnh đã tạo chứ không phải chọn vào nút gợi ý cảnh rồi chức năng chỉnh ảnh mới xuất hiện”**.
-- **Tái hiện đúng lời giáo viên** trên app thật (1920×1080): câu có ảnh theo chủ đề (nhãn *“Theo chủ đề: Toán”*) **không có nút “Chỉnh cảnh”** — nút chỉ được vẽ khi `normalizeSceneBlueprint(...)` khác `null`, tức là chỉ sau khi bấm “Cảnh thử”/“Gợi ý cảnh”. Đo bằng DOM: `{"open":false,"reason":"no edit button","badge":"Theo chủ đề: Tổng quát"}`.
-- **Sửa:** nút **“Chỉnh cảnh” luôn có** trên hàng ảnh (trừ hai trường hợp có lý do: câu đã chọn “Không ảnh”, và câu dùng ảnh giáo viên tự tải lên — sửa cảnh ở đó sẽ **thay mất ảnh thật** của giáo viên). Khi chưa có `sceneBlueprint`, xưởng cảnh **mở đúng cảnh đang vẽ**: cùng `contentCategory`/`iconName` mà khung xem trước đang dùng, nên khung đầu tiên của xưởng **chính là ảnh vừa thấy**.
-- **Ba luật dữ liệu đi kèm, mỗi luật một phép đo:**
-  1. **Mở ra không ghi gì** — cảnh khởi tạo chỉ là *điểm bắt đầu* của xưởng, không ghi vào ô ẩn.
-  2. **Đóng/Huỷ không ghi gì** — xưởng báo lại đúng JSON lúc mở (“Huỷ” phát `originalJson`), nên handler **bỏ qua tiếng vọng đó**; trước khi sửa, “Huỷ” vẫn ghi cảnh khởi tạo vào dữ liệu (`cancelWroteNothing:false`).
-  3. **Thay đổi thật thì phải NHÌN THẤY trong game** — lần sửa đầu tiên **xoá ảnh có sẵn đang được chọn** (`classroom-scene`, …), vì ảnh chọn tay **thắng** blueprint khi vẽ (#252); không xoá thì cảnh vừa sửa **vô hình** lúc chơi.
-- **Chứng minh bằng DOM + đọc lại DB** (`.tmp-308-probe.js`): câu 1 (không blueprint) và câu 2 (`science-scene`) đều `hasEdit:true` · mở rồi “Huỷ” ⇒ `cancelWroteNothing:true` · mở rồi thêm 1 hình + “Xong” ⇒ `{mainIcon:"calculator", paletteKey:"math", backdrop:"classroom", extras:1}` (đúng cảnh đang thấy) · câu 2 sau khi sửa `pickAfter:""` (ảnh chọn tay đã nhường cho blueprint) · **lưu rồi `getLibrary` đọc lại** thấy đúng blueprint có `extras`.
-- **Cổng `ui-scene-designer-check`: 81 → 84/84**, vì hợp đồng **đảo chiều** theo yêu cầu của giáo viên: check cũ “no button before a scene exists” bị thay bằng “nút có sẵn trước khi có cảnh”, “mở là sửa đúng ảnh đang có”, “mở không ghi gì”, “đóng không ghi gì”, “nút vẫn còn sau khi có cảnh”.
-- **Màn hình lớn (1920×1080) — đo lại và sửa chỗ đáng sửa:** ảnh trong thẻ câu chỉ **148×92 px** nằm cạnh một hàng nút rộng hơn 1.100 px (đọc như “ảnh nhỏ | dòng dài”). Thêm khối `@media (min-width:1500px)`: khối ảnh thành hai cột `minmax(220px,300px) | 1fr`, ảnh **300×187 px**, khoảng cách 16 px, badge 12 px. Ở 1366×768 **không đổi gì** (ảnh vẫn 148 px, hai nút cùng một hàng, không xuống dòng).
-- Ảnh: `.tmp-art/editor-1920.png`, `workshop-1920.png`, `lib-1920.png`, `proj-1920.png`, `editor-1366.png`.
-- Cổng trên app dựng lại 20:06 (mỗi cổng một phiên mới): designer **84/84** · editor-art **pass** · item-assets **157/157** · stage **179/179** · play **790/790** · library-paging **pass** · card-menu **pass** · dark-theme **pass** · unit **102/102** · `npm run check` 53 tệp · `renderer-globals` **1122 hàm/9096 chỗ gọi, 0 undefined** · scene-runtime **170.8 KiB** · embedded **6201.0 KiB**.
-- Installer: **16 519 222 byte** / 15.75 MiB / 22-11 **20:06** / SHA-256 `6225c49e21478264168ac3b85a3e046cf619acb0060571f874ac741a049d65b7`.

@@ -1518,6 +1518,81 @@ function assertNav(nav, tag) {
     }
   }
 
+  // #311 — "Chơi ngay" rồi KHÔNG cuộn được. Đo bằng bánh xe THẬT ở 1024x640, nơi
+  // nội dung cao hơn cửa sổ: trước khi sửa, `.game-stage` mang `overscroll-behavior:
+  // contain` dù nó không cuộn được (scrollHeight == clientHeight), nên bánh xe bị
+  // nuốt ở đó và `.modal` — hộp cuộn thật — không nhận được gì (modal.scrollTop = 0),
+  // đáp án cuối nằm dưới đáy cửa sổ. Một hộp KHÔNG cuộn được mà vẫn `contain` là
+  // một cái khoá cửa trên đường cuộn của cả trang.
+  if (want('quiz')) {
+    const tag = 'scroll';
+    await setViewportAndWait(ctx, { width: 1024, height: 640 });
+    // CỬA SỔ, không toàn màn hình: "Chơi ngay" của thẻ thư viện mở đúng chế độ này,
+    // và đây mới là chế độ mà `.modal` (không phải sân khấu) là hộp cuộn.
+    const opened = await evaluate(`(async () => {
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      document.querySelector('[data-play-close]')?.click();
+      document.getElementById('modalRoot').innerHTML = '';
+      document.documentElement.dataset.fullscreen = '0';
+      playGame(${GAME}, { fullscreen: false });
+      await sleep(1000);
+      document.documentElement.dataset.fullscreen = '0';
+      await sleep(200);
+      return { stage: Boolean(document.querySelector('.game-stage')) };
+    })()`);
+    check(`[${tag}] the windowed play surface opens at a small window`,
+      Boolean(opened && opened.stage), opened && opened.stage ? 'stage rendered' : 'no .game-stage');
+    const before = await evaluate(`(() => {
+      const modal = document.querySelector('.modal');
+      const stage = document.querySelector('.game-stage');
+      const opts = document.querySelectorAll('.answer-option');
+      const last = opts[opts.length - 1];
+      return {
+        modalScrollH: modal.scrollHeight, modalClientH: modal.clientHeight,
+        stageScrollH: stage.scrollHeight, stageClientH: stage.clientHeight,
+        stageOverscroll: getComputedStyle(stage).overscrollBehaviorY,
+        lastBottom: last ? Math.round(last.getBoundingClientRect().bottom) : null,
+        viewportH: innerHeight, scrollTop: modal.scrollTop
+      };
+    })()`);
+    check(`[${tag}] the content really is taller than the window`,
+      Boolean(before && before.lastBottom > before.viewportH),
+      before ? `last answer bottom ${before.lastBottom} vs ${before.viewportH}` : 'no result');
+    check(`[${tag}] the stage does not lock the wheel it cannot use`,
+      Boolean(before && before.stageScrollH <= before.stageClientH + 2 && before.stageOverscroll !== 'contain'),
+      before ? `stage ${before.stageScrollH}/${before.stageClientH}, overscroll ${before.stageOverscroll}` : 'no result');
+
+    // Bánh xe THẬT, đặt ngay giữa sân khấu — đúng chỗ giáo viên đặt con trỏ.
+    await ctx.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 512, y: 320 });
+    await ctx.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: 512, y: 320, deltaX: 0, deltaY: 600, button: 'none' });
+    await new Promise(r => setTimeout(r, 500));
+    const after = await evaluate(`(() => {
+      const modal = document.querySelector('.modal');
+      const opts = document.querySelectorAll('.answer-option');
+      const last = opts[opts.length - 1];
+      return {
+        modalScrollTop: Math.round(modal.scrollTop),
+        lastBottom: last ? Math.round(last.getBoundingClientRect().bottom) : null,
+        viewportH: innerHeight
+      };
+    })()`);
+    check(`[${tag}] the mouse wheel scrolls the play window`,
+      Boolean(after && after.modalScrollTop > 0),
+      after ? `modal.scrollTop ${after.modalScrollTop}` : 'no result');
+    check(`[${tag}] the last answer is reachable after one wheel`,
+      Boolean(after && after.lastBottom <= after.viewportH + 1),
+      after ? `last answer bottom ${after.lastBottom} vs ${after.viewportH}` : 'no result');
+    await evaluate(`(async () => { document.querySelector('[data-play-close]')?.click(); document.getElementById('modalRoot').innerHTML = ''; document.documentElement.dataset.fullscreen = '0'; return true; })()`);
+    await setViewportAndWait(ctx, { width: 1366, height: 768 });
+    const fit = await evaluate(`(() => {
+      const stage = document.querySelector('.game-stage');
+      return { stage: Boolean(stage) };
+    })()`);
+    check(`[${tag}] the small-window run is cleaned up`, fit && fit.stage === false,
+      fit && fit.stage ? 'play surface still open' : 'closed');
+    console.log('  scroll    1024x640: wheel reaches the last answer, stage no longer locks it');
+  }
+
   // #309 — the zoom button lives INSIDE the question picture, shows on hover, and
   // opens the very same drawing at full size. Measured with a real pointer move:
   // an `opacity:0` control is not "hidden" if it still takes the click.
