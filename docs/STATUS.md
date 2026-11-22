@@ -7,6 +7,16 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-17 — #302 “Không lưu được ảnh khi chỉnh sửa xong”: ô ẩn của câu khác bị đọc
+- Giáo viên báo **“không lưu được ảnh khi chỉnh sửa xong”** sau #301. Đo tiếp thì thấy #301 chỉ đúng cho game **một câu**.
+- **Nguyên nhân thật:** mọi hàm trong `questions.ts` lấy ô ẩn bằng `row.parentElement.querySelector('[data-field="sceneBlueprint"]')`. `parentElement` là **khung chứa TẤT CẢ các câu**, nên `querySelector` trả về ô của **câu 1**. Với game 3–5 câu, bấm “Chỉnh cảnh” ở câu 3 sẽ **mở ảnh của câu 1**, và khi ô nằm ngoài hàng (#300) thì chữ ghi cũng rơi vào ô của câu 1 ⇒ ảnh vừa sửa **không được lưu ở chỗ đang sửa**. Đúng câu chữ của giáo viên.
+- **Sửa:** một hàm duy nhất **`editorArtField(row, selector)`** — tìm **trong chính hàng trước**, chỉ lùi về khung chứa khi ô là **anh em của hàng** (#300). Thay **12 chỗ**: `editorItemArtValue`, `applyEditorItemArt`, `applyEditorBlueprint`, `applyEditorSuggestedBlueprint`, `applyEditorSceneSlots`, `wireSceneHandles`, `readEditorItemAssets`, nút mở xưởng, nút “Gợi ý AI” (prompt + danh sách đáp án + category/icon — trước đây gửi **prompt của câu 1 và đáp án của mọi câu** cho model).
+- **Tự bắt được 1 lỗi của chính bản vá:** xoá `const scope` trong `applyEditorSceneSlots` mà còn 1 chỗ dùng ⇒ `Uncaught ReferenceError: scope is not defined` (thấy khi dò DOM, không phải khi đọc code). Đã sửa và kiểm lại.
+- Gate `ui-scene-designer-check` **76 → 81/81**: mục 12 mới — hai câu giữ **ô riêng** · câu 2 mở **cảnh của câu 2** (so `paletteKey`) · sửa câu 2 **không đụng** câu 1 (so chuỗi trước/sau) · câu 2 lưu được `backdrop:"market"` · **ảnh câu 1 không thành chợ**.
+- Chứng minh bằng DOM thật: hai câu ⇒ `backdrops: ["forest","market"]` (trước bản vá cả hai đọc chung ô của câu 1).
+- Kiểm trên app mới mở (CDP 9621–9623): designer **81/81** · item-assets **157/157** · stage **179/179** · play **790/790** · background **42/42** · AI paging **12/12** · unit **102/102** · `npm run check` 53 tệp · `renderer-globals` **1120 hàm/9064 chỗ gọi** · scene-runtime **170.8 KiB** · embedded **6201.0 KiB**.
+- Installer: **16 502 693 byte** / 15.74 MiB / 22-11 **08:17** / SHA-256 `c54d2304183028abacf59644647a9b986bd04819a5a412cf89084d88602aaf88`.
+
 ### 2026-11-17 — #301 Khung vẽ phủ kín chỗ làm việc + chứng minh lưu thật sự chạy
 - Giáo viên báo **“thao tác không full ảnh, không lưu được”**.
 - **“Không full ảnh”:** khung vẽ bị ghim `max-width: 860px` và canh giữa, nên ở cửa sổ 1366×768 ảnh chỉ chiếm một phần cột giữa, xung quanh là khoảng trống. Sửa: **đo** chỗ trống thật rồi vẽ ảnh lớn nhất có thể — `measureBase()` lấy `min(stageWidth−12, (stageHeight−12)×1.6)` cho khung 16:10, `ResizeObserver` đo lại khi đổi cỡ cửa sổ; zoom vẫn là **hệ số trên cỡ nền** nên 100% = vừa khít, 200% = cuộn.

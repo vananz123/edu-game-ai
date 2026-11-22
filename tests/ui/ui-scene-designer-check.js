@@ -316,6 +316,44 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
     out.singleWorkshopClosed = !document.querySelector('.scene-designer');
     out.scrollUnlocked = document.documentElement.classList.contains('is-scene-designer') === false;
 
+    // ---- 12. #302: two questions must not share one blueprint field ----
+    // The container-wide lookup gave every question the FIRST question's scene, so
+    // editing question 2 saved the picture somewhere else (teacher: "khong luu duoc
+    // anh khi chinh sua xong"). Only the id is pinned, never the art source (#282).
+    const game2 = JSON.parse(JSON.stringify(game));
+    game2.id = 'sd-2';
+    game2.questions.push({
+      id: 'q2', type: 'multiple-choice', prompt: 'Qua duong khi den do thi lam gi?',
+      options: [{ id: 'a', text: 'Dung lai cho' }, { id: 'b', text: 'Chay qua' }],
+      correctOptionId: 'a', correctAnswer: '', explanation: 'Cho den xanh.', points: 100,
+      contentCategory: 'safety', iconName: 'traffic-light', illustrationAssetId: 'safety-road'
+    });
+    document.getElementById('modalRoot').innerHTML = '';
+    openEditor(game2, false, 'test');
+    await sleep(400);
+    const rows2 = () => Array.from(document.querySelectorAll('#editorQuestions .editor-question'));
+    const fieldAt = index => rows2()[index].querySelector('[data-field="sceneBlueprint"]');
+    rows2()[0].querySelector('[data-editor-art-blueprint]').click();
+    await sleep(250);
+    rows2()[1].querySelector('[data-editor-art-blueprint]').click();
+    await sleep(250);
+    const firstBefore = fieldAt(0).value;
+    const secondBefore = fieldAt(1).value;
+    out.twoQuestionsHaveOwnField = firstBefore !== secondBefore && !!firstBefore && !!secondBefore;
+    rows2()[1].querySelector('[data-editor-art-edit]').click();
+    await sleep(600);
+    // The palette key is the cheapest proof of WHOSE scene is open: the first
+    // question is a language/animals scene, the second a safety one.
+    out.secondOpensOwnScene = !!sd() && JSON.parse(fieldAt(1).value).paletteKey === JSON.parse(secondBefore).paletteKey;
+    sd().querySelector('[data-sd-place="market"]').click();
+    await sleep(350);
+    sd().querySelector('[data-sd-done]').click();
+    await sleep(500);
+    out.firstUntouched = fieldAt(0).value === firstBefore;
+    const secondAfter = JSON.parse(fieldAt(1).value || 'null');
+    out.secondSaved = !!secondAfter && secondAfter.backdrop === 'market';
+    out.firstThumbIsFirst = !/market/.test(rows2()[0].querySelector('[data-editor-art-thumb]').innerHTML);
+
     // Leave the app exactly as it was found (DECISIONS #288 sequel).
     document.getElementById('modalRoot').innerHTML = '';
     if (typeof closeEditorPage === 'function') closeEditorPage();
@@ -399,6 +437,11 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
   check('the zoom buttons still answer at 200%', out.zoomStillWorksAtMax === true);
   check('"Xong" closes the single workshop', out.singleWorkshopClosed === true);
   check('closing unlocks the page again', out.scrollUnlocked === true);
+  check('two questions keep their own blueprint field', out.twoQuestionsHaveOwnField === true);
+  check('question 2 opens its own scene, not question 1 s', out.secondOpensOwnScene === true);
+  check('editing question 2 leaves question 1 untouched', out.firstUntouched === true);
+  check('editing question 2 saves its own scene', out.secondSaved === true);
+  check('question 1 keeps its own picture', out.firstThumbIsFirst === true);
   check('the gate leaves the app as it found it', out.appRestored === true);
 
   const failed = results.filter(entry => !entry.ok).length;

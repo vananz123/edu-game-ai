@@ -406,16 +406,34 @@ function editorItemArtHtml(item) {
 }
 
 /**
+ * #302: one row's hidden input.
+ *
+ * `row.parentElement.querySelector(...)` returns the FIRST match in the whole
+ * questions container, so on a 5-question game the workshop opened from
+ * question 3 read — and could write — question 1's scene: the picture the
+ * teacher had just edited was saved somewhere else, which looked exactly like
+ * "không lưu được ảnh khi chỉnh sửa xong". Search the row's own subtree first;
+ * fall back to the container only because a field can be a SIBLING of the row
+ * (#300), never because it is easier.
+ */
+function editorArtField(row, selector) {
+  if (!row || !selector) return null;
+  const own = typeof row.querySelector === 'function' ? row.querySelector(selector) : null;
+  if (own) return own;
+  const parent = row.parentElement;
+  return parent ? parent.querySelector(selector) : null;
+}
+
+/**
  * #128: reads the picture choice of one row from the hidden input the editor saves.
  *
  * The control is drawn from this value and nothing else, so the thumb, the badge, the
  * picker and the saved game can never disagree.
  */
 function editorItemArtValue(row) {
-  const scope = row && row.parentElement;
-  const field = scope ? scope.querySelector('[data-field="illustrationAssetId"]') : null;
-  const category = scope ? scope.querySelector('[data-field="contentCategory"]') : null;
-  const blueprint = scope ? scope.querySelector('[data-field="sceneBlueprint"]') : null;
+  const field = editorArtField(row, '[data-field="illustrationAssetId"]');
+  const category = editorArtField(row, '[data-field="contentCategory"]');
+  const blueprint = editorArtField(row, '[data-field="sceneBlueprint"]');
   return {
     illustrationAssetId: field ? field.value : '',
     contentCategory: category ? category.value : '',
@@ -431,8 +449,7 @@ function editorImportIllustration() {
 /** Writes the choice to the hidden input, then redraws the control from that input. */
 function applyEditorItemArt(row, assetId) {
   if (!row) return;
-  const scope = row.parentElement;
-  const field = scope ? scope.querySelector('[data-field="illustrationAssetId"]') : null;
+  const field = editorArtField(row, '[data-field="illustrationAssetId"]');
   if (field) field.value = assetId || '';
   redrawEditorArtRow(row);
 }
@@ -445,14 +462,13 @@ function applyEditorItemArt(row, assetId) {
  */
 function applyEditorBlueprint(row) {
   if (!row || typeof stageBlueprintForCategory !== 'function') return;
-  const scope = row.parentElement;
-  const categoryField = scope ? scope.querySelector('[data-field="contentCategory"]') : null;
-  const blueprintField = scope ? scope.querySelector('[data-field="sceneBlueprint"]') : null;
+  const categoryField = editorArtField(row, '[data-field="contentCategory"]');
+  const blueprintField = editorArtField(row, '[data-field="sceneBlueprint"]');
   if (!blueprintField) return;
   const category = categoryField && categoryField.value ? categoryField.value : 'general';
   const blueprint = stageBlueprintForCategory(category);
   blueprintField.value = blueprint ? JSON.stringify(blueprint) : '';
-  const artField = scope ? scope.querySelector('[data-field="illustrationAssetId"]') : null;
+  const artField = editorArtField(row, '[data-field="illustrationAssetId"]');
   if (artField) artField.value = '';
   redrawEditorArtRow(row);
 }
@@ -468,15 +484,14 @@ function applyEditorBlueprint(row) {
  */
 function applyEditorSuggestedBlueprint(row, response) {
   if (!row) return false;
-  const scope = row.parentElement;
-  const blueprintField = scope ? scope.querySelector('[data-field="sceneBlueprint"]') : null;
+  const blueprintField = editorArtField(row, '[data-field="sceneBlueprint"]');
   if (!blueprintField) return false;
   const raw = response && typeof response.json === 'string' ? response.json : '';
   const blueprint = typeof stageNormalizeBlueprint === 'function' ? stageNormalizeBlueprint(raw) : null;
   if (!blueprint) return false;
   blueprintField.value = JSON.stringify(blueprint);
   // Same rule as "Cảnh thử": an explicit pick would hide the new scene entirely.
-  const artField = scope ? scope.querySelector('[data-field="illustrationAssetId"]') : null;
+  const artField = editorArtField(row, '[data-field="illustrationAssetId"]');
   if (artField) artField.value = '';
   redrawEditorArtRow(row);
   return true;
@@ -529,7 +544,7 @@ function sceneHandlesHtml(blueprint) {
  * the handle moves under the finger and the art follows on release.
  */
 function wireSceneHandles(live) {
-  const field = live.parentElement ? live.parentElement.querySelector('[data-field="sceneBlueprint"]') : null;
+  const field = editorArtField(live, '[data-field="sceneBlueprint"]');
   if (!field || typeof stageNormalizeBlueprint !== 'function') return;
   live.querySelectorAll('[data-art-handle]').forEach(handle => {
     /* #294: double-click puts ONE node back where the layout drew it, without
@@ -612,8 +627,7 @@ function wireSceneHandles(live) {
 function applyEditorSceneSlots(row) {
   if (!row) return;
   const live = row.closest('[data-editor-art]') || row;
-  const scope = live.parentElement;
-  const field = scope ? scope.querySelector('[data-field="sceneBlueprint"]') : null;
+  const field = editorArtField(live, '[data-field="sceneBlueprint"]');
   if (!field || typeof stageNormalizeBlueprint !== 'function') return;
   const current = stageNormalizeBlueprint(field.value);
   if (!current) return;
@@ -712,7 +726,7 @@ function applyEditorSceneSlots(row) {
   // A topic picture would win over the blueprint on the play surface, so editing
   // the scene clears it — the two are already mutually exclusive (#252). An
   // explicit "no picture" sentinel is left alone: that is the teacher's choice.
-  const artField = scope.querySelector('[data-field="illustrationAssetId"]');
+  const artField = editorArtField(live, '[data-field="illustrationAssetId"]');
   if (artField && artField.value && artField.value !== 'none') artField.value = '';
   redrawEditorArtRow(live);
 }
@@ -757,10 +771,10 @@ function wireEditorItemArtRow(row) {
   if (editButton) {
     editButton.addEventListener('click', () => {
       if (typeof openSceneDesigner !== 'function') return;
-      const parent = row.parentElement;
-      if (!parent) return;
-      const blueprintField = parent.querySelector('[data-field="sceneBlueprint"]');
-      const assetField = parent.querySelector('[data-field="illustrationAssetId"]');
+      /* #302: the row's OWN field. `parent.querySelector` gave question 1's
+         scene to every other question in the game. */
+      const blueprintField = editorArtField(row, '[data-field="sceneBlueprint"]');
+      const assetField = editorArtField(row, '[data-field="illustrationAssetId"]');
       if (!blueprintField) return;
       const render = json => {
         const item = { illustrationAssetId: assetField ? assetField.value : '', sceneBlueprint: json };
@@ -801,8 +815,10 @@ function wireEditorItemArtRow(row) {
     suggestButton.addEventListener('click', async () => {
       const control = suggestButton.closest('[data-editor-art]');
       if (!control) return;
-      const scope = control.parentElement;
-      const promptField = scope ? scope.querySelector('[data-field="prompt"]') : null;
+      /* #302: the live row, not the container — a container search also fed the
+         model the FIRST question's prompt and every question's answers. */
+      const scope = control.closest('.editor-question, .matching-pair-row, .treasure-stage-card') || control.parentElement;
+      const promptField = editorArtField(scope, '[data-field="prompt"]');
       const promptText = promptField && promptField.value ? promptField.value.trim() : '';
       if (!promptText) {
         toast('Hãy viết nội dung câu hỏi trước khi nhờ AI gợi ý cảnh.');
@@ -813,8 +829,8 @@ function wireEditorItemArtRow(row) {
       const answers = Array.from(scope.querySelectorAll('input[data-option-id]'))
         .map(input => String(input.value || '').trim())
         .filter(Boolean);
-      const categoryField = scope.querySelector('[data-field="contentCategory"]');
-      const iconField = scope.querySelector('[data-field="iconName"]');
+      const categoryField = editorArtField(scope, '[data-field="contentCategory"]');
+      const iconField = editorArtField(scope, '[data-field="iconName"]');
       suggestButton.disabled = true;
       const originalHtml = suggestButton.innerHTML;
       suggestButton.textContent = 'Đang gợi ý…';
@@ -909,10 +925,10 @@ function wireEditorItemArt(root) {
 }
 
 function readEditorItemAssets(scope) {
-  const category = scope?.querySelector('[data-field="contentCategory"]');
-  const icon = scope?.querySelector('[data-field="iconName"]');
-  const illustration = scope?.querySelector('[data-field="illustrationAssetId"]');
-  const blueprint = scope?.querySelector('[data-field="sceneBlueprint"]');
+  const category = editorArtField(scope, '[data-field="contentCategory"]');
+  const icon = editorArtField(scope, '[data-field="iconName"]');
+  const illustration = editorArtField(scope, '[data-field="illustrationAssetId"]');
+  const blueprint = editorArtField(scope, '[data-field="sceneBlueprint"]');
   if (!category && !icon && !illustration && !blueprint) return {};
   const fields = {};
   const categoryValue = (category?.value || '').trim();

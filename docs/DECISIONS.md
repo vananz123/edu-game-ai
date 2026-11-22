@@ -5009,3 +5009,22 @@ Giáo viên báo "thao tác không full ảnh, không lưu được".
 - **Đo trước, sửa sau.** Sau khi đo, đường lưu–đọc vốn đã đúng trên bản hiện tại; hai lỗi #300 (xưởng
   mở chồng + ô lưu bị bỏ im lặng) chính là thứ khiến giáo viên thấy "không lưu được". Không thêm
   cơ chế lưu thứ hai để "chữa" một triệu chứng đã hết.
+
+## #302 — một ô ẩn phải được tìm TỪ HÀNG CỦA NÓ, không phải từ khung chứa
+
+Giáo viên: "không lưu được ảnh khi chỉnh sửa xong". #301 sửa được hiện tượng cho game một câu,
+nhưng gốc vẫn còn: `row.parentElement.querySelector(...)`.
+
+**Quyết định**
+- **`parentElement` là khung chứa MỌI câu, không phải hàng của câu đó.** Một `querySelector` trên
+  khung chứa trả về ô của **câu đầu tiên**, nên "Chỉnh cảnh" ở câu 3 mở ảnh câu 1 và chữ ghi rơi
+  vào ô câu 1. Đây là lý do một lỗi "không lưu được" lại sống sót qua ba bản vá: bản vá trước chỉ
+  vá đường GHI, còn đường ĐỌC vẫn sai.
+- **Một hàm duy nhất `editorArtField(row, selector)`**: tìm trong chính hàng trước, chỉ lùi về khung
+  chứa khi ô là **anh em của hàng** (#300). Không nơi nào được tự gọi `parentElement.querySelector`
+  cho một ô của hàng nữa.
+- **Sửa cả những chỗ chưa ai báo**: nút "Gợi ý AI" đang gửi cho model **prompt của câu 1 và đáp án
+  của mọi câu** — cùng một gốc lỗi, và nó làm câu trả lời của AI sai một cách khó thấy.
+- **Bản vá do mình viết cũng phải bị đo**: xoá `const scope` mà còn một chỗ dùng đã tạo
+  `ReferenceError: scope is not defined`; chỉ lộ ra khi đọc DOM sau khi bấm, không lộ ra khi
+  `tsc` xanh. Một lần nữa: `tsc` xanh không chứng minh nút bấm chạy.
