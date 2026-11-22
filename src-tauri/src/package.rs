@@ -158,7 +158,10 @@ pub async fn export(app: &AppHandle, game: Value, requested: Option<PathBuf>) ->
         Some(None) => return canceled(),
         None => {
             let file_name = default_file_name(app, &game)?;
-            let chosen = crate::picker::choose(app, move |app| {
+            // #310: hộp thoại LƯU, không phải hộp thoại MỞ. `pick_file` chỉ chọn
+            // được tệp đang có, nên đặt tên mới cho gói là Windows báo
+            // "File not found" thay vì ghi ra tệp.
+            let chosen = crate::picker::choose_save(app, move |app| {
                 app.dialog()
                     .file()
                     .set_title("Xuất gói trò chơi")
@@ -166,7 +169,7 @@ pub async fn export(app: &AppHandle, game: Value, requested: Option<PathBuf>) ->
                     .add_filter("EduGame package", &["egame", "json"])
             })
             .await;
-            match chosen.map(crate::picker::to_path).transpose()? {
+            match chosen.map(crate::picker::saved_path).transpose()? {
                 Some(path) => path,
                 None => return canceled(),
             }
@@ -320,6 +323,23 @@ mod tests {
         let error = read_file_text(&file).expect_err("phải từ chối");
         assert!(error.starts_with("EG_READ: "), "{error}");
         assert!(error.contains("không phải tệp chữ UTF-8"), "{error}");
+    }
+
+    /// #310: lượt XUẤT phải dựng hộp thoại LƯU. `pick_file` (hộp thoại MỞ) chỉ
+    /// chọn được tệp đang có, nên đặt tên mới là Windows trả "File not found" —
+    /// lỗi này không cổng UI nào thấy, vì cổng gói truyền đường dẫn qua biến môi
+    /// trường và bỏ qua hộp thoại. Vì vậy nó được ghim ở đây, trên chính mã nguồn.
+    #[test]
+    fn the_export_dialog_is_a_save_dialog() {
+        let source = include_str!("package.rs");
+        let export_start = source.find("pub async fn export(").expect("export");
+        let export_body = &source[export_start..];
+        let end = export_body.find("fn default_file_name").expect("hết thân export");
+        let body = &export_body[..end];
+        assert!(body.contains("choose_save"), "lượt xuất phải dùng hộp thoại LƯU");
+        assert!(!body.contains("picker::choose("), "lượt xuất không được dùng hộp thoại MỞ");
+        let picker = include_str!("picker.rs");
+        assert!(picker.contains("build(&handle).save_file("), "choose_save phải gọi save_file");
     }
 
     #[test]

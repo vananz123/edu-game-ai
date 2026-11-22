@@ -5181,3 +5181,19 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
 - **Media emulation của WebView2 không đổi được `hover`/`pointer`.** `(hover:none)` vẫn
   `false` sau `Emulation.setEmulatedMedia`, nên nhánh cảm ứng **không thể** chứng minh bằng
   CDP trên máy này — phải nói rõ là "chưa đo", không được coi CSS đúng là đã kiểm.
+
+## #310 — Hộp thoại xuất gói `.egame` phải là hộp thoại LƯU
+
+- **"Xuất tệp" là một hộp thoại LƯU, không phải hộp thoại MỞ.** `pick_file` của
+  `tauri-plugin-dialog` dựng hộp thoại mở: nó chỉ chọn được tệp đang có, nên đặt tên mới cho
+  gói là Windows trả "File not found" — đúng lỗi #310. `save_file` mới cho đặt tên mới và
+  hỏi ghi đè.
+- **Một cổng dùng biến môi trường thay cho hộp thoại thì KHÔNG kiểm được hộp thoại.**
+  `tauri-webview-check` truyền đường dẫn qua `EDUGAME_TAURI_PACKAGE_SAVE` và bỏ qua hộp
+  thoại, nên 55/55 vẫn xanh trong khi giáo viên không xuất được. Hợp đồng "xuất dùng hộp
+  thoại lưu" được ghim bằng test Rust đọc chính mã nguồn, và bằng một phép đo UIA trên cửa
+  sổ thật (`SaveDialogLabel`, `Save as type`, nút `Save`).
+- **Đuôi tệp là việc của ứng dụng, không phải của hộp thoại.** Tên không có đuôi được ghi
+  thành `.egame`, nếu không lần nhập sau bộ lọc `*.egame` không thấy tệp vừa xuất.
+- **Lỗi của vỏ máy phải được dịch.** Toast in nguyên văn "File not found" không nói được
+  giáo viên phải làm gì; mã `EG_*` đã có sẵn để đổi thành câu việc-cần-làm.

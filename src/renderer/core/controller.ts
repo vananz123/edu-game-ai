@@ -620,14 +620,18 @@ async function handleAction(action, id, element) { try {
     if (action === 'export-first') {
       const game = state.db.games[0];
       if (!game) return toast('Thư viện chưa có trò chơi để xuất.');
-      const result = await desktop.call('exportGame', game);
-      if (result?.ok) toast('Đã xuất gói trò chơi.');
+      try {
+        const result = await desktop.call('exportGame', game);
+        if (result?.ok) toast('Đã xuất gói trò chơi.');
+      } catch (error) { toast(exportErrorText(error)); }
     }
     if (action === 'export-game') {
       const game = findGame(id);
       if (!game) return toast('Không tìm thấy trò chơi.');
-      const result = await desktop.call('exportGame', game);
-      if (result?.ok) toast('Đã xuất gói trò chơi ra tệp .egame.');
+      try {
+        const result = await desktop.call('exportGame', game);
+        if (result?.ok) toast('Đã xuất gói trò chơi ra tệp .egame.');
+      } catch (error) { toast(exportErrorText(error)); }
     }
     if (action === 'clear-lesson') { state.importedDoc = null; render(); toast('Đã xóa giáo án đã nhập.'); }
     if (action === 'delete') {
@@ -638,6 +642,21 @@ async function handleAction(action, id, element) { try {
   } catch (e) { toast(e.message || 'Đã xảy ra lỗi.'); }
 }
 function findGame(id) { return state.db.games.find(g => g.id === id); }
+/**
+ * #310: câu báo lỗi của lượt xuất, bằng tiếng Việt.
+ *
+ * Trước đây lỗi của vỏ máy (Windows trả "File not found") hiện nguyên văn tiếng
+ * Anh trong toast — giáo viên đọc không biết phải làm gì. Mã lỗi có tiền tố
+ * `EG_*` nên câu dưới chỉ nói đúng việc cần làm.
+ */
+function exportErrorText(error: any): string {
+  const text = String((error && error.message) || error || '');
+  if (/EG_WRITE/.test(text)) return 'Không ghi được tệp — hãy chọn thư mục khác (ví dụ Desktop) rồi xuất lại.';
+  if (/EG_PATH/.test(text)) return 'Đường dẫn vừa chọn không dùng được — hãy chọn lại.';
+  if (/EG_PACKAGE/.test(text)) return 'Gói trò chơi chưa lập được — hãy thử xuất lại.';
+  if (/EG_RUNTIME/.test(text)) return 'Ứng dụng chưa ghi xong tệp — hãy thử xuất lại.';
+  return text || 'Không xuất được gói trò chơi.';
+}
 function updateScoringVisibility() {
   const mode = $('#setupScoringMode')?.value || ANSWER_MODE_COMPETITIVE;
   const timeBonusField = $('#timeBonusField');

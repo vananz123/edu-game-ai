@@ -59,6 +59,39 @@ where
     answer.recv().ok().flatten()
 }
 
+/// Như `choose` nhưng là hộp thoại **LƯU**, không phải hộp thoại MỞ.
+///
+/// `pick_file` dựng hộp thoại MỞ: nó chỉ chọn được tệp ĐANG CÓ, nên khi giáo viên
+/// đặt tên mới cho gói `.egame` và bấm nút, Windows trả **"File not found"** —
+/// đúng lỗi #310. `save_file` mới là hộp thoại cho phép đặt tên mới, và cũng là
+/// hộp thoại duy nhất hỏi "tệp đã có, ghi đè không?".
+pub(crate) async fn choose_save<F>(app: &AppHandle, build: F) -> Option<FilePath>
+where
+    F: FnOnce(&AppHandle) -> FileDialogBuilder<tauri::Wry> + Send + 'static,
+{
+    let handle = app.clone();
+    let (picked, answer) = std::sync::mpsc::channel();
+    let started = tauri::async_runtime::spawn_blocking(move || {
+        build(&handle).save_file(move |path| {
+            let _ = picked.send(path);
+        });
+    });
+    let _ = started.await;
+    answer.recv().ok().flatten()
+}
+
+/// Đường dẫn của hộp thoại LƯU đã bổ sung đuôi `.egame` khi giáo viên gõ tên
+/// không có đuôi. Hộp thoại của Windows thường tự thêm, nhưng không phải mọi
+/// bản Windows/mọi bộ lọc đều làm vậy; thiếu đuôi thì lần nhập sau bộ lọc
+/// `*.egame` không nhìn thấy tệp vừa xuất.
+pub(crate) fn saved_path(picked: FilePath) -> Result<PathBuf, String> {
+    let path = to_path(picked)?;
+    if path.extension().is_some() {
+        return Ok(path);
+    }
+    Ok(path.with_extension("egame"))
+}
+
 /// Mở một hộp thoại chọn tệp với tiêu đề, bộ lọc và tên gợi ý — cả bốn lệnh
 /// nhập/xuất dùng chung đúng hình dạng này.
 pub(crate) async fn pick(app: &AppHandle, title: &'static str, filters: &'static [(&'static str, &'static [&'static str])]) -> Option<PathBuf> {
