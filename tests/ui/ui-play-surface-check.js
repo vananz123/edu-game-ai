@@ -1061,6 +1061,21 @@ function assertNav(nav, tag) {
       check(`[${tag}] map-closed screenshot captured`, Boolean(shotClosed.file),
         shotClosed.file || shotClosed.error);
 
+      // #309: the treasure picture gets the zoom button too, and the button must stay
+      // INSIDE a picture whose column is the narrowest of the four templates.
+      const tZoom = await evaluate(`(() => {
+        const art = document.querySelector('.stage-illustration.is-zoomable');
+        if (!art) return { art: false };
+        const btn = art.querySelector('.stage-art-zoom');
+        const a = art.getBoundingClientRect();
+        const b = btn ? btn.getBoundingClientRect() : null;
+        return { art: true, btn: Boolean(btn),
+          inside: b ? (b.right <= a.right + 0.5 && b.bottom <= a.bottom + 0.5) : false };
+      })()`);
+      check(`[${tag}] the treasure picture carries the zoom button inside it`,
+        Boolean(tZoom && tZoom.btn && tZoom.inside),
+        tZoom ? JSON.stringify(tZoom) : 'no result');
+
       // DECISIONS #91/#104: the journey map is a collapsed drawer while the
       // teacher is answering, so this fixture opens it through the stage control
       // before its height is measured (the same step a teacher takes).
@@ -1291,6 +1306,21 @@ function assertNav(nav, tag) {
         `${r.docHeight} vs ${r.viewportH}`);
       console.log(`  race      cells ${r.cells}  answers ${r.answers}  `
         + `overflow ${r.overflow}px  docH ${r.docHeight}/${r.viewportH}  -> ${shot.file || '(no image)'}`);
+
+      // #309: every play template that shows a picture gets the zoom button, not just
+      // the quiz — the teacher's rule is about the picture, not about one template.
+      const raceZoom = await evaluate(`(() => {
+        const art = document.querySelector('.stage-illustration.is-zoomable');
+        if (!art) return { art: false };
+        const btn = art.querySelector('.stage-art-zoom');
+        const a = art.getBoundingClientRect();
+        const b = btn ? btn.getBoundingClientRect() : null;
+        return { art: true, btn: Boolean(btn),
+          inside: b ? (b.right <= a.right + 0.5 && b.bottom <= a.bottom + 0.5) : false };
+      })()`);
+      check(`[${tag}] the race picture carries the zoom button inside it`,
+        Boolean(raceZoom && raceZoom.btn && raceZoom.inside),
+        raceZoom ? JSON.stringify(raceZoom) : 'no result');
     } else {
       check(`[${tag}] race stage measured`, false, 'no .game-stage');
     }
@@ -1486,6 +1516,97 @@ function assertNav(nav, tag) {
           : 'one column, as designed');
       console.log(`situation ${size.label}: fullscreen art ${g.art ? g.art.w + 'x' + g.art.h : '-'}px, text col ${g.mainCol ? g.mainCol.w : '-'}px; app window in-situation=${w.isSituation}`);
     }
+  }
+
+  // #309 — the zoom button lives INSIDE the question picture, shows on hover, and
+  // opens the very same drawing at full size. Measured with a real pointer move:
+  // an `opacity:0` control is not "hidden" if it still takes the click.
+  if (want('quiz')) {
+    const tag = 'zoom';
+    await setViewportAndWait(ctx, { width: 1366, height: 768 });
+    const opened = await evaluate(OPEN(GAME));
+    check(`[${tag}] the question picture is on screen`, Boolean(opened && opened.stage), 'no .game-stage');
+    const box = await evaluate(`(() => {
+      const art = document.querySelector('.stage-illustration.is-zoomable');
+      const btn = document.querySelector('.stage-art-zoom');
+      if (!art || !btn) return { art: Boolean(art), btn: Boolean(btn) };
+      const r = btn.getBoundingClientRect();
+      const a = art.getBoundingClientRect();
+      return {
+        art: true, btn: true,
+        inside: art.contains(btn),
+        corner: Math.round(a.right - r.right) + ',' + Math.round(a.bottom - r.bottom),
+        inFrame: r.left >= a.left && r.top >= a.top && r.right <= a.right + 0.5 && r.bottom <= a.bottom + 0.5,
+        opacity: getComputedStyle(btn).opacity,
+        pointer: getComputedStyle(btn).pointerEvents,
+        centre: (() => { const q = art.getBoundingClientRect(); return { x: Math.round(q.left + q.width / 2), y: Math.round(q.top + q.height / 2) }; })()
+      };
+    })()`);
+    check(`[${tag}] the picture carries the zoom button`, Boolean(box && box.btn),
+      box ? JSON.stringify({ art: box.art, btn: box.btn }) : 'no result');
+    check(`[${tag}] the button is a child of the picture, in its bottom-right corner`,
+      Boolean(box && box.inside && box.inFrame), box ? `inset ${box.corner}` : 'no result');
+    check(`[${tag}] it is invisible and unclickable until the pointer arrives`,
+      Boolean(box && box.opacity === '0' && box.pointer === 'none'),
+      box ? `opacity ${box.opacity}, pointer-events ${box.pointer}` : 'no result');
+
+    if (box && box.centre) {
+      await ctx.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: box.centre.x, y: box.centre.y });
+      await new Promise(r => setTimeout(r, 320));
+      const hover = await evaluate(`(() => {
+        const btn = document.querySelector('.stage-art-zoom');
+        return { opacity: getComputedStyle(btn).opacity, pointer: getComputedStyle(btn).pointerEvents };
+      })()`);
+      check(`[${tag}] hovering the picture reveals it`,
+        Boolean(hover && hover.opacity === '1' && hover.pointer === 'auto'),
+        hover ? `opacity ${hover.opacity}, pointer-events ${hover.pointer}` : 'no result');
+
+      const zoom = await evaluate(`(async () => {
+        const sleep = ms => new Promise(r => setTimeout(r, ms));
+        const btn = document.querySelector('.stage-art-zoom');
+        const src = document.querySelector('.stage-illustration.is-zoomable');
+        const srcBox = src.getBoundingClientRect();
+        btn.click();
+        await sleep(350);
+        const layer = document.querySelector('[data-art-zoom-layer]');
+        if (!layer) return { opened: false };
+        const fig = layer.querySelector('.art-zoom-figure').getBoundingClientRect();
+        return {
+          opened: true,
+          role: layer.getAttribute('role'),
+          layers: layer.querySelectorAll('.art-zoom-svg [data-scene-layer]').length,
+          srcLayers: src.querySelectorAll('[data-scene-layer]').length,
+          srcW: Math.round(srcBox.width), w: Math.round(fig.width), h: Math.round(fig.height),
+          ratio: +(fig.width / fig.height).toFixed(2),
+          onTop: getComputedStyle(layer).position === 'fixed',
+          inBody: layer.parentElement === document.body,
+          close: Boolean(layer.querySelector('[data-art-zoom-close]'))
+        };
+      })()`);
+      check(`[${tag}] clicking it opens a dialog`, Boolean(zoom && zoom.opened && zoom.role === 'dialog'),
+        zoom ? `opened ${zoom.opened}, role ${zoom.role}` : 'no result');
+      check(`[${tag}] the enlarged picture is the same drawing, just bigger`,
+        Boolean(zoom && zoom.layers > 0 && zoom.layers === zoom.srcLayers && zoom.w > zoom.srcW * 2),
+        zoom ? `layers ${zoom.layers}/${zoom.srcLayers}, ${zoom.srcW}px -> ${zoom.w}px` : 'no result');
+      check(`[${tag}] the enlarged frame keeps the 16:10 picture shape`,
+        Boolean(zoom && Math.abs(zoom.ratio - 1.6) <= 0.03), zoom ? `${zoom.w}x${zoom.h} = ${zoom.ratio}` : 'no result');
+      check(`[${tag}] the layer covers the window and carries a close button`,
+        Boolean(zoom && zoom.onTop && zoom.inBody && zoom.close),
+        zoom ? `fixed ${zoom.onTop}, body ${zoom.inBody}, close ${zoom.close}` : 'no result');
+      await capture(ctx.send, 'play-surface-zoom-open');
+
+      const escape = await evaluate(`(async () => {
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        await new Promise(r => setTimeout(r, 250));
+        return { gone: !document.querySelector('[data-art-zoom-layer]'), answers: document.querySelectorAll('.answer-option').length };
+      })()`);
+      check(`[${tag}] Escape closes it and the question is untouched`,
+        Boolean(escape && escape.gone && escape.answers === 4),
+        escape ? `gone ${escape.gone}, answers ${escape.answers}` : 'no result');
+    }
+    await ctx.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 2, y: 2 });
+    await evaluate(`(async () => { document.querySelector('[data-play-close]')?.click(); document.getElementById('modalRoot').innerHTML = ''; return true; })()`);
+    console.log('  zoom      button inside the picture, hover-revealed, Escape closes');
   }
 
   await evaluate(`(async () => {

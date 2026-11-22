@@ -139,6 +139,23 @@ window.addEventListener('keydown', async e => {
   // #119/#120: Escape closes an open card menu.
   if (e.key === 'Escape' && typeof closeGameMenus === 'function') closeGameMenus();
 });
+/* #309: "phong to" on the question picture. One delegated pair of listeners instead of
+   one per rendered question: a game redraws its whole surface on every answer, so a
+   listener bound to the button would be lost on the next question. */
+document.addEventListener('click', event => {
+  const target = event.target;
+  if (!target || !target.closest) return;
+  const zoom = target.closest('[data-art-zoom]');
+  if (zoom) {
+    event.preventDefault();
+    if (typeof openArtZoom === 'function') openArtZoom(zoom.closest('.stage-illustration') || zoom);
+    return;
+  }
+}, true);
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Escape') return;
+  if (typeof closeArtZoom === 'function' && closeArtZoom()) event.preventDefault();
+}, true);
 // The card menu is a popover: a click anywhere outside it, a scroll of any ancestor,
 // or a window resize closes it. `capture` so the outside click is seen before the
 // page's own listeners (a click on another "•••" must close the first menu).

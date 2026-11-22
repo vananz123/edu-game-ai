@@ -150,7 +150,7 @@ function raceTurnPanelHtml() {
     const q = rp.currentQ;
     const diff = q.difficulty || 'trung bình';
     const turn = rp.answerTurn;
-    const illusHtml = stageIllustrationHtml(q, state.currentGame, 'is-race');
+    const illusHtml = stageIllustrationHtml(q, state.currentGame, 'is-race', { zoom: true });
     const hasIllus = Boolean(illusHtml);
     /* `rp.answered` từ #209 nghĩa là VÒNG ĐÃ KHÉP, không còn là "đội đã bấm một lần".
        Ở Luyện tập một cú sai không khép vòng, nên lưới vẫn bấm được và chưa có điểm nào

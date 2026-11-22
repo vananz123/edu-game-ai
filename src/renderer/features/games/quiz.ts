@@ -44,7 +44,7 @@ function renderQuestion() {
     const houseMode = isHouseMode(game);
     // House mode puts the 3D house where the placeholder picture used to be,
     // so the illustration is dropped and a slot reserves its screen area.
-    const illusHtml = houseMode ? '' : stageIllustrationHtml(q, game, 'is-stage');
+    const illusHtml = houseMode ? '' : stageIllustrationHtml(q, game, 'is-stage', { zoom: true });
     const hasIllus = Boolean(illusHtml);
     /* #254: câu hỏi TÌNH HUỐNG ("Quyết định") nhận bố cục riêng — ảnh LỚN bên
        trái, câu hỏi + đáp án bên phải — để học sinh hình dung được tình huống
@@ -60,7 +60,7 @@ function renderQuestion() {
     const houseArtOn = Boolean(houseArt && houseArt.explicit);
     const houseSlotHtml = houseMode ? '<div class="house-stage-slot" aria-hidden="true"></div>' : '';
     const houseArtHtml = houseArtOn
-        ? `<div class="house-question-art">${stageIllustrationHtml(q, game, 'is-stage is-house-art')}</div>`
+        ? `<div class="house-question-art">${stageIllustrationHtml(q, game, 'is-stage is-house-art', { zoom: true })}</div>`
         : '';
     /* DECISIONS #208 (nhiệm vụ 4–5): HUD "Đã xây n/m phần" rời CỘT PHẢI (#179)
        thành DẢI NGANG ở đầu .stage-center, và banner phản hồi về lại cột chữ như

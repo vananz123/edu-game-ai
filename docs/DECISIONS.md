@@ -5155,3 +5155,23 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
   a scene exists" chính là lỗi được báo, nên nó được thay bằng bốn khẳng định mới (nút có
   sẵn · mở là đúng ảnh đang có · mở không ghi · đóng không ghi) — 81 → 84 check. Đổi hợp
   đồng thì phải nói rõ trong STATUS, không lặng lẽ nới test.
+
+## #309 — Nút phóng to ảnh minh hoạ khi chơi
+
+- **Một nút chỉ dành cho lúc CHƠI thì phải do lúc chơi bật.** `stageIllustrationHtml` là hàm
+  dùng chung cho editor, wizard và bốn template chơi; nếu nút nằm trong mặc định thì
+  thumbnail 148 px trong editor cũng có nút phóng to. Tham số `{ zoom: true }` chỉ được
+  truyền từ bốn nơi chơi game — cùng một hàm vẽ, hai hợp đồng khác nhau.
+- **"Ẩn khi chưa hover" phải là ẩn THẬT.** `opacity:0` một mình vẫn nhận click vào đúng chỗ
+  đó; nút phải kèm `pointer-events:none` và chỉ bật lại khi `:hover`/`:focus-visible`. Trên
+  máy cảm ứng (`hover:none`) nút hiện sẵn, vì ở đó không có hover để chờ.
+- **Lớp phóng to SAO CHÉP node đang thấy, không vẽ lại.** Vẽ lại bằng dữ liệu có thể lệch
+  palette/blueprint so với bức ảnh trẻ vừa nhìn — bản sao thì không thể lệch. Lớp phải gắn
+  vào `document.body`, vì modal của game cắt `overflow`.
+- **Khung lớn lấy bề rộng từ TỈ LỆ, không từ `max-height`.** `aspect-ratio:16/10` cộng
+  `max-height:92vh` cho ra 1310×707 (1.854) ở 1366×768 và hai dải trắng hai bên; đúng phải là
+  `min(1600px, 96vw, calc(92vh * 1.6))` ⇒ 1130×707 = 1.6.
+- **`aria-hidden` trên khung phải nhường khi trong khung có nút thật**; `<svg>` giữ
+  `aria-hidden` nên hình vẫn là trang trí, còn nút vẫn tới được bằng bàn phím.
+- **Một listener uỷ nhiệm, không phải listener trên từng nút.** Game vẽ lại toàn màn hình sau
+  mỗi câu trả lời, nên listener gắn vào nút sẽ biến mất ở câu sau.

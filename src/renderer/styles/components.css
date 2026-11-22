@@ -1220,3 +1220,39 @@ html[data-theme="dark"] .lib-empty h3{color:#e6ebf5}
   .editor-art-badge{font-size:12px}
   .editor-art-more,.editor-art-swap{margin-top:10px}
 }
+
+/* ═══ #309 — nút "phóng to" nằm TRONG ảnh minh hoạ khi chơi ═══
+   Giáo viên: "khi chơi game toàn màn hình, màn câu hỏi có ảnh minh hoạ thì có nút phóng to
+   ảnh ngay bên trong ảnh khi rê chuột vào". Nút là con của khung ảnh, chỉ hiện khi rê chuột
+   hoặc khi được focus bàn phím (và luôn hiện trên thiết bị cảm ứng, nơi không có hover). */
+.stage-illustration.is-zoomable{position:relative}
+.stage-art-zoom{position:absolute;right:8px;bottom:8px;z-index:3;display:inline-flex;align-items:center;justify-content:center;
+  width:30px;height:30px;border:1px solid #ffffff5c;border-radius:9px;background:#111827a8;color:#fff;
+  opacity:0;pointer-events:none;cursor:zoom-in;transition:opacity .14s,background-color .14s;
+  -webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
+.stage-illustration.is-zoomable:hover .stage-art-zoom,
+.stage-illustration.is-zoomable:focus-within .stage-art-zoom,
+.stage-art-zoom:focus-visible{opacity:1;pointer-events:auto}
+.stage-art-zoom:hover{background:#111827e0}
+.stage-art-zoom svg{display:block}
+@media (hover:none){.stage-art-zoom{opacity:.92;pointer-events:auto}}
+@media (prefers-reduced-motion:reduce){.stage-art-zoom{transition:none}}
+
+/* Lớp phóng to: ảnh là BẢN SAO của khung vừa bấm nên không thể lệch màu/nội dung. */
+.art-zoom-layer{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;
+  padding:28px;background:#0b1020d9;-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);cursor:zoom-out;
+  animation:art-zoom-in .14s ease-out}
+@keyframes art-zoom-in{from{opacity:0}to{opacity:1}}
+/* The width must be the SMALLEST of the three limits, and the height limit has to be
+   converted into a width (92vh x 1.6) — otherwise `max-height` cuts the box and the SVG
+   letterboxes into white bands (measured: 1310x707 = 1.854 instead of 1.6). */
+.art-zoom-figure{width:min(1600px,96vw,calc(92vh * 1.6));max-width:96vw;aspect-ratio:16/10;cursor:default;
+  border-radius:18px;overflow:hidden;background:#0f1428;box-shadow:0 24px 70px #00000073}
+.art-zoom-svg{display:block;width:100%;height:100%}
+.art-zoom-svg image{width:100%;height:100%}
+.art-zoom-close{position:absolute;top:16px;right:18px;width:40px;height:40px;border:1px solid #ffffff3d;border-radius:12px;
+  background:#111827b3;color:#fff;font-size:24px;line-height:1;cursor:pointer}
+.art-zoom-close:hover{background:#111827e6}
+@media (max-width:780px){.art-zoom-layer{padding:12px}.art-zoom-figure{width:min(96vw,calc(88vh * 1.6))}}
+@media (prefers-reduced-motion:reduce){.art-zoom-layer{animation:none}}
+html[data-theme="dark"] .art-zoom-figure{background:#111733}

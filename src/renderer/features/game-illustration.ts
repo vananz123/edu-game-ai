@@ -192,10 +192,21 @@ function resolveStageIllustration(item: any, game: any): any {
  * subject icon is unknown, which is what keeps a broken id from drawing half a
  * scene.
  */
-function stageIllustrationHtml(item: any, game: any, extraClass?: string): string {
+function stageIllustrationHtml(item: any, game: any, extraClass?: string, options?: any): string {
   const resolved = resolveStageIllustration(item, game);
   if (!resolved) return '';
-  const frameClass = 'stage-illustration' + (extraClass ? ' ' + extraClass : '');
+  /* #309: the play surface asks for a "phong to" button INSIDE the picture, shown on
+     hover. The editor and the wizard do not: they already own the whole row of picture
+     controls, and a zoom button on a 148px thumbnail would only be in the way. */
+  const zoomable = Boolean(options && options.zoom);
+  const frameClass = 'stage-illustration' + (extraClass ? ' ' + extraClass : '') + (zoomable ? ' is-zoomable' : '');
+  /* The frame used to be `aria-hidden` because it held nothing but decoration. With a
+     real button inside it, the frame must be reachable — the picture is still hidden
+     from assistive tech by the `aria-hidden` on the <svg> itself. */
+  const frameAria = zoomable ? '' : ' aria-hidden="true"';
+  const zoomButton = zoomable
+    ? `<button type="button" class="stage-art-zoom" data-art-zoom="${escapeHtml(resolved.assetId)}" title="Phóng to ảnh minh hoạ" aria-label="Phóng to ảnh minh hoạ"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 3H4.5A1.5 1.5 0 0 0 3 4.5V9"/><path d="M15 3h4.5A1.5 1.5 0 0 1 21 4.5V9"/><path d="M21 15v4.5a1.5 1.5 0 0 1-1.5 1.5H15"/><path d="M3 15v4.5A1.5 1.5 0 0 0 4.5 21H9"/></svg></button>`
+    : '';
   if (resolved.custom) {
     // #124: the teacher's own picture, framed like a built-in scene so the layout does
     // not change between the two. Besides `self`/`data:` the CSP allows only the
@@ -207,16 +218,82 @@ function stageIllustrationHtml(item: any, game: any, extraClass?: string): strin
     const src = customImageSrc(resolved.assetId);
     if (!src) return '';
     const cls = frameClass + ' is-custom';
-    return `<div class="${cls}" data-illustration="${escapeHtml(resolved.assetId)}" aria-hidden="true">` +
+    return `<div class="${cls}" data-illustration="${escapeHtml(resolved.assetId)}"${frameAria}>` +
       `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" preserveAspectRatio="xMidYMid meet" class="stage-illustration-svg" aria-hidden="true" focusable="false">` +
       `<image href="${escapeHtml(src)}" x="0" y="0" width="320" height="200" preserveAspectRatio="xMidYMid meet"/>` +
-      `</svg></div>`;
+      `</svg>${zoomButton}</div>`;
   }
   const palette = SceneRuntime.getIllustrationPalette(resolved.category);
-  const options = { className: 'stage-illustration-svg' };
+  const svgOptions = { className: 'stage-illustration-svg' };
   const svg = resolved.blueprint
-    ? SceneRuntime.renderBlueprintSvg(resolved.blueprint, palette, options)
-    : SceneRuntime.renderSceneSvg(resolved.category, resolved.iconName, palette, options);
+    ? SceneRuntime.renderBlueprintSvg(resolved.blueprint, palette, svgOptions)
+    : SceneRuntime.renderSceneSvg(resolved.category, resolved.iconName, palette, svgOptions);
   if (!svg) return '';
-  return `<div class="${frameClass}" data-illustration="${escapeHtml(resolved.assetId)}" aria-hidden="true">${svg}</div>`;
+  return `<div class="${frameClass}" data-illustration="${escapeHtml(resolved.assetId)}"${frameAria}>${svg}${zoomButton}</div>`;
+}
+
+/**
+ * #309: the enlarged picture.
+ *
+ * The overlay CLONES the frame that was clicked instead of re-rendering it: the play
+ * surface draws scenes for a specific item and a re-render could drift from what the
+ * child is looking at (a different palette, a blueprint version, a custom upload).
+ * Copying the node means the magnified picture is pixel-identical to the one behind it.
+ *
+ * It is appended to `document.body`, not inside the game modal, because the modal clips
+ * its overflow — a 16:10 picture has to be free to grow past the stage column.
+ */
+/* #309: the overlay that is open, if any. Kept so a second click replaces it instead of
+   stacking two layers (and so Escape can find it without querying the whole document). */
+let stageArtZoomElement: any = null;
+
+function closeArtZoom(): boolean {
+  const layer = document.querySelector('[data-art-zoom-layer]');
+  if (!layer) return false;
+  layer.remove();
+  if (typeof stageArtZoomElement === 'object' && stageArtZoomElement) stageArtZoomElement = null;
+  return true;
+}
+
+function openArtZoom(frame: Element): boolean {
+  if (!frame || !frame.querySelector) return false;
+  closeArtZoom();
+  const art = frame.querySelector('.stage-illustration-svg');
+  if (!art) return false;
+  const layer = document.createElement('div');
+  layer.className = 'art-zoom-layer';
+  layer.setAttribute('data-art-zoom-layer', '');
+  layer.setAttribute('role', 'dialog');
+  layer.setAttribute('aria-modal', 'true');
+  layer.setAttribute('aria-label', 'Ảnh minh hoạ phóng to');
+  const inner = document.createElement('div');
+  inner.className = 'art-zoom-figure';
+  const clone = art.cloneNode(true) as Element;
+  clone.setAttribute('class', 'art-zoom-svg');
+  inner.appendChild(clone);
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'art-zoom-close';
+  close.setAttribute('data-art-zoom-close', '');
+  close.setAttribute('aria-label', 'Đóng ảnh phóng to');
+  close.textContent = '×';
+  layer.appendChild(inner);
+  layer.appendChild(close);
+  document.body.appendChild(layer);
+  stageArtZoomElement = layer;
+  if (typeof paintUiIcons === 'function') paintUiIcons(layer);
+  const dismiss = () => closeArtZoom();
+  layer.addEventListener('click', event => {
+    const target = event.target as Element;
+    if (target && target.closest && target.closest('[data-art-zoom-close]')) {
+      event.preventDefault();
+      dismiss();
+      return;
+    }
+    /* A click anywhere that is not the picture itself closes it: a child who tapped the
+       dimmed area meant "get this off my question". */
+    if (!target || !target.closest || !target.closest('.art-zoom-figure')) dismiss();
+  });
+  close.focus();
+  return true;
 }

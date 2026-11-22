@@ -69,7 +69,7 @@ function renderMatchingBoard() {
 function matchingIllustrationHtml(game) {
     const m = game && game.matchingGame;
     const first = m && Array.isArray(m.pairs) ? m.pairs[0] : null;
-    return first ? stageIllustrationHtml(first, game, 'is-matching') : '';
+    return first ? stageIllustrationHtml(first, game, 'is-matching', { zoom: true }) : '';
 }
 const MATCH_CONNECTOR_PALETTE = [
     { stroke: '#10b981', glow: 'rgba(16, 185, 129, 0.55)', name: 'emerald' },

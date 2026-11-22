@@ -628,7 +628,7 @@ function renderTreasureStage() {
     const mission = treasureMissionMeta[missionType];
     const itemCount = Object.keys(tp.itemsFound).length;
     const characterId = treasureCharacterId(hunt.characterId);
-    const illustrationHtml = stageIllustrationHtml(stage.question, state.currentGame, 'is-stage is-treasure');
+    const illustrationHtml = stageIllustrationHtml(stage.question, state.currentGame, 'is-stage is-treasure', { zoom: true });
     // Bối cảnh + nhiệm vụ sống trong pop-up "📜 Bối cảnh & Nhiệm vụ chặng" (nút ở
     // tiêu đề chặng). Bản inline đã bị bỏ theo yêu cầu: cột chữ trả lại chỗ cho
     // câu hỏi và đáp án.
