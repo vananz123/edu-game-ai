@@ -1209,3 +1209,14 @@ html[data-theme="dark"] .lib-mode-pill{background:#ffffff10;border-color:#ffffff
 html[data-theme="dark"] .lib-card-check{background:#2b3352;border-color:#5f6b93}
 html[data-theme="dark"] .lib-card-menu:hover{background:#1e2544;color:#e6ebf5}
 html[data-theme="dark"] .lib-empty h3{color:#e6ebf5}
+
+/* #308 — màn hình lớn: khung ảnh trong thẻ câu không còn là một ô 148px bị bóp
+   bên cạnh cả hàng nút rộng 1.100px. Ảnh lớn dần theo thẻ, và cả khối vẫn là
+   hai cột nên mắt đọc "ảnh | nút" chứ không phải "ảnh nhỏ | dòng dài". */
+@media (min-width:1500px){
+  .editor-item-art{grid-template-columns:minmax(220px,300px) minmax(0,1fr);gap:16px;align-items:start}
+  .editor-art-thumb{width:100%;flex-basis:auto}
+  .editor-art-controls{gap:9px}
+  .editor-art-badge{font-size:12px}
+  .editor-art-more,.editor-art-swap{margin-top:10px}
+}

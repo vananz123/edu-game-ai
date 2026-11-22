@@ -5130,3 +5130,28 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
   đều được xác nhận lại bằng `getComputedStyle` hoặc bằng cổng kiểm.
 - **Cổng đo TRẠNG THÁI phải chạy trên app vừa mở** (#288): `ui-game-background-check` cho
   39/42 trên một phiên đã bị các cổng khác chỉnh, và 42/42 trên phiên mới.
+
+## #308 — "Chỉnh cảnh" phải sửa được ảnh ĐANG THẤY, không phải ảnh đã lưu
+
+- **Một nút chỉ hiện sau khi có dữ liệu là một nút giấu đường vào.** Câu hỏi nào cũng có
+  ảnh (theo chủ đề hoặc do máy dựng), nhưng nút "Chỉnh cảnh" trước đây chỉ được vẽ khi
+  `sceneBlueprint` đã tồn tại — tức là giáo viên phải bấm "Gợi ý cảnh"/"Cảnh thử" để *tạo
+  ra* cảnh rồi mới sửa được cảnh đó. Nút phải có mặt cho ảnh đang hiện, và khi mở nó phải
+  mở **đúng** cảnh trong khung xem trước (cùng chủ đề + cùng hình chính).
+- **Hai ngoại lệ có lý do, không phải bỏ sót:** câu đã chọn "Không ảnh" thì không có gì để
+  chỉnh; câu dùng **ảnh giáo viên tự tải lên** thì mở xưởng cảnh sẽ *thay mất ảnh thật* —
+  nên ở hai trường hợp đó nút vẫn ẩn.
+- **Mở ra không ghi gì, đóng lại cũng không ghi gì.** Xưởng cảnh báo lại đúng JSON lúc mở
+  khi bấm "Huỷ", nên handler phải **nhận ra tiếng vọng đó** và bỏ qua. Nếu không, chỉ cần
+  mở xem rồi đóng là dữ liệu câu hỏi đã đổi — đúng kiểu "tự nhiên có thêm cảnh".
+- **Một thay đổi phải NHÌN THẤY được khi chơi.** Ảnh chọn tay (`classroom-scene`, …) thắng
+  blueprint khi vẽ (#252), nên lần sửa đầu tiên phải **bỏ ảnh chọn tay**; giữ lại thì cảnh
+  vừa chỉnh xong sẽ vô hình trong game — lỗi tệ hơn cả lỗi không có nút.
+- **Màn hình lớn là một kích thước phải đo, không phải phóng to.** Ở 1920×1080 khung ảnh
+  148×92 px nằm cạnh hàng nút hơn 1.100 px: ảnh nhỏ, hàng dài, mắt đọc sai thứ tự. Khối ảnh
+  thành hai cột `minmax(220px,300px) | 1fr` từ 1500 px trở lên; **dưới 1500 px giữ nguyên**
+  (1366×768 vẫn 148 px, hai nút một hàng, không xuống dòng).
+- **Hợp đồng của cổng kiểm đảo chiều theo yêu cầu của giáo viên.** Check cũ "no button before
+  a scene exists" chính là lỗi được báo, nên nó được thay bằng bốn khẳng định mới (nút có
+  sẵn · mở là đúng ảnh đang có · mở không ghi · đóng không ghi) — 81 → 84 check. Đổi hợp
+  đồng thì phải nói rõ trong STATUS, không lặng lẽ nới test.

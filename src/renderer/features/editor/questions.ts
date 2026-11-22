@@ -392,7 +392,7 @@ function editorItemArtHtml(item) {
     <div class="editor-art-controls">
       <div class="editor-art-badge" data-editor-art-badge>${escapeHtml(badge)}</div>
       <div class="editor-art-buttons">
-        ${normalized ? `<button type="button" class="btn btn-primary btn-small" data-editor-art-edit title="Mở xưởng cảnh để kéo từng hình đến chỗ bạn muốn">${uiIcon('move', '', 13)} Chỉnh cảnh</button>` : ''}
+        ${isNone || isCustom ? '' : `<button type="button" class="btn btn-primary btn-small" data-editor-art-edit title="Mở xưởng cảnh: kéo từng hình đến chỗ bạn muốn, đổi nền, thêm hình">${uiIcon('move', '', 13)} Chỉnh cảnh</button>`}
         <button type="button" class="btn btn-secondary btn-small" data-editor-art-pick-open title="Chọn ảnh khác cho câu hỏi này">${uiIcon('image', '', 13)} Đổi ảnh</button>
       </div>
       <details class="editor-art-more editor-art-swap">
@@ -791,6 +791,29 @@ function wireEditorItemArtRow(row) {
       const blueprintField = editorArtField(row, '[data-field="sceneBlueprint"]');
       const assetField = editorArtField(row, '[data-field="illustrationAssetId"]');
       if (!blueprintField) return;
+      /* #308: "Chỉnh cảnh" must edit the picture that is ALREADY on screen.
+         Before this, the button only existed once a blueprint was stored, so a question
+         whose picture comes from its content category could not be touched until the
+         teacher pressed "Gợi ý cảnh"/"Cảnh thử" first — the teacher's exact complaint.
+         When nothing is stored, the workshop now opens on the SAME category and subject
+         the preview resolves, so the first frame of the workshop is the picture they
+         were looking at. */
+      let startJson = blueprintField.value;
+      const stored = typeof stageNormalizeBlueprint === 'function' ? stageNormalizeBlueprint(startJson) : null;
+      if (!stored) {
+        const categoryField = editorArtField(row, '[data-field="contentCategory"]');
+        const iconField = editorArtField(row, '[data-field="iconName"]');
+        const picked = assetField && /-scene$/u.test(assetField.value) ? assetField.value.replace(/-scene$/u, '') : '';
+        const category = picked || (categoryField && categoryField.value ? categoryField.value : 'general');
+        const seed = typeof stageBlueprintForCategory === 'function'
+          ? stageBlueprintForCategory(category, iconField ? iconField.value : '')
+          : null;
+        if (!seed) return;
+        startJson = JSON.stringify(seed);
+        /* #308: the seed is only the STARTING POINT of the workshop. Nothing is written
+           here — opening "Chỉnh cảnh" and pressing "Huỷ" must leave the question exactly
+           as it was (no blueprint quietly appearing in the saved data). */
+      }
       const render = json => {
         const item = { illustrationAssetId: assetField ? assetField.value : '', sceneBlueprint: json };
         return typeof stageIllustrationHtml === 'function'
@@ -798,7 +821,7 @@ function wireEditorItemArtRow(row) {
           : '';
       };
       openSceneDesigner({
-        blueprint: blueprintField.value,
+        blueprint: startJson,
         render,
         icons: Object.keys(EDITOR_SCENE_ICON_LABEL)
           .filter(id => typeof stageIsSceneIconId !== 'function' || stageIsSceneIconId(id))
@@ -806,6 +829,14 @@ function wireEditorItemArtRow(row) {
         signs: EDITOR_SCENE_SIGNS.filter(entry => !!entry.id),
         backdrops: stageSceneBackdropIds().map(id => ({ id, label: EDITOR_SCENE_BACKDROP_LABEL[id] || id })),
         onChange: json => {
+          /* #308: "Huỷ" reports the blueprint it OPENED with, so a seed that was never
+             on disk must not be written back — closing the workshop without touching
+             anything has to leave the question exactly as it was. */
+          if (!stored && json === startJson) return;
+          /* #308: the first real change also drops an explicit built-in pick, because a
+             pick outranks a blueprint in the play renderer (#252) — otherwise the scene
+             the teacher just edited would stay invisible in the game. */
+          if (assetField && /-scene$/u.test(assetField.value)) assetField.value = '';
           /* #300: resolve the field from the LIVE row, never from a captured node. A
              row that was redrawn while the workshop was open would leave the captured
              field detached and every later change would vanish. */

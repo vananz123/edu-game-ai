@@ -50,10 +50,28 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
       await sleep(250);
     };
 
-    out.noButtonWithoutScene = !row().querySelector('[data-editor-art-edit]');
+    // #308: the teacher asked to edit the picture that is already on screen instead of
+    // pressing "Goi y canh" first, so the button is ALWAYS on the row and opening it must
+    // not write anything until a real change happens.
+    out.editButtonBeforeScene = !!row().querySelector('[data-editor-art-edit]');
+    if (row().querySelector('[data-editor-art-edit]')) {
+      row().querySelector('[data-editor-art-edit]').click();
+      await sleep(500);
+      out.opensWithoutScene = !!sd();
+      out.openingWroteNothing = field().value === '';
+      out.seedDrawsSubject = !!sd()?.querySelector('[data-sd-art] [data-scene-layer="subject"]');
+      if (sd()) { sd().querySelector('[data-sd-cancel]').click(); await sleep(300); }
+      out.cancelWroteNothing = field().value === '';
+    } else {
+      out.opensWithoutScene = false;
+      out.openingWroteNothing = false;
+      out.seedDrawsSubject = false;
+      out.cancelWroteNothing = false;
+    }
     row().querySelector('[data-editor-art-blueprint]').click();
     await sleep(300);
     out.buttonAfterScene = !!row().querySelector('[data-editor-art-edit]');
+    out.sceneStoredAfterTest = field().value !== '';
 
     // ---- 1. it is its own screen, not a dialog on the row ----
     row().querySelector('[data-editor-art-edit]').click();
@@ -367,8 +385,14 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
     return out;
   })()`);
 
-  check('no "Chỉnh cảnh" button before a scene exists', out.noButtonWithoutScene === true);
-  check('the button appears once the scene exists', out.buttonAfterScene === true);
+  // #308: the old contract ("no button before a scene exists") was the bug the teacher
+  // reported, so the gate now pins the opposite one.
+  check('"Chỉnh cảnh" is on the row before any scene is stored', out.editButtonBeforeScene === true);
+  check('opening it edits the picture already on screen', out.opensWithoutScene === true && out.seedDrawsSubject === true,
+    JSON.stringify({ open: out.opensWithoutScene, drawn: out.seedDrawsSubject }));
+  check('opening it writes nothing', out.openingWroteNothing === true);
+  check('closing it without a change writes nothing', out.cancelWroteNothing === true);
+  check('the button stays once the scene exists', out.buttonAfterScene === true && out.sceneStoredAfterTest === true);
   check('the button opens the workshop', out.opens === true);
   check('the workshop is its own screen', out.isRegion === true && out.coversWindow === true, JSON.stringify({ region: out.isRegion, covers: out.coversWindow }));
   check('the workshop draws the current scene', out.drawsScene === true);
