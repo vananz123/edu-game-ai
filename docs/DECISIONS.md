@@ -5350,3 +5350,23 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
   + `*/ }` ở cuối khiến `}` thật nằm trong comment: CSS chạy đúng, nhưng người dọn comment
   theo phản xạ sẽ xoá luôn cái `}` và giết animation trong im lặng. Sửa cú pháp, giữ nguyên
   hiệu ứng, và để lại một dòng cảnh báo tại chỗ.
+
+## #319 — Hành động chính phải LỚN HƠN, và một comment về comment không được chứa dấu comment
+
+- **Một nút chính khác nút phụ bằng KÍCH THƯỚC, không bằng màu.** Ở cuối lớp, trên máy chiếu,
+  màu nhạt dần trước tiên; “Trình chiếu” từng cùng 38 px và cùng cỡ chữ 12 px với “Chơi LAN”
+  nên nó chỉ khác màu. Nay 44 px / 13.5 px / 133 px ngang — đo được, không phải cảm nhận.
+- **Phóng to nút chính là thay đổi BỐ CỤC, nên phải đo lại ở khổ hẹp nhất và ở toàn màn hình.**
+  Nút cao thêm 6 px có thể đẩy đáp án thứ tư ra ngoài màn hình (hợp đồng #208, #309). Đo được:
+  dải đầu trang **84 px toàn màn hình** và **106 px cửa sổ** — **không đổi** — vì chiều cao dải
+  do cột tiêu đề quyết định, không do hàng nút; thân sân khấu chỉ co lại trong khoảng trống
+  sẵn có. Toàn màn hình vẫn `docHeight == viewport` ở cả 1024×640 và 1366×768.
+- **Comment giải thích một cái bẫy không được chứa chính cái bẫy đó.** #318 dọn một chú thích
+  CSS hỏng, rồi viết chú thích mới **có chứa dấu đóng comment** — Tailwind đọc đó là hết
+  comment và `npm run build` chết (`CssSyntaxError: Missing opening {`). Nếu chỉ chạy
+  `cargo tauri build` mà không chạy `npm run build` trước, lỗi này sẽ nằm im trong nguồn và
+  chỉ lộ ra ở lần dựng frontend sau. `npm run verify:css` đọc bản ĐÃ biên dịch nên bắt được.
+- **Một cổng đo trạng thái phải chạy trên phiên KHÔNG bị cổng khác chạm vào.** `ui-fullscreen-check`
+  đỏ 8/20 khi phiên đang ở chế độ toàn màn hình do phép đo trước bật (F11 đi ngược chiều), và
+  đỏ `Execution context was destroyed` trên profile lạnh (hộp thiết lập lần đầu làm nạp lại
+  trang). Cùng một binary: **20/20** trên profile ấm. (#288, #317 — lần thứ ba.)

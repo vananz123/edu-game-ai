@@ -50,12 +50,19 @@
 
 /* Primary action: the projector button is the one that matters, so it gets
    the strongest colour and a subtle glow. */
+/* #319: "Trình chiếu" must read as THE action, not as one more tool button.
+   It is the one a first-time teacher has to find — the others are secondary.
+   Sized taller than its siblings (44 vs 38) instead of only repainted, and the
+   label is a size larger, so the difference survives a projector at the back of
+   the room. Measured at 1024x640 and 1366x768 — see docs/STATUS.md #319. */
 .play-tool-present {
   background: linear-gradient(135deg, #6a5ae0, #4b3fc0);
   border-color: #4b3fc0;
   color: #fff;
-  padding: 0 15px;
-  box-shadow: 0 4px 14px rgba(75, 63, 192, 0.3);
+  height: 44px;
+  padding: 0 20px;
+  font-size: 13.5px;
+  box-shadow: 0 4px 14px rgba(75, 63, 192, 0.3), 0 0 0 3px rgba(106, 90, 224, 0.14);
 }
 .play-tool-present:hover {
   background: linear-gradient(135deg, #7b6cf6, #5548d6);

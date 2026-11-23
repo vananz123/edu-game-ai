@@ -14,9 +14,12 @@
   70% { transform: scale(1.03) rotate(1.5deg); filter: brightness(1.1) drop-shadow(0 0 6px rgba(34, 197, 94, 0.3)); }
   100% { transform: scale(1) rotate(0deg); filter: brightness(1) drop-shadow(none); }
 }
-/* #318: khối này từng bị bọc hỏng — `/*` nằm giữa dòng `100%` và `*/ }` đóng khung
-   ở cuối, nên `@keyframes` VẪN chạy nhưng cái `}` thật nằm trong comment. Ai “dọn” comment
-   bằng cách xoá `*/ }` sẽ giết animation mà không thấy gì đỏ. Đã sửa cho đúng cú pháp. */
+/* #318: khối này từng bị bọc hỏng — dấu mở comment nằm giữa dòng 100% và dấu đóng
+   comment (kèm một } thừa) nằm sau khung, nên @keyframes VẪN chạy nhưng cái } thật
+   lại ở trong comment. Ai "dọn" comment theo phản xạ bằng cách xoá phần đuôi đó sẽ
+   giết animation mà không có gì đỏ. Đã sửa cho đúng cú pháp; đừng lặp lại.
+   (Lần đầu sửa chính comment này cũng hỏng: nó CHỨA dấu đóng comment, và bộ parse
+   của Tailwind đọc đó là hết comment -> "Missing opening {". Đừng viết dấu đó ở đây.) */
 @keyframes answer-shake {
   0%, 100% { transform: translateX(0); }
   20%, 60% { transform: translateX(-6px); }

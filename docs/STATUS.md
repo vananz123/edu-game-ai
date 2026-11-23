@@ -7,6 +7,24 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-24 — #319 “Trình chiếu” là nút LỚN HƠN, không chỉ đổi màu
+- Từ danh sách 3 lựa chọn ở #318, chọn mục **S2-4** của kế hoạch: nút **“Trình chiếu”** là hành động chính của cả màn chơi mà lại **cùng cỡ** với các nút phụ (`Chơi LAN`, toàn màn hình, đóng) — giáo viên mới không biết bấm đâu để chiếu.
+- **Đo trước khi sửa (1366×768, cửa sổ):** `.play-tool` cao **38 px** cho mọi nút; “Trình chiếu” 116×38, chữ **12 px** — bằng đúng chữ của “Chơi LAN”; ba nút phụ 38×38. Nút chính chỉ khác màu, và ở khoảng cách cuối lớp thì **màu không còn là tín hiệu**, kích thước mới là.
+- **Sửa (chỉ CSS, `.play-tool-present`):** `height 38 → 44 px`, `padding 0 15 → 0 20 px`, `font-size 12 → 13.5 px`, thêm vòng sáng `0 0 0 3px rgba(106,90,224,.14)` ngoài bóng đổ cũ.
+- **Đo sau khi sửa (cùng ba khổ, không suy đoán):**
+
+  | khổ | nút Trình chiếu | chữ | nhãn | dải đầu trang | thân sân khấu | trang cuộn |
+  |---|---|---|---|---|---|---|
+  | 1366×768 cửa sổ | **133×44** | 13.5 px | **1 dòng** | 106 px (không đổi) | 1134×552, đáy 714 | 1109 / 768 (sân khấu tự cuộn — #311) |
+  | 1024×640 cửa sổ | **133×44** | 13.5 px | 1 dòng | 106 px | 947×649 | 1667 / 640 (sân khấu tự cuộn) |
+  | 1024×640 toàn màn hình | **133×44** | 13.5 px | 1 dòng | **84 px (không đổi)** | đáy 626 | **640 / 640 — vừa khít, không cuộn** |
+  | 1366×768 toàn màn hình | **133×44** | 13.5 px | 1 dòng | **84 px (không đổi)** | đáy 754 | **768 / 768 — vừa khít** |
+
+  Nút lớn hơn **+16 % chiều cao, +17 px bề ngang** mà **không** làm dải đầu trang cao thêm ở bất kỳ khổ nào — nên hợp đồng #208 (1366×768 đủ 4 đáp án, không phải cuộn) vẫn nguyên. Mô hình thị giác trên ảnh chụp: *“the purple button is the main action … modestly larger than the small icon buttons … fully visible on one line and appears vertically centered … no overlap, clipping or misalignment.”*
+- **Cổng:** `ui-play-surface-check` **812/812** (có điều kiện `present ≥ 34 px`, nhãn **1 dòng**, `present.w > 70` — tất cả vẫn qua) · `ui-fullscreen-check` **20/20** · `ui-stage-illustration-check` **179/179** · `ui-answer-mode-check` **219/219** · `ui-editor-art-check` pass · `npm run verify:css` **61/61**.
+- **Sửa kèm một lỗi do #318 gây ra:** chú thích tôi viết ở #318 để cảnh báo về comment hỏng lại **chứa chính dấu đóng comment**, nên Tailwind đọc phần đuôi thành CSS thật và `npm run build` chết với `CssSyntaxError: Missing opening {` ở `game-animations.css:17`. Diễn đạt lại bằng chữ, không chép dấu đó. Bài học: **một comment giải thích về dấu comment không được chứa dấu đó.**
+- Installer: **16 535 220 byte** / 24-11 **02:14** / SHA-256 `551887d37071e46cce0688671499fa3554d03a739aabbb6fe37c96ac6d1536d4`.
+
 ### 2026-11-24 — #318 Rà kế hoạch UI/UX 20 mục: 7 mục sai sự thật, không sửa gì thêm
 - Giáo viên đưa `docs/archive/specs/ui-improvement-plan.md` (kế hoạch 4 sprint, 20 mục). Trước khi sửa, **kiểm chứng từng mục** với mã và với app đang chạy — vì tài liệu không được git theo dõi và không có ngày.
 - **Mục nghiêm trọng nhất của kế hoạch là SAI.** Kế hoạch nói `answer-celebrate` bị comment hỏng nên “thẻ đúng hiện không có animation nào thực sự chạy”. Đo trên app (CSSOM): **25 keyframes**, `answer-celebrate` **có mặt và chạy**; chú thích hỏng thật nhưng cái `}` thật nằm sau `*/` nên `@keyframes` vẫn đóng đúng. Chỉ dọn lại chú thích (không đổi hành vi) + ghi cảnh báo: ai xoá `*/ }` sẽ giết animation mà không có gì đỏ.
@@ -31,14 +49,3 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - Đo trên binary mới (1366×768): báo cáo x=**256** rộng **990** — **cùng mép trái** với đầu mục và danh sách câu hỏi (#314 giữ nguyên); bảng rộng 961, cột “Vị trí” 148 px; trang vẫn cuộn được.
 - Cổng trên binary mới: `ui-question-template-check` **21/21** · `ui-editor-art-check` pass · `ui-item-assets-editor-check` **157/157** · `ui-scene-designer-check` **84/84** · `ui-answer-mode-check` **219/219** · `ui-stage-illustration-check` **179/179** · `ui-fullscreen-check` **20/20** · `ui-game-background-check` **42/42** · `ui-library-paging-check` pass · `ui-project-selection-check` pass · `ui-presentation-check` **93/93** (phiên MỚI — chạy trong phiên đã bị cổng khác cài `window.confirm` thì đỏ vì `plugin:dialog|message`, đúng bài học #288) · `tauri:check` **56/56** + mở lại **10/10** · `cargo test --lib` **147/147** · unit **104/104** · `npm run check` pass · `check:renderer-globals` **1129 functions / 9173 call sites, 0 undefined** · `check:embedded` **6217.2 KiB**.
 - Installer: **16 540 599 byte** / 24-11 **01:38** / SHA-256 `ca5a7da98267e86815ca0bf1870b6f8a25a87180d4a8424ac195f0248bd6c8f6`.
-
-### 2026-11-23 — #316 “Không có mẫu thì nhập CSV/XLSX thế nào?” — nút Tải tệp mẫu
-- Giáo viên: **“chức năng nhập csv/xlsx tuy nhiên nếu không có mẫu thì làm thế nào người dùng nhập được”**. Đúng: nút duy nhất trong trình soạn thảo là **“Nhập CSV/XLSX”**, nó mở hộp thoại mở tệp cho một định dạng chưa ai đưa cho giáo viên. Không có tệp ⇒ không có đường vào.
-- **Thêm:** `src/shared/question-template.ts` — nguồn duy nhất của tệp mẫu (`QUESTION_TEMPLATE_COLUMNS`, `QUESTION_TEMPLATE_ROWS`, `questionTemplateCsv()`, `QUESTION_TEMPLATE_FILE_NAME = 'mau-cau-hoi-edugame.csv'`). Bản mirror cho renderer ở `src/renderer/shared/question-template.ts` (renderer là script toàn cục, không `import`), nạp trong `src/index.html` **trước** `features/editor/page.js`.
-- **Tệp mẫu là tệp mà bộ nhập THẬT SỰ đọc được:** dòng tiêu đề 10 cột (Câu hỏi, Dạng câu hỏi, Phương án A–D, Đáp án, Giải thích, Điểm, Độ khó) + **4 dòng ví dụ, mỗi dòng một dạng trò chơi chơi được**: trắc nghiệm, đúng/sai, điền từ, trả lời ngắn. Dấu `;` (Excel tiếng Việt), UTF-8 **BOM** + **CRLF** để Excel mở không lỗi font. Ô nhiều đáp án (`hướng đông;đông`) được bọc ngoặc kép nên vẫn là MỘT ô.
-- **Giao diện:** nút **“Tải tệp mẫu”** đặt **trước** “Nhập CSV/XLSX” (giáo viên chưa có tệp đọc thấy trước), thêm một dòng `#editorImportHint`: “Chưa có tệp? Bấm **Tải tệp mẫu** — tệp CSV mở bằng Excel, có sẵn 4 dòng ví dụ… Điền tiếp bên dưới rồi bấm **Nhập CSV/XLSX**. Tối đa 100 câu mỗi tệp…”. Nút tải bằng Blob + `<a download>` (cùng cách trang Lịch sử kết quả xuất CSV), báo `toast`.
-- **Kiểm chứng vòng tròn (điều quan trọng nhất):** `tests/unit/question-template.test.ts` đưa **chính chuỗi CSV xuất ra** vào `importQuestionsFromFile` và đòi ra **4 câu** đúng dạng, đúng đáp án (`A`, `Đúng`, `hướng đông` + `đông`, `Hà Nội`), đúng điểm/độ khó; đồng thời so bản renderer với bản shared **từng byte**. Bản nháp đầu tiên đã đỏ đúng chỗ: ô `"hướng đông;đông"` bị bọc ngoặc kép **hai lần** ⇒ bộ đọc trả về `"hướng đông` — sửa bằng cách để dữ liệu thô và cho hàm CSV tự bọc.
-- Cổng mới `tests/ui/ui-question-template-check.js` (**14/14**): nút tồn tại + đứng trước + dòng gợi ý hiện thật; bấm nút ⇒ bắt được **đúng 1 blob** `text/csv`, tên `mau-cau-hoi-edugame.csv`, **BOM đọc từ BYTE** (`Blob.text()` nuốt BOM nên đọc chữ luôn trả "không"), 5 dòng, 10 cột, 4 dạng câu, mỗi dòng đủ 10 ô khi tách **tôn trọng ngoặc kép**, tiếng Việt không lỗi font.
-- Cổng khác trên binary mới: `ui-editor-art-check` **pass** · `ui-item-assets-editor-check` **157/157** · `ui-answer-mode-check` **219/219** · `ui-scene-designer-check` **84/84** · unit **103/103** (thêm 1 suite) · `check:renderer-globals` **1127 functions / 9139 call sites, 0 undefined**.
-- Đo bố cục: dải đầu mục vẫn cao **49 px** ở 1366 và 1920, ba nút nằm **một hàng** (1366: x=952/1065/1201), dòng gợi ý cao 36 px.
-- Installer: **16 526 905 byte** / 23-11 **23:24** / SHA-256 `883b91fd34de7093913a9d9b8e7dcc4f8033538fc35f3be3ba05cf9a8596be1b`.
