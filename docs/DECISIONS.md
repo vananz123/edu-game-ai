@@ -5217,3 +5217,28 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
 - **Một cổng phải mở đúng chế độ mà lời báo nói tới.** `OPEN` của `ui-play-surface-check`
   ép `fullscreen: true`, nên nó không thể thấy lỗi của "Chơi ngay"; mục mới gọi
   `playGame(game, {fullscreen:false})`.
+
+## #312 — Cảnh tự chỉnh phải sống qua TỆP, không chỉ qua SQLite
+
+- **Đi qua tệp là một đường dữ liệu riêng.** "Lưu rồi mở lại trong máy này" chứng minh
+  `library:save-game` + đọc SQLite, không chứng minh `exportGame` → `importGame`: giữa hai
+  đường có bộ chuẩn hoá của gói, `saved_path`, và `asset-validation` khi lưu lại. Một cảnh
+  mất `extras` khi sang máy khác thì giáo viên chỉ phát hiện sau khi đã gửi bài.
+- **So SỐ, không so chuỗi.** Bộ chuẩn hoá bỏ `r: 0` (góc 0 là mặc định) và sắp lại thứ tự
+  khoá, nên so văn bản JSON sẽ đỏ vì lý do định dạng chứ không phải mất dữ liệu. Phép so
+  đúng là `extras[0].x === 0.125`, `freePos['around-1'].r === -30`.
+- **Khoá `freePos` không cùng gốc đếm:** `around-1..4` là **1-based**, còn `extra-0..`,
+  `sub-0..`, `prop-0..` là **0-based**. `around-0` bị bỏ **im lặng** (đúng: cảnh không có
+  vòng số 0), nên một fixture dùng `around-0` trông y như mất dữ liệu. Fixture phải dùng
+  đúng không gian khoá; đừng "sửa" bộ chuẩn hoá để chiều theo fixture sai.
+- **Trò chơi nhập từ gói giữ blueprint dưới dạng OBJECT, trình soạn thảo lưu dưới dạng
+  CHUỖI.** Cả hai dạng đều phải đọc được, và đã đo cả ba đường: chơi (3 `[data-scene-extra]`
+  với đúng phép biến đổi), xưởng cảnh (7 tay nắm), và lưu lại (extras + freePos còn nguyên).
+  Mọi chỗ đọc `sceneBlueprint` vì thế đi qua `normalizeSceneBlueprint`, không tự `JSON.parse`.
+- **Hộp thoại Windows cổ điển khai Save/Cancel là `ControlType.Pane`, không phải `Button`.**
+  Lọc theo `ControlType.Button` chỉ thấy thanh công cụ (`Help`, `Organize`, `New folder`);
+  `AutomationId '1'` phải chọn kèm **HWND khác 0** rồi bấm `BM_CLICK`. Đã gặp đúng lỗi này
+  khi viết lại helper UIAutomation ở #312.
+- **Bộ đếm của cổng gói là 1..4**, nên phép đo mới **dùng lại lượt 1** (tệp thật của cổng)
+  thay vì nới hợp đồng: lượt 1 là `EDUGAME_TAURI_PACKAGE_OPEN`, và lượt xuất của phép đo ghi
+  đè chính tệp đó bằng gói có cảnh.

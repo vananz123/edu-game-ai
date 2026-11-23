@@ -500,6 +500,9 @@ const filesGate = Boolean(process.env.EDUGAME_TAURI_FILES_DOCUMENT);
         onDisk ? fs.readFileSync(packagePaths.save, 'utf8').slice(0, 100) : 'không có tệp');
       imported = await evaluate(importRunner('Gói qua cổng'));
       check('nhập lại .egame: trò chơi + ngân hàng câu hỏi còn nguyên, id mới', imported.ok === true, imported.msg);
+      // #313: cảnh tự chỉnh phải sống qua tệp, không chỉ qua SQLite trong máy này.
+      const sceneTrip = await evaluate(sceneRoundTripRunner(packagePaths.save));
+      check('xuất → nhập giữ nguyên cảnh tự chỉnh (backdrop + extras + freePos)', sceneTrip.ok === true, sceneTrip.msg);
       const refused = await evaluate(hostileRunner());
       check('gói hỏng/độc hại bị từ chối với câu đọc được, không treo', refused.ok === true, refused.msg);
       // #274 — phép đo dung lượng trên bộ game lớn (P4). Cùng 40 câu, xuất hai lần:
@@ -971,6 +974,77 @@ const importRunner = (title) => `(async () => {
   } catch (error) {
     out.ok = false;
     out.msg = 'importGame lỗi: ' + (error && error.code) + ': ' + (error && error.message);
+  }
+  return out;
+})()`;
+
+/**
+ * #313: gói `.egame` phải mang theo CẢNH đã chỉnh tay — `backdrop`, `extras[]` và
+ * `freePos{}` — qua đúng đường xuất → nhập → lưu. Trước đây chỉ có đường lưu/mở
+ * lại trong máy là được chứng minh; đường xuất đi qua tệp thì chưa, nên một cảnh
+ * mất extras khi đi qua giáo viên khác sẽ không ai thấy.
+ *
+ * Phép so dùng SỐ, không dùng chuỗi: bộ chuẩn hoá bỏ `r: 0` (góc 0 là mặc định)
+ * và sắp lại thứ tự khoá, nên so văn bản sẽ đỏ vì lý do định dạng.
+ */
+const sceneRoundTripRunner = (target) => `(async () => {
+  const out = {};
+  const target = ${JSON.stringify(target)};
+  const blueprint = {
+    v: 1, layout: 'surround', backdrop: 'sea', paletteKey: 'language', mainIcon: 'fish',
+    around: ['star', 'sun', 'bug'],
+    extras: [
+      { icon: 'rocket', x: 0.125, y: 0.34, s: 0.8, r: -15 },
+      { icon: 'butterfly', x: 0.771, y: 0.617, s: 1.35, r: 22 },
+      { icon: 'apple', x: 0.4, y: 0.85, s: 0.55 }
+    ],
+    freePos: {
+      subject: { x: 0.52, y: 0.41, s: 1.2, r: 8 },
+      'around-1': { x: 0.2, y: 0.16, s: 0.7, r: -30 },
+      'extra-0': { x: 0.13, y: 0.36, s: 0.82, r: -15 }
+    }
+  };
+  const game = {
+    title: 'Gói có cảnh',
+    template: 'scenario',
+    gameSetup: { scoringMode: 'cơ bản', illustrationMode: 'auto' },
+    questions: [{
+      id: 'q0', type: 'scenario', prompt: 'Con vật nào sống dưới biển?',
+      options: [{ id: 'a', text: 'Con cá' }, { id: 'b', text: 'Con mèo' }],
+      correctOptionId: 'a', explanation: 'Cá sống dưới nước.',
+      sceneBlueprint: JSON.stringify(blueprint)
+    }]
+  };
+  try {
+    const exported = await desktop.call('exportGame', game);
+    out.exported = Boolean(exported && exported.ok === true && exported.path === target);
+    // Lượt 1 = tệp THẬT của cổng (vừa bị lượt xuất dưới đây ghi đè bằng gói có cảnh).
+    await desktop.gate('setPackageGateTurn', 1);
+    const back = await desktop.call('importGame');
+    if (!back || !back.questions || !back.questions[0]) { out.ok = false; out.msg = 'không đọc lại được gói'; return out; }
+    const raw = back.questions[0].sceneBlueprint;
+    const scene = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    const saved = await desktop.call('saveGame', back);
+    const stored = (await desktop.call('getLibrary')).games.find(g => g.id === saved.id);
+    const storedRaw = stored && stored.questions[0].sceneBlueprint;
+    const kept = typeof storedRaw === 'string' ? JSON.parse(storedRaw) : storedRaw;
+    const extras = scene && Array.isArray(scene.extras) ? scene.extras : [];
+    const free = (scene && scene.freePos) || {};
+    out.ok = out.exported && Boolean(scene) &&
+      scene.backdrop === 'sea' && scene.layout === 'surround' &&
+      Array.isArray(scene.around) && scene.around.length === 3 &&
+      extras.length === 3 && extras[0].icon === 'rocket' && extras[0].x === 0.125 && extras[2].s === 0.55 &&
+      free.subject && free.subject.x === 0.52 && free['around-1'] && free['around-1'].r === -30 &&
+      Boolean(kept) && kept.extras && kept.extras.length === 3 &&
+      kept.freePos && kept.freePos['extra-0'] && kept.freePos['extra-0'].y === 0.36;
+    out.msg = 'backdrop=' + (scene && scene.backdrop) + ', extras=' + extras.length +
+      ', freePos=' + Object.keys(free).length +
+      ', lưu lại: extras=' + (kept && kept.extras ? kept.extras.length : 0) +
+      '/freePos=' + (kept && kept.freePos ? Object.keys(kept.freePos).length : 0);
+    await desktop.call('deleteGame', saved.id);
+  } catch (error) {
+    out.ok = false;
+    out.msg = 'lỗi: ' + (error && error.code) + ': ' + (error && error.message);
   }
   return out;
 })()`;
