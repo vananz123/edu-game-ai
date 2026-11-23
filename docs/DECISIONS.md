@@ -5326,3 +5326,27 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
 - **Một cổng đo "không có lỗi console" phải chạy trên PHIÊN MỚI.** Chạy `ui-presentation-check`
   trong phiên mà cổng trước đã cài `window.confirm` thì nó đỏ vì `plugin:dialog|message not
   allowed by ACL` — lỗi của phép đo, không của sản phẩm (bài học #288).
+
+## #318 — Một tài liệu kế hoạch là GIẢ THUYẾT, phải đo trước khi sửa
+
+- **Kế hoạch 20 mục `docs/archive/specs/ui-improvement-plan.md` sai 7 mục, trong đó mục
+  được đóng dấu “CAUTION, sửa trước tiên” là sai.** Nó nói animation thẻ đúng không chạy;
+  CSSOM của app đang chạy có `answer-celebrate` và nó chạy bình thường. Chú thích hỏng thật
+  nhưng cú pháp vẫn đóng đúng chỗ. Nếu tin tài liệu, ta sẽ “sửa” một thứ đang chạy và có
+  nguy cơ làm hỏng nó.
+- **Ba dạng sai lặp lại trong tài liệu:** (1) *chẩn đoán sai cơ chế* — “JS xoá DOM trước khi
+  transition kịp chạy” trong khi `.toast` là phần tử thường trú; “animation chỉ chạy lần đầu”
+  trong khi `renderQuestion()` dựng lại `innerHTML` mỗi câu; (2) *mô tả sai mã hiện tại* —
+  `.match-card.selected` không có `transform` nào; `.lib-search` đã có `:focus-within`;
+  (3) *số đo bịa* — `.feedback` thật là `padding:14px; line-height:1.6; font-size:12px`.
+- **Một thay đổi thẩm mỹ không có khiếu nại của người dùng thì phải xếp sau một lỗi có người
+  báo.** #314–#317 đều bắt đầu từ câu của giáo viên; 19 mục còn lại của kế hoạch thì không.
+  Gộp 20 thay đổi px vào một lần build đổi mọi hợp đồng bố cục đang được cổng giữ (#307,
+  #314, #315, #316) mà không có gì để đối chiếu.
+- **Một thay đổi chỉ hiện khi HOVER thì cổng không đo được** (con trỏ CDP luôn ở 0,0). Nếu
+  làm, phải nói rõ là chưa kiểm chứng — và với thẻ có menu tuyệt đối bên trong, `transform`
+  trên thẻ còn tạo containing block mới, một lỗi kinh điển.
+- **Chú thích hỏng trong CSS là một cái bẫy, không phải lỗi hiển thị.** `/*` giữa dòng `100%`
+  + `*/ }` ở cuối khiến `}` thật nằm trong comment: CSS chạy đúng, nhưng người dọn comment
+  theo phản xạ sẽ xoá luôn cái `}` và giết animation trong im lặng. Sửa cú pháp, giữ nguyên
+  hiệu ứng, và để lại một dòng cảnh báo tại chỗ.

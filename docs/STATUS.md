@@ -7,6 +7,15 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-24 — #318 Rà kế hoạch UI/UX 20 mục: 7 mục sai sự thật, không sửa gì thêm
+- Giáo viên đưa `docs/archive/specs/ui-improvement-plan.md` (kế hoạch 4 sprint, 20 mục). Trước khi sửa, **kiểm chứng từng mục** với mã và với app đang chạy — vì tài liệu không được git theo dõi và không có ngày.
+- **Mục nghiêm trọng nhất của kế hoạch là SAI.** Kế hoạch nói `answer-celebrate` bị comment hỏng nên “thẻ đúng hiện không có animation nào thực sự chạy”. Đo trên app (CSSOM): **25 keyframes**, `answer-celebrate` **có mặt và chạy**; chú thích hỏng thật nhưng cái `}` thật nằm sau `*/` nên `@keyframes` vẫn đóng đúng. Chỉ dọn lại chú thích (không đổi hành vi) + ghi cảnh báo: ai xoá `*/ }` sẽ giết animation mà không có gì đỏ.
+- **Hai mục khác cũng sai:** S1-3 “toast biến mất đột ngột vì DOM bị xoá” — `.toast` là **một** phần tử thường trú, JS chỉ bật/tắt `.show`, `transition:.2s` đã có nên fade-out vẫn chạy. S3-1 “animation câu hỏi chỉ chạy lần đầu” — `renderQuestion()` dựng lại `root.innerHTML` mỗi câu nên nút DOM là **mới**, animation chạy lại từ đầu. S2-5 “`.match-card.selected` scale 1.02” — thật ra không có `transform` nào, chỉ viền + nền + vòng.
+- **Kết quả rà 20 mục:** 7 sai/đã-có · 6 là *thiếu tính năng* (đếm điểm, cascade màn kết quả, stagger thẻ, hướng wizard, flash ghép cặp, flip 3D) chứ không phải bug · 7 là *thay đổi thẩm mỹ* đúng như mô tả nhưng không có khiếu nại nào của giáo viên đứng sau.
+- **Rủi ro cụ thể nếu làm theo kế hoạch nguyên bản:** S2-6 tăng `padding` ngang của `.btn-primary.btn-small` sẽ đụng hợp đồng #316 (ba nút phải nằm **một hàng** ở 1366: x=952/1065/1201); S2-1 tăng `h1` 17→20px đổi chiều cao dải đầu trang mà các cổng bố cục đang đo; S4-5 `translateY(-3px)` khi hover không đo được bằng cổng (con trỏ luôn ở 0,0) nên sẽ là thay đổi **không kiểm chứng được**.
+- **Đã sửa:** chỉ chú thích `@keyframes answer-celebrate` trong `src/renderer/styles/game-animations.css`. Không đổi byte CSS có hiệu lực. `npm run verify:css` **61/61**.
+- **Chưa làm:** 19 mục còn lại, chờ giáo viên chọn (mỗi mục là một thay đổi thẩm mỹ, không phải sửa lỗi).
+
 ### 2026-11-24 — #317 Nhập câu hỏi: dòng nào bị bỏ thì phải NHÌN THẤY, và dán thẳng từ Excel
 - Giáo viên chọn **cả hai** việc: (a) nhập câu hỏi phải **báo cáo dòng bị bỏ kèm lý do** thay vì chết ở dòng sai đầu tiên, (b) **dán thẳng** bảng từ Excel/tài liệu, không cần lưu tệp.
 - **Trước #317:** `rowsToQuestions()` **throw** ở dòng hỏng đầu tiên ⇒ cả tệp mất; và khi nhập được, giáo viên đếm 12 dòng trong Excel mà chỉ thấy 11 câu, không có gì để nhìn. Đó là cùng một lỗi với #316: một cánh cửa không nói vì sao nó đóng.
@@ -33,19 +42,3 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - Cổng khác trên binary mới: `ui-editor-art-check` **pass** · `ui-item-assets-editor-check` **157/157** · `ui-answer-mode-check` **219/219** · `ui-scene-designer-check` **84/84** · unit **103/103** (thêm 1 suite) · `check:renderer-globals` **1127 functions / 9139 call sites, 0 undefined**.
 - Đo bố cục: dải đầu mục vẫn cao **49 px** ở 1366 và 1920, ba nút nằm **một hàng** (1366: x=952/1065/1201), dòng gợi ý cao 36 px.
 - Installer: **16 526 905 byte** / 23-11 **23:24** / SHA-256 `883b91fd34de7093913a9d9b8e7dcc4f8033538fc35f3be3ba05cf9a8596be1b`.
-
-### 2026-11-23 — #315 Khối ảnh trong thẻ câu hỏi không còn dán sát mép thẻ
-- Giáo viên: **“tính năng chỉnh sửa phần giao diện hiển thị ảnh nó sát quá”**. Đo trên bản build: thẻ câu hỏi x=**256**, hình thu nhỏ x=**257** — cách mép **1 px**, và vì thẻ có `overflow:hidden` + bo góc 14 px nên góc vuông của ảnh bị cắt cụt. Khoảng hình → nút chỉ **12 px**.
-- **Nguyên nhân:** khối ảnh `.editor-item-art` là **con trực tiếp** của `.editor-question` (thẻ `padding:0`), và lần chỉnh #303 đã đặt `margin:0;padding:0;border:0` cho khối này. Các con khác của thẻ (ô câu hỏi, phương án, `correct-select`) đều thụt 12 px, riêng khối ảnh thì không.
-- **Sửa (chỉ CSS, không đổi markup, không đổi selector):** `.editor-item-art{margin:0 12px 12px;padding:10px 11px;gap:16px}` — thụt vào đúng 12 px như các con khác, đệm 10/11 px bên trong, khoảng hình → nút 16 px.
-- **Đo lại trên bundle thật (không phải CSS tiêm):**
-
-  | khổ | mép thẻ | hình → mép trái thẻ | hình → nút | kích thước hình |
-  |---|---|---|---|---|
-  | 1366×768 | 256 | **24 px** | **16 px** | 148×93 |
-  | 1920×1080 | 460 | **24 px** | **16 px** | 300×188 |
-  | 2560×1440 | 780 | **24 px** | **16 px** | 300×188 |
-
-  (24 = 12 lề + 11 đệm + 1 viền thẻ.) Mô hình thị giác trên ảnh chụp 1366: *“small but visible margin inside its rounded mint-green frame … roughly 16 px of horizontal space … comfortably spaced rather than cramped”*.
-- Cổng trên binary mới: `ui-editor-art-check` **pass** · `ui-item-assets-editor-check` **157/157** · `ui-scene-designer-check` **84/84** · `ui-stage-illustration-check` **179/179** · `ui-answer-mode-check` **219/219**.
-- Installer: **16 530 770 byte** / 23-11 **22:52** / SHA-256 `41343f34195e832ff734dfc92684ce31d105591a3bdc34a72949f53a679ea745`.
