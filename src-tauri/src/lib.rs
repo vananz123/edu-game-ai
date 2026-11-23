@@ -106,6 +106,7 @@ pub fn run() {
             api::import_document,
             api::import_document_from_path,
             api::import_questions,
+            api::parse_questions,
             api::export_game,
             api::import_game,
             api::save_settings,

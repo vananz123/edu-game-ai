@@ -896,6 +896,36 @@ html.is-scene-designer,html.is-scene-designer body{overflow:hidden}
    duong ("Tai tep mau") ngay duoi dai nut, khong phai mot hop thoai moi. */
 .editor-import-hint{margin:-2px 2px 12px;font-size:11.5px;line-height:1.55;color:var(--muted)}
 .editor-import-hint strong{color:var(--text);font-weight:750}
+/* #317: dán thẳng từ Excel — một khung gấp, không phải hộp thoại thứ ba. */
+.editor-paste{margin:0 0 12px;border:1px solid var(--line);border-radius:12px;background:#fbfcfe}
+.editor-paste>summary{cursor:pointer;padding:9px 12px;font-size:12px;font-weight:700;color:#3f4859;list-style:none}
+.editor-paste>summary::-webkit-details-marker{display:none}
+.editor-paste>summary::before{content:'▸';display:inline-block;margin-right:7px;color:#8b95a8;transition:transform .12s ease}
+.editor-paste[open]>summary::before{transform:rotate(90deg)}
+.editor-paste-body{display:grid;gap:8px;padding:0 12px 12px}
+.editor-paste-text{width:100%;min-height:96px;padding:10px 11px;border:1px solid var(--line);border-radius:9px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;line-height:1.5;resize:vertical;background:#fff;color:var(--text)}
+.editor-paste-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.editor-paste-hint{font-size:11.5px;color:var(--muted)}
+/* #317: bảng dòng bị bỏ. Đọc được như một bảng tính, vì giáo viên sẽ mở lại Excel. */
+.editor-import-report{margin:0 0 12px;padding:11px 12px;border:1px solid #d8def0;border-left:4px solid #6366f1;border-radius:12px;background:#f7f8ff}
+.editor-import-report[data-complete="0"]{border-left-color:#d97706;background:#fffaf1;border-color:#f0e0c4}
+.editor-import-report-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.editor-import-report-title{font-size:12.5px;font-weight:750;color:var(--text)}
+.editor-import-report-note{margin:7px 0 8px;font-size:11.5px;line-height:1.55;color:#7b6432}
+.editor-import-table{width:100%;border-collapse:collapse;font-size:11.5px}
+.editor-import-table th{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line);color:var(--muted);font-weight:700}
+.editor-import-table td{padding:6px 8px;border-bottom:1px solid #eceff7;vertical-align:top}
+.editor-import-table tr:last-child td{border-bottom:0}
+.editor-import-line{white-space:nowrap;font-weight:700;color:#3f4859}
+.editor-import-field{white-space:nowrap;color:#3f4859}
+.editor-import-why{color:var(--text)}
+.editor-import-excerpt{display:block;margin-top:2px;color:var(--muted);font-size:11px}
+.editor-import-more{margin:7px 0 0;font-size:11.5px;color:var(--muted)}
+html[data-theme="dark"] .editor-paste,
+html[data-theme="dark"] .editor-import-report{background:var(--surface-2);border-color:var(--line)}
+html[data-theme="dark"] .editor-paste-text{background:var(--surface-1);border-color:var(--line);color:var(--text)}
+html[data-theme="dark"] .editor-import-table td{border-bottom-color:#2a3350}
 
 /* --- Một câu hỏi là một thẻ: đầu thẻ có số thứ tự, nội dung, ảnh --- */
 .editor-question{padding:0;margin-bottom:14px;border-radius:14px;background:#fff;overflow:hidden;

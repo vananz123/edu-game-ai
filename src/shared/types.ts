@@ -348,6 +348,16 @@ export interface TeachingStyle {
   notes?: string;
 }
 
+/** Kết quả một lần nhập câu hỏi, đủ để báo cáo dòng nào bị bỏ và vì sao (#317). */
+export interface QuestionImportPayload {
+  /** Tên tệp; rỗng khi câu hỏi được dán vào. */
+  name: string;
+  questions: GameQuestion[];
+  issues?: Array<{ line: number; field: string; message: string; excerpt: string }>;
+  complete?: boolean;
+  needsTeacherInput?: boolean;
+}
+
 export interface AppSettings {
   ai: AiSettings;
   preferences: { sound: boolean; largeText: boolean; teachingStyle?: TeachingStyle; audience?: 'child' | 'teen' | 'adult'; theme?: 'light' | 'dark' | 'system' };
@@ -426,7 +436,10 @@ export interface EduGameBridge {
   importDocumentFromPath(filePath: string): Promise<{ name: string; text: string; path?: string; characters?: number; sizeBytes?: number } | null>;
   setFullscreen(enabled: boolean): Promise<{ ok: boolean }>;
   onFullscreenChanged(callback: (enabled: boolean) => void): () => void;
-  importQuestions(): Promise<{ name: string; questions: GameQuestion[] } | null>;
+  /** #317: trả kèm `issues` (dòng bị bỏ + lý do) để trình soạn thảo báo lại. */
+  importQuestions(): Promise<QuestionImportPayload | null>;
+  /** #317: câu hỏi dán thẳng từ Excel/tài liệu — không có tệp). */
+  parseQuestionsText(text: string): Promise<QuestionImportPayload>;
   exportGame(game: EducationalGame): Promise<{ ok: boolean }>;
   importGame(): Promise<EducationalGame | null>;
   /** #132: key-free view — `ai.providers[].hasKey`/`keyMasked`, never `apiKey`. */

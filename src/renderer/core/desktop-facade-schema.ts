@@ -68,6 +68,8 @@ const DESKTOP_CALLS = Object.freeze({
   importDocument: { channel: 'files:import-document', group: 'files', kind: 'value', optional: false },
   importDocumentFromPath: { channel: 'files:import-document-from-path', group: 'files', kind: 'value', optional: false },
   importQuestions: { channel: 'files:import-questions', group: 'files', kind: 'value', optional: false },
+  // #317: câu hỏi dán vào (Excel/tài liệu) — không hộp thoại, không tệp.
+  parseQuestionsText: { channel: 'files:parse-questions', group: 'files', kind: 'value', optional: false },
   exportGame: { channel: 'files:export-game', group: 'files', kind: 'value', optional: false },
   importGame: { channel: 'files:import-game', group: 'files', kind: 'value', optional: false },
   importIllustration: { channel: 'files:import-illustration', group: 'files', kind: 'value', optional: false },

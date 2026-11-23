@@ -266,6 +266,26 @@ pub async fn import_questions(app: &AppHandle) -> Result<Value, String> {
         .map_err(|error| fail("EG_DOCUMENT", error.to_string()))
 }
 
+/// `files:parse-questions` (#317): câu hỏi DÁN vào trình soạn thảo, không có tệp.
+///
+/// Không hộp thoại, không byte, không cổng kiểm: renderer đưa chữ, luật đọc nằm
+/// trong `question-import.ts` và chạy trong V8 như mọi lần nhập khác. Một chuỗi
+/// rỗng bị từ chối TRƯỚC khi qua V8 để câu lỗi nói đúng việc giáo viên phải làm.
+pub fn parse_questions(app: &AppHandle, text: Option<&Value>) -> Result<Value, String> {
+    let source = text
+        .and_then(Value::as_str)
+        .ok_or_else(|| fail("EG_DOCUMENT", "Chưa có chữ nào để nhập."))?;
+    if source.trim().is_empty() {
+        return Err(fail(
+            "EG_DOCUMENT",
+            "Chưa có chữ nào để nhập. Hãy dán bảng hoặc danh sách câu hỏi.",
+        ));
+    }
+    library(app)?
+        .call("files:parse-questions", &[Value::String(source.to_string())])
+        .map_err(|error| fail("EG_DOCUMENT", error.to_string()))
+}
+
 /// Trần kích thước nhập, đọc từ chính bundle (`DOCUMENT_MAX`/`QUESTIONS_MAX` của
 /// `files-ops.ts` / `question-import.ts`) thay vì gõ lại 10 MB ở hai nơi.
 const MAX_BYTES_FALLBACK: u64 = 10 * 1024 * 1024;

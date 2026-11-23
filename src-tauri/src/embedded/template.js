@@ -366,8 +366,27 @@
     // Nhập bảng câu hỏi: luật đọc bảng tính của Electron (`question-import.ts`),
     // chỉ khác `Buffer` đến từ `BufferShim` ở trên.
     'files:import-questions': async function (fileName, base64) {
-      var questions = await files.importQuestionsFromFile(fileName, BufferShim.from(bytesOf(base64)));
-      return { name: files.baseName(fileName), questions: questions };
+      // #317: the report, not only the questions — the editor shows a table of the
+      // rows that were skipped and why, so a lost row is never silent again.
+      var report = await files.importQuestionsFromFileReport(fileName, BufferShim.from(bytesOf(base64)));
+      return {
+        name: files.baseName(fileName),
+        questions: report.questions,
+        issues: report.issues,
+        complete: report.complete,
+        needsTeacherInput: report.needsTeacherInput
+      };
+    },
+    // #317: câu hỏi dán thẳng từ Excel (hoặc từ một tài liệu) — không có tệp nào cả.
+    'files:parse-questions': function (text) {
+      var report = files.importQuestionsFromPastedText(String(text == null ? '' : text));
+      return {
+        name: report.name || '',
+        questions: report.questions,
+        issues: report.issues,
+        complete: report.complete,
+        needsTeacherInput: report.needsTeacherInput
+      };
     },
     // Trần kích thước tệp nhập: Rust đọc con số từ đây thay vì gõ lại 10 MB.
     'files:max-bytes': async function () { return files.DOCUMENT_MAX_BYTES; },

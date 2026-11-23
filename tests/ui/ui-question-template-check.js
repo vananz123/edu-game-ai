@@ -124,6 +124,40 @@ const SCENARIO = String.raw`(async () => {
 
   // Same page, one save: the editor is unaffected by the new button.
   out.questionRows = document.querySelectorAll('#pageContent #editorQuestions .editor-question').length;
+
+  // --- #317: dán thẳng từ Excel, và bảng báo cáo dòng bị bỏ ---------------------
+  const pasteBox = document.querySelector('#pageContent [data-editor-paste]');
+  const pasteText = document.querySelector('#pageContent [data-editor-paste-text]');
+  const pasteBtn = document.querySelector('#pageContent [data-editor-paste-import]');
+  out.pastePanel = Boolean(pasteBox && pasteText && pasteBtn);
+  out.pastePlaceholder = pasteText ? pasteText.getAttribute('placeholder') || '' : '';
+  if (pasteText && pasteBtn) {
+    // Two good rows and one the row reader must refuse: the good rows must still land,
+    // and the bad one must be NAMED in the report instead of vanishing.
+    pasteText.value = [
+      'Câu hỏi	Dạng câu hỏi	Phương án A	Phương án B	Đáp án',
+      'Nước sôi ở bao nhiêu độ?	trắc nghiệm	90	100	B',
+      'Sai đáp án?	trắc nghiệm	Một	Hai	Z',
+      'Thủ đô Việt Nam?	trả lời ngắn			Hà Nội'
+    ].join(String.fromCharCode(10));
+    pasteBtn.click();
+    await new Promise(r => setTimeout(r, 700));
+  }
+  out.questionsAfterPaste = document.querySelectorAll('#pageContent #editorQuestions .editor-question').length;
+  const report = document.querySelector('#pageContent [data-editor-import-report]');
+  out.reportShown = Boolean(report);
+  out.reportComplete = report ? report.getAttribute('data-complete') : null;
+  out.reportTitle = report ? report.querySelector('.editor-import-report-title').textContent.replace(/\s+/g, ' ').trim() : '';
+  out.reportRows = report ? [...report.querySelectorAll('tbody tr')].map(tr => tr.textContent.replace(/\s+/g, ' ').trim()) : [];
+  out.pasteCleared = Boolean(pasteText) && pasteText.value === '';
+  // The report must be ABOVE the question list, where the teacher looks after importing.
+  out.reportBeforeList = Boolean(report) && (report.compareDocumentPosition(document.querySelector('#pageContent #editorQuestions')) & Node.DOCUMENT_POSITION_FOLLOWING) > 0;
+  if (report) {
+    const closeBtn = report.querySelector('[data-editor-import-report-close]');
+    if (closeBtn) closeBtn.click();
+  }
+  await new Promise(r => setTimeout(r, 200));
+  out.reportClosed = document.querySelector('#pageContent [data-editor-import-report]') === null;
   document.querySelector('#pageContent #editorCancelBtn')?.click();
   await new Promise(r => setTimeout(r, 500));
   try { await desktop.call('deleteGame', game.id); } catch (e) { void e; }
@@ -159,6 +193,21 @@ const SCENARIO = String.raw`(async () => {
   check('the two-answer example stays ONE quoted cell', result.quotedMultiAnswer === true);
   check('Vietnamese text survives (no mojibake)', result.noExcelMojibake === true);
   check('the question list is untouched', result.questionRows === 1, `${result.questionRows} câu`);
+
+  // #317 — dán thẳng từ Excel + báo cáo dòng bị bỏ.
+  check('there is a paste panel with a monospace box and its own button',
+    result.pastePanel === true && /Ctrl\+V/.test(result.pastePlaceholder), result.pastePlaceholder.slice(0, 50));
+  check('two good pasted rows become questions, the bad row does not stop the paste',
+    result.questionsAfterPaste === 3, `${result.questionsAfterPaste} câu (1 + 2)`);
+  check('the report names what came in', /Đã nhập 2 câu/.test(result.reportTitle || ''), result.reportTitle);
+  check('the report is marked incomplete and sits above the question list',
+    result.reportComplete === '0' && result.reportBeforeList === true);
+  check('the skipped row is a table row naming its line, column and reason',
+    result.reportRows.length === 1 && /Dòng 3/.test(result.reportRows[0]) && /Đáp án/.test(result.reportRows[0])
+      && /không khớp phương án/.test(result.reportRows[0]),
+    result.reportRows[0] || '(none)');
+  check('the pasted text is cleared once it imported', result.pasteCleared === true);
+  check('the report can be dismissed', result.reportClosed === true);
   check('cancelling returns to the library', result.pageAfter === 'library', result.pageAfter);
 
   console.log(`\n${failures ? `${failures} check(s) failed` : 'All question-template checks passed'}`);

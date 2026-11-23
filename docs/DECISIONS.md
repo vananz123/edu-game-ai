@@ -5295,3 +5295,34 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
   câu trả lời mà không phải bấm gì.
 - **Renderer không `import` được** ⇒ tệp mẫu tồn tại hai bản (shared + renderer mirror), và
   bài kiểm tra so **từng byte**; đây là cùng khuôn với `connection-parity.test.ts`.
+
+## #317 — Nhập câu hỏi: báo cáo dòng bị bỏ, và dán thẳng từ Excel
+
+- **Một dòng hỏng không được làm mất cả tệp, và không được biến mất.** Bộ nhập câu hỏi đổi
+  từ "throw ở dòng sai đầu tiên" sang "bỏ dòng đó, nhập phần còn lại, và GHI LẠI dòng đó
+  kèm cột + lý do". Đường chặt cũ vẫn giữ nguyên từng chữ của thông báo, nên không có hành
+  vi nào lặng lẽ đổi nghĩa. Lỗi ở mức TỆP (sai đuôi, quá trần, thiếu cột bắt buộc) vẫn
+  throw: chưa đọc được gì thì không có gì để báo cáo.
+- **Báo cáo phải đứng TRÊN danh sách câu hỏi và phải TỰ CUỘN VÀO TẦM MẮT.** Một báo cáo nằm
+  dưới màn hình bằng không có báo cáo. Ở 1366×768 khung dán cao 197 px đẩy bảng xuống
+  y=567/768 ⇒ `scrollIntoView({block:'nearest'})` sau khi chèn.
+- **Cột phải có NHÃN tiếng Việt, không phải tên trường trong mã.** `rowIssueField()` trả
+  `prompt`/`options`/`answer`/…; trình soạn thảo ánh xạ sang “Câu hỏi / Phương án / Đáp án /
+  Giải thích / Điểm / Độ khó / Cả dòng”. Bài kiểm tra đòi MỌI `field` báo cáo đều có nhãn —
+  bảng không bao giờ được hiện `undefined`.
+- **Đếm câu trùng TRƯỚC khi đẩy câu vào danh sách.** Đếm sau thì "bỏ qua N câu đã có" luôn
+  bằng toàn bộ số vừa nhập (câu vừa thêm đã nằm trong `game.questions`). Đã đỏ đúng như vậy.
+- **Một nút sống trong DOM chỉ được nối bằng LISTENER UỶ NHIỆM.** `$('[data-…-close]', root)`
+  ở thời điểm nối trang trả `null` (bảng chưa tồn tại), `addEventListener` ném lỗi và giết
+  mọi handler sau nó — nút “Huỷ” của trình soạn thảo chết mà không ai thấy lỗi (bài học #309).
+   Cổng bắt được đúng triệu chứng “cancelling returns to the library — editor”.
+- **Dán thẳng là MỘT đường dữ liệu, không phải một chức năng mới.** `importQuestionsFromPastedText`
+  dùng chính luật đọc của nhập tệp; chỉ khác nguồn chữ. Dòng tiêu đề có “Câu hỏi” ⇒ đọc theo
+  hàng (bảng dán từ Excel, TAB), không có ⇒ đọc theo khối như tài liệu. Không có bộ đọc thứ
+  ba để lệch nhau theo thời gian.
+- **`files:parse-questions` phải là một LỆNH của vỏ, không chỉ một nhánh `dispatch()`.** Cổng
+  hợp đồng đòi mỗi kênh invoke có một `#[tauri::command]` trong bảng `hand_written()` và một
+  dòng `generate_handler!`; nhánh dispatch đơn lẻ làm `tauri-contract.test.ts` đỏ.
+- **Một cổng đo "không có lỗi console" phải chạy trên PHIÊN MỚI.** Chạy `ui-presentation-check`
+  trong phiên mà cổng trước đã cài `window.confirm` thì nó đỏ vì `plugin:dialog|message not
+  allowed by ACL` — lỗi của phép đo, không của sản phẩm (bài học #288).

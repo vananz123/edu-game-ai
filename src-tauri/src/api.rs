@@ -53,6 +53,9 @@ pub fn hand_written(command: &str) -> Option<(&'static str, &'static str)> {
         "import_document" => ("files:import-document", "import_document"),
         "import_document_from_path" => ("files:import-document-from-path", "import_document_from_path"),
         "import_questions" => ("files:import-questions", "import_questions"),
+        // #317: câu hỏi dán thẳng. Không hộp thoại nên không cần `AppHandle` cho
+        // picker — vẫn nhận `AppHandle` để lấy engine V8 trong thư viện.
+        "parse_questions" => ("files:parse-questions", "parse_questions"),
         "import_illustration" => ("files:import-illustration", "import_illustration"),
         "delete_illustration" => ("files:delete-illustration", "delete_illustration"),
         // Trình duyệt toàn màn hình: `WebviewWindow::set_fullscreen` của tiến trình.
@@ -177,6 +180,7 @@ const INVOKE_CHANNELS: &[&str] = &[
     "files:import-document",
     "files:import-document-from-path",
     "files:import-questions",
+    "files:parse-questions",
     "files:export-game",
     "files:import-game",
     // Không thuộc hợp đồng Electron: chỉ cổng kiểm tra gọi, và `package.rs` từ
@@ -363,6 +367,8 @@ async fn dispatch(app: &AppHandle, channel: &str, args: &[Value]) -> Result<Valu
         "files:import-document" => crate::document::import_document(app).await,
         "files:import-document-from-path" => crate::document::import_document_from_path(app, args.first()),
         "files:import-questions" => crate::document::import_questions(app).await,
+        // #317: câu hỏi dán thẳng — không hộp thoại, chữ đi thẳng vào V8.
+        "files:parse-questions" => crate::document::parse_questions(app, args.first()),
         // Ảnh: tham số đầu là đường dẫn TÙY CHỌN của renderer (kéo thả); rỗng thì
         // hộp thoại của tiến trình chọn.
         "files:import-illustration" => {
@@ -588,6 +594,13 @@ pub fn import_document_from_path(
 #[tauri::command]
 pub async fn import_questions(app: AppHandle) -> Result<serde_json::Value, String> {
     crate::document::import_questions(&app).await
+}
+
+/// #317: câu hỏi DÁN vào trình soạn thảo (từ Excel hoặc từ tài liệu). Không hộp
+/// thoại, không đường dẫn: chữ của giáo viên đi thẳng vào luật đọc trong V8.
+#[tauri::command]
+pub fn parse_questions(app: AppHandle, text: Option<Value>) -> Result<serde_json::Value, String> {
+    crate::document::parse_questions(&app, text.as_ref())
 }
 
 #[tauri::command]
@@ -1187,7 +1200,14 @@ mod tests {
         for channel in super::INVOKE_CHANNELS {
             assert!(!super::SEND_CHANNELS.contains(channel), "{channel} nằm ở cả hai danh sách");
         }
-        for channel in ["app:info", "library:get", "settings:get", "ai:local-models", "ai:remove-local-model"] {
+        for channel in [
+            "app:info",
+            "library:get",
+            "settings:get",
+            "ai:local-models",
+            "ai:remove-local-model",
+            "files:parse-questions",
+        ] {
             assert!(super::INVOKE_CHANNELS.contains(&channel), "{channel} thiếu trong INVOKE_CHANNELS");
         }
         assert_eq!(super::SEND_CHANNELS.len(), 3);

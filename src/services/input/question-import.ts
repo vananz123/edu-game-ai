@@ -94,6 +94,17 @@ export interface QuestionImportResult {
   parsed: ParsedQuestion[];
 }
 
+/**
+ * What the editor shows after an import (#317): the questions that came through AND
+ * the rows that did not, each with the reason the teacher must fix. `complete` is
+ * false as soon as one row was skipped — silence is what made a skipped row look like
+ * a row that had never been in the file.
+ */
+export interface QuestionImportReport extends QuestionImportResult {
+  /** Teacher-facing source name: the file name, or `''` for pasted text. */
+  name: string;
+}
+
 export async function importQuestionsFromFile(
   fileName: string,
   file: Buffer
@@ -109,6 +120,80 @@ export async function importQuestionsFromFile(
     throw new Error('Chỉ hỗ trợ tệp CSV, TSV hoặc XLSX.');
   }
   return rowsToQuestions(rows);
+}
+
+/**
+ * The same file reader, but a row that cannot become a question is REPORTED instead
+ * of aborting the whole file (#317). File-level problems (wrong extension, oversized,
+ * no header row, missing required columns) still throw: nothing was read at all, and a
+ * table of zero rows would be a worse answer than the error text.
+ */
+export async function importQuestionsFromFileReport(
+  fileName: string,
+  file: Buffer
+): Promise<QuestionImportReport> {
+  if (file.length > MAX_FILE_BYTES) throw new Error('Tệp câu hỏi vượt quá giới hạn 10 MB.');
+  const extension = fileName.toLowerCase().split('.').pop();
+  let rows: string[][];
+  if (extension === 'csv' || extension === 'tsv') {
+    rows = parseDelimitedText(file.toString('utf8'), extension === 'tsv' ? '\t' : undefined);
+  } else if (extension === 'xlsx') {
+    rows = await parseXlsx(file);
+  } else {
+    throw new Error('Chỉ hỗ trợ tệp CSV, TSV hoặc XLSX.');
+  }
+  return { name: '', ...rowsToQuestionsReport(rows) };
+}
+
+/**
+ * Pasted text → questions (#317). Excel puts a TAB between cells, so a paste that
+ * carries a header row goes through the SAME row reader as a file; anything else is
+ * the block parser teachers already know ("Câu 1: … A. … B. …").
+ */
+export function importQuestionsFromPastedText(text: string): QuestionImportReport {
+  const source = String(text == null ? '' : text).replace(/^\uFEFF/, '');
+  if (!source.trim()) throw new Error('Chưa có chữ nào để nhập. Hãy dán bảng hoặc danh sách câu hỏi.');
+  if (looksLikeTable(source)) {
+    return { name: '', ...rowsToQuestionsReport(parseDelimitedText(source)) };
+  }
+  return { name: '', ...parseQuestionsFromText(source) };
+}
+
+/**
+ * True when the first non-empty line is a spreadsheet HEADER row: several cells, one
+ * of them "Câu hỏi". Requiring the header — not just a delimiter — keeps pasted prose
+ * that happens to contain a tab on the block parser.
+ */
+function looksLikeTable(text: string): boolean {
+  const firstLine = text.split(/\r?\n/).find(line => line.trim().length > 0) || '';
+  if (!/[\t;,]/u.test(firstLine)) return false;
+  return firstLine
+    .split(/\t|;/u)
+    .some(cell => ['question', 'cauhoi'].includes(normalizeHeader(cell.replace(/^"|"$/g, ''))));
+}
+
+/** Rows → questions, collecting row problems instead of throwing (#317). */
+function rowsToQuestionsReport(rows: string[][]): QuestionImportResult {
+  const issues: QuestionImportIssue[] = [];
+  const questions = rowsToQuestions(rows, issues);
+  return {
+    questions,
+    issues,
+    complete: issues.length === 0 && questions.length > 0,
+    needsTeacherInput: issues.some(issue => issue.field === 'explanation'),
+    parsed: []
+  };
+}
+
+/** Label for the row-level error `rowsToQuestions` raised, so the table can name it. */
+function rowIssueField(message: string): QuestionImportIssue['field'] {
+  if (/nội dung câu hỏi/u.test(message)) return 'prompt';
+  if (/[Đđ]áp án/u.test(message)) return 'answer';
+  if (/phương án/u.test(message)) return 'options';
+  if (/điểm/u.test(message)) return 'points';
+  if (/độ khó/u.test(message)) return 'difficulty';
+  if (/dạng câu hỏi/u.test(message)) return 'prompt';
+  return 'row';
 }
 
 /**
@@ -974,7 +1059,7 @@ function decodeXml(value: string): string {
   });
 }
 
-function rowsToQuestions(rows: string[][]): GameQuestion[] {
+function rowsToQuestions(rows: string[][], reported?: QuestionImportIssue[]): GameQuestion[] {
   const headerRow = rows.findIndex(row => row.some(value => ['question', 'cauhoi'].includes(normalizeHeader(value))));
   if (headerRow < 0) {
     throw new Error('Không tìm thấy cột “Câu hỏi”. Dùng các cột: Câu hỏi, Dạng câu hỏi (tùy chọn), Phương án A-D, Đáp án, Giải thích, Điểm, Độ khó.');
@@ -996,12 +1081,9 @@ function rowsToQuestions(rows: string[][]): GameQuestion[] {
   const pointsColumn = findColumn(headers, ['points', 'diem']);
   const difficultyColumn = findColumn(headers, ['difficulty', 'dokho']);
   const questions: GameQuestion[] = [];
-  for (let rowIndex = headerRow + 1; rowIndex < rows.length; rowIndex += 1) {
-    const row = rows[rowIndex];
-    if (!row.some(value => value.trim())) continue;
-    if (questions.length >= MAX_QUESTIONS) {
-      throw new Error(`Mỗi lần chỉ nhập tối đa ${MAX_QUESTIONS} câu hỏi.`);
-    }
+  // One row → one question. Throws the teacher-facing text the strict reader has
+  // always thrown; the lenient reader catches it and turns it into a table row.
+  const readRow = (row: string[], rowIndex: number): GameQuestion => {
     const prompt = row[questionColumn]?.trim() || '';
     if (!prompt) throw new Error(`Dòng ${rowIndex + 1}: thiếu nội dung câu hỏi.`);
     const type = resolveQuestionType(typeColumn >= 0 ? row[typeColumn]?.trim() || '' : '');
@@ -1045,9 +1127,42 @@ function rowsToQuestions(rows: string[][]): GameQuestion[] {
       base.options = options;
       base.correctOptionId = correct.id;
     }
-    questions.push(base);
+    return base;
+  };
+
+  for (let rowIndex = headerRow + 1; rowIndex < rows.length; rowIndex += 1) {
+    const row = rows[rowIndex];
+    if (!row.some(value => value.trim())) continue;
+    if (questions.length >= MAX_QUESTIONS) {
+      const limit = `Mỗi lần chỉ nhập tối đa ${MAX_QUESTIONS} câu hỏi.`;
+      if (!reported) throw new Error(limit);
+      reported.push({
+        line: rowIndex + 1,
+        field: 'row',
+        message: limit.slice(0, -1) + ' — dòng này bị bỏ.',
+        excerpt: row.filter(value => value.trim()).join(' | ').slice(0, 160)
+      });
+      continue;
+    }
+    if (!reported) {
+      questions.push(readRow(row, rowIndex));
+      continue;
+    }
+    try {
+      questions.push(readRow(row, rowIndex));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      reported.push({
+        line: rowIndex + 1,
+        field: rowIssueField(message),
+        message,
+        excerpt: row.filter(value => value.trim()).join(' | ').slice(0, 160)
+      });
+    }
   }
-  if (!questions.length) throw new Error('Tệp không có câu hỏi nào để nhập.');
+  // Strict reader: an empty sheet is an error. Lenient reader: "no rows imported" is
+  // an answer the table states plainly, so it is not thrown.
+  if (!questions.length && !reported) throw new Error('Tệp không có câu hỏi nào để nhập.');
   return questions;
 }
 

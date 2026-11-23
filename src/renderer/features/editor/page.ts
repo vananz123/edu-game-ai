@@ -1,4 +1,62 @@
 // @ts-nocheck -- editor/page.ts — trang soạn thảo: nhập câu từ tệp, mở/đóng trang, markup, nối sự kiện và lưu (split từ features/game-editor.ts, DECISIONS #150).
+/**
+ * #317: after an import the teacher sees WHICH rows did not make it and why.
+ *
+ * A row that the strict reader would have thrown away used to vanish silently: the
+ * teacher counted 12 rows in Excel, got 11 questions, and had nothing to look at.
+ * The importer now reports each skipped row with the column it failed on.
+ */
+const IMPORT_FIELD_LABELS = {
+  prompt: 'Câu hỏi',
+  options: 'Phương án',
+  answer: 'Đáp án',
+  explanation: 'Giải thích',
+  points: 'Điểm',
+  difficulty: 'Độ khó',
+  row: 'Cả dòng'
+};
+
+function importReportHtml(imported, added, duplicates) {
+  const issues = Array.isArray(imported.issues) ? imported.issues : [];
+  const source = imported.name ? `“${escapeHtml(imported.name)}”` : 'chữ đã dán';
+  const head = added > 0
+    ? `Đã nhập <strong>${added} câu</strong> từ ${source}.`
+    : `Không nhập được câu nào từ ${source}.`;
+  const dup = duplicates > 0 ? ` Bỏ qua ${duplicates} câu đã có trong trò chơi.` : '';
+  const rows = issues.slice(0, 40).map(issue => `<tr>
+        <td class="editor-import-line">Dòng ${Number(issue.line) || '?'}</td>
+        <td class="editor-import-field">${escapeHtml(IMPORT_FIELD_LABELS[issue.field] || 'Cả dòng')}</td>
+        <td class="editor-import-why">${escapeHtml(String(issue.message || '').replace(/^Dòng \d+:\s*/, ''))}
+          <span class="editor-import-excerpt">${escapeHtml(String(issue.excerpt || '').slice(0, 120))}</span></td>
+      </tr>`).join('');
+  const more = issues.length > 40
+    ? `<p class="editor-import-more">… và ${issues.length - 40} dòng nữa. Sửa các dòng trên trước rồi nhập lại.</p>`
+    : '';
+  return `<div class="editor-import-report" data-editor-import-report data-complete="${issues.length ? '0' : '1'}" role="status">
+      <div class="editor-import-report-head">
+        <span class="editor-import-report-title">${head}${dup}</span>
+        <button type="button" class="btn btn-secondary btn-small" data-editor-import-report-close>Đóng</button>
+      </div>
+      ${issues.length ? `<p class="editor-import-report-note">${issues.length} dòng bị bỏ — sửa trong tệp (hoặc trong bảng đã dán) rồi nhập lại; các câu còn lại đã được thêm vào danh sách bên dưới.</p>
+      <table class="editor-import-table"><thead><tr><th>Vị trí</th><th>Cột</th><th>Vì sao bị bỏ</th></tr></thead><tbody>${rows}</tbody></table>${more}` : ''}
+    </div>`;
+}
+
+/** Replaces the previous report in place, above the question list. */
+function showImportReport(root, imported, added, duplicates) {
+  if (!imported) return;
+  const list = $('#editorQuestions', root);
+  if (!list) return;
+  const existing = $('[data-editor-import-report]', root);
+  if (existing) existing.remove();
+  list.insertAdjacentHTML('beforebegin', importReportHtml(imported, added, duplicates));
+  // The report lands below the paste box, which at 1366x768 puts it under the fold:
+  // a report the teacher never sees is the same silent loss as no report at all.
+  // `block: 'nearest'` scrolls the smallest amount that makes it visible.
+  const panel = $('[data-editor-import-report]', root);
+  if (panel && typeof panel.scrollIntoView === 'function') panel.scrollIntoView({ block: 'nearest' });
+}
+
 function applyImportedQuestions(root, game, imported) {
   if (!imported) return false;
   const { unique, skipped } = dedupeImportedQuestions(imported.questions, game.questions);
@@ -143,6 +201,18 @@ function editorPageHtml(game, isNew, note) {
       </div>
     </div>
     <div class="editor-page-body"><details class="editor-card editor-setup"><summary class="editor-card-head"><h2>Thông tin trò chơi</h2><span class="editor-card-note">Tên, môn, lớp, cách chơi và minh họa</span><span class="editor-card-toggle">Mở để sửa</span></summary><div class="editor-field-grid">      <div class="field-row"><div class="field"><label>Tên trò chơi</label><input id="editTitle" value="${escapeHtml(game.title)}"></div><div class="field"><label>Thể loại</label><select id="editTemplate">${[['quiz','Đấu trường kiến thức'],['scenario','Thử thách tình huống'],['matching','Ghép cặp kiến thức'],['treasure-hunt','Giải mã kho báu'],['race','Đường đua chinh phục']].map(([v,l])=>`<option value="${v}" ${game.template===v?'selected':''}>${l}</option>`).join('')}</select></div></div>    <div class="field-row"><div class="field"><label>Môn học</label><input id="editSubject" value="${escapeHtml(game.subject||'')}"></div><div class="field"><label>Lớp</label><input id="editGrade" value="${escapeHtml(game.grade||'')}"></div></div>    <div class="field"><label>Mô tả</label><input id="editDescription" value="${escapeHtml(game.description||'')}"></div>    <div class="field"><label>Minh họa</label><select id="editIllustrationMode"><option value="auto" ${editorIllustrationMode(game)==='auto'?'selected':''}>Tự động theo lĩnh vực nội dung</option><option value="manual" ${editorIllustrationMode(game)==='manual'?'selected':''}>Chọn thủ công từng mục</option><option value="off" ${editorIllustrationMode(game)==='off'?'selected':''}>Tắt minh họa</option></select><p class="field-hint">Giáo viên luôn kiểm soát hình minh họa. Tắt minh họa chỉ ẩn hình nội dung; icon chức năng của giao diện vẫn hoạt động.</p></div>    <div class="field ${answerModeSupportsTemplate(game.template) ? '' : 'hidden'}" id="answerModeField"><label>Cách trả lời</label><select id="editAnswerMode">${editorAnswerModeOptionMarkup(game)}</select><p class="field-hint">${escapeHtml(answerModeHint(editorAnswerMode(game)))} Điểm mỗi câu vẫn lấy từ “Điểm / câu” của câu hỏi.</p></div>    <div class="field ${game.template === 'quiz' ? '' : 'hidden'}" id="gameplayModeField"><label>Cách chơi</label><select id="editGameplayMode"><option value="classic" ${editorGameplayMode(game)==='classic'?'selected':''}>Cổ điển — trả lời câu hỏi nhận điểm</option><option value="house" ${editorGameplayMode(game)==='house'?'selected':''}>Xây nhà — câu đúng dần dựng ngôi nhà 3D</option></select><p class="field-hint">Chế độ Xây nhà biến mỗi câu trả lời đúng thành vật liệu dựng nhà (tường → mái → cửa sổ → vườn). Ngôi nhà chia đều theo số câu hỏi (tối đa 8 phần): trả lời đúng tất cả sẽ hoàn thiện ngôi nhà. Chế độ Cổ điển giữ nguyên cách chơi hiện tại.</p></div>    <div class="field ${game.template === 'quiz' ? '' : 'hidden'}" id="houseStyleField"><label>Mẫu nhà 3D</label><select id="editHouseStyle"><option value="auto" ${editorHouseStyle(game)==='auto'?'selected':''}>Tự động — mỗi trò một mẫu riêng</option>${houseStyleOptions().map(option=>`<option value="${option.id}" ${editorHouseStyle(game)===option.id?'selected':''}>${escapeHtml(option.label)}</option>`).join('')}</select><p class="field-hint">Chỉ dùng ở chế độ Xây nhà. “Tự động” chọn mẫu cố định theo trò chơi để ngôi nhà không đổi giữa các lần chơi; chọn tay để hợp chủ đề bài học.</p></div>      </div></details><div class="section-head editor-questions-head"><h3>Câu hỏi / tình huống <span class="tag">${game.questions.length}</span></h3><div><button class="btn btn-secondary btn-small" id="downloadQuestionsTemplateBtn" title="Tải tệp CSV mẫu: mở bằng Excel, điền theo 4 dòng ví dụ rồi lưu lại">${uiIcon('download', '', 13)} Tải tệp mẫu</button> <button class="btn btn-secondary btn-small" id="importQuestionsBtn" title="Nhập câu hỏi từ tệp CSV, TSV hoặc XLSX có dòng tiêu đề">${uiIcon('upload', '', 13)} Nhập CSV/XLSX</button> <button class="btn btn-secondary btn-small" id="addQuestionBtn">${uiIcon('plus', '', 13)} Thêm câu hỏi</button></div></div>
+    <details class="editor-paste" data-editor-paste>
+      <summary>Dán trực tiếp từ Excel hoặc từ tài liệu — không cần lưu tệp</summary>
+      <div class="editor-paste-body">
+        <textarea class="editor-paste-text" data-editor-paste-text rows="5" spellcheck="false"
+          placeholder="Bấm vào đây rồi Ctrl+V. Dán cả bảng (kèm dòng tiêu đề Câu hỏi / Đáp án …) hoặc dán danh sách câu hỏi dạng chữ (Câu 1: … A. … B. … Đáp án: A)."></textarea>
+        <div class="editor-paste-actions">
+          <button type="button" class="btn btn-primary btn-small" data-editor-paste-import>Nhập câu hỏi đã dán</button>
+          <button type="button" class="btn btn-secondary btn-small" data-editor-paste-clear>Xoá ô</button>
+          <span class="editor-paste-hint">Bảng dán từ Excel phải có dòng tiêu đề; cột “Câu hỏi” và “Đáp án” là bắt buộc.</span>
+        </div>
+      </div>
+    </details>
     <p class="editor-import-hint" id="editorImportHint">Chưa có tệp? Bấm <strong>Tải tệp mẫu</strong> — tệp CSV mở bằng Excel, có sẵn 4 dòng ví dụ (trắc nghiệm, đúng/sai, điền từ, trả lời ngắn). Điền tiếp bên dưới rồi bấm <strong>Nhập CSV/XLSX</strong>. Tối đa 100 câu mỗi tệp; ô “Đáp án” của câu điền từ có thể chứa nhiều đáp án đúng, cách nhau bằng dấu chấm phẩy trong ngoặc kép.</p>    <div id="editorQuestions">${game.questions.map((q,i)=>questionEditor(q,i,game.questions)).join('')}</div>      </div></section>`;
 }
 
@@ -238,10 +308,52 @@ $('#downloadQuestionsTemplateBtn', root).addEventListener('click', () => {
 });
 $('#importQuestionsBtn', root).addEventListener('click', async () => {
   try {
-    applyImportedQuestions(root, game, await desktop.call('importQuestions'));
+    const imported = await desktop.call('importQuestions');
+    if (!imported) return;
+    // Count the duplicates BEFORE the questions are pushed — afterwards every imported
+    // question is already in `game.questions` and the count would be "all of them".
+    const duplicates = dedupeImportedQuestions(imported.questions, game.questions).skipped;
+    const before = game.questions.length;
+    applyImportedQuestions(root, game, imported);
+    showImportReport(root, imported, game.questions.length - before, duplicates);
   } catch (error) {
     toast(error.message || 'Không nhập được câu hỏi.');
   }
+});
+// #317: dán thẳng từ Excel/tài liệu. Cùng đường dẫn dữ liệu với nhập tệp — cùng luật
+// đọc (question-import.ts) và cùng bảng báo cáo dòng bị bỏ, chỉ khác nguồn chữ.
+$('[data-editor-paste-import]', root).addEventListener('click', async () => {
+  const box = $('[data-editor-paste-text]', root);
+  const text = box ? box.value : '';
+  if (!text.trim()) {
+    toast('Chưa có chữ nào trong ô dán.');
+    if (box) box.focus();
+    return;
+  }
+  try {
+    const imported = await desktop.call('parseQuestionsText', text);
+    const duplicates = dedupeImportedQuestions(imported.questions, game.questions).skipped;
+    const before = game.questions.length;
+    const applied = applyImportedQuestions(root, game, imported);
+    showImportReport(root, imported, game.questions.length - before, duplicates);
+    if (applied && box) box.value = '';
+  } catch (error) {
+    toast(error.message || 'Không nhập được câu hỏi đã dán.');
+  }
+});
+$('[data-editor-paste-clear]', root).addEventListener('click', () => {
+  const box = $('[data-editor-paste-text]', root);
+  if (box) box.value = '';
+});
+// The report does not exist yet when this page is wired, so its close button cannot be
+// bound by id — one DELEGATED listener on the page (lesson #309: one listener, not one
+// per button). Binding it directly threw at wire time and silently killed every
+// handler after it (the cancel button stopped working).
+root.addEventListener('click', event => {
+  const closeButton = event.target.closest('[data-editor-import-report-close]');
+  if (!closeButton) return;
+  const panel = closeButton.closest('[data-editor-import-report]');
+  if (panel) panel.remove();
 });  $('#addQuestionBtn', root).addEventListener('click', () => { const i = $$('.editor-question', $('#editorQuestions', root) || root).length; const type=$('#editTemplate',root).value==='scenario'?'scenario':'multiple-choice'; const existing=currentEditorQuestions(root); $('#editorQuestions', root).insertAdjacentHTML('beforeend', questionEditor({id:newQuestionId(),type,prompt:type==='scenario'?'Tình huống mới':'Câu hỏi mới',options:[{id:'a',text:'Phương án A'},{id:'b',text:'Phương án B'},{id:'c',text:'Phương án C'}],correctOptionId:'a',explanation:'',points:100},i,existing)); refreshScenarioBranches(root); });  $('#saveGameBtn', root).addEventListener('click', () => saveEditedGame(game, false));  $('#saveExportBtn', root).addEventListener('click', () => saveEditedGame(game, true));
   $('#editTemplate', root).addEventListener('change', () => toggleEditorSections(root));
   // The three hidden panels exist so the teacher can switch template on this page,

@@ -27,7 +27,11 @@ import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 
 import { MAX_FILE_BYTES as QUESTIONS_MAX_BYTES } from '../../../src/services/input/question-import';
 
-export { importQuestionsFromFile } from '../../../src/services/input/question-import';
+export {
+  importQuestionsFromFile,
+  importQuestionsFromFileReport,
+  importQuestionsFromPastedText
+} from '../../../src/services/input/question-import';
 
 /** Trần ký tự của `text` trong kết quả — cùng con số `main.ts` cắt. */
 export const DOCUMENT_MAX_CHARACTERS = 120000;

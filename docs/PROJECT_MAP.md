@@ -111,7 +111,7 @@ vendor/                DLL VC++ đóng gói kèm
 | Luồng tạo game từ giáo án | `src/renderer/pages/create-wizard.ts` + `features/wizard/step-*.ts` + `features/wizard/state/*.ts` |
 | Phân luồng đầu vào (giáo án / câu hỏi / dàn ý) | `src/services/input/input-classifier.ts` (quy tắc), `input/input-classifier-semantic.ts` (lớp xác nhận MiniLM), IPC `lesson:classify-input`, UI trong `features/wizard/step-input.ts` |
 | Đổi thể loại không sinh lại nội dung | `src/services/game/draft-convert.ts`, IPC `lesson:convert-draft`, `wizardConvertOrDiscardForGenre` trong `features/wizard/state/actions.ts` |
-| Nhập câu hỏi soạn sẵn (CSV/XLSX/dán văn bản) | `src/services/input/question-import.ts` (`importQuestionsFromFile`, `parseQuestionsFromText`) |
+| Nhập câu hỏi soạn sẵn (CSV/XLSX/dán văn bản) | `src/services/input/question-import.ts` (`importQuestionsFromFile`, `parseQuestionsFromText`); #317: `importQuestionsFromFileReport`, `importQuestionsFromPastedText` — dòng hỏng thành `QuestionImportIssue` thay vì throw, kênh `files:parse-questions` (`document.rs::parse_questions`) |
 | Ngân hàng câu hỏi: 7 loại câu + chấm điểm thể loại tương thích (#115) | `src/services/input/question-import.ts` (phần `readQuestionBlock`/`ParsedQuestion`), `input/question-compatibility.ts` (thuần), `input/question-text.ts` (chuẩn hoá dùng chung), UI trong `features/wizard/step-recommend.ts` |
 | Làm sạch ký hiệu/emoji khi tài liệu giống ngân hàng câu hỏi (#116) | `src/services/input/question-text.ts` (`cleanQuestionLine`, `cleanQuestionText`, `looksLikeQuestionBankText`), `splitInlineQuestion` trong `input/question-import.ts` |
 | Bóc tách cấu trúc tài liệu | `src/services/lesson/lesson-structure.ts` (+ `features/wizard/step-structure.ts`) |
