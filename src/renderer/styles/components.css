@@ -892,6 +892,10 @@ html.is-scene-designer,html.is-scene-designer body{overflow:hidden}
   background:#fffffff2;backdrop-filter:blur(6px);box-shadow:0 4px 14px #1f29370a}
 .editor-questions-head h3{margin:0;font-size:13.5px;font-weight:800;display:flex;align-items:center;gap:8px}
 .editor-questions-head .tag{background:#eef0f9;color:#3f4859}
+/* #316: giao vien mo trang chinh sua ma chua co tep nao de nhap. Mot dong chi cho
+   duong ("Tai tep mau") ngay duoi dai nut, khong phai mot hop thoai moi. */
+.editor-import-hint{margin:-2px 2px 12px;font-size:11.5px;line-height:1.55;color:var(--muted)}
+.editor-import-hint strong{color:var(--text);font-weight:750}
 
 /* --- Một câu hỏi là một thẻ: đầu thẻ có số thứ tự, nội dung, ảnh --- */
 .editor-question{padding:0;margin-bottom:14px;border-radius:14px;background:#fff;overflow:hidden;

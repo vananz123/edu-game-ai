@@ -182,6 +182,10 @@
        toàn cục nạp theo thứ tự, nên chỉ khai báo hàm ở đỉnh tệp; không tệp nào
        đọc biến của tệp khác lúc nạp. Thứ tự: AI → trang/lưu → câu hỏi → kéo-thả
        → matching → treasure → race. -->
+  <!-- #316: mẫu CSV cho "Nhập CSV/XLSX". Nạp TRƯỚC features/editor/page.js vì
+       renderEditorPage() chèn nút "Tải tệp mẫu" đọc QUESTION_TEMPLATE_FILE_NAME
+       ngay lúc vẽ; thiếu tên này thì cả trang chỉnh sửa chết vì ReferenceError. -->
+  <script defer src="renderer/shared/question-template.js"></script>
   <script defer src="renderer/features/editor/ai.js"></script>
   <script defer src="renderer/features/editor/page.js"></script>
   <script defer src="renderer/features/editor/questions.js"></script>

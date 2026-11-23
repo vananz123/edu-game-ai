@@ -5273,3 +5273,25 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
   xác nhận tổng thể.
 - **Đệm phải cộng từ ba thứ:** 12 lề + 11 đệm + 1 viền = **24 px** từ mép thẻ tới hình, và
   khoảng hình → nút là **16 px**. Đó là hợp đồng, ghi lại để lần sau đổi số thì đổi cả ba.
+
+## #316 — Một nút nhập tệp phải đi kèm tệp mẫu
+
+- **"Nhập CSV/XLSX" mà không có mẫu là một cánh cửa khoá.** Hộp thoại mở tệp xin một định
+  dạng chưa ai đưa cho giáo viên. Mỗi lần sản phẩm có một bộ nhập theo cột, bộ nhập đó phải
+  tự phát được tệp mẫu, và nút mẫu đứng TRƯỚC nút nhập.
+- **Mẫu chỉ có giá trị khi nó ĐI QUA bộ nhập thật.** `question-template.test.ts` lấy chính
+  chuỗi CSV xuất ra, đưa vào `importQuestionsFromFile`, và đòi ra 4 câu đúng dạng, đúng đáp
+  án. Một mẫu "trông đúng" mà bộ nhập từ chối là lỗi tệ hơn không có mẫu.
+- **Đừng bọc ngoặc kép hai lần.** Dữ liệu để THÔ (`hướng đông;đông`), hàm CSV tự bọc ô; nếu
+  dòng dữ liệu đã có ngoặc kép thì ô ra ba lớp ngoặc và bộ đọc trả về `"hướng đông` — #316
+  đã đỏ đúng như vậy ở lần chạy đầu.
+- **`;` + BOM + CRLF là hợp đồng với Excel, không phải sở thích.** Excel tiếng Việt dùng `;`
+  làm dấu ngăn danh sách; thiếu BOM là mất dấu tiếng Việt.
+- **`Blob.text()` NUỐT BOM.** Muốn biết tệp có BOM hay không thì phải đọc BYTE
+  (`arrayBuffer()` → `EF BB BF`). Một cổng đọc chữ sẽ luôn báo "không có BOM" và đỏ oan.
+- **Khi đếm ô của CSV, phải tách TÔN TRỌNG ngoặc kép.** `line.split(';')` cho 11 ô trên dòng
+  có ô `"hướng đông;đông"` — đó là lỗi của phép đo, không phải của tệp.
+- **Dòng gợi ý nằm ngay dưới dải nút, không phải hộp thoại mới.** Người không có tệp đọc được
+  câu trả lời mà không phải bấm gì.
+- **Renderer không `import` được** ⇒ tệp mẫu tồn tại hai bản (shared + renderer mirror), và
+  bài kiểm tra so **từng byte**; đây là cùng khuôn với `connection-parity.test.ts`.
