@@ -916,7 +916,12 @@ html.is-scene-designer,html.is-scene-designer body{overflow:hidden}
 .correct-select{margin:2px 0 6px;padding:7px 10px;border:1px dashed var(--line);border-radius:9px;background:#fafbfe}
 .editor-item-assets{margin:0 12px 11px;padding:8px 9px;border:1px solid var(--line);border-radius:11px;background:#f7f8fc}
 /* Ảnh ở CỘT TRÁI, mọi nút ở cột phải: mắt đọc nội dung câu trước, ảnh sau. */
-.editor-item-art{display:grid;grid-template-columns:auto 1fr;align-items:start;margin:0;padding:0;border:0;background:transparent;gap:12px}
+/* #315: khoi anh phai THO  trong the. Truoc day margin/padding deu 0 nen hinh nam
+   sat mep the (do duoc: the x=256, hinh x=257 — cach 1px) va goc vuong cua hinh bi
+   cat boi overflow:hidden cua the bo goc 14px. Cho khoi anh thut vao dung 12px nhu
+   cac con khac cua the (textarea, options, correct-select) va dem them 10px ben
+   trong, khoang hinh -> nut la 16px. */
+.editor-item-art{display:grid;grid-template-columns:auto 1fr;align-items:start;margin:0 12px 12px;padding:10px 11px;border:0;background:transparent;gap:16px}
 .editor-art-thumb{width:148px;flex:0 0 148px;border-radius:10px;box-shadow:0 2px 8px #1f293714}
 .editor-art-controls{gap:7px}
 .editor-art-badge{font-size:11.5px;color:#3f4859}

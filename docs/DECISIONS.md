@@ -5258,3 +5258,18 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
   `.main`; khi trang có thanh cuộn thì khung hẹp đi 15 px và nội dung dịch trái ~7 px. Đã
   cân nhắc `scrollbar-gutter: stable` và không thêm, vì `src/renderer/styles/app.css` đã
   cố ý loại `rootscrollgutter` của daisyUI (nó làm lệch bề rộng mà các cổng bố cục đo).
+
+## #315 — Khối ảnh là một CON của thẻ, nên nó phải theo lề của thẻ
+
+- **`margin:0;padding:0` trên một khối nằm trong thẻ `padding:0` là dán sát mép.** Thẻ câu
+  hỏi có `padding:0` + `overflow:hidden` + bo góc 14 px; khối ảnh là con TRỰC TIẾP, nên hình
+  cách mép thẻ đúng 1 px và bốn góc vuông của ảnh bị cắt cụt. Mọi con khác của thẻ (ô câu hỏi,
+  danh sách phương án, `correct-select`) đều thụt 12 px — khối ảnh phải thụt đúng 12 px đó.
+- **Đo "sát" bằng khoảng cách tới MÉP THẺ, không bằng mắt.** Số phải đọc là
+  `thumb.left - card.left` (trước #315: **1 px**) và `controls.left - thumb.right`
+  (trước: **12 px**), đo ở 1366/1920/2560.
+- **Một ảnh chụp cắt sát không chứng minh được lề.** Ảnh crop có đệm 12 px của chính nó nên
+  mô hình thị giác đọc thành "cách lề 12 px" trong khi DOM nói 1 px. Tin DOM, ảnh chỉ để
+  xác nhận tổng thể.
+- **Đệm phải cộng từ ba thứ:** 12 lề + 11 đệm + 1 viền = **24 px** từ mép thẻ tới hình, và
+  khoảng hình → nút là **16 px**. Đó là hợp đồng, ghi lại để lần sau đổi số thì đổi cả ba.

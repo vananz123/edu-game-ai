@@ -7,6 +7,22 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-23 — #315 Khối ảnh trong thẻ câu hỏi không còn dán sát mép thẻ
+- Giáo viên: **“tính năng chỉnh sửa phần giao diện hiển thị ảnh nó sát quá”**. Đo trên bản build: thẻ câu hỏi x=**256**, hình thu nhỏ x=**257** — cách mép **1 px**, và vì thẻ có `overflow:hidden` + bo góc 14 px nên góc vuông của ảnh bị cắt cụt. Khoảng hình → nút chỉ **12 px**.
+- **Nguyên nhân:** khối ảnh `.editor-item-art` là **con trực tiếp** của `.editor-question` (thẻ `padding:0`), và lần chỉnh #303 đã đặt `margin:0;padding:0;border:0` cho khối này. Các con khác của thẻ (ô câu hỏi, phương án, `correct-select`) đều thụt 12 px, riêng khối ảnh thì không.
+- **Sửa (chỉ CSS, không đổi markup, không đổi selector):** `.editor-item-art{margin:0 12px 12px;padding:10px 11px;gap:16px}` — thụt vào đúng 12 px như các con khác, đệm 10/11 px bên trong, khoảng hình → nút 16 px.
+- **Đo lại trên bundle thật (không phải CSS tiêm):**
+
+  | khổ | mép thẻ | hình → mép trái thẻ | hình → nút | kích thước hình |
+  |---|---|---|---|---|
+  | 1366×768 | 256 | **24 px** | **16 px** | 148×93 |
+  | 1920×1080 | 460 | **24 px** | **16 px** | 300×188 |
+  | 2560×1440 | 780 | **24 px** | **16 px** | 300×188 |
+
+  (24 = 12 lề + 11 đệm + 1 viền thẻ.) Mô hình thị giác trên ảnh chụp 1366: *“small but visible margin inside its rounded mint-green frame … roughly 16 px of horizontal space … comfortably spaced rather than cramped”*.
+- Cổng trên binary mới: `ui-editor-art-check` **pass** · `ui-item-assets-editor-check` **157/157** · `ui-scene-designer-check` **84/84** · `ui-stage-illustration-check` **179/179** · `ui-answer-mode-check` **219/219**.
+- Installer: **16 530 770 byte** / 23-11 **22:52** / SHA-256 `41343f34195e832ff734dfc92684ce31d105591a3bdc34a72949f53a679ea745`.
+
 ### 2026-11-23 — #314 Một bề ngang cho mọi trang: trang chỉnh sửa không còn hẹp hơn thư viện
 - Giáo viên: **“phần max-width không đồng bộ giữa các trang, trang chỉnh sửa lại ngắn hơn trang thư viện trò chơi”**. Đo được đúng như vậy ở **1920×1080**: `#pageContent` của cả hai trang đều 1280 px, nhưng nội dung **thư viện rộng 1232 px** (455 → 1687) còn **trang chỉnh sửa chỉ 1180 px** (481 → 1661) — hẹp hơn **52 px** và bị đẩy lệch **26 px** sang phải. Ở 1366×768 hai trang bằng nhau (1076 px) nên lỗi chỉ hiện trên màn hình rộng.
 - **Nguyên nhân:** hai tầng cùng đặt trần. `#pageContent` đã có `max-w-[1280px] mx-auto` (index.html) là trần DUY NHẤT của mọi trang; riêng trang chỉnh sửa tự đặt thêm `.editor-page{max-width:1180px}` và `.editor-page-body{max-width:1200px}`, rồi cộng thêm `padding:0 20px` — nên nội dung thụt vào 20 px nữa so với thẻ thư viện.
@@ -32,21 +48,3 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - **Hai điều dễ đọc sai, đã ghi vào DECISIONS:** (1) khoá `freePos` là **1-based** cho `around-1..4` nhưng **0-based** cho `extra-0..`, `sub-0..`, `prop-0..` — thử nghiệm đầu tiên của tôi dùng `around-0` và bộ chuẩn hoá **bỏ im lặng** khoá đó; đó là hành vi ĐÚNG, nhưng rất dễ bị đọc thành “mất dữ liệu”. (2) Trò chơi nhập từ gói lưu blueprint dưới dạng **object**, còn trình soạn thảo lưu dưới dạng **chuỗi**; cả hai đều được đọc đúng (đã đo cả ba đường: chơi, xưởng cảnh, lưu lại).
 - **Cổng mới:** `tauri-webview-check` **55 → 56**, thêm `xuất → nhập giữ nguyên cảnh tự chỉnh (backdrop + extras + freePos)` — xuất một gói CÓ CẢNH vào đúng tệp của cổng, nhập lại, lưu, đọc lại từ thư viện, so **SỐ** (không so chuỗi, vì `r: 0` bị bỏ và khoá bị sắp lại): `backdrop=sea, extras=3, freePos=3, lưu lại: extras=3/freePos=3`. Cổng chạy bằng `npm run tauri:check` ⇒ **56/56** + pha mở lại **10/10**.
 - Không đổi mã sản phẩm: chỉ thêm một phép đo vào cổng. Installer của #311 vẫn là bản dựng mới nhất (16 518 753 byte, 23-11 01:05, `09da7c66…`).
-
-### 2026-11-23 — #311 “Bấm Chơi ngay rồi không cuộn được”: sân khấu nuốt bánh xe
-- Giáo viên: **“nút chơi ngay khi chơi không scroll được”**. Tái hiện trên app thật ở 1024×640 và 1366×768: `.modal` **có** cuộn được (`scrollHeight 866 / clientHeight 576`, `overflow:auto`) nhưng **bánh xe thật không nhích một pixel** (`modal.scrollTop = 0` sau khi lăn 400), và đáp án cuối nằm ở **868 px** trong khi cửa sổ cao **640 px** — tức là không tới được.
-- **Nguyên nhân gốc:** `src/renderer/styles/game-animations.css` đặt `overscroll-behavior: contain` cho `.modal[data-player-theme] .game-stage`. Ở chế độ cửa sổ (“Chơi ngay”), sân khấu cao theo nội dung nên nó **không cuộn được** (`scrollHeight == clientHeight`, đo 723/723) — nhưng `contain` vẫn **chặn bánh xe chuyền lên hộp cuộn thật là `.modal`**. Một hộp không cuộn được mà vẫn giữ bánh xe là một cái khoá trên đường cuộn của cả trang. (Kiểm chứng rằng CDP gửi bánh xe được: cùng một phiên, lăn trên trang Thư viện ⇒ `window.scrollY` 0 → 300.)
-- **Sửa:** bỏ `contain` ở mặc định (`overscroll-behavior-y: auto`), **chỉ** giữ `contain` trong `html[data-fullscreen="1"]` — nơi sân khấu mới thật sự là hộp cuộn (và `html,body{overflow:hidden}` nên không có gì để chuyền).
-- **Đo lại sau khi sửa (bánh xe thật, cả hai chế độ):**
-
-  | cỡ cửa sổ | Chơi ngay | Trình chiếu (toàn màn hình) |
-  |---|---|---|
-  | 1024×640 | `.modal` cuộn 290 px, đáp án cuối 825 → **535** | `.game-stage` cuộn 58 px, 651 → **593** |
-  | 1280×720 | `.modal` cuộn 58 px, 664 → **606** | vừa khít, không cần cuộn (675 trong 720) |
-  | 1366×768 | `.modal` cuộn 35 px, 686 → **651** | vừa khít, không cần cuộn (721 trong 768) |
-
-- **Cổng `ui-play-surface-check`: 806 → 812** với mục `[scroll]` mở đúng chế độ **cửa sổ** (`playGame(game, {fullscreen:false})`, không dùng `OPEN` vì `OPEN` ép toàn màn hình): nội dung phải cao hơn cửa sổ · sân khấu **không** được khoá bánh xe khi nó không cuộn được · bánh xe phải làm `.modal` cuộn (`scrollTop 333`) · đáp án cuối phải tới được sau một lần lăn.
-- **Quét tiếp 4 mẫu trò chơi** (cùng bản dựng 01:05, bánh xe thật, lăn 4 lần × 800 px rồi đo lại **sau** khi lăn): quiz · ghép cặp · đường đua · kho báu, mỗi mẫu ở **1024×640** và **1280×720**, cả **cửa sổ** và **toàn màn hình** = **16/16 không còn phần tử nào dưới đáy** (`belowFold = 0`). Ví dụ cửa sổ 1024×640: quiz `.modal` cuộn 290 px · ghép cặp 287 px · đường đua 15 px (đuôi trang) · **kho báu 725 px** (nội dung 1300 px trong hộp 576 px); toàn màn hình thì `.game-stage` là hộp cuộn (quiz 58 · ghép cặp 105 · kho báu 70 px). Không phát hiện lỗi mới — #311 là lỗi duy nhất.
-- Cổng trên bản dựng lại 01:05 (mỗi cổng một phiên sạch): play-surface **812/812** · stage **179/179** · answer-mode **219/219** · fullscreen **20/20** · `npm run check` 53 tệp · embedded khớp **6201.0 KiB**.
-- Installer: **16 518 753 byte** / 15.75 MiB / 23-11 **01:05** / SHA-256 `09da7c66f8169fb28cd3512afb6763e91c326789cfbb979c8cd41bce0c32bf94`.
-  - Bản dựng lại **cùng mã nguồn** (23-11 18:29, sau khi dọn cache Rust): **16 524 006 byte** / SHA-256 `8fc8e0acab8e22a8d8411be1…`. Hash khác bản 01:05 vì gói NSIS nhúng dấu thời gian — không có thay đổi mã nào giữa hai bản.
