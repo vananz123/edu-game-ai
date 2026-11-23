@@ -162,11 +162,16 @@ html[data-theme="dark"] .ask-panel{background-image:linear-gradient(135deg,#161a
    đặt": a bar that stays at a fixed offset from the window top while the question list
    scrolls under it. `#pageContent` is the scrolling document, so `position: sticky` with
    `inset-block-start` does the job without a nested scroll container. */
-.editor-page{display:flex;flex-direction:column;min-height:100%;max-width:1180px;margin:0 auto}
+/* #314: MOT be ngang cho moi trang. `#pageContent` da dat tran 1280px va tu canh
+   giua (index.html), nen mot trang tu dat tran rieng se hep hon cac trang khac:
+   do duoc o 1920px, thu vien rong 1232 con trinh soan thao chi 1180 va bi day lech
+   50px sang phai. Trang chi duoc phep dung phan dem cua `#pageContent`, khong tu
+   chon be ngang. */
+.editor-page{display:flex;flex-direction:column;min-height:100%;margin:0 auto}
 /* #162: the topbar is gone, so only the save bar is sticky (at the very top of
    the scrollport); the head scrolls away instead of stacking two sticky offsets
    whose second value had to guess the first one's height. */
-.editor-page-head{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:12px 22px;background:#ffffff;border-bottom:1px solid var(--line);box-shadow:0 6px 18px #1f29370d}
+.editor-page-head{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:12px 0;background:#ffffff;border-bottom:1px solid var(--line);box-shadow:0 6px 18px #1f29370d}
 /* Anchor for `position: sticky`: the sticky bars cannot leave the flow of their
    containing block, so the block must cover the whole scrollable height (the page, not a
    short wrapper). */
@@ -855,7 +860,9 @@ html.is-scene-designer,html.is-scene-designer body{overflow:hidden}
    ========================================================================== */
 
 /* --- Trang chỉnh sửa: một dải đầu trang, không phải hai --- */
-.editor-page-head{gap:12px;padding:10px 20px;border-bottom:0;box-shadow:none;background:transparent}
+/* #314: padding ngang = 0 de tieu de, thanh Luu va cac the deu bat dau o CUNG mot
+   mep (mep trong cua #pageContent) — truoc day moi thu bi thut vao 20px nua. */
+.editor-page-head{gap:12px;padding:10px 0;border-bottom:0;box-shadow:none;background:transparent}
 .editor-page-title h1{font-size:18px;letter-spacing:-.3px}
 .editor-page-title .small{margin-top:1px;font-size:11.5px}
 .editor-save-bar{top:0;gap:10px;padding:9px 20px;border:1px solid var(--line);border-radius:12px;margin:0 0 14px;
@@ -864,7 +871,7 @@ html.is-scene-designer,html.is-scene-designer body{overflow:hidden}
 .editor-save-hint svg{width:13px;height:13px;flex:0 0 auto}
 .editor-save-bar[data-dirty="1"] .editor-save-hint{color:#b45309;font-weight:700}
 .editor-save-actions .btn{border-radius:9px}
-.editor-page-body{padding:0 20px 40px;max-width:1200px;gap:14px}
+.editor-page-body{padding:0 0 40px;gap:14px}
 
 /* --- Thẻ cài đặt: lưới hai cột, gọn, để câu hỏi lên gần màn hình đầu --- */
 .editor-card{border:1px solid var(--line);border-radius:14px;background:#fff;padding:14px 16px 16px;box-shadow:0 1px 2px #1f293706}

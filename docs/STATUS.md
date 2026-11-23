@@ -7,6 +7,22 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-23 — #314 Một bề ngang cho mọi trang: trang chỉnh sửa không còn hẹp hơn thư viện
+- Giáo viên: **“phần max-width không đồng bộ giữa các trang, trang chỉnh sửa lại ngắn hơn trang thư viện trò chơi”**. Đo được đúng như vậy ở **1920×1080**: `#pageContent` của cả hai trang đều 1280 px, nhưng nội dung **thư viện rộng 1232 px** (455 → 1687) còn **trang chỉnh sửa chỉ 1180 px** (481 → 1661) — hẹp hơn **52 px** và bị đẩy lệch **26 px** sang phải. Ở 1366×768 hai trang bằng nhau (1076 px) nên lỗi chỉ hiện trên màn hình rộng.
+- **Nguyên nhân:** hai tầng cùng đặt trần. `#pageContent` đã có `max-w-[1280px] mx-auto` (index.html) là trần DUY NHẤT của mọi trang; riêng trang chỉnh sửa tự đặt thêm `.editor-page{max-width:1180px}` và `.editor-page-body{max-width:1200px}`, rồi cộng thêm `padding:0 20px` — nên nội dung thụt vào 20 px nữa so với thẻ thư viện.
+- **Sửa (chỉ CSS, không đổi mã renderer):** `.editor-page` bỏ `max-width`; `.editor-page-body` còn `padding:0 0 40px`; `.editor-page-head` còn `padding:10px 0`. Một trang **chỉ được dùng phần đệm của `#pageContent`**, không tự chọn bề ngang.
+- **Đo lại sau khi sửa (mép nội dung, không phải mép khung):**
+
+  | trang | 1366×768 | 1920×1080 | 2560×1440 |
+  |---|---|---|---|
+  | Thư viện · Dự án · Giáo án · Cài đặt · Tạo trò chơi | 256 → 1332 (**1076**) | 455 → 1687 (**1232**) | 780 → 2012 (**1232**) |
+  | Chỉnh sửa trò chơi | 256 → 1332 (**1076**) | 455 → 1687 (**1232**) | 775 → 2007 (**1232**) |
+
+  Bên trong trang chỉnh sửa, dải đầu trang · thanh Lưu · thẻ cài đặt · hàng câu hỏi đều bắt đầu ở **cùng một mép** (1920: 455; 1366: 256).
+- **Một chênh lệch 5 px còn lại là do thanh cuộn, không do CSS trang:** `#pageContent` canh giữa trong `.main`, nên khi trang hiện thanh cuộn (15 px) khung hẹp lại và nội dung dịch trái ~7 px (1920: thư viện 455, các trang không cuộn 460). Đã cân nhắc `scrollbar-gutter: stable` và **không thêm**: `src/renderer/styles/app.css` đã cố ý loại `rootscrollgutter` của daisyUI vì nó làm lệch bề rộng mà các cổng bố cục đo.
+- Cổng trên binary mới: `ui-item-assets-editor-check` **157/157** · `ui-scene-designer-check` **84/84** · `ui-editor-art-check` **pass** · `ui-library-paging-check` **pass** · `ui-project-selection-check` **pass**.
+- Installer: **16 525 891 byte** / 15.76 MiB / 23-11 **19:06** / SHA-256 `cf9b383174e88439444591e04e58c87dc233ff93ad9bab8c2d318b2fca6e3473`.
+
 ### 2026-11-23 — #312 Cảnh tự chỉnh sống qua tệp: xuất → nhập → sửa → lưu
 - Món treo lâu nhất của “Xưởng cảnh”: **`backdrop`, `extras[]`, `freePos{}` có đi theo giáo viên sang máy khác không** — tức là qua tệp `.egame`, chứ không chỉ qua SQLite trong máy này. Trước #312 chỉ đường lưu/mở lại trong máy được chứng minh.
 - **Đo trên app thật, bằng hộp thoại Windows thật** (UIAutomation, không dùng biến môi trường của cổng): dựng một trò chơi quiz có cảnh `layout: surround`, `backdrop: sea`, `paletteKey: language`, `around: [star, sun, bug]`, **3 extras** (`rocket` −15°, `butterfly` 22°, `apple`) và **6 khoá `freePos`**; xuất qua hộp thoại **Lưu**, xoá trò chơi khỏi thư viện, rồi nhập lại qua nút **Nhập** của trang Thư viện (hộp thoại **Mở**).
@@ -34,13 +50,3 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - Cổng trên bản dựng lại 01:05 (mỗi cổng một phiên sạch): play-surface **812/812** · stage **179/179** · answer-mode **219/219** · fullscreen **20/20** · `npm run check` 53 tệp · embedded khớp **6201.0 KiB**.
 - Installer: **16 518 753 byte** / 15.75 MiB / 23-11 **01:05** / SHA-256 `09da7c66f8169fb28cd3512afb6763e91c326789cfbb979c8cd41bce0c32bf94`.
   - Bản dựng lại **cùng mã nguồn** (23-11 18:29, sau khi dọn cache Rust): **16 524 006 byte** / SHA-256 `8fc8e0acab8e22a8d8411be1…`. Hash khác bản 01:05 vì gói NSIS nhúng dấu thời gian — không có thay đổi mã nào giữa hai bản.
-
-### 2026-11-17 — #310 “Tôi không xuất được game, lỗi file not found”
-- Giáo viên: **“tôi không xuất được game lỗi file not found”**. Nguyên nhân gốc: `src-tauri/src/package.rs` dựng hộp thoại xuất bằng `picker::choose` → **`pick_file`**, mà `pick_file` là hộp thoại **MỞ** — nó chỉ chọn được tệp **đang có**. Đặt tên mới cho gói `.egame` rồi bấm nút là Windows trả **“File not found”**, không ghi được byte nào. Hộp thoại **LƯU** là `save_file`.
-- **Sửa:** thêm `picker::choose_save` (cùng cách chống treo luồng chính như `choose`, nhưng gọi `save_file`) và lượt xuất dùng nó. Thêm `picker::saved_path`: giáo viên gõ tên **không có đuôi** thì tệp được ghi thành `.egame`, nếu không lần nhập sau bộ lọc `*.egame` không nhìn thấy tệp vừa xuất.
-- **Lỗi này không cổng nào thấy được:** `tauri-webview-check` truyền đường dẫn qua biến môi trường `EDUGAME_TAURI_PACKAGE_SAVE` và **bỏ qua hộp thoại hoàn toàn**, nên 55/55 vẫn xanh trong khi giáo viên không xuất được. Vì vậy có thêm **test Rust đọc mã nguồn** `the_export_dialog_is_a_save_dialog`: lượt `export` phải gọi `choose_save` và **không** được gọi hộp thoại mở; `picker.rs` phải gọi `save_file`.
-- **Chứng minh trên hộp thoại THẬT (UIAutomation, không phải suy đoán):** cửa sổ `#32770` của app có `SaveDialogLabel` *“File name:”*, *“Save as type:”*, nút `Save` (control id 1) và ô tên **đã điền sẵn “Gói kiểm 310.egame”** — đúng là hộp thoại LƯU. Đặt tên tuyệt đối qua `WM_SETTEXT` vào `Edit` id 1001 rồi `BM_CLICK` vào nút Save ⇒ tệp **618 byte** trên đĩa, `packageFormat: "edugame"`, renderer nhận `{ok:true, path:"…\export-310.egame"}`.
-- **Xuất rồi NHẬP lại đúng tệp đó:** hộp thoại mở (`Edit` id 1148) → `importGame` trả `{"title":"Gói kiểm 310","id":"imported_mws3ebeh6012519000_l4xr3p"}` — vòng tròn xuất→nhập chạy trên bản dựng cuối.
-- **Câu báo lỗi bằng tiếng Việt:** trước đây toast in nguyên văn lỗi của vỏ máy (tiếng Anh). `controller.ts` có `exportErrorText` ánh xạ `EG_WRITE` → *“Không ghi được tệp — hãy chọn thư mục khác (ví dụ Desktop) rồi xuất lại.”*, `EG_PATH`/`EG_PACKAGE`/`EG_RUNTIME` → câu tương ứng; hai nhánh `export-first`/`export-game` bắt lỗi riêng thay vì để rơi vào câu chung.
-- Cổng trên bản dựng lại 00:07: `npm run tauri:check` **55/55** + pha mở lại **10/10** (gồm cả xuất/nhập `.egame` qua đường cổng) · unit **102/102** · `npm run check` 53 tệp · `renderer-globals` **1125 hàm/9129 chỗ gọi, 0 undefined** · `cargo test --lib` **147/147** · embedded khớp **6201.0 KiB**.
-- Installer: **16 516 810 byte** / 15.75 MiB / 23-11 **00:07** / SHA-256 `bd24487f46000a40ec6656f911ecde9a31c0ab0f7152b0bfd5e4777b59ffacfe`.

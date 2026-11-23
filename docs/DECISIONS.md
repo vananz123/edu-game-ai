@@ -5242,3 +5242,19 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
 - **Bộ đếm của cổng gói là 1..4**, nên phép đo mới **dùng lại lượt 1** (tệp thật của cổng)
   thay vì nới hợp đồng: lượt 1 là `EDUGAME_TAURI_PACKAGE_OPEN`, và lượt xuất của phép đo ghi
   đè chính tệp đó bằng gói có cảnh.
+
+## #314 — Mỗi trang KHÔNG tự chọn bề ngang
+
+- **Một trần duy nhất: `#pageContent`.** Nó đã có `max-w-[1280px] mx-auto` trong
+  `src/index.html`, nên một trang tự đặt thêm `max-width` sẽ hẹp hơn các trang khác — đo
+  được 1180 so với 1232 px ở 1920. Bề ngang là việc của KHUNG, không phải của trang.
+- **Phần đệm cũng vậy.** `#pageContent` đã đệm 24 px mỗi bên; trang chỉnh sửa cộng thêm
+  `padding:0 20px` cho thân và `10px 20px` cho dải đầu, nên nội dung thụt vào 20 px nữa
+  so với lưới thẻ thư viện. Nội dung của mọi trang phải bắt đầu ở CÙNG một mép.
+- **Đo MÉP NỘI DUNG, không đo khung trang.** `#pageContent` giống nhau trên mọi trang, nên
+  phép đo khung luôn xanh trong khi nội dung lệch 52 px. Đo phần tử nội dung đầu tiên
+  (`.page-head`, `.lib-toolbar`, `.editor-page-head`, thẻ đầu tiên) ở 1366/1920/2560.
+- **Thanh cuộn làm lệch ~5 px và điều đó được GIỮ NGUYÊN.** `#pageContent` canh giữa trong
+  `.main`; khi trang có thanh cuộn thì khung hẹp đi 15 px và nội dung dịch trái ~7 px. Đã
+  cân nhắc `scrollbar-gutter: stable` và không thêm, vì `src/renderer/styles/app.css` đã
+  cố ý loại `rootscrollgutter` của daisyUI (nó làm lệch bề rộng mà các cổng bố cục đo).
