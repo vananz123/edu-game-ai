@@ -5211,6 +5211,9 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
 - **Kiểm chứng kênh đo trước khi tin kết quả đo.** Cùng một phiên: lăn trên trang Thư viện
   ⇒ `window.scrollY` 0 → 300 (kênh bánh xe hoạt động), rồi lăn trên màn chơi ⇒ 0 (lỗi thật).
   Không có bước đầu, "0" sẽ bị đọc thành "công cụ không gửi được bánh xe".
+- **Đo "tới được" SAU khi lăn, không phải trước.** Đếm phần tử nằm dưới đáy trước khi lăn chỉ
+  nói rằng trang dài; phép đo đúng là lăn hết cỡ rồi đếm lại — nếu còn phần tử dưới đáy thì nó
+  thật sự không tới được. Quét 16 tổ hợp (4 mẫu × 2 cỡ × 2 chế độ) sau #311: còn **0**.
 - **Một cổng phải mở đúng chế độ mà lời báo nói tới.** `OPEN` của `ui-play-surface-check`
   ép `fullscreen: true`, nên nó không thể thấy lỗi của "Chơi ngay"; mục mới gọi
   `playGame(game, {fullscreen:false})`.

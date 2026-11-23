@@ -20,6 +20,7 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
   | 1366×768 | `.modal` cuộn 35 px, 686 → **651** | vừa khít, không cần cuộn (721 trong 768) |
 
 - **Cổng `ui-play-surface-check`: 806 → 812** với mục `[scroll]` mở đúng chế độ **cửa sổ** (`playGame(game, {fullscreen:false})`, không dùng `OPEN` vì `OPEN` ép toàn màn hình): nội dung phải cao hơn cửa sổ · sân khấu **không** được khoá bánh xe khi nó không cuộn được · bánh xe phải làm `.modal` cuộn (`scrollTop 333`) · đáp án cuối phải tới được sau một lần lăn.
+- **Quét tiếp 4 mẫu trò chơi** (cùng bản dựng 01:05, bánh xe thật, lăn 4 lần × 800 px rồi đo lại **sau** khi lăn): quiz · ghép cặp · đường đua · kho báu, mỗi mẫu ở **1024×640** và **1280×720**, cả **cửa sổ** và **toàn màn hình** = **16/16 không còn phần tử nào dưới đáy** (`belowFold = 0`). Ví dụ cửa sổ 1024×640: quiz `.modal` cuộn 290 px · ghép cặp 287 px · đường đua 15 px (đuôi trang) · **kho báu 725 px** (nội dung 1300 px trong hộp 576 px); toàn màn hình thì `.game-stage` là hộp cuộn (quiz 58 · ghép cặp 105 · kho báu 70 px). Không phát hiện lỗi mới — #311 là lỗi duy nhất.
 - Cổng trên bản dựng lại 01:05 (mỗi cổng một phiên sạch): play-surface **812/812** · stage **179/179** · answer-mode **219/219** · fullscreen **20/20** · `npm run check` 53 tệp · embedded khớp **6201.0 KiB**.
 - Installer: **16 518 753 byte** / 15.75 MiB / 23-11 **01:05** / SHA-256 `09da7c66f8169fb28cd3512afb6763e91c326789cfbb979c8cd41bce0c32bf94`.
 
