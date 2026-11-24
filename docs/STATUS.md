@@ -17,7 +17,7 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - **Dựng lại từ target rỗng** (đã xoá 7,0 GB ở #330): `npm run build` + `build:tauri` + `build-embedded-js` + `cargo tauri build` chạy sạch — **không cần** mẹo xoá dòng 7 nữa, vì `tauri.conf.json` giờ đã dùng `devUrl` và **đã được commit** (`src-tauri/tauri.conf.json` sạch trong `git status`, hash `2d15e8e6…`).
 - Installer v0.5.3 (dựng lạnh): **16 297 788 byte** / 24-11 **17:43** / SHA-256 `0ac9540000c42d77513a088d3b36c78c44dfe1f5701f31c1c8cf75f8f239afbc`.
 - Cổng xanh trên binary 0.5.3: library-stagger **8/8** · match-flash **6/6** · wizard-motion **8/8** · page-head **6/6** · answer-mode **219/219** · play-surface **812/812** · result-cascade **9/9** · memory-flip **9/9** · stage **179/179** · item-assets **157/157** · question-template / editor-art / library-paging / project-selection pass · unit **104/104** · `verify:css` **61/61** · `check:renderer-globals` **1132 hàm / 9202 lời gọi, 0 undefined** · `check:embedded` khớp (6217.2 KiB).
-- **Chưa phát hành 0.5.3**: release công khai vẫn là **v0.5.2**. Tag + release 0.5.3 chờ quyết định của người dùng.
+- **Đã phát hành 0.5.3:** tag annotated **`v0.5.3`** (trỏ `5757d09`) + GitHub Release `https://github.com/vananz123/edu-game-ai/releases/tag/v0.5.3`, kèm asset `EduGame.Studio-0.5.3-x64-setup.exe` (**16 297 788 byte**, `state: uploaded`). GitHub tự tính `digest: sha256:0ac95400…f239afbc` — **khớp** byte dựng ở máy; link tải công khai trả `HTTP 200` + `Content-Length: 16297788`. Giờ có ba release công khai: v0.5.1, **v0.5.2**, **v0.5.3**.
 
 ### 2026-11-24 — #333 Phát hành v0.5.3 — UI polish hoàn chỉnh
 - **Version bump:** `package.json`, `tauri.conf.json`, `Cargo.toml` → `0.5.2 → 0.5.3`.
