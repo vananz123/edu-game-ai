@@ -5426,3 +5426,18 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
   `ui-answer-mode-check` lập tức đỏ vì nó đọc **89** trên đường tới **90**. Chờ “không đổi trong
   150 ms” (trần 900 ms) — và một lần chạy xanh không chứng minh gì: cổng này phải xanh **hai lần
   liên tiếp** vì lần đỏ là do thời điểm, không do logic.
+
+## #323 — Màn kết quả đã là một màn CÔNG BỐ; chỉ hàng xếp hạng là chưa
+
+- **Kế hoạch đúng một nửa.** Huy hiệu `result-medal-pop` và ba thẻ số so le `.05/.1/.15 s` **đã có
+  từ trước**; cái thiếu là **hàng của bảng xếp hạng đội**. Trước khi tin một mục “missing”, hãy đọc
+  CSS đang chạy — đây là mục thứ tám của cùng một tài liệu kế hoạch sai như vậy.
+- **So le phải chạy NGƯỢC từ hạng cuối lên nhất.** Màn này tồn tại cho đúng một khoảnh khắc: cả lớp
+  chờ xem đội nào nhất. Vì vậy nhà vô địch phải **đáp sau cùng**, không phải hiện trước.
+- **`:nth-last-child()` đếm từ cuối nên không cần biết có bao nhiêu đội.** Một bảng 2 đội và một
+  bảng 6 đội dùng đúng một bộ luật, không JS, không `--index` nội tuyến.
+- **`animation-fill-mode: both` là bắt buộc**, không phải trang trí: thiếu `backwards` thì hàng nằm
+  chờ **vẫn sáng** trong lúc delay, và “so le” chỉ còn là hàng nhảy vào muộn.
+- **Một cổng phải đo TRẠNG THÁI giữa đường, không chỉ đọc delay đã khai.** Delay tăng dần trong CSS
+  không chứng minh được gì nếu animation bị tắt ở nơi khác; mẫu `t=114ms` với hàng cuối sáng hơn
+  hàng nhất là bằng chứng thật, và nó cũng là thứ đỏ lên khi ai đó đặt sai `nth-last-child`.

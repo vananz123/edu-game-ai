@@ -576,7 +576,17 @@ html[data-theme="dark"] .ai-chat-composer textarea { color: var(--text); }
 .result-stat-label{font-size:10px;letter-spacing:.4px;color:var(--world-meta,#a9b1cd);font-weight:650;text-transform:uppercase}
 @keyframes result-medal-pop{0%{transform:scale(0) rotate(-14deg);opacity:0}60%{transform:scale(1.18) rotate(4deg)}100%{transform:scale(1) rotate(0);opacity:1}}
 @keyframes result-stat-in{0%{transform:translateY(10px);opacity:0}100%{transform:translateY(0);opacity:1}}
-@media (prefers-reduced-motion: reduce){.result-medal{animation:none}.result-stat{animation:none}}
+/* #323 Bang xep hang hien tu HANG CUOI len NHA VO DICH. Dem tu cuoi bang :nth-last-child
+   nen dung cho 2 den 6 doi ma khong can JS; hang cuoi bat dau truoc, nha vo dich dat sau
+   cung - dung khoanh khac ma man hinh nay ton tai. fill `both` giu hang an trong luc cho. */
+@keyframes leaderboard-row-in{0%{opacity:0;transform:translateY(9px) scale(.985)}100%{opacity:1;transform:none}}
+.leaderboard-row{animation:leaderboard-row-in .34s cubic-bezier(.2,.9,.25,1) both}
+.leaderboard-row:nth-last-child(2){animation-delay:.09s}
+.leaderboard-row:nth-last-child(3){animation-delay:.18s}
+.leaderboard-row:nth-last-child(4){animation-delay:.27s}
+.leaderboard-row:nth-last-child(5){animation-delay:.36s}
+.leaderboard-row:nth-last-child(6){animation-delay:.45s}
+@media (prefers-reduced-motion: reduce){.result-medal{animation:none}.result-stat{animation:none}.leaderboard-row{animation:none}}
 .result-actions{display:flex;justify-content:center;gap:9px;margin-top:24px}
 .editor-question{border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:12px}
 .editor-question-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
