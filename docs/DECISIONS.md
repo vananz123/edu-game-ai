@@ -5473,3 +5473,15 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
 - **`animationName` + `animationDelay` KHÔNG chứng minh animation đang chạy.** Cả hai đọc ra đúng
   trên một animation đã kết thúc. Chỉ mẫu `opacity` giữa đường mới là bằng chứng — cùng họ với
   #322 (matrix3d không chứng minh có perspective) và #323 (delay không chứng minh có so le).
+
+## #326 — Một thay đổi thẩm mỹ vẫn phải được đo như một thay đổi LAYOUT
+
+- **Câu hỏi của S4-1 không phải “20px có đẹp hơn 17px không”, mà “dải đầu trang có nhích
+  không”.** Nếu có, nó là thay đổi layout và phải đo lại ở mọi kích thước; số đo cho thấy **không**:
+  28px trước và sau ở 1280×800, 1366×768, 1920×1080, vì chiều cao dải do **cột nút** quyết định.
+- **Đo TRƯỚC khi sửa mới là đo.** Cùng một phép đo chạy hai lần, trước và sau, trên cùng ba kích
+  thước và cùng hai loại trang — nếu chỉ đo sau khi sửa thì “28px” chỉ là một con số, không phải
+  một so sánh.
+- **Cổng ghim cả HÌNH HỌC LẪN CHỮ**: `20px`, dải `28px`, một dòng, không chồng nút, và hai loại
+  trang dùng chung một hình học. Đây là bản mở rộng của #314 (“một trang không được tự chọn bề
+  rộng của riêng nó”) sang chiều cao dải đầu trang.

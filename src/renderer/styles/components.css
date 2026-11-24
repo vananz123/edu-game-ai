@@ -29,7 +29,7 @@
    screen opens at the same vertical rhythm. */
 .page-head{display:flex;align-items:center;justify-content:space-between;gap:10px 16px;flex-wrap:wrap;margin-bottom:14px}
 .page-head-title{display:flex;align-items:center;gap:8px;min-width:0}
-.page-head h1{margin:0;font-size:17px;line-height:1.25;letter-spacing:-.2px;font-weight:700;color:var(--text)}
+.page-head h1{margin:0;font-size:20px;line-height:1.25;letter-spacing:-.25px;font-weight:700;color:var(--text)}
 .page-head-sub{margin:2px 0 0;font-size:12px;line-height:1.45;color:var(--muted);max-width:68ch}
 .page-head-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 /* #181: `.tag` keeps a literal ink (not var(--muted)) because its own #f5f6fa
