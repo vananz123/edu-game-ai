@@ -108,7 +108,11 @@ function accountPanelHtml() {
       + '<span class="account-role">Đã đăng nhập bằng Google</span></div></div>'
       + '<div class="info-box mt-[14px]">Dữ liệu học tập nằm trên máy này, không tự tải lên đám mây. '
       + 'Đăng xuất không xoá trò chơi hay giáo án nào.</div>'
-      + '<div class="account-actions"><button class="btn-ghost" data-account-signout type="button">Đăng xuất</button></div>';
+      + '<div class="account-actions"><button class="btn-ghost" data-account-cloud-test type="button">'
+      + uiIcon('sparkles', '', 15) + ' Kiểm tra Cloud AI</button>'
+      + '<button class="btn-ghost" data-account-signout type="button">Đăng xuất</button></div>'
+      + accountCloudResultHtml()
+      + '<p class="account-hint">Kiểm tra dùng 1 lượt tạo game thật của tháng: 3 câu từ một bài mẫu.</p>';
   } else if (stateName === 'guest') {
     body = guestNote
       + '<div class="account-actions"><button class="btn-primary" data-account-signin type="button">'
@@ -144,6 +148,8 @@ function openAccountPanel() {
   root.querySelectorAll('[data-close]').forEach(button => { button.onclick = closeAccountPanel; });
   const signIn = root.querySelector('[data-account-signin]');
   if (signIn) signIn.onclick = () => accountSignIn();
+  const cloudTest = root.querySelector('[data-account-cloud-test]');
+  if (cloudTest) cloudTest.onclick = () => accountCloudTest();
   const signOut = root.querySelector('[data-account-signout]');
   if (signOut) signOut.onclick = () => accountSignOut();
   // Phiên hỏng: chỉ xoá phiên, không phải "đăng xuất" một phiên đang sống.
@@ -151,6 +157,45 @@ function openAccountPanel() {
   if (reset) reset.onclick = () => accountSignOut();
   // Không đọc lại trạng thái mỗi lần mở: panel phải vẽ đúng thứ người dùng vừa thấy
   // trên chip, không phải một trạng thái khác đến sau.
+}
+
+/** Kết quả lần kiểm Cloud AI gần nhất — hiện ngay trong panel, không toast. */
+let accountCloudResult = null;
+
+function accountCloudResultHtml() {
+  if (!accountCloudResult) return '';
+  const ok = accountCloudResult.ok === true;
+  const questions = ok && accountCloudResult.game && Array.isArray(accountCloudResult.game.questions)
+    ? accountCloudResult.game.questions.length
+    : 0;
+  const text = ok
+    ? 'Cloud AI hoạt động: đã tạo ' + questions + ' câu hỏi từ bài mẫu.'
+    : 'Cloud AI chưa dùng được: ' + (accountCloudResult.message || accountCloudResult.code || 'không rõ lý do');
+  return '<div class="info-box mt-[10px]" data-account-cloud-result="' + (ok ? 'ok' : 'fail') + '">'
+    + escapeHtml(text) + '</div>';
+}
+
+function rerenderAccountPanel() {
+  const root = $('#modalRoot');
+  if (root && root.querySelector('[data-account-panel]')) root.innerHTML = accountPanelHtml();
+}
+
+/**
+ * Kiểm Cloud AI trên máy này bằng MỘT lượt thật (#132 §D7: nhà cung cấp chỉ "dùng được"
+ * sau một lần gọi thành công). Không dùng để sinh nội dung cho lớp — chỉ để biết đường
+ * cloud có thông không, trước khi giáo viên tin nó.
+ */
+async function accountCloudTest() {
+  if (accountState.busy) return;
+  accountState.busy = 'Đang gọi Cloud AI… (có thể mất 10–30 giây)';
+  accountCloudResult = null;
+  rerenderAccountPanel();
+  try {
+    accountCloudResult = await cloudSelfTest();
+  } finally {
+    accountState.busy = '';
+    rerenderAccountPanel();
+  }
 }
 
 async function accountSignIn() {

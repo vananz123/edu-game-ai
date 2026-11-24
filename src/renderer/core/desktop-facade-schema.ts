@@ -24,7 +24,7 @@
  * Nhóm chức năng của kế hoạch Tauri, giai đoạn 2 (thứ tự = thứ tự chuyển dần):
  * `app | data | files | ai | diagnostics | presentation | lan | update`.
  *
- * 102 lời gọi của façade dưới đây. `group` là phân nhóm chức năng;
+ * 103 lời gọi của façade dưới đây. `group` là phân nhóm chức năng;
  * Khoá trùng hệt khoá của `window.eduGame`, để khi chuyển từng tệp chỉ đổi
  * `eduGame.x(` → `desktop.call('x')(`. `group` là phân nhóm của kế hoạch;
  * `channel` là chuỗi Electron đã chốt trong `src/shared/desktop-contract.json`;
@@ -56,6 +56,9 @@ const DESKTOP_CALLS = Object.freeze({
   authSignOut: { channel: 'auth:sign-out', group: 'app', kind: 'value', optional: false },
   onAuthSessionChanged: { channel: 'auth:session-changed', group: 'app', kind: 'stream', optional: false },
   onAuthLoggedOut: { channel: 'auth:logged-out', group: 'app', kind: 'stream', optional: false },
+  // Cloud AI (#344): renderer xin một trò chơi từ gateway của sản phẩm. Access token
+  // KHÔNG đi qua lời gọi này — nó ở lại Rust, chỉ `CloudOutcome` quay về.
+  cloudGenerate: { channel: 'ai:cloud-generate', group: 'ai', kind: 'value', optional: false },
 
   // ── data: thư viện trò chơi, lịch sử, giáo án, dự án ─────────────────────
   getLibrary: { channel: 'library:get', group: 'data', kind: 'value', optional: false },

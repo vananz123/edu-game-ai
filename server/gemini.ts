@@ -21,7 +21,11 @@ export type GeminiResult =
 
 /** Mã trạng thái đáng thử lại: nhà cung cấp bận, không phải yêu cầu sai. */
 export const RETRYABLE_STATUS = [429, 500, 502, 503, 504];
-const DELAYS_MS = [400, 1200];
+// Bốn lượt, tổng ~9 giây chờ. Đo trên máy thật (#344): những đợt "high demand" của
+// Gemini kéo dài HÀNG PHÚT, và ba lượt trong 1,2 giây chỉ đủ để biến một đợt bận thành
+// một lần hỏng chắc chắn. Giáo viên bấm "Tạo" thì đáng để chờ thêm vài giây — nhưng vẫn
+// phải có trần, vì một yêu cầu treo vô hạn còn tệ hơn một câu "thử lại sau".
+const DELAYS_MS = [600, 2000, 5000];
 
 export function shouldRetry(status: number): boolean {
   return RETRYABLE_STATUS.includes(status);

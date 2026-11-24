@@ -17,13 +17,54 @@ function check(name, ok, detail) {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
 }
 
+/**
+ * Một phép đo ngắn trên một target bất kỳ: đây có phải webview của ứng dụng không?
+ * Chỉ dùng để quyết định có nhận `http://localhost:5173/` hay không; một tab Chrome
+ * thường không có `__TAURI_INTERNALS__` nên sẽ bị loại.
+ */
+async function inspectPage(target) {
+  try {
+    const ws = new WebSocket(target.webSocketDebuggerUrl);
+    await new Promise((res, rej) => {
+      ws.addEventListener('open', res, { once: true });
+      ws.addEventListener('error', rej, { once: true });
+    });
+    const answer = await new Promise(resolve => {
+      ws.addEventListener('message', event => {
+        const message = JSON.parse(event.data);
+        if (message.id === 1) resolve(message);
+      });
+      ws.send(JSON.stringify({
+        id: 1,
+        method: 'Runtime.evaluate',
+        params: { expression: 'typeof window.__TAURI_INTERNALS__', returnByValue: true },
+      }));
+      setTimeout(() => resolve(null), 5000);
+    });
+    ws.close();
+    return answer && answer.result && answer.result.result && answer.result.result.value === 'object';
+  } catch {
+    return false;
+  }
+}
+
 async function connect(options = {}) {
   const list = await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json();
   // Tauri phục vụ trang qua giao thức riêng nên URL là `http://tauri.localhost/`
   // (không có `index.html`); chỉ các trang ứng dụng Tauri được chọn.
-  const target = list.find(
-    x => x.type === 'page' && (/index\.html/.test(x.url) || /^https?:\/\/tauri\.localhost\/?$/.test(x.url)),
-  );
+  //
+  // Bản dựng bằng `cargo build --release` (không qua `cargo tauri build`) lại nạp
+  // `devUrl` là `http://localhost:5173/`. Địa chỉ đó KHÔNG đủ để nhận một trang: một
+  // tab Chrome thường cũng có thể ở đó. Nên nhận thêm đúng địa chỉ ấy SAU KHI xác nhận
+  // trang có `__TAURI_INTERNALS__` — tức là webview của ứng dụng, không phải trình duyệt.
+  const appPages = list.filter(x => x.type === 'page' && /index\.html/.test(x.url));
+  const tauriPages = list.filter(x => x.type === 'page' && /^https?:\/\/tauri\.localhost\/?$/.test(x.url));
+  const devHostPages = list.filter(x => x.type === 'page' && /^http:\/\/localhost:5173\/?$/.test(x.url));
+  let target = appPages[0] || tauriPages[0] || null;
+  if (!target && devHostPages.length) {
+    const probe = await inspectPage(devHostPages[0]);
+    if (probe) target = devHostPages[0];
+  }
   if (!target) throw new Error('no index.html page target on port ' + PORT);
   const ws = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((res, rej) => {

@@ -569,6 +569,41 @@ fn write_session(app: &AppHandle, session: &SessionInfo) -> Result<(), String> {
     paths::write_json(app, SESSION_FILE, &blob)
 }
 
+/// Access token cho một lời gọi dịch vụ của sản phẩm (gateway AI), KHÔNG cho renderer.
+///
+/// `None` ở đây có hai nghĩa — "chưa đăng nhập" và "token sắp hết hạn" — và bên gọi xử
+/// lý cả hai bằng cùng một việc: thử làm mới rồi mới kết luận. Token không bao giờ đi
+/// qua `invoke` nào trả về JS (#337).
+pub(crate) fn access_token_for_call(app: &AppHandle) -> Result<Option<String>, String> {
+    let Some(session) = read_session(app)? else { return Ok(None) };
+    if session.access_token.is_empty() || session.needs_refresh(now_secs()) {
+        return Ok(None);
+    }
+    Ok(Some(session.access_token))
+}
+
+/// Làm mới token để dùng cho một lời gọi. Không ném lỗi khi chưa đăng nhập — trả `None`.
+pub(crate) async fn refresh_access_token_for_call(app: &AppHandle) -> Result<Option<String>, String> {
+    let Some(current) = read_session(app)? else { return Ok(None) };
+    if current.refresh_token.is_empty() {
+        return Ok(None);
+    }
+    let config = require_config()?;
+    let token = request_token(
+        &config,
+        serde_json::json!({ "refresh_token": current.refresh_token }),
+        "refresh_token",
+    )
+    .await?;
+    let mut session = token.into_session(now_secs());
+    if session.refresh_token.is_empty() {
+        session.refresh_token = current.refresh_token;
+    }
+    write_session(app, &session)?;
+    let _ = app.emit("auth:session-changed", session.public());
+    Ok(Some(session.access_token))
+}
+
 fn clear_session(app: &AppHandle) -> Result<(), String> {
     // Xoá hẳn tệp, không ghi `null`: sau khi đăng xuất không nên còn dấu vết rằng máy
     // này từng có tài khoản. `NotFound` là trạng thái đích, không phải lỗi.

@@ -38,7 +38,7 @@ async function run(): Promise<void> {
   });
   assert.equal(recovered.ok, true, 'một 503 thoáng qua phải được cứu');
   assert.equal(recovered.attempts, 2, 'đúng hai lượt gọi');
-  assert.deepEqual(waits, [400], 'chờ 400ms trước lượt thứ hai');
+  assert.deepEqual(waits, [600], 'chờ 600ms trước lượt thứ hai');
   assert.equal((recovered as { text: string }).text, '{"title":"T","questions":[{"id":"q1"}]}', 'hai part được nối, không có chỗ trống');
   assert.match(flaky.calls[0].url, /gemini-3\.5-flash-lite:generateContent/, 'model đi vào URL');
   assert.match(flaky.calls[0].url, /key=k$/, 'khoá đi vào URL, không vào thân');
@@ -52,12 +52,12 @@ async function run(): Promise<void> {
   assert.equal(rejected.attempts, 1, 'không thử lại 400');
   assert.equal(wrong.calls.length, 1, 'chỉ một request ra ngoài');
 
-  // 3. Bận liên tục: ba lượt rồi trả lỗi, không quay vô hạn.
+  // 3. Bận liên tục: bốn lượt rồi trả lỗi, không quay vô hạn.
   const down = fakeFetch([503]);
   const failed = await requestGameJson('prompt', { apiKey: 'k', model: 'm', fetchImpl: down.fetchImpl, sleep: async () => {} });
   assert.equal(failed.ok, false, 'vẫn báo lỗi sau khi thử lại');
-  assert.equal(failed.attempts, 3, 'ba lượt là giới hạn');
-  assert.equal(down.calls.length, 3, 'ba request ra ngoài, không hơn');
+  assert.equal(failed.attempts, 4, 'bốn lượt là giới hạn: ngắn hơn thì một đợt bận thành một lần hỏng');
+  assert.equal(down.calls.length, 4, 'bốn request ra ngoài, không hơn');
 
   // 4. Danh sách mã đáng thử lại là hợp đồng: 408 và 502 tuỳ nhà cung cấp.
   assert.deepEqual([408, 502, 429].filter(shouldRetry), [502, 429], 'chỉ 429/5xx mới thử lại');

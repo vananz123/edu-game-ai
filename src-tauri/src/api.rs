@@ -79,6 +79,9 @@ pub fn hand_written(command: &str) -> Option<(&'static str, &'static str)> {
         "start_auth_oauth" => ("auth:sign-in", "start_auth_oauth"),
         "refresh_auth_session" => ("auth:refresh", "refresh_auth_session"),
         "sign_out_auth" => ("auth:sign-out", "sign_out_auth"),
+        // Cloud AI (#344): token nằm trong Rust, renderer chỉ nhận trò chơi. Kênh này
+        // là lời gọi DUY NHẤT mang `Authorization` ra khỏi máy.
+        "cloud_generate" => ("ai:cloud-generate", "cloud_generate"),
         "get_ai_providers" => ("ai:providers", "get_ai_providers"),
         "get_local_ai_models" => ("ai:local-models", "get_local_ai_models"),
         // Giai đoạn 5: AI local — tải model/runtime và quản lý llama-server.
@@ -210,6 +213,7 @@ const INVOKE_CHANNELS: &[&str] = &[
     "auth:sign-in",
     "auth:refresh",
     "auth:sign-out",
+    "ai:cloud-generate",
     "ai:providers",
     "ai:test-provider",
     "ai:local-models",
@@ -296,6 +300,13 @@ async fn dispatch(app: &AppHandle, channel: &str, args: &[Value]) -> Result<Valu
         "auth:sign-in" => json(start_auth_oauth(app.clone()).await),
         "auth:refresh" => json(refresh_auth_session(app.clone()).await),
         "auth:sign-out" => json(sign_out_auth(app.clone())),
+        "ai:cloud-generate" => match args.first() {
+            Some(incoming) if incoming.is_object() => match serde_json::from_value::<crate::cloud::CloudRequest>(incoming.clone()) {
+                Ok(request) => json(Ok(crate::cloud::cloud_generate(app.clone(), request).await)),
+                Err(error) => Err(format!("AI_CLOUD: dữ liệu không đọc được ({error})")),
+            },
+            _ => Err("AI_CLOUD: thiếu đối tượng yêu cầu tạo trò chơi".to_string()),
+        },
         "settings:save" => match args.first() {
             Some(incoming) if incoming.is_object() => {
                 json(crate::settings::save(app, incoming.clone()))
@@ -735,6 +746,18 @@ pub async fn start_auth_oauth(app: AppHandle) -> Result<crate::auth::PublicSessi
 #[tauri::command]
 pub async fn refresh_auth_session(app: AppHandle) -> Result<crate::auth::PublicSession, String> {
     crate::auth::auth_refresh_session(app).await
+}
+
+/// `ai:cloud-generate` — gọi gateway AI của sản phẩm bằng token của phiên.
+///
+/// `async` vì một lượt sinh thật mất 5–30 giây; chặn luồng UI trong lúc đó là biến một
+/// tiến trình bình thường thành "ứng dụng bị treo".
+#[tauri::command]
+pub async fn cloud_generate(
+    app: AppHandle,
+    payload: crate::cloud::CloudRequest,
+) -> crate::cloud::CloudOutcome {
+    crate::cloud::cloud_generate(app, payload).await
 }
 
 /// `auth:sign-out` — xoá phiên DPAPI. Không động vào game hay giáo án.
