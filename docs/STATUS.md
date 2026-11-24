@@ -7,6 +7,16 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-24 — #343 Cloud AI chạy được ĐẦU-CUỐI: quota bằng bảng (không hàm RPC) + trả lại lượt khi hỏng
+- **Bỏ phụ thuộc vào bước triển khai không chạy được.** `/v1/generate` bị chặn vì ba hàm RPC chưa có trên project, trong khi **bảng** đã có và service_role ghi được. `server/quota.ts` nay tính hạn mức bằng bảng: đọc gói từ `subscriptions` (chỉ `plus` **và** `active` mới 100), giữ dòng `usage_monthly`, rồi tăng bằng **so-sánh-và-đổi** (`update … where generations = <giá trị vừa đọc>`) — nguyên tử ở mức dòng của Postgres, không cần `for update`, không cần RPC. Thua CAS thì đọc lại và thử, tối đa 3 lượt.
+- **Lỗi sản phẩm thật, do chạy thật mà thấy:** hai lần nhà cung cấp trả `503` ⇒ `generations` 0 → 1 → 2 trong khi **không có trò chơi nào** được tạo. Nay `refundGeneration()` trả lại lượt trên **cả bốn** nhánh hỏng (provider lỗi, cấu trúc JSON sai, ngoại lệ, và mọi lỗi sau khi đã trừ). Trả lại là best-effort: hỏng thì ghi log, không làm hỏng thêm phản hồi lỗi.
+- **Đo được (cùng một tài khoản thật, cùng một gateway):**
+  - `POST /v1/generate` → **200** sau 20,4 s; `game` 3 câu, **mọi câu có ≥2 phương án và `correctOptionId` khớp một phương án thật**; `provider: gemini-3.5-flash-lite`; `usage {allowed:true, used:3, quotaLimit:5, plan:'free'}`; bảng `usage_monthly` = **3**.
+  - Cố tình sai model (`GEMINI_MODEL=gemini-khong-ton-tai`) → **502**, `usage` **3 → 3**: lượt đã trừ được trả lại.
+  - Sau khi đặt `generations = 0`: một lượt lại bị `503` (đợt bận) → **502** và `usage` **0 → 0**.
+- `tsc` sạch, unit **106/106** (suite `server-quota` thêm 10 khẳng định: 4 nhóm quota + 4 nhóm trả lại lượt).
+- **Cloud AI (gateway) = `usable`** theo nghĩa #132 §D7: đã có một lần sinh **thành công thật** với cấu trúc hợp lệ và hạn mức đúng. **Chưa** nối app → gateway (renderer chưa gọi `/v1/generate` bằng token phiên) — đó là Phase 3. Ba hàm SQL vẫn chưa có, nên đường **credits** (`consume_credits`) chưa dùng được; gateway hiện chỉ dùng `generations`.
+
 ### 2026-11-24 — #342 bản rút gọn chỉ có HÀM, để một lần dán không đứt giữa đường
 - Tệp migration đầy đủ (331 dòng) đã chạy được phần **bảng** nhưng dừng trước phần **hàm** trên project thật. Đoán nguyên nhân lần nữa là việc vô ích; việc hữu ích là làm cho lần dán tới khó hỏng hơn: `docs/sql/2026-11-24-functions-only.sql` (187 dòng, 5 834 B) chỉ chứa 4 hàm + 3 cặp `revoke/grant`, **cắt nguyên văn** từ tệp migration bằng chỉ số dòng (không chép tay).
 - Kiểm trước khi đưa: **4** `as $$` / **4** `$$;` (cân bằng), 4 hàm đúng tên (`consume_generation_quota`, `handle_new_user`, `credit_cost_for`, `consume_credits`), 3 `grant`, không có nháy cong.

@@ -3,7 +3,7 @@ import rateLimit from 'express-rate-limit';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { requestGameJson } from './gemini.js';
-import { describeQuotaFailure } from './quota.js';
+import { consumeGeneration, describeQuotaFailure, refundGeneration, type QuotaStore } from './quota.js';
 
 const PORT = Number(process.env.PORT || 8787);
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
@@ -27,13 +27,6 @@ const requestSchema = z.object({
   template: z.enum(['quiz', 'scenario', 'matching']).optional().default('scenario'),
   grade: z.string().max(50).optional().default(''),
   subject: z.string().max(100).optional().default('')
-});
-
-const quotaSchema = z.object({
-  allowed: z.boolean(),
-  used: z.number(),
-  quota_limit: z.number(),
-  plan: z.string()
 });
 
 let authClient: SupabaseClient | null = null;
@@ -68,6 +61,51 @@ async function requireUser(req: AuthenticatedRequest, res: Response, next: NextF
   next();
 }
 
+/**
+ * Adapter cho `consumeGeneration`: đọc/ghi bảng bằng service_role. Không có hàm RPC nào
+ * ở đây — đó là chủ ý (xem đầu `quota.ts`): bảng đã tồn tại thì sản phẩm phải chạy.
+ */
+function quotaStore(admin: SupabaseClient): QuotaStore {
+  return {
+    async planOf(userId) {
+      const { data, error } = await admin
+        .from('subscriptions')
+        .select('plan,status')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      return (data as { plan: string; status: string } | null) ?? null;
+    },
+    async ensureRow(userId, month) {
+      const { error } = await admin
+        .from('usage_monthly')
+        .upsert({ user_id: userId, month, generations: 0 }, { onConflict: 'user_id,month', ignoreDuplicates: true });
+      if (error) throw new Error(error.message);
+    },
+    async readUsed(userId, month) {
+      const { data, error } = await admin
+        .from('usage_monthly')
+        .select('generations')
+        .eq('user_id', userId)
+        .eq('month', month)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      return data ? Number((data as { generations: number }).generations) : null;
+    },
+    async casBump(userId, month, from, to) {
+      const { data, error } = await admin
+        .from('usage_monthly')
+        .update({ generations: to, updated_at: new Date().toISOString() })
+        .eq('user_id', userId)
+        .eq('month', month)
+        .eq('generations', from)
+        .select('generations');
+      if (error) throw new Error(error.message);
+      return Array.isArray(data) && data.length === 1;
+    },
+  };
+}
+
 app.get('/health', (_req, res) => res.json({ ok: true, service: 'edugame-ai-gateway', version: '0.5.3' }));
 
 app.post('/v1/generate', requireConfiguration, requireUser, async (req: AuthenticatedRequest, res: Response) => {
@@ -79,29 +117,32 @@ app.post('/v1/generate', requireConfiguration, requireUser, async (req: Authenti
   const admin = adminClient!;
   const userId = req.userId!;
   const month = new Date().toISOString().slice(0, 7);
-  const { data: quotaResult, error: quotaError } = await admin.rpc('consume_generation_quota', {
-    p_user_id: userId,
-    p_month: month
-  }).single();
-  if (quotaError) {
-    // "Thiếu hàm" và "máy chủ bận" là hai chuyện khác nhau: một cái cần người chạy
-    // migration, một cái cần bấm lại. Gộp chúng thành một câu là bảo giáo viên làm
-    // việc vô ích.
-    const failure = describeQuotaFailure(quotaError);
-    console.error('Quota RPC error:', failure.body.code, quotaError.message);
-    res.status(failure.status).json(failure.body);
+  const outcome = await consumeGeneration(quotaStore(admin), userId, month);
+  // `strict` đang tắt nên union theo `ok` không tự thu hẹp kiểu; nhánh lỗi được nói ra
+  // bằng một kiểu riêng thay vì dựa vào suy luận của compiler.
+  const failure = outcome as {
+    ok: boolean;
+    kind?: 'exhausted' | 'unavailable';
+    reason?: string;
+    quota?: { allowed: boolean; used: number; quotaLimit: number; plan: string };
+  };
+  if (!failure.ok) {
+    if (failure.kind === 'exhausted' && failure.quota) {
+      res.status(429).json({ error: 'Bạn đã sử dụng hết lượt tạo game của tháng.', usage: failure.quota });
+      return;
+    }
+    const described = describeQuotaFailure({ message: failure.reason || '' });
+    console.error('Quota error:', described.body.code, failure.reason || '');
+    res.status(described.status).json(described.body);
     return;
   }
-  const quota = quotaSchema.safeParse(quotaResult);
-  if (!quota.success) {
-    console.error('Quota RPC returned an invalid response:', quota.error.message);
-    res.status(503).json({ error: 'Không đọc được kết quả hạn mức. Vui lòng thử lại sau.' });
-    return;
-  }
-  if (!quota.data.allowed) {
-    res.status(429).json({ error: 'Bạn đã sử dụng hết lượt tạo game của tháng.', usage: quota.data });
-    return;
-  }
+  const quota = failure.quota!;
+  // Đã trừ một lượt ⇒ mọi nhánh hỏng phía dưới phải trả lại. Một lượt bị trừ cho trò
+  // chơi không tồn tại là lỗi của sản phẩm, không phải của Google.
+  const refund = async (): Promise<void> => {
+    const returned = await refundGeneration(quotaStore(admin), userId, month, quota.used);
+    if (!returned) console.error('Refund failed: không trả lại được lượt', quota.used, userId);
+  };
 
   const input = parsed.data;
   const prompt = `Tạo trò chơi giáo dục bằng tiếng Việt. Chỉ trả về JSON, không markdown.
@@ -119,19 +160,22 @@ ${input.text}`;
       // rằng nhánh này chỉ còn dạng lỗi.
       const failure = result as { status: number; body: string; attempts: number };
       console.error('Gemini API error:', failure.status, 'sau', failure.attempts, 'lượt:', failure.body.slice(0, 500));
+      await refund();
       res.status(502).json({ error: 'Dịch vụ AI đang gặp lỗi. Vui lòng thử lại sau.' });
       return;
     }
     const text = result.text;
     const game = JSON.parse(text);
     if (!game || typeof game.title !== 'string' || !Array.isArray(game.questions) || game.questions.length === 0) {
+      await refund();
       res.status(502).json({ error: 'AI trả về cấu trúc trò chơi không hợp lệ.' });
       return;
     }
     // Do not persist source lesson text or generated content on the backend.
-    res.json({ game, provider: GEMINI_MODEL, usage: quota.data });
+    res.json({ game, provider: GEMINI_MODEL, usage: quota });
   } catch (error) {
     console.error('Generation failed:', error instanceof Error ? error.message : 'unknown');
+    await refund();
     res.status(502).json({ error: 'Không thể tạo trò chơi lúc này. Hãy kiểm tra kết nối rồi thử lại.' });
   }
 });
