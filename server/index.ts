@@ -2,13 +2,17 @@ import express, { Request, Response, NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
+import { requestGameJson } from './gemini.js';
 
 const PORT = Number(process.env.PORT || 8787);
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite';
+// 24/11: `gemini-2.5-flash-lite` trả 404 "no longer available to new users"; đo được
+// `gemini-3.5-flash-lite` → 200 trên cả `:generateContent` và endpoint tương thích
+// OpenAI. Đổi mặc định là việc của tệp này; đổi biến môi trường là việc của người chạy.
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
 
 const app = express();
 app.disable('x-powered-by');
@@ -102,24 +106,18 @@ Nội dung bài học:
 ${input.text}`;
 
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODEL)}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: 'Bạn là chuyên gia thiết kế trò chơi giáo dục tiếng Việt. Đảm bảo câu hỏi rõ ràng, đáp án nhất quán và không bịa dữ kiện.' }] },
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.3, responseMimeType: 'application/json' }
-      }),
-      signal: AbortSignal.timeout(90_000)
-    });
-    if (!response.ok) {
-      const providerBody = await response.text();
-      console.error('Gemini API error:', response.status, providerBody.slice(0, 1000));
+    // Ba lượt tối đa: nhà cung cấp trả `503 high demand` cho chính model vừa trả
+    // `200` vài giây trước, nên một lượt duy nhất là mất một giáo viên.
+    const result = await requestGameJson(prompt, { apiKey: GEMINI_API_KEY, model: GEMINI_MODEL });
+    if (!result.ok) {
+      // `strict` đang tắt nên union theo `ok` không tự thu hẹp kiểu; ép kiểu nói ra
+      // rằng nhánh này chỉ còn dạng lỗi.
+      const failure = result as { status: number; body: string; attempts: number };
+      console.error('Gemini API error:', failure.status, 'sau', failure.attempts, 'lượt:', failure.body.slice(0, 500));
       res.status(502).json({ error: 'Dịch vụ AI đang gặp lỗi. Vui lòng thử lại sau.' });
       return;
     }
-    const body = await response.json() as any;
-    const text = body.candidates?.[0]?.content?.parts?.map((part: { text?: string }) => part.text || '').join('') || '';
+    const text = result.text;
     const game = JSON.parse(text);
     if (!game || typeof game.title !== 'string' || !Array.isArray(game.questions) || game.questions.length === 0) {
       res.status(502).json({ error: 'AI trả về cấu trúc trò chơi không hợp lệ.' });

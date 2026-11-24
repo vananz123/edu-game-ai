@@ -67,7 +67,9 @@ export const AI_PROVIDERS: AiProviderDefinition[] = [
     label: 'Gemini (Google)',
     transport: 'openai-compatible',
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
-    model: 'gemini-2.5-flash',
+    // 24/11: `gemini-2.5-flash` trả 404 "no longer available to new users" trên CẢ
+    // hai endpoint của Google. Model mặc định phải là model còn dùng được hôm nay.
+    model: 'gemini-3.5-flash-lite',
     requiresKey: true,
     wizardEligible: true,
     note: 'Điểm cuối tương thích OpenAI của Google. Cần API key của Google AI Studio.'
@@ -103,7 +105,7 @@ export const AI_PROVIDERS: AiProviderDefinition[] = [
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
     model: '',
     requiresKey: true,
-    modelExample: 'gemini-2.5-flash',
+    modelExample: 'gemini-3.5-flash-lite',
     // A custom OpenAI-compatible endpoint is a real cloud provider for the lesson
     // workflow once its connection test passes (DECISIONS #132 D17): a teacher whose
     // gateway is not Gemini/ChatGPT must not lose the second analysis button.

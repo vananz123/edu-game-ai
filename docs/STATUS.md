@@ -7,6 +7,15 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-24 — #340 chạy gateway thật: model mặc định đã chết, nhà cung cấp trả 503, và một hàm SQL còn thiếu
+- **Đo được, không suy đoán.** Chạy `server/index.ts` với `sb_secret_` thật: `/health` → 200; `POST /v1/generate` với access token THẬT (admin `generate_link` → `verify`) đi qua được bước xác thực rồi dừng ở **bước hạn mức**. Truy nguyên: `consume_generation_quota`, `consume_credits`, `credit_cost_for` **đều không tồn tại** trong project (PostgREST `404 PGRST202`) ⇒ câu "Đã chạy migration" trước đó chỉ đúng phần **bảng**.
+- **Lỗi 1 (chặn sản phẩm): model mặc định đã bị Google khai tử.** `gemini-2.5-flash-lite` (gateway) và `gemini-2.5-flash` (app) trả `404 — "This model is no longer available to new users"` trên **cả** `:generateContent` và endpoint tương thích OpenAI. Đã đổi cả hai về `gemini-3.5-flash-lite` (đo được 200 ở cả hai endpoint) và ghi lý do ngay tại dòng đổi.
+- **Lỗi 2 (độ bền): nhà cung cấp trả `503 UNAVAILABLE` theo đợt** — có lúc **mọi** model 3.x đều 503, vài phút sau lại 200 với đúng yêu cầu đó. Gateway cũ bỏ cuộc sau một lượt ⇒ giáo viên nhận "Dịch vụ AI đang gặp lỗi" vì sự cố 2 giây của Google. Nay: `server/gemini.ts` (mới) thử lại tối đa 3 lượt với 400 ms / 1200 ms cho 429/5xx, **không** thử lại 4xx của mình; `tests/unit/server-gemini.test.ts` chốt hợp đồng đó.
+- **Bằng chứng sống:** `requestGameJson` gọi Gemini thật cho kết quả `attempts: 2` — lượt đầu 503, lượt hai ra JSON trò chơi hợp lệ (3 câu, 3 phương án, `correctOptionId`, 100 điểm) trong 4,6 s. Cơ chế thử lại vừa cứu một request thật, không phải một giả thuyết.
+- **Sửa tệp migration:** thêm khối `000b` chép `consume_generation_quota` (nguyên văn `server/schema.sql`, giữ hạn mức 5/100) để **một tệp là đủ** khi dựng project sạch — cùng lý do với khối `000` ở #335.
+- `tsc` sạch, unit **105/105** (thêm suite `server-gemini`), `cargo test --lib` 170/170 (không đổi Rust).
+- **Chưa kiểm:** `POST /v1/generate` → 200. Nó bị chặn bởi đúng ba hàm SQL còn thiếu, và tôi **không thể tự chạy DDL**: không có mật khẩu Postgres, không có Supabase CLI/access token trong repo. Cần một lần dán `server/migrations/2026-11-24-account-credits.sql` vào SQL Editor.
+
 ### 2026-11-24 — #339 đăng nhập Google THẬT trên bản đóng gói không có biến môi trường (đóng khe cuối của #338)
 - Chạy `edugame-studio-tauri.exe` với `SUPABASE*`/`GEMINI*` đã xoá khỏi môi trường và profile WebView2 sạch ⇒ bấm đăng nhập ⇒ **`loggedIn: true`** (`xathiennghiep@gmail.com`) sau **56 s**, chip đổi sang `member` không reload, promise của lệnh trả `oke`. Log OAuth chỉ có **đúng một** callback được chấp nhận. Khe "blind chưa đăng nhập" của #338 đã đóng.
 - Mở lại tiến trình mới (cùng profile, không biến môi trường): phiên đọc lại từ DPAPI ⇒ `loggedIn: true` ngay lúc mở. Cổng `ui-account-check` ở chế độ `EDUGAME_ACCOUNT_BLIND=1` và trạng thái **member**: **16/16**.
