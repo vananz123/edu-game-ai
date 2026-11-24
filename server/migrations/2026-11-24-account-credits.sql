@@ -1,6 +1,11 @@
 -- Cloud auth/credits — Phase 1 + 2 của docs/archive/specs/cloud-auth-plan.md (§7).
 -- Chạy trong SQL editor của Supabase TRƯỚC khi bật Cloud AI.
 --
+-- Thứ tự: `server/schema.sql` rồi tệp này. Nhưng tệp này cũng tự tạo hai bảng
+-- `subscriptions` / `usage_monthly` nếu chưa có (giống hệt `server/schema.sql`),
+-- nên chạy một mình vẫn đúng — một giáo viên mở SQL editor lần đầu không nên
+-- phải đoán thứ tự hai tệp.
+--
 -- Tệp này idempotent: chạy lại nhiều lần không hỏng dữ liệu.
 --
 -- Ba chỗ kế hoạch mô tả KHÔNG đúng với schema thật trong `server/schema.sql`, nên
@@ -13,6 +18,27 @@
 --      `consume_credits` là hàm mới song song, sẽ thay thế khi Phase 2 lên.
 --
 -- Không có bảng nào ở đây cho phép client đọc/ghi: mọi ghi đều qua service_role.
+
+-- ---------------------------------------------------------------------------
+-- 000 — hai bảng nền của `server/schema.sql` (tạo lại nếu chưa chạy tệp đó)
+-- ---------------------------------------------------------------------------
+create table if not exists public.subscriptions (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  plan text not null default 'free' check (plan in ('free', 'plus')),
+  status text not null default 'active' check (status in ('active', 'past_due', 'cancelled')),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.usage_monthly (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  month text not null,
+  generations integer not null default 0,
+  updated_at timestamptz not null default now(),
+  primary key (user_id, month)
+);
+
+alter table public.subscriptions enable row level security;
+alter table public.usage_monthly enable row level security;
 
 -- ---------------------------------------------------------------------------
 -- 001 — profiles
