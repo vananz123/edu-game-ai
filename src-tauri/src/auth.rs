@@ -199,30 +199,88 @@ pub struct CallbackParams {
     pub state: String,
 }
 
-/// Đọc dòng request đầu tiên của loopback và trả `code`/`state`, hoặc lỗi tiếng Việt.
-///
-/// Chỉ chấp nhận đúng `CALLBACK_PATH`; `error`/`error_description` do nhà cung cấp
-/// trả về được chuyển thành lỗi để UI nói được vì sao đăng nhập hỏng (ví dụ người
-/// dùng bấm "Từ chối" ở màn hình Google).
-pub fn parse_callback_request(request_line: &str) -> Result<CallbackParams, String> {
-    let mut parts = request_line.split_whitespace();
-    let method = parts.next().unwrap_or("");
-    let target = parts.next().unwrap_or("");
-    if method != "GET" {
-        return Err("Callback OAuth phải là GET.".to_string());
+/// Kết quả đọc thô từ dòng request của callback — chưa diễn giải.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct RawCallback {
+    pub is_get: bool,
+    pub path_ok: bool,
+    pub code: Option<String>,
+    pub state: Option<String>,
+    pub error: Option<String>,
+    pub error_description: Option<String>,
+}
+
+impl RawCallback {
+    /// Có ít nhất một tham số mang nghĩa ⇒ đây là phản hồi của nhà cung cấp, không
+    /// phải một tab lạc.
+    pub fn has_provider_payload(&self) -> bool {
+        self.code.is_some() || self.state.is_some() || self.error.is_some()
     }
+}
+
+/// Quyết định một request loopback làm gì với phiên đang chờ.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum CallbackVerdict {
+    /// Đúng `state`: kết thúc phiên chờ với `code`.
+    Accepted(CallbackParams),
+    /// Không phải của mình (favicon, tab mở lại, điều hướng lạc): trả lời rồi **chờ tiếp**.
+    Stray,
+    /// Của mình nhưng hỏng: trả lời rồi kết thúc bằng lỗi tiếng Việt.
+    Rejected(String),
+}
+
+/// Luật quan trọng nhất của loopback: chỉ một phản hồi **đúng `state`** được kết thúc
+/// phiên; mọi thứ khác phải bị bỏ qua. Một tab lạc từng làm hỏng cả lần đăng nhập thật
+/// (request vào đúng đường dẫn nhưng không có tham số nào).
+fn callback_verdict(raw: &RawCallback, expected_state: &str) -> CallbackVerdict {
+    if !raw.is_get || !raw.path_ok {
+        return CallbackVerdict::Stray;
+    }
+    let state_matches = raw.state.as_deref() == Some(expected_state);
+    if let Some(error) = &raw.error {
+        // Lỗi của người khác (state khác) không được phép kết thúc phiên của mình.
+        if raw.state.is_some() && !state_matches {
+            return CallbackVerdict::Stray;
+        }
+        let detail = raw.error_description.clone().unwrap_or_default();
+        return CallbackVerdict::Rejected(if detail.is_empty() {
+            format!("Nhà cung cấp đăng nhập trả lỗi: {error}")
+        } else {
+            format!("Nhà cung cấp đăng nhập trả lỗi: {error} — {detail}")
+        });
+    }
+    match (&raw.code, &raw.state) {
+        // Supabase (GoTrue) ở luồng PKCE trả về **chỉ `code`**, không kèm `state`.
+        // Chấp nhận `code` khi vắng `state`, vì thứ ràng buộc thật sự là `code_verifier`
+        // chỉ nằm trong RAM của tiến trình này: một `code` lạ không đổi được thành token.
+        (Some(code), None) if !code.is_empty() => CallbackVerdict::Accepted(CallbackParams {
+            code: code.clone(),
+            state: expected_state.to_string(),
+        }),
+        (Some(code), Some(_)) if !code.is_empty() && state_matches => {
+            CallbackVerdict::Accepted(CallbackParams {
+                code: code.clone(),
+                state: expected_state.to_string(),
+            })
+        }
+        // Đúng đường dẫn nhưng không có tham số nào: tab lạc, không phải câu trả lời.
+        _ if !raw.has_provider_payload() => CallbackVerdict::Stray,
+        // `state` khác: tín hiệu CSRF thật, không nhận, nhưng vẫn chờ tiếp.
+        _ => CallbackVerdict::Stray,
+    }
+}
+
+/// Đọc dòng request thô của loopback.
+pub fn raw_callback(request_line: &str) -> RawCallback {
+    let mut raw = RawCallback::default();
+    let mut parts = request_line.split_whitespace();
+    raw.is_get = parts.next().unwrap_or("") == "GET";
+    let target = parts.next().unwrap_or("");
     let (path, query) = match target.split_once('?') {
         Some((path, query)) => (path, query),
         None => (target, ""),
     };
-    if path != CALLBACK_PATH {
-        return Err(format!("Callback OAuth sai đường dẫn: {path}"));
-    }
-
-    let mut code = None;
-    let mut state = None;
-    let mut provider_error = None;
-    let mut provider_error_description = None;
+    raw.path_ok = path == CALLBACK_PATH;
     for pair in query.split('&').filter(|pair| !pair.is_empty()) {
         let (key, value) = match pair.split_once('=') {
             Some((key, value)) => (key, value),
@@ -230,24 +288,40 @@ pub fn parse_callback_request(request_line: &str) -> Result<CallbackParams, Stri
         };
         let value = percent_decode(value);
         match key {
-            "code" => code = Some(value),
-            "state" => state = Some(value),
-            "error" => provider_error = Some(value),
-            "error_description" => provider_error_description = Some(value),
+            "code" => raw.code = Some(value),
+            "state" => raw.state = Some(value),
+            "error" => raw.error = Some(value),
+            "error_description" => raw.error_description = Some(value),
             _ => {}
         }
     }
+    raw
+}
 
-    if let Some(error) = provider_error {
-        let detail = provider_error_description.unwrap_or_default();
-        return Err(if detail.is_empty() {
-            format!("Nhà cung cấp đăng nhập trả lỗi: {error}")
-        } else {
-            format!("Nhà cung cấp đăng nhập trả lỗi: {error} — {detail}")
-        });
+/// Đọc dòng request đầu tiên của loopback và trả `code`/`state`, hoặc lỗi tiếng Việt.
+///
+/// Chỉ chấp nhận đúng `CALLBACK_PATH`; `error`/`error_description` do nhà cung cấp
+/// trả về được chuyển thành lỗi để UI nói được vì sao đăng nhập hỏng (ví dụ người
+/// dùng bấm "Từ chối" ở màn hình Google).
+pub fn parse_callback_request(request_line: &str) -> Result<CallbackParams, String> {
+    let raw = raw_callback(request_line);
+    let mut parts = request_line.split_whitespace();
+    let method = parts.next().unwrap_or("");
+    let target = parts.next().unwrap_or("");
+    if method != "GET" {
+        return Err("Callback OAuth phải là GET.".to_string());
     }
-
-    match (code, state) {
+    if !raw.path_ok {
+        let path = target.split_once('?').map(|(path, _)| path).unwrap_or(target);
+        return Err(format!("Callback OAuth sai đường dẫn: {path}"));
+    }
+    if raw.error.is_some() {
+        return match callback_verdict(&raw, "") {
+            CallbackVerdict::Rejected(message) => Err(message),
+            _ => Err("Callback OAuth thiếu code hoặc state.".to_string()),
+        };
+    }
+    match (raw.code, raw.state) {
         (Some(code), Some(state)) if !code.is_empty() => Ok(CallbackParams { code, state }),
         _ => Err("Callback OAuth thiếu code hoặc state.".to_string()),
     }
@@ -303,19 +377,31 @@ pub fn wait_for_callback(
                 if reader.read_line(&mut request_line).is_err() {
                     continue;
                 }
-                let parsed = parse_callback_request(request_line.trim_end());
+                    let parsed = callback_verdict(&raw_callback(request_line.trim_end()), expected_state);
+                if std::env::var_os("EDUGAME_OAUTH_DEBUG").is_some() {
+                    // Chỉ bật bằng biến môi trường: lúc gỡ lỗi loopback cần thấy đúng
+                    // dòng request, còn máy giáo viên thì không ghi gì cả.
+                    let line = format!("{:?} <- {}\n", parsed, request_line.trim_end());
+                    if let Ok(mut log) = std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(std::env::temp_dir().join("edugame-oauth-debug.log"))
+                    {
+                        use std::io::Write as _;
+                        let _ = log.write_all(line.as_bytes());
+                    }
+                }
                 let (status, body, result) = match parsed {
-                    Ok(params) if params.state == expected_state => (
+                    CallbackVerdict::Accepted(params) => (
                         "200 OK",
                         "<p>Đăng nhập thành công. Bạn có thể đóng tab này và quay lại EduGame Studio.</p>",
                         Some(Ok(params)),
                     ),
-                    Ok(_) => (
-                        "400 Bad Request",
-                        "<p>Phiên đăng nhập không khớp. Hãy quay lại EduGame Studio và thử lại.</p>",
-                        None,
-                    ),
-                    Err(message) => (
+                    // Tab lạc (favicon, mở lại tab, điều hướng không tham số): trả lời rồi
+                    // chờ tiếp. Đây là lỗi thật đã gặp: request không tham số từng giết
+                    // cả phiên đăng nhập đang chờ.
+                    CallbackVerdict::Stray => ("204 No Content", "", None),
+                    CallbackVerdict::Rejected(message) => (
                         "400 Bad Request",
                         "<p>Không đọc được phản hồi đăng nhập.</p>",
                         Some(Err(message)),
@@ -418,7 +504,14 @@ fn write_session(app: &AppHandle, session: &SessionInfo) -> Result<(), String> {
 }
 
 fn clear_session(app: &AppHandle) -> Result<(), String> {
-    paths::write_json(app, SESSION_FILE, &serde_json::Value::Null)
+    // Xoá hẳn tệp, không ghi `null`: sau khi đăng xuất không nên còn dấu vết rằng máy
+    // này từng có tài khoản. `NotFound` là trạng thái đích, không phải lỗi.
+    let path = paths::data_dir(app)?.join(SESSION_FILE);
+    match std::fs::remove_file(&path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!("không xoá được {}: {error}", path.display())),
+    }
 }
 
 fn require_config() -> Result<CloudConfig, String> {
@@ -778,7 +871,8 @@ mod tests {
         let mut buffer = String::new();
         let mut reader = BufReader::new(wrong);
         let _ = reader.read_line(&mut buffer);
-        assert!(buffer.contains("400"), "state sai phải bị từ chối: {buffer}");
+        // `state` của người khác: không nhận, cũng không kết thúc phiên chờ (204).
+        assert!(buffer.contains("204"), "state sai không được là câu trả lời: {buffer}");
 
         let mut right = std::net::TcpStream::connect(("127.0.0.1", port)).expect("kết nối");
         right
@@ -800,6 +894,63 @@ mod tests {
         let error =
             wait_for_callback(listener, "state", Duration::from_millis(120)).expect_err("phải hết giờ");
         assert!(error.contains("Hết thời gian"), "{error}");
+    }
+
+    /// Lỗi thật gặp ngày 24/11: một request vào **đúng** `/auth/callback` nhưng không có
+    /// tham số nào (tab lạc, điều hướng lại) từng làm hỏng cả lần đăng nhập thật. Nó phải
+    /// bị bỏ qua, và callback đúng đến sau đó vẫn phải được nhận.
+    #[test]
+    fn loopback_ignores_a_callback_without_any_parameter() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let port = listener.local_addr().expect("addr").port();
+        let expected = "state-that-survives-a-stray-tab";
+        let worker = std::thread::spawn(move || {
+            wait_for_callback(listener, expected, Duration::from_secs(5))
+        });
+
+        let mut stray = std::net::TcpStream::connect(("127.0.0.1", port)).expect("kết nối");
+        stray
+            .write_all(b"GET /auth/callback HTTP/1.1\r\nHost: x\r\n\r\n")
+            .expect("ghi");
+        let mut buffer = String::new();
+        let mut reader = BufReader::new(stray);
+        let _ = reader.read_line(&mut buffer);
+        assert!(buffer.contains("204"), "request không tham số phải bị bỏ qua: {buffer}");
+
+        let mut right = std::net::TcpStream::connect(("127.0.0.1", port)).expect("kết nối");
+        right
+            .write_all(
+                format!("GET /auth/callback?code=real-code&state={expected} HTTP/1.1\r\nHost: x\r\n\r\n")
+                    .as_bytes(),
+            )
+            .expect("ghi");
+        let mut reply = String::new();
+        let mut right_reader = BufReader::new(right);
+        let _ = right_reader.read_line(&mut reply);
+        assert!(reply.contains("200"), "callback đúng vẫn phải được nhận: {reply}");
+
+        let params = worker.join().expect("luồng chờ").expect("callback");
+        assert_eq!(params.code, "real-code");
+    }
+
+    #[test]
+    fn callback_verdict_only_aborts_on_our_own_error() {
+        let ours = raw_callback("GET /auth/callback?error=access_denied&state=s1 HTTP/1.1");
+        assert_eq!(
+            callback_verdict(&ours, "s1"),
+            CallbackVerdict::Rejected("Nhà cung cấp đăng nhập trả lỗi: access_denied".to_string())
+        );
+        let theirs = raw_callback("GET /auth/callback?error=access_denied&state=other HTTP/1.1");
+        assert_eq!(callback_verdict(&theirs, "s1"), CallbackVerdict::Stray);
+        let bare = raw_callback("GET /auth/callback HTTP/1.1");
+        assert_eq!(callback_verdict(&bare, "s1"), CallbackVerdict::Stray);
+        // Supabase PKCE chỉ trả `code`: phải nhận, nếu không thì không bao giờ đăng nhập được.
+        let code_only = raw_callback("GET /auth/callback?code=03c21efd-d9e9 HTTP/1.1");
+        assert!(matches!(callback_verdict(&code_only, "s1"), CallbackVerdict::Accepted(_)));
+        let favicon = raw_callback("GET /favicon.ico HTTP/1.1");
+        assert_eq!(callback_verdict(&favicon, "s1"), CallbackVerdict::Stray);
+        let ok = raw_callback("GET /auth/callback?code=c&state=s1 HTTP/1.1");
+        assert!(matches!(callback_verdict(&ok, "s1"), CallbackVerdict::Accepted(_)));
     }
 }
 

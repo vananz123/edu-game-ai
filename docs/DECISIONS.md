@@ -5541,3 +5541,11 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
 - **Sự tồn tại của token trong tệp là thứ phải test, không phải tin.** Test khẳng định chuỗi lưu xuống đĩa **không chứa** `access_token` rõ; DPAPI là cơ chế, còn khẳng định là bằng chứng.
 - **Cấu hình thiếu phải là một trạng thái có tên**, không phải một lần panic hay một URL đoán mò: `configured: false` + câu tiếng Việt nói rõ Local AI vẫn dùng được. Trạng thái này đo được ngay trên máy không có khoá Supabase — tức là bây giờ.
 - **Không nới dependency để cho tiện một dòng:** `reqwest` đang bật `stream`; thêm tính năng `json` chỉ để dùng `.json()` sẽ kéo thêm bản biên dịch cho cả cây. Gửi body bằng chuỗi là đủ, và đó là lý do dòng đó có ghi chú.
+
+## #336 — Một luồng OAuth chỉ được coi là xong khi chạy với nhà cung cấp THẬT
+
+- Test giả lập dựng `?code=…&state=…` vì nó **bịa** phản hồi; Supabase thật trả `?code=…` **không `state`**. Cả 16 test đơn vị đều xanh trong khi đường đăng nhập chết ở lần chạy thật. Cùng họ với #288/#319: một cổng đo phải chạy trên thứ thật, không trên bản dựng lại của nó.
+- **`state` không phải thứ ràng buộc duy nhất.** Với PKCE, ràng buộc thật là `code_verifier` chỉ sống trong RAM tiến trình; `code` bị đánh cắp cũng không đổi được thành token. Vì vậy nhận `code` khi vắng `state` là đúng, còn `state` **khác** vẫn là tín hiệu CSRF và phải bị từ chối.
+- **Chẩn đoán ở biên phải ghi lại dữ liệu thật trước khi sửa.** Bản sửa đầu tiên của tôi giả định "tab lạc không tham số" và thêm đường bỏ qua — sai chẩn đoán; chính dòng log thô (`EDUGAME_OAUTH_DEBUG=1`, ghi vào `%TEMP%/edugame-oauth-debug.log`) mới cho thấy request có `code`. Một biến môi trường bật log ở biên rẻ hơn nhiều so với đoán.
+- **Đăng xuất phải XOÁ artifact, không ghi `null`.** Một tệp `null` còn trên đĩa là bằng chứng máy này từng có tài khoản, và nó không mang lại lợi ích gì. "Đã đăng xuất" phải đo được bằng **sự vắng mặt của tệp** (#324 family: một lời hứa về quyền riêng tư được đo bằng sự vắng mặt, không bằng ý định).
+- **Wildcard cổng của Supabase đúng như cần:** `http://127.0.0.1:*` nhận cả `:8420` lẫn `:51999`, nên loopback được dùng cổng OS cấp — không phải hy sinh tính chất "không đoán trước cổng" để chiều allow list.

@@ -7,6 +7,15 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-24 — #336 đăng nhập Google chạy THẬT (lần đầu), và hai lỗi chỉ lần chạy thật mới lộ
+- Supabase project + Google provider đã bật; đo trước khi đăng nhập: `/auth/v1/settings` → `google: true`, `/auth/v1/authorize?provider=google` → **302** sang `accounts.google.com`, và **cả cổng cố định 8420 lẫn cổng ngẫu nhiên 51999** đều được allow list nhận ⇒ wildcard `http://127.0.0.1:*` đúng như đã khai.
+- **Đăng nhập thật thành công**, hai lần liên tiếp: `auth_start_oauth` → trình duyệt hệ thống → callback → `auth_status` = `{configured:true, logged_in:true, email:…}` trong **8–16 s**. Phiên sống qua **khởi động lại app** (giải mã DPAPI đọc từ đĩa). `profiles` được trigger tạo tự động (có `display_name` từ Google). `auth_refresh_session` trả phiên còn hạn.
+- **Lỗi 1 (chặn hoàn toàn đăng nhập): Supabase PKCE trả về `code` mà KHÔNG kèm `state`.** Cổng loopback coi "thiếu `state`" là tab lạc nên trả 204 và chờ tiếp → phiên chết sau 5 phút. Sửa: nhận `code` khi vắng `state` (ràng buộc thật là `code_verifier` trong RAM, `code` lạ không đổi được thành token); `state` **khác** vẫn bị từ chối như tín hiệu CSRF.
+- **Lỗi 2: `auth_logout` ghi `null` vào `auth-session.json` thay vì xoá tệp** → sau khi đăng xuất vẫn còn dấu vết máy này từng có tài khoản. Sửa: xoá hẳn tệp (NotFound = trạng thái đích). Đo lại: sau logout **không còn tệp**.
+- Đã kiểm tra tệp phiên: chỉ có khoá `cipher`, **không có `access_token` dạng rõ** trên đĩa.
+- `cargo test --lib`: **165/165** (thêm 2 test: `loopback_ignores_a_callback_without_any_parameter`, `callback_verdict_only_aborts_on_our_own_error`).
+- Bài học ghi ở DECISIONS: bản sửa đầu tiên dựa trên **phỏng đoán** ("request không tham số"), sai; dòng log thô ở biên mới chỉ ra `?code=` không `state`. Chẩn đoán ở biên phải **ghi lại dữ liệu thật** trước khi sửa.
+
 ### 2026-11-24 — #335 Phase 1 cloud auth: PKCE + loopback + phiên DPAPI (Rust), và migration DB
 - Đọc `docs/archive/specs/cloud-auth-plan.md` (1068 dòng) rồi **đối chiếu với mã thật** trước khi viết: kế hoạch mô tả schema sai ở ba chỗ (xem DECISIONS #335) — tệp SQL mới làm theo schema thật, không theo kế hoạch.
 - **`src-tauri/src/auth.rs` (mới, 800 dòng, 16 test):** PKCE `S256` (vector RFC 7636), `state` 32 hex, loopback `127.0.0.1:0` + `GET /auth/callback` (một kết nối sai `state` bị **bỏ qua**, không làm hỏng phiên), đổi `code` → token qua `POST /auth/v1/token?grant_type=pkce`, refresh token, và phiên lưu bằng **DPAPI** (`secrets::protect_secret`) xuống `auth-session.json` — test khẳng định tệp đã lưu **không chứa token rõ**.
