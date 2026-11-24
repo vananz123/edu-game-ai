@@ -14,6 +14,7 @@ tài liệu khác vẫn cần đọc nhưng trả lời câu hỏi khác:
 | `docs/AI_SCENE_DIRECTOR_DESIGN.md` | Thiết kế AI Scene Director: từ vựng asset **thật** (10 backdrop / 38 icon / 24 palette), schema `v:1`, bảng cổng kiểm duyệt, prompt P3 |
 | `docs/handoff/` | Lịch sử bàn giao theo ngày và chi tiết quyết định cũ (chỉ đọc khi cần tra cứu) |
 | `tests/README.md` | Chạy test thế nào |
+| `docs/INSTALL_CHECKLIST.md` | Cài trên máy Windows sạch (P7): SmartScreen, cài, chơi offline, gỡ cài |
 
 ## Cây thư mục
 

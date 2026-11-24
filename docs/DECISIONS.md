@@ -5498,3 +5498,18 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
 - **Quy tắc:** một cổng tự tạo dữ liệu thì phải **tự làm cho dữ liệu đó hiện ra** (tải lại trạng
   thái), không được dựa vào việc phiên trước đã để lại gì. Cùng họ với #324 (canary) và #325
   (`renderLibrary()` không vẽ): **cổng phải tự tạo ra trạng thái mà nó đo**.
+
+## #328 — Phần không tự đo được thì phải thành một CHECKLIST có số, không phải một lời nhắc
+
+- **Bảy lượt gần đây đều đo được bằng cổng; P7 thì không.** Cài trên máy sạch cần một con người và
+  một cái máy khác. Thay vì “nhờ bạn thử giúp”, phần đó thành một tài liệu **5 bước / 13 dòng kỳ
+  vọng**, mỗi dòng có giá trị đúng để so — nhờ vậy kết quả báo về là **dữ liệu**, không phải cảm
+  nhận, và một dòng lệch là đủ để mở đúng một mục.
+- **Mỗi con số trong checklist phải là số đã đo.** “2 trò mẫu” lấy từ lượt chạy trinh nguyên #327;
+  “9 thẻ” là `LIBRARY_PAGE_SIZE`; đường dẫn dữ liệu lấy từ `paths.rs`; mã băm lấy từ tệp thật,
+  kèm lệnh để người đọc tự kiểm. Một checklist có số sai còn tệ hơn không có checklist.
+- **Nói trước cái sẽ làm người thử hoảng.** Bộ cài chưa ký ⇒ SmartScreen cảnh báo là **đúng dự
+  kiến**, không phải lỗi cài đặt (#324). Một tài liệu không nói trước điều này sẽ nhận về báo cáo
+  “app bị virus”.
+- **Dữ liệu giáo viên phải sống sót qua lần gỡ cài** — đó là một dòng kỳ vọng riêng, không phải
+  ghi chú: gỡ app không được xoá bài của giáo viên.
