@@ -7,6 +7,12 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-24 — #342 bản rút gọn chỉ có HÀM, để một lần dán không đứt giữa đường
+- Tệp migration đầy đủ (331 dòng) đã chạy được phần **bảng** nhưng dừng trước phần **hàm** trên project thật. Đoán nguyên nhân lần nữa là việc vô ích; việc hữu ích là làm cho lần dán tới khó hỏng hơn: `docs/sql/2026-11-24-functions-only.sql` (187 dòng, 5 834 B) chỉ chứa 4 hàm + 3 cặp `revoke/grant`, **cắt nguyên văn** từ tệp migration bằng chỉ số dòng (không chép tay).
+- Kiểm trước khi đưa: **4** `as $$` / **4** `$$;` (cân bằng), 4 hàm đúng tên (`consume_generation_quota`, `handle_new_user`, `credit_cost_for`, `consume_credits`), 3 `grant`, không có nháy cong.
+- Trạng thái thật lúc ghi: `PGRST202` cho cả ba RPC ⇒ `/v1/generate` trả **500 `server_not_migrated`** (câu trả lời của #341, không còn là 503 "thử lại").
+- **Chưa kiểm:** `/v1/generate` → 200; còn chờ người vận hành chạy tệp trên.
+
 ### 2026-11-24 — #341 gateway nói đúng loại lỗi: thiếu hàm RPC ≠ máy chủ bận
 - Đo lại sau #340: ba hàm RPC vẫn **chưa** có trong project (`PGRST202`), nên `/v1/generate` không thể thành công. Nhưng câu trả lời cũ — *"Không kiểm tra được hạn mức. Vui lòng thử lại sau."* (503) — bảo giáo viên bấm lại một việc **không bao giờ** thành công, và không nói gì cho người vận hành.
 - **`server/quota.ts` (mới):** `isMissingFunction()` nhận ba dạng của cùng nguyên nhân (`PGRST202`, "could not find the function", "does not exist"); `describeQuotaFailure()` trả **500 `server_not_migrated`** cho trường hợp thiếu cài đặt và **503 `quota_unavailable`** cho sự cố tạm thời. `server/index.ts` dùng nó và ghi mã lỗi vào log.
