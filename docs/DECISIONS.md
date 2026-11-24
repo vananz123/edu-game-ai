@@ -5485,3 +5485,16 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
 - **Cổng ghim cả HÌNH HỌC LẪN CHỮ**: `20px`, dải `28px`, một dòng, không chồng nút, và hai loại
   trang dùng chung một hình học. Đây là bản mở rộng của #314 (“một trang không được tự chọn bề
   rộng của riêng nó”) sang chiều cao dải đầu trang.
+
+## #327 — Cổng phải chạy được trên máy TRINH NGUYÊN, không chỉ trên profile ấm
+
+- **Một lượt chạy cổng trên profile ấm chứng minh cổng đó không hỏng trên profile ấm.** Lần này
+  app khởi động với thư mục dữ liệu **rỗng** và profile WebView2 **rỗng** — trạng thái sau khi
+  cài — và 15 cổng xanh, tức là sản phẩm thật sự dùng được từ số 0.
+- **`ui-library-stagger-check` đỏ trên máy sạch vì nó ăn theo trạng thái cũ.** Kênh `saveGame`
+  ghi xuống **đĩa**; `state.db` của renderer chỉ đổi khi nó **tải lại**. Trên profile ấm, 9 thẻ
+  hiện ra nhờ các lượt trước; trên máy sạch chỉ còn 2 game mẫu. Sửa bằng `refreshDb()` — không
+  phải bằng cách nới lỏng phép kiểm.
+- **Quy tắc:** một cổng tự tạo dữ liệu thì phải **tự làm cho dữ liệu đó hiện ra** (tải lại trạng
+  thái), không được dựa vào việc phiên trước đã để lại gì. Cùng họ với #324 (canary) và #325
+  (`renderLibrary()` không vẽ): **cổng phải tự tạo ra trạng thái mà nó đo**.

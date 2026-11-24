@@ -41,6 +41,11 @@ const SCENARIO = String.raw`(async () => {
   await sleep(250);
   const games = ${JSON.stringify([0, 1, 2, 3, 4, 5, 6, 7, 8].map(makeGame))};
   for (const game of games) await desktop.call('saveGame', game);
+  // Saving through the IPC channel writes to DISK; the renderer's copy of the library
+  // (state.db) only follows when it reloads. On a warm profile the 9 cards happened to
+  // appear anyway, so this gate passed there and failed on a VIRGIN install with 2
+  // cards (the first-run samples). A gate must not depend on state left by earlier runs.
+  await refreshDb();
   await sleep(400);
 
   // Re-draw the library the way a TEACHER does it: leave the page and come back. Calling
@@ -72,6 +77,7 @@ const REDUCED = String.raw`(async () => {
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const games = ${JSON.stringify([0, 1, 2].map(makeGame))};
   for (const game of games) await desktop.call('saveGame', game);
+  await refreshDb();
   await sleep(400);
   const nav = name => document.querySelector('.nav-item[data-page="' + name + '"]');
   nav('my-projects').click();
