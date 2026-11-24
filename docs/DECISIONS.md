@@ -5441,3 +5441,17 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
 - **Một cổng phải đo TRẠNG THÁI giữa đường, không chỉ đọc delay đã khai.** Delay tăng dần trong CSS
   không chứng minh được gì nếu animation bị tắt ở nơi khác; mẫu `t=114ms` với hàng cuối sáng hơn
   hàng nhất là bằng chứng thật, và nó cũng là thứ đỏ lên khi ai đó đặt sai `nth-last-child`.
+
+## #324 — Một lời hứa về offline phải được đo bằng SỰ VẮNG MẶT của yêu cầu mạng
+
+- **Đo “không gọi mây” bằng cách nghe chính WebView**, không bằng đọc mã: `Network.enable` +
+  `Network.requestWillBeSent`, tải lại cả trang, rồi chơi trọn một ván đã lưu. Khởi động: 81 yêu
+  cầu, **0** ra ngoài máy; chơi: **0** yêu cầu.
+- **Một cổng đo sự VẮNG MẶT phải có canary.** “Không thấy yêu cầu nào” là câu trả lời đúng của một
+  cổng bị điếc. Cổng gọi `https://offline-canary.invalid/probe` (RFC 2606 — không bao giờ phân
+  giải được) và **bắt buộc** nhìn thấy nó; không thấy thì cổng đỏ. Cùng bài học #322 ở dạng khác.
+- **Phạm vi của phép đo phải nói rõ.** Nó chứng minh app **không tạo** cuộc gọi mạng khi chơi; nó
+  **không** chứng minh hành vi khi DNS hỏng, và **không** nói gì về bộ cài trên máy sạch.
+- **Bộ cài chưa ký là một SỰ THẬT, không phải một lỗi để sửa bằng mã.** `Get-AuthenticodeSignature`
+  = `NotSigned` cho cả installer và app exe ⇒ SmartScreen sẽ chặn trên máy lạ. Chỉ chứng chỉ ký mã
+  (có phí, theo năm) mới đổi được điều này — cần quyết định của người dùng, không phải một commit.

@@ -4,6 +4,7 @@
 - **Đã xác minh:** `npm run build:tauri` → bundle nhúng **6160,9 KiB**, `dist-tauri` **201** tệp · `cargo tauri build` → release **3m52s**, NSIS **16.405.637 B (15,65 MiB)**, SHA-256 `298AA8FC…CAE363A` · `ProductVersion` của exe báo **0.5.2** · `npm test` **97/97** · `npm run check` sạch · `check:embedded` khớp 6160,9 KiB.
 - **Phạm vi:** `package.json`, `package-lock.json`, `server/index.ts` (`/health`), `Cargo.toml`, `Cargo.lock`, `tauri.conf.json` (chỉ `version`) — commit `2e46fa0`. `brand-assets.test.js` bắt hai chỗ dễ bỏ sót khi bump: version top-level riêng trong lockfile và literal trong `/health`.
 - **Còn mở / kế tiếp:** Chưa cài thử silent (`/S /D=…`) hay kiểm SmartScreen, chưa tạo GitHub release `v0.5.2`, chưa chơi offline sau khi rút mạng (**P7 vẫn MỞ**). Hash ghim mới cho `tauri.conf.json` (kèm `devPath` của chủ dự án): `5AE0BF64…13B20E`.
+- **#324 (2026-11-24):** phần *chơi offline* của P7 đã ĐO: 0 yêu cầu ra ngoài máy khi khởi động (81 yêu cầu cục bộ) và 0 khi chơi trọn một ván đã lưu — `ui-offline-play-check` 7/7. Còn mở: cài trên máy Windows sạch, và SmartScreen (bộ cài + app exe đều `NotSigned`, cần chứng chỉ ký mã).
 
 ## Nút thắt `tauri:check` đã đóng: `devPath` là khoá Tauri v1, và cổng sidebar 252px đã đỏ oan từ 2026-11-15 (2026-11-15)
 - **Đã xác minh:** `npm run tauri:check` → **51/51** + **10/10** mở lại, 0 FAIL, `sidebar=232px`; `npm test` **97/97**; `npm run check` sạch; `check:renderer-globals` 72/74 script, 1051 hàm, 0 undefined; `build:icons:check` 129 icon; `check:embedded` khớp 6160,9 KiB.
