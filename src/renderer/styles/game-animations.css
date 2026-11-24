@@ -179,6 +179,22 @@ html[data-fullscreen="1"] .modal[data-player-theme] .team-score-chip {
 }
 /* A matched pair keeps its ink dark and only fades: the card is still read
    under the green veil, and 0.65 on white keeps the text above 4.5:1. */
+/* #329 When a pair is found the two cards FLASH once: a green ring that expands
+   and dies. It is a box-shadow only, on purpose — transform and opacity here carry
+   the readability contract (a matched card keeps dark ink and stays readable under
+   the veil), so the celebration may not touch them; and it has no fill mode, so it
+   falls back to the plain matched state and leaves nothing behind. */
+@keyframes match-flash {
+  0% { box-shadow: 0 0 0 0 rgba(47, 158, 128, 0.5); }
+  55% { box-shadow: 0 0 0 9px rgba(47, 158, 128, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(47, 158, 128, 0); }
+}
+/* Only the card pair. A MEMORY card already celebrates by flipping (memory-flip,
+   #322) and one element cannot run two `animation` shorthands — adding the flash
+   there would silently kill the flip instead of adding a ring. */
+.modal[data-player-theme] .match-card.matched {
+  animation: match-flash 0.5s ease-out;
+}
 .modal[data-player-theme] .match-card.matched {
   background: var(--world-option-bg, linear-gradient(180deg, #ffffff 0%, #f5f8ff 100%));
   border-color: #2f9e80;
@@ -276,7 +292,8 @@ html[data-fullscreen="1"] .modal[data-player-theme] .team-score-chip {
   .modal[data-player-theme] .answer-option.wrong,
   .modal[data-player-theme] .feedback,
   .modal[data-player-theme] .memory-card.flipped,
-  .modal[data-player-theme] .match-card.wrong {
+  .modal[data-player-theme] .match-card.wrong,
+  .modal[data-player-theme] .match-card.matched {
     animation: none !important;
   }
 }
@@ -389,4 +406,24 @@ html[data-fullscreen="1"] .modal[data-player-theme] .treasure-map {
     animation: none !important;
     transform: none !important;
   }
+}
+
+/* #329 The wizard moves in the DIRECTION of travel: a forward step enters from the
+   right, a back step enters from the left. The direction is decided by comparing the
+   step index with the last one drawn, so a re-render that does not change the step
+   draws nothing at all — a slide that replays while the teacher types is worse than
+   no slide. */
+@keyframes wizard-step-forward {
+  0% { opacity: 0; transform: translateX(16px); }
+  100% { opacity: 1; transform: none; }
+}
+@keyframes wizard-step-back {
+  0% { opacity: 0; transform: translateX(-16px); }
+  100% { opacity: 1; transform: none; }
+}
+.wizard-step.is-forward { animation: wizard-step-forward 0.24s cubic-bezier(0.2, 0.9, 0.25, 1) both; }
+.wizard-step.is-back { animation: wizard-step-back 0.24s cubic-bezier(0.2, 0.9, 0.25, 1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .wizard-step.is-forward,
+  .wizard-step.is-back { animation: none; }
 }

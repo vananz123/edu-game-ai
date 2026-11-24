@@ -5513,3 +5513,14 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
   “app bị virus”.
 - **Dữ liệu giáo viên phải sống sót qua lần gỡ cài** — đó là một dòng kỳ vọng riêng, không phải
   ghi chú: gỡ app không được xoá bài của giáo viên.
+
+## #329 — Hai chuyển động không được phép trông như nhau, và một cổng phải đọc đúng ĐẠI LƯỢNG của nó
+
+- **Một phần tử chỉ có MỘT `animation` shorthand.** Thêm `match-flash` vào `.memory-card.matched` không "thêm vòng sáng" mà thay cú lật `memory-flip` của #322 — tức là một hiệu ứng mới ăn mất hiệu ứng cũ, im lặng. Nên phạm vi của loé là **thẻ cặp đôi** (`.match-card.matched`), còn thẻ bộ nhớ giữ phần thưởng riêng là cú lật.
+- **`box-shadow` computed là `x y BLUR SPREAD`** — vòng sáng là **spread**, nên phải đọc **độ dài thứ tư**. Cổng đầu tiên đọc độ dài thứ ba (= blur) và "đo" được spread 16px vốn là **quang tĩnh** của thẻ đã ghép: nó xanh vì một lý do sai. Đây là #274/#303 lần nữa — **cổng phải đo đúng đại lượng nó hứa**.
+- **`animation-name` KHÔNG trở về `none` khi animation chạy xong.** “Đã kết thúc” không đọc được từ tên; nó đọc được từ **spread về 0** và từ **mẫu opacity**. Cùng họ với #325 (`animationName` + `animationDelay` đọc đúng trên một animation đã xong).
+- **`Element.getAnimations()` trả về cả CSS TRANSITION.** Phần tử thẻ có transition `border-color`/`box-shadow`, nên `[0]` có thể là transition và keyframes của nó là `borderBottomColor`. Muốn biết animation keyframe đổi những thuộc tính nào thì phải **chọn theo `animationName`** rồi đọc `effect.getKeyframes()` — và đọc **trong lúc nó còn chạy**, vì animation đã xong thì rời khỏi danh sách.
+- **“Không đụng tới chỗ dễ đọc” phải chứng minh bằng KEYFRAMES, không bằng mẫu opacity.** Thẻ đã ghép còn một transition opacity riêng (0.72 → 0.95 theo theme), không liên quan gì tới loé; so mẫu opacity sẽ đỏ trên bản đúng. Đại lượng đúng là **tập thuộc tính mà animation khai báo**: chỉ `box-shadow`.
+- **Một lớp chuyển động của wizard phải được gắn SAU khi DOM đã vào trang.** Markup của bước có thể được sinh **hai lần** trong một `render()`; bản thứ hai không có lớp sẽ đè bản đầu, và triệu chứng là "không có animation" dù hàm tính hướng trả về đúng. Vì vậy `wizardStepMotionClass()` vừa trả lớp cho HTML vừa **nhớ** hướng, và `wireCreateWizard()` gắn nốt lên phần tử đã tồn tại.
+- **Một trang phải được đi tới như người dùng đi.** Cổng wizard đọc `wizardState` mà không `navigate('create-wizard')` trước, nên `.wizard-step` không tồn tại và cổng đỏ trên bản đúng (#325: cổng phải tự tạo trạng thái nó đo).
+- Phạm vi: cả hai là **chuyển động trang trí**, không mang thông tin; đều tắt trong `prefers-reduced-motion` và không đổi hình học (không ảnh hưởng các cổng đo layout).

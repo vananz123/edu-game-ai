@@ -85,13 +85,36 @@ function renderWizardProjects() {
   </section>`;
 }
 
+/**
+ * #329: which way did the wizard just move?
+ *
+ * The body is re-drawn on every step change, so the animation class is decided from
+ * the STEP INDEX compared with the index of the previous draw: forward slides in
+ * from the right, back from the left. When the index did not change (a re-render
+ * while the teacher types) this returns '' — a slide that replays on every keystroke
+ * reads as a broken page, which is worse than no slide at all.
+ */
+let wizardLastDrawnIndex = null;
+let wizardPendingMotion = null;
+function wizardStepMotionClass() {
+  const index = wizardStepIndex(wizardState.step);
+  const previous = wizardLastDrawnIndex;
+  wizardLastDrawnIndex = index;
+  if (previous === null || previous === index) return '';
+  const direction = index > previous ? 'is-forward' : 'is-back';
+  // Also remembered, because the page markup can be generated more than once per
+  // render (the second, motion-free copy would land last and kill the slide).
+  wizardPendingMotion = direction;
+  return ` ${direction}`;
+}
+
 function renderCreateWizard() {
   return `<div id="wizardRoot">
     <div class="page-head"><div class="page-head-title"><h1>Tạo trò chơi từ giáo án</h1></div><div class="page-head-actions"><button class="btn btn-secondary btn-small" data-wizard-action="new"><span data-icon="circle-plus" data-icon-size="14"></span> Dự án mới</button></div></div>
     ${renderWizardStepper()}
     ${renderWizardStatus()}
     <div class="grid grid-cols-[minmax(0,1.7fr)_minmax(270px,.8fr)] gap-3 items-start">
-      <div class="min-w-0">${renderWizardStepBody()}</div>
+      <div class="min-w-0 wizard-step${wizardStepMotionClass()}">${renderWizardStepBody()}</div>
       <aside class="min-w-0">${renderWizardProjects()}</aside>
     </div>
   </div>`;
@@ -121,6 +144,12 @@ function wizardSyncCurrentStepFromDom() {
 function wireCreateWizard() {
   const root = document.getElementById('wizardRoot');
   if (!root) return;
+  // #329: apply the pending step motion to the DOM that actually survived the render.
+  if (wizardPendingMotion) {
+    const stepBody = root.querySelector('.wizard-step');
+    if (stepBody) stepBody.classList.add(wizardPendingMotion);
+    wizardPendingMotion = null;
+  }
   if (typeof wireWizardStructureScrollCapture === 'function') wireWizardStructureScrollCapture();
   // #76: `innerHTML` cannot express `indeterminate`; `render()` (core/render.ts)
   // re-applies the derived tristate right after the markup is replaced.
