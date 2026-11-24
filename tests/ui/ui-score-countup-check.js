@@ -79,8 +79,76 @@ const SCENARIO = String.raw`(async () => {
   out.reduceExpected = String(state.gameAnswers.reduce((sum, answer) => sum + answer.points, 0));
 
   if (typeof closeGame === 'function') { try { closeGame(); } catch (e) { void e; } }
+  await sleep(500);
+
+  // ── 3. TEAM play: the chips on the bar must climb, and the first draw must not ──
+  const teamFixture = {
+    id: 'score321', title: 'Diem doi', template: 'quiz', subject: 'Tu nhien', grade: '4', description: '',
+    gameSetup: { answerMode: 'instant' },
+    questions: [
+      { id: 'q1', type: 'multiple-choice', difficulty: 'de', prompt: 'Cau mot?', explanation: 'Mot.', points: 100,
+        options: [{ id: 'a', text: 'A' }, { id: 'b', text: 'B' }], correctOptionId: 'a' },
+      { id: 'q2', type: 'multiple-choice', difficulty: 'de', prompt: 'Cau hai?', explanation: 'Hai.', points: 100,
+        options: [{ id: 'a', text: 'A' }, { id: 'b', text: 'B' }], correctOptionId: 'a' }
+    ]
+  };
+  playGame(teamFixture, { fullscreen: false });
+  await sleep(500);
+  openTeamSetup();
+  await sleep(350);
+  const startBtn = document.querySelector('#startTeamGameBtn');
+  out.teamSetupFound = Boolean(startBtn);
+  if (startBtn) startBtn.click();
+  await sleep(800);
+  const teamChipValues = () => [...document.querySelectorAll('.team-score-chip b')]
+    .map(node => String(node.textContent).trim());
+  out.teamFirstDraw = teamChipValues();
+  out.teamChipCount = out.teamFirstDraw.length;
+  const answer1 = document.querySelector('.answer-option[data-answer="a"]');
+  if (answer1) answer1.click();
+  await sleep(600);
+  const nextBtn = document.querySelector('#nextQuestionBtn');
+  out.teamNextFound = Boolean(nextBtn);
+  if (nextBtn) nextBtn.click();
+  // The bar is re-drawn whole with the new total; sample the climb as it happens.
+  const teamSamples = [];
+  const teamT0 = performance.now();
+  for (let i = 0; i < 10; i += 1) {
+    teamSamples.push({ t: Math.round(performance.now() - teamT0), v: teamChipValues() });
+    await sleep(40);
+  }
+  await sleep(300);
+  out.teamSamples = teamSamples;
+  out.teamSettled = teamChipValues();
+  out.teamPointsRecorded = state.teamPlay ? state.teamPlay.teams.map(t => String(t.points)) : null;
+
+  // ── 4. The leaderboard is a reveal: it counts up from zero ────────────────────
+  const answer2 = document.querySelector('.answer-option[data-answer="a"]');
+  if (answer2) answer2.click();
+  await sleep(500);
+  const next2 = document.querySelector('#nextQuestionBtn');
+  if (next2) next2.click();
+  const boardSamples = [];
+  const boardT0 = performance.now();
+  for (let i = 0; i < 10; i += 1) {
+    boardSamples.push({ t: Math.round(performance.now() - boardT0),
+      v: [...document.querySelectorAll('.leaderboard-row [data-team-score]')].map(n => String(n.textContent).trim()) });
+    await sleep(40);
+  }
+  await sleep(350);
+  out.boardSamples = boardSamples;
+  out.boardSettled = [...document.querySelectorAll('.leaderboard-row [data-team-score]')]
+    .map(n => String(n.textContent).trim());
+  out.boardCount = out.boardSettled.length;
+  // The rows are SORTED, so the expected order is the team points sorted descending —
+  // read them after the last answer, because the second team earns points too.
+  out.boardExpected = state.teamPlay
+    ? state.teamPlay.teams.map(t => t.points).sort((a, b) => b - a).map(String)
+    : null;
+
+  if (typeof closeGame === 'function') { try { closeGame(); } catch (e) { void e; } }
   await sleep(400);
-  for (const id of ['score320a', 'score320b']) {
+  for (const id of ['score320a', 'score320b', 'score321']) {
     try { await desktop.call('deleteGame', id); } catch (e) { void e; }
   }
   return out;
@@ -122,6 +190,40 @@ const SCENARIO = String.raw`(async () => {
   } finally {
     await cdp.send('Emulation.setEmulatedMedia', { features: [] });
   }
+
+  // 3. Team chips.
+  check('the team setup screen starts a real team game', r.teamSetupFound === true);
+  check('two team chips are drawn on the bar', r.teamChipCount === 2, String(r.teamChipCount));
+  check('the first draw shows 0 and does not climb — nobody just earned those points',
+    (r.teamFirstDraw || []).join(',') === '0,0', (r.teamFirstDraw || []).join(','));
+  const teamSeries = (r.teamSamples || []).map(sample => Number((sample.v || [])[0]));
+  const teamMid = (r.teamSamples || []).filter(sample => {
+    const value = Number((sample.v || [])[0]);
+    return value > 0 && value < Number((r.teamPointsRecorded || [0])[0]);
+  });
+  check('a team total climbs instead of teleporting', teamMid.length >= 1,
+    teamMid.map(sample => `${sample.t}:${(sample.v || [])[0]}`).join(' ') || '(no mid values)');
+  check('the team total lands on the points the game recorded',
+    (r.teamSettled || [])[0] === (r.teamPointsRecorded || [])[0],
+    `${(r.teamSettled || [])[0]} vs ${(r.teamPointsRecorded || [])[0]}`);
+  check('the team climb never goes backwards',
+    teamSeries.every((value, i) => i === 0 || value >= teamSeries[i - 1]), teamSeries.join(','));
+
+  // 4. Leaderboard reveal.
+  const boardSeries = (r.boardSamples || []).map(sample => Number((sample.v || [])[0]));
+  check('the leaderboard counts up from zero on the result screen',
+    (r.boardSamples || []).some(sample => Number((sample.v || [])[0]) > 0
+      && Number((sample.v || [])[0]) < Number((r.boardSettled || [0])[0])),
+    (r.boardSamples || []).map(sample => `${sample.t}:${(sample.v || [])[0]}`).join(' ') || '(no samples)');
+  check('every leaderboard row lands on its real total',
+    (r.boardSettled || []).length === 2 && (r.boardSettled || []).join(',') === (r.boardExpected || []).join(','),
+    `${(r.boardSettled || []).join(',')} vs ${(r.boardExpected || []).join(',')}`);
+  check('the leaderboard climb never goes backwards and never shows a negative score',
+    boardSeries.every((value, i) => i === 0 || value >= boardSeries[i - 1]),
+    boardSeries.join(','));
+  check('no sample on the leaderboard is outside the range the game could have',
+    (r.boardSamples || []).every(sample => (sample.v || []).every(value => Number(value) >= 0)),
+    (r.boardSamples || []).map(sample => (sample.v || []).join('/')).join(' '));
 
   const failed = results.filter(entry => !entry.ok).length;
   console.log('');

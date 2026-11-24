@@ -5391,3 +5391,23 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
   luôn đỏ vì chính mục đó đã dời con trỏ vào giữa hình. Dời con trỏ về góc (1,1) rồi hãy đo:
   hai lần chạy liền nhau đều **812/812**. (Bài học #271: một cổng đo bố cục mà không điều khiển
   con trỏ thì đo luôn trạng thái chuột.)
+
+## #321 — Số của đội: nhớ theo KHOÁ, lần vẽ đầu không được leo, và kẹp `t` cả hai đầu
+
+- **Một thành phần bị vẽ lại toàn bộ thì “số cũ” không nằm trong DOM.** Thanh đội và bảng xếp
+  hạng dựng lại toàn bộ mỗi câu, nên chỗ duy nhất biết giá trị trước là một **bản đồ nhớ theo
+  khoá** (`chip-0…`, `board-0…`). Bản đồ phải **xoá khi bắt đầu ván mới**: khoá theo vị trí,
+  ván sau có thể là đội khác.
+- **Lần vẽ đầu tiên KHÔNG được leo.** Đội đã có điểm mà thanh vừa hiện ra đã thấy số chạy lên
+  là nói dối về thời điểm kiếm điểm. Màn kết quả là ngoại lệ có chủ ý: ở đó đếm từ 0 là *công
+  bố*, không phải *giả vờ*.
+- **`requestAnimationFrame` trả THỜI ĐIỂM KHUNG HÌNH, không phải `performance.now()`.** Nó có
+  thể sớm hơn mốc chụp ngay trước vòng lặp, làm `t` âm ⇒ ease ra giá trị **âm**: bảng xếp hạng
+  #321 hiện `-44` trên đường 0 → 120. Phải kẹp **cả hai đầu** (`max(0, …)`), và một cổng phải
+  kiểm “không mẫu nào ngoài khoảng 0..tổng” — không chỉ kiểm giá trị cuối.
+- **Kỳ vọng của cổng phải đọc TRẠNG THÁI sau bước cuối, không phải chụp giữa chừng.** Ván 2 câu
+  có 2 đội: mỗi đội trả lời đúng một câu ⇒ **cả hai** cùng điểm, và bảng xếp hạng **sắp** theo
+  điểm. Chụp `teams` trước câu cuối cho ra `[120, 0]` và làm cổng đỏ trên bản đúng.
+- **Một animation dùng chung cho hai chỗ phải ở một nơi.** `animateScoreChip` (#320, `quiz.ts`)
+  được `animateTeamScores` (#321, `result-screen.ts`) gọi lại — không có bản sao thứ hai để
+  lệch nhau về tốc độ hay cách kẹp.

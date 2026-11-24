@@ -527,6 +527,7 @@ function startTeamGame() {
         return toast('Mỗi đội cần có tên.');
     if (new Set(names).size !== names.length)
         return toast('Tên các đội đang trùng nhau.');
+    teamPointsShown.clear();
     state.teamPlay = {
         teams: state.pendingTeams.map(t => ({ id: t.id, name: t.name.trim(), icon: t.icon.trim() || '🏁', points: 0, correct: 0, answered: 0 })),
         turn: 0
@@ -537,7 +538,7 @@ function startTeamGame() {
 function teamTurnBarHtml() {
     const tp = state.teamPlay;
     const team = tp.teams[tp.turn];
-    return `<div class="team-turn-bar"><div class="team-turn-summary"><span class="team-turn-label d-badge d-badge-primary d-badge-sm">👥 LƯỢT HIỆN TẠI</span><strong>${team.icon} ${escapeHtml(team.name)}</strong></div><div class="team-score-list" aria-label="Bảng điểm các đội">${tp.teams.map((t, i) => `<span class="team-score-chip ${i === tp.turn ? 'is-active' : ''}">${t.icon} ${escapeHtml(t.name)} <b>${t.points}</b></span>`).join('')}</div>${tp.teams.length > 1 ? `<label class="team-turn-select"><span>Đổi lượt:</span> <select id="teamTurnSelect">${tp.teams.map((t, i) => `<option value="${i}" ${i === tp.turn ? 'selected' : ''}>${t.icon} ${escapeHtml(t.name)}</option>`).join('')}</select></label>` : ''}</div>`;
+    return `<div class="team-turn-bar"><div class="team-turn-summary"><span class="team-turn-label d-badge d-badge-primary d-badge-sm">👥 LƯỢT HIỆN TẠI</span><strong>${team.icon} ${escapeHtml(team.name)}</strong></div><div class="team-score-list" aria-label="Bảng điểm các đội">${tp.teams.map((t, i) => `<span class="team-score-chip ${i === tp.turn ? 'is-active' : ''}">${t.icon} ${escapeHtml(t.name)} <b data-team-score data-team-key="chip-${i}" data-team-target="${t.points}">${t.points}</b></span>`).join('')}</div>${tp.teams.length > 1 ? `<label class="team-turn-select"><span>Đổi lượt:</span> <select id="teamTurnSelect">${tp.teams.map((t, i) => `<option value="${i}" ${i === tp.turn ? 'selected' : ''}>${t.icon} ${escapeHtml(t.name)}</option>`).join('')}</select></label>` : ''}</div>`;
 }
 function leaderboardHtml() {
     const tp = state.teamPlay;
@@ -545,7 +546,34 @@ function leaderboardHtml() {
         return '';
     const sorted = tp.teams.slice().sort((a, b) => b.points - a.points || b.correct - a.correct);
     const medals = ['🥇', '🥈', '🥉'];
-    return `<div class="leaderboard"><div class="stage-kicker d-badge d-badge-neutral">BẢNG XẾP HẠNG ĐỘI</div>${sorted.map((t, i) => `<div class="leaderboard-row ${i === 0 && t.points > 0 ? 'leader' : ''}"><span>${t.points > 0 ? (medals[i] || `#${i + 1}`) : '·'} <strong>${t.icon} ${escapeHtml(t.name)}</strong></span><span>Đúng ${t.correct}/${t.answered} câu</span><span>🏆 ${t.points} điểm</span></div>`).join('')}</div>`;
+    return `<div class="leaderboard"><div class="stage-kicker d-badge d-badge-neutral">BẢNG XẾP HẠNG ĐỘI</div>${sorted.map((t, i) => `<div class="leaderboard-row ${i === 0 && t.points > 0 ? 'leader' : ''}"><span>${t.points > 0 ? (medals[i] || `#${i + 1}`) : '·'} <strong>${t.icon} ${escapeHtml(t.name)}</strong></span><span>Đúng ${t.correct}/${t.answered} câu</span><span>🏆 <b data-team-score data-team-key="board-${i}" data-team-target="${t.points}">${t.points}</b> điểm</span></div>`).join('')}</div>`;
+}
+/**
+ * #321: a TEAM total must climb too.
+ *
+ * #320 made the individual total tick up, but in team play the number a class
+ * actually watches is the row of team chips (#team-score-chip) and the leaderboard.
+ * Both are re-drawn whole on every question, so the "from" value cannot be read off
+ * the DOM — it has to be remembered by key.
+ *
+ * Two rules, same as #320: the number always lands exactly on the team's real total,
+ * and the FIRST draw never climbs. A team that already has points when the bar first
+ * appears must not look like it just earned them; the result screen is the one place
+ * that deliberately counts up from 0, because there it is a reveal, not a lie.
+ */
+const teamPointsShown = new Map();
+function animateTeamScores(root, options = {}) {
+    const nodes = (root || document).querySelectorAll('[data-team-score]');
+    nodes.forEach(node => {
+        const key = node.getAttribute('data-team-key') || '';
+        const target = Number(node.getAttribute('data-team-target'));
+        if (!key || !Number.isFinite(target))
+            return;
+        const remembered = teamPointsShown.get(key);
+        const from = options.reveal ? 0 : (typeof remembered === 'number' ? remembered : target);
+        teamPointsShown.set(key, target);
+        animateScoreChip(node, from, target);
+    });
 }
 function bindPlayHeader(root) {
     const present = $('[data-play-present]', root);

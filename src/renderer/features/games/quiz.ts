@@ -118,6 +118,9 @@ function renderQuestion() {
     const stageBottomHtml = `<div class="stage-bottom"><span class="stage-tip">${scoringTip}</span>${nextInStage}</div>`;
     root.innerHTML = `<div class="game-stage${houseMode ? ' is-house-mode' : ''}${game.template === 'quiz' ? ' is-arena-quiz' : ''}" data-game="${stageGame}" data-game-world="quiz">${gameWorldLabel(stageGame)}<div class="stage-top"><span class="stage-meta">${escapeHtml(game.subject || 'TRÒ CHƠI HỌC TẬP')} · ${game.grade ? 'LỚP ' + escapeHtml(game.grade) : 'MỌI LỚP'}</span><span class="stage-meta stage-meta-right"><span class="stage-chip">${game.template === 'scenario' ? 'QUYẾT ĐỊNH' : 'CÂU'} <b>${state.gameAnswers.length + 1}</b>/${game.questions.length}</span><span class="stage-chip stage-chip-score">🏆 <b>${state.gameAnswers.reduce((s, a) => s + a.points, 0)}</b> điểm</span></span></div><div class="stage-progress"><div data-progress="${progress}"></div></div>${state.teamPlay ? teamTurnBarHtml() : ''}<div class="stage-center${situationSplit ? ' is-situation' : ''}">${houseHudHtml}${sideColHtml}<div class="stage-col is-main">${centerLeadHtml}${houseAnswerRow || answerArea}${mainFeedbackHtml}${stageBottomHtml}</div></div>${nextDock}<div id="answerExplanationDock" class="answer-explain-dock"></div></div>`;
     paintProgress(root);
+    // #321: the team chips were just re-drawn with their new totals; let them climb
+    // from what the previous draw showed instead of jumping.
+    animateTeamScores(root);
     $$('.answer-option', root).forEach(btn => btn.addEventListener('click', () => chooseAnswer(q, btn.dataset.answer)));
     const qHintBtn = $('#quizHintBtn', root);
     if (qHintBtn) {
@@ -401,7 +404,11 @@ function animateScoreChip(chip, from, to) {
     const frame = now => {
         if (!chip.isConnected)
             return;
-        const t = Math.min(1, (now - started) / duration);
+        // Clamp BOTH ends: a rAF timestamp is a frame time and can be EARLIER than the
+        // `performance.now()` taken just before the loop, which made the first frame
+        // render a NEGATIVE score (-44 on a 0 -> 120 climb). A scoreboard may never
+        // show a number the game never had, in either direction.
+        const t = Math.min(1, Math.max(0, (now - started) / duration));
         const eased = 1 - (1 - t) * (1 - t);
         chip.textContent = String(Math.round(from + (to - from) * eased));
         if (t < 1)
@@ -464,6 +471,9 @@ async function renderResults() {
     // `.house-stage-slot`, the same slot the answer phase uses, so buildHouseWorld()
     // projects the house (at its final part count) straight into it (DECISIONS #144).
     mountThreeStage($('#playBody .game-stage'));
+    // #321: the leaderboard is a REVEAL, so it counts up from zero — the one place
+    // where "starting at 0" is the truth of the moment rather than a lie.
+    animateTeamScores($('#playBody'), { reveal: true });
     reactThree('game:completed', { correct, points, houseCompleted: house ? house.completed : false });
     $('#closeResultBtn').onclick = () => closePlaySurface();
     $('#replayBtn').onclick = () => {
