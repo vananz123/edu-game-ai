@@ -5580,3 +5580,10 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
 - **Bằng chứng phải là `attempts`:** lượt gọi sống đầu tiên sau khi thêm thử lại trả `attempts: 2` rồi ra JSON hợp lệ. Nếu tôi chỉ viết "đã thêm retry" thì không ai biết nó có chạy.
 - **"Đã chạy migration" phải được kiểm bằng thứ migration tạo ra, không bằng bảng.** Ba hàm RPC không tồn tại dù mọi bảng trả 200 — vì lần chạy trước chỉ tới phần bảng. Kiểm bằng `POST /rest/v1/rpc/<tên>` và đọc `PGRST202`; đó là phép đo duy nhất phân biệt "có bảng" với "dùng được".
 - **Việc không tự làm được thì phải nói ra kèm đúng một hành động:** tôi không có mật khẩu Postgres, không có Supabase CLI trong repo, nên DDL là việc của người. Tệp migration được sửa để **một lần dán là đủ**, và đó là toàn bộ yêu cầu gửi đi.
+
+## #341 — "Thử lại sau" chỉ được nói khi thử lại có thể thành công
+
+- Gateway trả 503 *"Không kiểm tra được hạn mức. Vui lòng thử lại sau."* cho một project **chưa chạy migration**. Câu đó sai hai lần: nó bảo giáo viên làm một việc không bao giờ thành công, và nó không nói cho người vận hành biết phải chạy tệp nào. Một thông báo không phân biệt được "hỏng cài đặt" với "bận" là một thông báo vô dụng ở cả hai ca.
+- Luật: **thiếu cài đặt ⇒ 500 + mã `server_not_migrated` + câu chỉ đúng việc phải làm; tạm thời ⇒ 503 + `quota_unavailable` + "thử lại".** Mã lỗi máy đọc được là phần quan trọng: nó cho phép log, cổng kiểm và (sau này) bảng chẩn đoán phân loại mà không phải so chuỗi tiếng Việt.
+- Phép nhận dạng phải phủ **ba** dạng của cùng một nguyên nhân: `PGRST202` (PostgREST), "could not find the function" (schema cache), "does not exist" (Postgres). Chỉ khớp một dạng là để lọt đúng ca người dùng gặp.
+- **Kiểm tệp trước khi nhờ người dán:** đếm `$$` phải chẵn, liệt kê hàm/bảng, và kiểm nháy cong — vì thứ làm hỏng một lần dán thường không phải SQL mà là ký tự bị thay khi chép qua chat. Cùng họ #340: kiểm cái sẽ được dùng, không kiểm cái mình tin.

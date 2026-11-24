@@ -3,6 +3,7 @@ import rateLimit from 'express-rate-limit';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { requestGameJson } from './gemini.js';
+import { describeQuotaFailure } from './quota.js';
 
 const PORT = Number(process.env.PORT || 8787);
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
@@ -83,8 +84,12 @@ app.post('/v1/generate', requireConfiguration, requireUser, async (req: Authenti
     p_month: month
   }).single();
   if (quotaError) {
-    console.error('Quota RPC error:', quotaError.message);
-    res.status(503).json({ error: 'Không kiểm tra được hạn mức. Vui lòng thử lại sau.' });
+    // "Thiếu hàm" và "máy chủ bận" là hai chuyện khác nhau: một cái cần người chạy
+    // migration, một cái cần bấm lại. Gộp chúng thành một câu là bảo giáo viên làm
+    // việc vô ích.
+    const failure = describeQuotaFailure(quotaError);
+    console.error('Quota RPC error:', failure.body.code, quotaError.message);
+    res.status(failure.status).json(failure.body);
     return;
   }
   const quota = quotaSchema.safeParse(quotaResult);

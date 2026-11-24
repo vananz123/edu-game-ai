@@ -7,6 +7,14 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-24 — #341 gateway nói đúng loại lỗi: thiếu hàm RPC ≠ máy chủ bận
+- Đo lại sau #340: ba hàm RPC vẫn **chưa** có trong project (`PGRST202`), nên `/v1/generate` không thể thành công. Nhưng câu trả lời cũ — *"Không kiểm tra được hạn mức. Vui lòng thử lại sau."* (503) — bảo giáo viên bấm lại một việc **không bao giờ** thành công, và không nói gì cho người vận hành.
+- **`server/quota.ts` (mới):** `isMissingFunction()` nhận ba dạng của cùng nguyên nhân (`PGRST202`, "could not find the function", "does not exist"); `describeQuotaFailure()` trả **500 `server_not_migrated`** cho trường hợp thiếu cài đặt và **503 `quota_unavailable`** cho sự cố tạm thời. `server/index.ts` dùng nó và ghi mã lỗi vào log.
+- **Đo trên gateway thật:** `POST /v1/generate` → **500** `{"code":"server_not_migrated","error":"Máy chủ AI chưa được cài đặt đầy đủ (thiếu hàm hạn mức). Quản trị viên cần chạy tệp migration của máy chủ."}`; log: `Quota RPC error: server_not_migrated Could not find the function public.consume_generation_quota(p_month, p_user_id) in the schema cache`.
+- **Kiểm tệp migration trước khi người dán:** 12 944 B / 331 dòng, **8** dấu `$$` (chẵn), 4 hàm (`consume_generation_quota`, `handle_new_user`, `credit_cost_for`, `consume_credits`), 5 bảng, không có nháy cong (thứ hay bị Word/chat làm hỏng khi dán).
+- `tsc` sạch, unit **106/106** (thêm suite `server-quota`).
+- **Chưa kiểm:** `/v1/generate` → 200 vẫn cần một lần chạy SQL của người vận hành; tôi không có mật khẩu Postgres, không có Supabase CLI/PAT trong repo.
+
 ### 2026-11-24 — #340 chạy gateway thật: model mặc định đã chết, nhà cung cấp trả 503, và một hàm SQL còn thiếu
 - **Đo được, không suy đoán.** Chạy `server/index.ts` với `sb_secret_` thật: `/health` → 200; `POST /v1/generate` với access token THẬT (admin `generate_link` → `verify`) đi qua được bước xác thực rồi dừng ở **bước hạn mức**. Truy nguyên: `consume_generation_quota`, `consume_credits`, `credit_cost_for` **đều không tồn tại** trong project (PostgREST `404 PGRST202`) ⇒ câu "Đã chạy migration" trước đó chỉ đúng phần **bảng**.
 - **Lỗi 1 (chặn sản phẩm): model mặc định đã bị Google khai tử.** `gemini-2.5-flash-lite` (gateway) và `gemini-2.5-flash` (app) trả `404 — "This model is no longer available to new users"` trên **cả** `:generateContent` và endpoint tương thích OpenAI. Đã đổi cả hai về `gemini-3.5-flash-lite` (đo được 200 ở cả hai endpoint) và ghi lý do ngay tại dòng đổi.
