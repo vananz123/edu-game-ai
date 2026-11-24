@@ -380,10 +380,46 @@ function showQuizScoreChange(points, detail = 'điểm') {
     setTimeout(() => notice.remove(), 1800);
 }
 /** Tổng điểm trên thanh stage bằng đúng tổng đã ghi, thay vì trễ một câu (#213). */
+/**
+ * #320: a total that TELEPORTS from 0 to 300 tells the class nothing — the child
+ * who earned it never sees it move, and the teacher standing behind the room only
+ * sees a number that was already there. Ticking up makes the gain an event.
+ *
+ * Two rules the animation must never break: it always LANDS on the exact number
+ * (a mid-value left on screen would be a wrong score), and it stops silently when
+ * the stage below it was rebuilt (the element is gone; writing to it is a no-op
+ * that keeps a timer alive). `prefers-reduced-motion` gets the plain number.
+ */
+function animateScoreChip(chip, from, to) {
+    const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce || typeof requestAnimationFrame !== 'function' || from === to) {
+        chip.textContent = String(to);
+        return;
+    }
+    const duration = 380;
+    const started = performance.now();
+    const frame = now => {
+        if (!chip.isConnected)
+            return;
+        const t = Math.min(1, (now - started) / duration);
+        const eased = 1 - (1 - t) * (1 - t);
+        chip.textContent = String(Math.round(from + (to - from) * eased));
+        if (t < 1)
+            requestAnimationFrame(frame);
+        else
+            chip.textContent = String(to);
+    };
+    chip.textContent = String(from);
+    requestAnimationFrame(frame);
+}
 function syncScoreChip() {
     const chip = document.querySelector('.stage-chip-score b');
-    if (chip)
-        chip.textContent = String(state.gameAnswers.reduce((s, a) => s + a.points, 0));
+    if (!chip)
+        return;
+    const total = state.gameAnswers.reduce((s, a) => s + a.points, 0);
+    const written = String(chip.textContent).trim();
+    const shown = written === '' ? total : Number(written.replace(/[^\d-]/g, ''));
+    animateScoreChip(chip, Number.isFinite(shown) ? shown : total, total);
 }
 /** mm:ss for the result stat cards (language-neutral, compact on the projector). */
 function formatClock(totalSeconds) {

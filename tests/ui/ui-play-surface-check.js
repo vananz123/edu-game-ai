@@ -1601,6 +1601,14 @@ function assertNav(nav, tag) {
     await setViewportAndWait(ctx, { width: 1366, height: 768 });
     const opened = await evaluate(OPEN(GAME));
     check(`[${tag}] the question picture is on screen`, Boolean(opened && opened.stage), 'no .game-stage');
+    // "Hidden until the pointer arrives" is a measurement of HOVER STATE, and hover
+    // follows the POINTER. On a machine where the physical cursor happens to rest
+    // over the picture — or on a second run, because this very section moved the
+    // virtual pointer to the picture's centre — the button is legitimately visible
+    // and the check would fail on a correct build (#271, #288). Park the pointer in
+    // the corner first, so the assertion measures the CSS and not the mouse.
+    await ctx.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 1, y: 1 });
+    await new Promise(r => setTimeout(r, 200));
     const box = await evaluate(`(() => {
       const art = document.querySelector('.stage-illustration.is-zoomable');
       const btn = document.querySelector('.stage-art-zoom');

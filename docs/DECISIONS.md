@@ -5370,3 +5370,24 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
   đỏ 8/20 khi phiên đang ở chế độ toàn màn hình do phép đo trước bật (F11 đi ngược chiều), và
   đỏ `Execution context was destroyed` trên profile lạnh (hộp thiết lập lần đầu làm nạp lại
   trang). Cùng một binary: **20/20** trên profile ấm. (#288, #317 — lần thứ ba.)
+
+## #320 — Một con số động phải ĐÁP ĐÚNG số thật, và một cổng đo hover phải tự dời con trỏ
+
+- **Điểm nhảy cóc thì lớp không biết ai vừa được điểm.** Cho tổng đếm lên 380 ms là cách rẻ
+  nhất để biến “+100 điểm” thành một sự kiện nhìn thấy được. Làm ở `syncScoreChip()` — nơi
+  DUY NHẤT ghi tổng (#213) — nên không có đường thứ hai để lệch.
+- **Animation của một con số có hai ràng buộc cứng:** nó **luôn đáp đúng** con số đã ghi (giá
+  trị trung gian còn lại = điểm sai), và nó **dừng khi phần tử đã bị dựng lại** (`isConnected`):
+  `renderQuestion()` thay `innerHTML` mỗi câu, ghi tiếp vào nút đã chết chỉ giữ vòng lặp sống.
+- **`prefers-reduced-motion` là nhánh ĐO ĐƯỢC.** `Emulation.setEmulatedMedia` của WebView2 mô
+  phỏng được media feature này (khác `(hover:none)` — bài học #309), nên cổng kiểm cả hai nhánh
+  thay vì tin vào mã.
+- **Kỳ vọng của bài kiểm tra phải lấy từ TRẠNG THÁI, không từ fixture.** Trả lời đúng còn được
+  **thưởng tốc độ**: fixture 100 điểm, tổng thật 120. Một cổng so với con số trong fixture sẽ
+  đỏ trên bản đúng — hoặc xanh nhờ… sửa sai số.
+- **Một cổng đo HOVER phải tự dời con trỏ trước khi đọc.** Mục `[zoom]` của
+  `ui-play-surface-check` đọc `opacity` trước mọi cú di chuột, nên nó đo vị trí chuột thật của
+  máy (lần này chuột nằm trên hình ⇒ đỏ trên bản đúng), và lần chạy thứ hai trong cùng phiên
+  luôn đỏ vì chính mục đó đã dời con trỏ vào giữa hình. Dời con trỏ về góc (1,1) rồi hãy đo:
+  hai lần chạy liền nhau đều **812/812**. (Bài học #271: một cổng đo bố cục mà không điều khiển
+  con trỏ thì đo luôn trạng thái chuột.)
