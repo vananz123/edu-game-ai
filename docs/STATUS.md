@@ -7,6 +7,12 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-24 — #330 Dọn dẹp cây làm việc và cắt bản phát hành v0.5.2
+- Dọn **7,0 GB** cache build Rust (`src-tauri/target/`), cùng `src-tauri/gen/`, `dist-tauri/`, `tests/ui/shots/`, `tests/manual/out/`, `tests/.ui-check-profile/`, `.tmp-cargo.log` và các profile WebView2 tạm trong `%TEMP%`. Cây làm việc còn **301 MB**.
+- **Một chỗ Windows không cho xoá:** `dist/` (5,8 MB) bị một tiến trình giữ handle **không cho xoá** — ghi được, đổi tên được, `unlink` thì `Permission denied`. Đã đổi tên cả thư mục (đổi tên thư mục **được**) thành `.cache/` — tên đã nằm trong `.gitignore` (`.cache/`) nên `git status` sạch; xoá nốt sau khi khởi động lại máy.
+- Giữ installer đã dựng ở #329 ra ngoài `target/` trước khi xoá: `%TEMP%\edugame-release-v0.5.2\` (kèm `SHA256.txt`).
+- Không đổi mã sản phẩm. Chỉ tạo tag phát hành **`v0.5.2`** (annotated, 96 commit kể từ `v0.5.1`).
+
 ### 2026-11-24 — #329 Hai chuyển động mới: cặp thẻ VỪA GHÉP loé lên, và wizard trượt THEO HƯỚNG đi
 - Mục **S3-6 (match flash)**: `@keyframes match-flash` — một **vòng sáng xanh lan ra rồi tắt** (`box-shadow` spread 0 → 9px → 0, 0.5s) trên `.match-card.matched`. Cố ý **không** đụng `transform`/`opacity`: độ mờ và màu chữ của thẻ đã ghép là chỗ hợp đồng dễ đọc bám vào.
 - **Chỉ thẻ cặp đôi, không thẻ bộ nhớ**: một phần tử không chạy được hai `animation` shorthand — thêm loé vào `.memory-card.matched` sẽ **giết cú lật 3D của #322** chứ không thêm vòng sáng. Thẻ bộ nhớ đã có phần thưởng riêng là cú lật.
