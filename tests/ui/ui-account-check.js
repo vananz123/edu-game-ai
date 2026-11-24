@@ -105,6 +105,15 @@ function expectedState(status) {
   check('the chip state is the state the app reported', dom.state === wantState,
     'chip=' + dom.state + ' authStatus=' + JSON.stringify(dom.status));
 
+  // Blind mode: the launcher started the app with NO SUPABASE_* in its environment.
+  // Passing here is the only proof that the cloud config travelled inside the binary,
+  // which is the difference between working on this machine and working on a teacher's.
+  if (process.env.EDUGAME_ACCOUNT_BLIND === '1') {
+    check('the packaged build knows its cloud config without environment variables',
+      Boolean(dom.status) && dom.status.configured === true,
+      JSON.stringify(dom.status));
+  }
+
   const wantName = dom.status && dom.status.loggedIn ? (dom.status.email || 'Đã đăng nhập') : 'Khách';
   check('the chip name comes from the account state', dom.name === wantName, dom.name + ' vs ' + wantName);
 

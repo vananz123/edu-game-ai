@@ -7,6 +7,15 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-24 — #338 cấu hình cloud nhúng lúc biên dịch: bản cài biết Supabase mà không cần biến môi trường
+- **Vấn đề:** `CloudConfig::from_env()` đọc `SUPABASE_URL` / `SUPABASE_ANON_KEY` lúc chạy. Trên máy dev thì được, trên máy giáo viên thì không: ở đó không có `.env`, không có biến môi trường, và không ai mở terminal để đặt chúng. Bản cài vì thế sẽ luôn trả `configured: false` — đúng lúc cần đăng nhập nhất.
+- **Cách làm:** `src-tauri/build.rs` đọc `.env` ở gốc repo (nếu có) và phát `cargo:rustc-env=EDUGAME_SUPABASE_URL|…_ANON_KEY`; `auth.rs` đọc bằng `option_env!`. **Biến môi trường lúc chạy thắng giá trị nhúng** ⇒ dev vẫn trỏ sang project khác được, không phải sửa tệp. Không có khoá thì `option_env!` là `None` và app nói "chưa cấu hình", không nhúng chuỗi rỗng.
+- **Danh sách trắng, không phải danh sách đen:** `build.rs` chỉ biết hai tên. `_SERVICE_ROLE_KEY` (quyền ghi toàn bộ dữ liệu) và `GEMINI_API_KEY` (tiền API) **không** đi vào app. Test `only_the_publishable_pair_is_read_at_build_time` đọc đúng khối `const EMBEDDED` và chốt điều đó.
+- **Đo được, không phải tin:** cổng `ui-account-check` có thêm chế độ `EDUGAME_ACCOUNT_BLIND=1` — launcher xoá mọi biến `SUPABASE*`/`GEMINI*` và dùng profile WebView2 sạch. Kết quả: **16/16**, trong đó `authStatus = {configured: true, loggedIn: false, problem: null}`. Đây là bằng chứng duy nhất rằng cấu hình nằm **trong binary**.
+- **Bằng chứng thứ hai, trên tệp:** `grep -a -c` trên `edugame-studio-tauri.exe` → `sb_publishable_` **1**, host project **1**, `sb_secret_` **0**, `AIza` **0**, `SUPABASE_SERVICE_ROLE` **0**. Khoá công khai có mặt, khoá bí mật không.
+- `cargo test --lib` **170/170** (168 + 2 mới), `cargo tauri build` OK, `check-ui-test-syntax` 63 tệp OK.
+- **Chưa kiểm:** lượt đăng nhập Google **trong chế độ blind** — trình duyệt đã mở nhưng chưa có người bấm chọn tài khoản trong 5 phút của cửa sổ loopback, nên nó hết hạn. Cùng code path, cùng giá trị khoá đã đăng nhập thật thành công ở #336/#337, nhưng lần chạy "không biến môi trường" thì **chưa** đi hết.
+
 ### 2026-11-24 — #337 chip tài khoản + panel Google (Phase 1 có UI), và 3 lỗi thật do cổng đo bắt
 - **UI:** `src/renderer/features/account.ts` (mới) — chip ở đáy sidebar (thay khối "GV / Giáo viên" tĩnh) + panel. Bốn trạng thái đo được qua `data-state`: `member · guest · unconfigured · unknown`. Chế độ **Khách là hợp lệ**: không màn hình chặn nào, thư viện vẫn vẽ 9 thẻ, game đã lưu vẫn chơi.
 - **Hợp đồng:** 7 lời gọi mới trong façade (`authStatus`, `authSession`, `authSignIn`, `authRefresh`, `authSignOut` + hai `stream`: `onAuthSessionChanged`, `onAuthLoggedOut`) ⇒ 95 → **102**; `app` 8 → 15 (GROUP_COUNTS sửa kèm lý do). Năm lệnh bọc mới trong `api.rs` (`get_auth_status`, `get_auth_session`, `start_auth_oauth`, `refresh_auth_session`, `sign_out_auth`) + 5 kênh trong `INVOKE_CHANNELS`/`dispatch`.

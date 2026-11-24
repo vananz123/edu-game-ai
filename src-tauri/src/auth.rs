@@ -51,11 +51,33 @@ pub struct CloudConfig {
     pub anon_key: String,
 }
 
+/// Một thiết lập cloud: biến môi trường lúc chạy thắng giá trị đã nhúng lúc biên dịch.
+///
+/// Nhúng là cách DUY NHẤT để bản cài trên máy giáo viên biết cấu hình: máy đó không
+/// có `.env`, không có biến môi trường, và không ai sẽ mở terminal để đặt chúng.
+/// Khoá publishable là khoá công khai; `build.rs` chỉ nhúng hai tên trong danh sách
+/// trắng của nó.
+fn cloud_setting(var: &str, embedded: Option<&str>) -> Option<String> {
+    if let Ok(value) = std::env::var(var) {
+        let value = value.trim();
+        if !value.is_empty() {
+            return Some(value.to_string());
+        }
+    }
+    let embedded = embedded?.trim();
+    if embedded.is_empty() {
+        return None;
+    }
+    Some(embedded.to_string())
+}
+
 impl CloudConfig {
     /// `None` = máy này chưa cấu hình Supabase; mọi lệnh auth sẽ báo đúng như vậy.
     pub fn from_env() -> Option<Self> {
-        let base = std::env::var("SUPABASE_URL").ok()?.trim().trim_end_matches('/').to_string();
-        let key = std::env::var("SUPABASE_ANON_KEY").ok()?.trim().to_string();
+        let base = cloud_setting("SUPABASE_URL", option_env!("EDUGAME_SUPABASE_URL"))?
+            .trim_end_matches('/')
+            .to_string();
+        let key = cloud_setting("SUPABASE_ANON_KEY", option_env!("EDUGAME_SUPABASE_ANON_KEY"))?;
         if base.is_empty() || key.is_empty() {
             return None;
         }
@@ -920,6 +942,35 @@ mod tests {
         let session = token.into_session(100);
         assert_eq!(session.display_name, "co.lan");
         assert_eq!(session.expires_at, 3_700);
+    }
+
+    /// Thứ tự ưu tiên đo được mà không phải đặt biến môi trường của cả tiến trình
+    /// (đặt biến trong test là đua với các test khác chạy song song).
+    #[test]
+    fn environment_overrides_the_value_embedded_at_build_time() {
+        assert_eq!(
+            cloud_setting("EDUGAME_TEST_UNSET_VAR", Some(" https://embedded ")).as_deref(),
+            Some("https://embedded")
+        );
+        assert_eq!(cloud_setting("EDUGAME_TEST_UNSET_VAR", None), None);
+        assert_eq!(cloud_setting("EDUGAME_TEST_UNSET_VAR", Some("   ")), None);
+    }
+
+    /// Khoá bí mật không bao giờ được nhúng. `build.rs` chỉ có danh sách trắng hai
+    /// tên; test này chốt thêm ở phía đọc để lần sau ai thêm một tên vào đó thì
+    /// nhìn thấy hậu quả ngay.
+    #[test]
+    fn only_the_publishable_pair_is_read_at_build_time() {
+        // Đọc ĐÚNG danh sách trắng, không đọc cả tệp: chính tệp đó có câu giải thích
+        // vì sao hai khoá bí mật không được nhúng, và câu giải thích nhắc tên chúng.
+        let source = include_str!("../build.rs");
+        let start = source.find("const EMBEDDED").expect("khai báo danh sách trắng");
+        let end = start + source[start..].find("];").expect("kết thúc danh sách trắng");
+        let list = &source[start..end];
+        assert!(list.contains("SUPABASE_URL"), "{list}");
+        assert!(list.contains("SUPABASE_ANON_KEY"), "{list}");
+        assert!(!list.contains("SERVICE_ROLE"), "{list}");
+        assert!(!list.contains("GEMINI"), "{list}");
     }
 
     #[test]
