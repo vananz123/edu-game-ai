@@ -15,6 +15,9 @@ pub mod ai_http;
 pub mod ai_local;
 pub mod ai_tasks;
 pub mod api;
+// Phase 1 của docs/archive/specs/cloud-auth-plan.md: đăng nhập Google qua Supabase,
+// phiên lưu bằng DPAPI. Tách khỏi `api.rs` vì đây là luồng riêng, có test riêng.
+pub mod auth;
 pub mod base64;
 pub mod diagnostics;
 pub mod document;
@@ -167,6 +170,12 @@ pub fn run() {
             api::lan_begin,
             api::lan_next,
             api::lan_finish,
+            // Phase 1 (cloud auth): bốn lệnh của luồng đăng nhập Google.
+            auth::auth_status,
+            auth::auth_get_session,
+            auth::auth_start_oauth,
+            auth::auth_refresh_session,
+            auth::auth_logout,
         ])
         .run(tauri::generate_context!())
         .expect("không khởi động được vỏ Tauri");

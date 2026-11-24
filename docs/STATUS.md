@@ -7,6 +7,15 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-24 — #335 Phase 1 cloud auth: PKCE + loopback + phiên DPAPI (Rust), và migration DB
+- Đọc `docs/archive/specs/cloud-auth-plan.md` (1068 dòng) rồi **đối chiếu với mã thật** trước khi viết: kế hoạch mô tả schema sai ở ba chỗ (xem DECISIONS #335) — tệp SQL mới làm theo schema thật, không theo kế hoạch.
+- **`src-tauri/src/auth.rs` (mới, 800 dòng, 16 test):** PKCE `S256` (vector RFC 7636), `state` 32 hex, loopback `127.0.0.1:0` + `GET /auth/callback` (một kết nối sai `state` bị **bỏ qua**, không làm hỏng phiên), đổi `code` → token qua `POST /auth/v1/token?grant_type=pkce`, refresh token, và phiên lưu bằng **DPAPI** (`secrets::protect_secret`) xuống `auth-session.json` — test khẳng định tệp đã lưu **không chứa token rõ**.
+- Năm lệnh mới trong `invoke_handler`: `auth_status`, `auth_get_session`, `auth_start_oauth`, `auth_refresh_session`, `auth_logout`; phát event `auth://session-changed` / `auth://logged-out`. Mở trình duyệt bằng `rundll32 url.dll,FileProtocolHandler` (không qua shell, nên `&` trong URL không bị hiểu là ngăn cách lệnh).
+- **Chưa cấu hình thì nói thẳng:** `SUPABASE_URL` + `SUPABASE_ANON_KEY` đọc từ môi trường; thiếu một trong hai thì mọi lệnh trả câu tiếng Việt "Cloud AI chưa được cấu hình trên máy này… Bạn vẫn dùng được Local AI" thay vì im lặng. Máy này **không có** hai biến đó (`.env` chỉ có `GH_TOKEN`), nên trạng thái hiện tại là `configured: false` — đúng như phải thế.
+- **`server/migrations/2026-11-24-account-credits.sql` (mới):** `profiles` + trigger idempotent, `server_config` (hạn mức/giá credits nằm ở DB, không hard-code), `ai_usage_log` (không có cột nội dung bài học), thêm `credits_used`/`credits_limit` vào `usage_monthly` **giữ nguyên** cột `generations` cũ, và `consume_credits()` có `FOR UPDATE` + chống trùng theo `idempotency_key`. `consume_generation_quota` cũ giữ nguyên để gateway hiện tại không gãy.
+- `cargo test --lib`: **163/163** (147 cũ + 16 mới). Lỗi thật đã sửa trong lúc làm: `reqwest` ở đây chỉ bật `stream` nên **không có `.json()`** → gửi body bằng chuỗi; và một test của chính tôi kỳ vọng sai (`%2B` là dấu cộng, không phải dấu cách) — sửa kỳ vọng, không sửa bộ giải mã.
+- **Chưa có UI.** Bước tiếp theo là `auth.ts` + trang Account (Guest mode) + đưa năm kênh này qua façade `desktop.call`; và cần quyết định **khoá Supabase đi vào bản cài bằng đường nào** (biến môi trường chỉ đúng khi chạy từ mã nguồn).
+
 ### 2026-11-24 — #334 Bản bump 0.5.3 thiếu ba chỗ đồng bộ, và một hiệu ứng bị chạy HAI lần
 - Bản `02641b1` (bump 0.5.3) đổi `package.json` + `Cargo.toml` + `tauri.conf.json` nhưng **bỏ sót ba chỗ**, và mỗi chỗ đều có cổng bắt được:
   1. `package-lock.json` vẫn `0.5.2` ⇒ `brand-assets.test` đỏ (`lock.version` lệch);
