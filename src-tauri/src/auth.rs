@@ -638,7 +638,10 @@ pub fn translate_auth_error(status: u16, body: &str) -> String {
     let base = match status {
         400 | 401 => "Phiên đăng nhập không hợp lệ hoặc đã hết hạn.",
         403 => "Tài khoản không được phép dùng Cloud AI.",
-        404 => "Máy chủ đăng nhập không tìm thấy (kiểm tra SUPABASE_URL).",
+        // Supabase trả 404 kèm "invalid flow state, no valid flow state found" khi
+        // mã đăng nhập đã bị dùng hoặc đã hết hạn. Câu cũ — "kiểm tra SUPABASE_URL" —
+        // là chỉ dẫn cho lập trình viên, và nó chỉ sai đường khi gặp đúng ca này.
+        404 => "Máy chủ đăng nhập không nhận phiên này (mã đăng nhập có thể đã dùng hoặc đã hết hạn). Thử đăng nhập lại.",
         429 => "Bạn thử đăng nhập quá nhiều lần. Vui lòng chờ một phút.",
         500..=599 => "Máy chủ đăng nhập đang gặp sự cố. Thử lại sau.",
         _ => "Đăng nhập không thành công.",
@@ -980,6 +983,10 @@ mod tests {
         let detailed = translate_auth_error(400, "{\"error_description\":\"Token has expired\"}");
         assert!(detailed.contains("hết hạn"), "{detailed}");
         assert!(detailed.contains("Token has expired"), "{detailed}");
+        // Ca thật đo được ở lượt chạy blind: mã đã dùng ⇒ 404 + flow state.
+        let reused = translate_auth_error(404, "{\"msg\":\"invalid flow state, no valid flow state found\"}");
+        assert!(reused.contains("đã dùng"), "{reused}");
+        assert!(!reused.contains("SUPABASE_URL"), "{reused}");
     }
 
     /// Cổng loopback thật, không mạng: một kết nối sai `state` bị bỏ qua, kết nối

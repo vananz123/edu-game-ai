@@ -7,6 +7,14 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-24 — #339 đăng nhập Google THẬT trên bản đóng gói không có biến môi trường (đóng khe cuối của #338)
+- Chạy `edugame-studio-tauri.exe` với `SUPABASE*`/`GEMINI*` đã xoá khỏi môi trường và profile WebView2 sạch ⇒ bấm đăng nhập ⇒ **`loggedIn: true`** (`xathiennghiep@gmail.com`) sau **56 s**, chip đổi sang `member` không reload, promise của lệnh trả `oke`. Log OAuth chỉ có **đúng một** callback được chấp nhận. Khe "blind chưa đăng nhập" của #338 đã đóng.
+- Mở lại tiến trình mới (cùng profile, không biến môi trường): phiên đọc lại từ DPAPI ⇒ `loggedIn: true` ngay lúc mở. Cổng `ui-account-check` ở chế độ `EDUGAME_ACCOUNT_BLIND=1` và trạng thái **member**: **16/16**.
+- Tệp phiên vẫn chỉ có khoá `cipher` (blob 2504 kí tự), **không** có chuỗi token nào: đúng lời hứa của #335, đo lại trên bản mới.
+- **Chẩn đoán sai của tôi, ghi lại:** trong lúc dò cổng loopback tôi tự gọi `?code=ma-gia…` khi một lượt đăng nhập thật đang chờ ⇒ app thử đổi **hai** mã trên cùng một lượt, Supabase trả `404 invalid flow state, no valid flow state found`, và tôi suýt kết luận "exchange hỏng". Lượt chạy sạch sau đó thành công ở lần đầu. Xem DECISIONS #339.
+- **Sửa một câu thông báo sai đường:** nhánh 404 nói "Máy chủ đăng nhập không tìm thấy (kiểm tra SUPABASE_URL)" — đó là chỉ dẫn cho lập trình viên, còn ca thật là mã đã dùng/hết hạn. Nay: "Máy chủ đăng nhập không nhận phiên này (mã đăng nhập có thể đã dùng hoặc đã hết hạn). Thử đăng nhập lại." Test `auth_errors_are_translated_with_the_server_detail` có thêm đúng ca 404 đo được.
+- `cargo test --lib` **170/170**, `cargo tauri build` OK. Máy đang ở trạng thái **đã đăng nhập**.
+
 ### 2026-11-24 — #338 cấu hình cloud nhúng lúc biên dịch: bản cài biết Supabase mà không cần biến môi trường
 - **Vấn đề:** `CloudConfig::from_env()` đọc `SUPABASE_URL` / `SUPABASE_ANON_KEY` lúc chạy. Trên máy dev thì được, trên máy giáo viên thì không: ở đó không có `.env`, không có biến môi trường, và không ai mở terminal để đặt chúng. Bản cài vì thế sẽ luôn trả `configured: false` — đúng lúc cần đăng nhập nhất.
 - **Cách làm:** `src-tauri/build.rs` đọc `.env` ở gốc repo (nếu có) và phát `cargo:rustc-env=EDUGAME_SUPABASE_URL|…_ANON_KEY`; `auth.rs` đọc bằng `option_env!`. **Biến môi trường lúc chạy thắng giá trị nhúng** ⇒ dev vẫn trỏ sang project khác được, không phải sửa tệp. Không có khoá thì `option_env!` là `None` và app nói "chưa cấu hình", không nhúng chuỗi rỗng.
