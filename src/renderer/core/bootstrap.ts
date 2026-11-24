@@ -187,6 +187,9 @@ window.addEventListener('resize', () => {
     // Chơi LAN: subscribes to `lan:state` so a room opened before a reload (or on a
     // second window) is drawn again. Never throws when the bridge is absent.
     if (typeof lanInit === 'function') lanInit();
+    // #337: trạng thái tài khoản là chrome, nên nó được đọc **trước** lần vẽ đầu tiên;
+    // lời gọi không được await (một lần đọc lỗi không được làm chậm việc mở game đã lưu).
+    if (typeof window.initAccount === 'function') window.initAccount();
     const localAi = await desktop.call('getLocalAiModels');
     state.localAiModels = localAi.models;
     state.localAiMachine = localAi.machine;

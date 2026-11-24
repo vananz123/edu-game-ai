@@ -96,10 +96,18 @@
              của Cài đặt, nên nút này chỉ là đường thứ hai tới cùng một chỗ và chiếm đáy
              sidebar; "Cài đặt" ở trên là lối duy nhất. -->
         <div class="profile border-t border-line mt-4 pt-[17px] px-[5px] pb-0 flex items-center gap-[9px] max-compact:justify-center">
-          <div class="avatar w-[34px] h-[34px] rounded-[11px] bg-[#e8e6ff] text-[#4f46e5] font-extrabold grid place-items-center text-[12px]">GV</div>
-          <div class="max-compact:hidden">
-            <strong class="block text-[12px]">Giáo viên</strong>
-          </div><span class="profile-more ml-auto text-[#5f6a7d] max-compact:hidden" data-icon="ellipsis-vertical" data-icon-size="15"></span></div>
+          <!-- #337: chip tài khoản. Mặc định là Khách — không có màn hình chặn nào, và
+               game đã lưu vẫn chơi được khi chưa đăng nhập. `data-account-*` là hook
+               cho features/account.js và cho cổng ui-account-check. -->
+          <button class="account-chip" data-account-chip data-state="unknown" type="button" title="Tài khoản">
+            <span class="account-avatar" data-account-avatar>GV</span>
+            <span class="account-text max-compact:hidden">
+              <strong class="block text-[12px] account-name" data-account-name>Khách</strong>
+              <span class="account-role" data-account-role>Đang đọc trạng thái…</span>
+            </span>
+            <span class="profile-more ml-auto text-[#5f6a7d] max-compact:hidden" data-icon="ellipsis-vertical" data-icon-size="15"></span>
+          </button>
+        </div>
       </div>
     </aside>
     <main class="main min-w-0 flex-1">
@@ -270,6 +278,7 @@
   <script defer src="renderer/features/lan.js"></script>
   <script defer src="renderer/features/settings.js"></script>
   <script defer src="renderer/features/ai-status.js"></script>
+  <script defer src="renderer/features/account.js"></script>
   <script defer src="renderer/core/bootstrap.js"></script>
   <script defer src="renderer/features/presentation.js"></script>
 </body>

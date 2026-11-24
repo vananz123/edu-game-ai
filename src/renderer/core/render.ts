@@ -9,6 +9,9 @@ function render() {
   // DECISIONS #161: the sidebar block is chrome, not page content, so it refreshes
   // here — a game saved from the editor must appear in "Gần đây" without a reload.
   if (typeof renderSidebarShortcuts === 'function') renderSidebarShortcuts();
+  // Chip tài khoản ở đáy sidebar cũng là chrome: nó phải đổi ngay sau khi đăng nhập/ra,
+  // không đợi lần vẽ trang tiếp theo.
+  if (typeof renderAccountChip === 'function') renderAccountChip();
   // #129: the game editor is a page of the shell, not a modal over the library.
   const renderers = { library: renderLibrary, 'create-wizard': renderCreateWizard, create: renderCreate, editor: renderEditorPage, 'lesson-plans': renderLessonPlans, 'my-projects': renderMyProjects, sessions: renderSessions, settings: renderSettings };
   const renderedPage = state.page;

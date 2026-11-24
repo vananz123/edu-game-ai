@@ -170,7 +170,14 @@ pub fn run() {
             api::lan_begin,
             api::lan_next,
             api::lan_finish,
-            // Phase 1 (cloud auth): bốn lệnh của luồng đăng nhập Google.
+            // Phase 1 (cloud auth): năm lệnh của luồng đăng nhập Google.
+            api::get_auth_status,
+            api::get_auth_session,
+            api::start_auth_oauth,
+            api::refresh_auth_session,
+            api::sign_out_auth,
+            // Bản gọi trực tiếp (không qua kênh) để chẩn đoán bằng CDP: cùng
+            // một hàm, hai tên lệnh khác nhau nên không có tên nào bị đăng ký hai lần.
             auth::auth_status,
             auth::auth_get_session,
             auth::auth_start_oauth,

@@ -24,7 +24,7 @@
  * Nhóm chức năng của kế hoạch Tauri, giai đoạn 2 (thứ tự = thứ tự chuyển dần):
  * `app | data | files | ai | diagnostics | presentation | lan | update`.
  *
- * 93 lời gọi của façade dưới đây. `group` là phân nhóm chức năng;
+ * 102 lời gọi của façade dưới đây. `group` là phân nhóm chức năng;
  * Khoá trùng hệt khoá của `window.eduGame`, để khi chuyển từng tệp chỉ đổi
  * `eduGame.x(` → `desktop.call('x')(`. `group` là phân nhóm của kế hoạch;
  * `channel` là chuỗi Electron đã chốt trong `src/shared/desktop-contract.json`;
@@ -42,6 +42,20 @@ const DESKTOP_CALLS = Object.freeze({
   startSetup: { channel: 'setup:start', group: 'app', kind: 'value', optional: false },
   cancelSetup: { channel: 'setup:cancel', group: 'app', kind: 'value', optional: false },
   onSetupProgress: { channel: 'setup:progress', group: 'app', kind: 'stream', optional: false },
+  // Phase 1 của kế hoạch cloud auth. Nhóm `app` vì đây là danh tính của VỎ, không
+  // phải dữ liệu trò chơi: đăng xuất không xoá game nào.
+  //
+  // Hai kênh `stream` KHÔNG phải đường thứ hai cho cùng một trạng thái: phiên đổi
+  // ở chỗ khác (lời gọi chẩn đoán, lần làm mới token, một cửa sổ khác) và chip phải
+  // đổi theo. Ngày 24/11 cổng đo bắt được đúng lỗi này: đăng nhập qua đường khác
+  // `authSignIn` thì chip vẫn ghi "Khách" trong khi phiên đã có.
+  authStatus: { channel: 'auth:status', group: 'app', kind: 'value', optional: false },
+  authSession: { channel: 'auth:session', group: 'app', kind: 'value', optional: false },
+  authSignIn: { channel: 'auth:sign-in', group: 'app', kind: 'value', optional: false },
+  authRefresh: { channel: 'auth:refresh', group: 'app', kind: 'value', optional: false },
+  authSignOut: { channel: 'auth:sign-out', group: 'app', kind: 'value', optional: false },
+  onAuthSessionChanged: { channel: 'auth:session-changed', group: 'app', kind: 'stream', optional: false },
+  onAuthLoggedOut: { channel: 'auth:logged-out', group: 'app', kind: 'stream', optional: false },
 
   // ── data: thư viện trò chơi, lịch sử, giáo án, dự án ─────────────────────
   getLibrary: { channel: 'library:get', group: 'data', kind: 'value', optional: false },

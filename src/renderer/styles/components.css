@@ -1343,3 +1343,27 @@ html[data-theme="dark"] .lib-empty h3{color:#e6ebf5}
 @media (max-width:780px){.art-zoom-layer{padding:12px}.art-zoom-figure{width:min(96vw,calc(88vh * 1.6))}}
 @media (prefers-reduced-motion:reduce){.art-zoom-layer{animation:none}}
 html[data-theme="dark"] .art-zoom-figure{background:#111733}
+
+/* ── #337 chip tài khoản ở đáy sidebar + panel ────────────────────────────────
+   Chip là chrome: cùng một hàng với avatar 34px như trước (#161), nhưng bấm được.
+   Bốn trạng thái (`data-state`) chỉ đổi màu chữ nhỏ, không đổi kích thước — nếu
+   đổi kích thước thì đáy sidebar nhảy mỗi lần trạng thái tài khoản đến muộn. */
+.account-chip{display:flex;align-items:center;gap:9px;width:100%;padding:2px 2px;border:0;border-radius:10px;background:transparent;text-align:left;color:inherit;font:inherit;cursor:pointer}
+.account-chip:hover{background:var(--brand-soft,#f2f1ff)}
+.account-chip:focus-visible{outline:2px solid var(--purple,#4f46e5);outline-offset:2px}
+.account-text{min-width:0;display:flex;flex-direction:column;gap:1px}
+.account-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:132px}
+.account-role{font-size:11px;line-height:1.25;color:#6b7280}
+.account-avatar{width:34px;height:34px;flex:none;border-radius:11px;background:#e8e6ff;color:#4f46e5;font-weight:800;font-size:12px;display:grid;place-items:center;overflow:hidden}
+.account-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.account-avatar-lg{width:44px;height:44px;border-radius:13px;font-size:15px}
+.account-chip[data-state="unconfigured"] .account-role{color:#9ca3af}
+.account-chip[data-state="member"] .account-role{color:#15803d}
+.account-panel-who{display:flex;align-items:center;gap:11px}
+.account-actions{display:flex;gap:9px;margin-top:16px}
+.account-hint{margin:10px 0 0;font-size:12px;color:#6b7280}
+html[data-theme="dark"] .account-chip:hover{background:#232a45}
+html[data-theme="dark"] .account-avatar{background:#252c48;color:#a5b4fc}
+html[data-theme="dark"] .account-role{color:#94a3b8}
+html[data-theme="dark"] .account-chip[data-state="member"] .account-role{color:#4ade80}
+html[data-theme="dark"] .account-hint{color:#94a3b8}

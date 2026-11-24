@@ -18,7 +18,9 @@
 //!
 //! Luồng đầy đủ (số bước khớp plan §3.2): `auth_start_oauth` sinh PKCE + `state`,
 //! bind loopback, mở browser, chờ callback, đổi code lấy token, lưu session DPAPI,
-//! phát event `auth://session-changed`.
+//! phát event `auth:session-changed` / `auth:logged-out` — **đúng chuỗi kênh** của
+//! façade (`desktop-adapter-tauri.ts` nghe sự kiện theo `channel`, không theo một
+//! tên riêng), nhờ vậy chip tài khoản tự cập nhật khi phiên đổi ở bất kỳ đường nào.
 
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
@@ -61,8 +63,16 @@ impl CloudConfig {
     }
 }
 
-/// Thông tin phiên mà renderer nhận được. Không chứa gì khác (không có plan/credits:
-/// đó là việc của gateway).
+/// Phiên ĐẦY ĐỦ — chỉ sống trong tiến trình Rust và trong blob DPAPI trên đĩa.
+///
+/// **Tên trường ở đây là ĐỊNH DẠNG LƯU TRỮ** (snake_case như bản đầu), không phải
+/// giao diện IPC. Đổi nó là đổi định dạng tệp: ngày 24/11 một lần `rename_all` thêm
+/// vào đây làm phiên đã lưu không đọc lại được, và `auth_status` im lặng báo "Khách".
+/// Muốn đổi tên cho IPC thì đổi ở `PublicSession`.
+///
+/// Trường token nằm ở đây và **không** ở `PublicSession`: một kiểu duy nhất vừa để
+/// lưu vừa để gửi IPC là cách chắc chắn nhất để token rò ra JS. Cổng `ui-account-check`
+/// đã bắt được đúng lỗi đó (bản đầu gửi cả `access_token` cho renderer).
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SessionInfo {
     pub user_id: String,
@@ -73,6 +83,31 @@ pub struct SessionInfo {
     pub refresh_token: String,
     /// Unix giây.
     pub expires_at: i64,
+}
+
+/// Phần của phiên mà renderer được thấy: tên, email, ảnh. Không có token, không có
+/// `refresh_token`. Đây là kiểu trả về của mọi lệnh `auth:*` đi ra IPC.
+#[derive(Debug, Clone, Default, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PublicSession {
+    pub user_id: String,
+    pub email: String,
+    pub display_name: String,
+    pub avatar_url: Option<String>,
+    pub expires_at: i64,
+}
+
+impl SessionInfo {
+    /// Bản rút gọn để gửi ra renderer.
+    pub fn public(&self) -> PublicSession {
+        PublicSession {
+            user_id: self.user_id.clone(),
+            email: self.email.clone(),
+            display_name: self.display_name.clone(),
+            avatar_url: self.avatar_url.clone(),
+            expires_at: self.expires_at,
+        }
+    }
 }
 
 impl SessionInfo {
@@ -87,11 +122,20 @@ impl SessionInfo {
 }
 
 /// Trạng thái để UI quyết định hiện "Đăng nhập" hay "Cloud AI chưa cấu hình".
+///
+/// `camelCase` cho khớp `AppInfo`/`ShellInfo` của api.rs: renderer đọc `loggedIn`,
+/// và một tên trường lệch kiểu (snake) làm chip tài khoản nói "Khách" trong khi
+/// phiên đã có — đúng lỗi mà cổng đo bắt được ngày 24/11.
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AuthStatus {
     pub configured: bool,
     pub logged_in: bool,
     pub email: Option<String>,
+    /// Tệp phiên có nhưng không đọc được (DPAPI hỏng, đổi định dạng, tệp bị sửa).
+    /// Phải nói ra: im lặng coi đó là "chưa đăng nhập" là cách một giáo viên mất
+    /// phiên mà không biết vì sao.
+    pub problem: Option<String>,
 }
 
 pub fn now_secs() -> i64 {
@@ -607,18 +651,25 @@ pub fn auth_status(app: AppHandle) -> AuthStatus {
             configured,
             logged_in: true,
             email: Some(session.email),
+            problem: None,
         },
-        _ => AuthStatus { configured, logged_in: false, email: None },
+        Ok(None) => AuthStatus { configured, logged_in: false, email: None, problem: None },
+        Err(error) => AuthStatus {
+            configured,
+            logged_in: false,
+            email: None,
+            problem: Some(error),
+        },
     }
 }
 
 #[tauri::command]
-pub fn auth_get_session(app: AppHandle) -> Result<Option<SessionInfo>, String> {
-    read_session(&app)
+pub fn auth_get_session(app: AppHandle) -> Result<Option<PublicSession>, String> {
+    Ok(read_session(&app)?.map(|session| session.public()))
 }
 
 #[tauri::command]
-pub async fn auth_start_oauth(app: AppHandle) -> Result<SessionInfo, String> {
+pub async fn auth_start_oauth(app: AppHandle) -> Result<PublicSession, String> {
     let config = require_config()?;
     let verifier = new_code_verifier()?;
     let challenge = code_challenge(&verifier);
@@ -654,17 +705,19 @@ pub async fn auth_start_oauth(app: AppHandle) -> Result<SessionInfo, String> {
 
     let session = exchange_code(&config, &callback.code, &verifier).await?;
     write_session(&app, &session)?;
-    let _ = app.emit("auth://session-changed", &session);
-    Ok(session)
+    // Sự kiện cũng chỉ mang bản rút gọn: một `emit` với `SessionInfo` là đường thứ
+    // hai để token tới JS, và nó không hiện ra trong bất kỳ kiểu trả về nào.
+    let _ = app.emit("auth:session-changed", session.public());
+    Ok(session.public())
 }
 
 #[tauri::command]
-pub async fn auth_refresh_session(app: AppHandle) -> Result<SessionInfo, String> {
+pub async fn auth_refresh_session(app: AppHandle) -> Result<PublicSession, String> {
     let config = require_config()?;
     let current = read_session(&app)?.ok_or_else(|| "Chưa đăng nhập.".to_string())?;
     if current.refresh_token.is_empty() {
         clear_session(&app)?;
-        let _ = app.emit("auth://logged-out", serde_json::json!({ "reason": "no_refresh_token" }));
+        let _ = app.emit("auth:logged-out", serde_json::json!({ "reason": "no_refresh_token" }));
         return Err("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.".to_string());
     }
     let token = request_token(
@@ -678,14 +731,14 @@ pub async fn auth_refresh_session(app: AppHandle) -> Result<SessionInfo, String>
         session.refresh_token = current.refresh_token;
     }
     write_session(&app, &session)?;
-    let _ = app.emit("auth://session-changed", &session);
-    Ok(session)
+    let _ = app.emit("auth:session-changed", session.public());
+    Ok(session.public())
 }
 
 #[tauri::command]
 pub fn auth_logout(app: AppHandle) -> Result<(), String> {
     clear_session(&app)?;
-    let _ = app.emit("auth://logged-out", serde_json::json!({ "reason": "logout" }));
+    let _ = app.emit("auth:logged-out", serde_json::json!({ "reason": "logout" }));
     Ok(())
 }
 
@@ -818,6 +871,31 @@ mod tests {
         assert_eq!(decoded, session);
     }
 
+    /// Định dạng tệp phiên là một lời hứa với bản đang chạy: đổi tên trường ở
+    /// `SessionInfo` là làm mọi phiên đã lưu không đọc lại được. Test này chốt
+    /// snake_case của blob, để lần sau ai đổi tên sẽ thấy đỏ ngay.
+    #[test]
+    fn session_blob_format_stays_snake_case() {
+        let session = SessionInfo {
+            user_id: "u".to_string(),
+            email: "a@b.c".to_string(),
+            display_name: "Cô".to_string(),
+            avatar_url: None,
+            access_token: "t".to_string(),
+            refresh_token: "r".to_string(),
+            expires_at: 1,
+        };
+        let blob = encode_session_blob(&session).expect("mã hoá");
+        let decoded = decode_session_blob(&blob).expect("giải mã").expect("có phiên");
+        assert_eq!(decoded, session);
+        // Tên trường TRƯỚC khi mã hoá — đây mới là thứ quyết định tệp đọc lại được.
+        // (So sánh chuỗi cipher sau mã hoá là sai: DPAPI thêm salt ngẫu nhiên.)
+        let plain = serde_json::to_string(&session).expect("json");
+        assert!(plain.contains("\"access_token\""), "{plain}");
+        assert!(plain.contains("\"display_name\""), "{plain}");
+        assert!(!plain.contains("\"accessToken\""), "{plain}");
+    }
+
     #[test]
     fn empty_blob_reads_as_no_session() {
         assert_eq!(decode_session_blob(&serde_json::Value::Null).expect("null"), None);
@@ -931,6 +1009,44 @@ mod tests {
 
         let params = worker.join().expect("luồng chờ").expect("callback");
         assert_eq!(params.code, "real-code");
+    }
+
+    /// Token chỉ sống trong tiến trình Rust và trong blob DPAPI. Renderer nhận tên/ảnh.
+    /// Cổng `ui-account-check` đọc lại cùng bất biến này từ phía JS.
+    #[test]
+    fn session_payload_never_contains_a_token() {
+        let session = SessionInfo {
+            user_id: "u1".to_string(),
+            email: "co.giao@example.com".to_string(),
+            display_name: "Cô Giáo".to_string(),
+            avatar_url: Some("https://example.com/a.png".to_string()),
+            access_token: "SECRET-ACCESS".to_string(),
+            refresh_token: "SECRET-REFRESH".to_string(),
+            expires_at: 1_800_000_000,
+        };
+        let payload = serde_json::to_string(&session.public()).expect("serialize");
+        assert!(!payload.contains("SECRET-ACCESS"), "{payload}");
+        assert!(!payload.contains("SECRET-REFRESH"), "{payload}");
+        assert!(!payload.contains("access_token"), "{payload}");
+        assert!(!payload.contains("refresh_token"), "{payload}");
+        assert!(!payload.contains("accessToken"), "{payload}");
+        assert!(payload.contains("\"displayName\":\"Cô Giáo\""), "{payload}");
+        assert!(payload.contains("\"avatarUrl\""), "{payload}");
+    }
+
+    /// Chip tài khoản đọc `loggedIn`; tên trường lệch kiểu từng làm nó ghi "Khách"
+    /// trong khi phiên đã có.
+    #[test]
+    fn auth_status_serializes_in_camel_case() {
+        let payload = serde_json::to_string(&AuthStatus {
+            configured: true,
+            logged_in: true,
+            email: Some("a@b.c".to_string()),
+            problem: None,
+        })
+        .expect("serialize");
+        assert!(payload.contains("\"loggedIn\":true"), "{payload}");
+        assert!(!payload.contains("logged_in"), "{payload}");
     }
 
     #[test]

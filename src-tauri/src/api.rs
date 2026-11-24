@@ -70,6 +70,15 @@ pub fn hand_written(command: &str) -> Option<(&'static str, &'static str)> {
         // Giai đoạn 5: ghi cài đặt + khoá BYOK. Khoá mới chỉ được ghi dưới dạng
         // blob DPAPI; `save_settings` hỏng trước khi ghi nếu DPAPI không dùng được.
         "save_settings" => ("settings:save", "save_settings"),
+        // Phase 1 cloud auth: năm kênh của hợp đồng. Tên lệnh khác tên hàm trong
+        // `auth.rs` để một hàm không được đăng ký hai lần dưới cùng một tên —
+        // `auth_status` vẫn là lệnh riêng cho đường chẩn đoán, còn `get_auth_status`
+        // (ở dưới) là thân của kênh `auth:status`.
+        "get_auth_status" => ("auth:status", "get_auth_status"),
+        "get_auth_session" => ("auth:session", "get_auth_session"),
+        "start_auth_oauth" => ("auth:sign-in", "start_auth_oauth"),
+        "refresh_auth_session" => ("auth:refresh", "refresh_auth_session"),
+        "sign_out_auth" => ("auth:sign-out", "sign_out_auth"),
         "get_ai_providers" => ("ai:providers", "get_ai_providers"),
         "get_local_ai_models" => ("ai:local-models", "get_local_ai_models"),
         // Giai đoạn 5: AI local — tải model/runtime và quản lý llama-server.
@@ -193,6 +202,14 @@ const INVOKE_CHANNELS: &[&str] = &[
     "files:delete-illustration",
     "settings:get",
     "settings:save",
+    // Phase 1 của kế hoạch cloud auth: trạng thái, phiên, đăng nhập/ra.
+    // Đăng nhập mở trình duyệt hệ thống và chờ cổng loopback, nên nó là kênh
+    // DUY NHẤT của nhóm này có thể chạy lâu (tới 5 phút).
+    "auth:status",
+    "auth:session",
+    "auth:sign-in",
+    "auth:refresh",
+    "auth:sign-out",
     "ai:providers",
     "ai:test-provider",
     "ai:local-models",
@@ -274,6 +291,11 @@ async fn dispatch(app: &AppHandle, channel: &str, args: &[Value]) -> Result<Valu
         "shell:info" => json(shell_info(app.clone())),
         "library:get" => json(get_library(app.clone())),
         "settings:get" => json(get_settings(app.clone())),
+        "auth:status" => json(Ok(get_auth_status(app.clone()))),
+        "auth:session" => json(get_auth_session(app.clone())),
+        "auth:sign-in" => json(start_auth_oauth(app.clone()).await),
+        "auth:refresh" => json(refresh_auth_session(app.clone()).await),
+        "auth:sign-out" => json(sign_out_auth(app.clone())),
         "settings:save" => match args.first() {
             Some(incoming) if incoming.is_object() => {
                 json(crate::settings::save(app, incoming.clone()))
@@ -678,6 +700,47 @@ pub fn get_settings(app: AppHandle) -> Result<serde_json::Value, String> {
 #[tauri::command]
 pub fn save_settings(app: AppHandle, incoming: Value) -> Result<serde_json::Value, String> {
     crate::settings::save(&app, incoming)
+}
+
+// ── Phase 1 cloud auth: thân của năm kênh `auth:*` ──────────────────────────
+//
+// Bọc mỏng quanh `auth.rs`, cùng lý do như `save_settings` bọc `settings::save`:
+// bảng `hand_written()` và `generate_handler!` phải nhìn thấy cùng một tên lệnh,
+// và `tests/unit/tauri-contract.test.ts` chốt rằng mỗi kênh của hợp đồng có đúng
+// một lệnh trong tệp này.
+//
+// Đăng nhập là kênh DUY NHẤT ở đây chạy lâu (mở trình duyệt, chờ cổng loopback
+// tới 5 phút), nên nó phải `async` — nếu không, một giáo viên bỏ dở màn hình
+// đăng nhập sẽ làm đứng luồng lệnh của vỏ.
+
+/// `auth:status` — cấu hình + đã đăng nhập chưa + email. Không trả token.
+#[tauri::command]
+pub fn get_auth_status(app: AppHandle) -> crate::auth::AuthStatus {
+    crate::auth::auth_status(app)
+}
+
+/// `auth:session` — tên/ảnh đại diện để vẽ UI. Token vẫn nằm trong Rust.
+#[tauri::command]
+pub fn get_auth_session(app: AppHandle) -> Result<Option<crate::auth::PublicSession>, String> {
+    crate::auth::auth_get_session(app)
+}
+
+/// `auth:sign-in` — PKCE + loopback, mở trình duyệt hệ thống.
+#[tauri::command]
+pub async fn start_auth_oauth(app: AppHandle) -> Result<crate::auth::PublicSession, String> {
+    crate::auth::auth_start_oauth(app).await
+}
+
+/// `auth:refresh` — làm mới token khi sắp hết hạn.
+#[tauri::command]
+pub async fn refresh_auth_session(app: AppHandle) -> Result<crate::auth::PublicSession, String> {
+    crate::auth::auth_refresh_session(app).await
+}
+
+/// `auth:sign-out` — xoá phiên DPAPI. Không động vào game hay giáo án.
+#[tauri::command]
+pub fn sign_out_auth(app: AppHandle) -> Result<(), String> {
+    crate::auth::auth_logout(app)
 }
 
 /// Registry provider + trạng thái hiện tại cho trang Cài đặt và wizard. Cùng
