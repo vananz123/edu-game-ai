@@ -29,9 +29,15 @@
   0% { opacity: 0; transform: translateY(8px); }
   100% { opacity: 1; transform: translateY(0); }
 }
+/* A card turning over. The perspective is part of the TRANSFORM, not the parent:
+   a bare rotateY() is projected away to a flat squeeze (the card looks like it
+   grows out of the edge) and the computed matrix still reports matrix3d, so only
+   the depth term m34 tells the two apart. Starts at 84deg, not 90: a card that
+   begins exactly edge-on has zero width for a frame and reads as a glitch. */
 @keyframes memory-flip {
-  0% { transform: rotateY(90deg) scale(0.92); opacity: 0.6; }
-  100% { transform: rotateY(0deg) scale(1); opacity: 1; }
+  0% { transform: perspective(700px) rotateY(84deg) scale(0.94); opacity: 0.45; }
+  60% { transform: perspective(700px) rotateY(-7deg) scale(1.035); opacity: 1; }
+  100% { transform: perspective(700px) rotateY(0deg) scale(1); opacity: 1; }
 }
 
 .modal[data-player-theme] .answer-option.correct {
@@ -209,7 +215,7 @@ html[data-fullscreen="1"] .modal[data-player-theme] .team-score-chip {
   box-shadow: 0 8px 22px rgba(109, 99, 255, 0.22);
 }
 .modal[data-player-theme] .memory-card.flipped {
-  animation: memory-flip 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: memory-flip 0.42s cubic-bezier(0.22, 1, 0.36, 1);
   background: var(--world-card-selected-bg, linear-gradient(180deg, #eef1ff 0%, #dfe5ff 100%));
   border-color: var(--world-card-selected-border, #6d63ff);
 }

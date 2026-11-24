@@ -5411,3 +5411,18 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
 - **Một animation dùng chung cho hai chỗ phải ở một nơi.** `animateScoreChip` (#320, `quiz.ts`)
   được `animateTeamScores` (#321, `result-screen.ts`) gọi lại — không có bản sao thứ hai để
   lệch nhau về tốc độ hay cách kẹp.
+
+## #322 — Một `rotateY()` đã là `matrix3d`; thứ chứng minh “lật thật” là số hạng `m34`
+
+- **Cổng kiểm “có 3D không” bằng `matrix3d` là cổng LUÔN PASS.** `rotateY()` một mình đã cho ra
+  `matrix3d`, nên phiên bản đầu của `ui-memory-flip-check` **pass 8/8 trên đúng cái thẻ hỏng** mà
+  nó được viết để bắt. Cái perspective thêm vào là **số hạng độ sâu `m34` = −1/d** trong ma trận
+  biến đổi; không có nó thì phép quay bị chiếu bẹp và thẻ rộng bằng 0 ở giữa cú lật.
+- **Perspective thuộc về chính transform của thẻ**, không phải phần tử cha: `perspective(700px)`
+  đặt trong `@keyframes` là đủ và không làm thay đổi layout của lưới thẻ.
+- **Đừng bắt đầu cú lật ở đúng 90°.** Ở 90° thẻ rộng bằng 0 trong một khung hình — đọc ra như lỗi
+  chứ không phải như đang lật; bắt đầu ở 84° và overshoot nhẹ ở 60% cho cú lật có trọng lượng.
+- **Một cổng đọc một con số đang chạy phải chờ nó DỪNG.** #321 làm chip điểm đội đếm lên, và
+  `ui-answer-mode-check` lập tức đỏ vì nó đọc **89** trên đường tới **90**. Chờ “không đổi trong
+  150 ms” (trần 900 ms) — và một lần chạy xanh không chứng minh gì: cổng này phải xanh **hai lần
+  liên tiếp** vì lần đỏ là do thời điểm, không do logic.

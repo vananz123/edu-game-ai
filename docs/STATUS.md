@@ -7,6 +7,15 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-24 — #322 Thẻ bộ nhớ LẬT THẬT (3D), và cổng đo bằng số hạng độ sâu
+- Mục **S3-2** trong `docs/archive/specs/ui-improvement-plan.md`: `@keyframes memory-flip` chỉ có `rotateY(90deg) → 0` và **không có perspective**, nên trên phần tử phẳng phép quay bị chiếu bẹp — thẻ trông như **trượt ra từ cạnh** chứ không lật.
+- **Sửa** `src/renderer/styles/game-animations.css`: `perspective(700px)` đặt **trong chính transform** (không cần perspective ở phần tử cha), `84deg` thay vì `90deg` (một khung hình ở đúng 90° là thẻ rộng bằng 0 — đọc ra như lỗi), overshoot `-7deg` ở 60% cho cú lật có trọng lượng, `0.3s → 0.42s`. `prefers-reduced-motion` vẫn tắt hoàn toàn.
+- **Cổng mới `tests/ui/ui-memory-flip-check.js` (9/9)** — và nó tự bác phiên bản đầu của chính nó: bản đầu kiểm “có `matrix3d` không” và **pass 8/8 trên thẻ hỏng**, vì `rotateY()` một mình **đã** cho ra `matrix3d`. Thứ perspective thêm vào là **số hạng độ sâu `m34` (= −1/d)** trong ma trận; kiểm nó mới phân biệt được lật thật với bẹp phẳng. Trước khi sửa: **0 mẫu có m34** (đỏ đúng chỗ); sau khi sửa: **16 mẫu, m34 = 0.00074**.
+- Đo trên binary mới: animation `memory-flip`, **18 giá trị transform khác nhau** (không nhảy cóc), thẻ **kết thúc phẳng** (`none`), vẫn giữ `.flipped` và mặt thẻ đọc được; reduced-motion: **không animation**, phẳng ngay khi bấm.
+- **Cổng `ui-answer-mode-check` đỏ 218/219 vì #321, không phải vì #322:** nó chụp chữ trên chip đội ngay sau khi vẽ lại ⇒ đọc **89** trên đường tới **90**. Sửa cổng: `settleChips()` chờ số **ngừng đổi** (150 ms ổn định, trần 900 ms) trước khi chụp — **một cổng đọc số có animation phải chờ số dừng**, giống #320.
+- Cổng trên binary mới: `ui-memory-flip-check` **9/9** · `ui-matching-finish-check` **22/22** · `ui-score-countup-check` **18/18** · `ui-answer-mode-check` **219/219** (chạy **2 lần liên tiếp**) · `ui-play-surface-check` **812/812** · `ui-stage-illustration-check` **179/179** · `ui-item-assets-editor-check` **157/157** · `ui-presentation-check` **93/93** · `ui-fullscreen-check` **20/20** · unit **104/104** · `verify:css` **61/61**.
+- Installer: **16 533 945 byte** / 24-11 **09:43** / SHA-256 `5386a8d0e25e52d1a9b73b8835859676e91044ed772da78cdeaf679ef4c3230f`.
+
 ### 2026-11-24 — #321 Điểm của TỪNG ĐỘI cũng đếm lên (và không bao giờ hiện số âm)
 - Tiếp #320 theo lựa chọn **(a)**: trong chế độ thi đấu đội, con số giáo viên thật sự nhìn là **hàng chip điểm của các đội** trên thanh sân khấu và **BẢNG XẾP HẠNG ĐỘI** ở màn kết quả — cả hai trước đây đổi số tức thì.
 - **Sửa:** `teamTurnBarHtml()` và `leaderboardHtml()` gắn `data-team-score` + `data-team-key` + `data-team-target`; hàm mới `animateTeamScores(root, { reveal })` dùng lại `animateScoreChip` của #320. Thanh đội được vẽ lại **toàn bộ** mỗi câu nên “số cũ” **không đọc được từ DOM** — phải nhớ theo khoá (`chip-0..n`, `board-0..n`), và `teamPointsShown` được **xoá khi bắt đầu ván mới** (khoá theo vị trí, ván sau có thể khác đội).
@@ -26,21 +35,3 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - **Sửa kèm một cái bẫy của cổng `ui-play-surface-check`:** mục `[zoom]` “nút ẩn cho tới khi trỏ tới” đọc `opacity` **trước** khi di chuyển con trỏ, nên nó đo **vị trí chuột thật của máy** (lần này chuột đang nằm trên hình ⇒ đỏ `opacity 1, pointer-events auto` trên bản đúng), và lần chạy thứ hai trong cùng phiên thì luôn đỏ vì chính mục đó đã dời con trỏ vào giữa hình. Thêm `Input.dispatchMouseEvent` về góc (1,1) trước khi đo ⇒ **812/812** ở cả hai lần chạy liên tiếp, không phụ thuộc chuột (bài học #271).
 - Cổng trên binary mới: `ui-score-countup-check` **8/8** · `ui-play-surface-check` **812/812** · `ui-answer-mode-check` **219/219** · `ui-stage-illustration-check` **179/179** · `ui-fullscreen-check` **20/20** · `ui-presentation-check` **93/93** · `ui-item-assets-editor-check` **157/157** · `ui-editor-art-check` / `ui-question-template-check` / `ui-library-paging-check` pass · unit **104/104** · `check:renderer-globals` **1130 functions / 9186 call sites, 0 undefined**.
 - Installer: **16 534 104 byte** / 24-11 **08:24** / SHA-256 `d8d354fb3727fbc9ca9ada187a3dedfe877d5613246f8a49e0aeb0ae77136475`.
-
-### 2026-11-24 — #319 “Trình chiếu” là nút LỚN HƠN, không chỉ đổi màu
-- Từ danh sách 3 lựa chọn ở #318, chọn mục **S2-4** của kế hoạch: nút **“Trình chiếu”** là hành động chính của cả màn chơi mà lại **cùng cỡ** với các nút phụ (`Chơi LAN`, toàn màn hình, đóng) — giáo viên mới không biết bấm đâu để chiếu.
-- **Đo trước khi sửa (1366×768, cửa sổ):** `.play-tool` cao **38 px** cho mọi nút; “Trình chiếu” 116×38, chữ **12 px** — bằng đúng chữ của “Chơi LAN”; ba nút phụ 38×38. Nút chính chỉ khác màu, và ở khoảng cách cuối lớp thì **màu không còn là tín hiệu**, kích thước mới là.
-- **Sửa (chỉ CSS, `.play-tool-present`):** `height 38 → 44 px`, `padding 0 15 → 0 20 px`, `font-size 12 → 13.5 px`, thêm vòng sáng `0 0 0 3px rgba(106,90,224,.14)` ngoài bóng đổ cũ.
-- **Đo sau khi sửa (cùng ba khổ, không suy đoán):**
-
-  | khổ | nút Trình chiếu | chữ | nhãn | dải đầu trang | thân sân khấu | trang cuộn |
-  |---|---|---|---|---|---|---|
-  | 1366×768 cửa sổ | **133×44** | 13.5 px | **1 dòng** | 106 px (không đổi) | 1134×552, đáy 714 | 1109 / 768 (sân khấu tự cuộn — #311) |
-  | 1024×640 cửa sổ | **133×44** | 13.5 px | 1 dòng | 106 px | 947×649 | 1667 / 640 (sân khấu tự cuộn) |
-  | 1024×640 toàn màn hình | **133×44** | 13.5 px | 1 dòng | **84 px (không đổi)** | đáy 626 | **640 / 640 — vừa khít, không cuộn** |
-  | 1366×768 toàn màn hình | **133×44** | 13.5 px | 1 dòng | **84 px (không đổi)** | đáy 754 | **768 / 768 — vừa khít** |
-
-  Nút lớn hơn **+16 % chiều cao, +17 px bề ngang** mà **không** làm dải đầu trang cao thêm ở bất kỳ khổ nào — nên hợp đồng #208 (1366×768 đủ 4 đáp án, không phải cuộn) vẫn nguyên. Mô hình thị giác trên ảnh chụp: *“the purple button is the main action … modestly larger than the small icon buttons … fully visible on one line and appears vertically centered … no overlap, clipping or misalignment.”*
-- **Cổng:** `ui-play-surface-check` **812/812** (có điều kiện `present ≥ 34 px`, nhãn **1 dòng**, `present.w > 70` — tất cả vẫn qua) · `ui-fullscreen-check` **20/20** · `ui-stage-illustration-check` **179/179** · `ui-answer-mode-check` **219/219** · `ui-editor-art-check` pass · `npm run verify:css` **61/61**.
-- **Sửa kèm một lỗi do #318 gây ra:** chú thích tôi viết ở #318 để cảnh báo về comment hỏng lại **chứa chính dấu đóng comment**, nên Tailwind đọc phần đuôi thành CSS thật và `npm run build` chết với `CssSyntaxError: Missing opening {` ở `game-animations.css:17`. Diễn đạt lại bằng chữ, không chép dấu đó. Bài học: **một comment giải thích về dấu comment không được chứa dấu đó.**
-- Installer: **16 535 220 byte** / 24-11 **02:14** / SHA-256 `551887d37071e46cce0688671499fa3554d03a739aabbb6fe37c96ac6d1536d4`.

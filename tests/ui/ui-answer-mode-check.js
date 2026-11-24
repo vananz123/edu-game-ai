@@ -882,7 +882,24 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
         out.race.challengeProjector = await tapOpt('b');
 
         // ===== K2. HỘP CHIA ĐỘI của một game mang token (quiz, Luyện tập) =====
-        const teamSnap = () => {
+        // #321 gave the team chips an animated climb, so a snapshot taken the instant
+        // a chip is re-drawn reads a HALF-WAY number (89 on the way to 90) and the
+        // check below goes red on a correct build. Wait for the number to stop moving.
+        const settleChips = async () => {
+          const list = document.querySelector('.team-score-list');
+          const started = performance.now();
+          let last = '';
+          let stableSince = started;
+          while (performance.now() - started < 900) {
+            const now = text(list);
+            if (now !== last) { last = now; stableSince = performance.now(); }
+            else if (performance.now() - stableSince > 150) return now;
+            await new Promise(r => setTimeout(r, 30));
+          }
+          return text(list);
+        };
+        const teamSnap = async () => {
+          const chipText = await settleChips();
           const names = Array.prototype.slice.call(document.querySelectorAll('[data-team-name]'));
           const tp = state.teamPlay;
           const turn = state.answerTurn;
@@ -896,7 +913,7 @@ const { check, connect, results } = require('../manual/lib/ui-check-lib');
             rows: state.gameAnswers.length,
             lastPts: state.gameAnswers.length ? Number(state.gameAnswers[state.gameAnswers.length - 1].points) : null,
             token: String((state.currentGame && state.currentGame.gameSetup ? state.currentGame.gameSetup.scoringMode : '') || ''),
-            chip: text(document.querySelector('.team-score-list')),
+            chip: chipText,
             feedback: text(document.querySelector('#answerFeedback'))
           };
         };
