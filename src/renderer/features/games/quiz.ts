@@ -118,6 +118,15 @@ function renderQuestion() {
     const stageBottomHtml = `<div class="stage-bottom"><span class="stage-tip">${scoringTip}</span>${nextInStage}</div>`;
     root.innerHTML = `<div class="game-stage${houseMode ? ' is-house-mode' : ''}${game.template === 'quiz' ? ' is-arena-quiz' : ''}" data-game="${stageGame}" data-game-world="quiz">${gameWorldLabel(stageGame)}<div class="stage-top"><span class="stage-meta">${escapeHtml(game.subject || 'TRÒ CHƠI HỌC TẬP')} · ${game.grade ? 'LỚP ' + escapeHtml(game.grade) : 'MỌI LỚP'}</span><span class="stage-meta stage-meta-right"><span class="stage-chip">${game.template === 'scenario' ? 'QUYẾT ĐỊNH' : 'CÂU'} <b>${state.gameAnswers.length + 1}</b>/${game.questions.length}</span><span class="stage-chip stage-chip-score">🏆 <b>${state.gameAnswers.reduce((s, a) => s + a.points, 0)}</b> điểm</span></span></div><div class="stage-progress"><div data-progress="${progress}"></div></div>${state.teamPlay ? teamTurnBarHtml() : ''}<div class="stage-center${situationSplit ? ' is-situation' : ''}">${houseHudHtml}${sideColHtml}<div class="stage-col is-main">${centerLeadHtml}${houseAnswerRow || answerArea}${mainFeedbackHtml}${stageBottomHtml}</div></div>${nextDock}<div id="answerExplanationDock" class="answer-explain-dock"></div></div>`;
     paintProgress(root);
+    // #330: Reset animation câu hỏi để slide-in chạy lại mỗi câu (thay vì chỉ
+    // chạy lần đầu khi CSS animation được áp). Void offsetWidth = reflow trigger.
+    ['.stage-question', '.answer-grid', '.text-answer-box'].forEach(sel => {
+        const el = root.querySelector(sel);
+        if (!el) return;
+        (el as HTMLElement).style.animation = 'none';
+        void (el as HTMLElement).offsetWidth;
+        (el as HTMLElement).style.animation = '';
+    });
     // #321: the team chips were just re-drawn with their new totals; let them climb
     // from what the previous draw showed instead of jumping.
     animateTeamScores(root);

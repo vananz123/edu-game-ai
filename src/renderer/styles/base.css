@@ -101,11 +101,13 @@
   .modal[data-player-theme] .btn { transition-duration: calc(160ms * var(--motion-scale)); }
 }
 
-/* Page transition — fade-in nhe khi doi trang (Sprint 2 UI/UX) */
+/* Page transition — fade-in rõ hơn khi đổi trang (#330: opacity bắt đầu từ 0
+   thay vì 0.88 để hiệu ứng thực sự thấy được; translateY tăng lên 10px; thời
+   gian tăng lên 0.22s cho cảm giác mượt hơn). */
 @keyframes page-fade-in {
   from {
-    opacity: 0.88;
-    transform: translateY(4px);
+    opacity: 0;
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
@@ -113,7 +115,7 @@
   }
 }
 .page-fade-enter {
-  animation: page-fade-in 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: page-fade-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
 @media (prefers-reduced-motion: reduce) {
   .page-fade-enter {

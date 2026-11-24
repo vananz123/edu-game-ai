@@ -1,6 +1,6 @@
 {
   "name": "edugame-studio",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "EduGame Studio - ứng dụng Windows tạo, quản lý và chơi game giáo dục offline, TypeScript",
   "engines": {
     "node": ">=22.13.0"

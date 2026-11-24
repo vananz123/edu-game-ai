@@ -125,7 +125,13 @@ function toast(message, duration = 3000) {
     el.textContent = message;
     el.classList.add('show');
     clearTimeout(toast.timer);
-    toast.timer = setTimeout(() => el.classList.remove('show'), duration);
+    clearTimeout(toast.exitTimer);
+    // #330: Xóa .show trước (CSS transition chạy exit), sau 220ms mới xóa text
+    // để tránh giật khi toast mới đè lên toast cũ đang ẩn.
+    toast.timer = setTimeout(() => {
+      el.classList.remove('show');
+      toast.exitTimer = setTimeout(() => { el.textContent = ''; }, 220);
+    }, duration);
   }
   addNotification(message);
 }

@@ -1,9 +1,10 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "EduGame Studio (Tauri)",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "identifier": "vn.edugame.studio.tauri",
   "build": {
+    "devUrl": "http://localhost:5173",
     "frontendDist": "../dist-tauri"
   },
   "app": {

@@ -125,9 +125,13 @@
 html[data-theme="dark"] .empty-state{background:#171c32;border-color:#2a324b;color:#94a3b8}
 html[data-theme="dark"] .empty-state h3{color:#f1f5f9}
 html[data-theme="dark"] .empty-state p{color:#94a3b8}
-.game-card{transition:transform .18s cubic-bezier(0.34, 1.56, 0.64, 1),box-shadow .18s,border-color .18s;box-shadow:var(--shadow-md)}
-.game-card:hover{box-shadow:var(--shadow-hover)}
+/* #330: card-enter — stagger nhẹ khi thư viện render lần đầu; --i được đặt ở
+   libraryCardHtml (index % 9). Giữ transition đủ để hover không giật với animation. */
+@keyframes card-enter{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.game-card{transition:transform .18s cubic-bezier(0.34, 1.56, 0.64, 1),box-shadow .18s,border-color .18s;box-shadow:var(--shadow-md);animation:card-enter 0.26s cubic-bezier(0.16,1,0.3,1) both;animation-delay:calc(var(--i,0)*55ms)}
+.game-card:hover{box-shadow:var(--shadow-hover);transform:translateY(-3px)}
 html[data-theme="dark"] .game-card:hover{box-shadow:var(--shadow-hover)}
+@media(prefers-reduced-motion:reduce){.game-card{animation:none}}
 .form-panel{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px;box-shadow:var(--shadow-sm)}
 .form-panel h3{font-size:14px;margin:0 0 5px}
 .form-panel .panel-sub{margin-bottom:14px}
@@ -369,7 +373,11 @@ html[data-theme="dark"] .ai-chat-composer textarea { color: var(--text); }
 /* #220: hộp quà ẩn là một huy hiệu trên bản đồ sáng, không phải một emoji trần trên
    giấy da (đo được 1.15:1). Nền trắng + viền hổ phách cho nó một cạnh đọc được. */
 .treasure-map-item{position:absolute;top:-5px;right:4px;font-size:11px;line-height:1;padding:2px 3px;border-radius:6px;background:#fffdf7;border:1px solid #c9a94f;box-shadow:0 1px 3px #5b4a3322}
-@keyframes treasurePulse{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+/* #330: scale lên 1.12 + box-shadow nhấp nháy để badge rõ hơn trên bản đồ */
+@keyframes treasurePulse{
+  0%,100%{transform:scale(1);   box-shadow:0 0 0 0   rgba(98,88,232,0)}
+  50%    {transform:scale(1.12);box-shadow:0 0 0 8px rgba(98,88,232,0.22)}
+}
 .treasure-mission-badge{display:inline-flex;align-items:center;gap:6px;margin:-8px auto 16px;padding:5px 10px;border:1px solid #ddcaa4;border-radius:999px;background:#fffdf7;color:#3f3425;font-size:9px;font-weight:750;letter-spacing:.02em}
 .treasure-mission{display:grid;gap:12px;text-align:left}
 .mission-instruction{margin:0;color:#3f3425;font-size:11px;line-height:1.55}
@@ -1151,7 +1159,10 @@ html[data-theme="dark"] .editor-art-more>summary{color:#c7d0e0}
 .lib-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px}
 .lib-search{position:relative;display:flex;align-items:center;gap:8px;flex:1 1 260px;min-width:200px;background:#f6f7fb;border:1px solid #e7eaf2;border-radius:9px;padding:0 10px;color:#8b93a5}
 .lib-search input{flex:1;min-width:0;border:0;background:transparent;outline:0;font:inherit;font-size:12.5px;color:#26304a;padding:9px 0}
-.lib-search:focus-within{border-color:#b9b4ff;background:#fff;box-shadow:0 0 0 3px #6258e814}
+/* #332: ring đậm hơn (alpha 0x14→0x28≈16%), thêm transition mượt và dark-mode */
+.lib-search{transition:border-color .15s,box-shadow .15s,background .15s}
+.lib-search:focus-within{border-color:#6258e8;background:#fff;box-shadow:0 0 0 3px #6258e828}
+html[data-theme="dark"] .lib-search:focus-within{border-color:#8c84ff;background:#171c32;box-shadow:0 0 0 3px #6258e840}
 .lib-filter{width:auto;min-width:172px;font-size:12.5px}
 .lib-count{font-size:11.5px;font-weight:700;color:#5f6a7d;background:#f4f5fa;border-radius:999px;padding:5px 11px;white-space:nowrap}
 .lib-import{margin-left:auto}
