@@ -7,6 +7,14 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-24 — #325 Thẻ thư viện so le khi tải (và một cổng suýt đo nhầm DOM cũ)
+- Mục **S2-1** của kế hoạch — lần này **đúng**: `.lib-grid` không có animation vào nào, 9 thẻ hiện trong cùng một khung hình thành một “bức tường”.
+- **Sửa** `src/renderer/styles/components.css`: `@keyframes lib-card-in` + `.lib-grid > .lib-item{animation:…both}`, delay `:nth-child(2…9)` = `0.03…0.24 s` ⇒ **thuần CSS**, không `--i` nội tuyến nên **không có gì phải đồng bộ với phân trang**; trần đúng **một trang** (`LIBRARY_PAGE_SIZE = 9`) nên thẻ cuối không chờ quá **0.24 s**; `both` giữ thẻ **ẩn trong lúc chờ**; reduced-motion tắt hẳn. Chỉ `opacity` + `6px` — các cổng đo hình học đo chính những thẻ này.
+- **Cổng mới `tests/ui/ui-library-stagger-check.js` (8/8)**: delay đo được `0 0.03 … 0.24`, giữa lúc hiện thẻ 1 sáng hơn thẻ 5 ở **t = 33 ms**, kết thúc `opacity 1` + `transform none`.
+- **Một cái bẫy cổng tự mắc rồi tự sửa:** bản đầu gọi `renderLibrary()` để “vẽ lại” — nhưng hàm đó **chỉ TRẢ VỀ html, không vẽ gì**, nên cổng đọc **DOM của lần tải trang** mà animation đã kết thúc từ lâu: `animationName` đúng, delay đúng, mà `opacity` luôn `1` và mục so le **đỏ trên bản đã sửa đúng**. Sửa: điều hướng **như giáo viên** — bấm `.nav-item[data-page="my-projects"]` rồi quay lại `library`. Bài học: **một cổng phải tạo ra chính cái trạng thái nó đo**, không gọi hàm render rồi tin là DOM mới.
+- Cổng trên binary mới: `ui-library-stagger-check` **8/8** · `ui-library-paging-check` / `ui-project-selection-check` **pass ×2** (chạy hai lần để chắc không flake — rule có `translateY`) · `ui-play-surface-check` **812/812** · `ui-item-assets-editor-check` **157/157** · `ui-editor-art-check` pass · `ui-result-cascade-check` **9/9** · `verify:css` **61/61**.
+- Installer: **16 529 171 byte** / 24-11 **10:55** / SHA-256 `782a65c26ee0947aaf594d355da6359f74e33749b5303a9a4a8e4c80786bd41e`.
+
 ### 2026-11-24 — #324 P7 nửa ĐO ĐƯỢC: chơi offline không gọi mây (và bộ cài KHÔNG có chữ ký)
 - AGENTS.md hứa “game đã lưu phải chơi được offline” nhưng **chưa từng có phép đo nào**. Cổng mới `tests/ui/ui-offline-play-check.js` (**7/7**) bật `Network.requestWillBeSent` của chính WebView rồi **tải lại toàn trang** và **chơi trọn một ván đã lưu**.
 - **Đo được:** khởi động = **81 yêu cầu, 0 ra ngoài máy**; chơi trọn 2 câu → màn kết quả (120 → 240 điểm) = **0 yêu cầu mạng**, **0 host đám mây**. Trò chơi đã lưu **không phụ thuộc internet** — đúng như lời hứa, giờ có bằng chứng.
@@ -22,12 +30,3 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - Trước khi sửa cổng **đỏ đúng 3 mục** (`none none none`, delay `0 0 0`, không mẫu nào lệch) — red-first, không phải cổng trang trí.
 - Cổng trên binary mới: `ui-result-cascade-check` **9/9** · `ui-score-countup-check` **18/18** · `ui-answer-mode-check` **219/219** · `ui-memory-flip-check` **9/9** · `ui-matching-finish-check` **22/22** · `ui-play-surface-check` **812/812** · `ui-presentation-check` **93/93** · `ui-stage-illustration-check` **179/179** · unit **104/104** · `verify:css` **61/61**.
 - Installer: **16 532 514 byte** / 24-11 **10:20** / SHA-256 `e0069f9fd565333cf8bda51e51fd15a0fee79ad49461875d084b1a12c80542ff`.
-
-### 2026-11-24 — #322 Thẻ bộ nhớ LẬT THẬT (3D), và cổng đo bằng số hạng độ sâu
-- Mục **S3-2** trong `docs/archive/specs/ui-improvement-plan.md`: `@keyframes memory-flip` chỉ có `rotateY(90deg) → 0` và **không có perspective**, nên trên phần tử phẳng phép quay bị chiếu bẹp — thẻ trông như **trượt ra từ cạnh** chứ không lật.
-- **Sửa** `src/renderer/styles/game-animations.css`: `perspective(700px)` đặt **trong chính transform** (không cần perspective ở phần tử cha), `84deg` thay vì `90deg` (một khung hình ở đúng 90° là thẻ rộng bằng 0 — đọc ra như lỗi), overshoot `-7deg` ở 60% cho cú lật có trọng lượng, `0.3s → 0.42s`. `prefers-reduced-motion` vẫn tắt hoàn toàn.
-- **Cổng mới `tests/ui/ui-memory-flip-check.js` (9/9)** — và nó tự bác phiên bản đầu của chính nó: bản đầu kiểm “có `matrix3d` không” và **pass 8/8 trên thẻ hỏng**, vì `rotateY()` một mình **đã** cho ra `matrix3d`. Thứ perspective thêm vào là **số hạng độ sâu `m34` (= −1/d)** trong ma trận; kiểm nó mới phân biệt được lật thật với bẹp phẳng. Trước khi sửa: **0 mẫu có m34** (đỏ đúng chỗ); sau khi sửa: **16 mẫu, m34 = 0.00074**.
-- Đo trên binary mới: animation `memory-flip`, **18 giá trị transform khác nhau** (không nhảy cóc), thẻ **kết thúc phẳng** (`none`), vẫn giữ `.flipped` và mặt thẻ đọc được; reduced-motion: **không animation**, phẳng ngay khi bấm.
-- **Cổng `ui-answer-mode-check` đỏ 218/219 vì #321, không phải vì #322:** nó chụp chữ trên chip đội ngay sau khi vẽ lại ⇒ đọc **89** trên đường tới **90**. Sửa cổng: `settleChips()` chờ số **ngừng đổi** (150 ms ổn định, trần 900 ms) trước khi chụp — **một cổng đọc số có animation phải chờ số dừng**, giống #320.
-- Cổng trên binary mới: `ui-memory-flip-check` **9/9** · `ui-matching-finish-check` **22/22** · `ui-score-countup-check` **18/18** · `ui-answer-mode-check` **219/219** (chạy **2 lần liên tiếp**) · `ui-play-surface-check` **812/812** · `ui-stage-illustration-check` **179/179** · `ui-item-assets-editor-check` **157/157** · `ui-presentation-check` **93/93** · `ui-fullscreen-check` **20/20** · unit **104/104** · `verify:css` **61/61**.
-- Installer: **16 533 945 byte** / 24-11 **09:43** / SHA-256 `5386a8d0e25e52d1a9b73b8835859676e91044ed772da78cdeaf679ef4c3230f`.

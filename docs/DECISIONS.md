@@ -5455,3 +5455,21 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
 - **Bộ cài chưa ký là một SỰ THẬT, không phải một lỗi để sửa bằng mã.** `Get-AuthenticodeSignature`
   = `NotSigned` cho cả installer và app exe ⇒ SmartScreen sẽ chặn trên máy lạ. Chỉ chứng chỉ ký mã
   (có phí, theo năm) mới đổi được điều này — cần quyết định của người dùng, không phải một commit.
+
+## #325 — So le bằng CHỈ SỐ CON, và một cổng phải tự tạo ra trạng thái nó đo
+
+- **Delay đặt theo `:nth-child` trong CSS, không theo `--i` nội tuyến.** Chỉ số thẻ đổi mỗi lần
+  phân trang/lọc; một biến viết từ JS sẽ có ngày lệch khỏi thứ tự thật. CSS đếm con thì luôn đúng,
+  và trần một trang (`LIBRARY_PAGE_SIZE = 9`) là chỗ duy nhất phải nhớ.
+- **`animation-fill-mode: both` là điều kiện của một cái so le**, không phải trang trí: thiếu nó thì
+  thẻ nằm chờ vẫn sáng và “so le” chỉ còn là thẻ nhảy vào muộn.
+- **Biên độ phải nhỏ hơn cái mà cổng khác đang đo.** Thẻ thư viện là đối tượng của
+  `ui-library-paging-check` và `ui-project-selection-check`, nên hiệu ứng chỉ được `opacity` +
+  `6px`, và hai cổng đó phải xanh **hai lần liên tiếp** mới tính là không flake.
+- **`renderLibrary()` chỉ TRẢ VỀ html — nó không vẽ.** Cổng đầu tiên gọi nó rồi đọc DOM, tức là đọc
+  **lần tải trang cũ** với animation đã `finished` (`currentTime = 260`), nên nó **đỏ trên bản đã
+  sửa đúng** trong khi mọi thứ đúng. Một cổng phải **tự tạo ra trạng thái mà nó đo**: bấm điều
+  hướng như người dùng (`my-projects` rồi `library`).
+- **`animationName` + `animationDelay` KHÔNG chứng minh animation đang chạy.** Cả hai đọc ra đúng
+  trên một animation đã kết thúc. Chỉ mẫu `opacity` giữa đường mới là bằng chứng — cùng họ với
+  #322 (matrix3d không chứng minh có perspective) và #323 (delay không chứng minh có so le).

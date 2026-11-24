@@ -1126,6 +1126,23 @@ html[data-theme="dark"] .editor-art-more>summary{color:#c7d0e0}
    tiêu đề 2 dòng cố định, mô tả 2 dòng cố định, chân thẻ luôn bám đáy. */
 
 .lib-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;align-items:stretch}
+/* #325 The library grid is drawn in one frame; nine cards appearing at once reads as
+   a wall. The stagger is pure CSS on the CHILD INDEX (no inline --i, nothing to keep
+   in sync with paging) and stops at one page (LIBRARY_PAGE_SIZE = 9) so the last card
+   waits ~0.24s, never a third of a second. Opacity + 6px only: geometry gates measure
+   these cards, so the move has to be small enough never to matter. fill `both` keeps a
+   waiting card HIDDEN, otherwise the cascade is just a late jump. */
+@keyframes lib-card-in{0%{opacity:0;transform:translateY(6px)}100%{opacity:1;transform:none}}
+.lib-grid > .lib-item{animation:lib-card-in .26s cubic-bezier(.2,.9,.25,1) both}
+.lib-grid > .lib-item:nth-child(2){animation-delay:.03s}
+.lib-grid > .lib-item:nth-child(3){animation-delay:.06s}
+.lib-grid > .lib-item:nth-child(4){animation-delay:.09s}
+.lib-grid > .lib-item:nth-child(5){animation-delay:.12s}
+.lib-grid > .lib-item:nth-child(6){animation-delay:.15s}
+.lib-grid > .lib-item:nth-child(7){animation-delay:.18s}
+.lib-grid > .lib-item:nth-child(8){animation-delay:.21s}
+.lib-grid > .lib-item:nth-child(9){animation-delay:.24s}
+@media (prefers-reduced-motion: reduce){.lib-grid > .lib-item{animation:none}}
 .lib-item{position:relative;min-width:0;display:flex}
 .lib-item>.lib-card{width:100%}
 .lib-item.is-selected>.lib-card{border-color:#6258e8;box-shadow:0 0 0 2px #6258e833}
