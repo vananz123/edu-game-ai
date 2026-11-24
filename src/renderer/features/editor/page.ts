@@ -213,6 +213,17 @@ function editorPageHtml(game, isNew, note) {
         </div>
       </div>
     </details>
+    <details class="editor-paste" data-editor-cloud>
+      <summary>Cloud AI viết câu hỏi từ bài học — cần đăng nhập</summary>
+      <div class="editor-paste-body">
+        <textarea class="editor-paste-text" data-editor-cloud-lesson rows="5" spellcheck="false"
+          placeholder="Dán nội dung bài học (ít nhất 40 ký tự). Cloud AI đọc bài rồi viết câu hỏi cho trò chơi này."></textarea>
+        <div class="editor-paste-actions">
+          <button type="button" class="btn btn-primary btn-small" data-editor-cloud-generate>${uiIcon('sparkles', '', 13)} Viết câu hỏi bằng Cloud AI</button>
+          <span class="editor-paste-hint" data-editor-cloud-status>Mỗi lần viết dùng 1 lượt tạo game của tháng. Câu hỏi sinh ra đi qua đúng đường nhập đã kiểm, nên câu nào thiếu đáp án sẽ bị bỏ.</span>
+        </div>
+      </div>
+    </details>
     <p class="editor-import-hint" id="editorImportHint">Chưa có tệp? Bấm <strong>Tải tệp mẫu</strong> — tệp CSV mở bằng Excel, có sẵn 4 dòng ví dụ (trắc nghiệm, đúng/sai, điền từ, trả lời ngắn). Điền tiếp bên dưới rồi bấm <strong>Nhập CSV/XLSX</strong>. Tối đa 100 câu mỗi tệp; ô “Đáp án” của câu điền từ có thể chứa nhiều đáp án đúng, cách nhau bằng dấu chấm phẩy trong ngoặc kép.</p>    <div id="editorQuestions">${game.questions.map((q,i)=>questionEditor(q,i,game.questions)).join('')}</div>      </div></section>`;
 }
 
@@ -339,6 +350,63 @@ $('[data-editor-paste-import]', root).addEventListener('click', async () => {
     if (applied && box) box.value = '';
   } catch (error) {
     toast(error.message || 'Không nhập được câu hỏi đã dán.');
+  }
+});
+// #345: Cloud AI viết câu hỏi từ CHÍNH bài học giáo viên dán. Kết quả không đi thẳng vào
+// trò chơi: nó được đổi thành văn bản rồi qua `parseQuestionsText`, tức là qua đúng đường
+// nhập đã có kiểm tra, trùng lặp và báo cáo. Một đường thứ hai để ghi câu hỏi sẽ là một
+// đường thứ hai để sai.
+$('[data-editor-cloud-generate]', root).addEventListener('click', async () => {
+  const box = $('[data-editor-cloud-lesson]', root);
+  const status = $('[data-editor-cloud-status]', root);
+  const text = box ? box.value.trim() : '';
+  const say = message => { if (status) status.textContent = message; };
+  if (text.length < 40) {
+    say('Bài học quá ngắn — cần ít nhất 40 ký tự. Hãy dán thêm nội dung.');
+    if (box) box.focus();
+    return;
+  }
+  const button = $('[data-editor-cloud-generate]', root);
+  if (button) button.disabled = true;
+  say('Đang gọi Cloud AI… (có thể mất 10–30 giây)');
+  try {
+    const outcome = await cloudGenerateGame({
+      text,
+      sourceName: (game.title || 'bai-hoc') + '.txt',
+      // Số câu giáo viên đã có + 5, tối thiểu 3 và tối đa 15 — cùng giới hạn gateway nhận.
+      questionCount: Math.max(3, Math.min(15, game.questions.length + 5)),
+      template: game.template === 'scenario' ? 'scenario' : (game.template === 'matching' ? 'matching' : 'quiz'),
+      grade: game.grade || '',
+      subject: game.subject || '',
+    });
+    if (!outcome || outcome.ok !== true) {
+      // Mã lỗi có tên quyết định lời nhắn; "thử lại sau" chỉ dùng khi thử lại có ích.
+      const code = outcome && outcome.code;
+      const advice = code === 'not_signed_in' ? 'Hãy đăng nhập bằng chip tài khoản ở thanh bên.'
+        : (code === 'quota_exhausted' ? 'Tháng này đã hết lượt tạo game.'
+          : (code === 'quota_busy' || code === 'provider_unavailable' ? 'Dịch vụ AI đang bận — thử lại sau ít phút.'
+            : 'Không dùng được Cloud AI lúc này.'));
+      say((outcome && outcome.message ? outcome.message + ' ' : '') + advice);
+      return;
+    }
+    const converted = cloudGameToImportText(outcome.game);
+    if (!converted.kept) {
+      say('Cloud AI không trả về câu hỏi nào dùng được. Hãy thử lại với bài học rõ hơn.');
+      return;
+    }
+    const imported = await desktop.call('parseQuestionsText', converted.text);
+    const duplicates = dedupeImportedQuestions(imported.questions, game.questions).skipped;
+    const before = game.questions.length;
+    const applied = applyImportedQuestions(root, game, imported);
+    showImportReport(root, imported, game.questions.length - before, duplicates);
+    const dropped = converted.dropped ? ` Bỏ ${converted.dropped} câu thiếu đáp án.` : '';
+    say(applied
+      ? `Đã thêm ${game.questions.length - before} câu hỏi từ bài học.${dropped} Hãy đọc lại trước khi lưu.`
+      : `Không thêm được câu nào.${dropped}`);
+  } catch (error) {
+    say((error && error.message) || 'Không gọi được Cloud AI.');
+  } finally {
+    if (button) button.disabled = false;
   }
 });
 $('[data-editor-paste-clear]', root).addEventListener('click', () => {

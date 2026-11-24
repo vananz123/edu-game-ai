@@ -194,6 +194,9 @@
        renderEditorPage() chèn nút "Tải tệp mẫu" đọc QUESTION_TEMPLATE_FILE_NAME
        ngay lúc vẽ; thiếu tên này thì cả trang chỉnh sửa chết vì ReferenceError. -->
   <script defer src="renderer/shared/question-template.js"></script>
+  <!-- #345: cloud game -> import text. Mirror of src/shared/cloud-questions.ts;
+       tests/unit/cloud-questions.test.ts proves the two produce identical text. -->
+  <script defer src="renderer/shared/cloud-questions.js"></script>
   <script defer src="renderer/features/editor/ai.js"></script>
   <script defer src="renderer/features/editor/page.js"></script>
   <script defer src="renderer/features/editor/questions.js"></script>
