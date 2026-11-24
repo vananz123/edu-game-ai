@@ -132,7 +132,9 @@ const expectations = [
   // Sprint 2 (Tier 1 Animations & Micro-interactions): answer celebrate, wizard pop, page fade
   ['answer-celebrate has flash and scale', /@keyframes answer-celebrate\{[^}]*filter:brightness/],
   ['wizard step completion pop keyframes', /@keyframes step-pop\{[^}]*scale\(\.82\)/],
-  ['page transition fade-in keyframes', /@keyframes page-fade-in\{[^}]*opacity:\.88/],
+  // #330: the page fade now starts at opacity 0 (0.88 was invisible at 0.18s);
+  // the gate pins the new START value and the longer duration, not the old one.
+  ['page transition fade-in keyframes', /@keyframes page-fade-in\{[^}]*opacity:0;transform:translateY\(10px\)/],
   // Sprint 3 (Visual Polish & Theme Consistency): scrollbars, shadows, dark surfaces
   ['app-wide scrollbar has transition', /::-webkit-scrollbar-thumb\{[^}]*transition:background/],
   ['layered elevation shadow tokens defined', /--shadow-md:0 4px 12px/],

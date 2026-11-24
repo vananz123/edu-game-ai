@@ -63,7 +63,7 @@ function librarySelectionBarHtml(pageGames, selected) {
  */
 function libraryCardHtml(game, index, selected) {
   const id = escapeHtml(game.id);
-  return `<div class="lib-item${selected ? ' is-selected' : ''}" data-library-item="${id}"${selected ? ' data-selected="true"' : ''} style="--i:${index % 9}">
+  return `<div class="lib-item${selected ? ' is-selected' : ''}" data-library-item="${id}"${selected ? ' data-selected="true"' : ''}>
     <label class="lib-card-check" title="Chọn trò chơi này">
       <input type="checkbox" class="lesson-check" data-action="library-select" data-id="${id}"${selected ? ' checked' : ''} aria-label="Chọn ${escapeHtml(game.title || 'trò chơi')}">
     </label>
