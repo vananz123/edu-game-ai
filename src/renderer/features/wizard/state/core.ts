@@ -68,6 +68,9 @@ const wizardState = {
   // #349: the Cloud AI line under its button. Kept in STATE because every `render()`
   // replaces the card — a status written only into the DOM vanishes mid-run.
   cloudStatus: '',
+  // #350: `usage` của lần gọi Cloud AI gần nhất ({used, quotaLimit, unit, allowed}), để
+  // thẻ nói được "còn bao nhiêu" TRƯỚC khi bấm. null = chưa gọi lần nào.
+  cloudUsage: null,
   lessonStage: '', // O7: 'retrieve' | 'generate' | 'validate' | 'repair' | 'ready' | 'cached'
   lessonRepaired: false, // O7: true when the model actually had to repair an answer
   generationHistory: [], // #71: finished generation rows, used only for the ETA baseline
@@ -531,6 +534,7 @@ function wizardReset() {
     quick: null,
     busy: '',
     cloudStatus: '',
+    cloudUsage: null,
     lessonStage: '',
     lessonRepaired: false,
     analysisStartedAt: 0,

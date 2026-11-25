@@ -5650,4 +5650,12 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
 - **Ẩn nút không phải là quyền.** Thẻ Cloud AI chỉ vẽ cho người đã đăng nhập, nhưng hành động vẫn tự kiểm lại và từ chối kèm câu nói được việc phải làm ("Cần đăng nhập tài khoản…"). Cổng đo cả hai chiều.
 - **Một trạng thái chỉ sống trong DOM thì chết ở lần `render()` kế tiếp.** Đo được: bấm nút, lượt chạy bị từ chối vì hết hạn mức, giáo viên không thấy câu nào — vì `render()` đã dựng lại thẻ. Trạng thái phải là STATE (`wizardState.cloudStatus`).
 - **Cờ `busy` giữ qua lúc bàn giao là một nút chặn im lặng.** `wizardAdoptQuestionSet` từ chối chạy khi `busy`; chính handler giữ cờ đó, nên cloud soạn xong 5 câu rồi không dựng gì và không báo lỗi. Nhả cờ **trước** khi bàn giao.
-- **Cổng phải đọc câu bền vững, không đọc câu tạm.** Khi game đã có, thẻ Cloud AI biến mất (bước 5 hiện trạng thái hoàn tất) — nên điều cần kiểm là **notice**, không phải dòng trạng thái dưới nút; đọc dòng trạng thái sẽ báo một chuyển tiếp ĐÚNG là lỗi. SmartScreen, thời gian cài, hiệu ứng phải nhìn, một lượt chơi offline: bốn thứ này không có phép đo tự động trung thực nào trên máy đã có WebView2 và đã quen tệp cài.
+- **Cổng phải đọc câu bền vững, không đọc câu tạm.** Khi game đã có, thẻ Cloud AI biến mất (bước 5 hiện trạng thái hoàn tất) — nên điều cần kiểm là **notice**, không phải dòng trạng thái dưới nút; đọc dòng trạng thái sẽ báo một chuyển tiếp ĐÚNG là lỗi.
+
+## #350 — Giá của cú bấm phải hiện trước cú bấm
+
+- **Một nút tiêu tiền của người khác phải nói giá trước.** Gateway đã trả `usage` ở cả 200 lẫn 429; thẻ Cloud AI dùng chính con số đó để nói "còn bao nhiêu" **trước** khi giáo viên bấm, không phải sau khi họ bị từ chối.
+- **Đơn vị là một phần của con số** (#348 cùng họ): lượt (free) khác credits (trả phí). In sai đơn vị thì con số đúng vẫn vô nghĩa — và tệ hơn, nó nói sai về tiền.
+- **Biết là hết thì đừng mời bấm.** Nút bị vô hiệu kèm câu nói rõ số, thay vì để giáo viên bấm rồi nhận một lỗi mà hệ thống đã biết trước.
+- **Dữ liệu hỏng thì im lặng, không đoán.** `usage` rỗng/`null`/`NaN` ⇒ không in gì, và **không** khoá nút: một lần đọc hụt không phải bằng chứng hết hạn mức.
+- **Câu chữ phải được đo trên artefact ứng dụng nạp.** Hai hàm này là global của script cổ điển, nên test chạy **tệp đã biên dịch** trong `vm` chứ không chép lại logic — bản sao trong test sẽ đồng ý với test chứ không đồng ý với ứng dụng. SmartScreen, thời gian cài, hiệu ứng phải nhìn, một lượt chơi offline: bốn thứ này không có phép đo tự động trung thực nào trên máy đã có WebView2 và đã quen tệp cài.

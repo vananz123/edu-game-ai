@@ -114,6 +114,7 @@ const LIVE_RUN = `(async () => {
         questions: game.questions.length,
         source: wizardState.draftSource,
         gameId: game.id || '',
+        usage: cloudUsageText(wizardState.cloudUsage),
         text: String(wizardState.notice || text).trim(),
         attempts: attempt + 1
       };
@@ -122,6 +123,34 @@ const LIVE_RUN = `(async () => {
     await sleep(15000);
   }
   return { questions: 0, source: wizardState.draftSource, text: String(wizardState.notice || text).trim(), attempts: 3 };
+})()`;
+
+// #350: the meter is pure rendering, so it is measured WITHOUT a network call by seeding the
+// usage the gateway reports. Three states, including the paid unit (credits), because a
+// correct number with the wrong unit is still the wrong sentence for the teacher.
+const USAGE_STATES = `(async () => {
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  if (accountUiState() !== 'member') return { skipped: true };
+  const read = async usage => {
+    wizardState.cloudUsage = usage;
+    wizardState.cloudStatus = '';
+    render();
+    await sleep(120);
+    const meter = document.querySelector('[data-wizard-cloud-usage]');
+    const button = document.querySelector('[data-wizard-action="cloud-generate"]');
+    return {
+      text: (meter ? meter.textContent : '').trim(),
+      disabled: Boolean(button && button.disabled)
+    };
+  };
+  const near = await read({ allowed: true, used: 4, quotaLimit: 5, unit: 'generations', plan: 'free' });
+  const done = await read({ allowed: false, used: 5, quotaLimit: 5, unit: 'generations', plan: 'free' });
+  const credits = await read({ allowed: true, used: 498, quotaLimit: 500, unit: 'credits', plan: 'plus' });
+  const junk = await read({ used: 'x', quotaLimit: null });
+  wizardState.cloudUsage = null;
+  render();
+  await sleep(80);
+  return { near, done, credits, junk };
 })()`;
 
 async function main() {
@@ -156,11 +185,22 @@ async function main() {
     );
     check('a refused short lesson builds no game', short.game === false, String(short.game));
 
+    // #350: what the teacher reads BEFORE pressing the button.
+    const usage = await page.evaluate(USAGE_STATES);
+    check('the card says how many turns are left', /Còn 1\/5 lượt/u.test(String(usage.near.text)), String(usage.near.text));
+    check('a teacher with turns left can press the button', usage.near.disabled === false, String(usage.near.disabled));
+    check('an exhausted month is said plainly', /Đã hết lượt/u.test(String(usage.done.text)), String(usage.done.text));
+    check('an exhausted month disables the button instead of inviting a refusal', usage.done.disabled === true, String(usage.done.disabled));
+    check('a paid plan is counted in credits, not turns', /Còn 2\/500 credits/u.test(String(usage.credits.text)), String(usage.credits.text));
+    check('an unreadable usage prints nothing rather than NaN', String(usage.junk.text) === '', String(usage.junk.text));
+
     if (process.env.EDUGAME_CLOUD_LIVE === '1') {
       const live = await page.evaluate(LIVE_RUN);
       check('Cloud AI builds a game with questions in the wizard', live.questions > 0, `${live.questions} câu trong ${live.attempts} lượt`);
       check('the draft records Cloud AI as its source', live.source === 'cloud-questions', String(live.source));
       check('the status says Cloud AI wrote the questions', /Cloud AI/u.test(String(live.text)), String(live.text).slice(0, 120));
+      // #350: a real run must leave a real meter behind, in the account's own unit.
+      check('a real run reports the remaining allowance', /Còn \d+\/\d+ (lượt|credits)/u.test(String(live.usage)), String(live.usage));
     } else {
       check('the live branch is left to EDUGAME_CLOUD_LIVE=1', true, 'set the variable to spend a turn');
     }

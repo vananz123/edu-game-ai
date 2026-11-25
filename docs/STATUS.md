@@ -7,6 +7,15 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-25 — #350 thẻ Cloud AI nói "còn bao nhiêu" TRƯỚC khi bấm, và không mời bấm khi đã hết
+- **Con số phải có trước nút, không phải sau lỗi.** Gateway đã trả `usage` ở cả 200 lẫn 429; nay wizard giữ `wizardState.cloudUsage` và thẻ vẽ câu "Còn 1/5 lượt tạo game trong tháng." / "Còn 2/500 credits…" — nên giáo viên biết giá của cú bấm trước khi bấm.
+- **Đơn vị đi cùng con số** (#348 cùng họ): gói free đếm **lượt**, gói trả phí đếm **credits**; in "còn 2 lượt" cho một tài khoản trả phí là nói sai tiền của người ta.
+- **Đã hết thì nút bị vô hiệu**, kèm câu "Đã hết lượt tạo game của tháng (5/5)." — không mời bấm một việc chắc chắn bị từ chối.
+- **`usage` không đọc được thì KHÔNG in gì.** "Còn NaN lượt" tệ hơn im lặng; và dữ liệu hỏng **không** được khoá nút (một lần đọc hụt không phải bằng chứng hết hạn mức).
+- **Đo:** `tests/unit/cloud-usage.test.ts` (mới, **12 khẳng định**) chạy **tệp đã biên dịch** trong `vm` — đúng artefact ứng dụng nạp: lượt free, credits trả phí, đã hết (kèm số), `allowed` thiếu, `usage` rỗng/`null`/`NaN`. Unit **108/108**.
+- **Cổng UI:** `ui-wizard-cloud-check` thêm 6 dòng đo đồng hồ ở mức DOM (seeded `usage`) — nhưng lần này chạy ở trạng thái **Khách** (**4/4**, thẻ không vẽ) vì phiên đăng nhập đã bị xoá ở #349 và đăng nhập lại cần một cú bấm trong trình duyệt. **6 dòng đó CHƯA chạy được lần này** — ghi rõ là chưa đo, không phải đã qua.
+- **Chạy lại:** `tsc` sạch · unit **108/108** · `npm run check` 66 tệp · `verify:css` 61/61 · `check:embedded` 6 217,2 KiB · `ui-editor-cloud-check` **8/8** · `ui-account-check` **15/15**.
+
 ### 2026-11-25 — #349 wizard "Tạo từ giáo án" dùng được Cloud AI: 5 câu trong 1 lượt, nguồn ghi là `cloud-questions`
 - **Không mở bộ sinh thứ hai.** Gateway trả về một *trò chơi*; wizard đã có sẵn đường cho *bộ câu hỏi hoàn chỉnh* — cùng đường mà ngân hàng câu hỏi dán tay (#117) và khung chat (#182) đi. Nên câu hỏi của Cloud AI đi qua `wizardAdoptQuestionSet` rồi `wizardUseImportedQuestions`: một lần kiểm, một lần chống trùng, một câu thông báo.
 - **`cloudGameToQuestions()` (mới) là nguồn sự thật duy nhất:** `cloudGameToImportText()` nay **vẽ từ danh sách đó**, nên trình soạn thảo (cần văn bản) và wizard (cần câu hỏi) không thể bất đồng về "câu nào dùng được". Bản sao renderer có cùng hàm; test so **cả văn bản lẫn bộ câu hỏi** giữa hai bản.

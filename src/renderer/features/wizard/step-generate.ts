@@ -856,6 +856,8 @@ async function wizardGenerateWithCloud() {
       grade: String(config.grade || ''),
       subject: String(config.subject || '')
     });
+    // `usage` có ở cả 200 lẫn 429: học từ lần hỏng để thẻ nói được "đã hết" ngay.
+    if (outcome && outcome.usage) wizardState.cloudUsage = outcome.usage;
     if (!outcome || outcome.ok !== true) {
       const code = outcome && outcome.code;
       const advice = code === 'not_signed_in'
@@ -922,8 +924,9 @@ function wizardCloudCardHtml() {
       <strong class="text-[12px] block text-[#1e293b] dark:text-[#f8fafc]">Cloud AI — soạn câu hỏi bằng tài khoản đã đăng nhập</strong>
       <small class="block text-[12px] text-[#4f5a6e] dark:text-[#94a3b8] mt-0.5 leading-snug">Không cần cài model trên máy. Mỗi lần tạo trừ lượt/credits của tài khoản${email ? ` ${escapeHtml(email)}` : ''}.</small>
       <small class="block text-[12px] text-[#4f5a6e] dark:text-[#94a3b8] mt-0.5 leading-snug" data-wizard-cloud-status>${escapeHtml(wizardState.cloudStatus || '')}</small>
+      <small class="block text-[12px] text-[#4f5a6e] dark:text-[#94a3b8] mt-0.5 leading-snug" data-wizard-cloud-usage>${escapeHtml(cloudUsageText(wizardState.cloudUsage))}</small>
     </div>
-    <button type="button" class="btn btn-secondary btn-small shrink-0" data-wizard-action="cloud-generate"${wizardState.busy ? ' disabled' : ''}>Tạo bằng Cloud AI</button>
+    <button type="button" class="btn btn-secondary btn-small shrink-0" data-wizard-action="cloud-generate"${wizardState.busy || cloudUsageExhausted(wizardState.cloudUsage) ? ' disabled' : ''}>Tạo bằng Cloud AI</button>
   </div>`;
 }
 
