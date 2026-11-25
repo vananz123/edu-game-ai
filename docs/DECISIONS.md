@@ -5694,4 +5694,12 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
 - **Phép ĐỌC và phép TRỪ phải dùng chung một luật.** `usageSnapshot` hỏi đúng ba câu mà `consumeGeneration` hỏi: gói có phải `plus` không, gói có đang `active` không, giá thiếu thì lấy gì. Hai bộ luật khác nhau sẽ cho giáo viên đọc "còn 5 lượt" rồi bị trừ credits.
 - **Hạn mức hiển thị không được NHỎ HƠN hạn mức của gói.** Hàng `usage_monthly` có thể còn số của tháng trước; hiện "còn 50 credits" cho tài khoản được 500 là nói sai tiền của người ta.
 - **Vẽ lại HTML là mất handler.** `rerenderAccountPanel()` thay `innerHTML`, nên mọi `onclick` biến mất; thêm một khối tự tải (đồng hồ) làm lỗi này hiện ra ngay: "Đăng xuất" thành nút chết. Việc gắn handler phải là hàm riêng, gọi ở **cả hai** đường vẽ.
-- **Probe không được mở/đóng thứ cổng khác đang đo** (lặp lại bài học #352): lần này probe vẽ lại vào panel đang mở thay vì mở/đóng nó. SmartScreen, thời gian cài, hiệu ứng phải nhìn, một lượt chơi offline: bốn thứ này không có phép đo tự động trung thực nào trên máy đã có WebView2 và đã quen tệp cài.
+- **Probe không được mở/đóng thứ cổng khác đang đo** (lặp lại bài học #352): lần này probe vẽ lại vào panel đang mở thay vì mở/đóng nó.
+
+## #355 — Hai lệnh `cargo` cho ra hai sản phẩm khác nhau, và bộ cài phải được đo bằng cách cài
+
+- **`cargo build --release --bin` ≠ `cargo tauri build`.** Lệnh thứ nhất sinh bản trỏ `devUrl` và phải có máy chủ tĩnh ở cổng 5173; lệnh thứ hai nhúng `dist-tauri` và chạy từ `http://tauri.localhost/`. Cả hai ghi vào **cùng một đường dẫn** `src-tauri/target/release/edugame-studio-tauri.exe`, nên "exe đó có chạy được không" phụ thuộc lần dựng cuối là lệnh nào — đây là nguồn của trang "can't reach this page".
+- **Một cổng UI xanh trên bản dev không nói gì về bản cài.** Ba cổng cloud đã xanh trên bản `cargo build`; phải chạy lại **trên exe đã cài** mới biết lời hứa còn đúng (lần này còn đúng, nhưng đó là kết quả đo, không phải giả định).
+- **Bản cài phải được chạy khi KHÔNG có máy chủ 5173.** Đó chính là phép đo của #348 "bóc hết env": cổng 5173 trả 000 và app vẫn vẽ đủ 9 thẻ.
+- **Cấu hình chỉ có trong env thì không tồn tại trên máy đã cài.** URL gateway là `option_env!`, nên bộ cài dựng không kèm biến đó sẽ nói `gateway_not_configured` — câu này **đúng** (và là một trạng thái có tên), nhưng nó cũng là lời nhắc: muốn phát cho giáo viên thì phải dựng kèm `EDUGAME_AI_GATEWAY_URL`.
+- **`/S` của NSIS qua shell trực tiếp treo 900 giây** (nó mở tiến trình nền và bash chờ mãi); `Start-Process -Wait` trả `exit=0` và ghi đúng chỗ. Cài đặt là thao tác của Windows, không phải của bash. SmartScreen, thời gian cài, hiệu ứng phải nhìn, một lượt chơi offline: bốn thứ này không có phép đo tự động trung thực nào trên máy đã có WebView2 và đã quen tệp cài.

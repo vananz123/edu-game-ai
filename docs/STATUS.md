@@ -7,6 +7,15 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-25 — #355 dựng lại bộ cài và đo bằng cách CÀI THẬT: bản cài chạy độc lập, không cần máy chủ 5173
+- **"Hmmm… can't reach this page" không phải app hỏng:** đường `cargo build --release --bin` sinh ra bản trỏ `devUrl` (`http://localhost:5173`), nên nó **không mang giao diện**; tắt máy chủ tĩnh là thấy đúng trang lỗi đó. Đường `cargo tauri build` sinh ra bản **nhúng** `dist-tauri` và chạy từ `http://tauri.localhost/`.
+- **Bộ cài mới:** `EduGame Studio (Tauri)_0.5.4_x64-setup.exe` — **16 364 563 B**, sha256 `42e1957996aeeed7…`, dựng lúc 20:46 (gồm #349–#354; bản cũ 16 351 067 B từ #352b).
+- **Đo bằng cách cài thật:** `/S` qua `Start-Process -Wait` ⇒ exit 0, ghi vào `InstallLocation` đã đăng ký `D:\Temp\eg-install-check`, `edugame-studio-tauri.exe` 59 301 376 B, mtime 20:45:34.
+- **Chạy từ bản ĐÃ CÀI, với `5173` = 000 (không có máy chủ tĩnh):** `url=http://tauri.localhost/`, `page=library`, 9 thẻ ⇒ lời hứa "cài xong mở được, không cần server" đã được đo, không phải suy luận.
+- **Cổng trên bản đã cài:** `ui-account-check` **21/21** · `ui-editor-cloud-check` **15/15** · `ui-wizard-cloud-check` **11/11** · `ui-cloud-generate-check` **5/5** · `ui-offline-play-check` **7/7**.
+- **Lỗ hổng phát hiện khi đo:** URL gateway là `option_env!("EDUGAME_AI_GATEWAY_URL")` — chỉ có nếu dựng với biến đó; lần dựng này không có, nên bản cài **bóc hết env** trả lời `gateway_not_configured` kèm câu đúng nghĩa ("Cloud AI chưa được cấu hình trên bản cài này. Bạn vẫn dùng được Local AI.") chứ không phải lỗi mạng. Muốn phát cho giáo viên thì phải dựng kèm `EDUGAME_AI_GATEWAY_URL`.
+- **Chưa làm:** cài trên một máy Windows sạch (SmartScreen, thời lượng cài bằng tay, máy không có WebView2) vẫn là 5 dòng P7 cần người; đăng nhập Google bằng phiên sống vẫn cần một cú bấm.
+
 ### 2026-11-25 — #354 đồng hồ hạn mức tháng: "còn 496/500 credits" hiện TRƯỚC khi tiêu lượt nào
 - **`GET /v1/usage` (mới) đặt sau `requireUser`** ⇒ `userId` luôn đến từ token, không bao giờ từ tham số người gọi; không có đường đọc hạn mức của người khác. Trả `{plan, status, month, unit, used, limit, cost}` — **đọc, không trừ**.
 - **Vì sao ở gateway chứ ở app:** đo được rằng token thật + anon key đọc `usage_monthly`/`subscriptions` bằng **0 dòng** (chưa có policy cho chính chủ) — nên "đọc sổ bằng anon key" không phải một lựa chọn có thật. Gateway đã là cửa duy nhất và đã có service_role.
