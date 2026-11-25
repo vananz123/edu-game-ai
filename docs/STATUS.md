@@ -7,6 +7,15 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-25 — #347 cài → chạy → gỡ bộ cài v0.5.4 bằng máy: 11 dòng của P7 khép lại, 5 dòng vẫn cần người
+- **Bộ cài không còn là hộp đen.** Cài im lặng (`/S /D=…`, `installMode: currentUser` nên **không UAC**) → mã thoát **0**, thư mục cài **58 MB** có `edugame-studio-tauri.exe` + `uninstall.exe`, registry `HKCU\…\Uninstall` ghi `EduGame Studio (Tauri)` · `DisplayVersion 0.5.4` · đúng `InstallLocation`, và **một** shortcut trong Start Menu.
+- **Chạy bản ĐÃ CÀI với mọi biến `SUPABASE*`/`GEMINI*` đã xoá:** `version 0.5.4`, `authStatus.configured = true` — cấu hình nhúng lúc biên dịch hoạt động từ bản cài, không chỉ từ `target/release`.
+- **Lần chạy đầu trên dữ liệu rỗng** (dời `%APPDATA%\vn.edugame.studio.tauri\edugame-data` ra ngoài): màn thiết lập hiện, chip `guest`, `loggedIn: false`, thư viện có **đúng 1** trò mẫu `sample-traffic-001` — đúng thiết kế (`a_fresh_library_opens_with_the_sample_game`). Checklist cũ ghi “2 trò mẫu”: **sai**, đã sửa.
+- **Gỡ:** `uninstall.exe /S` → mã thoát **0**; thư mục cài, shortcut và mục registry **đều biến mất**, còn `edugame-data` (game + phiên) — đúng lời hứa “gỡ không xoá dữ liệu”.
+- **Ghi chú kỹ thuật đã vào tài liệu:** `edugame-studio-tauri.exe` trong bộ cài có mã băm **khác** tệp trong `target/release` vì Tauri vá thông tin loại gói (nsis); đừng kết luận bộ cài hỏng từ phép so đó.
+- **5 dòng còn lại cần một người:** hộp thoại SmartScreen, thời gian cài đo bằng đồng hồ, hiệu ứng điểm/thẻ phải **nhìn**, một lượt chơi offline thật, và máy **chưa có** WebView2 runtime (bộ cài không kèm runtime).
+- `docs/INSTALL_CHECKLIST.md` nay có mục “Phần đã đo tự động” (11 dòng, mỗi dòng ghi cách đo) + bảng 5 dòng còn lại, kèm mã băm bộ cài **v0.5.4**.
+
 ### 2026-11-24 — #346 nhánh “đã đăng nhập” của Cloud AI chạy thật; phát hành v0.5.4
 - **Đóng nốt nhánh còn treo của #345.** Đăng nhập thật (`xathiennghiep@gmail.com`) rồi chạy `EDUGAME_CLOUD_LIVE=1 node tests/ui/ui-editor-cloud-check.js`: **8/8**, trong đó `Cloud AI added questions to the editor — 6 câu trong 1 lượt`, trạng thái “Đã thêm 6 câu hỏi từ bài học”. Kiểm thêm ở DOM: 7 câu trong trình soạn thảo (1 câu mẫu + 6 câu mới), câu mới có **3 phương án** và ô đáp án đúng đã chọn (`a`).
 - **Lượt chạy thật làm lộ một lỗi chữ:** khi tài khoản đã hết lượt, thông báo in **hai câu cùng ý** (“Bạn đã dùng hết lượt…” + “Tháng này đã hết lượt…”). Nay câu của gateway được ưu tiên và lời khuyên chỉ xuất hiện khi gateway không nói gì.
