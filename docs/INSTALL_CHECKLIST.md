@@ -7,12 +7,12 @@ Mọi phép đo tự động đã xanh trên bản trinh nguyên giả lập (DE
 rỗng + profile WebView2 rỗng). Checklist này chỉ đo phần mà **máy ảo không đo được**: bộ cài,
 SmartScreen, shortcut, và hành vi sau khi gỡ.
 
-> **Bản cài đang dùng để thử:** `EduGame Studio (Tauri)_0.5.2_x64-setup.exe`
-> · 16 538 871 byte · 2026-11-24 11:52
-> · SHA-256 `d39200114ed4b9f743332d439ff913b71ff5c08f79a7db90bed61a4db70c8a8f`
+> **Bản cài đang dùng để thử:** `EduGame Studio (Tauri)_0.5.4_x64-setup.exe`
+> · 16 352 902 byte (15,60 MiB) · 2026-11-25 08:01
+> · SHA-256 `f83d815f068f63de506a04d286584cffaec2d5200e1172a7ae94f84174e94534`
 >
 > Kiểm mã băm trước khi cài (PowerShell):
-> `Get-FileHash '.\EduGame Studio (Tauri)_0.5.2_x64-setup.exe' -Algorithm SHA256`
+> `Get-FileHash '.\EduGame Studio (Tauri)_0.5.4_x64-setup.exe' -Algorithm SHA256`
 > Nếu mã khác ⇒ tệp hỏng hoặc không phải bản đã kiểm — **dừng lại**, đừng cài.
 
 ## Điều đã biết trước (đừng ngạc nhiên)
@@ -87,6 +87,39 @@ SmartScreen, shortcut, và hành vi sau khi gỡ.
 
 5.4 (Tuỳ chọn) Cài lại và mở Thư viện: các trò cũ có hiện lại không? Kỳ vọng: có.
 
+## Phần đã đo tự động trên máy này — 2026-11-24, bản v0.5.4
+
+Những dòng dưới đây **không** cần máy sạch nữa: chúng đã chạy thật trên bộ cài v0.5.4, và
+chép lại đúng kết quả đo để người đọc checklist biết phần nào còn phải làm.
+
+| Mục | Cách đo | Kết quả |
+| --- | --- | --- |
+| 2.1 Cài im lặng | `setup.exe /S /D=D:\Temp\eg-install-check` (`installMode: currentUser`, không UAC) | mã thoát **0** |
+| 2.2 Kích thước sau cài | đếm thư mục cài | **58 MB**, có `edugame-studio-tauri.exe` + `uninstall.exe` |
+| 2.3 Đăng ký gỡ cài | `HKCU\...\Uninstall\*` | `EduGame Studio (Tauri)` · `DisplayVersion 0.5.4` · `InstallLocation` đúng thư mục |
+| 2.4 Shortcut | `%APPDATA%\Microsoft\Windows\Start Menu\Programs` | có **một** tệp `.lnk` tên “EduGame Studio (Tauri)” |
+| 3.1 Màn thiết lập | chạy bản **đã cài** với dữ liệu rỗng | **có** (`data-setup-fullscreen="1"`) |
+| 3.2 Số trò mẫu | cùng lần chạy đó | **1** (`sample-traffic-001`) — đúng thiết kế, không phải thiếu |
+| 3.5 Cloud AI đã cấu hình | chạy bản đã cài với **mọi** biến `SUPABASE*`/`GEMINI*` đã xoá | `authStatus.configured = true` |
+| 4.1 Chưa đăng nhập vẫn dùng được | cùng lần chạy đó | chip `guest`, thư viện vẫn vẽ |
+| 5.1 Gỡ im lặng | `uninstall.exe /S` | mã thoát **0** |
+| 5.2 Dữ liệu còn sau gỡ | kiểm `%APPDATA%\vn.edugame.studio.tauri\edugame-data` | còn nguyên (`edugame.sqlite`, `auth-session.json`) |
+| 5.3 Gỡ sạch | kiểm thư mục cài, shortcut, registry | **không còn** thư mục, **không còn** shortcut, **không còn** mục đăng ký |
+
+**Vẫn cần một người ngồi trước máy sạch** (không đo được bằng script):
+
+| Mục | Vì sao |
+| --- | --- |
+| 1.2 SmartScreen | hộp thoại “Unknown publisher” chỉ hiện với người dùng thật trên tệp chưa từng có trên máy; script không chụp được nó một cách trung thực |
+| 2.2 Thời gian cài | đo bằng đồng hồ của người cài, trong điều kiện mạng thật |
+| 3.3 Điểm đếm lên / 3.4 Thẻ so le | hiệu ứng phải **nhìn** — xem ghi chú “vision-model ≠ người duyệt” |
+| 4.2–4.4 Chơi offline, mở lại, trình chiếu | cần một người chơi thật một lượt trên máy chưa từng có dữ liệu |
+| WebView2 chưa cài | máy này đã có WebView2 runtime; máy sạch có thể chưa có (bộ cài không kèm runtime) |
+
+Ghi chú kỹ thuật: `edugame-studio-tauri.exe` **trong bộ cài** khác mã băm với tệp trong
+`src-tauri/target/release/` vì Tauri vá thêm thông tin loại gói (nsis) vào exe. Đó là bình
+thường; đừng dùng phép so mã băm đó để kết luận bộ cài hỏng.
+
 ## Mẫu báo cáo
 
 | Mục | Kỳ vọng | Thực tế |
@@ -96,7 +129,7 @@ SmartScreen, shortcut, và hành vi sau khi gỡ.
 | 2.3 Đường dẫn cài | `%LOCALAPPDATA%\…` | |
 | 2.4 Shortcut | có, bấm mở được | |
 | 3.1 Màn thiết lập | có | |
-| 3.2 Số trò mẫu | 2 | |
+| 3.2 Số trò mẫu | 1 (`sample-traffic-001`) | |
 | 3.3 Điểm đếm lên | có | |
 | 3.4 Thẻ so le | có | |
 | 4.2 Chơi offline | trọn vẹn | |
