@@ -7,6 +7,20 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-25 — #353 nửa ĐỌC của sổ dùng AI: token thật + anon key + RLS, và panel vẽ bằng dữ liệu thật
+- **Đăng nhập Google vẫn cần một cú bấm của người** — đã thử lại: gọi `authSignIn`, chờ **240 giây**, vẫn `guest`. Nên lần này đo **nửa dữ liệu** (thứ Rust thật sự gửi) và **nửa vẽ** (bằng chính các dòng vừa ghi ở #351), thay vì nói "chưa đo được" rồi dừng.
+- **Đo nửa đọc, đúng đường `usage.rs` đi:** mint token thật của tài khoản thử (magic-link qua service_role, token không in ra), rồi `GET /rest/v1/ai_usage_log?user_id=eq.<mình>&select=…&limit=10` bằng **anon key + token người dùng** (không service_role):
+  - **200, 3 dòng** — đúng các dòng #351 đã ghi, mới nhất trước: `failed cost=0 {plan:free, unit:generations, error:gemini_404, questions:0}`, `completed cost=1 … questions:3` ×2.
+  - **người khác với token này: 200, 0 dòng** (bộ lọc `user_id` + RLS).
+  - **không token, chỉ anon key: 200, 0 dòng** — khoá công khai không đọc được sổ của ai.
+- **Đo nửa vẽ bằng dữ liệu THẬT** (đọc DB bằng service_role rồi đưa nguyên các dòng vào `accountState.history`, mở panel, đọc DOM): `data-account-usage="ready"`, đầu khối `Lịch sử dùng AI · 3 lần gần nhất`, ba dòng đúng thứ tự:
+  - `25/11 · lần gọi hỏng · không trừ · (gemini_404)`
+  - `25/11 · 3 câu · -1 lượt`
+  - `25/11 · 3 câu · -1 lượt`
+  (danh tính được stub trong probe và có ghi chú — con số thì không bịa.)
+- **Cổng chạy lại trên binary hiện tại:** `ui-account-check` **17/17** · `ui-editor-cloud-check` **15/15** · `ui-wizard-cloud-check` **11/11** (Khách) · `ui-cloud-generate-check` **5/5**.
+- **Vẫn chưa đo:** đường Rust `account:usage-history` với phiên THẬT (cùng một cú bấm đăng nhập bị chặn ở trên); bộ cài chưa dựng lại sau #352.
+
 ### 2026-11-25 — #352 giáo viên đọc được sổ dùng AI của chính mình trong panel Tài khoản
 - **Phép đọc nằm ở Rust, không ở renderer.** Hàng `select` của `ai_usage_log` cần `Authorization: Bearer`, mà token chỉ sống trong tiến trình Rust + blob DPAPI (#337). Kênh mới `account:usage-history` (`src-tauri/src/usage.rs`) đọc rồi trả `{status, cost, unit, questions, error, at}` — renderer không có đường nào chạm token.
 - **Đọc bằng anon key + token của phiên, KHÔNG service_role.** Service_role bỏ qua RLS, nghĩa là một lỗi `user_id` sẽ cho giáo viên xem sổ của người khác; policy `Users view own usage` chỉ có tác dụng khi request đi bằng đúng token người dùng.

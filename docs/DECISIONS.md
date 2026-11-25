@@ -5677,4 +5677,11 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
 - **`limit` do UI gửi phải bị kẹp ở máy.** Một tham số từ phía client không được quyết định phạm vi đọc dữ liệu.
 - **Sổ rỗng và sổ không đọc được là hai trạng thái, không phải một.** Cả hai đều "không có dòng nào"; hiện giống nhau là nói với giáo viên rằng họ chưa tiêu gì, trong khi sự thật là hệ thống chưa biết. Trạng thái lỗi phải nói ra rằng nó là lỗi ĐỌC.
 - **Có kênh trong schema façade không có nghĩa là kênh chạy được.** Façade là hợp đồng, `dispatch` mới là thân; thiếu nhánh dispatch thì lỗi hiện ra đúng lúc giáo viên bấm, không phải lúc biên dịch — nên cổng phải GỌI kênh, không chỉ đọc schema.
-- **Một probe không được di chuyển thứ nó đang đo.** Probe tự mở/đóng panel đã làm dòng kiểm "đóng panel thì panel biến mất" đo chính probe; cổng chỉ được ĐỌC node mà cổng khác đã mở. SmartScreen, thời gian cài, hiệu ứng phải nhìn, một lượt chơi offline: bốn thứ này không có phép đo tự động trung thực nào trên máy đã có WebView2 và đã quen tệp cài.
+- **Một probe không được di chuyển thứ nó đang đo.** Probe tự mở/đóng panel đã làm dòng kiểm "đóng panel thì panel biến mất" đo chính probe; cổng chỉ được ĐỌC node mà cổng khác đã mở.
+
+## #353 — Khi một cú bấm của người chặn đường, hãy đo nửa còn lại đúng cách
+
+- **"Cần người bấm" không phải lý do để dừng đo.** Đường đọc sổ có hai nửa: phần dữ liệu (token + anon key + RLS) và phần vẽ. Nửa dữ liệu đo được bằng một token THẬT của tài khoản thử; nửa vẽ đo được bằng chính các dòng vừa ghi. Ghi rõ nửa nào chưa đo (đường Rust với phiên sống) thay vì gộp tất cả thành "chưa kiểm".
+- **Phép đo quyền phải có cả hai chiều.** Đọc được sổ của mình (3 dòng) chỉ có nghĩa nếu đồng thời: `user_id` của người khác ⇒ 0 dòng, và **không token** (chỉ anon key) ⇒ 0 dòng. Một phép đo chỉ có chiều "đọc được" không phân biệt được "RLS đúng" với "RLS không tồn tại".
+- **Đo bằng dữ liệu thật, không bằng dữ liệu bịa.** Các dòng đưa vào panel là các dòng đã ghi thật ở #351 (kể cả dòng hỏng `gemini_404`) — nếu bịa thì phép đo chỉ chứng minh formatter đồng ý với chính nó.
+- **Danh tính stub phải được nói ra tại chỗ.** Probe đặt `accountUiState = () => 'member'` để khối sổ tồn tại; điều đó không chứng minh đăng nhập chạy, và ghi chú trong probe nói đúng như vậy. SmartScreen, thời gian cài, hiệu ứng phải nhìn, một lượt chơi offline: bốn thứ này không có phép đo tự động trung thực nào trên máy đã có WebView2 và đã quen tệp cài.
