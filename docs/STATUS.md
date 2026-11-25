@@ -7,6 +7,12 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-25 — #358 phát hành v0.5.5 (bốn nguồn phiên bản + đo bằng cách cài)
+- **Bốn nguồn phiên bản khớp nhau:** `package.json` / `package-lock.json` · `src-tauri/Cargo.toml` · `src-tauri/tauri.conf.json` · `GET /health` của gateway ⇒ **0.5.5**.
+- **Bộ cài:** `EduGame Studio (Tauri)_0.5.5_x64-setup.exe` — **16 367 996 B** (15,61 MiB), SHA-256 `45fd0f2ffb446e16…`, dựng 23:06, gồm #349–#357.
+- **Đo bằng cách CÀI THẬT** (`/S`, `exit=0`): registry `DisplayVersion 0.5.5`; exe đã cài 59 303 936 B mtime 23:05; chạy với **env bóc sạch** ⇒ `appInfo.version = 0.5.5`, `url = http://tauri.localhost/`, thư viện 9 thẻ, `accountQuota = ok free 5` (Cloud AI cấu hình từ URL **nhúng**, không từ env); `ui-account-check` **22/22** trên bản đã cài.
+- **Cổng trước khi phát:** `tsc` sạch · `npm run check` sạch · `check:embedded` 6 217,2 KiB · `check:embedded-gateway -- --require` OK.
+
 ### 2026-11-25 — #357 `idempotency_key`: một lần bấm là một dòng sổ, kể cả khi gửi lại
 - **Giữ chỗ TRƯỚC khi trừ lượt** (`claimUsageLog`): chèn dòng `pending` với `idempotency_key` (cột unique đã có từ migration 003, **không cần SQL mới**). Chỗ đã `completed` ⇒ **409 `duplicate_request`** và **không trừ gì**; chỗ `pending`/`failed` ⇒ **được thử lại và DÙNG LẠI** dòng đó (lần trước không có trò chơi nào, hoặc đã hoàn tiền).
 - **Khoá đi cùng thân request**: renderer sinh `cloudClickKey()` cho mỗi lần bấm; Rust **không** sinh khoá mới khi thử lại sau 401, và kiểm dạng ở máy (`key_is_usable`, 8–64 ký tự `[A-Za-z0-9_-]`) trước khi gửi.

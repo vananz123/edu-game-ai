@@ -7,12 +7,14 @@ Mọi phép đo tự động đã xanh trên bản trinh nguyên giả lập (DE
 rỗng + profile WebView2 rỗng). Checklist này chỉ đo phần mà **máy ảo không đo được**: bộ cài,
 SmartScreen, shortcut, và hành vi sau khi gỡ.
 
-> **Bản cài đang dùng để thử:** `EduGame Studio (Tauri)_0.5.4_x64-setup.exe`
+> **Bản cài đang dùng để thử:** `EduGame Studio (Tauri)_0.5.5_x64-setup.exe`
 > · 16 352 902 byte (15,60 MiB) · 2026-11-25 08:01
 > · SHA-256 `f83d815f068f63de506a04d286584cffaec2d5200e1172a7ae94f84174e94534`
 >
 > Kiểm mã băm trước khi cài (PowerShell):
-> `Get-FileHash '.\EduGame Studio (Tauri)_0.5.4_x64-setup.exe' -Algorithm SHA256`
+> `Get-FileHash '.\EduGame Studio (Tauri)_0.5.5_x64-setup.exe' -Algorithm SHA256`
+>
+> Bản **v0.5.5**: `16 367 996 B` · SHA-256 bắt đầu bằng `45fd0f2ffb446e16`
 > Nếu mã khác ⇒ tệp hỏng hoặc không phải bản đã kiểm — **dừng lại**, đừng cài.
 
 ## Điều đã biết trước (đừng ngạc nhiên)
@@ -96,7 +98,7 @@ chép lại đúng kết quả đo để người đọc checklist biết phần
 | --- | --- | --- |
 | 2.1 Cài im lặng | `setup.exe /S /D=D:\Temp\eg-install-check` (`installMode: currentUser`, không UAC) | mã thoát **0** |
 | 2.2 Kích thước sau cài | đếm thư mục cài | **58 MB**, có `edugame-studio-tauri.exe` + `uninstall.exe` |
-| 2.3 Đăng ký gỡ cài | `HKCU\...\Uninstall\*` | `EduGame Studio (Tauri)` · `DisplayVersion 0.5.4` · `InstallLocation` đúng thư mục |
+| 2.3 Đăng ký gỡ cài | `HKCU\...\Uninstall\*` | `EduGame Studio (Tauri)` · `DisplayVersion 0.5.5` · `InstallLocation` đúng thư mục |
 | 2.4 Shortcut | `%APPDATA%\Microsoft\Windows\Start Menu\Programs` | có **một** tệp `.lnk` tên “EduGame Studio (Tauri)” |
 | 3.1 Màn thiết lập | chạy bản **đã cài** với dữ liệu rỗng | **có** (`data-setup-fullscreen="1"`) |
 | 3.2 Số trò mẫu | cùng lần chạy đó | **1** (`sample-traffic-001`) — đúng thiết kế, không phải thiếu |
