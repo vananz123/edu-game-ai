@@ -87,6 +87,22 @@ function expectedState(status) {
   return status.loggedIn ? 'member' : 'guest';
 }
 
+// #352: the usage log channel, measured where it is reachable without a Google click.
+// A guest must get a NAMED refusal over the real IPC channel, not an empty list.
+const USAGE_GUEST = String.raw`(async () => {
+  const result = await desktop.call('accountUsageHistory', { limit: 5 });
+  // The panel is already open at this point in the gate; reading a node must not move it,
+  // or the later "closing removes the panel" check measures the probe instead of the app.
+  const panel = document.querySelector('[data-account-panel]');
+  return {
+    ok: Boolean(result && result.ok),
+    code: result && result.code,
+    rows: Array.isArray(result && result.rows) ? result.rows.length : -1,
+    state: panel ? panel.getAttribute('data-account-panel-state') : '',
+    usageBlock: Boolean(document.querySelector('[data-account-usage]'))
+  };
+})()`;
+
 (async () => {
   const cdp = await connect();
 
@@ -135,6 +151,14 @@ function expectedState(status) {
   check('clicking the chip opens the account panel', Boolean(panel.panel), String(panel.panel));
   check('the panel shows the same state as the chip', panel.panel === dom.state, panel.panel + ' vs ' + dom.state);
   check('the panel is titled "Tài khoản"', /Tài khoản/i.test(panel.heading || ''), panel.heading);
+  const usageGuest = await cdp.evaluate(USAGE_GUEST);
+  check(
+    'reading the usage log as a guest is refused with a named code',
+    usageGuest.ok === false && usageGuest.code === 'not_signed_in' && usageGuest.rows === 0,
+    usageGuest.code + ' rows=' + usageGuest.rows
+  );
+  check('a guest panel shows no usage log', usageGuest.usageBlock === false, 'state=' + usageGuest.state);
+
   check('a guest is offered Google sign-in', dom.state === 'guest' ? panel.signIn === true : panel.signIn !== true,
     'state=' + dom.state + ' signIn=' + panel.signIn);
   check('an unreadable session offers to clear it instead of claiming "guest"',

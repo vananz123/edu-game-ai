@@ -82,6 +82,9 @@ pub fn hand_written(command: &str) -> Option<(&'static str, &'static str)> {
         // Cloud AI (#344): token nằm trong Rust, renderer chỉ nhận trò chơi. Kênh này
         // là lời gọi DUY NHẤT mang `Authorization` ra khỏi máy.
         "cloud_generate" => ("ai:cloud-generate", "cloud_generate"),
+        // #352: sổ dùng AI của CHÍNH người đang đăng nhập. Đọc bằng token của phiên
+        // (anon key + RLS `Users view own usage`), không bằng service_role.
+        "get_usage_history" => ("account:usage-history", "get_usage_history"),
         "get_ai_providers" => ("ai:providers", "get_ai_providers"),
         "get_local_ai_models" => ("ai:local-models", "get_local_ai_models"),
         // Giai đoạn 5: AI local — tải model/runtime và quản lý llama-server.
@@ -214,6 +217,7 @@ const INVOKE_CHANNELS: &[&str] = &[
     "auth:refresh",
     "auth:sign-out",
     "ai:cloud-generate",
+    "account:usage-history",
     "ai:providers",
     "ai:test-provider",
     "ai:local-models",
@@ -300,6 +304,18 @@ async fn dispatch(app: &AppHandle, channel: &str, args: &[Value]) -> Result<Valu
         "auth:sign-in" => json(start_auth_oauth(app.clone()).await),
         "auth:refresh" => json(refresh_auth_session(app.clone()).await),
         "auth:sign-out" => json(sign_out_auth(app.clone())),
+        // #352: sổ dùng AI của người đang đăng nhập. `limit` đi qua `args` nhưng bị kẹp
+        // lại trong `usage::request_path`, nên một con số do UI gửi không mở rộng được
+        // phạm vi đọc.
+        "account:usage-history" => {
+            let limit = args
+                .first()
+                .and_then(|value| value.get("limit"))
+                .and_then(|value| value.as_u64())
+                .map(|value| value as u32)
+                .unwrap_or(crate::usage::DEFAULT_ROWS);
+            json(Ok(crate::usage::usage_history(app, limit).await))
+        }
         "ai:cloud-generate" => match args.first() {
             Some(incoming) if incoming.is_object() => match serde_json::from_value::<crate::cloud::CloudRequest>(incoming.clone()) {
                 Ok(request) => json(Ok(crate::cloud::cloud_generate(app.clone(), request).await)),
@@ -758,6 +774,18 @@ pub async fn cloud_generate(
     payload: crate::cloud::CloudRequest,
 ) -> crate::cloud::CloudOutcome {
     crate::cloud::cloud_generate(app, payload).await
+}
+
+/// `account:usage-history` — sổ dùng AI của người đang đăng nhập (#352).
+///
+/// Trả `UsageHistory` chứ không `Result<T, String>`: "chưa đăng nhập" và "không đọc được
+/// sổ" cần hai lời mời khác nhau, và UI cần mã máy đọc được để chọn lời.
+#[tauri::command]
+pub async fn get_usage_history(
+    app: AppHandle,
+    limit: Option<u32>,
+) -> crate::usage::UsageHistory {
+    crate::usage::usage_history(&app, limit.unwrap_or(crate::usage::DEFAULT_ROWS)).await
 }
 
 /// `auth:sign-out` — xoá phiên DPAPI. Không động vào game hay giáo án.

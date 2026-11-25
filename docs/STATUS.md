@@ -7,6 +7,22 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-25 — #352 giáo viên đọc được sổ dùng AI của chính mình trong panel Tài khoản
+- **Phép đọc nằm ở Rust, không ở renderer.** Hàng `select` của `ai_usage_log` cần `Authorization: Bearer`, mà token chỉ sống trong tiến trình Rust + blob DPAPI (#337). Kênh mới `account:usage-history` (`src-tauri/src/usage.rs`) đọc rồi trả `{status, cost, unit, questions, error, at}` — renderer không có đường nào chạm token.
+- **Đọc bằng anon key + token của phiên, KHÔNG service_role.** Service_role bỏ qua RLS, nghĩa là một lỗi `user_id` sẽ cho giáo viên xem sổ của người khác; policy `Users view own usage` chỉ có tác dụng khi request đi bằng đúng token người dùng.
+- **`limit` bị kẹp ở máy này** (`MAX_ROWS 30`, mặc định 10) — một con số do UI gửi không mở rộng được phạm vi đọc.
+- **Sổ rỗng ≠ không đọc được.** Ba trạng thái được vẽ khác nhau (`data-account-usage="idle|empty|error|ready"`), và trạng thái lỗi nói thẳng: *"Đây là lỗi đọc sổ, không phải kết luận là tháng này bạn chưa dùng gì."* Hiện cả hai như "chưa có lần nào" là nói dối giáo viên về tiền của họ.
+- **Đơn vị đi cùng con số** (#348): `25/11 · 3 câu · -1 lượt` khác `25/11 · 5 câu · -2 credits`; lần hỏng ghi `lần gọi hỏng · không trừ · (gemini_404)`.
+- **Không tự gọi mạng khi mở panel:** sổ đọc khi giáo viên bấm "Xem lịch sử dùng AI" (một lời mời, một lần đọc).
+- **Đo:**
+  - `cargo test --lib` **190/190** (12 test mới cho `usage.rs`: đường dẫn + kẹp `limit`, đơn vị đi cùng giá, dòng hỏng cost 0 + lý do, metadata thiếu vẫn ra dòng, đơn vị lạ bị chuẩn hoá, số dạng chuỗi, giá âm bị chặn, `[]` không phải lỗi, body hỏng là lỗi CÓ TÊN).
+  - `tests/unit/account-usage.test.ts` (mới) **22 khẳng định** trên tệp đã biên dịch: câu theo đơn vị, ngày, `NaN`, và **sổ rỗng khác sổ lỗi** ở mức HTML.
+  - `ui-account-check` **15/15 → 17/17**: kênh thật trả `{ok:false, code:'not_signed_in', rows:0}` cho khách, và panel khách **không** có khối sổ.
+  - unit **110/110** · `npm run check` sạch · `verify:css` 61/61 · `check:embedded` 6 217,2 KiB · `ui-wizard-cloud-check` 11/11 · `ui-cloud-generate-check` 5/5 · `tsc` sạch.
+- **Hai lỗi thật do cổng bắt:** (a) kênh có trong schema façade nhưng **thiếu nhánh `dispatch`** ⇒ *"Kênh `account:usage-history` chưa có thân trong vỏ Tauri"* khi bấm; (b) probe của cổng tự `openAccountPanel()/closeAccountPanel()` nên dòng kiểm "đóng panel thì panel biến mất" đo **probe** chứ không đo ứng dụng.
+- **Chưa làm:** nhánh **member** của panel (có dòng sổ thật) chưa được đo trên máy này — cần một cú bấm đăng nhập Google; bộ cài chưa dựng lại sau #352 (chỉ binary `target/release`).
+- **Ghi chú façade:** lời gọi mới xếp vào nhóm `app` (như `authSignOut`) nên `GROUP_COUNTS` chỉ đổi 15 → 16 và tổng 103 → 104, không thêm nhóm thứ chín.
+
 ### 2026-11-25 — #351 `ai_usage_log` có người ghi: mỗi lần gọi một dòng, và một lần hỏng ghi giá 0
 - **Sổ, không phải hạn mức.** Hạn mức vẫn tính bằng `usage_monthly` + CAS (#343/#348); `ai_usage_log` là dòng thứ hai để trả lời "tháng này tôi mất gì". Hai thứ **không** tính từ nhau — gộp lại là mở lại đúng cái cửa đã đóng.
 - **`server/usage-log.ts` (mới, hàm thuần `usageLogRow` + `writeUsageLog`):** `feature`, `model`, `credit_cost`, `status`, `completed_at`, `metadata{unit, plan, questions[, error]}`.

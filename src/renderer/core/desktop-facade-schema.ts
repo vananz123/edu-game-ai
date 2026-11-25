@@ -59,6 +59,9 @@ const DESKTOP_CALLS = Object.freeze({
   // Cloud AI (#344): renderer xin một trò chơi từ gateway của sản phẩm. Access token
   // KHÔNG đi qua lời gọi này — nó ở lại Rust, chỉ `CloudOutcome` quay về.
   cloudGenerate: { channel: 'ai:cloud-generate', group: 'ai', kind: 'value', optional: false },
+  // #352: sổ dùng AI của chính người đang đăng nhập. Cùng lý do với `cloudGenerate`:
+  // đọc sổ cần `Authorization`, nên phép đọc nằm ở Rust và renderer chỉ nhận con số.
+  accountUsageHistory: { channel: 'account:usage-history', group: 'app', kind: 'value', optional: false },
 
   // ── data: thư viện trò chơi, lịch sử, giáo án, dự án ─────────────────────
   getLibrary: { channel: 'library:get', group: 'data', kind: 'value', optional: false },

@@ -5668,4 +5668,13 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
 - **Một lần gọi hỏng có giá 0, vì tiền đã về.** Ghi số đã trừ rồi hoàn lại làm sổ cộng ra số tiền không ai thực sự bị trừ — và người đọc sổ sẽ tin con số đó.
 - **Sổ không được giữ nội dung.** Không bài học, không câu hỏi, không prompt; chỉ số câu dùng được và một mã lỗi ngắn. Nếu không, bảng này thành bản sao thứ hai của tài liệu giáo viên, với một policy RLS yếu hơn.
 - **Ghi sổ không bao giờ được làm hỏng việc đã trừ tiền.** `writeUsageLog` không ném; nó trả `{ok:false, reason}` để người vận hành đọc. Một bảng thiếu cột không được biến một lần gọi thành công thành 502.
-- **Một lời gọi API có thể trả 302 chứ không phải JSON.** `generate_link` của GoTrue chuyển hướng về Site URL, và `/verify` đặt token trong **fragment** của `Location`; đi theo redirect thì `ECONNREFUSED`, đọc body thì ra HTML. Phép đo phải đi đúng đường dữ liệu thật, không phải đường tài liệu mô tả. SmartScreen, thời gian cài, hiệu ứng phải nhìn, một lượt chơi offline: bốn thứ này không có phép đo tự động trung thực nào trên máy đã có WebView2 và đã quen tệp cài.
+- **Một lời gọi API có thể trả 302 chứ không phải JSON.** `generate_link` của GoTrue chuyển hướng về Site URL, và `/verify` đặt token trong **fragment** của `Location`; đi theo redirect thì `ECONNREFUSED`, đọc body thì ra HTML. Phép đo phải đi đúng đường dữ liệu thật, không phải đường tài liệu mô tả.
+
+## #352 — Sổ của người khác không được đọc bằng chìa của người vận hành
+
+- **Một phép đọc cần `Authorization` thì phải ở nơi có token.** Sổ dùng AI nằm ở Rust (`account:usage-history`) chứ không ở renderer: token chỉ sống trong tiến trình + blob DPAPI (#337), và mở một đường thứ hai để JS cầm token là mở lại đúng lỗ hổng đã đóng.
+- **Đọc bằng token của người dùng, không bằng service_role.** Service_role bỏ qua RLS; một lỗi `user_id` sẽ cho giáo viên xem sổ của người khác. Policy `Users view own usage` chỉ có nghĩa khi request đi bằng đúng token của chính họ.
+- **`limit` do UI gửi phải bị kẹp ở máy.** Một tham số từ phía client không được quyết định phạm vi đọc dữ liệu.
+- **Sổ rỗng và sổ không đọc được là hai trạng thái, không phải một.** Cả hai đều "không có dòng nào"; hiện giống nhau là nói với giáo viên rằng họ chưa tiêu gì, trong khi sự thật là hệ thống chưa biết. Trạng thái lỗi phải nói ra rằng nó là lỗi ĐỌC.
+- **Có kênh trong schema façade không có nghĩa là kênh chạy được.** Façade là hợp đồng, `dispatch` mới là thân; thiếu nhánh dispatch thì lỗi hiện ra đúng lúc giáo viên bấm, không phải lúc biên dịch — nên cổng phải GỌI kênh, không chỉ đọc schema.
+- **Một probe không được di chuyển thứ nó đang đo.** Probe tự mở/đóng panel đã làm dòng kiểm "đóng panel thì panel biến mất" đo chính probe; cổng chỉ được ĐỌC node mà cổng khác đã mở. SmartScreen, thời gian cài, hiệu ứng phải nhìn, một lượt chơi offline: bốn thứ này không có phép đo tự động trung thực nào trên máy đã có WebView2 và đã quen tệp cài.

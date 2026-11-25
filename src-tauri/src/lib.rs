@@ -36,6 +36,7 @@ pub mod presentation;
 pub mod secrets;
 pub mod settings;
 pub mod setup;
+pub mod usage;
 pub mod sql_params;
 pub mod storage;
 
@@ -178,6 +179,7 @@ pub fn run() {
             api::refresh_auth_session,
             api::sign_out_auth,
             api::cloud_generate,
+            api::get_usage_history,
             // Bản gọi trực tiếp (không qua kênh) để chẩn đoán bằng CDP: cùng
             // một hàm, hai tên lệnh khác nhau nên không có tên nào bị đăng ký hai lần.
             auth::auth_status,

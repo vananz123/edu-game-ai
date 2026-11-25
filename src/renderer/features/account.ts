@@ -15,6 +15,8 @@ const accountState = {
   session: null, // { displayName, avatarUrl } — chỉ để vẽ, không có token
   error: '',
   busy: '',
+  // #352: sổ dùng AI của chính tài khoản này. null = chưa đọc lần nào (KHÔNG phải "rỗng").
+  history: null,
 };
 
 function accountAttr(value) {
@@ -112,7 +114,8 @@ function accountPanelHtml() {
       + uiIcon('sparkles', '', 15) + ' Kiểm tra Cloud AI</button>'
       + '<button class="btn-ghost" data-account-signout type="button">Đăng xuất</button></div>'
       + accountCloudResultHtml()
-      + '<p class="account-hint">Kiểm tra dùng 1 lượt tạo game thật của tháng: 3 câu từ một bài mẫu.</p>';
+      + '<p class="account-hint">Kiểm tra dùng 1 lượt tạo game thật của tháng: 3 câu từ một bài mẫu.</p>'
+      + accountUsageHistoryHtml();
   } else if (stateName === 'guest') {
     body = guestNote
       + '<div class="account-actions"><button class="btn-primary" data-account-signin type="button">'
@@ -155,8 +158,110 @@ function openAccountPanel() {
   // Phiên hỏng: chỉ xoá phiên, không phải "đăng xuất" một phiên đang sống.
   const reset = root.querySelector('[data-account-reset]');
   if (reset) reset.onclick = () => accountSignOut();
+  const usage = root.querySelector('[data-account-usage-load]');
+  if (usage) usage.onclick = () => accountLoadUsage();
   // Không đọc lại trạng thái mỗi lần mở: panel phải vẽ đúng thứ người dùng vừa thấy
   // trên chip, không phải một trạng thái khác đến sau.
+}
+
+// ---------------------------------------------------------------------------
+// #352 — sổ dùng AI của chính tài khoản này (bảng `ai_usage_log`).
+//
+// Đọc sổ cần `Authorization`, nên phép đọc nằm ở Rust (`account:usage-history`) và
+// renderer chỉ nhận `{status, cost, unit, questions, error, at}`. Hai điều luật:
+//   1. Đơn vị đi cùng con số (#348): "1 lượt" khác "2 credits".
+//   2. Sổ rỗng và "không đọc được" là HAI trạng thái khác nhau — một cái là chưa tiêu gì,
+//      cái kia là chưa biết. Hiện giống nhau là nói dối giáo viên về tiền của họ.
+// ---------------------------------------------------------------------------
+
+/** `2026-11-25T04:00:00Z` → `25/11`. Sai/thiếu thì trả chuỗi rỗng, không bịa ngày. */
+function accountUsageDay(at) {
+  const text = String(at || '');
+  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return match ? match[3] + '/' + match[2] : '';
+}
+
+/** Một dòng sổ thành một câu ngắn. Hàm thuần, được đo bằng unit test. */
+function accountUsageLine(row) {
+  if (!row || typeof row !== 'object') return '';
+  const day = accountUsageDay(row.at);
+  const unit = row.unit === 'credits' ? 'credits' : 'lượt';
+  const cost = Number(row.cost);
+  const safeCost = Number.isFinite(cost) && cost > 0 ? cost : 0;
+  const questions = Number(row.questions);
+  const parts = [];
+  if (day) parts.push(day);
+  if (row.status === 'failed') {
+    parts.push('lần gọi hỏng');
+    parts.push('không trừ');
+    const reason = String(row.error || '').trim();
+    if (reason) parts.push('(' + reason + ')');
+  } else {
+    if (Number.isFinite(questions) && questions > 0) parts.push(questions + ' câu');
+    else parts.push('đã tạo');
+    parts.push(safeCost > 0 ? '-' + safeCost + ' ' + unit : 'không trừ');
+  }
+  return parts.join(' · ');
+}
+
+/** Khối sổ trong panel. Chưa đọc thì mời bấm; đọc rồi thì hiện các dòng. */
+function accountUsageHistoryHtml() {
+  const history = accountState.history;
+  const head = '<div class="account-usage-head"><strong>Lịch sử dùng AI</strong>'
+    + (history && history.ok === true && history.rows && history.rows.length
+      ? '<span class="account-role">' + history.rows.length + ' lần gần nhất</span>'
+      : '')
+    + '</div>';
+  if (!history) {
+    return '<div class="account-usage" data-account-usage="idle">' + head
+      + '<button class="btn-ghost btn-small" data-account-usage-load type="button">Xem lịch sử dùng AI</button>'
+      + '<p class="account-hint">Sổ chỉ ghi số lượt/credits và số câu — không lưu nội dung bài học của bạn.</p>'
+      + '</div>';
+  }
+  if (history.ok !== true) {
+    const detail = String(history.message || history.code || '').trim();
+    return '<div class="account-usage" data-account-usage="error">' + head
+      + '<p class="account-hint">Không đọc được sổ dùng AI' + (detail ? ': ' + escapeHtml(detail) : '.')
+      + ' Đây là lỗi đọc sổ, không phải kết luận là tháng này bạn chưa dùng gì.</p>'
+      + '<button class="btn-ghost btn-small" data-account-usage-load type="button">Thử đọc lại</button>'
+      + '</div>';
+  }
+  const rows = Array.isArray(history.rows) ? history.rows : [];
+  if (!rows.length) {
+    return '<div class="account-usage" data-account-usage="empty">' + head
+      + '<p class="account-hint">Tháng này chưa có lần gọi AI nào.</p>'
+      + '<button class="btn-ghost btn-small" data-account-usage-load type="button">Đọc lại</button>'
+      + '</div>';
+  }
+  const items = rows.map(row => '<li data-account-usage-row="' + escapeHtml(row.status || '') + '">'
+    + escapeHtml(accountUsageLine(row)) + '</li>').join('');
+  return '<div class="account-usage" data-account-usage="ready">' + head
+    + '<ul class="account-usage-list">' + items + '</ul>'
+    + '<button class="btn-ghost btn-small" data-account-usage-load type="button">Đọc lại</button>'
+    + '</div>';
+}
+
+/** Đọc sổ. Lỗi cũng là một trạng thái được vẽ, không phải toast rồi biến mất. */
+async function accountLoadUsage() {
+  if (accountState.busy) return;
+  accountState.busy = 'Đang đọc sổ dùng AI…';
+  rerenderAccountPanel();
+  try {
+    const result = await desktop.call('accountUsageHistory', { limit: 10 });
+    accountState.history = (result && typeof result === 'object')
+      ? result
+      : { ok: false, rows: [], code: 'bad_response', message: 'Máy trả về dữ liệu không đọc được.' };
+  } catch (error) {
+    accountState.history = {
+      ok: false,
+      rows: [],
+      code: 'transport_error',
+      message: (error && error.message) || 'Không gọi được kênh đọc sổ.',
+    };
+  } finally {
+    accountState.busy = '';
+    rerenderAccountPanel();
+  }
 }
 
 /** Kết quả lần kiểm Cloud AI gần nhất — hiện ngay trong panel, không toast. */
