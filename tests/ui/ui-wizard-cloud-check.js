@@ -153,6 +153,38 @@ const USAGE_STATES = `(async () => {
   return { near, done, credits, junk };
 })()`;
 
+// #350: the card's meter is pure rendering. It needs the card to exist, and the card needs
+// "member" — so this stubs ONLY that predicate, inside the eval, and restores it. What is
+// measured is "the card draws the number the gateway reported", not "sign-in works" (that is
+// ui-account-check and ui-cloud-generate-check, which talk to the real provider).
+const CARD_USAGE = String.raw`(async () => {
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const original = accountUiState;
+  accountUiState = () => 'member';
+  const read = async usage => {
+    wizardState.cloudUsage = usage;
+    wizardState.cloudStatus = '';
+    render();
+    await sleep(110);
+    const meter = document.querySelector('[data-wizard-cloud-usage]');
+    const button = document.querySelector('[data-wizard-action="cloud-generate"]');
+    return {
+      hasCard: Boolean(document.querySelector('[data-wizard-cloud]')),
+      text: (meter ? meter.textContent : '').trim(),
+      disabled: Boolean(button && button.disabled)
+    };
+  };
+  const near = await read({ allowed: true, used: 4, quotaLimit: 5, unit: 'generations' });
+  const done = await read({ allowed: false, used: 5, quotaLimit: 5, unit: 'generations' });
+  const credits = await read({ allowed: true, used: 498, quotaLimit: 500, unit: 'credits' });
+  const junk = await read({ used: 'x', quotaLimit: null });
+  wizardState.cloudUsage = null;
+  accountUiState = original;
+  render();
+  await sleep(80);
+  return { near, done, credits, junk };
+})()`;
+
 async function main() {
   const page = await connect({ evalTimeoutMs: 300000 });
 
@@ -160,6 +192,16 @@ async function main() {
   const step = await page.evaluate(OPEN_STEP);
   const member = step.state === 'member';
   console.log(`wizard-cloud-check: account state = ${step.state} (loggedIn=${step.loggedIn})`);
+
+  // #350: the meter on the card, measured with a stubbed identity (see CARD_USAGE).
+  const card = await page.evaluate(CARD_USAGE);
+  check('the card exists once the identity says member', card.near.hasCard === true);
+  check('the card says how many turns are left', /Còn 1\/5 lượt/u.test(String(card.near.text)), String(card.near.text));
+  check('a teacher with turns left can press the card button', card.near.disabled === false, String(card.near.disabled));
+  check('the card says an exhausted month plainly', /Đã hết lượt/u.test(String(card.done.text)), String(card.done.text));
+  check('the card disables its button when the month is spent', card.done.disabled === true, String(card.done.disabled));
+  check('the card counts a paid plan in credits', /Còn 2\/500 credits/u.test(String(card.credits.text)), String(card.credits.text));
+  check('unreadable usage leaves the card silent and pressable', card.junk.text === '' && card.junk.disabled === false, `${card.junk.text}|${card.junk.disabled}`);
 
   // 2. The guest case: no card, no button — and the absence is explained by the state.
   if (!member) {

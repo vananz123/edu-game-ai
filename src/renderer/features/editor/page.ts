@@ -157,6 +157,20 @@ function renderEditorPage() {
 }
 
 /** The single entry point: every caller opens the editor page through this. */
+// #350: `usage` của lần gọi Cloud AI gần nhất. Phạm vi TỆP, không phải trong
+// `wireEditorPage`: bộ dựng markup cũng đọc nó, nên khai báo bên trong một hàm thì lần
+// render đầu ném ReferenceError và cả trang soạn thảo không hiện (đã đo được, #350).
+// Chưa gọi lần nào thì `null` ⇒ không in gì.
+let editorCloudUsage = null;
+
+/** Vẽ đồng hồ "còn bao nhiêu" + khoá nút khi đã biết là hết (xem DECISIONS #350). */
+function editorCloudDrawUsage(root) {
+  const hint = $('[data-editor-cloud-usage]', root);
+  if (hint) hint.textContent = cloudUsageText(editorCloudUsage);
+  const button = $('[data-editor-cloud-generate]', root);
+  if (button) button.disabled = cloudUsageExhausted(editorCloudUsage);
+}
+
 function openEditor(game, isNew, note = '', aiContext = null) {
   editorCancelPending();
   editorAiContext = aiContext && aiContext.projectId && editorAiSupported(aiContext.gameType)
@@ -221,6 +235,7 @@ function editorPageHtml(game, isNew, note) {
         <div class="editor-paste-actions">
           <button type="button" class="btn btn-primary btn-small" data-editor-cloud-generate>${uiIcon('sparkles', '', 13)} Viết câu hỏi bằng Cloud AI</button>
           <span class="editor-paste-hint" data-editor-cloud-status>Mỗi lần viết dùng 1 lượt tạo game của tháng. Câu hỏi sinh ra đi qua đúng đường nhập đã kiểm, nên câu nào thiếu đáp án sẽ bị bỏ.</span>
+          <span class="editor-paste-hint" data-editor-cloud-usage>${escapeHtml(cloudUsageText(editorCloudUsage))}</span>
         </div>
       </div>
     </details>
@@ -231,6 +246,8 @@ function editorPageHtml(game, isNew, note) {
 function wireEditorPage(root) {
   if (!root) root = editorPageRoot();
   if (!root) return;
+  // #350: mở lại trình soạn thảo vẫn thấy đồng hồ của lần gọi trước.
+  editorCloudDrawUsage(root);
   // The fields belong to the page the shell just inserted; `game` is the one the markup
   // was built from.
   const game = editorPageState ? editorPageState.game : null;
@@ -379,6 +396,9 @@ $('[data-editor-cloud-generate]', root).addEventListener('click', async () => {
       grade: game.grade || '',
       subject: game.subject || '',
     });
+    // `usage` có ở cả 200 lẫn 429 (DECISIONS #348): học từ lần hỏng để lần sau biết giá.
+    if (outcome && outcome.usage) editorCloudUsage = outcome.usage;
+    editorCloudDrawUsage(root);
     if (!outcome || outcome.ok !== true) {
       // Mã lỗi có tên quyết định lời nhắn; "thử lại sau" chỉ dùng khi thử lại có ích.
       const code = outcome && outcome.code;
@@ -409,7 +429,8 @@ $('[data-editor-cloud-generate]', root).addEventListener('click', async () => {
   } catch (error) {
     say((error && error.message) || 'Không gọi được Cloud AI.');
   } finally {
-    if (button) button.disabled = false;
+    // Đã biết là hết thì nút phải ở lại trạng thái khoá, không mở ra mời bấm tiếp.
+    if (button) button.disabled = cloudUsageExhausted(editorCloudUsage);
   }
 });
 $('[data-editor-paste-clear]', root).addEventListener('click', () => {

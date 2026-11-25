@@ -112,6 +112,29 @@ const SIGNED_IN_ATTEMPT = String.raw`(async () => {
   return { added: 0, text: text.trim(), attempts: 3 };
 })()`;
 
+// #350: the meter is pure rendering, so it is measured WITHOUT spending a turn by seeding the
+// usage the gateway reports. The block exists for guests too, so this needs no sign-in.
+const USAGE_STATES = String.raw`(async () => {
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const read = async usage => {
+    editorCloudUsage = usage;
+    editorCloudDrawUsage();
+    await sleep(80);
+    const hint = document.querySelector('[data-editor-cloud-usage]');
+    const button = document.querySelector('[data-editor-cloud-generate]');
+    return { text: (hint ? hint.textContent : '').trim(), disabled: Boolean(button && button.disabled) };
+  };
+  const near = await read({ allowed: true, used: 4, quotaLimit: 5, unit: 'generations' });
+  const done = await read({ allowed: false, used: 5, quotaLimit: 5, unit: 'generations' });
+  const credits = await read({ allowed: true, used: 498, quotaLimit: 500, unit: 'credits' });
+  const junk = await read({ used: 'x', quotaLimit: null });
+  editorCloudUsage = null;
+  editorCloudDrawUsage();
+  await sleep(60);
+  const cleared = (document.querySelector('[data-editor-cloud-usage]') || {}).textContent || '';
+  return { near, done, credits, junk, cleared: cleared.trim() };
+})()`;
+
 async function main() {
   const page = await connect({ evalTimeoutMs: 240000 });
 
@@ -125,6 +148,16 @@ async function main() {
   check('a short lesson is refused with the reason', /40 ký tự/u.test(short.text), short.text);
   const afterShort = await page.evaluate('document.querySelectorAll("#editorQuestions .editor-question").length');
   check('a refused lesson adds no question', afterShort === 1, String(afterShort));
+
+  // #350: what the teacher reads BEFORE the button spends a turn.
+  const usage = await page.evaluate(USAGE_STATES);
+  check('the meter says how many turns are left', /Còn 1\/5 lượt/u.test(String(usage.near.text)), String(usage.near.text));
+  check('a teacher with turns left can press the button', usage.near.disabled === false, String(usage.near.disabled));
+  check('an exhausted month is said plainly', /Đã hết lượt/u.test(String(usage.done.text)), String(usage.done.text));
+  check('an exhausted month disables the button', usage.done.disabled === true, String(usage.done.disabled));
+  check('a paid plan is counted in credits, not turns', /Còn 2\/500 credits/u.test(String(usage.credits.text)), String(usage.credits.text));
+  check('unreadable usage prints nothing and keeps the button', usage.junk.text === '' && usage.junk.disabled === false, `${usage.junk.text}|${usage.junk.disabled}`);
+  check('clearing the usage clears the meter', usage.cleared === '', String(usage.cleared));
 
   const attempt = await page.evaluate(SIGNED_OUT_ATTEMPT);
   if (attempt.skipped) {
