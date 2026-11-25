@@ -4,6 +4,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { requestGameJson } from './gemini.js';
 import { consumeGeneration, describeQuotaFailure, refundGeneration, type QuotaStore } from './quota.js';
+import { usageLogRow, writeUsageLog } from './usage-log.js';
 
 const PORT = Number(process.env.PORT || 8787);
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
@@ -205,6 +206,25 @@ app.post('/v1/generate', requireConfiguration, requireUser, async (req: Authenti
     return;
   }
   const quota = failure.quota!;
+  // #351: sổ dùng chung cho cả ba nhánh (thành công / AI hỏng / cấu trúc hỏng). Ghi sổ KHÔNG
+  // được làm hỏng một lần gọi đã trừ tiền, nên hàm này không ném.
+  const logUsage = async (
+    input: { status: 'completed' | 'failed'; questions?: number; error?: string | null }
+  ): Promise<void> => {
+    const row = usageLogRow({
+      userId,
+      status: input.status,
+      kind: 'question_generation',
+      model: GEMINI_MODEL,
+      cost: quota.cost,
+      unit: quota.unit,
+      plan: quota.plan,
+      questions: input.questions,
+      error: input.error,
+    });
+    const written = await writeUsageLog(admin, row);
+    if (!written.ok) console.error('Usage log failed:', written.reason || 'unknown');
+  };
   // Đã trừ một lượt ⇒ mọi nhánh hỏng phía dưới phải trả lại. Một lượt bị trừ cho trò
   // chơi không tồn tại là lỗi của sản phẩm, không phải của Google.
   const refund = async (): Promise<void> => {
@@ -234,6 +254,7 @@ ${input.text}`;
       const failure = result as { status: number; body: string; attempts: number };
       console.error('Gemini API error:', failure.status, 'sau', failure.attempts, 'lượt:', failure.body.slice(0, 500));
       await refund();
+      await logUsage({ status: 'failed', error: `gemini_${failure.status}` });
       res.status(502).json({ error: 'Dịch vụ AI đang gặp lỗi. Vui lòng thử lại sau.' });
       return;
     }
@@ -241,14 +262,17 @@ ${input.text}`;
     const game = JSON.parse(text);
     if (!game || typeof game.title !== 'string' || !Array.isArray(game.questions) || game.questions.length === 0) {
       await refund();
+      await logUsage({ status: 'failed', error: 'invalid_game_json' });
       res.status(502).json({ error: 'AI trả về cấu trúc trò chơi không hợp lệ.' });
       return;
     }
     // Do not persist source lesson text or generated content on the backend.
+    await logUsage({ status: 'completed', questions: game.questions.length });
     res.json({ game, provider: GEMINI_MODEL, usage: quota });
   } catch (error) {
     console.error('Generation failed:', error instanceof Error ? error.message : 'unknown');
     await refund();
+    await logUsage({ status: 'failed', error: 'exception' });
     res.status(502).json({ error: 'Không thể tạo trò chơi lúc này. Hãy kiểm tra kết nối rồi thử lại.' });
   }
 });

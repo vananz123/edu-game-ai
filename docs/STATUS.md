@@ -7,6 +7,21 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-25 — #351 `ai_usage_log` có người ghi: mỗi lần gọi một dòng, và một lần hỏng ghi giá 0
+- **Sổ, không phải hạn mức.** Hạn mức vẫn tính bằng `usage_monthly` + CAS (#343/#348); `ai_usage_log` là dòng thứ hai để trả lời "tháng này tôi mất gì". Hai thứ **không** tính từ nhau — gộp lại là mở lại đúng cái cửa đã đóng.
+- **`server/usage-log.ts` (mới, hàm thuần `usageLogRow` + `writeUsageLog`):** `feature`, `model`, `credit_cost`, `status`, `completed_at`, `metadata{unit, plan, questions[, error]}`.
+- **Một lần gọi hỏng ghi giá 0**, vì tiền đã được hoàn; ghi số đã trừ rồi trả lại sẽ làm sổ cộng ra số tiền không ai thực sự bị trừ.
+- **Sổ không giữ nội dung:** không bài học, không câu hỏi, không prompt — chỉ số câu dùng được. Đây là điều kiện để bảng này không thành bản sao thứ hai của tài liệu giáo viên.
+- **Ghi sổ không thể làm hỏng một lần gọi đã trừ tiền:** `writeUsageLog` không ném, chỉ trả `{ok:false, reason}` để người vận hành đọc log máy chủ.
+- **Nối vào cả bốn nhánh** của `/v1/generate`: thành công (`completed`, số câu), Gemini hỏng (`failed`, `gemini_<status>`), JSON sai (`invalid_game_json`), ngoại lệ (`exception`). Nhánh 429 không ghi — không trừ thì không có gì để kê.
+- **Đo thật (tài khoản thử, gateway `PORT=8788`, `.env` đã source):**
+  - 200 → sổ `completed cost=1 question_generation {"plan":"free","unit":"generations","questions":3}`;
+  - 200 lần hai → dòng thứ hai, `generations` 1 → 2;
+  - `GEMINI_MODEL=gemini-khong-ton-tai` → **502**, sổ `failed cost=0 model=gemini-khong-ton-tai {"error":"gemini_404","questions":0}`, và `generations` **2 → 2** (hoàn đúng).
+- **Unit:** `tests/unit/server-usage-log.test.ts` (mới) — **24 khẳng định** (sổ thành công theo đúng đơn vị, hỏng ⇒ 0, mặc định, `NaN`/số âm bị chặn, không có chữ nào từ bài học, sink hỏng/ném không làm sập, ghi đúng bảng). Unit **109/109**.
+- **Cạm bẫy đo được:** `GET /auth/v1/admin/generate_link` trả **302 về Site URL** (`localhost:3000`) ⇒ `fetch` đi theo và `ECONNREFUSED`. Phải `redirect:'manual'`, và `/auth/v1/verify` trả token trong **fragment của `Location`**, không phải JSON body.
+- **Chưa làm:** chưa có màn hình đọc sổ này (giáo viên chưa xem được lịch sử của mình); chưa có `idempotency_key` (một lần gọi bị retry ở phía client sẽ thành hai dòng); RLS mới cho `select` chính chủ.
+
 ### 2026-11-25 — #350 thẻ Cloud AI nói "còn bao nhiêu" TRƯỚC khi bấm, và không mời bấm khi đã hết
 - **Con số phải có trước nút, không phải sau lỗi.** Gateway đã trả `usage` ở cả 200 lẫn 429; nay wizard giữ `wizardState.cloudUsage` và thẻ vẽ câu "Còn 1/5 lượt tạo game trong tháng." / "Còn 2/500 credits…" — nên giáo viên biết giá của cú bấm trước khi bấm.
 - **Đơn vị đi cùng con số** (#348 cùng họ): gói free đếm **lượt**, gói trả phí đếm **credits**; in "còn 2 lượt" cho một tài khoản trả phí là nói sai tiền của người ta.
