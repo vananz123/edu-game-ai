@@ -15,6 +15,7 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
   - `package.json` / `package-lock.json` 0.5.4 · `src-tauri/Cargo.toml` 0.5.4 · `src-tauri/tauri.conf.json` 0.5.4 · `server/index.ts` `/health` trả `0.5.4`.
   - Bộ cài `EduGame Studio (Tauri)_0.5.4_x64-setup.exe`: **16 352 902 B** (15,60 MiB), SHA-256 `f83d815f068f63de…`.
   - Chạy bản vừa dựng: `appInfo.version = 0.5.4`, chip tài khoản có mặt, `cloudGameToImportText` đã nạp.
+  - Phát hành GitHub: release **457522348**, asset **789524565** (`EduGame.Studio.Tauri._0.5.4_x64-setup.exe`), `digest` của GitHub = `sha256:f83d815f068f63de…` — **khớp** SHA-256 tính trên máy.
 - `tsc` sạch · unit **107/107** · `npm run check` 65 tệp.
 
 ### 2026-11-24 — #345 Cloud AI viết câu hỏi ngay trong trình soạn thảo, đi qua đúng đường nhập đã kiểm
