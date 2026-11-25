@@ -97,17 +97,30 @@ const QUOTA_PROBE = String.raw`(async () => {
   const originalQuota = accountState.quota;
   // The panel is ALREADY open at this point in the gate: draw again into it instead of
   // opening/closing, or the later "closing removes the panel" check measures this probe.
+  const draw = () => document.querySelector('[data-account-quota]');
+  // The block as the app ALREADY drew it, in whatever state this machine is in. Reading it
+  // before the stub means the signed-in verdict comes from the real session and the real
+  // gateway, and the stub below only proves the drawing.
+  const real = draw();
+  const realOut = {
+    realMode: real ? real.getAttribute('data-account-quota') : 'missing',
+    realText: real ? real.textContent.trim() : ''
+  };
   accountUiState = () => 'member';
   accountState.quota = { ok: true, plan: 'plus', status: 'active', month: '2026-11', unit: 'credits', used: 4, limit: 500, cost: 2 };
   rerenderAccountPanel();
   await sleep(180);
-  const block = document.querySelector('[data-account-quota]');
-  const out = {
+  const block = draw();
+  const out = Object.assign(realOut, {
+    realOk: Boolean(guest && guest.ok),
+    realCode: guest && guest.code,
+    realPlan: guest && guest.plan,
+    realLimit: guest && Number(guest.limit),
     guestOk: Boolean(guest && guest.ok),
     guestCode: guest && guest.code,
     mode: block ? block.getAttribute('data-account-quota') : 'missing',
     text: block ? block.textContent.trim() : ''
-  };
+  });
   accountUiState = original;
   accountState.quota = originalQuota;
   rerenderAccountPanel();
@@ -179,19 +192,46 @@ const USAGE_GUEST = String.raw`(async () => {
   check('the panel shows the same state as the chip', panel.panel === dom.state, panel.panel + ' vs ' + dom.state);
   check('the panel is titled "Tài khoản"', /Tài khoản/i.test(panel.heading || ''), panel.heading);
   const usageGuest = await cdp.evaluate(USAGE_GUEST);
+  // Two legs, one per state: a guest gets a NAMED refusal, a signed-in teacher gets rows.
+  // Measuring only one leg cannot tell "the token is sent" from "the channel always refuses".
+  if (dom.state === 'member') {
+    check(
+      'reading the usage log with a real session returns the rows of this account',
+      usageGuest.ok === true && usageGuest.rows >= 0,
+      'ok=' + usageGuest.ok + ' rows=' + usageGuest.rows
+    );
+  } else {
+    check(
+      'reading the usage log as a guest is refused with a named code',
+      usageGuest.ok === false && usageGuest.code === 'not_signed_in' && usageGuest.rows === 0,
+      usageGuest.code + ' rows=' + usageGuest.rows
+    );
+  }
   check(
-    'reading the usage log as a guest is refused with a named code',
-    usageGuest.ok === false && usageGuest.code === 'not_signed_in' && usageGuest.rows === 0,
-    usageGuest.code + ' rows=' + usageGuest.rows
+    dom.state === 'member' ? 'the panel shows the log block for a signed-in teacher' : 'a guest panel shows no usage log',
+    dom.state === 'member' ? usageGuest.usageBlock === true : usageGuest.usageBlock === false,
+    'state=' + usageGuest.state
   );
-  check('a guest panel shows no usage log', usageGuest.usageBlock === false, 'state=' + usageGuest.state);
 
   const quotaProbe = await cdp.evaluate(QUOTA_PROBE);
-  check(
-    'reading the monthly meter as a guest is refused with a named code',
-    quotaProbe.guestOk === false && quotaProbe.guestCode === 'not_signed_in',
-    String(quotaProbe.guestCode)
-  );
+  if (dom.state === 'member') {
+    check(
+      'the monthly meter comes back from the real gateway with a price',
+      quotaProbe.realOk === true && Number.isFinite(quotaProbe.realLimit) && quotaProbe.realLimit > 0,
+      'ok=' + quotaProbe.realOk + ' plan=' + quotaProbe.realPlan + ' limit=' + quotaProbe.realLimit
+    );
+    check(
+      'the meter block is drawn in the ready state for a signed-in teacher',
+      quotaProbe.realMode === 'ready' && /Còn|Đã hết/u.test(String(quotaProbe.realText)),
+      quotaProbe.realMode + ' — ' + quotaProbe.realText
+    );
+  } else {
+    check(
+      'reading the monthly meter as a guest is refused with a named code',
+      quotaProbe.guestOk === false && quotaProbe.guestCode === 'not_signed_in',
+      String(quotaProbe.guestCode)
+    );
+  }
   check('the meter block draws the reported allowance', quotaProbe.mode === 'ready', String(quotaProbe.mode));
   check('the meter sentence carries the plan and the unit', /Gói Plus/u.test(String(quotaProbe.text)) && /496\/500 credits/u.test(String(quotaProbe.text)), String(quotaProbe.text));
   check('the meter says how much was already spent', /đã dùng 4/u.test(String(quotaProbe.text)), String(quotaProbe.text));

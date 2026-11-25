@@ -40,6 +40,7 @@
     "launch:ui": "powershell -ExecutionPolicy Bypass -File tests/ui/launch-app.ps1",
     "build:embedded": "node scripts/build-embedded-js.js",
     "check:embedded": "node scripts/build-embedded-js.js --check",
+    "check:embedded-gateway": "node scripts/check-embedded-gateway.js",
     "build:tauri": "npm run build:embedded && node scripts/build-tauri-frontend.js",
     "tauri:run": "node scripts/build-tauri-release.js --run",
     "tauri:check": "node scripts/build-tauri-release.js --check"

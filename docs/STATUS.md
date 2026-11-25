@@ -7,6 +7,19 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-25 — #356 nhúng URL gateway lúc dựng, và nốt các nhánh member (đã đăng nhập thật)
+- **Lỗ hổng #355 được vá:** `build.rs` có thêm `embed_gateway_url()` nhúng `EDUGAME_AI_GATEWAY_URL` (env của tiến trình dựng thắng `.env`, đúng như hai biến Supabase), thiếu thì **in `cargo:warning`** ngay trong log dựng chứ không im lặng. Giữ nguyên tên biến ở cả hai phía — đi qua vòng `EDUGAME_{name}` sẽ thành `AI_GATEWAY_URL`, tức hai cái tên cho một thứ.
+- **Cổng phát hành mới `npm run check:embedded-gateway`:** đọc `.env`/env rồi khẳng định **chuỗi URL có trong byte của `.exe` đã dựng** (`--require` biến "thiếu cấu hình" thành LỖI). Trước khi vá, cổng này **FAIL trên bản cũ** (đúng nghĩa: chưa nhúng gì); sau khi dựng lại thì **OK**.
+- **Đo được (env bị bóc sạch, `env -u EDUGAME_AI_GATEWAY_URL`):** bản `target/release` trả `accountQuota = {ok:true, plan:'free', limit:5, used:0}` ⇒ app dùng URL **nhúng**, không dùng env. Bản **đã cài** (cài lại bằng `/S`, exit 0) cũng vậy: exe 57 912 KiB **có** chuỗi URL, và `accountQuota = {ok:true, plan:'free', limit:5, used:3}` từ `http://tauri.localhost/`.
+- **Đăng nhập đã có thật trên máy này** (`authStatus.loggedIn`, chip `xathiennghiep@gmail.com · Đã đăng nhập`) ⇒ các nhánh member treo từ #349 nay đo được:
+  - `ui-wizard-cloud-check` **21/21 (member, LIVE):** "Cloud AI builds a game with questions in the wizard — 5 câu", `draftSource = cloud-questions`, và **"a real run reports the remaining allowance — Còn 4/5 lượt"**.
+  - `ui-cloud-generate-check` **9/9 (member, LIVE)** — lần đầu **502 `provider_unavailable`** (Gemini burst), thử lại sau 20 giây thì xanh; ghi lại đúng như một lần đo, không phải lỗi sản phẩm.
+  - `ui-account-check` **22/22 (member, LIVE):** sổ trả **5 dòng thật**; đồng hồ thật `Gói miễn phí · Còn 4/5 lượt · đã dùng 1`. Cổng này nay **đọc STATE** (`guest` ⇒ đòi mã từ chối có tên; `member` ⇒ đòi dữ liệu thật) thay vì giả định máy đang là khách.
+- **Sửa cổng, không sửa app:** ba dòng FAIL đầu tiên của `ui-account-check` là **cổng đúng, kỳ vọng sai** — nó đòi `not_signed_in` trên một máy đã đăng nhập. Nay mỗi nhánh có kỳ vọng riêng; cả hai nhánh đều đã chạy thật.
+- **Bộ cài:** `…_0.5.4_x64-setup.exe` **16 373 457 B**, sha256 `dcb8689d…`, dựng 21:24 (có URL gateway nhúng).
+- **Kiểm khác:** `cargo test --lib` **194/194** · unit **110/110** · `npm run check` sạch · `verify:css` 61/61 · `check:embedded` 6 217,2 KiB · `check:embedded-gateway -- --require` OK.
+- **Chưa làm:** 5 dòng P7 vẫn cần người trên máy Windows sạch (SmartScreen, thời lượng cài, máy không có WebView2); `.env` **cá nhân** này đang trỏ gateway về `127.0.0.1:8788` — bản phát cho giáo viên phải dựng với URL thật.
+
 ### 2026-11-25 — #355 dựng lại bộ cài và đo bằng cách CÀI THẬT: bản cài chạy độc lập, không cần máy chủ 5173
 - **"Hmmm… can't reach this page" không phải app hỏng:** đường `cargo build --release --bin` sinh ra bản trỏ `devUrl` (`http://localhost:5173`), nên nó **không mang giao diện**; tắt máy chủ tĩnh là thấy đúng trang lỗi đó. Đường `cargo tauri build` sinh ra bản **nhúng** `dist-tauri` và chạy từ `http://tauri.localhost/`.
 - **Bộ cài mới:** `EduGame Studio (Tauri)_0.5.4_x64-setup.exe` — **16 364 563 B**, sha256 `42e1957996aeeed7…`, dựng lúc 20:46 (gồm #349–#354; bản cũ 16 351 067 B từ #352b).

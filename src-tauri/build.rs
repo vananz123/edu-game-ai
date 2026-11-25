@@ -23,8 +23,35 @@ fn read_dotenv() -> Vec<(String, String)> {
     pairs
 }
 
+/// URL của gateway Cloud AI (#356). Khác hai biến Supabase ở chỗ **tiền tố**: biến lúc
+/// chạy và biến lúc dựng đều tên `EDUGAME_AI_GATEWAY_URL`, nên nhúng thẳng tên đó thay vì
+/// đi qua vòng `EDUGAME_{name}` — đi vòng thì biến lúc dựng sẽ thành `AI_GATEWAY_URL`,
+/// tức hai cái tên cho một thứ, và bản cài sẽ im lặng mất Cloud AI.
+///
+/// Vì sao phải nhúng: `cloud.rs` đọc `option_env!("EDUGAME_AI_GATEWAY_URL")`, mà một biến
+/// chỉ nằm trong môi trường của người dựng thì **không tồn tại trên máy đã cài** — đúng
+/// lỗi #355 đo được (`gateway_not_configured` trên bản cài bóc hết env).
+fn embed_gateway_url(dotenv: &[(String, String)]) {
+    const NAME: &str = "EDUGAME_AI_GATEWAY_URL";
+    println!("cargo:rerun-if-env-changed={NAME}");
+    let value = std::env::var(NAME)
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .or_else(|| dotenv.iter().find(|(k, _)| k == NAME).map(|(_, v)| v.clone()));
+    match value {
+        Some(value) => println!("cargo:rustc-env={NAME}={}", value.trim_end_matches('/')),
+        // Thiếu thì nói TO ở log dựng: bản cài này sẽ không có Cloud AI, và người dựng
+        // phải biết ngay chứ không phải sau khi cài lên máy giáo viên.
+        None => println!(
+            "cargo:warning=EDUGAME_AI_GATEWAY_URL chưa đặt: bản dựng này KHÔNG có Cloud AI (Local AI vẫn chạy)."
+        ),
+    }
+}
+
 fn embed_cloud_config() {
     let dotenv = read_dotenv();
+    embed_gateway_url(&dotenv);
     for name in EMBEDDED {
         // Biến môi trường của tiến trình build thắng `.env`: cho phép dựng bản thử
         // trỏ sang project Supabase khác mà không sửa tệp.
