@@ -386,7 +386,10 @@ $('[data-editor-cloud-generate]', root).addEventListener('click', async () => {
         : (code === 'quota_exhausted' ? 'Tháng này đã hết lượt tạo game.'
           : (code === 'quota_busy' || code === 'provider_unavailable' ? 'Dịch vụ AI đang bận — thử lại sau ít phút.'
             : 'Không dùng được Cloud AI lúc này.'));
-      say((outcome && outcome.message ? outcome.message + ' ' : '') + advice);
+      // Câu của gateway đã nói đúng bệnh thì KHÔNG thêm lời khuyên trùng ý: lần chạy
+      // thật cho ra 'Bạn đã dùng hết lượt… Tháng này đã hết lượt…', đọc như lỗi lặp.
+      const message = outcome && outcome.message ? String(outcome.message).trim() : '';
+      say(message && message.length > 12 ? message : advice);
       return;
     }
     const converted = cloudGameToImportText(outcome.game);

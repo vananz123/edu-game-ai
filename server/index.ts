@@ -106,7 +106,7 @@ function quotaStore(admin: SupabaseClient): QuotaStore {
   };
 }
 
-app.get('/health', (_req, res) => res.json({ ok: true, service: 'edugame-ai-gateway', version: '0.5.3' }));
+app.get('/health', (_req, res) => res.json({ ok: true, service: 'edugame-ai-gateway', version: '0.5.4' }));
 
 app.post('/v1/generate', requireConfiguration, requireUser, async (req: AuthenticatedRequest, res: Response) => {
   const parsed = requestSchema.safeParse(req.body);

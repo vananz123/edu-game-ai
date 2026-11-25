@@ -7,6 +7,16 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-24 — #346 nhánh “đã đăng nhập” của Cloud AI chạy thật; phát hành v0.5.4
+- **Đóng nốt nhánh còn treo của #345.** Đăng nhập thật (`xathiennghiep@gmail.com`) rồi chạy `EDUGAME_CLOUD_LIVE=1 node tests/ui/ui-editor-cloud-check.js`: **8/8**, trong đó `Cloud AI added questions to the editor — 6 câu trong 1 lượt`, trạng thái “Đã thêm 6 câu hỏi từ bài học”. Kiểm thêm ở DOM: 7 câu trong trình soạn thảo (1 câu mẫu + 6 câu mới), câu mới có **3 phương án** và ô đáp án đúng đã chọn (`a`).
+- **Lượt chạy thật làm lộ một lỗi chữ:** khi tài khoản đã hết lượt, thông báo in **hai câu cùng ý** (“Bạn đã dùng hết lượt…” + “Tháng này đã hết lượt…”). Nay câu của gateway được ưu tiên và lời khuyên chỉ xuất hiện khi gateway không nói gì.
+- **Hạn mức free đã chạm trần thật** (5 lượt/tháng) trong lúc đo; đã đặt lại `generations = 0` cho tài khoản thử để đo tiếp — đây là thao tác trên dữ liệu thử, không phải cơ chế sản phẩm.
+- **Phát hành v0.5.4** (bốn nguồn phiên bản khớp nhau):
+  - `package.json` / `package-lock.json` 0.5.4 · `src-tauri/Cargo.toml` 0.5.4 · `src-tauri/tauri.conf.json` 0.5.4 · `server/index.ts` `/health` trả `0.5.4`.
+  - Bộ cài `EduGame Studio (Tauri)_0.5.4_x64-setup.exe`: **16 352 902 B** (15,60 MiB), SHA-256 `f83d815f068f63de…`.
+  - Chạy bản vừa dựng: `appInfo.version = 0.5.4`, chip tài khoản có mặt, `cloudGameToImportText` đã nạp.
+- `tsc` sạch · unit **107/107** · `npm run check` 65 tệp.
+
 ### 2026-11-24 — #345 Cloud AI viết câu hỏi ngay trong trình soạn thảo, đi qua đúng đường nhập đã kiểm
 - **Không mở đường thứ hai để ghi câu hỏi.** Gateway trả về một *trò chơi*; trình soạn thảo đọc *văn bản*. Thay vì dựng thêm một bộ ghi câu hỏi (kèm kiểm tra, chống trùng và báo cáo riêng), câu hỏi của Cloud AI được đổi thành đúng dạng khối mà giáo viên vẫn dán (`Câu 1: … / A. … / Đáp án: B / Giải thích: …`) rồi đi qua `parseQuestionsText` + `applyImportedQuestions` — tức là qua đường nhập đã có kiểm tra, chống trùng, báo cáo dòng bị bỏ.
 - **`src/shared/cloud-questions.ts` + bản sao renderer** (script cổ điển không `import` được). `cloudGameToImportText()` trả `{text, kept, dropped}`. Hai luật: câu mà đáp án **không khớp phương án nào thì BỎ** (không đoán — đáp án sai dạy điều sai), và mọi trường được ép về **một dòng** (một dấu xuống dòng trong câu hỏi sẽ tách nó thành hai câu).
