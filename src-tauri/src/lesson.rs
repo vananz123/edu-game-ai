@@ -603,8 +603,12 @@ fn generate_blocking(app: &AppHandle, payload: Option<&Value>) -> Result<Value, 
         .cloned();
     // Chỉ hai nguồn do giáo viên soạn mới được đi nhánh không gọi AI; một bản
     // nháp AI bị mất `analysisId` không được lặng lẽ thành trò chơi hoàn chỉnh.
+    // #349: `cloud-questions` = a set Cloud AI wrote. Same rule as the other two: the
+    // questions are already the game, so no model may be called for them.
     let no_model_draft = source_draft.is_some()
-        && (draft_source == "imported-questions" || draft_source == "chat-questions");
+        && (draft_source == "imported-questions"
+            || draft_source == "chat-questions"
+            || draft_source == "cloud-questions");
     if analysis_id.is_empty() && no_model_draft {
         let from_chat = draft_source == "chat-questions";
         let _ = app.emit(

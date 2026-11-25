@@ -65,6 +65,9 @@ const wizardState = {
   countTouched: false, // teacher edited the item count; auto-adjust must not override it
   quick: null, // O13: inline confirmation for "AI gợi ý & tạo ngay"
   busy: '', // '' | 'analyze' | 'recommend' | 'generate' | 'save'
+  // #349: the Cloud AI line under its button. Kept in STATE because every `render()`
+  // replaces the card — a status written only into the DOM vanishes mid-run.
+  cloudStatus: '',
   lessonStage: '', // O7: 'retrieve' | 'generate' | 'validate' | 'repair' | 'ready' | 'cached'
   lessonRepaired: false, // O7: true when the model actually had to repair an answer
   generationHistory: [], // #71: finished generation rows, used only for the ETA baseline
@@ -527,6 +530,7 @@ function wizardReset() {
     countTouched: false,
     quick: null,
     busy: '',
+    cloudStatus: '',
     lessonStage: '',
     lessonRepaired: false,
     analysisStartedAt: 0,

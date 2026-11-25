@@ -7,6 +7,20 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-25 — #349 wizard "Tạo từ giáo án" dùng được Cloud AI: 5 câu trong 1 lượt, nguồn ghi là `cloud-questions`
+- **Không mở bộ sinh thứ hai.** Gateway trả về một *trò chơi*; wizard đã có sẵn đường cho *bộ câu hỏi hoàn chỉnh* — cùng đường mà ngân hàng câu hỏi dán tay (#117) và khung chat (#182) đi. Nên câu hỏi của Cloud AI đi qua `wizardAdoptQuestionSet` rồi `wizardUseImportedQuestions`: một lần kiểm, một lần chống trùng, một câu thông báo.
+- **`cloudGameToQuestions()` (mới) là nguồn sự thật duy nhất:** `cloudGameToImportText()` nay **vẽ từ danh sách đó**, nên trình soạn thảo (cần văn bản) và wizard (cần câu hỏi) không thể bất đồng về "câu nào dùng được". Bản sao renderer có cùng hàm; test so **cả văn bản lẫn bộ câu hỏi** giữa hai bản.
+- **Nguồn thứ ba được đặt tên:** `draftSource = 'cloud-questions'` (shared type + `lesson.rs` nhận trong nhánh không-gọi-model). Không dùng lại `'imported-questions'`, vì câu thông báo sẽ nói sai nguồn ("không dùng AI" cho một bộ do AI viết).
+- **Chỉ giáo viên đã đăng nhập mới thấy thẻ Cloud AI — và ẩn nút KHÔNG phải là quyền:** gọi thẳng hành động vẫn bị từ chối kèm câu "Cần đăng nhập tài khoản…".
+- **Bài học ngắn bị từ chối TRƯỚC khi gọi mạng** ("Cần ít nhất 40 ký tự…"), nên một lần gõ thiếu không mất lượt.
+- **Đo thật (tài khoản thử, gói free):** `EDUGAME_CLOUD_LIVE=1 node tests/ui/ui-wizard-cloud-check.js` → **7/7**, `Cloud AI builds a game with questions in the wizard — 5 câu trong 1 lượt`, `draftSource = cloud-questions`, thông báo "Đã dựng trò chơi từ 5 câu Cloud AI soạn…". Khách: **4/4** (không thẻ, không nút, gọi thẳng bị từ chối, không dựng game).
+- **Hai lỗi thật do cổng bắt:**
+  - **Trạng thái chỉ nằm trong DOM** nên `render()` xoá mất: bấm nút, lượt chạy bị từ chối vì hết hạn mức, giáo viên **không đọc được câu nào**. Nay `wizardState.cloudStatus` là STATE và thẻ vẽ lại nó.
+  - **Chính handler giữ cờ `busy` khi bàn giao**, mà `wizardAdoptQuestionSet` từ chối chạy khi `busy` ⇒ Cloud AI soạn xong 5 câu rồi im lặng không dựng gì. Nay nhả cờ trước khi bàn giao.
+- **Chạy lại toàn bộ:** `tsc` sạch · unit **107/107** (nhóm 5 mới cho bộ câu hỏi) · `cargo test --lib` **178/178** · `npm run check` **66** tệp · `check:renderer-globals` 78/80 script · 1 158 hàm · 9 418 chỗ gọi · 0 undefined · `verify:css` 61/61 · `check:embedded` 6 217,2 KiB.
+- **Cổng UI khác trên binary dựng lại:** `ui-editor-cloud-check` **8/8** · `ui-wizard-motion-check` **8/8** · `ui-ai-provider-wizard-check` **tất cả** · `ui-account-check` **15/15**.
+- **Chưa làm:** chưa có nút "Tạo lại bằng Cloud AI" cho từng câu; wizard chưa hiện số lượt/credits còn lại; nhánh cloud chưa chạy với gói `plus` (đo ở #348 bằng script, chưa qua UI).
+
 ### 2026-11-25 — #348 gói trả phí trừ bằng CREDITS: đo thật 200 → trừ 2, hỏng → hoàn 2, hết → 429 không trừ
 - **Đường thứ hai của hạn mức đã mở, và nó KHÔNG chỉ là “nâng số lượt”.** `server/quota.ts` nay rẽ theo gói: `free` (hoặc `plus` quá hạn) đếm **lượt** như cũ (5/tháng), `plus` + `active` trừ **credits** — giá đọc từ `server_config` (`credit_cost_question_generation`), hạn mức tháng đọc từ `quota_pro_monthly_credits`. Cùng một dòng `usage_monthly`, cột khác (`credits_used` / `credits_limit`), cùng cách giữ nguyên tử: **so-sánh-và-đổi** `updated … where credits_used = N`.
 - **Vì sao không chỉ nâng 5 → 500 lượt:** một lần sinh 3 câu và một lần sinh 15 câu không đáng cùng một số tiền, và nhà cung cấp cũng không tính cùng giá. Đếm lượt là đơn vị của bản miễn phí (đủ để thử); credits là đơn vị của bản trả phí (đủ để trả tiền).

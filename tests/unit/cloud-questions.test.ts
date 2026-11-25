@@ -112,7 +112,33 @@ async function main() {
   const mirrorText = vm.runInContext(`cloudGameToImportText(${JSON.stringify(CLOUD_GAME)}).text`, context);
   assert.equal(mirrorText, converted.text, 'the renderer copy must match the shared module');
 
-  console.log('cloud-questions: 4 nhóm kiểm đã qua');
+  // 5. (#349) The wizard needs QUESTIONS, not text — and the two must agree about which
+  //    questions are usable, or a teacher would get 3 questions where the editor promised 4.
+  const set = SHARED.cloudGameToQuestions(CLOUD_GAME);
+  assert.equal(set.kept, converted.kept, 'the same questions survive for both consumers');
+  assert.equal(set.dropped, converted.dropped, 'and the same ones are dropped');
+  const first = set.questions[0];
+  assert.equal(first.id, 'cloud-1', 'ids are positional so a repeat cannot collide');
+  assert.equal(first.type, 'multiple-choice', 'the engine reads this type');
+  assert.deepEqual(first.options.map(option => option.id), ['a', 'b', 'c'], 'option ids are positional');
+  assert.ok(first.options.some(option => option.id === first.correctOptionId), 'the answer names a real option');
+  assert.equal(first.points, 100, 'points match every other question in the library');
+  // The answer letter in the TEXT must be the position of that option, not a copy of the
+  // model's own id (the model said `b2`, which is not an option id at all).
+  assert.match(converted.text.split(String.fromCharCode(10, 10))[0], /Đáp án: A/);
+  // A dropped question is counted by the set as well.
+  const brokenSet = SHARED.cloudGameToQuestions({ questions: [{ prompt: 'x', options: [{ id: 'a', text: 'y' }] }] });
+  assert.equal(brokenSet.kept, 0, 'one option is not a question');
+  assert.equal(brokenSet.dropped, 1, 'and it is counted');
+  // The mirror must produce the same set, not merely the same text.
+  const mirrorSet = vm.runInContext(`cloudGameToQuestions(${JSON.stringify(CLOUD_GAME)})`, context);
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(mirrorSet)),
+    JSON.parse(JSON.stringify(set)),
+    'the renderer copy must build the same questions'
+  );
+
+  console.log('cloud-questions: 5 nhóm kiểm đã qua');
 }
 
 void main();

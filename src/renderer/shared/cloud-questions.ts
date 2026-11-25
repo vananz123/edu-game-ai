@@ -11,6 +11,10 @@
  * Same two rules as the shared module: a question whose answer cannot be matched to a
  * real option is DROPPED (never guessed), and every field is flattened to one line so a
  * newline inside a prompt cannot split one question into two.
+ *
+ * #349: `cloudGameToQuestions()` is here too, because the wizard needs questions (it
+ * builds a draft) while the editor needs text; the text is rendered from the same list so
+ * the two can never disagree about which questions are usable.
  */
 
 const CLOUD_ANSWER_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
@@ -51,11 +55,11 @@ function cloudAnswerIndex(options, question) {
   return -1;
 }
 
-function cloudGameToImportText(game) {
-  const questions = game && Array.isArray(game.questions) ? game.questions : [];
-  const blocks = [];
+function cloudGameToQuestions(game) {
+  const source = game && Array.isArray(game.questions) ? game.questions : [];
+  const questions = [];
   let dropped = 0;
-  for (const question of questions) {
+  for (const question of source) {
     if (!question || typeof question !== 'object') {
       dropped += 1;
       continue;
@@ -69,16 +73,41 @@ function cloudGameToImportText(game) {
       dropped += 1;
       continue;
     }
-    const lines = [`Câu ${blocks.length + 1}: ${prompt}`];
-    texts.forEach((text, position) => lines.push(`${CLOUD_ANSWER_LETTERS[position]}. ${text}`));
-    lines.push(`Đáp án: ${CLOUD_ANSWER_LETTERS[index]}`);
-    const explanation = cloudOneLine(question.explanation);
-    if (explanation) lines.push(`Giải thích: ${explanation}`);
-    blocks.push(lines.join('\n'));
+    const letters = texts.map((text, position) => ({
+      id: CLOUD_ANSWER_LETTERS[position].toLowerCase(),
+      text: text,
+    }));
+    questions.push({
+      id: `cloud-${questions.length + 1}`,
+      type: 'multiple-choice',
+      prompt: prompt,
+      options: letters,
+      correctOptionId: letters[index].id,
+      explanation: cloudOneLine(question.explanation),
+      points: 100,
+    });
   }
+  return { questions: questions, kept: questions.length, dropped: dropped };
+}
+
+function cloudGameToImportText(game) {
+  const set = cloudGameToQuestions(game);
+  const blocks = set.questions.map((question, position) => {
+    const lines = [`Câu ${position + 1}: ${question.prompt}`];
+    question.options.forEach((option, index) => {
+      lines.push(`${CLOUD_ANSWER_LETTERS[index]}. ${option.text}`);
+    });
+    let answerAt = -1;
+    for (let index = 0; index < question.options.length; index += 1) {
+      if (question.options[index].id === question.correctOptionId) answerAt = index;
+    }
+    lines.push(`Đáp án: ${CLOUD_ANSWER_LETTERS[answerAt < 0 ? 0 : answerAt]}`);
+    if (question.explanation) lines.push(`Giải thích: ${question.explanation}`);
+    return lines.join('\n');
+  });
   return {
     text: blocks.join('\n\n'),
-    kept: blocks.length,
-    dropped: dropped,
+    kept: set.kept,
+    dropped: set.dropped,
   };
 }

@@ -387,7 +387,7 @@ export interface GameProject {
    * requires an analysis — a draft is never treated as teacher-authored just because
    * `analysisId` happens to be null.
    */
-  draftSource?: 'imported-questions' | 'chat-questions';
+  draftSource?: 'imported-questions' | 'chat-questions' | 'cloud-questions';
   /** Adapter output used to open the existing editor without calling AI again. */
   gameSnapshot: EducationalGame | null;
   /** Preserves the exact legacy setup when a saved game is opened in the wizard. */

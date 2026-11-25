@@ -361,6 +361,8 @@ async function wizardDispatch(action, button) {
     case 'next': return wizardNext();
     case 'new': return wizardNewProject();
     case 'generate': return wizardGenerateRun();
+    // #349: Cloud AI writes the questions, then the no-model draft path builds the game.
+    case 'cloud-generate': return wizardGenerateWithCloud();
     case 'regenerate': return wizardGenerateRegenerate();
     case 'regenerate-item': return wizardRegenerateItem(Number(button.dataset.itemIndex));
     // Phase B (#72): per-item artwork. Kept out of the `busy` guard above on

@@ -25,7 +25,9 @@ function wizardImportedSourceDraft(usable) {
  */
 async function wizardUseImportedQuestions(gameType, provenance) {
   if (wizardState.busy) return;
-  const runSource = provenance === 'chat-questions' ? 'chat-questions' : 'imported-questions';
+  const runSource = provenance === 'chat-questions'
+    ? 'chat-questions'
+    : (provenance === 'cloud-questions' ? 'cloud-questions' : 'imported-questions');
   if (!wizardState.importedQuestions.length) await wizardClassifyInput();
   const target = gameType || wizardRecommendedGame() || 'arena';
   // Only questions that are ready AND playable by the target; without this the
@@ -118,9 +120,13 @@ async function wizardUseImportedQuestions(gameType, provenance) {
     // teacher can save it right away or adjust the game information first.
     // #182: a chat set WAS written by the AI, so "không dùng AI" would be false — the
     // honest claim is that this step only validated the structure it was given.
+    // #349: three sources now, and the sentence must name the real one — "không dùng AI"
+    // would be false for a set Cloud AI wrote.
     wizardSetNotice(runSource === 'chat-questions'
       ? `Đã dựng trò chơi từ ${usable.length} câu AI vừa soạn trong khung chat — bước này chỉ kiểm tra cấu trúc, không gọi AI lần nữa. Kiểm tra thông tin rồi bấm “Lưu vào thư viện”.`
-      : `Đã tạo trò chơi từ ${usable.length} câu${skipped > 0 ? `, bỏ qua ${skipped} câu không tương thích hoặc đang xem lại` : ''} — không dùng AI. Kiểm tra thông tin rồi bấm “Lưu vào thư viện”.`);
+      : (runSource === 'cloud-questions'
+        ? `Đã dựng trò chơi từ ${usable.length} câu Cloud AI soạn${skipped > 0 ? `, bỏ qua ${skipped} câu chưa dùng được` : ''} — bước này chỉ kiểm tra cấu trúc, không gọi AI lần nữa. Kiểm tra thông tin rồi bấm “Lưu vào thư viện”.`
+        : `Đã tạo trò chơi từ ${usable.length} câu${skipped > 0 ? `, bỏ qua ${skipped} câu không tương thích hoặc đang xem lại` : ''} — không dùng AI. Kiểm tra thông tin rồi bấm “Lưu vào thư viện”.`));
   } catch (error) {
     wizardSetError(error);
   }
@@ -138,6 +144,10 @@ async function wizardUseImportedQuestions(gameType, provenance) {
  * is recorded as `'chat-questions'` so step 4 names the real source.
  *
  * Returns false when nothing was created; the chat keeps its own transcript either way.
+ *
+ * #349: the same seam is how Cloud AI content enters the wizard — `meta.provenance`
+ * `'cloud-questions'` names the real source, so step 4 never claims "không dùng AI" for a
+ * set the cloud wrote.
  */
 async function wizardAdoptQuestionSet(questionSet, meta) {
   const information = meta || {};
@@ -181,8 +191,9 @@ async function wizardAdoptQuestionSet(questionSet, meta) {
   s.questionCompatibility = [];
   s.importedMode = true;
   s.draftOrigin = 'source';
-  s.draftSource = 'chat-questions';
-  await wizardUseImportedQuestions('arena', 'chat-questions');
+  const provenance = (information.provenance === 'cloud-questions') ? 'cloud-questions' : 'chat-questions';
+  s.draftSource = provenance;
+  await wizardUseImportedQuestions('arena', provenance);
   return true;
 }
 

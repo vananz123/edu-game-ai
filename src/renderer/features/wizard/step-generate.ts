@@ -804,6 +804,7 @@ function renderWizardGenerate() {
       : `<div class="panel-sub">${escapeHtml(wizardProviderLabel())} sẽ soạn câu hỏi/tình huống theo đúng cấu hình bên dưới, sau đó bạn duyệt và chỉnh sửa trong trình soạn thảo. Cấu hình và phân tích đã được lưu nên có thể mở lại bất cứ lúc nào — không cần chạy lại AI.</div>
         ${wizardProviderCard()}
         ${wizardProviderPickerHtml()}
+        ${wizardCloudCardHtml()}
         ${wizardSummaryGrid(wizardConfigSummaryRows(config))}
         <div class="publish-actions">
           <button class="btn btn-secondary" data-wizard-action="back"><span data-icon="arrow-left" data-icon-size="13"></span> Cấu hình</button>
@@ -813,6 +814,117 @@ function renderWizardGenerate() {
         </div>`}
     ${s.projectId ? `<div class="field-hint">Dự án đã lưu: <code>${escapeHtml(s.projectId)}</code>. Nội dung AI tạo ra chỉ nằm trên máy này.</div>` : ''}
   </section>`;
+}
+
+/**
+ * #349: "Tạo bằng Cloud AI" at the finishing step.
+ *
+ * Why this lives in the wizard instead of the model pipeline: the gateway returns a GAME,
+ * and the wizard already has a path for a set of finished questions — the same one a pasted
+ * bank and the lesson chat use (`wizardAdoptQuestionSet`). Calling the cloud and then
+ * feeding its questions through that path means one validation, one dedupe, one notice;
+ * the alternative was a second generator with its own rules.
+ *
+ * Cloud AI is only OFFERED to a signed-in teacher, and the run re-checks that: a button
+ * that exists is not a permission. Nothing here stores a token — `cloudGenerateGame`
+ * crosses into Rust, which reads the DPAPI session and attaches the header.
+ */
+async function wizardGenerateWithCloud() {
+  if (wizardState.busy) return undefined;
+  if (accountUiState() !== 'member') {
+    wizardSetError(new Error('Cần đăng nhập tài khoản (chip ở thanh bên) để dùng Cloud AI.'));
+    return render();
+  }
+  const text = String(wizardState.text || '').trim();
+  if (text.length < 40) {
+    // Say the number, not "dữ liệu không hợp lệ": the teacher pastes the lesson at step 1.
+    wizardSetError(new Error('Cần ít nhất 40 ký tự nội dung bài học ở bước 1 để Cloud AI soạn câu hỏi.'));
+    return render();
+  }
+  wizardClearMessages();
+  wizardState.busy = 'generate';
+  wizardSetCloudStatus('Đang nhờ Cloud AI soạn câu hỏi…');
+  render();
+  wizardStartGenerationClock();
+  try {
+    const config = wizardState.config || {};
+    const outcome = await cloudGenerateGame({
+      text: text,
+      sourceName: wizardState.documentName || '',
+      questionCount: Math.min(15, Math.max(3, Number(config.itemCount) || 8)),
+      template: 'quiz',
+      grade: String(config.grade || ''),
+      subject: String(config.subject || '')
+    });
+    if (!outcome || outcome.ok !== true) {
+      const code = outcome && outcome.code;
+      const advice = code === 'not_signed_in'
+        ? 'Phiên đăng nhập đã hết hạn — hãy đăng nhập lại.'
+        : (code === 'quota_exhausted'
+          ? 'Tài khoản đã dùng hết lượt/credits của tháng.'
+          : (code === 'quota_busy' || code === 'provider_unavailable'
+            ? 'Dịch vụ AI đang bận — thử lại sau ít phút.'
+            : 'Không dùng được Cloud AI lúc này.'));
+      const message = outcome && outcome.message ? String(outcome.message).trim() : '';
+      wizardSetCloudStatus(message.length > 12 ? message : advice);
+      wizardSetError(new Error(message.length > 12 ? message : advice));
+      return undefined;
+    }
+    const set = cloudGameToQuestions(outcome.game);
+    if (!set.kept) {
+      wizardSetCloudStatus(`Cloud AI trả ${set.dropped} câu nhưng không câu nào dùng được.`);
+      wizardSetError(new Error('Cloud AI không trả về câu hỏi dùng được (thiếu phương án hoặc đáp án không khớp). Hãy thử lại hoặc dùng “Tạo nội dung”.'));
+      return undefined;
+    }
+    wizardSetCloudStatus(`Cloud AI đã soạn ${set.kept} câu${set.dropped ? ` (bỏ ${set.dropped} câu chưa dùng được)` : ''}.`);
+    // `wizardAdoptQuestionSet` refuses to run while `busy` is set (it is the guard that
+    // stops two runs overlapping), so this run must let go of the flag before handing
+    // over — otherwise the handoff returns false and the teacher gets nothing.
+    wizardState.busy = '';
+    // Same handoff as the lesson chat: the set replaces the wizard's content, so the
+    // guard about an unsaved draft must run (it lives inside `wizardAdoptQuestionSet`).
+    await wizardAdoptQuestionSet(
+      { questions: set.questions },
+      { provenance: 'cloud-questions', documentNames: wizardState.documentName ? [wizardState.documentName] : [] }
+    );
+  } catch (error) {
+    wizardSetError(error);
+  } finally {
+    wizardStopGenerationClock({ finished: Boolean(wizardState.gameSnapshot) });
+    wizardState.busy = '';
+    render();
+  }
+  return undefined;
+}
+
+/**
+ * One line under the cloud button: what happened, in the teacher's words.
+ *
+ * Written into STATE, not only into the node: `render()` rebuilds the card, so a status
+ * that lived in the DOM disappeared the moment the run started (measured: the button was
+ * clicked, the run was refused for quota, and the teacher saw no sentence at all).
+ */
+function wizardSetCloudStatus(text) {
+  wizardState.cloudStatus = String(text || '');
+  const node = document.querySelector('[data-wizard-cloud-status]');
+  if (node) node.textContent = wizardState.cloudStatus;
+}
+
+/** The Cloud AI card, drawn only for a signed-in teacher (a guest gets no promise it cannot keep). */
+function wizardCloudCardHtml() {
+  if (accountUiState() !== 'member') return '';
+  const status = accountState.status || {};
+  const email = String(status.email || '');
+  // Same tone vocabulary as the provider card above, so dark mode needs no new token.
+  return `<div class="flex gap-[12px] items-center border rounded-xl p-3 mb-4 border-[#ddf4e8] bg-[#effaf5] dark:bg-[#132d24] dark:border-[#1e4a3b]" data-wizard-cloud>
+    <span class="shrink-0" data-icon="cloud" data-icon-size="18"></span>
+    <div class="min-w-0 flex-1">
+      <strong class="text-[12px] block text-[#1e293b] dark:text-[#f8fafc]">Cloud AI — soạn câu hỏi bằng tài khoản đã đăng nhập</strong>
+      <small class="block text-[12px] text-[#4f5a6e] dark:text-[#94a3b8] mt-0.5 leading-snug">Không cần cài model trên máy. Mỗi lần tạo trừ lượt/credits của tài khoản${email ? ` ${escapeHtml(email)}` : ''}.</small>
+      <small class="block text-[12px] text-[#4f5a6e] dark:text-[#94a3b8] mt-0.5 leading-snug" data-wizard-cloud-status>${escapeHtml(wizardState.cloudStatus || '')}</small>
+    </div>
+    <button type="button" class="btn btn-secondary btn-small shrink-0" data-wizard-action="cloud-generate"${wizardState.busy ? ' disabled' : ''}>Tạo bằng Cloud AI</button>
+  </div>`;
 }
 
 async function wizardGenerateRun(options) {
