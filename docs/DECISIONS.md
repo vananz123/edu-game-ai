@@ -5631,3 +5631,13 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
 - **Một kỳ vọng sai trong checklist là một lỗi thật.** Mục 3.2 ghi “2 trò mẫu”; đo được **1** (`sample-traffic-001`), khớp test `a_fresh_library_opens_with_the_sample_game`. Kỳ vọng sai khiến người kiểm ghi “hỏng” cho một hành vi đúng — sửa kỳ vọng, không sửa sản phẩm.
 - **Đừng so mã băm exe trong bộ cài với exe đã dựng.** Tauri vá thông tin loại gói (nsis) vào exe khi đóng gói, nên hai mã khác nhau là bình thường. Ghi vào tài liệu để lần sau không ai kết luận sai.
 - **Phần không đo được thì để nguyên là “cần người”, kèm lý do từng dòng.** SmartScreen, thời gian cài, hiệu ứng phải nhìn, một lượt chơi offline: bốn thứ này không có phép đo tự động trung thực nào trên máy đã có WebView2 và đã quen tệp cài.
+
+## #348 — Một gói trả phí không thể được đo bằng đơn vị của bản miễn phí
+
+- **“Nâng 5 lượt thành 500 lượt” là bán cùng một thứ với giá khác.** Một lần sinh 3 câu và một lần sinh 15 câu không đáng cùng một số tiền, và nhà cung cấp cũng không tính cùng giá. Nên `plus` bị trừ bằng **credits** (`credit_cost_question_generation` trong `server_config`), `free` vẫn đếm **lượt** (5/tháng) — hai đơn vị, hai cột trong cùng một dòng `usage_monthly`.
+- **Đơn vị phải đi cùng con số, từ DB tới câu chữ.** `QuotaGrant` mang `unit` và `cost`; 429 nói đúng đơn vị của người dùng. Một câu viết sẵn trong Rust (“hết lượt”) là câu sẽ nói sai với người trả tiền, nên câu của máy chủ thắng câu viết sẵn (nối tiếp #346).
+- **Một khoá cấu hình thiếu không được biến thành “miễn phí”.** Giá 0/âm/đọc lỗi ⇒ giá mặc định 2. Bán miễn phí vì một dòng `server_config` không có là lỗi làm mất doanh thu mà không ai thấy.
+- **Hoàn tiền phải hoàn đúng số đã trừ.** Hoàn 1 “lượt” cho một lần trừ 2 credits nghĩa là giáo viên mất tiền trong khi hệ thống báo đã hoàn; `refundGeneration` nhận `{unit, cost}` và kẹp không âm.
+- **Ba lớp giữ nguyên tử không được khác nhau giữa hai đường.** Credits cũng dùng so-sánh-và-đổi trên đúng dòng đó; thua CAS ba lần là **tạm thời** (`unavailable`), không bao giờ là “hết credits” (#343 cùng họ).
+- **Một `QuotaStore` không giữ được credits thì không được bán credits.** Năm hàm credits là tuỳ chọn; thiếu chúng thì mọi gói chạy bằng đếm lượt — nói thẳng ra thay vì bán một thứ không đếm được.
+- **Đo bằng cách tạo ra cả ba trạng thái thật:** 200 (trừ 2), 502 (hoàn 2), 429 (không trừ). Một phép đo chỉ có nhánh thành công không nói gì về tiền của giáo viên. SmartScreen, thời gian cài, hiệu ứng phải nhìn, một lượt chơi offline: bốn thứ này không có phép đo tự động trung thực nào trên máy đã có WebView2 và đã quen tệp cài.

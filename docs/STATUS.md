@@ -7,6 +7,21 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-25 — #348 gói trả phí trừ bằng CREDITS: đo thật 200 → trừ 2, hỏng → hoàn 2, hết → 429 không trừ
+- **Đường thứ hai của hạn mức đã mở, và nó KHÔNG chỉ là “nâng số lượt”.** `server/quota.ts` nay rẽ theo gói: `free` (hoặc `plus` quá hạn) đếm **lượt** như cũ (5/tháng), `plus` + `active` trừ **credits** — giá đọc từ `server_config` (`credit_cost_question_generation`), hạn mức tháng đọc từ `quota_pro_monthly_credits`. Cùng một dòng `usage_monthly`, cột khác (`credits_used` / `credits_limit`), cùng cách giữ nguyên tử: **so-sánh-và-đổi** `updated … where credits_used = N`.
+- **Vì sao không chỉ nâng 5 → 500 lượt:** một lần sinh 3 câu và một lần sinh 15 câu không đáng cùng một số tiền, và nhà cung cấp cũng không tính cùng giá. Đếm lượt là đơn vị của bản miễn phí (đủ để thử); credits là đơn vị của bản trả phí (đủ để trả tiền).
+- **Đơn vị đi cùng con số.** `QuotaGrant` nay có `unit` (`generations` | `credits`) và `cost`; câu trả lời 429 nói đúng đơn vị của người dùng (“đã dùng hết credits”), và `cloud.rs` **dùng câu của máy chủ** thay vì câu viết sẵn — nếu không, giáo viên trả phí đọc “hết lượt” trong khi hệ thống trừ credits.
+- **Hoàn tiền theo đúng đơn vị.** `refundGeneration(…, {unit, cost})` trả lại đúng số đã trừ (2 credits chứ không phải 1 “lượt”), kẹp không âm, best-effort.
+- **Đo thật (tài khoản thử, gói `plus`/`active`, hạn mức 500):**
+  - `POST /v1/generate` → **200** trong 4,2 s, 3 câu; `usage = {allowed:true, used:2, quotaLimit:500, plan:'plus', unit:'credits', cost:2}`; trên đĩa `credits_used 2`, **`generations` vẫn 0** — chứng minh hai đường không giẫm lên nhau.
+  - Ép hỏng (`GEMINI_MODEL=gemini-khong-ton-tai`) → **502**, `credits_used` **2 → 2**: hoàn đúng 2 credits.
+  - Đặt `credits_used = 499` → **429** `{"error":"Bạn đã dùng hết credits tạo game của tháng.","usage":{…,"unit":"credits"}}`, **không trừ** (vẫn 499).
+  - Trả tài khoản về `free` và đặt lại bộ đếm sau khi đo.
+- **Cổng đo:** `tests/unit/server-quota.test.ts` thêm **7 nhóm** (plus trừ 2 và ghi đúng cột; dòng tháng cũ hạn mức 50 được **nâng** lên 500 nhưng không bao giờ hạ; giá cấu hình **0 hoặc đọc lỗi ⇒ giá mặc định 2**, không bán miễn phí; thiếu credits thì từ chối **trước khi ghi**; hoàn đúng số và kẹp 0; lỗi đọc credits là `unavailable` **không** phải “hết credits”; gói quá hạn quay về đếm lượt). `cloud.rs` thêm 2 khẳng định: câu của máy chủ thắng câu viết sẵn, và `usage` vẫn được chuyển tiếp.
+- **Chạy lại sau khi sửa:** `tsc` sạch · unit **107/107** · `cargo test --lib` **178/178** · `npm run check` 65 tệp · `check:renderer-globals` 78/80 script · 1 154 hàm · **9 368** chỗ gọi · 0 undefined · `verify:css` 61/61 · `check:embedded` 6 217,2 KiB.
+- **Cổng UI trên binary dựng lại:** `ui-cloud-generate-check` **9/9** (member, payload 1 587 B không có token) · `ui-account-check` **15/15**.
+- **Chưa làm (nói rõ):** chưa có UI hiện “còn bao nhiêu credits” (panel Tài khoản mới hiện kết quả gọi thử); `ai_usage_log` vẫn chưa ghi; chưa có cổng UI nào tự tạo được trạng thái `plus` (đổi gói hiện là thao tác trên DB thử).
+
 ### 2026-11-25 — #347 cài → chạy → gỡ bộ cài v0.5.4 bằng máy: 11 dòng của P7 khép lại, 5 dòng vẫn cần người
 - **Bộ cài không còn là hộp đen.** Cài im lặng (`/S /D=…`, `installMode: currentUser` nên **không UAC**) → mã thoát **0**, thư mục cài **58 MB** có `edugame-studio-tauri.exe` + `uninstall.exe`, registry `HKCU\…\Uninstall` ghi `EduGame Studio (Tauri)` · `DisplayVersion 0.5.4` · đúng `InstallLocation`, và **một** shortcut trong Start Menu.
 - **Chạy bản ĐÃ CÀI với mọi biến `SUPABASE*`/`GEMINI*` đã xoá:** `version 0.5.4`, `authStatus.configured = true` — cấu hình nhúng lúc biên dịch hoạt động từ bản cài, không chỉ từ `target/release`.

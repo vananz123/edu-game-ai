@@ -138,8 +138,15 @@ pub fn outcome_from_response(status: u16, body: &str) -> CloudOutcome {
         400 => CloudOutcome::fail("invalid_request", if message_field.is_empty() { "Dữ liệu gửi lên chưa hợp lệ." } else { &message_field }),
         401 => CloudOutcome::fail("not_signed_in", "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."),
         429 => {
+            // Dùng câu của máy chủ khi có: gói trả phí bị trừ bằng CREDITS, không phải bằng
+            // lượt (#348), nên một câu viết sẵn ở đây sẽ nói sai đơn vị của người dùng.
             let usage = parsed.get("usage").cloned();
-            let mut outcome = CloudOutcome::fail("quota_exhausted", "Bạn đã dùng hết lượt tạo game của tháng.");
+            let message = if message_field.is_empty() {
+                "Bạn đã dùng hết lượt tạo game của tháng."
+            } else {
+                &message_field
+            };
+            let mut outcome = CloudOutcome::fail("quota_exhausted", message);
             outcome.usage = usage;
             outcome
         }
@@ -286,6 +293,13 @@ mod tests {
     fn responses_become_named_states() {
         assert_eq!(outcome_from_response(401, "{}").code.as_deref(), Some("not_signed_in"));
         assert_eq!(outcome_from_response(429, "{}").code.as_deref(), Some("quota_exhausted"));
+        // Câu của máy chủ thắng câu viết sẵn: gói trả phí bị trừ bằng credits, không phải lượt.
+        let paid = outcome_from_response(
+            429,
+            r#"{"error":"Bạn đã dùng hết credits tạo game của tháng.","usage":{"unit":"credits"}}"#,
+        );
+        assert_eq!(paid.message.as_deref(), Some("Bạn đã dùng hết credits tạo game của tháng."));
+        assert!(paid.usage.is_some(), "usage vẫn được chuyển tiếp để UI hiện được số còn lại");
         assert_eq!(outcome_from_response(502, "{}").code.as_deref(), Some("provider_unavailable"));
         assert_eq!(outcome_from_response(503, "{}").code.as_deref(), Some("gateway_unavailable"));
         let busy = outcome_from_response(503, r#"{"code":"quota_unavailable"}"#);

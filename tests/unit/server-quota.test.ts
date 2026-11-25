@@ -74,7 +74,7 @@ async function quotaChecks(): Promise<void> {
   const state: FakeState = { plan: { plan: 'free', status: 'active' }, used: 0, casLosses: 0, bumps: [] };
   const first = await consumeGeneration(fakeStore(state), 'u1', '2026-11');
   assert.equal(first.ok, true, 'còn lượt thì cho qua');
-  assert.deepEqual((first as { quota: unknown }).quota, { allowed: true, used: 1, quotaLimit: 5, plan: 'free' }, 'usage tăng đúng một');
+  assert.deepEqual((first as { quota: unknown }).quota, { allowed: true, used: 1, quotaLimit: 5, plan: 'free', unit: 'generations', cost: 1 }, 'usage tăng đúng một lượt');
   assert.deepEqual(state.bumps, [{ from: 0, to: 1 }], 'đọc 0 rồi đổi 0 → 1');
 
   // 3. Hết lượt: không ghi gì thêm, và nói ra số đã dùng.
@@ -82,7 +82,7 @@ async function quotaChecks(): Promise<void> {
   const blocked = await consumeGeneration(fakeStore(full), 'u1', '2026-11');
   assert.equal(blocked.ok, false, 'hết lượt thì không cho qua');
   assert.equal((blocked as { kind: string }).kind, 'exhausted', 'đúng loại: hết lượt');
-  assert.deepEqual((blocked as { quota: unknown }).quota, { allowed: false, used: 5, quotaLimit: 5, plan: 'free' }, 'báo đúng số đã dùng');
+  assert.deepEqual((blocked as { quota: unknown }).quota, { allowed: false, used: 5, quotaLimit: 5, plan: 'free', unit: 'generations', cost: 1 }, 'báo đúng số đã dùng');
   assert.equal(full.bumps.length, 0, 'không ghi gì khi đã hết lượt');
 
   // 4. Tranh chấp: CAS thua một lần rồi thắng ⇒ vẫn đúng một lượt được cấp, không mất lượt.
@@ -145,3 +145,132 @@ async function refundChecks(): Promise<void> {
 }
 
 void refundChecks();
+
+// ── 5. Gói trả phí trừ bằng CREDITS, không bằng đếm lượt (#348) ──────────────
+// Cùng một dòng `usage_monthly`, cột khác. Giá và hạn mức đọc từ `server_config`, và
+// không có khoá cấu hình thì phải rơi về giá mặc định — bán miễn phí vì thiếu một dòng
+// cấu hình là lỗi làm mất doanh thu mà không ai thấy.
+interface CreditState {
+  used: number;
+  limit: number;
+  bumps: Array<{ from: number; to: number }>;
+  limits: number[];
+}
+
+function creditStore(options: {
+  plan?: string;
+  status?: string;
+  used?: number;
+  limit?: number;
+  cost?: number;
+  planLimit?: number;
+  failRead?: boolean;
+}): { store: QuotaStore; state: CreditState } {
+  const state: CreditState = {
+    used: options.used ?? 0,
+    limit: options.limit ?? 50,
+    bumps: [],
+    limits: [],
+  };
+  const store: QuotaStore = {
+    async planOf() {
+      return { plan: options.plan ?? 'plus', status: options.status ?? 'active' };
+    },
+    async ensureRow() {},
+    async readUsed() {
+      return 0;
+    },
+    async casBump() {
+      throw new Error('đường generations không được dùng khi gói trả phí');
+    },
+    async readCredits() {
+      if (options.failRead) throw new Error('mất kết nối');
+      return { used: state.used, limit: state.limit };
+    },
+    async casBumpCredits(_userId, _month, from, to) {
+      state.bumps.push({ from, to });
+      state.used = to;
+      return true;
+    },
+    async creditCost() {
+      return options.cost ?? 2;
+    },
+    async monthlyCredits() {
+      return options.planLimit ?? 500;
+    },
+    async ensureCreditsLimit(_userId, _month, limit) {
+      state.limits.push(limit);
+      state.limit = limit;
+    },
+  };
+  return { store, state };
+}
+
+async function creditChecks(): Promise<void> {
+  // 1. Gói plus: trừ đúng giá, và nói ra ĐƠN VỊ.
+  const basic = creditStore({});
+  const granted = await consumeGeneration(basic.store, 'u1', '2026-11');
+  assert.equal(granted.ok, true, 'plus còn credits thì cho qua');
+  assert.deepEqual(
+    (granted as { quota: unknown }).quota,
+    { allowed: true, used: 2, quotaLimit: 500, plan: 'plus', unit: 'credits', cost: 2 },
+    'hai credits, đơn vị là credits'
+  );
+  assert.deepEqual(basic.state.bumps, [{ from: 0, to: 2 }], 'một lần trừ đúng hai');
+
+  // 2. Dòng tháng tạo từ thời free (hạn mức 50) phải được nâng lên hạn mức của gói.
+  const upgraded = creditStore({ limit: 50 });
+  await consumeGeneration(upgraded.store, 'u1', '2026-11');
+  assert.deepEqual(upgraded.state.limits, [500], 'chỉ nâng, không hạ');
+  assert.equal(upgraded.state.limit, 500);
+
+  // 3. Giá cấu hình 0 hoặc đọc lỗi ⇒ giá mặc định, không bán miễn phí.
+  const cheap = creditStore({ cost: 0 });
+  const cheapOutcome = await consumeGeneration(cheap.store, 'u1', '2026-11');
+  assert.equal((cheapOutcome as { quota: { cost: number } }).quota.cost, 2, 'giá 0 trong DB thành 2');
+  const broken = creditStore({});
+  broken.store.creditCost = async () => {
+    throw new Error('server_config không đọc được');
+  };
+  const brokenOutcome = await consumeGeneration(broken.store, 'u1', '2026-11');
+  assert.equal((brokenOutcome as { quota: { cost: number } }).quota.cost, 2, 'đọc lỗi vẫn tính tiền');
+
+  // 4. Không đủ credits: từ chối TRƯỚC khi ghi, và gọi đúng tên.
+  const nearly = creditStore({ used: 499, limit: 500 });
+  const blocked = await consumeGeneration(nearly.store, 'u1', '2026-11');
+  assert.equal(blocked.ok, false, 'không đủ thì không cho qua');
+  assert.equal((blocked as { kind: string }).kind, 'exhausted', 'đúng loại: hết');
+  assert.deepEqual(nearly.state.bumps, [], 'không ghi gì khi đã hết');
+  assert.equal((blocked as { quota: { unit: string } }).quota.unit, 'credits', 'hết credits, không phải hết lượt');
+
+  // 5. Hoàn credits: trả đúng số đã trừ, không âm, và giữ đúng cột.
+  const refundable = creditStore({});
+  await consumeGeneration(refundable.store, 'u1', '2026-11');
+  assert.equal(await refundGeneration(refundable.store, 'u1', '2026-11', 2, { unit: 'credits', cost: 2 }), true);
+  assert.equal(refundable.state.used, 0, 'về đúng 0');
+  const clamped = creditStore({});
+  clamped.store.casBumpCredits = async (_u, _m, from, to) => {
+    clamped.state.bumps.push({ from, to });
+    return true;
+  };
+  await refundGeneration(clamped.store, 'u1', '2026-11', 1, { unit: 'credits', cost: 2 });
+  assert.deepEqual(clamped.state.bumps, [{ from: 1, to: 0 }], '1 − 2 kẹp về 0, không âm');
+
+  // 6. Lỗi đọc credits là TẠM THỜI, không phải hết credits.
+  const failing = creditStore({ failRead: true });
+  const unavailable = await consumeGeneration(failing.store, 'u1', '2026-11');
+  assert.equal(unavailable.ok, false, 'không cấp khi không đọc được');
+  assert.equal((unavailable as { kind: string }).kind, 'unavailable', 'không được báo hết credits');
+
+  // 7. Gói hết hạn quay về đếm lượt, và kho không giữ credits thì không bán credits.
+  const expired = creditStore({ status: 'past_due' });
+  expired.store.readCredits = undefined;
+  expired.store.casBumpCredits = undefined;
+  expired.store.readUsed = async () => 2;
+  // Đường đếm lượt phải dùng lại được: kho này vừa bị bỏ phần credits.
+  expired.store.casBump = async () => true;
+  const fallback = await consumeGeneration(expired.store, 'u1', '2026-11');
+  assert.equal((fallback as { quota: { unit: string } }).quota.unit, 'generations', 'hết hạn thì về đếm lượt');
+}
+
+void creditChecks();

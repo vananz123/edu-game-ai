@@ -103,6 +103,62 @@ function quotaStore(admin: SupabaseClient): QuotaStore {
       if (error) throw new Error(error.message);
       return Array.isArray(data) && data.length === 1;
     },
+    // ── credits (#348): cùng một dòng `usage_monthly`, cột khác ──────────────
+    async readCredits(userId, month) {
+      const { data, error } = await admin
+        .from('usage_monthly')
+        .select('credits_used,credits_limit')
+        .eq('user_id', userId)
+        .eq('month', month)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      if (!data) return null;
+      const row = data as { credits_used: number; credits_limit: number };
+      return { used: Number(row.credits_used), limit: Number(row.credits_limit) };
+    },
+    async casBumpCredits(userId, month, from, to) {
+      const { data, error } = await admin
+        .from('usage_monthly')
+        .update({ credits_used: to, updated_at: new Date().toISOString() })
+        .eq('user_id', userId)
+        .eq('month', month)
+        .eq('credits_used', from)
+        .select('credits_used');
+      if (error) throw new Error(error.message);
+      return Array.isArray(data) && data.length === 1;
+    },
+    async creditCost(kind) {
+      const { data, error } = await admin
+        .from('server_config')
+        .select('value')
+        .eq('key', 'credit_cost_' + kind)
+        .maybeSingle();
+      // Không có khoá cấu hình KHÔNG phải lỗi: rơi về giá mặc định trong quota.ts.
+      if (error || !data) return 0;
+      const raw = (data as { value: unknown }).value;
+      const number = typeof raw === 'number' ? raw : Number(String(raw).replace(/"/g, ''));
+      return Number.isFinite(number) ? number : 0;
+    },
+    async monthlyCredits(plan) {
+      const { data, error } = await admin
+        .from('server_config')
+        .select('value')
+        .eq('key', plan === 'pro' ? 'quota_pro_monthly_credits' : 'quota_free_monthly_credits')
+        .maybeSingle();
+      if (error || !data) return 0;
+      const raw = (data as { value: unknown }).value;
+      const number = typeof raw === 'number' ? raw : Number(String(raw).replace(/"/g, ''));
+      return Number.isFinite(number) ? number : 0;
+    },
+    async ensureCreditsLimit(userId, month, limit) {
+      const { error } = await admin
+        .from('usage_monthly')
+        .update({ credits_limit: limit, updated_at: new Date().toISOString() })
+        .eq('user_id', userId)
+        .eq('month', month)
+        .lt('credits_limit', limit);
+      if (error) throw new Error(error.message);
+    },
   };
 }
 
@@ -124,11 +180,23 @@ app.post('/v1/generate', requireConfiguration, requireUser, async (req: Authenti
     ok: boolean;
     kind?: 'exhausted' | 'unavailable';
     reason?: string;
-    quota?: { allowed: boolean; used: number; quotaLimit: number; plan: string };
+    quota?: {
+      allowed: boolean;
+      used: number;
+      quotaLimit: number;
+      plan: string;
+      unit?: 'generations' | 'credits';
+      cost?: number;
+    };
   };
   if (!failure.ok) {
     if (failure.kind === 'exhausted' && failure.quota) {
-      res.status(429).json({ error: 'Bạn đã sử dụng hết lượt tạo game của tháng.', usage: failure.quota });
+      // Câu phải nói đúng đơn vị: hết CREDITS không phải "hết lượt", và giáo viên trả phí
+      // cần biết mình đang bị trừ bằng gì để quyết định nâng gói hay chờ tháng sau.
+      const exhausted = failure.quota && failure.quota.unit === 'credits'
+        ? 'Bạn đã dùng hết credits tạo game của tháng.'
+        : 'Bạn đã sử dụng hết lượt tạo game của tháng.';
+      res.status(429).json({ error: exhausted, usage: failure.quota });
       return;
     }
     const described = describeQuotaFailure({ message: failure.reason || '' });
@@ -140,8 +208,13 @@ app.post('/v1/generate', requireConfiguration, requireUser, async (req: Authenti
   // Đã trừ một lượt ⇒ mọi nhánh hỏng phía dưới phải trả lại. Một lượt bị trừ cho trò
   // chơi không tồn tại là lỗi của sản phẩm, không phải của Google.
   const refund = async (): Promise<void> => {
-    const returned = await refundGeneration(quotaStore(admin), userId, month, quota.used);
-    if (!returned) console.error('Refund failed: không trả lại được lượt', quota.used, userId);
+    // Trả lại ĐÚNG đơn vị và ĐÚNG số đã trừ: hoàn 1 "lượt" cho một lần trừ 2 credits là
+    // giáo viên mất tiền trong khi hệ thống báo đã hoàn.
+    const returned = await refundGeneration(quotaStore(admin), userId, month, quota.used, {
+      unit: quota.unit,
+      cost: quota.cost,
+    });
+    if (!returned) console.error('Refund failed:', quota.unit, quota.used, quota.cost, userId);
   };
 
   const input = parsed.data;
