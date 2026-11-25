@@ -273,4 +273,54 @@ async function creditChecks(): Promise<void> {
   assert.equal((fallback as { quota: { unit: string } }).quota.unit, 'generations', 'hết hạn thì về đếm lượt');
 }
 
+/**
+ * #354 — the READ side must use the same rules as the WRITE side.
+ *
+ * If the meter and the deduction disagree about the unit, a teacher reads "còn 5 lượt" and
+ * then loses credits. The snapshot therefore has to answer the same questions: is this plan
+ * really paid, and is it really active?
+ */
+async function snapshotChecks(): Promise<void> {
+  const { usageSnapshot } = require('../../server/quota');
+
+  // 1. Free: turns, and the cost of one call is 1 turn.
+  const free = usageSnapshot({ plan: 'free', status: 'active' }, '2026-11', { generations: 2 }, null);
+  assert.equal(free.unit, 'generations');
+  assert.equal(free.used, 2);
+  assert.equal(free.limit, 5);
+  assert.equal(free.cost, 1);
+  assert.equal(free.plan, 'free');
+
+  // 2. Paid and active: credits, price from config, limit never below the plan's own.
+  const plus = usageSnapshot({ plan: 'plus', status: 'active' }, '2026-11', { creditsUsed: 4, creditsLimit: 50 }, 2, 500);
+  assert.equal(plus.unit, 'credits');
+  assert.equal(plus.used, 4);
+  assert.equal(plus.limit, 500, 'a stale row limit must not shrink a paid plan');
+  assert.equal(plus.cost, 2);
+
+  // 3. Paid but NOT active is measured in turns — the same rule the deduction uses.
+  const expired = usageSnapshot({ plan: 'plus', status: 'past_due' }, '2026-11', { generations: 1, creditsUsed: 99 }, 2);
+  assert.equal(expired.unit, 'generations', 'an inactive plan is not charged in credits');
+  assert.equal(expired.used, 1, 'the credits column is not the free-tier number');
+
+  // 4. No row yet is zero usage, not an error and not "unknown".
+  const empty = usageSnapshot(null, '2026-11', null, null);
+  assert.equal(empty.used, 0);
+  assert.equal(empty.limit, 5);
+  assert.equal(empty.unit, 'generations');
+
+  // 5. A missing price falls back to the default, never to "free".
+  const noPrice = usageSnapshot({ plan: 'plus', status: 'active' }, '2026-11', { creditsLimit: 500 }, 0, 500);
+  assert.equal(noPrice.cost, 2, 'price 0 would sell generations for nothing');
+
+  // 6. Garbage counters do not become NaN in the sentence.
+  const junk = usageSnapshot({ plan: 'free', status: 'active' }, '2026-11', { generations: Number.NaN }, null);
+  assert.equal(junk.used, 0);
+  const negative = usageSnapshot({ plan: 'free', status: 'active' }, '2026-11', { generations: -3 }, null);
+  assert.equal(negative.used, 0);
+}
+
 void creditChecks();
+// Thứ tự có ý nghĩa: hàm khai báo bằng `const { … } = require(…)` bên trong thân, nên phải
+// gọi sau khi tệp đã nạp xong — cùng lý do `creditChecks` được gọi ở cuối.
+void snapshotChecks();

@@ -17,6 +17,8 @@ const accountState = {
   busy: '',
   // #352: sổ dùng AI của chính tài khoản này. null = chưa đọc lần nào (KHÔNG phải "rỗng").
   history: null,
+  // #354: đồng hồ hạn mức tháng ({plan, unit, used, limit, cost}) — null = chưa đọc.
+  quota: null,
 };
 
 function accountAttr(value) {
@@ -115,6 +117,7 @@ function accountPanelHtml() {
       + '<button class="btn-ghost" data-account-signout type="button">Đăng xuất</button></div>'
       + accountCloudResultHtml()
       + '<p class="account-hint">Kiểm tra dùng 1 lượt tạo game thật của tháng: 3 câu từ một bài mẫu.</p>'
+      + accountQuotaHtml()
       + accountUsageHistoryHtml();
   } else if (stateName === 'guest') {
     body = guestNote
@@ -143,10 +146,15 @@ function closeAccountPanel() {
   if (root) root.innerHTML = '';
 }
 
-function openAccountPanel() {
-  const root = $('#modalRoot');
+/**
+ * Gắn lại handler cho MỌI nút trong panel.
+ *
+ * Phải là một hàm riêng vì `rerenderAccountPanel()` thay `innerHTML` — mà thay HTML là mất
+ * toàn bộ `onclick` đã gắn. Trước #354 chỉ `openAccountPanel` gắn handler, nên sau một lần
+ * vẽ lại (ví dụ đọc xong đồng hồ) nút "Đăng xuất" và "Kiểm tra Cloud AI" thành nút chết.
+ */
+function wireAccountPanel(root) {
   if (!root) return;
-  root.innerHTML = accountPanelHtml();
   if (typeof paintUiIcons === 'function') paintUiIcons(root);
   root.querySelectorAll('[data-close]').forEach(button => { button.onclick = closeAccountPanel; });
   const signIn = root.querySelector('[data-account-signin]');
@@ -160,8 +168,88 @@ function openAccountPanel() {
   if (reset) reset.onclick = () => accountSignOut();
   const usage = root.querySelector('[data-account-usage-load]');
   if (usage) usage.onclick = () => accountLoadUsage();
+  const quotaRetry = root.querySelector('[data-account-quota-load]');
+  if (quotaRetry) quotaRetry.onclick = () => accountLoadQuota();
+}
+
+function openAccountPanel() {
+  const root = $('#modalRoot');
+  if (!root) return;
+  root.innerHTML = accountPanelHtml();
+  wireAccountPanel(root);
+  // Mở panel là đọc đồng hồ: đây là phép ĐỌC, không trừ lượt, nên không cần mời bấm.
+  if (accountState.quota === null && !accountState.busy) accountLoadQuota();
   // Không đọc lại trạng thái mỗi lần mở: panel phải vẽ đúng thứ người dùng vừa thấy
   // trên chip, không phải một trạng thái khác đến sau.
+}
+
+// ---------------------------------------------------------------------------
+// #354 — đồng hồ hạn mức tháng. Đọc từ gateway (`GET /v1/usage`), KHÔNG trừ gì, và
+// `userId` bên máy chủ luôn đến từ token nên không có đường đọc hạn mức của người khác.
+// ---------------------------------------------------------------------------
+
+/** "Tháng 11: còn 5/5 lượt" — đơn vị đi cùng con số (#348). Hàm thuần, có unit test. */
+function accountQuotaLine(quota) {
+  if (!quota || typeof quota !== 'object' || quota.ok !== true) return '';
+  const unit = quota.unit === 'credits' ? 'credits' : 'lượt';
+  const used = Number(quota.used);
+  const limit = Number(quota.limit);
+  if (!Number.isFinite(used) || !Number.isFinite(limit) || limit <= 0) return '';
+  const left = Math.max(0, limit - used);
+  if (left <= 0) return 'Đã hết ' + unit + ' tạo game của tháng (' + used + '/' + limit + ').';
+  return 'Còn ' + left + '/' + limit + ' ' + unit + ' tạo game trong tháng.';
+}
+
+/** Gói, để giáo viên biết mình đang được đo bằng gì. */
+function accountQuotaPlanText(quota) {
+  if (!quota || typeof quota !== 'object' || quota.ok !== true) return '';
+  if (quota.plan === 'plus' && quota.status === 'active') return 'Gói Plus';
+  return 'Gói miễn phí';
+}
+
+function accountQuotaHtml() {
+  const quota = accountState.quota;
+  if (!quota) {
+    return '<div class="account-quota" data-account-quota="loading">'
+      + '<span class="account-hint">Đang đọc hạn mức tháng…</span></div>';
+  }
+  if (quota.ok !== true) {
+    const detail = String(quota.message || quota.code || '').trim();
+    return '<div class="account-quota" data-account-quota="error">'
+      + '<p class="account-hint">Chưa đọc được hạn mức tháng này'
+      + (detail ? ': ' + escapeHtml(detail) : '.')
+      + ' Đây là lỗi đọc số, không phải kết luận là bạn còn đủ lượt.</p>'
+      + '<button class="btn-ghost btn-small" data-account-quota-load type="button">Thử lại</button></div>';
+  }
+  const line = accountQuotaLine(quota);
+  if (!line) {
+    return '<div class="account-quota" data-account-quota="error">'
+      + '<p class="account-hint">Máy trả về hạn mức không đọc được. Thử lại sau.</p>'
+      + '<button class="btn-ghost btn-small" data-account-quota-load type="button">Thử lại</button></div>';
+  }
+  const spent = quota.used > 0 ? ' · đã dùng ' + Number(quota.used) : '';
+  return '<div class="account-quota" data-account-quota="ready">'
+    + '<span class="account-quota-plan">' + escapeHtml(accountQuotaPlanText(quota)) + '</span>'
+    + '<span class="account-quota-line">' + escapeHtml(line + spent) + '</span></div>';
+}
+
+async function accountLoadQuota() {
+  accountState.quota = null;
+  rerenderAccountPanel();
+  try {
+    const result = await desktop.call('accountQuota');
+    accountState.quota = (result && typeof result === 'object')
+      ? result
+      : { ok: false, code: 'bad_response', message: 'Máy trả về dữ liệu không đọc được.' };
+  } catch (error) {
+    accountState.quota = {
+      ok: false,
+      code: 'transport_error',
+      message: (error && error.message) || 'Không gọi được kênh đọc hạn mức.',
+    };
+  } finally {
+    rerenderAccountPanel();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -282,7 +370,10 @@ function accountCloudResultHtml() {
 
 function rerenderAccountPanel() {
   const root = $('#modalRoot');
-  if (root && root.querySelector('[data-account-panel]')) root.innerHTML = accountPanelHtml();
+  if (!root || !root.querySelector('[data-account-panel]')) return;
+  root.innerHTML = accountPanelHtml();
+  // Vẽ lại là mất handler: phải gắn lại, nếu không các nút trong panel thành nút chết.
+  wireAccountPanel(root);
 }
 
 /**

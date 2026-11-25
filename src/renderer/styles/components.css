@@ -1362,6 +1362,11 @@ html[data-theme="dark"] .art-zoom-figure{background:#111733}
 .account-panel-who{display:flex;align-items:center;gap:11px}
 .account-actions{display:flex;gap:9px;margin-top:16px}
 .account-hint{margin:10px 0 0;font-size:12px;color:#6b7280}
+.account-quota{margin-top:14px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font-size:12px}
+.account-quota-plan{font-weight:600;color:#111827}
+.account-quota-line{color:#4b5563}
+html[data-theme="dark"] .account-quota-plan{color:#f8fafc}
+html[data-theme="dark"] .account-quota-line{color:#94a3b8}
 .account-usage{margin-top:14px;padding-top:12px;border-top:1px solid #e5e7eb}
 .account-usage-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;font-size:12px;margin-bottom:6px}
 .account-usage-list{list-style:none;margin:0 0 8px;padding:0;display:grid;gap:4px;font-size:12px;color:#4b5563}

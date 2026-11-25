@@ -180,6 +180,7 @@ pub fn run() {
             api::sign_out_auth,
             api::cloud_generate,
             api::get_usage_history,
+            api::get_account_quota,
             // Bản gọi trực tiếp (không qua kênh) để chẩn đoán bằng CDP: cùng
             // một hàm, hai tên lệnh khác nhau nên không có tên nào bị đăng ký hai lần.
             auth::auth_status,

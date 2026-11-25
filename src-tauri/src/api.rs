@@ -85,6 +85,7 @@ pub fn hand_written(command: &str) -> Option<(&'static str, &'static str)> {
         // #352: sổ dùng AI của CHÍNH người đang đăng nhập. Đọc bằng token của phiên
         // (anon key + RLS `Users view own usage`), không bằng service_role.
         "get_usage_history" => ("account:usage-history", "get_usage_history"),
+        "get_account_quota" => ("account:quota", "get_account_quota"),
         "get_ai_providers" => ("ai:providers", "get_ai_providers"),
         "get_local_ai_models" => ("ai:local-models", "get_local_ai_models"),
         // Giai đoạn 5: AI local — tải model/runtime và quản lý llama-server.
@@ -218,6 +219,7 @@ const INVOKE_CHANNELS: &[&str] = &[
     "auth:sign-out",
     "ai:cloud-generate",
     "account:usage-history",
+    "account:quota",
     "ai:providers",
     "ai:test-provider",
     "ai:local-models",
@@ -307,6 +309,8 @@ async fn dispatch(app: &AppHandle, channel: &str, args: &[Value]) -> Result<Valu
         // #352: sổ dùng AI của người đang đăng nhập. `limit` đi qua `args` nhưng bị kẹp
         // lại trong `usage::request_path`, nên một con số do UI gửi không mở rộng được
         // phạm vi đọc.
+        // #354: đồng hồ hạn mức tháng. Phép đọc, không trừ gì.
+        "account:quota" => json(Ok(crate::cloud::cloud_usage(app.clone()).await)),
         "account:usage-history" => {
             let limit = args
                 .first()
@@ -786,6 +790,12 @@ pub async fn get_usage_history(
     limit: Option<u32>,
 ) -> crate::usage::UsageHistory {
     crate::usage::usage_history(&app, limit.unwrap_or(crate::usage::DEFAULT_ROWS)).await
+}
+
+/// `account:quota` — đồng hồ "tháng này còn bao nhiêu" (#354). Đọc, không trừ.
+#[tauri::command]
+pub async fn get_account_quota(app: AppHandle) -> crate::cloud::UsageMeter {
+    crate::cloud::cloud_usage(app).await
 }
 
 /// `auth:sign-out` — xoá phiên DPAPI. Không động vào game hay giáo án.

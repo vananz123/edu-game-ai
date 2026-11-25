@@ -52,6 +52,62 @@ export function quotaLimitFor(plan: PlanRow | null): number {
   return MONTH_LIMITS.free;
 }
 
+export interface UsageSnapshot {
+  plan: string;
+  status: string;
+  month: string;
+  unit: ChargeUnit;
+  used: number;
+  limit: number;
+  /** Giá của một lần sinh, theo `unit`. Cần để câu "còn bao nhiêu" đi kèm giá. */
+  cost: number;
+}
+
+/**
+ * Ảnh chụp hạn mức tháng của một người (#354): "tháng này dùng bao nhiêu / còn bao nhiêu",
+ * KHÔNG trừ gì. Đây là phép ĐỌC, nên nó phải dùng đúng bộ quy tắc của phép trừ:
+ * gói `plus` **và** `active` thì đếm bằng credits, còn lại đếm bằng lượt.
+ *
+ * `row` là hàng `usage_monthly` của tháng đó (null = chưa có hàng, tức là 0).
+ */
+export function usageSnapshot(
+  plan: PlanRow | null,
+  month: string,
+  row: { generations?: number; creditsUsed?: number; creditsLimit?: number } | null,
+  creditCost: number | null,
+  planCreditsLimit: number | null = null
+): UsageSnapshot {
+  const isPlus = Boolean(plan && plan.plan === 'plus' && plan.status === 'active');
+  const unit: ChargeUnit = isPlus ? 'credits' : 'generations';
+  const fallbackCost = creditCost && creditCost > 0 ? creditCost : DEFAULT_CREDIT_COST;
+  if (!isPlus) {
+    return {
+      plan: 'free',
+      status: (plan && plan.status) || 'inactive',
+      month,
+      unit,
+      used: Math.max(0, Math.trunc(Number(row && row.generations) || 0)),
+      limit: MONTH_LIMITS.free,
+      cost: 1,
+    };
+  }
+  // Hàng `usage_monthly` có thể còn hạn mức của tháng trước (hoặc của gói cũ). Hiện "còn 50
+  // credits" cho một tài khoản được 500 là nói sai tiền của người ta, nên lấy số CAO HƠN
+  // giữa hàng và cấu hình của gói.
+  const rowLimit = Math.max(0, Math.trunc(Number(row && row.creditsLimit) || 0));
+  const configured = Math.max(0, Math.trunc(Number(planCreditsLimit) || 0));
+  const limit = Math.max(rowLimit, configured) || DEFAULT_MONTHLY_CREDITS.pro;
+  return {
+    plan: 'plus',
+    status: plan!.status,
+    month,
+    unit,
+    used: Math.max(0, Math.trunc(Number(row && row.creditsUsed) || 0)),
+    limit,
+    cost: fallbackCost,
+  };
+}
+
 export interface QuotaGrant {
   allowed: true;
   used: number;

@@ -7,6 +7,18 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-25 — #354 đồng hồ hạn mức tháng: "còn 496/500 credits" hiện TRƯỚC khi tiêu lượt nào
+- **`GET /v1/usage` (mới) đặt sau `requireUser`** ⇒ `userId` luôn đến từ token, không bao giờ từ tham số người gọi; không có đường đọc hạn mức của người khác. Trả `{plan, status, month, unit, used, limit, cost}` — **đọc, không trừ**.
+- **Vì sao ở gateway chứ ở app:** đo được rằng token thật + anon key đọc `usage_monthly`/`subscriptions` bằng **0 dòng** (chưa có policy cho chính chủ) — nên "đọc sổ bằng anon key" không phải một lựa chọn có thật. Gateway đã là cửa duy nhất và đã có service_role.
+- **Phép ĐỌC dùng đúng luật của phép TRỪ** (`usageSnapshot` trong `server/quota.ts`): `plus` **và** `active` ⇒ credits, còn lại ⇒ lượt; giá thiếu/0 ⇒ mặc định 2 chứ không "miễn phí"; hạn mức **không nhỏ hơn** cấu hình của gói.
+- **Một lỗi thật do việc thêm đồng hồ làm lộ ra:** `rerenderAccountPanel()` chỉ thay `innerHTML`, mà thay HTML là **mất toàn bộ `onclick`** — trước đó chỉ `openAccountPanel` gắn handler, nên sau lần vẽ lại đầu tiên (đọc xong đồng hồ) "Đăng xuất" và "Kiểm tra Cloud AI" thành **nút chết**. Nay có `wireAccountPanel(root)` gọi ở cả hai chỗ.
+- **Đo bằng máy:**
+  - `GET /v1/usage` không token ⇒ **401**; gói free ⇒ `{plan:free, unit:generations, used:0, limit:5, cost:1}`; nâng thử tài khoản lên `plus/active` ⇒ `{plan:plus, unit:credits, used:0, limit:500, cost:2}` (đơn vị ĐỔI, không chỉ con số); trả về `free` ⇒ như cũ.
+  - Kênh Rust trên app đang chạy: khách ⇒ `{ok:false, code:'not_signed_in'}`; vẽ với số của gói Plus ⇒ `data-account-quota="ready"`, câu `Gói Plus · Còn 496/500 credits tạo game trong tháng. · đã dùng 4`.
+  - `ui-account-check` **17/17 → 21/21** (4 dòng mới: mã từ chối của khách, khối `ready`, câu có gói + đơn vị, số đã dùng).
+- **Kiểm khác:** `cargo test --lib` **194/194** (4 test mới cho `UsageMeter`) · unit **110/110** (thêm nhóm `usageSnapshot` + 16 khẳng định đồng hồ trong `account-usage`) · `npm run check` sạch · `verify:css` 61/61 · `check:embedded` 6 217,2 KiB · `ui-editor-cloud-check` 15/15 · `ui-wizard-cloud-check` 11/11 · `ui-cloud-generate-check` 5/5 · `tsc` sạch · façade **103 → 105** lời gọi (nhóm `app` 16 → 17).
+- **Chưa làm:** đường Rust với **phiên sống** vẫn chưa đo (đăng nhập cần một cú bấm: đã thử lại, chờ 240 giây, vẫn khách); bộ cài chưa dựng lại sau #352–#354.
+
 ### 2026-11-25 — #353 nửa ĐỌC của sổ dùng AI: token thật + anon key + RLS, và panel vẽ bằng dữ liệu thật
 - **Đăng nhập Google vẫn cần một cú bấm của người** — đã thử lại: gọi `authSignIn`, chờ **240 giây**, vẫn `guest`. Nên lần này đo **nửa dữ liệu** (thứ Rust thật sự gửi) và **nửa vẽ** (bằng chính các dòng vừa ghi ở #351), thay vì nói "chưa đo được" rồi dừng.
 - **Đo nửa đọc, đúng đường `usage.rs` đi:** mint token thật của tài khoản thử (magic-link qua service_role, token không in ra), rồi `GET /rest/v1/ai_usage_log?user_id=eq.<mình>&select=…&limit=10` bằng **anon key + token người dùng** (không service_role):

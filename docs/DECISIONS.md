@@ -5684,4 +5684,14 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
 - **"Cần người bấm" không phải lý do để dừng đo.** Đường đọc sổ có hai nửa: phần dữ liệu (token + anon key + RLS) và phần vẽ. Nửa dữ liệu đo được bằng một token THẬT của tài khoản thử; nửa vẽ đo được bằng chính các dòng vừa ghi. Ghi rõ nửa nào chưa đo (đường Rust với phiên sống) thay vì gộp tất cả thành "chưa kiểm".
 - **Phép đo quyền phải có cả hai chiều.** Đọc được sổ của mình (3 dòng) chỉ có nghĩa nếu đồng thời: `user_id` của người khác ⇒ 0 dòng, và **không token** (chỉ anon key) ⇒ 0 dòng. Một phép đo chỉ có chiều "đọc được" không phân biệt được "RLS đúng" với "RLS không tồn tại".
 - **Đo bằng dữ liệu thật, không bằng dữ liệu bịa.** Các dòng đưa vào panel là các dòng đã ghi thật ở #351 (kể cả dòng hỏng `gemini_404`) — nếu bịa thì phép đo chỉ chứng minh formatter đồng ý với chính nó.
-- **Danh tính stub phải được nói ra tại chỗ.** Probe đặt `accountUiState = () => 'member'` để khối sổ tồn tại; điều đó không chứng minh đăng nhập chạy, và ghi chú trong probe nói đúng như vậy. SmartScreen, thời gian cài, hiệu ứng phải nhìn, một lượt chơi offline: bốn thứ này không có phép đo tự động trung thực nào trên máy đã có WebView2 và đã quen tệp cài.
+- **Danh tính stub phải được nói ra tại chỗ.** Probe đặt `accountUiState = () => 'member'` để khối sổ tồn tại; điều đó không chứng minh đăng nhập chạy, và ghi chú trong probe nói đúng như vậy.
+
+## #354 — Số "còn lại" phải đọc được trước khi tiêu, và phép đọc không được mâu thuẫn với phép trừ
+
+- **Giá của cú bấm phải có TRƯỚC cú bấm** (#350 cùng họ), nhưng lần này không phải bằng cách tiêu một lượt để biết: `GET /v1/usage` là phép **đọc**, không trừ gì.
+- **`userId` của phép đọc lấy từ token, không từ tham số.** Đặt route sau `requireUser` là cách duy nhất để không tồn tại một đường đọc hạn mức của người khác — kể cả khi sau này ai đó thêm `?user_id=`.
+- **Một bảng chưa có policy thì "đọc trực tiếp bằng anon key" không phải lựa chọn.** Đo được: token thật + anon key ⇒ **0 dòng** cho chính chủ. Nên phép đọc đi qua cửa đã có (gateway), thay vì dựa vào một bước cài đặt mà người vận hành chưa chạy (#342 cùng họ).
+- **Phép ĐỌC và phép TRỪ phải dùng chung một luật.** `usageSnapshot` hỏi đúng ba câu mà `consumeGeneration` hỏi: gói có phải `plus` không, gói có đang `active` không, giá thiếu thì lấy gì. Hai bộ luật khác nhau sẽ cho giáo viên đọc "còn 5 lượt" rồi bị trừ credits.
+- **Hạn mức hiển thị không được NHỎ HƠN hạn mức của gói.** Hàng `usage_monthly` có thể còn số của tháng trước; hiện "còn 50 credits" cho tài khoản được 500 là nói sai tiền của người ta.
+- **Vẽ lại HTML là mất handler.** `rerenderAccountPanel()` thay `innerHTML`, nên mọi `onclick` biến mất; thêm một khối tự tải (đồng hồ) làm lỗi này hiện ra ngay: "Đăng xuất" thành nút chết. Việc gắn handler phải là hàm riêng, gọi ở **cả hai** đường vẽ.
+- **Probe không được mở/đóng thứ cổng khác đang đo** (lặp lại bài học #352): lần này probe vẽ lại vào panel đang mở thay vì mở/đóng nó. SmartScreen, thời gian cài, hiệu ứng phải nhìn, một lượt chơi offline: bốn thứ này không có phép đo tự động trung thực nào trên máy đã có WebView2 và đã quen tệp cài.

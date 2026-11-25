@@ -87,6 +87,33 @@ function expectedState(status) {
   return status.loggedIn ? 'member' : 'guest';
 }
 
+// #354: the monthly meter is a READ (no turn is spent). A guest must get a named refusal,
+// and the block must draw the numbers the gateway reported — measured by seeding the value
+// the channel returns, with the identity stubbed (sign-in needs a human click).
+const QUOTA_PROBE = String.raw`(async () => {
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const guest = await desktop.call('accountQuota');
+  const original = accountUiState;
+  const originalQuota = accountState.quota;
+  // The panel is ALREADY open at this point in the gate: draw again into it instead of
+  // opening/closing, or the later "closing removes the panel" check measures this probe.
+  accountUiState = () => 'member';
+  accountState.quota = { ok: true, plan: 'plus', status: 'active', month: '2026-11', unit: 'credits', used: 4, limit: 500, cost: 2 };
+  rerenderAccountPanel();
+  await sleep(180);
+  const block = document.querySelector('[data-account-quota]');
+  const out = {
+    guestOk: Boolean(guest && guest.ok),
+    guestCode: guest && guest.code,
+    mode: block ? block.getAttribute('data-account-quota') : 'missing',
+    text: block ? block.textContent.trim() : ''
+  };
+  accountUiState = original;
+  accountState.quota = originalQuota;
+  rerenderAccountPanel();
+  return out;
+})()`;
+
 // #352: the usage log channel, measured where it is reachable without a Google click.
 // A guest must get a NAMED refusal over the real IPC channel, not an empty list.
 const USAGE_GUEST = String.raw`(async () => {
@@ -158,6 +185,16 @@ const USAGE_GUEST = String.raw`(async () => {
     usageGuest.code + ' rows=' + usageGuest.rows
   );
   check('a guest panel shows no usage log', usageGuest.usageBlock === false, 'state=' + usageGuest.state);
+
+  const quotaProbe = await cdp.evaluate(QUOTA_PROBE);
+  check(
+    'reading the monthly meter as a guest is refused with a named code',
+    quotaProbe.guestOk === false && quotaProbe.guestCode === 'not_signed_in',
+    String(quotaProbe.guestCode)
+  );
+  check('the meter block draws the reported allowance', quotaProbe.mode === 'ready', String(quotaProbe.mode));
+  check('the meter sentence carries the plan and the unit', /Gói Plus/u.test(String(quotaProbe.text)) && /496\/500 credits/u.test(String(quotaProbe.text)), String(quotaProbe.text));
+  check('the meter says how much was already spent', /đã dùng 4/u.test(String(quotaProbe.text)), String(quotaProbe.text));
 
   check('a guest is offered Google sign-in', dom.state === 'guest' ? panel.signIn === true : panel.signIn !== true,
     'state=' + dom.state + ' signIn=' + panel.signIn);

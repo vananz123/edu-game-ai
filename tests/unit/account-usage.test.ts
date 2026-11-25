@@ -91,7 +91,36 @@ async function main() {
   // 9. Nothing from the lesson can appear: the row has no field for it.
   assert.ok(!/nội dung bài|prompt/iu.test(ready), 'no lesson text in the log UI');
 
-  console.log('account-usage: 22 khẳng định đã qua');
+  // ── #354: the monthly meter. Same rule as the log: unit travels with the number. ──
+  const quotaLine = quota => vm.runInContext(`accountQuotaLine(${JSON.stringify(quota)})`, context);
+  const quotaPlan = quota => vm.runInContext(`accountQuotaPlanText(${JSON.stringify(quota)})`, context);
+  assert.equal(quotaLine({ ok: true, plan: 'free', unit: 'generations', used: 2, limit: 5 }), 'Còn 3/5 lượt tạo game trong tháng.');
+  assert.equal(quotaLine({ ok: true, plan: 'plus', unit: 'credits', used: 4, limit: 500 }), 'Còn 496/500 credits tạo game trong tháng.');
+  assert.equal(quotaLine({ ok: true, plan: 'free', unit: 'generations', used: 5, limit: 5 }), 'Đã hết lượt tạo game của tháng (5/5).');
+  assert.equal(quotaLine({ ok: true, plan: 'plus', unit: 'credits', used: 500, limit: 500 }), 'Đã hết credits tạo game của tháng (500/500).');
+  assert.equal(quotaLine({ ok: false, code: 'http_503' }), '');
+  assert.equal(quotaLine({ ok: true, used: 'x', limit: null }), '');
+  assert.equal(quotaLine({ ok: true, used: 0, limit: 0 }), '', 'a zero ceiling is unknown, not "exhausted"');
+  assert.equal(quotaPlan({ ok: true, plan: 'plus', status: 'active' }), 'Gói Plus');
+  assert.equal(quotaPlan({ ok: true, plan: 'plus', status: 'past_due' }), 'Gói miễn phí');
+  assert.equal(quotaPlan({ ok: true, plan: 'free', status: 'active' }), 'Gói miễn phí');
+  assert.equal(quotaPlan(null), '');
+
+  // The panel's three states must not be interchangeable either.
+  vm.runInContext('accountState.quota = null', context);
+  assert.match(vm.runInContext('accountQuotaHtml()', context), /data-account-quota="loading"/u);
+  vm.runInContext(`accountState.quota = { ok: false, code: 'network_error', message: 'timeout' }`, context);
+  const quotaBroken = vm.runInContext('accountQuotaHtml()', context);
+  assert.match(quotaBroken, /data-account-quota="error"/u);
+  assert.match(quotaBroken, /không phải kết luận là bạn còn đủ lượt/u);
+  vm.runInContext(`accountState.quota = { ok: true, plan: 'free', status: 'active', unit: 'generations', used: 1, limit: 5 }`, context);
+  const quotaReady = vm.runInContext('accountQuotaHtml()', context);
+  assert.match(quotaReady, /data-account-quota="ready"/u);
+  assert.match(quotaReady, /Còn 4\/5 lượt/u);
+  assert.match(quotaReady, /đã dùng 1/u);
+  assert.match(quotaReady, /Gói miễn phí/u);
+
+  console.log('account-usage: 38 khẳng định đã qua');
 }
 
 void main();

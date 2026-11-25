@@ -228,6 +228,118 @@ pub async fn cloud_generate(app: AppHandle, request: CloudRequest) -> CloudOutco
     outcome_from_response(status, &text)
 }
 
+/// Đồng hồ hạn mức tháng (#354) — "còn bao nhiêu", KHÔNG trừ gì.
+///
+/// Đây là phép ĐỌC nên nó phải trả đúng CẢ BỐN thứ cùng lúc: gói, đơn vị, đã dùng, hạn mức.
+/// Thiếu đơn vị thì "còn 3" không nói được là 3 lượt hay 3 credits.
+#[derive(Debug, Clone, Serialize, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageMeter {
+    pub ok: bool,
+    pub plan: String,
+    pub status: String,
+    pub month: String,
+    pub unit: String,
+    pub used: i64,
+    pub limit: i64,
+    pub cost: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+
+impl UsageMeter {
+    fn fail(code: &str, message: &str) -> Self {
+        Self { ok: false, code: Some(code.to_string()), message: Some(message.to_string()), ..Self::default() }
+    }
+}
+
+fn int_field(value: &serde_json::Value, key: &str) -> i64 {
+    let Some(raw) = value.get(key) else { return 0 };
+    if let Some(number) = raw.as_i64() {
+        return number.max(0);
+    }
+    raw.as_str().and_then(|text| text.trim().parse::<i64>().ok()).unwrap_or(0).max(0)
+}
+
+/// Dịch phản hồi `GET /v1/usage` thành đồng hồ. Thuần, nên test được không cần mạng.
+///
+/// `unit` lạ bị chuẩn hoá về `generations`: một đơn vị không đọc được không được phép đi
+/// tiếp vào câu "còn N <đơn vị>".
+pub fn meter_from_json(value: &serde_json::Value) -> Result<UsageMeter, String> {
+    if !value.is_object() {
+        return Err("phản hồi hạn mức không phải đối tượng".to_string());
+    }
+    let plan = value.get("plan").and_then(|item| item.as_str()).unwrap_or("");
+    if plan.is_empty() {
+        return Err("phản hồi hạn mức thiếu tên gói".to_string());
+    }
+    Ok(UsageMeter {
+        ok: true,
+        plan: plan.to_string(),
+        status: value.get("status").and_then(|item| item.as_str()).unwrap_or("").to_string(),
+        month: value.get("month").and_then(|item| item.as_str()).unwrap_or("").to_string(),
+        unit: match value.get("unit").and_then(|item| item.as_str()) {
+            Some("credits") => "credits".to_string(),
+            _ => "generations".to_string(),
+        },
+        used: int_field(value, "used"),
+        limit: int_field(value, "limit"),
+        cost: int_field(value, "cost"),
+        code: None,
+        message: None,
+    })
+}
+
+/// Đọc đồng hồ từ gateway bằng token của phiên. Không bao giờ ném: mọi nhánh hỏng thành
+/// `code` có tên, vì "chưa đăng nhập" và "máy chủ chưa cài" cần hai lời mời khác nhau.
+pub async fn cloud_usage(app: AppHandle) -> UsageMeter {
+    let Some(url) = gateway_url() else {
+        return UsageMeter::fail(
+            "gateway_not_configured",
+            "Cloud AI chưa được cấu hình trên bản cài này.",
+        );
+    };
+    let token = match auth::access_token_for_call(&app) {
+        Ok(Some(token)) => token,
+        Ok(None) => match auth::refresh_access_token_for_call(&app).await {
+            Ok(Some(token)) => token,
+            Ok(None) => return UsageMeter::fail("not_signed_in", "Bạn chưa đăng nhập."),
+            Err(message) => return UsageMeter::fail("not_signed_in", &message),
+        },
+        Err(message) => return UsageMeter::fail("session_unreadable", &message),
+    };
+    let response = match client() {
+        Ok(client) => client,
+        Err(message) => return UsageMeter::fail("network_error", &message),
+    }
+    .get(format!("{url}/v1/usage"))
+    .header("Authorization", format!("Bearer {token}"))
+    .send()
+    .await;
+    let response = match response {
+        Ok(response) => response,
+        Err(error) => return UsageMeter::fail("network_error", &format!("Không đọc được hạn mức: {error}")),
+    };
+    let status = response.status().as_u16();
+    let text = response.text().await.unwrap_or_default();
+    if status == 401 {
+        return UsageMeter::fail("not_signed_in", "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
+    }
+    if !(200..300).contains(&status) {
+        return UsageMeter::fail(&format!("http_{status}"), "Chưa đọc được hạn mức tháng này.");
+    }
+    let parsed: serde_json::Value = match serde_json::from_str(&text) {
+        Ok(value) => value,
+        Err(error) => return UsageMeter::fail("bad_response", &format!("không đọc được phản hồi: {error}")),
+    };
+    match meter_from_json(&parsed) {
+        Ok(meter) => meter,
+        Err(message) => UsageMeter::fail("bad_response", &message),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -340,4 +452,38 @@ mod tests {
         assert!(!payload.contains("SECRET"), "{payload}");
         assert!(!payload.contains("access_token"), "{payload}");
     }
+    #[test]
+    fn meter_carries_unit_with_the_numbers() {
+        let meter = meter_from_json(&serde_json::json!({
+            "plan": "plus", "status": "active", "month": "2026-11",
+            "unit": "credits", "used": 4, "limit": 500, "cost": 2
+        })).expect("phải đọc được");
+        assert!(meter.ok);
+        assert_eq!(meter.plan, "plus");
+        assert_eq!(meter.unit, "credits");
+        assert_eq!(meter.used, 4);
+        assert_eq!(meter.limit, 500);
+        assert_eq!(meter.cost, 2);
+    }
+
+    #[test]
+    fn meter_normalises_an_unknown_unit() {
+        let meter = meter_from_json(&serde_json::json!({ "plan": "free", "unit": "bananas" })).expect("json");
+        assert_eq!(meter.unit, "generations");
+    }
+
+    #[test]
+    fn meter_reads_text_numbers_and_clamps_negatives() {
+        let meter = meter_from_json(&serde_json::json!({ "plan": "free", "used": "3", "limit": -5 })).expect("json");
+        assert_eq!(meter.used, 3);
+        assert_eq!(meter.limit, 0);
+    }
+
+    #[test]
+    fn meter_without_a_plan_is_an_error_not_free() {
+        // Thiếu tên gói mà đoán "free" là báo cho giáo viên trả phí rằng họ được 5 lượt.
+        assert!(meter_from_json(&serde_json::json!({ "used": 1 })).is_err());
+        assert!(meter_from_json(&serde_json::json!([1, 2])).is_err());
+    }
+
 }

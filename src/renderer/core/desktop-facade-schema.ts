@@ -62,6 +62,8 @@ const DESKTOP_CALLS = Object.freeze({
   // #352: sổ dùng AI của chính người đang đăng nhập. Cùng lý do với `cloudGenerate`:
   // đọc sổ cần `Authorization`, nên phép đọc nằm ở Rust và renderer chỉ nhận con số.
   accountUsageHistory: { channel: 'account:usage-history', group: 'app', kind: 'value', optional: false },
+  // #354: đồng hồ hạn mức tháng (đọc, không trừ) — cùng lý do nằm ở Rust với sổ.
+  accountQuota: { channel: 'account:quota', group: 'app', kind: 'value', optional: false },
 
   // ── data: thư viện trò chơi, lịch sử, giáo án, dự án ─────────────────────
   getLibrary: { channel: 'library:get', group: 'data', kind: 'value', optional: false },
