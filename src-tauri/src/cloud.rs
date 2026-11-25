@@ -32,6 +32,10 @@ pub struct CloudRequest {
     pub grade: String,
     #[serde(default)]
     pub subject: String,
+    /// #357: khoá cho MỘT lần bấm. Rust KHÔNG sinh khoá mới khi thử lại sau 401 — khoá đi
+    /// cùng thân request, nên lần thử lại vẫn là cùng một lần bấm với gateway.
+    #[serde(default)]
+    pub idempotency_key: Option<String>,
 }
 
 fn default_question_count() -> u32 {
@@ -83,6 +87,14 @@ fn gateway_url() -> Option<String> {
 /// Kiểm dữ liệu Ở MÁY trước khi gửi: một tài liệu 20 ký tự không cần đi 2 000 km để bị
 /// từ chối. Cùng giới hạn với `requestSchema` của gateway (`zod`).
 pub fn validate(request: &CloudRequest) -> Result<(), (&'static str, String)> {
+    if let Some(key) = request.idempotency_key.as_deref() {
+        if !key.trim().is_empty() && !key_is_usable(key) {
+            return Err((
+                "invalid_request",
+                "Mã của lần tạo này không hợp lệ. Hãy bấm tạo lại.".to_string(),
+            ));
+        }
+    }
     let length = request.text.trim().chars().count();
     if length < 40 {
         return Err(("invalid_request", format!("Bài học quá ngắn ({length} ký tự, cần ít nhất 40).")));
@@ -102,14 +114,31 @@ pub fn validate(request: &CloudRequest) -> Result<(), (&'static str, String)> {
 /// Thân request gửi gateway. Tách ra để test khẳng định đúng TÊN TRƯỜNG mà `zod` đọc
 /// (`sourceName`, `questionCount`) — sai tên là 400, không phải lỗi hiển nhiên.
 pub fn request_body(request: &CloudRequest) -> serde_json::Value {
-    serde_json::json!({
+    let mut body = serde_json::json!({
         "text": request.text,
         "sourceName": request.source_name,
         "questionCount": request.question_count,
         "template": request.template,
         "grade": request.grade,
         "subject": request.subject,
-    })
+    });
+    // Chỉ gửi khi có: một trường rỗng sẽ bị gateway coi là "có khoá nhưng sai dạng".
+    if let Some(key) = request.idempotency_key.as_deref().map(str::trim).filter(|k| !k.is_empty()) {
+        body["idempotencyKey"] = serde_json::Value::String(key.to_string());
+    }
+    body
+}
+
+/// Khoá phải đúng dạng gateway chấp nhận (8–64 ký tự `[A-Za-z0-9_-]`). Kiểm Ở MÁY trước khi
+/// gửi: một khoá sai dạng làm hỏng cả lần gọi mà giáo viên đã bấm.
+pub fn key_is_usable(key: &str) -> bool {
+    let trimmed = key.trim();
+    let length = trimmed.len();
+    length >= 8
+        && length <= 64
+        && trimmed
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
 /// Dịch phản hồi của gateway thành trạng thái có tên. Không mạng, nên test được.
@@ -150,6 +179,12 @@ pub fn outcome_from_response(status: u16, body: &str) -> CloudOutcome {
             outcome.usage = usage;
             outcome
         }
+        // #357: cùng một lần bấm được gửi lại ⇒ gateway đã trả lời 409 và KHÔNG trừ lượt.
+        // Câu này phải nói việc cần làm, không phải "lỗi 409".
+        409 => CloudOutcome::fail(
+            "duplicate_request",
+            "Lần tạo này đã hoàn tất trước đó nên không trừ lượt lần hai. Mở Thư viện để xem trò chơi vừa tạo; nếu chưa thấy, hãy bấm tạo lại.",
+        ),
         _ if code_field == "server_not_migrated" => CloudOutcome::fail(
             "server_not_migrated",
             if message_field.is_empty() { "Máy chủ AI chưa được cài đặt đầy đủ." } else { &message_field },
@@ -352,6 +387,7 @@ mod tests {
             template: "quiz".to_string(),
             grade: "3".to_string(),
             subject: "Toán".to_string(),
+            idempotency_key: None,
         }
     }
 
@@ -484,6 +520,47 @@ mod tests {
         // Thiếu tên gói mà đoán "free" là báo cho giáo viên trả phí rằng họ được 5 lượt.
         assert!(meter_from_json(&serde_json::json!({ "used": 1 })).is_err());
         assert!(meter_from_json(&serde_json::json!([1, 2])).is_err());
+    }
+
+    #[test]
+    fn the_body_carries_the_key_of_this_click_only_when_present() {
+        let mut request = request("một bài học đủ dài để không bị từ chối ở máy");
+        request.idempotency_key = Some("click-abc-123".to_string());
+        let body = request_body(&request);
+        assert_eq!(body.get("idempotencyKey").and_then(|v| v.as_str()), Some("click-abc-123"));
+
+        request.idempotency_key = Some("   ".to_string());
+        assert!(request_body(&request).get("idempotencyKey").is_none(), "khoá rỗng không được gửi");
+        request.idempotency_key = None;
+        assert!(request_body(&request).get("idempotencyKey").is_none());
+    }
+
+    #[test]
+    fn a_malformed_key_is_refused_here_not_remotely() {
+        assert!(key_is_usable("click-abc-123"));
+        assert!(key_is_usable("A1_b-2xyz"), "8 ký tự là vừa đủ");
+        assert!(!key_is_usable("A1_b-2"), "6 ký tự là quá ngắn");
+        assert!(!key_is_usable("ngan"), "quá ngắn");
+        assert!(!key_is_usable("có dấu cách trong khoá"));
+        assert!(!key_is_usable("khoá-có-dấu-tiếng-việt"));
+        assert!(!key_is_usable(&"x".repeat(65)));
+
+        let mut request = request("một bài học đủ dài để không bị từ chối ở máy");
+        request.idempotency_key = Some("sai dạng!".to_string());
+        assert_eq!(validate(&request).unwrap_err().0, "invalid_request");
+    }
+
+    #[test]
+    fn a_repeated_click_is_a_named_state_with_a_next_step() {
+        let outcome = outcome_from_response(
+            409,
+            "{\"code\":\"duplicate_request\",\"error\":\"đã hoàn tất\"}",
+        );
+        assert!(!outcome.ok);
+        assert_eq!(outcome.code.as_deref(), Some("duplicate_request"));
+        let message = outcome.message.unwrap_or_default();
+        assert!(message.contains("Thư viện"), "phải nói việc cần làm: {message}");
+        assert!(message.contains("không trừ lượt lần hai"), "phải nói về tiền: {message}");
     }
 
 }

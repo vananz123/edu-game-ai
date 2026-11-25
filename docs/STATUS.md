@@ -7,6 +7,18 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-25 — #357 `idempotency_key`: một lần bấm là một dòng sổ, kể cả khi gửi lại
+- **Giữ chỗ TRƯỚC khi trừ lượt** (`claimUsageLog`): chèn dòng `pending` với `idempotency_key` (cột unique đã có từ migration 003, **không cần SQL mới**). Chỗ đã `completed` ⇒ **409 `duplicate_request`** và **không trừ gì**; chỗ `pending`/`failed` ⇒ **được thử lại và DÙNG LẠI** dòng đó (lần trước không có trò chơi nào, hoặc đã hoàn tiền).
+- **Khoá đi cùng thân request**: renderer sinh `cloudClickKey()` cho mỗi lần bấm; Rust **không** sinh khoá mới khi thử lại sau 401, và kiểm dạng ở máy (`key_is_usable`, 8–64 ký tự `[A-Za-z0-9_-]`) trước khi gửi.
+- **Đo bằng máy (gateway + DB thật, tài khoản test):**
+  - Trùng khoá **đã completed** ⇒ `409 duplicate_request`; `generations` **2 → 2**, số dòng sổ **2 → 2** (không trừ, không thêm dòng). Câu trả lời: *"…đã hoàn tất trước đó nên không trừ lượt lần hai. Mở Thư viện…"*.
+  - Lần đầu **502** (nhà cung cấp bùng) ⇒ dòng `failed:0`; gửi lại **cùng khoá** ⇒ **200**, `generations` 0 → 1, và sổ vẫn **đúng một dòng** cho khoá đó (chuyển `failed` → `completed`). Khoá mới ⇒ trừ bình thường.
+  - **Đo qua app thật** (`desktop.call('cloudGenerate')`, env bóc sạch): lần 1 `ok:true` **3 câu**, lần 2 cùng khoá `ok:false code=duplicate_request` với câu nói việc cần làm; `cloudClickKey()` sinh khoá đúng dạng.
+- **Cổng:** `ui-wizard-cloud-check` **21/21 (member, LIVE)** · `ui-cloud-generate-check` **9/9 (member, LIVE)** (cả hai phải thử lại vì nhà cung cấp trả `503 high demand` — đúng như đã ghi ở #356) · `ui-account-check` **22/22** · `ui-editor-cloud-check` **14/14** (nhánh member).
+- **Kiểm khác:** `cargo test --lib` **197/197** (3 test mới: khoá trong thân request, khoá sai dạng bị từ chối ở máy, 409 thành trạng thái có tên) · unit **110/110** (thêm 24 khẳng định cho `claimUsageLog`) · `npm run check` sạch · `verify:css` 61/61 · `check:embedded` 6 217,2 KiB · `check:embedded-gateway` OK.
+- **Bộ cài:** `…_0.5.4_x64-setup.exe` **16 369 962 B**, sha256 `8390e185…`, dựng 22:13 (gồm #349–#357).
+- **Còn lại của khoá:** nếu phản hồi của lần gọi thành công bị mất trên đường về, lần bấm lại sẽ nhận `409` và **không có trò chơi** — chọn "không trừ hai lần" thay vì "phát lại nội dung", vì sổ **không được giữ nội dung** (#351) và phát lại miễn phí là một lỗ hổng tiền.
+
 ### 2026-11-25 — #356 nhúng URL gateway lúc dựng, và nốt các nhánh member (đã đăng nhập thật)
 - **Lỗ hổng #355 được vá:** `build.rs` có thêm `embed_gateway_url()` nhúng `EDUGAME_AI_GATEWAY_URL` (env của tiến trình dựng thắng `.env`, đúng như hai biến Supabase), thiếu thì **in `cargo:warning`** ngay trong log dựng chứ không im lặng. Giữ nguyên tên biến ở cả hai phía — đi qua vòng `EDUGAME_{name}` sẽ thành `AI_GATEWAY_URL`, tức hai cái tên cho một thứ.
 - **Cổng phát hành mới `npm run check:embedded-gateway`:** đọc `.env`/env rồi khẳng định **chuỗi URL có trong byte của `.exe` đã dựng** (`--require` biến "thiếu cấu hình" thành LỖI). Trước khi vá, cổng này **FAIL trên bản cũ** (đúng nghĩa: chưa nhúng gì); sau khi dựng lại thì **OK**.

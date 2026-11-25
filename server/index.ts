@@ -4,7 +4,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { requestGameJson } from './gemini.js';
 import { consumeGeneration, describeQuotaFailure, refundGeneration, usageSnapshot, type QuotaStore } from './quota.js';
-import { usageLogRow, writeUsageLog } from './usage-log.js';
+import { claimUsageLog, normalizeIdempotencyKey, releaseUsageLog, settleUsageLog, usageLogRow, writeUsageLog, type UsageLogDb } from './usage-log.js';
 
 const PORT = Number(process.env.PORT || 8787);
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
@@ -27,7 +27,9 @@ const requestSchema = z.object({
   questionCount: z.number().int().min(3).max(15).optional().default(8),
   template: z.enum(['quiz', 'scenario', 'matching']).optional().default('scenario'),
   grade: z.string().max(50).optional().default(''),
-  subject: z.string().max(100).optional().default('')
+  subject: z.string().max(100).optional().default(''),
+  // #357: khoá cho MỘT lần bấm, để lần thử lại không thành hai dòng sổ và hai lần trừ lượt.
+  idempotencyKey: z.string().trim().min(8).max(64).regex(/^[A-Za-z0-9_-]+$/u).optional()
 });
 
 let authClient: SupabaseClient | null = null;
@@ -66,6 +68,52 @@ async function requireUser(req: AuthenticatedRequest, res: Response, next: NextF
  * Adapter cho `consumeGeneration`: đọc/ghi bảng bằng service_role. Không có hàm RPC nào
  * ở đây — đó là chủ ý (xem đầu `quota.ts`): bảng đã tồn tại thì sản phẩm phải chạy.
  */
+/**
+ * Adapter sổ dùng AI (#357): ba thao tác mà `claimUsageLog` cần. `insertPending` chèn với
+ * `ignoreDuplicates` để khoá trùng **không** phải lỗi — chính việc "không chèn được" là
+ * thông tin (khoá đã tồn tại).
+ */
+function usageLogDb(admin: SupabaseClient): UsageLogDb {
+  return {
+    async insertPending(row) {
+      const { data, error } = await admin
+        .from('ai_usage_log')
+        .upsert(row, { onConflict: 'idempotency_key', ignoreDuplicates: true })
+        .select('id');
+      if (error) return { inserted: false, id: null, reason: error.message };
+      const rows = (data as { id: string }[] | null) || [];
+      return { inserted: rows.length > 0, id: rows.length > 0 ? rows[0].id : null };
+    },
+    async findKey(userId, key) {
+      const { data, error } = await admin
+        .from('ai_usage_log')
+        .select('id,status')
+        .eq('user_id', userId)
+        .eq('idempotency_key', key)
+        .maybeSingle();
+      if (error || !data) return null;
+      return data as { id: string; status: string };
+    },
+    async finish(id, row) {
+      const { error } = await admin
+        .from('ai_usage_log')
+        .update({
+          model: row.model,
+          credit_cost: row.credit_cost,
+          status: row.status,
+          completed_at: row.completed_at,
+          metadata: row.metadata,
+        })
+        .eq('id', id);
+      return error ? { ok: false, reason: error.message } : { ok: true };
+    },
+    async release(id) {
+      const { error } = await admin.from('ai_usage_log').delete().eq('id', id);
+      return error ? { ok: false, reason: error.message } : { ok: true };
+    },
+  };
+}
+
 function quotaStore(admin: SupabaseClient): QuotaStore {
   return {
     async planOf(userId) {
@@ -209,6 +257,28 @@ app.post('/v1/generate', requireConfiguration, requireUser, async (req: Authenti
   const admin = adminClient!;
   const userId = req.userId!;
   const month = new Date().toISOString().slice(0, 7);
+  const ledger = usageLogDb(admin);
+  // #357: giữ chỗ TRƯỚC khi trừ lượt. Khoá trùng đã `completed` ⇒ trả lời ngay, chưa trừ gì.
+  const key = normalizeIdempotencyKey(parsed.data.idempotencyKey);
+  let claimId: string | null = null;
+  if (key) {
+    const claim = await claimUsageLog(ledger, { userId, key });
+    // `strict` đang tắt: union theo `ok` không tự thu hẹp kiểu, nên nhánh lỗi được nói ra.
+    const claimFailure = claim as { ok: boolean; duplicate?: boolean; id?: string | null; reason?: string };
+    if (!claimFailure.ok) {
+      console.error('Usage log claim failed:', claimFailure.reason || 'unknown');
+    } else if (claimFailure.duplicate) {
+      // Lần gọi này đã thành công và đã trừ lượt rồi. Không trừ lần hai, và câu trả lời phải
+      // nói giáo viên nên làm gì tiếp — không phải "lỗi 409" trần trụi.
+      res.status(409).json({
+        error: 'Lần tạo này đã hoàn tất trước đó nên không trừ lượt lần hai. Mở Thư viện để xem trò chơi vừa tạo; nếu chưa thấy, hãy bấm tạo lại.',
+        code: 'duplicate_request',
+      });
+      return;
+    } else {
+      claimId = claimFailure.id || null;
+    }
+  }
   const outcome = await consumeGeneration(quotaStore(admin), userId, month);
   // `strict` đang tắt nên union theo `ok` không tự thu hẹp kiểu; nhánh lỗi được nói ra
   // bằng một kiểu riêng thay vì dựa vào suy luận của compiler.
@@ -226,6 +296,9 @@ app.post('/v1/generate', requireConfiguration, requireUser, async (req: Authenti
     };
   };
   if (!failure.ok) {
+    // Chưa trừ gì và chưa gọi AI ⇒ nhả chỗ, để lần bấm sau (cùng khoá hay khoá mới) không
+    // bị một dòng `pending` vô nghĩa chặn đường.
+    await releaseUsageLog(ledger, claimId);
     if (failure.kind === 'exhausted' && failure.quota) {
       // Câu phải nói đúng đơn vị: hết CREDITS không phải "hết lượt", và giáo viên trả phí
       // cần biết mình đang bị trừ bằng gì để quyết định nâng gói hay chờ tháng sau.
@@ -257,7 +330,7 @@ app.post('/v1/generate', requireConfiguration, requireUser, async (req: Authenti
       questions: input.questions,
       error: input.error,
     });
-    const written = await writeUsageLog(admin, row);
+    const written = await settleUsageLog(ledger, admin, claimId, row);
     if (!written.ok) console.error('Usage log failed:', written.reason || 'unknown');
   };
   // Đã trừ một lượt ⇒ mọi nhánh hỏng phía dưới phải trả lại. Một lượt bị trừ cho trò

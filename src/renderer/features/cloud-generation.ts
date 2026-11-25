@@ -13,9 +13,24 @@ const CLOUD_SELF_TEST_LESSON =
   + 'em đi sát mép đường bên phải. Trước khi sang đường, em dừng lại, nhìn trái, nhìn '
   + 'phải rồi mới đi. Không chơi đùa dưới lòng đường.';
 
+/**
+ * Mã cho MỘT lần bấm (#357). Gateway dùng nó để không trừ lượt hai lần khi cùng một lần
+ * bấm bị gửi lại (Rust làm mới token rồi gửi lại, hoặc mạng đứt ở phía app).
+ *
+ * Đủ 8–64 ký tự `[A-Za-z0-9_-]`: đúng dạng gateway chấp nhận, nên không bao giờ bị từ chối
+ * vì "mã sai dạng" — một cái giá quá đắt cho một lần bấm của giáo viên.
+ */
+function cloudClickKey() {
+  const random = () => Math.random().toString(36).slice(2, 10);
+  return 'click-' + Date.now().toString(36) + '-' + random() + random();
+}
+
 async function cloudGenerateGame(request) {
   try {
-    const result = await desktop.call('cloudGenerate', request || {});
+    const payload = Object.assign({}, request || {});
+    // Khoá đi CÙNG thân request: lần thử lại bên trong Rust dùng lại đúng thân này.
+    if (!payload.idempotencyKey) payload.idempotencyKey = cloudClickKey();
+    const result = await desktop.call('cloudGenerate', payload);
     if (!result || typeof result !== 'object') {
       return { ok: false, code: 'bad_response', message: 'Máy chủ trả về dữ liệu không đọc được.' };
     }

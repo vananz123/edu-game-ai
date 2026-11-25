@@ -5710,4 +5710,13 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
 - **Giữ NGUYÊN tên biến ở cả hai phía.** Đi qua vòng `EDUGAME_{name}` sẽ biến biến-lúc-dựng thành `AI_GATEWAY_URL` trong khi biến-lúc-chạy là `EDUGAME_AI_GATEWAY_URL` — hai cái tên cho một thứ, và bản cài im lặng mất Cloud AI.
 - **Bằng chứng nhúng là BYTE của tệp `.exe`, không phải lời khai "tôi đã export".** `check:embedded-gateway` đọc byte và tìm chuỗi; `--require` biến thiếu cấu hình thành lỗi phát hành. Cổng này đã FAIL trên bản cũ trước khi vá, nên nó không phải cổng luôn xanh.
 - **Cổng UI phải hỏi STATE trước khi đòi một kỳ vọng.** Ba dòng FAIL của `ui-account-check` không phải lỗi sản phẩm: cổng đòi `not_signed_in` trên máy đã đăng nhập. Nay `guest` ⇒ đòi mã từ chối có tên, `member` ⇒ đòi dữ liệu thật; **cả hai nhánh đều đã chạy**, nên một nhánh không thể che nhánh kia.
-- **Một lần 502 của nhà cung cấp không phải kết luận về sản phẩm** — nhưng cũng không được im lặng: ghi lại là lần đo thất bại, chờ, đo lại, và nói rõ đã đo được ở lần thứ mấy. SmartScreen, thời gian cài, hiệu ứng phải nhìn, một lượt chơi offline: bốn thứ này không có phép đo tự động trung thực nào trên máy đã có WebView2 và đã quen tệp cài.
+- **Một lần 502 của nhà cung cấp không phải kết luận về sản phẩm** — nhưng cũng không được im lặng: ghi lại là lần đo thất bại, chờ, đo lại, và nói rõ đã đo được ở lần thứ mấy.
+
+## #357 — Giữ chỗ trước khi trừ tiền; và một khoá chỉ có nghĩa khi cả hai phía cùng gửi nó
+
+- **Chống trừ hai lần thì phải chặn TRƯỚC khi trừ.** Ghi sổ sau khi trừ (cách của #351) không thể ngăn lần trừ thứ hai; chỉ một dòng `pending` giữ chỗ trước mới ngăn được. Thứ tự đó là toàn bộ giá trị của việc này.
+- **`completed` là trùng; `pending`/`failed` thì không.** Lần gọi hỏng đã hoàn tiền và không sinh ra trò chơi nào, nên chặn nó là chặn oan. Chỉ "đã thành công và đã trừ" mới là lý do từ chối.
+- **Không cần SQL mới khi cột đã có.** `idempotency_key` unique có từ migration 003; một việc phải chờ người vận hành chạy migration là một việc không tồn tại trên máy giáo viên (#342 cùng họ).
+- **Khoá phải đi cùng THÂN request**, không phải sinh lại ở mỗi lần thử: Rust thử lại sau 401, gateway thử lại với Gemini — nếu mỗi lần thử sinh khoá mới thì khoá vô dụng đúng ở chỗ cần nó nhất.
+- **Chọn "không trừ hai lần" thay vì "phát lại nội dung".** Sổ không giữ nội dung (#351), và phát lại miễn phí cùng một khoá là một lỗ hổng tiền. Nên khi phản hồi bị mất, giáo viên bấm lại và **trả một lượt mới** — hệ thống nói rõ điều đó bằng câu nói việc cần làm, thay vì một mã 409 trần trụi.
+- **Kiểm dạng khoá ở MÁY trước khi gửi**: một khoá sai dạng làm hỏng cả lần bấm mà giáo viên đã trả tiền, và thông báo lỗi từ xa sẽ nói về "dữ liệu đầu vào" chứ không nói về cái họ vừa bấm. SmartScreen, thời gian cài, hiệu ứng phải nhìn, một lượt chơi offline: bốn thứ này không có phép đo tự động trung thực nào trên máy đã có WebView2 và đã quen tệp cài.

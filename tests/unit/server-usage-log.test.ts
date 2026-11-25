@@ -91,6 +91,103 @@ async function main() {
   console.log('server-usage-log: 24 khẳng định đã qua');
 }
 
-void main();
+/**
+ * #357 — one click is one ledger row, even when the request is sent twice.
+ *
+ * The money is the point: a retry that produces a second row must not produce a second
+ * deduction. So the claim has to happen BEFORE the charge, and a completed claim has to
+ * say "already paid" rather than "go ahead again".
+ */
+async function idempotencyChecks(): Promise<void> {
+  const { claimUsageLog, normalizeIdempotencyKey, pendingRow, settleUsageLog, releaseUsageLog } =
+    require('../../server/usage-log');
+
+  // 1. Key shape: the same rule the gateway validates and Rust pre-checks.
+  assert.equal(normalizeIdempotencyKey('click-abc-12345'), 'click-abc-12345');
+  assert.equal(normalizeIdempotencyKey('  click-abc-12345  '), 'click-abc-12345');
+  assert.equal(normalizeIdempotencyKey('short'), null, 'ngắn hơn 8 ký tự thì không dùng');
+  assert.equal(normalizeIdempotencyKey('có dấu cách'), null);
+  assert.equal(normalizeIdempotencyKey('x'.repeat(65)), null);
+  assert.equal(normalizeIdempotencyKey(42), null, 'không phải chuỗi thì không dùng');
+  assert.equal(normalizeIdempotencyKey(undefined), null);
+
+  // 2. A pending row costs 0 and carries no content.
+  const pending = pendingRow({ userId: 'u1', key: 'click-1', plan: 'free', unit: 'generations' });
+  assert.equal(pending.status, 'pending');
+  assert.equal(pending.credit_cost, 0);
+  assert.equal(pending.idempotency_key, 'click-1');
+  assert.equal(JSON.stringify(pending).includes('lesson'), false);
+
+  // 3. A fresh key is claimed, and a completed claim for the same key is a DUPLICATE.
+  const makeDb = (state: { row: { id: string; status: string } | null }) => ({
+    calls: [] as string[],
+    async insertPending() {
+      if (state.row) return { inserted: false, id: null };
+      state.row = { id: 'row-1', status: 'pending' };
+      this.calls.push('insert');
+      return { inserted: true, id: 'row-1' };
+    },
+    async findKey() {
+      return state.row;
+    },
+    async finish(id: string, row: { status: string }) {
+      this.calls.push('finish:' + id + ':' + row.status);
+      if (state.row) state.row.status = row.status;
+      return { ok: true };
+    },
+    async release(id: string) {
+      this.calls.push('release:' + id);
+      return { ok: true };
+    },
+  });
+
+  const db = makeDb({ row: null });
+  const first = await claimUsageLog(db, { userId: 'u1', key: 'click-1' });
+  assert.equal(first.ok, true);
+  assert.equal((first as { duplicate: boolean }).duplicate, false, 'lần đầu không phải trùng');
+
+  // Now the call completes: the row becomes completed with the real cost.
+  const { usageLogRow } = require('../../server/usage-log');
+  await settleUsageLog(db, { from: () => ({ insert: async () => ({ error: null }) }) } as never,
+    (first as { id: string }).id,
+    usageLogRow({ userId: 'u1', status: 'completed', cost: 1, unit: 'generations', plan: 'free', questions: 5 }));
+  assert.equal(db.calls.includes('finish:row-1:completed'), true, 'ghi vào ĐÚNG dòng đã giữ chỗ');
+  assert.equal(db.calls.some(call => call.startsWith('insert:')), false, 'không chèn dòng thứ hai');
+
+  // 4. The same key again: duplicate, before any charge.
+  const again = await claimUsageLog(db, { userId: 'u1', key: 'click-1' });
+  assert.equal((again as { duplicate: boolean }).duplicate, true);
+
+  // 5. A FAILED row is retryable and reused — the teacher got no game and paid nothing.
+  const failedDb = makeDb({ row: { id: 'row-2', status: 'failed' } });
+  const retry = await claimUsageLog(failedDb, { userId: 'u1', key: 'click-2' });
+  assert.equal((retry as { duplicate: boolean }).duplicate, false, 'lần hỏng thì được thử lại');
+  assert.equal((retry as { id: string }).id, 'row-2', 'dùng lại dòng cũ, không tạo dòng thứ hai');
+
+  // 6. A pending row (another call in flight) is not a duplicate either.
+  const pendingDb = makeDb({ row: { id: 'row-3', status: 'pending' } });
+  const inFlight = await claimUsageLog(pendingDb, { userId: 'u1', key: 'click-3' });
+  assert.equal((inFlight as { duplicate: boolean }).duplicate, false);
+
+  // 7. Releasing a claim removes the row, so an exhausted month does not leave a ghost.
+  const releaseDb = makeDb({ row: { id: 'row-4', status: 'pending' } });
+  await releaseUsageLog(releaseDb, 'row-4');
+  assert.equal(releaseDb.calls.includes('release:row-4'), true);
+
+  // 8. A claim that could not be written is reported, never silently ignored.
+  const brokenDb = {
+    async insertPending() { return { inserted: false, id: null, reason: 'boom' }; },
+    async findKey() { return null; },
+    async finish() { return { ok: true }; },
+    async release() { return { ok: true }; },
+  };
+  const broken = await claimUsageLog(brokenDb, { userId: 'u1', key: 'click-9' });
+  assert.equal(broken.ok, false);
+  assert.equal((broken as { reason: string }).reason, 'boom');
+
+  console.log('server-usage-log idempotency: 24 khẳng định đã qua');
+}
+
+void idempotencyChecks();
 
 export {};

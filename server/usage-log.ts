@@ -83,3 +83,94 @@ export async function writeUsageLog(
     return { ok: false, reason: error instanceof Error ? error.message : 'unknown' };
   }
 }
+
+// ---------------------------------------------------------------------------
+// #357 — một lần bấm là một dòng sổ, kể cả khi mạng đứt rồi thử lại.
+//
+// Trước đây `POST /v1/generate` chỉ ghi sổ SAU khi trừ lượt, nên một lần thử lại (Rust làm
+// mới token rồi gửi lại; hoặc người dùng bấm lại sau khi mạng rớt) thành HAI dòng và HAI lần
+// trừ. Cột `idempotency_key` đã có sẵn (unique) từ migration 003, nên cách sửa không cần SQL
+// mới: **giữ chỗ trước khi trừ** bằng một dòng `pending`, và từ chối nếu chỗ đó đã `completed`.
+// ---------------------------------------------------------------------------
+
+/** Khoá do client sinh cho MỘT lần bấm. Rỗng/sai dạng ⇒ không dùng (hành vi như cũ). */
+export function normalizeIdempotencyKey(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const key = raw.trim();
+  if (key.length < 8 || key.length > 64) return null;
+  return /^[A-Za-z0-9_-]+$/u.test(key) ? key : null;
+}
+
+export interface UsageLogClaim {
+  userId: string;
+  key: string;
+  feature?: string;
+  unit?: ChargeUnitName;
+  plan?: string;
+}
+
+/** Dòng `pending`: chưa biết giá, vì lượt chưa bị trừ. */
+export function pendingRow(claim: UsageLogClaim, now?: Date): Record<string, unknown> {
+  return {
+    user_id: claim.userId,
+    feature: claim.feature || 'question_generation',
+    model: null,
+    credit_cost: 0,
+    status: 'pending',
+    idempotency_key: claim.key,
+    created_at: (now || new Date()).toISOString(),
+    metadata: { unit: claim.unit === 'credits' ? 'credits' : 'generations', plan: claim.plan || null },
+  };
+}
+
+export type ClaimOutcome =
+  | { ok: true; id: string | null; duplicate: false }
+  | { ok: true; id: string; duplicate: true }
+  | { ok: false; duplicate: false; reason: string };
+
+/** Nơi lưu sổ — tách khỏi Supabase để luật ở trên test được mà không cần mạng. */
+export interface UsageLogDb {
+  /** Chèn dòng `pending`; `inserted: false` nghĩa là khoá đã tồn tại. */
+  insertPending(row: Record<string, unknown>): Promise<{ inserted: boolean; id: string | null; reason?: string }>;
+  findKey(userId: string, key: string): Promise<{ id: string; status: string } | null>;
+  finish(id: string, row: UsageLogRow): Promise<{ ok: boolean; reason?: string }>;
+  release(id: string): Promise<{ ok: boolean; reason?: string }>;
+}
+
+/**
+ * Giữ chỗ cho một lần gọi.
+ *
+ * Luật, và lý do:
+ *  - Chỗ đã `completed` ⇒ **trùng**: lần gọi này đã thành công và đã trừ lượt. Trả lời
+ *    409 trước khi trừ, nên không bao giờ có lần trừ thứ hai.
+ *  - Chỗ đang `pending` hoặc `failed` ⇒ **được thử lại** và DÙNG LẠI dòng đó: lần trước
+ *    không sinh ra trò chơi nào (hoặc đã hoàn tiền), nên chặn ở đây là chặn oan.
+ *  - Không có chỗ nào ⇒ chèn `pending` và đi tiếp.
+ */
+export async function claimUsageLog(db: UsageLogDb, claim: UsageLogClaim): Promise<ClaimOutcome> {
+  const inserted = await db.insertPending(pendingRow(claim));
+  if (inserted.reason) return { ok: false, duplicate: false, reason: inserted.reason };
+  if (inserted.inserted) return { ok: true, id: inserted.id, duplicate: false };
+  // Khoá đã tồn tại (kể cả khi một lần gọi khác đang chen ngang): đọc trạng thái của nó.
+  const existing = await db.findKey(claim.userId, claim.key);
+  if (!existing) return { ok: true, id: inserted.id, duplicate: false };
+  if (existing.status === 'completed') return { ok: true, id: existing.id, duplicate: true };
+  return { ok: true, id: existing.id, duplicate: false };
+}
+
+/** Ghi kết quả vào đúng dòng đã giữ chỗ; không có id (không khoá) thì chèn dòng mới. */
+export async function settleUsageLog(
+  db: UsageLogDb,
+  admin: UsageLogSink,
+  id: string | null,
+  row: UsageLogRow
+): Promise<{ ok: boolean; reason?: string }> {
+  if (!id) return writeUsageLog(admin, row);
+  return db.finish(id, row);
+}
+
+/** Nhả chỗ khi chưa trừ gì và cũng chưa gọi AI (ví dụ bị từ chối vì hết lượt). */
+export async function releaseUsageLog(db: UsageLogDb, id: string | null): Promise<void> {
+  if (!id) return;
+  await db.release(id);
+}
