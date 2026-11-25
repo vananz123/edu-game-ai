@@ -11,10 +11,13 @@ FROM node:22-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 # `--omit=dev` vì TypeScript chỉ cần lúc biên dịch ở máy dựng, không cần trong image chạy.
-RUN npm ci --omit=dev --no-audit --no-fund
-COPY tsconfig.json ./
+# @types/node phải cài riêng: nó là devDependency, mà `server/tsconfig.json` khai báo
+# `types: ["node"]` — thiếu nó thì tsc hỏng ngay trong lần build đầu tiên của image.
+RUN npm ci --omit=dev --no-audit --no-fund   && npm install --no-save --no-audit --no-fund typescript@5 @types/node@22
 COPY server ./server
-RUN npx --yes typescript@5 tsc -p tsconfig.json
+# `server/tsconfig.json` chỉ gồm `server/`: image không có `src/` hay `tests/`, nên tsconfig
+# gốc sẽ báo "không có tệp đầu vào".
+RUN npx tsc -p server/tsconfig.json
 
 FROM node:22-slim
 ENV NODE_ENV=production
