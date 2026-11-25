@@ -1,0 +1,18 @@
+# Những thứ KHÔNG được đi vào image gateway.
+# `.env` chứa `SUPABASE_SERVICE_ROLE_KEY` và `GEMINI_API_KEY`: nếu nó vào image thì mọi
+# người kéo image đều có quyền ghi toàn bộ dữ liệu người dùng và tiêu tiền API.
+.env
+.env.*
+!.env.example
+node_modules
+dist
+dist-tauri
+src
+src-tauri
+tests
+docs
+scripts
+.cache
+.tmp-art
+*.log
+.git

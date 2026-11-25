@@ -7,6 +7,15 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-25 — #359 chuẩn bị đường triển khai gateway thật (không đăng ký dịch vụ nào)
+- **`Dockerfile` + `.dockerignore`:** gateway đóng gói được (`npm ci --omit=dev`, `USER node`, `HEALTHCHECK` gọi `/health`); `.dockerignore` **chặn `.env`** — image có khoá bí mật là image ai kéo cũng ghi được toàn bộ dữ liệu người dùng.
+- **`npm run smoke:gateway -- <url> [--expect-version X] [--pilot]`:** bốn dòng đúng bốn câu app hỏi — `/health` `ok` + đúng phiên bản, `/v1/usage` và `/v1/generate` **401 khi không có token**. Cổng này **cố ý không gọi AI**: smoke test không được tiêu tiền của giáo viên.
+- **`npm run check:pilot`** = `check:embedded-gateway --require --pilot`: đọc **byte của `.exe`** và **từ chối bộ cài cho giáo viên nếu URL không phải `https` hoặc trỏ localhost**. Đo: với `.env` hiện tại (`http://127.0.0.1:8788`) cổng **FAIL đúng nghĩa** (*"bộ cài cho giáo viên phải trỏ https"*); với `EDUGAME_AI_GATEWAY_URL=https://ai.example.com` nó chuyển sang FAIL vì chuỗi **không có trong exe** — đúng, vì exe đang nhúng localhost.
+- **`docs/DEPLOY_GATEWAY.md`:** biến môi trường, ba cách chạy kèm **bảng chi phí tham khảo** (VPS ~4–6 USD/tháng · PaaS free tier 0–7 USD/tháng nhưng **có thể ngủ** · máy trường + Cloudflare Tunnel 0 USD), quy trình dựng bộ cài, và ba lỗi đã gặp thật.
+- **Một lỗi trong chính cổng mới, do cổng bắt được:** hai dòng `/v1/usage` và `/v1/generate` báo "không kết nối được" chỉ vì tôi hoán vị `[path, name]` ⇒ URL thành `…:8788usage`. Sửa xong: **4/4** trên gateway đang chạy (`version=0.5.5`, `401` cả hai cửa).
+- **Chưa làm, và cố ý không tự làm:** chưa đăng ký host nào (tốn tiền, cần người quyết), nên đường HTTPS thật **chưa được đo**; `Dockerfile` **chưa được build** (máy này không có Docker) — chỉ mới kiểm bằng mắt và bằng các cổng TS.
+- **Cổng:** `tsc` sạch · `npm run check` sạch · `check:embedded` 6 217,2 KiB · `smoke:gateway` 4/4.
+
 ### 2026-11-25 — #358 phát hành v0.5.5 (bốn nguồn phiên bản + đo bằng cách cài)
 - **Bốn nguồn phiên bản khớp nhau:** `package.json` / `package-lock.json` · `src-tauri/Cargo.toml` · `src-tauri/tauri.conf.json` · `GET /health` của gateway ⇒ **0.5.5**.
 - **Bộ cài:** `EduGame Studio (Tauri)_0.5.5_x64-setup.exe` — **16 367 996 B** (15,61 MiB), SHA-256 `45fd0f2ffb446e16…`, dựng 23:06, gồm #349–#357.

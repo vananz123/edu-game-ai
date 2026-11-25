@@ -10,6 +10,7 @@
  *   npm run check:embedded-gateway                       # đọc .env rồi đối chiếu .exe
  *   EDUGAME_AI_GATEWAY_URL=… npm run check:embedded-gateway   # biến env thắng .env
  *   npm run check:embedded-gateway -- --require          # thiếu cấu hình = LỖI (cổng phát hành)
+ *   npm run check:embedded-gateway -- --require --pilot  # bản phát cho giáo viên: https, không localhost
  */
 const fs = require('fs');
 const path = require('path');
@@ -18,6 +19,10 @@ const ROOT = path.resolve(__dirname, '..');
 const EXE = path.join(ROOT, 'src-tauri', 'target', 'release', 'edugame-studio-tauri.exe');
 const NAME = 'EDUGAME_AI_GATEWAY_URL';
 const requireConfigured = process.argv.includes('--require');
+// #359: một bộ cài giao cho giáo viên mà trỏ `127.0.0.1` thì Cloud AI chỉ chạy trên máy
+// người dựng. Cờ `--pilot` biến điều đó thành lỗi phát hành, thay vì một lời nhắc trong docs.
+const pilot = process.argv.includes('--pilot');
+const LOCAL_HOSTS = /^(?:https?:\/\/)?(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(?::\d+)?/iu;
 
 function fromDotenv() {
   const file = path.join(ROOT, '.env');
@@ -52,6 +57,17 @@ if (!fs.existsSync(EXE)) {
 }
 
 const wanted = configured.replace(/\/+$/u, '');
+
+if (pilot) {
+  if (!/^https:\/\//u.test(wanted)) {
+    console.error('check-embedded-gateway: FAIL (--pilot) — bộ cài cho giáo viên phải trỏ https, đang là "' + wanted + '".');
+    process.exit(1);
+  }
+  if (LOCAL_HOSTS.test(wanted)) {
+    console.error('check-embedded-gateway: FAIL (--pilot) — "' + wanted + '" chỉ chạy trên máy người dựng. Hãy dựng với gateway đã triển khai.');
+    process.exit(1);
+  }
+}
 const bytes = fs.readFileSync(EXE);
 const found = bytes.includes(Buffer.from(wanted, 'utf8'));
 

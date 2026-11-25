@@ -5719,4 +5719,12 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
 - **Không cần SQL mới khi cột đã có.** `idempotency_key` unique có từ migration 003; một việc phải chờ người vận hành chạy migration là một việc không tồn tại trên máy giáo viên (#342 cùng họ).
 - **Khoá phải đi cùng THÂN request**, không phải sinh lại ở mỗi lần thử: Rust thử lại sau 401, gateway thử lại với Gemini — nếu mỗi lần thử sinh khoá mới thì khoá vô dụng đúng ở chỗ cần nó nhất.
 - **Chọn "không trừ hai lần" thay vì "phát lại nội dung".** Sổ không giữ nội dung (#351), và phát lại miễn phí cùng một khoá là một lỗ hổng tiền. Nên khi phản hồi bị mất, giáo viên bấm lại và **trả một lượt mới** — hệ thống nói rõ điều đó bằng câu nói việc cần làm, thay vì một mã 409 trần trụi.
-- **Kiểm dạng khoá ở MÁY trước khi gửi**: một khoá sai dạng làm hỏng cả lần bấm mà giáo viên đã trả tiền, và thông báo lỗi từ xa sẽ nói về "dữ liệu đầu vào" chứ không nói về cái họ vừa bấm. SmartScreen, thời gian cài, hiệu ứng phải nhìn, một lượt chơi offline: bốn thứ này không có phép đo tự động trung thực nào trên máy đã có WebView2 và đã quen tệp cài.
+- **Kiểm dạng khoá ở MÁY trước khi gửi**: một khoá sai dạng làm hỏng cả lần bấm mà giáo viên đã trả tiền, và thông báo lỗi từ xa sẽ nói về "dữ liệu đầu vào" chứ không nói về cái họ vừa bấm.
+
+## #359 — Một smoke test không được tiêu tiền, và một bộ cài cho giáo viên không được trỏ localhost
+
+- **`smoke:gateway` chỉ hỏi ba câu không tốn tiền**: `/health` đúng phiên bản, và cả hai cửa AI trả `401` khi không có token. Gọi AI để "kiểm tra gateway" là lấy một lượt của giáo viên trả cho một phép thử của người vận hành.
+- **`check:pilot` biến một lời nhắc trong docs thành LỖI phát hành.** Một bộ cài trỏ `127.0.0.1` vẫn "chạy được" trên máy người dựng và hỏng ở mọi máy khác — đó là kiểu hỏng tệ nhất: không ai thấy cho tới khi giao cho giáo viên. Nó đọc **byte của `.exe`**, không đọc lời khai.
+- **Chi phí là quyết định của người vận hành.** Tài liệu nêu ba mức giá và một điểm phải nói trước (free tier **ngủ** ⇒ lần gọi đầu chậm, trong khi app chờ 120 giây), nhưng **không** đăng ký dịch vụ nào: thêm một dịch vụ trả phí khi chưa ai đồng ý là vượt quyền.
+- **Một image có `.env` là một image bị rò khoá.** `.dockerignore` chặn `.env` là biện pháp duy nhất đứng giữa `SUPABASE_SERVICE_ROLE_KEY` và bất kỳ ai kéo image.
+- **Cổng mới cũng phải được đo, và nó đã bắt lỗi của chính nó** (hoán vị `[path, name]` làm URL thành `…:8788usage`): một cổng không chạy được thì không phải cổng. SmartScreen, thời gian cài, hiệu ứng phải nhìn, một lượt chơi offline: bốn thứ này không có phép đo tự động trung thực nào trên máy đã có WebView2 và đã quen tệp cài.

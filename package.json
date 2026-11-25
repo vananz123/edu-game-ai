@@ -41,6 +41,8 @@
     "build:embedded": "node scripts/build-embedded-js.js",
     "check:embedded": "node scripts/build-embedded-js.js --check",
     "check:embedded-gateway": "node scripts/check-embedded-gateway.js",
+    "check:pilot": "node scripts/check-embedded-gateway.js --require --pilot",
+    "smoke:gateway": "node scripts/smoke-gateway.js",
     "build:tauri": "npm run build:embedded && node scripts/build-tauri-frontend.js",
     "tauri:run": "node scripts/build-tauri-release.js --run",
     "tauri:check": "node scripts/build-tauri-release.js --check"
