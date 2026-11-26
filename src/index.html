@@ -17,7 +17,11 @@
        làm hook cho JS/CDP (.app-shell, .nav-item, .active, .toast, các #id) —
        quy tắc style cũ của chúng trong layout.css/responsive.css đã bị xóa. -->
   <div class="app-shell flex min-h-screen">
-    <aside class="sidebar w-[232px] max-wide:w-[208px] max-tab:w-[184px] max-compact:w-16 shrink-0 flex flex-col bg-white border-r border-line pt-[18px] px-3 pb-3 max-tab:px-2.5 max-compact:p-[16px_7px]">
+    <!-- #368: nút "hiện thanh bên" chỉ tồn tại khi thanh bên đang ẩn. Nó nằm NGOÀI <aside>
+         vì một cái nút để hiện một thứ đang bị ẩn không thể ở trong chính thứ đó. `position:
+         fixed` nên nó không chiếm chỗ trong flex của .app-shell. -->
+    <button type="button" class="sidebar-reveal" data-sidebar-show hidden title="Hiện thanh bên (Ctrl+B)" aria-label="Hiện thanh bên" aria-controls="appSidebar"><span data-icon="chevron-right" data-icon-size="14"></span></button>
+    <aside id="appSidebar" data-sidebar-panel class="sidebar w-[232px] max-wide:w-[208px] max-tab:w-[184px] max-compact:w-16 shrink-0 flex flex-col bg-white border-r border-line pt-[18px] px-3 pb-3 max-tab:px-2.5 max-compact:p-[16px_7px]">
       <!-- DECISIONS #162: brand và topbar đã bỏ. Trạng thái llama.cpp, thông báo và
            hai nút toàn màn hình/hướng dẫn chuyển vào sidebar. Mọi #id giữ nguyên,
            nên ai-status.ts và phần nối thông báo trong bootstrap.ts không phải sửa;
@@ -75,6 +79,9 @@
           </div>
           <button class="icon-button w-[34px] h-[34px] border border-line rounded-[10px] bg-white text-muted transition hover:bg-[#f6f6ff] hover:text-[#4f46e5]" id="topbarFullscreenBtn" title="Toàn màn hình (F11)"><span data-icon="maximize" data-icon-size="16"></span></button>
           <button class="icon-button w-[34px] h-[34px] border border-line rounded-[10px] bg-white text-muted transition hover:bg-[#f6f6ff] hover:text-[#4f46e5]" id="helpBtn" title="Hướng dẫn"><span data-icon="circle-question-mark" data-icon-size="16"></span></button>
+          <!-- #368: cùng một công tắc với nút "hiện" ở ngoài <aside>; trạng thái đi qua
+               `html[data-sidebar]`, không qua class của nút. -->
+          <button type="button" class="icon-button w-[34px] h-[34px] border border-line rounded-[10px] bg-white text-muted transition hover:bg-[#f6f6ff] hover:text-[#4f46e5]" data-sidebar-toggle title="Ẩn thanh bên (Ctrl+B)" aria-label="Ẩn thanh bên" aria-controls="appSidebar" aria-expanded="true"><span data-icon="panel-left" data-icon-size="16"></span></button>
         </div>
       </div>
       <!-- DECISIONS #161: chrome icon là <span data-icon> do paintUiIcons() vẽ, không
@@ -189,6 +196,9 @@
   <!-- Sidebar "Lối tắt" (#161): what the deleted Tổng quan page was for. Must load
        before core/render.js, which repaints the block on every render. -->
   <script defer src="renderer/features/sidebar-shortcuts.js"></script>
+  <!-- #368: ẩn/hiện thanh bên. Chỉ khai báo hàm; bootstrap gọi initSidebarToggle() TRƯỚC
+       lần vẽ đầu tiên để thanh bên không nhá ra rồi biến mất ở người đã ẩn nó. -->
+  <script defer src="renderer/features/sidebar-toggle.js"></script>
   <script defer src="renderer/core/render.js"></script>
   <!-- Trình soạn thảo, tách theo khu vực (DECISIONS #150). Renderer là script
        toàn cục nạp theo thứ tự, nên chỉ khai báo hàm ở đỉnh tệp; không tệp nào

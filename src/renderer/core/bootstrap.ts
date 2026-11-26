@@ -184,6 +184,9 @@ window.addEventListener('resize', () => {
     // of emoji, because index.html cannot call uiIcon(). Painted before the first
     // render() so no chrome ever flashes an unpainted placeholder.
     if (typeof paintUiIcons === 'function') paintUiIcons(document);
+    // #368: áp lựa chọn ẩn/hiện thanh bên TRƯỚC lần vẽ đầu tiên. Nếu để sau `render()`,
+    // người đã ẩn thanh bên sẽ thấy nó nhá ra rồi biến mất ở mỗi lần mở app.
+    if (typeof initSidebarToggle === 'function') initSidebarToggle();
     // Chơi LAN: subscribes to `lan:state` so a room opened before a reload (or on a
     // second window) is drawn again. Never throws when the bridge is absent.
     if (typeof lanInit === 'function') lanInit();

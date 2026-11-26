@@ -99,7 +99,11 @@ html[data-theme="dark"] .nav-item::before {
    dropdown của llama.cpp vừa đúng bề rộng cột nên mở tại chỗ.
    ============================================================ */
 .sidebar-status { display: flex; flex-direction: column; gap: 8px; margin: 0 2px 10px; }
-.sidebar-status-actions { display: flex; align-items: center; gap: 6px; }
+/* #368: hàng này có 5 nút 34px. Ở sidebar 232px thì vừa (194 ≤ 208), nhưng ở
+   `max-wide` (208px ⇒ 184 trong) và `max-tab` (184px ⇒ 160 trong) thì KHÔNG: thiếu
+   `flex-wrap` thì nút cuối bị `overflow-x: hidden` của sidebar cắt mất — đúng kiểu
+   một nút "không tồn tại" mà không có gì đỏ. Xuống dòng thay vì cắt. */
+.sidebar-status-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .sidebar .notification-popover {
   position: fixed;
   left: 12px;
@@ -308,3 +312,26 @@ html[data-theme="dark"] .nav-icon { background: var(--surface-2); color: #a0a8c0
      "Lưới đáp án + ô đáp án ở toàn màn hình" ở đầu tệp (DECISIONS #88). */
 }
 
+
+/* === #368 — ẩn/hiện thanh bên ===============================================
+   Trạng thái là `html[data-sidebar="hidden|shown"]`, do
+   renderer/features/sidebar-toggle.js đặt. Ẩn bằng `display:none` chứ không phải
+   width:0: `width:0` để lại padding + border (6px + 1px vẫn còn), nên nội dung
+   không nhận lại đủ chỗ và cái "ẩn" trông như một lỗi vẽ. */
+html[data-sidebar="hidden"] .app-shell > .sidebar { display: none; }
+
+/* Tay nắm để hiện lại: dính mép trái, giữa chiều cao, nằm trong lề 24px của
+   #pageContent nên không che chữ. Nửa trong suốt để nó không tranh mắt với nội
+   dung; đậm lên khi trỏ vào hoặc khi focus bàn phím (a11y: nó là <button> thật). */
+.sidebar-reveal {
+  position: fixed; top: 50%; left: 0; transform: translateY(-50%); z-index: 40;
+  width: 18px; height: 60px; display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--line); border-left: 0; border-radius: 0 10px 10px 0;
+  background: var(--surface-1, #fff); color: var(--muted);
+  box-shadow: var(--shadow-sm); opacity: .55; cursor: pointer;
+  transition: opacity .15s ease, width .15s ease;
+}
+.sidebar-reveal:hover, .sidebar-reveal:focus-visible { opacity: 1; width: 24px; }
+.sidebar-reveal:focus-visible { outline: 2px solid var(--purple); outline-offset: 1px; }
+.sidebar-reveal[hidden] { display: none; }
+@media (prefers-reduced-motion: reduce) { .sidebar-reveal { transition: none; } }

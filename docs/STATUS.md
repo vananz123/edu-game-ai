@@ -7,6 +7,46 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-26 — #368 ẩn/hiện thanh bên + tạm dừng thanh toán
+
+- **Yêu cầu:** thêm chức năng ẩn/hiện sidebar; **thanh toán tạm dừng** — PayOS/VNPay không dùng,
+  chủ dự án sẽ dùng **MoMo** sau.
+- **Trạng thái nằm ở `document.documentElement.dataset.sidebar` (`shown` | `hidden`)**, không phải
+  một class trên `<aside>`: CSS quyết định hình dạng, JS chỉ nói ý định, và `render()` không thể vô
+  tình làm thanh bên hiện lại. Tệp mới `src/renderer/features/sidebar-toggle.ts` (script toàn cục,
+  không import): `sidebarPrefRead` (giá trị lạ ⇒ `shown`), `applySidebarState`, `setSidebarHidden`,
+  `toggleSidebar`, `initSidebarToggle`.
+- **Ba đường hiện lại, vì một thứ ẩn được phải có lối về:** nút `panel-left` trong hàng hành động
+  của sidebar; tay nắm `chevron-right` dính mép trái giữa chiều cao (18×60 px, nửa trong suốt, đậm
+  lên khi hover/focus) chỉ tồn tại khi đang ẩn; và **Ctrl+B** (cả Ctrl và Cmd).
+- **Nhớ lựa chọn bằng localStorage** (`edugame.sidebar`), cùng họ với `ai-status`/`game-audio`:
+  đây là lựa chọn của MÀN HÌNH NÀY, và nó phải sống khi không có mạng (game đã lưu vẫn chơi
+  offline) — nên không đi qua IPC/settings DB.
+- **Ẩn bằng `display:none`** chứ không `width:0`: `width:0` còn padding 24 px + border 1 px, nên
+  nội dung không nhận lại đủ chỗ và cái "ẩn" trông như lỗi vẽ. Đo được: `#pageContent` 1038 → 1270 px.
+- **Một lỗi bố cục tìm thấy khi đo:** hàng `.sidebar-status-actions` có **5 nút 34 px** = 194 px,
+  trong khi sidebar `max-wide` 208 px (trong 184) và `max-tab` 184 px (trong 160) ⇒ nút cuối bị
+  `overflow-x: hidden` của sidebar **cắt mất**. Thêm `flex-wrap: wrap`; đo ở 900×700: 4 nút hiện
+  (34×34) + 1 nút trong popover ẩn, `clipped: []`.
+- **Đo:** `tests/unit/sidebar-toggle.test.ts` (mới, **7 nhóm**: mặc định hiện · đã ẩn từ lần trước ·
+  6 giá trị rác đều cho ra "hiện" · công tắc nhớ · bấm nút thật · Ctrl+B vs `b` trần · localStorage
+  bị chặn vẫn đổi được) · **`tests/ui/ui-sidebar-toggle-check.js` (mới) 17/17** trên app thật:
+  bấm nút ẩn ⇒ `aside` rời bố cục (`display:none`, w 0), nội dung 1038 → 1270 px, `data-sidebar`
+  + localStorage = `hidden`, tay nắm hiện ở x 0/w 18; bấm nút hiện ⇒ về đúng 232 px; Ctrl+B hai
+  chiều; **`Page.reload` xong vẫn ẩn** và vẫn còn lối hiện. `ui-account-check` **23/23**,
+  `ui-page-head-check` **6/6**. Ảnh: `tests/ui/shots/sidebar-368-{shown,hidden}.png` (1366×768:
+  tay nắm ở x 0, nội dung bắt đầu ở 38 px nên không che chữ).
+- **Thanh toán dừng ở đúng chỗ đang chạy được:** migration đã chạy trên Supabase nên
+  `billing_orders`/`period_end`/`plan_pro_*` có mặt; `check:billing` chỉ còn **một** mục đỏ
+  (`EDUGAME_BILLING_PROVIDER`). Code PayOS/VNPay **giữ nguyên** (luật tiền dùng chung), chỉ chưa
+  khai biến. Khi làm MoMo: thêm nhánh cấu hình vào `billingConfig`, hàm `momo*` trong
+  `server/billing-provider.ts`, một nhánh trong `worker/billing.ts` (IPN POST JSON, HMAC-SHA256
+  trên chuỗi có thứ tự cố định `accessKey…amount…extraData…ipnUrl…orderId…orderInfo…partnerCode…redirectUrl…requestId…requestType`),
+  và `EDUGAME_BILLING_PROVIDER=momo`.
+- **Chưa đo:** chưa ai bấm nút ẩn bằng tay trên máy thật; chưa thử ở cửa sổ ≤700 px (lúc đó
+  `.sidebar-status` bị ẩn nên chỉ còn Ctrl+B); tay nắm chưa được đo khi trang cuộn dài (nó `fixed`
+  nên phải nổi trên nội dung — mới đo ở trang Thư viện).
+
 ### 2026-11-26 — #364 bán gói Pro trong app: giá + nút Nâng cấp + webhook đã xác minh (chưa mở bán)
 
 - **Vì sao:** #362 cho hạn mức free là 10 lượt/kỳ 2 tuần nhưng **không có đường nào để trả tiền**.
@@ -140,18 +180,3 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
   - 5 mục P7 (SmartScreen "Unknown publisher", thời gian cài bằng tay, hiệu ứng đếm/so le bằng mắt, một ván offline thật, một máy **không** có WebView2) vẫn cần một người ngồi trước máy Windows sạch.
   - Tài khoản thử đang ở **5/10 lượt** của kỳ `2026-11-19`.
 
-### 2026-11-26 — #362 hạn mức free thành 10 lượt / kỳ 2 tuần; chip tài khoản cố định ở sidebar; panel Tài khoản mới
-- **Kỳ hạn mức giờ là 14 NGÀY, không phải tháng dương lịch.** `server/quota.ts`: `PERIOD_DAYS = 14`, `PERIOD_LIMITS = { free: 10, plus: 100 }`, và `usagePeriod(at)` chia trục thời gian thành các kỳ 14 ngày **tuyệt đối** kể từ 1970-01-01 UTC, trả `{key, start, end}`. `key` là ngày bắt đầu kỳ và **được ghi vào `usage_monthly.month`** (cột `text`) ⇒ **không cần migration**, không có trạng thái "lần dùng đầu" cho từng người, và không bị lệch do tháng 28/30/31 ngày. `server/index.ts` (2 chỗ) và `worker/index.ts` (`monthNow()`) nay lấy khoá từ `usagePeriod().key`; chữ "hạn mức tháng này" đổi thành "hạn mức kỳ này".
-- **Free = 10 lượt / kỳ**, Plus = 100. Đo bằng node: `PERIOD_LIMITS={"free":10,"plus":100}`; 26/11 và 02/12 cùng một kỳ; 03/12 mở kỳ mới. Cổng: `tests/unit/server-quota.test.ts` thêm `periodChecks()` (kỳ đúng 14 ngày, không chồng lấn, cùng khoá trong kỳ, trần 10/100); `worker-gateway.test.ts` đổi 5 → 10 ở 4 chỗ.
-- **Chip tài khoản cố định ở đáy sidebar, và nói GÓI trước tiên** (`src/renderer/features/account.ts` + `src/index.html`): avatar chữ cái, tên, **badge `FREE`/`PRO`** (`[data-account-plan]`), dòng hai `Còn 10/10 lượt`, thanh mét 4px, chevron; `chip.dataset.state` (`member|guest|unconfigured`) và `chip.dataset.plan`. Đã đăng nhập thì `refreshAccount()` **đọc luôn** `account:quota` (phép đọc, không trừ) để chip có số **trước khi** bấm vào; `accountLoadQuota()` vẽ lại cả panel lẫn chip nên hai chỗ không lệch số.
-- **Panel Tài khoản vẽ lại hoàn toàn:** khách thấy thẻ mời đăng nhập (3 quyền lợi, có dòng "10 lượt miễn phí mỗi kỳ 2 tuần", nút Google, ghi chú Khách); thành viên thấy hero avatar lớn + tên + badge gói, **thẻ hạn mức** (nhãn `GÓI CỦA BẠN`, tên gói, "Còn 10/10 lượt tạo game (kỳ 2 tuần)", mét lớn, "Mỗi lần soạn câu hỏi: 1 lượt · đã dùng 0/10 · kỳ 19/11 – 02/12"), 3 trạng thái loading/lỗi/ready, nút Kiểm tra Cloud AI + Đăng xuất, sổ dùng AI, ghi chú dữ liệu ở trên máy.
-- **CSS mới trong `components.css`** cho toàn bộ khối trên, gồm `html[data-theme="dark"]`, `[data-tone="low"|"pro"|"free"]`, và biến thể `.account-meter-lg`.
-- **Hai lỗi bố cục do ảnh chụp + số đo bắt được (đã sửa):** (1) avatar `<img>` từ googleusercontent **không tải được trong WebView2**, để lại biểu tượng ảnh vỡ giữa khuôn mặt tài khoản ⇒ bỏ hẳn `<img>`, chỉ dùng chữ cái; (2) ở cửa sổ cao 700px, sidebar có `scrollHeight 730 > 700` nên **thẻ tài khoản bị cắt 18px ở đáy** và dòng hạn mức bị cắt chữ ⇒ sidebar thành flex column, `.sidebar-shortcuts` co lại và tự cuộn, câu trên chip rút còn `Còn 10/10 lượt`, kỳ ghi ở `title` + panel. Đo lại: `scrollHeight 700 = 700`, chip `bottom 688 < 700`, chữ không cắt (`scrollWidth == width`).
-- **Đo THẬT qua worker đã deploy lại:** upload bundle mới `200 success=true`; `smoke:gateway --pilot` **4/4**; `GET /v1/usage` từ app đã cài ⇒ **`{"ok":true,"plan":"free","month":"2026-11-19","unit":"generations","used":0,"limit":10,"cost":1}`** — đúng kỳ 14 ngày, đúng trần 10.
-- **Cổng trên bản cài mới** (`/S` ⇒ `exit=0`): `ui-account-check` **23/23** · `ui-editor-cloud-check` **14/14** · `ui-wizard-cloud-check` **21/21 member LIVE** (một lượt Cloud AI thật) · `ui-cloud-generate-check` **9/9** (lần đầu `provider_unavailable`, đúng cơn 503 bình thường của Gemini, lần hai 9/9) · `ui-offline-play-check` **7/7** · `tsc` sạch · unit **111/111** · `npm run check` sạch · `verify:css` **61/61** · `build:tauri` **6 217,2 KiB** · `check:embedded` khớp · `check:pilot` **OK** · `cargo tauri build`. Installer **16 381 012 B · SHA-256 `870e1f5a71903da04aafef5b…`**.
-- **Ba cổng được sửa để đo đúng cái mới, không phải để dễ hơn:** `ui-account-check` nay hỏi chip **gói gì** + **còn bao nhiêu** khi đã đăng nhập (khách vẫn phải có câu trạng thái); `ui-wizard-cloud-check`/`ui-editor-cloud-check` đổi fixture 5 → 10 lượt; vòng thử lại của nhánh LIVE **không dừng ở lỗi nhà cung cấp** nữa mà chỉ dừng khi ứng dụng từ chối tại chỗ (bài ngắn / hết lượt / chưa đăng nhập) — trước đó một cơn 400/503 của Gemini bị đọc thành "wizard hỏng", và số lần thử thì bị in cứng là 3.
-- **Chưa kiểm / nói rõ:**
-  - Chưa từng thấy **một tài khoản Pro thật** trong bản cài này; nhánh Pro chỉ được đo bằng fixture (`Gói Plus`, `Còn 2/500 credits`, badge gradient).
-  - **Chưa quan sát một lần chuyển kỳ thật** (03/12); logic kỳ mới chỉ được đo bằng unit test + tính tay.
-  - Dòng `usage_monthly` cũ với khoá `2026-11` (tháng dương lịch) vẫn còn trong DB — vô hại nhưng là rác.
-  - Phiên bản app **vẫn 0.5.5**; asset v0.5.5 trên GitHub vẫn trỏ `127.0.0.1` ⇒ **đừng đưa cho giáo viên**; muốn phát bản này phải cắt **v0.5.6** (cần bạn nói `go`).

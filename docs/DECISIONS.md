@@ -5818,6 +5818,22 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
 - **#364 — giá chỉ được in MỘT lần trong một thẻ.** Ảnh chụp đầu tiên cho thấy "99.000đ / 14 ngày" ở
   góc cộng "99.000đ cho mỗi kỳ 14 ngày" ở tiêu đề: hai câu nói cùng một chuyện, và người đọc phải dừng
   lại để tự hỏi có phải hai mức giá. Unit test `account-billing` giờ đếm số lần xuất hiện của giá.
+- **#368 — trạng thái ẩn/hiện nằm trên `<html>`, không nằm trên `<aside>`.** `data-sidebar` là
+  một Ý ĐỊNH mà CSS đọc; một class trên chính `<aside>` thì mỗi lần `render()` dựng lại chrome là
+  mỗi lần có nguy cơ mất. Và ẩn bằng `display:none`, không `width:0` — `width:0` để lại padding
+  + border nên nội dung không nhận lại chỗ và cái ẩn trông như lỗi vẽ (đo: 1038 → 1270 px).
+- **#368 — một thứ ẩn được phải có lối về, và lối về không được ở trong chính thứ đã ẩn.**
+  Nút "hiện thanh bên" là phần tử **ngoài** `<aside>`, `position:fixed` ở mép trái (nằm trong lề
+  của `#pageContent`: đo được nội dung bắt đầu ở 38 px nên không che chữ), cộng Ctrl+B — vì ở cửa
+  sổ ≤700 px hàng nút trong sidebar bị ẩn, lúc đó bàn phím là đường duy nhất.
+- **#368 — hàng điều khiển phải XUỐNG DÒNG, không được để bị cắt.** Năm nút 34 px = 194 px không
+  vừa sidebar trong 184/160 px ở `max-wide`/`max-tab`, và `overflow-x:hidden` của sidebar biến
+  "không vừa" thành "không tồn tại" mà không có gì đỏ. `flex-wrap: wrap` là câu trả lời, và có
+  phép đo ở 900×700 (`clipped: []`).
+- **#368 — thanh toán tạm dừng, nhưng luật tiền thì không.** PayOS/VNPay chưa dùng (chủ dự án sẽ
+  dùng MoMo), nên **không xoá** `server/billing.ts` + `worker/billing.ts`: phần dùng chung (đơn,
+  CAS `pending→paid`, số ngày đã bán, credits đang áp) là thứ một cổng mới chỉ cần *nối* vào, và
+  `billing_orders`/`period_end` đã có trên Supabase.
 - **#367 — một phép đo có mở gói trả phí thì phải được HOÀN LẠI, và phải chứng minh là đã hoàn.**
   Vòng tiền được đo thật (checkout → pay → `plus` → `unit:"credits"`), rồi PATCH `subscriptions`
   về `free` + `period_end:null`, DELETE đơn, và **đọc lại** `/v1/billing/status` lẫn `/v1/usage`

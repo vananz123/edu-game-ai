@@ -746,6 +746,13 @@ Chủ dự án yêu cầu: *"xóa release cũ ở máy, tạo release mới và 
   Đo được trên máy chủ thật: `configured:false`, `provider:"none"`, `missing:[EDUGAME_BILLING_PROVIDER,
   chạy migration …]`. **Còn thiếu**: chạy migration trên Supabase + khai `PAYOS_*` rồi deploy, sau đó
   đo một đơn 99.000đ thật. Bước bật bán: `docs/DEPLOY_GATEWAY.md` §7.
+- [x] **#368 — ẩn/hiện thanh bên** (`html[data-sidebar]`, nút trong sidebar + tay nắm mép trái +
+  Ctrl+B, nhớ bằng localStorage; hàng 5 nút nay `flex-wrap` để không bị cắt ở 184/160 px):
+  unit 7 nhóm + `ui-sidebar-toggle-check` **17/17** (kể cả `Page.reload` vẫn giữ trạng thái ẩn).
+- [~] **Thanh toán TẠM DỪNG (2026-11-26).** PayOS/VNPay không dùng — chủ dự án sẽ dùng **MoMo**;
+  migration đã chạy, `check:billing` còn đúng một mục đỏ (`EDUGAME_BILLING_PROVIDER`). Khi làm
+  MoMo: adapter mới trong `server/billing-provider.ts` + một nhánh trong `worker/billing.ts`, luật
+  tiền dùng chung **không đổi**.
 - [x] **#367 — vòng tiền đã được đo THẬT đầu-cuối** (gateway staging + DB thật): checkout 99.000đ →
   `plus` + `periodEnd` +14 ngày → `/v1/usage` `unit:"credits", limit:500` → trả lại lần hai không
   cộng kỳ → hoàn gói & xoá đơn, đọc lại thấy `free`/`generations`/`used:5`. Script staging đã xoá
