@@ -79,9 +79,25 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
   **500 credits/kỳ** — khách trả 99.000đ sẽ đọc "Còn 100/100 credits". Nay `plus = 500` (đơn vị
   credits, 2 credits/lượt), đúng bằng `plan_pro_monthly_credits` trong DB và bằng giá đã bán;
   `server-quota.test.ts` đổi theo. Trần free vẫn **10 lượt**.
-- **Tiếp theo:** chạy migration + khai PayOS, rồi `node --env-file=.env scripts/check-billing.js
-  --checkout` và một đơn 99.000đ thật (PayOS sandbox trước), cuối cùng chụp lại thẻ Pro ở trạng thái
-  `active`.
+- **#366 — thêm cổng thứ hai VNPay, cùng luật tiền:** `server/billing-provider.ts` có
+  `vnpayEncode` (urlencode kiểu PHP: dấu cách → `+`), `vnpaySignData`, `vnpayCheckoutUrl`,
+  `vnpaySignatureOk` (so sánh không thoát sớm), `vnpayTime` (giờ VN `yyyyMMddHHmmss`),
+  `vnpayWebhookFields`; `worker/billing.ts` thêm `GET|POST /v1/billing/webhook/vnpay` trả **RspCode
+  của VNPay** (`00/01/02/04/97/99`) chứ không dùng mã HTTP của ta, và nhánh checkout **dựng URL
+  tại chỗ** (không gọi API nên bước tạo đơn không hỏng vì "nhà cung cấp bảo trì").
+  `hmacHexWith('SHA-512'|'SHA-256')` để PayOS và VNPay dùng chung một hàm.
+- **Ba cái bẫy của VNPay đã đo được:** (1) chữ ký phải ký trên giá trị **đã encode** (ký trên giá
+  trị thô thì mọi đơn có dấu cách đều bị từ chối); (2) `vnp_Amount` là tiền **× 100** — quên là bán
+  99.000đ với giá 990đ, và test soát đúng `9900000`; (3) **chỉ `ResponseCode` VÀ `TransactionStatus`
+  cùng `00`** mới mở gói (`00` + `02` là đã huỷ). Test `server-billing-vnpay` **8 nhóm** chạy qua
+  `handle()` thật: IPN tốt → `00` + gói `plus`; gửi lại → `02`; chữ ký sai → `97` và **không** mở;
+  sai tiền → `04`; đơn lạ → `01`; huỷ → `00` nhưng không mở; thiếu khoá → `99`.
+- **Chi phí/điều kiện, nói trước:** VNPay cần **hợp đồng merchant** (thường phải là pháp nhân +
+  website được duyệt) — chậm hơn PayOS (cá nhân/hộ KD chỉ cần CCCD, ~5 phút). Vì vậy PayOS vẫn là
+  cổng mặc định để mở bán trước; VNPay là lựa chọn khi đã có pháp nhân.
+- **Tiếp theo:** chạy migration + khai biến của cổng đã chọn, rồi
+  `node --env-file=.env scripts/check-billing.js --checkout` và một đơn 99.000đ thật (sandbox trước),
+  cuối cùng chụp lại thẻ Pro ở trạng thái `active`.
 
 ### 2026-11-26 — #363 phát hành v0.5.6 (asset công khai đã trỏ gateway thật)
 - **Bốn nguồn phiên bản + hai gateway cùng nhảy lên 0.5.6:** `package.json`/`package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, `GET /health` của `server/index.ts`, `DEFAULT_VERSION` của `worker/index.ts` (và binding `GATEWAY_VERSION` khi upload) + test `worker-gateway` theo `0.5.6`.

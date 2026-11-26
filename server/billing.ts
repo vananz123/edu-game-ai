@@ -37,7 +37,7 @@ export const ORDER_TTL_MINUTES = 20;
 export type OrderStatus = 'pending' | 'paid' | 'expired' | 'failed';
 // `none` = chưa cấu hình. Không có giá trị mặc định nào khác, vì một mặc định `fake` nghĩa là
 // một máy chủ quên cấu hình lại tự nhận mình đang chạy chế độ giả lập.
-export type ProviderId = 'payos' | 'fake' | 'none';
+export type ProviderId = 'payos' | 'vnpay' | 'fake' | 'none';
 
 export interface BillingConfig {
   provider: ProviderId;
@@ -62,14 +62,20 @@ export function billingConfig(env: BillingEnv): BillingConfig {
   const period = Math.trunc(Number(env.EDUGAME_PRO_PERIOD_DAYS || DEFAULT_PRO_PERIOD_DAYS));
   const credits = Math.trunc(Number(env.EDUGAME_PRO_CREDITS || DEFAULT_PRO_CREDITS));
   const missing: string[] = [];
-  if (provider !== 'payos' && provider !== 'fake') missing.push('EDUGAME_BILLING_PROVIDER');
+  if (provider !== 'payos' && provider !== 'vnpay' && provider !== 'fake') missing.push('EDUGAME_BILLING_PROVIDER');
   if (provider === 'payos') {
     if (!env.PAYOS_CLIENT_ID) missing.push('PAYOS_CLIENT_ID');
     if (!env.PAYOS_API_KEY) missing.push('PAYOS_API_KEY');
     if (!env.PAYOS_CHECKSUM_KEY) missing.push('PAYOS_CHECKSUM_KEY');
   }
+  // VNPay cần đúng hai thứ: mã website (vnp_TmnCode) và khoá bí mật để ký HMAC-SHA512. URL
+  // thanh toán có mặc định sandbox, nên thiếu VNPAY_URL KHÔNG chặn bán.
+  if (provider === 'vnpay') {
+    if (!env.VNPAY_TMN_CODE) missing.push('VNPAY_TMN_CODE');
+    if (!env.VNPAY_HASH_SECRET) missing.push('VNPAY_HASH_SECRET');
+  }
   return {
-    provider: provider === 'payos' ? 'payos' : provider === 'fake' ? 'fake' : 'none',
+    provider: provider === 'payos' ? 'payos' : provider === 'vnpay' ? 'vnpay' : provider === 'fake' ? 'fake' : 'none',
     priceVnd: price > 0 ? price : DEFAULT_PRO_PRICE_VND,
     periodDays: period > 0 ? period : DEFAULT_PRO_PERIOD_DAYS,
     credits: credits > 0 ? credits : DEFAULT_PRO_CREDITS,

@@ -5818,6 +5818,18 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
 - **#364 — giá chỉ được in MỘT lần trong một thẻ.** Ảnh chụp đầu tiên cho thấy "99.000đ / 14 ngày" ở
   góc cộng "99.000đ cho mỗi kỳ 14 ngày" ở tiêu đề: hai câu nói cùng một chuyện, và người đọc phải dừng
   lại để tự hỏi có phải hai mức giá. Unit test `account-billing` giờ đếm số lần xuất hiện của giá.
+- **#366 — một cổng thứ hai dùng CHUNG luật tiền, không chép luật.** PayOS và VNPay khác nhau
+  đúng ba chỗ (cách tạo link, thuật toán ký, hình dạng xác nhận), nên phần khác nằm trọn trong
+  `server/billing-provider.ts`, còn "tiền vào sổ nào, khi nào mở gói, chống mở hai lần" vẫn là
+  `server/billing.ts` + `worker/billing.ts` của #364. Thêm cổng KHÔNG được thêm một đường mở Pro
+  thứ hai — đó là lý do `handleBilling` chỉ có một chỗ gọi `applyPaidOrder`.
+- **#366 — IPN của VNPay trả `RspCode`, không trả mã HTTP của ta.** Họ đọc `RspCode` để quyết định
+  gọi lại; vì thế chữ ký sai phải là `97` (kèm HTTP 200), không phải 401 — 401 nghĩa là "đừng gọi
+  lại nữa", đúng cái sai khi lỗi nằm ở cấu hình của ta. Và `vnp_Amount` là tiền **× 100**: quên
+  nhân là bán gói 99.000đ với giá 990đ, nên con số đó có khẳng định riêng trong test.
+- **#366 — `ResponseCode=00` một mình KHÔNG phải đã trả tiền.** VNPay có trạng thái
+  `TransactionStatus` riêng (`00` thành công, `02` huỷ…). Chỉ khi **cả hai** cùng `00` mới gọi
+  `applyPaidOrder`; `00` + `02` trả `RspCode 00` cho họ thôi gọi lại nhưng **không** mở gói.
 - **#364 — trần của một gói phải bằng ĐÚNG thứ đã bán.** Thẻ Pro bán "500 credits mỗi kỳ" nhưng
   `PERIOD_LIMITS.plus` vẫn là **100** từ #362: khách trả 99.000đ sẽ đọc "Còn 100/100 credits" và
   hiểu là mình bị bớt. Hai con số nói về cùng một thứ nằm ở hai tệp thì phải bằng nhau; nay là 500

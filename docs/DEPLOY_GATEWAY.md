@@ -117,12 +117,21 @@ không xuất hiện, và đó là trạng thái đúng (một máy chủ chưa 
 1. **Chạy migration** `server/migrations/2026-11-26-billing.sql` trong Supabase → SQL Editor.
    Idempotent: thêm cột vào `subscriptions`, tạo `billing_orders` (RLS chỉ cho người dùng đọc đơn của
    mình), seed `plan_pro_price_vnd` = 99000, `plan_pro_period_days` = 14, `plan_pro_monthly_credits` = 500.
-2. **Khai biến trên Worker** (Settings → Variables and Secrets):
-   `EDUGAME_BILLING_PROVIDER` = `payos`, `EDUGAME_PRO_PRICE_VND` = `99000`,
-   `EDUGAME_PRO_PERIOD_DAYS` = `14`, `EDUGAME_PRO_CREDITS` = `500`,
-   `EDUGAME_PUBLIC_URL` = `https://ai-gateway.dovanan-bth2017.workers.dev`, và ba secret
-   `PAYOS_CLIENT_ID`, `PAYOS_API_KEY`, `PAYOS_CHECKSUM_KEY` (lấy ở trang merchant PayOS).
-   Đặt webhook URL bên PayOS = `https://<gateway>/v1/billing/webhook/payos`.
+2. **Chọn MỘT cổng, rồi khai biến của cổng đó** (Settings → Variables and Secrets). Ba biến
+   chung cho cả hai cổng: `EDUGAME_PRO_PRICE_VND` = `99000`, `EDUGAME_PRO_PERIOD_DAYS` = `14`,
+   `EDUGAME_PRO_CREDITS` = `500`, và `EDUGAME_PUBLIC_URL` = `https://ai-gateway.dovanan-bth2017.workers.dev`.
+
+   | | PayOS (#364) | VNPay (#366) |
+   |---|---|---|
+   | Đăng ký | `my.payos.vn`, cá nhân/hộ KD chỉ cần CCCD, ~5 phút | hợp đồng merchant với VNPay (thường cần pháp nhân + website được duyệt), lâu hơn |
+   | Biến | `EDUGAME_BILLING_PROVIDER=payos` + `PAYOS_CLIENT_ID`, `PAYOS_API_KEY`, `PAYOS_CHECKSUM_KEY` | `EDUGAME_BILLING_PROVIDER=vnpay` + `VNPAY_TMN_CODE`, `VNPAY_HASH_SECRET` (`VNPAY_URL` tuỳ chọn, mặc định sandbox) |
+   | Tạo link | gọi API PayOS (có thể hỏng vì họ) | tự dựng URL có chữ ký, **không gọi mạng** |
+   | Xác nhận tiền | webhook `POST /v1/billing/webhook/payos` | IPN `GET /v1/billing/webhook/vnpay`, khai URL này trong portal VNPay |
+   | Chữ ký | HMAC-SHA256 | HMAC-SHA512, ký trên giá trị **đã URL-encode** |
+
+   Điểm dễ sai của VNPay: `vnp_Amount` là **số tiền × 100**; và **chỉ khi cả
+   `vnp_ResponseCode` và `vnp_TransactionStatus` đều `00`** mới là đã trả tiền. Cả hai đã có
+   test riêng trong `tests/unit/server-billing-vnpay.test.ts`.
 3. **Deploy lại Worker** bằng script trong repo (nó tự khai đúng bộ binding, kể cả biến thanh
    toán đọc từ `.env`, và **không** bao giờ tự bật cờ fake):
    ```bash

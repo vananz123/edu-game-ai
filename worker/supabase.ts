@@ -29,6 +29,10 @@ export interface WorkerEnv {
   PAYOS_CLIENT_ID?: string;
   PAYOS_API_KEY?: string;
   PAYOS_CHECKSUM_KEY?: string;
+  // #366 — VNPay.
+  VNPAY_TMN_CODE?: string;
+  VNPAY_HASH_SECRET?: string;
+  VNPAY_URL?: string;
   [key: string]: string | undefined;
 }
 
@@ -421,8 +425,16 @@ export function billingDb(env: WorkerEnv): BillingDb {
  * Chữ ký PayOS là HMAC trên chuỗi `key=value&…`, khoá là `PAYOS_CHECKSUM_KEY`.
  */
 export async function hmacHex(secret: string, data: string): Promise<string> {
+  return hmacHexWith('SHA-256', secret, data);
+}
+
+/**
+ * VNPay ký bằng HMAC-SHA512 (#366), PayOS bằng SHA-256. Hai thuật toán, cùng một khoá API của
+ * WebCrypto — tham số hoá thay vì chép hai lần một hàm gần giống hệt.
+ */
+export async function hmacHexWith(algo: 'SHA-256' | 'SHA-512', secret: string, data: string): Promise<string> {
   const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const key = await crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: algo }, false, ['sign']);
   const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(data));
   return Array.from(new Uint8Array(signature))
     .map((byte) => byte.toString(16).padStart(2, '0'))

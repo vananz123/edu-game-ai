@@ -106,8 +106,10 @@ function finish() {
   if (failed > 0) {
     console.log('\ncheck-billing: CHƯA bán được (' + failed + ' mục đỏ).');
     console.log('Việc kế tiếp: docs/DEPLOY_GATEWAY.md §7 — (1) chạy server/migrations/2026-11-26-billing.sql');
-    console.log('trên Supabase, (2) khai PAYOS_CLIENT_ID/PAYOS_API_KEY/PAYOS_CHECKSUM_KEY +');
-    console.log('EDUGAME_BILLING_PROVIDER=payos rồi `npm run deploy:worker`.');
+    console.log('trên Supabase, (2) chọn MỘT cổng rồi khai biến của cổng đó:');
+    console.log('  PayOS  : EDUGAME_BILLING_PROVIDER=payos  + PAYOS_CLIENT_ID / PAYOS_API_KEY / PAYOS_CHECKSUM_KEY');
+    console.log('  VNPay  : EDUGAME_BILLING_PROVIDER=vnpay  + VNPAY_TMN_CODE / VNPAY_HASH_SECRET (/ VNPAY_URL)');
+    console.log('rồi `npm run deploy:worker`.');
     process.exit(1);
   }
   console.log('\ncheck-billing: đã có thể bán gói Pro.');

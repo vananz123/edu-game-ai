@@ -25,8 +25,19 @@ import {
   signaturesEqual,
   webhookVerdict,
 } from '../server/billing.js';
-import { payosLinkBody, payosWebhookFields, payosWebhookSignData } from '../server/billing-provider.js';
-import { billingDb, hmacHex, verifyUser, type BillingDb, type WorkerEnv } from './supabase.js';
+import {
+  VNPAY_DEFAULT_URL,
+  asciiDescription,
+  payosLinkBody,
+  payosWebhookFields,
+  payosWebhookSignData,
+  vnpayCheckoutUrl,
+  vnpaySignatureOk,
+  vnpaySignData,
+  vnpayTime,
+  vnpayWebhookFields,
+} from '../server/billing-provider.js';
+import { billingDb, hmacHex, hmacHexWith, verifyUser, type BillingDb, type WorkerEnv } from './supabase.js';
 
 const PAYOS_API = 'https://api.payos.vn/v2/payment-requests';
 /// Tên việc còn thiếu, viết như một việc người ta làm được — không phải mã lỗi.
@@ -122,6 +133,48 @@ export async function handleBilling(
         '<p>Quay lại <strong>EduGame Studio</strong> — ứng dụng sẽ tự cập nhật gói khi ngân hàng báo tiền về, ' +
         'thường trong vài giây.</p><p style="color:#666">Bạn có thể đóng tab này.</p>'
     );
+  }
+
+  // ── VNPay gọi IPN (GET, query string) và đọc `RspCode` trong JSON trả về để biết có phải gọi
+  //    lại hay không. Vì vậy đường này KHÔNG dùng mã lỗi HTTP của ta: 401 nghĩa là "đừng gọi lại
+  //    nữa", mà chữ ký hỏng thì lại đúng là phải gọi lại khi ta sửa cấu hình hoặc khi họ đổi khoá.
+  if (path === '/v1/billing/webhook/vnpay') {
+    if (request.method !== 'GET' && request.method !== 'POST') return json({ RspCode: '99', Message: 'Unknown error' }, 405);
+    if (config.provider !== 'vnpay' || config.missing.includes('VNPAY_HASH_SECRET')) {
+      return json({ RspCode: '99', Message: 'Merchant not configured' }, 503);
+    }
+    const params: Record<string, string> = {};
+    for (const [key, value] of url.searchParams.entries()) params[key] = value;
+    const secret = String(env.VNPAY_HASH_SECRET || '');
+    const expected = await hmacHexWith('SHA-512', secret, vnpaySignData(params));
+    if (!vnpaySignatureOk(params, expected)) {
+      console.warn('vnpay ipn ignored: bad signature');
+      return json({ RspCode: '97', Message: 'Invalid signature' });
+    }
+    const hook = vnpayWebhookFields(params);
+    const db = makeDb(env);
+    const order = hook.providerRef ? await db.orderByRef(hook.providerRef) : null;
+    if (!order) return json({ RspCode: '01', Message: 'Order not found' });
+    if (hook.amountVnd !== null && hook.amountVnd !== order.amountVnd) {
+      console.warn('vnpay ipn ignored: amount_mismatch');
+      return json({ RspCode: '04', Message: 'Invalid amount' });
+    }
+    if (hook.providerStatus !== 'PAID') {
+      // Huỷ/quá hạn: không mở gói, nhưng cũng không phải lỗi của họ — trả 00 để họ thôi gọi lại.
+      console.warn('vnpay ipn ignored: not_paid', hook.responseCode, hook.transactionStatus);
+      return json({ RspCode: '00', Message: 'Confirm Success' });
+    }
+    const paidAt = hook.paidAt || now;
+    const won = await db.markPaid(order.providerRef, paidAt);
+    if (!won) return json({ RspCode: '02', Message: 'Order already confirmed' });
+    // `user_id` lấy từ ĐƠN trong DB, không từ query string của nhà cung cấp.
+    const next = applyPaidOrder(
+      await db.subscriptionOf(order.userId),
+      { provider: order.provider, providerRef: order.providerRef, amountVnd: order.amountVnd, paidAt },
+      config.periodDays
+    );
+    await db.saveSubscription(order.userId, next);
+    return json({ RspCode: '00', Message: 'Confirm Success' });
   }
 
   // ── Webhook: KHÔNG dùng token người dùng; nó phải chạy cả khi giáo viên đã đóng app.
@@ -237,7 +290,30 @@ export async function handleBilling(
     const expiresAt = orderExpiry(now);
     const returnUrl = publicBase(env) + '/v1/billing/done';
     let checkoutUrl: string;
-    if (config.provider === 'payos') {
+    if (config.provider === 'vnpay') {
+      // Không gọi API: VNPay nhận một URL đã ký. Nghĩa là bước tạo đơn không thể hỏng vì
+      // "nhà cung cấp đang bảo trì" — chỉ có webhook/IPN mới cần họ sống.
+      checkoutUrl = await vnpayCheckoutUrl({
+        base: String(env.VNPAY_URL || VNPAY_DEFAULT_URL),
+        secret: String(env.VNPAY_HASH_SECRET || ''),
+        sign: (data, secret) => hmacHexWith('SHA-512', secret, data),
+        params: {
+          vnp_Version: '2.1.0',
+          vnp_Command: 'pay',
+          vnp_TmnCode: String(env.VNPAY_TMN_CODE || ''),
+          vnp_Locale: 'vn',
+          vnp_CurrCode: 'VND',
+          vnp_TxnRef: String(orderCode),
+          vnp_OrderInfo: asciiDescription('EduGame Pro ' + config.periodDays + ' ngay'),
+          vnp_OrderType: 'other',
+          // VNPay nhận SỐ TIỀN NHÂN 100. Quên nhân là bán 99.000đ với giá 990đ.
+          vnp_Amount: String(config.priceVnd * 100),
+          vnp_ReturnUrl: returnUrl,
+          vnp_CreateDate: vnpayTime(now),
+          vnp_ExpireDate: vnpayTime(expiresAt),
+        },
+      });
+    } else if (config.provider === 'payos') {
       const body = await payosLinkBody({
         orderCode,
         amount: config.priceVnd,

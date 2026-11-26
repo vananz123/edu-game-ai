@@ -746,3 +746,7 @@ Chủ dự án yêu cầu: *"xóa release cũ ở máy, tạo release mới và 
   Đo được trên máy chủ thật: `configured:false`, `provider:"none"`, `missing:[EDUGAME_BILLING_PROVIDER,
   chạy migration …]`. **Còn thiếu**: chạy migration trên Supabase + khai `PAYOS_*` rồi deploy, sau đó
   đo một đơn 99.000đ thật. Bước bật bán: `docs/DEPLOY_GATEWAY.md` §7.
+- [x] **#366 — cổng thứ hai VNPay** (`EDUGAME_BILLING_PROVIDER=vnpay`): ký HMAC-SHA512 trên giá trị
+  đã URL-encode, `vnp_Amount` = tiền × 100, IPN trả `RspCode` (00/01/02/04/97/99), chỉ
+  `ResponseCode` + `TransactionStatus` cùng `00` mới mở gói; 8 nhóm khẳng định chạy qua `handle()`.
+  Điều kiện: hợp đồng merchant VNPay (thường cần pháp nhân) — PayOS vẫn là cổng mở bán trước.
