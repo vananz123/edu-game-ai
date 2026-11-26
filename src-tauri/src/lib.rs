@@ -18,6 +18,7 @@ pub mod api;
 // Phase 1 của docs/archive/specs/cloud-auth-plan.md: đăng nhập Google qua Supabase,
 // phiên lưu bằng DPAPI. Tách khỏi `api.rs` vì đây là luồng riêng, có test riêng.
 pub mod auth;
+pub mod billing;
 pub mod cloud;
 pub mod base64;
 pub mod diagnostics;
@@ -181,6 +182,8 @@ pub fn run() {
             api::cloud_generate,
             api::get_usage_history,
             api::get_account_quota,
+            api::account_billing,
+            api::account_checkout,
             // Bản gọi trực tiếp (không qua kênh) để chẩn đoán bằng CDP: cùng
             // một hàm, hai tên lệnh khác nhau nên không có tên nào bị đăng ký hai lần.
             auth::auth_status,

@@ -157,17 +157,18 @@ function fakeManualAdapter(overrides = {}) {
 }
 
 // #337: nhóm `app` 8 → 15 vì bảy lời gọi tài khoản (đăng nhập/ra, trạng thái,
-// phiên, làm mới, và hai sự kiện). Số đếm này là nguồn sự thật của hợp đồng, nên
-// nó được sửa kèm lý do chứ không được nới ra.
-const GROUP_COUNTS = { app: 17, data: 19, files: 8, ai: 33, diagnostics: 4, presentation: 9, lan: 7, update: 8 };
+// phiên, làm mới, và hai sự kiện). #364: `app` 17 → 19 vì hai lời gọi bán gói Pro
+// (`account:billing` đọc giá, `account:checkout` mở trang thanh toán). Số đếm này là
+// nguồn sự thật của hợp đồng, nên nó được sửa kèm lý do chứ không được nới ra.
+const GROUP_COUNTS = { app: 19, data: 19, files: 8, ai: 33, diagnostics: 4, presentation: 9, lan: 7, update: 8 };
 
 (async function main() {
-  // ── 1. Hợp đồng: schema đủ 105 lời gọi ───────────────────────────────────
-  await it('façade có đủ 105 lời gọi theo schema', () => {
+  // ── 1. Hợp đồng: schema đủ 107 lời gọi ───────────────────────────────────
+  await it('façade có đủ 107 lời gọi theo schema', () => {
     const { schema } = boot();
     const calls = schema.calls;
-    assert.equal(Object.keys(calls).length, 105, 'façade phải có đúng 105 lời gọi');
-    assert.equal(schema.callCount, 105);
+    assert.equal(Object.keys(calls).length, 107, 'façade phải có đúng 107 lời gọi');
+    assert.equal(schema.callCount, 107);
     // Mỗi lời gọi phải có channel, group, kind
     for (const [key, spec] of Object.entries(calls)) {
       assert.ok(spec.channel, `${key} thiếu channel`);

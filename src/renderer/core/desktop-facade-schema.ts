@@ -64,6 +64,9 @@ const DESKTOP_CALLS = Object.freeze({
   accountUsageHistory: { channel: 'account:usage-history', group: 'app', kind: 'value', optional: false },
   // #354: đồng hồ hạn mức tháng (đọc, không trừ) — cùng lý do nằm ở Rust với sổ.
   accountQuota: { channel: 'account:quota', group: 'app', kind: 'value', optional: false },
+  // #364: giá + trạng thái gói Pro (đọc), và mở đường link thanh toán (ghi: mở trình duyệt).
+  accountBilling: { channel: 'account:billing', group: 'app', kind: 'value', optional: false },
+  accountCheckout: { channel: 'account:checkout', group: 'app', kind: 'value', optional: false },
 
   // ── data: thư viện trò chơi, lịch sử, giáo án, dự án ─────────────────────
   getLibrary: { channel: 'library:get', group: 'data', kind: 'value', optional: false },

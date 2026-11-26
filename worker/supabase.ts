@@ -7,6 +7,7 @@
 // Khoá: `SUPABASE_SERVICE_ROLE_KEY` chỉ sống ở đây (secret của Worker). Nó **không** được
 // đi vào phản hồi, không được log, và không có đường nào để client hỏi nó.
 
+import { effectivePlan } from '../server/billing.js';
 import type { QuotaStore } from '../server/quota.js';
 import type { UsageLogDb, UsageLogRow } from '../server/usage-log.js';
 
@@ -17,6 +18,18 @@ export interface WorkerEnv {
   GEMINI_API_KEY: string;
   GEMINI_MODEL?: string;
   GATEWAY_VERSION?: string;
+  // #364 — thanh toán. Tất cả đều TUỲ CHỌN: thiếu thì `billingConfig().missing` nói ra tên
+  // biến còn thiếu và nút Nâng cấp báo "chưa cấu hình", không phải im lặng.
+  EDUGAME_BILLING_PROVIDER?: string;
+  EDUGAME_PRO_PRICE_VND?: string;
+  EDUGAME_PRO_PERIOD_DAYS?: string;
+  EDUGAME_PRO_CREDITS?: string;
+  EDUGAME_PUBLIC_URL?: string;
+  EDUGAME_ALLOW_FAKE_PAYMENTS?: string;
+  PAYOS_CLIENT_ID?: string;
+  PAYOS_API_KEY?: string;
+  PAYOS_CHECKSUM_KEY?: string;
+  [key: string]: string | undefined;
 }
 
 interface RestOptions {
@@ -73,10 +86,27 @@ export function quotaStore(env: WorkerEnv): QuotaStore {
   const month = (value: string) => encodeURIComponent(value);
   return {
     async planOf(userId) {
-      const data = await rows<{ plan: string; status: string }>(
-        await rest(env, '/subscriptions?user_id=eq.' + userId + '&select=plan,status&limit=1')
+      // #364: gói trả phí có NGÀY HẾT HẠN. Đọc `period_end` rồi trả về gói đang thật sự có
+      // hiệu lực, để một dòng `plus` còn nằm trong DB sau khi hết hạn không mở credits mãi.
+      // Cùng lý do với `subscriptionOf`: một cột chưa có (migration billing chưa chạy) không
+      // được phép làm hỏng việc ĐỌC HẠN MỨC của mọi người dùng.
+      type PlanRow = { plan: string; status: string; period_end?: string | null };
+      let data: PlanRow[];
+      try {
+        data = await rows<PlanRow>(await rest(env, '/subscriptions?user_id=eq.' + userId + '&select=plan,status,period_end&limit=1'));
+      } catch {
+        data = await rows<PlanRow>(await rest(env, '/subscriptions?user_id=eq.' + userId + '&select=plan,status&limit=1'));
+      }
+      if (!data.length) return null;
+      const effective = effectivePlan(
+        {
+          plan: data[0].plan,
+          status: data[0].status,
+          periodEnd: data[0].period_end ? new Date(data[0].period_end) : null,
+        },
+        new Date()
       );
-      return data[0] || null;
+      return { plan: effective.plan, status: effective.status };
     },
     async ensureRow(userId, value) {
       await rest(env, '/usage_monthly?on_conflict=user_id,month', {
@@ -203,4 +233,198 @@ export function usageLogDb(env: WorkerEnv): UsageLogDb {
       return response.ok ? { ok: true } : { ok: false, reason: 'postgrest_' + response.status };
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// #364 — sổ đơn thanh toán. Ba phép ghi, và cả ba đều là "ghi rồi thôi":
+// không có phép nào cho client gọi, không có phép nào trả về khoá.
+// ---------------------------------------------------------------------------
+export interface OrderRow {
+  userId: string;
+  providerRef: string;
+  provider: string;
+  amountVnd: number;
+  status: 'pending' | 'paid' | 'expired' | 'failed';
+  checkoutUrl: string | null;
+  expiresAt: Date | null;
+  createdAt: Date;
+}
+
+export interface BillingDb {
+  subscriptionOf(userId: string): Promise<{
+    plan: string;
+    status: string;
+    periodEnd: Date | null;
+    provider: string | null;
+    providerRef: string | null;
+    priceVnd: number | null;
+  } | null>;
+  saveSubscription(
+    userId: string,
+    row: { plan: string; status: string; periodEnd: Date | null; provider: string | null; providerRef: string | null; priceVnd: number | null }
+  ): Promise<void>;
+  createOrder(order: {
+    userId: string;
+    provider: string;
+    providerRef: string;
+    amountVnd: number;
+    periodDays: number;
+    checkoutUrl: string;
+    expiresAt: Date;
+  }): Promise<void>;
+  orderByRef(providerRef: string): Promise<OrderRow | null>;
+  latestOrder(userId: string): Promise<OrderRow | null>;
+  markPaid(providerRef: string, paidAt: Date): Promise<boolean>;
+  /** Bảng `billing_orders` đã có trên máy chủ này chưa (migration đã chạy chưa). */
+  billingReady?(): Promise<boolean>;
+}
+
+interface OrderRest {
+  user_id: string;
+  provider: string;
+  provider_ref: string;
+  amount_vnd: number;
+  status: OrderRow['status'];
+  checkout_url: string | null;
+  expires_at: string | null;
+  created_at: string;
+}
+
+function orderFromRest(row: OrderRest): OrderRow {
+  return {
+    userId: row.user_id,
+    provider: row.provider,
+    providerRef: row.provider_ref,
+    amountVnd: Number(row.amount_vnd),
+    status: row.status,
+    checkoutUrl: row.checkout_url,
+    expiresAt: row.expires_at ? new Date(row.expires_at) : null,
+    createdAt: new Date(row.created_at),
+  };
+}
+
+export function billingDb(env: WorkerEnv): BillingDb {
+  const ORDER_COLUMNS = 'user_id,provider,provider_ref,amount_vnd,status,checkout_url,expires_at,created_at';
+  return {
+    async subscriptionOf(userId) {
+      // Database có thể chưa chạy migration billing (#364). Khi đó cột `period_end` chưa
+      // tồn tại, PostgREST trả 400 và — nếu không xử lý — cả `/v1/usage` sẽ hỏng cho MỌI
+      // người dùng chỉ vì một tính năng chưa bật. Vậy nên đọc được gì thì đọc: hụt cột
+      // thì lùi về đúng hình dạng cũ, coi như "chưa có ngày hết hạn".
+      const full = '/subscriptions?user_id=eq.' + userId + '&select=plan,status,period_end,provider,provider_ref,price_vnd&limit=1';
+      const legacyShape = '/subscriptions?user_id=eq.' + userId + '&select=plan,status&limit=1';
+      type Row = {
+        plan: string;
+        status: string;
+        period_end?: string | null;
+        provider?: string | null;
+        provider_ref?: string | null;
+        price_vnd?: number | null;
+      };
+      let data: Row[];
+      try {
+        data = await rows<Row>(await rest(env, full));
+      } catch {
+        data = await rows<Row>(await rest(env, legacyShape));
+      }
+      if (!data.length) return null;
+      const row = data[0];
+      return {
+        plan: row.plan,
+        status: row.status,
+        periodEnd: row.period_end ? new Date(row.period_end) : null,
+        provider: row.provider || null,
+        providerRef: row.provider_ref || null,
+        priceVnd: typeof row.price_vnd === 'number' ? row.price_vnd : null,
+      };
+    },
+    async saveSubscription(userId, row) {
+      // `merge-duplicates` = upsert theo khoá chính `user_id`. Ghi lại cùng một webhook hai
+      // lần cho ra cùng một hàng, không nhân đôi người dùng.
+      await rest(env, '/subscriptions?on_conflict=user_id', {
+        method: 'POST',
+        body: {
+          user_id: userId,
+          plan: row.plan,
+          status: row.status,
+          period_end: row.periodEnd ? row.periodEnd.toISOString() : null,
+          provider: row.provider,
+          provider_ref: row.providerRef,
+          price_vnd: row.priceVnd,
+          updated_at: new Date().toISOString(),
+        },
+        prefer: 'resolution=merge-duplicates,return=minimal',
+      });
+    },
+    async createOrder(order) {
+      await rest(env, '/billing_orders?on_conflict=provider_ref', {
+        method: 'POST',
+        body: {
+          user_id: order.userId,
+          plan: 'plus',
+          provider: order.provider,
+          provider_ref: order.providerRef,
+          amount_vnd: order.amountVnd,
+          period_days: order.periodDays,
+          status: 'pending',
+          checkout_url: order.checkoutUrl,
+          expires_at: order.expiresAt.toISOString(),
+        },
+        prefer: 'resolution=ignore-duplicates,return=minimal',
+      });
+    },
+    async orderByRef(providerRef) {
+      const data = await rows<OrderRest>(
+        await rest(
+          env,
+          '/billing_orders?provider_ref=eq.' + encodeURIComponent(providerRef) + '&select=' + ORDER_COLUMNS + '&limit=1'
+        )
+      );
+      return data.length ? orderFromRest(data[0]) : null;
+    },
+    async latestOrder(userId) {
+      const data = await rows<OrderRest>(
+        await rest(
+          env,
+          '/billing_orders?user_id=eq.' + userId + '&select=' + ORDER_COLUMNS + '&order=created_at.desc&limit=1'
+        )
+      );
+      return data.length ? orderFromRest(data[0]) : null;
+    },
+    async markPaid(providerRef, paidAt) {
+      // CAS trên `status`: chỉ đơn còn `pending` mới thành `paid`. Nhờ vậy hai webhook song
+      // song không cùng "mở Pro" — dòng thứ hai trả về 0 hàng và bị coi là đã xử lý.
+      const data = await rows<{ provider_ref: string }>(
+        await rest(
+          env,
+          '/billing_orders?provider_ref=eq.' + encodeURIComponent(providerRef) + '&status=eq.pending&select=provider_ref',
+          { method: 'PATCH', body: { status: 'paid', paid_at: paidAt.toISOString() }, prefer: 'return=representation' }
+        )
+      );
+      return data.length === 1;
+    },
+    async billingReady() {
+      // Hỏi bảng đơn có thật không, bằng một truy vấn rẻ nhất có thể. `false` ở đây là câu
+      // "chưa chạy migration", và người dùng sẽ đọc được đúng câu đó thay vì một trang lỗi.
+      try {
+        await rows(await rest(env, '/billing_orders?select=provider_ref&limit=1'));
+        return true;
+      } catch {
+        return false;
+      }
+    },
+  };
+}
+
+/**
+ * HMAC-SHA256 hex bằng WebCrypto — môi trường của Worker không có `node:crypto`.
+ * Chữ ký PayOS là HMAC trên chuỗi `key=value&…`, khoá là `PAYOS_CHECKSUM_KEY`.
+ */
+export async function hmacHex(secret: string, data: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(data));
+  return Array.from(new Uint8Array(signature))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
 }

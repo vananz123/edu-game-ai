@@ -36,6 +36,7 @@ import {
 } from '../server/usage-log.js';
 import { requestGameJson } from '../server/gemini.js';
 import { quotaStore, usageLogDb, verifyUser, type WorkerEnv } from './supabase.js';
+import { handleBilling, type BillingDeps } from './billing.js';
 
 const SERVICE = 'edugame-ai-gateway';
 const DEFAULT_VERSION = '0.5.6';
@@ -67,7 +68,7 @@ function monthNow(): string {
   return usagePeriod().key;
 }
 
-export interface HandlerDeps {
+export interface HandlerDeps extends BillingDeps {
   /** Cho test bơm bản giả; mặc định là các adapter thật ở `supabase.ts`. */
   store?: (env: WorkerEnv) => QuotaStore;
   ledger?: (env: WorkerEnv) => UsageLogDb;
@@ -87,6 +88,17 @@ export async function handle(
   if (path === '/health' && request.method === 'GET') {
     return json({ ok: true, service: SERVICE, version: env.GATEWAY_VERSION || DEFAULT_VERSION });
   }
+
+  // #364 — thanh toán đi trước mọi kiểm tra khác: webhook của nhà cung cấp KHÔNG có token
+  // người dùng, và `/v1/billing/status` phải trả lời được cả khi AI chưa cấu hình (một giáo
+  // viên muốn mua gói không nên đọc "máy chủ AI chưa cấu hình").
+  const billing = await handleBilling(request, env, {
+    db: deps.db,
+    auth: deps.auth,
+    createLink: deps.createLink,
+    now: deps.now,
+  });
+  if (billing) return billing;
 
   if (path !== '/v1/usage' && path !== '/v1/generate') {
     return json({ error: 'Không có đường này.', code: 'not_found' }, 404);

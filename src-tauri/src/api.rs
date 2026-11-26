@@ -86,6 +86,9 @@ pub fn hand_written(command: &str) -> Option<(&'static str, &'static str)> {
         // (anon key + RLS `Users view own usage`), không bằng service_role.
         "get_usage_history" => ("account:usage-history", "get_usage_history"),
         "get_account_quota" => ("account:quota", "get_account_quota"),
+        // #364 — bán gói Pro: đọc giá/trạng thái, và mở một đường link thanh toán.
+        "account_billing" => ("account:billing", "account_billing"),
+        "account_checkout" => ("account:checkout", "account_checkout"),
         "get_ai_providers" => ("ai:providers", "get_ai_providers"),
         "get_local_ai_models" => ("ai:local-models", "get_local_ai_models"),
         // Giai đoạn 5: AI local — tải model/runtime và quản lý llama-server.
@@ -220,6 +223,8 @@ const INVOKE_CHANNELS: &[&str] = &[
     "ai:cloud-generate",
     "account:usage-history",
     "account:quota",
+    "account:billing",
+    "account:checkout",
     "ai:providers",
     "ai:test-provider",
     "ai:local-models",
@@ -311,6 +316,8 @@ async fn dispatch(app: &AppHandle, channel: &str, args: &[Value]) -> Result<Valu
         // phạm vi đọc.
         // #354: đồng hồ hạn mức tháng. Phép đọc, không trừ gì.
         "account:quota" => json(Ok(crate::cloud::cloud_usage(app.clone()).await)),
+        "account:billing" => json(Ok(crate::billing::cloud_billing(app.clone()).await)),
+        "account:checkout" => json(Ok(crate::billing::cloud_checkout(app.clone()).await)),
         "account:usage-history" => {
             let limit = args
                 .first()
@@ -796,6 +803,20 @@ pub async fn get_usage_history(
 #[tauri::command]
 pub async fn get_account_quota(app: AppHandle) -> crate::cloud::UsageMeter {
     crate::cloud::cloud_usage(app).await
+}
+
+/// `account:billing` — giá gói Pro và trạng thái gói của chính người đang đăng nhập (#364).
+/// Đọc, không tạo đơn, không trừ gì.
+#[tauri::command]
+pub async fn account_billing(app: AppHandle) -> crate::billing::BillingStatus {
+    crate::billing::cloud_billing(app).await
+}
+
+/// `account:checkout` — xin một đường link thanh toán và mở bằng trình duyệt hệ thống.
+/// Ứng dụng không thấy số thẻ, và **không tự mở gói**: quyền lợi Pro chỉ đổi qua webhook.
+#[tauri::command]
+pub async fn account_checkout(app: AppHandle) -> crate::billing::CheckoutOutcome {
+    crate::billing::cloud_checkout(app).await
 }
 
 /// `auth:sign-out` — xoá phiên DPAPI. Không động vào game hay giáo án.

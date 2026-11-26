@@ -79,7 +79,7 @@ pub fn pick_gateway(env_value: Option<&str>, embedded: Option<&str>) -> Option<S
     Some(raw.trim_end_matches('/').to_string())
 }
 
-fn gateway_url() -> Option<String> {
+pub fn gateway_url() -> Option<String> {
     let env_value = std::env::var(GATEWAY_ENV).ok();
     pick_gateway(env_value.as_deref(), option_env!("EDUGAME_AI_GATEWAY_URL"))
 }
@@ -199,6 +199,12 @@ pub fn outcome_from_response(status: u16, body: &str) -> CloudOutcome {
         503 => CloudOutcome::fail("gateway_unavailable", "Máy chủ AI đang gặp sự cố. Vui lòng thử lại sau."),
         _ => CloudOutcome::fail("gateway_error", if message_field.is_empty() { "Không gọi được máy chủ AI." } else { &message_field }),
     }
+}
+
+/// Client dùng cho hai lời gọi thanh toán (#364). Cùng timeout với lời gọi AI: một trang
+/// thanh toán chậm không được làm app treo, nhưng một kết nối đứt phải báo đúng là đứt.
+pub fn client_for_billing() -> Result<reqwest::Client, String> {
+    client()
 }
 
 fn client() -> Result<reqwest::Client, String> {

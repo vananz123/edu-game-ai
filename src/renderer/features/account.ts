@@ -19,6 +19,11 @@ const accountState = {
   history: null,
   // #354/#362: đồng hồ hạn mức của kỳ 14 ngày ({plan, unit, used, limit, cost, month}) — null = chưa đọc.
   quota: null,
+  // #364 — giá và trạng thái gói Pro. `null` = chưa đọc (KHÔNG phải "miễn phí").
+  billing: null,
+  billingLoading: false,
+  checkoutMessage: '',
+  checkoutOk: false,
 };
 
 function accountAttr(value) {
@@ -181,6 +186,7 @@ function accountPanelHtml() {
   if (stateName === 'member') {
     body = accountHeroHtml()
       + accountQuotaHtml()
+      + accountProHtml()
       + '<div class="account-actions">'
       + '<button class="btn-ghost" data-account-cloud-test type="button">'
       + '<span class="account-btn-inner">' + uiIcon('sparkles', '', 15) + ' Kiểm tra Cloud AI</span></button>'
@@ -243,6 +249,10 @@ function wireAccountPanel(root) {
   if (usage) usage.onclick = () => accountLoadUsage();
   const quotaRetry = root.querySelector('[data-account-quota-load]');
   if (quotaRetry) quotaRetry.onclick = () => accountLoadQuota();
+  const upgrade = root.querySelector('[data-account-upgrade]');
+  if (upgrade) upgrade.onclick = () => accountStartCheckout();
+  const billingRetry = root.querySelector('[data-account-billing-load]');
+  if (billingRetry) billingRetry.onclick = () => accountLoadBilling();
 }
 
 function openAccountPanel() {
@@ -252,8 +262,178 @@ function openAccountPanel() {
   wireAccountPanel(root);
   // Mở panel là đọc đồng hồ: đây là phép ĐỌC, không trừ lượt, nên không cần mời bấm.
   if (accountState.quota === null && !accountState.busy) accountLoadQuota();
+  // Giá và tình trạng đơn cũng là phép ĐỌC. Đọc lại mỗi lần mở: người vừa chuyển khoản
+  // sang tab ngân hàng rồi quay lại cần thấy gói đã lên, không cần tải lại app.
+  if (accountUiState() === 'member') accountLoadBilling();
   // Không đọc lại trạng thái mỗi lần mở: panel phải vẽ đúng thứ người dùng vừa thấy
   // trên chip, không phải một trạng thái khác đến sau.
+}
+
+
+// ---------------------------------------------------------------------------
+// #364 — gói Pro. Ứng dụng KHÔNG thu tiền: nó mở trang thanh toán của nhà cung cấp bằng
+// trình duyệt hệ thống, rồi đọc lại trạng thái. Vì vậy mọi câu ở đây chỉ nói được ba thứ
+// đã biết chắc: giá, quyền lợi, và tình trạng đơn — không hứa "xong ngay".
+// ---------------------------------------------------------------------------
+
+/** `99000` → `99.000đ`. Số không đọc được thì trả chuỗi rỗng, không bịa giá. */
+function accountMoney(value) {
+  const amount = Math.trunc(Number(value) || 0);
+  if (amount <= 0) return '';
+  return amount.toLocaleString('vi-VN') + 'đ';
+}
+
+/** `2026-12-10T09:00:00Z` → `10/12`. Sai/thiếu thì rỗng. */
+function accountDateShort(iso) {
+  const date = new Date(String(iso || ''));
+  if (Number.isNaN(date.getTime())) return '';
+  return String(date.getDate()).padStart(2, '0') + '/' + String(date.getMonth() + 1).padStart(2, '0');
+}
+
+function accountBillingState() {
+  const billing = accountState.billing;
+  if (!billing) return 'loading';
+  if (billing.ok === false) return 'error';
+  if (billing.configured === false) return 'unconfigured';
+  return 'ready';
+}
+
+/** Nút chính của thẻ Pro. Chỉ có MỘT lý do để bấm: mở trang thanh toán. */
+function accountProActionsHtml(stateName) {
+  if (stateName !== 'ready') return '';
+  const label = accountState.busy ? 'Đang tạo đơn…' : 'Nâng cấp lên Pro';
+  return '<div class="account-actions">'
+    + '<button class="btn-primary account-upgrade-btn" data-account-upgrade type="button"'
+    + (accountState.busy ? ' disabled' : '') + '>'
+    + '<span class="account-btn-inner">' + uiIcon('sparkles', '', 15) + ' ' + escapeHtml(label) + '</span></button></div>';
+}
+
+/** Thẻ Pro: giá, quyền lợi, và tình trạng đơn. Bốn trạng thái, không có trạng thái thứ năm. */
+function accountProHtml() {
+  const billing = accountState.billing;
+  const stateName = accountBillingState();
+  const label = '<span class="account-card-label">Gói Pro</span>';
+  const days = Math.trunc(Number(billing && billing.periodDays) || 14);
+  if (stateName === 'loading') {
+    return '<div class="account-card account-pro" data-account-pro="loading">'
+      + '<div class="account-card-top">' + label + '</div>'
+      + '<p class="account-plan-line">Đang đọc thông tin gói…</p></div>';
+  }
+  if (stateName === 'error') {
+    return '<div class="account-card account-pro" data-account-pro="error">'
+      + '<div class="account-card-top">' + label + '</div>'
+      + '<p class="account-plan-line">Chưa đọc được thông tin gói: '
+      + escapeHtml((billing && (billing.message || billing.code)) || 'không rõ lý do')
+      + '</p><div class="account-actions"><button class="btn-ghost" data-account-billing-load type="button">Thử lại</button></div></div>';
+  }
+  if (stateName === 'unconfigured') {
+    // Nói thẳng là CHƯA BÁN ĐƯỢC, và nói thiếu gì. Một nút "Nâng cấp" bấm vào rồi báo lỗi
+    // là cách nhanh nhất để giáo viên nghĩ ứng dụng hỏng.
+    const missing = (billing.missing || []).join(', ');
+    return '<div class="account-card account-pro" data-account-pro="unconfigured">'
+      + '<div class="account-card-top">' + label + '<span class="account-badge">Chưa mở</span></div>'
+      + '<p class="account-plan-line">Bản chạy này chưa bật thanh toán'
+      + (missing ? ' (thiếu: ' + escapeHtml(missing) + ')' : '')
+      + '. Bạn vẫn dùng gói miễn phí bình thường.</p></div>';
+  }
+
+  const price = accountMoney(billing.priceVnd);
+  const credits = Math.trunc(Number(billing.credits) || 0);
+  const order = billing.order;
+
+  if (billing.plan === 'plus') {
+    const until = accountDateShort(billing.periodEnd);
+    return '<div class="account-card account-pro" data-account-pro="active">'
+      + '<div class="account-card-top">' + label + '<span class="account-badge" data-account-badge="pro">Pro</span></div>'
+      + '<p class="account-plan-name">Đang dùng gói Pro</p>'
+      + '<p class="account-plan-line">' + credits + ' credits mỗi kỳ ' + days + ' ngày'
+      + (until ? ' · kỳ này tới <strong>' + escapeHtml(until) + '</strong>' : '') + '.</p>'
+      + '<p class="account-plan-foot">Gói tự hết hạn, không tự trừ tiền. Không cần làm gì để quay về bản miễn phí.</p>'
+      + '</div>';
+  }
+
+  const pending = order && order.status === 'pending';
+  // Giá chỉ được xuất hiện MỘT lần. Đo bằng mắt (và bằng `account-billing.test`): một hàng
+  // "99.000đ / 14 ngày" ở góc cộng một tiêu đề "99.000đ cho mỗi kỳ 14 ngày" là hai câu nói
+  // cùng một chuyện — người đọc phải dừng lại để kiểm tra xem có phải hai mức giá không.
+  return '<div class="account-card account-pro" data-account-pro="free">'
+    + '<div class="account-card-top">' + label + '</div>'
+    + '<p class="account-plan-name">' + (price ? escapeHtml(price) + ' cho mỗi kỳ ' + days + ' ngày' : 'Gói Pro') + '</p>'
+    + '<ul class="account-perks">'
+    + '<li>' + uiIcon('check', '', 13) + ' <span>' + credits + ' credits mỗi kỳ — khoảng ' + Math.floor(credits / 2) + ' lần soạn câu hỏi</span></li>'
+    + '<li>' + uiIcon('check', '', 13) + ' <span>Dùng Cloud AI cho mọi giáo án, không dừng ở 10 lượt</span></li>'
+    + '<li>' + uiIcon('check', '', 13) + ' <span>Trò chơi vẫn nằm trên máy bạn và vẫn chơi được khi mất mạng</span></li>'
+    + '</ul>'
+    + (pending
+      ? '<p class="account-plan-line is-low" data-account-order-pending>' + escapeHtml(order.message || 'Đang chờ chuyển khoản.') + '</p>'
+      : '')
+    + (accountState.checkoutMessage
+      ? '<p class="account-plan-line' + (accountState.checkoutOk ? '' : ' is-low') + '" data-account-checkout-message>'
+        + escapeHtml(accountState.checkoutMessage) + '</p>'
+      : '')
+    + accountProActionsHtml('ready')
+    + '<p class="account-plan-foot">Thanh toán mở trong trình duyệt. Ứng dụng không thấy số thẻ hay mã PIN của bạn.</p>'
+    + '</div>';
+}
+
+/**
+ * Đọc giá và trạng thái gói. Phép ĐỌC, không tạo đơn, không trừ gì — nên gọi mỗi lần mở
+ * panel là đúng, và không cần mời người dùng bấm.
+ */
+async function accountLoadBilling() {
+  accountState.billingLoading = true;
+  try {
+    const result = await desktop.call('accountBilling');
+    accountState.billing = (result && typeof result === 'object') ? result : null;
+  } catch (error) {
+    accountState.billing = {
+      ok: false,
+      code: 'channel_error',
+      message: (error && error.message) || 'Không gọi được kênh thanh toán.',
+    };
+  } finally {
+    accountState.billingLoading = false;
+    rerenderAccountPanel();
+  }
+}
+
+/**
+ * Bấm "Nâng cấp": xin đường link rồi mở trình duyệt. Sau đó ĐỌC LẠI vài lần, vì tiền về
+ * qua ngân hàng chứ không về trong câu trả lời HTTP này — không có lần đọc lại thì giáo viên
+ * phải tự đoán khi nào gói mới lên.
+ */
+async function accountStartCheckout() {
+  if (accountState.busy) return;
+  accountState.busy = 'Đang tạo đơn thanh toán…';
+  accountState.checkoutMessage = '';
+  accountState.checkoutOk = false;
+  rerenderAccountPanel();
+  try {
+    const result = await desktop.call('accountCheckout');
+    const view = (result && typeof result === 'object') ? result : {};
+    accountState.checkoutOk = view.ok === true;
+    accountState.checkoutMessage = String(view.message || (view.ok ? 'Đã mở trang thanh toán.' : 'Chưa tạo được đơn thanh toán.'));
+    if (view.ok !== true && view.code === 'browser_blocked' && view.url) {
+      accountState.checkoutMessage += ' Link: ' + String(view.url);
+    }
+  } catch (error) {
+    accountState.checkoutMessage = (error && error.message) || 'Không gọi được kênh thanh toán.';
+  } finally {
+    accountState.busy = '';
+    rerenderAccountPanel();
+  }
+  if (accountState.checkoutOk) {
+    // Ba lần đọc, cách nhau 4 giây: đủ cho một lần chuyển khoản VietQR nhanh, không đủ để
+    // thành một vòng quay vô hạn khi giáo viên bỏ ngang.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await new Promise(resolve => setTimeout(resolve, 4000));
+      await accountLoadBilling();
+      if (accountState.billing && accountState.billing.plan === 'plus') {
+        await accountLoadQuota();
+        break;
+      }
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------

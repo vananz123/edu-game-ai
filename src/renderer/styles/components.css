@@ -1428,6 +1428,13 @@ html[data-theme="dark"] .account-quota[data-account-quota="error"]{border-color:
 html[data-theme="dark"] .account-signin{border-color:#2a3350;background:linear-gradient(180deg,#1e2340,#1b2237)}
 html[data-theme="dark"] .account-signin-title{color:#f1f5f9}
 html[data-theme="dark"] .account-perks{color:#c7d2fe}
+.account-pro,.account-card.account-pro{border-color:#c7d2fe;background:linear-gradient(180deg,#f7f8ff 0%,#fff 62%)}
+.account-upgrade-btn{width:100%;justify-content:center}
+.account-pro .account-plan-line.is-low{color:#b45309}
+.account-pro .account-actions{margin-top:10px}
+html[data-theme="dark"] .account-pro,html[data-theme="dark"] .account-card.account-pro{border-color:#3730a3;background:linear-gradient(180deg,#1b1e33 0%,#151827 62%)}
+html[data-theme="dark"] .account-pro .account-plan-line.is-low{color:#fbbf24}
+
 html[data-theme="dark"] .account-google-btn{background:#f8fafc;border-color:#d7dbe6;color:#1f2937}
 html[data-theme="dark"] .account-guest-note{background:#1b2237;border-color:#2a3350;color:#a5b4fc}
 html[data-theme="dark"] .account-usage{border-top-color:#2a3350}

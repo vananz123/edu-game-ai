@@ -107,7 +107,34 @@ npm run check:pilot            # FAIL nếu URL còn là http/localhost
 - URL không phải `https`,
 - URL trỏ `localhost` / `127.0.0.1` / `0.0.0.0`.
 
-## 7. Những lỗi đã gặp khi làm việc này (để không gặp lại)
+## 7. Bật bán gói Pro (#364)
+
+Thứ tự dưới đây không phải sở thích: gateway đọc bảng đơn và cột `period_end`, nên **migration
+phải chạy trước** khi khai cấu hình nhà cung cấp. Bỏ qua bước 1 thì `/v1/billing/status` trả lời
+`configured:false` kèm câu *"chạy migration server/migrations/2026-11-26-billing.sql"* — nút Nâng cấp
+không xuất hiện, và đó là trạng thái đúng (một máy chủ chưa bán được thì không được mời mua).
+
+1. **Chạy migration** `server/migrations/2026-11-26-billing.sql` trong Supabase → SQL Editor.
+   Idempotent: thêm cột vào `subscriptions`, tạo `billing_orders` (RLS chỉ cho người dùng đọc đơn của
+   mình), seed `plan_pro_price_vnd` = 99000, `plan_pro_period_days` = 14, `plan_pro_monthly_credits` = 500.
+2. **Khai biến trên Worker** (Settings → Variables and Secrets):
+   `EDUGAME_BILLING_PROVIDER` = `payos`, `EDUGAME_PRO_PRICE_VND` = `99000`,
+   `EDUGAME_PRO_PERIOD_DAYS` = `14`, `EDUGAME_PRO_CREDITS` = `500`,
+   `EDUGAME_PUBLIC_URL` = `https://ai-gateway.dovanan-bth2017.workers.dev`, và ba secret
+   `PAYOS_CLIENT_ID`, `PAYOS_API_KEY`, `PAYOS_CHECKSUM_KEY` (lấy ở trang merchant PayOS).
+   Đặt webhook URL bên PayOS = `https://<gateway>/v1/billing/webhook/payos`.
+3. **Deploy lại Worker** (bundle esbuild như §3) rồi kiểm tra bằng một token thật:
+   `GET /v1/billing/status` phải trả `configured:true`, `provider:"payos"`, `priceVnd:99000`;
+   không token phải là **401**.
+4. **Một đơn thử**: bấm "Nâng cấp lên Pro" trong panel Tài khoản → trình duyệt mở trang PayOS →
+   chuyển khoản → webhook về → `/v1/billing/status` chuyển `plan:"plus"`, `periodEnd` = hôm nay + 14
+   ngày, và `/v1/usage` đổi sang `unit:"credits"`, `limit:500`.
+
+**Đừng bật `EDUGAME_ALLOW_FAKE_PAYMENTS` trên máy chủ thật.** Cờ đó mở hai đường `POST /v1/billing/fake/pay`
+và `GET /v1/billing/fake/:code` để đo mà không cần tài khoản merchant; với nó, bất kỳ ai có token đều
+được Pro miễn phí. Cờ chỉ có tác dụng khi provider là `fake`.
+
+## 8. Những lỗi đã gặp khi làm việc này (để không gặp lại)
 
 - **Chạy gateway ở máy mà quên `source .env`** ⇒ `/v1/generate` trả `503` vì thiếu cấu hình
   (`requireConfiguration`), không phải vì model hỏng.

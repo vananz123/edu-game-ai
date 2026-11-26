@@ -740,4 +740,9 @@ Chủ dự án yêu cầu: *"xóa release cũ ở máy, tạo release mới và 
 - [x] **Bước 4 — công bố:** draft → upload `exe` + `.blockmap` → `latest.yml` sau cùng → verify tên/kích thước/hash → publish <https://github.com/vananz123/edu-game-ai/releases/tag/v0.5.0>. Feed công khai trả `version: 0.5.0`; `check:packaged-feed` trên binary 0.5.0 **24/24** — *"Ứng dụng đã mới nhất · Bản 0.5.0 là bản mới nhất đã công bố"*.
 - [ ] **Nợ của #226.** (a) Installer **chưa ký Authenticode** — SmartScreen có thể hỏi khi chạy lần đầu. (b) Chưa cài bộ cài thật trên máy Windows sạch ngắt mạng — **P7 vẫn mở**. (c) Chưa đo máy chiếu, màn < 720p. (d) Nhánh AI local không đo theo chỉ đạo.
 - [ ] **Việc kế tiếp.** Chạy `npm run measure:p7` trên máy sạch theo `tests/packaging/P7-OFFLINE-INSTALL.md` với installer 0.5.0; quyết định Authenticode; hộp xác nhận khi lưu game cũ (nợ #223).
-
+- [~] **Gói trả phí (#364) — đường mua đã có, CHƯA mở bán.** `server/billing.ts` +
+  `worker/billing.ts` + kênh `account:billing`/`account:checkout` + thẻ "Gói Pro" trong panel
+  Tài khoản; webhook PayOS đã xác minh HMAC và `provider_ref` unique + CAS chống mở gói hai lần.
+  Đo được trên máy chủ thật: `configured:false`, `provider:"none"`, `missing:[EDUGAME_BILLING_PROVIDER,
+  chạy migration …]`. **Còn thiếu**: chạy migration trên Supabase + khai `PAYOS_*` rồi deploy, sau đó
+  đo một đơn 99.000đ thật. Bước bật bán: `docs/DEPLOY_GATEWAY.md` §7.

@@ -7,6 +7,70 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-26 — #364 bán gói Pro trong app: giá + nút Nâng cấp + webhook đã xác minh (chưa mở bán)
+
+- **Vì sao:** #362 cho hạn mức free là 10 lượt/kỳ 2 tuần nhưng **không có đường nào để trả tiền**.
+  Nay đã có đường mua, chạy được đầu-cuối trong code, và **chưa bật bán** vì máy chủ thiếu hai thứ
+  có tên (xem "Còn thiếu").
+- **Luật tiền nằm MỘT chỗ:** `server/billing.ts` (hàm thuần) + `server/billing-provider.ts` (adapter
+  PayOS). Express và Worker dùng chung, nên câu "99.000đ / 14 ngày / 500 credits" không thể lệch giữa
+  hai máy chủ.
+- **Tệp đã sửa/thêm:**
+  - `server/billing.ts` (mới, ~300 dòng): `PERIOD_LIMITS` không đổi; thêm `billingConfig`,
+    `orderCodeFor`, `orderExpiry`, `effectiveOrderStatus`, `nextPeriodEnd`, `applyPaidOrder`,
+    `effectivePlan`, `webhookVerdict`, `payosSignData`, `signaturesEqual`, `orderMessage`.
+    `ProviderId` nay có `none` — chưa cấu hình **không** được mặc định thành `fake`.
+  - `server/billing-provider.ts` (mới): `payosLinkBody` (mô tả ASCII ≤25 ký tự), `payosWebhookFields`,
+    `payosWebhookSignData`.
+  - `server/migrations/2026-11-26-billing.sql` (mới, idempotent): `subscriptions` +`period_end`,
+    `provider`, `provider_ref`, `price_vnd`, `started_at`; bảng `billing_orders` (`provider_ref`
+    unique, status pending/paid/expired/failed, RLS chỉ user đọc đơn của mình); seed
+    `server_config` giá/kỳ/credits.
+  - `worker/billing.ts` (mới): `GET /v1/billing/status`, `POST /v1/billing/checkout`,
+    `POST /v1/billing/webhook/payos` (không cần token), `POST /v1/billing/fake/pay` +
+    `GET /v1/billing/fake/:code` (chỉ khi provider `fake` **và** `EDUGAME_ALLOW_FAKE_PAYMENTS=1`),
+    `GET /v1/billing/done`.
+  - `worker/supabase.ts`: `planOf` tôn trọng `period_end` (gói hết hạn tự về free), `BillingDb`
+    (`subscriptionOf`/`saveSubscription`/`createOrder`/`orderByRef`/`latestOrder`/`markPaid` CAS/
+    `billingReady`), `hmacHex` bằng WebCrypto.
+  - `worker/index.ts`: gọi `handleBilling` TRƯỚC các nhánh `/v1/usage` + `/v1/generate`.
+  - `src-tauri/src/billing.rs` (mới): `billing_from_json` (thuần, test được), `cloud_billing`,
+    `cloud_checkout` (mở `checkoutUrl` bằng trình duyệt hệ thống). `src-tauri/src/api.rs` +
+    `lib.rs`: hai kênh `account:billing`, `account:checkout`. `cloud.rs`: `gateway_url` →
+    `pub`, thêm `client_for_billing`.
+  - `src/renderer/features/account.ts`: thẻ "Gói Pro" trong panel Tài khoản —
+    `accountMoney`, `accountDateShort`, `accountBillingState`, `accountProHtml`,
+    `accountLoadBilling`, `accountStartCheckout` (mở trình duyệt rồi đọc lại 3 lần cách 4 giây).
+  - `src/renderer/styles/components.css`: `+654 B` cho `.account-pro`, `.account-upgrade-btn`.
+  - `tests/unit/server-billing.test.ts` (mới), `tests/unit/worker-billing.test.ts` (mới),
+    `tests/unit/account-billing.test.ts` (mới), `tests/ui/ui-billing-check.js` (mới);
+    `tests/unit/desktop-facade.test.ts` 105 → **107** lời gọi (`app` 17 → 19).
+- **Đo được:**
+  - `npx tsc -p tsconfig.json` sạch · `node tests/run-unit.js` **114/114** (billing: 8 + 6 + 8 nhóm
+    khẳng định) · `npm run check` sạch · `verify:css` **61/61** · `check:renderer-globals`
+    **1 188 hàm / 9 628 điểm gọi / 0 undefined** · `cargo test --lib billing` **4/4**.
+  - Worker deploy thật: bundle **804 213 B**, **0** `node:` import, upload `200 success=true`
+    etag `87d4d080…`, `/health` = `0.5.6`.
+  - Live đo bằng token thật: `/v1/usage` **200** `{"plan":"free","used":5,"limit":10}`
+    (không hỏng vì billing) · `/v1/billing/status` **200** với
+    `configured:false`, `provider:"none"`, `missing:["EDUGAME_BILLING_PROVIDER",
+    "chạy migration server/migrations/2026-11-26-billing.sql"]` · không token ⇒ **401**.
+  - Trên bản `.exe` vừa dựng: `account:billing` trả đúng trạng thái trên (Rust → gateway nối được),
+    `account:checkout` trả `billing_not_configured` + tên việc còn thiếu;
+    `ui-billing-check` **5/5**, `ui-account-check` **23/23**.
+  - Ảnh chụp panel: giá **chỉ hiện một lần** (đã sửa lỗi in giá hai lần ở hàng góc + tiêu đề), nút
+    "Nâng cấp lên Pro" full-width, không cắt chữ trong thẻ.
+- **Một lỗi thật đã tự gây ra và đã sửa:** deploy đầu tiên làm `/v1/usage` trả **503 cho mọi người**
+  vì `planOf` đọc cột `period_end` chưa tồn tại. Nay `planOf` và `subscriptionOf` lùi về hình dạng cũ
+  khi gặp cột thiếu — một tính năng chưa bật không được phép làm hỏng việc đọc hạn mức.
+- **Còn thiếu (chưa mở bán được):** (1) chạy `server/migrations/2026-11-26-billing.sql` trên Supabase;
+  (2) khai `PAYOS_CLIENT_ID`/`PAYOS_API_KEY`/`PAYOS_CHECKSUM_KEY` + `EDUGAME_BILLING_PROVIDER=payos`
+  (+ `EDUGAME_PUBLIC_URL`) trên Worker rồi deploy lại. **Chưa đo được** đường mua thật (tạo đơn →
+  chuyển khoản → gói lên Pro) vì thiếu hai thứ trên; phần đó là fixture/unit test, không phải bằng
+  chứng thật.
+- **Tiếp theo:** chạy migration + khai PayOS, rồi đo một đơn 99.000đ thật (PayOS sandbox trước) và
+  chụp lại thẻ Pro ở trạng thái `active`.
+
 ### 2026-11-26 — #363 phát hành v0.5.6 (asset công khai đã trỏ gateway thật)
 - **Bốn nguồn phiên bản + hai gateway cùng nhảy lên 0.5.6:** `package.json`/`package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, `GET /health` của `server/index.ts`, `DEFAULT_VERSION` của `worker/index.ts` (và binding `GATEWAY_VERSION` khi upload) + test `worker-gateway` theo `0.5.6`.
 - **Worker deploy lại trước khi dựng bộ cài** (nếu không `check:pilot` so sai bản): bundle 783 009 B, `0` import `node:`, upload `200 success=true` etag `470d59613f1d…`, `smoke:gateway --expect-version 0.5.6 --pilot` **4/4**.
@@ -36,18 +100,3 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
   - **Chưa quan sát một lần chuyển kỳ thật** (03/12); logic kỳ mới chỉ được đo bằng unit test + tính tay.
   - Dòng `usage_monthly` cũ với khoá `2026-11` (tháng dương lịch) vẫn còn trong DB — vô hại nhưng là rác.
   - Phiên bản app **vẫn 0.5.5**; asset v0.5.5 trên GitHub vẫn trỏ `127.0.0.1` ⇒ **đừng đưa cho giáo viên**; muốn phát bản này phải cắt **v0.5.6** (cần bạn nói `go`).
-
-### 2026-11-26 — #361 Cloud AI chạy THẬT trên Cloudflare Workers, và bộ cài trỏ URL thật
-- **Đã triển khai** `worker/` lên worker `ai-gateway` (account `2b919f…d323`) qua API Cloudflare: upload module đã bundle (782 554 B, esbuild `--format=esm --platform=neutral`, **0** import `node:`), kèm 4 biến thường (`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `GEMINI_MODEL=gemini-3.5-flash-lite`, `GATEWAY_VERSION=0.5.5`) và 2 secret (`GEMINI_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`). Upload `200 success=true` (etag `c168be58…`), hai secret `200`.
-- **`smoke:gateway --pilot` ⇒ 4/4:** `/health` `service=edugame-ai-gateway` `version=0.5.5` (3 184 ms), `/v1/usage` và `/v1/generate` **401** khi không token.
-- **Đo đường thật qua worker (tài khoản thử, đặt lại `generations=2` trước khi đo):** `GET /v1/usage` ⇒ `200 {"plan":"free","unit":"generations","used":2,"limit":5,"cost":1}`; `POST /v1/generate` (kèm `idempotencyKey`) ⇒ **200** trò chơi *"An toàn giao thông đường bộ lớp 4"* **4 câu**, `usage.used=3`; **gửi lại đúng khoá đó ⇒ 409 `duplicate_request`** và `usage_monthly` đứng nguyên ở **3** (đúng một lượt, đúng một dòng sổ).
-- **Bộ cài mới, trỏ URL thật:** `.env` → `EDUGAME_AI_GATEWAY_URL=https://ai-gateway.dovanan-bth2017.workers.dev`; `npm run build` · `verify:css` 61/61 · `build:tauri` (6 217,2 KiB) · `check:embedded` khớp · `check:pilot` **hai dòng OK** (danh tính gateway + chuỗi có trong 57 914 KiB exe) · `cargo tauri build` (8 m 15 s). Installer **16 369 669 B · SHA-256 `82f4c652cb47023abb46386b2ca3998b8e0d7a5b9d9961c0ee921a6a905c4e76`**.
-- **Đo bằng cách CÀI THẬT** (`/S` → `exit=0`, registry `DisplayVersion 0.5.5`, `InstallLocation D:\Temp\eg-install-check`, exe 59 303 936 B): chạy với `EDUGAME_AI_GATEWAY_URL`/`SUPABASE_URL`/`SUPABASE_ANON_KEY` **bị xoá khỏi env** ⇒ `url=http://tauri.localhost/`, `page=library`, **9 card**, `auth:status` `loggedIn=true`, **`account:quota` ⇒ `{"ok":true,"plan":"free","unit":"generations","used":3,"limit":5,"cost":1}`** — tức bản cài đọc được hạn mức **qua Cloudflare**, và `account:usage-history` có dòng thật `4 câu · -1 lượt · 2026-11-26T08:19:45Z`. Đây là bằng chứng exe → Rust → Worker → Supabase thông suốt.
-- **Cổng trên bản cài:** `ui-account-check` **22/22** (member) · `ui-editor-cloud-check` **14/14** · `ui-offline-play-check` **7/7** (canary thấy request ngoài khi thật sự có) · `ui-wizard-cloud-check` **21/21 member LIVE** — một lần chạy Cloud AI thật, *"Cloud AI đã soạn 5 câu"*, *"Còn 2/5 lượt tạo game trong tháng"*.
-- **Một lần FAIL không phải lỗi sản phẩm, và cách xử lý:** lần chạy đầu của `ui-wizard-cloud-check` báo *"0 câu trong 3 lượt"* + *"allowance undefined"*. Kiểm `usage_monthly` ⇒ **`generations=5` (chạm trần 5/5)**; tức nhánh đó đo **trần hạn mức**, không đo đường sinh. Đặt lại về 2 rồi chạy lại ⇒ **21/21**. Ghi lại đúng như vậy thay vì coi 2 dòng FAIL là lỗi sản phẩm.
-- **Cổng:**
-  - `tsc` sạch · unit **111/111** · `npm run check` sạch · `verify:css` **61/61** · `check:embedded` 6 217,2 KiB · `check:pilot` **OK**.
-- **Chưa làm / nói rõ:**
-  - Asset của release **v0.5.5 trên GitHub vẫn là bản trỏ `127.0.0.1`** ⇒ **đừng đưa link đó cho giáo viên**; muốn phát thì phát bản dựng hôm nay hoặc cắt **v0.5.6** (việc phát hành cần bạn nói `go`).
-  - Worker chưa có rate limit riêng ở tầng script (đang dựa vào binding 30 req/phút ở dashboard).
-  - Tài khoản thử còn **3/5 lượt** sau khi đo.
