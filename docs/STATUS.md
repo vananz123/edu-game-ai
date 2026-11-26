@@ -29,26 +29,44 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
   `<span aria-current="page">`, không phải liên kết (một link tới chính mình là bẫy focus).
 - **Sidebar sáng mục CHA khi đang ở trang con** (`pageTrailRoot`) — trước đây vào trình soạn thảo
   thì cả sidebar tối om, không mục nào sáng.
-- **Bớt một câu lặp:** nhãn nút quay lại đổi từ "← Thư viện" thành "← Quay lại", đích đến nói ở
-  `title`/`aria-label` ("Về Thư viện trò chơi"). Trước đó 40 px đầu trang đọc "Thư viện trò chơi"
-  **ba lần** (breadcrumb + nút + ngầm hiểu) và "Chỉnh sửa trò chơi" hai lần; người soát ảnh chê
-  đúng chỗ đó.
+- **Vòng 2 (sau khi chủ dự án chê "phần chỗ breadcrumb quá rối"):** đường dẫn **dời vào trong
+  header trình soạn thảo**, nằm sát trên `<h1>` và **chỉ còn mắt cha**: `← Thư viện trò chơi ›`
+  rồi `<h1>` hoàn tất câu. Ba kết quả đo được: (a) **bỏ hẳn nút "← Quay lại" thứ hai** — chính mắt
+  cha là nút rời trang (`data-editor-back`), nên chỉ còn **một** nút rời trang; (b) số dòng xếp
+  chồng trước nội dung **3 → 2** (header + thanh Lưu); (c) "Thư viện trò chơi" từ **3 lần** xuống
+  **1 lần** trong 70 px đầu trang, "Chỉnh sửa trò chơi" từ **2 lần** xuống **1**.
+- **Mắt cha trong header KHÔNG mang `data-page`** (mà `data-page-trail-parent` + `data-editor-back`):
+  `[data-page]` là điều hướng thẳng của controller và sẽ bỏ qua câu hỏi "Rời trình chỉnh sửa? Thay
+  đổi chưa lưu sẽ mất." mà `wireEditorPage` gắn cho `[data-editor-back]`. Một đường tắt về thư viện
+  làm mất bài của giáo viên là đúng thứ phải tránh.
 - **Đo:** `tests/unit/page-trail.test.ts` (6 nhóm, chạy trên `dist/.../page-trail.js`): 7 trang cấp 1
   không có breadcrumb + tự sáng mục của mình; `editor` mang cha thật; cha rác (`'editor'`, trang
   không tồn tại) lùi về mặc định; markup có `data-page` và `aria-current`, **không** có `data-page="editor"`;
   `childTitle` cho trình soạn thảo mới.
-- **Đo trên app thật:** `tests/ui/ui-page-trail-check.js` **27/27** — bấm thật vào sidebar 7 lần
+- **Đo trên app thật:** `tests/ui/ui-page-trail-check.js` **30/30** — bấm thật vào sidebar 7 lần
   (không breadcrumb ở trang cấp 1, đúng 1 mục `.active`), bấm thật menu "•••" → "Chỉnh sửa" ⇒
-  breadcrumb `Thư viện trò chơi › Chỉnh sửa trò chơi`, mắt cha là `button[data-page="library"]`,
-  `aria-current="page"`, breadcrumb ở y 20 **trên** đầu trang (43), sidebar vẫn `["library"]`, nút
-  "Quay lại" + `title="Về Thư viện trò chơi"`; bấm mắt cha ⇒ về thư viện và breadcrumb biến mất; bấm
-  nút quay lại trong trình soạn thảo cũng về đúng cha.
+  đường dẫn đọc `← Thư viện trò chơi ›` **không chứa** chuỗi "Chỉnh sửa trò chơi", nằm **trong**
+  header (y 30, `<h1>` ở y 46), **cỡ chữ 12px / line-height 14,4px**, **2 dòng** trước nội dung,
+  **một** nút rời trang và nó là mắt cha (`data-page-trail-parent="library"`, `data-page` rỗng,
+  `title="Về Thư viện trò chơi"`), sidebar vẫn `["library"]`; bấm mắt cha ⇒ về thư viện và đường
+  dẫn biến mất; làm lại rồi bấm `[data-editor-back]` cũng về đúng cha.
+- **Đo tương phản (lỗi có sẵn bị phép đo này lộ ra):** ở dark mode tiêu đề trình soạn thảo đang là
+  `#1e293b` cứng trên nền `rgb(15,18,32)` ⇒ **1,27:1**, gần như vô hình. Đã đổi sang
+  `color: var(--text, #1e293b)` trong `components.css` ⇒ **15,05:1** (sáng) / **15,5:1** (tối). Chữ
+  phụ của đường dẫn: mắt cha **4,76 / 6,08**, dấu `›` **5,05 / 7,76** — đạt AA 4,5 cho chữ 12px.
+  Gate có 2 phép đo mới, ngưỡng đặt **theo cỡ chữ** (tiêu đề ≥ 7, chữ phụ ≥ 4,5): đòi 7 cho chữ phụ
+  sẽ phải kéo nó về gần đen, tức là quay lại đúng cái rối vừa bỏ.
 - **Kết quả đo:** `tsc` sạch · unit **118/118** · `npm run check` sạch · `verify:css` **61/61** ·
   `check:renderer-globals` **80/82 scripts, 1199 functions, 9679 call sites, 0 undefined** ·
   `build:tauri` + `check:embedded` **6 217,2 KiB** · `cargo tauri build` OK · `ui-page-head-check`
-  **6/6** và `ui-sidebar-toggle-check` **17/17** vẫn xanh trên bản dựng mới.
-- **Ảnh:** `tests/ui/shots/page-trail-369-editor.png` (+ `-dark.png`) ở 1366×768; breadcrumb căn đúng
-  cột nội dung (x 256), cao 17 px, 12 px, không tràn ngang (`spill: 0`).
+  **6/6** và `ui-sidebar-toggle-check` **17/17** vẫn xanh trên bản dựng mới; `ui-page-trail-check`
+  cuối cùng **32/32** và `ui-account-check` **23/23**. (Một lần chạy `ui-account-check` báo 2 lỗi
+  ngay sau khi gate đường dẫn vừa đóng trình soạn thảo; hai lần chạy lại sạch 23/23 và không tái
+  hiện được — ghi là **chưa giải thích được**, không phải đã sửa.)
+- **Ảnh:** `tests/ui/shots/page-trail-369-editor.png`, `page-trail-369-top.png` (cắt 210 px đầu, phóng
+  2×) và `page-trail-369-top-dark.png` ở 1366×768. Đường dẫn căn đúng cột nội dung (x 256), cao
+  **14 px** sau khi bỏ mắt cuối, không tràn ngang (`hScroll: 0`), và ở **1024 px** vẫn **1 dòng**
+  (không xuống hàng, không tràn).
 - **Chưa đo:** đường `Dự án của tôi → trình soạn thảo` chỉ được chứng minh bằng unit test trên hàm
   thuần, **chưa bấm được trong UI** (trang dự án mở wizard chứ không mở thẳng trình soạn thảo);
   breadcrumb chưa thử với tiêu đề trang rất dài; chưa ai bấm thử bằng tay.

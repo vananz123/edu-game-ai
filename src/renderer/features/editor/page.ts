@@ -214,11 +214,14 @@ function editorParentLabel() {
 function editorPageHtml(game, isNew, note) {
   return `<section class="editor-page" data-editor-page="1">
     <header class="editor-page-head">
-      <!-- #369: nhãn là "Quay lại", không phải tên trang cha. Tên đó đã có ở breadcrumb ngay
-           trên (và nếu lặp lại thì "Thư viện trò chơi" xuất hiện ba lần trong 40 px đầu trang).
-           Đích đến vẫn được NÓI RA, chỉ là ở title/aria-label thay vì trên mặt nút. -->
-      <button class="btn btn-secondary btn-small" data-editor-back title="Về ${escapeHtml(editorParentLabel())}" aria-label="Về ${escapeHtml(editorParentLabel())}">${uiIcon('arrow-left', '', 13)} Quay lại</button>
-      <div class="editor-page-title"><h1>${isNew ? 'Duyệt và hoàn thiện trò chơi' : 'Chỉnh sửa trò chơi'}</h1>
+      <div class="editor-page-title">
+        <!-- #369: đường dẫn về trang cha nằm NGAY TRÊN tiêu đề, trong cùng cột — không phải một
+             dòng riêng phía trên và không phải một nút "Quay lại" thứ hai. Mắt cuối của đường
+             dẫn chính là <h1> bên dưới, nên tên trang đang mở chỉ xuất hiện một lần.
+             Nút này mang data-editor-back (không phải data-page) để câu hỏi "thay đổi chưa lưu"
+             vẫn được hỏi trước khi rời trang. -->
+        ${typeof pageTrailHeadHtml === 'function' ? pageTrailHeadHtml('editor', state.pageParent) : ''}
+        <h1>${isNew ? 'Duyệt và hoàn thiện trò chơi' : 'Chỉnh sửa trò chơi'}</h1>
         <div class="small muted">${escapeHtml(note)}</div></div>
     </header>
     <div class="editor-save-bar" data-editor-save-bar data-dirty="0">

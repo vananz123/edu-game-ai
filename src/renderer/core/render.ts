@@ -37,11 +37,10 @@ function render() {
     pageContainer.innerHTML = html;
     // #369: breadcrumb đứng trên đầu trang. Một chỗ duy nhất (đây) thay vì sửa 8 tệp page —
     // `pageTrailHtml` trả '' cho trang cấp 1 nên không có `<nav>` rỗng.
-    if (typeof pageTrailHtml === 'function') {
-      const childTitle = state.page === 'editor' && typeof editorPageState !== 'undefined' && editorPageState && editorPageState.isNew
-        ? 'Duyệt và hoàn thiện trò chơi'
-        : '';
-      const trail = pageTrailHtml(state.page, state.pageParent, { childTitle });
+    // Trình soạn thảo tự vẽ đường dẫn NGAY TRONG header (cạnh `<h1>`), nên ở đây bỏ qua nó:
+    // chèn thêm một dòng phía trên nữa là ba dòng chữ trước nội dung — chỗ bị chê là rối.
+    if (typeof pageTrailHtml === 'function' && state.page !== 'editor') {
+      const trail = pageTrailHtml(state.page, state.pageParent);
       if (trail) pageContainer.insertAdjacentHTML('afterbegin', trail);
     }
     if (window.__lastRenderedPage !== renderedPage) {

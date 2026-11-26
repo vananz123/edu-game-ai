@@ -62,6 +62,32 @@ function pageTrailCrumbs(page, parent, options = {}) {
   ];
 }
 
+/**
+ * Mắt cha "gọn" cho header của trình soạn thảo: chỉ đường về, không có mắt cuối.
+ *
+ * Vì sao không dùng `pageTrailHtml` ở đây: header đã có `<h1>` là tên trang đang mở, nên một
+ * mắt cuối cùng tên nằm sát trên `<h1>` là hai lần cùng một câu trong 20 px (đúng lỗi #364 đã
+ * sửa một lần). Đường dẫn trong header đọc là "← Thư viện trò chơi ›" rồi `<h1>` hoàn tất câu.
+ *
+ * `hook` được truyền vào vì mắt cha ở đây KHÔNG được là `data-page`: rời trình soạn thảo phải
+ * đi qua câu hỏi "Thay đổi chưa lưu sẽ mất" do `wireEditorPage` gắn cho `[data-editor-back]`,
+ * còn `[data-page]` là điều hướng thẳng của controller — dùng nó là bỏ qua câu hỏi đó.
+ */
+function pageTrailParentLinkHtml(page, parent, options = {}) {
+  const parentPage = pageTrailParent(page, parent);
+  if (!parentPage) return '';
+  const hook = options.hook ? ' ' + String(options.hook) : '';
+  const arrow = options.arrow ? '<span class="page-trail-arrow" aria-hidden="true">←</span> ' : '';
+  return `<button type="button" class="page-trail-link"${hook} data-page-trail-parent="${escapeHtml(parentPage)}" title="Về ${escapeHtml(pageTrailTitle(parentPage))}">${arrow}${escapeHtml(pageTrailTitle(parentPage))}</button>`;
+}
+
+/** Markup cho header trình soạn thảo: mắt cha + dấu "›" (mắt cuối là chính `<h1>`). */
+function pageTrailHeadHtml(page, parent) {
+  const link = pageTrailParentLinkHtml(page, parent, { arrow: true, hook: 'data-editor-back' });
+  if (!link) return '';
+  return `<nav class="page-trail is-head" aria-label="Đường dẫn trang">${link}<span class="page-trail-sep" aria-hidden="true">›</span></nav>`;
+}
+
 /** Markup đường dẫn. Rỗng khi trang là cấp 1 — không có `<nav>` rỗng trên màn hình. */
 function pageTrailHtml(page, parent, options = {}) {
   const crumbs = pageTrailCrumbs(page, parent, options);

@@ -25,15 +25,67 @@ const TRAIL = String.raw`(() => {
     page: (typeof state !== 'undefined' && state.page) || '',
     hasTrail: !!trail,
     text: trail ? trail.innerText.replace(/\s+/g, ' ').trim() : '',
-    parentLink: trail ? !!trail.querySelector('button[data-page]') : false,
-    parentPage: trail && trail.querySelector('button[data-page]') ? trail.querySelector('button[data-page]').dataset.page : '',
+    // Mắt cha có hai dạng: [data-page] (điều hướng thẳng, dùng cho trang con nói chung) và
+    // [data-page-trail-parent] (bản trong header trình soạn thảo, phải đi qua câu hỏi chưa-lưu).
+    // Không dùng dấu huyền trong khối này: chuỗi String.raw ở trên sẽ bị đóng giữa chừng.
+    parentLink: trail ? !!trail.querySelector('button[data-page], button[data-page-trail-parent]') : false,
+    parentPage: trail && trail.querySelector('button[data-page], button[data-page-trail-parent]')
+      ? (trail.querySelector('button[data-page], button[data-page-trail-parent]').dataset.page
+        || trail.querySelector('button[data-page], button[data-page-trail-parent]').dataset.pageTrailParent)
+      : '',
     currentAria: trail && trail.querySelector('[aria-current="page"]') ? trail.querySelector('[aria-current="page"]').getAttribute('aria-current') : '',
     trailTop: trail ? Math.round(trail.getBoundingClientRect().top) : -1,
     headTop: head ? Math.round(head.getBoundingClientRect().top) : -1,
+    trailInHead: trail ? !!trail.closest('.editor-page-head') : false,
+    trailFontSize: trail ? getComputedStyle(trail).fontSize : '',
+    trailLineHeight: trail ? getComputedStyle(trail).lineHeight : '',
+    h1Top: document.querySelector('.editor-page-head h1') ? Math.round(document.querySelector('.editor-page-head h1').getBoundingClientRect().top) : -1,
+    backHook: (() => {
+      const el = document.querySelector('[data-editor-back]');
+      return el ? { tag: el.tagName, inTrail: !!el.closest('.page-trail'), page: el.dataset.pageTrailParent || '', title: el.getAttribute('title') || '', dataPage: el.dataset.page || '' } : null;
+    })(),
+    // Số DÒNG xếp chồng trước nội dung đầu tiên: mỗi offset top khác nhau là một dòng.
+    rowsBeforeContent: (() => {
+      // Mốc "nội dung bắt đầu": phần tử đầu tiên của trang KHÔNG phải header/thanh Lưu
+      // (trình soạn thảo dùng ".editor-page-body, các trang khác dùng .panel).
+      const skip = new Set(['editor-page-head', 'editor-save-bar', 'page-trail']);
+      let content = null;
+      const root = document.querySelector('#pageContent > *');
+      if (root) {
+        for (const child of root.children) {
+          if ([...skip].some((cls) => child.classList.contains(cls))) continue;
+          content = child;
+          break;
+        }
+      }
+      if (!content) content = document.querySelector('#pageContent .panel');
+      if (!content) return -1;
+      const limit = content.getBoundingClientRect().top;
+      const rows = new Set();
+      document.querySelectorAll('#pageContent .page-trail, #pageContent .editor-page-head, #pageContent .editor-save-bar').forEach((el) => {
+        // Đường dẫn NẰM TRONG header là một dòng của header, không phải một dòng xếp chồng
+        // riêng — đếm nó là đếm hai lần cùng một dải.
+        if (el.classList.contains('page-trail') && el.closest('.editor-page-head')) return;
+        const r = el.getBoundingClientRect();
+        if (r.height > 0 && r.top < limit) rows.add(Math.round(r.top));
+      });
+      return rows.size;
+    })(),
     activeNav: nav,
     backLabel: back ? back.innerText.trim() : '',
     backTitle: back ? back.getAttribute('title') : '',
   };
+})()`;
+
+// Tương phản (WCAG) của chữ trên nền thật — đo, không đoán. Ngưỡng 7:1 vì đây là chữ phải
+// đọc để biết mình đang ở đâu, và vì bản sửa #369 làm màu tiêu đề đi qua token.
+const CONTRAST = String.raw`(() => {
+  const parse = (s) => s.match(/[\d.]+/g).map(Number);
+  const lum = (c) => { const [r, g, b] = c.slice(0, 3).map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  const ratio = (a, b) => { const la = lum(parse(a)); const lb = lum(parse(b)); const hi = Math.max(la, lb); const lo = Math.min(la, lb); return Math.round(((hi + 0.05) / (lo + 0.05)) * 100) / 100; };
+  const bgOf = (el) => { let n = el; while (n) { const bg = getComputedStyle(n).backgroundColor; if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') return bg; n = n.parentElement; } return 'rgb(255, 255, 255)'; };
+  const at = (sel) => { const el = document.querySelector(sel); if (!el) return null; const cs = getComputedStyle(el); return ratio(cs.color, bgOf(el)); };
+  return { h1: at('.editor-page-head h1'), link: at('.page-trail.is-head .page-trail-link'), sep: at('.page-trail.is-head .page-trail-sep') };
 })()`;
 
 (async () => {
@@ -67,18 +119,40 @@ const TRAIL = String.raw`(() => {
   const inEditor = await c.evaluate(TRAIL);
   check('đang ở trang trình soạn thảo', inEditor.page === 'editor', inEditor.page);
   check('có đường dẫn', inEditor.hasTrail === true, inEditor.text);
-  check('đường dẫn đúng: "Thư viện trò chơi › Chỉnh sửa trò chơi"', inEditor.text === 'Thư viện trò chơi › Chỉnh sửa trò chơi', inEditor.text);
-  check('mắt cha là liên kết data-page="library"', inEditor.parentLink === true && inEditor.parentPage === 'library', inEditor.parentPage);
-  check('mắt cuối khai báo aria-current=page', inEditor.currentAria === 'page', inEditor.currentAria);
-  check('đường dẫn nằm TRÊN đầu trang', inEditor.trailTop >= 0 && inEditor.trailTop < inEditor.headTop, inEditor.trailTop + ' < ' + inEditor.headTop);
+  // Đường dẫn trong header chỉ nói ĐƯỜNG VỀ; mắt cuối là <h1> ngay dưới, nên tên trang đang
+  // mở không được xuất hiện hai lần trong 20 px.
+  check('đường dẫn đọc là "← Thư viện trò chơi ›", không lặp tên trang đang mở', inEditor.text === '← Thư viện trò chơi ›', inEditor.text);
+  check('không còn từ "Chỉnh sửa trò chơi" trong đường dẫn', inEditor.text.indexOf('Chỉnh sửa trò chơi') === -1, inEditor.text);
+  check('đường dẫn nằm TRONG header, ngay trên <h1>', inEditor.trailInHead === true && inEditor.trailTop < inEditor.h1Top, inEditor.trailTop + ' < ' + inEditor.h1Top);
+  check('cỡ chữ đường dẫn = 12px (không nhỏ hơn sàn 11px của #208)', inEditor.trailFontSize === '12px', inEditor.trailFontSize + ' / lh ' + inEditor.trailLineHeight);
+  // Chỉ còn HAI dòng trước nội dung (header + thanh Lưu); trước #369b là ba (thêm dòng
+  // breadcrumb riêng). Đây là con số đo được của việc "bớt rối", không phải cảm nhận.
+  check('chỉ còn 2 dòng xếp chồng trước nội dung (header + thanh Lưu)', inEditor.rowsBeforeContent === 2, String(inEditor.rowsBeforeContent));
+  check('chỉ còn MỘT nút rời trang, và nó chính là mắt cha', inEditor.backHook !== null && inEditor.backHook.inTrail === true, JSON.stringify(inEditor.backHook));
+  check('mắt cha trỏ về library qua data-page-trail-parent', inEditor.parentLink === true && inEditor.parentPage === 'library', inEditor.parentPage);
+  // Mắt cha KHÔNG được là `data-page`: `[data-page]` là điều hướng thẳng của controller và sẽ
+  // bỏ qua câu hỏi "thay đổi chưa lưu sẽ mất" mà wireEditorPage gắn cho [data-editor-back].
+  check('mắt cha không dùng data-page (để câu hỏi chưa-lưu vẫn được hỏi)', !inEditor.backHook.dataPage, inEditor.backHook.dataPage || '(không có)');
+  check('mắt cha NÓI RÕ nó về đâu', inEditor.backHook.title === 'Về Thư viện trò chơi', inEditor.backHook.title);
   check('sidebar vẫn sáng mục CHA (library), không mục nào khác', inEditor.activeNav.length === 1 && inEditor.activeNav[0] === 'library', JSON.stringify(inEditor.activeNav));
-  // Nhãn trên mặt nút là "Quay lại" (tên trang cha đã có ở breadcrumb); đÍCH ĐẾN phải được
-  // nói ra ở `title`, nếu không một nút "Quay lại" là một câu mơ hồ.
-  check('nút quay lại ngắn gọn, không lặp tên trang cha', inEditor.backLabel === 'Quay lại', inEditor.backLabel);
-  check('nút quay lại NÓI RÕ nó về đâu', inEditor.backTitle === 'Về Thư viện trò chơi', inEditor.backTitle);
+
+  // 2b. Tương phản chữ ở CẢ HAI theme (dark mode từng làm tiêu đề gần như vô hình: 1,27:1).
+  const lightContrast = await c.evaluate(CONTRAST);
+  // Ngưỡng theo CỠ CHỮ, không theo một con số chung: tiêu đề 18px/800 phải đạt 7:1; mắt cha và
+  // dấu › là chữ phụ 12px, chuẩn AA là 4,5:1 — đòi 7:1 ở đây sẽ phải kéo chúng về gần đen và
+  // làm chúng tranh chỗ với tiêu đề, tức là quay lại đúng cái rối vừa bỏ.
+  check('tương phản SÁNG: tiêu đề ≥ 7, chữ phụ ≥ 4,5',
+    lightContrast.h1 >= 7 && lightContrast.link >= 4.5 && lightContrast.sep >= 4.5, JSON.stringify(lightContrast));
+  await c.evaluate(`document.documentElement.setAttribute('data-theme','dark'); 1`);
+  await c.settle(600);
+  const darkContrast = await c.evaluate(CONTRAST);
+  check('tương phản TỐI: tiêu đề ≥ 7, chữ phụ ≥ 4,5 — không còn màu hard-code',
+    darkContrast.h1 >= 7 && darkContrast.link >= 4.5 && darkContrast.sep >= 4.5, JSON.stringify(darkContrast));
+  await c.evaluate(`document.documentElement.setAttribute('data-theme','light'); 1`);
+  await c.settle(500);
 
   // 3. Bấm mắt cha ⇒ về thư viện, đường dẫn biến mất.
-  await c.evaluate(`document.querySelector('.page-trail button[data-page]').click(); 1`);
+  await c.evaluate(`document.querySelector('.page-trail [data-page-trail-parent]').click(); 1`);
   await c.settle(900);
   const back = await c.evaluate(TRAIL);
   check('bấm mắt cha quay về thư viện', back.page === 'library' && back.hasTrail === false, back.page + ' trail=' + back.hasTrail);

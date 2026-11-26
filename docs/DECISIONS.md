@@ -5900,10 +5900,25 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
   (sau lệnh đó thì không còn biết đường về) và `navigate()` xoá `state.pageParent` khi rời một
   trang cấp 1. Bảng chỉ giữ **mặc định** cho trường hợp không biết đã mở từ đâu.
 - **Một cái ẩn/xoá được thì phải có đường về, và nhãn phải nói đích thật.** `closeEditorPage()` và
-  nút quay lại đi về **đúng trang cha**, không phải luôn về thư viện — trước đây mở từ dự án rồi
-  bấm quay lại là bị đưa sang một trang khác với nơi xuất phát. Nhưng nhãn trên mặt nút là "Quay
-  lại", không phải tên trang cha: cái tên đó đã nằm ở breadcrumb ngay trên, và lặp lại thì 40 px
-  đầu trang đọc "Thư viện trò chơi" ba lần. Đích đến được nói ở `title`/`aria-label`.
+  mắt cha đi về **đúng trang cha**, không phải luôn về thư viện — trước đây mở từ dự án rồi bấm
+  quay lại là bị đưa sang một trang khác với nơi xuất phát. Đích đến được nói ở `title`
+  ("Về Thư viện trò chơi").
+- **Đường dẫn là MỘT dòng phụ trong header, không phải một dải riêng phía trên.** Ba dòng chữ xếp
+  chồng trước nội dung (đường dẫn / header / thanh Lưu) là chỗ bị chê là rối; đưa đường dẫn vào
+  cùng cột với `<h1>` đưa về **hai**. Và mắt cuối của đường dẫn **chính là `<h1>`**: viết lại tên
+  trang đang mở bằng chữ nhỏ sát trên tên lớn của nó là cùng một câu hai lần (lỗi #364 đã sửa một
+  lần), nên `pageTrailHeadHtml` chỉ vẽ mắt cha + dấu `›`.
+- **Một trang chỉ có MỘT nút rời trang.** Khi đường dẫn đã nằm trong header thì nút "← Quay lại"
+  riêng là nút thứ hai làm đúng một việc; nó bị bỏ, và mắt cha mang `data-editor-back` để câu hỏi
+  "thay đổi chưa lưu sẽ mất" vẫn được hỏi. Vì vậy mắt cha trong header dùng
+  `data-page-trail-parent`, **không** dùng `data-page` (điều hướng thẳng của controller sẽ bỏ qua
+  câu hỏi đó — một đường tắt làm mất bài của giáo viên).
+- **Ngưỡng tương phản đặt THEO CỠ CHỮ, không một con số chung.** Tiêu đề 18px/800 ≥ 7:1; chữ phụ
+  12px ≥ 4,5:1 (chuẩn AA). Đòi 7:1 cho chữ phụ sẽ phải kéo nó về gần đen — nó tranh chỗ với tiêu
+  đề và quay lại đúng cái rối vừa bỏ. Phép đo này cũng lộ ra một lỗi có sẵn: `.editor-page-title h1`
+  hard-code `#1e293b`, ở dark mode còn **1,27:1**; màu đi qua token thành 15,5:1.
+- **Cỡ chữ đường dẫn = 12px, line-height 14,4px.** Nhỏ hơn nữa thì vi phạm sàn 11px của #208 và
+  khó đọc; to hơn thì tranh chỗ với `<h1>` 18px. Ở 1024 px đường dẫn vẫn một dòng.
 - **Ở trang con, mục sidebar của CHA phải sáng.** Trang con không có mục riêng, nên nếu chỉ so
   `state.page` thì cả sidebar tối om khi đang soạn thảo — người dùng mất chỗ đứng. Sáng mục cha
   cũng là điều breadcrumb đang nói, bằng một cách khác.

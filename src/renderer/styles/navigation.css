@@ -352,4 +352,9 @@ html[data-sidebar="hidden"] .app-shell > .sidebar { display: none; }
 .page-trail-link:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; }
 .page-trail-sep { color: var(--muted); opacity: .7; }
 .page-trail-current { color: var(--text); font-weight: 600; }
-.editor-active .page-trail { margin: 0 0 6px; }
+/* Phiên bản nằm TRONG header trình soạn thảo: cùng cột với tiêu đề, sát trên `<h1>`.
+   `line-height: 1` + margin 2px để nó là một dòng phụ, không phải một khối riêng. */
+.page-trail.is-head { margin: 0; gap: 5px; line-height: 1.2; }
+.page-trail.is-head + h1 { margin-top: 2px; }
+.page-trail.is-head .page-trail-link { font-weight: 600; }
+.page-trail-arrow { font-size: 13px; line-height: 1; }

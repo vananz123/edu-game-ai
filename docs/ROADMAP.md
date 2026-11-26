@@ -768,7 +768,10 @@ Chủ dự án yêu cầu: *"xóa release cũ ở máy, tạo release mới và 
 
 - [x] **#369 — đường dẫn trang cha → trang con** ("Thư viện trò chơi › Chỉnh sửa trò chơi"):
   bảng `PAGE_TRAIL_TITLES`/`PAGE_TRAIL_PARENTS` một chỗ, trang cha = **nơi đã mở** trang con (nên
-  mở từ "Dự án của tôi" thì đường dẫn đổi theo), sidebar sáng mục cha, nút quay lại về đúng cha và
-  đổi nhãn thành "Quay lại" để không lặp tên ba lần. Sáu trang cấp 1 không có breadcrumb.
-  6 nhóm unit + `ui-page-trail-check` **27/27**. Còn thiếu: đường "Dự án của tôi → trình soạn thảo"
+  mở từ "Dự án của tôi" thì đường dẫn đổi theo), sidebar sáng mục cha. Sáu trang cấp 1 không có
+  breadcrumb. Sau khi bị chê "quá rối", đường dẫn dời **vào trong header** trình soạn thảo và chỉ
+  còn mắt cha (`← Thư viện trò chơi ›` + `<h1>` hoàn tất câu), nhờ
+  vậy **3 → 2 dòng** trước nội dung và bỏ được nút quay lại thứ hai. 6 nhóm unit +
+  `ui-page-trail-check` **32/32** (32 vì thêm 2 phép đo tương phản — chúng lộ ra một lỗi có sẵn:
+  tiêu đề editor ở dark mode là **1,27:1**, đã sửa thành 15,5:1). Còn thiếu: đường "Dự án của tôi → trình soạn thảo"
   chưa bấm được trong UI (trang dự án mở wizard).
