@@ -20,9 +20,12 @@ SmartScreen, shortcut, và hành vi sau khi gỡ.
 > Bản **v0.5.5 + Cloud AI thật** (dựng 26/11, trỏ `https://ai-gateway.dovanan-bth2017.workers.dev`):
 > `16 369 669 B` · SHA-256 `82f4c652cb47023abb46386b2ca3998b8e0d7a5b9d9961c0ee921a6a905c4e76`
 >
-> Bản **#362** (26/11, hạn mức free **10 lượt / kỳ 2 tuần**, chip tài khoản cố định ở sidebar,
-> panel Tài khoản mới): `16 381 012 B` · SHA-256 `870e1f5a71903da04aafef5b…`
-> — bản mới nhất đã đo trên máy này; **vẫn chưa phát hành trên GitHub**.
+> **Bản PHÁT HÀNH mới nhất — v0.5.6** (26/11): `16 379 656 B` · SHA-256
+> `9c922f3d706ca021236046e5cfeef9969d0ea8f6db34f5e9c402a97caf863b6b`
+> — hạn mức free **10 lượt / kỳ 2 tuần**, chip tài khoản cố định ở sidebar, panel Tài khoản mới,
+> gateway **thật** `https://ai-gateway.dovanan-bth2017.workers.dev` nhúng trong exe.
+> Tải: `https://github.com/vananz123/edu-game-ai/releases/download/v0.5.6/EduGame.Studio.Tauri.0.5.6.x64-setup.exe`
+> (asset trên GitHub đã được đối chiếu `digest` với tệp dựng tại máy này).
 > Kiểm bằng `npm run check:pilot` (đòi https + gateway tự khai đúng tên/bản + URL có trong byte của `.exe`).
 > Nếu mã khác ⇒ tệp hỏng hoặc không phải bản đã kiểm — **dừng lại**, đừng cài.
 
@@ -107,7 +110,7 @@ chép lại đúng kết quả đo để người đọc checklist biết phần
 | --- | --- | --- |
 | 2.1 Cài im lặng | `setup.exe /S /D=D:\Temp\eg-install-check` (`installMode: currentUser`, không UAC) | mã thoát **0** |
 | 2.2 Kích thước sau cài | đếm thư mục cài | **58 MB**, có `edugame-studio-tauri.exe` + `uninstall.exe` |
-| 2.3 Đăng ký gỡ cài | `HKCU\...\Uninstall\*` | `EduGame Studio (Tauri)` · `DisplayVersion 0.5.5` · `InstallLocation` đúng thư mục |
+| 2.3 Đăng ký gỡ cài | `HKCU\...\Uninstall\*` | `EduGame Studio (Tauri)` · `DisplayVersion 0.5.6` · `InstallLocation` đúng thư mục |
 | 2.4 Shortcut | `%APPDATA%\Microsoft\Windows\Start Menu\Programs` | có **một** tệp `.lnk` tên “EduGame Studio (Tauri)” |
 | 3.1 Màn thiết lập | chạy bản **đã cài** với dữ liệu rỗng | **có** (`data-setup-fullscreen="1"`) |
 | 3.2 Số trò mẫu | cùng lần chạy đó | **1** (`sample-traffic-001`) — đúng thiết kế, không phải thiếu |

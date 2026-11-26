@@ -103,7 +103,7 @@ function env(overrides: Record<string, string> = {}) {
     SUPABASE_ANON_KEY: 'anon',
     SUPABASE_SERVICE_ROLE_KEY: 'service',
     GEMINI_API_KEY: 'gemini',
-    GATEWAY_VERSION: '0.5.5',
+    GATEWAY_VERSION: '0.5.6',
     ...overrides,
   } as never;
 }
@@ -148,7 +148,7 @@ async function main(): Promise<void> {
   assert.equal(health.status, 200);
   assert.equal(healthBody.ok, true);
   assert.equal(healthBody.service, 'edugame-ai-gateway');
-  assert.equal(healthBody.version, '0.5.5');
+  assert.equal(healthBody.version, '0.5.6');
 
   // 2. Không token ⇒ 401, cả hai cửa.
   assert.equal((await handle(get('/v1/usage', ''), env(), { auth })).status, 401);

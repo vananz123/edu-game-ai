@@ -211,7 +211,7 @@ function quotaStore(admin: SupabaseClient): QuotaStore {
   };
 }
 
-app.get('/health', (_req, res) => res.json({ ok: true, service: 'edugame-ai-gateway', version: '0.5.5' }));
+app.get('/health', (_req, res) => res.json({ ok: true, service: 'edugame-ai-gateway', version: '0.5.6' }));
 
 /**
  * `GET /v1/usage` (#354) — "tháng này tôi còn bao nhiêu", KHÔNG trừ gì.

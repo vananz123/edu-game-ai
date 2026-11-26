@@ -5786,3 +5786,12 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
   `ui-wizard-cloud-check` trước đây dừng ngay ở lỗi `gemini_400` (một cơn bão của Gemini) và in cứng
   "3 lượt" — tức nó có thể báo "wizard hỏng" vì một lỗi không liên quan tới wizard. Nay nó chỉ dừng khi
   **ứng dụng** từ chối tại chỗ, và trả về số lần thử thật.
+- **#363 — phát hành là một phép ĐO, và phép đo cuối cùng là `digest` của asset công khai.** Release
+  v0.5.6 chỉ được coi là xong sau khi: cài `/S` ⇒ registry `DisplayVersion 0.5.6`; chạy với env bóc sạch
+  ⇒ `app:info.version = 0.5.6` **và** `account:quota` đọc được kỳ `2026-11-19`, trần **10**; rồi so
+  `digest` GitHub trả về (`sha256:9c922f3d…`) với tệp trên máy. Ba bằng chứng khác nhau cho ba câu khác
+  nhau: bản cài đúng là bản mình dựng, bản đó chạy được, và người khác tải đúng cùng một tệp.
+- **#363 — thứ tự deploy: gateway TRƯỚC, bộ cài SAU.** `check:pilot` so phiên bản trong `package.json`
+  với phiên bản gateway tự khai; dựng bộ cài trước rồi mới deploy worker sẽ làm cổng nói sai một cách
+  vô nghĩa. Và một phiên bản là **sáu** chỗ: bốn nguồn trong repo, `/health` của Express, `DEFAULT_VERSION`
+  của worker — bỏ sót một chỗ là tự tạo ra một cổng đỏ cho chính mình.

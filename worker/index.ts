@@ -38,7 +38,7 @@ import { requestGameJson } from '../server/gemini.js';
 import { quotaStore, usageLogDb, verifyUser, type WorkerEnv } from './supabase.js';
 
 const SERVICE = 'edugame-ai-gateway';
-const DEFAULT_VERSION = '0.5.5';
+const DEFAULT_VERSION = '0.5.6';
 const DEFAULT_MODEL = 'gemini-3.5-flash-lite';
 
 const requestSchema = z.object({
