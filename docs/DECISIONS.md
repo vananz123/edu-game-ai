@@ -5818,6 +5818,12 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
 - **#364 — giá chỉ được in MỘT lần trong một thẻ.** Ảnh chụp đầu tiên cho thấy "99.000đ / 14 ngày" ở
   góc cộng "99.000đ cho mỗi kỳ 14 ngày" ở tiêu đề: hai câu nói cùng một chuyện, và người đọc phải dừng
   lại để tự hỏi có phải hai mức giá. Unit test `account-billing` giờ đếm số lần xuất hiện của giá.
+- **#368 — `cargo build --release` KHÔNG cho ra app dùng được; chỉ `cargo tauri build` mới nhúng
+  giao diện.** Bản `cargo build` giữ `devUrl` = `http://localhost:5173/`, nên nó chỉ sống khi có
+  một server tĩnh phục vụ `dist-tauri`; tắt server là ra *"can't reach this page"* — và đó đúng là
+  thứ đã xảy ra với chủ dự án. Cổng đo dùng được cả hai (vì nó phục vụ `dist-tauri`), nên **một
+  cái cổng xanh không chứng minh bản đó phát được**: phép đo cuối phải là mở exe **không có server
+  nào** và đọc `location.href` (`http://tauri.localhost/`).
 - **#368 — trạng thái ẩn/hiện nằm trên `<html>`, không nằm trên `<aside>`.** `data-sidebar` là
   một Ý ĐỊNH mà CSS đọc; một class trên chính `<aside>` thì mỗi lần `render()` dựng lại chrome là
   mỗi lần có nguy cơ mất. Và ẩn bằng `display:none`, không `width:0` — `width:0` để lại padding

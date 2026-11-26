@@ -43,6 +43,15 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
   `server/billing-provider.ts`, một nhánh trong `worker/billing.ts` (IPN POST JSON, HMAC-SHA256
   trên chuỗi có thứ tự cố định `accessKey…amount…extraData…ipnUrl…orderId…orderInfo…partnerCode…redirectUrl…requestId…requestType`),
   và `EDUGAME_BILLING_PROVIDER=momo`.
+- **Một cái bẫy đã cắn thật (ghi lại vì nó làm chủ dự án không mở được app):** `cargo build --release`
+  tạo ra một exe trỏ `http://localhost:5173/` — bản đó chỉ chạy khi có `python -m http.server` phục
+  vụ `dist-tauri`. Mở nó sau khi tắt server thì chỉ thấy *"can't reach this page"*. Bản phát cho
+  người dùng phải là **`cargo tauri build`** (bật `custom-protocol`, nhúng `dist-tauri`); đo lại:
+  exe dựng bằng `cargo tauri build` mở `http://tauri.localhost/`, sidebar 232 px, 9 thẻ game,
+  `ui-sidebar-toggle-check` **17/17** và `ui-account-check` **23/23** trên chính bản đó.
+  Bộ cài mới: `EduGame Studio (Tauri)_0.5.6_x64-setup.exe` **16 397 005 B**,
+  sha256 `a49da34a…216533`; exe `50d34eea…f955fa9` (16 397 005 B là bộ cài; exe riêng trong
+  `target/release/`).
 - **Chưa đo:** chưa ai bấm nút ẩn bằng tay trên máy thật; chưa thử ở cửa sổ ≤700 px (lúc đó
   `.sidebar-status` bị ẩn nên chỉ còn Ctrl+B); tay nắm chưa được đo khi trang cuộn dài (nó `fixed`
   nên phải nổi trên nội dung — mới đo ở trang Thư viện).
