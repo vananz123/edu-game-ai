@@ -53,7 +53,11 @@ export const PERIOD_DAYS = 14;
  * người dùng hết lượt từ tuần thứ hai rồi chờ 3 tuần. Kỳ 14 ngày không đổi số lượt mỗi
  * lần bấm, chỉ đổi chỗ đếm.
  */
-export const PERIOD_LIMITS: Record<string, number> = { free: 10, plus: 100 };
+// Trần của kỳ, theo ĐÚNG đơn vị mà kỳ đó dùng: free đếm `generations` (10 lượt), plus đếm
+// `credits` (2 credits một lượt ⇒ 500 credits ≈ 250 lượt). Con số 500 ở đây phải khớp với giá
+// bán trong `server/billing.ts` và với `plan_pro_monthly_credits` trong DB — bán "500 credits"
+// rồi hiển thị "còn 100/100" là một lời nói dối về thứ khách đã trả tiền.
+export const PERIOD_LIMITS: Record<string, number> = { free: 10, plus: 500 };
 
 const DAY_MS = 86_400_000;
 

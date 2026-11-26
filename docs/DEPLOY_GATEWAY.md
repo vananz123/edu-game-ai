@@ -123,9 +123,16 @@ không xuất hiện, và đó là trạng thái đúng (một máy chủ chưa 
    `EDUGAME_PUBLIC_URL` = `https://ai-gateway.dovanan-bth2017.workers.dev`, và ba secret
    `PAYOS_CLIENT_ID`, `PAYOS_API_KEY`, `PAYOS_CHECKSUM_KEY` (lấy ở trang merchant PayOS).
    Đặt webhook URL bên PayOS = `https://<gateway>/v1/billing/webhook/payos`.
-3. **Deploy lại Worker** (bundle esbuild như §3) rồi kiểm tra bằng một token thật:
-   `GET /v1/billing/status` phải trả `configured:true`, `provider:"payos"`, `priceVnd:99000`;
-   không token phải là **401**.
+3. **Deploy lại Worker** bằng script trong repo (nó tự khai đúng bộ binding, kể cả biến thanh
+   toán đọc từ `.env`, và **không** bao giờ tự bật cờ fake):
+   ```bash
+   node --env-file=.env scripts/deploy-worker.js
+   node --env-file=.env scripts/check-billing.js              # chỉ đọc
+   node --env-file=.env scripts/check-billing.js --checkout    # tạo một đơn thật
+   ```
+   `check-billing` hỏi máy chủ ĐANG CHẠY, theo đúng thứ tự việc: migration đã chạy chưa → đã khai
+   nhà cung cấp chưa → giá/kỳ/credits đọc được chưa → (nếu `--checkout`) có trả về `checkoutUrl`.
+   Nó in ra tên việc còn thiếu, và thoát `1` khi chưa bán được — nên dùng được trong CI.
 4. **Một đơn thử**: bấm "Nâng cấp lên Pro" trong panel Tài khoản → trình duyệt mở trang PayOS →
    chuyển khoản → webhook về → `/v1/billing/status` chuyển `plan:"plus"`, `periodEnd` = hôm nay + 14
    ngày, và `/v1/usage` đổi sang `unit:"credits"`, `limit:500`.

@@ -64,9 +64,9 @@ function fakeStore(state: FakeState, overrides: Partial<QuotaStore> = {}): Quota
 }
 
 async function quotaChecks(): Promise<void> {
-  // 1. Hạn mức theo gói: `plus` chỉ được 100 khi còn `active`.
+  // 1. Hạn mức theo gói: `plus` chỉ được 500 credits khi còn `active` (đúng số đã bán).
   assert.equal(quotaLimitFor(null), PERIOD_LIMITS.free, 'không có dòng gói ⇒ hạn mức free');
-  assert.equal(quotaLimitFor({ plan: 'plus', status: 'active' }), 100, 'plus + active ⇒ 100');
+  assert.equal(quotaLimitFor({ plan: 'plus', status: 'active' }), 500, 'plus + active ⇒ 500 credits');
   assert.equal(quotaLimitFor({ plan: 'plus', status: 'past_due' }), PERIOD_LIMITS.free, 'plus quá hạn ⇒ free');
   assert.equal(quotaLimitFor({ plan: 'free', status: 'active' }), PERIOD_LIMITS.free, 'free ⇒ 10');
 
@@ -337,7 +337,7 @@ function periodChecks() {
   };
   assert.equal(PERIOD_DAYS, 14, 'kỳ = 14 ngày');
   assert.equal(limits.free, 10, 'free = 10 lượt mỗi kỳ');
-  assert.equal(limits.plus, 100, 'plus = 100');
+  assert.equal(limits.plus, 500, 'plus = 500 credits, đúng bằng số bán ra ở server/billing.ts');
 
   const day = (iso: string) => new Date(iso + 'T03:00:00Z');
   const p = usagePeriod(day('2026-11-26'));

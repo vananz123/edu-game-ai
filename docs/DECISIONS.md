@@ -5818,6 +5818,17 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
 - **#364 — giá chỉ được in MỘT lần trong một thẻ.** Ảnh chụp đầu tiên cho thấy "99.000đ / 14 ngày" ở
   góc cộng "99.000đ cho mỗi kỳ 14 ngày" ở tiêu đề: hai câu nói cùng một chuyện, và người đọc phải dừng
   lại để tự hỏi có phải hai mức giá. Unit test `account-billing` giờ đếm số lần xuất hiện của giá.
+- **#364 — trần của một gói phải bằng ĐÚNG thứ đã bán.** Thẻ Pro bán "500 credits mỗi kỳ" nhưng
+  `PERIOD_LIMITS.plus` vẫn là **100** từ #362: khách trả 99.000đ sẽ đọc "Còn 100/100 credits" và
+  hiểu là mình bị bớt. Hai con số nói về cùng một thứ nằm ở hai tệp thì phải bằng nhau; nay là 500
+  (credits, 2 credits/lượt) và test đọc chéo giữa `server/quota.ts` với `server/billing.ts`.
+- **#364 — "bán được chưa?" phải hỏi MÁY CHỦ ĐANG CHẠY, và nói tên việc còn thiếu.** `scripts/check-billing.js`
+  đọc `/v1/billing/status` bằng token thật (không dùng service-role, vì key đó bỏ qua mọi luật mà
+  giáo viên vẫn phải theo), rồi in `OK/FAIL` cho từng điều kiện theo thứ tự việc và thoát `1`.
+  Đo trên máy chủ thật hôm nay: `configured:false`, thiếu `EDUGAME_BILLING_PROVIDER` và migration —
+  đúng hai việc còn lại, không phải một danh sách mơ hồ. Deploy cũng thành một tệp
+  (`scripts/deploy-worker.js`) vì mỗi lần deploy tay là một lần dễ quên một binding, và script này
+  **từ chối** bật cờ fake trên script thật.
 - **#364 — phép đo phải chờ animation, nếu không nó đo một trạng thái không tồn tại.** Ảnh chụp sớm
   400ms cho `opacity: 0` trên `.modal` và vision-model đọc thành "modal trong suốt, chữ chồng lên nền".
   Đo lại sau 1,6s: `opacity: 1`, nền trắng đục, chữ sạch. Đây là lỗi của CỔNG, không phải của sản phẩm —

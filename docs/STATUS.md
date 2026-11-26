@@ -68,8 +68,20 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
   (+ `EDUGAME_PUBLIC_URL`) trên Worker rồi deploy lại. **Chưa đo được** đường mua thật (tạo đơn →
   chuyển khoản → gói lên Pro) vì thiếu hai thứ trên; phần đó là fixture/unit test, không phải bằng
   chứng thật.
-- **Tiếp theo:** chạy migration + khai PayOS, rồi đo một đơn 99.000đ thật (PayOS sandbox trước) và
-  chụp lại thẻ Pro ở trạng thái `active`.
+- **Bổ sung cùng ngày — hai script để bật bán không phải nhớ gì:**
+  `scripts/check-billing.js` (`npm run check:billing`) hỏi máy chủ **đang chạy** bốn câu theo đúng
+  thứ tự việc (migration → cấu hình → giá/kỳ/credits → `checkoutUrl` khi thêm `--checkout`), in tên
+  việc còn thiếu và thoát `1`; `scripts/deploy-worker.js` (`npm run deploy:worker`) bundle + PUT +
+  secret, tự khai biến thanh toán từ `.env` khi có, và **từ chối** `--allow-fake` trên script
+  `ai-gateway`. Đo: deploy lại cho **cùng etag** `87d4d080…` (bundle tất định), `check:billing`
+  đỏ đúng 3 mục và nêu đúng hai việc (migration + `EDUGAME_BILLING_PROVIDER`).
+- **Một mâu thuẫn về TIỀN đã sửa:** `PERIOD_LIMITS.plus` là **100** trong khi thẻ Pro bán
+  **500 credits/kỳ** — khách trả 99.000đ sẽ đọc "Còn 100/100 credits". Nay `plus = 500` (đơn vị
+  credits, 2 credits/lượt), đúng bằng `plan_pro_monthly_credits` trong DB và bằng giá đã bán;
+  `server-quota.test.ts` đổi theo. Trần free vẫn **10 lượt**.
+- **Tiếp theo:** chạy migration + khai PayOS, rồi `node --env-file=.env scripts/check-billing.js
+  --checkout` và một đơn 99.000đ thật (PayOS sandbox trước), cuối cùng chụp lại thẻ Pro ở trạng thái
+  `active`.
 
 ### 2026-11-26 — #363 phát hành v0.5.6 (asset công khai đã trỏ gateway thật)
 - **Bốn nguồn phiên bản + hai gateway cùng nhảy lên 0.5.6:** `package.json`/`package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, `GET /health` của `server/index.ts`, `DEFAULT_VERSION` của `worker/index.ts` (và binding `GATEWAY_VERSION` khi upload) + test `worker-gateway` theo `0.5.6`.
