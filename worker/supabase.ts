@@ -252,6 +252,8 @@ export interface OrderRow {
   checkoutUrl: string | null;
   expiresAt: Date | null;
   createdAt: Date;
+  /** Số ngày ĐÃ BÁN cho đơn này. Trao đúng số này, không trao cấu hình lúc webhook tới. */
+  periodDays: number;
 }
 
 export interface BillingDb {
@@ -279,6 +281,8 @@ export interface BillingDb {
   orderByRef(providerRef: string): Promise<OrderRow | null>;
   latestOrder(userId: string): Promise<OrderRow | null>;
   markPaid(providerRef: string, paidAt: Date): Promise<boolean>;
+  /** Hạn mức credits mà máy chủ này THẬT SỰ áp cho gói trả phí (`server_config`). */
+  proCredits?(): Promise<number>;
   /** Bảng `billing_orders` đã có trên máy chủ này chưa (migration đã chạy chưa). */
   billingReady?(): Promise<boolean>;
 }
@@ -288,6 +292,7 @@ interface OrderRest {
   provider: string;
   provider_ref: string;
   amount_vnd: number;
+  period_days: number | null;
   status: OrderRow['status'];
   checkout_url: string | null;
   expires_at: string | null;
@@ -304,12 +309,27 @@ function orderFromRest(row: OrderRest): OrderRow {
     checkoutUrl: row.checkout_url,
     expiresAt: row.expires_at ? new Date(row.expires_at) : null,
     createdAt: new Date(row.created_at),
+    periodDays: Number(row.period_days || 0),
   };
 }
 
+/**
+ * Cột đọc từ `billing_orders`. `period_days` PHẢI có trong danh sách này: thiếu nó thì mọi đơn
+ * đọc về đều `periodDays: 0`, và số ngày trao khi tiền về lại lấy từ cấu hình lúc webhook tới —
+ * đúng cái bug "#367" sửa. Có test đọc hằng này.
+ */
+export const ORDER_COLUMNS =
+  'user_id,provider,provider_ref,amount_vnd,period_days,status,checkout_url,expires_at,created_at';
+
 export function billingDb(env: WorkerEnv): BillingDb {
-  const ORDER_COLUMNS = 'user_id,provider,provider_ref,amount_vnd,status,checkout_url,expires_at,created_at';
   return {
+    // Hạn mức credits đang được ÁP là `server_config.quota_pro_monthly_credits` (đường
+    // `/v1/generate` đọc đúng khoá đó). Thẻ Pro phải quảng cáo chính con số này, nếu không
+    // giáo viên mua 500 mà được 300 (hoặc ngược lại) và cả hai đều đúng ở tệp của nó.
+    async proCredits() {
+      const store = quotaStore(env);
+      return store.monthlyCredits ? store.monthlyCredits('pro') : 0;
+    },
     async subscriptionOf(userId) {
       // Database có thể chưa chạy migration billing (#364). Khi đó cột `period_end` chưa
       // tồn tại, PostgREST trả 400 và — nếu không xử lý — cả `/v1/usage` sẽ hỏng cho MỌI

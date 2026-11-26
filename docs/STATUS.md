@@ -95,6 +95,33 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - **Chi phí/điều kiện, nói trước:** VNPay cần **hợp đồng merchant** (thường phải là pháp nhân +
   website được duyệt) — chậm hơn PayOS (cá nhân/hộ KD chỉ cần CCCD, ~5 phút). Vì vậy PayOS vẫn là
   cổng mặc định để mở bán trước; VNPay là lựa chọn khi đã có pháp nhân.
+- **#367 — ba con số trong đường tiền phải đến từ ĐÚNG nguồn:** (a) số ngày trao khi tiền về lấy
+  từ `period_days` **của đơn** (số ngày đã bán), không lấy cấu hình lúc webhook tới — admin đổi
+  14 → 7 ngày trong khi một đơn cũ còn chờ là chuyện có thật, và người đã trả 14 ngày không được
+  nhận 7; đơn cũ không có số ngày thì lùi về cấu hình; (b) `period_days` được thêm vào
+  `ORDER_COLUMNS` và hằng đó **được export để test đọc** — thiếu cột trong SELECT thì mọi đơn đọc
+  về 0 và bug (a) quay lại âm thầm; (c) `/v1/billing/status` quảng cáo hạn mức **đang áp** từ
+  `server_config.quota_pro_monthly_credits` (thêm `BillingDb.proCredits()`), env chỉ là lùi khi
+  đọc lỗi hoặc giá trị 0 — trước đó thẻ ghi 500 của env trong khi engine áp con số khác.
+  `tests/unit/worker-billing-sold.test.ts` (mới, **6 nhóm**): đơn bán 14 ngày + cấu hình 7 ⇒ trao
+  **14**; đơn không có số ngày ⇒ 7; DB nói 800 ⇒ thẻ ghi **800**; đọc lỗi ⇒ 500; DB 0 ⇒ 500.
+- **Đo được lần đầu: TOÀN BỘ vòng tiền trên gateway THẬT.** Migration đã chạy trên Supabase
+  (`billing_orders` có, `subscriptions.period_end` có, ba khoá `plan_pro_*` đã seed), nên
+  `missing` chỉ còn `["EDUGAME_BILLING_PROVIDER"]`. Dựng một script staging
+  `ai-gateway-fake` (`--script ai-gateway-fake --allow-fake --var EDUGAME_BILLING_PROVIDER=fake`)
+  rồi chạy cả vòng bằng token giáo viên thật: `status` → `configured:true` · `checkout` **200**,
+  99.000đ · `fake/pay` → `applied:true, plan:"plus", periodEnd:"2026-12-10T13:48:16Z"` (đúng
+  **14 ngày** từ 26/11) · `/v1/billing/status` → `plan:"plus", order:"paid"` · `/v1/usage` →
+  **`unit:"credits", limit:500, cost:2`** (lần đầu tiên thấy một tài khoản ở dạng Pro) · trả lần
+  hai → `applied:false`, `periodEnd` **không** đổi. Dọn: PATCH `subscriptions` về free +
+  `period_end:null`, DELETE đơn, rồi đọc lại: `plan:"free"`, `unit:"generations"`, `limit:10`,
+  `used:5` — **đã trả về nguyên trạng**.
+- **Script staging đã bị XOÁ ngay sau khi đo** (`DELETE …/scripts/ai-gateway-fake` ⇒ 200, URL trả
+  404). Lý do: nó ghi vào **cùng DB production**, nên một URL `fake` công khai là một cửa mở Pro
+  miễn phí cho bất kỳ ai có token — đo xong thì cửa phải đóng, và đã kiểm tra là đã đóng.
+- **`scripts/deploy-worker.js` có thêm `--var NAME=VALUE`** (lặp được): biến của riêng lần deploy
+  đó, và **thắng** `.env` — nhờ vậy một script staging khai được `fake` kể cả khi `.env` đang nói
+  `payos`. Không có nó thì phải bấm dashboard cho mỗi lần đo.
 - **Tiếp theo:** chạy migration + khai biến của cổng đã chọn, rồi
   `node --env-file=.env scripts/check-billing.js --checkout` và một đơn 99.000đ thật (sandbox trước),
   cuối cùng chụp lại thẻ Pro ở trạng thái `active`.

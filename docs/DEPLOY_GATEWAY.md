@@ -119,7 +119,12 @@ không xuất hiện, và đó là trạng thái đúng (một máy chủ chưa 
    mình), seed `plan_pro_price_vnd` = 99000, `plan_pro_period_days` = 14, `plan_pro_monthly_credits` = 500.
 2. **Chọn MỘT cổng, rồi khai biến của cổng đó** (Settings → Variables and Secrets). Ba biến
    chung cho cả hai cổng: `EDUGAME_PRO_PRICE_VND` = `99000`, `EDUGAME_PRO_PERIOD_DAYS` = `14`,
-   `EDUGAME_PRO_CREDITS` = `500`, và `EDUGAME_PUBLIC_URL` = `https://ai-gateway.dovanan-bth2017.workers.dev`.
+   `EDUGAME_PUBLIC_URL` = `https://ai-gateway.dovanan-bth2017.workers.dev`.
+
+   > **Hạn mức credits KHÔNG nằm ở env.** Con số đang được áp là
+   > `server_config.quota_pro_monthly_credits` trong DB (đúng khoá mà `/v1/generate` đọc), và
+   > thẻ Pro quảng cáo chính con số đó (#367). `EDUGAME_PRO_CREDITS` chỉ là phương án lùi khi
+   > đọc DB lỗi — đừng dùng nó để đổi hạn mức, hãy sửa `server_config`.
 
    | | PayOS (#364) | VNPay (#366) |
    |---|---|---|
@@ -129,6 +134,13 @@ không xuất hiện, và đó là trạng thái đúng (một máy chủ chưa 
    | Xác nhận tiền | webhook `POST /v1/billing/webhook/payos` | IPN `GET /v1/billing/webhook/vnpay`, khai URL này trong portal VNPay |
    | Chữ ký | HMAC-SHA256 | HMAC-SHA512, ký trên giá trị **đã URL-encode** |
 
+   **Đo vòng tiền khi chưa có cổng thật** (không mất một đồng nào, nhưng phải dọn):
+   ```bash
+   node --env-file=.env scripts/deploy-worker.js --script ai-gateway-fake --allow-fake      --var EDUGAME_BILLING_PROVIDER=fake --var EDUGAME_PUBLIC_URL=https://ai-gateway-fake.<sub>.workers.dev
+   # http …/v1/billing/checkout → …/v1/billing/fake/pay → /v1/billing/status, /v1/usage
+   # xong thì XOÁ script đó: nó ghi vào CÙNG DB production, nên một URL fake công khai là
+   # một cửa mở Pro miễn phí.
+   ```
    Điểm dễ sai của VNPay: `vnp_Amount` là **số tiền × 100**; và **chỉ khi cả
    `vnp_ResponseCode` và `vnp_TransactionStatus` đều `00`** mới là đã trả tiền. Cả hai đã có
    test riêng trong `tests/unit/server-billing-vnpay.test.ts`.

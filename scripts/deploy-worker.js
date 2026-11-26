@@ -10,6 +10,7 @@
  * Cách dùng:
  *   node --env-file=.env scripts/deploy-worker.js
  *   node --env-file=.env scripts/deploy-worker.js --script ai-gateway-fake --allow-fake
+ *   node --env-file=.env scripts/deploy-worker.js --script ai-gateway-fake --var EDUGAME_BILLING_PROVIDER=fake
  */
 const { build } = require('esbuild');
 const { readFileSync, writeFileSync, mkdirSync } = require('node:fs');
@@ -24,6 +25,14 @@ function arg(name, fallback = '') {
 const ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID || '2b919fc574709d476f6ec08e0828d323';
 const SCRIPT = arg('--script', process.env.EDUGAME_WORKER_SCRIPT || 'ai-gateway');
 const ALLOW_FAKE = process.argv.includes('--allow-fake');
+/** `--var NAME=VALUE` (lặp được): biến chỉ thuộc về LẦN DEPLOY NÀY, không cần có trong .env. */
+const CLI_VARS = process.argv.reduce((list, value, index, argv) => {
+  if (value === '--var' && argv[index + 1] && argv[index + 1].includes('=')) {
+    const [name, ...rest] = argv[index + 1].split('=');
+    list.push({ type: 'plain_text', name, text: rest.join('=') });
+  }
+  return list;
+}, []);
 const COMPAT_DATE = '2025-01-01';
 
 /** Biến thường: đọc được từ dashboard, không phải bí mật. */
@@ -46,6 +55,13 @@ function plainBindings() {
     if (process.env[name]) list.push({ type: 'plain_text', name, text: process.env[name] });
   }
   if (ALLOW_FAKE) list.push({ type: 'plain_text', name: 'EDUGAME_ALLOW_FAKE_PAYMENTS', text: '1' });
+  // `--var` đi sau nên nó THẮNG .env — một script staging phải khai được `fake` kể cả khi .env
+  // đang nói `payos` (hoặc chưa nói gì).
+  for (const binding of CLI_VARS) {
+    const at = list.findIndex((item) => item.name === binding.name);
+    if (at >= 0) list.splice(at, 1);
+    list.push(binding);
+  }
   return list;
 }
 

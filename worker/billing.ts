@@ -82,8 +82,28 @@ export interface BillingDeps {
   now?: () => Date;
 }
 
+/**
+ * Số ngày được trao khi tiền về = số ngày ĐÃ BÁN trên đơn, không phải cấu hình lúc webhook tới.
+ * Admin đổi 14 → 7 ngày trong khi một đơn cũ còn chờ là chuyện có thật, và người đã trả tiền cho
+ * 14 ngày không được nhận 7. Đơn cũ (ghi trước #366) không có số ngày ⇒ lùi về cấu hình.
+ */
+function soldPeriodDays(order: { periodDays?: number } | null, config: { periodDays: number }): number {
+  const sold = Math.trunc(Number((order && order.periodDays) || 0));
+  return sold > 0 ? sold : config.periodDays;
+}
+
 function publicBase(env: WorkerEnv): string {
   return String(env.EDUGAME_PUBLIC_URL || DEFAULT_PUBLIC_URL).replace(/\/+$/u, '');
+}
+
+async function enforcedCredits(db: BillingDb, config: { credits: number }): Promise<number> {
+  if (!db.proCredits) return config.credits;
+  try {
+    const value = Math.trunc(Number(await db.proCredits()));
+    return value > 0 ? value : config.credits;
+  } catch {
+    return config.credits;
+  }
 }
 
 async function payosCreateLink(env: WorkerEnv, body: unknown): Promise<{ ok: boolean; checkoutUrl?: string; error?: string }> {
@@ -171,7 +191,7 @@ export async function handleBilling(
     const next = applyPaidOrder(
       await db.subscriptionOf(order.userId),
       { provider: order.provider, providerRef: order.providerRef, amountVnd: order.amountVnd, paidAt },
-      config.periodDays
+      soldPeriodDays(order, config)
     );
     await db.saveSubscription(order.userId, next);
     return json({ RspCode: '00', Message: 'Confirm Success' });
@@ -216,7 +236,7 @@ export async function handleBilling(
     const next = applyPaidOrder(
       await db.subscriptionOf(order!.userId),
       { provider: order!.provider, providerRef: verdict.providerRef, amountVnd: verdict.amountVnd, paidAt: verdict.paidAt },
-      config.periodDays
+      soldPeriodDays(order, config)
     );
     await db.saveSubscription(order!.userId, next);
     return json({ ok: true, applied: true, periodEnd: next.periodEnd!.toISOString() });
@@ -242,7 +262,9 @@ export async function handleBilling(
       provider: config.provider,
       priceVnd: config.priceVnd,
       periodDays: config.periodDays,
-      credits: config.credits,
+      // Đọc hạn mức đang ÁP từ `server_config` (cùng khoá mà `/v1/generate` dùng). Lỗi đọc thì
+      // lùi về giá trị cấu hình để thẻ Pro vẫn có một con số, nhưng ưu tiên luôn là con số thật.
+      credits: await enforcedCredits(db, config),
       plan: plan.plan,
       status: plan.status,
       periodEnd: sub && sub.periodEnd ? sub.periodEnd.toISOString() : null,
@@ -366,7 +388,7 @@ export async function handleBilling(
       providerRef: latest.providerRef,
       amountVnd: latest.amountVnd,
       paidAt: now,
-    }, config.periodDays);
+    }, soldPeriodDays(latest, config));
     await db.saveSubscription(userId, next);
     return json({ ok: true, applied: true, plan: PAID_PLAN, periodEnd: next.periodEnd!.toISOString() });
   }

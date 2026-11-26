@@ -746,6 +746,14 @@ Chủ dự án yêu cầu: *"xóa release cũ ở máy, tạo release mới và 
   Đo được trên máy chủ thật: `configured:false`, `provider:"none"`, `missing:[EDUGAME_BILLING_PROVIDER,
   chạy migration …]`. **Còn thiếu**: chạy migration trên Supabase + khai `PAYOS_*` rồi deploy, sau đó
   đo một đơn 99.000đ thật. Bước bật bán: `docs/DEPLOY_GATEWAY.md` §7.
+- [x] **#367 — vòng tiền đã được đo THẬT đầu-cuối** (gateway staging + DB thật): checkout 99.000đ →
+  `plus` + `periodEnd` +14 ngày → `/v1/usage` `unit:"credits", limit:500` → trả lại lần hai không
+  cộng kỳ → hoàn gói & xoá đơn, đọc lại thấy `free`/`generations`/`used:5`. Script staging đã xoá
+  (404) vì nó ghi vào cùng DB production. Deploy có thêm `--var NAME=VALUE` (thắng `.env`).
+- [x] **#367 — ba con số trong đường tiền đến từ đúng nguồn:** số ngày trao = `period_days` của
+  ĐƠN (đã bán), `period_days` có trong `ORDER_COLUMNS` (export để test đọc), và thẻ Pro quảng cáo
+  hạn mức đang áp `server_config.quota_pro_monthly_credits` (env chỉ là lùi). 6 nhóm khẳng định
+  mới trong `worker-billing-sold`.
 - [x] **#366 — cổng thứ hai VNPay** (`EDUGAME_BILLING_PROVIDER=vnpay`): ký HMAC-SHA512 trên giá trị
   đã URL-encode, `vnp_Amount` = tiền × 100, IPN trả `RspCode` (00/01/02/04/97/99), chỉ
   `ResponseCode` + `TransactionStatus` cùng `00` mới mở gói; 8 nhóm khẳng định chạy qua `handle()`.

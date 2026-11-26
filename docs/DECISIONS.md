@@ -5818,6 +5818,26 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
 - **#364 — giá chỉ được in MỘT lần trong một thẻ.** Ảnh chụp đầu tiên cho thấy "99.000đ / 14 ngày" ở
   góc cộng "99.000đ cho mỗi kỳ 14 ngày" ở tiêu đề: hai câu nói cùng một chuyện, và người đọc phải dừng
   lại để tự hỏi có phải hai mức giá. Unit test `account-billing` giờ đếm số lần xuất hiện của giá.
+- **#367 — một phép đo có mở gói trả phí thì phải được HOÀN LẠI, và phải chứng minh là đã hoàn.**
+  Vòng tiền được đo thật (checkout → pay → `plus` → `unit:"credits"`), rồi PATCH `subscriptions`
+  về `free` + `period_end:null`, DELETE đơn, và **đọc lại** `/v1/billing/status` lẫn `/v1/usage`
+  để thấy `plan:"free"` / `unit:"generations"` / `used:5` đúng như trước. Một phép đo để lại quyền
+  Pro trên tài khoản thật là một phép đo đã làm hỏng thứ nó định đo.
+- **#367 — cổng `fake` chỉ được sống trong lúc đo, và phải bị XOÁ sau đó.** Script staging dùng
+  chung DB production, nên `/v1/billing/fake/pay` công khai = mở Pro miễn phí cho bất kỳ ai có
+  token. Vì thế `deploy-worker.js` **từ chối** `--allow-fake` trên chính `ai-gateway`, và script
+  đo được `DELETE` ngay sau khi đo (kiểm lại: 404). `--var NAME=VALUE` thắng `.env` để việc dựng
+  một script đo không cần bấm dashboard.
+- **#367 — trao ĐÚNG thứ đã bán, không trao cấu hình hiện tại.** Khi tiền về, số ngày lấy từ
+  `billing_orders.period_days` của chính đơn đó. Cấu hình có thể đổi giữa lúc tạo đơn và lúc
+  webhook tới; một người đã trả cho 14 ngày không được nhận 7 vì admin vừa sửa env. Và một con số
+  phải nằm trong danh sách cột được SELECT — `ORDER_COLUMNS` được export để test đọc, vì thiếu
+  `period_days` thì mọi đơn đọc về 0 và lỗi cũ quay lại mà không có gì đỏ.
+- **#367 — con số quảng cáo phải là con số đang ÁP.** Thẻ Pro ghi `credits` lấy từ
+  `server_config.quota_pro_monthly_credits` — đúng khoá `/v1/generate` dùng để chặn — chứ không
+  lấy `EDUGAME_PRO_CREDITS` của env; env chỉ còn là phương án lùi khi đọc DB lỗi hoặc trả 0. Hai
+  nguồn cho cùng một con số là cách chắc chắn nhất để bán một đằng giao một nẻo (#365 đã sửa đúng
+  lỗi này ở một cặp tệp khác).
 - **#366 — một cổng thứ hai dùng CHUNG luật tiền, không chép luật.** PayOS và VNPay khác nhau
   đúng ba chỗ (cách tạo link, thuật toán ký, hình dạng xác nhận), nên phần khác nằm trọn trong
   `server/billing-provider.ts`, còn "tiền vào sổ nào, khi nào mở gói, chống mở hai lần" vẫn là
