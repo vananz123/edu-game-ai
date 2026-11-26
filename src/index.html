@@ -199,6 +199,9 @@
   <!-- #368: ẩn/hiện thanh bên. Chỉ khai báo hàm; bootstrap gọi initSidebarToggle() TRƯỚC
        lần vẽ đầu tiên để thanh bên không nhá ra rồi biến mất ở người đã ẩn nó. -->
   <script defer src="renderer/features/sidebar-toggle.js"></script>
+  <!-- #369: đường dẫn trang cha → trang con. Nạp TRƯỚC core/render.js (nó chèn breadcrumb ở
+       mỗi lần vẽ) và trước features/editor/page.js (nhãn nút quay lại đọc từ cùng bảng). -->
+  <script defer src="renderer/features/page-trail.js"></script>
   <script defer src="renderer/core/render.js"></script>
   <!-- Trình soạn thảo, tách theo khu vực (DECISIONS #150). Renderer là script
        toàn cục nạp theo thứ tự, nên chỉ khai báo hàm ở đỉnh tệp; không tệp nào

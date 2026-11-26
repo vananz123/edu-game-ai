@@ -7,6 +7,52 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-26 — #369 đường dẫn trang cha → trang con ("Thư viện trò chơi › Chỉnh sửa trò chơi")
+
+- **Yêu cầu (nguyên văn):** "ví dụ thư viện trò chơi mà từ trang này tôi chỉnh sửa thì nó sẽ hiển
+  thị thư viện trò chơi > chỉnh sửa".
+- **Một bảng duy nhất, không phải tám tệp page.** `src/renderer/features/page-trail.ts` (script toàn
+  cục mới) giữ `PAGE_TRAIL_TITLES` (tên 8 trang) + `PAGE_TRAIL_PARENTS` (`editor → library`) và bốn
+  hàm thuần: `pageTrailTitle`, `pageTrailParent`, `pageTrailRoot`, `pageTrailCrumbs`, `pageTrailHtml`.
+  Hiện **chỉ `editor` là trang con thật** — nó không có mục riêng trên sidebar và luôn được mở TỪ
+  một trang khác; sáu trang còn lại là mục cấp 1 nên **không có breadcrumb** (một dòng "Thư viện trò
+  chơi › Thư viện trò chơi" trên mọi trang là chỗ trống bị lấy mất). Lần sau thêm trang con = thêm
+  một dòng vào `PAGE_TRAIL_PARENTS`.
+- **Trang cha là nơi ĐÃ MỞ trang con, không phải một giá trị mặc định.** `openEditor()` đọc
+  `state.page` **ngay trước** `navigate('editor')` (sau đó nó đã là `'editor'` và không còn biết
+  đường về) ⇒ mở từ thư viện thì "Thư viện trò chơi › …", mở từ dự án thì "Dự án của tôi › …".
+  `navigate()` xoá `state.pageParent` khi sang một trang cấp 1, nên lần mở sau không hiện breadcrumb
+  của lần trước. `closeEditorPage()` và nút quay lại đi về **trang cha đó**, không còn luôn về thư viện.
+- **Chèn ở một chỗ:** `core/render.ts` gọi `pageTrailHtml(state.page, state.pageParent)` ngay sau
+  `pageContainer.innerHTML = html` ⇒ không sửa tệp page nào để thêm markup. Mắt cha dùng lại đúng
+  hook `data-page` mà `controller.ts` đã lo, nên **không thêm đường điều hướng mới**. Mắt cuối là
+  `<span aria-current="page">`, không phải liên kết (một link tới chính mình là bẫy focus).
+- **Sidebar sáng mục CHA khi đang ở trang con** (`pageTrailRoot`) — trước đây vào trình soạn thảo
+  thì cả sidebar tối om, không mục nào sáng.
+- **Bớt một câu lặp:** nhãn nút quay lại đổi từ "← Thư viện" thành "← Quay lại", đích đến nói ở
+  `title`/`aria-label` ("Về Thư viện trò chơi"). Trước đó 40 px đầu trang đọc "Thư viện trò chơi"
+  **ba lần** (breadcrumb + nút + ngầm hiểu) và "Chỉnh sửa trò chơi" hai lần; người soát ảnh chê
+  đúng chỗ đó.
+- **Đo:** `tests/unit/page-trail.test.ts` (6 nhóm, chạy trên `dist/.../page-trail.js`): 7 trang cấp 1
+  không có breadcrumb + tự sáng mục của mình; `editor` mang cha thật; cha rác (`'editor'`, trang
+  không tồn tại) lùi về mặc định; markup có `data-page` và `aria-current`, **không** có `data-page="editor"`;
+  `childTitle` cho trình soạn thảo mới.
+- **Đo trên app thật:** `tests/ui/ui-page-trail-check.js` **27/27** — bấm thật vào sidebar 7 lần
+  (không breadcrumb ở trang cấp 1, đúng 1 mục `.active`), bấm thật menu "•••" → "Chỉnh sửa" ⇒
+  breadcrumb `Thư viện trò chơi › Chỉnh sửa trò chơi`, mắt cha là `button[data-page="library"]`,
+  `aria-current="page"`, breadcrumb ở y 20 **trên** đầu trang (43), sidebar vẫn `["library"]`, nút
+  "Quay lại" + `title="Về Thư viện trò chơi"`; bấm mắt cha ⇒ về thư viện và breadcrumb biến mất; bấm
+  nút quay lại trong trình soạn thảo cũng về đúng cha.
+- **Kết quả đo:** `tsc` sạch · unit **118/118** · `npm run check` sạch · `verify:css` **61/61** ·
+  `check:renderer-globals` **80/82 scripts, 1199 functions, 9679 call sites, 0 undefined** ·
+  `build:tauri` + `check:embedded` **6 217,2 KiB** · `cargo tauri build` OK · `ui-page-head-check`
+  **6/6** và `ui-sidebar-toggle-check` **17/17** vẫn xanh trên bản dựng mới.
+- **Ảnh:** `tests/ui/shots/page-trail-369-editor.png` (+ `-dark.png`) ở 1366×768; breadcrumb căn đúng
+  cột nội dung (x 256), cao 17 px, 12 px, không tràn ngang (`spill: 0`).
+- **Chưa đo:** đường `Dự án của tôi → trình soạn thảo` chỉ được chứng minh bằng unit test trên hàm
+  thuần, **chưa bấm được trong UI** (trang dự án mở wizard chứ không mở thẳng trình soạn thảo);
+  breadcrumb chưa thử với tiêu đề trang rất dài; chưa ai bấm thử bằng tay.
+
 ### 2026-11-26 — #368 ẩn/hiện thanh bên + tạm dừng thanh toán
 
 - **Yêu cầu:** thêm chức năng ẩn/hiện sidebar; **thanh toán tạm dừng** — PayOS/VNPay không dùng,
@@ -174,18 +220,3 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - **Tiếp theo:** chạy migration + khai biến của cổng đã chọn, rồi
   `node --env-file=.env scripts/check-billing.js --checkout` và một đơn 99.000đ thật (sandbox trước),
   cuối cùng chụp lại thẻ Pro ở trạng thái `active`.
-
-### 2026-11-26 — #363 phát hành v0.5.6 (asset công khai đã trỏ gateway thật)
-- **Bốn nguồn phiên bản + hai gateway cùng nhảy lên 0.5.6:** `package.json`/`package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, `GET /health` của `server/index.ts`, `DEFAULT_VERSION` của `worker/index.ts` (và binding `GATEWAY_VERSION` khi upload) + test `worker-gateway` theo `0.5.6`.
-- **Worker deploy lại trước khi dựng bộ cài** (nếu không `check:pilot` so sai bản): bundle 783 009 B, `0` import `node:`, upload `200 success=true` etag `470d59613f1d…`, `smoke:gateway --expect-version 0.5.6 --pilot` **4/4**.
-- **Chuỗi dựng:** `tsc` sạch · unit **111/111** · `npm run build` · `verify:css` **61/61** · `build:tauri` **6 217,2 KiB** · `check:embedded` khớp · `check:pilot` **hai dòng OK** (*"gateway đang chạy là edugame-ai-gateway 0.5.6 (200)"*, URL trong 57 919 KiB exe) · `cargo tauri build`.
-- **Bộ cài:** `EduGame Studio (Tauri)_0.5.6_x64-setup.exe` — **16 379 656 B**, SHA-256 `9c922f3d706ca021236046e5cfeef9969d0ea8f6db34f5e9c402a97caf863b6b`.
-- **Đo bằng cách CÀI THẬT** (`/S` ⇒ `exit=0`): registry `DisplayVersion 0.5.6`, `InstallLocation D:\Temp\eg-install-check`, exe 59 308 544 B; chạy với `EDUGAME_AI_GATEWAY_URL`/`SUPABASE_URL`/`SUPABASE_ANON_KEY` **bị bóc khỏi env** ⇒ `url=http://tauri.localhost/`, **`app:info.version = 0.5.6`**, `auth:status loggedIn=true`, **`account:quota ⇒ {"ok":true,"plan":"free","month":"2026-11-19","unit":"generations","used":5,"limit":10,"cost":1}`** — tức bản phát hành đọc hạn mức 10 lượt/kỳ 2 tuần qua Worker thật.
-- **Cổng trên bản đã cài:** `ui-account-check` **23/23** · `ui-editor-cloud-check` **14/14** · `ui-offline-play-check` **7/7**.
-- **Phát hành:** `POST /releases` ⇒ **201**, release id **459275416**, tag `v0.5.6`; upload asset ⇒ **201**, asset id **795431144**, **16 379 656 B**; **GitHub tự báo `digest sha256:9c922f3d…` khớp đúng tệp đã dựng** (so bằng API, không bằng niềm tin).
-- **Chưa kiểm / nói rõ:**
-  - Chưa thấy **tài khoản Pro thật**; nhánh Pro chỉ đo bằng fixture.
-  - **Chưa quan sát một lần chuyển kỳ thật** (03/12); luật kỳ 14 ngày mới chỉ có unit test + tính tay.
-  - 5 mục P7 (SmartScreen "Unknown publisher", thời gian cài bằng tay, hiệu ứng đếm/so le bằng mắt, một ván offline thật, một máy **không** có WebView2) vẫn cần một người ngồi trước máy Windows sạch.
-  - Tài khoản thử đang ở **5/10 lượt** của kỳ `2026-11-19`.
-

@@ -5887,3 +5887,28 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
   400ms cho `opacity: 0` trên `.modal` và vision-model đọc thành "modal trong suốt, chữ chồng lên nền".
   Đo lại sau 1,6s: `opacity: 1`, nền trắng đục, chữ sạch. Đây là lỗi của CỔNG, không phải của sản phẩm —
   và là lý do một kết luận từ ảnh phải kèm một phép đo DOM.
+
+## #369 — đường dẫn trang cha → trang con
+
+- **Chỉ trang CON mới có breadcrumb.** Trang cấp 1 là mục trên sidebar: nó đã tự nói "bạn đang ở
+  đâu" bằng mục đang sáng. Thêm "Thư viện trò chơi › Thư viện trò chơi" vào đầu mọi trang là lấy
+  chỗ của nội dung để nói lại một điều đã hiện. Vì vậy `pageTrailHtml` trả `''` cho trang cấp 1 —
+  không có `<nav>` rỗng, không có CSS "ẩn đi".
+- **Trang cha là nơi ĐÃ MỞ trang con, không phải hằng số trong bảng.** Cùng một trình soạn thảo,
+  mở từ "Thư viện trò chơi" phải đọc "Thư viện trò chơi › …", mở từ "Dự án của tôi" phải đọc
+  "Dự án của tôi › …". Vì thế `openEditor()` chụp `state.page` **trước** khi `navigate('editor')`
+  (sau lệnh đó thì không còn biết đường về) và `navigate()` xoá `state.pageParent` khi rời một
+  trang cấp 1. Bảng chỉ giữ **mặc định** cho trường hợp không biết đã mở từ đâu.
+- **Một cái ẩn/xoá được thì phải có đường về, và nhãn phải nói đích thật.** `closeEditorPage()` và
+  nút quay lại đi về **đúng trang cha**, không phải luôn về thư viện — trước đây mở từ dự án rồi
+  bấm quay lại là bị đưa sang một trang khác với nơi xuất phát. Nhưng nhãn trên mặt nút là "Quay
+  lại", không phải tên trang cha: cái tên đó đã nằm ở breadcrumb ngay trên, và lặp lại thì 40 px
+  đầu trang đọc "Thư viện trò chơi" ba lần. Đích đến được nói ở `title`/`aria-label`.
+- **Ở trang con, mục sidebar của CHA phải sáng.** Trang con không có mục riêng, nên nếu chỉ so
+  `state.page` thì cả sidebar tối om khi đang soạn thảo — người dùng mất chỗ đứng. Sáng mục cha
+  cũng là điều breadcrumb đang nói, bằng một cách khác.
+- **Breadcrumb chèn ở `core/render.ts`, không ở 8 tệp page.** Một điểm chèn duy nhất sau
+  `pageContainer.innerHTML = html`, và mắt cha dùng lại hook `data-page` mà controller đã hiểu ⇒
+  không thêm đường điều hướng, không thêm listener, không có cơ hội lệch giữa các trang.
+- **Mắt cuối không phải liên kết.** Một `<button>`/`<a>` trỏ về chính trang đang mở là một cái bẫy
+  focus và một lần tải lại vô nghĩa; nó là `<span aria-current="page">`.

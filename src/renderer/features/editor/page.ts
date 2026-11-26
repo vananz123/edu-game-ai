@@ -184,6 +184,10 @@ function openEditor(game, isNew, note = '', aiContext = null) {
   editorAiRequestId = '';
   editorPicturesBeforeSave = null;
   editorPageState = { game, isNew: Boolean(isNew), note };
+  // #369: mang theo trang đã mở trình soạn thảo. Đọc `state.page` NGAY TRƯỚC khi navigate —
+  // sau đó nó đã là 'editor' và không còn biết đường về. Wizard gọi openEditor() khi đang ở
+  // trang 'create-wizard', thư viện gọi khi đang ở 'library': cả hai đều là cha thật.
+  if (state.page && state.page !== 'editor') state.pageParent = state.page;
   navigate('editor');
 }
 
@@ -195,14 +199,25 @@ function closeEditorPage(options = {}) {
     editorPicturesBeforeSave = null;
   }
   editorPageState = null;
-  navigate('library');
+  // #369: quay về đúng trang đã mở, không phải luôn luôn về thư viện.
+  navigate((typeof pageTrailParent === 'function' ? pageTrailParent('editor', state.pageParent) : '') || 'library');
+}
+
+/** #369 — tên trang sẽ quay về (cùng bảng với breadcrumb, không hardcode "Thư viện"). */
+function editorParentLabel() {
+  const parent = (typeof pageTrailParent === 'function' ? pageTrailParent('editor', state.pageParent) : '') || 'library';
+  const label = typeof pageTrailTitle === 'function' ? pageTrailTitle(parent) : '';
+  return label || 'Thư viện trò chơi';
 }
 
 /** Markup of the editor page (the shell assigns it to `#pageContent`). */
 function editorPageHtml(game, isNew, note) {
   return `<section class="editor-page" data-editor-page="1">
     <header class="editor-page-head">
-      <button class="btn btn-secondary btn-small" data-editor-back>${uiIcon('arrow-left', '', 13)} Thư viện</button>
+      <!-- #369: nhãn là "Quay lại", không phải tên trang cha. Tên đó đã có ở breadcrumb ngay
+           trên (và nếu lặp lại thì "Thư viện trò chơi" xuất hiện ba lần trong 40 px đầu trang).
+           Đích đến vẫn được NÓI RA, chỉ là ở title/aria-label thay vì trên mặt nút. -->
+      <button class="btn btn-secondary btn-small" data-editor-back title="Về ${escapeHtml(editorParentLabel())}" aria-label="Về ${escapeHtml(editorParentLabel())}">${uiIcon('arrow-left', '', 13)} Quay lại</button>
       <div class="editor-page-title"><h1>${isNew ? 'Duyệt và hoàn thiện trò chơi' : 'Chỉnh sửa trò chơi'}</h1>
         <div class="small muted">${escapeHtml(note)}</div></div>
     </header>

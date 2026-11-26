@@ -4,6 +4,9 @@ function navigate(page) {
   // re-render would drop the nodes anyway (the next page may reuse the same ids).
   if (typeof closeGameMenus === 'function') closeGameMenus();
   state.page = page;
+  // #369: rời khỏi một trang con thì quên trang cha đi. Giữ lại thì lần sau mở trình soạn
+  // thảo từ một nơi khác sẽ hiện breadcrumb của lần trước — một câu sai về vị trí.
+  if (typeof pageTrailParent === 'function' && !pageTrailParent(page)) state.pageParent = '';
   state.search = '';
   render();
   if (page === 'my-projects') refreshProjectsPage();

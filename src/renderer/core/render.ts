@@ -4,7 +4,10 @@ function render() {
   // and debounced preview; keep the structure tree's scroll offsets so it does
   // not jump back to its first row.
   if (state.page === 'create-wizard' && typeof wizardStructureCaptureView === 'function') wizardStructureCaptureView();
-  $$('.nav-item[data-page]').forEach(el => el.classList.toggle('active', el.dataset.page === state.page));
+  // #369: ở trang con thì mục sidebar của CHA phải sáng, nếu không người dùng mất chỗ đứng
+  // khi mở trình soạn thảo (sidebar không có mục "Chỉnh sửa trò chơi").
+  const activePage = typeof pageTrailRoot === 'function' ? pageTrailRoot(state.page, state.pageParent) : state.page;
+  $$('.nav-item[data-page]').forEach(el => el.classList.toggle('active', el.dataset.page === activePage));
   $('#navGameCount').textContent = state.db.games.length;
   // DECISIONS #161: the sidebar block is chrome, not page content, so it refreshes
   // here — a game saved from the editor must appear in "Gần đây" without a reload.
@@ -32,6 +35,15 @@ function render() {
   const pageContainer = $('#pageContent');
   if (pageContainer) {
     pageContainer.innerHTML = html;
+    // #369: breadcrumb đứng trên đầu trang. Một chỗ duy nhất (đây) thay vì sửa 8 tệp page —
+    // `pageTrailHtml` trả '' cho trang cấp 1 nên không có `<nav>` rỗng.
+    if (typeof pageTrailHtml === 'function') {
+      const childTitle = state.page === 'editor' && typeof editorPageState !== 'undefined' && editorPageState && editorPageState.isNew
+        ? 'Duyệt và hoàn thiện trò chơi'
+        : '';
+      const trail = pageTrailHtml(state.page, state.pageParent, { childTitle });
+      if (trail) pageContainer.insertAdjacentHTML('afterbegin', trail);
+    }
     if (window.__lastRenderedPage !== renderedPage) {
       window.__lastRenderedPage = renderedPage;
       pageContainer.classList.remove('page-fade-enter');

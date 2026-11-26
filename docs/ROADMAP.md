@@ -765,3 +765,10 @@ Chủ dự án yêu cầu: *"xóa release cũ ở máy, tạo release mới và 
   đã URL-encode, `vnp_Amount` = tiền × 100, IPN trả `RspCode` (00/01/02/04/97/99), chỉ
   `ResponseCode` + `TransactionStatus` cùng `00` mới mở gói; 8 nhóm khẳng định chạy qua `handle()`.
   Điều kiện: hợp đồng merchant VNPay (thường cần pháp nhân) — PayOS vẫn là cổng mở bán trước.
+
+- [x] **#369 — đường dẫn trang cha → trang con** ("Thư viện trò chơi › Chỉnh sửa trò chơi"):
+  bảng `PAGE_TRAIL_TITLES`/`PAGE_TRAIL_PARENTS` một chỗ, trang cha = **nơi đã mở** trang con (nên
+  mở từ "Dự án của tôi" thì đường dẫn đổi theo), sidebar sáng mục cha, nút quay lại về đúng cha và
+  đổi nhãn thành "Quay lại" để không lặp tên ba lần. Sáu trang cấp 1 không có breadcrumb.
+  6 nhóm unit + `ui-page-trail-check` **27/27**. Còn thiếu: đường "Dự án của tôi → trình soạn thảo"
+  chưa bấm được trong UI (trang dự án mở wizard).

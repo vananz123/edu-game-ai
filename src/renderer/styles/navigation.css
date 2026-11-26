@@ -335,3 +335,21 @@ html[data-sidebar="hidden"] .app-shell > .sidebar { display: none; }
 .sidebar-reveal:focus-visible { outline: 2px solid var(--purple); outline-offset: 1px; }
 .sidebar-reveal[hidden] { display: none; }
 @media (prefers-reduced-motion: reduce) { .sidebar-reveal { transition: none; } }
+
+/* === #369 — đường dẫn trang cha → trang con ================================
+   Một dòng nhỏ ngay trên đầu trang, không phải một thanh: nó trả lời "tôi đang ở đâu"
+   chứ không phải một chỗ để bấm. Chỉ trang CON mới có (pageTrailHtml trả '' cho cấp 1),
+   nên sáu trang chính không bị thêm một dòng vô nghĩa. */
+.page-trail {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  font-size: 12px; line-height: 1.4; color: var(--muted); margin: 0 0 8px;
+}
+.page-trail-link {
+  appearance: none; background: none; border: 0; padding: 0; margin: 0;
+  font: inherit; color: var(--purple); cursor: pointer; border-radius: 4px;
+}
+.page-trail-link:hover { text-decoration: underline; }
+.page-trail-link:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; }
+.page-trail-sep { color: var(--muted); opacity: .7; }
+.page-trail-current { color: var(--text); font-weight: 600; }
+.editor-active .page-trail { margin: 0 0 6px; }
