@@ -5752,6 +5752,16 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
   chuỗi có trong `.exe`; một worker khác tên vẫn lọt. Nay nó gọi `/health` và đòi
   `service="edugame-ai-gateway"` + đúng phiên bản, và chẩn đoán **danh tính trước, byte sau**
   — nếu host sai thì việc URL nằm trong exe không cứu được bản cài.
+- **Deploy là một bước ĐO, không phải một bước tin.** Sau khi upload worker: `smoke:gateway --pilot`,
+  gọi `/v1/generate` một lần thật, gửi lại **đúng khoá** để thấy `409` và `usage_monthly` đứng yên,
+  rồi mới dựng bộ cài. Ba phép đo này trả lời ba câu khác nhau: "đúng gateway chưa", "AI chạy chưa",
+  "có trừ tiền hai lần không".
+- **`gencount` chạm trần là một phép đo THÀNH CÔNG, không phải lỗi.** Lần chạy `ui-wizard-cloud-check`
+  báo "0 câu trong 3 lượt" khi `usage_monthly.generations = 5/5`; ghi lại là "đo trần hạn mức",
+  đặt lại dữ liệu thử rồi chạy lại (21/21), thay vì sửa sản phẩm cho vừa một cổng đang chạm trần.
+- **Một asset đã phát hành trỏ sai host thì không được im lặng.** Installer v0.5.5 trên GitHub vẫn
+  trỏ `127.0.0.1`; ghi thẳng vào `docs/INSTALL_CHECKLIST.md` là **đừng đưa cho giáo viên**, thay vì
+  để người sau tải nhầm.
 - **`--no-live` phải nói ra là chưa kiểm.** Một cờ bỏ qua phép đo mà im lặng là một cổng giả.
 - **Kho giả phải tôn trọng dữ liệu được ghi.** Kho giả gán `status:'pending'` cho mọi dòng đã
   làm một nhánh `failed` "biến mất" — lỗi của test, nhưng nó dạy một điều: một kho giả tự bịa

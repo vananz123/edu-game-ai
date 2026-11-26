@@ -14,7 +14,12 @@ SmartScreen, shortcut, và hành vi sau khi gỡ.
 > Kiểm mã băm trước khi cài (PowerShell):
 > `Get-FileHash '.\EduGame Studio (Tauri)_0.5.5_x64-setup.exe' -Algorithm SHA256`
 >
-> Bản **v0.5.5**: `16 367 996 B` · SHA-256 bắt đầu bằng `45fd0f2ffb446e16`
+> Bản **v0.5.5** phát hành ngày 25/11: `16 367 996 B` · SHA-256 bắt đầu bằng `45fd0f2ffb446e16`
+> — **bản này trỏ `127.0.0.1` nên KHÔNG có Cloud AI; đừng đưa cho giáo viên.**
+>
+> Bản **v0.5.5 + Cloud AI thật** (dựng 26/11, trỏ `https://ai-gateway.dovanan-bth2017.workers.dev`):
+> `16 369 669 B` · SHA-256 `82f4c652cb47023abb46386b2ca3998b8e0d7a5b9d9961c0ee921a6a905c4e76`
+> Kiểm bằng `npm run check:pilot` (đòi https + gateway tự khai đúng tên/bản + URL có trong byte của `.exe`).
 > Nếu mã khác ⇒ tệp hỏng hoặc không phải bản đã kiểm — **dừng lại**, đừng cài.
 
 ## Điều đã biết trước (đừng ngạc nhiên)
