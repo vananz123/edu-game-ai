@@ -5766,3 +5766,23 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
 - **Kho giả phải tôn trọng dữ liệu được ghi.** Kho giả gán `status:'pending'` cho mọi dòng đã
   làm một nhánh `failed` "biến mất" — lỗi của test, nhưng nó dạy một điều: một kho giả tự bịa
   ra luật riêng thì test chỉ đo kho giả.
+- **#362 — một kỳ hạn mức là KHOÁ SỔ, không phải một thay đổi schema.** `usage_monthly.month` là
+  `text`, nên kỳ 14 ngày chỉ cần ghi **ngày bắt đầu kỳ** vào đó: không migration, không cột mới, không
+  cờ "lần dùng đầu tiên" cho từng người. Kỳ tính theo **bội số 14 ngày kể từ 1970-01-01 UTC** để mọi
+  tài khoản cùng chuyển kỳ một lúc và để tháng 28/30/31 ngày không làm lệch luật.
+- **#362 — trần free là 10 lượt/kỳ 2 tuần, và con số đó chỉ được sống ở MỘT chỗ.** `PERIOD_LIMITS` trong
+  `server/quota.ts`; gateway Express và Worker đều đọc từ đó. Fixture trong cổng UI phải sửa theo
+  (5 → 10) — một cổng đo một trần cũ là một cổng đang nói dối về sản phẩm.
+- **#362 — chip tài khoản phải trả lời "tôi đang dùng bản nào" trước khi trả lời "tôi là ai".** Badge
+  `FREE`/`PRO` + một dòng `Còn 10/10 lượt`; tên tài khoản là thứ ba. Câu "Đã đăng nhập" bị bỏ vì nó
+  không nói được điều giáo viên cần biết, còn sidebar 232px thì không đủ chỗ cho cả hai.
+- **#362 — một câu bị cắt là một câu không đọc được.** Đo được: ở 700px chiều cao, sidebar tràn 30px
+  và thẻ tài khoản bị cắt; dòng `Còn 10/10 lượt · kỳ 2 tuần` bị ellipsis. Sửa bằng cấu trúc (sidebar
+  flex, khối phím tắt co lại và tự cuộn) **và** bằng câu ngắn hơn — không bằng cách thu nhỏ chữ.
+- **#362 — avatar là chữ cái, không phải ảnh Google.** Đo bằng ảnh chụp: `<img>` từ googleusercontent
+  không tải được trong WebView2 và để lại biểu tượng ảnh vỡ ngay giữa khuôn mặt tài khoản. Một chữ cái
+  lúc nào cũng đọc được; một ảnh vỡ thì luôn trông như ứng dụng hỏng.
+- **#362 — một cổng chỉ được thử lại lỗi của NHÀ CUNG CẤP, và phải nói đã thử mấy lần.** Vòng LIVE của
+  `ui-wizard-cloud-check` trước đây dừng ngay ở lỗi `gemini_400` (một cơn bão của Gemini) và in cứng
+  "3 lượt" — tức nó có thể báo "wizard hỏng" vì một lỗi không liên quan tới wizard. Nay nó chỉ dừng khi
+  **ứng dụng** từ chối tại chỗ, và trả về số lần thử thật.

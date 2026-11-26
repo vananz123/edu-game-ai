@@ -20,7 +20,7 @@ interface Row {
 function makeWorld(overrides: { plan?: string; status?: string; used?: number; limit?: number } = {}) {
   const world = {
     used: overrides.used ?? 0,
-    limit: overrides.limit ?? 5,
+    limit: overrides.limit ?? 10,
     plan: overrides.plan ?? 'free',
     status: overrides.status ?? 'active',
     creditsUsed: 0,
@@ -155,7 +155,7 @@ async function main(): Promise<void> {
   assert.equal((await handle(post('/v1/generate', { text: LESSON }, ''), env(), { auth })).status, 401);
   assert.equal((await handle(get('/v1/usage', 'wrong'), env(), { auth })).status, 401);
 
-  // 3. ĐỌC hạn mức: gói free ⇒ đơn vị là lượt, hạn mức 5, không trừ gì.
+  // 3. ĐỌC hạn mức: gói free ⇒ đơn vị là lượt, hạn mức 10 của kỳ 14 ngày, không trừ gì.
   const worldA = makeWorld({ used: 1 });
   const usageResponse = await handle(get('/v1/usage'), env(), { auth, ...worldA.deps });
   const usageBody = await usageResponse.json();
@@ -163,7 +163,7 @@ async function main(): Promise<void> {
   assert.equal(usageBody.plan, 'free');
   assert.equal(usageBody.unit, 'generations');
   assert.equal(usageBody.used, 1);
-  assert.equal(usageBody.limit, 5);
+  assert.equal(usageBody.limit, 10);
   assert.equal(worldA.world.used, 1, 'đọc hạn mức không được trừ');
   assert.equal(worldA.world.bumps, 0);
 
@@ -213,7 +213,7 @@ async function main(): Promise<void> {
   assert.match(String(dupBody.error), /Thư viện/u);
 
   // 8. Hết lượt: 429 + câu đúng đơn vị + `usage` để UI tắt nút, và nhả chỗ đã giữ.
-  const worldSpent = makeWorld({ used: 5 });
+  const worldSpent = makeWorld({ used: 10 });
   const spent = await handle(post('/v1/generate', { text: LESSON, questionCount: 3, idempotencyKey: 'click-worker-002' }), env(), {
     auth,
     generate: generateOk(JSON.stringify(GAME)),
@@ -222,9 +222,9 @@ async function main(): Promise<void> {
   const spentBody = await spent.json();
   assert.equal(spent.status, 429);
   assert.match(String(spentBody.error), /lượt/u);
-  assert.equal(spentBody.usage.quotaLimit, 5);
+  assert.equal(spentBody.usage.quotaLimit, 10);
   assert.equal(worldSpent.world.rows.length, 0, 'chỗ đã giữ phải được nhả');
-  assert.equal(worldSpent.world.used, 5);
+  assert.equal(worldSpent.world.used, 10);
 
   // 9. Nhà cung cấp hỏng: 502, hoàn đúng lượt, dòng sổ là failed giá 0.
   const worldFail = makeWorld();

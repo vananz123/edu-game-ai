@@ -60,9 +60,9 @@ function cloudUsageText(usage) {
   if (!Number.isFinite(used) || !Number.isFinite(limit) || limit <= 0) return '';
   const left = Math.max(0, limit - used);
   if (usage.allowed === false || left <= 0) {
-    return `Đã hết ${unit} tạo game của tháng (${used}/${limit}).`;
+    return `Đã hết ${unit} tạo game của kỳ này (${used}/${limit}).`;
   }
-  return `Còn ${left}/${limit} ${unit} tạo game trong tháng.`;
+  return `Còn ${left}/${limit} ${unit} tạo game (kỳ 2 tuần).`;
 }
 
 /** Đã biết là hết: nút không được mời bấm một việc chắc chắn bị từ chối. */

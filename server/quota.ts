@@ -43,13 +43,44 @@ export type ChargeUnit = 'generations' | 'credits';
 export const DEFAULT_CREDIT_COST = 2;
 export const DEFAULT_MONTHLY_CREDITS = { free: 50, pro: 500 } as const;
 
-export const MONTH_LIMITS: Record<string, number> = { free: 5, plus: 100 };
+/** Độ dài một kỳ hạn mức, tính bằng ngày (#362: 2 tuần, không phải tháng). */
+export const PERIOD_DAYS = 14;
+
+/**
+ * Hạn mức của MỘT KỲ 14 NGÀY theo gói (#362): free **10 lượt**, plus 100.
+ *
+ * Vì sao 2 tuần chứ không phải tháng: giáo viên dạy theo tuần, và một hạn mức tháng khiến
+ * người dùng hết lượt từ tuần thứ hai rồi chờ 3 tuần. Kỳ 14 ngày không đổi số lượt mỗi
+ * lần bấm, chỉ đổi chỗ đếm.
+ */
+export const PERIOD_LIMITS: Record<string, number> = { free: 10, plus: 100 };
+
+const DAY_MS = 86_400_000;
+
+/**
+ * Kỳ hạn mức chứa thời điểm `at`: `{key, start, end}` (`YYYY-MM-DD`, `end` tính cả ngày).
+ *
+ * `key` là NGÀY BẮT ĐẦU KỲ và nó chính là giá trị ghi vào `usage_monthly.month` — cột đó là
+ * `text`, nên đổi từ "tháng" sang "kỳ 14 ngày" **không cần migration** (điều kiện để nó chạy
+ * được trên máy giáo viên và trên project thật, xem #357).
+ *
+ * Kỳ tính theo lịch tuyệt đối: bội số 14 ngày kể từ 1970-01-01 UTC. Nhờ vậy hai máy ở hai múi
+ * giờ tính ra **cùng** một kỳ, và hai kỳ liền nhau không chồng lấn.
+ */
+export function usagePeriod(at: Date = new Date()): { key: string; start: string; end: string } {
+  const today = Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate());
+  const day = Math.floor(today / DAY_MS);
+  const startDay = Math.floor(day / PERIOD_DAYS) * PERIOD_DAYS;
+  const start = new Date(startDay * DAY_MS).toISOString().slice(0, 10);
+  const end = new Date((startDay + PERIOD_DAYS - 1) * DAY_MS).toISOString().slice(0, 10);
+  return { key: start, start, end };
+}
 
 /** Hạn mức theo gói: chỉ `plus` **và** đang `active` mới được 100. */
 export function quotaLimitFor(plan: PlanRow | null): number {
-  if (!plan) return MONTH_LIMITS.free;
-  if (plan.plan === 'plus' && plan.status === 'active') return MONTH_LIMITS.plus;
-  return MONTH_LIMITS.free;
+  if (!plan) return PERIOD_LIMITS.free;
+  if (plan.plan === 'plus' && plan.status === 'active') return PERIOD_LIMITS.plus;
+  return PERIOD_LIMITS.free;
 }
 
 export interface UsageSnapshot {
@@ -64,11 +95,11 @@ export interface UsageSnapshot {
 }
 
 /**
- * Ảnh chụp hạn mức tháng của một người (#354): "tháng này dùng bao nhiêu / còn bao nhiêu",
+ * Ảnh chụp hạn mức kỳ 14 ngày của một người (#354, #362): "tháng này dùng bao nhiêu / còn bao nhiêu",
  * KHÔNG trừ gì. Đây là phép ĐỌC, nên nó phải dùng đúng bộ quy tắc của phép trừ:
  * gói `plus` **và** `active` thì đếm bằng credits, còn lại đếm bằng lượt.
  *
- * `row` là hàng `usage_monthly` của tháng đó (null = chưa có hàng, tức là 0).
+ * `row` là hàng `usage_monthly` của kỳ đó (null = chưa có hàng, tức là 0).
  */
 export function usageSnapshot(
   plan: PlanRow | null,
@@ -87,7 +118,7 @@ export function usageSnapshot(
       month,
       unit,
       used: Math.max(0, Math.trunc(Number(row && row.generations) || 0)),
-      limit: MONTH_LIMITS.free,
+      limit: PERIOD_LIMITS.free,
       cost: 1,
     };
   }

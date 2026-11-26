@@ -19,6 +19,10 @@ SmartScreen, shortcut, và hành vi sau khi gỡ.
 >
 > Bản **v0.5.5 + Cloud AI thật** (dựng 26/11, trỏ `https://ai-gateway.dovanan-bth2017.workers.dev`):
 > `16 369 669 B` · SHA-256 `82f4c652cb47023abb46386b2ca3998b8e0d7a5b9d9961c0ee921a6a905c4e76`
+>
+> Bản **#362** (26/11, hạn mức free **10 lượt / kỳ 2 tuần**, chip tài khoản cố định ở sidebar,
+> panel Tài khoản mới): `16 381 012 B` · SHA-256 `870e1f5a71903da04aafef5b…`
+> — bản mới nhất đã đo trên máy này; **vẫn chưa phát hành trên GitHub**.
 > Kiểm bằng `npm run check:pilot` (đòi https + gateway tự khai đúng tên/bản + URL có trong byte của `.exe`).
 > Nếu mã khác ⇒ tệp hỏng hoặc không phải bản đã kiểm — **dừng lại**, đừng cài.
 

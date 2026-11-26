@@ -22,6 +22,7 @@ import {
   consumeGeneration,
   describeQuotaFailure,
   refundGeneration,
+  usagePeriod,
   usageSnapshot,
   type QuotaStore,
 } from '../server/quota.js';
@@ -62,7 +63,8 @@ function configured(env: WorkerEnv): boolean {
 }
 
 function monthNow(): string {
-  return new Date().toISOString().slice(0, 7);
+  // Kỳ 14 ngày (#362): cùng hàm với bản Express, nên hai bản không thể chia kỳ khác nhau.
+  return usagePeriod().key;
 }
 
 export interface HandlerDeps {
@@ -125,7 +127,7 @@ export async function handle(
       return json(snapshot);
     } catch (error) {
       console.error('Usage read failed:', error instanceof Error ? error.message : 'unknown');
-      return json({ error: 'Chưa đọc được hạn mức tháng này. Thử lại sau ít phút.' }, 503);
+      return json({ error: 'Chưa đọc được hạn mức kỳ này. Thử lại sau ít phút.' }, 503);
     }
   }
 

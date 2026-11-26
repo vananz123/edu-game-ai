@@ -124,8 +124,8 @@ const USAGE_STATES = String.raw`(async () => {
     const button = document.querySelector('[data-editor-cloud-generate]');
     return { text: (hint ? hint.textContent : '').trim(), disabled: Boolean(button && button.disabled) };
   };
-  const near = await read({ allowed: true, used: 4, quotaLimit: 5, unit: 'generations' });
-  const done = await read({ allowed: false, used: 5, quotaLimit: 5, unit: 'generations' });
+  const near = await read({ allowed: true, used: 9, quotaLimit: 10, unit: 'generations' });
+  const done = await read({ allowed: false, used: 10, quotaLimit: 10, unit: 'generations' });
   const credits = await read({ allowed: true, used: 498, quotaLimit: 500, unit: 'credits' });
   const junk = await read({ used: 'x', quotaLimit: null });
   editorCloudUsage = null;
@@ -151,7 +151,7 @@ async function main() {
 
   // #350: what the teacher reads BEFORE the button spends a turn.
   const usage = await page.evaluate(USAGE_STATES);
-  check('the meter says how many turns are left', /Còn 1\/5 lượt/u.test(String(usage.near.text)), String(usage.near.text));
+  check('the meter says how many turns are left', /Còn 1\/10 lượt/u.test(String(usage.near.text)), String(usage.near.text));
   check('a teacher with turns left can press the button', usage.near.disabled === false, String(usage.near.disabled));
   check('an exhausted month is said plainly', /Đã hết lượt/u.test(String(usage.done.text)), String(usage.done.text));
   check('an exhausted month disables the button', usage.done.disabled === true, String(usage.done.disabled));

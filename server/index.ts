@@ -3,7 +3,7 @@ import rateLimit from 'express-rate-limit';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { requestGameJson } from './gemini.js';
-import { consumeGeneration, describeQuotaFailure, refundGeneration, usageSnapshot, type QuotaStore } from './quota.js';
+import { consumeGeneration, describeQuotaFailure, refundGeneration, usagePeriod, usageSnapshot, type QuotaStore } from './quota.js';
 import { claimUsageLog, normalizeIdempotencyKey, releaseUsageLog, settleUsageLog, usageLogRow, writeUsageLog, type UsageLogDb } from './usage-log.js';
 
 const PORT = Number(process.env.PORT || 8787);
@@ -224,7 +224,7 @@ app.get('/health', (_req, res) => res.json({ ok: true, service: 'edugame-ai-gate
 app.get('/v1/usage', requireConfiguration, requireUser, async (req: AuthenticatedRequest, res: Response) => {
   const admin = adminClient!;
   const userId = req.userId!;
-  const month = new Date().toISOString().slice(0, 7);
+  const month = usagePeriod().key;
   try {
     const store = quotaStore(admin);
     const plan = await store.planOf(userId);
@@ -244,7 +244,7 @@ app.get('/v1/usage', requireConfiguration, requireUser, async (req: Authenticate
     res.json(snapshot);
   } catch (error) {
     console.error('Usage read failed:', error instanceof Error ? error.message : 'unknown');
-    res.status(503).json({ error: 'Chưa đọc được hạn mức tháng này. Thử lại sau ít phút.' });
+    res.status(503).json({ error: 'Chưa đọc được hạn mức kỳ này. Thử lại sau ít phút.' });
   }
 });
 
@@ -256,7 +256,7 @@ app.post('/v1/generate', requireConfiguration, requireUser, async (req: Authenti
   }
   const admin = adminClient!;
   const userId = req.userId!;
-  const month = new Date().toISOString().slice(0, 7);
+  const month = usagePeriod().key;
   const ledger = usageLogDb(admin);
   // #357: giữ chỗ TRƯỚC khi trừ lượt. Khoá trùng đã `completed` ⇒ trả lời ngay, chưa trừ gì.
   const key = normalizeIdempotencyKey(parsed.data.idempotencyKey);

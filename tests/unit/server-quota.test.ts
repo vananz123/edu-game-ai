@@ -38,7 +38,7 @@ console.log('server-quota: 3 nhóm kiểm đã qua');
 // thuộc vào nó thì sản phẩm không chạy. Phép nguyên tử nằm ở `casBump`, và nó phải
 // đúng khi hai request tranh nhau.
 // ---------------------------------------------------------------------------
-import { consumeGeneration, quotaLimitFor, MONTH_LIMITS, type QuotaStore } from '../../server/quota';
+import { consumeGeneration, quotaLimitFor, usagePeriod, PERIOD_DAYS, PERIOD_LIMITS, type QuotaStore } from '../../server/quota';
 
 interface FakeState {
   plan: { plan: string; status: string } | null;
@@ -65,24 +65,24 @@ function fakeStore(state: FakeState, overrides: Partial<QuotaStore> = {}): Quota
 
 async function quotaChecks(): Promise<void> {
   // 1. Hạn mức theo gói: `plus` chỉ được 100 khi còn `active`.
-  assert.equal(quotaLimitFor(null), MONTH_LIMITS.free, 'không có dòng gói ⇒ hạn mức free');
+  assert.equal(quotaLimitFor(null), PERIOD_LIMITS.free, 'không có dòng gói ⇒ hạn mức free');
   assert.equal(quotaLimitFor({ plan: 'plus', status: 'active' }), 100, 'plus + active ⇒ 100');
-  assert.equal(quotaLimitFor({ plan: 'plus', status: 'past_due' }), MONTH_LIMITS.free, 'plus quá hạn ⇒ free');
-  assert.equal(quotaLimitFor({ plan: 'free', status: 'active' }), MONTH_LIMITS.free, 'free ⇒ 5');
+  assert.equal(quotaLimitFor({ plan: 'plus', status: 'past_due' }), PERIOD_LIMITS.free, 'plus quá hạn ⇒ free');
+  assert.equal(quotaLimitFor({ plan: 'free', status: 'active' }), PERIOD_LIMITS.free, 'free ⇒ 10');
 
   // 2. Lượt đầu tiên: tăng 0 → 1 và báo đúng con số.
   const state: FakeState = { plan: { plan: 'free', status: 'active' }, used: 0, casLosses: 0, bumps: [] };
   const first = await consumeGeneration(fakeStore(state), 'u1', '2026-11');
   assert.equal(first.ok, true, 'còn lượt thì cho qua');
-  assert.deepEqual((first as { quota: unknown }).quota, { allowed: true, used: 1, quotaLimit: 5, plan: 'free', unit: 'generations', cost: 1 }, 'usage tăng đúng một lượt');
+  assert.deepEqual((first as { quota: unknown }).quota, { allowed: true, used: 1, quotaLimit: 10, plan: 'free', unit: 'generations', cost: 1 }, 'usage tăng đúng một lượt');
   assert.deepEqual(state.bumps, [{ from: 0, to: 1 }], 'đọc 0 rồi đổi 0 → 1');
 
   // 3. Hết lượt: không ghi gì thêm, và nói ra số đã dùng.
-  const full: FakeState = { plan: null, used: 5, casLosses: 0, bumps: [] };
+  const full: FakeState = { plan: null, used: 10, casLosses: 0, bumps: [] };
   const blocked = await consumeGeneration(fakeStore(full), 'u1', '2026-11');
   assert.equal(blocked.ok, false, 'hết lượt thì không cho qua');
   assert.equal((blocked as { kind: string }).kind, 'exhausted', 'đúng loại: hết lượt');
-  assert.deepEqual((blocked as { quota: unknown }).quota, { allowed: false, used: 5, quotaLimit: 5, plan: 'free', unit: 'generations', cost: 1 }, 'báo đúng số đã dùng');
+  assert.deepEqual((blocked as { quota: unknown }).quota, { allowed: false, used: 10, quotaLimit: 10, plan: 'free', unit: 'generations', cost: 1 }, 'báo đúng số đã dùng');
   assert.equal(full.bumps.length, 0, 'không ghi gì khi đã hết lượt');
 
   // 4. Tranh chấp: CAS thua một lần rồi thắng ⇒ vẫn đúng một lượt được cấp, không mất lượt.
@@ -140,7 +140,7 @@ async function refundChecks(): Promise<void> {
   assert.equal(await refundGeneration(failing, 'u1', '2026-11', 2), false, 'trả lại hỏng thì false, không ném');
 
   // 4. Người khác đã tăng dòng trước (CAS thua): không trả lại mù, báo false.
-  const raced: FakeState = { plan: null, used: 5, casLosses: 1, bumps: [] };
+  const raced: FakeState = { plan: null, used: 10, casLosses: 1, bumps: [] };
   assert.equal(await refundGeneration(fakeStore(raced), 'u1', '2026-11', 2), false, 'giá trị đã khác thì không trừ bừa');
 }
 
@@ -287,7 +287,7 @@ async function snapshotChecks(): Promise<void> {
   const free = usageSnapshot({ plan: 'free', status: 'active' }, '2026-11', { generations: 2 }, null);
   assert.equal(free.unit, 'generations');
   assert.equal(free.used, 2);
-  assert.equal(free.limit, 5);
+  assert.equal(free.limit, 10);
   assert.equal(free.cost, 1);
   assert.equal(free.plan, 'free');
 
@@ -306,7 +306,7 @@ async function snapshotChecks(): Promise<void> {
   // 4. No row yet is zero usage, not an error and not "unknown".
   const empty = usageSnapshot(null, '2026-11', null, null);
   assert.equal(empty.used, 0);
-  assert.equal(empty.limit, 5);
+  assert.equal(empty.limit, 10);
   assert.equal(empty.unit, 'generations');
 
   // 5. A missing price falls back to the default, never to "free".
@@ -324,3 +324,52 @@ void creditChecks();
 // Thứ tự có ý nghĩa: hàm khai báo bằng `const { … } = require(…)` bên trong thân, nên phải
 // gọi sau khi tệp đã nạp xong — cùng lý do `creditChecks` được gọi ở cuối.
 void snapshotChecks();
+
+// ── #362: kỳ hạn mức là 14 NGÀY, không phải tháng ──────────────────────────────
+//
+// Đây là phép đo của yêu cầu "free 10 lượt / 2 tuần": nếu kỳ sai thì giáo viên hoặc bị trừ
+// oan (kỳ quá ngắn) hoặc được 20 lượt (kỳ 28 ngày) — mà cả hai đều là nói sai về tiền.
+function periodChecks() {
+  const { usagePeriod, PERIOD_DAYS, PERIOD_LIMITS: limits } = require('../../server/quota') as {
+    usagePeriod: (at?: Date) => { key: string; start: string; end: string };
+    PERIOD_DAYS: number;
+    PERIOD_LIMITS: Record<string, number>;
+  };
+  assert.equal(PERIOD_DAYS, 14, 'kỳ = 14 ngày');
+  assert.equal(limits.free, 10, 'free = 10 lượt mỗi kỳ');
+  assert.equal(limits.plus, 100, 'plus = 100');
+
+  const day = (iso: string) => new Date(iso + 'T03:00:00Z');
+  const p = usagePeriod(day('2026-11-26'));
+  // `key` là ngày bắt đầu kỳ — nó là giá trị ghi vào `usage_monthly.month`, nên phải ổn định.
+  assert.equal(p.key, p.start, 'khoá dòng = ngày bắt đầu kỳ');
+  const span = (Date.parse(p.end + 'T00:00:00Z') - Date.parse(p.start + 'T00:00:00Z')) / 86_400_000 + 1;
+  assert.equal(span, 14, 'kỳ dài đúng 14 ngày, tính cả ngày cuối');
+
+  // Cùng kỳ: mọi ngày trong kỳ trả cùng một khoá (nếu không, mỗi ngày là một hạn mức mới).
+  for (const inside of [p.start, '2026-11-26', '2026-12-01', p.end]) {
+    assert.equal(usagePeriod(day(inside)).key, p.key, 'ngày ' + inside + ' thuộc cùng kỳ');
+  }
+
+  // Kỳ liền sau bắt đầu đúng ngày sau `end`, và không chồng lấn.
+  const nextStart = new Date(Date.parse(p.end + 'T00:00:00Z') + 86_400_000).toISOString().slice(0, 10);
+  const next = usagePeriod(day(nextStart));
+  assert.equal(next.start, nextStart, 'kỳ sau bắt đầu ngay sau kỳ trước');
+  assert.ok(next.key !== p.key, 'hai kỳ khác khoá');
+
+  // Trước kỳ này cũng đúng 14 ngày ⇒ không có ngày nào rơi ra ngoài mọi kỳ.
+  const prevEnd = new Date(Date.parse(p.start + 'T00:00:00Z') - 86_400_000).toISOString().slice(0, 10);
+  const prev = usagePeriod(day(prevEnd));
+  assert.equal(
+    (Date.parse(p.start + 'T00:00:00Z') - Date.parse(prev.start + 'T00:00:00Z')) / 86_400_000,
+    14,
+    'kỳ trước cách đúng 14 ngày'
+  );
+
+  // Hai máy khác múi giờ vẫn tính ra CÙNG một kỳ (nếu không, một giáo viên có hai hạn mức).
+  const utc = usagePeriod(new Date('2026-11-26T23:30:00Z'));
+  const localTZ = usagePeriod(new Date('2026-11-26T23:30:00Z'));
+  assert.equal(utc.key, localTZ.key, 'kỳ tính theo lịch tuyệt đối');
+}
+
+periodChecks();

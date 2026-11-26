@@ -38,6 +38,7 @@ const PROBE = String.raw`(async () => {
   const session = await window.__accountGateSession();
   const name = document.querySelector('[data-account-name]');
   const role = document.querySelector('[data-account-role]');
+  const plan = document.querySelector('[data-account-plan]');
   const avatar = document.querySelector('[data-account-avatar]');
   const avatarBox = avatar ? avatar.getBoundingClientRect() : null;
   return {
@@ -46,6 +47,7 @@ const PROBE = String.raw`(async () => {
     state: chip.dataset.state,
     name: name ? name.textContent.trim() : null,
     role: role ? role.textContent.trim() : null,
+    plan: plan && !plan.hidden ? plan.textContent.trim() : null,
     avatarSize: avatarBox ? [Math.round(avatarBox.width), Math.round(avatarBox.height)] : null,
     chipWidth: Math.round(chip.getBoundingClientRect().width),
   };
@@ -107,7 +109,7 @@ const QUOTA_PROBE = String.raw`(async () => {
     realText: real ? real.textContent.trim() : ''
   };
   accountUiState = () => 'member';
-  accountState.quota = { ok: true, plan: 'plus', status: 'active', month: '2026-11', unit: 'credits', used: 4, limit: 500, cost: 2 };
+  accountState.quota = { ok: true, plan: 'plus', status: 'active', month: '2026-11-19', unit: 'credits', used: 4, limit: 500, cost: 2 };
   rerenderAccountPanel();
   await sleep(180);
   const block = draw();
@@ -173,8 +175,17 @@ const USAGE_GUEST = String.raw`(async () => {
   const wantName = dom.status && dom.status.loggedIn ? (dom.status.email || 'Đã đăng nhập') : 'Khách';
   check('the chip name comes from the account state', dom.name === wantName, dom.name + ' vs ' + wantName);
 
-  check('the chip explains the state in words', dom.role === ROLE_TEXT[wantState],
-    dom.role + ' vs ' + ROLE_TEXT[wantState]);
+  // #362: nguoi da dang nhap thi dong thu hai cua chip noi HAN MUC (badge noi goi), khach thi
+  // van la cau trang thai. Do dung thu moi trang thai hua, khong doi mot cau da bi bo.
+  if (wantState === 'member') {
+    const plan = String(dom.plan || '');
+    check('the chip says which plan this account is on', /^(Free|Pro)$/u.test(plan), plan || '(rong)');
+    check('the chip says how much of the allowance is left',
+      /^Còn \d+\/\d+ (lượt|credits)$/u.test(String(dom.role || '')), String(dom.role));
+  } else {
+    check('the chip explains the state in words', dom.role === ROLE_TEXT[wantState],
+      dom.role + ' vs ' + ROLE_TEXT[wantState]);
+  }
 
   check('the avatar keeps its 34px box', Array.isArray(dom.avatarSize) && dom.avatarSize[0] === 34 && dom.avatarSize[1] === 34,
     JSON.stringify(dom.avatarSize));

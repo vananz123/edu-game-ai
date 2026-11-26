@@ -17,7 +17,7 @@ const accountState = {
   busy: '',
   // #352: sổ dùng AI của chính tài khoản này. null = chưa đọc lần nào (KHÔNG phải "rỗng").
   history: null,
-  // #354: đồng hồ hạn mức tháng ({plan, unit, used, limit, cost}) — null = chưa đọc.
+  // #354/#362: đồng hồ hạn mức của kỳ 14 ngày ({plan, unit, used, limit, cost, month}) — null = chưa đọc.
   quota: null,
 };
 
@@ -60,7 +60,7 @@ const ACCOUNT_ROLE_TEXT = {
   unknown: 'Không đọc được trạng thái',
 };
 
-/** Vẽ lại chip ở đáy sidebar. Idempotent: `render()` gọi nó ở mỗi lần vẽ trang. */
+/** Vẽ lại chip ở đáy sidebar (tên, gói, đồng hồ hạn mức). Idempotent. */
 function renderAccountChip() {
   const chip = document.querySelector('[data-account-chip]');
   if (!chip) return;
@@ -71,12 +71,35 @@ function renderAccountChip() {
   const role = document.querySelector('[data-account-role]');
   if (role) role.textContent = ACCOUNT_ROLE_TEXT[stateName] || '';
   const avatar = document.querySelector('[data-account-avatar]');
-  if (avatar) {
-    const url = accountState.session && accountState.session.avatarUrl;
-    // Ảnh Google có thể 404 (tài khoản đã đổi ảnh): chip phải vẫn đọc được chữ cái.
-    avatar.innerHTML = url
-      ? '<img src="' + accountAttr(url) + '" alt="" referrerpolicy="no-referrer" onerror="this.remove()">'
-      : escapeHtml(accountInitial());
+  if (avatar) avatar.textContent = accountInitial();
+  // #362: gói + đồng hồ ngay trên chip, vì đây là thứ giáo viên cần thấy TRƯỚC khi bấm tạo.
+  const quota = accountState.quota;
+  const planKey = accountQuotaPlanKey(quota);
+  chip.dataset.plan = planKey;
+  const plan = document.querySelector('[data-account-plan]');
+  if (plan) {
+    plan.textContent = accountQuotaBadgeText(quota);
+    plan.hidden = planKey === 'none';
+  }
+  const meter = document.querySelector('[data-account-meter]');
+  const fill = document.querySelector('[data-account-meter-fill]');
+  const left = accountQuotaLeft(quota);
+  if (meter && fill) {
+    const share = accountQuotaShare(quota);
+    if (share === null) {
+      meter.hidden = true;
+    } else {
+      meter.hidden = false;
+      fill.style.width = Math.round(share * 100) + '%';
+      meter.dataset.tone = share <= 0.2 ? 'low' : (planKey === 'pro' ? 'pro' : 'free');
+    }
+  }
+  // Câu trên chip phải NGẮN: sidebar rộng 232px, và một câu bị cắt ("Còn 10/10 lượt · k…") là
+  // một câu không đọc được. Kỳ 2 tuần nói ở panel và ở `title` của chip.
+  const roleText = document.querySelector('[data-account-role]');
+  if (roleText && left && stateName === 'member') {
+    roleText.textContent = 'Còn ' + left.left + '/' + left.limit + ' ' + left.unit;
+    chip.title = accountQuotaLine(quota) + ' Bấm để mở Tài khoản.';
   }
 }
 
@@ -89,6 +112,11 @@ async function refreshAccount() {
     accountState.session = accountState.status && accountState.status.loggedIn
       ? await desktop.call('authSession').catch(() => null)
       : null;
+    // #362: đã đăng nhập thì đọc luôn hạn mức, để chip ở sidebar có số TRƯỚC khi bấm vào —
+    // đây là phép đọc, không trừ lượt.
+    if (accountState.status && accountState.status.loggedIn && accountState.quota === null) {
+      void accountLoadQuota();
+    }
   } catch (error) {
     accountState.status = null;
     accountState.session = null;
@@ -97,48 +125,93 @@ async function refreshAccount() {
   renderAccountChip();
 }
 
+/** Ảnh đại diện lớn: ảnh Google nếu có, không thì chữ cái. */
+function accountHeroAvatarHtml(size) {
+  // Chỉ chữ cái, không chèn ảnh Google: đo bằng ảnh chụp ở #362, `<img>` từ googleusercontent
+  // không tải được trong WebView2 và để lại biểu tượng ảnh vỡ ngay giữa khuôn mặt tài khoản.
+  // Một chữ cái đúng lúc nào cũng đọc được; một ảnh vỡ thì luôn trông như ứng dụng hỏng.
+  const cls = 'account-avatar ' + (size === 'lg' ? 'account-avatar-xl' : 'account-avatar-lg');
+  return '<span class="' + cls + '">' + escapeHtml(accountInitial()) + '</span>';
+}
+
+/** Dòng đầu của panel: ai đang đăng nhập, và đang ở gói nào. */
+function accountHeroHtml() {
+  const quota = accountState.quota;
+  const planKey = accountQuotaPlanKey(quota);
+  const badge = accountQuotaBadgeText(quota);
+  return '<div class="account-hero">'
+    + accountHeroAvatarHtml('lg')
+    + '<div class="account-hero-text">'
+    + '<strong class="account-hero-name" data-account-hero-name>' + escapeHtml(accountDisplayName()) + '</strong>'
+    + '<span class="account-hero-sub">Đăng nhập bằng Google'
+    + (badge ? ' · <span class="account-badge" data-account-hero-badge="' + accountAttr(planKey) + '">' + escapeHtml(badge) + '</span>' : '')
+    + '</span></div></div>';
+}
+
+/**
+ * Thẻ mời đăng nhập — màn hình đầu tiên của người chưa có tài khoản.
+ *
+ * Không phải một bức tường: câu đầu tiên nói rõ ứng dụng vẫn chạy đầy đủ khi chưa đăng nhập,
+ * câu thứ hai nói đăng nhập *mua thêm* gì. Một màn hình chặn sẽ vi phạm luật "Khách là mặc
+ * định và hợp lệ" của tệp này.
+ */
+function accountSignInCardHtml() {
+  return '<div class="account-signin">'
+    + '<span class="account-signin-mark">' + uiIcon('sparkles', '', 22) + '</span>'
+    + '<h3 class="account-signin-title">Đăng nhập để soạn câu hỏi bằng Cloud AI</h3>'
+    + '<ul class="account-perks">'
+    + '<li>' + uiIcon('check', '', 14) + ' Soạn cả bộ câu hỏi từ giáo án, có giải thích từng câu</li>'
+    + '<li>' + uiIcon('check', '', 14) + ' 10 lượt miễn phí mỗi kỳ 2 tuần</li>'
+    + '<li>' + uiIcon('check', '', 14) + ' Trò chơi, giáo án và điểm vẫn nằm trên máy bạn</li>'
+    + '</ul>'
+    + '<button class="account-google-btn" data-account-signin type="button">'
+    + '<span class="account-google-g" aria-hidden="true">G</span>'
+    + '<span>Đăng nhập với Google</span></button>'
+    + '<p class="account-hint">Trình duyệt sẽ mở để bạn chọn tài khoản, rồi tự quay về ứng dụng. '
+    + 'Không đăng nhập vẫn tạo và chơi game bình thường bằng AI local.</p>'
+    + '</div>';
+}
+
 function accountPanelHtml() {
   const stateName = accountUiState();
   const status = accountState.status || {};
   const head = '<div class="modal-head"><h2>Tài khoản</h2>'
     + '<button class="modal-close" data-close aria-label="Đóng">' + uiIcon('x', '', 16) + '</button></div>';
-  const guestNote = '<div class="info-box">Bạn đang dùng ở chế độ <strong>Khách</strong>. '
-    + 'Trò chơi, giáo án và kết quả vẫn lưu trên máy này và vẫn chơi được khi không có Internet. '
-    + 'Đăng nhập chỉ cần cho Cloud AI.</div>';
   let body = '';
   if (stateName === 'member') {
-    body = '<div class="account-panel-who"><span class="account-avatar account-avatar-lg">' + escapeHtml(accountInitial()) + '</span>'
-      + '<div><strong class="block">' + escapeHtml(accountDisplayName()) + '</strong>'
-      + '<span class="account-role">Đã đăng nhập bằng Google</span></div></div>'
-      + '<div class="info-box mt-[14px]">Dữ liệu học tập nằm trên máy này, không tự tải lên đám mây. '
-      + 'Đăng xuất không xoá trò chơi hay giáo án nào.</div>'
-      + '<div class="account-actions"><button class="btn-ghost" data-account-cloud-test type="button">'
-      + uiIcon('sparkles', '', 15) + ' Kiểm tra Cloud AI</button>'
+    body = accountHeroHtml()
+      + accountQuotaHtml()
+      + '<div class="account-actions">'
+      + '<button class="btn-ghost" data-account-cloud-test type="button">'
+      + '<span class="account-btn-inner">' + uiIcon('sparkles', '', 15) + ' Kiểm tra Cloud AI</span></button>'
       + '<button class="btn-ghost" data-account-signout type="button">Đăng xuất</button></div>'
       + accountCloudResultHtml()
-      + '<p class="account-hint">Kiểm tra dùng 1 lượt tạo game thật của tháng: 3 câu từ một bài mẫu.</p>'
-      + accountQuotaHtml()
-      + accountUsageHistoryHtml();
+      + accountUsageHistoryHtml()
+      + '<p class="account-hint">Dữ liệu học tập nằm trên máy này, không tự tải lên đám mây. '
+      + 'Đăng xuất không xoá trò chơi hay giáo án nào. Kiểm tra Cloud AI dùng 1 lượt thật.</p>';
   } else if (stateName === 'guest') {
-    body = guestNote
-      + '<div class="account-actions"><button class="btn-primary" data-account-signin type="button">'
-      + uiIcon('log-in', '', 15) + ' Đăng nhập với Google</button></div>'
-      + '<p class="account-hint">Trình duyệt sẽ mở để bạn chọn tài khoản, rồi tự quay về ứng dụng.</p>';
+    body = accountSignInCardHtml()
+      + '<div class="account-guest-note">' + uiIcon('shield', '', 15)
+      + ' <span>Bạn đang dùng ở chế độ <strong>Khách</strong> — mọi thứ vẫn lưu trên máy này.</span></div>';
   } else if (stateName === 'unconfigured') {
-    body = '<div class="info-box">Cloud AI chưa được cấu hình trên máy này, nên chưa có đăng nhập. '
-      + 'Bạn vẫn dùng được AI local và mọi tính năng khác.</div>';
+    body = '<div class="account-card"><div class="account-card-top">'
+      + '<span class="account-card-label">Cloud AI</span></div>'
+      + '<p class="account-plan-line">Cloud AI chưa được cấu hình trên bản cài này, nên chưa có đăng nhập. '
+      + 'Bạn vẫn dùng được AI local và mọi tính năng khác.</p></div>';
   } else {
     const detail = accountState.error || (status && status.problem) || '';
-    body = '<div class="info-box">Không đọc được phiên đăng nhập trên máy này.'
+    body = '<div class="account-card"><div class="account-card-top">'
+      + '<span class="account-card-label">Phiên đăng nhập</span></div>'
+      + '<p class="account-plan-line">Không đọc được phiên trên máy này.'
       + (detail ? ' Chi tiết: ' + escapeHtml(detail) : '')
-      + ' Bạn vẫn dùng được ứng dụng ở chế độ Khách; hãy đăng nhập lại nếu muốn dùng Cloud AI.</div>'
-      + '<div class="account-actions"><button class="btn-ghost" data-account-reset type="button">Xoá phiên cũ</button></div>';
+      + ' Bạn vẫn dùng được ứng dụng ở chế độ Khách.</p>'
+      + '<div class="account-actions"><button class="btn-ghost" data-account-reset type="button">Xoá phiên cũ</button></div></div>';
   }
   const busy = accountState.busy
     ? '<p class="account-hint" data-account-busy>' + escapeHtml(accountState.busy) + '</p>'
     : '';
-  return '<div class="modal-backdrop"><div class="modal" data-account-panel data-account-panel-state="'
-    + accountAttr(stateName) + '">' + head + '<div class="modal-body">' + body + busy + '</div></div></div>';
+  return '<div class="modal-backdrop"><div class="modal modal-account" data-account-panel data-account-panel-state="'
+    + accountAttr(stateName) + '">' + head + '<div class="modal-body account-body">' + body + busy + '</div></div></div>';
 }
 
 function closeAccountPanel() {
@@ -184,20 +257,69 @@ function openAccountPanel() {
 }
 
 // ---------------------------------------------------------------------------
-// #354 — đồng hồ hạn mức tháng. Đọc từ gateway (`GET /v1/usage`), KHÔNG trừ gì, và
-// `userId` bên máy chủ luôn đến từ token nên không có đường đọc hạn mức của người khác.
+// #354/#362 — đồng hồ hạn mức của KỲ 14 NGÀY. Đọc từ gateway (`GET /v1/usage`), KHÔNG trừ gì,
+// và `userId` bên máy chủ luôn đến từ token nên không có đường đọc hạn mức của người khác.
 // ---------------------------------------------------------------------------
 
-/** "Tháng 11: còn 5/5 lượt" — đơn vị đi cùng con số (#348). Hàm thuần, có unit test. */
-function accountQuotaLine(quota) {
-  if (!quota || typeof quota !== 'object' || quota.ok !== true) return '';
-  const unit = quota.unit === 'credits' ? 'credits' : 'lượt';
+/** 'pro' | 'free' | 'none'. 'none' = chưa đọc được hạn mức (KHÔNG phải "miễn phí"). */
+function accountQuotaPlanKey(quota) {
+  if (!quota || typeof quota !== 'object' || quota.ok !== true) return 'none';
+  return quota.plan === 'plus' && quota.status === 'active' ? 'pro' : 'free';
+}
+
+/** Nhãn ngắn để in trên chip: "Pro" / "Free". Rỗng khi chưa biết. */
+function accountQuotaBadgeText(quota) {
+  const key = accountQuotaPlanKey(quota);
+  return key === 'pro' ? 'Pro' : (key === 'free' ? 'Free' : '');
+}
+
+/** {used, limit, left, unit} hoặc null khi số không đọc được. */
+function accountQuotaLeft(quota) {
+  if (!quota || typeof quota !== 'object' || quota.ok !== true) return null;
   const used = Number(quota.used);
   const limit = Number(quota.limit);
-  if (!Number.isFinite(used) || !Number.isFinite(limit) || limit <= 0) return '';
-  const left = Math.max(0, limit - used);
-  if (left <= 0) return 'Đã hết ' + unit + ' tạo game của tháng (' + used + '/' + limit + ').';
-  return 'Còn ' + left + '/' + limit + ' ' + unit + ' tạo game trong tháng.';
+  if (!Number.isFinite(used) || !Number.isFinite(limit) || limit <= 0) return null;
+  return {
+    used: Math.max(0, Math.trunc(used)),
+    limit: Math.trunc(limit),
+    left: Math.max(0, Math.trunc(limit - used)),
+    unit: quota.unit === 'credits' ? 'credits' : 'lượt',
+  };
+}
+
+/** Phần đã dùng (0..1) để vẽ thanh. null = không vẽ thanh (không biết số). */
+function accountQuotaShare(quota) {
+  const view = accountQuotaLeft(quota);
+  if (!view) return null;
+  return Math.min(1, Math.max(0, view.used / view.limit));
+}
+
+/** '2026-11-19' → '19/11'. Sai dạng thì trả chuỗi rỗng, không bịa ngày. */
+function accountDayMonth(iso) {
+  const match = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/u);
+  return match ? match[3] + '/' + match[2] : '';
+}
+
+/**
+ * Kỳ 14 ngày mà dòng hạn mức đang nằm trong: `19/11 – 02/12`.
+ *
+ * `quota.month` là NGÀY BẮT ĐẦU KỲ (#362), nên ngày kết thúc tính được ở đây mà không cần
+ * máy chủ gửi thêm trường — và không cần migration cột nào.
+ */
+function accountPeriodText(month) {
+  const start = accountDayMonth(month);
+  if (!start) return '';
+  const match = String(month).match(/^(\d{4})-(\d{2})-(\d{2})/u);
+  const end = new Date(Date.parse(match[0] + 'T00:00:00Z') + 13 * 86_400_000).toISOString().slice(0, 10);
+  return start + ' – ' + accountDayMonth(end);
+}
+
+/** "Còn 1/5 lượt tạo game (kỳ 2 tuần)." — đơn vị đi cùng con số (#348). Hàm thuần. */
+function accountQuotaLine(quota) {
+  const view = accountQuotaLeft(quota);
+  if (!view) return '';
+  if (view.left <= 0) return 'Đã hết ' + view.unit + ' tạo game của kỳ này (' + view.used + '/' + view.limit + ').';
+  return 'Còn ' + view.left + '/' + view.limit + ' ' + view.unit + ' tạo game (kỳ 2 tuần).';
 }
 
 /** Gói, để giáo viên biết mình đang được đo bằng gì. */
@@ -207,30 +329,57 @@ function accountQuotaPlanText(quota) {
   return 'Gói miễn phí';
 }
 
+/** Một câu giải thích giá của một lần soạn, theo đơn vị đang dùng. */
+function accountQuotaCostText(quota) {
+  const view = accountQuotaLeft(quota);
+  if (!view) return '';
+  const cost = Number(quota.cost);
+  const price = Number.isFinite(cost) && cost > 0 ? Math.trunc(cost) : 1;
+  return 'Mỗi lần soạn câu hỏi: ' + price + ' ' + view.unit
+    + ' · đã dùng ' + view.used + '/' + view.limit;
+}
+
+/** Thẻ hạn mức trong panel: tên gói, thanh, số còn lại, kỳ. */
 function accountQuotaHtml() {
   const quota = accountState.quota;
   if (!quota) {
-    return '<div class="account-quota" data-account-quota="loading">'
-      + '<span class="account-hint">Đang đọc hạn mức tháng…</span></div>';
+    return '<div class="account-card account-quota" data-account-quota="loading">'
+      + '<div class="account-card-top"><span class="account-card-label">Gói của bạn</span></div>'
+      + '<p class="account-plan-line">Đang đọc hạn mức kỳ này…</p>'
+      + '<div class="account-meter account-meter-lg"><i style="width:0%"></i></div></div>';
   }
   if (quota.ok !== true) {
     const detail = String(quota.message || quota.code || '').trim();
-    return '<div class="account-quota" data-account-quota="error">'
-      + '<p class="account-hint">Chưa đọc được hạn mức tháng này'
+    return '<div class="account-card account-quota" data-account-quota="error">'
+      + '<div class="account-card-top"><span class="account-card-label">Gói của bạn</span></div>'
+      + '<p class="account-plan-line">Chưa đọc được hạn mức kỳ này'
       + (detail ? ': ' + escapeHtml(detail) : '.')
       + ' Đây là lỗi đọc số, không phải kết luận là bạn còn đủ lượt.</p>'
       + '<button class="btn-ghost btn-small" data-account-quota-load type="button">Thử lại</button></div>';
   }
   const line = accountQuotaLine(quota);
-  if (!line) {
-    return '<div class="account-quota" data-account-quota="error">'
-      + '<p class="account-hint">Máy trả về hạn mức không đọc được. Thử lại sau.</p>'
+  const view = accountQuotaLeft(quota);
+  if (!line || !view) {
+    return '<div class="account-card account-quota" data-account-quota="error">'
+      + '<div class="account-card-top"><span class="account-card-label">Gói của bạn</span></div>'
+      + '<p class="account-plan-line">Máy trả về hạn mức không đọc được. Thử lại sau.</p>'
       + '<button class="btn-ghost btn-small" data-account-quota-load type="button">Thử lại</button></div>';
   }
-  const spent = quota.used > 0 ? ' · đã dùng ' + Number(quota.used) : '';
-  return '<div class="account-quota" data-account-quota="ready">'
-    + '<span class="account-quota-plan">' + escapeHtml(accountQuotaPlanText(quota)) + '</span>'
-    + '<span class="account-quota-line">' + escapeHtml(line + spent) + '</span></div>';
+  const planKey = accountQuotaPlanKey(quota);
+  const share = accountQuotaShare(quota);
+  const percent = Math.round(share * 100);
+  const period = accountPeriodText(quota.month);
+  const low = view.left <= Math.max(1, Math.floor(view.limit * 0.2));
+  return '<div class="account-card account-quota" data-account-quota="ready" data-plan="' + accountAttr(planKey) + '">'
+    + '<div class="account-card-top"><span class="account-card-label">Gói của bạn</span>'
+    + '<span class="account-badge" data-account-badge="' + accountAttr(planKey) + '">'
+    + escapeHtml(accountQuotaBadgeText(quota)) + '</span></div>'
+    + '<p class="account-plan-name">' + escapeHtml(accountQuotaPlanText(quota)) + '</p>'
+    + '<p class="account-plan-line' + (low ? ' is-low' : '') + '">' + escapeHtml(line) + '</p>'
+    + '<div class="account-meter account-meter-lg" data-tone="' + accountAttr(low ? 'low' : planKey) + '">'
+    + '<i style="width:' + percent + '%"></i></div>'
+    + '<p class="account-plan-foot">' + escapeHtml(accountQuotaCostText(quota))
+    + (period ? ' · kỳ ' + escapeHtml(period) : '') + '</p></div>';
 }
 
 async function accountLoadQuota() {
@@ -249,6 +398,8 @@ async function accountLoadQuota() {
     };
   } finally {
     rerenderAccountPanel();
+    // Panel và chip là hai chỗ đọc cùng một con số; vẽ lại cả hai để chúng không lệch nhau.
+    renderAccountChip();
   }
 }
 

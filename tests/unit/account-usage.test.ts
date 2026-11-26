@@ -94,10 +94,10 @@ async function main() {
   // ── #354: the monthly meter. Same rule as the log: unit travels with the number. ──
   const quotaLine = quota => vm.runInContext(`accountQuotaLine(${JSON.stringify(quota)})`, context);
   const quotaPlan = quota => vm.runInContext(`accountQuotaPlanText(${JSON.stringify(quota)})`, context);
-  assert.equal(quotaLine({ ok: true, plan: 'free', unit: 'generations', used: 2, limit: 5 }), 'Còn 3/5 lượt tạo game trong tháng.');
-  assert.equal(quotaLine({ ok: true, plan: 'plus', unit: 'credits', used: 4, limit: 500 }), 'Còn 496/500 credits tạo game trong tháng.');
-  assert.equal(quotaLine({ ok: true, plan: 'free', unit: 'generations', used: 5, limit: 5 }), 'Đã hết lượt tạo game của tháng (5/5).');
-  assert.equal(quotaLine({ ok: true, plan: 'plus', unit: 'credits', used: 500, limit: 500 }), 'Đã hết credits tạo game của tháng (500/500).');
+  assert.equal(quotaLine({ ok: true, plan: 'free', unit: 'generations', used: 2, limit: 5 }), 'Còn 3/5 lượt tạo game (kỳ 2 tuần).');
+  assert.equal(quotaLine({ ok: true, plan: 'plus', unit: 'credits', used: 4, limit: 500 }), 'Còn 496/500 credits tạo game (kỳ 2 tuần).');
+  assert.equal(quotaLine({ ok: true, plan: 'free', unit: 'generations', used: 5, limit: 5 }), 'Đã hết lượt tạo game của kỳ này (5/5).');
+  assert.equal(quotaLine({ ok: true, plan: 'plus', unit: 'credits', used: 500, limit: 500 }), 'Đã hết credits tạo game của kỳ này (500/500).');
   assert.equal(quotaLine({ ok: false, code: 'http_503' }), '');
   assert.equal(quotaLine({ ok: true, used: 'x', limit: null }), '');
   assert.equal(quotaLine({ ok: true, used: 0, limit: 0 }), '', 'a zero ceiling is unknown, not "exhausted"');

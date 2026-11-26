@@ -119,7 +119,12 @@ const LIVE_RUN = `(async () => {
         attempts: attempt + 1
       };
     }
-    if (!/bận|thử lại/iu.test(text)) break;
+    // Chỉ dừng khi chính ứng dụng từ chối TẠI CHỖ. Một lỗi nhà cung cấp (400/503) không nói
+    // gì về sản phẩm, nên thử lại và ghi lại số lần đã thử — nếu không, một cơn bão 503 của
+    // Gemini sẽ được đọc thành "wizard hỏng".
+    if (/40 ký tự|Đã hết|đăng nhập|chưa cấu hình/iu.test(text)) {
+      return { questions: 0, source: wizardState.draftSource, text: String(wizardState.notice || text).trim(), attempts: attempt + 1 };
+    }
     await sleep(15000);
   }
   return { questions: 0, source: wizardState.draftSource, text: String(wizardState.notice || text).trim(), attempts: 3 };
@@ -143,8 +148,8 @@ const USAGE_STATES = `(async () => {
       disabled: Boolean(button && button.disabled)
     };
   };
-  const near = await read({ allowed: true, used: 4, quotaLimit: 5, unit: 'generations', plan: 'free' });
-  const done = await read({ allowed: false, used: 5, quotaLimit: 5, unit: 'generations', plan: 'free' });
+  const near = await read({ allowed: true, used: 9, quotaLimit: 10, unit: 'generations', plan: 'free' });
+  const done = await read({ allowed: false, used: 10, quotaLimit: 10, unit: 'generations', plan: 'free' });
   const credits = await read({ allowed: true, used: 498, quotaLimit: 500, unit: 'credits', plan: 'plus' });
   const junk = await read({ used: 'x', quotaLimit: null });
   wizardState.cloudUsage = null;
@@ -174,8 +179,8 @@ const CARD_USAGE = String.raw`(async () => {
       disabled: Boolean(button && button.disabled)
     };
   };
-  const near = await read({ allowed: true, used: 4, quotaLimit: 5, unit: 'generations' });
-  const done = await read({ allowed: false, used: 5, quotaLimit: 5, unit: 'generations' });
+  const near = await read({ allowed: true, used: 9, quotaLimit: 10, unit: 'generations' });
+  const done = await read({ allowed: false, used: 10, quotaLimit: 10, unit: 'generations' });
   const credits = await read({ allowed: true, used: 498, quotaLimit: 500, unit: 'credits' });
   const junk = await read({ used: 'x', quotaLimit: null });
   wizardState.cloudUsage = null;
@@ -196,7 +201,7 @@ async function main() {
   // #350: the meter on the card, measured with a stubbed identity (see CARD_USAGE).
   const card = await page.evaluate(CARD_USAGE);
   check('the card exists once the identity says member', card.near.hasCard === true);
-  check('the card says how many turns are left', /Còn 1\/5 lượt/u.test(String(card.near.text)), String(card.near.text));
+  check('the card says how many turns are left', /Còn 1\/10 lượt/u.test(String(card.near.text)), String(card.near.text));
   check('a teacher with turns left can press the card button', card.near.disabled === false, String(card.near.disabled));
   check('the card says an exhausted month plainly', /Đã hết lượt/u.test(String(card.done.text)), String(card.done.text));
   check('the card disables its button when the month is spent', card.done.disabled === true, String(card.done.disabled));
@@ -229,7 +234,7 @@ async function main() {
 
     // #350: what the teacher reads BEFORE pressing the button.
     const usage = await page.evaluate(USAGE_STATES);
-    check('the card says how many turns are left', /Còn 1\/5 lượt/u.test(String(usage.near.text)), String(usage.near.text));
+    check('the card says how many turns are left', /Còn 1\/10 lượt/u.test(String(usage.near.text)), String(usage.near.text));
     check('a teacher with turns left can press the button', usage.near.disabled === false, String(usage.near.disabled));
     check('an exhausted month is said plainly', /Đã hết lượt/u.test(String(usage.done.text)), String(usage.done.text));
     check('an exhausted month disables the button instead of inviting a refusal', usage.done.disabled === true, String(usage.done.disabled));

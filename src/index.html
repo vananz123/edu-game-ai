@@ -99,13 +99,17 @@
           <!-- #337: chip tài khoản. Mặc định là Khách — không có màn hình chặn nào, và
                game đã lưu vẫn chơi được khi chưa đăng nhập. `data-account-*` là hook
                cho features/account.js và cho cổng ui-account-check. -->
-          <button class="account-chip" data-account-chip data-state="unknown" type="button" title="Tài khoản">
+          <button class="account-chip" data-account-chip data-state="unknown" data-plan="none" type="button" title="Tài khoản">
             <span class="account-avatar" data-account-avatar>GV</span>
             <span class="account-text max-compact:hidden">
-              <strong class="block text-[12px] account-name" data-account-name>Khách</strong>
+              <span class="account-line">
+                <strong class="account-name" data-account-name>Khách</strong>
+                <span class="account-badge" data-account-plan hidden>Free</span>
+              </span>
               <span class="account-role" data-account-role>Đang đọc trạng thái…</span>
+              <span class="account-meter" data-account-meter hidden><i data-account-meter-fill></i></span>
             </span>
-            <span class="profile-more ml-auto text-[#5f6a7d] max-compact:hidden" data-icon="ellipsis-vertical" data-icon-size="15"></span>
+            <span class="profile-more ml-auto text-[#5f6a7d] max-compact:hidden" data-icon="chevron-right" data-icon-size="15"></span>
           </button>
         </div>
       </div>

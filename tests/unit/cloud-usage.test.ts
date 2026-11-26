@@ -29,18 +29,18 @@ async function main() {
   // 1. Free tier: turns.
   assert.equal(
     text({ allowed: true, used: 4, quotaLimit: 5, unit: 'generations' }),
-    'Còn 1/5 lượt tạo game trong tháng.'
+    'Còn 1/5 lượt tạo game (kỳ 2 tuần).'
   );
   // 2. Paid tier: credits, and the number is NOT relabelled as turns.
   assert.equal(
     text({ allowed: true, used: 498, quotaLimit: 500, unit: 'credits' }),
-    'Còn 2/500 credits tạo game trong tháng.'
+    'Còn 2/500 credits tạo game (kỳ 2 tuần).'
   );
   assert.ok(!/lượt/u.test(text({ allowed: true, used: 1, quotaLimit: 500, unit: 'credits' })), 'credits are not lượt');
   // 3. Exhausted: plain, with the numbers, and the button is disabled.
   assert.equal(
     text({ allowed: false, used: 5, quotaLimit: 5, unit: 'generations' }),
-    'Đã hết lượt tạo game của tháng (5/5).'
+    'Đã hết lượt tạo game của kỳ này (5/5).'
   );
   assert.equal(exhausted({ allowed: false, used: 5, quotaLimit: 5 }), true);
   // Reaching the limit on the numbers alone is also "done" — the gateway may omit `allowed`.

@@ -1348,33 +1348,89 @@ html[data-theme="dark"] .art-zoom-figure{background:#111733}
    Chip là chrome: cùng một hàng với avatar 34px như trước (#161), nhưng bấm được.
    Bốn trạng thái (`data-state`) chỉ đổi màu chữ nhỏ, không đổi kích thước — nếu
    đổi kích thước thì đáy sidebar nhảy mỗi lần trạng thái tài khoản đến muộn. */
-.account-chip{display:flex;align-items:center;gap:9px;width:100%;padding:2px 2px;border:0;border-radius:10px;background:transparent;text-align:left;color:inherit;font:inherit;cursor:pointer}
-.account-chip:hover{background:var(--brand-soft,#f2f1ff)}
-.account-chip:focus-visible{outline:2px solid var(--purple,#4f46e5);outline-offset:2px}
-.account-text{min-width:0;display:flex;flex-direction:column;gap:1px}
-.account-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:132px}
-.account-role{font-size:11px;line-height:1.25;color:#6b7280}
-.account-avatar{width:34px;height:34px;flex:none;border-radius:11px;background:#e8e6ff;color:#4f46e5;font-weight:800;font-size:12px;display:grid;place-items:center;overflow:hidden}
+/* #362 — chip tài khoản ở đáy sidebar: gói + đồng hồ hạn mức, và panel Tài khoản mới. */
+.app-shell>.sidebar{display:flex;flex-direction:column}
+.app-shell>.sidebar .sidebar-shortcuts{flex:1 1 auto;min-height:0;overflow-y:auto}
+.app-shell>.sidebar .sidebar-bottom{flex:0 0 auto}
+.account-chip{display:flex;align-items:center;gap:9px;width:100%;padding:7px 9px;border:1px solid var(--line,#e8e8f2);border-radius:14px;background:var(--surface-1,#fff);text-align:left;color:inherit;font:inherit;cursor:pointer;box-shadow:0 1px 2px rgba(15,23,42,.05);transition:border-color .15s,box-shadow .15s}
+.account-chip:hover{border-color:#c9c6f5;box-shadow:0 4px 14px rgba(79,70,229,.14)}
+.account-chip:focus-visible{outline:2px solid #4f46e5;outline-offset:2px}
+.account-text{min-width:0;flex:1;display:flex;flex-direction:column;gap:3px}
+.account-line{display:flex;align-items:center;gap:6px;min-width:0}
+.account-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;font-weight:700;color:#111827;max-width:118px}
+.account-role{font-size:11px;line-height:1.3;color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:138px}
+.account-avatar{width:34px;height:34px;flex:none;border-radius:50%;background:linear-gradient(135deg,#eef0ff,#ddd9ff);color:#4f46e5;font-weight:800;font-size:12px;display:grid;place-items:center;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(79,70,229,.14)}
 .account-avatar img{width:100%;height:100%;object-fit:cover;display:block}
-.account-avatar-lg{width:44px;height:44px;border-radius:13px;font-size:15px}
+.account-avatar-lg{width:44px;height:44px;font-size:15px}
+.account-avatar-xl{width:54px;height:54px;font-size:18px}
+.account-badge{flex:none;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:.02em;text-transform:uppercase;background:#f1f5f9;color:#475569;border:1px solid #e2e8f0}
+.account-badge[data-account-badge="pro"],.account-badge[data-account-hero-badge="pro"],.account-chip[data-plan="pro"] .account-badge{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border-color:transparent}
+.account-meter{position:relative;height:4px;border-radius:999px;background:#eef0f6;overflow:hidden;margin-top:1px;box-shadow:inset 0 0 0 1px rgba(15,23,42,.04)}
+.account-meter i{display:block;height:100%;border-radius:999px;background:#4f46e5;transition:width .35s ease}
+.account-meter[data-tone="pro"] i{background:linear-gradient(90deg,#4f46e5,#8b5cf6)}
+.account-meter[data-tone="low"] i{background:#f59e0b}
+.account-meter-lg{height:8px;margin:10px 0 0}
 .account-chip[data-state="unconfigured"] .account-role{color:#9ca3af}
-.account-chip[data-state="member"] .account-role{color:#15803d}
-.account-panel-who{display:flex;align-items:center;gap:11px}
-.account-actions{display:flex;gap:9px;margin-top:16px}
-.account-hint{margin:10px 0 0;font-size:12px;color:#6b7280}
-.account-quota{margin-top:14px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font-size:12px}
-.account-quota-plan{font-weight:600;color:#111827}
-.account-quota-line{color:#4b5563}
-html[data-theme="dark"] .account-quota-plan{color:#f8fafc}
-html[data-theme="dark"] .account-quota-line{color:#94a3b8}
-.account-usage{margin-top:14px;padding-top:12px;border-top:1px solid #e5e7eb}
+.account-chip[data-state="member"] .account-role{color:#334155}
+.account-actions{display:flex;gap:9px;margin-top:16px;flex-wrap:wrap}
+.account-btn-inner{display:inline-flex;align-items:center;gap:6px;line-height:1}
+.account-hint{margin:10px 0 0;font-size:12px;line-height:1.45;color:#6b7280}
+.modal-account{max-width:460px}
+.account-body{display:flex;flex-direction:column;gap:12px}
+.account-hero{display:flex;align-items:center;gap:12px}
+.account-hero-text{min-width:0;display:flex;flex-direction:column;gap:3px}
+.account-hero-name{font-size:14px;font-weight:800;color:#111827;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.account-hero-sub{display:flex;align-items:center;gap:6px;font-size:12px;color:#6b7280}
+.account-card{padding:13px 14px;border:1px solid #e8e8f2;border-radius:14px;background:var(--surface-1,#fff)}
+.account-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.account-card-label{font-size:11px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:#8b93a7}
+.account-plan-name{margin:6px 0 0;font-size:15px;font-weight:800;color:#111827}
+.account-plan-line{margin:4px 0 0;font-size:12.5px;line-height:1.45;color:#4b5563}
+.account-plan-line.is-low{color:#b45309;font-weight:600}
+.account-plan-foot{margin:8px 0 0;font-size:11px;color:#8b93a7}
+.account-quota[data-plan="pro"]{border-color:#ddd9fb;background:linear-gradient(180deg,#fbfaff,#f6f4ff)}
+.account-quota[data-account-quota="error"]{border-color:#fde68a;background:#fffbeb}
+.account-signin{display:flex;flex-direction:column;align-items:flex-start;gap:10px;padding:16px;border:1px solid #e8e8f2;border-radius:16px;background:linear-gradient(180deg,#fbfaff,#ffffff)}
+.account-signin-mark{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:linear-gradient(135deg,#4f46e5,#8b5cf6);color:#fff}
+.account-signin-title{margin:0;font-size:15px;font-weight:800;color:#111827;line-height:1.35}
+.account-perks{list-style:none;margin:0;padding:0;display:grid;gap:6px;font-size:12.5px;color:#4b5563}
+.account-perks li{display:flex;align-items:flex-start;gap:7px;line-height:1.4}
+.account-perks li svg{flex:none;margin-top:2px;color:#16a34a}
+.account-google-btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;margin-top:2px;padding:10px 14px;border:1px solid #d7dbe6;border-radius:12px;background:#fff;color:#1f2937;font:inherit;font-weight:700;font-size:13px;cursor:pointer;transition:box-shadow .15s,border-color .15s}
+.account-google-btn:hover{border-color:#b9c0d0;box-shadow:0 3px 10px rgba(15,23,42,.1)}
+.account-google-btn:focus-visible{outline:2px solid #4f46e5;outline-offset:2px}
+.account-google-g{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:12px;color:#4285f4;background:#fff;border:1px solid #e5e7eb}
+.account-guest-note{display:flex;align-items:flex-start;gap:8px;padding:10px 12px;border-radius:12px;background:#f8fafc;border:1px solid #eef1f6;font-size:12px;color:#4b5563;line-height:1.4}
+.account-guest-note svg{flex:none;margin-top:1px;color:#64748b}
+.account-usage{margin-top:4px;padding-top:12px;border-top:1px solid #e5e7eb}
 .account-usage-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;font-size:12px;margin-bottom:6px}
 .account-usage-list{list-style:none;margin:0 0 8px;padding:0;display:grid;gap:4px;font-size:12px;color:#4b5563}
 .account-usage-list li[data-account-usage-row="failed"]{color:#6b7280;opacity:.85}
+html[data-theme="dark"] .account-chip{border-color:#2a3350;background:#1b2237;box-shadow:none}
+html[data-theme="dark"] .account-chip:hover{border-color:#3c4670;box-shadow:0 4px 14px rgba(0,0,0,.35)}
+html[data-theme="dark"] .account-name{color:#f1f5f9}
+html[data-theme="dark"] .account-avatar{background:linear-gradient(135deg,#252c48,#312a55);color:#c7d2fe}
+html[data-theme="dark"] .account-role{color:#94a3b8}
+html[data-theme="dark"] .account-chip[data-state="member"] .account-role{color:#a5b4fc}
+html[data-theme="dark"] .account-badge{background:#252c48;color:#c7d2fe;border-color:#333c60}
+html[data-theme="dark"] .account-meter{background:#252c48}
+html[data-theme="dark"] .account-hint{color:#94a3b8}
+html[data-theme="dark"] .account-hero-name{color:#f1f5f9}
+html[data-theme="dark"] .account-hero-sub{color:#94a3b8}
+html[data-theme="dark"] .account-card{border-color:#2a3350;background:#1b2237}
+html[data-theme="dark"] .account-card-label{color:#8b93a7}
+html[data-theme="dark"] .account-plan-name{color:#f1f5f9}
+html[data-theme="dark"] .account-plan-line{color:#c7d2fe}
+html[data-theme="dark"] .account-plan-line.is-low{color:#fbbf24}
+html[data-theme="dark"] .account-plan-foot{color:#8b93a7}
+html[data-theme="dark"] .account-quota[data-plan="pro"]{border-color:#3b3470;background:linear-gradient(180deg,#1e2340,#221f3d)}
+html[data-theme="dark"] .account-quota[data-account-quota="error"]{border-color:#7c5a12;background:#2a2415}
+html[data-theme="dark"] .account-signin{border-color:#2a3350;background:linear-gradient(180deg,#1e2340,#1b2237)}
+html[data-theme="dark"] .account-signin-title{color:#f1f5f9}
+html[data-theme="dark"] .account-perks{color:#c7d2fe}
+html[data-theme="dark"] .account-google-btn{background:#f8fafc;border-color:#d7dbe6;color:#1f2937}
+html[data-theme="dark"] .account-guest-note{background:#1b2237;border-color:#2a3350;color:#a5b4fc}
 html[data-theme="dark"] .account-usage{border-top-color:#2a3350}
 html[data-theme="dark"] .account-usage-list{color:#a5b4fc}
-html[data-theme="dark"] .account-chip:hover{background:#232a45}
-html[data-theme="dark"] .account-avatar{background:#252c48;color:#a5b4fc}
-html[data-theme="dark"] .account-role{color:#94a3b8}
-html[data-theme="dark"] .account-chip[data-state="member"] .account-role{color:#4ade80}
-html[data-theme="dark"] .account-hint{color:#94a3b8}
+html[data-theme="dark"] .account-quota-plan{color:#f8fafc}
+html[data-theme="dark"] .account-quota-line{color:#94a3b8}
