@@ -5748,6 +5748,11 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
 - **Test phải chạy tệp ĐÃ BIÊN DỊCH.** `tests/unit/worker-gateway.test.ts` `require` bản
   `dist/worker/index.js`: đó là artefact `wrangler` sẽ đóng gói, không phải một bản viết lại
   trong test.
+- **Cổng phát hành phải hỏi chính gateway "anh là ai".** `check:pilot` cũ chỉ đòi `https` +
+  chuỗi có trong `.exe`; một worker khác tên vẫn lọt. Nay nó gọi `/health` và đòi
+  `service="edugame-ai-gateway"` + đúng phiên bản, và chẩn đoán **danh tính trước, byte sau**
+  — nếu host sai thì việc URL nằm trong exe không cứu được bản cài.
+- **`--no-live` phải nói ra là chưa kiểm.** Một cờ bỏ qua phép đo mà im lặng là một cổng giả.
 - **Kho giả phải tôn trọng dữ liệu được ghi.** Kho giả gán `status:'pending'` cho mọi dòng đã
   làm một nhánh `failed` "biến mất" — lỗi của test, nhưng nó dạy một điều: một kho giả tự bịa
   ra luật riêng thì test chỉ đo kho giả.
