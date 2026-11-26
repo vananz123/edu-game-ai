@@ -1,0 +1,25 @@
+# wrangler.toml — cấu hình triển khai gateway Cloud AI lên Cloudflare Workers (#360).
+#
+# Tên worker giữ đúng `ai-gateway` để `wrangler deploy` cập nhật đúng deployment đang có,
+# chứ không tạo một worker thứ hai mà app không gọi tới.
+#
+# Khoá KHÔNG nằm trong tệp này và không nằm trong repo (AGENTS.md):
+#   npx wrangler secret put GEMINI_API_KEY
+#   npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
+# Biến không bí mật (URL project, anon key, model) đặt ở dashboard → Settings → Variables.
+
+name = "ai-gateway"
+main = "index.ts"
+compatibility_date = "2025-06-01"
+
+# Không bật `nodejs_compat`: đường dẫn này không dùng builtin Node nào (đã kiểm bằng
+# `grep` trên worker/, server/quota.ts, server/usage-log.ts, server/gemini.ts).
+# Bật nó chỉ thêm bề mặt tấn công và byte khởi động.
+
+# Cấu hình bắt buộc, đọc ở `worker/supabase.ts`. Giá trị thật đặt bằng dashboard hoặc
+# `wrangler secret put`; ghi ở đây dưới dạng biến thường chỉ để `wrangler dev` chạy được.
+# [vars]
+# SUPABASE_URL = "https://<project>.supabase.co"
+# SUPABASE_ANON_KEY = "sb_publishable_..."
+# GEMINI_MODEL = "gemini-3.5-flash-lite"
+# GATEWAY_VERSION = "0.5.5"

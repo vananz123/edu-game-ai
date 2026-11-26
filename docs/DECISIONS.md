@@ -5728,3 +5728,26 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
 - **Chi phí là quyết định của người vận hành.** Tài liệu nêu ba mức giá và một điểm phải nói trước (free tier **ngủ** ⇒ lần gọi đầu chậm, trong khi app chờ 120 giây), nhưng **không** đăng ký dịch vụ nào: thêm một dịch vụ trả phí khi chưa ai đồng ý là vượt quyền.
 - **Một image có `.env` là một image bị rò khoá.** `.dockerignore` chặn `.env` là biện pháp duy nhất đứng giữa `SUPABASE_SERVICE_ROLE_KEY` và bất kỳ ai kéo image.
 - **Cổng mới cũng phải được đo, và nó đã bắt lỗi của chính nó** (hoán vị `[path, name]` làm URL thành `…:8788usage`): một cổng không chạy được thì không phải cổng. SmartScreen, thời gian cài, hiệu ứng phải nhìn, một lượt chơi offline: bốn thứ này không có phép đo tự động trung thực nào trên máy đã có WebView2 và đã quen tệp cài.
+
+## #360 — Một gateway thứ hai phải dùng LẠI luật tiền, và "cùng hợp đồng" là thứ đo được
+
+- **Viết lại phần vận chuyển, không viết lại phần tính tiền.** `worker/index.ts` import
+  `consumeGeneration`, `usageSnapshot`, `claimUsageLog`, `requestGameJson` từ `server/`. Hai
+  bản gateway là hai cách *đến* cùng một bộ luật, không phải hai bộ luật. Chép luật sang bản
+  thứ hai là mở đường cho "còn 4/5 lượt" ở UI này và "còn 496 credits" ở UI kia.
+- **Xác thực bằng token của giáo viên, không bằng khoá chung.** Đo được (#360): worker cũ trả
+  `401` cho một JWT Supabase **hợp lệ**. Một `GATEWAY_TOKEN` nhúng trong bộ cài là khoá công
+  khai, và một khoá công khai đứng trước `GEMINI_API_KEY` là một API mở cho cả internet.
+- **Không có proxy bảng.** `ALLOWED_TABLES` biến gateway thành một cửa đọc/ghi bảng tuỳ ý.
+  Gateway cần đúng bốn bảng; mọi thứ rộng hơn là bề mặt tấn công không có tính năng nào dùng.
+- **`/health` là hợp đồng, không phải lời chào.** `smoke:gateway` đòi `service` +
+  `version`; một worker trả `{"ok":true}` trông như đang chạy mà thực ra là gateway khác.
+  Kiểm bằng cổng, không kiểm bằng mắt.
+- **Không bật `nodejs_compat` khi không dùng builtin Node.** Bật cho "chắc" là thêm bề mặt và
+  thêm byte khởi động cho một thứ không cần.
+- **Test phải chạy tệp ĐÃ BIÊN DỊCH.** `tests/unit/worker-gateway.test.ts` `require` bản
+  `dist/worker/index.js`: đó là artefact `wrangler` sẽ đóng gói, không phải một bản viết lại
+  trong test.
+- **Kho giả phải tôn trọng dữ liệu được ghi.** Kho giả gán `status:'pending'` cho mọi dòng đã
+  làm một nhánh `failed` "biến mất" — lỗi của test, nhưng nó dạy một điều: một kho giả tự bịa
+  ra luật riêng thì test chỉ đo kho giả.
