@@ -776,3 +776,10 @@ Chủ dự án yêu cầu: *"xóa release cũ ở máy, tạo release mới và 
   thêm 2 phép đo tương phản — chúng lộ ra một lỗi có sẵn:
   tiêu đề editor ở dark mode là **1,27:1**, đã sửa thành 15,5:1). Còn thiếu: đường "Dự án của tôi → trình soạn thảo"
   chưa bấm được trong UI (trang dự án mở wizard).
+
+- [x] **#370 — chuyển động khi thao tác** (`src/renderer/styles/motion.css`, import cuối): nút
+  nhấn chìm 1px; thẻ trò chơi hover nhấc 2px + bóng đổi (bằng `translate`, vì `animation … both`
+  của `.game-card` thắng `transform`); menu "•••" bung `eg-menu-pop`; thanh "đã chọn N" trượt vào;
+  ô tìm kiếm/ô chọn có nhịp focus; **một chỗ tắt** cho `prefers-reduced-motion` (về 0 cả thời lượng
+  và transform). Cổng mới `ui-motion-check` **19/19** bấm bằng chuột thật, `verify:css` **66/66**
+  (+5 pin). Chưa đo: cảm giác mượt bằng mắt người, màn hình cảm ứng thật, chi phí vẽ lại 22 thẻ.

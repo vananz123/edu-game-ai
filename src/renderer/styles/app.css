@@ -266,3 +266,6 @@
 @import "./game-connection.css";
 @import "./game-constellation.css";
 @import "./lesson-chat.css";
+/* #370: chuyển động khi thao tác. Đứng CUỐI để tinh chỉnh được các rule phía trên
+   bằng thứ tự (không cần `!important`), và để một chỗ duy nhất tắt được toàn bộ. */
+@import "./motion.css";

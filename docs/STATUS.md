@@ -7,6 +7,53 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-26 — #370 chuyển động khi thao tác (thư viện làm ví dụ)
+
+- **Yêu cầu:** "bổ sung các hiệu ứng chuyển động khi thao tác trên ứng dụng, có thể dùng thư viện"
+  + "cứ chọn vào chạy không hỏi" ⇒ tự chọn phạm vi, tự đo, không hỏi lại.
+- **Tệp mới `src/renderer/styles/motion.css`** (import CUỐI trong `app.css`, nên tinh chỉnh được các
+  rule cũ bằng thứ tự, không cần `!important`): 5 biến `--motion-fast 120ms` / `--motion-base 180ms`
+  / `--motion-slow 260ms` / `--motion-ease` / `--motion-lift -2px` và **một chỗ duy nhất** để tắt:
+  `@media (prefers-reduced-motion: reduce)` đặt các biến về 0 **và** xoá `transform`/`translate`
+  của từng rule — chỉ đặt thời lượng 0 là không đủ, vì cú nhảy tức thì đúng là thứ cần tránh.
+- **Nút:** nhấn ⇒ chìm 1px, nhả ⇒ nổi lại; nút chính có bóng khi hover. Trước đây `.btn` chỉ
+  chuyển động màu, nên trên màn hình cảm ứng không có phản hồi nào cho cú bấm.
+- **Thẻ trò chơi (thư viện + dự án):** hover ⇒ nhấc **2px** + bóng đổi; nhấn ⇒ trở về 0; thẻ đang
+  được chọn thì không nhấc (viền tím đã nói "đang chọn").
+  **Lỗi đo được ở đây:** đặt `transform: translateY(-2px)` khi hover **không có tác dụng** — thẻ
+  còn mang `.game-card` với `animation: card-enter … both`, mà animation đã kết thúc với
+  `fill-mode: both` vẫn **thắng** mọi khai báo `transform` thường (đo được `matrix(1,0,0,1,0,0)`
+  dù chuột đã ở trên thẻ). Cách sửa: dùng thuộc tính biến đổi **độc lập** `translate`, nó cộng dồn
+  với `transform` của animation thay vì tranh nhau — và không phải sửa animation nhập cảnh của 22
+  thẻ (thứ mà các cổng khác đang đo).
+- **Menu "•••"** của thẻ: xuất hiện bằng `eg-menu-pop` (mờ + nhô 4px + scale .98, 120ms), chọn bằng
+  selector `[role="menu"]:not([hidden])` nên **không cần một dòng JS nào** và **không đổi `display`**
+  (không có cú giật bố cục). **Thanh "đã chọn N"** trượt vào bằng `eg-selbar-in`.
+- **Ô tìm kiếm + ô chọn thể loại:** viền đổi màu có nhịp khi focus/hover. **Biểu tượng sidebar** có
+  nhịp riêng (vạch chỉ báo của mục đang mở đã có từ trước).
+- **Cố ý KHÔNG đặt animation lên `.panel`:** bước 1 của wizard vẽ lại toàn trang sau mỗi lần gõ, nên
+  mỗi lần gõ sẽ là một lần cả khối mờ đi rồi hiện lại — và vài cổng đo hình học sẽ đọc đúng lúc khối
+  đang ở `translateY(6px)`.
+- **Cổng mới `tests/ui/ui-motion-check.js` 19/19**, bấm bằng **chuột thật** (`Input.dispatchMouseEvent`)
+  vì `:hover`/`:active` do trình duyệt quyết định theo con trỏ — `el.click()` chỉ chứng minh CSS viết
+  đúng, không chứng minh người dùng thấy gì. Số đo: hover thẻ **194,67 → 192,67 px = Δ 2px**, bóng
+  đổi, `scrollHeight` **1109 → 1109** và `scrollWidth` **1270 → 1270** (không xê dịch bố cục); nhấn
+  nút ⇒ `matrix(…, 1)` = chìm 1px rồi trở lại, nhả chuột ra ngoài không kích hoạt nhầm; menu
+  `animationName eg-menu-pop`, `opacity` kết thúc **1**; thanh chọn `eg-selbar-in`; giả lập
+  `prefers-reduced-motion: reduce` (qua `Emulation.setEmulatedMedia`) ⇒ `--motion-fast 0ms`,
+  `--motion-lift 0px`, hover **Δ 0px**, menu `animationName none`.
+- **`verify:css` thêm 5 pin** cho bản compile (**66/66**, trước là 61): Tailwind rút `120ms` thành
+  `.12s` và sẽ xoá một rule `translate` "không dùng" — pin bắt đúng hai khả năng đó.
+- **Kết quả đo:** `tsc` sạch · unit **118/118** · `npm run check` sạch · `verify:css` **66/66** ·
+  `check:renderer-globals` 0 undefined · `build:tauri` + `check:embedded` **6 217,2 KiB** ·
+  `cargo tauri build` OK · `ui-library-stagger-check` **8/8** · `ui-page-head-check` **6/6** ·
+  `ui-account-check` **23/23** · `ui-sidebar-toggle-check` **17/17** · `ui-page-trail-check` **38/38**
+  (chạy trên bản dựng trước đó, cùng CSS) · ảnh `tests/ui/shots/motion-370-{rest,hover,menu}.png`.
+- **Chưa đo:** cảm giác "mượt" thì không đo được bằng máy — 2px + bóng là ngưỡng tôi chọn cho khiêm
+  tốn, người soát ảnh tĩnh **không nhận ra** thẻ nào đang hover (ảnh chụp không có con trỏ), nên
+  việc "nhìn có thấy không" vẫn cần mắt người; chưa thử trên màn hình cảm ứng thật; chưa đo chi phí
+  vẽ lại khi 22 thẻ cùng transition.
+
 ### 2026-11-26 — #369 đường dẫn trang cha → trang con ("Thư viện trò chơi › Chỉnh sửa trò chơi")
 
 - **Yêu cầu (nguyên văn):** "ví dụ thư viện trò chơi mà từ trang này tôi chỉnh sửa thì nó sẽ hiển
@@ -129,122 +176,3 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - **Chưa đo:** chưa ai bấm nút ẩn bằng tay trên máy thật; chưa thử ở cửa sổ ≤700 px (lúc đó
   `.sidebar-status` bị ẩn nên chỉ còn Ctrl+B); tay nắm chưa được đo khi trang cuộn dài (nó `fixed`
   nên phải nổi trên nội dung — mới đo ở trang Thư viện).
-
-### 2026-11-26 — #364 bán gói Pro trong app: giá + nút Nâng cấp + webhook đã xác minh (chưa mở bán)
-
-- **Vì sao:** #362 cho hạn mức free là 10 lượt/kỳ 2 tuần nhưng **không có đường nào để trả tiền**.
-  Nay đã có đường mua, chạy được đầu-cuối trong code, và **chưa bật bán** vì máy chủ thiếu hai thứ
-  có tên (xem "Còn thiếu").
-- **Luật tiền nằm MỘT chỗ:** `server/billing.ts` (hàm thuần) + `server/billing-provider.ts` (adapter
-  PayOS). Express và Worker dùng chung, nên câu "99.000đ / 14 ngày / 500 credits" không thể lệch giữa
-  hai máy chủ.
-- **Tệp đã sửa/thêm:**
-  - `server/billing.ts` (mới, ~300 dòng): `PERIOD_LIMITS` không đổi; thêm `billingConfig`,
-    `orderCodeFor`, `orderExpiry`, `effectiveOrderStatus`, `nextPeriodEnd`, `applyPaidOrder`,
-    `effectivePlan`, `webhookVerdict`, `payosSignData`, `signaturesEqual`, `orderMessage`.
-    `ProviderId` nay có `none` — chưa cấu hình **không** được mặc định thành `fake`.
-  - `server/billing-provider.ts` (mới): `payosLinkBody` (mô tả ASCII ≤25 ký tự), `payosWebhookFields`,
-    `payosWebhookSignData`.
-  - `server/migrations/2026-11-26-billing.sql` (mới, idempotent): `subscriptions` +`period_end`,
-    `provider`, `provider_ref`, `price_vnd`, `started_at`; bảng `billing_orders` (`provider_ref`
-    unique, status pending/paid/expired/failed, RLS chỉ user đọc đơn của mình); seed
-    `server_config` giá/kỳ/credits.
-  - `worker/billing.ts` (mới): `GET /v1/billing/status`, `POST /v1/billing/checkout`,
-    `POST /v1/billing/webhook/payos` (không cần token), `POST /v1/billing/fake/pay` +
-    `GET /v1/billing/fake/:code` (chỉ khi provider `fake` **và** `EDUGAME_ALLOW_FAKE_PAYMENTS=1`),
-    `GET /v1/billing/done`.
-  - `worker/supabase.ts`: `planOf` tôn trọng `period_end` (gói hết hạn tự về free), `BillingDb`
-    (`subscriptionOf`/`saveSubscription`/`createOrder`/`orderByRef`/`latestOrder`/`markPaid` CAS/
-    `billingReady`), `hmacHex` bằng WebCrypto.
-  - `worker/index.ts`: gọi `handleBilling` TRƯỚC các nhánh `/v1/usage` + `/v1/generate`.
-  - `src-tauri/src/billing.rs` (mới): `billing_from_json` (thuần, test được), `cloud_billing`,
-    `cloud_checkout` (mở `checkoutUrl` bằng trình duyệt hệ thống). `src-tauri/src/api.rs` +
-    `lib.rs`: hai kênh `account:billing`, `account:checkout`. `cloud.rs`: `gateway_url` →
-    `pub`, thêm `client_for_billing`.
-  - `src/renderer/features/account.ts`: thẻ "Gói Pro" trong panel Tài khoản —
-    `accountMoney`, `accountDateShort`, `accountBillingState`, `accountProHtml`,
-    `accountLoadBilling`, `accountStartCheckout` (mở trình duyệt rồi đọc lại 3 lần cách 4 giây).
-  - `src/renderer/styles/components.css`: `+654 B` cho `.account-pro`, `.account-upgrade-btn`.
-  - `tests/unit/server-billing.test.ts` (mới), `tests/unit/worker-billing.test.ts` (mới),
-    `tests/unit/account-billing.test.ts` (mới), `tests/ui/ui-billing-check.js` (mới);
-    `tests/unit/desktop-facade.test.ts` 105 → **107** lời gọi (`app` 17 → 19).
-- **Đo được:**
-  - `npx tsc -p tsconfig.json` sạch · `node tests/run-unit.js` **114/114** (billing: 8 + 6 + 8 nhóm
-    khẳng định) · `npm run check` sạch · `verify:css` **61/61** · `check:renderer-globals`
-    **1 188 hàm / 9 628 điểm gọi / 0 undefined** · `cargo test --lib billing` **4/4**.
-  - Worker deploy thật: bundle **804 213 B**, **0** `node:` import, upload `200 success=true`
-    etag `87d4d080…`, `/health` = `0.5.6`.
-  - Live đo bằng token thật: `/v1/usage` **200** `{"plan":"free","used":5,"limit":10}`
-    (không hỏng vì billing) · `/v1/billing/status` **200** với
-    `configured:false`, `provider:"none"`, `missing:["EDUGAME_BILLING_PROVIDER",
-    "chạy migration server/migrations/2026-11-26-billing.sql"]` · không token ⇒ **401**.
-  - Trên bản `.exe` vừa dựng: `account:billing` trả đúng trạng thái trên (Rust → gateway nối được),
-    `account:checkout` trả `billing_not_configured` + tên việc còn thiếu;
-    `ui-billing-check` **5/5**, `ui-account-check` **23/23**.
-  - Ảnh chụp panel: giá **chỉ hiện một lần** (đã sửa lỗi in giá hai lần ở hàng góc + tiêu đề), nút
-    "Nâng cấp lên Pro" full-width, không cắt chữ trong thẻ.
-- **Một lỗi thật đã tự gây ra và đã sửa:** deploy đầu tiên làm `/v1/usage` trả **503 cho mọi người**
-  vì `planOf` đọc cột `period_end` chưa tồn tại. Nay `planOf` và `subscriptionOf` lùi về hình dạng cũ
-  khi gặp cột thiếu — một tính năng chưa bật không được phép làm hỏng việc đọc hạn mức.
-- **Còn thiếu (chưa mở bán được):** (1) chạy `server/migrations/2026-11-26-billing.sql` trên Supabase;
-  (2) khai `PAYOS_CLIENT_ID`/`PAYOS_API_KEY`/`PAYOS_CHECKSUM_KEY` + `EDUGAME_BILLING_PROVIDER=payos`
-  (+ `EDUGAME_PUBLIC_URL`) trên Worker rồi deploy lại. **Chưa đo được** đường mua thật (tạo đơn →
-  chuyển khoản → gói lên Pro) vì thiếu hai thứ trên; phần đó là fixture/unit test, không phải bằng
-  chứng thật.
-- **Bổ sung cùng ngày — hai script để bật bán không phải nhớ gì:**
-  `scripts/check-billing.js` (`npm run check:billing`) hỏi máy chủ **đang chạy** bốn câu theo đúng
-  thứ tự việc (migration → cấu hình → giá/kỳ/credits → `checkoutUrl` khi thêm `--checkout`), in tên
-  việc còn thiếu và thoát `1`; `scripts/deploy-worker.js` (`npm run deploy:worker`) bundle + PUT +
-  secret, tự khai biến thanh toán từ `.env` khi có, và **từ chối** `--allow-fake` trên script
-  `ai-gateway`. Đo: deploy lại cho **cùng etag** `87d4d080…` (bundle tất định), `check:billing`
-  đỏ đúng 3 mục và nêu đúng hai việc (migration + `EDUGAME_BILLING_PROVIDER`).
-- **Một mâu thuẫn về TIỀN đã sửa:** `PERIOD_LIMITS.plus` là **100** trong khi thẻ Pro bán
-  **500 credits/kỳ** — khách trả 99.000đ sẽ đọc "Còn 100/100 credits". Nay `plus = 500` (đơn vị
-  credits, 2 credits/lượt), đúng bằng `plan_pro_monthly_credits` trong DB và bằng giá đã bán;
-  `server-quota.test.ts` đổi theo. Trần free vẫn **10 lượt**.
-- **#366 — thêm cổng thứ hai VNPay, cùng luật tiền:** `server/billing-provider.ts` có
-  `vnpayEncode` (urlencode kiểu PHP: dấu cách → `+`), `vnpaySignData`, `vnpayCheckoutUrl`,
-  `vnpaySignatureOk` (so sánh không thoát sớm), `vnpayTime` (giờ VN `yyyyMMddHHmmss`),
-  `vnpayWebhookFields`; `worker/billing.ts` thêm `GET|POST /v1/billing/webhook/vnpay` trả **RspCode
-  của VNPay** (`00/01/02/04/97/99`) chứ không dùng mã HTTP của ta, và nhánh checkout **dựng URL
-  tại chỗ** (không gọi API nên bước tạo đơn không hỏng vì "nhà cung cấp bảo trì").
-  `hmacHexWith('SHA-512'|'SHA-256')` để PayOS và VNPay dùng chung một hàm.
-- **Ba cái bẫy của VNPay đã đo được:** (1) chữ ký phải ký trên giá trị **đã encode** (ký trên giá
-  trị thô thì mọi đơn có dấu cách đều bị từ chối); (2) `vnp_Amount` là tiền **× 100** — quên là bán
-  99.000đ với giá 990đ, và test soát đúng `9900000`; (3) **chỉ `ResponseCode` VÀ `TransactionStatus`
-  cùng `00`** mới mở gói (`00` + `02` là đã huỷ). Test `server-billing-vnpay` **8 nhóm** chạy qua
-  `handle()` thật: IPN tốt → `00` + gói `plus`; gửi lại → `02`; chữ ký sai → `97` và **không** mở;
-  sai tiền → `04`; đơn lạ → `01`; huỷ → `00` nhưng không mở; thiếu khoá → `99`.
-- **Chi phí/điều kiện, nói trước:** VNPay cần **hợp đồng merchant** (thường phải là pháp nhân +
-  website được duyệt) — chậm hơn PayOS (cá nhân/hộ KD chỉ cần CCCD, ~5 phút). Vì vậy PayOS vẫn là
-  cổng mặc định để mở bán trước; VNPay là lựa chọn khi đã có pháp nhân.
-- **#367 — ba con số trong đường tiền phải đến từ ĐÚNG nguồn:** (a) số ngày trao khi tiền về lấy
-  từ `period_days` **của đơn** (số ngày đã bán), không lấy cấu hình lúc webhook tới — admin đổi
-  14 → 7 ngày trong khi một đơn cũ còn chờ là chuyện có thật, và người đã trả 14 ngày không được
-  nhận 7; đơn cũ không có số ngày thì lùi về cấu hình; (b) `period_days` được thêm vào
-  `ORDER_COLUMNS` và hằng đó **được export để test đọc** — thiếu cột trong SELECT thì mọi đơn đọc
-  về 0 và bug (a) quay lại âm thầm; (c) `/v1/billing/status` quảng cáo hạn mức **đang áp** từ
-  `server_config.quota_pro_monthly_credits` (thêm `BillingDb.proCredits()`), env chỉ là lùi khi
-  đọc lỗi hoặc giá trị 0 — trước đó thẻ ghi 500 của env trong khi engine áp con số khác.
-  `tests/unit/worker-billing-sold.test.ts` (mới, **6 nhóm**): đơn bán 14 ngày + cấu hình 7 ⇒ trao
-  **14**; đơn không có số ngày ⇒ 7; DB nói 800 ⇒ thẻ ghi **800**; đọc lỗi ⇒ 500; DB 0 ⇒ 500.
-- **Đo được lần đầu: TOÀN BỘ vòng tiền trên gateway THẬT.** Migration đã chạy trên Supabase
-  (`billing_orders` có, `subscriptions.period_end` có, ba khoá `plan_pro_*` đã seed), nên
-  `missing` chỉ còn `["EDUGAME_BILLING_PROVIDER"]`. Dựng một script staging
-  `ai-gateway-fake` (`--script ai-gateway-fake --allow-fake --var EDUGAME_BILLING_PROVIDER=fake`)
-  rồi chạy cả vòng bằng token giáo viên thật: `status` → `configured:true` · `checkout` **200**,
-  99.000đ · `fake/pay` → `applied:true, plan:"plus", periodEnd:"2026-12-10T13:48:16Z"` (đúng
-  **14 ngày** từ 26/11) · `/v1/billing/status` → `plan:"plus", order:"paid"` · `/v1/usage` →
-  **`unit:"credits", limit:500, cost:2`** (lần đầu tiên thấy một tài khoản ở dạng Pro) · trả lần
-  hai → `applied:false`, `periodEnd` **không** đổi. Dọn: PATCH `subscriptions` về free +
-  `period_end:null`, DELETE đơn, rồi đọc lại: `plan:"free"`, `unit:"generations"`, `limit:10`,
-  `used:5` — **đã trả về nguyên trạng**.
-- **Script staging đã bị XOÁ ngay sau khi đo** (`DELETE …/scripts/ai-gateway-fake` ⇒ 200, URL trả
-  404). Lý do: nó ghi vào **cùng DB production**, nên một URL `fake` công khai là một cửa mở Pro
-  miễn phí cho bất kỳ ai có token — đo xong thì cửa phải đóng, và đã kiểm tra là đã đóng.
-- **`scripts/deploy-worker.js` có thêm `--var NAME=VALUE`** (lặp được): biến của riêng lần deploy
-  đó, và **thắng** `.env` — nhờ vậy một script staging khai được `fake` kể cả khi `.env` đang nói
-  `payos`. Không có nó thì phải bấm dashboard cho mỗi lần đo.
-- **Tiếp theo:** chạy migration + khai biến của cổng đã chọn, rồi
-  `node --env-file=.env scripts/check-billing.js --checkout` và một đơn 99.000đ thật (sandbox trước),
-  cuối cùng chụp lại thẻ Pro ở trạng thái `active`.

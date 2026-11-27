@@ -5934,3 +5934,33 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
   không thêm đường điều hướng, không thêm listener, không có cơ hội lệch giữa các trang.
 - **Mắt cuối không phải liên kết.** Một `<button>`/`<a>` trỏ về chính trang đang mở là một cái bẫy
   focus và một lần tải lại vô nghĩa; nó là `<span aria-current="page">`.
+
+## #370 — chuyển động khi thao tác
+
+- **Chuyển động phải trả lời một câu hỏi, không phải để trang có vẻ "sống".** Chỉ ba trạng thái
+  được chuyển động: HOVER (cái này bấm được), PRESS (cú bấm đã ăn), XUẤT HIỆN (một thứ mới vừa
+  tới). Không thêm chuyển động cho thứ đang đứng yên.
+- **Một chỗ tắt, và tắt cả `transform`, không chỉ thời lượng.** `prefers-reduced-motion: reduce`
+  đặt `--motion-*` về 0 **và** xoá `transform`/`translate`; đặt 0ms mà để `transform` lại là vẫn
+  còn một cú nhảy tức thì — đúng thứ người dùng reduced-motion muốn tránh. Mọi thời lượng là biến
+  (Tailwind rút `120ms` thành `.12s` trong bản build, nên **đo thời lượng phải quy về giây**, đừng
+  so chuỗi).
+- **Hover nhấc thẻ dùng `translate`, không dùng `transform`.** Đo được: thẻ trò chơi còn mang
+  `.game-card` với `animation: card-enter … both`, và animation đã kết thúc với `fill-mode: both`
+  **thắng** mọi khai báo `transform` thường — hover `translateY(-2px)` không bao giờ hiện ra
+  (`matrix(1,0,0,1,0,0)` dù chuột đã ở trên thẻ). `translate` là thuộc tính biến đổi độc lập nên
+  cộng dồn với animation thay vì tranh nhau, và animation nhập cảnh của 22 thẻ không phải sửa.
+  Hệ quả cho mọi việc sau: **muốn một hiệu ứng chồng lên phần tử đang có animation, hãy dùng thuộc
+  tính khác** (`translate`/`scale`/`rotate`), đừng đánh nhau với `transform`.
+- **Một hiệu ứng hover phải đổi nhiều hơn vị trí.** Nhấc 2px một mình đọc ra "thẻ nhảy"; bóng phải
+  đổi theo thì mới nói được "đang trỏ vào cái này". Cổng đo cả hai.
+- **`:hover`/`:active` phải được đo bằng CHUỘT THẬT** (`Input.dispatchMouseEvent`). `el.click()`
+  không đi qua trạng thái nhấn, nên một cổng dùng `click()` chỉ chứng minh CSS viết đúng, không
+  chứng minh người dùng thấy gì. Và phép đo phải so **hình chữ nhật đã vẽ** (hoặc `translate`),
+  không so tên thuộc tính — câu hứa là "nhấc lên 2px", không phải "có khai báo transform".
+- **Không animate `.panel`.** Wizard vẽ lại cả trang sau mỗi lần gõ; một animation trên khối sẽ
+  thành "mờ đi rồi hiện lại" mỗi lần gõ, và các cổng hình học sẽ đọc đúng lúc khối đang dịch 6px.
+  Một hiệu ứng xuất hiện chỉ được đặt lên thứ được vẽ MỘT lần.
+- **Chuyển động không được đổi bố cục.** Tất cả là `transform`/`translate`/`opacity`/màu, và cổng
+  đo `scrollHeight` + `scrollWidth` trước/sau hover phải **bằng nhau** — nếu không, mỗi lần rê chuột
+  qua lưới thẻ là một lần trang nhảy.

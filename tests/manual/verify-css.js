@@ -9,6 +9,13 @@ const css = fs.readFileSync(path.join(__dirname, '..', '..', 'dist', 'src', 'ren
 // Tailwind v4 minifies: no space after `{`, declarations reordered, quotes
 // dropped from attribute values. Match those shapes, not the source formatting.
 const expectations = [
+  // #370 — chuyển động khi thao tác. Compile là chỗ dễ mất nhất: Tailwind rút gọn
+  // `120ms`→`.12s`, và một rule `translate` bị coi là không dùng sẽ bị xoá khỏi bundle.
+  ['#370 card lift ships as `translate` (not transform)', /\.lib-card:hover\{translate:0 var\(--motion-lift\)/],
+  ['#370 press feedback on buttons', /\.btn:not\(:disabled\):active\{transform:translateY\(1px\)/],
+  ['#370 reduced-motion zeroes the motion tokens', /prefers-reduced-motion:reduce\)\{:root\{--motion-fast:0s/],
+  ['#370 card-menu pop animation ships', /@keyframes eg-menu-pop/],
+  ['#370 selection bar animation ships', /eg-selbar-in/],
   ['app-wide thin scrollbar (7px)', /::-webkit-scrollbar\{width:7px/],
   ['dark-theme scrollbar thumb', /\[data-theme=("?)dark\1\] ::-webkit-scrollbar-thumb/],
   ['player scrollbar thinned to 8px', /\[data-player-theme\] ::-webkit-scrollbar\{width:8px/],

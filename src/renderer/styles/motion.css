@@ -1,0 +1,179 @@
+/* ============================================================================
+   #370 — CHUYỂN ĐỘNG KHI THAO TÁC (interaction motion)
+
+   Nguyên tắc của tệp này:
+   1. Chuyển động trả lời một câu hỏi: "cái tôi vừa bấm có nhận ra tôi không?".
+      Vì thế nó chỉ dùng cho HOVER / PRESS / XUẤT HIỆN, không dùng để trang trí.
+   2. Mọi thời lượng là một biến, không phải số viết tay rải rác — muốn "chậm lại
+      một chút" chỉ sửa một chỗ, và `prefers-reduced-motion` chỉ cần tắt một chỗ.
+   3. Không chuyển động nào được đổi KÍCH THƯỚC bố cục. Tất cả là `transform` /
+      `opacity` / màu, nên không có gate hình học nào bị xê dịch, và hover một thẻ
+      không làm trang nhảy.
+   4. Nằm CUỐI chuỗi @import để có thể tinh chỉnh các rule đã có (nó thắng theo
+      thứ tự, không cần `!important`).
+   ============================================================================ */
+
+:root {
+  --motion-fast: 120ms;
+  --motion-base: 180ms;
+  --motion-slow: 260ms;
+  /* Easing "ra khỏi màn hình": nhanh lúc đầu, chậm lúc cuối — cảm giác có khối lượng. */
+  --motion-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  /* Easing "nảy nhẹ": chỉ dùng cho những thứ nhỏ (dấu chọn, chip), không cho khối lớn. */
+  --motion-ease-pop: cubic-bezier(0.34, 1.4, 0.64, 1);
+  /* Độ nhấc của một thẻ khi hover. Một biến vì đây là con số người dùng CẢM thấy. */
+  --motion-lift: -2px;
+}
+
+/* ---------------------------------------------------------------------------
+   1. Nút: nhấn xuống thì chìm 1px, nhả ra thì nổi lại.
+   Không có phản hồi này thì trên một màn hình cảm ứng giáo viên không biết cú
+   bấm đã ăn hay chưa.
+   --------------------------------------------------------------------------- */
+.btn {
+  transition:
+    background-color var(--motion-fast) var(--motion-ease),
+    color var(--motion-fast) var(--motion-ease),
+    border-color var(--motion-fast) var(--motion-ease),
+    box-shadow var(--motion-base) var(--motion-ease),
+    transform var(--motion-fast) var(--motion-ease);
+}
+.btn:not(:disabled):active {
+  transform: translateY(1px);
+}
+/* Nút chính: hover thì nhấc lên, nhấn thì chìm — hai chiều đọc được bằng tay. */
+.btn-primary:not(:disabled):hover {
+  box-shadow: 0 6px 16px #6258e83d;
+}
+.btn-primary:not(:disabled):active {
+  transform: translateY(1px);
+  box-shadow: 0 2px 6px #6258e833;
+}
+.btn-small:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+/* ---------------------------------------------------------------------------
+   2. THƯ VIỆN — thẻ trò chơi.
+   Thẻ nhấc lên khi hover: đó là câu trả lời rẻ nhất cho "thẻ này bấm được".
+   Dùng `transform` nên không đổi bố cục (số đo `scrollHeight` phải đứng yên).
+   --------------------------------------------------------------------------- */
+/* Dùng `translate` (thuộc tính biến đổi ĐỘC LẬP), không dùng `transform`.
+   Lý do đo được: thẻ trò chơi còn mang `.game-card`, mà `.game-card` có
+   `animation: card-enter … both` — animation đã kết thúc với `fill-mode: both` vẫn
+   THẮNG mọi khai báo `transform` thường, nên `transform: translateY(-2px)` khi hover
+   không bao giờ hiện ra (đo được: transform = matrix(1,0,0,1,0,0) dù chuột đã ở trên
+   thẻ). `translate` là thuộc tính riêng nên cộng dồn với `transform` của animation
+   thay vì tranh nhau, và không phải sửa animation nhập cảnh của 22 thẻ. */
+.lib-card {
+  transition:
+    box-shadow var(--motion-base) var(--motion-ease),
+    border-color var(--motion-base) var(--motion-ease),
+    translate var(--motion-base) var(--motion-ease);
+}
+.lib-card:hover {
+  translate: 0 var(--motion-lift);
+}
+.lib-card:active {
+  translate: 0 0;
+}
+/* Thẻ đang được chọn thì không nhấc: nó đã có viền tím nói "đang chọn". */
+.lib-item.is-selected > .lib-card:hover {
+  translate: none;
+}
+
+/* Nút "•••" của thẻ: đổi nền tức thì trước đây, giờ có nhịp. */
+.lib-card-menu {
+  transition:
+    background-color var(--motion-fast) var(--motion-ease),
+    color var(--motion-fast) var(--motion-ease),
+    transform var(--motion-fast) var(--motion-ease);
+}
+.lib-card-menu:active {
+  transform: scale(0.92);
+}
+
+/* Menu của thẻ: xuất hiện bằng một cú nhô nhẹ từ trên xuống, KHÔNG dựng khung
+   (không đổi `display`, không đổi bố cục, nên không có cú giật nào). */
+@keyframes eg-menu-pop {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+[data-game-menu-root] [role="menu"]:not([hidden]) {
+  animation: eg-menu-pop var(--motion-fast) var(--motion-ease);
+  transform-origin: top right;
+}
+
+/* Thanh "đã chọn N trò chơi" trượt vào thay vì đập vào mắt. */
+@keyframes eg-selbar-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: none; }
+}
+.lib-selbar {
+  animation: eg-selbar-in var(--motion-base) var(--motion-ease);
+}
+
+/* Ô tìm kiếm: viền đổi màu có nhịp, để biết nó đã nhận focus. */
+.lib-search {
+  transition: border-color var(--motion-fast) var(--motion-ease), box-shadow var(--motion-fast) var(--motion-ease);
+}
+.lib-search:focus-within {
+  border-color: #c8c3ff;
+  box-shadow: 0 0 0 3px #6258e81f;
+}
+
+/* Ô chọn (thể loại, lớp…): viền đổi có nhịp thay vì nhảy màu. */
+.select {
+  transition: border-color var(--motion-fast) var(--motion-ease), box-shadow var(--motion-fast) var(--motion-ease);
+}
+.select:hover {
+  border-color: #c8c3ff;
+}
+
+/* ---------------------------------------------------------------------------
+   3. Điều hướng: mục đang mở đã có vạch chỉ báo (navigation.css). Ở đây chỉ thêm
+   nhịp cho biểu tượng, để cú chuyển trang không "đóng băng" thanh bên.
+   --------------------------------------------------------------------------- */
+.nav-icon {
+  transition:
+    background-color var(--motion-fast) var(--motion-ease),
+    color var(--motion-fast) var(--motion-ease),
+    box-shadow var(--motion-base) var(--motion-ease);
+}
+
+/* ---------------------------------------------------------------------------
+   4. (Chỗ dành cho hiệu ứng xuất hiện của khối.) Cố ý KHÔNG đặt animation lên
+   `.panel`: bước 1 của wizard vẽ lại toàn trang sau mỗi lần gõ, nên mỗi lần gõ
+   sẽ là một lần cả khối mờ đi rồi hiện lại — và vài cổng đo hình học sẽ đọc
+   đúng lúc khối đang ở `transform: translateY(6px)`.
+   --------------------------------------------------------------------------- */
+
+/* ---------------------------------------------------------------------------
+   5. TẮT THEO Ý NGƯỜI DÙNG — một chỗ duy nhất.
+   Chỉ đặt thời lượng về 0 là KHÔNG đủ: `transform` vẫn nhảy tức thì, và một cú
+   nhảy tức thì đúng là thứ người dùng reduced-motion muốn tránh. Nên tắt cả
+   `transform` của các rule ở trên.
+   --------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+    --motion-base: 0ms;
+    --motion-slow: 0ms;
+    --motion-lift: 0px;
+  }
+  .btn,
+  .btn:not(:disabled):active,
+  .btn-primary:not(:disabled):active,
+  .lib-card,
+  .lib-card:hover,
+  .lib-card:active,
+  .lib-card-menu:active {
+    transform: none;
+    translate: none;
+    transition: none;
+  }
+  [data-game-menu-root] [role="menu"]:not([hidden]),
+  .lib-selbar {
+    animation: none;
+  }
+}
