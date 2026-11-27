@@ -772,6 +772,7 @@ Chủ dự án yêu cầu: *"xóa release cũ ở máy, tạo release mới và 
   breadcrumb. Sau khi bị chê "quá rối", đường dẫn dời **vào trong header** trình soạn thảo và chỉ
   còn mắt cha (`← Thư viện trò chơi ›` + `<h1>` hoàn tất câu), nhờ
   vậy **3 → 2 dòng** trước nội dung và bỏ được nút quay lại thứ hai. 6 nhóm unit +
-  `ui-page-trail-check` **32/32** (32 vì thêm 2 phép đo tương phản — chúng lộ ra một lỗi có sẵn:
+  `ui-page-trail-check` **38/38** (bản 3: mắt cuối **là** `<h1>`, sửa dấu `›` cụt mà bản 2 để lại;
+  thêm 2 phép đo tương phản — chúng lộ ra một lỗi có sẵn:
   tiêu đề editor ở dark mode là **1,27:1**, đã sửa thành 15,5:1). Còn thiếu: đường "Dự án của tôi → trình soạn thảo"
   chưa bấm được trong UI (trang dự án mở wizard).

@@ -354,7 +354,12 @@ html[data-sidebar="hidden"] .app-shell > .sidebar { display: none; }
 .page-trail-current { color: var(--text); font-weight: 600; }
 /* Phiên bản nằm TRONG header trình soạn thảo: cùng cột với tiêu đề, sát trên `<h1>`.
    `line-height: 1` + margin 2px để nó là một dòng phụ, không phải một khối riêng. */
-.page-trail.is-head { margin: 0; gap: 5px; line-height: 1.2; }
-.page-trail.is-head + h1 { margin-top: 2px; }
+.page-trail.is-head { margin: 0; gap: 6px; line-height: 1.2; align-items: baseline; }
 .page-trail.is-head .page-trail-link { font-weight: 600; }
+/* Mắt cuối LÀ <h1>: nó giữ cỡ chữ tiêu đề, không bị 12px của thanh đường dẫn kéo xuống. */
+.page-trail.is-head .page-trail-current {
+  font-size: 18px; font-weight: 800; letter-spacing: -.4px; line-height: 1.2;
+  color: var(--text, #1e293b); margin: 0;
+}
+.page-trail.is-head .page-trail-sep { transform: translateY(-2px); }
 .page-trail-arrow { font-size: 13px; line-height: 1; }

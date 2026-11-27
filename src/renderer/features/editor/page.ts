@@ -215,13 +215,13 @@ function editorPageHtml(game, isNew, note) {
   return `<section class="editor-page" data-editor-page="1">
     <header class="editor-page-head">
       <div class="editor-page-title">
-        <!-- #369: đường dẫn về trang cha nằm NGAY TRÊN tiêu đề, trong cùng cột — không phải một
-             dòng riêng phía trên và không phải một nút "Quay lại" thứ hai. Mắt cuối của đường
-             dẫn chính là <h1> bên dưới, nên tên trang đang mở chỉ xuất hiện một lần.
-             Nút này mang data-editor-back (không phải data-page) để câu hỏi "thay đổi chưa lưu"
-             vẫn được hỏi trước khi rời trang. -->
-        ${typeof pageTrailHeadHtml === 'function' ? pageTrailHeadHtml('editor', state.pageParent) : ''}
-        <h1>${isNew ? 'Duyệt và hoàn thiện trò chơi' : 'Chỉnh sửa trò chơi'}</h1>
+        <!-- #369: đường dẫn "Thư viện trò chơi › Chỉnh sửa trò chơi" nằm trên MỘT dòng — mắt cha
+             nhỏ, mắt cuối CHÍNH LÀ <h1> nên tên trang đang mở chỉ xuất hiện một lần và không có
+             dấu "›" cụt. Không có nút "Quay lại" thứ hai: mắt cha là nút rời trang, mang
+             data-editor-back (không phải data-page) để câu hỏi "thay đổi chưa lưu" vẫn được hỏi. -->
+        ${typeof pageTrailHeadHtml === 'function'
+          ? pageTrailHeadHtml('editor', state.pageParent, { childTitle: isNew ? PAGE_TRAIL_TITLES['editor-new'] : '' })
+          : `<h1>${isNew ? 'Duyệt và hoàn thiện trò chơi' : 'Chỉnh sửa trò chơi'}</h1>`}
         <div class="small muted">${escapeHtml(note)}</div></div>
     </header>
     <div class="editor-save-bar" data-editor-save-bar data-dirty="0">

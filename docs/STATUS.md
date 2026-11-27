@@ -35,6 +35,13 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
   cha là nút rời trang (`data-editor-back`), nên chỉ còn **một** nút rời trang; (b) số dòng xếp
   chồng trước nội dung **3 → 2** (header + thanh Lưu); (c) "Thư viện trò chơi" từ **3 lần** xuống
   **1 lần** trong 70 px đầu trang, "Chỉnh sửa trò chơi" từ **2 lần** xuống **1**.
+- **Vòng 3 (chủ dự án: "breadcrumb vẫn chưa được, cần xem lại"):** nguyên nhân đo được — bản 2 kết
+  thúc bằng dấu `›` **trỏ vào khoảng không** (`← Thư viện trò chơi ›` rồi hết), đọc như một liên kết
+  quay lại bị cụt chứ không phải một đường dẫn. Cách sửa không phải thêm lại một mắt cuối 12px rồi
+  để `<h1>` lặp cùng chữ ngay dưới (lỗi #364): **mắt cuối CHÍNH LÀ `<h1>`** — cùng một phần tử, chữ
+  nhỏ của cha đứng trước, tiêu đề 18px/800 đứng sau, tất cả trên **một dòng** (cao 22 px). Kết quả
+  trên app thật: `← Thư viện trò chơi › Chỉnh sửa trò chơi`, **một** `<h1>` trong trang, không dấu
+  cụt, không lặp chữ, không tràn ngang ở 1366 lẫn 1024 (`hScroll: 0`).
 - **Mắt cha trong header KHÔNG mang `data-page`** (mà `data-page-trail-parent` + `data-editor-back`):
   `[data-page]` là điều hướng thẳng của controller và sẽ bỏ qua câu hỏi "Rời trình chỉnh sửa? Thay
   đổi chưa lưu sẽ mất." mà `wireEditorPage` gắn cho `[data-editor-back]`. Một đường tắt về thư viện
@@ -43,7 +50,10 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
   không có breadcrumb + tự sáng mục của mình; `editor` mang cha thật; cha rác (`'editor'`, trang
   không tồn tại) lùi về mặc định; markup có `data-page` và `aria-current`, **không** có `data-page="editor"`;
   `childTitle` cho trình soạn thảo mới.
-- **Đo trên app thật:** `tests/ui/ui-page-trail-check.js` **30/30** — bấm thật vào sidebar 7 lần
+- **Trang cha không hard-code (đo được):** mở trình soạn thảo từ trang "Tạo trò chơi" ⇒ đường dẫn
+  đổi thành `← Tạo trò chơi › Duyệt và hoàn thiện trò chơi`, và nút rời trang quay về đúng
+  "Tạo trò chơi" — không phải thư viện.
+- **Đo trên app thật:** `tests/ui/ui-page-trail-check.js` **38/38** — bấm thật vào sidebar 7 lần
   (không breadcrumb ở trang cấp 1, đúng 1 mục `.active`), bấm thật menu "•••" → "Chỉnh sửa" ⇒
   đường dẫn đọc `← Thư viện trò chơi ›` **không chứa** chuỗi "Chỉnh sửa trò chơi", nằm **trong**
   header (y 30, `<h1>` ở y 46), **cỡ chữ 12px / line-height 14,4px**, **2 dòng** trước nội dung,
@@ -60,11 +70,11 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
   `check:renderer-globals` **80/82 scripts, 1199 functions, 9679 call sites, 0 undefined** ·
   `build:tauri` + `check:embedded` **6 217,2 KiB** · `cargo tauri build` OK · `ui-page-head-check`
   **6/6** và `ui-sidebar-toggle-check` **17/17** vẫn xanh trên bản dựng mới; `ui-page-trail-check`
-  cuối cùng **32/32** và `ui-account-check` **23/23**. (Một lần chạy `ui-account-check` báo 2 lỗi
+  cuối cùng **38/38** và `ui-account-check` **23/23**. (Một lần chạy `ui-account-check` báo 2 lỗi
   ngay sau khi gate đường dẫn vừa đóng trình soạn thảo; hai lần chạy lại sạch 23/23 và không tái
   hiện được — ghi là **chưa giải thích được**, không phải đã sửa.)
-- **Ảnh:** `tests/ui/shots/page-trail-369-editor.png`, `page-trail-369-top.png` (cắt 210 px đầu, phóng
-  2×) và `page-trail-369-top-dark.png` ở 1366×768. Đường dẫn căn đúng cột nội dung (x 256), cao
+- **Ảnh:** `tests/ui/shots/page-trail-369-editor.png`, `trail-flowA.png` / `trail-dark.png` (cắt dải
+  đầu trang, phóng 2×), `trail-1024.png`, `page-trail-369-top.png` + `-dark.png` ở 1366×768. Đường dẫn căn đúng cột nội dung (x 256), cao
   **14 px** sau khi bỏ mắt cuối, không tràn ngang (`hScroll: 0`), và ở **1024 px** vẫn **1 dòng**
   (không xuống hàng, không tràn).
 - **Chưa đo:** đường `Dự án của tôi → trình soạn thảo` chỉ được chứng minh bằng unit test trên hàm

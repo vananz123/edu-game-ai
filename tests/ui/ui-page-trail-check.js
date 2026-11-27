@@ -38,6 +38,10 @@ const TRAIL = String.raw`(() => {
     headTop: head ? Math.round(head.getBoundingClientRect().top) : -1,
     trailInHead: trail ? !!trail.closest('.editor-page-head') : false,
     trailFontSize: trail ? getComputedStyle(trail).fontSize : '',
+    trailH1: trail ? !!trail.querySelector('h1.page-trail-current') : false,
+    h1Count: document.querySelectorAll('#pageContent h1').length,
+    h1Text: document.querySelector('#pageContent h1') ? document.querySelector('#pageContent h1').innerText.trim() : '',
+    dangles: trail ? /[›»>]\s*$/u.test(trail.innerText.replace(/\s+/g, ' ').trim()) : false,
     trailLineHeight: trail ? getComputedStyle(trail).lineHeight : '',
     h1Top: document.querySelector('.editor-page-head h1') ? Math.round(document.querySelector('.editor-page-head h1').getBoundingClientRect().top) : -1,
     backHook: (() => {
@@ -85,7 +89,7 @@ const CONTRAST = String.raw`(() => {
   const ratio = (a, b) => { const la = lum(parse(a)); const lb = lum(parse(b)); const hi = Math.max(la, lb); const lo = Math.min(la, lb); return Math.round(((hi + 0.05) / (lo + 0.05)) * 100) / 100; };
   const bgOf = (el) => { let n = el; while (n) { const bg = getComputedStyle(n).backgroundColor; if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') return bg; n = n.parentElement; } return 'rgb(255, 255, 255)'; };
   const at = (sel) => { const el = document.querySelector(sel); if (!el) return null; const cs = getComputedStyle(el); return ratio(cs.color, bgOf(el)); };
-  return { h1: at('.editor-page-head h1'), link: at('.page-trail.is-head .page-trail-link'), sep: at('.page-trail.is-head .page-trail-sep') };
+  return { h1: at('.page-trail.is-head h1'), link: at('.page-trail.is-head .page-trail-link'), sep: at('.page-trail.is-head .page-trail-sep') };
 })()`;
 
 (async () => {
@@ -119,12 +123,14 @@ const CONTRAST = String.raw`(() => {
   const inEditor = await c.evaluate(TRAIL);
   check('đang ở trang trình soạn thảo', inEditor.page === 'editor', inEditor.page);
   check('có đường dẫn', inEditor.hasTrail === true, inEditor.text);
-  // Đường dẫn trong header chỉ nói ĐƯỜNG VỀ; mắt cuối là <h1> ngay dưới, nên tên trang đang
-  // mở không được xuất hiện hai lần trong 20 px.
-  check('đường dẫn đọc là "← Thư viện trò chơi ›", không lặp tên trang đang mở', inEditor.text === '← Thư viện trò chơi ›', inEditor.text);
-  check('không còn từ "Chỉnh sửa trò chơi" trong đường dẫn', inEditor.text.indexOf('Chỉnh sửa trò chơi') === -1, inEditor.text);
-  check('đường dẫn nằm TRONG header, ngay trên <h1>', inEditor.trailInHead === true && inEditor.trailTop < inEditor.h1Top, inEditor.trailTop + ' < ' + inEditor.h1Top);
-  check('cỡ chữ đường dẫn = 12px (không nhỏ hơn sàn 11px của #208)', inEditor.trailFontSize === '12px', inEditor.trailFontSize + ' / lh ' + inEditor.trailLineHeight);
+  // Bản 1 thiếu mắt cuối ("dấu › cụt"), bản 2 lặp tên trang hai lần. Bản 3: mắt cuối CHÍNH LÀ
+  // <h1> — đường dẫn đọc đủ "cha › con" trên một dòng và cái tên chỉ tồn tại một lần.
+  check('đường dẫn đọc đủ "← Thư viện trò chơi › Chỉnh sửa trò chơi"', inEditor.text === '← Thư viện trò chơi › Chỉnh sửa trò chơi', inEditor.text);
+  check('không có dấu "›" cụt ở cuối đường dẫn', inEditor.dangles === false, inEditor.text);
+  check('mắt cuối của đường dẫn LÀ <h1>', inEditor.trailH1 === true, String(inEditor.trailH1));
+  check('trang chỉ có MỘT <h1> (tên trang không bị viết hai lần)', inEditor.h1Count === 1, String(inEditor.h1Count));
+  check('nội dung <h1> là tên trang đang mở', inEditor.h1Text === 'Chỉnh sửa trò chơi', inEditor.h1Text);
+  check('đường dẫn nằm TRONG header và một dòng', inEditor.trailInHead === true && inEditor.trailLineHeight !== '32px', inEditor.trailInHead + ' / lh ' + inEditor.trailLineHeight);
   // Chỉ còn HAI dòng trước nội dung (header + thanh Lưu); trước #369b là ba (thêm dòng
   // breadcrumb riêng). Đây là con số đo được của việc "bớt rối", không phải cảm nhận.
   check('chỉ còn 2 dòng xếp chồng trước nội dung (header + thanh Lưu)', inEditor.rowsBeforeContent === 2, String(inEditor.rowsBeforeContent));
@@ -173,6 +179,29 @@ const CONTRAST = String.raw`(() => {
   await c.settle(900);
   const afterBack = await c.evaluate(TRAIL);
   check('nút quay lại trong trình soạn thảo về đúng trang cha', afterBack.page === 'library' && afterBack.hasTrail === false, afterBack.page);
+
+  // 5. Trang cha KHÔNG hard-code: mở trình soạn thảo từ "Tạo trò chơi" thì đường dẫn phải đổi
+  //    thành "← Tạo trò chơi › Duyệt và hoàn thiện trò chơi" (tên mới của trang khi tạo mới).
+  await c.evaluate(`document.querySelector('.nav-item[data-page="create"]').click(); 1`);
+  await c.settle(900);
+  const toNew = await c.evaluate(String.raw`(() => {
+    const btn = [...document.querySelectorAll('#pageContent button')].find((el) => /Mở trình chỉnh sửa câu hỏi/u.test(el.innerText || ''));
+    if (!btn) return false;
+    btn.click();
+    return true;
+  })()`);
+  check('mở được trình soạn thảo từ trang "Tạo trò chơi"', toNew === true, String(toNew));
+  await c.settle(1300);
+  const fresh = await c.evaluate(TRAIL);
+  check('đường dẫn đổi theo trang cha thật: "← Tạo trò chơi › Duyệt và hoàn thiện trò chơi"',
+    fresh.text === '← Tạo trò chơi › Duyệt và hoàn thiện trò chơi', fresh.text);
+  check('trang tạo mới vẫn chỉ một <h1>', fresh.h1Count === 1 && fresh.trailH1 === true, fresh.h1Count + ' / h1-in-trail=' + fresh.trailH1);
+  await c.evaluate(`document.querySelector('[data-editor-back]').click(); 1`);
+  await c.settle(800);
+  const backCreate = await c.evaluate(TRAIL);
+  check('từ trình soạn thảo mới quay lại đúng trang "Tạo trò chơi"', backCreate.page === 'create', backCreate.page);
+  await c.evaluate(`document.querySelector('.nav-item[data-page="library"]').click(); 1`);
+  await c.settle(600);
 
   const failed = results.filter((row) => !row.ok).length;
   console.log('\nui-page-trail-check: ' + (results.length - failed) + '/' + results.length + ' passed');

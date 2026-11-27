@@ -81,11 +81,20 @@ function pageTrailParentLinkHtml(page, parent, options = {}) {
   return `<button type="button" class="page-trail-link"${hook} data-page-trail-parent="${escapeHtml(parentPage)}" title="Về ${escapeHtml(pageTrailTitle(parentPage))}">${arrow}${escapeHtml(pageTrailTitle(parentPage))}</button>`;
 }
 
-/** Markup cho header trình soạn thảo: mắt cha + dấu "›" (mắt cuối là chính `<h1>`). */
-function pageTrailHeadHtml(page, parent) {
+/**
+ * Markup đường dẫn cho header trình soạn thảo. Mắt cuối **là** `<h1>` của trang.
+ *
+ * Vì sao: một dấu "›" không có gì sau nó là một đường dẫn cụt — đúng lỗi của bản đầu #369
+ * (chủ dự án: "breadcrumb vẫn chưa được"). Nhưng vẽ thêm một mắt cuối cỡ 12px rồi lại đặt
+ * `<h1>` cùng chữ ngay dưới là hai lần cùng một câu (lỗi #364). Cách duy nhất thoả cả hai:
+ * **mắt cuối chính là `<h1>`** — cùng một phần tử, chữ nhỏ của mắt cha đứng trước, tiêu đề
+ * lớn đứng sau trên CÙNG một dòng.
+ */
+function pageTrailHeadHtml(page, parent, options = {}) {
   const link = pageTrailParentLinkHtml(page, parent, { arrow: true, hook: 'data-editor-back' });
   if (!link) return '';
-  return `<nav class="page-trail is-head" aria-label="Đường dẫn trang">${link}<span class="page-trail-sep" aria-hidden="true">›</span></nav>`;
+  const current = pageTrailTitle(page, options.childTitle);
+  return `<nav class="page-trail is-head" aria-label="Đường dẫn trang">${link}<span class="page-trail-sep" aria-hidden="true">›</span><h1 class="page-trail-current" aria-current="page">${escapeHtml(current)}</h1></nav>`;
 }
 
 /** Markup đường dẫn. Rỗng khi trang là cấp 1 — không có `<nav>` rỗng trên màn hình. */

@@ -5908,6 +5908,13 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
   cùng cột với `<h1>` đưa về **hai**. Và mắt cuối của đường dẫn **chính là `<h1>`**: viết lại tên
   trang đang mở bằng chữ nhỏ sát trên tên lớn của nó là cùng một câu hai lần (lỗi #364 đã sửa một
   lần), nên `pageTrailHeadHtml` chỉ vẽ mắt cha + dấu `›`.
+- **Mắt cuối của đường dẫn LÀ `<h1>` của trang — không phải một mắt 12px thứ hai.** Hai bản trước
+  đều sai theo hai kiểu khác nhau: bản 1 vẽ đủ hai mắt rồi để `<h1>` lặp đúng chữ đó ngay dưới
+  (cùng một câu hai lần, lỗi #364); bản 2 bỏ mắt cuối nên đường dẫn kết thúc bằng một dấu `›` trỏ
+  vào khoảng không — đọc như liên kết quay lại bị cụt. Cách thoả cả hai: mắt cha nhỏ đứng trước,
+  `›`, rồi **chính `<h1>`** đóng vai mắt cuối trên cùng một dòng. Một phần tử, một câu, đủ đường
+  dẫn. Hệ quả kiểm được: trang chỉ có **một** `<h1>`, không có dấu cụt, cao dòng 22 px ở cả 1366 và
+  1024 px.
 - **Một trang chỉ có MỘT nút rời trang.** Khi đường dẫn đã nằm trong header thì nút "← Quay lại"
   riêng là nút thứ hai làm đúng một việc; nó bị bỏ, và mắt cha mang `data-editor-back` để câu hỏi
   "thay đổi chưa lưu sẽ mất" vẫn được hỏi. Vì vậy mắt cha trong header dùng
