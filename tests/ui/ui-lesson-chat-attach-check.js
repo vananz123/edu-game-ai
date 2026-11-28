@@ -66,6 +66,8 @@ const MEASURE = String.raw`(() => {
     picker: {
       open: !!picker,
       position: picker ? getComputedStyle(picker).position : '',
+      gapToButton: pickerBox && b ? Math.round(b.top - pickerBox.bottom) : -1,
+      leftDelta: pickerBox && b ? Math.round(pickerBox.left - b.left) : -999,
       width: pickerBox ? Math.round(pickerBox.width) : -1,
       fieldWidth: f ? Math.round(f.width) : -1,
       animation: picker ? getComputedStyle(picker).animationName : '',
@@ -112,7 +114,10 @@ const MEASURE = String.raw`(() => {
   await c.settle(700);
   const opened = await c.evaluate(MEASURE);
   check('bấm "+" ⇒ bảng chọn mở', opened.picker.open === true, String(opened.picker.open));
-  check('bảng chọn nằm PHÍA TRÊN khung gõ (không che chữ đang gõ)', opened.picker.aboveField === true, String(opened.picker.aboveField));
+  // #377: popup dính vào nút "+" nên nó NẰM ĐÈ lên phần trên của khung gõ (đó là cách một menu
+  // gắn vào nút hoạt động). Điều không được phép: che hai nút dưới cùng (nút "+" và mũi tên gửi).
+  check('bảng nổi không che hai nút của khung gõ (đáy popup cao hơn đỉnh nút "+")',
+    opened.picker.aboveField === true || opened.picker.gapToButton >= 0, 'cách đỉnh nút ' + opened.picker.gapToButton + 'px');
   check('bảng chọn có lối "Tải giáo án mới" (một nút làm được việc của hai nút cũ)',
     opened.picker.imports >= 1, String(opened.picker.imports));
   check('đang mở: aria-expanded="true" + class is-open', opened.expanded === 'true' && opened.openClass === true,
@@ -129,6 +134,56 @@ const MEASURE = String.raw`(() => {
   check('bảng nổi rộng không quá khung gõ (không đè sang cột danh sách)',
     opened.picker.width <= opened.picker.fieldWidth, opened.picker.width + ' ≤ ' + opened.picker.fieldWidth);
   check('bảng nổi có nhịp mở (eg-pop-up)', opened.picker.animation === 'eg-pop-up', opened.picker.animation);
+  // #377: popup phải DÍNH vào nút "+", không phải neo vào đỉnh cả khung gõ (đo trước khi sửa: 69px).
+  check('bảng nổi nằm SÁT nút "+" (cách ≤ 12px, mép trái lệch ≤ 10px so với nút)',
+    opened.picker.gapToButton >= 0 && opened.picker.gapToButton <= 12 && Math.abs(opened.picker.leftDelta) <= 10,
+    'cách nút ' + opened.picker.gapToButton + 'px, lệch trái ' + opened.picker.leftDelta + 'px');
+
+  // 5a. #377 — CHỌN MỘT GIÁO ÁN KHÔNG ĐƯỢC LÀM NHÁY.
+  // Trước khi sửa: mỗi lần tick gọi `render()` ⇒ 29 mutation, phần tử `.lesson-chat-pop` bị thay,
+  // `eg-pop-up` chạy lại ⇒ màn hình nháy đúng lúc đang tick.
+  await c.evaluate(String.raw`(() => {
+    const pop = document.querySelector('.lesson-chat-field > .lesson-chat-pop');
+    if (pop) pop.dataset.keepMark = 'same';
+    window.__pickProbe = { mutations: 0, anims: 0 };
+    window.__pickObserver = new MutationObserver((records) => { window.__pickProbe.mutations += records.length; });
+    window.__pickObserver.observe(document.querySelector('#pageContent'), { childList: true, subtree: true });
+    if (!window.__pickAnimWired) {
+      window.__pickAnimWired = true;
+      document.addEventListener('animationstart', (event) => {
+        const el = event.target;
+        if (el && el.classList && el.classList.contains('lesson-chat-pop') && window.__pickProbe) window.__pickProbe.anims += 1;
+      }, true);
+    }
+    return 1;
+  })()`);
+  await c.evaluate(String.raw`(() => {
+    const boxes = [...document.querySelectorAll('[data-lesson-chat-pick]')];
+    const target = boxes.find((box) => !box.checked) || boxes[0];
+    target.checked = !target.checked;
+    target.dispatchEvent(new Event('change', { bubbles: true }));
+    return 1;
+  })()`);
+  await c.settle(700);
+  const picked = await c.evaluate(String.raw`(() => {
+    const pop = document.querySelector('.lesson-chat-field > .lesson-chat-pop');
+    return {
+      samePopup: !!(pop && pop.dataset.keepMark === 'same'),
+      open: !!pop,
+      mutations: window.__pickProbe.mutations,
+      anims: window.__pickProbe.anims,
+      chips: document.querySelectorAll('[data-lesson-chat-sources] .lesson-chat-chip').length,
+      hint: (document.querySelector('[data-lesson-chat-hint]') || {}).textContent || '',
+      checked: [...document.querySelectorAll('[data-lesson-chat-pick]')].filter((box) => box.checked).length,
+    };
+  })()`);
+  check('chọn một giáo án KHÔNG dựng lại popup (cùng một phần tử DOM)', picked.samePopup === true && picked.open === true, 'same=' + picked.samePopup);
+  check('chọn một giáo án KHÔNG chạy lại animation nhập cảnh (không nháy)', picked.anims === 0, String(picked.anims) + ' lần animation');
+  check('chọn một giáo án chỉ sửa vài chỗ, không vẽ lại cả trang (≤ 6 mutation)', picked.mutations <= 6,
+    String(picked.mutations) + ' mutation (trước #377: 29)');
+  check('hàng chip và câu gợi ý cập nhật đúng sau khi chọn',
+    picked.chips === picked.checked && picked.hint.includes(String(picked.checked)) === true,
+    'chip=' + picked.chips + ' · đã tick=' + picked.checked + ' · "' + picked.hint.slice(0, 46) + '"');
 
   // 5b. Esc đóng popup (một lớp nổi phải có đường tắt).
   await c.evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); 1`);

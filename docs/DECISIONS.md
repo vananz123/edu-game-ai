@@ -6078,3 +6078,19 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
   nên không bao giờ cắt. Một danh sách tên tệp dài là chỗ dễ thấy lỗi này nhất.
 - **Chiều cao popup phải bị chặn bởi CỬA SỔ, không chỉ bởi nội dung.** `max-height: min(320px, 46vh)`:
   ở cửa sổ thấp, một thẻ cao 320px sẽ trùm lên cả phần đang đọc.
+
+## #377 — popup dính vào NÚT, và một lần tick không được vẽ lại cả trang
+
+- **Một menu gắn vào một nút thì neo vào NÚT đó, không neo vào hộp chứa nút.** Bản trước đặt
+  `bottom: calc(100% + 8px)` so với `.lesson-chat-field` (hộp cao 99px), nên popup cách nút "+"
+  **69px** — đọc ra như một hộp thoại rời. Neo vào nút (`bottom: 46px`, `left: 4px`) ⇒ cách **8px**.
+  Hệ quả chấp nhận được: popup **nằm đè** lên phần trên của khung gõ; điều không được phép là che
+  hai nút dưới cùng — cổng đo đúng điều đó, không đo "không được chồng lên khung gõ".
+- **Menu nhỏ hơn vùng nó che.** 460px phủ gần kín khung gõ + hàng chip (thấy bằng ảnh 2×); 380px vẫn
+  đọc đủ tên tệp (đã có "…") và che còn 54% khung gõ.
+- **Một lần tick không được gọi `render()`.** Đo được: tick một giáo án ⇒ **29 mutation**, phần tử
+  popup bị **thay mới**, `eg-pop-up` **chạy lại** ⇒ nháy đúng lúc tay người dùng đang ở đó. Chỉ ba
+  thứ thật sự đổi khi tick (hàng chip, câu gợi ý, trạng thái nút gửi), nên `lessonChatSyncPicked()`
+  sửa đúng ba chỗ đó tại chỗ. Đo lại: **2 mutation**, cùng phần tử, **0** animation.
+- **Cùng một lý do áp cho "Chọn tất cả" và "bỏ một giáo án".** Nếu chỉ sửa đường tick lẻ thì hai
+  đường còn lại vẫn nháy — và người dùng sẽ gặp đúng cú nháy đó ở nút to nhất trong bảng.

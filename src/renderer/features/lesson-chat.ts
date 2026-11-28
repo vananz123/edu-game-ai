@@ -421,6 +421,45 @@ function lessonChatAttachButtonHtml() {
     + '<span data-icon="circle-plus" data-icon-size="16"></span></button>';
 }
 
+/**
+ * #377 — đồng bộ "đang chọn giáo án nào" TẠI CHỖ, không vẽ lại cả trang.
+ *
+ * Đo được trước khi sửa: bấm một checkbox trong bảng chọn ⇒ **29 mutation** trong `#pageContent`,
+ * phần tử `.lesson-chat-pop` bị **thay bằng phần tử mới**, nên `eg-pop-up` chạy lại ⇒ màn hình
+ * nháy đúng lúc người dùng đang tick. Nguyên nhân: mỗi lần đổi lựa chọn gọi `render()` — hàm vẽ
+ * lại TOÀN BỘ trang.
+ *
+ * Ở đây chỉ ba thứ thật sự đổi khi tick: hàng chip, câu gợi ý dưới khung gõ, và trạng thái nút gửi.
+ * Bảng chọn thì không phải đổi (ô checkbox đã tự đổi khi người dùng bấm).
+ */
+function lessonChatSyncPicked() {
+  const composer = document.querySelector('.lesson-chat-composer');
+  if (!composer) return;
+  const html = lessonChatAttachHtml();
+  const host = composer.querySelector('[data-lesson-chat-sources]');
+  if (host) {
+    if (html) host.outerHTML = html;
+    else host.remove();
+  } else if (html) {
+    const anchor = composer.querySelector('.lesson-chat-modes');
+    if (anchor) anchor.insertAdjacentHTML('beforebegin', html);
+  }
+  const hint = composer.querySelector('[data-lesson-chat-hint]');
+  if (hint) {
+    hint.textContent = lessonChatUi.docIds.length
+      ? `Đã chọn ${lessonChatUi.docIds.length} giáo án — AI sẽ đối chiếu và trả lời bám sát nội dung.`
+      : 'Cứ hỏi thẳng — không cần chọn hay tải giáo án nào cả.';
+  }
+  const send = composer.querySelector('[data-lesson-chat-send]');
+  if (send) send.disabled = !lessonChatCanSend();
+  const attach = composer.querySelector('.lesson-chat-attach-btn');
+  if (attach) {
+    attach.title = lessonChatDocuments().length
+      ? 'Chọn hoặc tải giáo án khác'
+      : 'Chưa gắn giáo án nào — chọn hoặc tải một tệp để AI trích dẫn';
+  }
+}
+
 function lessonChatComposerHtml() {
   const options = lessonChatProviderOptions();
   const selected = lessonChatProviderSelection();
@@ -521,7 +560,8 @@ function wireLessonChat() {
       } else {
         lessonChatUi.docIds = lessonChatUi.docIds.filter(item => item !== id);
       }
-      render();
+      // #377: KHÔNG gọi render() — xem `lessonChatSyncPicked`.
+      lessonChatSyncPicked();
     });
   });
   const provider = document.getElementById('lessonChatProvider');
@@ -583,12 +623,20 @@ async function lessonChatHandle(action, element) {
   if (action === 'lesson-chat-pick-all') {
     const library = Array.isArray(state.lessonLibrary) ? state.lessonLibrary : [];
     lessonChatUi.docIds = id === 'none' ? [] : library.map(document => document.id);
-    render();
+    // #377: đổi trạng thái các ô TẠI CHỖ rồi đồng bộ — vẽ lại cả trang sẽ dựng lại bảng chọn và
+    // làm nó nháy ngay giữa thao tác.
+    document.querySelectorAll('[data-lesson-chat-pick]').forEach(box => {
+      box.checked = lessonChatUi.docIds.includes(box.dataset.id);
+    });
+    lessonChatSyncPicked();
     return true;
   }
   if (action === 'lesson-chat-remove-doc') {
     lessonChatUi.docIds = lessonChatUi.docIds.filter(item => item !== id);
-    render();
+    document.querySelectorAll('[data-lesson-chat-pick]').forEach(box => {
+      if (box.dataset.id === id) box.checked = false;
+    });
+    lessonChatSyncPicked();
     return true;
   }
   if (action === 'lesson-chat-import') {

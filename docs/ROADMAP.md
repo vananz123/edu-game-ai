@@ -828,3 +828,9 @@ Chủ dự án yêu cầu: *"xóa release cũ ở máy, tạo release mới và 
   chat 648→648, đỉnh nút "+" 556→556 (không xê dịch). Sửa hai lỗi hiển thị thấy qua ảnh 2×: thanh
   cuộn ngang (`overflow-x: hidden`) và tên tệp dài không có dấu "…" (`min-width: 0` + `flex: 1 1
   auto`). Cổng `ui-lesson-chat-attach-check` **23/23**. Chưa đo: hộp thoại tệp thật; cửa sổ ≤ 500 px.
+
+- [x] **#377 — popup dính sát nút "+" và hết nháy khi chọn giáo án**: neo vào nút (`bottom: 46px`,
+  `left: 4px` ⇒ cách 8px thay vì 69px), thu bề rộng 460→380px; bỏ `render()` khi tick bằng
+  `lessonChatSyncPicked()` (chỉ sửa chip + câu gợi ý + nút gửi tại chỗ), áp cho cả "Chọn tất cả" và
+  bỏ một giáo án. Đo: 29 → **2 mutation**, cùng phần tử popup, **0** animation nhập cảnh chạy lại.
+  Cổng `ui-lesson-chat-attach-check` **28/28**. Chưa đo: cảm giác bằng mắt trên video; cửa sổ ≤ 500px.

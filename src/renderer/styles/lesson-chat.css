@@ -523,12 +523,19 @@
    ============================================================================ */
 .lesson-chat-field > .lesson-chat-pop {
   position: absolute;
-  left: 0;
-  bottom: calc(100% + 8px);
+  /* #377: dính vào NÚT "+", không phải vào cả khung gõ. Đo trước khi sửa: đáy popup cách nút 69px
+     (vì nó neo vào đỉnh khung gõ, mà khung gõ cao 99px) — đọc ra như một hộp thoại rời rạc.
+     Nút chiếm 8–38px tính từ đáy khung gõ, nên `bottom: 46px` đặt đáy popup cách đỉnh nút 8px;
+     `left: 4px` để mép trái gần nút (nút ở 8px). */
+  left: 4px;
+  bottom: 46px;
   z-index: 30;
-  width: min(460px, 100%);
+  /* 380px chứ không phải 460: một menu gắn vào nút thì nhỏ hơn vùng nội dung nó che. Ở 460px
+     (đo bằng ảnh 2×) nó phủ gần kín cả khung gõ lẫn hàng chip phía trên; tên tệp đã có "…" nên
+     hẹp hơn không mất thông tin. */
+  width: min(380px, 100%);
   margin: 0;
-  max-height: min(320px, 46vh);
+  max-height: min(300px, 46vh);
   /* Đo được: popup rộng 459px nhưng `scrollWidth` 484px ⇒ một thanh cuộn NGANG hiện ra ở đáy thẻ
      (người soát ảnh gọi đúng là "thanh cuộn trông chưa xong"). Nội dung dài đã có
      `text-overflow: ellipsis`, nên chặn trục ngang là đủ; chỉ trục dọc được cuộn. */

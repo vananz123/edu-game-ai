@@ -7,6 +7,38 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-26 — #377 popup dính sát nút "+", và hết nháy khi chọn giáo án
+
+- **Yêu cầu (nguyên văn):** "tôi cần phần pop up gần nút + hơn, lỗi khi chọn giáo án bị nháy".
+- **Vì sao popup ở xa:** nó được neo vào **đỉnh cả khung gõ** (`bottom: calc(100% + 8px)` của
+  `.lesson-chat-field`), mà khung gõ cao 99 px ⇒ đo được đáy popup cách nút **69 px**. Giờ neo vào
+  chính nút: `bottom: 46px` (nút chiếm 8–38 px từ đáy khung) + `left: 4px` ⇒ **cách nút 8 px, lệch
+  trái 4 px**, và không che nút "+" hay mũi tên gửi. Nhân đó thu bề rộng **460 → 380 px** và
+  `max-height 320 → 300`: ở 460 px nó phủ gần kín cả khung gõ lẫn hàng chip (ảnh 2× cho thấy đúng
+  thế); tên tệp đã có "…" nên hẹp hơn không mất thông tin. Che khung gõ còn **54%**.
+- **Nguyên nhân cú "nháy" (đo được):** mỗi lần tick một giáo án gọi `render()` — hàm vẽ lại **toàn
+  bộ trang**: **29 mutation** trong `#pageContent`, phần tử `.lesson-chat-pop` bị **thay bằng phần tử
+  mới**, nên `eg-pop-up` **chạy lại** ⇒ màn hình nháy đúng lúc người dùng đang tick.
+- **Sửa:** thêm `lessonChatSyncPicked()` — chỉ sửa ba thứ thật sự đổi khi tick (hàng chip, câu gợi ý
+  dưới khung gõ, trạng thái nút gửi) **tại chỗ**; bảng chọn không phải vẽ lại vì ô checkbox đã tự
+  đổi. Áp cho cả `lesson-chat-pick-all` ("Chọn tất cả"/"Bỏ chọn" đổi mọi ô tại chỗ) và
+  `lesson-chat-remove-doc`.
+- **Đo lại:** tick một giáo án ⇒ **2 mutation** (trước 29), **cùng một phần tử popup**, **0** lần
+  animation nhập cảnh; hàng chip và câu gợi ý vẫn cập nhật đúng ("Đã chọn 4 giáo án…"). "Chọn tất
+  cả" ⇒ 4 mutation, cùng phần tử, 0 animation, 5 chip, mọi ô đã tick.
+- **Cổng `tests/ui/ui-lesson-chat-attach-check.js` lên 28/28** (+5 check): popup cách nút **≤ 12 px**
+  và lệch trái **≤ 10 px**; tick một giáo án ⇒ **cùng phần tử DOM**, **0 animation**, **≤ 6
+  mutation**, chip/gợi ý khớp số đã tick. Một check cũ được viết lại cho đúng câu hỏi mới: popup dính
+  vào nút thì **nằm đè** lên khung gõ là đúng, điều không được phép là che hai nút dưới cùng.
+- **Kết quả đo:** `tsc` sạch · unit **118/118** · `npm run check` sạch · `verify:css` **66/66** ·
+  `check:renderer-globals` 0 undefined · `check:embedded` **6 217,2 KiB** · `cargo tauri build` OK ·
+  `ui-lesson-chat-send-check` **15/15** · `ui-lesson-page-check` **17/17** · `ui-motion-check`
+  **19/19** · `ui-account-check` **23/23**.
+- **Ảnh:** `tests/ui/shots/lesson-chat-popup-377.png` (toàn trang), `-zoom.png` (2×, bản 460 px trước
+  khi thu hẹp).
+- **Chưa đo:** cảm giác "hết nháy" bằng mắt người trên video (chỉ đo được: cùng phần tử, 0 animation,
+  2 mutation); chưa thử khi cửa sổ ≤ 500 px cao.
+
 ### 2026-11-26 — #376 bấm dấu "+" là bảng chọn giáo án bật lên thành POPUP NỔI
 
 - **Yêu cầu:** "bấm vào dấu cộng thì hiện lên pop up luôn".
@@ -74,33 +106,3 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
   chip, và "Tải giáo án mới" chỉ còn bên trong bảng chọn.
 - **Chưa đo:** chưa bấm "Tải giáo án mới" trong bảng (mở hộp thoại tệp thật của Windows); chưa thử
   chọn/bỏ chọn một giáo án qua bảng rồi hỏi AI.
-
-### 2026-11-26 — #374 nút Gửi thành mũi tên tròn bên trong khung gõ chat
-
-- **Yêu cầu:** "di chuyển nút gửi thành mũi tên bên trong khung chat".
-- **Trước:** "Gửi" là một `.btn btn-primary btn-small` **có chữ**, nằm trong hàng `.lesson-chat-foot`
-  dưới khung gõ (cạnh ô chọn nhà cung cấp) ⇒ chiếm một ô riêng cho bốn ký tự, và mắt phải đi
-  xuống dưới khung gõ mới bấm được.
-- **Sau:** `<div class="lesson-chat-field">` bọc textarea; nút `.lesson-chat-send` là **hình tròn
-  30×30** đặt `right:8px; bottom:8px` **trong** khung, icon **`arrow-up`** (icon-only), nhãn đọc được
-  ở `aria-label="Gửi câu hỏi"` + `title="Gửi (Enter)"`. Hook `data-lesson-chat-send` giữ nguyên nên
-  Enter, đếm ký tự và khoá-khi-đang-gửi không phải sửa một dòng nào.
-- **Chữ không chui xuống dưới nút:** textarea có `padding-right: 44px` + `padding-bottom: 12px`.
-- **Bỏ tay nắm kéo-giãn của textarea** (`resize: none`): ảnh chụp 2× cho thấy tay nắm nằm **đúng
-  dưới** nút gửi và bị nút che mất một nửa. Khung gõ vẫn cao 96–300px theo nội dung.
-- **Nút Dừng dùng đúng chỗ đó:** khi đang trả lời, cùng hình tròn đó là `.is-stop`
-  (`data-action="lesson-chat-stop"`, `aria-label="Dừng trả lời"`), nên bố cục không nhảy khi trạng
-  thái đổi.
-- **Cổng mới `tests/ui/ui-lesson-chat-send-check.js` 15/15:** nút nằm **hoàn toàn trong** hình chữ
-  nhật của khung gõ (cách mép phải 8px, mép dưới 8px), tròn `border-radius: 50%`, **không chữ** +
-  `aria-label` + có `<svg>`, hàng chân khung gõ **không còn chữ "Gửi"**, `padding-right 44px`,
-  `resize none`; rỗng ⇒ `disabled`, gõ ⇒ bật, xoá ⇒ tắt lại, và bật/tắt **không đổi hình chữ nhật**
-  (30×30, 8/8 ở cả hai trạng thái); trạng thái đang-trả-lời ⇒ cùng chỗ là nút Dừng.
-- **Kết quả đo:** `tsc` sạch · unit **118/118** · `npm run check` sạch · `verify:css` **66/66** ·
-  `check:renderer-globals` 0 undefined · `check:embedded` **6 217,2 KiB** · `cargo tauri build` OK ·
-  `ui-lesson-page-check` **17/17** · `ui-motion-check` **19/19** · `ui-account-check` **23/23** ·
-  `ui-settings-ai-labels-check` **12/12**.
-- **Ảnh:** `tests/ui/shots/lesson-chat-send-374.png` (khung gõ 2×, có chữ) và `lesson-page-374.png`.
-  Người soát ảnh xác nhận nút nằm gọn trong khung, không còn va vào tay nắm kéo-giãn.
-- **Chưa đo:** chưa **bấm nút gửi để gửi một câu hỏi thật** (sẽ gọi AI thật) — mới đo trạng thái
-  bật/tắt và vị trí; chưa thử nút này trên màn hình cảm ứng.
