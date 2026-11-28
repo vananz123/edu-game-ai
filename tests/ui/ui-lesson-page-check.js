@@ -41,6 +41,13 @@ const MEASURE = String.raw`(() => {
     columns: col ? getComputedStyle(col).gridTemplateColumns : '',
     pcOverflow: pc ? getComputedStyle(pc).overflowY : '',
     listScroll: list ? { h: list.clientHeight, sh: list.scrollHeight, overflow: getComputedStyle(list).overflowY, top: list.scrollTop } : null,
+    empty: (() => {
+      const el = document.querySelector('[data-lesson-chat-empty]');
+      if (!el) return null;
+      const heading = el.querySelector('strong');
+      const text = el.innerText.replace(/\s+/g, ' ').trim();
+      return { heading: heading ? heading.innerText.trim() : '', text };
+    })(),
     headButtons: [...document.querySelectorAll('.lesson-chat-head-actions button')].map((b) => ({
       text: (b.innerText || '').replace(/\s+/g, ' ').trim(),
       action: b.dataset.action || '',
@@ -75,6 +82,18 @@ const MEASURE = String.raw`(() => {
   const projectBtn = wide.headButtons.find((b) => b.page === 'create-wizard');
   check('nút "Nhập tệp" vẫn còn (đã chuyển vào header khung chat)', !!importBtn, JSON.stringify(wide.headButtons.map((b) => b.text)));
   check('nút "Dự án mới" vẫn còn và vẫn trỏ tới create-wizard', !!projectBtn, projectBtn ? projectBtn.text : '(không thấy)');
+
+  // 2b. #378 — lời mời ở khung chat rỗng.
+  check('khung chat rỗng mời "Hỏi về giáo án của bạn"', !!wide.empty && wide.empty.heading === 'Hỏi về giáo án của bạn',
+    wide.empty ? wide.empty.heading : '(không có khối rỗng)');
+  check('câu mời cũ "Cứ hỏi, không cần mở giáo án" đã bị bỏ',
+    !!wide.empty && !/Cứ hỏi, không cần mở giáo án/u.test(wide.empty.text), wide.empty ? wide.empty.text.slice(0, 60) : '');
+  // Chỉ dẫn phải trỏ vào control ĐANG CÓ. "Chọn giáo án" là nút đã bị gộp (#375) — nhắc nó là
+  // dạy người dùng đi tìm một thứ không tồn tại.
+  check('câu mời không chỉ vào nút "Chọn giáo án" đã bị gộp', !!wide.empty && !/Chọn giáo án/u.test(wide.empty.text),
+    wide.empty ? wide.empty.text.slice(0, 80) : '');
+  check('câu mời chỉ đúng nút "＋" trong khung gõ', !!wide.empty && /＋/u.test(wide.empty.text),
+    wide.empty ? wide.empty.text.slice(0, 80) : '');
 
   // 3. Cuộn cửa sổ: không được ăn, và khung không được dịch.
   await c.evaluate(`window.scrollTo(0, 500); 1`);

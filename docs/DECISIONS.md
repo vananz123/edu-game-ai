@@ -6094,3 +6094,17 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
   sửa đúng ba chỗ đó tại chỗ. Đo lại: **2 mutation**, cùng phần tử, **0** animation.
 - **Cùng một lý do áp cho "Chọn tất cả" và "bỏ một giáo án".** Nếu chỉ sửa đường tick lẻ thì hai
   đường còn lại vẫn nháy — và người dùng sẽ gặp đúng cú nháy đó ở nút to nhất trong bảng.
+
+## #378 — lời mời trong ứng dụng phải trỏ vào control ĐANG CÓ
+
+- **Một câu hướng dẫn là một lời hứa về giao diện; gộp nút thì phải sửa câu.** Lời mời cũ viết
+  "gắn giáo án bằng nút **Chọn giáo án** trong khung gõ", nhưng từ #375 hai nút đó đã gộp thành một
+  nút "＋" — câu đó dạy người dùng đi tìm một thứ không tồn tại, và **không cổng nào bắt được** vì
+  không cổng nào đọc nội dung câu. Từ nay: đổi tên/gộp một control thì grep chính cái tên đó trong
+  toàn bộ chuỗi tiếng Việt của renderer.
+- **Lời mời dài bốn dòng là một tài liệu, không phải một lời mời.** Khung rỗng chỉ cần nói: hỏi về
+  cái gì, và gắn bài bằng cách nào. Hai câu là đủ; phần "kết quả hiện theo đúng định dạng của trò
+  chơi, kèm nút Tạo trò chơi" đã có sẵn ở kết quả khi nó thật sự xuất hiện.
+- **Cổng phải đọc NỘI DUNG của lời mời, không chỉ sự tồn tại của khối.** Bốn check mới: tiêu đề
+  đúng chữ mới, câu cũ đã biến mất, **không** còn nhắc tên control đã bị gộp, và **có** nhắc nút
+  "＋". Thiếu hai check giữa thì một lời mời sai vẫn xanh.

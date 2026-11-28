@@ -389,12 +389,13 @@ function lessonChatTranscriptHtml() {
     ? lessonChatUi.chat.messages
     : [];
   if (!messages.length && !lessonChatUi.sending && !lessonChatUi.error) {
+    // #378: câu cũ ("Cứ hỏi, không cần mở giáo án…") đã bị bỏ. Nó dài bốn dòng, và nó chỉ vào
+    // một nút KHÔNG CÒN TỒN TẠI ("Chọn giáo án" — từ #375 đã gộp thành nút "＋" trong khung gõ),
+    // tức là một chỉ dẫn sai. Câu mới nói đúng việc đang có: hỏi về giáo án, gắn bài bằng "＋".
     return `<div class="lesson-chat-empty" data-lesson-chat-empty>
-      <strong>Cứ hỏi, không cần mở giáo án</strong>
-      Hỏi thẳng một câu là AI trả lời. Muốn câu trả lời kèm trích dẫn đúng bài thì gắn
-      giáo án bằng nút <b>Chọn giáo án</b> ngay trong khung gõ. Muốn có bộ câu hỏi, cứ hỏi
-      "tạo 8 câu hỏi về bài này" — kết quả hiện theo đúng định dạng của trò chơi, kèm nút
-      <b>Tạo trò chơi</b>.
+      <strong>Hỏi về giáo án của bạn</strong>
+      Gắn giáo án bằng nút <b>＋</b> trong khung gõ để câu trả lời kèm trích dẫn đúng bài. Cần bộ
+      câu hỏi thì hỏi thẳng, ví dụ "tạo 8 câu hỏi về bài này".
     </div>`;
   }
   return `${messages.map(message => lessonChatMessageHtml(message)).join('')}${lessonChatPendingHtml()}`;

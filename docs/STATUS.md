@@ -7,6 +7,27 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-26 — #378 lời mời ở khung chat rỗng: "Hỏi về giáo án của bạn"
+
+- **Yêu cầu:** "Cứ hỏi, không cần mở giáo án … Xóa câu này đổi lại thành hỏi về giáo án".
+- **Câu cũ dài 4 dòng và chỉ vào một nút KHÔNG CÒN TỒN TẠI:** nó viết "gắn giáo án bằng nút **Chọn
+  giáo án** trong khung gõ", nhưng từ #375 hai nút đó đã gộp thành **một nút "＋"** — tức là lời mời
+  đang dạy người dùng đi tìm một thứ không có trên màn hình.
+- **Câu mới:** tiêu đề **"Hỏi về giáo án của bạn"** + hai dòng: *"Gắn giáo án bằng nút **＋** trong
+  khung gõ để câu trả lời kèm trích dẫn đúng bài. Cần bộ câu hỏi thì hỏi thẳng, ví dụ "tạo 8 câu hỏi
+  về bài này"."* Ngắn hơn một nửa, và chỉ vào đúng control đang có.
+- **Cổng `tests/ui/ui-lesson-page-check.js` 17 → 21/21** với bốn check mới: tiêu đề đúng chữ mới;
+  câu cũ **đã biến mất**; câu mời **không** nhắc "Chọn giáo án" đã bị gộp; và câu mời **có** nhắc nút
+  "＋". Ba check sau là loại lỗi đã xảy ra thật: một lời mời trỏ vào control đã bị gộp thì vẫn "qua"
+  mọi cổng cũ vì không cổng nào đọc nội dung câu đó.
+- **Kết quả đo:** `tsc` sạch · unit **118/118** · `npm run check` sạch · `verify:css` **66/66** ·
+  `check:renderer-globals` 0 undefined · `check:embedded` **6 217,2 KiB** · `cargo tauri build` OK ·
+  `ui-lesson-chat-attach-check` **28/28** · `ui-lesson-chat-send-check` **15/15** · `ui-motion-check`
+  **19/19** · `ui-account-check` **23/23**.
+- **Ảnh:** `tests/ui/shots/lesson-empty-378.png` (toàn trang) và `-zoom.png` (khối rỗng 2×).
+- **Chưa đo:** chưa hỏi thử một câu thật để thấy khối rỗng biến mất đúng lúc; độ dài câu mới chỉ đo
+  bằng số dòng nhìn thấy, không đo bằng số ký tự người đọc.
+
 ### 2026-11-26 — #377 popup dính sát nút "+", và hết nháy khi chọn giáo án
 
 - **Yêu cầu (nguyên văn):** "tôi cần phần pop up gần nút + hơn, lỗi khi chọn giáo án bị nháy".
@@ -72,37 +93,3 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
   soát ảnh xác nhận tên dài giờ cắt bằng "…", **không còn thanh cuộn ngang**, thẻ trông hoàn chỉnh.
 - **Chưa đo:** chưa bấm "Tải giáo án mới" (hộp thoại tệp thật); chưa thử popup khi cửa sổ rất thấp
   (≤ 500 px cao, lúc đó `max-height: 46vh` bó thẻ lại).
-
-### 2026-11-26 — #375 gộp "Chọn giáo án" + "Tải giáo án mới" thành một nút "+" trong khung gõ
-
-- **Yêu cầu:** "gộp chọn giáo án và tải giáo án mới thành 1 dấu + rồi di chuyển vào trong khung chat".
-- **Trước:** hai nút chữ ("Chọn giáo án", "Tải giáo án mới") chiếm trọn một hàng phía trên khung
-  gõ, trong khi **cả hai đều dẫn tới cùng một bảng chọn giáo án** — hai nút cho một việc, và cả
-  hai đều cách xa nơi con trỏ đang đứng.
-- **Sau:** một nút tròn **30×30** `.lesson-chat-attach-btn` ở góc **dưới-trái TRONG khung gõ** (đối
-  xứng với mũi tên gửi ở góc dưới-phải), icon `circle-plus`, icon-only + `aria-label="Chọn hoặc tải
-  giáo án"` + `aria-expanded` (và class `is-open` khi bảng mở). Hàng chip phía trên giờ **chỉ còn
-  chip**: nó trả lời "AI đang đọc gì", không phải "làm thêm bằng cách nào".
-- **Một nút phải làm được việc của hai nút cũ:** bảng chọn giáo án (mở từ nút "+") **đã có** nút
-  "Tải giáo án mới" — thêm vào cả trạng thái có giáo án lẫn trạng thái kho rỗng. Không có lối đó thì
-  gộp nút là **giấu** mất chức năng tải tệp.
-- **Chữ chừa chỗ cho cả hai nút:** textarea `padding-left: 44px` + `padding-right: 44px`.
-- **Cổng mới `tests/ui/ui-lesson-chat-attach-check.js` 16/16:** composer có **đúng một** control mở
-  bảng chọn; nó nằm trong khung gõ (cách mép trái **8px**, mép dưới **8px**), tròn 30×30, không chữ +
-  có `aria-label`; **0** lần chữ "Chọn giáo án" và "Tải giáo án mới" trong composer khi bảng đóng;
-  `padding-left 44`; hàng chip có 0 nút chọn/tải; bấm ⇒ bảng mở **phía trên** khung gõ, có
-  `data-action="lesson-chat-import"`, liệt kê **5** giáo án, `aria-expanded="true"` + `is-open`;
-  bấm lần nữa ⇒ đóng, vẫn đúng **một** nút.
-- **Một unit test đã phải sửa theo (không phải nới):** `renderer-load-order` từng đòi
-  `data-action="lesson-chat-import"` **có mặt trong HTML trang**; sau khi gộp, lối đó nằm trong bảng
-  chọn nên chỉ xuất hiện khi bảng mở. Test giờ hỏi hai điều: (a) trang có nút mở bảng chọn, và
-  (b) **bảng chọn đó thật sự có lối tải tệp** (`lessonChatPickerHtml()` với `showPicker = true`) —
-  chỉ kiểm (a) là cho qua một cái nút mở ra bảng rỗng.
-- **Kết quả đo:** `tsc` sạch · unit **118/118** · `npm run check` sạch · `verify:css` **66/66** ·
-  `check:renderer-globals` 0 undefined · `check:embedded` **6 217,2 KiB** · `cargo tauri build` OK ·
-  `ui-lesson-chat-send-check` **15/15** · `ui-lesson-page-check` **17/17** · `ui-motion-check` **19/19**.
-- **Ảnh:** `tests/ui/shots/lesson-chat-attach-375.png` (composer 2×, bảng chọn đang mở),
-  `lesson-page-375.png`. Người soát ảnh xác nhận đúng **một** nút "+" trong khung, hàng trên chỉ còn
-  chip, và "Tải giáo án mới" chỉ còn bên trong bảng chọn.
-- **Chưa đo:** chưa bấm "Tải giáo án mới" trong bảng (mở hộp thoại tệp thật của Windows); chưa thử
-  chọn/bỏ chọn một giáo án qua bảng rồi hỏi AI.

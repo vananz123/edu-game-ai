@@ -834,3 +834,8 @@ Chủ dự án yêu cầu: *"xóa release cũ ở máy, tạo release mới và 
   `lessonChatSyncPicked()` (chỉ sửa chip + câu gợi ý + nút gửi tại chỗ), áp cho cả "Chọn tất cả" và
   bỏ một giáo án. Đo: 29 → **2 mutation**, cùng phần tử popup, **0** animation nhập cảnh chạy lại.
   Cổng `ui-lesson-chat-attach-check` **28/28**. Chưa đo: cảm giác bằng mắt trên video; cửa sổ ≤ 500px.
+
+- [x] **#378 — lời mời ở khung chat rỗng đổi thành "Hỏi về giáo án của bạn"**: bỏ câu bốn dòng cũ
+  (nó chỉ vào nút "Chọn giáo án" đã bị gộp từ #375), thay bằng tiêu đề + hai dòng chỉ đúng nút "＋"
+  trong khung gõ. `ui-lesson-page-check` **17 → 21/21**: tiêu đề mới, câu cũ đã mất, không nhắc
+  control đã gộp, có nhắc "＋". Chưa đo: hỏi thử một câu thật để thấy khối rỗng biến mất.
