@@ -814,3 +814,10 @@ Chủ dự án yêu cầu: *"xóa release cũ ở máy, tạo release mới và 
   nó; trạng thái đang-trả-lời dùng đúng chỗ đó cho nút Dừng. Cổng mới `ui-lesson-chat-send-check`
   **15/15** (vị trí trong khung, icon-only + nhãn đọc, không còn chữ "Gửi" ở hàng dưới, bật/tắt
   không đổi hình, stop cùng chỗ). Chưa đo: bấm gửi một câu hỏi thật; màn hình cảm ứng.
+
+- [x] **#375 — gộp "Chọn giáo án" + "Tải giáo án mới" thành một nút "+" trong khung gõ**: nút tròn
+  30×30 ở góc dưới-trái khung gõ, icon-only + `aria-label` + `aria-expanded`/`is-open`; hàng chip
+  chỉ còn chip; lối "Tải giáo án mới" chuyển vào **trong** bảng chọn (cả trạng thái kho rỗng); chữ
+  chừa chỗ hai bên (`padding-left/right: 44px`). Cổng mới `ui-lesson-chat-attach-check` **16/16**,
+  và `renderer-load-order` được sửa để hỏi đúng câu mới (bảng chọn có lối tải tệp) thay vì nới.
+  Chưa đo: mở hộp thoại tệp thật; chọn/bỏ chọn giáo án rồi hỏi AI.

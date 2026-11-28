@@ -338,7 +338,48 @@
   position: relative;
   display: block;
 }
+/* #375 — nút "+" (chọn hoặc tải giáo án) ở góc dưới-TRÁI của khung gõ, đối xứng với mũi tên gửi
+   ở góc dưới-phải. Nhẹ hơn nút gửi: nó là lối phụ, không phải hành động chính. */
+.lesson-chat-attach-btn {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line, #e2e8f0);
+  border-radius: 50%;
+  background: var(--panel, #fff);
+  color: var(--muted, #5f6a7d);
+  cursor: pointer;
+  transition: background-color var(--motion-fast, 120ms) var(--motion-ease, ease),
+    color var(--motion-fast, 120ms) var(--motion-ease, ease),
+    border-color var(--motion-fast, 120ms) var(--motion-ease, ease);
+}
+.lesson-chat-attach-btn:hover {
+  background: var(--purple2, #f1f2f9);
+  color: var(--purple, #6258e8);
+  border-color: var(--purple, #6258e8);
+}
+.lesson-chat-attach-btn:focus-visible {
+  outline: 2px solid var(--purple, #6258e8);
+  outline-offset: 2px;
+}
+/* Bảng đang mở: nút phải nói nó đang mở, nếu không nó trông như một nút chưa bấm được. */
+.lesson-chat-attach-btn.is-open {
+  background: var(--purple, #6258e8);
+  border-color: var(--purple, #6258e8);
+  color: #fff;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lesson-chat-attach-btn { transition: none; }
+}
+
 .lesson-chat-field .lesson-chat-input {
+  /* Chừa chỗ cho CẢ HAI nút: "+" ở góc dưới-trái, mũi tên gửi ở góc dưới-phải. */
+  padding-left: 44px;
   padding-right: 44px;
   padding-bottom: 12px;
   /* Bỏ tay nắm kéo-giãn của textarea: nó nằm ĐÚNG góc dưới-phải, tức là dưới nút gửi — đo bằng

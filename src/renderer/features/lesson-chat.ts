@@ -234,18 +234,21 @@ function lessonChatAttachHtml() {
   const chips = docs.map(document =>
     `<span class="lesson-chat-chip"><span title="${escapeHtml(document.name || '')}">${escapeHtml(document.name || 'Giáo án')}</span><button type="button" class="lesson-chat-mode" data-action="lesson-chat-remove-doc" data-id="${escapeHtml(document.id)}" aria-label="Bỏ ${escapeHtml(document.name || 'giáo án')} khỏi cuộc trò chuyện"><span data-icon="x" data-icon-size="12"></span></button></span>`
   ).join('');
-  const ungrounded = docs.length ? '' : ' title="Chưa gắn giáo án nào — AI trả lời bằng kiến thức chung. Chọn giáo án để có trích dẫn."';
-  return `<div class="lesson-chat-attach" data-lesson-chat-sources>${chips}
-    <button type="button" class="lesson-chat-mode" data-action="lesson-chat-picker" aria-pressed="${lessonChatUi.showPicker ? 'true' : 'false'}"${ungrounded}><span data-icon="circle-plus" data-icon-size="13"></span> Chọn giáo án</button>
-    <button type="button" class="lesson-chat-mode" data-action="lesson-chat-import"><span data-icon="upload" data-icon-size="13"></span> Tải giáo án mới</button>
-  </div>`;
+  // #375: hai nút chữ "Chọn giáo án" + "Tải giáo án mới" đã gộp thành MỘT nút "+" nằm trong
+  // khung gõ (xem `lessonChatAttachButtonHtml`). Hàng này giờ chỉ còn chip của những giáo án
+  // đang đọc — đúng một việc: cho biết AI đang đọc gì. Không có chip thì hàng này rỗng và biến mất.
+  if (!chips) return '';
+  return `<div class="lesson-chat-attach" data-lesson-chat-sources>${chips}</div>`;
 }
 
 function lessonChatPickerHtml() {
   if (!lessonChatUi.showPicker) return '';
   const library = Array.isArray(state.lessonLibrary) ? state.lessonLibrary : [];
+  // #375: dòng "Tải giáo án mới" nằm TRONG bảng này, nên nút "+" một mình vẫn làm được cả hai việc
+  // cũ (chọn tệp đã có, hoặc nhập tệp mới).
+  const importRow = '<div class="lesson-chat-set-actions"><button type="button" class="lesson-chat-mode" data-action="lesson-chat-import"><span data-icon="upload" data-icon-size="13"></span> Tải giáo án mới</button></div>';
   if (!library.length) {
-    return `<div class="lesson-chat-pop"><h4>Chọn giáo án</h4><div class="lesson-chat-empty-sources">Kho chưa có giáo án nào. Bấm "Tải giáo án mới" để nhập một tệp.</div></div>`;
+    return `<div class="lesson-chat-pop" data-lesson-chat-picker><h4>Chọn giáo án</h4><div class="lesson-chat-empty-sources">Kho chưa có giáo án nào. Tải một tệp để bắt đầu.</div>${importRow}</div>`;
   }
   const rows = library.map(document =>
     `<label class="lesson-chat-pick"><input type="checkbox" class="lesson-check" data-lesson-chat-pick data-id="${escapeHtml(document.id)}"${lessonChatUi.docIds.includes(document.id) ? ' checked' : ''}><span title="${escapeHtml(document.name || '')}">${escapeHtml(document.name || 'Giáo án')}</span></label>`
@@ -256,6 +259,7 @@ function lessonChatPickerHtml() {
     <div class="lesson-chat-set-actions">
       <button type="button" class="lesson-chat-mode" data-action="lesson-chat-pick-all" data-id="all">Chọn tất cả</button>
       <button type="button" class="lesson-chat-mode" data-action="lesson-chat-pick-all" data-id="none">Bỏ chọn</button>
+      <button type="button" class="lesson-chat-mode" data-action="lesson-chat-import"><span data-icon="upload" data-icon-size="13"></span> Tải giáo án mới</button>
       <button type="button" class="btn btn-primary btn-small" data-action="lesson-chat-picker-close">Xong</button>
     </div>
   </div>`;
@@ -376,6 +380,27 @@ function lessonChatTranscriptHtml() {
   return `${messages.map(message => lessonChatMessageHtml(message)).join('')}${lessonChatPendingHtml()}`;
 }
 
+/**
+ * #375 — MỘT nút "+" thay cho hai nút chữ, và nó nằm TRONG khung gõ.
+ *
+ * Trước: "Chọn giáo án" và "Tải giáo án mới" là hai nút chữ chiếm trọn một hàng phía trên khung
+ * gõ, trong khi cả hai đều dẫn tới cùng một chỗ: bảng chọn giáo án (bảng đó đã có mục tải tệp
+ * mới). Hai nút cho một việc, và cả hai đều cách xa nơi con trỏ đang đứng.
+ *
+ * Giờ: một nút tròn 30×30 ở góc dưới-TRÁI của khung gõ (đối xứng với mũi tên gửi ở góc dưới-phải),
+ * mở đúng bảng chọn đó. Nó là icon-only nên tên đọc được nằm ở aria-label/title, và aria-expanded
+ * nói bảng đang mở hay đóng.
+ */
+function lessonChatAttachButtonHtml() {
+  const grounded = lessonChatDocuments().length > 0;
+  const open = lessonChatUi.showPicker ? 'true' : 'false';
+  return '<button type="button" class="lesson-chat-attach-btn' + (lessonChatUi.showPicker ? ' is-open' : '') + '"'
+    + ' data-action="lesson-chat-picker" aria-expanded="' + open + '"'
+    + ' aria-label="Chọn hoặc tải giáo án"'
+    + ' title="' + (grounded ? 'Chọn hoặc tải giáo án khác' : 'Chưa gắn giáo án nào — chọn hoặc tải một tệp để AI trích dẫn') + '">'
+    + '<span data-icon="circle-plus" data-icon-size="16"></span></button>';
+}
+
 function lessonChatComposerHtml() {
   const options = lessonChatProviderOptions();
   const selected = lessonChatProviderSelection();
@@ -400,6 +425,7 @@ function lessonChatComposerHtml() {
          (Enter, đếm ký tự, khoá khi đang gửi) không phải sửa. Nút là icon-only, nên nhãn đọc được
          nằm ở aria-label + title. (Không viết dấu huyền trong khối template này.) -->
     <div class="lesson-chat-field">
+      ${lessonChatAttachButtonHtml()}
       <textarea id="lessonChatInput" class="lesson-chat-input" placeholder="${lessonChatUi.mode === 'question_set' ? 'Ví dụ: tạo 8 câu hỏi trắc nghiệm về quang hợp' : 'Ví dụ: Mục tiêu của bài này là gì?'}">${escapeHtml(lessonChatUi.draft)}</textarea>
       ${lessonChatUi.sending
         ? `<button type="button" class="lesson-chat-send is-stop" data-action="lesson-chat-stop" aria-label="Dừng trả lời" title="Dừng trả lời"><span data-icon="square" data-icon-size="12"></span></button>`

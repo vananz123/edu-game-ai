@@ -6041,3 +6041,22 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
   trạng thái), nếu không bố cục nhảy mỗi lần gửi.
 - **Cổng phải DỰNG trạng thái nó đo.** Bản nháp của khung gõ được giữ trong `lessonChatUi.draft`,
   nên một phiên trước gõ dở làm "rỗng" không còn rỗng: cổng xoá ô gõ trước khi kiểm `disabled`.
+
+## #375 — một nút "+" thay cho hai nút, và nó chỉ được phép gộp khi mất đi thì không mất chức năng
+
+- **Hai nút dẫn tới cùng một bảng là hai nút thừa.** "Chọn giáo án" và "Tải giáo án mới" trước đây
+  chiếm trọn một hàng phía trên khung gõ, nhưng cả hai đều mở bảng chọn giáo án. Gộp thành một nút
+  "+" ở góc **dưới-trái** khung gõ (đối xứng với mũi tên gửi ở góc dưới-phải) — cùng một hàng điều
+  khiển, hai đầu khung gõ.
+- **Gộp nút chỉ hợp lệ khi chức năng bị "nuốt" vẫn còn chỗ.** Lối "Tải giáo án mới" phải nằm
+  **bên trong** bảng chọn (cả khi kho có giáo án lẫn khi kho rỗng); nếu không, gộp nút là giấu mất
+  khả năng nhập tệp mới. Cổng đo đúng điều này, không chỉ đếm "có một nút".
+- **Một control hai trạng thái phải nói trạng thái của nó.** Nút "+" mang `aria-expanded` và class
+  `is-open`; nếu không, người dùng không biết bảng đang mở vì cái nút trông y như lúc chưa bấm.
+- **Hàng chip chỉ trả lời một câu: "AI đang đọc gì".** Nó không còn nút nào; hành động đã về khung
+  gõ. Một hàng vừa kể trạng thái vừa chứa hành động là hai câu trả lời cho hai câu hỏi khác nhau
+  nằm cùng một chỗ.
+- **Khi hình thức đổi, test cũ phải hỏi câu mới — không được nới.** `renderer-load-order` từng đòi
+  HTML trang phải chứa `data-action="lesson-chat-import"`; sau khi gộp, chuỗi đó chỉ có khi bảng
+  mở. Test giờ kiểm hai điều: trang có nút mở bảng, **và** bảng đó thật sự có lối tải tệp. Chỉ kiểm
+  điều đầu là cho qua một cái nút mở ra bảng rỗng.

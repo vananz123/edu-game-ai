@@ -419,7 +419,18 @@ assert.equal(typeof lessonPageHtml, 'string', 'the lesson-plans page should rend
 assert.ok(lessonPageHtml.includes('class="lesson-two-col"'), 'the page should be the two-column layout');
 assert.ok(lessonPageHtml.includes('id="lessonChatCol"'), 'the fixed chat column should render first');
 assert.ok(lessonPageHtml.indexOf('lesson-chat-frame') < lessonPageHtml.indexOf('lesson-list-col'), 'chat on the left, list on the right');
-assert.ok(lessonPageHtml.includes('data-action="lesson-chat-import"'), 'the chat should offer uploading a new lesson');
+// #375: lối "tải giáo án mới" không còn là một nút chữ đứng riêng — nó nằm TRONG bảng chọn
+// (bảng mở từ nút "+" ở góc khung gõ). Vì thế phép kiểm phải hỏi hai điều: (a) trang có nút "+"
+// mở bảng chọn, và (b) bảng chọn đó THẬT SỰ có lối tải tệp. Chỉ kiểm (a) là cho qua một cái nút
+// mở ra bảng rỗng.
+assert.ok(lessonPageHtml.includes('data-action="lesson-chat-picker"'), 'the chat should offer a button that opens the lesson picker');
+const pickerHtml = evalInContext(`
+  lessonChatUi.showPicker = true;
+  const html = lessonChatPickerHtml();
+  lessonChatUi.showPicker = false;
+  html
+`);
+assert.ok(pickerHtml.includes('data-action="lesson-chat-import"'), 'the picker should offer uploading a new lesson');
 assert.ok(lessonPageHtml.includes('id="lessonChatProvider"') || lessonPageHtml.includes('Nhà cung cấp:'), 'the chat should show the AI provider choice');
 assert.ok(!lessonPageHtml.includes('BETA'), 'the BETA panel is gone, not renamed');
 assert.ok(!lessonPageHtml.includes('qaDocSelect'), 'the old single-document question channel is deleted');

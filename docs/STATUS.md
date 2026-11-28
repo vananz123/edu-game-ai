@@ -7,6 +7,40 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-26 — #375 gộp "Chọn giáo án" + "Tải giáo án mới" thành một nút "+" trong khung gõ
+
+- **Yêu cầu:** "gộp chọn giáo án và tải giáo án mới thành 1 dấu + rồi di chuyển vào trong khung chat".
+- **Trước:** hai nút chữ ("Chọn giáo án", "Tải giáo án mới") chiếm trọn một hàng phía trên khung
+  gõ, trong khi **cả hai đều dẫn tới cùng một bảng chọn giáo án** — hai nút cho một việc, và cả
+  hai đều cách xa nơi con trỏ đang đứng.
+- **Sau:** một nút tròn **30×30** `.lesson-chat-attach-btn` ở góc **dưới-trái TRONG khung gõ** (đối
+  xứng với mũi tên gửi ở góc dưới-phải), icon `circle-plus`, icon-only + `aria-label="Chọn hoặc tải
+  giáo án"` + `aria-expanded` (và class `is-open` khi bảng mở). Hàng chip phía trên giờ **chỉ còn
+  chip**: nó trả lời "AI đang đọc gì", không phải "làm thêm bằng cách nào".
+- **Một nút phải làm được việc của hai nút cũ:** bảng chọn giáo án (mở từ nút "+") **đã có** nút
+  "Tải giáo án mới" — thêm vào cả trạng thái có giáo án lẫn trạng thái kho rỗng. Không có lối đó thì
+  gộp nút là **giấu** mất chức năng tải tệp.
+- **Chữ chừa chỗ cho cả hai nút:** textarea `padding-left: 44px` + `padding-right: 44px`.
+- **Cổng mới `tests/ui/ui-lesson-chat-attach-check.js` 16/16:** composer có **đúng một** control mở
+  bảng chọn; nó nằm trong khung gõ (cách mép trái **8px**, mép dưới **8px**), tròn 30×30, không chữ +
+  có `aria-label`; **0** lần chữ "Chọn giáo án" và "Tải giáo án mới" trong composer khi bảng đóng;
+  `padding-left 44`; hàng chip có 0 nút chọn/tải; bấm ⇒ bảng mở **phía trên** khung gõ, có
+  `data-action="lesson-chat-import"`, liệt kê **5** giáo án, `aria-expanded="true"` + `is-open`;
+  bấm lần nữa ⇒ đóng, vẫn đúng **một** nút.
+- **Một unit test đã phải sửa theo (không phải nới):** `renderer-load-order` từng đòi
+  `data-action="lesson-chat-import"` **có mặt trong HTML trang**; sau khi gộp, lối đó nằm trong bảng
+  chọn nên chỉ xuất hiện khi bảng mở. Test giờ hỏi hai điều: (a) trang có nút mở bảng chọn, và
+  (b) **bảng chọn đó thật sự có lối tải tệp** (`lessonChatPickerHtml()` với `showPicker = true`) —
+  chỉ kiểm (a) là cho qua một cái nút mở ra bảng rỗng.
+- **Kết quả đo:** `tsc` sạch · unit **118/118** · `npm run check` sạch · `verify:css` **66/66** ·
+  `check:renderer-globals` 0 undefined · `check:embedded` **6 217,2 KiB** · `cargo tauri build` OK ·
+  `ui-lesson-chat-send-check` **15/15** · `ui-lesson-page-check` **17/17** · `ui-motion-check` **19/19**.
+- **Ảnh:** `tests/ui/shots/lesson-chat-attach-375.png` (composer 2×, bảng chọn đang mở),
+  `lesson-page-375.png`. Người soát ảnh xác nhận đúng **một** nút "+" trong khung, hàng trên chỉ còn
+  chip, và "Tải giáo án mới" chỉ còn bên trong bảng chọn.
+- **Chưa đo:** chưa bấm "Tải giáo án mới" trong bảng (mở hộp thoại tệp thật của Windows); chưa thử
+  chọn/bỏ chọn một giáo án qua bảng rồi hỏi AI.
+
 ### 2026-11-26 — #374 nút Gửi thành mũi tên tròn bên trong khung gõ chat
 
 - **Yêu cầu:** "di chuyển nút gửi thành mũi tên bên trong khung chat".
@@ -70,41 +104,3 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - **Chưa đo:** chưa gửi một câu hỏi thật sau khi đổi bố cục (transcript dài ra thì `.lesson-chat-scroll`
   vẫn là vùng cuộn bên trong — đúng thiết kế, nhưng chưa đo bằng câu trả lời thật); chưa thử cửa sổ
   rất thấp (≤ 600 px cao).
-
-### 2026-11-26 — #372 dọn nhãn thừa trong Cài đặt, nhất là phần nhà cung cấp AI
-
-- **Yêu cầu:** "loại bỏ những label không cần thiết gây loạn trong trang cài đặt, đặc biệt là phần
-  nhà cung cấp AI".
-- **Đếm được trước khi sửa (nguồn gây rối):**
-  1. Tab "Nhà cung cấp AI" mang **hai chip nhỏ** (`○` và `0/4`) nói lại đúng hai chip đầy đủ trong
-     header panel cách đó ~40 px; "0/4" là con số **không có nhãn**.
-  2. Dòng footnote "Kiểm tra gửi một yêu cầu thật rất nhỏ (tối đa 8 token)…" giống nhau ở **cả bốn**
-     thẻ ⇒ bốn dòng chữ nói cùng một điều.
-  3. Dòng "lý do" của thẻ chưa cấu hình luôn là "Chưa có API key." — đúng câu chip ngay cạnh đã nói.
-  4. OpenCode nhắc "Chưa dùng cho luồng tạo trò chơi" **hai lần** (badge + câu đầu của ghi chú).
-  5. "Chưa lưu khoá." là câu thứ ba trong cùng thẻ nói "chưa có khoá".
-  6. Thẻ model local nói về RAM **ba lần**: "Đánh giá máy: RAM đạt…", dòng số liệu RAM, và dòng
-     "✓ RAM đạt mức khuyến nghị.".
-  7. Dải "Cho trò chơi mới" có **bốn chip tên nhà cung cấp** lặp lại đúng tiêu đề bốn thẻ bên dưới.
-- **Đã bỏ:** (1) chip trên nhãn tab — trạng thái vẫn còn nguyên **bằng chữ** trong header panel;
-  (2) toàn bộ footnote 8 token; (3) dòng lý do **chỉ khi** trạng thái là `not-configured` (lý do của
-  trạng thái khác thường — đang lỗi, đã cấu hình nhưng chưa kiểm tra — **vẫn giữ**, vì lúc đó nó là
-  dữ kiện); (4) câu trùng trong ghi chú OpenCode; (5) "Chưa lưu khoá." khi chưa có khoá (khi **đã**
-  có khoá thì dòng này là thông tin thật, nên giữ); (6) dòng RAM thứ ba — nhưng **giữ** cảnh báo đỏ
-  "RAM thấp hơn mức tối thiểu" vì đó là cảnh báo, không phải câu lặp; (7) bốn chip tên.
-- **Không mất thông tin (đây là điều cổng phải chứng minh):** vẫn đủ **bốn** nhà cung cấp, mỗi thẻ
-  đúng **một** chip trạng thái, header panel vẫn **hai** chip (AI local + cloud), chip của hai tab
-  "Phong cách"/"Giao diện" vẫn còn, lý do của thẻ OpenCode vẫn còn.
-- **Cổng mới `tests/ui/ui-settings-ai-labels-check.js` 12/12:** đo bằng **số lần xuất hiện** của
-  từng câu (`Kiểm tra gửi một yêu cầu thật` = 0, `RAM đạt mức khuyến nghị` = 0, `Chưa lưu khoá` = 0,
-  tên nhà cung cấp **ngoài** thẻ = 0) và bằng cấu trúc (chip/tab/lý do). Cổng **từ chối chạy** (exit
-  2) nếu tab "Nhà cung cấp AI" không còn — vì tab đó biến mất khi máy đã cấu hình AI đủ (#305).
-- **Kết quả đo:** `tsc` sạch · unit **118/118** · `npm run check` sạch · `verify:css` **66/66** ·
-  `check:renderer-globals` 0 undefined · `check:embedded` **6 217,2 KiB** · `cargo tauri build` OK ·
-  `ui-account-check` **23/23** · `ui-motion-check` **19/19** · `ui-page-head-check` **6/6** ·
-  `ui-sidebar-toggle-check` **17/17**.
-- **Ảnh:** `tests/ui/shots/settings-ai-cloud-after.png` (+ `-dark.png`) và `settings-ai-before-crop.png`
-  để so trước/sau; người soát ảnh xác nhận thẻ Gemini còn **đúng một dòng chữ phụ** và đọc theo thứ
-  tự tên → chip → mô tả → ba trường → ba nút.
-- **Chưa đo:** chưa ai bấm qua bốn thẻ bằng tay sau khi bỏ nhãn; câu giới thiệu dài ở đầu panel và
-  dải "Cho trò chơi mới" vẫn còn (cố ý — chúng không lặp lại điều gì khác, chỉ dài).
