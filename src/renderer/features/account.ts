@@ -161,19 +161,16 @@ function accountHeroHtml() {
  * định và hợp lệ" của tệp này.
  */
 function accountSignInCardHtml() {
+  // #371 — người chưa đăng nhập chỉ cần MỘT thứ: nút đăng nhập.
+  // Bản trước còn một danh sách ba quyền lợi, một đoạn hướng dẫn hai câu và một ghi chú
+  // "bạn đang ở chế độ Khách" — bốn khối chữ để nói một việc mà cái nút đã nói. Chủ dự án:
+  // "khi chưa đăng nhập thì chỉ cần hiển thị đăng nhập là đủ".
   return '<div class="account-signin">'
     + '<span class="account-signin-mark">' + uiIcon('sparkles', '', 22) + '</span>'
     + '<h3 class="account-signin-title">Đăng nhập để soạn câu hỏi bằng Cloud AI</h3>'
-    + '<ul class="account-perks">'
-    + '<li>' + uiIcon('check', '', 14) + ' Soạn cả bộ câu hỏi từ giáo án, có giải thích từng câu</li>'
-    + '<li>' + uiIcon('check', '', 14) + ' 10 lượt miễn phí mỗi kỳ 2 tuần</li>'
-    + '<li>' + uiIcon('check', '', 14) + ' Trò chơi, giáo án và điểm vẫn nằm trên máy bạn</li>'
-    + '</ul>'
     + '<button class="account-google-btn" data-account-signin type="button">'
     + '<span class="account-google-g" aria-hidden="true">G</span>'
     + '<span>Đăng nhập với Google</span></button>'
-    + '<p class="account-hint">Trình duyệt sẽ mở để bạn chọn tài khoản, rồi tự quay về ứng dụng. '
-    + 'Không đăng nhập vẫn tạo và chơi game bình thường bằng AI local.</p>'
     + '</div>';
 }
 
@@ -196,9 +193,7 @@ function accountPanelHtml() {
       + '<p class="account-hint">Dữ liệu học tập nằm trên máy này, không tự tải lên đám mây. '
       + 'Đăng xuất không xoá trò chơi hay giáo án nào. Kiểm tra Cloud AI dùng 1 lượt thật.</p>';
   } else if (stateName === 'guest') {
-    body = accountSignInCardHtml()
-      + '<div class="account-guest-note">' + uiIcon('shield', '', 15)
-      + ' <span>Bạn đang dùng ở chế độ <strong>Khách</strong> — mọi thứ vẫn lưu trên máy này.</span></div>';
+    body = accountSignInCardHtml();
   } else if (stateName === 'unconfigured') {
     body = '<div class="account-card"><div class="account-card-top">'
       + '<span class="account-card-label">Cloud AI</span></div>'
@@ -261,7 +256,10 @@ function openAccountPanel() {
   root.innerHTML = accountPanelHtml();
   wireAccountPanel(root);
   // Mở panel là đọc đồng hồ: đây là phép ĐỌC, không trừ lượt, nên không cần mời bấm.
-  if (accountState.quota === null && !accountState.busy) accountLoadQuota();
+  // #371: chỉ khi ĐÃ đăng nhập. Với Khách thì lời gọi này chắc chắn hỏng (không có token), và
+  // mỗi lần hỏng lại vẽ lại panel — chính là cú "nháy lần hai" ngay sau khi panel vừa hiện.
+  const member = accountUiState() === 'member';
+  if (member && accountState.quota === null && !accountState.busy) accountLoadQuota();
   // Giá và tình trạng đơn cũng là phép ĐỌC. Đọc lại mỗi lần mở: người vừa chuyển khoản
   // sang tab ngân hàng rồi quay lại cần thấy gói đã lên, không cần tải lại app.
   if (accountUiState() === 'member') accountLoadBilling();
@@ -699,10 +697,32 @@ function accountCloudResultHtml() {
     + escapeHtml(text) + '</div>';
 }
 
+/**
+ * #371 — vẽ lại phần THÂN của panel, không dựng lại `.modal`.
+ *
+ * Bản trước thay `#modalRoot.innerHTML` mỗi lần trạng thái đổi, nên mỗi lần đó là một
+ * `.modal` MỚI — và `.modal` có `animation: pop-in` + backdrop `fade-in`. Kết quả: mở panel
+ * thì nó nảy lên, 60ms sau nảy lần nữa. Đo được trước khi sửa: `modalRoot` bị ghi **2 lần**
+ * trong 58ms khi vừa mở. Giữ nguyên phần tử `.modal` thì animation chỉ chạy một lần, còn
+ * trạng thái/nội dung vẫn cập nhật đúng.
+ */
 function rerenderAccountPanel() {
   const root = $('#modalRoot');
-  if (!root || !root.querySelector('[data-account-panel]')) return;
-  root.innerHTML = accountPanelHtml();
+  const current = root && root.querySelector('[data-account-panel]');
+  if (!root || !current) return;
+  const next = document.createElement('div');
+  next.innerHTML = accountPanelHtml();
+  const nextPanel = next.querySelector('[data-account-panel]');
+  if (!nextPanel) return;
+  const body = current.querySelector('.modal-body');
+  const nextBody = nextPanel.querySelector('.modal-body');
+  if (body && nextBody) {
+    current.dataset.accountPanelState = nextPanel.dataset.accountPanelState;
+    body.innerHTML = nextBody.innerHTML;
+  } else {
+    // Panel đổi hình dạng (không còn `.modal-body`) thì mới phải thay cả khối.
+    current.replaceWith(nextPanel);
+  }
   // Vẽ lại là mất handler: phải gắn lại, nếu không các nút trong panel thành nút chết.
   wireAccountPanel(root);
 }

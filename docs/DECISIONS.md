@@ -5964,3 +5964,22 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
 - **Chuyển động không được đổi bố cục.** Tất cả là `transform`/`translate`/`opacity`/màu, và cổng
   đo `scrollHeight` + `scrollWidth` trước/sau hover phải **bằng nhau** — nếu không, mỗi lần rê chuột
   qua lưới thẻ là một lần trang nhảy.
+
+## #371 — panel Tài khoản của Khách
+
+- **Màn hình của người chưa đăng nhập chỉ có MỘT việc: đăng nhập.** Một tiêu đề + một nút. Danh
+  sách quyền lợi, đoạn hướng dẫn hai câu và ghi chú "bạn đang ở chế độ Khách" là bốn khối chữ để
+  nói một điều mà cái nút đã nói; chúng đã bị bỏ. Khách vẫn là trạng thái hợp lệ (mọi thứ lưu trên
+  máy), nhưng panel không phải chỗ để thuyết phục.
+- **Đừng gọi một phép đọc chắc chắn hỏng.** `openAccountPanel()` từng gọi `accountLoadQuota()` cho
+  cả Khách; không có token nên nó luôn lỗi, và `finally` của nó vẽ lại panel. Một lời gọi chắc chắn
+  hỏng không phải "phòng khi cần" — nó là một lần vẽ lại, một vòng mạng và một thông báo lỗi có thể
+  hiện ra ở nơi không ai xin.
+- **Vẽ lại KHÔNG được dựng lại phần tử có animation nhập cảnh.** `#modalRoot.innerHTML = …` tạo một
+  `.modal` mới, và `.modal` mang `pop-in` + backdrop `fade-in` ⇒ mỗi lần cập nhật trạng thái là một
+  cú nảy nữa ("nháy hai lần", đo được: 2 lần ghi trong 58ms). Vẽ lại phải thay **thân** của cùng
+  phần tử, rồi gắn lại handler; chỉ thay cả khối khi cấu trúc thật sự đổi. Nguyên tắc chung: một
+  animation nhập cảnh thuộc về **lần mở**, không thuộc về **lần dữ liệu tới**.
+- **`settle` cố định sau `Page.reload` là một lần đánh cược vào tốc độ máy.** Cổng #368 đỏ 3 check
+  chỉ vì bản dựng nhúng khởi động chậm hơn 2,5s. Cổng phải **chờ đúng thứ nó sẽ đo** (thuộc tính
+  `data-sidebar` đã có mặt) với hạn chót, và vẫn báo đỏ khi quá hạn — chờ mù hoặc chờ mãi đều sai.

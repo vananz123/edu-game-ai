@@ -783,3 +783,11 @@ Chủ dự án yêu cầu: *"xóa release cũ ở máy, tạo release mới và 
   ô tìm kiếm/ô chọn có nhịp focus; **một chỗ tắt** cho `prefers-reduced-motion` (về 0 cả thời lượng
   và transform). Cổng mới `ui-motion-check` **19/19** bấm bằng chuột thật, `verify:css` **66/66**
   (+5 pin). Chưa đo: cảm giác mượt bằng mắt người, màn hình cảm ứng thật, chi phí vẽ lại 22 thẻ.
+
+- [x] **#371 — panel Tài khoản của Khách: một nút, và hết "nháy hai lần"**: bỏ danh sách quyền lợi
+  / đoạn hướng dẫn / ghi chú "chế độ Khách"; không gọi đọc hạn mức khi chưa đăng nhập (lời gọi
+  chắc chắn hỏng ⇒ mỗi lần hỏng là một lần vẽ lại); `rerenderAccountPanel()` thay thân `.modal`
+  thay vì dựng lại nó, nên `pop-in` chạy đúng **một** lần. Đo: `#modalRoot` bị ghi 2 → **1** lần,
+  `.modal` pop-in 2 → **1**, panel còn 460×270 với đúng 1 nút. Cổng mới `ui-account-guest-check`
+  **17/17** (từ chối chạy trên hồ sơ đã đăng nhập) + `ui-sidebar-toggle-check` được làm bền
+  (`waitForBoot`, **17/17**). Chưa đo: đường đã đăng nhập thật.

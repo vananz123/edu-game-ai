@@ -25,6 +25,21 @@ const PROBE = String.raw`(async () => {
   };
 })()`;
 
+/**
+ * Chờ app nạp lại xong: `initSidebarToggle()` là thứ đặt `data-sidebar`, nên khi thuộc tính đó
+ * có mặt thì khung đã dựng xong. Trả về `false` (và cổng sẽ báo đỏ) nếu quá hạn — im lặng chờ
+ * mãi mới là lỗi, còn báo đỏ vì máy chậm thì cũng sai.
+ */
+async function waitForBoot(c, limitMs) {
+  const started = Date.now();
+  for (;;) {
+    const ready = await c.evaluate(`document.documentElement.dataset.sidebar || ''`).catch(() => '');
+    if (ready === 'shown' || ready === 'hidden') return true;
+    if (Date.now() - started > limitMs) return false;
+    await c.settle(400);
+  }
+}
+
 (async () => {
   const c = await connect();
   const read = () => c.evaluate(PROBE);
@@ -74,7 +89,11 @@ const PROBE = String.raw`(async () => {
   await c.evaluate(`document.querySelector('[data-sidebar-toggle]').click(); 1`);
   await c.settle(300);
   await c.send('Page.reload', {});
-  await c.settle(2500);
+  // #371: một `settle` cố định là một lần đánh cược vào tốc độ máy — bản dựng nhúng khởi động
+  // chậm hơn hẳn bản dev, và cổng này từng báo đỏ vì nạp lại chưa xong (dataset.sidebar = null).
+  // Chờ đúng thứ mình cần đo (trạng thái đã được áp), tối đa 10 giây, rồi mới kết luận.
+  await waitForBoot(c, 10000);
+  await c.settle(600);
   const afterReload = await read();
   t('nạp lại app vẫn giữ trạng thái ẩn', afterReload.state === 'hidden' && afterReload.asideDisplay === 'none', afterReload.state + '/' + afterReload.asideDisplay);
   t('sau nạp lại vẫn có đường hiện', afterReload.revealHidden === false && afterReload.revealDisplay !== 'none', String(afterReload.revealHidden));

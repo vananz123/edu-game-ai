@@ -7,6 +7,44 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-26 — #371 panel Tài khoản của người CHƯA đăng nhập: chỉ một nút, và không nháy hai lần
+
+- **Yêu cầu (nguyên văn):** "khi chưa đăng nhập thì chỉ cần hiển thị đăng nhập là đủ, kiểm tra khi
+  chưa đăng nhập mở lên nó bị nháy 2 lần gây khó chịu".
+- **Đo được cú "nháy 2 lần" trước khi sửa:** mở panel ⇒ `#modalRoot` bị ghi **2 lần trong 58ms**
+  (`guest` @16102 rồi `guest` @16160). Nguyên nhân: `openAccountPanel()` vẽ panel rồi gọi
+  `accountLoadQuota()`; với Khách lời gọi đó **chắc chắn hỏng** (không có token), và `finally` của
+  nó vẽ lại panel. Mỗi lần vẽ lại là `modalRoot.innerHTML = …` ⇒ một `.modal` MỚI ⇒ `animation:
+  pop-in` + backdrop `fade-in` chạy lần nữa. Người dùng thấy panel nảy hai lần.
+- **Sửa 1 — không đọc thứ chắc chắn hỏng:** chỉ gọi `accountLoadQuota()` khi `accountUiState()` là
+  `member`. Không có lời gọi thì không có lần vẽ lại thứ hai khi vừa mở.
+- **Sửa 2 — vẽ lại không dựng lại `.modal`:** `rerenderAccountPanel()` giờ thay `innerHTML` của
+  `.modal-body` (và cập nhật `data-account-panel-state`) trên **cùng phần tử** `.modal`, rồi gắn lại
+  handler; chỉ khi panel mất hẳn `.modal-body` mới thay cả khối. Animation nhập cảnh vì thế chạy
+  đúng **một** lần cho mỗi lần mở, còn trạng thái/hạn mức vẫn cập nhật.
+- **Sửa 3 — panel Khách tối giản:** bỏ danh sách ba quyền lợi, đoạn hướng dẫn hai câu và ghi chú
+  "bạn đang ở chế độ Khách". Còn: tiêu đề "Đăng nhập để soạn câu hỏi bằng Cloud AI" + nút
+  "Đăng nhập với Google". Đo: panel còn **460×270 px**, đúng **1** nút, không còn `.account-perks`
+  / `.account-guest-note` / hạn mức / gói Pro / lịch sử / nút đăng xuất.
+- **Cổng mới `tests/ui/ui-account-guest-check.js` 17/17** (cần hồ sơ WebView2 SẠCH; nếu hồ sơ đã
+  đăng nhập thì cổng thoát với mã 2 và nói "không đo được" — không cho qua rỗng). Đo bằng hai đại
+  lượng khách quan thay cho "nhìn xem có nháy không": số lần `#modalRoot` bị ghi (MutationObserver)
+  = **1** lúc mở và = **1** khi mở lại, số lần `animationstart` của `.modal` = **1**. Thêm 4 check
+  cho cơ chế vẽ lại: cùng một phần tử DOM, **0** pop-in khi vẽ lại, thân panel đổi sang `member`
+  (trạng thái dựng — dữ liệu hạn mức do unit test lo), và nút Đóng vẫn sống sau lần vẽ lại.
+- **Sửa độ bền của cổng #368:** `ui-sidebar-toggle-check` từng đỏ vì sau `Page.reload` nó `settle`
+  cố định 2,5s — trên bản dựng nhúng khởi động chậm hơn, `data-sidebar` còn `null` nên 3 check đỏ
+  và một bước sau đó ném lỗi. Giờ có `waitForBoot(c, 10000)`: chờ **đúng thứ mình sẽ đo** (thuộc
+  tính `data-sidebar` có mặt), quá hạn thì vẫn báo đỏ. Đo lại: **17/17**.
+- **Kết quả đo:** `tsc` sạch · unit **118/118** · `npm run check` sạch · `verify:css` **66/66** ·
+  `check:renderer-globals` 0 undefined · `check:embedded` **6 217,2 KiB** · `cargo tauri build` OK ·
+  `ui-account-check` **21/21** (chế độ Khách) · `ui-account-guest-check` **17/17** ·
+  `ui-sidebar-toggle-check` **17/17** · `ui-motion-check` **19/19** · `ui-page-head-check` **6/6**.
+- **Ảnh:** `tests/ui/shots/account-guest-371.png` (panel Khách 460×270, phóng 2×).
+- **Chưa đo:** đường **đã đăng nhập** thật (mở panel ⇒ đọc hạn mức ⇒ vẽ lại thân) chưa chạy trên
+  một phiên thật — phần "vẽ lại không dựng lại modal" chỉ được đo bằng trạng thái DỰNG; cú nháy
+  được đo bằng số lần ghi DOM + số animation, không phải bằng mắt trên video.
+
 ### 2026-11-26 — #370 chuyển động khi thao tác (thư viện làm ví dụ)
 
 - **Yêu cầu:** "bổ sung các hiệu ứng chuyển động khi thao tác trên ứng dụng, có thể dùng thư viện"
@@ -127,52 +165,3 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - **Chưa đo:** đường `Dự án của tôi → trình soạn thảo` chỉ được chứng minh bằng unit test trên hàm
   thuần, **chưa bấm được trong UI** (trang dự án mở wizard chứ không mở thẳng trình soạn thảo);
   breadcrumb chưa thử với tiêu đề trang rất dài; chưa ai bấm thử bằng tay.
-
-### 2026-11-26 — #368 ẩn/hiện thanh bên + tạm dừng thanh toán
-
-- **Yêu cầu:** thêm chức năng ẩn/hiện sidebar; **thanh toán tạm dừng** — PayOS/VNPay không dùng,
-  chủ dự án sẽ dùng **MoMo** sau.
-- **Trạng thái nằm ở `document.documentElement.dataset.sidebar` (`shown` | `hidden`)**, không phải
-  một class trên `<aside>`: CSS quyết định hình dạng, JS chỉ nói ý định, và `render()` không thể vô
-  tình làm thanh bên hiện lại. Tệp mới `src/renderer/features/sidebar-toggle.ts` (script toàn cục,
-  không import): `sidebarPrefRead` (giá trị lạ ⇒ `shown`), `applySidebarState`, `setSidebarHidden`,
-  `toggleSidebar`, `initSidebarToggle`.
-- **Ba đường hiện lại, vì một thứ ẩn được phải có lối về:** nút `panel-left` trong hàng hành động
-  của sidebar; tay nắm `chevron-right` dính mép trái giữa chiều cao (18×60 px, nửa trong suốt, đậm
-  lên khi hover/focus) chỉ tồn tại khi đang ẩn; và **Ctrl+B** (cả Ctrl và Cmd).
-- **Nhớ lựa chọn bằng localStorage** (`edugame.sidebar`), cùng họ với `ai-status`/`game-audio`:
-  đây là lựa chọn của MÀN HÌNH NÀY, và nó phải sống khi không có mạng (game đã lưu vẫn chơi
-  offline) — nên không đi qua IPC/settings DB.
-- **Ẩn bằng `display:none`** chứ không `width:0`: `width:0` còn padding 24 px + border 1 px, nên
-  nội dung không nhận lại đủ chỗ và cái "ẩn" trông như lỗi vẽ. Đo được: `#pageContent` 1038 → 1270 px.
-- **Một lỗi bố cục tìm thấy khi đo:** hàng `.sidebar-status-actions` có **5 nút 34 px** = 194 px,
-  trong khi sidebar `max-wide` 208 px (trong 184) và `max-tab` 184 px (trong 160) ⇒ nút cuối bị
-  `overflow-x: hidden` của sidebar **cắt mất**. Thêm `flex-wrap: wrap`; đo ở 900×700: 4 nút hiện
-  (34×34) + 1 nút trong popover ẩn, `clipped: []`.
-- **Đo:** `tests/unit/sidebar-toggle.test.ts` (mới, **7 nhóm**: mặc định hiện · đã ẩn từ lần trước ·
-  6 giá trị rác đều cho ra "hiện" · công tắc nhớ · bấm nút thật · Ctrl+B vs `b` trần · localStorage
-  bị chặn vẫn đổi được) · **`tests/ui/ui-sidebar-toggle-check.js` (mới) 17/17** trên app thật:
-  bấm nút ẩn ⇒ `aside` rời bố cục (`display:none`, w 0), nội dung 1038 → 1270 px, `data-sidebar`
-  + localStorage = `hidden`, tay nắm hiện ở x 0/w 18; bấm nút hiện ⇒ về đúng 232 px; Ctrl+B hai
-  chiều; **`Page.reload` xong vẫn ẩn** và vẫn còn lối hiện. `ui-account-check` **23/23**,
-  `ui-page-head-check` **6/6**. Ảnh: `tests/ui/shots/sidebar-368-{shown,hidden}.png` (1366×768:
-  tay nắm ở x 0, nội dung bắt đầu ở 38 px nên không che chữ).
-- **Thanh toán dừng ở đúng chỗ đang chạy được:** migration đã chạy trên Supabase nên
-  `billing_orders`/`period_end`/`plan_pro_*` có mặt; `check:billing` chỉ còn **một** mục đỏ
-  (`EDUGAME_BILLING_PROVIDER`). Code PayOS/VNPay **giữ nguyên** (luật tiền dùng chung), chỉ chưa
-  khai biến. Khi làm MoMo: thêm nhánh cấu hình vào `billingConfig`, hàm `momo*` trong
-  `server/billing-provider.ts`, một nhánh trong `worker/billing.ts` (IPN POST JSON, HMAC-SHA256
-  trên chuỗi có thứ tự cố định `accessKey…amount…extraData…ipnUrl…orderId…orderInfo…partnerCode…redirectUrl…requestId…requestType`),
-  và `EDUGAME_BILLING_PROVIDER=momo`.
-- **Một cái bẫy đã cắn thật (ghi lại vì nó làm chủ dự án không mở được app):** `cargo build --release`
-  tạo ra một exe trỏ `http://localhost:5173/` — bản đó chỉ chạy khi có `python -m http.server` phục
-  vụ `dist-tauri`. Mở nó sau khi tắt server thì chỉ thấy *"can't reach this page"*. Bản phát cho
-  người dùng phải là **`cargo tauri build`** (bật `custom-protocol`, nhúng `dist-tauri`); đo lại:
-  exe dựng bằng `cargo tauri build` mở `http://tauri.localhost/`, sidebar 232 px, 9 thẻ game,
-  `ui-sidebar-toggle-check` **17/17** và `ui-account-check` **23/23** trên chính bản đó.
-  Bộ cài mới: `EduGame Studio (Tauri)_0.5.6_x64-setup.exe` **16 397 005 B**,
-  sha256 `a49da34a…216533`; exe `50d34eea…f955fa9` (16 397 005 B là bộ cài; exe riêng trong
-  `target/release/`).
-- **Chưa đo:** chưa ai bấm nút ẩn bằng tay trên máy thật; chưa thử ở cửa sổ ≤700 px (lúc đó
-  `.sidebar-status` bị ẩn nên chỉ còn Ctrl+B); tay nắm chưa được đo khi trang cuộn dài (nó `fixed`
-  nên phải nổi trên nội dung — mới đo ở trang Thư viện).
