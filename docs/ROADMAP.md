@@ -791,3 +791,11 @@ Chủ dự án yêu cầu: *"xóa release cũ ở máy, tạo release mới và 
   `.modal` pop-in 2 → **1**, panel còn 460×270 với đúng 1 nút. Cổng mới `ui-account-guest-check`
   **17/17** (từ chối chạy trên hồ sơ đã đăng nhập) + `ui-sidebar-toggle-check` được làm bền
   (`waitForBoot`, **17/17**). Chưa đo: đường đã đăng nhập thật.
+
+- [x] **#372 — dọn nhãn thừa trong Cài đặt (nhất là nhà cung cấp AI)**: bỏ 2 chip trên nhãn tab
+  ("○", "0/4"), footnote 8-token lặp ở cả 4 thẻ, dòng lý do trùng chip (chỉ khi `not-configured`),
+  câu trùng trong ghi chú OpenCode, "Chưa lưu khoá." khi chưa có khoá, câu RAM thứ ba, và 4 chip tên
+  nhà cung cấp ở dải "Cho trò chơi mới". Giữ: 4 thẻ, 4 chip trạng thái, 2 chip header, lý do của
+  trạng thái khác thường, cảnh báo RAM thiếu. Cổng mới `ui-settings-ai-labels-check` **12/12** (đếm
+  số lần xuất hiện của từng câu + đếm thứ phải còn; từ chối chạy nếu tab đã ẩn). Chưa đo: bấm tay
+  qua bốn thẻ.

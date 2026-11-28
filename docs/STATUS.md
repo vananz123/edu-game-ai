@@ -7,6 +7,44 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-26 — #372 dọn nhãn thừa trong Cài đặt, nhất là phần nhà cung cấp AI
+
+- **Yêu cầu:** "loại bỏ những label không cần thiết gây loạn trong trang cài đặt, đặc biệt là phần
+  nhà cung cấp AI".
+- **Đếm được trước khi sửa (nguồn gây rối):**
+  1. Tab "Nhà cung cấp AI" mang **hai chip nhỏ** (`○` và `0/4`) nói lại đúng hai chip đầy đủ trong
+     header panel cách đó ~40 px; "0/4" là con số **không có nhãn**.
+  2. Dòng footnote "Kiểm tra gửi một yêu cầu thật rất nhỏ (tối đa 8 token)…" giống nhau ở **cả bốn**
+     thẻ ⇒ bốn dòng chữ nói cùng một điều.
+  3. Dòng "lý do" của thẻ chưa cấu hình luôn là "Chưa có API key." — đúng câu chip ngay cạnh đã nói.
+  4. OpenCode nhắc "Chưa dùng cho luồng tạo trò chơi" **hai lần** (badge + câu đầu của ghi chú).
+  5. "Chưa lưu khoá." là câu thứ ba trong cùng thẻ nói "chưa có khoá".
+  6. Thẻ model local nói về RAM **ba lần**: "Đánh giá máy: RAM đạt…", dòng số liệu RAM, và dòng
+     "✓ RAM đạt mức khuyến nghị.".
+  7. Dải "Cho trò chơi mới" có **bốn chip tên nhà cung cấp** lặp lại đúng tiêu đề bốn thẻ bên dưới.
+- **Đã bỏ:** (1) chip trên nhãn tab — trạng thái vẫn còn nguyên **bằng chữ** trong header panel;
+  (2) toàn bộ footnote 8 token; (3) dòng lý do **chỉ khi** trạng thái là `not-configured` (lý do của
+  trạng thái khác thường — đang lỗi, đã cấu hình nhưng chưa kiểm tra — **vẫn giữ**, vì lúc đó nó là
+  dữ kiện); (4) câu trùng trong ghi chú OpenCode; (5) "Chưa lưu khoá." khi chưa có khoá (khi **đã**
+  có khoá thì dòng này là thông tin thật, nên giữ); (6) dòng RAM thứ ba — nhưng **giữ** cảnh báo đỏ
+  "RAM thấp hơn mức tối thiểu" vì đó là cảnh báo, không phải câu lặp; (7) bốn chip tên.
+- **Không mất thông tin (đây là điều cổng phải chứng minh):** vẫn đủ **bốn** nhà cung cấp, mỗi thẻ
+  đúng **một** chip trạng thái, header panel vẫn **hai** chip (AI local + cloud), chip của hai tab
+  "Phong cách"/"Giao diện" vẫn còn, lý do của thẻ OpenCode vẫn còn.
+- **Cổng mới `tests/ui/ui-settings-ai-labels-check.js` 12/12:** đo bằng **số lần xuất hiện** của
+  từng câu (`Kiểm tra gửi một yêu cầu thật` = 0, `RAM đạt mức khuyến nghị` = 0, `Chưa lưu khoá` = 0,
+  tên nhà cung cấp **ngoài** thẻ = 0) và bằng cấu trúc (chip/tab/lý do). Cổng **từ chối chạy** (exit
+  2) nếu tab "Nhà cung cấp AI" không còn — vì tab đó biến mất khi máy đã cấu hình AI đủ (#305).
+- **Kết quả đo:** `tsc` sạch · unit **118/118** · `npm run check` sạch · `verify:css` **66/66** ·
+  `check:renderer-globals` 0 undefined · `check:embedded` **6 217,2 KiB** · `cargo tauri build` OK ·
+  `ui-account-check` **23/23** · `ui-motion-check` **19/19** · `ui-page-head-check` **6/6** ·
+  `ui-sidebar-toggle-check` **17/17**.
+- **Ảnh:** `tests/ui/shots/settings-ai-cloud-after.png` (+ `-dark.png`) và `settings-ai-before-crop.png`
+  để so trước/sau; người soát ảnh xác nhận thẻ Gemini còn **đúng một dòng chữ phụ** và đọc theo thứ
+  tự tên → chip → mô tả → ba trường → ba nút.
+- **Chưa đo:** chưa ai bấm qua bốn thẻ bằng tay sau khi bỏ nhãn; câu giới thiệu dài ở đầu panel và
+  dải "Cho trò chơi mới" vẫn còn (cố ý — chúng không lặp lại điều gì khác, chỉ dài).
+
 ### 2026-11-26 — #371 panel Tài khoản của người CHƯA đăng nhập: chỉ một nút, và không nháy hai lần
 
 - **Yêu cầu (nguyên văn):** "khi chưa đăng nhập thì chỉ cần hiển thị đăng nhập là đủ, kiểm tra khi
@@ -91,77 +129,3 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
   tốn, người soát ảnh tĩnh **không nhận ra** thẻ nào đang hover (ảnh chụp không có con trỏ), nên
   việc "nhìn có thấy không" vẫn cần mắt người; chưa thử trên màn hình cảm ứng thật; chưa đo chi phí
   vẽ lại khi 22 thẻ cùng transition.
-
-### 2026-11-26 — #369 đường dẫn trang cha → trang con ("Thư viện trò chơi › Chỉnh sửa trò chơi")
-
-- **Yêu cầu (nguyên văn):** "ví dụ thư viện trò chơi mà từ trang này tôi chỉnh sửa thì nó sẽ hiển
-  thị thư viện trò chơi > chỉnh sửa".
-- **Một bảng duy nhất, không phải tám tệp page.** `src/renderer/features/page-trail.ts` (script toàn
-  cục mới) giữ `PAGE_TRAIL_TITLES` (tên 8 trang) + `PAGE_TRAIL_PARENTS` (`editor → library`) và bốn
-  hàm thuần: `pageTrailTitle`, `pageTrailParent`, `pageTrailRoot`, `pageTrailCrumbs`, `pageTrailHtml`.
-  Hiện **chỉ `editor` là trang con thật** — nó không có mục riêng trên sidebar và luôn được mở TỪ
-  một trang khác; sáu trang còn lại là mục cấp 1 nên **không có breadcrumb** (một dòng "Thư viện trò
-  chơi › Thư viện trò chơi" trên mọi trang là chỗ trống bị lấy mất). Lần sau thêm trang con = thêm
-  một dòng vào `PAGE_TRAIL_PARENTS`.
-- **Trang cha là nơi ĐÃ MỞ trang con, không phải một giá trị mặc định.** `openEditor()` đọc
-  `state.page` **ngay trước** `navigate('editor')` (sau đó nó đã là `'editor'` và không còn biết
-  đường về) ⇒ mở từ thư viện thì "Thư viện trò chơi › …", mở từ dự án thì "Dự án của tôi › …".
-  `navigate()` xoá `state.pageParent` khi sang một trang cấp 1, nên lần mở sau không hiện breadcrumb
-  của lần trước. `closeEditorPage()` và nút quay lại đi về **trang cha đó**, không còn luôn về thư viện.
-- **Chèn ở một chỗ:** `core/render.ts` gọi `pageTrailHtml(state.page, state.pageParent)` ngay sau
-  `pageContainer.innerHTML = html` ⇒ không sửa tệp page nào để thêm markup. Mắt cha dùng lại đúng
-  hook `data-page` mà `controller.ts` đã lo, nên **không thêm đường điều hướng mới**. Mắt cuối là
-  `<span aria-current="page">`, không phải liên kết (một link tới chính mình là bẫy focus).
-- **Sidebar sáng mục CHA khi đang ở trang con** (`pageTrailRoot`) — trước đây vào trình soạn thảo
-  thì cả sidebar tối om, không mục nào sáng.
-- **Vòng 2 (sau khi chủ dự án chê "phần chỗ breadcrumb quá rối"):** đường dẫn **dời vào trong
-  header trình soạn thảo**, nằm sát trên `<h1>` và **chỉ còn mắt cha**: `← Thư viện trò chơi ›`
-  rồi `<h1>` hoàn tất câu. Ba kết quả đo được: (a) **bỏ hẳn nút "← Quay lại" thứ hai** — chính mắt
-  cha là nút rời trang (`data-editor-back`), nên chỉ còn **một** nút rời trang; (b) số dòng xếp
-  chồng trước nội dung **3 → 2** (header + thanh Lưu); (c) "Thư viện trò chơi" từ **3 lần** xuống
-  **1 lần** trong 70 px đầu trang, "Chỉnh sửa trò chơi" từ **2 lần** xuống **1**.
-- **Vòng 3 (chủ dự án: "breadcrumb vẫn chưa được, cần xem lại"):** nguyên nhân đo được — bản 2 kết
-  thúc bằng dấu `›` **trỏ vào khoảng không** (`← Thư viện trò chơi ›` rồi hết), đọc như một liên kết
-  quay lại bị cụt chứ không phải một đường dẫn. Cách sửa không phải thêm lại một mắt cuối 12px rồi
-  để `<h1>` lặp cùng chữ ngay dưới (lỗi #364): **mắt cuối CHÍNH LÀ `<h1>`** — cùng một phần tử, chữ
-  nhỏ của cha đứng trước, tiêu đề 18px/800 đứng sau, tất cả trên **một dòng** (cao 22 px). Kết quả
-  trên app thật: `← Thư viện trò chơi › Chỉnh sửa trò chơi`, **một** `<h1>` trong trang, không dấu
-  cụt, không lặp chữ, không tràn ngang ở 1366 lẫn 1024 (`hScroll: 0`).
-- **Mắt cha trong header KHÔNG mang `data-page`** (mà `data-page-trail-parent` + `data-editor-back`):
-  `[data-page]` là điều hướng thẳng của controller và sẽ bỏ qua câu hỏi "Rời trình chỉnh sửa? Thay
-  đổi chưa lưu sẽ mất." mà `wireEditorPage` gắn cho `[data-editor-back]`. Một đường tắt về thư viện
-  làm mất bài của giáo viên là đúng thứ phải tránh.
-- **Đo:** `tests/unit/page-trail.test.ts` (6 nhóm, chạy trên `dist/.../page-trail.js`): 7 trang cấp 1
-  không có breadcrumb + tự sáng mục của mình; `editor` mang cha thật; cha rác (`'editor'`, trang
-  không tồn tại) lùi về mặc định; markup có `data-page` và `aria-current`, **không** có `data-page="editor"`;
-  `childTitle` cho trình soạn thảo mới.
-- **Trang cha không hard-code (đo được):** mở trình soạn thảo từ trang "Tạo trò chơi" ⇒ đường dẫn
-  đổi thành `← Tạo trò chơi › Duyệt và hoàn thiện trò chơi`, và nút rời trang quay về đúng
-  "Tạo trò chơi" — không phải thư viện.
-- **Đo trên app thật:** `tests/ui/ui-page-trail-check.js` **38/38** — bấm thật vào sidebar 7 lần
-  (không breadcrumb ở trang cấp 1, đúng 1 mục `.active`), bấm thật menu "•••" → "Chỉnh sửa" ⇒
-  đường dẫn đọc `← Thư viện trò chơi ›` **không chứa** chuỗi "Chỉnh sửa trò chơi", nằm **trong**
-  header (y 30, `<h1>` ở y 46), **cỡ chữ 12px / line-height 14,4px**, **2 dòng** trước nội dung,
-  **một** nút rời trang và nó là mắt cha (`data-page-trail-parent="library"`, `data-page` rỗng,
-  `title="Về Thư viện trò chơi"`), sidebar vẫn `["library"]`; bấm mắt cha ⇒ về thư viện và đường
-  dẫn biến mất; làm lại rồi bấm `[data-editor-back]` cũng về đúng cha.
-- **Đo tương phản (lỗi có sẵn bị phép đo này lộ ra):** ở dark mode tiêu đề trình soạn thảo đang là
-  `#1e293b` cứng trên nền `rgb(15,18,32)` ⇒ **1,27:1**, gần như vô hình. Đã đổi sang
-  `color: var(--text, #1e293b)` trong `components.css` ⇒ **15,05:1** (sáng) / **15,5:1** (tối). Chữ
-  phụ của đường dẫn: mắt cha **4,76 / 6,08**, dấu `›` **5,05 / 7,76** — đạt AA 4,5 cho chữ 12px.
-  Gate có 2 phép đo mới, ngưỡng đặt **theo cỡ chữ** (tiêu đề ≥ 7, chữ phụ ≥ 4,5): đòi 7 cho chữ phụ
-  sẽ phải kéo nó về gần đen, tức là quay lại đúng cái rối vừa bỏ.
-- **Kết quả đo:** `tsc` sạch · unit **118/118** · `npm run check` sạch · `verify:css` **61/61** ·
-  `check:renderer-globals` **80/82 scripts, 1199 functions, 9679 call sites, 0 undefined** ·
-  `build:tauri` + `check:embedded` **6 217,2 KiB** · `cargo tauri build` OK · `ui-page-head-check`
-  **6/6** và `ui-sidebar-toggle-check` **17/17** vẫn xanh trên bản dựng mới; `ui-page-trail-check`
-  cuối cùng **38/38** và `ui-account-check` **23/23**. (Một lần chạy `ui-account-check` báo 2 lỗi
-  ngay sau khi gate đường dẫn vừa đóng trình soạn thảo; hai lần chạy lại sạch 23/23 và không tái
-  hiện được — ghi là **chưa giải thích được**, không phải đã sửa.)
-- **Ảnh:** `tests/ui/shots/page-trail-369-editor.png`, `trail-flowA.png` / `trail-dark.png` (cắt dải
-  đầu trang, phóng 2×), `trail-1024.png`, `page-trail-369-top.png` + `-dark.png` ở 1366×768. Đường dẫn căn đúng cột nội dung (x 256), cao
-  **14 px** sau khi bỏ mắt cuối, không tràn ngang (`hScroll: 0`), và ở **1024 px** vẫn **1 dòng**
-  (không xuống hàng, không tràn).
-- **Chưa đo:** đường `Dự án của tôi → trình soạn thảo` chỉ được chứng minh bằng unit test trên hàm
-  thuần, **chưa bấm được trong UI** (trang dự án mở wizard chứ không mở thẳng trình soạn thảo);
-  breadcrumb chưa thử với tiêu đề trang rất dài; chưa ai bấm thử bằng tay.

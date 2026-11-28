@@ -15,7 +15,17 @@ function settingsProviderCard(provider, inputCls, labelCls, hintCls, btnSecondar
   const chipLabel = provider.status === 'ready' ? '✓ Sẵn sàng'
     : provider.status === 'configured' ? '● Đã cấu hình'
       : provider.status === 'failing' ? '<span data-icon="triangle-alert" data-icon-size="10"></span> Đang lỗi' : '○ Chưa cấu hình';
-  const note = provider.note ? '<div class=\'mt-1 text-[12px] text-[#5a6478]\'>' + escapeHtml(provider.note) + '</div>' : '';
+  // #372 — nhãn nào chỉ NÓI LẠI điều đã có ở chỗ khác thì bỏ.
+  // (a) `reason` của nhà cung cấp chưa cấu hình luôn là "Chưa có API key." — đúng câu mà chip
+  //     "○ Chưa cấu hình" ngay bên cạnh đã nói. Chỉ giữ lý do khi trạng thái khác thường (đang
+  //     lỗi, đã cấu hình nhưng chưa kiểm tra), vì lúc đó nó thêm một dữ kiện.
+  const reason = provider.reason && provider.status !== 'not-configured'
+    ? '<div class="' + hintCls + ' mt-1" data-ai-provider-reason>' + escapeHtml(provider.reason) + '</div>'
+    : '';
+  // (b) Ghi chú của OpenCode nhắc lại đúng câu của badge "Chưa dùng cho luồng tạo trò chơi" ngay
+  //     trên nó; cắt câu đó khỏi ghi chú, giữ phần còn lại.
+  const noteText = String(provider.note || '').replace(/^Chưa dùng cho luồng tạo trò chơi\.\s*/u, '');
+  const note = noteText ? '<div class=\'mt-1 text-[12px] text-[#5a6478]\'>' + escapeHtml(noteText) + '</div>' : '';
   const fields = provider.id === 'local' ? '' : [
     '<div class="grid grid-cols-2 gap-2 mt-2">',
     '  <div class="field"><label class="' + labelCls + '">API BASE URL</label>',
@@ -25,25 +35,30 @@ function settingsProviderCard(provider, inputCls, labelCls, hintCls, btnSecondar
     '</div>',
     '<div class="field mt-2"><label class="' + labelCls + '">API KEY</label>',
     '<input class="' + inputCls + '" type="password" autocomplete="off" data-ai-key-input="' + escapeHtml(provider.id) + '" value="" placeholder="' + escapeHtml(provider.hasKey ? 'Đã lưu khoá — gõ khoá mới để thay' : (provider.requiresKey ? 'Nhập khoá của nhà cung cấp' : 'Khoá (nếu có)')) + '">',
-    '<div class="' + hintCls + ' mt-1" data-ai-key-state="' + escapeHtml(provider.id) + '">' + (provider.hasKey ? 'Đã lưu khoá (' + escapeHtml(provider.keyMasked || '••••') + ').' : 'Chưa lưu khoá.') + '</div></div>',
+    // #372: khi CHƯA có khoá thì không in "Chưa lưu khoá." — chip "○ Chưa cấu hình" ngay trên
+    // đã nói đúng điều đó, và đây là câu thứ ba trong cùng một thẻ nói "chưa có khoá". Khi ĐÃ có
+    // khoá thì dòng này là thông tin thật (khoá đã lưu, đuôi ••••), nên giữ.
+    (provider.hasKey ? '<div class="' + hintCls + ' mt-1" data-ai-key-state="' + escapeHtml(provider.id) + '">Đã lưu khoá (' + escapeHtml(provider.keyMasked || '••••') + ').</div>' : '') + '</div>',
     '<div class="flex items-center gap-2 flex-wrap mt-2">',
     '<button class="' + btnSecondaryCls + '" data-ai-test="' + escapeHtml(provider.id) + '"><span data-icon="link" data-icon-size="13"></span> Kiểm tra kết nối</button>',
     '<button class="' + btnSecondaryCls + '" data-ai-key-save="' + escapeHtml(provider.id) + '">Lưu khoá</button>',
     '<button class="' + btnSecondaryCls + '" data-ai-key-clear="' + escapeHtml(provider.id) + '"' + (provider.hasKey ? '' : ' disabled') + '>Xoá khoá</button>',
     '</div>',
-    '<div class="' + hintCls + ' mt-1">Kiểm tra gửi một yêu cầu thật rất nhỏ (tối đa 8 token) tới nhà cung cấp — không phải tạo trò chơi.</div>'
+    // #372: bỏ dòng "Kiểm tra gửi một yêu cầu thật rất nhỏ (tối đa 8 token)…". Nó giống nhau ở
+    // CẢ BỐN thẻ, tức là bốn dòng chữ nói cùng một điều; nhãn nút "Kiểm tra kết nối" đã nói việc
+    // mà nút làm.
   ].join('');
+  // #372: bỏ dòng hint cạnh nút của thẻ local — cùng lý do (nhãn nút đã đủ).
   const localActions = provider.id === 'local' ? [
     '<div class="flex items-center gap-2 flex-wrap mt-2">',
     '<button class="' + btnSecondaryCls + '" data-ai-test="local"><span data-icon="link" data-icon-size="13"></span> Kiểm tra kết nối</button>',
-    '<div class="' + hintCls + '">Kiểm tra chạy một câu hỏi ngắn trên model local đang chạy.</div>',
     '</div>'
   ].join('') : '';
   const badge = provider.wizardEligible ? '' : '<span class="ml-1.5 px-1.5 py-0.5 rounded bg-[#f5f6fa] dark:bg-[#1e2544] text-[12px] font-semibold text-[#5f6a7d] dark:text-[#94a3b8]">Chưa dùng cho luồng tạo trò chơi</span>';
   return '<div class="p-3 rounded-xl border border-[#e2e8f0] dark:border-[#2a324b]" data-ai-provider="' + escapeHtml(provider.id) + '" data-ai-provider-status="' + escapeHtml(provider.status) + '">'
     + '<div class="flex items-center justify-between gap-2 flex-wrap"><div class="min-w-0"><strong class="text-[13px] text-[#1e293b] dark:text-[#f1f5f9]">' + escapeHtml(provider.label) + '</strong>' + badge + '</div>'
     + '<span class="px-2 py-0.5 rounded text-[12px] font-semibold ' + chip + '" data-ai-provider-chip>' + chipLabel + '</span></div>'
-    + '<div class="' + hintCls + ' mt-1" data-ai-provider-reason>' + escapeHtml(provider.reason || '') + '</div>'
+    + reason
     + note + fields + localActions + '</div>';
 }
 
@@ -225,8 +240,10 @@ function renderSettings() {
   // sub-tabs, one of which is off-screen. Phong cách/Giao diện already say the same thing
   // in their tab label, so the heading stays a plain title.
   const sectionTabChips = {
-    ai: tabChip(localReady ? '✓' : '○', localReady, `AI local: ${localReady ? 'sẵn sàng' : 'chưa cài đủ model và runtime'}`, 'monitor')
-      + tabChip(`${readyCloud}/${cloudProviders.length}`, readyCloud > 0, `${readyCloud}/${cloudProviders.length} nhà cung cấp cloud đã có khoá và sẵn sàng`, 'cloud'),
+    // #372: tab "Nhà cung cấp AI" KHÔNG còn chip riêng. Hai chip nhỏ "○" và "0/4" ở đây nói lại
+    // đúng hai chip đầy đủ trong header của chính panel (cách nhau ~40 px), và "0/4" là một con số
+    // không có nhãn. Trạng thái vẫn còn nguyên trong panel, bằng chữ.
+    ai: '',
     teaching: tabChip(tone, true, `Giọng điệu: ${tone}`),
     interface: tabChip(themeLabel, true, `Chủ đề giao diện: ${themeLabel}`),
     // #204: the update state lives in `features/about-panel.ts` and arrives from main at
@@ -271,7 +288,9 @@ function renderSettings() {
                   <span>${modelStatus}</span>
                   <span>Đánh giá máy: ${escapeHtml(selectedLocalModel.recommendationReason)}</span>
                   <span>RAM ${formatBytes(machine.totalRamBytes || 0)} · cần tối thiểu ${formatBytes(selectedLocalModel.minimumRamBytes)}, khuyến nghị ${formatBytes(selectedLocalModel.recommendedRamBytes)}</span>
-                  <span class="${selectedLocalModel.memoryStatus==='insufficient' ? 'text-[#dc2626]' : selectedLocalModel.memoryStatus==='below-recommended' ? 'text-[#9c4808]' : 'text-[#0f7b5c]'}">${selectedLocalModel.memoryStatus==='insufficient'?'<span data-icon="triangle-alert" data-icon-size="11"></span> RAM thấp hơn mức tối thiểu; model có thể không chạy ổn định.':selectedLocalModel.memoryStatus==='below-recommended'?'<span data-icon="triangle-alert" data-icon-size="11"></span> RAM thấp hơn mức khuyến nghị.':'✓ RAM đạt mức khuyến nghị.'}</span>
+                  ${selectedLocalModel.memoryStatus==='insufficient'
+                    ? '<span class="text-[#dc2626]" data-local-ram-warning><span data-icon="triangle-alert" data-icon-size="11"></span> RAM thấp hơn mức tối thiểu; model có thể không chạy ổn định.</span>'
+                    : ''}
                 </div>
               </div>
             ` : ''}
@@ -325,7 +344,10 @@ function renderSettings() {
           <div class="p-3 mb-3 bg-[#f8fafc] dark:bg-[#151a30] rounded-xl border border-[#f1f5f9] dark:border-[#2a324b]" data-ai-policy>
             <strong class="text-[12px] text-[#1e293b] dark:text-[#f1f5f9] block">Cho trò chơi mới: tự chọn nhà cung cấp sẵn sàng</strong>
             <div class="${hintCls} mt-1">Không tự đổi nhà cung cấp khi đang lỗi. Thứ tự tự động: AI local → Gemini → ChatGPT. Bước 2 và bước 5 luôn hiện nhà cung cấp đang dùng và cho chọn nếu có từ hai nhà cung cấp sẵn sàng.</div>
-            <div class="flex flex-wrap gap-1.5 mt-2">${providers.filter(p => p.wizardEligible).map(p => `<span class="px-2 py-0.5 rounded text-[12px] font-semibold ${p.usable ? 'bg-[#effaf5] text-[#0f7b5c]' : 'bg-[#f5f6fa] text-[#5f6a7d]'}">${escapeHtml(p.label)}</span>`).join('')}</div>
+            <!-- #372: bốn chip tên nhà cung cấp ở đây đã bị bỏ — chúng lặp lại đúng tên thẻ ngay
+                 bên dưới, và trạng thái "dùng được hay chưa" đã có chip riêng trong từng thẻ. Câu
+                 "Thứ tự tự động: AI local → Gemini → ChatGPT" phía trên đã nói đủ thứ tự fallback,
+                 nên danh sách tên không thêm một dữ kiện nào. -->
           </div>
           <div class="grid gap-3">${cloudProviders.map(provider => settingsProviderCard(provider, inputCls, labelCls, hintCls, btnSecondaryCls)).join('')}</div>
         ` : `<p class="${hintCls}">Đang nạp danh sách nhà cung cấp AI…</p>`}

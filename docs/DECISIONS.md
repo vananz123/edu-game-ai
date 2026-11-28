@@ -5983,3 +5983,23 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
 - **`settle` cố định sau `Page.reload` là một lần đánh cược vào tốc độ máy.** Cổng #368 đỏ 3 check
   chỉ vì bản dựng nhúng khởi động chậm hơn 2,5s. Cổng phải **chờ đúng thứ nó sẽ đo** (thuộc tính
   `data-sidebar` đã có mặt) với hạn chót, và vẫn báo đỏ khi quá hạn — chờ mù hoặc chờ mãi đều sai.
+
+## #372 — nhãn nào nói lại điều đã có thì bỏ
+
+- **Một nhãn chỉ được tồn tại nếu nó nói một điều CHƯA có ở chỗ khác trên màn hình.** Bốn câu kiểu
+  "chưa có khoá" trong cùng một thẻ (chip trạng thái + dòng lý do + "Chưa lưu khoá." + ghi chú) đọc
+  như bốn lỗi khác nhau. Quy tắc thay thế: chip nói TRẠNG THÁI, một câu nói VÌ SAO (chỉ khi lý do
+  khác thường), các trường nói DỮ LIỆU, nút nói VIỆC LÀM ĐƯỢC.
+- **Bỏ nhãn không được bỏ thông tin — và phải chứng minh bằng phép đếm.** Cổng #372 đếm số lần
+  xuất hiện của từng câu (phải = 0 với câu lặp) **và** đếm số thứ phải còn (4 nhà cung cấp, 4 chip
+  trạng thái, 2 chip header, 1 dòng lý do của thẻ OpenCode). Một cổng chỉ kiểm "đã xoá" sẽ vui vẻ
+  cho qua một màn hình trống.
+- **Cảnh báo không phải câu lặp.** Dòng "✓ RAM đạt mức khuyến nghị" bị bỏ (nó là câu thứ ba nói
+  RAM đủ), nhưng "RAM thấp hơn mức tối thiểu; model có thể không chạy ổn định" **ở lại** — cùng chủ
+  đề, khác chức năng: một câu trấn an, một câu cảnh báo. Xoá theo chủ đề là cách mất cảnh báo.
+- **Con số không nhãn là câu đố.** Chip "0/4" trên nhãn tab không nói nó đếm cái gì, trong khi hai
+  chip trong panel đã nói bằng chữ. Một con số trên nhãn chỉ được phép tồn tại khi nó tự giải thích
+  được ở chỗ nó đứng (hoặc có `title`) **và** không có bản đầy đủ cách đó vài chục pixel.
+- **Cổng phải từ chối chạy khi màn hình không còn ở trạng thái nó đo.** Tab "Nhà cung cấp AI" biến
+  mất khi máy đã cấu hình AI đủ (#305); cổng #372 thoát với mã 2 và nói "không đo được" thay vì
+  xanh rỗng.
