@@ -93,7 +93,11 @@ function renderLessonPlans() {
   // #182: hai cột — khung chatbot cố định bên trái (`lessonChatPanelHtml`,
   // features/lesson-chat.ts), danh sách giáo án bên phải. Panel "Hỏi đáp chuyên sâu
   // BETA" một tài liệu bị xoá hẳn: chat thay thế nó, dùng lại đúng một đường IPC.
-  return `<div class="page-head"><div class="page-head-title"><h1>Giáo án</h1></div><div class="page-head-actions"><button class="btn btn-secondary btn-small" data-action="import-document"><span data-icon="upload" data-icon-size="14"></span> Nhập giáo án từ tệp</button><button class="btn btn-primary btn-small" data-page="create-wizard"><span data-icon="circle-plus" data-icon-size="14"></span> Tạo dự án mới</button></div></div>
+  // #373: tiêu đề "Giáo án" đã bị bỏ (chủ dự án: "tôi cần xóa chữ giáo án đi"). Hàng tiêu đề đó
+  // chỉ chiếm chỗ: tên trang đã có mục đang sáng trên sidebar, và hai nút của nó đã chuyển vào
+  // header của khung chat (features/lesson-chat.ts) nên không mất một hành động nào.
+  // `.lesson-page` là khung flex cao đúng phần còn lại của cửa sổ, để trang này KHÔNG cuộn.
+  return `<div class="lesson-page" data-lesson-page>
     <div class="lesson-two-col" data-lesson-two-col>
       ${lessonChatPanelHtml()}
       <div class="lesson-list-col min-w-0">
@@ -108,7 +112,8 @@ function renderLessonPlans() {
               : `<div class="bg-white border border-dashed border-[#dfe2ed] rounded-xl p-6 text-center text-[#5f6a7d] flex flex-col items-center justify-center"><div class="mb-2.5 text-[#5f6a7d]"><span data-icon="file-text" data-icon-size="28"></span></div><h3 class="text-[#394256] text-[14px] mb-1 mt-0">${query ? 'Không tìm thấy giáo án phù hợp' : 'Chưa có giáo án nào'}</h3><p class="max-w-[46ch] mx-auto mb-3 leading-[1.55] text-[12px]" title="${query ? 'Thử từ khóa khác hoặc xoá bộ lọc.' : 'Kết quả phân tích được giữ lại để dùng cho nhiều trò chơi.'}">${query ? 'Thử từ khóa khác hoặc xoá bộ lọc.' : 'Nhập tệp DOCX, PDF, PPTX hoặc TXT để lưu tài liệu nguồn.'}</p><button class="btn btn-secondary btn-small" data-action="import-document"><span data-icon="upload" data-icon-size="14"></span> Nhập giáo án đầu tiên</button></div>`}
         </section>
       </div>
-    </div>`;
+    </div>
+  </div>`;
 }
 
 /** Phần thân "Xem chi tiết": hai danh sách mục tiêu & khái niệm, không còn vỏ

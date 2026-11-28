@@ -799,3 +799,11 @@ Chủ dự án yêu cầu: *"xóa release cũ ở máy, tạo release mới và 
   trạng thái khác thường, cảnh báo RAM thiếu. Cổng mới `ui-settings-ai-labels-check` **12/12** (đếm
   số lần xuất hiện của từng câu + đếm thứ phải còn; từ chối chạy nếu tab đã ẩn). Chưa đo: bấm tay
   qua bốn thẻ.
+
+- [x] **#373 — trang Giáo án: bỏ chữ "Giáo án", khung chat full, cuộn không di chuyển**: xoá hàng
+  `.page-head` (hai nút chuyển vào header khung chat: "Nhập tệp", "Dự án mới"); trang cao `100vh`
+  + `overflow: hidden`, khung chat `height: 100%`, chỉ `.lesson-list-col` cuộn; `render()` đặt
+  `#pageContent.dataset.page`. Đo: khung chat **20/716 px không đổi** khi cuộn cửa sổ 500 px hay
+  cuộn danh sách 300 px (trước: 63 → 14 px ở lần cuộn đầu); 1024 px vẫn xếp chồng và cuộn được.
+  Cổng mới `ui-lesson-page-check` **17/17**. Chưa đo: một câu trả lời chat thật làm transcript dài
+  ra; cửa sổ rất thấp (≤ 600 px).

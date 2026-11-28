@@ -7,6 +7,40 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-26 — #373 trang Giáo án: bỏ chữ "Giáo án", khung chat choán hết chiều cao, cuộn không di chuyển
+
+- **Yêu cầu (nguyên văn):** "quay qua trang giáo án đi, tôi cần xóa chữ 'giáo án' đi và là khung
+  chat full. để khi scroll chúng không di chuyển".
+- **Đo được trước khi sửa (1366×768):** trang cao **1308 px** trong cửa sổ 768 px nên **cả trang
+  cuộn**; khung chat `position: sticky` nên lần cuộn đầu tiên nó **trượt** từ đỉnh 63 px xuống 14 px
+  rồi mới đứng. Mắt đọc thấy khung chat "nhảy" một lần — đó là cái phải bỏ.
+- **Bỏ hàng tiêu đề:** `<div class="page-head"><h1>Giáo án</h1>…` bị xoá hẳn. Hai nút của nó
+  ("Nhập giáo án từ tệp", "Tạo dự án mới") **chuyển vào header khung chat** với nhãn ngắn hơn
+  ("Nhập tệp", "Dự án mới") — không mất một hành động nào, và không còn hàng 29 px chiếm chỗ.
+- **Trang không cuộn, chỉ danh sách cuộn:** `#pageContent[data-page="lesson-plans"]` cao `100vh`,
+  `overflow: hidden`, là flex column; `.lesson-page` (khung mới bao cả hai cột) giãn hết; khung chat
+  `height: 100%`; `.lesson-list-col` là thứ **duy nhất** có `overflow-y: auto`. Vì không có gì cuộn
+  ngoài danh sách, khung chat **không thể** đổi hình chữ nhật khi cuộn.
+- **`render()` giờ đặt `#pageContent.dataset.page`** — CSS cần biết trang nào đang mở, và một thuộc
+  tính (không phải class do JS bật/tắt) thì không thể lệch với nội dung vừa vẽ.
+- **Chỉ khoá từ 1181 px:** dưới ngưỡng đó hai cột xếp chồng (media query sẵn có của #182/#184);
+  khoá chiều cao ở đó sẽ **giấu mất danh sách** — hỏng nặng hơn cái đang sửa.
+- **Cổng mới `tests/ui/ui-lesson-page-check.js` 17/17.** Đo được: không còn `<h1>` (0), trang
+  `scrollHeight 768 = winH 768`, khung chat **716 px** (≥ 90% cửa sổ), danh sách `overflow auto`
+  1213 > 716; cuộn cửa sổ 500 px ⇒ **`scrollY = 0`**; cuộn danh sách 300 px ⇒ đỉnh/chiều cao khung
+  **20/716 → 20/716** (không đổi) và composer vẫn nằm trong khung; ở **1024 px** hai cột xếp chồng,
+  trang cao 1434 > 768 (cuộn lại được), khung chat 453 px (không bị ép 100vh).
+- **Kết quả đo:** `tsc` sạch · unit **118/118** · `npm run check` sạch · `verify:css` **66/66** ·
+  `check:renderer-globals` 0 undefined · `check:embedded` **6 217,2 KiB** · `cargo tauri build` OK ·
+  `ui-page-head-check` **6/6** · `ui-settings-ai-labels-check` **12/12** · `ui-account-check`
+  **23/23** · `ui-motion-check` **19/19**.
+- **Ảnh:** `tests/ui/shots/lesson-page-373.png` (1366×768, chụp khi danh sách ở đầu), `-dark.png`,
+  `-1024.png`. Người soát ảnh xác nhận đầu danh sách **không còn bị cắt**, khung chat chạy hết chiều
+  cao, composer không bị cắt.
+- **Chưa đo:** chưa gửi một câu hỏi thật sau khi đổi bố cục (transcript dài ra thì `.lesson-chat-scroll`
+  vẫn là vùng cuộn bên trong — đúng thiết kế, nhưng chưa đo bằng câu trả lời thật); chưa thử cửa sổ
+  rất thấp (≤ 600 px cao).
+
 ### 2026-11-26 — #372 dọn nhãn thừa trong Cài đặt, nhất là phần nhà cung cấp AI
 
 - **Yêu cầu:** "loại bỏ những label không cần thiết gây loạn trong trang cài đặt, đặc biệt là phần
@@ -82,50 +116,3 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 - **Chưa đo:** đường **đã đăng nhập** thật (mở panel ⇒ đọc hạn mức ⇒ vẽ lại thân) chưa chạy trên
   một phiên thật — phần "vẽ lại không dựng lại modal" chỉ được đo bằng trạng thái DỰNG; cú nháy
   được đo bằng số lần ghi DOM + số animation, không phải bằng mắt trên video.
-
-### 2026-11-26 — #370 chuyển động khi thao tác (thư viện làm ví dụ)
-
-- **Yêu cầu:** "bổ sung các hiệu ứng chuyển động khi thao tác trên ứng dụng, có thể dùng thư viện"
-  + "cứ chọn vào chạy không hỏi" ⇒ tự chọn phạm vi, tự đo, không hỏi lại.
-- **Tệp mới `src/renderer/styles/motion.css`** (import CUỐI trong `app.css`, nên tinh chỉnh được các
-  rule cũ bằng thứ tự, không cần `!important`): 5 biến `--motion-fast 120ms` / `--motion-base 180ms`
-  / `--motion-slow 260ms` / `--motion-ease` / `--motion-lift -2px` và **một chỗ duy nhất** để tắt:
-  `@media (prefers-reduced-motion: reduce)` đặt các biến về 0 **và** xoá `transform`/`translate`
-  của từng rule — chỉ đặt thời lượng 0 là không đủ, vì cú nhảy tức thì đúng là thứ cần tránh.
-- **Nút:** nhấn ⇒ chìm 1px, nhả ⇒ nổi lại; nút chính có bóng khi hover. Trước đây `.btn` chỉ
-  chuyển động màu, nên trên màn hình cảm ứng không có phản hồi nào cho cú bấm.
-- **Thẻ trò chơi (thư viện + dự án):** hover ⇒ nhấc **2px** + bóng đổi; nhấn ⇒ trở về 0; thẻ đang
-  được chọn thì không nhấc (viền tím đã nói "đang chọn").
-  **Lỗi đo được ở đây:** đặt `transform: translateY(-2px)` khi hover **không có tác dụng** — thẻ
-  còn mang `.game-card` với `animation: card-enter … both`, mà animation đã kết thúc với
-  `fill-mode: both` vẫn **thắng** mọi khai báo `transform` thường (đo được `matrix(1,0,0,1,0,0)`
-  dù chuột đã ở trên thẻ). Cách sửa: dùng thuộc tính biến đổi **độc lập** `translate`, nó cộng dồn
-  với `transform` của animation thay vì tranh nhau — và không phải sửa animation nhập cảnh của 22
-  thẻ (thứ mà các cổng khác đang đo).
-- **Menu "•••"** của thẻ: xuất hiện bằng `eg-menu-pop` (mờ + nhô 4px + scale .98, 120ms), chọn bằng
-  selector `[role="menu"]:not([hidden])` nên **không cần một dòng JS nào** và **không đổi `display`**
-  (không có cú giật bố cục). **Thanh "đã chọn N"** trượt vào bằng `eg-selbar-in`.
-- **Ô tìm kiếm + ô chọn thể loại:** viền đổi màu có nhịp khi focus/hover. **Biểu tượng sidebar** có
-  nhịp riêng (vạch chỉ báo của mục đang mở đã có từ trước).
-- **Cố ý KHÔNG đặt animation lên `.panel`:** bước 1 của wizard vẽ lại toàn trang sau mỗi lần gõ, nên
-  mỗi lần gõ sẽ là một lần cả khối mờ đi rồi hiện lại — và vài cổng đo hình học sẽ đọc đúng lúc khối
-  đang ở `translateY(6px)`.
-- **Cổng mới `tests/ui/ui-motion-check.js` 19/19**, bấm bằng **chuột thật** (`Input.dispatchMouseEvent`)
-  vì `:hover`/`:active` do trình duyệt quyết định theo con trỏ — `el.click()` chỉ chứng minh CSS viết
-  đúng, không chứng minh người dùng thấy gì. Số đo: hover thẻ **194,67 → 192,67 px = Δ 2px**, bóng
-  đổi, `scrollHeight` **1109 → 1109** và `scrollWidth` **1270 → 1270** (không xê dịch bố cục); nhấn
-  nút ⇒ `matrix(…, 1)` = chìm 1px rồi trở lại, nhả chuột ra ngoài không kích hoạt nhầm; menu
-  `animationName eg-menu-pop`, `opacity` kết thúc **1**; thanh chọn `eg-selbar-in`; giả lập
-  `prefers-reduced-motion: reduce` (qua `Emulation.setEmulatedMedia`) ⇒ `--motion-fast 0ms`,
-  `--motion-lift 0px`, hover **Δ 0px**, menu `animationName none`.
-- **`verify:css` thêm 5 pin** cho bản compile (**66/66**, trước là 61): Tailwind rút `120ms` thành
-  `.12s` và sẽ xoá một rule `translate` "không dùng" — pin bắt đúng hai khả năng đó.
-- **Kết quả đo:** `tsc` sạch · unit **118/118** · `npm run check` sạch · `verify:css` **66/66** ·
-  `check:renderer-globals` 0 undefined · `build:tauri` + `check:embedded` **6 217,2 KiB** ·
-  `cargo tauri build` OK · `ui-library-stagger-check` **8/8** · `ui-page-head-check` **6/6** ·
-  `ui-account-check` **23/23** · `ui-sidebar-toggle-check` **17/17** · `ui-page-trail-check` **38/38**
-  (chạy trên bản dựng trước đó, cùng CSS) · ảnh `tests/ui/shots/motion-370-{rest,hover,menu}.png`.
-- **Chưa đo:** cảm giác "mượt" thì không đo được bằng máy — 2px + bóng là ngưỡng tôi chọn cho khiêm
-  tốn, người soát ảnh tĩnh **không nhận ra** thẻ nào đang hover (ảnh chụp không có con trỏ), nên
-  việc "nhìn có thấy không" vẫn cần mắt người; chưa thử trên màn hình cảm ứng thật; chưa đo chi phí
-  vẽ lại khi 22 thẻ cùng transition.

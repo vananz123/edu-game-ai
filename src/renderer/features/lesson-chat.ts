@@ -215,6 +215,9 @@ function lessonChatHeadHtml() {
       <strong>${escapeHtml(title)}</strong>
     </div>
     <div class="lesson-chat-head-actions">
+      <!-- #373: hai nút của trang Giáo án chuyển vào đây khi hàng tiêu đề bị bỏ. -->
+      <button type="button" class="lesson-chat-mode" data-action="import-document" title="Nhập giáo án từ tệp"><span data-icon="upload" data-icon-size="13"></span> Nhập tệp</button>
+      <button type="button" class="lesson-chat-mode" data-page="create-wizard" title="Tạo dự án mới từ giáo án"><span data-icon="circle-plus" data-icon-size="13"></span> Dự án mới</button>
       <button type="button" class="lesson-chat-mode" data-action="lesson-chat-history" aria-pressed="${lessonChatUi.showHistory ? 'true' : 'false'}" title="Cuộc trò chuyện trước (${chats})"><span data-icon="list" data-icon-size="13"></span> ${chats}</button>
       <button type="button" class="lesson-chat-mode" data-action="lesson-chat-new" title="Bắt đầu cuộc trò chuyện mới"><span data-icon="plus" data-icon-size="13"></span> Mới</button>
     </div>

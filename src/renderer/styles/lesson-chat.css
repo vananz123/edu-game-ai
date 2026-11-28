@@ -527,3 +527,57 @@
     max-height: 52vh;
   }
 }
+
+/* ============================================================================
+   #373 — TRANG GIÁO ÁN KHÔNG CUỘN; CHỈ DANH SÁCH BÊN PHẢI CUỘN.
+
+   Vấn đề đo được trước khi sửa (1366×768): trang Giáo án cao 1308px trong cửa sổ 768px, nên
+   cuộn chuột là CẢ khung chat trượt lên: đỉnh khung 63px → 14px rồi mới đứng lại (sticky). Mắt
+   đọc thấy khung chat "nhảy" một lần. Chủ dự án: "làm khung chat full, để khi scroll chúng không
+   di chuyển".
+
+   Cách làm: trang này cao đúng phần còn lại của cửa sổ và `overflow: hidden`; khung chat giãn
+   hết chiều cao đó; cột danh sách là thứ duy nhất có `overflow-y: auto`. Kết quả: khung chat
+   KHÔNG BAO GIỜ đổi hình chữ nhật khi cuộn, vì không có gì cuộn ngoài nó.
+
+   Chỉ áp dụng từ 1181px: dưới ngưỡng đó hai cột xếp chồng (media query ngay trên), và khoá
+   chiều cao lúc đó sẽ giấu mất danh sách — hỏng nặng hơn cái đang sửa.
+   ============================================================================ */
+@media (min-width: 1181px) {
+  #pageContent[data-page="lesson-plans"] {
+    /* 100vh: shell không có topbar (#162), nên trang bắt đầu ở đỉnh cửa sổ. `border-box` (mặc
+       định của Tailwind) giữ phần đệm pt-5/pb-8 nằm TRONG chiều cao này. */
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+  }
+  .lesson-page {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  .lesson-two-col {
+    flex: 1 1 auto;
+    min-height: 0;
+    align-items: stretch;
+  }
+  /* Sticky không còn cần thiết (không có gì cuộn), và `static` tránh một lớp định vị thừa. */
+  .lesson-chat-col {
+    position: static;
+    display: flex;
+    min-height: 0;
+  }
+  .lesson-chat-frame {
+    height: 100%;
+    min-height: 0;
+  }
+  .lesson-list-col {
+    overflow-y: auto;
+    min-height: 0;
+    /* Chừa chỗ cho thanh cuộn để thẻ không bị cắt mất mép: cùng lý do như #314. */
+    padding-right: 2px;
+  }
+}

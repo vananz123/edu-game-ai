@@ -34,6 +34,10 @@ function render() {
   if (state.page !== renderedPage) { render(); return; }
   const pageContainer = $('#pageContent');
   if (pageContainer) {
+    // #373: CSS cần biết TRANG NÀO đang mở (trang Giáo án khoá bố cục để chỉ danh sách cuộn).
+    // `data-page` là một thuộc tính, không phải một class do JS bật/tắt — nên nó không thể lệch
+    // với nội dung vừa vẽ, và nó đọc được từ CSS lẫn từ cổng đo.
+    pageContainer.dataset.page = renderedPage;
     pageContainer.innerHTML = html;
     // #369: breadcrumb đứng trên đầu trang. Một chỗ duy nhất (đây) thay vì sửa 8 tệp page —
     // `pageTrailHtml` trả '' cho trang cấp 1 nên không có `<nav>` rỗng.

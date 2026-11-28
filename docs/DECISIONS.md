@@ -6003,3 +6003,21 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
 - **Cổng phải từ chối chạy khi màn hình không còn ở trạng thái nó đo.** Tab "Nhà cung cấp AI" biến
   mất khi máy đã cấu hình AI đủ (#305); cổng #372 thoát với mã 2 và nói "không đo được" thay vì
   xanh rỗng.
+
+## #373 — trang Giáo án không cuộn; chỉ danh sách cuộn
+
+- **`position: sticky` không phải "không di chuyển".** Khung chat cũ bám đỉnh bằng sticky, nhưng
+  trang vẫn cuộn 1308 px, nên lần cuộn ĐẦU TIÊN nó trượt từ 63 px xuống 14 px rồi mới đứng — mắt
+  đọc thấy đúng một cú nhảy. Muốn "không di chuyển" thì phải **không có gì cuộn ngoài nó**: trang
+  cao đúng cửa sổ + `overflow: hidden`, và chỉ cột danh sách có `overflow-y: auto`.
+- **Một hàng tiêu đề chỉ đáng tồn tại nếu nó nói điều chưa có ở đâu khác.** Tên trang đã có mục đang
+  sáng trên sidebar, nên `<h1>Giáo án</h1>` chỉ chiếm 29 px; hai nút của hàng đó thì KHÔNG được
+  xoá — chúng chuyển vào header khung chat. Bỏ nhãn phải kèm chỗ mới cho hành động, nếu không là
+  mất chức năng.
+- **Một lớp khoá bố cục phải có điều kiện.** Dưới 1181 px hai cột xếp chồng; khoá `100vh` +
+  `overflow: hidden` ở đó sẽ giấu mất danh sách. Vì thế toàn bộ khối #373 nằm trong
+  `@media (min-width: 1181px)` — và cổng đo **cả hai** phía của ngưỡng (1366: không cuộn được;
+  1024: cuộn lại được).
+- **CSS cần biết trang nào đang mở, và biết bằng THUỘC TÍNH.** `render()` đặt
+  `#pageContent.dataset.page`; một thuộc tính không thể lệch với nội dung vừa vẽ như một class do
+  JS bật/tắt, và cổng đọc được nó.
