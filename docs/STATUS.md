@@ -7,6 +7,36 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-26 — #374 nút Gửi thành mũi tên tròn bên trong khung gõ chat
+
+- **Yêu cầu:** "di chuyển nút gửi thành mũi tên bên trong khung chat".
+- **Trước:** "Gửi" là một `.btn btn-primary btn-small` **có chữ**, nằm trong hàng `.lesson-chat-foot`
+  dưới khung gõ (cạnh ô chọn nhà cung cấp) ⇒ chiếm một ô riêng cho bốn ký tự, và mắt phải đi
+  xuống dưới khung gõ mới bấm được.
+- **Sau:** `<div class="lesson-chat-field">` bọc textarea; nút `.lesson-chat-send` là **hình tròn
+  30×30** đặt `right:8px; bottom:8px` **trong** khung, icon **`arrow-up`** (icon-only), nhãn đọc được
+  ở `aria-label="Gửi câu hỏi"` + `title="Gửi (Enter)"`. Hook `data-lesson-chat-send` giữ nguyên nên
+  Enter, đếm ký tự và khoá-khi-đang-gửi không phải sửa một dòng nào.
+- **Chữ không chui xuống dưới nút:** textarea có `padding-right: 44px` + `padding-bottom: 12px`.
+- **Bỏ tay nắm kéo-giãn của textarea** (`resize: none`): ảnh chụp 2× cho thấy tay nắm nằm **đúng
+  dưới** nút gửi và bị nút che mất một nửa. Khung gõ vẫn cao 96–300px theo nội dung.
+- **Nút Dừng dùng đúng chỗ đó:** khi đang trả lời, cùng hình tròn đó là `.is-stop`
+  (`data-action="lesson-chat-stop"`, `aria-label="Dừng trả lời"`), nên bố cục không nhảy khi trạng
+  thái đổi.
+- **Cổng mới `tests/ui/ui-lesson-chat-send-check.js` 15/15:** nút nằm **hoàn toàn trong** hình chữ
+  nhật của khung gõ (cách mép phải 8px, mép dưới 8px), tròn `border-radius: 50%`, **không chữ** +
+  `aria-label` + có `<svg>`, hàng chân khung gõ **không còn chữ "Gửi"**, `padding-right 44px`,
+  `resize none`; rỗng ⇒ `disabled`, gõ ⇒ bật, xoá ⇒ tắt lại, và bật/tắt **không đổi hình chữ nhật**
+  (30×30, 8/8 ở cả hai trạng thái); trạng thái đang-trả-lời ⇒ cùng chỗ là nút Dừng.
+- **Kết quả đo:** `tsc` sạch · unit **118/118** · `npm run check` sạch · `verify:css` **66/66** ·
+  `check:renderer-globals` 0 undefined · `check:embedded` **6 217,2 KiB** · `cargo tauri build` OK ·
+  `ui-lesson-page-check` **17/17** · `ui-motion-check` **19/19** · `ui-account-check` **23/23** ·
+  `ui-settings-ai-labels-check` **12/12**.
+- **Ảnh:** `tests/ui/shots/lesson-chat-send-374.png` (khung gõ 2×, có chữ) và `lesson-page-374.png`.
+  Người soát ảnh xác nhận nút nằm gọn trong khung, không còn va vào tay nắm kéo-giãn.
+- **Chưa đo:** chưa **bấm nút gửi để gửi một câu hỏi thật** (sẽ gọi AI thật) — mới đo trạng thái
+  bật/tắt và vị trí; chưa thử nút này trên màn hình cảm ứng.
+
 ### 2026-11-26 — #373 trang Giáo án: bỏ chữ "Giáo án", khung chat choán hết chiều cao, cuộn không di chuyển
 
 - **Yêu cầu (nguyên văn):** "quay qua trang giáo án đi, tôi cần xóa chữ 'giáo án' đi và là khung
@@ -78,41 +108,3 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
   tự tên → chip → mô tả → ba trường → ba nút.
 - **Chưa đo:** chưa ai bấm qua bốn thẻ bằng tay sau khi bỏ nhãn; câu giới thiệu dài ở đầu panel và
   dải "Cho trò chơi mới" vẫn còn (cố ý — chúng không lặp lại điều gì khác, chỉ dài).
-
-### 2026-11-26 — #371 panel Tài khoản của người CHƯA đăng nhập: chỉ một nút, và không nháy hai lần
-
-- **Yêu cầu (nguyên văn):** "khi chưa đăng nhập thì chỉ cần hiển thị đăng nhập là đủ, kiểm tra khi
-  chưa đăng nhập mở lên nó bị nháy 2 lần gây khó chịu".
-- **Đo được cú "nháy 2 lần" trước khi sửa:** mở panel ⇒ `#modalRoot` bị ghi **2 lần trong 58ms**
-  (`guest` @16102 rồi `guest` @16160). Nguyên nhân: `openAccountPanel()` vẽ panel rồi gọi
-  `accountLoadQuota()`; với Khách lời gọi đó **chắc chắn hỏng** (không có token), và `finally` của
-  nó vẽ lại panel. Mỗi lần vẽ lại là `modalRoot.innerHTML = …` ⇒ một `.modal` MỚI ⇒ `animation:
-  pop-in` + backdrop `fade-in` chạy lần nữa. Người dùng thấy panel nảy hai lần.
-- **Sửa 1 — không đọc thứ chắc chắn hỏng:** chỉ gọi `accountLoadQuota()` khi `accountUiState()` là
-  `member`. Không có lời gọi thì không có lần vẽ lại thứ hai khi vừa mở.
-- **Sửa 2 — vẽ lại không dựng lại `.modal`:** `rerenderAccountPanel()` giờ thay `innerHTML` của
-  `.modal-body` (và cập nhật `data-account-panel-state`) trên **cùng phần tử** `.modal`, rồi gắn lại
-  handler; chỉ khi panel mất hẳn `.modal-body` mới thay cả khối. Animation nhập cảnh vì thế chạy
-  đúng **một** lần cho mỗi lần mở, còn trạng thái/hạn mức vẫn cập nhật.
-- **Sửa 3 — panel Khách tối giản:** bỏ danh sách ba quyền lợi, đoạn hướng dẫn hai câu và ghi chú
-  "bạn đang ở chế độ Khách". Còn: tiêu đề "Đăng nhập để soạn câu hỏi bằng Cloud AI" + nút
-  "Đăng nhập với Google". Đo: panel còn **460×270 px**, đúng **1** nút, không còn `.account-perks`
-  / `.account-guest-note` / hạn mức / gói Pro / lịch sử / nút đăng xuất.
-- **Cổng mới `tests/ui/ui-account-guest-check.js` 17/17** (cần hồ sơ WebView2 SẠCH; nếu hồ sơ đã
-  đăng nhập thì cổng thoát với mã 2 và nói "không đo được" — không cho qua rỗng). Đo bằng hai đại
-  lượng khách quan thay cho "nhìn xem có nháy không": số lần `#modalRoot` bị ghi (MutationObserver)
-  = **1** lúc mở và = **1** khi mở lại, số lần `animationstart` của `.modal` = **1**. Thêm 4 check
-  cho cơ chế vẽ lại: cùng một phần tử DOM, **0** pop-in khi vẽ lại, thân panel đổi sang `member`
-  (trạng thái dựng — dữ liệu hạn mức do unit test lo), và nút Đóng vẫn sống sau lần vẽ lại.
-- **Sửa độ bền của cổng #368:** `ui-sidebar-toggle-check` từng đỏ vì sau `Page.reload` nó `settle`
-  cố định 2,5s — trên bản dựng nhúng khởi động chậm hơn, `data-sidebar` còn `null` nên 3 check đỏ
-  và một bước sau đó ném lỗi. Giờ có `waitForBoot(c, 10000)`: chờ **đúng thứ mình sẽ đo** (thuộc
-  tính `data-sidebar` có mặt), quá hạn thì vẫn báo đỏ. Đo lại: **17/17**.
-- **Kết quả đo:** `tsc` sạch · unit **118/118** · `npm run check` sạch · `verify:css` **66/66** ·
-  `check:renderer-globals` 0 undefined · `check:embedded` **6 217,2 KiB** · `cargo tauri build` OK ·
-  `ui-account-check` **21/21** (chế độ Khách) · `ui-account-guest-check` **17/17** ·
-  `ui-sidebar-toggle-check` **17/17** · `ui-motion-check` **19/19** · `ui-page-head-check` **6/6**.
-- **Ảnh:** `tests/ui/shots/account-guest-371.png` (panel Khách 460×270, phóng 2×).
-- **Chưa đo:** đường **đã đăng nhập** thật (mở panel ⇒ đọc hạn mức ⇒ vẽ lại thân) chưa chạy trên
-  một phiên thật — phần "vẽ lại không dựng lại modal" chỉ được đo bằng trạng thái DỰNG; cú nháy
-  được đo bằng số lần ghi DOM + số animation, không phải bằng mắt trên video.

@@ -807,3 +807,10 @@ Chủ dự án yêu cầu: *"xóa release cũ ở máy, tạo release mới và 
   cuộn danh sách 300 px (trước: 63 → 14 px ở lần cuộn đầu); 1024 px vẫn xếp chồng và cuộn được.
   Cổng mới `ui-lesson-page-check` **17/17**. Chưa đo: một câu trả lời chat thật làm transcript dài
   ra; cửa sổ rất thấp (≤ 600 px).
+
+- [x] **#374 — nút Gửi thành mũi tên tròn TRONG khung gõ chat** (trang Giáo án): `.lesson-chat-field`
+  bọc textarea, `.lesson-chat-send` 30×30 `right/bottom: 8px`, icon `arrow-up`, `aria-label` +
+  `title`; chữ chừa chỗ `padding-right: 44px`; bỏ tay nắm kéo-giãn (`resize: none`) vì nút đè lên
+  nó; trạng thái đang-trả-lời dùng đúng chỗ đó cho nút Dừng. Cổng mới `ui-lesson-chat-send-check`
+  **15/15** (vị trí trong khung, icon-only + nhãn đọc, không còn chữ "Gửi" ở hàng dưới, bật/tắt
+  không đổi hình, stop cùng chỗ). Chưa đo: bấm gửi một câu hỏi thật; màn hình cảm ứng.

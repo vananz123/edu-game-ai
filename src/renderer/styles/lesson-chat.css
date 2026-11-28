@@ -329,6 +329,70 @@
   box-shadow: 0 0 0 3px var(--purple2);
 }
 
+/* #374 — NÚT GỬI LÀ MŨI TÊN TRÒN NẰM TRONG KHUNG GÕ.
+   `.lesson-chat-field` là hộp định vị; textarea chừa chỗ ở góc dưới-phải để chữ không chui
+   xuống dưới nút (padding-right + padding-bottom). Nút 30×30 đặt `right/bottom: 8px`, nên nó
+   không đổi bố cục của hàng nào — trước đây nó là một nút chữ "Gửi" trong `.lesson-chat-foot`,
+   tức là chiếm một ô riêng dù chỉ có một ký tự. */
+.lesson-chat-field {
+  position: relative;
+  display: block;
+}
+.lesson-chat-field .lesson-chat-input {
+  padding-right: 44px;
+  padding-bottom: 12px;
+  /* Bỏ tay nắm kéo-giãn của textarea: nó nằm ĐÚNG góc dưới-phải, tức là dưới nút gửi — đo bằng
+     ảnh chụp 2x thấy nút che mất một nửa tay nắm. Khung gõ cao 96px và tự giãn theo nội dung tới
+     300px, nên không ai cần kéo tay. */
+  resize: none;
+}
+.lesson-chat-send {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--purple, #6258e8);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 2px 8px #6258e83d;
+  transition: background-color var(--motion-fast, 120ms) var(--motion-ease, ease),
+    transform var(--motion-fast, 120ms) var(--motion-ease, ease), opacity var(--motion-fast, 120ms);
+}
+.lesson-chat-send:hover:not(:disabled) {
+  background: #5145d6;
+}
+.lesson-chat-send:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.lesson-chat-send:focus-visible {
+  outline: 2px solid var(--purple, #6258e8);
+  outline-offset: 2px;
+}
+.lesson-chat-send:disabled {
+  /* Chưa gõ gì thì không có gì để gửi: nút vẫn ở đó (vị trí không đổi) nhưng nói rõ là chưa
+     bấm được. Giữ nguyên kích thước để khung gõ không nhảy khi trạng thái đổi. */
+  background: var(--purple2, #e6e4ff);
+  color: var(--muted, #8b93a7);
+  box-shadow: none;
+  cursor: default;
+}
+.lesson-chat-send.is-stop {
+  background: var(--panel, #fff);
+  color: var(--text, #1e293b);
+  border: 1px solid var(--line, #e2e8f0);
+  box-shadow: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lesson-chat-send { transition: none; }
+  .lesson-chat-send:active:not(:disabled) { transform: none; }
+}
+
 .lesson-chat-foot {
   display: flex;
   gap: 8px;

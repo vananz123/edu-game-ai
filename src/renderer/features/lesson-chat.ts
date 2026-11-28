@@ -395,7 +395,16 @@ function lessonChatComposerHtml() {
         `<button type="button" class="lesson-chat-mode${lessonChatUi.mode === mode.id ? ' is-active' : ''}" data-action="lesson-chat-mode" data-id="${mode.id}" aria-pressed="${lessonChatUi.mode === mode.id ? 'true' : 'false'}"><span data-icon="${mode.icon}" data-icon-size="12"></span> ${mode.label}</button>`
       ).join('')}
     </div>
-    <textarea id="lessonChatInput" class="lesson-chat-input" placeholder="${lessonChatUi.mode === 'question_set' ? 'Ví dụ: tạo 8 câu hỏi trắc nghiệm về quang hợp' : 'Ví dụ: Mục tiêu của bài này là gì?'}">${escapeHtml(lessonChatUi.draft)}</textarea>
+    <!-- #374: nút Gửi nằm TRONG khung gõ, là một mũi tên tròn ở góc dưới-phải — chỗ ngón tay
+         và mắt đã ở đó sau khi gõ xong. Hook data-lesson-chat-send giữ nguyên tên nên mọi wiring cũ
+         (Enter, đếm ký tự, khoá khi đang gửi) không phải sửa. Nút là icon-only, nên nhãn đọc được
+         nằm ở aria-label + title. (Không viết dấu huyền trong khối template này.) -->
+    <div class="lesson-chat-field">
+      <textarea id="lessonChatInput" class="lesson-chat-input" placeholder="${lessonChatUi.mode === 'question_set' ? 'Ví dụ: tạo 8 câu hỏi trắc nghiệm về quang hợp' : 'Ví dụ: Mục tiêu của bài này là gì?'}">${escapeHtml(lessonChatUi.draft)}</textarea>
+      ${lessonChatUi.sending
+        ? `<button type="button" class="lesson-chat-send is-stop" data-action="lesson-chat-stop" aria-label="Dừng trả lời" title="Dừng trả lời"><span data-icon="square" data-icon-size="12"></span></button>`
+        : `<button type="button" class="lesson-chat-send" data-action="lesson-chat-send" data-lesson-chat-send aria-label="Gửi câu hỏi" title="Gửi (Enter)"${lessonChatCanSend() ? '' : ' disabled'}><span data-icon="arrow-up" data-icon-size="15"></span></button>`}
+    </div>
     <div class="lesson-chat-foot">
       ${options.length > 1
         ? `<select id="lessonChatProvider" class="lesson-chat-provider" aria-label="Nhà cung cấp AI">${options.map(provider =>
@@ -403,9 +412,6 @@ function lessonChatComposerHtml() {
           ).join('')}</select>`
         : `<span class="lesson-chat-status" data-lesson-chat-provider>${escapeHtml(lessonChatProviderStatusText(selected, options))}</span>`}
       ${countField}
-      ${lessonChatUi.sending
-        ? `<button type="button" class="btn btn-secondary btn-small" data-action="lesson-chat-stop"><span data-icon="square" data-icon-size="13"></span> Dừng</button>`
-        : `<button type="button" class="btn btn-primary btn-small" data-action="lesson-chat-send" data-lesson-chat-send${lessonChatCanSend() ? '' : ' disabled'}>Gửi</button>`}
     </div>
     <small class="lesson-chat-status" data-lesson-chat-hint>${lessonChatUi.docIds.length ? `Đã chọn ${lessonChatUi.docIds.length} giáo án — AI sẽ đối chiếu và trả lời bám sát nội dung.` : 'Cứ hỏi thẳng — không cần chọn hay tải giáo án nào cả.'}</small>
   </div>`;

@@ -6021,3 +6021,23 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
 - **CSS cần biết trang nào đang mở, và biết bằng THUỘC TÍNH.** `render()` đặt
   `#pageContent.dataset.page`; một thuộc tính không thể lệch với nội dung vừa vẽ như một class do
   JS bật/tắt, và cổng đọc được nó.
+
+## #374 — nút gửi nằm trong khung gõ, không ở hàng dưới
+
+- **Hành động chính phải ở nơi mắt và ngón tay đã ở sẵn.** Sau khi gõ xong, con trỏ ở cuối khung
+  gõ; một nút "Gửi" nằm ở hàng dưới bên trái (cạnh ô chọn nhà cung cấp) bắt người dùng đi tìm nó.
+  Nút gửi vì thế là một hình tròn 30×30 đặt `right:8px; bottom:8px` **trong** khung gõ, icon
+  `arrow-up`.
+- **Icon-only phải có tên đọc được.** Nút không có chữ ⇒ `aria-label` + `title` là chỗ duy nhất
+  nói nó làm gì; "mũi tên" không tự giải thích trong một ứng dụng có cả nút tải tệp lên.
+- **Hook cũ giữ nguyên tên.** `data-lesson-chat-send` vẫn là nút đó, nên mọi wiring (Enter, đếm ký
+  tự, khoá khi đang gửi) không phải sửa — đổi HÌNH THỨC không được kéo theo đổi HỢP ĐỒNG.
+- **Chỗ nào có nút thì chữ phải chừa chỗ, và thứ trang trí phải nhường.** `padding-right: 44px`
+  cho chữ không chui xuống dưới nút; và tay nắm kéo-giãn của textarea bị bỏ (`resize: none`) vì nó
+  nằm **đúng dưới** nút — ảnh chụp 2× cho thấy nút che mất một nửa tay nắm. Một control không được
+  đè lên một control khác.
+- **Trạng thái đổi thì HÌNH không đổi.** Đang trả lời, cùng hình tròn đó là nút Dừng (`is-stop`);
+  bật/tắt không làm nút đổi kích thước hay đổi khoảng cách mép (cổng đo 30×30 và 8/8 px ở cả hai
+  trạng thái), nếu không bố cục nhảy mỗi lần gửi.
+- **Cổng phải DỰNG trạng thái nó đo.** Bản nháp của khung gõ được giữ trong `lessonChatUi.draft`,
+  nên một phiên trước gõ dở làm "rỗng" không còn rỗng: cổng xoá ô gõ trước khi kiểm `disabled`.
