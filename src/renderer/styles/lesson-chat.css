@@ -511,6 +511,48 @@
   max-height: 230px;
 }
 
+/* ============================================================================
+   #376 — BẢNG CHỌN GIÁO ÁN LÀ MỘT POPUP NỔI, MỞ NGAY TRÊN NÚT "+".
+
+   Trước: bảng này là một KHỐI trong composer, nằm phía trên khung gõ, nên mở nó là đẩy hàng chip,
+   hàng chế độ và khung gõ xuống — bố cục nhảy, và đầu bảng ở đúng chỗ hàng chip vừa bị đẩy đi.
+   Chủ dự án: "bấm vào dấu cộng thì hiện lên pop up luôn".
+
+   Giờ: `position: absolute` so với `.lesson-chat-field` (bọc khung gõ), dính đáy khung và mở LÊN
+   TRÊN. Không chiếm chỗ trong luồng ⇒ mở/đóng không làm gì trong khung chat di chuyển.
+   ============================================================================ */
+.lesson-chat-field > .lesson-chat-pop {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: 30;
+  width: min(460px, 100%);
+  margin: 0;
+  max-height: min(320px, 46vh);
+  /* Đo được: popup rộng 459px nhưng `scrollWidth` 484px ⇒ một thanh cuộn NGANG hiện ra ở đáy thẻ
+     (người soát ảnh gọi đúng là "thanh cuộn trông chưa xong"). Nội dung dài đã có
+     `text-overflow: ellipsis`, nên chặn trục ngang là đủ; chỉ trục dọc được cuộn. */
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: var(--panel);
+  box-shadow: 0 16px 34px #1e293b26, 0 2px 8px #1e293b14;
+  /* Mở lên bằng một nhịp ngắn — cùng ngôn ngữ với menu "•••" của thẻ game (#370). */
+  animation: eg-pop-up var(--motion-fast, 120ms) var(--motion-ease, ease);
+}
+/* Tên tệp dài phải cắt bằng dấu "…" TRONG thẻ, không tràn ra mép: `ellipsis` chỉ chạy khi ô chữ
+   được phép co theo hàng, còn mặc định nó rộng bằng nội dung nên không bao giờ cắt (đo được:
+   một tên 432px trong thẻ 459px, không có dấu "…"). */
+.lesson-chat-field > .lesson-chat-pop .lesson-chat-pick { min-width: 0; }
+.lesson-chat-field > .lesson-chat-pop .lesson-chat-pick > span { flex: 1 1 auto; min-width: 0; }
+
+@keyframes eg-pop-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lesson-chat-field > .lesson-chat-pop { animation: none; }
+}
+
 .lesson-chat-pick {
   display: flex;
   align-items: center;

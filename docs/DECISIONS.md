@@ -6060,3 +6060,21 @@ Giáo viên: "thiết kế lại giao diện phần chỉnh sửa trò chơi và
   HTML trang phải chứa `data-action="lesson-chat-import"`; sau khi gộp, chuỗi đó chỉ có khi bảng
   mở. Test giờ kiểm hai điều: trang có nút mở bảng, **và** bảng đó thật sự có lối tải tệp. Chỉ kiểm
   điều đầu là cho qua một cái nút mở ra bảng rỗng.
+
+## #376 — bảng chọn giáo án là popup NỔI, không phải một khối đẩy bố cục
+
+- **Một bảng sinh ra từ một nút phải nổi lên từ nút đó, không được chen vào luồng.** Bản trước vẽ
+  bảng trong composer, nên mở bảng là đẩy hàng chip + hàng chế độ + khung gõ xuống; mắt đọc thấy cả
+  khung chat nhảy, và đầu bảng rơi đúng chỗ hàng chip vừa bị đẩy đi. Giờ bảng là `position: absolute`
+  so với `.lesson-chat-field`, dính đáy khung gõ và mở **lên trên**: bốn số đo (composer, khung gõ,
+  khung chat, đỉnh nút "+") **trước và sau khi mở bằng nhau**.
+- **Một lớp nổi phải có ÍT NHẤT hai đường tắt.** Nút "Xong" là đường của người biết mình đang làm gì;
+  `mousedown` ra ngoài và **Esc** là đường của người đổi ý. Cổng đo cả hai, và đo rằng sau đó bấm lại
+  nút vẫn mở được (một popup không được kẹt ở trạng thái đóng).
+- **Đo được thì mới sửa: hai lỗi hiển thị chỉ lộ ra khi nhìn ảnh 2×.** (a) `scrollWidth 484` >
+  `clientWidth 459` ⇒ thanh cuộn NGANG ở đáy thẻ, trông như thẻ chưa làm xong — chặn `overflow-x`.
+  (b) Tên tệp dài bị cắt ngang mép thẻ **không có dấu "…"**: `text-overflow: ellipsis` chỉ chạy khi
+  ô chữ được phép co theo hàng (`min-width: 0` + `flex: 1 1 auto`); mặc định nó rộng bằng nội dung
+  nên không bao giờ cắt. Một danh sách tên tệp dài là chỗ dễ thấy lỗi này nhất.
+- **Chiều cao popup phải bị chặn bởi CỬA SỔ, không chỉ bởi nội dung.** `max-height: min(320px, 46vh)`:
+  ở cửa sổ thấp, một thẻ cao 320px sẽ trùm lên cả phần đang đọc.

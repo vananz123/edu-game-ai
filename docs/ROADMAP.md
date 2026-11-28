@@ -821,3 +821,10 @@ Chủ dự án yêu cầu: *"xóa release cũ ở máy, tạo release mới và 
   chừa chỗ hai bên (`padding-left/right: 44px`). Cổng mới `ui-lesson-chat-attach-check` **16/16**,
   và `renderer-load-order` được sửa để hỏi đúng câu mới (bảng chọn có lối tải tệp) thay vì nới.
   Chưa đo: mở hộp thoại tệp thật; chọn/bỏ chọn giáo án rồi hỏi AI.
+
+- [x] **#376 — bảng chọn giáo án mở thành POPUP NỔI ngay trên nút "+"**: chuyển bảng vào trong
+  `.lesson-chat-field`, `position: absolute; bottom: calc(100% + 8px)`, rộng `min(460px, 100%)`, nhịp
+  mở `eg-pop-up`; thêm hai đường tắt (bấm ra ngoài, Esc). Đo: composer 261→261, khung gõ 99→99, khung
+  chat 648→648, đỉnh nút "+" 556→556 (không xê dịch). Sửa hai lỗi hiển thị thấy qua ảnh 2×: thanh
+  cuộn ngang (`overflow-x: hidden`) và tên tệp dài không có dấu "…" (`min-width: 0` + `flex: 1 1
+  auto`). Cổng `ui-lesson-chat-attach-check` **23/23**. Chưa đo: hộp thoại tệp thật; cửa sổ ≤ 500 px.

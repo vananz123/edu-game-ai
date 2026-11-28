@@ -7,6 +7,40 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
 
 ## Mục lục bàn giao
 
+### 2026-11-26 — #376 bấm dấu "+" là bảng chọn giáo án bật lên thành POPUP NỔI
+
+- **Yêu cầu:** "bấm vào dấu cộng thì hiện lên pop up luôn".
+- **Trước:** bảng chọn giáo án là một **khối trong composer** nằm phía trên khung gõ, nên mở nó là
+  **đẩy** hàng chip, hàng chế độ và khung gõ xuống — bố cục nhảy, và đầu bảng rơi đúng chỗ hàng chip
+  vừa bị đẩy đi.
+- **Sau:** bảng chọn được vẽ **trong** `.lesson-chat-field` (hộp bọc khung gõ) và là
+  `position: absolute; bottom: calc(100% + 8px); left: 0; width: min(460px, 100%)`, có nhịp mở
+  `eg-pop-up` (6px + mờ dần, 120ms), viền + bóng của một lớp nổi. Mở/đóng **không chiếm chỗ** trong
+  luồng ⇒ không gì trong khung chat di chuyển.
+- **Đo được (1366×768):** composer **261 → 261 px**, khung gõ **99 → 99 px**, khung chat **648 → 648
+  px**, đỉnh nút "+" **556 → 556 px**; popup rộng **460 px** so với khung gõ **599 px** nên không đè
+  sang cột danh sách; popup mở **lên trên** (đáy 554 ≤ đỉnh khung gõ 562).
+- **Hai đường tắt cho một lớp nổi** (trước đây chỉ có nút "Xong"): `mousedown` ra ngoài
+  `.lesson-chat-pop` và phím **Esc** đều đóng bảng (Esc đóng cả danh sách cuộc trò chuyện). Bấm lại
+  dấu "+" vẫn mở/đóng được — đo sau khi Esc và sau khi bấm ngoài.
+- **Hai lỗi hiển thị phát hiện qua ảnh 2× và sửa trong cùng việc này:**
+  1. **Thanh cuộn NGANG** hiện ở đáy thẻ: `scrollWidth 484` > `clientWidth 459`. Nội dung dài đã có
+     `text-overflow: ellipsis` nên chỉ cần chặn trục ngang (`overflow-x: hidden`) — trục dọc vẫn cuộn.
+  2. **Tên tệp dài bị cắt ngang mép thẻ** chứ không có dấu "…": ô chữ rộng bằng nội dung nên
+     `ellipsis` không bao giờ chạy. Thêm `min-width: 0` cho hàng và `flex: 1 1 auto` cho ô tên ⇒ tên
+     432 px trong thẻ 459 px giờ cắt đúng bằng "…" (đo: `scrollWidth 432 > clientWidth 407`).
+- **Cổng `tests/ui/ui-lesson-chat-attach-check.js` lên 23/23** (thêm 6 check): popup `position:
+  absolute`; **không xê dịch bố cục** (4 số đo trước/sau bằng nhau); rộng không quá khung gõ; có
+  `animationName eg-pop-up`; **Esc** đóng; **bấm ra ngoài** đóng; và mở lại được sau đó.
+- **Kết quả đo:** `tsc` sạch · unit **118/118** · `npm run check` sạch · `verify:css` **66/66** ·
+  `check:renderer-globals` 0 undefined · `check:embedded` **6 217,2 KiB** · `cargo tauri build` OK ·
+  `ui-lesson-chat-send-check` **15/15** · `ui-lesson-page-check` **17/17** · `ui-motion-check`
+  **19/19** · `ui-account-check` **23/23**.
+- **Ảnh:** `tests/ui/shots/lesson-chat-popup-376.png` (toàn trang) và `-zoom.png` (popup 2×). Người
+  soát ảnh xác nhận tên dài giờ cắt bằng "…", **không còn thanh cuộn ngang**, thẻ trông hoàn chỉnh.
+- **Chưa đo:** chưa bấm "Tải giáo án mới" (hộp thoại tệp thật); chưa thử popup khi cửa sổ rất thấp
+  (≤ 500 px cao, lúc đó `max-height: 46vh` bó thẻ lại).
+
 ### 2026-11-26 — #375 gộp "Chọn giáo án" + "Tải giáo án mới" thành một nút "+" trong khung gõ
 
 - **Yêu cầu:** "gộp chọn giáo án và tải giáo án mới thành 1 dấu + rồi di chuyển vào trong khung chat".
@@ -70,37 +104,3 @@ chuyển mục cũ nhất vào file lưu trữ đúng ngày của nó và cập 
   Người soát ảnh xác nhận nút nằm gọn trong khung, không còn va vào tay nắm kéo-giãn.
 - **Chưa đo:** chưa **bấm nút gửi để gửi một câu hỏi thật** (sẽ gọi AI thật) — mới đo trạng thái
   bật/tắt và vị trí; chưa thử nút này trên màn hình cảm ứng.
-
-### 2026-11-26 — #373 trang Giáo án: bỏ chữ "Giáo án", khung chat choán hết chiều cao, cuộn không di chuyển
-
-- **Yêu cầu (nguyên văn):** "quay qua trang giáo án đi, tôi cần xóa chữ 'giáo án' đi và là khung
-  chat full. để khi scroll chúng không di chuyển".
-- **Đo được trước khi sửa (1366×768):** trang cao **1308 px** trong cửa sổ 768 px nên **cả trang
-  cuộn**; khung chat `position: sticky` nên lần cuộn đầu tiên nó **trượt** từ đỉnh 63 px xuống 14 px
-  rồi mới đứng. Mắt đọc thấy khung chat "nhảy" một lần — đó là cái phải bỏ.
-- **Bỏ hàng tiêu đề:** `<div class="page-head"><h1>Giáo án</h1>…` bị xoá hẳn. Hai nút của nó
-  ("Nhập giáo án từ tệp", "Tạo dự án mới") **chuyển vào header khung chat** với nhãn ngắn hơn
-  ("Nhập tệp", "Dự án mới") — không mất một hành động nào, và không còn hàng 29 px chiếm chỗ.
-- **Trang không cuộn, chỉ danh sách cuộn:** `#pageContent[data-page="lesson-plans"]` cao `100vh`,
-  `overflow: hidden`, là flex column; `.lesson-page` (khung mới bao cả hai cột) giãn hết; khung chat
-  `height: 100%`; `.lesson-list-col` là thứ **duy nhất** có `overflow-y: auto`. Vì không có gì cuộn
-  ngoài danh sách, khung chat **không thể** đổi hình chữ nhật khi cuộn.
-- **`render()` giờ đặt `#pageContent.dataset.page`** — CSS cần biết trang nào đang mở, và một thuộc
-  tính (không phải class do JS bật/tắt) thì không thể lệch với nội dung vừa vẽ.
-- **Chỉ khoá từ 1181 px:** dưới ngưỡng đó hai cột xếp chồng (media query sẵn có của #182/#184);
-  khoá chiều cao ở đó sẽ **giấu mất danh sách** — hỏng nặng hơn cái đang sửa.
-- **Cổng mới `tests/ui/ui-lesson-page-check.js` 17/17.** Đo được: không còn `<h1>` (0), trang
-  `scrollHeight 768 = winH 768`, khung chat **716 px** (≥ 90% cửa sổ), danh sách `overflow auto`
-  1213 > 716; cuộn cửa sổ 500 px ⇒ **`scrollY = 0`**; cuộn danh sách 300 px ⇒ đỉnh/chiều cao khung
-  **20/716 → 20/716** (không đổi) và composer vẫn nằm trong khung; ở **1024 px** hai cột xếp chồng,
-  trang cao 1434 > 768 (cuộn lại được), khung chat 453 px (không bị ép 100vh).
-- **Kết quả đo:** `tsc` sạch · unit **118/118** · `npm run check` sạch · `verify:css` **66/66** ·
-  `check:renderer-globals` 0 undefined · `check:embedded` **6 217,2 KiB** · `cargo tauri build` OK ·
-  `ui-page-head-check` **6/6** · `ui-settings-ai-labels-check` **12/12** · `ui-account-check`
-  **23/23** · `ui-motion-check` **19/19**.
-- **Ảnh:** `tests/ui/shots/lesson-page-373.png` (1366×768, chụp khi danh sách ở đầu), `-dark.png`,
-  `-1024.png`. Người soát ảnh xác nhận đầu danh sách **không còn bị cắt**, khung chat chạy hết chiều
-  cao, composer không bị cắt.
-- **Chưa đo:** chưa gửi một câu hỏi thật sau khi đổi bố cục (transcript dài ra thì `.lesson-chat-scroll`
-  vẫn là vùng cuộn bên trong — đúng thiết kế, nhưng chưa đo bằng câu trả lời thật); chưa thử cửa sổ
-  rất thấp (≤ 600 px cao).

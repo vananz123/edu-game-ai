@@ -176,6 +176,14 @@ let lessonChatMouseWired = false;
 function wireLessonChatDocumentOnce() {
   if (lessonChatMouseWired || typeof document === 'undefined') return;
   lessonChatMouseWired = true;
+  // #376: Esc đóng mọi lớp nổi của chat (bảng chọn giáo án, danh sách cuộc trò chuyện).
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Escape') return;
+    if (!lessonChatUi.showPicker && !lessonChatUi.showHistory) return;
+    lessonChatUi.showPicker = false;
+    lessonChatUi.showHistory = false;
+    render();
+  });
   document.addEventListener('mousedown', event => {
     const target = event.target;
     if (!target || typeof target.closest !== 'function') return;
@@ -184,6 +192,18 @@ function wireLessonChatDocumentOnce() {
       lessonChatUi.focusComposer = false;
       lessonChatUi.caret = null;
       return;
+    }
+    // #376: bảng chọn giáo án giờ là một popup NỔI trên khung gõ, nên bấm ra ngoài phải đóng nó
+    // (Esc lo ở listener bên dưới) — một lớp nổi không có đường tắt là một lớp chắn tầm nhìn.
+    if (lessonChatUi.showPicker || lessonChatUi.showHistory) {
+      const insidePop = target.closest('.lesson-chat-pop');
+      const onToggle = target.closest('[data-action="lesson-chat-picker"], [data-action="lesson-chat-history"]');
+      if (!insidePop && !onToggle) {
+        lessonChatUi.showPicker = false;
+        lessonChatUi.showHistory = false;
+        render();
+        return;
+      }
     }
     lessonChatCaptureFocus();
     if (target === document.getElementById('lessonChatInput')) {
@@ -414,7 +434,6 @@ function lessonChatComposerHtml() {
   // locked until it lands (`lessonChatCanSend`).
   return `<div class="lesson-chat-composer">
     ${lessonChatAttachHtml()}
-    ${lessonChatPickerHtml()}
     <div class="lesson-chat-modes" role="group" aria-label="Chế độ trả lời">
       ${LESSON_CHAT_MODES.map(mode =>
         `<button type="button" class="lesson-chat-mode${lessonChatUi.mode === mode.id ? ' is-active' : ''}" data-action="lesson-chat-mode" data-id="${mode.id}" aria-pressed="${lessonChatUi.mode === mode.id ? 'true' : 'false'}"><span data-icon="${mode.icon}" data-icon-size="12"></span> ${mode.label}</button>`
@@ -426,6 +445,7 @@ function lessonChatComposerHtml() {
          nằm ở aria-label + title. (Không viết dấu huyền trong khối template này.) -->
     <div class="lesson-chat-field">
       ${lessonChatAttachButtonHtml()}
+      ${lessonChatPickerHtml()}
       <textarea id="lessonChatInput" class="lesson-chat-input" placeholder="${lessonChatUi.mode === 'question_set' ? 'Ví dụ: tạo 8 câu hỏi trắc nghiệm về quang hợp' : 'Ví dụ: Mục tiêu của bài này là gì?'}">${escapeHtml(lessonChatUi.draft)}</textarea>
       ${lessonChatUi.sending
         ? `<button type="button" class="lesson-chat-send is-stop" data-action="lesson-chat-stop" aria-label="Dừng trả lời" title="Dừng trả lời"><span data-icon="square" data-icon-size="12"></span></button>`

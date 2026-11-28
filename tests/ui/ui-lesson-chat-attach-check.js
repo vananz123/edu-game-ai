@@ -57,8 +57,18 @@ const MEASURE = String.raw`(() => {
       buttons: sources ? sources.querySelectorAll('button').length : -1,
       pickerInside: sources ? sources.querySelectorAll('[data-action="lesson-chat-picker"], [data-action="lesson-chat-import"]').length : -1,
     },
+    heights: {
+      composer: composer ? Math.round(composer.getBoundingClientRect().height) : -1,
+      field: field ? Math.round(field.getBoundingClientRect().height) : -1,
+      frame: document.querySelector('.lesson-chat-frame') ? Math.round(document.querySelector('.lesson-chat-frame').getBoundingClientRect().height) : -1,
+      buttonTop: b ? Math.round(b.top) : -1,
+    },
     picker: {
       open: !!picker,
+      position: picker ? getComputedStyle(picker).position : '',
+      width: pickerBox ? Math.round(pickerBox.width) : -1,
+      fieldWidth: f ? Math.round(f.width) : -1,
+      animation: picker ? getComputedStyle(picker).animationName : '',
       aboveField: !!(pickerBox && f && pickerBox.bottom <= f.top + 2),
       imports: picker ? picker.querySelectorAll('[data-action="lesson-chat-import"]').length : -1,
       rows: picker ? picker.querySelectorAll('.lesson-chat-pick').length : -1,
@@ -109,7 +119,41 @@ const MEASURE = String.raw`(() => {
     opened.expanded + ' / is-open=' + opened.openClass);
   check('bảng chọn liệt kê giáo án trong kho', opened.picker.rows >= 1, String(opened.picker.rows));
 
-  // 6. Bấm lần nữa ⇒ đóng.
+  // #376: bảng chọn là POPUP NỔI — mở nó không được đẩy bất cứ thứ gì trong khung chat.
+  check('bảng chọn là popup nổi (position: absolute, không chiếm chỗ trong luồng)',
+    opened.picker.position === 'absolute', opened.picker.position);
+  check('mở bảng KHÔNG xê dịch bố cục khung chat (composer/khung gõ/khung chat/nút "+" y nguyên)',
+    opened.heights.composer === closed.heights.composer && opened.heights.field === closed.heights.field
+      && opened.heights.frame === closed.heights.frame && opened.heights.buttonTop === closed.heights.buttonTop,
+    JSON.stringify(closed.heights) + ' → ' + JSON.stringify(opened.heights));
+  check('bảng nổi rộng không quá khung gõ (không đè sang cột danh sách)',
+    opened.picker.width <= opened.picker.fieldWidth, opened.picker.width + ' ≤ ' + opened.picker.fieldWidth);
+  check('bảng nổi có nhịp mở (eg-pop-up)', opened.picker.animation === 'eg-pop-up', opened.picker.animation);
+
+  // 5b. Esc đóng popup (một lớp nổi phải có đường tắt).
+  await c.evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); 1`);
+  await c.settle(500);
+  const viaEsc = await c.evaluate(MEASURE);
+  check('Esc đóng popup', viaEsc.picker.open === false && viaEsc.expanded === 'false', 'open=' + viaEsc.picker.open + ' · expanded=' + viaEsc.expanded);
+
+  // 5c. Bấm ra ngoài đóng popup.
+  await c.evaluate(`document.querySelector('.lesson-chat-attach-btn').click(); 1`);
+  await c.settle(600);
+  await c.evaluate(String.raw`(() => {
+    const target = document.querySelector('.lesson-chat-scroll') || document.body;
+    target.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    return 1;
+  })()`);
+  await c.settle(500);
+  const viaOutside = await c.evaluate(MEASURE);
+  check('bấm ra ngoài đóng popup', viaOutside.picker.open === false, String(viaOutside.picker.open));
+
+  // 6. Bấm hai lần: mở rồi đóng (một control, hai trạng thái, không có nút thứ hai xuất hiện).
+  await c.evaluate(`document.querySelector('.lesson-chat-attach-btn').click(); 1`);
+  await c.settle(500);
+  const reopened = await c.evaluate(MEASURE);
+  check('bấm lại ⇒ mở lại được (popup không bị kẹt sau khi Esc/bấm ngoài)',
+    reopened.picker.open === true && reopened.pickerButtons === 1, 'open=' + reopened.picker.open);
   await c.evaluate(`document.querySelector('.lesson-chat-attach-btn').click(); 1`);
   await c.settle(600);
   const again = await c.evaluate(MEASURE);
